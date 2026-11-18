@@ -155,38 +155,11 @@ fun topics_eq scalar g = (
   Cases_on `flg` >> simp[vyperEventTheory.encode_indexed_event_topics_def] >>
   drule_all scalar >> simp[]) g
 
-fun non_indexed g = (
-  Induct >> rpt gen_tac >> strip_tac
-  >- (Cases_on `tys` >> gvs[log_non_indexed_types_def]) >>
-  Cases_on `tys` >> gvs[log_non_indexed_types_def, LIST_REL_CONS1] >>
-  rename1 `log_non_indexed_types (flg::_) _` >>
-  first_x_assum drule_all >> strip_tac >>
-  Cases_on `flg` >> simp[log_non_indexed_types_def]) g
-
 fun abi_eq scalar g = (
   Induct >> simp[] >> rpt gen_tac >> strip_tac >>
   gvs[LIST_REL_CONS1] >> drule_all scalar >>
   disch_then (qspec_then `tenv` strip_assume_tac) >>
   Cases_on `vals` >> simp[]) g
-
-fun encoding_facts scalar g = (
-  `!tys atys flags vals.
-    EVERY supported_scalar_type tys /\ LIST_REL event_arg_compatible tys atys ==>
-    encode_indexed_event_topics flags atys vals =
-    encode_indexed_event_topics flags tys vals` by (POP_ASSUM_LIST (K all_tac) >> topics_eq scalar) >>
-  `!flags tys atys.
-    EVERY supported_scalar_type tys /\ LIST_REL event_arg_compatible tys atys ==>
-    EVERY supported_scalar_type (log_non_indexed_types flags tys) /\
-    LIST_REL event_arg_compatible (log_non_indexed_types flags tys)
-      (log_non_indexed_types flags atys)` by (POP_ASSUM_LIST (K all_tac) >> non_indexed) >>
-  `!tys atys vals tenv.
-    EVERY supported_scalar_type tys /\ LIST_REL event_arg_compatible tys atys ==>
-    vyper_to_abi_types tenv atys = vyper_to_abi_types tenv tys /\
-    vyper_to_abi_list tenv atys vals = vyper_to_abi_list tenv tys vals` by (POP_ASSUM_LIST (K all_tac) >> abi_eq scalar) >>
-  `EVERY supported_scalar_type (log_non_indexed_types flags tys) /\
-   LIST_REL event_arg_compatible (log_non_indexed_types flags tys)
-      (log_non_indexed_types flags (MAP expr_type args))` by metis_tac[] >>
-  metis_tac[]) g
 
 fun selected_data cases g = (
   qpat_assum `LIST_REL (\arg v. supported_scalar_type (SND arg) /\ _) ds vs`

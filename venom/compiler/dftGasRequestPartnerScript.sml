@@ -24,7 +24,8 @@ Proof
   gvs[dft_gas_swap_pair_def, is_terminator_def, inst_wf_def,
       read_effects_def, write_effects_def] >>
   with_opcode_clause gvs >>
-  gvs[AllCaseEqs(), exec_create_abort_iff] >>
+  gvs[AllCaseEqs(), exec_create_abort_iff, exec_ext_call_abort_iff,
+      exec_delegatecall_abort_iff] >>
   simp[] >> rpt strip_tac >>
   gvs[] >>
   qpat_x_assum `effects_independent _ _` mp_tac >>

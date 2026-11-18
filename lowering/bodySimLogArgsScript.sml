@@ -78,19 +78,20 @@ Proof
   simp[module_type_env_submap]
 QED
 
-Theorem supported_nested_abi_env[local]:
+Theorem supported_nested_abi_env:
   !leaf fuel tops ty.
-    leaf = supported_scalar_type ==>
+    (!t. leaf t ==> supported_event_leaf_type t) ==>
     !large removed.
       supported_nested_type leaf fuel tops ty /\ type_env tops SUBMAP large ==>
       vyper_to_abi_type (DRESTRICT (type_env tops) (COMPL removed)) ty =
       vyper_to_abi_type (DRESTRICT large (COMPL removed)) ty
 Proof
   recInduct supported_nested_type_ind >> rpt strip_tac >> gvs[] >>
-  Cases_on `supported_scalar_type ty`
-  >- (Cases_on `ty` >>
-      gvs[supported_scalar_type_def, supported_word_type_def,
-          supported_string_type_def]) >>
+  Cases_on `leaf ty`
+  >- (`supported_event_leaf_type ty` by metis_tac[] >>
+      Cases_on `ty` >>
+      gvs[supported_event_leaf_type_def, supported_scalar_type_def,
+          supported_word_type_def, supported_string_type_def]) >>
   qpat_x_assum `supported_nested_type _ _ _ _` mp_tac >>
   Cases_on `ty` >>
   simp[Once supported_nested_type_def, supported_scalar_type_def,
@@ -115,18 +116,21 @@ Proof
   Cases_on `b` >> gvs[] >> metis_tac[]
 QED
 
-Theorem supported_nested_evaluated_assignable[local]:
+Theorem supported_nested_evaluated_assignable:
   !leaf fuel tops ty.
-    leaf = supported_scalar_type ==>
+    (!t. leaf t ==> supported_event_leaf_type t) ==>
     !large removed tv.
       supported_nested_type leaf fuel tops ty /\ type_env tops SUBMAP large /\
       evaluate_type (DRESTRICT large (COMPL removed)) ty = SOME tv ==>
       assignable_type (DRESTRICT large (COMPL removed)) ty
 Proof
   recInduct supported_nested_type_ind >> rpt strip_tac >> gvs[] >>
-  Cases_on `supported_scalar_type ty`
-  >- (irule supported_scalar_type_assignable >>
-      simp[well_formed_type_def]) >>
+  Cases_on `leaf ty`
+  >- (`supported_event_leaf_type ty` by metis_tac[] >>
+      Cases_on `ty` >>
+      gvs[supported_event_leaf_type_def, supported_scalar_type_def,
+          supported_word_type_def, supported_string_type_def] >>
+      simp[assignable_type_def, well_formed_type_def]) >>
   qpat_x_assum `supported_nested_type _ _ _ _` mp_tac >>
   Cases_on `ty` >>
   simp[Once supported_nested_type_def, supported_scalar_type_def,
@@ -178,7 +182,8 @@ Theorem supported_place_evaluated_assignable:
 Proof
   rpt strip_tac >>
   qspecl_then [`supported_scalar_type`, `LENGTH tops`, `tops`, `ty`]
-    mp_tac supported_nested_evaluated_assignable >> simp[] >>
+    mp_tac supported_nested_evaluated_assignable >>
+  simp[supported_event_leaf_type_def] >>
   disch_then (qspecl_then [`tenv`, `{}`, `tv`] mp_tac) >>
   gvs[supported_place_type_def, DRESTRICT_UNIV]
 QED
@@ -191,17 +196,23 @@ Proof
   rpt strip_tac >> drule body_main_type_env_submap >> strip_tac >>
   qspecl_then [`supported_scalar_type`, `LENGTH tops`, `tops`, `ty`]
     mp_tac supported_nested_abi_env >>
-  simp[supported_place_type_def] >>
+  simp[supported_place_type_def, supported_event_leaf_type_def] >>
   disch_then (qspecl_then [`get_tenv cx`, `{}`] mp_tac) >>
   gvs[supported_place_type_def, DRESTRICT_UNIV]
 QED
 
-Theorem supported_place_abi_types_env[local]:
+Theorem supported_event_nested_abi_types_env[local]:
   !tys tops cx.
-    get_module_code cx NONE = SOME tops /\ EVERY (supported_place_type tops) tys ==>
+    get_module_code cx NONE = SOME tops /\
+    EVERY (supported_nested_type supported_event_leaf_type (LENGTH tops) tops) tys ==>
     vyper_to_abi_types (type_env tops) tys = vyper_to_abi_types (get_tenv cx) tys
 Proof
-  Induct >> simp[] >> metis_tac[supported_place_abi_env]
+  rpt strip_tac >> drule body_main_type_env_submap >> strip_tac >>
+  simp[vyper_to_abi_types_MAP] >> irule MAP_CONG >> rpt strip_tac >>
+  qspecl_then [`supported_event_leaf_type`, `LENGTH tops`, `tops`, `x`]
+    mp_tac supported_nested_abi_env >> simp[] >>
+  disch_then (qspecl_then [`get_tenv cx`, `{}`] mp_tac) >>
+  gvs[EVERY_MEM, DRESTRICT_UNIV]
 QED
 
 Theorem supported_event_fields_some[local]:
@@ -235,53 +246,7 @@ Proof
   metis_tac[event_decl_names_mem]
 QED
 
-(* A scalar type's ABI type does not look at the type environment. *)
-Theorem scalar_abi_types_env[local]:
-  !ts env env'.
-    EVERY supported_scalar_type ts ==>
-    vyper_to_abi_types env ts = vyper_to_abi_types env' ts
-Proof
-  Induct >> simp[] >> Cases >>
-  simp[supported_scalar_type_def, supported_word_type_def,
-       supported_string_type_def]
-QED
-
-(* body_inv's ce_event_info is build_event_info's for the program, whose
-   event names supported_program makes distinct, and the source finds the
-   same declaration in the module get_module_code gives. *)
-Theorem body_log_metadata:
-  !tops ctx cenv cx id fields.
-    body_inv tops ctx cenv cx /\ supported_event_fields tops id = SOME fields ==>
-    ?h. cenv.ce_event_info (nsid_to_string id) =
-          SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
-        lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
-          SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
-        LENGTH (FILTER I (MAP SND fields)) <= 3 /\
-        EVERY supported_scalar_type (MAP (SND o FST) fields)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule supported_event_fields_some >> strip_tac >> gvs[] >>
-  `EVERY supported_scalar_type (MAP (SND o FST) fields) /\
-   LENGTH (FILTER I (MAP SND fields)) <= 3` by
-    (gvs[body_inv_def, supported_program_def,
-         supported_declaration_headers_def, EVERY_MEM] >>
-     qpat_x_assum `!e. MEM e tops ==> supported_declaration_header _ _`
-       drule >>
-     simp[supported_declaration_header_def, EVERY_MAP, combinTheory.o_DEF,
-          MEM_MAP, PULL_EXISTS] >>
-     strip_tac >> gvs[EVERY_MEM]) >>
-  `event_decl_unique name tops` by
-    gvs[body_inv_def, supported_program_def,
-        supported_declaration_names_def, event_names_unique] >>
-  gvs[body_inv_def, nsid_to_string_def, build_event_info_lookup_event_metadata_in,
-      lookup_event_metadata_def, get_module_code_def, AllCaseEqs(),
-      event_hash_def] >>
-  metis_tac[scalar_abi_types_env]
-QED
-
-(* ===== The arguments ===== *)
-
-(* The argument's explicit body-safety facts supply the call preconditions. *)
+(* Both metadata lookups resolve the same declaration and its event hash. *)
 Theorem body_log_aggregate_metadata:
   !tops ctx cenv cx id fields.
     body_inv tops ctx cenv cx /\ supported_event_fields tops id = SOME fields ==>
@@ -290,36 +255,53 @@ Theorem body_log_aggregate_metadata:
         lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
           SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
         LENGTH (FILTER I (MAP SND fields)) <= 3 /\
-        EVERY (\f. if SND f then supported_scalar_type (SND (FST f))
-                    else supported_place_type tops (SND (FST f))) fields
+        EVERY (\f. if SND f then supported_event_leaf_type (SND (FST f))
+                    else supported_nested_type supported_event_leaf_type
+                           (LENGTH tops) tops (SND (FST f))) fields
 Proof
   rpt gen_tac >> strip_tac >>
   drule supported_event_fields_some >> strip_tac >> gvs[] >>
-  `EVERY (\f. if SND f then supported_scalar_type (SND (FST f))
-              else supported_place_type tops (SND (FST f))) fields /\
+  `EVERY (\f. if SND f then supported_event_leaf_type (SND (FST f))
+              else supported_nested_type supported_event_leaf_type
+                     (LENGTH tops) tops (SND (FST f))) fields /\
    LENGTH (FILTER I (MAP SND fields)) <= 3` by
     (gvs[body_inv_def, supported_program_def,
          supported_declaration_headers_def, EVERY_MEM] >>
      qpat_x_assum `!e. MEM e tops ==> supported_declaration_header _ _` drule >>
-     simp[supported_declaration_header_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
-     `!ty. supported_scalar_type ty ==> supported_place_type tops ty` by
-       simp[supported_place_type_def, Once supported_nested_type_def] >>
-     metis_tac[]) >>
-  `EVERY (supported_place_type tops) (MAP (SND o FST) fields)` by
+     simp[supported_declaration_header_def, EVERY_MEM]) >>
+  `EVERY (supported_nested_type supported_event_leaf_type (LENGTH tops) tops)
+         (MAP (SND o FST) fields)` by
     (gvs[EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD, combinTheory.o_DEF] >>
      rpt strip_tac >>
      qpat_x_assum `!a b c. MEM ((a,b),c) fields ==> _` drule >>
      Cases_on `p_2'` >> simp[] >>
-     simp[supported_place_type_def, Once supported_nested_type_def]) >>
+     simp[Once supported_nested_type_def]) >>
   `vyper_to_abi_types (type_env tops) (MAP (SND o FST) fields) =
    vyper_to_abi_types (get_tenv cx) (MAP (SND o FST) fields)` by
-    (irule supported_place_abi_types_env >> gvs[body_inv_def]) >>
+    (irule supported_event_nested_abi_types_env >> gvs[body_inv_def]) >>
   `event_decl_unique name tops` by
     gvs[body_inv_def, supported_program_def,
         supported_declaration_names_def, event_names_unique] >>
   gvs[body_inv_def, nsid_to_string_def, build_event_info_lookup_event_metadata_in,
       lookup_event_metadata_def, get_module_code_def, AllCaseEqs(), event_hash_def]
 QED
+
+Theorem body_log_metadata:
+  !tops ctx cenv cx id fields.
+    body_inv tops ctx cenv cx /\ supported_event_fields tops id = SOME fields /\
+    EVERY supported_scalar_type (MAP (SND o FST) fields) ==>
+    ?h. cenv.ce_event_info (nsid_to_string id) =
+          SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
+        lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
+          SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
+        LENGTH (FILTER I (MAP SND fields)) <= 3 /\
+        EVERY supported_scalar_type (MAP (SND o FST) fields)
+Proof
+  rpt strip_tac >>
+  drule_all body_log_aggregate_metadata >> metis_tac[]
+QED
+
+(* ===== The arguments ===== *)
 
 Theorem log_arg_body_pre[local]:
   !tops ctx cenv cx env e calls es.
@@ -432,6 +414,24 @@ Proof
   irule type_to_abi_enc_info_plan >> simp[] >>
   qexists_tac `get_tenv cx` >> simp[] >>
   metis_tac[expr_sim_inv_memory_size]
+QED
+
+Theorem body_log_event_tuple_abi_plan:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  tys <> [] /\
+  EVERY (supported_nested_type supported_event_leaf_type (LENGTH tops) tops) tys /\
+  evaluate_type (get_tenv cx) (TupleT tys) = SOME tv ==>
+  abi_enc_plan (get_tenv cx) (TupleT tys)
+    (type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT tys))
+Proof
+  strip_tac >> irule body_log_assignable_abi_plan >>
+  reverse conj_tac >- metis_tac[] >>
+  `type_env tops SUBMAP get_tenv cx` by
+    (irule body_main_type_env_submap >> gvs[body_inv_def]) >>
+  qspecl_then [`supported_event_leaf_type`, `LENGTH tops`, `tops`, `TupleT tys`]
+    mp_tac supported_nested_evaluated_assignable >> simp[] >>
+  disch_then (qspecl_then [`get_tenv cx`, `{}`, `tv`] mp_tac) >>
+  simp[DRESTRICT_UNIV, Once supported_nested_type_def, NULL_EQ]
 QED
 
 Theorem body_log_actual_tuple_abi_plan:

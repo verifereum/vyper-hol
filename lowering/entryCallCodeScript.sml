@@ -197,7 +197,10 @@ Proof
   rw[entry_preserves_code_def, compile_call_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   fs[entry_preserves_code_def] >>
-  rpt IF_CASES_TAC >> gvs[AllCaseEqs()] >>
+  rpt IF_CASES_TAC >>
+  qpat_x_assum `!flags tys st x st'. _` (fn defaults =>
+    qpat_x_assum `!flags tys st x st'. _` (fn args =>
+      FIRST [gvs[AllCaseEqs()]] >> assume_tac args >> assume_tac defaults)) >>
   rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac (SRULE [entry_preserves_code_def] entry_code_alloc_buffer) >>
   imp_res_tac (SRULE [entry_preserves_code_def] (Q.INST [`opc` |-> `INVOKE`] entry_code_emit_op)) >>

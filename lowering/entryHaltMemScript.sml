@@ -114,7 +114,7 @@ Proof
      qexists_tac `b + 32` >> simp[arithmeticTheory.MOD_LESS_EQ]) >>
   `mem_safe_step fuel ctx (mk_inst id ALLOCA [Lit 32w] [buf]) s` by
     (simp[mem_safe_step_non_invoke, mk_inst_def] >>
-     irule below_frontier_no_ranges >> simp[]) >>
+     disj1_tac >> irule below_frontier_no_ranges >> simp[]) >>
   `step_inst fuel ctx (mk_inst id ALLOCA [Lit 32w] [buf]) s = OK s1` by
     simp[step_inst_non_invoke, mk_inst_def] >>
   drule mem_safe_run_step >>
@@ -226,7 +226,7 @@ Proof
      gvs[wordsTheory.w2n_n2w] >> decide_tac) >>
   `mem_safe_step fuel ctx (mk_inst id ALLOCA [Lit (n2w n)] [buf]) s` by
     (simp[mem_safe_step_non_invoke, mk_inst_def] >>
-     irule below_frontier_no_ranges >> simp[]) >>
+     disj1_tac >> irule below_frontier_no_ranges >> simp[]) >>
   `step_inst fuel ctx (mk_inst id ALLOCA [Lit (n2w n)] [buf]) s = OK s1` by
     simp[step_inst_non_invoke, mk_inst_def] >>
   drule mem_safe_run_step >> disch_then drule >> disch_then drule >>

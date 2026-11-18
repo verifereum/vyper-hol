@@ -50,3 +50,33 @@ Proof
   disch_then drule_all >> disch_then assume_tac >>
   drule_all (BETA_RULE focus_finalizer_prefix_bridge_conditional) >> simp[]
 QED
+
+(* Every accepted finalizer carries a successful symbolic prefix of the
+   original program to one of the finalized program; at an observed opcode
+   the finalized prefix stops at the same opcode in the same state, up to
+   the program counter, label stack entries and label bytes. *)
+Theorem accepted_finalizers_prefix_transport:
+  !fin rp p q.
+    fin IN accepted_finalizers /\ fin rp p = SOME q /\ asm_static_wf p ==>
+    ?K. 0 < K /\ !env s n a.
+      s.as_pc = 0 /\ sym_steps p env n (sym_init s) = SymOK a ==>
+      (?m b. sym_steps q env m (sym_init s) = SymOK b /\ n <= K * (m+1)) /\
+      (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                   "CREATE2"} /\
+         a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp op ==>
+       ?m b. sym_steps q env m (sym_init s) = SymOK b /\
+         b.sym_base.as_pc < LENGTH q /\ EL b.sym_base.as_pc q = AsmOp op /\
+         (b.sym_base with as_pc := 0) = (a.sym_base with as_pc := 0) /\
+         MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
+         FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)
+Proof
+  mp_tac (BETA_RULE accepted_finalizers_prefix_transport_conditional) >>
+  impl_tac >-
+    (rpt conj_tac >> MAP_FIRST MATCH_ACCEPT_TAC
+      (map BETA_RULE
+        [merge_iszero_prefix_transport, prune_jumps_prefix_transport,
+         inefficient_jumps_prefix_transport, peephole_prefix_transport,
+         merge_jumpdests_prefix_transport, prune_unreachable_prefix_transport,
+         prune_unused_prefix_transport])) >>
+  disch_then MATCH_ACCEPT_TAC
+QED

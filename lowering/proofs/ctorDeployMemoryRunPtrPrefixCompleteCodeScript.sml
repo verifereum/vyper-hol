@@ -12,7 +12,7 @@ Ancestors
   abiDecoderMemberInfos abiDecoderMembers abiDecoderCoherence abiDecoderTypedContract
   abiDecoderEmpty ctorDeployMemoryRunPtrPrefixEmptyFloor abiEncoderRegisteredEffect
   abiEncoder abiDecoderLoop allocaFrontierBound exprLoweringProps
-  abiDecoderWordTyped abiDecoderLayout ctorDeployMemoryFrontier
+  abiDecoderWordTyped abiDecoderLayout ctorDeployMemoryFrontier allocaFrontierRoom
   venomState venomInst venomExecSemantics
   ptrDiscipline ptrSafeRun words list arithmetic
   ctorDeployMemoryRunPtrPrefixMembersCons ctorAbiActualWorld ctorAbiActualAlloc

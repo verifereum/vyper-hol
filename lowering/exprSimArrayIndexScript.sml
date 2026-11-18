@@ -8,7 +8,7 @@
  * range (not negative, for a signed index, and below the length), and
  * hands out the element's pointer: the base, past the length word for a
  * dynamic array, plus the index times the element size.  These are the
- * fragment lemmas the array case of compile_subscript_sim (exprSimPlaces)
+ * fragment lemmas an array subscript's simulation
  * needs: the code runs to the pointer for an index in range, and aborts
  * for one out of range, where the source raises a RuntimeError
  * (evaluate_subscripts array_index, or extend_storage_place's "array ...

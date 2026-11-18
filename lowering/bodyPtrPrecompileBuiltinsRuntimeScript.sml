@@ -7,6 +7,9 @@ Theorem computed_static_exec_eq:
   computed_precompile (venom_call_request s addr 0w ai an T) /\
   inst.inst_outputs = [out] ==>
   exec_ext_call inst s gas addr 0w ai an ro rs T =
+    if s.vs_outcomes = [] then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else
     OK (update_var out
       (if (FST (take_outcome (venom_call_request s addr 0w ai an T)
               s.vs_outcomes)).co_success then 1w else 0w)
@@ -17,7 +20,9 @@ Theorem computed_static_exec_eq:
        with <|vs_returndata :=
           (FST (take_outcome (venom_call_request s addr 0w ai an T)
                  s.vs_outcomes)).co_returnData;
-              vs_outcomes := DROP 1 s.vs_outcomes|>))
+              vs_outcomes := DROP 1 s.vs_outcomes;
+              vs_requests := s.vs_requests ++
+                [venom_call_request s addr 0w ai an T with cr_gas := SOME (w2n gas)]|>))
 Proof
   ACCEPT_TAC (Q.INST [`rq` |-> `venom_call_request s addr 0w ai an T`]
     computed_static_exec |> SIMP_RULE bool_ss [])
@@ -25,7 +30,7 @@ QED
 
 Theorem computed_static_exec_ok:
   computed_precompile (venom_call_request s addr 0w ai an T) /\
-  inst.inst_outputs = [out] ==>
+  inst.inst_outputs = [out] /\ s.vs_outcomes <> [] ==>
   ?t. exec_ext_call inst s gas addr 0w ai an ro rs T = OK t
 Proof
   strip_tac >> drule_all computed_static_exec_eq >> simp[]
@@ -35,7 +40,8 @@ Theorem computed_call_prefix:
   src <> gv /\ dst <> gv /\
   eval_operand (Var src) s = SOME wi /\
   eval_operand (Var dst) s = SOME wo /\
-  computed_precompile (venom_call_request s addr 0w wi an T) ==>
+  computed_precompile (venom_call_request s addr 0w wi an T) /\
+  s.vs_outcomes <> [] ==>
   ?t. run_inst_seq
     [mk_inst id GAS [] [gv];
      mk_inst (id+1) STATICCALL
@@ -46,6 +52,7 @@ Proof
   `computed_precompile (venom_call_request u addr 0w wi an T)` by
     (simp[Abbr `u`, update_var_def, venom_call_request_def] >>
      gvs[venom_call_request_def, read_memory_def]) >>
+  `u.vs_outcomes <> []` by simp[Abbr `u`, update_var_def] >>
   `eval_operand (Var src) u = SOME wi /\
    eval_operand (Var dst) u = SOME wo /\
    eval_operand (Var gv) u = SOME (HD (s.vs_gas_readings ++ [0w]))` by

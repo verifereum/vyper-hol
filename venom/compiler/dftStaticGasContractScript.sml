@@ -22,18 +22,9 @@ Theorem dft_ctx_sim_rq_gas_static_forward:
        ctx_abort_rq D C C' vs vs'
 Proof
   strip_tac >>
-  `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
-    metis_tac[dft_ctx_functions_map] >>
-  drule dft_ctx_block_ids_distinct >> strip_tac >>
-  drule_all o1_ctx_shape_wf_functions >> strip_tac >>
-  drule_all dft_ctx_wf_functions >> strip_tac >>
-  mp_tac (Q.INST [`ctx:venom_context` |-> `C'`, `s:venom_state` |-> `vs'`]
-            gas_oracle_from_list) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  mp_tac (Q.INST [`ctx:venom_context` |-> `C`, `s:venom_state` |-> `vs'`]
-            gas_oracle_to_list) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  rename1 `run_context _ C (vs' with vs_gas_readings := rds)` >>
+  drule_all dft_ctx_gas_replay_witness >>
+  disch_then (qspec_then `vs'`
+    (qx_choosel_then [`orc`, `rds`] strip_assume_tac)) >>
   qexists_tac `vs' with vs_gas_readings := rds` >>
   conj_tac >- simp[gas_variant_def, venom_state_component_equality] >>
   conj_tac

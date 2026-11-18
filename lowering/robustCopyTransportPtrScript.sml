@@ -4,10 +4,10 @@ Ancestors
   representationCleanPtr exprSimMemoryTransport valueEncoding valueEncodingProofs
   valueEncodingProps bodyPtrDefs venomMemProofs list arithmetic
 
-Theorem copied_window_agree_witness:
+Theorem copied_window_decreasing_taint_witness:
   !tn tn' mem mem' src dst n m.
     mem_bytes_at dst n mem' = mem_bytes_at src n mem /\
-    (!i. i < n ==> (dst+i IN tn' <=> src+i IN tn)) /\
+    (!i. i < n /\ dst+i IN tn' ==> src+i IN tn) /\
     mem_agree_outside tn' mem' m ==>
     ?mix. mem_agree_outside tn mem mix /\
           mem_bytes_at src n mix = mem_bytes_at dst n m
@@ -43,15 +43,30 @@ Proof
   simp[Abbr `s`]
 QED
 
-Theorem robust_val_in_memory_copy_transport:
+Theorem copied_window_agree_witness:
+  !tn tn' mem mem' src dst n m.
+    mem_bytes_at dst n mem' = mem_bytes_at src n mem /\
+    (!i. i < n ==> (dst+i IN tn' <=> src+i IN tn)) /\
+    mem_agree_outside tn' mem' m ==>
+    ?mix. mem_agree_outside tn mem mix /\
+          mem_bytes_at src n mix = mem_bytes_at dst n m
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!i. i < n /\ dst+i IN tn' ==> src+i IN tn` by metis_tac[] >>
+  qspecl_then [`tn`, `tn'`, `mem`, `mem'`, `src`, `dst`, `n`, `m`]
+    MATCH_MP_TAC copied_window_decreasing_taint_witness >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem robust_val_in_memory_decreasing_taint_transport:
   !tv v src dst n tn tn' mem mem'.
     val_wf tv v /\ val_footprint tv v <= n /\
     mem_bytes_at dst n mem' = mem_bytes_at src n mem /\
-    (!i. i < n ==> (dst+i IN tn' <=> src+i IN tn)) /\
+    (!i. i < n /\ dst+i IN tn' ==> src+i IN tn) /\
     (!m. mem_agree_outside tn mem m ==> val_in_memory tv v src m) ==>
     !m. mem_agree_outside tn' mem' m ==> val_in_memory tv v dst m
 Proof
-  rpt strip_tac >> drule_all copied_window_agree_witness >>
+  rpt strip_tac >> drule_all copied_window_decreasing_taint_witness >>
   disch_then (qx_choose_then `mix` strip_assume_tac) >>
   `val_in_memory tv v src mix` by metis_tac[] >>
   irule val_in_memory_relocate_footprint >>
@@ -62,6 +77,21 @@ Proof
   `i < n` by decide_tac >>
   `EL i (mem_bytes_at src n mix) = EL i (mem_bytes_at dst n m)` by simp[] >>
   gvs[EL_mem_bytes_at]
+QED
+
+Theorem robust_val_in_memory_copy_transport:
+  !tv v src dst n tn tn' mem mem'.
+    val_wf tv v /\ val_footprint tv v <= n /\
+    mem_bytes_at dst n mem' = mem_bytes_at src n mem /\
+    (!i. i < n ==> (dst+i IN tn' <=> src+i IN tn)) /\
+    (!m. mem_agree_outside tn mem m ==> val_in_memory tv v src m) ==>
+    !m. mem_agree_outside tn' mem' m ==> val_in_memory tv v dst m
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!i. i < n /\ dst+i IN tn' ==> src+i IN tn` by metis_tac[] >>
+  qspecl_then [`tv`, `v`, `src`, `dst`, `n`, `tn`, `tn'`, `mem`, `mem'`]
+    MATCH_MP_TAC robust_val_in_memory_decreasing_taint_transport >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem robust_val_in_memory_exterior_frame:

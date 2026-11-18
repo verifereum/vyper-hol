@@ -1,13 +1,27 @@
 (* Rollup theory for Vyper->Venom lowering + e2e correctness *)
 Theory vyperLoweringHol
 Ancestors
+  (* arbitrary-calldata entry and S1 suppliers *)
+  calldataArrayLiveMemory calldataArrayModularSetup calldataArrayRawCallsite
+  calldataBulkOperationalCertificate calldataBulkSourceOutcome calldataCoherentOwnedEndpoint
+  calldataExactBytesJoint calldataExactMemberValues calldataMembersRawCallsite
+  calldataExactScalarAccepted calldataExactScalarRejected calldataNoneFallbackJoint
+  calldataNoneMetadata calldataRegistrationRawAddress
+  calldataRegistrationTerminalBindings calldataValidHeaderLocalFrontier dispatchedArgsBind
+  dispatchedSelectedFacts dispatchedSelectedPrefix dispatchedSelectedRelations
+  dispatchedValueEntry dispatchedValueFallback dispatchedValuePrefix
+  dispatchedValueSelection dispatchedValueSource fallbackEntryEndpoint
+  loweringCalldataCorrect registrationGuardRejectOrigin
+  dispatchedEntryValueRevert
+  e2eLifecycle e2eTransactionWorld
   e2eCodeFrame
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
   bodyMemStorageCopyStage
-  createCtorTupleExecution dallocaBlueprintArgs
+  dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
+  rawCallCalldataPeakMemory
   loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
   loweringCallBudgetBounds
   moduleLoweringProps entryDispatchProps entryDecodeProps
@@ -26,6 +40,7 @@ Ancestors
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
   stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignTupleMem
+  storageCopyBodyRaisePtr
   stmtSimAssignStorage stmtSimStoreCopy storageCopyLive stmtSimAssignStorageCopy
   stmtSimAssignAttr
   stmtSimAssignAttrStorage stmtSimAugAssignAttr
@@ -36,6 +51,7 @@ Ancestors
   transientLockFrameProps
   selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
+  immutableRepSensitivity
   immutableCodeLayout
   e2eDeployFrame ctorDeployLoweringEntry
   deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
@@ -44,6 +60,7 @@ Ancestors
   loweringShapeProps
   ctorShapeProps ctorUnitShape
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
+  bodyFullShadowBodyInvLowering
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
@@ -72,7 +89,15 @@ Ancestors
   extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
   extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
   abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
+  (* closed-world request-cut guard and producer *)
+  e2eOutcomesProducer
   (* providers awaiting their consumers *)
+  bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
+  bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
+  bodyFullTypeBuiltinAbiEncode
+  bodyPtrTypeBuiltinsBytesUintSemantics
+  internalReturnMemoryMem bodyFullIntCallByteFrame
+  bodyFullIntCall
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa
   assignBasePtrStoragePath assignTuplePtrBytesCopy

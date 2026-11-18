@@ -29,9 +29,7 @@ Theorem evaluate_read_only:
   (!cx g v. !mods. read_only_context mods cx /\ atarget_mutability_ok mods View g ==>
      state_rel_frame machine_frame (assign_tuple_targets cx g v)) /\
   (!cx gs vs. !mods. read_only_context mods cx /\ EVERY (atarget_mutability_ok mods View) gs ==>
-     state_rel_frame machine_frame (assign_tuple_target_list cx gs vs)) /\
-  (!cx es. !mods. read_only_context mods cx /\ EVERY (expr_mutability_ok mods View) es ==>
-     state_rel_frame machine_frame (eval_expr_results cx es))
+     state_rel_frame machine_frame (assign_tuple_target_list cx gs vs))
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
   >- simp[Once evaluate_def, machine_frame_primitives]
@@ -94,9 +92,7 @@ Proof
   >- simp[Once evaluate_def, machine_frame_primitives]
   >- suspend "targets_cons"
   >- simp[Once evaluate_def, machine_frame_primitives]
-  >- simp[Once evaluate_def, machine_frame_primitives]
-  >- simp[Once evaluate_def, machine_frame_primitives]
-  >> suspend "expr_results_cons"
+  >> simp[Once evaluate_def, machine_frame_primitives]
 QED
 
 Resume evaluate_read_only[return_some]:
@@ -633,13 +629,6 @@ QED
 Resume evaluate_read_only[target_place]:
   rpt strip_tac >> simp[Once evaluate_def] >>
   match_mp_tac machine_frame_bind >> simp[machine_frame_get_place] >> metis_tac[]
-QED
-
-Resume evaluate_read_only[expr_results_cons]:
-  rpt strip_tac >> gvs[] >> simp[Once evaluate_def] >>
-  irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
-  >- (rpt strip_tac >> match_mp_tac machine_frame_bind >> simp[] >> metis_tac[]) >>
-  metis_tac[]
 QED
 
 Finalise evaluate_read_only

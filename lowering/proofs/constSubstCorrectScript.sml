@@ -7,7 +7,7 @@ Ancestors
   vyperMisc vyperTyping vyperTypeValues targetOverlapAccess
   vyperPlaceFrames vyperStatePreservation
   vyperImmutablesPreservation vyperScopePreservation vyperCallOutcomeFrame
-  vyperCreateFrame vyperCallFrame vyperMachineFrame vyperEvalOutcomeSuffix
+  vyperCreate vyperCreateFrame vyperCallFrame vyperMachineFrame vyperEvalOutcomeSuffix
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeSystem finite_map alist list
 
 Definition const_local_refs_def:
@@ -1471,7 +1471,7 @@ Theorem protected_cell_frame_call_primitives:
   state_rel_frame (protected_cell_frame addr src id) (update_transient upd_t) /\
   state_rel_frame (protected_cell_frame addr src id) (adopt_call_outcome rq co) /\
   state_rel_frame (protected_cell_frame addr src id)
-    (take_call_outcome target calldata value_opt)
+    (take_call_outcome gas_cap target calldata value_opt)
 Proof
   rpt conj_tac >> irule protected_cell_frame_eq_op >>
   simp[return_def, raise_def, get_accounts_def, get_transient_storage_def,
@@ -2336,7 +2336,7 @@ Proof
 QED
 
 Theorem protected_cell_frame_blueprint[local]:
-  state_rel_frame (protected_cell_frame addr src id) (check_create_blueprint has_salt vs)
+  state_rel_frame (protected_cell_frame addr src id) (check_create_blueprint has_salt literal_offset vs)
 Proof
   simp[state_rel_frame_result] >> rpt strip_tac >>
   drule check_create_blueprint_result_state >> strip_tac >> simp[]
@@ -2381,10 +2381,7 @@ Theorem checked_protected_cell_frame_mutual_aux:
       writable_atarget env g ==> protected_cell_frame addr src id st st') /\
   (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==>
     !mods art src id env addr. checked_frame_context cx mods art src id env /\
-      EVERY (writable_atarget env) gs ==> protected_cell_frame addr src id st st') /\
-  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==>
-    !mods art src id env addr. checked_frame_context cx mods art src id env /\
-      well_typed_exprs env es ==> protected_cell_frame addr src id st st')
+      EVERY (writable_atarget env) gs ==> protected_cell_frame addr src id st st')
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   simp_tac bool_ss [frame_place_expr_other, optionTheory.NOT_NONE_SOME] >>
@@ -2561,7 +2558,7 @@ Proof
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rename1 `code_slice_source bt es = SOME operands` >>
       PairCases_on `operands` >> simp[] >>
-      drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+      drule_all vyperTypeEvalCaseProofsTheory.code_slice_operand_typing >>
       strip_tac >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
@@ -2583,49 +2580,16 @@ Proof
   >- (`well_typed_exprs env es` by
         (qpat_x_assum `well_typed_expr env (Call _ _ _ _)` mp_tac >>
          simp[Once well_typed_expr_def] >> metis_tac[]) >>
-      Cases_on `kind` >> gvs[]
-      >- (irule protected_cell_frame_bind >> conj_tac
-          >- simp[protected_cell_frame_create] >>
-          simp[state_rel_frame_result] >> metis_tac[])
-      >- (irule protected_cell_frame_bind >> conj_tac
-          >- simp[protected_cell_frame_create] >>
-          simp[state_rel_frame_result] >> metis_tac[])
-      >- (drule frame_well_typed_exprs_slices >>
-          disch_then (qspec_then `if has_salt then 4 else 3` strip_assume_tac) >>
-          irule protected_cell_frame_bind >> reverse conj_tac
-          >- (simp[state_rel_frame_result] >> metis_tac[]) >>
-          rpt strip_tac >> simp_tac bool_ss [] >>
-          irule protected_cell_frame_bind >> simp[protected_cell_frame_blueprint] >>
-          rpt strip_tac >> simp_tac bool_ss [] >>
-          qpat_x_assum `!a b c d e f. _ /\ _ ==> _` drule >>
-          disch_then drule >> strip_tac >>
-          irule protected_cell_frame_bind >> reverse conj_tac
-          >- (simp[state_rel_frame_result] >> metis_tac[]) >>
-          rpt strip_tac >> simp_tac bool_ss [] >>
-          irule protected_cell_frame_bind >>
-          simp[protected_cell_frame_reads, protected_cell_frame_create]) >>
-      `well_typed_exprs env (DROP 2 es)` by
-        (irule (cj 2 frame_well_typed_exprs_slices) >> simp[]) >>
-      drule frame_well_typed_exprs_slices >>
-      disch_then (qspec_then `LENGTH es - ((if has_salt then 1 else 0) + 2)` strip_assume_tac) >>
-      `well_typed_exprs env (TAKE 2 es)` by
-        (irule (cj 1 frame_well_typed_exprs_slices) >> simp[]) >>
+      `well_typed_exprs env (create_operand_order kind has_salt es)` by
+        metis_tac[vyperTypeEvalProofsTheory.well_typed_exprs_create_operand_order] >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
-      qpat_x_assum `!a b c. eval_exprs _ _ _ = _ ==> _` drule >> strip_tac >>
-      irule protected_cell_frame_bind >> reverse conj_tac
-      >- (simp[state_rel_frame_result] >> metis_tac[]) >>
-      rpt strip_tac >> simp_tac bool_ss [] >>
-      irule protected_cell_frame_bind >> simp[protected_cell_frame_reads] >>
-      rpt strip_tac >> simp_tac bool_ss [] >>
-      qpat_x_assum `!a b c d e f g h i. _ /\ _ /\ _ ==> _` drule >>
-      disch_then drule >> disch_then drule >> strip_tac >>
-      irule protected_cell_frame_bind >>
-      simp[protected_cell_frame_create] >>
-      simp[state_rel_frame_result] >> metis_tac[])
+      Cases_on `kind` >>
+      simp[vyperCreateTheory.eval_create_operands_def, protected_cell_frame_create,
+           protected_cell_frame_bind, protected_cell_frame_blueprint])
   >~ [`well_typed_expr env (Call ty (IntCall (call_src,call_fn)) es drv)`]
-  >- (rule_assum_tac (SIMP_RULE bool_ss [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >>
+  >- (rule_assum_tac (SIMP_RULE bool_ss [vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >>
       rewrite_tac[ignore_bind_def] >>
       irule protected_cell_frame_bind >>
       simp[protected_cell_frame_pure_guards] >> rpt strip_tac >>
@@ -2634,13 +2598,13 @@ Proof
       simp[protected_cell_frame_pure_guards] >> rpt strip_tac >>
       simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >>
       strip_tac >> full_simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >>
       simp[protected_cell_frame_pure_guards] >> rpt strip_tac >>
       simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >>
       strip_tac >> full_simp_tac bool_ss [] >>
       rename1 `lookup_callable_function _ _ _ = SOME tup` >>
       PairCases_on `tup` >> gvs[] >>
@@ -2683,11 +2647,11 @@ Proof
       irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >> strip_tac >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >> strip_tac >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >> strip_tac >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >> strip_tac >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (Cases_on `tup1` >> simp[protected_cell_frame_return] >>
           Cases_on `cx.nonreentrant_slot` >>
@@ -3118,13 +3082,6 @@ Proof
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_return] >>
       simp[state_rel_frame_result] >> metis_tac[])
-  >~ [`well_typed_exprs env (e::es)`]
-  >- (gvs[Once well_typed_expr_def] >>
-      irule protected_cell_frame_bind >> reverse conj_tac
-      >- (simp[state_rel_frame_result] >> metis_tac[]) >>
-      rpt strip_tac >> simp_tac bool_ss [] >>
-      irule protected_cell_frame_bind >> simp[protected_cell_frame_return] >>
-      simp[state_rel_frame_result] >> metis_tac[])
   >~ [`writable_atarget env (BaseTarget bt)`]
   >- (drule writable_atarget_base >> strip_tac >>
       drule checked_frame_context_constant_root >> strip_tac >>
@@ -3170,10 +3127,7 @@ Theorem checked_protected_cell_frame_mutual:
       writable_atarget env g ==> protected_cell_frame addr src id st st') /\
   (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==>
     !mods art src id env addr. checked_frame_context cx mods art src id env /\
-      EVERY (writable_atarget env) gs ==> protected_cell_frame addr src id st st') /\
-  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==>
-    !mods art src id env addr. checked_frame_context cx mods art src id env /\
-      well_typed_exprs env es ==> protected_cell_frame addr src id st st')
+      EVERY (writable_atarget env) gs ==> protected_cell_frame addr src id st st')
 Proof
   conj_tac >- ACCEPT_TAC (cj 1 checked_protected_cell_frame_mutual_aux) >>
   conj_tac >- ACCEPT_TAC (cj 2 checked_protected_cell_frame_mutual_aux) >>
@@ -3184,8 +3138,7 @@ Proof
   conj_tac >- ACCEPT_TAC (cj 7 checked_protected_cell_frame_mutual_aux) >>
   conj_tac >- ACCEPT_TAC (cj 8 checked_protected_cell_frame_mutual_aux) >>
   conj_tac >- ACCEPT_TAC (cj 9 checked_protected_cell_frame_mutual_aux) >>
-  conj_tac >- ACCEPT_TAC (cj 10 checked_protected_cell_frame_mutual_aux) >>
-  ACCEPT_TAC (cj 11 checked_protected_cell_frame_mutual_aux)
+  ACCEPT_TAC (cj 10 checked_protected_cell_frame_mutual_aux)
 QED
 
 Theorem checked_eval_stmt_protected_cell_frame:
@@ -3256,13 +3209,6 @@ Theorem checked_assign_tuple_target_list_protected_cell_frame:
   state_rel_frame (protected_cell_frame addr src id) (assign_tuple_target_list cx gs vs)
 Proof
   simp[state_rel_frame_result] >> metis_tac[cj 10 checked_protected_cell_frame_mutual]
-QED
-
-Theorem checked_eval_expr_results_protected_cell_frame:
-  checked_frame_context cx mods art src id env /\ well_typed_exprs env es ==>
-  state_rel_frame (protected_cell_frame addr src id) (eval_expr_results cx es)
-Proof
-  simp[state_rel_frame_result] >> metis_tac[cj 11 checked_protected_cell_frame_mutual]
 QED
 
 Theorem checked_eval_expr_const_cells_agree:
@@ -3497,7 +3443,7 @@ Resume constant_expr_replay_aux[struct]:
   drule_all constant_value_eval_expr_observation >>
   disch_then (qspec_then `sc` strip_assume_tac) >>
   `well_typed_exprs (artifact_env artifact mods current_src) (MAP SND kes)` by
-    (irule vyperTypeEvalSoundnessTheory.well_typed_named_exprs_MAP_SND_stmt >>
+    (irule vyperTypeEvalCaseProofsTheory.well_typed_named_exprs_MAP_SND_stmt >>
      gvs[well_typed_expr_def]) >>
   gvs[constant_value_def, constant_expr_def, AllCaseEqs()] >>
   `EVERY (constant_expr mods) (MAP SND kes)` by fs[EVERY_MEM] >>
@@ -4735,10 +4681,10 @@ Theorem const_computations_related_create_blueprint:
   (!s ps t. const_cells_agree roots s /\ actuals s = (INL ps,t) ==>
     const_cells_agree roots t) ==>
   const_computations_related (const_results_related roots cx ty)
-    (bind prefix (\pre. bind (check_create_blueprint salt pre) (\sz.
+    (bind prefix (\pre. bind (check_create_blueprint salt literal_offset pre) (\sz.
       bind (bind actuals (read_results cx)) (\vs.
         eval_create cx (CreateFromBlueprint raw_args) salt rof ats (pre ++ vs) (SOME sz)))))
-    (bind prefix' (\pre. bind (check_create_blueprint salt pre) (\sz.
+    (bind prefix' (\pre. bind (check_create_blueprint salt literal_offset pre) (\sz.
       bind (bind actuals' (read_results cx)) (\vs.
         eval_create cx (CreateFromBlueprint raw_args) salt rof ats (pre ++ vs) (SOME sz))))) st
 Proof
@@ -4779,67 +4725,7 @@ Proof
   rpt strip_tac >> irule const_computations_related_refl >> simp[const_results_related_def]
 QED
 
-Theorem const_computations_related_intcall_arguments:
-  const_computations_related (const_result_lists_related roots cx tys)
-    (eval_expr_results cx es) actuals' st /\
-  (!ps s. eval_expr_results cx es st = (INL ps,s) ==> const_cells_agree roots s) /\
-  well_typed_expr env (Call ty (IntCall (call_src,fn)) es drv) /\
-  get_module_code cx call_src = SOME ts /\
-  lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) /\
-  (!addr src id tv root. MEM (addr,src,id,tv,root) roots ==>
-    checked_frame_context cx mods art src id env) /\ (!x. Rel x x) ==>
-  const_computations_related Rel
-    (bind (eval_expr_results cx es) (\ps. bind get_scopes (\prev.
-      bind (finally
-        (bind (set_scopes [FEMPTY]) (\u.
-          eval_exprs (cx with stk updated_by CONS (call_src,fn)) (DROP n dflts)))
-        (set_scopes prev)) (\vs. bind (read_results cx ps) (k prev vs)))))
-    (bind actuals' (\ps. bind get_scopes (\prev.
-      bind (finally
-        (bind (set_scopes [FEMPTY]) (\u.
-          eval_exprs (cx with stk updated_by CONS (call_src,fn)) (DROP n dflts)))
-        (set_scopes prev)) (\vs. bind (read_results cx ps) (k prev vs))))) st
-Proof
-  strip_tac >> irule const_computations_related_bind >>
-  qexists `const_result_lists_related roots cx tys` >> simp[] >> rpt strip_tac >>
-  `const_cells_agree roots s` by metis_tac[] >>
-  irule const_computations_related_prefix >> reverse conj_tac
-  >- (irule const_computations_related_refl >> simp[]) >> rpt strip_tac >>
-  qpat_x_assum `get_scopes _ = _` mp_tac >>
-  simp[get_scopes_def, return_def] >> strip_tac >> gvs[] >>
-  ho_match_mp_tac const_computations_related_delayed_read >> simp[] >>
-  reverse conj_tac
-  >- (rpt strip_tac >> irule checked_intcall_defaults_const_cells_agree >>
-      metis_tac[]) >>
-  irule const_computations_related_refl >> simp[]
-QED
 
-Theorem const_computations_related_intcall_results:
-  const_computations_related (const_result_lists_related roots cx tys)
-    (eval_expr_results cx es) actuals' st /\
-  (!ps s. eval_expr_results cx es st = (INL ps,s) ==> const_cells_agree roots s) /\
-  well_typed_expr env (Call ty (IntCall (call_src,fn)) es drv) /\
-  get_module_code cx call_src = SOME ts /\
-  lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) /\
-  (!addr src id tv root. MEM (addr,src,id,tv,root) roots ==>
-    checked_frame_context cx mods art src id env) ==>
-  const_computations_related (const_results_related roots cx out_ty)
-    (bind (eval_expr_results cx es) (\ps. bind get_scopes (\prev.
-      bind (finally
-        (bind (set_scopes [FEMPTY]) (\u.
-          eval_exprs (cx with stk updated_by CONS (call_src,fn)) (DROP n dflts)))
-        (set_scopes prev)) (\vs. bind (read_results cx ps) (\vals. k prev vs vals)))))
-    (bind actuals' (\ps. bind get_scopes (\prev.
-      bind (finally
-        (bind (set_scopes [FEMPTY]) (\u.
-          eval_exprs (cx with stk updated_by CONS (call_src,fn)) (DROP n dflts)))
-        (set_scopes prev)) (\vs. bind (read_results cx ps) (\vals. k prev vs vals))))) st
-Proof
-  strip_tac >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  ho_match_mp_tac (INST_TYPE [alpha |-> ``:eval_result``]
-    const_computations_related_intcall_arguments) >>
-  simp[const_results_related_def] >> metis_tac[]
-QED
 
 (* Fixed-footprint inputs for the structural induction.  The collector
    specialization discharges these static maps and pure replay facts. *)
@@ -4849,6 +4735,8 @@ Definition const_subst_context_def:
     (!addr src id tv root. MEM (addr,src,id,tv,root) roots ==>
       checked_frame_context cx mods art src id env) /\
     (!id r. ALOOKUP E id = SOME r ==>
+      (?tops. get_module_code cx NONE = SOME tops /\
+        ALOOKUP (module_consts_env tops []) id = SOME r) /\
       constant_expr mods r /\ const_local_refs r = [] /\
       FLOOKUP env.bare_globals (NONE,id) = SOME (expr_type r) /\
       FLOOKUP env.toplevel_vtypes (NONE,id) = SOME (Type (expr_type r)) /\
@@ -4858,6 +4746,73 @@ Definition const_subst_context_def:
         (PlaceR (ImmutablePlace NONE id [])) pv /\
         (!st. const_cells_agree roots st ==> eval_expr cx r st = (INL pv,st)))
 End
+
+Theorem subst_consts_exprs_map:
+  subst_consts_exprs E es = MAP (subst_consts_expr E) es
+Proof
+  Induct_on `es` >> simp[subst_consts_expr_def]
+QED
+
+Theorem const_closed_subst:
+  (!e. constant_expr mods e /\ const_local_refs e = [] ==>
+    subst_consts_expr E e = e) /\
+  (!es. EVERY (constant_expr mods) es /\ const_local_exprs es = [] ==>
+    subst_consts_exprs E es = es) /\
+  (!fs. EVERY (constant_expr mods) (MAP SND fs) /\ const_local_fields fs = [] ==>
+    subst_consts_fields E fs = fs)
+Proof
+  ho_match_mp_tac const_local_refs_ind >>
+  simp[constant_expr_def, const_local_refs_def, subst_consts_expr_def] >>
+  rpt strip_tac >> gvs[SF ETA_ss] >>
+  PairCases_on `ns` >> Cases_on `ns0` >>
+  gvs[constant_expr_def, const_local_refs_def, subst_consts_expr_def]
+QED
+
+Theorem subst_consts_absorb:
+  (!id r. ALOOKUP E id = SOME r ==>
+    ALOOKUP full id = SOME r /\ subst_consts_expr full r = r) ==>
+  (!e. subst_consts_expr full (subst_consts_expr E e) = subst_consts_expr full e) /\
+  (!bt. subst_consts_btarget full (subst_consts_btarget E bt) =
+    subst_consts_btarget full bt) /\
+  (!es. subst_consts_exprs full (subst_consts_exprs E es) = subst_consts_exprs full es) /\
+  (!d. subst_consts_opt full (subst_consts_opt E d) = subst_consts_opt full d) /\
+  (!fs. subst_consts_fields full (subst_consts_fields E fs) = subst_consts_fields full fs)
+Proof
+  strip_tac >> ho_match_mp_tac fold_const_expr_ind >>
+  simp[subst_consts_expr_def] >> rpt strip_tac >>
+  PairCases_on `ns` >> Cases_on `ns0` >> simp[subst_consts_expr_def] >>
+  Cases_on `ALOOKUP E ns1` >> simp[subst_consts_expr_def] >>
+  first_x_assum drule >> strip_tac >> simp[]
+QED
+
+Theorem const_subst_normalized_expr:
+  const_subst_context roots cx env E mods art ==>
+  subst_consts_expr (case get_module_code cx NONE of
+    SOME tops => module_consts_env tops [] | NONE => [])
+    (subst_consts_expr E e) =
+  subst_consts_expr (case get_module_code cx NONE of
+    SOME tops => module_consts_env tops [] | NONE => []) e
+Proof
+  strip_tac >> qmatch_goalsub_abbrev_tac `subst_consts_expr full` >>
+  `!id r. ALOOKUP E id = SOME r ==>
+    ALOOKUP full id = SOME r /\ subst_consts_expr full r = r` by
+    (rpt strip_tac >> gvs[const_subst_context_def] >>
+     first_x_assum drule >> strip_tac >>
+     simp[Abbr`full`] >> metis_tac[const_closed_subst]) >>
+  drule subst_consts_absorb >> metis_tac[]
+QED
+
+Theorem const_subst_blueprint_literal_offset:
+  const_subst_context roots cx env E mods art ==>
+  blueprint_literal_offset cx has_salt (subst_consts_exprs E es) =
+  blueprint_literal_offset cx has_salt es
+Proof
+  strip_tac >>
+  simp[blueprint_literal_offset_def, subst_consts_exprs_map,
+       GSYM MAP_DROP] >>
+  Cases_on `DROP (if has_salt then 3 else 2) es` >>
+  simp[] >> metis_tac[const_subst_normalized_expr]
+QED
 
 Theorem const_subst_typed_annotation:
   const_subst_context roots cx env E mods art /\
@@ -4872,12 +4827,6 @@ Proof
   gvs[const_subst_context_def] >>
   first_x_assum drule >> strip_tac >>
   gvs[well_typed_expr_def, vtype_annotation_ok_def]
-QED
-
-Theorem subst_consts_exprs_map:
-  subst_consts_exprs E es = MAP (subst_consts_expr E) es
-Proof
-  Induct_on `es` >> simp[subst_consts_expr_def]
 QED
 
 Theorem subst_consts_fields_maps:
@@ -4919,19 +4868,6 @@ Proof
   simp[state_rel_frame_result] >> metis_tac[]
 QED
 
-Theorem const_subst_context_results_frame:
-  const_subst_context roots cx env E mods art /\
-  well_typed_exprs env es /\ const_cells_agree roots st /\
-  eval_expr_results cx es st = (res,st') ==> const_cells_agree roots st'
-Proof
-  strip_tac >> irule protected_cell_frame_cells_agree >>
-  qexists `st` >> simp[] >> rpt strip_tac >>
-  gvs[const_subst_context_def] >>
-  `checked_frame_context cx mods art src id env` by metis_tac[] >>
-  drule_all checked_eval_expr_results_protected_cell_frame >>
-  simp[state_rel_frame_result] >> metis_tac[]
-QED
-
 Theorem const_subst_context_base_frame:
   const_subst_context roots cx env E mods art /\
   IS_SOME (type_place_target env bt) /\ const_cells_agree roots st /\
@@ -4966,9 +4902,7 @@ Definition const_subst_exprs_ok_def:
   const_subst_exprs_ok roots cx env E es <=>
     well_typed_exprs env es ==>
     !st. const_cells_agree roots st ==>
-      eval_exprs cx es st = eval_exprs cx (subst_consts_exprs E es) st /\
-      const_computations_related (const_result_lists_related roots cx (MAP expr_type es))
-        (eval_expr_results cx es) (eval_expr_results cx (subst_consts_exprs E es)) st
+      eval_exprs cx es st = eval_exprs cx (subst_consts_exprs E es) st
 End
 
 Theorem const_computations_related_eq:
@@ -5012,33 +4946,21 @@ Proof
       const_result_lists_related_def] >>
   gen_tac >> strip_tac >>
   simp[const_subst_exprs_ok_def, well_typed_expr_def] >>
-  strip_tac >> gen_tac >> strip_tac >> conj_tac
-  >- (gvs[EVERY_DEF] >>
-      simp_tac bool_ss [subst_consts_expr_def, Ntimes evaluate_def 2] >>
-      rewrite_tac[GSYM const_computations_related_eq] >>
-      irule const_computations_related_bind >>
-      qexists `const_results_related roots cx (expr_type h)` >>
-      reverse conj_tac >- gvs[const_subst_expr_ok_def] >>
-      rpt strip_tac >>
-      `const_cells_agree roots s` by metis_tac[const_subst_context_expr_frame] >>
-      BETA_TAC >> irule const_computations_related_prefix >> reverse conj_tac
-      >- metis_tac[const_computations_related_read] >>
-      rpt strip_tac >> drule read_result_state >> strip_tac >> gvs[] >>
-      irule const_computations_related_prefix >> reverse conj_tac
-      >- gvs[const_computations_related_eq, const_subst_exprs_ok_def] >>
-      rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
+  strip_tac >> gen_tac >> strip_tac >>
   gvs[EVERY_DEF] >>
   simp_tac bool_ss [subst_consts_expr_def, Ntimes evaluate_def 2] >>
+  rewrite_tac[GSYM const_computations_related_eq] >>
   irule const_computations_related_bind >>
   qexists `const_results_related roots cx (expr_type h)` >>
   reverse conj_tac >- gvs[const_subst_expr_ok_def] >>
-  rpt strip_tac >> BETA_TAC >>
+  rpt strip_tac >>
   `const_cells_agree roots s` by metis_tac[const_subst_context_expr_frame] >>
-  irule const_computations_related_bind >>
-  qexists `const_result_lists_related roots cx (MAP expr_type es)` >>
-  reverse conj_tac >- gvs[const_subst_exprs_ok_def] >>
-  rpt strip_tac >> BETA_TAC >>
-  simp[const_computations_related_def, return_def, const_result_lists_related_cons]
+  BETA_TAC >> irule const_computations_related_prefix >> reverse conj_tac
+  >- metis_tac[const_computations_related_read] >>
+  rpt strip_tac >> drule read_result_state >> strip_tac >> gvs[] >>
+  irule const_computations_related_prefix >> reverse conj_tac
+  >- gvs[const_computations_related_eq, const_subst_exprs_ok_def] >>
+  rpt strip_tac >> irule const_computations_related_refl >> simp[]
 QED
 
 
@@ -5069,7 +4991,7 @@ Theorem const_sha256_exhausted[local]:
 Proof
   strip_tac >>
   `outcome_suffix st.outcomes (SND (eval_exprs cx es st)).outcomes` by
-    metis_tac[cj 6 eval_outcomes_suffix_with_results, outcomes_suffix_def] >>
+    metis_tac[cj 6 eval_outcomes_suffix_mutual, outcomes_suffix_def] >>
   Cases_on `eval_exprs cx es st` >>
   gvs[outcome_suffix_def] >>
   simp[Once evaluate_def, ignore_bind_def, bind_def, type_check_def,
@@ -5099,7 +5021,7 @@ Proof
   qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> imp_res_tac read_result_state >> gvs[] >>
-  metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_with_results]
+  metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_mutual]
 QED
 
 Theorem constant_expr_exhausted_no_sha256[local]:
@@ -5133,7 +5055,7 @@ Proof
       qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
       rpt strip_tac >> gvs[] >> imp_res_tac read_result_state >> gvs[] >>
-      metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_with_results])
+      metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_mutual])
   >~ [`bi = Sha256`]
   >- metis_tac[const_sha256_exhausted]
   >~ [`eval_expr cx (Builtin ty bi es) st = _`]
@@ -6020,7 +5942,7 @@ Proof
       rpt strip_tac >>
       simp_tac bool_ss [subst_consts_expr_def, Ntimes evaluate_def 2,
         subst_consts_fields_maps, expr_type_def] >>
-      drule vyperTypeEvalSoundnessTheory.well_typed_named_exprs_MAP_SND_stmt >> strip_tac >>
+      drule vyperTypeEvalCaseProofsTheory.well_typed_named_exprs_MAP_SND_stmt >> strip_tac >>
       drule_all const_subst_exprs_from_elements >>
       simp[const_subst_exprs_ok_def] >> strip_tac >>
       simp_tac bool_ss [LET_THM] >>
@@ -6217,7 +6139,7 @@ Proof
           rpt strip_tac >> irule const_computations_related_refl >>
           simp[const_results_related_def]) >>
       PairCases_on `x` >>
-      drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+      drule_all vyperTypeEvalCaseProofsTheory.code_slice_operand_typing >>
       strip_tac >> gvs[] >>
       `?rest. es = Builtin x0 (Acc Code) [x1]::rest` by
         gvs[code_slice_source_SOME] >>
@@ -6241,10 +6163,8 @@ Proof
       irule const_computations_related_prefix >> reverse conj_tac
       >- (irule const_computations_related_prefix >> reverse conj_tac
           >- (irule const_computations_related_prefix >> reverse conj_tac
-              >- (irule const_computations_related_prefix >> reverse conj_tac
-                  >- (simp[const_computations_related_eq] >>
-                      irule const_subst_code_source >> metis_tac[]) >>
-                  rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
+              >- (simp[const_computations_related_eq] >>
+                  irule const_subst_code_source >> metis_tac[]) >>
               rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
           rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
       rpt strip_tac >> irule const_computations_related_refl >>
@@ -6327,9 +6247,6 @@ Resume const_subst_structural[extcall]:
   `!xs s res t. well_typed_exprs env xs /\ const_cells_agree roots s /\
       eval_exprs cx xs s = (res,t) ==> const_cells_agree roots t` by
     metis_tac[const_subst_context_exprs_frame] >>
-  `!xs s res t. well_typed_exprs env xs /\ const_cells_agree roots s /\
-      eval_expr_results cx xs s = (res,t) ==> const_cells_agree roots t` by
-    metis_tac[const_subst_context_results_frame] >>
   simp_tac bool_ss [subst_consts_expr_def, Once evaluate_def] >>
   simp_tac bool_ss [Once evaluate_def] >>
   rewrite_tac[subst_consts_exprs_map, GSYM MAP_TAKE, GSYM MAP_DROP] >>
@@ -6360,72 +6277,40 @@ Resume const_subst_structural[extcall]:
   simp[const_results_related_def]
 QED
 Resume const_subst_structural[create]:
-  `!xs. EVERY (const_subst_expr_ok roots cx env env') xs /\
-         well_typed_exprs env xs ==> const_subst_exprs_ok roots cx env env' xs` by
+  `EVERY (const_subst_expr_ok roots cx env env') (create_operand_order c b es)` by
+    (Cases_on `c` >> Cases_on `es` >>
+     gvs[create_operand_order_def, rich_listTheory.EVERY_TAKE,
+         rich_listTheory.EVERY_DROP] >>
+     rename1 `create_operand_order RawCreate _ (operand :: rest)` >>
+     Cases_on `rest` >>
+     gvs[create_operand_order_def, rich_listTheory.EVERY_TAKE,
+         rich_listTheory.EVERY_DROP]) >>
+  `well_typed_exprs env (create_operand_order c b es)` by
+    metis_tac[vyperTypeEvalProofsTheory.well_typed_exprs_create_operand_order] >>
+  `const_subst_exprs_ok roots cx env env' (create_operand_order c b es)` by
     metis_tac[const_subst_exprs_from_elements] >>
-  `!xs s res t. well_typed_exprs env xs /\ const_cells_agree roots s /\
-      eval_exprs cx xs s = (res,t) ==> const_cells_agree roots t` by
-    metis_tac[const_subst_context_exprs_frame] >>
-  `!xs s res t. well_typed_exprs env xs /\ const_cells_agree roots s /\
-      eval_expr_results cx xs s = (res,t) ==> const_cells_agree roots t` by
-    metis_tac[const_subst_context_results_frame] >>
+  `create_operand_order c b (subst_consts_exprs env' es) =
+   subst_consts_exprs env' (create_operand_order c b es)` by
+    (Cases_on `c` >> Cases_on `es` >>
+     simp[create_operand_order_def, subst_consts_exprs_map,
+          MAP_TAKE, MAP_DROP] >>
+     rename1 `_ = MAP (subst_consts_expr env')
+       (create_operand_order RawCreate _ (operand :: rest))` >>
+     Cases_on `rest` >>
+     simp[create_operand_order_def, subst_consts_exprs_map,
+          MAP_TAKE, MAP_DROP]) >>
   `MAP expr_type (subst_consts_exprs env' es) = MAP expr_type es` by
     metis_tac[const_subst_typed_annotations] >>
+  `!salt. blueprint_literal_offset cx salt (subst_consts_exprs env' es) =
+     blueprint_literal_offset cx salt es` by
+    metis_tac[const_subst_blueprint_literal_offset] >>
   simp_tac bool_ss [subst_consts_expr_def, Once evaluate_def] >>
   simp_tac bool_ss [Once evaluate_def] >>
-  gvs[subst_consts_exprs_map] >>
-  Cases_on `c` >> simp_tac (srw_ss()) []
-  >- (irule const_computations_related_prefix >>
-      reverse conj_tac >- (simp[const_computations_related_eq]) >>
-      rpt strip_tac >> irule const_computations_related_equal >>
-      simp[const_results_related_def])
-  >- (simp_tac bool_ss [] >> irule const_computations_related_prefix >>
-      reverse conj_tac >- (simp[const_computations_related_eq]) >>
-      rpt strip_tac >> irule const_computations_related_equal >>
-      simp[const_results_related_def])
-  >- (simp_tac bool_ss [] >>
-      rewrite_tac[MAP_TAKE, MAP_DROP] >>
-      ho_match_mp_tac (GEN_ALL (BETA_RULE (PURE_REWRITE_RULE [vyperStateTheory.bind_assoc]
-        const_computations_related_create_blueprint))) >>
-      qexists `MAP expr_type (DROP (if b then 4 else 3) es)` >>
-      simp[GSYM MAP_TAKE, GSYM MAP_DROP, GSYM subst_consts_exprs_map,
-        const_computations_related_eq] >>
-      `well_typed_exprs env (TAKE (if b then 4 else 3) es) /\
-       well_typed_exprs env (DROP (if b then 4 else 3) es)` by
-        metis_tac[frame_well_typed_exprs_slices] >>
-      `const_subst_exprs_ok roots cx env env' (TAKE (if b then 4 else 3) es) /\
-       const_subst_exprs_ok roots cx env env' (DROP (if b then 4 else 3) es)` by
-        metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP] >>
-      gvs[const_subst_exprs_ok_def] >> conj_tac
-      >- (rpt strip_tac >>
-          qpat_x_assum `!s. const_cells_agree roots s ==> _ /\
-            const_computations_related _ (eval_expr_results cx (TAKE _ es)) _ s`
-            (qspec_then `st` mp_tac) >>
-          simp[] >> strip_tac >>
-          qpat_x_assum `eval_exprs cx _ st = (INL v,s)` mp_tac >>
-          asm_rewrite_tac[] >> strip_tac >>
-          qpat_x_assum `!xs s res t. _ /\ _ /\ eval_exprs cx xs s = _ ==> _`
-            irule >> goal_assum (drule_at Any) >> simp[]) >>
-      rpt strip_tac >>
-      qpat_x_assum `!xs s res t. _ /\ _ /\ eval_expr_results cx xs s = _ ==> _`
-        irule >> goal_assum (drule_at Any) >> simp[]) >>
-  simp_tac bool_ss [] >>
-  ho_match_mp_tac (GEN_ALL (BETA_RULE (PURE_REWRITE_RULE [vyperStateTheory.bind_assoc]
-    const_computations_related_raw_create))) >>
-  qmatch_goalsub_abbrev_tac `TAKE n (DROP 2 es)` >>
-  qexists `MAP expr_type (TAKE n (DROP 2 es))` >>
-  simp[GSYM MAP_TAKE, GSYM MAP_DROP, GSYM subst_consts_exprs_map,
-    const_computations_related_eq] >>
-  `well_typed_exprs env (TAKE 2 es) /\
-   well_typed_exprs env (TAKE n (DROP 2 es)) /\
-   well_typed_exprs env (DROP n (DROP 2 es))` by
-    metis_tac[frame_well_typed_exprs_slices] >>
-  `const_subst_exprs_ok roots cx env env' (TAKE 2 es) /\
-   const_subst_exprs_ok roots cx env env' (TAKE n (DROP 2 es)) /\
-   const_subst_exprs_ok roots cx env env' (DROP n (DROP 2 es))` by
-    metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP] >>
-  gvs[const_subst_exprs_ok_def, subst_consts_exprs_map,
-    GSYM MAP_TAKE, GSYM MAP_DROP] >> metis_tac[]
+  asm_rewrite_tac[] >>
+  irule const_computations_related_prefix >> reverse conj_tac
+  >- gvs[const_computations_related_eq, const_subst_exprs_ok_def] >>
+  rpt strip_tac >> irule const_computations_related_equal >>
+  simp[const_results_related_def, GSYM subst_consts_exprs_map]
 QED
 Finalise const_subst_structural
 
@@ -6552,7 +6437,7 @@ Proof
   drule_all checked_module_consts_lookup_footprint >>
   disch_then (qspec_then `sc` strip_assume_tac) >>
   qexists `roots ++ roots'` >>
-  simp[const_cells_agree_append, const_subst_context_def] >>
+  simp[const_cells_agree_append, const_subst_context_def, get_module_code_def] >>
   conj_tac
   >- (drule get_tenv_sources >> simp[artifact_env_def]) >>
   conj_tac

@@ -145,8 +145,8 @@ success flag when the computed input is valid. No callee source correctness is
 presumed or proved.
 
 Success relates `tx_return_bytes`, accounts after EVM pending deletions,
-transient storage modulo dead target storage, logs and the filtered request
-sequence via `request_agree`. Requests are success-only; leftover outcomes are not final
+transient storage modulo dead target storage, logs and the full request
+list (computed precompiles included) via `request_agree`. Requests are success-only; leftover outcomes are not final
 observations. Non-exempt source failure requires target failure, without
 revert-data/reason/general-kind equality. The sole exemption is exact
 `RuntimeError "abi_decode invalid"` with a dynamic target occurring in a function

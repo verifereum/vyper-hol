@@ -1,6 +1,7 @@
 (* Focused checks against the activated evaluator, independent of preservation. *)
 Theory vyperExtCallModesTest
 Ancestors
+  vyperInterpreterCV
   vyperExtCallConsumptionTest vyperCallOutcome extCallOracle
   vyperInterpreter vyperState vyperContext vyperABI vyperAST vyperValue
   vyperValueOperation list finite_map words vfmTypes pair
@@ -34,13 +35,11 @@ Proof
   simp EXT_CALL_FIXTURE_SIMP >> CONV_TAC cv_eval
 QED
 
-Theorem activated_exhaustion_records_request:
+Theorem activated_exhaustion_errors:
   eval_expr empty_evaluation_context counter_expr
     (empty_state with outcomes := SOME []) =
-    (INR (Error (RevertData [])),
-     empty_state with <|outcomes := SOME []; requests := [counter_request];
-       storage_trace := [StorageOutcome counter_request
-         (failed_outcome counter_request)]|>)
+    (INR (Error (RuntimeError "take_call_outcome")),
+     empty_state with outcomes := SOME [])
 Proof
   simp EXT_CALL_FIXTURE_SIMP >> CONV_TAC cv_eval
 QED
@@ -68,18 +67,25 @@ Proof
 QED
 
 (* A computed precompile takes its success from the next outcome and
-   records no request. *)
-Theorem activated_precompile_consumes_without_recording:
-  let rq = call_outcome_request 2w [38w;18w;31w;240w] NONE empty_state in
+   records the request. *)
+Theorem activated_precompile_records_request:
   SND (eval_expr empty_evaluation_context sha256_expr counter_state) =
     counter_state with <|outcomes := SOME [];
-      storage_trace := [StorageOutcome rq (failed_outcome rq)]|> /\
+      requests := counter_state.requests ++
+        [call_outcome_request 2w [38w;18w;31w;240w] NONE empty_state];
+      storage_trace :=
+        [StorageOutcome (call_outcome_request 2w [38w;18w;31w;240w] NONE empty_state)
+           (failed_outcome (call_outcome_request 2w [38w;18w;31w;240w] NONE empty_state))]|> /\
   ~ISL (FST (eval_expr empty_evaluation_context sha256_expr counter_state)) /\
   SND (eval_expr empty_evaluation_context sha256_expr
          (counter_state with outcomes :=
             SOME [counter_outcome with co_success := T])) =
     counter_state with <|outcomes := SOME [];
-      storage_trace := [StorageOutcome rq (failed_outcome rq with
+      requests := counter_state.requests ++
+        [call_outcome_request 2w [38w;18w;31w;240w] NONE empty_state];
+      storage_trace :=
+        [StorageOutcome (call_outcome_request 2w [38w;18w;31w;240w] NONE empty_state)
+           (failed_outcome (call_outcome_request 2w [38w;18w;31w;240w] NONE empty_state) with
         <|co_success := T;
           co_returnData := word_to_bytes (SHA_256_bytes [38w;18w;31w;240w]) T|>)]|> /\
   ISL (FST (eval_expr empty_evaluation_context sha256_expr
@@ -337,7 +343,7 @@ QED
    encoding. *)
 Definition extcall_argument_state_def:
   extcall_argument_state = empty_state with
-    <|outcomes := SOME [];
+    <|outcomes := SOME [counter_outcome];
       scopes := [FEMPTY |+ ("d",
         <|assignable := T;
           type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
@@ -365,7 +371,8 @@ Theorem extcall_argument_first_pop[local]:
        popped := [([ValueSubscript (IntV 1)],IntV 2)]|>)])
 Proof
   simp[extcall_argument_state_def, empty_state_def,
-       empty_evaluation_context_def] >>
+       empty_evaluation_context_def, counter_outcome_def, failed_outcome_def,
+       call_outcome_request_def] >>
   CONV_TAC cv_eval
 QED
 
@@ -385,7 +392,8 @@ Theorem extcall_argument_second_pop[local]:
                   ([ValueSubscript (IntV 1)],IntV 2)]|>)])
 Proof
   simp[extcall_argument_state_def, empty_state_def,
-       empty_evaluation_context_def] >>
+       empty_evaluation_context_def, counter_outcome_def, failed_outcome_def,
+       call_outcome_request_def] >>
   CONV_TAC cv_eval
 QED
 
@@ -401,7 +409,8 @@ Theorem extcall_argument_keyword_read[local]:
   (INL (IntV 1),s2)
 Proof
   simp[extcall_argument_state_def, empty_state_def,
-       empty_evaluation_context_def] >>
+       empty_evaluation_context_def, counter_outcome_def, failed_outcome_def,
+       call_outcome_request_def] >>
   CONV_TAC cv_eval
 QED
 

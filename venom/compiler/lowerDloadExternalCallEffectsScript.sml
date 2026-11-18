@@ -30,8 +30,10 @@ Theorem ld_exec_ext_call_effect:
     tn' = tn with <|
       t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss.vs_returndata)};
       t_stor := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
         ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
       t_trans := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
         ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |> /\
     ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
     ld_dyn_agree fl tn'.t_mem ss.vs_memory ts.vs_memory /\
@@ -42,8 +44,11 @@ Theorem ld_exec_ext_call_effect:
     ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >> (
-  qabbrev_tac `rq = venom_call_request s addr value ao az st` >>
-  qabbrev_tac `rq' = venom_call_request t addr value at az st` >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[ld_nonghost_def] >>
+  `t.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_ext_call_def, AllCaseEqs()]) >>
+  qabbrev_tac `rq = venom_call_request s addr value ao az st with cr_gas := SOME (w2n gs)` >>
+  qabbrev_tac `rq' = venom_call_request t addr value at az st with cr_gas := SOME (w2n gt)` >>
   Cases_on `consume_call_outcome rq (w2n ro) (w2n rz) s` >>
   Cases_on `consume_call_outcome rq' (w2n rt) (w2n rz) t` >>
   rename1 `consume_call_outcome rq (w2n ro) (w2n rz) s = (w,ss0)` >>
@@ -59,8 +64,10 @@ Proof
   qabbrev_tac `mask = tn with <|
     t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss0.vs_returndata)};
     t_stor := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss0.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss0.vs_requests) /\
       ss0.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
     t_trans := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss0.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss0.vs_requests) /\
       ss0.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |>` >>
   `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[ld_nonghost_def] >>
   `w = w' /\ ld_memory lo A mask ss0 ts0 /\

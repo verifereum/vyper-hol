@@ -253,7 +253,7 @@ Proof
      Cases_on `eval_operand e s` >> gvs[] >>
      Cases_on `eval_operand f s` >> gvs[] >>
      fs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[] >>
-     simp[exec_delegatecall_def] >> pairarg_tac >> simp[])
+     Cases_on `s.vs_outcomes = []` >> simp[exec_delegatecall_def])
   >~ [`inst.inst_opcode = CREATE`] >-
     (`LENGTH inst.inst_operands = 3` by gvs[inst_wf_def] >>
      gvs[LENGTH_EQ_NUM_compute] >>
@@ -500,7 +500,7 @@ Proof
      Cases_on `eval_operand g s` >> gvs[] >>
      IF_CASES_TAC >> simp[] >>
      fs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[] >>
-     simp[exec_ext_call_def] >> pairarg_tac >> simp[])
+     Cases_on `s.vs_outcomes = []` >> simp[exec_ext_call_def])
   >~ [`inst.inst_opcode = STATICCALL`] >-
     (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
      gvs[terminates_def, step_inst_base_opcode_eqs, exec_ext_call_def, AllCaseEqs()] >>
@@ -518,7 +518,7 @@ Proof
      Cases_on `eval_operand e s` >> gvs[] >>
      Cases_on `eval_operand f s` >> gvs[] >>
      fs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[] >>
-     simp[exec_ext_call_def] >> pairarg_tac >> simp[])
+     Cases_on `s.vs_outcomes = []` >> simp[exec_ext_call_def])
   >~ [`inst.inst_opcode = LOG`] >-
     (fs[step_inst_non_invoke, inst_wf_def] >>
      rename1 `inst.inst_operands = Lit tc :: rest` >>
@@ -546,6 +546,18 @@ Proof
      first_assum (qspec_then `b` mp_tac) >> simp[])
 QED
 
+Theorem fmp_stage_back_kept_nonparam_point:
+  inst_wf inst /\ inst_shape_ok inst /\ pre_fmp_opcode inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM; PHI; PARAM] /\
+  (!v. MEM (Var v) inst.inst_operands ==> IS_SOME (lookup_var v s)) /\
+  s.vs_labels = t.vs_labels /\ terminates (step_inst k' C' inst t) ==>
+  terminates (step_inst k C inst s)
+Proof
+  strip_tac >> irule kept_base_terminates >> simp[] >>
+  qexistsl_tac [`C'`, `k'`, `t`] >> simp[] >>
+  ho_match_mp_tac kept_operand_defined >> simp[]
+QED
+
 Theorem fmp_stage_back_kept_nonparam:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
@@ -560,9 +572,7 @@ Proof
   `inst_wf inst /\ inst_shape_ok inst /\ pre_fmp_opcode inst.inst_opcode` by
     (fs[o1_fn_shape_def, fn_inst_wf_def, fn_shape_ok_def,
         pre_fmp_ops_def, EVERY_MEM] >> metis_tac[fn_insts_def, MEM_fn_insts_blocks_iff]) >>
-  irule kept_base_terminates >> simp[] >>
-  reverse conj_tac >- gvs[] >>
-  qexistsl_tac [`C'`, `k'`, `t`] >> simp[] >>
-  ho_match_mp_tac kept_operand_defined >> simp[] >>
-  fs[fmp_stage_rel_def, fmp_frame_rel_def]
+  `s.vs_labels = t.vs_labels` by fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
+  irule fmp_stage_back_kept_nonparam_point >> gvs[] >>
+  qexistsl_tac [`C'`, `k'`, `t`] >> simp[]
 QED

@@ -1447,7 +1447,7 @@ Proof
   `value_has_type (StructTV (ZIP(MAP FST kes,tvs)))
     (StructV(ZIP(MAP FST kes,vs)))` by
     (simp[value_has_type_def] >>
-     irule vyperTypeEvalSoundnessTheory.struct_has_type_zip_same_names_stmt >> simp[]) >>
+     irule vyperTypeEvalCaseProofsTheory.struct_has_type_zip_same_names_stmt >> simp[]) >>
   `val_wf (StructTV (ZIP(MAP FST kes,tvs))) (StructV(ZIP(MAP FST kes,vs)))` by
     metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
   `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
