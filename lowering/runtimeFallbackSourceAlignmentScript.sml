@@ -43,15 +43,14 @@ Theorem classified_fallback_source_alignment_nr:
     SOME (mut,nr,args,[],ret,fbody) ==>
   fb = (mut,nr,
         lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
-        tx.function_name,args,([]:expr list),ret,fbody)
+        tx.function_name,args,([]:expr list),ret,fbody) /\
+  subst_consts_stmts (module_consts_env tops []) fbody = fbody
 Proof
   strip_tac >> PairCases_on `fb` >>
   drule classified_fallback_name >> strip_tac >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supported_headers_module_consts_env, supported_program_def,
-              supported_declaration_headers_def] >>
   drule classify_functions_fallback_mem >> strip_tac >>
-  gvs[subst_consts_fn_empty] >>
+  drule_all checked_supported_external_subst >> strip_tac >>
+  gvs[] >>
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   `vyperInterpreter$lookup_function NONE "__default__" External tops =
      SOME (fb0,fb1,fb4,fb5,fb6,fb7)` by
@@ -59,7 +58,8 @@ Proof
      qexists_tac `FunctionDecl External fb0 fb1 fb2 "__default__" fb4 fb5 fb6 fb7` >>
      simp[vyperInterpreterTheory.lookup_function_def,
           vyperTypeContractTheory.external_name_keys_toplevel_def]) >>
-  drule_all default_decl_raw_return >> strip_tac >> gvs[]
+  drule_all default_decl_raw_return >> strip_tac >>
+  gvs[subst_consts_fn_def]
 QED
 
 Theorem classified_fallback_source_alignment:

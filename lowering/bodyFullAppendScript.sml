@@ -3758,16 +3758,9 @@ Proof
      `body_expr_full_ok cx e` by metis_tac[] >>
      rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >>
      disch_then (map_every assume_tac o CONJUNCTS) >> suspend "compose") >>
-  qpat_assum `supported_stmt _ _ _`
-    (strip_assume_tac o SRULE [supported_stmt_append_form])
-  >- metis_tac[bodyAppendStorageFactsTheory.supported_append_storage_decl] >>
-  drule bodyStorageMetadataTheory.supported_variable_decl_mem >> strip_tac >>
-  `supported_program tops` by fs[body_inv_def] >>
-  drule_all supportedProgramTheory.supported_program_declaration >> strip_tac >>
-  `mut = Storage \/ mut = Transient` by
-    (Cases_on `mut` >> Cases_on `vis` >>
-     fs[supportedDeclsTheory.supported_declaration_header_def]) >>
-  metis_tac[]
+  qpat_x_assum `supported_stmt _ _ _` mp_tac >>
+  simp[supported_stmt_append_form, supportedStmtsTheory.supported_append_target_def] >>
+  metis_tac[bodyAppendStorageFactsTheory.supported_append_storage_decl]
 QED
 
 Resume body_append_storage_full[compose]:

@@ -3,10 +3,28 @@ Ancestors
   ctorDeployDefs ctorDeployShape ctorDeployInitcode
   vyperTypeContractContext vyperTypeContract compileVyper
   e2eDeployDefs vyperTypeSystem supportedStmtTraverse supportedProgram
+  constSubstStmtsPreserve
+
+val _ = Parse.hide "body";
+
+Theorem checked_constructor_body_subst[local]:
+  supported_program_deploy tops /\
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP mods NONE = SOME tops /\
+  MEM (FunctionDecl Deploy mut nr rr fname args defaults ret body) tops ==>
+  subst_consts_stmts (module_consts_env tops []) body = body
+Proof
+  strip_tac >> drule_all supported_program_deploy_function >> strip_tac >>
+  irule subst_consts_supported_stmts_unchanged >>
+  fs[supported_function_body_def] >>
+  qexistsl_tac [`args ++ supported_stmts_bindings T body ++
+                supported_stmts_bindings F body`, `tops`] >> simp[] >>
+  metis_tac[checked_module_consts_env_names_constant]
+QED
 
 Theorem outcomes_free_classified_constructor_typing:
   !layouts addr mods art tops mut nr rr fname args defaults ret fbody.
-  supported_program tops /\
+  supported_program_deploy tops /\
   check_contract T layouts addr mods = SOME art /\
   ALOOKUP mods NONE = SOME tops /\
   SND (SND (SND (classify_functions tops))) =
@@ -15,11 +33,8 @@ Theorem outcomes_free_classified_constructor_typing:
 Proof
   rpt gen_tac >> strip_tac >>
   drule classify_functions_ctor_mem >> strip_tac >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supported_program_def,
-      supportedDeclsTheory.supported_declaration_headers_def,
-      supportedDeclsTheory.supported_headers_module_consts_env] >>
-  gvs[constSubstTheory.subst_consts_fn_empty] >>
+  drule_all checked_constructor_body_subst >> strip_tac >>
+  gvs[constSubstTheory.subst_consts_fn_def] >>
   drule_all check_contract_deploy_function_body_MEM >>
   simp[check_function_body_def] >>
   strip_tac >>
@@ -38,7 +53,7 @@ Theorem outcomes_free_classified_constructor_source:
 Proof
   rpt gen_tac >> strip_tac >>
   fs[deploy_source_ok_def, deploy_typing_ok_def, ctor_named_init_def] >>
-  `ALOOKUP [(NONE,tops)] NONE = SOME tops` by simp[] >>
+  `ALOOKUP [((NONE:num option),tops)] NONE = SOME tops` by simp[] >>
   `?env env'. type_stmts env ret fbody = SOME env'` by
     (irule (INST_TYPE [``:'a`` |-> ``:160 word``]
        outcomes_free_classified_constructor_typing) >>
@@ -46,11 +61,15 @@ Proof
   qspec_then `tops` (qspecl_then [`NONE`, `"__init__"`] mp_tac)
     classify_functions_ctor_lookup >>
   simp[] >> strip_tac >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supported_program_def,
-      supportedDeclsTheory.supported_declaration_headers_def,
-      supportedDeclsTheory.supported_headers_module_consts_env] >>
-  gvs[constSubstTheory.subst_consts_fn_empty, constructor_call_free_def] >>
+  drule vyperTypeContractStaticMapsTheory.lookup_function_Deploy_SOME_cases >>
+  strip_tac
+  >- (gvs[constSubstTheory.subst_consts_fn_def,
+          constSubstTheory.subst_consts_stmt_def, supported_stmt_expr_exists_def] >>
+      metis_tac[]) >>
+  `subst_consts_stmts (module_consts_env tops []) raw_body = raw_body` by
+    metis_tac[INST_TYPE [``:'a`` |-> ``:160 word``]
+      checked_constructor_body_subst] >>
+  gvs[constSubstTheory.subst_consts_fn_def, constructor_call_free_def] >>
   metis_tac[]
 QED
 

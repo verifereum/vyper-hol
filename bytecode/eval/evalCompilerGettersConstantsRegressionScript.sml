@@ -79,8 +79,8 @@ Theorem public_header_slot_and_constant_boundaries:
     (VariableDecl (Public T) Transient "g" regression_uint (SOME 0)) /\
   ~supported_declaration_header []
     (VariableDecl (Public F) Storage "g" regression_uint NONE) /\
-  ~supported_declaration_header []
-    (regression_constant "A" (Name regression_uint "literal"))
+  supported_declaration_header []
+    (regression_constant "A" (Literal regression_uint (IntL 7)))
 Proof
   EVAL_TAC
 QED
