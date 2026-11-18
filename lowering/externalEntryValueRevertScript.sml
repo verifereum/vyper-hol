@@ -41,7 +41,7 @@ QED
 Theorem external_value_reject_trace[local]:
   source_deployment_rel tops am tx /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut, F, args, [], ret, fbody) /\
+    SOME (mut, nr, args, [], ret, fbody) /\
   LENGTH tx.args = LENGTH args /\
   mut <> Payable /\ tx.value <> 0 ==>
   !gs. call_external_trace orc gs am tx =
@@ -58,11 +58,11 @@ Proof
 QED
 
 (* Rejection occurs before evaluation can consume any gas readings. *)
-Theorem external_entry_reject_readings:
+Theorem external_entry_reject_readings_nr:
   source_deployment_rel tops am tx /\
   value_transfer_ok tx am.accounts /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
-    SOME (mut,F,args,[],ret,fbody) /\
+    SOME (mut,nr,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME env /\
   send_call_value mut
     (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -79,13 +79,29 @@ Proof
   disch_then SUBST1_TAC >> simp[]
 QED
 
+Theorem external_entry_reject_readings:
+  source_deployment_rel tops am tx /\
+  value_transfer_ok tx am.accounts /\
+  vyperInterpreter$lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+      <| outcomes := SOME os; requests := [] |>) = (INR e,st) ==>
+  !gs. FST (call_external (SOME os) gs am tx) <>
+    INR (Error (RuntimeError "msg.gas: no gas reading"))
+Proof
+  metis_tac[external_entry_reject_readings_nr]
+QED
+
 Theorem external_value_reject_dispatch[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
   valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
   initial_venom_state_rel tops am tx vs /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut,F,args,[],ret,fbody) /\
+    SOME (mut,nr,args,[],ret,fbody) /\
   send_call_value mut
     (initial_evaluation_context am.sources am.layouts tx NONE)
     (initial_state am [env] with
@@ -249,7 +265,7 @@ Theorem external_value_reject_target[local]:
   valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
   initial_venom_state_rel tops am tx vs /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut,F,args,[],ret,fbody) /\
+    SOME (mut,nr,args,[],ret,fbody) /\
   send_call_value mut
     (initial_evaluation_context am.sources am.layouts tx NONE)
     (initial_state am [env] with
@@ -275,8 +291,8 @@ QED
 
 (* The selected rejection run fixes empty GAS marks and its terminal endpoint
    before any storage horizon is introduced. *)
-Theorem external_entry_value_revert:
-  !tops rpolicy unit am tx ret vs mut args fbody env e st.
+Theorem external_entry_value_revert_nr:
+  !tops rpolicy unit am tx ret vs mut nr args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -285,7 +301,7 @@ Theorem external_entry_value_revert:
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
+      SOME (mut, nr, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
     send_call_value mut
       (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -344,5 +360,30 @@ Proof
           vyperStorageFootprintTheory.storage_roots_fit_def,
           vyperStorageFootprintTheory.storage_trace_backends_well_formed_def] >>
   metis_tac[gas_origin_ptr_path_projections]
+QED
+
+Theorem external_entry_value_revert:
+  !tops rpolicy unit am tx ret vs mut args fbody env e st.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INR e, st) ==>
+    source_unit_execution_correct tops ret am tx unit vs
+Proof
+  rpt gen_tac >>
+  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`, `mut`,
+               `F`, `args`, `fbody`, `env`, `e`, `st`] MATCH_ACCEPT_TAC
+    external_entry_value_revert_nr
 QED
 
