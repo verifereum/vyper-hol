@@ -1,6 +1,6 @@
 Theory runtimeSymSrcDataContext
 Ancestors
-  symbolicSourceCompilerCopyFrame
+  symbolicSourceCompilerCopyFrame symbolicSourceCompilerFrame
   runtimeSymSrcDataFrame context compileEnv emitHelper
 
 fun specialize_frame theorem =

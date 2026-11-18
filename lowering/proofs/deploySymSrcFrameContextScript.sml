@@ -1,6 +1,6 @@
 Theory deploySymSrcFrameContext
 Ancestors
-  symbolicSourceCompilerCopyFrame
+  symbolicSourceCompilerCopyFrame symbolicSourceCompilerFrame
   deploySymSrcBlockFrame context compileEnv emitHelper
 
 fun specialize_frame theorem =
