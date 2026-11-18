@@ -16,13 +16,6 @@ fun windows_tac thms =
     irule dalloca_windows_ignore_bind >> conj_tac,
     COND_CASES_TAC, BasicProvers.TOP_CASE_TAC]);
 
-Theorem dalloca_windows_state_wrappers[local]:
-  SND (as_stack_val t (op_st:operand # compile_state)) = SND op_st /\
-  SND (as_ptr_val t loc op_st) = SND op_st
-Proof
-  Cases_on `op_st` >> simp[as_stack_val_def, as_ptr_val_def]
-QED
-
 Theorem builtin_operand_members[local]:
   (1 <= LENGTH xs ==> MEM (HD xs) xs) /\
   (2 <= LENGTH xs ==> MEM (HD (TL xs)) xs)

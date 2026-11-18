@@ -607,10 +607,11 @@ Proof
   metis_tac[MEM_FRONT_NOT_NIL, MEM_LAST_NOT_NIL]
 QED
 
-Theorem dalloca_windows_create_as_stack[local]:
-  SND (as_stack_val ty (op_st:operand # compile_state)) = SND op_st
+Theorem dalloca_windows_state_wrappers:
+  SND (as_stack_val t (op_st:operand # compile_state)) = SND op_st /\
+  SND (as_ptr_val t loc op_st) = SND op_st
 Proof
-  Cases_on `op_st` >> simp[as_stack_val_def]
+  Cases_on `op_st` >> simp[as_stack_val_def, as_ptr_val_def]
 QED
 
 Theorem dalloca_windows_compile_call:
@@ -628,7 +629,7 @@ Proof
   Cases_on `target` >> rpt strip_tac >> gvs[] >>
   TRY (rename1 `preserves_dalloca_windows _ (compile_call _ _ _ _ (CreateTarget ck _ _ _) _ _)` >>
        Cases_on `ck` >> gvs[]) >>
-  TRY (simp[dalloca_windows_result_state, compile_call_def, dalloca_windows_create_as_stack,
+  TRY (simp[dalloca_windows_result_state, compile_call_def, dalloca_windows_state_wrappers,
             pairTheory.UNCURRY] >> rpt strip_tac >>
        finish_window_state [dalloca_windows_create_proxy_call,
                              dalloca_windows_compile_raw_create] >> NO_TAC) >>
