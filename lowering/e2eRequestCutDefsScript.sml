@@ -303,7 +303,8 @@ Definition vyper_frame_staging_def:
     (?deploy_bc. compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc)) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es
+    call_state_rel tops runtime_bc am tx es /\
+    ~MEM tx.target es.rollback.toDelete
 End
 
 (* The v3 staging text, conjunct for conjunct.  Staging keeps original tx
@@ -467,7 +468,7 @@ Definition call_guard_gas_link_stmt_def:
                 raw_safe_rq_upto
                   (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
                   0 (recorded_outcomes_count obs_pre) unit.cu_context vs /\
-                (?fn inst s fuel s'.
+                (?fn inst s fuel s' fn' inst' t fuel' t'.
                    raw_reachable vs unit.cu_context fn inst s /\
                    inst.inst_opcode <> INVOKE /\
                    LENGTH s.vs_requests = recorded_outcomes_count obs_pre /\
@@ -477,24 +478,27 @@ Definition call_guard_gas_link_stmt_def:
                      rq (EL (recorded_outcomes_count obs_pre) s'.vs_requests) /\
                    outcome =
                      (if s.vs_outcomes = [] then failed_outcome rq
-                      else HD s.vs_outcomes)) /\
+                      else HD s.vs_outcomes) /\
+                   raw_reachable (opt_entry_state prog prog' cp es)
+                     out.po_unit.cu_context fn' inst' t /\
+                   inst'.inst_opcode <> INVOKE /\
+                   LENGTH t.vs_requests = recorded_outcomes_count obs_pre /\
+                   step_inst fuel' out.po_unit.cu_context inst' t = OK t' /\
+                   recorded_outcomes_count obs_pre < LENGTH t'.vs_requests /\
+                   request_agree_except
+                     (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
+                     (EL (recorded_outcomes_count obs_pre) s'.vs_requests)
+                     (EL (recorded_outcomes_count obs_pre) t'.vs_requests) /\
+                   t.vs_outcomes = s.vs_outcomes) /\
                 ctx_rq_upto
                   (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
                   (recorded_outcomes_count obs_pre)
-                  unit.cu_context out.po_unit.cu_context vs
-                  (opt_entry_state prog prog' cp es) /\
+                  unit.cu_context out.po_unit.cu_context
+                  vs (opt_entry_state prog prog' cp es) /\
                 (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-                   mem_inv
-                     (\ctx fn inst s.
-                       (request_cut (recorded_outcomes_count obs_pre) s /\
-                        ~in_static_abort_prefix fn s) ==>
-                       lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
-                     out.po_unit.cu_context (opt_entry_state prog prog' cp es)) /\
+                  mem_inv (\ctx fn inst s. (request_cut (recorded_outcomes_count obs_pre) s /\ ~in_static_abort_prefix fn s) ==>
+                    lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s) out.po_unit.cu_context (opt_entry_state prog prog' cp es)) /\
                 (fin = asm_opt_finalizer ==>
-                 code_end_offset_ok
-                   (\ctx fn inst s.
-                     raw_reachable (opt_entry_state prog prog' cp es) ctx fn inst s /\
-                     request_cut (recorded_outcomes_count obs_pre) s /\
-                     ~in_static_abort_prefix fn s)
-                   out.po_unit.cu_context)))
+                  code_end_offset_ok (\ctx fn inst s. raw_reachable (opt_entry_state prog prog' cp es) ctx fn inst s /\
+                    request_cut (recorded_outcomes_count obs_pre) s /\ ~in_static_abort_prefix fn s) out.po_unit.cu_context)))
 End
