@@ -8,13 +8,21 @@ Ancestors
   asmSem asmSymSem asmSymBridge asmWf asmOptimizer finite_map pred_set
   words arithmetic list rich_list
 
+(* Eliminate naming premises when matching a worker's specialized result. *)
+val prune_alias_conv = REDEPTH_CONV (FIRST_CONV
+  [Unwind.UNWIND_FORALL_CONV, REWR_CONV LET_THM, BETA_CONV]);
+val prune_specialize = CONV_RULE prune_alias_conv;
+fun prune_introduce names = map_every (fn name => qx_gen_tac name >>
+  disch_then (assume_tac o
+    CONV_RULE (RAND_CONV (REDEPTH_CONV Unwind.UNWIND_FORALL_CONV)))) names;
+
 (* Only the two non-label instructions are removed. The retained index
    used for a fetch is distinct from the splice boundary used for a cut. *)
 Theorem prune_jump_layout[local]:
-  let p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail in
-  let q = pre ++ [AsmLabel x] ++ tail in
-  let b = LENGTH pre in
-  let r = splice_pc b 2 0 in
+  !p. p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail ==>
+  !q. q = pre ++ [AsmLabel x] ++ tail ==>
+  !b. b = LENGTH pre ==>
+  !r. r = splice_pc b 2 0 ==>
   asm_static_wf p ==>
   asm_static_wf q /\ FILTER is_data_inst q = FILTER is_data_inst p /\
   (!i. i < LENGTH p /\ i <> b /\ i <> b+1 ==>
@@ -22,7 +30,7 @@ Theorem prune_jump_layout[local]:
   (!l i. INDEX_OF (AsmLabel l) p = SOME i ==>
        i <> b /\ i <> b+1 /\ INDEX_OF (AsmLabel l) q = SOME (r i))
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC prune_alias_conv >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> strip_tac >>
   `asm_static_wf (pre ++ AsmLabel x :: tail) /\
    FILTER is_data_inst (pre ++ AsmLabel x :: tail) =
@@ -53,22 +61,21 @@ QED
 
 (* The label name survives the contraction, but its assembled word changes. *)
 Theorem prune_jump_taken_layout[local]:
-  let p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail in
-  let q = pre ++ [AsmLabel x] ++ tail in
-  let r = splice_pc (LENGTH pre) 2 0 in
+  !p. p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail ==>
+  !q. q = pre ++ [AsmLabel x] ++ tail ==>
   asm_static_wf p /\ FLOOKUP (SND (compute_label_offsets p)) l = SOME old /\
   FLOOKUP (build_offset_to_pc p) old = SOME dest ==>
   ?fresh. FLOOKUP (SND (compute_label_offsets q)) l = SOME fresh /\
-          fresh < dimword(:256) /\ FLOOKUP (build_offset_to_pc q) fresh = SOME (r dest)
+          fresh < dimword(:256) /\ FLOOKUP (build_offset_to_pc q) fresh = SOME (splice_pc (LENGTH pre) 2 0 dest)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC prune_alias_conv >>
   qabbrev_tac `p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail` >>
   qabbrev_tac `q = pre ++ [AsmLabel x] ++ tail` >>
   strip_tac >>
   drule_all staticAbortOptPruneUnreachableLayoutTheory.lookup_pair_code_label_index >>
   strip_tac >>
   `asm_static_wf q /\ INDEX_OF (AsmLabel l) q = SOME (splice_pc (LENGTH pre) 2 0 dest)` by
-    (mp_tac (BETA_RULE (REWRITE_RULE [LET_THM] prune_jump_layout)) >>
+    (mp_tac (prune_specialize prune_jump_layout) >>
      simp[Abbr `p`, Abbr `q`] >> metis_tac[]) >>
   drule_all asm_static_wf_code_label >>
   disch_then (qx_choose_then `fresh` strip_assume_tac) >>
@@ -79,32 +86,30 @@ QED
 (* At the interior cut the destination replays to the state before the
    erased push. At all other cuts the symbolic stack is unchanged. *)
 Theorem prune_jump_actual_root[local]:
-  let p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail in
-  let q = pre ++ [AsmLabel x] ++ tail in
-  let b = LENGTH pre in
-  let r = splice_pc b 2 0 in
-  let ep = asm_data_env p (assemble p ++ data) in
-  let eq = asm_data_env q (assemble q ++ data) in
+  !p. p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail ==>
+  !q. q = pre ++ [AsmLabel x] ++ tail ==>
+  !b. b = LENGTH pre ==>
+  !eq. eq = asm_data_env q (assemble q ++ data) ==>
   s.as_pc = 0 /\ asm_static_wf p /\ s.as_code = assemble p ++ data /\
-  sym_steps p ep n (sym_init s) = SymOK ss ==>
+  sym_steps p (asm_data_env p (assemble p ++ data)) n (sym_init s) = SymOK ss ==>
   asm_static_wf q /\ FILTER is_data_inst q = FILTER is_data_inst p /\
   ?j v t.
     sym_steps q eq j (sym_init (s with as_code := assemble q ++ data)) = SymOK v /\
     asm_steps (SND(compute_label_offsets q)) (build_offset_to_pc q) q j
       (s with as_code := assemble q ++ data) = AsmOK t /\
     asm_sym_rel q eq t v /\
-    t.as_pc = (if ss.sym_base.as_pc = b+1 then b else r ss.sym_base.as_pc) /\
+    t.as_pc = (if ss.sym_base.as_pc = b+1 then b else splice_pc b 2 0 ss.sym_base.as_pc) /\
     t.as_call_ctx = ss.sym_base.as_call_ctx /\
     t.as_requests = ss.sym_base.as_requests /\ LENGTH t.as_stack = LENGTH v.sym_stack /\
     (if ss.sym_base.as_pc = b+1 then ss.sym_stack = Lab x 0 :: v.sym_stack
      else ss.sym_stack = v.sym_stack)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC prune_alias_conv >>
   qabbrev_tac `p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail` >>
   qabbrev_tac `q = pre ++ [AsmLabel x] ++ tail` >>
   strip_tac >>
   `asm_static_wf q /\ FILTER is_data_inst q = FILTER is_data_inst p` by
-    (mp_tac (BETA_RULE (REWRITE_RULE [LET_THM] prune_jump_layout)) >>
+    (mp_tac (prune_specialize prune_jump_layout) >>
      simp[Abbr `p`, Abbr `q`] >> metis_tac[]) >>
   asm_rewrite_tac[] >>
   qabbrev_tac `ep = asm_data_env p (assemble p ++ data)` >>
@@ -116,7 +121,7 @@ Proof
           (if ss.sym_base.as_pc = LENGTH pre+1 then ss.sym_stack = Lab x 0 :: v.sym_stack
            else ss.sym_stack = v.sym_stack)` by
     (mp_tac (Q.INST [`n` |-> `n`, `env` |-> `ep`]
-              (BETA_RULE (REWRITE_RULE [LET_THM] prune_jump_site_stopped_prefix))) >>
+              (prune_specialize prune_jump_site_stopped_prefix)) >>
      qpat_assum `Abbrev (p = _)`
        (fn th => rewrite_tac [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
      qpat_assum `Abbrev (q = _)`
@@ -144,15 +149,14 @@ QED
 (* The bypass already accounts for the pop at an interior cut. Apply
    precisely its slot shift to the demands justified by stopped replay. *)
 Theorem prune_jump_root_slots[local]:
-  let b = LENGTH (pre:asm_inst list) in
-  let r = splice_pc b 2 0 in
-  let d = if pc (e:num#num) = b+1 then 1 else 0 in
-  let Demand = \w stack.
+  !b. b = LENGTH (pre:asm_inst list) ==>
+  !r. r = splice_pc b 2 0 ==>
+  !d. d = (if pc (e:num#num) = b+1 then 1 else 0) ==>
+  !Demand. Demand = (\w stack.
     (!k l org. tag w k = SOME(l,org) ==>
        k < LENGTH stack /\ EL k stack = Lab l 0) /\
     (!k. boolean w k ==> k < LENGTH stack /\
-       (EL k stack = Val 0w \/ EL k stack = Val 1w))
-  in
+       (EL k stack = Val 0w \/ EL k stack = Val 1w))) ==>
   e IN V /\ t.as_pc = (if pc e = b+1 then b else r (pc e)) /\
   LENGTH t.as_stack = LENGTH dst /\ height e = LENGTH src /\
   (if pc e = b+1 then src = Lab x 0 :: dst else src = dst) /\
@@ -164,7 +168,7 @@ Theorem prune_jump_root_slots[local]:
   ?z. z IN V /\ pc z <> b /\ pc z <> b+1 /\ r (pc z) = t.as_pc /\
       height z = LENGTH t.as_stack /\ Demand z dst
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC prune_alias_conv >>
   qabbrev_tac `b = LENGTH pre` >> strip_tac >>
   Cases_on `pc e = b+1`
   >- (`pc e <> b` by decide_tac >>
@@ -196,8 +200,8 @@ QED
 
 (* Select the surviving root of the cut before constructing retained arms. *)
 Theorem prune_jump_replayed_root[local]:
-  let Shape =
-    \p cc req pc height need tag boolean i (t:asm_state).
+  !Shape. Shape =
+    (\p cc req pc height need tag boolean i (t:asm_state).
       t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
       t.as_call_ctx = cc /\ t.as_requests = req /\
       (need i ==> t.as_call_ctx.cc_static) /\
@@ -211,20 +215,20 @@ Theorem prune_jump_replayed_root[local]:
            FLOOKUP (build_offset_to_pc p) off = SOME dest /\
            EL k t.as_stack = (n2w off:bytes32)) /\
       (!k. boolean i k ==> k < height i /\
-         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-  in
-  let Flow =
-    \p pc height tag boolean (x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit =
-      \(src:num -> num option)
+         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !Flow. Flow =
+    (\p pc height tag boolean (x:num#num) (y:num#num).
+    !hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !ins. ins = EL (pc x) p ==>
+    !inherit. inherit =
+      (\(src:num -> num option)
         (fresh:num -> (string#num)option) (bnew:num -> bool).
         (!k l origin. tag y k = SOME(l,origin) ==>
            k < hj /\ (fresh k = SOME(l,origin) \/
            ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
         (!k. boolean y k ==> k < hj /\
-           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-    in
+           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs =>
@@ -254,7 +258,8 @@ Theorem prune_jump_replayed_root[local]:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
              | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -263,19 +268,17 @@ Theorem prune_jump_replayed_root[local]:
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins t = AsmOK u ==>
                      (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F
-  in
-  let Open =
-    \p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
+    | _ => F) ==>
+  !Open. Open =
+    (\p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
       (tag:(num#num)->num->(string#num)option)
       (boolean:(num#num)->num->bool) edge.
-    let S = Shape p cc req pc height need tag boolean in
-    let target = \x y.
+    !S. S = Shape p cc req pc height need tag boolean ==>
+    !target. target = (\x y.
       ?l origin off. tag x 0 = SOME(l,origin) /\
         FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
         off < dimword(:256) /\
-        FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-    in
+        FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
       FINITE V /\ X SUBSET V /\
       (!x. x IN V ==> ?t. S x t) /\
       (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -293,17 +296,15 @@ Theorem prune_jump_replayed_root[local]:
                       p 1 t = AsmFault u) /\ u.as_requests=req) \/
          (?y u. edge x y /\
             asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-              p 1 t = AsmOK u /\ S y u))
-  in
-  let p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail in
-  let q = pre ++ [AsmLabel x] ++ tail in
-  let b = LENGTH pre in
-  let Demand = \w stack.
+              p 1 t = AsmOK u /\ S y u))) ==>
+  !p. p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail ==>
+  !q. q = pre ++ [AsmLabel x] ++ tail ==>
+  !b. b = LENGTH pre ==>
+  !Demand. Demand = (\w stack.
     (!k l org. tag w k = SOME(l,org) ==>
        k < LENGTH stack /\ EL k stack = Lab l 0) /\
     (!k. boolean w k ==> k < LENGTH stack /\
-       (EL k stack = Val 0w \/ EL k stack = Val 1w))
-  in
+       (EL k stack = Val 0w \/ EL k stack = Val 1w))) ==>
   s.as_pc = 0 /\ s.as_code = assemble p ++ data /\ asm_static_wf p /\
   sym_steps p (asm_data_env p (assemble p ++ data)) n (sym_init s) = SymOK ss /\
   Open p cc req V {} rank pc height need tag boolean edge /\
@@ -320,7 +321,7 @@ Theorem prune_jump_replayed_root[local]:
     z IN V /\ pc z <> b /\ pc z <> b+1 /\ splice_pc b 2 0 (pc z) = t.as_pc /\
     height z = LENGTH t.as_stack /\ Demand z v.sym_stack
 Proof
-  rpt gen_tac >> rpt (pairTools.LET_INTRO_TAC >> disch_then assume_tac) >>
+  prune_introduce [`Shape`,`Flow`,`Open`,`p`,`q`,`b`,`Demand`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `asm_static_wf q /\ FILTER is_data_inst q = FILTER is_data_inst p /\
    ?j v t.
@@ -337,7 +338,7 @@ Proof
   (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl [`j`,`v`,`t`] >>
   mp_tac (Q.INST [`src` |-> `ss.sym_stack`, `dst` |-> `v.sym_stack`]
-    (SPEC_ALL (INST_TYPE [alpha |-> ``:num``] prune_jump_root_slots))) >>
+    (SPEC_ALL (prune_specialize (INST_TYPE [alpha |-> ``:num``] prune_jump_root_slots)))) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qpat_assum `b = LENGTH pre` (fn th => pure_rewrite_tac[GSYM th]) >>
   (impl_tac >- suspend "bypass") >>
@@ -348,7 +349,7 @@ QED
 
 Resume prune_jump_replayed_root[actual]:
   mp_tac (Q.INST [`ss` |-> `ss`, `n` |-> `n`, `s` |-> `s`, `data` |-> `data`]
-    (SPEC_ALL prune_jump_actual_root)) >>
+    (SPEC_ALL (prune_specialize prune_jump_actual_root))) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qpat_assum `(p:asm_inst list) = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   qpat_assum `(q:asm_inst list) = _` (fn th => pure_rewrite_tac[GSYM th]) >>
@@ -358,11 +359,14 @@ Resume prune_jump_replayed_root[actual]:
 QED
 
 Resume prune_jump_replayed_root[bypass]:
-  qpat_assum `Demand = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `Demand e ss.sym_stack` mp_tac >>
+  qpat_assum `Demand = _` (fn th => pure_rewrite_tac[th]) >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  disch_then strip_assume_tac >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   disch_tac >>
   mp_tac (Q.INST [`v` |-> `e`]
-    (SPEC_ALL staticAbortOptPruneJumpsBypassTheory.prune_jump_site_bypass)) >>
+    (SPEC_ALL (prune_specialize staticAbortOptPruneJumpsBypassTheory.prune_jump_site_bypass))) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qpat_assum `b = LENGTH pre` (fn th => pure_rewrite_tac[GSYM th]) >>
   (impl_tac >- (
@@ -391,15 +395,14 @@ Finalise prune_jump_replayed_root
 (* A source normal arm supplies its original slot map and output height.
    Contract it before changing the meanings of label tags. *)
 Theorem prune_jump_retained_arm_flow[local]:
-  let Inherit = \height tag boolean (u:num#num) (w:num#num) src fresh bnew.
+  !Inherit. Inherit = (\height tag boolean (u:num#num) (w:num#num) src fresh bnew.
     (!k l origin. tag w k = SOME(l,origin) ==>
        k < height w /\ (fresh k = SOME(l,origin) \/
        ?h. src k = SOME h /\ h < height u /\ tag u h = SOME(l,origin))) /\
     (!k. boolean w k ==> k < height w /\
-       (bnew k \/ ?h. src k = SOME h /\ h < height u /\ boolean u h))
-  in
-  let Shape =
-    \p cc req pc height need tag boolean i (t:asm_state).
+       (bnew k \/ ?h. src k = SOME h /\ h < height u /\ boolean u h))) ==>
+  !Shape. Shape =
+    (\p cc req pc height need tag boolean i (t:asm_state).
       t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
       t.as_call_ctx = cc /\ t.as_requests = req /\
       (need i ==> t.as_call_ctx.cc_static) /\
@@ -413,12 +416,13 @@ Theorem prune_jump_retained_arm_flow[local]:
            FLOOKUP (build_offset_to_pc p) off = SOME dest /\
            EL k t.as_stack = (n2w off:bytes32)) /\
       (!k. boolean i k ==> k < height i /\
-         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-  in
-  let Flow =
-    \p pc height tag boolean (u:num#num) (w:num#num).
-    let hi = height u; hj = height w; ins = EL (pc u) p in
-    let inherit = Inherit height tag boolean u w in
+         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !Flow. Flow =
+    (\p pc height tag boolean (u:num#num) (w:num#num).
+    !hi. hi = height u ==>
+    !hj. hj = height w ==>
+    !ins. ins = EL (pc u) p ==>
+    !inherit. inherit = Inherit height tag boolean u w ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs =>
@@ -448,7 +452,8 @@ Theorem prune_jump_retained_arm_flow[local]:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -457,15 +462,13 @@ Theorem prune_jump_retained_arm_flow[local]:
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins t = AsmOK v ==>
                      (EL 0 v.as_stack=0w \/ EL 0 v.as_stack=1w)))
-    | _ => F
-  in
-  let Target = \p (u:num#num) w.
+    | _ => F) ==>
+  !Target. Target = (\p (u:num#num) w.
     ?l origin off. tag u 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc w)
-  in
-  let Open = \p.
-    let S = Shape p cc req pc height need tag boolean in
+      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc w)) ==>
+  !Open. Open = (\p.
+    !S. S = Shape p cc req pc height need tag boolean ==>
       FINITE V /\ {} SUBSET V /\
       (!u. u IN V ==> ?t. S u t) /\
       (!u. u IN V DIFF {} ==> pc u < LENGTH p) /\
@@ -483,18 +486,16 @@ Theorem prune_jump_retained_arm_flow[local]:
                       p 1 t = AsmFault v) /\ v.as_requests=req) \/
          (?w v. edge u w /\
             asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-              p 1 t = AsmOK v /\ S w v))
-  in
-  let p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail in
-  let b = LENGTH pre in
-  let r = splice_pc b 2 0 in
-  let Keep = \z. z IN V /\ pc z <> b /\ pc z <> b+1 in
-  let Bypass = \z.
+              p 1 t = AsmOK v /\ S w v))) ==>
+  !p. p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail ==>
+  !b. b = LENGTH pre ==>
+  !r. r = splice_pc b 2 0 ==>
+  !Keep. Keep = (\z. z IN V /\ pc z <> b /\ pc z <> b+1) ==>
+  !Bypass. Bypass = (\z.
     Keep z /\ rank z < rank u /\ height z = height w /\
     (if pc w = b then pc z = b+2 else z = w) /\
-    (if isTaken then z = w /\ Target p u z else r (pc z) = r (pc u) + 1)
-  in
-  let q = pre ++ [AsmLabel x] ++ tail in
+    (if isTaken then z = w /\ Target p u z else r (pc z) = r (pc u) + 1)) ==>
+  !q. q = pre ++ [AsmLabel x] ++ tail ==>
   asm_static_wf p /\ Open p /\ Keep u /\ edge u w /\
   (if isTaken then Target p u w else pc w = pc u+1) ==>
   ?z. Bypass z /\ Flow p pc height tag boolean u z /\
@@ -506,8 +507,8 @@ Theorem prune_jump_retained_arm_flow[local]:
          Flow q (r o pc) height (\w k. OPTION_MAP (\(l,i). (l,rho l i)) (tag w k))
            boolean u z)
 Proof
-  rpt gen_tac >>
-  rpt (pairTools.LET_INTRO_TAC >> disch_then assume_tac) >> strip_tac >>
+  prune_introduce [`Inherit`,`Shape`,`Flow`,`Target`,`Open`,`p`,`b`,`r`,`Keep`,`Bypass`,`q`] >>
+  strip_tac >>
   `Keep u` by first_assum ACCEPT_TAC >>
   `pc u <> b /\ pc u <> b+1` by gvs[] >>
   `!src fresh bnew. Inherit height tag boolean u w src fresh bnew ==>
@@ -531,7 +532,8 @@ Resume prune_jump_retained_arm_flow[lift]:
   rpt gen_tac >> disch_tac >>
   mp_tac (Q.INST [`legal` |-> `\a:bool. T`, `taken` |-> `\a:bool. isTaken`,
                  `v` |-> `\a:bool. w`, `H` |-> `height w`]
-    (SPEC_ALL (INST_TYPE [``:'arm`` |-> ``:bool``] prune_jump_site_retained_arms))) >>
+    (SPEC_ALL (prune_specialize
+      (INST_TYPE [``:'arm`` |-> ``:bool``] prune_jump_site_retained_arms)))) >>
   simp_tac bool_ss [LET_THM, ADD_CLAUSES] >>
   qpat_assum `b = LENGTH pre` (fn th => pure_rewrite_tac[GSYM th]) >>
   qpat_assum `_ = splice_pc b 2 0` (fn th => pure_rewrite_tac[GSYM th]) >>
@@ -634,8 +636,7 @@ QED
 
 Resume prune_jump_retained_arm_flow[taken_layout]:
   mp_tac (Q.INST [`l` |-> `l`, `old` |-> `off`, `dest` |-> `(pc:num#num->num) (z:num#num)`]
-    (SPEC_ALL prune_jump_taken_layout)) >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+    (SPEC_ALL (prune_specialize prune_jump_taken_layout))) >>
   map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[GSYM th]))
     [`(p:asm_inst list) = _`, `(q:asm_inst list) = _`, `b = LENGTH pre`,
      `r = splice_pc b 2 0`] >>
@@ -658,7 +659,7 @@ Resume prune_jump_retained_arm_flow[retag]:
      qpat_assum `Keep = _` (fn th => pure_rewrite_tac[th]) >>
      BETA_TAC >> strip_tac >> first_assum irule >> first_assum ACCEPT_TAC) >>
   `EL (r (pc u)) q = EL (pc u) p` by
-    (mp_tac prune_jump_layout >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+    (mp_tac (prune_specialize prune_jump_layout) >>
      map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[GSYM th]))
        [`(p:asm_inst list) = _`, `(q:asm_inst list) = _`, `b = LENGTH pre`,
         `r = splice_pc b 2 0`] >>
@@ -718,16 +719,16 @@ Finalise prune_jump_retained_arm_flow
    Move carries the retained-membership, rank and Flow obligations. *)
 Theorem prune_jump_retained_row_arms[local]:
   !R Move.
-  let fall_arm = \z. ins <> AsmOp "JUMP" /\
-    ?w. R w /\ fall w /\ Move F w z /\ height z = height w /\ fallQ z in
-  let taken_arm = \z. (ins = AsmOp "JUMP" \/ ins = AsmOp "JUMPI") /\
-    ?w. R w /\ taken w /\ Move T w z /\ height z = height w /\ takenQ z in
-  let New = \z. fall_arm z \/ taken_arm z in
-  let arm = \E P (n:num). ?z. E z /\ P z /\ height z = n in
-  let legal = \E P n. !z. E z ==> P z /\ height z = n in
-  let next = \E f n. arm E f n /\ legal E f n in
-  let stop = \E a. a <= h /\ untagged a /\ !z. ~E z in
-  let row = \E f j.
+  !New. New = (\z.
+    (ins <> AsmOp "JUMP" /\
+      ?w. R w /\ fall w /\ Move F w z /\ height z = height w /\ fallQ z) \/
+    ((ins = AsmOp "JUMP" \/ ins = AsmOp "JUMPI") /\
+      ?w. R w /\ taken w /\ Move T w z /\ height z = height w /\ takenQ z)) ==>
+  !arm. arm = (\E P (n:num). ?z. E z /\ P z /\ height z = n) ==>
+  !legal. legal = (\E P n. !z. E z ==> P z /\ height z = n) ==>
+  !next. next = (\E f n. arm E f n /\ legal E f n) ==>
+  !stop. stop = (\E a. a <= h /\ untagged a /\ !z. ~E z) ==>
+  !row. row = (\E f j.
     case ins of
       AsmLabel l => next E f h
     | AsmPush bs => next E f (h+1)
@@ -752,8 +753,7 @@ Theorem prune_jump_retained_row_arms[local]:
                  else
                    ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                        untagged (asm_op_arity name) /\ next E f (h-asm_op_arity name+m))
-    | _ => F
-  in
+    | _ => F) ==>
   (!w. ins <> AsmOp "JUMP" /\ R w /\ fall w ==>
        ?z. Move F w z /\ height z = height w /\ fallQ z) /\
   (!w. (ins = AsmOp "JUMP" \/ ins = AsmOp "JUMPI") /\ R w /\ taken w ==>
@@ -761,12 +761,11 @@ Theorem prune_jump_retained_row_arms[local]:
   row R fall taken ==>
   row New fallQ takenQ
 Proof
-  rpt gen_tac >>
-  rpt (pairTools.LET_INTRO_TAC >> disch_then assume_tac) >> strip_tac >>
+  ntac 2 gen_tac >>
+  prune_introduce [`New`,`arm`,`legal`,`next`,`stop`,`row`] >> strip_tac >>
   `!n. ins <> AsmOp "JUMP" /\ arm R fall n ==> arm New fallQ n` by
     (qpat_assum `arm = _` (fn th => pure_rewrite_tac[th]) >> BETA_TAC >>
      qpat_assum `New = _` (fn th => pure_rewrite_tac[th]) >> BETA_TAC >>
-     qpat_assum `fall_arm = _` (fn th => pure_rewrite_tac[th]) >> BETA_TAC >>
      gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac
        (qx_choose_then `w` strip_assume_tac)) >>
      qpat_assum `!w. ins <> AsmOp "JUMP" /\ R w /\ fall w ==> _`
@@ -778,7 +777,6 @@ Proof
         arm New takenQ n` by
     (qpat_assum `arm = _` (fn th => pure_rewrite_tac[th]) >> BETA_TAC >>
      qpat_assum `New = _` (fn th => pure_rewrite_tac[th]) >> BETA_TAC >>
-     qpat_assum `taken_arm = _` (fn th => pure_rewrite_tac[th]) >> BETA_TAC >>
      gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac
        (qx_choose_then `w` strip_assume_tac)) >>
      qpat_assum `!w. (ins = AsmOp "JUMP" \/ ins = AsmOp "JUMPI") /\ R w /\ taken w ==> _`
@@ -788,13 +786,13 @@ Proof
      qexists `w` >> asm_rewrite_tac[]) >>
   `!n P. legal R P n ==> !z. New z ==> height z = n` by
     (map_every (fn p => qpat_assum p (fn th => pure_rewrite_tac[th]) >> BETA_TAC)
-       [`legal = _`, `New = _`, `fall_arm = _`, `taken_arm = _`] >>
+       [`legal = _`, `New = _`] >>
      rpt gen_tac >> disch_tac >> gen_tac >> strip_tac >>
      qpat_assum `!w. R w ==> _` (drule_then strip_assume_tac) >> asm_rewrite_tac[]) >>
   `!z. New z ==> (ins = AsmOp "JUMP" ==> takenQ z) /\
                   (ins = AsmOp "JUMPI" ==> fallQ z \/ takenQ z)` by
     (map_every (fn p => qpat_assum p (fn th => pure_rewrite_tac[th]) >> BETA_TAC)
-       [`New = _`, `fall_arm = _`, `taken_arm = _`] >>
+       [`New = _`] >>
      rpt strip_tac >> asm_rewrite_tac[]) >>
   `!n. ins <> AsmOp "JUMP" /\ ins <> AsmOp "JUMPI" /\ next R fall n ==>
         next New fallQ n` by
@@ -807,11 +805,11 @@ Proof
          disch_then ACCEPT_TAC) >>
      qpat_assum `New z` mp_tac >>
      map_every (fn p => qpat_assum p (fn th => pure_rewrite_tac[th]) >> BETA_TAC)
-       [`New = _`, `fall_arm = _`, `taken_arm = _`] >>
+       [`New = _`] >>
      asm_rewrite_tac[] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `!a. stop R a ==> stop New a` by
     (map_every (fn p => qpat_assum p (fn th => pure_rewrite_tac[th]) >> BETA_TAC)
-       [`stop = _`, `New = _`, `fall_arm = _`, `taken_arm = _`] >>
+       [`stop = _`, `New = _`] >>
      rpt strip_tac >>
      (first_assum ACCEPT_TAC ORELSE
       (rename1 `R w` >> qpat_assum `!w. ~R w` (qspec_then `w` mp_tac) >>
@@ -901,7 +899,7 @@ QED
 (* Restrict the contracted relation before assigning a replacement for an
    erased producer: only a rooted demand has a replay provenance proof. *)
 Theorem prune_jump_cut_rows[local]:
-  let Shape = \p cc req pc height need tag boolean (u:num#num) (t:asm_state).
+  !Shape. Shape = (\p cc req pc height need tag boolean (u:num#num) (t:asm_state).
     t.as_pc = pc u /\ LENGTH t.as_stack = height u /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need u ==> t.as_call_ctx.cc_static) /\
@@ -911,14 +909,16 @@ Theorem prune_jump_cut_rows[local]:
       ?off dest. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
         off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest /\
         EL k t.as_stack = (n2w off:bytes32)) /\
-    (!k. boolean u k ==> k < height u /\ (EL k t.as_stack=0w \/ EL k t.as_stack=1w)) in
-  let Inherit = \height tag boolean (u:num#num) (w:num#num) src fresh bnew.
+    (!k. boolean u k ==> k < height u /\ (EL k t.as_stack=0w \/ EL k t.as_stack=1w))) ==>
+  !Inherit. Inherit = (\height tag boolean (u:num#num) (w:num#num) src fresh bnew.
     (!k l i. tag w k = SOME(l,i) ==> k < height w /\
       (fresh k = SOME(l,i) \/ ?h. src k = SOME h /\ h < height u /\ tag u h = SOME(l,i))) /\
-    (!k. boolean w k ==> k < height w /\ (bnew k \/ ?h. src k = SOME h /\ h < height u /\ boolean u h)) in
-  let Flow = \p pc height tag boolean (u:num#num) (w:num#num).
-    let hi = height u; hj = height w; ins = EL (pc u) p in
-    let inherit = Inherit height tag boolean u w in
+    (!k. boolean w k ==> k < height w /\ (bnew k \/ ?h. src k = SOME h /\ h < height u /\ boolean u h))) ==>
+  !Flow. Flow = (\p pc height tag boolean (u:num#num) (w:num#num).
+    !hi. hi = height u ==>
+    !hj. hj = height w ==>
+    !ins. ins = EL (pc u) p ==>
+    !inherit. inherit = Inherit height tag boolean u w ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\
@@ -937,22 +937,23 @@ Theorem prune_jump_cut_rows[local]:
            SOME n => 0 < n /\ n < hi /\ hj = hi /\
              inherit (\k. SOME(if k=0 then n else if k=n then 0 else k)) (\k. NONE) (\k. F)
          | NONE =>
-             let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+             !a. a = asm_op_arity name ==>
+             !m. m = hj + a - hi ==>
              a <= hi /\ hj = m+(hi-a) /\ ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
              inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
                (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
                  !t v. LENGTH t.as_stack=hi /\
                    asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p) ins t = AsmOK v ==>
                    (EL 0 v.as_stack=0w \/ EL 0 v.as_stack=1w)))
-    | _ => F in
-  let Target = \p pc tag (u:num#num) (w:num#num).
+    | _ => F) ==>
+  !Target. Target = (\p pc tag (u:num#num) (w:num#num).
     ?l i off. tag u 0=SOME(l,i) /\ FLOOKUP (SND(compute_label_offsets p)) l=SOME off /\
-      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME(pc w) in
-  let Check = \ins (h:num) untagged condition_untagged isStatic resolved E height f j.
-    let arm = \P n. ?z. E z /\ P z /\ height z = n in
-    let legal = \P n. !z. E z ==> P z /\ height z = n in
-    let next = \n. arm f n /\ legal f n in
-    let stop = \a. a <= h /\ untagged a /\ !z. ~E z in
+      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME(pc w)) ==>
+  !Check. Check = (\ins (h:num) untagged condition_untagged isStatic resolved E height f j.
+    !arm. arm = (\P n. ?z. E z /\ P z /\ height z = n) ==>
+    !legal. legal = (\P n. !z. E z ==> P z /\ height z = n) ==>
+    !next. next = (\n. arm f n /\ legal f n) ==>
+    !stop. stop = (\a. a <= h /\ untagged a /\ !z. ~E z) ==>
     case ins of
       AsmLabel l => next h
     | AsmPush bs => next (h+1)
@@ -972,49 +973,51 @@ Theorem prune_jump_cut_rows[local]:
                                arm f (h-2) /\ arm j (h-2) /\ legal (\z. f z \/ j z) (h-2)
                         else ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                              untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-    | _ => F in
-  let Slots = \p cc height need tag boolean (u:num#num).
+    | _ => F) ==>
+  !Slots. Slots = (\p cc height need tag boolean (u:num#num).
     (need u ==> cc.cc_static) /\
     (!k. boolean u k ==> k < height u /\ tag u k=NONE) /\
     (!k l i. tag u k=SOME(l,i) ==> k < height u /\ i < LENGTH p /\
       (EL i p=AsmPushLabel l \/ EL i p=AsmPushOfst l 0) /\
       ?off dest. FLOOKUP (SND(compute_label_offsets p)) l=SOME off /\
-        off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME dest) in
-  let Row = \p cc pc height tag E (u:num#num).
+        off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME dest)) ==>
+  !Row. Row = (\p cc pc height tag E (u:num#num).
     pc u < LENGTH p /\ Check (EL (pc u) p) (height u) (\a. !k. k<a ==> tag u k=NONE)
       (tag u 1=NONE) cc.cc_static (\l. IS_SOME (FLOOKUP (SND(compute_label_offsets p)) l))
-      (E u) height (\w. pc w=pc u+1) (Target p pc tag u) in
-  let Rows = \p cc (V:(num#num)->bool) X (rank:(num#num)->num) pc height need tag boolean E.
+      (E u) height (\w. pc w=pc u+1) (Target p pc tag u)) ==>
+  !Rows. Rows = (\p cc (V:(num#num)->bool) X (rank:(num#num)->num) pc height need tag boolean E.
     (!u. u IN V ==> Slots p cc height need tag boolean u) /\
     (!u w. E u w ==> u IN V DIFF X /\ w IN V /\ rank w < rank u /\ Flow p pc height tag boolean u w) /\
-    (!u. u IN V DIFF X ==> Row p cc pc height tag E u) in
-  let Control = \p pc tag (u:num#num) w.
+    (!u. u IN V DIFF X ==> Row p cc pc height tag E u)) ==>
+  !Control. Control = (\p pc tag (u:num#num) w.
     if EL (pc u) p = AsmOp "JUMP" then Target p pc tag u w
     else if EL (pc u) p = AsmOp "JUMPI" then pc w=pc u+1 \/ Target p pc tag u w
-    else pc w=pc u+1 in
-  let Open = \p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need tag boolean E.
-    let S = Shape p cc req pc height need tag boolean in
-    let lo = SND(compute_label_offsets p); otp = build_offset_to_pc p in
+    else pc w=pc u+1) ==>
+  !Open. Open = (\p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need tag boolean E.
+    !S. S = Shape p cc req pc height need tag boolean ==>
+    !lo. lo = SND(compute_label_offsets p) ==>
+    !otp. otp = build_offset_to_pc p ==>
     FINITE V /\ X SUBSET V /\ (!u. u IN V ==> ?t. S u t) /\
     (!u. u IN V DIFF X ==> pc u < LENGTH p) /\
     (!u w. E u w ==> u IN V DIFF X /\ w IN V /\ rank w < rank u /\
       Flow p pc height tag boolean u w /\ Control p pc tag u w) /\
     (!u t. u IN V DIFF X /\ S u t ==>
       (?v. (asm_steps lo otp p 1 t=AsmRevert v \/ asm_steps lo otp p 1 t=AsmFault v) /\ v.as_requests=req) \/
-      (?w v. E u w /\ asm_steps lo otp p 1 t=AsmOK v /\ S w v)) in
-  let Reach = \(E:(num#num)->(num#num)->bool) e u.
-    ?n path. path 0=e /\ path n=u /\ !k. k<n ==> E (path k) (path (SUC k)) in
-  let Demand = \tag boolean (e:num#num) stk.
+      (?w v. E u w /\ asm_steps lo otp p 1 t=AsmOK v /\ S w v))) ==>
+  !Reach. Reach = (\(E:(num#num)->(num#num)->bool) e u.
+    ?n path. path 0=e /\ path n=u /\ !k. k<n ==> E (path k) (path (SUC k))) ==>
+  !Demand. Demand = (\tag boolean (e:num#num) stk.
     (!k l i. tag e k=SOME(l,i) ==> k<LENGTH stk /\ EL k stk=Lab l 0) /\
-    (!k. boolean e k ==> k<LENGTH stk /\ (EL k stk=Val 0w \/ EL k stk=Val 1w)) in
-  let Cert = \p ss a. ?V e rank pc height need tag boolean E.
+    (!k. boolean e k ==> k<LENGTH stk /\ (EL k stk=Val 0w \/ EL k stk=Val 1w))) ==>
+  !Cert. Cert = (\p ss a. ?V e rank pc height need tag boolean E.
     Rows p a.as_call_ctx V {} rank pc height need tag boolean E /\
     Open p a.as_call_ctx a.as_requests V {} rank pc height need tag boolean E /\
     e IN V /\ (!u. u IN V ==> Reach E e u) /\
-    Shape p a.as_call_ctx a.as_requests pc height need tag boolean e a /\ Demand tag boolean e ss.sym_stack in
-  let p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail in
-  let q = pre ++ [AsmLabel x] ++ tail in
-  let ep = asm_data_env p (assemble p ++ data); eq = asm_data_env q (assemble q ++ data) in
+    Shape p a.as_call_ctx a.as_requests pc height need tag boolean e a /\ Demand tag boolean e ss.sym_stack) ==>
+  !p. p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail ==>
+  !q. q = pre ++ [AsmLabel x] ++ tail ==>
+  !ep. ep = asm_data_env p (assemble p ++ data) ==>
+  !eq. eq = asm_data_env q (assemble q ++ data) ==>
   s.as_pc=0 /\ s.as_code=assemble p ++ data /\ asm_static_wf p /\
   sym_steps p ep n (sym_init s)=SymOK ss /\ asm_sym_rel p ep a ss /\ Cert p ss a ==>
   ?j v t. sym_steps q eq j (sym_init (s with as_code := assemble q ++ data))=SymOK v /\
@@ -1022,7 +1025,8 @@ Theorem prune_jump_cut_rows[local]:
       (s with as_code := assemble q ++ data)=AsmOK t /\
     asm_sym_rel q eq t v /\ t.as_call_ctx=a.as_call_ctx /\ t.as_requests=a.as_requests /\ Cert q v t
 Proof
-  rpt gen_tac >> rpt (pairTools.LET_INTRO_TAC >> disch_then assume_tac) >>
+  prune_introduce [`Shape`,`Inherit`,`Flow`,`Target`,`Check`,`Slots`,`Row`,
+    `Rows`,`Control`,`Open`,`Reach`,`Demand`,`Cert`,`p`,`q`,`ep`,`eq`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `Cert p ss a` mp_tac >>
   qpat_assum `Cert = _` (fn th => pure_rewrite_tac[th]) >> BETA_TAC >>
@@ -1058,7 +1062,7 @@ QED
 Resume prune_jump_cut_rows[replay]:
   mp_tac (CONV_RULE (REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV))
     (Q.INST [`cc` |-> `a.as_call_ctx`, `req` |-> `a.as_requests`]
-      (SPEC_ALL prune_jump_replayed_root))) >>
+      (SPEC_ALL (prune_specialize prune_jump_replayed_root)))) >>
   map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac[GSYM th]))
     [`(p:asm_inst list) = _`, `(q:asm_inst list) = _`, `ep = _`, `eq = _`] >>
   (impl_tac >- (
@@ -1103,7 +1107,7 @@ Resume prune_jump_cut_rows[moves]:
   rpt gen_tac >> strip_tac >>
   mp_tac (CONV_RULE (REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV))
     (Q.INST [`cc` |-> `a.as_call_ctx`, `req` |-> `a.as_requests`, `isTaken` |-> `take`]
-      (SPEC_ALL prune_jump_retained_arm_flow))) >>
+      (SPEC_ALL (prune_specialize prune_jump_retained_arm_flow)))) >>
   map_every (fn pat => qpat_assum pat (pure_rewrite_tac o single o GSYM))
     [`(p:asm_inst list) = _`, `(q:asm_inst list) = _`] >>
   map_every (fn pat => qpat_assum pat
@@ -1212,7 +1216,7 @@ Resume prune_jump_cut_rows[rooted]:
     (rpt gen_tac >> simp[Abbr `tagQ`, optionTheory.OPTION_MAP_EQ_SOME, pairTheory.EXISTS_PROD]) >>
   `!i. i < LENGTH p /\ i <> b /\ i <> b+1 ==>
        r i < LENGTH q /\ EL (r i) q = EL i p` by
-    (mp_tac prune_jump_layout >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+    (mp_tac (prune_specialize prune_jump_layout) >>
      map_every (fn pat => qpat_assum pat (fn th =>
          pure_rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]))
        [`(p:asm_inst list) = _`, `(q:asm_inst list) = _`,
@@ -1223,7 +1227,7 @@ Resume prune_jump_cut_rows[rooted]:
       ?off. FLOOKUP (SND(compute_label_offsets q)) l = SOME off /\
          off < dimword(:256) /\ FLOOKUP (build_offset_to_pc q) off = SOME (r dest)` by
     (rpt gen_tac >> strip_tac >>
-     mp_tac prune_jump_taken_layout >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+     mp_tac (prune_specialize prune_jump_taken_layout) >>
      map_every (fn pat => qpat_assum pat (fn th =>
          pure_rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]))
        [`(p:asm_inst list) = _`, `(q:asm_inst list) = _`,
@@ -1434,7 +1438,7 @@ Resume prune_jump_cut_rows[rowQ]:
      qpat_assum `Check = _` (pure_rewrite_tac o single) >>
      CONV_TAC (REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV)) >>
      disch_tac >>
-     irule (CONV_RULE (REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV))
+     irule (prune_specialize
        (Q.ISPECL [`edge u : (num#num)->bool`, `Move u : bool->(num#num)->(num#num)->bool`]
          prune_jump_retained_row_arms)) >>
      (conj_tac >- (
@@ -1556,9 +1560,9 @@ Resume prune_jump_cut_rows[package]:
         REWR_CONV ratTheory.RAT_OF_NUM_LES, HO_REWR_CONV check_case_presentation])
    in
      rule_assum_tac (CONV_RULE normalize) >> CONV_TAC normalize >>
-     mp_tac (CONV_RULE normalize
+     mp_tac (CONV_RULE normalize (prune_specialize
        (Q.SPECL [`q`,`v`,`t`,`A`,`z`,`\u. rat$rat_of_num (rank u)`,
-                  `pcQ`,`height`,`need`,`tagQ`,`boolean`,`E`] pending_rows_rooted_package))
+                  `pcQ`,`height`,`need`,`tagQ`,`boolean`,`E`] pending_rows_rooted_package)))
    end) >>
   (impl_tac >- (
     ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -1580,12 +1584,12 @@ Finalise prune_jump_cut_rows
 (* Transfer a protected terminal observation at the actual bytes on each
    side. The backward bridge provides the destination concrete count. *)
 Theorem prune_jump_terminal_transport[local]:
-  let p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail in
-  let q = pre ++ [AsmLabel x] ++ tail in
-  let sp = s with as_code := assemble p ++ data in
-  let sq = s with as_code := assemble q ++ data in
-  let env = asm_data_env p sp.as_code in
-  let runAsm = \r. asm_steps (SND(compute_label_offsets r)) (build_offset_to_pc r) r in
+  !p. p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail ==>
+  !q. q = pre ++ [AsmLabel x] ++ tail ==>
+  !sp. sp = (s with as_code := assemble p ++ data) ==>
+  !sq. sq = (s with as_code := assemble q ++ data) ==>
+  !env. env = asm_data_env p sp.as_code ==>
+  !runAsm. runAsm = (\r. asm_steps (SND(compute_label_offsets r)) (build_offset_to_pc r) r) ==>
   s.as_pc = 0 /\ asm_static_wf p /\ asm_static_wf q /\
   asm_data_env q sq.as_code = env /\
   (runAsm p n sp = AsmRevert out \/ runAsm p n sp = AsmFault out) /\
@@ -1593,7 +1597,7 @@ Theorem prune_jump_terminal_transport[local]:
   ?j t. (runAsm q j sq = AsmRevert t \/ runAsm q j sq = AsmFault t) /\
     sym_terminal (sym_steps q env j (sym_init s)) /\ t.as_requests = out.as_requests
 Proof
-  rpt (pairTools.LET_INTRO_TAC >> disch_then assume_tac) >>
+  prune_introduce [`p`,`q`,`sp`,`sq`,`env`,`runAsm`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `asm_refines p q` by
     (map_every (fn pat => qpat_assum pat SUBST1_TAC) [`p = _`, `q = _`] >>
@@ -1683,7 +1687,7 @@ QED
 
 Theorem prune_inefficient_jumps_abort_certificate:
   !orig s data req_bound.
-  let Shape = \p cc req pc height need tag boolean i (t:asm_state).
+  !Shape. Shape = (\p cc req pc height need tag boolean i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -1697,24 +1701,23 @@ Theorem prune_inefficient_jumps_abort_certificate:
          FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-  in
-  let target = \p pc tag (x:num#num) (y:num#num).
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !target. target = (\p pc tag (x:num#num) (y:num#num).
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-  in
-  let Flow = \p pc height tag boolean (x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit =
-      \(src:num -> num option)
+      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
+  !Flow. Flow = (\p pc height tag boolean (x:num#num) (y:num#num).
+    !hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !ins. ins = EL (pc x) p ==>
+    !inherit. inherit =
+      (\(src:num -> num option)
         (fresh:num -> (string#num)option) (bnew:num -> bool).
         (!k l origin. tag y k = SOME(l,origin) ==>
            k < hj /\ (fresh k = SOME(l,origin) \/
              ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
         (!k. boolean y k ==> k < hj /\
-           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-    in
+           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\
@@ -1738,7 +1741,8 @@ Theorem prune_inefficient_jumps_abort_certificate:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -1747,11 +1751,9 @@ Theorem prune_inefficient_jumps_abort_certificate:
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins t=AsmOK u ==>
                      (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F
-  in
-  let Rows = \p cc V rank pc height need tag boolean edge.
-    let lo = SND (compute_label_offsets p) in
-    let otp = build_offset_to_pc p in
+    | _ => F) ==>
+  !Rows. Rows = (\p cc V rank pc height need tag boolean edge.
+    !lo. lo = SND (compute_label_offsets p) ==>
     (!x. x IN V ==>
       (need x ==> cc.cc_static) /\
       (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
@@ -1759,17 +1761,17 @@ Theorem prune_inefficient_jumps_abort_certificate:
          k < height x /\ origin < LENGTH p /\
          (EL origin p = AsmPushLabel l \/ EL origin p = AsmPushOfst l 0) /\
          ?off dest. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
-                    FLOOKUP otp off = SOME dest)) /\
+                    FLOOKUP (build_offset_to_pc p) off = SOME dest)) /\
     (!x y. edge x y ==> x IN V /\ y IN V /\ rank y < rank x /\ Flow p pc height tag boolean x y) /\
     (!x. x IN V ==>
       pc x < LENGTH p /\
-      let h = height x in
-      let fall = \y. pc y = pc x+1 in
-      let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-      let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-      let next = \n. arm fall n /\ legal fall n in
-      let untagged = \a. !k. k<a ==> tag x k=NONE in
-      let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
+      (!h. h = height x ==>
+      !fall. fall = (\y. pc y = pc x+1) ==>
+      !arm. arm = (\P n. ?y. edge x y /\ P y /\ height y = n) ==>
+      !legal. legal = (\P n. !y. edge x y ==> P y /\ height y = n) ==>
+      !next. next = (\n. arm fall n /\ legal fall n) ==>
+      !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+      !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
       case EL (pc x) p of
         AsmLabel l => next h
       | AsmPush bs => next (h+1)
@@ -1794,12 +1796,11 @@ Theorem prune_inefficient_jumps_abort_certificate:
                    else
                       ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                           untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-      | _ => F)
-  in
-  let Open = \p cc req (V:(num#num)->bool) X rank pc height need
+      | _ => F))) ==>
+  !Open. Open = (\p cc req (V:(num#num)->bool) X rank pc height need
     (tag:(num#num)->num->(string#num)option)
     (boolean:(num#num)->num->bool) edge.
-    let S = Shape p cc req pc height need tag boolean in
+    !S. S = Shape p cc req pc height need tag boolean ==>
     FINITE V /\ X SUBSET V /\
     (!x. x IN V ==> ?t. S x t) /\
     (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -1816,18 +1817,15 @@ Theorem prune_inefficient_jumps_abort_certificate:
                     p 1 t = AsmFault u) /\ u.as_requests=req) \/
        (?y u. edge x y /\
           asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-            p 1 t = AsmOK u /\ S y u))
-  in
-  let Reach = \(edge:(num#num)->(num#num)->bool) e x.
+            p 1 t = AsmOK u /\ S y u))) ==>
+  !Reach. Reach = (\(edge:(num#num)->(num#num)->bool) e x.
     ?n (path:num->num#num).
-      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))
-  in
-  let bytes = \p. assemble p ++ data in
-  let env0 = asm_data_env orig (bytes orig) in
-  let M_R = \p.
-    let envp = asm_data_env p (bytes p) in
-    let start = s with as_code := bytes p in
-    let run = asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p in
+      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) ==>
+  !bytes. bytes = (\p. assemble p ++ data) ==>
+  !env0. env0 = asm_data_env orig (bytes orig) ==>
+  !M_R. M_R = (\p.
+    !start. start = (s with as_code := bytes p) ==>
+    !run. run = asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p ==>
     s.as_pc = 0 /\ s.as_code = bytes orig /\
     asm_static_wf orig /\ asm_static_wf p /\
     FILTER is_data_inst p = FILTER is_data_inst orig /\
@@ -1839,7 +1837,7 @@ Theorem prune_inefficient_jumps_abort_certificate:
          pc height need tag boolean edge.
         run j start = AsmOK t /\
         sym_steps p env0 j (sym_init s) = SymOK u /\
-        asm_sym_rel p envp t u /\
+        asm_sym_rel p (asm_data_env p (bytes p)) t u /\
         t.as_pc = u.sym_base.as_pc /\ LENGTH t.as_stack = LENGTH u.sym_stack /\
         t.as_call_ctx = u.sym_base.as_call_ctx /\ t.as_requests = u.sym_base.as_requests /\
         t.as_call_ctx = cc /\ t.as_requests = req /\ req <<= req_bound /\
@@ -1850,11 +1848,11 @@ Theorem prune_inefficient_jumps_abort_certificate:
         (!k l origin. tag e k = SOME(l,origin) ==>
            k < LENGTH u.sym_stack /\ EL k u.sym_stack = Lab l 0) /\
         (!k. boolean e k ==>
-           k < LENGTH u.sym_stack /\ (EL k u.sym_stack = Val 0w \/ EL k u.sym_stack = Val 1w))))
-  in
+           k < LENGTH u.sym_stack /\ (EL k u.sym_stack = Val 0w \/ EL k u.sym_stack = Val 1w))))) ==>
   !p. M_R p ==> M_R (FST (prune_inefficient_jumps p))
 Proof
-  rpt gen_tac >> rpt (pairTools.LET_INTRO_TAC >> disch_then assume_tac) >>
+  ntac 4 gen_tac >>
+  prune_introduce [`Shape`,`target`,`Flow`,`Rows`,`Open`,`Reach`,`bytes`,`env0`,`M_R`] >>
   match_mp_tac (Q.INST [`P` |-> `M_R`] prune_jumps_walk_preserves_contextual) >> rpt gen_tac >>
   disch_then (CONJUNCTS_THEN2 mp_tac assume_tac) >>
   Cases_on `a` >> simp[NoAsms, asm_jump_to_next_def] >>
@@ -1870,8 +1868,7 @@ Proof
     (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
       (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac mp_tac))))) >>
   `asm_static_wf q /\ FILTER is_data_inst q = FILTER is_data_inst p` by
-    (mp_tac prune_jump_layout >>
-     rewrite_tac[LET_THM] >>
+    (mp_tac (prune_specialize prune_jump_layout) >>
      qpat_assum `asm_static_wf p` mp_tac >>
      simp[NoAsms, Abbr `p`, Abbr `q`]) >>
   `FILTER is_data_inst q = FILTER is_data_inst orig` by metis_tac[] >>
@@ -1883,7 +1880,8 @@ Proof
   >- (disj1_tac >>
       qmatch_asmsub_rename_tac `sym_terminal (sym_steps p env0 n (sym_init s))` >>
       qmatch_asmsub_rename_tac `out.as_requests <<= req_bound` >>
-      mp_tac (Q.INST [`n` |-> `n`, `out` |-> `out`] prune_jump_terminal_transport) >>
+      mp_tac (Q.INST [`n` |-> `n`, `out` |-> `out`]
+        (prune_specialize prune_jump_terminal_transport)) >>
       CONV_TAC (TOP_DEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV)) >>
       map_every (fn pat => qpat_assum pat (pure_rewrite_tac o single o GSYM o REWRITE_RULE[markerTheory.Abbrev_def]))
         [`Abbrev (p = _)`, `Abbrev (q = _)`] >>
@@ -1901,7 +1899,7 @@ Proof
   qmatch_asmsub_rename_tac `Shape p cc req pc height need tag boolean e t` >>
   `!code. sym_init (s with as_code := code) = sym_init s` by simp[sym_init_def] >>
   mp_tac (Q.INST [`s` |-> `s with as_code := bytes (p:asm_inst list)`, `n` |-> `j`,
-                  `a` |-> `t`, `ss` |-> `u`] prune_jump_cut_rows) >>
+                  `a` |-> `t`, `ss` |-> `u`] (prune_specialize prune_jump_cut_rows)) >>
   CONV_TAC (TOP_DEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV)) >>
   map_every (fn pat => qpat_assum pat (pure_rewrite_tac o single o GSYM o REWRITE_RULE[markerTheory.Abbrev_def]))
     [`Abbrev (p = _)`, `Abbrev (q = _)`] >>

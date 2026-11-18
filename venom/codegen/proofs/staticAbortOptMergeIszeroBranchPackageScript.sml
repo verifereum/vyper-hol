@@ -6,11 +6,11 @@ Ancestors
 
 Theorem pending_rows_rooted_package:
   !q u (t:asm_state) (V:(num#num)->bool) e rank pc height need tag boolean edge.
-  let cc = t.as_call_ctx in
-  let req = t.as_requests in
-  let lo = SND (compute_label_offsets q) in
-  let otp = build_offset_to_pc q in
-  let Shape = \(x:num#num) (s:asm_state).
+  !cc. cc = t.as_call_ctx ==>
+  !req. req = t.as_requests ==>
+  !lo. lo = SND (compute_label_offsets q) ==>
+  !otp. otp = build_offset_to_pc q ==>
+  !Shape. Shape = (\(x:num#num) (s:asm_state).
     s.as_pc = pc x /\ LENGTH s.as_stack = height x /\
     s.as_call_ctx = cc /\ s.as_requests = req /\
     (need x ==> s.as_call_ctx.cc_static) /\
@@ -21,23 +21,22 @@ Theorem pending_rows_rooted_package:
        ?off dest. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
          FLOOKUP otp off = SOME dest /\ EL k s.as_stack = (n2w off:bytes32)) /\
     (!k. boolean x k ==> k < height x /\
-       (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w))
-  in
-  let target = \(x:num#num) (y:num#num).
+       (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w))) ==>
+  !target. target = (\(x:num#num) (y:num#num).
     ?l origin off. tag x 0 = SOME(l,origin) /\ FLOOKUP lo l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP otp off = SOME(pc y)
-  in
-  let Flow = \(x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) q in
-    let inherit =
-      \(src:num -> num option)
+      off < dimword(:256) /\ FLOOKUP otp off = SOME(pc y)) ==>
+  !Flow. Flow = (\(x:num#num) (y:num#num).
+    !hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !ins. ins = EL (pc x) q ==>
+    !inherit. inherit =
+      (\(src:num -> num option)
         (fresh:num -> (string#num)option) (bnew:num -> bool).
         (!k l origin. tag y k = SOME(l,origin) ==>
            k < hj /\ (fresh k = SOME(l,origin) \/
              ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
         (!k. boolean y k ==> k < hj /\
-           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-    in
+           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\
@@ -59,16 +58,16 @@ Theorem pending_rows_rooted_package:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
                  (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
                    !s v. LENGTH s.as_stack=hi /\ asm_step lo otp ins s=AsmOK v ==>
                      (EL 0 v.as_stack=0w \/ EL 0 v.as_stack=1w)))
-    | _ => F
-  in
-  let Rows = \A R.
+    | _ => F) ==>
+  !Rows. Rows = (\A R.
     (!x. x IN A ==>
       (need x ==> cc.cc_static) /\
       (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
@@ -80,13 +79,13 @@ Theorem pending_rows_rooted_package:
     (!x y. R x y ==> x IN A /\ y IN A /\ rank y < rank x /\ Flow x y) /\
     (!x. x IN A ==>
       pc x < LENGTH q /\
-      let h = height x in
-      let fall = \y. pc y = pc x+1 in
-      let arm = \P n. ?y. R x y /\ P y /\ height y = n in
-      let legal = \P n. !y. R x y ==> P y /\ height y = n in
-      let next = \n. arm fall n /\ legal fall n in
-      let untagged = \a. !k. k<a ==> tag x k=NONE in
-      let stop = \a. a<=h /\ untagged a /\ !y. ~R x y in
+      !h. h = height x ==>
+      !fall. fall = (\y. pc y = pc x+1) ==>
+      !arm. arm = (\P n. ?y. R x y /\ P y /\ height y = n) ==>
+      !legal. legal = (\P n. !y. R x y ==> P y /\ height y = n) ==>
+      !next. next = (\n. arm fall n /\ legal fall n) ==>
+      !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+      !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~R x y) ==>
       case EL (pc x) q of
         AsmLabel l => next h
       | AsmPush bs => next (h+1)
@@ -111,52 +110,48 @@ Theorem pending_rows_rooted_package:
                    else
                       ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                           untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-      | _ => F)
-  in
-  let EdgeOK = \x y.
+      | _ => F)) ==>
+  !EdgeOK. EdgeOK = (\x y.
     Flow x y /\
     (if EL (pc x) q = AsmOp "JUMP" then target x y
      else if EL (pc x) q = AsmOp "JUMPI" then pc y = pc x+1 \/ target x y
-     else pc y = pc x+1)
-  in
-  let Open = \A X R.
-    FINITE A /\ X SUBSET A /\
-    (!x. x IN A ==> ?s. Shape x s) /\
-    (!x. x IN A DIFF X ==> pc x < LENGTH q) /\
-    (!x y. R x y ==> x IN A DIFF X /\ y IN A /\ rank y < rank x /\ EdgeOK x y) /\
-    (!x s. x IN A DIFF X /\ Shape x s ==>
-       (?v. (asm_steps lo otp q 1 s = AsmRevert v \/
-             asm_steps lo otp q 1 s = AsmFault v) /\ v.as_requests=req) \/
-       (?y v. R x y /\ asm_steps lo otp q 1 s = AsmOK v /\ Shape y v))
-  in
-  let Reach = \(R:(num#num)->(num#num)->bool) a x.
+     else pc y = pc x+1)) ==>
+  !Reach. Reach = (\(R:(num#num)->(num#num)->bool) a x.
     ?n (path:num->num#num).
-      path 0=a /\ path n=x /\ !k. k<n ==> R (path k) (path(SUC k))
-  in
-  let Root = \a s. (Shape a s /\
+      path 0=a /\ path n=x /\ !k. k<n ==> R (path k) (path(SUC k))) ==>
+  !Root. Root = (\a s. Shape a s /\
     (!k l origin. tag a k=SOME(l,origin) ==>
        k<LENGTH u.sym_stack /\ EL k u.sym_stack=Lab l 0) /\
     (!k. boolean a k ==>
-       k<LENGTH u.sym_stack /\ (EL k u.sym_stack=Val 0w \/ EL k u.sym_stack=Val 1w)))
-  in
+       k<LENGTH u.sym_stack /\ (EL k u.sym_stack=Val 0w \/ EL k u.sym_stack=Val 1w))) ==>
   FINITE V /\ e IN V /\ Rows V edge /\ (!x y. edge x y ==> EdgeOK x y) /\ Root e t ==>
-  let live_set = {x | x IN V /\ Reach edge e x} in
-  let live_edge = \x y. x IN live_set /\ edge x y in
+  !live_set. live_set = {x | x IN V /\ Reach edge e x} ==>
+  !live_edge. live_edge = (\x y. x IN live_set /\ edge x y) ==>
   e IN live_set /\ (!x. x IN live_set ==> Reach live_edge e x) /\
-  Rows live_set live_edge /\ Open live_set {} live_edge /\ Root e t
+  Rows live_set live_edge /\
+  (FINITE live_set /\ {} SUBSET live_set /\
+   (!x. x IN live_set ==> ?s. Shape x s) /\
+   (!x. x IN live_set DIFF {} ==> pc x < LENGTH q) /\
+   (!x y. live_edge x y ==>
+      x IN live_set DIFF {} /\ y IN live_set /\ rank y < rank x /\ EdgeOK x y) /\
+   (!x s. x IN live_set DIFF {} /\ Shape x s ==>
+      (?v. (asm_steps lo otp q 1 s = AsmRevert v \/
+            asm_steps lo otp q 1 s = AsmFault v) /\ v.as_requests=req) \/
+      (?y v. live_edge x y /\ asm_steps lo otp q 1 s = AsmOK v /\ Shape y v))) /\
+  Root e t
 Proof
-  rpt gen_tac >>
-  ntac 2 (CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  map_every (fn name =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
-    qx_gen_tac name >> disch_tac)
-    [`lo`,`otp`,`Shape`,`target`,`Flow`,`Rows`,`EdgeOK`,`Open`,`Reach`,`Root`] >>
-  strip_tac >>
-  map_every (fn name =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
-    qx_gen_tac name >> disch_tac) [`live_set`,`live_edge`] >>
+  ntac 12 gen_tac >>
+  ntac 2 (CONV_TAC (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
+  let
+    fun intro_alias conv name =
+      qx_gen_tac name >> disch_then (assume_tac o CONV_RULE
+        (RAND_CONV conv THENC REWR_CONV (GSYM markerTheory.Abbrev_def)))
+  in
+    map_every (intro_alias ALL_CONV) [`lo`,`otp`,`Shape`,`target`,`Flow`] >>
+    intro_alias (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2 ORELSEC BETA_CONV)) `Rows` >>
+    map_every (intro_alias ALL_CONV) [`EdgeOK`,`Reach`,`Root`] >>
+    strip_tac >> map_every (intro_alias ALL_CONV) [`live_set`,`live_edge`]
+  end >>
   `!a. a IN live_set <=> a IN V /\ Reach edge e a` by
     simp[Abbr `live_set`, numberTheory.equiv_class_element] >>
   qpat_assum `Abbrev (Rows = _)` (fn rows_eq =>
@@ -204,7 +199,7 @@ Resume pending_rows_rooted_package[rows]:
 QED
 
 Resume pending_rows_rooted_package[interpret]:
-  simp[Abbr `Open`, DIFF_EMPTY, EMPTY_SUBSET] >>
+  simp[DIFF_EMPTY, EMPTY_SUBSET] >>
   conj_tac >- (irule SUBSET_FINITE_I >> qexists `V` >> simp[SUBSET_DEF]) >>
   conj_tac >- suspend "inhabit" >>
   conj_tac >- (qx_gen_tac `x` >> disch_tac >> `x IN V` by metis_tac[] >>
@@ -237,7 +232,9 @@ Resume pending_rows_rooted_package[step]:
   map_every qunabbrev_tac [`Shape`,`lo`,`otp`] >>
   BETA_TAC >> RULE_ASSUM_TAC BETA_RULE >>
   match_mp_tac (GEN_ALL
-    (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM, BETA_CONV])) pending_role_step)) >>
+    (CONV_RULE (TOP_DEPTH_CONV (FIRST_CONV
+      [HO_REWR_CONV UNWIND_FORALL_THM2, REWR_CONV LET_THM, BETA_CONV]))
+      pending_role_step)) >>
   asm "dispatch" (qspec_then `x` (drule_then
     (CONJUNCTS_THEN2 assume_tac (mk_asm "row")))) >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -252,7 +249,7 @@ Resume pending_rows_rooted_package[successor_slots]:
   conj_tac
   >- (qpat_assum `Abbrev (Flow = _)` (fn flow_eq =>
         qpat_assum `Flow x y` (ACCEPT_TAC o
-          CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM, BETA_CONV])) o
+          CONV_RULE (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2 ORELSEC BETA_CONV)) o
           PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] flow_eq]))) >>
   asm "slots" (qspec_then `y` (drule_then strip_assume_tac)) >>
   conj_tac >- first_assum ACCEPT_TAC >>
