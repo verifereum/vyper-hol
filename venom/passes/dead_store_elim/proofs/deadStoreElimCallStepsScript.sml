@@ -102,7 +102,8 @@ Proof
   strip_tac >> drule_all dse_call_request >> strip_tac >>
   qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
-  namedCases_on `consume_call_outcome (venom_call_request t addr value off sz is_static)
+  namedCases_on `consume_call_outcome
+    (venom_call_request t addr value off sz is_static with cr_gas := SOME (w2n gas))
     (w2n ro) (w2n rs) s` ["output source"] >>
   simp[Excl "consume_call_outcome_eq"] >>
   strip_tac >> gvs[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>

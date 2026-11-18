@@ -80,8 +80,8 @@ Proof
   `step_inst fuel C inst s = exec_ext_call inst s gas addr value ao az ro rs static /\
    step_inst fuel Ct inst t = exec_ext_call inst t gas addr value ao' az ro' rs static` by
     (fs[MEM] >> gvs[step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
-  qabbrev_tac `rq1 = venom_call_request s addr value ao az static` >>
-  qabbrev_tac `rq2 = venom_call_request t addr value ao' az static` >>
+  qabbrev_tac `rq1 = venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)` >>
+  qabbrev_tac `rq2 = venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)` >>
   Cases_on `consume_call_outcome rq1 (w2n ro) (w2n rs) s` >>
   rename1 `consume_call_outcome rq1 (w2n ro) (w2n rs) s = (w,r)` >>
   `?out. inst.inst_outputs = [out] /\ u = update_var out w r` by
@@ -98,7 +98,9 @@ Proof
         simp[consume_call_outcome_eq] >> strip_tac >>
         gvs[update_var_def, record_request_def]) >>
      mp_tac ricf_execution_call_request_compatible >>
-     (impl_tac >- simp[]) >> simp[Abbr `rq1`, Abbr `rq2`]) >>
+     (impl_tac >- simp[]) >>
+     fs[Abbr `rq1`, Abbr `rq2`, request_agree_except_def,
+        venom_call_request_def, computed_precompile_def]) >>
   `source_memory_write_ranges inst s = [(w2n ro,w2n rs)]` by
     (fs[MEM] >> gvs[source_memory_write_ranges_def]) >>
   `step_prov PG G inst (update_var out w r) = set_prov G [out] NONE /\
@@ -129,10 +131,10 @@ Proof
   `!z v. consume_call_outcome rq2 (w2n ro') (w2n rs) t = (z,v) ==>
     step_inst fuel Ct inst t = OK (update_var out z v)` by
     (rpt gen_tac >> strip_tac >>
-     `rq2 = venom_call_request t addr value ao' az static` by simp[Abbr `rq2`] >>
+     `rq2 = venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas)` by simp[Abbr `rq2`] >>
      qpat_assum `step_inst fuel Ct inst t = _` (fn th => pure_rewrite_tac[th]) >>
      pure_rewrite_tac[exec_ext_call_def, LET_THM] >>
-     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _`
+     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _ with cr_gas := _`
        (fn th => pure_rewrite_tac[GSYM th]) >>
      qpat_assum `consume_call_outcome rq2 _ _ t = (z,v)`
        (fn th => pure_rewrite_tac[th]) >> simp[Excl "consume_call_outcome_eq"]) >>

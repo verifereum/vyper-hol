@@ -83,7 +83,8 @@ Proof
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
   namedCases_on `consume_call_outcome
-    (venom_call_request t addr 0w off sz F with cr_kind := DelegateMessageCall)
+    (venom_call_request t addr 0w off sz F with
+      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>)
     (w2n ro) (w2n rs) s` ["output source"] >>
   simp[Excl "consume_call_outcome_eq"] >>
   strip_tac >> gvs[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>

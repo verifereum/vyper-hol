@@ -240,18 +240,18 @@ Proof
 QED
 
 Theorem log_monad_take[local]:
-  log_monad (take_call_outcome target calldata value_opt)
+  log_monad (take_call_outcome gas_cap target calldata value_opt)
 Proof
   irule log_monad_take_request >>
-  qexists_tac `call_outcome_request target calldata value_opt` >>
+  qexists_tac `\st. call_outcome_request target calldata value_opt st with cr_gas := gas_cap` >>
   simp[take_call_outcome_def]
 QED
 
 Theorem log_monad_take_delegate[local]:
-  log_monad (take_delegate_outcome target calldata value_opt)
+  log_monad (take_delegate_outcome gas_cap target calldata value_opt)
 Proof
   irule log_monad_take_request >>
-  qexists_tac `delegate_outcome_request target calldata value_opt` >>
+  qexists_tac `\st. delegate_outcome_request target calldata value_opt st with cr_gas := gas_cap` >>
   simp[take_delegate_outcome_def]
 QED
 
@@ -744,7 +744,7 @@ QED
 
 Theorem Send_outcome_log_extends:
   (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    (rq,outcome) <- take_call_outcome gas_cap target [] (SOME amount);
     check outcome.co_success "send failed";
     adopt_call_outcome rq outcome;
     return (Value NoneV)
@@ -763,7 +763,7 @@ Theorem ExtCall_outcome_log_extends:
     (if ret_type = NoneT then
        check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
      else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success "ExtCall reverted";
     adopt_call_outcome rq outcome;
     k outcome.co_returnData

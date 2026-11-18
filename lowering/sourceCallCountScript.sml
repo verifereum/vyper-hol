@@ -1002,8 +1002,8 @@ Proof
 QED
 
 Theorem outcome_prefix_causal_call_steps[local]:
-  outcome_prefix_causal (take_call_outcome target calldata value_opt) /\
-  outcome_prefix_causal (take_delegate_outcome target calldata value_opt)
+  outcome_prefix_causal (take_call_outcome gas_cap target calldata value_opt) /\
+  outcome_prefix_causal (take_delegate_outcome gas_cap target calldata value_opt)
 Proof
   conj_tac >>
   simp_tac bool_ss [outcome_prefix_causal_def,
@@ -1027,7 +1027,7 @@ fun EXTERNAL_STEP g = FIRST
 
 Theorem outcome_prefix_causal_call_oracle[local]:
   outcome_prefix_causal
-    (bind (take_call_outcome target calldata value_opt) (\(rq, outcome).
+    (bind (take_call_outcome gas_cap target calldata value_opt) (\(rq, outcome).
        ignore_bind
          (if call_outcome_success outcome then return ()
           else raise (Error (RevertData (call_outcome_return_data outcome))))
@@ -1041,7 +1041,8 @@ Theorem outcome_prefix_causal_call_effects[local]:
   outcome_prefix_causal
     (eval_ext_call_effects cx target calldata value_opt gas accounts)
 Proof
-  mp_tac outcome_prefix_causal_call_oracle >>
+  mp_tac (Q.INST [`gas_cap` |-> `OPTION_BIND gas dest_NumV`]
+    outcome_prefix_causal_call_oracle) >>
   simp_tac (srw_ss()) [outcome_prefix_causal_def, eval_ext_call_effects_def,
     vyperStateTheory.bind_def, vyperStateTheory.return_def,
     vyperStateTheory.ignore_bind_def]
@@ -1264,7 +1265,9 @@ Resume outcome_prefix_causal_external_actions[send]:
       >- suspend "send_native_suffix" >>
       suspend "send_oracle_suffix") >>
   `outcome_prefix_causal
-    (bind (take_call_outcome v [] v') (\(rq,outcome).
+    (bind (take_call_outcome
+      (SOME (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] t') dest_NumV of
+               NONE => 0 | SOME g => g)) v [] v') (\(rq,outcome).
       bind (check outcome.co_success "send failed") (\x.
         bind (adopt_call_outcome rq outcome) (\x. return (Value NoneV)))))`
     by (match_mp_tac outcome_prefix_causal_bind >>
@@ -1318,8 +1321,9 @@ Resume outcome_prefix_causal_external_actions[rawcall]:
   conj_tac >- suspend "rawcall_dispatch_suffix" >>
   `outcome_prefix_causal
     (bind
-      (bind (if flags.rcf_is_delegate then take_delegate_outcome target calldata v
-             else take_call_outcome target calldata v)
+      (bind (if flags.rcf_is_delegate then
+               take_delegate_outcome (OPTION_BIND gas dest_NumV) target calldata v
+             else take_call_outcome (OPTION_BIND gas dest_NumV) target calldata v)
         (\(rq,outcome). bind (adopt_call_outcome rq outcome)
           (\x. return (outcome.co_success,outcome.co_returnData))))
       (\(success,returnData).
@@ -4364,9 +4368,10 @@ Proof
 QED
 
 Theorem source_take_call_bind_normal[local]:
-  !addr data amount g s xs.
-    bind (take_call_outcome addr data amount) g (s with outcomes := SOME xs) =
-    bind (take_request_outcome (call_outcome_request addr data amount s)) g
+  !gas_cap addr data amount g s xs.
+    bind (take_call_outcome gas_cap addr data amount) g (s with outcomes := SOME xs) =
+    bind (take_request_outcome
+      (call_outcome_request addr data amount s with cr_gas := gas_cap)) g
       (s with outcomes := SOME xs)
 Proof
   simp[vyperStateTheory.bind_def, take_call_outcome_def,
@@ -4387,7 +4392,10 @@ Theorem source_send_oracle_normal[local]:
         | SOME amount =>
           if cx.txn.is_static /\ amount <> 0 then
             (INR (Error (RuntimeError "write in static context")), s with outcomes := SOME xs)
-          else bind (take_call_outcome addr []
+          else bind (take_call_outcome
+                       (SOME (case OPTION_BIND
+                         (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+                           NONE => 0 | SOME g => g)) addr []
                        (if cx.txn.is_static then NONE else SOME amount))
                  (\(rq,oc). bind (check oc.co_success "send failed")
                    (\u. bind (adopt_call_outcome rq oc) (\v. return (Value NoneV))))
@@ -4413,7 +4421,7 @@ Theorem source_ext_effects_oracle_normal[local]:
   !cx addr data amount gas accounts g s xs.
     bind (eval_ext_call_effects cx addr data amount gas accounts) g
       (s with outcomes := SOME xs) =
-    bind (take_call_outcome addr data amount)
+    bind (take_call_outcome (OPTION_BIND gas dest_NumV) addr data amount)
       (\(rq,oc). bind
         (if call_outcome_success oc then return ()
          else raise (Error (RevertData (call_outcome_return_data oc))))
@@ -4456,7 +4464,9 @@ Theorem source_ext_call_oracle_normal[local]:
               (INR (Error (RuntimeError "ExtCall target has no code")), s with outcomes := SOME xs)
             else if cx.txn.is_static /\ (case amount of NONE => F | SOME n => n <> 0) then
               (INR (Error (RuntimeError "write in static context")), s with outcomes := SOME xs)
-            else bind (take_call_outcome addr data (if cx.txn.is_static then NONE else amount))
+            else bind (take_call_outcome
+              (OPTION_BIND (ext_call_kwarg EKGas opts (DROP (LENGTH tys) rest)) dest_NumV)
+              addr data (if cx.txn.is_static then NONE else amount))
               (\(rq,oc). bind
                 (if call_outcome_success oc then return ()
                  else raise (Error (RevertData (call_outcome_return_data oc))))
@@ -4520,11 +4530,12 @@ Theorem source_raw_call_oracle_normal[local]:
     else if cx.txn.is_static /\ ~flags.rcf_is_static /\ amount <> 0 then
       (INR (Error (RuntimeError "write in static context")), s with outcomes := SOME xs)
     else bind (take_request_outcome
-      (if flags.rcf_is_delegate then
+      ((if flags.rcf_is_delegate then
         delegate_outcome_request addr data
           (if cx.txn.is_static \/ flags.rcf_is_static then NONE else SOME amount) s
        else call_outcome_request addr data
-          (if cx.txn.is_static \/ flags.rcf_is_static then NONE else SOME amount) s))
+          (if cx.txn.is_static \/ flags.rcf_is_static then NONE else SOME amount) s)
+        with cr_gas := OPTION_BIND gas dest_NumV))
       (\(rq,oc). bind (adopt_call_outcome rq oc) (\u.
         if flags.rcf_revert_on_failure then
           bind (if oc.co_success then return () else raise (Error (RevertData oc.co_returnData)))

@@ -61,7 +61,7 @@ QED
    storage nor account typing is assumed in the no-adoption case. *)
 Theorem arbitrary_static_failed_payloads_preserve_storage:
   contract_storage_well_formed cx st /\
-  take_call_outcome target data value st = (INL (rq,co),st1) /\
+  take_call_outcome gas_cap target data value st = (INL (rq,co),st1) /\
   adopt_call_outcome rq co st1 = (INL (),st2) /\
   (rq.cr_static \/ ~co.co_success) ==>
   contract_storage_well_formed cx st2 /\ outcome_suffix st.outcomes st2.outcomes
@@ -74,10 +74,10 @@ QED
 Theorem ordinary_guard_error_storage_suffix:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
   st.outcomes = SOME (co::rest) /\
-  rq = call_outcome_request target data value st /\
+  rq = (call_outcome_request target data value st with cr_gas := gas_cap) /\
   ~computed_precompile rq /\ co.co_success /\ ~rq.cr_static /\
   ~accounts_runtime_well_typed co.co_accounts ==>
-  take_call_outcome target data value st =
+  take_call_outcome gas_cap target data value st =
     (INR (Error (RuntimeError "call outcome accounts")),
      st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
        storage_trace := st.storage_trace ++ [StorageOutcome rq co]|>) /\
@@ -95,7 +95,7 @@ QED
 
 Theorem take_guard_error_storage_client:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
-  take_call_outcome target data value st = (INR exc,st') ==>
+  take_call_outcome gas_cap target data value st = (INR exc,st') ==>
   contract_storage_well_formed cx st' /\ oracle_storage_ok cx st' /\
   outcome_suffix st.outcomes st'.outcomes
 Proof
@@ -104,7 +104,7 @@ QED
 
 (* Actual computed calls consume one outcome but record no request. *)
 Theorem computed_outcome_suffix_client:
-  take_call_outcome target data value st = (res,st') /\
+  take_call_outcome gas_cap target data value st = (res,st') /\
   st.outcomes = SOME os /\
   computed_precompile (call_outcome_request target data value st) ==>
   st'.outcomes = SOME (DROP 1 os) /\ st'.requests = st.requests
@@ -116,7 +116,7 @@ QED
 
 Theorem successful_adoption_storage_client:
   runtime_storage_consistent env cx st /\ oracle_storage_ok cx st /\
-  take_call_outcome target data value st = (INL (rq,co),st1) /\
+  take_call_outcome gas_cap target data value st = (INL (rq,co),st1) /\
   co.co_success /\ adopt_call_outcome rq co st1 = (INL (),st2) ==>
   runtime_storage_consistent env cx st2 /\ oracle_storage_ok cx st2 /\
   outcome_suffix st.outcomes st2.outcomes
