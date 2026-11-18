@@ -1,5 +1,5 @@
 Theory bodyPtrTypeBuiltinsBytesWordInputs
-Ancestors bodyPtrTypeBuiltinsBytesWordActual bodyPtrSignedConvertSourceTyping
+Ancestors bodyPtrTypeBuiltinsBytesWordTypes bodyPtrSignedConvertSourceTyping
   exprSimHash exprSimHashBoundary bodyPtrDefs loweringPosts exprLoweringProps
   vyperValue valueEncoding venomState
 

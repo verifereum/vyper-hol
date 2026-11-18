@@ -116,11 +116,11 @@ QED
 
 (* Validated mutual-interface schema (the mutual theorem itself is future work).
  *
- * Use the eleven clauses, in exactly the order and with exactly the typing
+ * Use the ten clauses, in exactly the order and with exactly the typing
  * and runtime antecedents of eval_storage_well_formed_on_mutual:
  *   eval_stmt, eval_stmts, eval_iterator, eval_for, eval_expr, eval_exprs,
  *   eval_base_place, eval_target_place, assign_tuple_targets,
- *   assign_tuple_target_list, eval_expr_results.
+ *   assign_tuple_target_list.
  * Preserve the two well_typed_expr/type_place_expr implications in clause 5.
  * Quantify initial_st and selected AFTER the evaluator's structural arguments,
  * so recursive calls can use the same initial_st and selected.  Replace the
@@ -160,8 +160,7 @@ QED
  * IS_SOME is essential: otherwise the non-oracle run_raw_call branch needs
  * a separate callee-preservation premise not expressed by StorageOutcome.
  * It is available at call_external_trace (SOME os), and is threaded through
- * recursion by eval_outcome_suffix_mutual and outcome_suffix_modes; the
- * expression-results clause uses eval_expr_results_outcome_suffix.
+ * recursion by eval_outcome_suffix_mutual and outcome_suffix_modes.
  *
  * Internal calls change stk, not txn.target, and temporarily change scopes.
  * Their defaults/body/cleanup proof obligations are the ones in
