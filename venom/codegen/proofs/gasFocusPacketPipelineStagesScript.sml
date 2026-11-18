@@ -22,6 +22,8 @@ Theorem focus_packet_pipeline_stages:
     stage 9 = out.po_unit.cu_context /\
     (!k. k < 9 ==> ctx_pass_stage rp (EL k o1_fn_passes) (o1_walk_view rp k)
       (stage k) (stage (SUC k))) /\
+    (!k. k <= 9 ==> o1_ctx_shape (stage k) /\
+      EVERY (o1_fn_row k) (stage k).ctx_functions) /\
     (stage 7).ctx_entry = SOME nm /\
     ctx_pass_stage rp (CFP_Simple VP_DFT) any_view (stage 7) (stage 8) /\
     ctx_pass_stage rp (CFP_Simple VP_CFGNormalization) any_view (stage 8) (stage 9) /\
@@ -64,6 +66,8 @@ Proof
      simp[EVERY_MEM] >> metis_tac[]) >>
   drule_all (Q.INST [`C` |-> `stage 7`, `C'` |-> `stage 8`, `view` |-> `any_view`]
     dft_stage_wf_ssa) >> strip_tac >>
+  qpat_assum `!k. k <= LENGTH _ ==> _`
+    (assume_tac o SRULE [o1_fn_passes_def]) >>
   qexists `stage` >>
   simp[prune_unit_fcg_unreachable_fields] >>
   rpt strip_tac >>
