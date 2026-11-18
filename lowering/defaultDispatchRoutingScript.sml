@@ -1,20 +1,8 @@
 (* Raw selector routing: bytes are word8, so byte validity is intrinsic. *)
 Theory defaultDispatchRouting
-Ancestors entryDispatchProps checkedSelectorTableProps sourceEntrySelection
+Ancestors calldataSelectorProps entryDispatchProps checkedSelectorTableProps sourceEntrySelection
   vyperCalldata selectorCompilerProps supportedProgram supportedProgramProps
   vyperABIEntries compileVyper loweringShapeProps mem2varBlockSimHelpers list rich_list
-
-Theorem cd_selector_method_id[local]:
-  4 <= LENGTH cd ==> cd_selector cd = w2n (calldata_method_id cd)
-Proof
-  strip_tac >>
-  `LENGTH (TAKE 4 cd) = 4` by simp[LENGTH_TAKE] >>
-  drule selectorCompilerPropsTheory.calldata_method_id_four_bytes >>
-  simp[GSYM cd_selector_def] >> strip_tac >>
-  `calldata_method_id (TAKE 4 cd ++ DROP 4 cd) =
-   calldata_method_id (TAKE 4 cd)` by
-    (irule calldata_method_id_append >> simp[]) >> gvs[]
-QED
 
 Theorem default_raw_selected_target:
   MEM (mut,nr,rr,name,args,([]:expr list),ret,fbody) exts /\
