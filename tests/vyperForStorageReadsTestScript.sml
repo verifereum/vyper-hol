@@ -6,6 +6,7 @@
    at loop entry would give the unchanged sums. *)
 Theory vyperForStorageReadsTest
 Ancestors
+  vyperSmallStepCV
   vyperSmallStep[ignore_grammar] vyperExtCallCpsCVTest
   vyperCallOutcome[ignore_grammar] vfmState[ignore_grammar]
   vfmExecution[ignore_grammar]
