@@ -54,3 +54,30 @@ Proof
   Cases_on `h` >> simp[tv_abi_dynamic_def, vyper_to_abi_type_def] >>
   metis_tac[]
 QED
+
+(* The addition uses a word literal, even if the mathematical head cursor
+   does not fit in a word. The source also reduces that cursor modulo 2^256. *)
+Theorem member_source_decode:
+  abi_decoder_coherent ce env sf ty tv ==>
+  cd_decode F s.vs_call_ctx.cc_calldata tv
+    (w2n (if dec_info_needs_offset (type_to_abi_dec_info sf ce ty)
+          then p + abi_decode_load CALLDATALOAD (p + n2w ao) s
+          else p + n2w ao)) =
+  cd_decode F s.vs_call_ctx.cc_calldata tv
+    (cd_member_ptr F s.vs_call_ctx.cc_calldata tv (w2n p) ao)
+Proof
+  strip_tac >>
+  Cases_on `type_to_abi_dec_info sf ce ty = DecComplex T []`
+  >- gvs[abi_decoder_empty_dynamic_translation,
+         abi_decoder_coherent_array_iff, cd_decode_def] >>
+  drule abi_decoder_coherent_dynamic >>
+  drule abi_decoder_coherent_header >>
+  simp[abi_decoder_header_def] >> rpt strip_tac >>
+  `dec_info_needs_offset (type_to_abi_dec_info sf ce ty) = tv_abi_dynamic tv` by
+    metis_tac[abi_decoder_nonempty_offset, calldata_coherent_dynamic] >>
+  `cd_member_ptr F s.vs_call_ctx.cc_calldata tv (w2n p) ao =
+    cd_member_ptr F s.vs_call_ctx.cc_calldata tv (w2n p)
+      (w2n (n2w ao : bytes32))` by
+    simp[cd_member_ptr_def, cd_at_def, MOD_PLUS] >>
+  metis_tac[calldata_member_pointer]
+QED
