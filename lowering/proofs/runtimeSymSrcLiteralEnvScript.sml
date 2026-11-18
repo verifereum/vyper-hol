@@ -1,7 +1,7 @@
 Theory runtimeSymSrcLiteralEnv
 Ancestors
   runtimeSymSrcContext runtimeSymSrcInterfaces runtimeSymSrcEmission
-  exprLowering compileEnv context emitHelper loweringShapeDefs list venomInst stackPlanTypes
+  exprLowering compileEnv context emitHelper loweringShapeDefs list venomInst stackPlanTypes vyperAST
 
 Theorem runtime_sym_store_byte_chunks:
   !ptr bs off s u s'.
@@ -77,4 +77,20 @@ Proof
   simp[is_label_operand_def] >> strip_tac >>
   qpat_assum `emit_op BLOCKHASH _ _ = _`
     (mp_then Any mp_tac runtime_sym_emit_op) >> simp[]
+QED
+
+Theorem runtime_sym_compile_topname:
+  runtime_sym_env tops ce /\ EVERY runtime_sym_inst (state_insts s) /\
+  compile_expr_body cfn bfn tfn ce ty (TopLevelName rt ns) s = (v,s') ==>
+  EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
+Proof
+  simp[compile_expr_body_def, expr_type_def] >>
+  Cases_on `FLOOKUP ce.ce_module_vars ns` >>
+  simp[NoAsms, runtime_sym_value_def, mk_ptr_def, is_label_operand_def] >>
+  strip_tac >> gvs[] >>
+  TRY (Cases_on `x` >> gvs[runtime_sym_value_def, mk_ptr_def, is_label_operand_def]) >>
+  pairarg_tac >> gvs[] >>
+  drule_at (Pat `emit_inst _ _ _ _ = _`) runtime_sym_emit_inst >>
+  simp[runtime_sym_inst_def, mk_inst_def, runtime_sym_value_def,
+       is_label_operand_def]
 QED

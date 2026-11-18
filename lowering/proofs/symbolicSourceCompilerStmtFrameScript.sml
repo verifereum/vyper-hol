@@ -51,14 +51,14 @@ Proof
   rpt (BETA_TAC >> irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
 QED
 
-Theorem symbolic_frame_stmt_option_case[local,simp]:
+Theorem symbolic_frame_stmt_option_case[simp]:
   symbolic_frame R (case x of NONE => m | SOME y => f y) =
   (case x of NONE => symbolic_frame R m | SOME y => symbolic_frame R (f y))
 Proof
   Cases_on `x` >> simp[]
 QED
 
-Theorem symbolic_frame_stmt_pair_case[local,simp]:
+Theorem symbolic_frame_stmt_pair_case[simp]:
   symbolic_frame R ((\(x,y). f x y) p) =
   (\(x,y). symbolic_frame R (f x y)) p
 Proof
@@ -100,7 +100,7 @@ Proof
   strip_tac >> Cases_on `s` >> simp[declare_stmt_local_def]
 QED
 
-Theorem symbolic_frame_mcopy_guard[local,simp]:
+Theorem symbolic_frame_mcopy_guard[simp]:
   symbolic_frame R (emit_inst INVALID [] []) /\ symbolic_frame R m ==>
   symbolic_frame R (compile_mcopy_guard cenv m)
 Proof

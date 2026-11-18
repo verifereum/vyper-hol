@@ -1,7 +1,7 @@
 Theory runtimeSymSrcExprBody
 Ancestors
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission runtimeSymSrcInterfaces
-  runtimeSymSrcBlockEmission exprLowering compileEnv context emitHelper
+  runtimeSymSrcBlockEmission runtimeSymSrcLiteralEnv exprLowering compileEnv context emitHelper
   supportedExprs supportedExprTraverse exprCallBounds exprSimHypsDefs vyperAST list venomInst stackPlanTypes finite_map
 
 Theorem runtime_sym_expr_body:
@@ -152,15 +152,8 @@ Resume runtime_sym_expr_body[flag]:
        supported_pure_expr_def, supported_effect_expr_def, supported_pure_expr_def]
 QED
 Resume runtime_sym_expr_body[topname]:
-  simp[NoAsms, runtime_sym_expr_contract_def, compile_expr_body_def, expr_type_def] >>
-  Cases_on `FLOOKUP ce.ce_module_vars ns` >>
-  simp[NoAsms, runtime_sym_value_def, mk_ptr_def, is_label_operand_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  TRY (Cases_on `x` >> gvs[runtime_sym_value_def, mk_ptr_def, is_label_operand_def]) >>
-  pairarg_tac >> gvs[] >>
-  drule_at (Pat `emit_inst _ _ _ _ = _`) runtime_sym_emit_inst >>
-  simp[runtime_sym_inst_def, mk_inst_def, runtime_sym_value_def,
-       is_label_operand_def]
+  simp[NoAsms, runtime_sym_expr_contract_def] >>
+  metis_tac[runtime_sym_compile_topname]
 QED
 Resume runtime_sym_expr_body[call]:
   drule runtime_sym_generators_call >>

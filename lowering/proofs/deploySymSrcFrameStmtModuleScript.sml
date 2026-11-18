@@ -7,18 +7,22 @@ Ancestors
 val _ = augment_srw_ss [rewrites [deploy_blocks_frame_bind,
                                 deploy_blocks_frame_ignore_bind]];
 
+fun specialize_frame theorem =
+  REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks` (Q.GEN `R` theorem));
+
 Theorem deploy_blocks_frame_option_case[local,simp]:
   deploy_blocks_frame (case x of NONE => m | SOME y => f y) =
   (case x of NONE => deploy_blocks_frame m | SOME y => deploy_blocks_frame (f y))
 Proof
-  Cases_on `x` >> simp[]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_stmt_option_case)
 QED
 
 Theorem deploy_blocks_frame_pair_case[local,simp]:
   deploy_blocks_frame ((\(x,y). f x y) p) =
   (\(x,y). deploy_blocks_frame (f x y)) p
 Proof
-  Cases_on `p` >> simp[]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_stmt_pair_case)
 QED
 
 Theorem deploy_blocks_frame_get_terminated:
@@ -107,7 +111,7 @@ QED
 Theorem deploy_blocks_frame_mcopy_guard[simp]:
   deploy_blocks_frame m ==> deploy_blocks_frame (compile_mcopy_guard cenv m)
 Proof
-  simp[compile_mcopy_guard_def] >> IF_CASES_TAC >> simp[]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_mcopy_guard) >> simp[]
 QED
 
 Theorem deploy_blocks_frame_return_unlock:

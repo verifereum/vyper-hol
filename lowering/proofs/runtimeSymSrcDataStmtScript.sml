@@ -5,18 +5,22 @@ Ancestors runtimeSymSrcDataCustomError runtimeSymSrcDataContext
 
 (* Distribute the projection frame through control selection, keeping branch
    conditions opaque rather than duplicating compiler continuations. *)
+fun specialize_frame theorem =
+  REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data` (Q.GEN `R` theorem));
+
 Theorem runtime_data_frame_option_case[local,simp]:
   runtime_data_frame (case x of NONE => m | SOME y => f y) =
   (case x of NONE => runtime_data_frame m | SOME y => runtime_data_frame (f y))
 Proof
-  Cases_on `x` >> simp[]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_stmt_option_case)
 QED
 
 Theorem runtime_data_frame_pair_case[local,simp]:
   runtime_data_frame ((\(x,y). f x y) p) =
   (\(x,y). runtime_data_frame (f x y)) p
 Proof
-  Cases_on `p` >> simp[]
+  MATCH_ACCEPT_TAC (specialize_frame symbolic_frame_stmt_pair_case)
 QED
 
 Theorem runtime_data_frame_var_location_case[local,simp]:
@@ -68,7 +72,7 @@ QED
 Theorem runtime_data_frame_compile_mcopy_guard[simp]:
   runtime_data_frame m ==> runtime_data_frame (compile_mcopy_guard cenv m)
 Proof
-  simp[compile_mcopy_guard_def] >> IF_CASES_TAC >> simp[]
+  strip_tac >> match_mp_tac (specialize_frame symbolic_frame_mcopy_guard) >> simp[]
 QED
 
 Theorem runtime_data_frame_compile_return_unlock:

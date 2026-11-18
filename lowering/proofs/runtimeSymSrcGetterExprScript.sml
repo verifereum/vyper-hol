@@ -2,7 +2,7 @@ Theory runtimeSymSrcGetterExpr
 Ancestors
   runtimeSymSrcOpenPlaces runtimeSymSrcContextComplete
   runtimeSymSrcSubscriptGenerators runtimeSymSrcSubscriptPrimitives
-  runtimeSymSrcInterfaces runtimeSymSrcEmission exprLowering vyperGetter
+  runtimeSymSrcInterfaces runtimeSymSrcEmission runtimeSymSrcLiteralEnv exprLowering vyperGetter
   vyperAST compileEnv context list venomInst stackPlanTypes
 
 Theorem runtime_sym_getter_lower_value_raw[local]:
@@ -63,15 +63,10 @@ Theorem runtime_sym_getter_topname_raw:
   compile_expr ce ty (TopLevelName rt ns) s = (v,s') ==>
   EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
 Proof
-  simp[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
-  Cases_on `FLOOKUP ce.ce_module_vars ns` >>
-  simp[NoAsms, runtime_sym_value_def, mk_ptr_def, is_label_operand_def] >>
-  strip_tac >> gvs[] >>
-  TRY (Cases_on `x` >> gvs[runtime_sym_value_def, mk_ptr_def, is_label_operand_def]) >>
-  pairarg_tac >> gvs[] >>
-  drule_at (Pat `emit_inst _ _ _ _ = _`) runtime_sym_emit_inst >>
-  simp[runtime_sym_inst_def, mk_inst_def, runtime_sym_value_def,
-       is_label_operand_def]
+  mp_tac (Q.INST [`tops` |-> `tops`, `ce` |-> `ce`, `ty` |-> `ty`,
+    `rt` |-> `rt`, `ns` |-> `ns`, `s` |-> `s`, `v` |-> `v`, `s'` |-> `s'`]
+    runtime_sym_compile_topname) >>
+  simp[Once compile_expr_def, compile_expr_body_def, expr_type_def]
 QED
 
 Theorem runtime_sym_getter_subscript_expr_raw:

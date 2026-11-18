@@ -27,10 +27,11 @@ Proof
       runtime_sym_inst_def, mk_inst_def, is_label_operand_def]
 QED
 
-Theorem runtime_sym_decode_args:
+Theorem runtime_sym_decode_args_at:
   !args off s u s'.
-  runtime_sym_env tops ce /\ EVERY runtime_sym_inst (state_insts s) /\
-  compile_decode_args ce args off CALLDATALOAD (Lit 0w) 4 s = (u,s') ==>
+  runtime_sym_env tops ce /\ opc <> CODESIZE /\ opc <> CODECOPY /\
+  ~is_label_operand hi /\ EVERY runtime_sym_inst (state_insts s) /\
+  compile_decode_args ce args off opc hi adj s = (u,s') ==>
   EVERY runtime_sym_inst (state_insts s')
 Proof
   Induct
@@ -40,7 +41,7 @@ Proof
   >- (rpt (pairarg_tac >> simp[]) >> strip_tac >>
       qpat_assum `emit_op ADD _ _ = _` (mp_then Any mp_tac runtime_sym_emit_op) >>
       simp[is_label_operand_def] >> strip_tac >>
-      qpat_assum `emit_op CALLDATALOAD _ _ = _` (mp_then Any mp_tac runtime_sym_emit_op) >>
+      qpat_assum `emit_op opc _ _ = _` (mp_then Any mp_tac runtime_sym_emit_op) >>
       simp[] >> strip_tac >>
       drule_all runtime_sym_abi_clamp_basetype >> strip_tac >>
       `EVERY runtime_sym_inst (state_insts cs'⁴')` by
@@ -66,9 +67,21 @@ Proof
     simp[is_label_operand_def] >> strip_tac >>
     qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
       (mp_then Any mp_tac runtime_sym_abi_decode_to_buf) >>
-    simp[is_label_operand_def] >> strip_tac >>
+    simp[is_label_operand_def, COND_RAND] >> strip_tac >>
     first_x_assum drule_all >> simp[]) >>
   qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_abi_decode_to_buf) >>
-  simp[is_label_operand_def] >> strip_tac >> metis_tac[]
+  simp[is_label_operand_def, COND_RAND] >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem runtime_sym_decode_args:
+  !args off s u s'.
+  runtime_sym_env tops ce /\ EVERY runtime_sym_inst (state_insts s) /\
+  compile_decode_args ce args off CALLDATALOAD (Lit 0w) 4 s = (u,s') ==>
+  EVERY runtime_sym_inst (state_insts s')
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `compile_decode_args _ _ _ _ _ _ _ = _`) runtime_sym_decode_args_at >>
+  disch_then (qspec_then `tops` mp_tac) >> simp[is_label_operand_def]
 QED

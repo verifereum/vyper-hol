@@ -6,7 +6,7 @@ Theorem runtime_sym_internal_fn_bodies:
   !xs.
     (!lbl ce params rb nr key trans view ctor len body rt s u s'.
        MEM (lbl,ce,params,rb,nr,key,trans,view,ctor,len,body,rt) xs /\
-       EVERY P (state_insts s) /\
+       EVERY P (state_insts s) /\ s.cs_current_insts = [] /\
        compile_internal_function ce params rb nr key trans view ctor len body rt s = (u,s') ==>
        EVERY P (state_insts s')) ==>
     !s u s'. EVERY P (state_insts s) /\
@@ -20,6 +20,9 @@ Proof
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   `EVERY P (state_insts cs')` by
     (mp_tac (runtime_sym_new_block |> Q.INST [`label` |-> `h0`, `st` |-> `s`]) >> simp[]) >>
+  `cs'.cs_current_insts = []` by
+    (qpat_x_assum `new_block _ _ = _` mp_tac >> simp[new_block_def] >>
+     strip_tac >> pop_assum (SUBST1_TAC o SYM) >> simp[]) >>
   qpat_assum `!lbl ce params rb nr key trans view ctor len body rt s s'. _`
     (drule_at (Pat `compile_internal_function _ _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >> strip_tac >>

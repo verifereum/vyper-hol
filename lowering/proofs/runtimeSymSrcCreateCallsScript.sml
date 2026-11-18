@@ -3,7 +3,7 @@ Ancestors
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission runtimeSymSrcInterfaces
   runtimeSymSrcCallStaging runtimeSymSrcSystemCreate runtimeSymSrcAbiEncode
   runtimeSymSrcContext runtimeSymSrcContextTypedBase
-  exprLowering compileEnv emitHelper list stackPlanTypes supportedExprs
+  exprLowering exprLoweringEquations compileEnv emitHelper list stackPlanTypes supportedExprs
 
 Theorem runtime_sym_create_salt:
   (!e s op s'. salt = SOME e /\ EVERY runtime_sym_inst (state_insts s) /\
@@ -38,11 +38,8 @@ Proof
     runtime_sym_extcall_store_values >>
   disch_then (qspec_then `tops` mp_tac) >> simp[] >>
   disch_then irule >>
-  `!es st. LENGTH (FST (compile_multi_vvs cfn ce es st)) = LENGTH es` by
-    (Induct >> simp[compile_multi_vvs_def, comp_return_def, comp_bind_def] >>
-     rpt gen_tac >> rpt (pairarg_tac >> simp[]) >>
-     simp[comp_return_def] >> metis_tac[pairTheory.FST]) >>
-  `LENGTH vals = LENGTH (MAP (lowered_value_type ce) args)` by metis_tac[pairTheory.FST, LENGTH_MAP] >>
+  `LENGTH vals = LENGTH (MAP (lowered_value_type ce) args)` by
+    metis_tac[compile_multi_vvs_length, LENGTH_MAP] >>
   simp[every_zip_fst]
 QED
 

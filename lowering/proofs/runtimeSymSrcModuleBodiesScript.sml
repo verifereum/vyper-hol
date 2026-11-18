@@ -87,6 +87,32 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >> metis_tac[]
 QED
 
+Theorem runtime_sym_guarded_body_raw:
+  runtime_sym_env tops ce /\
+  (!s u s'. EVERY runtime_sym_inst (state_insts s) /\
+    compile_stmts ce NoLoop (case ret of SOME ty => ty | NONE => BaseT BoolT)
+      stmts s = (u,s') ==> EVERY runtime_sym_inst (state_insts s')) ==>
+  !s u s'. EVERY runtime_sym_inst (state_insts s) /\
+    compile_guarded_body ce nr key trans view stmts ret s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')
+Proof
+  strip_tac >> simp[compile_guarded_body_def, comp_ignore_bind_def] >>
+  match_mp_tac runtime_sym_bind >> conj_tac
+  >- (Cases_on `nr` >> simp[comp_return_def] >>
+      metis_tac[runtime_sym_nonreentrant_lock]) >>
+  gen_tac >> BETA_TAC >> match_mp_tac runtime_sym_bind >> conj_tac
+  >- first_assum ACCEPT_TAC >>
+  gen_tac >> Cases_on `nr` >> Cases_on `view` >> Cases_on `trans` >>
+  Cases_on `ret` >>
+  simp[comp_bind_def, comp_get_def, compile_nonreentrant_unlock_def,
+       comp_return_def, emit_inst_def, emit_void_def, fresh_id_def, emit_def] >>
+  rpt gen_tac >> IF_CASES_TAC >>
+  simp[comp_return_def, comp_bind_def, comp_ignore_bind_def,
+       emit_inst_def, emit_void_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
+  gvs[state_insts_def, all_blocks_def, MAP_APPEND, FLAT_APPEND, EVERY_APPEND,
+      runtime_sym_inst_def, mk_inst_def]
+QED
+
 Theorem runtime_sym_guarded_body:
   runtime_sym_env tops ce /\
   (!ce'. runtime_sym_stmts_contract tops bindings compile_stmts ce' NoLoop
@@ -97,21 +123,8 @@ Theorem runtime_sym_guarded_body:
   compile_guarded_body ce nr key trans view stmts ret s = (u,s') ==>
   EVERY runtime_sym_inst (state_insts s')
 Proof
-  strip_tac >> simp[compile_guarded_body_def, comp_ignore_bind_def] >>
-  match_mp_tac runtime_sym_bind >> conj_tac
-  >- (Cases_on `nr` >> simp[comp_return_def] >>
-      metis_tac[runtime_sym_nonreentrant_lock]) >>
-  gen_tac >> BETA_TAC >> match_mp_tac runtime_sym_bind >> conj_tac
-  >- (gvs[runtime_sym_stmts_contract_def, runtime_sym_loop_def] >> metis_tac[]) >>
-  gen_tac >> Cases_on `nr` >> Cases_on `view` >> Cases_on `trans` >>
-  Cases_on `ret` >>
-  simp[comp_bind_def, comp_get_def, compile_nonreentrant_unlock_def,
-       comp_return_def, emit_inst_def, emit_void_def, fresh_id_def, emit_def] >>
-  rpt gen_tac >> IF_CASES_TAC >>
-  simp[comp_return_def, comp_bind_def, comp_ignore_bind_def,
-       emit_inst_def, emit_void_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
-  gvs[state_insts_def, all_blocks_def, MAP_APPEND, FLAT_APPEND, EVERY_APPEND,
-      runtime_sym_inst_def, mk_inst_def]
+  strip_tac >> match_mp_tac runtime_sym_guarded_body_raw >>
+  gvs[runtime_sym_stmts_contract_def, runtime_sym_loop_def] >> metis_tac[]
 QED
 
 Theorem runtime_sym_fallback_body:
@@ -135,6 +148,27 @@ Proof
   gen_tac >> BETA_TAC >> match_mp_tac runtime_sym_guarded_body >> metis_tac[]
 QED
 
+Theorem runtime_sym_external_body_raw:
+  runtime_sym_env tops ce /\
+  (!ce s ce' s'. runtime_sym_env tops ce /\ EVERY runtime_sym_inst (state_insts s) /\
+    compile_register_positional_args ce args 4 s = (ce',s') ==>
+    runtime_sym_env tops ce' /\ EVERY runtime_sym_inst (state_insts s')) /\
+  (!ce' s u s'. runtime_sym_env tops ce' /\ EVERY runtime_sym_inst (state_insts s) /\
+    compile_stmts ce' NoLoop (case ret of SOME ty => ty | NONE => BaseT BoolT)
+      stmts s = (u,s') ==> EVERY runtime_sym_inst (state_insts s')) /\
+  EVERY runtime_sym_inst (state_insts s) /\
+  compile_external_function_body ce args nr key trans view stmts ret s = (u,s') ==>
+  EVERY runtime_sym_inst (state_insts s')
+Proof
+  simp[compile_external_function_body_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `!ce s ce' s'. _` drule_all >> strip_tac >>
+  irule runtime_sym_guarded_body_raw >>
+  goal_assum (drule_at (Pat `compile_guarded_body _ _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> qexists_tac `tops` >> simp[] >> rpt strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
 Theorem runtime_sym_external_function_body:
   runtime_sym_env tops ce /\
   (!ce s ce' s'. runtime_sym_env tops ce /\
@@ -149,11 +183,10 @@ Theorem runtime_sym_external_function_body:
   compile_external_function_body ce args nr key trans view stmts ret s = (u,s') ==>
   EVERY runtime_sym_inst (state_insts s')
 Proof
-  simp[compile_external_function_body_def, comp_bind_def] >>
-  pairarg_tac >> simp[] >> strip_tac >>
-  first_x_assum drule >> disch_then drule >>
-  disch_then drule >> strip_tac >>
-  metis_tac[runtime_sym_guarded_body]
+  strip_tac >> irule runtime_sym_external_body_raw >>
+  goal_assum (drule_at (Pat `compile_external_function_body _ _ _ _ _ _ _ _ _ = _`)) >>
+  qexists_tac `tops` >>
+  gvs[runtime_sym_stmts_contract_def, runtime_sym_loop_def] >> metis_tac[]
 QED
 
 Theorem runtime_sym_common_function_body:

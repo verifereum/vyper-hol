@@ -575,18 +575,3 @@ Proof
   simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
        supported_expr_exists_def]
 QED
-
-(* An inhabited nested aggregate: callbacks must accept aggregate children,
-   not just word leaves, and remain bounded at each list boundary. *)
-Theorem runtime_sym_nested_make_array_probe:
-  supported_expr []
-    (Builtin (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Fixed 1))
-      (MakeArray (SOME (ArrayT (BaseT (UintT 256)) (Fixed 1))) (Fixed 1))
-      [Builtin (ArrayT (BaseT (UintT 256)) (Fixed 1))
-        (MakeArray (SOME (BaseT (UintT 256))) (Fixed 1))
-        [Name (BaseT (UintT 256)) "x"]]) /\
-  expr_size (Name (BaseT (UintT 256)) "x") <
-    list_size expr_size [Name (BaseT (UintT 256)) "x"]
-Proof
-  EVAL_TAC
-QED
