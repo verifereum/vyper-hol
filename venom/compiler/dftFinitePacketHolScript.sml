@@ -65,4 +65,4 @@ Ancestors
   dftPacketCallPathInsertion dftPacketCallKeyFreshness dftPacketCallRootConservation dftPacketFreshCutGeometry
   dftPacketChangedCallerSuccess dftPacketCallFreshRoot dftPacketFreshRootGeometry
   dftPacketBlockPathConservation dftPacketBlockReplayClosed
-  dftPacketReturnNewCuts
+  dftPacketReturnNewCuts dftPacketBlockPathUpdate dftPacketBlockReplayFrame
