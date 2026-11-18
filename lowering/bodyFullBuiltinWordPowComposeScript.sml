@@ -120,7 +120,15 @@ Proof
                   exprSimAccountsTheory.emit_op_extends_next_var] >>
       `fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\
        fn_has_code s2 sb func` by
-        metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
+        (`cs_extends s1 sb` by
+           (irule compileEnvTheory.cs_extends_trans >> qexists_tac `s2` >> simp[]) >>
+         `fn_has_code sa s1 func /\ fn_has_code s1 sb func` by
+           (irule (Q.SPECL [`sa`, `s1`, `sb`, `func`]
+              fragExecTheory.fn_has_code_split) >> simp[]) >>
+         `fn_has_code s1 s2 func /\ fn_has_code s2 sb func` by
+           (irule (Q.SPECL [`s1`, `s2`, `sb`, `func`]
+              fragExecTheory.fn_has_code_split) >> simp[]) >>
+         simp[]) >>
       `lower_value compile_expr cenv ty
         (Builtin (BaseT (UintT 256)) PowMod256
           [gas_shadow_expr x0; gas_shadow_expr x0']) shadow_sa = (op,shadow_sb)` by

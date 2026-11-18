@@ -35,13 +35,13 @@ Proof
   qspec_then `tops` mp_tac classified_fallback_fold_name >> simp[]
 QED
 
-Theorem classified_fallback_source_alignment:
+Theorem classified_fallback_source_alignment_nr:
   supported_program tops /\ source_typing_ok tops am tx /\
   tx.function_name = "__default__" /\
   FST (SND (SND (classify_functions tops))) = SOME fb /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
-    SOME (mut,F,args,[],ret,fbody) ==>
-  fb = (mut,F,
+    SOME (mut,nr,args,[],ret,fbody) ==>
+  fb = (mut,nr,
         lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
         tx.function_name,args,([]:expr list),ret,fbody)
 Proof
@@ -60,4 +60,17 @@ Proof
      simp[vyperInterpreterTheory.lookup_function_def,
           vyperTypeContractTheory.external_name_keys_toplevel_def]) >>
   drule_all default_decl_raw_return >> strip_tac >> gvs[]
+QED
+
+Theorem classified_fallback_source_alignment:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  tx.function_name = "__default__" /\
+  FST (SND (SND (classify_functions tops))) = SOME fb /\
+  vyperInterpreter$lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) ==>
+  fb = (mut,F,
+        lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+        tx.function_name,args,([]:expr list),ret,fbody)
+Proof
+  rpt strip_tac >> drule_all classified_fallback_source_alignment_nr >> simp[]
 QED

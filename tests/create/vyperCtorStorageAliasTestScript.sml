@@ -1,5 +1,5 @@
-(* A storage array passed as a constructor argument keeps its location until
-   the constructor tuple is copied, after a later pop has changed its length. *)
+(* A read of a storage array after a later pop sees the shortened array; a
+   constructor argument is read before such a later argument runs. *)
 Theory vyperCtorStorageAliasTest
 Ancestors
   vyperCreate vyperStoragePopTest

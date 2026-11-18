@@ -9,7 +9,7 @@
  *   body_log_aggregate_full -- retained aggregate specialization
  *)
 Theory bodyFullLog
-Ancestors
+Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
   bodyExprPreFacts allocLimits allocLimitsProps exprSimSource vyperTypeCallGraph
@@ -47,27 +47,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
-
-Theorem log_full_aggregate_lowered_post_type[local]:
-  !ce cx env e es.
-    expr_body_pre ce cx env e es /\ ~is_word_type (expr_type e) /\
-    ~is_bytestring_type (expr_type e) ==>
-    lowered_value_type ce e = post_value_type ce e
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule expr_body_pre_var_types_well_formed >> strip_tac >>
-  `well_typed_expr env e /\
-   sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
-   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
-      ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
-    gvs[expr_body_pre_def, expr_sim_inv_def,
-        env_consistent_def, env_context_consistent_def] >>
-  drule ifexp_lowered_type_classify >>
-  disch_then (qspec_then `ce` mp_tac) >>
-  (impl_tac >- metis_tac[]) >> strip_tac >> gvs[]
-  >- simp[post_value_type_lowered] >>
-  gvs[post_value_type_def, expr_type_def]
-QED
 
 (* Exact declared-data compiler boundaries; no runtime registration is claimed. *)
 Theorem log_full_declared_data_stage_code:
@@ -1548,8 +1527,10 @@ Resume compile_log_frag_full[packing_field_packet]:
           (qspecl_then [`EL i dtys`,`expr_type (EL i data_args)`]
              match_mp_tac log_compatible_aggregate_source >> simp[]) >>
         `lowered_value_type cenv (EL i data_args) = post_value_type cenv (EL i data_args)` by
-          (qspecl_then [`cenv`,`cx`,`env`,`EL i data_args`,`es`]
-             match_mp_tac log_full_aggregate_lowered_post_type >> simp[]) >> simp[]) >>
+          (qspecl_then [`cenv`,`EL i data_args`,`env`] match_mp_tac
+             exprSimAggregateNestedStoreTheory.aggregate_nested_lowered_post >>
+           qpat_assum `expr_body_pre cenv cx env (EL i data_args) es`
+             (mp_tac o REWRITE_RULE [expr_body_pre_def]) >> simp[]) >> simp[]) >>
      qexistsl_tac [`ltv`,`ptv`] >> simp[]) >>
   suspend "topic_selection"
 QED
