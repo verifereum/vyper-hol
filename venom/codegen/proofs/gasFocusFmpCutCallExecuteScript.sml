@@ -253,7 +253,10 @@ Proof
     (irule fmp_mem_geometry_point >>
      goal_assum (drule_at (Pat `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
   `s.vs_call_ctx = t.vs_call_ctx` by fs[fmp_stage_rel_def,fmp_frame_rel_def] >>
-  `t.vs_outcomes <> []` by fs[fmp_stage_rel_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
+  `t.vs_outcomes <> []` by
+    (fs[fmp_stage_rel_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
+     qpat_assum `s.vs_outcomes = t.vs_outcomes` (rewrite_tac o single o SYM) >>
+     first_assum ACCEPT_TAC) >>
   `MEM gop prefix /\ MEM adop prefix` by
     (qpat_x_assum `(inst.inst_opcode = CALL /\ _) \/ _` strip_assume_tac >> simp[]) >>
   `eval_operand gop t = SOME gas /\ eval_operand adop t = SOME addr /\

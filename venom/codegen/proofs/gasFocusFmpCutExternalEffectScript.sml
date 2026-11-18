@@ -9,7 +9,7 @@ Ancestors
   o1LowerDloadExternalOracle o1LowerDloadExternalEffects o1LowerDloadShared
   fmpStageRel ptrDiscipline venomExecSemantics venomCallOracleDefs extCallOracle
   o1LowerDloadRelocationKernel passSimulationDefs ptrDisciplineEmptyTaint
-  venomState finite_map pred_set list words
+  venomState opcodeClass finite_map pred_set list words
 
 Theorem cut_call_request_containment[local]:
   taint_within_upto D n C vs /\
@@ -357,14 +357,14 @@ Theorem cut_call_exception[local]:
       inst.inst_operands = [g;a;v;off;sz;ro;rs] /\
       eval_operand v s = SOME value /\ value <> 0w))
 Proof
-  simp[MEM] >> strip_tac >>
+  strip_tac >> Cases_on `r` >> fs[passSimulationDefsTheory.terminates_def] >>
+  TRY (drule step_inst_base_halt_opcodes >> gvs[MEM] >> NO_TAC) >>
+  TRY (drule step_inst_base_intret_opcodes >> gvs[MEM] >> NO_TAC) >>
+  fs[MEM] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_opcode_eqs, exec_ext_call_def, exec_delegatecall_def,
-       Excl "consume_call_outcome_eq", AllCaseEqs()] >>
-  rpt strip_tac >>
-  gvs[passSimulationDefsTheory.terminates_def, eval_operands_def,
-      pairTheory.UNCURRY, Excl "consume_call_outcome_eq", AllCaseEqs()] >>
-  metis_tac[]
+  simp[step_inst_base_opcode_eqs, exec_ext_call_abort_iff,
+       exec_delegatecall_abort_iff, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[eval_operands_def] >> metis_tac[]
 QED
 
 Theorem cut_external_defined[local]:
@@ -388,11 +388,15 @@ Theorem cut_call_abort[local]:
   r = Abort ExHalt_abort (halt_state (set_returndata [] s)) /\
   step_inst_base inst t = Abort ExHalt_abort (halt_state (set_returndata [] t))
 Proof
-  strip_tac >> drule_all cut_call_exception >> strip_tac >> simp[] >>
+  strip_tac >> drule_all cut_call_exception >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> simp[] >>
   `MEM inst.inst_opcode ^external_ops` by simp[MEM_APPEND] >>
   drule_all cut_external_defined >> strip_tac >>
   qpat_x_assum `(_ /\ (?out. inst.inst_outputs = [out])) \/ _` strip_assume_tac
-  >- (`t.vs_outcomes = []` by fs[fmp_stage_rel_def, ld_shared_agree_def] >>
+  >- (`t.vs_outcomes = []` by
+        (fs[fmp_stage_rel_def, ld_shared_agree_def] >>
+         qpat_assum `s.vs_outcomes = t.vs_outcomes` (rewrite_tac o single o SYM) >>
+         first_assum ACCEPT_TAC) >>
       gvs[MEM, LENGTH_EQ_NUM_compute, eval_operands_IS_SOME_EVERY,
           optionTheory.IS_SOME_EXISTS] >>
       simp[step_inst_base_opcode_eqs, exec_ext_call_def, exec_delegatecall_def,

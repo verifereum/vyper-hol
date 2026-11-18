@@ -128,6 +128,9 @@ Proof
     (simp[Abbr `rq`] >> metis_tac[]) >>
   drule_all ld_consume_create_outcome_transport >> strip_tac >>
   qmatch_asmsub_abbrev_tac `consume_create_outcome rq t = (_,rt)` >>
+  `t.vs_outcomes <> []` by
+    (qpat_assum `s.vs_outcomes = t.vs_outcomes` (rewrite_tac o single o SYM) >>
+     first_assum ACCEPT_TAC) >>
   `exec_create inst t value off' sz salt = OK (update_var out w rt)` by
     (pure_rewrite_tac[dload_exec_create_success_iff] >>
      qexistsl_tac [`out`,`w`,`rt`] >> simp[Excl "consume_create_outcome_eq"]) >>
