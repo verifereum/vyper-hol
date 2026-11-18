@@ -1,7 +1,7 @@
 (* Finite bytes decoder writes preserve the ambient frontier and old ghosts. *)
 Theory calldataBytesFiniteFrame
 Ancestors
-  entryReachBodySequenceObservations entryReachBodyExactArrayLoop
+  stepTaintVarFrame entryReachBodySequenceObservations entryReachBodyExactArrayLoop
   calldataBytesLeaf abiDecoderReservation abiDecoderContract abiEncoder
   fragGasSeqPtr decoderGhostFramePtr ptrDiscipline
   emitHelper exprLoweringProps compileEnv loweringStateRelDefs venomExecSemantics venomState venomInst
@@ -52,16 +52,6 @@ Proof
 QED
 
 (* Unlike op_taint, exact map entries distinguish NONE from SOME {}. *)
-Theorem bytes_step_old_tvar[local]:
-  ~MEM x i.inst_outputs ==>
-  FLOOKUP (step_taint i s t tn).t_var x = FLOOKUP tn.t_var x
-Proof
-  simp[step_taint_def, set_var_taint_def] >>
-  Cases_on `i.inst_outputs` >> simp[FLOOKUP_DRESTRICT] >>
-  rename1 `i.inst_outputs = h::outs` >>
-  Cases_on `outs` >> simp[FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
-QED
-
 Theorem bytes_sequence_old_ghosts[local]:
   !code D lower ctx fn PG G tn initial H u name.
   inst_seq_ptr D lower ctx fn PG G tn code initial H u /\
@@ -72,7 +62,7 @@ Proof
   Induct >> simp[inst_seq_ptr_def] >> rpt gen_tac >>
   Cases_on `step_inst_base h initial` >> simp[] >> strip_tac >>
   gvs[] >> first_x_assum drule >>
-  simp[step_prov_other_output, bytes_step_old_tvar]
+  simp[step_prov_other_output, step_taint_other_var]
 QED
 
 Theorem calldata_bytes_sequence_ghost_frame:

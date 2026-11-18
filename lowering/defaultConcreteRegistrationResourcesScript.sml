@@ -1,7 +1,7 @@
 (* Endpoint-map transport for concrete registration resources. *)
 Theory defaultConcreteRegistrationResources
 Ancestors defaultConcreteRegistrationDefs abiAllocationHistory
-  ctorDeployLoweringEntryRoom loweringStateRelDefs
+  allocaFrontierRoom loweringStateRelDefs
   finite_map pred_set words arithmetic exprLoweringProps list
 
 Theorem default_registration_abi_history_transport:

@@ -1,19 +1,8 @@
 (* Translate the unit's allocation charge to the body simulation interface. *)
 Theory entryInitialResources
 Ancestors
-  ctorDeployLoweringEntryRoom allocaFrontierBound exprLoweringProps allocaBudgetProps vyperCompiler contextCodegenRel venomWf venomInst
+  allocaFrontierRoom allocaFrontierBound exprLoweringProps allocaBudgetProps vyperCompiler contextCodegenRel venomWf venomInst
   arithmetic
-
-Theorem alloca_frontier_inv_room:
-  alloca_frontier_inv ctx func inst s /\
-  unit_alloca_budget ctx < dimword (:256) ==>
-  alloca_room ctx func s
-Proof
-  strip_tac >>
-  gvs[alloca_frontier_inv_def, alloca_room_def, call_targets_card,
-      ctorDeployLoweringEntryRoomTheory.deploy_ctor_pending_alloca_eq, unit_alloca_frame_def, ctorDeployLoweringEntryRoomTheory.deploy_ctor_alloca_size_eq] >>
-  decide_tac
-QED
 
 Theorem initial_alloca_room:
   lookup_function func.fn_name ctx.ctx_functions = SOME func /\
@@ -30,8 +19,8 @@ Proof
   `CARD {g | TC (fn_directly_calls ctx) func.fn_name g} <=
    LENGTH (FILTER (\i. i.inst_opcode = INVOKE)
      (FLAT (MAP fn_insts ctx.ctx_functions)))` by simp[call_targets_card] >>
-  simp[alloca_room_def, call_targets_card, ctorDeployLoweringEntryRoomTheory.deploy_ctor_pending_alloca_eq,
-       unit_alloca_frame_def, ctorDeployLoweringEntryRoomTheory.deploy_ctor_alloca_size_eq] >>
+  simp[alloca_room_def, call_targets_card, deploy_ctor_pending_alloca_eq,
+       unit_alloca_frame_def, deploy_ctor_alloca_size_eq] >>
   qmatch_goalsub_abbrev_tac `CARD below * frame` >>
   `remaining_alloca_budget (fn_insts func) s + CARD below * frame <=
    unit_alloca_budget ctx` suffices_by decide_tac >>

@@ -4,7 +4,7 @@ Ancestors
   defaultConcreteRegistrationDefs defaultEntryPrefix defaultDispatchFacts
   entryValidatedResources entryReachBodyInitialResources entryReachBodyFmp
   entryRegistrationCursorHistory entryValueRevertPtr acceptedContextPhi
-  ctorDeployMemoryFrontier allocaFrontierBound vyperLoweringCorrect
+  ctorDeployMemoryFrontier allocaFrontierRoom allocaFrontierBound vyperLoweringCorrect
   vyperCompiler venomWf fcgDefs moduleLoweringProps compileEnv finite_map
   venomMemProps abiAllocationHistory exprLoweringProps
   venomInstProofs1 contextCodegenRel list ptrDiscipline venomInst arithmetic

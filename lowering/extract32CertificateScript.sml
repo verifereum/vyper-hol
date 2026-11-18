@@ -6,9 +6,9 @@ Ancestors
   augAssignPtrScalarRun augAssignPtrScalarClamp augAssignPtrScalarCertificate
   augAssignPtrScalarSafety
   bodyPtrTypeBuiltinsBounds assignBasePtrBytesPrefix
-  rawCallBufferPtr storageCopyBodyRaisePtr instSeqComposePtr
+  rawCallBufferPtr bodyPtrBytestringBuiltinsAllocation typedCopyPtr instSeqComposePtr
   immutableRegionLoadPtr decoderGhostFramePtr
-  exprSimExtract32Read exprLoweringProps exprLowering emitHelper emitHelperProps
+  exprSimExtract32Read exprSafeOperandBuiltins exprLoweringProps exprLowering emitHelper emitHelperProps
   fragGasCopyLoop instSeqPtrLo fragGasSeqPtr ghostPcTransportPtr
   builtinBytes compileEnv ptrDiscipline bodyPtrDefs loweringStateRelDefs freshWrites
   venomInst venomState venomExecSemantics instIdxIndep
@@ -67,28 +67,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem clamp_basetype_returns_input:
-  compile_clamp_basetype raw typ sa = (result,sb) ==> result = raw
-Proof
-  strip_tac >> Cases_on `typ` >> gvs[compile_clamp_basetype_def, comp_return_def] >>
-  Cases_on `b`
-  >~ [`compile_clamp_basetype raw (BaseT (UintT n)) sa = _`] >-
-    (Cases_on `n < 256` >>
-     gvs[compile_clamp_basetype_def, clamp_and_return_def, comp_bind_def,
-         comp_ignore_bind_def, comp_return_def] >> pairarg_tac >> gvs[])
-  >~ [`compile_clamp_basetype raw (BaseT (IntT n)) sa = _`] >-
-    (Cases_on `n < 256` >>
-     gvs[compile_clamp_basetype_def, clamp_and_return_def, comp_bind_def,
-         comp_ignore_bind_def, comp_return_def] >> pairarg_tac >> gvs[])
-  >~ [`compile_clamp_basetype raw (BaseT (BytesT bt)) sa = _`] >-
-    (Cases_on `bt` >> gvs[compile_clamp_basetype_def, comp_return_def] >>
-     Cases_on `n < 32` >>
-     gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-     rpt (pairarg_tac >> gvs[])) >>
-  gvs[compile_clamp_basetype_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[])
-QED
-
 Theorem clamp_basetype_fixed_certificate:
   compile_clamp_basetype (Var x) typ sa = (result,sb) /\
   not_fresh_at sa x /\ op_prov G (Var x) = NONE /\ op_taint tn (Var x) = {} /\
@@ -103,7 +81,7 @@ Theorem clamp_basetype_fixed_certificate:
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
   strip_tac >>
-  `result = Var x` by metis_tac[clamp_basetype_returns_input] >>
+  `result = Var x` by metis_tac[compile_clamp_basetype_returns] >>
   `scalar_code {x} (emitted_insts sa sb)` by
     (irule scalar_clamp_basetype_code >> simp[scalar_available_def] >> metis_tac[]) >>
   `!v. v IN {x} ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}` by simp[] >>
@@ -151,9 +129,11 @@ Proof
     (simp[Abbr `G1`, Abbr `tn1`, Abbr `s1`] >>
      irule clean_add_checked_uniform >> simp[]) >>
   `ptr_covers G1 tn1 addr s1 32` by
-    (simp[Abbr `G1`, Abbr `tn1`, Abbr `s1`] >>
-     irule (SRULE [ptr_covers_inst_idx] storage_copy_add_covers) >>
-     simp[] >> qexists_tac `span` >> simp[]) >>
+    (mp_tac (Q.SPECL [`PG`, `G`, `tn`, `s`, `id`, `data`, `addr`, `a`,
+       `w2n (b:256 word)`, `span`, `32`, `offset`] pointer_offset_covers) >>
+     simp[ptr_covers_inst_idx, Abbr `G1`, Abbr `tn1`, Abbr `s1`,
+          ptr_covers_def, copy_len_binop_ghost_frame, op_taint_def,
+          FLOOKUP_UPDATE, arithmeticTheory.ADD_COMM]) >>
   `lookup_var addr s1 = SOME (a+b)` by simp[Abbr `s1`, lookup_var_update_var] >>
   `!i. w2n (a+b) <= i /\ i < w2n (a+b)+32 ==> i NOTIN tn1.t_mem` by
     simp[Abbr `tn1`, w2n_add_2] >>

@@ -26,7 +26,7 @@ Ancestors
   ctorAbiActualArrayFinite abiDecoderRecursiveLoopContext fragGasPathMem arithmetic abiDecoderLoop
   abiDecodeRanges abiDecoderTypedContract abiDecoderContract compileEnv words list
   abiDecoderCoherence abiEncoder contractABI abiEncoderRegisteredEffect abiDecoderReentry
-  ctorAbiActualObservations ctorAbiActualSites abiEncoderProps pred_set ctorDeployMemoryFrontier
+  ctorAbiActualObservations ctorAbiActualSites abiEncoderProps pred_set ctorDeployMemoryFrontier allocaFrontierRoom
 
 val Ckw = ``\ty tv.
  !k dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
