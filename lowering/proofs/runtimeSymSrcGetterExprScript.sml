@@ -5,9 +5,9 @@ Ancestors
   runtimeSymSrcInterfaces runtimeSymSrcEmission exprLowering vyperGetter
   vyperAST compileEnv context list venomInst stackPlanTypes
 
-Theorem runtime_sym_getter_lower_value_raw:
+Theorem runtime_sym_getter_lower_value_raw[local]:
   (!s v s'. runtime_sym_env tops ce /\ EVERY runtime_sym_inst (state_insts s) /\
-    cfn ce ty e s = (v,s') ==>
+    cfn ce (ty : type) (e : expr) s = (v,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v) /\
   runtime_sym_env tops ce /\ EVERY runtime_sym_inst (state_insts s) /\
   lower_value cfn ce ty e s = (op,s') ==>
@@ -37,6 +37,8 @@ Proof
   >- (rpt conj_tac
       >- (rpt gen_tac >> strip_tac >> first_x_assum drule_all >> simp_tac bool_ss [])
       >- (map_every qx_gen_tac [`kt`,`st`,`op`,`next`] >> strip_tac >>
+          qpat_assum `!t s v s'. _ /\ _ /\ cfn ce t key s = (v,s') ==> _`
+            (qspec_then `kt` assume_tac) >>
           mp_tac (Q.INST [`tops` |-> `tops`, `cfn` |-> `cfn`, `ce` |-> `ce`,
             `ty` |-> `kt`, `e` |-> `key`, `s` |-> `st`, `op` |-> `op`,
             `s'` |-> `next`] runtime_sym_getter_lower_value_raw) >> asm_rewrite_tac[])

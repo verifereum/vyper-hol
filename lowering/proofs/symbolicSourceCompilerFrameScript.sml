@@ -128,21 +128,24 @@ Resume symbolic_frame_expr[expr]:
   rpt conj_tac >> rpt gen_tac >>
   rewrite_tac[expr_child_callback_def, builtin_child_callback_def,
               type_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >>
-  asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th])
+  asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th]) >>
+  rpt strip_tac >> metis_tac[]
 QED
 
 Resume symbolic_frame_expr[builtin]:
   asm "builtin" (irule o REWRITE_RULE [symbolic_frame_def]) >>
   rpt conj_tac >> rpt gen_tac >>
   rewrite_tac[expr_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >>
-  asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th])
+  asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th]) >>
+  rpt strip_tac >> metis_tac[]
 QED
 
 Resume symbolic_frame_expr[type_builtin]:
   asm "type_builtin" (irule o REWRITE_RULE [symbolic_frame_def]) >>
   rpt conj_tac >> rpt gen_tac >>
   rewrite_tac[expr_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >>
-  asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th])
+  asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th]) >>
+  rpt strip_tac >> metis_tac[]
 QED
 
 Finalise symbolic_frame_expr
