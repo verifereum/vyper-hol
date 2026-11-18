@@ -169,6 +169,81 @@ val selected_external_trace_tac =
        vyperStateTheory.set_scopes_def, vyperStateTheory.return_def,
        Excl "lock_if_nr_def", Excl "unlock_if_nr_def"]
 
+(* The source unlocks on ordinary fallthrough and Return. *)
+Theorem call_external_body_run_nr:
+  !am cx nr mut tenv env fbody ret es0 es_lock res ee eu.
+    es0.scopes = [env] /\
+    lock_if_nr cx nr (is_view_mut mut) es0 = (INL (),es_lock) /\
+    eval_stmts cx fbody es_lock = (res,ee) /\
+    ((res = INL () \/ (?v. res = INR (ReturnException v))) ==>
+      unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),eu)) ==>
+    (res = INL () ==>
+      call_external_body am cx nr mut tenv es0 env fbody ret =
+        (INL NoneV,
+         abstract_machine_from_state am.sources am.exports am.layouts eu,
+         eu.requests)) /\
+    (!v. res = INR (ReturnException v) ==>
+      call_external_body am cx nr mut tenv es0 env fbody ret =
+        case evaluate_type tenv ret of
+          NONE => (INR (Error (TypeError "eval ret")),am,eu.requests)
+        | SOME tv =>
+            case safe_cast tv v of
+              NONE => (INR (Error (TypeError "ext cast ret")),am,eu.requests)
+            | SOME v' =>
+                (INL v',
+                 abstract_machine_from_state am.sources am.exports am.layouts eu,
+                 eu.requests)) /\
+    (res = INR HaltException ==>
+      call_external_body am cx nr mut tenv es0 env fbody ret =
+        (INR HaltException,
+         abstract_machine_from_state am.sources am.exports am.layouts ee,
+         ee.requests)) /\
+    (!e. res = INR e /\ (!v. e <> ReturnException v) /\ e <> HaltException ==>
+      call_external_body am cx nr mut tenv es0 env fbody ret =
+        (INR e,am,ee.requests))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `es0 with scopes := [env] = es0` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  PURE_ONCE_REWRITE_TAC[call_external_body_def] >>
+  PURE_REWRITE_TAC[LET_THM] >>
+  PURE_ONCE_REWRITE_TAC[GSYM is_view_mut_def] >>
+  PURE_ONCE_REWRITE_TAC[GSYM lock_if_nr_def, GSYM unlock_if_nr_def] >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.return_def, vyperStateTheory.set_scopes_def,
+       Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
+  rpt strip_tac >> gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"]
+  >- (Cases_on `evaluate_type tenv ret` >> simp[] >>
+      rename1 `evaluate_type tenv ret = SOME tv` >>
+      Cases_on `safe_cast tv v` >> simp[]) >>
+  Cases_on `e` >> gvs[]
+QED
+
+Theorem lock_if_nr_with_gas_obs:
+  lock_if_nr cx nr iv s = (result,u) ==>
+  lock_if_nr cx nr iv (s with gas_obs := obs) =
+    (result,u with gas_obs := obs)
+Proof
+  Cases_on `nr` >> Cases_on `cx.nonreentrant_slot` >>
+  Cases_on `iv` >> Cases_on `cx.txn.is_static` >>
+  simp[lock_if_nr_def, acquire_nonreentrant_lock_execution,
+       check_not_static_def, vyperStateTheory.check_def,
+       vyperStateTheory.assert_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem unlock_if_nr_with_gas_obs:
+  unlock_if_nr cx nr iv s = (result,u) ==>
+  unlock_if_nr cx nr iv (s with gas_obs := obs) =
+    (result,u with gas_obs := obs)
+Proof
+  Cases_on `nr` >> Cases_on `iv` >> Cases_on `cx.nonreentrant_slot` >>
+  simp[unlock_if_nr_def, release_nonreentrant_lock_execution,
+       vyperStateTheory.return_def] >> strip_tac >> gvs[]
+QED
+
 (* The trace includes the unlock after fallthrough or Return. *)
 Theorem call_external_selected_body_trace:
   !tops am tx ret mut nr args fbody env orc gobs es0 es_lock res ee.
