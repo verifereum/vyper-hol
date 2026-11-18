@@ -204,9 +204,7 @@ Proof
 QED
 
 Theorem outcomes_free_reason_message:
-  (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
-         opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
-         opc <> RETURNDATACOPY ==> P opc) ==>
+  P ALLOCA /\ P ADD /\ P MSTORE ==>
   (
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
@@ -229,7 +227,7 @@ Theorem outcomes_free_reason_message:
   )
 Proof
   rpt strip_tac >> irule every_state_insts_reason_message >>
-  simp[(b7 outcomes_free_bytelike_literal)] >>
+  simp[outcomes_free_bytelike_literal] >>
   rpt strip_tac >> qpat_x_assum `!ce ty e st. _` irule >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED

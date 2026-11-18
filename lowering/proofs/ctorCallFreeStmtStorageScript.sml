@@ -47,7 +47,7 @@ Proof
 QED
 
 Theorem outcomes_free_slot_to_memory:
-  (!opc. MEM opc [ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD; MLOAD;
+  (!opc. MEM opc [ADD; MUL; ASSIGN; JMP; EQ; JNZ; DLOAD; MLOAD;
     SLOAD; TLOAD; CALLDATALOAD; MSTORE] ==> P opc) /\
   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
@@ -57,8 +57,9 @@ Proof
   simp[compile_slot_to_memory_def, compile_word_copy_loop_def,
     compile_word_copy_loop_op_def] >>
   irule outcomes_free_word_copy_base >>
-  simp[DISJ_IMP_THM, outcomes_free_ptr_load, compile_ptr_store_def,
-    opcode_every_emit_void]
+  simp[DISJ_IMP_THM, compile_ptr_store_def, opcode_every_emit_void] >>
+  rpt strip_tac >> Cases_on `loc` >>
+  simp[compile_ptr_load_def, compile_imm_load_word_def, opcode_every_emit_op]
 QED
 
 Theorem outcomes_free_range_bound_checks:

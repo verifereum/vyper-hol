@@ -116,7 +116,7 @@ Theorem outcomes_free_stmt_assert:
   )
 Proof
   strip_tac >>
-  strip_tac >> drule (UNDISCH outcomes_free_reason_message) >> disch_then assume_tac >>
+  strip_tac >> drule (b7 outcomes_free_reason_message) >> disch_then assume_tac >>
   drule (UNDISCH outcomes_free_revert_with_custom_error) >> disch_then assume_tac >>
   rpt gen_tac >> Cases_on `ar` >>
   simp[supported_stmt_expr_exists_def, supported_assert_exists_def] >> strip_tac >>
@@ -183,7 +183,7 @@ Theorem outcomes_free_stmt_raise:
   )
 Proof
   strip_tac >>
-  strip_tac >> drule (UNDISCH outcomes_free_reason_message) >> disch_then assume_tac >>
+  strip_tac >> drule (b7 outcomes_free_reason_message) >> disch_then assume_tac >>
   drule (UNDISCH outcomes_free_revert_with_custom_error) >> disch_then assume_tac >>
   rpt gen_tac >> Cases_on `rr` >>
   simp[supported_stmt_expr_exists_def, supported_raise_exists_def] >> strip_tac >>
