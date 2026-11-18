@@ -3975,7 +3975,7 @@ Proof
   metis_tac[fold_const_typing_aux]
 QED
 
-Theorem constant_subscript_base_exact[local]:
+Theorem constant_subscript_base_exact:
   constant_expr mods e ==> subscript_base_type_exact env e
 Proof
   Cases_on `e` >> simp[subscript_base_type_exact_def, constant_expr_def]

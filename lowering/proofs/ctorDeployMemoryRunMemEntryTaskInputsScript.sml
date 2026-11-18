@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryTaskInputs
 Ancestors
+  ctorDeployLoweringEntrySelection constSubst
   ctorDeployMemoryRunMemEntryTaskRegistration ctorDeployInitcode
   ctorDeployLoweringDefs ctorDeployDefs e2eDeployDefs compileVyper
   vyperInterpreter vyperTypeContractStaticMaps list words
@@ -24,7 +25,7 @@ Proof
 QED
 
 Theorem ctor_task_start_source:
-  supported_program tops /\
+  deploy_source_ok tops am tx /\
   SND (SND (SND (classify_functions tops))) =
     SOME (fmut,fnr,rr,fname,fargs,dflts,ret,fbody) /\
   fname = "__init__" /\ tx.function_name = "__init__" /\
@@ -32,13 +33,12 @@ Theorem ctor_task_start_source:
   fmut = mut /\ fnr = nr /\ dflts = [] /\ ret = NoneT /\ fbody = stmts
 Proof
   strip_tac >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supportedProgramTheory.supported_program_def,
-      supportedDeclsTheory.supported_declaration_headers_def,
-      supportedDeclsTheory.supported_headers_module_consts_env] >>
+  qpat_assum `deploy_ctor_start _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [deploy_ctor_start_def]) >>
+  drule_all deploy_supported_constructor_subst >> strip_tac >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
     classify_functions_ctor_lookup >> simp[] >> strip_tac >>
-  gvs[deploy_ctor_start_def]
+  gvs[subst_consts_fn_def, subst_consts_expr_def]
 QED
 
 Theorem ctor_task_encoded_size:
@@ -170,14 +170,13 @@ Proof
     SOME (fmut,fnr,rr,fname,fargs,dflts,ret,fbody)` by simp[] >>
   drule_all ctor_task_start_source >> strip_tac >>
   drule_all ctor_task_encoded_source >> strip_tac >>
+  qpat_assum `deploy_ctor_start _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [deploy_ctor_start_def]) >>
   `vyperInterpreter$lookup_function NONE fname Deploy tops =
     SOME (fmut,fnr,fargs,dflts,ret,fbody)` by
-    (`module_consts_env tops [] = []` by
-       metis_tac[supportedProgramTheory.supported_program_def,
-         supportedDeclsTheory.supported_declaration_headers_def,
-         supportedDeclsTheory.supported_headers_module_consts_env] >>
-     qspecl_then [`tops`, `NONE`, `fname`] mp_tac
-       classify_functions_ctor_lookup >> simp[] >> strip_tac >> gvs[]) >>
+    (qspecl_then [`tops`, `NONE`, `fname`] mp_tac
+       classify_functions_ctor_lookup >> simp[] >> strip_tac >>
+     gvs[subst_consts_fn_def]) >>
   drule_all ctor_task_source_params >> strip_tac >>
   gvs[] >> metis_tac[]
 QED

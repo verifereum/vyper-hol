@@ -65,7 +65,8 @@ Theorem dispatched_call_correct_from_selected_endpoint:
        send_call_value mut (initial_evaluation_context am.sources am.layouts tx NONE)
          (initial_state am [env] with <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
          (INL (), es0) ==>
-       runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret fbody) ==>
+       runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret
+      (subst_consts_stmts (module_consts_env tops []) fbody)) ==>
     source_unit_execution_correct tops ret am tx unit vs /\
     ?marks. source_unit_execution_correct_with shadow_unit.cu_context marks tops ret am tx unit vs
 Proof
@@ -75,7 +76,8 @@ Proof
   >- (qexists_tac `rpolicy` >> asm_rewrite_tac []) >>
   qexistsl_tac [`args`, `fbody`, `mut`, `F`] >>
   asm_rewrite_tac [] >> rpt gen_tac >> strip_tac >>
-  `runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret fbody` by
+  `runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret
+      (subst_consts_stmts (module_consts_env tops []) fbody)` by
     (Cases_on `tx.function_name = "__default__"`
      >- (drule_all dispatched_entry_endpoint_default >> simp[]) >>
      qpat_x_assum `!env es0. _` (qspecl_then [`env`, `es0`] mp_tac) >> simp[]) >>
@@ -98,17 +100,14 @@ val fallback_source_package_tac =
     SOME (mut,T,args,[],ret,fbody)` by fs[] >>
   `args = []` by metis_tac[default_fallback_no_args] >>
   drule_all default_fallback_classified >>
-  disch_then (qx_choose_then `rr` assume_tac) >>
-  drule loweringShapePropsTheory.classify_functions_fallback_mem >>
   strip_tac >>
-  `module_consts_env tops [] = []` by
-    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
-     gvs[supportedProgramTheory.supported_program_def,
-       supportedDeclsTheory.supported_declaration_headers_def] >> metis_tac[]) >>
-  `lookup_raw_return_or_F (NONE:num option) "__default__" External tops = rr` by
-    (drule entryStateRelTheory.source_typing_ok_external_names_distinct >> strip_tac >>
-     gvs[constSubstTheory.subst_consts_fn_empty] >>
-     drule_all default_decl_raw_return >> simp[]) >>
+  qabbrev_tac `rr = lookup_raw_return_or_F (NONE:num option) "__default__" External tops` >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[entryStateRelTheory.source_typing_ok_external_names_distinct] >>
+  drule_all default_fallback_lookup_decl >> strip_tac >>
+  `subst_consts_stmts (module_consts_env tops []) fbody = fbody` by
+    (drule_all checked_supported_external_subst >>
+     simp[constSubstTheory.subst_consts_fn_def]) >>
   `set_fallback_package_target rpolicy.rpol_target
     (package_fallback_fn tops T (K global_nonreentrant_slot)
       (SOME (mut,T,rr,"__default__",[],([]:expr list),ret,fbody))) =
@@ -189,7 +188,7 @@ fun registered_lock_result_tac placement =
          [`cenv`,`sa`,`sl`,`se`,`st'`,`func`,`s_lock`,
           `G_lock`,`tn_lock`])
         (INST_TYPE [alpha |-> ``:expr``] runtime_selected_lock_readings)) >>
-      impl_tac >- asm_rewrite_tac[] >>
+      impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
       disch_then (qx_choosel_then [`shadow_unit`,`marks`] strip_assume_tac) >>
       qexistsl_tac [`shadow_unit`,`marks`] >> simp[]) >>
   mp_tac (Q.INST
@@ -198,6 +197,7 @@ fun registered_lock_result_tac placement =
      `ss` |-> `vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
                          vs_inst_idx := 0|>`,
      `es_abort` |-> `es_lock`,
+     `fbody` |-> `subst_consts_stmts (module_consts_env tops []) fbody`,
      `rt` |-> `if ret = NoneT then NONE else SOME ret`]
     (SPEC_ALL externalEntryJointTheory.external_entry_abort_from_registration)) >>
   impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
@@ -261,7 +261,8 @@ Proof
   gvs[] >>
   `runtime_entry_body_start tops rpolicy
     (lbl,cenv0,pos_args,min_cds,is_payable,T,global_nonreentrant_slot,
-     T,mut = View,fbody,if ret = NoneT then NONE else SOME ret) st` by
+     T,mut = View,subst_consts_stmts (module_consts_env tops []) fbody,
+     if ret = NoneT then NONE else SOME ret) st` by
     (pure_rewrite_tac[runtimeBodyStartDefsTheory.runtime_entry_body_start_def] >>
      disj1_tac >> first_assum ACCEPT_TAC) >>
   registered_lock_result_tac [`lbl`,`lbl`,`cenv0`,`pos_args`,`min_cds`,
@@ -339,7 +340,8 @@ Triviality dispatched_call_readings_from_selected_endpoint:
        send_call_value mut (initial_evaluation_context am.sources am.layouts tx NONE)
          (initial_state am [env] with <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
          (INL (), es0) ==>
-       runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret fbody) ==>
+       runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret
+      (subst_consts_stmts (module_consts_env tops []) fbody)) ==>
     ?marks.
       source_unit_execution_correct_with shadow_unit.cu_context marks
         tops ret am tx unit vs /\
@@ -357,7 +359,8 @@ Proof
   >- (qexists_tac `rpolicy` >> asm_rewrite_tac []) >>
   qexistsl_tac [`args`, `fbody`, `mut`, `F`] >>
   asm_rewrite_tac [] >> rpt gen_tac >> strip_tac >>
-  `runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret fbody` by
+  `runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret
+      (subst_consts_stmts (module_consts_env tops []) fbody)` by
     (Cases_on `tx.function_name = "__default__"`
      >- (drule_all dispatched_entry_endpoint_default >> simp[]) >>
      qpat_x_assum `!env es0. _` (qspecl_then [`env`, `es0`] mp_tac) >> simp[]) >>

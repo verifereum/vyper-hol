@@ -129,11 +129,11 @@ Theorem registration_external_allocs_ok:
   supported_program tops /\ name <> "__default__" /\
   lookup_function NONE name External tops =
     SOME (mut,nr,args,defaults,ret,fbody) ==>
-  ?rr:bool. fn_allocs_ok tops (mut,nr,rr,name,args,defaults,ret,fbody)
+  ?rr:bool. fn_allocs_ok tops (subst_consts_fn (module_consts_env tops [])
+    (mut,nr,rr,name,args,defaults,ret,fbody))
 Proof
   strip_tac >>
-  `supported_declaration_headers tops` by fs[supported_program_def] >>
-  drule_all supported_headers_external_member >> strip_tac >>
+  drule_all lookup_function_external_member >> strip_tac >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
   qexists_tac `rr` >> irule lower_vyper_runtime_unit_allocs_ok >>
   metis_tac[]
@@ -497,7 +497,8 @@ Proof
         vyperTypeContractSoundnessTheory.call_tx_well_typed_def] >>
      gvs[wordsTheory.dimword_def]) >>
   asm_rewrite_tac [] >> qexists_tac `tvs` >> asm_rewrite_tac [] >>
-  drule_all registration_external_allocs_ok >> strip_tac >>
+  drule_all registration_external_allocs_ok >>
+  simp[constSubstTheory.subst_consts_fn_def] >> strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
     metis_tac[source_typing_ok_type_def_keys_distinct] >>
   rpt strip_tac >>

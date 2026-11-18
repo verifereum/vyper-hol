@@ -2,7 +2,8 @@
    argument binding or body correctness. *)
 Theory registrationRejectMetadata
 Ancestors
-  entryExternalParameterAdmissibility entryStateRel entryDecodePlanProps entryDispatchProps registrationSizeAdmissibility
+  entryExternalParameterAdmissibility entryStateRel entryDecodePlanProps entryDispatchProps
+  registrationSizeAdmissibility dispatchedValueSelection constSubst
   abiCallerBuiltinInput abiDecoderCoherence calldataSourceSize
   vyperTypeSystem vyperTypeContract vyperTypeContractContext
   compileVyper compileEnv moduleLowering supportedProgram list rich_list words
@@ -24,8 +25,8 @@ QED
 Theorem registration_reject_member_package_inputs[local]:
   lower_vyper_runtime_unit tops policy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
-  MEM (mut,nr,rawret,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
-  lookup_function NONE name External tops = SOME (mut,nr,args,[],ret,fbody) /\
+  MEM (mut,nr,rawret,name,args,[],ret,compiled_body) (FST (classify_functions tops)) /\
+  lookup_function NONE name External tops = SOME (mut,nr,args,[],ret,rawbody) /\
   set_external_package_target policy.rpol_target
     (package_external_fn tops ut nk (mut,nr,rr,name,args,[],ret,fbody)) =
     (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
@@ -119,7 +120,7 @@ QED
 Resume registration_reject_member_package_inputs[head_bound]:
   Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,more)` >>
   PairCases_on `more` >>
-  `fn_allocs_ok tops (mut,nr,rawret,name,args,[],ret,fbody)` by
+  `fn_allocs_ok tops (mut,nr,rawret,name,args,[],ret,compiled_body)` by
     (irule lower_vyper_runtime_unit_allocs_ok >> fs[] >> metis_tac[]) >>
   `ce.ce_struct_fields = make_struct_fields_map tops` by
     (Cases_on `ret = NoneT` >>
@@ -141,7 +142,7 @@ QED
 Resume registration_reject_member_package_inputs[parameters]:
   Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,more)` >>
   PairCases_on `more` >>
-  `fn_allocs_ok tops (mut,nr,rawret,name,args,[],ret,fbody)` by
+  `fn_allocs_ok tops (mut,nr,rawret,name,args,[],ret,compiled_body)` by
     (irule lower_vyper_runtime_unit_allocs_ok >> fs[] >> metis_tac[]) >>
   fs[LIST_REL_EL_EQN] >>
   rpt strip_tac >> simp[EL_ZIP, EL_MAP] >>
@@ -170,7 +171,6 @@ Theorem registration_reject_classified_package_inputs:
   lower_vyper_runtime_unit tops policy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
   MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
-  lookup_function NONE name External tops = SOME (mut,nr,args,[],ret,fbody) /\
   set_external_package_target policy.rpol_target
     (package_external_fn tops ut nk (mut,nr,rr,name,args,[],ret,fbody)) =
     (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
@@ -183,8 +183,12 @@ Theorem registration_reject_classified_package_inputs:
         var_location_memory_size loc = SOME (type_memory_size tv)) /\
       type_memory_size tv < dimword (:256)) args (ZIP (MAP SND args,tvs))
 Proof
-  strip_tac >> irule registration_reject_member_package_inputs >>
-  metis_tac[]
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  drule_all classified_external_source_lookup >> strip_tac >>
+  irule registration_reject_member_package_inputs >>
+  Cases_on `rawdefaults` >> gvs[subst_consts_expr_def] >> metis_tac[]
 QED
 
 Theorem registration_reject_package_inputs:
@@ -205,8 +209,9 @@ Theorem registration_reject_package_inputs:
       type_memory_size tv < dimword (:256)) args (ZIP (MAP SND args,tvs))
 Proof
   strip_tac >>
-  `supported_declaration_headers tops` by fs[supported_program_def] >>
-  drule_all supported_headers_external_member >> strip_tac >>
+  drule_all lookup_function_external_member >>
+  simp_tac std_ss [constSubstTheory.subst_consts_fn_def,
+                  constSubstTheory.subst_consts_expr_def] >> strip_tac >>
   irule registration_reject_member_package_inputs >>
   metis_tac[]
 QED

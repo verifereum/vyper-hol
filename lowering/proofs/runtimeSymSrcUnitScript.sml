@@ -13,6 +13,7 @@ Ancestors
    (empty under Linear dispatch). *)
 Theorem lower_vyper_runtime_unit_sym_src_ok:
   !tops rpolicy unit.
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
   label_flow_ok unit.cu_context /\
