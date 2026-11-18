@@ -32,6 +32,40 @@ Proof
   simp[] >> metis_tac[MEM]
 QED
 
+(* Use the two reachability directions for the same supplied filling and oracle. *)
+Theorem dft_fixed_filling_code_end_offset_ok:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C7.ctx_functions C8.ctx_functions /\
+  LIST_REL dft_fn_rel C7.ctx_functions C8.ctx_functions /\
+  C8.ctx_entry = C7.ctx_entry /\ o1_ctx_shape C7 /\
+  ctx_labels_bound C7 vs0.vs_labels /\ o1_run_state_ok vs0 /\
+  code_end_offset_ok (raw_reachable (vs0 with vs_gas_readings := raw ++ [0w])) C7 /\
+  (!p d fn inst s. ev_reachable orc vs0 C7 p d fn inst s ==>
+     ?ws. raw_reachable (vs0 with vs_gas_readings := raw ++ [0w]) C7 fn inst
+            (s with vs_gas_readings := ws)) /\
+  (!fn inst s. raw_reachable vs0 C8 fn inst s ==>
+     ?p d. ev_reachable orc vs0 C8 p d fn inst
+             (s with vs_gas_readings := vs0.vs_gas_readings)) ==>
+  code_end_offset_ok (raw_reachable vs0) C8
+Proof
+  strip_tac >>
+  `code_end_offset_ok
+    (\ctx fn inst s. ?p d. ev_reachable orc vs0 ctx p d fn inst s) C7` by
+    (rw[code_end_offset_ok_def] >>
+     first_x_assum drule >> strip_tac >>
+     rename1 `eval_operand (Var _) s = SOME _` >>
+     qpat_x_assum `code_end_offset_ok (raw_reachable _) C7`
+       (mp_tac o REWRITE_RULE [code_end_offset_ok_def]) >>
+     disch_then (qspecl_then [`fn`, `inst`, `s with vs_gas_readings := ws`] mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  drule_all dft_ev_code_end_offset_ok >>
+  simp[code_end_offset_ok_def] >> strip_tac >> rpt strip_tac >>
+  rename1 `raw_reachable vs0 C8 fn inst s` >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum (qspecl_then
+    [`fn`, `inst`, `s with vs_gas_readings := vs0.vs_gas_readings`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem dft_ctx_code_end_sim_gas[local]:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
