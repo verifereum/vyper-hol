@@ -9,11 +9,6 @@ Libs
   monadsyntax
 
 
-val outcomes_free_register_constructor_args_fixed =
-  SRULE [DISJ_IMP_THM, FORALL_AND_THM] (Q.INST [`P` |-> `\op. op <> CALL /\
-    op <> STATICCALL /\ op <> DELEGATECALL /\ op <> CREATE /\ op <> CREATE2 /\
-    op <> INVOKE`] outcomes_free_register_constructor_args);
-
 Theorem extract_context_entry_every:
   extract_context_with_internals label internals st = SOME (ctx,data) /\
   (!entry fs.
@@ -33,49 +28,44 @@ Proof
        fn_insts_def, EVERY_fn_insts_blocks, FIND_thm]
 QED
 
-Theorem compile_generate_deploy_prefix_excludes_outcomes:
-  (!env s.
-    EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
-      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
-      bb.bb_instructions) (all_blocks s) ==>
-    EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
-      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
-      bb.bb_instructions)
-      (all_blocks (SND (compile_stmts env NoLoop NoneT ss s)))) ==>
-  !s. EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
-      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
-      bb.bb_instructions) (all_blocks s) ==>
-    EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
-      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
-      bb.bb_instructions)
-      (all_blocks (SND (compile_generate_deploy has rt imm args sz [] env ss
+Theorem compile_generate_deploy_prefix_opcodes:
+  (!opc. MEM opc [CALLVALUE; ASSIGN; TLOAD; SLOAD; TSTORE; SSTORE; CODECOPY;
+     RETURN; DLOAD; ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
+     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES;
+     ALLOCA; JMP; JNZ] ==> P opc) /\
+  (!env s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_stmts env NoLoop NoneT ss s)))) ==>
+  !s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_generate_deploy has rt imm args sz [] env ss
         pay nr key trans s)))
 Proof
   strip_tac >>
-  gvs[GSYM ctorCallFreeRulesTheory.every_state_insts_blocks] >>
-  Cases_on `has` >> simp[compile_generate_deploy_def, compile_internal_fn_bodies_def]
-  >- (Cases_on `env.ce_nonreentrant` >> rename1 `env.ce_nonreentrant = (g,rest)` >>
-      PairCases_on `rest` >> Cases_on `trans` >> Cases_on `rest2` >>
-      asm_rewrite_tac [] >> Cases_on `imm > 0` >>
-      rpt (FIRST [gen_tac, strip_tac,
-        CHANGED_TAC (simp[every_state_insts_return, every_state_insts_fresh_id,
-            every_state_insts_fresh_var, every_state_insts_fresh_label,
-          every_state_insts_get, every_state_insts_new_block, opcode_every_emit_op,
-              opcode_every_emit_void, opcode_every_emit_inst,
-          outcomes_free_register_constructor_args_fixed]),
-        irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac,
-        first_assum irule, IF_CASES_TAC]) >>
-      rpt IF_CASES_TAC >>
-      gvs[compile_fixed_region_with_id_def, compile_nonreentrant_lock_def,
-        compile_nonreentrant_unlock_def, compile_constructor_epilogue_def,
-        compile_alloc_buffer_def, emit_op_def, emit_void_def, emit_inst_def,
-        fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
-        comp_ignore_bind_def, comp_return_def, outcomes_free_state_insts,
-        mk_inst_def])
-  >> simp[compile_simple_deploy_def, compile_alloc_buffer_def,
-       emit_op_def, emit_void_def, emit_inst_def, fresh_id_def, fresh_var_def,
-       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       outcomes_free_state_insts, mk_inst_def]
+  `!args ce off sz st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_register_constructor_args ce args off sz st)))` by
+    (rpt strip_tac >> irule outcomes_free_register_constructor_args >>
+     fs[DISJ_IMP_THM, FORALL_AND_THM]) >>
+  `!key trans view st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_nonreentrant_lock key trans view st))) /\
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_nonreentrant_unlock key trans view st)))` by
+    (rpt gen_tac >> strip_tac >> irule outcomes_free_nonreentrant >>
+     fs[DISJ_IMP_THM, FORALL_AND_THM]) >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  Cases_on `has` >>
+  simp[compile_generate_deploy_def, compile_internal_fn_bodies_def,
+       compile_simple_deploy_def, pairTheory.ELIM_UNCURRY] >>
+  rpt (FIRST [IF_CASES_TAC,
+    ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return, every_state_insts_get,
+      every_state_insts_new_block, every_state_insts_fresh_label,
+      outcomes_free_fixed_region, outcomes_free_constructor_epilogue,
+      ctorCallFreeValuesTheory.outcomes_free_alloc_buffer])])
 QED
 
 Theorem compile_generate_deploy_prefix_split:
@@ -151,7 +141,10 @@ Proof
       bb.bb_instructions)
       (all_blocks (SND (compile_generate_deploy has (LENGTH bc) imm args sz [] env ss
         pay nr key trans s)))` by
-    (rpt strip_tac >> irule compile_generate_deploy_prefix_excludes_outcomes >> simp[]) >>
+    (qspec_then `LENGTH bc` mp_tac (Q.GEN `rt` (Q.INST [`P` |-> `\op. ~MEM op
+       [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]`]
+       compile_generate_deploy_prefix_opcodes)) >>
+     fs[ctorCallFreeRulesTheory.every_state_insts_blocks, DISJ_IMP_THM, FORALL_AND_THM]) >>
   pop_assum (qspec_then `initial_compile_state "__deploy"` mp_tac) >>
   (impl_tac >- simp[all_blocks_def, initial_compile_state_def]) >> strip_tac >>
   Cases_on `compile_generate_deploy has (LENGTH bc) imm args sz [] env ss

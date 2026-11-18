@@ -75,10 +75,7 @@ Proof
   >- (gvs[set_constructor_package_target_def] >>
       simp[type_stmt_def, supported_stmt_expr_exists_def]) >>
   rename1 `SOME cf` >> PairCases_on `cf` >>
-  `?env env'. type_stmts env cf6 cf7 = SOME env' /\
-    ~supported_stmts_expr_exists constructor_call_root cf7` by
-    (irule outcomes_free_classified_constructor_source >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  drule_all outcomes_free_classified_constructor_source >> strip_tac >>
   gvs[set_constructor_package_target_def, package_constructor_def] >>
   metis_tac[]
 QED

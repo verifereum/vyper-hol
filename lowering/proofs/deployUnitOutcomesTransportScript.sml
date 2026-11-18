@@ -2,7 +2,7 @@
 Theory deployUnitOutcomesTransport
 Ancestors
   deployUnitExecution deployOutcomesFreeDeploy
-  deployOutcomesFreeOrigins deployOutcomesFreeSafety
+  loweringBudgetNonconsumingOracleTransport
   ctorDeployLoweringSource ctorDeployDefs e2eDeployDefs compileVyper
   fragGasOrigin fragGasOriginPtr ptrSafeRun venomState dftCommutation list
 
@@ -31,18 +31,18 @@ Proof
   simp[venom_state_fupdcanon]
   >- (disj1_tac >> simp[] >>
       qexistsl_tac [`H`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`] >>
-      drule_all (SRULE [] outcomes_origin_pointer_focus) >>
+      drule_all (SRULE [] gas_origin_ptr_focus_outcomes_update) >>
       disch_then (qspec_then `os` (assume_tac o SRULE [venom_state_fupdcanon])) >>
       metis_tac[])
   >- (disj2_tac >> disj1_tac >> simp[] >>
       qexistsl_tac [`H`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`] >>
-      drule_all (SRULE [] outcomes_origin_pointer_focus) >>
+      drule_all (SRULE [] gas_origin_ptr_focus_outcomes_update) >>
       disch_then (qspec_then `os` (assume_tac o SRULE [venom_state_fupdcanon])) >>
       metis_tac[]) >>
   disj2_tac >> disj2_tac >>
   qexists_tac `map_result_state (\t. t with vs_outcomes := os) r` >>
-  simp[] >> conj_tac
-  >- (drule_all (SRULE [] outcomes_origin_path) >>
+  simp[exit_result_outcomes_update] >> conj_tac
+  >- (drule_all (SRULE [] gas_origin_path_outcomes_update) >>
       disch_then (qspec_then `os` (assume_tac o SRULE [venom_state_fupdcanon])) >>
       metis_tac[]) >>
   gen_tac >> strip_tac >>
@@ -50,7 +50,7 @@ Proof
   simp[] >> gen_tac >>
   qpat_x_assum `!fuel. ptr_safe_blocks _ _ _ _ _ _ _ _ _`
     (qspec_then `fuel` assume_tac) >>
-  drule_all (SRULE [] (cj 3 outcomes_ptr_safe_defs)) >>
+  drule_all (SRULE [] (cj 3 ptr_safe_outcomes_update)) >>
   disch_then (qspecl_then [`deploy_dead H tops runtime_bc am tx`,
     `imm_len tops`, `fuel`, `dunit.cu_context`, `[]`, `FEMPTY`, `entry_taint`,
     `vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy"; vs_inst_idx := 0|>`,

@@ -28,12 +28,7 @@ Theorem call_free_constructor_epilogue[local]:
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_constructor_epilogue sz cap imm st)))
 Proof
-  qid_spec_tac `st` >> simp[compile_constructor_epilogue_def] >>
-  rpt (FIRST [IF_CASES_TAC >> gvs[],
-    ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
-      call_free_emit_inst, call_free_alloc_buffer, every_state_insts_return])])
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] outcomes_free_constructor_epilogue) >> simp[]
 QED
 
 Theorem call_free_register_constructor_args[local]:

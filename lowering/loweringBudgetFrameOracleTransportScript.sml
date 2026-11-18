@@ -1,6 +1,7 @@
 Theory loweringBudgetFrameOracleTransport
 Ancestors
   ptrDiscipline gasEvents oracleStateProps contextCodegenRel codegenRel
+  memSafeRun unitTransformDefs dftCommutation
   venomExecSemantics venomState list
 
 Theorem active_inst_outcomes_update:
@@ -29,16 +30,49 @@ Proof
   simp[eval_one_phi_def, operand_outcomes_update]
 QED
 
+Theorem state_operations_outcomes_update:
+  (update_var x v (s with vs_outcomes := os) =
+    (update_var x v s with vs_outcomes := os)) /\
+  (mload n (s with vs_outcomes := os) = mload n s) /\
+  (sload k (s with vs_outcomes := os) = sload k s) /\
+  (tload k (s with vs_outcomes := os) = tload k s) /\
+  (mstore n v (s with vs_outcomes := os) = (mstore n v s with vs_outcomes := os)) /\
+  (mstore8 n v (s with vs_outcomes := os) = (mstore8 n v s with vs_outcomes := os)) /\
+  (sstore k v (s with vs_outcomes := os) = (sstore k v s with vs_outcomes := os)) /\
+  (tstore k v (s with vs_outcomes := os) = (tstore k v s with vs_outcomes := os)) /\
+  (write_memory_with_expansion n bs (s with vs_outcomes := os) =
+    (write_memory_with_expansion n bs s with vs_outcomes := os)) /\
+  (mcopy n m z (s with vs_outcomes := os) = (mcopy n m z s with vs_outcomes := os)) /\
+  (istore n v (s with vs_outcomes := os) = (istore n v s with vs_outcomes := os)) /\
+  (halt_state (s with vs_outcomes := os) = (halt_state s with vs_outcomes := os)) /\
+  (revert_state (s with vs_outcomes := os) = (revert_state s with vs_outcomes := os)) /\
+  (set_returndata bs (s with vs_outcomes := os) = (set_returndata bs s with vs_outcomes := os)) /\
+  (jump_to lbl (s with vs_outcomes := os) = (jump_to lbl s with vs_outcomes := os))
+Proof
+  simp[update_var_def, mload_def, sload_def, tload_def, contract_storage_def,
+       contract_transient_def, mstore_def, mstore8_def, sstore_def,
+       tstore_def, write_memory_with_expansion_def, mcopy_def, istore_def,
+       halt_state_def, revert_state_def, set_returndata_def, jump_to_def]
+QED
+
+Theorem eval_phis_outcomes_update:
+  !insts s os. eval_phis (s with vs_outcomes := os) insts =
+    map_result_state (\t. t with vs_outcomes := os) (eval_phis s insts)
+Proof
+  Induct >> simp[eval_phis_def, map_result_state_def] >> rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[one_phi_outcomes_update] >>
+  Cases_on `eval_one_phi s h` >> simp[map_result_state_def] >>
+  rename1 `eval_one_phi s h = SOME p` >> Cases_on `p` >>
+  Cases_on `eval_phis s insts` >>
+  simp[map_result_state_def, state_operations_outcomes_update]
+QED
+
 Theorem phis_outcomes_update[local]:
   !insts s t os. eval_phis s insts = OK t ==>
     eval_phis (s with vs_outcomes := os) insts =
       OK (t with vs_outcomes := os)
 Proof
-  Induct >> simp[eval_phis_def] >> rpt gen_tac >>
-  Cases_on `h.inst_opcode = PHI` >> simp[eval_phis_def] >>
-  simp[one_phi_outcomes_update, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[] >> first_x_assum drule >> disch_then (qspec_then `os` mp_tac) >>
-  simp[update_var_def]
+  simp[eval_phis_outcomes_update, map_result_state_def]
 QED
 
 Theorem enters_block_outcomes_update:
@@ -78,9 +112,7 @@ Theorem bind_fold_outcomes_update[local]:
     FOLDL (\u (out,v). update_var out v u) (s with vs_outcomes := os) pairs =
     (FOLDL (\u (out,v). update_var out v u) s pairs) with vs_outcomes := os
 Proof
-  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
-  first_x_assum (qspecl_then [`update_var h0 h1 s`, `os`] mp_tac) >>
-  simp[update_var_def]
+  Induct >> simp[pairTheory.FORALL_PROD, state_operations_outcomes_update]
 QED
 
 Theorem bind_outputs_outcomes_update:
@@ -156,4 +188,59 @@ Proof
     (conj_tac >> strip_tac >>
      pop_assum (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
   simp[step_taint_def, ghost_components_outcomes_update]
+QED
+
+Theorem lookup_var_outcomes_update:
+  lookup_var v (s with vs_outcomes := os) = lookup_var v s
+Proof
+  mp_tac (Q.INST [`op` |-> `Var v`] operand_outcomes_update) >>
+  simp[eval_operand_def]
+QED
+
+Theorem taint_parts_outcomes_update:
+  written_taint tn inst (s with vs_outcomes := os) = written_taint tn inst s /\
+  ret_taint tn inst (s with vs_outcomes := os) = ret_taint tn inst s
+Proof
+  simp[written_taint_def, ret_taint_def, operand_outcomes_update]
+QED
+
+Theorem read_ranges_outcomes_update:
+  source_memory_read_ranges inst (s with vs_outcomes := os) =
+    source_memory_read_ranges inst s
+Proof
+  simp[source_memory_read_ranges_def, dret_memory_read_ranges_def,
+       memory_range_of_operands_def, operand_outcomes_update,
+       eval_operands_outcomes_update]
+QED
+
+Theorem ptr_predicates_outcomes_update:
+  access_ok lo G fn inst (s with vs_outcomes := os) = access_ok lo G fn inst s /\
+  taint_ok fn tn inst (s with vs_outcomes := os) = taint_ok fn tn inst s /\
+  allocas_from lo (s with vs_outcomes := os) = allocas_from lo s /\
+  allocas_below_fmp (s with vs_outcomes := os) = allocas_below_fmp s
+Proof
+  simp[access_ok_def, taint_ok_def, about_to_revert_def, in_revert_forward_def,
+       active_inst_def, allocas_from_def, allocas_below_fmp_def,
+       read_ranges_outcomes_update, write_ranges_outcomes_update,
+       taint_parts_outcomes_update, operand_outcomes_update,
+       eval_operands_outcomes_update, lookup_var_outcomes_update]
+QED
+
+Theorem memory_checks_outcomes_update:
+  (inst_mem_below_frontier inst (s with vs_outcomes := os) =
+    inst_mem_below_frontier inst s) /\
+  (inst_dload_in_section inst (s with vs_outcomes := os) =
+    inst_dload_in_section inst s)
+Proof
+  simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
+       read_ranges_outcomes_update, write_ranges_outcomes_update,
+       operand_outcomes_update, eval_operands_outcomes_update]
+QED
+
+Theorem mem_safe_step_outcomes_update:
+  inst.inst_opcode <> INVOKE ==>
+  mem_safe_step fuel ctx inst (s with vs_outcomes := os) =
+    mem_safe_step fuel ctx inst s
+Proof
+  simp[mem_safe_step_def, memory_checks_outcomes_update]
 QED

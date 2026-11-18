@@ -32,6 +32,21 @@ Proof
     state_insts_def, all_blocks_def, mk_inst_def]
 QED
 
+Theorem outcomes_free_constructor_epilogue:
+  P ALLOCA /\ P ADD /\ P MCOPY /\ P CODECOPY /\ P RETURN ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_constructor_epilogue sz cap imm st)))
+Proof
+  strip_tac >> simp[compile_constructor_epilogue_def] >>
+  rpt (FIRST [IF_CASES_TAC,
+    ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, outcomes_free_alloc_buffer,
+      every_state_insts_return])])
+QED
+
 Theorem opcode_every_fixed_region:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -130,7 +145,8 @@ Proof
   `P ALLOCA` by fs[] >>
   Induct >- simp[compile_register_constructor_args_def, every_state_insts_return] >>
   gen_tac >> PairCases_on `h` >> rpt strip_tac >>
-  Cases_on `FLOOKUP ce.ce_vars h0` >>
+  qmatch_goalsub_rename_tac `compile_register_constructor_args _ ((nm,_)::_)` >>
+  Cases_on `FLOOKUP ce.ce_vars nm` >>
   simp[compile_register_constructor_args_def] >>
   rpt (FIRST [gen_tac, strip_tac,
     CHANGED_TAC (gvs[outcomes_free_alloc_buffer, every_state_insts_return]),
