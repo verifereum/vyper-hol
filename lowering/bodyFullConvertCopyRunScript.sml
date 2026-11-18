@@ -111,9 +111,15 @@ Proof
   drule_all bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_with_raw_endpoint >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`]
     (qx_choosel_then [`dst`, `w'`, `z`, `Ga`, `tna`, `r`] strip_assume_tac)) >>
-  `r = t` by metis_tac[sumTheory.INR_11] >>
+  `r = t` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sm mid) s = OK r` mp_tac >>
+     qpat_assum `run_inst_seq (emitted_insts sm mid) s = OK t`
+       (fn th => pure_rewrite_tac [th]) >> simp[]) >>
   qpat_x_assum `r = t` SUBST_ALL_TAC >>
-  `p = dst` by metis_tac[operand_11] >>
+  `p = dst` by
+    (qpat_x_assum `buf.buf_operand = Var p` mp_tac >>
+     qpat_assum `buf.buf_operand = Var dst`
+       (fn th => pure_rewrite_tac [th]) >> simp[]) >>
   qpat_x_assum `p = dst` SUBST_ALL_TAC >>
   `w = w'` by gvs[eval_operand_def, lookup_var_def] >>
   qpat_x_assum `w = w'` SUBST_ALL_TAC >>
