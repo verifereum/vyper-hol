@@ -26,6 +26,7 @@ Ancestors
   loweringPosts exprLoweringProps vyperStorageFootprint ptrSafeRun
   ptrDiscipline bodyPtrDefs runtimeBodyStartDefs fragGasOriginPtr
   entryPtrSeamPrefix entryPtrSeamRegister externalEntryChecks entryStateRel
+  sourceEntrySelection
   selectedBodyCode bodyMemAggregatePath fragGasPathFrameMem venomMemProofs
   moduleLoweringProps vyperCompiler nonreentrantEntryPath externalReturnPackage
   vyperTypeContractGetter vyperTypeContractSoundness vyperTypeContractContext
@@ -122,7 +123,10 @@ Theorem external_entry_registration_joint:
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    tx.function_name <> "__default__" /\
+    LENGTH tx.args = LENGTH args /\
+    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+      tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, nr, args, [], ret, fbody) /\
@@ -184,7 +188,6 @@ Theorem external_entry_registration_joint:
           [] (OK s0,G0,tn0)
 Proof
   rpt gen_tac >> strip_tac >>
-  `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all runtime_entry_function_no_phi_nr >> strip_tac >>
   drule_all external_entry_reaches_registration_ptr_nr >> strip_tac >>
@@ -328,7 +331,10 @@ Theorem external_entry_locked_joint:
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    tx.function_name <> "__default__" /\
+    LENGTH tx.args = LENGTH args /\
+    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+      tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut,T,args,[],ret,fbody) /\
@@ -355,6 +361,10 @@ Theorem external_entry_locked_joint:
           T,mut = View,pbody,rt) st /\
       rt = (if ret = NoneT then NONE else SOME ret) /\
       compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+      compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) sa =
+        ((),sl) /\
+      compile_guarded_body cenv T global_nonreentrant_slot T (mut = View)
+        pbody rt sa = ((),st') /\
       compile_stmts cenv NoLoop (case rt of SOME ty => ty | NONE => BaseT BoolT)
         pbody sl = ((),se) /\
       fn_has_code sl se func /\ fn_has_code se st' func /\
@@ -426,7 +436,6 @@ Proof
     simp[global_nonreentrant_slot_def, wordsTheory.dimword_def] >>
   drule_all selected_entry_after_lock >> strip_tac >>
   drule_all entry_path_endpoint_facts >> strip_tac >>
-  `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all runtime_entry_function_no_phi_nr >> strip_tac >>
   `func' = func` by
@@ -455,7 +464,10 @@ Theorem external_entry_lock_abort_joint:
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    tx.function_name <> "__default__" /\
+    LENGTH tx.args = LENGTH args /\
+    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+      tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut,T,args,[],ret,fbody) /\
@@ -592,7 +604,9 @@ Theorem external_entry_subst_consts_joint:
                         vs_inst_idx := 0 |>, FEMPTY, entry_taint)
             [] (OK s0, G0, tn0)
 Proof
-  rpt gen_tac >> strip_tac >> drule_all external_entry_registration_joint >>
+  rpt gen_tac >> strip_tac >>
+  drule_all valid_vyper_call_selected_calldata >> strip_tac >>
+  drule_all external_entry_registration_joint >>
   disch_then (qx_choosel_then
     [`pbody`,`lbl`,`cenv0`,`pos_args`,`min_cds`,`is_payable`,`nkey`,`ut'`,`iv`,
      `rt`,`st`,`cenv`,`sa`,`st'`,`func`,`s0`,`G0`,`tn0`] strip_assume_tac) >>

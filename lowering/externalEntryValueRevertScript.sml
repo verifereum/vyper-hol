@@ -1,7 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalEntryValueRevert
 Ancestors
-  entryValueRejectFacts entrySourcePackages entryRejectCode entryPrefixPtr entryValueRevertPtr
+  sourceEntrySelection entryValueRejectFacts entrySourcePackages entryRejectCode entryPrefixPtr entryValueRevertPtr
   entryChecksLayout entryChecksPassPtr
   fragGasOriginPtr fragGasOrigin fragGasPathPtr gasEvents gasCount memSafeRun instMemFrontier
   loweringStateRelDefs ptrDiscipline ptrSafeRun actualEntryAllocationFrame
@@ -98,7 +98,10 @@ QED
 Theorem external_value_reject_dispatch[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
-  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  tx.function_name <> "__default__" /\
+    LENGTH tx.args = LENGTH args /\
+    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+      tx.args vs.vs_call_ctx.cc_calldata /\
   initial_venom_state_rel tops am tx vs /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,[],ret,fbody) /\
@@ -128,10 +131,10 @@ Proof
   drule_all entry_runtime_no_dalloca >> strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule_all entry_value_reject_callvalue >> strip_tac >>
-  drule_all lower_runtime_selected_source_packages >> strip_tac >>
+  drule_all lower_runtime_named_source_packages >> strip_tac >>
   drule_all run_lowering_entry_label >> strip_tac >>
   drule_all run_lowering_selected_entry_code >> strip_tac >>
-  drule_all valid_call_linear_dispatch_target >>
+  drule_all source_selected_linear_dispatch_target >>
   disch_then (qspec_then `fl` assume_tac) >>
   `compile_entry_checks mc F sc = ((),sk)` by
     (qpat_x_assum `compile_entry_checks _ _ _ = _` mp_tac >> simp[]) >>
@@ -262,7 +265,10 @@ QED
 Theorem external_value_reject_target[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
-  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  tx.function_name <> "__default__" /\
+    LENGTH tx.args = LENGTH args /\
+    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+      tx.args vs.vs_call_ctx.cc_calldata /\
   initial_venom_state_rel tops am tx vs /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,[],ret,fbody) /\
@@ -297,7 +303,10 @@ Theorem external_entry_value_revert_nr:
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    tx.function_name <> "__default__" /\
+    LENGTH tx.args = LENGTH args /\
+    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+      tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
@@ -318,7 +327,7 @@ Proof
   disch_then (qspec_then `SOME vs.vs_outcomes` assume_tac) >>
   drule_all external_value_reject_target >> strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
-  drule_all lower_runtime_selected_source_packages >> strip_tac >>
+  drule_all lower_runtime_named_source_packages >> strip_tac >>
   `OPTREL gas_shadow_unit (SOME unit)
     (run_lowering sels (MAP gas_shadow_external_package exts)
       (MAP gas_shadow_internal_package ints)
@@ -381,9 +390,7 @@ Theorem external_entry_value_revert:
       (INR e, st) ==>
     source_unit_execution_correct tops ret am tx unit vs
 Proof
-  rpt gen_tac >>
-  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`, `mut`,
-               `F`, `args`, `fbody`, `env`, `e`, `st`] MATCH_ACCEPT_TAC
-    external_entry_value_revert_nr
+  rpt gen_tac >> strip_tac >>
+  drule_all valid_vyper_call_selected_calldata >> strip_tac >>
+  drule_all external_entry_value_revert_nr >> simp[]
 QED
-
