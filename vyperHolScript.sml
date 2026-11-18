@@ -92,6 +92,7 @@ Ancestors
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
   codegenLabelDisciplined
   codegenSymOwnRel
+  symS7OwnHol
   (* bytecode: a passing operand-stack checker excludes frame overflow *)
   stackBoundSoundness
   asmFinalizerPrefix

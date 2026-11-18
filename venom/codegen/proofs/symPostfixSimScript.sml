@@ -1,7 +1,7 @@
 (* Symbolic output metadata and postfix execution boundaries. *)
 Theory symPostfixSim
 Ancestors
-  fnFrameStepsRevertForward
+  fnFrameStepsRevertForward symPhiRenameFacts
   symInstKinds symShuffleSim regularPostfixSim fnPlanPrefix
   doSwapSim deepDupCallerSim planWf codegenEncodingWf rich_list
   stackPlanOps stackPlanGen stackModel planExec prefixExec prefixSim
@@ -123,8 +123,7 @@ Theorem LIST_REL_relabel_left[local]:
   (!sv. R (EL i xs) sv ==> R op sv) ==>
   LIST_REL R (LUPDATE op i xs) ys
 Proof
-  simp[LIST_REL_EL_EQN, EL_LUPDATE] >> rpt strip_tac >>
-  IF_CASES_TAC >> metis_tac[]
+  MATCH_ACCEPT_TAC symPhiRenameFactsTheory.LIST_REL_relabel_left
 QED
 
 Theorem sym_kinds_ok_poke:
@@ -134,12 +133,7 @@ Theorem sym_kinds_ok_poke:
   sym_kinds_ok cplan fn ret srest
     (ps with ps_stack := stack_poke d op ps.ps_stack) ss
 Proof
-  simp[sym_kinds_ok_def] >> rpt strip_tac >>
-  qexists `top` >> simp[] >>
-  once_rewrite_tac[GSYM rich_listTheory.LIST_REL_REVERSE_EQ] >>
-  pure_rewrite_tac[REVERSE_REVERSE, stack_poke_def] >>
-  irule LIST_REL_relabel_left >>
-  simp[stack_peek_def, rich_listTheory.LIST_REL_REVERSE1]
+  MATCH_ACCEPT_TAC symPhiRenameFactsTheory.sym_kinds_ok_poke
 QED
 
 
@@ -302,15 +296,7 @@ Theorem phi_depth_operand:
   stack_get_phi_depth (FILTER is_var_operand ops) stk = SOME d ==>
   ?y. stack_peek d stk = Var y /\ MEM (Var y) ops
 Proof
-  strip_tac >>
-  `d < LENGTH stk` by
-    metis_tac[stack_get_phi_depth_def, planWfTheory.stack_find_bound, LENGTH_REVERSE] >>
-  `MEM (stack_peek d stk) (FILTER is_var_operand ops)` by
-    (gvs[stack_get_phi_depth_def, stack_peek_def] >>
-     drule genBlockSimTheory.stack_find_el >>
-     simp[EL_REVERSE, arithmeticTheory.PRE_SUB1]) >>
-  Cases_on `stack_peek d stk` >>
-  gvs[MEM_FILTER, stackPlanTypesTheory.is_var_operand_def]
+  MATCH_ACCEPT_TAC symPhiRenameFactsTheory.phi_depth_operand
 QED
 
 Theorem sym_phi_rename:
@@ -323,8 +309,8 @@ Theorem sym_phi_rename:
   sym_kinds_ok cplan fn ret srest
     (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) ss
 Proof
-  strip_tac >> drule phi_depth_operand >> strip_tac >>
-  irule sym_kinds_ok_poke >> simp[] >> metis_tac[phi_var_output_kind]
+  metis_tac[symPhiRenameFactsTheory.sym_phi_rename_own,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem temporary_spill_ranges_avoid_inventory:

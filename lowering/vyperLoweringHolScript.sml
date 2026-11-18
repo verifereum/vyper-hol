@@ -68,6 +68,7 @@ Ancestors
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
   loweringMemCorrect
   asmSymBridge
+  asmSymBridgeOwn
   asmDataEnv
   asmOptOwnPeephole
   asmOptFinalizerCorrect
