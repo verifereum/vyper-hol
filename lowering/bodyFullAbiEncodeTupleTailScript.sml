@@ -877,6 +877,8 @@ Theorem abi_encode_staged_tuple_full_tail:
     FLOOKUP prepared.vs_allocas i = SOME row) /\
   (!x. not_fresh_at st x ==> lookup_var x prepared = lookup_var x initial) /\
   stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func ce cx ee prepared /\
+  copy_static prepared = copy_static (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial) /\
   (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (initial,G,tn) [] (OK prepared,Gp,tnp)) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -2076,7 +2078,94 @@ Resume abi_encode_staged_tuple_full_tail[writeback_locals]:
 QED
 
 Resume abi_encode_staged_tuple_full_tail[result_state]:
-  FAIL_TAC "remaining state observation"
+  `N < dimword(:256)` by
+    (qpat_assum `p+N < dimword(:256)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `!x. not_fresh_at staged x ==> lookup_var x alloc_run = lookup_var x prepared` by
+    (rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at staged x ==> lookup_var x alloc_run = _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+  drule_all_then (MAP_EVERY assume_tac o CONJUNCTS)
+    bodyFullAbiEncodePureFrameTheory.abi_encode_tuple_setup_frames >>
+  `abi_encode_exec_frame func prepared t` by
+    (irule exprSimAbiEncodeExecFrameTheory.abi_encode_exec_frame_trans >>
+     qexists `ready_run` >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `t.vs_labels = prepared.vs_labels` by
+    (qpat_assum `t.vs_labels = ready_run.vs_labels` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func ce cx ee t` by
+    suspend "canonical_state" >>
+  suspend "state_horizon"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[canonical_state]:
+  `staged.cs_next_var <= body_end.cs_next_var` by
+    (qpat_assum `compile_abi_encode_to_buf _ _ _ ready = (_,body_end)`
+       (mp_tac o MATCH_MP abiEncodeVarFlowTheory.compile_abi_encode_next_var) >>
+     qpat_assum `staged.cs_next_var <= ready.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `!op v. abi_decoder_operand_live body_end.cs_next_var op /\
+      eval_operand op u = SOME v ==> eval_operand op t = SOME v` by
+    (gen_tac >> gen_tac >> disch_tac >>
+     qpat_assum `!op. (!x. op = Var x ==> _) ==> eval_operand op t = _`
+       (qspec_then `op` mp_tac) >>
+     pop_assum mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `op` >>
+     simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+          abiDecoderReentryTheory.abi_decoder_older_vars_def,
+          loweringStateRelDefsTheory.not_fresh_at_def] >>
+     metis_tac[]) >>
+  `p <= p+32+k /\ p+32+k+LENGTH (enc ct rv) <= p+N` by
+    (qpat_assum `32+k+LENGTH (enc ct rv) <= N` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  irule (cj 1 exprSimAbiEncodeStateTransportTheory.abi_encode_phases_caller_state) >>
+  qpat_assum `window_strong_result ctx func ready body_end len ct rv
+      (p+32+k) ready_run u` (irule_at Any) >>
+  qpat_assum `abi_builtin_encode_setup _ M staged = ((Var root,Var dp),ready)`
+    (irule_at Any) >>
+  qpat_assum `abi_builtin_encode_setup_frame _ _ N p wlen prepared ready_run`
+    (irule_at Any) >>
+  simp_tac bool_ss [pairTheory.SND] >>
+  qpat_assum `compile_abi_encode_to_buf (Var dp) (Var src) ei ready = (len,body_end)`
+    (irule_at Any) >>
+  asm_rewrite_tac[] >>
+  simp[NoAsms,Abbr `N`,Abbr `k`]
+QED
+
+Resume abi_encode_staged_tuple_full_tail[state_horizon]:
+  `stmt_state_rel H ctx func ce cx ee initial` by
+    (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+         (?ts. _ /\ abi_args_post H ctx func ce cx es origin st s0 ee args ops vs initial /\ _) /\ _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     qpat_assum `abi_args_post H ctx func ce cx es origin st s0 ee args ops vs initial`
+       (ACCEPT_TAC o cj 1 o REWRITE_RULE [abi_args_post_def])) >>
+  `prepared.vs_accounts = initial.vs_accounts /\
+   prepared.vs_transient = initial.vs_transient /\
+   prepared.vs_requests = initial.vs_requests /\
+   prepared.vs_call_ctx = initial.vs_call_ctx` by
+    (qpat_assum `copy_static prepared = copy_static _`
+       (fn th =>
+         mp_tac (MATCH_MP exprSimStorageCopyTheory.copy_static_fields th) >>
+         mp_tac (AP_TERM ``venom_state_vs_requests`` th)) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[exprSimStorageCopyTheory.copy_static_def,
+          abiBuiltinAllocationTheory.abi_builtin_allocate_state_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  drule_all_then (MAP_EVERY assume_tac o CONJUNCTS)
+    exprSimAbiEncodeStateTransportTheory.abi_encode_caller_world_fields >>
+  qpat_assum `abi_encode_exec_frame func prepared t`
+    (assume_tac o cj 3 o REWRITE_RULE [exprSimAbiEncodeExecFrameTheory.abi_encode_exec_frame_def]) >>
+  rewrite_tac[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
+  irule (INST_TYPE [Type.alpha |-> ``:256``]
+    exprLoweringPropsTheory.stmt_state_rel_fields_transport) >>
+  qpat_assum `stmt_state_rel H ctx func ce cx ee initial` (irule_at Any) >>
+  qexists `storage_trace_horizon ee.storage_trace` >>
+  map_every (fn q => qpat_assum q (pure_once_rewrite_tac o single))
+    [`t.vs_call_ctx = prepared.vs_call_ctx`,
+     `t.vs_accounts = prepared.vs_accounts`,
+     `t.vs_transient = prepared.vs_transient`,
+     `t.vs_requests = prepared.vs_requests`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise abi_encode_staged_tuple_full_tail
