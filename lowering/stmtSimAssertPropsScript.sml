@@ -90,6 +90,28 @@ Proof
   imp_res_tac new_block_props >> gvs[]
 QED
 
+(* The instruction a bare or unreachable raise, or a failed assert, ends its
+   block with aborts, and its exception, and its gas path. *)
+Theorem abort_zero_exit:
+  !opc ops msg sa sb s func ctx.
+    ((opc = REVERT /\ ops = [Lit 0w; Lit 0w] /\ msg = "") \/
+     (opc = INVALID /\ ops = [] /\ msg = "UNREACHABLE")) /\
+    emit_inst opc ops [] sa = ((), sb) /\ fn_has_code sa sb func /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
+    ?a t. expr_exit (INR (AssertException msg) : unit + exception)
+                    (Abort a t) /\
+          gas_path ctx func s 0 (Abort a t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?a t. step_inst_base (mk_inst sa.cs_next_id opc ops []) s = Abort a t /\
+         expr_exit (INR (AssertException msg) : unit + exception) (Abort a t)` by
+    (gvs[expr_exit_def] >> metis_tac[step_revert_zero, step_invalid]) >>
+  qexistsl_tac [`a`, `t`] >> simp[] >>
+  irule emit_abort_zero_path >> simp[] >>
+  qexistsl_tac [`opc`, `ops`, `sa`, `sb`] >> gvs[]
+QED
+
 Theorem assert_compiler_code:
   cs_extends sa s1 /\
   fresh_label "assert_ok" s1 = (ok,s2) /\

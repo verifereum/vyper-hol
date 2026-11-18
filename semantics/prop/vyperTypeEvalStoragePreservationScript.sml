@@ -15,6 +15,7 @@ Ancestors
   vyperPlaceResultTyping vyperTargetPlaceWrite vyperAugAssignWriteSoundness
   vyperImmutableMetadataFrame[ignore_grammar]
   vyperCallOutcome[ignore_grammar]
+  vyperTypeEvalCaseProofs vyperTypeEvalProofs
 Libs
   wordsLib markerLib BasicProvers
 

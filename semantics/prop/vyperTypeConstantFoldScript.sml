@@ -313,7 +313,7 @@ Proof
   strip_tac >> drule constant_values_runtime_types >>
   rw[exprs_runtime_typed_def, value_runtime_typed_def] >>
   gvs[well_typed_expr_def, well_formed_type_def, IS_SOME_EXISTS] >>
-  metis_tac[vyperTypeEvalSoundnessTheory.struct_lit_value_has_type]
+  metis_tac[vyperTypeEvalCaseProofsTheory.struct_lit_value_has_type]
 QED
 
 Theorem checked_constant_decl_typed[local]:
@@ -386,7 +386,7 @@ Proof
   strip_tac >>
   qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
   simp[Once well_typed_expr_def] >> strip_tac >>
-  drule vyperTypeEvalSoundnessTheory.type_place_expr_annotation_ok_stmt >> strip_tac >>
+  drule vyperTypeEvalCaseProofsTheory.type_place_expr_annotation_ok_stmt >> strip_tac >>
   Cases_on `vt` >> gvs[vtype_annotation_ok_def, subscript_vtype_def] >>
   Cases_on `expr_type e1` >>
   gvs[subscript_vtype_def, subscript_type_ok_def] >>
@@ -594,7 +594,7 @@ Proof
   >~ [`StructLit`] >- (
     gvs[constant_value_def, constant_expr_def, AllCaseEqs()] >>
     `well_typed_exprs (artifact_env artifact mods current_src) (MAP SND kes)` by
-      (irule vyperTypeEvalSoundnessTheory.well_typed_named_exprs_MAP_SND_stmt >> gvs[well_typed_expr_def]) >>
+      (irule vyperTypeEvalCaseProofsTheory.well_typed_named_exprs_MAP_SND_stmt >> gvs[well_typed_expr_def]) >>
     `EVERY (constant_expr mods) (MAP SND kes)` by fs[EVERY_MEM] >>
     first_x_assum (qspecl_then [`cx`,`am`] mp_tac) >>
     simp[] >> disch_then drule_all >>
@@ -969,7 +969,7 @@ QED
 Resume constant_eval_expr_fold_agreement[struct]:
     strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     `well_typed_exprs (artifact_env artifact mods current_src) (MAP SND kes)` by
-      (irule vyperTypeEvalSoundnessTheory.well_typed_named_exprs_MAP_SND_stmt >> gvs[well_typed_expr_def]) >>
+      (irule vyperTypeEvalCaseProofsTheory.well_typed_named_exprs_MAP_SND_stmt >> gvs[well_typed_expr_def]) >>
     `!e pv next. MEM e (MAP SND kes) /\
        eval_expr cx e (initial_state am sc) = (INL pv,next) ==>
        next = initial_state am sc /\

@@ -24,9 +24,7 @@ Theorem lower_vyper_runtime_unit_allocation_history:
     k <= 2 ** 64 /\
     (!obs. source_calls_within k am tx vs.vs_outcomes obs) /\
     (!marks.
-      source_storage_ok am tx vs.vs_outcomes
-        (gas_explicit marks vs.vs_gas_readings) /\
-      call_outcomes_storage_ok am tx vs.vs_outcomes
+      call_storage_ok am tx vs.vs_outcomes
         (gas_explicit marks vs.vs_gas_readings)) /\
     (!marks. ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
@@ -64,9 +62,7 @@ Theorem lower_vyper_runtime_unit_allocation_history:
     initial_venom_state_rel tops am tx vs /\
     (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
     (!marks.
-      source_storage_ok am tx vs.vs_outcomes
-        (gas_explicit marks vs.vs_gas_readings) /\
-      call_outcomes_storage_ok am tx vs.vs_outcomes
+      call_storage_ok am tx vs.vs_outcomes
         (gas_explicit marks vs.vs_gas_readings)) /\
     (!marks. ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
