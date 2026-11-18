@@ -6431,6 +6431,99 @@ Proof
   simp[]
 QED
 
+Theorem args_return_buffer_geometry[local]:
+  supported_return_type tops ret /\
+  get_module_code cx NONE = SOME tops /\
+  expr_sim_inv ce cx env es /\
+  ce.ce_struct_fields = make_struct_fields_map tops /\
+  evaluate_type (get_tenv cx) ret = SOME tv /\
+  compute_func_info
+    (\k. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) k))
+    ret (type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ret)
+    ty_args = (nrc,rbs,pvs) ==>
+  ((nrc = 0 /\ ret <> NoneT) <=> nrc = 0 /\ 0 < rbs) /\
+  (nrc = 0 /\ 0 < rbs ==> rbs = type_memory_size tv)
+Proof
+  strip_tac >>
+  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ret =
+    type_memory_size tv` by
+    (drule_all expr_sim_inv_memory_size >>
+     simp[GSYM structFieldsPropsTheory.type_mem_bytes_type_memory_bytes]) >>
+  `ret <> NoneT ==> assignable_type (get_tenv cx) ret` by
+    (strip_tac >>
+     `well_formed_type (get_tenv cx) ret` by simp[well_formed_type_def] >>
+     qpat_x_assum `supported_return_type tops ret` mp_tac >>
+     simp[supportedTypesTheory.supported_return_type_def,
+          supportedTypesTheory.supported_value_type_def] >> strip_tac
+     >- metis_tac[retAbiPlanPropsTheory.supported_scalar_type_assignable] >>
+     Cases_on `ret` >> gvs[]
+     >~ [`TupleT types`]
+     >- (simp[assignable_type_def] >>
+         gvs[vyperValueTheory.evaluate_type_def, vyperValueTheory.evaluate_types_OPT_MMAP,
+             AllCaseEqs(),
+             well_formed_type_def, NULL_EQ] >>
+         `EVERY IS_SOME (MAP (evaluate_type (get_tenv cx)) types)` by
+           (simp[GSYM IS_SOME_OPT_MMAP] >>
+            Cases_on `OPT_MMAP (evaluate_type (get_tenv cx)) types` >> gvs[]) >>
+         gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
+         irule retAbiPlanPropsTheory.supported_scalar_type_assignable >> gvs[well_formed_type_def])
+     >~ [`ArrayT elem bd`]
+     >- (Cases_on `bd` >> gvs[assignable_type_def, retAbiPlanPropsTheory.supported_word_type_assignable]) >>
+     rename1 `supported_struct_fields tops id` >>
+     Cases_on `supported_struct_fields tops id` >> gvs[] >>
+     drule_all retAbiPlanPropsTheory.supported_struct_fields_get_tenv >> strip_tac >>
+     gvs[assignable_type_def, EVERY_MEM, retAbiPlanPropsTheory.supported_word_type_assignable, NULL_EQ]) >>
+  `ret <> NoneT ==> 0 < type_memory_size tv` by
+    metis_tac[assignable_type_slot_size_pos, CONJUNCT1 valueEncodingPropsTheory.type_memory_size_pos] >>
+  Cases_on `ret = NoneT` >> gvs[compute_func_info_def, returns_stack_count_def] >>
+  Cases_on `nrc = 0` >> gvs[] >> Cases_on `ret` >> gvs[]
+QED
+
+Theorem args_enter_invoke[local]:
+  lowering_context_ok ctx /\ MEM caller ctx.ctx_functions /\
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb caller.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (lbl,ops) /\
+  eval_operands ops s = SOME argv ==>
+  ?callee setup entered.
+    lookup_function lbl ctx.ctx_functions = SOME callee /\
+    setup_callee callee argv s = SOME setup /\
+    gas_invoke_entry (ctx,caller) s callee entered
+Proof
+  strip_tac >>
+  `MEM inst (fn_insts caller)` by
+    metis_tac[fragFuelTheory.lookup_block_get_instruction_fn_insts] >>
+  `ctx_distinct_fn_names ctx /\ wf_invoke_targets ctx` by
+    fs[vyperCompilerTheory.lowering_context_ok_def,
+       venomWfTheory.ctx_distinct_fn_names_def,
+       vyperCompilerTheory.wf_invoke_targets_check_eq] >>
+  drule_all vyperCompilerTheory.invoke_target_resolves_uniquely >> strip_tac >>
+  `label = lbl` by fs[venomExecSemanticsTheory.decode_invoke_def] >>
+  qpat_x_assum `label = lbl` SUBST_ALL_TAC >>
+  `MEM callee ctx.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `callee.fn_blocks <> []` by
+    fs[vyperCompilerTheory.lowering_context_ok_def, EVERY_MEM, venomWfTheory.fn_has_entry_def] >>
+  Cases_on `callee.fn_blocks` >> fs[] >>
+  `?setup. setup_callee callee argv s = SOME setup` by
+    simp[venomExecSemanticsTheory.setup_callee_def] >>
+  `lookup_block setup.vs_current_bb callee.fn_blocks = SOME h /\
+    ~setup.vs_halted` by
+    gvs[venomExecSemanticsTheory.setup_callee_def, venomInstTheory.lookup_block_def, FIND_thm] >>
+  `MEM h callee.fn_blocks` by simp[] >>
+  `phi_prefix_length h.bb_instructions = 0` by
+    (irule venomExecProofsTheory.no_phis_phi_prefix_length_zero >>
+     fs[vyperCompilerTheory.lowering_context_ok_def, vyperCompilerTheory.ptr_ok_check_def, EVERY_MEM] >>
+     metis_tac[venomFnInstsProofsTheory.MEM_fn_insts]) >>
+  `eval_phis setup h.bb_instructions = OK setup` by metis_tac[eval_phis_no_phi] >>
+  qexistsl_tac [`setup`,`setup with vs_inst_idx := 0`] >>
+  simp[] >>
+  rewrite_tac[fragGasFocusTheory.gas_invoke_entry_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`bb`,`inst`,`lbl`,`ops`,`argv`,`setup`,`h`,`setup`] >>
+  simp[]
+QED
+
 Theorem intcall_args_full:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
@@ -7978,26 +8071,38 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `EVERY (\op. op_taint tnd op = {}) (bops ++ sup_ops ++ def_ops)` by
     (qpat_assum `EVERY (\op. op_taint tnd op = {}) ([] ++ sup_ops ++ def_ops)` mp_tac >>
-     simp[listTheory.EVERY_APPEND]) >>
+     qpat_assum `EVERY (\op. op_taint tnd op = {}) bops` mp_tac >>
+     pure_rewrite_tac[listTheory.EVERY_APPEND,listTheory.APPEND,listTheory.EVERY_DEF] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `!b cap. MEM (SOME (b,cap)) (MAP (op_prov Gd) (bops ++ sup_ops ++ def_ops)) ==>
      ?aid. FLOOKUP u.vs_allocas aid = SOME (b,cap) /\
        sa.cs_next_id <= aid /\ aid < sm.cs_next_id /\ lo <= b /\ b + cap <= u.vs_alloca_next` by
-    (rpt gen_tac >> rewrite_tac[listTheory.MAP_APPEND,listTheory.MEM_APPEND] >>
-     strip_tac
+    (rpt gen_tac >> disch_tac >>
+     `MEM (SOME (b,cap)) (MAP (op_prov Gd) bops) \/
+      MEM (SOME (b,cap)) (MAP (op_prov Gd) (sup_ops ++ def_ops))` by
+       (qpat_x_assum `MEM (SOME _) (MAP (op_prov Gd) (bops ++ sup_ops ++ def_ops))`
+          mp_tac >>
+        pure_rewrite_tac[listTheory.MAP_APPEND,listTheory.MEM_APPEND] >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[])
      >- (Cases_on `rc' = 0 /\ 0 < rbs`
-         >- (qpat_assum `rc' = 0 /\ 0 < rbs ==> ?rb b. _` (drule_then strip_assume_tac) >>
-             qpat_assum `MEM (SOME _) (MAP (op_prov Gd) bops)` mp_tac >>
+         >- (qpat_assum `rc' = 0 /\ 0 < rbs ==> ?rb b. _` mp_tac >>
+             (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+             qpat_x_assum `MEM (SOME _) (MAP (op_prov Gd) bops)` mp_tac >>
              qpat_assum `bops = [_]` (fn th => rewrite_tac[th]) >>
-             simp[] >> strip_tac >> qexists_tac `sa.cs_next_id` >> simp[]) >>
-         `(rc' <> 0 \/ rbs = 0)` by
+             qpat_assum `op_prov Gd _ = SOME _` (fn th => simp[NoAsms,th]) >>
+             strip_tac >> qexists_tac `sa.cs_next_id` >> simp[]) >>
+         qpat_assum `(rc' <> 0 \/ rbs = 0) ==> bops = [] /\ bws = []` mp_tac >>
+         (impl_tac >-
            (qpat_assum `~(rc' = 0 /\ 0 < rbs)` mp_tac >>
-            POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
-         qpat_assum `(rc' <> 0 \/ rbs = 0) ==> bops = [] /\ bws = []`
-           (drule_then strip_assume_tac) >>
-         qpat_assum `MEM (SOME _) (MAP (op_prov Gd) bops)` mp_tac >> simp[]) >>
+            POP_ASSUM_LIST (K ALL_TAC) >> decide_tac)) >>
+         strip_tac >> qpat_x_assum `MEM (SOME _) (MAP (op_prov Gd) bops)` mp_tac >>
+         qpat_assum `bops = []` (fn th => simp[NoAsms,th])) >>
      qpat_assum `!b cap. MEM (SOME (b,cap)) (MAP (op_prov Gd) (sup_ops ++ def_ops)) ==> _`
        (drule_then strip_assume_tac) >>
-     goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
+     qexists_tac `aid` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qpat_assum `st3.cs_next_id <= sm.cs_next_id` mp_tac >>
+     qpat_assum `aid < st3.cs_next_id` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
   `fn_has_code sa sm func` by
     (qspecl_then [`sa`,`sm`,`sb`,`func`] mp_tac fn_has_code_split >>
      (impl_tac >-
@@ -8099,15 +8204,302 @@ Proof
      rewrite_tac[intcall_entry_full_def] >>
      qpat_assum `((ed with scopes := [penv]) with scopes := ed.scopes) = ed`
        (fn th => rewrite_tac[th]) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     (all_tac >- (qexistsl_tac [`dflts`,`es0 with gas_obs := gas_explicit marks entry.vs_gas_readings ++ []`,
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- (qexistsl_tac [`dflts`,`es0 with gas_obs := gas_explicit marks entry.vs_gas_readings ++ []`,
                        `xs`,`ee with gas_obs := []`,
                        `ee with gas_obs := gas_explicit dm t.vs_gas_readings`,
                        `dvs`,`(ed with gas_obs := []) with scopes := [FEMPTY]`] >>
-         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-         qpat_assum `ds = DROP _ dflts` (SUBST1_TAC o SYM) >>
-         qunabbrev_tac `cxd` >> first_assum ACCEPT_TAC)) >>
-     FAIL_TAC "non-separation packet residuals") >>
+          rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+          qpat_assum `ds = DROP _ dflts` (SUBST1_TAC o SYM) >>
+          qunabbrev_tac `cxd` >> first_assum ACCEPT_TAC)
+     >- (qexistsl_tac [`st2`,`sup_ops`,`st2a`,`def_ops`,`sup_ops ++ def_ops`,`st3`,
+                       `rc'`,`rbs`,`pvs`,`lbl`,`bops ++ sup_ops ++ def_ops`,`ibb`,`ii`,`bws ++ wd`] >>
+         `LENGTH es + LENGTH (omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es)) = LENGTH args` by
+           (qpat_assum `LENGTH (omitted_defaults _ _ _) = _` mp_tac >>
+            qpat_assum `LENGTH es <= LENGTH args` mp_tac >>
+            POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+         `omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es) = ds` by
+           (qpat_assum `omitted_defaults _ _ _ = DROP _ dflts` mp_tac >>
+            qpat_assum `ds = DROP _ dflts` (fn th => simp[NoAsms,th])) >>
+         qpat_assum `LENGTH es + LENGTH (omitted_defaults _ _ _) = LENGTH args`
+           (fn th => rewrite_tac[th]) >>
+         qpat_assum `omitted_defaults _ _ _ = ds` (fn th => rewrite_tac[th]) >>
+         `lbl = internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
+                  (nsid_to_string (NONE,name))
+                  (cenv.ce_func_param_types (nsid_to_string (NONE,name))) cenv.ce_is_ctor` by
+           (qunabbrev_tac `lbl` >> REFL_TAC) >>
+         rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+         >~ [`rc' = 0 /\ rbs = 0 ==> _`]
+         >- (strip_tac >>
+             qpat_assum `rc' = 0 /\ rbs = 0 ==> ?e. st2 = sa /\ _`
+               (drule_all_then strip_assume_tac) >>
+             qpat_assum `(rc' <> 0 \/ rbs = 0) ==> bops = [] /\ bws = []` mp_tac >>
+             (impl_tac >- (disj2_tac >> first_assum ACCEPT_TAC)) >>
+             disch_then (SUBST1_TAC o CONJUNCT1) >>
+             rewrite_tac[listTheory.APPEND] >> rpt conj_tac >>
+             TRY (first_assum ACCEPT_TAC) >> goal_assum (drule_at Any))
+         >- (disch_tac >>
+             qpat_assum `0 < rc' \/ 0 < rbs ==> ?rb q b.
+                 compile_alloc_buffer buf_n sa = (rb,st2) /\ _`
+               (drule_then (qx_choose_then `rb` (qx_choose_then `q`
+                 (qx_choose_then `b` strip_assume_tac)))) >>
+             `vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (NONE,name)))
+                     (base_ptr rb)` by
+               (qpat_assum `!rb. (0 < rc' \/ 0 < rbs) /\ _ ==> _`
+                  (irule) >> conj_tac >> first_assum ACCEPT_TAC) >>
+             Q_TAC (fn tm => SUBGOAL_THEN tm assume_tac)
+               `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+                       inst.inst_id = sa.cs_next_id`
+             >- (drule_all bodyPtrIfExpAllocCompilerTheory.compile_alloc_buffer_raw_step >>
+                 disch_then (qx_choose_then `outvar` strip_assume_tac) >>
+                 qexists_tac `mk_inst sa.cs_next_id ALLOCA [Lit (n2w buf_n)] [outvar]` >>
+                 conj_tac >- first_assum ACCEPT_TAC >>
+                 simp[NoAsms,venomInstTheory.mk_inst_def]) >>
+             qpat_assum `Abbrev (buf_n = _)`
+               (fn th => rewrite_tac[GSYM (REWRITE_RULE[markerTheory.Abbrev_def] th)]) >>
+             qexistsl_tac [`rb`,`sa.cs_next_id`,`b`] >>
+             rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+             TRY (qpat_assum `rb.buf_operand = Var q` (fn th => rewrite_tac[th]) >>
+                  first_assum ACCEPT_TAC >> NO_TAC ORELSE all_tac) >>
+             TRY (qpat_assum `rb.buf_size = buf_n` (fn th => rewrite_tac[th]) >>
+                  first_assum ACCEPT_TAC) >>
+             TRY (simp[NoAsms] >> NO_TAC)
+             >~ [`0 < rc' ==> _`]
+             >- (disch_tac >>
+                 qpat_assum `0 < rc' ==> ?b r m e. compile_alloc_buffer _ sa = (b,st2) /\
+                              emit_multi_op INVOKE _ rc' st3 = (r,m) /\ _`
+                   (drule_then (qx_choose_then `rbuf` (qx_choose_then `results`
+                     (qx_choose_then `mid` (qx_choose_then `ignored` strip_assume_tac))))) >>
+                 `rbuf = rb` by
+                   (qpat_assum `compile_alloc_buffer (32 * rc') sa = (rbuf,st2)` mp_tac >>
+                    qpat_assum `compile_alloc_buffer buf_n sa = (rb,st2)` mp_tac >>
+                    qunabbrev_tac `buf_n` >> simp[NoAsms] >>
+                    qpat_assum `0 < rc'` (fn th => simp[NoAsms,th])) >>
+                 qpat_assum `(rc' <> 0 \/ rbs = 0) ==> bops = [] /\ bws = []` mp_tac >>
+                 (impl_tac >- (disj1_tac >> qpat_assum `0 < rc'` mp_tac >> decide_tac)) >>
+                 disch_then (SUBST1_TAC o CONJUNCT1) >> rewrite_tac[listTheory.APPEND] >>
+                 qexistsl_tac [`results`,`mid`,`ignored`] >>
+                 qpat_assum `rbuf = rb` (SUBST1_TAC o SYM) >>
+                 conj_tac >> first_assum ACCEPT_TAC) >>
+             disch_tac >>
+             `rc' = 0 /\ 0 < rbs` by
+               (qpat_assum `rc' = 0` mp_tac >>
+                qpat_assum `0 < rc' \/ 0 < rbs` mp_tac >>
+                POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+             `buf_n = rbs` by
+               (qpat_assum `rc' = 0` (fn th => simp[NoAsms,Abbr `buf_n`,th])) >>
+             `!rbuf. compile_alloc_buffer rbs sa = (rbuf,st2) ==> rbuf = rb` by
+               (gen_tac >> qpat_assum `compile_alloc_buffer buf_n sa = (rb,st2)` mp_tac >>
+                qpat_assum `buf_n = rbs` (fn th => rewrite_tac[th]) >>
+                POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+             qpat_assum `rc' = 0 /\ 0 < rbs ==> ?p off. compile_alloc_buffer rbs sa = (p,st2) /\
+                          bops = [p.buf_operand] /\ _`
+               (drule_all_then (qx_choose_then `p` (qx_choose_then `off` strip_assume_tac))) >>
+             `p = rb` by (first_assum irule >> first_assum ACCEPT_TAC) >>
+             qpat_x_assum `p = rb` SUBST_ALL_TAC >>
+             `off = b` by
+               (qpat_assum `FLOOKUP u.vs_allocas sa.cs_next_id = SOME (off,rb.buf_size)` mp_tac >>
+                qpat_assum `FLOOKUP u.vs_allocas sa.cs_next_id = SOME (b,buf_n)`
+                  (fn th => simp[NoAsms,th])) >>
+             qpat_x_assum `off = b` SUBST_ALL_TAC >>
+             qpat_assum `rc' = 0 /\ 0 < rbs ==> ?rbuf e. compile_alloc_buffer rbs sa = (rbuf,st2) /\
+                          emit_void INVOKE _ st3 = (e,sm) /\ _`
+               (drule_all_then (qx_choose_then `rbuf` (qx_choose_then `ignored` strip_assume_tac))) >>
+             `rbuf = rb` by (first_assum irule >> first_assum ACCEPT_TAC) >>
+             qpat_x_assum `rbuf = rb` SUBST_ALL_TAC >>
+             `cenv.ce_struct_fields = make_struct_fields_map tops` by
+               (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,bodySimTheory.body_inv_def]) >>
+             `rbs = type_memory_size rtv` by
+               (irule (cj 2 args_return_buffer_geometry) >>
+                conj_tac >- first_assum ACCEPT_TAC >>
+                qexistsl_tac [`cenv`,`cx`,`tenv`,`es0`,`rc'`,`pvs`,`ret`,`tops`,`MAP SND args`] >>
+                rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+                qpat_assum `cenv.ce_func_info _ = compute_func_info _ _ _ _` mp_tac >>
+                qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` (fn th => simp[NoAsms,th])) >>
+             qpat_assum `bops = [rb.buf_operand]` SUBST1_TAC >>
+             qpat_assum `bws = [n2w b]` SUBST1_TAC >>
+             simp[NoAsms,listTheory.APPEND,listTheory.HD] >> rpt conj_tac
+             >- (qpat_assum `emit_void INVOKE _ st3 = (ignored,sm)` mp_tac >> simp[NoAsms])
+             >- (qpat_assum `rbs = type_memory_size rtv` (SUBST1_TAC o SYM) >>
+                 qpat_assum `buf_n = rbs` (SUBST1_TAC o SYM) >>
+                 qpat_assum `rb.buf_size = buf_n` (fn th => simp[NoAsms,th])) >>
+             `b MOD dimword (:256) <= b` by simp[arithmeticTheory.MOD_LESS_EQ] >>
+             qpat_assum `rbs = type_memory_size rtv` (SUBST1_TAC o SYM) >>
+             qpat_assum `buf_n = rbs` (SUBST1_TAC o SYM) >>
+             qpat_assum `b MOD dimword (:256) <= b` mp_tac >>
+             qpat_assum `b + buf_n <= u.vs_alloca_next` mp_tac >>
+             POP_ASSUM_LIST (K ALL_TAC) >> decide_tac)
+         >- (`lowering_context_ok ctx` by
+               (qpat_assum `body_inv _ _ _ _` mp_tac >>
+                POP_ASSUM_LIST (K ALL_TAC) >>
+                rw[bodySimTheory.body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[] >>
+                metis_tac[vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry,
+                          deployUnitProducersTheory.lower_vyper_deploy_unit_context_ok]) >>
+             drule_all args_enter_invoke >> strip_tac >> goal_assum (drule_at Any)) >>
+         rpt gen_tac >> strip_tac >>
+         `lbl' = internal_fn_label (build_func_ids 0 tops name) name (MAP SND args)
+                   cenv.ce_is_ctor /\
+          has_rb = ((returns_stack_count
+            (\k. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) k)) ret = 0) /\
+            ret <> NoneT) /\
+          params = ZIP (MAP FST args, compute_pass_via_stack (MAP SND args)
+            (returns_stack_count
+              (\k. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) k)) ret))` by
+           (qpat_assum `set_internal_package_target _ _ = _` mp_tac >>
+            simp[NoAsms,compileVyperTheory.package_internal_fn_def,
+                 compileVyperTheory.set_internal_package_target_def] >> strip_tac >>
+            rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE first_assum (ACCEPT_TAC o SYM))) >>
+         `cenv.ce_func_ids = build_func_ids 0 tops` by
+           (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
+            simp[NoAsms,bodySimTheory.body_inv_def]) >>
+         `lbl' = lbl` by
+           (qpat_assum `lbl' = internal_fn_label _ _ _ _` SUBST1_TAC >>
+            qpat_assum `lbl = internal_fn_label _ _ _ _` SUBST1_TAC >>
+            qpat_assum `cenv.ce_func_ids = _` SUBST1_TAC >>
+            qpat_assum `cenv.ce_func_param_types name = _` (fn th =>
+              simp[NoAsms,nsid_to_string_def,th,listTheory.TAKE_DROP])) >>
+         `compute_func_info
+            (\k. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) k))
+            ret (type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ret)
+            (MAP SND args) = (rc',rbs,pvs)` by
+           (qpat_assum `cenv.ce_func_info _ = compute_func_info _ _ _ _` mp_tac >>
+            qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` (fn th => simp[NoAsms,th])) >>
+         `rc' = returns_stack_count
+            (\k. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) k)) ret` by
+           (qpat_assum `compute_func_info _ _ _ _ = (rc',rbs,pvs)` mp_tac >>
+            simp[NoAsms,compute_func_info_def]) >>
+         `has_rb <=> rc' = 0 /\ 0 < rbs` by
+           (`cenv.ce_struct_fields = make_struct_fields_map tops` by
+              (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,bodySimTheory.body_inv_def]) >>
+            qpat_assum `has_rb = _` SUBST1_TAC >>
+            qpat_assum `rc' = returns_stack_count _ _` (SUBST1_TAC o SYM) >>
+            irule (cj 1 args_return_buffer_geometry) >>
+            rpt (goal_assum (drule_at Any)) >> simp[]) >>
+         conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
+         `ce.ce_module = cenv.ce_module /\
+          ce.ce_module_vars = cenv.ce_module_vars /\
+          ce.ce_module_var_type = cenv.ce_module_var_type /\
+          ce.ce_is_ctor = cenv.ce_is_ctor` by
+           (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
+            qpat_assum `set_internal_package_target _ _ = _` mp_tac >>
+            POP_ASSUM_LIST (K ALL_TAC) >>
+            simp[compileVyperTheory.package_internal_fn_def,
+                 compileVyperTheory.set_internal_package_target_def,
+                 compileVyperTheory.update_cenv_nonreentrant_def] >> strip_tac >>
+            qpat_assum `_ = ce` (SUBST1_TAC o SYM) >>
+            simp[NoAsms,bodySimTheory.body_inv_def,bodySimTheory.cenv_module_pins_def,
+                 immutableLocationPropsTheory.build_compile_env_module_vars,
+                 compileVyperTheory.build_compile_env_def] >>
+            strip_tac >> reverse conj_tac >- metis_tac[] >>
+            rpt (pairarg_tac >> simp[])) >>
+         conj_tac
+         >- (qpat_assum `stmt_state_rel H ctx func cenv cx ed u`
+               (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_immutable_base_zero) >>
+             simp[exprLoweringPropsTheory.immutable_base_zero_alt]) >>
+         conj_tac
+         >- (qpat_assum `stmt_state_rel H ctx func cenv cx ed u`
+               (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_state_rel) >>
+             disch_then (mp_tac o MATCH_MP stmtSimReturnTheory.state_rel_scopes_nil) >>
+             strip_tac >> irule exprLoweringPropsTheory.state_rel_cenv_cong >>
+             qexists `cenv` >> simp[vyperStateTheory.lookup_scopes_def]) >>
+         `immutable_alloca_sep func cenv cx ed u` by
+           (qpat_assum `stmt_state_rel H ctx func cenv cx ed u`
+             (ACCEPT_TAC o MATCH_MP bodyFullIntCallReturnFrameTheory.return_stmt_immutable_sep)) >>
+         conj_tac
+         >- (rewrite_tac[intCallCalleeTheory.internal_immutable_regions_def] >>
+             qpat_assum `ce.ce_module = cenv.ce_module` SUBST1_TAC >>
+             qpat_assum `ce.ce_module_vars = cenv.ce_module_vars` SUBST1_TAC >>
+             qpat_assum `ce.ce_module_var_type = cenv.ce_module_var_type` SUBST1_TAC >>
+             qpat_assum `ce.ce_is_ctor = cenv.ce_is_ctor` SUBST1_TAC >>
+             simp[NoAsms] >> disch_tac >> reverse conj_tac
+             >- (rpt gen_tac >> strip_tac >>
+                 dxrule_all (cj 1 immutableDeployAssignFactsTheory.immutable_assign_declared_region) >>
+                 simp[NoAsms]) >>
+             rpt gen_tac >> strip_tac >> reverse conj_tac
+             >- (qpat_assum `immutable_alloca_sep func cenv cx ed u` mp_tac >>
+                 simp[NoAsms,exprLoweringPropsTheory.immutable_alloca_sep_def] >>
+                 strip_tac >> first_x_assum drule_all >> simp[NoAsms]) >>
+             `state_well_typed ed` by
+               (qpat_assum `expr_sim_inv cenv cx tenv ed` mp_tac >>
+                simp[NoAsms,expr_sim_inv_def]) >>
+             irule valueTypingMemoryPropsTheory.value_has_type_memory_wf >>
+             qpat_x_assum `FLOOKUP (case ALOOKUP ed.immutables _ of _ => _ | _ => _) _ = SOME _`
+               mp_tac >>
+             Cases_on `ALOOKUP ed.immutables cx.txn.target` >> simp[NoAsms] >> strip_tac >>
+             drule_all vyperTypeEnvTheory.state_well_typed_immutables_ALOOKUP >> strip_tac >>
+             drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >> simp[NoAsms]) >>
+         `params = ZIP (MAP FST args,pvs)` by
+           (qpat_assum `params = ZIP _` SUBST1_TAC >>
+            qpat_assum `compute_func_info _ _ _ _ = (rc',rbs,pvs)` mp_tac >>
+            simp[NoAsms,compute_func_info_def] >> strip_tac >> simp[]) >>
+         `ALL_DISTINCT (MAP FST args)` by
+           (`supported_program tops` by
+              (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,bodySimTheory.body_inv_def]) >>
+            qpat_assum `MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops`
+              (mp_then Any mp_tac supportedProgramTheory.supported_program_function) >>
+            simp[] >> metis_tac[supportedProgramTheory.supported_function_body_binding_contract]) >>
+         `ce.ce_vars = FST (allocate_args (get_struct_fields (make_struct_fields_map tops)) args 0 FEMPTY)` by
+           (qpat_assum `set_internal_package_target _ _ = _` mp_tac >>
+            POP_ASSUM_LIST (K ALL_TAC) >>
+            simp[compileVyperTheory.package_internal_fn_def,
+                 compileVyperTheory.set_internal_package_target_def,
+                 compileVyperTheory.update_cenv_nonreentrant_def] >> strip_tac >>
+            qpat_assum `_ = ce` (SUBST1_TAC o SYM) >>
+            simp[NoAsms,compileVyperTheory.build_compile_env_def] >>
+            rpt (pairarg_tac >> simp[])) >>
+         `MAP FST params = MAP FST args /\ LENGTH params = LENGTH args` by
+           (qpat_assum `params = ZIP (MAP FST args,pvs)` SUBST1_TAC >>
+            simp[listTheory.LENGTH_ZIP,vyperTypingTheory.MAP_FST_ZIP_MAP_FST]) >>
+         `LENGTH wd = LENGTH args` by
+           (qpat_assum `LENGTH wd = _` mp_tac >>
+            qpat_assum `LENGTH (MAP SND args) = LENGTH (sup_ops ++ def_ops)` mp_tac >>
+            simp[NoAsms]) >>
+         `LENGTH bws = if has_rb then 1 else 0` by
+           (qpat_assum `has_rb <=> rc' = 0 /\ 0 < rbs` SUBST1_TAC >>
+            Cases_on `rc' = 0 /\ 0 < rbs`
+            >- (qpat_assum `rc' = 0 /\ 0 < rbs` strip_assume_tac >>
+                qpat_assum `rc' = 0 /\ 0 < rbs ==> ?rb b. _`
+                  (mp_then Any mp_tac TRUTH ORELSE mp_tac) >>
+                simp[] >> strip_tac >> simp[]) >>
+            `rc' <> 0 \/ rbs = 0` by decide_tac >>
+            qpat_assum `rc' <> 0 \/ rbs = 0 ==> _` mp_tac >> simp[]) >>
+         `!i. i < LENGTH params ==>
+            FST (EL i params) = FST (EL i args) /\
+            SND (EL i params) = EL i pvs /\
+            EL ((if has_rb then 1 else 0) + i) (bws ++ wd) = EL i wd` by
+           (rpt strip_tac >> simp[listTheory.EL_ZIP,listTheory.EL_MAP,listTheory.EL_APPEND_EQN]) >>
+         `cenv.ce_struct_fields = make_struct_fields_map tops` by
+           (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,bodySimTheory.body_inv_def]) >>
+         `!i. i < LENGTH params ==>
+            ?off tv.
+              evaluate_type (get_tenv cx) (SND (EL i args)) = SOME tv /\
+              FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc off (type_memory_size tv)) /\
+              FLOOKUP penv (FST (EL i params)) = SOME
+                <|assignable := T; type := tv; value := EL i (xs ++ dvs); popped := []|>` by
+           (rpt strip_tac >>
+            `i < LENGTH args` by simp[] >>
+            qpat_assum `bind_arguments _ _ _ = SOME penv`
+              (mp_then Any mp_tac entryArgPtrsTheory.bind_arguments_lookup_index) >>
+            disch_then (qspec_then `i` mp_tac) >> simp[] >>
+            disch_then (qx_choose_then `tv` strip_assume_tac) >>
+            `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) (SND (EL i args)) =
+             type_memory_size tv` by
+               (qpat_assum `expr_sim_inv cenv cx tenv ed`
+                  (mp_then Any mp_tac expr_sim_inv_memory_size) >>
+                disch_then (qspec_then `SND (EL i args)` mp_tac) >>
+                simp[GSYM structFieldsPropsTheory.type_mem_bytes_type_memory_bytes]) >>
+            qpat_assum `ALL_DISTINCT (MAP FST args)`
+              (mp_then Any mp_tac entryStateRelTheory.allocate_args_lookup) >>
+            disch_then (qspecl_then [`get_struct_fields (make_struct_fields_map tops)`, `0`, `FEMPTY`]
+              (mp_tac o CONJUNCT2)) >>
+            simp[Once listTheory.EVERY_EL] >> disch_then (qspec_then `i` mp_tac) >>
+            simp[] >> metis_tac[]) >>
+         qpat_x_assum `!j rt. j < LENGTH ([] ++ sup_ops ++ def_ops) /\ _ ==> _`
+           (mp_tac o SRULE [listTheory.TAKE_DROP,listTheory.APPEND]) >>
+         qpat_assum `get_tenv cxd = get_tenv cx` (fn th => simp[NoAsms,th,listTheory.EL_MAP]) >>
+         strip_tac >>
+         FAIL_TAC "package argument relations and resources") >>
+     FAIL_TAC "decoded packet fields") >>
   Q_TAC ASM_CASES_TAC `?err failed. lock_if_nr cx nr (is_view_mut mut) ed = (INR err,failed)`
   >- (qpat_x_assum `?err failed. lock_if_nr _ _ _ _ = (INR err,failed)`
         (qx_choose_then `err` (qx_choose_then `failed` assume_tac)) >>
