@@ -2,7 +2,7 @@ Theory entryExpressionCode
 Ancestors
   entryDispatcherCode entryCallCode entryAggregateCode entryValueCode
   entryArithmeticCode entryBuiltinCode entryCodePredicate entryContextCodePredicate
-  exprLowering exprCallBounds supportedExprs exprSimHypsDefs targetPlaceLive
+  exprLowering exprCallBounds supportedExprs exprSimHypsDefs targetPlaceLive list
 
 Theorem entry_code_invalid_expr[local]:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (invalid_expr_call ty)
@@ -14,7 +14,7 @@ Proof
 QED
 
 Theorem entry_code_expr_callback[local]:
-  (expr_size e < bound ==>
+  (expr_size e + cenv_defaults_size ce < bound ==>
    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (expr_child_callback bound cfn ce ty e)
@@ -24,9 +24,9 @@ Proof
 QED
 
 Theorem entry_code_ifexp_body[local]:
-  (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et c)) /\
-  (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et a)) /\
-  (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et b)) ==>
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et c)) /\
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et a)) /\
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et b)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_expr_body cfn bfn tfn ce ty (IfExp ann c a b))
 Proof
@@ -36,11 +36,11 @@ Proof
     (irule entry_code_lower_value >> simp[]) >>
   rw[entry_preserves_code_def, compile_expr_body_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  qpat_x_assum `!ce et. entry_preserves_code _ (cfn ce et a)`
-    (qspecl_then [`ce`, `ty`] (fn th =>
+  qpat_x_assum `!et. entry_preserves_code _ (cfn ce et a)`
+    (qspec_then `ty` (fn th =>
       imp_res_tac (SRULE [entry_preserves_code_def] th))) >>
-  qpat_x_assum `!ce et. entry_preserves_code _ (cfn ce et b)`
-    (qspecl_then [`ce`, `ty`] (fn th =>
+  qpat_x_assum `!et. entry_preserves_code _ (cfn ce et b)`
+    (qspec_then `ty` (fn th =>
       imp_res_tac (SRULE [entry_preserves_code_def] th))) >>
   qpat_x_assum `entry_preserves_code _ (lower_value _ _ _ _)`
     (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th)) >>
@@ -55,7 +55,7 @@ Proof
 QED
 
 Theorem entry_code_struct_body[local]:
-  (!name e ce et. MEM (name,e) fields ==>
+  (!name e et. MEM (name,e) fields ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_expr_body cfn bfn tfn ce ty (StructLit ann ns fields))
@@ -96,9 +96,9 @@ QED
 Theorem entry_code_expr_equation[local]:
   compile_expr ce ty e =
     compile_expr_body
-      (expr_child_callback (expr_size e) compile_expr)
-      (builtin_child_callback (expr_size e) compile_builtin_dispatch)
-      (type_child_callback (expr_size e) compile_type_builtin_dispatch) ce ty e
+      (expr_child_callback (expr_size e + cenv_defaults_size ce) compile_expr)
+      (builtin_child_callback (expr_size e + cenv_defaults_size ce) compile_builtin_dispatch)
+      (type_child_callback (expr_size e + cenv_defaults_size ce) compile_type_builtin_dispatch) ce ty e
 Proof
   simp[Once FUN_EQ_THM, Once compile_expr_raw_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
@@ -114,20 +114,43 @@ Proof
          entry_code_emit_void] >> rpt gen_tac)
 QED
 
+Theorem entry_code_defaults_without[local]:
+  EVERY (EVERY (supported_expr tops) o SND) cenv.ce_func_defaults ==>
+  EVERY (EVERY (supported_expr tops) o SND)
+    (cenv_without_defaults cenv name).ce_func_defaults
+Proof
+  simp[cenv_without_defaults_def, EVERY_MEM, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem entry_code_omitted_default_supported[local]:
+  EVERY (EVERY (supported_expr tops) o SND) cenv.ce_func_defaults /\
+  MEM e (omitted_defaults cenv name n) ==> supported_expr tops e
+Proof
+  rw[omitted_defaults_def] >>
+  Cases_on `ALOOKUP cenv.ce_func_defaults name` >> gvs[] >>
+  drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+  gvs[EVERY_MEM] >>
+  metis_tac[rich_listTheory.MEM_DROP_IMP, pairTheory.SND]
+QED
+
 Theorem entry_code_supported_union[local]:
   !e cenv ty.
+    EVERY (EVERY (supported_expr tops) o SND) cenv.ce_func_defaults /\
     (supported_pure_expr tops e \/ supported_place_expr tops e \/
      supported_effect_expr tops e \/ supported_effect_place_expr tops e) ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_expr cenv ty e)
 Proof
-  measureInduct_on `expr_size e` >> rpt gen_tac >>
-  disch_tac >>
-  `!ce et child. expr_size child < expr_size e /\
+  measureInduct_on `(\(e,ce). expr_size e + cenv_defaults_size ce) (e,cenv)` >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  qpat_x_assum `_ = (e,cenv)` SUBST_ALL_TAC >>
+  `!et child. expr_size child < expr_size e /\
      (supported_pure_expr tops child \/ supported_place_expr tops child \/
       supported_effect_expr tops child \/ supported_effect_place_expr tops child) ==>
      entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-       (expr_child_callback (expr_size e) compile_expr ce et child)` by
-    (rpt strip_tac >> irule entry_code_expr_callback >> metis_tac[]) >>
+       (expr_child_callback (expr_size e + cenv_defaults_size cenv) compile_expr cenv et child)` by
+    (rpt strip_tac >> irule entry_code_expr_callback >> strip_tac >>
+     first_x_assum irule >> simp[] >> metis_tac[]) >>
   pure_rewrite_tac[Once entry_code_expr_equation] >>
   Cases_on `e`
   >~ [`Name _ _`] >- suspend "name"
@@ -229,11 +252,16 @@ Resume entry_code_supported_union[type]:
 QED
 
 Resume entry_code_supported_union[call]:
+  gvs[supported_pure_expr_def, supported_effect_expr_def] >>
   simp[entry_preserves_code_def, compile_expr_body_def] >>
   pure_rewrite_tac[GSYM entry_preserves_code_def] >>
-  irule entry_code_supported_call >>
-  reverse conj_tac
-  >- (gvs[supported_pure_expr_def, supported_effect_expr_def] >> metis_tac[]) >>
+  irule entry_code_supported_call >> reverse (rpt conj_tac)
+  >- (qexistsl_tac [`t`, `tops`] >> simp[])
+  >- (rpt strip_tac >> irule entry_code_expr_callback >> strip_tac >>
+      qpat_x_assum `!y. _ < _ ==> _` irule >>
+      simp[entry_code_defaults_without] >>
+      drule_all entry_code_omitted_default_supported >>
+      gvs[supported_expr_def, vyperASTTheory.expr_size_def] >> metis_tac[]) >>
   rpt strip_tac >>
   gvs[supported_pure_expr_def, supported_effect_expr_def, vyperASTTheory.expr_size_def] >>
   first_x_assum irule >> conj_tac
@@ -259,7 +287,7 @@ Resume entry_code_supported_union[pop]:
   gvs[supported_effect_expr_def] >>
   `entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
      (compile_get_target_ptr
-       (expr_child_callback (expr_size (Pop ann (TopLevelNameTarget p))) compile_expr)
+       (expr_child_callback (expr_size (Pop ann (TopLevelNameTarget p)) + cenv_defaults_size cenv) compile_expr)
        cenv (TopLevelNameTarget p))` by
     (irule entry_code_get_target_ptr >> simp[targetPlaceLiveTheory.target_indices_def]) >>
   rw[entry_preserves_code_def, compile_expr_body_def] >>
@@ -273,6 +301,7 @@ QED
 Finalise entry_code_supported_union
 
 Theorem entry_code_supported_pure_expr:
+  EVERY (EVERY (supported_expr tops) o SND) cenv.ce_func_defaults /\
   supported_pure_expr tops e ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_expr cenv ty e)
 Proof
@@ -280,6 +309,7 @@ Proof
 QED
 
 Theorem entry_code_supported_place_expr:
+  EVERY (EVERY (supported_expr tops) o SND) cenv.ce_func_defaults /\
   supported_place_expr tops e ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_expr cenv ty e)
 Proof
@@ -287,6 +317,7 @@ Proof
 QED
 
 Theorem entry_code_supported_effect_expr:
+  EVERY (EVERY (supported_expr tops) o SND) cenv.ce_func_defaults /\
   supported_effect_expr tops e ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_expr cenv ty e)
 Proof
@@ -294,6 +325,7 @@ Proof
 QED
 
 Theorem entry_code_supported_effect_place_expr:
+  EVERY (EVERY (supported_expr tops) o SND) cenv.ce_func_defaults /\
   supported_effect_place_expr tops e ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_expr cenv ty e)
 Proof
@@ -301,6 +333,7 @@ Proof
 QED
 
 Theorem entry_code_supported_expr:
+  EVERY (EVERY (supported_expr tops) o SND) cenv.ce_func_defaults /\
   supported_expr tops e ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_expr cenv ty e)
 Proof

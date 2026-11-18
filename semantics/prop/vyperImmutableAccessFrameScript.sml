@@ -128,24 +128,11 @@ Proof
   drule set_immutable_key_frame >> simp[]
 QED
 
-Theorem immutable_frame_refl[local]:
-  ^immutable_frame cx A st st
-Proof
-  simp[]
-QED
-
 Theorem immutable_frame_trans[local]:
   ^immutable_frame cx A st mid /\ ^immutable_frame cx A mid st' ==>
   ^immutable_frame cx A st st'
 Proof
   metis_tac[]
-QED
-
-Theorem immutable_frame_stack[local]:
-  ^immutable_frame (cx with stk := stk) A st st' =
-  ^immutable_frame cx A st st'
-Proof
-  simp[]
 QED
 
 (* Target provenance: indices may have effects, but cannot change the root. *)
@@ -156,7 +143,8 @@ Theorem lookup_global_immutable_origin[local]:
 Proof
   simp[lookup_global_def, vyperMiscTheory.option_CASE_rator,
        vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
-       bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+       bind_def, ignore_bind_def, record_storage_event_def,
+       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -177,7 +165,9 @@ Proof
   >> simp[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def] >>
   rpt strip_tac >>
   `?path0. pv = PlaceR (ImmutablePlace src id path0)` by
-    (Cases_on `pv` >> gvs[extend_place_def, raise_def]
+    (Cases_on `pv` >>
+     gvs[extend_place_def, ignore_bind_def, record_storage_event_def,
+         bind_def, return_def, raise_def, AllCaseEqs()]
      >- (Cases_on `p` >>
          gvs[extend_place_def, extend_memory_place_def, bind_def,
              ignore_bind_def, return_def, AllCaseEqs()] >>
@@ -320,7 +310,7 @@ Theorem evaluate_immutable_global_case[local]:
   ^(immutable_constructor_case "TopLevelName")
 Proof
   BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def] >>
-  imp_res_tac lookup_global_state >> gvs[]
+  imp_res_tac lookup_global_immutables >> gvs[]
 QED
 
 Theorem evaluate_immutable_flag_case[local]:
@@ -348,7 +338,7 @@ Theorem evaluate_immutable_baseglobal_case[local]:
   ^(immutable_constructor_case "TopLevelNameTarget")
 Proof
   BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def] >>
-  imp_res_tac lookup_global_state >> gvs[]
+  imp_res_tac lookup_global_immutables >> gvs[]
 QED
 
 Theorem evaluate_immutable_attribute_case[local]:
@@ -357,7 +347,8 @@ Proof
   BETA_TAC >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
       int_calls_expr_def] >>
-  imp_res_tac select_result_state >> gvs[] >>
+  imp_res_tac select_result_state >>
+  gvs[evaluation_state_component_equality] >>
   qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
   simp[] >> disch_then drule_all >> simp[]
 QED
@@ -377,7 +368,9 @@ Proof
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
       int_calls_expr_def] >>
   imp_res_tac subscript_base_read_state >>
-  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  imp_res_tac read_result_state >>
+  imp_res_tac select_result_state >>
+  gvs[evaluation_state_component_equality] >>
   gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
   last_x_assum (drule_then (drule_then assume_tac)) >>
   rpt (qpat_x_assum `!s r t. eval_expr _ _ _ = _ ==> _` drule_all >> strip_tac) >>
@@ -393,7 +386,8 @@ Proof
   BETA_TAC >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
       int_calls_expr_def] >>
-  imp_res_tac extend_place_state >> gvs[] >>
+  imp_res_tac extend_place_state >>
+  gvs[evaluation_state_component_equality] >>
   qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
   simp[] >> disch_then drule_all >> simp[]
 QED
@@ -404,7 +398,9 @@ Proof
   BETA_TAC >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
       int_calls_expr_def] >>
-  imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
+  imp_res_tac read_result_state >>
+  imp_res_tac extend_place_state >>
+  gvs[evaluation_state_component_equality] >>
   gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
   rpt (qpat_x_assum `!s r t. eval_base_place _ _ _ = _ ==> _` drule_all >> strip_tac) >>
   rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
@@ -477,7 +473,7 @@ Proof
   BETA_TAC >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def,
       accesses_expr_def, int_calls_expr_def, accesses_named_exprs_map,
-      vyperTypeEvalSoundnessTheory.int_calls_exprs_MAP_SND] >>
+      vyperTypeEvalProofsTheory.int_calls_exprs_MAP_SND] >>
   qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
   simp[] >> disch_then drule_all >> simp[]
 QED
@@ -918,34 +914,10 @@ Proof
   first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem immutable_results_frame_rule[local]:
-  ^im_results cx es /\ ^callable_closed cx A R /\
-  ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) ==>
-  !st res st'. eval_expr_results cx es st = (res,st') ==>
-    ^immutable_frame cx A st st'
-Proof
-  BETA_TAC >> strip_tac >> gvs[] >>
-  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
-  simp[] >> disch_tac >> rpt strip_tac >>
-  first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
-QED
-
 Theorem immutable_exprs_frame_rule[local]:
   ^im_exprs cx es /\ ^callable_closed cx A R /\
   ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) ==>
   !st res st'. eval_exprs cx es st = (res,st') ==>
-    ^immutable_frame cx A st st'
-Proof
-  BETA_TAC >> strip_tac >> gvs[] >>
-  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
-  simp[] >> disch_tac >> rpt strip_tac >>
-  first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
-QED
-
-Theorem immutable_stmts_frame_rule[local]:
-  ^im_stmts cx ss /\ ^callable_closed cx A R /\
-  ^safe_accesses A R (accesses_stmts ss) (int_calls_stmts ss) ==>
-  !st res st'. eval_stmts cx ss st = (res,st') ==>
     ^immutable_frame cx A st st'
 Proof
   BETA_TAC >> strip_tac >> gvs[] >>
@@ -1370,15 +1342,6 @@ Proof
        AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   Cases_on `y` >> gvs[handle_function_def, return_def, raise_def] >>
   metis_tac[]
-QED
-
-Theorem immutable_intcall_cleanup_frame[local]:
-  ignore_bind (pop_function prev) (unlock_if_nr cx nr view) st = (res,st') ==>
-  ^immutable_frame cx A st st'
-Proof
-  simp[pop_function_def, set_scopes_def, ignore_bind_def, bind_def,
-       return_def, Excl "unlock_if_nr_def"] >>
-  strip_tac >> drule unlock_if_nr_immutables >> simp[]
 QED
 
 val immutable_intcall_prefix = ``\cx src fn (es:expr list) ts mut nr args dflts ret body.

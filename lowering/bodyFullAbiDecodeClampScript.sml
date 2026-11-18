@@ -1,7 +1,7 @@
 Theory bodyFullAbiDecodeClamp
 Ancestors
   bodyFullAbiDecodeClampMemory
-  abiDecodeClampShape abiDecodePtrScalarAbort bodyPtrBopScalarOutcome
+  calldataClampPtr abiDecodePtrScalarAbort bodyPtrBopScalarOutcome
   abiEncoder bodyPtrBopScalarDynamic bodyPtrBopScalarCompile bodyPtrBopScalarSeq
   bodyFullAbiDecodePath instSeqPtrLo abiDecoderReentry emitHelperProps
   exprLoweringProps emitHelper freshWrites compileEnv list pred_set

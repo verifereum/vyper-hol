@@ -9,6 +9,7 @@ Ancestors
   lowerDloadPtrTerminalClosure lowerDloadPtrJointShift lowerDloadPtrJointEnvironmentRead
   lowerDloadPtrJointGas lowerDloadPtrJointIdentity lowerDloadPtrJointExternalCall
   lowerDloadPtrJointCreate lowerDloadPtrJointDelegate lowerDloadPtrJointEntry
+  lowerDloadPtrJointDalloca
 
 (* These are quotation abbreviations only, not HOL definitions. Keeping the
    normal existential literally identical at entry and exit avoids drifting
@@ -16,7 +17,7 @@ Ancestors
 val normal = ``\R ds PH H un g j t.
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -66,6 +67,7 @@ val covered = ``\i n (emitted:instruction list).
   i.inst_opcode = MSTORE8 \/ MEM i.inst_opcode [MSTORE; ISTORE] \/
   i.inst_opcode = MCOPY \/ MEM i.inst_opcode [SLOAD; TLOAD] \/
   MEM i.inst_opcode [SSTORE; TSTORE] \/ i.inst_opcode = ALLOCA \/
+  i.inst_opcode = DALLOCA \/
   (i.inst_opcode = DLOAD /\ SUC n = LENGTH emitted) \/
   (i.inst_opcode = DLOADBYTES /\ SUC n = LENGTH emitted) \/
   MEM i.inst_opcode [CODECOPY; CALLDATACOPY; RETURNDATACOPY; EXTCODECOPY]``;
@@ -75,7 +77,7 @@ fun normal_row th =
   rpt (first_assum (irule_at Any)) >> simp[] >>
   qexists_tac `fuel` >> gvs[];
 
-Theorem dload_joint_covered_next:
+val dload_joint_covered_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -92,61 +94,81 @@ Theorem dload_joint_covered_next:
     (step_prov PH H j t1) (step_taint j t t1 un) g next
     (t1 with vs_inst_idx := SUC t.vs_inst_idx) \/
    dload_terminal_mode lo P vs C ds (step_prov PH H j t1)
-    (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))
+    (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))``;
+
+Theorem dload_joint_covered_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_covered_next_header)))))))
 Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac
   >~ [`SUC n < LENGTH emitted`]
-  >- normal_row dload_joint_interior_next_closed
+  >- normal_row dload_joint_interior_next_closed_static
   >~ [`MEM i.inst_opcode (LT::_)`]
-  >- normal_row dload_joint_tracked_scalar_next
+  >- normal_row dload_joint_tracked_scalar_next_static
   >~ [`i.inst_opcode = ADD`]
-  >- normal_row dload_joint_tracked_affine_next
+  >- normal_row dload_joint_tracked_affine_next_static
   >~ [`i.inst_opcode = SUB`]
-  >- normal_row dload_joint_tracked_affine_next
+  >- normal_row dload_joint_tracked_affine_next_static
   >~ [`MEM i.inst_opcode [ASSIGN; PARAM; RETPC_PARAM]`]
-  >- normal_row dload_joint_tracked_variable_next
+  >- normal_row dload_joint_tracked_variable_next_static
   >~ [`MEM i.inst_opcode [MLOAD; ILOAD]`]
-  >- normal_row dload_joint_tracked_mload_next
+  >- normal_row dload_joint_tracked_mload_next_static
   >~ [`i.inst_opcode = SHA3`]
-  >- normal_row dload_joint_tracked_sha3_next
+  >- normal_row dload_joint_tracked_sha3_next_static
   >~ [`i.inst_opcode = LOG`]
-  >- normal_row dload_joint_tracked_log_next
+  >- normal_row dload_joint_tracked_log_next_static
   >~ [`i.inst_opcode = CALL`]
-  >- normal_row (SRULE [] dload_joint_tracked_external_call_next)
+  >- normal_row (SRULE [] dload_joint_tracked_external_call_next_static)
   >~ [`i.inst_opcode = STATICCALL`]
-  >- normal_row (SRULE [] dload_joint_tracked_external_call_next)
+  >- normal_row (SRULE [] dload_joint_tracked_external_call_next_static)
   >~ [`i.inst_opcode = CREATE`]
-  >- normal_row (SRULE [] dload_joint_tracked_create_next)
+  >- normal_row (SRULE [] dload_joint_tracked_create_next_static)
   >~ [`i.inst_opcode = CREATE2`]
-  >- normal_row (SRULE [] dload_joint_tracked_create_next)
+  >- normal_row (SRULE [] dload_joint_tracked_create_next_static)
   >~ [`i.inst_opcode = DELEGATECALL`]
-  >- normal_row (SRULE [] dload_joint_tracked_delegate_next)
+  >- normal_row (SRULE [] dload_joint_tracked_delegate_next_static)
   >~ [`i.inst_opcode = MSTORE8`]
-  >- normal_row dload_joint_tracked_mstore8_next
+  >- normal_row dload_joint_tracked_mstore8_next_static
   >~ [`MEM i.inst_opcode [MSTORE; ISTORE]`]
-  >- normal_row dload_joint_tracked_mstore_next
+  >- normal_row dload_joint_tracked_mstore_next_static
   >~ [`i.inst_opcode = MCOPY`]
-  >- normal_row dload_joint_tracked_mcopy_next
+  >- normal_row dload_joint_tracked_mcopy_next_static
   >~ [`MEM i.inst_opcode [SLOAD; TLOAD]`]
-  >- normal_row dload_joint_tracked_storage_read_next
+  >- normal_row dload_joint_tracked_storage_read_next_static
   >~ [`MEM i.inst_opcode [SSTORE; TSTORE]`]
-  >- normal_row dload_joint_tracked_storage_write_next
+  >- normal_row dload_joint_tracked_storage_write_next_static
   >~ [`i.inst_opcode = ALLOCA`]
-  >- normal_row dload_joint_tracked_alloca_next
+  >- normal_row dload_joint_tracked_alloca_next_static
+  >~ [`i.inst_opcode = DALLOCA`]
+  >- normal_row dload_joint_tracked_dalloca_next_static
   >~ [`i.inst_opcode = DLOAD`]
-  >- normal_row dload_joint_tracked_dload_complete_next
+  >- normal_row dload_joint_tracked_dload_complete_next_static
   >~ [`i.inst_opcode = DLOADBYTES`]
-  >- normal_row dload_joint_tracked_dloadbytes_complete_next
+  >- normal_row dload_joint_tracked_dloadbytes_complete_next_static
   >~ [`MEM i.inst_opcode [CODECOPY; CALLDATACOPY; RETURNDATACOPY; EXTCODECOPY]`]
   >- (pure_rewrite_tac [AND_CLAUSES] >>
-      irule dload_joint_tracked_external_copy_routed_next >> simp[] >>
+      irule dload_joint_tracked_external_copy_routed_next_static >> simp[] >>
       rpt (first_assum (irule_at Any)) >> simp[] >>
       qexists_tac `fuel` >> gvs[])
   >> disj2_tac >> irule dload_terminal_mode_next >>
   simp[] >> rpt (first_assum (irule_at Any)) >> simp[]
 QED
 
-Theorem dload_joint_covered_shift_next:
+Theorem dload_joint_covered_next:
+  ^dload_joint_covered_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_tac >> match_mp_tac dload_joint_covered_next_static >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
+
+val dload_joint_covered_shift_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -164,23 +186,38 @@ Theorem dload_joint_covered_shift_next:
     (step_prov PH H j t1) (step_taint j t t1 un) g next
     (t1 with vs_inst_idx := SUC t.vs_inst_idx) \/
    dload_terminal_mode lo P vs C ds (step_prov PH H j t1)
-    (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))
+    (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))``;
+
+Theorem dload_joint_covered_shift_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_covered_shift_next_header))))
 Proof
   qabbrev_tac `old = ^covered` >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac
-  >- (pure_rewrite_tac [AND_CLAUSES] >> irule (SRULE [] dload_joint_covered_next) >> simp[] >>
+  >- (pure_rewrite_tac [AND_CLAUSES] >> irule (SRULE [] dload_joint_covered_next_static) >> simp[] >>
       rpt (first_assum (irule_at Any)) >> simp[] >>
       qexists_tac `fuel` >> simp[] >>
       conj_tac >- metis_tac[] >>
-      disj1_tac >> rpt (first_assum (irule_at Any)) >> simp[Abbr `old`] >> conj_tac
-      >- (qpat_x_assum
-            `(_ : instruction -> num -> instruction list -> bool) i n emitted`
-            mp_tac >> simp[]) >>
-      qpat_x_assum `!k. k < LENGTH cs ==> _`
-        (mp_tac o SIMP_RULE (srw_ss()) [LET_THM]) >> simp[])
-  >- normal_row (SRULE [] dload_joint_tracked_shift_next)
+      disj1_tac >> rpt (first_assum (irule_at Any)) >> simp[Abbr `old`] >>
+      qpat_x_assum
+        `(_ : instruction -> num -> instruction list -> bool) i n emitted`
+        mp_tac >> simp[])
+  >- normal_row (SRULE [] dload_joint_tracked_shift_next_static)
   >> disj2_tac >> irule dload_terminal_mode_next >>
   simp[] >> rpt (first_assum (irule_at Any)) >> simp[]
+QED
+
+Theorem dload_joint_covered_shift_next:
+  ^dload_joint_covered_shift_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_tac >> match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) dload_joint_covered_shift_next_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
 QED
 
 val covered_shift = ``\i n emitted. (^covered) i n emitted \/
@@ -198,7 +235,7 @@ Theorem dload_joint_dispatch_residual_classification:
     SUC n <= LENGTH emitted ==>
     (~((^final_covered) i n emitted) <=>
       ~(SUC n < LENGTH emitted) /\
-      MEM i.inst_opcode [MEMTOP; PHI; DALLOCA; GETFMP; SETFMP; FMP_PARAM])
+      MEM i.inst_opcode [MEMTOP; PHI; GETFMP; SETFMP; FMP_PARAM])
 Proof
   rpt gen_tac >> Cases_on `i.inst_opcode` >>
   simp[venomInstTheory.is_terminator_def] >> decide_tac
@@ -245,7 +282,7 @@ Proof
   gvs[listTheory.MEM, venomInstTheory.is_raw_fmp_opcode_def]
 QED
 
-Theorem dload_joint_covered_environment_next:
+val dload_joint_covered_environment_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -263,28 +300,44 @@ Theorem dload_joint_covered_environment_next:
     (step_prov PH H j t1) (step_taint j t t1 un) g next
     (t1 with vs_inst_idx := SUC t.vs_inst_idx) \/
    dload_terminal_mode lo P vs C ds (step_prov PH H j t1)
-    (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))
+    (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))``;
+
+Theorem dload_joint_covered_environment_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_covered_environment_next_header))))
 Proof
   qabbrev_tac `old = ^covered_shift` >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac
   >- (pure_rewrite_tac [AND_CLAUSES] >>
-      irule (SRULE [] dload_joint_covered_shift_next) >> simp[] >>
+      irule (SRULE [] dload_joint_covered_shift_next_static) >> simp[] >>
       rpt (first_assum (irule_at Any)) >> simp[] >>
       qexists_tac `fuel` >> simp[] >>
       conj_tac >- metis_tac[] >>
       disj1_tac >> rpt (first_assum (irule_at Any)) >>
-      simp[Abbr `old`] >> conj_tac
-      >- (qpat_x_assum
-            `(_ : instruction -> num -> instruction list -> bool) i n emitted`
-            mp_tac >> simp[]) >>
-      qpat_x_assum `!k. k < LENGTH cs ==> _`
-        (mp_tac o SIMP_RULE (srw_ss()) [LET_THM]) >> simp[])
-  >- normal_row (SRULE [] dload_joint_tracked_environment_read_next)
-  >- normal_row (SRULE [] dload_joint_tracked_gas_next)
-  >- normal_row (SRULE [] dload_joint_tracked_identity_next)
+      simp[Abbr `old`] >>
+      qpat_x_assum
+        `(_ : instruction -> num -> instruction list -> bool) i n emitted`
+        mp_tac >> simp[])
+  >- normal_row (SRULE [] dload_joint_tracked_environment_read_next_static)
+  >- normal_row (SRULE [] dload_joint_tracked_gas_next_static)
+  >- normal_row (SRULE [] dload_joint_tracked_identity_next_static)
   >> disj2_tac >> irule dload_terminal_mode_next >>
   simp[] >> rpt (first_assum (irule_at Any)) >> simp[]
 QED
+
+Theorem dload_joint_covered_environment_next:
+  ^dload_joint_covered_environment_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_tac >> match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) dload_joint_covered_environment_next_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
+
 
 Theorem dload_joint_dispatch_actual_covered:
   o1_src_inv D C vs /\ o1_ctx_shape C /\
@@ -300,7 +353,7 @@ Proof
   gvs[]
 QED
 
-Theorem dload_joint_next:
+val dload_joint_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -317,10 +370,18 @@ Theorem dload_joint_next:
     (step_prov PH H j t1) (step_taint j t t1 un) g next
     (t1 with vs_inst_idx := SUC t.vs_inst_idx) \/
    dload_terminal_mode lo P vs C ds (step_prov PH H j t1)
-    (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))
+    (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))``;
+
+Theorem dload_joint_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_next_header)))))))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  irule dload_joint_covered_environment_next >>
+  irule (CONV_RULE (DEPTH_CONV BETA_CONV) dload_joint_covered_environment_next_static) >>
   simp[] >> rpt (first_assum (irule_at Any)) >> simp[] >>
   qpat_x_assum `_ \/ dload_terminal_mode _ _ _ _ _ _ _ _ _ _` strip_assume_tac
   >- (disj1_tac >>
@@ -334,7 +395,18 @@ Proof
   disj2_tac >> simp[]
 QED
 
-Theorem dload_joint_entry:
+Theorem dload_joint_next:
+  ^dload_joint_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_tac >> match_mp_tac dload_joint_next_static >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
+
+
+val dload_joint_entry_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -344,9 +416,17 @@ Theorem dload_joint_entry:
   enters_block g
     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) t /\
   active_inst g j t ==>
-  (^normal) (\i n emitted. T) [] [] FEMPTY entry_taint g j t
+  (^normal) (\i n emitted. T) [] [] FEMPTY entry_taint g j t``;
+
+Theorem dload_joint_entry_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_entry_header)))))))
 Proof
-  strip_tac >> drule_all dload_actual_joint_entry_tracked >>
+  strip_tac >> drule_all dload_actual_joint_entry_tracked_static >>
   disch_then (qspec_then `P` strip_assume_tac) >>
   `set (fn_ir_vars f) =
     {v | ?ci. MEM ci (fn_insts f) /\
@@ -378,4 +458,14 @@ Proof
   conj_tac >- metis_tac[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `q'` >> first_assum ACCEPT_TAC
+QED
+
+Theorem dload_joint_entry:
+  ^dload_joint_entry_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_tac >> match_mp_tac dload_joint_entry_static >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
 QED

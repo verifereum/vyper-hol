@@ -20,10 +20,11 @@ Theorem ld_joint_external_update_next:
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
   occ_frame_reachable vs C stk PG G1 tn1 fn inst2
     (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H1 /\
-  occurrence_annotation_ok n a U B HP H1 stk PG G1
+  occurrence_annotation_ok (dyn_floor C vs) n a U B HP H1 stk PG G1
     (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
   ld_env_agree sites fn H1 tn1 s1 t1 /\
   ld_memory_agree sites lo tn1.t_mem s1.vs_memory t1.vs_memory /\
+  ld_dyn_agree (dyn_floor C vs) tn1.t_mem s1.vs_memory t1.vs_memory /\
   ld_shared_agree D s.vs_call_ctx.cc_address tn1 s1 t1 /\
   s1.vs_returndata = t1.vs_returndata ==>
   ?u fn'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\

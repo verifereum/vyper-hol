@@ -410,8 +410,7 @@ Proof
   drule (cj 1 eval_expr_no_control) >>
   rename1 `INR exc` >> Cases_on `exc` >>
   gvs[no_control_exc_def, no_type_error_result_def]
-  >~ [`Error err`] >- (Cases_on `err` >> gvs[]) >>
-  metis_tac[eval_expr_calls_no_halt, expr_map_pre_def]
+  >~ [`Error err`] >- (Cases_on `err` >> gvs[])
 QED
 
 Theorem expr_map_pre_checked_type:
@@ -1231,12 +1230,13 @@ Proof
       [StorageRoot tr
         (w2n (hashmap_slot base_slot (encode_hashmap_key (expr_type idx) kv))) tvt]`]
     mapping_leaf_vv_holds)) >> strip_tac >>
-  simp[vv_post_def, expr_type_def, vv_at_def] >>
+  simp[vv_post_def, expr_type_def, vv_at_def, vv_place_ptr_def,
+       contextTheory.mk_ptr_def, eval_operand_def] >>
   conj_tac >- (Cases_on `tr` >> gvs[slot_loc_def]) >>
   conj_tac >- (rpt strip_tac >> Cases_on `tr` >> gvs[slot_loc_def]) >>
   qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
   strip_tac >> rpt conj_tac >>
-  FIRST [first_assum ACCEPT_TAC, Cases_on `tr` >> gvs[slot_loc_def] >> NO_TAC]
+  FIRST [first_assum ACCEPT_TAC, Cases_on `tr` >> gvs[slot_loc_def, vv_place_ptr_def] >> NO_TAC]
 
 QED

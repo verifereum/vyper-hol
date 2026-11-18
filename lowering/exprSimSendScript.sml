@@ -63,12 +63,8 @@ Theorem compile_expr_call:
 Proof
   rpt gen_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
-       expr_type_def] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  irule compile_call_callback_contract >>
-  irule expr_child_callback_agrees >>
-  rpt strip_tac >> drule call_callback_child_bound >>
-  simp[expr_size_def]
+       expr_type_def, compile_call_child_calls] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC
 QED
 
 Theorem compile_expr_send_stack:
@@ -869,8 +865,10 @@ Proof
     (Cases_on `has_gas` >> gvs[LENGTH_EQ_NUM_compute]) >>
   gvs[vyperValueTheory.evaluate_type_def] >>
   `accounts_runtime_well_typed ee.accounts` by
-    fs[expr_sim_inv_def,
-       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+    (qpat_assum `expr_sim_inv cenv cx env ee` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[expr_sim_inv_def,
+       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed]) >>
   `outcomes_accounts_typed ee.outcomes` by gvs[expr_sim_inv_def] >>
   Cases_on `bind (eval_send cx has_gas (to_v :: amount_v :: gas_vs))
               (read_result cx) ee` >>

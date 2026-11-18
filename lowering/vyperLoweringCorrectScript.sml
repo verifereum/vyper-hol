@@ -129,7 +129,7 @@ End
 Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     loweringStateRelDefs$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
-    vs.vs_prev_hashes = tx.block_hashes /\
+    tx.block_hashes = TAKE 256 vs.vs_prev_hashes /\
     vs.vs_code = tx.code
 End
 
@@ -141,7 +141,6 @@ Definition initial_venom_state_rel_def:
     value_transfer_ok tx am.accounts /\
     vs.vs_accounts = accounts_after_transfer tx am.accounts /\
     vs.vs_transient = am.tStorage /\ am.logs = [] /\ vs.vs_logs = [] /\
-    am.pending_deletions = [] /\
     tx_env_ok tx /\ venom_env_rel tx vs /\
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
@@ -1110,8 +1109,7 @@ End
 (* The lowered unit's functions and their reachable parts are
    pointer-confined (fn_ptr_ok), with P each function's pointer parameters:
    the return buffer, if any, and the arguments passed in memory:
-   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound for a
-   unit without DALLOCA. *)
+   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound. *)
 Theorem lower_vyper_runtime_unit_fn_ptr_ok:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\

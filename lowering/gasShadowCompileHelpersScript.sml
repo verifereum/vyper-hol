@@ -840,6 +840,12 @@ Proof
     (compile_stage_intcall_args g cenv
        (if sh then MAP gas_shadow_expr es else es) flags tys)`
     by (irule gas_shadow_compiles_stage_intcall_args >> simp[]) >>
+  `!ce es flags tys. gas_shadow_compiles
+    (compile_stage_intcall_args f ce es flags tys)
+    (compile_stage_intcall_args g ce es flags tys)`
+    by (rpt gen_tac >>
+        irule (SIMP_RULE std_ss []
+          (Q.INST [`sh` |-> `F`] gas_shadow_compiles_stage_intcall_args)) >> simp[]) >>
   qabbrev_tac `info = cenv.ce_func_info (nsid_to_string fid)` >>
   PairCases_on `info` >> fs[markerTheory.Abbrev_def] >>
   qpat_x_assum `_ = cenv.ce_func_info _` (assume_tac o SYM) >>
@@ -856,7 +862,10 @@ Proof
    qx_gen_tac `rbuf_opt` >> BETA_TAC >>
    match_mp_tac gas_shadow_compiles_bind >> conj_tac
    >- simp[] >>
-   qx_gen_tac `invoke_args` >> BETA_TAC >>
+   qx_gen_tac `supplied_ops` >> BETA_TAC >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- simp[] >>
+   qx_gen_tac `default_ops` >> BETA_TAC >>
    Cases_on `rbuf_opt` >> Cases_on `info0 > 0` >>
    simp[GSYM comp_bind_def, GSYM comp_return_def, SF ETA_ss] >>
    rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac

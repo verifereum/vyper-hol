@@ -19,7 +19,7 @@ Theory loweringMemCorrect
 Ancestors
   vyperLoweringCorrect vyperCompiler loweringPtrCorrect memSafeRun
   allocaFrontierBound ptrDiscipline lowerDloadDefs contextCodegenRel venomWf
-  venomInst unitMemInv
+  venomInst unitMemInv unitTransformDefs rawReachableFmp ctxLookupAgree
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "tops";
@@ -34,13 +34,16 @@ val _ = Parse.hide "tops";
    distinct labels, an acyclic reachable call graph, the allocation budget
    below the word size) are lowering_context_ok, which run_lowering checks.
    The other conjuncts come from run_lowering: no eom, and no reserved
-   global region.  No DALLOCA is the O1 source shape's
-   (o1_source_unit_ok_no_dalloca), which S4 has. *)
+   global region.  No DALLOCA is a premise: the bridge covers only
+   static allocation. The lowering's pointer check excludes the other raw
+   FMP operations, so the free-memory pointer never moves. The entry floor
+   gives the bridge's two pointer facts. *)
 Theorem lower_vyper_runtime_unit_memory_ok:
   !tops rpolicy unit am tx vs fn lbl D.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     initial_venom_state_rel tops am tx vs /\
     ~ctx_has_dalloca unit.cu_context /\
+    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
     (!fuel. mem_safe_blocks fuel unit.cu_context fn
@@ -79,10 +82,87 @@ Proof
   `!f inst s. alloca_frontier_inv unit.cu_context f inst s ==>
               s.vs_alloca_next < dimword (:256)` by
     (rpt strip_tac >> drule alloca_frontier_inv_bound >> simp[]) >>
+  `EVERY no_raw_fmp_ops unit.cu_context.ctx_functions` by
+    (drule_all lower_vyper_runtime_unit_fn_ptr_ok >> strip_tac >>
+     simp[listTheory.EVERY_MEM, no_raw_fmp_ops_def] >> rpt strip_tac >>
+     rename1 `MEM i (fn_insts f)` >>
+     `fn_ptr_ok P f` by fs[listTheory.EVERY_MEM] >>
+     `i.inst_opcode <> DRET /\ i.inst_opcode <> GETFMP /\
+      i.inst_opcode <> SETFMP /\ i.inst_opcode <> RETFMP` by
+       (fs[fn_ptr_ok_def] >> metis_tac[]) >>
+     `i.inst_opcode <> DALLOCA` by
+       (fs[ctx_has_dalloca_def, listTheory.EVERY_MEM,
+           listTheory.EXISTS_MEM] >> metis_tac[]) >>
+     qpat_x_assum `is_raw_fmp_opcode _` mp_tac >>
+     rpt (qpat_x_assum `i.inst_opcode <> _` mp_tac) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `i.inst_opcode` >> simp[is_raw_fmp_opcode_def]) >>
+  `!f inst s. raw_reachable vs unit.cu_context f inst s ==>
+     dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (rpt strip_tac >> drule raw_reachable_no_raw_fmp_fixed >>
+     simp[] >> strip_tac >>
+     drule raw_reachable_initial_fmp >> strip_tac >> simp[] >>
+     `~is_raw_fmp_opcode inst.inst_opcode` by
+       (fs[listTheory.EVERY_MEM, no_raw_fmp_ops_def] >>
+        imp_res_tac active_inst_mem_fn_insts >> metis_tac[]) >>
+     `inst.inst_opcode <> DALLOCA` by
+       (strip_tac >> gvs[is_raw_fmp_opcode_def]) >>
+     simp[dalloca_no_wrap_def]) >>
   drule_all mem_safe_raw_unit_memory_ok >> strip_tac >>
   drule lower_vyper_runtime_unit_raw_defaults >> strip_tac >>
   drule_all loweringPtrCorrectTheory.lower_vyper_runtime_unit_ptr_taint >> strip_tac >>
   simp[fixed_region_reserved_def]
+QED
+
+Theorem lower_vyper_runtime_unit_dload_in_section:
+  !tops rpolicy unit vs fn lbl.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    (!fuel. mem_safe_blocks fuel unit.cu_context fn
+       (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                   vs_inst_idx := 0 |>))
+    ==> mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                                 s.vs_code = vs.vs_code /\
+                                 s.vs_data_section = vs.vs_data_section)
+          unit.cu_context vs
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  drule lowering_context_ok_bridge >> strip_tac >>
+  `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
+    (imp_res_tac lookup_function_MEM >>
+     imp_res_tac lookup_function_result_name >> simp[]) >>
+  `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
+  `EVERY (\f. ALL_DISTINCT (fn_labels f)) unit.cu_context.ctx_functions` by
+    fs[listTheory.EVERY_MEM] >>
+  rewrite_tac[unitMemInvTheory.mem_inv_def, codegen_reachability_package_def] >>
+  qexists_tac `\c f i s. mem_safe_point c f i s /\
+                         s.vs_code = vs.vs_code /\
+                         s.vs_data_section = vs.vs_data_section` >>
+  rpt conj_tac
+  >- (qspecl_then [`mem_safe_point`,
+        `\c f i s. s.vs_code = vs.vs_code /\
+                   s.vs_data_section = vs.vs_data_section`,
+        `unit.cu_context`] mp_tac
+        contextCodegenRelPropsTheory.reachability_closed_conj >>
+      simp[mem_safe_point_closed, code_data_closed])
+  >- (qexistsl_tac [`"__entry"`, `fn`, `lbl`] >> simp[] >>
+      qspecl_then [`mem_safe_point`,
+        `\c f i s. s.vs_code = vs.vs_code /\
+                   s.vs_data_section = vs.vs_data_section`,
+        `unit.cu_context`, `fn`,
+        `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                    vs_inst_idx := 0 |>`] mp_tac
+        contextCodegenRelPropsTheory.fn_entry_inv_conj >>
+      impl_tac >- (
+        conj_tac >- (irule mem_safe_point_entry >> simp[]) >>
+        qspecl_then [`unit.cu_context`, `fn`,
+          `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                      vs_inst_idx := 0 |>`] mp_tac code_data_entry >>
+        simp[]) >>
+      gvs[]) >>
+  rw[] >> metis_tac[mem_safe_point_dload]
 QED
 
 (* S3's twin for LowerDload: every reachable DLOAD/DLOADBYTES offset,
@@ -149,11 +229,16 @@ QED
    stays below 2^256, so LowerDload's scratch sites do not wrap:
    alloca_frontier_inv bounds the frontier by unit_alloca_budget, and
    lowering_context_ok, which run_lowering checks, leaves 32 bytes per
-   DLOAD above that budget. *)
+   DLOAD above that budget.  With a DALLOCA in the unit the scratch sites
+   also stay below the initial free-memory pointer, which every reachable
+   state keeps, given that budget fits below it. *)
 Theorem lower_vyper_runtime_unit_dload_headroom_ok:
   !tops rpolicy unit am tx vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    initial_venom_state_rel tops am tx vs
+    initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+     unit_alloca_budget unit.cu_context +
+       32 * ctx_dload_count unit.cu_context <= w2n vs.vs_initial_fmp)
     ==> mem_inv dload_headroom_ok unit.cu_context vs
 Proof
   rpt strip_tac >>
@@ -169,15 +254,21 @@ Proof
   `?lbl. fn_entry_label fn = SOME lbl` by
     (Cases_on `fn.fn_blocks` >>
      gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
-  simp[unitMemInvTheory.mem_inv_def, codegen_reachability_package_def] >>
-  qexists_tac `alloca_frontier_inv` >> rpt conj_tac
-  >- (irule alloca_frontier_inv_closed >> simp[])
-  >- (irule alloca_frontier_inv_entry >>
-      simp[ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def, listTheory.MEM_MAP,
-           reachable_call_graph_acyclic_def] >>
-      fs[initial_venom_state_rel_def] >> metis_tac[]) >>
-  rw[dload_headroom_ok_def, alloca_frontier_inv_def, ctx_dload_count_def] >>
-  fs[rich_listTheory.FILTER_FLAT, rich_listTheory.LENGTH_FLAT, listTheory.MAP_MAP_o,
-     combinTheory.o_DEF] >>
-  decide_tac
+  `mem_inv (\ctx fn inst s. s.vs_alloca_next <= unit_alloca_budget ctx)
+     unit.cu_context vs` by
+    (simp[unitMemInvTheory.mem_inv_def, codegen_reachability_package_def] >>
+     qexists_tac `alloca_frontier_inv` >> rpt conj_tac
+     >- (irule alloca_frontier_inv_closed >> simp[])
+     >- (irule alloca_frontier_inv_entry >>
+         simp[ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def,
+              listTheory.MEM_MAP, reachable_call_graph_acyclic_def] >>
+         fs[initial_venom_state_rel_def] >> metis_tac[]) >>
+     rw[alloca_frontier_inv_def] >> decide_tac) >>
+  fs[unitMemInvTheory.mem_inv_raw_reachable] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule ctxLookupAgreeTheory.raw_reachable_initial_fmp >> strip_tac >>
+  fs[dload_headroom_ok_def, ctx_dload_count_def, ctx_has_dalloca_def,
+     rich_listTheory.FILTER_FLAT, rich_listTheory.LENGTH_FLAT,
+     listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  rw[] >> fs[] >> decide_tac
 QED

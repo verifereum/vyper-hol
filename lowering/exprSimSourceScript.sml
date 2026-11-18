@@ -18,6 +18,32 @@ Ancestors
 Libs
   pairLib monadsyntax
 
+Theorem expr_sim_inv_nocalls_copies_subscript_base:
+  expr_sim_inv cenv cx env es /\
+  int_calls_expr obj = [] /\ int_calls_expr idx = [] ==>
+  copies_subscript_base cenv obj idx = subscript_reads_base cx obj idx
+Proof
+  strip_tac >>
+  `!src. ALOOKUP cenv.ce_modules src = get_module_code cx src` by
+    fs[expr_sim_inv_def, bare_globals_layout_def] >>
+  `!src. ALOOKUP cenv.ce_modules src =
+     ALOOKUP (case ALOOKUP cx.sources cx.txn.target of
+                NONE => [] | SOME mods => mods) src` by
+    (Cases_on `ALOOKUP cx.sources cx.txn.target` >>
+     fs[vyperContextTheory.get_module_code_def]) >>
+  `nonconstant_reads cenv.ce_modules (accesses_expr obj) =
+   nonconstant_reads (case ALOOKUP cx.sources cx.txn.target of
+                       NONE => [] | SOME mods => mods)
+     (accesses_expr obj)` by
+    (irule vyperSubscriptOverlapTheory.nonconstant_reads_lookup_cong >>
+     simp[]) >>
+  simp[exprLoweringTheory.copies_subscript_base_def,
+       subscript_reads_base_def,
+       vyperSubscriptOverlapTheory.subscript_overlap_def,
+       vyperSubscriptOverlapTheory.expr_accesses_def,
+       vyperSubscriptOverlapTheory.reached_functions_def]
+QED
+
 Theorem expr_sim_pre_gas_obs[simp]:
   expr_sim_pre cenv cx env e (es with gas_obs := gs) <=>
   expr_sim_pre cenv cx env e es
@@ -343,19 +369,6 @@ Proof
   simp[bind_def, AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem eval_expr_calls_no_halt:
-  ~expr_has_evm_run e /\
-  EVERY (\c. FST c = NONE /\
-             ?tops. supported_program tops /\
-                    get_module_code cx NONE = SOME tops /\
-                    IS_SOME (supported_function_decl tops c Internal))
-    (int_calls_expr e) ==>
-  eval_expr cx e st <> (INR HaltException, st')
-Proof
-  strip_tac >> irule (cj 1 eval_no_halt) >> fs[expr_has_evm_run_def] >>
-  Cases_on `int_calls_expr e` >> fs[] >> fs[EVERY_MEM] >>
-  metis_tac[optionTheory.SOME_11]
-QED
 
 Theorem expr_body_pre_res_ok:
   !cenv cx env e es res es'.
@@ -370,12 +383,7 @@ Proof
      simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
      metis_tac[cj 1 eval_expr_no_control, read_result_no_control]) >>
   Cases_on `exc` >> gvs[no_control_exc_def, no_type_error_result_def]
-  >~ [`Error err`] >- (Cases_on `err` >> gvs[]) >>
-  `!st st'. eval_expr cx e st <> (INR HaltException, st')` by
-    (rpt gen_tac >> irule eval_expr_calls_no_halt >> fs[expr_body_pre_def]) >>
-  qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _`
-    mp_tac >>
-  simp[bind_def, AllCaseEqs()] >> metis_tac[read_result_no_halt]
+  >~ [`Error err`] >- (Cases_on `err` >> gvs[])
 QED
 
 Theorem word_value_type_typed:
@@ -576,6 +584,34 @@ Proof
   gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
 QED
 
+(* The result of an operand of a word type: an address or a bytesN one
+   is no word_value_type, so expr_body_pre_word_result does not cover it. *)
+Theorem expr_body_pre_word_type_result:
+  !cenv cx env e es res es'.
+    expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) /\
+    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv cenv cx env es' /\
+    !v. res = INL v ==>
+        ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+              value_has_type tyv v
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >> asm_rewrite_tac[] >>
+  rw[] >> drule_all expr_body_pre_word_value >> simp[]
+QED
+
+Theorem expr_sim_pre_word_type_result:
+  !cenv cx env e es res es'.
+    expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) /\
+    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv cenv cx env es' /\
+    !v. res = INL v ==>
+        ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+              value_has_type tyv v
+Proof
+  metis_tac[expr_body_pre_word_type_result, expr_sim_pre_body_pre]
+QED
+
 Theorem expr_body_pre_lower_value_word_shape:
   !cenv cx env e es ty sa op sb.
     lower_value compile_expr cenv ty e sa = (op, sb) /\
@@ -636,8 +672,7 @@ Proof
   drule (cj 1 eval_expr_no_control) >>
   rename1 `INR exc` >> Cases_on `exc` >>
   gvs[no_control_exc_def, no_type_error_result_def]
-  >~ [`Error err`] >- (Cases_on `err` >> gvs[]) >>
-  metis_tac[eval_expr_calls_no_halt, expr_body_pre_def]
+  >~ [`Error err`] >- (Cases_on `err` >> gvs[])
 QED
 
 Theorem operand_eval_evidence_semantics:

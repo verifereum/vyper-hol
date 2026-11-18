@@ -25,7 +25,7 @@
  *
  *   - frame_sim_rf L C C' fn fn': as frame_sim, but only for states of fn'
  *     that touch memory and sit outside a revert-forward pair, matched
- *     with a state of fn also outside one.  raw_mem_ok and static_mem_ok
+ *     with a state of fn also outside one.  The raw, static and lowered facts
  *     exempt states in a revert-forward pair, so they are
  *     not closed under mem_corr alone; they are closed under the weaker
  *     mem_corr_closed_rf, and frame_sim plus frame_sim_rf transport any
@@ -34,6 +34,7 @@
  * TOP-LEVEL: ctx_bisim_ctx_sim, fn_bisim_ctx_bisim, frame_sim_mem_inv,
  *   frame_sim_rf_mem_inv, mem_corr_closed_rf_raw_mem_ok,
  *   mem_corr_closed_rf_intro, mem_corr_closed_rf_static_mem_ok,
+ *   mem_corr_closed_rf_lowered_mem_fact,
  *   static_codegen_ranges, mem_corr_static_codegen_ranges.
  *)
 Theory o1PassLift
@@ -158,6 +159,16 @@ Theorem execution_frame_merge_callee:
 Proof
   simp[execution_frame_eq_reconstruct] >> strip_tac >>
   pop_assum (SUBST1_TAC o SYM) >> simp[merge_callee_state_def]
+QED
+
+Theorem frame_result_rel_revert_empty:
+  frame_result_rel (Abort Revert_abort s) r' /\ s.vs_returndata = [] ==>
+  ?t. r' = Abort Revert_abort t /\ t.vs_returndata = []
+Proof
+  Cases_on `r'` >>
+  simp[frame_result_rel_def, execution_frame_eq_reconstruct] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `_ = s` (SUBST_ALL_TAC o SYM) >> gvs[]
 QED
 
 Theorem frame_result_rel_unit:
@@ -691,17 +702,18 @@ Proof
   disch_then irule >> metis_tac[raw_reachable_rules]
 QED
 
-(* What the memory facts see of a state: the alloca frame, the initial
-   free-memory pointer, the gas readings left and the instruction's memory
-   ranges.  An inserted instruction that touches no memory corresponds to
-   any instruction.  The readings let a fact guarded by how many readings
-   a state has popped (gas_cut) move along the correspondence. *)
+(* What the memory facts see of a state: the alloca frame, the
+   free-memory pointers, DALLOCA's no-wrap bound and the instruction's
+   memory ranges.  An inserted instruction that touches no memory
+   corresponds to any instruction. *)
 Definition mem_corr_def:
   mem_corr inst s inst' s' <=>
     s'.vs_alloca_next = s.vs_alloca_next /\
     s'.vs_allocas = s.vs_allocas /\
     s'.vs_initial_fmp = s.vs_initial_fmp /\
     s'.vs_gas_readings = s.vs_gas_readings /\
+    s'.vs_fmp = s.vs_fmp /\
+    (dalloca_no_wrap inst s ==> dalloca_no_wrap inst' s') /\
     (inst_mem_ranges inst' s' = [] \/
      inst_mem_ranges inst' s' = inst_mem_ranges inst s)
 End
@@ -891,6 +903,41 @@ Proof
 QED
 
 (* Frame simulations away from revert-forward pairs compose. *)
+Definition frame_sim_rf_observation_def:
+  frame_sim_rf_observation P L C C' fn fn' <=>
+    !s0 inst' s'.
+      fn_entry_state fn s0 /\ s0.vs_labels = L /\
+      frame_reach C' fn' s0 inst' s' /\
+      inst_mem_ranges inst' s' <> [] /\ ~in_revert_forward fn' s' ==>
+      ?inst s. frame_reach C fn s0 inst s /\ ~in_revert_forward fn s /\
+               mem_corr inst s inst' s' /\ (P fn s ==> P fn' s')
+End
+
+
+Theorem frame_sim_rf_observation_forget:
+  frame_sim_rf_observation P L C C' fn fn' ==> frame_sim_rf L C C' fn fn'
+Proof
+  rw[frame_sim_rf_observation_def, frame_sim_rf_def] >> metis_tac[]
+QED
+
+
+Theorem frame_sim_rf_observation_trans:
+  frame_sim_rf_observation P L C1 C2 f g /\
+  frame_sim_rf_observation P L C2 C3 g h /\
+  fn_entry_label f = fn_entry_label g ==>
+  frame_sim_rf_observation P L C1 C3 f h
+Proof
+  simp[frame_sim_rf_observation_def] >> rpt strip_tac >>
+  `fn_entry_state g s0` by gvs[fn_entry_state_def] >>
+  `?inst s. frame_reach C2 g s0 inst s /\ ~in_revert_forward g s /\
+     mem_corr inst s inst' s' /\ (P g s ==> P h s')` by metis_tac[] >>
+  `inst_mem_ranges inst s <> []` by gvs[mem_corr_def] >>
+  `?inst0 s1. frame_reach C1 f s0 inst0 s1 /\ ~in_revert_forward f s1 /\
+     mem_corr inst0 s1 inst s /\ (P f s1 ==> P g s)` by metis_tac[] >>
+  metis_tac[mem_corr_trans]
+QED
+
+
 Theorem frame_sim_rf_trans:
   frame_sim_rf L C1 C2 f g /\ frame_sim_rf L C2 C3 g h /\
   fn_entry_label f = fn_entry_label g ==> frame_sim_rf L C1 C3 f h
@@ -980,13 +1027,9 @@ QED
 Theorem mem_corr_closed_rf_raw_mem_ok:
   mem_corr_closed_rf raw_mem_ok
 Proof
-  `!inst s. inst_mem_below_frontier inst s <=>
-            EVERY (\(off,len). len = 0 \/ off + len <= s.vs_alloca_next)
-              (inst_mem_ranges inst s)`
-    by simp_tac std_ss [inst_mem_below_frontier_def, inst_mem_ranges_def] >>
-  pop_assum (fn th =>
-    rw[mem_corr_closed_rf_def, mem_corr_def, raw_mem_ok_def,
-       inst_mem_ok_in_fn_def, in_revert_forward_def, th]) >>
+  rw[mem_corr_closed_rf_def, mem_corr_def, raw_mem_ok_def,
+     inst_mem_ok_in_fn_def, in_revert_forward_def,
+     REWRITE_RULE [GSYM inst_mem_ranges_def] inst_mem_below_frontiers_def] >>
   fs[] >> metis_tac[]
 QED
 
@@ -1005,7 +1048,15 @@ QED
 Theorem mem_corr_closed_rf_static_mem_ok:
   mem_corr_closed_rf (static_mem_ok eom)
 Proof
-  rw[mem_corr_closed_rf_def, mem_corr_def, static_mem_ok_def] >> fs[]
+  rw[mem_corr_closed_rf_def, mem_corr_def, static_mem_ok_def] >> fs[] >>
+  metis_tac[]
+QED
+
+Theorem mem_corr_closed_rf_lowered_mem_fact:
+  mem_corr_closed_rf (lowered_mem_fact eom)
+Proof
+  rw[mem_corr_closed_rf_def, mem_corr_def, lowered_mem_fact_def,
+     lowered_mem_ok_def] >> fs[] >> metis_tac[]
 QED
 
 (* A selected safe occurrence supplies codegen's local memory ranges
@@ -1013,6 +1064,7 @@ QED
 Theorem static_codegen_ranges:
   generate_context_plan ctx9 = SOME cpl /\
   static_mem_ok cpl.cp_max_static_eom ctx7 fn7 inst7 s7 /\
+  cpl.cp_initial_fmp <= w2n s7.vs_initial_fmp /\
   ~in_revert_forward fn7 s7 /\
   (inst_mem_ranges inst9 s9 = [] \/
    inst_mem_ranges inst9 s9 = inst_mem_ranges inst7 s7) /\
@@ -1021,10 +1073,11 @@ Theorem static_codegen_ranges:
   context_source_memory_writes_disjoint cpl inst9 s9
 Proof
   rpt strip_tac >>
-  `static_mem_ok cpl.cp_max_static_eom ctx9 fn9 inst9 s9` by
-    fs[static_mem_ok_def] >>
   `lowered_mem_ok cpl.cp_max_static_eom cpl.cp_initial_fmp
-     ctx9 fn9 inst9 s9` by metis_tac[static_mem_ok_lowered] >>
+     ctx7 fn7 inst7 s7` by metis_tac[static_mem_ok_lowered] >>
+  `lowered_mem_ok cpl.cp_max_static_eom cpl.cp_initial_fmp
+     ctx9 fn9 inst9 s9` by
+    (fs[lowered_mem_ok_def] >> metis_tac[]) >>
   drule generate_context_plan_spill_gap >> strip_tac >>
   metis_tac[lowered_reads_disjoint, lowered_writes_disjoint]
 QED
@@ -1032,6 +1085,7 @@ QED
 Theorem mem_corr_static_codegen_ranges:
   generate_context_plan ctx9 = SOME cpl /\
   static_mem_ok cpl.cp_max_static_eom ctx7 fn7 inst7 s7 /\
+  cpl.cp_initial_fmp <= w2n s7.vs_initial_fmp /\
   ~in_revert_forward fn7 s7 /\
   mem_corr inst7 s7 inst9 s9 /\
   ~in_revert_forward fn9 s9 ==>
@@ -1302,13 +1356,13 @@ Proof
 QED
 
 (* The context-level fuel bound: run_context on lift_fuel fm fuel. *)
-Theorem fn_bisim_fuel_run_context:
+Theorem fn_bisim_fuel_run_context_frame:
   LIST_REL (fn_bisim_fuel fm) C.ctx_functions C'.ctx_functions /\
   (!n. n <= fm n) /\ C'.ctx_entry = C.ctx_entry /\
   (!fuel v t. run_context fuel C vs <> IntRet v t) /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
   terminates (run_context fuel C vs) ==>
-  dead_result_rel D (run_context fuel C vs)
+  frame_result_rel (run_context fuel C vs)
     (run_context (lift_fuel fm fuel) C' vs)
 Proof
   strip_tac >>
@@ -1328,7 +1382,20 @@ Proof
     `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
     `fuel`] mp_tac) >>
   simp[passSimulationDefsTheory.terminates_def] >> strip_tac >>
-  simp[run_function_def] >>
+  simp[run_function_def]
+QED
+
+Theorem fn_bisim_fuel_run_context:
+  LIST_REL (fn_bisim_fuel fm) C.ctx_functions C'.ctx_functions /\
+  (!n. n <= fm n) /\ C'.ctx_entry = C.ctx_entry /\
+  (!fuel v t. run_context fuel C vs <> IntRet v t) /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  terminates (run_context fuel C vs) ==>
+  dead_result_rel D (run_context fuel C vs)
+    (run_context (lift_fuel fm fuel) C' vs)
+Proof
+  strip_tac >>
   irule unit_result_rel_dead_result_rel >>
-  irule frame_result_rel_unit >> simp[]
+  irule frame_result_rel_unit >> simp[] >>
+  irule fn_bisim_fuel_run_context_frame >> simp[]
 QED

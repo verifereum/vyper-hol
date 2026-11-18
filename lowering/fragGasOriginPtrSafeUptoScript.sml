@@ -18,7 +18,9 @@ Theory fragGasOriginPtrSafeUpto
 Ancestors
   fragGasOriginPtr fragGasFocus fragExec o1SafeUpto ptrSafeRun memSafeRun
   ptrDiscipline contextRawReachable contextCodegenRel
+  rawReachableFmp ctxLookupAgree
   concretizePtrCoverageStaticMemReachability lowerDloadPtrRawReachable
+  frameAllocationOwnership
   gasCount gasEvents gasOracleReplay unitMemInv unitTransformDefs
   lowerDloadDefs contextCodegenRelProps venomExecSemantics venomExecProofs
   venomInstProofs venomInst venomState finite_map list arithmetic
@@ -684,7 +686,8 @@ Proof
   strip_tac
   >- (drule_all revert_forward_at_opcode >> strip_tac >>
       simp[inst_mem_ok_in_fn_def] >> metis_tac[]) >>
-  gvs[Once mem_safe_step_def, inst_mem_ok_in_fn_def]
+  gvs[Once mem_safe_step_def, inst_mem_ok_in_fn_def] >>
+  metis_tac[inst_mem_below_frontier_frontiers]
 QED
 
 Theorem invoke_mem_facts[local]:
@@ -695,7 +698,7 @@ Proof
   `inst = inst with inst_opcode := INVOKE` by
     simp[instruction_component_equality] >>
   pop_assum (fn th => once_rewrite_tac [th]) >>
-  simp[inst_mem_ok_in_fn_def, inst_mem_below_frontier_def]
+  simp[inst_mem_ok_in_fn_def, inst_mem_below_frontiers_def]
 QED
 
 Theorem focus_at_ok[local]:
@@ -728,6 +731,51 @@ Proof
   metis_tac[ptr_safe_step_inst_ok, mem_step_facts]
 QED
 
+(* ===== The focused reachable-state boundary ===== *)
+
+Theorem gas_origin_ptr_focus_frame_facts:
+  gas_origin_ptr_focus (D, lo, explicit, ctx, func, [])
+    (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>,
+     FEMPTY, entry_taint) marks out /\
+  ctx.ctx_entry = SOME name /\
+  lookup_function name ctx.ctx_functions = SOME func /\
+  fn_entry_label func = SOME lbl /\
+  EVERY (\f. ALL_DISTINCT (fn_labels f)) ctx.ctx_functions /\
+  EVERY (\f. fn_ptr_ok P f /\ fn_ptr_ok P (reachable_fn f)) ctx.ctx_functions /\
+  lo <= vs.vs_alloca_next /\
+  reserved_intervals_wf ctx.ctx_global_reserved /\
+  EVERY (\f. f.fn_eom = NONE) ctx.ctx_functions /\
+  ~ctx_has_dalloca ctx /\ fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
+  mem_inv dload_headroom_ok ctx vs /\
+  w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
+  code_layout_valid vs ==>
+  !stk PG G tn fn inst s.
+    frame_reachable vs ctx stk PG G tn fn inst s /\
+    gas_cut (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)) vs s ==>
+    (!fuel. ptr_inst_ok D lo fuel ctx fn G tn inst s) /\
+    inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s
+Proof
+  strip_tac >>
+  qabbrev_tac `k = MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)` >>
+  `k <= LENGTH marks /\ k <= LENGTH vs.vs_gas_readings` by simp[Abbr `k`] >>
+  rpt gen_tac >> strip_tac >>
+  `active_inst fn inst s` by
+    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frame_reachable_cases] >> rw[] >> simp[]) >>
+  `MEM fn ctx.ctx_functions` by
+    metis_tac[frame_reachable_functions_member] >>
+  `ALL_DISTINCT (fn_labels fn)` by fs[EVERY_MEM] >>
+  drule_all active_inst_block_lookup >> strip_tac >>
+  drule frame_reachable_focus >>
+  disch_then (qspecl_then [`D`, `lo`, `explicit`, `LENGTH marks`, `k`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >> gvs[] >> simp[focus_at_def] >>
+      qexistsl_tac [`marks`, `out`] >> simp[]) >>
+  strip_tac
+  >- (drule_all focus_at_ok >> metis_tac[ptr_inst_ok_fuel]) >>
+  drule_all run_safe_ok >> metis_tac[ptr_inst_ok_fuel]
+QED
+
 (* ===== The bridge ===== *)
 
 Theorem gas_origin_ptr_focus_o1_safe_upto:
@@ -744,6 +792,7 @@ Theorem gas_origin_ptr_focus_o1_safe_upto:
   EVERY (\f. f.fn_eom = NONE) ctx.ctx_functions /\
   ~ctx_has_dalloca ctx /\ fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
   mem_inv dload_headroom_ok ctx vs /\
+  w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   code_layout_valid vs ==>
   o1_safe_upto D lo (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)) ctx vs
 Proof
@@ -754,23 +803,7 @@ Proof
      frame_reachable vs ctx stk PG G tn fn inst s /\ gas_cut k vs s ==>
      (!fuel. ptr_inst_ok D lo fuel ctx fn G tn inst s) /\
      inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s` by
-    (rpt gen_tac >> strip_tac >>
-     `active_inst fn inst s` by
-       (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
-        simp[Once frame_reachable_cases] >> rw[] >> simp[]) >>
-     `MEM fn ctx.ctx_functions` by
-       metis_tac[frame_reachable_functions_member] >>
-     `ALL_DISTINCT (fn_labels fn)` by fs[EVERY_MEM] >>
-     drule_all active_inst_block_lookup >> strip_tac >>
-     drule frame_reachable_focus >>
-     disch_then (qspecl_then [`D`, `lo`, `explicit`, `LENGTH marks`, `k`]
-                   mp_tac) >>
-     impl_tac
-     >- (simp[] >> rpt strip_tac >> gvs[] >> simp[focus_at_def] >>
-         qexistsl_tac [`marks`, `out`] >> simp[]) >>
-     strip_tac
-     >- (drule_all focus_at_ok >> metis_tac[ptr_inst_ok_fuel]) >>
-     drule_all run_safe_ok >> metis_tac[ptr_inst_ok_fuel]) >>
+    (simp[Abbr `k`] >> metis_tac[gas_origin_ptr_focus_frame_facts]) >>
   `ptr_discipline_upto lo k ctx vs` by
     (simp[ptr_discipline_upto_def] >> conj_tac >- metis_tac[] >>
      rpt gen_tac >> strip_tac >> first_x_assum drule_all >> strip_tac >>
@@ -791,5 +824,51 @@ Proof
     (qpat_x_assum `mem_inv _ _ _` mp_tac >>
      simp[mem_inv_raw_reachable, dload_headroom_ok_def] >>
      rpt strip_tac >> res_tac >> decide_tac) >>
+  `!fn inst s. raw_reachable vs ctx fn inst s ==>
+     dalloca_no_wrap inst s /\
+     w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (rpt gen_tac >> strip_tac >>
+     `EVERY pre_fmp_ops ctx.ctx_functions` by
+       fs[o1PassContractTheory.fmp_free_ctx_def, EVERY_MEM] >>
+     drule raw_reachable_fmp_fixed >> simp[] >> strip_tac >>
+     drule raw_reachable_initial_fmp >> strip_tac >> simp[] >>
+     simp[dalloca_no_wrap_def] >> strip_tac >>
+     drule ptr_raw_reachable_frame >> strip_tac >>
+     metis_tac[frame_reachable_dalloca]) >>
   rw[o1_safe_upto_def, o1_ptr_safe_upto_def, raw_mem_ok_def] >> metis_tac[]
+QED
+
+(* DLOAD validity is projected from the focused frame facts, not from
+   o1_safe_upto, whose public conclusion does not retain it. *)
+Theorem gas_origin_ptr_focus_dload_upto:
+  gas_origin_ptr_focus (D, lo, explicit, ctx, func, [])
+    (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>,
+     FEMPTY, entry_taint) marks out /\
+  ctx.ctx_entry = SOME name /\
+  lookup_function name ctx.ctx_functions = SOME func /\
+  fn_entry_label func = SOME lbl /\
+  EVERY (\f. ALL_DISTINCT (fn_labels f)) ctx.ctx_functions /\
+  EVERY (\f. fn_ptr_ok P f /\ fn_ptr_ok P (reachable_fn f)) ctx.ctx_functions /\
+  lo <= vs.vs_alloca_next /\
+  reserved_intervals_wf ctx.ctx_global_reserved /\
+  EVERY (\f. f.fn_eom = NONE) ctx.ctx_functions /\
+  ~ctx_has_dalloca ctx /\ fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
+  mem_inv dload_headroom_ok ctx vs /\
+  w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
+  code_layout_valid vs ==>
+  !fn inst s.
+    raw_reachable vs ctx fn inst s /\
+    gas_cut (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)) vs s ==>
+    inst_dload_in_section inst s
+Proof
+  strip_tac >>
+  `!stk PG G tn fn inst s.
+     frame_reachable vs ctx stk PG G tn fn inst s /\
+     gas_cut (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)) vs s ==>
+     (!fuel. ptr_inst_ok D lo fuel ctx fn G tn inst s) /\
+     inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s` by
+    metis_tac[gas_origin_ptr_focus_frame_facts] >>
+  rpt gen_tac >> strip_tac >>
+  drule ptr_raw_reachable_frame >> strip_tac >>
+  first_x_assum drule_all >> simp[]
 QED

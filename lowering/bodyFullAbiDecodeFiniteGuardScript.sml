@@ -1,7 +1,7 @@
 Theory bodyFullAbiDecodeFiniteGuard
 Ancestors
   bodyFullAbiDecodeLeafCases bodyFullAbiDecodeClamp bodyFullAbiDecodePath
-  bodyFullAbiDecodeClampMemory
+  bodyFullAbiDecodeClampMemory bodyFullAbiDecodeFiniteGuardEffect
   abiDecodePtrScalarAbort bodyPtrBopScalarOutcome
   bodyPtrBopScalarSeq instSeqPtrLo fragGasOriginPtrDead fragGasOriginPtrLoop
   abiDecodePtrPrims exprLoweringProps freshWrites list rich_list finite_map
@@ -66,46 +66,11 @@ Theorem abi_decode_scalar_guard_success_joint:
        lookup_var x u = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
        op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >>
-  drule_all (bop_scalar_seq_run |> Q.INST [`D` |-> `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]) >>
-  disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
-  `lo <= s.vs_alloca_next` by fs[] >>
-  `inst_seq_ptr <|d_stor := K (K {}); d_trans := K (K {});
-      d_imm := K {}; d_ret := K {}|> lo ctx fn PG G tn
-      (emitted_insts sa sb) s G' tn'` by
-    (irule inst_seq_ptr_zero_to_lo >> simp[] >>
-     qexists_tac `<|d_stor := K (K {}); d_trans := K (K {});
-       d_imm := K {}; d_ret := K {}|>` >> simp[]) >>
-  qpat_x_assum `inst_seq_ptr _ 0 _ _ _ _ _ _ _ _ _` kall_tac >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-      i.inst_opcode <> GAS) (emitted_insts sa sb)` by
-    metis_tac[bop_scalar_seq_opcodes] >>
-  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by metis_tac[bodyFullAbiDecodeClampMemoryTheory.abi_decode_scalar_seq_mem_ok] >>
-  drule_all emitted_origin_ptr_path >>
-  disch_then (qspec_then `explicit` assume_tac) >>
-  drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
-  qabbrev_tac `u = t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  `state_frame u = state_frame (s with vs_inst_idx := u.vs_inst_idx) /\
-   ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-   u.vs_inst_idx = LENGTH sb.cs_current_insts /\ u.vs_allocas = s.vs_allocas` by
-    (simp[Abbr `u`] >>
-     qpat_x_assum `t = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
-     simp[state_frame_def]) >>
-  `!x. not_fresh_at sa x ==>
-     lookup_var x u = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
-     op_taint tn' (Var x) = op_taint tn (Var x)` by
-    (simp[Abbr `u`, lookup_var_def, op_taint_def] >> gvs[]) >>
-  `alloca_history fn s` by fs[] >>
-  `alloca_history fn u` by
-    (irule abi_decode_no_alloca_endpoint_history >>
-     qexistsl_tac [`s`, `sa`, `sb`] >> simp[] >>
-     gvs[inst_extends_def]) >>
-  `(^owned_decoder_state) sb u G' tn'` by
-    (irule abi_decode_owned_scalar_frame_with_history >>
-     conj_tac >- asm_rewrite_tac[] >>
-     qexistsl_tac [`G`, `s`, `sa`, `tn`] >> asm_rewrite_tac[]) >>
-  qexistsl_tac [`u`, `G'`, `tn'`] >> asm_rewrite_tac[] >>
-  gen_tac >> irule gas_origin_ptr_path_from_no_dead >> asm_rewrite_tac[]
+  strip_tac >> mp_tac abi_decode_scalar_guard_success_joint_effect >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  disch_then (qx_choose_then `u` (qx_choose_then `Gf`
+    (qx_choose_then `tnf` strip_assume_tac))) >>
+  qexistsl_tac [`u`, `Gf`, `tnf`] >> asm_rewrite_tac[]
 QED
 
 Theorem abi_decode_scalar_guard_abort_joint:

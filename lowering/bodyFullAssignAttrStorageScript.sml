@@ -365,6 +365,44 @@ Resume compile_assign_attr_storage_full[continue]:
       qpat_assum `gas_origin_ptr_path _ (z,Gu,tu) [] _` mp_tac >>
       rpt (pop_assum kall_tac) >> rpt strip_tac >>
       metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+  `tnf.t_mem = tu.t_mem` by
+    (simp[Abbr `tnf`] >> irule (cj 1 clean_storage_step_taint_ptr) >>
+     Cases_on `tr` >> simp[Abbr `u`, tstore_def, sstore_def] >>
+     qexists_tac `n2w slot + n2w off` >>
+     qpat_assum `dst = Var out` (fn th => PURE_ONCE_REWRITE_TAC [GSYM th]) >>
+     first_assum ACCEPT_TAC) >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv ff stored_state` by
+    (irule alloca_frame_same_state >> qexists_tac `z` >> rpt conj_tac
+     >~ [`alloca_frame`]
+     >- (qpat_assum
+           `expr_post (storage_trace_horizon mid.storage_trace) _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+         irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >>
+         rpt conj_tac
+         >- first_assum ACCEPT_TAC
+         >- first_assum ACCEPT_TAC
+         >- (qpat_assum `ff.scopes = _` (fn th => rewrite_tac[th]) >>
+             qpat_assum `MAP FDOM es.scopes = _` (ACCEPT_TAC o SYM))
+         >- first_assum ACCEPT_TAC >>
+         qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`, `cx`,
+                       `func`] >> first_assum ACCEPT_TAC) >>
+     simp[Abbr `stored_state`, Abbr `u`] >>
+     Cases_on `tr` >> simp[tstore_def, sstore_def]) >>
+  `!aid off' sz i.
+     FLOOKUP s0.vs_allocas aid = SOME (off', sz) /\ aid < sa.cs_next_id /\
+     (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                off' + sz <= b \/ b + sz' <= off') /\
+     off' <= i /\ i < off' + sz /\ i IN tnf.t_mem ==> i IN tn0.t_mem` by
+    (qpat_assum `ghost_kept_at _ cenv es sa G0 tn0 s0 _ tu`
+       (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
+     qpat_assum `tnf.t_mem = _` (fn th => rewrite_tac[th]) >>
+     first_assum ACCEPT_TAC) >>
+  pop_assum (fn tk => pop_assum (fn af =>
+    PURE_REWRITE_TAC [af, tk, AND_CLAUSES, FORALL_SIMP])) >>
   simp[stmt_lands_def, cenv_top_ext_refl, Abbr `stored_state`, Abbr `tnf`, Abbr `u`] >>
   Cases_on `tr` >>
   fs[expr_post_def, ghost_kept_at_def, op_taint_def,

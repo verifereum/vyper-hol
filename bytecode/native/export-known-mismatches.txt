@@ -143,8 +143,6 @@ a727a5fdf8562ed5 bytes #543  # functional/codegen/types/numbers/test_signed_ints
 b7b8e56fd02bfcfa bytes #543  # functional/codegen/types/numbers/test_signed_ints::test_negative_nums[typ8]
 60a4e629b8eb1461 bytes #543  # functional/codegen/types/numbers/test_signed_ints::test_negative_nums[typ9]
 0fd0d7e7f04a21a3 bytes #543+decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_extcall_oob
-b49bfd6773113762 bytes #546  # functional/codegen/calling_convention/test_internal_call::test_list_call
-b3f1f7d083e14484 bytes #546  # functional/codegen/calling_convention/test_internal_call::test_multi_arg_list_call
 e001fa93c7860757 bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops0-False-False-False-False]
 87e4f2267d5d9c86 bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops1-False-False-False-False]
 441c80f0041e782d bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops3-False-False-False-False]

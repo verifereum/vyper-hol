@@ -84,7 +84,7 @@ Theorem abi_encode_vv_post_pointer_cong:
   (vv_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty p) s <=>
    vv_post H ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty q) s)
 Proof
-  simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def]
+  simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, vv_place_ptr_def]
 QED
 
 Theorem abi_encode_vv_post_fields_transport:

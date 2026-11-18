@@ -47,7 +47,7 @@ val fixed_last_actual_writer_candidate = ``
    Birth slices and all active frame lower bounds must be supplied from
    historical source ownership and ptr_discipline. *)
 val fixed_write_owner_identity_candidate = ``
-  ptr_paired_write_owner lo positions (reloc:num -> num) xs
+  ptr_paired_write_owner dyn lo positions (reloc:num -> num) xs
     (tokens,registry,births,PT,TG,saved,entries) /\
   x IN xs /\ x < lo /\ ptr_birth_slices post tokens births /\
   LENGTH tokens = SUC (LENGTH post.po_stack) /\

@@ -254,9 +254,89 @@ Proof
   fs[ctx_pass_stage_def, run_context_def, run_function_def]
 QED
 
+(* Strengthen each selected result in the conditional clause, including the
+   recursive callee packet.  This is proof-time syntax, not a new relation. *)
+val ldEmptyObservation = ``!se. r = Abort Revert_abort se /\
+  se.vs_returndata = [] ==> ?te. r' = Abort Revert_abort te /\
+  te.vs_returndata = []``;
+fun ldObserveSelected tm =
+  if is_exists tm then
+    let val (v,b) = dest_exists tm in
+      if fst (dest_var v) = "r'" then
+        mk_exists (v, mk_conj (b, ldEmptyObservation))
+      else mk_exists (v, ldObserveSelected b)
+    end
+  else if is_abs tm then
+    let val (v,b) = dest_abs tm in mk_abs (v, ldObserveSelected b) end
+  else if is_comb tm then
+    let val (f,x) = dest_comb tm in
+      mk_comb (ldObserveSelected f, ldObserveSelected x) end
+  else tm;
+val ldStepClauseFuel = List.nth (strip_conj (fst (dest_imp
+  (concl ld_runner_templates_fuel))), 0);
+val ldObservedStepClauseFuel = ldObserveSelected ldStepClauseFuel;
+
+Theorem ld_runner_step_clause_fuel_revert_empty_conditional:
+  ^ldObservedStepClauseFuel
+Proof
+  qabbrev_tac `RR = ^ldPacket` >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[] >>
+  drule_at (Pat `terminates _`) ld_terminating_invoke_inversion >>
+  disch_then (qspecl_then [`s`, `fuel`, `inst`, `C`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
+  `?sn. enters_block fn' cs sn` by metis_tac[ld_run_enters] >>
+  drule_all (SRULE [] (Q.INST
+    [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`]
+    lower_dload_stage_invoke_entry)) >> strip_tac >>
+  qpat_x_assum `enters_block fn' cs sn` kall_tac >>
+  first_x_assum (drule_all_then strip_assume_tac o
+    SIMP_RULE bool_ss [PULL_EXISTS]) >>
+  gvs[] >>
+  qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[Abbr `RR`] >> strip_tac
+  >- suspend "return"
+  >- suspend "halt"
+  >> suspend "abort"
+QED
+
+Resume ld_runner_step_clause_fuel_revert_empty_conditional[return]:
+  `wf_function fn` by
+    (drule ld_joint_source >>
+     disch_then (strip_assume_tac o MATCH_MP occ_frame_reachable_annotation) >>
+     fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
+  `cs.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address` by
+    metis_tac[ld_setup_callee_call_ctx] >>
+  drule_at (Pat `ld_joint_boundary _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    (SIMP_RULE bool_ss [PULL_EXISTS]
+      (SRULE [] (Q.INST [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`]
+        ld_return_endpoint_consume))) >>
+  simp[] >> disch_then (drule_all_then strip_assume_tac) >>
+  `s1.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address` by
+    (qpat_x_assum `bind_outputs _ jr.iret_values _ = _` kall_tac >>
+     qspec_then `\u. u.vs_call_ctx.cc_address` mp_tac
+       venomInstProofs1Theory.bind_outputs_preserves >>
+     simp[update_var_def] >> disch_then drule >>
+     simp[adopt_return_fmp_def, merge_callee_state_def]) >>
+  `step_inst fuel C' inst t = OK t1'` by simp[Once step_inst_def] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Resume ld_runner_step_clause_fuel_revert_empty_conditional[halt]:
+  simp[Once step_inst_def] >> simp[Once step_inst_def] >> gvs[]
+QED
+Resume ld_runner_step_clause_fuel_revert_empty_conditional[abort]:
+  simp[Once step_inst_def] >> simp[Once step_inst_def] >> gvs[] >>
+  strip_tac >> gvs[] >> simp[Once step_inst_def]
+QED
+Finalise ld_runner_step_clause_fuel_revert_empty_conditional
+
 Theorem lower_dload_stage_root_entry:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   o1_safe_upto D lo ncut C vs /\ 0 < ncut /\
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl /\ enters_block fn ^ldS0 s1 ==>
@@ -285,7 +365,7 @@ Proof
        (strip_assume_tac o REWRITE_RULE [contextCodegenRelTheory.enters_block_def]) >>
      imp_res_tac gas_count_phis_ok >> gvs[gas_cut_def]) >>
   drule_all ld_wf_enters_block_fetch >> strip_tac >>
-  drule_all ld_joint_entry >> strip_tac >>
+  drule_all ld_joint_entry_static >> strip_tac >>
   qexistsl_tac [`fn'`, `inst`, `bb`] >> simp[]
 QED
 
@@ -330,7 +410,7 @@ QED
 (* The run of the entry function, cut after its first j events. *)
 Theorem ld_root_simulation_events_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   callee_first names C.ctx_functions /\ o1_safe_upto D lo ncut C vs /\
   0 < j /\ j <= ncut /\
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
@@ -386,7 +466,7 @@ QED
 
 Theorem ld_root_simulation:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   callee_first names C.ctx_functions /\ o1_safe_upto D lo ncut C vs /\
   0 < j /\ j <= ncut /\
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
@@ -414,7 +494,7 @@ QED
 Theorem lower_dload_stage_sim_events_fuel:
   !rpolicy D view C C' vs names fuel.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
     terminates (run_context fuel C vs) ==>
     ?name fn fn' lbl.
@@ -447,7 +527,7 @@ QED
 Theorem lower_dload_stage_sim_events:
   !rpolicy D view C C' vs names fuel.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
     terminates (run_context fuel C vs) ==>
     ?fuel' name fn fn' lbl.
@@ -466,10 +546,23 @@ Proof
   strip_tac >> qexistsl_tac [`fuel`, `name`, `fn`, `fn'`, `lbl`] >> simp[]
 QED
 
+val ldMutualResultFuelObserved = snd (dest_imp
+  (concl ld_runner_conditional_induction_fuel_revert_empty));
+
+Theorem ld_runner_simulation_fuel_revert_empty:
+  ^ldMutualResultFuelObserved
+Proof
+  mp_tac ld_runner_conditional_induction_fuel_revert_empty >>
+  (impl_tac >- (conj_tac
+    >- ACCEPT_TAC ld_runner_step_clause_fuel_revert_empty_conditional
+    >> ACCEPT_TAC ld_runner_exec_clause_fuel_revert_empty_conditional)) >>
+  simp[]
+QED
+
 Theorem lower_dload_stage_sim:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     ctx_sim D C C' vs vs
 Proof
@@ -479,10 +572,10 @@ Proof
 QED
 
 (* Event matching also fixes the target interpreter budget. *)
-Theorem lower_dload_stage_sim_fuel:
+Theorem lower_dload_stage_sim_fuel_static:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     ctx_sim_fuel I D C C' vs vs
 Proof
@@ -490,11 +583,22 @@ Proof
   drule_all lower_dload_stage_sim_events_fuel >> strip_tac >> simp[]
 QED
 
+Theorem lower_dload_stage_sim_fuel:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+    ctx_sim_fuel I D C C' vs vs
+Proof
+  rpt strip_tac >> irule lower_dload_stage_sim_fuel_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
+QED
+
 (* The first n events of a run inside the cut, with no termination. *)
 Theorem lower_dload_stage_events_upto:
   !rpolicy D view C C' vs names lo n fuel name fn lbl.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     callee_first names C.ctx_functions /\ o1_safe_upto D lo n C vs /\
     C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
@@ -523,4 +627,36 @@ Proof
   first_x_assum drule >> strip_tac >>
   qexistsl_tac [`m`, `fn'`] >> simp[] >>
   metis_tac[ld_take_length]
+QED
+
+Theorem lower_dload_stage_revert_empty:
+  !rpolicy D view C C' vs names fuel s.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
+    run_context fuel C vs = Abort Revert_abort s /\
+    s.vs_returndata = [] ==>
+    ?t. run_context fuel C' vs = Abort Revert_abort t /\
+        t.vs_returndata = []
+Proof
+  rpt strip_tac >> fs[o1_run_state_ok_def] >>
+  `terminates (Abort Revert_abort s)` by simp[terminates_def] >>
+  drule_all ld_run_context_entry >> strip_tac >>
+  qpat_x_assum `s0 = _` SUBST_ALL_TAC >>
+  drule o1_src_inv_safe_upto >> strip_tac >>
+  first_x_assum (qspec_then `SUC (LENGTH vs.vs_gas_readings)` assume_tac) >>
+  `0 < SUC (LENGTH vs.vs_gas_readings)` by simp[] >>
+  drule_all lower_dload_stage_root_entry >> strip_tac >>
+  `opaque_use_ok fn` by metis_tac[ld_ctx_shape_lookup_opaque] >>
+  `fn.fn_name = name` by
+    (qpat_assum `lookup_function name C.ctx_functions = SOME fn`
+       (mp_tac o REWRITE_RULE [lookup_function_def]) >>
+     disch_then (mp_tac o MATCH_MP venomExecPropsTheory.FIND_P) >> simp[]) >>
+  `terminates (run_blocks fuel C fn ^ldS0)` by metis_tac[] >>
+  drule_at (Pat `ld_joint_boundary`)
+    (SIMP_RULE bool_ss [] (cj 3 ld_runner_simulation_fuel_revert_empty)) >>
+  simp[] >>
+  disch_then (drule_at (Pat `terminates (run_blocks _ _ _ _)`)) >>
+  simp[] >> disch_then (drule_all_then strip_assume_tac) >>
+  gvs[] >> metis_tac[]
 QED

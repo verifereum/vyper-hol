@@ -143,11 +143,13 @@ Theorem ld_bytes_certificate_backward:
   (!owner bs bt size. owner IN live /\ ld_site_entry E owner bs bt size ==>
     lo <= bs /\ lo <= bt /\ bs+size < dimword(:256) /\
     bt+size < dimword(:256)) /\
+  (!owner bs bt size. owner IN live /\ ld_site_entry E owner bs bt size ==>
+    bs+size <= dyn_floor CS s /\ bt+size <= dyn_floor CS s) /\
   (!owner other bs bt size cs ct cz.
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt size /\ ld_site_entry E other cs ct cz ==>
     (bs+size <= cs \/ cs+cz <= bs) /\ (bt+size <= ct \/ ct+cz <= bt)) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem u0.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t0) /\
   a.inst_opcode = ADD /\ a.inst_operands = [off;Label "code_end"] /\
   a.inst_outputs = [av] /\
@@ -178,7 +180,7 @@ Theorem ld_bytes_certificate_backward:
   u0.t_stor SUBSET tn.t_stor /\ u0.t_trans SUBSET tn.t_trans /\
   u0.t_imm SUBSET tn.t_imm ==>
   ?z. step_inst fuel CS inst s = OK z /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint inst s z tn).t_mem u.t_mem
       (\a. read_memory a 1 z) (\b. read_memory b 1 t) /\
     ld_owned_vars U E AG BH (step_taint inst s z tn) u z t /\

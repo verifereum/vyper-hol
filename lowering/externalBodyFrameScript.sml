@@ -6,7 +6,7 @@ Ancestors
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
   list pair finite_map alist arithmetic combin integer option pred_set rich_list
-  fragExec bodySim bodySimMain bodySimEntry bodySimStmtCases
+  fragExec bodySim bodySimEntry bodySimStmtFacts
   loweringHalt stmtLoweringMono exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering exprLowering
   e2eDefs supportedProgram supportedProgramProps supportedDecls supportedNames
@@ -542,6 +542,12 @@ Proof
   gvs[set_external_package_target_def, package_external_fn_def] >>
   Cases_on `ret = NoneT` >>
   gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
+  `!vis mut rr name args dflts ret ss.
+     MEM (FunctionDecl vis mut T rr name args dflts ret ss) tops ==>
+     lookup_nonreentrant_slot am.layouts tx.target =
+       SOME global_nonreentrant_slot` by
+    (rpt strip_tac >> irule layouts_agree_nonreentrant_slot >>
+     fs[source_deployment_rel_def] >> metis_tac[]) >>
   simp[body_inv_def, cenv_module_pins_def, build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[source_deployment_rel_def, get_module_code_def,
@@ -780,12 +786,11 @@ Proof
   simp[package_external_fn_def]
 QED
 
-Theorem external_selected_return_buffer_ok:
-  !tops rpolicy unit tx calldata ret mut args fbody lbl cenv0 pos_args
+Theorem external_source_return_buffer_ok:
+  !tops rpolicy unit tx ret mut args fbody lbl cenv0 pos_args
    min_cds is_payable nkey ut iv rt st cenv sa.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
-    valid_vyper_call tops tx calldata ret /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut,F,args,[],ret,fbody) /\
     set_external_package_target rpolicy.rpol_target
@@ -807,23 +812,61 @@ Proof
   `same_frame cenv cenv` by simp[] >>
   `~lookup_raw_return_or_F (NONE:num option) tx.function_name External tops` by
     (drule_all external_package_raw_flag >> simp[]) >>
-  `tx.function_name <> "__default__"` by gvs[valid_vyper_call_def] >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  `MEM (mut,F,F,tx.function_name,args,[],ret,fbody) (FST (classify_functions tops))` by
-    (irule supported_headers_external_plain_member >>
-     fs[supported_program_def]) >>
-  gvs[] >>
-  drule_all lower_vyper_runtime_unit_return_buffer_ok >>
-  gvs[lookup_raw_return_or_F_def] >> strip_tac >>
-  qpat_x_assum `external_return_buffer_ok _` mp_tac >>
-  qpat_assum `set_external_package_target _ _ = _`
-    (fn th => rewrite_tac [th]) >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supported_headers_module_consts_env,
+              supported_program_def, supported_declaration_headers_def] >>
+  `external_return_buffer_ok
+     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt)` by
+    (drule lookup_function_external_raw_cases >> strip_tac
+     >- (`MEM (FunctionDecl External mut F F tx.function_name args [] ret fbody)
+            tops` by gvs[lookup_raw_return_or_F_def] >>
+         Cases_on `classify_functions tops` >> PairCases_on `r` >>
+         drule_all supported_external_classification >> strip_tac >>
+         Cases_on `tx.function_name = "__default__"` >> gvs[]
+         >- (qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+             simp[lower_vyper_runtime_unit_def, package_fallback_fn_def,
+                  set_fallback_package_target_def] >> strip_tac >>
+             gvs[package_external_fn_def, set_external_package_target_def,
+                 external_return_buffer_ok_def]) >>
+         drule_all lower_vyper_runtime_unit_return_buffer_ok >>
+         gvs[lookup_raw_return_or_F_def]) >>
+     `public_getter decl =
+        SOME (mut,F,F,tx.function_name,args,([]:expr list),ret,fbody)` by
+       fs[public_getter_source_tuple] >>
+     `MEM (mut,F,F,tx.function_name,args,[],ret,fbody)
+        (FST (classify_functions tops))` by
+       (simp[classify_functions_def] >> pairarg_tac >>
+        simp[MEM_MAP, MEM_public_getters, subst_consts_fn_empty] >>
+        metis_tac[]) >>
+     Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
+     drule_all lower_vyper_runtime_unit_return_buffer_ok >>
+     gvs[lookup_raw_return_or_F_def]) >>
   drule package_external_fn_return_buffer_ok >>
   disch_then drule >> strip_tac >>
   drule compile_register_positional_args_cenv >> strip_tac >>
   `~cenv0.ce_raw_return` by gvs[compile_env_component_equality] >>
   qpat_x_assum `cenv = _` (fn th => once_rewrite_tac [th]) >>
   gvs[return_buffer_ok_def]
+QED
+
+Theorem external_selected_return_buffer_ok:
+  !tops rpolicy unit tx calldata ret mut args fbody lbl cenv0 pos_args
+   min_cds is_payable nkey ut iv rt st cenv sa.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    valid_vyper_call tops tx calldata ret /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut,F,args,[],ret,fbody) /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+        (mut,F,lookup_raw_return_or_F (NONE : num option)
+          tx.function_name External tops,tx.function_name,args,[],ret,fbody)) =
+      (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+    (stmts_valued_return fbody /\ cenv.ce_is_external /\
+     ~cenv.ce_raw_return ==> return_buffer_ok cenv)
+Proof
+  rpt strip_tac >> drule_all external_source_return_buffer_ok >> simp[]
 QED
 
 
@@ -836,14 +879,13 @@ QED
    lock. expr_sim_inv's storage-variable clause (each storage variable has
    its declared module type and no hash-map info) follows from body_inv
    and the single-module fact via body_inv_storage_var_types. *)
-Theorem external_body_frame:
+Theorem external_source_body_frame:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 lbl cenv0 pos_args
    min_cds is_payable nkey ut' iv rt st cenv sa.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
@@ -886,7 +928,7 @@ Proof
     (drule external_send_call_value_frame >>
      simp[evaluation_state_component_equality, initial_state_def]) >>
   `outcomes_accounts_typed es0.outcomes /\ IS_SOME es0.outcomes` by fs[] >>
-  drule external_source_context_typed >> strip_tac >>
+  drule_all external_source_context_typed >> strip_tac >>
   drule_all external_package_dec_metadata >> strip_tac >>
   drule_all external_package_global_maps >> strip_tac >>
   drule external_package_bare_globals >>
@@ -918,14 +960,16 @@ Proof
     gvs[env_consistent_def] >>
   `stmts_valued_return fbody /\ cenv.ce_is_external /\
    ~cenv.ce_raw_return ==> return_buffer_ok cenv` by
-    (strip_tac >> drule external_selected_return_buffer_ok >>
+    (strip_tac >> drule external_source_return_buffer_ok >>
      rpt (disch_then drule) >> simp[]) >>
   drule_all external_package_alloc_env_agree >> strip_tac >>
   `?rr:bool. fn_allocs_ok tops
      (mut,F,rr,tx.function_name,args,[],ret,fbody)` by
-    (`tx.function_name <> "__default__"` by gvs[valid_vyper_call_def] >>
-     `supported_declaration_headers tops` by fs[supported_program_def] >>
-     drule_all supported_headers_external_member >> strip_tac >>
+    (`module_consts_env tops [] = []` by
+       metis_tac[supported_headers_module_consts_env,
+                 supported_program_def, supported_declaration_headers_def] >>
+     drule lookup_function_external_classified >>
+     simp[subst_consts_fn_empty] >> strip_tac >>
      Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
      qexists `rr` >> irule lower_vyper_runtime_unit_allocs_ok >>
      metis_tac[]) >>
@@ -1036,5 +1080,48 @@ Proof
        (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
      conj_tac >> first_assum ACCEPT_TAC) >>
   gvs[] >> irule cenv_module_pins_immutables_disjoint >> metis_tac[]
+QED
+
+Theorem external_body_frame:
+  !tops rpolicy unit am tx ret vs mut args fbody env es0 lbl cenv0 pos_args
+   min_cds is_payable nkey ut' iv rt st cenv sa.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+         (mut, F, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
+       rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
+    body_inv tops unit.cu_context cenv
+      (initial_evaluation_context am.sources am.layouts tx NONE) /\
+    cenv.ce_return_pc = NONE /\
+    ?bindings env_t env'.
+      supported_stmts tops bindings fbody /\
+      expr_sim_inv cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
+      ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
+      type_stmts env_t ret fbody = SOME env' /\
+      stmts_exprs_ok cenv fbody /\
+      call_evaluation_safe
+        (initial_evaluation_context am.sources am.layouts tx NONE)
+        (int_calls_stmts fbody)
+Proof
+  rpt strip_tac >> drule_all external_source_body_frame >> simp[]
 QED
 

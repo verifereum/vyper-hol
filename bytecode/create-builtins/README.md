@@ -17,9 +17,12 @@ The independent `oracle/` files were generated with the `VYPER_PIN` Vyper
 hashes.
 
 The compiler at the pin rejects `dom06_blueprint_rawargs_b32`, so its oracle
-files are kept from `0.5.0a4+commit.cd74ce4f`, it is out of
-`parity-fixtures.txt`, and `prepare` cannot reproduce this corpus as a whole. Keep that diagnostic and its oracle files when
-regenerating the accepted fixtures. The fixtures whose bytecode changed at
+files are kept from `0.5.0a4+commit.cd74ce4f` and it is out of
+`parity-fixtures.txt`. It is listed in `compiler-rejects.txt`: `prepare`
+checks that the pinned compiler still rejects it and skips it, and
+`python-o1-bytecode-fixtures --check` reproduces the rest of the corpus.
+Keep that diagnostic and its oracle files when regenerating the accepted
+fixtures. The fixtures whose bytecode changed at
 the pin through vyperlang/vyper#5127 are out of `parity-fixtures.txt` and
 listed in `../pending-5127-port.md`.
 

@@ -99,6 +99,148 @@ Proof
   metis_tac[eval_base_place_memory_access]
 QED
 
+Theorem eval_base_place_memory_read:
+  !t cx st id path st'.
+    eval_base_place cx t st = (INL (PlaceR (MemoryPlace id path)),st') ==>
+    MEM (ReadAcc (LocalRef id)) (accesses_target t)
+Proof
+  measureInduct_on `base_assignment_target_size t` >>
+  Cases_on `t` >> rpt gen_tac
+  >- (simp[Once evaluate_def, bind_def, get_scopes_def,
+           type_check_def, assert_def, ignore_bind_def, return_def, raise_def,
+           accesses_expr_def, AllCaseEqs()] >> rpt strip_tac >> gvs[])
+  >- (PairCases_on `p` >> simp[Once evaluate_def] >>
+      metis_tac[lookup_global_not_memory])
+  >- (simp[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def] >>
+      rpt strip_tac >> drule extend_place_memory_origin >>
+      strip_tac >> gvs[] >> first_x_assum (qspec_then `b` mp_tac) >>
+      simp[] >> metis_tac[])
+  >> simp[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def] >>
+  rpt strip_tac >> drule extend_place_memory_origin >>
+  strip_tac >> gvs[] >> first_x_assum (qspec_then `b` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem eval_target_place_memory_read:
+  eval_target_place cx t st = (INL (MemoryPlace id path),st') ==>
+  MEM (ReadAcc (LocalRef id)) (accesses_target t)
+Proof
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
+  metis_tac[eval_base_place_memory_read]
+QED
+
+Theorem eval_expr_memory_access:
+  !e cx st id path st'.
+    eval_expr cx e st = (INL (PlaceR (MemoryPlace id path)),st') ==>
+    MEM (ReadAcc (LocalRef id)) (accesses_expr e)
+Proof
+  measureInduct_on `expr_size e` >> Cases_on `e` >> rpt gen_tac
+  >- (simp[Once evaluate_def, bind_def, get_scopes_def, type_check_def,
+           assert_def, ignore_bind_def, return_def, raise_def,
+           accesses_expr_def, AllCaseEqs()] >> rpt strip_tac >> gvs[])
+  >- (PairCases_on `p` >> simp[Once evaluate_def] >>
+      metis_tac[lookup_global_not_memory])
+  >- (PairCases_on `p` >>
+      simp[Once evaluate_def, lookup_flag_mem_def, bind_def,
+           option_CASE_rator, lift_option_type_def, return_def, raise_def,
+           AllCaseEqs()])
+  >- suspend "ifexp"
+  >- simp[Once evaluate_def, return_def]
+  >- (PairCases_on `p` >>
+      simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()])
+  >- suspend "subscript"
+  >- suspend "attribute"
+  >- simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+          AllCaseEqs()]
+  >- simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+          AllCaseEqs()]
+  >- suspend "pop"
+  >> suspend "call"
+QED
+Resume eval_expr_memory_access[ifexp]:
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def] >>
+  rpt strip_tac >>
+  rename1 `conditional_result cx raw mid = _` >>
+  `raw = PlaceR (MemoryPlace id path)` by
+    (qpat_x_assum `conditional_result _ _ _ = _` mp_tac >>
+     Cases_on `raw` >>
+     rw[conditional_result_def, bind_def, return_def, raise_def,
+        AllCaseEqs()] >> gvs[] >> pop_assum mp_tac >> IF_CASES_TAC >>
+     simp[bind_def, return_def, AllCaseEqs()] >> rw[] >>
+     BasicProvers.every_case_tac >> gvs[]) >> gvs[] >>
+  qpat_x_assum `switch_BoolV _ _ _ _ _ = _` mp_tac >>
+  simp[switch_BoolV_def, bind_def, return_def, raise_def,
+       COND_RATOR, AllCaseEqs()] >>
+  rpt strip_tac >>
+  qpat_x_assum `!y. _` (fn th =>
+    map_every (fn e => mp_tac (SIMP_RULE (srw_ss()) [] (Q.SPEC e th)))
+      [`e0`, `e1`]) >>
+  simp[DECIDE ``b < a + (b + (c + (d + 1))) /\
+                c < a + (b + (c + (d + 1)))``] >> metis_tac[]
+QED
+Resume eval_expr_memory_access[subscript]:
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def] >>
+  rpt strip_tac >>
+  rename1 `select_result cx _ raw _ _ = _` >>
+  Cases_on `raw` >>
+  gvs[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  drule extend_place_memory_origin >> strip_tac >> gvs[] >>
+  qpat_x_assum `(if subscript_reads_base _ _ _ then _ else _) _ = _` mp_tac >>
+  IF_CASES_TAC >>
+  simp[bind_def, return_def, AllCaseEqs()] >> rpt strip_tac >>
+  first_x_assum (qspec_then `e'` mp_tac) >>
+  simp[DECIDE ``a < a + (b + (c + 1))``] >> metis_tac[]
+QED
+Resume eval_expr_memory_access[attribute]:
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def] >>
+  rpt strip_tac >> rename1 `select_result cx _ raw _ _ = _` >>
+  Cases_on `raw` >>
+  gvs[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  drule extend_place_memory_origin >> strip_tac >> gvs[] >>
+  first_x_assum (qspec_then `e'` mp_tac) >> simp[] >> metis_tac[]
+QED
+Resume eval_expr_memory_access[pop]:
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def] >>
+  rpt strip_tac >> rename1 `pop_place cx bp _ = _` >> Cases_on `bp`
+  >- (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+      gvs[pop_place_def, bind_def, ignore_bind_def, return_def, raise_def,
+          AllCaseEqs()] >>
+      rename1 `ArrayTV et bd` >> Cases_on `bd` >>
+      gvs[pop_place_def, bind_def, ignore_bind_def, return_def, raise_def,
+          AllCaseEqs()])
+  >- (gvs[pop_place_def, bind_def, ignore_bind_def, return_def, raise_def,
+          UNCURRY, AllCaseEqs()] >>
+      metis_tac[eval_target_place_memory_read]) >>
+  gvs[pop_place_def, bind_def, ignore_bind_def, return_def, raise_def,
+      AllCaseEqs()]
+QED
+Resume eval_expr_memory_access[call]:
+  Cases_on `c` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+       AllCaseEqs()] >> rpt strip_tac
+  >~ [`IntCall p`]
+  >- (PairCases_on `p` >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+          raise_def, UNCURRY, AllCaseEqs()])
+  >~ [`eval_send`]
+  >- (drule vyperCallFrameTheory.eval_send_success_value >> simp[])
+  >~ [`eval_ext_call`]
+  >- (drule vyperCallFrameTheory.eval_ext_call_success_value >> simp[])
+  >~ [`eval_raw_call`]
+  >- (drule vyperCallFrameTheory.eval_raw_call_success_value >> simp[])
+  >~ [`eval_raw_call`]
+  >- (drule vyperCallFrameTheory.eval_raw_call_success_value >> simp[])
+  >~ [`CreateTarget`]
+  >- (rename1 `CreateTarget kind _ _ _` >> Cases_on `kind` >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+          AllCaseEqs()] >>
+      drule vyperCreateFrameTheory.eval_create_success_value >> simp[])
+QED
+Finalise eval_expr_memory_access
+
 Theorem pop_place_other_local:
   pop_place cx p st = (res,st') /\
   (!path. p <> MemoryPlace id path) ==>
@@ -462,4 +604,33 @@ Theorem eval_exprs_unwritten_local:
     lookup_scopes id st'.scopes = lookup_scopes id st.scopes
 Proof
   metis_tac[cj 6 evaluate_unwritten_local]
+QED
+
+Theorem subscript_nonoverlap_local_frame:
+  !mods cx obj idx es mid res fin id path.
+    eval_expr cx obj es = (INL (PlaceR (MemoryPlace id path)),mid) /\
+    is_ArrayT (expr_type obj) /\ base_through_dynarray obj /\
+    ~subscript_overlap mods obj idx /\
+    eval_expr cx idx mid = (res,fin) ==>
+    lookup_scopes id fin.scopes = lookup_scopes id mid.scopes
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!mods accs. MEM (ReadAcc (LocalRef id)) accs ==>
+      MEM (LocalRef id) (nonconstant_reads mods accs)` by
+    (recInduct nonconstant_reads_ind >> rw[nonconstant_reads_def] >>
+     rpt (CASE_TAC >> gvs[]) >> metis_tac[]) >>
+  `MEM (LocalRef id) (nonconstant_reads mods (expr_accesses mods obj))` by
+    (first_x_assum irule >> simp[expr_accesses_def] >>
+     metis_tac[eval_expr_memory_access]) >>
+  irule eval_expr_unwritten_local >> goal_assum (drule_at Any) >>
+  strip_tac >>
+  `MEM (WriteAcc (LocalRef id)) (expr_accesses mods idx)` by
+    simp[expr_accesses_def] >>
+  `any_written (nonconstant_reads mods (expr_accesses mods obj))
+               (expr_accesses mods idx)` by
+    (qsuff_tac `!reads. MEM (LocalRef id) reads ==>
+        any_written reads (expr_accesses mods idx)`
+     >- metis_tac[] >>
+     Induct >> simp[any_written_def] >> metis_tac[]) >>
+  gvs[subscript_overlap_def]
 QED
