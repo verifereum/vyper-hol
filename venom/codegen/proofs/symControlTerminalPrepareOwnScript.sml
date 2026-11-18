@@ -299,16 +299,6 @@ Proof
        execute_plan_def, exec_stack_op_def] >> gvs[] >> metis_tac[]
 QED
 
-Theorem terminal_operands_not_retpc:
-  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
-  MEM inst.inst_opcode
-    [STOP; RETURN; SELFDESTRUCT; REVERT; ASSERT; ASSERT_UNREACHABLE;
-     INVALID; CREATE; CREATE2; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL] /\
-  MEM (Var x) (compute_operands inst) ==> ~retpc_var fn x
-Proof
-  ACCEPT_TAC symControlTerminalWordStackOwnTheory.terminal_operands_not_retpc
-QED
-
 Theorem terminal_arranged_word_stack_mode:
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
   opaque_use_ok fn /\

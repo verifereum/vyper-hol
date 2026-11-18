@@ -3140,7 +3140,7 @@ Theorem terminal_operands_not_retpc:
      INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
   MEM (Var x) (compute_operands inst) ==> ~retpc_var fn x
 Proof
-  strip_tac >> irule symControlTerminalPrepareOwnTheory.terminal_operands_not_retpc >>
+  strip_tac >> irule symControlTerminalWordStackOwnTheory.terminal_operands_not_retpc >>
   metis_tac[listTheory.MEM]
 QED
 
