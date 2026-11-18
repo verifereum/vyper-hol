@@ -6,7 +6,7 @@
  *   intcall_args_full
  *)
 Theory bodyFullIntCallArgs
-Ancestors ptrDiscipline[qualified,ignore_grammar]
+Ancestors vyperStorageBackend[qualified,ignore_grammar] vyperStorageFootprint[qualified,ignore_grammar] freshWrites[qualified,ignore_grammar] bodyFullAllocaFresh[qualified,ignore_grammar] bodyIntCallSource[qualified,ignore_grammar] bodySim[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] supportedNames[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
   bodyFullIntCallDefs bodyIntCallSeams bodyFullPreds bodySimFull bodyFullUnwrap
   gasOutcomeFull bodyPtrDefs gasShadow gasShadowShape gasContext exprSimHypsDefs
   exprSimIfExpWidenedAdapter exprSimSliceCompose
@@ -4710,7 +4710,13 @@ Proof
                (\crv. return (Value crv))))))))))` by
     simp[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
          ignore_bind_def, bind_apply, return_def, FUN_EQ_THM] >>
+  `storage_trace_frame
+     (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)` by
+    (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   qpat_x_assum `eval_expr _ _ = _` SUBST_ALL_TAC >>
+  qpat_x_assum `storage_trace_frame _`
+    (assume_tac o PURE_REWRITE_RULE [bind_assoc]) >>
   pure_rewrite_tac[bind_assoc] >>
   qpat_x_assum `gas_admissible _ P es0`
     (assume_tac o PURE_REWRITE_RULE [bind_assoc]) >>
@@ -4721,5 +4727,1106 @@ Proof
   rename1 `compile_expr _ _ _ sa = (vv,sm)` >>
   `kc vv sm = (out,sb)` by
     (qpat_x_assum `comp_bind _ _ sa = _` mp_tac >> simp[comp_bind_def]) >>
-  FAIL_TAC "factored source and compiler continuation"
+  qpat_assum `compile_expr _ _ _ sa = (vv,sm)`
+    (assume_tac o REWRITE_RULE [exprSimSendTheory.compile_expr_call]) >>
+  Cases_on `compile_expr cenv ty
+    (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa` >>
+  rename1 `compile_expr _ _ _ shadow_sa = (shadow_vv,shadow_sm)` >>
+  qpat_assum `compile_expr _ _ _ shadow_sa = (shadow_vv,shadow_sm)`
+    (assume_tac o REWRITE_RULE
+      [gas_shadow_expr_def, exprSimSendTheory.compile_expr_call]) >>
+  drule_all intcall_args_omitted_defaults >> strip_tac >>
+  namedCases_on `cenv.ce_func_info (nsid_to_string (NONE,name))`
+    ["rc rbs pvs"] >>
+  qpat_assum `compile_call _ _ _ _ _ es _ sa = _`
+    (mp_then Any mp_tac intCallStepTheory.compile_call_intcall_shape) >>
+  simp[SimpLHS] >> strip_tac >>
+  qpat_assum `compile_call _ _ _ _ _ (MAP gas_shadow_expr es) _ shadow_sa = _`
+    (mp_then Any mp_tac intCallStepTheory.compile_call_intcall_shape) >>
+  simp[SimpLHS] >> strip_tac >>
+  rename1 `compile_stage_intcall_args _ _ es _ _ st2 = (sup_ops,st2a)` >>
+  rename1 `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) _ _ sh_st2 =
+    (sh_sup_ops,sh_st2a)` >>
+  `gas_shadow_state st2 sh_st2` by
+    (reverse (Cases_on `0 < rc' \/ 0 < rbs`) >-
+       (`rc' = 0 /\ rbs = 0` by decide_tac >> fs[]) >>
+     `?n rb sh_rb. compile_alloc_buffer n sa = (rb,st2) /\
+        compile_alloc_buffer n shadow_sa = (sh_rb,sh_st2)` by
+       (Cases_on `0 < rc'` >- (gs[] >> qexists_tac `32 * rc'` >> simp[]) >>
+        `rc' = 0 /\ 0 < rbs` by decide_tac >> gs[] >> qexists_tac `rbs` >> simp[]) >>
+     pop_assum strip_assume_tac >>
+     `gas_shadow_compiles (compile_alloc_buffer n) (compile_alloc_buffer n)` by
+       simp[gasShadowCompileContextTheory.gas_shadow_compiles_alloc_buffer] >>
+     drule_all (cj 2 bodyFullSharedTheory.gas_shadow_step) >> simp[]) >>
+  `!ce xs flags tys sh.
+     gas_shadow_compiles (compile_stage_intcall_args compile_expr ce xs flags tys)
+       (compile_stage_intcall_args compile_expr ce
+         (if sh then MAP gas_shadow_expr xs else xs) flags tys)` by
+    (rpt gen_tac >> irule gasShadowCompileCallSupportTheory.gas_shadow_compiles_stage_intcall_args >>
+     ACCEPT_TAC (cj 1 gasShadowCompileTheory.gas_shadow_compile_expr)) >>
+  `sh_sup_ops = sup_ops /\ gas_shadow_state st2a sh_st2a` by
+    (qpat_assum `compile_stage_intcall_args _ _ es _ _ st2 = _` mp_tac >>
+     qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) _ _ sh_st2 = _` mp_tac >>
+     qpat_assum `gas_shadow_state st2 sh_st2` mp_tac >>
+     qpat_assum `!ce xs flags tys sh. gas_shadow_compiles _ _`
+       (qspecl_then [`cenv`, `es`, `pvs`,
+         `TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (NONE,name)))`, `T`]
+          mp_tac) >>
+     SIMP_TAC std_ss [] >> metis_tac[bodyFullSharedTheory.gas_shadow_step]) >>
+  rename1 `compile_stage_intcall_args _ _ _ _ _ st2a = (def_ops,st3)` >>
+  rename1 `compile_stage_intcall_args _ _ _ _ _ sh_st2a = (sh_def_ops,sh_st3)` >>
+  qmatch_asmsub_abbrev_tac `compile_stage_intcall_args compile_expr
+    (cenv_without_defaults cenv (nsid_to_string (NONE,name))) ds _ _ st2a` >>
+  `ds = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts` by
+    simp[Abbr `ds`] >>
+  `sh_def_ops = def_ops /\ gas_shadow_state st3 sh_st3` by
+    (qpat_assum `compile_stage_intcall_args _ _ ds _ _ st2a = _` mp_tac >>
+     qpat_assum `compile_stage_intcall_args _ _ ds _ _ sh_st2a = _` mp_tac >>
+     qpat_assum `gas_shadow_state st2a sh_st2a` mp_tac >>
+     qpat_assum `!ce xs flags tys sh. gas_shadow_compiles _ _`
+       (qspecl_then [`cenv_without_defaults cenv (nsid_to_string (NONE,name))`,
+         `ds`, `DROP (LENGTH es) pvs`,
+         `DROP (LENGTH es) (TAKE (LENGTH args)
+           (cenv.ce_func_param_types (nsid_to_string (NONE,name))))`, `F`] mp_tac) >>
+     SIMP_TAC std_ss [] >>
+     metis_tac[bodyFullSharedTheory.gas_shadow_step]) >>
+  `MAP gas_shadow_expr ds = ds` by
+    (qpat_assum `ds = DROP _ dflts` (SUBST1_TAC) >>
+     first_assum ACCEPT_TAC) >>
+  `!ce xs flags tys a ops b.
+      compile_stage_intcall_args compile_expr ce xs flags tys a = (ops,b) ==>
+      cs_extends a b` by
+    (rpt strip_tac >>
+     qspecl_then [`compile_expr`, `ce`, `xs`, `flags`, `tys`, `a`]
+       mp_tac externalEntryShapeTheory.compile_stage_intcall_args_labels >>
+     simp[externalEntryShapeTheory.compile_expr_labels]) >>
+  `cs_extends sa st2 /\ cs_extends shadow_sa sh_st2` by
+    (reverse (Cases_on `0 < rc' \/ 0 < rbs`) >-
+       (`rc' = 0 /\ rbs = 0` by decide_tac >> fs[cs_extends_refl]) >>
+     Cases_on `0 < rc'` >-
+       (fs[] >> metis_tac[loweringHaltTheory.compile_alloc_buffer_extends]) >>
+     `rc' = 0 /\ 0 < rbs` by decide_tac >>
+     fs[] >> metis_tac[loweringHaltTheory.compile_alloc_buffer_extends]) >>
+  `cs_extends st2 st2a /\ cs_extends st2a st3 /\
+   cs_extends sh_st2 sh_st2a /\ cs_extends sh_st2a sh_st3` by
+    (rpt conj_tac >> first_x_assum irule >> goal_assum (drule_at Any)) >>
+  `!a b. (?ops u. emit_void INVOKE ops a = (u,b)) \/
+          (?ops n rb results mid u.
+             emit_multi_op INVOKE ops n a = (results,mid) /\
+             store_multi_results rb results 0 mid = (u,b)) ==>
+          cs_extends a b` by
+    (rpt strip_tac
+     >- (mp_tac (Q.SPECL [`INVOKE`, `ops`, `a`, `K T`]
+                    externalEntryShapeTheory.emit_void_labels) >> simp[]) >>
+     irule cs_extends_trans >> qexists_tac `mid` >> conj_tac
+     >- (mp_tac (Q.SPECL [`INVOKE`, `ops`, `n`, `a`, `K T`]
+                    externalEntryShapeTheory.emit_multi_op_labels) >> simp[]) >>
+     mp_tac (Q.SPECL [`rb`, `results`, `0`, `mid`, `K T`]
+                 externalEntryShapeTheory.store_multi_results_labels) >> simp[]) >>
+  `cs_extends st3 sm /\ cs_extends sh_st3 shadow_sm` by
+    (conj_tac >> first_x_assum irule >>
+     Cases_on `0 < rc'` >> Cases_on `0 < rbs` >> fs[] >> metis_tac[]) >>
+  `cs_extends sm sb /\ cs_extends shadow_sm shadow_sb` by
+    (conj_tac
+     >- metis_tac[compileAppendPropsTheory.cs_appends_result_extends] >>
+     `kc shadow_vv shadow_sm = (out,shadow_sb)` by
+       (qpat_assum `comp_bind _ _ shadow_sa = _` mp_tac >>
+        pure_rewrite_tac[comp_bind_def] >> simp[]) >>
+     metis_tac[compileAppendPropsTheory.cs_appends_result_extends]) >>
+  `!a b c e g z fn.
+      cs_extends a b /\ cs_extends b c /\ cs_extends c e /\
+      cs_extends e g /\ cs_extends g z /\ fn_has_code a z fn ==>
+      fn_has_code a b fn /\ fn_has_code b c fn /\ fn_has_code c e fn /\
+      fn_has_code e g fn` by
+    (rpt strip_tac >> metis_tac[cs_extends_trans, fn_has_code_mid,
+                                cs_extends_refl]) >>
+  `fn_has_code sa st2 func /\ fn_has_code st2 st2a func /\
+   fn_has_code st2a st3 func /\ fn_has_code st3 sm func` by
+    (qpat_assum `!a b c e g z fn. _ ==> fn_has_code a b fn /\ _`
+       (qspecl_then [`sa`, `st2`, `st2a`, `st3`, `sm`, `sb`, `func`] mp_tac) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  `fn_has_code shadow_sa sh_st2 shadow_func /\
+   fn_has_code sh_st2 sh_st2a shadow_func /\
+   fn_has_code sh_st2a sh_st3 shadow_func /\
+   fn_has_code sh_st3 shadow_sm shadow_func` by
+    (qpat_assum `!a b c e g z fn. _ ==> fn_has_code a b fn /\ _`
+       (qspecl_then [`shadow_sa`, `sh_st2`, `sh_st2a`, `sh_st3`, `shadow_sm`,
+                    `shadow_sb`, `shadow_func`] mp_tac) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  `cenv.ce_func_param_types (nsid_to_string (NONE,name)) = MAP SND args` by
+    simp[nsid_to_string_def, TAKE_DROP] >>
+  `!sft ts. ALL_DISTINCT (supported_function_names ts) /\
+        MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) ts ==>
+        build_func_info sft ts name =
+          compute_func_info (\n. MAP (FST o SND) (sft n)) ret
+            (type_mem_bytes sft ret) (MAP SND args)` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> gen_tac >>
+     Induct >> simp[compileVyperTheory.build_func_info_def,
+                    supportedNamesTheory.supported_function_names_def] >>
+     Cases_on `h` >>
+     simp[compileVyperTheory.build_func_info_def,
+          supportedNamesTheory.supported_function_names_def,
+          loweringShapePropsTheory.MEM_supported_function_names] >>
+     rpt strip_tac >> gvs[] >>
+     `name <> s` by metis_tac[] >> Cases_on `f = External` >> simp[]) >>
+  `ALL_DISTINCT (supported_function_names tops) /\
+   cenv.ce_func_info =
+     build_func_info (get_struct_fields (make_struct_fields_map tops)) tops` by
+    ((qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
+     simp[bodySimTheory.body_inv_def, supportedProgramTheory.supported_program_def,
+          supportedNamesTheory.supported_declaration_names_def] >> (metis_tac[bodySimTheory.body_inv_def, supportedProgramTheory.supported_program_def, supportedNamesTheory.supported_declaration_names_def]))) >>
+  `cenv.ce_func_info (nsid_to_string (NONE,name)) =
+    compute_func_info
+      (\n. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) n))
+      ret (type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ret)
+      (MAP SND args)` by
+    (qpat_assum `cenv.ce_func_info = build_func_info _ _` SUBST1_TAC >>
+     simp[nsid_to_string_def, NoAsms] >>
+     qpat_assum `!sft ts. _ ==> build_func_info sft ts name = _` irule >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `pvs = compute_pass_via_stack (MAP SND args) rc'` by
+    (qpat_assum `cenv.ce_func_info _ = compute_func_info _ _ _ _` mp_tac >>
+     qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` SUBST1_TAC >>
+     simp[NoAsms, compute_func_info_def] >> metis_tac[]) >>
+  `LENGTH pvs = LENGTH args` by simp[LENGTH_compute_pass_via_stack] >>
+  `!xs a. LENGTH xs = LENGTH es ==>
+      compile_stage_intcall_args compile_expr cenv xs
+        (TAKE (LENGTH es) pvs) (TAKE (LENGTH es) (MAP SND args)) a =
+      compile_stage_intcall_args compile_expr cenv xs pvs
+        (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (NONE,name)))) a` by
+    (rpt gen_tac >> disch_then (assume_tac o SYM) >>
+     qpat_assum `cenv.ce_func_param_types _ = MAP SND args` SUBST1_TAC >>
+     `TAKE (LENGTH args) (MAP SND args) = MAP SND args` by simp[] >>
+     pop_assum SUBST1_TAC >>
+     qpat_assum `LENGTH es = LENGTH xs` SUBST1_TAC >>
+     irule (GSYM intcall_args_stage_take) >> simp[]) >>
+  `compile_stage_intcall_args compile_expr cenv es
+      (TAKE (LENGTH es) pvs) (TAKE (LENGTH es) (MAP SND args)) st2 =
+      (sup_ops,st2a)` by simp[] >>
+  `compile_stage_intcall_args compile_expr cenv (MAP gas_shadow_expr es)
+      (TAKE (LENGTH es) pvs) (TAKE (LENGTH es) (MAP SND args)) sh_st2 =
+      (sup_ops,sh_st2a)` by simp[] >>
+  `expr_sim_inv cenv cx tenv es0` by
+    (qpat_assum `expr_body_pre _ _ _ _ _`
+       (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [expr_body_pre_def])) >>
+  `env_consistent tenv cx es0` by
+    (qpat_assum `expr_sim_inv cenv cx tenv es0`
+       (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [expr_sim_inv_def])) >>
+  `tenv.type_defs = get_tenv cx` by
+    (irule vyperTypeEvalCaseProofsTheory.env_consistent_type_defs_get_tenv >>
+     goal_assum (drule_at Any)) >>
+  `LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es)
+       (TAKE (LENGTH es) (MAP SND args)) /\
+   EVERY (supported_value_type tops o SND) args /\
+   EVERY (supported_default_expression tops) dflts /\
+   supported_return_type tops ret` by
+    ((drule_all bodyIntCallSourceTheory.body_intcall_source_selection >>
+     qpat_assum `lookup_callable_function _ name tops = SOME _`
+       (fn th => SIMP_TAC (srw_ss()) [th]) >>
+     strip_tac >> pure_asm_rewrite_tac[] >> (metis_tac[bodyIntCallSourceTheory.body_intcall_source_selection]))) >>
+  `EVERY (supported_value_type tops) (MAP SND args)` by
+    (simp[EVERY_MAP, combinTheory.o_DEF] >>
+     metis_tac[EVERY_MAP, combinTheory.o_DEF]) >>
+  `EVERY (\t. type_memory_bytes cenv t < 2 ** 64) (MAP SND args)` by
+    (irule intcall_args_parameter_allocation_bounds_defaults >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+  `!ts n i. i < LENGTH ts /\ EL i (compute_pass_via_stack ts n) ==>
+      is_word_type (EL i ts)` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> Induct >> simp[] >>
+     rpt gen_tac >> Cases_on `i` >>
+     simp[compute_pass_via_stack_def] >> rw[] >> metis_tac[]) >>
+  `!i. i < LENGTH args /\ EL i pvs ==> is_word_type (EL i (MAP SND args))` by
+    (rpt gen_tac >>
+     qpat_assum `pvs = compute_pass_via_stack _ _` SUBST1_TAC >>
+     qpat_assum `!ts n j. _ ==> is_word_type (EL j ts)`
+       (qspecl_then [`MAP SND args`,`rc'`,`i`] mp_tac) >>
+     simp[NoAsms]) >>
+  `~ctx_has_dalloca ctx` by
+    (drule bodyInvNoDallocaTheory.body_inv_no_dalloca >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ action _ _ _` >>
+  `storage_trace_frame action` by
+    (qunabbrev_tac `action` >>
+     qpat_assum `storage_trace_frame _` mp_tac >>
+     qpat_assum `ds = DROP _ dflts` (SUBST1_TAC o SYM) >>
+     simp[NoAsms]) >>
+  (reverse (Cases_on `storage_trace_domain cx st0 es0.storage_trace`)
+   >- (irule gasOutcomeFullComposeTheory.gas_outcome_full_bad_nil >>
+       (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+       qx_gen_tac `tail` >> Cases_on `action (es0 with gas_obs := tail)` >>
+       drule_all vyperStorageTraceTheory.storage_trace_frame_prefix >>
+       strip_tac >> simp[] >> strip_tac >>
+       drule vyperStorageFootprintTheory.storage_trace_domain_prefix >> simp[])) >>
+  `valid_horizon cx st0 (storage_trace_horizon es0.storage_trace)
+      es0.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon cx st0 H es0.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon es0.storage_trace` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
+  `type_memory_bytes cenv ret < 2 ** 64` by
+    (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
+     qpat_assum `MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     `MEM (subst_consts_fn (module_consts_env tops [])
+        (mut,nr,rr,name,args,dflts,ret,ss))
+        (FST (SND (classify_functions tops)))` by
+       (simp[constSubstTheory.subst_consts_fn_def,
+             loweringShapePropsTheory.MEM_classify_internal] >>
+        qexistsl [`dflts`,`ss`] >> simp[]) >>
+     qpat_x_assum `body_inv _ _ _ _` mp_tac >>
+     simp[bodySimTheory.body_inv_def] >> strip_tac >>
+     Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,rest)` >>
+     PairCases_on `rest` >>
+     `fn_allocs_ok tops (subst_consts_fn (module_consts_env tops [])
+         (mut,nr,rr,name,args,dflts,ret,ss))` by
+       (Cases_on `cx.in_deploy`
+        >- (gvs[] >> irule compileVyperTheory.lower_vyper_deploy_unit_allocs_ok >>
+            metis_tac[]) >>
+        gvs[] >> irule compileVyperTheory.lower_vyper_runtime_unit_allocs_ok >>
+        metis_tac[]) >>
+     qpat_x_assum `fn_allocs_ok _ _` mp_tac >>
+     simp[constSubstTheory.subst_consts_fn_def, compileVyperTheory.fn_allocs_ok_def] >>
+     `type_memory_bytes
+       (build_compile_env tops Internal mut name args ret
+         (subst_consts_stmts (module_consts_env tops []) ss) F) =
+      type_memory_bytes cenv` by
+       (irule compileEnvTheory.type_memory_bytes_frame >>
+        simp[compileVyperTheory.build_compile_env_ce_struct_fields]) >> simp[]) >>
+  `rc' <= 2 /\ rbs < 2 ** 64` by
+    (qpat_assum `cenv.ce_func_info _ = compute_func_info _ _ _ _` mp_tac >>
+     qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` SUBST1_TAC >>
+     qpat_assum `type_memory_bytes cenv ret < 2 ** 64` mp_tac >>
+     qpat_assum `body_inv _ _ _ _`
+       (assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
+     `cenv.ce_struct_fields = make_struct_fields_map tops` by fs[] >>
+     qpat_assum `cenv.ce_struct_fields = _` (SUBST1_TAC o SYM) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[structFieldsPropsTheory.type_mem_bytes_type_memory_bytes,
+          compute_func_info_def] >>
+     Cases_on `ret` >>
+     simp[returns_stack_count_def, tuple_like_stack_count_def,
+          MAX_STACK_RETURNS_def] >> rw[] >> decide_tac) >>
+  qabbrev_tac `buf_n = if 0 < rc' then 32 * rc' else rbs` >>
+  `32 * rc' < dimword (:256)` by
+    (qpat_assum `rc' <= 2` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[wordsTheory.dimword_def] >> decide_tac) >>
+  `rbs < dimword (:256)` by
+    (irule arithmeticTheory.LESS_TRANS >> qexists_tac `2 ** 64` >>
+     conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[wordsTheory.dimword_def, NoAsms])) >>
+  `buf_n < dimword (:256)` by
+    (Cases_on `0 < rc'` >> simp[Abbr `buf_n`]) >>
+  `(0 < rc' \/ 0 < rbs) ==> ?rbuf. compile_alloc_buffer buf_n sa = (rbuf,st2)` by
+    (disch_tac >> Cases_on `0 < rc'`
+     >- (qpat_assum `0 < rc' ==> ?rb rs st4 u.
+                       compile_alloc_buffer (32 * rc') sa = (rb,st2) /\ _` mp_tac >>
+         impl_tac >- first_assum ACCEPT_TAC >>
+         disch_then (qx_choose_then `rb0` strip_assume_tac) >>
+         qexists_tac `rb0` >> simp[Abbr `buf_n`]) >>
+     `rc' = 0 /\ 0 < rbs` by decide_tac >>
+     qpat_assum `rc' = 0 /\ 0 < rbs ==> ?rb u.
+                   compile_alloc_buffer rbs sa = (rb,st2) /\ _` mp_tac >>
+     impl_tac >- simp[] >>
+     disch_then (qx_choose_then `rb0` strip_assume_tac) >>
+     qexists_tac `rb0` >> simp[Abbr `buf_n`]) >>
+  `allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by
+    (qpat_assum `ghost_inv_at _ lo d cenv cx es0 G0 tn0 s0` mp_tac >>
+     simp[bodyPtrDefsTheory.ghost_inv_at_def, NoAsms]) >>
+  `0 < rc' \/ 0 < rbs ==>
+   ?rb q w entry Ga tna.
+     compile_alloc_buffer buf_n sa = (rb,st2) /\ rb.buf_operand = Var q /\
+     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+                       (s0,G0,tn0) [] (OK entry,Ga,tna)) /\
+     not_fresh_at st2 q /\ lookup_var q entry = SOME w /\
+     ptr_covers Ga tna q entry buf_n /\
+     FLOOKUP entry.vs_allocas sa.cs_next_id = SOME (w2n w,buf_n) /\
+     FLOOKUP Ga q = SOME (w2n w,buf_n) /\
+     w2n w + buf_n <= entry.vs_alloca_next /\
+     (!n b sz. local_region cenv es0.scopes entry n b sz ==>
+         regions_disjoint (w2n w) buf_n b sz) /\
+     alloca_history func entry /\ ~entry.vs_halted /\
+     entry.vs_current_bb = st2.cs_current_bb /\
+     entry.vs_inst_idx = LENGTH st2.cs_current_insts /\
+     s0.vs_alloca_next <= entry.vs_alloca_next /\
+     lo <= w2n w /\ sa.cs_next_id < st2.cs_next_id /\
+     sa.cs_next_var <= st2.cs_next_var /\ rb.buf_size = buf_n /\
+     wb_frame cenv es0 es0 sa s0 entry /\
+     ghost_kept_at lo cenv es0 sa G0 tn0 s0 Ga tna /\
+     return_buf_frame d cenv st2 entry /\
+     (!H. valid_horizon cx st0 H es0.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es0 entry /\
+        storage_well_formed_on cx es0 (FST H) /\
+        ghost_inv_at (DF H) lo d cenv cx es0 Ga tna entry)` by
+    (disch_tac >>
+     qpat_assum `0 < rc' \/ 0 < rbs ==> ?rb. _` mp_tac >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (qx_choose_then `rb` assume_tac) >>
+     drule_all (INST_TYPE [``:'b`` |-> ``:256``]
+       bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_exact) >>
+     disch_then (qspecl_then [`tn0`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`G0`]
+       (qx_choose_then `rq` (qx_choose_then `rw` (qx_choose_then `entry`
+         (qx_choose_then `Ga` (qx_choose_then `tna` strip_assume_tac)))))) >>
+     `~entry.vs_halted` by
+       (qpat_assum `entry with <| vs_vars := _; vs_allocas := _;
+          vs_alloca_next := _; vs_inst_idx := _ |> = s0`
+          (mp_tac o Q.AP_TERM `\s. s.vs_halted`) >> simp[]) >>
+     `!H. valid_horizon cx st0 H es0.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es0 entry /\
+        storage_well_formed_on cx es0 (FST H) /\
+        ghost_inv_at (DF H) lo d cenv cx es0 Ga tna entry` by
+       ((qx_gen_tac `H` >> disch_tac >>
+        qpat_assum `!H. valid_horizon _ _ H es0.storage_trace ==> _ /\ _ /\ _`
+          (drule_then strip_assume_tac) >>
+        conj_tac >- (first_x_assum irule >> first_assum ACCEPT_TAC) >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        irule (INST_TYPE [``:'a`` |-> ``:256``]
+          bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at) >>
+        rpt (first_assum (irule_at Any)) >> simp[] >> (metis_tac[INST_TYPE [``:'a`` |-> ``:256``]
+          bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at]))) >>
+     drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
+     `lo <= w2n rw` by
+       (qpat_assum `allocas_from lo entry`
+         (qspecl_then [`sa.cs_next_id`,`w2n rw`,`buf_n`] mp_tac o
+          REWRITE_RULE [ptrDisciplineTheory.allocas_from_def]) >>
+        disch_then irule >> first_assum ACCEPT_TAC) >>
+     `sa.cs_next_id < st2.cs_next_id /\ sa.cs_next_var <= st2.cs_next_var` by simp[] >>
+     `entry.vs_memory = s0.vs_memory` by
+       (qpat_assum `entry with <| vs_vars := _; vs_allocas := _;
+           vs_alloca_next := _; vs_inst_idx := _ |> = s0`
+         (mp_tac o Q.AP_TERM `\s. s.vs_memory`) >> simp[]) >>
+     `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x entry = SOME w` by
+       (rpt strip_tac >> qpat_assum `!x. not_fresh_at sa x ==> _ /\ _ /\ _`
+          (drule_then strip_assume_tac) >> simp[]) >>
+     `wb_frame cenv es0 es0 sa s0 entry` by
+       (simp[loweringPostsTheory.wb_frame_def, exprSimPropsTheory.locals_kept_mem] >>
+        rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     `return_buf_frame d cenv st2 entry` by
+       (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+        rpt (first_assum (irule_at Any)) >> simp[]) >>
+     `ghost_kept_at lo cenv es0 sa G0 tn0 s0 Ga tna` by
+       (qpat_assum `stmt_state_rel (storage_trace_horizon _) ctx func cenv cx es0 s0`
+          (strip_assume_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
+        `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id
+           ==> off + sz <= s0.vs_alloca_next` by
+          (rpt strip_tac >>
+           qpat_assum `alloca_inv s0`
+             (irule o REWRITE_RULE [venomMemDefsTheory.alloca_next_valid_def] o
+              CONJUNCT2 o REWRITE_RULE [venomMemDefsTheory.alloca_inv_def]) >>
+           goal_assum (drule_at Any)) >>
+        `!n b sz. local_region cenv es0.scopes s0 n b sz ==> b + sz <= s0.vs_alloca_next` by
+          (rpt strip_tac >> drule_all exprSimConvertFromBytesTheory.dynamic_local_region_bound >> simp[]) >>
+        `!x. not_fresh_at sa x ==>
+            FLOOKUP Ga x = FLOOKUP G0 x /\ op_taint tna (Var x) = op_taint tn0 (Var x)` by
+          (rpt strip_tac >> qpat_assum `!x. not_fresh_at sa x ==> _ /\ _ /\ _`
+             (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+        qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP Ga x = _ /\ _` mp_tac >>
+        qpat_assum `!i. i IN tna.t_mem <=> _` mp_tac >>
+        qpat_assum `lo <= s0.vs_alloca_next` mp_tac >>
+        qpat_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _` mp_tac >>
+        qpat_assum `!n b sz. local_region cenv es0.scopes s0 n b sz ==> _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> ntac 5 disch_tac >>
+        `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G0 tn0` by
+          MATCH_ACCEPT_TAC wordArgsPtrTheory.ghost_kept_at_refl >>
+        drule_all_then ACCEPT_TAC bodyFullAllocaFreshTheory.alloc_buffer_ghost_kept_at) >>
+     qexistsl_tac [`rb`,`rq`,`rw`,`entry`,`Ga`,`tna`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  (* One initial cut for both return modes, with the allocation pinned only
+     in the allocating mode. *)
+  `?entry Ga tna pin.
+     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+            (s0,G0,tn0) [] (OK entry,Ga,tna)) /\
+     (0 < rc' \/ 0 < rbs ==>
+        ?rb q (w:bytes32). compile_alloc_buffer buf_n sa = (rb,st2) /\
+          rb.buf_operand = Var q /\ rb.buf_size = buf_n /\
+          pin = SOME (q,w2n w,buf_n)) /\
+     (rc' = 0 /\ rbs = 0 ==> pin = NONE) /\
+     (case pin of NONE => T | SOME (q,b,k) =>
+        FLOOKUP Ga q = SOME (b,k) /\ op_taint tna (Var q) = {} /\
+        lookup_var q entry = SOME (n2w b) /\
+        FLOOKUP entry.vs_allocas sa.cs_next_id = SOME (b,k) /\
+        sa.cs_next_id < st2.cs_next_id /\ lo <= b /\ b+k <= entry.vs_alloca_next /\
+        not_fresh_at st2 q /\
+        (!n lb sz. local_region cenv es0.scopes entry n lb sz ==>
+           b+k <= lb \/ lb+sz <= b)) /\
+     wb_frame cenv es0 es0 sa s0 entry /\ ghost_kept_at lo cenv es0 sa G0 tn0 s0 Ga tna /\
+     alloca_history func entry /\ sa.cs_next_id <= st2.cs_next_id /\
+     sa.cs_next_var <= st2.cs_next_var /\ s0.vs_alloca_next <= entry.vs_alloca_next /\
+     (!n b sz. local_region cenv es0.scopes s0 n b sz <=>
+        local_region cenv es0.scopes entry n b sz) /\
+     return_buf_frame d cenv st2 entry /\ ~entry.vs_halted /\
+     entry.vs_current_bb = st2.cs_current_bb /\
+     entry.vs_inst_idx = LENGTH st2.cs_current_insts /\
+     (!H. valid_horizon cx st0 H es0.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es0 entry /\
+        storage_well_formed_on cx es0 (FST H) /\
+        ghost_inv_at (DF H) lo d cenv cx es0 Ga tna entry)` by
+    (reverse (Cases_on `0 < rc' \/ 0 < rbs`)
+     >- (`rc' = 0 /\ rbs = 0` by decide_tac >>
+         qpat_assum `rc' = 0 /\ rbs = 0 ==> ?u. st2 = sa /\ _` mp_tac >>
+         (impl_tac >- simp[]) >> strip_tac >>
+         qexistsl_tac [`s0`,`G0`,`tn0`,`NONE`] >>
+         simp[exprSimWordArgsTheory.wb_frame_refl, wordArgsPtrTheory.ghost_kept_at_refl,
+              cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules] >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `0 < rc' \/ 0 < rbs ==> ?rb q w entry Ga tna. _` mp_tac >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (qx_choose_then `rb` (qx_choose_then `q` (qx_choose_then `w`
+       (qx_choose_then `entry` (qx_choose_then `Ga` (qx_choose_then `tna` strip_assume_tac)))))) >>
+     `op_taint tna (Var q) = {}` by
+       (qpat_assum `ptr_covers Ga tna q entry buf_n`
+         (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ptr_covers_def])) >>
+     `!n b sz. local_region cenv es0.scopes s0 n b sz <=>
+           local_region cenv es0.scopes entry n b sz` by
+       (qpat_assum `stmt_state_rel (storage_trace_horizon _) ctx func cenv cx es0 s0` mp_tac >>
+        qpat_assum `local_ptrs_reserved cenv sa` mp_tac >>
+        qpat_assum `wb_frame cenv es0 es0 sa s0 entry` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> ntac 3 disch_tac >>
+        `MAP FDOM es0.scopes = MAP FDOM es0.scopes` by REFL_TAC >>
+        drule_all_then ACCEPT_TAC wordArgsPtrTheory.wb_frame_local_regions) >>
+     qexistsl_tac [`entry`,`Ga`,`tna`,`SOME (q,w2n w,buf_n)`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (disch_tac >> qexistsl_tac [`rb`,`q`,`w`] >> simp[]) >>
+     simp[wordsTheory.n2w_w2n] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     rpt strip_tac >>
+     qpat_assum `!n b sz. local_region cenv es0.scopes entry n b sz ==> regions_disjoint _ _ _ _`
+       (drule_then mp_tac) >> simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
+  `local_ptrs_reserved cenv st2` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sa` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at st2 x` by
+    ((rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> pure_asm_rewrite_tac[] >> (simp[freshWritesTheory.not_fresh_at_mono]))) >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at st2 x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> pure_asm_rewrite_tac[] >>
+     simp[freshWritesTheory.not_fresh_at_mono]) >>
+  irule gasOutcomeFullGuardedTheory.gas_outcome_full_zero_prefix_guarded >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`Ga`,`entry`,`tna`] >>
+  conj_tac >- (rpt strip_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  qunabbrev_tac `action` >>
+  qpat_assum `ds = DROP _ dflts` (fn th =>
+    qpat_assum `gas_admissible _ P es0`
+      (assume_tac o PURE_REWRITE_RULE [GSYM th])) >>
+  qmatch_goalsub_abbrev_tac `bind (eval_exprs cx es) supplied_tail` >>
+  `EVERY (\e. expr_body_pre cenv cx tenv e es0) es` by
+    (qpat_assum `expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0`
+       mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     disch_then (strip_assume_tac o
+       SIMP_RULE (srw_ss())
+         [Once vyperTypeSystemTheory.well_typed_expr_def,
+          vyperTypeCallGraphTheory.int_calls_expr_def,
+          Once byte_widths_expr_def, Once allocLimitsTheory.alloc_limits_expr_def,
+          Once supportedExprTraverseTheory.expr_has_evm_run_thm,
+          supportedExprTraverseTheory.supported_expr_exists_def,
+          supportedExprTraverseTheory.supported_exprs_exists_every] o
+       REWRITE_RULE [expr_body_pre_def]) >>
+     simp[listTheory.EVERY_MEM, expr_body_pre_def] >>
+     qx_gen_tac `e` >> disch_tac >>
+     `call_evaluation_safe cx (int_calls_exprs es)` by
+       (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
+        qexists_tac `(NONE,name)::int_calls_exprs es` >> simp[]) >>
+     imp_res_tac exprSimSourceTheory.int_calls_exprs_every_mem >>
+     gvs[listTheory.EVERY_MEM, listTheory.EXISTS_MEM, combinTheory.o_THM] >>
+     metis_tac[exprSimSourceTheory.well_typed_exprs_member,
+               exprSimSourceTheory.byte_widths_exprs_mem,
+               exprSimSourceTheory.alloc_limits_exprs_mem,
+               exprSimSourceTheory.call_evaluation_safe_exprs_mem]) >>
+  irule intcall_args_stage_full_p2 >>
+  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
+  qpat_assum `expr_sim_inv cenv cx tenv es0` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ _ es (TAKE _ _) (TAKE _ _) st2 = _`
+    (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) (TAKE _ _) (TAKE _ _) sh_st2 = _`
+    (irule_at Any) >>
+  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
+  qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 Ga tna` (irule_at Any) >>
+  qpat_assum `return_buf_frame d cenv st2 entry` (irule_at Any) >>
+  qpat_assum `(case pin of NONE => T | SOME _ => _)` (irule_at Any) >>
+  qexistsl_tac [`[]`,`[]`,`[]`,`[]`,`[]`,`P`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (simp[venomStateTheory.eval_operands_def, listTheory.LENGTH_TAKE,
+            rich_listTheory.EL_TAKE, rich_listTheory.EVERY_TAKE] >> NO_TAC)
+  >- (qunabbrev_tac `supplied_tail` >>
+      qpat_assum `!v. storage_trace_frame (f v)` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> disch_tac >>
+      Cases_on `cx.nonreentrant_slot` >> simp[] >>
+      rpt (FIRST [gen_tac, disch_tac, conj_tac, CHANGED_TAC BETA_TAC,
+             MATCH_MP_TAC storage_trace_frame_bind_all,
+             MATCH_MP_TAC storage_trace_frame_ignore_bind,
+             MATCH_MP_TAC storage_trace_frame_finally,
+             MATCH_MP_TAC storage_trace_frame_finally_unless_halt,
+             MATCH_MP_TAC storage_trace_frame_try,
+             MATCH_MP_TAC vyperStorageTraceTheory.storage_trace_frame_cond]) >>
+      simp[storage_trace_frame_bind_all, storage_trace_frame_ignore_bind,
+           storage_trace_frame_finally, storage_trace_frame_finally_unless_halt,
+           storage_trace_frame_try, vyperStorageTraceTheory.storage_trace_frame_cond,
+           storage_trace_frame_function_handler, storage_trace_frame_state_reads,
+           storage_trace_frame_state_updates, storage_trace_frame_lifts,
+           storage_trace_frame_function_stack, storage_trace_frame_return,
+           storage_trace_frame_raise, storage_trace_frame_optional_locks,
+           storage_trace_frame_acquire_lock, storage_trace_frame_release_lock,
+           storage_trace_frame_check_not_static,
+           cj 2 evaluate_storage_trace_frame, cj 6 evaluate_storage_trace_frame])
+  >- (rpt strip_tac >> irule intcall_args_aggregate_physical_type >>
+      qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
+      qexistsl_tac [`tenv`,`cm`,`ci`,`ee`,`dty`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC)
+  >> TRY (qunabbrev_tac `supplied_tail` >>
+      qpat_assum `gas_admissible (bind (eval_exprs cx es) _) P es0` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> NO_TAC)
+  >> TRY (rpt strip_tac >>
+      qpat_assum `!i. i < LENGTH args /\ EL i pvs ==> is_word_type _` mp_tac >>
+      qpat_assum `LENGTH es <= LENGTH args` mp_tac >>
+      qpat_assum `LENGTH pvs = LENGTH args` mp_tac >>
+      qpat_assum `EL _ (TAKE (LENGTH es) pvs)` mp_tac >>
+      qpat_assum `_ < LENGTH es` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      simp[rich_listTheory.EL_TAKE] >> NO_TAC) >>
+  map_every qx_gen_tac [`marks`,`xs`,`ee`,`t`,`G1`,`tn1`] >> strip_tac >>
+  qpat_assum `!tail. eval_exprs cx es _ = _`
+    (qspec_then `[]` assume_tac) >>
+  `body_exprs_full_ok (cx with stk updated_by CONS (NONE,name)) ds` by
+    (qpat_assum `ds = DROP _ dflts` SUBST1_TAC >>
+     irule intcall_args_defaults_ih >>
+     qpat_assum `eval_exprs cx es _ = (INL xs,_)` (irule_at Any) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func (cenv_without_defaults cenv name) cx ee t` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     irule exprLoweringPropsTheory.stmt_state_rel_cenv_cong >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx ee t` (irule_at Any) >>
+     simp[cenv_without_defaults_def]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func (cenv_without_defaults cenv name)
+       (cx with stk updated_by CONS (NONE,name)) ee t` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func (cenv_without_defaults cenv name) cx ee t`
+       (drule_then mp_tac) >>
+     simp[intcall_args_stmt_state_rel_push]) >>
+  `well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt)` by
+    (qpat_assum `expr_body_pre cenv cx tenv (Call _ _ _ _) es0`
+       (ACCEPT_TAC o cj 2 o REWRITE_RULE [expr_body_pre_def])) >>
+  `IS_SOME (FLOOKUP tenv.fn_sigs (NONE,name))` by
+    (qpat_assum `well_typed_expr tenv (Call _ _ _ _)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[Once well_typed_expr_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+  `functions_well_typed cx /\ env_consistent tenv cx ee` by
+    (qpat_assum `expr_sim_inv cenv cx tenv ee` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[expr_sim_inv_def]) >>
+  drule_all vyperTypeEvalProofsTheory.callable_body_typing_from_env_consistent >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `env_body` (qx_choose_then `ret_tv` (qx_choose_then `env_after`
+      (fn th => map_every assume_tac (CONJUNCTS th)))))) >>
+  `well_typed_exprs (defaults_env (tenv with current_src := NONE)) ds` by
+    (qpat_assum `ds = DROP _ dflts` SUBST1_TAC >>
+     irule vyperTypeEvalProofsTheory.well_typed_exprs_DROP >>
+     qpat_assum `well_typed_exprs (defaults_env env_body) dflts`
+       (mp_then Any mp_tac (cj 4 vyperTypeContractContextTheory.well_typed_static_maps_transfer)) >>
+     disch_then (qspec_then `defaults_env (tenv with current_src := NONE)` mp_tac) >>
+     simp[defaults_env_def]) >>
+  `supported_pure_exprs tops ds` by
+    (qpat_assum `ds = DROP _ dflts` SUBST1_TAC >>
+     `supported_program tops` by
+       (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> simp[bodySimTheory.body_inv_def]) >>
+     `supported_pure_exprs tops dflts` by
+       (drule_all supportedProgramTheory.supported_program_declaration >>
+        simp[supportedProgramTheory.supported_declaration_body_def]) >>
+     qpat_assum `supported_pure_exprs tops dflts` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[supportedExprsTheory.supported_pure_exprs_every, EVERY_MEM] >>
+     metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
+  qabbrev_tac `cxd = cx with stk updated_by CONS (NONE,name)` >>
+  `!src. finally (ignore_bind (set_scopes [FEMPTY]) (eval_exprs cxd ds))
+            (set_scopes src.scopes) src = eval_exprs cxd ds src` by
+    (qx_gen_tac `src` >> Cases_on `eval_exprs cxd ds src` >>
+     rename1 `eval_exprs cxd ds src = (res,fin)` >>
+     `fin.scopes = src.scopes` by
+       (irule stmtSimForArrayFrameTheory.supported_pure_exprs_scopes >>
+        goal_assum (drule_at Any) >> qexists_tac `tops` >>
+        first_assum ACCEPT_TAC) >>
+     `eval_exprs cxd ds (src with scopes := [FEMPTY]) =
+        (res,fin with scopes := [FEMPTY])` by
+       (drule_all intcall_args_defaults_scope_action >>
+        disch_then (qspecl_then [`cxd`,`src`,`[FEMPTY]`] mp_tac) >>
+        qpat_assum `eval_exprs cxd ds src = (res,fin)` (fn th =>
+          POP_ASSUM_LIST (K ALL_TAC) >> simp[th])) >>
+     Cases_on `res` >>
+     qpat_assum `eval_exprs cxd ds src = _` mp_tac >>
+     qpat_assum `eval_exprs cxd ds (src with scopes := [FEMPTY]) = _` mp_tac >>
+     qpat_assum `fin.scopes = src.scopes` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[ignore_bind_apply, set_scopes_def, finally_def, return_def, raise_def,
+          evaluation_state_component_equality]) >>
+  qabbrev_tac `after_defaults = \prev dvs.
+    bind
+      (bind (lift_option_type (bind_arguments (get_tenv cx) args (xs ++ dvs))
+                "IntCall bind_arguments") (\penv.
+       bind (lift_option_type (evaluate_type (get_tenv cx) ret)
+                "IntCall eval ret") (\rtv.
+       ignore_bind (lock_if_nr cx nr (is_view_mut mut))
+         (bind (push_function (NONE,name) penv cx) (\cxf.
+          bind (finally_unless_halt
+            (finally
+              (try (ignore_bind (eval_stmts cxf ss) (return NoneV)) handle_function)
+              (pop_function prev))
+            (unlock_if_nr cx nr (is_view_mut mut))) (\rv.
+          bind (lift_option_type (safe_cast rtv rv) "IntCall cast ret")
+               (\crv. return (Value crv)))))))) f` >>
+  `supplied_tail xs = bind get_scopes (\prev.
+     bind (finally (ignore_bind (set_scopes [FEMPTY]) (eval_exprs cxd ds))
+                   (set_scopes prev)) (after_defaults prev))` by
+    (qpat_assum `Abbrev (supplied_tail = _)` mp_tac >>
+     qpat_assum `Abbrev (after_defaults = _)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[markerTheory.Abbrev_def] >> rpt disch_tac >>
+     simp[vyperStateTheory.bind_assoc, lock_if_nr_def, unlock_if_nr_def,
+          is_view_mut_def, DE_MORGAN_THM]) >>
+  `supplied_tail xs = bind (eval_exprs cxd ds)
+       (\dvs src. after_defaults src.scopes dvs src)` by
+    (qpat_assum `supplied_tail xs = bind get_scopes _` SUBST1_TAC >>
+     qpat_assum `!src. finally _ _ src = eval_exprs cxd ds src` mp_tac >>
+     qpat_assum `supported_pure_exprs tops ds` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> ntac 2 disch_tac >>
+     simp[FUN_EQ_THM, bind_apply, get_scopes_def, return_def] >>
+     qx_gen_tac `src` >>
+     Cases_on `eval_exprs cxd ds src` >>
+     rename1 `eval_exprs cxd ds src = (res,fin)` >>
+     `fin.scopes = src.scopes` by
+       (irule stmtSimForArrayFrameTheory.supported_pure_exprs_scopes >>
+        goal_assum (drule_at Any) >> qexists_tac `tops` >> first_assum ACCEPT_TAC) >>
+     qpat_assum `!src. finally _ _ src = eval_exprs cxd ds src`
+       (qspec_then `src` assume_tac) >>
+     Cases_on `res` >> simp[vyperStateTheory.bind_def]) >>
+  qpat_assum `supplied_tail xs = bind (eval_exprs cxd ds) _` SUBST_ALL_TAC >>
+  `body_inv tops ctx (cenv_without_defaults cenv name) cxd` by
+    (qunabbrev_tac `cxd` >> irule intcall_args_defaults_body_inv >>
+     first_assum ACCEPT_TAC) >>
+  `expr_sim_inv (cenv_without_defaults cenv name) cxd
+      (tenv with current_src := NONE) ee` by
+    (qunabbrev_tac `cxd` >> irule intcall_args_defaults_inv >>
+     first_assum ACCEPT_TAC) >>
+  `EVERY (\e. expr_body_pre (cenv_without_defaults cenv name) cxd
+      (tenv with current_src := NONE) e ee) ds` by
+    (qunabbrev_tac `cxd` >> qpat_assum `ds = DROP _ dflts` SUBST1_TAC >>
+     irule intcall_args_defaults_pre >>
+     qpat_assum `well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt)`
+       (irule_at Any) >>
+     qexistsl_tac [`tops`,`ss`,`rr`,`ret`,`nr`,`mut`,`ctx`,`args`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp[Once vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  `TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (NONE,name))) =
+      MAP SND args` by
+    (qpat_assum `cenv.ce_func_param_types _ = MAP SND args` SUBST1_TAC >>
+     simp[NoAsms]) >>
+  `compile_stage_intcall_args compile_expr (cenv_without_defaults cenv name)
+      ds (DROP (LENGTH es) pvs) (DROP (LENGTH es) (MAP SND args)) st2a =
+      (def_ops,st3)` by
+    (qpat_assum `TAKE (LENGTH args) _ = MAP SND args` (SUBST1_TAC o SYM) >>
+     qpat_assum `compile_stage_intcall_args _ _ ds _ _ st2a = _` mp_tac >>
+     simp[NoAsms, nsid_to_string_def]) >>
+  `compile_stage_intcall_args compile_expr (cenv_without_defaults cenv name)
+      (MAP gas_shadow_expr ds) (DROP (LENGTH es) pvs)
+      (DROP (LENGTH es) (MAP SND args)) sh_st2a = (def_ops,sh_st3)` by
+    (qpat_assum `TAKE (LENGTH args) _ = MAP SND args` (SUBST1_TAC o SYM) >>
+     qpat_assum `MAP gas_shadow_expr ds = ds` SUBST1_TAC >>
+     qpat_assum `sh_def_ops = def_ops` (SUBST1_TAC o SYM) >>
+     qpat_assum `compile_stage_intcall_args _ _ ds _ _ sh_st2a = _` mp_tac >>
+     simp[NoAsms, nsid_to_string_def]) >>
+  `!src H tr. valid_horizon cxd src H tr = valid_horizon cx src H tr` by
+    ((qunabbrev_tac `cxd` >> POP_ASSUM_LIST (K ALL_TAC) >>
+     `!src b. get_storage (cx with stk updated_by CONS (NONE,name)) src b =
+               get_storage cx src b` by
+       (rpt gen_tac >> Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+     `!src regs. storage_well_formed_on (cx with stk updated_by CONS (NONE,name)) src regs =
+                 storage_well_formed_on cx src regs` by
+       simp[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+     `!regs tr. storage_trace_backends_well_formed
+                    (cx with stk updated_by CONS (NONE,name)) regs tr =
+                storage_trace_backends_well_formed cx regs tr` by
+       (gen_tac >> Induct >>
+        simp[vyperStorageFootprintTheory.storage_trace_backends_well_formed_def] >>
+        Cases >> simp[]) >>
+     simp[vyperStorageFootprintTheory.valid_horizon_def,
+          vyperStorageFootprintTheory.storage_observations_ok_def] >> (simp[vyperStorageBackendTheory.get_storage_def, vyperStorageFootprintTheory.storage_well_formed_on_def, vyperStorageFootprintTheory.storage_trace_backends_well_formed_def, vyperStorageFootprintTheory.valid_horizon_def, vyperStorageFootprintTheory.storage_observations_ok_def]))) >>
+  `!src tr. storage_trace_domain cxd src tr = storage_trace_domain cx src tr` by
+    (qpat_assum `!src H tr. valid_horizon cxd src H tr = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
+     simp[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  `cx_tops cxd = cx_tops cx` by
+    (qunabbrev_tac `cxd` >>
+     simp[NoAsms, cx_tops_def, vyperTypeEvalProofsTheory.get_module_code_stk_irrelevant]) >>
+  `!source src u G tn.
+    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cxd) cxd st0 source (src,u,G,tn) Q R =
+    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 source (src,u,G,tn) Q R` by
+    (qpat_assum `!src H tr. valid_horizon cxd src H tr = _` mp_tac >>
+     qpat_assum `!src tr. storage_trace_domain cxd src tr = _` mp_tac >>
+     qpat_assum `cx_tops cxd = cx_tops cx` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> ntac 3 disch_tac >>
+     simp[gas_outcome_full_def, gasStorageTheory.gas_bad_storage_at_def]) >>
+  `LENGTH ds = LENGTH args - LENGTH es` by
+    (qpat_assum `ds = DROP _ dflts` SUBST1_TAC >>
+     qpat_assum `LENGTH args - LENGTH es <= LENGTH dflts` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  `MAP expr_type ds = DROP (LENGTH es) (MAP SND args)` by
+    (`LENGTH dflts <= LENGTH args` by
+       (qpat_assum `MAP expr_type dflts = _` (mp_tac o AP_TERM ``LENGTH : type list -> num``) >>
+        simp[NoAsms] >> decide_tac) >>
+     `LENGTH dflts - (LENGTH args - LENGTH es) + (LENGTH args - LENGTH dflts) =
+        LENGTH es` by
+       (qpat_assum `LENGTH es <= LENGTH args` mp_tac >>
+        qpat_assum `LENGTH args - LENGTH es <= LENGTH dflts` mp_tac >>
+        qpat_assum `LENGTH dflts <= LENGTH args` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+     qpat_assum `ds = DROP _ dflts` SUBST1_TAC >>
+     simp[SimpLHS, NoAsms, listTheory.MAP_DROP] >>
+     qpat_assum `MAP expr_type dflts = _` SUBST1_TAC >>
+     simp[SimpLHS, NoAsms, listTheory.MAP_DROP, rich_listTheory.DROP_DROP_T] >>
+     qpat_assum `_ + (LENGTH args - LENGTH dflts) = LENGTH es`
+       (fn th => simp[NoAsms, th])) >>
+  `LIST_REL (type_widens_to (get_tenv cxd)) (MAP expr_type ds)
+      (DROP (LENGTH es) (MAP SND args))` by
+    (qpat_assum `MAP expr_type ds = _` SUBST1_TAC >>
+     simp[NoAsms, listTheory.EVERY2_refl, vyperTypeArgFitsTheory.type_widens_to_refl]) >>
+  `!sc s n b k. local_region (cenv_without_defaults cenv name) sc s n b k <=>
+                 local_region cenv sc s n b k` by
+    simp[NoAsms, loweringStateRelDefsTheory.local_region_def, cenv_without_defaults_def] >>
+  `get_tenv cxd = get_tenv cx` by
+    (qunabbrev_tac `cxd` >> simp[NoAsms, vyperTypeEvalProofsTheory.get_tenv_stk_irrelevant]) >>
+  `ci_mono st2 st2a` by
+    (qpat_assum `compile_stage_intcall_args _ _ es (TAKE _ _) (TAKE _ _) st2 = _`
+       (fn th =>
+         qspecl_then [`compile_expr`,`cenv`,`es`,`TAKE (LENGTH es) pvs`,
+                      `TAKE (LENGTH es) (MAP SND args)`,`st2`] mp_tac
+           exprLoweringPropsTheory.ci_mono_compile_stage_intcall_args >>
+         simp[NoAsms, th, cj 1 exprLoweringPropsTheory.compile_expr_ci_mono])) >>
+  `local_ptrs_reserved (cenv_without_defaults cenv name) st2a` by
+    (pure_rewrite_tac[exprOperandVarTheory.local_ptrs_reserved_without_defaults] >>
+     irule exprOperandVarTheory.compiler_ci_mono_reserved >>
+     qexists_tac `st2` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!x sz. (cenv_without_defaults cenv name).ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at st2a x` by
+    (simp[NoAsms, cenv_without_defaults_def] >> rpt strip_tac >>
+     irule exprOperandVarTheory.compiler_ci_mono_not_fresh >>
+     qexists_tac `st2` >> conj_tac >- first_assum ACCEPT_TAC >>
+     first_assum MATCH_MP_TAC >> qexists_tac `sz` >> first_assum ACCEPT_TAC) >>
+  `!x sz. (cenv_without_defaults cenv name).ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at st2a x` by
+    (simp[NoAsms, cenv_without_defaults_def] >> rpt strip_tac >>
+     irule exprOperandVarTheory.compiler_ci_mono_not_fresh >>
+     qexists_tac `st2` >> conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st2 x`
+       (qspecl_then [`x`,`sz`] MATCH_MP_TAC) >> first_assum ACCEPT_TAC) >>
+  `return_buf_frame d (cenv_without_defaults cenv name) st2a t =
+   return_buf_frame d cenv st2a t` by
+    (Cases_on `d` >> TRY (PairCases_on `x`) >>
+     simp[NoAsms, return_buf_frame_def, cenv_without_defaults_def]) >>
+  `return_buf_frame d (cenv_without_defaults cenv name) st2a t` by
+    (qpat_assum `return_buf_frame d (cenv_without_defaults cenv name) st2a t = _`
+       SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `type_memory_bytes (cenv_without_defaults cenv name) = type_memory_bytes cenv` by
+    (irule compileEnvTheory.type_memory_bytes_frame >> simp[NoAsms, cenv_without_defaults_def]) >>
+  `!ty sub. type_step_offset (cenv_without_defaults cenv name) ty sub =
+            type_step_offset cenv ty sub` by
+    (qpat_assum `type_memory_bytes (cenv_without_defaults cenv name) = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> disch_tac >>
+     simp[oneline loweringPostsTheory.type_step_offset_def, cenv_without_defaults_def]) >>
+  `!path ty. type_path_offset (cenv_without_defaults cenv name) ty path =
+             type_path_offset cenv ty path` by
+    (qpat_assum `!ty sub. type_step_offset (cenv_without_defaults cenv name) ty sub = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> disch_tac >>
+     Induct >> simp[loweringPostsTheory.type_path_offset_def]) >>
+  `!src dst a u v. wb_frame (cenv_without_defaults cenv name) src dst a u v =
+                    wb_frame cenv src dst a u v` by
+    (qpat_assum `!sc s n b k. local_region (cenv_without_defaults cenv name) sc s n b k <=> _` mp_tac >>
+     qpat_assum `!path ty. type_path_offset (cenv_without_defaults cenv name) ty path = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> ntac 2 disch_tac >>
+     simp[wb_frame_def, locals_kept_def, loweringPostsTheory.popped_kept_def,
+          loweringPostsTheory.dynarray_len_at_def, cenv_without_defaults_def]) >>
+  `!G tn. ghost_kept_at lo (cenv_without_defaults cenv name) es0 sa G0 tn0 s0 G tn =
+          ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn` by
+    (qpat_assum `!sc s n b k. local_region (cenv_without_defaults cenv name) sc s n b k <=> _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> disch_tac >> simp[ghost_kept_at_def]) >>
+  `!H. cx_dead H cxd = cx_dead H cx` by
+    (qunabbrev_tac `cxd` >> simp[NoAsms, sourceUnitExecutionTheory.cx_dead_def]) >>
+  `!src (regs : (bool # bytes32 # type_value) list).
+     storage_well_formed_on cxd src regs = storage_well_formed_on cx src regs` by
+    (qunabbrev_tac `cxd` >> POP_ASSUM_LIST (K ALL_TAC) >>
+     `!src b. get_storage (cx with stk updated_by CONS (NONE,name)) src b =
+               get_storage cx src b` by
+       (rpt gen_tac >> Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+     simp[vyperStorageFootprintTheory.storage_well_formed_on_def]) >>
+  pop_assum (mk_asm "defaults_storage") >>
+  `!D src G tn u. ghost_inv_at D lo d (cenv_without_defaults cenv name) cxd src G tn u =
+                  ghost_inv_at D lo d cenv cx src G tn u` by
+    (qpat_assum `cx_tops cxd = cx_tops cx` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> disch_tac >>
+     Cases_on `d` >> TRY (PairCases_on `x`) >>
+     simp[ghost_inv_at_def, return_buf_ptr_def, cenv_without_defaults_def]) >>
+  pop_assum (mk_asm "defaults_ghost") >>
+  `!H. valid_horizon cxd st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func (cenv_without_defaults cenv name) cxd ee t /\
+     storage_well_formed_on cxd ee (FST H) /\
+     ghost_inv_at (DF H) lo d (cenv_without_defaults cenv name) cxd ee G1 tn1 t` by
+    (qx_gen_tac `H` >> disch_tac >>
+     `valid_horizon cx st0 H ee.storage_trace` by
+       (qpat_assum `!src h tr. valid_horizon cxd src h tr = _`
+          (fn th => once_rewrite_tac[GSYM th]) >> first_assum ACCEPT_TAC) >>
+     qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+        stmt_state_rel H ctx func (cenv_without_defaults cenv name) cxd ee t`
+       (drule_then assume_tac) >>
+     qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func cenv cx ee t /\ _`
+       (drule_then strip_assume_tac) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (asm "defaults_storage" (MATCH_MP_TAC o iffRL o SPEC_ALL) >>
+         first_assum ACCEPT_TAC) >>
+     asm "defaults_ghost" (MATCH_MP_TAC o iffRL o SPEC_ALL) >>
+     first_assum ACCEPT_TAC) >>
+  `!j. j < LENGTH ds /\ EL j (DROP (LENGTH es) pvs) ==>
+       is_word_type (EL j (DROP (LENGTH es) (MAP SND args)))` by
+    (qx_gen_tac `j` >> strip_tac >>
+     `j + LENGTH es < LENGTH args` by
+       (qpat_assum `j < LENGTH ds` mp_tac >>
+        qpat_assum `LENGTH ds = LENGTH args - LENGTH es` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+     `j + LENGTH es < LENGTH pvs` by
+       (qpat_assum `LENGTH pvs = LENGTH args` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     `j + LENGTH es < LENGTH (MAP SND args)` by
+       (pure_rewrite_tac[listTheory.LENGTH_MAP] >> first_assum ACCEPT_TAC) >>
+     `EL (j + LENGTH es) pvs` by
+       (`EL j (DROP (LENGTH es) pvs) = EL (j + LENGTH es) pvs` by
+          (irule listTheory.EL_DROP >> first_assum ACCEPT_TAC) >>
+        pop_assum (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+     `EL j (DROP (LENGTH es) (MAP SND args)) = EL (j + LENGTH es) (MAP SND args)` by
+       (irule listTheory.EL_DROP >> first_assum ACCEPT_TAC) >>
+     pop_assum SUBST1_TAC >>
+     qpat_assum `!i. i < LENGTH args /\ EL i pvs ==> _` (MATCH_MP_TAC o SPEC_ALL) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `!source src u G tn. gas_outcome_full _ _ cxd _ source (src,u,G,tn) _ _ = _`
+    (fn th => once_rewrite_tac[GSYM th]) >>
+  irule intcall_args_stage_full_p2 >>
+  qpat_assum `body_inv tops ctx (cenv_without_defaults cenv name) cxd`
+    (irule_at Any) >>
+  qpat_assum `expr_sim_inv (cenv_without_defaults cenv name) cxd
+               (tenv with current_src := NONE) ee` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ (cenv_without_defaults cenv name)
+               ds _ _ st2a = (def_ops,st3)` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ (cenv_without_defaults cenv name)
+               (MAP gas_shadow_expr ds) _ _ sh_st2a = (def_ops,sh_st3)`
+    (irule_at Any) >>
+  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
+  qpat_assum `eval_operands _ t = SOME ws1` (irule_at Any) >>
+  qexistsl_tac [`xs`,`tn0`,`sa`,`s0`,`TAKE (LENGTH es) (MAP SND args)`,
+                `pin`,`TAKE (LENGTH es) pvs`,`es0`,`d`,`P`,`G0`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (qmatch_goalsub_rename_tac `halt_exit _ cxd _ _ _` >>
+       rpt strip_tac >> rename1 `halt_exit H cxd exit_src res r` >>
+       qpat_assum `!H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\ _ ==> _`
+         irule >>
+       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+       Cases_on `res = INR HaltException`
+       >- (qpat_assum `res = INR HaltException` SUBST_ALL_TAC >>
+           qunabbrev_tac `cxd` >>
+           qpat_assum `halt_exit H (cx with stk updated_by CONS (NONE,name)) exit_src _ r`
+             (mp_then Any ACCEPT_TAC intcall_args_halt_exit_pop)) >>
+       irule haltExitProjTheory.halt_exit_not_halt >> first_assum ACCEPT_TAC >> NO_TAC)
+  >~ [`!dvs. storage_trace_frame ((\dvs src. after_defaults src.scopes dvs src) dvs)`]
+  >- (`!prev dvs. storage_trace_frame (after_defaults prev dvs)` by
+        (qunabbrev_tac `after_defaults` >>
+         qpat_assum `!v. storage_trace_frame (f v)` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >> disch_tac >>
+         Cases_on `cx.nonreentrant_slot` >> simp[] >>
+         rpt (FIRST [gen_tac, disch_tac, conj_tac, CHANGED_TAC BETA_TAC,
+                MATCH_MP_TAC storage_trace_frame_bind_all,
+                MATCH_MP_TAC storage_trace_frame_ignore_bind,
+                MATCH_MP_TAC storage_trace_frame_finally,
+                MATCH_MP_TAC storage_trace_frame_finally_unless_halt,
+                MATCH_MP_TAC storage_trace_frame_try,
+                MATCH_MP_TAC vyperStorageTraceTheory.storage_trace_frame_cond]) >>
+         simp[storage_trace_frame_function_handler, storage_trace_frame_lifts,
+              storage_trace_frame_function_stack, storage_trace_frame_return,
+              storage_trace_frame_raise, storage_trace_frame_optional_locks,
+              storage_trace_frame_acquire_lock, storage_trace_frame_release_lock,
+              storage_trace_frame_check_not_static, cj 2 evaluate_storage_trace_frame]) >>
+      rewrite_tac[storage_trace_frame_def] >>
+      map_every qx_gen_tac [`dvs`,`src`,`obs`] >>
+      qpat_assum `!prev dvs. storage_trace_frame (after_defaults prev dvs)`
+        (qspecl_then [`src.scopes`,`dvs`] mp_tac) >>
+      rewrite_tac[storage_trace_frame_def] >>
+      disch_then (qspecl_then [`src`,`obs`] mp_tac) >>
+      simp[NoAsms]) >>
+  TRY (qmatch_goalsub_rename_tac `LENGTH ([] ++ sup_ops)` >>
+       pure_rewrite_tac[listTheory.APPEND] >>
+       first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [listTheory.APPEND]) >> NO_TAC) >>
+  TRY (qmatch_goalsub_rename_tac `LENGTH (DROP _ _)` >>
+       qpat_assum `LENGTH ds = LENGTH args - LENGTH es` mp_tac >>
+       qpat_assum `LENGTH pvs = LENGTH args` mp_tac >>
+       POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> NO_TAC) >>
+  TRY (qmatch_goalsub_rename_tac `vv_type _ = lowered_value_type _ _` >>
+       rpt strip_tac >> irule intcall_args_aggregate_physical_type >>
+       qpat_assum `body_inv tops ctx (cenv_without_defaults cenv name) cxd` (irule_at Any) >>
+       rpt (first_assum (irule_at Any)) >> NO_TAC) >>
+  TRY (qpat_assum `!sc s n b k. local_region (cenv_without_defaults cenv name) sc s n b k <=> _`
+         (fn th => pure_rewrite_tac [th, listTheory.APPEND]) >>
+       qpat_assum `get_tenv cxd = get_tenv cx` (fn th => pure_rewrite_tac [th]) >>
+       first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [listTheory.APPEND]) >> NO_TAC)
+  >~ [`ghost_kept_at lo (cenv_without_defaults cenv name) es0 sa G0 tn0 s0 G1 tn1`]
+  >- (qpat_assum `!G tn. ghost_kept_at lo (cenv_without_defaults cenv name) _ _ _ _ _ G tn = _`
+        (fn th => pure_rewrite_tac[th]) >> first_assum ACCEPT_TAC)
+  >~ [`wb_frame (cenv_without_defaults cenv name) es0 ee sa s0 t`]
+  >- (qpat_assum `!src dst a u v. wb_frame (cenv_without_defaults cenv name) src dst a u v = _`
+        (fn th => pure_rewrite_tac[th]) >> first_assum ACCEPT_TAC)
+  >~ [`EVERY (\ty. type_memory_bytes (cenv_without_defaults cenv name) ty < _) (DROP _ _)`]
+  >- (qpat_assum `type_memory_bytes (cenv_without_defaults cenv name) = _`
+        SUBST1_TAC >> irule rich_listTheory.EVERY_DROP >> first_assum ACCEPT_TAC)
+  >~ [`EVERY (supported_value_type tops) (DROP _ _)`]
+  >- (irule rich_listTheory.EVERY_DROP >> first_assum ACCEPT_TAC)
+  >~ [`!H. dead_lo_ok H (DF H) lo (cenv_without_defaults cenv name) cxd`]
+  >- (qpat_assum `cx_tops cxd = cx_tops cx` mp_tac >>
+      qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx` mp_tac >>
+      qunabbrev_tac `cxd` >> POP_ASSUM_LIST (K ALL_TAC) >>
+      simp[dead_lo_ok_def, sourceUnitExecutionTheory.cx_dead_def,
+           cenv_without_defaults_def]) >>
+  map_every qx_gen_tac [`dm`,`dvs`,`ed`,`u`,`Gd`,`tnd`] >> strip_tac >>
+  rename1 `eval_operands _ u = SOME wd` >>
+  qpat_assum `!source src u G tn. gas_outcome_full _ _ cxd _ source (src,u,G,tn) _ _ = _`
+    (fn th => once_rewrite_tac[th]) >> BETA_TAC >>
+  `?penv. bind_arguments (get_tenv cx) args (xs ++ dvs) = SOME penv` by
+    (Cases_on `bind_arguments (get_tenv cx) args (xs ++ dvs)` >> simp[] >>
+     `after_defaults ed.scopes dvs (ed with gas_obs := []) =
+        (INR (Error (TypeError "IntCall bind_arguments")),ed with gas_obs := [])` by
+       (qunabbrev_tac `after_defaults` >>
+        simp[lift_option_type_def, vyperStateTheory.bind_def,
+             pairTheory.UNCURRY, raise_def]) >>
+     `P (INR (Error (TypeError "IntCall bind_arguments")))` by
+       (qpat_assum `gas_admissible ((\dvs src. after_defaults src.scopes dvs src) dvs) P ed`
+          (qspecl_then [`[]`,`INR (Error (TypeError "IntCall bind_arguments"))`,
+                        `ed with gas_obs := []`] (mp_tac o BETA_RULE) o
+           REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
+        qpat_assum `after_defaults ed.scopes dvs (ed with gas_obs := []) = _`
+          (fn th => simp[NoAsms,th])) >>
+     qpat_assum `!e. P (INR e) ==> expr_vv_res_ok (INR e)`
+       (qspec_then `Error (TypeError "IntCall bind_arguments")` drule) >>
+     simp[NoAsms,exprSimDefsTheory.expr_vv_res_ok_def]) >>
+  rename1 `bind_arguments (get_tenv cx) args (xs ++ dvs) = SOME penv` >>
+  rename1 `evaluate_type (get_tenv cx) ret = SOME rtv` >>
+  `?H. valid_horizon cx st0 H ed.storage_trace` by
+    (qpat_assum `storage_trace_domain cxd st0 ed.storage_trace` mp_tac >>
+     qpat_assum `!src tr. storage_trace_domain cxd src tr = _`
+       (fn th => pure_rewrite_tac[th]) >>
+     rewrite_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     disch_tac >> qexists_tac `storage_trace_horizon ed.storage_trace` >>
+     first_assum ACCEPT_TAC) >>
+  `ed.scopes = ee.scopes` by
+    (qpat_assum `!tail. eval_exprs cxd ds _ = _` (qspec_then `[]` assume_tac) >>
+     drule_all stmtSimForArrayFrameTheory.supported_pure_exprs_scopes >> simp[]) >>
+  `!tail sc. lock_if_nr cx nr (is_view_mut mut)
+       (ed with <|scopes := sc; gas_obs := tail|>) =
+     (FST (lock_if_nr cx nr (is_view_mut mut) ed),
+      SND (lock_if_nr cx nr (is_view_mut mut) ed) with
+          <|scopes := sc; gas_obs := tail|>)` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >>
+     Cases_on `nr` >> simp[lock_if_nr_def, return_def] >>
+     Cases_on `cx.nonreentrant_slot` >> simp[raise_def] >>
+     simp[acquire_nonreentrant_lock_def, ignore_bind_def,
+          vyperStateTheory.bind_def, record_storage_event_def,
+          get_transient_storage_def, update_transient_def, return_def,
+          raise_def, check_not_static_def, check_def, assert_def, COND_RATOR] >>
+     rpt IF_CASES_TAC >>
+     simp[vyperStateTheory.bind_def, return_def, raise_def,
+          update_transient_def, assert_def] >>
+     Cases_on `mut = View \/ mut = Pure` >> simp[]) >>
+  `!err locked. lock_if_nr cx nr (is_view_mut mut) ed = (INR err,locked) ==>
+     !tail.
+       after_defaults ed.scopes dvs (ed with gas_obs := tail) =
+         (INR err, locked with <|scopes := ed.scopes; gas_obs := tail|>) /\
+       bind (intcall_rest cx name mut nr ss ed.scopes rtv) f
+         ((ed with scopes := [penv]) with gas_obs := tail) =
+         (INR err, locked with <|scopes := [penv]; gas_obs := tail|>)` by
+    (map_every qx_gen_tac [`err`,`locked`] >>
+     disch_then (fn th =>
+       qpat_assum `!tail sc. lock_if_nr _ _ _ _ = _`
+         (assume_tac o REWRITE_RULE [th, pairTheory.FST, pairTheory.SND])) >>
+     qx_gen_tac `tail` >>
+     `ed with <|scopes := ed.scopes; gas_obs := tail|> =
+      ed with gas_obs := tail` by
+       simp[NoAsms, evaluation_state_component_equality] >>
+     `lock_if_nr cx nr (is_view_mut mut) (ed with gas_obs := tail) =
+       (INR err, locked with <|scopes := ed.scopes; gas_obs := tail|>)` by
+       (qpat_assum `!tail sc. lock_if_nr _ _ _ _ = (INR err,_)`
+          (qspecl_then [`tail`,`ed.scopes`] mp_tac) >>
+        qpat_assum `ed with <|scopes := ed.scopes; gas_obs := tail|> = _`
+          (fn th => rewrite_tac[th])) >>
+     `lock_if_nr cx nr (is_view_mut mut)
+       ((ed with scopes := [penv]) with gas_obs := tail) =
+       (INR err, locked with <|scopes := [penv]; gas_obs := tail|>)` by
+       (qpat_assum `!tail sc. lock_if_nr _ _ _ _ = (INR err,_)`
+          (qspecl_then [`tail`,`[penv]`] mp_tac) >>
+        simp[NoAsms, evaluation_state_component_equality]) >>
+     conj_tac
+     >- (qunabbrev_tac `after_defaults` >> BETA_TAC >>
+         qpat_assum `bind_arguments _ args (xs ++ dvs) = SOME penv` mp_tac >>
+         qpat_assum `evaluate_type _ ret = SOME rtv` mp_tac >>
+         qpat_assum `lock_if_nr _ _ _ (ed with gas_obs := tail) = _` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >> ntac 3 disch_tac >>
+         ASM_SIMP_TAC std_ss [lift_option_type_def, vyperStateTheory.bind_def,
+                      ignore_bind_def, return_def, pairTheory.pair_case_thm, sumTheory.sum_case_def]) >>
+     qpat_assum `lock_if_nr _ _ _ ((ed with scopes := [penv]) with gas_obs := tail) = _`
+       (fn th => SIMP_TAC std_ss [th,intcall_rest_def,vyperStateTheory.bind_def,
+          ignore_bind_def,pairTheory.pair_case_thm,sumTheory.sum_case_def])) >>
+  `!locked. lock_if_nr cx nr (is_view_mut mut) ed = (INL (),locked) ==>
+     !tail. after_defaults ed.scopes dvs (ed with gas_obs := tail) =
+       bind (intcall_rest cx name mut nr ss ed.scopes rtv) f
+         ((ed with scopes := [penv]) with gas_obs := tail)` by
+    (qx_gen_tac `locked` >> disch_then (fn th =>
+       qpat_assum `!tail sc. lock_if_nr _ _ _ _ = _`
+         (assume_tac o REWRITE_RULE [th, pairTheory.FST, pairTheory.SND])) >>
+     qx_gen_tac `tail` >>
+     `ed with <|scopes := ed.scopes; gas_obs := tail|> =
+      ed with gas_obs := tail` by
+       simp[NoAsms, evaluation_state_component_equality] >>
+     `lock_if_nr cx nr (is_view_mut mut) (ed with gas_obs := tail) =
+       (INL (), locked with <|scopes := ed.scopes; gas_obs := tail|>)` by
+       (qpat_assum `!tail sc. lock_if_nr _ _ _ _ = (INL (),_)`
+          (qspecl_then [`tail`,`ed.scopes`] mp_tac) >>
+        qpat_assum `ed with <|scopes := ed.scopes; gas_obs := tail|> = _`
+          (fn th => rewrite_tac[th])) >>
+     qunabbrev_tac `after_defaults` >> BETA_TAC >>
+     qpat_assum `bind_arguments _ args (xs ++ dvs) = SOME penv` (fn bth =>
+       qpat_assum `evaluate_type _ ret = SOME rtv` (fn rth =>
+         SIMP_TAC std_ss [bth,rth,lift_option_type_def,bind_return,ignore_bind_def])) >>
+     `((ed with scopes := [penv]) with gas_obs := tail) =
+      ((ed with gas_obs := tail) with scopes := [penv])` by
+       simp[NoAsms, evaluation_state_component_equality] >>
+     qpat_assum `((ed with scopes := [penv]) with gas_obs := tail) = _`
+       SUBST1_TAC >>
+     once_rewrite_tac[vyperStateTheory.bind_def] >>
+     qpat_assum `lock_if_nr _ _ _ (ed with gas_obs := tail) = (INL (),_)`
+       (mp_then Any (fn th => rewrite_tac[th])
+         (SIMP_RULE std_ss [lift_option_type_def] intcall_args_lock_push_success))) >>
+  Q_TAC ASM_CASES_TAC `?err failed. lock_if_nr cx nr (is_view_mut mut) ed = (INR err,failed)`
+  >- (qpat_x_assum `?err failed. lock_if_nr _ _ _ _ = (INR err,failed)`
+        (qx_choose_then `err` (qx_choose_then `failed` assume_tac)) >>
+      qpat_assum `!err locked. lock_if_nr _ _ _ _ = (INR err,locked) ==> !tail. _ /\ _`
+        (qspecl_then [`err`,`failed`] mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >>
+      rewrite_tac[FORALL_AND_THM] >> strip_tac >>
+      once_rewrite_tac[gas_outcome_full_def] >>
+      FAIL_TAC "post-defaults failed-lock outcome at INVOKE") >>
+  FAIL_TAC "post-defaults source and INVOKE boundary"
 QED
