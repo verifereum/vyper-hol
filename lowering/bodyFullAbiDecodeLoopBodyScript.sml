@@ -483,6 +483,76 @@ Proof
      qpat_assum `msz = type_memory_size tv` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[EVERY_DEF, EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
-  drule_at (Pat `eval_operand (Var iv) s = SOME (n2w j)`) abi_decode_loop_backedge_joint >>
-  FAIL_TAC "backedge premises"
+  `!D. V D ==> gas_origin_ptr_path (DF D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,G',tn')` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _` mp_tac >>
+     qpat_assum `!H. V H ==> gas_origin_ptr_path _ (u,Gu,tnu) _ _` mp_tac >>
+     qpat_assum `r = OK t` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND]) >>
+  `allocas_from lo t` by
+    (qpat_assum `!D. V D ==> gas_origin_ptr_path _ (s,G,tn) _ _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (mp_then Any mp_tac member_origin_allocas_from) >> simp[]) >>
+  `loop_body.cs_next_var <= returned.cs_next_var /\
+   anchor.cs_next_var <= returned.cs_next_var /\
+   origin.cs_next_var <= returned.cs_next_var` by (simp[]) >>
+  `local_ptrs_reserved ce returned /\ not_fresh_at returned counter /\
+   not_fresh_at returned input /\
+   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at returned x) /\
+   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at returned x)` by
+    (qpat_assum `local_ptrs_reserved ce loop_body` mp_tac >>
+     qpat_assum `not_fresh_at anchor counter` mp_tac >>
+     qpat_assum `not_fresh_at anchor input` mp_tac >>
+     qpat_assum `!x sz. ce.ce_return_buf = _ ==> not_fresh_at loop_body x` mp_tac >>
+     qpat_assum `!x sz. ce.ce_return_pc = _ ==> not_fresh_at loop_body x` mp_tac >>
+     qpat_assum `loop_body.cs_next_var <= returned.cs_next_var` mp_tac >>
+     qpat_assum `anchor.cs_next_var <= returned.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+       freshWritesTheory.not_fresh_at_mono]) >>
+  qpat_assum `(^owned_decoder_state) live protected returned t G' tn'`
+    (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
+  `cell+32 < dimword (:256)` by
+    (`alloca_room ctx fn t` by
+       (irule stmt_state_rel_alloca_room >>
+        qexistsl_tac [`H`,`ce`,`cx`,`es`] >>
+        qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es t /\ _`
+          (qspec_then `H` mp_tac) >> simp[]) >>
+     qpat_assum `alloca_room ctx fn t`
+       (mp_then Any mp_tac exprLoweringPropsTheory.alloca_room_next_lt) >>
+     simp[]) >>
+  `!D. V D ==> ghost_inv_at (DF D) lo delta ce cx es G' tn' t /\
+       ghost_kept_at lo ce es0 origin G0 tn0 s0 G' tn' /\
+       stmt_state_rel D ctx fn ce cx es t` by
+    (qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es t /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  qpat_x_assum `?ci cp. MEM ci (fn_insts fn) /\ _ /\ _ /\ ci.inst_id = aid /\ _`
+    (qx_choose_then `ci` (qx_choose_then `counter_owner` strip_assume_tac)) >>
+  qpat_assum `abi_decode_ptr_window G' tn' t input input_word _`
+    (mp_then (Pat `abi_decode_ptr_window _ _ _ _ _ _`)
+      (fn th => qpat_assum `!D. V D ==> ghost_inv_at _ _ _ _ _ _ G' tn' t /\ _`
+        (mp_then (Pat `!H. _ ==> ghost_inv_at _ _ _ _ _ _ _ _ _ /\ _`)
+          (mp_tac o SPEC_ALL) th))
+      (Q.INST [`sa` |-> `returned`, `id` |-> `returned.cs_next_id`,
+        `prefix` |-> `returned.cs_current_insts`,
+        `bb` |-> `<|bb_label := returned.cs_current_bb; bb_instructions :=
+          returned.cs_current_insts ++
+            abi_decode_backedge_insts returned.cs_next_id iv nv (Var counter) hdr|>`]
+        (SPEC_ALL abi_decode_loop_backedge_joint))) >>
+  (impl_tac >- (asm_rewrite_tac[] >> simp[])) >>
+  disch_then (qx_choose_then `back` (qx_choose_then `Gb`
+    (qx_choose_then `tnb` strip_assume_tac))) >>
+  `~back.vs_halted /\ back.vs_current_bb = hdr /\ back.vs_inst_idx = 0` by
+    (qpat_assum `back = jump_to hdr _` (fn th => rewrite_tac[th]) >>
+     simp[jump_to_def, venomStateTheory.mstore_def, update_var_def]) >>
+  qpat_x_assum `back = jump_to hdr _` kall_tac >>
+  `!D. V D ==> gas_origin_ptr_path (DF D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK back,Gb,tnb)` by
+    (qpat_assum `!D. V D ==> gas_origin_ptr_path _ (s,G,tn) _ (OK t,G',tn')` mp_tac >>
+     qpat_assum `!D. V D ==> gas_origin_ptr_path _ (t,G',tn') _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND]) >>
+  FAIL_TAC "reconstruct anchor resource"
 QED
