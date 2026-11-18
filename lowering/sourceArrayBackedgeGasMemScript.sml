@@ -53,7 +53,7 @@ Proof
           step_inst_base_opcode_eqs, mk_inst_def, is_terminator_def,
           inst_dload_in_section_def] >>
      conj_tac
-     >- (disj2_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+     >- (disj2_tac >> disj1_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
      disj2_tac >> disj1_tac >> qexists_tac `hdr` >> simp[]) >>
   `gas_path_mem ctx fn u 0 (OK (jump_to hdr u))` by
     (`~(jump_to hdr u).vs_halted` by simp[jump_to_def] >>

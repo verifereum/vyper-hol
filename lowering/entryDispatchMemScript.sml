@@ -42,7 +42,7 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[mk_inst_def, is_terminator_def, mem_safe_step_non_invoke,
     step_inst_non_invoke, step_jmp_behavior] >>
-  irule below_frontier_no_ranges >> simp[mk_inst_def]
+  disj1_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]
 QED
 
 Theorem mem_safe_run_jnz[local]:
@@ -58,7 +58,7 @@ Proof
   simp[mk_inst_def, is_terminator_def, mem_safe_step_non_invoke,
     step_inst_non_invoke] >>
   reverse conj_tac
-  >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  >- (disj1_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
   drule step_jnz_behavior >> Cases_on `w = 0w` >> gvs[]
 QED
 
@@ -139,7 +139,7 @@ Proof
     (irule mem_safe_run_step >> goal_assum (drule_at Any) >>
      simp[mk_inst_def, is_terminator_def]) >>
   gvs[] >> disj2_tac >> simp[mem_safe_step_non_invoke, mk_inst_def] >>
-  irule below_frontier_no_ranges >> simp[]
+  disj1_tac >> irule below_frontier_no_ranges >> simp[]
 QED
 
 Theorem selector_clause_safe_control[local]:
