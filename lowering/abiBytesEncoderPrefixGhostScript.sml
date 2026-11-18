@@ -17,7 +17,7 @@ Theorem bytes_encoder_prefix_ghosts:
   ptr_covers G tn src a (32+n) /\
   ptr_covers G tn dst a (32+contractABI$ceil32 n) /\
   (!i. w2n p <= i /\ i < w2n p + 32 + n ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo a /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp a) /\ allocas_from lo a /\
   run_inst_seq (TAKE 4 (bytestring_encoder_insts id N (Var dst) (Var src))) a = OK b ==>
   ?H tm.
     (!D. inst_seq_ptr D lo ctx func PG G tn
@@ -153,6 +153,10 @@ Proof
      simp[ptr_covers_def, eval_operand_def] >> rpt strip_tac >>
      gvs[eval_operand_def, Abbr `a1`, update_var_def] >>
      goal_assum (drule_at Any) >> simp[]) >>
+  `!k. (allocas_below_fmp (a1 with vs_inst_idx := k) <=> allocas_below_fmp a) /\
+       (allocas_below_fmp (a2 with vs_inst_idx := k) <=> allocas_below_fmp a) /\
+       (allocas_below_fmp (a3 with vs_inst_idx := k) <=> allocas_below_fmp a)` by
+    simp[allocas_below_fmp_def, Abbr `a1`, Abbr `a2`, Abbr `a3`, update_var_def] >>
   `!D k. ptr_inst_ok D lo 0 ctx func G1 tn1 i1 (a1 with vs_inst_idx := k) /\
     ptr_inst_ok D lo 0 ctx func G2 tn2 i2 (a2 with vs_inst_idx := k) /\
     ptr_inst_ok D lo 0 ctx func G3 tn3 i3 (a3 with vs_inst_idx := k)` by

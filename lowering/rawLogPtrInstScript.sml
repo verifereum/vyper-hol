@@ -50,7 +50,7 @@ Theorem log_inst_ok:
   EVERY (\op. op_taint tn op = {}) topics /\
   op_taint tn pop = {} /\ op_taint tn len = {} /\
   (!i. w2n off <= i /\ i < w2n off + w2n n ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base
     (mk_inst id LOG (Lit (n2w (LENGTH topics)) :: REVERSE topics ++ [len;pop]) []) s = OK t /\
   t.vs_requests = s.vs_requests ==>
@@ -105,7 +105,7 @@ Theorem log_counted_edge:
   EVERY (\op. op_taint tn op = {}) topics /\
   op_taint tn pop = {} /\ op_taint tn len = {} /\
   (!i. w2n off <= i /\ i < w2n off + w2n n ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base
     (mk_inst id LOG (Lit (n2w (LENGTH topics)) :: REVERSE topics ++ [len;pop]) []) s =
     OK (s with vs_logs := logs) ==>
