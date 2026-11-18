@@ -156,32 +156,43 @@ Proof
   drule_at (Pos last) ptr_call_history_execution >>
   disch_then drule >> simp[] >>
   disch_then (drule_at (Pos last)) >> simp[] >>
-  disch_then (qspecl_then [`sr`,`gas`] strip_assume_tac) >>
+  disch_then (qspec_then `sr` strip_assume_tac) >>
   `u.vs_allocas = a.po_state.vs_allocas /\
    u.vs_current_bb = a.po_state.vs_current_bb /\
    u.vs_prev_bb = a.po_state.vs_prev_bb /\
    u.vs_params = a.po_state.vs_params /\
    (!x. x <> out ==> lookup_var x u = lookup_var x a.po_state) /\
    u.vs_return_pc_token = a.po_state.vs_return_pc_token` by
-    (qpat_x_assum `exec_ext_call _ a.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (Cases_on `a.po_state.vs_outcomes = []` >>
+     qpat_x_assum `exec_ext_call _ a.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[exec_ext_call_def, update_var_def, venom_state_component_equality] >>
-     strip_tac >> gvs[lookup_var_def] >> metis_tac[FLOOKUP_UPDATE]) >>
+     strip_tac >> gvs[lookup_var_def] >> qx_gen_tac `x` >> disch_tac >>
+     qpat_assum `_ |+ _ = _ |+ _` (mp_tac o Q.AP_TERM `\m. FLOOKUP m x`) >>
+     simp[FLOOKUP_UPDATE]) >>
   `v.vs_current_bb = at.po_state.vs_current_bb /\
    v.vs_prev_bb = at.po_state.vs_prev_bb /\
    v.vs_params = at.po_state.vs_params /\
    (!x. x <> out ==> lookup_var x v = lookup_var x at.po_state) /\
    v.vs_return_pc_token = at.po_state.vs_return_pc_token` by
-    (qpat_x_assum `exec_ext_call _ at.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (Cases_on `at.po_state.vs_outcomes = []` >>
+     qpat_x_assum `exec_ext_call _ at.po_state _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[exec_ext_call_def, update_var_def, venom_state_component_equality] >>
-     strip_tac >> gvs[lookup_var_def] >> metis_tac[FLOOKUP_UPDATE]) >>
+     strip_tac >> gvs[lookup_var_def] >> qx_gen_tac `x` >> disch_tac >>
+     qpat_assum `_ |+ _ = _ |+ _` (mp_tac o Q.AP_TERM `\m. FLOOKUP m x`) >>
+     simp[FLOOKUP_UPDATE]) >>
   qexistsl [`w`,`u`,`v`,
     `<|iao_ofst := ro_op; iao_size := NONE; iao_max_size := SOME rs_op|>`,
     `sr`,`ro`,`rs`] >>
   gvs[Excl "MEM"] >>
-  simp[step_inst_non_invoke, step_inst_base_def, mem_write_ops_def,
-       source_memory_write_ranges_def, fixed_source_write_range_def,
-       memory_range_of_operands_def, eval_operands_def, step_writes_def,
-       range_bytes_def, update_var_def]
+  (conj_tac >-
+    (simp[step_inst_non_invoke] >>
+     pure_rewrite_tac[step_inst_base_def] >>
+     qpat_assum `a.po_inst.inst_opcode = _` (fn th => pure_rewrite_tac[th]) >>
+     pure_rewrite_tac[opcode_case_def] >>
+     simp[])) >>
+  simp[mem_write_ops_def, source_memory_write_ranges_def,
+       fixed_source_write_range_def, memory_range_of_operands_def,
+       eval_operands_def, step_writes_def, range_bytes_def, update_var_def]
 QED
 
 Theorem ptr_focus_call_sample[local]:
