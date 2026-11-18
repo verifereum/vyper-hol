@@ -56,11 +56,18 @@ Proof
   `wf_function fn1` by metis_tac[raw_reachable_wf] >>
   `ALL_DISTINCT (fn_labels fn1)` by fs[wf_function_def] >>
   `~in_static_abort_prefix fn1 s1` by
-    (irule joint_trace_call_not_static_prefix >> metis_tac[]) >>
+    (irule joint_trace_call_not_static_prefix >> conj_tac >- simp[] >>
+     qexistsl_tac [`ctx`, `G`, `G1`, `PG`, `PG1`, `evs`, `h`, `h1`, `hs`,
+       `hs1`, `inst1`, `j`, `fn`, `inst`, `t`, `om`, `om1`, `oms`, `oms1`,
+       `q0`, `qs`, `stk`, `stk1`, `tn`, `tn1`, `vs0`] >> simp[]) >>
   `EL (LENGTH evs) (q0::qs) = JointConfig stk PG G tn fn inst t oms om hs h` by
     metis_tac[joint_trace_endpoint] >>
   `s1.vs_requests <<= t.vs_requests` by
-    (irule joint_trace_requests_prefix >> metis_tac[]) >>
+    (irule joint_trace_requests_prefix >>
+     qexistsl_tac [`ctx`, `G1`, `G`, `PG1`, `PG`, `evs`, `fn1`, `fn`, `h1`,
+       `h`, `hs1`, `hs`, `inst1`, `inst`, `LENGTH evs`, `j`, `om1`, `om`,
+       `oms1`, `oms`, `JointConfig stk PG G tn fn inst t oms om hs h`,
+       `q0`, `qs`, `stk1`, `stk`, `tn1`, `tn`, `vs0`] >> simp[]) >>
   `request_cut (LENGTH t.vs_requests) s1` by
     (simp[request_cut_def] >> metis_tac[IS_PREFIX_LENGTH]) >>
   `s1.vs_initial_fmp = n2w cplan.cp_initial_fmp` by
@@ -73,6 +80,7 @@ Proof
 QED
 
 Theorem codegen_request_cut_outcome_identity:
+  !fn inst fuel final k.
   supported_program tops /\ source_typing_ok tops am tx /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
@@ -95,7 +103,7 @@ Theorem codegen_request_cut_outcome_identity:
   t.vs_outcomes <> [] /\
   MEM (EL k (call_requests es), HD t.vs_outcomes) (call_trace es)
 Proof
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   qpat_x_assum `LENGTH t.vs_requests = k` (SUBST_ALL_TAC o SYM) >>
   drule supported_program_raw_shape_free_program >> strip_tac >>
   `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
@@ -126,12 +134,14 @@ Proof
     simp[joint_config_reachable_def] >>
   pop_assum (qx_choosel_then [`q0`, `evs`, `qs`] assume_tac o
     REWRITE_RULE [joint_reachable_iff_trace]) >>
-  mp_tac (Q.INST [`unit` |-> `out.po_unit`, `cpl` |-> `cplan`,
-    `tail` |-> `[]`, `vs0` |-> `entry_venom_state prog cplan es`,
-    `es` |-> `evs`, `es0` |-> `es`, `s` |-> `t`, `s'` |-> `t'`,
-    `result` |-> `r`] (SPEC_ALL codegen_request_step_alignment)) >>
+  qspecl_then [`rpolicy`, `out.po_unit`, `cplan`, `prog`, `[]`,
+    `entry_venom_state prog cplan es`, `q0`, `evs`, `qs`, `es`, `t`, `t'`,
+    `r`, `final`] mp_tac codegen_request_step_alignment >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      rpt strip_tac >> irule request_cut_trace_memory >> metis_tac[]) >>
+      rpt strip_tac >>
+      FIRST [irule (cj 1 request_cut_trace_memory),
+             irule (cj 2 request_cut_trace_memory)] >>
+      metis_tac[]) >>
   simp[]
 QED

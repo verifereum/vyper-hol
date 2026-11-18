@@ -96,6 +96,7 @@ QED
 (* ===== Pairing a recorded request with its outcome ===== *)
 
 Theorem trace_request_pairing:
+  !P L pa La pb Lb ra rb.
   L = pa ++ La /\ L = pb ++ Lb /\
   ra ++ FILTER P (MAP FST La) = FILTER P (MAP FST L) /\
   rb ++ FILTER P (MAP FST Lb) = FILTER P (MAP FST L) /\
@@ -105,7 +106,8 @@ Theorem trace_request_pairing:
   MAP SND La <> [] /\
   MEM (EL (LENGTH ra) (FILTER P (MAP FST L)), HD (MAP SND La)) L
 Proof
-  strip_tac >>
+  rpt strip_tac >>
+  qpat_x_assum `MAP SND Lb = _` (assume_tac o Q.AP_TERM `LENGTH`) >>
   `ra = FILTER P (MAP FST pa)` by
     (qpat_x_assum `ra ++ _ = _` mp_tac >>
      qpat_assum `L = pa ++ La` SUBST1_TAC >>
@@ -115,21 +117,18 @@ Proof
      qpat_assum `L = pb ++ Lb` SUBST1_TAC >>
      simp[FILTER_APPEND_DISTRIB, APPEND_11_LENGTH]) >>
   `pa ++ La = pb ++ Lb` by metis_tac[] >>
+  qpat_x_assum `ra ++ _ = _` kall_tac >>
+  qpat_x_assum `rb ++ _ = _` kall_tac >>
   qpat_x_assum `L = pb ++ Lb` kall_tac >>
+  qpat_x_assum `L = pa ++ La` SUBST_ALL_TAC >>
+  qpat_x_assum `ra = _` SUBST_ALL_TAC >>
+  qpat_x_assum `rb = _` SUBST_ALL_TAC >>
   qpat_x_assum `pa ++ La = pb ++ Lb` mp_tac >>
-  rewrite_tac[APPEND_EQ_APPEND] >> strip_tac >> gvs[]
-  >- (gvs[FILTER_APPEND_DISTRIB]) >>
-  `l <> []` by (strip_tac >> gvs[]) >>
-  `?x. l = [x]` by
-    (Cases_on `l` >> gvs[] >> Cases_on `t` >> gvs[] >>
-     qpat_x_assum `MAP SND Lb = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
-  qpat_x_assum `FILTER P (MAP FST pa) ++ _ = _` kall_tac >>
-  qpat_x_assum `FILTER P (_ ++ _) ++ _ = _` kall_tac >>
-  qpat_x_assum `MAP SND Lb = _` kall_tac >>
-  qpat_x_assum `l <> []` kall_tac >>
-  gvs[] >> PairCases_on `x` >>
-  fs[FILTER_APPEND_DISTRIB] >> Cases_on `P x0` >> fs[] >>
-  simp[EL_APPEND_EQN]
+  rewrite_tac[APPEND_EQ_APPEND] >> strip_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  fs[FILTER_APPEND_DISTRIB] >>
+  Cases_on `l` >> fs[] >> Cases_on `t` >> fs[] >>
+  PairCases_on `h` >> Cases_on `P h0` >> fs[] >> simp[EL_APPEND_EQN]
 QED
 
 (* ===== Prefix driver at a non-forwarding endpoint ===== *)
@@ -237,6 +236,7 @@ Proof
 QED
 
 Theorem codegen_request_step_alignment:
+  !rpolicy unit cpl prog tail vs0 q0 es qs es0 s s' result final.
   generate_context_plan unit.cu_context = SOME cpl /\
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
   codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl /\
@@ -262,7 +262,7 @@ Theorem codegen_request_step_alignment:
   MEM (EL (LENGTH s.vs_requests) (call_requests es0), HD s.vs_outcomes)
     (call_trace es0)
 Proof
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   drule_all step_inst_request_outcomes >> strip_tac >>
   `~is_terminator inst.inst_opcode /\
    ~MEM inst.inst_opcode [RETURNDATACOPY; ASSIGN; REVERT]` by
@@ -272,8 +272,11 @@ Proof
   qspec_then `LENGTH es`
     (drule_at (Pat `joint_trace _ _ _ _ _ _`) o GEN_ALL)
     normal_frame_trace_prefix_nonforward >>
+  disch_then (qspecl_then [`tail`, `rpolicy`, `prog`, `es0`, `cpl`] mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[LESS_IMP_LESS_OR_EQ]) >>
-  disch_then (qx_choosel_then [`n`, `ast`] strip_assume_tac) >> gvs[] >>
+  disch_then (qx_choosel_then [`n`, `ast`] strip_assume_tac) >>
+  `normal_frame_plan rpolicy unit cpl prog vs0 es0
+     (JointConfig stk PG G tn fn inst s oms om hs h) ast` by metis_tac[] >>
   drule normal_frame_fn_shape >> strip_tac >>
   `wf_function fn` by fs[codegen_ready_fn_def] >>
   drule_all active_inst_next_nonterminator >> strip_tac >>
@@ -289,34 +292,39 @@ Proof
     (simp[joint_transition_ordinary] >> metis_tac[]) >>
   `source_memory_reads_disjoint cpl inst s /\
    context_source_memory_writes_disjoint cpl inst s` by
-    (first_x_assum irule >> simp[] >> metis_tac[]) >>
-  drule_all normal_frame_joint_step >>
-  disch_then (qx_choosel_then [`m`, `ast1`] strip_assume_tac) >>
+    (first_x_assum irule >> simp[] >>
+     qexistsl_tac [`G`, `PG`, `fn`, `h`, `hs`, `LENGTH es`, `om`, `oms`,
+                   `stk`, `tn`] >> simp[]) >>
+  `?m ast1. asm_steps (SND (compute_label_offsets prog))
+       (build_offset_to_pc prog) prog m ast = AsmOK ast1 /\
+     normal_frame_plan rpolicy unit cpl prog vs0 es0 q' ast1` by
+    (irule normal_frame_joint_step >> metis_tac[]) >>
   `asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
      prog (n+m) (entry_asm_state vs0 es0) = AsmOK ast1` by
     (irule asm_steps_compose_ok >> qexists_tac `ast` >> simp[]) >>
   `ast1.as_requests = s'.vs_requests /\ ast1.as_outcomes = s'.vs_outcomes` by
     (qpat_x_assum `joint_transition _ _ _ q'` mp_tac >>
-     simp[joint_transition_ordinary] >> strip_tac >> gvs[] >>
+     simp[joint_transition_ordinary] >> strip_tac >>
+     qpat_x_assum `normal_frame_plan _ _ _ _ _ _ _ ast1` mp_tac >>
+     qunabbrev_tac `snext` >> fs[] >> strip_tac >>
      drule normal_frame_plan_oracle >> simp[]) >>
   drule normal_frame_plan_oracle >> strip_tac >>
   drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
+  `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
   Q.SUBGOAL_THEN `vs0.vs_call_ctx.cc_created_in_tx \/ account_already_created
     (lookup_account (FST (HD es0.contexts)).msgParams.callee
       es0.rollback.accounts)` assume_tac
   >- (gvs[initial_ctx_rel_tail_def, initial_ctx_rel_def] >> metis_tac[]) >>
   drule_all asm_frame_rel_entry_tail >> strip_tac >>
-  drule_all asm_frame_prefix_call_trace_tail >>
-  disch_then (qx_choosel_then [`esa`, `pa`] strip_assume_tac) >>
-  qpat_x_assum `asm_steps _ _ _ (n+m) _ = _` assume_tac >>
-  drule_all asm_frame_prefix_call_trace_tail >>
-  disch_then (qx_choosel_then [`esb`, `pb`] strip_assume_tac) >>
+  `?esa pa. asm_frame_rel_tail tail prog vs0.vs_data_section es0 ast esa /\
+     call_trace es0 = pa ++ call_trace esa` by
+    (irule asm_frame_prefix_call_trace_tail >> metis_tac[]) >>
+  `?esb pb. asm_frame_rel_tail tail prog vs0.vs_data_section es0 ast1 esb /\
+     call_trace es0 = pb ++ call_trace esb` by
+    (irule asm_frame_prefix_call_trace_tail >> metis_tac[]) >>
   gvs[asm_frame_rel_tail_def, asm_frame_rel_def] >>
-  mp_tac (Q.INST [`L` |-> `call_trace es0`, `La` |-> `call_trace esa`,
-    `Lb` |-> `call_trace esb`, `ra` |-> `s.vs_requests`,
-    `rb` |-> `s'.vs_requests`, `P` |-> `\rq. ~computed_precompile rq`]
-    trace_request_pairing) >>
-  simp[GSYM call_requests_def] >>
-  impl_tac >- (gvs[call_requests_def] >> metis_tac[]) >>
-  simp[]
+  qspecl_then [`\rq. ~computed_precompile rq`, `call_trace es0`, `pa`,
+    `call_trace esa`, `pb`, `call_trace esb`, `s.vs_requests`,
+    `s'.vs_requests`] mp_tac trace_request_pairing >>
+  simp[GSYM call_requests_def]
 QED

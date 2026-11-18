@@ -55,8 +55,8 @@ Proof
   >- (`opt_entry_state prog prog cplan es = entry_venom_state prog cplan es` by
         metis_tac[opt_entry_state_identity] >>
       pop_assum (fn th => fs[th]) >>
-      mp_tac (Q.INST [`fn` |-> `fn'`, `inst` |-> `inst'`, `fuel` |-> `fuel'`,
-        `final` |-> `es'`] codegen_request_cut_outcome_identity) >>
+      qspecl_then [`fn'`, `inst'`, `fuel'`, `es'`, `LENGTH s.vs_requests`] mp_tac
+        codegen_request_cut_outcome_identity >>
       impl_tac >- (simp[] >> metis_tac[]) >>
       strip_tac >> gvs[]) >>
   (* ADMISSION: S7 request-cut simulation through the assembly optimizer.
