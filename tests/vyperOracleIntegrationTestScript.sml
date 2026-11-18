@@ -336,6 +336,28 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* The sha256 builtin records a static value-zero request to address 2
+   carrying its input bytes, kept when the outcome reports failure; with no
+   outcome left it records none. *)
+Definition integration_sha256_requests_observe_def:
+  integration_sha256_requests_observe os =
+    send_request_fields (SND (cpscv_run
+      (Builtin (BaseT (BytesT (Fixed 32))) Sha256
+        [Literal (BaseT (BytesT (Dynamic 3))) (BytesL [1w; 2w; 3w])])
+      (send_state with outcomes := os)))
+End
+val () = cv_auto_trans integration_sha256_requests_observe_def;
+
+Theorem Sha256_builtin_records_request:
+  integration_sha256_requests_observe (SOME [send_outcome T [] 0]) =
+    send_initial_requests ++ [(2w,0,[1w; 2w; 3w],T,3,2w,4w)] /\
+  integration_sha256_requests_observe (SOME [send_outcome F [] 0]) =
+    send_initial_requests ++ [(2w,0,[1w; 2w; 3w],T,3,2w,4w)] /\
+  integration_sha256_requests_observe (SOME []) = send_initial_requests
+Proof
+  CONV_TAC cv_eval
+QED
+
 (* The complete rollback equality is certified separately from computable
    snapshots; CV does not decide equality of function-valued account maps. *)
 Theorem public_failure_whole_machine_rollback:
