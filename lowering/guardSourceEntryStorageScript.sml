@@ -15,22 +15,6 @@ Proof
       check_not_static_def, assert_def, check_def, AllCaseEqs(), listTheory.MEM_APPEND]
 QED
 
-Theorem send_call_value_storage:
-  send_call_value mut cx st = (r,u) /\
-  storage_well_formed_on cx st (FST H) ==>
-  storage_well_formed_on cx u (FST H)
-Proof
-  simp[send_call_value_def, ignore_bind_def, bind_def, check_def,
-       assert_def, return_def, raise_def] >>
-  rpt IF_CASES_TAC >> simp[] >> strip_tac >>
-  gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def,
-      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def] >>
-  Cases_on `mut = Payable` >>
-  gvs[vyperStateTheory.assert_def, vyperStateTheory.return_def,
-      vyperStateTheory.raise_def] >>
-  drule_all transfer_value_preserves_storage_well_formed_on >> simp[]
-QED
-
 Theorem lock_if_nr_storage:
   regions_consistent (FST H) /\
   storage_locks_separated (FST H) (SND H) /\
