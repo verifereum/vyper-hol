@@ -14,6 +14,7 @@ Ancestors
   vyperLoweringCorrect compileVyper vyperCompiler vyperInterpreter e2eDefs
   o1PassContract unitMemInv memSafeRun ptrSafeRun
   contextRawReachable contextCodegenRel
+  fragGasOrigin gasExplicitSites gasShadowRunLowering
   ptrDiscipline lowerDloadDefs
   venomExecSemantics venomInst venomState
   arithmetic list rich_list pair words finite_map
@@ -254,7 +255,16 @@ val lower_vyper_runtime_unit_dynamic_peak_memory_bound_quote : term = “
     (calldata_dispatch tops vs0.vs_call_ctx.cc_calldata = NONE \/
      ((valid_vyper_call tops tx vs0.vs_call_ctx.cc_calldata ret \/
        dispatched_vyper_call tops tx vs0.vs_call_ctx.cc_calldata ret) /\
-      source_unit_execution_correct_at marks tops ret am tx unit vs0 /\
+      (?shadow_unit func r.
+         runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+         lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+         fn_entry_label func = SOME "__entry" /\
+         exit_result r /\
+         gas_origin_path F
+           (gas_explicit_sites unit.cu_context shadow_unit.cu_context)
+           unit.cu_context func
+           (vs0 with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                        vs_inst_idx := 0 |>) marks r) /\
       call_storage_ok am tx vs0.vs_outcomes
         (gas_explicit marks vs0.vs_gas_readings ++ tail) /\
       ~source_exempt tops
@@ -297,6 +307,10 @@ val lower_vyper_runtime_unit_memory_ptr_dynamic_companion_quote : term = “
     raw_variant fmp vs0 vs /\
     (!f i s.
        raw_reachable vs0 unit.cu_context f i s ==>
+       (inst_mem_below_frontiers i s \/
+        ?bb. lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+             revert_forward_at bb s.vs_inst_idx) /\
+       inst_dload_in_section i s /\
        w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
        (i.inst_opcode = DALLOCA ==>
         !sz_op sz.
@@ -304,9 +318,6 @@ val lower_vyper_runtime_unit_memory_ptr_dynamic_companion_quote : term = “
           w2n s.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256))) /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
-    (!fuel. mem_safe_blocks fuel unit.cu_context fn
-       (vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                    vs_inst_idx := 0 |>)) /\
     (!fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint
        (vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                     vs_inst_idx := 0 |>)) ==>
@@ -353,7 +364,7 @@ val expected_constant_owners =
    ("vfmState", ["lookup_account"]),
    ("ptrDiscipline", ["ctx_has_dalloca", "entry_taint",
                      "fixed_region_reserved", "ptr_discipline", "taint_within"]),
-   ("venomInst", ["fn_insts", "lookup_function", "fn_entry_label",
+   ("venomInst", ["fn_insts", "lookup_function", "lookup_block", "fn_entry_label",
                   "DALLOCA", "EXTCODESIZE", "ASSERT", "SHL", "OR", "ADD",
                   "MSTORE", "EXTCODECOPY"]),
    ("exprLoweringProps", ["fmp_room", "stmt_state_rel", "run_inst_seq",
@@ -364,7 +375,7 @@ val expected_constant_owners =
                    "lookup_var", "Lit", "Var"]),
    ("venomExecSemantics", ["OK"]),
    ("builtinSystem", ["compile_msg_data_to_memory"]),
-   ("fragExec", ["fn_has_code"]),
+   ("fragExec", ["exit_result", "fn_has_code"]),
    ("loweringStateRelDefs", ["local_ptrs_reserved", "not_fresh_at"]),
    ("emitHelper", ["emit_op", "emit_void"]),
    ("context", ["compile_alloc_dynamic", "compile_copy_memory_dynamic"]),
@@ -372,7 +383,6 @@ val expected_constant_owners =
    ("compileVyper", ["lower_vyper_runtime_unit"]),
    ("vyperCalldata", ["calldata_dispatch"]),
    ("loweringCalldataCorrect", ["dispatched_vyper_call"]),
-   ("sourceUnitExecution", ["source_unit_execution_correct_at"]),
    ("e2eDefs", ["source_typing_ok", "source_deployment_rel", "valid_vyper_call",
                 "call_storage_ok", "source_exempt"]),
    ("vyperLoweringCorrect", ["initial_venom_state_rel"]),
@@ -383,9 +393,13 @@ val expected_constant_owners =
    ("vyperInterpreter", ["call_external"]),
    ("exprSimHypsDefs", ["outcomes_accounts_typed"]),
    ("contextRawReachable", ["raw_reachable"]),
-   ("memSafeRun", ["mem_safe_blocks"]),
+   ("memSafeRun", ["inst_dload_in_section"]),
    ("ptrSafeRun", ["ptr_safe_blocks"]),
-   ("unitTransformDefs", ["raw_unit_memory_ok"])];
+   ("unitTransformDefs", ["inst_mem_below_frontiers", "raw_unit_memory_ok"]),
+   ("contextCodegenRel", ["revert_forward_at"]),
+   ("fragGasOrigin", ["gas_origin_path"]),
+   ("gasExplicitSites", ["gas_explicit_sites"]),
+   ("gasShadowRunLowering", ["runtime_gas_shadow_unit"])];
 
 fun constant_owner tm =
   let val {Thy, Name, ...} = dest_thy_const tm in (Name, Thy) end;
