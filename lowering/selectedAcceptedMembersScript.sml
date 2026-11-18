@@ -393,3 +393,116 @@ Proof
   qpat_assum `!D explicit. gas_origin_ptr_path _ (r,H,u) [] (OK v,J,z)` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_origin_ptr_path_trans]
 QED
+
+(* The old root pointer and the immutable input operand survive each
+   slice of the member program. *)
+Theorem selected_member_root_frame[local]:
+  selected_member_frame st en (s,G,tn) (t,H,u) /\
+  abi_decoder_operand_live st.cs_next_var (Var root) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  ptr_covers G tn root s extent /\ op_taint tn src = {} /\ op_prov G src = NONE ==>
+  t.vs_call_ctx = s.vs_call_ctx /\
+  eval_operand (Var root) t = eval_operand (Var root) s /\
+  eval_operand src t = eval_operand src s /\
+  ptr_covers H u root t extent /\ op_taint u src = {} /\ op_prov H src = NONE
+Proof
+  simp[selected_member_frame_def] >> strip_tac >>
+  `eval_operand (Var root) t = eval_operand (Var root) s /\
+   eval_operand src t = eval_operand src s` by metis_tac[] >>
+  `not_fresh_at st root /\ (!name. src = Var name ==> not_fresh_at st name)` by
+    (Cases_on `src` >>
+     gvs[abi_decoder_operand_live_def,abi_decoder_older_vars_def,not_fresh_at_def]) >>
+  `ptr_covers H u root t extent` by
+    (irule assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame >>
+     goal_assum (drule_at Any) >> fs[eval_operand_def,op_taint_def]) >>
+  Cases_on `src` >> gvs[op_taint_def,op_prov_def] >> metis_tac[]
+QED
+
+Theorem selected_member_window_survives[local]:
+  selected_member_frame st en (s,G,tn) (t,H,u) /\
+  abi_decode_footprint_frame ((d,sz)::scratch) s t /\ alloca_inv t /\
+  (oid < st.cs_next_id \/ en.cs_next_id <= oid) /\
+  FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+  (!q k. MEM (q,k) scratch ==> ?id. st.cs_next_id <= id /\ id < en.cs_next_id /\
+      FLOOKUP t.vs_allocas id = SOME (q,k)) /\
+  base_addr <= b /\ b + type_memory_size tv <= base_addr + cap /\
+  b + type_memory_size tv <= d /\ val_wf tv x /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv x b m) ==>
+  !m. mem_agree_outside u.t_mem t.vs_memory m ==> val_in_memory tv x b m
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `selected_member_frame _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE[selected_member_frame_def]) >>
+  `mem_bytes_at b (type_memory_size tv) t.vs_memory =
+   mem_bytes_at b (type_memory_size tv) s.vs_memory` by
+    (irule (cj 2 calldataChildFrameTheory.calldata_child_preserves_allocated_region) >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     qexistsl_tac [`base_addr`,`cap`,`d`,`oid`,`scratch`,`sz`] >>
+     simp[]) >>
+  rpt gen_tac >> disch_tac >>
+  irule bodyPtrBytestringBuiltinsWindowGhostTheory.robust_val_in_memory_window_transport >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`tn.t_mem`,`u.t_mem`,`type_memory_size tv`,`s.vs_memory`,`t.vs_memory`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (rpt strip_tac >> fs[SUBSET_DEF]) >>
+  simp[exprSimPropsTheory.val_footprint_le]
+QED
+
+(* Result shared by a singleton and a suffix of the installed member list. *)
+Definition selected_member_segment_def:
+  selected_member_segment ctx fn site lo PG limit st en b n
+    (s,G,tn) (t,H,u) scratch <=>
+    ~t.vs_halted /\ t.vs_current_bb = en.cs_current_bb /\
+    t.vs_inst_idx = LENGTH en.cs_current_insts /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    fresh_vars_wrt limit t /\ selected_member_replays st en fn t /\
+    selected_member_frame st en (s,G,tn) (t,H,u) /\
+    abi_decode_footprint_frame ((b,n)::scratch) s t /\
+    (!q k. MEM (q,k) scratch ==> ?id. st.cs_next_id <= id /\ id < en.cs_next_id /\
+      FLOOKUP t.vs_allocas id = SOME (q,k)) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,H,u))
+End
+
+Theorem selected_member_segment_append[local]:
+  selected_member_segment ctx fn site lo PG limit st en b n (s,G,tn) (t,H,u) sc /\
+  selected_member_segment ctx fn site lo PG limit en fin (b+n) m (t,H,u) (v,J,z) sd /\
+  st.cs_next_id <= en.cs_next_id /\ en.cs_next_id <= fin.cs_next_id /\
+  st.cs_next_var <= en.cs_next_var ==>
+  selected_member_segment ctx fn site lo PG limit st fin b (n+m) (s,G,tn) (v,J,z) (sc++sd)
+Proof
+  rewrite_tac[selected_member_segment_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  ntac 7 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (`selected_member_replays st en fn v` by
+       (qpat_assum `selected_member_frame en fin (t,H,u) (v,J,z)` mp_tac >>
+        qpat_assum `selected_member_replays st en fn t` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        metis_tac[selected_member_replays_outside,LESS_EQ_REFL]) >>
+     irule selected_member_replays_join >> metis_tac[]) >>
+  conj_tac >- (drule_all selected_member_frame_trans >> disch_then ACCEPT_TAC) >>
+  conj_tac >-
+    (irule abi_decode_footprint_frame_trans >> qexists_tac `t` >> conj_tac
+     >- (irule abi_decode_footprint_frame_weaken >> goal_assum (drule_at Any) >>
+         POP_ASSUM_LIST (K ALL_TAC) >> simp[MEM_APPEND] >> rpt gen_tac >> strip_tac
+         >- (qexistsl [`b`,`n+m`] >> simp[]) >>
+         qexistsl [`d`,`sz`] >> simp[]) >>
+     irule abi_decode_footprint_frame_weaken >> goal_assum (drule_at Any) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[MEM_APPEND] >> rpt gen_tac >> strip_tac
+     >- (qexistsl [`b`,`m+n`] >> simp[]) >>
+     qexistsl [`d`,`sz`] >> simp[]) >>
+  conj_tac >-
+    (rpt gen_tac >> simp[MEM_APPEND] >> strip_tac
+     >- (qpat_assum `!q k. MEM (q,k) sc ==> _` drule >> strip_tac >>
+         qexists_tac `id` >> conj_tac >- first_assum ACCEPT_TAC >>
+         conj_tac >- decide_tac >>
+         qpat_assum `selected_member_frame en fin (t,H,u) (v,J,z)`
+           (mp_tac o REWRITE_RULE[selected_member_frame_def]) >>
+         strip_tac >> metis_tac[]) >>
+     qpat_assum `!q k. MEM (q,k) sd ==> _` drule >> strip_tac >>
+     qexists_tac `id` >> simp[] >> decide_tac) >>
+  rpt gen_tac >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,H,u)` mp_tac >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ (t,H,u) [] (OK v,J,z)` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_origin_ptr_path_trans]
+QED
