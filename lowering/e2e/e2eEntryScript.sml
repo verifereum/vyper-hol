@@ -183,22 +183,29 @@ Definition opt_entry_state_def:
            DROP (LENGTH (assemble prog')) (FST (HD es.contexts)).msgParams.code |>
 End
 
-(* ADMISSION: at the identity finalizer the optimized entry state is the
-   entry state.  Waits for its proof. *)
 Theorem opt_entry_state_identity:
   !tops am tx prog cp es.
     call_state_rel tops (assemble prog) am tx es ==>
     opt_entry_state prog prog cp es = entry_venom_state prog cp es
 Proof
-  cheat
+  rpt gen_tac >> rename1 `opt_entry_state prog prog cplan es = _` >>
+  strip_tac >>
+  qspecl_then [`tops`, `prog`, `am`, `tx`, `es`, `cplan`] mp_tac
+    entry_venom_state_installed_section >>
+  asm_simp_tac (srw_ss ()) [opt_entry_state_def, venom_state_component_equality,
+       entry_venom_state_frame_fields] >>
+  metis_tac[]
 QED
 
-(* ADMISSION: at the identity finalizer the entry state's code is the
-   transaction's.  Waits for its proof. *)
 Theorem opt_entry_txp_identity:
   !tops am tx prog cp es.
     call_state_rel tops (assemble prog) am tx es ==>
     tx with code := (opt_entry_state prog prog cp es).vs_code = tx
 Proof
-  cheat
+  rpt gen_tac >> rename1 `(opt_entry_state prog prog cplan es).vs_code` >>
+  strip_tac >>
+  qspecl_then [`tops`, `am`, `tx`, `prog`, `cplan`, `es`]
+    (fn th => first_assum (SUBST1_TAC o MATCH_MP th)) opt_entry_state_identity >>
+  gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+      entry_venom_state_frame_fields, vyperContextTheory.call_txn_component_equality]
 QED
