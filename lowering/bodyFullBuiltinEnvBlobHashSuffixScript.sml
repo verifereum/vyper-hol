@@ -18,7 +18,7 @@ Theorem blobhash_full_suffix:
  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
  eval_operand arg s = SOME (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i)) /\
- op_taint tn arg = {} /\ op_prov G arg = NONE /\ ~ctx_has_dalloca ctx /\
+ op_taint tn arg = {} /\ op_prov G arg = NONE /\
  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
  (!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -137,6 +137,10 @@ Proof
     `taint_ok func tn inst s` by
       simp[taint_ok_def, Abbr `inst`, mk_inst_def,
         contextCodegenRelTheory.source_memory_read_ranges_def] >>
+    `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+      (strip_tac >> fs[stmt_state_rel_def, fmp_room_def, allocas_below_fmp_def,
+         venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+       rpt strip_tac >> res_tac >> decide_tac) >>
     `ptr_inst_ok (DF H) lo 0 ctx func G tn inst s` by
       (simp[ptr_inst_ok_def] >>
        `allocas_from lo s` by fs[ghost_inv_at_def] >>

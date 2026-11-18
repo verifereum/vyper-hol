@@ -161,6 +161,7 @@ Proof
     OK (update_var (STRING #"%" (toString sa.cs_next_var)) w
       (s with vs_gas_readings := DROP 1 s.vs_gas_readings))` by
     metis_tac[gas_builtin_base_step] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule emit_scalar_builtin_counted_suffix >> simp[MEM] >>
   disch_then drule_all >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] assume_tac) >>

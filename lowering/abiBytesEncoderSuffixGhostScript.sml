@@ -8,7 +8,7 @@ Theorem bytes_encoder_suffix_ghosts:
   LENGTH N = 9 /\ ALL_DISTINCT N /\
   eval_operand (Var (EL 0 N)) a = SOME (n2w n) /\
   op_taint tn (Var (EL 0 N)) = {} /\ n+32 < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo a /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp a) /\ allocas_from lo a /\
   run_inst_seq (DROP 7 (bytestring_encoder_insts id N dst src)) a = OK b ==>
   ?H tm.
     (!D k. inst_seq_ptr D lo ctx func PG G tn
@@ -105,6 +105,11 @@ Proof
   `~is_terminator i0.inst_opcode /\ ~is_terminator i1.inst_opcode /\
    ~is_terminator i2.inst_opcode /\ ~is_terminator i3.inst_opcode` by
     simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def, is_terminator_def] >>
+  `!k. (allocas_below_fmp (a with vs_inst_idx := k) <=> allocas_below_fmp a) /\
+       (allocas_below_fmp (a1 with vs_inst_idx := k) <=> allocas_below_fmp a) /\
+       (allocas_below_fmp (a2 with vs_inst_idx := k) <=> allocas_below_fmp a) /\
+       (allocas_below_fmp (a3 with vs_inst_idx := k) <=> allocas_below_fmp a)` by
+    simp[allocas_below_fmp_def, Abbr `a1`, Abbr `a2`, Abbr `a3`, update_var_def] >>
   `!D k. ptr_inst_ok D lo 0 ctx func G tn i0 (a with vs_inst_idx := k)` by
     (simp[Abbr `i0`, ptr_inst_ok_def, step_inst_non_invoke,
        step_inst_inst_idx_indep, exec_result_map_def, allocas_from_def,

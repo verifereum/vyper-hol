@@ -54,7 +54,8 @@ Proof
   (conj_asm1_tac
    >- (mp_tac hash_builtin_value_from_suffixes >>
        (impl_tac >- (conj_tac >- ACCEPT_TAC blockhash_full_suffix >>
-                     (rpt gen_tac >> MATCH_ACCEPT_TAC blobhash_full_suffix))) >>
+                     (rpt gen_tac >> strip_tac >> irule blobhash_full_suffix >>
+                      simp[] >> qexists_tac `arg` >> simp[]))) >>
        disch_then irule >> metis_tac[]) >>
    metis_tac[hash_builtin_full_vv])
 QED
