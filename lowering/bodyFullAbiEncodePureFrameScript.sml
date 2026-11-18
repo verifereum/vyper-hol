@@ -614,3 +614,23 @@ Proof
   match_mp_tac abi_encode_args_full_pure_frame_from_step >>
   rpt gen_tac >> MATCH_ACCEPT_TAC abi_encode_arg_step_full
 QED
+
+(* The tuple region and the row below refer to the selected staging endpoint. *)
+Theorem abi_encode_prepared_pure_frame[local]:
+  compile_alloc_buffer n st = (buf,allocated) /\ fn_has_code st allocated func /\
+  FLOOKUP prepared.vs_allocas st.cs_next_id = SOME (b,n) /\
+  (!name z k. local_region ce ee.scopes initial name z k ==>
+     loweringStateRelDefs$regions_disjoint b n z k) /\
+  (!z k. loweringStateRelDefs$regions_disjoint b n z k ==>
+     mem_bytes_at z k prepared.vs_memory = mem_bytes_at z k initial.vs_memory) ==>
+  pure_frame ce func ee st initial prepared
+Proof
+  strip_tac >> drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  match_mp_tac exprSimPropsTheory.pure_frame_fresh_alloca >>
+  qexistsl_tac [`st.cs_next_id`, `[Lit (n2w n)]`,
+    `[STRING #"%" (toString st.cs_next_var)]`, `b`, `n`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> first_assum irule >> metis_tac[]) >>
+  rpt strip_tac >> first_assum irule >>
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+QED
