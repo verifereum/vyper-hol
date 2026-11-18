@@ -977,7 +977,10 @@ Theorem selected_raw_memory[local]:
   raw_unit_memory_ok unit.cu_context vs /\
   ptr_discipline 0 unit.cu_context vs /\ taint_within D unit.cu_context vs /\
   mem_inv dload_offset_ok unit.cu_context vs /\
-  mem_inv dload_headroom_ok unit.cu_context vs
+  mem_inv dload_headroom_ok unit.cu_context vs /\
+  mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+    s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
+    unit.cu_context vs
 Proof
   strip_tac >>
   mp_tac (Q.SPECL [`tops`, `rp`, `unit`, `am`, `tx`, `vs`, `fn`, `"__entry"`, `D`]
@@ -985,7 +988,9 @@ Proof
   impl_tac >- fs[] >> strip_tac >> simp[] >>
   conj_tac
   >- metis_tac[lower_vyper_runtime_unit_dload_offset_ok] >>
-  metis_tac[lower_vyper_runtime_unit_dload_headroom_ok]
+  conj_tac
+  >- metis_tac[lower_vyper_runtime_unit_dload_headroom_ok] >>
+  metis_tac[lower_vyper_runtime_unit_dload_in_section]
 QED
 
 Theorem selected_run:
@@ -1184,14 +1189,20 @@ Theorem vyper_call_correct_at_marks:
          (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
          unit.cu_context vs /\
        mem_inv dload_offset_ok unit.cu_context vs /\
-       mem_inv dload_headroom_ok unit.cu_context vs ==>
+       mem_inv dload_headroom_ok unit.cu_context vs /\
+       mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+         s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
+         unit.cu_context vs ==>
        ctx_sim
          (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
          unit.cu_context out.po_unit.cu_context vs
          vs0 /\
        (fin = asm_opt_finalizer ==>
-          code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
-       (o1_lowered_inv out.po_unit.cu_context vs0 \/
+          code_end_offset_ok (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
+                              ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
+       ((o1_lowered_inv out.po_unit.cu_context vs0 /\
+         (fin = asm_opt_finalizer ==>
+            code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)) \/
         ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
            mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
                      lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
@@ -1275,13 +1286,19 @@ Proof
   `raw_unit_memory_ok unit.cu_context vs /\
    ptr_discipline 0 unit.cu_context vs /\ taint_within D unit.cu_context vs /\
    mem_inv dload_offset_ok unit.cu_context vs /\
-   mem_inv dload_headroom_ok unit.cu_context vs` by
+   mem_inv dload_headroom_ok unit.cu_context vs /\
+   mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+     s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
+     unit.cu_context vs` by
     (irule selected_raw_memory >> metis_tac[]) >>
   Q.SUBGOAL_THEN
   `ctx_sim D unit.cu_context out.po_unit.cu_context vs vs0 /\
    (fin = asm_opt_finalizer ==>
-      code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
-   (o1_lowered_inv out.po_unit.cu_context vs0 \/
+      code_end_offset_ok (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
+                          ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
+   ((o1_lowered_inv out.po_unit.cu_context vs0 /\
+     (fin = asm_opt_finalizer ==>
+        code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)) \/
     ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
        mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
                  lowered_mem_fact eom ctx fn inst s)
@@ -1312,8 +1329,10 @@ Proof
       qpat_x_assum `txp = tx` SUBST_ALL_TAC >>
       `initial_ctx_rel cplan prog out.po_unit.cu_context vs0 es` by
         metis_tac[entry_venom_state_initial_ctx_rel] >>
-      Cases_on `o1_lowered_inv out.po_unit.cu_context vs0`
-      >- (drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
+      Cases_on `o1_lowered_inv out.po_unit.cu_context vs0 /\
+                (fin = asm_opt_finalizer ==>
+                   code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)`
+      >- (fs[] >> drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
           drule_all o1_pipeline_codegen_obligations >> strip_tac >>
           `!n. ?r' es''. run_call es = SOME (r',es'') /\
              (frame_resource_starved es r' es'' \/
@@ -1363,8 +1382,10 @@ Proof
     (irule codegen_assembly_finalizer_nonempty >> metis_tac[]) >>
   drule_all opt_entry_asm_frame_rel >>
   disch_then (qspecl_then [`prog`, `cplan`] assume_tac) >>
-  Cases_on `o1_lowered_inv out.po_unit.cu_context vs0`
-  >- (drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
+  Cases_on `o1_lowered_inv out.po_unit.cu_context vs0 /\
+            (fin = asm_opt_finalizer ==>
+               code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)`
+  >- (fs[] >> drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
       drule_all o1_pipeline_codegen_obligations >> strip_tac >>
       `!n. ?r' es''. run_call es = SOME (r',es'') /\
          (frame_resource_starved es r' es'' \/
@@ -1460,14 +1481,20 @@ Theorem call_pipeline_gas_link:
                 (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
                 unit.cu_context vs /\
               mem_inv dload_offset_ok unit.cu_context vs /\
-              mem_inv dload_headroom_ok unit.cu_context vs ==>
+              mem_inv dload_headroom_ok unit.cu_context vs /\
+              mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
+                unit.cu_context vs ==>
               ctx_sim
                 (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
                 unit.cu_context out.po_unit.cu_context vs
                 vs0 /\
               (fin = asm_opt_finalizer ==>
-                 code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
-              (o1_lowered_inv out.po_unit.cu_context vs0 \/
+                 code_end_offset_ok (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
+                                     ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
+              ((o1_lowered_inv out.po_unit.cu_context vs0 /\
+                (fin = asm_opt_finalizer ==>
+                   code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)) \/
                ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
                   mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
                             lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
@@ -1519,14 +1546,20 @@ Theorem vyper_call_correct_from_gas_link:
                  (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
                  unit.cu_context vs /\
                mem_inv dload_offset_ok unit.cu_context vs /\
-               mem_inv dload_headroom_ok unit.cu_context vs ==>
+               mem_inv dload_headroom_ok unit.cu_context vs /\
+               mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                 s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
+                 unit.cu_context vs ==>
                ctx_sim
                  (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
                  unit.cu_context out.po_unit.cu_context vs
                  vs0 /\
                (fin = asm_opt_finalizer ==>
-                  code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
-               (o1_lowered_inv out.po_unit.cu_context vs0 \/
+                  code_end_offset_ok (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
+                                      ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
+               ((o1_lowered_inv out.po_unit.cu_context vs0 /\
+                 (fin = asm_opt_finalizer ==>
+                    code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)) \/
                 ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
                    mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
                              lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
