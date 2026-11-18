@@ -113,13 +113,7 @@ val excluded_test_names = [
   (* The JSON frontend translates `self.codesize` as a storage variable, not
      as the size of the executing code that Vyper reads with CODESIZE
      (https://github.com/verifereum/vyper-hol/issues/1542). *)
-  "test_self_codesize_in_constructor",
-  (* Each raw `precompiled_contract` fixture was created with the nonce the
-     module-scoped deployer had reached in earlier tests; replay starts every
-     test at nonce 0, so the CREATE address check fails
-     (https://github.com/verifereum/vyper-hol/issues/1543). *)
-  "test_address_code_runtime_error_slice_too_long",
-  "test_address_code_slice[5-10-*"
+  "test_self_codesize_in_constructor"
 ]
 
 fun glob_match pat str =

@@ -50,8 +50,16 @@ val replays = vyperJsonReplayLib.replay_file fixture;
 val expected_status =
   [("test_basic_code",true), ("test_output_mismatch",false),
    ("test_expected_revert",true), ("test_unexpected_revert",false),
-   ("test_null_code",true)];
+   ("test_null_code",true), ("test_raw_without_deployer_nonce",true),
+   ("test_raw_deployer_nonce",true), ("test_raw_deployer_nonce_rewind",false),
+   ("test_raw_deployer_nonce_address_mismatch",false)];
 val expected_names = List.map #1 expected_status;
+(* Raw-deployment failures must fail for their own reason. *)
+val expected_errors =
+  [("test_raw_deployer_nonce_rewind",
+    "raw deployment deployer nonce below replay"),
+   ("test_raw_deployer_nonce_address_mismatch",
+    "raw deployment address mismatch")];
 val () =
   if List.map #1 prepared = expected_names then ()
   else raise Fail "prepared fixture names differ from expected names or order";
@@ -79,6 +87,12 @@ fun emit_case (name,theorem) = let
       SOME (_,value) => value | NONE => raise Fail ("unexpected fixture case: " ^ name)
   val () = if success=wanted then ()
     else raise Fail (name ^ ": unexpected HOL result: " ^ term_to_string result)
+  val () = case List.find (fn (key,_) => key=name) expected_errors of
+      NONE => ()
+    | SOME (_,error) =>
+        if String.isSubstring error (term_to_string result) then ()
+        else raise Fail (name ^ ": expected error " ^ error ^ ", got " ^
+                         term_to_string result)
   val traces = case List.find (fn (key,_) => key=name) prepared of
       SOME (_,value) => value | NONE => raise Fail ("missing prepared case: " ^ name)
   val input = vyperJsonReplayLib.encode_traces traces
