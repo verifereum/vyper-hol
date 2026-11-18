@@ -164,8 +164,9 @@ and a pending `(request, pre-call log count, pre-call deletion count)`. `observe
 | That callee returns to our depth | append the pending pair and clear pending |
 | Our frame faults/pops, or an unobserved instruction/descendant step occurs | no new entry |
 
-`call_trace es` includes value-zero computed precompiles;
-`call_requests es` filters precisely those out of its requests. `gas_readings es` is a separate
+`call_trace es` includes value-zero computed precompiles, and
+`call_requests es` is `MAP FST (call_trace es)`: every entry's request, those
+included. `gas_readings es` is a separate
 frame-local list for assembly initialization, **not a source gas-number
 oracle**. The observer is total/deterministic; trace decomposition and semantic
 correctness are not proved by totality and remain 2.1 work. CALLCODE is not observed;
@@ -173,8 +174,8 @@ DELEGATECALL and CREATE/CREATE2 are observed but outside S7 shape.
 
 **Computed calls:** value zero to addresses 1/2/6/7 uses `precompile_result`
 (ecrecover/SHA256/ecadd/ecmul) for its return data, takes its success from
-the next outcome (the EVM can starve it of gas), records no request and
-preserves state. The source's sha256/ecrecover/ecadd/ecmul builtins take that
+the next outcome (the EVM can starve it of gas), records its request like
+any call and otherwise preserves state. The source's sha256/ecrecover/ecadd/ecmul builtins take that
 outcome too. Invalid EC input gives failure; invalid ecrecover is a valid
 successful empty result. Nonzero value or another precompile is ordinary.
 
@@ -188,12 +189,14 @@ gives a `run_call` result that either is frame-resource-starved or satisfies
 `calldata_result_rel H`, including the unmatched-calldata case.
 
 The companion `vyper_call_gas_sufficient`
-(`lowering/e2eGasSufficientTopScript.sml`) takes `valid_vyper_call` for the
-supplied calldata and source return. It gives a threshold `g` such that
-adding any `g' >= g` gas to the frame yields a run. If the trace length is
-below `2 ** 64`, `call_storage_ok` holds for every gas filling of its
-outcomes, and no source observation is exempt (`~gas_source_exempt`), an
-OutOfGas run reaches a `RETURNDATACOPY` instruction (`frame_inst_at`).
+(`lowering/e2eGasSufficientTopScript.sml`) gives a threshold `g` such that
+adding any `g' >= g` gas to the frame yields a run. When
+`calldata_dispatch` selects a source call, the gas guarantee requires the
+raised-gas trace length to be below `2 ** 64`, `call_storage_ok` for every
+gas filling of its outcomes, and `~gas_source_exempt` for every source
+observation of that call. Under those conditions, an OutOfGas run reaches
+a `RETURNDATACOPY` instruction (`frame_inst_at`). The same OutOfGas
+conclusion applies to unmatched calldata.
 The identity case composes the stage bounds S1b
 (`lower_vyper_runtime_unit_run_bounded`), S6b
 (`run_venom_pipeline_run_bounded`) and S7g (`codegen_gas_sufficient`). The deploy twin
@@ -205,7 +208,8 @@ Both assembly-optimizer cases have proofs that inherit upstream admissions.
 
 On success the result relates `tx_return_bytes`, accounts after EVM pending
 deletions and transient storage modulo dead target storage, ordered concrete logs
-and the filtered request sequence via `request_agree`.
+and the full request list `call_requests es` (every trace entry's request,
+computed precompiles included) via `request_agree`.
 Failed-run requests, leftover terminal outcomes, revert data/reason and general
 abort kind are not compared. `unspecified_behaviour_exempt` covers exact
 `RuntimeError "abi_decode invalid"` with a dynamic ABI target occurring in a
@@ -224,10 +228,10 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 
 | Key | Decision / rejected alternative | Current implementation and explicit deviation or limit | Future owner |
 |---|---|---|---|
-| D1 | Full outcome oracle; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption. `call_result_rel_at` compares requests via `effects_agree` and `request_agree`. The observer records the message-call gas operand in `cr_gas`, and `request_agree` matches it to the explicit source `gas=` value when present. | 2.1 trace / 7 callee producer |
+| D1 | Full outcome oracle; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption. `call_result_rel_at` compares the full request list on success and halt via `effects_agree` and `request_agree`. The observer records the message-call gas operand in `cr_gas`, and `request_agree` matches it to the explicit source `gas=` value when present. | 2.1 trace / 7 callee producer |
 | D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas/StackOverflow; a starved computed precompile is an oracle outcome. The gas bound is the separate companion `vyper_call_gas_sufficient`. | 2.1 / 4 |
 | D3 | Frame-local GAS readings | Venom `exec_gas` and `asm_gas` consume readings, zero on exhaustion. The entry uses `gas_readings es`, and `call_result_rel H` checks all source gas fillings allowed by `gas_readings_rel`. | 2.1 / 4.2 |
-| D4 | Compute value-zero precompiles 1/2/6/7's data, take their success from the oracle | `precompile_result`, `take_outcome`, `precompile_call_success`, request filter `call_requests`; helper purity is proved, EVM purity bridge is deferred. | 2.1 |
+| D4 | Compute value-zero precompiles 1/2/6/7's data, take their success from the oracle | `precompile_result`, `take_outcome`, `precompile_call_success`, every request recorded (`record_request`, `call_requests`); helper purity is proved, EVM purity bridge is deferred. | 2.1 |
 | D5 | One evaluator NONE/SOME, not duplicate evaluator or unchecked accounts | Source `evaluation_state.outcomes/requests`, `take_call_outcome` account guard; full triples at call/deploy entry, two-argument initializer retained. Existing storage/type proof guards remain conditional; no universal storage validator. | 6 / 7 |
 | D6 | SOME send requests a real call outcome, not pure transfer | Source Send uses empty-data nonstatic request and requires success; NONE retains concrete transfer behavior. | 6 |
 | D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall is **not admitted**, despite a general helper branch. | 6 |

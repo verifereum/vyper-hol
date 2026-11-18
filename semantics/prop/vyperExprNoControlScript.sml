@@ -474,7 +474,7 @@ Proof
 QED
 
 Theorem precompile_call_success_no_control:
-  precompile_call_success bt s = (INR exc, s') ==> no_control_exc exc
+  precompile_call_success bt vs s = (INR exc, s') ==> no_control_exc exc
 Proof
   strip_tac >> drule vyperStatePreservationTheory.precompile_call_success_exception >>
   rw[] >> simp[no_control_exc_def]

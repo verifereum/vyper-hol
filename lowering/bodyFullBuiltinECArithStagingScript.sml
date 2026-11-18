@@ -6,7 +6,7 @@ Ancestors
   exprSimSource exprSimHyps exprSimHypsDefs exprSimOperands exprSimWordArgs
   loweringPosts stateRelProj
   vyperStorageTrace vyperStorageFootprint vyperTypeExprSoundness vyperValue
-  venomCallOracleDefs exprSimPrecompiles
+  venomCallOracleDefs exprSimPrecompiles vyperInterpreter
 
 Theorem ec_arith_staged_cut:
   !bt a e1 e2 cx tops ctx cenv env es ty sa vv sb shadow_sa shadow_sb
@@ -75,6 +75,7 @@ Theorem ec_arith_staged_cut:
       (case point_result of NONE => INR (RuntimeError
          (if bt = ECAdd then "ECAdd invalid point" else "ECMul invalid point"))
        | SOME xy => INL (mk_ec_result xy)) /\
+    precompile_input bt [v1;v2] = read_memory (w2n wi) (w2n an) u /\
     precompile_result (venom_call_request u addr 0w wi an T).cr_target
       (venom_call_request u addr 0w wi an T).cr_data =
       SOME (OPTION_MAP (\(rx,ry).

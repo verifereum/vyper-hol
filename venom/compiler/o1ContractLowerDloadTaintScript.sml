@@ -13,23 +13,28 @@ Ancestors
   lowerDloadDefs venomPassSchedule list calleeTransport lowerDloadRequestObservation
   lowerDloadTerminalObservation lowerDloadRecursiveInterface lowerDloadReachableFloor
   lowerDloadNormalData lowerDloadReachableDiscipline unitShapeDefs pred_set
+  extCallOracle
   contextCodegenRel venomInst lowerDloadSourceInterface
 
 (* Agreement of the complete step_taint adoption guard; request streams
-   themselves may differ, only their change indicators must agree. *)
+   themselves may differ, but growth and the last request class must agree. *)
 Theorem ld_adoption_guard_agreement:
   !s s' t t'.
     s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
     s.vs_outcomes = t.vs_outcomes /\
     s'.vs_outcomes = t'.vs_outcomes /\
     ((s'.vs_requests <> s.vs_requests) <=>
-     (t'.vs_requests <> t.vs_requests)) ==>
+     (t'.vs_requests <> t.vs_requests)) /\
+    computed_precompile (LAST s'.vs_requests) =
+      computed_precompile (LAST t'.vs_requests) ==>
     ((~s.vs_call_ctx.cc_static /\
       s'.vs_requests <> s.vs_requests /\
+      ~computed_precompile (LAST s'.vs_requests) /\
       s'.vs_outcomes <> s.vs_outcomes /\
       (HD s.vs_outcomes).co_success) <=>
      (~t.vs_call_ctx.cc_static /\
       t'.vs_requests <> t.vs_requests /\
+      ~computed_precompile (LAST t'.vs_requests) /\
       t'.vs_outcomes <> t.vs_outcomes /\
       (HD t.vs_outcomes).co_success))
 Proof

@@ -30,8 +30,10 @@ Theorem ld_exec_ext_call_effect:
     tn' = tn with <|
       t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss.vs_returndata)};
       t_stor := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
         ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
       t_trans := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
         ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |> /\
     ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
     ld_dyn_agree fl tn'.t_mem ss.vs_memory ts.vs_memory /\
@@ -62,8 +64,10 @@ Proof
   qabbrev_tac `mask = tn with <|
     t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss0.vs_returndata)};
     t_stor := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss0.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss0.vs_requests) /\
       ss0.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
     t_trans := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss0.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss0.vs_requests) /\
       ss0.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |>` >>
   `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[ld_nonghost_def] >>
   `w = w' /\ ld_memory lo A mask ss0 ts0 /\

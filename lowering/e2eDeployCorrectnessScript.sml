@@ -44,7 +44,7 @@ Theorem deploy_pipeline_gas_link:
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
-    unit_alloca_budget dunit.cu_context +
+    imm_len tops + unit_alloca_budget dunit.cu_context +
       32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
     (?shadow_ctx. !vs.
        raw_variant fmp vs vs_out ==>

@@ -273,15 +273,23 @@ val reading_base = reading_place_operations :: reading_base;
 
 Theorem reading_call_primitives[local]:
   (frame_call_value cx vo st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
-  (precompile_call_success bt st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
+  (precompile_call_success bt vs st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
   (take_call_outcome gas_cap addr data vo st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
   (take_delegate_outcome gas_cap addr data vo st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
   (adopt_call_outcome rq co st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
   (create_oracle_result salt value code rof st = (INR ^missing_exc,st') ==> st'.gas_obs = [])
 Proof
   conj_tac >- READING_WALK reading_base [frame_call_value_def] >>
-  conj_tac >- simp[precompile_call_success_def, return_def, check_def,
-                    assert_def, AllCaseEqs()] >>
+  conj_tac >-
+    (Cases_on `st.outcomes` >>
+     simp[precompile_call_success_def, return_def, COND_RATOR] >>
+     rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+     simp[check_def, assert_def, bind_def, AllCaseEqs()] >>
+     Cases_on `take_call_outcome NONE (precompile_address bt)
+       (precompile_input bt vs) NONE st` >>
+     rename1 `take_call_outcome _ _ _ _ _ = (res,mid)` >>
+     Cases_on `res` >> simp[UNCURRY, check_def, assert_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >> drule take_call_outcome_error >> simp[]) >>
   conj_tac >- (strip_tac >> drule take_call_outcome_error >> simp[]) >>
   conj_tac >- (strip_tac >> drule take_delegate_outcome_error >> simp[]) >>
   conj_tac >- simp[adopt_call_outcome_equation] >>

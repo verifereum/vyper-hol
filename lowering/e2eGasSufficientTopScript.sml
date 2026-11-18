@@ -96,23 +96,25 @@ QED
    The storage and source exemption guards transfer because the program
    cannot observe its own code. *)
 Theorem vyper_call_gas_sufficient_asm_opt:
-  !policy tops deploy_bc runtime_bc am tx ret es.
+  !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
     ~program_reads_self_code tops /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx
-      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    call_state_rel tops runtime_bc am tx es
     ==>
     ?g. !g'.
       g <= g' /\
-      (!gs. call_storage_ok am tx
-         (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-      (!obs. ~gas_source_exempt tops tx
-         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-            obs am tx)) /\
-      LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64
+      (!f vals.
+         calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+           (!gs. call_storage_ok am
+              (tx with <| function_name := f; args := vals |>)
+              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+           (!obs. ~gas_source_exempt tops
+              (tx with <| function_name := f; args := vals |>)
+              (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+                 obs am (tx with <| function_name := f; args := vals |>))) /\
+           LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64)
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
@@ -153,11 +155,7 @@ Proof
   `!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
      ~MEM (Label "runtime_begin") inst.inst_operands` by
     metis_tac[lower_vyper_runtime_unit_no_runtime_begin] >>
-  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
-  qspecl_then [`tops`, `rpolicy`, `unit`] mp_tac
-    lower_vyper_runtime_unit_fns_stable >>
-  impl_tac >- simp[] >> strip_tac >>
-  drule_all run_context_terminates_uniform >>
+  drule_all call_gas_uniform_fuel >>
   disch_then (qx_choose_then `fuel` assume_tac) >>
   qspecl_then [`0`, `rpolicy`, `unit`, `out`, `cplan`, `fuel`] mp_tac
     run_venom_pipeline_run_bounded_static_abort >>
@@ -197,8 +195,7 @@ Proof
    vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\ vs.vs_fmp = vs.vs_initial_fmp /\
    vs.vs_call_ctx.cc_static = tx.is_static /\
    vs.vs_outcomes = MAP SND (call_trace eg) /\
-   vs.vs_code = assemble prog ++ vs.vs_data_section /\
-   valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret` by
+   vs.vs_code = assemble prog ++ vs.vs_data_section` by
     fs[Abbr`vs`, Abbr`eg`, opt_entry_state_add_frame_gas,
        o1_initial_state_ok_def, code_layout_valid_def] >>
   qabbrev_tac `txp = tx with code := vs.vs_code` >>
@@ -215,21 +212,30 @@ Proof
     fs[Abbr`txp`, source_deployment_rel_def, layouts_agree_def] >>
   `ALOOKUP am.sources tx.target = SOME [(NONE, tops)]` by
     fs[source_deployment_rel_def, layouts_agree_def] >>
-  `!gs. call_storage_ok am txp vs.vs_outcomes gs` by
-    (fs[Abbr`txp`] >> metis_tac[call_storage_ok_code_update]) >>
-  `!obs. call_external (SOME vs.vs_outcomes) obs am txp =
-         call_external (SOME vs.vs_outcomes) obs am tx` by
-    (gen_tac >> simp[Abbr`txp`, vyperInterpreterTheory.call_external_def] >>
-     `call_external_trace (SOME vs.vs_outcomes) obs am (tx with code := vs.vs_code) =
-      call_external_trace (SOME vs.vs_outcomes) obs am tx` suffices_by simp[] >>
-     irule call_external_trace_no_self_code_update >>
-     qexists_tac `tops` >> simp[]) >>
-  `!obs. ~gas_source_exempt tops txp
-           (call_external (SOME vs.vs_outcomes) obs am txp)` by
-    fs[gas_source_exempt_def, Abbr`txp`] >>
-  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `txp`, `ret`] mp_tac
-    lower_vyper_runtime_unit_run_bounded >>
-  impl_tac >- simp[] >> disch_then (qx_choose_then `fuelp` assume_tac) >>
+  `outcomes_accounts_typed (SOME vs.vs_outcomes)` by simp[] >>
+  `!f vals. calldata_dispatch tops txp.calldata = SOME (f, vals) ==>
+      (!obs. call_storage_ok am
+         (txp with <| function_name := f; args := vals |>) vs.vs_outcomes obs) /\
+      (!obs. ~gas_source_exempt tops
+         (txp with <| function_name := f; args := vals |>)
+         (call_external (SOME vs.vs_outcomes) obs am
+            (txp with <| function_name := f; args := vals |>)))` by
+    (rpt gen_tac >> strip_tac >>
+     `calldata_dispatch tops tx.calldata = SOME (f, vals)` by fs[Abbr`txp`] >>
+     qpat_x_assum `!f vals. calldata_dispatch tops tx.calldata = _ ==> _`
+       (qspecl_then [`f`, `vals`] mp_tac) >>
+     simp[] >> strip_tac >>
+     qabbrev_tac `td = tx with <| function_name := f; args := vals |>` >>
+     `(txp with <| function_name := f; args := vals |>) =
+      td with code := vs.vs_code` by
+       simp[Abbr`txp`, Abbr`td`, vyperContextTheory.call_txn_component_equality] >>
+     `ALOOKUP am.sources td.target = SOME [(NONE, tops)]` by
+       simp[Abbr`td`] >>
+     `txp.is_static = td.is_static` by simp[Abbr`txp`, Abbr`td`] >>
+     simp[call_storage_ok_code_update, gas_source_exempt_def,
+          vyperInterpreterTheory.call_external_def,
+          call_external_trace_no_self_code_update] >>
+     fs[gas_source_exempt_def, vyperInterpreterTheory.call_external_def]) >>
   qabbrev_tac `D = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
                       d_imm := K UNIV; d_ret := K UNIV |>` >>
   `dead_wf D` by simp[Abbr`D`, dead_wf_def] >>
@@ -248,82 +254,10 @@ Proof
        ~(!n. terminates (run_context n unit.cu_context vi) ==>
              ?u. run_context n unit.cu_context vi = Abort ExHalt_abort u))` by
     (gen_tac >> strip_tac >>
-     `gas_variant vi vs` by metis_tac[raw_variant_gas_variant] >>
-     `initial_venom_state_rel tops am txp vi` by
-       metis_tac[gas_variant_initial_venom_state_rel] >>
-     `vi.vs_outcomes = vs.vs_outcomes /\ vi.vs_call_ctx = vs.vs_call_ctx`
-       by metis_tac[gas_variant_outcomes, gas_variant_call_ctx] >>
-     `code_layout_valid vi` by
-       (irule gas_variant_code_layout_valid >> qexists_tac `vs` >> simp[]) >>
-     `valid_vyper_call tops txp vi.vs_call_ctx.cc_calldata ret` by
-       gvs[Abbr`txp`, valid_vyper_call_def] >>
-     `outcomes_accounts_typed (SOME vi.vs_outcomes) /\
-      (!marks. call_storage_ok am txp vi.vs_outcomes
-                (gas_explicit marks vi.vs_gas_readings)) /\
-      !marks. ~source_exempt tops
-        (call_external (SOME vi.vs_outcomes)
-           (gas_explicit marks vi.vs_gas_readings) am txp)` by
-       (qpat_assum `vi.vs_outcomes = vs.vs_outcomes`
-          (fn th => PURE_REWRITE_TAC [th]) >>
-        rpt conj_tac
-        >- fs[]
-        >- (gen_tac >>
-            qpat_assum `!gs. call_storage_ok am txp _ gs`
-              (qspec_then `gas_explicit marks vi.vs_gas_readings` ACCEPT_TAC)) >>
-        gen_tac >>
-        qpat_assum `!obs. ~gas_source_exempt tops txp _`
-          (qspec_then `gas_explicit marks vi.vs_gas_readings`
-             (ACCEPT_TAC o CONJUNCT1 o
-              SIMP_RULE (srw_ss()) [gas_source_exempt_def]))) >>
-     drule_all lower_vyper_runtime_unit_correct_readings_available >>
-     strip_tac >>
-     qspecl_then [`marks`, `tops`, `ret`, `am`, `txp`, `unit`, `vi`, `rpolicy`]
-       mp_tac source_unit_exit_safe_runs >>
-     impl_tac >- fs[] >> strip_tac >>
-     `terminates (run_context fuel unit.cu_context vi)` by
-       (qpat_x_assum `!f s. terminates _ ==> _`
-          (qspecl_then [`fuelp`, `vi`] mp_tac) >>
-        impl_tac
-        >- (qpat_x_assum `!vs. _ ==> terminates (run_context fuelp _ _)`
-              irule >> simp[]) >>
-        simp[]) >>
-     `vi.vs_fmp = vi.vs_initial_fmp` by
-       fs[raw_variant_def, gas_variant_def,
-          venomStateTheory.venom_state_component_equality] >>
-     `w2n vi.vs_initial_fmp <= w2n vi.vs_fmp` by simp[] >>
-     drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
-     `mem_inv dload_offset_ok unit.cu_context vi` by
-       (irule lower_vyper_runtime_unit_dload_offset_ok >> metis_tac[]) >>
-     `mem_inv dload_headroom_ok unit.cu_context vi` by
-       (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
-     `mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
-                              s.vs_code = vi.vs_code /\
-                              s.vs_data_section = vi.vs_data_section)
-        unit.cu_context vi` by
-       (irule lower_vyper_runtime_unit_dload_in_section >> metis_tac[]) >>
-     simp[Abbr`D`, taint_within_def] >> strip_tac >>
-     `call_storage_ok am txp vi.vs_outcomes
-        (gas_explicit marks vi.vs_gas_readings)` by
-       (qpat_assum `!marks. call_storage_ok am txp vi.vs_outcomes _`
-          (qspec_then `marks` ACCEPT_TAC)) >>
-     `FST (call_external (SOME vi.vs_outcomes)
-            (gas_explicit marks vi.vs_gas_readings) am txp) <>
-        INR (Error (RuntimeError "msg.gas: no gas reading"))` by
-       (qpat_x_assum `(?tail. _) ==> _` mp_tac >>
-        impl_tac
-        >- (qexists_tac `[]` >> PURE_REWRITE_TAC [APPEND_NIL] >>
-            FIRST_ASSUM ACCEPT_TAC) >>
-        disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
-     `~gas_source_exempt tops txp
-        (call_external (SOME vi.vs_outcomes)
-           (gas_explicit marks vi.vs_gas_readings) am txp)` by
-       (qpat_assum `vi.vs_outcomes = vs.vs_outcomes`
-          (fn th => PURE_REWRITE_TAC [th]) >>
-        qpat_assum `!obs. ~gas_source_exempt tops txp _`
-          (qspec_then `gas_explicit marks vi.vs_gas_readings` ACCEPT_TAC)) >>
-     qspecl_then [`tops`, `ret`, `am`, `txp`, `unit`, `vi`, `marks`] mp_tac
-       call_gas_static_no_abort >>
-     impl_tac >- (rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >> simp[]) >>
+     qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `txp`, `vs`, `vi`, `fuel`]
+       mp_tac call_gas_raw_variant_facts >>
+     impl_tac >- (rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+     simp[Abbr`D`, taint_within_def]) >>
   `venom_run_bounded fuel' M out.po_unit.cu_context vs` by
     (qpat_x_assum `!D vs fmp. _ ==> venom_run_bounded _ _ _ _`
        (qspecl_then [`D`, `vs`, `vs.vs_initial_fmp`] mp_tac) >>
@@ -678,38 +612,44 @@ QED
 (* TOP-LEVEL: one theorem over the accepted finalizers, with
    vyper_call_correct_guarded's finalizer premises. *)
 Theorem vyper_call_gas_sufficient:
-  !fin policy tops deploy_bc runtime_bc am tx ret es.
+  !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
     (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx
-      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    call_state_rel tops runtime_bc am tx es
     ==>
     ?g. !g'.
       g <= g' ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((!gs. call_storage_ok am tx
-            (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-         (!obs. ~gas_source_exempt tops tx
-            (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-               obs am tx)) /\
-         LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
+        ((!f vals.
+            calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+              (!gs. call_storage_ok am
+                 (tx with <| function_name := f; args := vals |>)
+                 (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+              (!obs. ~gas_source_exempt tops
+                 (tx with <| function_name := f; args := vals |>)
+                 (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+                    obs am (tx with <| function_name := f; args := vals |>))) /\
+              LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64) /\
          frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt gen_tac >> strip_tac >>
   `?g. !g'.
      g <= g' /\
-     (!gs. call_storage_ok am tx
-        (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-     (!obs. ~gas_source_exempt tops tx
-        (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-           obs am tx)) /\
-     LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64
+     (!f vals.
+        calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+          (!gs. call_storage_ok am
+             (tx with <| function_name := f; args := vals |>)
+             (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+          (!obs. ~gas_source_exempt tops
+             (tx with <| function_name := f; args := vals |>)
+             (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+                obs am (tx with <| function_name := f; args := vals |>))) /\
+          LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64)
      ==>
      ?r es'.
        run_call (add_frame_gas g' es) = SOME (r, es') /\

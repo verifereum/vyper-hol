@@ -325,9 +325,11 @@ Theorem ld_oracle_call_taint:
     t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss.vs_returndata)};
     t_stor := adopt_reset inst
       (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
        ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
     t_trans := adopt_reset inst
       (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
        ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |>
 Proof
   strip_tac >>
