@@ -180,8 +180,9 @@ successful empty result. Nonzero value or another precompile is ordinary.
 
 **Gas and observations:** entry `cc_gas = 0` and `vs_gas_readings = gas_readings es`.
 Venom GAS and assembly GAS consume frame-local readings, returning zero on
-exhaustion. `unitShapeDefs.opaque_use_ok` restricts return-address uses. No equality of Venom
-GAS with EVM readings or `msg.gas`/`gas=` guarantee is claimed. The
+exhaustion. `unitShapeDefs.opaque_use_ok` restricts return-address uses.
+`gas_readings_rel` constrains source gas fillings using the EVM readings
+and allows slots with no corresponding reading. The
 [fixed-storage call theorem](compiler-correctness-specification.md#fixed-storage-regions)
 gives a `run_call` result that either is frame-resource-starved or satisfies
 `calldata_result_rel H`, including the unmatched-calldata case.
@@ -223,9 +224,9 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 
 | Key | Decision / rejected alternative | Current implementation and explicit deviation or limit | Future owner |
 |---|---|---|---|
-| D1 | Full outcome oracle; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption; `call_result_rel_at` compares filtered successful requests via `effects_agree` and `request_agree`. The observer sets `cr_gas` to `NONE`; source gas observations are existential and not tied to EVM readings. | 2.1 trace / 7 callee producer |
+| D1 | Full outcome oracle; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption. `call_result_rel_at` compares requests via `effects_agree` and `request_agree`. The observer records the message-call gas operand in `cr_gas`, and `request_agree` matches it to the explicit source `gas=` value when present. | 2.1 trace / 7 callee producer |
 | D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas/StackOverflow; a starved computed precompile is an oracle outcome. The gas bound is the separate companion `vyper_call_gas_sufficient`. | 2.1 / 4 |
-| D3 | Frame-local GAS readings | Venom `exec_gas` and `asm_gas` consume readings, zero on exhaustion; entry uses `gas_readings es`. Source observations in the result are existential and not yet tied to EVM readings. | 2.1 / 4.2 |
+| D3 | Frame-local GAS readings | Venom `exec_gas` and `asm_gas` consume readings, zero on exhaustion. The entry uses `gas_readings es`, and `call_result_rel H` checks all source gas fillings allowed by `gas_readings_rel`. | 2.1 / 4.2 |
 | D4 | Compute value-zero precompiles 1/2/6/7's data, take their success from the oracle | `precompile_result`, `take_outcome`, `precompile_call_success`, request filter `call_requests`; helper purity is proved, EVM purity bridge is deferred. | 2.1 |
 | D5 | One evaluator NONE/SOME, not duplicate evaluator or unchecked accounts | Source `evaluation_state.outcomes/requests`, `take_call_outcome` account guard; full triples at call/deploy entry, two-argument initializer retained. Existing storage/type proof guards remain conditional; no universal storage validator. | 6 / 7 |
 | D6 | SOME send requests a real call outcome, not pure transfer | Source Send uses empty-data nonstatic request and requires success; NONE retains concrete transfer behavior. | 6 |
