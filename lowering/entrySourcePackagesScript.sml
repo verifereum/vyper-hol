@@ -4,14 +4,14 @@ Ancestors
   supportedProgram supportedNames supportedDecls e2eDefs list
 
 Theorem selected_external_source_member[local]:
-  supported_program tops /\ valid_vyper_call tops tx cd ret /\
+  supported_program tops /\ tx.function_name <> "__default__" /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,dflts,ret,fbody) ==>
   ?rr. MEM (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)
     (FST (classify_functions tops))
 Proof
   strip_tac >> irule supported_headers_external_member >>
-  gvs[supported_program_def, valid_vyper_call_def]
+  gvs[supported_program_def]
 QED
 
 Theorem external_source_package_labels[local]:
@@ -37,7 +37,7 @@ Proof
 QED
 
 Theorem selected_external_package_member[local]:
-  supported_program tops /\ valid_vyper_call tops tx cd ret /\
+  supported_program tops /\ tx.function_name <> "__default__" /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,dflts,ret,fbody) ==>
   ?ce pa mc key view rt.
@@ -56,9 +56,9 @@ Proof
   metis_tac[MEM_MAP, combinTheory.o_THM]
 QED
 
-Theorem lower_runtime_selected_source_packages:
+Theorem lower_runtime_named_source_packages:
   lower_vyper_runtime_unit tops rp = SOME u /\
-  supported_program tops /\ valid_vyper_call tops tx cd ret /\
+  supported_program tops /\ tx.function_name <> "__default__" /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,dflts,ret,fbody) ==>
   ?sels exts ints fb ei ce pa mc key view rt.
@@ -85,4 +85,23 @@ Proof
   goal_assum (drule_at Any) >>
   simp[external_source_package_labels, internal_source_package_labels] >>
   metis_tac[]
+QED
+
+Theorem lower_runtime_selected_source_packages:
+  lower_vyper_runtime_unit tops rp = SOME u /\
+  supported_program tops /\ valid_vyper_call tops tx cd ret /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,dflts,ret,fbody) ==>
+  ?sels exts ints fb ei ce pa mc key view rt.
+    run_lowering sels exts ints fb rp 0 0 [] ei "__entry" = SOME u /\
+    sels = build_selectors (type_env tops) (FST (classify_functions tops)) /\
+    EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) exts /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
+    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,fbody,rt) exts /\
+    exts = MAP (set_external_package_target rp.rpol_target o
+      package_external_fn tops T (K global_nonreentrant_slot))
+      (FST (classify_functions tops))
+Proof
+  strip_tac >> `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
+  drule_all lower_runtime_named_source_packages >> simp[]
 QED

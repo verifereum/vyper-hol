@@ -158,23 +158,6 @@ Proof
   metis_tac[aug_place_pure_scopes_mutual]
 QED
 
-Theorem aug_place_lookup_global_not_memory:
-  lookup_global cx src id s = (INL pv,s') ==>
-  !name path. pv <> PlaceR (MemoryPlace name path)
-Proof
-  Cases_on `get_module_code cx src`
-  >- simp[lookup_global_def, lift_option_type_def, bind_def, raise_def] >>
-  Cases_on `find_var_decl_by_name id x`
-  >- (simp[lookup_global_def, lift_option_type_def, bind_def,
-           return_def, AllCaseEqs()] >> rpt strip_tac >>
-      gvs[option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
-  PairCases_on `x'` >> Cases_on `x'0` >>
-  simp[lookup_global_def, lift_option_type_def, bind_def,
-       return_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[option_CASE_rator, return_def, raise_def, ignore_bind_def,
-      record_storage_event_def, bind_def, AllCaseEqs()]
-QED
-
 Theorem aug_place_top_level_pop_scopes:
   eval_expr cx (Pop ty (TopLevelNameTarget id)) s = (r,s') ==>
   s'.scopes = s.scopes
@@ -185,9 +168,8 @@ Proof
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
   imp_res_tac lookup_global_state >> imp_res_tac get_place_state >>
   trace_scopes_tac >>
-  imp_res_tac aug_place_lookup_global_not_memory >>
   Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
-  Cases_on `p` >> gvs[] >>
+  Cases_on `p` >> gvs[lookup_global_not_memory] >>
   imp_res_tac pop_storage_place_scopes_immutables >>
   gvs[pop_place_def, raise_def] >>
   gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def] >>
