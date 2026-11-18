@@ -21,6 +21,7 @@ Ancestors
   bodyMemStorageCopyStage
   dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
+  rawCallCalldataPeakMemory
   loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
   loweringCallBudgetBounds
   moduleLoweringProps entryDispatchProps entryDecodeProps
