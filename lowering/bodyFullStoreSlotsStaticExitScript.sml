@@ -44,7 +44,7 @@ Proof
   `?addr w. eval_operand dst u = SOME addr /\
             eval_operand value u = SOME w` by
     (Cases_on `tr` >>
-     gvs[Abbr `i`, step_inst_non_invoke, step_inst_base_SSTORE, step_inst_base_TSTORE,
+     gvs[Abbr `i`, step_inst_non_invoke, step_inst_base_opcode_eqs,
          mk_inst_def, exec_write2_def, eval_operands_def, AllCaseEqs(),
          is_terminator_def, fragExecTheory.exit_result_def]) >>
   qabbrev_tac `us = u with vs_call_ctx := (u.vs_call_ctx with cc_static := T)` >>
@@ -54,7 +54,7 @@ Proof
   `step_inst_base i us =
      Abort ExHalt_abort (halt_state (set_returndata [] us))` by
     (Cases_on `tr` >>
-     simp[Abbr `i`, step_inst_base_SSTORE, step_inst_base_TSTORE, mk_inst_def,
+     simp[Abbr `i`, step_inst_base_opcode_eqs, mk_inst_def,
           Abbr `us`, eval_operands_def] >>
      fs[eval_operand_def, lookup_var_def]) >>
   reverse conj_tac

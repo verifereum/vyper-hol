@@ -36,10 +36,7 @@ Theorem slots_static_step_ok[local]:
   OK (u with vs_call_ctx := (u.vs_call_ctx with cc_static := T))
 Proof
   simp[MEM] >> strip_tac >>
-  gvs[step_inst_non_invoke, step_inst_base_ASSIGN, step_inst_base_ADD,
-      step_inst_base_MUL, step_inst_base_EQ, step_inst_base_LT,
-      step_inst_base_ISZERO, step_inst_base_SHR, step_inst_base_MLOAD,
-      step_inst_base_JMP, step_inst_base_JNZ,
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
       exec_pure1_def, exec_pure2_def, exec_read1_def, AllCaseEqs()] >>
   simp[mload_def]
 QED
@@ -98,10 +95,7 @@ Theorem slots_readonly_step_frame:
   (!u. step_inst fuel ctx inst s <> Halt u)
 Proof
   simp[MEM] >> strip_tac >>
-  simp[step_inst_non_invoke, step_inst_base_ASSIGN, step_inst_base_ADD,
-       step_inst_base_MUL, step_inst_base_EQ, step_inst_base_LT,
-       step_inst_base_ISZERO, step_inst_base_SHR, step_inst_base_MLOAD,
-       step_inst_base_JMP, step_inst_base_JNZ,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
        exec_pure1_def, exec_pure2_def, exec_read1_def, AllCaseEqs(),
        update_var_def, jump_to_def] >>
   rpt strip_tac >> gvs[update_var_def, jump_to_def]

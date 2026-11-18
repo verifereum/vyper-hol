@@ -77,7 +77,7 @@ Resume store_slots_observer_readonly_transfer[entry]:
     (qpat_x_assum `step_inst fuel ctx i a = OK t` mp_tac >>
      qpat_x_assum `_ = ASSIGN \/ _` mp_tac >> strip_tac >>
      gvs[is_terminator_def] >>
-     simp[step_inst_non_invoke, step_inst_base_JMP, step_inst_base_JNZ,
+     simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
           AllCaseEqs()] >> metis_tac[]) >>
   disj2_tac >> qexists_tac `lbl` >> gvs[jump_to_def]
 QED

@@ -556,8 +556,7 @@ Resume compile_store_slots_static_origin_ptr_path[jump_index]:
   qpat_assum `step_inst 0 ctx i a = OK middle` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
   simp[is_terminator_def] >> rpt strip_tac >>
-  gvs[is_terminator_def, step_inst_non_invoke, step_inst_base_JMP,
-      step_inst_base_JNZ, AllCaseEqs(), jump_to_def]
+  gvs[is_terminator_def, step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs(), jump_to_def]
 QED
 
 Resume compile_store_slots_static_origin_ptr_path[zero_cut]:
@@ -969,4 +968,3 @@ Resume compile_store_slots_static_origin_ptr_path[store_cursor]:
 QED
 
 Finalise compile_store_slots_static_origin_ptr_path
-

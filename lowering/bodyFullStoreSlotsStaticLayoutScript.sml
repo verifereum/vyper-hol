@@ -81,17 +81,6 @@ QED
 
 Finalise store_slots_trace_family
 
-Theorem store_slots_fragment_final_label_fresh:
-  compile_store_slots cenv src dst ty tr sa = ((),sb) ==>
-  ~MEM sb.cs_current_bb
-    (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb)))
-Proof
-  strip_tac >>
-  `code_trace_certified (compile_store_slots cenv src dst ty tr)` by
-    simp[store_slots_trace_family] >>
-  drule_all code_trace_certified_raw_shape >> simp[]
-QED
-
 Theorem store_slots_fragment_syntax_shape:
   compile_store_slots cenv src dst ty tr sa = ((),sb) ==>
   cs_extends sa sb /\ frag_ops_free sa sb /\
@@ -114,30 +103,6 @@ Proof
   `EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions` by
     (irule frag_relabel_front_nonphi >> metis_tac[]) >>
   Cases_on `bb.bb_instructions` >> gvs[phi_prefix_length_def]
-QED
-
-(* One compiler-only diagnostic for the actual-function compatibility boundary.
-   No machine execution is involved. *)
-Theorem store_slots_nonempty_final_alias_diagnostic[local]:
-  let ce = (ARB:compile_env) with ce_struct_fields := FEMPTY;
-      sa = <| cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
-              cs_current_bb := "@dyn_exit_2";
-              cs_current_insts := [mk_inst 17 SSTORE [Lit 0w; Var "%0"] []];
-              cs_blocks := []; cs_data_sections := [] |>;
-      sb = SND (compile_store_slots ce (Lit 0w) (Lit 0w)
-                    (ArrayT (BaseT (UintT 256)) (Dynamic 1)) F sa);
-      func = mk_raw_function "alias" sb.cs_blocks
-  in
-    compile_store_slots ce (Lit 0w) (Lit 0w)
-      (ArrayT (BaseT (UintT 256)) (Dynamic 1)) F sa = ((),sb) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    sb.cs_current_bb = sa.cs_current_bb /\ sb.cs_current_insts <> [] /\
-    ?i. MEM i (frag_code sa sb) /\ MEM i.inst_opcode [JMP;JNZ] /\
-        MEM (Label sa.cs_current_bb) i.inst_operands
-Proof
-  EVAL_TAC >>
-  simp[DISJ_IMP_THM, FORALL_AND_THM, LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR,
-       EXISTS_OR_THM] >> EVAL_TAC
 QED
 
 Theorem store_slots_start_oblivious:

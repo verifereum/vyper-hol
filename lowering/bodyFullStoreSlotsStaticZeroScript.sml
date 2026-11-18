@@ -98,8 +98,7 @@ QED
 
 Resume slots_zero_readonly_completion[edges]:
   markerLib.RESUME_TAC >>
-  simp[step_inst_non_invoke, mk_inst_def, step_inst_base_ASSIGN,
-       step_inst_base_EQ, step_inst_base_JMP, step_inst_base_JNZ,
+  simp[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs,
        is_terminator_def, exec_pure2_def, eval_operand_def,
        lookup_var_def, update_var_def, jump_to_def, bool_to_word_def,
        FLOOKUP_UPDATE] >> metis_tac[]

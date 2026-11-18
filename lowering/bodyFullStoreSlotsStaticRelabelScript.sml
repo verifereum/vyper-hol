@@ -13,11 +13,7 @@ Theorem slots_relabel_step_frame[local]:
   (!u. step_inst fuel ctx inst s <> Halt u)
 Proof
   simp[MEM] >> strip_tac >>
-  simp[step_inst_non_invoke, step_inst_base_ASSIGN, step_inst_base_ADD,
-       step_inst_base_MUL, step_inst_base_EQ, step_inst_base_LT,
-       step_inst_base_ISZERO, step_inst_base_SHR, step_inst_base_MLOAD,
-       step_inst_base_JMP, step_inst_base_JNZ, step_inst_base_SSTORE,
-       step_inst_base_TSTORE, exec_pure1_def, exec_pure2_def,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_pure1_def, exec_pure2_def,
        exec_read1_def, exec_write2_def, AllCaseEqs(),
        update_var_def, jump_to_def, sstore_def, tstore_def] >>
   rpt strip_tac >> gvs[update_var_def, jump_to_def, sstore_def, tstore_def]
@@ -154,8 +150,7 @@ Resume store_slots_relabel_checked_edge[entry]:
     (irule typedCopyArrayPtrTheory.entry_ghost_no_phi >> metis_tac[]) >>
   `?lbl. t = jump_to lbl a` by
     (qpat_x_assum `step_inst fuel ctx inst a = OK t` mp_tac >>
-     gvs[MEM] >> simp[step_inst_non_invoke,step_inst_base_JMP,
-       step_inst_base_JNZ,AllCaseEqs()] >> metis_tac[]) >>
+     gvs[MEM] >> simp[step_inst_non_invoke,step_inst_base_opcode_eqs,AllCaseEqs()] >> metis_tac[]) >>
   disj2_tac >> qexists_tac `lbl` >> gvs[jump_to_def]
 QED
 
@@ -183,10 +178,7 @@ Resume store_slots_relabel_checked_edge[ordinary]:
      irule (SRULE [] frag_relabel_base_nonphi) >>
      gvs[is_terminator_def,step_inst_non_invoke]) >>
   `t.vs_current_bb = a.vs_current_bb` by
-    (gvs[MEM,step_inst_non_invoke,step_inst_base_ASSIGN,step_inst_base_ADD,
-         step_inst_base_MUL,step_inst_base_EQ,step_inst_base_LT,
-         step_inst_base_ISZERO,step_inst_base_SHR,step_inst_base_MLOAD,
-         step_inst_base_SSTORE,step_inst_base_TSTORE,
+    (gvs[MEM,step_inst_non_invoke,step_inst_base_opcode_eqs,
          exec_pure1_def,exec_pure2_def,exec_read1_def,exec_write2_def,
          AllCaseEqs(),update_var_def,sstore_def,tstore_def]) >>
   `ghost_step fuel ctx PG Ga tna inst
