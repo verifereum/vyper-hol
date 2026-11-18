@@ -314,6 +314,85 @@ Proof
   gvs[Abbr `cx`, initial_evaluation_context_def, Excl "lock_if_nr_def"]
 QED
 
+Theorem selected_call_trace_result_nr:
+  !tops am tx ret mut nr args fbody env os gx es0 es_lock res ee eu.
+    source_deployment_rel tops am tx /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut,nr,args,[],ret,fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <|outcomes := SOME os; requests := []|>) = (INL (),es0) /\
+    lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+      nr (is_view_mut mut) es0 = (INL (),es_lock) /\
+    eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+      fbody (es_lock with gas_obs := gx) = (res,ee) /\
+    unlock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+      nr (is_view_mut mut) ee = (INL (),eu) ==>
+    ?r am' rqs obs.
+      call_external_trace (SOME os) gx am tx = (r,am',rqs,obs) /\
+      ((res = INL () \/ (?v. res = INR (ReturnException v))) ==>
+        obs = eu.storage_trace) /\
+      (~(res = INL () \/ (?v. res = INR (ReturnException v))) ==>
+        obs = ee.storage_trace) /\
+      (res = INL () ==>
+        r = INL NoneV /\ rqs = eu.requests /\
+        am' = finalize_pending_deletions
+          (abstract_machine_from_state am.sources am.exports am.layouts eu)) /\
+      (!v. res = INR (ReturnException v) ==>
+        rqs = eu.requests /\
+        (r,am') =
+          case evaluate_type (type_env tops) ret of
+            NONE => (INR (Error (TypeError "eval ret")),am)
+          | SOME tv =>
+              case safe_cast tv v of
+                NONE => (INR (Error (TypeError "ext cast ret")),am)
+              | SOME v' => (INL v',finalize_pending_deletions
+                  (abstract_machine_from_state am.sources am.exports am.layouts eu))) /\
+      (res = INR HaltException ==>
+        r = INR HaltException /\ rqs = ee.requests /\
+        am' = finalize_pending_deletions
+          (abstract_machine_from_state am.sources am.exports am.layouts ee)) /\
+      (!e. res = INR e /\ (!v. e <> ReturnException v) /\ e <> HaltException ==>
+        r = INR e /\ am' = am /\ rqs = ee.requests)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH tx.args = LENGTH args` by
+    (drule vyperCallTheory.bind_arguments_length >> simp[]) >>
+  `es0.scopes = [env]` by
+    (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
+  `(es0 with gas_obs := gx).scopes = [env]` by simp[] >>
+  `lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+    nr (is_view_mut mut) (es0 with gas_obs := gx) =
+    (INL (),es_lock with gas_obs := gx)` by
+    (drule lock_if_nr_with_gas_obs >> simp[]) >>
+  drule_all call_external_selected_body_trace >> strip_tac >>
+  drule call_external_trace_result >> strip_tac >>
+  drule_all call_external_selected_body_gas >>
+  disch_then (qspec_then `gx` assume_tac) >>
+  qspecl_then [`am`, `initial_evaluation_context am.sources am.layouts tx NONE`,
+               `nr`, `mut`, `type_env tops`, `env`, `fbody`, `ret`,
+               `es0 with gas_obs := gx`, `es_lock with gas_obs := gx`,
+               `res`, `ee`, `eu`] mp_tac call_external_body_run_nr >>
+  impl_tac >- simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
+  strip_tac >>
+  qexistsl_tac [`r`,`am'`,`rqs`,
+    `(if res = INL () \/ (?v. res = INR (ReturnException v))
+      then eu else ee).storage_trace`] >>
+  simp[Excl "unlock_if_nr_def"] >>
+  rpt conj_tac
+  >- (strip_tac >> gvs[])
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!v. res = INR (ReturnException v) ==> _`
+        (qspec_then `v` mp_tac) >>
+      gvs[] >> strip_tac >> gvs[] >> BasicProvers.EVERY_CASE_TAC >> gvs[])
+  >- (strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!e. res = INR e /\ _ ==> _` (qspec_then `e` mp_tac) >>
+  simp[] >> strip_tac >> Cases_on `e` >> gvs[]
+QED
+
 (* call_external_selected_body_gas without gas observations. *)
 Theorem call_external_selected_body:
   !tops am tx ret mut nr args fbody env orc es0.
