@@ -46,7 +46,7 @@ Proof
   windows_tac [dalloca_windows_ptr_access]
 QED
 
-Theorem dalloca_windows_imm_copy[local]:
+Theorem dalloca_windows_imm_copy:
   !n off. preserves_dalloca_windows window
     (compile_imm_copy_to_memory ctor imm src dst n off)
 Proof
@@ -226,4 +226,78 @@ Theorem dalloca_windows_result_map[local]:
 Proof
   simp[preserves_dalloca_windows_def] >> rpt strip_tac >>
   Cases_on `m st` >> gvs[] >> metis_tac[]
+QED
+Theorem dalloca_windows_copy_memory:
+  preserves_dalloca_windows window (compile_copy_memory dst src n) /\
+  preserves_dalloca_windows window (compile_copy_memory_dynamic dst src length_op)
+Proof
+  Cases_on `n` >>
+  simp[compile_copy_memory_def, compile_copy_memory_dynamic_def,
+       dalloca_windows_return, dalloca_windows_emit_helpers]
+QED
+
+Theorem dalloca_windows_store_bytestring[local]:
+  preserves_dalloca_windows window (compile_store_bytestring src dst)
+Proof
+  rewrite_tac[compile_store_bytestring_def, compile_bytestring_copy_len_def] >>
+  windows_pure_tac
+QED
+
+Theorem dalloca_windows_store_memory_typed[local]:
+  (!cenv dst dst_ty src src_ty.
+    preserves_dalloca_windows window (compile_store_memory_typed cenv dst dst_ty src src_ty)) /\
+  (!cenv dst src dst_tys src_tys dst_off src_off.
+    preserves_dalloca_windows window
+      (compile_typed_copy_fields cenv dst src dst_tys src_tys dst_off src_off)) /\
+  (!cenv dst dst_elem src src_elem n.
+    preserves_dalloca_windows window (compile_copy_sarray_typed cenv dst dst_elem src src_elem n)) /\
+  (!cenv dst dst_elem cap src src_elem.
+    preserves_dalloca_windows window
+      (compile_copy_dynarray_typed cenv dst dst_elem cap src src_elem)) /\
+  (!cenv dst src dst_fields src_fields dst_off src_off.
+    preserves_dalloca_windows window
+      (compile_struct_typed_copy cenv dst src dst_fields src_fields dst_off src_off))
+Proof
+  ho_match_mp_tac compile_store_memory_typed_ind >>
+  rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `is_word_type dst_ty`
+      >- (simp[Once compile_store_memory_typed_def] >> windows_pure_tac) >>
+      Cases_on `is_bytestring_type dst_ty /\ is_bytestring_type src_ty`
+      >- simp[Once compile_store_memory_typed_def, dalloca_windows_store_bytestring] >>
+      Cases_on `acyclic_struct_metadata cenv.ce_struct_fields`
+      >- (Cases_on `dst_ty` >> Cases_on `src_ty` >>
+          TRY (rename1 `compile_store_memory_typed ccenv dst (ArrayT dt db) src (ArrayT st sb)` >>
+               Cases_on `db` >> Cases_on `sb`) >> gvs[] >>
+          simp[Once compile_store_memory_typed_def, LET_THM,
+               dalloca_windows_copy_memory] >> metis_tac[]) >>
+      simp[Once compile_store_memory_typed_def, dalloca_windows_emit_helpers])
+  >- simp[Once compile_store_memory_typed_def, dalloca_windows_return]
+  >- simp[Once compile_store_memory_typed_def, dalloca_windows_return]
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      simp[Once compile_store_memory_typed_def] >>
+      windows_tac [compile_with_byte_offset_def] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `type_memory_bytes ccenv dst_ty = type_memory_bytes ccenv src_ty /\
+                ~is_abi_dynamic cenv.ce_struct_fields dst_ty` >> gvs[] >>
+      simp[Once compile_store_memory_typed_def] >>
+      windows_tac [dalloca_windows_copy_memory] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `type_memory_bytes ccenv dst_ty = type_memory_bytes ccenv src_ty /\ dst_ty = src_ty` >> gvs[] >>
+      simp[Once compile_store_memory_typed_def] >>
+      windows_tac [dalloca_windows_copy_memory] >> metis_tac[])
+  >- simp[Once compile_store_memory_typed_def, dalloca_windows_return] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ALOOKUP src_fields name` >>
+  TRY (rename1 `SOME p` >> PairCases_on `p`) >> gvs[] >>
+  simp[Once compile_store_memory_typed_def] >>
+  windows_tac [compile_with_byte_offset_def] >> metis_tac[]
+QED
+
+Theorem dalloca_windows_store_memory:
+  preserves_dalloca_windows window (compile_store_memory env src dst dst_ty src_ty)
+Proof
+  rewrite_tac[compile_store_memory_def] >>
+  windows_tac [dalloca_windows_store_memory_typed, dalloca_windows_copy_memory,
+               dalloca_windows_store_bytestring]
 QED
