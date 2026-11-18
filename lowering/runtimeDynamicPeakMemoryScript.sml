@@ -3,28 +3,11 @@ Theory runtimeDynamicPeakMemory
 Ancestors
   loweringCallBudgetBounds loweringCallBudgetHistory loweringBudgetDallocaWindows
   loweringBudgetRecorderOutcomes loweringRuntimeBudgetShape
-  fmpLowerSequenceExec dallocaBounds contextCodegenRel venomInst
-  vfmExecution vfmExecutionProp vfmCalldataBound vfmBuffer vfmTypes vfmConstants
-  venomLayout venomState dallocaCalldata rawCallCalldataPeakMemory
-  exprSimRawCallCalldata exprLoweringProps builtinSystem emitHelper fragExec
+  fmpLowerSequenceExec contextCodegenRel venomInst venomLayout venomState
   compileVyper vyperCompiler vyperLoweringCorrect o1PassContract
   contextRawReachable ctxLookupAgreeHelpers venomExecProofs ptrDiscipline unitTransformDefs
   stepWriteFootprintBase
   compileEnv arithmetic list rich_list words finite_map
-
-Theorem calldata_copy_zero_memory_expansion:
-  es.contexts = (c, rb) :: rest ==>
-  vfmExecution$copy_to_memory gas offset 0 0 (SOME get_call_data) es =
-    consume_gas gas es
-Proof
-  simp[copy_to_memory_def, memory_expansion_info_def, consume_gas_def,
-       get_call_data_def, get_current_context_def, set_current_context_def,
-       vfmExecutionTheory.bind_def, vfmExecutionTheory.return_def,
-       vfmExecutionTheory.assert_def, vfmExecutionTheory.ignore_bind_def,
-       vfmExecutionTheory.expand_memory_def, vfmExecutionTheory.write_memory_def,
-       word_size_def] >>
-  strip_tac >> IF_CASES_TAC >> simp[]
-QED
 
 Theorem raw_reachable_at_active_inst[local]:
   raw_reachable vs0 ctx fn i0 s /\ active_inst fn i s ==>
@@ -66,117 +49,6 @@ Proof
   qpat_x_assum `!fn i s. raw_reachable _ _ _ _ _ ==> _`
     (qspecl_then [`fn`, `inst`, `s`] mp_tac) >>
   simp[dalloca_no_wrap_def] >> rpt strip_tac >> res_tac
-QED
-
-(* Evaluated operands at the reached call use the very same length and
-   pointer as the copy, with no intervening compiler-emitted instruction. *)
-Theorem raw_call_msg_data_allocation_window:
-  compile_msg_data_to_memory sa = ((data_ptr,data_len),sb) /\
-  compile_raw_call_finish addr data_ptr data_len gas value call_ty n rev ov out sb =
-    (result,sc) /\
-  fn_has_code sa sc fn ==>
-  ?bb call.
-    lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
-    isPREFIX (sa.cs_current_insts ++ emitted_insts sa sb ++ [call])
-      bb.bb_instructions /\
-    ((call.inst_opcode = CALL /\
-      call.inst_operands = [gas;addr;value;data_ptr;data_len;out;Lit (n2w n)]) \/
-     (MEM call.inst_opcode [STATICCALL;DELEGATECALL] /\
-      call.inst_operands = [gas;addr;data_ptr;data_len;out;Lit (n2w n)]))
-Proof
-  strip_tac >>
-  drule raw_call_finish_prefix >>
-  disch_then (qx_choose_then `success` (qx_choose_then `after_call` strip_assume_tac)) >>
-  `same_blocks sa sb /\ isPREFIX sa.cs_current_insts sb.cs_current_insts` by
-    (qpat_x_assum `compile_msg_data_to_memory _ = _` mp_tac >>
-     simp[compile_msg_data_to_memory_def, contextTheory.compile_alloc_dynamic_def,
-          emit_op_def, emit_void_def, compileEnvTheory.comp_bind_def,
-          compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
-          compileEnvTheory.fresh_var_def, compileEnvTheory.fresh_id_def,
-          compileEnvTheory.emit_def, same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
-     strip_tac >> gvs[] >> simp[IS_PREFIX_APPEND]) >>
-  `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
-    fs[rich_listTheory.IS_PREFIX_APPEND, emitted_insts_def,
-       rich_listTheory.DROP_LENGTH_APPEND] >>
-  Cases_on `call_ty` >> gvs[] >>
-  qpat_assum `emit_op _ _ _ = _` (strip_assume_tac o MATCH_MP emit_op_extends) >>
-  qpat_assum `emit_op _ _ _ = _` (strip_assume_tac o MATCH_MP emitted_insts_emit_op_local) >>
-  `cs_extends sa after_call` by
-    (irule cs_extends_same_block >> fs[same_blocks_def, IS_PREFIX_APPEND] >>
-     metis_tac[APPEND_ASSOC]) >>
-  `fn_has_code after_call sc fn` by metis_tac[fn_has_code_split] >>
-  qspecl_then [`after_call`, `sc`, `fn`] mp_tac fn_has_code_start >>
-  simp[] >> strip_tac >> fs[same_blocks_def] >>
-  rename1 `lookup_block _ fn.fn_blocks = SOME call_bb` >>
-  qexists_tac `call_bb` >>
-  qpat_assum `emitted_insts sb after_call = [_]`
-    (fn th => exists_tac (hd (fst (listSyntax.dest_list (rhs (concl th)))))) >>
-  gvs[mk_inst_def]
-QED
-
-Theorem raw_call_msg_data_site_peak_memory:
-  compile_msg_data_to_memory sa = ((data_ptr,data_len),sb) /\
-  LENGTH s.vs_call_ctx.cc_calldata < 2 ** 64 /\
-  fmp_room ctx fn s /\ ctx_has_dalloca ctx /\
-  w2n s.vs_fmp <= w2n s.vs_initial_fmp + 2 ** 64 * 2 ** 64 /\
-  fmp_frontier_rel cp_fmp (w2n s.vs_initial_fmp) lo s.vs_fmp ==>
-  ?pre t.
-    run_inst_seq (TAKE 1 (emitted_insts sa sb)) s = OK pre /\
-    eval_operand data_len pre =
-      SOME (n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
-    pre.vs_fmp = s.vs_fmp /\
-    run_inst_seq (emitted_insts sa sb) s = OK t /\
-    eval_operand data_ptr t = SOME pre.vs_fmp /\
-    eval_operand data_len t = eval_operand data_len pre /\
-    venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <= 2 ** 64 /\
-    w2n pre.vs_fmp + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <
-      dimword (:256) /\
-    lo + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) < dimword (:256) /\
-    fmp_room ctx fn t /\
-    fmp_frontier_rel cp_fmp (w2n s.vs_initial_fmp)
-      (lo + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata)) t.vs_fmp /\
-    (!es c rb rest gas offset.
-      es.contexts = (c, rb) :: rest /\
-      s.vs_call_ctx.cc_calldata = buffer_to_list c.msgParams.data ==>
-      (s.vs_call_ctx.cc_calldata = [] ==>
-        copy_to_memory gas offset 0 0 (SOME get_call_data) es =
-          consume_gas gas es) /\
-      (s.vs_call_ctx.cc_calldata <> [] /\ wf_state es /\ calldata_bounded es /\
-       2 ** 64 <= offset + LENGTH s.vs_call_ctx.cc_calldata ==>
-        c.msgParams.gasLimit - c.gasUsed <
-        memory_expansion_cost (buffer_length c.memory)
-          (word_size (offset + LENGTH s.vs_call_ctx.cc_calldata) * 32)))
-Proof
-  strip_tac >>
-  drule_all calldata_memory_prefix >> disch_then (qx_choose_then `pre` strip_assume_tac) >>
-  `LENGTH s.vs_call_ctx.cc_calldata < dimword (:256)` by
-    (fs[dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
-  drule_all calldata_memory_run >> disch_then (qx_choose_then `t` strip_assume_tac) >>
-  qexistsl_tac [`pre`, `t`] >>
-  imp_res_tac dalloca_calldata_size_bound >>
-  simp[] >>
-  qspecl_then [`ctx`, `fn`, `cp_fmp`, `s.vs_initial_fmp`, `lo`, `0`,
-    `ARB`, `ARB`, `ARB`, `ARB`, `s`] mp_tac raw_call_msg_data_peak_memory_oog_bridge >>
-  disch_then (mp_tac o CONJUNCT2) >> simp[] >> strip_tac >> gvs[] >>
-  qpat_x_assum `t = _`
-    (fn th => MAP_EVERY (assume_tac o SIMP_RULE (srw_ss()) [] o
-      (fn field => AP_TERM field th))
-      [``\(v:venom_state). v.vs_allocas``,
-       ``\(v:venom_state). v.vs_alloca_next``,
-       ``\(v:venom_state). v.vs_initial_fmp``]) >>
-  `fmp_room ctx fn t` by
-    (irule fmp_room_fields >>
-     qexists_tac `(write_memory_with_expansion (w2n s.vs_fmp)
-       s.vs_call_ctx.cc_calldata s) with vs_fmp :=
-       s.vs_fmp + n2w (venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata))` >>
-     fs[write_memory_with_expansion_def]) >>
-  asm_rewrite_tac[] >> rpt gen_tac >> strip_tac >> conj_tac
-  >- metis_tac[calldata_copy_zero_memory_expansion] >>
-  strip_tac >>
-  qspecl_then [`ctx`, `fn`, `cp_fmp`, `s.vs_initial_fmp`, `lo`,
-    `offset + LENGTH s.vs_call_ctx.cc_calldata`, `es`, `c`, `rb`, `rest`, `s`]
-    mp_tac raw_call_msg_data_peak_memory_oog_bridge >>
-  simp[]
 QED
 
 Theorem runtime_raw_fmp_opcode_guards[local]:
