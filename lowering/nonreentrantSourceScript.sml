@@ -72,7 +72,7 @@ Proof
   strip_tac >>
   `accounts_rel H cx es ss /\ ss.vs_call_ctx.cc_address = cx.txn.target` by
     gvs[state_rel_def, call_ctx_rel_def] >>
-  `transient_agree H cx
+  `transient_agree H cx.txn.target
     ((cx.txn.target =+ update_storage (n2w nkey) v
        (es.tStorage cx.txn.target)) es.tStorage)
     ((cx.txn.target =+ update_storage (n2w nkey) v

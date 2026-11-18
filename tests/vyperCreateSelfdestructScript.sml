@@ -1,5 +1,6 @@
 Theory vyperCreateSelfdestruct
 Ancestors
+  vyperSmallStepCV
   vyperCreate vyperInterpreter vyperSmallStep[ignore_grammar]
   vyperContext vfmExecution vfmState finite_set finite_map
 Libs

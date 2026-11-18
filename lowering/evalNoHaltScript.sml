@@ -1,5 +1,5 @@
 (* Source evaluation never halts (INR HaltException) on syntax without an
-   expr_evm_run_root node (selfdestruct, delegate raw_call, create) when
+   expr_halt_root node (selfdestruct, delegate raw_call, create) when
    every internal call it makes is to the main module of a supported
    program.  Only selfdestruct raises the halt, and an internal call passes
    on its callee body's halt; external calls, send and raw_call surface a
@@ -432,7 +432,7 @@ QED
 val syn_ss = [supported_stmt_expr_exists_def, supported_expr_exists_def,
   supported_assignment_exists_def, supported_iterator_exists_def,
   supported_assert_exists_def, supported_raise_exists_def,
-  expr_evm_run_root_def, int_calls_stmt_def, int_calls_expr_def,
+  expr_halt_root_def, expr_evm_run_root_def, int_calls_stmt_def, int_calls_expr_def,
   int_calls_atarget_def, int_calls_iterator_def, int_calls_assert_reason_def,
   int_calls_raise_reason_def, EVERY_APPEND, exprs_pre_every,
   fields_exprs, guard_INL, get_module_code_stk_upd];
@@ -474,58 +474,58 @@ Proof
 QED
 
 Theorem eval_no_halt_every[local]:
-  (!cx s. ~supported_stmt_expr_exists expr_evm_run_root s /\
+  (!cx s. ~supported_stmt_expr_exists expr_halt_root s /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s) ==>
      !st st'. eval_stmt cx s st = (INR HaltException, st') ==> F) /\
-  (!cx ss. ~supported_stmts_expr_exists expr_evm_run_root ss /\
+  (!cx ss. ~supported_stmts_expr_exists expr_halt_root ss /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss) ==>
      !st st'. eval_stmts cx ss st = (INR HaltException, st') ==> F) /\
-  (!cx it. ~supported_iterator_exists expr_evm_run_root it /\
+  (!cx it. ~supported_iterator_exists expr_halt_root it /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator it) ==>
      !st st'. eval_iterator cx it st = (INR HaltException, st') ==> F) /\
-  (!cx tyv nm ss vs. ~supported_stmts_expr_exists expr_evm_run_root ss /\
+  (!cx tyv nm ss vs. ~supported_stmts_expr_exists expr_halt_root ss /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss) ==>
      !st st'. eval_for cx tyv nm ss vs st = (INR HaltException, st') ==> F) /\
-  (!cx e. ~supported_expr_exists expr_evm_run_root e /\
+  (!cx e. ~supported_expr_exists expr_halt_root e /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) ==>
      !st st'. eval_expr cx e st = (INR HaltException, st') ==> F) /\
-  (!cx es. EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+  (!cx es. EVERY (\e. ~supported_expr_exists expr_halt_root e /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) es ==>
      !st st'. eval_exprs cx es st = (INR HaltException, st') ==> F) /\
-  (!cx t. ~supported_target_exists expr_evm_run_root t /\
+  (!cx t. ~supported_target_exists expr_halt_root t /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) ==>
      !st st'. eval_base_place cx t st = (INR HaltException, st') ==> F) /\
-  (!cx t. ~supported_target_exists expr_evm_run_root t /\
+  (!cx t. ~supported_target_exists expr_halt_root t /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) ==>
      !st st'. eval_target_place cx t st = (INR HaltException, st') ==> F) /\
-  (!cx g v. ~supported_assignment_exists expr_evm_run_root g /\
+  (!cx g v. ~supported_assignment_exists expr_halt_root g /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget g) ==>
      !st st'. assign_tuple_targets cx g v st = (INR HaltException, st') ==> F) /\
-  (!cx gs vs. ~supported_assignments_exists expr_evm_run_root gs /\
+  (!cx gs vs. ~supported_assignments_exists expr_halt_root gs /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_atargets gs) ==>
      !st st'. assign_tuple_target_list cx gs vs st = (INR HaltException, st') ==>
               F) /\
-  (!cx es. EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+  (!cx es. EVERY (\e. ~supported_expr_exists expr_halt_root e /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) es ==>
@@ -614,19 +614,19 @@ QED
 
 Resume eval_no_halt_every[ExtCall]:
   rpt strip_tac >> pop_assum mp_tac >> gvs syn_ss >>
-  `EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+  `EVERY (\e. ~supported_expr_exists expr_halt_root e /\
           EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                      get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) es` by gvs[exprs_pre_every] >>
-  `!n. EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+  `!n. EVERY (\e. ~supported_expr_exists expr_halt_root e /\
           EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                      get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) (TAKE n es) /\
-       EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+       EVERY (\e. ~supported_expr_exists expr_halt_root e /\
           EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                      get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) (DROP n es) /\
-       EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+       EVERY (\e. ~supported_expr_exists expr_halt_root e /\
           EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                      get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) (TAKE n (DROP 1 es))` by
@@ -662,7 +662,7 @@ Resume eval_no_halt_every[IntCallLive]:
   `EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
      (int_calls_exprs (DROP (LENGTH tup3 - (LENGTH tup2 - LENGTH es)) tup3))` by
     (irule int_calls_exprs_DROP_EVERY >> simp[]) >>
-  `EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+  `EVERY (\e. ~supported_expr_exists expr_halt_root e /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code (cx with stk updated_by CONS (NONE,fn)) NONE =
                 SOME tops) (int_calls_expr e))
@@ -712,28 +712,28 @@ QED
    Internal declaration in the current module. *)
 Theorem eval_no_halt:
   (!cx e st st'.
-     ~supported_expr_exists expr_evm_run_root e /\
+     ~supported_expr_exists expr_halt_root e /\
      (int_calls_expr e = [] \/
       ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
              EVERY (\c. FST c = NONE /\
                          IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) ==>
      eval_expr cx e st <> (INR HaltException, st')) /\
   (!cx es st st'.
-     ~supported_exprs_exists expr_evm_run_root es /\
+     ~supported_exprs_exists expr_halt_root es /\
      (int_calls_exprs es = [] \/
       ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
              EVERY (\c. FST c = NONE /\
                          IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)) ==>
      eval_exprs cx es st <> (INR HaltException, st')) /\
   (!cx s st st'.
-     ~supported_stmt_expr_exists expr_evm_run_root s /\
+     ~supported_stmt_expr_exists expr_halt_root s /\
      (int_calls_stmt s = [] \/
       ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
              EVERY (\c. FST c = NONE /\
                          IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) ==>
      eval_stmt cx s st <> (INR HaltException, st')) /\
   (!cx ss st st'.
-     ~supported_stmts_expr_exists expr_evm_run_root ss /\
+     ~supported_stmts_expr_exists expr_halt_root ss /\
      (int_calls_stmts ss = [] \/
       ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
              EVERY (\c. FST c = NONE /\
@@ -744,7 +744,7 @@ Proof
   disch_then (CONJUNCTS_THEN2 assume_tac
                 (assume_tac o MATCH_MP calls_pre_every))
   >- metis_tac[cj 5 eval_no_halt_every]
-  >- (`EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
+  >- (`EVERY (\e. ~supported_expr_exists expr_halt_root e /\
          EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                     get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) es`
@@ -754,24 +754,24 @@ Proof
   metis_tac[cj 2 eval_no_halt_every]
 QED
 
-Theorem build_getter_no_evm_run[local]:
+Theorem build_getter_no_halt[local]:
   !e kt vt n args ret exp.
     build_getter e kt vt n = (args,ret,exp) /\
-    ~supported_expr_exists expr_evm_run_root e ==>
-    ~supported_expr_exists expr_evm_run_root exp
+    ~supported_expr_exists expr_halt_root e ==>
+    ~supported_expr_exists expr_halt_root exp
 Proof
   recInduct build_getter_ind >> rpt conj_tac >> rpt gen_tac >>
   TRY disch_tac >> rpt gen_tac >>
   simp[Once build_getter_def] >> rw[] >> gvs[] >>
   rpt (pairarg_tac >> gvs[]) >>
-  gvs[supported_expr_exists_def, expr_evm_run_root_def] >>
-  first_x_assum irule >> simp[supported_expr_exists_def, expr_evm_run_root_def]
+  gvs[supported_expr_exists_def, expr_halt_root_def, expr_evm_run_root_def] >>
+  first_x_assum irule >> simp[supported_expr_exists_def, expr_halt_root_def, expr_evm_run_root_def]
 QED
 
-Theorem selected_public_getter_body_no_evm_run[local]:
+Theorem selected_public_getter_body_no_halt[local]:
   is_public_getter_decl fn decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,gbody) ==>
-  ~supported_stmts_expr_exists expr_evm_run_root gbody
+  ~supported_stmts_expr_exists expr_halt_root gbody
 Proof
   Cases_on `decl` >>
   gvs[is_public_getter_decl_def, external_getter_tuple_def]
@@ -779,18 +779,18 @@ Proof
       Cases_on `is_ArrayT t` >> gvs[]
       >- (rpt strip_tac >>
           drule_all array_public_getter_tuple_shape >> strip_tac >> gvs[] >>
-          `~supported_expr_exists expr_evm_run_root exp` by
-            (irule build_getter_no_evm_run >> goal_assum (drule_at Any) >>
-             simp[supported_expr_exists_def, expr_evm_run_root_def]) >>
+          `~supported_expr_exists expr_halt_root exp` by
+            (irule build_getter_no_halt >> goal_assum (drule_at Any) >>
+             simp[supported_expr_exists_def, expr_halt_root_def, expr_evm_run_root_def]) >>
           gvs[supported_stmt_expr_exists_def, supported_expr_exists_def]) >>
       rpt strip_tac >>
       gvs[external_getter_tuple_def, supported_stmt_expr_exists_def, supported_expr_exists_def,
-          expr_evm_run_root_def]) >>
+          expr_halt_root_def, expr_evm_run_root_def]) >>
   Cases_on `v` >> gvs[is_public_getter_decl_def] >> rpt strip_tac >>
   drule_all hashmap_public_getter_tuple_shape >> strip_tac >> gvs[] >>
-  `~supported_expr_exists expr_evm_run_root exp` by
-    (irule build_getter_no_evm_run >> goal_assum (drule_at Any) >>
-     simp[supported_expr_exists_def, expr_evm_run_root_def]) >>
+  `~supported_expr_exists expr_halt_root exp` by
+    (irule build_getter_no_halt >> goal_assum (drule_at Any) >>
+     simp[supported_expr_exists_def, expr_halt_root_def, expr_evm_run_root_def]) >>
   gvs[supported_stmt_expr_exists_def, supported_expr_exists_def]
 QED
 
@@ -808,7 +808,7 @@ Proof
       irule (cj 4 eval_no_halt) >> metis_tac[]) >>
   irule (cj 4 eval_no_halt) >>
   conj_tac
-  >- (drule_all selected_public_getter_body_no_evm_run >> simp[]) >>
+  >- (drule_all selected_public_getter_body_no_halt >> simp[]) >>
   disj1_tac >>
   drule_all selected_public_getter_body_int_calls_empty >> simp[]
 QED
