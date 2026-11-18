@@ -47,7 +47,7 @@ Ancestors
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
   exprLoweringProps emitHelper compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs
-  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperState vyperValue vyperTyping
+  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperCallFrame vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState
@@ -150,14 +150,7 @@ Theorem eval_send_value:
   !cx has_gas vs st tv st'.
     eval_send cx has_gas vs st = (INL tv, st') ==> ?v. tv = Value v
 Proof
-  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
-  Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       lift_option_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  rpt strip_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+  rpt strip_tac >> drule eval_send_success_value >> simp[]
 QED
 
 (* Reading send's result: send returns a value, which reads as itself. *)
@@ -194,17 +187,17 @@ QED
    remaining outcomes, by outcomes_accounts_typed, nor a computed
    precompile's, which keeps the current accounts. *)
 Theorem take_call_outcome_typed:
-  !target cd vo st.
+  !target cd vo st gas_cap.
     outcomes_accounts_typed st.outcomes /\
     accounts_runtime_well_typed st.accounts ==>
-    FST (take_call_outcome target cd vo st) <>
+    FST (take_call_outcome gas_cap target cd vo st) <>
       INR (Error (RuntimeError "call outcome accounts"))
 Proof
   rpt gen_tac >> strip_tac >>
   simp[take_call_outcome_def, take_request_outcome_def] >> Cases_on `st.outcomes` >> simp[] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >> simp[] >>
   pairarg_tac >> simp[] >> rw[] >>
   gvs[outcomes_accounts_typed_def, take_outcome_def] >>
-  Cases_on `x` >> gvs[failed_outcome_def] >>
   Cases_on `computed_precompile (call_outcome_request target cd vo st)` >>
   gvs[AllCaseEqs(), failed_outcome_def, call_outcome_request_def]
 QED
@@ -231,10 +224,12 @@ Proof
          assert_def, vyperStateTheory.return_def, raise_def] >>
       Cases_on `n = 0` >> gvs[]) >>
   rename1 `frame_call_value _ _ _ = (INL vo, _)` >>
-  Cases_on `take_call_outcome a [] vo es` >>
-  qmatch_asmsub_rename_tac `take_call_outcome _ _ _ _ = (tr, es1)` >>
+  qabbrev_tac `gas_cap = SOME (case OPTION_BIND
+    (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of NONE => 0 | SOME g => g)` >>
+  Cases_on `take_call_outcome gas_cap a [] vo es` >>
+  qmatch_asmsub_rename_tac `take_call_outcome _ _ _ _ _ = (tr, es1)` >>
   drule_all take_call_outcome_typed >>
-  disch_then (qspecl_then [`a`, `[]`, `vo`] mp_tac) >>
+  disch_then (qspecl_then [`a`, `[]`, `vo`, `gas_cap`] mp_tac) >>
   Cases_on `tr` >> simp[]
   >- (rename1 `INL x` >> PairCases_on `x` >> simp[] >> rpt strip_tac >>
       Cases_on `x1.co_success` >>
@@ -359,7 +354,9 @@ Theorem send_call_read_step:
   stmt_state_rel H ctx func cenv cx es1 t /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
-  IS_SOME (eval_operand gas_op t) /\
+  eval_operand gas_op t = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -372,7 +369,8 @@ Theorem send_call_read_step:
                        vs_logs := t'.vs_logs;
                        vs_pending_deletions := t'.vs_pending_deletions;
                        vs_returndata := t'.vs_returndata |> /\
-    ((res = INR (Error (RuntimeError "write in static context")) /\
+    (((res = INR (Error (RuntimeError "write in static context")) \/
+       res = INR (Error (RuntimeError "take_call_outcome"))) /\
       step_inst_base (mk_inst id CALL
         [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
         Abort ExHalt_abort (halt_state (set_returndata [] t))) \/
@@ -396,6 +394,7 @@ Proof
     SRULE [mk_inst_def]) >>
   disch_then (qspecl_then [`out`, `id`] strip_assume_tac) >>
   gvs[mk_inst_def]
+  >- (qexists_tac `t` >> simp[])
   >- (qexists_tac `t` >> simp[]) >>
   metis_tac[]
 QED
@@ -410,7 +409,9 @@ Theorem send_tail_frag:
   storage_well_formed_on cx es' (FST H) /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
-  IS_SOME (eval_operand gas_op t) /\
+  eval_operand gas_op t = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -483,17 +484,17 @@ QED
 
 (* The oracle's take and adopt never read or write the gas observations. *)
 Theorem take_call_outcome_gas_obs[local]:
-  take_call_outcome target calldata value_opt (st with gas_obs := tail) =
-  (FST (take_call_outcome target calldata value_opt st),
-   SND (take_call_outcome target calldata value_opt st) with gas_obs := tail)
+  take_call_outcome gas_cap target calldata value_opt (st with gas_obs := tail) =
+  (FST (take_call_outcome gas_cap target calldata value_opt st),
+   SND (take_call_outcome gas_cap target calldata value_opt st) with gas_obs := tail)
 Proof
   `call_outcome_request target calldata value_opt (st with gas_obs := tail) =
    call_outcome_request target calldata value_opt st` by
     simp[call_outcome_request_def] >>
   Cases_on `st.outcomes` >> simp[take_call_outcome_def, take_request_outcome_def] >>
   rename1 `st.outcomes = SOME os` >>
-  Cases_on `take_outcome (call_outcome_request target calldata value_opt st) os` >>
-  rw[]
+  Cases_on `os` >> simp[] >>
+  pairarg_tac >> simp[] >> rw[]
 QED
 
 Theorem adopt_call_outcome_gas_obs[local]:
@@ -552,8 +553,10 @@ Proof
       Cases_on `res0` >> simp[] >>
       strip_tac >> gvs[evaluation_state_component_equality]) >>
   simp[bind_def, ignore_bind_def, take_call_outcome_gas_obs] >>
-  Cases_on `take_call_outcome toAddr [] value_opt st1` >>
-  rename1 `take_call_outcome _ _ _ _ = (tres, st2)` >>
+  Cases_on `take_call_outcome
+    (SOME (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+       NONE => 0 | SOME g => g)) toAddr [] value_opt st1` >>
+  rename1 `take_call_outcome _ _ _ _ _ = (tres, st2)` >>
   Cases_on `tres` >> simp[] >>
   rename1 `_ = (INL ro, st2)` >> PairCases_on `ro` >>
   simp[bind_def, ignore_bind_def, check_def, assert_def, return_def,
@@ -606,7 +609,9 @@ Theorem send_tail_path[local]:
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
-  IS_SOME (eval_operand gas_op t) /\
+  eval_operand gas_op t = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -736,7 +741,9 @@ Theorem send_tail_summary[local]:
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ es1.gas_obs = [] /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
-  IS_SOME (eval_operand gas_op t) /\
+  eval_operand gas_op t = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -879,12 +886,11 @@ Proof
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
   qpat_assum `eval_operand addr_op _ = _` (irule_at Any) >>
   qpat_assum `eval_operand val_op _ = _` (irule_at Any) >>
-  rpt conj_tac >>
-  FIRST [first_assum ACCEPT_TAC,
-         irule address_typed_dest >> first_assum ACCEPT_TAC,
-         irule uint256_typed_dest >> first_assum ACCEPT_TAC,
-         Cases_on `has_gas` >> gvs[eval_operand_def] >> NO_TAC,
-         fs[] >> NO_TAC]
+  imp_res_tac address_typed_dest >>
+  imp_res_tac uint256_typed_dest >>
+  Cases_on `has_gas` >>
+  gvs[LENGTH_EQ_NUM_compute, ext_call_kwarg_def, eval_operand_def, evaluate_type_def] >>
+  imp_res_tac uint256_typed_dest >> simp[]
 QED
 
 (* TOP-LEVEL *)

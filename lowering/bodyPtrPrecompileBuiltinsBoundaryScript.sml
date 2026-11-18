@@ -87,6 +87,7 @@ Theorem computed_static_writeback_frame:
 Proof
   strip_tac >> drule_all computed_static_exec >>
   disch_then (qspecl_then [`rs`, `ro`, `gas`] assume_tac) >>
+  Cases_on `s.vs_outcomes = []` >>
   gvs[update_var_def, write_memory_with_expansion_def]
 QED
 

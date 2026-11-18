@@ -241,7 +241,8 @@ Proof
   strip_tac >>
   `?vop offop szop value off sz rest.
     eval_operand vop s = SOME value /\ eval_operand offop s = SOME off /\
-    eval_operand szop s = SOME sz /\ w2n sz > 2 * max_code_size /\
+    eval_operand szop s = SOME sz /\
+    (w2n sz > 2 * max_code_size \/ s.vs_outcomes = []) /\
     (?out. inst.inst_outputs = [out]) /\
     ((inst.inst_opcode = CREATE /\ inst.inst_operands = [vop;offop;szop] /\ rest = []) \/
      (inst.inst_opcode = CREATE2 /\ ?sop sw.
@@ -267,8 +268,10 @@ Proof
    (!op x. MEM op rest /\ eval_operand op s = SOME x ==> eval_operand op t = SOME x)` by
     metis_tac[MEM] >>
   qpat_x_assum `!op x. MEM op (vop::szop::rest) /\ _ ==> _` kall_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[fmp_stage_rel_def, ld_shared_agree_def] >>
   gvs[] >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
-                exec_create_def, Excl "consume_create_outcome_eq"] >>
+                exec_create_abort_iff] >>
   metis_tac[MEM]
 QED
 

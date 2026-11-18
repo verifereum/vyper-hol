@@ -108,8 +108,10 @@ Theorem send_call_step:
   eval_operand value s = SOME vw /\ step_inst_base inst s = OK u ==>
   step_inst_base inst s =
     OK (update_var out
-      (FST (consume_call_outcome (venom_call_request s aw vw 0w 0w F) 0 0 s))
-      (SND (consume_call_outcome (venom_call_request s aw vw 0w 0w F) 0 0 s)))
+      (FST (consume_call_outcome
+        (venom_call_request s aw vw 0w 0w F with cr_gas := SOME (w2n gw)) 0 0 s))
+      (SND (consume_call_outcome
+        (venom_call_request s aw vw 0w 0w F with cr_gas := SOME (w2n gw)) 0 0 s)))
 Proof
   strip_tac >>
   `venom_call_request s aw vw 0w 0w s.vs_call_ctx.cc_static =
@@ -121,6 +123,7 @@ Proof
      simp[step_inst_base_opcode_eqs, eval_operand_def,
           Excl "consume_call_outcome_eq"]) >>
   qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+  Cases_on `s.vs_outcomes = []` >>
   simp[step_inst_base_opcode_eqs, eval_operand_def, exec_ext_call_def,
        Excl "consume_call_outcome_eq"] >>
   pairarg_tac >> simp[Excl "consume_call_outcome_eq"]
@@ -156,7 +159,7 @@ Proof
   gvs[update_var_def, Excl "consume_call_outcome_eq"] >>
   irule consume_call_no_reset_accounts >>
   simp[Excl "consume_call_outcome_eq"] >>
-  qexistsl_tac [`0w`, `aw`, `0w`, `0`, `0`, `vw`] >> simp[]
+  (metis_tac[])
 QED
 
 Theorem send_call_ghost_inv:
@@ -211,7 +214,7 @@ Proof
   gvs[update_var_def, Excl "consume_call_outcome_eq"] >>
   irule consume_call_no_reset_accounts >>
   simp[Excl "consume_call_outcome_eq"] >>
-  qexistsl_tac [`0w`, `aw`, `0w`, `0`, `0`, `vw`] >> simp[]
+  qexistsl_tac [`0w`, `aw`, `0w`, `SOME (w2n gw)`, `0`, `0`, `vw`] >> simp[]
 QED
 
 Theorem send_call_ghost_inv_at:
@@ -331,7 +334,9 @@ Theorem send_read_call_step:
   outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
-  IS_SOME (eval_operand gas s) /\
+  eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -344,7 +349,8 @@ Theorem send_read_call_step:
                       vs_logs := s'.vs_logs;
                       vs_pending_deletions := s'.vs_pending_deletions;
                       vs_returndata := s'.vs_returndata |> /\
-    ((res = INR (Error (RuntimeError "write in static context")) /\
+    (((res = INR (Error (RuntimeError "write in static context")) \/
+       res = INR (Error (RuntimeError "take_call_outcome"))) /\
       step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))) \/
      (res = INL NoneV /\ step_inst_base inst s = OK (update_var out 1w s') /\
       state_rel H fn cenv cx es' s') \/
@@ -357,6 +363,7 @@ Proof
   drule_all eval_send_outcome_typed >> strip_tac >>
   drule_all extCallOracleStepTheory.send_call_oracle_step >>
   strip_tac >> gvs[]
+  >- (qexists_tac `s` >> simp[])
   >- (qexists_tac `s` >> simp[]) >>
   metis_tac[]
 QED
@@ -372,12 +379,15 @@ Theorem send_read_checked_tail:
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es = (res, es') ==>
-  (res = INR (Error (RuntimeError "write in static context")) /\
+  ((res = INR (Error (RuntimeError "write in static context")) \/
+    res = INR (Error (RuntimeError "take_call_outcome"))) /\
    gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 G tn
      (Abort ExHalt_abort (halt_state (set_returndata [] s)))) \/
   ?t u w.
@@ -403,7 +413,9 @@ Proof
   `IS_SOME (eval_operand gas s)` by simp[] >>
   `!w st. eval_operand (Var out) (update_var out w st) = SOME w` by
     simp[eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  drule_all send_read_call_step >> strip_tac
+  drule_all send_read_call_step >>
+  disch_then (qx_choose_then `s'` (CONJUNCTS_THEN2 assume_tac
+    (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 assume_tac assume_tac) strip_assume_tac)))
   >- (disj1_tac >> simp[] >>
       drule_at (Pat `step_inst_base _ _ = _`) gas_path_ptr_abort >>
       simp[is_terminator_def])
@@ -423,6 +435,8 @@ Theorem send_read_state_rel_any:
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -454,12 +468,15 @@ Theorem send_read_checked_tail_uniform[local]:
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es = (res, es') ==>
-  (res = INR (Error (RuntimeError "write in static context")) /\
+  ((res = INR (Error (RuntimeError "write in static context")) \/
+    res = INR (Error (RuntimeError "take_call_outcome"))) /\
    !H. valid_horizon cx st0 H es'.storage_trace ==>
      gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 G tn
        (Abort ExHalt_abort (halt_state (set_returndata [] s)))) \/
@@ -487,7 +504,8 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule_all send_read_checked_tail >>
-  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac)
+  disch_then (qspecl_then [`PG`, `G`]
+    (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 assume_tac assume_tac) strip_assume_tac))
   >- (disj1_tac >> simp[] >> qx_gen_tac `H1` >> strip_tac >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> _`
         (qspec_then `H1` mp_tac) >>
@@ -584,6 +602,8 @@ Theorem send_tail_path_ptr:
   outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -624,9 +644,11 @@ Proof
        stmt_state_rel H ctx fn cenv cx es1 s /\ stor_taint_ok H cx tn s` by
     (rpt strip_tac >> res_tac >> fs[bodyPtrDefsTheory.ghost_inv_def]) >>
   drule_all send_read_checked_tail_uniform >>
-  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac)
+  disch_then (qspecl_then [`PG`, `G`]
+    (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 assume_tac assume_tac) strip_assume_tac))
   >- (qexistsl_tac [`G`, `tn`,
          `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
+      qpat_x_assum `res = _ \/ res = _` strip_assume_tac >>
       simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]) >>
   qpat_x_assum `emit_op _ _ _ = _` kall_tac >>
   qpat_x_assum `emit_void _ _ _ = _` kall_tac >>
@@ -744,6 +766,8 @@ Theorem send_tail_summary_ptr:
   outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -941,9 +965,13 @@ Resume send_expr_sim_ptr[normal]:
   `outcomes_accounts_typed ee.outcomes /\ accounts_runtime_well_typed ee.accounts` by
     fs[expr_sim_inv_def,
       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
-  `op_taint tn gas_op = {} /\ ?gw. eval_operand gas_op t = SOME gw` by
+  `op_taint tn gas_op = {} /\ ?gw. eval_operand gas_op t = SOME gw /\
+    w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g)` by
     (Cases_on `has_gas` >> gvs[eval_operand_def, op_taint_def] >>
-     gvs[LENGTH_EQ_NUM_compute]) >>
+     gvs[LENGTH_EQ_NUM_compute, vyperInterpreterTheory.ext_call_kwarg_def,
+         vyperValueTheory.evaluate_type_def] >>
+     imp_res_tac uint256_typed_dest >> simp[]) >>
   `dest_AddressV to_v = SOME (w2w (typed_val_to_w256 (BaseTV AddressT) to_v))` by
     metis_tac[address_typed_dest] >>
   `dest_NumV amount_v = SOME (w2n (typed_val_to_w256 (BaseTV (UintT 256)) amount_v))` by

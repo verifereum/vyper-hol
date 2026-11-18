@@ -47,7 +47,7 @@ QED
 
 Theorem take_call_outcome_runtime_consistent:
   runtime_consistent env cx st /\
-  take_call_outcome target calldata value_opt st = (res,st') ==>
+  take_call_outcome gas_cap target calldata value_opt st = (res,st') ==>
   runtime_consistent env cx st'
 Proof
   PURE_REWRITE_TAC [take_call_outcome_def] >>
@@ -56,7 +56,7 @@ QED
 
 Theorem take_delegate_outcome_runtime_consistent:
   runtime_consistent env cx st /\
-  take_delegate_outcome target calldata value_opt st = (res,st') ==>
+  take_delegate_outcome gas_cap target calldata value_opt st = (res,st') ==>
   runtime_consistent env cx st'
 Proof
   PURE_REWRITE_TAC [take_delegate_outcome_def] >>
@@ -85,7 +85,7 @@ QED
 
 Theorem take_adopt_call_outcome_runtime_consistent:
   runtime_consistent env cx st /\
-  take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+  take_call_outcome gas_cap target calldata value_opt st = (INL (rq,outcome),st1) /\
   adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
   runtime_consistent env cx st2
 Proof
@@ -97,7 +97,7 @@ QED
 
 Theorem take_adopt_delegate_outcome_runtime_consistent:
   runtime_consistent env cx st /\
-  take_delegate_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+  take_delegate_outcome gas_cap target calldata value_opt st = (INL (rq,outcome),st1) /\
   adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
   runtime_consistent env cx st2
 Proof
@@ -116,7 +116,7 @@ Theorem checked_call_outcome_type_sound:
   (!bs s res t. runtime_consistent env cx s /\ k bs s = (res,t) ==>
      runtime_consistent env cx t /\ Q res t) /\
   (do
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success msg;
     adopt_call_outcome rq outcome;
     k outcome.co_returnData
@@ -134,7 +134,7 @@ QED
 Theorem Send_outcome_type_sound:
   runtime_consistent env cx st /\
   (do
-    (rq,outcome) <- take_call_outcome target [] value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target [] value_opt;
     check outcome.co_success "send failed";
     adopt_call_outcome rq outcome;
     return (Value NoneV)

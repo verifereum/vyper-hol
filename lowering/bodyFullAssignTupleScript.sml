@@ -19,7 +19,7 @@ Ancestors
   assignTuplePtrLoadStep tupleTypedLoad bodyFullGhostFrame valueEncodingProofs
   augAssignFullStore assignTuplePtrStorage stmtSimAssignStorage vfmState exprLoweringProps
   tupleTargetStoreRun bodyFullMemoryStore stateRelProj wordLoadStorePtr memoryPlaceStorePost
-  haltExitProj
+  haltExitProj immutableRepSensitivity
   assignTuplePtrStoreWord stmtSimDeclStore vyperTypeArgFits instMemFrontier
   tupleTargetStoreProps vyperLookup stmtSimAssignStorageFacts stmtSimDefs exprSimDefs fragGasOriginPtr loweringSlice
 

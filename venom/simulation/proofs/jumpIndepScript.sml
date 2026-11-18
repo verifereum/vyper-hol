@@ -385,7 +385,8 @@ Theorem exec_ext_call_jump[local]:
 Proof
   rpt gen_tac >>
   simp([exec_ext_call_def, venom_call_request_def,
-        write_memory_with_expansion_def, make_venom_call_state_jump] @ ext_call_rw) >>
+        write_memory_with_expansion_def, make_venom_call_state_jump,
+        halt_state_def, set_returndata_def] @ ext_call_rw) >>
   EVERY_CASE_TAC >>
   simp[instIdxIndepTheory.exec_result_map_def, update_var_def, update_var_jump,
        venom_state_component_equality]
@@ -404,7 +405,8 @@ Theorem exec_delegatecall_jump[local]:
 Proof
   rpt gen_tac >>
   simp([exec_delegatecall_def, venom_call_request_def,
-        write_memory_with_expansion_def] @ ext_call_rw) >>
+        write_memory_with_expansion_def, halt_state_def, set_returndata_def]
+       @ ext_call_rw) >>
   EVERY_CASE_TAC >>
   simp[instIdxIndepTheory.exec_result_map_def, update_var_def, update_var_jump,
        venom_state_component_equality]
