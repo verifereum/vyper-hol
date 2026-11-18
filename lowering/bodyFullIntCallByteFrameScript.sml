@@ -153,7 +153,7 @@ Proof
   metis_tac[step_inst_base_OK_byte_frame, step_inst_base_IntRet_byte_frame, ADD_COMM]
 QED
 
-Theorem exec_alloca_protected_byte_sites[local]:
+Theorem exec_alloca_protected_byte_sites:
   x < s.vs_alloca_next /\
   (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
     x < b \/ b + sz <= x) /\ exec_alloca inst s n = OK t ==>
