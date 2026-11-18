@@ -81,8 +81,12 @@ Theorem focus_producer_finalizer_static:
         ctx_abort_rq D unit.cu_context out.po_unit.cu_context
           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
         (fin = asm_opt_finalizer ==>
-           code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
-        (o1_lowered_inv out.po_unit.cu_context vs0 \/
+           code_end_offset_ok
+             (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
+               ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
+        ((o1_lowered_inv out.po_unit.cu_context vs0 /\
+          (fin = asm_opt_finalizer ==>
+             code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)) \/
          ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
             mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
                       lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
