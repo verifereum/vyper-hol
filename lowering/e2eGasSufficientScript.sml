@@ -35,7 +35,7 @@ Theory e2eGasSufficient
 Ancestors
   e2eDefs e2eProducers e2eEntry unitTransformDefs
   ptrDiscipline lowerDloadDefs e2eComposition sourceUnitExitSafe
-  sourceUnitExecution exprSimHypsDefs sourceCallCount
+  sourceUnitExecution exprSimHypsDefs
   o1PipelineCorrect o1PipelineCompose o1PassContract contextCodegenRel
   o1StaticPipelineCorrect runtimeLabelReadiness
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
@@ -177,7 +177,6 @@ Definition deploy_gas_source_exempt_def:
     src = INR (Error (RuntimeError "create initcode too large"))
 End
 
-(* ADMISSION: statement only.  Waits for its proof from gas_source_exempt's static disjunct and the source result relation. *)
 Theorem call_static_abort_gas_source_exempt:
   !H tops ret tx src u.
     tx.is_static /\
@@ -185,7 +184,12 @@ Theorem call_static_abort_gas_source_exempt:
     external_call_result_rel H tops ret tx src (Abort ExHalt_abort u) ==>
     gas_source_exempt tops tx src
 Proof
-  cheat
+  rpt gen_tac >> PairCases_on `src` >>
+  Cases_on `src0` >> simp[external_call_result_rel_def] >>
+  rename1 `INR ex` >> Cases_on `ex` >>
+  simp[external_call_result_rel_def, gas_source_exempt_def] >>
+  rename1 `Error e` >> Cases_on `e` >>
+  simp[external_call_result_rel_def, gas_source_exempt_def]
 QED
 
 Theorem call_gas_static_no_abort[local]:
@@ -282,9 +286,8 @@ Theorem vyper_call_gas_sufficient_identity:
          (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
       (!obs. ~gas_source_exempt tops tx
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-            obs am tx) /\
-       source_calls_within (2 ** 64) am tx
-         (MAP SND (call_trace (add_frame_gas g' es))) obs)
+            obs am tx)) /\
+      LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
@@ -718,7 +721,6 @@ Proof
   simp[]
 QED
 
-(* ADMISSION: statement only.  Waits for the static gas consumer's proof; the reading-availability premise is discharged inside the gas proof. *)
 Theorem call_gas_static_lowered_inv:
   !H tops ret am tx fuel unit out vs_in vs marks tail.
     tx.is_static /\
@@ -739,5 +741,9 @@ Theorem call_gas_static_lowered_inv:
        ?u. run_context n unit.cu_context vs_in = Abort ExHalt_abort u)) ==>
     o1_lowered_inv out.po_unit.cu_context vs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!n. terminates _ ==> _` (qspec_then `fuel` mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!rest. FST _ <> _` (qspec_then `tail` assume_tac) >>
+  gvs[] >> metis_tac[call_static_abort_gas_source_exempt]
 QED

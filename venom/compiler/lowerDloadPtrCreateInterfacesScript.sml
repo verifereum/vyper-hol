@@ -19,6 +19,7 @@ Theorem dload_exec_create_success_iff:
   exec_create i s value off sz salt = OK u <=>
   ?out w v. i.inst_outputs = [out] /\
     w2n sz <= 2 * max_code_size /\
+    s.vs_outcomes <> [] /\
     consume_create_outcome (venom_create_request s value off sz salt) s = (w,v) /\
     u = update_var out w v
 Proof
@@ -27,6 +28,8 @@ Proof
   rename1 `h::tl` >> Cases_on `tl` >>
   simp[exec_create_def, Excl "consume_create_outcome_eq"] >>
   IF_CASES_TAC >- simp[] >>
+  Cases_on `s.vs_outcomes = []` >>
+  simp[Excl "consume_create_outcome_eq"] >>
   pairarg_tac >> gvs[Excl "consume_create_outcome_eq"] >> metis_tac[]
 QED
 
@@ -80,6 +83,8 @@ Theorem dload_exec_create_environment:
     (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1)
 Proof
   pure_rewrite_tac[dload_exec_create_success_iff] >> strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[dload_equal_environment_def, venom_state_component_equality] >>
   Cases_on `consume_create_outcome (venom_create_request s value off sz salt) s` >>
   rename1 `consume_create_outcome _ s = (x,u)` >>
   `x = w /\ dload_equal_environment u v` by

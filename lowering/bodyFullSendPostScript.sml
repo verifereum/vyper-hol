@@ -25,6 +25,8 @@ Theorem send_tail_path_full[local]:
   outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
@@ -67,13 +69,16 @@ Proof
   `allocas_from lo s` by
     (res_tac >> fs[ghost_inv_at_def]) >>
   drule_all send_read_checked_tail_full_uniform >>
-  disch_then (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >>
-  gvs[] >- suspend "static" >- suspend "normal" >> suspend "failed"
+  disch_then (qspecl_then [`explicit`,`PG`,`G`]
+    (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 assume_tac strip_assume_tac) strip_assume_tac))
+  >- suspend "halt" >>
+  gvs[] >- suspend "normal" >> suspend "failed"
 QED
 
-Resume send_tail_path_full[static]:
+Resume send_tail_path_full[halt]:
   qexistsl_tac [`G`,`tn`,
     `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
+  qpat_x_assum `res = _ \/ res = _` strip_assume_tac >>
   rpt strip_tac >> res_tac >>
   simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
        exprSimDefsTheory.halt_exit_def]
@@ -166,6 +171,8 @@ Theorem send_tail_outcome_full:
   outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\

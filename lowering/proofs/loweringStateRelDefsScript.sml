@@ -405,11 +405,13 @@ End
 
 (* A call request recorded by the source (r1) and by Venom (r2): equal but
    for the snapshots of the accounts and transient storage, which agree as
-   above. *)
+   above, and the gas: the target's gas operand is the source's gas= value
+   when the source has one. *)
 Definition request_agree_def:
   request_agree H (target:address) (r1:call_request) (r2:call_request) ⇔
-    r1 with <| cr_accounts := r2.cr_accounts;
+    r1 with <| cr_gas := r2.cr_gas; cr_accounts := r2.cr_accounts;
                cr_tStorage := r2.cr_tStorage |> = r2 ∧
+    (∀g. r1.cr_gas = SOME g ⇒ r2.cr_gas = SOME g) ∧
     accounts_agree H target r1.cr_accounts r2.cr_accounts ∧
     transient_agree H target r1.cr_tStorage r2.cr_tStorage
 End
