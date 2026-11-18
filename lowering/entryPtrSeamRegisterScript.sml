@@ -1385,7 +1385,7 @@ QED
 
 (* The same through the calldata pointer guard of a dynamic argument,
    which passes since the pointer is 4 + delta. *)
-Theorem registration_argument_prepare_counted:
+Theorem registration_argument_prepare_guarded_joint:
   compile_alloc_buffer n st = (buf,a) /\
   compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
     a = (src,mid) /\
@@ -1465,7 +1465,7 @@ Proof
   suspend "guard"
 QED
 
-Resume registration_argument_prepare_counted[guard]:
+Resume registration_argument_prepare_guarded_joint[guard]:
   `w2n (n2w (delta + 4) : bytes32) = delta + 4` by
     (rewrite_tac[wordsTheory.w2n_n2w] >> irule arithmeticTheory.LESS_MOD >>
      first_assum ACCEPT_TAC) >>
@@ -1588,7 +1588,7 @@ Resume registration_argument_prepare_counted[guard]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Finalise registration_argument_prepare_counted
+Finalise registration_argument_prepare_guarded_joint
 
 Theorem registration_argument_prepare_guarded_robust_resources:
   compile_alloc_buffer n st = (buf,a) /\
@@ -1646,7 +1646,7 @@ Theorem registration_argument_prepare_guarded_robust_resources:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  rpt strip_tac >> drule_all registration_argument_prepare_counted >>
+  rpt strip_tac >> drule_all registration_argument_prepare_guarded_joint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl_tac [`t`,`H`,`u`,`q`,`p`] >> simp[]
 QED
@@ -1995,7 +1995,7 @@ Proof
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
     gvs[fn_inst_ids_distinct_def, venomInstTheory.fn_insts_def,
         registration_fn_insts_blocks_inst_ids] >>
-  drule_all registration_argument_prepare_counted >>
+  drule_all registration_argument_prepare_guarded_joint >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   rename1 `lookup_var q ready = SOME (n2w p)` >>
   drule_all registration_preparation_forward_slots >> strip_tac >>

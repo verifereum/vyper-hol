@@ -35,7 +35,7 @@ Proof
     metis_tac[venomInstIdsPropsTheory.fn_inst_ids_distinct_all_distinct] >>
   `dyn ==> abi_decode_load CALLDATALOAD (n2w (4+ofs) : bytes32) s = n2w delta /\
     4+delta < dimword (:256)` by simp[] >>
-  drule_all registration_argument_prepare_counted >>
+  drule_all registration_argument_prepare_guarded_joint >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   rename1 `lookup_var q ready = SOME (n2w p)` >>
   drule_all registration_preparation_forward_slots >> strip_tac >>
