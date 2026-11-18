@@ -83,13 +83,14 @@ Proof
   simp[runtime_data_frame_def] >> strip_tac >>
   Cases_on `e`
   >~ [`Builtin t bi args`]
-  >- (Cases_on `bi = AddMod /\ ?a b c d f g. args = [Name a b; Name c d; Name f g]`
+  >- (Cases_on `?a b c d f g. bi = AddMod /\ args = [Name a b; Name c d; Name f g]`
       >- gvs[compile_expr_body_def] >>
-      Cases_on `bi = MulMod /\ ?a b c d f g. args = [Name a b; Name c d; Name f g]`
+      Cases_on `?a b c d f g. bi = MulMod /\ args = [Name a b; Name c d; Name f g]`
       >- gvs[compile_expr_body_def] >>
-      Cases_on `bi = PowMod256 /\ ?a b c d. args = [Name a b; Name c d]`
+      Cases_on `?a b c d. bi = PowMod256 /\ args = [Name a b; Name c d]`
       >- gvs[compile_expr_body_def] >>
-      drule_all compile_expr_body_builtin_default >> simp[]) >>
+      drule_all compile_expr_body_builtin_default >>
+      disch_then (fn th => rewrite_tac[th]) >> fs[vyperASTTheory.expr_type_def]) >>
   pure_rewrite_tac[compile_expr_body_def] >>
   simp[pairTheory.pair_CASE_def, pairTheory.ELIM_UNCURRY]
   >~ [`FLOOKUP cenv.ce_module_vars p`]

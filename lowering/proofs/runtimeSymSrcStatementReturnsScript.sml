@@ -317,12 +317,18 @@ Theorem runtime_sym_return_some:
     EVERY runtime_sym_inst (state_insts s')) ==>
   runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty (Return (SOME e))
 Proof
-  simp[runtime_sym_stmt_contract_def] >> rpt strip_tac >>
-  fs[supported_stmt_def, supported_stmt_expr_exists_def,
-     supportedExprTraverseTheory.supported_expr_exists_def] >>
+  rewrite_tac[runtime_sym_stmt_contract_def] >> rpt strip_tac >>
+  qpat_x_assum `supported_stmt _ _ _` mp_tac >>
+  qpat_x_assum `~supported_stmt_expr_exists _ _` mp_tac >>
+  simp_tac (srw_ss()) [supported_stmt_def, supported_stmt_expr_exists_def,
+    supportedExprTraverseTheory.supported_expr_exists_def] >> rpt strip_tac >>
   mp_tac (Q.INST [`tops` |-> `tops`, `ce` |-> `ce`, `e` |-> `e`,
     `ty` |-> `ty`, `lc` |-> `lc`] runtime_sym_return_some_step) >>
-  simp[] >> impl_tac
-  >- (rpt strip_tac >> fs[runtime_sym_expr_contract_def]) >>
-  disch_then drule_all >> simp[]
+  impl_tac
+  >- (rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC) >>
+      rpt strip_tac >>
+      qpat_x_assum `runtime_sym_expr_contract _ _ _ _ _` mp_tac >>
+      rewrite_tac[runtime_sym_expr_contract_def] >>
+      disch_then drule_all >> simp_tac bool_ss []) >>
+  disch_then drule_all >> simp_tac bool_ss []
 QED

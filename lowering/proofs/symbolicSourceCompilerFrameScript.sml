@@ -1,6 +1,6 @@
 Theory symbolicSourceCompilerFrame
 Ancestors
-  runtimeSymSrcDataFrame deploySymSrcBlockFrame abiEncoder exprLowering
+  abiEncoder exprLowering
   exprCallBounds compileEnv emitHelper
 
 (* The ghost index retains the original data sections or block suffix while
@@ -11,25 +11,6 @@ Definition compiler_preserves_def:
     !g s t. R g s t ==> FST (m s) = FST (m t) /\
       R g (SND (m s)) (SND (m t))
 End
-
-Theorem compiler_preserves_runtime:
-  compiler_preserves (\data s t. s = t /\ s.cs_data_sections = data) m <=>
-  runtime_data_frame m
-Proof
-  simp[compiler_preserves_def, runtime_data_frame_def] >> metis_tac[]
-QED
-
-Theorem compiler_preserves_deploy:
-  compiler_preserves (\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks) m <=>
-  deploy_blocks_frame m
-Proof
-  simp[compiler_preserves_def, deploy_blocks_frame_def] >>
-  eq_tac >> strip_tac >> rpt gen_tac
-  >- (strip_tac >> first_x_assum (qspecl_then [`B`,`s`] mp_tac) >>
-      simp[] >> Cases_on `m (s with cs_blocks := s.cs_blocks ++ B)` >> simp[]) >>
-  Cases_on `m s` >>
-  first_x_assum drule_all >> simp[]
-QED
 
 Theorem compiler_preserves_return[simp]:
   compiler_preserves R (comp_return x)
@@ -69,12 +50,12 @@ Proof
   rpt strip_tac >>
   simp[Once compile_abi_encode_child_def, comp_ignore_bind_def] >>
   rpt (irule compiler_preserves_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
+       reverse conj_tac >- asm_simp_tac bool_ss [compiler_preserves_return] >> gen_tac >> BETA_TAC) >>
   rpt IF_CASES_TAC >>
-  simp[arithmeticTheory.ADD_COMM] >>
+  asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM, compiler_preserves_return] >>
   rpt (irule compiler_preserves_bind >>
-       reverse conj_tac >- simp[comp_ignore_bind_def] >>
-       gen_tac >> BETA_TAC) >> simp[comp_ignore_bind_def]
+       reverse conj_tac >- asm_simp_tac bool_ss [comp_ignore_bind_def, compiler_preserves_return] >>
+       gen_tac >> BETA_TAC) >> asm_simp_tac bool_ss [comp_ignore_bind_def, compiler_preserves_return]
 QED
 
 Theorem compiler_preserves_abi_decode:
@@ -107,13 +88,13 @@ Proof
   rpt strip_tac >>
   simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def] >>
   rpt (irule compiler_preserves_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
+       reverse conj_tac >- asm_simp_tac bool_ss [compiler_preserves_return] >> gen_tac >> BETA_TAC) >>
   rpt IF_CASES_TAC >>
   rpt (FIRST
     [irule compiler_preserves_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC,
+       reverse conj_tac >- asm_simp_tac bool_ss [compiler_preserves_return] >> gen_tac >> BETA_TAC,
      CHANGED_TAC (pure_asm_rewrite_tac [COND_CLAUSES, comp_ignore_bind_def]),
-     IF_CASES_TAC]) >> simp[arithmeticTheory.ADD_COMM]
+     IF_CASES_TAC]) >> asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM, compiler_preserves_return]
 QED
 
 Theorem compiler_preserves_expr:
@@ -133,20 +114,26 @@ Theorem compiler_preserves_expr:
   (!ce rt ty bi args. compiler_preserves R (compile_builtin_dispatch ce rt ty bi args)) /\
   (!ce vt ty tb rt args. compiler_preserves R (compile_type_builtin_dispatch ce vt ty tb rt args))
 Proof
-  disch_then (CONJUNCTS_THEN2 (mk_asm "invalid") (CONJUNCTS_THEN2
-    (mk_asm "expr") (CONJUNCTS_THEN2 (mk_asm "builtin") (mk_asm "type_builtin")))) >>
-  rewrite_tac[compiler_preserves_def] >>
-  ho_match_mp_tac compile_expr_raw_ind >> rpt conj_tac >>
-  rpt gen_tac >> strip_tac >>
-  once_rewrite_tac[compile_expr_raw_def] >> BETA_TAC >>
-  rpt gen_tac >> strip_tac
-  >~ [`compile_expr_body`]
-  >- asm "expr" (irule o REWRITE_RULE [compiler_preserves_def])
-  >~ [`compile_builtin_dispatch_body`]
-  >- asm "builtin" (irule o REWRITE_RULE [compiler_preserves_def])
-  >> asm "type_builtin" (irule o REWRITE_RULE [compiler_preserves_def])
-  >> rpt conj_tac >> rpt gen_tac >>
-  rewrite_tac[expr_child_callback_def, builtin_child_callback_def,
-              type_child_callback_def] >> BETA_TAC >> IF_CASES_TAC >>
-  asm "invalid" (fn th => simp[REWRITE_RULE [compiler_preserves_def] th])
+  let
+    fun callbacks (asl, w) =
+      (rpt conj_tac >> rpt gen_tac >>
+       rewrite_tac[expr_child_callback_def, builtin_child_callback_def,
+                   type_child_callback_def] >> BETA_TAC >>
+       TRY IF_CASES_TAC >>
+       asm "invalid" (fn th => asm_simp_tac bool_ss
+         [REWRITE_RULE [compiler_preserves_def] th])) (asl, w)
+  in
+    disch_then (CONJUNCTS_THEN2 (mk_asm "invalid") (CONJUNCTS_THEN2
+      (mk_asm "expr") (CONJUNCTS_THEN2 (mk_asm "builtin") (mk_asm "type_builtin")))) >>
+    rewrite_tac[compiler_preserves_def] >>
+    ho_match_mp_tac compile_expr_raw_ind >> rpt conj_tac >>
+    rpt gen_tac >> strip_tac >>
+    once_rewrite_tac[compile_expr_raw_def] >> BETA_TAC >>
+    rpt gen_tac >> strip_tac
+    >~ [`compile_expr_body`]
+    >- (asm "expr" (irule o REWRITE_RULE [compiler_preserves_def]) >> callbacks)
+    >~ [`compile_builtin_dispatch_body`]
+    >- (asm "builtin" (irule o REWRITE_RULE [compiler_preserves_def]) >> callbacks)
+    >> asm "type_builtin" (irule o REWRITE_RULE [compiler_preserves_def]) >> callbacks
+  end
 QED

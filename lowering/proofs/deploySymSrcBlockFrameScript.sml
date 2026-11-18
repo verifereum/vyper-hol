@@ -1,5 +1,6 @@
 Theory deploySymSrcBlockFrame
 Ancestors
+  symbolicSourceCompilerFrame
   deploySymSrcHistory runtimeSymSrcInterfaces compileEnv emitHelper context
   loweringShapeDefs list venomInst
 
@@ -9,6 +10,18 @@ Definition deploy_blocks_frame_def:
       m (s with cs_blocks := s.cs_blocks ++ B) =
         (x,t with cs_blocks := t.cs_blocks ++ B)
 End
+
+Theorem compiler_preserves_deploy:
+  compiler_preserves (\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks) m <=>
+  deploy_blocks_frame m
+Proof
+  simp[compiler_preserves_def, deploy_blocks_frame_def] >>
+  eq_tac >> strip_tac >> rpt gen_tac
+  >- (strip_tac >> first_x_assum (qspecl_then [`B`,`s`] mp_tac) >>
+      simp[] >> Cases_on `m (s with cs_blocks := s.cs_blocks ++ B)` >> simp[]) >>
+  Cases_on `m s` >>
+  first_x_assum drule_all >> simp[]
+QED
 
 Theorem deploy_blocks_frame_return[simp]:
   deploy_blocks_frame (comp_return x)

@@ -2,12 +2,20 @@
    consumers. Data-writing dispatch operations deliberately have no rule. *)
 Theory runtimeSymSrcDataFrame
 Ancestors
+  symbolicSourceCompilerFrame
   compileEnv emitHelper exprCallBounds
 
 Definition runtime_data_frame_def:
   runtime_data_frame (m : 'a compiler) <=>
     !st. (SND (m st)).cs_data_sections = st.cs_data_sections
 End
+
+Theorem compiler_preserves_runtime:
+  compiler_preserves (\data s t. s = t /\ s.cs_data_sections = data) m <=>
+  runtime_data_frame m
+Proof
+  simp[compiler_preserves_def, runtime_data_frame_def] >> metis_tac[]
+QED
 
 Theorem runtime_data_frame_apply:
   runtime_data_frame m /\ m st = (x,st') ==>
