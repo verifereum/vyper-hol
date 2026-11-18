@@ -823,14 +823,14 @@ QED
 Definition call_result_rel_at_def:
   call_result_rel_at gobs tops am tx es r es' <=>
     let os = MAP SND (call_trace es) in
-    let H = storage_trace_horizon (source_storage_trace am tx os gobs) in
+    let touched = storage_trace_horizon (source_storage_trace am tx os gobs) in
     let (res, am', rqs) = call_external (SOME os) gobs am tx in
     case res of
       INL v => ?out. tx_return_bytes tops tx v out /\
                      frame_outcome es r es' NONE out am'.logs /\
-                     effects_agree H tx (am', rqs) es es'
+                     effects_agree touched tx (am', rqs) es es'
     | INR HaltException => frame_outcome es r es' NONE [] am'.logs /\
-                           effects_agree H tx (am', rqs) es es'
+                           effects_agree touched tx (am', rqs) es es'
     | INR exc => exception_outcome_rel tops exc es r es'
 End
 
