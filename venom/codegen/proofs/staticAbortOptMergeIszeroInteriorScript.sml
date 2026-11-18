@@ -5,18 +5,21 @@ Ancestors
   asmOptimizer words arithmetic list
 
 Theorem merge_iszero_actual_interior_cut:
-  let b = LENGTH pre; m = LENGTH pat; c = ss.sym_base.as_pc in
-  let d = c-b; B = \w:bytes32. (b2w (w=0w):bytes32) in
-  let ep = asm_data_env p (assemble p ++ data);
-      eq = asm_data_env q (assemble q ++ data);
-      sq = s with as_code := assemble q ++ data in
+  !b. b = LENGTH pre ==>
+  !m. m = LENGTH pat ==>
+  !c. c = ss.sym_base.as_pc ==>
+  !d. d = c-b ==>
+  !B. B = (\w:bytes32. (b2w (w=0w):bytes32)) ==>
+  !eq. eq = asm_data_env q (assemble q ++ data) ==>
+  !sq. sq = (s with as_code := assemble q ++ data) ==>
   p = pre ++ pat ++ tail /\ q = pre ++ repl ++ tail /\
   ((?x. asm_returns_zero_or_one x /\
         pat = [x; AsmOp "ISZERO"; AsmOp "ISZERO"] /\ repl = [x]) \/
    (?l. pat = [AsmOp "ISZERO"; AsmOp "ISZERO"; AsmPushLabel l; AsmOp "JUMPI"] /\
         repl = [AsmPushLabel l; AsmOp "JUMPI"])) /\
   s.as_pc = 0 /\ s.as_code = assemble p ++ data /\ asm_static_wf p /\
-  sym_steps p ep n (sym_init s) = SymOK ss /\ b < c /\ c < b+m ==>
+  sym_steps p (asm_data_env p (assemble p ++ data)) n (sym_init s) = SymOK ss /\
+  b < c /\ c < b+m ==>
   asm_static_wf q /\ ?k u t.
     sym_steps q eq k (sym_init sq) = SymOK u /\
     asm_steps (SND (compute_label_offsets q)) (build_offset_to_pc q) q k sq = AsmOK t /\
@@ -31,11 +34,11 @@ Theorem merge_iszero_actual_interior_cut:
        repl=[AsmPushLabel l; AsmOp "JUMPI"] /\ u.sym_stack=Val w::stk /\
        ss.sym_stack=(if d=3 then [Lab l 0] else []) ++ (Val (FUNPOW B (MIN d 2) w)::stk))
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all (cj 1 (BETA_RULE (REWRITE_RULE [LET_THM] merge_iszero_one_canonical_layout))) >>
+  drule_all (cj 1 (BETA_RULE (CONV_RULE (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) merge_iszero_one_canonical_layout))) >>
   disch_then assume_tac >>
-  drule_all (cj 2 (BETA_RULE (REWRITE_RULE [LET_THM] merge_iszero_one_canonical_layout))) >>
+  drule_all (cj 2 (BETA_RULE (CONV_RULE (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) merge_iszero_one_canonical_layout))) >>
   disch_then assume_tac >>
   qmatch_asmsub_abbrev_tac `sym_steps p ep n (sym_init s) = SymOK ss` >>
   `?k u. sym_steps q ep k (sym_init s) = SymOK u /\
@@ -50,7 +53,7 @@ Proof
        ss.sym_stack=(if ss.sym_base.as_pc-LENGTH pre=3 then [Lab l 0] else []) ++
          (Val (FUNPOW (\z:bytes32. (b2w (z=0w):bytes32))
                       (MIN (ss.sym_base.as_pc-LENGTH pre) 2) w)::stk))` by (
-    drule_all (BETA_RULE (REWRITE_RULE [LET_THM] merge_iszero_one_stopped_prefix)) >>
+    drule_all (BETA_RULE (CONV_RULE (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) merge_iszero_one_stopped_prefix)) >>
     simp[] >>
     disch_then (qx_choose_then `h` (qx_choose_then `j` (qx_choose_then `entry`
       (map_every assume_tac o CONJUNCTS)))) >>
