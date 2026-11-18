@@ -632,3 +632,68 @@ Proof
   qpat_x_assum `y::ys = xs` (fn th => rewrite_tac[GSYM th]) >>
   simp[val_in_memory_def] >> metis_tac[]
 QED
+
+(* At zero cursors the member segment covers exactly the aggregate output.
+   The representation callback concerns the very list returned by source decode. *)
+Theorem selected_complex_accepts[local]:
+  type_to_abi_dec_info sf ce ty = DecComplex dyn (abi_decoder_member_infos sf' ce tys) /\
+  type_memory_size tv = type_memory_size_list tvs /\
+  LIST_REL (abi_decoder_coherent ce env' sf') tys tvs /\
+  LIST_REL (selected_decoder_accepts ce env' sf') tys tvs /\
+  (!cd pos x. cd_decode F cd tv pos = SOME x ==>
+    ?xs. cd_decode_list F cd tvs pos 0 = SOME xs /\
+      (LIST_REL value_has_type tvs xs ==> value_has_type tv x) /\
+      (!d mem. tuple_in_memory xs tvs d mem ==> val_in_memory tv x d mem)) ==>
+  selected_decoder_accepts ce env sf ty tv
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rewrite_tac[selected_decoder_accepts_def] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `compile_abi_decode_complex_elems (Var child) src CALLDATALOAD (Lit 0w) (Lit 0w)
+      (abi_decoder_member_infos sf' ce tys) 0 0 st = ((),last)` by
+    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+     qpat_assum `type_to_abi_dec_info _ _ _ = _` (rewrite_tac o single) >>
+     rewrite_tac [abiDecoderComplexGuardTheory.abi_decode_complex_phases,
+          abiDecoderComplexHeadTheory.abi_decode_complex_head_guard_def, LET_THM,
+          comp_bind_def,comp_ignore_bind_def,comp_return_def] >>
+     simp[pairTheory.UNCURRY]) >>
+  qpat_assum `!cd pos x. _` (drule_then strip_assume_tac) >>
+  `selected_member_replays st last fn initial` by
+    (rewrite_tac[selected_member_replays_def] >> first_assum ACCEPT_TAC) >>
+  `ptr_covers G tn child initial (type_memory_size_list tvs) /\
+   d + type_memory_size_list tvs < dimword (:256) /\
+   d + type_memory_size_list tvs <= base_addr+cap` by
+    (qpat_assum `type_memory_size tv = _` (rewrite_tac o single o SYM) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qspecl_then [`tys`,`tvs`,`xs`,`0`,`0`,`st`,`last`,`limit`,`ctx`,`fn`,`site`,`lower`,
+     `PG`,`child`,`src`,`initial`,`G`,`tn`,`p`,`d`,`type_memory_size_list tvs`,`oid`,`base_addr`,`cap`]
+    (mp_tac o REWRITE_RULE[ADD_CLAUSES,LESS_EQ_REFL])
+    (Q.INST [`env` |-> `env'`, `sf` |-> `sf'`] selected_member_list_run) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `v` (qx_choose_then `sc`
+    (qx_choose_then `H` (qx_choose_then `u` (map_every assume_tac o CONJUNCTS))))) >>
+  qpat_assum `selected_member_segment _ _ _ _ _ _ _ _ _ _ _ _ _`
+     (map_every assume_tac o CONJUNCTS o REWRITE_RULE[selected_member_segment_def]) >>
+  drule_all selected_member_root_frame >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `value_has_type tv x` by metis_tac[] >>
+  `val_wf tv x` by metis_tac[value_has_type_val_wf] >>
+  `!mem. mem_agree_outside u.t_mem v.vs_memory mem ==> val_in_memory tv x d mem` by metis_tac[] >>
+  `val_in_memory tv x d v.vs_memory` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  `!fuel r. run_from fuel ctx fn v = r /\ (!err. r <> Error err) ==>
+    ?fuel'. run_from fuel' ctx fn initial = r /\
+      (mem_safe_run fuel ctx fn v ==> mem_safe_run fuel' ctx fn initial)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
+       (qspecl_then [`ARB`,`{}`] (mp_tac o MATCH_MP gas_origin_ptr_path_exec)) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[exit_result_def] >> metis_tac[]) >>
+  qpat_x_assum `selected_member_frame _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE[selected_member_frame_def]) >>
+  qpat_x_assum `selected_member_replays st last fn v`
+    (assume_tac o REWRITE_RULE[selected_member_replays_def]) >>
+  qexistsl [`v`,`sc`,`H`,`u`] >>
+  rpt conj_tac >>
+  (first_assum ACCEPT_TAC ORELSE
+    (qpat_assum `type_memory_size tv = _` (rewrite_tac o single) >>
+     first_assum ACCEPT_TAC))
+QED
