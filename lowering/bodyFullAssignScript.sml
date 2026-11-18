@@ -13,6 +13,7 @@ Ancestors
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyFullAssignAttrStorage bodyExprPreFacts bodyStorageMetadata
   bodyFullAssignToplevelSetup bodyFullAssignToplevelTail
+  bodyFullStoreSlotsPath bodyFullStoreSlotsStatic
   bodyFullAssignToplevelCode bodyFullAssignToplevelSource exprSimSliceCompose
   gasOutcomeFullCompose exprSimTopLevelProps vyperStorageFootprint
   vyperStorageTrace exprLoweringProps loweringStateRelDefs

@@ -95,7 +95,10 @@ holbuild --max-heap 8000 -j2 build --skip-checkpoints --skip-proof-steps \
 (set -e
 for t in vyperTypeSystemTheory vyperTypeBuiltinsTheory \
     vyperTypeExprSoundnessTheory vyperTypeSoundnessTheory \
-    vyperMembershipSemanticsTestTheory vyperMembershipParityTestTheory \
+    vyperMembershipSemanticsTestTheory \
+    vyperMembershipInLitListTestTheory vyperMembershipNotinLitList3TestTheory \
+    vyperMembershipInMemDynarrayTestTheory vyperMembershipInStorageDynarrayTestTheory \
+    vyperMembershipEqStringLitSameTestTheory vyperMembershipEqBytesStorageBothTestTheory \
     vyperMembershipMatrixTestTheory vyperSmallStepTheory \
     bytestringHashPropsTheory \
     exprLoweringPropsTheory:list_membership_small_traces \
