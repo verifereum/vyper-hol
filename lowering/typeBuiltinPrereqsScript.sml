@@ -1,7 +1,7 @@
 (* Shared proof facts for the joint TypeBuiltin constructor ports. *)
 Theory typeBuiltinPrereqs
 Ancestors
-  exprOpenFirstOperand vyperTypeCallStackSoundness supportedExprTraverse
+  exprOpenFirstOperand vyperTypeCallStackSoundness supportedExprTraverse stateRelProj
   bodyMemAssignTopCopyIndex fragExecMem instMemFrontier bodyMemAssignTopCopyFacts fragGasSeqMem
   memSafeRun exprSimWordBuiltins bodyUnopFragMemory exprSimConvertFromBytes fragGasPathMem
   bodyLiteralBufferMemory abiEmptyAllocate allocaFootprint venomMemDefs venomMemProps
@@ -481,7 +481,10 @@ Proof
      pairarg_tac >> strip_tac >> gvs[] >>
      drule emitted_insts_emit_op >> simp[]) >>
   `w2n w + sz <= t.vs_alloca_next` by
-    (`alloca_inv t` by fs[stmt_state_rel_def] >>
+    (`alloca_inv t` by
+       (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ t`
+          (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
+        simp[]) >>
      fs[alloca_inv_def, alloca_next_valid_def] >> first_x_assum drule >> simp[]) >>
   `s.vs_alloca_next <= t.vs_alloca_next` by
     (qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK t` mp_tac >>
@@ -991,7 +994,7 @@ Proof
   `expr_body_pre cenv cx env src es` by
     (irule expr_body_pre_type_builtin_head >> metis_tac[]) >>
   drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) exprSimSourceTheory.expr_body_pre_eval) >> strip_tac >>
-  gvs[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
+  gvs[expr_body_pre_def, Once well_typed_expr_def, byte_widths_expr_def,
       alloc_limits_expr_def, int_calls_expr_def,
       supportedExprTraverseTheory.supported_expr_exists_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm] >>
