@@ -98,6 +98,33 @@ Proof
   qexists_tac `n` >> simp[]
 QED
 
+(* PARAM progress uses the source arity bound, independent of target execution. *)
+Theorem fmp_stage_back_param_point:
+  frame_reachable vs C stk PG G tn fn inst s /\ o1_ctx_shape C /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = PARAM /\
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  (!stk0 PG0 G0 tn0 caller inv st name args callee.
+    frame_reachable vs C stk0 PG0 G0 tn0 caller inv st /\
+    active_inst caller inv st /\ inv.inst_opcode = INVOKE /\
+    inv.inst_operands = Label name::args /\
+    lookup_function name C.ctx_functions = SOME callee ==>
+    LENGTH (fn_user_param_insts callee) <= LENGTH args) ==>
+  terminates (step_inst k C inst s)
+Proof
+  strip_tac >>
+  `LENGTH (fn_user_param_insts fn) <= LENGTH s.vs_params` by
+    metis_tac[frame_param_bounds] >>
+  drule_then assume_tac stage_source_canonical >>
+  drule_all canonical_user_param_index >> strip_tac >>
+  `w2n (n2w j : bytes32) < LENGTH s.vs_params` by
+    (mp_tac (Q.SPEC `j` (INST_TYPE [alpha |-> ``:256``] word_n2w_le2)) >> decide_tac) >>
+  `fnFrameBoundaryEntryParams$entry_param_shape s inst` by
+    (simp[fnFrameBoundaryEntryParamsTheory.entry_param_shape_def] >>
+     Cases_on `inst.inst_outputs` >> gvs[LENGTH_EQ_NUM_compute]) >>
+  drule fnFrameBoundaryEntryParamsTheory.entry_param_step >>
+  simp[terminates_def]
+QED
+
 Theorem fmp_stage_back_param_conditional:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
@@ -115,18 +142,8 @@ Theorem fmp_stage_back_param_conditional:
 Proof
   strip_tac >>
   `o1_ctx_shape C` by fs[fmp_stage_ctx_def] >>
-  `LENGTH (fn_user_param_insts fn) <= LENGTH s.vs_params` by
-    metis_tac[frame_param_bounds] >>
   drule_all fmp_stage_frame_facts >> strip_tac >>
-  `canonical_param_prefix fn` by
-    (fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
-     metis_tac[stage_source_canonical]) >>
-  drule_all canonical_user_param_index >> strip_tac >>
-  `w2n (n2w j : bytes32) < LENGTH s.vs_params` by
-    (mp_tac (Q.SPEC `j` (INST_TYPE [alpha |-> ``:256``] word_n2w_le2)) >> decide_tac) >>
-  `fnFrameBoundaryEntryParams$entry_param_shape s inst` by
-    (simp[fnFrameBoundaryEntryParamsTheory.entry_param_shape_def] >>
-     Cases_on `inst.inst_outputs` >> gvs[LENGTH_EQ_NUM_compute]) >>
-  drule fnFrameBoundaryEntryParamsTheory.entry_param_step >>
-  simp[terminates_def]
+  qhdtm_x_assum `fmp_stage_rel` mp_tac >>
+  simp[fmp_stage_rel_def, fmp_frame_rel_def] >> strip_tac >>
+  irule fmp_stage_back_param_point >> metis_tac[]
 QED
