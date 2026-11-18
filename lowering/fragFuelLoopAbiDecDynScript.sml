@@ -41,60 +41,6 @@ Proof
   simp[mk_inst_def]
 QED
 
-(* Straight-line segment boundaries.  The exit sets name the loop's
-   control-flow edges; no composition across the back edge is used here. *)
-Theorem fuel_ok_decode_dyn_header[local]:
-  !load_opc i_ptr base_op src_op exit_lbl body_lbl Wv E.
-    ~is_terminator load_opc /\ load_opc <> PHI /\
-    exit_lbl IN E /\ body_lbl IN E ==>
-    fuel_ok Wv {} E
-      (do i_op <- emit_op MLOAD [i_ptr];
-          src_addr <- compile_abi_dec_addr base_op src_op;
-          cnt_hdr <- emit_op load_opc [src_addr];
-          cmp <- emit_op LT [i_op; cnt_hdr];
-          done_op <- emit_op ISZERO [cmp];
-          emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] []
-       od)
-Proof
-  rpt strip_tac >>
-  simp_tac std_ss [compile_abi_dec_addr_def] >>
-  fuel_auto [fuel_ok_emit_op, fuel_ok_emit_inst_jnz] >>
-  simp[is_terminator_def]
-QED
-
-Theorem fuel_ok_decode_dyn_body[local]:
-  !dst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz
-     i_ptr hdr_lbl Wv E.
-    ~is_terminator load_opc /\ load_opc <> PHI /\ hdr_lbl IN E /\
-    (!d s Wv E. fuel_ok Wv {} E
-       (compile_abi_decode_to_buf d s load_opc base_op hi_op elem_info)) ==>
-    fuel_ok Wv {} E
-      (do i_op2 <- emit_op MLOAD [i_ptr];
-          src_data <- emit_op ADD [src_op; Lit 32w];
-          src_off <- emit_op MUL [i_op2; Lit (n2w elem_abi_sz)];
-          elem_src <- emit_op ADD [src_data; src_off];
-          actual_src <-
-            (if dec_info_needs_offset elem_info then
-               compile_abi_decode_dyn_elem_ptr load_opc base_op elem_src
-                 src_data hi_op elem_abi_sz
-             else return elem_src);
-          dst_data <- emit_op ADD [dst; Lit 32w];
-          dst_off <- emit_op MUL [i_op2; Lit (n2w elem_mem_sz)];
-          elem_dst <- emit_op ADD [dst_data; dst_off];
-          compile_abi_decode_to_buf elem_dst actual_src
-            load_opc base_op hi_op elem_info;
-          new_i <- emit_op ADD [i_op2; Lit 1w];
-          emit_void MSTORE [i_ptr; new_i];
-          emit_inst JMP [Label hdr_lbl] []
-       od)
-Proof
-  rpt strip_tac >>
-  simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
-    compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
-  fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void, fuel_ok_emit_inst_jmp] >>
-  simp[is_terminator_def]
-QED
-
 (* Discarding control-flow destinations gives the structural compilation
    invariant without asserting termination of the back edge. *)
 Theorem fuel_ok_decode_dyn_structure[local]:
@@ -744,20 +690,6 @@ Proof
   gen_tac >> MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_fresh_return)
 QED
 
-Theorem abi_dyn_fresh_if[local]:
-  !b m n. (^dyn_fresh) m /\ (^dyn_fresh) n ==>
-    (^dyn_fresh) (if b then m else n)
-Proof
-  Cases_on `b` >> simp[] >> metis_tac[]
-QED
-
-Theorem abi_dyn_fresh_copy_case[local]:
-  !opc m n p. (^dyn_fresh) m /\ (^dyn_fresh) n /\ (^dyn_fresh) p ==>
-    (^dyn_fresh) (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)
-Proof
-  Cases_on `opc` >> simp[] >> metis_tac[]
-QED
-
 
 Theorem abi_dyn_decode_fresh[local]:
   (!dst src lop base hi info.
@@ -960,7 +892,7 @@ QED
 val dyn_closed = ``\T m. !a r b. m a = (r,b) ==>
   (^dyn_F) ((^dyn_J) (T UNION (^dyn_B) a b)) a b``;
 
-Theorem abi_dyn_branchless_closed[local]:
+Theorem abi_dyn_branchless_closed:
   !m. code_action (\opc. opc <> JMP /\ opc <> JNZ) m ==>
     !T. (^dyn_closed) T m
 Proof
@@ -969,7 +901,7 @@ Proof
   simp[] >> irule EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem abi_dyn_closed_bind[local]:
+Theorem abi_dyn_closed_bind:
   !T m f. (^dyn_closed) T m /\
     (!x. (^(inst [alpha |-> beta] dyn_closed)) T (f x)) ==>
     (^(inst [alpha |-> beta] dyn_closed)) T (comp_bind m f)
@@ -982,7 +914,7 @@ Proof
   qexists_tac `r'` >> simp[]
 QED
 
-Theorem abi_dyn_closed_ignore_bind[local]:
+Theorem abi_dyn_closed_ignore_bind:
   !T m n. (^dyn_closed) T m /\
     (^(inst [alpha |-> beta] dyn_closed)) T n ==>
     (^(inst [alpha |-> beta] dyn_closed)) T (comp_ignore_bind m n)
@@ -991,14 +923,14 @@ Proof
   ho_match_mp_tac (BETA_RULE abi_dyn_closed_bind) >> simp[]
 QED
 
-Theorem abi_dyn_closed_return[local]:
+Theorem abi_dyn_closed_return:
   !T v. (^dyn_closed) T (comp_return v)
 Proof
   rpt gen_tac >> qspec_then `comp_return v` mp_tac abi_dyn_branchless_closed >>
   simp[code_action_return]
 QED
 
-Theorem abi_dyn_closed_emit_op[local]:
+Theorem abi_dyn_closed_emit_op:
   !T opc ops. opc <> JMP /\ opc <> JNZ ==>
     (^(inst [alpha |-> ``:operand``] dyn_closed)) T (emit_op opc ops)
 Proof
@@ -1007,7 +939,7 @@ Proof
   simp[code_action_emit_op]
 QED
 
-Theorem abi_dyn_closed_emit_inst[local]:
+Theorem abi_dyn_closed_emit_inst:
   !T opc ops outs. (^dyn_J) T (mk_inst 0 opc ops outs) ==>
     (^(inst [alpha |-> ``:unit``] dyn_closed)) T (emit_inst opc ops outs)
 Proof
@@ -1018,7 +950,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem abi_dyn_closed_emit_void[local]:
+Theorem abi_dyn_closed_emit_void:
   !T opc ops. (^dyn_J) T (mk_inst 0 opc ops []) ==>
     (^(inst [alpha |-> ``:unit``] dyn_closed)) T (emit_void opc ops)
 Proof
@@ -1026,7 +958,7 @@ Proof
   metis_tac[BETA_RULE abi_dyn_closed_emit_inst]
 QED
 
-Theorem abi_dyn_closed_label[local]:
+Theorem abi_dyn_closed_label:
   !T suffix. (^(inst [alpha |-> ``:string``] dyn_closed)) T (fresh_label suffix)
 Proof
   ntac 2 gen_tac >> qspec_then `fresh_label suffix` mp_tac abi_dyn_branchless_closed >>
@@ -1082,7 +1014,7 @@ val dyn_skel = ``\hdr body exit (p:compile_state -> unit # compile_state)
     (h:compile_state -> unit # compile_state) (q:compile_state -> unit # compile_state).
   do p; new_block hdr; h; new_block body; q; new_block exit; return () od``;
 
-Theorem abi_dyn_skeleton_closed[local]:
+Theorem abi_dyn_skeleton_closed:
   !T hdr body exit p h q.
     (^(inst [alpha |-> ``:unit``] dyn_closed)) (T UNION {hdr;body;exit}) p /\
     (^(inst [alpha |-> ``:unit``] dyn_closed)) (T UNION {hdr;body;exit}) h /\
@@ -1943,22 +1875,6 @@ Proof
     IF_CASES_TAC, gen_tac, conj_tac]) >> simp[]
 QED
 
-Theorem abi_dyn_middle_provenance[local]:
-  !dst src lop base hi info asz msz i A.
-    (^(inst [alpha |-> ``:unit``] dyn_prov)) A
-      ((^dyn_middle) dst src lop base hi info asz msz i)
-Proof
-  rpt gen_tac >> simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
-    compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
-  rpt (FIRST [MATCH_ACCEPT_TAC (BETA_RULE (CONJUNCT1 abi_dyn_decode_provenance)),
-    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_prov_emit_op),
-    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_prov_emit_void),
-    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_prov_return),
-    ho_match_mp_tac (BETA_RULE abi_dyn_prov_bind),
-    ho_match_mp_tac (BETA_RULE abi_dyn_prov_ignore_bind),
-    IF_CASES_TAC, gen_tac, conj_tac])
-QED
-
 Theorem abi_dyn_middle_targets[local]:
   !dst src lop base hi info asz msz i A.
     lop <> JMP /\ lop <> JNZ ==>
@@ -2720,21 +2636,6 @@ Proof
   simp[frag_observer_cut_lookup, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
-Theorem abi_dyn_region_lookup[local]:
-  !sa sb fn s. fn_has_code sa sb fn /\ (^dyn_R) sa sb s /\
-    ~at_point sb s ==>
-    ?bb inst. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-      get_instruction bb s.vs_inst_idx = SOME inst
-Proof
-  rpt gen_tac >> simp_tac std_ss [fn_has_code_def, at_point_def] >>
-  strip_tac
-  >- (qexistsl_tac [`bb`, `EL s.vs_inst_idx sb.cs_current_insts`] >>
-      gvs[rich_listTheory.IS_PREFIX_APPEND, get_instruction_def, EL_APPEND_EQN]) >>
-  rename1 `MEM emitted (emitted_blocks sa sb)` >>
-  qexistsl_tac [`emitted`, `EL s.vs_inst_idx emitted.bb_instructions`] >>
-  gvs[get_instruction_def] >> metis_tac[]
-QED
-
 Theorem abi_dyn_region_agreement[local]:
   !sa sb fn obs s. fn_has_code sa sb fn /\ fn_has_code sa sb obs /\
     (^dyn_R) sa sb s /\ ~at_point sb s ==>
@@ -3062,21 +2963,6 @@ Proof
   irule_at Any frag_observer_cut_instruction >> simp[frag_observer_cut_lookup]
 QED
 
-Theorem abi_dyn_region_end[local]:
-  !sa sb s. cs_extends sa sb /\
-    (!bb. MEM bb (emitted_blocks sa sb) ==> bb.bb_label <> sb.cs_current_bb) /\
-    at_point sb s ==> (^dyn_R) sa sb s
-Proof
-  rpt gen_tac >> strip_tac >> simp_tac std_ss [] >>
-  reverse conj_tac >- gvs[at_point_def] >>
-  strip_tac >> drule frag_extends_emitted_shape >>
-  Cases_on `emitted_blocks sa sb = []`
-  >- (simp[] >> strip_tac >> gvs[at_point_def, rich_listTheory.IS_PREFIX_APPEND]) >>
-  simp[] >> strip_tac >>
-  `MEM (LAST (emitted_blocks sa sb)) (emitted_blocks sa sb)`
-    by simp[rich_listTheory.MEM_LAST_NOT_NIL] >> gvs[at_point_def] >> metis_tac[]
-QED
-
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
 
@@ -3179,32 +3065,6 @@ Proof
   qexistsl_tac [`tb`, `tob`] >> simp[] >>
   `vars_kept N {} s0 t` by metis_tac[vars_kept_trans] >>
   gvs[vars_kept_def, lookup_var_def] >> metis_tac[]
-QED
-
-Theorem abi_dyn_middle_region_interface[local]:
-  !dst src lop base hi info asz msz i sa sb N s0 ctx fn ctx0 id.
-    (^dyn_middle) dst src lop base hi info asz msz i sa = ((),sb) /\
-    ~is_terminator lop /\ lop <> INVOKE /\ lop <> PHI /\ (^dyn_Old) sa /\
-    N <= sa.cs_next_var /\ fn_has_code sa sb fn /\ no_phi_fn fn ==>
-    (!s. at_point sa s ==> (^dyn_R) sa sb s) /\
-    (!s. at_point sb s ==> (^dyn_R) sa sb s) /\
-    fn_has_code sa sb (frag_observer sa sb fn id) /\
-    (^abi_dyn_cut_hyp) ((^dyn_R) sa sb) (at_point sb)
-      (\s. vars_kept N {} s0 s /\ s.vs_labels = s0.vs_labels)
-      ctx fn ctx0 (frag_observer sa sb fn id)
-Proof
-  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
-  `!bb. MEM bb (emitted_blocks sa sb) ==> bb.bb_label <> sb.cs_current_bb`
-    by metis_tac[BETA_RULE abi_dyn_middle_final_exclusion] >>
-  `cs_extends sa sb` by
-    (drule_all (SRULE [code_action_def, code_step_def] abi_dyn_middle_code) >>
-     metis_tac[entry_shape_extends]) >>
-  conj_tac >- metis_tac[BETA_RULE abi_dyn_middle_entry] >>
-  conj_tac >- metis_tac[BETA_RULE abi_dyn_region_end] >>
-  conj_tac >- metis_tac[abi_dyn_observer_has_code] >>
-  irule abi_dyn_middle_cut_hyp >> simp_tac std_ss [] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qpat_assum `comp_bind _ _ sa = _` (irule_at Any) >> simp[]
 QED
 
 val abi_dyn_cut_result = ``\C Q ctx fn ctx0 obs n s.
@@ -3318,35 +3178,6 @@ Theorem abi_dyn_empty_context_stable[local]:
 Proof
   simp[callees_stable_def, venomInstTheory.lookup_function_def,
        listTheory.FIND_thm]
-QED
-
-Theorem abi_dyn_non_invoke_context[local]:
-  !f g ctx ctx' inst s.
-    inst.inst_opcode <> INVOKE ==>
-    step_inst f ctx inst s = step_inst g ctx' inst s
-Proof
-  simp[venomExecSemanticsTheory.step_inst_non_invoke]
-QED
-
-(* Cutoff diagnostic: a continuation witness becomes a state observation,
-   but the fixed-result alternative remains a distinct obligation. *)
-Theorem abi_dyn_cutoff_observation[local]:
-  !G ctx fn s j P bb id.
-    (!t. P t ==>
-       lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
-       get_instruction bb t.vs_inst_idx = SOME (mk_inst id STOP [] [])) /\
-    fuel_outcome G ctx fn s j P ==>
-    (?t. P t /\ run_from (G+j) ctx fn s =
-       Halt (halt_state (t with vs_returndata := []))) \/
-    (!f. G <= f ==> run_from (f+j) ctx fn s = run_from (G+j) ctx fn s)
-Proof
-  rpt gen_tac >> strip_tac >> gvs[fuel_outcome_def] >>
-  disj1_tac >> qexists_tac `t` >> simp[] >>
-  qpat_x_assum `!f. G <= f ==> _` (qspec_then `G` mp_tac) >>
-  simp[] >> strip_tac >> asm_rewrite_tac[] >>
-  irule fragExecTheory.run_from_halt >>
-  qexistsl_tac [`bb`, `mk_inst id STOP [] []`] >>
-  simp[step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 Theorem abi_dyn_observer_no_phi[local]:
@@ -3623,20 +3454,6 @@ Proof
           simp[Abbr `Q`] >> rpt strip_tac >> metis_tac[vars_kept_trans]) >>
       simp[] >> strip_tac >> qexists_tac `j'` >> simp[] >> decide_tac) >>
   simp[]
-QED
-
-Theorem abi_dyn_emit_op_footprint[local]:
-  !opc ops st out st'.
-    emit_op opc ops st = (out,st') ==>
-    EVERY (\i. i.inst_opcode = opc /\
-       EVERY (\x. ~var_below st.cs_next_var x) i.inst_outputs)
-      (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts)
-Proof
-  rpt strip_tac >>
-  drule exprLoweringPropsTheory.emitted_insts_emit_op_local >>
-  simp[exprLoweringPropsTheory.emitted_insts_def] >> strip_tac >>
-  simp[listTheory.DROP_APPEND, mk_inst_def, var_below_def] >>
-  qexists_tac `st.cs_next_var` >> simp[]
 QED
 
 Theorem abi_dyn_counter_rank[local]:

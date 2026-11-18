@@ -661,7 +661,7 @@ Proof
 QED
 
 (* The comparison and the load write no memory, storage or immutables. *)
-Theorem copy_register_taint_frame[local]:
+Theorem copy_register_taint_frame:
   MEM inst.inst_opcode [EQ; MLOAD] /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp ==>
   (step_taint inst s t tn).t_mem = tn.t_mem /\
@@ -685,7 +685,7 @@ Proof
   Cases_on `ops2` >> simp[]
 QED
 
-Theorem copy_store_taint_bound_step[local]:
+Theorem copy_store_taint_bound_step:
   X SUBSET (T0 DIFF {(k + n2w i, j) | (i,j) | i < m}) UNION
            {(k + n2w i, j) | (i,j) | i < m /\ j < 32 /\ c + 32*i + j IN M} ==>
   key_update X (k + n2w m) (mem_word_taint M (c + 32*m)) SUBSET
@@ -705,7 +705,7 @@ QED
 (* The pointer check and ghost of one memory-to-storage iteration: the
    source offset stays inside the source pointer's region, the stored
    slot takes the loaded word's memory taint, and nothing else changes. *)
-Theorem memory_copy_body_ptr[local]:
+Theorem memory_copy_body_ptr:
   !loc ctx cv mv sv vv dv nv x dst G tn s n b k i.
   (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;mv;sv;vv;dv;nv] /\ ~MEM x [cv;mv;sv;vv;dv;nv] /\
@@ -962,7 +962,7 @@ QED
 
 (* The pieces the two loop directions share: the counter's initialisation
    and the header's test and branch. *)
-Theorem copy_init_origin_ptr[local]:
+Theorem copy_init_origin_ptr:
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id ASSIGN [Lit 0w] [cv]]

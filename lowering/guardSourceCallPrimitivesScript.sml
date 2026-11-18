@@ -4,6 +4,7 @@ Theory guardSourceCallPrimitives
 Ancestors
   guardSourceInstrumentation vyperInterpreter vyperCreate vyperStorageTrace
   vyperCallOutcome vyperCallOutcomeProps vyperStorageFootprint vyperState
+  vyperCreateFrame
 
 Theorem take_create_as_request[local]:
   take_create_outcome kind value initcode st = (INL (rq,co),mid) ==>
@@ -339,4 +340,40 @@ Proof
    irule create_oracle_result_finite_prefix >>
    goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   gvs[valid_horizon_def]
+QED
+
+Theorem eval_create_operands_finite_prefix:
+  IS_SOME st.outcomes /\
+  valid_horizon cx initial_st H st.storage_trace /\
+  storage_well_formed_on cx st (FST H) /\
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st = (res,out) /\
+  (?sfx. selected = out.storage_trace ++ sfx) /\
+  (!pre q co sfx.
+    selected = pre ++ StorageOutcome q co :: sfx /\
+    valid_horizon cx initial_st H pre /\
+    storage_well_formed_on cx
+      (empty_state with <|accounts := q.cr_accounts;
+                         tStorage := q.cr_tStorage|>) (FST H) ==>
+    storage_well_formed_on cx
+      (empty_state with <|accounts := co.co_accounts;
+                         tStorage := co.co_tStorage|>) (FST H)) ==>
+  storage_well_formed_on cx out (FST H) /\
+  storage_observations_ok cx H out.storage_trace
+Proof
+  Cases_on `kind` >>
+  simp[eval_create_operands_def, LET_THM] >>
+  rpt gen_tac >> strip_tac >>~-
+  ([`bind _ _ _ = _`],
+   qpat_x_assum `bind _ _ _ = _` mp_tac >>
+   simp[bind_def, AllCaseEqs()] >> strip_tac >>
+   imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+   gvs[valid_horizon_def] >>
+   irule eval_create_finite_prefix >>
+   goal_assum (drule_at Any) >>
+   qexistsl [`initial_st`, `out.storage_trace ++ sfx`] >>
+   simp[valid_horizon_def] >> metis_tac[]) >>
+  irule eval_create_finite_prefix >>
+  goal_assum (drule_at Any) >>
+  qexistsl [`initial_st`, `selected`] >> gvs[] >>
+  first_assum ACCEPT_TAC
 QED

@@ -1,17 +1,9 @@
-(* Request-cut replacement texts for the milestone 7 closed-world route:
- * s1_request_prefix, vyper_call_staging, vyper_closed_world and the
- * call_guard_gas_link header.  vyperLoweringHol imports this theory.
+(* Request-cut definitions for the closed-world call outcomes theorem:
+ * s1_request_prefix, vyper_call_staging, vyper_closed_world and
+ * call_guard_gas_link_stmt.
  *
- * Base texts: the v3 call gas-link packet (s1_request_prefix_def,
- * vyper_call_staging_def, call_guard_gas_link; D5 dispatched_vyper_call,
- * raw fmp, calldata bound) and 5175cccaf:lowering/e2eOutcomesDefsScript.sml
- * (vyper_closed_world_def, horizon_covers_def).  Everything not named below
- * is as in those texts.
- *
- * The fixes, and whether each is needed for programs inside today's gate
- * (supported_program, the gated scope) or only for the complete proof.
- * None of these texts is on the first end-to-end result's route (Step B
- * layer 5 lands without them).
+ * The notes below describe which cases arise under supported_program
+ * (the gated scope) and which arise only outside it.
  *
  * (A) Prefix horizon.  s1_request_prefix's prefix arm assumed valid_horizon
  *     on obs_pre only but concluded whole-run raw_unit_memory_ok,
@@ -26,7 +18,7 @@
  *     only when rq is not a computed precompile: at a precompile outcome the
  *     states with at most k requests run on past obs_pre, into storage reads
  *     that H need not cover.
- *     Scope: GATED.  In-gate witness (read at main e74ed8bb3, not built):
+ *     Scope: GATED.  In-gate example:
  *       interface I:
  *           def g() -> uint256: nonpayable
  *       arr: DynArray[uint256, 2]
@@ -65,33 +57,26 @@
  *     Scope: GATED.  The four builtins are admitted
  *     (supportedExprFormsScript.sml:115-117) and take an oracle entry.
  *
- * (C) Closed world.  Staging (vyper_call_staging) is the v3 text, which takes
- *     dispatched_vyper_call (D5); it is split here into its frame half,
- *     vyper_frame_staging, and the dispatch, unchanged as a conjunction.
- *     vyper_closed_world's re-entry clause no longer demands staging of every
- *     non-static re-entry into tx.target.  It asks for the frame half and
- *     either calldata that dispatches to nothing or a dispatched call of any
- *     nonreentrancy (vyper_entry_call, dispatched_vyper_call with nr
- *     existential), with that call's source facts.  Which arm covers what:
+ * (C) Closed world.  vyper_call_staging combines vyper_frame_staging, a
+ *     dispatched_vyper_call and the call trace bound.  For a non-static
+ *     re-entry into tx.target, vyper_closed_world requires frame staging.
+ *     If calldata dispatches to an external entry, it also requires
+ *     dispatched_vyper_call with the trace bound and the call's source
+ *     facts.  The dispatch predicate leaves nr and dflts existential:
  *     - __default__ re-entry (an ETH refund) and calldata matching no
- *       selector when __default__ exists: vyper_entry_call, since
- *       calldata_dispatch maps them to ("__default__", []); with nr = F it is
- *       vyper_call_staging.  GATED (__default__ is admitted).
+ *       selector when __default__ exists: calldata_dispatch maps them to
+ *       ("__default__", []).  GATED (__default__ is admitted).
  *     - calldata matching no selector with no __default__, a short static
  *       head, a failed decode: calldata_dispatch = NONE, where the compiled
  *       contract reverts with empty return data before any body (the
- *       dispatches-to-nothing case of loweringCalldataCorrect,
- *       seq-4946-nr b70e063e4).  No source facts asked.  GATED.
- *     - a nonreentrant entry: vyper_entry_call with nr = T.  With the lock
+ *       dispatches-to-nothing case of loweringCalldataCorrect).  No source
+ *       facts are required.  GATED.
+ *     - a nonreentrant entry: dispatched_vyper_call with nr = T.  With the lock
  *       held the source call fails RuntimeError "nonreentrant lock", which
  *       is not exempt, so the arm's source conjuncts hold; with the lock free
- *       it runs as an ordinary call.  GATED (the gate doesn't restrict nr),
- *       but its consumer needs the nr widening of the dispatched call
- *       theorems (dispatched_vyper_call F to nr, unwritten), so it is proved
- *       only with the complete proof.
- *     - default arguments: vyper_entry_call leaves dflts existential, as
- *       dispatched_vyper_call does.  COMPLETE ONLY (the gate forces NULL
- *       defaults).
+ *       it runs as an ordinary call.  GATED (the gate doesn't restrict nr).
+ *     - external default arguments: the gate forces NULL defaults for
+ *       external entries.  COMPLETE ONLY.
  *     - computed precompiles: the EVERY ~computed_precompile conjuncts on
  *       the caller's and every re-entry's call trace are dropped; (B) makes
  *       them unnecessary.  GATED.
@@ -294,8 +279,8 @@ End
 
 (* ===== Staging and the closed world (C) ===== *)
 
-(* es is a fresh non-static call frame of the compiled contract, related to
-   am and tx: staging without the dispatched call. *)
+(* es is a fresh call frame of the compiled contract, related to am and tx.
+   Frame staging allows both static and non-static calls. *)
 Definition vyper_frame_staging_def:
   vyper_frame_staging fin policy tops runtime_bc am tx es <=>
     fin IN accepted_finalizers /\
@@ -307,24 +292,14 @@ Definition vyper_frame_staging_def:
     ~MEM tx.target es.rollback.toDelete
 End
 
-(* The v3 staging text, conjunct for conjunct.  Staging keeps original tx
-   and real es; phase witnesses stay in the link (Argon55b2d96c). *)
+(* Staging keeps the original tx and real es.  The gas link supplies the
+   phase witnesses. *)
 Definition vyper_call_staging_def:
   vyper_call_staging fin policy tops runtime_bc am tx ret es <=>
     vyper_frame_staging fin policy tops runtime_bc am tx es /\
     dispatched_vyper_call tops tx
       (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
     LENGTH (call_trace es) < 2 ** 64
-End
-
-(* The external entry a calldata dispatches to, whatever its nonreentrancy:
-   dispatched_vyper_call with nr existential. *)
-Definition vyper_entry_call_def:
-  vyper_entry_call tops tx calldata ret <=>
-    calldata_dispatch tops calldata = SOME (tx.function_name, tx.args) /\
-    ?mut nr args dflts body.
-      vyperInterpreter$lookup_function NONE tx.function_name External tops =
-        SOME (mut, nr, args, dflts, ret, body)
 End
 
 (* H holds every region and lock of the call's source trace, whatever gas
@@ -374,7 +349,7 @@ Definition vyper_closed_world_def:
         vyper_frame_staging fin policy tops runtime_bc am_e tx_e e /\
         (calldata_dispatch tops
            (buffer_to_list (FST (HD e.contexts)).msgParams.data) = NONE \/
-         (?ret_e. vyper_entry_call tops tx_e
+         (?ret_e. dispatched_vyper_call tops tx_e
                     (buffer_to_list (FST (HD e.contexts)).msgParams.data) ret_e) /\
          LENGTH (call_trace e) < 2 ** 64 /\
          horizon_covers H am_e tx_e (MAP SND (call_trace e)) /\

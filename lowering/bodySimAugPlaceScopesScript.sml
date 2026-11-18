@@ -158,16 +158,6 @@ Proof
   metis_tac[aug_place_pure_scopes_mutual]
 QED
 
-Theorem aug_place_pure_results_scopes:
-  !es tops cx s r s'. supported_pure_exprs tops es /\
-    eval_expr_results cx es s = (r,s') ==> s'.scopes = s.scopes
-Proof
-  Induct >> simp[supported_pure_expr_def, Once evaluate_def, return_def] >>
-  rpt strip_tac >> gvs[bind_def, AllCaseEqs(), return_def] >>
-  metis_tac[aug_place_pure_expr_scopes]
-QED
-
-
 Theorem aug_place_lookup_global_not_memory:
   lookup_global cx src id s = (INL pv,s') ==>
   !name path. pv <> PlaceR (MemoryPlace name path)
@@ -319,7 +309,7 @@ Resume aug_place_effect_scopes_mutual[extcall]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
   imp_res_tac eval_ext_call_preserves_non_accounts >>
   imp_res_tac read_results_state >> gvs[] >>
-  metis_tac[aug_place_pure_exprs_scopes, aug_place_pure_results_scopes]
+  metis_tac[aug_place_pure_exprs_scopes]
 QED
 Resume aug_place_effect_scopes_mutual[pop]:
   rpt strip_tac >> irule aug_place_top_level_pop_scopes >>
