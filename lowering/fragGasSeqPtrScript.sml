@@ -368,6 +368,47 @@ Proof
   Cases_on `h.inst_opcode = GAS` >> simp[ADD1]
 QED
 
+Theorem run_inst_seq_ptr_continuation:
+  !code s t G tn G' tn' ctx func bb fuel.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    inst_seq_ptr D lo ctx func PG G tn code s G' tn' /\
+    run_inst_seq code s = OK t /\
+    ptr_safe_run D lo fuel ctx func PG G' tn'
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH code) ==>
+    ptr_safe_run D lo fuel ctx func PG G tn s
+Proof
+  Induct >- simp[run_inst_seq_def, inst_seq_ptr_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[run_inst_seq_def, inst_seq_ptr_def] >>
+  rename1 `step_inst_base h s = OK u` >>
+  `step_inst fuel ctx h s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+  `ptr_safe_run D lo fuel ctx func PG (step_prov PG G h u)
+     (step_taint h s u tn) (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (first_x_assum (qspecl_then
+       [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+        `t with vs_inst_idx := SUC s.vs_inst_idx`, `step_prov PG G h u`,
+        `step_taint h s u tn`, `G'`, `tn'`, `ctx`, `func`, `bb`, `fuel`]
+       mp_tac) >>
+     fs[run_inst_seq_inst_idx, exec_result_map_def, ADD_CLAUSES]) >>
+  `ptr_safe_step D lo fuel ctx func PG G tn h s` by
+    (simp[Once ptr_safe_step_def] >> metis_tac[ptr_inst_ok_fuel]) >>
+  `ghost_step fuel ctx PG G tn h s =
+     (step_prov PG G h u, step_taint h s u tn)` by
+    metis_tac[ghost_step_non_invoke] >>
+  `lookup_block u.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  fs[ptr_safe_run_def] >>
+  once_rewrite_tac[ptr_safe_block_def] >>
+  simp[]
+QED
+
 Theorem inst_seq_ptr_invariant:
   !code s G tn G' tn' R.
     inst_seq_ptr D lo ctx fn PG G tn code s G' tn' /\ R G tn /\
