@@ -3,6 +3,7 @@ Theory selectedAcceptedArrayStep
 Ancestors
   selectedAcceptedInterfaces calldataArrayRawCallsite calldataMemberResourceFrame
   decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr robustCopyTransportPtr
+  sourceArrayHeaderOriginPtr sourceArrayBackedgeOriginPtr
   fragGasOriginPtrExec vyperCalldataProps vyperCalldata words arithmetic
   calldataSourceCorrespondence calldataDynStep decoderArraySetupPtr
   abiDecoderDynamicLoopSetup abiDecoderArraySetupInputs abiDecoderExecution
@@ -80,6 +81,7 @@ Theorem selected_array_setup[local]:
       op_taint u (Var x) = op_taint tn (Var x)) /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
     u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at st x ==> FLOOKUP u.t_var x = FLOOKUP tn.t_var x) /\
     (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
       (s,G,tn) [] (OK a,H,u))
 Proof
@@ -89,7 +91,7 @@ Proof
    mload (w2n (n2w slot : bytes32)) s = n2w j` by
     (simp[eval_operand_def, w2n_n2w] >> fs[]) >>
   drule_all calldata_element_setup_reentry >> strip_tac >>
-  drule_all calldata_array_element_setup_endpoint_ptr_origin_core >>
+  drule_all calldata_array_element_setup_endpoint_ptr_origin_core_exact_frame >>
   disch_then (qspecl_then [`ARB`,`ARB`,`ctx`,`PG`,`ARB`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts st ready) s = OK raw` >>
   `LENGTH (emitted_insts st ready) + s.vs_inst_idx =
@@ -135,13 +137,14 @@ Theorem selected_array_header[local]:
     (!x. ~MEM x [hv;cv;cmp;dn] ==>
       lookup_var x b = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
       op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!x. ~MEM x [hv;cv;cmp;dn] ==> FLOOKUP u.t_var x = FLOOKUP tn.t_var x) /\
     (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
       (s,G,tn) [] (OK b,H,u))
 Proof
   strip_tac >>
   mp_tac (Q.INST [`lo` |-> `lower`, `id` |-> `hid`, `iv` |-> `hv`,
     `done` |-> `dn`, `ncount` |-> `cnt`, `srcaddr` |-> `n2w sb`]
-    (SPEC_ALL decoder_index_header_ptr_core_uniform_origin)) >>
+    (SPEC_ALL source_array_header_origin_ptr_exact_frame)) >>
   (impl_tac >- simp[]) >> strip_tac >>
   qexistsl_tac [`t`, `H`, `u`] >>
   `fresh_vars_wrt limit (abi_decode_header_state hv cv cmp dn j cnt s)` by
@@ -210,6 +213,7 @@ Theorem selected_array_child[local]:
     allocas_from lower v /\
     (!name. not_fresh_at ready name ==> FLOOKUP Gv name = FLOOKUP Ga name /\
       op_taint tvn (Var name) = op_taint ta (Var name)) /\
+    (!name. not_fresh_at ready name ==> FLOOKUP tvn.t_var name = FLOOKUP ta.t_var name) /\
     tvn.t_mem SUBSET ta.t_mem /\ tvn.t_stor = ta.t_stor /\
     tvn.t_trans = ta.t_trans /\ tvn.t_imm = ta.t_imm /\
     (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
@@ -229,7 +233,9 @@ Proof
   qexistsl_tac [`x`,`rest`,`v`,`sc`,`Gv`,`tvn`] >>
   asm_rewrite_tac[calldata_member_resource_frame_def, calldata_member_own_def,
     calldata_member_wit_def, op_taint_def] >>
-  rpt strip_tac >> first_x_assum drule >> simp[]
+  rpt strip_tac >>
+  qpat_assum `!name. not_fresh_at ready name ==> _ /\ _`
+    (drule_then strip_assume_tac) >> simp[]
 QED
 
 (* Separate the owned counter write from the child footprint. *)
@@ -260,6 +266,7 @@ Theorem selected_array_backedge[local]:
     tt.t_trans = tn.t_trans /\ tt.t_imm = tn.t_imm /\
     (!x. x <> nv ==> lookup_var x t = lookup_var x v /\
       FLOOKUP Gt x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)) /\
+    (!x. x <> nv ==> FLOOKUP tt.t_var x = FLOOKUP tn.t_var x) /\
     (!a n. a+n <= slot \/ slot+32 <= a ==>
       mem_bytes_at a n t.vs_memory = mem_bytes_at a n v.vs_memory) /\
     (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
@@ -267,7 +274,7 @@ Theorem selected_array_backedge[local]:
 Proof
   strip_tac >>
   mp_tac (Q.INST [`s` |-> `v`, `lo` |-> `lower`, `P` |-> `{}`, `ncount` |-> `cnt`]
-    (SPEC_ALL decoder_index_backedge_ptr_core_uniform_origin)) >>
+    (SPEC_ALL source_array_backedge_origin_ptr_exact_frame)) >>
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `t = jump_to hdr _` >>
   drule_all decoder_index_backedge_replay_frame >> strip_tac >>
@@ -372,7 +379,8 @@ Theorem selected_array_enter_child[local]:
     a.vs_alloca_next = s.vs_alloca_next /\
     calldata_member_resource_frame ctx fn site limit L H live d span s a [] /\
     (!x. abi_decoder_operand_live live (Var x) ==>
-      FLOOKUP Ga x = FLOOKUP G x /\ op_taint ta (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP Ga x = FLOOKUP G x /\ op_taint ta (Var x) = op_taint tn (Var x) /\
+      FLOOKUP ta.t_var x = FLOOKUP tn.t_var x) /\
     ta.t_mem = tn.t_mem /\ ta.t_stor = tn.t_stor /\
     ta.t_trans = tn.t_trans /\ ta.t_imm = tn.t_imm /\
     (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
@@ -434,7 +442,9 @@ Proof
      asm_rewrite_tac[GSYM allocas_from_def]) >>
   qexistsl_tac [`a`,`Ga`,`ta`,`child`] >> asm_rewrite_tac[] >>
   rpt conj_tac
-  >- (rpt strip_tac >> first_x_assum drule >> simp[] >> metis_tac[])
+  >- (qx_gen_tac `name` >> strip_tac >>
+      `not_fresh_at st name /\ ~MEM name [hv;cv;cmp;dn]` by simp[] >>
+      asm_simp_tac bool_ss [])
   >> rpt gen_tac >>
   irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
     (SPEC_ALL gas_origin_ptr_path_append))) >>
@@ -494,6 +504,243 @@ QED
 
 (* One installed iteration, from the header to the same header.  The source
    cursor is modular; the destination cursor is contained in its real owner. *)
+Theorem selected_array_iteration_with_frame:
+  selected_decoder_accepts ce env sf ty tv /\ abi_decoder_coherent ce env sf ty tv /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions =
+    abi_decode_header_insts hid (Var q) src CALLDATALOAD hv cv cmp dn
+      st.cs_current_bb exit_lbl /\
+  s.vs_inst_idx = 0 /\ ~s.vs_halted /\ ALL_DISTINCT [q;hv;cv;cmp;dn] /\
+  lookup_var q s = SOME (n2w slot) /\ ptr_covers G tn q s 32 /\
+  slot+32 < dimword (:256) /\ slot+32 <= s.vs_alloca_next /\ mload slot s = n2w j /\
+  DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem /\
+  eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\ op_prov G src = NONE /\
+  abi_decode_load CALLDATALOAD (n2w sb:bytes32) s = n2w cnt /\ j < cnt /\
+  cnt < dimword (:256) /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\
+  lookup_block st.cs_current_bb fn.fn_blocks = SOME body_bb /\
+  phi_prefix_length body_bb.bb_instructions = 0 /\ st.cs_current_insts = [] /\
+  lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
+  phi_prefix_length exit_bb.bb_instructions = 0 /\
+  phi_prefix_length bb.bb_instructions = 0 /\ fresh_vars_wrt limit s /\
+  (!x. MEM x [hv;cv;cmp;dn] ==> ?k. x = STRING #"%" (toString k) /\
+    k < limit.cs_next_var) /\
+  abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD
+    (Lit 0w) (Lit 0w) di (tv_abi_size tv) (type_memory_size tv) st = (ops,ready) /\
+  dec_info_needs_offset di = tv_abi_dynamic tv /\
+  lookup_var root s = SOME (n2w d) /\ ptr_covers G tn root s span /\
+  abi_decoder_operand_live live (Var q) /\ abi_decoder_operand_live live (Var root) /\
+  abi_decoder_operand_live live src /\ live <= st.cs_next_var /\
+  (!x. MEM x [hv;cv;cmp;dn] ==> ~abi_decoder_operand_live live (Var x)) /\
+  32+j*type_memory_size tv+type_memory_size tv <= span /\ d+span < dimword (:256) /\
+  st.cs_next_var <= ready.cs_next_var /\ ready.cs_next_var <= limit.cs_next_var /\
+  fn_has_code st ready fn /\ fn_has_code ready last fn /\ fn_inst_ids_distinct fn /\
+  last.cs_next_var <= limit.cs_next_var /\ unit_alloca_budget ctx < dimword (:256) /\
+  (last.cs_current_insts = [] ==> !bb'.
+    lookup_block last.cs_current_bb fn.fn_blocks = SOME bb' ==>
+    phi_prefix_length bb'.bb_instructions = 0) /\
+  (!child. SND (SND ops) = Var child ==>
+    compile_abi_decode_to_buf (Var child) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) ready = ((),last)) /\
+  FST ops = Var iv /\
+  lookup_block last.cs_current_bb fn.fn_blocks = SOME back_bb /\
+  back_bb.bb_instructions = last.cs_current_insts ++
+    abi_decode_backedge_insts bid iv nv (Var q) s.vs_current_bb /\
+  nv = STRING #"%" (toString k) /\ k < limit.cs_next_var /\
+  ~abi_decoder_operand_live live (Var nv) /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\ calldata_member_own fn L H s /\
+  L <= ready.cs_next_id /\ ready.cs_next_id <= last.cs_next_id /\ last.cs_next_id <= H /\
+  L <= counter_id /\ counter_id < H /\ counter_id <> oid /\
+  FLOOKUP s.vs_allocas counter_id = SOME (slot,32) /\
+  FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+  (oid < ready.cs_next_id \/ last.cs_next_id <= oid) /\
+  base_addr <= d /\ d+span <= base_addr+cap /\
+  LENGTH xs = j /\ EVERY (val_wf tv) xs /\ EVERY (value_has_type tv) xs /\
+  (!i. i < j ==> !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv (EL i xs) (d+32+i*type_memory_size tv) mem) /\
+  cd_decode_elems F s.vs_call_ctx.cc_calldata tv (cd_at F (w2n (n2w sb:bytes32)) 32)
+    j (SUC n) = SOME pending ==>
+  ?x rest t Gt tt scratch.
+    pending = x::rest /\
+    cd_decode_elems F s.vs_call_ctx.cc_calldata tv (cd_at F (w2n (n2w sb:bytes32)) 32)
+      (SUC j) n = SOME rest /\
+    cd_decode F s.vs_call_ctx.cc_calldata tv (cd_member_ptr F s.vs_call_ctx.cc_calldata tv
+      (cd_at F (w2n (n2w sb:bytes32)) 32) (j*tv_abi_size tv)) = SOME x /\
+    LENGTH (xs ++ [x]) = SUC j /\
+    EVERY (val_wf tv) (xs ++ [x]) /\ EVERY (value_has_type tv) (xs ++ [x]) /\
+    (!i. i < SUC j ==> !mem. mem_agree_outside tt.t_mem t.vs_memory mem ==>
+      val_in_memory tv (EL i (xs ++ [x])) (d+32+i*type_memory_size tv) mem) /\
+    ~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = 0 /\
+    allocas_from lower t /\
+    calldata_member_resource_frame ctx fn site limit L H live d span s t scratch /\
+    FLOOKUP t.vs_allocas counter_id = SOME (slot,32) /\
+    FLOOKUP t.vs_allocas oid = SOME (base_addr,cap) /\
+    lookup_var q t = SOME (n2w slot) /\ ptr_covers Gt tt q t 32 /\
+    lookup_var root t = SOME (n2w d) /\ ptr_covers Gt tt root t span /\
+    eval_operand src t = SOME (n2w sb) /\ op_taint tt src = {} /\ op_prov Gt src = NONE /\
+    mload slot t = n2w (SUC j) /\ DISJOINT {a | slot <= a /\ a < slot+32} tt.t_mem /\
+    mem_bytes_at d (32+j*type_memory_size tv) t.vs_memory =
+      mem_bytes_at d (32+j*type_memory_size tv) s.vs_memory /\
+    t.vs_code = s.vs_code /\ t.vs_accounts = s.vs_accounts /\
+    t.vs_transient = s.vs_transient /\ t.vs_logs = s.vs_logs /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\
+    t.vs_tx_ctx = s.vs_tx_ctx /\ t.vs_block_ctx = s.vs_block_ctx /\
+    t.vs_fmp = s.vs_fmp /\ t.vs_gas_readings = s.vs_gas_readings /\
+    (!x. abi_decoder_operand_live live (Var x) ==>
+      FLOOKUP Gt x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)) /\
+    (!x. abi_decoder_operand_live live (Var x) ==> FLOOKUP tt.t_var x = FLOOKUP tn.t_var x) /\
+    tt.t_mem SUBSET tn.t_mem /\ tt.t_stor = tn.t_stor /\
+    tt.t_trans = tn.t_trans /\ tt.t_imm = tn.t_imm /\
+    (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,Gt,tt))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `d+32+j*type_memory_size tv+type_memory_size tv < dimword (:256) /\
+   d+32+j*type_memory_size tv+type_memory_size tv <= base_addr+cap /\
+   d+32+j*type_memory_size tv < dimword (:256) /\ type_memory_size tv < dimword (:256)` by
+    decide_tac >>
+  mp_tac (SPEC_ALL selected_array_enter_child) >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+  rename1 `a.vs_inst_idx = LENGTH ready.cs_current_insts` >>
+  rename1 `ptr_covers Ga ta child a _` >>
+  qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s a []`
+    (strip_assume_tac o MATCH_MP calldata_member_resource_endpoint) >>
+  qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s a []`
+    (strip_assume_tac o MATCH_MP calldata_member_resource_observations) >>
+  qpat_assum `!child. SND (SND ops) = Var child ==> _`
+    (qspec_then `child` (fn th => qpat_assum `SND (SND ops) = Var child`
+       (assume_tac o MP th))) >>
+  mp_tac (Q.INST [`cd` |-> `s.vs_call_ctx.cc_calldata`,
+      `b` |-> `cd_at F (w2n (n2w sb:bytes32)) 32`,
+      `e` |-> `d+32+j*type_memory_size tv`, `xs` |-> `pending`]
+    (SPEC_ALL selected_array_child)) >>
+  (impl_tac >- (asm_rewrite_tac[] >> decide_tac)) >> strip_tac >>
+  rename1 `v.vs_inst_idx = LENGTH last.cs_current_insts` >>
+  rename1 `gas_origin_ptr_path _ (a,Ga,ta) [] (OK v,Gv,tvn)` >>
+  `live <= ready.cs_next_var /\ d <= d+32+j*type_memory_size tv /\
+   d+32+j*type_memory_size tv+type_memory_size tv <= d+span` by decide_tac >>
+  `calldata_member_resource_frame ctx fn site limit L H live d span s v ([] ++ sc)` by
+    (irule calldata_member_resource_extend >>
+     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s a []` (irule_at Any) >>
+     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ a v sc` (irule_at Any) >>
+     asm_rewrite_tac[]) >>
+  qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s v _`
+    (strip_assume_tac o MATCH_MP calldata_member_resource_endpoint) >>
+  qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s v _`
+    (strip_assume_tac o MATCH_MP calldata_member_resource_observations) >>
+  `!name. abi_decoder_operand_live ready.cs_next_var (Var name) ==>
+    FLOOKUP Gv name = FLOOKUP Ga name /\
+    op_taint tvn (Var name) = op_taint ta (Var name) /\
+    FLOOKUP tvn.t_var name = FLOOKUP ta.t_var name` by
+    (simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def, GSYM not_fresh_at_def] >>
+     rpt strip_tac >> asm_simp_tac bool_ss []) >>
+  `!name. abi_decoder_operand_live live (Var name) ==>
+    FLOOKUP Gv name = FLOOKUP G name /\ op_taint tvn (Var name) = op_taint tn (Var name) /\
+    FLOOKUP tvn.t_var name = FLOOKUP tn.t_var name` by
+    (rpt strip_tac >>
+     `abi_decoder_operand_live ready.cs_next_var (Var name)` by
+       (irule abi_decoder_operand_live_mono >> qexists_tac `live` >> asm_rewrite_tac[]) >>
+     asm_simp_tac bool_ss []) >>
+  `eval_operand (Var iv) v = SOME (n2w j) /\ op_taint tvn (Var iv) = {} /\
+   op_prov Gv (Var iv) = NONE` by
+    (qpat_assum `FST ops = Var iv` (fn th =>
+       map_every (fn tm => qpat_assum tm (assume_tac o REWRITE_RULE [th]))
+         [`eval_operand (FST ops) a = _`,`op_taint ta (FST ops) = _`,
+          `op_prov Ga (FST ops) = _`,`abi_decoder_operand_live ready.cs_next_var (FST ops)`]) >>
+     qpat_assum `op_prov Ga (Var iv) = NONE` (assume_tac o SRULE [op_prov_def]) >>
+     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ a v sc`
+       (strip_assume_tac o MATCH_MP calldata_member_resource_observations) >>
+     simp[op_prov_def]) >>
+  `lookup_var q v = lookup_var q s` by
+    (qpat_assum `!op. abi_decoder_operand_live live op ==> eval_operand op v = _`
+       (qspec_then `Var q` mp_tac) >> simp[eval_operand_def]) >>
+  `ptr_covers Gv tvn q v 32` by
+    (irule decoderGhostFramePtrTheory.ptr_covers_frame >>
+     qpat_assum `ptr_covers G tn q s 32` (irule_at Any) >> asm_simp_tac bool_ss []) >>
+  `q <> nv /\ slot+32 <= v.vs_alloca_next /\
+   FLOOKUP v.vs_allocas counter_id = SOME (slot,32) /\
+   FLOOKUP v.vs_allocas oid = SOME (base_addr,cap)` by
+    (conj_tac >- (strip_tac >> gvs[]) >>
+     asm_simp_tac bool_ss [] >> decide_tac) >>
+  `lookup_var q v = SOME (n2w slot)` by asm_rewrite_tac[] >>
+  mp_tac (Q.INST [`bb` |-> `back_bb`, `prefix` |-> `last.cs_current_insts`, 
+      `id` |-> `bid`, `hdr` |-> `s.vs_current_bb`, `hdr_bb` |-> `bb`,
+      `G` |-> `Gv`, `tn` |-> `tvn`] (SPEC_ALL selected_array_backedge)) >>
+  (impl_tac >- fs[]) >> strip_tac >>
+  rename1 `ptr_covers Gout tt q t 32` >>
+  `calldata_member_resource_frame ctx fn site limit L H live d span s t
+      (([] ++ sc) ++ [(slot,32)])` by
+    (irule calldata_member_resource_extend >>
+     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s v _` (irule_at Any) >>
+     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ v t _` (irule_at Any) >>
+     asm_rewrite_tac[] >> decide_tac) >>
+  `mem_bytes_at d (32+j*type_memory_size tv) v.vs_memory =
+     mem_bytes_at d (32+j*type_memory_size tv) s.vs_memory` by
+    (qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ a v sc` (fn th =>
+       strip_assume_tac (MATCH_MP calldata_member_resource_endpoint th) >>
+       strip_assume_tac (MATCH_MP calldata_member_resource_observations th)) >>
+     qpat_assum `calldata_member_wit _ _ v sc`
+       (assume_tac o REWRITE_RULE [calldata_member_wit_def]) >>
+     mp_tac (Q.INST [`dst` |-> `d`, `stride` |-> `type_memory_size tv`,
+         `s` |-> `a`, `t` |-> `v`, `lo` |-> `ready.cs_next_id`,
+         `hi` |-> `last.cs_next_id`, `scratch` |-> `sc`, `output_id` |-> `oid`]
+       (SPEC_ALL calldata_child_preserves_contained_prefix)) >>
+     (impl_tac >- (asm_rewrite_tac[] >> decide_tac)) >> asm_rewrite_tac[]) >>
+  (Q_TAC (fn tm => SUBGOAL_THEN tm assume_tac)
+    `d+(32+j*type_memory_size tv+type_memory_size tv) <= slot \/ slot+32 <= d` >-
+    (irule selected_array_counter_disjoint >>
+     qpat_assum `FLOOKUP v.vs_allocas counter_id = _` (irule_at Any) >>
+     qpat_assum `FLOOKUP v.vs_allocas oid = _` (irule_at Any) >>
+     asm_rewrite_tac[] >> decide_tac)) >>
+  `mem_bytes_at d (32+j*type_memory_size tv) t.vs_memory =
+     mem_bytes_at d (32+j*type_memory_size tv) s.vs_memory /\
+   mem_bytes_at (d+32+j*type_memory_size tv) (type_memory_size tv) t.vs_memory =
+     mem_bytes_at (d+32+j*type_memory_size tv) (type_memory_size tv) v.vs_memory` by
+    (`d+(32+j*type_memory_size tv) <= slot \/ slot+32 <= d` by decide_tac >>
+     `d+32+j*type_memory_size tv+type_memory_size tv <= slot \/
+        slot+32 <= d+32+j*type_memory_size tv` by decide_tac >>
+     asm_simp_tac bool_ss []) >>
+  `tvn.t_mem SUBSET tn.t_mem /\ tt.t_mem SUBSET tn.t_mem` by
+    (metis_tac[SUBSET_TRANS]) >>
+  `!i. i < SUC j ==> !mem. mem_agree_outside tt.t_mem t.vs_memory mem ==>
+    val_in_memory tv (EL i (xs ++ [x])) (d+32+i*type_memory_size tv) mem` by
+    (mp_tac (Q.INST [`stride` |-> `type_memory_size tv`,
+       `old` |-> `s.vs_memory`, `mid` |-> `v.vs_memory`, `new` |-> `t.vs_memory`,
+       `dirty` |-> `tn.t_mem`, `middle` |-> `tvn.t_mem`, `clean` |-> `tt.t_mem`]
+       (SPEC_ALL selected_array_extend_values)) >>
+     (impl_tac >- asm_rewrite_tac[]) >> disch_then ACCEPT_TAC) >>
+  `!name. abi_decoder_operand_live live (Var name) ==>
+     FLOOKUP Gout name = FLOOKUP G name /\ op_taint tt (Var name) = op_taint tn (Var name) /\
+     FLOOKUP tt.t_var name = FLOOKUP tn.t_var name` by
+    (qx_gen_tac `name` >> strip_tac >> `name <> nv` by (strip_tac >> gvs[]) >>
+     asm_simp_tac bool_ss []) >>
+  `!op. abi_decoder_operand_live live op ==> eval_operand op t = eval_operand op s` by
+    (qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s t _`
+       (strip_assume_tac o MATCH_MP calldata_member_resource_observations) >>
+     first_assum ACCEPT_TAC) >>
+  `lookup_var q t = lookup_var q s /\ lookup_var root t = lookup_var root s` by
+    (qpat_assum `!op. abi_decoder_operand_live live op ==> eval_operand op t = _`
+       (fn th => mp_tac (Q.SPEC `Var q` th) >> mp_tac (Q.SPEC `Var root` th)) >>
+     simp[eval_operand_def]) >>
+  `ptr_covers Gout tt root t span` by
+    (irule decoderGhostFramePtrTheory.ptr_covers_frame >>
+     qpat_assum `ptr_covers G tn root s span` (irule_at Any) >> asm_simp_tac bool_ss []) >>
+  `op_taint tt src = {} /\ op_prov Gout src = NONE` by
+    (Cases_on `src` >> fs[op_taint_def,op_prov_def]) >>
+  qpat_assum `entry_decoder_obs s a` (strip_assume_tac o REWRITE_RULE [entry_decoder_obs_def]) >>
+  qpat_assum `entry_decoder_obs v t` (strip_assume_tac o REWRITE_RULE [entry_decoder_obs_def]) >>
+  qexistsl_tac [`x`,`rest`,`t`,`Gout`,`tt`,`([] ++ sc) ++ [(slot,32)]`] >>
+  asm_simp_tac bool_ss [LENGTH_APPEND, EVERY_APPEND, LENGTH, listTheory.EVERY_DEF, ADD1, ADD] >>
+  rpt gen_tac >>
+  irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
+    (SPEC_ALL gas_origin_ptr_path_append))) >>
+  qexistsl_tac [`Gv`,`v`,`(OK v,Gv,tvn)`,`tvn`] >> asm_simp_tac bool_ss [] >>
+  irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
+    (SPEC_ALL gas_origin_ptr_path_append))) >>
+  qexistsl_tac [`Ga`,`a`,`(OK a,Ga,ta)`,`ta`] >> asm_simp_tac bool_ss []
+QED
+
 Theorem selected_array_iteration:
   selected_decoder_accepts ce env sf ty tv /\ abi_decoder_coherent ce env sf ty tv /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -584,145 +831,8 @@ Theorem selected_array_iteration:
     (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
       (s,G,tn) [] (OK t,Gt,tt))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `d+32+j*type_memory_size tv+type_memory_size tv < dimword (:256) /\
-   d+32+j*type_memory_size tv+type_memory_size tv <= base_addr+cap /\
-   d+32+j*type_memory_size tv < dimword (:256) /\ type_memory_size tv < dimword (:256)` by
-    decide_tac >>
-  mp_tac (SPEC_ALL selected_array_enter_child) >>
+  disch_tac >> mp_tac (SPEC_ALL selected_array_iteration_with_frame) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  rename1 `a.vs_inst_idx = LENGTH ready.cs_current_insts` >>
-  rename1 `ptr_covers Ga ta child a _` >>
-  qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s a []`
-    (strip_assume_tac o MATCH_MP calldata_member_resource_endpoint) >>
-  qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s a []`
-    (strip_assume_tac o MATCH_MP calldata_member_resource_observations) >>
-  qpat_assum `!child. SND (SND ops) = Var child ==> _`
-    (qspec_then `child` (fn th => qpat_assum `SND (SND ops) = Var child`
-       (assume_tac o MP th))) >>
-  mp_tac (Q.INST [`cd` |-> `s.vs_call_ctx.cc_calldata`,
-      `b` |-> `cd_at F (w2n (n2w sb:bytes32)) 32`,
-      `e` |-> `d+32+j*type_memory_size tv`, `xs` |-> `pending`]
-    (SPEC_ALL selected_array_child)) >>
-  (impl_tac >- (asm_rewrite_tac[] >> decide_tac)) >> strip_tac >>
-  rename1 `v.vs_inst_idx = LENGTH last.cs_current_insts` >>
-  rename1 `gas_origin_ptr_path _ (a,Ga,ta) [] (OK v,Gv,tvn)` >>
-  `live <= ready.cs_next_var /\ d <= d+32+j*type_memory_size tv /\
-   d+32+j*type_memory_size tv+type_memory_size tv <= d+span` by decide_tac >>
-  `calldata_member_resource_frame ctx fn site limit L H live d span s v ([] ++ sc)` by
-    (irule calldata_member_resource_extend >>
-     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s a []` (irule_at Any) >>
-     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ a v sc` (irule_at Any) >>
-     asm_rewrite_tac[]) >>
-  qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s v _`
-    (strip_assume_tac o MATCH_MP calldata_member_resource_endpoint) >>
-  qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s v _`
-    (strip_assume_tac o MATCH_MP calldata_member_resource_observations) >>
-  `!name. abi_decoder_operand_live ready.cs_next_var (Var name) ==>
-    FLOOKUP Gv name = FLOOKUP Ga name /\
-    op_taint tvn (Var name) = op_taint ta (Var name)` by
-    (simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def, GSYM not_fresh_at_def] >>
-     first_assum ACCEPT_TAC) >>
-  `!name. abi_decoder_operand_live live (Var name) ==>
-    FLOOKUP Gv name = FLOOKUP G name /\ op_taint tvn (Var name) = op_taint tn (Var name)` by
-    (rpt strip_tac >>
-     `abi_decoder_operand_live ready.cs_next_var (Var name)` by
-       (irule abi_decoder_operand_live_mono >> qexists_tac `live` >> asm_rewrite_tac[]) >>
-     asm_simp_tac bool_ss []) >>
-  `eval_operand (Var iv) v = SOME (n2w j) /\ op_taint tvn (Var iv) = {} /\
-   op_prov Gv (Var iv) = NONE` by
-    (qpat_assum `FST ops = Var iv` (fn th =>
-       map_every (fn tm => qpat_assum tm (assume_tac o REWRITE_RULE [th]))
-         [`eval_operand (FST ops) a = _`,`op_taint ta (FST ops) = _`,
-          `op_prov Ga (FST ops) = _`,`abi_decoder_operand_live ready.cs_next_var (FST ops)`]) >>
-     qpat_assum `op_prov Ga (Var iv) = NONE` (assume_tac o SRULE [op_prov_def]) >>
-     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ a v sc`
-       (strip_assume_tac o MATCH_MP calldata_member_resource_observations) >>
-     simp[op_prov_def]) >>
-  `lookup_var q v = lookup_var q s` by
-    (qpat_assum `!op. abi_decoder_operand_live live op ==> eval_operand op v = _`
-       (qspec_then `Var q` mp_tac) >> simp[eval_operand_def]) >>
-  `ptr_covers Gv tvn q v 32` by
-    (irule decoderGhostFramePtrTheory.ptr_covers_frame >>
-     qpat_assum `ptr_covers G tn q s 32` (irule_at Any) >> asm_simp_tac bool_ss []) >>
-  `q <> nv /\ slot+32 <= v.vs_alloca_next /\
-   FLOOKUP v.vs_allocas counter_id = SOME (slot,32) /\
-   FLOOKUP v.vs_allocas oid = SOME (base_addr,cap)` by
-    (conj_tac >- (strip_tac >> gvs[]) >>
-     asm_simp_tac bool_ss [] >> decide_tac) >>
-  `lookup_var q v = SOME (n2w slot)` by asm_rewrite_tac[] >>
-  mp_tac (Q.INST [`bb` |-> `back_bb`, `prefix` |-> `last.cs_current_insts`, 
-      `id` |-> `bid`, `hdr` |-> `s.vs_current_bb`, `hdr_bb` |-> `bb`,
-      `G` |-> `Gv`, `tn` |-> `tvn`] (SPEC_ALL selected_array_backedge)) >>
-  (impl_tac >- fs[]) >> strip_tac >>
-  rename1 `ptr_covers Gout tt q t 32` >>
-  `calldata_member_resource_frame ctx fn site limit L H live d span s t
-      (([] ++ sc) ++ [(slot,32)])` by
-    (irule calldata_member_resource_extend >>
-     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s v _` (irule_at Any) >>
-     qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ v t _` (irule_at Any) >>
-     asm_rewrite_tac[] >> decide_tac) >>
-  `mem_bytes_at d (32+j*type_memory_size tv) v.vs_memory =
-     mem_bytes_at d (32+j*type_memory_size tv) s.vs_memory` by
-    (qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ a v sc` (fn th =>
-       strip_assume_tac (MATCH_MP calldata_member_resource_endpoint th) >>
-       strip_assume_tac (MATCH_MP calldata_member_resource_observations th)) >>
-     qpat_assum `calldata_member_wit _ _ v sc`
-       (assume_tac o REWRITE_RULE [calldata_member_wit_def]) >>
-     mp_tac (Q.INST [`dst` |-> `d`, `stride` |-> `type_memory_size tv`,
-         `s` |-> `a`, `t` |-> `v`, `lo` |-> `ready.cs_next_id`,
-         `hi` |-> `last.cs_next_id`, `scratch` |-> `sc`, `output_id` |-> `oid`]
-       (SPEC_ALL calldata_child_preserves_contained_prefix)) >>
-     (impl_tac >- (asm_rewrite_tac[] >> decide_tac)) >> asm_rewrite_tac[]) >>
-  (Q_TAC (fn tm => SUBGOAL_THEN tm assume_tac)
-    `d+(32+j*type_memory_size tv+type_memory_size tv) <= slot \/ slot+32 <= d` >-
-    (irule selected_array_counter_disjoint >>
-     qpat_assum `FLOOKUP v.vs_allocas counter_id = _` (irule_at Any) >>
-     qpat_assum `FLOOKUP v.vs_allocas oid = _` (irule_at Any) >>
-     asm_rewrite_tac[] >> decide_tac)) >>
-  `mem_bytes_at d (32+j*type_memory_size tv) t.vs_memory =
-     mem_bytes_at d (32+j*type_memory_size tv) s.vs_memory /\
-   mem_bytes_at (d+32+j*type_memory_size tv) (type_memory_size tv) t.vs_memory =
-     mem_bytes_at (d+32+j*type_memory_size tv) (type_memory_size tv) v.vs_memory` by
-    (`d+(32+j*type_memory_size tv) <= slot \/ slot+32 <= d` by decide_tac >>
-     `d+32+j*type_memory_size tv+type_memory_size tv <= slot \/
-        slot+32 <= d+32+j*type_memory_size tv` by decide_tac >>
-     asm_simp_tac bool_ss []) >>
-  `tvn.t_mem SUBSET tn.t_mem /\ tt.t_mem SUBSET tn.t_mem` by
-    (metis_tac[SUBSET_TRANS]) >>
-  `!i. i < SUC j ==> !mem. mem_agree_outside tt.t_mem t.vs_memory mem ==>
-    val_in_memory tv (EL i (xs ++ [x])) (d+32+i*type_memory_size tv) mem` by
-    (mp_tac (Q.INST [`stride` |-> `type_memory_size tv`,
-       `old` |-> `s.vs_memory`, `mid` |-> `v.vs_memory`, `new` |-> `t.vs_memory`,
-       `dirty` |-> `tn.t_mem`, `middle` |-> `tvn.t_mem`, `clean` |-> `tt.t_mem`]
-       (SPEC_ALL selected_array_extend_values)) >>
-     (impl_tac >- asm_rewrite_tac[]) >> disch_then ACCEPT_TAC) >>
-  `!name. abi_decoder_operand_live live (Var name) ==>
-     FLOOKUP Gout name = FLOOKUP G name /\ op_taint tt (Var name) = op_taint tn (Var name)` by
-    (qx_gen_tac `name` >> strip_tac >> `name <> nv` by (strip_tac >> gvs[]) >>
-     asm_simp_tac bool_ss []) >>
-  `!op. abi_decoder_operand_live live op ==> eval_operand op t = eval_operand op s` by
-    (qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ s t _`
-       (strip_assume_tac o MATCH_MP calldata_member_resource_observations) >>
-     first_assum ACCEPT_TAC) >>
-  `lookup_var q t = lookup_var q s /\ lookup_var root t = lookup_var root s` by
-    (qpat_assum `!op. abi_decoder_operand_live live op ==> eval_operand op t = _`
-       (fn th => mp_tac (Q.SPEC `Var q` th) >> mp_tac (Q.SPEC `Var root` th)) >>
-     simp[eval_operand_def]) >>
-  `ptr_covers Gout tt root t span` by
-    (irule decoderGhostFramePtrTheory.ptr_covers_frame >>
-     qpat_assum `ptr_covers G tn root s span` (irule_at Any) >> asm_simp_tac bool_ss []) >>
-  `op_taint tt src = {} /\ op_prov Gout src = NONE` by
-    (Cases_on `src` >> fs[op_taint_def,op_prov_def]) >>
-  qpat_assum `entry_decoder_obs s a` (strip_assume_tac o REWRITE_RULE [entry_decoder_obs_def]) >>
-  qpat_assum `entry_decoder_obs v t` (strip_assume_tac o REWRITE_RULE [entry_decoder_obs_def]) >>
-  qexistsl_tac [`x`,`rest`,`t`,`Gout`,`tt`,`([] ++ sc) ++ [(slot,32)]`] >>
-  asm_simp_tac bool_ss [LENGTH_APPEND, EVERY_APPEND, LENGTH, listTheory.EVERY_DEF, ADD1, ADD] >>
-  rpt gen_tac >>
-  irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
-    (SPEC_ALL gas_origin_ptr_path_append))) >>
-  qexistsl_tac [`Gv`,`v`,`(OK v,Gv,tvn)`,`tvn`] >> asm_simp_tac bool_ss [] >>
-  irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
-    (SPEC_ALL gas_origin_ptr_path_append))) >>
-  qexistsl_tac [`Ga`,`a`,`(OK a,Ga,ta)`,`ta`] >> asm_simp_tac bool_ss []
+  rename1 `ptr_covers Gout tt root t span` >>
+  qexistsl_tac [`x`,`rest`,`t`,`Gout`,`tt`,`scratch`] >> asm_rewrite_tac[]
 QED
