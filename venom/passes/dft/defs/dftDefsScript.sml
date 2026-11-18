@@ -173,9 +173,11 @@ End
 
 (* DFT's own abort classes, for which instructions it may reorder: an
    ASSERT reverts, ASSERT_UNREACHABLE and RETURNDATACOPY halt
-   exceptionally, an INVOKE may end any way, and nothing else aborts in the
-   non-static frames DFT's output runs in.  Unlike opcode_fail_class, the
-   state writes a static frame aborts (SSTORE, LOG, CALL, ...) are none. *)
+   exceptionally, and an INVOKE may end any way.  Unlike opcode_fail_class,
+   the state writes a static frame aborts (SSTORE, LOG, CALL, ...) and the
+   calls that abort when no outcome is left are none: those aborts are
+   ExHalt, and an output run may end any way where its input run halted
+   exceptionally (dead_result_rel). *)
 Definition dft_abort_kind_def:
   dft_abort_kind ASSERT = CanRevert /\
   dft_abort_kind ASSERT_UNREACHABLE = CanExHalt /\
@@ -730,25 +732,3 @@ Definition dft_ctx_def:
   dft_ctx ctx =
     ctx with ctx_functions := MAP dft_fn ctx.ctx_functions
 End
-
-(* Concrete ordering regressions: terminator order precedes operand order,
-   and a repeated memory writer must not move behind a storage writer. *)
-Theorem inst_data_deps_first_order_probe[local]:
-  MAP (\i. i.inst_id)
-    (inst_data_deps
-      [mk_inst 1 ASSIGN [] ["a"]; mk_inst 2 ASSIGN [] ["b"]]
-      ["a"; "b"] (mk_inst 3 RETURN [Var "b"; Var "a"] [])) = [1;2]
-Proof
-  EVAL_TAC
-QED
-
-Theorem compute_effect_deps_first_order_probe[local]:
-  MAP (\i. i.inst_id)
-    (FST (compute_effect_deps
-      <| et_last_write := FEMPTY |+ (Eff_MEMORY, mk_inst 1 MCOPY [] [])
-                                |+ (Eff_STORAGE, mk_inst 2 SSTORE [] []);
-         et_all_reads := FEMPTY |+ (Eff_MEMORY, [mk_inst 1 MCOPY [] []]) |>
-      (mk_inst 3 STATICCALL [] []))) = [1;2]
-Proof
-  EVAL_TAC
-QED

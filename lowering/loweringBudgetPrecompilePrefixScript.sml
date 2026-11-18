@@ -6,11 +6,11 @@ Ancestors
 Theorem three_instruction_abort_prefix[local]:
   !checked cfg p h marks q.
     lower_budget_path checked cfg p h marks q ==>
-    !fn s gi ci ai op.
+    !fn s gi ci ai op abort_kind.
       p.bp_fn = fn /\ p.bp_state = s /\
       gi.inst_opcode = GAS /\ ci.inst_opcode = STATICCALL /\
       ai.inst_opcode = ASSERT /\ ai.inst_operands = [op] /\
-      (?u. run_inst_seq [gi;ci;ai] s = Abort Revert_abort u) /\
+      (?u. run_inst_seq [gi;ci;ai] s = Abort abort_kind u) /\
       (!st i. st.vs_current_bb = s.vs_current_bb /\
         st.vs_inst_idx < s.vs_inst_idx + 3 /\
         s.vs_inst_idx <= st.vs_inst_idx /\ active_inst fn i st ==>
@@ -19,13 +19,13 @@ Theorem three_instruction_abort_prefix[local]:
       q.bp_state.vs_current_bb = s.vs_current_bb /\
       ?n. n < 3 /\ q.bp_state.vs_inst_idx = s.vs_inst_idx + n /\
         lower_history_count h <= (if n = 2 then 1 else 0) /\
-        (?u. run_inst_seq (DROP n [gi;ci;ai]) q.bp_state = Abort Revert_abort u) /\
+        (?u. run_inst_seq (DROP n [gi;ci;ai]) q.bp_state = Abort abort_kind u) /\
         (n = 2 ==> eval_operand op q.bp_state = SOME 0w)
 Proof
   ho_match_mp_tac lower_budget_path_ind >> rpt conj_tac >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac
   >- (gvs[lower_history_count_def] >> qexists_tac `0` >> simp[])
-  >> first_x_assum (qspecl_then [`fn`,`s`,`gi`,`ci`,`ai`,`op`] mp_tac)
+  >> first_x_assum (qspecl_then [`fn`,`s`,`gi`,`ci`,`ai`,`op`,`abort_kind`] mp_tac)
   >> (impl_tac >- metis_tac[]) >> strip_tac >> gvs[]
   >> qpat_x_assum `!st i. _` (qspec_then `q.bp_state` assume_tac)
   >> gvs[]
@@ -88,7 +88,8 @@ Proof
   disch_then (qspecl_then [`fn`,`s`,
     `EL 0 (emitted_insts sm sb)`,`EL 1 (emitted_insts sm sb)`,
     `EL 2 (emitted_insts sm sb)`,
-    `Var (STRING #"%" (toString (sm.cs_next_var+1)))`] mp_tac) >>
+    `Var (STRING #"%" (toString (sm.cs_next_var+1)))`,
+    `if s.vs_outcomes = [] then ExHalt_abort else Revert_abort`] mp_tac) >>
   (impl_tac >- gvs[mk_inst_def]) >> strip_tac >>
   `?i. active_inst q.bp_fn i q.bp_state` by
     metis_tac[budget_path_endpoint_active] >>

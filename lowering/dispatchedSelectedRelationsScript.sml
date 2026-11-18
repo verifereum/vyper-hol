@@ -2,7 +2,7 @@
    registration fold's concrete resources, without canonical call encoding. *)
 Theory dispatchedSelectedRelations
 Ancestors
-  entryPtrSeamRegister entryStateRel bodyPtrDefs moduleLowering
+  allocaFrontierRoom entryPtrSeamRegister entryStateRel bodyPtrDefs moduleLowering
   loweringStateRelDefs supportedProgram vyperInterpreter vyperContext
   compileEnv entryLocals exprLoweringProps vyperCompiler venomState
   venomExecSemantics ptrDiscipline immutableRelation immutableLocationProps

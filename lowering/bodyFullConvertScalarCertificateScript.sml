@@ -1,5 +1,6 @@
 Theory bodyFullConvertScalarCertificate
 Ancestors
+  instSeqPtrUniform
   convertScalarBytesRun
   bodyFullAllocGeneric
   bodyUnopFragMemory
@@ -113,12 +114,12 @@ Theorem scalar_convert_uniform_ok[local]:
 Proof
   strip_tac >> drule_all scalar_dispatch_op >>
   disch_then (qspec_then `cenv` assume_tac) >>
-  drule_all scalar_op_fixed_ok >>
-  disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
-  qexistsl [`H`,`th`] >> simp[] >> gen_tac >>
+  ho_match_mp_tac (SRULE []
+    (Q.INST [`entry` |-> `\q:num. s`] (SPEC_ALL inst_seq_ptr_uniformize))) >>
+  gen_tac >>
   drule_all scalar_op_fixed_ok >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  metis_tac[inst_seq_ptr_ghost_unique]
+  qexistsl [`H`,`th`] >> simp[]
 QED
 
 Theorem scalar_convert_uniform_abort[local]:
@@ -136,12 +137,12 @@ Theorem scalar_convert_uniform_abort[local]:
 Proof
   strip_tac >> drule_all scalar_dispatch_op >>
   disch_then (qspec_then `cenv` assume_tac) >>
-  drule_all scalar_op_fixed_abort >>
-  disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
-  qexistsl [`H`,`th`] >> simp[] >> gen_tac >>
+  ho_match_mp_tac (SRULE []
+    (Q.INST [`entry` |-> `\q:num. s`] (SPEC_ALL inst_seq_ptr_uniformize))) >>
+  gen_tac >>
   drule_all scalar_op_fixed_abort >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  metis_tac[inst_seq_ptr_ghost_unique]
+  qexistsl [`H`,`th`] >> simp[]
 QED
 
 Theorem scalar_convert_code[local]:
@@ -206,7 +207,7 @@ Proof
       qexistsl [`H`,`th`] >>
       simp[exec_result_map_def] >> gen_tac >>
       `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th` by
-        (irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_transport >> simp[] >> qexists `0` >> simp[]) >>
+        (irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_from_alloca_next >> simp[] >> qexists `0` >> simp[]) >>
       `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
         (emitted_insts sa sb)` by fs[EVERY_MEM] >>
       `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
@@ -217,7 +218,7 @@ Proof
   drule_all scalar_convert_uniform_abort >>
   disch_then (qspecl_then [`fn`,`PG`] strip_assume_tac) >>
   `!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th` by
-    (gen_tac >> irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_transport >> simp[] >> qexists `0` >> simp[]) >>
+    (gen_tac >> irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_from_alloca_next >> simp[] >> qexists `0` >> simp[]) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
   drule_all run_inst_seq_abort_origin_ptr_uniform >>

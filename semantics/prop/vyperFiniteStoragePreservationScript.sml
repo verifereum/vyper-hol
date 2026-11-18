@@ -13,7 +13,7 @@ Ancestors
 Libs
   wordsLib
 
-Theorem storage_well_formed_on_stk[local]:
+Theorem storage_well_formed_on_stk:
   storage_well_formed_on (cx with stk updated_by f) st R <=>
   storage_well_formed_on cx st R
 Proof
@@ -22,14 +22,14 @@ Proof
   simp[storage_well_formed_on_def]
 QED
 
-Theorem storage_well_formed_on_scopes[local]:
+Theorem storage_well_formed_on_scopes:
   storage_well_formed_on cx (st with scopes := sc) R <=>
   storage_well_formed_on cx st R
 Proof
   irule storage_well_formed_on_backends >> simp[]
 QED
 
-Theorem storage_observations_ok_stk[local]:
+Theorem storage_observations_ok_stk:
   storage_observations_ok (cx with stk updated_by f) H tr <=>
   storage_observations_ok cx H tr
 Proof
@@ -55,7 +55,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem default_finally_result[local]:
+Theorem default_finally_result:
   finally (do set_scopes [FEMPTY]; eval_exprs cxd ds od)
     (set_scopes base_st.scopes) base_st = (res,out) ==>
   ?framed. eval_exprs cxd ds (base_st with scopes := [FEMPTY]) = (res,framed) /\
@@ -67,7 +67,7 @@ Proof
   Cases_on `dres` >> simp[raise_def] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem default_restore_runtime_projections[local]:
+Theorem default_restore_runtime_projections:
   state_well_typed base_st /\ state_well_typed framed /\
   accounts_well_typed framed.accounts /\
   env_consistent (defaults_env env_body) cxd framed /\
@@ -113,7 +113,7 @@ Proof
             storage_observations_ok_prefix]
 QED
 
-Theorem push_empty_scope_runtime_consistent[local]:
+Theorem push_empty_scope_runtime_consistent:
   runtime_consistent env cx st ==>
   runtime_consistent env cx (st with scopes := FEMPTY::st.scopes)
 Proof
@@ -549,10 +549,10 @@ Proof
    goal_assum (drule_at Any) >> simp[] >>
    metis_tac[unchanged_backends_preserve_finite_storage]) >>
   all_tac >>~-
-  ([`take_call_outcome _ _ _ _ = _`],
+  ([`take_call_outcome _ _ _ _ _ = _`],
    irule unchanged_backends_preserve_finite_storage >>
    goal_assum (drule_at Any) >> simp[]) >>~-
-  ([`take_delegate_outcome _ _ _ _ = (INR _,_)`],
+  ([`take_delegate_outcome _ _ _ _ _ = (INR _,_)`],
    irule unchanged_backends_preserve_finite_storage >>
    goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `run_raw_call _ _ _ _ _ _ _ _ = SOME result` mp_tac >>
@@ -597,7 +597,7 @@ Proof
    irule adopt_call_outcome_preserves_finite_storage >>
    goal_assum (drule_at Any) >> simp[] >>
    metis_tac[unchanged_backends_preserve_finite_storage]) >>~-
-  ([`take_call_outcome _ _ _ _ = _`],
+  ([`take_call_outcome _ _ _ _ _ = _`],
    irule unchanged_backends_preserve_finite_storage >>
    goal_assum (drule_at Any) >> simp[]) >>
   irule observed_backend_preserves_storage_well_formed_on >>
@@ -629,7 +629,7 @@ Proof
    irule adopt_call_outcome_preserves_finite_storage >>
    goal_assum (drule_at Any) >> simp[] >>
    metis_tac[unchanged_backends_preserve_finite_storage]) >>~-
-  ([`take_call_outcome _ _ _ _ = _`],
+  ([`take_call_outcome _ _ _ _ _ = _`],
    irule unchanged_backends_preserve_finite_storage >>
    goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `run_ext_call _ _ _ _ _ _ _ _ = SOME result` mp_tac >>
@@ -727,7 +727,7 @@ Proof
   last_x_assum (qspec_then `StorageLock lock` mp_tac) >> simp[]
 QED
 
-Theorem lock_frame_preserves_storage_well_formed_on[local]:
+Theorem lock_frame_preserves_storage_well_formed_on:
   regions_consistent regions /\ storage_locks_separated regions locks /\
   storage_well_formed_on cx st regions /\ MEM lock locks /\
   lock + 1 <= dimword(:256) /\ st'.accounts = st.accounts /\
@@ -787,7 +787,7 @@ Proof
   Cases_on `addr' = addr` >> simp[combinTheory.APPLY_UPDATE_THM]
 QED
 
-Theorem intcall_cleanup_preserves_storage_well_formed_on[local]:
+Theorem intcall_cleanup_preserves_storage_well_formed_on:
   storage_well_formed_on cx st (FST H) /\ regions_consistent (FST H) /\
   storage_locks_separated (FST H) (SND H) /\
   storage_observations_ok cx H st'.storage_trace /\
@@ -841,7 +841,7 @@ QED
 
 (* The horizon may contain a larger selected execution's roots. Its public
    caller supplies the horizon of that exact execution, including failures. *)
-Theorem push_loop_runtime_consistent[local]:
+Theorem push_loop_runtime_consistent:
   runtime_consistent env cx st /\
   evaluate_type env.type_defs ty = SOME tyv /\
   value_has_type tyv v /\ id NOTIN FDOM env.var_types /\
@@ -866,7 +866,7 @@ Proof
      finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem pushed_loop_cleanup[local]:
+Theorem pushed_loop_cleanup:
   push_scope_with_var id tyv v st = (INL (),stp) /\
   finally (try do eval_stmts cx body_stmts; return F od handle_loop_exception)
     pop_scope stp = (loop_res,st_after) ==>
@@ -924,7 +924,7 @@ Proof
   rpt IF_CASES_TAC >> gvs[]
 QED
 
-Theorem finally_unless_halt_finite_cleanup_cases[local]:
+Theorem finally_unless_halt_finite_cleanup_cases:
   finally_unless_halt (finally f (pop_function prev))
     (if nr then
        case cx.nonreentrant_slot of NONE => return ()

@@ -1,5 +1,6 @@
 Theory bodyFullConvertCastOrigin
 Ancestors
+  instSeqPtrUniform
   bodyFullAllocGeneric
   typeBuiltinPrereqs
   exprSimConvertBytes
@@ -104,12 +105,12 @@ Theorem cast_uniform_certificate[local]:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  strip_tac >> drule_all cast_compiled_certificate >>
-  disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
-  qexistsl [`H`,`th`] >> simp[] >> gen_tac >>
+  strip_tac >> ho_match_mp_tac (SRULE []
+    (Q.INST [`entry` |-> `\q:num. s`] (SPEC_ALL inst_seq_ptr_uniformize))) >>
+  gen_tac >>
   drule_all cast_compiled_certificate >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  metis_tac[inst_seq_ptr_ghost_unique]
+  qexistsl [`H`,`th`] >> simp[]
 QED
 
 Theorem convert_cast_origin_path:
@@ -149,7 +150,7 @@ Proof
   `EVERY (\ins. ins.inst_opcode <> INVOKE /\ ~is_terminator ins.inst_opcode /\
       ins.inst_opcode <> GAS) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
   `!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th` by
-    (gen_tac >> irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_transport >> simp[] >>
+    (gen_tac >> irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_from_alloca_next >> simp[] >>
      conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
      qexists `0` >> simp[]) >>
   `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\

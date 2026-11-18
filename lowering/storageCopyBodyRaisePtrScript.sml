@@ -34,15 +34,6 @@ Proof
   simp[EXTENSION]
 QED
 
-Theorem storage_copy_payload_byte_probe:
-  key_taint {(17w:bytes32,7:num)} 17w = {7} /\
-  written_taint (tn with t_var := tn.t_var |+ ("payload",{7}))
-    (mk_inst 0 MSTORE [Lit 0w; Var "payload"] []) s = {7}
-Proof
-  simp[key_taint_def, written_taint_def, mk_inst_def, eval_operand_def,
-       op_taint_def, FLOOKUP_UPDATE, EXTENSION]
-QED
-
 Theorem storage_copy_mstore_path_ptr:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\

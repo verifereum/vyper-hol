@@ -113,7 +113,7 @@ Proof
     gvs[static_shadow_rel_def, static_shadow_def, venom_state_component_equality] >>
   drule step_inst_base_abort_opcodes >> strip_tac >>
   with_opcode_clause (fn ths =>
-    fs (ths @ [AllCaseEqs(), exec_call_helpers_no_halt_abort,
+    fs (ths @ [AllCaseEqs(), exec_ext_call_abort_iff, exec_delegatecall_abort_iff,
                exec_create_abort_iff, exec_write2_def, eval_operands_def])) >>
   gvs[revert_state_def, GSYM halt_state_def] >>
   metis_tac[static_shadow_rel_controls]
