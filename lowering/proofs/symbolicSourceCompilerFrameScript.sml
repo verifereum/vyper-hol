@@ -26,6 +26,13 @@ Proof
   metis_tac[]
 QED
 
+Theorem symbolic_frame_ignore_bind:
+  symbolic_frame R m /\ symbolic_frame R n ==>
+  symbolic_frame R (comp_ignore_bind m n)
+Proof
+  simp[comp_ignore_bind_def, symbolic_frame_bind]
+QED
+
 (* Decompose the compiler monad until a primitive or induction
    hypothesis applies. Normalize the branch facts before using the IH. *)
 fun abi_frame_tac goal =

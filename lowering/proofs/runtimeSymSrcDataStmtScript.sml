@@ -260,24 +260,6 @@ Proof
     BasicProvers.TOP_CASE_TAC])
 QED
 
-Theorem runtime_data_frame_compile_annassign[local]:
-  (!c t e. runtime_data_frame (compile_expr c t e)) /\
-  (!c v. runtime_data_frame (unwrap_value c v)) /\
-  (!c dst loc v p sl t s n.
-    runtime_data_frame (compile_assign_value c dst loc v p sl t s n)) ==>
-  runtime_data_frame (compile_stmt cenv lctx ty (AnnAssign id vtyp e))
-Proof
-  strip_tac >> simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC >>
-  irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC >>
-  irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC >>
-  irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC >>
-  Cases_on `FLOOKUP cenv.ce_vars id` >> simp[] >>
-  rename1 `SOME binding` >> Cases_on `binding` >> simp[]
-QED
-
-(* This conditional interface deliberately leaves expression-family actions
-   opaque. Its uniform premises can be discharged by the expression publication. *)
 Theorem runtime_data_frame_compile_stmt_conditional:
   (!c t e. runtime_data_frame (compile_expr c t e)) /\
   (!c t e. runtime_data_frame (lower_value compile_expr c t e)) /\
@@ -311,113 +293,9 @@ Theorem runtime_data_frame_compile_stmt_conditional:
   (!cenv lctx ty s. runtime_data_frame (compile_stmt cenv lctx ty s)) /\
   (!cenv lctx ty ss. runtime_data_frame (compile_stmts cenv lctx ty ss))
 Proof
-  suspend "rest"
-QED
-
-Resume runtime_data_frame_compile_stmt_conditional[rest]:
   strip_tac >>
-  `!c err. runtime_data_frame (compile_revert_with_custom_error c err)` by
-    (rpt gen_tac >> irule runtime_data_frame_revert_with_custom_error >> simp[]) >>
-  ho_match_mp_tac compile_stmt_ind >> rpt strip_tac >>
-  simp[runtime_data_frame_compile_annassign]
-  >~ [`compile_stmt _ _ _ (Assign (BaseTarget _) _)`] >- suspend "assign"
-  >~ [`compile_stmt _ _ _ (AugAssign _ _ _ _)`] >- suspend "augassign"
-  >~ [`compile_stmt _ _ _ (Log _ _)`] >- suspend "log"
-  >~ [`compile_stmt _ _ _ (Return NONE)`] >- suspend "return_none"
-  >~ [`compile_stmt _ _ _ (Return (SOME _))`] >- suspend "return_some"
-  >~ [`compile_stmt _ _ _ (If _ _ _)`] >- suspend "if"
-  >~ [`compile_stmt _ _ _ (For _ _ (Range _ _) _ _)`] >- suspend "range"
-  >~ [`compile_stmt _ _ _ (For _ _ (Array _) _ _)`] >- suspend "iter" >>
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >>
-  simp[] >> Cases_on `block_is_terminated x` >> simp[] >>
-  qpat_x_assum `!cs cenv. _ ==> runtime_data_frame (compile_stmt _ _ _ _)`
-    (qspec_then `x` assume_tac) >>
-  qpat_x_assum `!cs cenv. _ ==> runtime_data_frame (compile_stmts _ _ _ _)`
-    (qspec_then `x` assume_tac) >>
-  gvs[] >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` symbolic_frame_stmt_cond))) >>
+  simp[block_is_terminated_def, runtime_data_frame_revert_with_custom_error]
 QED
-Resume runtime_data_frame_compile_stmt_conditional[return_none]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  Cases_on `cenv.ce_return_pc` >> simp[]
-  >- (Cases_on `cenv.ce_ctor_exit_label` >> simp[] >>
-      pairarg_tac >> simp[] >>
-      irule runtime_data_frame_bind >> simp[]) >>
-  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  Cases_on `cenv.ce_ctor_exit_label` >> simp[] >> pairarg_tac >> simp[] >>
-  irule runtime_data_frame_bind >> simp[]
-QED
-
-Resume runtime_data_frame_compile_stmt_conditional[assign]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >> disj2_tac >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  BasicProvers.TOP_CASE_TAC >> simp[]
-QED
-
-Resume runtime_data_frame_compile_stmt_conditional[augassign]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  BasicProvers.TOP_CASE_TAC >> simp[] >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
-QED
-
-Resume runtime_data_frame_compile_stmt_conditional[log]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  BasicProvers.TOP_CASE_TAC >> simp[] >> rename1 `SOME info` >> PairCases_on `info` >> simp[] >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  disj2_tac >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
-QED
-
-Resume runtime_data_frame_compile_stmt_conditional[if]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
-QED
-
-Resume runtime_data_frame_compile_stmt_conditional[return_some]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC >>
-  Cases_on `cenv.ce_return_pc` >> simp[]
-  >- suspend "external_return" >>
-  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  suspend "external_return"
-QED
-
-Resume runtime_data_frame_compile_stmt_conditional[external_return]:
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  BasicProvers.TOP_CASE_TAC >> simp[]
-QED
-
-Resume runtime_data_frame_compile_stmt_conditional[iter]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  qpat_x_assum `!arr_ty isdyn count elem c ex inc. _` (assume_tac o SRULE []) >>
-  irule runtime_data_frame_bind >> reverse conj_tac
-  >- (BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  gen_tac >> BETA_TAC >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
-QED
-
-Resume runtime_data_frame_compile_stmt_conditional[range]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  qpat_x_assum `!sgn c ex inc. _` (assume_tac o SRULE []) >>
-  irule runtime_data_frame_bind >> reverse conj_tac
-  >- (POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `start_e` >> simp[] >>
-      Cases_on `end_e` >> simp[] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[])) >>
-  gen_tac >> BETA_TAC >>
-  irule runtime_data_frame_bind >> reverse conj_tac
-  >- (POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `start_e` >> simp[] >>
-      Cases_on `end_e` >> simp[] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[])) >>
-  gen_tac >> BETA_TAC >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  irule runtime_data_frame_bind >> reverse conj_tac
-  >- (BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  gen_tac >> BETA_TAC >>
-  rpt (BETA_TAC >> irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
-QED
-
-Finalise runtime_data_frame_compile_stmt_conditional

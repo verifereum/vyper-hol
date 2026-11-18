@@ -1,5 +1,6 @@
 Theory deploySymSrcFrameABI
 Ancestors
+  symbolicSourceCompilerAbiFrame
   deploySymSrcBlockFrame symbolicSourceCompilerFrame abiEncoder compileEnv emitHelper
   builtinAbi builtinBytes builtinCreate builtinHashing builtinMath builtinMisc
   builtinSimple builtinStrings builtinSystem
@@ -7,59 +8,72 @@ Ancestors
 val _ = augment_srw_ss [rewrites [deploy_blocks_frame_bind,
                                 deploy_blocks_frame_ignore_bind]];
 
+fun apply_symbolic_frame theorem =
+  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
+      (Q.GEN `R` theorem)))
+
 Theorem deploy_blocks_frame_abi_int_clamp[simp]:
   deploy_blocks_frame (compile_abi_int_clamp v bits signed)
-Proof Cases_on `signed` >> simp[compile_abi_int_clamp_def]
+Proof
+  apply_symbolic_frame symbolic_frame_abi_int_clamp >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_bytes_clamp[simp]:
   deploy_blocks_frame (compile_abi_bytes_clamp v n)
-Proof simp[compile_abi_bytes_clamp_def]
+Proof
+  apply_symbolic_frame symbolic_frame_abi_bytes_clamp >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_clamp_basetype[simp]:
   deploy_blocks_frame (compile_abi_clamp_basetype v c)
-Proof Cases_on `c` >> simp[compile_abi_clamp_basetype_def]
+Proof
+  apply_symbolic_frame symbolic_frame_abi_clamp_basetype >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_zero_pad[simp]:
   deploy_blocks_frame (compile_abi_zero_pad p n c)
-Proof simp[compile_abi_zero_pad_def]
+Proof
+  apply_symbolic_frame symbolic_frame_abi_zero_pad >> simp[]
 QED
 
 Theorem deploy_blocks_frame_get_element_ptr[simp]:
   deploy_blocks_frame (compile_get_element_ptr p n)
-Proof simp[compile_get_element_ptr_def]
+Proof
+  apply_symbolic_frame symbolic_frame_get_element_ptr >> simp[]
 QED
 
 Theorem deploy_blocks_frame_get_dynarray_elem_ptr[simp]:
   deploy_blocks_frame (compile_get_dynarray_elem_ptr p i n)
-Proof simp[compile_get_dynarray_elem_ptr_def]
+Proof
+  apply_symbolic_frame symbolic_frame_get_dynarray_elem_ptr >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_encode_static[simp]:
   deploy_blocks_frame (compile_abi_encode_static dst src)
-Proof simp[compile_abi_encode_static_def]
+Proof
+  apply_symbolic_frame symbolic_frame_abi_encode_static >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_decode_static:
   (!v. deploy_blocks_frame (clamp v)) ==>
   deploy_blocks_frame (compile_abi_decode_static src dst opc clamp)
-Proof simp[compile_abi_decode_static_def]
+Proof
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_abi_decode_static >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_encode_static_info[simp]:
   deploy_blocks_frame (compile_abi_encode_static_info dst src info)
-Proof Cases_on `info` >> simp[compile_abi_encode_static_info_def]
+Proof
+  apply_symbolic_frame symbolic_frame_abi_encode_static_info >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_encode_dyn_static_loop[simp]:
   deploy_blocks_frame
     (compile_abi_encode_dyn_static_loop dst src info asz msz len)
 Proof
-  simp[compile_abi_encode_dyn_static_loop_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_abi_encode_dyn_static_loop >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_encode_mutual:
@@ -101,46 +115,34 @@ QED
 
 Theorem deploy_blocks_frame_abi_dec_addr[simp]:
   deploy_blocks_frame (compile_abi_dec_addr bop pos)
-Proof simp[compile_abi_dec_addr_def] >> IF_CASES_TAC >> simp[]
+Proof
+  apply_symbolic_frame symbolic_frame_abi_dec_addr >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_decode_range_check[simp]:
   deploy_blocks_frame (compile_abi_decode_range_check start endop hi)
 Proof
-  simp[compile_abi_decode_range_check_def] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_abi_decode_range_check >> simp[]
 QED
 
 Theorem deploy_blocks_frame_getelemptr_abi[simp]:
   deploy_blocks_frame (compile_getelemptr_abi src dyn off opc bop hi)
 Proof
-  simp[compile_getelemptr_abi_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >> simp[comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >> simp[]
+  apply_symbolic_frame symbolic_frame_getelemptr_abi >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_decode_dyn_elem_ptr[simp]:
   deploy_blocks_frame (compile_abi_decode_dyn_elem_ptr opc bop elem src hi sz)
 Proof
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >> simp[comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >> simp[]
+  apply_symbolic_frame symbolic_frame_abi_decode_dyn_elem_ptr >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_copy_case[simp]:
   deploy_blocks_frame
     (case opc of CALLDATALOAD => emit_void CALLDATACOPY args
        | DLOAD => emit_void DLOADBYTES args | _ => emit_void MCOPY args)
-Proof Cases_on `opc` >> simp[]
+Proof
+  apply_symbolic_frame symbolic_frame_abi_copy_case >> simp[]
 QED
 
 Theorem deploy_blocks_frame_abi_decode_mutual:

@@ -1,60 +1,67 @@
 Theory runtimeSymSrcDataABI
 Ancestors
+  symbolicSourceCompilerAbiFrame
   runtimeSymSrcDataFrame symbolicSourceCompilerFrame abiEncoder compileEnv emitHelper
+
+fun apply_symbolic_frame theorem =
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` theorem)))
 
 Theorem runtime_data_frame_abi_int_clamp[simp]:
   runtime_data_frame (compile_abi_int_clamp v bits signed)
 Proof
-  Cases_on `signed` >> simp[compile_abi_int_clamp_def]
+  apply_symbolic_frame symbolic_frame_abi_int_clamp >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_bytes_clamp[simp]:
   runtime_data_frame (compile_abi_bytes_clamp v n)
 Proof
-  simp[compile_abi_bytes_clamp_def]
+  apply_symbolic_frame symbolic_frame_abi_bytes_clamp >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_clamp_basetype[simp]:
   runtime_data_frame (compile_abi_clamp_basetype v c)
 Proof
-  Cases_on `c` >> simp[compile_abi_clamp_basetype_def]
+  apply_symbolic_frame symbolic_frame_abi_clamp_basetype >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_zero_pad[simp]:
   runtime_data_frame (compile_abi_zero_pad p n c)
 Proof
-  simp[compile_abi_zero_pad_def]
+  apply_symbolic_frame symbolic_frame_abi_zero_pad >> simp[]
 QED
 
 Theorem runtime_data_frame_get_element_ptr[simp]:
   runtime_data_frame (compile_get_element_ptr p n)
 Proof
-  simp[compile_get_element_ptr_def]
+  apply_symbolic_frame symbolic_frame_get_element_ptr >> simp[]
 QED
 
 Theorem runtime_data_frame_get_dynarray_elem_ptr[simp]:
   runtime_data_frame (compile_get_dynarray_elem_ptr p i n)
 Proof
-  simp[compile_get_dynarray_elem_ptr_def]
+  apply_symbolic_frame symbolic_frame_get_dynarray_elem_ptr >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_encode_static[simp]:
   runtime_data_frame (compile_abi_encode_static dst src)
 Proof
-  simp[compile_abi_encode_static_def]
+  apply_symbolic_frame symbolic_frame_abi_encode_static >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_decode_static:
   (!v. runtime_data_frame (clamp v)) ==>
   runtime_data_frame (compile_abi_decode_static src dst opc clamp)
 Proof
-  simp[compile_abi_decode_static_def]
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_abi_decode_static >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_encode_static_info[simp]:
   runtime_data_frame (compile_abi_encode_static_info dst src info)
 Proof
-  Cases_on `info` >> simp[compile_abi_encode_static_info_def]
+  apply_symbolic_frame symbolic_frame_abi_encode_static_info >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_encode_dyn_static_loop:
@@ -62,10 +69,8 @@ Theorem runtime_data_frame_abi_encode_dyn_static_loop:
   runtime_data_frame
     (compile_abi_encode_dyn_static_loop dst src info asz msz len)
 Proof
-  strip_tac >> simp[compile_abi_encode_dyn_static_loop_def,
-                       comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_abi_encode_dyn_static_loop >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_encode_mutual:
@@ -118,40 +123,26 @@ QED
 Theorem runtime_data_frame_abi_dec_addr[simp]:
   runtime_data_frame (compile_abi_dec_addr bop pos)
 Proof
-  simp[compile_abi_dec_addr_def] >> IF_CASES_TAC >> simp[]
+  apply_symbolic_frame symbolic_frame_abi_dec_addr >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_decode_range_check[simp]:
   runtime_data_frame (compile_abi_decode_range_check start endop hi)
 Proof
-  simp[compile_abi_decode_range_check_def] >>
-  rpt (irule runtime_data_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_abi_decode_range_check >> simp[]
 QED
 
 Theorem runtime_data_frame_getelemptr_abi[simp]:
   runtime_data_frame (compile_getelemptr_abi src dyn off opc bop hi)
 Proof
-  simp[compile_getelemptr_abi_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >> simp[comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >> simp[]
+  apply_symbolic_frame symbolic_frame_getelemptr_abi >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_decode_dyn_elem_ptr[simp]:
   runtime_data_frame
     (compile_abi_decode_dyn_elem_ptr opc bop elem src hi sz)
 Proof
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >> simp[comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >> simp[]
+  apply_symbolic_frame symbolic_frame_abi_decode_dyn_elem_ptr >> simp[]
 QED
 
 (* Keep the opcode choice opaque in the recursive decoder proof. *)
@@ -160,7 +151,7 @@ Theorem runtime_data_frame_abi_copy_case[simp]:
     (case opc of CALLDATALOAD => emit_void CALLDATACOPY args
        | DLOAD => emit_void DLOADBYTES args | _ => emit_void MCOPY args)
 Proof
-  Cases_on `opc` >> simp[]
+  apply_symbolic_frame symbolic_frame_abi_copy_case >> simp[]
 QED
 
 Theorem runtime_data_frame_abi_decode_mutual:

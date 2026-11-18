@@ -322,19 +322,6 @@ Proof
     BasicProvers.TOP_CASE_TAC])
 QED
 
-Theorem deploy_blocks_frame_annassign[local]:
-  (!c t e. deploy_blocks_frame (compile_expr c t e)) /\
-  (!c v. deploy_blocks_frame (unwrap_value c v)) /\
-  (!c dst loc v p sl t s n.
-    deploy_blocks_frame (compile_assign_value c dst loc v p sl t s n)) ==>
-  deploy_blocks_frame (compile_stmt cenv lctx ty (AnnAssign id vtyp e))
-Proof
-  strip_tac >> simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >>
-  Cases_on `FLOOKUP cenv.ce_vars id` >> simp[] >>
-  rename1 `SOME binding` >> Cases_on `binding` >> simp[]
-QED
-
 Theorem deploy_blocks_frame_stmt_cond:
   (!n. deploy_blocks_frame (compile_fixed_region_with_id n)) /\
   (!c t e. deploy_blocks_frame (compile_expr c t e)) /\
@@ -369,123 +356,8 @@ Theorem deploy_blocks_frame_stmt_cond:
   (!cenv lctx ty ss. deploy_blocks_frame (compile_stmts cenv lctx ty ss))
 Proof
   strip_tac >>
-  `!c err. deploy_blocks_frame (compile_revert_with_custom_error c err)` by
-    (rpt gen_tac >> irule deploy_blocks_frame_revert_with_custom_error >> simp[]) >>
-  `!c id t. deploy_blocks_frame (declare_local c id t)` by
-    (simp[deploy_blocks_frame_declare_local]) >>
-  ho_match_mp_tac compile_stmt_ind >> rpt strip_tac >>
-  simp[deploy_blocks_frame_annassign]
-  >~ [`compile_stmt _ _ _ (Assign (BaseTarget _) _)`] >- suspend "assign"
-  >~ [`compile_stmt _ _ _ (AugAssign _ _ _ _)`] >- suspend "augassign"
-  >~ [`compile_stmt _ _ _ (Log _ _)`] >- suspend "log"
-  >~ [`compile_stmt _ _ _ (Return NONE)`] >- suspend "return_none"
-  >~ [`compile_stmt _ _ _ (Return (SOME _))`] >- suspend "return_some"
-  >~ [`compile_stmt _ _ _ (If _ _ _)`] >- suspend "if"
-  >~ [`compile_stmt _ _ _ (For _ _ (Range _ _) _ _)`] >- suspend "range"
-  >~ [`compile_stmt _ _ _ (For _ _ (Array _) _ _)`] >- suspend "iter" >>
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >>
-  simp[] >> suspend "cons"
+  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
+      (Q.GEN `R` symbolic_frame_stmt_cond))) >>
+  simp[block_is_terminated_def, deploy_blocks_frame_declare_local, deploy_blocks_frame_revert_with_custom_error]
 QED
-
-Resume deploy_blocks_frame_stmt_cond[assign]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >> disj2_tac >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  BasicProvers.TOP_CASE_TAC >> simp[]
-QED
-
-Resume deploy_blocks_frame_stmt_cond[augassign]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  BasicProvers.TOP_CASE_TAC >> simp[] >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[]
-QED
-
-Resume deploy_blocks_frame_stmt_cond[log]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  BasicProvers.TOP_CASE_TAC >> simp[] >> rename1 `SOME info` >> PairCases_on `info` >> simp[] >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  disj2_tac >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[]
-QED
-
-Resume deploy_blocks_frame_stmt_cond[return_none]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  Cases_on `cenv.ce_return_pc` >> simp[]
-  >- (Cases_on `cenv.ce_ctor_exit_label` >> simp[] >>
-      pairarg_tac >> simp[] >>
-      match_mp_tac deploy_blocks_frame_bind >> simp[]) >>
-  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  Cases_on `cenv.ce_ctor_exit_label` >> simp[] >> pairarg_tac >> simp[] >>
-  match_mp_tac deploy_blocks_frame_bind >> simp[]
-QED
-
-Resume deploy_blocks_frame_stmt_cond[return_some]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac >> BETA_TAC >>
-  Cases_on `cenv.ce_return_pc` >> simp[]
-  >- suspend "external_return" >>
-  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  suspend "external_return"
-QED
-
-Resume deploy_blocks_frame_stmt_cond[external_return]:
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  BasicProvers.TOP_CASE_TAC >> simp[]
-QED
-
-Resume deploy_blocks_frame_stmt_cond[if]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >>
-  simp[] >> suspend "if_get"
-QED
-
-Resume deploy_blocks_frame_stmt_cond[iter]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  qpat_x_assum `!arr_ty isdyn count elem c ex inc. _` (assume_tac o SRULE []) >>
-  irule deploy_blocks_frame_bind >> reverse conj_tac
-  >- (BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  gen_tac >> BETA_TAC >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[]
-QED
-
-Resume deploy_blocks_frame_stmt_cond[range]:
-  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  qpat_x_assum `!sgn c ex inc. _` (assume_tac o SRULE []) >>
-  irule deploy_blocks_frame_bind >> reverse conj_tac
-  >- (POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `start_e` >> simp[] >>
-      Cases_on `end_e` >> simp[] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[])) >>
-  gen_tac >> BETA_TAC >>
-  irule deploy_blocks_frame_bind >> reverse conj_tac
-  >- (POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `start_e` >> simp[] >>
-      Cases_on `end_e` >> simp[] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[])) >>
-  gen_tac >> BETA_TAC >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[] >>
-  irule deploy_blocks_frame_bind >> reverse conj_tac
-  >- (BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  gen_tac >> BETA_TAC >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[]
-QED
-
-Resume deploy_blocks_frame_stmt_cond[cons]:
-  qpat_x_assum `!cs cenv. _ ==> deploy_blocks_frame (compile_stmt _ _ _ _)`
-    (qspec_then `ARB with cs_current_insts := []`
-       (assume_tac o SRULE [block_is_terminated_def])) >>
-  qpat_x_assum `!cs cenv. _ ==> deploy_blocks_frame (compile_stmts _ _ _ _)`
-    (qspec_then `ARB with cs_current_insts := []`
-       (assume_tac o SRULE [block_is_terminated_def])) >>
-  ho_match_mp_tac deploy_blocks_frame_get_terminated >>
-  gen_tac >> Cases_on `b` >> simp[deploy_blocks_frame_declare_stmt_local]
-QED
-Resume deploy_blocks_frame_stmt_cond[if_get]:
-  ho_match_mp_tac deploy_blocks_frame_get_terminated >> gen_tac >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >>
-  BETA_TAC >> ho_match_mp_tac deploy_blocks_frame_get_terminated >> gen_tac >>
-  rpt (BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >> gen_tac) >>
-  simp[]
-QED
-Finalise deploy_blocks_frame_stmt_cond

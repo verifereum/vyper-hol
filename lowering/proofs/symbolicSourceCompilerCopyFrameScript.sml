@@ -1,5 +1,7 @@
 Theory symbolicSourceCompilerCopyFrame
-Ancestors symbolicSourceCompilerFrame context
+Ancestors symbolicSourceCompilerFrame compileEnv context
+
+val _ = augment_srw_ss [rewrites [symbolic_frame_bind]];
 
 Theorem symbolic_frame_typed_copy_mutual:
   (!op args. symbolic_frame R (emit_op op args)) /\
@@ -28,9 +30,9 @@ Proof
       Cases_on `acyclic_struct_metadata cenv.ce_struct_fields` >> gvs[] >>
       Cases_on `dt` >> Cases_on `st` >> gvs[] >>
       rpt (CASE_TAC >> gvs[]) >> metis_tac[])
-  >- (Cases_on `type_memory_bytes cenv dt = type_memory_bytes cenv st /\ ~is_abi_dynamic cenv.ce_struct_fields dt` >> gvs[] >> disj2_tac >>
+  >- (IF_CASES_TAC >> gvs[] >>
       rpt (irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-      simp[] >> metis_tac[])
+      simp[])
   >- (IF_CASES_TAC >> gvs[] >>
       rpt (irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]) >>
   pairarg_tac >> gvs[] >>

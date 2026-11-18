@@ -1,5 +1,6 @@
 Theory deploySymSrcFrameExprHelpers
 Ancestors
+  symbolicSourceCompilerExprFrame
   deploySymSrcBlockFrame deploySymSrcFrameContext exprLowering compileEnv
   targetPlaceLive targetPlaceSimCasesBase
 
@@ -14,168 +15,165 @@ fun frame_tac g =
    rpt (match_mp_tac deploy_blocks_frame_bind >> conj_tac
      >- (simp[] >> frame_tac) >> gen_tac >> BETA_TAC) >> simp[]) g;
 
+fun apply_symbolic_frame theorem =
+  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
+      (Q.GEN `R` theorem)))
+
 Theorem deploy_blocks_frame_compile_clamp[simp]:
   deploy_blocks_frame (compile_clamp v ty)
 Proof
-  simp[compile_clamp_def] >> pairarg_tac >> simp[] >>
-  IF_CASES_TAC >> simp[] >> frame_tac
+  apply_symbolic_frame symbolic_frame_compile_clamp >> simp[]
 QED
 
 Theorem deploy_blocks_frame_clamp_and_return[simp]:
   deploy_blocks_frame (clamp_and_return v ty)
-Proof simp[clamp_and_return_def]
+Proof
+  apply_symbolic_frame symbolic_frame_clamp_and_return >> simp[]
 QED
 
 Theorem deploy_blocks_frame_clamp_basetype[simp]:
   deploy_blocks_frame (compile_clamp_basetype v ty)
 Proof
-  Cases_on `ty` >> simp[compile_clamp_basetype_def] >>
-  rename1 `BaseT b` >> Cases_on `b` >> simp[compile_clamp_basetype_def] >>
-  rpt (IF_CASES_TAC >> simp[]) >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[compile_clamp_basetype_def]) >>
-  rpt (IF_CASES_TAC >> simp[]) >> frame_tac
+  apply_symbolic_frame symbolic_frame_clamp_basetype >> simp[]
 QED
 
 Theorem deploy_blocks_frame_safe_add[simp]:
   deploy_blocks_frame (compile_safe_add x y ty)
 Proof
-  simp[compile_safe_add_def] >> irule deploy_blocks_frame_bind >> simp[] >>
-  gen_tac >> rpt (IF_CASES_TAC >> simp[])
+  apply_symbolic_frame symbolic_frame_safe_add >> simp[]
 QED
 
 Theorem deploy_blocks_frame_safe_sub[simp]:
   deploy_blocks_frame (compile_safe_sub x y ty)
 Proof
-  simp[compile_safe_sub_def] >> irule deploy_blocks_frame_bind >> simp[] >>
-  gen_tac >> rpt (IF_CASES_TAC >> simp[])
+  apply_symbolic_frame symbolic_frame_safe_sub >> simp[]
 QED
 
 Theorem deploy_blocks_frame_mul_overflow[simp]:
   deploy_blocks_frame (compile_mul_overflow_check x y res sg bits)
 Proof
-  simp[compile_mul_overflow_check_def] >>
-  Cases_on `sg /\ bits = 256` >> simp[] >> frame_tac
+  apply_symbolic_frame symbolic_frame_mul_overflow >> simp[]
 QED
 
 Theorem deploy_blocks_frame_safe_mul[simp]:
   deploy_blocks_frame (compile_safe_mul x y ty)
 Proof
-  simp[compile_safe_mul_def] >>
-  Cases_on `type_bits ty > 128` >>
-  Cases_on `is_decimal_type ty` >>
-  Cases_on `type_bits ty < 256` >> simp[]
+  apply_symbolic_frame symbolic_frame_safe_mul >> simp[]
 QED
 
 Theorem deploy_blocks_frame_safe_div[simp]:
   deploy_blocks_frame (compile_safe_div x y ty)
 Proof
-  Cases_on `is_signed_type ty` >> Cases_on `type_bits ty = 256` >>
-  Cases_on `type_bits ty < 256` >> simp[compile_safe_div_def] >> frame_tac
+  apply_symbolic_frame symbolic_frame_safe_div >> simp[]
 QED
 
 Theorem deploy_blocks_frame_safe_decimal_div[simp]:
   deploy_blocks_frame (compile_safe_decimal_div x y divisor ty)
-Proof simp[compile_safe_decimal_div_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_safe_decimal_div >> simp[]
 QED
 
 Theorem deploy_blocks_frame_safe_mod[simp]:
   deploy_blocks_frame (compile_safe_mod x y ty)
-Proof Cases_on `is_signed_type ty` >> simp[compile_safe_mod_def]
+Proof
+  apply_symbolic_frame symbolic_frame_safe_mod >> simp[]
 QED
 
 Theorem deploy_blocks_frame_safe_pow[simp]:
   deploy_blocks_frame (compile_safe_pow x y ty bl el)
 Proof
-  Cases_on `bl` >> Cases_on `el` >> simp[compile_safe_pow_def] >>
-  rpt (IF_CASES_TAC >> simp[]) >> frame_tac
+  apply_symbolic_frame symbolic_frame_safe_pow >> simp[]
 QED
 
 Theorem deploy_blocks_frame_compare[simp]:
   deploy_blocks_frame (compile_compare op x y ty)
 Proof
-  Cases_on `op` >> simp[compile_compare_def] >>
-  rpt (IF_CASES_TAC >> simp[]) >> frame_tac
+  apply_symbolic_frame symbolic_frame_compare >> simp[]
 QED
 
 Theorem deploy_blocks_frame_wrap_truncate[simp]:
   deploy_blocks_frame (wrap_truncate v ty)
-Proof simp[wrap_truncate_def] >> rpt (IF_CASES_TAC >> simp[])
+Proof
+  apply_symbolic_frame symbolic_frame_wrap_truncate >> simp[]
 QED
 
 Theorem deploy_blocks_frame_binop:
   (!c x y. deploy_blocks_frame (compile_select c x y)) ==>
   deploy_blocks_frame (compile_binop op x y ty bl el)
 Proof
-  strip_tac >> Cases_on `op` >> simp[compile_binop_def] >>
-  rpt (IF_CASES_TAC >> simp[]) >> frame_tac
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_binop >> simp[]
 QED
 
 Theorem deploy_blocks_frame_bytestring_hash[simp]:
   deploy_blocks_frame (compile_bytestring_hash p)
-Proof simp[compile_bytestring_hash_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_bytestring_hash >> simp[]
 QED
 
 Theorem deploy_blocks_frame_membership_eqs[simp]:
   !es n. deploy_blocks_frame (emit_membership_eqs n es)
-Proof Induct >> simp[emit_membership_eqs_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_membership_eqs >> simp[]
 QED
 
 Theorem deploy_blocks_frame_membership_or[simp]:
   !es acc. deploy_blocks_frame (fold_membership_or acc es)
-Proof Induct >> simp[fold_membership_or_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_membership_or >> simp[]
 QED
 
 Theorem deploy_blocks_frame_membership_and[simp]:
   !es acc. deploy_blocks_frame (fold_membership_and acc es)
-Proof Induct >> simp[fold_membership_and_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_membership_and >> simp[]
 QED
 
 Theorem deploy_blocks_frame_list_membership_in[simp]:
   deploy_blocks_frame (compile_list_membership_in n es)
 Proof
-  simp[compile_list_membership_in_def] >>
-  match_mp_tac deploy_blocks_frame_bind >> simp[] >> Cases >> simp[]
+  apply_symbolic_frame symbolic_frame_list_membership_in >> simp[]
 QED
 
 Theorem deploy_blocks_frame_list_membership_notin[simp]:
   deploy_blocks_frame (compile_list_membership_notin n es)
 Proof
-  simp[compile_list_membership_notin_def] >>
-  match_mp_tac deploy_blocks_frame_bind >> simp[] >> Cases >> simp[] >> frame_tac
+  apply_symbolic_frame symbolic_frame_list_membership_notin >> simp[]
 QED
 
 Theorem deploy_blocks_frame_array_membership_loop:
   (!p. deploy_blocks_frame (loader p)) ==>
   deploy_blocks_frame (compile_array_membership_loop n arr len sz off loader bd isin)
 Proof
-  strip_tac >> Cases_on `bd` >> Cases_on `off > 0` >> Cases_on `isin` >>
-  simp[compile_array_membership_loop_def] >> frame_tac
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_array_membership_loop >> simp[]
 QED
 
 Theorem deploy_blocks_frame_var_array_membership:
   (!ctor imm loc off. deploy_blocks_frame (compile_ptr_load ctor imm loc off)) ==>
   deploy_blocks_frame (compile_var_array_membership cenv n vv ty isin)
 Proof
-  strip_tac >> Cases_on `ty` >>
-  TRY (rename1 `ArrayT t bd` >> Cases_on `bd`) >>
-  simp[compile_var_array_membership_def] >>
-  simp[deploy_blocks_frame_array_membership_loop] >>
-  frame_tac >> irule deploy_blocks_frame_array_membership_loop >> simp[]
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_var_array_membership >> simp[]
 QED
 
 Theorem deploy_blocks_frame_mapping_subscript[simp]:
   deploy_blocks_frame (compile_mapping_subscript slot key)
-Proof simp[compile_mapping_subscript_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_mapping_subscript >> simp[]
 QED
 
 Theorem deploy_blocks_frame_keccak256_key[simp]:
   deploy_blocks_frame (compile_keccak256_key key bs32)
-Proof Cases_on `bs32` >> simp[compile_keccak256_key_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_keccak256_key >> simp[]
 QED
 
 Theorem deploy_blocks_frame_extcodesize_check[simp]:
   deploy_blocks_frame (compile_extcodesize_check addr)
-Proof simp[compile_extcodesize_check_def] >> frame_tac
+Proof
+  apply_symbolic_frame symbolic_frame_extcodesize_check >> simp[]
 QED
 
 Theorem deploy_blocks_frame_return_value_decode:
