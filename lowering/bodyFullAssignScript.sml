@@ -826,10 +826,6 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-(* Complete the Assign store for both valid and invalid extended traces. *)
-
-(* The normal RHS endpoint feeds the joint top-level store. *)
-
 (* The rejected write still evaluates the RHS and records its root. *)
 
 Theorem body_assign_toplevel_word_full_static_rhs[local]:
@@ -892,6 +888,7 @@ Proof
   qexistsl_tac [`op`,`sm`,`sb`,`w`] >> simp[]
 QED
 
+(* Complete the Assign store for both valid and invalid extended traces. *)
 Theorem body_assign_toplevel_word_full_residual_frame[local]:
   ~cx.txn.is_static /\ get_module_code cx src = SOME tops /\
   find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id_str) /\
@@ -1000,6 +997,7 @@ Proof
   Cases_on `cx.txn.is_static` >> Cases_on `tr` >> simp[set_storage_def]
 QED
 
+(* The normal RHS endpoint feeds the joint top-level store. *)
 Theorem body_assign_toplevel_word_full_after_rhs_frame[local]:
   ~cx.txn.is_static /\ get_module_code cx src = SOME tops /\
   find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id_str) /\
