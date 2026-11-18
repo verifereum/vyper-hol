@@ -1,9 +1,9 @@
 (* Relocated body client preparation. INVOKE is an explicit selected-outcome cut. *)
 Theory symBodyOwnPrepare
 Ancestors
-  symBlockBodyOwnCore symBodyOrdinaryOwn symBodyTerminalOwn symBodyStaticFacts
-  symBodyJumpOwn symBodySuccessorPointwise symBodyAlgebra
-  symFnSimSpec fnBlockBody fnBlockBodyClasses fnBlockBodySteps venomInstProps
+  symBlockBodyOwnCore symBodyAdvanceOwn symBodyJumpContinueOwn
+  symBodyResultBranchesOwn symBodyStaticFacts symBodyAlgebra
+  symFnSimSpec fnBlockBody fnBlockBodySteps
 
 (* Parse-time abbreviations only; no new logical constants. *)
 val _ = Parse.temp_overload_on ("own_body_result",
@@ -147,50 +147,14 @@ Theorem own_nonterm_advance:
     block_rest fuel ctx fn bb vs = block_rest fuel ctx fn bb vs'
 Proof
   simp_tac (srw_ss()) [] >> strip_tac >>
-  `sym_data_label prog env "code_end"` by
-    (irule codegen_sym_code_end_label_kernel >>
-     gvs[body_inv_reloc_def] >> metis_tac[]) >>
-  `(MEM (Label "runtime_begin") inst.inst_operands ==>
-    sym_data_label prog env "runtime_begin")` by
-    (strip_tac >> drule_all body_inv_inst_reloc >> strip_tac >>
-     qhdtm_x_assum `body_inv_reloc` mp_tac >>
-     qpat_x_assum `!k prefix_ops rest_ops ps vs as ss. _` kall_tac >>
-     simp_tac (srw_ss()) [body_inv_reloc_def] >> strip_tac >>
-     irule codegen_sym_runtime_begin_label_kernel >>
-     asm_simp_tac bool_ss [] >>
-     qexistsl [`fn`, `inst`, `rpolicy`, `unit`] >> simp[] >>
-     metis_tac[listTheory.MEM_EL]) >>
-  `?ops ps' rest' n as1 ss1.
-    generate_inst_plan liveness dfg cfg fn inst
-      (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
-      (k + 1 < LENGTH bb.bb_instructions /\
-       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
-      bb.bb_label ps = SOME (ops, ps') /\
-    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
-      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-      (LENGTH bb.bb_instructions)
-      (SUC k - LENGTH (get_params bb.bb_instructions))
-      (DROP (SUC k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
-      ps' = SOME (rest', ps_after) /\ rest_ops = ops ++ rest' /\
-    asm_steps lo o2pc prog n as = AsmOK as1 /\
-    fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
-    as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops) /\
-    sym_steps_mode allow_own prog env own n ss = SymOK ss1 /\
-    sym_frame_inv_own lo prog env own ctx cpl fn ret srest labs0 ps' as1 ss1` by
-    (Cases_on `inst.inst_opcode = INVOKE`
-     >- (drule_all (SRULE [] own_invoke_selected) >> strip_tac >>
-         first_x_assum drule >> strip_tac >> metis_tac[]) >>
-     Cases_on `inst.inst_opcode = GAS`
-     >- (drule_all sym_body_gas_ok_own_kernel >> metis_tac[]) >>
-     drule_all sym_body_ordinary_ok_own_kernel >> metis_tac[]) >>
-  drule_all body_inv_advance_reloc >> strip_tac >>
-  `vs.vs_inst_idx = k` by gvs[body_inv_reloc_def] >>
-  drule_all body_inv_inst_reloc >> strip_tac >>
-  `get_instruction bb vs.vs_inst_idx = SOME inst` by metis_tac[] >>
-  drule_all block_rest_advance >> strip_tac >>
-  `vs1.vs_code = vs.vs_code` by metis_tac[step_preserves_code] >>
-  qexistsl [`prefix_ops ++ ops`, `rest'`, `ps'`,
-    `vs1 with vs_inst_idx := SUC k`, `as1`, `ss1`, `n`] >> simp[]
+  `inst.inst_opcode = INVOKE ==>
+    own_invoke_outcomes allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
+      ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0
+      prefix_ops rest_ops k ps vs as ss inst` by
+    (BETA_TAC >> strip_tac >> drule_all (SRULE [] own_invoke_selected) >> simp[]) >>
+  drule_all sym_body_nonterm_prefix_selected_own >> strip_tac >>
+  qexistsl [`prefix'`, `rest'`, `ps'`, `vs'`, `as1`, `ss1`, `n`] >> simp[]
 QED
 
 Theorem own_result_prefix[local]:
@@ -254,17 +218,7 @@ Theorem own_jump_continue:
     as ss (run_blocks fuel ctx fn vs1)
 Proof
   simp_tac (srw_ss()) [] >> strip_tac >>
-  drule_all body_jump_entry_reloc_kernel >> strip_tac >>
-  conj_tac >- metis_tac[] >>
-  irule (SRULE [] own_result_prefix) >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-  `sym_frame_inv_own lo prog env own ctx cpl fn ret srest labs0 pe as1 ss1` by
-    (irule sym_frame_inv_plan_transport_own >> goal_assum (drule_at Any) >> simp[]) >>
-  qhdtm_assum `body_inv_reloc` (strip_assume_tac o REWRITE_RULE [body_inv_reloc_def]) >>
-  `!l. FLOOKUP vs1.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)` by metis_tac[] >>
-  qhdtm_x_assum `sym_fn_frame_sim_at_own` mp_tac >>
-  rewrite_tac[sym_fn_frame_sim_at_own_def] >>
-  disch_then drule_all >> simp[] >> metis_tac[]
+  drule_all (BETA_RULE sym_body_jump_continue_minimal_own) >> simp[]
 QED
 
 Theorem own_terminator_result:
@@ -277,24 +231,7 @@ Theorem own_terminator_result:
     (k,prefix_ops,rest_ops,ps,vs,as,ss)
 Proof
   simp_tac (srw_ss()) [] >> strip_tac >>
-  drule body_inv_facts_reloc >> strip_tac >>
-  drule_all body_inv_inst_reloc >> strip_tac >>
-  `vs.vs_inst_idx = k` by gvs[body_inv_reloc_def] >>
-  `get_instruction bb vs.vs_inst_idx = SOME inst` by metis_tac[] >>
-  `!t. MEM t (get_successors inst) ==> MEM (AsmLabel t) prog` by
-    (rpt strip_tac >> drule_all body_succ_placed_reloc >> strip_tac >>
-     drule_all placed_nonentry_sym_code_label_kernel >> simp[]) >>
-  drule_all fnBlockBodyHelpersTheory.step_ok_terminator_jump >> strip_tac
-  >- (drule_all jmp_wf_operands_kernel >> disch_then assume_tac >>
-      drule_all sym_body_jmp_prefix_own_kernel >> strip_tac >>
-      drule_all (SRULE [] own_jump_continue) >> strip_tac >> metis_tac[block_rest_jump])
-  >- (drule_all jnz_wf_operands_kernel >> disch_then assume_tac >>
-      `!c l1 l2. inst.inst_operands = [c;Label l1;Label l2] ==>
-        eval_operand c vs = eval_operand c (frame_view fn ra vs)` by
-        metis_tac[jnz_condition_frame_view_kernel] >>
-      drule_all sym_body_jnz_prefix_own_kernel >> strip_tac >>
-      drule_all (SRULE [] own_jump_continue) >> strip_tac >> metis_tac[block_rest_jump]) >>
-  gvs[unitShapeDefsTheory.inst_shape_ok_def]
+  drule_all (BETA_RULE sym_body_terminator_minimal_own) >> simp[]
 QED
 
 Theorem own_revert_result:
@@ -306,12 +243,8 @@ Theorem own_revert_result:
     (k,prefix_ops,rest_ops,ps,vs,as,ss)
 Proof
   simp_tac (srw_ss()) [] >> strip_tac >>
-  `MEM (AsmLabel "revert") prog` by
-    (drule body_inv_facts_reloc >> strip_tac >>
-     drule_all placed_revert_sym_code_label_kernel >> simp[]) >>
-  drule_all sym_body_revert_step_own_kernel >>
-  disch_then (qspec_then `fuel` mp_tac) >> simp_tac (srw_ss()) [] >> strip_tac >>
-  Cases_on `exec_block fuel ctx bb vs` >> gvs[block_rest_def] >> metis_tac[]
+  drule_all (BETA_RULE sym_body_revert_result_minimal_own) >>
+  disch_then (qspec_then `fuel` mp_tac) >> simp[]
 QED
 
 Theorem own_nonok_result:
@@ -328,22 +261,13 @@ Theorem own_nonok_result:
     (k,prefix_ops,rest_ops,ps,vs,as,ss)
 Proof
   simp_tac (srw_ss()) [] >> strip_tac >>
-  `MEM (AsmLabel "revert") prog` by
-    (drule body_inv_facts_reloc >> strip_tac >>
-     drule_all placed_revert_sym_code_label_kernel >> simp[]) >>
-  drule_all body_inv_inst_reloc >> strip_tac >>
-  `vs.vs_inst_idx = k` by gvs[body_inv_reloc_def] >>
-  `get_instruction bb vs.vs_inst_idx = SOME inst` by metis_tac[] >>
-  drule_all block_rest_other >> disch_then (qspec_then `fn` SUBST1_TAC) >>
-  `inst.inst_opcode = ASSERT ==> MEM (AsmLabel "revert") prog` by simp[] >>
-  Cases_on `res` >> simp[]
-  >- (Cases_on `inst.inst_opcode = INVOKE`
-      >- (drule_all (SRULE [] own_invoke_selected) >> simp[] >> metis_tac[]) >>
-      drule_all sym_body_halt_step_own_kernel >> simp[])
-  >- (Cases_on `inst.inst_opcode = INVOKE`
-      >- (drule_all (SRULE [] own_invoke_selected) >> simp[] >> metis_tac[]) >>
-      drule_all sym_body_abort_step_own_kernel >> simp[]) >>
-  drule_all sym_body_ret_step_own_kernel >> simp[]
+  `inst.inst_opcode = INVOKE ==>
+    own_invoke_outcomes allow_own fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
+      ps_dfs_after ps_after pc0 Inv ra pc_ret rest mem0 env own ret srest labs0
+      prefix_ops rest_ops k ps vs as ss inst` by
+    (BETA_TAC >> strip_tac >> drule_all (SRULE [] own_invoke_selected) >> simp[]) >>
+  drule_all (BETA_RULE sym_body_nonok_selected_own) >> simp[]
 QED
 
 Theorem sym_body_own_branches_given_invoke:

@@ -81,3 +81,91 @@ Proof
     `ps_tdfs`, `tafter`, `ps_end`, `ra`, `ret`] >> gns[] >>
   rpt strip_tac >> first_x_assum irule >> simp[]
 QED
+
+Theorem sym_body_jmp_step_minimal_own:
+  gen_fn_frame_sim_at_simple_reloc fuel /\ sym_fn_frame_sim_at_own allow_own fuel /\
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = JMP /\ step_inst fuel ctx inst vs = OK vs1 /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  code_end_offset_ok Inv ctx /\ sym_unit_static_ok unit /\ asm_static_wf prog /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  asm_data_env_lo_ok lo prog env own /\ vs.vs_code = own /\
+  sym_frame_inv_own lo prog env own ctx cpl fn ret srest labs0 ps as ss ==>
+  ~vs1.vs_halted /\
+  jump_body_clauses allow_own lo o2pc prog env own cpl ctx fn mem0 pc_ret rest srest labs0
+    as ss (run_blocks fuel ctx fn vs1)
+Proof
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  drule_all body_inv_inst_reloc >> strip_tac >>
+  drule_all jmp_wf_operands_kernel >> disch_then assume_tac >>
+  `is_terminator inst.inst_opcode` by simp[venomInstTheory.is_terminator_def] >>
+  `!t. MEM t (get_successors inst) ==> MEM (AsmLabel t) prog` by
+    (rpt strip_tac >> assume_tac placed_nonentry_sym_code_label_kernel >>
+     drule_all body_succ_sym_label_reloc_kernel >> strip_tac >> simp[]) >>
+  drule_all sym_body_jmp_prefix_own_kernel >> strip_tac >>
+  drule_all (BETA_RULE sym_body_jump_continue_minimal_own) >> simp[]
+QED
+
+Theorem sym_body_jnz_step_minimal_own:
+  gen_fn_frame_sim_at_simple_reloc fuel /\ sym_fn_frame_sim_at_own allow_own fuel /\
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = JNZ /\ step_inst fuel ctx inst vs = OK vs1 /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  code_end_offset_ok Inv ctx /\ sym_unit_static_ok unit /\ asm_static_wf prog /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  asm_data_env_lo_ok lo prog env own /\ vs.vs_code = own /\
+  sym_frame_inv_own lo prog env own ctx cpl fn ret srest labs0 ps as ss ==>
+  ~vs1.vs_halted /\
+  jump_body_clauses allow_own lo o2pc prog env own cpl ctx fn mem0 pc_ret rest srest labs0
+    as ss (run_blocks fuel ctx fn vs1)
+Proof
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  drule body_inv_facts_reloc >> strip_tac >>
+  drule_all body_inv_inst_reloc >> strip_tac >>
+  drule_all jnz_wf_operands_kernel >> disch_then assume_tac >>
+  `is_terminator inst.inst_opcode` by simp[venomInstTheory.is_terminator_def] >>
+  `!c l1 l2. inst.inst_operands = [c;Label l1;Label l2] ==>
+    eval_operand c vs = eval_operand c (frame_view fn ra vs)` by
+    metis_tac[jnz_condition_frame_view_kernel] >>
+  `!t. MEM t (get_successors inst) ==> MEM (AsmLabel t) prog` by
+    (rpt strip_tac >> assume_tac placed_nonentry_sym_code_label_kernel >>
+     drule_all body_succ_sym_label_reloc_kernel >> strip_tac >> simp[]) >>
+  drule_all sym_body_jnz_prefix_own_kernel >> strip_tac >>
+  drule_all (BETA_RULE sym_body_jump_continue_minimal_own) >> simp[]
+QED
+
+Theorem sym_body_terminator_minimal_own:
+  gen_fn_frame_sim_at_simple_reloc fuel /\ sym_fn_frame_sim_at_own allow_own fuel /\
+  body_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  is_terminator inst.inst_opcode /\ step_inst fuel ctx inst vs = OK vs1 /\
+  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
+  code_end_offset_ok Inv ctx /\ sym_unit_static_ok unit /\ asm_static_wf prog /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  asm_data_env_lo_ok lo prog env own /\ vs.vs_code = own /\
+  sym_frame_inv_own lo prog env own ctx cpl fn ret srest labs0 ps as ss ==>
+  jump_body_clauses allow_own lo o2pc prog env own cpl ctx fn mem0 pc_ret rest srest labs0
+    as ss (block_rest fuel ctx fn bb vs)
+Proof
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  drule_all body_inv_inst_reloc >> strip_tac >>
+  `vs.vs_inst_idx = k` by gvs[body_inv_reloc_def] >>
+  `get_instruction bb vs.vs_inst_idx = SOME inst` by metis_tac[] >>
+  drule_all step_ok_terminator_jump >> strip_tac
+  >- (drule_all (BETA_RULE sym_body_jmp_step_minimal_own) >> strip_tac >>
+      metis_tac[block_rest_jump])
+  >- (drule_all (BETA_RULE sym_body_jnz_step_minimal_own) >> strip_tac >>
+      metis_tac[block_rest_jump]) >>
+  gvs[unitShapeDefsTheory.inst_shape_ok_def]
+QED
