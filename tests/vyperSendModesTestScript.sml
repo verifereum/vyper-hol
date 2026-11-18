@@ -2,6 +2,7 @@
    CPS equations above are executed directly by CV, not substituted here. *)
 Theory vyperSendModesTest
 Ancestors
+  vyperSmallStepCV
   vyperSendCpsCVTest vyperExtCallCpsCVTest vyperInterpreter vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperState vyperContext vyperABI vyperAST vyperValue
   vyperValueOperation list option pair finite_map words vfmTypes

@@ -1,6 +1,7 @@
 (* Source-derived witnesses distinguish capture time from load time. *)
 Theory vyperLoadTimingTest
 Ancestors
+  vyperSmallStepCV
   vyperSmallStep vyperState vyperMisc jsonToVyper finite_map While pair
 Libs
   jsonASTLib vyperConstEvalLib cv_transLib finite_mapLib wordsLib

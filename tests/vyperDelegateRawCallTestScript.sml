@@ -2,6 +2,7 @@
    The direct eval_raw_call path and the CPS expression path both execute in CV. *)
 Theory vyperDelegateRawCallTest
 Ancestors
+  vyperSmallStepCV
   vyperSmallStep[ignore_grammar] vyperInterpreter
   vfmExecution[ignore_grammar] vfmState[ignore_grammar]
   vyperState vyperContext vyperAST vyperValue vyperTypeSystem

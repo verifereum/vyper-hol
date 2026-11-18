@@ -11,6 +11,7 @@ Ancestors
   vyperTypeExprResult vyperValue vyperTypeEnv
   vyperTypeInvariants vyperTypeAssignContext vyperTypeBuiltins
   vyperTypeEvalSoundness vyperTypeValues
+  vyperTypeEvalCaseProofs vyperTypeEvalProofs
 Libs monadsyntax
 
 Theorem eval_expr_oracle_storage_mutual:
