@@ -1,6 +1,7 @@
 Theory calldataExactScalarAccepted
 Ancestors
   calldataWordLive calldataWordPtr calldataFiniteTransport calldataDynOwned
+  stepTaintVarFrame
   decoderWorldFramePtr decoderGhostFramePtr abiEncoderWindowLookup
    abiDecoderFrameCompose ptrDiscipline bodyPtrDefs
   abiCallerAllocation
@@ -31,16 +32,6 @@ Proof
   simp[DROP_LENGTH_APPEND, mk_inst_def, abi_decoder_reentry_opcode_def,
     not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
   metis_tac[LESS_EQ_REFL, LESS_EQ_TRANS, DECIDE ``n <= n+1 /\ n <= n+2``]
-QED
-
-Theorem scalar_step_tvar_frame[local]:
-  ~MEM name inst.inst_outputs ==>
-  FLOOKUP (step_taint inst s t tn).t_var name = FLOOKUP tn.t_var name
-Proof
-  simp[step_taint_def, set_var_taint_def] >>
-  Cases_on `inst.inst_outputs` >> simp[FLOOKUP_DRESTRICT] >>
-  rename1 `inst.inst_outputs = h::outs` >>
-  Cases_on `outs` >> simp[FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
 QED
 
 Theorem calldata_word_accepted_resource_joint:
@@ -142,7 +133,7 @@ Proof
        (qspec_then `ARB` assume_tac) >>
      goal_assum (drule_at Any) >> rpt strip_tac >>
      qpat_x_assum `FLOOKUP q.t_var name = _` (fn th => rewrite_tac [GSYM th]) >>
-     irule scalar_step_tvar_frame >>
+     irule step_taint_other_var >>
      qpat_x_assum `EVERY _ (emitted_insts st last)` mp_tac >>
      pure_rewrite_tac [EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)

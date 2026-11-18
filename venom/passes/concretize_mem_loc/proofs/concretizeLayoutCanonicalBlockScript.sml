@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalBlock
-Ancestors concretizeLayoutCutSafe concretizeLayoutCanonicalDeferred concretizeLayoutCanonicalBase
+Ancestors concretizeAssignProps concretizeLayoutCutSafe concretizeLayoutCanonicalDeferred concretizeLayoutCanonicalBase
   concretizeLayoutCanonicalDriver concretizeLayoutAlignedControl concretizeLayoutPhaseCompose
   concretizeLayoutPhaseCorridor concretizeLayoutPhaseOrigin frameRankedTerminalCorridor
   concretizeLayoutPairedEntry concretizeLayoutStagePairing concretizeStepStructure
@@ -1728,15 +1728,6 @@ Proof
   gvs[]
 QED
 
-Theorem layout_assign_suffix_image[local]:
-  !mid positions. EVERY (\i. i.inst_opcode = ASSIGN) mid ==>
-  FILTER (\i. i.inst_opcode <> NOP)
-    (MAP (concretize_inst_with_positions positions) mid) = mid
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  simp[concretize_positions_unchanged]
-QED
-
 Theorem layout_block_pair_assign_suffix[local]:
   layout_block_pair positions bb bb' k k' /\
   DROP k bb.bb_instructions = mid ++ rev::tail /\
@@ -1744,7 +1735,7 @@ Theorem layout_block_pair_assign_suffix[local]:
   ?tail'. DROP k' bb'.bb_instructions = mid ++ rev::tail'
 Proof
   strip_tac >> drule layout_block_pair_drop >>
-  simp[MAP_APPEND, FILTER_APPEND_DISTRIB, layout_assign_suffix_image,
+  simp[MAP_APPEND, FILTER_APPEND_DISTRIB, ptr_forwarding_assign_interval,
     concretize_positions_unchanged] >> metis_tac[]
 QED
 

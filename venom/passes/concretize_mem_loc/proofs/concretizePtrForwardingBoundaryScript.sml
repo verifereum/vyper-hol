@@ -1,6 +1,6 @@
 Theory concretizePtrForwardingBoundary
 Ancestors
-  concretizeStepStructure concretizeStepShape
+  concretizeAssignProps concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape contextCodegenRel
   concretizeMemLocDefs passSharedDefs venomInst list rich_list finite_map arithmetic
 
@@ -46,15 +46,6 @@ Proof
       Cases_on `x` >> Cases_on `y` >>
       gvs[step_back_assign_def]) >>
   simp[same_after_assigns_def]
-QED
-
-Theorem ptr_forwarding_assign_interval:
-  EVERY (\i. i.inst_opcode = ASSIGN) xs ==>
-  FILTER (\i. i.inst_opcode <> NOP)
-    (MAP (concretize_inst_with_positions p) xs) = xs
-Proof
-  Induct_on `xs` >> simp[] >> rpt strip_tac >>
-  simp[concretize_positions_unchanged]
 QED
 
 (* Backward order: the latest copy causes two unequal operands to meet;
