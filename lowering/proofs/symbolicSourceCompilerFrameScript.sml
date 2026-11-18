@@ -140,7 +140,7 @@ Resume symbolic_frame_expr[expr]:
   asm "expr" (irule o REWRITE_RULE [symbolic_frame_def]) >>
   rpt conj_tac >> rpt gen_tac >>
   rewrite_tac[expr_child_callback_def, builtin_child_callback_def,
-              type_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC
+              type_child_callback_def] >> BETA_TAC >> IF_CASES_TAC >> rewrite_tac[COND_CLAUSES]
   >~ [`invalid_expr_call`] >- invalid_callback_frame_tac
   >~ [`compile_expr`] >- callback_frame_tac
       `!e ce ty s. _ ==> !g t. R g s t ==> _ /\ R g (SND (compile_expr ce ty e s)) _`
@@ -155,7 +155,7 @@ QED
 Resume symbolic_frame_expr[builtin]:
   asm "builtin" (irule o REWRITE_RULE [symbolic_frame_def]) >>
   rpt conj_tac >> rpt gen_tac >>
-  rewrite_tac[expr_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC
+  rewrite_tac[expr_child_callback_def] >> BETA_TAC >> IF_CASES_TAC >> rewrite_tac[COND_CLAUSES]
   >~ [`invalid_expr_call`] >- invalid_callback_frame_tac
   >> callback_frame_tac
     `!e ce ty s. _ ==> !g t. R g s t ==> _ /\ R g (SND (compile_expr ce ty e s)) _`
@@ -164,7 +164,7 @@ QED
 Resume symbolic_frame_expr[type_builtin]:
   asm "type_builtin" (irule o REWRITE_RULE [symbolic_frame_def]) >>
   rpt conj_tac >> rpt gen_tac >>
-  rewrite_tac[expr_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC
+  rewrite_tac[expr_child_callback_def] >> BETA_TAC >> IF_CASES_TAC >> rewrite_tac[COND_CLAUSES]
   >~ [`invalid_expr_call`] >- invalid_callback_frame_tac
   >> callback_frame_tac
     `!e ce ty s. _ ==> !g t. R g s t ==> _ /\ R g (SND (compile_expr ce ty e s)) _`
