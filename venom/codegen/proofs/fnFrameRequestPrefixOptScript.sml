@@ -556,8 +556,8 @@ Proof
    cb'.as_requests = s'.vs_requests /\ cb'.as_outcomes = s'.vs_outcomes` by
     gvs[] >>
   gvs[asm_frame_rel_tail_def, asm_frame_rel_def] >>
-  qspecl_then [`\rq. ~computed_precompile rq`, `call_trace es0`, `pa`,
+  qspecl_then [`\rq. T`, `call_trace es0`, `pa`,
     `call_trace esa`, `pb`, `call_trace esb`, `s.vs_requests`,
     `s'.vs_requests`] mp_tac trace_request_pairing >>
-  simp[GSYM call_requests_def]
+  simp[listTheory.FILTER_T, GSYM call_requests_def]
 QED

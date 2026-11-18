@@ -164,12 +164,10 @@ Definition call_trace_def:
   call_trace es = (frame_obs es).entries
 End
 
-(* The requests the oracle-mode run records: computed-precompile calls
- * (value 0 to 1/2/6/7) have no effects, so record_request leaves them out,
- * though their outcomes still answer the run. *)
+(* The requests the oracle-mode run records: one per trace entry, computed
+ * precompiles (value 0 to 1/2/6/7) included. *)
 Definition call_requests_def:
-  call_requests es =
-    FILTER (\rq. ~computed_precompile rq) (MAP FST (call_trace es))
+  call_requests es = MAP FST (call_trace es)
 End
 
 Definition gas_readings_def:

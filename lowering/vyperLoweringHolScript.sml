@@ -21,6 +21,7 @@ Ancestors
   bodyMemStorageCopyStage
   dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
+  rawCallCalldataPeakMemory
   loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
   loweringCallBudgetBounds
   moduleLoweringProps entryDispatchProps entryDecodeProps
@@ -93,6 +94,7 @@ Ancestors
   (* providers awaiting their consumers *)
   bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
   bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
+  bodyFullTypeBuiltinAbiEncode
   bodyPtrTypeBuiltinsBytesUintSemantics
   internalReturnMemoryMem bodyFullIntCallByteFrame
   bodyFullIntCall

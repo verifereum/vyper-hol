@@ -33,15 +33,17 @@ Proof
 QED
 
 Theorem lower_budget_precompile_consumption:
-  !bt es s rq ro rz sr ee w t.
+  !bt vs es s rq ro rz sr ee w t.
     precompile_builtin bt /\ es.outcomes = SOME s.vs_outcomes /\
-    precompile_call_success bt es = (sr,ee) /\
+    precompile_call_success bt vs es = (sr,ee) /\
     consume_call_outcome rq ro rz s = (w,t) ==>
     ee.outcomes = SOME t.vs_outcomes /\
     t.vs_outcomes = DROP 1 s.vs_outcomes
 Proof
   rpt strip_tac >> Cases_on `s.vs_outcomes` >>
   gvs[consume_call_outcome_eq, precompile_call_success_def,
+      take_call_outcome_def, take_request_outcome_def, call_outcome_request_def,
+      pair_CASE_def, UNCURRY,
       take_outcome_rest, vyperStateTheory.check_def,
       vyperStateTheory.assert_def, vyperStateTheory.return_def,
       vyperStateTheory.raise_def, vyperStateTheory.bind_def] >>

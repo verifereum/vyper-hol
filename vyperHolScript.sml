@@ -77,9 +77,9 @@ Ancestors
   (* whitelist: retained raw-call and CREATE compiler shape proofs *)
   whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
-  batchCopyRobustPtr entryHaltPtr liveArrayTransportPtr normalizationAllocPtr
+  batchCopyRobustPtr liveArrayTransportPtr normalizationAllocPtr
   ptrSafetyTransport returnMetadataPtr staticTypeFitsPtr structChildPtr
-  typedCopyArrayExecutionPtr wordCopyRobustPtr
+  wordCopyRobustPtr
   (* end-to-end runtime correctness *)
   e2eCorrectness guardRequestAlignment
   (* sufficient gas, the companions to the call and deploy theorems *)

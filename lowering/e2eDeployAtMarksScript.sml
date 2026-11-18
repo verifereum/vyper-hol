@@ -64,7 +64,7 @@ Proof
   simp[shadow_root_def, shadow_root_contexts_def]
 QED
 
-Theorem opt_deploy_codegen_asm_entry_rel[local]:
+Theorem opt_deploy_codegen_asm_entry_rel:
   !tops prog prog' am tx es cplan u.
   deploy_state_rel tops (assemble prog') am tx es /\ unit_shape_ok u ==>
   codegen_asm_entry_rel cplan prog (opt_deploy_entry_state prog prog' cplan tops es)
@@ -80,7 +80,7 @@ Proof
   gvs[entry_venom_state_def, venomStateTheory.init_venom_state_def, contextCodegenRelTheory.context_memory_rel_def]
 QED
 
-Theorem opt_deploy_asm_frame_rel[local]:
+Theorem opt_deploy_asm_frame_rel:
   !tops prog prog' am tx es cplan u.
   deploy_state_rel tops (assemble prog') am tx es /\ unit_shape_ok u /\
   assemble prog' <> [] ==>
@@ -141,7 +141,7 @@ QED
 
 (* The bridges at the deployment entry: the S4 memory facts of vs from its
    memory-safe and pointer-safe runs from "__deploy". *)
-Theorem deploy_selected_memory[local]:
+Theorem deploy_selected_memory:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_source_ok tops am tx /\
@@ -266,7 +266,7 @@ Theorem deploy_correct_at_tail[local]:
   ~(?t. runtime_bc = 0xEFw :: t) /\
   w2n vs_out.vs_initial_fmp <= w2n fmp /\
   w2n fmp < 2 ** 254 /\
-  unit_alloca_budget dunit.cu_context +
+  imm_len tops + unit_alloca_budget dunit.cu_context +
     32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
   raw_variant fmp vs vs_out /\
   (~deploy_source_exempt tops
@@ -431,7 +431,7 @@ Theorem e2e_deploy_correct_from_gas_link:
     ~(?t. runtime_bc = 0xEFw :: t) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
-    unit_alloca_budget dunit.cu_context +
+    imm_len tops + unit_alloca_budget dunit.cu_context +
       32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
     run_call es = SOME (r, es') /\
     (creation_resource_starved es r es' \/

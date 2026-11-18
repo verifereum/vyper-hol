@@ -142,7 +142,7 @@ Proof
             mem_safe_run_abort_step) >>
           gvs[mem_safe_step_non_invoke, mk_inst_def] >>
           qexistsl [`nkey`, `st`] >> gvs[] >>
-          irule below_frontier_no_ranges >> simp[]) >>
+          disj1_tac >> irule below_frontier_no_ranges >> simp[]) >>
       qabbrev_tac `u = tstore (n2w nkey) 0w s with
                          vs_inst_idx := s.vs_inst_idx + 1` >>
       `step_inst fuel ctx (mk_inst st.cs_next_id TSTORE
