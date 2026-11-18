@@ -256,6 +256,7 @@ Ancestors
   vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
   structFieldsProps vyperTypeABI vyperValue vfmConstants valueEncoding pair
   vyperPlaceInvariants placeTypingProps allocLimits
+  vyperTypeEvalProofs
 Libs
   pairLib
 

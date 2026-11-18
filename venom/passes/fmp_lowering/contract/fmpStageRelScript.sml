@@ -353,6 +353,8 @@ Definition fmp_stage_result_def:
     case r of
       Halt se => dead_result_rel D r r'
     | Abort ab se => dead_result_rel D r r' /\
+        (ab = Revert_abort /\ se.vs_returndata = [] ==>
+         !ab' te. r' = Abort ab' te ==> te.vs_returndata = []) /\
         !ab' te. r' = Abort ab' te ==>
           LIST_REL (request_agree_except D) se.vs_requests te.vs_requests
     | Error e => F
@@ -412,6 +414,8 @@ Definition fmp_invoke_sim_def:
                 (t1 with vs_inst_idx := SUC t.vs_inst_idx) ts
         | Halt se => dead_result_rel D r r'
         | Abort ab se => dead_result_rel D r r' /\
+            (ab = Revert_abort /\ se.vs_returndata = [] ==>
+             !ab' te. r' = Abort ab' te ==> te.vs_returndata = []) /\
             !ab' te. r' = Abort ab' te ==>
               LIST_REL (request_agree_except D) se.vs_requests te.vs_requests
         | _ => F
