@@ -6,7 +6,7 @@ Ancestors
 
 Theorem Send_outcome_preserves_locals:
   (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    (rq,outcome) <- take_call_outcome gas_cap target [] (SOME amount);
     check outcome.co_success "send failed";
     adopt_call_outcome rq outcome;
     return (Value NoneV)
@@ -607,7 +607,7 @@ Proof
 QED
 
 Theorem scope_pop_effect_outcome_primitives[simp]:
-  scope_pop_effect (vyperCallOutcome$take_call_outcome target calldata value_opt) /\
+  scope_pop_effect (vyperCallOutcome$take_call_outcome gas_cap target calldata value_opt) /\
   scope_pop_effect (vyperCallOutcome$adopt_call_outcome rq co)
 Proof
   conj_tac
@@ -620,12 +620,20 @@ QED
 Theorem scope_pop_effect_call_helpers[simp]:
   scope_pop_effect (eval_send cx has_gas vs) /\
   scope_pop_effect (eval_ext_call cx static skip_check sig opts vs) /\
-  scope_pop_effect (check_create_blueprint has_salt vs)
+  scope_pop_effect (check_create_blueprint has_salt literal_offset vs)
 Proof
   rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
   FIRST (map (fn th => drule th >> simp[])
     [eval_send_preserves_non_accounts, eval_ext_call_preserves_non_accounts,
      vyperCreateFrameTheory.check_create_blueprint_result_state])
+QED
+
+Theorem eval_create_operands_scope_pop_effect[simp]:
+  scope_pop_effect
+    (eval_create_operands cx kind has_salt rof arg_tys literal_offset vs)
+Proof
+  Cases_on `kind` >> simp[eval_create_operands_def] >>
+  ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
 Theorem eval_send_scope_effect[local]:
@@ -717,26 +725,7 @@ Proof
   drule read_results_state >> simp[]
 QED
 
-Theorem eval_expr_results_empty_scope_effect[local]:
-  scope_pop_effect (eval_expr_results cx [])
-Proof
-  simp[Once evaluate_def]
-QED
-
-Theorem eval_expr_results_scope_effect[local]:
-  scope_pop_effect (eval_expr cx e) /\
-  (!st pv middle. eval_expr cx e st = (INL pv,middle) ==>
-    scope_pop_effect (eval_expr_results cx es)) ==>
-  scope_pop_effect (eval_expr_results cx (e::es))
-Proof
-  strip_tac >> rewrite_tac[Once evaluate_def] >>
-  ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
-  rpt gen_tac >> strip_tac >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-  >- (first_x_assum irule >> goal_assum (drule_at Any)) >> simp[]
-QED
-
-Theorem eval_mutual_scope_pop_effect_results[local]:
+Theorem eval_mutual_scope_pop_effect:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
@@ -746,8 +735,7 @@ Theorem eval_mutual_scope_pop_effect_results[local]:
   (!cx bt. scope_pop_effect (eval_base_place cx bt)) /\
   (!cx bt. scope_pop_effect (eval_target_place cx bt)) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
-  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
-  (!cx es. scope_pop_effect (eval_expr_results cx es))
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   rpt gen_tac >> rpt strip_tac >~
@@ -766,7 +754,6 @@ Proof
      eval_literal_scope_effect, eval_structlit_scope_effect,
      eval_pop_scope_effect, eval_attribute_scope_effect, eval_ifexp_scope_effect,
      eval_exprs_empty_scope_effect, eval_exprs_cons_scope_effect,
-     eval_expr_results_empty_scope_effect, eval_expr_results_scope_effect,
      eval_name_place_scope_effect, eval_toplevel_place_scope_effect,
      eval_attribute_base_place_scope_effect, eval_target_place_scope_effect,
      eval_subscript_base_place_scope_effect, eval_subscript_scope_effect,
@@ -776,28 +763,19 @@ Proof
      eval_selfdestruct_scope_effect, eval_raw_log_scope_effect, eval_send_scope_effect])
 QED
 
-Resume eval_mutual_scope_pop_effect_results[ExtCall]:
+Resume eval_mutual_scope_pop_effect[ExtCall]:
   rewrite_tac[Once evaluate_def] >>
   ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   rpt POP_EFFECT_BIND_STEP
 QED
 
-Resume eval_mutual_scope_pop_effect_results[Create]:
-  Cases_on `kind` >> Cases_on `has_salt` >> gvs[] >>
-  `TAKE (LENGTH es - 2) (DROP 2 es) = DROP 2 es` by
-    metis_tac[LENGTH_DROP, TAKE_LENGTH_ID] >>
-  pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-  `DROP (LENGTH es - 2) (DROP 2 es) = []` by
-    metis_tac[LENGTH_DROP, DROP_LENGTH_NIL] >>
-  pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-  simp_tac (srw_ss()) [Once evaluate_def] >>
-  rpt POP_EFFECT_BIND_STEP >>
-  simp_tac (srw_ss()) [LET_THM, LENGTH_DROP, GSYM arithmeticTheory.SUB_PLUS] >>
+Resume eval_mutual_scope_pop_effect[Create]:
+  rewrite_tac[Once evaluate_def] >>
   rpt POP_EFFECT_BIND_STEP
 QED
 
-Resume eval_mutual_scope_pop_effect_results[IntCall]:
+Resume eval_mutual_scope_pop_effect[IntCall]:
   rewrite_tac[Once evaluate_def, ignore_bind_def] >>
   ntac 3 (ho_match_mp_tac scope_pop_effect_bind_guarded >>
           conj_tac >- simp[] >> rpt gen_tac >> strip_tac) >>
@@ -827,33 +805,12 @@ Resume eval_mutual_scope_pop_effect_results[IntCall]:
   rpt strip_tac >> imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
 QED
 
-Resume eval_mutual_scope_pop_effect_results[Builtin]:
+Resume eval_mutual_scope_pop_effect[Builtin]:
   irule eval_builtin_scope_effect >>
   Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >> metis_tac[]
 QED
 
-Finalise eval_mutual_scope_pop_effect_results
-
-Theorem eval_mutual_scope_pop_effect:
-  (!(cx:evaluation_context) (s:stmt). T) /\
-  (!(cx:evaluation_context) (ss:stmt list). T) /\
-  (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
-  (!cx e. scope_pop_effect (eval_expr cx e)) /\
-  (!cx es. scope_pop_effect (eval_exprs cx es)) /\
-  (!cx bt. scope_pop_effect (eval_base_place cx bt)) /\
-  (!cx bt. scope_pop_effect (eval_target_place cx bt)) /\
-  (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
-  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
-Proof
-  metis_tac[eval_mutual_scope_pop_effect_results]
-QED
-
-Theorem eval_expr_results_scope_pop_effect:
-  scope_pop_effect (eval_expr_results cx es)
-Proof
-  metis_tac[eval_mutual_scope_pop_effect_results]
-QED
+Finalise eval_mutual_scope_pop_effect
 
 (* A pop trace only rewrites existing entries, so every frame keeps its
    domain and every entry its type and assignability. *)
@@ -912,7 +869,7 @@ Theorem eval_expr_preserves_scopes_dom:
     eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> drule scope_pop_effect_scopes_dom >>
-  simp[eval_mutual_scope_pop_effect_results]
+  simp[eval_mutual_scope_pop_effect]
 QED
 
 
@@ -938,7 +895,7 @@ Theorem eval_base_place_preserves_scopes_dom:
   ∀cx bt st res st'. eval_base_place cx bt st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> drule scope_pop_effect_scopes_dom >>
-  simp[eval_mutual_scope_pop_effect_results, eval_expr_results_scope_pop_effect]
+  simp[eval_mutual_scope_pop_effect]
 QED
 
 Theorem eval_base_place_preserves_var_in_scope:
@@ -964,15 +921,15 @@ Theorem eval_exprs_preserves_scopes_dom:
     eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> drule scope_pop_effect_scopes_dom >>
-  simp[eval_mutual_scope_pop_effect_results, eval_expr_results_scope_pop_effect]
+  simp[eval_mutual_scope_pop_effect]
 QED
 
-Theorem eval_expr_results_preserves_scopes_dom:
-  eval_expr_results cx es st = (res,st') ==>
+Theorem eval_create_operands_preserves_scopes_dom:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st = (res,st') ==>
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> drule scope_pop_effect_scopes_dom >>
-  simp[eval_mutual_scope_pop_effect_results, eval_expr_results_scope_pop_effect]
+  simp[]
 QED
 
 Theorem eval_exprs_preserves_var_in_scope:
@@ -998,7 +955,7 @@ Theorem eval_target_place_preserves_scopes_dom:
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> drule scope_pop_effect_scopes_dom >>
-  simp[eval_mutual_scope_pop_effect_results, eval_expr_results_scope_pop_effect]
+  simp[eval_mutual_scope_pop_effect]
 QED
 
 Theorem eval_target_place_preserves_var_in_scope:

@@ -3,13 +3,13 @@
 Theory e2eBoundaryTest
 Ancestors
   e2eDefs frameOutcome callTrace
-  vyperInterpreter vyperContext vyperState vyperABI vyperAST vyperValue
+  vyperInterpreter vyperContext vyperState vyperABI vyperAST vyperValue vyperCalldata
   vyperTypeContractSoundness vyperTypeInitialState vyperTypeContract
   vyperStorageLayoutSafety vyperRuntimeAccounts
   supportedProgram supportedDecls contractABI selectorDispatch
   vfmState[ignore_grammar] vfmExecution[ignore_grammar]
   list alist option pair words
-Libs wordsLib
+Libs wordsLib cv_transLib
 
 val _ = Parse.hide "body";
 
@@ -53,7 +53,7 @@ Theorem boundary_live_and_fresh:
   source_deployment_rel tops am tx /\ tx_block_fields_rel tx es.txParams /\
   ?ctxt rb rest.
     es.contexts = (ctxt,rb)::rest /\
-    ~ctxt.msgParams.static /\ ctxt.jumpDest = NONE /\
+    ctxt.msgParams.static = tx.is_static /\ ctxt.jumpDest = NONE /\
     ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
     buffer_to_list ctxt.memory = [] /\ ctxt.returnData = [] /\
     installed_code_rel tops code (account_immutables am tx.target)
@@ -61,7 +61,11 @@ Theorem boundary_live_and_fresh:
     ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
     LENGTH ctxt.msgParams.code <= 24576
 Proof
-  simp[call_state_rel_def] >> metis_tac[]
+  strip_tac >>
+  drule call_state_rel_parsed >> strip_tac >>
+  drule call_state_rel_code_length >> strip_tac >>
+  fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def] >>
+  qpat_x_assum `es.contexts = _` (fn th => gvs[th])
 QED
 
 Theorem block_environment_bounds:
@@ -69,7 +73,7 @@ Theorem block_environment_bounds:
   tx.block_number <> 0 /\ tx.block_number < 2 ** 255 /\
   MIN 256 tx.block_number <= LENGTH tx.block_hashes /\
   LENGTH tx.block_hashes <= 256 /\
-  tp.prevRandao = n2w tx.prev_randao /\ tp.prevHashes = tx.block_hashes
+  tp.prevRandao = n2w tx.prev_randao /\ tx.block_hashes = TAKE 256 tp.prevHashes
 Proof
   simp[tx_block_fields_rel_def, loweringStateRelDefsTheory.tx_env_ok_def]
 QED
@@ -78,7 +82,8 @@ Theorem boundary_pending_deletions:
   call_state_rel tops code am tx es ==>
   es.rollback.toDelete = am.pending_deletions
 Proof
-  simp[call_state_rel_def] >> metis_tac[]
+  simp[call_state_rel_def, frame_fresh_def, frame_tx_rel_def,
+       world_rel_def] >> metis_tac[]
 QED
 
 Theorem no_genesis_or_unbounded_hash_environment:
@@ -119,18 +124,22 @@ QED
 
 Theorem typing_and_storage_contracts:
   (source_typing_ok tops am tx <=>
-    ?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
-          checked_contract_runtime_ready art [(NONE,tops)] am tx /\
-          machine_well_typed am /\ call_tx_well_typed tx) /\
-  (source_storage_ok am tx os gs <=>
+    ?art cenv.
+      check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+      global_cells_typed tops art.cta_bare_globals (account_immutables am tx.target) /\
+      constants_fold_module [(NONE, tops)] (account_immutables am tx.target) NONE tops FEMPTY = SOME cenv /\
+      cenv SUBMAP get_source_immutables NONE (account_immutables am tx.target) /\
+      machine_well_typed am /\ call_tx_well_typed tx) /\
+  (call_storage_ok am tx os gs <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
     let obs = source_storage_trace am tx os gs in
     let (regions, locks) = storage_trace_horizon obs in
       storage_roots_fit obs /\ regions_consistent regions /\
       storage_locks_separated regions locks /\
-      storage_well_formed_on cx (initial_state am []) regions)
+      storage_well_formed_on cx (initial_state am []) regions /\
+      storage_trace_backends_well_formed cx regions obs)
 Proof
-  simp[source_typing_ok_def, source_storage_ok_def]
+  simp[source_typing_ok_def, call_storage_ok_def]
 QED
 
 Theorem outcome_guard_success_only:
@@ -196,15 +205,63 @@ Proof
        vyperValueOperationTheory.safe_cast_def]
 QED
 
+(* ===== Raw calldata dispatch through the source boundary ===== *)
+val dispatch_entry =
+  ``FunctionDecl External Nonpayable F F "f"
+      [("a",BaseT (UintT 8))] [] NoneT []``
+val dispatch_default =
+  ``FunctionDecl External Payable F F "__default__" [] [] NoneT []``
+val dispatch_selector = ``[0x31w;0x20w;0xd4w;0x34w] : word8 list``
+
+Triviality dispatch_method_id:
+  vyperABIEntries$abi_method_id FEMPTY "f" [BaseT (UintT 8)] = 0x3120d434
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem calldata_dispatch_decodes_exact_head:
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (^dispatch_selector ++ cd_example_word 255) = SOME ("f", [IntV 255])
+Proof
+  computeLib.RESTR_EVAL_TAC [``vyperABIEntries$abi_method_id``] >>
+  simp[dispatch_method_id] >> EVAL_TAC
+QED
+
+Theorem calldata_dispatch_miss_and_short_fallback:
+  calldata_dispatch [^dispatch_entry] [0w;0w;0w;0w] = NONE /\
+  calldata_dispatch [^dispatch_entry; ^dispatch_default] [0w;0w;0w;0w] =
+    SOME ("__default__", []) /\
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (TAKE 3 ^dispatch_selector) = SOME ("__default__", [])
+Proof
+  rpt conj_tac >>
+  computeLib.RESTR_EVAL_TAC [``vyperABIEntries$abi_method_id``] >>
+  simp[dispatch_method_id] >> EVAL_TAC
+QED
+
+Theorem calldata_dispatch_bad_head_or_argument_rejects:
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (^dispatch_selector ++ TAKE 31 (cd_example_word 255)) = NONE /\
+  calldata_dispatch [^dispatch_entry; ^dispatch_default]
+    (^dispatch_selector ++ cd_example_word 256) = NONE
+Proof
+  rpt conj_tac >>
+  computeLib.RESTR_EVAL_TAC [``vyperABIEntries$abi_method_id``] >>
+  simp[dispatch_method_id] >> EVAL_TAC
+QED
+
 (* The compiler packages the same getter that source lookup selects. *)
 Theorem source_lookup_getter_supported:
-  let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
+  EVERY (\tops.
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\
-    supported_program tops
+    supported_program tops)
+    [[VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0);
+      EventDecl "Batch" [(("values",ArrayT (BaseT (UintT 256)) (Dynamic 4)),F)]]]
 Proof
-  simp_tac bool_ss [LET_THM] >> conj_tac >- EVAL_TAC >>
+  simp_tac bool_ss [listTheory.EVERY_DEF, AND_CLAUSES] >>
+  conj_tac >- EVAL_TAC >>
   simp[supported_program_def, supported_declaration_headers_def,
     supported_declaration_header_def, supported_declaration_body_def,
     supportedNamesTheory.supported_declaration_names_def,
@@ -224,7 +281,7 @@ Theorem raw_return_is_unwrapped:
   tx_return_bytes
     [FunctionDecl External Pure F T "raw" [] []
        (BaseT (BytesT (Dynamic 8))) []]
-    (BaseT (BytesT (Dynamic 8))) (tx with function_name := "raw")
+    (tx with function_name := "raw")
     (vyperValue$BytesV [1w; 2w]) out <=>
   out = [1w; 2w]
 Proof
@@ -287,7 +344,8 @@ End
 
 Theorem decoding_exemption_exact:
   (unspecified_behaviour_exempt dynamic_decode_program e <=>
-    e = RuntimeError "abi_decode invalid") /\
+    e = RuntimeError "abi_decode invalid" \/
+    e = RuntimeError "transfer_value recipient overflow") /\
   ~unspecified_behaviour_exempt [] (RuntimeError "abi_decode invalid") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (RuntimeError "abi_decode conversion") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (TypeError "abi_decode invalid")
@@ -333,15 +391,17 @@ Theorem success_requires_requests_and_effects:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
   H = storage_trace_horizon
     (source_storage_trace am tx (MAP SND (call_trace es)) []) ==>
-  (call_result_rel_at [] tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops am tx es r es' <=>
     ?out. frame_outcome es r es' NONE out am'.logs /\
-      tx_return_bytes tops ret tx v out /\
-      accounts_agree H cx am'.accounts
+      tx_return_bytes tops tx v out /\
+      accounts_agree H cx.txn.target am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-      transient_agree H cx am'.tStorage es'.rollback.tStorage /\
-      LIST_REL (request_agree H cx) rqs (call_requests es))
+      transient_agree H cx.txn.target am'.tStorage es'.rollback.tStorage /\
+      LIST_REL (request_agree H cx.txn.target) rqs (call_requests es))
 Proof
-  simp[call_result_rel_at_def, call_success_rel_def]
+  strip_tac >>
+  gvs[call_result_rel_at_def, effects_agree_def, initial_evaluation_context_def,
+      AC CONJ_ASSOC CONJ_COMM]
 QED
 
 Theorem halt_requires_empty_success_and_effects:
@@ -350,20 +410,21 @@ Theorem halt_requires_empty_success_and_effects:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
   H = storage_trace_horizon
     (source_storage_trace am tx (MAP SND (call_trace es)) []) ==>
-  (call_result_rel_at [] tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops am tx es r es' <=>
     frame_outcome es r es' NONE [] am'.logs /\
-      accounts_agree H cx am'.accounts
+      accounts_agree H cx.txn.target am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-      transient_agree H cx am'.tStorage es'.rollback.tStorage /\
-      LIST_REL (request_agree H cx) rqs (call_requests es))
+      transient_agree H cx.txn.target am'.tStorage es'.rollback.tStorage /\
+      LIST_REL (request_agree H cx.txn.target) rqs (call_requests es))
 Proof
-  simp[call_result_rel_at_def]
+  strip_tac >>
+  gvs[call_result_rel_at_def, effects_agree_def, initial_evaluation_context_def]
 QED
 
 Theorem assert_result_does_not_compare_requests:
   call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR (AssertException s),am',rqs) ==>
-  (call_result_rel_at [] tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops am tx es r es' <=>
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
       ((exc = Reverted /\ frame_raises es Reverted) \/
        s = "UNREACHABLE"))
@@ -373,7 +434,7 @@ QED
 
 Theorem error_result_only_exact_exemption_or_failure:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INR (Error e),am',rqs) ==>
-  (call_result_rel_at [] tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops am tx es r es' <=>
     unspecified_behaviour_exempt tops e \/
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
 Proof
@@ -383,13 +444,13 @@ QED
 Theorem escaped_control_is_not_related:
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR BreakException,am',rqs) ==>
-     ~call_result_rel_at [] tops ret am tx es r es') /\
+     ~call_result_rel_at [] tops am tx es r es') /\
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR ContinueException,am',rqs) ==>
-     ~call_result_rel_at [] tops ret am tx es r es') /\
+     ~call_result_rel_at [] tops am tx es r es') /\
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR (ReturnException v),am',rqs) ==>
-     ~call_result_rel_at [] tops ret am tx es r es')
+     ~call_result_rel_at [] tops am tx es r es')
 Proof
   simp[call_result_rel_at_def, exception_outcome_rel_def]
 QED

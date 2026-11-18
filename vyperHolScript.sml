@@ -36,6 +36,9 @@ Ancestors
   o1PassLift
   (* O1: the pipeline's request companion at an abort *)
   o1PipelineRequests
+  (* O1: joint simulation, abort requests and memory for static frames *)
+  o1StaticPipelineCorrect
+  o1PipelineMemoryLoweredAbort
   (* codegen and compiler units: frame simulation, stack planning, unit checks,
      codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
@@ -89,3 +92,6 @@ Ancestors
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
   codegenLabelDisciplined
   codegenSymOwnRel
+  (* bytecode: a passing operand-stack checker excludes frame overflow *)
+  stackBoundSoundness
+  asmFinalizerPrefix

@@ -1,6 +1,6 @@
 (* Distinct boundary cases beyond the six core parity fixtures. *)
 Theory vyperMembershipMatrixTest
-Ancestors vyperMembershipParityTest compileVyper concretizeMemLocDefs alist byte integer_word option
+Ancestors vyperMembershipInFlagTest vyperMembershipNotinFlagTest vyperMembershipNotinMemSarrayTest vyperMembershipNeBytesVarTest vyperMembershipInEmptyListTest compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs membershipParityLib evalCompilerBytecodeLib vyperCheckContractFrontendLib jsonASTLib finite_mapLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
@@ -10,7 +10,6 @@ val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY,i2w_pos])
 val controls = ["in_flag", "notin_flag", "notin_mem_sarray",
   "ne_bytes_var", "in_empty_list"]
-val () = List.app membershipParityLib.prepare_compile controls
 val programs = listSyntax.mk_list (map membershipParityLib.program controls,
   ``:toplevel list``)
 val outputs = listSyntax.mk_list (map membershipParityLib.oracle controls,
@@ -20,7 +19,11 @@ Theorem task_controls_match_python:
   MAP (compile_vyper (K SOME) (o1_policy all_capabilities)) ^programs =
   MAP SOME ^outputs
 Proof
-  EVAL_TAC
+  simp[in_flag_matches_python,
+       notin_flag_matches_python,
+       notin_mem_sarray_matches_python,
+       ne_bytes_var_matches_python,
+       in_empty_list_matches_python]
 QED
 
 (* Keep one real-codegen rejection at the aggregate-element boundary. *)

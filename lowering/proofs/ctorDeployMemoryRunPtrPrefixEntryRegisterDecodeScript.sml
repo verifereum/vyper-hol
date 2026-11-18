@@ -9,7 +9,7 @@ Ancestors
  abiDecoderCoherence abiDecoderCounters ctorAbiActualFrame abiDecoderLoop
  abiEncoderProps emitHelperProps fragExec compileEnv
  localPtrsProps entryArgPtrs loweringHalt moduleLowering context venomInst venomExecSemantics
- allocaFrontierBound allocaBudgetProps venomMemDefs ctorAbiActualSites ctorDeployMemoryFrontier
+ allocaFrontierBound allocaBudgetProps venomMemDefs ctorAbiActualSites ctorDeployMemoryFrontier allocaFrontierRoom
  ptrSafeRun ptrDiscipline venomState finite_map words arithmetic pred_set list rich_list
   ctorDeployMemoryRunMemEntryRegistration fragGasPathMem
   fragGasOriginPtr fragGasOriginPtrLoop

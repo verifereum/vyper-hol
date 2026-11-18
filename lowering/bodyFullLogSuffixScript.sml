@@ -40,7 +40,7 @@ Theorem compile_log_topic_ops_origin_ptr_path:
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
               (!l. FST p <> Label l)) xs /\
   LIST_REL (\arg v. log_arg_rel cenv cx sa sm es s arg v /\
-    supported_scalar_type (SND arg) /\
+    supported_event_leaf_type (SND arg) /\
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
     xs vs /\
   encode_indexed_event_topics (REPLICATE (LENGTH xs) T) (MAP SND xs) vs =

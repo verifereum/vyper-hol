@@ -12,9 +12,9 @@ Libs monadsyntax
 (* ===== Shared checked continuation ===== *)
 
 Theorem checked_call_outcome_continue:
-  take_call_outcome target calldata value_opt st = (res,st1) ==>
+  take_call_outcome gas_cap target calldata value_opt st = (res,st1) ==>
   (do
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success msg;
     adopt_call_outcome rq outcome;
     k outcome.co_returnData
@@ -36,23 +36,23 @@ QED
    postconditions: the recursive continuation is never unfolded. *)
 Theorem checked_call_outcome_cases:
   (do
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success msg;
     adopt_call_outcome rq outcome;
     k outcome.co_returnData
   od) st = result <=>
-  (?exc st1. take_call_outcome target calldata value_opt st = (INR exc,st1) /\
+  (?exc st1. take_call_outcome gas_cap target calldata value_opt st = (INR exc,st1) /\
              result = (INR exc,st1)) \/
   (?rq outcome st1.
-    take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+    take_call_outcome gas_cap target calldata value_opt st = (INL (rq,outcome),st1) /\
     ~outcome.co_success /\ result = (INR (Error (RuntimeError msg)),st1)) \/
   (?rq outcome st1 st2.
-    take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+    take_call_outcome gas_cap target calldata value_opt st = (INL (rq,outcome),st1) /\
     outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
     k outcome.co_returnData st2 = result)
 Proof
-  Cases_on `take_call_outcome target calldata value_opt st` >>
-  rename1 `take_call_outcome target calldata value_opt st = (res,st1)` >>
+  Cases_on `take_call_outcome gas_cap target calldata value_opt st` >>
+  rename1 `take_call_outcome gas_cap target calldata value_opt st = (res,st1)` >>
   drule checked_call_outcome_continue >> disch_then (qspecl_then [`msg`,`k`] mp_tac) >>
   Cases_on `res` >- (rename1 `INL ro` >> Cases_on `ro` >>
     simp[adopt_call_outcome_equation] >> rw[] >> metis_tac[]) >>
@@ -65,7 +65,7 @@ QED
 Theorem checked_call_outcome_exception:
   accounts_runtime_well_typed st.accounts /\
   (do
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success msg;
     adopt_call_outcome rq outcome;
     k outcome.co_returnData
@@ -87,13 +87,13 @@ QED
    balance nor default-return-value evaluation is duplicated here. k gets
    outcome.co_returnData at the adopted state, including empty return data. *)
 Theorem ExtCall_outcome_continue:
-  take_call_outcome target calldata value_opt st = (res,st1) ==>
+  take_call_outcome gas_cap target calldata value_opt st = (res,st1) ==>
   (do
     accounts <- get_accounts;
     (if ret_type = NoneT then
        check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
      else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success "ExtCall reverted";
     adopt_call_outcome rq outcome;
     k outcome.co_returnData
@@ -112,16 +112,16 @@ Proof
   simp[bind_def, ignore_bind_def, get_accounts_def, return_def, check_def, assert_def] >>
   rw[] >> gvs[assert_def, bind_def, ignore_bind_def, return_def] >>
   Cases_on `res` >> simp[] >>
-  rename1 `take_call_outcome target calldata value_opt st = (INL ro,st1)` >>
+  rename1 `take_call_outcome gas_cap target calldata value_opt st = (INL ro,st1)` >>
   Cases_on `ro` >>
   simp[adopt_call_outcome_equation, bind_def, ignore_bind_def, assert_def] >>
   rw[] >> gvs[]
 QED
 
 Theorem Send_outcome_continue:
-  take_call_outcome target [] (SOME amount) st = (res,st1) ==>
+  take_call_outcome gas_cap target [] (SOME amount) st = (res,st1) ==>
   (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    (rq,outcome) <- take_call_outcome gas_cap target [] (SOME amount);
     check outcome.co_success "send failed";
     adopt_call_outcome rq outcome;
     return (Value NoneV)
@@ -158,7 +158,7 @@ Proof
 QED
 
 Theorem checked_call_outcome_success_frame:
-  take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+  take_call_outcome gas_cap target calldata value_opt st = (INL (rq,outcome),st1) /\
   adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
   rq.cr_accounts = st.accounts /\ rq.cr_tStorage = st.tStorage /\
   st2 = st with <|accounts := st2.accounts; tStorage := st2.tStorage;
@@ -172,7 +172,7 @@ Proof
 QED
 
 Theorem checked_delegate_outcome_success_frame:
-  take_delegate_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+  take_delegate_outcome gas_cap target calldata value_opt st = (INL (rq,outcome),st1) /\
   adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
   rq.cr_accounts = st.accounts /\ rq.cr_tStorage = st.tStorage /\
   st2 = st with <|accounts := st2.accounts; tStorage := st2.tStorage;

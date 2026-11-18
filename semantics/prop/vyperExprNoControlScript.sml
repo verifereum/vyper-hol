@@ -132,10 +132,10 @@ Theorem no_control_prims:
   (check_not_static cx s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (release_nonreentrant_lock a n s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (adopt_call_outcome rq oc s = (INR exc,s') ⇒ no_control_exc exc) ∧
-  (take_call_outcome t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
-  (take_delegate_outcome t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
+  (take_call_outcome gas_cap t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
+  (take_delegate_outcome gas_cap t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (eval_create cx k hs rof tys vs bs s = (INR exc,s') ⇒ no_control_exc exc) ∧
-  (check_create_blueprint hs vs s = (INR exc,s') ⇒ no_control_exc exc)
+  (check_create_blueprint hs literal_offset vs s = (INR exc,s') ⇒ no_control_exc exc)
 Proof
   Cases_on `tr` >>
   rw[return_def, raise_def, get_scopes_def, set_scopes_def, get_accounts_def,
@@ -495,6 +495,13 @@ Proof
   Cases_on `t` >> NC_DEF [eval_send_def, frame_call_value_def]
 QED
 
+Theorem eval_create_operands_no_control:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st =
+    (INR exc, st') ==> no_control_exc exc
+Proof
+  Cases_on `kind` >> NC_DEF [eval_create_operands_def]
+QED
+
 Theorem eval_raw_call_no_control:
   eval_raw_call cx flags target_addr calldata amount gas st = (INR exc, st') ==>
   no_control_exc exc
@@ -516,17 +523,15 @@ val canonical_no_control_ind = evaluate_ind
               `\cx es. !s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc`,
               `\cx t. !s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc`,
               `\cx t. !s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc`,
-              `\cx g v. T`, `\cx gs vs. T`,
-              `\cx es. !s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc`]
+              `\cx g v. T`, `\cx gs vs. T`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV)
   |> PURE_REWRITE_RULE [FORALL_SIMP, AND_CLAUSES, IMP_CLAUSES];
 
-Theorem canonical_eval_no_control_with_results:
+Theorem canonical_eval_no_control:
   (!cx e s exc st'. eval_expr cx e s = (INR exc,st') ==> no_control_exc exc) /\
   (!cx es s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc) /\
   (!cx t s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx es s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc)
+  (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc)
 Proof
   ho_match_mp_tac canonical_no_control_ind >> rpt conj_tac
   >- NC_EVAL_CASE
@@ -555,25 +560,8 @@ Proof
   >- NC_EVAL_CASE
   >- NC_EVAL_CASE
   >- NC_EVAL_CASE
-  >- NC_EVAL_CASE
-  >- NC_EVAL_CASE
   >> NC_EVAL_CASE
 QED
-Theorem canonical_eval_no_control:
-  (!cx e s exc st'. eval_expr cx e s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx es s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx t s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc)
-Proof
-  metis_tac[canonical_eval_no_control_with_results]
-QED
-
-Theorem eval_expr_results_no_control:
-  eval_expr_results cx es st = (INR exc,st') ==> no_control_exc exc
-Proof
-  metis_tac[canonical_eval_no_control_with_results]
-QED
-
 Theorem eval_expr_no_control:
   (∀cx e s exc st'.
     eval_expr cx e s = (INR exc, st') ⇒
@@ -602,8 +590,7 @@ val tuple_no_control_ind = evaluate_ind
               `\cx ty nm body vs. T`, `\cx e. T`, `\cx es. T`,
               `\cx t. T`, `\cx t. T`,
               `\cx g v. !st exc st'. assign_tuple_targets cx g v st = (INR exc,st') ==> no_control_exc exc`,
-              `\cx gs vs. !st exc st'. assign_tuple_target_list cx gs vs st = (INR exc,st') ==> no_control_exc exc`,
-              `\cx es. T`]
+              `\cx gs vs. !st exc st'. assign_tuple_target_list cx gs vs st = (INR exc,st') ==> no_control_exc exc`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV)
   |> PURE_REWRITE_RULE [FORALL_SIMP, AND_CLAUSES, IMP_CLAUSES];
 
@@ -624,7 +611,7 @@ QED
 
 Theorem Send_outcome_runtime_error:
   (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    (rq,outcome) <- take_call_outcome gas_cap target [] (SOME amount);
     check outcome.co_success "send failed";
     adopt_call_outcome rq outcome;
     return (Value NoneV)

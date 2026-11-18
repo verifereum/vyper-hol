@@ -3,7 +3,7 @@ Ancestors
   loweringStateRelDefs
  ctorDeployMemoryRunMemEntryTaskBound deployEntryLayout ctorDeployDefs
  asmDataSuffixProps e2eEntry finite_map o1PassContract
- ctorDeployMemoryRunMemEntryLiteralPath ctorDeployLoweringEntryRoom
+ ctorDeployMemoryRunMemEntryLiteralPath allocaFrontierRoom
  ctorDeployMemoryRunMemEntryImmutableFrame compileEnv exprLoweringProps
  ctorDeployMemoryRunMemEntryZeroImmutables
 

@@ -240,18 +240,18 @@ Proof
 QED
 
 Theorem log_monad_take[local]:
-  log_monad (take_call_outcome target calldata value_opt)
+  log_monad (take_call_outcome gas_cap target calldata value_opt)
 Proof
   irule log_monad_take_request >>
-  qexists_tac `call_outcome_request target calldata value_opt` >>
+  qexists_tac `\st. call_outcome_request target calldata value_opt st with cr_gas := gas_cap` >>
   simp[take_call_outcome_def]
 QED
 
 Theorem log_monad_take_delegate[local]:
-  log_monad (take_delegate_outcome target calldata value_opt)
+  log_monad (take_delegate_outcome gas_cap target calldata value_opt)
 Proof
   irule log_monad_take_request >>
-  qexists_tac `delegate_outcome_request target calldata value_opt` >>
+  qexists_tac `\st. delegate_outcome_request target calldata value_opt st with cr_gas := gas_cap` >>
   simp[take_delegate_outcome_def]
 QED
 
@@ -448,10 +448,16 @@ Theorem eval_mutual_log_extends =
   REWRITE_RULE [state_rel_frame_result]
     (MATCH_MP eval_state_rel_frame log_extends_eval_frame);
 
-Theorem eval_expr_results_log_extends:
-  eval_expr_results cx es st = (res,st') ==> log_extends st st'
+Theorem eval_create_operands_log_extends:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st =
+    (res,st') ==> log_extends st st'
 Proof
-  metis_tac[eval_mutual_log_extends]
+  Cases_on `kind` >>
+  simp[eval_create_operands_def, LET_THM, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+  imp_res_tac eval_create_logs_extend >>
+  simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL]
 QED
 
 Theorem eval_stmt_log_extends:
@@ -744,7 +750,7 @@ QED
 
 Theorem Send_outcome_log_extends:
   (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    (rq,outcome) <- take_call_outcome gas_cap target [] (SOME amount);
     check outcome.co_success "send failed";
     adopt_call_outcome rq outcome;
     return (Value NoneV)
@@ -763,7 +769,7 @@ Theorem ExtCall_outcome_log_extends:
     (if ret_type = NoneT then
        check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
      else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success "ExtCall reverted";
     adopt_call_outcome rq outcome;
     k outcome.co_returnData

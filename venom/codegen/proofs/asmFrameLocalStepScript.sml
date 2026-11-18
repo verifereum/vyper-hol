@@ -36,6 +36,7 @@ Theorem asm_consume_outcome_not_revert[local]:
   asm_consume_call_outcome rq ro rs stk st <> AsmRevert x /\
   asm_consume_create_outcome rq stk st <> AsmRevert x
 Proof
+  Cases_on `st.as_outcomes = []` >>
   simp[asm_consume_call_outcome_def, asm_consume_create_outcome_def] >>
   rpt (pairarg_tac >> gvs[])
 QED
@@ -533,7 +534,7 @@ Resume frame_asm_group_observers[context]:
 QED
 Finalise frame_asm_group_observers[local]
 
-Theorem frame_asm_step_observers[local]:
+Theorem frame_asm_step_observers:
   (!name. inst = AsmOp name ==>
     ~is_evm_call_name name /\ name <> "GAS" /\ name <> "SELFDESTRUCT") /\
   (asm_step labels pc inst a = AsmOK a1 \/

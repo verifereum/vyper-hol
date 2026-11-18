@@ -2,7 +2,8 @@
  * Used by exec_ext_call (venomExecSemantics) for CALL and STATICCALL.
  * TOP-LEVEL: venom_call_request (already-evaluated operands),
  * consume_call_outcome (success word and state, before output binding).
- * Gas evaluation and single-output validation remain the dispatcher's job.
+ * Gas evaluation and single-output validation remain the dispatcher's job;
+ * exec_ext_call/exec_delegatecall set cr_gas to the evaluated gas operand.
  *)
 Theory venomCallOracleDefs
 Ancestors

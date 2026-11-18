@@ -368,7 +368,8 @@ Resume eval_expr_immutable_root_nonconstant[call]:
   >- (drule eval_raw_call_success_value >> simp[])
   >~ [`CreateTarget`]
   >- (rename1 `CreateTarget kind _ _ _` >> Cases_on `kind` >>
-      gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+      gvs[vyperCreateTheory.eval_create_operands_def,
+          bind_def, ignore_bind_def, return_def, raise_def,
           AllCaseEqs()] >>
       drule eval_create_success_value >> simp[])
 QED

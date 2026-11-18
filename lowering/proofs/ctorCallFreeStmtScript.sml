@@ -26,9 +26,10 @@ Proof
   rpt strip_tac >> first_x_assum irule >> fs[state_insts_def, all_blocks_def]
 QED
 
-Theorem opcode_every_stmt_stmts_size[local]:
-  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
-         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
+Theorem outcomes_free_stmt_stmts_size[local]:
+  (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
+         opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
+         opc <> RETURNDATACOPY ==> P opc) ==>
   (
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
@@ -66,27 +67,27 @@ Proof
   >> suspend "stmts"
 QED
 
-Resume opcode_every_stmt_stmts_size[stmt]:
+Resume outcomes_free_stmt_stmts_size[stmt]:
   gen_tac >> strip_tac >> Cases_on `s`
   >~ [`compile_stmt _ _ _ Pass`] >- simp[Once compile_stmt_def, every_state_insts_return]
   >~ [`compile_stmt _ _ _ Continue`] >- (rpt gen_tac >> Cases_on `lc` >>
     simp[Once compile_stmt_def, opcode_every_emit_inst, every_state_insts_ignore_bind, every_state_insts_return])
   >~ [`compile_stmt _ _ _ Break`] >- (rpt gen_tac >> Cases_on `lc` >>
     simp[Once compile_stmt_def, opcode_every_emit_inst, every_state_insts_ignore_bind, every_state_insts_return])
-  >~ [`compile_stmt _ _ _ (AnnAssign _ _ _)`] >- (rpt strip_tac >> use_expr (UNDISCH opcode_every_stmt_annassign) >> metis_tac[])
+  >~ [`compile_stmt _ _ _ (AnnAssign _ _ _)`] >- (rpt strip_tac >> use_expr (UNDISCH outcomes_free_stmt_annassign) >> metis_tac[])
   >~ [`compile_stmt _ _ _ (Assign _ _)`] >- suspend "assign"
-  >~ [`compile_stmt _ _ _ (AugAssign _ _ _ _)`] >- (rpt strip_tac >> use_expr (UNDISCH opcode_every_stmt_augassign) >> simp[] >> metis_tac[])
-  >~ [`compile_stmt _ _ _ (Append _ _)`] >- (rpt strip_tac >> use_expr (UNDISCH opcode_every_stmt_append) >> simp[] >> metis_tac[])
-  >~ [`compile_stmt _ _ _ (Assert _ _)`] >- (rpt strip_tac >> use_expr (UNDISCH opcode_every_stmt_assert) >> simp[] >> metis_tac[])
-  >~ [`compile_stmt _ _ _ (Raise _)`] >- (rpt strip_tac >> use_expr (UNDISCH opcode_every_stmt_raise) >> simp[] >> metis_tac[])
+  >~ [`compile_stmt _ _ _ (AugAssign _ _ _ _)`] >- (rpt strip_tac >> use_expr (UNDISCH outcomes_free_stmt_augassign) >> simp[] >> metis_tac[])
+  >~ [`compile_stmt _ _ _ (Append _ _)`] >- (rpt strip_tac >> use_expr (UNDISCH outcomes_free_stmt_append) >> simp[] >> metis_tac[])
+  >~ [`compile_stmt _ _ _ (Assert _ _)`] >- (rpt strip_tac >> use_expr (UNDISCH outcomes_free_stmt_assert) >> simp[] >> metis_tac[])
+  >~ [`compile_stmt _ _ _ (Raise _)`] >- (rpt strip_tac >> use_expr (UNDISCH outcomes_free_stmt_raise) >> simp[] >> metis_tac[])
   >~ [`compile_stmt _ _ _ (Return _)`] >- suspend "return"
-  >~ [`compile_stmt _ _ _ (Log _ _)`] >- (rpt strip_tac >> use_expr (UNDISCH opcode_every_stmt_log) >> simp[] >> metis_tac[])
+  >~ [`compile_stmt _ _ _ (Log _ _)`] >- (rpt strip_tac >> use_expr (UNDISCH outcomes_free_stmt_log) >> simp[] >> metis_tac[])
   >~ [`compile_stmt _ _ _ (If _ _ _)`] >- suspend "if"
   >~ [`compile_stmt _ _ _ (For _ _ _ _ _)`] >- suspend "for"
   >> suspend "expr"
 QED
 
-Resume opcode_every_stmt_stmts_size[stmts]:
+Resume outcomes_free_stmt_stmts_size[stmts]:
   Cases_on `ss` >- simp[Once compile_stmt_def, every_state_insts_return] >>
   rename1 `h::tl` >> simp[list_size_def] >> strip_tac >>
   qpat_x_assum `!m. _` (qspec_then `n-1` mp_tac) >>
@@ -106,26 +107,26 @@ Resume opcode_every_stmt_stmts_size[stmts]:
   metis_tac[]
 QED
 
-Resume opcode_every_stmt_stmts_size[expr]:
+Resume outcomes_free_stmt_stmts_size[expr]:
   rpt gen_tac >> simp[supported_stmt_expr_exists_def] >> strip_tac >>
   qid_spec_tac `st` >> simp[Once compile_stmt_def] >>
   ho_match_mp_tac every_state_insts_ignore_bind >> simp[every_state_insts_return] >>
   metis_tac[]
 QED
 
-Resume opcode_every_stmt_stmts_size[assign]:
+Resume outcomes_free_stmt_stmts_size[assign]:
   rename1 `Assign target e` >> Cases_on `target`
-  >- (rpt strip_tac >> use_expr (UNDISCH opcode_every_stmt_assign_base) >> simp[] >> metis_tac[]) >>
-  rpt strip_tac >> use_expr (UNDISCH opcode_every_stmt_assign_tuple) >> simp[] >> metis_tac[]
+  >- (rpt strip_tac >> use_expr (UNDISCH outcomes_free_stmt_assign_base) >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >> use_expr (UNDISCH outcomes_free_stmt_assign_tuple) >> simp[] >> metis_tac[]
 QED
 
-Resume opcode_every_stmt_stmts_size[return]:
+Resume outcomes_free_stmt_stmts_size[return]:
   rename1 `Return eo` >> Cases_on `eo`
-  >- simp[(UNDISCH opcode_every_stmt_return_none)] >>
-  rpt strip_tac >> use_expr (UNDISCH opcode_every_stmt_return_some) >> simp[] >> metis_tac[]
+  >- simp[(UNDISCH outcomes_free_stmt_return_none)] >>
+  rpt strip_tac >> use_expr (UNDISCH outcomes_free_stmt_return_some) >> simp[] >> metis_tac[]
 QED
 
-Resume opcode_every_stmt_stmts_size[if]:
+Resume outcomes_free_stmt_stmts_size[if]:
   rename1 `If cond b1 b2` >>
   `0 < n` by gvs[vyperASTTheory.stmt_size_def] >>
   qpat_x_assum `!m. _` (qspec_then `n-1` mp_tac) >>
@@ -133,33 +134,75 @@ Resume opcode_every_stmt_stmts_size[if]:
   `2 * list_size stmt_size b1 + 1 <= n-1` by gvs[vyperASTTheory.stmt_size_def] >>
   `2 * list_size stmt_size b2 + 1 <= n-1` by gvs[vyperASTTheory.stmt_size_def] >>
   rpt strip_tac >>
-  use_expr (UNDISCH opcode_every_stmt_if) >> simp[]
+  use_expr (UNDISCH outcomes_free_stmt_if) >> simp[]
   >>~- ([`!ann id args d. ~R (Call ann (IntCall id) args d) ==> _ (* g *)`],
          metis_tac[]) >>
   gvs[supported_stmt_expr_exists_def] >> conj_tac >>
   rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
-Resume opcode_every_stmt_stmts_size[for]:
+Resume outcomes_free_stmt_stmts_size[for]:
   qmatch_asmsub_rename_tac `stmt_size (For loop_ident loop_type loop_iterator loop_bound loop_body)` >>
   `0 < n` by gvs[vyperASTTheory.stmt_size_def] >>
   qpat_x_assum `!m. _` (qspec_then `n-1` mp_tac) >>
   (impl_tac >- decide_tac) >> strip_tac >>
   `2 * list_size stmt_size loop_body + 1 <= n-1` by gvs[vyperASTTheory.stmt_size_def] >>
   Cases_on `loop_iterator`
-  >- (rpt strip_tac >> use_expr (UNDISCH opcode_every_stmt_for_array) >> simp[]
+  >- (rpt strip_tac >> use_expr (UNDISCH outcomes_free_stmt_for_array) >> simp[]
     >>~- ([`!ann id args d. ~R (Call ann (IntCall id) args d) ==> _ (* g *)`],
            metis_tac[]) >>
     gvs[supported_stmt_expr_exists_def] >>
     rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
-  rpt strip_tac >> use_expr (UNDISCH opcode_every_stmt_for_range) >> simp[]
+  rpt strip_tac >> use_expr (UNDISCH outcomes_free_stmt_for_range) >> simp[]
   >>~- ([`!ann id args d. ~R (Call ann (IntCall id) args d) ==> _ (* g *)`],
          metis_tac[]) >>
   gvs[supported_stmt_expr_exists_def] >>
   rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
-Finalise opcode_every_stmt_stmts_size
+Finalise outcomes_free_stmt_stmts_size
+
+Theorem outcomes_free_compile_stmt_stmts_from_expr:
+  (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
+         opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
+         opc <> RETURNDATACOPY ==> P opc) ==>
+  (
+  (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+    ~supported_expr_exists R e /\
+    ~supported_expr_exists expr_shape_root e ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_expr ce ty e st)))) ==>
+  (!ce lc ty s st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+    ~supported_stmt_expr_exists R s /\
+    ~supported_stmt_expr_exists expr_shape_root s ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_stmt ce lc ty s st)))) /\
+  (!ce lc ty ss st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+    ~supported_stmts_expr_exists R ss /\
+    ~supported_stmts_expr_exists expr_shape_root ss ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_stmts ce lc ty ss st))))
+  )
+Proof
+  strip_tac >>
+  strip_tac >> drule (UNDISCH outcomes_free_stmt_stmts_size) >> strip_tac >> conj_tac
+  >- (rpt gen_tac >> first_x_assum (qspec_then `2 * stmt_size s + 2` mp_tac) >>
+    simp[] >> strip_tac >> rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
+  rpt gen_tac >> first_x_assum (qspec_then `2 * list_size stmt_size ss + 1` mp_tac) >>
+  simp[] >> strip_tac >> rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]
+QED
 
 Theorem compile_stmt_stmts_opcode_every_from_expr:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
@@ -194,12 +237,7 @@ Theorem compile_stmt_stmts_opcode_every_from_expr:
       (state_insts (SND (compile_stmts ce lc ty ss st))))
   )
 Proof
-  strip_tac >>
-  strip_tac >> drule (UNDISCH opcode_every_stmt_stmts_size) >> strip_tac >> conj_tac
-  >- (rpt gen_tac >> first_x_assum (qspec_then `2 * stmt_size s + 2` mp_tac) >>
-    simp[] >> strip_tac >> rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
-  rpt gen_tac >> first_x_assum (qspec_then `2 * list_size stmt_size ss + 1` mp_tac) >>
-  simp[] >> strip_tac >> rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]
+  strip_tac >> match_mp_tac outcomes_free_compile_stmt_stmts_from_expr >> simp[]
 QED
 
 Theorem compile_stmt_stmts_call_free_from_expr:

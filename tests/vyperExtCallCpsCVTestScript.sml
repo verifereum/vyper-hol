@@ -3,6 +3,7 @@
    consumption gate remains in vyperExtCallCpsEquivalenceTest.  No big-step rewrites here. *)
 Theory vyperExtCallCpsCVTest
 Ancestors
+  vyperSmallStepCV
   vyperSmallStep[ignore_grammar] extCallOracle
   vyperCallOutcome[ignore_grammar] vfmState[ignore_grammar]
   vfmExecution[ignore_grammar] vfmContext[ignore_grammar]
@@ -125,13 +126,13 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem cpscv_exhaustion_records_request:
+Theorem cpscv_exhaustion_runtime_error:
   cpscv_observe T 9w (BaseT (UintT 256)) NONE (SOME [])
-    (INR (Error (RevertData [])))
-    3 4w cpscv_initial_logs (cpscv_requests T) (SOME []) /\
+    (INR (Error (RuntimeError "take_call_outcome")))
+    3 4w cpscv_initial_logs cpscv_initial_requests (SOME []) /\
   cpscv_observe F 9w (BaseT (UintT 256)) NONE (SOME [])
-    (INR (Error (RevertData [])))
-    3 4w cpscv_initial_logs (cpscv_requests F) (SOME [])
+    (INR (Error (RuntimeError "take_call_outcome")))
+    3 4w cpscv_initial_logs cpscv_initial_requests (SOME [])
 Proof
   CONV_TAC cv_eval
 QED
