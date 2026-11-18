@@ -3,7 +3,7 @@ Theory symFrameBoundaryPairing
 Ancestors arithmetic[qualified,ignore_grammar] option[qualified,ignore_grammar]
   codegenSymRel asmSymOwnStep fnPlanPlaceRevertPostamble
   asmSymForwardOwn asmSymBridge asmSymSem asmSem asmWf
-  symbolResolve list finite_map words asmOptimizer
+  symbolResolve list finite_map words asmOptimizer asmSymRelocLabelsOwn asmSymModeOwn
 
 Theorem sym_frame_inv_canonical_own:
   !p env own ctx cp fn ret srest labs0 ps cs ss.
@@ -23,18 +23,8 @@ Theorem boundary_label_ref_defined:
   ?off. FLOOKUP lo l = SOME off
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  `MEM (AsmLabel l) p \/ MEM (AsmDataHeader l) p` by
-    (fs[asm_static_wf_def] >> first_x_assum irule >>
-     simp[asm_label_refs_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-     first_assum (irule_at Any) >> simp[]) >>
-  Cases_on `MEM (AsmLabel l) p`
-  >- (`?i. INDEX_OF (AsmLabel l) p = SOME i` by
-        (Cases_on `INDEX_OF (AsmLabel l) p` >> gvs[INDEX_OF_eq_NONE]) >>
-      drule_all asmSymBridgeTheory.asm_static_wf_code_label >>
-      fs[code_labels_agree_def] >> metis_tac[]) >>
-  `MEM (AsmDataHeader l) p` by metis_tac[] >>
   `asm_data_env_lo_ok lo p env own` by fs[asm_sym_rel_own_def] >>
-  fs[asm_data_env_lo_ok_def] >> first_x_assum drule >> simp[] >> metis_tac[]
+  metis_tac[asm_push_label_lookup_reloc]
 QED
 
 Theorem boundary_jump_dest_conc:
@@ -43,13 +33,7 @@ Theorem boundary_jump_dest_conc:
   sym_jump_dest p dest = SOME i /\ sval_conc lo dest = SOME w ==>
   FLOOKUP (build_offset_to_pc p) (w2n w) = SOME i
 Proof
-  rpt strip_tac >>
-  Cases_on `dest` >> gvs[sym_jump_dest_def, AllCaseEqs()] >>
-  drule_all asm_static_wf_code_label >> strip_tac >>
-  gvs[code_labels_agree_def, sval_conc_def, INDEX_OF_eq_SOME] >>
-  `off < dimword(:256)` by simp[dimword_def] >>
-  simp[]
-  >> (metis_tac [EL_MEM, arithmeticTheory.LESS_MOD, optionTheory.SOME_11])
+  rpt gen_tac >> MATCH_ACCEPT_TAC sym_jump_dest_conc_reloc
 QED
 
 Theorem asm_sym_legacy_step_own:
@@ -61,17 +45,9 @@ Theorem asm_sym_legacy_step_own:
     asm_sym_rel_own lo p env own cs' out
 Proof
   rpt strip_tac >>
-  mp_tac (Q.SPECL [`lo`, `\code. asm_data_env_lo_ok lo p env own /\ code = own`]
-    asm_sym_inst_step_core |> Q.INST [`inst` |-> `EL cs.as_pc p`]) >>
-  simp[asm_sym_rel_core_own] >>
-  impl_tac
-  >- (simp[EL_MEM] >> rpt conj_tac
-      >- metis_tac[boundary_label_ref_defined]
-      >- metis_tac[boundary_jump_dest_conc]
-      >> rpt strip_tac >>
-      `asm_data_env_lo_ok lo p env own /\ cs.as_code = own` by
-        fs[asm_sym_rel_own_def] >>
-      drule_all sym_codecopy_address_own >> simp[]) >>
+  `MEM (EL cs.as_pc p) p` by simp[EL_MEM] >>
+  drule_all (Q.INST [`allow_own` |-> `F`, `ai` |-> `EL cs.as_pc p`]
+    asm_sym_inst_step_mode) >>
   simp[]
 QED
 
@@ -83,10 +59,9 @@ Theorem asm_sym_legacy_steps_own:
   ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
     asm_sym_rel_own lo p env own cs' out
 Proof
-  rpt gen_tac >> strip_tac >>
-  mp_tac (Q.INST [`allow_own` |-> `F`] asm_sym_steps_mode_lockstep_from_step) >>
-  simp[sym_steps_mode_def] >> impl_tac
-  >- metis_tac[asm_sym_legacy_step_own] >>
+  rpt strip_tac >>
+  drule_all (SRULE [sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `F`] asm_sym_steps_mode_sim)) >>
   simp[]
 QED
 
