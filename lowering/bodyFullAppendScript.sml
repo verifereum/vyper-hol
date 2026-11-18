@@ -494,7 +494,9 @@ Resume append_nested_memory_cont_full[success]:
   drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts sm sb)` by
-    (fs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+    (qpat_assum `EVERY (\i. MEM i.inst_opcode _) _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
      gvs[venomInstTheory.is_terminator_def]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (t,G,tn) [] (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf)` by
