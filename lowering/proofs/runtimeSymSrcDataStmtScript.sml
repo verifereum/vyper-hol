@@ -4,13 +4,6 @@ Ancestors runtimeSymSrcDataCustomError
 
 (* Distribute the projection frame through control selection, keeping branch
    conditions opaque rather than duplicating compiler continuations. *)
-Theorem runtime_data_frame_if[simp]:
-  runtime_data_frame (if b then m else n) =
-  (if b then runtime_data_frame m else runtime_data_frame n)
-Proof
-  Cases_on `b` >> simp[]
-QED
-
 Theorem runtime_data_frame_option_case[local,simp]:
   runtime_data_frame (case x of NONE => m | SOME y => f y) =
   (case x of NONE => runtime_data_frame m | SOME y => runtime_data_frame (f y))

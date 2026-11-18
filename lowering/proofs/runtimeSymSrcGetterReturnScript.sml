@@ -20,66 +20,18 @@ Theorem runtime_sym_return_some_raw[local]:
     compile_stmt ce lc ty (Return (SOME e)) s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')
 Proof
-  disch_then (CONJUNCTS_THEN2 (mk_asm "expr") (mk_asm "abi")) >>
-  `!dt st v pc s u s'. runtime_sym_env tops ce /\
-    ~is_label_operand v /\ ~is_label_operand pc /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_internal_return_from_env ce dt st v pc s = (u,s') ==>
-    EVERY runtime_sym_inst (state_insts s')` by
-    (mp_tac runtime_sym_internal_return_from_env >>
-     (impl_tac >- metis_tac[runtime_sym_store_memory, runtime_sym_nonreentrant_unlock]) >> simp[]) >>
-  pop_assum (mk_asm "internal") >> rpt strip_tac >>
-  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-  simp[Once compile_stmt_def, lower_value_def, comp_bind_def] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  rename1 `compile_expr ce ty e s = (vv,sa)` >>
-  `EVERY runtime_sym_inst (state_insts sa) /\ runtime_sym_value vv` by
-    (asm "expr" drule_all >> simp[]) >>
-  gvs[] >> rename1 `unwrap_value ce vv sa = (v,sb)` >>
-  `EVERY runtime_sym_inst (state_insts sb) /\ ~is_label_operand v` by
-    metis_tac[runtime_sym_unwrap_value] >>
-  Cases_on `ce.ce_return_pc` >>
-  TRY (rename1 `ce.ce_return_pc = SOME loc` >> Cases_on `loc`) >> simp[]
-  >>~- ([`ce.ce_return_pc = SOME (PtrVar _ _)`],
-    rpt strip_tac >>
-    `!loc. ce.ce_return_pc = SOME loc ==> runtime_sym_loc loc` by gvs[runtime_sym_env_def] >>
-    asm "internal" (drule_at (Pat `compile_internal_return_from_env _ _ _ _ _ _ = _`)) >>
-    gvs[runtime_sym_loc_def])
-  >>~- ([`ce.ce_return_pc = SOME (MemLoc _ _)`],
-    simp[comp_bind_def] >> pairarg_tac >> simp[] >> rpt strip_tac >>
-    qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any mp_tac runtime_sym_emit_op) >>
-    simp[is_label_operand_def] >> strip_tac >> asm "internal" drule_all >> simp[]) >>
-  suspend "external"
+  strip_tac >> match_mp_tac runtime_sym_return_some_step >>
+  qexists_tac `tops` >> asm_rewrite_tac[] >>
+  rpt conj_tac
+  >- metis_tac[runtime_sym_unwrap_value]
+  >- (match_mp_tac runtime_sym_internal_return_from_env >>
+      metis_tac[runtime_sym_store_memory, runtime_sym_nonreentrant_unlock])
+  >- (match_mp_tac runtime_sym_external_return >>
+      metis_tac[runtime_sym_nonreentrant_unlock, runtime_sym_alloc_buffer])
+  >- metis_tac[runtime_sym_alloc_buffer]
+  >- metis_tac[runtime_sym_store_memory_typed]
+  >> metis_tac[runtime_sym_nonreentrant_unlock]
 QED
-
-Resume runtime_sym_return_some_raw[external]:
-  markerLib.RESUME_TAC >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  pairarg_tac >> simp[] >>
-  qmatch_asmsub_abbrev_tac `if norm then _ else _` >>
-  `EVERY runtime_sym_inst (state_insts cs') /\ ~is_label_operand ret_op` by
-    (Cases_on `norm` >>
-     qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
-     simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-     rpt (pairarg_tac >> simp[]) >> rpt strip_tac >> gvs[] >>
-     drule_all runtime_sym_alloc_buffer >> strip_tac >>
-     drule_all runtime_sym_store_memory_typed >> simp[]) >>
-  Cases_on `ce.ce_raw_return` >> Cases_on `FST ce.ce_nonreentrant` >>
-  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> simp[]) >> rpt strip_tac >> gvs[] >>
-  TRY (qpat_assum `compile_nonreentrant_unlock _ _ _ _ = _` kall_tac >>
-       drule_all runtime_sym_nonreentrant_unlock >> strip_tac) >>
-  TRY (qpat_assum `compile_alloc_buffer _ _ = _`
-       (mp_then Any mp_tac runtime_sym_alloc_buffer) >>
-       simp[] >> strip_tac >> drule_all runtime_sym_store_memory_typed >> strip_tac) >>
-  mp_tac runtime_sym_external_return >>
-  (impl_tac >- (conj_tac
-    >- (rpt strip_tac >> drule_all runtime_sym_nonreentrant_unlock >> simp[]) >>
-    conj_tac
-    >- (rpt strip_tac >> drule_all runtime_sym_alloc_buffer >> simp[]) >>
-    asm "abi" ACCEPT_TAC)) >>
-  disch_then (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >> simp[]
-QED
-Finalise runtime_sym_return_some_raw
 
 Theorem runtime_sym_single_return_raw:
   (!s v s'. runtime_sym_env tops ce /\ EVERY runtime_sym_inst (state_insts s) /\

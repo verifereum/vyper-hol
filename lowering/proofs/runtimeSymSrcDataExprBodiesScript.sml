@@ -1,6 +1,7 @@
 Theory runtimeSymSrcDataExprBodies
 Ancestors
   runtimeSymSrcDataFrame exprLowering emitHelper compileEnv builtinAbi builtinBytes context exprCallBounds
+  exprLoweringEquations
 
 Theorem runtime_data_frame_type_builtin_dispatch_body:
   (!ty e. runtime_data_frame (lower_value cfn cenv ty e)) /\
@@ -59,23 +60,6 @@ Proof
     runtime_data_frame_invalid_expr_call]
 QED
 
-Theorem runtime_expr_body_builtin_fallback[local]:
-  ~(bi = AddMod /\ ?a b c d f g. args = [Name a b; Name c d; Name f g]) /\
-  ~(bi = MulMod /\ ?a b c d f g. args = [Name a b; Name c d; Name f g]) /\
-  ~(bi = PowMod256 /\ ?a b c d. args = [Name a b; Name c d]) ==>
-  compile_expr_body cfn bfn tfn cenv ty (Builtin t bi args) st =
-    bfn cenv (expr_type (Builtin t bi args)) ty bi args st
-Proof
-  strip_tac >> Cases_on `args` >- simp[compile_expr_body_def] >>
-  rename1 `h::tl` >> Cases_on `h` >> simp[compile_expr_body_def] >>
-  Cases_on `tl` >- simp[compile_expr_body_def] >>
-  rename1 `h2::tl2` >> Cases_on `h2` >> simp[compile_expr_body_def] >>
-  Cases_on `tl2`
-  >- (Cases_on `bi` >> gvs[compile_expr_body_def]) >>
-  rename1 `h3::tl3` >> Cases_on `h3` >> simp[compile_expr_body_def] >>
-  Cases_on `tl3` >> Cases_on `bi` >> gvs[compile_expr_body_def]
-QED
-
 Theorem runtime_data_frame_expr_body:
   (!t l. runtime_data_frame (compile_literal_vv t l)) /\
   (!t id. runtime_data_frame (compile_name_vv cenv t id)) /\
@@ -105,7 +89,7 @@ Proof
       >- gvs[compile_expr_body_def] >>
       Cases_on `bi = PowMod256 /\ ?a b c d. args = [Name a b; Name c d]`
       >- gvs[compile_expr_body_def] >>
-      drule_all runtime_expr_body_builtin_fallback >> simp[]) >>
+      drule_all compile_expr_body_builtin_default >> simp[]) >>
   pure_rewrite_tac[compile_expr_body_def] >>
   simp[pairTheory.pair_CASE_def, pairTheory.ELIM_UNCURRY]
   >~ [`FLOOKUP cenv.ce_module_vars p`]

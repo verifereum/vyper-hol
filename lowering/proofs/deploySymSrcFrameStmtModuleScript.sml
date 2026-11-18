@@ -6,13 +6,6 @@ Ancestors
 val _ = augment_srw_ss [rewrites [deploy_blocks_frame_bind,
                                 deploy_blocks_frame_ignore_bind]];
 
-Theorem deploy_blocks_frame_if[simp]:
-  deploy_blocks_frame (if b then m else n) =
-  (if b then deploy_blocks_frame m else deploy_blocks_frame n)
-Proof
-  Cases_on `b` >> simp[]
-QED
-
 Theorem deploy_blocks_frame_option_case[local,simp]:
   deploy_blocks_frame (case x of NONE => m | SOME y => f y) =
   (case x of NONE => deploy_blocks_frame m | SOME y => deploy_blocks_frame (f y))

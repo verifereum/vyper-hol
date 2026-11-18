@@ -49,6 +49,81 @@ Proof
        supported_effect_expr_def, supported_expr_exists_def] >> metis_tac[]
 QED
 
+Theorem runtime_sym_subscript_step:
+  (!st value next. EVERY runtime_sym_inst (state_insts st) /\
+     cfn ce ty be st = (value,next) ==>
+     EVERY runtime_sym_inst (state_insts next) /\ runtime_sym_value value) /\
+  (!kt st op next. EVERY runtime_sym_inst (state_insts st) /\
+     lower_value cfn ce kt key st = (op,next) ==>
+     EVERY runtime_sym_inst (state_insts next) /\ ~is_label_operand op) /\
+  (!op b s out s'. EVERY runtime_sym_inst (state_insts s) /\
+     ~is_label_operand op /\ compile_keccak256_key op b s = (out,s') ==>
+     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand out) /\
+  (!bop key s out s'. EVERY runtime_sym_inst (state_insts s) /\
+     ~is_label_operand bop /\ ~is_label_operand key /\
+     compile_mapping_subscript bop key s = (out,s') ==>
+     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand out) /\
+  (!bop off s out s'. EVERY runtime_sym_inst (state_insts s) /\
+     ~is_label_operand bop /\ compile_tuple_subscript bop off s = (out,s') ==>
+     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand out) /\
+  (!ce loc bop idx dyn count ws sz signed s out s'.
+     runtime_sym_env tops ce /\ EVERY runtime_sym_inst (state_insts s) /\
+     ~is_label_operand bop /\ ~is_label_operand idx /\
+     compile_array_subscript bop idx dyn count ws sz signed
+       (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca loc) s = (out,s') ==>
+     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand out) ==>
+  runtime_sym_env tops ce /\ EVERY runtime_sym_inst (state_insts s) /\
+  compile_subscript cfn ce rt ty be key s = (v,s') ==>
+  EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
+Proof
+  disch_then (CONJUNCTS_THEN2 (mk_asm "base_safe")
+    (CONJUNCTS_THEN2 (mk_asm "key_safe") strip_assume_tac)) >> strip_tac >>
+  Cases_on `cfn ce ty be s` >>
+  `EVERY runtime_sym_inst (state_insts r) /\ runtime_sym_value q` by
+    (asm "base_safe" drule_all >> simp[]) >>
+  drule runtime_sym_value_operand >> strip_tac >>
+  qpat_x_assum `compile_subscript _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `cfn ce ty be s = _`
+    (fn th => simp[NoAsms, compile_subscript_def, comp_bind_def, th]) >>
+  Cases_on `(if copies_subscript_base ce be key then
+    compile_snapshot_vv ce T q else comp_return q) r` >>
+  rename1 `(if copies_subscript_base ce be key then _ else _) r = (bv,bs)` >>
+  `EVERY runtime_sym_inst (state_insts bs) /\ runtime_sym_value bv` by
+    (qpat_x_assum `(if _ then _ else _) r = _` mp_tac >>
+     Cases_on `copies_subscript_base ce be key` >>
+     pure_asm_rewrite_tac[COND_CLAUSES, comp_return_def, pairTheory.PAIR_EQ]
+     >- (strip_tac >> drule_all runtime_sym_snapshot_vv >> simp[]) >>
+     strip_tac >> metis_tac[]) >>
+  drule runtime_sym_value_operand >> strip_tac >>
+  simp[NoAsms] >>
+  suspend "branches"
+QED
+
+Resume runtime_sym_subscript_step[branches]:
+  markerLib.RESUME_TAC >>
+  (Cases_on `place_type ce be` >> simp[NoAsms]
+   >- (strip_tac >> irule runtime_sym_map_sequence >>
+       conj_tac >- asm_rewrite_tac[] >>
+       conj_tac >- asm_rewrite_tac[] >>
+       goal_assum (drule_at (Pos last)) >> asm_rewrite_tac[] >>
+       asm "key_safe" (qspec_then `expr_type key` (fn th => simp[th]))) >>
+   Cases_on `t` >> simp[NoAsms] >>
+   CONV_TAC (DEPTH_CONV (ETA_CONV ORELSEC HO_REWR_CONV (GSYM comp_bind_assoc))) >> strip_tac >>
+   irule runtime_sym_locate_sequence >>
+   goal_assum (drule_at (Pos last)) >>
+   rpt gen_tac >> strip_tac
+   >>~- ([`place_type ce be = ValPT (TupleT _)`], metis_tac[])
+   >>~- ([`place_type ce be = ValPT (StructT _)`], metis_tac[]) >>
+   irule runtime_sym_operand_sequence >>
+   goal_assum (drule_at (Pos last)) >>
+   (conj_tac >- (simp[NoAsms] >> rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!ce loc bop idx dyn count ws sz signed s out s'. _`
+       (drule_at (Pos last)) >> asm_rewrite_tac[]) >>
+   rpt gen_tac >> strip_tac >> asm "key_safe" drule_all >> simp[]))
+QED
+
+Finalise runtime_sym_subscript_step
+
 Theorem runtime_sym_subscript:
   runtime_sym_lower_value_clause tops /\
   (!op b s out s'. EVERY runtime_sym_inst (state_insts s) /\
@@ -71,69 +146,14 @@ Theorem runtime_sym_subscript:
 Proof
   strip_tac >> rewrite_tac[runtime_sym_subscript_clause_def] >>
   map_every qx_gen_tac [`cfn`,`ce`,`rt`,`ty`,`be`,`key`,`s`,`v`,`s'`] >> strip_tac >>
-  `((supported_expr tops be \/ supported_place_expr tops be \/
-     supported_effect_place_expr tops be) /\
-    (supported_expr tops key \/ supported_place_expr tops key \/
-     supported_effect_place_expr tops key)) /\
-    ~supported_expr_exists is_self_code be /\
-    ~supported_expr_exists is_self_code key` by
-    metis_tac[runtime_sym_subscript_children] >>
-  Cases_on `cfn ce ty be s` >>
-  `EVERY runtime_sym_inst (state_insts r) /\ runtime_sym_value q` by
-    (qpat_x_assum `!t. _` (qspec_then `ty` strip_assume_tac) >>
-     qpat_x_assum `runtime_sym_expr_contract _ _ _ _ be` mp_tac >>
-     rewrite_tac[runtime_sym_expr_contract_def] >>
-     disch_then (qspecl_then [`s`,`q`,`r`] mp_tac) >>
-     asm_rewrite_tac[]) >>
-  drule runtime_sym_value_operand >> strip_tac >>
-  qpat_x_assum `compile_subscript _ _ _ _ _ _ _ = _` mp_tac >>
-  qpat_x_assum `cfn ce ty be s = _`
-    (fn th => simp[NoAsms, compile_subscript_def, comp_bind_def, th]) >>
-  Cases_on `(if copies_subscript_base ce be key then
-    compile_snapshot_vv ce T q else comp_return q) r` >>
-  rename1 `(if copies_subscript_base ce be key then _ else _) r = (bv,bs)` >>
-  `EVERY runtime_sym_inst (state_insts bs) /\ runtime_sym_value bv` by
-    (qpat_x_assum `(if _ then _ else _) r = _` mp_tac >>
-     Cases_on `copies_subscript_base ce be key` >>
-     pure_asm_rewrite_tac[COND_CLAUSES, comp_return_def, pairTheory.PAIR_EQ]
-     >- (strip_tac >> drule_all runtime_sym_snapshot_vv >> simp[]) >>
-     strip_tac >> metis_tac[]) >>
-  drule runtime_sym_value_operand >> strip_tac >>
-  simp[NoAsms] >>
-  `!kt op t. lower_value cfn ce kt key bs = (op,t) ==>
-     EVERY runtime_sym_inst (state_insts t) /\ ~is_label_operand op` by
-    (rpt gen_tac >> strip_tac >>
-     qpat_x_assum `runtime_sym_lower_value_clause tops` mp_tac >>
-     rewrite_tac[runtime_sym_lower_value_clause_def] >>
-     disch_then irule >> qexistsl [`ce`,`cfn`,`key`,`bs`,`kt`] >>
-     asm_rewrite_tac[] >> metis_tac[]) >>
-  pop_assum (mk_asm "key_safe") >> suspend "branches"
+  drule_all runtime_sym_subscript_children >> strip_tac >>
+  match_mp_tac runtime_sym_subscript_step >>
+  qexists_tac `tops` >> asm_rewrite_tac[] >> conj_tac
+  >- (qpat_x_assum `!t. _` (qspec_then `ty` strip_assume_tac) >>
+      fs[runtime_sym_expr_contract_def]) >>
+  qpat_x_assum `runtime_sym_lower_value_clause tops` mp_tac >>
+  simp[runtime_sym_lower_value_clause_def] >> metis_tac[]
 QED
-
-Resume runtime_sym_subscript[branches]:
-  markerLib.RESUME_TAC >>
-  (Cases_on `place_type ce be` >> simp[NoAsms]
-   >- (strip_tac >> irule runtime_sym_map_sequence >>
-       conj_tac >- asm_rewrite_tac[] >>
-       conj_tac >- asm_rewrite_tac[] >>
-       goal_assum (drule_at (Pos last)) >> asm_rewrite_tac[] >>
-       asm "key_safe" (qspec_then `expr_type key` MATCH_ACCEPT_TAC)) >>
-   Cases_on `t` >> simp[NoAsms] >>
-   CONV_TAC (DEPTH_CONV (ETA_CONV ORELSEC HO_REWR_CONV (GSYM comp_bind_assoc))) >> strip_tac >>
-   irule runtime_sym_locate_sequence >>
-   goal_assum (drule_at (Pos last)) >>
-   rpt gen_tac >> strip_tac
-   >>~- ([`place_type ce be = ValPT (TupleT _)`], metis_tac[])
-   >>~- ([`place_type ce be = ValPT (StructT _)`], metis_tac[]) >>
-   irule runtime_sym_operand_sequence >>
-   goal_assum (drule_at (Pos last)) >>
-   (conj_tac >- (simp[NoAsms] >> rpt gen_tac >> strip_tac >>
-     qpat_x_assum `!ce loc bop idx dyn count ws sz signed s out s'. _`
-       (drule_at (Pos last)) >> asm_rewrite_tac[]) >>
-   rpt gen_tac >> strip_tac >> asm "key_safe" irule >> qexists_tac `ty` >> asm_rewrite_tac[]))
-QED
-
-Finalise runtime_sym_subscript
 
 Theorem runtime_sym_target_ptr:
   runtime_sym_lower_value_clause tops /\

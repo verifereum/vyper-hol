@@ -1,6 +1,6 @@
 Theory runtimeSymSrcGetterExpr
 Ancestors
-  runtimeSymSrcOperandSequences runtimeSymSrcContextComplete
+  runtimeSymSrcOpenPlaces runtimeSymSrcContextComplete
   runtimeSymSrcSubscriptGenerators runtimeSymSrcSubscriptPrimitives
   runtimeSymSrcInterfaces runtimeSymSrcEmission exprLowering vyperGetter
   vyperAST compileEnv context list venomInst stackPlanTypes
@@ -29,43 +29,15 @@ Theorem runtime_sym_getter_subscript_raw:
   compile_subscript cfn ce rt ty be key s = (v,s') ==>
   EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
 Proof
-  strip_tac >> Cases_on `cfn ce ty be s` >>
-  `EVERY runtime_sym_inst (state_insts r) /\ runtime_sym_value q` by
-    metis_tac[] >>
-  Cases_on `(if copies_subscript_base ce be key then compile_snapshot_vv ce T q else comp_return q) r` >>
-  rename1 `(if copies_subscript_base ce be key then compile_snapshot_vv ce T q else comp_return q) r = (bv,bs)` >>
-  `EVERY runtime_sym_inst (state_insts bs) /\ runtime_sym_value bv` by
-    (Cases_on `copies_subscript_base ce be key` >>
-     gvs[comp_return_def] >> metis_tac[runtime_sym_snapshot_vv]) >>
-  drule_at (Pat `runtime_sym_value bv`) runtime_sym_value_operand >> strip_tac >>
-  qpat_x_assum `compile_subscript _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_subscript_def, comp_bind_def] >>
-  `!kt op t. lower_value cfn ce kt key bs = (op,t) ==>
-     EVERY runtime_sym_inst (state_insts t) /\ ~is_label_operand op` by
-    (rpt gen_tac >> strip_tac >>
-     drule_at (Pat `lower_value _ _ _ _ _ = _`) runtime_sym_getter_lower_value_raw >>
-     simp[] >> disch_then irule >>
-     qexists_tac `tops` >> simp[] >>
-     rpt gen_tac >> strip_tac >> first_assum drule_all >> simp[]) >>
-  pop_assum (mk_asm "key_safe") >>
-  (Cases_on `place_type ce be` >> simp[NoAsms]
-   >- (strip_tac >> irule runtime_sym_map_sequence >>
-       conj_tac >- metis_tac[runtime_sym_keccak256_key] >>
-       conj_tac >- metis_tac[runtime_sym_mapping_subscript] >>
-       goal_assum (drule_at (Pos last)) >> asm_rewrite_tac[] >>
-       asm "key_safe" (qspec_then `expr_type key` MATCH_ACCEPT_TAC)) >>
-   Cases_on `t` >> simp[NoAsms] >>
-   CONV_TAC (DEPTH_CONV (ETA_CONV ORELSEC HO_REWR_CONV (GSYM comp_bind_assoc))) >> strip_tac >>
-   irule runtime_sym_locate_sequence >>
-   goal_assum (drule_at (Pos last)) >> rpt gen_tac >> strip_tac
-   >>~- ([`place_type ce be = ValPT (TupleT _)`], metis_tac[runtime_sym_tuple_subscript])
-   >>~- ([`place_type ce be = ValPT (StructT _)`], metis_tac[runtime_sym_tuple_subscript]) >>
-   irule runtime_sym_operand_sequence >>
-   goal_assum (drule_at (Pos last)) >>
-   (conj_tac >- (simp[NoAsms] >> rpt gen_tac >> strip_tac >>
-     drule_at (Pos last) runtime_sym_array_subscript >>
-     disch_then (qspec_then `tops` mp_tac) >> simp[]) >>
-    rpt gen_tac >> strip_tac >> asm "key_safe" irule >> qexists_tac `ty` >> asm_rewrite_tac[]))
+  strip_tac >> match_mp_tac runtime_sym_subscript_step >>
+  qexists_tac `tops` >> asm_rewrite_tac[] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> irule runtime_sym_getter_lower_value_raw >>
+      qexists_tac `tops` >> simp[])
+  >- metis_tac[runtime_sym_keccak256_key]
+  >- metis_tac[runtime_sym_mapping_subscript]
+  >- metis_tac[runtime_sym_tuple_subscript]
+  >> metis_tac[runtime_sym_array_subscript]
 QED
 
 Theorem runtime_sym_getter_name_raw:

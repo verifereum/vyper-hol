@@ -16,30 +16,12 @@ Theorem runtime_data_frame_expr_mutual:
     (SND (compile_type_builtin_dispatch cenv vt ty tb rt args st)).cs_data_sections =
       st.cs_data_sections)
 Proof
-  ho_match_mp_tac compile_expr_raw_ind >> rpt conj_tac >>
-  rpt gen_tac >> strip_tac >>
-  once_rewrite_tac[compile_expr_raw_def] >> BETA_TAC
-  >~ [`compile_expr_body`]
-  >- (irule (REWRITE_RULE [runtime_data_frame_def]
-         runtime_data_frame_expr_body_assembled) >>
-      rpt conj_tac >> rpt gen_tac >>
-      rewrite_tac[expr_child_callback_def, builtin_child_callback_def,
-                  type_child_callback_def] >> BETA_TAC >> IF_CASES_TAC >>
-      simp[REWRITE_RULE [runtime_data_frame_def]
-        runtime_data_frame_invalid_expr_call])
-  >~ [`compile_builtin_dispatch_body`]
-  >- (irule (REWRITE_RULE [runtime_data_frame_def]
-         runtime_data_frame_builtin_body_assembled) >>
-      rpt gen_tac >> rewrite_tac[expr_child_callback_def] >>
-      BETA_TAC >> IF_CASES_TAC >>
-      simp[REWRITE_RULE [runtime_data_frame_def]
-        runtime_data_frame_invalid_expr_call])
-  >> gvs[] >> irule (REWRITE_RULE [runtime_data_frame_def]
-       runtime_data_frame_type_body_assembled) >>
-     rpt gen_tac >> rewrite_tac[expr_child_callback_def] >>
-     BETA_TAC >> IF_CASES_TAC >>
-     simp[REWRITE_RULE [runtime_data_frame_def]
-       runtime_data_frame_invalid_expr_call]
+  mp_tac (REWRITE_RULE [compiler_preserves_runtime]
+    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] compiler_preserves_expr)) >>
+  simp[runtime_data_frame_expr_body_assembled,
+       runtime_data_frame_builtin_body_assembled,
+       runtime_data_frame_type_body_assembled] >>
+  simp[runtime_data_frame_def]
 QED
 
 Theorem runtime_data_frame_compile_expr[simp]:

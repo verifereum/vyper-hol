@@ -212,8 +212,10 @@ QED
 (* The two return-dispatch contracts below are local family boundaries proved
    above. The final exit join discharges them from the literal primitive
    contracts. unwrap_value is C1.1.3.2; the pointwise expression is C1.1.4. *)
-Theorem runtime_sym_return_some:
-  runtime_sym_expr_contract tops compile_expr ce ty e /\
+Theorem runtime_sym_return_some_step:
+  (!s v s'. runtime_sym_env tops ce /\ EVERY runtime_sym_inst (state_insts s) /\
+    compile_expr ce ty e s = (v,s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v) /\
   (!v s op s'. runtime_sym_env tops ce /\ runtime_sym_value v /\
     EVERY runtime_sym_inst (state_insts s) /\ unwrap_value ce v s = (op,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
@@ -237,22 +239,21 @@ Theorem runtime_sym_return_some:
   (!k t v s u s'. EVERY runtime_sym_inst (state_insts s) /\
     compile_nonreentrant_unlock k t v s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) ==>
-  runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty (Return (SOME e))
+  !s u s'. runtime_sym_env tops ce /\ EVERY runtime_sym_inst (state_insts s) /\
+    compile_stmt ce lc ty (Return (SOME e)) s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "expr") (CONJUNCTS_THEN2 (mk_asm "unwrap")
     (CONJUNCTS_THEN2 (mk_asm "internal") (CONJUNCTS_THEN2 (mk_asm "external_return")
     (CONJUNCTS_THEN2 (mk_asm "alloc")
     (CONJUNCTS_THEN2 (mk_asm "typed") (mk_asm "unlock"))))))) >>
-  simp[runtime_sym_stmt_contract_def] >> rpt strip_tac >>
-  fs[supported_stmt_def, supported_stmt_expr_exists_def,
-     supportedExprTraverseTheory.supported_expr_exists_def] >>
+  rpt strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   simp[Once compile_stmt_def, lower_value_def, comp_bind_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   rename1 `compile_expr ce ty e s = (vv,sa)` >>
   `EVERY runtime_sym_inst (state_insts sa) /\ runtime_sym_value vv` by
-    (asm "expr" mp_tac >> simp[runtime_sym_expr_contract_def] >>
-     disch_then drule_all >> simp[]) >>
+    (asm "expr" drule_all >> simp[]) >>
   gvs[] >> rename1 `unwrap_value ce vv sa = (v,sb)` >>
   `EVERY runtime_sym_inst (state_insts sb) /\ ~is_label_operand v` by
     (asm "unwrap" drule_all >> simp[]) >>
@@ -287,4 +288,39 @@ Proof
        (fn eq => asm "alloc" (fn th => mp_then Any mp_tac th eq)) >>
        simp[] >> strip_tac >> asm "typed" drule_all >> strip_tac) >>
   asm "external_return" (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >> simp[]
+QED
+
+Theorem runtime_sym_return_some:
+  runtime_sym_expr_contract tops compile_expr ce ty e /\
+  (!v s op s'. runtime_sym_env tops ce /\ runtime_sym_value v /\
+    EVERY runtime_sym_inst (state_insts s) /\ unwrap_value ce v s = (op,s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
+  (!dt st v pc s u s'. runtime_sym_env tops ce /\
+    ~is_label_operand v /\ ~is_label_operand pc /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_internal_return_from_env ce dt st v pc s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')) /\
+  (!rv prim raw info sz nr key trans view s u s'.
+    (!v. rv = SOME v ==> ~is_label_operand v) /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_external_return rv prim raw info sz nr key trans view s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')) /\
+  (!n s b s'. EVERY runtime_sym_inst (state_insts s) /\
+    compile_alloc_buffer n s = (b,s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand b.buf_operand) /\
+  (!b dt v st s u s'. ~is_label_operand b /\ ~is_label_operand v /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_store_memory_typed ce b dt v st s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')) /\
+  (!k t v s u s'. EVERY runtime_sym_inst (state_insts s) /\
+    compile_nonreentrant_unlock k t v s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')) ==>
+  runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty (Return (SOME e))
+Proof
+  simp[runtime_sym_stmt_contract_def] >> rpt strip_tac >>
+  fs[supported_stmt_def, supported_stmt_expr_exists_def,
+     supportedExprTraverseTheory.supported_expr_exists_def] >>
+  irule runtime_sym_return_some_step >>
+  qexists_tac `tops` >> asm_rewrite_tac[] >>
+  gvs[runtime_sym_expr_contract_def]
 QED

@@ -1,7 +1,7 @@
 Theory deploySymSrcInternalBodies
 Ancestors
   deploySymSrcHistory runtimeSymSrcEmissionProbe runtimeSymSrcPackageTransport
-  runtimeSymSrcInstructions moduleLowering compileEnv loweringShapeDefs list
+  runtimeSymSrcInstructions compileVyper moduleLowering compileEnv loweringShapeDefs list
 
 Theorem deploy_sym_internal_fn_bodies_cond:
   !xs.
@@ -47,7 +47,7 @@ Theorem deploy_sym_classified_internal_bodies_cond:
     compile_internal_fn_bodies
       (MAP (set_internal_package_target target o
          package_internal_fn tops trans keys ctor imm)
-         (FST (SND (classify_functions tops)))) s = (u,s') ==>
+         (order_internals names (FST (SND (classify_functions tops))))) s = (u,s') ==>
     EVERY deploy_sym_inst (state_insts s')
 Proof
   strip_tac >> match_mp_tac deploy_sym_internal_fn_bodies_cond >>

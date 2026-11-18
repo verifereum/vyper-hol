@@ -1,6 +1,6 @@
 Theory runtimeSymSrcDataABI
 Ancestors
-  runtimeSymSrcDataFrame abiEncoder compileEnv emitHelper
+  runtimeSymSrcDataFrame symbolicSourceCompilerFrame abiEncoder compileEnv emitHelper
 
 Theorem runtime_data_frame_abi_int_clamp[simp]:
   runtime_data_frame (compile_abi_int_clamp v bits signed)
@@ -80,16 +80,10 @@ Theorem runtime_data_frame_abi_encode_mutual:
   (!dst src ei asz msz len.
     runtime_data_frame (compile_abi_encode_dyn_loop dst src ei asz msz len))
 Proof
-  strip_tac >> ho_match_mp_tac compile_abi_encode_child_ind >>
-  rpt strip_tac >>
-  simp[Once compile_abi_encode_child_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >>
-  gvs[runtime_data_frame_abi_encode_dyn_static_loop, arithmeticTheory.ADD_COMM] >>
-  rpt (irule runtime_data_frame_bind >>
-       reverse conj_tac >- gvs[comp_ignore_bind_def] >>
-       gen_tac >> BETA_TAC) >> gvs[comp_ignore_bind_def]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [compiler_preserves_runtime]
+    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] compiler_preserves_abi_encode)) >>
+  simp[runtime_data_frame_abi_encode_dyn_static_loop]
 QED
 
 Theorem runtime_data_frame_abi_encode_child:
@@ -179,18 +173,10 @@ Theorem runtime_data_frame_abi_decode_mutual:
     runtime_data_frame
       (compile_abi_decode_dyn_loop dst src opc bop hi ei asz msz ip cnt))
 Proof
-  strip_tac >> ho_match_mp_tac compile_abi_decode_to_buf_ind >>
-  rpt strip_tac >>
-  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def,
-       runtime_data_frame_abi_decode_static] >>
-  rpt (irule runtime_data_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >>
-  rpt (FIRST
-    [irule runtime_data_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC,
-     CHANGED_TAC (pure_asm_rewrite_tac [COND_CLAUSES, comp_ignore_bind_def]),
-     IF_CASES_TAC]) >> gvs[arithmeticTheory.ADD_COMM]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [compiler_preserves_runtime]
+    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] compiler_preserves_abi_decode)) >>
+  simp[runtime_data_frame_abi_decode_static]
 QED
 
 Theorem runtime_data_frame_abi_decode_to_buf:

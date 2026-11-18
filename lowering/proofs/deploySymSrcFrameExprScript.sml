@@ -320,32 +320,12 @@ Theorem deploy_blocks_frame_expr_mutual_cond:
   (!ce rt ty bi args. deploy_blocks_frame (compile_builtin_dispatch ce rt ty bi args)) /\
   (!ce vt ty tb rt args. deploy_blocks_frame (compile_type_builtin_dispatch ce vt ty tb rt args))
 Proof
-  strip_tac >> rewrite_tac[deploy_blocks_frame_def] >>
-  ho_match_mp_tac compile_expr_raw_ind >> rpt conj_tac >>
-  rpt gen_tac >> strip_tac >>
-  once_rewrite_tac[compile_expr_raw_def] >> BETA_TAC >>
-  rpt gen_tac >> strip_tac
-  >~ [`compile_expr_body`]
-  >- (irule (REWRITE_RULE [deploy_blocks_frame_def]
-         deploy_blocks_frame_expr_body_assembled) >>
-      rpt conj_tac >> simp[] >> rpt gen_tac >>
-      rewrite_tac[expr_child_callback_def, builtin_child_callback_def,
-                  type_child_callback_def] >> BETA_TAC >> IF_CASES_TAC >>
-      simp[REWRITE_RULE [deploy_blocks_frame_def]
-        deploy_blocks_frame_invalid_expr_call])
-  >~ [`compile_builtin_dispatch_body`]
-  >- (irule (REWRITE_RULE [deploy_blocks_frame_def]
-         deploy_blocks_frame_builtin_body_assembled) >>
-      rpt conj_tac >> simp[] >> rpt gen_tac >>
-      rewrite_tac[expr_child_callback_def] >> BETA_TAC >> IF_CASES_TAC >>
-      simp[REWRITE_RULE [deploy_blocks_frame_def]
-        deploy_blocks_frame_invalid_expr_call]) >>
-  gvs[] >> irule (REWRITE_RULE [deploy_blocks_frame_def]
-       deploy_blocks_frame_type_body_assembled) >>
-  rpt conj_tac >> simp[] >> rpt gen_tac >>
-  rewrite_tac[expr_child_callback_def] >> BETA_TAC >> IF_CASES_TAC >>
-  simp[REWRITE_RULE [deploy_blocks_frame_def]
-    deploy_blocks_frame_invalid_expr_call]
+  strip_tac >>
+  match_mp_tac (REWRITE_RULE [compiler_preserves_deploy]
+    (Q.INST [`R` |-> `\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks`] compiler_preserves_expr)) >>
+  simp[deploy_blocks_frame_expr_body_assembled,
+       deploy_blocks_frame_builtin_body_assembled,
+       deploy_blocks_frame_type_body_assembled]
 QED
 
 Theorem deploy_blocks_frame_compile_expr_cond:

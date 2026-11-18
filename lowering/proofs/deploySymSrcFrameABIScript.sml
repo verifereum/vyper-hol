@@ -1,6 +1,6 @@
 Theory deploySymSrcFrameABI
 Ancestors
-  deploySymSrcBlockFrame abiEncoder compileEnv emitHelper
+  deploySymSrcBlockFrame symbolicSourceCompilerFrame abiEncoder compileEnv emitHelper
   builtinAbi builtinBytes builtinCreate builtinHashing builtinMath builtinMisc
   builtinSimple builtinStrings builtinSystem
 
@@ -73,15 +73,9 @@ Theorem deploy_blocks_frame_abi_encode_mutual:
   (!dst src ei asz msz len.
     deploy_blocks_frame (compile_abi_encode_dyn_loop dst src ei asz msz len))
 Proof
-  ho_match_mp_tac compile_abi_encode_child_ind >> rpt strip_tac >>
-  simp[Once compile_abi_encode_child_def, comp_ignore_bind_def] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >>
-  gvs[arithmeticTheory.ADD_COMM] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- gvs[comp_ignore_bind_def] >>
-       gen_tac >> BETA_TAC) >> gvs[comp_ignore_bind_def]
+  match_mp_tac (REWRITE_RULE [compiler_preserves_deploy]
+    (Q.INST [`R` |-> `\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks`] compiler_preserves_abi_encode)) >>
+  simp[deploy_blocks_frame_abi_encode_dyn_static_loop]
 QED
 
 Theorem deploy_blocks_frame_abi_encode_child[simp]:
@@ -158,17 +152,9 @@ Theorem deploy_blocks_frame_abi_decode_mutual:
     deploy_blocks_frame
       (compile_abi_decode_dyn_loop dst src opc bop hi ei asz msz ip cnt))
 Proof
-  ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt strip_tac >>
-  simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def,
-       deploy_blocks_frame_abi_decode_static] >>
-  rpt (irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >>
-  rpt (FIRST
-    [irule deploy_blocks_frame_bind >>
-       reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC,
-     CHANGED_TAC (pure_asm_rewrite_tac [COND_CLAUSES, comp_ignore_bind_def]),
-     IF_CASES_TAC]) >> gvs[arithmeticTheory.ADD_COMM]
+  match_mp_tac (REWRITE_RULE [compiler_preserves_deploy]
+    (Q.INST [`R` |-> `\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks`] compiler_preserves_abi_decode)) >>
+  simp[deploy_blocks_frame_abi_decode_static]
 QED
 
 Theorem deploy_blocks_frame_abi_decode_to_buf[simp]:

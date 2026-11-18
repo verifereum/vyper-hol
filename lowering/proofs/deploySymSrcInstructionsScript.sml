@@ -67,23 +67,17 @@ Proof
     conj_tac
     >- (rpt gen_tac >> strip_tac >> drule_all deploy_sym_register_constructor_args >> simp[]) >>
     rpt gen_tac >> strip_tac >>
-    drule_at (Pat `compile_internal_fn_bodies _ _ = _`) deploy_sym_internal_fn_bodies_cond >>
+    qpat_assum `classify_functions tops = _` (fn classification =>
+      drule_at (Pat `compile_internal_fn_bodies _ _ = _`)
+        (SRULE [classification]
+          (Q.INST [`tops` |-> `tops`] deploy_sym_classified_internal_bodies_cond))) >>
     simp[] >> impl_tac >- (
-      rpt gen_tac >> strip_tac >> gvs[MEM_MAP] >>
-      PairCases_on `y` >> gvs[] >>
-      qpat_x_assum `(_,_,_,_,_,_,_,_,_,_,_,_) = _` (assume_tac o SYM) >>
-      qpat_assum `classify_functions tops = _`
-        (fn th => drule_all (SRULE [th] runtimeSymSrcPackageTransportTheory.runtime_sym_internal_source)) >>
-      strip_tac >>
-      drule runtimeSymSrcPackageTransportTheory.runtime_sym_internal_package_fields >>
-      strip_tac >> gvs[] >>
-      drule_all runtimeSymSrcPackageTransportTheory.runtime_sym_internal_environment >>
-      strip_tac >>
-      rename1 `supported_stmts tops (source_args ++ supported_stmts_bindings T source_body ++ _) source_body` >>
+      rpt gen_tac >> strip_tac >>
+      rename1 `supported_stmts tops internal_bindings internal_body` >>
       drule_at (Pat `compile_internal_function _ _ _ _ _ _ _ _ _ _ _ _ = _`)
         deploy_sym_internal_function >>
       disch_then (qspecl_then [`tops`,
-        `source_args ++ supported_stmts_bindings T source_body ++ supported_stmts_bindings F source_body`] mp_tac) >>
+        `internal_bindings`] mp_tac) >>
       simp[runtime_sym_stmts_closed] >> impl_tac >- (
         conj_tac
         >- (rpt gen_tac >> strip_tac >> drule_all runtime_sym_alloc_buffer >> simp[]) >>
