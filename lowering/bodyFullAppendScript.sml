@@ -87,150 +87,6 @@ Proof
   fs[evaluate_subscripts_def]
 QED
 
-(* The three-instruction storage header guard has no allocation or memory
-   accesses.  Keep this layout boundary shared by its two uniform lifts. *)
-Theorem append_storage_guard_code[local]:
-  emit_op (if tr then TLOAD else SLOAD) [bop] st0 = (lop,st1) /\
-  emit_op LT [lop; Lit (n2w cap)] st1 = (valid,st2) /\
-  emit_void ASSERT [valid] st2 = ((),st3) ==>
-  st3.cs_current_bb = st0.cs_current_bb /\
-  st3.cs_current_insts = st0.cs_current_insts ++ emitted_insts st0 st3 /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts st0 st3) /\
-  (!s. run_inst_seq_mem_ok (emitted_insts st0 st3) s)
-Proof
-  simp[emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
-    compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,
-    compileEnvTheory.comp_return_def, compileEnvTheory.fresh_id_def,
-    compileEnvTheory.fresh_var_def, compileEnvTheory.emit_def] >>
-  strip_tac >> gvs[] >>
-  simp[exprLoweringPropsTheory.emitted_insts_def] >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
-  Cases_on `tr` >>
-  simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
-  gen_tac >> irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
-  simp[venomInstTheory.mk_inst_def, memSafeRunTheory.inst_dload_in_section_def] >>
-  rpt conj_tac >> irule instMemFrontierTheory.below_frontier_no_ranges >>
-  simp[venomInstTheory.mk_inst_def]
-QED
-
-Theorem append_storage_guard_uniform[local]:
-  emit_op (if tr then TLOAD else SLOAD) [bop] st0 = (lop,st1) /\
-  emit_op LT [lop; Lit (n2w cap)] st1 = (valid,st2) /\
-  emit_void ASSERT [valid] st2 = ((),st3) /\
-  eval_operand bop s = SOME slot /\
-  (!x. bop = Var x ==> not_fresh_at st0 x) /\ cap < dimword (:256) /\
-  w2n (if tr then tload slot s else sload slot s) < cap /\
-  op_taint tn bop = {} /\
-  key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
-  fn_has_code st0 st3 func /\ s.vs_current_bb = st0.cs_current_bb /\
-  s.vs_inst_idx = LENGTH st0.cs_current_insts ==>
-  ?t Gf tf.
-    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-      (OK (t with vs_inst_idx := LENGTH st3.cs_current_insts),Gf,tf)) /\
-    run_inst_seq (emitted_insts st0 st3) s = OK t /\
-    state_frame t = state_frame s /\
-    eval_operand lop t = SOME (if tr then tload slot s else sload slot s) /\
-    op_taint tf lop = {} /\
-    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
-    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
-    (!x. not_fresh_at st0 x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
-Proof
-  strip_tac >>
-  drule_all appendStorageStageTransportPtrTheory.append_storage_guard_actual >>
-  disch_then (qspecl_then [`func`,`PG`,`G`,`ARB`] strip_assume_tac) >>
-  rename1 `run_inst_seq (emitted_insts st0 st3) s = OK t` >>
-  rename1 `op_taint tf lop = {}` >>
-  rename1 `!k. inst_seq_ptr ARB 0 ctx func PG G tn (emitted_insts st0 st3)
-    (s with vs_inst_idx := k) Gf tf` >>
-  `!D. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st0 st3) s Gf tf`
-    by suspend "pointer" >>
-  drule_all append_storage_guard_code >> strip_tac >>
-  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    isPREFIX (emitted_insts st0 st3) (DROP s.vs_inst_idx bb.bb_instructions)`
-    by metis_tac[stmtReasonLitFragMemoryTheory.fn_has_code_code] >>
-  qexistsl_tac [`t`,`Gf`,`tf`] >> reverse conj_tac
-  >- (asm_rewrite_tac[] >> rpt strip_tac >> metis_tac[]) >>
-  rpt gen_tac >>
-  `LENGTH st3.cs_current_insts = s.vs_inst_idx + LENGTH (emitted_insts st0 st3)`
-    by metis_tac[LENGTH_APPEND] >>
-  qpat_x_assum `LENGTH st3.cs_current_insts = _`
-    (fn th => pure_once_rewrite_tac[th]) >>
-  irule (cj 1 fragGasCopyLoopTheory.run_inst_seq_origin_ptr_lift) >>
-  simp[] >> metis_tac[]
-QED
-
-Resume append_storage_guard_uniform[pointer]:
-  gen_tac >>
-  drule_all appendStorageStageTransportPtrTheory.append_storage_guard_actual >>
-  disch_then (qspecl_then [`func`,`PG`,`G`,`D`] strip_assume_tac) >>
-  `G' = Gf /\ tn' = tf` by
-    metis_tac[fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique] >>
-  gvs[] >> first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]
-QED
-
-Finalise append_storage_guard_uniform[local]
-
-Theorem append_storage_guard_abort_uniform[local]:
-  emit_op (if tr then TLOAD else SLOAD) [bop] st0 = (lop,st1) /\
-  emit_op LT [lop; Lit (n2w cap)] st1 = (valid,st2) /\
-  emit_void ASSERT [valid] st2 = ((),st3) /\
-  eval_operand bop s = SOME slot /\
-  (!x. bop = Var x ==> not_fresh_at st0 x) /\ cap < dimword (:256) /\
-  ~(w2n (if tr then tload slot s else sload slot s) < cap) /\
-  op_taint tn bop = {} /\
-  key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
-  fn_has_code st0 st3 func /\ s.vs_current_bb = st0.cs_current_bb /\
-  s.vs_inst_idx = LENGTH st0.cs_current_insts ==>
-  ?t j Gf tf.
-    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-      (Abort Revert_abort (t with vs_inst_idx := j),Gf,tf)) /\
-    run_inst_seq (emitted_insts st0 st3) s = Abort Revert_abort t /\
-    op_taint tf lop = {} /\
-    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
-    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
-    (!x. not_fresh_at st0 x ==>
-      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
-Proof
-  strip_tac >>
-  drule_all appendStorageStageTransportPtrTheory.append_storage_guard_abort_actual >>
-  disch_then (qspecl_then [`func`,`PG`,`G`,`ARB`] strip_assume_tac) >>
-  rename1 `run_inst_seq (emitted_insts st0 st3) s = Abort Revert_abort t` >>
-  rename1 `op_taint tf lop = {}` >>
-  rename1 `!k. inst_seq_ptr ARB 0 ctx func PG G tn (emitted_insts st0 st3)
-    (s with vs_inst_idx := k) Gf tf` >>
-  `!D. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st0 st3) s Gf tf`
-    by suspend "pointer" >>
-  drule_all append_storage_guard_code >> strip_tac >>
-  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    isPREFIX (emitted_insts st0 st3) (DROP s.vs_inst_idx bb.bb_instructions)`
-    by metis_tac[stmtReasonLitFragMemoryTheory.fn_has_code_code] >>
-  `run_inst_seq_mem_ok (emitted_insts st0 st3) s` by simp[] >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-    i.inst_opcode <> GAS) (emitted_insts st0 st3)` by fs[EVERY_MEM] >>
-  drule_all fragGasCopyLoopTheory.run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  qexistsl_tac [`t`,`j`,`Gf`,`tf`] >> reverse conj_tac
-  >- (asm_rewrite_tac[] >> rpt strip_tac >> metis_tac[]) >>
-  rpt gen_tac >> first_x_assum irule >>
-  irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
-  simp[] >> conj_tac >- fs[EVERY_MEM] >> qexists_tac `0` >> simp[]
-QED
-
-Resume append_storage_guard_abort_uniform[pointer]:
-  gen_tac >>
-  drule_all appendStorageStageTransportPtrTheory.append_storage_guard_abort_actual >>
-  disch_then (qspecl_then [`func`,`PG`,`G`,`D`] strip_assume_tac) >>
-  `G' = Gf /\ tn' = tf` by
-    metis_tac[fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique] >>
-  gvs[] >> first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]
-QED
-
-Finalise append_storage_guard_abort_uniform[local]
-
 (* Staging ends before the storage guard; it needs no static/no-dalloca
    restriction.  The allocation/copy compiler cut is kept explicit. *)
 Theorem append_storage_aggregate_stage_ready[local]:
@@ -1006,7 +862,13 @@ QED
 
 Resume append_storage_aggregate_cont_full[guard_fields]:
   `s3.cs_current_bb = sd.cs_current_bb` by
-    (drule_all append_storage_guard_code >> simp[]) >>
+    (qpat_assum `emit_op _ _ sd = (_,s1)`
+       (mp_tac o MATCH_MP exprLoweringPropsTheory.emit_op_same_blocks) >>
+     qpat_assum `emit_op LT _ s1 = (_,s2)`
+       (mp_tac o MATCH_MP exprLoweringPropsTheory.emit_op_same_blocks) >>
+     qpat_assum `emit_void ASSERT _ s2 = ((),s3)`
+       (mp_tac o MATCH_MP exprLoweringPropsTheory.emit_void_same_blocks) >>
+     simp[exprLoweringPropsTheory.same_blocks_def] >> rpt strip_tac >> simp[]) >>
   qpat_assum `allocas_from lo staged`
     (assume_tac o SRULE [ptrDisciplineTheory.allocas_from_def]) >>
   qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp staged`
