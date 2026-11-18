@@ -1,5 +1,7 @@
 Theory o1CodeEndWalkCompose
 Ancestors
+  o1StaticPipelineCompose o1CodeEndConcretizeTransport fmpStageRel
+  o1CodeEndSimplifyCfgTransport o1CodeEndSueTransport unitTransformDefs
   o1PipelineCompose o1CodeEndLowerStage o1CodeEndLowerLifetime
   o1CodeEndMiddleTransport o1CodeEndSsaProtectedUses
   o1CodeEndStructuralTransport o1CodeEndDftTransport
@@ -140,3 +142,101 @@ Resume o1_code_end_walk_stages_sim[forward]:
   metis_tac[SRULE [] (Q.INST [`f` |-> `I`] ctx_sim_fuel_trans)]
 QED
 Finalise o1_code_end_walk_stages_sim
+
+Theorem o1_code_end_pre_dft_bound_fixed:
+  (!k. k < LENGTH o1_fn_passes ==>
+    ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+      (stage k) (stage (SUC k))) /\
+  (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
+  (!k. k <= LENGTH o1_fn_passes ==> EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  dead_wf D /\ o1_initial_state_ok vs_out /\
+  vs_out.vs_fmp = vs_out.vs_initial_fmp /\ code_layout_valid vs_out /\
+  LENGTH vs_out.vs_data_section < dimword (:256) DIV 2 /\
+  v7 = (vs_out with vs_gas_readings := rds) /\
+  vi = (v7 with <|vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+  o1_inv D 0 (stage 0) vi /\
+  mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+    s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section)
+    (stage 1) vi /\
+  (!fn inst. MEM fn (stage 1).ctx_functions /\ MEM inst (fn_insts fn) ==>
+    ~MEM (Label "code_end") inst.inst_operands) /\
+  fmp_variant_room (SOME fmp) (stage (LENGTH o1_fn_passes)) vs_out ==>
+  code_end_offset_ok (raw_reachable v7) (stage 7)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (Q.INST [`D` |-> `D`, `stage` |-> `stage`, `rpolicy` |-> `rpolicy`,
+    `vs_out` |-> `vs_out`, `fmp` |-> `fmp`, `rds` |-> `rds`]
+      o1_walk_pre_dft_stage_facts_static_abort_fixed) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  PURE_REWRITE_TAC [LET_THM] >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  qpat_assum `v7 = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+  qpat_assum `vi = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  drule o1_walk_stages_max_live_eom >> strip_tac >>
+  `LENGTH o1_fn_passes = 9` by EVAL_TAC >>
+  `!k. k < 9 ==> o1_pre k (stage k) (stage (SUC k))` by
+    (rw[o1_pre_def] >> first_x_assum irule >> simp[]) >>
+  map_every (fn k =>
+    qpat_assum `!k. k < LENGTH _ ==> _` (qspec_then k assume_tac) >>
+    qpat_assum `!k. k < 9 ==> _` (qspec_then k assume_tac) >>
+    qpat_assum `!k. k <= LENGTH _ ==> o1_ctx_shape _` (qspec_then k assume_tac) >>
+    qpat_assum `!k. k <= LENGTH _ ==> EVERY _ _` (qspec_then k assume_tac))
+    [`1`, `2`, `3`, `4`, `5`, `6`, `7`] >>
+  `max_live_eom (stage 3) = max_live_eom (stage 9) /\
+   max_live_eom (stage 4) = max_live_eom (stage 9)` by
+    (qpat_x_assum `!j. _ <= LENGTH o1_fn_passes ==> max_live_eom _ = _`
+      (fn th => map_every (fn k =>
+        assume_tac (SIMP_RULE (srw_ss()) [o1_fn_passes_def] (Q.SPEC k th))) [`1`, `6`]) >>
+     metis_tac[]) >>
+  fs[o1_fn_passes_def] >>
+  `code_layout_valid v7` by
+    (qpat_assum `code_layout_valid vs_out`
+       (mp_tac o REWRITE_RULE [lowerDloadDefsTheory.code_layout_valid_def]) >>
+     simp[lowerDloadDefsTheory.code_layout_valid_def]) >>
+  `code_layout_valid vi` by
+    (qpat_assum `code_layout_valid v7`
+       (mp_tac o REWRITE_RULE [lowerDloadDefsTheory.code_layout_valid_def]) >>
+     simp[lowerDloadDefsTheory.code_layout_valid_def]) >>
+  `o1_initial_state_ok v7 /\ v7.vs_fmp = v7.vs_initial_fmp` by
+    fs[o1_initial_state_ok_def] >>
+  `o1_initial_state_ok vi /\ vi.vs_fmp = vi.vs_initial_fmp` by
+    fs[o1_initial_state_ok_def] >>
+  `vi.vs_code = vs_out.vs_code /\ vi.vs_data_section = vs_out.vs_data_section` by fs[] >>
+  `code_end_offset_ok (raw_reachable vi) (stage 2)` by
+    (qpat_assum `o1_inv D 1 (stage 1) vi`
+       (strip_assume_tac o SIMP_RULE (srw_ss()) [o1_inv_def]) >>
+     mp_tac (Q.INST [`C` |-> `stage 1`, `C'` |-> `stage 2`, `D` |-> `D`,
+       `vs` |-> `vi`, `v` |-> `vi`, `rpolicy` |-> `rpolicy`,
+       `view` |-> `o1_walk_view rpolicy 1`] lower_dload_stage_code_end_static) >>
+     simp[] >> metis_tac[]) >>
+  `?eom. max_live_eom (stage 3) = SOME eom` by
+    fs[o1_inv_def, o1_static_inv_def] >>
+  `eom <= w2n vi.vs_initial_fmp /\ fmp_variant_room (SOME fmp) (stage 4) v7` by
+    (fs[fmp_variant_room_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `code_end_offset_ok (raw_reachable vi) (stage 3)` by
+    (irule concretize_code_end_offset_ok >> metis_tac[]) >>
+  `code_end_offset_ok (raw_reachable v7) (stage 4)` by
+    (mp_tac (Q.INST [`D` |-> `D`, `C` |-> `stage 3`, `C'` |-> `stage 4`,
+       `vs'` |-> `v7`, `fmp` |-> `fmp`, `rpolicy` |-> `rpolicy`]
+       fmp_lowering_code_end_relocate_static) >>
+     qpat_assum `vi = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >> simp[]) >>
+  drule_all lower_dload_stage_protected_lifetime >> strip_tac >>
+  drule_all concretize_stage_protected_lifetime >> strip_tac >>
+  `fmp_stage_ctx rpolicy D (stage 3) (stage 4) vi v7 fmp eom` by
+    fs[fmp_stage_ctx_def] >>
+  drule_all fmp_stage_protected_lifetime_static >> strip_tac >>
+  `EVERY make_ssa_input_ok (stage 4).ctx_functions` by
+    fs[o1_fn_row_def, EVERY_MEM] >>
+  `v7.vs_vars = FEMPTY /\ ~v7.vs_halted` by fs[o1_initial_state_ok_def] >>
+  `code_end_offset_ok (raw_reachable v7) (stage 5)` by
+    (irule (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND] code_end_ssa_stage_bound) >>
+     fs[] >> metis_tac[]) >>
+  drule_all (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND] make_ssa_stage_protected_uses) >>
+  strip_tac >>
+  `o1_ssa_inv (stage 5) v7` by fs[o1_inv_def] >>
+  drule_all simplify_cfg_code_end_stage_preserves >> strip_tac >>
+  `EVERY wf_ssa (stage 6).ctx_functions` by fs[o1_inv_def, o1_ssa_inv_def] >>
+  mp_tac (Q.INST [`C` |-> `stage 6`, `C'` |-> `stage 7`, `vs` |-> `v7`,
+    `rpolicy` |-> `rpolicy`, `view` |-> `o1_walk_view rpolicy 6`]
+    sue_code_end_stage_preserves) >> simp[]
+QED

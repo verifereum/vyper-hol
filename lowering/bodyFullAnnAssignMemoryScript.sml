@@ -751,8 +751,63 @@ Resume annassign_memory_full_physical_rhs_from_entry[physical_post]:
     off <= i /\ i < off+len /\ i IN tn'.t_mem ==> i IN tn0.t_mem` by
     suspend "physical_taint" >>
   qexistsl_tac [`v`,`tv`] >> asm_rewrite_tac[] >>
-  fs[expr_post_def,ghost_kept_at_def] >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,metis_tac[]]
+  qpat_assum `expr_post H ctx func ce cx e es a b entry mid v op z`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  qpat_assum `ghost_kept_at lo ce es a Ga tna entry G' tn'`
+    (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
+  `~is_word_type (post_value_type ce e) ==> !rt sw.
+     evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME rt /\
+     eval_operand op z = SOME sw ==>
+     type_memory_size rt = 0 \/ type_memory_size rt + w2n sw <= z.vs_alloca_next` by
+    (qpat_assum `~is_word_type (post_value_type ce e) ==> !rt sw.
+       _ ==> _ \/ w2n sw + type_memory_size rt <= z.vs_alloca_next`
+       (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM])) >>
+  `w2n w + type_memory_bytes old typ <= z.vs_alloca_next` by
+    (irule arithmeticTheory.LESS_EQ_TRANS >>
+     qexists_tac `entry.vs_alloca_next` >> asm_rewrite_tac[]) >>
+  `s0.vs_alloca_next <= z.vs_alloca_next` by
+    (irule arithmeticTheory.LESS_EQ_TRANS >>
+     qexists_tac `entry.vs_alloca_next` >> asm_rewrite_tac[]) >>
+  `!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==>
+      FLOOKUP z.vs_allocas aid = SOME ent` by
+    (rpt strip_tac >>
+     qpat_assum `!aid ent. FLOOKUP entry.vs_allocas aid = SOME ent ==> _` irule >>
+     qpat_assum `!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==> _`
+       (drule_then ACCEPT_TAC)) >>
+  `FLOOKUP z.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_bytes old typ)` by
+    (qpat_assum `!aid ent. FLOOKUP entry.vs_allocas aid = SOME ent ==> _` irule >>
+     first_assum ACCEPT_TAC) >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+      lookup_var x z = SOME w` by
+    (rpt strip_tac >>
+     qpat_assum `!x w. not_fresh_at a x /\ lookup_var x entry = SOME w ==> _` irule >>
+     qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at a x /\ _`
+       (drule_then (assume_tac o CONJUNCT1)) >>
+     qpat_assum `!x. not_fresh_at sa x ==> lookup_var x entry = lookup_var x s0 /\ _`
+       (drule_then (assume_tac o CONJUNCT1)) >>
+     asm_rewrite_tac[]) >>
+  `!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G0 x /\
+      op_taint tn' (Var x) = op_taint tn0 (Var x)` by
+    (rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at a x /\ _`
+       (drule_then (assume_tac o CONJUNCT1)) >>
+     qpat_assum `!x. not_fresh_at a x ==> FLOOKUP G' x = FLOOKUP Ga x /\ _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `!x. not_fresh_at sa x ==> lookup_var x entry = lookup_var x s0 /\ _`
+       (drule_then strip_assume_tac) >>
+     asm_rewrite_tac[]) >>
+  `!aid off len i.
+    FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
+    (!name x cap. local_region old es.scopes s0 name x cap ==>
+      len+off <= x \/ cap+x <= off) /\
+    off <= i /\ i < len+off /\ i IN tn'.t_mem ==> i IN tn0.t_mem` by
+    (qpat_assum `!aid off len i.
+       FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
+       (!name x cap. local_region old es.scopes s0 name x cap ==>
+         off+len <= x \/ x+cap <= off) /\
+       off <= i /\ i < off+len /\ i IN tn'.t_mem ==> i IN tn0.t_mem` mp_tac >>
+     simp[NoAsms,arithmeticTheory.ADD_COMM]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume annassign_memory_full_physical_rhs_from_entry[physical_taint]:

@@ -58,6 +58,7 @@ Ancestors
   loweringShapeProps
   ctorShapeProps ctorUnitShape
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
+  bodyFullShadowBodyInvLowering
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
@@ -86,10 +87,13 @@ Ancestors
   extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
   extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
   abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
+  (* closed-world request-cut texts awaiting their producers *)
+  e2eRequestCutDefs
   (* providers awaiting their consumers *)
   bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
   bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
   internalReturnMemoryMem bodyFullIntCallByteFrame
+  bodyFullIntCall
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa
   assignBasePtrStoragePath assignTuplePtrBytesCopy
