@@ -1,7 +1,7 @@
 Theory deployOutcomesFreeStmtTuple
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeLowering deployOutcomesFreeTyping
+  deployOutcomesFreeTyping
   deployOutcomesFreeStmtValues stmtLowering supportedStmtTraverse compileEnv list
 
 Theorem outcomes_free_compile_tuple_store_all:
@@ -27,7 +27,7 @@ Theorem outcomes_free_compile_tuple_store_all:
 Proof
   strip_tac >> Induct >> rpt gen_tac >> strip_tac >>
   Cases_on `targets` >> Cases_on `vals` >>
-  simp[compile_tuple_store_all_def, outcomes_free_return] >>
+  simp[compile_tuple_store_all_def, every_state_insts_return] >>
   rename1 `compile_tuple_store_all ce (h::tys) (tgt::ts) (v::vs)` >>
   Cases_on `tgt` >>
   gvs[EVERY_DEF, supported_assignment_exists_def]
@@ -39,9 +39,11 @@ Proof
       irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> reverse conj_tac
       >- (rpt strip_tac >> first_x_assum irule >> simp[] >> qexists `env` >> simp[]) >>
       rpt strip_tac >> IF_CASES_TAC
-      >- (IF_CASES_TAC >> simp[outcomes_free_emit_ops]) >> simp[]) >>
+      >- (IF_CASES_TAC >> simp[opcode_every_emit_op, opcode_every_emit_void,
+          opcode_every_emit_inst]) >> simp[]) >>
   simp[compile_tuple_store_all_def] >>
-  irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[outcomes_free_emit_ops] >>
+  irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst] >>
   rpt strip_tac >> first_x_assum irule >> simp[] >> qexists `env` >> simp[]
 QED
 
@@ -68,7 +70,7 @@ Theorem outcomes_free_compile_tuple_unpack:
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   simp[compile_tuple_unpack_def] >> IF_CASES_TAC
-  >- simp[outcomes_free_emit_ops] >>
+  >- simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
       irule ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac
@@ -76,13 +78,14 @@ Proof
           first_x_assum irule >> simp[] >> qexists `env` >> simp[]) >>
       simp[]) >>
   qmatch_goalsub_abbrev_tac `if stage_ok then _ else _` >>
-  Cases_on `stage_ok` >> simp[outcomes_free_return] >>
+  Cases_on `stage_ok` >> simp[every_state_insts_return] >>
   rpt gen_tac >> strip_tac >>
   (irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
       >- simp[] >>
       rpt gen_tac >> strip_tac >> BETA_TAC >>
       simp[comp_bind_def, comp_return_def] >>
       irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >>
-      simp[outcomes_free_emit_ops, outcomes_free_return]) >>
-  simp[outcomes_free_return]
+      simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+          every_state_insts_return]) >>
+  simp[every_state_insts_return]
 QED

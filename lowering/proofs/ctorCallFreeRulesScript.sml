@@ -19,6 +19,15 @@ Proof
   simp[state_insts_def, EVERY_FLAT, EVERY_MAP]
 QED
 
+Theorem outcomes_free_state_insts:
+  EVERY P (state_insts s) <=>
+  EVERY (\bb. EVERY P bb.bb_instructions) s.cs_blocks /\
+  EVERY P s.cs_current_insts
+Proof
+  simp[state_insts_def, all_blocks_def, EVERY_FLAT, EVERY_MAP,
+       EVERY_MEM, MEM_REVERSE, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
 Theorem every_state_insts_return:
   EVERY P (state_insts st) ==>
   EVERY P (state_insts (SND (comp_return x st)))

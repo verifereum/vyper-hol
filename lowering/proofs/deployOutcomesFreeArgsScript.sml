@@ -1,8 +1,9 @@
 Theory deployOutcomesFreeArgs
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeLowering deployOutcomesFreeGenerators abiEncoder moduleLowering context emitHelper
+  deployOutcomesFreeGenerators abiEncoder moduleLowering context emitHelper
   compileEnv list pair
+  ctorCallFreeValues
 
 Theorem outcomes_free_abi_clamp:
   EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
@@ -16,9 +17,11 @@ Proof
   strip_tac >> Cases_on `ci` >>
   simp[compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
        compile_abi_bytes_clamp_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return]),
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
-    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC]) >> gvs[outcomes_free_emit_ops]
+    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac,
+        IF_CASES_TAC]) >> gvs[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]
 QED
 
 Theorem outcomes_free_abi_dec_addr:
@@ -31,7 +34,8 @@ Theorem outcomes_free_abi_dec_addr:
     (state_insts (SND (compile_abi_dec_addr b p s)))
 Proof
   strip_tac >> simp[compile_abi_dec_addr_def] >> IF_CASES_TAC >>
-  gvs[outcomes_free_return, outcomes_free_emit_ops]
+  gvs[every_state_insts_return, opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst]
 QED
 
 Theorem outcomes_free_abi_range_check:
@@ -44,9 +48,11 @@ Theorem outcomes_free_abi_range_check:
     (state_insts (SND (compile_abi_decode_range_check a b hi s)))
 Proof
   strip_tac >> simp[compile_abi_decode_range_check_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return]),
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
-    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac]) >> gvs[outcomes_free_emit_ops]
+    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind,
+        conj_tac]) >> gvs[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]
 QED
 
 Theorem outcomes_free_abi_static:
@@ -66,9 +72,12 @@ Theorem outcomes_free_abi_static:
     (state_insts (SND (compile_abi_decode_static src dst opc clamp s)))
 Proof
   strip_tac >> simp[compile_abi_decode_static_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return]),
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
-    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac]) >> gvs[outcomes_free_emit_ops, outcomes_free_abi_dec_addr, outcomes_free_abi_range_check]
+    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind,
+        conj_tac]) >> gvs[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+        outcomes_free_abi_dec_addr, outcomes_free_abi_range_check]
 QED
 
 Theorem outcomes_free_getelemptr_abi:
@@ -82,10 +91,13 @@ Theorem outcomes_free_getelemptr_abi:
     (state_insts (SND (compile_getelemptr_abi src dyn off opc b hi s)))
 Proof
   strip_tac >> simp[compile_getelemptr_abi_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return,
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return,
     outcomes_free_abi_dec_addr]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
-    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC]) >> gvs[outcomes_free_emit_ops, outcomes_free_abi_dec_addr, outcomes_free_abi_range_check]
+    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac,
+        IF_CASES_TAC]) >> gvs[opcode_every_emit_op, opcode_every_emit_void,
+        opcode_every_emit_inst, outcomes_free_abi_dec_addr, outcomes_free_abi_range_check]
 QED
 
 Theorem outcomes_free_abi_dyn_elem_ptr:
@@ -99,10 +111,13 @@ Theorem outcomes_free_abi_dyn_elem_ptr:
     (state_insts (SND (compile_abi_decode_dyn_elem_ptr opc b es sd hi asz s)))
 Proof
   strip_tac >> simp[compile_abi_decode_dyn_elem_ptr_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return,
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return,
     outcomes_free_abi_dec_addr, outcomes_free_abi_range_check]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
-    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC]) >> gvs[outcomes_free_emit_ops, outcomes_free_abi_dec_addr, outcomes_free_abi_range_check]
+    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac,
+        IF_CASES_TAC]) >> gvs[opcode_every_emit_op, opcode_every_emit_void,
+        opcode_every_emit_inst, outcomes_free_abi_dec_addr, outcomes_free_abi_range_check]
 QED
 
 Theorem outcomes_free_abi_bytes_copy[local]:
@@ -117,7 +132,7 @@ Theorem outcomes_free_abi_bytes_copy[local]:
     | DLOAD => emit_void DLOADBYTES [dst; src; sz]
     | _ => emit_void MCOPY [dst; src; sz]) s)))
 Proof
-  Cases_on `opc` >> gvs[outcomes_free_emit_ops]
+  Cases_on `opc` >> gvs[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]
 QED
 
 val outcomes_free_decode_case_tac =
@@ -125,8 +140,10 @@ val outcomes_free_decode_case_tac =
   rpt (FIRST [gen_tac, strip_tac,
     irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind,
     conj_tac, IF_CASES_TAC,
-    CHANGED_TAC (gvs[outcomes_free_emit_ops, outcomes_free_return,
-      outcomes_free_fresh, outcomes_free_new_block,
+    CHANGED_TAC (gvs[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+        every_state_insts_return,
+      every_state_insts_fresh_id, every_state_insts_fresh_var, every_state_insts_fresh_label,
+          every_state_insts_new_block,
       outcomes_free_abi_static, outcomes_free_abi_clamp,
       outcomes_free_getelemptr_abi, outcomes_free_abi_dyn_elem_ptr,
       outcomes_free_abi_dec_addr, outcomes_free_abi_range_check,
@@ -188,13 +205,14 @@ Theorem outcomes_free_decode_args:
     i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE)
     (state_insts (SND (compile_decode_args env args off opc hi base s)))
 Proof
-  Induct_on `args` >- simp[compile_decode_args_def, outcomes_free_return] >>
+  Induct_on `args` >- simp[compile_decode_args_def, every_state_insts_return] >>
   gen_tac >> PairCases_on `h` >> rpt strip_tac >>
   Cases_on `h1` >> Cases_on `h2` >>
   Cases_on `FLOOKUP env.ce_vars h0` >>
   simp[compile_decode_args_def, compile_abi_arg_ptr_guard_def] >>
   rpt (FIRST [gen_tac, strip_tac,
-    CHANGED_TAC (gvs[outcomes_free_emit_ops, outcomes_free_return,
+    CHANGED_TAC (gvs[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+        every_state_insts_return,
       outcomes_free_abi_clamp, cj 1 outcomes_free_abi_decode]),
     irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac,
     IF_CASES_TAC,
@@ -213,12 +231,12 @@ Theorem outcomes_free_register_constructor_args_state:
     i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE)
     (state_insts (SND (compile_register_constructor_args env args off sz s)))
 Proof
-  Induct_on `args` >- simp[compile_register_constructor_args_def, outcomes_free_return] >>
+  Induct_on `args` >- simp[compile_register_constructor_args_def, every_state_insts_return] >>
   gen_tac >> PairCases_on `h` >> rpt strip_tac >>
   Cases_on `FLOOKUP env.ce_vars h0` >>
   simp[compile_register_constructor_args_def] >>
   rpt (FIRST [gen_tac, strip_tac,
-    CHANGED_TAC (gvs[outcomes_free_alloc_buffer, outcomes_free_return,
+    CHANGED_TAC (gvs[outcomes_free_alloc_buffer, every_state_insts_return,
       outcomes_free_decode_args]),
     irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac,
     IF_CASES_TAC,

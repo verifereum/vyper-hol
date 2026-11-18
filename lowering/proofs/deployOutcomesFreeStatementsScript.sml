@@ -4,10 +4,10 @@ Ancestors
   deployOutcomesFreeCustomErrors
   deployOutcomesFreeStmtLog deployOutcomesFreeStmtValues
   deployOutcomesFreeStmtControl deployOutcomesFreeTyping
-  deployOutcomesFreeStmtAssign deployOutcomesFreeStmtTuple
+  ctorCallFreeStmtStorage deployOutcomesFreeStmtTuple
   deployOutcomesFreeStmtAssignCases deployOutcomesFreeStmtExitCases
   deployOutcomesFreeStmtFlowCases
-  deployOutcomesFreeExprBody deployOutcomesFreeLowering stmtLowering
+  deployOutcomesFreeExprBody stmtLowering
   e2eDeployDefs supportedStmtTraverse supportedExprTraverse exprLowering
 
 Theorem outcomes_free_compile_reason_message:
@@ -25,7 +25,7 @@ Proof
   strip_tac >> gen_tac >> recInduct compile_reason_message_ind >>
   rpt conj_tac >> rpt gen_tac >> strip_tac >>
   simp[compile_reason_message_def]
-  >- (irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[outcomes_free_return]) >>
+  >- (irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[every_state_insts_return]) >>
   metis_tac[]
 QED
 
@@ -43,7 +43,7 @@ Theorem outcomes_free_compile_log_eval_all:
     EVERY (well_typed_expr env) es /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_log_eval_all ce es s)))
 Proof
-  strip_tac >> Induct >> simp[compile_log_eval_all_def, outcomes_free_return,
+  strip_tac >> Induct >> simp[compile_log_eval_all_def, every_state_insts_return,
     supported_expr_exists_def] >> rpt strip_tac >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
   >- (rpt strip_tac >> simp[lower_value_def] >>
@@ -51,7 +51,7 @@ Proof
   rpt gen_tac >> strip_tac >> BETA_TAC >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
-  irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[outcomes_free_return] >> metis_tac[]
+  irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[every_state_insts_return] >> metis_tac[]
 QED
 
 (* The expression and target certificates are deliberately typed and quantify
@@ -173,10 +173,11 @@ Proof
   >~ [`compile_stmt _ _ _ (Assert _ AssertUnreachable)`] >- suspend "assert_simple"
   >~ [`compile_stmt _ _ _ (Raise (RaiseReason _))`] >- suspend "raise_reason"
   >~ [`compile_stmt _ _ _ (Expr _)`] >- suspend "expr" >>
-  simp[Once compile_stmt_def, outcomes_free_return, outcomes_free_emit_ops,
+  simp[Once compile_stmt_def, every_state_insts_return, opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst,
        supported_stmt_expr_exists_def] >>
-  rpt (irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[outcomes_free_return]) >>
-  simp[outcomes_free_emit_ops]
+  rpt (irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[every_state_insts_return]) >>
+  simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]
 QED
 
 Resume outcomes_free_compile_statements_mutual[range]:
@@ -295,7 +296,7 @@ Resume outcomes_free_compile_statements_mutual[expr]:
   qpat_x_assum `~supported_stmt_expr_exists _ _` mp_tac >>
   simp[supported_stmt_expr_exists_def] >> strip_tac >>
   simp[Once compile_stmt_def] >> irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >>
-  simp[outcomes_free_return] >> metis_tac[]
+  simp[every_state_insts_return] >> metis_tac[]
 QED
 
 Resume outcomes_free_compile_statements_mutual[assert_simple]:
@@ -340,7 +341,7 @@ Resume outcomes_free_compile_statements_mutual[cons]:
   simp[supported_stmt_expr_exists_def] >> strip_tac >>
   simp[Once compile_stmt_def] >> irule ctorCallFreeRulesTheory.every_state_insts_bind >>
   simp[compileEnvTheory.comp_get_def] >> rpt gen_tac >> strip_tac >> BETA_TAC >>
-  IF_CASES_TAC >- simp[outcomes_free_return] >>
+  IF_CASES_TAC >- simp[every_state_insts_return] >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
   >- simp[outcomes_free_declare_stmt_local] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>

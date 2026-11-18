@@ -1,7 +1,7 @@
 Theory deployOutcomesFreeStmtExitCases
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeLowering stmtLowering compileEnv emitHelper venomInst
+  stmtLowering compileEnv emitHelper venomInst
   loweringShapeDefs
 
 Theorem outcomes_free_stmt_assert_simple:
@@ -17,13 +17,17 @@ Theorem outcomes_free_stmt_assert_simple:
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
   simp[compile_stmt_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_fresh, outcomes_free_new_block,
-                    outcomes_free_emit_ops, outcomes_free_return]),
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_fresh_id, every_state_insts_fresh_var,
+      every_state_insts_fresh_label, every_state_insts_new_block,
+                    opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+                        every_state_insts_return]),
               irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
               irule ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
               gen_tac, disch_tac, first_assum irule]) >>
-  simp[outcomes_free_fresh, outcomes_free_new_block,
-       outcomes_free_emit_ops, outcomes_free_return] >> metis_tac[]
+  simp[every_state_insts_fresh_id, every_state_insts_fresh_var, every_state_insts_fresh_label,
+      every_state_insts_new_block,
+       opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+           every_state_insts_return] >> metis_tac[]
 QED
 
 Theorem outcomes_free_stmt_assert_reason:
@@ -43,13 +47,17 @@ Theorem outcomes_free_stmt_assert_reason:
 Proof
   strip_tac >> rpt gen_tac >>
   simp[compile_stmt_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_fresh, outcomes_free_new_block,
-                    outcomes_free_emit_ops, outcomes_free_return]),
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_fresh_id, every_state_insts_fresh_var,
+      every_state_insts_fresh_label, every_state_insts_new_block,
+                    opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+                        every_state_insts_return]),
               irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
               irule ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
               gen_tac, disch_tac, first_assum irule]) >>
-  simp[outcomes_free_fresh, outcomes_free_new_block,
-       outcomes_free_emit_ops, outcomes_free_return] >> metis_tac[]
+  simp[every_state_insts_fresh_id, every_state_insts_fresh_var, every_state_insts_fresh_label,
+      every_state_insts_new_block,
+       opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+           every_state_insts_return] >> metis_tac[]
 QED
 
 Theorem outcomes_free_stmt_return_none:
@@ -69,13 +77,15 @@ Proof
   Cases_on `ce.ce_nonreentrant` >> rename1 `ce.ce_nonreentrant = (nr, rest)` >>
   PairCases_on `rest` >> Cases_on `nr` >>
   Cases_on `ce.ce_return_pc` >> simp[compile_stmt_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return]),
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return]),
               irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
               irule ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
               gen_tac, disch_tac, first_assum irule]) >>
   rename1 `ce.ce_return_pc = SOME loc` >> Cases_on `loc` >>
   simp[] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return]),
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return]),
               irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
               irule ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
               gen_tac, disch_tac, first_assum irule])
@@ -104,10 +114,11 @@ Theorem outcomes_free_stmt_log:
 Proof
   strip_tac >> rpt gen_tac >>
   Cases_on `ce.ce_event_info (nsid_to_string id)` >>
-  simp[compile_stmt_def, outcomes_free_emit_ops] >>
+  simp[compile_stmt_def, opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
   rename1 `ce.ce_event_info _ = SOME info` >> PairCases_on `info` >>
   simp[] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return]),
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return]),
               irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
               irule ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
               gen_tac, disch_tac, IF_CASES_TAC, first_assum irule])
@@ -144,12 +155,14 @@ Proof
   strip_tac >> irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac >- simp[] >>
   gen_tac >> Cases_on `ce.ce_return_pc` >-
    (simp[] >>
-    rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return]),
+    rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+        opcode_every_emit_inst, every_state_insts_return]),
                 irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
                 irule ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
                 gen_tac, disch_tac, IF_CASES_TAC, first_assum irule])) >>
   rename1 `ce.ce_return_pc = SOME loc` >> Cases_on `loc` >> simp[] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return]),
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return]),
               irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
               irule ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
               gen_tac, disch_tac, IF_CASES_TAC, first_assum irule])

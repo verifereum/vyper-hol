@@ -1,13 +1,16 @@
 Theory deployOutcomesFreeAbiGenerators
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeLowering deployOutcomesFreeGenerators deployOutcomesFreeArgs
+  deployOutcomesFreeGenerators deployOutcomesFreeArgs
   context emitHelper builtinAbi builtinBytes
   builtinSimple exprLowering abiEncoder list pair
+  ctorCallFreeValues
 
 val abi_preserve_tac =
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return,
-    outcomes_free_fresh, outcomes_free_new_block, outcomes_free_alloc_buffer,
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return,
+    every_state_insts_fresh_id, every_state_insts_fresh_var, every_state_insts_fresh_label,
+        every_state_insts_new_block, outcomes_free_alloc_buffer,
     outcomes_free_copy_memory]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
     irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC]);
@@ -40,37 +43,6 @@ Proof
   strip_tac >> simp[compile_bytestring_widen_copy_def] >> abi_preserve_tac
 QED
 
-Theorem outcomes_free_int_clamp:
-  (!opc. MEM opc [SLT; SGT; GT; ISZERO; AND; ASSERT] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_int_clamp sg bits v s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_int_clamp_def] >> abi_preserve_tac
-QED
-
-Theorem outcomes_free_load_bytestring_as_word:
-  (!opc. MEM opc [MLOAD; ADD; ISZERO; MUL; SUB; shift] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (load_bytestring_as_word v shift s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[load_bytestring_as_word_def] >> abi_preserve_tac
-QED
-
-Theorem outcomes_free_type_convert:
-  (!opc. MEM opc [MLOAD; ADD; ISZERO; MUL; SUB; SHR; SAR; SLT; SGT; GT;
-    AND; ASSERT; SIGNEXTEND; EQ; SHL; SDIV] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_type_convert v cv s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >> Cases_on `cv` >>
-  simp[compile_type_convert_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_int_clamp,
-    outcomes_free_load_bytestring_as_word, DISJ_IMP_THM, FORALL_AND_THM]),
-    CHANGED_TAC abi_preserve_tac, pairarg_tac])
-QED
-
 Theorem outcomes_free_extract32_load:
   (!opc. MEM opc [ADD; LT; GT; OR; ISZERO; ASSERT; MLOAD] ==> P opc) /\
   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
@@ -79,21 +51,6 @@ Theorem outcomes_free_extract32_load:
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   simp[compile_extract32_load_def, compile_assert_slice_bounds_def] >> abi_preserve_tac
-QED
-
-Theorem outcomes_free_clamp_basetype:
-  (!opc. MEM opc [SHL; SLT; SGT; GT; ISZERO; AND; ASSERT] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_clamp_basetype v ty s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  Cases_on `ty` >> simp[compile_clamp_basetype_def, outcomes_free_return] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[compile_clamp_basetype_def, outcomes_free_return] >>
-  rpt (FIRST [CHANGED_TAC (simp[compile_clamp_basetype_def,
-    outcomes_free_return, outcomes_free_clamp, DISJ_IMP_THM, FORALL_AND_THM]),
-    CHANGED_TAC abi_preserve_tac, Cases_on `b`])
 QED
 
 Theorem outcomes_free_abi_encode_static:

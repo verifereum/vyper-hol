@@ -1,75 +1,21 @@
 Theory deployOutcomesFreeBuiltinGenerators
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeLowering deployOutcomesFreeGenerators builtinMisc builtinStrings builtinHashing
+  deployOutcomesFreeGenerators builtinMisc builtinStrings builtinHashing
   builtinBytes builtinMath builtinSimple exprLowering context emitHelper
   compileEnv venomInst list pair
+  ctorCallFreeOps ctorCallFreeValues
 
 (* The implementation boundary is monadic preservation of the instruction
    inventory. This tactic only decomposes binds and their finite branches. *)
 val builtin_preserve_tac =
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return, outcomes_free_emit_ops,
-    outcomes_free_alloc_buffer, outcomes_free_fresh, outcomes_free_new_block,
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst,
+    outcomes_free_alloc_buffer, every_state_insts_fresh_id, every_state_insts_fresh_var,
+        every_state_insts_fresh_label, every_state_insts_new_block,
     outcomes_free_ptr_load]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
     irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC]);
-
-Theorem outcomes_free_compile_select:
-  P XOR /\ P MUL /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_select c a b s)))
-Proof
-  strip_tac >> simp[compile_select_def] >> builtin_preserve_tac
-QED
-
-Theorem outcomes_free_compile_neg:
-  P SGT /\ P ASSERT /\ P SUB /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_neg v ty s)))
-Proof
-  strip_tac >> simp[compile_neg_def] >> pairarg_tac >> simp[] >> builtin_preserve_tac
-QED
-
-Theorem outcomes_free_compile_builtin_abs:
-  (!opc. MEM opc [SUB; SLT; EQ; AND; ISZERO; ASSERT; XOR; MUL] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_builtin_abs v s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_builtin_abs_def, compile_select_def] >> builtin_preserve_tac
-QED
-
-Theorem outcomes_free_compile_blockhash:
-  (!opc. MEM opc [NUMBER; SUB; SLT; ISZERO; ASSERT; LT; BLOCKHASH] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_blockhash v s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_blockhash_def] >> builtin_preserve_tac
-QED
-
-Theorem outcomes_free_compile_blobhash:
-  P BLOBHASH /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_blobhash v s)))
-Proof
-  simp[compile_blobhash_def, outcomes_free_emit_ops]
-QED
-
-Theorem outcomes_free_compile_floor:
-  (!opc. MEM opc [SLT; SUB; XOR; MUL; SDIV] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_floor v d s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_floor_def, compile_select_def] >> builtin_preserve_tac
-QED
-
-Theorem outcomes_free_compile_ceil:
-  (!opc. MEM opc [SLT; ADD; XOR; MUL; SDIV] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_ceil v d s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_ceil_def, compile_select_def] >> builtin_preserve_tac
-QED
 
 Theorem outcomes_free_compile_uint2str:
   (!opc. MEM opc [ALLOCA; ASSIGN; JMP; EQ; JNZ; Mod; ADD; SUB; MSTORE; Div] ==> P opc) /\
@@ -80,30 +26,6 @@ Proof
   simp[compile_uint2str_def] >> builtin_preserve_tac
 QED
 
-Theorem outcomes_free_compile_env_var:
-  (!opc. MEM opc [CALLER; ADDRESS; CALLVALUE; TIMESTAMP; NUMBER; BLOBBASEFEE;
-    GASPRICE; SUB; BLOCKHASH; CHAINID; COINBASE; GASLIMIT; BASEFEE; PREVRANDAO;
-    ORIGIN; GAS] ==> P opc) /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_env_var e s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >> Cases_on `e` >>
-  simp[compile_env_var_def] >> builtin_preserve_tac
-QED
-
-Theorem outcomes_free_compile_builtin_calldatasize:
-  P CALLDATASIZE /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_builtin_calldatasize s)))
-Proof
-  simp[compile_builtin_calldatasize_def, outcomes_free_emit_ops]
-QED
-
-Theorem outcomes_free_compile_invert:
-  P XOR /\ P NOT /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_invert v ty ce s)))
-Proof
-  strip_tac >> Cases_on `ty` >> simp[compile_invert_def, outcomes_free_emit_ops]
-QED
-
 Theorem outcomes_free_compile_builtin_len:
   (!opc. MEM opc [ADD; ILOAD; DLOAD; MLOAD; SLOAD; TLOAD; CALLDATALOAD] ==> P opc) /\
   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
@@ -111,45 +33,6 @@ Theorem outcomes_free_compile_builtin_len:
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   simp[compile_builtin_len_def, outcomes_free_ptr_load]
-QED
-
-Theorem outcomes_free_compile_as_wei_value_int:
-  (!opc. MEM opc [MUL; Div; EQ; ISZERO; OR; SLT; AND; ASSERT] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_as_wei_value_int v scale signed s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_as_wei_value_int_def] >> builtin_preserve_tac
-QED
-
-Theorem outcomes_free_compile_as_wei_value_decimal:
-  (!opc. MEM opc [SLT; ISZERO; ASSERT; Div; MUL] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_as_wei_value_decimal v scale d s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_as_wei_value_decimal_def] >> builtin_preserve_tac
-QED
-
-Theorem outcomes_free_compile_pow_mod256:
-  P Exp /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_pow_mod256 a b s)))
-Proof
-  simp[compile_pow_mod256_def, outcomes_free_emit_ops]
-QED
-
-Theorem outcomes_free_compile_addmod:
-  P ASSERT /\ P ADDMOD /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_addmod a b c s)))
-Proof
-  strip_tac >> simp[compile_addmod_def] >> builtin_preserve_tac
-QED
-
-Theorem outcomes_free_compile_mulmod:
-  P ASSERT /\ P MULMOD /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_mulmod a b c s)))
-Proof
-  strip_tac >> simp[compile_mulmod_def] >> builtin_preserve_tac
 QED
 
 Theorem outcomes_free_compile_assert_slice_bounds:
@@ -271,7 +154,8 @@ Theorem outcomes_free_emit_membership_eqs:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (emit_membership_eqs needle elems s)))
 Proof
   Induct_on `elems` >> rpt strip_tac >> simp[emit_membership_eqs_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return, outcomes_free_emit_ops]),
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind, conj_tac, first_assum irule])
 QED
 
@@ -280,7 +164,8 @@ Theorem outcomes_free_fold_membership_or:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (fold_membership_or acc cs s)))
 Proof
   Induct_on `cs` >> rpt strip_tac >> simp[fold_membership_or_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return, outcomes_free_emit_ops]),
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind, conj_tac, first_assum irule])
 QED
 
@@ -289,7 +174,8 @@ Theorem outcomes_free_fold_membership_and:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (fold_membership_and acc cs s)))
 Proof
   Induct_on `cs` >> rpt strip_tac >> simp[fold_membership_and_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return, outcomes_free_emit_ops]),
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind, conj_tac, first_assum irule])
 QED
 
@@ -299,7 +185,7 @@ Theorem outcomes_free_compile_list_membership_in:
 Proof
   strip_tac >> simp[compile_list_membership_in_def] >> irule ctorCallFreeRulesTheory.every_state_insts_bind >>
   simp[outcomes_free_emit_membership_eqs] >> rpt strip_tac >>
-  Cases_on `x` >> simp[outcomes_free_return, outcomes_free_fold_membership_or]
+  Cases_on `x` >> simp[every_state_insts_return, outcomes_free_fold_membership_or]
 QED
 
 Theorem outcomes_free_compile_list_membership_notin:
@@ -308,8 +194,9 @@ Theorem outcomes_free_compile_list_membership_notin:
 Proof
   strip_tac >> simp[compile_list_membership_notin_def] >> irule ctorCallFreeRulesTheory.every_state_insts_bind >>
   simp[outcomes_free_emit_membership_eqs] >> rpt strip_tac >>
-  Cases_on `x` >> simp[outcomes_free_return] >> irule ctorCallFreeRulesTheory.every_state_insts_bind >>
-  simp[outcomes_free_emit_ops, outcomes_free_fold_membership_and]
+  Cases_on `x` >> simp[every_state_insts_return] >> irule ctorCallFreeRulesTheory.every_state_insts_bind >>
+  simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+      outcomes_free_fold_membership_and]
 QED
 
 Theorem outcomes_free_compile_array_membership_loop:
@@ -322,8 +209,10 @@ Theorem outcomes_free_compile_array_membership_loop:
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   Cases_on `bound` >> simp[compile_array_membership_loop_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return, outcomes_free_emit_ops,
-      outcomes_free_fresh, outcomes_free_new_block]),
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst,
+      every_state_insts_fresh_id, every_state_insts_fresh_var, every_state_insts_fresh_label,
+          every_state_insts_new_block]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind,
     conj_tac, IF_CASES_TAC, first_assum irule])
 QED
@@ -340,8 +229,8 @@ Proof
   conj_tac
   >- (rpt strip_tac >> BETA_TAC >> irule (SRULE [DISJ_IMP_THM, FORALL_AND_THM]
         outcomes_free_compile_array_membership_loop) >> simp[outcomes_free_ptr_load]) >>
-  Cases_on `ty` >> simp[outcomes_free_return] >>
-  Cases_on `b` >> simp[outcomes_free_return, outcomes_free_ptr_load]
+  Cases_on `ty` >> simp[every_state_insts_return] >>
+  Cases_on `b` >> simp[every_state_insts_return, outcomes_free_ptr_load]
 QED
 
 (* Name fast paths pair name lookup with unwrapping. *)
@@ -357,8 +246,9 @@ Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   irule (SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value) >> simp[] >>
   simp[compile_name_vv_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[outcomes_free_return]) >>
-  irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[outcomes_free_emit_ops, outcomes_free_return]
+  rpt (BasicProvers.TOP_CASE_TAC >> gvs[every_state_insts_return]) >>
+  irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst, every_state_insts_return]
 QED
 
 Theorem outcomes_free_compile_addmod_names:

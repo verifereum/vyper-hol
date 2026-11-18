@@ -1,19 +1,21 @@
 Theory deployOutcomesFreeExpressions
 Ancestors
-  deployOutcomesFreeLowering deployOutcomesFreeGenerators
+  ctorCallFreeRules deployOutcomesFreeGenerators
   exprLowering exprCallBounds e2eDeployDefs supportedExprTraverse vyperTypeSystem
   deployOutcomesFreeExprBody
   deployOutcomesFreeGeneralBuiltinBody deployOutcomesFreeBodyGenerators
   deployOutcomesFreeExprGenerators deployOutcomesFreeBuiltinGenerators
   deployOutcomesFreeAggregateGenerators deployOutcomesFreeAbiGenerators
   deployOutcomesFreeTypeBuiltinBody deployOutcomesFreeSelectors compileEnv
+  ctorCallFreeOps ctorCallFreeValues
 
 (* Specialize the independently checked finite opcode certificates once. *)
 val safe_generators = map
   (SRULE [DISJ_IMP_THM, FORALL_AND_THM] o
    Q.INST [`P` |-> `\op. op <> CALL /\ op <> STATICCALL /\
       op <> DELEGATECALL /\ op <> CREATE /\ op <> CREATE2 /\ op <> INVOKE`])
-  [outcomes_free_snapshot, outcomes_free_emit_ops, outcomes_free_alloc_buffer,
+  [outcomes_free_snapshot, opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, outcomes_free_alloc_buffer,
    outcomes_free_ptr_load, outcomes_free_unwrap_value,
    outcomes_free_mapping_subscript, outcomes_free_keccak256_key,
    outcomes_free_tuple_subscript, outcomes_free_array_subscript,
@@ -41,7 +43,8 @@ val safe_generators = map
    outcomes_free_clamp_basetype, outcomes_free_store_memory];
 
 val safe_simp = simp (safe_generators @
-  [outcomes_free_fresh, outcomes_free_new_block, outcomes_free_lower_abi_decode]);
+  [every_state_insts_fresh_id, every_state_insts_fresh_var, every_state_insts_fresh_label,
+      every_state_insts_new_block, outcomes_free_lower_abi_decode]);
 
 Theorem outcomes_free_target_generators[local]:
   Q = (\s. EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\

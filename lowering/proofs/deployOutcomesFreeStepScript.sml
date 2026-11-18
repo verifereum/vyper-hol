@@ -170,7 +170,8 @@ Proof
   simp[halt_state_def, revert_state_def, set_returndata_def]
 QED
 Resume outcomes_step_inst_base[dret]:
-  `!pairs cursor st. pack_dret_dynamic cursor pairs (st with vs_outcomes := os) =
+  `!(pairs:(bytes32 # bytes32) list) cursor st.
+     pack_dret_dynamic cursor pairs (st with vs_outcomes := os) =
      (FST (pack_dret_dynamic cursor pairs st),
       FST (SND (pack_dret_dynamic cursor pairs st)),
       SND (SND (pack_dret_dynamic cursor pairs st)) with vs_outcomes := os)` by

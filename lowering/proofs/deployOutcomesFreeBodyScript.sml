@@ -6,7 +6,8 @@ Ancestors
   deployOutcomesFreeExprGenerators deployOutcomesFreeStmtLog
   deployOutcomesFreeStmtValues deployOutcomesFreeAbiGenerators
   supportedStmtTraverse deployOutcomesFreeBodyGenerators
-  exprLowering deployOutcomesFreeLowering deployOutcomesFreeStoreSlots
+  exprLowering ctorCallFreeStmtStorage
+  ctorCallFreeOps ctorCallFreeValues loweringFunctionOpcodes
 
 val safe_generator =
   SRULE [DISJ_IMP_THM, FORALL_AND_THM] o
@@ -54,7 +55,7 @@ Proof
     rpt gen_tac >> strip_tac >> BETA_TAC >>
     irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp safe_generators >>
     rpt gen_tac >> strip_tac >> BETA_TAC >>
-    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp (outcomes_free_return :: safe_generators)) >>
+    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp (every_state_insts_return :: safe_generators)) >>
   gvs[] >> metis_tac[]
 QED
 

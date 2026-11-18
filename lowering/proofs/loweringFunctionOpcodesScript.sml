@@ -3,6 +3,23 @@ Ancestors
   moduleLowering compileEnv context emitHelper loweringShapeDefs venomInst
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeABIDecode list pair
 
+Theorem outcomes_free_nonreentrant:
+  (!opc. MEM opc [TLOAD; SLOAD; TSTORE; SSTORE; EQ; ISZERO; ASSERT] ==> P opc) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_nonreentrant_lock key trans view s))) /\
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_nonreentrant_unlock key trans view s)))
+Proof
+  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[compile_nonreentrant_lock_def, compile_nonreentrant_unlock_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst]),
+    gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
+        irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind,
+    conj_tac, IF_CASES_TAC])
+QED
+
 Theorem opcode_every_fixed_region:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -23,13 +40,8 @@ Theorem opcode_every_nonreentrant_lock:
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_nonreentrant_lock key trans view st)))
 Proof
-  strip_tac >>
-  qid_spec_tac `st` >> simp[compile_nonreentrant_lock_def] >>
-  rpt (FIRST [IF_CASES_TAC >> gvs[],
-    ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-      every_state_insts_return])])
+  rpt strip_tac >> irule (cj 1 outcomes_free_nonreentrant) >>
+  simp[DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
 Theorem opcode_every_abi_arg_ptr_guard:

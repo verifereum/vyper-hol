@@ -1,7 +1,7 @@
 Theory deployOutcomesFreeStmtValues
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeLowering stmtLowering compileEnv
+  stmtLowering compileEnv
 
 Theorem outcomes_free_compile_load_tuple_elements:
   P ADD /\ P MLOAD ==>
@@ -11,49 +11,14 @@ Theorem outcomes_free_compile_load_tuple_elements:
       (state_insts (SND (compile_load_tuple_elements cenv base tys offset s)))
 Proof
   strip_tac >> Induct_on `tys` >>
-  simp[compile_load_tuple_elements_def, outcomes_free_return] >>
+  simp[compile_load_tuple_elements_def, every_state_insts_return] >>
   rpt gen_tac >> strip_tac >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
-  >- simp[outcomes_free_emit_ops] >>
+  >- simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >> irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
-  >- simp[outcomes_free_emit_ops] >>
+  >- simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >> irule ctorCallFreeRulesTheory.every_state_insts_bind >>
-  simp[outcomes_free_return]
-QED
-
-Theorem outcomes_free_compile_tuple_load_all:
-  P ADD /\
-  (!op word s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_load_memory op word s)))) ==>
-  !tys cenv base offset s.
-    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_tuple_load_all cenv base tys offset s)))
-Proof
-  strip_tac >> Induct_on `tys` >>
-  simp[compile_tuple_load_all_def, outcomes_free_return] >>
-  rpt gen_tac >> strip_tac >> BETA_TAC >> irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
-  >- simp[outcomes_free_emit_ops] >>
-  rpt gen_tac >> strip_tac >> BETA_TAC >> irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
-  >- simp[] >>
-  rpt gen_tac >> strip_tac >> BETA_TAC >> irule ctorCallFreeRulesTheory.every_state_insts_bind >>
-  simp[outcomes_free_return]
-QED
-
-Theorem outcomes_free_compile_store_at_loc:
-  P MSTORE /\ P SSTORE /\ P TSTORE /\ P INVALID /\
-  (!imm dst value s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_imm_store_word imm dst value s)))) ==>
-  !imm dst value loc s.
-    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_store_at_loc imm dst value loc s)))
-Proof
-  strip_tac >> rpt gen_tac >> strip_tac >> namedCases_on `loc` ["", "loc_kind"]
-  >- simp[compile_store_at_loc_def, outcomes_free_emit_ops] >>
-  Cases_on `loc_kind` >> simp[compile_store_at_loc_def, outcomes_free_emit_ops]
+  simp[every_state_insts_return]
 QED
 
 Theorem outcomes_free_compile_internal_return:
@@ -71,15 +36,17 @@ Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   simp[compile_internal_return_def] >>
   IF_CASES_TAC >> simp[]
-  >- (Cases_on `ret` >> simp[outcomes_free_emit_ops] >>
-      Cases_on `elems = []` >> simp[outcomes_free_emit_ops] >>
+  >- (Cases_on `ret` >> simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst] >>
+      Cases_on `elems = []` >> simp[opcode_every_emit_op, opcode_every_emit_void,
+          opcode_every_emit_inst] >>
       irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
       >- simp[outcomes_free_compile_load_tuple_elements] >>
-      simp[outcomes_free_emit_ops]) >>
-  Cases_on `buf` >> simp[outcomes_free_emit_ops] >>
-  Cases_on `ret` >> simp[outcomes_free_emit_ops] >>
+      simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]) >>
+  Cases_on `buf` >> simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
+  Cases_on `ret` >> simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
   irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >>
-  simp[outcomes_free_emit_ops]
+  simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]
 QED
 
 Theorem outcomes_free_compile_external_return:
@@ -104,23 +71,24 @@ Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   simp[compile_external_return_def] >>
   irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[] >> conj_tac
-  >- (Cases_on `lock` >> simp[outcomes_free_return]) >>
+  >- (Cases_on `lock` >> simp[every_state_insts_return]) >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
-  Cases_on `ret` >> simp[outcomes_free_emit_ops] >>
+  Cases_on `ret` >> simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
   Cases_on `raw` >> simp[]
   >- (irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
-      >- simp[outcomes_free_emit_ops] >>
+      >- simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
       rpt gen_tac >> strip_tac >> BETA_TAC >>
       irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
-      >- simp[outcomes_free_emit_ops] >>
-      simp[outcomes_free_emit_ops]) >>
+      >- simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
+      simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]) >>
   Cases_on `prim` >> simp[] >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
   >- simp[] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
   simp[comp_bind_def, comp_return_def] >> BETA_TAC
-  >- (irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[outcomes_free_emit_ops]) >>
+  >- (irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst]) >>
   pairarg_tac >> gvs[] >>
-  irule (cj 3 outcomes_free_emit_ops) >> simp[] >>
+  irule opcode_every_emit_inst >> simp[] >>
   metis_tac[pairTheory.SND]
 QED

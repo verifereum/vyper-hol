@@ -3,7 +3,7 @@ Theory deployOutcomesFreeEntry
 Ancestors
   ctorCallFreeRules loweringPackageInsts
   vyperCompiler list venomInst deployOutcomesFreeArgs
-  ctorUnitShape ctorGeneratorShape ctorShapeProps loweringShapeProps supportedStmtTraverse moduleLowering deployOutcomesFreeLowering loweringShapeDefs
+  ctorUnitShape ctorGeneratorShape ctorShapeProps loweringShapeProps supportedStmtTraverse moduleLowering loweringShapeDefs
   context emitHelper compileEnv ctorDeployLoweringCode compileVyper ctorDeployDefs stmtLowering
 Libs
   monadsyntax
@@ -64,8 +64,10 @@ Proof
       PairCases_on `rest` >> Cases_on `trans` >> Cases_on `rest2` >>
       asm_rewrite_tac [] >> Cases_on `imm > 0` >>
       rpt (FIRST [gen_tac, strip_tac,
-        CHANGED_TAC (simp[outcomes_free_return, outcomes_free_fresh,
-          outcomes_free_get, outcomes_free_new_block, outcomes_free_emit_ops,
+        CHANGED_TAC (simp[every_state_insts_return, every_state_insts_fresh_id,
+            every_state_insts_fresh_var, every_state_insts_fresh_label,
+          every_state_insts_get, every_state_insts_new_block, opcode_every_emit_op,
+              opcode_every_emit_void, opcode_every_emit_inst,
           outcomes_free_register_constructor_args_state]),
         irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac,
         first_assum irule, IF_CASES_TAC]) >>

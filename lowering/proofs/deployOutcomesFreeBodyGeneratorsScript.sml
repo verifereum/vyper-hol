@@ -1,29 +1,8 @@
 Theory deployOutcomesFreeBodyGenerators
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeLowering deployOutcomesFreeGenerators exprLowering context
-
-Theorem outcomes_free_snapshot:
-  (!ce v st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (unwrap_value ce v st)))) /\
-  (!n st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_alloc_buffer n st)))) /\
-  (!ce a b ty sty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_store_memory ce a b ty sty st)))) ==>
-  !ce copy v s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_snapshot_vv ce copy v s)))
-Proof
-  strip_tac >> rpt gen_tac >> strip_tac >> simp[compile_snapshot_vv_def] >>
-  IF_CASES_TAC
-  >- (irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[outcomes_free_return]) >>
-  IF_CASES_TAC >> simp[outcomes_free_return] >>
-  irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[outcomes_free_return] >>
-  simp[compile_materialize_vv_def] >> rpt gen_tac >> strip_tac >>
-  irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >> rpt gen_tac >> strip_tac >> BETA_TAC >>
-  irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >> rpt gen_tac >> strip_tac >> BETA_TAC >>
-  irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[outcomes_free_return]
-QED
+  deployOutcomesFreeGenerators exprLowering context
+  ctorCallFreeStmtStorage ctorCallFreeValues
 
 Theorem outcomes_free_dynarray_append:
   (!opc. MEM opc [MLOAD; SLOAD; TLOAD; ILOAD; DLOAD; CALLDATALOAD;
@@ -44,7 +23,8 @@ Proof
   rpt (FIRST [ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
     ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
     gen_tac, IF_CASES_TAC >> qid_spec_tac `s`,
-    CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return,
+    CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+        every_state_insts_return,
       outcomes_free_ptr_load, outcomes_free_ptr_store, outcomes_free_imm_store_words]),
     first_assum irule])
 QED

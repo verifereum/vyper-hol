@@ -1,9 +1,10 @@
 Theory deployOutcomesFreeAggregateGenerators
 Ancestors
   constSubstCorrect ctorCallFreeRules
-  deployOutcomesFreeLowering deployOutcomesFreeGenerators exprLowering context emitHelper compileEnv
+  deployOutcomesFreeGenerators exprLowering context emitHelper compileEnv
   list pair venomInst vyperAST deployOutcomesFreeTyping
   supportedExprTraverse vyperTypeSystem
+  ctorCallFreeValues
 
 Theorem outcomes_free_make_tuple:
   !es tys buf off s.
@@ -18,8 +19,9 @@ Theorem outcomes_free_make_tuple:
 Proof
   Induct_on `es` >> rpt strip_tac >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  Cases_on `tys` >> simp[compile_make_tuple_def, outcomes_free_return] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops,
+  Cases_on `tys` >> simp[compile_make_tuple_def, every_state_insts_return] >>
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
@@ -40,8 +42,9 @@ Theorem outcomes_free_make_array_elems:
 Proof
   Induct_on `es` >> rpt strip_tac >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_make_array_elems_def, outcomes_free_return] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops,
+  simp[compile_make_array_elems_def, every_state_insts_return] >>
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
@@ -62,7 +65,8 @@ Proof
   strip_tac >> simp[compile_make_array_def] >>
   irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac
   >- (Cases_on `lw` >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-      simp[outcomes_free_return, outcomes_free_emit_ops]) >>
+      simp[every_state_insts_return, opcode_every_emit_op, opcode_every_emit_void,
+          opcode_every_emit_inst]) >>
   rpt strip_tac >> simp[outcomes_free_make_array_elems]
 QED
 
@@ -79,8 +83,8 @@ Theorem outcomes_free_multi_exprs:
 Proof
   Induct_on `es` >> rpt strip_tac >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_multi_exprs_def, outcomes_free_return] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return,
+  simp[compile_multi_exprs_def, every_state_insts_return] >>
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_lower_value_opcodes]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind, conj_tac,
     first_assum irule]) >> simp[]
@@ -93,9 +97,10 @@ Theorem outcomes_free_store_abi_tuple:
     (state_insts (SND (compile_store_abi_tuple ce buf off args s)))
 Proof
   Induct_on `args` >> rpt strip_tac >>
-  simp[compile_store_abi_tuple_def, outcomes_free_return] >>
+  simp[compile_store_abi_tuple_def, every_state_insts_return] >>
   PairCases_on `h` >> simp[compile_store_abi_tuple_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_copy_memory]),
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, outcomes_free_copy_memory]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind,
     conj_tac, IF_CASES_TAC, first_assum irule])
 QED
@@ -114,9 +119,10 @@ Theorem outcomes_free_struct_lit:
 Proof
   Induct_on `fields` >> rpt strip_tac >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_struct_lit_def, outcomes_free_return] >>
+  simp[compile_struct_lit_def, every_state_insts_return] >>
   PairCases_on `h` >> simp[compile_struct_lit_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops,
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
@@ -137,10 +143,11 @@ Theorem outcomes_free_concat:
 Proof
   Induct_on `es` >> rpt strip_tac >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_concat_def, outcomes_free_return] >>
-  Cases_on `infos` >> simp[compile_concat_def, outcomes_free_return] >>
+  simp[compile_concat_def, every_state_insts_return] >>
+  Cases_on `infos` >> simp[compile_concat_def, every_state_insts_return] >>
   PairCases_on `h'` >> simp[compile_concat_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops,
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_lower_value_opcodes]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
     irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC, first_assum irule]) >>
@@ -158,16 +165,18 @@ Theorem outcomes_free_acc:
     (state_insts (SND (compile_acc f ce e item s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  Cases_on `item` >> simp[compile_acc_def, outcomes_free_emit_ops] >>
+  Cases_on `item` >> simp[compile_acc_def, opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst] >>
   rpt (pairarg_tac >> gvs[]) >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops]),
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst]),
     gen_tac, strip_tac]) >>
   `EVERY (\i. P i.inst_opcode)
      (state_insts (SND (lower_value f ce (BaseT AddressT) e s)))` by
     (irule outcomes_free_lower_value_opcodes >> simp[DISJ_IMP_THM, FORALL_AND_THM]) >>
-  gvs[outcomes_free_emit_ops] >>
-  rpt (pairarg_tac >> gvs[outcomes_free_emit_ops]) >>
-  metis_tac[outcomes_free_emit_ops, SND]
+  gvs[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
+  rpt (pairarg_tac >> gvs[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]) >>
+  metis_tac[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst, SND]
 QED
 
 (* Materialization is discharged by the ABI generator publication at the join. *)
@@ -187,8 +196,8 @@ Theorem outcomes_free_abi_encode_args:
 Proof
   Induct_on `es` >> rpt strip_tac >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_abi_encode_args_def, outcomes_free_return] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return,
+  simp[compile_abi_encode_args_def, every_state_insts_return] >>
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
     conj_tac, IF_CASES_TAC, first_assum irule]) >> simp[]

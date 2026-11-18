@@ -1,7 +1,7 @@
 Theory deployOutcomesFreeStmtLog
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeLowering stmtLowering list pair
+  stmtLowering list pair
 
 Theorem outcomes_free_compile_log_save_arg:
   (!ce ty vv s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
@@ -12,7 +12,7 @@ Theorem outcomes_free_compile_log_save_arg:
       (state_insts (SND (compile_log_save_arg ce ty op es s)))
 Proof
   rpt strip_tac >> simp[compile_log_save_arg_def] >>
-  IF_CASES_TAC >- simp[outcomes_free_return] >> first_x_assum irule >> simp[]
+  IF_CASES_TAC >- simp[every_state_insts_return] >> first_x_assum irule >> simp[]
 QED
 
 Theorem outcomes_free_compile_log_topic_ops:
@@ -23,9 +23,9 @@ Theorem outcomes_free_compile_log_topic_ops:
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_log_topic_ops ops s)))
 Proof
-  strip_tac >> Induct >> simp[compile_log_topic_ops_def, outcomes_free_return] >>
+  strip_tac >> Induct >> simp[compile_log_topic_ops_def, every_state_insts_return] >>
   gen_tac >> ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac >- simp[] >>
-  gen_tac >> ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_bind >> simp[outcomes_free_return]
+  gen_tac >> ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_bind >> simp[every_state_insts_return]
 QED
 
 Theorem outcomes_free_compile_log_store_data:
@@ -38,11 +38,11 @@ Theorem outcomes_free_compile_log_store_data:
       (state_insts (SND (compile_log_store_data ce ops tys buf off s)))
 Proof
   strip_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >>
-  simp[compile_log_store_data_def, outcomes_free_return]
-  >- metis_tac[outcomes_free_emit_ops]
-  >- metis_tac[outcomes_free_emit_ops] >>
+  simp[compile_log_store_data_def, every_state_insts_return]
+  >- metis_tac[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]
+  >- metis_tac[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
   qid_spec_tac `s` >> ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac
-  >- metis_tac[outcomes_free_emit_ops] >>
+  >- metis_tac[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
   gen_tac >> ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[]
 QED
 
@@ -63,5 +63,5 @@ Proof
   rpt (FIRST [ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
               ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
               gen_tac]) >>
-  metis_tac[outcomes_free_emit_ops]
+  metis_tac[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]
 QED

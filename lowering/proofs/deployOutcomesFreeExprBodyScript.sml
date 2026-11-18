@@ -1,6 +1,6 @@
 Theory deployOutcomesFreeExprBody
 Ancestors
-  deployOutcomesFreeLowering exprLowering exprCallBounds e2eDeployDefs
+  ctorCallFreeRules exprLowering exprCallBounds e2eDeployDefs
   supportedExprTraverse pairToolsContext compileEnv emitHelper
   deployOutcomesFreeTyping deployOutcomesFreeSelectors vyperTypeSystem list
   deployOutcomesFreeBuiltinDispatch
@@ -10,7 +10,7 @@ Theorem outcomes_free_invalid_expr_call:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (invalid_expr_call ty s)))
 Proof
   strip_tac >> simp[invalid_expr_call_def] >> pairarg_tac >> simp[] >>
-  drule_all (cj 3 outcomes_free_emit_ops) >>
+  drule_all opcode_every_emit_inst >>
   disch_then (qspecl_then [`[]`, `[]`] mp_tac) >> simp[]
 QED
 

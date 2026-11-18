@@ -1,7 +1,8 @@
 Theory deployOutcomesFreeStmtAssignCases
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeLowering deployOutcomesFreeStmtControl stmtLowering compileEnv list
+  deployOutcomesFreeStmtControl stmtLowering compileEnv list
+  ctorCallFreeStmtStorage
 
 Theorem outcomes_free_stmt_annassign:
   P ALLOCA /\ P MSTORE /\ P INVALID /\
@@ -25,13 +26,15 @@ Proof
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >> reverse conj_tac
-  >- (IF_CASES_TAC >> simp[outcomes_free_return]) >>
+  >- (IF_CASES_TAC >> simp[every_state_insts_return]) >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
   simp[comp_bind_def, comp_return_def] >>
-  Cases_on `FLOOKUP ce.ce_vars id` >> simp[outcomes_free_emit_ops] >>
+  Cases_on `FLOOKUP ce.ce_vars id` >> simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst] >>
   rename1 `FLOOKUP ce.ce_vars id = SOME binding` >>
-  Cases_on `binding` >> simp[outcomes_free_emit_ops] >>
-  IF_CASES_TAC >> simp[outcomes_free_emit_ops]
+  Cases_on `binding` >> simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst] >>
+  IF_CASES_TAC >> simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]
 QED
 
 Theorem outcomes_free_stmt_assign_base:
@@ -60,14 +63,15 @@ Proof
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >> reverse conj_tac
-  >- (IF_CASES_TAC >> simp[outcomes_free_return]) >>
+  >- (IF_CASES_TAC >> simp[every_state_insts_return]) >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return]),
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return]),
               irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] ,
               gen_tac, disch_tac, CHANGED_TAC BETA_TAC]) >>
-  BasicProvers.TOP_CASE_TAC >> simp[outcomes_free_emit_ops]
+  BasicProvers.TOP_CASE_TAC >> simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst]
 QED
 
 Theorem outcomes_free_stmt_assign_tuple:
@@ -104,11 +108,13 @@ Proof
   simp[Once compile_stmt_def] >> irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
   ntac 2 (simp[Once comp_bind_def, comp_return_def]) >>
-  BasicProvers.TOP_CASE_TAC >> simp[outcomes_free_emit_ops] >>
+  BasicProvers.TOP_CASE_TAC >> simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst] >>
   rename1 `FST (SND _) = SOME loc` >>
   Cases_on `loc` >>
   ntac 2 (simp[Once comp_bind_def, comp_return_def]) >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return, outcomes_free_emit_ops]),
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst]),
               irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[],
               gen_tac, disch_tac, CHANGED_TAC BETA_TAC])
 QED
@@ -139,10 +145,10 @@ Proof
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
-  >- (IF_CASES_TAC >> simp[outcomes_free_return] >>
+  >- (IF_CASES_TAC >> simp[every_state_insts_return] >>
       rpt gen_tac >> strip_tac >> irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >>
       rpt gen_tac >> strip_tac >> BETA_TAC >>
-      irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[outcomes_free_return]) >>
+      irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[every_state_insts_return]) >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
   simp[comp_bind_def, comp_return_def]
 QED
