@@ -5072,3 +5072,88 @@ Proof
   simp[Excl "isPREFIX", istore_def, mstore_def, allocas_from_def, allocas_below_fmp_def] >>
   fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
 QED
+
+(* Resolve the destination at its live cursor, then use the common store suffix. *)
+Theorem tuple_runtime_destination_word[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (mk_inst id MUL [Var cv;Lit 32w] [dm]::
+            mk_inst (id+1) ADD [dst;Var dm] [dv]::
+            (extra_code ++ mk_inst (id+2+LENGTH extra_code) ISTORE [arg;Var vv] []::tail))
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  (case extra of
+     NONE => arg = Var dv /\ at = bw+k*32w /\ extra_code = [] /\ outs = []
+   | SOME (region,rwrd,av) =>
+       arg = Var av /\ at = rwrd+(bw+k*32w) /\
+       extra_code = [mk_inst (id+2) ADD [region;Var dv] [av]] /\ outs = [av] /\
+       eval_operand region s = SOME rwrd /\ op_prov G region = NONE /\
+       op_taint tn region = {} /\ region <> Var dm /\ region <> Var dv /\ vv <> av) /\
+  eval_operand dst s = SOME bw /\ op_prov G dst = NONE /\ op_taint tn dst = {} /\
+  eval_operand (Var cv) s = SOME k /\ op_prov G (Var cv) = NONE /\ op_taint tn (Var cv) = {} /\
+  dst <> Var dm /\ vv <> dm /\ vv <> dv /\ eval_operand (Var vv) s = SOME w /\
+  w2n at + 32 <= lo /\ lo <= s.vs_alloca_next /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted ==>
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    store_copy_normalize s t = istore (w2n at) w s /\
+    t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx + 3 + LENGTH extra_code /\
+    isPREFIX tail (DROP t.vs_inst_idx bb.bb_instructions) /\
+    (!p. ~MEM p (dm::dv::outs) ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p)) /\
+    tf.t_mem = (tn.t_mem DIFF {j | w2n at <= j /\ j < w2n at + 32}) UNION
+      {w2n at + j | j IN op_taint tn (Var vv)} /\
+    tf.t_imm = key_update tn.t_imm (w2n at) (op_taint tn (Var vv)) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    t.vs_alloca_next = s.vs_alloca_next /\ allocas_from lo t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  `eval_operand (Lit 32w) s = SOME 32w /\ op_prov G (Lit 32w) = NONE /\
+   op_taint tn (Lit 32w) = {}` by simp[eval_operand_def, op_prov_def, op_taint_def] >>
+  drule_all (tuple_runtime_binary_prefix |> Q.INST [`opc` |-> `MUL`] |> SRULE [Excl "isPREFIX"]) >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `m` (qx_choose_then `Gm` (qx_choose_then `tm` strip_assume_tac)))) >>
+  `lookup_block m.vs_current_bb fn.fn_blocks = SOME bb /\
+   eval_operand dst m = SOME bw /\ op_prov Gm dst = NONE /\ op_taint tm dst = {}` by simp[] >>
+  drule_all (tuple_runtime_binary_prefix |> Q.INST [`opc` |-> `ADD`,
+    `s` |-> `m`, `G` |-> `Gm`, `tn` |-> `tm`] |> SRULE [Excl "isPREFIX"]) >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `r` (qx_choose_then `Gr` (qx_choose_then `tr` strip_assume_tac)))) >>
+  `lookup_block r.vs_current_bb fn.fn_blocks = SOME bb /\ lo <= r.vs_alloca_next /\
+   eval_operand (Var vv) r = SOME w /\ op_taint tr (Var vv) = op_taint tn (Var vv)` by simp[] >>
+  `case extra of
+     NONE => arg = Var dv /\ at = bw+k*32w /\ extra_code = [] /\ outs = []
+   | SOME (region,rwrd,av) =>
+       arg = Var av /\ at = rwrd+(bw+k*32w) /\
+       extra_code = [mk_inst (id+2) ADD [region;Var dv] [av]] /\ outs = [av] /\
+       eval_operand region r = SOME rwrd /\ op_prov Gr region = NONE /\
+       op_taint tr region = {} /\ Var vv <> Var av` by
+    (Cases_on `extra` >- fs[] >> PairCases_on `x` >> fs[]) >>
+  drule_all (tuple_runtime_region_store |> Q.INST [`s` |-> `r`, `G` |-> `Gr`, `tn` |-> `tr`]) >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`Gf`,`tf`] >>
+  conj_tac >-
+    (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gm`,`m`,`tm`] >> simp[] >>
+     irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gr`,`r`,`tr`] >> simp[]) >>
+  `store_copy_normalize s t = istore (w2n at) w s` by
+    (`!base' mid end'. store_copy_normalize base' (store_copy_normalize mid end') =
+                         store_copy_normalize base' end'` by
+       simp[stmtSimStoreCopyTheory.store_copy_normalize_def] >>
+     `store_copy_normalize s r = s` by
+       (qpat_assum `store_copy_normalize m r = m`
+          (mp_tac o Q.AP_TERM `store_copy_normalize s`) >> simp[]) >>
+     qpat_x_assum `store_copy_normalize r t = istore _ _ r`
+       (mp_tac o Q.AP_TERM `store_copy_normalize s`) >>
+     simp[] >>
+     `store_copy_normalize s (istore (w2n at) w r) =
+       istore (w2n at) w (store_copy_normalize s r)` by
+       simp[NoAsms, stmtSimStoreCopyTheory.store_copy_normalize_def, istore_def, mstore_def] >>
+     simp[]) >>
+  `t.vs_inst_idx = s.vs_inst_idx + 3 + LENGTH extra_code` by decide_tac >>
+  simp[Excl "isPREFIX"] >> rpt strip_tac >>
+  qpat_assum `!op. op <> Var dm ==> _` (qspec_then `Var p` mp_tac) >>
+  qpat_assum `!op. op <> Var dv ==> _` (qspec_then `Var p` mp_tac) >>
+  simp[eval_operand_def]
+QED
