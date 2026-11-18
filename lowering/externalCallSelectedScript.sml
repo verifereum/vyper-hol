@@ -244,6 +244,16 @@ Proof
        vyperStateTheory.return_def] >> strip_tac >> gvs[]
 QED
 
+Theorem unlock_if_nr_with_scopes:
+  unlock_if_nr cx nr iv s = (result,u) ==>
+  unlock_if_nr cx nr iv (s with scopes := sc) =
+    (result,u with scopes := sc)
+Proof
+  Cases_on `nr` >> Cases_on `iv` >> Cases_on `cx.nonreentrant_slot` >>
+  simp[unlock_if_nr_def, release_nonreentrant_lock_execution,
+       vyperStateTheory.return_def] >> strip_tac >> gvs[]
+QED
+
 (* The selected lock is observed even if a View function only reads it. *)
 Theorem lock_if_nr_success_trace:
   cx.nonreentrant_slot = SOME key /\
