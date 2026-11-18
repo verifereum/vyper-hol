@@ -5,7 +5,7 @@ Ancestors
   bodyFullAbiDecodeFiniteGuard assignBasePtrBytesPrefix
   typedCopyOriginPtrBase typedMemoryCopy bodyPtrMakeArrayEmission bodyFullShared bodyPtrDefs
   allocaFootprint gasOriginPtrLabels instSeqPtrLo fragGasOriginPtrDead
-  fragGasOriginPtrLoop fragGasCopyLoop stmtReasonLitFragMemory fragExec fragGasPath
+  fragGasOriginPtrLoop fragGasCopyLoop stmtReasonLitFragMemory fragExec fragGasPath stmtSimProps
   stateFrame emitHelperProps loweringShapeRules
   compileEnv emitHelper venomInst venomExecSemantics venomState
   words list finite_map exprLoweringProps freshWrites rich_list loweringStateRelDefs
@@ -141,4 +141,161 @@ Proof
     simp[mk_inst_def, is_terminator_def] >>
   drule_all run_inst_seq_origin_ptr_lift >>
   simp[Abbr `t`]
+QED
+
+(* Control transfer changes only the cursor, not owned resources. *)
+Theorem abi_decode_loop_owned_jump_exact:
+  (^owned_decoder_state) st s G tn ==>
+  (^owned_decoder_state) st (jump_to lbl s) G tn
+Proof
+  strip_tac >>
+  `alloca_history fn (jump_to lbl s)` by
+    (irule allocaHistoryTheory.alloca_history_jump >>
+     simp[jump_to_def] >> qexists_tac `s` >> fs[]) >>
+  simp[stmt_state_rel_jump_to, bodyFullSharedTheory.ghost_inv_at_jump] >>
+  gvs[abiDecodePtrMemberFrameTheory.abi_decode_ptr_window_def,
+      bodyPtrDefsTheory.ptr_covers_def, local_region_def,
+      jump_to_def, lookup_var_def] >> rpt conj_tac >> metis_tac[]
+QED
+
+(* Observe the concrete comparison followed by the taken jump, before target PHIs. *)
+Theorem abi_decode_loop_branch_observed[local]:
+  emit_op LT [Var counter; length] sa = (Var x,sb) /\
+  emit_op ISZERO [Var x] sb = (Var y,sc) /\
+  emit_inst JNZ [Var y; Label exit; Label body_lbl] [] sc = ((),sd) /\
+  lookup_var counter s = SOME (n2w j) /\
+  eval_operand length s = SOME (n2w n) /\ j <= n /\ n < dimword (:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ fn_has_code sa sd obs ==>
+  gas_path ctx obs s 0 (OK (jump_to (if j = n then exit else body_lbl)
+    (update_var y (if j = n then 1w else 0w)
+      (update_var x (if j < n then 1w else 0w) s))))
+Proof
+  strip_tac >>
+  `cs_extends sa sb /\ cs_extends sb sc /\ cs_extends sc sd` by
+    metis_tac[typed_copy_emit_op_mono, ci_mono_def, cs_extends_emit_inst] >>
+  `fn_has_code sa sc obs /\ fn_has_code sc sd obs` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  qabbrev_tac `code = [mk_inst sa.cs_next_id LT [Var counter; length] [x];
+                       mk_inst sb.cs_next_id ISZERO [Var x] [y]]` >>
+  `sc.cs_current_bb = sa.cs_current_bb /\
+   sc.cs_current_insts = sa.cs_current_insts ++ code` by
+    gvs[Abbr `code`, emit_op_eq, APPEND_ASSOC] >>
+  `sd.cs_blocks = sc.cs_blocks /\ sd.cs_current_bb = sc.cs_current_bb /\
+   sd.cs_current_insts = sc.cs_current_insts ++
+     [mk_inst sc.cs_next_id JNZ [Var y; Label exit; Label body_lbl] []]` by
+    gvs[emit_inst_eq] >>
+  `j < dimword (:256)` by decide_tac >>
+  qabbrev_tac `v = update_var x (if j < n then 1w else 0w) s` >>
+  `step_inst_base (mk_inst sa.cs_next_id LT [Var counter; length] [x]) s = OK v` by
+    (`eval_operand (Var counter) s = SOME (n2w j)` by simp[eval_operand_def] >>
+     mp_tac (Q.SPECL [`Var counter`, `length`, `n2w j`, `n2w n`,
+                       `sa.cs_next_id`, `x`, `s`] step_LT) >>
+     Cases_on `j < n` >>
+     simp[Abbr `v`, w2n_n2w, arithmeticTheory.LESS_MOD, bool_to_word_def]) >>
+  qabbrev_tac `u = update_var y (if j = n then 1w else 0w) v` >>
+  `step_inst_base (mk_inst sb.cs_next_id ISZERO [Var x] [y]) v = OK u` by
+    (`eval_operand (Var x) v = SOME (if j < n then 1w else 0w)` by
+       simp[Abbr `v`, eval_operand_def, lookup_var_update_var] >>
+     drule step_ISZERO >>
+     disch_then (qspecl_then [`sb.cs_next_id`,`y`] mp_tac) >>
+     Cases_on `j < n` >> gvs[Abbr `u`, bool_to_word_def]) >>
+  `run_inst_seq code s = OK u` by simp[run_inst_seq_def, Abbr `code`] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+   LENGTH (FILTER (\i. i.inst_opcode = GAS) code) = 0` by
+    simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+  qabbrev_tac `q = u with vs_inst_idx := LENGTH sc.cs_current_insts` >>
+  `gas_path ctx obs s 0 (OK q)` by
+    (drule_all abi_decode_finite_success_observed >>
+     disch_then (qspec_then `ctx` mp_tac) >> simp[Abbr `q`]) >>
+  `gas_path ctx obs q 0 (OK (jump_to (if j = n then exit else body_lbl) q))` by
+    (irule assert_jnz_zero_path >>
+     conj_tac >- simp[Abbr `q`, Abbr `u`, Abbr `v`, update_var_def] >>
+     qexistsl_tac [`Var y`,`sc`,`sd`] >>
+     simp[Abbr `q`, Abbr `u`, Abbr `v`, eval_operand_def,
+          lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `jump_to (if j = n then exit else body_lbl) q =
+   jump_to (if j = n then exit else body_lbl) u` by simp[Abbr `q`, jump_to_def] >>
+  `gas_path ctx obs s 0 (OK (jump_to (if j = n then exit else body_lbl) q))` by
+    metis_tac[gas_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []] >>
+  gvs[Abbr `u`, Abbr `v`]
+QED
+
+Theorem abi_decode_loop_owned_branch_exact:
+  emit_op LT [Var counter; length] sa = (lt,sb) /\
+  emit_op ISZERO [lt] sb = (done,sc) /\
+  emit_inst JNZ [done; Label exit; Label body_lbl] [] sc = ((),sd) /\
+  lookup_var counter s = SOME (n2w j) /\
+  eval_operand length s = SOME (n2w n) /\ j <= n /\ n < dimword (:256) /\
+  FLOOKUP G counter = NONE /\ op_prov G length = NONE /\
+  op_taint tn (Var counter) = {} /\ op_taint tn length = {} /\
+  fn_has_code sa sd fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  (^owned_decoder_state) sa s G tn /\
+  not_fresh_at sa input /\ local_ptrs_reserved ce sa /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+  ?t Gf tnf.
+    (!obs. fn_has_code sa sd obs ==> gas_path ctx obs s 0 (OK t)) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,Gf,tnf)) /\
+    (^owned_decoder_state) sd t Gf tnf /\
+    ~t.vs_halted /\ t.vs_inst_idx = 0 /\
+    t.vs_current_bb = (if j = n then exit else body_lbl) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_labels = s.vs_labels /\
+    tnf.t_mem = tn.t_mem /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
+  drule_all (typed_copy_origin_ptr_header_branch_path |> Q.GEN `D`) >>
+  disch_then assume_tac >>
+  first_assum (qspecl_then [`explicit`, `PG`,
+    `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]
+    strip_assume_tac) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+       (s,G,tn) [] (OK t,Gf,tnf)` by
+    (gen_tac >> first_x_assum (qspecl_then [`explicit`,`PG`,`D`] mp_tac) >>
+     rpt strip_tac >> gvs[]) >>
+  `sa.cs_next_var <= sb.cs_next_var /\
+   sa.cs_next_var <= sd.cs_next_var /\ sa.cs_next_id <= sd.cs_next_id` by
+    gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+        fresh_var_def, fresh_id_def, emit_def, comp_return_def] >>
+  `!p. not_fresh_at sa p ==> p <> x /\ p <> y` by
+    metis_tac[emit_op_old_var_separate, arithmeticTheory.LESS_EQ_REFL] >>
+  qabbrev_tac `u = update_var y (if j = n then 1w else 0w)
+      (update_var x (if j < n then 1w else 0w) s)` >>
+  `t = jump_to (if j = n then exit else body_lbl) u` by simp[Abbr `u`] >>
+  `alloca_history fn u` by
+    (irule allocaHistoryTheory.alloca_history_frame >>
+     qexists_tac `s` >> fs[Abbr `u`, update_var_def]) >>
+  `state_frame u = state_frame (s with vs_inst_idx := u.vs_inst_idx)` by
+    simp[Abbr `u`, update_var_def, state_frame_def] >>
+  `!p. not_fresh_at sa p ==>
+    lookup_var p u = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+    op_taint tnf (Var p) = op_taint tn (Var p)` by
+    (simp[Abbr `u`, lookup_var_update_var] >> metis_tac[]) >>
+  `(^owned_decoder_state) sd u Gf tnf` by
+    (irule abi_decode_owned_scalar_frame_with_history >>
+     conj_tac >- asm_rewrite_tac[] >>
+     qexistsl_tac [`G`,`s`,`sa`,`tn`] >> asm_rewrite_tac[]) >>
+  `(^owned_decoder_state) sd t Gf tnf` by
+    (qpat_assum `t = jump_to _ u` SUBST1_TAC >>
+     irule abi_decode_loop_owned_jump_exact >> asm_rewrite_tac[]) >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >>
+  conj_tac >-
+    (qpat_x_assum `fn_has_code sa sd fn` kall_tac >>
+     rpt strip_tac >>
+     qpat_assum `lt = Var x` SUBST_ALL_TAC >>
+     qpat_assum `done = Var y` SUBST_ALL_TAC >>
+     drule_all abi_decode_loop_branch_observed >> simp[Abbr `u`]) >>
+  asm_rewrite_tac[] >> simp[Abbr `u`, jump_to_def, update_var_def] >>
+  rpt strip_tac >>
+  `p <> x /\ p <> y` by metis_tac[] >>
+  simp[FLOOKUP_DRESTRICT, ptrDisciplineTheory.op_taint_def, FLOOKUP_UPDATE]
 QED
