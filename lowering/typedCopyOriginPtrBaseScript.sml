@@ -1472,7 +1472,11 @@ Resume typed_copy_origin_ptr_index_loop[body]:
      qpat_assum `!p. not_fresh_at sa p ==> not_fresh_at sth p /\ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   `lookup_var counter t = SOME (n2w j) /\ FLOOKUP Gf counter = NONE /\
-   op_taint tnf (Var counter) = {}` by metis_tac[] >>
+   op_taint tnf (Var counter) = {}` by
+    (qpat_assum `!p. not_fresh_at sth p ==> p <> x /\ p <> y`
+       (qspec_then `counter` mp_tac) >> simp[] >> strip_tac >>
+     qpat_assum `!p. p <> x /\ p <> y ==> _`
+       (qspec_then `counter` mp_tac) >> simp[]) >>
   `ptr_covers Gf tnf xs t (N * type_memory_size stv) /\
    ptr_covers Gf tnf xd t (N * type_memory_size dtv)` by
     (qpat_x_assum `ptr_covers G tn xs s _` mp_tac >>

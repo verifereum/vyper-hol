@@ -182,6 +182,7 @@ Theorem activated_computed_sha256:
     t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
     t.vs_transient = s.vs_transient /\ t.vs_logs = s.vs_logs
 Proof
+  simp ([LET_THM, probe_computed_def, mk_inst_def] @ call_clauses) >>
   simp computed_defs
 QED
 
@@ -300,8 +301,8 @@ Theorem activated_output_arity:
   step_inst_base ((probe_call 8w) with inst_outputs := ["a"; "b"]) s =
     Error "ext_call requires single output"
 Proof
-  simp[probe_call_def, mk_inst_def, step_inst_base_def, eval_operand_def,
-       exec_ext_call_def]
+  simp ([probe_call_def, mk_inst_def, eval_operand_def,
+         exec_ext_call_def] @ call_clauses)
 QED
 
 Theorem activated_unequal_targets:

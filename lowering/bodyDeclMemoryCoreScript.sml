@@ -77,7 +77,7 @@ Proof
 QED
 
 (* Outside the bytestrings, a value's store size is its type's. *)
-Theorem val_store_size_non_bytestring[local]:
+Theorem val_store_size_non_bytestring:
   ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
   val_store_size tv v = type_memory_size tv
 Proof

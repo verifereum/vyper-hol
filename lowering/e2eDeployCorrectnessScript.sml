@@ -4,7 +4,7 @@
  * owns its own file. *)
 Theory e2eDeployCorrectness
 Ancestors
-  e2eDeployAtMarks e2eDeployDefs ctorDeployDefs
+  e2eDeployAtMarks e2eDeployRawFmp e2eDeployDefs ctorDeployDefs
   ctorDeployInitcode ctorDeployEntry ctorDeployShape ctorDeployDefsReach
   deployUnitExecution ctorDeployBodyJoint ctorDeployDead ctorDeployFrame
   compileVyper compilePhasesProps codegen e2eProducers e2eComposition
@@ -28,43 +28,6 @@ Proof
   goal_assum $ drule_at Any >> gvs[]
 QED
 
-(* ADMISSION: moves the deploy certificate to any call outcomes, for a call-free constructor.
-   Waits for its proof. *)
-Theorem deploy_unit_execution_correct_with_outcomes:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx
-   shadow_ctx marks vs outs.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    tx.function_name = "__init__" /\
-    deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx
-      dunit vs ==>
-    deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx
-      dunit (vs with vs_outcomes := outs)
-Proof
-  cheat
-QED
-
-(* ADMISSION: the deploy gas link's certificate premise at the raw free-memory pointer.
-   Waits for its proof. *)
-Theorem deploy_unit_execution_correct_raw_fmp:
-  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es fmp.
-    fin IN accepted_finalizers /\
-    fin rpolicy prog = SOME prog' /\
-    deploy_phases policy tops (assemble prog, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_state_rel tops (assemble prog') am tx es /\
-    deploy_source_ok tops am tx ==>
-    ?shadow_ctx. !vs.
-      raw_variant fmp vs (opt_deploy_entry_state prog prog' cplan tops es) ==>
-      ?marks. deploy_unit_execution_correct_with shadow_ctx marks
-        tops runtime_bc am
-        (tx with code := (opt_deploy_entry_state prog prog' cplan tops es).vs_code)
-        dunit vs
-Proof
-  cheat
-QED
-
 (* ADMISSION: the deploy gas link's call bound, for a call-free constructor.
    Waits for its proof. *)
 Theorem deploy_source_calls_within_call_free:
@@ -72,90 +35,6 @@ Theorem deploy_source_calls_within_call_free:
     deploy_source_ok tops am tx /\
     tx.function_name = "__init__" ==>
     deploy_source_calls_within (2 ** 64) tops am tx os gobs
-Proof
-  cheat
-QED
-
-(* ADMISSION: deploy_source_ok at the optimized deploy code.
-   Waits for its proof. *)
-Theorem deploy_source_ok_opt_code:
-  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es.
-    fin IN accepted_finalizers /\
-    fin rpolicy prog = SOME prog' /\
-    deploy_phases policy tops (assemble prog, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_state_rel tops (assemble prog') am tx es /\
-    deploy_source_ok tops am tx ==>
-    deploy_source_ok tops am
-      (tx with code := (opt_deploy_entry_state prog prog' cplan tops es).vs_code)
-Proof
-  cheat
-QED
-
-(* ADMISSION: a raw free-memory pointer meeting the deploy gas link's bounds.
-   Waits for its proof. *)
-Theorem deploy_raw_fmp_exists:
-  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan es.
-    deploy_phases policy tops (assemble prog, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) ==>
-    ?fmp:bytes32.
-      w2n (opt_deploy_entry_state prog prog' cplan tops es).vs_initial_fmp <=
-        w2n fmp /\
-      w2n fmp < 2 ** 254 /\
-      unit_alloca_budget dunit.cu_context +
-        32 * ctx_dload_count dunit.cu_context <= w2n fmp
-Proof
-  cheat
-QED
-
-(* ADMISSION: the raw-pointer safety and gas-mask boundary used inside the deploy gas link's proof.
-   Waits for its proof. *)
-Theorem deploy_raw_fmp_focus_mask_entry:
-  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es
-   vs_out fmp shadow_ctx func.
-    fin IN accepted_finalizers /\
-    fin rpolicy prog = SOME prog' /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
-    deploy_phases policy tops (assemble prog, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_state_rel tops (assemble prog') am tx es /\
-    vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
-    deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
-    w2n vs_out.vs_initial_fmp <= w2n fmp /\
-    w2n fmp < 2 ** 254 /\
-    unit_alloca_budget dunit.cu_context +
-      32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
-    (!vs. raw_variant fmp vs vs_out ==>
-       ?marks. deploy_unit_execution_correct_with shadow_ctx marks
-         tops runtime_bc am (tx with code := vs_out.vs_code) dunit vs) /\
-    lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME func ==>
-    ?markf. !gs.
-      deploy_unit_execution_correct_with shadow_ctx (markf gs)
-        tops runtime_bc am (tx with code := vs_out.vs_code) dunit
-        (vs_out with <|vs_gas_readings := gs; vs_fmp := fmp;
-                       vs_initial_fmp := fmp|>) /\
-      ?D f extra.
-        dead_wf D /\
-        (fin = asm_opt_finalizer ==>
-           !fn inst s.
-             raw_reachable
-               (vs_out with <|vs_gas_readings := gs; vs_fmp := fmp;
-                              vs_initial_fmp := fmp|>)
-               dunit.cu_context fn inst s /\
-             gas_cut (MIN (LENGTH (markf gs)) (LENGTH gs))
-               (vs_out with <|vs_gas_readings := gs; vs_fmp := fmp;
-                              vs_initial_fmp := fmp|>) s ==>
-             inst_dload_in_section inst s) /\
-        o1_safe_upto D (imm_len tops) (MIN (LENGTH (markf gs)) (LENGTH gs))
-          dunit.cu_context
-          (vs_out with <|vs_gas_readings := gs; vs_fmp := fmp;
-                         vs_initial_fmp := fmp|>) /\
-        MAP (\key. key IN gas_explicit_sites dunit.cu_context shadow_ctx)
-          (gas_events_blocks f dunit.cu_context func
-            (vs_out with <|vs_gas_readings := gs; vs_fmp := fmp;
-                           vs_initial_fmp := fmp; vs_prev_bb := NONE;
-                           vs_current_bb := "__deploy"; vs_inst_idx := 0|>)) =
-          markf gs ++ extra
 Proof
   cheat
 QED
@@ -258,6 +137,13 @@ Proof
   rpt strip_tac >>
   drule compile_vyper_deploy_phases >> strip_tac >>
   `K SOME IN accepted_finalizers` by simp[asmOptimizerTheory.accepted_finalizers_def] >>
+  `K SOME <> asm_opt_finalizer` by
+    (strip_tac >>
+     qpat_x_assum `K SOME = asm_opt_finalizer`
+       (fn th => mp_tac (Q.AP_THM
+         (Q.AP_THM th `rpolicy with rpol_final_assembly := FAP_Optimize`)
+         `[AsmOp "STOP"; AsmOp "STOP"]`)) >>
+     EVAL_TAC) >>
   drule_all compile_vyper_runtime_not_ef >> strip_tac >>
   `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
   qspec_then `es` strip_assume_tac run_call_total >>
@@ -266,17 +152,28 @@ Proof
   `~frame_resource_starved es r es'` by
     (fs[frameOutcomeTheory.creation_resource_starved_def,
         frameOutcomeTheory.frame_resource_starved_def] >> metis_tac[]) >>
-  qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`, `dunit`,
-               `dout`, `prog`, `cplan`, `am`, `tx`, `es`, `r`, `es'`] mp_tac
-    deploy_pipeline_gas_link >>
-  impl_tac
-  >- (fs[] >> rpt strip_tac >>
-      drule_all deploy_unit_execution_correct_joint >> simp[]) >>
-  strip_tac >>
-  qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`, `tx`, `es`,
-               `r`, `es'`, `rpolicy`, `dunit`, `dout`, `prog`, `cplan`] mp_tac
-    e2e_deploy_correct_from_gas_link >>
-  impl_tac >- fs[] >> simp[]
+  `deploy_bc = assemble prog` by fs[deploy_phases_def] >> gvs[] >>
+  `K SOME rpolicy prog = SOME prog` by simp[] >>
+  `tx with code := (opt_deploy_entry_state prog prog cplan tops es).vs_code = tx`
+    by metis_tac[deploy_txp_identity] >>
+  `!gobs. deploy_source_calls_within (2 ** 64) tops am tx
+      (MAP SND (call_trace es)) gobs` by
+    (irule deploy_source_calls_within_call_free >>
+     fs[deploy_state_rel_def]) >>
+  drule deploy_raw_fmp_exists >>
+  disch_then (qspecl_then [`prog`, `es`] strip_assume_tac) >>
+  drule_all deploy_unit_execution_correct_raw_fmp >>
+  disch_then (qspec_then `fmp` strip_assume_tac) >>
+  qspecl_then [`K SOME`, `policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
+               `dout`, `prog`, `prog`, `cplan`, `am`, `tx`, `es`,
+               `opt_deploy_entry_state prog prog cplan tops es`, `fmp`, `r`, `es'`]
+    mp_tac deploy_pipeline_gas_link >>
+  impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
+  qspecl_then [`K SOME`, `policy`, `tops`, `assemble prog`, `runtime_bc`,
+               `rpolicy`, `dunit`, `dout`, `prog`, `prog`, `cplan`, `am`, `tx`,
+               `tx`, `es`, `opt_deploy_entry_state prog prog cplan tops es`,
+               `fmp`, `r`, `es'`] mp_tac e2e_deploy_correct_from_gas_link >>
+  impl_tac >- gvs[] >> simp[]
 QED
 
 (* The final assembly optimizer's case, under the same hypotheses plus the
