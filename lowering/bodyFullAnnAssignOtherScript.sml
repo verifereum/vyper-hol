@@ -166,7 +166,12 @@ Resume annassign_other_typed_full_execution[prefix]:
   gnvs[Excl "NOT_AND"] >>
   qpat_x_assum `unwrap_value cenv' vv sv = _ /\ _` strip_assume_tac >>
   `type_memory_size dtv = type_memory_bytes cenv typ` by simp[] >>
-  drule_all annassign_full_alloc_rhs_prefix >>
+  qspecl_then
+    [`DF`,`lo`,`d`,`PG`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,
+     `cenv`,`cenv'`,`cx`,`es`,`id`,`typ`,`e`,`st0`,`sa`,`r`,`a`,`b`,
+     `shadow_a`,`shadow_b`,`p`,`type_memory_size dtv`,`op`,`s0`,`G0`,`tn0`,
+     `lctx`] mp_tac annassign_full_alloc_rhs_prefix >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac) >>
   suspend "compose"
 QED
