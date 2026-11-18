@@ -130,7 +130,12 @@ Theorem abi_encode_tuple_allocate_origin:
             (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
               val_in_memory (EL i tvs) (EL i vs) (w2n w) mem)))) /\
     t.vs_allocas = (abi_builtin_allocate_state a.cs_next_id sz s).vs_allocas /\
-    t.vs_alloca_next = (abi_builtin_allocate_state a.cs_next_id sz s).vs_alloca_next
+    t.vs_alloca_next = (abi_builtin_allocate_state a.cs_next_id sz s).vs_alloca_next /\
+    FLOOKUP t.vs_allocas a.cs_next_id = SOME (w2n bw,sz) /\
+    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
+      FLOOKUP t.vs_allocas aid = SOME e) /\
+    t with <|vs_vars := s.vs_vars; vs_allocas := s.vs_allocas;
+      vs_alloca_next := s.vs_alloca_next; vs_inst_idx := s.vs_inst_idx|> = s
 Proof
   strip_tac >> drule_all (INST_TYPE [``:'b`` |-> ``:'a``] abi_encode_alloc_origin_exact) >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`] strip_assume_tac) >>
