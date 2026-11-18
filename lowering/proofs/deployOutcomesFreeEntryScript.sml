@@ -28,6 +28,13 @@ Proof
        fn_insts_def, EVERY_fn_insts_blocks, FIND_thm]
 QED
 
+Theorem comp_ignore_bind_return_unit[local]:
+  comp_ignore_bind (m:unit compiler) (comp_return ()) = m
+Proof
+  simp[FUN_EQ_THM, comp_ignore_bind_def, comp_bind_def, comp_return_def,
+       pairTheory.ELIM_UNCURRY, pairTheory.PAIR_FST_SND_EQ, oneTheory.one]
+QED
+
 Theorem compile_generate_deploy_prefix_opcodes:
   (!opc. MEM opc [CALLVALUE; ASSIGN; TLOAD; SLOAD; TSTORE; SSTORE; CODECOPY;
      RETURN; DLOAD; ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
@@ -41,30 +48,17 @@ Theorem compile_generate_deploy_prefix_opcodes:
       (state_insts (SND (compile_generate_deploy has rt imm args sz [] env ss
         pay nr key trans s)))
 Proof
-  strip_tac >>
-  `!args ce off sz st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-     EVERY (\i. P i.inst_opcode)
-       (state_insts (SND (compile_register_constructor_args ce args off sz st)))` by
-    (rpt strip_tac >> irule outcomes_free_register_constructor_args >>
-     fs[DISJ_IMP_THM, FORALL_AND_THM]) >>
-  `!key trans view st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-     EVERY (\i. P i.inst_opcode)
-       (state_insts (SND (compile_nonreentrant_lock key trans view st))) /\
-     EVERY (\i. P i.inst_opcode)
-       (state_insts (SND (compile_nonreentrant_unlock key trans view st)))` by
-    (rpt gen_tac >> strip_tac >> irule outcomes_free_nonreentrant >>
-     fs[DISJ_IMP_THM, FORALL_AND_THM]) >>
+  strip_tac >> Cases_on `has`
+  >- (PURE_REWRITE_TAC [compile_generate_deploy_def, COND_CLAUSES,
+        compile_internal_fn_bodies_def, comp_ignore_bind_return_unit, LET_THM,
+        pairTheory.ELIM_UNCURRY] >> BETA_TAC >>
+      rpt strip_tac >> irule outcomes_free_constructor_prefix >> simp[]) >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  Cases_on `has` >>
-  simp[compile_generate_deploy_def, compile_internal_fn_bodies_def,
-       compile_simple_deploy_def, pairTheory.ELIM_UNCURRY] >>
-  rpt (FIRST [IF_CASES_TAC,
-    ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
+  simp[compile_generate_deploy_def, compile_simple_deploy_def] >>
+  rpt (FIRST [ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
     ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-      opcode_every_emit_inst, every_state_insts_return, every_state_insts_get,
-      every_state_insts_new_block, every_state_insts_fresh_label,
-      outcomes_free_fixed_region, outcomes_free_constructor_epilogue,
+    gen_tac, CHANGED_TAC (simp[opcode_every_emit_void, opcode_every_emit_inst,
+      every_state_insts_return,
       ctorCallFreeValuesTheory.outcomes_free_alloc_buffer])])
 QED
 

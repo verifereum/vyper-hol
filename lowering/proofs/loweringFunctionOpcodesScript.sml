@@ -156,3 +156,56 @@ Proof
       Cases_on `var_location_memory_size loc`)]) >>
   qpat_x_assum `!ce off sz st. _` irule >> simp[]
 QED
+
+Theorem outcomes_free_constructor_prefix:
+  (!opc. MEM opc [CALLVALUE; ASSIGN; TLOAD; SLOAD; TSTORE; SSTORE; CODECOPY;
+     RETURN; DLOAD; ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
+     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES;
+     ALLOCA; JMP; JNZ] ==> P opc) /\
+  (!ce st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_stmts ce NoLoop NoneT fbody st)))) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND
+      (do (if ~pay then
+             do cv <- emit_op CALLVALUE [];
+                no_val <- emit_op ISZERO [cv]; emit_void ASSERT [no_val] od
+           else return ());
+          imm <- (if cap > 0 then
+                    do p <- compile_fixed_region_with_id cap;
+                       return (SND p).buf_operand od
+                  else return (Lit 0w));
+          ce <- compile_register_constructor_args
+            (cenv with ce_imm_alloca := (if cap > 0 then SOME imm else NONE)) args 0 sz;
+          (if nr then compile_nonreentrant_lock key trans view else return ());
+          lbl <- fresh_label "ctor_exit";
+          compile_stmts (ce with ce_ctor_exit_label := SOME lbl) NoLoop NoneT fbody;
+          cs <- comp_get;
+          (if block_is_terminated cs then return () else emit_inst JMP [Label lbl] []);
+          new_block lbl;
+          (if nr then compile_nonreentrant_unlock key trans view else return ());
+          compile_constructor_epilogue runtime_size cap imm od st)))
+Proof
+  strip_tac >>
+  `!args ce off sz st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_register_constructor_args ce args off sz st)))` by
+    (rpt strip_tac >> irule outcomes_free_register_constructor_args >>
+     fs[DISJ_IMP_THM, FORALL_AND_THM]) >>
+  `!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_nonreentrant_lock key trans view st))) /\
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_nonreentrant_unlock key trans view st)))` by
+    (gen_tac >> strip_tac >> irule outcomes_free_nonreentrant >>
+     fs[DISJ_IMP_THM, FORALL_AND_THM]) >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt (FIRST [IF_CASES_TAC,
+    ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, every_state_insts_return, every_state_insts_get,
+      every_state_insts_new_block, every_state_insts_fresh_label,
+      outcomes_free_fixed_region, outcomes_free_constructor_epilogue])])
+QED

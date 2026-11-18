@@ -24,8 +24,7 @@ Theorem outcomes_free_state_insts:
   EVERY (\bb. EVERY P bb.bb_instructions) s.cs_blocks /\
   EVERY P s.cs_current_insts
 Proof
-  simp[state_insts_def, all_blocks_def, EVERY_FLAT, EVERY_MAP,
-       EVERY_MEM, MEM_REVERSE, MEM_FLAT, MEM_MAP] >> metis_tac[]
+  simp[every_state_insts_blocks, all_blocks_def, rich_listTheory.EVERY_REVERSE, EVERY_APPEND]
 QED
 
 Theorem every_state_insts_return:

@@ -7,40 +7,6 @@ Ancestors
   loweringShapeDefs vyperCompiler compileVyper list venomInst ctorCallFreeRules
   externalEntryShape
 
-Theorem call_free_fixed_region[local]:
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_fixed_region_with_id sz st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_fixed_region) >> simp[]
-QED
-
-Theorem call_free_nonreentrant_lock[local]:
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_nonreentrant_lock key trans view st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_nonreentrant_lock) >> simp[]
-QED
-
-Theorem call_free_constructor_epilogue[local]:
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_constructor_epilogue sz cap imm st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] outcomes_free_constructor_epilogue) >> simp[]
-QED
-
-Theorem call_free_register_constructor_args[local]:
-  !args ce off sz st.
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_register_constructor_args ce args off sz st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] outcomes_free_register_constructor_args) >>
-  simp[DISJ_IMP_THM]
-QED
-
 Theorem register_constructor_args_labels[local]:
   !args ce off sz st.
     cs_extends st (SND (compile_register_constructor_args ce args off sz st)) /\
@@ -104,16 +70,9 @@ Theorem call_free_constructor_prefix[local]:
           (if nr then compile_nonreentrant_unlock key trans view else return ());
           compile_constructor_epilogue runtime_size cap imm od st)))
 Proof
-  strip_tac >>
-  rpt (FIRST [IF_CASES_TAC >> gvs[],
-    ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
-      call_free_emit_inst, every_state_insts_return, every_state_insts_get,
-      every_state_insts_new_block, every_state_insts_fresh_label,
-      call_free_fixed_region, call_free_register_constructor_args,
-      call_free_nonreentrant_lock, call_free_nonreentrant_unlock,
-      call_free_constructor_epilogue])])
+  rpt strip_tac >>
+  irule (BETA_RULE (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] outcomes_free_constructor_prefix)) >>
+  simp[DISJ_IMP_THM]
 QED
 
 Theorem constructor_prefix_labels[local]:
