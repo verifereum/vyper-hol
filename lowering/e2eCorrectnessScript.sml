@@ -1615,7 +1615,86 @@ Theorem vyper_call_correct_asm_opt:
       (frame_resource_starved es r es' \/
        call_result_rel_guarded tops am tx es r es')
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
+  rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
+  qpat_x_assum `prog = _ ++ _` kall_tac >>
+  `asm_opt_finalizer IN accepted_finalizers` by simp[accepted_finalizers_def] >>
+  `call_state_rel tops (assemble prog') am tx es` by fs[] >>
+  qspec_then `es` strip_assume_tac run_call_total >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >>
+  Cases_on `frame_resource_starved es r es'` >> simp[] >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+   source_deployment_rel tops am tx` by
+    fs[call_state_rel_def, world_rel_def, source_deployment_rel_def] >>
+  `external_return_type tops tx.function_name = ret` by
+    (fs[dispatched_vyper_call_def] >> simp[external_return_type_def]) >>
+  `outcomes_accounts_typed (SOME (MAP SND (call_trace es)))` by
+    (`wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
+       fs[call_state_rel_def, evm_state_ok_def] >>
+     drule_all call_trace_outcomes_bounded >>
+     simp[exprSimHypsDefsTheory.outcomes_accounts_typed_def, listTheory.EVERY_MEM]) >>
+  qabbrev_tac `vs0 = opt_entry_state prog prog' cplan es` >>
+  qabbrev_tac `txp = tx with code := vs0.vs_code` >>
+  drule supported_program_raw_shape_free_program >> strip_tac >>
+  `?art. vyperTypeContract$check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
+    metis_tac[source_typing_ok_def] >>
+  drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
+  drule_all run_venom_pipeline_output_shape >> strip_tac >>
+  `code_layout_valid vs0` by
+    metis_tac[Abbr `vs0`, opt_entry_code_layout_valid] >>
+  `source_typing_ok tops am txp` by
+    (simp[Abbr `txp`] >> irule source_typing_ok_code_update >>
+     qpat_assum `code_layout_valid vs0`
+       (mp_tac o REWRITE_RULE [code_layout_valid_def]) >>
+     simp[wordsTheory.dimword_def, venomLayoutTheory.dimindex_256] >>
+     strip_tac >> irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+     qexists_tac `2 ** 255` >> fs[]) >>
+  `initial_venom_state_rel tops am txp vs0` by
+    metis_tac[Abbr `vs0`, Abbr `txp`, opt_entry_initial_venom_state_rel] >>
+  `source_deployment_rel tops am txp` by
+    fs[Abbr `txp`, source_deployment_rel_def, layouts_agree_def] >>
+  qabbrev_tac `fmp = (n2w (MAX cplan.cp_initial_fmp
+    (unit_alloca_budget unit.cu_context +
+     32 * ctx_dload_count unit.cu_context)) : bytes32)` >>
+  qspecl_then [`tops`, `rpolicy`, `unit`, `out`, `cplan`, `prog`, `prog'`, `es`,
+               `fmp`] mp_tac raw_fmp_choice >>
+  impl_tac >- simp[Abbr `fmp`] >>
+  strip_tac >>
+  `w2n vs0.vs_initial_fmp <= w2n fmp` by fs[Abbr `vs0`] >>
+  drule_all lower_vyper_runtime_unit_correct_dispatched_with >> strip_tac >>
+  `?shadow_ctx. !vs. raw_variant fmp vs vs0 ==>
+     ?marks. source_unit_execution_correct_with shadow_ctx marks
+       tops ret am txp unit vs` by
+    (qexists_tac `shadow_ctx` >> rpt strip_tac >>
+     `vs.vs_outcomes = MAP SND (call_trace es) /\
+      vs.vs_call_ctx.cc_calldata =
+        buffer_to_list (FST (HD es.contexts)).msgParams.data /\
+      vs.vs_fmp = fmp /\ vs.vs_initial_fmp = fmp` by
+       (qpat_assum `raw_variant _ _ _`
+          (mp_tac o PURE_REWRITE_RULE [raw_variant_def, gas_variant_def]) >>
+        disch_then (mp_tac o Q.AP_TERM
+          `\s:venom_state. (s.vs_outcomes, s.vs_call_ctx.cc_calldata,
+             s.vs_fmp, s.vs_initial_fmp)`) >>
+        simp[Abbr `vs0`, opt_entry_state_def, entry_venom_state_def] >> metis_tac[]) >>
+     `LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64` by
+       metis_tac[Abbr `vs0`, raw_variant_opt_entry_calldata_bound] >>
+     `initial_venom_state_rel tops am txp vs` by
+       metis_tac[raw_variant_initial_venom_state_rel] >>
+     qpat_x_assum `!am tx ret vs. _` (qspecl_then [`am`, `txp`, `ret`, `vs`] mp_tac) >>
+     gvs[Abbr `txp`, dispatched_vyper_call_code_update]) >>
+  qspecl_then [`asm_opt_finalizer`, `policy`, `tops`, `deploy_bc`, `runtime_bc`,
+      `rpolicy`, `unit`, `out`, `prog`, `prog'`, `cplan`, `am`, `tx`, `txp`, `ret`,
+      `es`, `vs0`, `fmp`, `r`, `es'`] mp_tac call_pipeline_gas_link >>
+  impl_tac >- (asm_simp_tac bool_ss [Abbr `vs0`, Abbr `txp`] >> metis_tac[]) >>
+  strip_tac >>
+  qspecl_then [`asm_opt_finalizer`, `policy`, `tops`, `deploy_bc`, `runtime_bc`,
+      `rpolicy`, `unit`, `out`, `prog`, `prog'`, `cplan`, `am`, `tx`, `txp`, `ret`,
+      `es`, `vs0`, `fmp`, `r`, `es'`] mp_tac vyper_call_correct_from_gas_link >>
+  impl_tac >- asm_simp_tac bool_ss [Abbr `vs0`, Abbr `txp`] >>
+  asm_simp_tac bool_ss [Abbr `txp`, call_result_rel_code_update]
 QED
 
 (* TOP-LEVEL: one theorem over the accepted finalizers (Python's -O none and
