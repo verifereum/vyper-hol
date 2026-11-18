@@ -8478,8 +8478,7 @@ Proof
            (qpat_assum `has_rb <=> rc' = 0 /\ 0 < rbs` SUBST1_TAC >>
             Cases_on `rc' = 0 /\ 0 < rbs`
             >- (qpat_assum `rc' = 0 /\ 0 < rbs` strip_assume_tac >>
-                qpat_assum `rc' = 0 /\ 0 < rbs ==> ?rb b. _`
-                  (mp_then Any mp_tac TRUTH ORELSE mp_tac) >>
+                qpat_assum `rc' = 0 /\ 0 < rbs ==> ?rb b. _` mp_tac >>
                 simp[] >> strip_tac >> simp[]) >>
             `rc' <> 0 \/ rbs = 0` by decide_tac >>
             qpat_assum `rc' <> 0 \/ rbs = 0 ==> _` mp_tac >> simp[]) >>
