@@ -42,7 +42,7 @@ Proof
   qpat_x_assum `_ <= LENGTH _` mp_tac >>
   CONV_TAC (LAND_CONV (LAND_CONV EVAL)) >> strip_tac >>
   simp[asm_step_def, asm_step_op_def] >>
-  simp[asm_step_arith_def] >> simp[asm_step_compare_def] >>
+  FIRST [simp[asm_step_arith_def]] >> simp[asm_step_compare_def] >>
   simp[asm_step_bitwise_def] >> simp[asm_step_memory_def] >>
   simp[asm_step_control_def] >> simp[asm_step_extcall_def] >>
   simp[asm_step_copy_def] >> simp[asm_step_context_def] >>

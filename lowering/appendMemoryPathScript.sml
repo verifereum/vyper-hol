@@ -92,14 +92,14 @@ Resume append_memory_word_mem_ok[success]:
   append_word_mem_step_tac >>
   append_word_mem_step_tac >>
   pure_rewrite_tac [run_inst_seq_mem_ok_last] >>
-  asm_simp_tac (srw_ss()) [unitTransformDefsTheory.inst_mem_below_frontier_def,
+  FIRST [asm_simp_tac (srw_ss()) [unitTransformDefsTheory.inst_mem_below_frontier_def,
     contextCodegenRelTheory.source_memory_read_ranges_def,
     codegenRelTheory.source_memory_write_ranges_def,
     codegenRelTheory.fixed_source_write_range_def,
     memSafeRunTheory.inst_dload_in_section_def,
     eval_operand_def, lookup_var_def, mk_inst_def,
     finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FUPDATE_LIST_THM,
-    fresh_var_neq, mstore_def, LET_THM] >> decide_tac
+    fresh_var_neq, mstore_def, LET_THM]] >> decide_tac
 QED
 
 Finalise append_memory_word_mem_ok
