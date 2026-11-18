@@ -14,6 +14,8 @@ Ancestors
   concretizePtrDallocaActualWrites concretizePtrValueTransport concretizePtrRequestHistory
   concretizePtrChronologicalDemand concretizePtrOwnershipErasure
   concretizePtrComparisonTransport concretizePtrWriteClassification ptrDiscipline
+  concretizePtrOwnerPath concretizePtrAllocationOwnership
+  concretizeLayoutAccessGeometry frameAllocationOwnership ptrDisciplineEmptyTaint
   o1LowerDloadPtrDiscipline o1SafeUpto list finite_map arithmetic words pred_set
 
 (* The pairing is determined by the stage's static layout equations. No
@@ -333,4 +335,58 @@ Proof
     (irule ptr_stage_placements_endpoint_bound >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
   Cases_on `ctx_has_dalloca C` >> fs[dyn_floor_def] >> decide_tac
+QED
+
+Theorem ptr_cut_owner_allocas_from[local]:
+  ptr_observation_reachable vs C obs /\ ptr_discipline_upto lo n C vs /\
+  gas_cut n vs obs.po_state /\ d <= LENGTH obs.po_stack ==>
+  allocas_from lo (ptr_owner_view d obs).cf_state
+Proof
+  strip_tac >> fs[ptr_observation_reachable_def] >>
+  Cases_on `d = LENGTH obs.po_stack`
+  >- (simp[ptr_owner_view_def] >> metis_tac[ptr_discipline_upto_at]) >>
+  drule_all frame_reachable_saved_allocas_from >> strip_tac >>
+  `LENGTH obs.po_stack - d - 1 < LENGTH obs.po_stack` by decide_tac >>
+  fs[EVERY_EL, ptr_owner_view_def]
+QED
+
+(* With no DALLOCA it is enough to bound the active frontier: saved
+   allocations lie below it, so the cut need not be queried at saved states. *)
+Theorem ptr_cut_owner_below_floor[local]:
+  ptr_observation_reachable vs C obs /\ ptr_discipline_upto lo n C vs /\
+  gas_cut n vs obs.po_state /\ alloca_frontier_upto n C vs /\
+  vs.vs_allocas = FEMPTY /\ d <= LENGTH obs.po_stack /\
+  FLOOKUP (ptr_owner_view d obs).cf_state.vs_allocas aid = SOME (b,sz) ==>
+  b + sz <= dyn_floor C vs
+Proof
+  strip_tac >> fs[ptr_observation_reachable_def] >>
+  Cases_on `ctx_has_dalloca C` >> simp[dyn_floor_def]
+  >- (drule frame_reachable_initial_fmp >> strip_tac >>
+      Cases_on `d = LENGTH obs.po_stack`
+      >- (`allocas_below_fmp obs.po_state` by metis_tac[ptr_discipline_upto_at] >>
+          fs[ptr_owner_view_def, allocas_below_fmp_def] >> metis_tac[]) >>
+      drule_all frame_reachable_saved_below_fmp_upto >> strip_tac >>
+      qabbrev_tac `j = LENGTH obs.po_stack - d - 1` >>
+      `j < LENGTH obs.po_stack` by (simp[Abbr `j`] >> decide_tac) >>
+      `allocas_below_fmp (EL j obs.po_stack).cf_state /\
+       (EL j obs.po_stack).cf_state.vs_initial_fmp = vs.vs_initial_fmp` by
+        fs[EVERY_EL] >>
+      fs[ptr_owner_view_def, allocas_below_fmp_def, Abbr `j`] >> metis_tac[]) >>
+  drule_all ptr_frame_alloc_geometry >> strip_tac >>
+  `obs.po_state.vs_alloca_next < dimword (:256)` by
+    metis_tac[alloca_frontier_upto_def] >>
+  `b + sz <= obs.po_state.vs_alloca_next` by
+    (qabbrev_tac `states = obs.po_state :: MAP (\f. f.cf_state) obs.po_stack` >>
+     `?k. k < LENGTH states /\ EL k states = (ptr_owner_view d obs).cf_state` by
+       (Cases_on `d = LENGTH obs.po_stack`
+        >- (qexists_tac `0` >> simp[Abbr `states`, ptr_owner_view_def]) >>
+        `LENGTH obs.po_stack - d - 1 < LENGTH obs.po_stack` by decide_tac >>
+        qexists_tac `SUC (LENGTH obs.po_stack - d - 1)` >>
+        simp[Abbr `states`, ptr_owner_view_def, EL_MAP]) >>
+     `b + sz <= (EL k states).vs_alloca_next` by
+       (drule ptr_active_alloc_tables >> simp[EVERY_EL] >>
+        disch_then (qspec_then `k` mp_tac) >>
+        simp[ptr_alloc_table_ok_def] >> metis_tac[]) >>
+     drule_all ptr_active_alloc_frontier >> fs[Abbr `states`] >> gvs[]) >>
+  decide_tac
 QED
