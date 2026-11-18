@@ -741,7 +741,7 @@ Proof
 QED
 
 (* Source observations supply the dead-slot frame for a nonlocal tuple head. *)
-Theorem body_assign_tuple_nonlocal_write_ready[local]:
+Theorem body_assign_tuple_nonlocal_write_ready:
   tuple_target_aligned cenv cx g ty tv /\
   (!id. g <> BaseTarget (NameTarget id)) /\ value_has_type tv v /\
   assign_tuple_targets cx g v es = (INL (),es') ==>
@@ -811,10 +811,10 @@ Resume body_assign_tuple_nonlocal_write_ready[field]:
   metis_tac[accountsRelPropsTheory.storage_dead_update_struct_word_field]
 QED
 
-Finalise body_assign_tuple_nonlocal_write_ready
+Finalise body_assign_tuple_nonlocal_write_ready[local]
 
 (* A successful nonlocal head observes its root before the joint slot store. *)
-Theorem body_assign_tuple_nonlocal_head_full_path[local]:
+Theorem body_assign_tuple_nonlocal_head_full_path:
   compile_tuple_store_all cenv [ty] [g] [op] sa = ((),sb) /\
   assign_tuple_targets cx g v es = (INL (),es') /\
   tuple_target_aligned cenv cx g ty tv /\
@@ -970,10 +970,10 @@ Resume body_assign_tuple_nonlocal_head_full_path[field]:
   simp[bodyPtrDefsTheory.ghost_inv_at_storage_trace]
 QED
 
-Finalise body_assign_tuple_nonlocal_head_full_path
+Finalise body_assign_tuple_nonlocal_head_full_path[local]
 
 (* One local write, at the current source scope, retains the tuple snapshot. *)
-Theorem body_assign_tuple_local_head_full_path[local]:
+Theorem body_assign_tuple_local_head_full_path:
   compile_tuple_store_all cenv [ty] [BaseTarget (NameTarget id)] [op] sa = ((),sb) /\
   assign_tuple_targets cx (BaseTarget (NameTarget id)) v es = (INL (),es') /\
   tuple_target_aligned cenv cx (BaseTarget (NameTarget id)) ty entry.type /\
@@ -1196,7 +1196,7 @@ Resume body_assign_tuple_local_head_full_path[post]:
   metis_tac[]
 QED
 
-Finalise body_assign_tuple_local_head_full_path
+Finalise body_assign_tuple_local_head_full_path[local]
 
 Theorem body_assign_tuple_static_head_full_exit[local]:
   !ctx func cenv cx s g ty tv v op st sf RetQ RetP ee lo explicit PG G tn.
@@ -1269,7 +1269,7 @@ Proof
 QED
 (* Compose singleton stores over the fixed post-load snapshot.  The seed
    identifies the caller regions independently of the final trace horizon. *)
-Theorem body_assign_tuple_store_targets_full_path[local]:
+Theorem body_assign_tuple_store_targets_full_path:
   !gs tys tvs vs ops k m b fulltys fullvs ctx func cenv cx es s st sf
      tops env es0 eseed sseed Hseed Dseed lo G tn explicit PG RetQ RetP.
     compile_tuple_store_all cenv tys gs ops st = ((),sf) /\
@@ -1807,7 +1807,7 @@ Resume body_assign_tuple_store_targets_full_path[tail]:
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC
 QED
 
-Finalise body_assign_tuple_store_targets_full_path
+Finalise body_assign_tuple_store_targets_full_path[local]
 
 
 Theorem body_assign_tuple_widened_full:
