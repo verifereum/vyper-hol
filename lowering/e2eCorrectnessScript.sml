@@ -42,6 +42,7 @@ Ancestors
   venomCompilerWf venomWf o1LabelFlowCompose
   contextStaticAbortRel
   list callRawVariant ctorDeployRunBounded rawReachableFmp ctxLookupAgreeHelpers
+  callCodeTrace callCodeStorage
 
 
 (* =====================================================================
@@ -845,37 +846,45 @@ Proof
   simp[dispatched_vyper_call_def]
 QED
 
-(* ADMISSION: transport from the optimized code's transaction back to tx,
-   for programs that do not read their own code.  Waits for its proof. *)
+(* The storage guard is unchanged when execution cannot read its own code. *)
 Theorem call_storage_ok_code_update:
   ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
   ~program_reads_self_code tops ==>
   (call_storage_ok am (tx with code := c) os gobs <=>
    call_storage_ok am tx os gobs)
 Proof
-  cheat
+  strip_tac >>
+  `source_storage_trace am (tx with code := c) os gobs =
+   source_storage_trace am tx os gobs` by
+    simp[source_storage_trace_def, call_external_trace_no_self_code_update] >>
+  Cases_on `storage_trace_horizon (source_storage_trace am tx os gobs)` >>
+  simp[call_storage_ok_def, call_storage_checks_code_update]
 QED
 
-(* ADMISSION: transport from the optimized code's transaction back to tx,
-   for programs that do not read their own code.  Waits for its proof. *)
+(* The source result and storage horizon come from the same traced call. *)
 Theorem call_result_rel_at_code_update:
   ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
   ~program_reads_self_code tops ==>
   (call_result_rel_at gobs tops am (tx with code := c) es r es' <=>
    call_result_rel_at gobs tops am tx es r es')
 Proof
-  cheat
+  strip_tac >>
+  simp[call_result_rel_at_def, LET_THM, source_storage_trace_def,
+       call_external_def, call_external_trace_no_self_code_update,
+       tx_return_bytes_def, effects_agree_def]
 QED
 
-(* ADMISSION: transport from the optimized code's transaction back to tx,
-   for programs that do not read their own code.  Waits for its proof. *)
+(* Transport the storage guard and result at each gas observation. *)
 Theorem call_result_rel_code_update:
   ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
   ~program_reads_self_code tops ==>
   (call_result_rel tops am (tx with code := c) es r es' <=>
    call_result_rel tops am tx es r es')
 Proof
-  cheat
+  strip_tac >>
+  drule_all_then (fn th =>
+    simp[call_result_rel_def, LET_THM, th, call_result_rel_at_code_update])
+    call_storage_ok_code_update
 QED
 
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
@@ -909,7 +918,8 @@ Proof
   metis_tac[external_call_result_rel_frame]
 QED
 
-(* ADMISSION: statement only.  Waits for the exceptional-arm composition proof (ctx_sim transport plus the coarse S7 abort observation). *)
+(* An ExHalt source run needs only the coarse exceptional S7 observation:
+   simulation preserves the abort shape, not necessarily the abort tag. *)
 Theorem call_at_horizon_static_abort_composition:
   run_call es = SOME (r,es') /\ ~frame_resource_starved es r es' /\
   external_return_type tops tx.function_name = ret /\
@@ -932,7 +942,22 @@ Theorem call_at_horizon_static_abort_composition:
        ?exc out lgs. frame_outcome es r' es'' (SOME exc) out lgs)) ==>
   call_result_rel_at gs tops am tx es r es'
 Proof
-  cheat
+  rpt strip_tac >>
+  drule external_call_result_rel_terminates >> strip_tac >>
+  qpat_x_assum `!n. terminates _ ==> _` (qspec_then `fuel` mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `ctx_sim _ _ _ _ _` mp_tac >>
+  simp[ctx_sim_def] >> disch_then drule >> strip_tac >>
+  `?a u'. run_context fuel' ctx' vs' = Abort a u'` by
+    (Cases_on `run_context fuel' ctx' vs'` >> gvs[dead_result_rel_def]) >>
+  qpat_x_assum `!n a u. _` (qspecl_then [`fuel'`, `a`, `u'`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `external_call_result_rel _ _ _ _ src _` >>
+  PairCases_on `src` >> gvs[call_result_rel_at_def] >>
+  Cases_on `src0` >> gvs[external_call_result_rel_def] >>
+  rename1 `call_external _ _ _ _ = (INR source_exc,_,_)` >>
+  Cases_on `source_exc` >> gvs[exception_outcome_rel_def] >>
+  gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
 (* The S3 memory facts of the raw unit from the entry's memory- and
