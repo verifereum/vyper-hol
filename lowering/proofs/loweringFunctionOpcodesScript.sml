@@ -116,3 +116,27 @@ Proof
   strip_tac >> match_mp_tac outcomes_free_decode_args >>
   simp[DISJ_IMP_THM, FORALL_AND_THM]
 QED
+
+Theorem outcomes_free_register_constructor_args:
+  (!opc. MEM opc [ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
+     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES;
+     ALLOCA; JMP; JNZ] ==> P opc) /\ P DLOAD ==>
+  !args ce off sz st.
+  EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_register_constructor_args ce args off sz st)))
+Proof
+  strip_tac >> drule outcomes_free_decode_args >> strip_tac >>
+  `P ALLOCA` by fs[] >>
+  Induct >- simp[compile_register_constructor_args_def, every_state_insts_return] >>
+  gen_tac >> PairCases_on `h` >> rpt strip_tac >>
+  Cases_on `FLOOKUP ce.ce_vars h0` >>
+  simp[compile_register_constructor_args_def] >>
+  rpt (FIRST [gen_tac, strip_tac,
+    CHANGED_TAC (gvs[outcomes_free_alloc_buffer, every_state_insts_return]),
+    irule every_state_insts_bind, irule every_state_insts_ignore_bind, conj_tac,
+    IF_CASES_TAC,
+    (qmatch_goalsub_rename_tac `var_location_memory_size loc` >>
+      Cases_on `var_location_memory_size loc`)]) >>
+  qpat_x_assum `!ce off sz st. _` irule >> simp[]
+QED

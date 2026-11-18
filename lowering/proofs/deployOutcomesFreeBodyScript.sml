@@ -1,63 +1,17 @@
 Theory deployOutcomesFreeBody
 Ancestors
-  ctorCallFreeRules
-  deployOutcomesFreeExpressions deployOutcomesFreeStatements
-  deployOutcomesFreeConstructorTyping deployOutcomesFreeGenerators
-  ctorCallFreeCallbacks ctorCallFreeStmtLogs
-  ctorCallFreeStmtReturns deployOutcomesFreeAbiGenerators
-  supportedStmtTraverse ctorCallFreeStmtAssign ctorCallFreeABIEncode
-  exprLowering ctorCallFreeStmtStorage
-  ctorCallFreeOps ctorCallFreeValues loweringFunctionOpcodes
+  ctorCallFreeRules ctorCallFreeExpr ctorCallFreeStmt ctorCallFreeSource
+  deployOutcomesFreeConstructorTyping ctorDeployDefs e2eDeployDefs compileVyper
+  supportedStmtTraverse
 
-val safe_generator =
-  SRULE [DISJ_IMP_THM, FORALL_AND_THM] o
+(* The constructor's statements are an instance of the precise statement
+   lemma: the excluded opcodes are the six call and create opcodes, and every
+   call or precompile root is ruled out by constructor_call_root. *)
+val outcomes_free_instance =
+  SRULE [constructor_call_root_def] o
   Q.INST [`P` |-> `\opc. ~MEM opc
-    [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]`]
-
-val safe_generators = map safe_generator
-  [outcomes_free_unwrap_value, outcomes_free_alloc_buffer,
-   outcomes_free_store_memory, cj 1 outcomes_free_typed_copy,
-   outcomes_free_copy_memory, cj 1 outcomes_free_store_slots_mutual,
-   outcomes_free_slot_copies, outcomes_free_imm_store,
-   outcomes_free_store_immutable_bytestring, outcomes_free_imm_store_words,
-   outcomes_free_load_memory, outcomes_free_binop, outcomes_free_bytelike_literal,
-   outcomes_free_nonreentrant, outcomes_free_ptr_load,
-   outcomes_free_slot_to_memory, outcomes_free_imm_copy,
-   outcomes_free_compile_log_save_arg, outcomes_free_compile_log_topic_ops,
-   outcomes_free_compile_log_store_data,
-   outcomes_free_compile_revert_with_reason, outcomes_free_compile_external_return,
-   outcomes_free_snapshot, outcomes_free_dynarray_append,
-   cj 1 outcomes_free_word_copy, cj 2 outcomes_free_abi_encode,
-   outcomes_free_encode_log_topic];
-
-Theorem outcomes_free_compile_stmts:
-  !ce lc ty sts env ret out s.
-    type_stmts env ret sts = SOME out /\
-    ~supported_stmts_expr_exists constructor_call_root sts /\
-    EVERY (\i. ~MEM i.inst_opcode
-      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (state_insts s) ==>
-    EVERY (\i. ~MEM i.inst_opcode
-      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
-      (state_insts (SND (compile_stmts ce lc ty sts s)))
-Proof
-  rpt gen_tac >> strip_tac >>
-  mp_tac (SRULE [] (Q.INST [`P` |-> `\opc. ~MEM opc
-    [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]`]
-    (cj 2 outcomes_free_compile_statements_mutual))) >>
-  impl_tac >- (simp safe_generators >>
-    conj_tac >- metis_tac[SRULE [] outcomes_free_compile_expr] >>
-    conj_tac >- metis_tac[SRULE [] outcomes_free_compile_get_target_ptr] >>
-    rpt gen_tac >> strip_tac >>
-    irule (safe_generator outcomes_free_compile_log_save_arg) >> simp[] >>
-    rpt gen_tac >> strip_tac >>
-    simp[compile_materialize_vv_def] >>
-    irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp safe_generators >>
-    rpt gen_tac >> strip_tac >> BETA_TAC >>
-    irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp safe_generators >>
-    rpt gen_tac >> strip_tac >> BETA_TAC >>
-    irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp (every_state_insts_return :: safe_generators)) >>
-  gvs[] >> metis_tac[]
-QED
+    [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]`,
+    `R` |-> `constructor_call_root`]
 
 (* Source typing belongs to the selected constructor, independently of the
    compiler environment and return convention used for its lowering. *)
@@ -82,7 +36,17 @@ Theorem outcomes_free_constructor_body:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all outcomes_free_constructor_package_source >> strip_tac >>
+  `~supported_stmts_expr_exists expr_shape_root fbody` by
+    (Cases_on `ctor`
+     >- gvs[set_constructor_package_target_def, supported_stmt_expr_exists_def] >>
+     rename1 `ctor_named_init (SOME cf)` >> PairCases_on `cf` >>
+     gvs[set_constructor_package_target_def, package_constructor_def,
+         ctor_named_init_def, deploy_source_ok_def] >>
+     drule_all (cj 2 named_constructor_call_free_source) >> simp[]) >>
   gvs[GSYM ctorCallFreeRulesTheory.every_state_insts_blocks] >>
-  irule (SRULE [] outcomes_free_compile_stmts) >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
+  mp_tac (outcomes_free_instance outcomes_free_compile_stmt_stmts_from_expr) >>
+  simp[] >> impl_tac
+  >- (rpt strip_tac >>
+      irule (outcomes_free_instance outcomes_free_compile_expr) >> simp[]) >>
+  strip_tac >> first_x_assum irule >> simp[]
 QED

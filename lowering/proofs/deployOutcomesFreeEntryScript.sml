@@ -2,12 +2,17 @@
 Theory deployOutcomesFreeEntry
 Ancestors
   ctorCallFreeRules loweringPackageInsts
-  vyperCompiler list venomInst deployOutcomesFreeArgs
+  vyperCompiler list venomInst loweringFunctionOpcodes
   ctorUnitShape ctorGeneratorShape ctorShapeProps loweringShapeProps supportedStmtTraverse moduleLowering loweringShapeDefs
   context emitHelper compileEnv ctorDeployLoweringCode compileVyper ctorDeployDefs stmtLowering
 Libs
   monadsyntax
 
+
+val outcomes_free_register_constructor_args_fixed =
+  SRULE [DISJ_IMP_THM, FORALL_AND_THM] (Q.INST [`P` |-> `\op. op <> CALL /\
+    op <> STATICCALL /\ op <> DELEGATECALL /\ op <> CREATE /\ op <> CREATE2 /\
+    op <> INVOKE`] outcomes_free_register_constructor_args);
 
 Theorem extract_context_entry_every:
   extract_context_with_internals label internals st = SOME (ctx,data) /\
@@ -57,7 +62,7 @@ Proof
             every_state_insts_fresh_var, every_state_insts_fresh_label,
           every_state_insts_get, every_state_insts_new_block, opcode_every_emit_op,
               opcode_every_emit_void, opcode_every_emit_inst,
-          outcomes_free_register_constructor_args_state]),
+          outcomes_free_register_constructor_args_fixed]),
         irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac,
         first_assum irule, IF_CASES_TAC]) >>
       rpt IF_CASES_TAC >>
