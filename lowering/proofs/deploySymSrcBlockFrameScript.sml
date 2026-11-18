@@ -11,11 +11,11 @@ Definition deploy_blocks_frame_def:
         (x,t with cs_blocks := t.cs_blocks ++ B)
 End
 
-Theorem compiler_preserves_deploy:
-  compiler_preserves (\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks) m <=>
+Theorem symbolic_frame_deploy:
+  symbolic_frame (\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks) m <=>
   deploy_blocks_frame m
 Proof
-  simp[compiler_preserves_def, deploy_blocks_frame_def] >>
+  simp[symbolic_frame_def, deploy_blocks_frame_def] >>
   eq_tac >> strip_tac >> rpt gen_tac
   >- (strip_tac >> first_x_assum (qspecl_then [`B`,`s`] mp_tac) >>
       simp[] >> Cases_on `m (s with cs_blocks := s.cs_blocks ++ B)` >> simp[]) >>

@@ -10,11 +10,11 @@ Definition runtime_data_frame_def:
     !st. (SND (m st)).cs_data_sections = st.cs_data_sections
 End
 
-Theorem compiler_preserves_runtime:
-  compiler_preserves (\data s t. s = t /\ s.cs_data_sections = data) m <=>
+Theorem symbolic_frame_runtime:
+  symbolic_frame (\data s t. s = t /\ s.cs_data_sections = data) m <=>
   runtime_data_frame m
 Proof
-  simp[compiler_preserves_def, runtime_data_frame_def] >> metis_tac[]
+  simp[symbolic_frame_def, runtime_data_frame_def] >> metis_tac[]
 QED
 
 Theorem runtime_data_frame_apply:

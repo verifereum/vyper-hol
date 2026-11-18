@@ -108,7 +108,7 @@ Resume runtime_sym_subscript_step[branches]:
        goal_assum (drule_at (Pos last)) >> asm_rewrite_tac[] >>
        rpt gen_tac >> strip_tac >>
        asm "key_safe" (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-       asm_simp_tac bool_ss []) >>
+       disch_then irule >> FIRST_ASSUM ACCEPT_TAC) >>
    Cases_on `t` >> simp[NoAsms] >>
    CONV_TAC (DEPTH_CONV (ETA_CONV ORELSEC HO_REWR_CONV (GSYM comp_bind_assoc))) >> strip_tac >>
    irule runtime_sym_locate_sequence >>
@@ -123,7 +123,7 @@ Resume runtime_sym_subscript_step[branches]:
        (drule_at (Pos last)) >> asm_rewrite_tac[]) >>
    rpt gen_tac >> strip_tac >>
    asm "key_safe" (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-   asm_simp_tac bool_ss []))
+   disch_then irule >> FIRST_ASSUM ACCEPT_TAC))
 QED
 
 Finalise runtime_sym_subscript_step

@@ -81,8 +81,8 @@ Theorem runtime_data_frame_abi_encode_mutual:
     runtime_data_frame (compile_abi_encode_dyn_loop dst src ei asz msz len))
 Proof
   strip_tac >>
-  match_mp_tac (REWRITE_RULE [compiler_preserves_runtime]
-    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] compiler_preserves_abi_encode)) >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] symbolic_frame_abi_encode)) >>
   simp[runtime_data_frame_abi_encode_dyn_static_loop]
 QED
 
@@ -174,8 +174,8 @@ Theorem runtime_data_frame_abi_decode_mutual:
       (compile_abi_decode_dyn_loop dst src opc bop hi ei asz msz ip cnt))
 Proof
   strip_tac >>
-  match_mp_tac (REWRITE_RULE [compiler_preserves_runtime]
-    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] compiler_preserves_abi_decode)) >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] symbolic_frame_abi_decode)) >>
   simp[runtime_data_frame_abi_decode_static]
 QED
 

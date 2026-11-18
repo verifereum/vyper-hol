@@ -322,15 +322,14 @@ Proof
   qpat_x_assum `~supported_stmt_expr_exists _ _` mp_tac >>
   simp_tac (srw_ss()) [supported_stmt_def, supported_stmt_expr_exists_def,
     supportedExprTraverseTheory.supported_expr_exists_def] >> rpt strip_tac >>
-  `supported_expr tops e \/ supported_place_expr tops e \/
-   supported_effect_place_expr tops e` by asm_rewrite_tac[] >>
   mp_tac (Q.INST [`tops` |-> `tops`, `ce` |-> `ce`, `e` |-> `e`,
     `ty` |-> `ty`, `lc` |-> `lc`] runtime_sym_return_some_step) >>
   impl_tac
   >- (rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC) >>
-      rpt gen_tac >> strip_tac >>
-      qpat_x_assum `runtime_sym_expr_contract _ _ _ _ _` mp_tac >>
-      rewrite_tac[runtime_sym_expr_contract_def] >>
-      disch_then drule_all >> simp_tac bool_ss []) >>
+      map_every qx_gen_tac [`st`,`v`,`st_next`] >> strip_tac >>
+      qpat_x_assum `runtime_sym_expr_contract _ _ _ _ _`
+        (qspecl_then [`st`,`v`,`st_next`] irule o
+         REWRITE_RULE [runtime_sym_expr_contract_def]) >>
+      asm_rewrite_tac[]) >>
   disch_then drule_all >> simp_tac bool_ss []
 QED

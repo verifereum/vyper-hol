@@ -73,8 +73,8 @@ Theorem deploy_blocks_frame_abi_encode_mutual:
   (!dst src ei asz msz len.
     deploy_blocks_frame (compile_abi_encode_dyn_loop dst src ei asz msz len))
 Proof
-  match_mp_tac (REWRITE_RULE [compiler_preserves_deploy]
-    (Q.INST [`R` |-> `\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks`] compiler_preserves_abi_encode)) >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
+    (Q.INST [`R` |-> `\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks`] symbolic_frame_abi_encode)) >>
   simp[deploy_blocks_frame_abi_encode_dyn_static_loop]
 QED
 
@@ -152,8 +152,8 @@ Theorem deploy_blocks_frame_abi_decode_mutual:
     deploy_blocks_frame
       (compile_abi_decode_dyn_loop dst src opc bop hi ei asz msz ip cnt))
 Proof
-  match_mp_tac (REWRITE_RULE [compiler_preserves_deploy]
-    (Q.INST [`R` |-> `\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks`] compiler_preserves_abi_decode)) >>
+  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
+    (Q.INST [`R` |-> `\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks`] symbolic_frame_abi_decode)) >>
   simp[deploy_blocks_frame_abi_decode_static]
 QED
 

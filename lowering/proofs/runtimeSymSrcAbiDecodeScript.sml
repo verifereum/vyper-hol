@@ -183,8 +183,8 @@ Resume runtime_sym_abi_decode_mutual[cons]:
   (impl_tac >- (simp[NoAsms, is_label_operand_def] >> conj_tac >>
     first_assum (MATCH_ACCEPT_TAC o REWRITE_RULE [is_label_operand_def]))) >>
   strip_tac >>
-  rename1 `compile_getelemptr_abi _ _ _ _ _ _ _ = (elem_src,_)` >>
-  Cases_on `elem_src` >>
+  rename1 `compile_abi_decode_to_buf _ _ _ _ _ _ _ = (decoded,_)` >>
+  Cases_on `decoded` >>
   qpat_x_assum `!is_dyn dst src. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
   simp[NoAsms] >> disch_then drule_all >> strip_tac >>
   qpat_x_assum `!is_dyn. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>

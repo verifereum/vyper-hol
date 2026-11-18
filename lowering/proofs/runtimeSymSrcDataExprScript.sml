@@ -16,8 +16,8 @@ Theorem runtime_data_frame_expr_mutual:
     (SND (compile_type_builtin_dispatch cenv vt ty tb rt args st)).cs_data_sections =
       st.cs_data_sections)
 Proof
-  mp_tac (REWRITE_RULE [compiler_preserves_runtime]
-    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] compiler_preserves_expr)) >>
+  mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] symbolic_frame_expr)) >>
   simp[runtime_data_frame_expr_body_assembled,
        runtime_data_frame_builtin_body_assembled,
        runtime_data_frame_type_body_assembled] >>
