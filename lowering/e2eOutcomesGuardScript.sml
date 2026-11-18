@@ -5,7 +5,7 @@ Ancestors
   vyperInterpreter vyperState vyperStorageBackend vfmState vfmContext
   callTraceFrameProvenance callTraceFrame callTrace guardReentryCode
   guardPushProjections immutableSectionRel vfmExecution vfmExecutionProp
-  arithmetic list
+  e2eCorrectness frameOutcome guardTerminalBackend arithmetic list
 
 Triviality guard_closed_world_inherit:
   vyper_closed_world fin policy tops runtime_bc am tx H es /\
@@ -153,4 +153,18 @@ Proof
     (drule_all guard_reaches_code_nonempty >> simp[]) >>
   fs[storage_well_formed_on_def, boolTheory.FORALL_BOOL, get_storage_def,
      lookup_account_def, Abbr `cx`, initial_evaluation_context_def]
+QED
+
+Triviality guard_undispatched_reentry_rollback:
+  vyper_frame_staging fin policy tops runtime_bc am tx e /\
+  calldata_dispatch tops
+    (buffer_to_list (FST (HD e.contexts)).msgParams.data) = NONE /\
+  2 <= LENGTH e.contexts /\ run_call e = SOME (r,e') ==>
+  ISL r /\ LENGTH e'.contexts + 1 = LENGTH e.contexts /\
+  e'.rollback = SND (HD e.contexts)
+Proof
+  strip_tac >> fs[vyper_frame_staging_def] >>
+  drule_all vyper_call_reverts >>
+  simp[frame_resource_starved_def] >>
+  metis_tac[guard_nested_frame_outcome, optionTheory.NOT_SOME_NONE]
 QED
