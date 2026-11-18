@@ -93,7 +93,10 @@ Proof
      `i.inst_opcode <> DALLOCA` by
        (fs[ctx_has_dalloca_def, listTheory.EVERY_MEM,
            listTheory.EXISTS_MEM] >> metis_tac[]) >>
-     Cases_on `i.inst_opcode` >> fs[is_raw_fmp_opcode_def]) >>
+     qpat_x_assum `is_raw_fmp_opcode _` mp_tac >>
+     rpt (qpat_x_assum `i.inst_opcode <> _` mp_tac) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `i.inst_opcode` >> simp[is_raw_fmp_opcode_def]) >>
   `!f inst s. raw_reachable vs unit.cu_context f inst s ==>
      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
     (rpt strip_tac >> drule raw_reachable_no_raw_fmp_fixed >>
@@ -109,6 +112,57 @@ Proof
   drule lower_vyper_runtime_unit_raw_defaults >> strip_tac >>
   drule_all loweringPtrCorrectTheory.lower_vyper_runtime_unit_ptr_taint >> strip_tac >>
   simp[fixed_region_reserved_def]
+QED
+
+Theorem lower_vyper_runtime_unit_dload_in_section:
+  !tops rpolicy unit vs fn lbl.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    (!fuel. mem_safe_blocks fuel unit.cu_context fn
+       (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                   vs_inst_idx := 0 |>))
+    ==> mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                                 s.vs_code = vs.vs_code /\
+                                 s.vs_data_section = vs.vs_data_section)
+          unit.cu_context vs
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  drule lowering_context_ok_bridge >> strip_tac >>
+  `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
+    (imp_res_tac lookup_function_MEM >>
+     imp_res_tac lookup_function_result_name >> simp[]) >>
+  `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
+  `EVERY (\f. ALL_DISTINCT (fn_labels f)) unit.cu_context.ctx_functions` by
+    fs[listTheory.EVERY_MEM] >>
+  rewrite_tac[unitMemInvTheory.mem_inv_def, codegen_reachability_package_def] >>
+  qexists_tac `\c f i s. mem_safe_point c f i s /\
+                         s.vs_code = vs.vs_code /\
+                         s.vs_data_section = vs.vs_data_section` >>
+  rpt conj_tac
+  >- (qspecl_then [`mem_safe_point`,
+        `\c f i s. s.vs_code = vs.vs_code /\
+                   s.vs_data_section = vs.vs_data_section`,
+        `unit.cu_context`] mp_tac
+        contextCodegenRelPropsTheory.reachability_closed_conj >>
+      simp[mem_safe_point_closed, code_data_closed])
+  >- (qexistsl_tac [`"__entry"`, `fn`, `lbl`] >> simp[] >>
+      qspecl_then [`mem_safe_point`,
+        `\c f i s. s.vs_code = vs.vs_code /\
+                   s.vs_data_section = vs.vs_data_section`,
+        `unit.cu_context`, `fn`,
+        `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                    vs_inst_idx := 0 |>`] mp_tac
+        contextCodegenRelPropsTheory.fn_entry_inv_conj >>
+      impl_tac >- (
+        conj_tac >- (irule mem_safe_point_entry >> simp[]) >>
+        qspecl_then [`unit.cu_context`, `fn`,
+          `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                      vs_inst_idx := 0 |>`] mp_tac code_data_entry >>
+        simp[]) >>
+      gvs[]) >>
+  rw[] >> metis_tac[mem_safe_point_dload]
 QED
 
 (* S3's twin for LowerDload: every reachable DLOAD/DLOADBYTES offset,

@@ -45,7 +45,8 @@ val EVAL_FRAME_IH_TAC = evalWalkLib.IH_TAC {stop = K false,
      lock_if_nr_def, unlock_if_nr_def]};
 
 val EVAL_FRAME_STEP = evalWalkLib.STEP {net = eval_frame_net, at = RAND_CONV,
-  unfolds = [switch_BoolV_def, ignore_bind_def],
+  unfolds = [switch_BoolV_def, ignore_bind_def,
+    vyperCreateTheory.eval_create_operands_def],
   intros = [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac, conj_tac,
     CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
@@ -79,8 +80,7 @@ Theorem eval_state_rel_frame:
   (!cx t. state_rel_frame R (eval_base_place cx t)) /\
   (!cx t. state_rel_frame R (eval_target_place cx t)) /\
   (!cx g v. state_rel_frame R (assign_tuple_targets cx g v)) /\
-  (!cx gs vs. state_rel_frame R (assign_tuple_target_list cx gs vs)) /\
-  (!cx es. state_rel_frame R (eval_expr_results cx es))
+  (!cx gs vs. state_rel_frame R (assign_tuple_target_list cx gs vs))
 Proof
   strip_tac >> ho_match_mp_tac evaluate_ind >> rpt conj_tac
   >- EVAL_FRAME_CASE
@@ -122,8 +122,6 @@ Proof
   (* Builtin In/NotIn: the membership branch's eval_exprs needs the
      disjunct-guarded induction hypothesis; EVAL_FRAME_IH_TAC leaves it open. *)
   >- (EVAL_FRAME_CASE >> metis_tac[])
-  >- EVAL_FRAME_CASE
-  >- EVAL_FRAME_CASE
   >- EVAL_FRAME_CASE
   >- EVAL_FRAME_CASE
   >- EVAL_FRAME_CASE

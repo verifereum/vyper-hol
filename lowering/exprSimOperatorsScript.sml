@@ -150,25 +150,6 @@ Proof
   gvs[listTheory.LENGTH_EQ_NUM_compute]
 QED
 
-Theorem expr_body_pre_bop:
-  !cenv cx env ann bop e1 e2 es.
-    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
-    well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
-    expr_body_pre cenv cx env e1 es /\
-    !es'. expr_sim_inv cenv cx env es' ==> expr_body_pre cenv cx env e2 es'
-Proof
-  rpt gen_tac >>
-  simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
-       int_calls_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
-       supportedExprTraverseTheory.expr_has_evm_run_def,
-       supportedExprTraverseTheory.supported_expr_exists_def,
-       supportedExprTraverseTheory.expr_evm_run_root_def,
-       listTheory.EVERY_APPEND] >>
-  strip_tac >>
-  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
-            vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
-QED
-
 Theorem expr_sim_pre_bop:
   !cenv cx env ann bop e1 e2 es.
     expr_sim_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
@@ -283,34 +264,6 @@ Proof
 QED
 
 (* ===== Equality on address and bytesN ===== *)
-
-(* The result of an operand of a word type: an address or a bytesN one
-   is no word_value_type, so expr_body_pre_word_result does not cover it. *)
-Theorem expr_body_pre_word_type_result:
-  !cenv cx env e es res es'.
-    expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) /\
-    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\
-    !v. res = INL v ==>
-        ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-              value_has_type tyv v
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all expr_body_pre_eval >> strip_tac >> asm_rewrite_tac[] >>
-  rw[] >> drule_all expr_body_pre_word_value >> simp[]
-QED
-
-Theorem expr_sim_pre_word_type_result:
-  !cenv cx env e es res es'.
-    expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) /\
-    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\
-    !v. res = INL v ==>
-        ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-              value_has_type tyv v
-Proof
-  metis_tac[expr_body_pre_word_type_result, expr_sim_pre_body_pre]
-QED
 
 (* == and != on two address or two bytesN operands: compile_bop_typed_sim
    (exprSimOps), the operands held in their typed words, with

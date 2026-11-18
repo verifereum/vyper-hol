@@ -12,6 +12,7 @@ Ancestors
 Theorem cut_call_decode[local]:
   MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL] /\
   step_inst_base inst s = OK s1 ==>
+  s.vs_outcomes <> [] /\
   ?gop adop vop offop szop rop rsop gas addr value off sz ro rs prefix out.
     eval_operand gop s = SOME gas /\ eval_operand adop s = SOME addr /\
     eval_operand offop s = SOME off /\ eval_operand szop s = SOME sz /\
@@ -44,7 +45,9 @@ Theorem cut_call_dispatch[local]:
   kind = (if inst.inst_opcode = DELEGATECALL then DelegateMessageCall else MessageCall) /\
   static = (if inst.inst_opcode = CALL then s.vs_call_ctx.cc_static
             else inst.inst_opcode = STATICCALL) /\
-  rq = (venom_call_request s addr value off sz static with cr_kind := kind) /\
+  rq = (venom_call_request s addr value off sz static with
+          <|cr_kind := kind; cr_gas := SOME (w2n gas)|>) /\
+  s.vs_outcomes <> [] /\
   consume_call_outcome rq (w2n ro) (w2n rs) s = (w,r) ==>
   step_inst_base inst s = OK (update_var out w r)
 Proof
@@ -180,8 +183,10 @@ Theorem focus_fmp_cut_call_execute:
     kind = (if inst.inst_opcode = DELEGATECALL then DelegateMessageCall else MessageCall) /\
     static = (if inst.inst_opcode = CALL then s.vs_call_ctx.cc_static
               else inst.inst_opcode = STATICCALL) /\
-    rq1 = (venom_call_request s addr value off sz static with cr_kind := kind) /\
-    rq2 = (venom_call_request t addr value off' sz static with cr_kind := kind) /\
+    rq1 = (venom_call_request s addr value off sz static with
+             <|cr_kind := kind; cr_gas := SOME (w2n gas)|>) /\
+    rq2 = (venom_call_request t addr value off' sz static with
+             <|cr_kind := kind; cr_gas := SOME (w2n gas)|>) /\
     consume_call_outcome rq1 (w2n ro) (w2n rs) s = (w1,r1) /\
     consume_call_outcome rq2 (w2n ro') (w2n rs) t = (w2,r2) /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
@@ -193,9 +198,9 @@ Theorem focus_fmp_cut_call_execute:
       (MAP FST (SET_TO_LIST (FDOM (fmp_ld_sites sm))))
 Proof
   strip_tac >> drule_all cut_call_decode >>
-  disch_then (qx_choosel_then
+  disch_then (CONJUNCTS_THEN2 assume_tac (qx_choosel_then
     [`gop`,`adop`,`vop`,`offop`,`szop`,`rop`,`rsop`,`gas`,`addr`,`value`,
-     `off`,`sz`,`ro`,`rs`,`prefix`,`out`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
+     `off`,`sz`,`ro`,`rs`,`prefix`,`out`] (MAP_EVERY assume_tac o CONJUNCTS))) >>
   drule_all cut_call_clean >> strip_tac >>
   `!op v. MEM op inst.inst_operands /\ op = Var v ==> ~retpc_var fn v` by
     metis_tac[cut_call_nonopaque] >>
@@ -248,6 +253,10 @@ Proof
     (irule fmp_mem_geometry_point >>
      goal_assum (drule_at (Pat `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
   `s.vs_call_ctx = t.vs_call_ctx` by fs[fmp_stage_rel_def,fmp_frame_rel_def] >>
+  `t.vs_outcomes <> []` by
+    (fs[fmp_stage_rel_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
+     qpat_assum `s.vs_outcomes = t.vs_outcomes` (rewrite_tac o single o SYM) >>
+     first_assum ACCEPT_TAC) >>
   `MEM gop prefix /\ MEM adop prefix` by
     (qpat_x_assum `(inst.inst_opcode = CALL /\ _) \/ _` strip_assume_tac >> simp[]) >>
   `eval_operand gop t = SOME gas /\ eval_operand adop t = SOME addr /\
@@ -262,8 +271,10 @@ Proof
   qabbrev_tac `kind = if inst.inst_opcode = DELEGATECALL then DelegateMessageCall else MessageCall` >>
   qabbrev_tac `static = if inst.inst_opcode = CALL then s.vs_call_ctx.cc_static
                         else inst.inst_opcode = STATICCALL` >>
-  qabbrev_tac `rq1 = venom_call_request s addr value off sz static with cr_kind := kind` >>
-  qabbrev_tac `rq2 = venom_call_request t addr value off' sz static with cr_kind := kind` >>
+  qabbrev_tac `rq1 = venom_call_request s addr value off sz static with
+    <|cr_kind := kind; cr_gas := SOME (w2n gas)|>` >>
+  qabbrev_tac `rq2 = venom_call_request t addr value off' sz static with
+    <|cr_kind := kind; cr_gas := SOME (w2n gas)|>` >>
   Cases_on `consume_call_outcome rq1 (w2n ro) (w2n rs) s` >>
   rename1 `consume_call_outcome rq1 (w2n ro) (w2n rs) s = (w1,r1)` >>
   Cases_on `consume_call_outcome rq2 (w2n ro') (w2n rs) t` >>

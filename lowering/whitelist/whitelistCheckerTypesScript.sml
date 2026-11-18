@@ -302,7 +302,22 @@ Proof
   metis_tac[well_formed_integer_type]
 QED
 
-(* Rows 34 and 35 (narrow): shifts take an integer, << only a 256-bit one;
+Theorem well_typed_binop_bitwise_supported:
+  well_typed_binop ty op t1 t2 /\ well_formed_type tenv t1 /\
+  MEM op [And;Or;XOr] ==>
+  supported_binop op t1 t2 lb ne \/ is_flag_type t1
+Proof
+  Cases_on `is_bool_type t1`
+  >- (Cases_on `t1` >> gvs[is_bool_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      rw[] >>
+      gvs[is_bool_type_def, well_typed_binop_def, supported_binop_def]) >>
+  rw[] >> gvs[well_typed_binop_def, supported_binop_def] >>
+  imp_res_tac well_formed_integer_type >> gvs[] >>
+  gvs[well_formed_type_def, evaluate_type_def, IS_SOME_COND]
+QED
+
+(* Rows 34 and 35 (narrow): integer << requires a 256-bit LHS;
    a non-negative literal amount of signed type (row 33) remains. *)
 Theorem well_typed_binop_shift_supported:
   well_typed_binop ty op (expr_type a) (expr_type b) /\
@@ -311,7 +326,16 @@ Theorem well_typed_binop_shift_supported:
   supported_binop op (expr_type a) (expr_type b) lb ne \/
   (supported_nonnegative_literal b /\ ~is_uint_type (expr_type b))
 Proof
-  rpt strip_tac >>
+  rw[] >>
+  (Cases_on `expr_type a = BaseT (BytesT (Fixed 32))`
+  >- (disj1_tac >>
+      Cases_on `expr_type b = BaseT (BytesT (Fixed 32))`
+      >- gvs[supported_binop_def] >>
+      `is_int_type (expr_type b)` by
+        gvs[well_typed_binop_def] >>
+      `supported_integer_type (expr_type b)` by
+        metis_tac[well_formed_integer_type] >>
+      gvs[supported_binop_def]) >>
   `is_int_type (expr_type a)` by gvs[well_typed_binop_def] >>
   `supported_integer_type (expr_type a)`
     by metis_tac[well_formed_integer_type] >>
@@ -319,7 +343,7 @@ Proof
     by metis_tac[well_formed_unsigned_signed] >>
   gvs[well_typed_binop_def, supported_binop_def, builtin_operands_ok_def,
       shift_amount_ok_def, nonneg_int_literal_supported] >>
-  metis_tac[]
+  metis_tac[])
 QED
 
 (* Row 38: == and != never take aggregates; bytestrings (row 36), flags

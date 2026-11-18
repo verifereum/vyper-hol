@@ -40,7 +40,8 @@ Definition observable_call_def:
 End
 
 (* Called only under observable_call by observe. The total extractor uses
- * top-first stack order; the gas and output-buffer operands are omitted.
+ * top-first stack order; a call records its gas operand (the top of the
+ * stack), and the output-buffer operands are omitted.
  * Accounts are live rollback accounts, NOT the saved frame snapshot. *)
 Definition request_of_def:
   request_of s =
@@ -60,7 +61,7 @@ Definition request_of_def:
             cr_tStorage := s.rollback.tStorage |>
        else <| cr_kind := if next_opcode c = SOME DelegateCall
                           then DelegateMessageCall else MessageCall;
-          cr_gas := NONE;
+          cr_gas := SOME (w2n (HD c.stack));
           cr_data_len := w2n (EL (3 + valueOffset) c.stack);
           cr_target := w2w (EL 1 c.stack);
           cr_value := if valueOffset = 1 then w2n (EL 2 c.stack) else 0;
@@ -163,12 +164,10 @@ Definition call_trace_def:
   call_trace es = (frame_obs es).entries
 End
 
-(* The requests the oracle-mode run records: computed-precompile calls
- * (value 0 to 1/2/6/7) have no effects, so record_request leaves them out,
- * though their outcomes still answer the run. *)
+(* The requests the oracle-mode run records: one per trace entry, computed
+ * precompiles (value 0 to 1/2/6/7) included. *)
 Definition call_requests_def:
-  call_requests es =
-    FILTER (\rq. ~computed_precompile rq) (MAP FST (call_trace es))
+  call_requests es = MAP FST (call_trace es)
 End
 
 Definition gas_readings_def:

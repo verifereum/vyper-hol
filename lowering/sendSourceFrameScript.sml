@@ -42,6 +42,8 @@ Proof
     Cases_on `run_result` >> simp[return_def, raise_def] >>
     rename1 `FST result` >> Cases_on `FST result` >> simp[] >>
     strip_tac >> first_x_assum drule >> simp[]) >>
+  rename1 `s.outcomes = SOME os` >> Cases_on `os` >>
+  simp[ignore_bind_def, bind_def, return_def, raise_def] >>
   qpat_abbrev_tac `taken = take_outcome _ _` >>
   PairCases_on `taken` >>
   simp[ignore_bind_def, bind_def, assert_def, adopt_call_outcome_def,

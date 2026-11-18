@@ -9,14 +9,14 @@ Ancestors
   o1LowerDloadExternalOracle o1LowerDloadExternalEffects o1LowerDloadShared
   fmpStageRel ptrDiscipline venomExecSemantics venomCallOracleDefs extCallOracle
   o1LowerDloadRelocationKernel passSimulationDefs ptrDisciplineEmptyTaint
-  venomState finite_map pred_set list words
+  venomState opcodeClass finite_map pred_set list words
 
 Theorem cut_call_request_containment[local]:
   taint_within_upto D n C vs /\
   frame_reachable vs C stk PG G tn fn inst s /\ gas_cut n vs s /\
   active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
   step_inst_base inst s = OK (update_var out w r) /\
-  consume_call_outcome rq ro rs s = (w,r) /\ ~computed_precompile rq ==>
+  consume_call_outcome rq ro rs s = (w,r) ==>
   tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
@@ -26,10 +26,8 @@ Proof
   `r.vs_requests = record_request rq s.vs_requests` by
     (mp_tac (Q.INST [`rq` |-> `rq`,`ro` |-> `ro`,`rs` |-> `rs`,`s` |-> `s`] consume_call_outcome_observation) >>
      simp[Excl "consume_call_outcome_eq"]) >>
-  `record_request rq s.vs_requests = s.vs_requests ++ [rq]` by
-    metis_tac[take_outcome_ordinary] >>
   `LENGTH s.vs_requests < LENGTH (update_var out w r).vs_requests` by
-    simp[update_var_def] >>
+    simp[record_request_def, update_var_def] >>
   `step_inst 0 C inst s = OK (update_var out w r)` by
     simp[step_inst_non_invoke] >>
   drule_all taint_within_upto_request >> simp[]
@@ -41,17 +39,21 @@ Theorem cut_call_shared[local]:
   active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
   step_inst_base inst s = OK (update_var out w1 r1) /\
   ld_shared_agree D s.vs_call_ctx.cc_address tn s t /\ s.vs_call_ctx = t.vs_call_ctx /\
-  rq1 = (venom_call_request s addr value off sz static with cr_kind := kind) /\
-  rq2 = (venom_call_request t addr value off' sz static with cr_kind := kind) /\
+  rq1 = (venom_call_request s addr value off sz static with
+           <|cr_kind := kind; cr_gas := SOME (w2n gas)|>) /\
+  rq2 = (venom_call_request t addr value off' sz static with
+           <|cr_kind := kind; cr_gas := SOME (w2n gas)|>) /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
   consume_call_outcome rq1 ro1 rs s = (w1,r1) /\
   consume_call_outcome rq2 ro2 rs t = (w2,r2) ==>
   w1 = w2 /\ r1.vs_returndata = r2.vs_returndata /\
   ld_shared_agree D s.vs_call_ctx.cc_address
     (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+                        ~computed_precompile (LAST r1.vs_requests) /\
                         r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                        then {} else tn.t_stor;
                t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+                         ~computed_precompile (LAST r1.vs_requests) /\
                          r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                         then {} else tn.t_trans|>) r1 r2
 Proof
@@ -61,15 +63,6 @@ Proof
    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
    rq1.cr_kind = rq2.cr_kind /\ rq1.cr_value = rq2.cr_value` by
     simp[venom_call_request_def] >>
-  Cases_on `computed_precompile rq1`
-  >- (`computed_precompile rq2` by metis_tac[ld_computed_precompile_cong] >>
-      drule_all ld_consume_precompile_shared >> strip_tac >>
-      `r1.vs_requests = s.vs_requests` by
-        (qpat_x_assum `rq1 = _` kall_tac >>
-         mp_tac (Q.INST [`rq` |-> `rq1`,`ro` |-> `ro1`] consume_call_outcome_observation) >>
-         simp[Excl "consume_call_outcome_eq"] >>
-         metis_tac[ld_record_request_growth]) >>
-      simp[] >> metis_tac[]) >>
   drule_all cut_call_request_containment >> strip_tac >>
   `accounts_agree_except D s.vs_accounts t.vs_accounts` by
     (irule ld_shared_accounts_observe >> goal_assum drule >> simp[]) >>
@@ -124,9 +117,11 @@ Theorem cut_call_shared_after_update[local]:
   (inst.inst_opcode = CALL ==> rq.cr_static = s.vs_call_ctx.cc_static) /\
   ld_shared_agree D s.vs_call_ctx.cc_address
     (tn with <|t_stor := if ~rq.cr_static /\ r1.vs_requests <> s.vs_requests /\
+                        ~computed_precompile (LAST r1.vs_requests) /\
                         r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                        then {} else tn.t_stor;
                t_trans := if ~rq.cr_static /\ r1.vs_requests <> s.vs_requests /\
+                         ~computed_precompile (LAST r1.vs_requests) /\
                          r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                         then {} else tn.t_trans|>) r1 r2 ==>
   ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s (update_var out w1 r1) tn)
@@ -141,6 +136,7 @@ Proof
   Cases_on `inst.inst_opcode = CALL`
   >- gvs[ld_shared_agree_def, adopt_reset_def, update_var_def] >>
   Cases_on `~rq.cr_static /\ r1.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST r1.vs_requests) /\
     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
   gvs[ld_shared_agree_def, adopt_reset_def, update_var_def, word_agree_except_def]
 QED
@@ -352,22 +348,23 @@ QED
 Theorem cut_call_exception[local]:
   MEM inst.inst_opcode ^call_ops /\ step_inst_base inst s = r /\
   passSimulationDefs$terminates r /\ ~(?s1. r = OK s1) ==>
-  inst.inst_opcode = CALL /\
   r = Abort ExHalt_abort (halt_state (set_returndata [] s)) /\
-  s.vs_call_ctx.cc_static /\
-  ?g a v off sz ro rs value.
-    inst.inst_operands = [g;a;v;off;sz;ro;rs] /\
-    eval_operand v s = SOME value /\ value <> 0w /\
-    IS_SOME (eval_operands inst.inst_operands s)
+  IS_SOME (eval_operands inst.inst_operands s) /\
+  LENGTH inst.inst_operands = (if inst.inst_opcode = CALL then 7 else 6) /\
+  ((s.vs_outcomes = [] /\ ?out. inst.inst_outputs = [out]) \/
+   (inst.inst_opcode = CALL /\ s.vs_call_ctx.cc_static /\
+    ?g a v off sz ro rs value.
+      inst.inst_operands = [g;a;v;off;sz;ro;rs] /\
+      eval_operand v s = SOME value /\ value <> 0w))
 Proof
-  simp[MEM] >> strip_tac >>
+  strip_tac >> Cases_on `r` >> fs[passSimulationDefsTheory.terminates_def] >>
+  TRY (drule step_inst_base_halt_opcodes >> gvs[MEM] >> NO_TAC) >>
+  TRY (drule step_inst_base_intret_opcodes >> gvs[MEM] >> NO_TAC) >>
+  fs[MEM] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_opcode_eqs, exec_ext_call_def, exec_delegatecall_def,
-       Excl "consume_call_outcome_eq", AllCaseEqs()] >>
-  rpt strip_tac >>
-  gvs[passSimulationDefsTheory.terminates_def, eval_operands_def,
-      pairTheory.UNCURRY, Excl "consume_call_outcome_eq", AllCaseEqs()] >>
-  metis_tac[]
+  simp[step_inst_base_opcode_eqs, exec_ext_call_abort_iff,
+       exec_delegatecall_abort_iff, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[eval_operands_def] >> metis_tac[]
 QED
 
 Theorem cut_external_defined[local]:
@@ -391,9 +388,19 @@ Theorem cut_call_abort[local]:
   r = Abort ExHalt_abort (halt_state (set_returndata [] s)) /\
   step_inst_base inst t = Abort ExHalt_abort (halt_state (set_returndata [] t))
 Proof
-  strip_tac >> drule_all cut_call_exception >> strip_tac >> simp[] >>
+  strip_tac >> drule_all cut_call_exception >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> simp[] >>
   `MEM inst.inst_opcode ^external_ops` by simp[MEM_APPEND] >>
   drule_all cut_external_defined >> strip_tac >>
+  qpat_x_assum `(_ /\ (?out. inst.inst_outputs = [out])) \/ _` strip_assume_tac
+  >- (`t.vs_outcomes = []` by
+        (fs[fmp_stage_rel_def, ld_shared_agree_def] >>
+         qpat_assum `s.vs_outcomes = t.vs_outcomes` (rewrite_tac o single o SYM) >>
+         first_assum ACCEPT_TAC) >>
+      gvs[MEM, LENGTH_EQ_NUM_compute, eval_operands_IS_SOME_EVERY,
+          optionTheory.IS_SOME_EXISTS] >>
+      simp[step_inst_base_opcode_eqs, exec_ext_call_def, exec_delegatecall_def,
+           Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
   `MEM v inst.inst_operands` by simp[] >>
   `FILTER ($= v) inst.inst_operands = [v] ==>
     !ops. mem_read_ops inst = SOME ops \/ mem_write_ops inst = SOME ops ==>
@@ -432,14 +439,15 @@ Proof
   gvs[MEM, step_inst_base_opcode_eqs]
 QED
 
-Theorem cut_create_oversize[local]:
+Theorem cut_create_nonstatic_exception[local]:
   MEM inst.inst_opcode ^create_ops /\ ~s.vs_call_ctx.cc_static /\
   step_inst_base inst s = r /\ passSimulationDefs$terminates r /\
   ~(?s1. r = OK s1) ==>
   r = Abort ExHalt_abort (halt_state (set_returndata [] s)) /\
   IS_SOME (eval_operands inst.inst_operands s) /\
   ?v off sz rest size.
-    eval_operand sz s = SOME size /\ w2n size > 2 * vfmConstants$max_code_size /\
+    eval_operand sz s = SOME size /\
+    (w2n size > 2 * vfmConstants$max_code_size \/ s.vs_outcomes = []) /\
     (?out. inst.inst_outputs = [out]) /\
     inst.inst_operands = v::off::sz::rest /\
     ((inst.inst_opcode = CREATE /\ rest = []) \/
@@ -455,14 +463,14 @@ Proof
   metis_tac[]
 QED
 
-Theorem cut_create_size_abort[local]:
+Theorem cut_create_nonstatic_abort[local]:
   ^external_point /\ MEM inst.inst_opcode ^create_ops /\ ~s.vs_call_ctx.cc_static /\
   step_inst_base inst s = r /\ passSimulationDefs$terminates r /\
   ~(?s1. r = OK s1) ==>
   r = Abort ExHalt_abort (halt_state (set_returndata [] s)) /\
   step_inst_base inst t = Abort ExHalt_abort (halt_state (set_returndata [] t))
 Proof
-  strip_tac >> drule_all cut_create_oversize >>
+  strip_tac >> drule_all cut_create_nonstatic_exception >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac
       (REPEAT_TCL CHOOSE_THEN (MAP_EVERY assume_tac o CONJUNCTS)))) >>
@@ -483,12 +491,13 @@ Proof
   `eval_operand sz t = SOME szval` by
     (drule_all cut_external_operands >> metis_tac[fmpStagePointRangesTheory.fmp_mem_value_clean]) >>
   `s.vs_call_ctx = t.vs_call_ctx` by fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[fmp_stage_rel_def, ld_shared_agree_def] >>
   `~t.vs_call_ctx.cc_static` by metis_tac[] >>
   qpat_x_assum `?out. inst.inst_outputs = [out]` strip_assume_tac >>
   qpat_x_assum `(inst.inst_opcode = CREATE /\ _) \/ _` strip_assume_tac >>
   qpat_x_assum `IS_SOME (eval_operands _ t)` mp_tac >>
   simp[eval_operands_IS_SOME_EVERY, optionTheory.IS_SOME_EXISTS] >>
-  strip_tac >> simp[step_inst_base_opcode_eqs, exec_create_def]
+  strip_tac >> simp[step_inst_base_opcode_eqs, exec_create_def] >> metis_tac[]
 QED
 
 Theorem focus_fmp_cut_external_effect:
@@ -516,7 +525,7 @@ Proof
    step_inst_base inst t = Abort ExHalt_abort (halt_state (set_returndata [] t))` by
     (Cases_on `s.vs_call_ctx.cc_static`
      >- (drule_all cut_create_static_abort >> simp[]) >>
-     drule_all cut_create_size_abort >> simp[]) >>
+     drule_all cut_create_nonstatic_abort >> simp[]) >>
   qexists_tac `Abort ExHalt_abort (halt_state (set_returndata [] t))` >>
   simp[dead_result_rel_def]
 QED

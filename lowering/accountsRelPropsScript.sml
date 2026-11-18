@@ -31,6 +31,8 @@
  *   observed_storage_region_read_live, storage_read_live_head,
  *   storage_read_live_field — reads of a declared region see live bytes
  *   storage_agree_read_head — agreeing storages read a live value alike
+ *   observed_storage_head_agree — the first slot of an observed region reads
+ *                             alike in the Venom and source states
  *   storage_range_agree_of_live, storage_range_agree_head,
  *   storage_range_agree_field — agreement on the slots of one read: from a
  *                             live read, on its first slot, on a field
@@ -72,15 +74,15 @@ Proof
 QED
 
 Theorem accounts_agree_refl[simp]:
-  !cx a. accounts_agree H cx a a
+  !cx a. accounts_agree H cx.txn.target a a
 Proof
   simp[accounts_agree_def]
 QED
 
 Theorem accounts_agree_process_deletions:
   !cx ds a1 a2.
-    accounts_agree H cx a1 a2 ==>
-    accounts_agree H cx (process_deletions ds a1) (process_deletions ds a2)
+    accounts_agree H cx.txn.target a1 a2 ==>
+    accounts_agree H cx.txn.target (process_deletions ds a1) (process_deletions ds a2)
 Proof
   gen_tac >> Induct_on `ds` >>
   simp[process_deletions_def] >>
@@ -91,14 +93,30 @@ Proof
       combinTheory.APPLY_UPDATE_THM, storage_agree_def]
 QED
 
+(* A pending deletion erases any earlier update of the deleted account. *)
+Theorem process_deletions_update_mem:
+  !dels accs a x.
+    MEM a dels ==>
+    process_deletions dels (update_account a x accs) =
+    process_deletions dels accs
+Proof
+  Induct >> fs[vfmExecutionTheory.process_deletions_def, update_account_def] >>
+  rpt gen_tac >> Cases_on `h = a` >> fs[combinTheory.UPDATE_EQ] >>
+  strip_tac >>
+  `(h =+ empty_account_state) ((a =+ x) accs) =
+   (a =+ x) ((h =+ empty_account_state) accs)` by
+    (irule combinTheory.UPDATE_COMMUTES >> simp[]) >>
+  simp[]
+QED
+
 Theorem transient_agree_refl[simp]:
-  !cx t. transient_agree H cx t t
+  !cx t. transient_agree H cx.txn.target t t
 Proof
   simp[transient_agree_def]
 QED
 
 Theorem request_agree_refl[simp]:
-  !cx rq. request_agree H cx rq rq
+  !cx rq. request_agree H cx.txn.target rq rq
 Proof
   simp[request_agree_def, call_request_component_equality]
 QED
@@ -108,8 +126,8 @@ QED
 Theorem state_rel_accounts:
   !func cenv cx es s.
     state_rel H func cenv cx es s ==>
-    accounts_agree H cx es.accounts s.vs_accounts /\
-    transient_agree H cx es.tStorage s.vs_transient /\
+    accounts_agree H cx.txn.target es.accounts s.vs_accounts /\
+    transient_agree H cx.txn.target es.tStorage s.vs_transient /\
     es.pending_deletions = s.vs_pending_deletions
 Proof
   rw[state_rel_def, accounts_rel_def]
@@ -240,10 +258,10 @@ QED
 
 Theorem transient_agree_update:
   !cx t1 t2 k v.
-    transient_agree H cx t1 t2 /\
+    transient_agree H cx.txn.target t1 t2 /\
     (!j b. storage_dead H T (t1 cx.txn.target) j b /\ j <> w2n k ==>
            storage_dead H T (update_storage k v (t1 cx.txn.target)) j b) ==>
-    transient_agree H cx
+    transient_agree H cx.txn.target
       ((cx.txn.target =+ update_storage k v (t1 cx.txn.target)) t1)
       ((cx.txn.target =+ update_storage k v (t2 cx.txn.target)) t2)
 Proof
@@ -300,9 +318,9 @@ QED
 (* ===== The call oracle ===== *)
 
 Theorem accounts_rel_take_call_outcome:
-  !cx target calldata value_opt es es' res s.
+  !cx gas_cap target calldata value_opt es es' res s.
     accounts_rel H cx es s /\
-    take_call_outcome target calldata value_opt es = (res, es') ==>
+    take_call_outcome gas_cap target calldata value_opt es = (res, es') ==>
     accounts_rel H cx es' s
 Proof
   rpt strip_tac >> drule take_call_outcome_frame >> strip_tac >>
@@ -315,13 +333,13 @@ QED
    transient storage. *)
 Theorem take_outcome_agree:
   !cx rq1 rq2 os o1 o2 r1 r2.
-    request_agree H cx rq1 rq2 /\
+    request_agree H cx.txn.target rq1 rq2 /\
     take_outcome rq1 os = (o1, r1) /\ take_outcome rq2 os = (o2, r2) ==>
     r1 = r2 /\
     o1 with <| co_accounts := o2.co_accounts;
                co_tStorage := o2.co_tStorage |> = o2 /\
-    accounts_agree H cx o1.co_accounts o2.co_accounts /\
-    transient_agree H cx o1.co_tStorage o2.co_tStorage
+    accounts_agree H cx.txn.target o1.co_accounts o2.co_accounts /\
+    transient_agree H cx.txn.target o1.co_tStorage o2.co_tStorage
 Proof
   rw[request_agree_def] >>
   `rq1.cr_kind = rq2.cr_kind /\
@@ -343,8 +361,8 @@ Theorem accounts_rel_adopt_call_outcome:
     rq'.cr_kind = rq.cr_kind /\
     outcome with <| co_accounts := outcome'.co_accounts;
                     co_tStorage := outcome'.co_tStorage |> = outcome' /\
-    accounts_agree H cx outcome.co_accounts outcome'.co_accounts /\
-    transient_agree H cx outcome.co_tStorage outcome'.co_tStorage /\
+    accounts_agree H cx.txn.target outcome.co_accounts outcome'.co_accounts /\
+    transient_agree H cx.txn.target outcome.co_tStorage outcome'.co_tStorage /\
     s'.vs_accounts =
       FST (adopt_outcome rq' outcome' (s.vs_accounts, s.vs_transient, logs)) /\
     s'.vs_transient =
@@ -363,10 +381,10 @@ QED
 Theorem accounts_rel_call_request:
   !cx es s target calldata value_opt.
     accounts_rel H cx es s ==>
-    accounts_agree H cx
+    accounts_agree H cx.txn.target
       (call_outcome_request target calldata value_opt es).cr_accounts
       s.vs_accounts /\
-    transient_agree H cx
+    transient_agree H cx.txn.target
       (call_outcome_request target calldata value_opt es).cr_tStorage
       s.vs_transient
 Proof
@@ -498,6 +516,29 @@ Theorem storage_agree_read_head:
 Proof
   rw[storage_agree_def] >> irule word_to_bytes_EL_eq >> rpt strip_tac >>
   drule_all storage_read_live_head >> metis_tac[]
+QED
+
+(* The first slot of an observed region reads, in the Venom state, what the
+   source state holds there. *)
+Theorem observed_storage_head_agree:
+  state_rel H func cenv cx es s /\
+  MEM (tr,slot,tv) (FST H) /\ 0 < type_slot_size tv ==>
+  (if tr then tload slot s else sload slot s) =
+    lookup_storage slot (get_storage cx es tr)
+Proof
+  strip_tac >>
+  `storage_rel H cx.txn.target es s /\ transient_rel H cx.txn.target es s` by
+    fs[state_rel_def] >>
+  `storage_read_live H tr (get_storage cx es tr) slot tv` by
+    metis_tac[observed_storage_region_read_live] >>
+  `storage_agree (storage_dead H tr (get_storage cx es tr))
+      (get_storage cx es tr)
+      (if tr then contract_transient s else contract_storage s)` by
+    (Cases_on `tr` >>
+     gvs[storage_rel_def, transient_rel_def, vyperStorageBackendTheory.get_storage_def,
+         lookup_account_def]) >>
+  drule_all storage_agree_read_head >>
+  Cases_on `tr` >> simp[tload_def, sload_def]
 QED
 
 (* Two element slot ranges of an array that share a slot x are the same
@@ -911,7 +952,7 @@ QED
 (* Agreeing accounts differ at most in the running contract's storage. *)
 Theorem accounts_agree_lookup:
   !cx a1 a2 addr.
-    accounts_agree H cx a1 a2 ==>
+    accounts_agree H cx.txn.target a1 a2 ==>
     (lookup_account addr a2).balance = (lookup_account addr a1).balance /\
     (lookup_account addr a2).code = (lookup_account addr a1).code /\
     (lookup_account addr a2).nonce = (lookup_account addr a1).nonce
@@ -968,9 +1009,9 @@ QED
 Theorem agree_cx_cong:
   !cx cx'.
     cx'.txn.target = cx.txn.target ==>
-    accounts_agree H cx' = accounts_agree H cx /\
-    transient_agree H cx' = transient_agree H cx /\
-    request_agree H cx' = request_agree H cx
+    accounts_agree H cx'.txn.target = accounts_agree H cx.txn.target /\
+    transient_agree H cx'.txn.target = transient_agree H cx.txn.target /\
+    request_agree H cx'.txn.target = request_agree H cx.txn.target
 Proof
   rpt strip_tac >>
   simp[FUN_EQ_THM, accounts_agree_def, transient_agree_def,

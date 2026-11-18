@@ -87,15 +87,11 @@ Proof
   simp_tac exec_call_result_head_ss []
 QED
 
-Theorem exec_call_helpers_no_halt_abort:
+Theorem exec_call_helpers_no_halt:
   (!inst s g a v ao as_ ro rs is_s s'.
      exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
-  (!inst s g a v ao as_ ro rs is_s ab s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
   (!inst s g a ao as_ ro rs s'.
      exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
-  (!inst s g a ao as_ ro rs ab s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
   (!inst s v off sz salt s'.
      exec_create inst s v off sz salt <> Halt s')
 Proof
@@ -104,7 +100,7 @@ QED
 
 val _ = augment_srw_ss [rewrites
   [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret,
-   exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
+   exec_call_helpers_not_intret, exec_call_helpers_no_halt]];
 (* ===== Main classification theorems ===== *)
 
 Triviality step_inst_base_halt_terminator_opcodes[local]:
@@ -201,32 +197,6 @@ Triviality effect_free_group_cases[local]:
   !op. is_effect_free_op op ==>
     ef_pure1 op \/ ef_arith1 op \/ ef_arith2 op \/ ef_cmp op \/
     ef_bits op \/ ef_pure3 op \/ ef_read0 op \/ ef_read1 op \/ ef_misc op
-Proof
-  Cases >> EVAL_TAC
-QED
-
-Triviality effect_free_opcode_cases[local]:
-  !op. is_effect_free_op op ==>
-    (op = NOT \/ op = ISZERO) \/
-    (op = ADD \/ op = SUB \/ op = MUL \/ op = Div \/ op = SDIV \/
-     op = Mod \/ op = SMOD \/ op = Exp) \/
-    (op = EQ \/ op = LT \/ op = GT \/ op = SLT \/ op = SGT) \/
-    (op = AND \/ op = OR \/ op = XOR \/ op = SHL \/
-     op = SHR \/ op = SAR \/ op = SIGNEXTEND \/ op = BYTE \/
-     op = OFFSET) \/
-    (op = ADDMOD \/ op = MULMOD) \/
-    (op = CALLER \/ op = ADDRESS \/ op = CALLVALUE \/ op = GAS \/
-     op = ORIGIN \/ op = GASPRICE \/ op = CHAINID \/
-     op = COINBASE \/ op = TIMESTAMP \/ op = NUMBER \/
-     op = PREVRANDAO \/ op = GASLIMIT \/ op = BASEFEE \/
-     op = BLOBBASEFEE \/ op = SELFBALANCE \/ op = CALLDATASIZE \/
-     op = RETURNDATASIZE \/ op = MEMTOP \/ op = CODESIZE) \/
-    (op = MLOAD \/ op = SLOAD \/ op = TLOAD \/ op = ILOAD \/
-     op = DLOAD \/ op = BLOCKHASH \/ op = BLOBHASH \/ op = BALANCE \/
-     op = CALLDATALOAD \/ op = EXTCODESIZE \/ op = EXTCODEHASH) \/
-    (op = SHA3 \/ op = PHI \/ op = ASSIGN \/ op = PARAM \/ op = NOP \/
-     op = GETFMP \/ op = INITIAL_FMP \/ op = BUMP \/
-     op = FMP_PARAM \/ op = RETPC_PARAM)
 Proof
   Cases >> EVAL_TAC
 QED
@@ -502,13 +472,16 @@ Proof
   Cases >> EVAL_TAC
 QED
 
-(* A static frame aborts at CALL with value. *)
+(* Calls abort on an exhausted oracle; value CALL also has a static guard. *)
 Theorem ext_call_not_halt_abort[local]:
   !inst s vs' a.
     is_ext_call_op inst.inst_opcode ==>
     step_inst_base inst s <> Halt vs' /\
     (step_inst_base inst s <> Abort a vs' \/
      inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2 \/
+     (s.vs_outcomes = [] /\
+      (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+       inst.inst_opcode = DELEGATECALL)) \/
      (s.vs_call_ctx.cc_static /\ inst.inst_opcode = CALL))
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
@@ -519,7 +492,8 @@ Proof
   drule ext_call_opcode_cases >> strip_tac >> simp[] >>
   strip_tac >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  step_inst_base_opcode_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  step_inst_base_opcode_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[exec_ext_call_abort_iff, exec_delegatecall_abort_iff]
 QED
 
 Triviality storage_imm_log_assert_not_halt[local]:
@@ -660,6 +634,9 @@ Theorem step_inst_base_abort_opcodes:
     inst.inst_opcode = CREATE \/
     inst.inst_opcode = CREATE2 \/
     inst.inst_opcode = RETURNDATACOPY \/
+    (vs.vs_outcomes = [] /\
+     (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+      inst.inst_opcode = DELEGATECALL)) \/
     (vs.vs_call_ctx.cc_static /\
      (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
       inst.inst_opcode = LOG \/ inst.inst_opcode = SELFDESTRUCT \/
@@ -693,6 +670,9 @@ Theorem step_inst_base_abort_opcode:
     inst.inst_opcode = CREATE \/
     inst.inst_opcode = CREATE2 \/
     inst.inst_opcode = RETURNDATACOPY \/
+    (s.vs_outcomes = [] /\
+     (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+      inst.inst_opcode = DELEGATECALL)) \/
     (s.vs_call_ctx.cc_static /\
      (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
       inst.inst_opcode = LOG \/ inst.inst_opcode = CALL))
@@ -713,6 +693,9 @@ Theorem step_inst_abort_opcodes:
     inst.inst_opcode = CREATE2 \/
     inst.inst_opcode = RETURNDATACOPY \/
     inst.inst_opcode = INVOKE \/
+    (vs.vs_outcomes = [] /\
+     (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+      inst.inst_opcode = DELEGATECALL)) \/
     (vs.vs_call_ctx.cc_static /\
      (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
       inst.inst_opcode = LOG \/ inst.inst_opcode = SELFDESTRUCT \/

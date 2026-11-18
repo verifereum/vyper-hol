@@ -234,6 +234,7 @@ Proof
   `(!v. MEM (Var v) i.inst_operands ==> lookup_var v (H n) = lookup_var v t) /\
    (H n).vs_returndata = t.vs_returndata /\
    (H n).vs_labels = t.vs_labels /\
+   ((H n).vs_outcomes = [] <=> t.vs_outcomes = []) /\
    (H n).vs_call_ctx.cc_static = t.vs_call_ctx.cc_static` by
     (gvs[state_equiv_def, execution_equiv_def, venomStateTheory.lookup_var_def] >>
      metis_tac[]) >>

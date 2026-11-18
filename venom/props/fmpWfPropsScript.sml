@@ -3,6 +3,7 @@
 Theory fmpWfProps
 Ancestors
   fmpWfDefs
+  venomWf venomInst
 
 Theorem fmp_return_abi_matches_no_returns:
   fn_return_insts fn = [] /\
@@ -51,6 +52,15 @@ Theorem invoke_layout_wf_invoke:
     fmp_invoke_output_arity_ok callee sig inst
 Proof
   simp[invoke_layout_wf_def]
+QED
+
+Theorem invoke_lowered_targets_wf:
+  fmp_lowered_context_wf ctx ==> wf_invoke_targets ctx
+Proof
+  rw[fmp_lowered_context_wf_def, wf_invoke_targets_def] >>
+  first_x_assum drule_all >>
+  simp[invoke_layout_wf_def] >> strip_tac >>
+  metis_tac[lookup_function_mem, ctx_fn_names_def]
 QED
 
 Theorem fmp_signature_matches_fn_some:

@@ -14,10 +14,13 @@ Theorem hash_staticcall_inst_ok:
     c <= w2n r /\ w2n r + 32 <= c+cap /\
     (!a. MEM a [gas;Lit 2w;Var p;len;Var q;Lit 32w] ==> op_taint tn a = {}) /\
     (!i. w2n w <= i /\ i < w2n w+w2n n ==> i NOTIN tn.t_mem) /\
+    tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
     ~ctx_has_dalloca ctx /\
     step_inst_base (mk_inst id STATICCALL
-      [gas;Lit 2w;Var p;len;Var q;Lit 32w] [out]) s = OK t /\
-    t.vs_requests = s.vs_requests ==>
+      [gas;Lit 2w;Var p;len;Var q;Lit 32w] [out]) s = OK t ==>
     ptr_inst_ok D 0 0 ctx fn G tn
       (mk_inst id STATICCALL [gas;Lit 2w;Var p;len;Var q;Lit 32w] [out]) s
 Proof
@@ -65,7 +68,8 @@ Theorem hash_sha256_call_success:
     s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
     ?t. step_inst_base (mk_inst id STATICCALL
       [gas;Lit 2w;Var p;len;Var q;Lit 32w] [out]) s = OK t /\
-      t.vs_requests = s.vs_requests /\ t.vs_allocas = s.vs_allocas /\
+      t.vs_requests = s.vs_requests ++
+        [venom_call_request s 2w 0w w n T with cr_gas := SOME (w2n a)] /\ t.vs_allocas = s.vs_allocas /\
       t.vs_fmp = s.vs_fmp /\ LENGTH t.vs_returndata = 32 /\
       lookup_var out t = SOME 1w
 Proof
@@ -74,7 +78,9 @@ Proof
     ((write_memory_with_expansion (w2n r)
       (word_to_bytes (SHA_256_bytes bs) T) s) with
         <|vs_returndata := word_to_bytes (SHA_256_bytes bs) T;
-          vs_outcomes := rest|>)` >>
+          vs_outcomes := rest;
+          vs_requests := s.vs_requests ++
+            [venom_call_request s 2w 0w w n T with cr_gas := SOME (w2n a)]|>)` >>
   conj_tac >- (irule step_STATICCALL_sha256 >> simp[] >> metis_tac[]) >>
   simp[update_var_def, write_memory_with_expansion_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
@@ -83,19 +89,25 @@ Theorem hash_sha256_call_failure:
   !id gas p len q out s a w n r.
     eval_operand gas s = SOME a /\
     eval_operand (Var p) s = SOME w /\ eval_operand len s = SOME n /\
-    eval_operand (Var q) s = SOME r /\
+    eval_operand (Var q) s = SOME r /\ s.vs_outcomes <> [] /\
     ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
     ?t. step_inst_base (mk_inst id STATICCALL
       [gas;Lit 2w;Var p;len;Var q;Lit 32w] [out]) s = OK t /\
-      t.vs_requests = s.vs_requests /\ t.vs_allocas = s.vs_allocas /\
+      t.vs_requests = s.vs_requests ++
+        [venom_call_request s 2w 0w w n T with cr_gas := SOME (w2n a)] /\ t.vs_allocas = s.vs_allocas /\
       t.vs_fmp = s.vs_fmp /\ t.vs_returndata = [] /\
       lookup_var out t = SOME 0w
 Proof
   rpt gen_tac >> strip_tac >>
   qexists_tac `update_var out 0w
     ((write_memory_with_expansion (w2n r) [] s) with
-      <|vs_returndata := [];vs_outcomes := DROP 1 s.vs_outcomes|>)` >>
-  conj_tac >- (irule step_STATICCALL_sha256_fail >> simp[] >> metis_tac[]) >>
+      <|vs_returndata := [];vs_outcomes := DROP 1 s.vs_outcomes;
+        vs_requests := s.vs_requests ++
+          [venom_call_request s 2w 0w w n T with cr_gas := SOME (w2n a)]|>)` >>
+  conj_tac >-
+    (qpat_assum `s.vs_outcomes <> []` (fn nonempty =>
+       irule (SIMP_RULE (srw_ss()) [nonempty] step_STATICCALL_sha256_fail)) >>
+     simp[] >> metis_tac[]) >>
   simp[update_var_def, write_memory_with_expansion_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 

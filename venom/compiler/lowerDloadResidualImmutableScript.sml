@@ -429,8 +429,9 @@ Resume ld_normal_istore_backward[bytes]:
      `w2n off <= b /\ b < w2n off + 32` by metis_tac[] >>
      `a - w2n off = b - w2n off` by metis_tac[] >>
      decide_tac) >>
-  irule ld_istore_byte_rel >> simp[] >>
-  drule ld_normal_data_memory >> simp[] >> metis_tac[]
+  drule ld_normal_data_memory >> disch_tac >>
+  irule ld_istore_byte_rel >> BETA_TAC >> asm_rewrite_tac[] >>
+  qexistsl_tac [`dst`, `value`] >> asm_rewrite_tac[]
 QED
 
 Finalise ld_normal_istore_backward

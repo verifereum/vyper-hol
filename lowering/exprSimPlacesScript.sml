@@ -7,23 +7,13 @@
  * attributes (exprSimAttribute's compile_attribute_vv_sim), tuple
  * subscripts (exprSimTuple's compile_subscript_tuple_sim), a dispatch that
  * disagrees with the base's type and subscripts of any base but an array, a
- * tuple or a mapping, which do not type.  Array and mapping subscripts
- * are compile_subscript_array_case (exprSimSubscriptArray) and
+ * tuple or a mapping, which do not type.  Mapping subscripts are
  * compile_subscript_map_case (exprSimSubscriptMap).  Pop on a storage variable is
  * compile_pop_storage_sim; pop on a nested target is compile_pop_nested_sim,
  * by exprSimPopNested's pop_nested_sim, whose residuals are listed there.
  * Root immutable pop is rejected by the source checker, as in Python.
  *
  * TOP-LEVEL:
- *   compile_subscript_case — static and dynamic arrays with the
- *                           bounds-check abort, hashmaps, tuples (#558),
- *                           Places row 1, over expr_vv_case: by place_type
- *                           of the base, compile_subscript_map_case for a
- *                           mapping, compile_subscript_mismatch_case for a
- *                           dispatch type other than the base's,
- *                           compile_subscript_tuple_sim for a tuple,
- *                           compile_subscript_array_case for an array
- *   compile_subscript_sim — compile_subscript_case with nocalls = T
  *   compile_attribute_sim — struct fields (#558), row 2: by
  *                           compile_attribute_vv_sim
  *   compile_pop_sim       — pop on a dynamic array, with the empty-array
@@ -35,8 +25,7 @@
  * storage and transient places included.  It does not cover a hashmap
  * base: that evaluates to a HashMapRef and is typed by type_place_expr, not
  * well_typed_expr.  A mapping base is judged by expr_map_case
- * (exprSimMapDefs) instead, which compile_subscript_case takes for a
- * MapPT base and compile_subscript_sim supplies via expr_map_case_below.
+ * (exprSimMapDefs) instead.
  *
  * compile_subscript dispatches on place_type of the base, the base's own
  * type for a nested place, and pop takes its target's place from
@@ -53,12 +42,6 @@ Ancestors
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
 
 (* ===== Subscripts ===== *)
-
-(* The case lemmas take the judgments a shared case lemma takes
-   (expr_vv_case, expr_sim_case: exprSimHyps), so the body simulation's
-   body_subscript_case (bodySimExprCases), where an operand may call an
-   internal function, uses them with nocalls = F, as compile_subscript_sim
-   does with T. *)
 
 (* The compiler's dispatch type disagrees with the base's type: place_type
    says ValPT bt with bt not the base's expr_type.  Unreachable: under
@@ -93,79 +76,6 @@ Proof
   drule_all place_type_checked_place_on_defined >> strip_tac >>
   Cases_on `vt` >> gvs[value_type_place_def] >>
   Cases_on `expr_type obj` >> gvs[subscript_vtype_def]
-QED
-
-(* By place_type of the base: compile_subscript_map_case for a mapping,
-   compile_subscript_mismatch_case for a dispatch type other than the
-   base's, exprSimTuple's compile_subscript_tuple_sim for a tuple and
-   compile_subscript_array_case for an array; no other base types. *)
-(* A mapping-typed base has expr_type NoneT, so the subscript never reads it
-   before the index. *)
-Theorem subscript_map_base_not_read[local]:
-  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
-  place_type cenv obj = MapPT kt vt ==>
-  ~subscript_reads_base cx obj idx
-Proof
-  strip_tac >> drule_all expr_body_pre_map_subscript_base >> strip_tac >>
-  drule_all expr_map_pre_checked_type >> strip_tac >>
-  drule type_place_expr_vtype_annotation >>
-  simp[vtype_annotation_ok_def, vyperInterpreterTheory.subscript_reads_base_def,
-       vyperSubscriptOverlapTheory.subscript_overlap_def]
-QED
-
-Theorem compile_subscript_case:
-  !nocalls ctx func cenv cx ann obj idx.
-    expr_vv_case nocalls ctx func cenv cx obj /\
-    (!kt vt. place_type cenv obj = MapPT kt vt ==>
-             expr_map_case nocalls ctx func cenv cx obj) /\
-    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
-       (if subscript_reads_base cx obj idx
-        then do v <- read_result cx tv; return (Value v) od
-        else return tv) s' = (INL tv', t') ==>
-       expr_sim_case nocalls ctx func cenv cx idx) /\
-    (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
-    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
-Proof
-  rpt strip_tac >> Cases_on `place_type cenv obj`
-  >- (simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
-      drule_all subscript_map_base_not_read >> strip_tac >>
-      `expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
-        (irule compile_subscript_map_case >> fs[vyperStateTheory.return_def] >>
-         first_assum ACCEPT_TAC) >>
-      qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
-      simp[expr_vv_case_def] >>
-      disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >> fs[]) >>
-  rename1 `ValPT bt` >>
-  Cases_on `bt <> expr_type obj`
-  >- (irule compile_subscript_mismatch_case >> qexists_tac `bt` >> simp[]) >>
-  gvs[] >> simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
-  drule_all subscript_base_array_or_tuple >> strip_tac
-  >- (`expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
-        (irule compile_subscript_array_case >> fs[] >> first_assum ACCEPT_TAC) >>
-      qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
-      simp[expr_vv_case_def] >>
-      disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >> fs[]) >>
-  `expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
-    (irule compile_subscript_tuple_sim >> gvs[]) >>
-  qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
-  simp[expr_vv_case_def] >>
-  disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >> fs[]
-QED
-
-Theorem compile_subscript_sim:
-  !cenv ann obj idx.
-    expr_sim_below cenv (expr_size (Subscript ann obj idx)) ==>
-    expr_vv_ok cenv (Subscript ann obj idx)
-Proof
-  rpt strip_tac >>
-  `expr_ok cenv obj /\ expr_ok cenv idx` by
-    (fs[expr_sim_below_def] >> rpt strip_tac >> first_x_assum irule >>
-     simp[expr_size_def]) >>
-  `expr_sim_below cenv (expr_size obj)` by
-    (irule expr_sim_below_mono >>
-     qexists_tac `expr_size (Subscript ann obj idx)` >> simp[expr_size_def]) >>
-  gvs[expr_ok_case, expr_vv_ok_case] >> rpt gen_tac >>
-  irule compile_subscript_case >> simp[expr_map_case_below]
 QED
 
 (* ===== Attributes ===== *)

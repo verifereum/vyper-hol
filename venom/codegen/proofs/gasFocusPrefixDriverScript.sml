@@ -6,6 +6,12 @@ Ancestors
   frameJointTransition venomExecProps blockSimHelpers fnSimSpec
   asmOptimizer codegenEntrySim codegenSymRel dftDefs unitMemInv finite_map
   list rich_list pred_set words arithmetic focusJointChainBound gasFocusBoundedFrontier
+  contextRawReachable dftGasOracleDefs fcgDefs irSupply memSafeRun
+  venomPassSchedule venomPipelineRunner staticAbortDefs
+
+(* verifereum's calldata-bound frame_rel is in scope; the statements below
+   use frame_rel as a variable. *)
+val _ = hide "frame_rel";
 
 (* Proof goals only. These ML values register no HOL definitions or theorems.
    The packet, CFG cursor and frame-plan conjuncts will be joined here once
@@ -626,3 +632,119 @@ Theorem focus_bounded_frontier_stops:
 Proof
   ACCEPT_TAC gasFocusBoundedFrontierTheory.focus_bounded_frontier_stops
 QED
+
+(* Signed selection and replay goal. The theorem is exported once proved. *)
+val focus_finalizer_select_replay_goal : term = ``
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+  code_layout_valid vs0 /\
+  unit_shape_ok out.po_unit /\
+  generate_context_plan out.po_unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy out.po_unit = SOME prog /\
+  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+  (fin = asm_opt_finalizer ==>
+     label_flow_ok unit.cu_context /\
+     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+                ~MEM (Label "code_end") inst.inst_operands) /\
+     EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
+                       ds.ds_items) unit.cu_data_segment /\
+     ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
+                 MEM inst (fn_insts fn) /\
+                 MEM (Label "runtime_begin") inst.inst_operands) ==>
+      EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) /\
+     LENGTH vs0.vs_data_section < dimword (:256) DIV 2) /\
+  (vs0.vs_call_ctx.cc_static ==>
+     !fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+               ~MEM (Label "runtime_begin") inst.inst_operands) /\
+  vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
+  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
+  asm_frame_rel_tail [] prog' vs0.vs_data_section es0
+    (entry_asm_state vs0 es0 with
+      as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
+  unit.cu_context.ctx_entry = SOME nm /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+  fn_entry_label entryfn = SOME lbl /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+  unit_alloca_budget unit.cu_context +
+    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+  (!gs. ?D f extra.
+    dead_wf D /\
+    (fin = asm_opt_finalizer ==>
+       !fn inst s.
+         raw_reachable (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>)
+           unit.cu_context fn inst s /\
+         gas_cut (MIN (LENGTH (markf gs)) (LENGTH gs))
+           (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) s ==>
+         inst_dload_in_section inst s) /\
+    o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
+      unit.cu_context (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+    MAP project
+      (gas_events_blocks f unit.cu_context entryfn
+        (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp;
+                    vs_prev_bb := NONE;
+                    vs_current_bb := lbl; vs_inst_idx := 0|>)) =
+      markf gs ++ extra) /\
+  run_call es0 = SOME (result,final) /\
+  ~frame_resource_starved es0 result final /\
+  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
+    (init_ir_supply unit) = SOME (pre,t) /\
+  pre.cu_context.ctx_entry = SOME nm /\
+  run_callee_first rpolicy o1_fn_passes
+    (fcg_postorder (fcg_analyze pre.cu_context) nm)
+    (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)) t =
+    SOME (out.po_unit,t') /\
+  stage 0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context /\
+  stage 9 = out.po_unit.cu_context /\
+  (!k. k < 9 ==> ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+    (stage k) (stage (SUC k))) /\
+  (!k. k <= 9 ==> o1_ctx_shape (stage k) /\
+    EVERY (o1_fn_row k) (stage k).ctx_functions) ==>
+  ?raw_slots sites unused.
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+    !raw.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
+      (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
+      !D.
+        (?fr. terminates (run_context fr unit.cu_context
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
+        dead_wf D /\
+        o1_pre_walk_inv D unit.cu_context
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+        (fin = asm_opt_finalizer ==>
+           mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                     s.vs_code = vs0.vs_code /\ s.vs_data_section = vs0.vs_data_section)
+             unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
+        (?orc.
+          (!fuel. gas_res_rel (run_context fuel (stage 7)
+            (vs0 with vs_gas_readings := raw ++ [0w]))
+            (ev_context orc fuel (stage 7) vs0)) /\
+          (!fuel. gas_res_rel (run_context fuel (stage 8) vs0)
+            (ev_context orc fuel (stage 8) vs0)) /\
+          (!p d fn inst s. ev_reachable orc vs0 (stage 7) p d fn inst s ==>
+            ?ws. raw_reachable (vs0 with vs_gas_readings := raw ++ [0w])
+                 (stage 7) fn inst (s with vs_gas_readings := ws)) /\
+          (!fn inst s. raw_reachable vs0 (stage 8) fn inst s ==>
+            ?p d. ev_reachable orc vs0 (stage 8) p d fn inst
+              (s with vs_gas_readings := vs0.vs_gas_readings))) \/
+        (vs0.vs_call_ctx.cc_static /\
+         ctx_sim D unit.cu_context out.po_unit.cu_context
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+         ctx_abort_rq D unit.cu_context out.po_unit.cu_context
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+         (fin = asm_opt_finalizer ==>
+            code_end_offset_ok
+              (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
+                ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
+         (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+           mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+                     lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
+             out.po_unit.cu_context vs0) /\
+         (!fuel. terminates (run_context fuel unit.cu_context
+                   (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
+                 ?u. run_context fuel unit.cu_context
+                       (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) =
+                     Abort ExHalt_abort u))
+``;

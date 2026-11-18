@@ -1,7 +1,6 @@
 Theory loweringRuntimeBudgetAssembly
 Ancestors
-  loweringRuntimeBudgetShape sourceCallCount sourceCallCountEntryReplay
-  sourceCallCountMonotone sourceCallCountWitness
+  loweringRuntimeBudgetShape loweringBudgetRecorderOutcomes
 
 Theorem lower_vyper_runtime_unit_call_budget_from_count:
   !tops rpolicy unit am tx ret vs k.
@@ -11,11 +10,9 @@ Theorem lower_vyper_runtime_unit_call_budget_from_count:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     k <= 2 ** 64 /\
-    (!obs. source_calls_within k am tx vs.vs_outcomes obs) /\
+    LENGTH vs.vs_outcomes <= k /\
     (!marks.
-      source_storage_ok am tx vs.vs_outcomes
-        (gas_explicit marks vs.vs_gas_readings) /\
-      call_outcomes_storage_ok am tx vs.vs_outcomes
+      call_storage_ok am tx vs.vs_outcomes
         (gas_explicit marks vs.vs_gas_readings)) /\
     (!marks. ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
@@ -35,8 +32,7 @@ Theorem lower_vyper_runtime_unit_call_budget_from_count:
                     vs_inst_idx := 0 |>) entered /\
       p = <| bp_stack := []; bp_params := []; bp_prov := FEMPTY;
              bp_taint := entry_taint; bp_fn := fn; bp_state := entered |> /\
-      lower_budget_path F (D,lo,explicit,unit.cu_context) p h marks q /\
-      lower_history_count h <= k ==>
+      lower_budget_path F (D,lo,explicit,unit.cu_context) p h marks q ==>
       ?remaining pair.
         remaining <= k /\ remaining <= 2 ** 64 /\
         lower_history_count h + remaining = k /\
@@ -49,6 +45,10 @@ Theorem lower_vyper_runtime_unit_call_budget_from_count:
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   drule_all supported_runtime_budget_allocation_shape >> strip_tac >>
+  `entered.vs_outcomes = vs.vs_outcomes` by
+    (drule enters_block_preserves_outcomes >> simp[]) >>
+  `lower_history_count h <= k` by
+    (drule lower_budget_path_count_le_outcomes >> simp[] >> decide_tac) >>
   qexistsl_tac [`k - lower_history_count h`, `pair`] >>
   simp[] >> conj_tac >- (fs[] >> decide_tac) >> metis_tac[]
 QED

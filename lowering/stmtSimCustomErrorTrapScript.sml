@@ -90,7 +90,10 @@ Theorem ce_trap_mem_safe_context:
   inst.inst_opcode <> INVOKE ==>
   (mem_safe_step fuel (ce_trap_ctx ctx) inst s <=> mem_safe_step fuel ctx inst s)
 Proof
-  simp[mem_safe_step_non_invoke]
+  `!i. (ce_trap_inst i).inst_opcode = DALLOCA <=> i.inst_opcode = DALLOCA` by
+    (rw[ce_trap_inst_def] >> gvs[]) >>
+  simp[mem_safe_step_non_invoke, ptrDisciplineTheory.ctx_has_dalloca_def,
+       ce_trap_ctx_def, ce_trap_fn_insts, EXISTS_MAP, combinTheory.o_DEF]
 QED
 
 Theorem ce_trap_pending_alloca_size:

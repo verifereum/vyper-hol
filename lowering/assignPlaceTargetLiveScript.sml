@@ -1,6 +1,7 @@
 Theory assignPlaceTargetLive
 Ancestors
   bodySimAugPlaceLive bodySimAugPlaceMemory bodySimAugPlaceScopes
+  vyperLocalAccessFrame[qualified,ignore_grammar]
   notMutateExprScopes stmtLowering exprLowering vyperInterpreter vyperState vyperMisc stmtSimAugAssignPlaceMemory
 Libs monadsyntax
 
@@ -16,8 +17,8 @@ Proof
            type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
       rpt strip_tac >> rename1 `IS_SOME (lookup_scopes name st.scopes)` >>
       Cases_on `lookup_scopes name st.scopes` >> gvs[evaluate_subscripts_def])
-  >- (PairCases_on `nsid` >> simp[Once evaluate_def] >>
-      metis_tac[bodySimAugPlaceScopesTheory.aug_place_lookup_global_not_memory])
+  >- (PairCases_on `nsid` >>
+      simp[Once evaluate_def, vyperLocalAccessFrameTheory.lookup_global_not_memory])
   >- (rpt strip_tac >>
       qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>

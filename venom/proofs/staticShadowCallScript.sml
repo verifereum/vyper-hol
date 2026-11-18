@@ -77,15 +77,23 @@ Theorem static_shadow_exec_ext_call[local]:
     (exec_ext_call inst sh gas addr value ao az ro rz j)
 Proof
   strip_tac >>
-  `venom_call_request sh addr value ao az j =
-     venom_call_request s addr value ao az i with cr_static := j` by
+  `(sh.vs_outcomes = [] <=> s.vs_outcomes = [])` by
+    (drule static_shadow_rel_fields >> strip_tac >> simp[static_shadow_def]) >>
+  Cases_on `s.vs_outcomes = []`
+  >- (namedCases_on `inst.inst_outputs` ["", "out rest"] >>
+      simp[exec_ext_call_def, static_shadow_result_rel_def] >>
+      Cases_on `rest` >> simp[exec_ext_call_def, static_shadow_result_rel_def]) >>
+  qabbrev_tac `rq = venom_call_request s addr value ao az i with
+    cr_gas := SOME (w2n gas)` >>
+  `venom_call_request sh addr value ao az j with cr_gas := SOME (w2n gas) =
+     rq with cr_static := j` by
     (drule static_shadow_rel_fields >>
-     gvs[venom_call_request_def, read_memory_def, static_shadow_rel_def,
+     gvs[Abbr `rq`, venom_call_request_def, read_memory_def, static_shadow_rel_def,
          static_shadow_def, venom_state_component_equality]) >>
   simp[exec_ext_call_def, pairTheory.pair_CASE_def, pairTheory.UNCURRY,
        Excl "consume_call_outcome_eq"] >>
   irule (SRULE [LET_THM, pairTheory.pair_CASE_def, Excl "consume_call_outcome_eq"]
-    static_shadow_call_output) >> simp[venom_call_request_def]
+    static_shadow_call_output) >> simp[Abbr `rq`, venom_call_request_def]
 QED
 
 Theorem static_shadow_exec_delegatecall[local]:
@@ -95,9 +103,16 @@ Theorem static_shadow_exec_delegatecall[local]:
     (exec_delegatecall inst sh gas addr ao az ro rz)
 Proof
   strip_tac >>
+  `(sh.vs_outcomes = [] <=> s.vs_outcomes = [])` by
+    (drule static_shadow_rel_fields >> strip_tac >> simp[static_shadow_def]) >>
+  Cases_on `s.vs_outcomes = []`
+  >- (namedCases_on `inst.inst_outputs` ["", "out rest"] >>
+      simp[exec_delegatecall_def, static_shadow_result_rel_def] >>
+      Cases_on `rest` >> simp[exec_delegatecall_def, static_shadow_result_rel_def]) >>
   qabbrev_tac `rq = venom_call_request s addr 0w ao az F with
-    cr_kind := DelegateMessageCall` >>
-  `venom_call_request sh addr 0w ao az F with cr_kind := DelegateMessageCall =
+    <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>` >>
+  `venom_call_request sh addr 0w ao az F with
+     <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |> =
      rq with cr_static := F` by
     (drule static_shadow_rel_fields >>
      gvs[Abbr `rq`, venom_call_request_def, read_memory_def, static_shadow_rel_def,

@@ -1,5 +1,6 @@
 Theory vyperPopReceiverTest
 Ancestors
+  vyperSmallStepCV
   vyperSmallStep jsonToVyper jsonToVyperExpr jsonAST vyperAST
 Libs
   vyperCheckContractFrontendLib cv_transLib

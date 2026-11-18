@@ -504,17 +504,21 @@ Definition extract_venom_result_def:
 End
 
 (* Execute CALL/STATICCALL using the shared outcome oracle.
-   Operand evaluation, including gas, remains in step_inst_base; only the
-   evaluated gas value is ignored. Concrete helpers remain for other opcodes.
+   Operand evaluation, including gas, remains in step_inst_base; the request
+   records the evaluated gas operand. Concrete helpers remain for other opcodes.
    CALL: operands = [gas; addr; value; argsOff; argsSize; retOff; retSize]
    STATICCALL: operands = [gas; addr; argsOff; argsSize; retOff; retSize]
 *)
 Definition exec_ext_call_def:
   exec_ext_call inst s gas addr_w value argsOff argsSize retOff retSize is_static =
-    let rq = venom_call_request s addr_w value argsOff argsSize is_static;
+    let rq = venom_call_request s addr_w value argsOff argsSize is_static with
+               cr_gas := SOME (w2n gas);
         (output, s') = consume_call_outcome rq (w2n retOff) (w2n retSize) s
     in case inst.inst_outputs of
-         [out] => OK (update_var out output s')
+         [out] =>
+           if s.vs_outcomes = [] then
+             Abort ExHalt_abort (halt_state (set_returndata [] s))
+           else OK (update_var out output s')
        | _ => Error "ext_call requires single output"
 End
 
@@ -526,10 +530,13 @@ End
 Definition exec_delegatecall_def:
   exec_delegatecall inst s gas addr_w argsOff argsSize retOff retSize =
     let rq = venom_call_request s addr_w 0w argsOff argsSize F with
-               cr_kind := DelegateMessageCall;
+               <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>;
         (output, s') = consume_call_outcome rq (w2n retOff) (w2n retSize) s
     in case inst.inst_outputs of
-         [out] => OK (update_var out output s')
+         [out] =>
+           if s.vs_outcomes = [] then
+             Abort ExHalt_abort (halt_state (set_returndata [] s))
+           else OK (update_var out output s')
        | _ => Error "delegatecall requires single output"
 End
 
@@ -540,21 +547,43 @@ Definition exec_create_def:
       [out] =>
         if w2n sz > 2 * max_code_size then
           Abort ExHalt_abort (halt_state (set_returndata [] s))
+        else if s.vs_outcomes = [] then
+          Abort ExHalt_abort (halt_state (set_returndata [] s))
         else let rq = venom_create_request s value offset sz salt_opt;
                  (output, s') = consume_create_outcome rq s
              in OK (update_var out output s')
     | _ => Error "create requires single output"
 End
 
+Theorem exec_ext_call_abort_iff:
+  exec_ext_call inst s gas addr value ao sz ro rs is_static = Abort ab s' <=>
+  (?out. inst.inst_outputs = [out]) /\ s.vs_outcomes = [] /\
+  ab = ExHalt_abort /\ s' = halt_state (set_returndata [] s)
+Proof
+  Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def] >>
+  rename1 `head::tail` >> Cases_on `tail` >>
+  simp[exec_ext_call_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem exec_delegatecall_abort_iff:
+  exec_delegatecall inst s gas addr ao sz ro rs = Abort ab s' <=>
+  (?out. inst.inst_outputs = [out]) /\ s.vs_outcomes = [] /\
+  ab = ExHalt_abort /\ s' = halt_state (set_returndata [] s)
+Proof
+  Cases_on `inst.inst_outputs` >> simp[exec_delegatecall_def] >>
+  rename1 `head::tail` >> Cases_on `tail` >>
+  simp[exec_delegatecall_def, AllCaseEqs()] >> metis_tac[]
+QED
+
 Theorem exec_create_abort_iff:
   exec_create inst s v off sz salt = Abort a s' <=>
   (?out. inst.inst_outputs = [out]) /\
-  w2n sz > 2 * max_code_size /\ a = ExHalt_abort /\
+  (w2n sz > 2 * max_code_size \/ s.vs_outcomes = []) /\ a = ExHalt_abort /\
   s' = halt_state (set_returndata [] s)
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_create_def] >>
   rename1 `h::t` >> Cases_on `t` >> simp[exec_create_def] >>
-  IF_CASES_TAC >- (simp[] >> metis_tac[]) >> simp[]
+  rpt IF_CASES_TAC >> simp[] >> metis_tac[]
 QED
 
 Theorem exec_create_not_Halt:
@@ -562,7 +591,7 @@ Theorem exec_create_not_Halt:
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_create_def] >>
   rename1 `h::t` >> Cases_on `t` >> simp[exec_create_def] >>
-  IF_CASES_TAC >> simp[] >> simp[]
+  rpt IF_CASES_TAC >> simp[]
 QED
 
 Theorem exec_create_not_IntRet:
@@ -570,7 +599,7 @@ Theorem exec_create_not_IntRet:
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_create_def] >>
   rename1 `h::t` >> Cases_on `t` >> simp[exec_create_def] >>
-  IF_CASES_TAC >> simp[] >> simp[]
+  rpt IF_CASES_TAC >> simp[]
 QED
 
 (* Bump-allocate: record region in vs_allocas without touching vs_memory.

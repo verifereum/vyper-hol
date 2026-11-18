@@ -32,7 +32,7 @@ Theorem sha_alloc_abort_ptr_at:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
-  ?t Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+  ?t Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
     inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tf
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -43,9 +43,14 @@ Proof
   `!x. x=p \/ len=Var x \/ x=q ==> not_fresh_at sn x` by metis_tac[] >>
   `eval_operand (Var q) t = SOME v` by metis_tac[] >>
   `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
+  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+      (s.vs_transient s.vs_call_ctx.cc_address)` by
+    fs[ghost_inv_at_def, stor_taint_ok_at_def] >>
   drule_all (Q.INST [`ctx` |-> `ctx with ctx_functions := []`]
     hash_alloc_sha256_abort_from_input) >>
-  disch_then (qspec_then `D` strip_assume_tac) >>
+  strip_tac >>
   drule_all hash_alloc_sha256_code_split >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
