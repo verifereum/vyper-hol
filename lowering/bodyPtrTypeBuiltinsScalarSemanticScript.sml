@@ -61,19 +61,6 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-(* These are typing-valid corner cases, not dynamic-bytestring residuals.
-   scalar_operand_typed_frag excludes them; their SAR/SDIV semantics therefore
-   need a separate execution boundary before complete scalar assembly. *)
-Theorem fixed_zero_signed_typing_probe:
-  valid_conversion (BaseT (BytesT (Fixed 0))) (BaseT (IntT 256)) /\
-  valid_conversion (BaseT (BytesT (Fixed 0))) (BaseT DecimalT) /\
-  well_formed_type tenv (BaseT (BytesT (Fixed 0))) /\
-  well_formed_type tenv (BaseT (IntT 256)) /\
-  well_formed_type tenv (BaseT DecimalT)
-Proof
-  EVAL_TAC
-QED
-
 (* The generic conversion precondition and typing interface suffice here;
    importing convertScalarTyping would currently fail in its immutable
    expr_sim_inv_def reference, so consumers use this stronger word boundary. *)
@@ -111,7 +98,7 @@ QED
      pure/zero-edge boundaries. ScalarArithmetic also covers BoolToDecimal,
      although valid_conversion does not permit that pair.
    - Fixed bytes0 to signed Int/Decimal passes valid_conversion and all type
-     evaluation checks (fixed_zero_signed_typing_probe). The compiler emits
+     evaluation checks. The compiler emits
      SAR with count 256, optionally followed by decimal conversion. No runtime
      payload load is involved. Separate exact-run semantics on its zero input
      is required; the signed dynamic-bytestring residual cannot cover it.

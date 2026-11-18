@@ -93,12 +93,15 @@ Theorem send_read_checked_tail_full[local]:
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es = (res, es') ==>
-  (res = INR (Error (RuntimeError "write in static context")) /\
+  ((res = INR (Error (RuntimeError "write in static context")) \/
+    res = INR (Error (RuntimeError "take_call_outcome"))) /\
    step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s)) /\
    gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
      (Abort ExHalt_abort (halt_state (set_returndata [] s)),G,tn)) \/
@@ -125,7 +128,9 @@ Proof
   `IS_SOME (eval_operand gas s)` by simp[] >>
   `!w st. eval_operand (Var out) (update_var out w st) = SOME w` by
     simp[eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  drule_all send_read_call_step >> strip_tac
+  drule_all send_read_call_step >>
+  disch_then (qx_choose_then `s'` (CONJUNCTS_THEN2 assume_tac
+    (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 assume_tac assume_tac) strip_assume_tac)))
   >- (disj1_tac >> simp[] >> irule exit_inst_origin_ptr >>
       simp[exit_result_def] >>
       simp[step_inst_non_invoke, exit_result_def, mem_safe_step_non_invoke,
@@ -156,12 +161,15 @@ Theorem send_read_checked_tail_full_uniform:
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
   eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es = (res, es') ==>
-  (res = INR (Error (RuntimeError "write in static context")) /\
+  ((res = INR (Error (RuntimeError "write in static context")) \/
+    res = INR (Error (RuntimeError "take_call_outcome"))) /\
    step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s)) /\
    !H. valid_horizon cx st0 H es'.storage_trace ==>
      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,tn) []
@@ -190,7 +198,8 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule_all send_read_checked_tail_full >>
-  disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac)
+  disch_then (qspecl_then [`explicit`, `PG`, `G`]
+    (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 assume_tac strip_assume_tac) strip_assume_tac))
   >- (disj1_tac >> simp[] >> qx_gen_tac `H1` >> strip_tac >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> _`
         (qspec_then `H1` mp_tac) >>

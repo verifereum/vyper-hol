@@ -61,7 +61,7 @@ Theorem asm_frame_delegate_request[local]:
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
   a.as_stack = gas :: addr :: ao :: sz :: ro :: rs :: stk ==>
   (asm_call_request a addr 0w (w2n ao) (w2n sz) F with
-     cr_kind := DelegateMessageCall) = request_of es
+     <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>) = request_of es
 Proof
   strip_tac >>
   `next_opcode (FST (HD es.contexts)) = SOME DelegateCall` by

@@ -66,7 +66,7 @@ Theorem hash_sha256_abort_summary:
   builtin_result cx ee.accounts ann Sha256 tys [v] = INL r /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
-    gas_path_ptr (D H) 0 ctx fn PG G tn s 1 Gf tf (Abort Revert_abort t)) ==>
+    gas_path_ptr (D H) 0 ctx fn PG G tn s 1 Gf tf (Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t)) ==>
   gas_summary_ptr_at D (ctx,fn) PG cx st0 [F]
     (\es'. case builtin_result cx es'.accounts ann Sha256 tys [v] of
        INR exc => (INR exc,es')
@@ -78,7 +78,7 @@ Proof
   pop_assum (fn th => once_rewrite_tac[GSYM th]) >>
   rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INR (Error (RuntimeError "precompile failed"))`,
-    `ef`, `Gf`, `tf`, `Abort Revert_abort t`] >>
+    `ef`, `Gf`, `tf`, `Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t`] >>
   simp[gasSummaryTheory.gas_explicit_replicate_false, fragExecTheory.exit_result_def,
     exprSimDefsTheory.expr_exit_def] >>
   Cases_on `s.vs_outcomes` >> gvs[]
