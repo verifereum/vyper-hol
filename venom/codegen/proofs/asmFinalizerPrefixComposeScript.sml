@@ -1,6 +1,6 @@
 Theory asmFinalizerPrefixCompose
 Ancestors
-  arithmetic asmOptimizer asmSymSem asmOptFinalizerCorrect
+  arithmetic asmOptimizer asmSymSem asmOptFinalizerCorrect asmOptNonemptyCompose
   asmOptPruneUnreachable asmOptMergeIszero asmOptMergeJumpdests
   asmOptPruneJumps asmOptInefficientJumps asmOptPruneUnused asmOptPeephole
 
@@ -57,31 +57,6 @@ Proof
   qpat_x_assum `!op. _ ==> ?m b. _` drule_all >>
   disch_then (qx_choosel_then [`m2`, `b2`] strip_assume_tac) >>
   qexistsl_tac [`m2`, `b2`] >> gvs[]
-QED
-
-Theorem optimize_round_relation[local]:
-  !R. (!p q r. R p q /\ R q r ==> R p r) /\
-  (!p. R p (FST (prune_unreachable_code p))) /\
-  (!p. R p (FST (merge_iszero p))) /\
-  (!p. R p (FST (merge_jumpdests p))) /\
-  (!p. R p (FST (prune_inefficient_jumps p))) /\
-  (!p. R p (FST (optimize_inefficient_jumps p))) /\
-  (!p. R p (FST (prune_unused_jumpdests p))) /\
-  (!p q c. stack_peephole_opts p = SOME (q,c) ==> R p q) ==>
-  !p q c. optimize_round p = SOME (q,c) ==> R p q
-Proof
-  rw[optimize_round_def] >> rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[pairTheory.FST]
-QED
-
-Theorem optimize_rounds_relation[local]:
-  !R. (!p q r. R p q /\ R q r ==> R p r) /\
-  (!p q c. optimize_round p = SOME (q,c) ==> R p q) ==>
-  !n p q. optimize_assembly_rounds n p = SOME q ==> R p q
-Proof
-  gen_tac >> strip_tac >> Induct >> simp[optimize_assembly_rounds_def] >>
-  rpt gen_tac >> CASE_TAC >> PairCases_on `x` >> rw[] >>
-  metis_tac[]
 QED
 
 Theorem accepted_finalizers_prefix_transport_conditional:
