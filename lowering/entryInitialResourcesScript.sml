@@ -4,17 +4,6 @@ Ancestors
   ctorDeployLoweringEntryRoom allocaFrontierBound exprLoweringProps allocaBudgetProps vyperCompiler contextCodegenRel venomWf venomInst
   arithmetic
 
-Theorem alloca_frontier_inv_room:
-  alloca_frontier_inv ctx func inst s /\
-  unit_alloca_budget ctx < dimword (:256) ==>
-  alloca_room ctx func s
-Proof
-  strip_tac >>
-  gvs[alloca_frontier_inv_def, alloca_room_def, call_targets_card,
-      ctorDeployLoweringEntryRoomTheory.deploy_ctor_pending_alloca_eq, unit_alloca_frame_def, ctorDeployLoweringEntryRoomTheory.deploy_ctor_alloca_size_eq] >>
-  decide_tac
-QED
-
 Theorem initial_alloca_room:
   lookup_function func.fn_name ctx.ctx_functions = SOME func /\
   (!g. TC (fn_directly_calls ctx) func.fn_name g ==>
