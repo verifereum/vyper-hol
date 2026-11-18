@@ -120,14 +120,10 @@ Resume inv_wave_static_observation_classification[observation]:
 QED
 
 Resume inv_wave_static_observation_classification[write]:
-  `static_abort_at bb' (LENGTH pseudos + LENGTH consumed)` by
-    (irule inv_missing_write_target_abort >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[APPEND_ASSOC, MEM_FILTER] >>
-     qexistsl [`fn`, `s0.vs_current_bb`] >> fs[] >> metis_tac[]) >>
-  `t.vs_call_ctx.cc_static` by metis_tac[static_shadow_ev_reachable] >>
+  `in_static_abort_prefix fn' t` by
+    (drule_all_then ACCEPT_TAC inv_missing_write_static_abort_prefix) >>
   disj2_tac >> disj2_tac >> conj_tac
-  >- (simp[in_static_abort_prefix_def] >> gvs[]) >>
+  >- first_assum ACCEPT_TAC >>
   qexistsl [`fn`, `x0`, `sX`] >> simp[]
 QED
 

@@ -1,7 +1,7 @@
 Theory ctorDeployMemoryRunPtrPrefixEntryPrepared
 Ancestors
   ctorDeployMemoryRunPtrPrefixEntryRegisterList ctorDeployMemoryRunPtrDefs
-  ctorDeployMemoryFrontier e2eDeployDefs
+  ctorDeployMemoryFrontier allocaFrontierRoom e2eDeployDefs
 
 Theorem prefix_entry_frontier_all_sites:
   alloca_frontier_inv_from k ctx func site s ==>
