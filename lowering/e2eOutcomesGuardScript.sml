@@ -5,7 +5,7 @@ Ancestors
   vyperInterpreter vyperState vyperStorageBackend vfmState vfmContext
   callTraceFrameProvenance callTraceFrame callTrace guardReentryCode guardReentryAccounts
   guardPushProjections immutableSectionRel vfmExecution vfmExecutionProp
-  e2eCorrectness frameOutcome guardTerminalBackend guardSourceAlignment
+  e2eCorrectness e2eComposition frameOutcome guardTerminalBackend guardSourceAlignment
   vyperCallFiniteStorageSupport
   vfmDecreasesGas relation pair arithmetic list
 
@@ -97,6 +97,60 @@ Proof
   conj_tac
   >- (irule valid_horizon_call_storage_ok >> qexists_tac `H` >> simp[]) >>
   drule_all source_call_final_storage_well_formed >> simp[]
+QED
+
+Triviality guard_close_storage_readings:
+  vyper_frame_staging fin policy tops runtime_bc am tx es /\
+  vyper_closed_world fin policy tops runtime_bc am tx H es /\
+  (!rq co.
+    MEM (rq,co) (call_trace es) /\
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := rq.cr_accounts;
+                         tStorage := rq.cr_tStorage|>) (FST H) ==>
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := co.co_accounts;
+                         tStorage := co.co_tStorage|>) (FST H)) /\
+  gas_readings_rel (gas_readings es)
+    (\gs.
+       (call_storage_ok am tx (MAP SND (call_trace es)) gs ==>
+        call_result_rel_at gs tops am tx es r es') /\
+       !res am' rqs obs pre rq co sfx.
+         call_external_trace (SOME (MAP SND (call_trace es))) gs am tx =
+           (res,am',rqs,obs) /\
+         obs = pre ++ StorageOutcome rq co :: sfx /\
+         valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+           (initial_state am []) H pre ==>
+         (co.co_accounts = rq.cr_accounts /\ co.co_tStorage = rq.cr_tStorage) \/
+         ?rq'. MEM (rq',co) (call_trace es) /\ request_agree H tx.target rq rq') ==>
+  gas_readings_rel (gas_readings es)
+    (\gs. call_storage_ok am tx (MAP SND (call_trace es)) gs /\
+      call_result_rel_at gs tops am tx es r es' /\
+      ?res am' rqs obs.
+        call_external_trace (SOME (MAP SND (call_trace es))) gs am tx =
+          (res,am',rqs,obs) /\
+        storage_well_formed_on
+          (initial_evaluation_context am.sources am.layouts tx NONE)
+          (initial_state am' []) (FST H))
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_readings_rel _ _` (fn bridge =>
+    match_mp_tac (MATCH_MP
+      (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_mono) bridge)) >>
+  qx_gen_tac `gs` >> BETA_TAC >> strip_tac >>
+  `?res am' rqs obs.
+    call_external_trace (SOME (MAP SND (call_trace es))) gs am tx =
+      (res,am',rqs,obs)` by metis_tac[ABS_PAIR_THM] >>
+  mp_tac guard_closed_world_storage_at_readings >>
+  impl_tac
+  >- (asm_simp_tac bool_ss [] >> conj_tac
+      >- (map_every qx_gen_tac [`pre`, `rq`, `co`, `sfx`] >> strip_tac >>
+          qpat_assum `!res am' rqs obs pre rq co sfx. _`
+            (qspecl_then [`res`, `am'`, `rqs`, `obs`, `pre`, `rq`, `co`, `sfx`] mp_tac) >>
+          asm_simp_tac bool_ss []) >>
+      first_assum ACCEPT_TAC) >>
+  strip_tac >> simp[] >> metis_tac[]
 QED
 
 Triviality guard_reentry_staging:
