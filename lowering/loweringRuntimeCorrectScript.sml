@@ -864,7 +864,7 @@ Proof
   simp[Excl "lock_if_nr_def"]
 QED
 
-Theorem runtime_lock_abort_result:
+Theorem runtime_lock_abort_result_with:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
   source_typing_ok tops am tx /\
@@ -892,7 +892,8 @@ Theorem runtime_lock_abort_result:
      (D,0,explicit,unit.cu_context,func,[])
      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
                 vs_inst_idx := 0|>,FEMPTY,entry_taint) [] (Abort a t,G,tn)) ==>
-  source_unit_execution_correct_at [] tops ret am tx unit vs /\
+  ?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+  source_unit_execution_correct_with shadow_unit.cu_context [] tops ret am tx unit vs /\
   (!gs. FST (call_external (SOME vs.vs_outcomes) gs am tx) <>
     INR (Error (RuntimeError "msg.gas: no gas reading")))
 Proof
@@ -903,17 +904,19 @@ Proof
        `initial_evaluation_context am.sources am.layouts tx NONE`,
        `os` |-> `vs.vs_outcomes`] (SPEC_ALL external_lock_failure_trace)) >>
      impl_tac >- asm_rewrite_tac[] >> disch_then ACCEPT_TAC) >>
-  reverse conj_tac
-  >- (gen_tac >>
-      qpat_x_assum `!gs. call_external_trace _ gs _ _ = _`
-        (qspec_then `gs` (mp_tac o MATCH_MP call_external_trace_result)) >>
-      Cases_on `exc = Error (RuntimeError "nonreentrant lock")` >> gvs[]) >>
   `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
                 gas_shadow_unit unit shadow_unit` by
     (Cases_on `classify_functions tops` >> PairCases_on `r` >>
      irule runtime_gas_shadow_unit_exists >> simp[] >>
      drule loweringShapePropsTheory.supported_program_no_external_defaults >> simp[]) >>
   pop_assum strip_assume_tac >>
+  qexists_tac `shadow_unit` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac
+  >- (gen_tac >>
+      qpat_x_assum `!gs. call_external_trace _ gs _ _ = _`
+        (qspec_then `gs` (mp_tac o MATCH_MP call_external_trace_result)) >>
+      Cases_on `exc = Error (RuntimeError "nonreentrant lock")` >> gvs[]) >>
   `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
     fs[gas_shadow_unit_def] >>
   `OPTREL gas_shadow_function (SOME func)
@@ -931,8 +934,8 @@ Proof
     metis_tac[venomInstTheory.lookup_function_MEM] >>
   qabbrev_tac `entry = vs with <|vs_prev_bb := NONE;
     vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
-  PURE_REWRITE_TAC [source_unit_execution_correct_at_def] >>
-  qexistsl_tac [`shadow_unit.cu_context`,`func`,`shadow_fn`] >>
+  PURE_REWRITE_TAC [source_unit_execution_correct_with_def] >>
+  qexistsl_tac [`func`,`shadow_fn`] >>
   qpat_assum `Abbrev (entry = _)`
     (fn th => ASM_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
   disj2_tac >> qexistsl_tac
@@ -984,6 +987,44 @@ Proof
   qpat_assum `lookup_block entry.vs_current_bb func.fn_blocks = SOME bb`
     (fn th => qpat_assum `ptr_safe_run _ _ _ _ _ _ _ _ _`
       (ACCEPT_TAC o SIMP_RULE (srw_ss()) [ptrSafeRunTheory.ptr_safe_run_def,th]))
+QED
+
+Theorem runtime_lock_abort_result:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,T,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+       <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) /\
+  lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+    T (is_view_mut mut) es0 = (INR exc,es_abort) /\
+  unit.cu_context.ctx_entry = SOME "__entry" /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions =
+    SOME func /\
+  fn_entry_label func = SOME "__entry" /\
+  lookup_block "__entry" func.fn_blocks = SOME bb /\
+  phi_prefix_length bb.bb_instructions = 0 /\
+  expr_exit (INR exc : unit + exception) (Abort a t) /\
+  (exc = Error (RuntimeError "nonreentrant lock") \/
+   exc = Error (RuntimeError "write in static context")) /\
+  (!D explicit. gas_origin_ptr_path
+     (D,0,explicit,unit.cu_context,func,[])
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                vs_inst_idx := 0|>,FEMPTY,entry_taint) [] (Abort a t,G,tn)) ==>
+  source_unit_execution_correct_at [] tops ret am tx unit vs /\
+  (!gs. FST (call_external (SOME vs.vs_outcomes) gs am tx) <>
+    INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
+  drule_all runtime_lock_abort_result_with >> strip_tac >>
+  simp[source_unit_execution_correct_at_with] >>
+  qexists_tac `shadow_unit.cu_context` >> simp[]
 QED
 
 Theorem external_entry_lock_revert_readings[local]:
@@ -1182,6 +1223,396 @@ val selected_call_readings_tac =
   namedCases_on `res` ["u", "e"]
   >- (Cases_on `u` >> gvs[]) >>
   Cases_on `e` >> gvs[AllCaseEqs()];
+(* Prepare the body at the state immediately after its entry lock. *)
+val runtime_locked_body_outcome_tac =
+  `LENGTH tx.args = LENGTH args` by
+    (drule bind_arguments_length >> simp[]) >>
+  drule_all externalEntryJointTheory.selected_nonreentrant_lock_metadata >>
+  strip_tac >>
+  `global_nonreentrant_slot < dimword (:256)` by
+    simp[contextTheory.global_nonreentrant_slot_def,wordsTheory.dimword_def] >>
+  drule_all external_source_body_frame_nr >> strip_tac >>
+  mp_tac (Q.SPECL [`tops`,`rpolicy`,`unit`,`lbl`,`cenv0`,`pos_args`,
+    `min_cds`,`is_payable`,`T`,`global_nonreentrant_slot`,`T`,`mut = View`,
+    `fbody`,`rt`,`st`,`cenv`,`sa`,`sl`,`st'`,`bindings`,
+    `unit.cu_context`,
+    `initial_evaluation_context am.sources am.layouts tx NONE`,
+    `env_t`,`env'`,`ret`] runtime_entry_body_shadow_with_shadow_nr) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`func2`,`shadow_ctx`,`shadow_func`,`cenv'`,
+    `sb`,`shadow_sl`,`shadow_sb`,`shadow_unit`] strip_assume_tac) >>
+  `func2 = func` by gvs[] >>
+  drule_all guarded_body_stmts_env >>
+  disch_then (qx_choose_then `compiled_env` assume_tac) >>
+  `se = sb` by gvs[] >>
+  `compiled_env = cenv'` by gvs[] >>
+  qpat_x_assum `func2 = func` SUBST_ALL_TAC >>
+  qpat_x_assum `se = sb` SUBST_ALL_TAC >>
+  qpat_x_assum `compiled_env = cenv'` SUBST_ALL_TAC >>
+  qpat_x_assum `shadow_ctx = shadow_unit.cu_context` SUBST_ALL_TAC;
+
+val runtime_locked_return_frame_tac =
+  mp_tac (Q.SPECL
+    [`\H. cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE)`,
+     `0`, `NONE`, `shadow_unit.cu_context`, `[]`, `func`, `shadow_func`,
+     `tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `mut`, `T`, `args`, `fbody`,
+     `env`, `source_lbl`, `cenv0`, `pos_args`, `min_cds`, `is_payable`,
+     `global_nonreentrant_slot`, `T`, `mut = View`, `rt`, `st`, `cenv`, `sa`]
+    external_source_frame_ret_ok_full_nr) >>
+  impl_tac >- simp[] >> disch_then assume_tac >>
+  `cx_tops (initial_evaluation_context am.sources am.layouts tx NONE) = tops` by
+    (irule cx_tops_module >>
+     gvs[source_deployment_rel_def, vyperContextTheory.get_module_code_def,
+         initial_evaluation_context_def]) >>
+  `~cenv.ce_is_ctor` by
+    gvs[bodySimTheory.body_inv_def, initial_evaluation_context_def] >>
+  `~ctx_has_dalloca unit.cu_context` by
+    metis_tac[entry_runtime_no_dalloca] >>
+  `ctx_inst_ids_distinct unit.cu_context` by
+    (drule_all caller_runtime_entry_integrity >> simp[]) >>
+  `struct_args_unique tops` by
+    (fs[source_typing_ok_def] >> metis_tac[checked_contract_struct_args_unique]);
+
+Theorem runtime_locked_well_formed_on[local]:
+  send_call_value mut cx
+    (initial_state am [env] with <|outcomes := orc; requests := []|>) =
+    (INL (),es0) /\
+  lock_if_nr cx T iv es0 = (INL (),es_lock) ==>
+  !H. valid_horizon cx (initial_state am []) H es_lock.storage_trace ==>
+    storage_well_formed_on cx es_lock (FST H)
+Proof
+  strip_tac >> gen_tac >> simp_tac std_ss [valid_horizon_def] >> strip_tac >>
+  `storage_well_formed_on cx es0 (FST H)` by
+    (qpat_assum `send_call_value _ _ _ = _` (fn th =>
+       mp_tac (Q.INST [`R` |-> `FST (H : (bool # bytes32 # type_value) list # num list)`]
+         (MATCH_MP (INST_TYPE [alpha |-> ``:256``] body_start_storage_well_formed) th))) >>
+     simp[]) >>
+  match_mp_tac (Q.INST [`st` |-> `es0`,
+                       `H` |-> `(H : (bool # bytes32 # type_value) list # num list)`,
+                       `nr` |-> `T`,
+                       `view` |-> `iv`, `res` |-> `INL ()`]
+    vyperExternalEntryStorageFrameTheory.lock_if_nr_preserves_storage_well_formed_on) >>
+  asm_rewrite_tac[]
+QED
+
+(* Obligation shared by the successful and reverting terminal paths. *)
+val runtime_locked_eval_tac =
+  `eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+     fbody (es_lock with gas_obs := gx) = (res, ee with gas_obs := [])` by
+    (qpat_x_assum `!tail. eval_stmts _ _ _ = _`
+       (qspec_then `[]` mp_tac) >> simp[]) >>
+  `stmt_res_ok NoLoop res /\ (res = INL () ==> ret = NoneT)` by
+    (drule_all external_body_source_ok_nr >> simp[]);
+
+val runtime_locked_unlock_tac =
+  mp_tac (Q.INST [`nr` |-> `T`, `iv` |-> `is_view_mut mut`,
+    `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
+    `es` |-> `ee with gas_obs := []`, `key` |-> `global_nonreentrant_slot`]
+      (SPEC_ALL unlock_if_nr_success_trace)) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choose_then `eu` strip_assume_tac) >>
+  drule_all selected_call_trace_result_nr >> strip_tac;
+
+fun runtime_selected_readings_finish_tac (marks_tac, unpack_tac) =
+  disch_then (qx_choose_then `marks` assume_tac) >>
+  marks_tac >>
+  qpat_x_assum `_ \/ _` mp_tac >>
+  simp[call_external_trace_observations] >>
+  disch_then (DISJ_CASES_THEN2 strip_assume_tac
+    (qx_choosel_then [`cr`, `am'`, `rqs`, `obs`]
+      (MAP_EVERY ASSUME_TAC o CONJUNCTS)))
+  >- (`!tail. ~call_storage_ok am tx vs.vs_outcomes
+           (gas_explicit marks vs.vs_gas_readings ++ tail)` by
+        (gen_tac >> strip_tac >>
+         drule source_storage_guards_domain >> simp[]) >>
+      conj_tac
+      >- (unpack_tac >>
+          pure_rewrite_tac[source_unit_execution_correct_with_def] >>
+          qexistsl_tac [`func`, `shadow_func`] >> simp[] >> metis_tac[]) >>
+      simp[]) >>
+  conj_tac
+  >- (unpack_tac >>
+      pure_rewrite_tac[source_unit_execution_correct_with_def] >>
+      qexistsl_tac [`func`, `shadow_func`] >> simp[] >>
+      disj2_tac >> qexistsl_tac [`cr`, `am'`, `rqs`, `obs`] >> simp[]) >>
+  disch_tac >> qx_gen_tac `unread` >>
+  qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
+    (qspec_then `unread` (strip_assume_tac o MATCH_MP call_external_trace_result)) >>
+  simp[];
+
+Theorem runtime_selected_lock_readings:
+  !tops rpolicy unit am tx ret vs mut args fbody env es0 es_lock source_lbl lbl cenv0 pos_args min_cds is_payable
+   rt st cenv sa sl se st' func s0 G0 tn0.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, T, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) /\
+    lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+      T (is_view_mut mut) es0 = (INL (),es_lock) /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+        (mut,T,lookup_raw_return_or_F (NONE:num option)
+           tx.function_name External tops,tx.function_name,args,[],ret,fbody)) =
+      (source_lbl,cenv0,pos_args,min_cds,is_payable,T,global_nonreentrant_slot,
+        T,mut = View,fbody,rt) /\
+    runtime_entry_body_start tops rpolicy
+      (lbl,cenv0,pos_args,min_cds,is_payable,T,global_nonreentrant_slot,
+        T,mut = View,fbody,rt) st /\
+    rt = (if ret = NoneT then NONE else SOME ret) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+    compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) sa =
+      ((),sl) /\
+    compile_guarded_body cenv T global_nonreentrant_slot T (mut = View)
+      fbody rt sa = ((),st') /\
+    compile_stmts cenv NoLoop (case rt of SOME ty => ty | NONE => BaseT BoolT)
+      fbody sl = ((),se) /\
+    fn_has_code sl se func /\ fn_has_code se st' func /\
+    fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sl /\ ~block_is_terminated sl /\
+    unit.cu_context.ctx_entry = SOME "__entry" /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    fn_entry_label func = SOME "__entry" /\
+    alloca_history func s0 /\ fresh_vars_wrt sl s0 /\
+    return_buf_frame NONE cenv sl s0 /\
+    ~s0.vs_halted /\ s0.vs_current_bb = sl.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sl.cs_current_insts /\
+    s0.vs_gas_readings = vs.vs_gas_readings /\
+    s0.vs_code = vs.vs_code /\ s0.vs_labels = vs.vs_labels /\
+    (mut <> View ==> ~tx.is_static) /\
+    (!st0 H. valid_horizon
+      (initial_evaluation_context am.sources am.layouts tx NONE) st0 H
+      es_lock.storage_trace ==>
+      ((!fuel. ptr_safe_run
+          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
+          0 fuel unit.cu_context func [] G0 tn0 s0) ==>
+        !fuel. ptr_safe_blocks
+          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
+          0 fuel unit.cu_context func [] FEMPTY entry_taint
+          (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                     vs_inst_idx := 0 |>)) /\
+      ghost_inv_at
+        (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
+        0 NONE cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE)
+        es_lock G0 tn0 s0 /\
+      stmt_state_rel H unit.cu_context func cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE) es_lock s0 /\
+      !explicit.
+        gas_origin_ptr_path
+          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
+           0,explicit,unit.cu_context,func,[])
+          (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                     vs_inst_idx := 0 |>,FEMPTY,entry_taint) [] (OK s0,G0,tn0))
+    ==>
+    ?shadow_unit marks.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      source_unit_execution_correct_with shadow_unit.cu_context marks
+        tops ret am tx unit vs /\
+      ((?tail.
+          call_storage_ok am tx vs.vs_outcomes
+            (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+       !tail.
+         FST (call_external (SOME vs.vs_outcomes)
+           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+         INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  rpt strip_tac >>
+  runtime_locked_body_outcome_tac >>
+  runtime_locked_return_frame_tac >>
+  qpat_assum `send_call_value _ _ _ = (INL (),es0)` (fn send =>
+    qpat_assum `lock_if_nr _ T _ es0 = (INL (),es_lock)` (fn lock =>
+      assume_tac (MATCH_MP runtime_locked_well_formed_on (CONJ send lock)))) >>
+  drule_at (Pat `frame_ret_ok_full _ _ _ _ _`) body_stmts_sim_full >>
+  disch_then (qspecl_then [`tops`, `bindings`, `env_t`, `env'`, `NoLoop`,
+                           `fbody`, `es_lock`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> metis_tac[lookup_function_abi_decode_target_occurs]) >>
+  disch_then (mp_tac o REWRITE_RULE [stmt_frag_full_def]) >>
+  disch_then (qspecl_then [`initial_state am []`, `sl`, `sb`, `shadow_sl`,
+                           `shadow_sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
+  impl_tac
+  >- (`cenv.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
+      simp[dead_lo_ok_def, ret_pc_ok_def, gas_admissible_def] >>
+      rpt strip_tac
+      >~ [`stmt_res_ok`] >- metis_tac[external_body_source_ok_nr]
+      >~ [`dalloca_no_wrap`]
+      >- metis_tac[bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap]
+      >> qpat_x_assum `!st0 H. valid_horizon _ _ _ es_lock.storage_trace ==> _`
+           drule >> simp[]) >>
+  qpat_assum `cx_tops _ = tops` (fn th => REWRITE_TAC [th]) >>
+  strip_tac >>
+  runtime_body_compose_tac
+    (Q.ISPEC `\(cr : value + exception).
+       cr <> INR (Error (RuntimeError "msg.gas: no gas reading"))`
+       unit_execution_compose_result_horizon) >>
+  impl_tac
+  >- (rpt conj_tac
+      >- simp[evaluate_storage_trace_frame]
+      >- (`es0.storage_trace = []` by
+            (drule send_call_value_accounts >> simp[initial_state_def]) >>
+          `es_lock.storage_trace = [StorageLock global_nonreentrant_slot]` by
+            (drule_all lock_if_nr_success_trace >> simp[]) >>
+          simp[storage_trace_domain_def, valid_horizon_def,
+               storage_trace_horizon_def, storage_trace_regions_def,
+               storage_trace_locks_def, regions_consistent_def,
+               storage_locks_separated_def, storage_well_formed_on_def,
+               storage_observations_ok_def, storage_roots_fit_def,
+               storage_trace_backends_well_formed_def, arithmeticTheory.ADD1])
+      >- (rpt strip_tac >> BETA_TAC >>
+          qpat_x_assum `!st0 H. valid_horizon _ _ _ es_lock.storage_trace ==> _`
+            drule >> strip_tac >> fs[])
+      >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+          mp_tac (Q.INST [`nr` |-> `T`, `iv` |-> `is_view_mut mut`,
+            `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
+            `es` |-> `ee`, `key` |-> `global_nonreentrant_slot`]
+              (SPEC_ALL unlock_if_nr_success_trace)) >>
+          impl_tac >- simp[] >> strip_tac >>
+          drule_all selected_call_trace_result_nr >> strip_tac >>
+          qpat_assum `call_external_trace _ gobs _ _ = (_,_,_,obs)`
+            (fn trace => simp_tac (srw_ss()) [trace]) >>
+          Cases_on `res = INL () \/ (?v. res = INR (ReturnException v))`
+          >- (qpat_assum `_ ==> obs = se.storage_trace` (fn trace =>
+                first_assum (SUBST1_TAC o MATCH_MP trace)) >>
+              drule_all selected_unlock_trace_horizons >>
+              disch_then (qspec_then `initial_state am []` ACCEPT_TAC)) >>
+          qpat_assum `_ ==> obs = ee.storage_trace` (fn trace =>
+            first_assum (SUBST1_TAC o MATCH_MP trace)) >> simp[])
+      >- (rpt gen_tac >> BETA_TAC >> rpt strip_tac >>
+          runtime_locked_eval_tac >>
+          qspecl_then [`tops`, `am`, `tx`, `ret`, `mut`, `T`, `args`, `fbody`,
+                       `env`, `vs.vs_outcomes`, `gx ++ tail`, `gx`, `es0`,
+                       `es_lock`, `res`, `ee`, `tail`, `[]`] mp_tac
+            selected_call_trace_gas_cong_nr >> simp[])
+      >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+          `eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+             fbody (es_lock with gas_obs := gx) =
+           (INR (Error err), ee with gas_obs := [])` by
+            (qpat_x_assum `!tail. eval_stmts _ _ _ = _`
+               (qspec_then `[]` mp_tac) >> simp[]) >>
+          runtime_locked_unlock_tac >> gvs[source_exempt_def])
+      >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+          `res = INL () /\ ~block_is_terminated sb /\ ~t.vs_halted /\
+           t.vs_current_bb = sb.cs_current_bb /\
+           t.vs_inst_idx = LENGTH sb.cs_current_insts` by
+            gvs[stmt_lands_def] >>
+          runtime_locked_eval_tac >>
+          `ret = NoneT` by simp[] >>
+          qpat_x_assum `cx_tops _ = tops` kall_tac >>
+          rpt BasicProvers.VAR_EQ_TAC >>
+          mp_tac (Q.INST [`nr` |-> `T`, `nkey` |-> `global_nonreentrant_slot`,
+                          `iv` |-> `mut = View`, `stmts` |-> `fbody`, `st` |-> `sa`,
+                          `sl` |-> `sl`, `se` |-> `sb`, `sb` |-> `st'`, `cenv` |-> `cenv`]
+            nonreentrantExitTheory.compile_guarded_body_stop_unlock_parts) >>
+          impl_tac >- fs[] >>
+          disch_then (qx_choose_then `su` strip_assume_tac) >>
+          `fn_has_code sb su func /\ fn_has_code su st' func` by
+            metis_tac[fn_has_code_split] >>
+          `allocas_from 0 t` by simp[ptrDisciplineTheory.allocas_from_def] >>
+          qexists_tac `Halt (halt_state ((if mut <> View then
+            tstore (n2w global_nonreentrant_slot) 0w t else t)
+            with <|vs_inst_idx := LENGTH su.cs_current_insts;
+                   vs_returndata := []|>))` >>
+          simp[exit_result_def] >>
+          qx_genl_tac [`H1`, `G1`, `tn1`] >> strip_tac >>
+          `mut <> View ==> ~t.vs_call_ctx.cc_static` by
+            fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+               loweringStateRelDefsTheory.call_ctx_rel_def,
+               initial_evaluation_context_def] >>
+          (* The halt state of this fixed instruction suffix precedes H and ghosts. *)
+          mp_tac (Q.INST [`nr` |-> `T`, `iv` |-> `mut = View`,
+               `nkey` |-> `global_nonreentrant_slot`, `st` |-> `sb`,
+               `sb` |-> `st'`, `s` |-> `t`, `ctx` |-> `unit.cu_context`,
+               `tn` |-> `tn1`, `lo` |-> `0`, `G` |-> `G1`,
+               `PG` |-> `[]`, `DF` |-> `\H. cx_dead H
+                  (initial_evaluation_context am.sources am.layouts tx NONE)`,
+               `cenv` |-> `cenv'`, `cx` |->
+                  `initial_evaluation_context am.sources am.layouts tx NONE`]
+               (INST_TYPE [alpha |-> ``:256``]
+               nonreentrantExitTheory.optional_transient_unlock_stop_joint_at)) >>
+          impl_tac >- simp[] >>
+          disch_then (qx_choosel_then [`ss`,`tn'`] strip_assume_tac) >>
+          qpat_assum `ss = _` (fn eq =>
+            PURE_REWRITE_TAC [GSYM (SIMP_RULE bool_ss [] eq)]) >>
+          qexistsl_tac [`G1`,`tn'`] >>
+          conj_tac
+          >- (`~cenv'.ce_is_ctor` by
+                (qpat_assum `cenv_top_ext cenv cenv' _`
+                   (mp_tac o MATCH_MP stmtFragPtrTheory.cenv_top_ext_is_ctor) >> simp[]) >>
+              qpat_assum `ghost_inv_at _ 0 NONE cenv' _ _ G1 tn1 t`
+                (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+              qpat_assum `!H explicit. dead_lo_ok _ _ _ _ _ /\ _ ==> _`
+                (irule o BETA_RULE) >>
+              simp[dead_lo_ok_def]) >>
+          rpt strip_tac >>
+          runtime_locked_unlock_tac >>
+          `unlock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+             T (is_view_mut mut) =
+           if mut <> View then release_nonreentrant_lock tx.target global_nonreentrant_slot
+           else vyperState$return ()` by
+            (Cases_on `mut = View` >> gvs[unlock_if_nr_def,initial_evaluation_context_def]) >>
+          drule_all source_typing_none_return_plain >> strip_tac >>
+          fs[stmt_state_rel_def] >>
+          qspecl_then [`H1`,`func`,`cenv'`,
+            `initial_evaluation_context am.sources am.layouts tx NONE`,
+            `ee with gas_obs := []`,`eu`,`t`,`ss`,`T`,`global_nonreentrant_slot`,
+            `mut = View`,`tops`,`tx`,`am.sources`,`am.exports`,`am.layouts`] mp_tac
+              external_halt_success_unlock >>
+          impl_tac
+          >- (conj_tac >- simp[loweringStateRelDefsTheory.state_rel_gas_obs] >>
+              simp[initial_evaluation_context_def]) >>
+          strip_tac >>
+          gvs[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def,
+              abstract_machine_from_state_def, finalize_pending_deletions_def])
+      >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+          runtime_locked_eval_tac >>
+          runtime_locked_unlock_tac >>
+          qpat_x_assum `!tail. stmt_exit_ptr _ _ _ _ _`
+            (qspec_then `[]` mp_tac) >>
+          simp[stmt_exit_ptr_def] >> strip_tac
+          >- (runtime_compose_abort_halt_cases_tac >>
+              gvs[expr_exit_def, external_call_result_rel_def] >>
+              runtime_compose_halt_tac) >>
+          `(abstract_machine_from_state am.sources am.exports am.layouts
+               (eu with scopes := [])) =
+             abstract_machine_from_state am.sources am.exports am.layouts eu` by
+            simp[abstract_machine_from_state_def] >>
+          qpat_assum `unlock_if_nr _ T _ (ee with gas_obs := []) = (INL (),eu)`
+            (mp_tac o MATCH_MP (Q.INST [`sc` |-> `[]`] unlock_if_nr_with_scopes)) >>
+          simp[] >> strip_tac >> gvs[])
+      >> ((* The selected source call forwards a missing-reading error only from
+             the body, which has consumed exactly the marked readings. *)
+          qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
+          rpt gen_tac >> BETA_TAC >> strip_tac >>
+          `res <> INR (Error (RuntimeError "msg.gas: no gas reading"))` by
+            (disch_tac >>
+             qpat_x_assum `!tail. eval_stmts _ _ _ = _`
+               (qspec_then `[0w:bytes32]` mp_tac) >>
+             asm_rewrite_tac[] >>
+             disch_then (mp_tac o MATCH_MP eval_stmts_missing_gas_reading_empty) >>
+             simp[]) >>
+          `eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+             fbody (es_lock with gas_obs := gx) = (res, ee with gas_obs := [])` by
+            (qpat_x_assum `!tail. eval_stmts _ _ _ = _`
+               (qspec_then `[]` mp_tac) >> simp[]) >>
+          runtime_locked_unlock_tac >>
+          namedCases_on `res` ["u", "e"]
+          >- (Cases_on `u` >> gvs[]) >>
+          Cases_on `e` >> gvs[AllCaseEqs()])) >>
+  runtime_selected_readings_finish_tac
+    ((qexistsl_tac [`shadow_unit`,`marks`] >>
+      conj_tac >- first_assum ACCEPT_TAC), ALL_TAC)
+QED
+
 Theorem lower_vyper_runtime_unit_correct_readings_available:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -1218,33 +1649,10 @@ Proof
                   runtime_compose_halt_tac)
               >> gvs[abstract_machine_from_state_def])
           >> selected_call_readings_tac) >>
-      disch_then (qx_choose_then `marks` assume_tac) >>
-      qexists_tac `marks` >>
-      qpat_x_assum `_ \/ _` mp_tac >>
-      simp[call_external_trace_observations] >>
-      disch_then (DISJ_CASES_THEN2 strip_assume_tac
-        (qx_choosel_then [`cr`, `am'`, `rqs`, `obs`]
-          (MAP_EVERY ASSUME_TAC o CONJUNCTS)))
-      >- (`!tail. ~call_storage_ok am tx vs.vs_outcomes
-               (gas_explicit marks vs.vs_gas_readings ++ tail)` by
-            (gen_tac >> strip_tac >>
-             drule source_storage_guards_domain >> simp[]) >>
-          conj_tac
-          >- (pure_rewrite_tac[source_unit_execution_correct_at_with] >>
-              qexists_tac `shadow_unit.cu_context` >>
-              pure_rewrite_tac[source_unit_execution_correct_with_def] >>
-              qexistsl_tac [`func`, `shadow_func`] >> simp[] >> metis_tac[]) >>
-          simp[]) >>
-      conj_tac
-      >- (pure_rewrite_tac[source_unit_execution_correct_at_with] >>
-          qexists_tac `shadow_unit.cu_context` >>
-          pure_rewrite_tac[source_unit_execution_correct_with_def] >>
-          qexistsl_tac [`func`, `shadow_func`] >> simp[] >>
-          disj2_tac >> qexistsl_tac [`cr`, `am'`, `rqs`, `obs`] >> simp[]) >>
-      disch_tac >> qx_gen_tac `unread` >>
-      qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
-        (qspec_then `unread` (strip_assume_tac o MATCH_MP call_external_trace_result)) >>
-      simp[]) >>
+      runtime_selected_readings_finish_tac
+        (qexists_tac `marks`,
+         PURE_REWRITE_TAC [source_unit_execution_correct_at_with] >>
+         qexists_tac `shadow_unit.cu_context`)) >>
   drule_all external_entry_value_revert >>
   rewrite_tac[source_unit_execution_correct_def] >>
   disch_then (qx_choose_then `marks` assume_tac) >>
