@@ -7,6 +7,7 @@ Ancestors
   vyperConstEvalWitness
   vyperAccountCodehashTest
   vyperBytesAddressConvertTest
+  vyperBytesBitwiseTest
   vyperBytesDecimalConvertTest
   vyperCallOutcomeTest
   vyperCalldataLenTest
