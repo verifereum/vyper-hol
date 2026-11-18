@@ -206,6 +206,6 @@ Proof
   strip_tac >>
   qspecl_then [`tops`, `am`, `tx`, `prog`, `cplan`, `es`]
     (fn th => first_assum (SUBST1_TAC o MATCH_MP th)) opt_entry_state_identity >>
-  gvs[call_state_rel_def, entry_venom_state_frame_fields,
-      vyperContextTheory.call_txn_component_equality]
+  gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+      entry_venom_state_frame_fields, vyperContextTheory.call_txn_component_equality]
 QED
