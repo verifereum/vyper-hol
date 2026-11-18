@@ -208,6 +208,14 @@ Proof
             fnBlockStepHelpersTheory.revert_forward_pair_past_phis]
 QED
 
+Theorem sym_phi_error_run_blocks:
+  lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis vs bb.bb_instructions = Error e ==>
+  run_blocks (SUC fuel) ctx fn vs = Error e
+Proof
+  simp[run_blocks_unfold, run_block_def, SF CONJ_ss]
+QED
+
 Theorem sym_phi_error_body_result_own:
   !allow_own own fuel ctx fn vs bb e lo o2pc prog env cp mem0 pc_ret rest srest labs0 as ss.
     lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -215,8 +223,27 @@ Theorem sym_phi_error_body_result_own:
     sym_body_result_own allow_own lo o2pc prog env own cp ctx fn mem0 pc_ret rest srest labs0
       as ss (run_blocks (SUC fuel) ctx fn vs)
 Proof
-  rpt strip_tac >>
-  simp[run_blocks_unfold, run_block_def, sym_body_result_own_def]
+  rpt gen_tac >> strip_tac >> drule_all sym_phi_error_run_blocks >>
+  simp[sym_body_result_error_own]
+QED
+
+(* Package the same returned state for either symbolic postcondition. *)
+Theorem sym_entry_return_result_kernel:
+  !P cp ctx fn vs as ra rest fuel rv vs' lo o2pc prog pc_ret.
+    fn_entry_state_rel cp fn vs as ra rest /\
+    run_blocks fuel ctx fn vs = IntRet rv vs' /\
+    (?n as' ss'. asm_steps lo o2pc prog n as = AsmOK as' /\
+      as'.as_pc = pc_ret /\ as'.as_stack = REVERSE rv.iret_values ++ rest /\
+      context_memory_rel cp vs'.vs_memory as'.as_memory /\
+      (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+        read_byte b as'.as_memory = read_byte b as.as_memory) /\
+      shared_state_rel vs' as' /\ P n as' ss') ==>
+    ?n as' ss'. asm_steps lo o2pc prog n as = AsmOK as' /\
+      as'.as_pc = pc_ret /\ as'.as_stack = REVERSE rv.iret_values ++ rest /\
+      fn_return_state_rel ctx cp fn vs' as as' /\ P n as' ss'
+Proof
+  rpt gen_tac >> strip_tac >> drule_all entry_step_return >>
+  metis_tac[]
 QED
 
 Theorem sym_entry_return_result_own:
@@ -235,8 +262,9 @@ Theorem sym_entry_return_result_own:
         FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
       (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b)
 Proof
-  rpt gen_tac >> simp[sym_body_result_own_def] >> strip_tac >>
-  metis_tac[entry_step_return]
+  rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac sym_entry_return_result_kernel >>
+  gvs[sym_body_result_own_def] >> metis_tac[]
 QED
 
 Theorem sym_block_prefix_prepare_kernel:

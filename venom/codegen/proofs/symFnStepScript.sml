@@ -18,10 +18,6 @@ Ancestors
   fnBlockStep fnBlockStepHelpers fnBlockBody fnSimSpec asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel venomExecSemantics
   venomState planExec stackOpSim blockSimHelpers fnPlanLineageEntryProduction
-Libs
-  prefixContractLib
-
-val _ = Theory.add_ML_dependency "prefixContractLib";
 
 (* These names are representation variables in the boundary contracts. *)
 val _ = Parse.hide "base";
@@ -50,13 +46,12 @@ Theorem sym_label_block_steps:
 Proof
   rpt gen_tac >> strip_tac >> drule label_block_steps >> strip_tac >> simp[] >>
   gvs[sym_frame_inv_def, asm_sym_rel_def] >>
-  gvs[execute_plan_def, exec_stack_op_def, asm_block_at_cons] >>
   conj_tac
-  >- (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [numLib.num_CONV ``1:num``])) >>
-      simp[asmSpliceTheory.sym_steps_def, sym_step_def, sym_lift_def,
-           asmSemTheory.asm_step_def, asmSemTheory.asm_next_def,
-           sym_state_component_equality]) >>
-  simp[sym_kinds_ok_def] >> gvs[sym_kinds_ok_def] >> metis_tac[]
+  >- (`asm_block_at prog ss.sym_base.as_pc [AsmLabel lbl]` by
+        gvs[execute_plan_def, exec_stack_op_def, asm_block_at_cons] >>
+      drule symShuffleSimTheory.sym_steps_label >>
+      simp[asmSemTheory.asm_next_def]) >>
+  gvs[sym_kinds_ok_def] >> metis_tac[]
 QED
 
 Theorem sym_block_prefix_step_exact:
@@ -131,78 +126,15 @@ Theorem sym_block_prefix_step_exact:
       n = LENGTH (execute_plan cp.cp_initial_fmp (clean_ops ++ phi_ops))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule take_drop_phi_prefix >> strip_tac >>
-  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1`
-  >- suspend "single"
-  >> suspend "join"
-QED
-
-Resume sym_block_prefix_step_exact[single]:
-  qpat_assum `LENGTH (TAKE _ _) = _` (fn len =>
-  prefix_contract_tac REWRITE_RULE irule
-    [`ps` |-> `ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`,
-     `base:num` |-> `spill_base:num`,
-     `phis:instruction list` |-> `TAKE (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`,
-     `body:instruction list` |-> `DROP (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`]
-    [len, listTheory.TAKE_DROP, stackPlanTypesTheory.plan_state_accfupds,
-     combinTheory.K_THM, fnPlanPrefixTheory.wf_marked_cleanup_fields,
-     fn_frame_inv_cleanup_fields, sym_frame_inv_cleanup_fields]
-    sym_single_pred_prefix_frame_sim_exact) >> simp[] >>
-  suspend "single_inputs"
-QED
-
-Resume sym_block_prefix_step_exact[single_inputs]:
-  conj_tac >- suspend "single_spill_bounds" >>
-  conj_tac >- suspend "single_operand_stability" >>
-  suspend "single_lineage_witnesses"
-QED
-
-Resume sym_block_prefix_step_exact[single_spill_bounds]:
-  gvs[listTheory.MEM_APPEND]
-QED
-
-Resume sym_block_prefix_step_exact[single_operand_stability]:
+  `code_labels_agree prog lo` by simp[] >>
+  drule label_flow_ok_imp_label_flow_own_ok >> strip_tac >>
+  rename1 `sym_frame_inv prog env ctx cpl fn ret srest labs0 ps_l as ss` >>
+  `sym_frame_inv_own lo prog env as.as_code ctx cpl fn ret srest labs0 ps_l as ss`
+    by simp[sym_frame_inv_canonical_own] >>
+  drule_all (Q.SPEC `F` sym_block_prefix_step_exact_own) >>
+  simp[sym_steps_mode_def, sym_frame_inv_canonical_own] >> strip_tac >>
   metis_tac[]
 QED
-
-Resume sym_block_prefix_step_exact[single_lineage_witnesses]:
-  qexistsl_tac [`ch`, `growth`, `h`, `lbl_ctr`, `pred`, `promised`, `ps_l`, `spill_base`, `vs`] >>
-  gvs[] >> metis_tac[]
-QED
-
-Resume sym_block_prefix_step_exact[join]:
-  gvs[] >>
-  qpat_assum `non_param_insts _ = _` (fn np =>
-  prefix_contract_tac (SRULE o cons listTheory.TAKE_DROP)
-    (drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`))
-    [`ps` |-> `ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`,
-     `base:num` |-> `spill_base:num`,
-     `phis:instruction list` |-> `TAKE (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`,
-     `body:instruction list` |-> `DROP (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`]
-    [np, stackPlanTypesTheory.plan_state_accfupds, combinTheory.K_THM,
-     fnPlanPrefixTheory.wf_marked_cleanup_fields,
-     fn_frame_inv_cleanup_fields, sym_frame_inv_cleanup_fields]
-    sym_phi_prefix_frame_sim_exact) >>
-  suspend "join_frame_inputs"
-QED
-
-Resume sym_block_prefix_step_exact[join_frame_inputs]:
-  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
-  suspend "join_lineage_region_inputs"
-QED
-
-Resume sym_block_prefix_step_exact[join_lineage_region_inputs]:
-  disch_then (drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `MEM _ _.cp_regions`)) >>
-  suspend "join_side_conditions"
-QED
-
-Resume sym_block_prefix_step_exact[join_side_conditions]:
-  simp[] >> (impl_tac >- metis_tac[]) >> simp[]
-QED
-
-Finalise sym_block_prefix_step_exact
 
 Theorem sym_block_prefix_step:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb
@@ -287,9 +219,7 @@ Theorem sym_nonentry_run_rest:
     block_rest fuel ctx fn bb
       (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
 Proof
-  rpt strip_tac >> simp[run_blocks_unfold, run_block_def, block_rest_def] >>
-  Cases_on `exec_block fuel ctx bb
-    (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >> simp[]
+  ACCEPT_TAC sym_nonentry_run_rest_kernel
 QED
 
 Theorem sym_phi_entry_inv:
@@ -302,10 +232,7 @@ Theorem sym_phi_entry_inv:
       Inv ctx fn inst
         (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `fn_entry_inv _ _ _ _`
-    (irule o REWRITE_RULE [fn_entry_inv_def]) >>
-  simp[enters_block_def]
+  ACCEPT_TAC sym_phi_entry_inv_kernel
 QED
 
 Theorem sym_entry_body_inv:
@@ -367,29 +294,10 @@ Theorem sym_entry_body_inv:
       (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps1
       pc_bb vs as Inv ra pc_ret rest mem0
 Proof
-  rpt gen_tac >> strip_tac >> suspend "entry_shape"
+  rpt gen_tac >> strip_tac >> simp[body_inv_reloc_specialize] >>
+  `code_labels_agree prog lo` by simp[] >>
+  drule_all sym_entry_body_inv_own >> simp[]
 QED
-
-Resume sym_entry_body_inv[entry_shape]:
-  drule_all step_fn_shape >> strip_tac >> suspend "entry_body_fields"
-QED
-
-Resume sym_entry_body_inv[entry_body_fields]:
-  gvs[fnBlockBodyStepsTheory.body_inv_def, stackPlanGenTheory.init_cleanup_plan_state_def,
-      stackPlanTypesTheory.init_plan_state_def] >> suspend "entry_body_static"
-QED
-
-Resume sym_entry_body_inv[entry_body_static]:
-  `!xs L. ?prefixL prefixD core.
-     xs = prefixL ++ core /\ xs = prefixD ++ core /\
-     (!v. MEM v L ==> ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` by
-    (rpt gen_tac >> qexistsl_tac [`[]`, `[]`, `xs`] >> simp[]) >>
-  rpt conj_tac >> metis_tac[entry_step_phi_bound,
-    revert_forward_pair_past_params, fnPlanLineageTheory.lineage_state_rules,
-    venomWfTheory.fn_reachable_def, relationTheory.RTC_REFL]
-QED
-
-Finalise sym_entry_body_inv
 
 Theorem sym_nonentry_body_inv:
   !rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
@@ -466,43 +374,10 @@ Theorem sym_nonentry_body_inv:
       (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
       as Inv ra pc_ret rest mem0
 Proof
-  rpt gen_tac >> strip_tac >> suspend "phi_fields"
+  rpt gen_tac >> strip_tac >> simp[body_inv_reloc_specialize] >>
+  `code_labels_agree prog lo` by simp[] >>
+  drule_all sym_nonentry_body_inv_own >> simp[]
 QED
-
-Resume sym_nonentry_body_inv[phi_fields]:
-  `s_phi.vs_labels = vs.vs_labels /\
-   s_phi.vs_call_ctx = vs.vs_call_ctx /\
-   s_phi.vs_current_bb = vs.vs_current_bb` by
-    (drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
-     disch_then (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
-  suspend "phi_body_inputs"
-QED
-
-Resume sym_nonentry_body_inv[phi_body_inputs]:
-  `!inst. active_inst fn inst
-      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) ==>
-      Inv ctx fn inst
-        (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
-    metis_tac[sym_phi_entry_inv] >>
-  suspend "phi_body_static"
-QED
-
-Resume sym_nonentry_body_inv[phi_body_static]:
-  `get_params bb.bb_instructions = []` by
-    (irule fnBlockBodyHelpersTheory.no_param_get_params >>
-     gvs[callLayoutDefsTheory.no_param_insts_def,
-         stackPlanGenTheory.non_param_insts_def, listTheory.FILTER_EQ_ID]) >>
-  suspend "phi_body_finish"
-QED
-
-Resume sym_nonentry_body_inv[phi_body_finish]:
-  gvs[fnBlockBodyStepsTheory.body_inv_def,
-      fnBlockStepHelpersTheory.operand_val_frame_view_inst_idx] >>
-  metis_tac[fnPlanLineageTheory.lineage_entry_lineage_state,
-            fnBlockStepHelpersTheory.revert_forward_pair_past_phis]
-QED
-
-Finalise sym_nonentry_body_inv
 
 Theorem sym_phi_error_body_result:
   !fuel ctx fn vs bb e lo o2pc prog env cp mem0 pc_ret rest srest labs0 as ss.
@@ -511,8 +386,8 @@ Theorem sym_phi_error_body_result:
     sym_body_result lo o2pc prog env cp ctx fn mem0 pc_ret rest srest labs0
       as ss (run_blocks (SUC fuel) ctx fn vs)
 Proof
-  rpt strip_tac >>
-  simp[run_blocks_unfold, run_block_def, sym_body_result_def]
+  rpt gen_tac >> strip_tac >> drule_all sym_phi_error_run_blocks >>
+  simp[sym_body_result_error]
 QED
 
 Theorem sym_entry_return_result:
@@ -530,8 +405,9 @@ Theorem sym_entry_return_result:
         FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
       (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b)
 Proof
-  rpt gen_tac >> simp[sym_body_result_def] >> strip_tac >>
-  metis_tac[entry_step_return]
+  rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac sym_entry_return_result_kernel >>
+  gvs[sym_body_result_def] >> metis_tac[]
 QED
 
 Theorem sym_block_prefix_prepare:
@@ -593,98 +469,8 @@ Theorem sym_block_prefix_prepare:
       (!off. MEM (SOSpill off) (clean_ops ++ inst_ops) \/
         MEM (SORestore off) (clean_ops ++ inst_ops) ==> off < dimword (:256))
 Proof
-  rpt gen_tac >> strip_tac >> suspend "prepare_shape"
+  ACCEPT_TAC sym_block_prefix_prepare_kernel
 QED
-
-Resume sym_block_prefix_prepare[prepare_shape]:
-  drule_all step_fn_shape >> strip_tac >> suspend "prepare_label"
-QED
-
-Resume sym_block_prefix_prepare[prepare_label]:
-  drule venomExecPropsTheory.lookup_block_label >> strip_tac >>
-  suspend "prepare_label_inputs"
-QED
-
-Resume sym_block_prefix_prepare[prepare_label_inputs]:
-  `lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
-   dfs_block_state liveness dfg cfg fn
-     (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label ps_dfs` by
-    metis_tac[] >> suspend "prepare_params"
-QED
-
-Resume sym_block_prefix_prepare[prepare_params]:
-  `canonical_param_prefix fn` by fs[stackPlanGenTheory.codegen_ready_fn_def] >>
-  drule_all fnPlanPrefixTheory.nonentry_block_no_params >> strip_tac >> suspend "prepare_lineage"
-QED
-
-Resume sym_block_prefix_prepare[prepare_lineage]:
-  drule fnPlanPrefixTheory.codegen_ready_fn_no_marker >> strip_tac >>
-  drule fnPlanLineageTheory.lineage_entry_lineage_state >> strip_tac >>
-  suspend "prepare_regenerate"
-QED
-
-Resume sym_block_prefix_prepare[prepare_regenerate]:
-  drule_all fnPlanLineageTheory.lineage_state_block_plan >> strip_tac >>
-  suspend "prepare_static"
-QED
-
-Resume sym_block_prefix_prepare[prepare_static]:
-  drule_all fnLineageStaticTheory.lineage_state_static >> strip_tac >>
-  suspend "prepare_split"
-QED
-
-Resume sym_block_prefix_prepare[prepare_split]:
-  drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)
-    generate_block_plan_nonentry >>
-  (impl_tac >- simp[]) >> strip_tac >> suspend "prepare_bounds"
-QED
-
-Resume sym_block_prefix_prepare[prepare_bounds]:
-  drule_all fnPlanPlaceDfsBlockTheory.dfs_block_plan_contained >> strip_tac >>
-  suspend "prepare_alloc"
-QED
-
-Resume sym_block_prefix_prepare[prepare_alloc]:
-  drule_all dfs_block_alloc_bounded >> strip_tac >> suspend "prepare_region"
-QED
-
-Resume sym_block_prefix_prepare[prepare_region]:
-  drule_all context_region_fn_name >> suspend "prepare_region_fields"
-QED
-
-Resume sym_block_prefix_prepare[prepare_region_fields]:
-  simp[] >> strip_tac >> suspend "prepare_finish"
-QED
-
-Resume sym_block_prefix_prepare[prepare_finish]:
-  qexistsl_tac [`h`, `promised`, `ps_after`, `clean_ops`, `ps2`, `inst_ops`] >>
-  conj_tac >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> gvs[]) >>
-  simp[] >> suspend "prepare_finish_bounds"
-QED
-
-Resume sym_block_prefix_prepare[prepare_finish_bounds]:
-  `r.sr_spill_base <= ps_after.ps_alloc.sa_spill_base /\
-   ps_after.ps_alloc.sa_next_offset <= r.sr_spill_end` by (gvs[] >> decide_tac) >>
-  gvs[] >> suspend "prepare_offsets"
-QED
-
-Resume sym_block_prefix_prepare[prepare_offsets]:
-  conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >> suspend "prepare_offset_bound"
-QED
-
-Resume sym_block_prefix_prepare[prepare_offset_bound]:
-  gen_tac >> disch_tac >> irule region_subplan_spill_offsets >>
-  suspend "prepare_offset_witness"
-QED
-
-Resume sym_block_prefix_prepare[prepare_offset_witness]:
-  qexistsl_tac [`cpl`, `unit.cu_context`, `clean_ops ++ inst_ops`, `post`,
-               `pre ++ [SOLabel vs.vs_current_bb]`, `EL i cpl.cp_regions`] >>
-  gvs[]
-QED
-
-Finalise sym_block_prefix_prepare
 
 Theorem sym_block_step_prefix:
   !unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth spill_base
@@ -747,78 +533,16 @@ Theorem sym_block_step_prefix:
       sym_steps prog env n ss = SymOK ss1 /\
       sym_frame_inv prog env ctx cpl fn ret srest labs0 ps1 as1 ss1
 Proof
-  rpt gen_tac >> strip_tac >> suspend "full_prepare"
+  rpt gen_tac >> strip_tac >>
+  `code_labels_agree prog lo` by simp[] >>
+  drule label_flow_ok_imp_label_flow_own_ok >> strip_tac >>
+  `sym_frame_inv_own lo prog env as.as_code ctx cpl fn ret srest labs0 ps as ss`
+    by gvs[sym_frame_inv_canonical_own] >>
+  drule_all (Q.SPEC `F` sym_block_step_prefix_own) >>
+  simp[sym_steps_mode_def, sym_frame_inv_canonical_own] >> strip_tac >>
+  qexistsl_tac [`h`, `promised`, `ps_after`, `prefix_ops`, `rest_ops`, `ps1`,
+                `n`, `as1`, `ss1`] >> simp[] >> metis_tac[]
 QED
-
-Resume sym_block_step_prefix[full_prepare]:
-  drule_all sym_block_prefix_prepare >>
-  disch_then (strip_assume_tac o SPEC_ALL) >> suspend "full_label"
-QED
-
-Resume sym_block_step_prefix[full_label]:
-  qpat_assum `block_ops = _` (fn eq =>
-    qpat_x_assum `asm_block_at _ _ _` (mp_tac o REWRITE_RULE [eq])) >>
-  suspend "full_label_match"
-QED
-
-Resume sym_block_step_prefix[full_label_match]:
-  rewrite_tac[listTheory.APPEND] >>
-  disch_then (mp_then (Pat `asm_block_at _ _ _`) mp_tac sym_label_block_steps) >>
-  suspend "full_label_inputs"
-QED
-
-Resume sym_block_step_prefix[full_label_inputs]:
-  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (qspecl_then [`lo`, `o2pc`] strip_assume_tac) >>
-  suspend "full_phi"
-QED
-
-Resume sym_block_step_prefix[full_phi]:
-  drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
-    sym_block_prefix_step >> suspend "full_phi_frame"
-QED
-
-Resume sym_block_step_prefix[full_phi_frame]:
-  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
-  suspend "full_phi_inputs"
-QED
-
-Resume sym_block_step_prefix[full_phi_inputs]:
-  disch_then (mp_tac o REWRITE_RULE [fn_frame_inv_pc]) >>
-  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
-  suspend "full_phi_remaining"
-QED
-
-Resume sym_block_step_prefix[full_phi_remaining]:
-  disch_then (drule_all o SIMP_RULE pure_ss [asmSemTheory.asm_state_accfupds, combinTheory.K_THM]) >>
-  strip_tac >> suspend "full_compose"
-QED
-
-Resume sym_block_step_prefix[full_compose]:
-  qpat_assum `asm_steps _ _ _ 1 _ = _` (mp_tac o MATCH_MP asm_steps_add_ok) >>
-  strip_tac >> suspend "full_witness"
-QED
-
-Resume sym_block_step_prefix[full_witness]:
-  qexistsl_tac [`h`, `promised`, `ps_after`, `clean_ops ++ phi_ops`,
-                `body_ops`, `ps1`, `1 + n`, `as'`, `ss'`] >>
-  conj_tac >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> gvs[]) >>
-  simp[execute_plan_label_length, Once sym_steps_add] >>
-  suspend "full_plan_state"
-QED
-
-Resume sym_block_step_prefix[full_plan_state]:
-  reverse conj_tac >- gvs[] >> suspend "full_plan_witness"
-QED
-
-Resume sym_block_step_prefix[full_plan_witness]:
-  rewrite_tac[fnBlockPlanStaticTheory.block_plan_state_def] >>
-  qexistsl_tac [`[]`,
-    `ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`,
-    `clean_ops`, `ps2`, `phi_ops`] >> gvs[]
-QED
-
-Finalise sym_block_step_prefix
 
 (* General symbolic simulation over agreeing code labels and fixed code bytes. *)
 Theorem sym_fn_sims_all_own:
