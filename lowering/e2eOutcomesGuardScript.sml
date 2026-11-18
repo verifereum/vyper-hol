@@ -296,6 +296,59 @@ Proof
   strip_tac >> gvs[source_exempt_def] >> metis_tac[]
 QED
 
+Triviality guard_nested_result_storage:
+  vyper_closed_world fin policy tops runtime_bc am tx H e /\
+  2 <= LENGTH e.contexts /\
+  call_external_trace (SOME (MAP SND (call_trace e))) gs am tx =
+    (res,am',rqs,obs) /\
+  call_result_rel_at gs tops am tx e r e' /\
+  storage_well_formed_on
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am' []) (FST H) /\
+  storage_well_formed_on
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (empty_state with <|accounts := (SND (HD e.contexts)).accounts;
+                       tStorage := (SND (HD e.contexts)).tStorage|>) (FST H) /\
+  ~MEM tx.target e'.rollback.toDelete ==>
+  ISL r /\ LENGTH e'.contexts + 1 = LENGTH e.contexts /\
+  storage_well_formed_on
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (empty_state with <|accounts := e'.rollback.accounts;
+                       tStorage := e'.rollback.tStorage|>) (FST H)
+Proof
+  strip_tac >>
+  drule call_external_trace_result >> strip_tac >>
+  `regions_consistent (FST H) /\
+   horizon_covers H am tx (MAP SND (call_trace e)) /\
+   ~source_exempt tops (res,am',rqs)` by
+    (fs[vyper_closed_world_def] >>
+     qpat_assum `call_external _ gs am tx = (res,am',rqs)` (fn result =>
+       qpat_assum `!gobs. ~source_exempt _ (call_external _ _ _ _)`
+         (qspec_then `gs` (ACCEPT_TAC o REWRITE_RULE [result])))) >>
+  `EVERY (\region. MEM region (FST H)) (storage_trace_regions obs)` by
+    (qpat_assum `horizon_covers _ _ _ _`
+      (mp_tac o Q.SPEC `gs` o REWRITE_RULE [horizon_covers_def]) >> simp[]) >>
+  `(initial_evaluation_context am.sources am.layouts tx NONE).txn.target = tx.target` by
+    simp[initial_evaluation_context_def] >>
+  `ISL r /\ LENGTH e'.contexts + 1 = LENGTH e.contexts` by
+    metis_tac[guard_nested_call_result] >>
+  asm_rewrite_tac[] >>
+  mp_tac (Q.INST [`cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`]
+    (INST_TYPE [alpha |-> ``:num list``] guard_terminal_backend_well_formed)) >>
+  simp[]
+QED
+
+Triviality guard_gas_readings_witness:
+  gas_readings_rel readings P ==> ?gs. P gs
+Proof
+  rw[gas_readings_rel_def] >>
+  `LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots (MAP THE slots)` by
+    (simp[LIST_REL_EL_EQN, EL_MAP] >> rpt strip_tac >>
+     Cases_on `EL n slots` >> simp[]) >>
+  qpat_x_assum `!gobs tail. _` (qspecl_then [`MAP THE slots`, `[]`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
 Triviality guard_trace_storage_induction:
   runtime_bc <> [] /\
   (!e am tx ret r e'.
