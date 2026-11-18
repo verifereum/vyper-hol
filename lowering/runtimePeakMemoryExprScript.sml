@@ -201,33 +201,6 @@ Proof
   gvs[as_stack_val_def] >> metis_tac[]
 QED
 
-Theorem dalloca_windows_pair_return[local]:
-  preserves_dalloca_windows window (\st. (f st,st))
-Proof
-  simp[preserves_dalloca_windows_def]
-QED
-
-Theorem dalloca_windows_pair_bind[local]:
-  preserves_dalloca_windows window m /\
-  (!v. preserves_dalloca_windows window (f v)) ==>
-  preserves_dalloca_windows window
-    (\st. (\(v,st1). f v st1) (m st))
-Proof
-  strip_tac >>
-  `preserves_dalloca_windows window (comp_bind m f)` by
-    metis_tac[dalloca_windows_bind] >>
-  fs[preserves_dalloca_windows_def, comp_bind_def] >>
-  rpt strip_tac >> first_x_assum irule >>
-  metis_tac[]
-QED
-
-Theorem dalloca_windows_result_map[local]:
-  preserves_dalloca_windows window m ==>
-  preserves_dalloca_windows window (\st. (f (FST (m st)), SND (m st)))
-Proof
-  simp[preserves_dalloca_windows_def] >> rpt strip_tac >>
-  Cases_on `m st` >> gvs[] >> metis_tac[]
-QED
 Theorem dalloca_windows_copy_memory:
   preserves_dalloca_windows window (compile_copy_memory dst src n) /\
   preserves_dalloca_windows window (compile_copy_memory_dynamic dst src length_op)
