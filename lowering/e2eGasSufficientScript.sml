@@ -72,7 +72,7 @@ Proof
        add_frame_gas_fields, MAP_MAP_o, combinTheory.o_DEF, EVERY_MAP]
 QED
 
-Theorem entry_venom_state_add_frame_gas[local]:
+Theorem entry_venom_state_add_frame_gas:
   !prog cp g es.
     entry_venom_state prog cp (add_frame_gas g es) =
     entry_venom_state prog cp es with
@@ -192,7 +192,7 @@ Proof
   simp[external_call_result_rel_def, gas_source_exempt_def]
 QED
 
-Theorem call_gas_static_no_abort[local]:
+Theorem call_gas_static_no_abort:
   !tops ret am tx unit vs marks.
     tx.is_static /\ o1_source_unit_ok unit /\
     source_unit_execution_correct_at marks tops ret am tx unit vs /\

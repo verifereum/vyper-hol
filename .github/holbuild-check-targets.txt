@@ -983,3 +983,5 @@ vyperTypeExternalCallMachineTheory
 vyperTypeExternalDefaultsTheory
 vyperTypeSoundnessTheory
 vyperTypeStoragePreservationTheory
+deploySymSrcUnitTheory
+runtimeSymSrcUnitTheory
