@@ -17,17 +17,11 @@ Proof
   gvs[supported_program_def, supported_declaration_names_def]
 QED
 
-Theorem entry_no_dalloca_fmp_room[local]:
-  ~ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==>
-  fmp_room ctx func s
-Proof
-  simp[ctx_has_dalloca_def, fmp_room_def, EXISTS_MEM] >> metis_tac[]
-QED
-
 Theorem entry_runtime_fmp_room:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ MEM func unit.cu_context.ctx_functions ==>
   fmp_room unit.cu_context func s
 Proof
-  metis_tac[entry_runtime_no_dalloca, entry_no_dalloca_fmp_room]
+  strip_tac >> drule_all entry_runtime_no_dalloca >>
+  simp[ctx_has_dalloca_def, fmp_room_def, EXISTS_MEM] >> metis_tac[]
 QED
