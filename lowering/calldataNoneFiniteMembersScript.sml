@@ -83,9 +83,12 @@ Proof
   >- (rpt gen_tac >> strip_tac >> Cases_on `id < b.cs_next_id`
       >- (`a.cs_next_id <= id /\ id < b.cs_next_id` by decide_tac >>
           `FLOOKUP t.vs_allocas id = FLOOKUP r.vs_allocas id` by metis_tac[] >>
+          `FLOOKUP r.vs_allocas id = SOME (q,k)` by
+            (qpat_assum `FLOOKUP t.vs_allocas id = FLOOKUP r.vs_allocas id`
+               (fn th => rewrite_tac[GSYM th]) >> first_assum ACCEPT_TAC) >>
           qpat_assum `!id q k. a.cs_next_id <= id /\ _ ==> _`
             (qspecl_then [`id`,`q`,`k`] mp_tac) >>
-          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC ORELSE metis_tac[]) >>
+          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
           strip_tac >> asm_rewrite_tac[] >> conj_tac
           >- decide_tac >> qexists `ins` >> asm_rewrite_tac[]) >>
       `b.cs_next_id <= id /\ id < c.cs_next_id` by decide_tac >>
