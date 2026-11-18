@@ -53,7 +53,7 @@ Theorem lower_vyper_runtime_unit_correct_dispatched:
     ==>
     source_unit_execution_correct tops ret am tx unit vs
 Proof
-  (* HELD ADMISSION SEQ-4939: S1 for noncanonical/__default__ dispatch; needs the entry chain over calldata_exact_owned_run *)
+  (* HELD ADMISSION: S1 for noncanonical/__default__ dispatch; needs the entry chain over calldata_exact_owned_run *)
   cheat
 QED
 
@@ -112,7 +112,7 @@ Theorem lower_vyper_runtime_unit_reverts:
                   (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                               vs_inst_idx := 0 |>))
 Proof
-  (* HELD ADMISSION SEQ-4940: S1 revert on a NONE dispatch; needs the selector-miss and decode-failure entry runs *)
+  (* HELD ADMISSION: S1 revert on a NONE dispatch; needs the selector-miss and decode-failure entry runs *)
   cheat
 QED
 
