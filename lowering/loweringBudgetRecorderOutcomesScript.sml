@@ -4,7 +4,7 @@ Ancestors
   fnBlockBodySteps venomInstProofs1 venomExecProofs contextCodegenRel
   venomExecSemantics venomCallOracleDefs venomState list rich_list
 
-Theorem budget_enters_block_outcomes[local]:
+Theorem enters_block_preserves_outcomes:
   enters_block fn s t ==> t.vs_outcomes = s.vs_outcomes
 Proof
   simp[enters_block_def] >> rpt strip_tac >>
@@ -14,11 +14,11 @@ QED
 
 Theorem budget_exec_call_outcomes[local]:
   (exec_ext_call inst s gas addr value ao az ro rz static = OK t ==>
-    t.vs_outcomes = DROP 1 s.vs_outcomes) /\
+    s.vs_outcomes <> [] /\ t.vs_outcomes = DROP 1 s.vs_outcomes) /\
   (exec_delegatecall inst s gas addr ao az ro rz = OK t ==>
-    t.vs_outcomes = DROP 1 s.vs_outcomes) /\
+    s.vs_outcomes <> [] /\ t.vs_outcomes = DROP 1 s.vs_outcomes) /\
   (exec_create inst s value off sz salt = OK t ==>
-    t.vs_outcomes = DROP 1 s.vs_outcomes)
+    s.vs_outcomes <> [] /\ t.vs_outcomes = DROP 1 s.vs_outcomes)
 Proof
   rpt conj_tac >>
   simp[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
@@ -30,6 +30,8 @@ QED
 
 Theorem budget_step_outcomes[local]:
   inst.inst_opcode <> INVOKE /\ step_inst fuel ctx inst s = OK t ==>
+  (MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] ==>
+    s.vs_outcomes <> []) /\
   t.vs_outcomes =
     DROP (if MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]
           then 1 else 0) s.vs_outcomes
@@ -70,6 +72,7 @@ QED
 Theorem budget_path_outcomes[local]:
   !checked cfg p h marks q.
     lower_budget_path checked cfg p h marks q ==>
+    lower_history_count h <= LENGTH p.bp_state.vs_outcomes /\
     q.bp_state.vs_outcomes = DROP (lower_history_count h) p.bp_state.vs_outcomes
 Proof
   ho_match_mp_tac lower_budget_path_ind >> rpt conj_tac >>
@@ -77,16 +80,16 @@ Proof
   gvs[lower_history_count_def, FILTER_APPEND, lower_event_consumes_def]
   >- (drule_all budget_step_outcomes >>
       Cases_on `MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` >>
-      fs[MEM] >> strip_tac >>
+      fs[] >> strip_tac >> simp[] >>
       pure_rewrite_tac[DROP_DROP_T] >>
       AP_THM_TAC >> AP_TERM_TAC >> decide_tac)
-  >- (drule budget_enters_block_outcomes >> strip_tac >>
+  >- (drule enters_block_preserves_outcomes >> strip_tac >>
       `i.inst_opcode <> INVOKE /\
        ~MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` by
         (Cases_on `i.inst_opcode` >> gvs[venomInstTheory.is_terminator_def]) >>
       drule_all budget_step_outcomes >> gvs[])
   >- (imp_res_tac setup_callee_oracle >>
-      imp_res_tac budget_enters_block_outcomes >> gvs[])
+      imp_res_tac enters_block_preserves_outcomes >> gvs[])
   >> imp_res_tac budget_intret_outcomes >>
   imp_res_tac bind_outputs_oracle >> gvs[]
 QED
@@ -95,6 +98,14 @@ Theorem lower_budget_path_outcomes:
   !checked D lo explicit ctx p h marks q.
     lower_budget_path checked (D,lo,explicit,ctx) p h marks q ==>
     q.bp_state.vs_outcomes = DROP (lower_history_count h) p.bp_state.vs_outcomes
+Proof
+  metis_tac[budget_path_outcomes]
+QED
+
+Theorem lower_budget_path_count_le_outcomes:
+  !checked D lo explicit ctx p h marks q.
+    lower_budget_path checked (D,lo,explicit,ctx) p h marks q ==>
+    lower_history_count h <= LENGTH p.bp_state.vs_outcomes
 Proof
   metis_tac[budget_path_outcomes]
 QED

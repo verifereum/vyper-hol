@@ -31,15 +31,18 @@ Theorem hash_emit_sha256_tail_abort_path:
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
     ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
-    ?t j Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+    ?t j Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
       inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf /\
       gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
-        (Abort Revert_abort (t with vs_inst_idx := j))
+        (Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) (t with vs_inst_idx := j))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all emitted_insts_sha256_tail >> strip_tac >>
-  qrefinel [`_`, `_`, `DRESTRICT G (COMPL {gv;sv})`,
-    `tn with t_var := tn.t_var |+ (gv,{}) |+ (sv,{})`] >>
+  qrefinel [`_`, `_`,
+    `if s.vs_outcomes = [] then DRESTRICT G (COMPL {gv})
+     else DRESTRICT G (COMPL {gv;sv})`,
+    `if s.vs_outcomes = [] then tn with t_var := tn.t_var |+ (gv,{})
+     else tn with t_var := tn.t_var |+ (gv,{}) |+ (sv,{})`] >>
   irule hash_sha256_tail_abort_path >>
   gvs[mk_inst_def] >> metis_tac[hash_sha256_emit_fresh]
 QED

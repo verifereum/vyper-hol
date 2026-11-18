@@ -121,7 +121,7 @@ drule_all hash_sha256_source_failure >> strip_tac >>
       (Q.SPECL [`1`, `s.vs_gas_readings`]
         gasSummaryTheory.gas_explicit_replicate_false)) >>
   irule gas_outcome_full_intro >>
-  qexistsl_tac [`Gf`, `ef`, `[F]`, `Abort Revert_abort (t with vs_inst_idx := j)`,
+  qexistsl_tac [`Gf`, `ef`, `[F]`, `Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) (t with vs_inst_idx := j)`,
     `INR (Error (RuntimeError "precompile failed"))`, `tf`] >>
   conj_tac >-
     (simp[] >>
@@ -538,7 +538,7 @@ Resume sha_vv_sim_full[fixed_abort]:
       (Q.SPECL [`1`, `s.vs_gas_readings`]
         gasSummaryTheory.gas_explicit_replicate_false)) >>
   irule gas_outcome_full_intro >>
-  qexistsl_tac [`Gf`, `ef`, `[F]`, `Abort Revert_abort (t with vs_inst_idx := j)`,
+  qexistsl_tac [`Gf`, `ef`, `[F]`, `Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) (t with vs_inst_idx := j)`,
     `INR (Error (RuntimeError "precompile failed"))`, `tf`] >>
   conj_tac >-
     (simp[] >>

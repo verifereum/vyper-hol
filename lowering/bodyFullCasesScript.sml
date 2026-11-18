@@ -21,6 +21,10 @@ Ancestors
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
   vyperAST vyperInterpreter vyperState vyperValue list
+  selfdestructHalt bodyInvNoDalloca gasOutcomeFullCompose gasExemptOrigin
+  exprOperandVar exprCallbackContracts builtinSystem emitHelper allocLimits exprLowering exprLoweringProps gasShadowState compileEnv fragExec fragGasEmitCtrl vfmSameFrame ptrSafeRun ptrDiscipline gasEvents gasCount memSafeRun instMemFrontier venomExecSemantics venomInst venomState unitTransformDefs contextCodegenRel codegenRel bodyPtrDefs rich_list
+Libs
+  pairLib
 
 val _ = Parse.hide "body";
 
@@ -36,7 +40,7 @@ Proof
        flag_member_expr_full_ok, literal_expr_full_ok]
 QED
 
-(* Admitted: the joint twin of body_annassign_case_ptr_at (bodyPtrAssignCases). *)
+(* Joint annotated declaration, split by the source and destination layouts. *)
 Theorem body_annassign_case_full:
   !cx id typ e.
     (!tenv s'' tyv t.
@@ -110,6 +114,8 @@ QED
 (* Admitted: the joint twin of body_assign_case_ptr_at (bodyPtrAssignCases). *)
 Theorem body_assign_case_full:
   !cx t e.
+    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+            struct_args_unique tops) /\
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok cx t) /\
@@ -117,6 +123,7 @@ Theorem body_assign_case_full:
     body_stmt_full_ok cx (Assign (BaseTarget t) e)
 Proof
   rw[body_stmt_full_ok_def] >>
+  `struct_args_unique tops` by (fs[body_inv_def] >> metis_tac[]) >>
   Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
                     is_word_type ty`
   >- (gvs[] >> irule body_assign_local_word_full >> metis_tac[]) >>
@@ -772,16 +779,524 @@ Proof
   simp[same_frame_refl]
 QED
 
-(* Vacuous: expr_body_pre excludes selfdestruct (expr_evm_run_root). *)
+(* Joint composition from the source, paired layout and terminal interfaces. *)
+Theorem selfdestruct_expr_full_from_interfaces:
+  (!cenv cx env ann args dflt es.
+    expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
+    ?e. args = [e] /\ ann = NoneT /\ dflt = NONE /\
+      expr_type e = BaseT AddressT /\
+      (!es'. expr_sim_inv cenv cx env es' ==>
+         expr_body_pre cenv cx env e es') /\
+      eval_expr cx (Call ann SelfDestructTarget args dflt) =
+        bind (bind (eval_expr cx e) (read_result cx)) (selfdestruct_tail cx)) ==>
+  (!cenv ty ann e dflt sa sb vv ssa ssb svv func sfunc.
+    expr_type e = BaseT AddressT /\
+    gas_shadow_compiles
+      (lower_value compile_expr cenv (expr_type e) e)
+      (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)) /\
+    gas_shadow_state sa ssa /\
+    compile_expr cenv ty (Call ann SelfDestructTarget [e] dflt) sa = (vv,sb) /\
+    compile_expr cenv ty (gas_shadow_expr (Call ann SelfDestructTarget [e] dflt))
+      ssa = (svv,ssb) /\
+    fn_has_code sa sb func /\ fn_has_code ssa ssb sfunc ==>
+    ?op sm ssm.
+      vv = StackValue ann (Lit 0w) /\ svv = StackValue ann (Lit 0w) /\
+      lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
+      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+        ssa = (op,ssm) /\
+      gas_shadow_state sm ssm /\
+      compile_selfdestruct op sm = ((),sb) /\
+      compile_selfdestruct op ssm = ((),ssb) /\
+      ci_mono sa sm /\ ci_mono sm sb /\
+      ci_mono ssa ssm /\ ci_mono ssm ssb /\
+      fn_has_code sa sm func /\ fn_has_code sm sb func /\
+      fn_has_code ssa ssm sfunc /\ fn_has_code ssm ssb sfunc) ==>
+  (!op sm sb func t aw tn G ctx lo d cenv cx ee explicit PG.
+    compile_selfdestruct op sm = ((),sb) /\ fn_has_code sm sb func /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
+    eval_operand op t = SOME aw /\ op_taint tn op = {} /\ op_prov G op = NONE /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) ==>
+    ?r. step_inst_base (mk_inst sm.cs_next_id SELFDESTRUCT [op] []) t = r /\
+        exit_result r /\
+        (!D. ghost_inv_at D lo d cenv cx ee G tn t ==>
+          gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+            (t,G,tn) [] (r,G,tn))) ==>
+  !cx ann args dflt DF lo d PG tops ctx shadow_ctx func shadow_func
+    cenv env ty es.
+    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Call ann SelfDestructTarget args dflt) es
+Proof
+  disch_then (mk_asm "source_contract") >>
+  disch_then (mk_asm "layout_contract") >>
+  disch_then (mk_asm "tail_contract") >> rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  asm "source_contract" drule >> strip_tac >> gvs[] >>
+  `expr_body_pre cenv cx env e es` by
+    (first_x_assum irule >> gvs[expr_body_pre_def]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx (expr_type e) e es` by
+    (gvs[body_exprs_full_ok_def] >>
+     qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
+     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  suspend "compiler"
+QED
+
+Resume selfdestruct_expr_full_from_interfaces[compiler]:
+  `!child ss. ?sm. compile_expr cenv ty
+      (Call NoneT SelfDestructTarget [child] NONE) ss =
+      (StackValue NoneT (Lit 0w),sm)` by
+    (rpt gen_tac >> simp[Once compile_expr_def, compile_call_def, expr_type_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> simp[]) >> metis_tac[]) >>
+  `compile_expr cenv ty (Call NoneT SelfDestructTarget [e] NONE) sa =
+       (StackValue NoneT (Lit 0w),sb) /\
+   compile_expr cenv ty (gas_shadow_expr (Call NoneT SelfDestructTarget [e] NONE))
+       shadow_sa = (StackValue NoneT (Lit 0w),shadow_sb)` by
+    (qpat_x_assum `lower_value _ _ _ (Call _ _ _ _) _ = _` mp_tac >>
+     qpat_x_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _` mp_tac >>
+     simp[gas_shadow_expr_def] >> simp[lower_value_def, comp_bind_def] >>
+     rpt (pairarg_tac >> simp[]) >>
+     `vv' = StackValue NoneT (Lit 0w) /\ vv = StackValue NoneT (Lit 0w)` by
+       metis_tac[pairTheory.PAIR_EQ] >>
+     gvs[unwrap_value_def, comp_return_def]) >>
+  `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+     (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e))` by
+    (irule (SRULE [] (Q.INST [`sh` |-> `T`]
+       gasShadowCompileHelpersTheory.gas_shadow_compiles_lower_value)) >>
+     simp[gas_shadow_compile_expr]) >>
+  asm "layout_contract" drule_all >> strip_tac >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
+  qpat_x_assum `expr_sim_full _ _ _ _ e _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `ssm`, `op'`,
+    `s0`, `G0`, `tn0`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
+  strip_tac >> suspend "compose"
+QED
+
+Resume selfdestruct_expr_full_from_interfaces[compose]:
+  asm_x "source_contract" kall_tac >> asm_x "layout_contract" kall_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ fullQ fullR` >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
+  `!v. storage_trace_frame (bind (selfdestruct_tail cx v) (read_result cx))` by
+    (gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_read_result,
+          selfdestructHaltTheory.storage_trace_frame_selfdestruct_tail]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gasOutcomeFullTheory.gas_outcome_full_def])
+  >~ [`gas_bad_storage_at _ _ _ _ _ _`]
+  >- (rewrite_tac[gasOutcomeFullTheory.gas_outcome_full_def] >>
+      qexists `marks` >> disj1_tac >> reverse conj_tac >- metis_tac[] >>
+      asm_rewrite_tac[] >> once_rewrite_tac[bind_assoc] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
+  >- (rewrite_tac[gasOutcomeFullTheory.gas_outcome_full_def] >>
+      qexists `marks` >> disj2_tac >> disj2_tac >>
+      qexistsl [`err`, `ee`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `finish'`] >>
+      reverse conj_tac >- metis_tac[] >>
+      asm_rewrite_tac[] >> rewrite_tac[ignore_bind_def] >>
+      ntac 2 (once_rewrite_tac[bind_assoc]) >>
+      irule gasExemptCertTheory.gas_exempt_cert_error_value >>
+      asm_rewrite_tac[ignore_bind_def]) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
+     ee.storage_trace` by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  Cases_on `exit_result r`
+  >- (`?ex. res = INR ex` by
+        (qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _`
+           (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+         (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+         gvs[Abbr `childQ`, Abbr `childR`, Abbr `fullR`,
+             fragExecTheory.exit_result_def] >>
+         Cases_on `res` >> gvs[]) >>
+      gvs[] >>
+      rewrite_tac[gasOutcomeFullTheory.gas_outcome_full_def] >>
+      qexists `marks` >> disj2_tac >> disj1_tac >>
+      qexistsl [`INR ex`, `ee`, `r`, `G'`, `tn'`] >>
+      conj_tac
+      >- (asm_rewrite_tac[] >> once_rewrite_tac[bind_assoc] >>
+          irule gasSummaryComposeTheory.gas_source_bind_exception >> simp[]) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      rpt strip_tac >> first_x_assum drule >> strip_tac >>
+      gvs[Abbr `childQ`, fragExecTheory.exit_result_def]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  gvs[fragExecTheory.exit_result_def] >>
+  `childQ (storage_trace_horizon ee.storage_trace) res
+     (ee with gas_obs := []) G' tn' t` by metis_tac[] >>
+  qpat_x_assum `childQ _ _ _ _ _ _` mp_tac >>
+  simp[NoAsms, Abbr `childQ`] >> strip_tac >> gvs[] >>
+  `?a. dest_AddressV v = SOME a` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     fs[] >> Cases_on `dest_AddressV v` >> simp[] >>
+     qpat_x_assum `gas_admissible (bind (bind (bind _ _) _) _) _ _`
+       (mp_tac o REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
+     disch_then (qspecl_then [`gas_explicit marks s0.vs_gas_readings`,
+       `INR (Error (TypeError "selfdestruct target"))`, `ee with gas_obs := []`] mp_tac) >>
+     once_rewrite_tac[bind_assoc] >> pure_once_rewrite_tac[bind_def] >>
+     asm_rewrite_tac[] >>
+     simp[selfdestruct_tail_def, lift_option_type_def, bind_def, raise_def,
+       exprSimDefsTheory.expr_res_ok_def,
+       vyperStateTheory.evaluation_state_component_equality]) >>
+  `value_has_type (BaseTV AddressT) v` by
+    (Cases_on `v` >> gvs[vyperValueTheory.dest_AddressV_def,
+                         vyperTypingTheory.value_has_type_def]) >>
+  drule exprSimSendTheory.address_typed_dest >> strip_tac >>
+  gvs[] >>
+  `post_value_type cenv e = BaseT AddressT` by simp[is_word_type_def] >>
+  `expr_post (storage_trace_horizon ee.storage_trace) ctx func cenv cx e
+     es sa sm s0 (ee with gas_obs := []) v op' t` by metis_tac[] >>
+  `eval_operand op' t = SOME (typed_val_to_w256 (BaseTV AddressT) v) /\ ~t.vs_halted /\
+   op_taint tn' op' = {} /\ op_prov G' op' = NONE` by
+    (conj_tac
+     >- (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+         simp[NoAsms, expr_post_def] >> strip_tac >>
+         gvs[expr_val_rel_def, is_word_type_def,
+             vyperValueTheory.evaluate_type_def]) >>
+     conj_tac >- metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_projections,
+                           fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted] >>
+     gvs[bodyPtrDefsTheory.ptr_val_ok_def, is_word_type_def]) >>
+  suspend "normal"
+QED
+
+Resume selfdestruct_expr_full_from_interfaces[normal]:
+  `bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL v, ee with gas_obs := [])` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     pure_rewrite_tac[APPEND_NIL] >> disch_then ACCEPT_TAC) >>
+  `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+    (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+          vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
+      es.storage_trace` by
+    (drule vyperStorageFootprintTheory.valid_horizon_frame >>
+     disch_then (qspecl_then [`st0`, `ee with gas_obs := []`,
+       `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+       `INL v`, `cx`, `storage_trace_horizon ee.storage_trace`] mp_tac) >>
+     simp[]) >>
+  `gas_value_prefix (storage_trace_horizon ee.storage_trace) T
+     (ctx,func,cenv,cx) (expr_type e,e) (sa,sm,op')
+     (es,s0) marks (v,ee,t)` by
+    (simp[gasNormalPrefixTheory.gas_value_prefix_def] >>
+     simp[gasSummaryTheory.gas_marked_exec_def,
+          fragGasModeTheory.gas_marked_path_def] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _ /\ _`
+       (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     drule fragGasOriginPtrTheory.gas_origin_ptr_path_projections >> strip_tac >>
+     drule fragGasOriginTheory.gas_origin_path_erase >>
+     simp[fragGasModeTheory.gas_marked_path_def]) >>
+  `t.vs_call_ctx.cc_address = cx.txn.target /\
+   t.vs_call_ctx.cc_created_in_tx = cx.txn.created_in_tx /\
+   t.vs_call_ctx.cc_static = cx.txn.is_static` by
+    fs[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def,
+       loweringStateRelDefsTheory.call_ctx_rel_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  asm "tail_contract" drule_all >>
+  disch_then (qspecl_then [`lo`, `d`, `cenv`, `cx`, `ee with gas_obs := []`,
+    `gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
+  Cases_on `cx.txn.is_static` >- suspend "static" >>
+  Cases_on `selfdestruct_overflows cx
+      (w2w (typed_val_to_w256 (BaseTV AddressT) v)) ee.accounts`
+  >- suspend "overflow" >> suspend "halt"
+QED
+
+Resume selfdestruct_expr_full_from_interfaces[static]:
+  `r = Abort ExHalt_abort (halt_state (set_returndata [] t))` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operands_def]) >>
+  gvs[] >> rewrite_tac[gasOutcomeFullTheory.gas_outcome_full_def] >>
+  qexists `marks` >> disj2_tac >> disj1_tac >>
+  qexistsl [`INR (Error (RuntimeError "write in static context"))`,
+    `ee`, `Abort ExHalt_abort (halt_state (set_returndata [] t))`, `G'`, `tn'`] >>
+  conj_tac
+  >- (gen_tac >> once_rewrite_tac[bind_assoc] >>
+      pure_once_rewrite_tac[bind_def] >> asm_rewrite_tac[] >>
+      simp[selfdestruct_tail_def, bind_def, ignore_bind_def, lift_option_type_def,
+        check_not_static_def, check_def, assert_def, raise_def, return_def]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> disch_tac >> reverse conj_tac
+  >- (disj2_tac >>
+      simp[fragExecTheory.exit_result_def, Abbr `childR`,
+        exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _ /\ _` drule >> strip_tac >>
+  `gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (t,G',tn') [] (Abort ExHalt_abort (halt_state (set_returndata [] t)),G',tn')` by
+    (first_x_assum irule >> first_assum ACCEPT_TAC) >>
+  qpat_assum `gas_origin_ptr_path _ _ marks (OK t,G',tn')`
+    (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+  disch_then (qspec_then `t` mp_tac) >> simp[] >>
+  disch_then (qspec_then `[]` mp_tac) >> simp[] >>
+  disch_then irule >> first_assum ACCEPT_TAC
+QED
+
+Resume selfdestruct_expr_full_from_interfaces[overflow]:
+  rewrite_tac[gasOutcomeFullTheory.gas_outcome_full_def] >>
+  qexists `marks` >> disj2_tac >> disj2_tac >>
+  qexistsl [`RuntimeError "transfer_value recipient overflow"`,
+    `ee`, `func`, `PG`, `G'`, `tn'`, `t`] >>
+  conj_tac
+  >- (qpat_x_assum `eval_expr cx (Call _ _ _ _) = _` (assume_tac o SYM) >>
+      asm_rewrite_tac[] >> rewrite_tac[ignore_bind_def] >>
+      once_rewrite_tac[bind_assoc] >>
+      irule gasExemptCertTheory.gas_exempt_cert_error_result >>
+      irule gasExemptCertTheory.gas_exempt_cert_origin >>
+      rewrite_tac[gasExemptOriginTheory.gas_exempt_origin_def] >> disj2_tac >>
+      qexistsl [`storage_trace_horizon ee.storage_trace`, `cenv`, `cx`, `ty`,
+        `NoneT`, `e`, `NONE`, `sa`, `sb`, `sm`,
+        `StackValue NoneT (Lit 0w)`, `op'`, `v`,
+        `w2w (typed_val_to_w256 (BaseTV AddressT) v)`] >> simp[]) >>
+  qexists `storage_trace_horizon ee.storage_trace` >> simp[] >>
+  irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_focus_rules) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _ /\ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  simp[]
+QED
+
+Resume selfdestruct_expr_full_from_interfaces[halt]:
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     ?u. step_inst_base (mk_inst sm.cs_next_id SELFDESTRUCT [op'] []) t = Halt u /\
+         u.vs_returndata = [] /\
+         halt_rel H cx
+           (selfdestruct_final cx
+             (w2w (typed_val_to_w256 (BaseTV AddressT) v))
+             (ee with gas_obs := [])) u` by
+    (rpt strip_tac >> irule step_selfdestruct_halt_rel >> simp[] >>
+     irule halt_rel_from_state_rel >>
+     metis_tac[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_def]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ?u. _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[] >>
+  rewrite_tac[gasOutcomeFullTheory.gas_outcome_full_def] >>
+  qexists `marks` >> disj2_tac >> disj1_tac >>
+  qexistsl [`INR HaltException`,
+    `selfdestruct_final cx (w2w (typed_val_to_w256 (BaseTV AddressT) v)) ee`,
+    `Halt u`, `G'`, `tn'`] >>
+  conj_tac
+  >- (gen_tac >> once_rewrite_tac[bind_assoc] >>
+      pure_once_rewrite_tac[bind_def] >> asm_rewrite_tac[] >>
+      `selfdestruct_tail cx v (ee with gas_obs := tail) =
+         (INR HaltException : eval_result + exception,
+          selfdestruct_final cx (w2w (typed_val_to_w256 (BaseTV AddressT) v))
+            (ee with gas_obs := tail))` by
+        (irule selfdestruct_tail_halt >> simp[]) >>
+      simp[bind_def, selfdestruct_final_fields]) >>
+  conj_tac >- simp[selfdestruct_final_def] >>
+  gen_tac >> disch_tac >>
+  `valid_horizon cx st0 H ee.storage_trace` by fs[selfdestruct_final_def] >>
+  reverse conj_tac
+  >- (disj2_tac >>
+      simp[fragExecTheory.exit_result_def, Abbr `childR`,
+        exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _ /\ _` drule >> strip_tac >>
+  `gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (t,G',tn') [] (Halt u,G',tn')` by
+    (first_x_assum irule >> first_assum ACCEPT_TAC) >>
+  qpat_assum `gas_origin_ptr_path _ _ marks (OK t,G',tn')`
+    (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+  disch_then (qspec_then `t` mp_tac) >> simp[] >>
+  disch_then (qspec_then `[]` mp_tac) >> simp[] >>
+  disch_then irule >> first_assum ACCEPT_TAC
+QED
+
+Finalise selfdestruct_expr_full_from_interfaces
+
+(* A single mask-independent terminal result carries the child ghosts. *)
+Theorem selfdestruct_full_compiled_tail_joint:
+  !op sm sb func t aw tn G ctx lo d cenv cx ee explicit PG.
+    compile_selfdestruct op sm = ((),sb) /\ fn_has_code sm sb func /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
+    eval_operand op t = SOME aw /\ op_taint tn op = {} /\
+    op_prov G op = NONE /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) ==>
+    ?r. step_inst_base (mk_inst sm.cs_next_id SELFDESTRUCT [op] []) t = r /\
+        exit_result r /\
+        (!D. ghost_inv_at D lo d cenv cx ee G tn t ==>
+          gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+            (t,G,tn) [] (r,G,tn))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `sb.cs_current_bb = sm.cs_current_bb /\
+   sb.cs_current_insts = sm.cs_current_insts ++
+     [mk_inst sm.cs_next_id SELFDESTRUCT [op] []]` by
+    (qpat_x_assum `compile_selfdestruct _ _ = _` mp_tac >>
+     simp[compile_selfdestruct_def, emit_void_def, fresh_id_def, emit_def,
+          comp_bind_def] >> strip_tac >> gvs[]) >>
+  `?bb. lookup_block sm.cs_current_bb func.fn_blocks = SOME bb /\
+    !i. i < LENGTH [mk_inst sm.cs_next_id SELFDESTRUCT [op] []] ==>
+      get_instruction bb (LENGTH sm.cs_current_insts + i) =
+        SOME (EL i [mk_inst sm.cs_next_id SELFDESTRUCT [op] []])` by
+    (irule fn_has_code_same_block >> qexists_tac `sb` >> simp[]) >>
+  first_x_assum (qspec_then `0` assume_tac) >> gvs[] >>
+  conj_asm1_tac
+  >- (simp[step_inst_base_def, mk_inst_def, eval_operands_def] >>
+      Cases_on `t.vs_call_ctx.cc_static` >> simp[exit_result_def]) >>
+  rpt strip_tac >>
+  irule exit_inst_origin_ptr >> simp[] >>
+  simp[mk_inst_def, step_inst_non_invoke, gas_events_step_def,
+    gas_count_step_def, mem_safe_step_non_invoke,
+    inst_mem_below_frontier_def, inst_dload_in_section_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  fs[ghost_inv_at_def, stor_taint_ok_at_def] >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def,
+    step_inst_non_invoke, step_inst_base_def, eval_operands_def] >>
+  Cases_on `t.vs_call_ctx.cc_static` >> simp[] >>
+  rpt strip_tac >> gvs[halt_state_def, set_returndata_def] >>
+  simp[step_taint_def, adopt_reset_def, store_taint_def,
+       imm_taint_def, ret_taint_def] >>
+  Cases_on `t.vs_call_ctx.cc_created_in_tx`
+  >- gvs[vfmStateTheory.update_account_def, vfmStateTheory.lookup_account_def,
+         combinTheory.APPLY_UPDATE_THM] >>
+  gvs[GSYM vfmStateTheory.lookup_account_def,
+      vfmSameFrameTheory.transfer_value_preserves_storage]
+QED
+
+(* Local source and paired compilation boundaries for the joint case. *)
+Theorem selfdestruct_full_source_pre:
+  !cenv cx env ann args dflt es.
+    expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
+    ?e. args = [e] /\ ann = NoneT /\ dflt = NONE /\
+      expr_type e = BaseT AddressT /\
+      (!es'. expr_sim_inv cenv cx env es' ==>
+         expr_body_pre cenv cx env e es') /\
+      eval_expr cx (Call ann SelfDestructTarget args dflt) =
+        bind (bind (eval_expr cx e) (read_result cx)) (selfdestruct_tail cx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?e. args = [e] /\ ann = NoneT /\ dflt = NONE /\
+       expr_type e = BaseT AddressT` by
+    gvs[expr_body_pre_def, well_typed_expr_def, LENGTH_EQ_NUM_compute] >>
+  gvs[eval_selfdestruct_action] >>
+  rw[expr_body_pre_def] >>
+  gvs[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
+      alloc_limits_expr_def, int_calls_expr_def,
+      expr_has_evm_run_thm, supported_expr_exists_def,
+      supported_exprs_exists_every]
+QED
+
+Theorem selfdestruct_full_layout_shadow:
+  !cenv ty ann e dflt sa sb vv ssa ssb svv func sfunc.
+    expr_type e = BaseT AddressT /\
+    gas_shadow_compiles
+      (lower_value compile_expr cenv (expr_type e) e)
+      (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)) /\
+    gas_shadow_state sa ssa /\
+    compile_expr cenv ty (Call ann SelfDestructTarget [e] dflt) sa = (vv,sb) /\
+    compile_expr cenv ty (gas_shadow_expr (Call ann SelfDestructTarget [e] dflt))
+      ssa = (svv,ssb) /\
+    fn_has_code sa sb func /\ fn_has_code ssa ssb sfunc ==>
+    ?data sm ssm.
+      vv = StackValue ann (Lit 0w) /\ svv = StackValue ann (Lit 0w) /\
+      lower_value compile_expr cenv (expr_type e) e sa = (data,sm) /\
+      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+        ssa = (data,ssm) /\
+      gas_shadow_state sm ssm /\
+      compile_selfdestruct data sm = ((),sb) /\
+      compile_selfdestruct data ssm = ((),ssb) /\
+      ci_mono sa sm /\ ci_mono sm sb /\
+      ci_mono ssa ssm /\ ci_mono ssm ssb /\
+      fn_has_code sa sm func /\ fn_has_code sm sb func /\
+      fn_has_code ssa ssm sfunc /\ fn_has_code ssm ssb sfunc
+Proof
+  rpt gen_tac >>
+  simp[Once compile_expr_def, gas_shadow_expr_def] >>
+  simp[Once compile_expr_def, compile_call_def, expr_type_def,
+       lower_value_callback_contract, expr_child_callback_agrees] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  `lower_value
+      (expr_child_callback (cenv_defaults_size cenv + expr_size e +
+        (type_size ann + (option_size expr_size dflt + 2))) compile_expr)
+      cenv (BaseT AddressT) e = lower_value compile_expr cenv (BaseT AddressT) e` by
+    (irule lower_value_callback_contract >>
+     irule expr_child_callback_agrees >> simp[]) >>
+  `lower_value
+      (expr_child_callback (cenv_defaults_size cenv + expr_size (gas_shadow_expr e) +
+        (type_size ann +
+         (option_size expr_size (OPTION_MAP gas_shadow_expr dflt) + 2)))
+        compile_expr) cenv (BaseT AddressT) (gas_shadow_expr e) =
+      lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr e)` by
+    (irule lower_value_callback_contract >>
+     irule expr_child_callback_agrees >> simp[]) >>
+  gvs[] >>
+  qpat_x_assum `gas_shadow_compiles _ _` mp_tac >>
+  simp[gas_shadow_compiles_def] >>
+  disch_then drule >> simp[] >> strip_tac >> gvs[] >>
+  `ci_mono sa st1` by
+    (`ci_mono sa (SND (lower_value compile_expr cenv (BaseT AddressT) e sa))`
+       suffices_by gvs[] >>
+     irule ci_mono_lower_value_cfn >> simp[compile_expr_ci_mono]) >>
+  `ci_mono ssa st1'` by
+    (`ci_mono ssa (SND (lower_value compile_expr cenv (BaseT AddressT)
+                        (gas_shadow_expr e) ssa))` suffices_by gvs[] >>
+     irule ci_mono_lower_value_cfn >> simp[compile_expr_ci_mono]) >>
+  `ci_mono st1 sb /\ ci_mono st1' ssb` by
+    (qpat_x_assum `compile_selfdestruct data st1 = _` mp_tac >>
+     qpat_x_assum `compile_selfdestruct data st1' = _` mp_tac >>
+     simp[compile_selfdestruct_def, emit_void_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          fresh_id_def, emit_def, ci_mono_def,
+          cs_extends_def, IS_PREFIX_APPEND, APPEND_ASSOC] >>
+     rpt strip_tac >> gvs[] >> conj_tac >> qexists_tac `[]` >> simp[]) >>
+  gvs[ci_mono_def] >> metis_tac[fn_has_code_split]
+QED
+
+(* Discharge the closed interfaces using their integrated suppliers. *)
+Theorem selfdestruct_expr_full:
+  !cx ann args dflt DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Call ann SelfDestructTarget args dflt) es
+Proof
+  mp_tac selfdestruct_expr_full_from_interfaces >>
+  impl_tac >- ACCEPT_TAC selfdestruct_full_source_pre >>
+  impl_tac >- ACCEPT_TAC selfdestruct_full_layout_shadow >>
+  impl_tac >- ACCEPT_TAC selfdestruct_full_compiled_tail_joint >>
+  simp[]
+QED
+
+(* Both result judgments extend the same child joint witness. *)
 Theorem body_selfdestruct_case_full:
   !cx v24 es v25.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  rw[body_expr_full_ok_def] >>
-  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
-      supportedExprTraverseTheory.expr_has_evm_run_thm,
-      supportedExprTraverseTheory.expr_evm_run_root_def]
+  rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[body_expr_full_ok_def] >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Call v24 SelfDestructTarget es v25) es'` by
+    (irule selfdestruct_expr_full >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  irule expr_vv_sim_stack_full >> simp[] >>
+  drule selfdestruct_full_source_pre >> strip_tac >> gvs[] >>
+  rpt conj_tac
+  >- (gen_tac >>
+      simp[Once compile_expr_def, compile_call_def, expr_type_def,
+           comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> simp[]))
+  >- (rpt strip_tac >>
+      gvs[bind_def, AllCaseEqs()] >>
+      qpat_x_assum `selfdestruct_tail _ _ _ = _` mp_tac >>
+      simp[selfdestruct_tail_def, vyperInterpreterTheory.transfer_value_def,
+           bind_def, ignore_bind_def, lift_option_type_def,
+           check_not_static_def, check_def, assert_def, get_accounts_def,
+           update_accounts_def, update_pending_deletions_def,
+           return_def, raise_def] >>
+      rpt (CASE_TAC >> gvs[])) >>
+  simp[loweringPostsTheory.post_value_type_def, expr_type_def,
+       lowered_value_type_def, vyperValueTheory.evaluate_type_def,
+       valueEncodingTheory.type_memory_size_def]
 QED
 
 (* The send operands and CALL/ASSERT suffix share the joint witness. *)

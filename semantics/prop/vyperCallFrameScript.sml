@@ -36,25 +36,13 @@ Theorem eval_send_success_value:
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  Cases_on `dest_AddressV h` >> Cases_on `dest_NumV h'` >>
-  simp[eval_send_def, frame_call_value_def, COND_RATOR, bind_apply, ignore_bind_apply, type_check_def,
-       check_def, assert_def, return_def, raise_def, lift_option_type_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-  Cases_on `st.outcomes` >>
-  gvs[bind_apply, ignore_bind_apply, return_def, raise_def, AllCaseEqs(),
-      get_accounts_def, get_transient_storage_def, lift_option_def,
-      bind_def, ignore_bind_def, check_def, assert_def] >>
-  rpt strip_tac >> gvs[] >>
-  (* static frame: the outcomes case is on the post-check state *)
-  TRY (qpat_x_assum `option_CASE _ _ _ _ = _` mp_tac >> CASE_TAC >>
-       simp[bind_apply, ignore_bind_apply, return_def, raise_def,
-            AllCaseEqs(), get_accounts_def, get_transient_storage_def,
-            lift_option_def, bind_def, ignore_bind_def, check_def,
-            assert_def] >>
-       rpt strip_tac >> gvs[]) >>
-  pairarg_tac >> gvs[bind_def, ignore_bind_def, check_def, assert_def,
-                       return_def, raise_def, AllCaseEqs()]
+  simp[eval_send_def, bind_def, ignore_bind_def, return_def, raise_def,
+       COND_RATOR, AllCaseEqs(), UNCURRY, LET_THM] >>
+  rw[] >> gvs[] >>
+  rename1 `frame_call_value cx (SOME amount) mid = (INL value_opt,call_st)` >>
+  Cases_on `call_st.outcomes` >>
+  gvs[bind_def, ignore_bind_def, return_def, raise_def,
+      AllCaseEqs(), UNCURRY]
 QED
 
 Theorem eval_raw_call_success_value:

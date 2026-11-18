@@ -3,6 +3,7 @@
    pre-adoption request snapshots are observed, not just helper parameters. *)
 Theory vyperSendCpsCVTest
 Ancestors
+  vyperSmallStepCV
   vyperExtCallCpsCVTest vyperSmallStep[ignore_grammar] extCallOracle
   vyperCallOutcome[ignore_grammar] vfmState[ignore_grammar]
   vfmExecution[ignore_grammar] vyperState vyperContext vyperAST vyperValue
@@ -104,10 +105,10 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem send_cps_exhaustion_records_request:
+Theorem send_cps_exhaustion_runtime_error:
   send_observe 9w 7 (SOME [])
-    (INR (Error (RuntimeError "send failed"))) 3 0 [] 2w 4w cpscv_initial_logs
-    (send_requests 9w 7) (SOME [])
+    (INR (Error (RuntimeError "take_call_outcome"))) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests (SOME [])
 Proof
   CONV_TAC cv_eval
 QED

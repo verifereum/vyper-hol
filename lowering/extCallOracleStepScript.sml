@@ -52,14 +52,15 @@ Ancestors
    flag, and accounts and transient storage that agree as accounts_rel
    says. *)
 Theorem venom_call_request_source:
-  !cx es s aw vw ao az stat target value_opt.
+  !cx es s aw vw ao az stat target value_opt gas_cap gas.
     accounts_rel H cx es s /\ w2w aw = target /\
     w2n vw = (case value_opt of NONE => 0 | SOME n => n) /\
-    (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt ==>
-    request_agree H cx
+    (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt /\
+    (!g. gas_cap = SOME g ==> g = w2n gas) ==>
+    request_agree H cx.txn.target
       (call_outcome_request target (read_memory (w2n ao) (w2n az) s)
-         value_opt es)
-      (venom_call_request s aw vw ao az stat)
+         value_opt es with cr_gas := gas_cap)
+      (venom_call_request s aw vw ao az stat with cr_gas := SOME (w2n gas))
 Proof
   rpt strip_tac >>
   drule_then (qspecl_then [`target`, `read_memory (w2n ao) (w2n az) s`,
@@ -100,7 +101,7 @@ QED
    record and adopt the same outcome. *)
 Theorem state_rel_adopt_consume[local]:
   !func cenv cx es s rq rq' outcome rest ro rz tr.
-    state_rel H func cenv cx es s /\ request_agree H cx rq rq' /\
+    state_rel H func cenv cx es s /\ request_agree H cx.txn.target rq rq' /\
     take_outcome rq s.vs_outcomes = (outcome, rest) /\
     local_ptrs_rel func cenv es.scopes
       (SND (consume_call_outcome rq' ro rz s)) /\
@@ -162,12 +163,14 @@ QED
    source state as taken). *)
 Theorem exec_ext_call_oracle_step:
   !H func cenv cx es s inst gas aw vw ao az ro rz stat out target
-   value_opt rq outcome es1.
+   value_opt rq outcome es1 gas_cap.
     state_rel H func cenv cx es s /\ inst.inst_outputs = [out] /\
     w2w aw = target /\
     w2n vw = (case value_opt of NONE => 0 | SOME n => n) /\
     (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt /\
-    take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
+    (!g. gas_cap = SOME g ==> g = w2n gas) /\
+    take_call_outcome gas_cap target
+      (read_memory (w2n ao) (w2n az) s) value_opt es =
       (INL (rq, outcome), es1) ==>
     ?s'. exec_ext_call inst s gas aw vw ao az ro rz stat =
            OK (update_var out (if outcome.co_success then 1w else 0w) s') /\
@@ -191,20 +194,25 @@ Proof
   `accounts_rel H cx es s /\ es.outcomes = SOME s.vs_outcomes /\
    s.vs_call_ctx.cc_static = cx.txn.is_static` by
     fs[state_rel_def, call_ctx_rel_def] >>
-  `?rest. rq = call_outcome_request target (read_memory (w2n ao) (w2n az) s)
-                 value_opt es /\
+  Cases_on `s.vs_outcomes = []`
+  >- gvs[take_call_outcome_def, take_request_outcome_def] >>
+  `?rest. rq = (call_outcome_request target (read_memory (w2n ao) (w2n az) s)
+                 value_opt es with cr_gas := gas_cap) /\
           take_outcome rq s.vs_outcomes = (outcome, rest) /\
           es1 = es with <| outcomes := SOME rest;
                            requests := record_request rq es.requests;
                            storage_trace := es.storage_trace ++
                              [StorageOutcome rq outcome] |>` by
-    (qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `take_call_outcome _ _ _ _ _ = _` mp_tac >>
+     Cases_on `s.vs_outcomes` >> fs[] >>
      simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> simp[] >> rw[] >>
      qexists_tac `rest` >> simp[]) >>
-  `request_agree H cx rq (venom_call_request s aw vw ao az stat)` by
+  `request_agree H cx.txn.target rq
+    (venom_call_request s aw vw ao az stat with cr_gas := SOME (w2n gas))` by
     (qpat_x_assum `rq = _` SUBST1_TAC >>
      irule venom_call_request_source >> simp[]) >>
-  qabbrev_tac `rq' = venom_call_request s aw vw ao az stat` >>
+  qabbrev_tac `rq' = venom_call_request s aw vw ao az stat
+    with cr_gas := SOME (w2n gas)` >>
   Cases_on `take_outcome rq' s.vs_outcomes` >>
   rename1 `take_outcome rq' _ = (outcome', rest')` >>
   drule_all take_outcome_agree >> strip_tac >>
@@ -261,17 +269,21 @@ QED
    take_call_outcome, which Venom does not make. *)
 Theorem send_call_oracle_step:
   !func cenv cx es s inst gas_op addr_op val_op out has_gas to_v amount_v
-   gas_vs aw vw res es'.
+   gas_vs aw vw res es' gw.
     state_rel H func cenv cx es s /\
     inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
     inst.inst_operands =
       [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
-    IS_SOME (eval_operand gas_op s) /\
+    eval_operand gas_op s = SOME gw /\
+    w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
     eval_operand addr_op s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
     eval_operand val_op s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
     LENGTH gas_vs = (if has_gas then 1 else 0) /\
     eval_send cx has_gas (to_v :: amount_v :: gas_vs) es = (res, es') ==>
     (res = INR (Error (RuntimeError "write in static context")) /\
+     step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))) \/
+    (res = INR (Error (RuntimeError "take_call_outcome")) /\
      step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))) \/
     res = INR (Error (RuntimeError "call outcome accounts")) \/
     ?s'. s' = s with <| vs_outcomes := s'.vs_outcomes;
@@ -302,7 +314,7 @@ Proof
       fs[step_inst_base_opcode_eqs, eval_operand_def]) >>
   disj2_tac >>
   `step_inst_base inst s =
-     exec_ext_call inst s (THE (eval_operand gas_op s)) aw vw 0w 0w
+     exec_ext_call inst s gw aw vw 0w 0w
        (0w:bytes32) (0w:bytes32) cx.txn.is_static` by
     (Cases_on `eval_operand gas_op s` >> fs[] >>
      simp[step_inst_base_opcode_eqs, eval_operand_def]) >>
@@ -310,21 +322,30 @@ Proof
      (INL (if cx.txn.is_static then NONE else SOME (w2n vw)), es)` by
     (Cases_on `cx.txn.is_static` >> fs[frame_call_value_def, w2n_eq_0,
       bind_def, ignore_bind_def, check_def, assert_def, vyperStateTheory.return_def]) >>
+  Cases_on `s.vs_outcomes = []`
+  >- (disj1_tac >>
+      qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
+      simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, check_def, lift_option_type_def, return_def,
+           take_call_outcome_def, take_request_outcome_def,
+           exec_ext_call_def] >> strip_tac >> gvs[]) >>
+  disj2_tac >>
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
   simp[eval_send_def, update_pending_deletions_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, check_def, lift_option_type_def,
        vyperStateTheory.return_def] >>
-  Cases_on `take_call_outcome (w2w aw) []
+  qpat_assum `w2n gw = _` (fn th => rewrite_tac[GSYM th]) >>
+  Cases_on `take_call_outcome (SOME (w2n gw)) (w2w aw) []
     (if cx.txn.is_static then NONE else SOME (w2n vw)) es` >>
-  qmatch_asmsub_rename_tac `take_call_outcome _ _ _ _ = (tr, es1)` >>
+  qmatch_asmsub_rename_tac `take_call_outcome _ _ _ _ _ = (tr, es1)` >>
   Cases_on `tr` >> simp[]
   >- (rename1 `INL x` >> PairCases_on `x` >> rename1 `INL (rq, outcome)` >>
       simp[] >> strip_tac >> disj2_tac >>
       qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `s`, `inst`,
-                   `THE (eval_operand gas_op s)`, `aw`, `vw`, `0w`, `0w`,
+                   `gw`, `aw`, `vw`, `0w`, `0w`,
                    `0w:bytes32`, `0w:bytes32`, `cx.txn.is_static`, `out`, `w2w aw`,
                    `if cx.txn.is_static then NONE else SOME (w2n vw)`, `rq`,
-                   `outcome`, `es1`] mp_tac exec_ext_call_oracle_step >>
+                   `outcome`, `es1`, `SOME (w2n gw)`] mp_tac exec_ext_call_oracle_step >>
       (impl_tac >-
         (Cases_on `cx.txn.is_static` >>
          gvs[read_memory_def, write_memory_with_expansion_empty_0])) >>
@@ -357,6 +378,7 @@ Proof
       gvs[adopt_call_outcome_equation, bind_def, ignore_bind_def, assert_def,
           vyperStateTheory.return_def]) >>
   strip_tac >> disj1_tac >>
-  qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `take_call_outcome _ _ _ _ _ = _` mp_tac >>
+  Cases_on `s.vs_outcomes` >> gvs[] >>
   simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> rw[] >> gvs[]
 QED

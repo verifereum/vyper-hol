@@ -34,6 +34,51 @@ Proof
   rpt strip_tac >> gvs[update_var_def, AllCaseEqs()]
 QED
 
+(* The loop variable's ALLOCA puts the base of its sz-byte allocation in p.
+   It can reuse the existing allocation for this instruction ID. The step
+   preserves the state relation, all other variables, and existing allocations. *)
+Theorem for_alloca_state:
+  !(H :(bool # 'a word # type_value) list # num list) ctx func cenv cx es s
+   A p sz.
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    MEM A (fn_insts func) /\ A.inst_opcode = ALLOCA /\
+    A.inst_operands = [Lit (n2w sz)] /\ A.inst_outputs = [p] /\
+    not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\ ~s.vs_halted ==>
+    ?s1 w.
+      step_inst_base A s = OK s1 /\
+      (!(H' :(bool # 'a word # type_value) list # num list).
+         stmt_state_rel H' ctx func cenv cx es s ==>
+         stmt_state_rel H' ctx func cenv cx es s1) /\
+      lookup_var p s1 = SOME w /\
+      FLOOKUP s1.vs_allocas A.inst_id = SOME (w2n w, sz) /\
+      s1.vs_current_bb = s.vs_current_bb /\
+      s1.vs_inst_idx = s.vs_inst_idx /\ ~s1.vs_halted /\
+      (!x. x <> p ==> lookup_var x s1 = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+                   FLOOKUP s1.vs_allocas aid = SOME entry)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?s1. exec_alloca A s (n2w sz : bytes32) = OK s1` by
+    (Cases_on `FLOOKUP s.vs_allocas A.inst_id`
+     >- simp[exec_alloca_def] >>
+     rename1 `FLOOKUP s.vs_allocas A.inst_id = SOME entry` >>
+     PairCases_on `entry` >> simp[exec_alloca_def]) >>
+  drule_all stmt_state_rel_exec_alloca >> strip_tac >>
+  `!(H' :(bool # 'a word # type_value) list # num list).
+     stmt_state_rel H' ctx func cenv cx es s ==>
+     stmt_state_rel H' ctx func cenv cx es s1` by
+    (rpt strip_tac >>
+     qspec_then `H'` drule_all stmt_state_rel_exec_alloca >> simp[]) >>
+  drule_all exec_alloca_frames >> strip_tac >>
+  `s1.vs_current_bb = s.vs_current_bb /\
+   s1.vs_inst_idx = s.vs_inst_idx /\ ~s1.vs_halted` by
+    (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+     simp[exec_alloca_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[update_var_def, AllCaseEqs()]) >>
+  qexistsl_tac [`s1`, `w`] >> simp[] >>
+  simp[step_inst_base_def]
+QED
+
 Theorem exec_alloca_operand_frame:
   !inst s n t p.
     exec_alloca inst s n = OK t /\ inst.inst_outputs = [p] ==>

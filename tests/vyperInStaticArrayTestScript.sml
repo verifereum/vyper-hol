@@ -4,6 +4,7 @@
    that such slots exist.  Expected values follow Vyper: `0 in [0, 7]` is true. *)
 Theory vyperInStaticArrayTest
 Ancestors
+  vyperSmallStepCV
   vyperInterpreter vyperSmallStep vyperState vyperContext vyperAST vyperValue
   vyperValueOperation vyperTypeSystem jsonToVyper vyperTestRunner
   list option pair words

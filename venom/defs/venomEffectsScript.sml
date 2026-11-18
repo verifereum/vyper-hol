@@ -200,8 +200,10 @@ End
    - NoFail: only OK or Error (pure ops, reads, memory writes)
    - CanRevert: can Abort with Revert_abort (ASSERT)
    - CanExHalt: can Abort with ExHalt_abort (ASSERT_UNREACHABLE, RETURNDATACOPY,
-     INVALID; and the state writes SSTORE, TSTORE, LOG, SELFDESTRUCT, CREATE,
-     CREATE2 and value-carrying CALL, which abort in a static frame)
+     INVALID; the state writes SSTORE, TSTORE, LOG, SELFDESTRUCT, CREATE,
+     CREATE2 and value-carrying CALL, which abort in a static frame; and
+     CALL, STATICCALL, DELEGATECALL, CREATE and CREATE2, which abort when no
+     outcome is left)
    - AnyFail: can Halt or Abort with any type (INVOKE — from callee)
    Note: effects_independent INVOKE INVOKE = F, so AnyFail never pairs with itself. *)
 Datatype:
@@ -222,6 +224,8 @@ Definition opcode_fail_class_def:
   opcode_fail_class CREATE = CanExHalt /\
   opcode_fail_class CREATE2 = CanExHalt /\
   opcode_fail_class CALL = CanExHalt /\
+  opcode_fail_class STATICCALL = CanExHalt /\
+  opcode_fail_class DELEGATECALL = CanExHalt /\
   opcode_fail_class INVOKE = AnyFail /\
   opcode_fail_class _ = NoFail
 End
