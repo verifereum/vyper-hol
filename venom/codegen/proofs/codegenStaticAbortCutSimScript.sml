@@ -12,7 +12,7 @@ val _ = Parse.hide "base";
 (* Statement-local observations preserve both normal clauses and the complete
    provenance of a stopped abort, including a cut in an invoked function. *)
 Theorem stopped_fn_simulations:
-  let A = \rpolicy unit cpl prog ctx lo o2pc Inv env ast ss vs'.
+  !A. A = (\rpolicy unit cpl prog ctx lo o2pc Inv env ast ss vs'.
     (?n out. (asm_steps lo o2pc prog n ast = AsmRevert out \/
               asm_steps lo o2pc prog n ast = AsmFault out) /\
        sym_terminal (sym_steps prog env n ss) /\ out.as_requests <<= vs'.vs_requests) \/
@@ -27,9 +27,8 @@ Theorem stopped_fn_simulations:
          raC pcretC restC memC /\
        sym_frame_inv prog env ctx cpl fnC retC srestC labsC psC cut sc /\
        (in_static_abort_prefix fnC cvsC \/ in_revert_forward fnC cvsC) /\
-       cut.as_requests = vs'.vs_requests)
-  in
-  let R = \rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest srest labs0 ast ss res.
+       cut.as_requests = vs'.vs_requests)) ==>
+  !R. R = (\rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest srest labs0 ast ss res.
     (!vs'. res = Halt vs' ==>
        ?n out. asm_steps lo o2pc prog n ast = AsmHalt out /\
          venom_asm_terminal_rel vs' out /\ sym_terminal (sym_steps prog env n ss)) /\
@@ -45,10 +44,9 @@ Theorem stopped_fn_simulations:
          ss'.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
          (!b. context_spill_byte cpl b /\ ~closure_spill_byte ctx cpl fn.fn_name b ==>
            FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b) /\
-         (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cpl b))
-  in
-  let E = \fuel.
-    !rpolicy unit cpl prog ctx lo o2pc i r fn vs ast Inv ra pc_ret rest env ret srest ss.
+         (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cpl b))) ==>
+  !fuel.
+  (!rpolicy unit cpl prog ctx lo o2pc i r fn vs ast Inv ra pc_ret rest env ret srest ss.
     ctx = unit.cu_context /\
     lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
     generate_context_plan ctx = SOME cpl /\
@@ -94,10 +92,8 @@ Theorem stopped_fn_simulations:
          ss'.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
          (!b. context_spill_byte cpl b /\ ~closure_spill_byte ctx cpl fn.fn_name b ==>
            FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
-         (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cpl b))
-  in
-  let F = \fuel.
-    !rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+         (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cpl b))) /\
+  (!rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth
       spill_base lbl_ctr fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after
       vs ast Inv ra pc_ret rest mem0 env ret srest labs0 ss.
     ctx = unit.cu_context /\
@@ -144,36 +140,27 @@ Theorem stopped_fn_simulations:
     asm_static_wf prog /\ (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
     sym_frame_inv prog env ctx cpl fn ret srest labs0 ps ast ss ==>
     R rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest srest labs0 ast ss
-      (run_blocks fuel ctx fn vs)
-  in
-    !fuel. E fuel /\ F fuel
+      (run_blocks fuel ctx fn vs))
 Proof
-  qmatch_goalsub_abbrev_tac `LET _ aobs` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ robs` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ eprop` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ fprop` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
+  qx_gen_tac `aobs` >>
+  disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  qx_gen_tac `robs` >>
+  disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
   Induct
-  >- simp[Abbr `eprop`, Abbr `fprop`, Abbr `robs`, run_blocks_def] >>
-  mp_tac stopped_block_body_from_lower_fuel >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
-  (impl_tac >- (fs[Abbr `eprop`, Abbr `fprop`] >>
-                 conj_tac >> first_assum ACCEPT_TAC)) >>
+  >- simp[Abbr `robs`, run_blocks_def] >>
+  qspec_then `aobs` mp_tac stopped_block_body_from_lower_fuel >>
+  (impl_tac >- simp[Abbr `aobs`]) >>
+  disch_then (qspec_then `robs` mp_tac) >>
+  (impl_tac >- simp[Abbr `robs`]) >>
+  (impl_tac >- (first_assum ACCEPT_TAC)) >>
   disch_then (mk_asm "body") >> conj_tac
   >- (mp_tac stopped_entry_lift >> markerLib.REABBREV_TAC >>
       (impl_tac >- (asm_x "body" mp_tac >> simp[Abbr `robs`])) >>
-      simp[Abbr `eprop`]) >>
-  qspec_then `fuel` mp_tac stopped_nonentry_lift >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
-  (impl_tac >- (asm_x "body" mp_tac >> simp[Abbr `robs`, Abbr `aobs`])) >>
-  unabbrev_all_tac >> BETA_TAC >> disch_then ACCEPT_TAC
+      simp[]) >>
+  qspecl_then [`fuel`, `robs`] mp_tac stopped_nonentry_lift >>
+  (impl_tac >- simp[Abbr `robs`, Abbr `aobs`]) >>
+  (impl_tac >- (asm_x "body" ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem codegen_entry_abort_stopped:
@@ -243,7 +230,8 @@ Proof
      its assumed theorem had free variables in its hypotheses, so matching
      could not instantiate the fn_entry_state_rel arguments. *)
   drule_at (Pat `fn_entry_state_rel _ _ _ _ _ _`)
-    (stopped_fn_simulations |> PURE_REWRITE_RULE [LET_THM] |> BETA_RULE
+    (stopped_fn_simulations |> Unwind.UNWIND_FORALL_RULE
+       |> Unwind.UNWIND_FORALL_RULE |> BETA_RULE
        |> Q.SPEC `fuel` |> CONJUNCT1 |> BETA_RULE |> SPEC_ALL
        |> Q.INST [`i` |-> `0`, `pc_ret` |-> `0`,
                   `ret` |-> `""`, `srest` |-> `[]`]) >>
