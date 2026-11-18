@@ -161,6 +161,16 @@ Proof
   pop_assum (SUBST1_TAC o SYM) >> simp[merge_callee_state_def]
 QED
 
+Theorem frame_result_rel_revert_empty:
+  frame_result_rel (Abort Revert_abort s) r' /\ s.vs_returndata = [] ==>
+  ?t. r' = Abort Revert_abort t /\ t.vs_returndata = []
+Proof
+  Cases_on `r'` >>
+  simp[frame_result_rel_def, execution_frame_eq_reconstruct] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `_ = s` (SUBST_ALL_TAC o SYM) >> gvs[]
+QED
+
 Theorem frame_result_rel_unit:
   frame_result_rel r r' /\ (!v t. r <> IntRet v t) ==> unit_result_rel r r'
 Proof
@@ -893,6 +903,41 @@ Proof
 QED
 
 (* Frame simulations away from revert-forward pairs compose. *)
+Definition frame_sim_rf_observation_def:
+  frame_sim_rf_observation P L C C' fn fn' <=>
+    !s0 inst' s'.
+      fn_entry_state fn s0 /\ s0.vs_labels = L /\
+      frame_reach C' fn' s0 inst' s' /\
+      inst_mem_ranges inst' s' <> [] /\ ~in_revert_forward fn' s' ==>
+      ?inst s. frame_reach C fn s0 inst s /\ ~in_revert_forward fn s /\
+               mem_corr inst s inst' s' /\ (P fn s ==> P fn' s')
+End
+
+
+Theorem frame_sim_rf_observation_forget:
+  frame_sim_rf_observation P L C C' fn fn' ==> frame_sim_rf L C C' fn fn'
+Proof
+  rw[frame_sim_rf_observation_def, frame_sim_rf_def] >> metis_tac[]
+QED
+
+
+Theorem frame_sim_rf_observation_trans:
+  frame_sim_rf_observation P L C1 C2 f g /\
+  frame_sim_rf_observation P L C2 C3 g h /\
+  fn_entry_label f = fn_entry_label g ==>
+  frame_sim_rf_observation P L C1 C3 f h
+Proof
+  simp[frame_sim_rf_observation_def] >> rpt strip_tac >>
+  `fn_entry_state g s0` by gvs[fn_entry_state_def] >>
+  `?inst s. frame_reach C2 g s0 inst s /\ ~in_revert_forward g s /\
+     mem_corr inst s inst' s' /\ (P g s ==> P h s')` by metis_tac[] >>
+  `inst_mem_ranges inst s <> []` by gvs[mem_corr_def] >>
+  `?inst0 s1. frame_reach C1 f s0 inst0 s1 /\ ~in_revert_forward f s1 /\
+     mem_corr inst0 s1 inst s /\ (P f s1 ==> P g s)` by metis_tac[] >>
+  metis_tac[mem_corr_trans]
+QED
+
+
 Theorem frame_sim_rf_trans:
   frame_sim_rf L C1 C2 f g /\ frame_sim_rf L C2 C3 g h /\
   fn_entry_label f = fn_entry_label g ==> frame_sim_rf L C1 C3 f h
@@ -1311,13 +1356,13 @@ Proof
 QED
 
 (* The context-level fuel bound: run_context on lift_fuel fm fuel. *)
-Theorem fn_bisim_fuel_run_context:
+Theorem fn_bisim_fuel_run_context_frame:
   LIST_REL (fn_bisim_fuel fm) C.ctx_functions C'.ctx_functions /\
   (!n. n <= fm n) /\ C'.ctx_entry = C.ctx_entry /\
   (!fuel v t. run_context fuel C vs <> IntRet v t) /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
   terminates (run_context fuel C vs) ==>
-  dead_result_rel D (run_context fuel C vs)
+  frame_result_rel (run_context fuel C vs)
     (run_context (lift_fuel fm fuel) C' vs)
 Proof
   strip_tac >>
@@ -1337,7 +1382,20 @@ Proof
     `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
     `fuel`] mp_tac) >>
   simp[passSimulationDefsTheory.terminates_def] >> strip_tac >>
-  simp[run_function_def] >>
+  simp[run_function_def]
+QED
+
+Theorem fn_bisim_fuel_run_context:
+  LIST_REL (fn_bisim_fuel fm) C.ctx_functions C'.ctx_functions /\
+  (!n. n <= fm n) /\ C'.ctx_entry = C.ctx_entry /\
+  (!fuel v t. run_context fuel C vs <> IntRet v t) /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  terminates (run_context fuel C vs) ==>
+  dead_result_rel D (run_context fuel C vs)
+    (run_context (lift_fuel fm fuel) C' vs)
+Proof
+  strip_tac >>
   irule unit_result_rel_dead_result_rel >>
-  irule frame_result_rel_unit >> simp[]
+  irule frame_result_rel_unit >> simp[] >>
+  irule fn_bisim_fuel_run_context_frame >> simp[]
 QED
