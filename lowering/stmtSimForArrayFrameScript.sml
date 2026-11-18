@@ -311,23 +311,6 @@ Proof
 QED
 
 
-Theorem subscript_write_contains_name[local]:
-  !name key.
-    place_contains (SubscriptTarget (NameTarget name) key) (NameTarget name)
-Proof
-  simp[place_contains_def, place_access_def]
-QED
-
-Theorem iterator_unmodified_rejects_element_write[local]:
-  !name key ty rhs.
-    ~iterator_unmodified (Array (Name ty name))
-      [Assign (BaseTarget (SubscriptTarget (NameTarget name) key)) rhs]
-Proof
-  simp[iterator_unmodified_def, expr_places_def, stmt_writes_ok_def,
-       atarget_writes_ok_def, subscript_write_contains_name]
-QED
-
-
 Theorem array_name_attribute_target_rejected:
   !env name elem bound field.
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) ==>
