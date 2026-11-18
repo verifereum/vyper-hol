@@ -5,7 +5,7 @@ Ancestors ptrSafeRun ptrDiscipline venomExecSemantics venomInst venomState
 
 Theorem word_arithmetic_ptr_safe_step:
   (!op. MEM op inst.inst_operands ==> op_taint tn op = {}) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   MEM inst.inst_opcode
     [SUB; MUL; Div; Exp; ADDMOD; MULMOD; SGT; SLT; ISZERO; OR; AND; ASSERT] ==>
   ptr_safe_step D lo fuel ctx fn PG G tn inst s
@@ -22,7 +22,7 @@ QED
 
 Theorem word_literal_comparison_ptr_safe_step:
   (!arg. MEM arg inst.inst_operands ==> op_taint tn arg = {}) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   MEM inst.inst_opcode [LT; GT; EQ] /\
   (inst.inst_operands = [op; Lit w] \/ inst.inst_operands = [Lit w; op]) ==>
   ptr_safe_step D lo fuel ctx fn PG G tn inst s

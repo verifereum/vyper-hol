@@ -1508,22 +1508,7 @@ Proof
   gvs[outcomes_accounts_typed_def, EVERY_MEM]
 QED
 
-
 (* ===== The counted composition ===== *)
-
-(* In oracle mode raw_call reads no gas observation. *)
-Theorem calldata_take_call_outcome_gas_obs[local]:
-  !target cd vo st g gas_cap.
-    take_call_outcome gas_cap target cd vo (st with gas_obs := g) =
-      (FST (take_call_outcome gas_cap target cd vo st),
-       SND (take_call_outcome gas_cap target cd vo st) with gas_obs := g) /\
-    (SND (take_call_outcome gas_cap target cd vo st)).gas_obs = st.gas_obs
-Proof
-  rpt gen_tac >> simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def] >>
-  Cases_on `st.outcomes` >> simp[LET_THM, UNCURRY] >>
-  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
-  simp[LET_THM, UNCURRY] >> rw[]
-QED
 
 Theorem calldata_adopt_call_outcome_gas_obs[local]:
   !rq oc st g.
@@ -1559,8 +1544,12 @@ Proof
   simp[eval_raw_call_def, update_pending_deletions_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, vyperStateTheory.return_def, raise_def] >>
   qmatch_goalsub_abbrev_tac `take_call_outcome gas_cap target data vo` >>
-  qspecl_then [`target`, `data`, `vo`, `st`, `g`, `gas_cap`] mp_tac
-    calldata_take_call_outcome_gas_obs >>
+  mp_tac (CONJ
+    (Q.INST [`calldata` |-> `data`, `value_opt` |-> `vo`, `readings` |-> `g`]
+       vyperCallOutcomePropsTheory.take_call_outcome_gas_obs)
+    (Q.INST [`calldata` |-> `data`, `value_opt` |-> `vo`]
+       (CONJUNCT2 (CONJUNCT2 (CONJUNCT2 (CONJUNCT2
+          vyperCallOutcomePropsTheory.take_call_outcome_preserved_fields)))))) >>
   Cases_on `take_call_outcome gas_cap target data vo st` >> rename1 `_ = (q, st1)` >>
   reverse (Cases_on `q`) >> simp[] >> strip_tac >>
   rename1 `INL rqoc` >> PairCases_on `rqoc` >> simp[] >>

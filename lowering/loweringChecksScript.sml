@@ -8,6 +8,8 @@ Ancestors
   constSubstCV
   (* allocation limits, conversions, concat buffers, shared callee memory *)
   compilerLoweringTest
+  (* dynamic peak-memory statement type and constant bindings *)
+  peakMemoryHeaders deployPeakMemoryHeaders
   (* fixed-program regressions: ranges, allocation budget, immutables,
      assignment order, the O1 source-stage unit shape, the pop() subscript
      rejection, a name declared at two types in sibling scopes *)
@@ -26,7 +28,7 @@ Ancestors
   (* compiled creation code *)
   vyperCtorAliasTest createImmutableBytecodeTest createCompletionProbe
   ctorImmutableAppendTest
-  e2eWitnessCompute e2eWitness e2eCompose e2eERC20Witness
+  e2eWitnessCompute e2eWitness e2eNonreentrantWitness e2eCompose e2eERC20Witness
   (* tests of the bytecode evaluation library the native runner shares *)
   evalCompilerBytecodeLibTest
   (* operand-stack checker: pinned internal-call bytecode and deep call chains *)

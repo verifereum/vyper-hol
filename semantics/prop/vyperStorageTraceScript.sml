@@ -991,10 +991,16 @@ Proof
 QED
 
 Theorem storage_trace_frame_precompile_call_success:
-  storage_trace_frame (precompile_call_success bt)
+  storage_trace_frame (precompile_call_success bt vs)
 Proof
-  rw[storage_trace_frame_def, precompile_call_success_def] >>
-  rpt BasicProvers.TOP_CASE_TAC >> gvs[return_def, check_def, assert_def, raise_def, AllCaseEqs()]
+  pure_rewrite_tac[storage_trace_frame_def] >> rpt gen_tac >>
+  Cases_on `precompile_builtin bt` >> simp[precompile_call_success_def, return_def] >>
+  Cases_on `st.outcomes` >> simp[return_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[check_def, assert_def, bind_def, take_call_outcome_def,
+       take_request_outcome_def, call_outcome_request_def] >>
+  pairarg_tac >> simp[bind_def, check_def, assert_def, AllCaseEqs()] >>
+  Cases_on `outcome.co_success` >> simp[]
 QED
 
 Theorem storage_trace_frame_array_iterator_results:

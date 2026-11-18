@@ -13,15 +13,16 @@
 
 Theory asmOptInefficientJumps
 Ancestors
+  asmSpliceWithin asmRefinesWithin asmSymSemWithin
   asmSplice asmSymPc finalizerContract asmSymSem asmOptimizer asmWf
 
-Theorem jumpi_over_jump_window_refines:
-  asm_window_refines pfx
+Theorem jumpi_over_jump_window_refines_within[local]:
+  asm_window_refines_within pfx
     [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"]
     [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"]
     (AsmLabel x :: rest)
 Proof
-  rw[asm_window_refines_def, asm_static_wf_def] >>
+  rw[asm_window_refines_within_def, asm_static_wf_def] >>
   `¬MEM (AsmLabel x) pfx`
     by (qpat_x_assum `asm_labels_unique _`
           (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
@@ -63,13 +64,20 @@ Proof
     by simp[Abbr `s1`, asmSemTheory.asm_next_def] >>
   reverse (Cases_on `∃c stk. ss.sym_stack = Val c :: stk`)
   >- ((* a Lab condition, or too few items: p's JUMPI misuses its stack *)
-      `∃e. sym_step p env (AsmOp "JUMPI") s1 = SymError e ∨
-           sym_step p env (AsmOp "JUMPI") s1 = SymBad e`
-        by (Cases_on `ss.sym_stack` >> gvs[]
-            >- simp[sym_step_def, sym_step_op_def, sym_jumpi_def] >>
-            rename1 `ss.sym_stack = v :: _` >> Cases_on `v` >>
-            gvs[sym_step_def, sym_step_op_def, sym_jumpi_def]) >>
+      Q.SUBGOAL_THEN
+        `∃e. sym_step p env (AsmOp "JUMPI") s1 = SymError e ∨
+             sym_step p env (AsmOp "JUMPI") s1 = SymBad e` assume_tac
+      >- (Cases_on `ss.sym_stack` >> gvs[]
+          >- simp[sym_step_def, sym_step_op_def, sym_jumpi_def] >>
+          rename1 `ss.sym_stack = v :: _` >> Cases_on `v` >>
+          gvs[sym_step_def, sym_step_op_def, sym_jumpi_def]) >>
       qexistsl_tac [`2`, `0`] >>
+      conj_tac >- simp[] >> conj_tac >- simp[] >>
+      CONV_TAC (REWR_CONV CONJ_ASSOC) >> reverse conj_tac
+      >- (pop_assum strip_assume_tac >> (rpt strip_tac >> irule window_bounded_cases >>
+          simp[sym_steps_pos, sym_steps_def, sym_steps_ok_pos,
+               sym_steps_ok_def, sym_terminal_def, asm_plain_inst_def,
+               asmWfTheory.is_data_inst_def])) >>
       pop_assum strip_assume_tac >>
       simp[sym_steps_pos, sym_terminal_def]) >>
   gvs[] >>
@@ -106,6 +114,12 @@ Proof
   reverse (Cases_on `c = 0w`)
   >- ((* nonzero: p jumps to LABEL x, q falls through onto it *)
       qexistsl_tac [`2`, `3`] >>
+      conj_tac >- simp[] >> conj_tac >- simp[] >>
+      CONV_TAC (REWR_CONV CONJ_ASSOC) >> reverse conj_tac
+      >- (rpt strip_tac >> irule window_bounded_cases >>
+          simp[sym_steps_pos, sym_steps_def, sym_steps_ok_pos,
+               sym_steps_ok_def, sym_terminal_def, asm_plain_inst_def,
+               asmWfTheory.is_data_inst_def]) >>
       simp[sym_steps_pos, sym_steps_def, sym_terminal_def] >>
       simp[Abbr `s1`, Abbr `t1`, Abbr `t2`, splice_pc_def,
            asmSemTheory.asm_next_def, sym_with_pc_def,
@@ -131,6 +145,12 @@ Proof
     by simp[Abbr `s3`, sym_step_def, sym_step_op_def, sym_jump_def,
             sym_jump_dest_def] >>
   qexistsl_tac [`4`, `3`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  CONV_TAC (REWR_CONV CONJ_ASSOC) >> reverse conj_tac
+  >- (Cases_on `INDEX_OF (AsmLabel y) p` >> (rpt strip_tac >> irule window_bounded_cases >>
+          simp[sym_steps_pos, sym_steps_def, sym_steps_ok_pos,
+               sym_steps_ok_def, sym_terminal_def, asm_plain_inst_def,
+               asmWfTheory.is_data_inst_def])) >>
   Cases_on `INDEX_OF (AsmLabel y) p` >>
   simp[sym_steps_pos, sym_steps_def, sym_terminal_def] >>
   rename1 `INDEX_OF (AsmLabel y) p = SOME i` >>
@@ -140,6 +160,15 @@ Proof
        asmSemTheory.asm_next_def, sym_with_pc_def,
        sym_state_component_equality,
        asmSemTheory.asm_state_component_equality]
+QED
+
+Theorem jumpi_over_jump_window_refines:
+  asm_window_refines pfx
+    [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"]
+    [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"]
+    (AsmLabel x :: rest)
+Proof
+  metis_tac[jumpi_over_jump_window_refines_within, asm_window_refines_of_within]
 QED
 
 Theorem optimize_inefficient_jumps_fst:
@@ -153,24 +182,24 @@ Proof
   pairarg_tac >> simp[]
 QED
 
-Theorem optimize_inefficient_jumps_refines_under:
+Theorem optimize_inefficient_jumps_refines_under_both[local]:
   ∀sfx pfx.
-    asm_refines (pfx ++ sfx) (pfx ++ FST (optimize_inefficient_jumps sfx))
+    asm_refines_both (pfx ++ sfx) (pfx ++ FST (optimize_inefficient_jumps sfx))
 Proof
   ho_match_mp_tac optimize_inefficient_jumps_ind >>
   reverse (rpt conj_tac)
-  >- simp[optimize_inefficient_jumps_def, asm_refines_refl]
-  >- simp[optimize_inefficient_jumps_def, asm_refines_refl]
-  >- simp[optimize_inefficient_jumps_def, asm_refines_refl]
-  >- simp[optimize_inefficient_jumps_def, asm_refines_refl]
-  >- simp[optimize_inefficient_jumps_def, asm_refines_refl] >>
+  >- simp[optimize_inefficient_jumps_def, asm_refines_both_refl]
+  >- simp[optimize_inefficient_jumps_def, asm_refines_both_refl]
+  >- simp[optimize_inefficient_jumps_def, asm_refines_both_refl]
+  >- simp[optimize_inefficient_jumps_def, asm_refines_both_refl]
+  >- simp[optimize_inefficient_jumps_def, asm_refines_both_refl] >>
   rpt gen_tac >> strip_tac >> simp[optimize_inefficient_jumps_fst] >>
-  reverse IF_CASES_TAC >- (gvs[] >> irule asm_refines_cons >> simp[]) >>
+  reverse IF_CASES_TAC >- (gvs[] >> irule asm_refines_both_cons >> simp[]) >>
   Cases_on `a` >> Cases_on `e` >> gvs[asm_jumpi_over_jump_def] >>
   Cases_on `c` >> gvs[asm_is_push_label_def] >> gen_tac >>
   qmatch_goalsub_rename_tac
     `AsmPushLabel lx :: AsmOp "JUMPI" :: AsmPushLabel ly :: _` >>
-  irule asm_refines_trans >>
+  irule asm_refines_both_trans >>
   qexists_tac `pfx ++ AsmOp "ISZERO" :: AsmPushLabel ly :: AsmOp "JUMPI" ::
                AsmLabel lx :: rest` >>
   simp[] >>
@@ -178,9 +207,9 @@ Proof
                               AsmPushLabel ly; AsmOp "JUMP"]`,
                   `repl` |-> `[AsmOp "ISZERO"; AsmPushLabel ly;
                                AsmOp "JUMPI"]`,
-                  `sfx` |-> `AsmLabel lx :: rest`] asm_splice_window_refines) >>
+                  `sfx` |-> `AsmLabel lx :: rest`] asm_splice_window_refines_both) >>
   impl_tac
-  >- (simp[asm_splice_ok_def, jumpi_over_jump_window_refines,
+  >- (simp[asm_splice_ok_def, jumpi_over_jump_window_refines_within,
            is_data_inst_def, asm_label_refs_def,
            symbolResolveTheory.asm_inst_size_def] >>
       rw[] >> EVAL_TAC) >>
@@ -188,10 +217,25 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
+Theorem optimize_inefficient_jumps_refines_under:
+  ∀sfx pfx.
+    asm_refines (pfx ++ sfx) (pfx ++ FST (optimize_inefficient_jumps sfx))
+Proof
+  metis_tac[optimize_inefficient_jumps_refines_under_both, relationTheory.RINTER]
+QED
+
 Theorem optimize_inefficient_jumps_refines:
   ∀p. asm_refines p (FST (optimize_inefficient_jumps p))
 Proof
   gen_tac >>
   qspecl_then [`p`, `[]`] mp_tac optimize_inefficient_jumps_refines_under >>
+  simp[]
+QED
+
+Theorem optimize_inefficient_jumps_refines_both:
+  ∀p. asm_refines_both p (FST (optimize_inefficient_jumps p))
+Proof
+  gen_tac >>
+  qspecl_then [`p`, `[]`] mp_tac optimize_inefficient_jumps_refines_under_both >>
   simp[]
 QED

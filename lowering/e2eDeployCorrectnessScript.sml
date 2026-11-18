@@ -44,7 +44,7 @@ Theorem deploy_pipeline_gas_link:
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
-    unit_alloca_budget dunit.cu_context +
+    imm_len tops + unit_alloca_budget dunit.cu_context +
       32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
     (?shadow_ctx. !vs.
        raw_variant fmp vs vs_out ==>
@@ -95,7 +95,7 @@ QED
  * (including internal calls and Send) and the precompile builtins, whose
  * STATICCALL the EVM can fail for lack of gas, while checked constant
  * initializers are pure. No oracle/callee is needed. Its gas observations gobs
- * are existential, as in call_result_rel: msg.gas in the constructor reads the
+ * are existential, as in call_result_rel_guarded: msg.gas in the constructor reads the
  * readings the EVM run produced. The theorem does not claim agreement for
  * malformed constructors excluded by constructor_args_encode. There is no
  * nested-creation frame_outcome claim and no Some-root oracle hypothesis.

@@ -12,8 +12,9 @@
     "tests/vyper-regression/abi/test_dynamic_padding.py": "f68b00935ca6f7361a3d6187ae8792ba943bb24ee41127aab57fbc458fb717bd",
     "tests/vyper-regression/abi/test_returndata_padding.py": "f39850c325f1af76fb3646c21642ad06a6e982685f67c715b5e1ce787ed46730",
     "tests/vyper-regression/builtins/test_convert_address_to_bytes_m.py": "a5b3bbe54d258899522329f6a4dbc0652c938bf0b0b77aebd92201ae609d1532",
+    "tests/vyper-regression/builtins/test_self_is_contract.py": "a8308ed138fff6a2b6c4723285f39de741cf4fa1099820464a61b84f9db645a2",
     "tests/vyper-regression/create/test_create_operand_order.py": "cb1ea3bd7239c72a64d9ac1663a7e85c2d1a9d5601e9c2c91b5a8b0e136c9827",
-    "tools/vyper_test_export_plugin.py": "0c39aecaf73d3d2bbc83611720c342f0988da678520f63fdfcbac853e8599ff3",
+    "tools/vyper_test_export_plugin.py": "5ccf4e510be76fc09d3329642abb181b0726d215aa782b863b43a1b213d9e2d9",
     "tools/vyper_test_exports.py": "a0708d10fda15ef633a8026e46c9a6c7c803b5db3a71f50627bd4c6a0347fd8f"
   },
   "profile": {

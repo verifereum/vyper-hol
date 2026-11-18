@@ -1278,7 +1278,7 @@ Proof
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   drule_all hash_alloc_buffer_labels >> strip_tac >>
-  drule_all exprSimUnwrapTheory.alloc_buffer_fields >> strip_tac >>
+  drule_all exprSimAllocTheory.alloc_buffer_fields >> strip_tac >>
   `eval_operand x t = SOME p` by
     (Cases_on `x` >> gvs[eval_operand_def]) >>
   `run_inst_seq (emitted_insts mid sb) t =

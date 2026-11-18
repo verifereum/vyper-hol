@@ -145,9 +145,9 @@ Proof
 QED
 
 Theorem machine_frame_precompile_call_success:
-  state_rel_frame machine_frame (precompile_call_success bt)
+  state_rel_frame machine_frame (precompile_call_success bt vs)
 Proof
-  rw[state_rel_frame_def] >> Cases_on `precompile_call_success bt st` >>
+  rw[state_rel_frame_def] >> Cases_on `precompile_call_success bt vs st` >>
   drule precompile_call_success_state >> rw[] >> simp[machine_frame_def]
 QED
 

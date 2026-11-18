@@ -471,12 +471,26 @@ Proof
     (irule if_condition_admissible >> metis_tac[]) >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at sa x` by metis_tac[ret_pc_ok_def] >>
+  irule gas_outcome_full_initial_domain >>
+  conj_tac >- simp[evaluate_storage_trace_frame] >>
+  conj_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+     simp[]) >>
   (* the condition, on the If's own input block *)
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `sa`, `cond`, `shadow_sa`, `scond`, `op`,
     `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        mp_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
   strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ condQ condR` >>
   rewrite_tac[eval_stmt_if_forced] >>
@@ -624,8 +638,17 @@ Resume compile_if_stmt_frag_full[entry]:
     metis_tac[local_ptrs_reserved_next_var] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at entry x` by metis_tac[not_fresh_at_mono] >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `return_buf_sep d cenv mid t` by
+    (irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+     conj_tac >- fs[] >>
+     qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`, `cx`,
+                   `es`, `func`, `s0`, `sa`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  simp[ret_pc_ok_jump_to, return_buf_frame_jump_to, block_is_terminated_def,
+  simp[return_buf_sep_jump, return_buf_sep_push,
+       ret_pc_ok_jump_to, return_buf_frame_jump_to, block_is_terminated_def,
        jump_to_def] >>
   fs[allocas_below_fmp_def]
 QED
@@ -860,6 +883,8 @@ Resume compile_if_stmt_frag_full[finish]:
     (rpt gen_tac >> strip_tac >>
      `not_fresh_at entry x` by metis_tac[not_fresh_at_mono] >>
      fs[ghost_kept_at_def]) >>
+  `return_buf_sep d cenv ee u` by
+    (irule return_buf_sep_pop >> qexistsl_tac [`cb`, `sc`] >> fs[]) >>
   `return_buf_frame d cenv last u` by
     (`cb.ce_return_buf = cenv.ce_return_buf` by
        fs[cenv_top_ext_def, compile_env_component_equality] >>
@@ -889,7 +914,8 @@ Resume compile_if_stmt_frag_full[finish]:
         (irule alloca_frame_same_state >> qexists_tac `u` >> simp[jump_to_def]) >>
       conj_tac >- simp[] >> qexists_tac `cenv` >>
       simp[stmt_lands_def, stmt_state_rel_jump_to, block_is_terminated_def,
-           return_buf_frame_jump_to, ghost_inv_at_jump, cenv_top_ext_refl,
+           return_buf_frame_jump_to, return_buf_sep_jump,
+           ghost_inv_at_jump, cenv_top_ext_refl,
            lookup_var_def] >>
       simp[jump_to_def] >>
       fs[storage_well_formed_on_def, get_storage_scopes, lookup_var_def] >>
