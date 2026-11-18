@@ -3,7 +3,7 @@ Ancestors
   fragGasOriginPtrLoop fragGasCopyLoop fragGasOriginPtrDead placeStoreCopyPath stmtSimStoreCopy
   bodyMemAssignTopCopyPaths bodyMemAssignTopCopyLoop
   decoderGhostFramePtr bodyFullStoreSlotsRetired
-  fragGasSeqPtr fragGasOriginPtr ptrSafeRun ptrDiscipline
+  fragGasSeqPtr fragGasSeqPtrContext fragGasOriginPtr ptrSafeRun ptrDiscipline
   instMemFrontier fragExecMem memSafeRun fragExec
   venomInstProofs venomExecSemantics venomState venomInst
   finite_map pred_set list words arithmetic
@@ -20,7 +20,7 @@ Theorem copy_scalar_eq_origin_ptr[local]:
   eval_operand (Var cv) s = SOME a /\ eval_operand count s = SOME b /\
   op_taint tn (Var cv) = {} /\ op_taint tn count = {} /\
   FLOOKUP G cv = NONE /\ op_prov G count = NONE /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (update_var tv (bool_to_word (a = b)) s with
            vs_inst_idx := s.vs_inst_idx + 1),
@@ -70,7 +70,7 @@ Theorem copy_operand_header_origin_ptr[local]:
   eval_operand (Var cv) s = SOME a /\ eval_operand count s = SOME b /\
   op_taint tn (Var cv) = {} /\ op_taint tn count = {} /\
   FLOOKUP G cv = NONE /\ op_prov G count = NONE /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (jump_to (if a = b then exit else body_lbl)
           (update_var tv (bool_to_word (a = b)) s with
@@ -89,11 +89,12 @@ Proof
   disch_then (qspecl_then [`explicit`,`PG`,`D`] assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_origin_ptr_path _ _ [] (OK t,G1,tn1)` >>
   `~t.vs_halted /\ allocas_from lo t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     t.vs_current_bb = s.vs_current_bb /\
     t.vs_inst_idx = s.vs_inst_idx + 1 /\
     lookup_var tv t = SOME (bool_to_word (a = b))` by
     (simp[Abbr `t`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-     gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
+     gvs[allocas_from_def, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `op_taint tn1 (Var tv) = {}` by
     simp[Abbr `tn1`, step_taint_def, set_var_taint_def,
          out_taint_def, mk_inst_def, op_taint_def, FLOOKUP_UPDATE,
@@ -171,7 +172,7 @@ Theorem memory_copy_loop_zero_origin_ptr_uniform:
   fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
   eval_operand count s = SOME 0w /\ op_taint tn count = {} /\
   op_prov G count = NONE /\ (!y. count = Var y ==> not_fresh_at sa y) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t Gf tnf.
@@ -215,6 +216,8 @@ Proof
       mk_inst (idh+1) JNZ [Var tv;Label exit;Label body_lbl] []]
      (DROP q.vs_inst_idx bbh.bb_instructions)` by simp[Excl "isPREFIX"] >>
   `lookup_block q.vs_current_bb func.fn_blocks = SOME bbh` by simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q)` by
+    (gvs[Abbr `q`, jump_to_def, update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all copy_operand_header_origin_ptr >>
   disch_then (qspecl_then [`explicit`,`PG`,`<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`] assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_origin_ptr_path _ (q,Gq,tq) [] (OK t,Gf,tnf)` >>
@@ -244,7 +247,7 @@ Theorem copy_operand_header_frame[local]:
   eval_operand (Var cv) s = SOME a /\ eval_operand count s = SOME b /\
   op_taint tn (Var cv) = {} /\ op_taint tn count = {} /\
   FLOOKUP G cv = NONE /\ op_prov G count = NONE /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted ==>
   ?t Gf tnf.
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
     t = jump_to (if a = b then exit else body_lbl)
@@ -280,7 +283,7 @@ Theorem copy_operand_body_runtime[local]:
   ALL_DISTINCT [cv;mv;sv;vv;dv;nv] /\
   (!x. not_fresh_at sa x ==> ~MEM x [cv;mv;sv;vv;dv;nv]) /\
   ~sbase.vs_call_ctx.cc_static /\ w2n b + 32*(i+1) <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (code ++ [mk_inst (id+7) JMP [Label hdr] []])
     (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -301,6 +304,13 @@ Proof
       i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code` by
     (simp[] >> Cases_on `loc = LocStorage` >> simp[mk_inst_def, is_terminator_def]) >>
   `run_inst_seq code s = OK t` by simp[] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+      ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+      i.inst_opcode <> DALLOCA) code` by
+    (simp[] >> Cases_on `loc = LocStorage` >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    metis_tac[run_inst_seq_allocas_below_fmp] >>
   drule_all_then (qspec_then `explicit` strip_assume_tac) run_inst_seq_origin_ptr_lift >>
   qmatch_asmsub_abbrev_tac `gas_origin_ptr_path _ _ [] (OK t1,Gf,tnf)` >>
   `get_instruction bb t1.vs_inst_idx = SOME (mk_inst (id+7) JMP [Label hdr] [])` by
@@ -309,7 +319,9 @@ Proof
      drule instruction_prefix_cursor >> simp[Abbr `t1`, ADD1]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t1,Gf,tnf) []
      (OK (jump_to hdr t1),Gf,tnf)` by
-    (irule copy_jmp_origin_ptr >> gvs[Abbr `t1`, allocas_from_def, Excl "isPREFIX"] >> metis_tac[]) >>
+    (irule copy_jmp_origin_ptr >>
+     gvs[Abbr `t1`, allocas_from_def, allocas_below_fmp_def, Excl "isPREFIX"] >>
+     metis_tac[]) >>
   qexists_tac `jump_to hdr t1` >>
   conj_tac >- metis_tac[gas_origin_ptr_path_trans] >>
   simp[Abbr `t1`, jump_to_def, eval_operand_def, lookup_var_def,
@@ -323,7 +335,7 @@ Theorem copy_operand_body_step[local]:
     mk_inst (id+3) ADD [dst;Var cv] [dv];
     mk_inst (id+4) (if loc = LocStorage then SSTORE else TSTORE) [Var dv;Var vv] [];
     mk_inst (id+5) ADD [Var cv;Lit 1w] [nv]; mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;mv;sv;vv;dv;nv] /\ ~MEM x [cv;mv;sv;vv;dv;nv] /\
   (!y. dst = Var y ==> ~MEM y [cv;mv;sv;vv;dv;nv]) /\
   store_copy_frame sa loc b k sbase i s /\
@@ -365,11 +377,29 @@ Proof
   qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[]
 QED
 
+Theorem store_copy_frame_allocas_below_fmp:
+  store_copy_frame sa loc b k sbase i q ==>
+  (allocas_below_fmp q <=> allocas_below_fmp sbase)
+Proof
+  `!js a. allocas_below_fmp
+      (FOLDL (\t j. (if loc = LocStorage then sstore else tstore)
+        (k + n2w j) (mload (w2n (b + n2w j * 32w)) sbase) t) a js) =
+      allocas_below_fmp a` by
+    (Induct >> simp[] >> rpt gen_tac >>
+     Cases_on `loc = LocStorage` >>
+     simp[sstore_def, tstore_def, allocas_below_fmp_def]) >>
+  strip_tac >> fs[store_copy_frame_def] >>
+  qpat_x_assum `store_copy_normalize _ _ = _`
+    (mp_tac o Q.AP_TERM `\q. allocas_below_fmp q`) >>
+  simp[store_copy_prefix_def] >>
+  simp[store_copy_normalize_def, allocas_below_fmp_def]
+QED
+
 Theorem memory_copy_loop_operand_origin_ptr_uniform:
  !x dst n count F sa u sb func loc ctx lo s G tn b k explicit PG.
   compile_word_copy_loop_op (Var x) dst count LocMemory loc F sa = (u,sb) /\
   fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_call_ctx.cc_static /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_call_ctx.cc_static /\
   not_fresh_at sa x /\ (!y. dst = Var y ==> not_fresh_at sa y) /\
   lookup_var x s = SOME b /\ ptr_covers G tn x s (32*n) /\
   eval_operand dst s = SOME k /\ op_taint tn dst = {} /\
@@ -432,6 +462,8 @@ Resume memory_copy_loop_operand_origin_ptr_uniform[header]:
      mk_inst (idh+1) JNZ [Var tv;Label exit;Label body_lbl] []]
      (DROP q.vs_inst_idx bbh.bb_instructions)` by simp[Excl "isPREFIX"] >>
   `lookup_block q.vs_current_bb func.fn_blocks = SOME bbh` by simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q)` by
+    metis_tac[store_copy_frame_allocas_below_fmp] >>
   drule_all copy_operand_header_frame >>
   disch_then (qspecl_then [`explicit`,`PG`,`D0`] strip_assume_tac) >>
   `j < dimword(:256)` by decide_tac >>
@@ -482,6 +514,8 @@ Resume memory_copy_loop_operand_origin_ptr_uniform[body]:
     mk_inst (idb+3) ADD [dst;Var cv] [dv];
     mk_inst (idb+4) (if loc = LocStorage then SSTORE else TSTORE) [Var dv;Var vv] [];
     mk_inst (idb+5) ADD [Var cv;Lit 1w] [nv]; mk_inst (idb+6) ASSIGN [Var nv] [cv]]` by simp[Abbr `code`] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp q)` by
+    metis_tac[store_copy_frame_allocas_below_fmp] >>
   drule_all copy_operand_body_step >>
   disch_then (qspecl_then [`explicit`,`PG`,`D0`] strip_assume_tac) >>
   `eval_operand count t = SOME (n2w n)` by

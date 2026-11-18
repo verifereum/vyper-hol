@@ -15,7 +15,7 @@ Libs
 Theorem dense_single_inst_seq_ptr:
   ptr_covers G tn root s 32 /\ lookup_var root s = SOME a /\
   eval_operand dst s = SOME k /\ op_taint tn dst = {} /\
-  (!x. dst = Var x ==> x <> tmp) /\ ~ctx_has_dalloca ctx /\
+  (!x. dst = Var x ==> x <> tmp) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_call_ctx.cc_static ==>
   !D func PG id tr.
   inst_seq_ptr D 0 ctx func PG G tn
@@ -29,7 +29,7 @@ Theorem dense_single_inst_seq_ptr:
 Proof
   strip_tac >> rpt gen_tac >>
   `ptr_inst_ok D 0 0 ctx func G tn (mk_inst id MLOAD [Var root] [tmp]) s` by
-    (irule ptr_inst_ok_mload >> simp[]) >>
+    (irule ptr_inst_ok_mload_lo >> simp[allocas_from_def]) >>
   `eval_operand dst (update_var tmp (mload (w2n a) s) s) = SOME k` by
     (Cases_on `dst` >> gvs[eval_operand_def, lookup_var_def, update_var_def,
       FLOOKUP_UPDATE]) >>
@@ -43,7 +43,12 @@ Proof
        (update_var tmp (mload (w2n a) s) s) tn)
      (mk_inst (id+1) (if tr then TSTORE else SSTORE) [dst;Var tmp] [])
      (update_var tmp (mload (w2n a) s) s with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (irule assign_base_ptr_inst_ok_storage_word >> simp[] >> Cases_on `tr` >> simp[]) >>
+    (irule fragGasSeqPtrContextTheory.ptr_inst_ok_restore_ctx >>
+     conj_tac >- (Cases_on `tr` >> simp[mk_inst_def]) >>
+     conj_tac >- (simp[allocas_below_fmp_def, update_var_def] >>
+       gvs[allocas_below_fmp_def]) >>
+     irule assign_base_ptr_inst_ok_storage_word >>
+     Cases_on `tr` >> simp[ctx_has_dalloca_def]) >>
   Cases_on `tr` >>
   gvs[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def,
     exec_read1_def, exec_write2_def, eval_operand_def, update_var_def,
@@ -63,7 +68,7 @@ Theorem dense_single_origin_ptr:
     (DROP s.vs_inst_idx bb.bb_instructions) /\
   ptr_covers G tn root s 32 /\ lookup_var root s = SOME a /\
   eval_operand dst s = SOME k /\ op_taint tn dst = {} /\
-  (!x. dst = Var x ==> x <> tmp) /\ ~ctx_has_dalloca ctx /\
+  (!x. dst = Var x ==> x <> tmp) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ w2n a + 32 <= s.vs_alloca_next /\
   ~s.vs_call_ctx.cc_static ==>
   !D explicit PG.
@@ -104,7 +109,7 @@ Theorem dense_single_compiled_origin_ptr_uniform:
   not_fresh_at sa root /\ (!x. dst = Var x ==> not_fresh_at sa x) /\
   ptr_covers G tn root s 32 /\ lookup_var root s = SOME a /\
   eval_operand dst s = SOME k /\ op_taint tn dst = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   w2n a + 32 <= s.vs_alloca_next /\ ~s.vs_call_ctx.cc_static /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

@@ -2,6 +2,7 @@ Theory bodyFullStoreSlotsBase
 Ancestors arithmetic[qualified,ignore_grammar]
   bodyFullStoreSlotsOperandLoop bodyFullStoreSlotsTaintStore
   bodyFullStoreSlotsTaintFold bodyFullStoreSlotsOffset fullStoreDense
+  bodyFullStoreSlotsFrame
   bodyFullStoreSlotsAddresses fragGasOriginPtrDead augAssignPtrScalarProbe
   typedCopyOriginPtrDynArray bodyPtrSignedConvertScalarOps bytestringCopyExecution
   fragGasSeqPtr fragGasOriginPtr fragExecMem venomExecSemantics
@@ -17,7 +18,7 @@ Theorem store_cnt_shr_joint[local]:
     (DROP s.vs_inst_idx bb.bb_instructions) /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   eval_operand sum s = SOME w /\ op_taint tn sum = {} /\
-  op_prov G sum = NONE /\ ~ctx_has_dalloca ctx /\
+  op_prov G sum = NONE /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ ~s.vs_halted ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (update_var out (w >>> 5) s with vs_inst_idx := s.vs_inst_idx + 1),
@@ -33,8 +34,12 @@ Proof
       wordsTheory.dimword_def] >>
   `ptr_inst_ok D 0 0 ctx func G tn
     (mk_inst id SHR [Lit 5w;sum] [out]) s` by
-    (irule convert_scalar_ptr_inst_ok >> simp[op_prov_def, op_taint_def] >>
-     goal_assum (drule_at Any)) >>
+    (simp[ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       allocas_from_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def] >>
+     rpt strip_tac >> gvs[op_prov_def, op_taint_def, finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
   `run_inst_seq_mem_ok [mk_inst id SHR [Lit 5w;sum] [out]] s` by
     (simp[run_inst_seq_mem_ok_last, inst_dload_in_section_def, mk_inst_def] >>
      irule below_frontier_no_ranges >> simp[]) >>
@@ -55,7 +60,7 @@ QED
 Theorem store_cnt_shr_uniform[local]:
   emit_op SHR [Lit 5w;sum] a = (op,b) /\ fn_has_code a b func /\
   eval_operand sum s = SOME w /\ op_taint tn sum = {} /\
-  op_prov G sum = NONE /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  op_prov G sum = NONE /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?out t Gf tf.
@@ -123,7 +128,7 @@ Theorem store_cnt_round_uniform[local]:
   emit_op ADD [loaded;Lit 63w] a = (sum,b) /\
   emit_op SHR [Lit 5w;sum] b = (cnt,c) /\ fn_has_code a c func /\
   eval_operand loaded s = SOME w /\ op_taint tn loaded = {} /\
-  op_prov G loaded = NONE /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  op_prov G loaded = NONE /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?out t Gf tf.
@@ -165,6 +170,9 @@ Proof
     simp[Abbr `s1`, update_var_def] >>
   `allocas_from lo s1` by
     simp[Abbr `s1`,update_var_def,ptrDisciplineTheory.allocas_from_def] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s1)` by
+    (simp[Abbr `s1`,allocas_below_fmp_def,update_var_def] >>
+     metis_tac[allocas_below_fmp_def]) >>
   drule_all store_cnt_shr_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -195,7 +203,7 @@ Theorem store_cnt_producer_uniform[local]:
   w2n sw + 32 < dimword (:256) /\ w2n sw + 32 <= s.vs_alloca_next /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
      mem_word_at (w2n sw) mem = n2w N) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
@@ -237,6 +245,8 @@ Proof
        stmtSimStoreCopyTheory.store_copy_normalize_def, allocas_from_def] >>
      metis_tac[]) >>
   `op_prov Gu (Var lv) = NONE` by simp[op_prov_def] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
+    metis_tac[typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp] >>
   drule_all store_cnt_round_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   qexistsl [`out`,`t`,`Gf`,`tf`] >> simp[] >>
@@ -262,7 +272,7 @@ Theorem store_cnt_compile_uniform[local]:
   w2n sw + 32 < dimword (:256) /\ w2n sw + 32 <= s.vs_alloca_next /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
      mem_word_at (w2n sw) mem = n2w N) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
@@ -318,7 +328,7 @@ QED
 Theorem store_slots_operand_loop[local]:
   compile_word_copy_loop_op src dst cnt LocMemory
     (if tr then LocTransient else LocStorage) F sa = (result,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_call_ctx.cc_static /\
   (!y. dst = Var y ==> not_fresh_at sa y) /\
   (n <> 0 ==> ?x. src = Var x /\ not_fresh_at sa x /\
@@ -397,7 +407,7 @@ Theorem store_slots_single_loop[local]:
   (!y. dst = Var y ==> not_fresh_at sa y) /\
   lookup_var x s = SOME sw /\ ptr_covers G tn x s 32 /\
   eval_operand dst s = SOME dw /\ op_taint tn dst = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   w2n sw + 32 <= s.vs_alloca_next /\ ~s.vs_call_ctx.cc_static /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -461,7 +471,7 @@ Theorem compile_store_slots_base_origin_ptr_path:
    w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
   encode_value tv v = SOME writes /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -630,6 +640,8 @@ Resume compile_store_slots_base_origin_ptr_path[bytes_produced]:
     gvs[] >>
   `(!y. cnt = Var y ==> not_fresh_at sm y) /\ ~t.vs_call_ctx.cc_static` by
     simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
+    metis_tac[store_slots_normalize_allocas_below_fmp] >>
   drule_all store_slots_operand_loop >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   suspend "bytes_loop")

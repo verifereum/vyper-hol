@@ -8,6 +8,7 @@
  *)
 Theory bodyFullAppend
 Ancestors
+  bodyFullStoreSlotsStatic
   memoryPlaceStorePost
   stateRelProj bodyFullAppendLocalFrames bodyFullAppendNestedFrames
   bodyFullMemoryFrames bodyFullMemoryCopy typedCopyOriginPtrBase
