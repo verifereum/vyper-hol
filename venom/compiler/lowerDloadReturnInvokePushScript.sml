@@ -51,15 +51,15 @@ Proof
   gvs[]
 QED
 
-Theorem ld_invoke_callee_ambient:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+Theorem ld_invoke_callee_ambient_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   MEM fn C.ctx_functions /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
   lookup_function nm C'.ctx_functions = SOME calleeT ==>
   ?callee. lookup_function nm C.ctx_functions = SOME callee /\
     callee.fn_name = nm /\
     calleeT = FST (lower_dload_function_supply (Sigma nm) callee) /\
-    ^ld_covered_ambient lo C C' vs0 Sigma names callee calleeT
+    ^ld_covered_ambient_static lo C C' vs0 Sigma names callee calleeT
 Proof
   simp[] >> strip_tac >>
   `fn_invoke_ok (ctx_fn_names C) fn` by
@@ -83,8 +83,8 @@ Proof
   qexists_tac `callee` >> simp[]
 QED
 
-Theorem ld_invoke_correlated_setup:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+Theorem ld_invoke_correlated_setup_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\
   inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
@@ -94,7 +94,7 @@ Theorem ld_invoke_correlated_setup:
   ?callee argsS cs.
     lookup_function nm C.ctx_functions = SOME callee /\ callee.fn_name = nm /\
     eval_operands ops s = SOME argsS /\ setup_callee callee argsS s = SOME cs /\
-    ^ld_covered_ambient lo C C' vs0 Sigma names callee calleeT /\
+    ^ld_covered_ambient_static lo C C' vs0 Sigma names callee calleeT /\
     cs.vs_current_bb = ct.vs_current_bb /\ cs.vs_prev_bb = ct.vs_prev_bb /\
     ld_memory lo A (tn with t_var := FEMPTY) cs ct /\
     ld_nonghost (tn with t_var := FEMPTY) cs ct /\
@@ -105,7 +105,7 @@ Theorem ld_invoke_correlated_setup:
     (!j a. j < LENGTH ops /\ EL j (MAP (op_prov f.lf_H) ops) = SOME a ==>
       j IN P nm)
 Proof
-  qabbrev_tac `Ambient = ^ld_covered_ambient` >>
+  qabbrev_tac `Ambient = ^ld_covered_ambient_static` >>
   strip_tac >>
   `o1_ctx_shape C /\ ptr_discipline lo C vs0` by
     fs[Abbr `Ambient`] >>
@@ -119,7 +119,7 @@ Proof
     callee.fn_name = nm /\
     calleeT = FST (lower_dload_function_supply (Sigma nm) callee) /\
     Ambient lo C C' vs0 Sigma names callee calleeT` by
-    (qunabbrev_tac `Ambient` >> drule_all ld_invoke_callee_ambient >> simp[]) >>
+    (qunabbrev_tac `Ambient` >> drule_all ld_invoke_callee_ambient_static >> simp[]) >>
   `fn_shape_ok fn` by
     (drule_all ld_sync_fn_shape >> strip_tac >>
      metis_tac[o1_fn_shape_components]) >>
@@ -155,6 +155,19 @@ Proof
   gvs[ptrDisciplineTheory.fn_ptr_ok_def]
 QED
 
+
+(* Argument provenance read through the live ghosts against the selected
+   sites: the callee's parameters as INVOKE's call rule records them. *)
+Theorem ld_params_ok_arguments[local]:
+  ld_ghost_ok fl A H G ==>
+  ld_params_ok fl A (MAP (op_prov H) ops) (MAP (op_prov G) ops)
+Proof
+  rw[lowerDloadSafetyRelationTheory.ld_params_ok_def, EL_MAP] >>
+  Cases_on `EL k ops` >> simp[op_prov_def] >>
+  rename1 `FLOOKUP H v` >> Cases_on `FLOOKUP H v` >> simp[] >>
+  fs[lowerDloadSafetyRelationTheory.ld_ghost_ok_def] >> metis_tac[]
+QED
+
 (* Structural constructor: semantic entry/reachability is supplied separately. *)
 Theorem ld_sync_call_push:
   ld_sync lo P C vs0 stk PG G tn fn calli s t A (f::fs) N /\
@@ -169,16 +182,17 @@ Theorem ld_sync_call_push:
   MEM g.lf_fn C.ctx_functions /\
   g.lf_src.vs_alloca_next = f.lf_src.vs_alloca_next /\
   g.lf_tgt.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
-  frame_reachable vs0 C (saved::stk)
-    (MAP (OPTION_MAP (ld_erase A)) g.lf_Q) (ld_erase A o_f g.lf_H)
+  frame_reachable vs0 C (saved::stk) PG' (ld_erase A o_f g.lf_H)
     tn1 g.lf_fn i g.lf_src /\
+  ld_params_ok (dyn_floor C vs0) A g.lf_Q PG' /\
   active_inst g.lf_fn i g.lf_src /\
   ld_envelope g.lf_supply g.lf_fn g.lf_src g.lf_src.vs_inst_idx X p /\
   g.lf_tgt.vs_inst_idx = p /\
   ld_memory lo A tn1 g.lf_src g.lf_tgt /\
-  ld_nonghost tn1 g.lf_src g.lf_tgt ==>
-  ld_sync lo P C vs0 (saved::stk)
-    (MAP (OPTION_MAP (ld_erase A)) g.lf_Q) (ld_erase A o_f g.lf_H)
+  ld_nonghost tn1 g.lf_src g.lf_tgt /\
+  ld_dyn_agree (dyn_floor C vs0) tn1.t_mem g.lf_src.vs_memory
+    g.lf_tgt.vs_memory ==>
+  ld_sync lo P C vs0 (saved::stk) PG' (ld_erase A o_f g.lf_H)
     tn1 g.lf_fn i g.lf_src g.lf_tgt A (g::f::fs) (SUC N)
 Proof
   strip_tac >>
@@ -192,6 +206,7 @@ Proof
      drule ld_sync_frontier >> simp[]) >>
   qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[ld_sync_def] >> strip_tac >>
+  conj_tac >- simp[lowerDloadSafetyRelationTheory.ld_ghost_ok_erased] >>
   conj_tac
   >- (qpat_x_assum `EVERY _ fs` mp_tac >> rpt (pop_assum kall_tac) >>
       simp[EVERY_MEM, MEM_MAP] >> rpt strip_tac >>
@@ -309,8 +324,8 @@ Proof
   simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem ld_invoke_active_push:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+Theorem ld_invoke_active_push_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
   inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
@@ -322,7 +337,7 @@ Theorem ld_invoke_active_push:
   ?callee argsS cs fc.
     lookup_function nm C.ctx_functions = SOME callee /\
     eval_operands ops s = SOME argsS /\ setup_callee callee argsS s = SOME cs /\
-    ^ld_covered_ambient lo C C' vs0 Sigma names callee calleeT /\
+    ^ld_covered_ambient_static lo C C' vs0 Sigma names callee calleeT /\
     fc = <|lf_serial := N; lf_supply := Sigma nm; lf_fn := callee;
       lf_src := cs; lf_tgt := ct; lf_H := FEMPTY;
       lf_Q := MAP (op_prov f.lf_H) ops; lf_E := {}; lf_tv := FEMPTY|> /\
@@ -331,11 +346,11 @@ Theorem ld_invoke_active_push:
          cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|> :: stk)
       callee calleeT cs (f::fs) fc A Sigma names bb tp
 Proof
-  qabbrev_tac `Ambient = ^ld_covered_ambient` >>
+  qabbrev_tac `Ambient = ^ld_covered_ambient_static` >>
   qabbrev_tac `Stable = ^ld_probe_stable` >>
   qabbrev_tac `Point = ^ld_probe_point` >> strip_tac >>
   `ld_global lo A (f::fs)` by fs[Abbr `Stable`] >>
-  qunabbrev_tac `Ambient` >> drule_all ld_invoke_correlated_setup >>
+  qunabbrev_tac `Ambient` >> drule_all ld_invoke_correlated_setup_static >>
   disch_then (strip_assume_tac o SRULE []) >>
   qabbrev_tac `fc = <|lf_serial := N; lf_supply := Sigma nm; lf_fn := callee;
     lf_src := cs; lf_tgt := ct; lf_H := FEMPTY;
@@ -371,18 +386,18 @@ Proof
   qabbrev_tac `saved = <|cf_fn := fn; cf_inst := inst; cf_state := s;
     cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>` >>
   `frame_reachable vs0 C (saved::stk)
-    (MAP (OPTION_MAP (ld_erase A)) fc.lf_Q) FEMPTY
+    (MAP (op_prov G) ops) FEMPTY
     (tn with t_var := FEMPTY) callee i cs` by
     suspend "reach" >>
   `ld_sync lo P C vs0 (saved::stk)
-    (MAP (OPTION_MAP (ld_erase A)) fc.lf_Q) FEMPTY
+    (MAP (op_prov G) ops) FEMPTY
     (tn with t_var := FEMPTY) callee i cs ct A (fc::f::fs) (SUC N)` by
     suspend "sync" >>
   `Stable lo P Sigma names (f::fs) fc A A (fc::f::fs)` by
     suspend "stable" >>
   `ld_return_cont C callee cs cs` by
     (irule ld_return_cont_entry >> simp[]) >>
-  qexistsl_tac [`MAP (OPTION_MAP (ld_erase A)) fc.lf_Q`,`FEMPTY`,
+  qexistsl_tac [`MAP (op_prov G) ops`,`FEMPTY`,
     `tn with t_var := FEMPTY`,`i`,`cs`,`ct`,`A`,`fc::f::fs`,
     `SUC N`,`X`,`ct.vs_inst_idx`,`0`] >>
   simp[NoAsms, lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
@@ -390,17 +405,16 @@ Proof
   metis_tac[listTheory.NOT_NIL_EQ_LENGTH_NOT_0]
 QED
 
-Resume ld_invoke_active_push[reach]:
-  drule ld_sync_ghosts >> simp[] >> strip_tac >>
-  simp[Abbr `fc`, Abbr `saved`, ld_arguments_erasure] >>
+Resume ld_invoke_active_push_static[reach]:
+  simp[Abbr `saved`] >>
   irule frame_reachable_call >>
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[ld_sync_source, ld_sync_ghosts]
 QED
 
-Resume ld_invoke_active_push[sync]:
+Resume ld_invoke_active_push_static[sync]:
   `ld_sync lo P C vs0 (saved::stk)
-    (MAP (OPTION_MAP (ld_erase A)) fc.lf_Q) (ld_erase A o_f fc.lf_H)
+    (MAP (op_prov G) ops) (ld_erase A o_f fc.lf_H)
     (tn with t_var := FEMPTY) fc.lf_fn i fc.lf_src fc.lf_tgt
     A (fc::f::fs) (SUC N)` suffices_by simp[Abbr `fc`] >>
   irule ld_sync_call_push >>
@@ -409,12 +423,24 @@ Resume ld_invoke_active_push[sync]:
   conj_tac >-
     (qpat_assum `lookup_function nm C.ctx_functions = SOME callee` mp_tac >>
      rpt (pop_assum kall_tac) >> metis_tac[lookup_function_MEM]) >>
-  conj_tac >- (qexists_tac `X` >> fs[]) >>
-  conj_tac >- fs[] >>
-  qexistsl_tac [`t`,`tn`] >> simp[]
+  rpt conj_tac
+  >~ [`ld_dyn_agree _ _ _ _`]
+  >- (qpat_assum `setup_callee _ _ s = SOME cs`
+        (strip_assume_tac o MATCH_MP
+           calleeTransportTheory.setup_callee_shared_fields) >>
+      qpat_assum `setup_callee _ _ t = SOME ct`
+        (strip_assume_tac o MATCH_MP
+           calleeTransportTheory.setup_callee_shared_fields) >>
+      qpat_assum `ld_sync _ _ _ _ stk _ _ _ _ _ _ _ _ (f::fs) _`
+        (mp_tac o MATCH_MP ld_sync_dyn_agree) >> fs[])
+  >~ [`ld_params_ok _ _ _ _`]
+  >- (irule ld_params_ok_arguments >> drule ld_sync_ghosts >> simp[]) >>
+  FIRST [qexists_tac `X` >> fs[] >> NO_TAC,
+         fs[] >> NO_TAC,
+         qexistsl_tac [`t`,`tn`] >> simp[] >> NO_TAC]
 QED
 
-Resume ld_invoke_active_push[stable]:
+Resume ld_invoke_active_push_static[stable]:
   qpat_assum `ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N`
     (strip_assume_tac o MATCH_MP ld_sync_source) >>
   `MEM fn C.ctx_functions` by
@@ -444,11 +470,12 @@ Resume ld_invoke_active_push[stable]:
   rpt (pop_assum kall_tac) >> metis_tac[]
 QED
 
-Finalise ld_invoke_active_push
+Finalise ld_invoke_active_push_static
+
 
 (* Successful-run clients derive activity, then use the same push boundary. *)
-Theorem ld_invoke_guarded_push:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+Theorem ld_invoke_guarded_push_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
   inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
@@ -458,7 +485,7 @@ Theorem ld_invoke_guarded_push:
   ?callee argsS cs fc.
     lookup_function nm C.ctx_functions = SOME callee /\
     eval_operands ops s = SOME argsS /\ setup_callee callee argsS s = SOME cs /\
-    ^ld_covered_ambient lo C C' vs0 Sigma names callee calleeT /\
+    ^ld_covered_ambient_static lo C C' vs0 Sigma names callee calleeT /\
     fc = <|lf_serial := N; lf_supply := Sigma nm; lf_fn := callee;
       lf_src := cs; lf_tgt := ct; lf_H := FEMPTY;
       lf_Q := MAP (op_prov f.lf_H) ops; lf_E := {}; lf_tv := FEMPTY|> /\
@@ -468,13 +495,13 @@ Theorem ld_invoke_guarded_push:
            cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|> :: stk)
         callee calleeT cs (f::fs) fc A Sigma names) ct
 Proof
-  qabbrev_tac `Ambient = ^ld_covered_ambient` >>
+  qabbrev_tac `Ambient = ^ld_covered_ambient_static` >>
   qabbrev_tac `Stable = ^ld_probe_stable` >>
   qabbrev_tac `Point = ^ld_probe_point` >>
   qabbrev_tac `Guard = ^ld_probe_guard` >>
   qabbrev_tac `Entry = ^ld_probe_entry` >> strip_tac >>
   `ld_global lo A (f::fs)` by fs[Abbr `Stable`] >>
-  qunabbrev_tac `Ambient` >> drule_all ld_invoke_correlated_setup >>
+  qunabbrev_tac `Ambient` >> drule_all ld_invoke_correlated_setup_static >>
   disch_then (strip_assume_tac o SRULE []) >>
   qexistsl_tac [`callee`,`argsS`,`cs`,
     `<|lf_serial := N; lf_supply := Sigma nm; lf_fn := callee;
@@ -500,8 +527,116 @@ Proof
      calleeT.fn_blocks = SOME bb` by
     simp[] >>
   qunabbrev_tac `Stable` >>
-  drule_all ld_invoke_active_push >> strip_tac >>
+  drule_all ld_invoke_active_push_static >> strip_tac >>
   gvs[Abbr `Point`] >>
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[]
+QED
+
+Theorem ld_invoke_callee_ambient:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  MEM fn C.ctx_functions /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME calleeT ==>
+  ?callee. lookup_function nm C.ctx_functions = SOME callee /\
+    callee.fn_name = nm /\
+    calleeT = FST (lower_dload_function_supply (Sigma nm) callee) /\
+    ^ld_covered_ambient lo C C' vs0 Sigma names callee calleeT
+Proof
+  strip_tac >>
+  `^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn'` by
+    gvs[o1PassContractTheory.o1_run_state_ok_def] >>
+  drule_all ld_invoke_callee_ambient_static >> simp[NoAsms] >> strip_tac >>
+  qexists_tac `callee` >> gvs[o1PassContractTheory.o1_run_state_ok_def]
+QED
+
+Theorem ld_invoke_correlated_setup:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME calleeT /\
+  eval_operands ops t = SOME argsT /\
+  setup_callee calleeT argsT t = SOME ct ==>
+  ?callee argsS cs.
+    lookup_function nm C.ctx_functions = SOME callee /\ callee.fn_name = nm /\
+    eval_operands ops s = SOME argsS /\ setup_callee callee argsS s = SOME cs /\
+    ^ld_covered_ambient lo C C' vs0 Sigma names callee calleeT /\
+    cs.vs_current_bb = ct.vs_current_bb /\ cs.vs_prev_bb = ct.vs_prev_bb /\
+    ld_memory lo A (tn with t_var := FEMPTY) cs ct /\
+    ld_nonghost (tn with t_var := FEMPTY) cs ct /\
+    ld_vars P A <|lf_serial := N; lf_supply := Sigma nm; lf_fn := callee;
+      lf_src := cs; lf_tgt := ct; lf_H := FEMPTY;
+      lf_Q := MAP (op_prov f.lf_H) ops; lf_E := {}; lf_tv := FEMPTY|> /\
+    (!a. MEM (SOME a) (MAP (op_prov f.lf_H) ops) ==> a IN FDOM A) /\
+    (!j a. j < LENGTH ops /\ EL j (MAP (op_prov f.lf_H) ops) = SOME a ==>
+      j IN P nm)
+Proof
+  strip_tac >>
+  `^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn'` by
+    gvs[o1PassContractTheory.o1_run_state_ok_def] >>
+  drule_all ld_invoke_correlated_setup_static >> simp[NoAsms] >> strip_tac >>
+  qexistsl_tac [`callee`, `argsS`, `cs`] >>
+  gvs[o1PassContractTheory.o1_run_state_ok_def]
+QED
+
+Theorem ld_invoke_active_push:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME calleeT /\
+  eval_operands ops t = SOME argsT /\
+  setup_callee calleeT argsT t = SOME ct /\
+  enters_block calleeT ct tp /\ active_inst calleeT ti tp /\
+  lookup_block tp.vs_current_bb calleeT.fn_blocks = SOME bb ==>
+  ?callee argsS cs fc.
+    lookup_function nm C.ctx_functions = SOME callee /\
+    eval_operands ops s = SOME argsS /\ setup_callee callee argsS s = SOME cs /\
+    ^ld_covered_ambient lo C C' vs0 Sigma names callee calleeT /\
+    fc = <|lf_serial := N; lf_supply := Sigma nm; lf_fn := callee;
+      lf_src := cs; lf_tgt := ct; lf_H := FEMPTY;
+      lf_Q := MAP (op_prov f.lf_H) ops; lf_E := {}; lf_tv := FEMPTY|> /\
+    ^ld_probe_point lo P C C' vs0
+      (<|cf_fn := fn; cf_inst := inst; cf_state := s;
+         cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+      callee calleeT cs (f::fs) fc A Sigma names bb tp
+Proof
+  strip_tac >>
+  `^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn'` by
+    gvs[o1PassContractTheory.o1_run_state_ok_def] >>
+  drule_all ld_invoke_active_push_static >> simp[NoAsms] >> strip_tac >>
+  qexistsl_tac [`callee`, `argsS`, `cs`] >>
+  simp[] >> gvs[o1PassContractTheory.o1_run_state_ok_def] >>
+  goal_assum (drule_at (Pat `ld_sync`)) >> simp[] >>
+  qexistsl_tac [`X`, `p`, `h`] >> simp[] >> metis_tac[]
+QED
+
+Theorem ld_invoke_guarded_push:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME calleeT /\
+  eval_operands ops t = SOME argsT /\
+  setup_callee calleeT argsT t = SOME ct ==>
+  ?callee argsS cs fc.
+    lookup_function nm C.ctx_functions = SOME callee /\
+    eval_operands ops s = SOME argsS /\ setup_callee callee argsS s = SOME cs /\
+    ^ld_covered_ambient lo C C' vs0 Sigma names callee calleeT /\
+    fc = <|lf_serial := N; lf_supply := Sigma nm; lf_fn := callee;
+      lf_src := cs; lf_tgt := ct; lf_H := FEMPTY;
+      lf_Q := MAP (op_prov f.lf_H) ops; lf_E := {}; lf_tv := FEMPTY|> /\
+    ^ld_probe_entry C' calleeT
+      (^ld_probe_point lo P C C' vs0
+        (<|cf_fn := fn; cf_inst := inst; cf_state := s;
+           cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+        callee calleeT cs (f::fs) fc A Sigma names) ct
+Proof
+  strip_tac >>
+  `^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn'` by
+    gvs[o1PassContractTheory.o1_run_state_ok_def] >>
+  drule_all ld_invoke_guarded_push_static >> simp[NoAsms] >> strip_tac >>
+  qexistsl_tac [`callee`, `argsS`, `cs`] >>
+  gvs[o1PassContractTheory.o1_run_state_ok_def] >> first_assum ACCEPT_TAC
 QED

@@ -9,8 +9,8 @@ Theorem calldata_slice_body_operand_full:
      body_exprs_full_ok cx args) /\
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
-  ?e. args = [e] /\ expr_type e = BaseT (UintT 256) /\
-    ann = BaseT (BytesT (Dynamic n)) /\ 0 < n /\ n < 2 ** 256 /\
+  ?e m. args = [e] /\ expr_type e = BaseT (UintT 256) /\
+    ann = BaseT (BytesT (Dynamic m)) /\ 0 < n /\ n <= m /\ m < 2 ** 256 /\ n < 2 ** 256 /\
     expr_body_pre cenv cx env e es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type e) e es /\
@@ -21,6 +21,7 @@ Proof
   `well_typed_expr env (Builtin ann (CalldataSlice n) args)` by
     fs[expr_body_pre_def] >>
   drule calldata_slice_typing >> strip_tac >> gvs[] >>
+  `n < 2 ** 256` by (fs[] >> decide_tac) >>
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >>
      disch_then irule >> fs[expr_body_pre_def]) >>

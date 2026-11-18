@@ -44,12 +44,12 @@ Proof
   irule (Q.INST [`p` |-> `NONE`, `m` |-> `{}`] ricf_execution_bind_next) >>
   simp[ricf_opaque_value_agree_def, ricf_is_zero_prov_def, ricf_value_agree_def, ld_value_agree_def, word_agree_except_def] >>
   fs[MEM] >>
-  gvs[step_prov_def, out_prov_def, step_taint_def,
+  FIRST [gvs[step_prov_def, out_prov_def, step_taint_def,
     mem_taint_def, adopt_reset_def, store_taint_def,
     imm_taint_def, new_site_bytes_def, step_writes_def,
     range_bytes_def, taint_component_equality, occurrence_sites_step_def,
     source_memory_write_ranges_def, update_var_def,
-    FLOOKUP_DEF, is_terminator_def, SF CONJ_ss] >>
+    FLOOKUP_DEF, is_terminator_def, SF CONJ_ss]] >>
   metis_tac[update_var_def]
 QED
 

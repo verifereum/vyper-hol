@@ -1,15 +1,18 @@
 Theory concretizeAnalysisReadOrigin
 Ancestors concretizeLayoutCutSafe o1SafeUpto venomWfProps
-  concretizeAnalysisScanCoverage concretizePtrIncomingOrigins frameOriginCacheReach
+  concretizeAnalysisScanCoverage concretizePtrIncomingOrigins frameOriginCacheReach frameIncomingArgument
   frameAllocationOwnership frameReadOwnership frameJointDemand frameJointTransition frameJointTrace
   frameOriginHistory frameOriginReachable ptrDiscipline o1PassContract
   basePtrDefs cfgAnalysis venomWf venomInst venomInstProps removeUnusedSsaProofs list finite_map pred_set
 
 Theorem joint_current_production_origin:
+  gas_cut ncut vs0 s /\
   joint_origin_history vs0 ctx stk PG G tn fn inst s oms om hs h /\
   EVERY (fn_ptr_ok P) ctx.ctx_functions /\ EVERY wf_function ctx.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
-  EVERY ssa_form ctx.ctx_functions /\ ~ctx_has_dalloca ctx /\
+  EVERY ssa_form ctx.ctx_functions /\
+  (ctx_has_dalloca ctx ==> ptr_discipline_upto lo ncut ctx vs0) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
   wf_function fn /\ all_reachable fn /\ ssa_form fn /\ FLOOKUP G v = SOME site ==>
   (?aid. FLOOKUP om v = SOME (OriginLocal aid,site) /\
     FLOOKUP s.vs_allocas aid = SOME site /\
@@ -19,13 +22,16 @@ Theorem joint_current_production_origin:
     v IN pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn) /\
     k < LENGTH stk /\ FLOOKUP (EL k stk).cf_state.vs_allocas aid = SOME site)
 Proof
-  strip_tac >> drule joint_origin_history_erasure >> strip_tac >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==>
+     ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s` by simp[] >>
+  drule joint_origin_history_erasure >> strip_tac >>
   drule_all origin_frame_current_lookup >> strip_tac >> Cases_on `tag`
   >- (disj1_tac >> metis_tac[origin_frame_current_cache,
         origin_frame_current_production_coverage])
   >- (disj2_tac >> metis_tac[origin_frame_current_incoming,
-        joint_incoming_allocation_owner]) >>
-  metis_tac[origin_frame_current_not_dynamic]
+        joint_incoming_allocation_owner_upto]) >>
+  drule_all origin_frame_dynamic_site_upto >> strip_tac >> gvs[]
 QED
 
 Theorem shape_context_inst_wf[local]:
@@ -39,7 +45,8 @@ QED
 Theorem joint_read_production_origin:
   joint_trace vs0 ctx q0 es qs q /\ o1_ctx_shape ctx /\
   layout_cut_safe D lo ncut vs0 ctx q /\ EVERY ssa_form ctx.ctx_functions /\
-  EVERY all_reachable ctx.ctx_functions /\ ~ctx_has_dalloca ctx /\
+  EVERY all_reachable ctx.ctx_functions /\
+  (ctx_has_dalloca ctx ==> byte < w2n vs0.vs_initial_fmp) /\
   j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   byte IN joint_reads (EL j (q0::qs)) /\ lo <= byte /\
@@ -66,19 +73,23 @@ Proof
     gvs[joint_config_reachable_def] >>
   drule joint_origin_history_erasure >> strip_tac >>
   drule origin_frame_erasure >> strip_tac >>
-  `MEM fn ctx.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM fn ctx.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `EVERY wf_function ctx.ctx_functions` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions` by
     metis_tac[shape_context_inst_wf] >>
   `wf_function fn /\ all_reachable fn /\ ssa_form fn` by metis_tac[EVERY_MEM] >>
   `gas_cut ncut vs0 s` by metis_tac[layout_cut_safe_frame] >>
-  fs[layout_cut_safe_def, ptr_discipline_upto_def] >>
+  fs[layout_cut_safe_def] >>
+  qpat_assum `ptr_discipline_upto _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ptr_discipline_upto_def]) >>
   `EVERY (fn_ptr_ok P) ctx.ctx_functions` by
     (fs[EVERY_MEM] >> metis_tac[]) >>
   `access_ok lo G fn inst s` by metis_tac[] >>
   `byte IN range_bytes (source_memory_read_ranges inst s)` by gvs[joint_reads_def] >>
   drule_all access_ok_read_site >> strip_tac >>
+  `ctx_has_dalloca ctx ==> FST (b,sz) < w2n vs0.vs_initial_fmp` by
+    (strip_tac >> `byte < w2n vs0.vs_initial_fmp` by metis_tac[] >> simp[] >> decide_tac) >>
   qexistsl_tac [`P`,`ops`,`v`,`b`,`sz`] >> simp[] >>
   irule joint_current_production_origin >> metis_tac[]
 QED

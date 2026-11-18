@@ -115,7 +115,7 @@ Proof
 QED
 
 Theorem ptr_mixed_scalar_eval:
-  ptr_ledger_erases births TG G /\
+  ptr_ledger_erases dyn births TG G /\
   ptr_mixed_vars births positions TG tn f g s t /\
   ptr_nonopaque_operand f op /\ s.vs_labels = t.vs_labels /\
   op_prov G op = NONE /\ op_taint tn op = {} ==>
@@ -125,14 +125,14 @@ Proof
   drule ptr_owner_op_projection >>
   disch_then (qspec_then `op` strip_assume_tac) >>
   `op_prov TG op = NONE` by
-    (Cases_on `op_prov TG op` >> gvs[ptr_owner_project_def, FLOOKUP_DEF]) >>
+    (Cases_on `op_prov TG op` >> gvs[ptr_owner_erases_def, FLOOKUP_DEF]) >>
   drule_all ptr_mixed_vars_eval >>
   Cases_on `eval_operand op s` >> Cases_on `eval_operand op t` >>
   simp[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]
 QED
 
 Theorem ptr_terminal_read_range_transport:
-  ptr_ledger_erases births TG G /\
+  ptr_ledger_erases dyn births TG G /\
   ptr_mixed_vars births positions TG tn f g s t /\
   s.vs_labels = t.vs_labels /\ ptr_use_ok P pv inst /\
   FDOM G SUBSET pv /\ taint_ok f tn inst s /\
@@ -170,16 +170,16 @@ Proof
   gvs[ptr_lookup_transport_def]
 QED
 
-Theorem ptr_paired_current_range_static_bound:
+Theorem ptr_paired_current_range_static_bound_static:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
@@ -191,15 +191,45 @@ Theorem ptr_paired_current_range_static_bound:
   eval_operand ops.iao_ofst a.po_state = SOME x /\
   eval_operand ops.iao_ofst at.po_state = SOME y /\
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
-  n = 0 \/ w2n y + n <= eom
+  n = 0 \/ w2n y + n <= eom \/ (y = x /\ dyn_floor C vs <= w2n x)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `n = 0` >- simp[] >>
-  drule_all ptr_paired_current_range_classification >> strip_tac
-  >- (drule_all ptr_stage_fixed_region_bound >> simp[]) >>
+  drule_all ptr_paired_current_range_classification_static >> strip_tac
+  >- (drule_all ptr_stage_fixed_region_bound >> simp[])
+  >- (rpt disj2_tac >> gvs[]) >>
+  disj2_tac >> disj1_tac >>
   `ptr_stage_placements C' positions` by
     fs[concretizePtrPairedPrefixTheory.ptr_paired_prefix_def] >>
   drule_all ptr_stage_placements_endpoint_bound >> simp[] >> decide_tac
+QED
+
+Theorem ptr_paired_current_range_static_bound:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  ((mem_read_ops a.po_inst = SOME ops /\
+    MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state)) \/
+   (mem_write_ops a.po_inst = SOME ops /\
+    MEM (w2n x,n) (source_memory_write_ranges a.po_inst a.po_state))) /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
+  n = 0 \/ w2n y + n <= eom \/ (y = x /\ dyn_floor C vs <= w2n x)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_current_range_static_bound_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem ptr_paired_read_range_static_bound:
@@ -211,7 +241,7 @@ Theorem ptr_paired_read_range_static_bound:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
@@ -221,11 +251,14 @@ Theorem ptr_paired_read_range_static_bound:
   eval_operand ops.iao_ofst at.po_state = SOME y /\
   MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state) /\
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
-  n = 0 \/ w2n y + n <= eom
+  n = 0 \/ w2n y + n <= eom \/ (y = x /\ dyn_floor C vs <= w2n x)
 Proof
-  strip_tac >> irule ptr_paired_current_range_static_bound >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
+  strip_tac >> irule ptr_paired_current_range_static_bound >> simp[] >>
+  conj_tac >- (qexists_tac `names` >> simp[]) >>
+  qexistsl [`C'`,`H`,`PT`,`R`,`TG`,`a`,`at`,`births`,`calls`,`done`,`entries`,
+            `h`,`ht`,`lo`,`lp`,`ops`,`positions`,`registry`,`rpolicy`,`saved`,
+            `tokens`,`ws`] >>
+  simp[]
 QED
 
 Theorem ptr_paired_terminal_static_bound:
@@ -286,7 +319,6 @@ QED
 
 Resume ptr_paired_terminal_static_bound[terminal_operands]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
-  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
   qpat_assum `ptr_discipline _ _ _` mp_tac >>
@@ -295,6 +327,7 @@ Resume ptr_paired_terminal_static_bound[terminal_operands]:
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
      metis_tac[]) >>
+  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   drule_all ptr_frame_current_static >> strip_tac >>
   `FDOM a.po_prov SUBSET fn_pv P a.po_fn` by
     (fs[ptr_static_support_def, pred_setTheory.SUBSET_DEF, FLOOKUP_DEF] >>
@@ -314,8 +347,12 @@ Resume ptr_paired_terminal_static_bound[terminal_operands]:
   `mem_read_ops a.po_inst = SOME
     <|iao_ofst := addr; iao_size := SOME lenop; iao_max_size := SOME lenop|>` by
     simp[mem_read_ops_def] >>
+  `!w:256 word. ~(dyn_floor C vs <= w2n w)` by
+    (gen_tac >> qpat_assum `~ctx_has_dalloca C` (fn th => rewrite_tac[th,
+       dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt])) >>
   drule_at (Pat `mem_read_ops _ = _`) ptr_paired_read_range_static_bound >>
-  disch_then (drule_all o SRULE []) >> simp[]
+  disch_then (drule_all o SRULE []) >>
+  qpat_x_assum `!w. ~(dyn_floor _ _ <= _)` (fn th => simp[th])
 QED
 
 Finalise ptr_paired_terminal_static_bound

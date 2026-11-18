@@ -29,6 +29,10 @@ QED
 Theorem opcode_every_intcall:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) /\ P INVOKE /\
+  (!e ty st. MEM e (omitted_defaults ce (nsid_to_string id) (LENGTH args)) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (cfn (cenv_without_defaults ce (nsid_to_string id)) ty e st)))) /\
   (!e ty st. MEM e args ==> EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (cfn ce ty e st)))) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -196,6 +200,11 @@ Theorem opcode_every_call:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) /\
   P INVOKE /\ P RETURNDATACOPY /\
   ~expr_shape_root (Call ann target args d) /\
+  (!id. target = IntCall id ==>
+    !e ty st. MEM e (omitted_defaults ce (nsid_to_string id) (LENGTH args)) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (cfn (cenv_without_defaults ce (nsid_to_string id)) ty e st)))) /\
   (!e ty st. MEM e (call_callback_children args d) ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (cfn ce ty e st)))) ==>

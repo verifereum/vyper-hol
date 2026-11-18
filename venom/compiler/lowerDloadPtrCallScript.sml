@@ -9,7 +9,7 @@ Ancestors
    allocation: vs_allocas, vs_alloca_next are related by dload_table_stack;
    memory: vs_memory is related by dload_memory_match;
    variables: vs_vars agrees on non-opaque original variables through
-     dload_vars_match (RETPC_PARAM-derived opaque values must be excluded);
+     dload_vars_match fl (RETPC_PARAM-derived opaque values must be excluded);
    arguments/token: vs_params has provenance-indexed word agreement;
      vs_return_pc_token is the final argument, not necessarily equal;
    masked shared store: vs_accounts, vs_transient, vs_immutables;
@@ -73,9 +73,9 @@ QED
    positions mean ordinary words.  Calls instead use MAP op_prov arguments,
    whose length is exactly the number of argument values. *)
 Definition dload_param_values_def:
-  dload_param_values fs PG PH xs ys <=>
+  dload_param_values fl fs PG PH xs ys <=>
     LENGTH PG <= LENGTH xs /\ LENGTH PH <= LENGTH ys /\
-    LIST_REL (\(p,x) (q,y). dload_value_word fs {} p q x y)
+    LIST_REL (\(p,x) (q,y). dload_value_word fl fs {} p q x y)
       (GENLIST (\k. (if k < LENGTH PG then EL k PG else NONE, EL k xs))
         (LENGTH xs))
       (GENLIST (\k. (if k < LENGTH PH then EL k PH else NONE, EL k ys))
@@ -83,22 +83,22 @@ Definition dload_param_values_def:
 End
 
 Theorem dload_param_values_unprovenanced_refl:
-  dload_param_values fs [] [] xs xs
+  dload_param_values fl fs [] [] xs xs
 Proof
   simp[dload_param_values_def, LIST_REL_EL_EQN, EL_GENLIST,
        dload_value_word_def, word_agree_except_def]
 QED
 
 Theorem dload_param_values_length:
-  dload_param_values fs PG PH xs ys ==> LENGTH xs = LENGTH ys
+  dload_param_values fl fs PG PH xs ys ==> LENGTH xs = LENGTH ys
 Proof
   simp[dload_param_values_def, LIST_REL_EL_EQN]
 QED
 
 Theorem dload_param_values_lookup:
-  dload_param_values fs PG PH xs ys /\ k < LENGTH xs ==>
+  dload_param_values fl fs PG PH xs ys /\ k < LENGTH xs ==>
   k < LENGTH ys /\
-  dload_value_word fs {}
+  dload_value_word fl fs {}
     (if k < LENGTH PG then EL k PG else NONE)
     (if k < LENGTH PH then EL k PH else NONE) (EL k xs) (EL k ys)
 Proof
@@ -109,17 +109,17 @@ QED
 (* Only caller-local metadata is compared here.  Shared mutable fields of
    these snapshots must not be compared after the callee has executed. *)
 Definition dload_saved_metadata_def:
-  dload_saved_metadata fs V f g <=>
-    dload_vars_match fs V f.cf_prov g.cf_prov
+  dload_saved_metadata fl fs V f g <=>
+    dload_vars_match fl fs V f.cf_prov g.cf_prov
       (entry_taint with t_var := f.cf_tvar)
       (entry_taint with t_var := g.cf_tvar) f.cf_state g.cf_state /\
-    dload_param_values fs f.cf_params g.cf_params
+    dload_param_values fl fs f.cf_params g.cf_params
       f.cf_state.vs_params g.cf_state.vs_params
 End
 
 Theorem dload_saved_metadata_unprovenanced_refl:
   f.cf_prov = FEMPTY /\ f.cf_params = [] ==>
-  dload_saved_metadata [] V f f
+  dload_saved_metadata fl [] V f f
 Proof
   simp[dload_saved_metadata_def, dload_vars_match_empty_provenance,
        dload_param_values_unprovenanced_refl]
@@ -127,8 +127,8 @@ QED
 
 Theorem dload_setup_parameters:
   setup_callee fn xs s = SOME cs /\ setup_callee gn ys t = SOME ct /\
-  dload_param_values fs PG PH xs ys ==>
-  dload_param_values fs PG PH cs.vs_params ct.vs_params
+  dload_param_values fl fs PG PH xs ys ==>
+  dload_param_values fl fs PG PH cs.vs_params ct.vs_params
 Proof
   strip_tac >> imp_res_tac setup_callee_frame >> gvs[]
 QED

@@ -9,7 +9,7 @@ Ancestors
   o1LowerDloadRunnerBoundary passSimulationDefs o1SafeUpto gasCount
 
 val ldA = ``ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   callee_first names C.ctx_functions /\ o1_safe_upto D lo ncut C vs``;
 val ldJ = ``ld_joint_boundary vs C C' lo D``;
 (* A run from s can still read j gas events inside the cut: every state

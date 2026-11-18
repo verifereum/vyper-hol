@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeLoopSource
 Ancestors
+  bodyFullAbiDecodeLoopSourceExact
   bodyFullAbiDecodeLeafCases decoderArraySetupPtr calldataDynOwned
   bodyPtrBopScalarOutcome bodyPtrBopScalarSeq stateFrame
   allocaFootprint emitHelperProps exprLoweringProps freshWrites
@@ -75,80 +76,9 @@ Theorem abi_decode_loop_source_joint:
       op_taint tnu (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
-  `abi_decode_indexed_address src idx asz sa = (head,sb)` by
-    simp[abi_decode_indexed_address_def, comp_bind_def] >>
-  drule_all calldataDynOwnedTheory.calldata_indexed_address_repeat >> strip_tac >>
-  `(!x. src = Var x ==> not_fresh_at sa x) /\
-   (!x. idx = Var x ==> not_fresh_at sa x)` by
-    (conj_tac >> rpt strip_tac >> gvs[abi_decoder_operand_live_def,
-       abi_decoder_older_vars_def, not_fresh_at_def]) >>
-  drule_all clean_scaled_source_prefix_endpoint_ptr_origin_core >>
-  disch_then (qspecl_then [`ARB`, `cx`, `ctx`, `PG`, `ARB`] strip_assume_tac) >>
-  `!i. MEM i (emitted_insts sa sb) ==> MEM i.inst_opcode [ADD;MUL]` by
-    (qpat_x_assum `emit_op ADD [src;Lit 32w] sa = _` mp_tac >>
-     qpat_x_assum `emit_op MUL _ s1 = _` mp_tac >>
-     qpat_x_assum `emit_op ADD [data;offset] s2 = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[emit_op_def, emit_inst_def, comp_bind_def, fresh_var_def,
-          fresh_id_def, emit_def, comp_return_def, comp_ignore_bind_def] >>
-     rpt strip_tac >> gvs[] >>
-     qpat_x_assum `MEM i _` mp_tac >>
-     pure_rewrite_tac [emitted_insts_def, compile_state_accfupds,
-       compile_state_accessors, GSYM APPEND_ASSOC, DROP_LENGTH_APPEND,
-       combinTheory.K_THM, MEM, mk_inst_def, instruction_accessors] >>
-     rpt strip_tac >> gvs[]) >>
-  `t = s with vs_vars := t.vs_vars` by
-    (mp_tac (Q.SPECL [`emitted_insts sa sb`, `\x:string. F`, `s`, `t`]
-      run_inst_seq_protected_frame) >>
-     impl_tac >- (conj_tac >- (rpt gen_tac >> strip_tac >>
-       `MEM i.inst_opcode [ADD;MUL]` by metis_tac[] >>
-       `MEM i.inst_opcode
-         [ADD; SUB; MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD;
-          EQ; LT; GT; SLT; SGT; ISZERO; AND; OR; XOR; NOT;
-          SHL; SHR; SAR; SIGNEXTEND; BYTE; ASSIGN; ASSERT; ASSERT_UNREACHABLE]`
-         by (fs[MEM] >> metis_tac[]) >>
-       drule_all bop_scalar_inst_protected_frame >> simp[]) >> simp[]) >> simp[]) >>
-  `sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
-   sb.cs_current_bb = sa.cs_current_bb` by
-    (qpat_assum `emit_op ADD [src;Lit 32w] sa = _`
-       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     qpat_assum `emit_op MUL _ s1 = _`
-       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     qpat_assum `emit_op ADD [data;offset] s2 = _`
-       (mp_then Any strip_assume_tac emitted_insts_emit_op) >> simp[] >>
-     qpat_x_assum `emit_op ADD [src;Lit 32w] sa = _` mp_tac >>
-     qpat_x_assum `emit_op MUL _ s1 = _` mp_tac >>
-     qpat_x_assum `emit_op ADD [data;offset] s2 = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[emit_op_def, emit_inst_def, comp_bind_def, fresh_var_def,
-       fresh_id_def, emit_def, comp_return_def, comp_ignore_bind_def] >>
-     rpt strip_tac >> gvs[]) >>
-  qabbrev_tac `r = t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  `state_frame r = state_frame (s with vs_inst_idx := r.vs_inst_idx)` by
-    (simp[Abbr `r`] >>
-     qpat_assum `t = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
-     simp[state_frame_def]) >>
-  `alloca_history fn r` by
-    (irule abi_decode_no_alloca_endpoint_history >>
-     qexistsl_tac [`s`, `sa`, `sb`] >>
-     fs[Abbr `r`, inst_extends_def, IS_PREFIX_APPEND, EVERY_MEM, MEM] >>
-     gen_tac >> strip_tac >>
-     qpat_x_assum `!i. MEM i _ ==> _` drule >> strip_tac >> simp[]) >>
-  `(^owned_decoder_state) sb r HG u` by
-    (irule abi_decode_owned_scalar_frame_with_history >>
-     conj_tac >- asm_rewrite_tac[] >>
-     qexistsl_tac [`G`, `s`, `sa`, `tn`] >>
-     asm_rewrite_tac[] >> simp[Abbr `r`, lookup_var_def] >>
-     metis_tac[lookup_var_def]) >>
-  qexistsl_tac [`r`, `HG`, `u`] >>
-  conj_tac >- (gen_tac >> first_assum irule >> simp[]) >>
-  asm_rewrite_tac[] >>
-  simp[Abbr `r`, eval_operand_def, lookup_var_def, word_add_n2w] >>
-  conj_tac >- metis_tac[GSYM word_add_n2w, GSYM word_mul_n2w,
-    arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM,
-    arithmeticTheory.MULT_COMM] >>
-  conj_tac >- (Cases_on `data` >>
-    fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-       not_fresh_at_def]) >>
-  metis_tac[lookup_var_def]
+  drule_all bodyFullAbiDecodeLoopSourceExactTheory.abi_decode_loop_source_joint_exact >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  rename1 `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,Gu,tnu)` >>
+  qexistsl_tac [`u`, `Gu`, `tnu`] >>
+  asm_rewrite_tac[]
 QED

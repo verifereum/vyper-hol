@@ -78,13 +78,13 @@ QED
 Theorem excluded_opcode_checks:
   EVERY (\op. ~inst_shape_ok (mk_inst 0 op [] [])) [DJMP; OFFSET] /\
   EVERY (\op. ~raw_opcode_ok op)
-    [ASSERT_UNREACHABLE; DALLOCA; DRET; GETFMP; SETFMP;
+    [ASSERT_UNREACHABLE; DRET; GETFMP; SETFMP;
      RETFMP; INITIAL_FMP; BUMP; FMP_PARAM; MEMTOP] /\
   EVERY (\op. inst_shape_ok (mk_inst 0 op [] []))
     [ASSERT_UNREACHABLE; DLOAD; DLOADBYTES; DALLOCA; DRET; GETFMP; SETFMP;
      RETFMP; INITIAL_FMP; BUMP; FMP_PARAM; MEMTOP; RET;
      DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT] /\
-  EVERY raw_opcode_ok [RET; DLOAD; DLOADBYTES] /\
+  EVERY raw_opcode_ok [RET; DLOAD; DLOADBYTES; DALLOCA] /\
   ~raw_opcode_ok PHI
 Proof
   EVAL_TAC

@@ -13,6 +13,7 @@ Ancestors
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullStructLit bodyFullPop
+  bodyFullRawCallCalldata
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
@@ -23,14 +24,16 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* Admitted: the joint twin of body_expr_ptr_ok_at_leaf (bodySimPtrMain). *)
+(* Join the four joint expression leaves. *)
 Theorem body_expr_full_ok_leaf:
   !cx e.
     (?a id. e = Name a id) \/ (?a nsid. e = TopLevelName a nsid) \/
     (?a nsid mid. e = FlagMember a nsid mid) \/ (?a l. e = Literal a l) ==>
     body_expr_full_ok cx e
 Proof
-  cheat
+  rpt strip_tac >> gvs[] >>
+  simp[name_expr_full_ok, toplevel_name_expr_full_ok,
+       flag_member_expr_full_ok, literal_expr_full_ok]
 QED
 
 (* Admitted: the joint twin of body_annassign_case_ptr_at (bodyPtrAssignCases). *)
@@ -62,7 +65,7 @@ Proof
   irule body_annassign_other_full >> metis_tac[]
 QED
 
-(* Admitted: the joint Append case. *)
+(* The joint Append case, by its storage, local and nested leaves. *)
 Theorem body_append_case_full:
   !cx t e.
     (!s'' p t'.
@@ -72,8 +75,9 @@ Theorem body_append_case_full:
 Proof
   rpt strip_tac >> Cases_on `?nid. t = TopLevelNameTarget nid`
   >- (gvs[] >> irule body_append_storage_full >> first_assum ACCEPT_TAC) >>
-  Cases_on `t` >> gvs[] >>
-  rw[body_stmt_full_ok_def, supported_stmt_def, supported_append_target_def]
+  Cases_on `?id. t = NameTarget id`
+  >- (gvs[] >> irule body_append_local_full >> first_assum ACCEPT_TAC) >>
+  irule body_append_nested_full >> simp[] >> metis_tac[]
 QED
 
 (* The joint twin of body_assert_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
@@ -290,11 +294,24 @@ Proof
   `body_exprs_full_ok cx [e1;e2]` by fs[builtin_args_length_ok_def] >>
   drule expr_body_pre_bop >> strip_tac >>
   `is_word_type ty` by
-    (Cases_on `bop` >> gvs[well_typed_binop_def, is_numeric_type_def] >>
-     Cases_on `expr_type e1` >>
-     gvs[is_int_type_def, is_bool_type_def, is_flag_type_def, is_word_type_def] >>
-     rename1 `BaseT bt` >> Cases_on `bt` >>
-     gvs[is_int_type_def, is_bool_type_def, is_flag_type_def, is_word_type_def]) >>
+    (qpat_assum `expr_body_pre _ _ _ (Builtin ty (Bop bop) [e1;e2]) _`
+       (mp_tac o MATCH_MP expr_body_pre_type_evaluates) >>
+     simp[expr_type_def, optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+     Cases_on `ty`
+     >~ [`is_word_type (BaseT bt)`]
+       >- (Cases_on `bt`
+           >~ [`is_word_type (BaseT (BytesT bd))`]
+             >- (Cases_on `bd` >> Cases_on `bop` >>
+                 gvs[well_typed_binop_def, is_numeric_type_def, is_int_type_def,
+                     is_bool_type_def, is_flag_type_def, is_word_type_def,
+                     vyperValueTheory.evaluate_type_def,
+                     optionTheory.IF_EQUALS_OPTION]) >>
+           Cases_on `bop` >>
+           gvs[well_typed_binop_def, is_numeric_type_def, is_int_type_def,
+               is_bool_type_def, is_flag_type_def, is_word_type_def]) >>
+     Cases_on `bop` >>
+     gvs[well_typed_binop_def, is_numeric_type_def, is_int_type_def,
+         is_bool_type_def, is_flag_type_def, is_word_type_def]) >>
   conj_asm1_tac
   >- (Cases_on `(bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1)`
       >- (irule bop_bytestring_eqne_sim_full >> metis_tac[]) >>
@@ -629,11 +646,12 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint Log case. *)
+(* Log, by bodyFullLog's joint fragment. *)
 Theorem body_log_case_full:
   !cx id es. body_exprs_full_ok cx es ==> body_stmt_full_ok cx (Log id es)
 Proof
-  cheat
+  rw[body_stmt_full_ok_def] >>
+  irule compile_log_frag_full >> metis_tac[]
 QED
 
 (* Pass, by stmtSimPass's joint fragment. *)
@@ -672,13 +690,13 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.raise_unreachable_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_raw_call_calldata_case_ptr_at (bodyPtrCallCases). *)
+(* The joint raw_call-with-calldata case. *)
 Theorem body_raw_call_calldata_case_full:
   !cx ty flags es v19.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullRawCallCalldataTheory.raw_call_calldata_expr_full_ok
 QED
 
 (* Admitted: the joint twin of body_raw_call_case_ptr_at (bodyPtrCallCases). *)

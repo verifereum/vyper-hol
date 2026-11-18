@@ -176,6 +176,7 @@ Theorem abi_decode_loop_owned_branch[local]:
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all (typed_copy_origin_ptr_header_branch_path |> Q.GEN `D`) >>
   disch_then assume_tac >>
   first_assum (qspecl_then [`explicit`, `PG`,

@@ -25,3 +25,7 @@ example an external call with a `gas=` keyword). The oracles stay the pinned
 compiler's output.
 
 The decoder-divergent fixtures are the ones listed in `decoder_divergent`.
+One more fixture differs for the same reason outside the native runner's
+corpus: `assignment-order/s11_storage_map_assign_extcall_rhs` (an external call
+returning `uint256`). `evalAssignmentOrderTheory` proves it compiles and
+differs (`s11_storage_map_assign_extcall_rhs_differs_from_pinned_decoder`).

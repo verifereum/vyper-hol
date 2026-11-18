@@ -1,0 +1,56 @@
+Upstream: https://github.com/vyperlang/vyper/pull/5274
+Status: merged (bbba50e10e45703a6ce1190e4f0e5dedccf8d2b2)
+Scope: the fixpoint sweep in BasePtrAnalysis, with hunk context adapted to the pin (which lacks the OrderedSet import); the tests are not ported.
+
+diff --git a/vyper/venom/analysis/base_ptr_analysis.py b/vyper/venom/analysis/base_ptr_analysis.py
+index e6538b21..b3a85397 100644
+--- a/vyper/venom/analysis/base_ptr_analysis.py
++++ b/vyper/venom/analysis/base_ptr_analysis.py
+@@ -1,5 +1,4 @@
+ import dataclasses as dc
+-from collections import deque
+ from dataclasses import dataclass
+ from typing import Optional
+ 
+@@ -17,7 +16,7 @@ from vyper.evm.address_space import (
+ from vyper.exceptions import CompilerPanic
+ from vyper.venom.analysis.analysis import IRAnalysis
+ from vyper.venom.analysis.cfg import CFGAnalysis
+-from vyper.venom.basicblock import IRBasicBlock, IRInstruction, IRLiteral, IROperand, IRVariable
++from vyper.venom.basicblock import IRInstruction, IRLiteral, IROperand, IRVariable
+ from vyper.venom.memory_location import (
+     Allocation,
+     InstAccessOps,
+@@ -108,18 +107,21 @@ class BasePtrAnalysis(IRAnalysis):
+         self._untracked_root_active = set()
+         self.cfg = self.analyses_cache.request_analysis(CFGAnalysis)
+ 
+-        worklist = deque(self.cfg.dfs_pre_walk)
+-
+-        while len(worklist) > 0:
+-            bb: IRBasicBlock = worklist.popleft()
+-
++        # facts are per variable, not per program point: a use can sit any
++        # number of blocks below the definition (e.g. a phi operand from a
++        # predecessor visited after the join, read in a loop body behind a
++        # header with no pointer instructions), so re-visiting only the
++        # successors of a changed block can miss it. sweep every block until
++        # nothing changes. facts only grow, and there are finitely many
++        # variables and allocations; conflicting offsets for an allocation
++        # collapse to None, so this terminates.
++        blocks = list(self.cfg.dfs_pre_walk)
++        changed = True
++        while changed:
+             changed = False
+-            for inst in bb.instructions:
+-                changed |= self._handle_inst(inst)
+-
+-            if changed:
+-                for succ in self.cfg.cfg_out(bb):
+-                    worklist.append(succ)
++            for bb in blocks:
++                for inst in bb.instructions:
++                    changed |= self._handle_inst(inst)
+ 
+         self.vars_in_allocations = dict()
+         for var, ptrs in self.var_to_mem.items():
