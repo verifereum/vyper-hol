@@ -8,7 +8,7 @@ Ancestors
 Definition symbolic_frame_def:
   symbolic_frame (R : 'g -> compile_state -> compile_state -> bool)
       (m : 'a compiler) <=>
-    !g s t. R g s t ==> FST (m s) = FST (m t) /\
+    !s g t. R g s t ==> FST (m s) = FST (m t) /\
       R g (SND (m s)) (SND (m t))
 End
 

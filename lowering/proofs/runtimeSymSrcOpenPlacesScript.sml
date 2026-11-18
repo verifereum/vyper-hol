@@ -149,14 +149,31 @@ Theorem runtime_sym_subscript:
   runtime_sym_subscript_clause tops
 Proof
   strip_tac >> rewrite_tac[runtime_sym_subscript_clause_def] >>
-  map_every qx_gen_tac [`cfn`,`ce`,`rt`,`ty`,`be`,`key`,`s`,`v`,`s'`] >> strip_tac >>
-  drule_all runtime_sym_subscript_children >> strip_tac >>
-  match_mp_tac runtime_sym_subscript_step >>
-  qexists_tac `tops` >> asm_rewrite_tac[] >> conj_tac
-  >- (qpat_x_assum `!t. _` (qspec_then `ty` strip_assume_tac) >>
-      fs[runtime_sym_expr_contract_def]) >>
-  qpat_x_assum `runtime_sym_lower_value_clause tops` mp_tac >>
-  simp[runtime_sym_lower_value_clause_def] >> metis_tac[]
+  map_every qx_gen_tac [`cfn`,`ce`,`rt`,`ty`,`be`,`key`,`s`,`v`,`s'`] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac strip_assume_tac))) >>
+  drule_all runtime_sym_subscript_children >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac strip_assume_tac)) >>
+  mp_tac (Q.INST [`tops` |-> `tops`, `cfn` |-> `cfn`, `ce` |-> `ce`,
+    `rt` |-> `rt`, `ty` |-> `ty`, `be` |-> `be`, `key` |-> `key`,
+    `s` |-> `s`, `v` |-> `v`, `s'` |-> `s'`] runtime_sym_subscript_step) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC)
+      >- (map_every qx_gen_tac [`st`,`value`,`next`] >> strip_tac >>
+          qpat_assum `!t. runtime_sym_expr_contract _ _ _ t be /\ _`
+            (qspec_then `ty`
+              (qspecl_then [`st`,`value`,`next`] match_mp_tac o
+               REWRITE_RULE [runtime_sym_expr_contract_def] o CONJUNCT1)) >>
+          asm_rewrite_tac[]) >>
+      map_every qx_gen_tac [`kt`,`st`,`op`,`next`] >> strip_tac >>
+      qpat_x_assum `runtime_sym_lower_value_clause tops`
+        (qspecl_then [`cfn`,`ce`,`kt`,`key`,`st`,`op`,`next`]
+          match_mp_tac o REWRITE_RULE [runtime_sym_lower_value_clause_def]) >>
+      qpat_assum `!t. runtime_sym_expr_contract _ _ _ t be /\ _`
+        (qspec_then `kt` (assume_tac o CONJUNCT2)) >>
+      asm_rewrite_tac[]) >>
+  disch_then match_mp_tac >> asm_rewrite_tac[]
 QED
 
 Theorem runtime_sym_target_ptr:

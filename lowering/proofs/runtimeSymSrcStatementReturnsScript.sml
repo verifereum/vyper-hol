@@ -330,6 +330,7 @@ Proof
       qpat_x_assum `runtime_sym_expr_contract _ _ _ _ _`
         (qspecl_then [`st`,`v`,`st_next`] irule o
          REWRITE_RULE [runtime_sym_expr_contract_def]) >>
-      asm_rewrite_tac[]) >>
-  disch_then drule_all >> simp_tac bool_ss []
+      qexists_tac `st` >> asm_rewrite_tac[]) >>
+  disch_then (qspecl_then [`s`,`()`,`s'`] match_mp_tac) >>
+  asm_rewrite_tac[]
 QED

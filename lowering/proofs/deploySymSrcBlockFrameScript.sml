@@ -17,7 +17,7 @@ Theorem symbolic_frame_deploy:
 Proof
   simp[symbolic_frame_def, deploy_blocks_frame_def] >>
   eq_tac >> strip_tac >> rpt gen_tac
-  >- (strip_tac >> first_x_assum (qspecl_then [`B`,`s`] mp_tac) >>
+  >- (strip_tac >> first_x_assum (qspecl_then [`s`,`B`] mp_tac) >>
       simp[] >> Cases_on `m (s with cs_blocks := s.cs_blocks ++ B)` >> simp[]) >>
   Cases_on `m s` >>
   first_x_assum drule_all >> simp[]
