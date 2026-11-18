@@ -63,7 +63,9 @@ Theorem augassign_immutable_load_valid_framed_joint:
           u.vs_alloca_next = s.vs_alloca_next /\
           (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
           ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-          u.vs_inst_idx = LENGTH sb.cs_current_insts)
+          u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          state_frame u = state_frame (s with vs_inst_idx := u.vs_inst_idx) /\
+          (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s))
 Proof
   strip_tac >>
   `cx.in_deploy` by metis_tac[augassign_immutable_in_deploy] >>
@@ -133,6 +135,10 @@ Resume augassign_immutable_load_valid_framed_joint[frame]:
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (qspec_then `n2w off` mp_tac) >>
   (impl_tac >- simp[Abbr `target`, eval_operand_def, mk_inst_def]) >> strip_tac >>
+  `!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q s` by
+    (qx_gen_tac `q` >> disch_tac >>
+     qpat_assum `!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q s /\ _`
+       (qspec_then `q` mp_tac) >> simp[]) >>
   drule emit_op_facts >> strip_tac >> gvs[] >>
   conj_tac >- (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
   conj_tac >> rpt strip_tac >>
