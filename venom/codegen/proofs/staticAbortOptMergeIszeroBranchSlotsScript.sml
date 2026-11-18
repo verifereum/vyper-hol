@@ -6,46 +6,69 @@ Ancestors
 Theorem merge_iszero_branch_slots:
   !(pre:asm_inst list) tail p q l (ss:sym_state) (t:asm_state)
     (V:(num#num)->bool) e pc (height:(num#num)->num) need tag boolean v.
-  let b = LENGTH pre in
-  let keep = \i. i < b \/ b+2 <= i in
-  let f = \i. if i < b then i else i-2 in
-  let M = OPTION_MAP (\(nm,org). (nm,f org)) in
-  let fresh = (ss.sym_base.as_pc = b+3) in
-  let Vq = {x | x IN V /\ keep (pc x)} UNION (if fresh then {v} else {}) in
-  let hq = \x. if x=v then height e-1 else height x in
-  let nq = \x. x<>v /\ need x in
-  let tq = \x k. if x=v then (if k=0 then NONE else M (tag e (k+1)))
-    else if (pc x=b+2 /\ k=0) \/ (pc x=b+3 /\ k=1) then NONE
-    else if pc x=b+3 /\ k=0 then SOME(l,b) else M (tag x k) in
-  let Bq = \x k. if x=v then 0<k /\ boolean e (k+1)
-    else boolean x k /\ ~(pc x=b+2 /\ k=0) /\ ~(pc x=b+3 /\ k<=1) in
-  let LabelOK = \code nm org.
-    org < LENGTH code /\
-    (EL org code = AsmPushLabel nm \/ EL org code = AsmPushOfst nm 0) /\
-    ?off dest. FLOOKUP (SND (compute_label_offsets code)) nm = SOME off /\
-      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc code) off = SOME dest in
-  let Slots = \code cc A h n g B.
+  !b. b = LENGTH pre ==>
+  !M. M = OPTION_MAP (\(nm,org). (nm,if org < b then org else org-2)) ==>
+  !Slots. Slots = (\code cc A h n g B.
     !x. x IN A ==>
       (n x ==> cc.cc_static) /\
       (!k. B x k ==> k < h x /\ g x k=NONE) /\
-      (!k nm org. g x k=SOME(nm,org) ==> k < h x /\ LabelOK code nm org) in
+      (!k nm org. g x k=SOME(nm,org) ==> k < h x /\
+        org < LENGTH code /\
+        (EL org code = AsmPushLabel nm \/ EL org code = AsmPushOfst nm 0) /\
+        ?off dest. FLOOKUP (SND (compute_label_offsets code)) nm = SOME off /\
+          off < dimword(:256) /\ FLOOKUP (build_offset_to_pc code) off = SOME dest)) ==>
   p=pre++[AsmOp "ISZERO"; AsmOp "ISZERO"; AsmPushLabel l; AsmOp "JUMPI"]++tail /\
   q=pre++[AsmPushLabel l; AsmOp "JUMPI"]++tail /\ asm_static_wf p /\
   e IN V /\ v NOTIN V /\ Slots p t.as_call_ctx V height need tag boolean /\
   (!x. x IN V /\ pc x=b+3 ==> ?i. tag x 0=SOME(l,i)) ==>
-  Slots q t.as_call_ctx Vq hq nq tq Bq
+  Slots q t.as_call_ctx
+    ({x | x IN V /\ (pc x < b \/ b+2 <= pc x)} UNION
+      (if ss.sym_base.as_pc = b+3 then {v} else {}))
+    (\x. if x=v then height e-1 else height x)
+    (\x. x<>v /\ need x)
+    (\x k. if x=v then (if k=0 then NONE else M (tag e (k+1)))
+      else if (pc x=b+2 /\ k=0) \/ (pc x=b+3 /\ k=1) then NONE
+      else if pc x=b+3 /\ k=0 then SOME(l,b) else M (tag x k))
+    (\x k. if x=v then 0<k /\ boolean e (k+1)
+      else boolean x k /\ ~(pc x=b+2 /\ k=0) /\ ~(pc x=b+3 /\ k<=1))
 Proof
-  rpt gen_tac >>
-  map_every (fn name =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
-    qx_gen_tac name >> disch_tac)
-    [`b`,`keep`,`f`,`M`,`fresh`,`Vq`,`hq`,`nq`,`tq`,`Bq`,`LabelOK`,`Slots`] >>
+  ntac 15 gen_tac >>
+  qx_gen_tac `b` >> disch_then (assume_tac o
+    CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
+  qx_gen_tac `M` >> disch_tac >>
+  qabbrev_tac `f = \i. if i < b then i else i-2` >>
+  `Abbrev (M = OPTION_MAP (\(nm,org). (nm,f org)))` by
+    (simp[markerTheory.Abbrev_def, Abbr `f`]) >>
+  qpat_x_assum `M = _` kall_tac >>
+  qx_gen_tac `Slots` >> disch_tac >>
+  qabbrev_tac `LabelOK = \code nm org.
+    org < LENGTH code /\
+    (EL org code = AsmPushLabel nm \/ EL org code = AsmPushOfst nm 0) /\
+    ?off dest. FLOOKUP (SND (compute_label_offsets code)) nm = SOME off /\
+      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc code) off = SOME dest` >>
+  `Abbrev (Slots = \code cc A h n g B.
+    !x. x IN A ==>
+      (n x ==> cc.cc_static) /\
+      (!k. B x k ==> k < h x /\ g x k=NONE) /\
+      (!k nm org. g x k=SOME(nm,org) ==> k < h x /\ LabelOK code nm org))` by
+    (pure_asm_rewrite_tac[markerTheory.Abbrev_def] >> simp[Abbr `LabelOK`, CONJ_ASSOC]) >>
+  qpat_x_assum `Slots = _` kall_tac >>
+  qabbrev_tac `fresh = (ss.sym_base.as_pc = b+3)` >>
+  qabbrev_tac `Vq = {x | x IN V /\ (pc x < b \/ b+2 <= pc x)} UNION
+      (if fresh then {v} else {})` >>
+  qabbrev_tac `hq = \x. if x=v then height e-1 else height x` >>
+  qabbrev_tac `nq = \x. x<>v /\ need x` >>
+  qabbrev_tac `tq = \x k. if x=v then (if k=0 then NONE else M (tag e (k+1)))
+      else if (pc x=b+2 /\ k=0) \/ (pc x=b+3 /\ k=1) then NONE
+      else if pc x=b+3 /\ k=0 then SOME(l,b) else M (tag x k)` >>
+  qabbrev_tac `Bq = \x k. if x=v then 0<k /\ boolean e (k+1)
+      else boolean x k /\ ~(pc x=b+2 /\ k=0) /\ ~(pc x=b+3 /\ k<=1)` >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`pat` |-> `[AsmOp "ISZERO"; AsmOp "ISZERO"; AsmPushLabel l; AsmOp "JUMPI"]`,
                    `repl` |-> `[AsmPushLabel l; AsmOp "JUMPI"]`]
-                 merge_iszero_one_canonical_layout) >>
-  CONV_TAC (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM, BETA_CONV])) >>
+    (CONV_RULE (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2))
+      merge_iszero_one_canonical_layout)) >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   (impl_tac >- simp[]) >>
   disch_then (fn th => EVERY [mk_asm "layout-target" (cj 3 th),
     mk_asm "layout-fetch" (cj 4 th), mk_asm "layout-origin" (cj 5 th)]) >>

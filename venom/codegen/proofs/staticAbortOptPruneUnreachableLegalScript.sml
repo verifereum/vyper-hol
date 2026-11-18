@@ -5,29 +5,26 @@ Ancestors
 
 Theorem prune_one_relocated_legal:
   !pre t x tail (V:(num#num)->bool) pc
-    (tag:(num#num)->num->(string#num)option) edge.
-    let p = pre ++ [t;x] ++ tail in
-    let q = pre ++ [t] ++ tail in
-    let d = LENGTH pre+1 in
-    let r = \i. if i < d then i else i-1 in
-    let Z = \l j. j < LENGTH q /\
-      (EL j q = AsmPushLabel l \/ EL j q = AsmPushOfst l 0) in
-    let pick = \l. @j. Z l j in
-    let tagQ = \v k. OPTION_MAP (\(l,i). (l,if i=d then pick l else r i))
-      (tag v k) in
-    let Hit = \p l j.
+    (tag:(num#num)->num->(string#num)option) edge
+    p q d r tagQ Hit Target Legal fall taken.
+    p = pre ++ [t;x] ++ tail ==> q = pre ++ [t] ++ tail ==>
+    d = LENGTH pre+1 ==> r = (\i. if i < d then i else i-1) ==>
+    tagQ = (\v k. OPTION_MAP (\(l,i). (l,if i=d then
+      (@j. j < LENGTH q /\ (EL j q = AsmPushLabel l \/ EL j q = AsmPushOfst l 0))
+      else r i)) (tag v k)) ==>
+    Hit = (\p l j.
       ?off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
-        off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME j in
-    let Target = \p pc tag (a:num#num) (b:num#num).
-      ?l i. tag a 0 = SOME(l,i) /\ Hit p l (pc b) in
-    let Legal = \p pc tag a b.
+        off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME j) ==>
+    Target = (\p pc tag (a:num#num) (b:num#num).
+      ?l i. tag a 0 = SOME(l,i) /\ Hit p l (pc b)) ==>
+    Legal = (\p pc tag a b.
       if EL (pc a) p = AsmOp "JUMP" then Target p pc tag a b
       else if EL (pc a) p = AsmOp "JUMPI" then pc b = pc a+1 \/ Target p pc tag a b
-      else pc b = pc a+1 in
-    let fall = \a b. edge a b /\ ~asm_terminal_op (EL (pc a) p) /\ pc b = pc a+1 in
-    let taken = \a l b. edge a b /\
+      else pc b = pc a+1) ==>
+    fall = (\a b. edge a b /\ ~asm_terminal_op (EL (pc a) p) /\ pc b = pc a+1) ==>
+    taken = (\a l b. edge a b /\
       (EL (pc a) p = AsmOp "JUMP" \/ EL (pc a) p = AsmOp "JUMPI") /\
-      (?i. tag a 0 = SOME(l,i)) /\ Hit p l (pc b) in
+      (?i. tag a 0 = SOME(l,i)) /\ Hit p l (pc b)) ==>
     (!v. v IN V ==> pc v <> d /\ r (pc v) < LENGTH q /\
       EL (r (pc v)) q = EL (pc v) p) /\
     (!a b. edge a b <=> fall a b \/ ?l. taken a l b) /\
@@ -45,12 +42,7 @@ Theorem prune_one_relocated_legal:
     (!a b. edge a b ==> Legal q (r o pc) tagQ a b)
 Proof
   rpt gen_tac >>
-  map_every (fn selector =>
-    qmatch_goalsub_abbrev_tac selector >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ p`, `LET _ q`, `LET _ d`, `LET _ r`, `LET _ Z`, `LET _ pick`,
-     `LET _ tagQ`, `LET _ Hit`, `LET _ Target`, `LET _ Legal`,
-     `LET _ fall`, `LET _ taken`] >>
+  ntac 10 (disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def])) >>
   strip_tac >>
   qpat_x_assum `!a b. edge a b <=> _` kall_tac >>
   conj_asm1_tac
@@ -63,7 +55,9 @@ Proof
       `taken a l b` by (fs[Abbr `taken`] >> metis_tac[]) >>
       qpat_assum `!a l b. taken a l b ==> _` (drule_then assume_tac) >>
       simp[Abbr `Target`, o_THM] >>
-      qexistsl [`l`, `if i=d then pick l else r i`] >>
+      qexistsl [`l`, `if i=d then
+        (@j. j < LENGTH q /\ (EL j q = AsmPushLabel l \/ EL j q = AsmPushOfst l 0))
+        else r i`] >>
       simp[Abbr `tagQ`]) >>
   rpt gen_tac >> disch_tac >>
   `a IN V` by (qpat_assum `!a b. edge a b ==> a IN V /\ _` drule >> simp[]) >>

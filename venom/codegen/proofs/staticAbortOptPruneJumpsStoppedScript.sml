@@ -5,11 +5,10 @@ Ancestors
   codegenSymRel asmOptimizer asmWf asmSem arithmetic list
 
 Theorem prune_jump_site_stopped_prefix:
-  let p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail;
-      q = pre ++ [AsmLabel x] ++ tail;
-      b = LENGTH pre;
-      c = ss.sym_base.as_pc in
-  let r = splice_pc b 2 0 in
+  !p. p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail ==>
+  !q. q = pre ++ [AsmLabel x] ++ tail ==>
+  !b. b = LENGTH pre ==>
+  !c. c = ss.sym_base.as_pc ==>
   asm_static_wf p /\ s.as_pc = 0 /\
   sym_steps p env n (sym_init s) = SymOK ss ==>
   if c = b+1 then
@@ -18,9 +17,9 @@ Theorem prune_jump_site_stopped_prefix:
       sym_steps q env j (sym_init s) = SymOK u /\
       ss = (sym_with_pc (b+1) u with sym_stack := Lab x 0 :: u.sym_stack)
   else
-    ?j. sym_steps q env j (sym_init s) = SymOK (sym_with_pc (r c) ss)
+    ?j. sym_steps q env j (sym_init s) = SymOK (sym_with_pc (splice_pc b 2 0 c) ss)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  CONV_TAC (REPEATC Unwind.UNWIND_FORALL_CONV) >> strip_tac >>
   qabbrev_tac `b = LENGTH pre` >>
   qabbrev_tac `p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail` >>
   qabbrev_tac `q = pre ++ [AsmLabel x] ++ tail` >>
@@ -62,7 +61,9 @@ QED
 Resume prune_jump_site_stopped_prefix[replay]:
   mp_tac (Q.INST [`pat` |-> `[AsmPushLabel x; AsmOp "JUMP"]`,
                   `repl` |-> `[]`, `tail` |-> `AsmLabel x :: tail`]
-                 (REWRITE_RULE[LET_THM] merge_iszero_synchronized_replay)) >>
+    (CONV_RULE (REPEATC (FIRST_CONV
+       [Unwind.UNWIND_FORALL_CONV, REWR_CONV LET_THM THENC BETA_CONV]))
+       merge_iszero_synchronized_replay)) >>
   unabbrev_all_tac >>
   rule_assum_tac (REWRITE_RULE[rich_listTheory.APPEND_ASSOC_CONS, APPEND]) >>
   simp[rich_listTheory.APPEND_ASSOC_CONS] >>
@@ -74,9 +75,11 @@ Resume prune_jump_site_stopped_prefix[replay]:
       rpt strip_tac >> `i = LENGTH pre` by decide_tac >> gvs[]) >>
     conj_tac >- (
       rpt strip_tac >>
-      irule (SRULE [LET_THM]
-        (Q.SPECL [`pre`, `[AsmPushLabel x; AsmOp "JUMP"]`, `[]`,
-                  `AsmLabel x :: tail`] merge_iszero_outside_fetch_ok)) >>
+      irule (SRULE [] (Q.SPECL [`pre`, `[AsmPushLabel x; AsmOp "JUMP"]`, `[]`,
+                                `AsmLabel x :: tail`]
+        (CONV_RULE (REDEPTH_CONV (FIRST_CONV [Unwind.UNWIND_FORALL_CONV,
+                                               REWR_CONV LET_THM, BETA_CONV]))
+          merge_iszero_outside_fetch_ok))) >>
       simp[rich_listTheory.APPEND_ASSOC_CONS]) >>
     rpt strip_tac >>
     `v = sym_with_pc (LENGTH pre + 2) u` by (
