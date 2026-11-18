@@ -5,15 +5,15 @@ Ancestors
 Theorem conditional_jump_kept_receipt:
   !p q b x V (rank:(num#num)->num) (pc:(num#num)->num) height
     (tag:(num#num)->num->(string#num)option) boolean old cc z0 z1.
-  let r = splice_pc b 4 3 in
-  let C = \p l d. ?off. FLOOKUP (SND(compute_label_offsets p)) l=SOME off /\
-                       off<dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME d in
-  let Flow = \p pc height tag boolean (u:num#num) (v:num#num).
-    let hi=height u; hj=height v; ins=EL (pc u) p in
-    let inherit = \(src:num->num option) (fresh:num->(string#num)option) bnew.
+  !r. r = splice_pc b 4 3 ==>
+  !C. C = (\p l d. ?off. FLOOKUP (SND(compute_label_offsets p)) l=SOME off /\
+                       off<dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME d) ==>
+  !Flow. Flow = (\p pc height tag boolean (u:num#num) (v:num#num).
+    !hi hj ins. hi = height u /\ hj = height v /\ ins = EL (pc u) p ==>
+    !inherit. inherit = (\(src:num->num option) (fresh:num->(string#num)option) bnew.
       (!k l i. tag v k=SOME(l,i) ==> k<hj /\
         (fresh k=SOME(l,i) \/ ?a. src k=SOME a /\ a<hi /\ tag u a=SOME(l,i))) /\
-      (!k. boolean v k ==> k<hj /\ (bnew k \/ ?a. src k=SOME a /\ a<hi /\ boolean u a)) in
+      (!k. boolean v k ==> k<hj /\ (bnew k \/ ?a. src k=SOME a /\ a<hi /\ boolean u a))) ==>
     case ins of
       AsmLabel l => hj=hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj=hi+1 /\
@@ -33,25 +33,28 @@ Theorem conditional_jump_kept_receipt:
          | NONE => case ALOOKUP swap_table name of
              SOME n => 0<n /\ n<hi /\ hj=hi /\
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k)) (\k. NONE) (\k. F)
-           | NONE => let a=asm_op_arity name; m=hj+asm_op_arity name-hi in
+           | NONE =>
+               !a. a = asm_op_arity name ==>
+               !m. m = hj+a-hi ==>
                a<=hi /\ hj=m+(hi-a) /\ ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
                  (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
                    !t s. LENGTH t.as_stack=hi /\
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p) ins t=AsmOK s ==>
                        EL 0 s.as_stack=0w \/ EL 0 s.as_stack=1w))
-    | _ => F in
-  let Target = \p tg d. ?l i. tg 0=SOME(l,i) /\ C p l d in
-  let Legal = \p i tg j.
+    | _ => F) ==>
+  !Target. Target = (\p tg d. ?l i. tg 0=SOME(l,i) /\ C p l d) ==>
+  !Legal. Legal = (\p i tg j.
     if EL i p=AsmOp "JUMP" then Target p tg j else
-    if EL i p=AsmOp "JUMPI" then j=i+1 \/ Target p tg j else j=i+1 in
-  let Row = \p i h tg (edge:(num#num)->bool) pc height.
-    let arm = \P n. ?v. edge v /\ P (pc v) /\ height v=n in
-    let legal = \P n. !v. edge v ==> P (pc v) /\ height v=n in
-    let fall = \d. d=i+1; taken = Target p tg in
-    let next = \n. arm fall n /\ legal fall n in
-    let untagged = \a. !k. k<a ==> tg k=NONE in
-    let stop = \a. a<=h /\ untagged a /\ !v. ~edge v in
+    if EL i p=AsmOp "JUMPI" then j=i+1 \/ Target p tg j else j=i+1) ==>
+  !Row. Row = (\p i h tg (edge:(num#num)->bool) pc height.
+    !arm. arm = (\P n. ?v. edge v /\ P (pc v) /\ height v=n) ==>
+    !legal. legal = (\P n. !v. edge v ==> P (pc v) /\ height v=n) ==>
+    !fall. fall = (\d. d=i+1) ==>
+    !taken. taken = Target p tg ==>
+    !next. next = (\n. arm fall n /\ legal fall n) ==>
+    !untagged. untagged = (\a. !k. k<a ==> tg k=NONE) ==>
+    !stop. stop = (\a. a<=h /\ untagged a /\ !v. ~edge v) ==>
     case EL i p of
       AsmLabel l => next h
     | AsmPush bs => next (h+1)
@@ -70,22 +73,22 @@ Theorem conditional_jump_kept_receipt:
                        arm taken (h-2) /\ legal (\d. fall d \/ taken d) (h-2) else
                      ?m. static_abort_straight name m /\ asm_op_arity name<=h /\
                        untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-    | _ => F in
-  let keep = {u | u IN V /\ (pc u<b \/ b+4<=pc u)} in
-  let D = {u | u IN V /\ pc u=b} in
-  let U = \u k. case tag (z0 u) k of NONE => tag (z1 u) k | SOME t => SOME t in
-  let UB = \u k. boolean (z0 u) k \/ boolean (z1 u) k in
-  let vraw = \u (i:num) k.
+    | _ => F) ==>
+  !keep. keep = {u | u IN V /\ (pc u<b \/ b+4<=pc u)} ==>
+  !D. D = {u | u IN V /\ pc u=b} ==>
+  !U. U = (\u k. case tag (z0 u) k of NONE => tag (z1 u) k | SOME t => SOME t) ==>
+  !UB. UB = (\u k. boolean (z0 u) k \/ boolean (z1 u) k) ==>
+  !vraw. vraw = (\u (i:num) k.
     if i<2 then (if k=0 then NONE else U u (k-1)) else
     if i=2 then (if k=0 then SOME(x,b+2) else if k=1 then NONE else U u (k-2))
-    else if i=4 then tag (z0 u) k else tag (z1 u) k in
-  let vb = \u (i:num) k.
+    else if i=4 then tag (z0 u) k else tag (z1 u) k) ==>
+  !vb. vb = (\u (i:num) k.
     if i=0 then k<>0 /\ UB u (k-1) else if i=1 then k=0 \/ UB u (k-1) else
     if i=2 then k=1 \/ (2<=k /\ UB u (k-2)) else
-    if i=4 then boolean (z0 u) k else boolean (z1 u) k in
-  let rt = \u. if u IN keep then tag u else vraw u 0 in
-  let rb = \u. if u IN keep then boolean u else vb u 0 in
-  let Tr = \rho tg k. OPTION_MAP (\(l,i). (l,rho l i)) (tg k) in
+    if i=4 then boolean (z0 u) k else boolean (z1 u) k) ==>
+  !rt. rt = (\u. if u IN keep then tag u else vraw u 0) ==>
+  !rb. rb = (\u. if u IN keep then boolean u else vb u 0) ==>
+  !Tr. Tr = (\rho tg k. OPTION_MAP (\(l,i). (l,rho l i)) (tg k)) ==>
   (!i. i<LENGTH p /\ (i<b \/ b+4<=i) ==>
        r i<LENGTH q /\ EL (r i) q=EL i p) /\
   (!l j. C p l j ==> (j<b \/ b+4<=j) /\ C q l (r j)) /\
@@ -108,12 +111,11 @@ Theorem conditional_jump_kept_receipt:
         Flow q (r o pc) height (\v. if v=u then Tr rho (tag u) else Tr rho (rt v))
           (\v. if v=u then boolean u else rb v) u v))
 Proof
-  rpt gen_tac >>
-  map_every (fn pat => qmatch_goalsub_abbrev_tac pat >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ r`,`LET _ C`,`LET _ Flow`,`LET _ Target`,`LET _ Legal`,`LET _ Row`,
-     `LET _ keep`,`LET _ D`,`LET _ U`,`LET _ UB`,`LET _ vraw`,`LET _ vb`,
-     `LET _ rt`,`LET _ rb`,`LET _ Tr`] >>
+  ntac 14 gen_tac >>
+  map_every (fn v => qx_gen_tac v >>
+    CONV_TAC (LAND_CONV (RAND_CONV (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)))) >>
+    disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]))
+    [`r`,`C`,`Flow`,`Target`,`Legal`,`Row`,`keep`,`D`,`U`,`UB`,`vraw`,`vb`,`rt`,`rb`,`Tr`] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `!u. u IN keep ==>
      (!v. old u v ==> (v IN keep \/ v IN D) /\ rank v<rank u) /\
@@ -133,7 +135,9 @@ Proof
     (drule_then (MAP_EVERY assume_tac o CONJUNCTS)) >>
   qspecl_then [`p`,`q`,`b`,`pc u`,`cc`,`height u`,`tag u`,`boolean u`,
                `old u`,`pc`,`height`,`tag`,`boolean`]
-    (mp_tac o SIMP_RULE bool_ss [LET_THM, combinTheory.o_THM]) conditional_jump_retained_row >>
+    (mp_tac o SIMP_RULE bool_ss [combinTheory.o_THM] o
+      CONV_RULE (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)))
+    conditional_jump_retained_row >>
   impl_tac >-
     (qpat_assum `!i. i < LENGTH p /\ _ ==> r i < LENGTH q /\ _`
        (qspec_then `pc u` mp_tac) >> simp[] >> strip_tac >>

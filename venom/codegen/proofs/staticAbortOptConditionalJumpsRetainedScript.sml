@@ -5,18 +5,18 @@ Ancestors
 
 Theorem conditional_jump_retained_row:
   !p q b i cc h tx bx (edge:(num#num)->bool) pc height tag boolean.
-  let r = splice_pc b 4 3 in
-  let C = \p l d. ?off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
-    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME d in
-  let Target = \p tx j. ?l origin. tx 0 = SOME(l,origin) /\ C p l j in
-  let arm = \P n. ?y. edge y /\ P y /\ height y = n in
-  let legal = \P n. !y. edge y ==> P y /\ height y = n in
-  let Row = \p i tx pc.
-    let fall = \y. pc y = i+1 in
-    let taken = \y. Target p tx (pc y) in
-    let next = \n. arm fall n /\ legal fall n in
-    let untagged = \a. !k. k<a ==> tx k=NONE in
-    let stop = \a. a<=h /\ untagged a /\ !y. ~edge y in
+  !r. r = splice_pc b 4 3 ==>
+  !C. C = (\p l d. ?off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
+    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME d) ==>
+  !Target. Target = (\p tx j. ?l origin. tx 0 = SOME(l,origin) /\ C p l j) ==>
+  !arm. arm = (\P n. ?y. edge y /\ P y /\ height y = n) ==>
+  !legal. legal = (\P n. !y. edge y ==> P y /\ height y = n) ==>
+  !Row. Row = (\p i tx pc.
+    !fall. fall = (\y. pc y = i+1) ==>
+    !taken. taken = (\y. Target p tx (pc y)) ==>
+    !next. next = (\n. arm fall n /\ legal fall n) ==>
+    !untagged. untagged = (\a. !k. k<a ==> tx k=NONE) ==>
+    !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge y) ==>
     case EL i p of
       AsmLabel l => next h
     | AsmPush bs => next (h+1)
@@ -40,15 +40,15 @@ Theorem conditional_jump_retained_row:
                  else
                    ?m. static_abort_straight name m /\ asm_op_arity name<=h /\
                        untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-    | _ => F in
-  let Inherit = \tx ty bx by' hj src fresh bnew.
+    | _ => F) ==>
+  !Inherit. Inherit = (\tx ty bx by' hj src fresh bnew.
     (!k l origin. ty k = SOME(l,origin) ==>
        k < hj /\ (fresh k = SOME(l,origin) \/
        ?a. src k = SOME a /\ a < h /\ tx a = SOME(l,origin))) /\
-    (!k. by' k ==> k < hj /\ (bnew k \/ ?a. src k = SOME a /\ a < h /\ bx a)) in
-  let Flow = \p i tx ty by' hj.
-    let ins = EL i p in
-    let inherit = Inherit tx ty bx by' hj in
+    (!k. by' k ==> k < hj /\ (bnew k \/ ?a. src k = SOME a /\ a < h /\ bx a))) ==>
+  !Flow. Flow = (\p i tx ty by' hj.
+    !ins. ins = EL i p ==>
+    !inherit. inherit = Inherit tx ty bx by' hj ==>
     case ins of
       AsmLabel l => hj=h /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj=h+1 /\
@@ -71,18 +71,19 @@ Theorem conditional_jump_retained_row:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - h in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + a - h ==>
                a<=h /\ hj=m+(h-a) /\ ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
                  (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
                    !s u. LENGTH s.as_stack=h /\
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins s = AsmOK u ==> (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F in
-  let Legal = \p i tx j.
+    | _ => F) ==>
+  !Legal. Legal = (\p i tx j.
     if EL i p = AsmOp "JUMP" then Target p tx j
     else if EL i p = AsmOp "JUMPI" then j=i+1 \/ Target p tx j
-    else j=i+1 in
+    else j=i+1) ==>
   (i<b \/ b+4<=i) /\ r i < LENGTH q /\ EL (r i) q = EL i p /\
   (!l j. C p l j ==> (j<b \/ b+4<=j) /\ C q l (r j)) /\
   (!l. IS_SOME (FLOOKUP (SND (compute_label_offsets p)) l) ==>
@@ -90,8 +91,8 @@ Theorem conditional_jump_retained_row:
   Row p i tx pc /\
   (!y. edge y ==> Flow p i tx (tag y) (boolean y) (height y) /\ Legal p i tx (pc y)) ==>
   (!y. edge y ==> pc y<=b \/ b+4<=pc y) /\
-  !rho raw boolQ.
-    let tr = OPTION_MAP (\(l,j). (l,rho l j)) in
+  !rho raw boolQ tr.
+    tr = OPTION_MAP (\(l,j). (l,rho l j)) ==>
     (!l. EL i p = AsmPushLabel l \/ EL i p = AsmPushOfst l 0 ==> rho l i = r i) /\
     (!y k l j. edge y /\ raw y k = SOME(l,j) ==> tag y k = SOME(l,j)) /\
     (!y k. edge y /\ boolQ y k ==> boolean y k) ==>
@@ -104,17 +105,17 @@ Theorem conditional_jump_retained_row:
        Flow q (r i) (tr o tx) (tr o raw y) (boolQ y) (height y) /\
        (!k l. raw y k = SOME(l,b) ==> ?a. a < h /\ tx a = SOME(l,b)))
 Proof
-  rpt gen_tac >>
-  map_every (fn p => qmatch_goalsub_abbrev_tac p >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ r`,`LET _ C`,`LET _ Target`,`LET _ arm`,`LET _ legal`,`LET _ Row`,
-     `LET _ Inherit`,`LET _ Flow`,`LET _ Legal`] >>
+  ntac 13 gen_tac >>
+  map_every (fn v => qx_gen_tac v >>
+    CONV_TAC (LAND_CONV (RAND_CONV (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)))) >>
+    disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]))
+    [`r`,`C`,`Target`,`arm`,`legal`,`Row`,`Inherit`,`Flow`,`Legal`] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `!j. j=i+1 ==> (j<=b \/ b+4<=j) /\ r j=r i+1` by
     (qunabbrev_tac `r` >> metis_tac[splice_pc_next, DECIDE ``0 < (4:num)``]) >>
   conj_tac >- suspend "successors" >>
-  rpt gen_tac >> qmatch_goalsub_abbrev_tac `LET _ tr` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >> strip_tac >>
+  map_every qx_gen_tac [`rho'`, `raw`, `boolQ`, `tr`] >>
+  disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >> strip_tac >>
   `!j. Target p tx j ==> Target q (tr o tx) (r j)` by
     (simp[Abbr `Target`, Abbr `tr`, combinTheory.o_THM] >> rpt strip_tac >>
      rename1 `tx 0 = SOME(l,origin)` >> qexistsl [`l`,`rho' l origin`] >>
