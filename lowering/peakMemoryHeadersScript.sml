@@ -12,9 +12,9 @@ Ancestors
   loweringRuntimeCorrect loweringMemCorrect loweringPtrCorrect
   loweringCalldataCorrect sourceUnitExecution vyperCalldata
   vyperLoweringCorrect compileVyper vyperCompiler vyperInterpreter e2eDefs
-  o1PassContract unitMemInv memSafeRun ptrSafeRun
+  o1PassContract unitMemInv ptrSafeRun
   contextRawReachable contextCodegenRel
-  fragGasOrigin gasExplicitSites gasShadowRunLowering
+  fragGasOrigin gasExplicitSites gasShadow
   ptrDiscipline lowerDloadDefs
   venomExecSemantics venomInst venomState
   arithmetic list rich_list pair words finite_map
@@ -256,7 +256,8 @@ val lower_vyper_runtime_unit_dynamic_peak_memory_bound_quote : term = “
      ((valid_vyper_call tops tx vs0.vs_call_ctx.cc_calldata ret \/
        dispatched_vyper_call tops tx vs0.vs_call_ctx.cc_calldata ret) /\
       (?shadow_unit func r.
-         runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+         lower_vyper_runtime_unit (MAP gas_shadow_toplevel tops) rpolicy =
+           SOME shadow_unit /\
          lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
          fn_entry_label func = SOME "__entry" /\
          exit_result r /\
@@ -310,7 +311,6 @@ val lower_vyper_runtime_unit_memory_ptr_dynamic_companion_quote : term = “
        (inst_mem_below_frontiers i s \/
         ?bb. lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
              revert_forward_at bb s.vs_inst_idx) /\
-       inst_dload_in_section i s /\
        w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
        (i.inst_opcode = DALLOCA ==>
         !sz_op sz.
@@ -393,13 +393,12 @@ val expected_constant_owners =
    ("vyperInterpreter", ["call_external"]),
    ("exprSimHypsDefs", ["outcomes_accounts_typed"]),
    ("contextRawReachable", ["raw_reachable"]),
-   ("memSafeRun", ["inst_dload_in_section"]),
    ("ptrSafeRun", ["ptr_safe_blocks"]),
    ("unitTransformDefs", ["inst_mem_below_frontiers", "raw_unit_memory_ok"]),
    ("contextCodegenRel", ["revert_forward_at"]),
    ("fragGasOrigin", ["gas_origin_path"]),
    ("gasExplicitSites", ["gas_explicit_sites"]),
-   ("gasShadowRunLowering", ["runtime_gas_shadow_unit"])];
+   ("gasShadow", ["gas_shadow_toplevel"])];
 
 fun constant_owner tm =
   let val {Thy, Name, ...} = dest_thy_const tm in (Name, Thy) end;
