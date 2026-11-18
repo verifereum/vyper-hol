@@ -94,6 +94,13 @@ Proof
   abi_frame_tac
 QED
 
+(* The guarded callback selects one recursive branch. Keep only its
+   induction hypothesis when solving the pointwise frame. *)
+fun callback_frame_tac pattern =
+  rpt strip_tac >>
+  qpat_x_assum pattern (fn ih =>
+    rpt (qpat_x_assum `!x. _` kall_tac) >> metis_tac[ih])
+
 Theorem symbolic_frame_expr:
   (!ty. symbolic_frame R (invalid_expr_call ty)) /\
   (!cfn bfn tfn ce ty e.
@@ -129,7 +136,15 @@ Resume symbolic_frame_expr[expr]:
   rewrite_tac[expr_child_callback_def, builtin_child_callback_def,
               type_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >>
   asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th]) >>
-  rpt strip_tac >> metis_tac[]
+  ALL_TAC
+  >~ [`compile_expr`] >- callback_frame_tac
+      `!e ce ty s. _ ==> !g t. _ /\ R g (SND (compile_expr ce ty e s)) _`
+   >~ [`compile_builtin_dispatch`] >- callback_frame_tac
+      `!args ce rt ty bi s. _ ==> !g t. _ /\
+        R g (SND (compile_builtin_dispatch ce rt ty bi args s)) _`
+   >> callback_frame_tac
+      `!args ce vt ty tb rt s. _ ==> !g t. _ /\
+        R g (SND (compile_type_builtin_dispatch ce vt ty tb rt args s)) _`
 QED
 
 Resume symbolic_frame_expr[builtin]:
@@ -137,7 +152,8 @@ Resume symbolic_frame_expr[builtin]:
   rpt conj_tac >> rpt gen_tac >>
   rewrite_tac[expr_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >>
   asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th]) >>
-  rpt strip_tac >> metis_tac[]
+  callback_frame_tac
+    `!e ce ty s. _ ==> !g t. _ /\ R g (SND (compile_expr ce ty e s)) _`
 QED
 
 Resume symbolic_frame_expr[type_builtin]:
@@ -145,7 +161,8 @@ Resume symbolic_frame_expr[type_builtin]:
   rpt conj_tac >> rpt gen_tac >>
   rewrite_tac[expr_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >>
   asm "invalid" (fn th => asm_simp_tac bool_ss [REWRITE_RULE [symbolic_frame_def] th]) >>
-  rpt strip_tac >> metis_tac[]
+  callback_frame_tac
+    `!e ce ty s. _ ==> !g t. _ /\ R g (SND (compile_expr ce ty e s)) _`
 QED
 
 Finalise symbolic_frame_expr
