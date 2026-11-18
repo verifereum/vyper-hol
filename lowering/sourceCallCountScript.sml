@@ -5622,7 +5622,12 @@ Proof
   >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 44 evaluate_def] >>
       rpt REPLAY_CUT_STEP)
   >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 45 evaluate_def] >>
-      rpt REPLAY_CUT_STEP)
+      ntac 2 gen_tac >> MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+      >- REPLAY_CUT_IH_TAC >>
+      conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+        ntac 4 REPLAY_CUT_STEP >> rpt REPLAY_CUT_STEP) >>
+      gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+      conj_tac >- REPLAY_TRACE_TAC >> REPLAY_SAFETY_TAC)
   >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 46 evaluate_def] >>
       rpt REPLAY_CUT_STEP)
   >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 47 evaluate_def] >>

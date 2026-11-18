@@ -2,6 +2,7 @@
    makes both over-consumption and failure to consume observable. *)
 Theory vyperCreateOracleTest
 Ancestors
+  vyperSmallStepCV
   vyperCreateSelfdestruct vyperCreate vyperCallOutcome extCallOracle
   vyperContext vyperState vfmState vfmExecution list
 Libs

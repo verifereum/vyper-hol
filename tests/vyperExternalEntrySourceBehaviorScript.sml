@@ -2,6 +2,7 @@
    Importing the EVM behavior theory checks both sides of the examples. *)
 Theory vyperExternalEntrySourceBehavior
 Ancestors
+  vyperSmallStepCV
   vyperExternalEntryBehavior vyperInterpreter vyperContext vyperState
   vyperSmallStep[ignore_grammar] vyperValue vfmExecution vfmState
 Libs

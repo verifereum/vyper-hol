@@ -1,5 +1,6 @@
 Theory vyperCreateSelfdestruct
 Ancestors
+  vyperSmallStepCV
   vyperCreate vyperInterpreter vyperSmallStep[ignore_grammar]
   vyperAST vyperContext vyperState vyperValue vyperValueOperation vyperEvalPureExpr
   constSubst vyperPinFold vyperOriginFold vyperPinFoldProps jsonToVyper jsonToVyperCV

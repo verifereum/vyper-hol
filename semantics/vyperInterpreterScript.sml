@@ -8,7 +8,7 @@ Ancestors
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
   vyperSubscriptOverlap
 Libs
-  cv_transLib wordsLib intLib monadsyntax
+  wordsLib intLib monadsyntax
 
 (* Import only the two outcome selectors used here, without EVM/crypto
    grammar shadowing source operations in existing proof consumers. *)
@@ -25,13 +25,11 @@ Definition push_function_def:
     $ st with scopes := [sc]
 End
 
-val () = cv_auto_trans push_function_def;
 
 Definition pop_function_def:
   pop_function prev = set_scopes prev
 End
 
-val () = cv_auto_trans pop_function_def;
 
 (* helper for sending ether between accounts *)
 
@@ -49,10 +47,6 @@ Definition transfer_value_def:
   od
 End
 
-val () = transfer_value_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def,
-            LET_RATOR, COND_RATOR, update_accounts_def, o_DEF, C_DEF]
-  |> cv_auto_trans;
 
 (* machinery for calls to functions in a Vyper contract, and for internal calls
 * within a contract, including implicit functions associated with public
@@ -82,7 +76,6 @@ Definition lookup_function_def:
     lookup_function src_id_opt name vis ts
 End
 
-val () = cv_auto_trans lookup_function_def;
 
 (* Lookup function callable via IntCall: Internal always, Deploy only during deployment *)
 Definition lookup_callable_function_def:
@@ -92,7 +85,6 @@ Definition lookup_callable_function_def:
     | NONE => if in_deploy then lookup_function NONE name Deploy ts else NONE
 End
 
-val () = cv_auto_trans lookup_callable_function_def;
 
 (* ===== @raw_return declarations ===== *)
 
@@ -110,7 +102,6 @@ Definition lookup_raw_return_def:
     lookup_raw_return src_id_opt name vis ts
 End
 
-val () = cv_auto_trans lookup_raw_return_def;
 
 (* TOP-LEVEL: lookup_raw_return_or_F
    lookup_raw_return with "no such function" folded into F. *)
@@ -121,7 +112,6 @@ Definition lookup_raw_return_or_F_def:
     | NONE => F
 End
 
-val () = cv_auto_trans lookup_raw_return_or_F_def;
 
 (* KEY LEMMA: the reported flag comes from a declaration of that name and
    visibility, so a positive answer is justified. *)
@@ -147,14 +137,7 @@ Definition bind_arguments_def:
   bind_arguments _ _ _ = NONE
 End
 
-val bind_arguments_pre_def = cv_auto_trans_pre "bind_arguments_pre" bind_arguments_def;
 
-Theorem bind_arguments_pre[cv_pre]:
-  ∀x y z. bind_arguments_pre x y z
-Proof
-  ho_match_mp_tac bind_arguments_ind \\ rw[]
-  \\ rw[Once bind_arguments_pre_def]
-QED
 
 Definition handle_function_def:
   handle_function (ReturnException v) = return v ∧
@@ -164,9 +147,6 @@ Definition handle_function_def:
   handle_function _ = raise $ Error (TypeError "handle_function")
 End
 
-val () = handle_function_def
-  |> SRULE [FUN_EQ_THM]
-  |> cv_auto_trans;
 
 (* helpers for the termination argument for the main interpreter definition
 * (evaulate_def below) *)
@@ -427,7 +407,6 @@ Definition subscript_reads_base_def:
       e1 e2
 End
 
-val () = cv_auto_trans subscript_reads_base_def;
 
 Theorem subscript_reads_base_through_dynarray:
   subscript_reads_base cx e1 e2 ⇒
@@ -670,9 +649,6 @@ Definition handle_loop_exception_def:
   else raise e
 End
 
-val () = handle_loop_exception_def
-  |> SRULE [FUN_EQ_THM, COND_RATOR]
-  |> cv_auto_trans;
 
 Definition switch_BoolV_def:
   switch_BoolV cx res f g = do
@@ -691,7 +667,6 @@ Definition is_immutable_decl_def:
   is_immutable_decl n (_ :: ts) = is_immutable_decl n ts
 End
 
-val () = cv_auto_trans is_immutable_decl_def;
 
 Definition get_range_limits_def:
   get_range_limits (IntV n1) (IntV n2) =
@@ -701,7 +676,6 @@ Definition get_range_limits_def:
   get_range_limits _ _ = INR (TypeError "range not IntV")
 End
 
-val () = cv_auto_trans get_range_limits_def;
 
 (* ===== External Call Execution via Verifereum ===== *)
 
@@ -738,7 +712,6 @@ Definition make_ext_call_state_def:
      |>
 End
 
-val () = cv_auto_trans make_ext_call_state_def;
 
 (* Extract results from verifereum execution.
    On success: return updated accounts/tStorage.
@@ -765,7 +738,6 @@ Definition extract_call_result_def:
     | _ => NONE  (* shouldn't happen for single-context call *)
 End
 
-val () = cv_auto_trans extract_call_result_def;
 
 Definition ext_call_value_transfer_ok_def:
   ext_call_value_transfer_ok caller callee value_opt accounts =
@@ -778,7 +750,6 @@ Definition ext_call_value_transfer_ok_def:
           recipient.balance + amount < 2 ** 256
 End
 
-val () = cv_auto_trans ext_call_value_transfer_ok_def;
 
 (* Account bounds and their CV representation live in vyperRuntimeAccounts,
    below the interpreter so oracle helpers can be evaluator parents. *)
@@ -791,7 +762,6 @@ Definition ext_call_success_accounts_ok_aux_def:
     | _ => T
 End
 
-val () = cv_auto_trans ext_call_success_accounts_ok_aux_def;
 
 Definition ext_call_success_accounts_ok_def:
   ext_call_success_accounts_ok
@@ -849,7 +819,6 @@ Definition run_ext_call_def:
       | NONE => NONE
 End
 
-val () = cv_auto_trans run_ext_call_def;
 
 (* The gas an external call forwards: the value of its gas= operand, capped
    at the model's gas limit, or the call's default without one (all gas for
@@ -863,7 +832,6 @@ Definition forwarded_gas_def:
     | NONE => default_gas
 End
 
-val () = cv_auto_trans forwarded_gas_def;
 
 (* DELEGATECALL loads code from target_addr but retains the current message's
    address, caller and value. In particular there is no entry value transfer. *)
@@ -888,7 +856,6 @@ Definition make_delegate_call_state_def:
        originalAccounts := accounts; msdomain := Collect empty_domain |>
 End
 
-val () = cv_auto_trans make_delegate_call_state_def;
 
 (* As in run_ext_call, calldata of 2 ** 256 bytes or more is a model
    failure. *)
@@ -908,7 +875,6 @@ Definition run_delegate_call_def:
         else NONE
 End
 
-val () = cv_auto_trans run_delegate_call_def;
 
 Definition run_raw_call_def:
   run_raw_call cx flags target_addr calldata amount gas accounts tStorage =
@@ -919,7 +885,6 @@ Definition run_raw_call_def:
       gas accounts tStorage (vyper_to_tx_params cx.txn)
 End
 
-val () = cv_auto_trans run_raw_call_def;
 
 (* Every frame the interpreter starts for an external call has calldata
    shorter than 2 ** 256 bytes, the bound call_tx_well_typed asks of a
@@ -981,7 +946,6 @@ Definition ext_call_has_code_def:
     ¬NULL (lookup_account target accounts).code
 End
 
-val () = cv_auto_trans ext_call_has_code_def;
 
 Definition ext_call_precheck_ok_def:
   ext_call_precheck_ok skip_check ret_type target accounts ⇔
@@ -990,7 +954,6 @@ Definition ext_call_precheck_ok_def:
     | _ => T
 End
 
-val () = cv_auto_trans ext_call_precheck_ok_def;
 
 (* A static frame may call only without value, and every call it makes is
    static: NONE stands for a static call (call_outcome_request,
@@ -1004,10 +967,6 @@ Definition frame_call_value_def:
     od else return value_opt
 End
 
-val () = frame_call_value_def
-  |> SRULE [FUN_EQ_THM, COND_RATOR, ignore_bind_def, bind_def, check_def,
-            assert_def]
-  |> cv_auto_trans;
 
 Theorem frame_call_value_state:
   frame_call_value cx value_opt st = (res, st') ==> st' = st
@@ -1070,11 +1029,6 @@ Definition eval_raw_call_def:
   od
 End
 
-val () = eval_raw_call_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, UNCURRY,
-            COND_RATOR, prod_CASE_rator, sum_CASE_rator, lift_option_def,
-            option_CASE_rator, type_check_def, assert_def, update_pending_deletions_def]
-  |> cv_auto_trans;
 
 Theorem eval_raw_call_preserves_non_accounts:
   eval_raw_call cx flags target_addr calldata amount gas st = (res, st') ==>
@@ -1104,7 +1058,6 @@ Definition ext_call_kwarg_def:
   ext_call_kwarg kw _ _ = NONE
 End
 
-val () = cv_auto_trans ext_call_kwarg_def;
 
 (* A raw_call's value= (default 0) from the keyword operands, whose kinds kws
    lists in source order. *)
@@ -1115,7 +1068,6 @@ Definition raw_call_value_def:
     | SOME v => dest_NumV v
 End
 
-val () = cv_auto_trans raw_call_value_def;
 
 (* Each keyword argument at most once; staticcall sends no value. *)
 Definition ext_call_opts_ok_def:
@@ -1123,7 +1075,6 @@ Definition ext_call_opts_ok_def:
     ALL_DISTINCT opts ∧ (is_static ⇒ ¬MEM EKValue opts)
 End
 
-val () = cv_auto_trans ext_call_opts_ok_def;
 
 (* extcall/staticcall once all operands are values.  vs is the operand list
    of ExtCall, evaluated in Vyper's order (expr.py _lower_external_call and
@@ -1171,11 +1122,6 @@ Definition eval_ext_call_effects_def:
   od
 End
 
-val () = eval_ext_call_effects_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR,
-            prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
-            lift_option_def, check_def, assert_def]
-  |> cv_auto_trans;
 
 Definition eval_ext_call_def:
   eval_ext_call cx is_static skip_check (func_name, arg_types, ret_type) opts [] =
@@ -1219,12 +1165,6 @@ Definition eval_ext_call_def:
   od
 End
 
-val () = eval_ext_call_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR,
-            prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
-            lift_option_def, lift_option_type_def, type_check_def, check_def,
-            assert_def]
-  |> cv_auto_trans;
 
 (* send(to, value[, gas=...]); vs = [to; value] ++ (if has_gas then [gas] else []),
    evaluated in Vyper's order (lower_send).  Without the outcome oracle the
@@ -1271,11 +1211,6 @@ Definition eval_send_def:
   eval_send cx has_gas _ = raise (Error (TypeError "Send args"))
 End
 
-val () = eval_send_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR,
-            prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
-            lift_option_type_def, type_check_def, check_def, assert_def]
-  |> cv_auto_trans;
 
 (* ===== Reentrancy Lock Helpers ===== *)
 (* Vyper's @nonreentrant uses transient storage (EIP-1153 on Cancun+).
@@ -1301,12 +1236,6 @@ Definition acquire_nonreentrant_lock_def:
   od
 End
 
-val () = acquire_nonreentrant_lock_def
-  |> SRULE [vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-            FUN_EQ_THM, LET_THM, COND_RATOR,
-            get_transient_storage_def, update_transient_def,
-            vyperStateTheory.return_def, vyperStateTheory.raise_def]
-  |> cv_auto_trans;
 
 (* Release the reentrancy lock *)
 Definition release_nonreentrant_lock_def:
@@ -1320,12 +1249,6 @@ Definition release_nonreentrant_lock_def:
   od
 End
 
-val () = release_nonreentrant_lock_def
-  |> SRULE [vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-            FUN_EQ_THM, LET_THM,
-            get_transient_storage_def, update_transient_def,
-            vyperStateTheory.return_def]
-  |> cv_auto_trans;
 
 (* msg.gas: the next reading of the frame's gas observations, in execution
    order.  Readings are never rolled back; running out is a runtime error. *)
@@ -1336,7 +1259,6 @@ Definition next_gas_reading_def:
     | w::ws => return (IntV (&w2n (w:bytes32))) (st with gas_obs := ws)
 End
 
-val () = cv_auto_trans next_gas_reading_def;
 
 (* sha256, ecrecover, ecadd and ecmul compile to an asserted STATICCALL of
    a computed precompile (2, 1, 6, 7), which the EVM can fail for lack of
@@ -1350,7 +1272,6 @@ Definition precompile_builtin_def[simp]:
   precompile_builtin _ = F
 End
 
-val () = cv_auto_trans precompile_builtin_def;
 
 Definition precompile_call_success_def:
   precompile_call_success bt st =
@@ -1363,7 +1284,6 @@ Definition precompile_call_success_def:
           (st with outcomes := SOME rest)
 End
 
-val () = cv_auto_trans precompile_call_success_def;
 
 Theorem precompile_call_success_not_builtin[simp]:
   ~precompile_builtin bt ==> precompile_call_success bt = return ()
@@ -1379,7 +1299,6 @@ Definition code_slice_source_def[simp]:
   code_slice_source _ _ = NONE
 End
 
-val () = cv_auto_trans code_slice_source_def;
 
 Theorem code_slice_source_SOME:
   code_slice_source bt es = SOME (ct, addr) ⇔
@@ -1400,7 +1319,6 @@ Definition is_view_mut_def[simp]:
   is_view_mut mut ⇔ mut = View ∨ mut = Pure
 End
 
-val () = cv_auto_trans is_view_mut_def;
 
 (* Take the reentrancy lock of a nonreentrant function, and release it again;
    a view function only checks the lock and so leaves it untouched. *)
@@ -1419,10 +1337,6 @@ Definition lock_if_nr_def:
     else return ()
 End
 
-val () = lock_if_nr_def
-  |> SRULE [FUN_EQ_THM, COND_RATOR, option_CASE_rator, ignore_bind_def,
-            bind_def]
-  |> cv_auto_trans;
 
 Definition unlock_if_nr_def:
   unlock_if_nr cx nr is_view =
@@ -1433,9 +1347,6 @@ Definition unlock_if_nr_def:
     else return ()
 End
 
-val () = unlock_if_nr_def
-  |> SRULE [FUN_EQ_THM, COND_RATOR, option_CASE_rator]
-  |> cv_auto_trans;
 
 (* Unfolded by simp, so proofs about evaluate_def see the lock code inline. *)
 val () = export_rewrites ["lock_if_nr_def", "unlock_if_nr_def"];
@@ -1462,11 +1373,6 @@ Definition array_iterator_results_def:
       od
 End
 
-val () = array_iterator_results_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
-            eval_result_CASE_rator, place_CASE_rator, type_value_CASE_rator,
-            bound_CASE_rator]
-  |> cv_auto_trans;
 
 Theorem array_iterator_results_storage:
   array_iterator_results cx ty (PlaceR (StoragePlace tr slot (ArrayTV etv bd))) =
@@ -2054,7 +1960,6 @@ Definition initial_immutables_module_def:
     initial_immutables_module env src_id_opt ts acc
 End
 
-val () = cv_auto_trans initial_immutables_module_def;
 
 (* Initialize immutables for all modules *)
 Definition initial_immutables_def:
@@ -2065,7 +1970,6 @@ Definition initial_immutables_def:
     | SOME acc => initial_immutables_module env src_id_opt ts acc
 End
 
-val () = cv_auto_trans initial_immutables_def;
 
 (* Look up the nonreentrant key slot from the transient storage layout.
    In Python, this is the entry with key (NONE, "$.nonreentrant_key"). *)
@@ -2077,7 +1981,6 @@ Definition lookup_nonreentrant_slot_def:
         ALOOKUP transient_layout (NONE, "$.nonreentrant_key")
 End
 
-val () = cv_auto_trans lookup_nonreentrant_slot_def;
 
 Definition initial_evaluation_context_def:
   initial_evaluation_context srcs layouts tx src_id_opt =
@@ -2090,7 +1993,6 @@ Definition initial_evaluation_context_def:
    |>
 End
 
-val () = cv_auto_trans initial_evaluation_context_def;
 
 Datatype:
   abstract_machine = <|
@@ -2133,7 +2035,6 @@ Definition initial_state_def:
    |>
 End
 
-val () = cv_auto_trans initial_state_def;
 
 Definition abstract_machine_from_state_def:
   abstract_machine_from_state srcs exps layouts (st: evaluation_state) =
@@ -2148,7 +2049,6 @@ Definition abstract_machine_from_state_def:
    |> : abstract_machine
 End
 
-val () = cv_auto_trans abstract_machine_from_state_def;
 
 Theorem abstract_machine_from_state_gas_obs:
   abstract_machine_from_state srcs exps layouts (st with gas_obs := readings) =
@@ -2172,7 +2072,6 @@ Definition merge_constants_def:
       (λal. (addr, imms') :: ADELKEY addr al)
 End
 
-val () = cv_auto_trans merge_constants_def;
 
 (* Evaluate constant expressions in a module's toplevels.
    Previously-evaluated constants are merged into am.immutables so that
@@ -2207,7 +2106,6 @@ Definition set_current_module_def:
   set_current_module cx src_id_opt = cx with stk := [(src_id_opt, "")]
 End
 
-val () = cv_auto_trans set_current_module_def;
 
 (* The order in which modules' constants are evaluated: imported modules
    first, the main module (source NONE) last, so a main-module constant can
@@ -2221,7 +2119,6 @@ Definition constants_order_def:
     else constants_order rest ++ [(src_id_opt, ts)]
 End
 
-val () = cv_auto_trans constants_order_def;
 
 (* constants_order only reorders the modules. *)
 Theorem PERM_constants_order:
@@ -2275,10 +2172,6 @@ Definition send_call_value_def:
   od
 End
 
-val () = send_call_value_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def,
-            LET_RATOR, COND_RATOR]
-  |> cv_auto_trans;
 
 (* External defaults run after value transfer, before formal argument binding.
    Like internal-call defaults, they share one empty local scope, thread every
@@ -2473,7 +2366,6 @@ Definition call_external_raw_return_def:
   | SOME ts => lookup_raw_return_or_F src_id_opt tx.function_name External ts
 End
 
-val () = cv_auto_trans call_external_raw_return_def;
 
 (* SELFDESTRUCT schedules deletion until the enclosing transaction commits. *)
 Definition finalize_pending_deletions_def:
@@ -2483,7 +2375,6 @@ Definition finalize_pending_deletions_def:
       pending_deletions := [] |>
 End
 
-val () = cv_auto_trans finalize_pending_deletions_def;
 
 Theorem finalize_pending_deletions_metadata[simp]:
   (finalize_pending_deletions am).sources = am.sources /\

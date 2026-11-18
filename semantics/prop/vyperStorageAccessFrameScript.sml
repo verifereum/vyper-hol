@@ -28,6 +28,7 @@ Ancestors
   vyperStatePreservation
   vyperTypeInvariants vyperTypeCallStackSoundness vyperTypeEvalSoundness
   vyperTypeCallGraphSoundness vyperTypeCallGraph relation pred_set alist
+  vyperTypeEvalCaseProofs vyperTypeEvalProofs
 
 (* Why it holds (a reader may ignore this): inside an expression only
    Pop writes storage directly; in a reached internal callee Assign,
