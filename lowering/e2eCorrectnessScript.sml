@@ -833,7 +833,8 @@ Proof
   rpt strip_tac >>
   drule raw_variant_call_ctx >> strip_tac >>
   gvs[opt_entry_state_def, entry_venom_state_def,
-      call_state_rel_def, evm_state_ok_def,
+      call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+      evm_state_ok_def,
       vfmCalldataBoundTheory.calldata_bounded_def] >>
   metis_tac[vfmBufferTheory.LENGTH_buffer_to_list]
 QED
@@ -1054,7 +1055,8 @@ Proof
        entry_asm_state_def, shared_state_rel_def,
        venom_asm_terminal_rel_def, opt_entry_state_def,
        entry_venom_state_frame_fields, entry_venom_state_fresh] >>
-  gvs[call_state_rel_def, entry_venom_state_def, venomStateTheory.init_venom_state_def,
+  gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+      entry_venom_state_def, venomStateTheory.init_venom_state_def,
       context_memory_rel_def]
 QED
 
@@ -1078,7 +1080,8 @@ Proof
         es.rollback.accounts)` by
     (`(FST (HD es.contexts)).msgParams.code <> []` by
        (strip_tac >> fs[]) >>
-     gvs[call_state_rel_def, vfmExecutionTheory.account_already_created_def,
+     gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+         vfmExecutionTheory.account_already_created_def,
          listTheory.NULL_EQ]) >>
   `asm_frame_rel prog' (entry_venom_state prog' cplan es).vs_data_section es
      (entry_asm_state (entry_venom_state prog' cplan es) es) es` by
@@ -1110,7 +1113,8 @@ Proof
   rpt strip_tac >> gvs[] >>
   simp[opt_entry_state_def, entry_venom_state_frame_fields,
        entry_venom_state_fresh, o1_initial_state_ok_def] >>
-  gvs[call_state_rel_def, entry_venom_state_def, opt_entry_state_def]
+  gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+      entry_venom_state_def, opt_entry_state_def]
 QED
 
 Theorem opt_entry_data_section_bound[local]:
@@ -1564,12 +1568,14 @@ Proof
   qspec_then `es` strip_assume_tac run_call_total >>
   qexistsl_tac [`r`, `es'`] >> simp[] >>
   Cases_on `frame_resource_starved es r es'` >> simp[] >>
-  `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
+  `source_deployment_rel tops am tx` by fs[call_state_rel_def, frame_fresh_def,
+                                           frame_tx_rel_def, world_rel_def] >>
   `external_return_type tops tx.function_name = ret` by
     (fs[dispatched_vyper_call_def] >> simp[external_return_type_def]) >>
   `outcomes_accounts_typed (SOME (MAP SND (call_trace es)))` by
     (`wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
-       fs[call_state_rel_def, evm_state_ok_def] >>
+       fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+          evm_state_ok_def] >>
      drule_all call_trace_outcomes_bounded >>
      simp[exprSimHypsDefsTheory.outcomes_accounts_typed_def, listTheory.EVERY_MEM]) >>
   `initial_venom_state_rel tops am tx (entry_venom_state prog cplan es)` by
@@ -1959,7 +1965,8 @@ Proof
    vs.vs_call_ctx.cc_calldata =
      buffer_to_list (FST (HD es.contexts)).msgParams.data` by
     simp[Abbr `vs`, entry_venom_state_def, entry_venom_state_fresh] >>
-  `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
+  `source_deployment_rel tops am tx` by fs[call_state_rel_def, frame_fresh_def,
+                                           frame_tx_rel_def, world_rel_def] >>
   `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
    fixed_region_reserved 0 unit.cu_context` by
     (drule lower_vyper_runtime_unit_raw_defaults >>
@@ -2071,7 +2078,8 @@ Proof
      fs[code_layout_valid_def, wordsTheory.dimword_def,
         fcpLib.INDEX_CONV ``dimindex(:256)``] >> decide_tac) >>
   `source_deployment_rel tops am txp` by
-    (fs[call_state_rel_def, Abbr `txp`, source_deployment_rel_def,
+    (fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+        Abbr `txp`, source_deployment_rel_def,
         layouts_agree_def]) >>
   `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
    fixed_region_reserved 0 unit.cu_context` by
@@ -2226,7 +2234,8 @@ Theorem vyper_call_correct:
 Proof
   rpt strip_tac >> simp[calldata_result_rel_def] >>
   `tx.calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
-    gvs[call_state_rel_def] >>
+    gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def,
+        world_rel_def] >>
   asm_rewrite_tac[] >>
   Cases_on `calldata_dispatch tops
               (buffer_to_list (FST (HD es.contexts)).msgParams.data)` >>

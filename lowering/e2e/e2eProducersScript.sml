@@ -230,7 +230,8 @@ Theorem entry_venom_state_initial_venom_state_rel:
 Proof
   rpt strip_tac >> drule entry_venom_state_source_environment >> strip_tac >>
   drule entry_venom_state_installed_section >> strip_tac >>
-  gvs[call_state_rel_def, tx_block_fields_rel_def,
+  gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+      tx_block_fields_rel_def,
       initial_venom_state_rel_def, entry_venom_state_frame_fields,
       entry_venom_state_fresh]
 QED
@@ -256,7 +257,8 @@ Proof
     account_already_created
       (lookup_account (FST (HD es.contexts)).msgParams.callee
         es.rollback.accounts))` by
-    gvs[call_state_rel_def, vfmExecutionTheory.account_already_created_def,
+    gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+        vfmExecutionTheory.account_already_created_def,
         listTheory.NULL_EQ] >>
   drule entry_venom_state_installed_section >> strip_tac >>
   `initial_state_rel cplan prog 0 (HD u.cu_context.ctx_functions)
@@ -265,7 +267,8 @@ Proof
      gvs[unit_shape_ok_def]) >>
   `(entry_venom_state prog cplan es).vs_params = []` by
     simp[entry_venom_state_def, venomStateTheory.init_venom_state_def] >>
-  gvs[unit_shape_ok_def, entry_fn_first_def, call_state_rel_def, evm_state_ok_def,
+  gvs[unit_shape_ok_def, entry_fn_first_def, call_state_rel_def,
+      frame_fresh_def, frame_tx_rel_def, world_rel_def, evm_state_ok_def,
       initial_ctx_rel_def, entry_venom_state_fresh,
       entry_venom_state_frame_fields]
 QED
