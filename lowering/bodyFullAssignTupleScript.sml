@@ -7,7 +7,7 @@
  * TOP-LEVEL: the body_*_full sub-shape theorems below.
  *)
 Theory bodyFullAssignTuple
-Ancestors
+Ancestors words[qualified,ignore_grammar]
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
@@ -5157,3 +5157,465 @@ Proof
   qpat_assum `!op. op <> Var dv ==> _` (qspec_then `Var p` mp_tac) >>
   simp[eval_operand_def]
 QED
+
+(* One loop round, from the body cursor back to the header. *)
+Theorem tuple_runtime_loop_round[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (mk_inst id MUL [Var cv;Lit 32w] [mv]::
+            mk_inst (id+1) ADD [Var src;Var mv] [sv]::
+            mk_inst (id+2) MLOAD [Var sv] [vv]::
+            mk_inst (id+3) MUL [Var cv;Lit 32w] [dm]::
+            mk_inst (id+4) ADD [dst;Var dm] [dv]::
+            (extra_code ++ [mk_inst (id+5+LENGTH extra_code) ISTORE [arg;Var vv] [];
+                            mk_inst (id+6+LENGTH extra_code) ADD [Var cv;Lit 1w] [nv];
+                            mk_inst (id+7+LENGTH extra_code) ASSIGN [Var nv] [cv];
+                            mk_inst (id+8+LENGTH extra_code) JMP [Label hdr] []]))
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  (case extra of
+     NONE => arg = Var dv /\ bw = n2w dest /\ extra_code = [] /\ outs = []
+   | SOME (region,rwrd,av) =>
+       arg = Var av /\ rwrd+bw = n2w dest /\
+       extra_code = [mk_inst (id+5) ADD [region;Var dv] [av]] /\ outs = [av] /\
+       eval_operand region s = SOME rwrd /\ op_prov G region = NONE /\
+       op_taint tn region = {} /\ ~MEM region (MAP Var [mv;sv;vv;dm;dv])) /\
+  ALL_DISTINCT (src::cv::mv::sv::vv::dm::dv::nv::outs) /\
+  ~MEM dst (MAP Var [mv;sv;vv;dm]) /\
+  eval_operand dst s = SOME bw /\ op_prov G dst = NONE /\ op_taint tn dst = {} /\
+  eval_operand (Var cv) s = SOME (n2w i) /\ op_prov G (Var cv) = NONE /\
+  op_taint tn (Var cv) = {} /\
+  lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\
+  32*i+32 <= capacity /\ w2n a + 32*i < dimword (:256) /\
+  w2n a + 32*i + 32 <= s.vs_alloca_next /\
+  dest + 32*i + 32 <= lo /\ dest + 32*i < dimword (:256) /\
+  lo <= s.vs_alloca_next /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted ==>
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+    eval_operand (Var cv) t = SOME (n2w (SUC i)) /\
+    op_prov Gf (Var cv) = NONE /\ op_taint tf (Var cv) = {} /\
+    store_copy_normalize s t = istore (dest+32*i) (mload (w2n a+32*i) s) s /\
+    (!p. ~MEM p (cv::mv::sv::vv::dm::dv::nv::outs) ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tf (Var p) = op_taint tn (Var p)) /\
+    tf.t_mem = (tn.t_mem DIFF {j | dest+32*i <= j /\ j < dest+32*i+32}) UNION
+      {dest+32*i + j | j | j IN mem_word_taint tn.t_mem (w2n a+32*i)} /\
+    tf.t_imm = key_update tn.t_imm (dest+32*i) (mem_word_taint tn.t_mem (w2n a+32*i)) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans
+Proof
+  strip_tac >>
+  `eval_operand (Lit 32w) s = SOME 32w /\ op_prov G (Lit 32w) = NONE /\
+   op_taint tn (Lit 32w) = {}` by simp[eval_operand_def, op_prov_def, op_taint_def] >>
+  drule_all (tuple_runtime_binary_prefix |> Q.INST [`opc` |-> `MUL`] |> SRULE [Excl "isPREFIX"]) >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `m` (qx_choose_then `Gm` (qx_choose_then `tm` strip_assume_tac)))) >>
+  `lookup_block m.vs_current_bb fn.fn_blocks = SOME bb /\
+   lookup_var src m = SOME a /\ ptr_covers Gm tm src m capacity /\
+   eval_operand (Var mv) m = SOME (n2w (32*i)) /\ src <> sv /\
+   w2n a + 32*i + 32 <= m.vs_alloca_next` by
+    (`(n2w i:bytes32)*32w = n2w (32*i)` by
+       simp[NoAsms, wordsTheory.word_mul_n2w, Once MULT_COMM] >>
+     `src <> mv /\ src <> sv` by fs[Excl "isPREFIX"] >>
+     `lookup_var src m = lookup_var src s /\ op_taint tm (Var src) = op_taint tn (Var src)` by
+       (qpat_assum `!p. p <> Var mv ==> _` (qspec_then `Var src` mp_tac) >> simp[eval_operand_def]) >>
+     gvs[NoAsms, wordsTheory.word_mul_n2w, Once MULT_COMM, Excl "isPREFIX",
+         ptr_covers_def, eval_operand_def]) >>
+  `isPREFIX [mk_inst (id+1) ADD [Var src;Var mv] [sv];
+             mk_inst ((id+1)+1) MLOAD [Var sv] [vv]] (DROP m.vs_inst_idx bb.bb_instructions)` by
+    (qpat_assum `isPREFIX (_::_::_) (DROP m.vs_inst_idx _)`
+       (strip_assume_tac o REWRITE_RULE [rich_listTheory.IS_PREFIX_APPEND]) >> simp[GSYM ADD_ASSOC]) >>
+  drule_all (tuple_runtime_source_word |> Q.INST [`s` |-> `m`, `G` |-> `Gm`, `tn` |-> `tm`]) >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `r` (qx_choose_then `Gr` (qx_choose_then `tr` strip_assume_tac)))) >>
+  `r.vs_current_bb = m.vs_current_bb /\ r.vs_memory = m.vs_memory /\
+   r.vs_labels = m.vs_labels /\ r.vs_alloca_next = m.vs_alloca_next /\
+   r.vs_allocas = m.vs_allocas /\ r.vs_fmp = m.vs_fmp /\
+   r.vs_initial_fmp = m.vs_initial_fmp /\ r.vs_halted = m.vs_halted` by
+    (qpat_assum `r with <|vs_vars := _; vs_inst_idx := _|> = m` mp_tac >>
+     simp[NoAsms, venom_state_component_equality]) >>
+  `m.vs_memory = s.vs_memory /\ m.vs_labels = s.vs_labels` by
+    (conj_tac >-
+       (qpat_assum `store_copy_normalize s m = s`
+          (mp_tac o Q.AP_TERM `\q. q.vs_memory`) >>
+        simp[NoAsms, stmtSimStoreCopyTheory.store_copy_normalize_def]) >>
+     qpat_assum `store_copy_normalize s m = s`
+       (mp_tac o Q.AP_TERM `\q. q.vs_labels`) >>
+     simp[NoAsms, stmtSimStoreCopyTheory.store_copy_normalize_def]) >>
+  `lookup_block r.vs_current_bb fn.fn_blocks = SOME bb /\ lo <= r.vs_alloca_next /\
+   allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r) /\ ~r.vs_halted /\
+   eval_operand (Var vv) r = SOME (mload (w2n a+32*i) s)` by
+    (`allocas_from lo r = allocas_from lo m` by
+       (rewrite_tac[allocas_from_def] >> asm_rewrite_tac[]) >>
+     `allocas_below_fmp r = allocas_below_fmp m` by
+       (rewrite_tac[allocas_below_fmp_def] >> asm_rewrite_tac[]) >>
+     simp[mload_def, Excl "isPREFIX"]) >>
+  `!op. ~MEM op (MAP Var [mv;sv;vv]) ==>
+     eval_operand op r = eval_operand op s /\ op_prov Gr op = op_prov G op /\
+     op_taint tr op = op_taint tn op` by
+    (gen_tac >> Cases_on `op` >> simp[eval_operand_def, op_prov_def, op_taint_def] >>
+     rpt strip_tac >>
+     qpat_assum `!p. p <> sv /\ p <> vv ==> _` (qspec_then `s'` mp_tac) >>
+     qpat_assum `!p. p <> Var mv ==> _` (qspec_then `Var s'` mp_tac) >>
+     simp[eval_operand_def, op_prov_def]) >>
+  `isPREFIX (mk_inst (id+3) MUL [Var cv;Lit 32w] [dm]::
+            mk_inst ((id+3)+1) ADD [dst;Var dm] [dv]::
+            (extra_code ++ [mk_inst ((id+3)+2+LENGTH extra_code) ISTORE [arg;Var vv] [];
+                            mk_inst (id+6+LENGTH extra_code) ADD [Var cv;Lit 1w] [nv];
+                            mk_inst (id+7+LENGTH extra_code) ASSIGN [Var nv] [cv];
+                            mk_inst (id+8+LENGTH extra_code) JMP [Label hdr] []]))
+    (DROP r.vs_inst_idx bb.bb_instructions)` by
+    (qpat_assum `isPREFIX (_::_::_::_) (DROP m.vs_inst_idx _)`
+       (strip_assume_tac o MATCH_MP fragGasSeqAbortTheory.instruction_prefix_cursor) >>
+     qpat_assum `isPREFIX (_::_::_) (DROP (SUC m.vs_inst_idx) _)`
+       (mp_tac o CONJUNCT2 o MATCH_MP fragGasSeqAbortTheory.instruction_prefix_cursor) >>
+     `r.vs_inst_idx = SUC (SUC m.vs_inst_idx)` by decide_tac >>
+     qpat_assum `r.vs_inst_idx = _` SUBST1_TAC >>
+     simp[Excl "isPREFIX", GSYM ADD_ASSOC]) >>
+  qabbrev_tac `at:bytes32 = n2w (dest+32*i)` >>
+  `case extra of
+     NONE => arg = Var dv /\ at = bw+n2w i*32w /\ extra_code = [] /\ outs = []
+   | SOME (region,rwrd,av) =>
+       arg = Var av /\ at = rwrd+(bw+n2w i*32w) /\
+       extra_code = [mk_inst ((id+3)+2) ADD [region;Var dv] [av]] /\ outs = [av] /\
+       eval_operand region r = SOME rwrd /\ op_prov Gr region = NONE /\
+       op_taint tr region = {} /\ region <> Var dm /\ region <> Var dv /\ vv <> av` by
+    (Cases_on `extra` >-
+       gvs[Abbr `at`, Excl "isPREFIX", wordsTheory.word_mul_n2w,
+           wordsTheory.word_add_n2w, Once MULT_COMM] >>
+     PairCases_on `x` >> fs[Excl "isPREFIX", GSYM ADD_ASSOC] >>
+     conj_tac >-
+       (simp[NoAsms, Abbr `at`, wordsTheory.WORD_ADD_ASSOC] >>
+        qpat_assum `_ + bw = n2w dest` SUBST1_TAC >>
+        simp[NoAsms, GSYM wordsTheory.word_add_n2w,
+          wordsTheory.word_mul_n2w, Once MULT_COMM]) >>
+     qpat_assum `outs = [_]` SUBST_ALL_TAC >> fs[Excl "isPREFIX"]) >>
+  `w2n at = dest+32*i` by simp[Abbr `at`, wordsTheory.w2n_n2w, LESS_MOD] >>
+  `eval_operand dst r = SOME bw /\ op_prov Gr dst = NONE /\ op_taint tr dst = {} /\
+   eval_operand (Var cv) r = SOME (n2w i) /\ op_prov Gr (Var cv) = NONE /\
+   op_taint tr (Var cv) = {} /\ dst <> Var dm /\ vv <> dm /\ vv <> dv` by
+    fs[Excl "isPREFIX"] >>
+  `w2n at + 32 <= lo` by simp[] >>
+  drule_all (tuple_runtime_destination_word |>
+    Q.INST [`s` |-> `r`, `G` |-> `Gr`, `tn` |-> `tr`] |> SRULE [Excl "isPREFIX"]) >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `u` (qx_choose_then `Gu` (qx_choose_then `tu` strip_assume_tac)))) >>
+  `lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+   eval_operand (Var cv) u = SOME (n2w i) /\ op_prov Gu (Var cv) = NONE /\
+   op_taint tu (Var cv) = {}` by
+    (`cv <> dm /\ cv <> dv /\ ~MEM cv outs` by fs[Excl "isPREFIX"] >>
+     qpat_assum `!p. _ ==> lookup_var p u = _ /\ _` (qspec_then `cv` mp_tac) >>
+     simp[Excl "isPREFIX", eval_operand_def, op_prov_def] >>
+     gvs[Excl "isPREFIX", eval_operand_def, op_prov_def]) >>
+  `eval_operand (Lit 1w) u = SOME 1w /\ op_prov Gu (Lit 1w) = NONE /\
+   op_taint tu (Lit 1w) = {}` by simp[eval_operand_def, op_prov_def, op_taint_def] >>
+  drule_all (tuple_runtime_binary_prefix |> Q.INST [`opc` |-> `ADD`,
+    `s` |-> `u`, `G` |-> `Gu`, `tn` |-> `tu`] |> SRULE [Excl "isPREFIX"]) >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `z` (qx_choose_then `Gz` (qx_choose_then `tz` strip_assume_tac)))) >>
+  `lookup_block z.vs_current_bb fn.fn_blocks = SOME bb /\
+   eval_operand (Var nv) z = SOME (n2w (SUC i))` by
+    simp[ADD1, wordsTheory.word_add_n2w, Excl "isPREFIX"] >>
+  `isPREFIX [mk_inst (id+7+LENGTH extra_code) ASSIGN [Var nv] [cv];
+             mk_inst ((id+7+LENGTH extra_code)+1) JMP [Label hdr] []]
+    (DROP z.vs_inst_idx bb.bb_instructions)` by
+    (`(id+7+LENGTH extra_code)+1 = id+8+LENGTH extra_code` by decide_tac >>
+     pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  drule_all (tuple_runtime_loop_assign_jump |> Q.INST [`s` |-> `z`,
+    `G` |-> `Gz`, `tn` |-> `tz`] |> SRULE [Excl "isPREFIX"]) >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `t` (qx_choose_then `Gf` (qx_choose_then `tf` strip_assume_tac)))) >>
+  qexistsl_tac [`t`,`Gf`,`tf`] >>
+  conj_tac >-
+    (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gm`,`m`,`tm`] >> simp[] >>
+     irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gr`,`r`,`tr`] >> simp[] >>
+     irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gu`,`u`,`tu`] >> simp[] >>
+     irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gz`,`z`,`tz`] >> simp[]) >>
+  `!base' mid end'. store_copy_normalize base' (store_copy_normalize mid end') =
+                     store_copy_normalize base' end'` by
+    simp[stmtSimStoreCopyTheory.store_copy_normalize_def] >>
+  `store_copy_normalize s r = s` by
+    (qpat_assum `r with <|vs_vars := _; vs_inst_idx := _|> = m`
+       (mp_tac o Q.AP_TERM `store_copy_normalize s`) >>
+     simp[stmtSimStoreCopyTheory.store_copy_normalize_def, NoAsms] >>
+     qpat_assum `store_copy_normalize s m = s` mp_tac >>
+     simp[stmtSimStoreCopyTheory.store_copy_normalize_def, NoAsms]) >>
+  `store_copy_normalize s u = istore (dest+32*i) (mload (w2n a+32*i) s) s` by
+    (qpat_assum `store_copy_normalize r u = istore _ _ r`
+       (mp_tac o Q.AP_TERM `store_copy_normalize s`) >>
+     simp[Excl "isPREFIX"] >>
+     `!p w x. store_copy_normalize s (istore p w x) =
+                istore p w (store_copy_normalize s x)` by
+       simp[NoAsms, stmtSimStoreCopyTheory.store_copy_normalize_def, istore_def, mstore_def] >>
+     simp[]) >>
+  `store_copy_normalize s t = store_copy_normalize s u` by
+    (qpat_assum `store_copy_normalize z t = z`
+       (mp_tac o Q.AP_TERM `store_copy_normalize s`) >>
+     qpat_assum `store_copy_normalize u z = u`
+       (mp_tac o Q.AP_TERM `store_copy_normalize s`) >> simp[]) >>
+  simp[Excl "isPREFIX"] >> rpt strip_tac >>
+  qpat_assum `!p. _ ==> lookup_var p t = _ /\ _` (qspec_then `p` mp_tac) >>
+  qpat_assum `!p. _ ==> FLOOKUP Gz p = _` (qspec_then `p` mp_tac) >>
+  qpat_assum `!p. _ ==> eval_operand p z = _ /\ _` (qspec_then `Var p` mp_tac) >>
+  qpat_assum `!p. _ ==> lookup_var p u = _ /\ _` (qspec_then `p` mp_tac) >>
+  qpat_assum `!p. _ ==> lookup_var p r = _ /\ _` (qspec_then `p` mp_tac) >>
+  qpat_assum `!p. _ ==> FLOOKUP Gm p = _` (qspec_then `p` mp_tac) >>
+  qpat_assum `!p. _ ==> eval_operand p m = _ /\ _` (qspec_then `Var p` mp_tac) >>
+  simp[eval_operand_def, Excl "isPREFIX"]
+QED
+
+Theorem tuple_runtime_live_operand[local]:
+  t.vs_labels = s.vs_labels /\
+  (!p. op = Var p ==> lookup_var p t = lookup_var p s /\
+        FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p)) ==>
+  eval_operand op t = eval_operand op s /\ op_prov Gf op = op_prov G op /\
+  op_taint tf op = op_taint tn op
+Proof
+  Cases_on `op` >> simp[eval_operand_def, op_prov_def, op_taint_def]
+QED
+
+(* The recursive suffix cannot feed back into the source above the section. *)
+Theorem tuple_runtime_taint_round[local]:
+  i < n /\ b+32*n <= a /\
+  M1 = (M DIFF {j | b+32*i <= j /\ j < b+32*i+32}) UNION
+       {b+32*i+j | j | j IN mem_word_taint M (a+32*i)} /\
+  (!x. x IN M2 <=> if b+32*SUC i <= x /\ x < b+32*n
+                   then a+(x-b) IN M1 else x IN M1) ==>
+  !x. x IN M2 <=> if b+32*i <= x /\ x < b+32*n
+                 then a+(x-b) IN M else x IN M
+Proof
+  strip_tac >> gen_tac >>
+  `b+32*i+32 = b+32*SUC i` by decide_tac >>
+  Cases_on `x < b+32*i` >-
+    (`x < b+32*SUC i` by decide_tac >> simp[mem_word_taint_def] >>
+     rpt strip_tac >> gvs[] >> decide_tac) >>
+  Cases_on `x < b+32*SUC i` >-
+    (`x < b+32*n` by decide_tac >>
+     `?j. x = b+32*i+j /\ j < 32 /\ a+(x-b) = a+32*i+j` by
+       (qexists `x-(b+32*i)` >> decide_tac) >>
+     simp[mem_word_taint_def] >> metis_tac[]) >>
+  Cases_on `x < b+32*n` >-
+    (`b+32*SUC i <= a+(x-b)` by decide_tac >> simp[mem_word_taint_def] >>
+     eq_tac >> rpt strip_tac >> gvs[] >> decide_tac) >>
+  simp[mem_word_taint_def] >> eq_tac >> rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+(* Recurse on the remaining count, using the ordinary transfer recurrence on
+   the very state reached by the annotated body. *)
+Theorem tuple_runtime_loop_suffix[local]:
+  lookup_block hdr fn.fn_blocks = SOME bbh /\
+  isPREFIX [mk_inst idh EQ [Var cv;cnt] [tv];
+            mk_inst (idh+1) JNZ [Var tv;Label done_lbl;Label body_lbl] []]
+    bbh.bb_instructions /\
+  lookup_block body_lbl fn.fn_blocks = SOME bbb /\
+  isPREFIX (mk_inst idb MUL [Var cv;Lit 32w] [mv]::
+            mk_inst (idb+1) ADD [Var src;Var mv] [sv]::
+            mk_inst (idb+2) MLOAD [Var sv] [vv]::
+            mk_inst (idb+3) MUL [Var cv;Lit 32w] [dm]::
+            mk_inst (idb+4) ADD [dst;Var dm] [dv]::
+            (extra_code ++ [mk_inst (idb+5+LENGTH extra_code) ISTORE [arg;Var vv] [];
+                            mk_inst (idb+6+LENGTH extra_code) ADD [Var cv;Lit 1w] [nv];
+                            mk_inst (idb+7+LENGTH extra_code) ASSIGN [Var nv] [cv];
+                            mk_inst (idb+8+LENGTH extra_code) JMP [Label hdr] []]))
+    bbb.bb_instructions /\
+  (case extra of
+     NONE => arg = Var dv /\ bw = n2w dest /\ extra_code = [] /\ outs = []
+   | SOME (region,rwrd,av) =>
+       arg = Var av /\ rwrd+bw = n2w dest /\
+       extra_code = [mk_inst (idb+5) ADD [region;Var dv] [av]] /\ outs = [av] /\
+       ~MEM region (MAP Var (tv::cv::mv::sv::vv::dm::dv::nv::outs))) /\
+  ALL_DISTINCT (src::tv::cv::mv::sv::vv::dm::dv::nv::outs) /\
+  ~MEM dst (MAP Var (tv::cv::mv::sv::vv::dm::dv::nv::outs)) /\
+  ~MEM cnt (MAP Var (tv::cv::mv::sv::vv::dm::dv::nv::outs)) /\
+  32*n <= capacity /\ dest+32*n <= lo /\ lo <= w2n a /\
+  w2n a+32*n < dimword (:256) ==>
+  !remaining i s G tn.
+    i+remaining = n /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+    eval_operand (Var cv) s = SOME (n2w i) /\
+    op_prov G (Var cv) = NONE /\ op_taint tn (Var cv) = {} /\
+    eval_operand cnt s = SOME (n2w n) /\ op_prov G cnt = NONE /\ op_taint tn cnt = {} /\
+    eval_operand dst s = SOME bw /\ op_prov G dst = NONE /\ op_taint tn dst = {} /\
+    (!region rwrd av. extra = SOME (region,rwrd,av) ==>
+       eval_operand region s = SOME rwrd /\ op_prov G region = NONE /\ op_taint tn region = {}) /\
+    lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\
+    w2n a+32*n <= s.vs_alloca_next /\ lo <= s.vs_alloca_next /\ allocas_from lo s /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+    ?t Gf tf.
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+      t.vs_current_bb = done_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+      store_copy_normalize s t = immutable_transfers T T a (n2w dest) remaining (32*i) s /\
+      (!p. ~MEM p (tv::cv::mv::sv::vv::dm::dv::nv::outs) ==>
+           lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+           op_taint tf (Var p) = op_taint tn (Var p)) /\
+      tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+      (!x. x IN tf.t_mem <=> if dest+32*i <= x /\ x < dest+32*n
+                             then w2n a+(x-dest) IN tn.t_mem else x IN tn.t_mem)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> Induct
+  >- suspend "base" >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `i < n /\ n < dimword (:256) /\ i < dimword (:256)` by decide_tac >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bbh /\
+   isPREFIX [mk_inst idh EQ [Var cv;cnt] [tv];
+             mk_inst (idh+1) JNZ [Var tv;Label done_lbl;Label body_lbl] []]
+     (DROP s.vs_inst_idx bbh.bb_instructions)` by simp[Excl "isPREFIX"] >>
+  drule_all tuple_runtime_loop_test >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `r` (qx_choose_then `Gr` (qx_choose_then `tr` strip_assume_tac)))) >>
+  `r.vs_current_bb = body_lbl` by
+    (`(n2w i:bytes32) <> n2w n` by simp[wordsTheory.n2w_11, LESS_MOD] >> simp[]) >>
+  `r.vs_memory = s.vs_memory /\ r.vs_labels = s.vs_labels /\
+   r.vs_allocas = s.vs_allocas /\ r.vs_initial_fmp = s.vs_initial_fmp /\
+   r.vs_fmp = s.vs_fmp /\ r.vs_alloca_next = s.vs_alloca_next /\
+   ~r.vs_halted` by
+    (qpat_assum `store_copy_normalize s r = s`
+       (strip_assume_tac o SIMP_RULE (srw_ss())
+          [stmtSimStoreCopyTheory.store_copy_normalize_def, venom_state_component_equality]) >> simp[]) >>
+  `!op. op <> Var tv ==>
+     eval_operand op r = eval_operand op s /\ op_prov Gr op = op_prov G op /\
+     op_taint tr op = op_taint tn op` by
+    (gen_tac >> disch_tac >> match_mp_tac tuple_runtime_live_operand >> simp[] >> metis_tac[]) >>
+  suspend "round"
+QED
+
+Resume tuple_runtime_loop_suffix[base]:
+  simp[immutable_transfers_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bbh /\
+   isPREFIX [mk_inst idh EQ [Var cv;cnt] [tv];
+             mk_inst (idh+1) JNZ [Var tv;Label done_lbl;Label body_lbl] []]
+     (DROP s.vs_inst_idx bbh.bb_instructions)` by simp[Excl "isPREFIX"] >>
+  drule_all tuple_runtime_loop_test >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `r` (qx_choose_then `Gr` (qx_choose_then `tr` strip_assume_tac)))) >>
+  `~r.vs_halted` by
+    (qpat_assum `store_copy_normalize s r = s`
+       (strip_assume_tac o SIMP_RULE (srw_ss())
+          [stmtSimStoreCopyTheory.store_copy_normalize_def, venom_state_component_equality]) >> simp[]) >>
+  qexistsl_tac [`r`,`Gr`,`tr`] >> simp[Excl "isPREFIX"]
+QED
+
+Resume tuple_runtime_loop_suffix[round]:
+  `lookup_block r.vs_current_bb fn.fn_blocks = SOME bbb /\
+   lo <= r.vs_alloca_next /\ allocas_from lo r /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp r)` by
+    (`allocas_from lo r = allocas_from lo s /\
+      allocas_below_fmp r = allocas_below_fmp s` by (simp[allocas_from_def, allocas_below_fmp_def] >> (gvs[allocas_from_def, allocas_below_fmp_def])) >>
+     simp[Excl "isPREFIX"]) >>
+  `eval_operand (Var cv) r = SOME (n2w i) /\ op_prov Gr (Var cv) = NONE /\
+   op_taint tr (Var cv) = {} /\
+   eval_operand dst r = SOME bw /\ op_prov Gr dst = NONE /\ op_taint tr dst = {} /\
+   lookup_var src r = SOME a /\ ptr_covers Gr tr src r capacity` by
+    (`lookup_var src r = lookup_var src s /\ FLOOKUP Gr src = FLOOKUP G src /\
+      op_taint tr (Var src) = op_taint tn (Var src)` by
+       (qpat_assum `!p. p <> tv ==> _` (qspec_then `src` mp_tac) >>
+        fs[Excl "isPREFIX"]) >>
+     qpat_assum `!op. _ ==> eval_operand op r = _ /\ _` (qspec_then `dst` mp_tac) >>
+     qpat_assum `!op. _ ==> eval_operand op r = _ /\ _` (qspec_then `Var cv` mp_tac) >>
+     fs[ptr_covers_def, Excl "isPREFIX"] >> gvs[Excl "isPREFIX"]) >>
+  `case extra of
+     NONE => arg = Var dv /\ bw = n2w dest /\ extra_code = [] /\ outs = []
+   | SOME (region,rwrd,av) =>
+       arg = Var av /\ rwrd+bw = n2w dest /\
+       extra_code = [mk_inst (idb+5) ADD [region;Var dv] [av]] /\ outs = [av] /\
+       eval_operand region r = SOME rwrd /\ op_prov Gr region = NONE /\
+       op_taint tr region = {} /\ ~MEM region (MAP Var [mv;sv;vv;dm;dv])` by
+    (Cases_on `extra` >- fs[Excl "isPREFIX"] >> PairCases_on `x` >>
+     qpat_assum `!op. _ ==> eval_operand op r = _ /\ _` (qspec_then `x0` mp_tac) >>
+     fs[Excl "isPREFIX"]) >>
+  `32*i+32 <= capacity /\ w2n a+32*i < dimword (:256) /\
+   w2n a+32*i+32 <= r.vs_alloca_next /\ dest+32*i+32 <= lo /\
+   dest+32*i < dimword (:256)` by decide_tac >>
+  `ALL_DISTINCT (src::cv::mv::sv::vv::dm::dv::nv::outs) /\
+   ~MEM dst (MAP Var [mv;sv;vv;dm])` by fs[Excl "isPREFIX"] >>
+  mp_tac (tuple_runtime_loop_round |> Q.INST [`s` |-> `r`, `G` |-> `Gr`,
+    `tn` |-> `tr`, `id` |-> `idb`, `bb` |-> `bbb`]) >>
+  (impl_tac >-
+     (qpat_assum `isPREFIX (mk_inst idb MUL _ _ :: _) bbb.bb_instructions` mp_tac >>
+      simp[Excl "isPREFIX"] >> gvs[Excl "isPREFIX"])) >>
+  disch_then (qx_choose_then `u` (qx_choose_then `Gu` (qx_choose_then `tu` strip_assume_tac))) >>
+  suspend "recur"
+QED
+
+Resume tuple_runtime_loop_suffix[recur]:
+  `u.vs_labels = s.vs_labels /\ u.vs_allocas = s.vs_allocas /\
+   u.vs_initial_fmp = s.vs_initial_fmp /\ u.vs_fmp = s.vs_fmp /\
+   u.vs_alloca_next = s.vs_alloca_next /\ ~u.vs_halted` by
+    (qpat_assum `store_copy_normalize r u = istore _ _ r`
+       (strip_assume_tac o SIMP_RULE (srw_ss())
+          [stmtSimStoreCopyTheory.store_copy_normalize_def,
+           istore_def, mstore_def, venom_state_component_equality]) >> simp[]) >>
+  `!p. ~MEM p (tv::cv::mv::sv::vv::dm::dv::nv::outs) ==>
+       lookup_var p u = lookup_var p s /\ FLOOKUP Gu p = FLOOKUP G p /\
+       op_taint tu (Var p) = op_taint tn (Var p)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!p. _ ==> lookup_var p u = _ /\ _` (qspec_then `p` mp_tac) >>
+     qpat_assum `!p. p <> tv ==> _` (qspec_then `p` mp_tac) >>
+     fs[Excl "isPREFIX"]) >>
+  `!op. ~MEM op (MAP Var (tv::cv::mv::sv::vv::dm::dv::nv::outs)) ==>
+       eval_operand op u = eval_operand op s /\ op_prov Gu op = op_prov G op /\
+       op_taint tu op = op_taint tn op` by
+    (gen_tac >> disch_tac >> match_mp_tac tuple_runtime_live_operand >> simp[Excl "isPREFIX"] >>
+     rpt strip_tac >> gvs[Excl "isPREFIX", MEM_MAP] >>
+     qpat_assum `!p. _ ==> lookup_var p u = lookup_var p s /\ _`
+       (qspec_then `p` mp_tac) >> simp[Excl "isPREFIX"]) >>
+  `allocas_from lo u = allocas_from lo s /\ allocas_below_fmp u = allocas_below_fmp s` by
+    (rewrite_tac[allocas_from_def, allocas_below_fmp_def] >> asm_rewrite_tac[]) >>
+  `lookup_var src u = SOME a /\ ptr_covers Gu tu src u capacity` by
+    (qpat_assum `!p. _ ==> lookup_var p u = lookup_var p s /\ _`
+       (qspec_then `src` mp_tac) >>
+     fs[Excl "isPREFIX"] >>
+     fs[ptr_covers_def, Excl "isPREFIX"] >> gvs[Excl "isPREFIX"]) >>
+  qpat_assum `!i s G tn. _ ==> ?t Gf tf. _`
+    (qspecl_then [`SUC i`,`u`,`Gu`,`tu`] mp_tac) >>
+  (impl_tac >-
+     (`SUC i + remaining = n` by decide_tac >>
+      qpat_assum `!op. _ ==> eval_operand op u = _ /\ _` (qspec_then `cnt` mp_tac) >>
+      qpat_assum `!op. _ ==> eval_operand op u = _ /\ _` (qspec_then `dst` mp_tac) >>
+      fs[Excl "isPREFIX"] >> rpt gen_tac >> disch_tac >>
+      qpat_assum `!r w v. extra = SOME (r,w,v) ==> eval_operand r s = _ /\ _`
+        (qspecl_then [`region`,`rwrd`,`av`] mp_tac) >>
+      qpat_assum `!op. _ ==> eval_operand op u = _ /\ _` (qspec_then `region` mp_tac) >>
+      gvs[])) >>
+  disch_then (qx_choose_then `t` (qx_choose_then `Gf` (qx_choose_then `tf` strip_assume_tac))) >>
+  qexistsl_tac [`t`,`Gf`,`tf`] >>
+  (conj_tac >-
+    (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gr`,`r`,`tr`] >> simp[Excl "isPREFIX"] >>
+     irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gu`,`u`,`tu`] >> simp[Excl "isPREFIX"])) >>
+  `!base mid finish. store_copy_normalize base (store_copy_normalize mid finish) =
+                    store_copy_normalize base finish` by
+    simp[stmtSimStoreCopyTheory.store_copy_normalize_def] >>
+  `store_copy_normalize s u = istore (dest+32*i) (mload (w2n a+32*i) s) s` by
+    (qpat_assum `store_copy_normalize r u = istore _ _ r`
+       (mp_tac o Q.AP_TERM `store_copy_normalize s`) >>
+     `!p w x. store_copy_normalize s (istore p w x) =
+                istore p w (store_copy_normalize s x)` by
+       simp[NoAsms, stmtSimStoreCopyTheory.store_copy_normalize_def, istore_def, mstore_def] >>
+     simp[mload_def, Excl "isPREFIX"]) >>
+  `dest + 32*i < dimword (:256) /\ w2n a+32*i < dimword (:256) /\
+   32*SUC i = 32*i+32` by decide_tac >>
+  `store_copy_normalize s t = immutable_transfers T T a (n2w dest) (SUC remaining) (32*i) s` by
+    (qpat_assum `store_copy_normalize u t = immutable_transfers T T a _ _ _ u`
+       (mp_tac o Q.AP_TERM `store_copy_normalize s`) >>
+     simp[immutable_transfers_normalize, immutable_transfers_def, immutable_word_transfer_def,
+          immutable_copy_read_def, wordsTheory.word_add_n2w, wordsTheory.n2w_w2n,
+          wordsTheory.w2n_n2w, LESS_MOD, abiDecodeStaticPropsTheory.w2n_add_n2w_lt,
+          Excl "isPREFIX"]) >>
+  `!p. ~MEM p (tv::cv::mv::sv::vv::dm::dv::nv::outs) ==>
+       lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+       op_taint tf (Var p) = op_taint tn (Var p)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!p. _ ==> lookup_var p t = _ /\ _` (qspec_then `p` mp_tac) >>
+     qpat_assum `!p. _ ==> lookup_var p u = lookup_var p s /\ _` (qspec_then `p` mp_tac) >>
+     simp[]) >>
+  rpt (conj_tac >- simp[Excl "isPREFIX"]) >>
+  match_mp_tac (Q.INST [`M1` |-> `tu.t_mem`] tuple_runtime_taint_round) >>
+  simp[Excl "isPREFIX"] >> decide_tac
+QED
+
+Finalise tuple_runtime_loop_suffix[local]
