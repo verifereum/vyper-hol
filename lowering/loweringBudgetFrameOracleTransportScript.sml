@@ -60,9 +60,10 @@ Theorem eval_phis_outcomes_update:
     map_result_state (\t. t with vs_outcomes := os) (eval_phis s insts)
 Proof
   Induct >> simp[eval_phis_def, map_result_state_def] >> rpt gen_tac >>
-  Cases_on `h.inst_opcode = PHI` >> simp[one_phi_outcomes_update] >>
-  Cases_on `eval_one_phi s h` >> simp[map_result_state_def] >>
-  rename1 `eval_one_phi s h = SOME p` >> Cases_on `p` >>
+  rename1 `eval_one_phi _ inst` >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[one_phi_outcomes_update] >>
+  Cases_on `eval_one_phi s inst` >> simp[map_result_state_def] >>
+  rename1 `eval_one_phi s inst = SOME p` >> Cases_on `p` >>
   Cases_on `eval_phis s insts` >>
   simp[map_result_state_def, state_operations_outcomes_update]
 QED

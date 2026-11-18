@@ -216,7 +216,8 @@ Proof
   Induct_on `fields` >> rpt strip_tac >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   simp[compile_struct_lit_def, every_state_insts_return] >>
-  PairCases_on `h` >> simp[compile_struct_lit_def] >>
+  rename1 `compile_struct_lit _ _ _ (fld::_)` >> PairCases_on `fld` >>
+  simp[compile_struct_lit_def] >>
   rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
       opcode_every_emit_inst,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,

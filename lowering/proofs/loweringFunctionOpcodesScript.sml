@@ -99,7 +99,8 @@ Theorem outcomes_free_decode_args:
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_decode_args ce args off opc hi base st)))
 Proof
-  strip_tac >> drule outcomes_free_abi_decode >> strip_tac >>
+  strip_tac >> mp_tac outcomes_free_abi_decode >>
+  impl_tac >- simp[DISJ_IMP_THM] >> strip_tac >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   Induct >> simp[compile_decode_args_def, every_state_insts_return] >>
   qx_gen_tac `arg` >> PairCases_on `arg` >> rpt gen_tac >> strip_tac >>
@@ -144,7 +145,7 @@ Proof
   strip_tac >> drule outcomes_free_decode_args >> strip_tac >>
   `P ALLOCA` by fs[] >>
   Induct >- simp[compile_register_constructor_args_def, every_state_insts_return] >>
-  gen_tac >> PairCases_on `h` >> rpt strip_tac >>
+  qx_gen_tac `arg` >> PairCases_on `arg` >> rpt strip_tac >>
   qmatch_goalsub_rename_tac `compile_register_constructor_args _ ((nm,_)::_)` >>
   Cases_on `FLOOKUP ce.ce_vars nm` >>
   simp[compile_register_constructor_args_def] >>

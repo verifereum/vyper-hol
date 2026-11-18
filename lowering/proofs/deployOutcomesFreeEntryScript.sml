@@ -48,18 +48,16 @@ Theorem compile_generate_deploy_prefix_opcodes:
       (state_insts (SND (compile_generate_deploy has rt imm args sz [] env ss
         pay nr key trans s)))
 Proof
-  strip_tac >> Cases_on `has`
-  >- (PURE_REWRITE_TAC [compile_generate_deploy_def, COND_CLAUSES,
-        compile_internal_fn_bodies_def, comp_ignore_bind_return_unit, LET_THM,
-        pairTheory.ELIM_UNCURRY] >> BETA_TAC >>
-      rpt strip_tac >> irule outcomes_free_constructor_prefix >> simp[]) >>
-  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_generate_deploy_def, compile_simple_deploy_def] >>
-  rpt (FIRST [ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_void, opcode_every_emit_inst,
-      every_state_insts_return,
-      ctorCallFreeValuesTheory.outcomes_free_alloc_buffer])])
+  strip_tac >> Cases_on `has` >>
+  PURE_REWRITE_TAC [compile_generate_deploy_def, COND_CLAUSES,
+    compile_internal_fn_bodies_def, comp_ignore_bind_return_unit, LET_THM,
+    pairTheory.ELIM_UNCURRY] >> BETA_TAC >> rpt strip_tac
+  >- (irule outcomes_free_constructor_prefix >> simp[]) >>
+  `compile_simple_deploy rt imm =
+     compile_constructor_epilogue (rt + imm) 0 (Lit 0w)` by
+    simp[compile_simple_deploy_def, compile_constructor_epilogue_def] >>
+  pop_assum SUBST1_TAC >> irule outcomes_free_constructor_epilogue >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
 Theorem compile_generate_deploy_prefix_split:
@@ -185,7 +183,7 @@ Proof
   qpat_x_assum `lower_vyper_deploy_unit _ _ _ = _` mp_tac >>
   simp[lower_vyper_deploy_unit_def] >> pairarg_tac >> simp[] >>
   pairarg_tac >> simp[] >> strip_tac >>
-  Cases_on `ctor_fn` >> gvs[]
+  rename1 `classify_functions tops = (_,_,_,cf)` >> Cases_on `cf` >> gvs[]
   >- (gvs[set_constructor_package_target_def] >>
       irule (SRULE [] run_deploy_lowering_entry_excludes_outcomes) >>
       goal_assum (drule_at Any) >>

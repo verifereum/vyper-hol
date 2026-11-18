@@ -184,7 +184,7 @@ Proof
          rpt strip_tac >> first_assum irule >> metis_tac[])
   >>~- ([`compile_get_target_ptr _ _ _ _ (* sg *)`],
          rpt strip_tac >> first_assum irule >> metis_tac[]) >>
-  Cases_on `dst_loc_opt` >> simp[opcode_every_emit_void, (c7 [outcomes_free_alloc_buffer, outcomes_free_store_memory, outcomes_free_typed_copy, outcomes_free_copy_memory, outcomes_free_store_slots_mutual, outcomes_free_imm_store, outcomes_free_store_immutable_bytestring, outcomes_free_imm_store_words] outcomes_free_compile_assign_value)]
+  BasicProvers.TOP_CASE_TAC >> simp[opcode_every_emit_void, (c7 [outcomes_free_alloc_buffer, outcomes_free_store_memory, outcomes_free_typed_copy, outcomes_free_copy_memory, outcomes_free_store_slots_mutual, outcomes_free_imm_store, outcomes_free_store_immutable_bytestring, outcomes_free_imm_store_words] outcomes_free_compile_assign_value)]
 QED
 
 Theorem opcode_every_stmt_assign_base:

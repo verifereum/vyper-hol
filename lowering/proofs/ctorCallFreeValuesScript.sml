@@ -180,7 +180,7 @@ Theorem outcomes_free_unwrap_value:
 Proof
   strip_tac >> Cases_on `vv` >> simp[unwrap_value_def, every_state_insts_return] >>
   IF_CASES_TAC >- simp[outcomes_free_ptr_load] >>
-  Cases_on `p.ptr_location` >>
+  BasicProvers.TOP_CASE_TAC >>
   simp[every_state_insts_return, outcomes_free_ensure_memory]
 QED
 

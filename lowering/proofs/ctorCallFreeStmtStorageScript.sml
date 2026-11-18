@@ -230,8 +230,7 @@ Proof
               irule ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
               gen_tac, disch_tac]) >>
   rpt IF_CASES_TAC >> simp[every_state_insts_return, opcode_every_emit_op,
-      opcode_every_emit_void, opcode_every_emit_inst] >>
-  PairCases_on `x` >> simp[]
+      opcode_every_emit_void, opcode_every_emit_inst]
 QED
 
 Theorem outcomes_free_store_slots_mutual:

@@ -42,8 +42,7 @@ QED
 
 Theorem outcomes_free_lower_abi_decode:
   (!opc. MEM opc [ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
-     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES;
-     ALLOCA; JMP; JNZ] ==> P opc) /\
+     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; ALLOCA; JMP; JNZ] ==> P opc) /\
   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (lower_abi_decode src info lo hi sz s)))
@@ -74,7 +73,8 @@ Theorem outcomes_free_store_abi_tuple:
 Proof
   Induct_on `args` >> rpt strip_tac >>
   simp[compile_store_abi_tuple_def, every_state_insts_return] >>
-  PairCases_on `h` >> simp[compile_store_abi_tuple_def] >>
+  rename1 `compile_store_abi_tuple _ _ _ (arg::_)` >> PairCases_on `arg` >>
+  simp[compile_store_abi_tuple_def] >>
   rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
       opcode_every_emit_inst, outcomes_free_copy_memory]),
     gen_tac, strip_tac, irule every_state_insts_bind, irule every_state_insts_ignore_bind,

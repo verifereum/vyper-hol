@@ -196,7 +196,7 @@ Proof
   simp[compile_clamp_basetype_def, every_state_insts_return] >>
   rpt (FIRST [CHANGED_TAC (simp[compile_clamp_basetype_def,
     every_state_insts_return, outcomes_free_clamp, DISJ_IMP_THM, FORALL_AND_THM]),
-    CHANGED_TAC opcode_preserve_tac, Cases_on `b`])
+    CHANGED_TAC opcode_preserve_tac, rename1 `BytesT bd` >> Cases_on `bd`])
 QED
 
 Theorem outcomes_free_compile_select:

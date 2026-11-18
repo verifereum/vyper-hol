@@ -39,8 +39,8 @@ Theorem outcomes_free_compile_list_membership_in:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_list_membership_in needle elems s)))
 Proof
   strip_tac >> simp[compile_list_membership_in_def] >> irule every_state_insts_bind >>
-  simp[outcomes_free_emit_membership_eqs] >> rpt strip_tac >>
-  Cases_on `x` >> simp[every_state_insts_return, outcomes_free_fold_membership_or]
+  simp[outcomes_free_emit_membership_eqs] >> Cases >> rpt strip_tac >>
+  simp[every_state_insts_return, outcomes_free_fold_membership_or]
 QED
 
 Theorem outcomes_free_compile_list_membership_notin:
@@ -48,8 +48,8 @@ Theorem outcomes_free_compile_list_membership_notin:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_list_membership_notin needle elems s)))
 Proof
   strip_tac >> simp[compile_list_membership_notin_def] >> irule every_state_insts_bind >>
-  simp[outcomes_free_emit_membership_eqs] >> rpt strip_tac >>
-  Cases_on `x` >> simp[every_state_insts_return] >> irule every_state_insts_bind >>
+  simp[outcomes_free_emit_membership_eqs] >> Cases >> rpt strip_tac >>
+  simp[every_state_insts_return] >> irule every_state_insts_bind >>
   simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
       outcomes_free_fold_membership_and]
 QED

@@ -61,7 +61,8 @@ Proof
 QED
 
 Theorem outcomes_free_abi_copy[local]:
-  P CALLDATACOPY /\ P DLOADBYTES /\ P MCOPY /\
+  (opc = CALLDATALOAD ==> P CALLDATACOPY) /\ (opc = DLOAD ==> P DLOADBYTES) /\
+  P MCOPY /\
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode) (state_insts (SND
     ((case opc of CALLDATALOAD => emit_void CALLDATACOPY ops
@@ -73,21 +74,23 @@ QED
 
 Theorem outcomes_free_abi_decode:
   (!opc. MEM opc [ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
-     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES;
-     ALLOCA; JMP; JNZ] ==> P opc) ==>
+     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; ALLOCA; JMP; JNZ] ==> P opc) ==>
   (
   (!dst src opc base_op hi_op info.
-    P opc ==> !st.
+    P opc /\ (opc = CALLDATALOAD ==> P CALLDATACOPY) /\
+    (opc = DLOAD ==> P DLOADBYTES) ==> !st.
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_abi_decode_to_buf dst src opc base_op hi_op info st)))) /\
   (!dst src opc base_op hi_op elems ao vo.
-    P opc ==> !st.
+    P opc /\ (opc = CALLDATALOAD ==> P CALLDATACOPY) /\
+    (opc = DLOAD ==> P DLOADBYTES) ==> !st.
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_abi_decode_complex_elems dst src opc base_op hi_op elems ao vo st)))) /\
   (!dst src opc base_op hi_op info asz msz ip cnt.
-    P opc ==> !st.
+    P opc /\ (opc = CALLDATALOAD ==> P CALLDATACOPY) /\
+    (opc = DLOAD ==> P DLOADBYTES) ==> !st.
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_abi_decode_dyn_loop dst src opc base_op hi_op info asz msz ip cnt st))))
@@ -163,8 +166,8 @@ Theorem opcode_every_abi_decode_opcode:
       (state_insts (SND (compile_abi_decode_dyn_loop dst src opc base_op hi_op info asz msz ip cnt st))))
   )
 Proof
-  strip_tac >> match_mp_tac outcomes_free_abi_decode >>
-  simp[DISJ_IMP_THM, FORALL_AND_THM]
+  strip_tac >> mp_tac outcomes_free_abi_decode >>
+  impl_tac >- simp[DISJ_IMP_THM] >> simp[]
 QED
 
 Theorem opcode_every_abi_decode_memory:

@@ -6,6 +6,29 @@ Ancestors
   ctorCallFreeCallbacks supportedExprTraverse e2eDeployDefs
   abiBuiltinDispatchCorrect exprBopLowering builtinAbi
 
+Theorem type_builtin_member_callback[local]:
+  (!e ety st. expr_size e < list_size expr_size args /\
+      ~supported_expr_exists R e /\
+      ~supported_expr_exists expr_shape_root e ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (cfn cenv ety e st)))) /\
+  ~supported_exprs_exists R args /\
+  ~supported_exprs_exists expr_shape_root args ==>
+  !e ety st. MEM e args ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (cfn cenv ety e st)))
+Proof
+  rpt strip_tac >> first_x_assum irule >>
+  metis_tac[expr_list_member_bound, supported_exprs_exists_every, EXISTS_MEM]
+QED
+
+val member_callback_tac =
+  drule_then (drule_then (drule_then
+    (assume_tac o PURE_REWRITE_RULE [GSYM AND_IMP_INTRO])))
+  type_builtin_member_callback;
+
 local
   val finish_ptr =
     qmatch_goalsub_abbrev_tac `as_ptr_val vv_ty LocMemory action` >>
@@ -159,12 +182,7 @@ Theorem outcomes_free_type_builtin_dispatch_body:
 Proof
   strip_tac >>
   strip_tac >> rpt gen_tac >> strip_tac >>
-  `!e ety st. MEM e args ==>
-    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (cfn cenv ety e st)))` by
-    (rpt strip_tac >> first_x_assum irule >>
-     metis_tac[expr_list_member_bound, supported_exprs_exists_every, EXISTS_MEM]) >>
+  member_callback_tac >>
   `!e ety. MEM e args ==> !st.
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
@@ -253,11 +271,7 @@ Theorem opcode_every_type_builtin_dispatch_body:
 Proof
   strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `P MSTORE` by simp[] >>
-  `!e ety st. MEM e args ==>
-    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (cfn cenv ety e st)))` by
-    (rpt strip_tac >> first_x_assum irule >>
-     metis_tac[expr_list_member_bound, supported_exprs_exists_every, EXISTS_MEM]) >>
+  member_callback_tac >>
   rpt strip_tac >> irule outcomes_free_type_builtin_dispatch_body >>
   simp[UNDISCH opcode_every_abi_encode_args] >> qexists_tac `R` >> simp[]
 QED
