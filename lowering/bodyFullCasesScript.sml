@@ -15,6 +15,11 @@ Ancestors
   bodyFullStructLit bodyFullPop
   bodyFullRawCallCalldata
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
+  bodyFullBuiltinEnv
+  bodyFullMakeArray
+  bodyFullBuiltinConcat bodyFullBuiltinSlice bodyFullBuiltinCalldataSlice
+  bodyFullBuiltinUint2Str
+  bodyFullBuiltinECRecover bodyFullBuiltinECArithCompose
   bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps exprSimAggregateLayout loweringPosts bodyExprPreFacts supportedStmts
@@ -40,7 +45,7 @@ Proof
        flag_member_expr_full_ok, literal_expr_full_ok]
 QED
 
-(* Admitted: the joint twin of body_annassign_case_ptr_at (bodyPtrAssignCases). *)
+(* Joint annotated declaration, split by the source and destination layouts. *)
 Theorem body_annassign_case_full:
   !cx id typ e.
     (!tenv s'' tyv t.
@@ -240,7 +245,7 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.break_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of bodyPtrEnvBuiltins's env_builtin_expr_ptr_ok, without Env MsgGas. *)
+(* Joint environment builtins, excluding Env MsgGas. *)
 Theorem env_builtin_expr_full_ok:
   !cx ty bt es.
     (bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i /\ i <> MsgGas) \/
@@ -255,7 +260,11 @@ Theorem env_builtin_expr_full_ok:
        body_expr_full_ok cx (HD es)) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule env_builtin_sim_full >>
+      gvs[type_check_def, assert_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
 (* Admitted: the joint twin of bodyPtrBopIn's bop_in_expr_ptr_ok. *)
@@ -334,14 +343,18 @@ Proof
   metis_tac[eval_expr_builtin_value]
 QED
 
-(* Admitted: the joint twin of bodyPtrMakeArray's make_array_expr_ptr_ok. *)
+(* Joint MakeArray execution and result ownership. *)
 Theorem make_array_expr_full_ok:
   !cx ty bt es.
     (?t n. bt = MakeArray t n) /\
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule make_array_builtin_sim_full >>
+      metis_tac[]) >>
+  simp[]
 QED
 
 (* Admitted: the joint twin of bodyPtrWordBuiltins's word_builtin_expr_ptr_ok. *)
@@ -370,7 +383,7 @@ Proof
   ACCEPT_TAC bodyFullHashTheory.hash_expr_full_ok
 QED
 
-(* Admitted: the joint twin of bodyPtrBytestringBuiltins's bytestring_builtin_expr_ptr_ok. *)
+(* Joint bytestring suppliers, including Slice's code-source child order. *)
 Theorem bytestring_builtin_expr_full_ok:
   !cx ty bt es.
     ((?n. bt = CalldataSlice n) \/ (?n. bt = Concat n) \/ (?n. bt = Slice n) \/
@@ -384,17 +397,33 @@ Theorem bytestring_builtin_expr_full_ok:
             body_exprs_full_ok cx [addr])) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `(?n. bt = CalldataSlice n) \/ _` mp_tac >> strip_tac
+      >- (gvs[code_slice_source_def] >>
+          metis_tac[calldata_slice_expr_sim_full, calldata_slice_vv_sim_full])
+      >- (gvs[code_slice_source_def] >> irule concat_sim_full >> metis_tac[])
+      >- (gvs[] >> irule slice_builtin_sim_full >> metis_tac[]) >>
+      gvs[code_slice_source_def] >> irule uint2str_builtin_sim_full >>
+      metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
-(* Admitted: the joint twin of bodyPtrPrecompileBuiltins's precompile_builtin_expr_ptr_ok. *)
+(* Joint precompile execution, including aggregate result ownership. *)
 Theorem precompile_builtin_expr_full_ok:
   !cx ty bt es.
     (bt = ECRecover \/ bt = ECAdd \/ bt = ECMul) /\
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `bt = ECRecover` >> gvs[]
+      >- (irule ecrecover_builtin_sim_full >> metis_tac[]) >>
+      irule ec_arith_builtin_sim_full >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
 (* msg.gas, by msgGasFull's joint fragment: typing fixes the
