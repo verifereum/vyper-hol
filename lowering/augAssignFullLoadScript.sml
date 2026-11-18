@@ -105,7 +105,9 @@ Theorem augassign_load_joint:
       u.vs_alloca_next = s.vs_alloca_next /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
       ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sc.cs_current_insts
+      u.vs_inst_idx = LENGTH sc.cs_current_insts /\
+      state_frame u = state_frame (s with vs_inst_idx := u.vs_inst_idx) /\
+      (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `?H. valid_horizon cx st0 H st.storage_trace`
@@ -155,7 +157,7 @@ Resume augassign_load_joint[memory]:
   qpat_x_assum `!H. valid_horizon _ _ _ _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
     drule >> strip_tac >>
   `MLOAD <> ALLOCA` by simp[] >>
-  drule_all augassign_load_rhs_frame >> strip_tac >> simp[]
+  drule_all augassign_load_rhs_frame >> strip_tac >> gvs[]
 QED
 
 Resume augassign_load_joint[storage]:
