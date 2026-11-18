@@ -93,9 +93,10 @@ Proof
 QED
 
 Theorem intcall_exempt_lock_success[local]:
-  !cx name mut nr ss st gs ee.
+  !cx name mut nr ss st gs ee tops err.
+    unspecified_behaviour_exempt tops err /\
     intcall_callee_src cx name mut nr ss (st with gas_obs := gs) =
-      (INR (Error (RuntimeError "abi_decode invalid")),ee) ==>
+      (INR (Error err),ee) ==>
     ?locked. !tail. lock_if_nr cx nr (is_view_mut mut)
       (st with gas_obs := tail) = (INL (),locked with gas_obs := tail)
 Proof
@@ -114,7 +115,8 @@ Proof
   rpt IF_CASES_TAC >> simp[raise_def, return_def, bind_def] >>
   strip_tac >> simp[update_transient_def, assert_def, bind_def,
                     return_def, raise_def, check_def] >>
-  gvs[check_def, assert_def, bind_def, return_def, raise_def]
+  gvs[check_def, assert_def, bind_def, return_def, raise_def,
+      e2eDefsTheory.unspecified_behaviour_exempt_def]
 QED
 
 Theorem intcall_rest_locked[local]:
@@ -344,11 +346,10 @@ Theorem intcall_exempt_rest[local]:
 Proof
   rpt strip_tac >>
   drule gas_exempt_cert_execution >> strip_tac >>
-  `err = RuntimeError "abi_decode invalid"` by
-    gvs[e2eDefsTheory.unspecified_behaviour_exempt_def] >>
   `?locked. !gs. lock_if_nr cx nr (is_view_mut mut)
        (es with gas_obs := gs) = (INL (),locked with gas_obs := gs)` by
     (irule intcall_exempt_lock_success >>
+     first_assum (irule_at Any) >>
      first_x_assum (qspec_then `[]` mp_tac) >>
      simp[ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
      metis_tac[]) >>
@@ -462,7 +463,7 @@ QED
 Theorem intcall_return_noncompleted:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
-   rr prev penv rtv es1 t G tn rc rbs pvs callee entered bb inst lbl arg_ops argv dflts.
+   rr prev penv rtv es1 t G tn rc rbs pvs callee entered bb inst lbl arg_ops argv dflts Q.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
@@ -503,27 +504,7 @@ Theorem intcall_return_noncompleted:
     (fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func ==>
      gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (cx_tops cx) cx st0 (intcall_rest cx name mut nr ss prev rtv) (es1,t,G,tn)
-       (\H res ee G tn t'. ?tv. res = INL tv /\
-         vv_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
-           es0 sa sm s0 ee tv vv t' /\
-         vv_store_bound cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
-           (lowered_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) ee tv vv t' /\
-         t'.vs_current_bb = sm.cs_current_bb /\ t'.vs_inst_idx = LENGTH sm.cs_current_insts /\
-         alloca_history func t' /\
-        (ctx_has_dalloca ctx ==> allocas_below_fmp t') /\ s0.vs_alloca_next <= t'.vs_alloca_next /\
-         ghost_inv_at (DF H) lo d cenv cx ee G tn t' /\
-         ptr_vv_ok cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) tv vv ee G tn t' /\
-         (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-          ?val. read_result cx tv ee = (INL val,ee) /\
-            !rt w. evaluate_type (get_tenv cx) (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) = SOME rt /\
-              eval_operand (vv_operand vv) t' = SOME w ==>
-              w2n w + type_memory_size rt <= lo /\
-              (!mem. mem_agree_outside tn.t_mem t'.vs_memory mem ==> val_in_memory rt val (w2n w) mem)) /\
-         (!ty' op. vv = StackValue ty' op /\ ~is_word_type (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) ==>
-            ptr_buf_ok cenv (Call ann (IntCall (NONE,name)) es dflt) op G t') /\
-         (!ty' p. vv = LocatedValue ty' p /\ p.ptr_location = LocMemory ==>
-            ptr_buf_ok cenv (Call ann (IntCall (NONE,name)) es dflt) p.ptr_operand G t') /\
-         ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn)
+       Q
        (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))
 Proof
