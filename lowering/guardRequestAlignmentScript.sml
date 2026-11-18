@@ -83,10 +83,10 @@ Theorem source_compiled_request_alignment:
    ?a. run_context fuel unit.cu_context vs = Abort a ss) /\
   EVERY (\p. ~computed_precompile (FST p)) (call_trace es) /\
   k < LENGTH vs.vs_outcomes /\
-  request_agree H (initial_evaluation_context am.sources am.layouts tx NONE)
+  request_agree H tx.target
     rq (EL k ss.vs_requests) ==>
   MEM (EL k (call_requests es), EL k vs.vs_outcomes) (call_trace es) /\
-  request_agree H (initial_evaluation_context am.sources am.layouts tx NONE)
+  request_agree H tx.target
     rq (EL k (call_requests es))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -111,6 +111,6 @@ Proof
     Q.INST [`am'` |-> `am`, `res` |-> `ARB`, `rqs` |-> `[]`,
             `tx` |-> `tx`, `r1` |-> `EL k ss.vs_requests`]) >>
   simp[external_call_dead_def, cx_dead_def, initial_evaluation_context_def] >>
-  qexistsl_tac [`am`, `k`, `ss`] >>
+  qexistsl_tac [`k`, `ss`] >>
   fs[cx_dead_def, initial_evaluation_context_def]
 QED
