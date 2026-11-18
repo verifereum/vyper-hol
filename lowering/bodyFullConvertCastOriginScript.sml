@@ -1,5 +1,6 @@
 Theory bodyFullConvertCastOrigin
 Ancestors
+  instSeqPtrUniform
   bodyFullAllocGeneric
   typeBuiltinPrereqs
   exprSimConvertBytes
@@ -104,12 +105,12 @@ Theorem cast_uniform_certificate[local]:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  strip_tac >> drule_all cast_compiled_certificate >>
-  disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
-  qexistsl [`H`,`th`] >> simp[] >> gen_tac >>
+  strip_tac >> ho_match_mp_tac (SRULE []
+    (Q.INST [`entry` |-> `\q:num. s`] (SPEC_ALL inst_seq_ptr_uniformize))) >>
+  gen_tac >>
   drule_all cast_compiled_certificate >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  metis_tac[inst_seq_ptr_ghost_unique]
+  qexistsl [`H`,`th`] >> simp[]
 QED
 
 Theorem convert_cast_origin_path:
