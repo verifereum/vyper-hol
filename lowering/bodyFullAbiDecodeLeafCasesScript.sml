@@ -3,7 +3,7 @@ Ancestors
   bodyFullGhostFrame bodyFullUnwrapRun assignTuplePtrLoadStep
   stateFrame compileEnv loweringStateRelDefs stateRelProj bodyFullAbiDecodeAge
   abiDecoderWordTyped exprSimAbiDecodeChildBounds externalEntryShape
-  entryDecoderHistoryFrame abiDecodeClampShape
+  entryDecoderHistoryFrame calldataClampPtr
   allocaHistory freshWrites abiDecodePtrMemberFrame ptrDiscipline exprSimCopy bodyPtrDefs
   bodyFullAbiDecodeOutputOwnership bodyFullAbiDecodeCopyFrame
   bodyFullAbiDecodeDecoderFrame bodyFullAbiDecodeMotiveProbe
