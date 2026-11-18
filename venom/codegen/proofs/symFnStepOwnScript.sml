@@ -1,7 +1,7 @@
 (* Relocated function-level composition of the symbolic prefixes and body. *)
 Theory symFnStepOwn
 Ancestors
-  symFnPrefixOwn symFrameBoundaryOwn symBlockBodyResultOwn symBlockBody symFnSimSpec codegenSymRel
+  symFnPrefixOwn symFrameBoundaryOwn symBlockBodyBranchOwn symBlockBody symFnSimSpec codegenSymRel
   codegenSymOwnRel fnEntryStep fnEntryPlan fnBlockStep fnBlockStepHelpers
   fnBlockBody fnBlockBodySteps fnSimSpec asmSymBridge asmSymSem frameRel
   contextCodegenRel codegenRel venomExecSemantics venomState planExec
@@ -224,7 +224,7 @@ Theorem sym_phi_error_body_result_own:
       as ss (run_blocks (SUC fuel) ctx fn vs)
 Proof
   rpt gen_tac >> strip_tac >> drule_all sym_phi_error_run_blocks >>
-  simp[sym_body_result_error_own]
+  simp[symBlockBodyResultOwnTheory.sym_body_result_error_own]
 QED
 
 (* Package the same returned state for either symbolic postcondition. *)
@@ -512,8 +512,8 @@ Resume sym_fn_entry_block_step_own[entry_body]:
     (qpat_assum `sym_frame_inv_own _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [sym_frame_inv_own_def, asm_sym_rel_own_def]) >>
      fs[fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def]) >>
-  drule_all sym_block_body_frame_sim_own >> strip_tac >>
-  drule_all sym_body_result_prefix_own >> strip_tac >>
+  drule_all symBlockBodyResultOwnTheory.sym_block_body_frame_sim_own >> strip_tac >>
+  drule_all symBlockBodyResultOwnTheory.sym_body_result_prefix_own >> strip_tac >>
   `run_blocks (SUC fuel) unit.cu_context fn vs =
    block_rest fuel unit.cu_context fn (HD fn.fn_blocks) vs_p` by
     (irule entry_step_run_rest >> metis_tac[exec_block_def]) >>
@@ -560,8 +560,8 @@ Resume sym_fn_block_frame_step_own[frame_body]:
     (qpat_assum `sym_frame_inv_own _ _ _ _ _ _ _ _ _ _ ps1 _ _`
        (strip_assume_tac o REWRITE_RULE [sym_frame_inv_own_def, asm_sym_rel_own_def]) >>
      fs[fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def]) >>
-  drule_all sym_block_body_frame_sim_own >> strip_tac >>
-  drule_all sym_body_result_prefix_own >> strip_tac >>
+  drule_all symBlockBodyResultOwnTheory.sym_block_body_frame_sim_own >> strip_tac >>
+  drule_all symBlockBodyResultOwnTheory.sym_body_result_prefix_own >> strip_tac >>
   drule_all sym_nonentry_run_rest_kernel >>
   disch_then (fn th => rewrite_tac[th]) >> fs[sym_body_result_own_def]
 QED
