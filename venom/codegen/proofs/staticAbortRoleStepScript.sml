@@ -109,15 +109,9 @@ QED
 
 Theorem role_shape_transfer[local]:
   !src fresh bnew (x:num#num) t.
-  let lo = SND(compute_label_offsets p); otp = build_offset_to_pc p in
-  let geom = \i k l origin.
-    k < height i /\ origin < LENGTH p /\
-    (EL origin p = AsmPushLabel l \/
-     (?d. EL origin p = AsmPushOfst l d) \/ EL origin p = AsmDataLabel l) /\
-    ?off dest. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
-               FLOOKUP otp off = SOME dest
-  in
-  let shaped = \i (s:asm_state).
+  !lo. lo = SND(compute_label_offsets p) ==>
+  !otp. otp = build_offset_to_pc p ==>
+  !shaped. shaped = (\i (s:asm_state).
     s.as_pc = pc i /\ LENGTH s.as_stack = height i /\
     s.as_call_ctx = cc /\ s.as_requests = req /\
     (need i ==> s.as_call_ctx.cc_static) /\
@@ -128,13 +122,17 @@ Theorem role_shape_transfer[local]:
        ?off dest. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
                   FLOOKUP otp off = SOME dest /\ EL k s.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-      (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w))
-  in
+      (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w))) ==>
   shaped x t /\
   u.as_pc = pc y /\ LENGTH u.as_stack = height y /\
   u.as_call_ctx = t.as_call_ctx /\ u.as_requests = t.as_requests /\
   (need y ==> cc.cc_static) /\
-  (!k l origin. tag y k = SOME(l,origin) ==> geom y k l origin) /\
+  (!k l origin. tag y k = SOME(l,origin) ==>
+    k < height y /\ origin < LENGTH p /\
+    (EL origin p = AsmPushLabel l \/
+     (?d. EL origin p = AsmPushOfst l d) \/ EL origin p = AsmDataLabel l) /\
+    ?off dest. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
+               FLOOKUP otp off = SOME dest) /\
   (!k a. k < height y /\ src k = SOME a /\ a < height x ==>
      EL k u.as_stack = EL a t.as_stack) /\
   (!k l origin. fresh k = SOME(l,origin) ==>
@@ -147,6 +145,7 @@ Theorem role_shape_transfer[local]:
      (bnew k \/ ?a. src k = SOME a /\ a < height x /\ boolean x a)) ==>
   shaped y u
 Proof
+  CONV_TAC (REDEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2 ORELSEC BETA_CONV)) >>
   simp[] >> rpt gen_tac >> strip_tac >>
   `(!k l origin. tag y k = SOME(l,origin) ==>
       ?off. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
@@ -184,8 +183,9 @@ Proof
 QED
 
 Theorem pending_role_step:
-  let lo = SND(compute_label_offsets p); otp = build_offset_to_pc p in
-  let S = \(i:num#num) (s:asm_state).
+  !lo. lo = SND(compute_label_offsets p) ==>
+  !otp. otp = build_offset_to_pc p ==>
+  !S. S = (\(i:num#num) (s:asm_state).
     s.as_pc = pc i /\ LENGTH s.as_stack = height i /\
     s.as_call_ctx = cc /\ s.as_requests = req /\
     (need i ==> s.as_call_ctx.cc_static) /\
@@ -196,55 +196,53 @@ Theorem pending_role_step:
        ?off dest. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
                   FLOOKUP otp off = SOME dest /\ EL k s.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-      (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w))
-  in
-  let ins = EL (pc x) p; hi = height x in
-  let target = \y. ?l origin off. tag x 0 = SOME(l,origin) /\
-        FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
-        FLOOKUP otp off = SOME(pc y) in
-  let fall = ?y. edge x y /\ pc y = pc x+1 in
-  let taken = ?y. edge x y /\ target y in
-  let flow = \y.
-    let hj = height y in
-    let inherit = \src fresh bnew.
-      (!k l origin. tag y k = SOME(l,origin) ==>
-        k < hj /\ (fresh k = SOME(l,origin) \/
-           ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
-      (!k. boolean y k ==> k < hj /\
-        (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-    in
-    case ins of
-      AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
-    | AsmPush bs => hj = hi+1 /\
-        inherit (\k. if k=0 then NONE else SOME(k-1)) (\k. NONE)
-          (\k. k=0 /\ !s u. asm_step lo otp (AsmPush bs) s = AsmOK u ==>
-                   (EL 0 u.as_stack = 0w \/ EL 0 u.as_stack = 1w))
-    | AsmPushLabel l => hj = hi+1 /\
-        inherit (\k. if k=0 then NONE else SOME(k-1))
-                (\k. if k=0 then SOME(l,pc x) else NONE) (\k. F)
-    | AsmPushOfst l d => hj = hi+1 /\
-        inherit (\k. if k=0 then NONE else SOME(k-1))
-                (\k. if k=0 /\ d=0 then SOME(l,pc x) else NONE) (\k. F)
-    | AsmOp name =>
-        (case ALOOKUP dup_table name of
-           SOME n => n < hi /\ hj = hi+1 /\
-             inherit (\k. SOME(if k=0 then n else k-1)) (\k. NONE) (\k. F)
-         | NONE => case ALOOKUP swap_table name of
-             SOME n => 0 < n /\ n < hi /\ hj = hi /\
-               inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
-                       (\k. NONE) (\k. F)
-           | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
-               a <= hi /\ hj = m+(hi-a) /\
-               ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
-               inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
-                 (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
-                   !s u. LENGTH s.as_stack=hi /\ asm_step lo otp ins s=AsmOK u ==>
-                         (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F
-  in
+      (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w))) ==>
+  !ins. ins = EL (pc x) p ==>
+  !hi. hi = height x ==>
+  !fall. fall = (?y. edge x y /\ pc y = pc x+1) ==>
+  !taken. taken = (?y. edge x y /\
+    ?l origin off. tag x 0 = SOME(l,origin) /\
+      FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
+      FLOOKUP otp off = SOME(pc y)) ==>
   pc x < LENGTH p /\ S x t /\
-  (!y. edge x y ==> flow y /\ (need y ==> cc.cc_static) /\
+  (!y. edge x y ==>
+    (!hj. hj = height y ==>
+     !inherit. inherit = (\src fresh bnew.
+       (!k l origin. tag y k = SOME(l,origin) ==>
+         k < hj /\ (fresh k = SOME(l,origin) \/
+            ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
+       (!k. boolean y k ==> k < hj /\
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
+     case ins of
+       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
+     | AsmPush bs => hj = hi+1 /\
+         inherit (\k. if k=0 then NONE else SOME(k-1)) (\k. NONE)
+           (\k. k=0 /\ !s u. asm_step lo otp (AsmPush bs) s = AsmOK u ==>
+                    (EL 0 u.as_stack = 0w \/ EL 0 u.as_stack = 1w))
+     | AsmPushLabel l => hj = hi+1 /\
+         inherit (\k. if k=0 then NONE else SOME(k-1))
+                 (\k. if k=0 then SOME(l,pc x) else NONE) (\k. F)
+     | AsmPushOfst l d => hj = hi+1 /\
+         inherit (\k. if k=0 then NONE else SOME(k-1))
+                 (\k. if k=0 /\ d=0 then SOME(l,pc x) else NONE) (\k. F)
+     | AsmOp name =>
+         (case ALOOKUP dup_table name of
+            SOME n => n < hi /\ hj = hi+1 /\
+              inherit (\k. SOME(if k=0 then n else k-1)) (\k. NONE) (\k. F)
+          | NONE => case ALOOKUP swap_table name of
+              SOME n => 0 < n /\ n < hi /\ hj = hi /\
+                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
+                        (\k. NONE) (\k. F)
+            | NONE =>
+                !a. a = asm_op_arity name ==>
+                !m. m = hj + a - hi ==>
+                a <= hi /\ hj = m+(hi-a) /\
+                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
+                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
+                  (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
+                    !s u. LENGTH s.as_stack=hi /\ asm_step lo otp ins s=AsmOK u ==>
+                          (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
+     | _ => F) /\ (need y ==> cc.cc_static) /\
      (!k l origin. tag y k = SOME(l,origin) ==>
        k < height y /\ origin < LENGTH p /\
        (EL origin p = AsmPushLabel l \/
@@ -274,7 +272,7 @@ Theorem pending_role_step:
         asm_steps lo otp p 1 t = AsmFault u) /\ u.as_requests = req) \/
   (?y u. edge x y /\ asm_steps lo otp p 1 t = AsmOK u /\ S y u)
 Proof
-  CONV_TAC (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM, BETA_CONV])) >>
+  CONV_TAC (REDEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2 ORELSEC BETA_CONV)) >>
   strip_tac >>
   qpat_x_assum `!y. edge x y ==> _` (mk_asm "edges") >>
   `t.as_pc < LENGTH p` by (asm_rewrite_tac[]) >>
@@ -294,7 +292,7 @@ QED
    program, observation functions, destination occurrence and result. *)
 fun transfer_role src fresh bnew =
   match_mp_tac
-    (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM, BETA_CONV]))
+    (CONV_RULE (REDEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2 ORELSEC BETA_CONV))
       (Q.SPECL [src,fresh,bnew] role_shape_transfer)) >>
   qexistsl [`x`,`t`];
 
