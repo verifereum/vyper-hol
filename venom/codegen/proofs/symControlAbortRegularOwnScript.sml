@@ -87,7 +87,6 @@ Theorem regular_abort_prepared_step:
   venom_to_evm_name inst.inst_opcode = SOME name /\
   cs.as_stack = args ++ tail /\ cs.as_call_ctx = vs.vs_call_ctx /\
   cs.as_outcomes = vs.vs_outcomes /\
-  cs.as_outcomes = vs.vs_outcomes /\
   venom_asm_terminal_rel vs cs ==>
   LENGTH args = asm_op_arity name /\
   ((?out. asm_step lo o2pc (AsmOp name) cs = AsmRevert out) \/
@@ -183,6 +182,7 @@ Theorem sym_regular_abort_prepared_terminal_mode_conditional:
   eval_operands inst.inst_operands vs = SOME args /\
   venom_to_evm_name inst.inst_opcode = SOME name /\
   cs.as_stack = args ++ tail /\ cs.as_call_ctx = vs.vs_call_ctx /\
+  cs.as_outcomes = vs.vs_outcomes /\
   venom_asm_terminal_rel vs cs /\ ss.sym_stack = MAP Val args ++ suffix /\
   (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
   source_memory_reads_disjoint cp inst vs /\
