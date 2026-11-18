@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringNoCtor
 Ancestors
-  immSectionDead
+  immSectionDead vfmProg
   structFieldsProps accountsRelProps ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
   immutableDeployExecution ctorDeployDefs immSectionDead e2eEntry venomState vyperCompiler
@@ -2565,10 +2565,11 @@ Theorem no_ctor_source_observations:
   classify_functions tops = (exts,ints,fb,NONE) /\
   deploy_typing_ok tops am tx /\
   tx.function_name = "__init__" /\ tx.args = [] /\
-  value_transfer_ok tx am.accounts /\ am.pending_deletions = [] ==>
+  value_transfer_ok tx am.accounts ==>
   ?am'. load_contract NONE gobs am tx [(NONE,tops)] [] = INL (am',[]) /\
     ALOOKUP am'.sources tx.target = SOME [(NONE,tops)] /\
-    am'.accounts = accounts_after_transfer tx am.accounts /\
+    am'.accounts = process_deletions am.pending_deletions
+      (accounts_after_transfer tx am.accounts) /\
     am'.tStorage = am.tStorage /\ am'.logs = am.logs /\
     immutables_section_rel tops (account_immutables am' tx.target)
       (REPLICATE (imm_len tops) 0w)
@@ -2589,7 +2590,7 @@ Theorem no_ctor_entry_frame:
   gas_variant vs (deploy_entry_state prog cplan tops es) ==>
   vs.vs_accounts = accounts_after_transfer tx am.accounts /\
   vs.vs_transient = am.tStorage /\ vs.vs_logs = [] /\
-  vs.vs_pending_deletions = [] /\ vs.vs_requests = []
+  vs.vs_pending_deletions = am.pending_deletions /\ vs.vs_requests = []
 Proof
   strip_tac >>
   qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
@@ -2619,7 +2620,7 @@ Proof
   `tx.args = []` by
     (gvs[deploy_state_rel_def] >> drule_all no_ctor_args >> simp[]) >>
   `deploy_typing_ok tops am tx /\ tx.function_name = "__init__" /\
-    value_transfer_ok tx am.accounts /\ am.pending_deletions = [] /\ am.logs = []` by
+    value_transfer_ok tx am.accounts /\ am.logs = []` by
     gvs[deploy_source_ok_def, deploy_state_rel_def] >>
   drule no_ctor_source_observations >> simp[] >>
   disch_then (qspecl_then [`tx`, `[]`, `am`] mp_tac) >> simp[] >> strip_tac >>
@@ -2630,10 +2631,12 @@ Proof
        vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM,
        vfmStateTheory.account_state_component_equality] >>
   simp[no_ctor_gas_marks, deploy_venom_result_rel_def] >>
-  gvs[vfmExecutionTheory.process_deletions_def,
-      accountsRelPropsTheory.accounts_agree_refl,
+  gvs[accountsRelPropsTheory.accounts_agree_refl,
       accountsRelPropsTheory.transient_agree_refl,
-      e2eDefsTheory.logs_correspond_def]
+      e2eDefsTheory.logs_correspond_def] >>
+  Cases_on `MEM tx.target am.pending_deletions`
+  >- simp[process_deletions_update_mem, accounts_agree_refl] >>
+  simp[lookup_account_process_deletions_other, accounts_agree_refl]
 QED
 
 (* Without a constructor, load_contract runs the synthetic empty one, and the
