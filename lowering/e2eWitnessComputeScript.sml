@@ -7,6 +7,7 @@
  *)
 Theory e2eWitnessCompute
 Ancestors
+  vyperSmallStepCV
   compileVyper venomPipelineDriver asmOptimizer supportedProgram
   concretizeMemLocDefs codegenReadyCompute alist integer_word option
   e2eDefs sourceCallCount callTrace frameOutcome
@@ -62,7 +63,7 @@ QED
 Definition p23_deploy_tx_def:
   p23_deploy_tx = empty_call_txn with
     <| target := 2w; sender := 1w; function_name := "__init__";
-       code := p23_deploy_bc;
+       code := p23_deploy_bc; created_in_tx := T;
        block_number := 1; block_hashes := [0w] |>
 End
 
