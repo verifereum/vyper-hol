@@ -347,22 +347,31 @@ Resume annassign_other_typed_full_execution[success]:
       qexistsl_tac [`id`,`mid`,`type_memory_size stv`,`rest`,`sc`] >>
       qexistsl_tac [`vv_location vv`,`a`,`stv`,`expr_type e`,`sw`,`v`,`xs`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      TRY (simp[NoAsms]) >> TRY decide_tac >>
+      simp[NoAsms] >>
       TRY (qpat_assum `op = Var xs` (fn op_eq =>
         qpat_assum `!ty. type_memory_bytes cenv' ty = type_memory_bytes cenv ty` (fn decl =>
           qpat_assum `type_memory_bytes cenv typ = type_memory_size dtv` (fn size =>
             PURE_REWRITE_TAC [op_eq, Q.SPEC `typ` decl, size] >>
             first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [op_eq, Q.SPEC `typ` decl, size])))))
-      >> TRY (qpat_assum `w2n sw + type_memory_size stv <= w2n w`
-                (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
-              metis_tac[arithmeticTheory.ADD_COMM] >> NO_TAC)
+      >~ [`vv_location vv <> SOME LocMemory ==>
+             type_memory_size stv + w2n sw <= w2n w \/ _`]
+      >- (strip_tac >>
+          FIRST
+            [disj1_tac >>
+               qpat_assum `w2n sw + type_memory_size stv <= w2n w`
+                 (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM]),
+             disj2_tac >>
+               qpat_assum `w2n w + type_memory_size dtv <= w2n sw`
+                 (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM])])
       >> TRY (strip_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
       TRY (gen_tac >> disch_tac >>
            qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
              (qspec_then `H` mp_tac) >>
-           (impl_tac >- fs[Abbr `out`]) >>
+           (impl_tac >-
+             (qpat_assum `out = mid with scopes := _` (fn eq =>
+                qpat_assum `valid_horizon cx st0 H out.storage_trace`
+                  (ACCEPT_TAC o SIMP_RULE (srw_ss()) [eq])))) >>
            POP_ASSUM_LIST (K all_tac) >> simp[NoAsms,expr_post_def] >> NO_TAC) >>
-      TRY decide_tac >>
       TRY (strip_tac >> decide_tac) >>
       TRY (qpat_assum `lower_value compile_expr cenv' (expr_type e) e a = (op,b)`
             (mp_tac o MATCH_MP (cj 2 exprLoweringPropsTheory.compile_expr_grows)) >>
