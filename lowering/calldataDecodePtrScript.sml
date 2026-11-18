@@ -102,7 +102,7 @@ Theorem calldatacopy_safe_continuation:
   eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
   eval_operand n s = SOME nw /\ ptr_covers G tn p s (w2n nw) /\
   op_taint tn (Var p) = {} /\ op_taint tn src = {} /\ op_taint tn n = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   t = write_memory_with_expansion (w2n dw)
     (TAKE (w2n nw)
       (DROP (w2n sw) s.vs_call_ctx.cc_calldata ++ REPLICATE (w2n nw) 0w)) s /\
@@ -180,7 +180,7 @@ Theorem calldata_bytestring_overwrite_endpoint_core_uniform_origin_sequence:
   run_inst_seq (emitted_insts sa sb) s = OK actual /\ ptr_covers G tn p s C /\
   op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
@@ -379,7 +379,10 @@ Proof
           step_taint_other_output, Abbr `i0`, mk_inst_def]) >>
   `s1.vs_allocas = s.vs_allocas /\ s2.vs_allocas = s.vs_allocas /\
    s1.vs_fmp = s.vs_fmp /\ s2.vs_fmp = s.vs_fmp /\
-   s3.vs_fmp = s.vs_fmp` by
+   s3.vs_fmp = s.vs_fmp /\
+   s1.vs_initial_fmp = s.vs_initial_fmp /\
+   s2.vs_initial_fmp = s.vs_initial_fmp /\
+   s3.vs_initial_fmp = s.vs_initial_fmp` by
     (map_every (fn q => qpat_x_assum q mp_tac)
        [`step_inst_base i0 s = OK s1`,
         `step_inst_base i1 s1 = OK s2`,
@@ -389,6 +392,10 @@ Proof
      fs[step_inst_base_opcode_eqs] >>
      fs[exec_read1_def, exec_pure1_def, exec_pure2_def, AllCaseEqs()] >>
      gvs[update_var_def]) >>
+  `!k. (allocas_below_fmp (s1 with vs_inst_idx := k) <=> allocas_below_fmp s) /\
+       (allocas_below_fmp (s2 with vs_inst_idx := k) <=> allocas_below_fmp s) /\
+       (allocas_below_fmp (s3 with vs_inst_idx := k) <=> allocas_below_fmp s)` by
+    simp[allocas_below_fmp_def] >>
   `copied.vs_fmp = s3.vs_fmp` by
     simp[Abbr `copied`, write_memory_with_expansion_def,
          write_memory_def, expand_memory_def] >>
@@ -698,7 +705,7 @@ Theorem calldata_bytestring_overwrite_endpoint_core_uniform_origin:
   run_inst_seq (emitted_insts sa sb) s = OK actual /\ ptr_covers G tn p s C /\
   op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
@@ -738,7 +745,7 @@ Theorem calldata_bytestring_overwrite_endpoint_core_uniform_sequence_joint:
   run_inst_seq (emitted_insts sa sb) s = OK actual /\ ptr_covers G tn p s C /\
   op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
@@ -780,7 +787,7 @@ Theorem calldata_bytestring_overwrite_endpoint_core_uniform_joint:
   run_inst_seq (emitted_insts sa sb) s = OK actual /\ ptr_covers G tn p s C /\
   op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
@@ -821,7 +828,7 @@ Theorem calldata_bytestring_overwrite_endpoint_core_uniform:
   run_inst_seq (emitted_insts sa sb) s = OK actual /\ ptr_covers G tn p s C /\
   op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
@@ -858,7 +865,7 @@ Theorem calldata_bytestring_overwrite_prefix:
   run_inst_seq (emitted_insts sa sb) s = OK actual /\ ptr_covers G tn p s C /\
   op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G' tn'.
@@ -898,7 +905,7 @@ Theorem calldata_bytestring_decoder_prefix_framed_uniform:
   fresh_vars_wrt sa s /\ ptr_covers G tn p s C /\
   op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
@@ -963,7 +970,7 @@ Theorem calldata_bytestring_decoder_prefix_framed:
   fresh_vars_wrt sa s /\ ptr_covers G tn p s C /\
   op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
@@ -999,7 +1006,7 @@ Theorem calldata_bytestring_decoder_prefix:
   fresh_vars_wrt sa s /\ ptr_covers G tn p s C /\
   op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
