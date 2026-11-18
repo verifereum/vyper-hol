@@ -30,7 +30,7 @@ Proof
   metis_tac[ev_reachable_primitive_abort]
 QED
 
-Theorem dft_ctx_sim_gas_wave_static_abort:
+Theorem dft_ctx_replay_gas_wave_static_abort:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
@@ -40,16 +40,26 @@ Theorem dft_ctx_sim_gas_wave_static_abort:
   (vs'.vs_call_ctx.cc_static ==>
     !fn inst l. MEM fn C.ctx_functions /\ MEM inst (fn_insts fn) /\
       inst.inst_opcode = CODECOPY /\ MEM (Label l) inst.inst_operands ==>
-      l IN FDOM vs'.vs_labels) ==>
-  ?vs. gas_variant vs vs' /\ ctx_sim_fuel I D C C' vs vs' /\
-       (dead_wf D ==> ctx_abort_rq D C C' vs vs') /\
-       (o1_lowered_inv C vs ==>
-          o1_lowered_inv C' vs' \/
-          ((?eom. max_live_eom C' = SOME eom /\
-             mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
-                       lowered_mem_fact eom ctx fn inst s) C' vs') /\
-           !fuel. terminates (run_context fuel C vs) ==>
-                  ?u. run_context fuel C vs = Abort ExHalt_abort u))
+      l IN FDOM vs'.vs_labels) /\
+  (!fuel. gas_res_rel
+    (run_context fuel C (vs' with vs_gas_readings := rds))
+    (ev_context orc fuel C vs')) /\
+  (!fuel. gas_res_rel (run_context fuel C' vs') (ev_context orc fuel C' vs')) /\
+  (!p d fn inst t. ev_reachable orc vs' C p d fn inst t ==>
+     ?ws. raw_reachable (vs' with vs_gas_readings := rds) C fn inst
+              (t with vs_gas_readings := ws)) /\
+  (!fn inst t. raw_reachable vs' C' fn inst t ==>
+     ?p d. ev_reachable orc vs' C' p d fn inst
+              (t with vs_gas_readings := vs'.vs_gas_readings)) ==>
+  ctx_sim_fuel I D C C' (vs' with vs_gas_readings := rds) vs' /\
+  (dead_wf D ==> ctx_abort_rq D C C' (vs' with vs_gas_readings := rds) vs') /\
+  (o1_lowered_inv C (vs' with vs_gas_readings := rds) ==>
+     o1_lowered_inv C' vs' \/
+     ((?eom. max_live_eom C' = SOME eom /\
+        mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+                  lowered_mem_fact eom ctx fn inst s) C' vs') /\
+      !fuel. terminates (run_context fuel C (vs' with vs_gas_readings := rds)) ==>
+             ?u. run_context fuel C (vs' with vs_gas_readings := rds) = Abort ExHalt_abort u))
 Proof
   strip_tac >>
   `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
@@ -57,15 +67,6 @@ Proof
   drule dft_ctx_block_ids_distinct >> strip_tac >>
   drule_all o1_ctx_shape_wf_functions >> strip_tac >>
   drule_all dft_ctx_wf_functions >> strip_tac >>
-  mp_tac (Q.INST [`ctx:venom_context` |-> `C'`, `s:venom_state` |-> `vs'`]
-            gas_oracle_from_list) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  mp_tac (Q.INST [`ctx:venom_context` |-> `C`, `s:venom_state` |-> `vs'`]
-            gas_oracle_to_list) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  rename1 `run_context _ C (vs' with vs_gas_readings := rds)` >>
-  qexists_tac `vs' with vs_gas_readings := rds` >>
-  conj_tac >- simp[gas_variant_def, venom_state_component_equality] >>
   conj_tac
   >- (rw[ctx_sim_fuel_def] >>
       irule gas_dft_dead_result >>
@@ -140,4 +141,45 @@ Proof
   simp[gas_res_rel_def] >>
   Cases_on `run_context fuel C (vs' with vs_gas_readings := rds)` >>
   simp[gas_res_rel_def]
+QED
+
+Theorem dft_ctx_sim_gas_wave_static_abort:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
+  o1_ctx_shape C /\
+  ctx_labels_bound C vs'.vs_labels /\ o1_initial_state_ok vs' /\
+  vs'.vs_fmp = vs'.vs_initial_fmp /\ code_layout_valid vs' /\
+  (vs'.vs_call_ctx.cc_static ==>
+    !fn inst l. MEM fn C.ctx_functions /\ MEM inst (fn_insts fn) /\
+      inst.inst_opcode = CODECOPY /\ MEM (Label l) inst.inst_operands ==>
+      l IN FDOM vs'.vs_labels) ==>
+  ?vs. gas_variant vs vs' /\ ctx_sim_fuel I D C C' vs vs' /\
+       (dead_wf D ==> ctx_abort_rq D C C' vs vs') /\
+       (o1_lowered_inv C vs ==>
+          o1_lowered_inv C' vs' \/
+          ((?eom. max_live_eom C' = SOME eom /\
+             mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+                       lowered_mem_fact eom ctx fn inst s) C' vs') /\
+           !fuel. terminates (run_context fuel C vs) ==>
+                  ?u. run_context fuel C vs = Abort ExHalt_abort u))
+Proof
+  strip_tac >>
+  `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
+    metis_tac[dft_ctx_functions_map] >>
+  drule dft_ctx_block_ids_distinct >> strip_tac >>
+  drule_all o1_ctx_shape_wf_functions >> strip_tac >>
+  drule_all dft_ctx_wf_functions >> strip_tac >>
+  mp_tac (Q.INST [`ctx:venom_context` |-> `C'`, `s:venom_state` |-> `vs'`]
+            gas_oracle_from_list) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  mp_tac (Q.INST [`ctx:venom_context` |-> `C`, `s:venom_state` |-> `vs'`]
+            gas_oracle_to_list) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `run_context _ C (vs' with vs_gas_readings := rds)` >>
+  qexists_tac `vs' with vs_gas_readings := rds` >>
+  conj_tac >- simp[gas_variant_def, venom_state_component_equality] >>
+  irule dft_ctx_replay_gas_wave_static_abort >>
+  conj_tac >- (qexists_tac `orc` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
