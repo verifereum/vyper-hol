@@ -4,6 +4,7 @@ Ancestors
   codegen stackPlanGen unitTransformDefs o1PipelineCorrect
   unitMemInv staticAbortDefs contextRawReachable ptrDiscipline
   venomExecSemantics callTrace frameOutcome vfmExecution
+  guardRequestCutIdentity
 
 (* Match a witnessed request step to the corresponding non-precompile call
    in the EVM frame. The lowered witness lets the simulation stop at the
@@ -48,7 +49,17 @@ Theorem codegen_request_cut_outcome:
     s.vs_outcomes <> [] /\
     MEM (EL k (call_requests es), HD s.vs_outcomes) (call_trace es)
 Proof
-  (* ADMISSION: S7 request-cut simulation through nested INVOKEs.
+  rpt gen_tac >> strip_tac >>
+  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  gvs[]
+  >- (`opt_entry_state prog prog cplan es = entry_venom_state prog cplan es` by
+        metis_tac[opt_entry_state_identity] >>
+      pop_assum (fn th => fs[th]) >>
+      mp_tac (Q.INST [`fn` |-> `fn'`, `inst` |-> `inst'`, `fuel` |-> `fuel'`,
+        `final` |-> `es'`] codegen_request_cut_outcome_identity) >>
+      impl_tac >- (simp[] >> metis_tac[]) >>
+      strip_tac >> gvs[]) >>
+  (* ADMISSION: S7 request-cut simulation through the assembly optimizer.
      The backend lane owns its discharge. *)
   cheat
 QED
