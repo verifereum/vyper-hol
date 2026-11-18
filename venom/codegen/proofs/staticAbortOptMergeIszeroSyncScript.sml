@@ -17,8 +17,9 @@ Proof
 QED
 
 Theorem merge_iszero_synchronized_replay:
-  let b = LENGTH pre; m = LENGTH pat in
-  let r = splice_pc b m (LENGTH repl) in
+  !b. b = LENGTH pre ==>
+  !m. m = LENGTH pat ==>
+  !r. r = splice_pc b m (LENGTH repl) ==>
   p = pre ++ pat ++ tail /\ q = pre ++ repl ++ tail /\ 2 <= m /\
   (!i. b < i /\ i < b+m ==> ~asm_reachable_marker (EL i p)) /\
   (!i. b <= i /\ i+1 < b+m ==>
@@ -36,7 +37,7 @@ Theorem merge_iszero_synchronized_replay:
          ?j. sym_steps q env j (sym_init s) =
                SymOK (sym_with_pc (r ss.sym_base.as_pc) ss)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  CONV_TAC (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) >> strip_tac >>
   completeInduct_on `n` >> Cases_on `n`
   >- (simp[sym_steps_def, sym_init_def, splice_pc_def, sym_with_pc_def] >>
       rpt strip_tac >> qexists_tac `0` >>
