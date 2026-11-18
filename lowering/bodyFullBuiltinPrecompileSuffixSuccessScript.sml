@@ -34,7 +34,7 @@ Theorem precompile_suffix_success_full_family:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (lo <> 0 ==> !x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sm x) /\
-  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [gi;ci;ai] (DROP s.vs_inst_idx bb.bb_instructions) /\
   (func.fn_name,id) NOTIN explicit /\

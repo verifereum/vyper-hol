@@ -24,7 +24,7 @@ Theorem blockhash_full_suffix:
  0 <= i /\ i < 2 ** 256 /\
  eval_operand arg s = SOME (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i)) /\
  op_taint tn arg = {} /\ op_prov G arg = NONE /\
- (!p. arg = Var p ==> not_fresh_at sa p) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+ (!p. arg = Var p ==> not_fresh_at sa p) /\ ~ctx_has_dalloca ctx /\
  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
  (!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -219,8 +219,8 @@ Proof
       step_inst_non_invoke, step_inst_inst_idx_indep, is_terminator_def,
       exec_result_map_def] >>
     simp[Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `u4`,
-      update_var_def, allocas_from_def, allocas_below_fmp_def] >>
-    fs[allocas_from_def, allocas_below_fmp_def] >> conj_tac
+      update_var_def, allocas_from_def] >>
+    fs[allocas_from_def] >> conj_tac
     >- (reverse conj_tac >- metis_tac[] >>
         qx_gen_tac `operand` >> Cases_on `operand = Var cur` >> simp[] >>
         Cases_on `operand = Lit 256w` >> simp[op_taint_def]) >>
@@ -270,10 +270,6 @@ Proof
     simp[Abbr `j1`, Abbr `j2`, Abbr `j3`, Abbr `j4`, mk_inst_def]) >>
  qabbrev_tac `j5 = mk_inst (sa.cs_next_id+4) ASSERT [Var good] []` >>
  qabbrev_tac `v4 = u4 with vs_inst_idx := s.vs_inst_idx + 4` >>
- `!k. allocas_below_fmp (v4 with vs_inst_idx := k) <=> allocas_below_fmp s` by
-   simp[allocas_below_fmp_def, update_var_def, Abbr `v4`, Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`] >>
- `allocas_below_fmp v4 <=> allocas_below_fmp s` by
-   (first_x_assum (qspec_then `v4.vs_inst_idx` mp_tac) >> simp[]) >>
  `get_instruction bb v4.vs_inst_idx = SOME j5` by
    (`s.vs_inst_idx + 4 < LENGTH bb.bb_instructions` by
       (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
@@ -383,8 +379,6 @@ Proof
       simp[Abbr `j5`, Abbr `j6`, mk_inst_def, is_terminator_def] >>
     simp[ptr_inst_ok_def, step_inst_non_invoke, step_inst_inst_idx_indep,
       exec_result_map_def] >>
-    `allocas_below_fmp (u4 with vs_inst_idx := k) <=> allocas_below_fmp s` by
-      simp[allocas_below_fmp_def, update_var_def, Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`] >>
     Cases_on `word_lt (n2w n:bytes32) (n2w cx.txn.block_number - 256w)` >>
     simp[exec_result_map_def]) >>
  `~word_lt (n2w n:bytes32) (n2w cx.txn.block_number - 256w) ==>
@@ -426,10 +420,6 @@ Proof
     simp[Abbr `j1`, Abbr `j2`, Abbr `j3`, Abbr `j4`, Abbr `j5`, Abbr `j6`, mk_inst_def]) >>
  qabbrev_tac `j7 = mk_inst (sa.cs_next_id+6) ASSERT [Var recent] []` >>
  qabbrev_tac `v6 = u6 with vs_inst_idx := s.vs_inst_idx + 6` >>
- `!k. allocas_below_fmp (v6 with vs_inst_idx := k) <=> allocas_below_fmp s` by
-   simp[allocas_below_fmp_def, update_var_def, Abbr `v6`, Abbr `u6`, Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`] >>
- `allocas_below_fmp v6 <=> allocas_below_fmp s` by
-   (first_x_assum (qspec_then `v6.vs_inst_idx` mp_tac) >> simp[]) >>
  `get_instruction bb v6.vs_inst_idx = SOME j7` by
    (`s.vs_inst_idx + 6 < LENGTH bb.bb_instructions` by
       (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
@@ -535,8 +525,7 @@ Resume blockhash_full_suffix[success]:
     simp[ptr_inst_ok_def, step_inst_non_invoke, step_inst_inst_idx_indep,
       exec_result_map_def] >>
     simp[access_ok_def, taint_ok_def, Abbr `j8`, mk_inst_def,
-      contextCodegenRelTheory.source_memory_read_ranges_def, source_memory_write_ranges_def,
-      Abbr `u8`, update_var_def, allocas_below_fmp_def]) >>
+      contextCodegenRelTheory.source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
  `!D lo1. allocas_from lo1 s ==> inst_seq_ptr D lo1 ctx func PG G6 tn6
     [j7;j8] v6 G8 tn8` by
    (rpt gen_tac >> strip_tac >>
