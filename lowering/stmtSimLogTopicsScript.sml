@@ -159,7 +159,7 @@ QED
 Theorem log_bytestring_arg_view:
   stmt_state_rel H ctx func cenv cx es s /\
   log_arg_rel cenv cx sa sb es s (op,ty) v /\
-  supported_scalar_type ty /\ is_bytestring_type ty /\
+  supported_event_leaf_type ty /\ is_bytestring_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v ==>
   ?b bs. eval_operand op s = SOME (n2w b) /\
     mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
@@ -168,8 +168,8 @@ Theorem log_bytestring_arg_view:
     encode_event_topic ty v = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs))
 Proof
   Cases_on `ty` >>
-  simp[supported_scalar_type_def, supported_word_type_def,
-       supported_string_type_def, is_bytestring_type_def] >>
+  simp[supported_event_leaf_type_def, supported_scalar_type_def,
+       supported_word_type_def, supported_string_type_def, is_bytestring_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
   simp[supported_word_type_def, supported_string_type_def, is_bytestring_type_def]
   >~ [`BaseT (BytesT bd)`]
@@ -214,14 +214,15 @@ Resume log_bytestring_arg_view[string]:
 QED
 Finalise log_bytestring_arg_view
 
-Theorem log_scalar_topic_shape:
-  supported_scalar_type ty ==>
+Theorem log_event_topic_shape:
+  supported_event_leaf_type ty ==>
   (is_event_bytestring_type ty = is_bytestring_type ty) /\
-  (~is_bytestring_type ty ==> supported_word_type ty /\ is_word_type ty)
+  (~is_bytestring_type ty ==> is_word_type ty)
 Proof
-  Cases_on `ty` >> simp[supported_scalar_type_def, supported_word_type_def,
-    supported_string_type_def, is_event_bytestring_type_def, is_bytestring_type_def,
-    is_word_type_def] >>
+  Cases_on `ty` >>
+  simp[supported_event_leaf_type_def, supported_scalar_type_def,
+    supported_word_type_def, supported_string_type_def,
+    is_event_bytestring_type_def, is_bytestring_type_def, is_word_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
   simp[supported_word_type_def, supported_string_type_def,
     is_event_bytestring_type_def, is_bytestring_type_def, is_word_type_def] >>
@@ -230,10 +231,27 @@ Proof
     is_event_bytestring_type_def, is_bytestring_type_def, is_word_type_def]
 QED
 
-Theorem compile_encode_log_topic_scalar_run:
+Theorem log_scalar_topic_shape:
+  supported_scalar_type ty ==>
+  (is_event_bytestring_type ty = is_bytestring_type ty) /\
+  (~is_bytestring_type ty ==> supported_word_type ty /\ is_word_type ty)
+Proof
+  strip_tac >>
+  `supported_event_leaf_type ty` by simp[supported_event_leaf_type_def] >>
+  drule log_event_topic_shape >> simp[] >> strip_tac >>
+  `!t. supported_string_type t ==> is_bytestring_type t` by
+    (Cases >> simp[supported_string_type_def, is_bytestring_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     simp[supported_string_type_def, is_bytestring_type_def] >>
+     rename1 `BaseT (BytesT bd)` >> Cases_on `bd` >>
+     simp[supported_string_type_def, is_bytestring_type_def]) >>
+  metis_tac[supported_scalar_type_def]
+QED
+
+Theorem compile_encode_log_topic_event_run:
   stmt_state_rel H ctx func cenv cx es s /\
   log_arg_rel cenv cx sa sm es s (x,ty) v /\
-  supported_scalar_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  supported_event_leaf_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   compile_encode_log_topic x (is_bytestring_type ty) sm = (op,sb) ==>
@@ -243,16 +261,15 @@ Theorem compile_encode_log_topic_scalar_run:
     (t with vs_vars := s.vs_vars) = s /\
     (!z. not_fresh_at sm z ==> lookup_var z t = lookup_var z s)
 Proof
-  strip_tac >> drule_all log_scalar_topic_shape >> strip_tac >>
+  strip_tac >> drule_all log_event_topic_shape >> strip_tac >>
   Cases_on `is_bytestring_type ty`
   >- (drule_all log_bytestring_arg_view >> strip_tac >>
       gvs[] >> drule_all compile_encode_log_topic_bytes_run >> strip_tac >>
       qexists_tac `t` >> simp[]) >>
   gvs[] >>
-  `supported_word_type ty /\ is_word_type ty` by simp[] >>
   `eval_operand x s = SOME (typed_val_to_w256 tv v)` by
     gvs[log_arg_rel_def, expr_val_rel_def] >>
-  drule_all log_word_topic >> strip_tac >>
+  drule_all log_event_word_topic >> strip_tac >>
   drule_all compile_encode_log_topic_word_run >> strip_tac >>
   qexistsl_tac [`s`, `typed_val_to_w256 tv v`] >> simp[]
 QED
@@ -294,7 +311,7 @@ Theorem log_readonly_arg:
   (t with vs_vars := s.vs_vars) = s /\
   (!z. not_fresh_at sm z ==> lookup_var z t = lookup_var z s) /\
   (!z. FST arg = Var z ==> not_fresh_at sm z) /\ (!l. FST arg <> Label l) /\
-  supported_scalar_type (SND arg) /\ log_arg_rel cenv cx sa sm es s arg v ==>
+  supported_event_leaf_type (SND arg) /\ log_arg_rel cenv cx sa sm es s arg v ==>
   log_arg_rel cenv cx sa sb es t arg v
 Proof
   strip_tac >>
@@ -342,10 +359,10 @@ Theorem log_readonly_args:
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
               (!l. FST p <> Label l)) xs /\
   LIST_REL (\arg v. log_arg_rel cenv cx sa sm es s arg v /\
-    supported_scalar_type (SND arg) /\
+    supported_event_leaf_type (SND arg) /\
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs ==>
   LIST_REL (\arg v. log_arg_rel cenv cx sa sb es t arg v /\
-    supported_scalar_type (SND arg) /\
+    supported_event_leaf_type (SND arg) /\
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs
 Proof
   Induct_on `xs` >> Cases_on `vs` >> simp[] >> rpt strip_tac
@@ -381,14 +398,14 @@ Theorem log_readonly_source_args[local]:
   (!z. not_fresh_at sm z ==> lookup_var z t = lookup_var z s) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
               (!l. FST p <> Label l)) xs /\
-  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
-    ?aty tv. supported_scalar_type aty /\
+  LIST_REL (\arg v. supported_event_leaf_type (SND arg) /\
+    ?aty tv. supported_event_leaf_type aty /\
       log_arg_rel cenv cx sa sm es s (FST arg,aty) v /\
       evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
       (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
       encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs ==>
-  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
-    ?aty tv. supported_scalar_type aty /\
+  LIST_REL (\arg v. supported_event_leaf_type (SND arg) /\
+    ?aty tv. supported_event_leaf_type aty /\
       log_arg_rel cenv cx sa sb es t (FST arg,aty) v /\
       evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
       (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
@@ -407,8 +424,8 @@ Theorem compile_log_topic_ops_run:
   compile_log_topic_ops (MAP (\p. (FST p,is_bytestring_type (SND p))) xs) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
               (!l. FST p <> Label l)) xs /\
-  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
-    ?aty tv. supported_scalar_type aty /\
+  LIST_REL (\arg v. supported_event_leaf_type (SND arg) /\
+    ?aty tv. supported_event_leaf_type aty /\
       log_arg_rel cenv cx sa sm es s (FST arg,aty) v /\
       evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
       (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
@@ -426,7 +443,7 @@ Proof
   simp[compile_log_topic_ops_cons] >> strip_tac >> gvs[] >>
   PairCases_on `h` >> gvs[] >>
   `compile_encode_log_topic h0 (is_bytestring_type aty) sm = (op,sm')` by simp[] >>
-  drule_all compile_encode_log_topic_scalar_run >> strip_tac >>
+  drule_all compile_encode_log_topic_event_run >> strip_tac >>
   drule_all log_topic_frontier >> strip_tac >>
   suspend "compose"
 QED
@@ -510,8 +527,8 @@ Theorem compile_split_log_topics_run:
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
               (!l. FST p <> Label l)) xs /\
-  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
-    ?aty tv. supported_scalar_type aty /\
+  LIST_REL (\arg v. supported_event_leaf_type (SND arg) /\
+    ?aty tv. supported_event_leaf_type aty /\
       log_arg_rel cenv cx sa sm es s (FST arg,aty) v /\
       evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
       (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
@@ -557,9 +574,9 @@ Resume compile_split_log_topics_run[post]:
     (MAP (\p. (FST p,is_bytestring_type (SND p)))
       (MAP FST (FILTER SND (ZIP (xs,flags)))))` by gvs[EVERY_MAP] >>
   drule_all compile_log_topic_ops_frontier >> strip_tac >>
-  `EVERY (\arg. supported_scalar_type (SND arg)) xs` by
+  `EVERY (\arg. supported_event_leaf_type (SND arg)) xs` by
     (gvs[LIST_REL_EL_EQN, EVERY_EL] >> metis_tac[]) >>
-  `EVERY (\arg. supported_scalar_type (SND arg) /\
+  `EVERY (\arg. supported_event_leaf_type (SND arg) /\
      (!z. FST arg = Var z ==> not_fresh_at sm z) /\ (!l. FST arg <> Label l))
      (SND (split_log_ops xs flags))` by
     (irule log_split_data_every >> simp[EVERY_CONJ] >> metis_tac[]) >>
