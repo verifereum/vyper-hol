@@ -65,10 +65,10 @@ Proof
     (strip_assume_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
   drule_all_then SUBST_ALL_TAC supported_program_external_dflts_nil >>
   drule_at (Pat `runtime_gas_shadow_unit _ _ = _`)
-    (cj 1 dispatched_call_correct_from_selected_endpoint) >>
+    (cj 1 dispatched_call_correct) >>
   disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`unit`, `am`, `vs`] mp_tac) >>
-  simp[dispatched_entry_endpoint_selected]
+  simp[]
 QED
 
 (* The dispatched-calldata unit theorem with a shadow context fixed by
@@ -105,10 +105,10 @@ Proof
     (strip_assume_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
   drule_all_then SUBST_ALL_TAC supported_program_external_dflts_nil >>
   drule_at (Pat `runtime_gas_shadow_unit _ _ = _`)
-    (cj 2 dispatched_call_correct_from_selected_endpoint) >>
+    (cj 2 dispatched_call_correct) >>
   disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`unit`, `am`, `vs`] mp_tac) >>
-  simp[dispatched_entry_endpoint_selected]
+  simp[]
 QED
 
 (* S1, calldata that dispatches to nothing: no fallback, a short head, or a
