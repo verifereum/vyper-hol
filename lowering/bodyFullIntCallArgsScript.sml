@@ -8,7 +8,7 @@
 Theory bodyFullIntCallArgs
 Ancestors ptrDiscipline[qualified,ignore_grammar]
   bodyFullIntCallDefs bodyIntCallSeams bodyFullPreds bodySimFull bodyFullUnwrap
-  gasOutcomeFull bodyPtrDefs gasShadow gasContext exprSimHypsDefs
+  gasOutcomeFull bodyPtrDefs gasShadow gasShadowShape gasContext exprSimHypsDefs
   exprSimIfExpWidenedAdapter exprSimSliceCompose
   loweringPosts exprSimVVFrame valueEncodingProofs bodyPtrBytestringBuiltinsWindowGhost
   exprReasonOperand haltExitProj typedMemoryCopy
@@ -4651,6 +4651,13 @@ Proof
   drule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_target_not_mem >>
   strip_tac >>
   `LENGTH args - LENGTH es <= LENGTH dflts` by decide_tac >>
+  `MAP gas_shadow_expr (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) =
+   DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts` by
+    (irule gasShadowShapeTheory.omitted_defaults_gas_shadow_id >>
+     qexists_tac `tops` >>
+     irule supportedProgramTheory.supported_program_defaults >>
+     fs[bodySimTheory.body_inv_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
   `eval_expr cx (Call ann (IntCall (NONE,name)) es dflt) =
    bind (eval_exprs cx es) (\vs.
      bind get_scopes (\prev.
