@@ -8,7 +8,7 @@ Ancestors
  ctorDeployMemoryRunMemEntryShiftedCheckedArrayEntry
  ctorDeployMemoryRunMemEntryShiftedCheckedArrayEdges
  ctorDeployMemoryRunMemEntryShiftedObservation ctorDeployMemoryRunMemEntryShiftedFrame
- ctorDeployMemoryFrontier ctorDeployMemoryRunMemEntryArraySteps
+ ctorDeployMemoryFrontier allocaFrontierRoom ctorDeployMemoryRunMemEntryArraySteps
  ctorDeployMemoryRunMemEntryBulk ctorDeployMemoryRunMemEntryWord
  ctorAbiActualBulk abiDecoderBulkReentry abiDecoderBulkExecute abiDecoderBulk
  ctorAbiActualObservations venomState venomExecSemantics venomInst list
@@ -293,94 +293,3 @@ Proof
  conj_tac >- metis_tac[abi_decode_sim_trans] >>
  asm_x "child" kall_tac >> metis_tac[gas_path_mem_then, ADD_0]
 QED
-
-Theorem ctor_actual_array_setup_ranges_from[local]:
-  (^O) k ctx func site ids D N d outsz earlier limit_st
-    tv vs slot_id slot initial 0 0 prepared /\
-  abi_decoder_operand_live earlier src /\ abi_decoder_operand_live earlier dst /\
-  abi_decoder_operand_live earlier hi /\
-  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
-  sb + len < dimword (:256) /\
-  (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\
-    sb + len <= h /\ h < dimword (:256)) /\
-  0 < outsz /\ D <= d /\ d + outsz <= D+N /\
-  k + unit_alloca_budget ctx < dimword (:256) /\ slot_id IN ctor_actual_sites func ids ==>
-  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb len d outsz slot 32 prepared /\
-  slot < dimword (:256) /\ venomMemDefs$regions_disjoint (slot,32) (d,outsz)
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `!op w. abi_decoder_operand_live earlier op /\ eval_operand op initial = SOME w ==>
-    eval_operand op prepared = SOME w` by
-    (rpt strip_tac >> irule ctor_actual_array_observation_operand_from >>
-     goal_assum (drule_at (Pat `(^O) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
-  `eval_operand src prepared = SOME (n2w sb) /\
-   eval_operand dst prepared = SOME (n2w d)` by metis_tac[] >>
-  `hi = Lit 0w \/ ?h. eval_operand hi prepared = SOME (n2w h) /\
-    sb + len <= h /\ h < dimword (:256)` by metis_tac[] >>
-  qpat_assum `(^O) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o BETA_RULE) >>
-  `slot < dimword (:256)` by
-    (drule_all ctorDeployLoweringEntryAllocationTheory.deploy_ctor_index_slot_bound >> simp[]) >>
-  drule_all ctor_actual_sites_scratch >> strip_tac >>
-  `venomMemDefs$regions_disjoint (d,outsz) (slot,32)` by
-    (irule ctor_actual_region_contained >> qexistsl [`D`, `N`] >> simp[]) >>
-  `d + outsz < dimword (:256)` by
-    (drule_all alloca_frontier_inv_from_word_bound >> strip_tac >>
-     metis_tac[LESS_EQ_TRANS, LESS_EQ_LESS_TRANS]) >>
-  asm_simp_tac (srw_ss()) [abi_decoder_ranges_def, eval_operand_def, abi_decode_source_opcode_def] >>
-  gvs[venomMemDefsTheory.regions_disjoint_def] >>
-  disj2_tac >> qexists `h` >> simp[]
-QED
-
-Theorem ctor_actual_array_setup_context_from[local]:
-  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
-  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn)))
-    (ListV avs) (ArrayV (DynArrayV vs)) /\
-  (^O) k ctx func site ids D N d
-    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) earlier limit_st
-    tv vs slot_id slot initial 0 0 prepared /\
-  abi_decode_index_init header_st = (ip,loop_st) /\ earlier <= loop_st.cs_next_var /\
-  eval_operand ip prepared = SOME (n2w slot) /\
-  abi_decoder_operand_live earlier src /\ abi_decoder_operand_live earlier dst /\
-  abi_decoder_operand_live earlier hi /\
-  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
-  sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256) /\
-  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
-    initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
-  (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\
-    sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <= h /\
-    h < dimword (:256)) /\
-  D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
-  k + unit_alloca_budget ctx < dimword (:256) /\ slot_id IN ctor_actual_sites func ids ==>
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) hi ip src dst
-    0 sb d slot slot 32 loop_st.cs_next_var prepared /\
-  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
-    prepared.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
-  (^O) k ctx func site ids D N d
-    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) loop_st.cs_next_var limit_st
-    tv vs slot_id slot prepared 0 0 prepared /\
-  venomMemDefs$regions_disjoint (slot,32) (d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `0 < type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by
-    simp[Once type_memory_bytes_def] >>
-  drule_all ctor_actual_array_setup_ranges_from >> strip_tac >>
-  drule abi_decode_index_init_shape >> strip_tac >>
-  `abi_decoder_operand_live loop_st.cs_next_var ip` by
-    (simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def, IN_DEF,
-       ASCIInumbersTheory.toString_inj] >> rpt strip_tac >> decide_tac) >>
-  `abi_decoder_operand_live loop_st.cs_next_var src /\
-   abi_decoder_operand_live loop_st.cs_next_var dst /\
-   abi_decoder_operand_live loop_st.cs_next_var hi` by
-    metis_tac[abi_decoder_operand_live_mono] >>
-  `(^O) k ctx func site ids D N d
-    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) loop_st.cs_next_var limit_st
-    tv vs slot_id slot prepared 0 0 prepared` by
-    (irule ctor_actual_array_observation_self_from >> goal_assum (drule_at Any)) >>
-  qpat_x_assum `(^O) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ initial _ _ prepared`
-    (MAP_EVERY assume_tac o CONJUNCTS o BETA_RULE) >>
-  fs[abi_decoder_recursive_loop_data_def, Excl "enc_def"] >>
-  gvs[abi_decoder_operand_live_def]
-QED
-
