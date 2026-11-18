@@ -2,6 +2,7 @@
 Theory bodyPtrSignedConvertSourceTyping
 Ancestors memoryLocalRhsProps bodyPtrSignedConvertLayout bodySim
   supportedExprs supportedExprForms vyperTypeSystem exprLowering exprSimHypsDefs compileEnv
+  vyperTypeEvalProofs
 Libs monadsyntax
 
 Theorem internal_call_lowered_bytestring:
@@ -199,7 +200,7 @@ Proof
      pure_rewrite_tac[vyperTypeInvariantsTheory.fn_sigs_consistent_def] >>
      disch_then drule >> strip_tac >>
      `IS_SOME (FLOOKUP env.fn_sigs (q,r))` by simp[] >>
-     drule_all vyperTypeEvalSoundnessTheory.callable_body_typing_from_env_consistent >>
+     drule_all vyperTypeEvalProofsTheory.callable_body_typing_from_env_consistent >>
      simp[] >> strip_tac >> simp[well_formed_type_def]) >>
   `well_typed_expr env (Call sig.ret_ty (IntCall id) args drv)` by
     (Cases_on `id` >>

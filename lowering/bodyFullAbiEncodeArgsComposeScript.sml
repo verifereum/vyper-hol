@@ -223,11 +223,11 @@ Resume abi_encode_args_full_from_step[cons]:
   irule gas_outcome_full_bind_all >> BETA_TAC >> rpt conj_tac
   >~ [`storage_trace_frame (bind (eval_expr _ _) _)`]
   >- (irule vyperStorageTraceTheory.storage_trace_frame_bind >>
-      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+      simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
            vyperStorageTraceTheory.storage_trace_frame_read_result])
   >~ [`!v. storage_trace_frame (bind (eval_exprs cx args) (\vs. return (v::vs)))`]
   >- (gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind >>
-      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+      simp[cj 6 vyperStorageTraceTheory.evaluate_storage_trace_frame,
            vyperStorageTraceTheory.storage_trace_frame_return])
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> drule gasExemptCertTheory.gas_exempt_cert_bind_value >> simp[] >>
@@ -332,7 +332,7 @@ Resume abi_encode_args_full_from_step[cons_resources]:
   `storage_trace_domain cx st0 es.storage_trace` by
     (`storage_trace_frame (bind (eval_expr cx h) (read_result cx))` by
        (irule vyperStorageTraceTheory.storage_trace_frame_bind >>
-        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+        simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
              vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
      qpat_x_assum `storage_trace_frame _` mp_tac >>
      simp[vyperStorageTraceTheory.storage_trace_frame_def] >>

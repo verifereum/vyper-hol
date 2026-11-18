@@ -111,7 +111,7 @@ Proof
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
   >~ [`storage_trace_frame (eval_expr _ _)`]
-  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
+  >- simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame]
   >~ [`!v. storage_trace_frame (read_result cx v)`]
   >- simp[vyperStorageTraceTheory.storage_trace_frame_read_result]
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
@@ -155,7 +155,7 @@ Resume abi_encode_arg_step_full[capture]:
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
   >~ [`storage_trace_frame (eval_expr _ _)`]
-  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
+  >- simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame]
   >~ [`!v. storage_trace_frame (read_result cx v)`]
   >- simp[vyperStorageTraceTheory.storage_trace_frame_read_result]
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
@@ -343,7 +343,7 @@ Resume abi_encode_arg_step_full[capture_read]:
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) es.storage_trace` by
     (drule_at (Pos (el 2)) vyperStorageFootprintTheory.valid_horizon_frame >>
      disch_then (qspecl_then [`st0`,`cx`,`storage_trace_horizon ee.storage_trace`] mp_tac) >>
-     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+     simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
        vyperStorageTraceTheory.storage_trace_frame_bind,
        vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
   `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func ce cx es s0` by

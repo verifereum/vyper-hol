@@ -81,7 +81,7 @@ Proof
   irule gas_outcome_full_bind_all >> rpt conj_tac
   >~ [`storage_trace_frame (bind _ _)`]
   >- simp[vyperStorageTraceTheory.storage_trace_frame_bind,
-      vyperStorageTraceTheory.evaluate_storage_trace_frame,
+      cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
       vyperStorageTraceTheory.storage_trace_frame_read_result]
   >- simp[vyperStorageTraceTheory.storage_trace_frame_def]
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]

@@ -82,7 +82,7 @@ Proof
   irule gas_outcome_full_bind_all >> rpt conj_tac
   >~ [`storage_trace_frame (bind _ _)`]
   >- (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+      simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
            vyperStorageTraceTheory.storage_trace_frame_read_result])
   >- simp[vyperStorageTraceTheory.storage_trace_frame_def]
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
@@ -203,7 +203,7 @@ Resume abi_encode_word_vv_full_from_packaging[word_continuation]:
     (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
      drule_at (Pat `f st = _`) vyperStorageFootprintTheory.valid_horizon_frame >>
      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
-       vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
        vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
   `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func ce cx es s0` by
     metis_tac[] >>

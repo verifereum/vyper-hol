@@ -9,6 +9,7 @@ Ancestors
   bodyFullUnwrapRun ptrSafetyTransport fragGasSeqPtr fragExecPtr
   instMemFrontier memSafeRun exprLoweringProps localPtrsProps
   normalizerAllocationFrame allocaSiteResource revertAllocationPtr
+  decoderGhostFramePtr stateRelProj
   loweringHalt fragExec fragExecMem emitHelper emitHelperProps rich_list words
   venomMemDefs bodyPtrDefs robustCopyTransportPtr exprSimProps
   bodyFullAbiEncodeSetupSourceFrame
@@ -379,7 +380,8 @@ Proof
       i.inst_operands = [Lit w] /\
       FLOOKUP initial.vs_allocas i.inst_id = SOME (b,sz) ==> sz = w2n w` by
     (qpat_x_assum `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp_tac bool_ss [abi_args_post_def,stmt_state_rel_def] >> metis_tac[]) >>
+     simp_tac bool_ss [abi_args_post_def] >>
+     disch_then (ACCEPT_TAC o MATCH_MP stmt_state_rel_alloca_size o CONJUNCT1)) >>
   `MEM (mk_inst st.cs_next_id ALLOCA
       [Lit (n2w (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))))]
       [STRING #"%" (toString st.cs_next_var)]) (fn_insts func)` by

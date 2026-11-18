@@ -112,7 +112,7 @@ Proof
   conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_def] >>
   rpt conj_tac
   >~ [`storage_trace_frame (eval_exprs _ _)`]
-  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
+  >- simp[cj 6 vyperStorageTraceTheory.evaluate_storage_trace_frame]
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_values >>
       goal_assum (drule_at Any) >> fs[])

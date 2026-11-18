@@ -2,6 +2,7 @@
 Theory stateRelProj
 Ancestors
   loweringStateRelDefs exprLoweringProps vyperTypeSystem supportedStmts
+  venomInst venomState finite_map words
 
 Theorem state_rel_local_ptrs_rel:
   state_rel H func cenv cx vs ss ==> local_ptrs_rel func cenv vs.scopes ss
@@ -38,6 +39,15 @@ QED
 
 Theorem stmt_state_rel_alloca_room:
   stmt_state_rel H ctx func cenv cx vs ss ==> alloca_room ctx func ss
+Proof
+  simp[stmt_state_rel_def]
+QED
+
+Theorem stmt_state_rel_alloca_size:
+  stmt_state_rel H ctx func cenv cx vs s ==>
+  !i w b sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+    i.inst_operands = [Lit w] /\
+    FLOOKUP s.vs_allocas i.inst_id = SOME (b,sz) ==> sz = w2n w
 Proof
   simp[stmt_state_rel_def]
 QED
