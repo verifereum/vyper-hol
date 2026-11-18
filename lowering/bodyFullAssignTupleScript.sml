@@ -4738,3 +4738,55 @@ Proof
      qexistsl_tac [`G2`,`r2`,`t2`] >> simp[]) >>
   gvs[venom_state_component_equality]
 QED
+
+(* The EQ changes only the test register. JNZ consumes that exact result. *)
+Theorem tuple_runtime_loop_test[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX [mk_inst id EQ [Var cv;cnt] [tv];
+            mk_inst (id+1) JNZ [Var tv;Label done_lbl;Label body_lbl] []]
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  eval_operand (Var cv) s = SOME c /\ eval_operand cnt s = SOME n /\
+  op_prov G (Var cv) = NONE /\ op_taint tn (Var cv) = {} /\
+  op_prov G cnt = NONE /\ op_taint tn cnt = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted ==>
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    t.vs_current_bb = (if c = n then done_lbl else body_lbl) /\
+    t.vs_inst_idx = 0 /\ store_copy_normalize s t = s /\
+    (!p. p <> tv ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p)) /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
+  drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
+  qabbrev_tac `i = mk_inst id EQ [Var cv;cnt] [tv]` >>
+  `step_inst_base i s = OK (update_var tv (bool_to_word (c = n)) s)` by
+    (simp[Abbr `i`] >> irule step_EQ >> simp[]) >>
+  `i.inst_outputs = [tv] /\ augAssignPtrScalarCertificate$scalar_shape i /\
+    EVERY (\p. op_prov G p = NONE /\ op_taint tn p = {}) i.inst_operands /\
+    inst_mem_below_frontier i s /\ inst_dload_in_section i s` by
+    simp[Abbr `i`, mk_inst_def, augAssignPtrScalarCertificateTheory.scalar_shape_def,
+      augAssignPtrScalarCertificateTheory.scalar_binary_def, inst_mem_below_frontier_def,
+      inst_dload_in_section_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  drule_all tuple_runtime_scalar_cursor >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `r` (qx_choose_then `Gr` (qx_choose_then `tr` strip_assume_tac)))) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (r,Gr,tr) []
+       (OK (jump_to (if c = n then done_lbl else body_lbl) r),Gr,tr)` by
+    (gen_tac >>
+     `bool_to_word (c = n) <> (0w:bytes32) <=> c = n` by
+       (Cases_on `c = n` >> simp[bool_to_word_def]) >>
+     irule (decoderNavigationPtrTheory.jnz_origin_ptr_path |>
+       Q.INST [`v` |-> `bool_to_word (c = n)`] |> SRULE []) >>
+     fs[update_var_def, allocas_from_def, allocas_below_fmp_def] >>
+     (metis_tac[])) >>
+  qexistsl_tac [`jump_to (if c = n then done_lbl else body_lbl) r`,`Gr`,`tr`] >>
+  conj_tac >-
+    (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gr`,`r`,`tr`] >> simp[]) >>
+  gvs[jump_to_def, update_var_def, lookup_var_def,
+      stmtSimStoreCopyTheory.store_copy_normalize_def, venom_state_component_equality]
+QED
