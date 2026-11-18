@@ -84,6 +84,8 @@ Ancestors
   extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
   extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
   abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
+  (* closed-world request-cut texts awaiting their producers *)
+  e2eRequestCutDefs
   (* providers awaiting their consumers *)
   internalReturnMemoryMem bodyFullIntCallByteFrame
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
