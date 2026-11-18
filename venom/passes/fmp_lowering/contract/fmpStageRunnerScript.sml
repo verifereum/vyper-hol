@@ -379,14 +379,19 @@ QED
    (fmp_root_skip), and the runner relates the entry's run.  A run of the
    entry never returns (entry_fn_no_return), and run_blocks never ends
    OK. *)
-Theorem fmp_runner_entry[local]:
+Theorem fmp_runner_entry:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   terminates (run_context fuel C vs) ==>
   dead_result_rel D (run_context fuel C vs) (run_context fuel C' vs') /\
   (!a se a' te.
      run_context fuel C vs = Abort a se /\
      run_context fuel C' vs' = Abort a' te ==>
-     LIST_REL (request_agree_except D) se.vs_requests te.vs_requests)
+     LIST_REL (request_agree_except D) se.vs_requests te.vs_requests) /\
+  (!se te.
+     run_context fuel C vs = Abort Revert_abort se /\
+     se.vs_returndata = [] /\
+     run_context fuel C' vs' = Abort Revert_abort te ==>
+     te.vs_returndata = [])
 Proof
   strip_tac >>
   `?name. C.ctx_entry = SOME name` by
