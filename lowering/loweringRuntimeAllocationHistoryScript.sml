@@ -6,11 +6,10 @@ Ancestors
   loweringBudgetMarkedResidual loweringBudgetOracleConsumption
   loweringBudgetOraclePrefix loweringBudgetPathDeterminism
   loweringBudgetPrecompilePrefix loweringBudgetResidualArithmetic
-  loweringBudgetReturnStorePrefix loweringBudgetSourceResidual
+  loweringBudgetReturnStorePrefix
   loweringBudgetTerminalFrontier loweringRuntimeBudgetAssembly
   loweringBudgetExitCoverage
-  loweringRuntimeBudgetSourceEntry
-  ptrDiscipline contextRawReachable sourceCallCount compileVyper
+  ptrDiscipline contextRawReachable compileVyper
   vyperCompiler e2eDefs lowerDloadDefs o1PassContract
   list arithmetic
 
@@ -22,11 +21,9 @@ Theorem lower_vyper_runtime_unit_allocation_history:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     k <= 2 ** 64 /\
-    (!obs. source_calls_within k am tx vs.vs_outcomes obs) /\
+    LENGTH vs.vs_outcomes <= k /\
     (!marks.
-      source_storage_ok am tx vs.vs_outcomes
-        (gas_explicit marks vs.vs_gas_readings) /\
-      call_outcomes_storage_ok am tx vs.vs_outcomes
+      call_storage_ok am tx vs.vs_outcomes
         (gas_explicit marks vs.vs_gas_readings)) /\
     (!marks. ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
@@ -62,11 +59,9 @@ Theorem lower_vyper_runtime_unit_allocation_history:
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
+    LENGTH vs.vs_outcomes < 2 ** 64 /\
     (!marks.
-      source_storage_ok am tx vs.vs_outcomes
-        (gas_explicit marks vs.vs_gas_readings) /\
-      call_outcomes_storage_ok am tx vs.vs_outcomes
+      call_storage_ok am tx vs.vs_outcomes
         (gas_explicit marks vs.vs_gas_readings)) /\
     (!marks. ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
@@ -108,7 +103,7 @@ Proof
   qpat_x_assum `!tops rpolicy unit am tx ret vs k. _`
     (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`,
                   `vs`, `2 ** 64`] mp_tac) >>
-  impl_tac >- simp[] >>
+  impl_tac >- simp[arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
   disch_then (qspecl_then [`D`, `lo`, `explicit`, `name`, `entry`,
     `lbl`, `entered`, `p`, `h`, `marks`, `q`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>

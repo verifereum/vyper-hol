@@ -1471,7 +1471,7 @@ Theorem protected_cell_frame_call_primitives:
   state_rel_frame (protected_cell_frame addr src id) (update_transient upd_t) /\
   state_rel_frame (protected_cell_frame addr src id) (adopt_call_outcome rq co) /\
   state_rel_frame (protected_cell_frame addr src id)
-    (take_call_outcome target calldata value_opt)
+    (take_call_outcome gas_cap target calldata value_opt)
 Proof
   rpt conj_tac >> irule protected_cell_frame_eq_op >>
   simp[return_def, raise_def, get_accounts_def, get_transient_storage_def,
@@ -2561,7 +2561,7 @@ Proof
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rename1 `code_slice_source bt es = SOME operands` >>
       PairCases_on `operands` >> simp[] >>
-      drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+      drule_all vyperTypeEvalCaseProofsTheory.code_slice_operand_typing >>
       strip_tac >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
@@ -2625,7 +2625,7 @@ Proof
       simp[protected_cell_frame_create] >>
       simp[state_rel_frame_result] >> metis_tac[])
   >~ [`well_typed_expr env (Call ty (IntCall (call_src,call_fn)) es drv)`]
-  >- (rule_assum_tac (SIMP_RULE bool_ss [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >>
+  >- (rule_assum_tac (SIMP_RULE bool_ss [vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >>
       rewrite_tac[ignore_bind_def] >>
       irule protected_cell_frame_bind >>
       simp[protected_cell_frame_pure_guards] >> rpt strip_tac >>
@@ -2634,13 +2634,13 @@ Proof
       simp[protected_cell_frame_pure_guards] >> rpt strip_tac >>
       simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >>
       strip_tac >> full_simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >>
       simp[protected_cell_frame_pure_guards] >> rpt strip_tac >>
       simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >>
       strip_tac >> full_simp_tac bool_ss [] >>
       rename1 `lookup_callable_function _ _ _ = SOME tup` >>
       PairCases_on `tup` >> gvs[] >>
@@ -2683,11 +2683,11 @@ Proof
       irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >> strip_tac >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >> strip_tac >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >> strip_tac >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >> strip_tac >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (Cases_on `tup1` >> simp[protected_cell_frame_return] >>
           Cases_on `cx.nonreentrant_slot` >>
@@ -3497,7 +3497,7 @@ Resume constant_expr_replay_aux[struct]:
   drule_all constant_value_eval_expr_observation >>
   disch_then (qspec_then `sc` strip_assume_tac) >>
   `well_typed_exprs (artifact_env artifact mods current_src) (MAP SND kes)` by
-    (irule vyperTypeEvalSoundnessTheory.well_typed_named_exprs_MAP_SND_stmt >>
+    (irule vyperTypeEvalCaseProofsTheory.well_typed_named_exprs_MAP_SND_stmt >>
      gvs[well_typed_expr_def]) >>
   gvs[constant_value_def, constant_expr_def, AllCaseEqs()] >>
   `EVERY (constant_expr mods) (MAP SND kes)` by fs[EVERY_MEM] >>
@@ -6020,7 +6020,7 @@ Proof
       rpt strip_tac >>
       simp_tac bool_ss [subst_consts_expr_def, Ntimes evaluate_def 2,
         subst_consts_fields_maps, expr_type_def] >>
-      drule vyperTypeEvalSoundnessTheory.well_typed_named_exprs_MAP_SND_stmt >> strip_tac >>
+      drule vyperTypeEvalCaseProofsTheory.well_typed_named_exprs_MAP_SND_stmt >> strip_tac >>
       drule_all const_subst_exprs_from_elements >>
       simp[const_subst_exprs_ok_def] >> strip_tac >>
       simp_tac bool_ss [LET_THM] >>
@@ -6217,7 +6217,7 @@ Proof
           rpt strip_tac >> irule const_computations_related_refl >>
           simp[const_results_related_def]) >>
       PairCases_on `x` >>
-      drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+      drule_all vyperTypeEvalCaseProofsTheory.code_slice_operand_typing >>
       strip_tac >> gvs[] >>
       `?rest. es = Builtin x0 (Acc Code) [x1]::rest` by
         gvs[code_slice_source_SOME] >>

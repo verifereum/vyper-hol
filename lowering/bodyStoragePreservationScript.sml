@@ -274,8 +274,8 @@ Resume body_oracle_storage_mutual[ext_call]:
   `well_typed_exprs env (TAKE 1 es) /\
    well_typed_exprs env (TAKE (LENGTH sig1) (DROP 1 es)) /\
    well_typed_exprs env (DROP (1 + LENGTH sig1) es)` by
-    metis_tac[vyperTypeEvalSoundnessTheory.well_typed_exprs_TAKE,
-              vyperTypeEvalSoundnessTheory.well_typed_exprs_DROP] >>
+    metis_tac[vyperTypeEvalProofsTheory.well_typed_exprs_TAKE,
+              vyperTypeEvalProofsTheory.well_typed_exprs_DROP] >>
   `~supported_exprs_exists expr_evm_run_root (TAKE 1 es) /\
    ~supported_exprs_exists expr_evm_run_root (TAKE (LENGTH sig1) (DROP 1 es)) /\
    ~supported_exprs_exists expr_evm_run_root (DROP (1 + LENGTH sig1) es)` by
@@ -289,8 +289,8 @@ Resume body_oracle_storage_mutual[ext_call]:
   `call_evaluation_safe cx (int_calls_exprs (TAKE 1 es)) /\
    call_evaluation_safe cx (int_calls_exprs (TAKE (LENGTH sig1) (DROP 1 es))) /\
    call_evaluation_safe cx (int_calls_exprs (DROP (1 + LENGTH sig1) es))` by
-    metis_tac[vyperTypeEvalSoundnessTheory.call_evaluation_safe_exprs_TAKE,
-              vyperTypeEvalSoundnessTheory.call_evaluation_safe_exprs_DROP] >>
+    metis_tac[vyperTypeEvalProofsTheory.call_evaluation_safe_exprs_TAKE,
+              vyperTypeEvalProofsTheory.call_evaluation_safe_exprs_DROP] >>
   gvs[arithmeticTheory.ADD_COMM] >>
   qpat_assum `eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) _ = _`
     (mp_then (Pos last) mp_tac body_eval_ext_call_storage) >>
@@ -379,9 +379,9 @@ QED
 Resume body_oracle_storage_mutual[builtin_slice_tail]:
   rpt strip_tac >>
   rename1 `code_slice_source bt es = SOME (ct,ca)` >>
-  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+  drule_all vyperTypeEvalCaseProofsTheory.code_slice_operand_typing >>
   strip_tac >>
-  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_call_safe >>
+  drule_all vyperTypeEvalCaseProofsTheory.code_slice_operand_call_safe >>
   simp[int_calls_expr_def] >> strip_tac >>
   `~supported_exprs_exists expr_evm_run_root (TL es) /\
    ~supported_expr_exists expr_evm_run_root ca /\
@@ -408,9 +408,9 @@ QED
 Resume body_oracle_storage_mutual[builtin_slice_addr]:
   rpt strip_tac >>
   rename1 `code_slice_source bt es = SOME (ct,ca)` >>
-  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+  drule_all vyperTypeEvalCaseProofsTheory.code_slice_operand_typing >>
   strip_tac >>
-  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_call_safe >>
+  drule_all vyperTypeEvalCaseProofsTheory.code_slice_operand_call_safe >>
   simp[int_calls_expr_def] >> strip_tac >>
   `~supported_exprs_exists expr_evm_run_root (TL es) /\
    ~supported_expr_exists expr_evm_run_root ca /\
@@ -588,7 +588,7 @@ Resume body_oracle_storage_mutual[struct_expr]:
   qpat_assum `well_typed_expr env (StructLit _ _ _)`
     (strip_assume_tac o SRULE [Once well_typed_expr_def]) >>
   `well_typed_exprs env (MAP SND kes)` by
-    (irule vyperTypeEvalSoundnessTheory.well_typed_named_exprs_MAP_SND_stmt >> simp[]) >>
+    (irule vyperTypeEvalCaseProofsTheory.well_typed_named_exprs_MAP_SND_stmt >> simp[]) >>
   `~supported_exprs_exists expr_evm_run_root (MAP SND kes)` by
     gvs[exprOracleStorageInterfacesTheory.supported_exprs_exists_not_every,
         exprOracleStorageInterfacesTheory.supported_fields_exists_not_every] >>
@@ -877,7 +877,7 @@ Resume body_oracle_storage_mutual[intcall_args_success]:
    IS_SOME d_st.outcomes /\ oracle_storage_ok cx d_st` by
     (`env_consistent env cx args_st` by fs[runtime_consistent_def] >>
      `IS_SOME (FLOOKUP env.fn_sigs (NONE,fn))` by simp[] >>
-     drule_all vyperTypeEvalSoundnessTheory.callable_body_typing_from_env_consistent >>
+     drule_all vyperTypeEvalProofsTheory.callable_body_typing_from_env_consistent >>
      strip_tac >>
      `call_evaluation_safe (cx with stk updated_by CONS (NONE,fn))
         (int_calls_exprs (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts))` by
@@ -917,7 +917,7 @@ Resume body_oracle_storage_mutual[intcall_args_success]:
         conj_tac >- simp[] >>
         qexistsl_tac [`defaults_env env_body`, `r1`,
                       `args_st with scopes := [FEMPTY]`] >>
-        simp[vyperTypeEvalSoundnessTheory.well_typed_exprs_DROP]) >>
+        simp[vyperTypeEvalProofsTheory.well_typed_exprs_DROP]) >>
      irule bodyStorageIntcallDefaultsTheory.intcall_defaults_oracle_storage >>
      simp[] >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
   `runtime_consistent env cx d_st` by
@@ -938,7 +938,7 @@ Resume body_oracle_storage_mutual[intcall_read_success]:
   rename1 `bind_arguments (get_tenv cx) args (vs ++ dflt_vs) = SOME call_env` >>
   `env_consistent env cx d_st` by fs[runtime_consistent_def] >>
   `IS_SOME (FLOOKUP env.fn_sigs (NONE,fn))` by simp[] >>
-  drule_all vyperTypeEvalSoundnessTheory.callable_body_typing_from_env_consistent >>
+  drule_all vyperTypeEvalProofsTheory.callable_body_typing_from_env_consistent >>
   strip_tac >>
   (`scope_well_typed call_env` by
     metis_tac[vyperTypeBindArgumentsTheory.bind_arguments_scope_well_typed_from_success] >>
@@ -974,7 +974,7 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
       disch_then drule >> disch_then drule >> simp[]) >>
    `functions_well_typed (cx with stk updated_by CONS (NONE,fn))` by
      (fs[runtime_consistent_def] >>
-      drule_all vyperTypeEvalSoundnessTheory.intcall_default_env_side_conditions >>
+      drule_all vyperTypeEvalProofsTheory.intcall_default_env_side_conditions >>
       disch_then (qspec_then `fn` mp_tac) >> simp[]) >>
    `!r s. eval_stmts (cx with stk updated_by CONS (NONE,fn)) ss
        (lock_st with scopes := [call_env]) = (r,s) ==>

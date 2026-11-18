@@ -52,6 +52,16 @@ Definition supported_scalar_type_def:
     supported_word_type ty \/ supported_string_type ty
 End
 
+(* Event encoding uses typed words, including flags and every fixed-bytes width. *)
+Definition supported_event_leaf_type_def:
+  supported_event_leaf_type ty <=>
+    supported_scalar_type ty \/
+    case ty of
+      FlagT id => T
+    | BaseT (BytesT (Fixed n)) => n <= 32
+    | _ => F
+End
+
 (* First type declaration wins, as in type_env. An interface/flag of the
    same name blocks a later struct; an arbitrary module never resolves. *)
 Definition supported_struct_fields_def:

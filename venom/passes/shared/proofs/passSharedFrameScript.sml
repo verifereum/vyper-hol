@@ -62,7 +62,7 @@ fun spa_assume n inst_q s_q s'_q =
 (* ===== Non-terminator result type elimination ======================== *)
 (* ===================================================================== *)
 
-val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
+val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt]];
 
 (* Index the guarded equations once; never expand the full opcode case
    when the opcode is already known. Shared by all result/frame proofs. *)
@@ -120,7 +120,7 @@ Definition commute_equiv_def:
     commute_frame s1 = commute_frame s2
 End
 
-Theorem state_equiv_imp_commute_equiv[local]:
+Theorem state_equiv_imp_commute_equiv:
   !vars s1 s2. state_equiv vars s1 s2 ==> commute_equiv vars s1 s2
 Proof
   rw[state_equiv_def, execution_equiv_def, commute_equiv_def]
@@ -133,7 +133,7 @@ QED
 (* inst_defs = inst_outputs, inst_uses = operand_vars *)
 
 (* commute_equiv is weaker than state_equiv *)
-Theorem commute_equiv_subset[local]:
+Theorem commute_equiv_subset:
   !v1 v2 s1 s2. commute_equiv v1 s1 s2 /\ v1 SUBSET v2 ==>
     commute_equiv v2 s1 s2
 Proof
@@ -145,7 +145,7 @@ QED
    (see state_equiv_imp_commute_equiv above) *)
 
 (* result_equiv for OK gives state_equiv *)
-Theorem result_equiv_ok_state_equiv[local]:
+Theorem result_equiv_ok_state_equiv:
   !vars s1 s2 r1 r2.
     result_equiv vars (OK s1) (OK s2) ==> state_equiv vars s1 s2
 Proof
@@ -237,8 +237,17 @@ Proof
   >- (Cases_on `op2` >> EVAL_TAC)
 QED
 
+(* Empty write_effects implies not ext_call. *)
+Theorem empty_write_not_ext_call:
+  !op. write_effects op = {} ==> ~is_ext_call_op op
+Proof
+  Cases >> rw[write_effects_def, is_ext_call_op_def, all_effects_def,
+              empty_effects_def] >>
+  gvs[pred_setTheory.EXTENSION]
+QED
+
 (* Helper: eval_operand agrees when lookup_var agrees on Var operands *)
-Theorem eval_operand_agree[local]:
+Theorem eval_operand_agree:
   !op s s'.
     (!x. MEM (Var x) [op] ==> lookup_var x s = lookup_var x s') /\
     s.vs_labels = s'.vs_labels ==>
@@ -280,7 +289,7 @@ Theorem step_inst_base_static_write_abort:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
-     inst.inst_opcode = LOG \/ inst.inst_opcode = CALL) ==>
+     inst.inst_opcode = LOG) ==>
     s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) /\
     a = ExHalt_abort /\ s' = halt_state (set_returndata [] s)
 Proof
@@ -290,6 +299,20 @@ Proof
   gvs[exec_write2_def, AllCaseEqs(), eval_operands_def]
 QED
 
+Theorem step_inst_base_call_abort:
+  !inst s a s'.
+    step_inst_base inst s = Abort a s' /\ inst.inst_opcode = CALL ==>
+    (s.vs_call_ctx.cc_static \/ s.vs_outcomes = []) /\
+    IS_SOME (eval_operands inst.inst_operands s) /\
+    a = ExHalt_abort /\ s' = halt_state (set_returndata [] s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  step_inst_base_opcode_tac >>
+  rw[AllCaseEqs(), exec_ext_call_abort_iff] >>
+  gvs[eval_operands_def]
+QED
+
 (* Base-instruction abort guards do not issue external requests. *)
 Theorem step_inst_base_abort_requests:
   step_inst_base inst s = Abort a post ==>
@@ -297,12 +320,10 @@ Theorem step_inst_base_abort_requests:
 Proof
   strip_tac >>
   drule step_inst_base_abort_opcodes >> strip_tac >>
-  TRY (drule step_inst_base_static_write_abort >> simp[] >> strip_tac >>
-       gvs[halt_state_def, set_returndata_def]) >>
   qpat_x_assum `step_inst_base inst s = Abort a post` mp_tac >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  asm_rewrite_tac[venomInstTheory.opcode_case_def] >>
-  simp[AllCaseEqs(), exec_create_abort_iff] >>
+  step_inst_base_opcode_tac >>
+  simp[AllCaseEqs(), exec_create_abort_iff, exec_ext_call_abort_iff,
+       exec_delegatecall_abort_iff, exec_write2_def] >>
   rpt strip_tac >>
   gvs[halt_state_def, revert_state_def, set_returndata_def]
 QED
@@ -327,7 +348,7 @@ Theorem step_inst_base_static_abort_input_equiv[local]:
   !inst s1 s2 a s1'.
     step_inst_base inst s1 = Abort a s1' /\
     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
-     inst.inst_opcode = LOG \/ inst.inst_opcode = CALL) /\
+     inst.inst_opcode = LOG) /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) /\
     s1.vs_labels = s2.vs_labels /\
     s1.vs_call_ctx.cc_static = s2.vs_call_ctx.cc_static ==>
@@ -350,31 +371,12 @@ Theorem step_inst_base_abort_returndata:
     s'.vs_returndata = []
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
-               inst.inst_opcode = LOG \/ inst.inst_opcode = CALL`
-  >- (drule_then (qspec_then `s` mp_tac) step_inst_base_static_abort_input_equiv >>
-      gvs[halt_state_def, set_returndata_def]) >>
-  imp_res_tac step_inst_base_abort_opcode >> gvs[]
-  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      step_inst_base_opcode_tac >>
-      rw[set_returndata_def, revert_state_def, is_terminator_def,
-         venom_state_component_equality, AllCaseEqs()])
-  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      step_inst_base_opcode_tac >>
-      rw[set_returndata_def, halt_state_def, is_terminator_def,
-         venom_state_component_equality, AllCaseEqs()])
-  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      step_inst_base_opcode_tac >>
-      rw[exec_create_abort_iff, set_returndata_def, halt_state_def,
-         is_terminator_def, venom_state_component_equality, AllCaseEqs()])
-  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      step_inst_base_opcode_tac >>
-      rw[exec_create_abort_iff, set_returndata_def, halt_state_def,
-         is_terminator_def, venom_state_component_equality, AllCaseEqs()])
-  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      step_inst_base_opcode_tac >>
-      rw[set_returndata_def, halt_state_def, is_terminator_def,
-         venom_state_component_equality, AllCaseEqs()])
+  drule_all step_inst_base_abort_opcode >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  step_inst_base_opcode_tac >>
+  rw[exec_create_abort_iff, exec_ext_call_abort_iff,
+     exec_delegatecall_abort_iff, set_returndata_def, halt_state_def,
+     revert_state_def, AllCaseEqs(), exec_write2_def] >> gvs[]
 QED
 
 Theorem step_inst_base_abort_type[local]:
@@ -385,13 +387,17 @@ Theorem step_inst_base_abort_type[local]:
     (inst.inst_opcode = ASSERT_UNREACHABLE ==> a = ExHalt_abort) /\
     (inst.inst_opcode = CREATE ==> a = ExHalt_abort) /\
     (inst.inst_opcode = CREATE2 ==> a = ExHalt_abort) /\
+    (inst.inst_opcode = CALL ==> a = ExHalt_abort) /\
+    (inst.inst_opcode = STATICCALL ==> a = ExHalt_abort) /\
+    (inst.inst_opcode = DELEGATECALL ==> a = ExHalt_abort) /\
     (inst.inst_opcode = RETURNDATACOPY ==> a = ExHalt_abort)
 Proof
   rpt strip_tac >>
   gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   step_inst_base_opcode_tac >>
-  rw[is_terminator_def, AllCaseEqs(), exec_create_abort_iff]
+  rw[is_terminator_def, AllCaseEqs(), exec_create_abort_iff,
+     exec_ext_call_abort_iff, exec_delegatecall_abort_iff]
 QED
 
 (* A non-terminator abort's type is fixed by its opcode's fail class. *)
@@ -404,7 +410,7 @@ Theorem step_inst_base_abort_fail_class:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
-            inst.inst_opcode = LOG \/ inst.inst_opcode = CALL`
+            inst.inst_opcode = LOG`
   >- (drule_all step_inst_base_static_write_abort >> strip_tac >>
       gvs[opcode_fail_class_def]) >>
   drule_all step_inst_base_abort_opcode >>
@@ -415,7 +421,7 @@ QED
 (* Non-INVOKE aborters (ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY) are all
    abort_incompatible with INVOKE. So step_inst_base can't abort for a
    non-INVOKE instruction that is abort_compatible with INVOKE. *)
-Theorem no_abort_with_invoke[local]:
+Theorem no_abort_with_invoke:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
     ~is_terminator inst.inst_opcode /\
@@ -473,6 +479,7 @@ Theorem step_inst_base_abort_input_equiv:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_labels = s2.vs_labels /\
+    (s1.vs_outcomes = [] <=> s2.vs_outcomes = []) /\
     s1.vs_call_ctx.cc_static = s2.vs_call_ctx.cc_static ==>
     ?s2'. step_inst_base inst s2 = Abort a s2'
 Proof
@@ -483,14 +490,15 @@ Proof
   `eval_operands inst.inst_operands s1 = eval_operands inst.inst_operands s2` by
     (irule eval_operands_agree >> simp[]) >>
   Cases_on `inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
-               inst.inst_opcode = LOG \/ inst.inst_opcode = CALL`
+               inst.inst_opcode = LOG`
   >- (drule_then (qspec_then `s2` mp_tac) step_inst_base_static_abort_input_equiv >>
       gvs[]) >>
   drule_all step_inst_base_abort_opcode >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   step_inst_base_opcode_tac >>
-  simp[exec_create_abort_iff] >>
-  gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[exec_create_abort_iff] >>
+  simp[exec_create_abort_iff, exec_ext_call_abort_iff, exec_delegatecall_abort_iff] >>
+  gvs[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[exec_create_abort_iff, exec_ext_call_abort_iff, exec_delegatecall_abort_iff] >>
   metis_tac[]
 QED
 
@@ -527,10 +535,29 @@ Proof
   `eval_operands inst_b.inst_operands s = eval_operands inst_b.inst_operands v` by
     (irule eval_operands_agree >> simp[]) >>
   Cases_on `inst_b.inst_opcode = SSTORE \/ inst_b.inst_opcode = TSTORE \/
-               inst_b.inst_opcode = LOG \/ inst_b.inst_opcode = CALL`
+               inst_b.inst_opcode = LOG`
   >- (drule_then (qspec_then `v` mp_tac) step_inst_base_static_abort_input_equiv >>
       gvs[halt_state_def, set_returndata_def]) >>
-  imp_res_tac step_inst_base_abort_opcode >> gvs[]
+  Cases_on `is_ext_call_op inst_b.inst_opcode`
+  >- (
+    `write_effects inst_a.inst_opcode = {}` by
+      metis_tac[effects_independent_sym, effects_independent_ext_call_empty] >>
+    `~is_ext_call_op inst_a.inst_opcode` by
+      metis_tac[empty_write_not_ext_call] >>
+    `inst_a.inst_opcode <> INVOKE` by
+      (strip_tac >> gvs[EVAL ``write_effects INVOKE = {}``]) >>
+    `inst_a.inst_opcode <> CALL /\ inst_a.inst_opcode <> STATICCALL /\
+     inst_a.inst_opcode <> CREATE /\ inst_a.inst_opcode <> CREATE2 /\
+     inst_a.inst_opcode <> DELEGATECALL` by
+      (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
+    `v.vs_outcomes = s.vs_outcomes` by
+      (drule_all step_inst_noninvoke_oracle >> simp[]) >>
+    `v.vs_returndata = s.vs_returndata` by
+      metis_tac[write_effects_sound_returndata, pred_setTheory.NOT_IN_EMPTY] >>
+    drule_then (qspec_then `v` mp_tac) step_inst_base_abort_input_equiv >>
+    simp[] >> disch_then (qx_choose_then `v_abort` strip_assume_tac) >>
+    qexists_tac `v_abort` >> metis_tac[step_inst_base_abort_returndata]) >>
+  imp_res_tac step_inst_base_abort_opcode >> gvs[is_ext_call_op_def]
   >- (
     (* ASSERT *)
     qpat_x_assum `step_inst_base inst_b s = _` mp_tac >>
@@ -547,24 +574,6 @@ Proof
     `eval_operand cond_op v = SOME 0w` by (
       Cases_on `cond_op` >> gvs[eval_operand_def]) >>
     gvs[halt_state_def, set_returndata_def])
-  >- (
-    `!op. MEM op inst_b.inst_operands ==>
-          eval_operand op s = eval_operand op v` by
-      (Cases >> simp[eval_operand_def] >> metis_tac[]) >>
-    qpat_x_assum `step_inst_base inst_b s = _` mp_tac >>
-    step_inst_base_opcode_tac >> simp[] >>
-    gvs[AllCaseEqs()] >> rpt strip_tac >>
-    gvs[exec_create_abort_iff, halt_state_def, set_returndata_def] >>
-    qexists_tac `v with <|vs_returndata := []; vs_halted := T|>` >> simp[])
-  >- (
-    `!op. MEM op inst_b.inst_operands ==>
-          eval_operand op s = eval_operand op v` by
-      (Cases >> simp[eval_operand_def] >> metis_tac[]) >>
-    qpat_x_assum `step_inst_base inst_b s = _` mp_tac >>
-    step_inst_base_opcode_tac >> simp[] >>
-    gvs[AllCaseEqs()] >> rpt strip_tac >>
-    gvs[exec_create_abort_iff, halt_state_def, set_returndata_def] >>
-    qexists_tac `v with <|vs_returndata := []; vs_halted := T|>` >> simp[])
   >> (
     (* RETURNDATACOPY: need returndata agreement *)
     `Eff_RETURNDATA NOTIN write_effects inst_a.inst_opcode` by (
@@ -631,7 +640,7 @@ QED
    All of these return OK iff operands evaluate (+ condition nonzero for ASSERT). *)
 (* When state_equiv holds between s and s', step returns OK on s' too.
    This is a simple wrapper around step_inst_result_equiv_full. *)
-Theorem step_inst_transfer_via_equiv[local]:
+Theorem step_inst_transfer_via_equiv:
   !fuel ctx inst s v s' vars.
     step_inst fuel ctx inst s = OK v /\
     state_equiv vars s s' /\
@@ -651,7 +660,7 @@ QED
 (* Helper: derive eval_operand agreement from lookup_var agreement *)
 (* Helper: derive that non-terminator OK step preserves context fields needed
    for step_inst_base_ok_transfer *)
-Theorem step_preserves_transfer_ctx[local]:
+Theorem step_preserves_transfer_ctx:
   !fuel ctx inst s v.
     step_inst fuel ctx inst s = OK v /\
     ~is_terminator inst.inst_opcode ==>
@@ -659,15 +668,6 @@ Theorem step_preserves_transfer_ctx[local]:
     v.vs_params = s.vs_params
 Proof
   metis_tac[step_preserves_control_flow, step_preserves_params]
-QED
-
-(* Empty write_effects implies not ext_call *)
-Theorem empty_write_not_ext_call:
-  !op. write_effects op = {} ==> ~is_ext_call_op op
-Proof
-  Cases >> rw[write_effects_def, is_ext_call_op_def, all_effects_def,
-              empty_effects_def] >>
-  gvs[pred_setTheory.EXTENSION]
 QED
 
 (* When inst_a has empty write_effects and both return OK,
@@ -1744,4 +1744,19 @@ Proof
       mp_tac (Q.SPECL [`fuel`, `ctx`, `inst1`, `inst2`, `s`]
               commute_base_case) >>
       simp[]))
+QED
+
+Theorem step_inst_base_nonrevert_revert_empty:
+  inst.inst_opcode <> REVERT /\
+  step_inst_base inst s = Abort Revert_abort post ==>
+  post.vs_returndata = []
+Proof
+  strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (qpat_x_assum `is_terminator _` mp_tac >>
+      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+      step_inst_base_opcode_tac >>
+      gvs[AllCaseEqs(), halt_state_def, set_returndata_def] >>
+      rpt strip_tac >> pairarg_tac >> gvs[]) >>
+  metis_tac[step_inst_base_abort_returndata]
 QED

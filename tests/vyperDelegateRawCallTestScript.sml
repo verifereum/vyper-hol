@@ -2,6 +2,7 @@
    The direct eval_raw_call path and the CPS expression path both execute in CV. *)
 Theory vyperDelegateRawCallTest
 Ancestors
+  vyperSmallStepCV
   vyperSmallStep[ignore_grammar] vyperInterpreter
   vfmExecution[ignore_grammar] vfmState[ignore_grammar]
   vyperState vyperContext vyperAST vyperValue vyperTypeSystem
@@ -101,7 +102,7 @@ Definition delegate_observe_def:
         (vyperSmallStep$eval_expr_cps delegate_context
           (delegate_expression calldata_form flags amount) st vyperSmallStep$DoneK))
       else eval_raw_call delegate_context flags 42w delegate_context.txn.calldata amount
-        default_evm_gas_limit st in
+        NONE st in
     FST r = expected /\
     let final = SND r in
     MAP (\a. let acc = lookup_account a final.accounts in
@@ -228,7 +229,7 @@ Theorem delegate_designation_executes_implementation_in_proxy_context:
           (delegate_expression (SND mode) (delegate_flags 128 T) 0)
           delegate_designation_state vyperSmallStep$DoneK))
       else eval_raw_call delegate_context (delegate_flags 128 T) 42w
-        delegate_context.txn.calldata 0 default_evm_gas_limit
+        delegate_context.txn.calldata 0 NONE
         delegate_designation_state in
     FST r = INL (Value (BytesV delegate_words)) /\
     let final = SND r in

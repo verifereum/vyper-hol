@@ -178,4 +178,43 @@ QED
 
 Finalise suffix_checked
 
+Theorem suffix_abort_checked:
+  gi = mk_inst id GAS [] [gv] /\
+  ci = mk_inst (id+1) STATICCALL
+    [Var gv; Lit addr; Var src; Lit an; Var dst; Lit rn] [cv] /\
+  src <> gv /\ dst <> gv /\
+  ptr_covers G tn src s (w2n an) /\ ptr_covers G tn dst s (w2n rn) /\
+  eval_operand (Var src) s = SOME wi /\
+  (!i. w2n wi <= i /\ i < w2n wi + w2n an ==> i NOTIN tn.t_mem) /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+    (s.vs_transient s.vs_call_ctx.cc_address) /\
+  step_inst_base gi s = OK u /\ step_inst_base ci u = Abort a t ==>
+  inst_seq_ptr D lo ctx fn PG G tn (gi::ci::tail) s
+    (step_prov PG G gi u) (step_taint gi s u tn)
+Proof
+  strip_tac >>
+  qabbrev_tac `G1 = step_prov PG G gi u` >>
+  qabbrev_tac `tn1 = step_taint gi s u tn` >>
+  `ptr_inst_ok D lo 0 ctx fn G tn gi s` by
+    (gvs[] >> irule gas_ptr_inst_ok >> simp[]) >>
+  `ptr_covers G1 tn1 src u (w2n an) /\
+   ptr_covers G1 tn1 dst u (w2n rn)` by
+    (simp[Abbr `G1`, Abbr `tn1`] >> metis_tac[gas_ptr_covers]) >>
+  `ptr_inst_ok D lo 0 ctx fn G1 tn1 ci
+      (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (gvs[] >> irule staticcall_ptr_inst_ok >>
+     conj_tac >- simp[instIdxIndepTheory.step_inst_inst_idx_indep,
+       mk_inst_def, is_terminator_def, exec_result_map_def] >>
+     drule gas_step_taint >> simp[Abbr `tn1`] >> strip_tac >>
+     gvs[step_GAS, allocas_from_def, update_var_def, mk_inst_def,
+       op_taint_def, FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>
+     metis_tac[]) >>
+  gvs[mk_inst_def, Abbr `G1`, Abbr `tn1`, is_terminator_def] >>
+  simp[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def,
+       is_terminator_def]
+QED
+
 
