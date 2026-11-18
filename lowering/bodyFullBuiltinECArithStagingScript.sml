@@ -148,7 +148,6 @@ Theorem ec_arith_staged_cut:
       tnu.t_trans SUBSET (DF H).d_trans u.vs_call_ctx.cc_address
         (u.vs_transient u.vs_call_ctx.cc_address) /\
       (!i. w2n wi <= i /\ i < w2n wi + w2n an ==> i NOTIN tnu.t_mem) /\
-      (addr = 1w ==> !i. w2n wo <= i /\ i < w2n wo + 32 ==> i NOTIN tnu.t_mem) /\
       (!name b sz. local_region cenv es2.scopes u name b sz ==>
         regions_disjoint (w2n wo) (w2n (64w:256 word)) b sz) /\
       (!aid b sz. aid < s2.cs_next_id /\ FLOOKUP u.vs_allocas aid = SOME (b,sz) ==>

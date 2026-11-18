@@ -223,8 +223,8 @@ Theorem erc20_transfer_balances:
     word_to_bytes (1w : bytes32) T
 Proof
   mp_tac (EQT_ELIM erc20_balances_eval) >>
-  Cases_on `erc20_es_transfer_post.contexts` >> simp[] >>
-  PairCases_on `h` >> simp[]
+  namedCases_on `erc20_es_transfer_post.contexts` ["", "frame rest"] >>
+  simp[] >> PairCases_on `frame` >> simp[]
 QED
 
 val erc20_check_dep =
@@ -391,8 +391,8 @@ Proof
        vyperContextTheory.empty_call_txn_def] >>
   simp[erc20_immutables_section, call_requests_def, erc20_dep_trace] >>
   fs[frame_outcome_def, erc20_es_dep_def, p23_frame_def] >>
-  Cases_on `erc20_es_dep_post.contexts` >> gvs[] >>
-  PairCases_on `h` >>
+  namedCases_on `erc20_es_dep_post.contexts` ["", "frame rest"] >>
+  gvs[] >> PairCases_on `frame` >>
   gvs[loweringStateRelDefsTheory.accounts_agree_def,
       loweringStateRelDefsTheory.transient_agree_def, storage_agree_refl]
 QED
@@ -423,8 +423,8 @@ Proof
   qexists `word_to_bytes (1w : bytes32) T` >>
   simp[erc20_transfer_return, call_requests_def, erc20_transfer_trace] >>
   fs[frame_outcome_def, erc20_es_transfer_def, p23_frame_def] >>
-  Cases_on `erc20_es_transfer_post.contexts` >> gvs[] >>
-  PairCases_on `h` >>
+  namedCases_on `erc20_es_transfer_post.contexts` ["", "frame rest"] >>
+  gvs[] >> PairCases_on `frame` >>
   gvs[loweringStateRelDefsTheory.accounts_agree_def,
       loweringStateRelDefsTheory.transient_agree_def, storage_agree_refl] >>
   EVAL_TAC
@@ -440,7 +440,7 @@ Proof
           pred_setTheory.SUM_IMAGE_ZERO,
           erc20_deployed_accounts_def, vfmStateTheory.update_account_def,
           vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def] >>
-     gen_tac >> Cases_on `x = 2w` >>
+     qx_gen_tac `address` >> Cases_on `address = 2w` >>
      simp[vfmStateTheory.empty_account_state_def,
           vfmStateTheory.empty_accounts_def,
           combinTheory.APPLY_UPDATE_THM]) >>
@@ -483,8 +483,10 @@ Proof
        vfmExecutionPropTheory.wf_account_state_def,
        immutableSectionRelTheory.installed_code_rel_def,
        erc20_immutables_section, erc20_runtime_code_length] >>
-  rpt conj_tac >> rpt gen_tac >> Cases_on `2w = x` >> simp[] >>
-  EVAL_TAC >> simp[]
+  rpt conj_tac
+  >- (qx_gen_tac `address` >> Cases_on `2w = address` >> simp[] >>
+      EVAL_TAC >> simp[]) >>
+  rpt gen_tac >> EVAL_TAC >> simp[]
 QED
 
 val erc20_supported = EVAL

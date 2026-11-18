@@ -5,10 +5,12 @@ Ancestors
   bodyInvNoDalloca bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
   bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
   bodyFullExtract32Prepare bodyFullExtract32Suffix bodyFullExtract32SuffixExit
-  bodyFullExtract32JoinFrame bodyPtrTypeBuiltinsSavedOperand
+  bodyFullExtract32JoinFrame bodyPtrTypeBuiltinsSavedOperand wordArgsPtr
   gasShadowCompile gasShadowCompileStmtHelpers exprOperandVar exprLoweringProps stmtSimProps
   gasOutcomeFullCompose exprSimHyps exprSimSource exprSimExtract32Source
   vyperContext vyperInterpreter vyperState vyperAST
+Libs
+  horizonTypeLib
 
 (* The current typing contract excludes fixed-byte sources and signed offsets.
    Keep this boundary local rather than narrowing the frozen expression case. *)
@@ -465,9 +467,10 @@ Resume extract32_vv_full[suffix_entry]:
      qpat_assum `expr_post H _ _ _ _ src _ _ _ _ _ _ _ _` (irule_at Any) >>
      qpat_assum `expr_post H _ _ _ _ off _ _ _ _ _ _ _ _` (irule_at Any) >> simp[]) >>
   `wb_frame cenv es mid sa s0 u` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
-  irule (INST_TYPE [alpha |-> ``:256``] extract32_join_ghost_kept_at) >>
+  irule (horizonTypeLib.at_horizon_named "H" wordArgsPtrTheory.ghost_kept_at_wb_trans) >>
   qpat_assum `stmt_state_rel H _ _ _ _ es s0` (irule_at Any) >>
-  qpat_assum `ghost_kept_at lo cenv mid s2 G2 tn2 u G3 tn3` (irule_at Any) >> simp[]
+  qpat_assum `ghost_kept_at lo cenv mid s2 G2 tn2 u G3 tn3` (irule_at Any) >>
+  qpat_assum `wb_frame cenv es mid sa s0 u` (irule_at Any) >> simp[]
 QED
 
 Resume extract32_vv_full[result_bounds]:

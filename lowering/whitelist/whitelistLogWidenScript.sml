@@ -9,7 +9,7 @@
    that every declared indexed field has an evaluated type. *)
 Theory whitelistLogWiden
 Ancestors
-  allocLimits allocLimitsProps eventLoweringStructure
+  allocLimits allocLimitsProps eventEncodingProps eventLoweringStructure
   valueCopyBytes valueTypingMemoryProps vyperEventCompatibility
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   stmtSimLogArgsRun stmtSimLogArgsGrowth stmtSimLogSuffix stmtSimLogSource
@@ -104,7 +104,10 @@ Theorem compatible_non_indexed:
     LIST_REL event_arg_compatible (log_non_indexed_types flags tys)
       (log_non_indexed_types flags atys)
 Proof
-  logWidenTacticsLib.non_indexed
+  rpt strip_tac >>
+  mp_tac (Q.INST [`R` |-> `event_arg_compatible`, `Q` |-> `K T`,
+                  `ftys` |-> `tys`] log_non_indexed_types_preserve) >>
+  simp[EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem event_leaf_compatible_abi_eq:

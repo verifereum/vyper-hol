@@ -252,7 +252,7 @@ QED
 Theorem code_end_stage_origins[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C Ct /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
-  o1_run_state_ok vs /\ raw_reachable vs Ct g j t ==>
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ raw_reachable vs Ct g j t ==>
   frame_origin vs C Ct g j t /\
   (!nm f g. lookup_function nm C.ctx_functions = SOME f /\
     lookup_function nm Ct.ctx_functions = SOME g ==> g = simplify_cfg_fn f /\ scfg_static f)
@@ -273,7 +273,7 @@ Proof
      fs[scfg_static_def, o1_fn_shape_def] >> metis_tac[fn_shape_ok_scfg_shape]) >>
   conj_tac
   >- (irule frame_sim_raw_origins >>
-      fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def, ctx_pass_stage_def] >>
+      fs[ctx_pass_stage_def] >>
       qpat_x_assum `LIST_REL (\fn fn'. ?observed s out. _) _ _` kall_tac >>
       qpat_x_assum `LIST_REL _ _ _` mp_tac >>
       qpat_x_assum `Ct.ctx_functions = _` mp_tac >>
@@ -303,9 +303,9 @@ Proof
   metis_tac[wf_ssa_defs_reach_uses, fn_shape_ok_scfg_shape]
 QED
 
-Theorem code_end_stage_preserves[local]:
+Theorem simplify_cfg_code_end_stage_preserves:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C Ct /\
-  o1_ctx_shape C /\ o1_ssa_inv C vs /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ o1_ssa_inv C vs /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
   code_end_offset_ok (raw_reachable vs) C /\
   EVERY (\f. !x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
     i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) C.ctx_functions ==>
@@ -359,5 +359,6 @@ Proof
    o1_inv D 6 C' s` by (first_x_assum irule >> simp[]) >>
   simp[] >>
   `EL 5 o1_fn_passes = CFP_Simple VP_SimplifyCFG` by EVAL_TAC >>
-  fs[o1_inv_def] >> metis_tac[code_end_stage_preserves]
+  fs[o1_inv_def, o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  metis_tac[simplify_cfg_code_end_stage_preserves]
 QED
