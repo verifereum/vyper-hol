@@ -31,6 +31,7 @@ Ancestors allocaFrontierRoom fragGasPathFrameMem
   list rich_list selectorDispatch byte contractABI vyperABIRoundtrip
   valueEncoding valueEncodingDefs entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
   ctorDeployMemoryFrontier registrationSizeAdmissibility argumentRegistrationOpen
+  sourceEntrySelection
 
 (* Supported checked source excludes all runtime DALLOCA producers.  This
    rules out the proposed near-limit source family before budgeting it. *)
@@ -447,7 +448,10 @@ QED
 Theorem registration_owned_entry_inputs_nr:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
-  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  tx.function_name <> "__default__" /\
+  LENGTH tx.args = LENGTH args /\
+  calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+    tx.args vs.vs_call_ctx.cc_calldata /\
   initial_venom_state_rel tops am tx vs /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,[],ret,fbody) /\
@@ -487,16 +491,12 @@ Proof
   drule_all registration_source_parameter_inputs_nr >> strip_tac >>
   drule_all registration_initial_ptr_resources >>
   disch_then (qspec_then `site` strip_assume_tac) >>
-  `calldata_encodes (type_env tops) tx.function_name (MAP SND args)
-     tx.args vs.vs_call_ctx.cc_calldata` by
-    gvs[e2eDefsTheory.valid_vyper_call_def] >>
   `LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256)` by
     (fs[initial_venom_state_rel_def, venom_env_rel_def, call_ctx_rel_def,
         e2eDefsTheory.source_typing_ok_def,
         vyperTypeContractSoundnessTheory.call_tx_well_typed_def] >>
      gvs[wordsTheory.dimword_def]) >>
   asm_rewrite_tac [] >> qexists_tac `tvs` >> asm_rewrite_tac [] >>
-  `tx.function_name <> "__default__"` by fs[e2eDefsTheory.valid_vyper_call_def] >>
   drule_all registration_external_allocs_ok >> strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
     metis_tac[source_typing_ok_type_def_keys_distinct] >>
@@ -553,7 +553,10 @@ Theorem registration_owned_entry_inputs:
     (!i. i < LENGTH args ==>
       type_memory_size (EL i tvs) < dimword (:256))
 Proof
-  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_owned_entry_inputs_nr)
+  strip_tac >>
+  drule_all valid_vyper_call_selected_calldata >> strip_tac >>
+  drule_all (Q.INST [`nr` |-> `F`] registration_owned_entry_inputs_nr) >>
+  disch_then (qspec_then `site` ACCEPT_TAC)
 QED
 
 (* A selected argument occupies its canonical tuple window, including dynamic
@@ -3323,7 +3326,10 @@ QED
 Theorem registration_owned_locals_joint_nr:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
-  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  tx.function_name <> "__default__" /\
+  LENGTH tx.args = LENGTH args /\
+  calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+    tx.args vs.vs_call_ctx.cc_calldata /\
   initial_venom_state_rel tops am tx vs /\
   lookup_function NONE tx.function_name External tops = SOME (mut,nr,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -3558,7 +3564,9 @@ Theorem registration_owned_locals_joint[local]:
     (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
       !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1)
 Proof
-  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_owned_locals_joint_nr)
+  strip_tac >>
+  drule_all valid_vyper_call_selected_calldata >> strip_tac >>
+  drule_all (Q.INST [`nr` |-> `F`] registration_owned_locals_joint_nr) >> simp[]
 QED
 
 Theorem registration_owned_locals_endpoint_resources:
@@ -4022,7 +4030,8 @@ Theorem registration_actual_endpoint_relations:
   ghost_inv H NONE cenv (initial_evaluation_context am.sources am.layouts tx NONE)
     es0 G0 tn0 s0
 Proof
-  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_actual_endpoint_relations_nr)
+  strip_tac >>
+  drule_all (Q.INST [`nr` |-> `F`] registration_actual_endpoint_relations_nr) >> simp[]
 QED
 
 Theorem registration_positional_args_joint_nr:
@@ -4031,7 +4040,10 @@ Theorem registration_positional_args_joint_nr:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\ source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    tx.function_name <> "__default__" /\
+  LENGTH tx.args = LENGTH args /\
+  calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+    tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, nr, args, [], ret, fbody) /\
@@ -4150,6 +4162,7 @@ Theorem registration_positional_args_joint[local]:
           !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_all valid_vyper_call_selected_calldata >> strip_tac >>
   drule_all registration_positional_args_joint_nr >>
   disch_then (qspec_then `G1` strip_assume_tac) >>
   qexistsl_tac [`s0`, `G0`, `tn0`] >> simp[]
@@ -4232,7 +4245,10 @@ Theorem register_positional_args_ptr_nr:
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    tx.function_name <> "__default__" /\
+  LENGTH tx.args = LENGTH args /\
+  calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+    tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, nr, args, [], ret, fbody) /\
@@ -4348,6 +4364,7 @@ Theorem register_positional_args_ptr:
           !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_all valid_vyper_call_selected_calldata >> strip_tac >>
   drule_all register_positional_args_ptr_nr >>
   disch_then (qspec_then `G1` strip_assume_tac) >>
   qexistsl_tac [`s0`, `G0`, `tn0`] >> simp[]
