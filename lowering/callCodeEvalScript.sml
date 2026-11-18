@@ -143,8 +143,9 @@ QED
 Resume evaluate_no_self_code_update_aux[create]:
   PURE_ONCE_REWRITE_TAC [evaluate_def] >>
   simp[call_code_create_updates] >>
-  drule_then assume_tac no_self_code_create_order >>
-  first_x_assum (drule_all_then SUBST1_TAC) >> simp[]
+  qpat_x_assum `!c. closed cx /\ _ ==> _` (qspec_then `c` mp_tac) >>
+  impl_tac >- simp[no_self_code_create_order] >>
+  disch_then SUBST1_TAC >> simp[]
 QED
 
 Resume evaluate_no_self_code_update_aux[remaining]:
