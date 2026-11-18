@@ -3,6 +3,7 @@
 Theory ctorDeployLoweringReturn
 Ancestors
   valueEncodingDefs ctorDeployLoweringDefs ctorDeployDefs immSectionDead o1PassContract ctorReturnFrame
+  accountsRelProps vfmProg
   vyperInterpreter supportedDecls symbolResolve ctorDeployInitcodeAsm
   codegenEncodingWf ctorDeployShape o1PipelineCorrect asmToBytecodeProofs list rich_list venomPipelineData unitLabelMap venomFnScheduleRunner
   venomPipelineRunner venomPipelineDriver vyperCompiler compileVyper asmIR
@@ -12,11 +13,12 @@ Ancestors
   entryStateRel structFieldsProps vyperTypeDeploymentSoundness moduleLowering compileEnv loweringStateRelDefs
 
 Theorem deploy_ctor_finish_normal[local]:
-  ~nr /\ st.pending_deletions = [] /\
+  ~nr /\
   (res = INL () \/ res = INR (ReturnException NoneV)) ==>
   deploy_ctor_finish tops tx cx nr mut am_c res st =
-    INL (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st
-           with sources updated_by CONS (tx.target, [(NONE,tops)]), st.requests)
+    INL (finalize_pending_deletions
+      (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st
+         with sources updated_by CONS (tx.target, [(NONE,tops)])), st.requests)
 Proof
   strip_tac >>
   simp[deploy_ctor_finish_def, unlock_if_nr_def, vyperStateTheory.return_def,
@@ -59,7 +61,7 @@ Theorem deploy_ctor_body_pending[local]:
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   eval_stmts (deploy_evaluation_context tops am tx) stmts
     (es0 with <|gas_obs := gs; outcomes := SOME outcomes|>) = (res,st) ==>
-  st.pending_deletions = []
+  st.pending_deletions = am.pending_deletions
 Proof
   strip_tac >> drule deploy_ctor_start_pending >> strip_tac >>
   `~supported_stmts_expr_exists constructor_call_root stmts` by
@@ -587,10 +589,10 @@ Theorem deploy_snapshot_observations[local]:
       (lookup_account tx.target st.accounts).storage)
     (lookup_account tx.target st.accounts).storage
     (lookup_account tx.target before.vs_accounts).storage /\
-  transient_agree H (deploy_evaluation_context tops am tx) st.tStorage before.vs_transient /\
+  transient_agree H (deploy_evaluation_context tops am tx).txn.target st.tStorage before.vs_transient /\
   logs_correspond (compiled_event_info tops) (type_env tops)
     tx.target st.logs before.vs_logs /\
-  LIST_REL (request_agree H (deploy_evaluation_context tops am tx))
+  LIST_REL (request_agree H (deploy_evaluation_context tops am tx).txn.target)
     st.requests before.vs_requests
 Proof
   strip_tac >>
@@ -602,7 +604,7 @@ Proof
   `st.logs = before.vs_logs` by
     (qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
      simp[state_rel_def, logs_rel_def, LIST_REL_eq] >> metis_tac[]) >>
-  `LIST_REL (request_agree H (deploy_evaluation_context tops am tx))
+  `LIST_REL (request_agree H (deploy_evaluation_context tops am tx).txn.target)
      st.requests before.vs_requests` by
     (qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
      simp[state_rel_def] >> metis_tac[]) >>
@@ -926,14 +928,14 @@ QED
 Theorem deploy_result_context_agree[local]:
   am_c.sources = am.sources /\ am_c.layouts = am.layouts ==>
   accounts_agree H
-    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE) =
-    accounts_agree H (deploy_evaluation_context tops am tx) /\
+    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE).txn.target =
+    accounts_agree H (deploy_evaluation_context tops am tx).txn.target /\
   transient_agree H
-    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE) =
-    transient_agree H (deploy_evaluation_context tops am tx) /\
+    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE).txn.target =
+    transient_agree H (deploy_evaluation_context tops am tx).txn.target /\
   request_agree H
-    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE) =
-    request_agree H (deploy_evaluation_context tops am tx)
+    (initial_evaluation_context ((tx.target,[(NONE,tops)])::am_c.sources) am_c.layouts tx NONE).txn.target =
+    request_agree H (deploy_evaluation_context tops am tx).txn.target
 Proof
   strip_tac >> irule accountsRelPropsTheory.agree_cx_cong >>
   simp[initial_evaluation_context_def, e2eDeployDefsTheory.deploy_evaluation_context_def]
@@ -966,11 +968,12 @@ Theorem deploy_ctor_return:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `~nr` by (drule_all deploy_ctor_start_nr >> simp[]) >>
-  `st.pending_deletions = []` by
+  `st.pending_deletions = am.pending_deletions` by
     (drule_all deploy_ctor_body_pending >> simp[]) >>
   `deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx) nr mut am_c res st =
-   INL (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st
-     with sources updated_by CONS (tx.target,[(NONE,tops)]),st.requests)` by
+   INL (finalize_pending_deletions
+     (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st
+       with sources updated_by CONS (tx.target,[(NONE,tops)])),st.requests)` by
     metis_tac[deploy_ctor_finish_normal] >>
   qpat_x_assum `constructor_return_q _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[constructor_return_q_def] >> strip_tac >>
@@ -984,9 +987,9 @@ Proof
       (TAKE (imm_len tops) (before.vs_memory ++ REPLICATE (imm_len tops) 0w))` by
     metis_tac[deploy_ctor_immutable_section] >>
   drule deploy_snapshot_observations >> strip_tac >>
-  `before.vs_pending_deletions = []` by
-    (qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
-     simp[state_rel_def] >> metis_tac[]) >>
+  drule accountsRelPropsTheory.state_rel_accounts >> strip_tac >>
+  `before.vs_pending_deletions = st.pending_deletions` by
+    fs[] >>
   drule deploy_ctor_start_static >> strip_tac >>
   drule_all deploy_result_context_agree >>
   disch_then (qspecl_then [`tx`,`tops`,`H`] strip_assume_tac) >>
@@ -1001,12 +1004,35 @@ Proof
   qpat_x_assum `state_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `immutables_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `!pre vis name ty slot post. _` kall_tac >>
-  simp[deploy_venom_result_rel_def, abstract_machine_from_state_def,
+  simp[deploy_venom_result_rel_def, finalize_pending_deletions_def,
+       abstract_machine_from_state_def,
        e2eDefsTheory.account_immutables_def] >>
-  gvs[accounts_agree_def, vfmExecutionTheory.process_deletions_def,
-      vfmStateTheory.update_account_def, vfmStateTheory.lookup_account_def,
-      initial_evaluation_context_def,
-      e2eDeployDefsTheory.deploy_evaluation_context_def,
-      vfmStateTheory.account_state_component_equality,
-      combinTheory.APPLY_UPDATE_THM] >> metis_tac[]
+  gvs[initial_evaluation_context_def,
+      e2eDeployDefsTheory.deploy_evaluation_context_def] >>
+  `accounts_agree H tx.target
+    (process_deletions am.pending_deletions st.accounts)
+    (process_deletions am.pending_deletions before.vs_accounts)` by
+    (irule (SRULE [e2eDeployDefsTheory.deploy_evaluation_context_def,
+      initial_evaluation_context_def]
+      (Q.SPEC `deploy_evaluation_context tops am tx`
+        accountsRelPropsTheory.accounts_agree_process_deletions)) >> fs[]) >>
+  Cases_on `MEM tx.target am.pending_deletions`
+  >- (`!a. process_deletions am.pending_deletions
+        (update_account tx.target a before.vs_accounts) =
+        process_deletions am.pending_deletions before.vs_accounts` by
+        (gen_tac >> irule accountsRelPropsTheory.process_deletions_update_mem >>
+         fs[]) >> fs[]) >>
+  `(lookup_account tx.target before.vs_accounts).code =
+   (lookup_account tx.target st.accounts).code` by
+    (qpat_x_assum `accounts_agree H tx.target st.accounts before.vs_accounts` mp_tac >>
+     simp[accounts_agree_def, vfmStateTheory.lookup_account_def,
+          vfmStateTheory.account_state_component_equality]) >>
+  `!A a. update_account a (lookup_account a A) A = A` by
+    rw[FUN_EQ_THM, vfmStateTheory.update_account_def,
+       vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM] >>
+  `lookup_account tx.target before.vs_accounts with
+     code := (lookup_account tx.target st.accounts).code =
+   lookup_account tx.target before.vs_accounts` by
+    simp[vfmStateTheory.account_state_component_equality] >>
+  fs[vfmProgTheory.lookup_account_process_deletions_other]
 QED

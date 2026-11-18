@@ -11,8 +11,27 @@ val () = holbuild_extra_deps ["../raw-system/parity-fixtures.txt"]
 
 val suffix = "_matches_python_oracle"
 val checked_names = List.concat (map DB.theorems
-  ["evalCompilerRawSystem1", "evalCompilerRawSystem2", "evalCompilerRawSystem3",
-   "evalCompilerRawSystem4"])
+  ["evalCompilerRawSystem1",
+   "evalCompilerRawSystem3",
+   "evalCompilerRawSystem4",
+   "evalCompilerRawSystemRl021topic",
+   "evalCompilerRawSystemRl042topicsBytes32data",
+   "evalCompilerRawSystemRl073topicsConcatNolit",
+   "evalCompilerRawSystemRr05StorageData",
+   "evalCompilerRawSystemSd01",
+   "evalCompilerRawSystemSd02Msgsender",
+   "evalCompilerRawSystemSd04IfThenContinue",
+   "evalCompilerRawSystem2",
+   "evalCompilerRawSystemRrBytes",
+   "evalCompilerRawSystemRrDefaultFn",
+   "evalCompilerRawSystemRrStorage",
+   "evalCompilerRawSystemXaBytesLitReturn",
+   "evalCompilerRawSystemRl034topics",
+   "evalCompilerRawSystemRr02Dynamic",
+   "evalCompilerRawSystemRr04TerminusRet",
+   "evalCompilerRawSystemRrArg",
+   "evalCompilerRawSystemRrNr",
+   "evalCompilerRawSystemRrLocal"])
   |> map #1
   |> List.filter (String.isSuffix suffix)
   |> map (fn name => String.substring (name, 0, size name - size suffix))

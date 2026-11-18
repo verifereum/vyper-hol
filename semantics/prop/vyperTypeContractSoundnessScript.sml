@@ -20,6 +20,7 @@ Ancestors
   vyperTypeContractFunction vyperTypeContractGetter vyperTypeEntryReadiness
   vyperTypeStatePreservation vyperTypeConstantFold vyperTypeExternalDefaults
   vyperTypeConstantCells vyperStorageTrace
+  vyperTypeEvalProofs
 Libs
   wordsLib
 
