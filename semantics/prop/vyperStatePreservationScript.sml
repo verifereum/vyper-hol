@@ -62,22 +62,30 @@ Proof
   rw[next_gas_reading_def] >> Cases_on `st.gas_obs` >>
   gvs[return_def, raise_def, evaluation_state_component_equality]
 QED
-(* A precompile builtin's success check consumes an outcome and changes
- * nothing else; a failed check is a runtime error. *)
+(* A precompile builtin records its request and consumes an outcome. *)
 Theorem precompile_call_success_state:
-  !bt st res st'. precompile_call_success bt st = (res, st') ==>
-    ?os. st' = st with outcomes := os
+  !bt vs st res st'. precompile_call_success bt vs st = (res, st') ==>
+    ?os rqs trace. st' = st with
+      <|outcomes := os; requests := rqs; storage_trace := trace|>
 Proof
-  rw[precompile_call_success_def, return_def] >>
+  rw[precompile_call_success_def, return_def, bind_def,
+     vyperCallOutcomeTheory.take_call_outcome_def,
+     vyperCallOutcomeTheory.take_request_outcome_def,
+     vyperCallOutcomeTheory.call_outcome_request_def,
+     extCallOracleTheory.take_outcome_def] >>
   BasicProvers.every_case_tac >>
-  gvs[check_def, assert_def, evaluation_state_component_equality]
+  gvs[check_def, assert_def, evaluation_state_component_equality] >> metis_tac[]
 QED
 
 Theorem precompile_call_success_exception:
-  !bt st exc st'. precompile_call_success bt st = (INR exc, st') ==>
+  !bt vs st exc st'. precompile_call_success bt vs st = (INR exc, st') ==>
     ?msg. exc = Error (RuntimeError msg)
 Proof
-  rw[precompile_call_success_def, return_def] >>
+  rw[precompile_call_success_def, return_def, bind_def,
+     vyperCallOutcomeTheory.take_call_outcome_def,
+     vyperCallOutcomeTheory.take_request_outcome_def,
+     vyperCallOutcomeTheory.call_outcome_request_def,
+     extCallOracleTheory.take_outcome_def] >>
   BasicProvers.every_case_tac >> gvs[check_def, assert_def]
 QED
 

@@ -634,12 +634,18 @@ QED
 
 (* A precompile builtin's success check consumes at most the head outcome. *)
 Theorem outcomes_suffix_precompile_call_success:
-  outcomes_suffix (precompile_call_success bt)
+  outcomes_suffix (precompile_call_success bt vs)
 Proof
   simp[outcomes_suffix_def, precompile_call_success_def] >> gen_tac >>
   Cases_on `precompile_builtin bt` >> simp[return_def] >>
   Cases_on `st.outcomes` >> simp[return_def] >>
-  rename1 `SOME os` >> Cases_on `os` >> simp[check_def, assert_def] >>
+  rename1 `SOME os` >> Cases_on `os` >>
+  simp[check_def, assert_def, bind_def, take_call_outcome_def,
+       take_request_outcome_def, call_outcome_request_def] >>
+  pairarg_tac >> simp[check_def, assert_def, AllCaseEqs()] >>
+  qpat_assum `extCallOracle$take_outcome _ _ = _`
+    (mp_tac o AP_TERM ``SND:call_outcome # call_outcome list -> call_outcome list``) >>
+  simp[extCallOracleTheory.take_outcome_rest] >> strip_tac >> gvs[] >>
   simp[outcome_suffix_def] >> qexists_tac `[h]` >> simp[]
 QED
 

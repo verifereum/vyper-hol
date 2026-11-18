@@ -33,10 +33,12 @@ Theorem dload_external_call_ghosts:
       t_var := set_var_taint tn.t_var i.inst_outputs {};
       t_stor := if i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
                     s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
                     s1.vs_outcomes <> s.vs_outcomes /\
                     (HD s.vs_outcomes).co_success then {} else tn.t_stor;
       t_trans := if i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
                     s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
                     s1.vs_outcomes <> s.vs_outcomes /\
                     (HD s.vs_outcomes).co_success then {} else tn.t_trans;
       t_imm := tn.t_imm|>
@@ -59,7 +61,8 @@ Theorem dload_external_call_adoption:
   (st <=> i.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
   exec_ext_call i s gas addr value ao az ro rz st = OK s1 ==>
   ((i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-    s1.vs_requests <> s.vs_requests /\ s1.vs_outcomes <> s.vs_outcomes /\
+    s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\ s1.vs_outcomes <> s.vs_outcomes /\
     (HD s.vs_outcomes).co_success) <=>
    (~(st \/ s.vs_call_ctx.cc_static) /\
     ~computed_precompile (venom_call_request s addr value ao az st) /\
@@ -134,11 +137,13 @@ Theorem dload_external_call_store_ghosts:
   (i.inst_opcode = CALL \/ i.inst_opcode = STATICCALL) ==>
   (step_taint i s s1 tn).t_stor =
     (if i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-        s1.vs_requests <> s.vs_requests /\ s1.vs_outcomes <> s.vs_outcomes /\
+        s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\ s1.vs_outcomes <> s.vs_outcomes /\
         (HD s.vs_outcomes).co_success then {} else tn.t_stor) /\
   (step_taint i s s1 tn).t_trans =
     (if i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-        s1.vs_requests <> s.vs_requests /\ s1.vs_outcomes <> s.vs_outcomes /\
+        s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\ s1.vs_outcomes <> s.vs_outcomes /\
         (HD s.vs_outcomes).co_success then {} else tn.t_trans) /\
   (step_taint i s s1 tn).t_imm = tn.t_imm
 Proof
@@ -153,14 +158,17 @@ Theorem dload_external_call_shared_store:
   exec_ext_call i s gs addr value ao az ro rz st = OK s1 /\
   exec_ext_call i t gt addr value bo bz rt rz st = OK t1 /\
   ((~s.vs_call_ctx.cc_static /\ s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
     s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
    (~t.vs_call_ctx.cc_static /\ t1.vs_requests <> t.vs_requests /\
+        ~computed_precompile (LAST t1.vs_requests) /\
     t1.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)) ==>
   dload_shared_store (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `a = (i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-    s1.vs_requests <> s.vs_requests /\ s1.vs_outcomes <> s.vs_outcomes /\
+    s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\ s1.vs_outcomes <> s.vs_outcomes /\
     (HD s.vs_outcomes).co_success)` >>
   `a <=> ~(st \/ s.vs_call_ctx.cc_static) /\
      ~computed_precompile (venom_call_request s addr value ao az st) /\
@@ -200,8 +208,10 @@ Theorem dload_external_call_step:
     dload_equal_environment s1 t1 /\
     (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1) /\
     ((~s.vs_call_ctx.cc_static /\ s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
       s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
      (~t.vs_call_ctx.cc_static /\ t1.vs_requests <> t.vs_requests /\
+        ~computed_precompile (LAST t1.vs_requests) /\
       t1.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -316,8 +326,10 @@ Theorem dload_external_call_boundary:
   dload_equal_environment s1 t1 /\
   (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1) /\
   ((~s.vs_call_ctx.cc_static /\ s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
     s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
    (~t.vs_call_ctx.cc_static /\ t1.vs_requests <> t.vs_requests /\
+        ~computed_precompile (LAST t1.vs_requests) /\
     t1.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)) ==>
   dload_boundary_core fl lo fs V Ws PG PH
     (step_prov PG G i s1) (step_prov PH H i t1)
@@ -427,8 +439,10 @@ Proof
     dload_equal_environment s1 t1 /\
     (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1) /\
     ((~s.vs_call_ctx.cc_static /\ s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
       s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
      (~t.vs_call_ctx.cc_static /\ t1.vs_requests <> t.vs_requests /\
+        ~computed_precompile (LAST t1.vs_requests) /\
       t1.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success))` by
     (irule (Q.INST [`value` |-> `vv`] dload_external_call_step) >>
      simp[] >> metis_tac[]) >>
