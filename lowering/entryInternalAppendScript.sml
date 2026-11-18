@@ -2,7 +2,7 @@
 Theory entryInternalAppend
 Ancestors
   entryCompileIntervals moduleLowering compileEnv context fragExec
-  stmtLoweringMono abiDecoderAppend list loweringShapeDefs
+  stmtLoweringMono abiDecoderAppend list loweringShapeDefs intCallCallee
 
 Theorem cs_appends_fixed_region[local]:
   cs_appends (compile_fixed_region_with_id n)
@@ -31,6 +31,20 @@ Proof
   rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
   rpt (FIRST [CHANGED_TAC (simp[cs_appends_emit_helpers, cs_appends_return]),
     gen_tac, irule cs_appends_bind, irule cs_appends_ignore_bind, conj_tac])
+QED
+
+Theorem cs_appends_internal_function_entry:
+  cs_appends (compile_internal_function_entry ce params has_ret ctor imm rt)
+Proof
+  simp[compile_internal_function_entry_def, compile_internal_entry_prefix_def,
+       comp_ignore_bind_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[cs_appends_emit_helpers, cs_appends_return,
+    cs_appends_internal_param_decls, cs_appends_materialize_internal_params,
+    cs_appends_fixed_region, cs_appends_abi_alloc_buffer]),
+    gen_tac, irule cs_appends_bind, conj_tac, IF_CASES_TAC]) >>
+  Cases_on `rt` >> simp[cs_appends_return] >>
+  IF_CASES_TAC >> simp[cs_appends_return, cs_appends_abi_alloc_buffer,
+                       cs_appends_bind]
 QED
 
 Theorem cs_appends_internal_function:

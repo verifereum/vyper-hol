@@ -414,7 +414,7 @@ Proof
   rpt strip_tac >> gvs[FLOOKUP_UPDATE]
 QED
 
-Theorem materialize_internal_params_reserved[local]:
+Theorem materialize_internal_params_reserved:
  !caps cenv st cenv' st'.
  materialize_internal_params cenv caps st = (cenv',st') /\
  ALL_DISTINCT (MAP FST caps) /\
