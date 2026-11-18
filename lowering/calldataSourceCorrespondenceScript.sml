@@ -1,7 +1,7 @@
 Theory calldataSourceCorrespondence
 Ancestors
   vyperCalldata vyperCalldataProps calldataRecursiveProducers abiDecoderContract
-  abiDecoderCoherence compileEnv vyperABI exprLowering abiEncoder
+  abiDecoderCoherence abiDecoderDynamic abiDecoderOffset compileEnv vyperABI exprLowering abiEncoder
   arithmetic list words
 
 Theorem calldata_decode_load_word:

@@ -1,7 +1,7 @@
 (* Same-witness synchronized loop backedge. *)
 Theory sourceArrayBackedgeOriginPtr
 Ancestors
-  decoderLoopBackedgeCorePtr fragGasOriginPtr fragGasSeqPtr fragGasSeqMem
+  decoderLoopBackedgeCorePtr decoderNavigationPtr fragGasOriginPtr fragGasSeqPtr fragGasSeqMem
   instMemFrontier sourceArrayBackedgeGasMem
   compileEnv loweringStateRelDefs wordLoadStorePtr abiDecoderContract instIdxIndep
   ghostPcTransportPtr memLocDefs bodyPtrDefs decoderGhostFramePtr decoderProtectedScratchPtr
@@ -9,41 +9,6 @@ Ancestors
   ptrSafeRun ptrDiscipline codegenRel emitHelperProps contextCodegenRel exprLoweringProps
   venomExecSemantics venomState venomInst finite_map pred_set words list arithmetic
   fragGasPathMem fragGasPathPtr memSafeRun gasCount
-
-Theorem backedge_joint_edge[local]:
-  gas_path_mem_edge ctx fn s 0 (OK t) /\
-  gas_path_ptr_edge D lo ctx fn PG G tn s 0 H u (OK t) /\
-  ~t.vs_halted ==>
-  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,H,u)
-Proof
-  strip_tac >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,H,u)` by
-    (simp[gas_origin_ptr_edge_def] >>
-     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
-  metis_tac[gas_origin_ptr_path_rules, APPEND]
-QED
-
-Theorem backedge_joint_step[local]:
-  ~s.vs_halted /\ ~a.vs_halted /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME i /\
-  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode /\
-  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
-  step_inst_base i s = OK a /\
-  ptr_inst_ok D lo 0 ctx fn G tn i s ==>
-  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-    (OK (a with vs_inst_idx := SUC s.vs_inst_idx),step_prov PG G i a,step_taint i s a tn)
-Proof
-  strip_tac >> irule backedge_joint_edge >> simp[] >> conj_tac
-  >- (`gas_path_mem_edge ctx fn s (if i.inst_opcode = GAS then 1 else 0)
-        (OK (a with vs_inst_idx := SUC s.vs_inst_idx))` suffices_by simp[] >>
-      irule straight_line_mem_edge >> simp[] >> qexistsl_tac [`bb`,`i`] >> simp[]) >>
-  `gas_path_ptr_edge D lo ctx fn PG G tn s
-    (if i.inst_opcode = GAS then 1 else 0) (step_prov PG G i a)
-    (step_taint i s a tn) (OK (a with vs_inst_idx := SUC s.vs_inst_idx))`
-    suffices_by simp[] >>
-  irule straight_line_ptr_edge >> simp[] >> qexists_tac `bb` >> simp[]
-QED
 
 Theorem source_array_backedge_origin_ptr_exact_frame:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -175,7 +140,7 @@ Proof
        (OK (a with vs_inst_idx := SUC (LENGTH prefix)),H,v)` by
        (simp_tac bool_ss [Abbr `H`, Abbr `v`] >>
         `SUC (LENGTH prefix) = SUC s.vs_inst_idx` by simp[] >>
-        pop_assum SUBST1_TAC >> irule backedge_joint_step >>
+        pop_assum SUBST1_TAC >> irule decoderNavigationPtrTheory.straight_line_step_origin >>
         simp[Abbr `ainst`, mk_inst_def, is_terminator_def,
           get_instruction_def, abi_decode_backedge_insts_def, EL_APPEND_EQN,
           below_frontier_no_ranges, inst_dload_in_section_other,
@@ -197,7 +162,7 @@ Proof
         `step_inst_base store aa = OK (ss with vs_inst_idx := SUC (LENGTH prefix))` by
           simp[Abbr `aa`, step_inst_inst_idx_indep, exec_result_map_def,
             Abbr `store`, mk_inst_def, is_terminator_def] >>
-        irule backedge_joint_step >> simp[] >>
+        irule decoderNavigationPtrTheory.straight_line_step_origin >> simp[] >>
         simp[Abbr `aa`, Abbr `store`, Abbr `a`, Abbr `ss`,
           mk_inst_def, is_terminator_def, get_instruction_def,
           abi_decode_backedge_insts_def, EL_APPEND_EQN, ADD1,
@@ -233,8 +198,13 @@ Proof
             metis_tac[allocas_from_def, allocas_below_fmp_def]) >>
         disj2_tac >> disj1_tac >> qexists_tac `hdr` >> simp[]) >>
      `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (ss2,H,u) [] (OK (jump_to hdr ss),H,u)` by
-       (irule backedge_joint_edge >> simp[Abbr `ss`, Abbr `a`, jump_to_def,
-          mstore_def, update_var_def]) >>
+       (`gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (ss2,H,u) []
+          (OK (jump_to hdr ss),H,u)` by
+          (simp[gas_origin_ptr_edge_def] >>
+           metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
+        `~(jump_to hdr ss).vs_halted` by
+          simp[Abbr `ss`, Abbr `a`, jump_to_def, mstore_def, update_var_def] >>
+        metis_tac[gas_origin_ptr_path_rules, APPEND]) >>
      metis_tac[gas_origin_ptr_path_append, APPEND]) >>
   `!x. x <> nv ==> FLOOKUP u.t_var x = FLOOKUP tn.t_var x` by
     simp[FLOOKUP_UPDATE] >>

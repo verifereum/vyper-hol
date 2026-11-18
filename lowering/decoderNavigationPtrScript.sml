@@ -1939,34 +1939,6 @@ Proof
   gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE, ptr_covers_def] >> metis_tac[]
 QED
 
-Theorem navigation_load_joint_step[local]:
-  ~s.vs_halted /\ ~t.vs_halted /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME i /\
-  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode /\
-  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
-  step_inst_base i s = OK t /\ ptr_inst_ok D lo 0 ctx fn G tn i s ==>
-  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-    (OK (t with vs_inst_idx := SUC s.vs_inst_idx),step_prov PG G i t,
-     step_taint i s t tn)
-Proof
-  strip_tac >>
-  `gas_path_mem_edge ctx fn s 0 (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (irule for_range_straight_line_mem_edge >> simp[] >>
-     qexistsl_tac [`bb`,`i`,`t`] >> simp[]) >>
-  `gas_path_ptr_edge D lo ctx fn PG G tn s 0 (step_prov PG G i t)
-     (step_taint i s t tn) (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (drule_all straight_line_ptr_edge >> simp[]) >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-     (OK (t with vs_inst_idx := SUC s.vs_inst_idx),step_prov PG G i t,
-      step_taint i s t tn)` by
-    (simp[gas_origin_ptr_edge_def] >>
-     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
-  drule (cj 2 gas_origin_ptr_path_rules) >>
-  disch_then (qspec_then `[]` mp_tac) >>
-  simp[cj 1 gas_origin_ptr_path_rules]
-QED
-
 Theorem emit_mload_clean_endpoint_ptr_origin_core_exact_frame:
   !sa out sb q s t a G tn cx ctx PG R.
     emit_op MLOAD [Var q] sa = (out,sb) /\
@@ -2049,7 +2021,7 @@ Proof
     simp[NoAsms, Abbr `HG`, Abbr `u`] >>
     qpat_x_assum `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx`
       (fn th => pure_rewrite_tac [th]) >>
-    irule navigation_load_joint_step >>
+    irule straight_line_step_origin >>
     simp[Abbr `ins`, mk_inst_def, is_terminator_def,
       inst_dload_in_section_other] >>
     rpt conj_tac >>

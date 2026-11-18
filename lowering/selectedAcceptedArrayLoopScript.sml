@@ -2,7 +2,7 @@
    equation over the calldata in the current call context. *)
 Theory selectedAcceptedArrayLoop
 Ancestors
-  selectedAcceptedArrayExactStep selectedAcceptedArrayStep
+  selectedAcceptedArrayStep
   selectedAcceptedInterfaces sourceArrayHeaderOriginPtr decoderGhostFramePtr
   calldataMemberResourceFrame calldataSourceCorrespondence
   abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderFrame abiDecoderExecution
@@ -198,7 +198,7 @@ Proof
      qpat_x_assum `SUC j * _ <= cnt * _` mp_tac >>
      pure_rewrite_tac[MULT_CLAUSES] >> decide_tac) >>
   mp_tac (Q.INST [`H` |-> `H_id`, `n` |-> `remaining`]
-    (SPEC_ALL selected_array_iteration_exact)) >>
+    (SPEC_ALL selected_array_iteration_with_frame)) >>
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `ptr_covers Gmid tt root t span` >>
   drule_then strip_assume_tac calldata_member_resource_endpoint >>
