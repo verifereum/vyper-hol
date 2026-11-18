@@ -176,7 +176,7 @@ Theorem ld_delegate_execution:
     read_memory (w2n (at:bytes32)) (w2n az) t /\
   exec_delegatecall inst t (gas:bytes32) (addr:bytes32) at az (rt:bytes32) (rz:bytes32) = OK ts ==>
   ?rq out w u.
-    rq = venom_call_request t addr 0w at az F with cr_kind := DelegateMessageCall /\
+    rq = venom_call_request t addr 0w at az F with <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|> /\
     consume_call_outcome rq (w2n rt) (w2n rz) t = (w,u) /\
     inst.inst_outputs = [out] /\ ts = update_var out w u
 Proof
@@ -224,11 +224,14 @@ Theorem ld_delegate_observed_effect:
     ss.vs_inst_idx = f.lf_src.vs_inst_idx /\ ts.vs_inst_idx = f.lf_tgt.vs_inst_idx
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `f.lf_tgt.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_delegatecall_def, AllCaseEqs()]) >>
+  `f.lf_src.vs_outcomes <> []` by fs[ld_nonghost_def] >>
   drule_at Any ld_delegate_execution >>
   disch_then (qspecl_then [`tn`,`f.lf_src`,`ao`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   qabbrev_tac `rqs = venom_call_request f.lf_src addr 0w ao az F with
-    cr_kind := DelegateMessageCall` >>
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
   qabbrev_tac `xs = TAKE (w2n rz) u.vs_returndata` >>
   qabbrev_tac `tn' = tn with t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH xs}` >>
   `LENGTH xs <= w2n rz` by simp[Abbr `xs`, LENGTH_TAKE_EQ, MIN_DEF] >>

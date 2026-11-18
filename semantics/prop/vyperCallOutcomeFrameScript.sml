@@ -88,7 +88,7 @@ QED
 
 Theorem state_rel_frame_locals_take:
   (!s t. t.scopes = s.scopes /\ t.immutables = s.immutables ==> R s t) ==>
-  state_rel_frame R (take_call_outcome target calldata value_opt)
+  state_rel_frame R (take_call_outcome gas_cap target calldata value_opt)
 Proof
   simp[state_rel_frame_result] >> rpt strip_tac >>
   drule take_call_outcome_frame >>
@@ -99,7 +99,7 @@ QED
 Theorem take_call_outcome_transport:
   (!s t observations. R s t ==> R s (t with storage_trace := observations)) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
-  take_call_outcome target calldata value_opt st = (res,st') ==>
+  take_call_outcome gas_cap target calldata value_opt st = (res,st') ==>
   R st st'
 Proof
   rpt strip_tac >> drule take_call_outcome_frame >> strip_tac >>
@@ -154,7 +154,7 @@ Theorem checked_call_outcome_transport:
                   logs := s.logs ++ logs; pending_deletions := pending|>)) /\
   (!bs s res t. k bs s = (res,t) ==> R s t) /\
   (do
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success msg;
     adopt_call_outcome rq outcome;
     k outcome.co_returnData
@@ -180,7 +180,7 @@ Theorem ExtCall_outcome_checked_tail:
     (if ret_type = NoneT then
        check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
      else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success "ExtCall reverted";
     adopt_call_outcome rq outcome;
     k outcome.co_returnData
@@ -188,14 +188,14 @@ Theorem ExtCall_outcome_checked_tail:
   if ret_type = NoneT /\ NULL (lookup_account target st.accounts).code then
     (INR (Error (RuntimeError "ExtCall target has no code")),st)
   else (do
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success "ExtCall reverted";
     adopt_call_outcome rq outcome;
     k outcome.co_returnData
   od) st
 Proof
-  Cases_on `take_call_outcome target calldata value_opt st` >>
-  rename1 `take_call_outcome target calldata value_opt st = (answer,mid)` >>
+  Cases_on `take_call_outcome gas_cap target calldata value_opt st` >>
+  rename1 `take_call_outcome gas_cap target calldata value_opt st = (answer,mid)` >>
   drule ExtCall_outcome_continue >>
   disch_then (qspecl_then [`ret_type`,`k`] mp_tac) >>
   drule checked_call_outcome_continue >>
@@ -217,7 +217,7 @@ Theorem ExtCall_outcome_transport:
     (if ret_type = NoneT then
        check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
      else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success "ExtCall reverted";
     adopt_call_outcome rq outcome;
     k outcome.co_returnData
@@ -240,7 +240,7 @@ Theorem Send_outcome_transport:
     R s (s with <|accounts := accounts; tStorage := transient;
                   logs := s.logs ++ logs; pending_deletions := pending|>)) /\
   (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    (rq,outcome) <- take_call_outcome gas_cap target [] (SOME amount);
     check outcome.co_success "send failed";
     adopt_call_outcome rq outcome;
     return (Value NoneV)
@@ -251,7 +251,7 @@ Proof
   irule (checked_call_outcome_transport |> INST_TYPE [alpha |-> ``:eval_result``]) >>
   simp[] >>
   conj_tac >- metis_tac[] >>
-  qexistsl_tac [`[]`,`\bs. vyperState$return (Value NoneV)`,
+  qexistsl_tac [`[]`,`gas_cap`,`\bs. vyperState$return (Value NoneV)`,
     `"send failed"`,`res`,`target`,`SOME amount`] >> simp[return_def]
 QED
 
@@ -260,7 +260,7 @@ Theorem checked_call_outcome_locals:
   (!bs s res t. k bs s = (res,t) ==>
      t.scopes = s.scopes /\ t.immutables = s.immutables) /\
   (do
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success msg;
     adopt_call_outcome rq outcome;
     k outcome.co_returnData
@@ -277,12 +277,12 @@ QED
    Failed/static adoption does not install payloads. The suffix is the actual
    shared take suffix, not an unconstrained future oracle. *)
 Theorem take_adopt_call_outcome_effects:
-  take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+  take_call_outcome gas_cap target calldata value_opt st = (INL (rq,outcome),st1) /\
   adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
   ?os rest prefix.
     st.outcomes = SOME os /\ st2.outcomes = SOME rest /\
     os = prefix ++ rest /\ LENGTH prefix <= 1 /\
-    rq = call_outcome_request target calldata value_opt st /\
+    rq = (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) /\
     st2.requests = record_request rq st.requests /\
     st2 = st with <|outcomes := SOME rest;
                    requests := record_request rq st.requests;
@@ -304,7 +304,7 @@ Proof
   drule take_call_outcome_success >> strip_tac >>
   drule_all take_call_outcome_suffix >> strip_tac >>
   Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
-  gvs[adopt_call_outcome_equation, call_outcome_request_def] >>
+  gvs[adopt_call_outcome_equation, call_outcome_request_def, computed_precompile_def] >>
   qexistsl_tac [`rest`,`prefix`] >>
   gvs[evaluation_state_component_equality]
 QED

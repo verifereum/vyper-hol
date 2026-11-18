@@ -13,7 +13,7 @@ Ancestors
   ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
   memSafeRun instMemFrontier gasEvents gasCount gasContext contextRawReachable unitMemInv
   emitHelper emitHelperProps exprLoweringProps freshWrites
-  stmtLowering exprLowering compileEnv valueEncoding allocaHistory
+  stmtLowering stmtLoweringMono exprLowering compileEnv valueEncoding allocaHistory
   vyperStorageTrace vyperStorageFootprint vyperStorageBackend
   vyperInterpreter vyperState vyperValue
   venomExecSemantics venomExecProofs venomInst venomState
@@ -190,7 +190,7 @@ Proof
   simp[]
 QED
 
-Theorem compile_if_layout_shadow:
+Theorem compile_if_layout_shadow_ids[local]:
   !cenv lctx ty c ss1 ss2 c' ss1' ss2' sa sb ta tb func sfunc.
   compile_stmt cenv lctx ty (If c ss1 ss2) sa = ((), sb) /\
   compile_stmt cenv lctx ty (If c' ss1' ss2') ta = ((), tb) /\
@@ -231,6 +231,7 @@ Theorem compile_if_layout_shadow:
       entry.cs_current_bb = (if b then tl else el) /\
       entry.cs_current_insts = [] /\
       cs_extends sa entry /\ sa.cs_next_var <= entry.cs_next_var /\
+      sa.cs_next_id <= entry.cs_next_id /\
       cs_extends entry last /\ cs_extends last sb /\
       last.cs_next_var <= sb.cs_next_var /\
       fn_has_code entry last func /\ fn_has_code last after func /\
@@ -293,10 +294,79 @@ Proof
   qpat_x_assum `e2' = e2` SUBST_ALL_TAC >>
   `block_is_terminated t10 = block_is_terminated s10` by
     metis_tac[gas_shadow_terminated] >>
+  `sa.cs_next_id <= s1.cs_next_id` by
+    metis_tac[cj 2 compile_expr_grows] >>
+  `s6.cs_next_id <= s7.cs_next_id` by
+    (qspecl_then [`cenv`, `lctx`, `ty`, `ss1`, `s6`] mp_tac
+       (cj 2 stmtLoweringMonoTheory.compile_stmt_ci_mono) >>
+     simp[ci_mono_def]) >>
+  `s7.cs_next_id <= s8.cs_next_id` by
+    (Cases_on `block_is_terminated s7` >> gvs[] >>
+     qpat_x_assum `emit_inst JMP _ _ s7 = ((), s8)`
+       (mp_tac o MATCH_MP emit_inst_extends) >> simp[]) >>
+  `sa.cs_next_id <= s6.cs_next_id /\ sa.cs_next_id <= s9.cs_next_id` by
+    (imp_res_tac fresh_label_props >> imp_res_tac new_block_props >>
+     imp_res_tac emit_inst_extends >> decide_tac) >>
   qexistsl_tac [`op`, `s1`, `t1`, `s4`, `s5`, `tl`, `el`, `xl`] >>
   simp[] >> gen_tac >> Cases_on `b` >> simp[]
   >- (qexistsl_tac [`s6`, `s7`, `s8`, `t6`, `t7`, `e1`] >> simp[]) >>
   qexistsl_tac [`s9`, `s10`, `s11`, `t9`, `t10`, `e2`] >> simp[]
+QED
+
+Theorem compile_if_layout_shadow:
+  !cenv lctx ty c ss1 ss2 c' ss1' ss2' sa sb ta tb func sfunc.
+  compile_stmt cenv lctx ty (If c ss1 ss2) sa = ((), sb) /\
+  compile_stmt cenv lctx ty (If c' ss1' ss2') ta = ((), tb) /\
+  gas_shadow_state sa ta /\
+  fn_has_code sa sb func /\ fn_has_code ta tb sfunc /\
+  (!sx op sy. lower_value compile_expr cenv (BaseT BoolT) c sx = (op, sy) ==>
+     cs_extends sx sy /\ sx.cs_next_var <= sy.cs_next_var) /\
+  (!sx op sy. lower_value compile_expr cenv (BaseT BoolT) c' sx = (op, sy) ==>
+     cs_extends sx sy /\ sx.cs_next_var <= sy.cs_next_var) /\
+  cs_mono (stmts_env cenv lctx ty ss1) /\
+  cs_mono (stmts_env cenv lctx ty ss2) /\
+  cs_mono (stmts_env cenv lctx ty ss1') /\
+  cs_mono (stmts_env cenv lctx ty ss2') /\
+  gas_shadow_compiles (lower_value compile_expr cenv (BaseT BoolT) c)
+    (lower_value compile_expr cenv (BaseT BoolT) c') /\
+  gas_shadow_compiles (stmts_env cenv lctx ty ss1)
+    (stmts_env cenv lctx ty ss1') /\
+  gas_shadow_compiles (stmts_env cenv lctx ty ss2)
+    (stmts_env cenv lctx ty ss2') ==>
+  ?op cond scond pre post tl el xl.
+    lower_value compile_expr cenv (BaseT BoolT) c sa = (op, cond) /\
+    lower_value compile_expr cenv (BaseT BoolT) c' ta = (op, scond) /\
+    gas_shadow_state cond scond /\
+    fn_has_code sa cond func /\ fn_has_code ta scond sfunc /\
+    cs_extends sa cond /\ sa.cs_next_var <= cond.cs_next_var /\
+    sa.cs_next_var <= sb.cs_next_var /\
+    pre.cs_current_bb = cond.cs_current_bb /\
+    pre.cs_current_insts = cond.cs_current_insts /\
+    emit_inst JNZ [op; Label tl; Label el] [] pre = ((), post) /\
+    fn_has_code pre post func /\
+    !b. ?entry last after sentry slast cenvb.
+      stmts_env cenv lctx ty (if b then ss1 else ss2) entry =
+        (cenvb, last) /\
+      stmts_env cenv lctx ty (if b then ss1' else ss2') sentry =
+        (cenvb, slast) /\
+      gas_shadow_state entry sentry /\ gas_shadow_state last slast /\
+      fn_has_code sentry slast sfunc /\
+      entry.cs_current_bb = (if b then tl else el) /\
+      entry.cs_current_insts = [] /\
+      cs_extends sa entry /\ sa.cs_next_var <= entry.cs_next_var /\
+      cs_extends entry last /\ cs_extends last sb /\
+      last.cs_next_var <= sb.cs_next_var /\
+      fn_has_code entry last func /\ fn_has_code last after func /\
+      (if block_is_terminated last then after = last
+       else emit_inst JMP [Label xl] [] last = ((), after)) /\
+      (~block_is_terminated last ==>
+       sb.cs_current_bb = xl /\ sb.cs_current_insts = [])
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_if_layout_shadow_ids >> strip_tac >>
+  qexistsl_tac [`op`, `cond`, `scond`, `pre`, `post`, `tl`, `el`, `xl`] >>
+  simp[] >> gen_tac >> first_x_assum (qspec_then `b` strip_assume_tac) >>
+  qexistsl_tac [`entry`, `last`, `after`, `sentry`, `slast`, `cenvb`] >> simp[]
 QED
 
 (* ----- The selected branch ----- *)
@@ -394,7 +464,7 @@ Proof
   qspecl_then [`cenv`, `lctx`, `ty`, `c`, `ss1`, `ss2`, `gas_shadow_expr c`,
     `MAP gas_shadow_stmt ss1`, `MAP gas_shadow_stmt ss2`, `sa`, `sb`,
     `shadow_sa`, `shadow_sb`, `func`, `shadow_func`]
-    mp_tac compile_if_layout_shadow >>
+    mp_tac compile_if_layout_shadow_ids >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >>
   `gas_admissible (bind (eval_expr cx c) (read_result cx)) expr_res_ok es` by
@@ -707,7 +777,130 @@ Resume compile_if_stmt_frag_full[finish]:
 QED
 *)
 Resume compile_if_stmt_frag_full[finish]:
-  cheat
+  qx_genl_tac [`res`, `ee`, `G`, `tn`, `u`] >> strip_tac >>
+  qexistsl_tac [`if res = INL () then jump_to xl u else u`, `G`, `tn`] >>
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> BETA_TAC >>
+  disch_then (qx_choose_then `sc` (CONJUNCTS_THEN2
+    (assume_tac o BETA_RULE) assume_tac)) >>
+  qpat_x_assum `?cenv''. stmt_lands _ _ _ _ /\ _`
+    (qx_choose_then `cb` strip_assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx ee u` by
+    (qpat_assum `stmt_state_rel H ctx func cb cx _ u`
+       (mp_then Any mp_tac stmt_state_rel_pop_top_ext) >>
+     disch_then (qspecl_then [`cenv`, `sc`, `ee.scopes`] mp_tac) >>
+     simp[]) >>
+  `ghost_inv_at (DF H) lo d cenv cx ee G tn u` by
+    (qpat_assum `ghost_inv_at (DF H) lo d cb cx _ G tn u`
+       (mp_then Any mp_tac ghost_inv_at_pop) >>
+     disch_then (qspecl_then [`cenv`, `sc`, `ee.scopes`] mp_tac) >>
+     simp[]) >>
+  `alloca_frame cenv mid entry (jump_to (if b then tl else el) t)
+     cenv ee u` by
+    (qpat_assum `alloca_frame _ _ _ _ cb _ u`
+       (mp_then Any mp_tac alloca_frame_pop) >>
+     disch_then (qspecl_then [`sc`, `ee.scopes`, `cenv`] mp_tac) >>
+     simp[alloca_frame_push_pre]) >>
+  `storage_trace_frame (bind (eval_expr cx c) (read_result cx))` by
+    (irule storage_trace_frame_bind_all >>
+     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+     es.storage_trace` by
+    (qpat_assum `bind _ _ _ = (INL (BoolV b), mid)`
+       (mp_then Any mp_tac valid_horizon_frame) >>
+     simp[] >> disch_then irule >> simp[]) >>
+  `stmt_state_rel (storage_trace_horizon mid.storage_trace)
+     ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv mid t` by
+    (drule_all expr_post_alloca_frame >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv mid (jump_to (if b then tl else el) t)` by
+    (irule alloca_frame_same_state >> qexists_tac `t` >> simp[jump_to_def]) >>
+  `alloca_frame cenv es sa s0 cenv ee u` by
+    (irule alloca_frame_trans >>
+     qexistsl_tac [`cenv`, `mid`, `jump_to (if b then tl else el) t`, `entry`] >>
+     simp[jump_to_def]) >>
+  `!aid off sz i.
+     FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+     (!n ba sz'. local_region cenv es.scopes s0 n ba sz' ==>
+                off + sz <= ba \/ ba + sz' <= off) /\
+     off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem` by
+    (match_mp_tac (Q.INST
+       [`c1` |-> `cenv`, `e1` |-> `mid with scopes := FEMPTY :: mid.scopes`,
+        `s1` |-> `jump_to (if b then tl else el) t`, `sa1` |-> `entry`,
+        `tn1` |-> `tn1`] alloca_taint_kept_trans) >>
+     conj_tac
+     >- (qpat_assum `alloca_frame cenv es sa s0 cenv mid t` mp_tac >>
+         simp[NoAsms, alloca_frame_def, loweringStateRelDefsTheory.local_region_def,
+              lookup_scopes_def, lookup_var_def, jump_to_def]) >>
+     conj_tac >- simp[] >>
+     conj_tac >- simp[jump_to_def] >>
+     conj_tac >- fs[ghost_kept_at_def] >>
+     qpat_assum `!aid off sz i. FLOOKUP (jump_to _ t).vs_allocas _ = _ /\ _ ==> _`
+       mp_tac >>
+     simp[]) >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         lookup_var x u = SOME w` by
+    (rpt strip_tac >>
+     `lookup_var x t = SOME w` by metis_tac[] >>
+     `not_fresh_at entry x` by metis_tac[not_fresh_at_mono] >>
+     fs[lookup_var_def, jump_to_def]) >>
+  `!aid ba. FLOOKUP s0.vs_allocas aid = SOME ba ==>
+           FLOOKUP u.vs_allocas aid = SOME ba` by
+    (rpt strip_tac >> fs[jump_to_def]) >>
+  `s0.vs_alloca_next <= u.vs_alloca_next` by fs[jump_to_def] >>
+  `!x. not_fresh_at sa x ==>
+       FLOOKUP G x = FLOOKUP G0 x /\
+       op_taint tn (Var x) = op_taint tn0 (Var x)` by
+    (rpt gen_tac >> strip_tac >>
+     `not_fresh_at entry x` by metis_tac[not_fresh_at_mono] >>
+     fs[ghost_kept_at_def]) >>
+  `return_buf_frame d cenv last u` by
+    (`cb.ce_return_buf = cenv.ce_return_buf` by
+       fs[cenv_top_ext_def, compile_env_component_equality] >>
+     qpat_x_assum `return_buf_frame d cb last u` mp_tac >>
+     Cases_on `d` >> simp[return_buf_frame_def] >>
+     rename1 `SOME dd` >> PairCases_on `dd` >> simp[return_buf_frame_def]) >>
+  `return_buf_frame d cenv sb u` by
+    (qspecl_then [`d`, `cenv`, `cenv`, `last`, `sb`, `u`, `u`] mp_tac
+       return_buf_frame_frame >> simp[]) >>
+  Cases_on `res = INL ()`
+  >- (qpat_x_assum `res = INL ()` SUBST_ALL_TAC >>
+      `~block_is_terminated last` by fs[] >>
+      `emit_inst JMP [Label xl] [] last = ((), after)` by fs[] >>
+      `u.vs_current_bb = last.cs_current_bb /\
+       u.vs_inst_idx = LENGTH last.cs_current_insts` by
+        (qpat_x_assum `stmt_lands _ _ _ _` mp_tac >> simp[stmt_lands_def]) >>
+      `allocas_from lo u` by fs[ghost_inv_at_def] >>
+      `gas_origin_ptr_path (DF H, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
+         (u, G, tn) [] (OK (jump_to xl u), G, tn)` by
+        (qpat_assum `emit_inst JMP [Label xl] [] last = _`
+           (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                                emit_jmp_origin_ptr)) >> simp[]) >>
+      `alloca_history func (jump_to xl u)` by
+        (irule alloca_history_jump >> conj_tac >- simp[jump_to_def] >>
+         qexists_tac `u` >> simp[jump_to_def]) >>
+      `alloca_frame cenv es sa s0 cenv ee (jump_to xl u)` by
+        (irule alloca_frame_same_state >> qexists_tac `u` >> simp[jump_to_def]) >>
+      conj_tac >- simp[] >> qexists_tac `cenv` >>
+      simp[stmt_lands_def, stmt_state_rel_jump_to, block_is_terminated_def,
+           return_buf_frame_jump_to, ghost_inv_at_jump, cenv_top_ext_refl,
+           lookup_var_def] >>
+      simp[jump_to_def] >>
+      fs[storage_well_formed_on_def, get_storage_scopes, lookup_var_def] >>
+      first_assum ACCEPT_TAC) >>
+  `stmt_lands lctx sb res u` by
+    (qpat_x_assum `stmt_lands _ _ _ _` mp_tac >> simp[stmt_lands_def]) >>
+  asm_simp_tac std_ss [] >>
+  conj_tac >- (irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
+  qexists_tac `cenv` >> simp[cenv_top_ext_refl] >>
+  fs[storage_well_formed_on_def, get_storage_scopes] >>
+  first_assum ACCEPT_TAC
 QED
 
 Finalise compile_if_stmt_frag_full

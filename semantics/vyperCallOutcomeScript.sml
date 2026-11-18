@@ -24,12 +24,14 @@ End
 val () = cv_auto_trans call_outcome_request_def;
 
 (* Taking an outcome for a request: the request is recorded, and a
-   successful non-static outcome's accounts must be well typed.  Calls and
-   delegate calls differ only in the request they take for. *)
+   successful non-static outcome's accounts must be well typed.  A call that
+   finds no outcome left is an error.  Calls and delegate calls differ only
+   in the request they take for. *)
 Definition take_request_outcome_def:
   take_request_outcome rq st =
     case st.outcomes of
       NONE => (INR (Error (RuntimeError "take_call_outcome")), st)
+    | SOME [] => (INR (Error (RuntimeError "take_call_outcome")), st)
     | SOME os =>
       let (outcome, rest) = take_outcome rq os in
       let st' = st with <| outcomes := SOME rest;
@@ -42,9 +44,11 @@ Definition take_request_outcome_def:
 End
 val () = take_request_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
 
+(* gas_cap is the call's gas= operand, if it has one; the request records it. *)
 Definition take_call_outcome_def:
-  take_call_outcome target calldata value_opt st =
-    take_request_outcome (call_outcome_request target calldata value_opt st) st
+  take_call_outcome gas_cap target calldata value_opt st =
+    take_request_outcome
+      (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) st
 End
 val () = cv_auto_trans take_call_outcome_def;
 
@@ -59,8 +63,9 @@ End
 val () = cv_auto_trans delegate_outcome_request_def;
 
 Definition take_delegate_outcome_def:
-  take_delegate_outcome target calldata value_opt st =
-    take_request_outcome (delegate_outcome_request target calldata value_opt st) st
+  take_delegate_outcome gas_cap target calldata value_opt st =
+    take_request_outcome
+      (delegate_outcome_request target calldata value_opt st with cr_gas := gas_cap) st
 End
 val () = cv_auto_trans take_delegate_outcome_def;
 
@@ -81,28 +86,49 @@ val () = adopt_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_t
 
 (* The evaluator's frame proofs use these. *)
 
-(* Definitional identity with PLAN 5.3, including the shared live snapshots.
-   The request constructor is factored only to avoid repeating that record. *)
+(* Definitional identity with PLAN 5.3, including the shared live snapshots. *)
 Theorem take_call_outcome_plan:
-  take_call_outcome target calldata value_opt st =
+  take_call_outcome gas_cap target calldata value_opt st =
     case st.outcomes of
       NONE => (INR (Error (RuntimeError "take_call_outcome")),st)
+    | SOME [] => (INR (Error (RuntimeError "take_call_outcome")),st)
     | SOME os =>
-      let rq = <|cr_kind := MessageCall; cr_gas := NONE; cr_data_len := LENGTH calldata;
-                 cr_target := target;
-                 cr_value := (case value_opt of NONE => 0 | SOME v => v);
-                 cr_data := calldata; cr_static := IS_NONE value_opt;
-                 cr_accounts := st.accounts; cr_tStorage := st.tStorage|> in
-      let (outcome,rest) = take_outcome rq os in
-      let st' = st with <|outcomes := SOME rest;
-                          requests := record_request rq st.requests;
-                          storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|> in
-      if outcome.co_success /\ ~rq.cr_static /\
-         ~accounts_runtime_well_typed outcome.co_accounts then
-        (INR (Error (RuntimeError "call outcome accounts")),st')
-      else (INL (rq,outcome),st')
+      case take_outcome
+        <|cr_kind := MessageCall; cr_gas := gas_cap; cr_data_len := LENGTH calldata;
+          cr_target := target;
+          cr_value := (case value_opt of NONE => 0 | SOME v => v);
+          cr_data := calldata; cr_static := IS_NONE value_opt;
+          cr_accounts := st.accounts; cr_tStorage := st.tStorage|> os of
+      (outcome,rest) =>
+        (if outcome.co_success /\ ~IS_NONE value_opt /\
+            ~accounts_runtime_well_typed outcome.co_accounts then
+           INR (Error (RuntimeError "call outcome accounts"))
+         else INL
+           (<|cr_kind := MessageCall; cr_gas := gas_cap; cr_data_len := LENGTH calldata;
+              cr_target := target;
+              cr_value := (case value_opt of NONE => 0 | SOME v => v);
+              cr_data := calldata; cr_static := IS_NONE value_opt;
+              cr_accounts := st.accounts; cr_tStorage := st.tStorage|>,outcome),
+         st with <|outcomes := SOME rest;
+           requests := record_request
+             <|cr_kind := MessageCall; cr_gas := gas_cap; cr_data_len := LENGTH calldata;
+               cr_target := target;
+               cr_value := (case value_opt of NONE => 0 | SOME v => v);
+               cr_data := calldata; cr_static := IS_NONE value_opt;
+               cr_accounts := st.accounts; cr_tStorage := st.tStorage|> st.requests;
+           storage_trace := st.storage_trace ++ [StorageOutcome
+             <|cr_kind := MessageCall; cr_gas := gas_cap; cr_data_len := LENGTH calldata;
+               cr_target := target;
+               cr_value := (case value_opt of NONE => 0 | SOME v => v);
+               cr_data := calldata; cr_static := IS_NONE value_opt;
+               cr_accounts := st.accounts; cr_tStorage := st.tStorage|> outcome]|>)
 Proof
-  simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def]
+  Cases_on `st.outcomes` >>
+  simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def,
+       COND_RAND, COND_RATOR] >>
+  pairarg_tac >> rw[]
 QED
 
 Theorem take_request_outcome_frame:
@@ -112,11 +138,13 @@ Theorem take_request_outcome_frame:
 Proof
   Cases_on `st.outcomes` >>
   simp[take_request_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_request_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
 
 Theorem take_call_outcome_frame:
-  take_call_outcome target calldata value_opt st = (res, st') ==>
+  take_call_outcome gas_cap target calldata value_opt st = (res, st') ==>
   st' = st with <|outcomes := st'.outcomes; requests := st'.requests;
                  storage_trace := st'.storage_trace|>
 Proof
@@ -125,7 +153,7 @@ Proof
 QED
 
 Theorem take_delegate_outcome_frame:
-  take_delegate_outcome target calldata value_opt st = (res, st') ==>
+  take_delegate_outcome gas_cap target calldata value_opt st = (res, st') ==>
   st' = st with <|outcomes := st'.outcomes; requests := st'.requests;
                  storage_trace := st'.storage_trace|>
 Proof
@@ -223,10 +251,13 @@ Definition create_outcome_request_def:
 End
 val () = cv_auto_trans create_outcome_request_def;
 
+(* As take_request_outcome: a create that finds no outcome left is an
+   error. *)
 Definition take_create_outcome_def:
   take_create_outcome kind value initcode st =
     case st.outcomes of
       NONE => (INR (Error (RuntimeError "take_create_outcome")), st)
+    | SOME [] => (INR (Error (RuntimeError "take_create_outcome")), st)
     | SOME os =>
       let rq = create_outcome_request kind value initcode st in
       let (outcome, rest) = take_outcome rq os in
@@ -255,7 +286,7 @@ Proof
 QED
 
 Theorem take_create_outcome_SOME:
-  st.outcomes = SOME os /\
+  st.outcomes = SOME os /\ os <> [] /\
   rq = create_outcome_request kind value initcode st /\
   take_outcome rq os = (outcome,rest) ==>
   take_create_outcome kind value initcode st =
@@ -265,7 +296,7 @@ Theorem take_create_outcome_SOME:
      st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
                storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
-  rpt strip_tac >> gvs[take_create_outcome_def, record_request_def] >>
+  rpt strip_tac >> Cases_on `os` >> gvs[take_create_outcome_def, record_request_def] >>
   rw[] >> gvs[]
 QED
 
@@ -284,24 +315,15 @@ Proof
 QED
 
 Theorem take_create_outcome_exhausted:
-  st.outcomes = SOME [] /\
-  rq = create_outcome_request kind value initcode st ==>
+  st.outcomes = SOME [] ==>
   take_create_outcome kind value initcode st =
-    (if ~accounts_runtime_well_typed st.accounts
-     then INR (Error (RuntimeError "create outcome accounts"))
-     else INL (rq,failed_outcome rq),
-     st with <|outcomes := SOME []; requests := st.requests ++ [rq];
-               storage_trace := st.storage_trace ++ [StorageOutcome rq (failed_outcome rq)]|>)
+    (INR (Error (RuntimeError "take_create_outcome")), st)
 Proof
-  rpt strip_tac >>
-  `take_outcome rq [] = (failed_outcome rq,[])` by
-    simp[take_outcome_def] >>
-  drule_all take_create_outcome_SOME >>
-  simp[failed_outcome_def, create_outcome_request_def]
+  simp[take_create_outcome_def]
 QED
 
 Theorem take_create_outcome_guard_rejected:
-  st.outcomes = SOME os /\
+  st.outcomes = SOME os /\ os <> [] /\
   rq = create_outcome_request kind value initcode st /\
   take_outcome rq os = (outcome,rest) /\
   ~accounts_runtime_well_typed outcome.co_accounts ==>
@@ -319,6 +341,8 @@ Theorem take_create_outcome_frame:
                  storage_trace := st'.storage_trace|>
 Proof
   Cases_on `st.outcomes` >> simp[take_create_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_create_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
 
@@ -328,6 +352,8 @@ Theorem take_create_outcome_error:
   exc = Error (RuntimeError "create outcome accounts")
 Proof
   Cases_on `st.outcomes` >> simp[take_create_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_create_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
 
@@ -354,6 +380,8 @@ Theorem take_create_outcome_success:
     accounts_runtime_well_typed outcome.co_accounts
 Proof
   Cases_on `st.outcomes` >> simp[take_create_outcome_def, record_request_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_create_outcome_def, record_request_def] >>
   pairarg_tac >> rw[] >> gvs[]
 QED
 
@@ -362,12 +390,14 @@ Theorem take_create_outcome_suffix:
   st.outcomes = SOME os ==>
   ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
     LENGTH prefix <= 1 /\
-    st'.requests = st.requests ++ [create_outcome_request kind value initcode st]
+    st'.requests = st.requests ++
+      (if os = [] then [] else [create_outcome_request kind value initcode st])
 Proof
-  rpt strip_tac >> gvs[take_create_outcome_def] >> pairarg_tac >>
-  gvs[AllCaseEqs(), take_outcome_def, record_request_def] >>
-  TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
-  rename1 `os = head::tail` >> qexists_tac `[head]` >> simp[]
+  rpt strip_tac >> Cases_on `os`
+  >- (gvs[take_create_outcome_def] >> qexists_tac `[]` >> simp[]) >>
+  rename1 `head::tail` >>
+  gvs[take_create_outcome_def, take_outcome_def, record_request_def, AllCaseEqs()] >>
+  qexists_tac `[head]` >> simp[]
 QED
 
 Theorem adopt_create_outcome_equation:

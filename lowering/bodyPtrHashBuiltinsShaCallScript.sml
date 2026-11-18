@@ -83,7 +83,7 @@ Theorem hash_sha256_call_failure:
   !id gas p len q out s a w n r.
     eval_operand gas s = SOME a /\
     eval_operand (Var p) s = SOME w /\ eval_operand len s = SOME n /\
-    eval_operand (Var q) s = SOME r /\
+    eval_operand (Var q) s = SOME r /\ s.vs_outcomes <> [] /\
     ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
     ?t. step_inst_base (mk_inst id STATICCALL
       [gas;Lit 2w;Var p;len;Var q;Lit 32w] [out]) s = OK t /\
@@ -95,7 +95,10 @@ Proof
   qexists_tac `update_var out 0w
     ((write_memory_with_expansion (w2n r) [] s) with
       <|vs_returndata := [];vs_outcomes := DROP 1 s.vs_outcomes|>)` >>
-  conj_tac >- (irule step_STATICCALL_sha256_fail >> simp[] >> metis_tac[]) >>
+  conj_tac >-
+    (qpat_assum `s.vs_outcomes <> []` (fn nonempty =>
+       irule (SIMP_RULE (srw_ss()) [nonempty] step_STATICCALL_sha256_fail)) >>
+     simp[] >> metis_tac[]) >>
   simp[update_var_def, write_memory_with_expansion_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
