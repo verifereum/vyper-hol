@@ -23,13 +23,13 @@ Proof
 QED
 
 Theorem merge_iszero_one_canonical_layout:
-  let b = LENGTH pre in
-  let z = if LENGTH pat = 3 then b+1 else b in
-  let keep = \i. i < z \/ z+2 <= i in
-  let f = \i. if i < z then i else i-2 in
-  let R = \prog l i. i < LENGTH prog /\
+  !b. b = LENGTH pre ==>
+  !z. z = (if LENGTH pat = 3 then b+1 else b) ==>
+  !keep. keep = (\i. i < z \/ z+2 <= i) ==>
+  !f. f = (\i. if i < z then i else i-2) ==>
+  !R. R = (\prog l i. i < LENGTH prog /\
     (EL i prog = AsmPushLabel l \/ (?d. EL i prog = AsmPushOfst l d) \/
-     EL i prog = AsmDataLabel l) in
+     EL i prog = AsmDataLabel l)) ==>
   p = pre ++ pat ++ tail /\ q = pre ++ repl ++ tail /\
   asm_static_wf p /\
   ((?x. asm_returns_zero_or_one x /\
@@ -47,7 +47,8 @@ Theorem merge_iszero_one_canonical_layout:
   (!i. keep i /\ i < LENGTH p ==> f i < LENGTH q /\ EL (f i) q = EL i p) /\
   (!l i. R p l i ==> keep i /\ R q l (f i))
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2 ORELSEC BETA_CONV)) >>
+  BETA_TAC >>
   qabbrev_tac `z = if LENGTH pat = 3 then LENGTH pre+1 else LENGTH pre` >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `?left right. p = left ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++ right /\

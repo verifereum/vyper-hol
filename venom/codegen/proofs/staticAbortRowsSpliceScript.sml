@@ -5,26 +5,30 @@ Ancestors
   staticAbortStraight asmSem asmIR asmSymSem alist finite_map words list
   arithmetic pred_set pair
 
+(* Specialize the predecessor interfaces at their defining values. *)
+val specialize_names = CONV_RULE (TOP_DEPTH_CONV
+  (HO_REWR_CONV UNWIND_FORALL_THM2 ORELSEC BETA_CONV));
+
 val structural_splice =
   Q.SPECL [`\i:'a. \t:asm_state. T`, `\i:'a. T`, `\i j:'a. T`,
-           `\t u:asm_state. T`, `\t:asm_state. T`] open_fragment_splice
-  |> SIMP_RULE bool_ss [LET_THM];
+           `\t u:asm_state. T`, `\t:asm_state. T`] open_fragment_splice;
 
 Theorem bounded_static_rows_splice:
 !p cc f V1 X2 e1 e2 z r1 r2
  (I1:(num#num)->(num#num#bool#(num->(string#num)option)#(num->bool))) I2 R1 R2.
-let Flow =
+!Flow. Flow = (
   \p pc height tag boolean (x:num#num) (y:num#num).
-  let hi = height x; hj = height y; ins = EL (pc x) p in
-  let inherit =
+  !hi. hi = height x ==>
+  !hj. hj = height y ==>
+  !ins. ins = EL (pc x) p ==>
+  !inherit. inherit = (
     \(src:num -> num option)
       (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-  in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
   case ins of
     AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
   | AsmPush bs =>
@@ -54,7 +58,8 @@ let Flow =
              inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                (\k. NONE) (\k. F)
          | NONE =>
-           let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+           !a. a = asm_op_arity name ==>
+           !m. m = hj + a - hi ==>
            a <= hi /\ hj = m+(hi-a) /\
            ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
            inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -63,21 +68,20 @@ let Flow =
                  asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                    ins t = AsmOK u ==>
                  (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-  | _ => F
-in
-let Reach = \(edge:(num#num)->(num#num)->bool) e x.
+  | _ => F) ==>
+!Reach. Reach = (\(edge:(num#num)->(num#num)->bool) e x.
   ?n (path:num->num#num).
-    path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))
-in
-let lo = SND(compute_label_offsets p); invmap = build_offset_to_pc p in
-let Check = \pc h tag arm legal dead.
-  let fall = \c. c = pc + 1 in
-  let target = \c.
+    path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) ==>
+!lo. lo = SND(compute_label_offsets p) ==>
+!invmap. invmap = build_offset_to_pc p ==>
+!Check. Check = (\pc h tag arm legal dead.
+  !fall. fall = (\c. c = pc + 1) ==>
+  !target. target = (\c.
     ?l origin off. tag 0 = SOME(l,origin) /\ FLOOKUP lo l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP invmap off = SOME c in
-  let next = \n. arm fall n /\ legal fall n in
-  let untagged = \a. !k. k<a ==> tag k=NONE in
-  let stop = \a. a<=h /\ untagged a /\ dead in
+      off < dimword(:256) /\ FLOOKUP invmap off = SOME c) ==>
+  !next. next = (\n. arm fall n /\ legal fall n) ==>
+  !untagged. untagged = (\a. !k. k<a ==> tag k=NONE) ==>
+  !stop. stop = (\a. a<=h /\ untagged a /\ dead) ==>
   pc < LENGTH p /\
   case EL pc p of
     AsmLabel l => next h
@@ -103,50 +107,48 @@ let Check = \pc h tag arm legal dead.
                else
                   ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                       untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-  | _ => F
-in
-let Valid = \h need tag boolean.
+  | _ => F) ==>
+!Valid. Valid = (\h need tag boolean.
   (need ==> cc.cc_static) /\
   (!k. boolean k ==> k < h /\ tag k=NONE) /\
   (!k l origin. tag k = SOME(l,origin) ==>
      k < h /\ origin < LENGTH p /\
      (EL origin p = AsmPushLabel l \/ EL origin p = AsmPushOfst l 0) /\
      ?off dest. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
-                FLOOKUP invmap off = SOME dest)
-in
-let Rows = \V X (rank:num#num->num) pc height need tag boolean edge.
-  (!x. x IN V ==> Valid (height x) (need x) (tag x) (boolean x)) /\
-  (!x y. edge x y ==>
-    x IN V DIFF X /\ y IN V /\ rank y < rank x /\
-    Flow p pc height tag boolean x y) /\
-  (!x. x IN V DIFF X ==>
-    Check (pc x) (height x) (tag x)
-      (\P n. ?y. edge x y /\ P (pc y) /\ height y = n)
-      (\P n. !y. edge x y ==> P (pc y) /\ height y = n)
-      (!y. ~edge x y))
-in
-let B = \V X e r I R.
+                FLOOKUP invmap off = SOME dest)) ==>
+!B. B = (\Flow Reach Check Valid V X e (r:num#num->num) I R.
   FINITE V /\ X SUBSET V /\ e IN V /\
   (!x. x IN V ==> FST x=f /\ Reach R e x) /\
-  Rows V X r (\x. FST (I x)) (\x. FST (SND (I x)))
-    (\x. FST (SND (SND (I x)))) (\x. FST (SND (SND (SND (I x)))))
-    (\x. SND (SND (SND (SND (I x))))) R
-in
-let L = \x:num#num. (f,2*SND x); D = \x:num#num. (f,2*SND x+1) in
-let d = \x. if x=z then D e2 else L x in
-let U = IMAGE L (V1 DELETE z) UNION IMAGE D V2;
-    Y = IMAGE D X2;
-    e = d e1;
-    E = \a b. (?x y. R1 x y /\ a=L x /\ b=d y) \/
-              (?x y. R2 x y /\ a=D x /\ b=D y)
-in
-B V1 {z} e1 r1 I1 R1 /\ B V2 X2 e2 r2 I2 R2 /\ I1 z=I2 e2 ==>
-?r I. B U Y e r I E /\ I e=I1 e1 /\
+  (!x. x IN V ==> Valid (FST (SND (I x))) (FST (SND (SND (I x))))
+    (FST (SND (SND (SND (I x))))) (SND (SND (SND (SND (I x)))))) /\
+  (!x y. R x y ==>
+    x IN V DIFF X /\ y IN V /\ r y < r x /\
+    Flow p (\x. FST (I x)) (\x. FST (SND (I x)))
+      (\x. FST (SND (SND (SND (I x))))) (\x. SND (SND (SND (SND (I x))))) x y) /\
+  (!x. x IN V DIFF X ==>
+    Check (FST (I x)) (FST (SND (I x))) (FST (SND (SND (SND (I x)))))
+      (\P n. ?y. R x y /\ P (FST (I y)) /\ FST (SND (I y)) = n)
+      (\P n. !y. R x y ==> P (FST (I y)) /\ FST (SND (I y)) = n)
+      (!y. ~R x y))) ==>
+!L. L = (\x:num#num. (f,2*SND x)) ==>
+!D. D = (\x:num#num. (f,2*SND x+1)) ==>
+!d. d = (\x. if x=z then D e2 else L x) ==>
+!U. U = IMAGE L (V1 DELETE z) UNION IMAGE D V2 ==>
+!e. e = d e1 ==>
+!E. E = (\a b. (?x y. R1 x y /\ a=L x /\ b=d y) \/
+                (?x y. R2 x y /\ a=D x /\ b=D y)) ==>
+B Flow Reach Check Valid V1 {z} e1 r1 I1 R1 /\
+B Flow Reach Check Valid V2 X2 e2 r2 I2 R2 /\ I1 z=I2 e2 ==>
+?r I. B Flow Reach Check Valid U (IMAGE D X2) e r I E /\ I e=I1 e1 /\
   (!x. x IN V1 DELETE z ==> I(L x)=I1 x) /\
   (!x. x IN V2 ==> I(D x)=I2 x)
 Proof
-  rpt gen_tac >> rpt BasicProvers.LET_ELIM_TAC >>
-  fs[Abbr `B`, Abbr `Rows`] >> rpt strip_tac >>
+  ntac 14 gen_tac >>
+  map_every (fn name => qx_gen_tac name >> disch_then
+    (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
+    [`Flow`, `Reach`, `lo`, `invmap`, `Check`, `Valid`, `B`, `L`, `D`, `d`, `U`, `e`, `E`] >>
+  qabbrev_tac `Y = IMAGE D X2` >>
+  simp[Abbr `B`] >> rpt strip_tac >>
   `?(r:(num#num)->num) I. (FINITE U /\ Y SUBSET U /\
     (!x y. E x y ==> x IN U DIFF Y /\ y IN U /\ r y < r x)) /\
     e IN U /\ I e=I1 e1 /\
@@ -159,7 +161,8 @@ QED
 
 Resume bounded_static_rows_splice[geometry]:
   Q.ISPECL_THEN [`V1`,`V2`,`X2`,`e1`,`e2`,`z`,`r1`,`r2`,
-                 `I1`,`I2`,`R1`,`R2`,`f`] mp_tac structural_splice >>
+                 `I1`,`I2`,`R1`,`R2`,`f`]
+    (mp_tac o SIMP_RULE bool_ss [] o specialize_names) structural_splice >>
   (impl_tac >-
     (fs[Abbr `Reach`] >> rpt conj_tac >> rpt gen_tac >> disch_tac >>
      FIRST [qpat_assum `!x y. R1 x y ==> _` drule,
@@ -280,8 +283,8 @@ Resume bounded_static_rows_splice[relink]:
      simp[EXTENSION] >> gen_tac >> eq_tac >> simp[] >> strip_tac >>
      qpat_assum `!x. x IN U ==> FST x=f /\ _` drule >> simp[Abbr `Reach`]) >>
   Q.ISPECL_THEN [`U UNION {L z}`, `{L z}`, `e`, `pre`, `\a:num#num. D e2`, `J`]
-    mp_tac linked_reachable_arm_interfaces >>
-  simp_tac bool_ss [LET_THM, IN_SING] >>
+    (mp_tac o specialize_names) linked_reachable_arm_interfaces >>
+  simp_tac bool_ss [IN_SING] >>
   qpat_assum `(U UNION {L z}) DIFF {L z} = U` (rewrite_tac o single) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `!a b. (a IN U /\ ?c. pre a c /\ b = if c=L z then D e2 else c) <=> E a b` by

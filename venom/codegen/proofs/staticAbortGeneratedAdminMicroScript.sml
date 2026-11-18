@@ -113,10 +113,8 @@ QED
    value of a spill address, are observed. *)
 Theorem generated_admin_micro_coverage:
   !p pc fmp ops h.
-    let lo = SND (compute_label_offsets p);
-        o2pc = build_offset_to_pc p;
-        code = execute_plan fmp ops
-    in
+    !lo. lo = SND (compute_label_offsets p) ==>
+    !code. code = execute_plan fmp ops ==>
       prefix_wf lo h ops /\ asm_block_at p pc code ==>
       ?H. H 0 = h /\ H (LENGTH code) = prefix_end_len lo h ops /\
         (!inst. MEM inst code ==>
@@ -124,12 +122,12 @@ Theorem generated_admin_micro_coverage:
         !k extra t.
           k < LENGTH code /\ t.as_pc = pc + k /\
           LENGTH t.as_stack = H k + extra ==>
-          ?u. static_abort_normal lo o2pc p 1 t u /\
+          ?u. static_abort_normal lo (build_offset_to_pc p) p 1 t u /\
             u.as_pc = pc + k + 1 /\
             LENGTH u.as_stack = H (SUC k) + extra /\
             u.as_call_ctx = t.as_call_ctx /\ u.as_requests = t.as_requests
 Proof
-  simp[LET_THM] >> rpt gen_tac >> strip_tac >>
+  ntac 2 (rpt gen_tac >> disch_then SUBST1_TAC) >> strip_tac >>
   drule generated_admin_prefix_heights >>
   disch_then (qspecl_then [`fmp`, `build_offset_to_pc p`] strip_assume_tac) >>
   `EVERY static_abort_admin (execute_plan fmp ops)` by
