@@ -202,7 +202,8 @@ stated source, storage and execution premises still apply.
 On success the result relates `tx_return_bytes`, accounts after EVM pending
 deletions and transient storage modulo dead target storage, ordered concrete logs
 and the full request list `call_requests es` (every trace entry's request,
-computed precompiles included) via `request_agree`.
+computed precompiles included) via `request_agree`. A source halt relates the
+same accounts, transient storage and requests (`effects_agree`) with empty output.
 Failed-run requests, leftover terminal outcomes, revert data/reason and general
 abort kind are not compared. `unspecified_behaviour_exempt` covers exact
 `RuntimeError "abi_decode invalid"` with a dynamic ABI target occurring in a
@@ -221,7 +222,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 
 | Key | Decision / rejected alternative | Current implementation and explicit deviation or limit | Future owner |
 |---|---|---|---|
-| D1 | Full outcome oracle; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption; `call_result_rel` compares the full request list via `request_agree` on success and halt. The trace observer records the forwarded gas operand for CALL/STATICCALL/DELEGATECALL (`NONE` only for CREATE/CREATE2), the source's builtin request carries no gas, and `request_agree` ties gas only to an explicit source `gas=` value; source gas observations are existential and not tied to EVM readings. | 2.1 trace / 7 callee producer |
+| D1 | Full outcome oracle; requests on success or halt | `extCallOracle` records and source SOME/Venom/asm call adoption; `call_result_rel` compares the full request list via `request_agree` on success and halt. The trace observer records the forwarded gas operand for CALL/STATICCALL/DELEGATECALL (`NONE` only for CREATE/CREATE2), the source's builtin request carries no gas, and `request_agree` ties gas only to an explicit source `gas=` value; source gas observations are existential and not tied to EVM readings. | 2.1 trace / 7 callee producer |
 | D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas/StackOverflow; a starved computed precompile is an oracle outcome. The gas bound is the separate companion `vyper_call_gas_sufficient`. | 2.1 / 4 |
 | D3 | Frame-local GAS readings | Venom `exec_gas` and `asm_gas` consume readings, zero on exhaustion; entry uses `gas_readings es`. Source observations in the result are existential and not yet tied to EVM readings. | 2.1 / 4.2 |
 | D4 | Compute value-zero precompiles 1/2/6/7's data, take their success from the oracle | `precompile_result`, `take_outcome`, `precompile_call_success`, every request recorded (`record_request`, `call_requests`); helper purity is proved, EVM purity bridge is deferred. | 2.1 |
