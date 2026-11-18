@@ -370,10 +370,11 @@ Theorem ricf_execution_ext_call_next:
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   active_inst fn inst s /\ MEM inst.inst_opcode [CALL;STATICCALL] /\
   inst.inst_outputs = [out] /\
+  s.vs_outcomes <> [] /\
   step_inst fuel C inst s = exec_ext_call inst s gas addr value ao az ro rs static /\
   step_inst fuel Ct inst t = exec_ext_call inst t gas addr value ao' az ro' rs static /\
-  rq1 = venom_call_request s addr value ao az static /\
-  rq2 = venom_call_request t addr value ao' az static /\
+  rq1 = venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas) /\
+  rq2 = venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas) /\
   ((computed_precompile rq1 /\ computed_precompile rq2 /\
     rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
     request_agree_except D rq1 rq2) /\
@@ -403,10 +404,17 @@ Theorem ricf_execution_ext_call_next:
       ledger E sites maps targets (step_taint inst s (update_var out w r) tn)
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    (fs[ricf_execution_invariant_def, ricf_opaque_frame_agree_def,
+        ricf_frame_agree_def, Excl "consume_call_outcome_eq"] >>
+     drule taint_agree_frame >>
+     disch_then (mp_tac o AP_TERM ``\v:venom_state. v.vs_outcomes``) >>
+     simp[ricf_opaque_view_def]) >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   `step_inst fuel C inst s = OK (update_var out w r)` by
     (qpat_assum `step_inst fuel C inst s = _` (fn th => pure_rewrite_tac[th]) >>
      pure_rewrite_tac[exec_ext_call_def, LET_THM] >>
-     qpat_assum `rq1 = venom_call_request _ _ _ _ _ _`
+     qpat_assum `rq1 = venom_call_request _ _ _ _ _ _ with cr_gas := _`
        (fn th => pure_rewrite_tac[GSYM th]) >>
      qpat_assum `consume_call_outcome rq1 _ _ s = _` (fn th => pure_rewrite_tac[th]) >>
      simp[Excl "consume_call_outcome_eq"]) >>
@@ -415,14 +423,14 @@ Proof
     (rpt gen_tac >> strip_tac >>
      qpat_assum `step_inst fuel Ct inst t = _` (fn th => pure_rewrite_tac[th]) >>
      pure_rewrite_tac[exec_ext_call_def, LET_THM] >>
-     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _`
+     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _ with cr_gas := _`
        (fn th => pure_rewrite_tac[GSYM th]) >>
      qpat_assum `consume_call_outcome rq2 _ _ t = _` (fn th => pure_rewrite_tac[th]) >>
      simp[Excl "consume_call_outcome_eq"]) >>
   `rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
    rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient` by
-    (qpat_assum `rq1 = venom_call_request _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
-     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
+    (qpat_assum `rq1 = venom_call_request _ _ _ _ _ _ with cr_gas := _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _ with cr_gas := _` (fn th => rewrite_tac[th]) >>
      simp[venom_call_request_def]) >>
   qabbrev_tac `source_off = w2n ro` >>
   qabbrev_tac `target_off = w2n ro'` >>

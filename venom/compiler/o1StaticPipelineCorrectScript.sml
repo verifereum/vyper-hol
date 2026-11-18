@@ -335,7 +335,6 @@ Proof
   qexists_tac `vs_in` >> metis_tac[ctx_sim_fuel_imp_ctx_sim]
 QED
 
-(* ADMISSION: statement only.  Waits for the static-inclusive raw S6b run-bound proof (the static O1 supplier's run bound). *)
 Theorem run_venom_pipeline_run_bounded_static_abort:
   !lo rpolicy unit out cp fuel.
     o1_pipeline rpolicy unit = SOME out /\
@@ -362,7 +361,37 @@ Theorem run_venom_pipeline_run_bounded_static_abort:
         terminates (run_context fuel unit.cu_context vs_in)) ==>
       venom_run_bounded fuel' M out.po_unit.cu_context vs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qexistsl_tac [`cfg_norm_fuel out.po_unit.cu_context fuel`,
+                `2 * dimword (:256)`] >>
+  rpt gen_tac >> strip_tac >>
+  `!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+         eom <= w2n vs.vs_initial_fmp` by
+    metis_tac[generate_context_plan_eom_room] >>
+  `fmp_variant_room (SOME fmp) out.po_unit.cu_context vs` by
+    simp[fmp_variant_room_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [o1PipelineCorrectTheory.o1_pipeline_def]) >>
+  drule_all o1_pipeline_stage_facts_static_abort >> strip_tac >>
+  qpat_x_assum `!fmp. ?vs_in. _`
+    (qspec_then `fmp` (qx_choose_then `vi` strip_assume_tac)) >>
+  qpat_x_assum `!vs_in. raw_variant fmp vs_in vs ==> _`
+    (qspec_then `vi` mp_tac) >> simp[] >> strip_tac >>
+  `mem_inv raw_mem_ok unit.cu_context vi` by
+    (simp[raw_unit_memory_ok_mem_inv] >> rpt strip_tac >>
+     fs[raw_unit_memory_ok_def] >>
+     metis_tac[contextRawReachableTheory.raw_reachable_least]) >>
+  `o1_pre_walk_inv D unit.cu_context vi` by
+    (irule o1_source_pre_walk_inv >> simp[o1_src_inv_def] >>
+     metis_tac[source_fmp_free]) >>
+  `ctx_sim_fuel (cfg_norm_fuel out.po_unit.cu_context) D
+     unit.cu_context out.po_unit.cu_context vi vs` by metis_tac[] >>
+  `terminates
+     (run_context (cfg_norm_fuel out.po_unit.cu_context fuel)
+       out.po_unit.cu_context vs)` by
+    (fs[ctx_sim_fuel_def] >> metis_tac[dead_result_rel_terminates]) >>
+  `?Inv. codegen_reachability_package Inv out.po_unit.cu_context vs` by
+    (fs[o1_lowered_inv_def, mem_inv_def] >> metis_tac[]) >>
+  metis_tac[venomRunBoundedTheory.venom_run_bounded_word_ceiling]
 QED
 
 (* ADMISSION: statement only.  Waits for the static-frame code-end proof, the companion of o1_pipeline_code_end_offset_ok without o1_run_state_ok. *)
