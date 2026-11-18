@@ -25,24 +25,8 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem type_stmt_assigntuple:
-  type_stmt env ret_ty (Assign (TupleTarget gs) e) =
-    (if atarget_accepts env (TupleTarget gs) (expr_type e) /\
-        well_typed_expr env e /\ assignable_type env.type_defs (expr_type e)
-     then SOME env else NONE)
-Proof
-  simp_tac bool_ss [Once type_stmt_def]
-QED
-
-Theorem supported_stmt_assigntuple:
-  supported_stmt tops bindings (Assign (TupleTarget gs) e) =
-    supported_assignment tops bindings (TupleTarget gs) e
-Proof
-  simp_tac bool_ss [Once supported_stmt_def]
-QED
-
 (* A local copy preserves the disjoint snapshot used by later tuple targets. *)
-Theorem body_assign_tuple_local_copy_snapshot_post:
+Theorem body_assign_tuple_local_copy_snapshot_post[local]:
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (s,G,tn) [] (OK t,Gf,tf) /\
   typed_copy_state_frame sa (w2n dst) (type_memory_size entry.type) s t /\
@@ -111,128 +95,8 @@ Proof
   metis_tac[])
 QED
 
-(* The positive MCOPY emitted by tuple staging selects one joint endpoint. *)
-Theorem body_assign_tuple_stage_mcopy_path:
-  emit_void MCOPY [Var xd; Var xs; Lit (n2w n)] sa = ((),sb) /\
-  0 < n /\ type_memory_size (TupleTV tvs) = n /\
-  val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
-  not_fresh_at sa xs /\ not_fresh_at sa xd /\
-  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
-  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n sw) mem) /\
-  ptr_covers G tn xs s n /\ ptr_covers G tn xd s n /\
-  w2n sw + n < dimword (:256) /\ w2n dw + n < dimword (:256) /\
-  w2n sw + n <= s.vs_alloca_next /\ w2n dw + n <= s.vs_alloca_next /\
-  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  fn_has_code sa sb func /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t Gf tf.
-    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-      (s,G,tn) [] (OK t,Gf,tf)) /\
-    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n dw) t.vs_memory /\
-    (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
-      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n dw) mem) /\
-    typed_copy_state_frame sa (w2n dw) n s t /\
-    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
-    (!i. ~(w2n dw <= i /\ i < w2n dw+n) ==>
-      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
-      (i IN tf.t_mem <=> i IN tn.t_mem)) /\
-    (!x. not_fresh_at sa x ==>
-      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
-      op_taint tf (Var x) = op_taint tn (Var x))
-Proof
-  strip_tac >>
-  `compile_copy_memory (Var xd) (Var xs) n sa = ((),sb)` by
-    (Cases_on `n` >> gvs[compile_copy_memory_def]) >>
-  Q.SUBGOAL_THEN `n = 0 \/ w2n sw + n <= s.vs_alloca_next` assume_tac
-  >- simp[] >>
-  Q.SUBGOAL_THEN `n = 0 \/ w2n dw + n <= s.vs_alloca_next` assume_tac
-  >- simp[] >>
-  drule_all body_full_memory_copy_path >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  qexistsl_tac [`t`,`Gf`,`tf`] >> simp[] >>
-  rpt strip_tac >>
-  qpat_x_assum `typed_copy_state_frame _ _ _ _ _` mp_tac >>
-  simp[typed_copy_state_frame_def,typed_copy_frame_def] >>
-  rpt strip_tac >> first_x_assum irule >> decide_tac
-QED
-
-(* Allocation retains robust source contents at its own joint endpoint. *)
-Theorem body_assign_tuple_alloc_snapshot:
-  stmt_state_rel H ctx func cenv cx es s /\
-  compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
-  local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func /\
-  n < dimword (:256) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
-  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
-  not_fresh_at sa xs /\ lookup_var xs s = SOME sw /\
-  evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
-  expr_val_at cenv cx (TupleT tys) start sa es (ArrayV (TupleV vs)) (Var xs) s /\
-  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n sw) mem) /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?u root b G1 tn1.
-    buf.buf_operand = Var root /\
-    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-      (s,G,tn) [] (OK u,G1,tn1)) /\
-    (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
-      stmt_state_rel H' ctx func cenv cx es u) /\
-    (!D d. ghost_inv_at D lo d cenv cx es G tn s ==>
-      ghost_inv_at D lo d cenv cx es G1 tn1 u) /\
-    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    local_ptrs_reserved cenv sb /\
-    FLOOKUP u.vs_allocas sa.cs_next_id = SOME (b,n) /\
-    lo <= b /\ b+n < dimword (:256) /\ lookup_var root u = SOME (n2w b) /\
-    ptr_covers G1 tn1 root u n /\
-    (!name a len. local_region cenv es.scopes u name a len ==> regions_disjoint b n a len) /\
-    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> FLOOKUP u.vs_allocas aid = SOME entry) /\
-    (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==> regions_disjoint b n a len) /\
-    (!x. not_fresh_at sa x ==>
-      lookup_var x u = lookup_var x s /\ FLOOKUP G1 x = FLOOKUP G x /\
-      op_taint tn1 (Var x) = op_taint tn (Var x)) /\
-    (!x cap. not_fresh_at sa x /\ ptr_covers G tn x s cap ==> ptr_covers G1 tn1 x u cap) /\
-    not_fresh_at sb root /\
-    (!x. not_fresh_at sa x ==> not_fresh_at sb x) /\
-    allocas_from lo u /\ lo <= u.vs_alloca_next /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
-    u.vs_memory = s.vs_memory /\ u.vs_labels = s.vs_labels /\
-    u.vs_accounts = s.vs_accounts /\ u.vs_call_ctx = s.vs_call_ctx /\
-    u.vs_transient = s.vs_transient /\ u.vs_immutables = s.vs_immutables /\
-    (!i. ~(b <= i /\ i < b+n) ==> (i IN tn1.t_mem <=> i IN tn.t_mem)) /\
-    tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
-    (!mem. mem_agree_outside tn1.t_mem u.vs_memory mem ==>
-      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n sw) mem)
-Proof
-  strip_tac >>
-  drule_all body_full_alloc_buffer_path >>
-  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] strip_assume_tac) >>
-  qexistsl_tac [`u`,`root`,`b`,`G1`,`tn1`] >> simp[] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  `!name a len. local_region cenv es.scopes u name a len <=>
-    local_region cenv es.scopes s name a len` by
-    (rw[local_region_def] >> metis_tac[local_ptrs_reserved_def]) >>
-  `val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
-   (!i. w2n sw <= i /\
-        i < w2n sw + val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) ==>
-        ~(b <= i /\ i < b+n))` by
-    (qpat_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
-     rewrite_tac[expr_val_at_def] >>
-     disch_then (qspec_then `TupleTV tvs` mp_tac) >>
-     simp[is_word_type_def,eval_operand_def] >> strip_tac >>
-     gvs[regions_disjoint_def] >> res_tac >> decide_tac) >>
-  drule_at (Pos (el 5)) robust_val_in_memory_exterior_frame >>
-  disch_then (qspecl_then [`tn1.t_mem`, `s.vs_memory`,
-    `{i | b <= i /\ i < b+n}`] mp_tac) >> simp[]
-QED
-
 (* Tuple element addresses are joint origin/pointer steps at every horizon. *)
-Theorem body_assign_tuple_offset_add_path:
+Theorem body_assign_tuple_offset_add_path[local]:
   emit_op ADD [Var root; Lit (n2w off)] sa = (op,sb) /\
   not_fresh_at sa root /\ lookup_var root s = SOME w /\
   ptr_covers G tn root s capacity /\ off+n <= capacity /\
@@ -301,7 +165,7 @@ Proof
 QED
 
 (* Storage-field slots are word sums of literals, never memory pointers. *)
-Theorem body_assign_tuple_field_add_path:
+Theorem body_assign_tuple_field_add_path[local]:
   emit_op ADD [Lit slot; Lit (n2w off)] sa = (dst,sb) /\
   local_ptrs_reserved cenv sa /\
   (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
@@ -391,7 +255,7 @@ Proof
 QED
 
 (* Clean tuple words use the same deterministic MLOAD endpoint for all D. *)
-Theorem body_assign_tuple_mload_path:
+Theorem body_assign_tuple_mload_path[local]:
   emit_op MLOAD [Var root] sa = (op,sb) /\
   lookup_var root s = SOME w /\ ptr_covers G tn root s 32 /\
   w2n w+32 <= s.vs_alloca_next /\
@@ -466,7 +330,7 @@ Proof
 QED
 
 (* Joint load recursion; semantic value recovery is done at this endpoint. *)
-Theorem body_assign_tuple_load_all_core:
+Theorem body_assign_tuple_load_all_core[local]:
   !tys cenv root off sa elems sb s w G tn capacity lo ctx func explicit PG.
     compile_tuple_load_all cenv (Var root) tys off sa = (elems,sb) /\
     not_fresh_at sa root /\ lookup_var root s = SOME w /\
@@ -668,7 +532,7 @@ Proof
 QED
 
 (* Typed and relational postconditions at the joint load endpoint. *)
-Theorem body_assign_tuple_load_all_path:
+Theorem body_assign_tuple_load_all_path[local]:
   compile_tuple_load_all cenv (Var root) tys off sa = (elems,sb) /\
   not_fresh_at sa root /\ lookup_var root s = SOME w /\
   ptr_covers G tn root s capacity /\ off + type_memory_size_list tvs <= capacity /\
@@ -790,7 +654,7 @@ Proof
 QED
 
 (* A normal storage head changes neither the staged tuple nor loaded operands. *)
-Theorem body_assign_tuple_storage_head_path:
+Theorem body_assign_tuple_storage_head_path[local]:
   compile_store_at_loc cenv.ce_imm_alloca dst value
     (SOME (if tr then LocTransient else LocStorage)) sa = ((),sb) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
@@ -877,7 +741,7 @@ Proof
 QED
 
 (* Source observations supply the dead-slot frame for a nonlocal tuple head. *)
-Theorem body_assign_tuple_nonlocal_write_ready:
+Theorem body_assign_tuple_nonlocal_write_ready[local]:
   tuple_target_aligned cenv cx g ty tv /\
   (!id. g <> BaseTarget (NameTarget id)) /\ value_has_type tv v /\
   assign_tuple_targets cx g v es = (INL (),es') ==>
@@ -950,7 +814,7 @@ QED
 Finalise body_assign_tuple_nonlocal_write_ready
 
 (* A successful nonlocal head observes its root before the joint slot store. *)
-Theorem body_assign_tuple_nonlocal_head_full_path:
+Theorem body_assign_tuple_nonlocal_head_full_path[local]:
   compile_tuple_store_all cenv [ty] [g] [op] sa = ((),sb) /\
   assign_tuple_targets cx g v es = (INL (),es') /\
   tuple_target_aligned cenv cx g ty tv /\
@@ -1109,7 +973,7 @@ QED
 Finalise body_assign_tuple_nonlocal_head_full_path
 
 (* One local write, at the current source scope, retains the tuple snapshot. *)
-Theorem body_assign_tuple_local_head_full_path:
+Theorem body_assign_tuple_local_head_full_path[local]:
   compile_tuple_store_all cenv [ty] [BaseTarget (NameTarget id)] [op] sa = ((),sb) /\
   assign_tuple_targets cx (BaseTarget (NameTarget id)) v es = (INL (),es') /\
   tuple_target_aligned cenv cx (BaseTarget (NameTarget id)) ty entry.type /\
@@ -1334,7 +1198,7 @@ QED
 
 Finalise body_assign_tuple_local_head_full_path
 
-Theorem body_assign_tuple_static_head_full_exit:
+Theorem body_assign_tuple_static_head_full_exit[local]:
   !ctx func cenv cx s g ty tv v op st sf RetQ RetP ee lo explicit PG G tn.
     compile_tuple_store_all cenv [ty] [g] [op] st = ((),sf) /\
     tuple_target_aligned cenv cx g ty tv /\
@@ -1405,7 +1269,7 @@ Proof
 QED
 (* Compose singleton stores over the fixed post-load snapshot.  The seed
    identifies the caller regions independently of the final trace horizon. *)
-Theorem body_assign_tuple_store_targets_full_path:
+Theorem body_assign_tuple_store_targets_full_path[local]:
   !gs tys tvs vs ops k m b fulltys fullvs ctx func cenv cx es s st sf
      tops env es0 eseed sseed Hseed Dseed lo G tn explicit PG RetQ RetP.
     compile_tuple_store_all cenv tys gs ops st = ((),sf) /\
