@@ -1386,6 +1386,12 @@ Proof
     mp_tac o1_pipeline_context_obligations_lowered_abort >>
   impl_tac >- (gvs[] >> metis_tac[]) >> strip_tac >>
   drule_all abort_context_obligations_raw >> strip_tac >>
+  `code_end_offset_ok
+     (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
+                      ~in_static_abort_prefix fn s)
+     out.po_unit.cu_context` by
+    (qpat_x_assum `code_end_offset_ok (raw_reachable vs0) _` mp_tac >>
+     PURE_REWRITE_TAC[code_end_offset_ok_def] >> BETA_TAC >> metis_tac[]) >>
   `!n a u. run_context n out.po_unit.cu_context vs0 = Abort a u ==>
      ?r' es''. run_call es = SOME (r',es'') /\
        (frame_resource_starved es r' es'' \/
@@ -2125,7 +2131,13 @@ Proof
      `taint_within D0 unit.cu_context vcode` by
        simp[Abbr `D0`, taint_within_def] >>
      qpat_assum `!vi. raw_variant _ vi vs ==> _`
-       (qspec_then `vcode` (drule_then strip_assume_tac)) >> metis_tac[]) >>
+       (qspec_then `vcode` (drule_then strip_assume_tac)) >>
+     qpat_x_assum `raw_unit_memory_ok _ vcode /\ _ ==> _` mp_tac >>
+     (impl_tac >- metis_tac[]) >>
+     disch_then (CONJUNCTS_THEN2 kall_tac strip_assume_tac) >> simp[] >>
+     rename1 `run_context fuel unit.cu_context vcode = Abort Revert_abort s` >>
+     qpat_x_assum `!fuel. terminates (run_context fuel unit.cu_context vcode) ==> _`
+       (qspec_then `fuel` mp_tac) >> simp[terminates_def]) >>
   qspecl_then [`D0`, `0`, `rpolicy`, `unit`, `out`, `vs`, `vs.vs_initial_fmp`]
     mp_tac run_venom_pipeline_correct_static_abort >>
   impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
