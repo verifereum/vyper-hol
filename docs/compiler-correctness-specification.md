@@ -39,9 +39,11 @@ or check and is easy to miss:
   (`lowering/e2eDefsScript.sml`) requires
   `(lookup_account tx.target es.rollback.accounts).code = ctxt.msgParams.code`,
   and its `frame_tx_rel` conjunct requires `ctxt.msgParams.callee = tx.target`.
-  A frame entered by DELEGATECALL or CALLCODE from a proxy (callee the proxy,
-  code the implementation's) and a call to an EIP-7702 delegated account do not
-  satisfy this, so they are outside `vyper_call_correct`. The conjunct makes the
+  In a frame entered by DELEGATECALL or CALLCODE from a proxy, the callee is the
+  proxy but the executing bytecode is the implementation's, which differs from the
+  bytecode installed at the proxy; in a call to an EIP-7702 delegated account, the
+  executing bytecode is the delegate's, not the delegation designator installed at
+  `tx.target`. Such frames are outside `vyper_call_correct`. The conjunct makes the
   target an account with installed (nonempty) code, so a nested CREATE cannot
   land on it, bounds the length of the executing
   code (`call_state_rel_code_length`), and ties the account code the source reads
@@ -142,7 +144,7 @@ failure. For a source `AssertException s`, `exception_outcome_rel`
 and raised by the frame itself (`frame_raises es Reverted`), or any failure when
 `s = "UNREACHABLE"`; `deploy_result_rel` (`lowering/e2eDeployDefsScript.sml`)
 requires `Reverted` or, for `"UNREACHABLE"`, any failure. For a source `Error e`
-(custom errors, `raw_revert`, bubbled call or creation failures) both relations
+(for example the bubbled failure of an `extcall`) both relations
 accept any failed frame outcome; when `unspecified_behaviour_exempt tops e` holds
 (see the exemption under
 [Observations, resources and limits](#observations-resources-and-limits)) they
@@ -316,10 +318,11 @@ FMP fields. Venom GAS consumes the frame-local `gas_readings es`, returning zero
 when exhausted; assembly also uses frame-local EVM gas readings. There is **no caller-read
 gas-reading correspondence** and no source `msg.gas` guarantee. For `gas=`, the
 theorem relates only the operand: where requests are compared (success or halt),
-`request_agree` requires `r1.cr_gas = SOME g ==> r2.cr_gas = SOME g`, so a call
-with an explicit source `gas=` value forwards exactly that gas operand on its
-CALL/STATICCALL/DELEGATECALL; a `send` without `gas=` records 0, so its operand
-must be 0. The operand of any other call without `gas=` is unconstrained,
+`request_agree` requires `r1.cr_gas = SOME g ==> r2.cr_gas = SOME g` of every
+compared request. Among the call forms `supported_program` admits (`extcall`,
+`staticcall` and `send`), a call with an explicit source `gas=` value therefore
+forwards exactly that gas operand on its CALL or STATICCALL, and a `send` without
+`gas=` records 0, so its operand must be 0. The operand of any other call without `gas=` is unconstrained,
 creations and the precompile builtins record none, and the gas the callee
 actually receives is not related.
 The result relation ties source gas observations to the frame's EVM gas readings only through `gas_readings_rel (gas_readings es)`: it fixes some slots of the source's gas observations so that the fixed (`SOME`) slots together with the unused readings are a permutation of `gas_readings es`, and the result must hold for every value in an unfixed (`NONE`) slot and every appended tail, which the EVM readings do not constrain. The old
