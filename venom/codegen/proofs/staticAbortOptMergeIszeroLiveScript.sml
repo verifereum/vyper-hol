@@ -32,8 +32,8 @@ QED
 
 Theorem merge_iszero_pending_root_contraction:
 !p cc req V rank pc height need tag boolean edge v d.
-let Shape =
-  \p cc req pc height need tag boolean i (t:asm_state).
+!Shape. Shape =
+  (\p cc req pc height need tag boolean i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -47,20 +47,20 @@ let Shape =
          FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-in
-let Flow =
-  \p pc height tag boolean (x:num#num) (y:num#num).
-  let hi = height x; hj = height y; ins = EL (pc x) p in
-  let inherit =
-    \(src:num -> num option)
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+!Flow. Flow =
+  (\p pc height tag boolean (x:num#num) (y:num#num).
+  !hi. hi = height x ==>
+  !hj. hj = height y ==>
+  !ins. ins = EL (pc x) p ==>
+  !inherit. inherit =
+    (\(src:num -> num option)
       (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-  in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
   case ins of
     AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
   | AsmPush bs =>
@@ -90,7 +90,8 @@ let Flow =
              inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                (\k. NONE) (\k. F)
          | NONE =>
-           let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+           !a. a = asm_op_arity name ==>
+           !m. m = hj + a - hi ==>
            a <= hi /\ hj = m+(hi-a) /\
            ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
            inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -99,19 +100,17 @@ let Flow =
                  asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                    ins t = AsmOK u ==>
                  (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-  | _ => F
-in
-let Open =
-  \p cc req (V:(num#num)->bool) X rank pc height need
+  | _ => F) ==>
+!Open. Open =
+  (\p cc req (V:(num#num)->bool) X rank pc height need
     (tag:(num#num)->num->(string#num)option)
     (boolean:(num#num)->num->bool) edge.
-  let S = Shape p cc req pc height need tag boolean in
-  let target = \x y.
+  !S. S = Shape p cc req pc height need tag boolean ==>
+  !target. target = (\x y.
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
       off < dimword(:256) /\
-      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-  in
+      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
     FINITE V /\ X SUBSET V /\
     (!x. x IN V ==> ?t. S x t) /\
     (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -129,13 +128,11 @@ let Open =
                     p 1 t = AsmFault u) /\ u.as_requests=req) \/
        (?y u. edge x y /\
           asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-            p 1 t = AsmOK u /\ S y u))
-in
-let Reach = \(edge:(num#num)->(num#num)->bool) e x.
+            p 1 t = AsmOK u /\ S y u))) ==>
+!Reach. Reach = (\(edge:(num#num)->(num#num)->bool) e x.
   ?n (path:num->num#num).
-    path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))
-in
-let LiveShape = Shape p cc req pc height need tag boolean in
+    path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) ==>
+!LiveShape. LiveShape = Shape p cc req pc height need tag boolean ==>
 Open p cc req V {} rank pc height need tag boolean edge /\ v IN V /\
 (d=1 \/ d=2) /\ asm_block_at p (pc v) (REPLICATE d (AsmOp "ISZERO")) ==>
 ?z. z IN V /\ Reach edge v z /\ rank z < rank v /\
@@ -143,25 +140,26 @@ Open p cc req V {} rank pc height need tag boolean edge /\ v IN V /\
     (!k l o'. tag z k=SOME(l,o') ==> 0<k /\ tag v k=SOME(l,o')) /\
     (!k. 0<k /\ boolean z k ==> boolean v k) /\
     (!t. LiveShape v t ==> ?w stk. t.as_stack=w::stk /\
-      let u = t with <|as_pc := pc v+d;
-                       as_stack := FUNPOW (\a. b2w (a=0w)) d w :: stk|> in
+      !u. u = t with <|as_pc := pc v+d;
+                      as_stack := FUNPOW (\a. b2w (a=0w)) d w :: stk|> ==>
       asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p d t = AsmOK u /\ LiveShape z u) /\
-    (let W={a | a IN V /\ Reach edge z a}; E=(\a b. a IN W /\ edge a b) in
-     z IN W /\ Open p cc req W {} rank pc height need tag boolean E /\
-     (!a. a IN W ==> Reach E z a))
+    (!live_set. live_set = {a | a IN V /\ Reach edge z a} ==>
+     !live_edge. live_edge = (\a b. a IN live_set /\ edge a b) ==>
+     z IN live_set /\ Open p cc req live_set {} rank pc height need tag boolean live_edge /\
+     (!a. a IN live_set ==> Reach live_edge z a))
 Proof
-  rpt gen_tac >>
-  map_every (fn q =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
-    qx_gen_tac q >> disch_tac) [`Shape`,`Flow`,`Open`,`Reach`,`LiveShape`] >>
+  ntac 13 gen_tac >>
+  map_every (fn q => qx_gen_tac q >>
+    disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]))
+    [`Shape`,`Flow`,`Open`,`Reach`,`LiveShape`] >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac))) >>
   qpat_assum `Abbrev (Open = _)` (fn openth =>
     qpat_assum `Abbrev (LiveShape = _)` (fn shth =>
       qpat_assum `Open p cc req V {} rank pc height need tag boolean edge`
-        (strip_assume_tac o SRULE[REWRITE_RULE[markerTheory.Abbrev_def] openth,
-          GSYM (REWRITE_RULE[markerTheory.Abbrev_def] shth), LET_THM]))) >>
+        (strip_assume_tac o SRULE[GSYM (REWRITE_RULE[markerTheory.Abbrev_def] shth)] o
+          CONV_RULE (REDEPTH_CONV (BETA_CONV ORELSEC HO_REWR_CONV UNWIND_FORALL_THM2)) o
+          PURE_REWRITE_RULE[REWRITE_RULE[markerTheory.Abbrev_def] openth]))) >>
   `!x. x IN V /\ EL (pc x) p = AsmOp "ISZERO" ==>
      ?y. edge x y /\ y IN V /\ rank y < rank x /\
          pc y = pc x+1 /\ height y = height x /\ tag y 0 = NONE /\
@@ -176,8 +174,8 @@ Proof
        (!k l o'. tag z k=SOME(l,o') ==> 0<k /\ tag v k=SOME(l,o')) /\
        (!k. 0<k /\ boolean z k ==> boolean v k) /\
        (!t. LiveShape v t ==> ?w stk. t.as_stack=w::stk /\
-         let u = t with <|as_pc := pc v+d;
-                          as_stack := FUNPOW (\a. b2w (a=0w)) d w :: stk|> in
+         !u. u = t with <|as_pc := pc v+d;
+                         as_stack := FUNPOW (\a. b2w (a=0w)) d w :: stk|> ==>
          asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p d t = AsmOK u /\ LiveShape z u)`
     by (suspend "contract") >>
   qexists `z` >> rpt (conj_tac >- (first_assum ACCEPT_TAC)) >>
@@ -209,9 +207,10 @@ Resume merge_iszero_pending_root_contraction[hop]:
        qpat_assum `EL (pc x) p = AsmOp "ISZERO"` (fn inst =>
          qpat_assum `height y = height x` (fn height_eq =>
            qpat_x_assum `Flow p pc height tag boolean x y`
-             (strip_assume_tac o SRULE[REWRITE_RULE[markerTheory.Abbrev_def] flow,
-                inst, height_eq, LET_THM, iszero_flow_table,
-                DECIDE ``!h:num. h+1-h=1``])))) >>
+             (strip_assume_tac o SRULE[inst, height_eq, iszero_flow_table,
+                DECIDE ``!h:num. h+1-h=1``] o
+              CONV_RULE (REDEPTH_CONV (BETA_CONV ORELSEC HO_REWR_CONV UNWIND_FORALL_THM2)) o
+              PURE_REWRITE_RULE[REWRITE_RULE[markerTheory.Abbrev_def] flow])))) >>
      conj_tac
      >- (map_every qx_gen_tac [`k`,`l`,`orig`] >> disch_tac >>
          qpat_x_assum `!k l origin. tag y k = SOME(l,origin) ==> _ /\ _`
@@ -259,6 +258,7 @@ Resume merge_iszero_pending_root_contraction[uniform]:
 QED
 
 Resume merge_iszero_pending_root_contraction[contract]:
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
   `EL (pc v) p = AsmOp "ISZERO" /\
    (d=2 ==> EL (pc v+1) p = AsmOp "ISZERO")` by
     ((qpat_x_assum `d = 1 \/ d = 2` strip_assume_tac >>
@@ -300,10 +300,9 @@ Resume merge_iszero_pending_root_contraction[contract]:
 QED
 
 Resume merge_iszero_pending_root_contraction[restrict]:
-  map_every (fn q =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
-    qx_gen_tac q >> disch_tac) [`live_set`,`live_edge`] >>
+  map_every (fn q => qx_gen_tac q >>
+    disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]))
+    [`live_set`,`live_edge`] >>
   `!a. a IN live_set <=> a IN V /\ Reach edge z a` by simp[Abbr `live_set`] >>
   `live_set SUBSET V` by simp[SUBSET_DEF] >>
   `!a b. a IN live_set /\ edge a b ==> b IN live_set` by
@@ -326,10 +325,10 @@ Resume merge_iszero_pending_root_contraction[restrict]:
   >- (qpat_assum `Abbrev (Open = _)` (fn openth =>
         qpat_assum `Abbrev (LiveShape = _)` (fn shth =>
           qpat_assum `Abbrev (live_edge = _)` (fn eth =>
-            SIMP_TAC bool_ss [REWRITE_RULE[markerTheory.Abbrev_def] openth,
-              GSYM (REWRITE_RULE[markerTheory.Abbrev_def] shth),
-              REWRITE_RULE[markerTheory.Abbrev_def] eth, LET_THM,
-              DIFF_EMPTY, EMPTY_SUBSET]))) >>
+            PURE_REWRITE_TAC [REWRITE_RULE[markerTheory.Abbrev_def] openth] >>
+            CONV_TAC (REDEPTH_CONV (BETA_CONV ORELSEC HO_REWR_CONV UNWIND_FORALL_THM2)) >>
+            SIMP_TAC bool_ss [GSYM (REWRITE_RULE[markerTheory.Abbrev_def] shth),
+              REWRITE_RULE[markerTheory.Abbrev_def] eth, DIFF_EMPTY, EMPTY_SUBSET]))) >>
       conj_tac >- metis_tac[SUBSET_FINITE_I] >>
       conj_tac >- metis_tac[] >>
       conj_tac >- metis_tac[] >>
