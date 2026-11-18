@@ -247,7 +247,7 @@ Theorem outcomes_free_stmt_log:
   )
 Proof
   strip_tac >>
-  strip_tac >> drule (UNDISCH outcomes_free_log_eval_all) >> disch_then assume_tac >>
+  strip_tac >> drule (b7 outcomes_free_log_eval_all) >> disch_then assume_tac >>
   rpt gen_tac >> simp[supported_stmt_expr_exists_def] >> strip_tac >>
   `EVERY (\e. ~supported_expr_exists R e /\
      ~supported_expr_exists expr_shape_root e) args` by

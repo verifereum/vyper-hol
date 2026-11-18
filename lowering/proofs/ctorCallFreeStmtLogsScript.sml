@@ -131,9 +131,10 @@ Proof
 QED
 
 Theorem outcomes_free_log_eval_all:
-  (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
-         opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
-         opc <> RETURNDATACOPY ==> P opc) ==>
+  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
+    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
+    TSTORE; CALLDATACOPY; NOT; AND; MCOPY; LT; ISZERO; GT; ASSERT]
+    ==> P opc) ==>
   (
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
@@ -155,8 +156,16 @@ Theorem outcomes_free_log_eval_all:
     (state_insts (SND (compile_log_eval_all ce es st)))
   )
 Proof
-  rpt strip_tac >> irule every_state_insts_log_eval_all >>
-  fs[(b7 outcomes_free_unwrap_value), (c7 [(c7 [outcomes_free_alloc_buffer, outcomes_free_unwrap_value, outcomes_free_store_memory] outcomes_free_materialize_vv)] outcomes_free_compile_log_save_arg)] >>
+  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >> rpt strip_tac >>
+  irule every_state_insts_log_eval_all >>
+  `!ce ty vv s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_materialize_vv ce ty vv s)))`
+    by (rpt strip_tac >> irule outcomes_free_materialize_vv >>
+        simp[DISJ_IMP_THM, outcomes_free_alloc_buffer,
+             outcomes_free_unwrap_value, outcomes_free_store_memory]) >>
+  drule outcomes_free_compile_log_save_arg >> strip_tac >>
+  simp[DISJ_IMP_THM, outcomes_free_unwrap_value] >>
   simp[Once EVERY_MEM] >> rpt strip_tac >>
   qpat_x_assum `!ce ty e st. _` irule >>
   conj_tac >- first_assum ACCEPT_TAC >> fs[EVERY_MEM]
@@ -186,7 +195,7 @@ Theorem opcode_every_log_eval_all:
     (state_insts (SND (compile_log_eval_all ce es st)))
   )
 Proof
-  strip_tac >> match_mp_tac outcomes_free_log_eval_all >> simp[]
+  strip_tac >> match_mp_tac outcomes_free_log_eval_all >> simp[DISJ_IMP_THM]
 QED
 
 Theorem every_state_insts_reason_message:
