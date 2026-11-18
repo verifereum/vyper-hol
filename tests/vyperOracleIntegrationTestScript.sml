@@ -299,15 +299,13 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* A computed precompile (here SHA-256 at Address2) takes its success bit
-   from the head outcome and records no request.  A delegate raw_call to the
-   same address is no computed precompile: it records its request and takes
-   the head outcome as is. *)
+(* Both calls record their request. The static SHA-256 call uses the oracle
+   head for its success bit. The delegate call takes the head outcome as is. *)
 Theorem RawCall_precompile_takes_outcome:
   integration_raw_call_observe F F 0 2w (SOME [send_outcome F [] 0])
-    (INL (Value (BoolV F))) (SOME 0) send_initial_requests /\
+    (INL (Value (BoolV F))) (SOME 0) (integration_raw_call_requests 2w) /\
   integration_raw_call_observe F F 0 2w (SOME [send_outcome T [] 0])
-    (INL (Value (BoolV T))) (SOME 0) send_initial_requests /\
+    (INL (Value (BoolV T))) (SOME 0) (integration_raw_call_requests 2w) /\
   integration_raw_call_observe T F 0 2w (SOME [send_outcome T [] 0])
     (INL (Value (BoolV T))) (SOME 0) (send_requests 2w 0)
 Proof
