@@ -183,7 +183,7 @@ val checker_defs =
    power_exponent_ok_def,
    power_operands_ok_def,
    builtin_operands_ok_def,
-   augassign_operand_ok_def,
+   augassign_shift_amount_ok_def, augassign_operand_ok_def,
    is_prim_word_type_def,
    well_typed_builtin_app_def,
    bytelike_type_bound_def,

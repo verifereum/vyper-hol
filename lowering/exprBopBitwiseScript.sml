@@ -17,6 +17,7 @@ Libs
 
 Theorem bop_result_bitwise_pairs[local]:
   (bop = And \/ bop = Or \/ bop = XOr) /\
+  word_value v1 /\
   expr_res_ok (bop_result cx ann bop tys v1 v2 es) ==>
   ((?i1 i2. v1 = IntV i1 /\ v2 = IntV i2) \/
    (?b1 b2. v1 = BoolV b1 /\ v2 = BoolV b2) \/
@@ -24,7 +25,7 @@ Theorem bop_result_bitwise_pairs[local]:
 Proof
   strip_tac >> gvs[] >>
   fs[bop_result_def, evaluate_builtin_def] >>
-  Cases_on `v1` >> gvs[evaluate_binop_def, expr_res_ok_def] >>
+  Cases_on `v1` >> gvs[evaluate_binop_def, expr_res_ok_def, word_value_def] >>
   gvs[AllCaseEqs()]
 QED
 
@@ -36,6 +37,7 @@ QED
 Theorem bop_result_bitwise:
   !cx ann bop v1 v2 es.
     (bop = And \/ bop = Or \/ bop = XOr) /\
+    word_value v1 /\
     expr_res_ok (bop_result cx ann bop tys v1 v2 es) /\
     (!i1 i2. v1 = IntV i1 /\ v2 = IntV i2 ==>
        within_int_bound
@@ -110,6 +112,7 @@ QED
 Theorem compile_bitwise_sim:
   !ctx func cenv cx bop ty ann bl el v1 v2 es0.
     (bop = And \/ bop = Or \/ bop = XOr) /\
+    word_value v1 /\
     (!i1 i2. v1 = IntV i1 /\ v2 = IntV i2 ==>
        within_int_bound
          (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i1 /\
@@ -118,7 +121,7 @@ Theorem compile_bitwise_sim:
     binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >>
-  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   irule binop_frag_straight >>
   conj_tac >- metis_tac[straight_fresh_compile_bitwise] >>
   disch_tac >>

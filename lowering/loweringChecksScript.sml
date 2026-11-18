@@ -28,6 +28,8 @@ Ancestors
   e2eWitnessCompute e2eWitness
   (* tests of the bytecode evaluation library the native runner shares *)
   evalCompilerBytecodeLibTest
+  (* operand-stack checker: pinned internal-call bytecode and deep call chains *)
+  stackBoundWitnesses
   (* the supported subset: per-construct contracts, membership matrix *)
   supportedExprFormProps supportedExprProps supportedProgramProps
   vyperMembershipMatrixTest

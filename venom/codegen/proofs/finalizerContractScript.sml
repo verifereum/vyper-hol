@@ -150,7 +150,20 @@ Theorem optimize_round_refines:
   ∀p p' c. optimize_round p = SOME (p', c) ⇒ asm_refines p p'
 Proof
   rw[optimize_round_def] >> rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[asm_refines_trans, pairTheory.FST]
+  rename1 `prune_unreachable_code src = (a1,b1)` >>
+  rename1 `merge_iszero a1 = (a2,b2)` >>
+  rename1 `merge_jumpdests a2 = (a3,b3)` >>
+  rename1 `prune_inefficient_jumps a3 = (a4,b4)` >>
+  rename1 `optimize_inefficient_jumps a4 = (a5,b5)` >>
+  rename1 `prune_unused_jumpdests a5 = (a6,b6)` >>
+  rename1 `stack_peephole_opts a6 = SOME (dest,b7)` >>
+  `asm_refines src a1 /\ asm_refines a1 a2 /\
+   asm_refines a2 a3 /\ asm_refines a3 a4 /\
+   asm_refines a4 a5 /\ asm_refines a5 a6 /\ asm_refines a6 dest` by
+    (rpt conj_tac >> metis_tac[pairTheory.FST]) >>
+  fs[] >>
+  POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
+  imp_res_tac asm_refines_trans >> first_assum ACCEPT_TAC
 QED
 
 Theorem optimize_assembly_rounds_refines:

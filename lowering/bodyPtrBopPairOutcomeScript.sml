@@ -2,7 +2,7 @@ Theory bodyPtrBopPairOutcome
 Ancestors
   gasSummaryComposePtrAll gasStorage vyperStorageTrace gasSummary fragGasPath
   bodyPtrBopOperands bodyPtrBopOperandRetention gasSummaryComposePtr
-  stmtSimLogArgs exprSimOperators bodyPtrDefs
+  stmtSimLogArgs exprSimOperators exprSimHyps bodyPtrDefs
 
 (* Keep the first operand at the second operand's exit.  Only its value
    footprint is retained; this deliberately asserts no buffer coverage. *)

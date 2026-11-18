@@ -126,9 +126,17 @@ Proof
        mk_inst_def, entry_block_def, entry_param_outputs_def,
        collect_param_info_def, has_ret_instruction_def, build_param_index_def,
        rma_init_state_def, FLOOKUP_UPDATE] >>
+  qmatch_goalsub_abbrev_tac `dfg_build_function callee_fn` >>
+  qabbrev_tac `callee_dfg = dfg_build_function callee_fn` >>
+  qunabbrev_tac `callee_fn` >>
+  qmatch_goalsub_abbrev_tac `dfg_build_function main_fn` >>
+  qabbrev_tac `main_dfg = dfg_build_function main_fn` >>
+  qunabbrev_tac `main_fn` >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >>
-  simp[rma_fixpoint_step_def, FLOOKUP_UPDATE, rma_analyze_fn_def,
-       mem_write_ops_def] >>
+  simp[rma_fixpoint_step_def, FLOOKUP_UPDATE] >>
+  simp[rma_analyze_fn_def] >>
+  simp[mem_write_ops_def] >>
+  simp[FLOOKUP_UPDATE] >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >>
   simp[]
 QED
