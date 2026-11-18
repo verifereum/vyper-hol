@@ -11,7 +11,7 @@ Ancestors ptrDiscipline[qualified,ignore_grammar]
   gasOutcomeFull bodyPtrDefs gasShadow gasContext exprSimHypsDefs
   exprSimIfExpWidenedAdapter exprSimSliceCompose
   loweringPosts exprSimVVFrame valueEncodingProofs bodyPtrBytestringBuiltinsWindowGhost
-  exprReasonOperand typedMemoryCopy
+  exprReasonOperand haltExitProj typedMemoryCopy
   logStoreDataOriginPtr annassignRelayoutSource bodyFullPathHistory
   wideningZeroLayout exprSimHyps exprSimSend aggregateEvaluatedLayout vyperTypeSystem context compileEnv
   exprLowering vyperInterpreter vyperState vyperAST vyperStorageTrace fragExec list
