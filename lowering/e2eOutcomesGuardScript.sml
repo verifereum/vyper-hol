@@ -3,7 +3,7 @@ Theory e2eOutcomesGuard
 Ancestors
   e2eRequestCutDefs e2eDefs vfmAccountFrame vyperStorageFootprint
   vyperInterpreter vyperState vyperStorageBackend vfmState vfmContext
-  callTraceFrameProvenance callTraceFrame callTrace guardReentryCode
+  callTraceFrameProvenance callTraceFrame callTrace guardReentryCode guardReentryAccounts
   guardPushProjections immutableSectionRel vfmExecution vfmExecutionProp
   e2eCorrectness frameOutcome guardTerminalBackend arithmetic list
 
@@ -44,6 +44,61 @@ Proof
   qpat_x_assum `!s child. run_call_reaches es s /\ _ ==> _`
     (qspecl_then [`s`, `child`] mp_tac) >>
   impl_tac >- (simp[] >> decide_tac) >> simp[]
+QED
+
+Triviality guard_reentry_staging:
+  vyper_closed_world fin policy tops runtime_bc am tx H es /\
+  call_state_rel tops runtime_bc am tx es /\ runtime_bc <> [] /\
+  run_call_reaches es s /\ LENGTH es.contexts <= LENGTH s.contexts /\
+  step s = (INL (),e) /\ LENGTH s.contexts < LENGTH e.contexts /\
+  (FST (HD e.contexts)).msgParams.callee = tx.target /\
+  ~(FST (HD e.contexts)).msgParams.static /\
+  storage_well_formed_on
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (empty_state with <|accounts := e.rollback.accounts;
+                       tStorage := e.rollback.tStorage|>) (FST H) ==>
+  ?am_e tx_e.
+    am_e.sources = am.sources /\ am_e.layouts = am.layouts /\
+    tx_e.target = tx.target /\
+    vyper_frame_staging fin policy tops runtime_bc am_e tx_e e /\
+    (calldata_dispatch tops (buffer_to_list (FST (HD e.contexts)).msgParams.data) = NONE \/
+     vyper_closed_world fin policy tops runtime_bc am_e tx_e H e /\
+     LENGTH (call_trace e) < 2 ** 64 /\
+     ?ret_e. vyper_entry_call tops tx_e
+       (buffer_to_list (FST (HD e.contexts)).msgParams.data) ret_e)
+Proof
+  strip_tac >>
+  qpat_assum `vyper_closed_world _ _ _ _ _ _ _ _`
+    (mp_tac o last o CONJUNCTS o REWRITE_RULE [vyper_closed_world_def]) >>
+  disch_then (qspecl_then [`s`, `()`, `e`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `am_e` (qx_choose_then `tx_e`
+    (map_every assume_tac o CONJUNCTS))) >>
+  `tx_e.target = tx.target /\ world_rel am_e tx_e e` by
+    (fs[vyper_frame_staging_def, call_state_rel_def, frame_tx_rel_def] >> gvs[]) >>
+  `wf_state es /\ account_already_created (lookup_account tx.target es.rollback.accounts)` by
+    (fs[call_state_rel_def, evm_state_ok_def, installed_code_rel_def,
+        account_already_created_def, NULL_EQ] >> metis_tac[APPEND_eq_NIL]) >>
+  `~account_empty (lookup_account tx.target es.originalAccounts)` by
+    fs[vyper_closed_world_def] >>
+  `run_call_reaches es e` by
+    (irule run_call_reaches_step >> qexistsl_tac [`s`, `()`] >> simp[]) >>
+  `LENGTH es.contexts <= LENGTH e.contexts` by decide_tac >>
+  `~account_empty (lookup_account tx_e.target e.originalAccounts)` by
+    (mp_tac (Q.INST [`s` |-> `e`, `a` |-> `tx.target`]
+       guard_reaches_created_original_nonempty) >> simp[]) >>
+  qexistsl_tac [`am_e`, `tx_e`] >> simp[] >>
+  qpat_x_assum `calldata_dispatch _ _ = NONE \/ _` strip_assume_tac >> simp[] >>
+  `storage_well_formed_on
+    (initial_evaluation_context am_e.sources am_e.layouts tx_e NONE)
+    (empty_state with <|accounts := e.rollback.accounts;
+                       tStorage := e.rollback.tStorage|>) (FST H)` by
+    (qpat_x_assum `storage_well_formed_on _ _ _` mp_tac >>
+     simp[storage_well_formed_on_def, boolTheory.FORALL_BOOL, get_storage_def,
+          initial_evaluation_context_def]) >>
+  `vyper_closed_world fin policy tops runtime_bc am_e tx_e H e` by
+    (mp_tac (Q.INST [`am` |-> `am`, `tx` |-> `tx`, `es` |-> `es`]
+      guard_closed_world_inherit) >> simp[]) >>
+  disj2_tac >> simp[] >> metis_tac[]
 QED
 
 val guard_frame_storage_pair =
