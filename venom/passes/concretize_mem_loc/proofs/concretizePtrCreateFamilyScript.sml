@@ -186,9 +186,9 @@ Proof
     (irule ptr_create_family_delegate_request >> metis_tac[]) >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = OK _` mp_tac >>
   Cases_on `consume_call_outcome (venom_call_request t addr 0w at az F with
-    cr_kind := DelegateMessageCall) (w2n rt) (w2n rz) t` >>
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n rt) (w2n rz) t` >>
   Cases_on `consume_call_outcome (venom_call_request s addr 0w ao az F with
-    cr_kind := DelegateMessageCall) (w2n ro) (w2n rz) s` >>
+    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n ro) (w2n rz) s` >>
   rename1 `consume_call_outcome _ (w2n rt) _ t = (wt,zt)` >>
   rename1 `consume_call_outcome _ (w2n ro) _ s = (ws,us)` >>
   simp[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>

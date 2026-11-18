@@ -590,7 +590,7 @@ End
 (* Shared request and completion for CALL/STATICCALL. Expand both requested
  * memory regions, but overwrite only the actual returned prefix. In
  * particular short returndata never shifts/drops the trailing memory.
- * Forwarded gas is popped/evaluated by dispatch and deliberately ignored. *)
+ * The callers set cr_gas to the popped gas operand. *)
 Definition asm_call_request_def:
   asm_call_request s (addr:bytes32) (value:bytes32) ao asz is_static =
     <| cr_kind := MessageCall; cr_gas := NONE;
@@ -637,7 +637,8 @@ Definition asm_exec_call_def:
       gas :: addr :: value :: ao :: asz :: ro :: rs :: stk =>
         if s.as_call_ctx.cc_static /\ value <> 0w then
           AsmFault (s with as_returndata := []) else
-        let rq = asm_call_request s addr value (w2n ao) (w2n asz) is_static in
+        let rq = asm_call_request s addr value (w2n ao) (w2n asz) is_static with
+                   cr_gas := SOME (w2n gas) in
         asm_consume_call_outcome rq (w2n ro) (w2n rs) stk
           (s with as_memory := asm_call_memory (w2n ao) (w2n asz)
                                 (w2n ro) (w2n rs) s.as_memory)
@@ -649,7 +650,8 @@ Definition asm_exec_staticcall_def:
   asm_exec_staticcall s =
     case s.as_stack of
       gas :: addr :: ao :: asz :: ro :: rs :: stk =>
-        let rq = asm_call_request s addr 0w (w2n ao) (w2n asz) T in
+        let rq = asm_call_request s addr 0w (w2n ao) (w2n asz) T with
+                   cr_gas := SOME (w2n gas) in
         asm_consume_call_outcome rq (w2n ro) (w2n rs) stk
           (s with as_memory := asm_call_memory (w2n ao) (w2n asz)
                                 (w2n ro) (w2n rs) s.as_memory)
@@ -671,7 +673,7 @@ Definition asm_exec_delegatecall_def:
     case s.as_stack of
       gas :: addr :: ao :: asz :: ro :: rs :: stk =>
         let rq = asm_call_request s addr 0w (w2n ao) (w2n asz) F with
-                   cr_kind := DelegateMessageCall in
+                   <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |> in
         asm_consume_call_outcome rq (w2n ro) (w2n rs) stk
           (s with as_memory := asm_call_memory (w2n ao) (w2n asz)
                                 (w2n ro) (w2n rs) s.as_memory)

@@ -103,13 +103,13 @@ Theorem exec_ext_call_frame_view:
   OK (frame_view fn ra
     (update_var out
       (FST (consume_call_outcome
-        (venom_call_request s addr value argsOff argsSize is_static)
+        (venom_call_request s addr value argsOff argsSize is_static with cr_gas := SOME (w2n gas))
         (w2n retOff) (w2n retSize) s))
       (SND (consume_call_outcome
-        (venom_call_request s addr value argsOff argsSize is_static)
+        (venom_call_request s addr value argsOff argsSize is_static with cr_gas := SOME (w2n gas))
         (w2n retOff) (w2n retSize) s))) with
     vs_memory := (SND (consume_call_outcome
-      (venom_call_request s addr value argsOff argsSize is_static)
+      (venom_call_request s addr value argsOff argsSize is_static with cr_gas := SOME (w2n gas))
       (w2n retOff) (w2n retSize) (s with vs_memory := m))).vs_memory)
 Proof
   strip_tac >>
@@ -151,7 +151,7 @@ Proof
   pairarg_tac >> simp[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
   strip_tac >> gvs[Excl "consume_call_outcome_eq"] >>
   rename1 `consume_call_outcome
-    (venom_call_request s target _ argOff argSize _) (w2n retOff) (w2n retSize) s = (w,t)` >>
+    (venom_call_request s target _ argOff argSize _ with cr_gas := _) (w2n retOff) (w2n retSize) s = (w,t)` >>
   rename1 `inst.inst_outputs = [out]` >>
   `~retpc_var fn out` by
     (irule noncopy_output_not_retpc >> simp[] >> qexists_tac `inst` >> simp[]) >>

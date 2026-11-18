@@ -546,7 +546,7 @@ Proof
   rename1 `inst.inst_outputs = out::rest_outputs` >>
   Cases_on `rest_outputs` >> simp[exec_ext_call_def, lift_result_def] >>
   Cases_on `(FST (take_outcome
-    (venom_call_request s2 addr value ao as_ is_static) s2.vs_outcomes)).co_success` >>
+    (venom_call_request s2 addr value ao as_ is_static with cr_gas := SOME (w2n gas)) s2.vs_outcomes)).co_success` >>
   simp[] >> ext_call_result_tac ()
 QED
 
@@ -592,7 +592,7 @@ Proof
   Cases_on `rest_outputs` >> simp[exec_delegatecall_def, lift_result_def] >>
   Cases_on `(FST (take_outcome
     (venom_call_request s2 addr 0w ao as_ F with
-       cr_kind := DelegateMessageCall) s2.vs_outcomes)).co_success` >>
+       <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>) s2.vs_outcomes)).co_success` >>
   simp[] >> ext_call_result_tac ()
 QED
 

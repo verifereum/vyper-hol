@@ -42,9 +42,11 @@ Definition take_request_outcome_def:
 End
 val () = take_request_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
 
+(* gas_cap is the call's gas= operand, if it has one; the request records it. *)
 Definition take_call_outcome_def:
-  take_call_outcome target calldata value_opt st =
-    take_request_outcome (call_outcome_request target calldata value_opt st) st
+  take_call_outcome gas_cap target calldata value_opt st =
+    take_request_outcome
+      (call_outcome_request target calldata value_opt st with cr_gas := gas_cap) st
 End
 val () = cv_auto_trans take_call_outcome_def;
 
@@ -59,8 +61,9 @@ End
 val () = cv_auto_trans delegate_outcome_request_def;
 
 Definition take_delegate_outcome_def:
-  take_delegate_outcome target calldata value_opt st =
-    take_request_outcome (delegate_outcome_request target calldata value_opt st) st
+  take_delegate_outcome gas_cap target calldata value_opt st =
+    take_request_outcome
+      (delegate_outcome_request target calldata value_opt st with cr_gas := gas_cap) st
 End
 val () = cv_auto_trans take_delegate_outcome_def;
 
@@ -84,11 +87,11 @@ val () = adopt_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_t
 (* Definitional identity with PLAN 5.3, including the shared live snapshots.
    The request constructor is factored only to avoid repeating that record. *)
 Theorem take_call_outcome_plan:
-  take_call_outcome target calldata value_opt st =
+  take_call_outcome gas_cap target calldata value_opt st =
     case st.outcomes of
       NONE => (INR (Error (RuntimeError "take_call_outcome")),st)
     | SOME os =>
-      let rq = <|cr_kind := MessageCall; cr_gas := NONE; cr_data_len := LENGTH calldata;
+      let rq = <|cr_kind := MessageCall; cr_gas := gas_cap; cr_data_len := LENGTH calldata;
                  cr_target := target;
                  cr_value := (case value_opt of NONE => 0 | SOME v => v);
                  cr_data := calldata; cr_static := IS_NONE value_opt;
@@ -116,7 +119,7 @@ Proof
 QED
 
 Theorem take_call_outcome_frame:
-  take_call_outcome target calldata value_opt st = (res, st') ==>
+  take_call_outcome gas_cap target calldata value_opt st = (res, st') ==>
   st' = st with <|outcomes := st'.outcomes; requests := st'.requests;
                  storage_trace := st'.storage_trace|>
 Proof
@@ -125,7 +128,7 @@ Proof
 QED
 
 Theorem take_delegate_outcome_frame:
-  take_delegate_outcome target calldata value_opt st = (res, st') ==>
+  take_delegate_outcome gas_cap target calldata value_opt st = (res, st') ==>
   st' = st with <|outcomes := st'.outcomes; requests := st'.requests;
                  storage_trace := st'.storage_trace|>
 Proof

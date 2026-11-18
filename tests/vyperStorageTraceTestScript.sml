@@ -88,7 +88,7 @@ Theorem concrete_static_raw_call_preserves_storage_trace:
   st.outcomes = NONE /\
   ~flags.rcf_is_delegate /\ flags.rcf_is_static /\
   ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = 0 /\
-  run_raw_call cx flags target calldata 0 gas st.accounts st.tStorage =
+  run_raw_call cx flags target calldata 0 (forwarded_gas default_evm_gas_limit gas) st.accounts st.tStorage =
     SOME (T, [], st.accounts, st.tStorage, [], []) ==>
   eval_raw_call cx flags target calldata 0 gas st =
     (INL (Value (BoolV T)), st)
@@ -105,7 +105,7 @@ QED
 
 Theorem concrete_static_ext_call_preserves_storage_trace:
   st.outcomes = NONE /\
-  run_ext_call cx.txn.target target calldata NONE gas st.accounts st.tStorage
+  run_ext_call cx.txn.target target calldata NONE (forwarded_gas default_evm_gas_limit gas) st.accounts st.tStorage
     (vyper_to_tx_params cx.txn) =
     SOME (T, [], st.accounts, st.tStorage, [], []) ==>
   eval_ext_call_effects cx target calldata NONE gas st.accounts st = (INL [], st)

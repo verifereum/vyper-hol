@@ -278,9 +278,9 @@ Proof
    s.vs_pending_deletions = t.vs_pending_deletions` by
     fs[ld_joint_boundary_def, ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
   qabbrev_tac `rq1 = venom_call_request s daval 0w dival dzval F with
-                      cr_kind := DelegateMessageCall` >>
+                      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n dgval)|>` >>
   qabbrev_tac `rq2 = venom_call_request t daval 0w di_target dzval F with
-                      cr_kind := DelegateMessageCall` >>
+                      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n dgval)|>` >>
   `request_agree_except D rq1 rq2` by
     simp[Abbr `rq1`, Abbr `rq2`, request_agree_except_def,
          venom_call_request_def, call_request_component_equality] >>
@@ -888,8 +888,8 @@ Proof
     (drule ld_joint_call_operands >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> gvs[MEM] >> metis_tac[]) >>
   `s.vs_call_ctx = t.vs_call_ctx` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
-  qabbrev_tac `rq1 = venom_call_request s addr value off sz static` >>
-  qabbrev_tac `rq2 = venom_call_request t addr value off' sz static` >>
+  qabbrev_tac `rq1 = venom_call_request s addr value off sz static with cr_gas := SOME (w2n gas)` >>
+  qabbrev_tac `rq2 = venom_call_request t addr value off' sz static with cr_gas := SOME (w2n gas)` >>
   `rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
    rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
@@ -921,7 +921,7 @@ Proof
          qexistsl_tac [`fuel`,`update_var out w1 r1`] >>
          simp[Excl "consume_call_outcome_eq", update_var_def]) >>
       simp[Abbr `rq1`, Abbr `rq2`] >>
-      irule ld_venom_call_request_masked >> simp[]) >>
+      simp[request_agree_except_def, venom_call_request_def]) >>
    drule_all ld_call_outcome_effects >> strip_tac >>
    qexistsl_tac [`out`,`w1`,`r1`,`r2`,`rq1`,`rq2`,`ro`,`rs`,`ro'`] >>
    simp[Excl "consume_call_outcome_eq"] >>

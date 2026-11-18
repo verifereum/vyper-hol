@@ -392,10 +392,9 @@ Proof
 QED
 
 
-(* exec_ext_call ignores gas and converts ret offsets/sizes with w2n.
-   Fix the independent type parameters at the bytes32 operand interface. *)
+(* Fix gas and return-buffer word widths at the bytes32 operand interface. *)
 val call_effect = INST_TYPE [
-  ``:'a`` |-> ``:256 word``, ``:'e`` |-> ``:256 word``,
+  ``:'a`` |-> ``:256``, ``:'e`` |-> ``:256``,
   ``:'b`` |-> ``:256``, ``:'c`` |-> ``:256``, ``:'d`` |-> ``:256``]
   ld_exec_ext_call_effect;
 

@@ -466,18 +466,18 @@ Proof
 QED
 
 Theorem outcomes_suffix_take:
-  outcomes_suffix (take_call_outcome target calldata value_opt)
+  outcomes_suffix (take_call_outcome gas_cap target calldata value_opt)
 Proof
   irule outcomes_suffix_take_request >>
-  qexists_tac `call_outcome_request target calldata value_opt` >>
+  qexists_tac `\st. call_outcome_request target calldata value_opt st with cr_gas := gas_cap` >>
   simp[take_call_outcome_def]
 QED
 
 Theorem outcomes_suffix_take_delegate:
-  outcomes_suffix (take_delegate_outcome target calldata value_opt)
+  outcomes_suffix (take_delegate_outcome gas_cap target calldata value_opt)
 Proof
   irule outcomes_suffix_take_request >>
-  qexists_tac `delegate_outcome_request target calldata value_opt` >>
+  qexists_tac `\st. delegate_outcome_request target calldata value_opt st with cr_gas := gas_cap` >>
   simp[take_delegate_outcome_def]
 QED
 

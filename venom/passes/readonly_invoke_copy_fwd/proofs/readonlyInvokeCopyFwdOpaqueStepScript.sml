@@ -394,7 +394,8 @@ Proof
     simp[venom_call_request_def, read_memory_def,
       ricf_retpc_view_def, frame_view_def] >>
   Cases_on `consume_call_outcome
-    (venom_call_request s addr value ao az staticflag) (w2n ro) (w2n rz) s` >>
+    (venom_call_request s addr value ao az staticflag with cr_gas := SOME (w2n gas))
+    (w2n ro) (w2n rz) s` >>
   drule ricf_view_consume_call >>
   disch_then (qspec_then `fn` assume_tac) >>
   EQ_TAC >> simp[exec_ext_call_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
@@ -433,7 +434,8 @@ Proof
     simp[venom_call_request_def, read_memory_def,
       ricf_retpc_view_def, frame_view_def] >>
   Cases_on `consume_call_outcome
-    (venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall)
+    (venom_call_request s addr 0w ao az F with
+      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>)
     (w2n ro) (w2n rz) s` >>
   drule ricf_view_consume_call >>
   disch_then (qspec_then `fn` assume_tac) >>
