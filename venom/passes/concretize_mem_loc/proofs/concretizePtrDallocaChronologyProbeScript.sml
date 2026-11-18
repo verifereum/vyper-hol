@@ -92,7 +92,7 @@ Theorem ptr_dalloca_nop_observation:
 Proof
   ho_match_mp_tac ptr_chrono_step_ind >>
   simp[ptr_observe_def] >> rpt strip_tac >>
-  gvs[is_terminator_def, step_inst_non_invoke, step_inst_base_def] >>
+  gvs[is_terminator_def, step_inst_non_invoke, step_inst_base_opcode_eqs] >>
   metis_tac[ptr_assign_prefix_nop_ghosts]
 QED
 
