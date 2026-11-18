@@ -16,7 +16,8 @@
 Theory externalCallSelected
 Ancestors
   vyperState vyperContext vyperInterpreter vyperTypeSystem
-  vyperTypeSelectedEntrySoundness e2eDefs supportedStmts
+  vyperTypeSelectedEntrySoundness vyperTypeExternalCallMachine nonreentrantEquiv
+  e2eDefs supportedStmts
   compileEnv compileVyper stmtLowering stmtLoweringMono moduleLowering
   fragExec loweringPosts stmtSimProps bodySim stmtsEnvRetTy
 
@@ -71,10 +72,10 @@ QED
    the value moved, as external_entry_reaches_body starts the body from
    it; the body starts from es0 with the call's observations. *)
 Theorem call_external_selected_body_gas:
-  !tops am tx ret mut args fbody env orc gobs es0.
+  !tops am tx ret mut nr args fbody env orc gobs es0.
     source_deployment_rel tops am tx /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
+      SOME (mut, nr, args, [], ret, fbody) /\
     LENGTH tx.args = LENGTH args /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
     send_call_value mut
@@ -84,7 +85,7 @@ Theorem call_external_selected_body_gas:
     call_external orc gobs am tx =
       case call_external_body am
              (initial_evaluation_context am.sources am.layouts tx NONE)
-             F mut (type_env tops) (es0 with gas_obs := gobs) env fbody ret of
+             nr mut (type_env tops) (es0 with gas_obs := gobs) env fbody ret of
         (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
       | (INR HaltException, am', rqs) =>
           (INR HaltException, finalize_pending_deletions am', rqs)
@@ -115,47 +116,33 @@ Proof
          vyperStateTheory.ignore_bind_def, vyperStateTheory.get_scopes_def,
          vyperStateTheory.set_scopes_def, vyperStateTheory.finally_def,
          vyperStateTheory.return_def] >>
-  `call_external_function orc gobs am cx F mut tops [(NONE, tops)] args []
+  `call_external_function orc gobs am cx nr mut tops [(NONE, tops)] args []
      tx.args fbody ret =
-   call_external_body am cx F mut (type_env tops) es1 env fbody ret` by
+   call_external_body am cx nr mut (type_env tops) es1 env fbody ret` by
     (qpat_assum `_ = type_env tops` (SUBST1_TAC o SYM) >>
      irule call_external_function_body >> gvs[Abbr `cx`]) >>
   gvs[Abbr `es1`, call_external_body_scopes] >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _`
     (mp_tac o GSYM) >>
   simp[call_external_function_def] >>
-  Cases_on `call_external_function_trace orc gobs am cx F mut tops
+  Cases_on `call_external_function_trace orc gobs am cx nr mut tops
               [(NONE,tops)] args [] tx.args fbody ret` >>
   PairCases_on `r` >> Cases_on `q` >> simp[] >>
   rename1 `INR exc` >> Cases_on `exc` >> simp[]
 QED
 
-(* The selected call's storage observations are the body run's: with no
-   lock and no defaults, nothing else records storage. *)
-Theorem call_external_selected_body_trace:
-  !tops am tx ret mut args fbody env orc gobs es0 res ee.
-    source_deployment_rel tops am tx /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
-    LENGTH tx.args = LENGTH args /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
-      (INL (), es0) /\
-    eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
-      fbody (es0 with gas_obs := gobs) = (res, ee) ==>
-    ?r am' rqs.
-      call_external_trace orc gobs am tx = (r, am', rqs, ee.storage_trace)
-Proof
-  rw[source_deployment_rel_def] >>
+(* Expose the selected call after value transfer and argument binding. *)
+val selected_external_trace_tac =
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `source_deployment_rel _ _ _`
+    (strip_assume_tac o REWRITE_RULE [source_deployment_rel_def]) >>
   `type_env_all_modules [(NONE, tops)] = type_env tops` by
     simp[type_env_all_modules_def, type_env_def] >>
   `es0.scopes = [env]` by
     (drule (cj 1 send_call_value_with_scopes) >> simp[initial_state_def]) >>
   simp[call_external_trace_def, find_function_module_def,
        lookup_exported_function_def, get_self_code_def, get_module_code_def,
-       initial_evaluation_context_def] >>
+       initial_evaluation_context_def, Excl "unlock_if_nr_def"] >>
   qmatch_goalsub_abbrev_tac `call_external_function_trace orc gobs am cx` >>
   qabbrev_tac `es1 = (es0 with gas_obs := gobs) with scopes := [FEMPTY]` >>
   `send_call_value mut cx
@@ -171,8 +158,6 @@ Proof
      simp[Abbr `es1`, initial_state_def]) >>
   `es1 with scopes := [env] = es0 with gas_obs := gobs` by
     simp[Abbr `es1`, evaluation_state_component_equality] >>
-  `eval_stmts cx fbody (es0 with gas_obs := gobs) = (res, ee)` by
-    gvs[Abbr `cx`, initial_evaluation_context_def] >>
   `~cx.in_deploy` by simp[Abbr `cx`] >>
   `initial_state am [FEMPTY] with
      <| outcomes := orc; requests := []; gas_obs := gobs; storage_trace := [] |> =
@@ -181,16 +166,85 @@ Proof
     simp[initial_state_def] >>
   simp[call_external_function_trace_def,
        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       vyperStateTheory.set_scopes_def, vyperStateTheory.return_def] >>
-  BasicProvers.every_case_tac >> gvs[pairTheory.UNCURRY]
+       vyperStateTheory.set_scopes_def, vyperStateTheory.return_def,
+       Excl "lock_if_nr_def", Excl "unlock_if_nr_def"]
+
+(* The trace includes the unlock after fallthrough or Return. *)
+Theorem call_external_selected_body_trace:
+  !tops am tx ret mut nr args fbody env orc gobs es0 es_lock res ee.
+    source_deployment_rel tops am tx /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, nr, args, [], ret, fbody) /\
+    LENGTH tx.args = LENGTH args /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
+      (INL (), es0) /\
+    lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+      nr (is_view_mut mut) (es0 with gas_obs := gobs) = (INL (), es_lock) /\
+    eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+      fbody es_lock = (res, ee) ==>
+    ?r am' rqs.
+      call_external_trace orc gobs am tx =
+        (r, am', rqs,
+         (if res = INL () \/ (?v. res = INR (ReturnException v)) then
+            SND (unlock_if_nr
+              (initial_evaluation_context am.sources am.layouts tx NONE)
+              nr (is_view_mut mut) ee)
+          else ee).storage_trace)
+Proof
+  selected_external_trace_tac >>
+  `?us. unlock_if_nr
+     (initial_evaluation_context am.sources am.layouts tx NONE)
+     nr (is_view_mut mut) ee = (INL (),us)` by
+    (simp[unlock_if_nr_def, vyperStateTheory.return_def,
+          release_nonreentrant_lock_execution] >>
+     Cases_on `(initial_evaluation_context
+       am.sources am.layouts tx NONE).nonreentrant_slot` >>
+     simp[vyperStateTheory.return_def] >>
+     IF_CASES_TAC >>
+     simp[release_nonreentrant_lock_execution, vyperStateTheory.return_def]) >>
+  gvs[Abbr `cx`, initial_evaluation_context_def, pairTheory.UNCURRY,
+      Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
+  Cases_on `res` >> simp[] >>
+  rename1 `eval_stmts _ _ _ = (INR exc, _)` >>
+  Cases_on `exc` >> simp[] >>
+  Cases_on `evaluate_type (type_env tops) ret` >> simp[] >>
+  rename1 `evaluate_type (type_env tops) ret = SOME tv` >>
+  rename1 `eval_stmts _ _ _ = (INR (ReturnException value), _)` >>
+  Cases_on `safe_cast tv value` >> simp[]
+QED
+
+Theorem call_external_selected_lock_failure:
+  !tops am tx ret mut nr args fbody env orc gobs es0 exn es_lock.
+    source_deployment_rel tops am tx /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, nr, args, [], ret, fbody) /\
+    LENGTH tx.args = LENGTH args /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
+      (INL (), es0) /\
+    lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+      nr (is_view_mut mut) (es0 with gas_obs := gobs) = (INR exn, es_lock)
+    ==>
+    call_external_trace orc gobs am tx =
+      (INR exn, am, es_lock.requests, es_lock.storage_trace)
+Proof
+  selected_external_trace_tac >>
+  drule (REWRITE_RULE [GSYM lock_if_nr_def] call_lock_action_error) >>
+  strip_tac >>
+  gvs[Abbr `cx`, initial_evaluation_context_def, Excl "lock_if_nr_def"]
 QED
 
 (* call_external_selected_body_gas without gas observations. *)
 Theorem call_external_selected_body:
-  !tops am tx ret mut args fbody env orc es0.
+  !tops am tx ret mut nr args fbody env orc es0.
     source_deployment_rel tops am tx /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
+      SOME (mut, nr, args, [], ret, fbody) /\
     LENGTH tx.args = LENGTH args /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
     send_call_value mut
@@ -200,7 +254,7 @@ Theorem call_external_selected_body:
     call_external orc [] am tx =
       case call_external_body am
              (initial_evaluation_context am.sources am.layouts tx NONE)
-             F mut (type_env tops) es0 env fbody ret of
+             nr mut (type_env tops) es0 env fbody ret of
         (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
       | (INR HaltException, am', rqs) =>
           (INR HaltException, finalize_pending_deletions am', rqs)

@@ -139,7 +139,12 @@ Proof
   rpt gen_tac >> strip_tac >>
   `LENGTH tx.args = LENGTH args` by
     (drule bind_arguments_length >> simp[]) >>
-  drule_all call_external_selected_body_trace >> strip_tac >>
+  `lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+     F (is_view_mut mut) (es0 with gas_obs := gx) =
+     (INL (), es0 with gas_obs := gx)` by
+    simp[lock_if_nr_def, vyperStateTheory.return_def] >>
+  drule_all call_external_selected_body_trace >>
+  simp[unlock_if_nr_def, vyperStateTheory.return_def] >> strip_tac >>
   qexistsl_tac [`r`, `am'`, `rqs`] >> simp[] >>
   drule call_external_trace_result >> strip_tac >>
   drule_all call_external_selected_body_gas >>
