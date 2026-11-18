@@ -1,5 +1,6 @@
 Theory vyperTestRunner
 Ancestors
+  vyperSmallStepCV
   contractABI vyperABIDecode vyperABI vyperInterpreter vyperSmallStep jsonAST
   jsonToVyper vfmContext vfmExecution vfmTransaction vfmDecreasesGas
 Libs

@@ -6,6 +6,7 @@ Ancestors
   unitShapeDefs stackPlanGen stackOpSim fnPlanPlaceFnRegion
   callLayoutDefs fmpWfDefs venomWf venomInst
   venomExecProps venomRetProps fmpLowerProps
+  fmpWfProps
   fcgDefs fcgAnalysisProps fcgPostorder relation list rich_list
 
 val _ = Parse.hide "cp";
@@ -67,14 +68,6 @@ Proof
   metis_tac[canonical_entry_params_retpc]
 QED
 
-Theorem fmp_lowered_wf_invoke_targets[local]:
-  fmp_lowered_context_wf ctx ==> wf_invoke_targets ctx
-Proof
-  rw[fmp_lowered_context_wf_def, wf_invoke_targets_def] >>
-  res_tac >> gvs[invoke_layout_wf_def] >>
-  imp_res_tac lookup_function_mem >> gvs[ctx_fn_names_def]
-QED
-
 Theorem entry_not_reachable_callee[local]:
   ctx_wf ctx /\ wf_invoke_targets ctx /\ reachable_call_graph_acyclic ctx /\
   ctx.ctx_entry = SOME entry /\ MEM entry (ctx_fn_names ctx) /\
@@ -122,7 +115,7 @@ Proof
    reachable_call_graph_acyclic unit.cu_context`
     by fs[codegen_context_obligations_def] >>
   `wf_invoke_targets unit.cu_context`
-    by metis_tac[fmp_lowered_wf_invoke_targets] >>
+    by metis_tac[invoke_lowered_targets_wf] >>
   `MEM fe.fn_name (ctx_fn_names unit.cu_context)`
     by simp[ctx_fn_names_def] >>
   Cases_on `fe.fn_name = callee_name`
