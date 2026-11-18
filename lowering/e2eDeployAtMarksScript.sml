@@ -266,7 +266,7 @@ Theorem deploy_correct_at_tail[local]:
   ~(?t. runtime_bc = 0xEFw :: t) /\
   w2n vs_out.vs_initial_fmp <= w2n fmp /\
   w2n fmp < 2 ** 254 /\
-  unit_alloca_budget dunit.cu_context +
+  imm_len tops + unit_alloca_budget dunit.cu_context +
     32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
   raw_variant fmp vs vs_out /\
   (~deploy_source_exempt tops
@@ -433,7 +433,7 @@ Theorem e2e_deploy_correct_from_gas_link:
     ~(?t. runtime_bc = 0xEFw :: t) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
-    unit_alloca_budget dunit.cu_context +
+    imm_len tops + unit_alloca_budget dunit.cu_context +
       32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
     run_call es = SOME (r, es') /\
     (creation_resource_starved es r es' \/

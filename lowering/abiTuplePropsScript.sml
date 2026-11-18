@@ -195,7 +195,7 @@ Proof
   first_x_assum irule >> metis_tac[]
 QED
 
-Theorem compile_store_abi_tuple_step[local]:
+Theorem compile_store_abi_tuple_step:
   compile_store_abi_tuple cenv buf off ((op,ty)::xs) st =
   (do compile_abi_tuple_slot cenv buf off op ty;
       compile_store_abi_tuple cenv buf (off+type_memory_bytes cenv ty) xs od) st

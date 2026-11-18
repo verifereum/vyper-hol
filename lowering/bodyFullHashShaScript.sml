@@ -114,8 +114,11 @@ fun sha_memory_abort_origin_tac g = (
 
 fun sha_memory_abort_post_tac g = (
 drule_all hash_sha256_source_failure >> strip_tac >>
-  `ef.storage_trace = mid.storage_trace` by
-    (Cases_on `s.vs_outcomes` >> gvs[]) >>
+  `!H. valid_horizon cx st0 H ef.storage_trace <=>
+       valid_horizon cx st0 H mid.storage_trace` by
+    (gen_tac >> Cases_on `s.vs_outcomes` >> gvs[]) >>
+  `storage_trace_domain cx st0 ef.storage_trace` by
+    (Cases_on `s.vs_outcomes` >> gvs[storage_trace_domain_def]) >>
   `gas_explicit [F] s.vs_gas_readings = []` by
     ACCEPT_TAC (REWRITE_RULE [EVAL ``REPLICATE 1 F``]
       (Q.SPECL [`1`, `s.vs_gas_readings`]
@@ -133,7 +136,7 @@ drule_all hash_sha256_source_failure >> strip_tac >>
   simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
        exprSimDefsTheory.halt_exit_def] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _` mp_tac >>
-  qpat_assum `ef.storage_trace = mid.storage_trace` mp_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H ef.storage_trace <=> _` mp_tac >>
   qpat_assum `valid_horizon cx st0 H ef.storage_trace` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]
 ) g;
@@ -146,7 +149,7 @@ pop_assum strip_assume_tac >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
     inst_seq_ptr (DF H) lo ctx func PG G1 tn1 (emitted_insts sm sn) s Gf tf /\
-    ghost_inv_at (DF H) lo d cenv cx (mid with outcomes := SOME rest) Gf tf t` by
+    ghost_inv_at (DF H) lo d cenv cx (SND (take_call_outcome NONE 2w bs NONE mid)) Gf tf t` by
     (gen_tac >> disch_tac >>
      qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
        (fn family => qpat_assum `valid_horizon cx st0 H mid.storage_trace`
@@ -174,10 +177,11 @@ pop_assum strip_assume_tac >>
         qpat_assum `inst_seq_ptr (DF (storage_trace_horizon mid.storage_trace))
           lo ctx func PG G1 tn1 _ s Gf tf` mp_tac >>
         POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[inst_seq_ptr_ghost_unique]) >>
-     gvs[ghost_inv_at_inst_idx])
+     gvs[ghost_inv_at_inst_idx, ghost_inv_at_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC)
 ) g;
 
-fun sha_memory_success_frame_tac g = (
+fun sha_memory_success_frame_tac source_value g = (
 `alloca_inv s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sn)` by
     (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) _`
@@ -206,36 +210,39 @@ fun sha_memory_success_frame_tac g = (
        (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
          (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
      drule_all hash_ghost_kept_wb_trans >> simp[]) >>
-  `(mid with outcomes := SOME rest) with gas_obs := [] = mid with outcomes := SOME rest` by
+  `(SND (take_call_outcome NONE 2w bs NONE mid)) with gas_obs := [] =
+    SND (take_call_outcome NONE 2w bs NONE mid)` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   `gas_explicit [F] s.vs_gas_readings = []` by
     ACCEPT_TAC (REWRITE_RULE [EVAL ``REPLICATE 1 F``]
       (Q.SPECL [`1`, `s.vs_gas_readings`] gasSummaryTheory.gas_explicit_replicate_false)) >>
-  `!tail. ignore_bind (precompile_call_success Sha256)
+  `!tail. ignore_bind (precompile_call_success Sha256 [^source_value])
     (return (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T))))
     (mid with gas_obs := tail) =
     (INL (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T))),
-      (mid with outcomes := SOME rest) with gas_obs := tail)` by
+      (SND (take_call_outcome NONE 2w bs NONE mid)) with gas_obs := tail)` by
     (qpat_assum `expr_type e = _` (fn te =>
        qpat_assum `builtin_result _ _ _ Sha256 [expr_type e] _ = _` (fn br =>
-         drule_all hash_sha256_source_success >> simp[te, REWRITE_RULE [te] br])))
+         drule_all hash_sha256_source_success >>
+         simp[te, REWRITE_RULE [te] br] >>
+         simp[precompile_input_def])))
 ) g;
 
 fun sha_memory_success_post_tac g = (
 irule gas_outcome_full_intro >>
-  qexistsl_tac [`Gf`, `mid with outcomes := SOME rest`, `[F]`,
+  qexistsl_tac [`Gf`, `SND (take_call_outcome NONE 2w bs NONE mid)`, `[F]`,
     `OK (t with vs_inst_idx := s.vs_inst_idx+LENGTH (emitted_insts sm sn))`,
     `INL (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T)))`, `tf`] >>
   qpat_assum `expr_type e = _` (fn te =>
     qpat_assum `builtin_result _ _ _ Sha256 [expr_type e] _ = _`
-      (fn br => simp[REWRITE_RULE [te] br])) >>
+      (fn br => simp[REWRITE_RULE [te] br, storage_trace_domain_def])) >>
   gen_tac >> disch_tac >>
   `valid_horizon cx st0 H mid.storage_trace` by fs[] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (fn family => qpat_assum `valid_horizon cx st0 H mid.storage_trace`
          (fn valid => strip_assume_tac (MATCH_MP (Q.SPEC `H` family) valid))) >>
   `inst_seq_ptr (DF H) lo ctx func PG G1 tn1 (emitted_insts sm sn) s Gf tf /\
-   ghost_inv_at (DF H) lo d cenv cx (mid with outcomes := SOME rest) Gf tf t` by
+   ghost_inv_at (DF H) lo d cenv cx (SND (take_call_outcome NONE 2w bs NONE mid)) Gf tf t` by
     metis_tac[] >>
   conj_tac
   >- (qpat_assum `MAP (\i. (func.fn_name,i.inst_id) IN gas_explicit_sites ctx shadow_ctx) _ = [F]`
@@ -250,7 +257,7 @@ irule gas_outcome_full_intro >>
   `mid with gas_obs := [] = mid` by
     (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
   `vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
-    es sa sn s0 (mid with outcomes := SOME rest)
+    es sa sn s0 (SND (take_call_outcome NONE 2w bs NONE mid))
     (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T)))
     (StackValue (BaseT (BytesT (Fixed 32))) op) t` by
     (qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -531,8 +538,11 @@ Resume sha_vv_sim_full[fixed_abort]:
     simp[exprSimWordArgsTheory.builtin_result_def,
       vyperContextTheory.evaluate_builtin_def] >>
   drule_all hash_sha256_source_failure >> strip_tac >>
-  `ef.storage_trace = mid.storage_trace` by
-    (Cases_on `s.vs_outcomes` >> gvs[]) >>
+  `!H. valid_horizon cx st0 H ef.storage_trace <=>
+       valid_horizon cx st0 H mid.storage_trace` by
+    (gen_tac >> Cases_on `s.vs_outcomes` >> gvs[]) >>
+  `storage_trace_domain cx st0 ef.storage_trace` by
+    (Cases_on `s.vs_outcomes` >> gvs[storage_trace_domain_def]) >>
   `gas_explicit [F] s.vs_gas_readings = []` by
     ACCEPT_TAC (REWRITE_RULE [EVAL ``REPLICATE 1 F``]
       (Q.SPECL [`1`, `s.vs_gas_readings`]
@@ -550,7 +560,7 @@ Resume sha_vv_sim_full[fixed_abort]:
   simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
        exprSimDefsTheory.halt_exit_def] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _` mp_tac >>
-  qpat_assum `ef.storage_trace = mid.storage_trace` mp_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H ef.storage_trace <=> _` mp_tac >>
   qpat_assum `valid_horizon cx st0 H ef.storage_trace` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]
 QED
@@ -696,13 +706,15 @@ QED
 
 Resume sha_vv_sim_full[string_memory_success]:
   sha_memory_success_endpoint_tac >>
-  sha_memory_success_frame_tac >>
+  `precompile_input Sha256 [StringV str] = bs` by
+    simp[precompile_input_def, Abbr `bs`] >>
+  sha_memory_success_frame_tac ``StringV str`` >>
   sha_memory_success_post_tac
 QED
 
 Resume sha_vv_sim_full[dynamic_memory_success]:
   sha_memory_success_endpoint_tac >>
-  sha_memory_success_frame_tac >>
+  sha_memory_success_frame_tac ``BytesV bs`` >>
   sha_memory_success_post_tac
 QED
 
@@ -719,7 +731,7 @@ Resume sha_vv_sim_full[fixed_success]:
       vyperContextTheory.evaluate_builtin_def] >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
     inst_seq_ptr (DF H) lo ctx func PG G1 tn1 (emitted_insts sm sn) s Gf tf /\
-    ghost_inv_at (DF H) lo d cenv cx (mid with outcomes := SOME rest) Gf tf t` by
+    ghost_inv_at (DF H) lo d cenv cx (SND (take_call_outcome NONE 2w bs NONE mid)) Gf tf t` by
     (gen_tac >> disch_tac >>
      `expr_post H ctx func cenv cx e es sa sm s0 mid (BytesV bs) v s /\
       ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 s` by metis_tac[] >>
@@ -745,7 +757,8 @@ Resume sha_vv_sim_full[fixed_success]:
         qpat_assum `inst_seq_ptr (DF (storage_trace_horizon mid.storage_trace))
           lo ctx func PG G1 tn1 _ s Gf tf` mp_tac >>
         POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[inst_seq_ptr_ghost_unique]) >>
-     gvs[ghost_inv_at_inst_idx]) >>
+     gvs[ghost_inv_at_inst_idx, ghost_inv_at_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `alloca_inv s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sn)` by
     (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) _`
@@ -774,32 +787,34 @@ Resume sha_vv_sim_full[fixed_success]:
        (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
          (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
      drule_all hash_ghost_kept_wb_trans >> simp[]) >>
-  `(mid with outcomes := SOME rest) with gas_obs := [] = mid with outcomes := SOME rest` by
+  `(SND (take_call_outcome NONE 2w bs NONE mid)) with gas_obs := [] =
+    SND (take_call_outcome NONE 2w bs NONE mid)` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   `gas_explicit [F] s.vs_gas_readings = []` by
     ACCEPT_TAC (REWRITE_RULE [EVAL ``REPLICATE 1 F``]
       (Q.SPECL [`1`, `s.vs_gas_readings`] gasSummaryTheory.gas_explicit_replicate_false)) >>
-  `!tail. ignore_bind (precompile_call_success Sha256)
+  `!tail. ignore_bind (precompile_call_success Sha256 [BytesV bs])
     (return (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T))))
     (mid with gas_obs := tail) =
     (INL (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T))),
-      (mid with outcomes := SOME rest) with gas_obs := tail)` by
+      (SND (take_call_outcome NONE 2w bs NONE mid)) with gas_obs := tail)` by
     (qpat_assum `expr_type e = _` (fn te =>
        qpat_assum `builtin_result _ _ _ Sha256 [expr_type e] _ = _` (fn br =>
-         drule_all hash_sha256_source_success >> simp[te, REWRITE_RULE [te] br]))) >>
+         drule_all hash_sha256_source_success >>
+         simp[te, REWRITE_RULE [te] br, precompile_input_def]))) >>
   irule gas_outcome_full_intro >>
-  qexistsl_tac [`Gf`, `mid with outcomes := SOME rest`, `[F]`,
+  qexistsl_tac [`Gf`, `SND (take_call_outcome NONE 2w bs NONE mid)`, `[F]`,
     `OK (t with vs_inst_idx := s.vs_inst_idx+LENGTH (emitted_insts sm sn))`,
     `INL (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T)))`, `tf`] >>
   qpat_assum `expr_type e = _` (fn te =>
     qpat_assum `builtin_result _ _ _ Sha256 [expr_type e] _ = _`
-      (fn br => simp[REWRITE_RULE [te] br])) >>
+      (fn br => simp[REWRITE_RULE [te] br, storage_trace_domain_def])) >>
   gen_tac >> disch_tac >>
   `valid_horizon cx st0 H mid.storage_trace` by fs[] >>
   `expr_post H ctx func cenv cx e es sa sm s0 mid (BytesV bs) v s /\
    ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 s` by metis_tac[] >>
   `inst_seq_ptr (DF H) lo ctx func PG G1 tn1 (emitted_insts sm sn) s Gf tf /\
-   ghost_inv_at (DF H) lo d cenv cx (mid with outcomes := SOME rest) Gf tf t` by
+   ghost_inv_at (DF H) lo d cenv cx (SND (take_call_outcome NONE 2w bs NONE mid)) Gf tf t` by
     metis_tac[] >>
   conj_tac
   >- (qpat_assum `MAP (\i. (func.fn_name,i.inst_id) IN gas_explicit_sites ctx shadow_ctx) _ = [F]`
@@ -814,7 +829,7 @@ Resume sha_vv_sim_full[fixed_success]:
   `mid with gas_obs := [] = mid` by
     (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
   `vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
-    es sa sn s0 (mid with outcomes := SOME rest)
+    es sa sn s0 (SND (take_call_outcome NONE 2w bs NONE mid))
     (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T)))
     (StackValue (BaseT (BytesT (Fixed 32))) op) t` by
     (qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`

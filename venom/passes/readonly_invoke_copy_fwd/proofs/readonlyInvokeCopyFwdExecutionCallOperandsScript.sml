@@ -114,14 +114,8 @@ Theorem ricf_execution_call_request_compatible:
   inst.inst_opcode <> INVOKE /\ step_inst fuel C inst s = OK u /\
   LENGTH s.vs_requests < LENGTH u.vs_requests /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n ao') (w2n az) t ==>
-  ((computed_precompile (venom_call_request s addr value ao az static) /\
-    computed_precompile (venom_call_request t addr value ao' az static) /\
-    (venom_call_request s addr value ao az static).cr_target =
-      (venom_call_request t addr value ao' az static).cr_target /\
-    (venom_call_request s addr value ao az static).cr_data =
-      (venom_call_request t addr value ao' az static).cr_data) \/
-   request_agree_except D (venom_call_request s addr value ao az static)
-     (venom_call_request t addr value ao' az static))
+  request_agree_except D (venom_call_request s addr value ao az static)
+    (venom_call_request t addr value ao' az static)
 Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
