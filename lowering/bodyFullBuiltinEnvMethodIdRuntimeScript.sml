@@ -7,7 +7,7 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   exprSimMemoryStack vyperTyping vyperTypeSystem builtinHashing
   vyperContext builtinSimple bodyFullGhostFrame vyperStorageTrace vyperStorageFootprint compileEnv
   loweringPosts bodyPtrDefs venomState fragGasSeqPtr vyperAST list exprSimHyps
-  bodyInvNoDalloca
+  bodyInvNoDalloca bodyFullUnaryValueCompose
 Libs pairLib
 
 Theorem method_id_runtime_joint_outcome_from_suffix:
@@ -169,37 +169,28 @@ Resume method_id_runtime_joint_outcome_from_suffix[bind_composition]:
           vyperInterpreterTheory.precompile_builtin_def]) >>
   pop_assum SUBST1_TAC >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
-  irule gas_outcome_full_bind_all >> rpt conj_tac
-  >- simp[storage_trace_frame_def]
-  >~ [`storage_trace_frame (bind _ _)`]
-  >- (irule storage_trace_frame_bind_all >>
-      simp[cj 5 evaluate_storage_trace_frame, storage_trace_frame_read_result])
-  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
-      qexistsl_tac [`mid`, `t`, `v`] >> gvs[])
-  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
-  qexists_tac `\H res ee G' tn' t. childQ H res ee G' tn' t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
-  reverse conj_tac
-  >- (irule gas_outcome_full_post_source >>
-      qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
-      conj_tac >- simp[] >>
-      simp[Abbr `childR`] >> rpt strip_tac >> Cases_on `res` >>
+  irule gas_outcome_full_unary_value >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
+  reverse (rpt conj_tac)
+  >~ [`storage_trace_frame _`] >- simp[storage_trace_frame_def]
+  >~ [`!H res ee HG tm t. childQ H res ee HG tm t ==> ?v. res = INL v`]
+  >- (simp[Abbr `childQ`] >> rpt strip_tac >> goal_assum (drule_at Any))
+  >- (simp[Abbr `childR`] >> rpt strip_tac >> Cases_on `res` >>
       gvs[exprSimDefsTheory.expr_exit_def, stmtSimPropsTheory.expr_exit_INR_type,
           exprSimDefsTheory.halt_exit_def]) >>
   suspend "successful_suffix"
 QED
 
 Resume method_id_runtime_joint_outcome_from_suffix[successful_suffix]:
-  qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
+  qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`t`,`v`] >>
   BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
      mid.storage_trace` by gvs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> childQ H res mid G1 tn1 t /\ _`
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> childQ H res mid G1 tn1 t`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
-  simp_tac (srw_ss()) [Abbr `childQ`] >> strip_tac >>
-  disj1_tac >> goal_assum (drule_at Any) >> simp[] >>
+  qpat_assum `res = INL v` (fn eq => simp_tac (srw_ss()) [Abbr `childQ`,eq]) >>
+  strip_tac >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
     expr_post H ctx func cenv cx e es sa sm s0 mid v x t /\
     expr_store_bound cx (expr_type e) v x t /\
@@ -209,11 +200,11 @@ Resume method_id_runtime_joint_outcome_from_suffix[successful_suffix]:
     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e x G1 t) /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1` by
     (rpt strip_tac >>
-     qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> childQ H res mid G1 tn1 t /\ _`
-       (qspec_then `H` mp_tac) >> simp[]) >>
+     qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> childQ H res mid G1 tn1 t`
+       (qspec_then `H` mp_tac) >> gvs[]) >>
   Q.SUBGOAL_THEN `?xs. !tail. bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := xs ++ tail) = (INL v, mid with gas_obs := tail)` assume_tac
-  >- (qexists_tac `gas_explicit marks s0.vs_gas_readings` >> simp[]) >>
+  >- (qexists_tac `gas_explicit marks s0.vs_gas_readings` >> gvs[]) >>
   qpat_x_assum `!DF lo d explicit ctx func PG tops cenv cx env ann e es sa sm sb s0 st0 mid v x s G0 tn0 G tn fixed op. _`
     (drule_all_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`]
       (strip_assume_tac o SIMP_RULE std_ss [LET_THM]))) >>
