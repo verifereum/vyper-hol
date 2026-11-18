@@ -7,11 +7,29 @@ Ancestors
   stmtSimLogTopics stmtLogTopicsMemory valueCopyBytes exprSimMemDefs
   exprSimProps vyperTyping vfmConstants
 
-Theorem compile_log_scalar_topics_from_capture:
+Theorem log_arg_clear_event:
+  expr_sim_inv cenv cx env es /\ supported_event_leaf_type ty ==>
+  log_arg_clear cenv cx ty v
+Proof
+  Cases_on `ty` >>
+  simp[supported_event_leaf_type_def, supported_scalar_type_def,
+       supported_word_type_def, supported_string_type_def]
+  >- metis_tac[log_arg_clear_base] >>
+  rw[log_arg_clear_def] >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  `dynarray_free (FlagTV m)` by
+    (rw[loweringPostsTheory.dynarray_free_def] >> Cases_on `path` >>
+     simp[loweringPostsTheory.mem_path_offset_def, AllCaseEqs(),
+          optionTheory.OPTION_MAP_EQ_SOME, pairTheory.EXISTS_PROD, PULL_EXISTS] >>
+     rpt strip_tac >> drule mem_step_offset_shape >> simp[]) >>
+  drule_all exprSimAttributeFieldsTheory.local_val_at_dynarray_apart >> simp[]
+QED
+
+Theorem compile_log_event_topics_from_capture:
   log_full_post DF lo d ctx func cenv cx es sa sm s0 G0 tn0 args captured
     H (INL vs) ee G tn s /\
   expr_sim_inv cenv cx env inv_es /\ local_ptrs_reserved cenv sm /\
-  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+  LIST_REL (\arg v. supported_event_leaf_type (SND arg) /\
     ?j. j < LENGTH args /\ v = EL j vs /\
         FST arg = FST (EL j captured) /\
         SND arg = expr_type (EL j args)) xs ivs /\
@@ -47,7 +65,7 @@ Proof
   qpat_x_assum `log_full_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [log_full_post_def]) >> gvs[] >>
   `LIST_REL (\arg v. log_arg_rel cenv cx sa sm ee s arg v /\
-      supported_scalar_type (SND arg) /\
+      supported_event_leaf_type (SND arg) /\
       ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
       xs ivs /\
    LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) G tn s) xs ivs /\
@@ -67,10 +85,7 @@ Proof
        (dep_rewrite.DEP_REWRITE_TAC [EL_ZIP, EL_MAP] >> simp[]) >>
      fs[] >>
      Cases_on `EL n xs` >> fs[log_arg_rel_def] >>
-     Cases_on `expr_type (EL j args)` >>
-     fs[supported_scalar_type_def, supported_word_type_def,
-        supported_string_type_def] >>
-     metis_tac[log_arg_clear_base, pairTheory.PAIR]) >>
+     metis_tac[log_arg_clear_event, pairTheory.PAIR]) >>
   `LENGTH xs = LENGTH ivs` by metis_tac[LIST_REL_LENGTH] >>
   (* The capture's actual read extent supplies the hash memory check. *)
   `LIST_REL (\arg v. !w len. ~is_word_type (SND arg) /\
@@ -85,14 +100,14 @@ Proof
        (mp_tac o Q.SPEC `n` o CONJUNCT2 o REWRITE_RULE [LIST_REL_EL_EQN]) >>
      simp[] >> rpt strip_tac >>
      `is_bytestring_type (SND (EL n xs))` by
-       metis_tac[stmtSimLogTopicsTheory.log_scalar_topic_shape] >>
+       metis_tac[stmtSimLogTopicsTheory.log_event_topic_shape] >>
      drule_all valueCopyBytesTheory.bytestring_type_value >> strip_tac >>
      gvs[vyperTypingTheory.value_has_type_def,
          exprSimMemDefsTheory.expr_store_bound_def,
          exprSimPropsTheory.val_store_size_def,
          vfmConstantsTheory.word_size_def] >> decide_tac) >>
-  `LIST_REL (\arg v. supported_scalar_type (SND arg) /\
-      ?aty tv. supported_scalar_type aty /\
+  `LIST_REL (\arg v. supported_event_leaf_type (SND arg) /\
+      ?aty tv. supported_event_leaf_type aty /\
         log_arg_rel cenv cx sa sm ee s (FST arg,aty) v /\
         evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
         (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
@@ -148,6 +163,6 @@ Theorem compile_log_scalar_topics_full:
            ghost_inv_at D lo d cenv cx ee Gf tnf t)
 Proof
   strip_tac >>
-  mp_tac (Q.INST [`inv_es` |-> `ee`] (SPEC_ALL compile_log_scalar_topics_from_capture)) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]
+  mp_tac (Q.INST [`inv_es` |-> `ee`] (SPEC_ALL compile_log_event_topics_from_capture)) >>
+  (impl_tac >- (simp[] >> gvs[LIST_REL_EL_EQN, supported_event_leaf_type_def])) >> simp[]
 QED
