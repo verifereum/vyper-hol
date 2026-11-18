@@ -44,3 +44,5 @@ Ancestors
   (* ABI encode/decode edge cases and size boundaries *)
   abiDecodeBoundsTest abiDecodeAliasTest abiDecoderBytesEdges
   createSizeBoundaryTest
+  (* conditional gas-link and optimized-assembly checks *)
+  e2eGasCompositionChecks
