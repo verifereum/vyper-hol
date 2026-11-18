@@ -3,6 +3,7 @@
 Theory symEmitCodecopyOwn
 Ancestors symEmitSim codegenSymRel asmSymBridge asmSymSem asmSem
   asmSplice strongPrefixSim symInstKinds list finite_map symEmitDataReplay
+  symEmitCodecopyDecode
 
 Theorem asm_sym_codecopy_values_core:
   LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack /\
@@ -12,8 +13,7 @@ Theorem asm_sym_codecopy_values_core:
   IS_SOME (eval_operand src vs)
 Proof
   strip_tac >>
-  gvs[LIST_REL_CONS1, asmSymBridgeTheory.sval_conc_def,
-      venomStateTheory.eval_operands_def, AllCaseEqs()]
+  drule_all asm_sym_codecopy_decode >> simp[]
 QED
 
 Theorem sym_codecopy_prepared_safe_mode:
