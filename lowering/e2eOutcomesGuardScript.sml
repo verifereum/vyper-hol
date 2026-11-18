@@ -717,3 +717,64 @@ Proof
   `request_agree H tx.target rq (EL k s'.vs_requests)` by fs[Abbr `k`] >>
   metis_tac[request_agree_dead_trans]
 QED
+
+(* Supply the single-frame proof whenever a child dispatches. The trace
+   induction supplies storage preservation for that child's own calls. *)
+Triviality guard_closed_world_readings:
+  call_guard_gas_link_stmt /\
+  s1_request_prefix tops /\
+  (!tx calldata ret. vyper_entry_call tops tx calldata ret ==>
+     dispatched_vyper_call tops tx calldata ret) /\
+  vyper_call_staging fin policy tops runtime_bc am tx ret es /\
+  vyper_closed_world fin policy tops runtime_bc am tx H es /\
+  run_call es = SOME (r,es') /\ ~frame_resource_starved es r es' ==>
+  gas_readings_rel (gas_readings es)
+    (\gs. call_storage_ok am tx (MAP SND (call_trace es)) gs /\
+          call_result_rel_at gs tops am tx es r es')
+Proof
+  strip_tac >>
+  `vyper_frame_staging fin policy tops runtime_bc am tx es` by
+    metis_tac[vyper_call_staging_def] >>
+  `runtime_bc <> []` by (drule guard_frame_runtime_nonempty >> simp[]) >>
+  `!rq co.
+    MEM (rq,co) (call_trace es) /\
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := rq.cr_accounts;
+                         tStorage := rq.cr_tStorage|>) (FST H) ==>
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := co.co_accounts;
+                         tStorage := co.co_tStorage|>) (FST H)` by
+    (mp_tac guard_trace_storage_induction >>
+     asm_simp_tac bool_ss [] >>
+     impl_tac
+     >- (map_every qx_gen_tac [`e`, `am_e`, `tx_e`, `ret_e`, `r_e`, `e'`] >>
+         strip_tac >>
+         `~MEM tx_e.target e.rollback.toDelete` by fs[vyper_frame_staging_def] >>
+         `~MEM tx_e.target e'.rollback.toDelete` by
+           metis_tac[guard_staged_run_no_target_deletion] >>
+         irule guard_nested_storage_from_readings >>
+         asm_simp_tac bool_ss [] >>
+         qexistsl_tac [`fin`, `policy`, `runtime_bc`, `tops`] >>
+         asm_simp_tac bool_ss [] >>
+         Cases_on `frame_resource_starved e r_e e'` >> simp[] >>
+         `vyper_call_staging fin policy tops runtime_bc am_e tx_e ret_e e` by
+           metis_tac[vyper_call_staging_def] >>
+         mp_tac (Q.INST [`es` |-> `e`, `am` |-> `am_e`, `tx` |-> `tx_e`,
+           `ret` |-> `ret_e`, `r` |-> `r_e`, `es'` |-> `e'`] guard_compiler_readings) >>
+         impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
+         mp_tac (Q.INST [`es` |-> `e`, `am` |-> `am_e`, `tx` |-> `tx_e`,
+           `r` |-> `r_e`, `es'` |-> `e'`] guard_close_storage_readings) >>
+         impl_tac >- (asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC) >>
+         disch_then (fn bridge => match_mp_tac (MATCH_MP
+           (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_mono) bridge)) >>
+         BETA_TAC >> simp[]) >>
+     disch_then (qspecl_then [`es`, `am`, `tx`] mp_tac) >> simp[]) >>
+  drule_all guard_compiler_readings >> strip_tac >>
+  mp_tac guard_close_storage_readings >>
+  impl_tac >- (asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC) >>
+  disch_then (fn bridge => match_mp_tac (MATCH_MP
+    (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_mono) bridge)) >>
+  BETA_TAC >> simp[]
+QED
