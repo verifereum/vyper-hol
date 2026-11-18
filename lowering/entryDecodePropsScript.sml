@@ -1159,3 +1159,41 @@ Proof
   qpat_x_assum `tt.vs_memory = _` SUBST1_TAC >>
   rewrite_tac[mem_word_at_eq_mload, mload_mstore_same]
 QED
+
+Theorem word_arg_clamp_ok_selected:
+  !tenv sfields cenv ty tv v.
+    is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+    value_has_type tv v /\
+    (!nsid. ty = FlagT nsid ==> ?m.
+       FLOOKUP tenv nsid = SOME (FlagArgs m) /\
+       cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
+    abi_clamp_ok
+      (case type_to_abi_dec_info sfields cenv ty of
+         DecPrimWord c => c
+       | _ => NoClamp)
+      (typed_val_to_w256 tv v)
+Proof
+  rpt strip_tac >> Cases_on `ty` >> gvs[is_word_type_def] >>
+  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def]) >>
+  gvs[evaluate_type_def, type_to_abi_dec_info_def, type_to_abi_clamp_def,
+      AllCaseEqs()] >>
+  Cases_on `v` >>
+  gvs[value_has_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  rw[abi_clamp_ok_def]
+  >~ [`PAD_LEFT`] >- (qspec_then `l` mp_tac address_clamp_ok >> simp[])
+  >~ [`PAD_RIGHT`] >- (qspec_then `l` mp_tac bytesM_clamp_ok >> simp[])
+  >~ [`Signed 168`]
+  >- (qspecl_then [`168`, `i`] mp_tac int_clamp_signed_ok >> simp[])
+  >~ [`sign_extend`]
+  >- (`8 <= n` by
+        (spose_not_then assume_tac >> `n < 8` by decide_tac >>
+         gvs[LESS_MOD]) >>
+      qspecl_then [`n`, `i`] mp_tac int_clamp_signed_ok >> simp[])
+  >~ [`Num i`]
+  >- (`(i2w i : bytes32) = n2w (Num i)` by
+        (`~(i < 0)` by intLib.ARITH_TAC >>
+         simp[integer_wordTheory.i2w_def]) >>
+      qspecl_then [`n`, `Num i`] mp_tac n2w_lsr_clamp_ok >> simp[]) >>
+  qspecl_then [`cenv.ce_flag_n_members (nsid_to_string p)`, `n`]
+    mp_tac n2w_lsr_clamp_ok >> simp[]
+QED
