@@ -756,12 +756,11 @@ QED
 
 
 
-Theorem sv_rel_vals[local]:
-  ∀stk stk'. LIST_REL (sv_rel x y) stk stk' ⇒
-             MAP sval_val stk = MAP sval_val stk'
+Theorem sv_rel_list_vals[local]:
+  !l l'. LIST_REL (sv_rel x y) l l' ==> MAP sval_val l' = MAP sval_val l
 Proof
-  Induct >> simp[LIST_REL_CONS1, PULL_EXISTS] >> rpt strip_tac >>
-  gvs[sv_rel_def, sval_val_def] >> metis_tac[]
+  Induct >> simp[LIST_REL_CONS1, PULL_EXISTS] >> rpt strip_tac >> res_tac >>
+  gvs[sv_rel_def, sval_val_def]
 QED
 
 Theorem within_ok_rename[local]:
@@ -769,7 +768,7 @@ Theorem within_ok_rename[local]:
   (Q (rename_push_label x y i) ⇔ Q i) ∧
   (R (rename_push_label x y i) stk' ⇔ R i stk)
 Proof
-  strip_tac >> drule sv_rel_vals >> strip_tac >>
+  strip_tac >> drule sv_rel_list_vals >> strip_tac >>
   Cases_on `i = AsmPushLabel x`
   >- (`asm_plain_inst (AsmPushLabel x) ∧ asm_plain_inst (AsmPushLabel y)`
         by simp[asm_plain_inst_def, is_data_inst_def] >>
@@ -1021,13 +1020,6 @@ Proof
   simp[merge_jumpdests_def] >> rpt gen_tac >>
   qspecl_then [`LENGTH p`, `[]`, `p`, `F`] mp_tac merge_jumpdests_walk_refines_both >>
   simp[]
-QED
-
-Theorem sv_rel_list_vals[local]:
-  !l l'. LIST_REL (sv_rel x y) l l' ==> MAP sval_val l' = MAP sval_val l
-Proof
-  Induct >> simp[LIST_REL_CONS1, PULL_EXISTS] >> rpt strip_tac >> res_tac >>
-  gvs[sv_rel_def, sval_val_def]
 QED
 
 (* A successful prefix either stops inside the redirect, or has reached
