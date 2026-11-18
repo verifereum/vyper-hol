@@ -862,7 +862,7 @@ Proof
   drule_all widening_memory_layout_bound >> strip_tac >>
   `0 < type_memory_size stv` by
     (drule_all widening_zero_memory_size >> simp[] >> decide_tac) >>
-  simp[] >> gvs[dimword_def] >> decide_tac
+  simp[] >> gvs[wordsTheory.dimword_def] >> decide_tac
 QED
 
 (* A memory local whose source has a widened physical layout. *)
