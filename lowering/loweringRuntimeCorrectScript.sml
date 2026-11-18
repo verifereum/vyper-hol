@@ -1554,9 +1554,22 @@ Proof
             (qpat_x_assum `!tail. eval_stmts _ _ _ = _`
                (qspec_then `[]` mp_tac) >> simp[]) >>
           runtime_locked_unlock_tac >>
+          `cr = r` by
+            (qpat_assum `call_external_trace _ gx _ _ = (cr,_,_,_)` (fn trace =>
+               qpat_assum `call_external_trace _ gx _ _ = (r,_,_,_)`
+                 (mp_tac o REWRITE_RULE [trace])) >> simp[]) >>
+          pop_assum SUBST1_TAC >>
+          (* Only the source result laws matter for this case split. *)
+          MAP_EVERY (fn pat => qpat_assum pat mp_tac)
+            [`res <> INR (Error (RuntimeError "msg.gas: no gas reading"))`,
+             `res = INL () ==> r = _ /\ _`,
+             `!v. res = INR (ReturnException v) ==> _`,
+             `res = INR HaltException ==> r = _ /\ _`,
+             `!e. res = INR e /\ _ ==> r = _ /\ _`] >>
+          POP_ASSUM_LIST (K ALL_TAC) >>
           namedCases_on `res` ["u", "e"]
-          >- (Cases_on `u` >> gvs[]) >>
-          Cases_on `e` >> gvs[AllCaseEqs()])) >>
+          >- (Cases_on `u` >> simp[]) >>
+          Cases_on `e` >> simp[AllCaseEqs()] >> strip_tac >> gvs[])) >>
   runtime_selected_readings_finish_tac
     ((qexistsl_tac [`shadow_unit`,`marks`] >>
       conj_tac >- first_assum ACCEPT_TAC), ALL_TAC)
