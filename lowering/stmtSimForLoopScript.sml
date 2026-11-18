@@ -391,48 +391,6 @@ Proof
 QED
 
 
-Theorem stmt_state_rel_declare_word_alloca[local]:
-  !H func cenv cx es s id p sz w inst v tyv sc rest a ctx.
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-    es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
-    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-    inst.inst_outputs = [p] /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
-    32 <= sz /\ word_value v /\ type_memory_size tyv = 32 /\
-    word_memory_type tyv ==>
-    stmt_state_rel H ctx func cenv cx
-      (es with scopes :=
-         (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
-      (mstore (w2n w) (val_to_w256 v) s)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `local_ptrs_rel func cenv es.scopes s /\
-   immutable_alloca_sep func cenv cx es s /\
-   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s` by
-    fs[stmt_state_rel_def, state_rel_def] >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-     (mstore (w2n w) (val_to_w256 v) s)` by
-    (irule immutables_rel_mstore_alloca >>
-     simp[] >> qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >> simp[]) >>
-  `LENGTH s.vs_memory <= LENGTH (mstore (w2n w) (val_to_w256 v) s).vs_memory` by
-    simp[venomMemPropsTheory.mstore_memory_nondecreasing] >>
-  irule stmt_state_rel_declare_memory >>
-  simp[word_value_wf] >> qexistsl_tac [`inst`, `s`, `w`] >>
-  simp[word_value_memory_rel] >> conj_tac
-  >- (rpt strip_tac >>
-      `regions_disjoint (w2n w) sz b sz'` by
-        (irule local_ptrs_rel_alloca_disjoint >>
-         qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >> fs[stmt_state_rel_def]) >>
-      irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >>
-      fs[regions_disjoint_def] >> decide_tac) >>
-  `LENGTH s.vs_memory <=
-   LENGTH (mstore (w2n w) (val_to_w256 v) s).vs_memory` by
-    simp[venomMemPropsTheory.LENGTH_mstore_eq] >>
-  fs[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
-QED
-
 Theorem for_counter_entry_frame[local]:
   !H ctx func cenv bc cx es s t id entry p dv w sz counter sa value.
   stmt_state_rel H ctx func cenv cx es s /\
@@ -565,7 +523,7 @@ Proof
         res_tac >> gvs[]) >>
      rewrite_tac[GSYM val_to_w256_def] >>
      irule (SRULE [] (Q.SPECL [`H'`, `func`, `bc`, `cx`,
-       `esk with scopes := FEMPTY :: esk.scopes`] stmt_state_rel_declare_word_alloca)) >>
+       `esk with scopes := FEMPTY :: esk.scopes`] stmt_state_rel_declare_word)) >>
      simp[lookup_scopes_def, word_value_def] >>
      qexists_tac `ainst` >> simp[]) >>
   qexists_tac `s2` >>
@@ -633,19 +591,6 @@ Proof
   strip_tac >> qexists_tac `s2` >> simp[] >>
   rpt strip_tac >> first_x_assum irule >> simp[] >>
   qexists_tac `fuel` >> simp[]
-QED
-(* Every non-Error result from a is one from b, and from b one from c:
-   then from a one from c. *)
-Theorem run_from_results_trans[local]:
-  !ctx func a b c.
-    (!fuel r. run_from fuel ctx func a = r /\ (!e. r <> Error e) ==>
-              ?fuel'. run_from fuel' ctx func b = r) /\
-    (!fuel r. run_from fuel ctx func b = r /\ (!e. r <> Error e) ==>
-              ?fuel'. run_from fuel' ctx func c = r) ==>
-    !fuel r. run_from fuel ctx func a = r /\ (!e. r <> Error e) ==>
-             ?fuel'. run_from fuel' ctx func c = r
-Proof
-  metis_tac[]
 QED
 
 (* The range loop's code, as compile_for_range_parts lays it out, and the

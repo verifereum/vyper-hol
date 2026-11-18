@@ -26,7 +26,8 @@
  *   compile_safe_add_overflow_frag — the Venom side of slice 3
  *
  * Helpers:
- *   stmt_state_rel_exec_alloca, stmt_state_rel_declare_word,
+ *   stmt_state_rel_exec_alloca, stmt_state_rel_declare_memory,
+ *   stmt_state_rel_declare_store, stmt_state_rel_declare_word,
  *   eval_name_word, lower_value_name_word, step_name_word,
  *   eval_stmt_if_success, eval_stmt_annassign_value,
  *   eval_stmt_annassign_read_value, compile_if_parts,
@@ -45,6 +46,7 @@ Ancestors
   vyperEvalExprPreservesScopesDom
   vyperEvalPreservesScopes vyperStatePreservation arithmeticProps
   venomExecSemantics venomExecProofs venomInst venomInstProofs venomState
+  ptrDiscipline venomMemProps
 Libs
   monadsyntax
 
@@ -565,35 +567,152 @@ Proof
   metis_tac[]
 QED
 
-(* A declaration adds a tracked allocation region; all other live regions
-   are transported through their preserved pointer variables. *)
-Theorem immutable_alloca_sep_declare_local[local]:
-  !func cenv cx es s es' t id entry p sz w inst.
-    immutable_alloca_sep func cenv cx es s /\
-    es'.immutables = es.immutables /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    lookup_scopes id es'.scopes = SOME entry /\
-    (!n. n <> id ==> lookup_scopes n es'.scopes = lookup_scopes n es.scopes) /\
+(* Registering a new local whose region now holds its value: the state t
+   differs from s only in the memory the ALLOCA's region holds. *)
+Theorem stmt_state_rel_declare_memory:
+  !H func cenv cx es s t id p sz w inst v tyv sc rest a ctx.
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    lookup_var p t = SOME w /\
-    (!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s) /\
+    not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz) ==>
-    immutable_alloca_sep func cenv cx es' t
+    inst.inst_outputs = [p] /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_fmp = s.vs_fmp /\
+    ((ptrDiscipline$ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      t.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
+    t.vs_immutables = s.vs_immutables /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\
+    t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels /\
+    t.vs_code = s.vs_code /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
+    (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
+         lookup_var q t = lookup_var q s) /\
+    (!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
+         mem_bytes_at b sz' s.vs_memory = mem_bytes_at b sz' t.vs_memory) /\
+    type_memory_size tyv <= sz /\ val_wf tyv v /\
+    memory_value_rel tyv v (w2n w) t.vs_memory ==>
+    stmt_state_rel H ctx func cenv cx
+      (es with scopes :=
+         (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest) t
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule immutable_alloca_sep_frame >> disch_then irule >>
-  rpt conj_tac >> TRY (fs[] >> NO_TAC) >>
+  rpt gen_tac >> strip_tac >> gs[] >>
+  qabbrev_tac `entry = <| assignable := a; type := tyv; value := v; popped := [] |>` >>
+  qabbrev_tac `scs' = (sc |+ (id, entry)) :: rest` >>
+  `local_ptrs_rel func cenv (sc :: rest) s /\ alloca_inv s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `!n b sz'. n <> id /\ local_region cenv (sc :: rest) s n b sz' ==>
+             regions_disjoint (w2n w) sz b sz'` by
+    (rpt strip_tac >> irule local_ptrs_rel_alloca_disjoint >>
+     qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `sc :: rest`, `s`] >> simp[]) >>
+  `w2n w + sz <= s.vs_alloca_next` by
+    (fs[alloca_inv_def, alloca_next_valid_def] >> res_tac >> fs[]) >>
+  `lookup_scopes id scs' = SOME entry /\
+   !n. n <> id ==> lookup_scopes n scs' = lookup_scopes n (sc :: rest)` by
+    simp[Abbr `scs'`, lookup_scopes_def, FLOOKUP_UPDATE] >>
+  `local_backed func p s (w2n w) sz` by
+    (simp[local_backed_def] >> disj1_tac >> qexists_tac `inst` >> simp[]) >>
+  `!n e q sq. lookup_scopes n scs' = SOME e /\
+       FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sq) ==>
+       lookup_var q t = lookup_var q s` by
+    (rpt strip_tac >> Cases_on `n = id` >- (gvs[] >> metis_tac[]) >>
+     `lookup_scopes n (sc :: rest) = SOME e` by metis_tac[] >>
+     `~not_local_ptr cenv (sc :: rest) q` by
+       (simp[not_local_ptr_def] >> metis_tac[]) >>
+     first_x_assum irule >> simp[]) >>
+  `local_ptrs_rel func cenv scs' t` by
+    (irule local_ptrs_rel_write_local >>
+     qexistsl_tac [`entry`, `id`, `p`, `sc :: rest`, `s`, `sz`, `w`] >>
+     simp[Abbr `entry`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >> gvs[]) >>
+  `state_rel H func cenv cx (es with scopes := scs') t` by
+    (irule state_rel_frame >> conj_tac >- simp[] >>
+     qexists_tac `es` >> qexists_tac `s` >>
+     simp[vyperStateTheory.evaluation_state_component_equality] >>
+     fs[stmt_state_rel_def]) >>
+  `alloca_inv t` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
+  `alloca_room ctx func t` by
+    (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `fmp_room ctx func t` by
+    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def] >>
+     first_assum ACCEPT_TAC) >>
+  `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
+    (`immutable_alloca_sep func cenv cx es s` by fs[stmt_state_rel_def] >>
+     drule immutable_alloca_sep_frame >> disch_then irule >>
+     rpt conj_tac >> TRY (fs[] >> NO_TAC) >>
+     fs[] >> rpt strip_tac >>
+     rename1 `local_region cenv scs' t j b len` >>
+     Cases_on `j = id`
+     >- (gvs[local_region_def] >> metis_tac[]) >>
+     `local_region cenv (sc :: rest) s j b len` by
+       (gvs[local_region_def] >> metis_tac[]) >>
+     metis_tac[]) >>
+  `immutable_base_zero cenv t` by
+    (irule exprLoweringPropsTheory.immutable_base_zero_frame >> qexists_tac `s` >>
+     rpt conj_tac
+     >~ [`lookup_var _ t = lookup_var _ s`]
+     >- (rpt strip_tac >> qpat_x_assum `!q. q = p \/ _ ==> _` irule >>
+         simp[not_local_ptr_def]) >>
+     fs[stmt_state_rel_def]) >>
+  fs[stmt_state_rel_def] >> metis_tac[]
+QED
+
+(* Storing a word that lays out v into a new local's region, whose ALLOCA
+   ran, binds the local to v in the innermost scope.  v may occupy more than
+   the stored word (the zero length word of an empty bytestring or dynamic
+   array), as long as it fits the region. *)
+Theorem stmt_state_rel_declare_store:
+  !H func cenv cx es s id p sz w inst v tyv sc rest a x ctx.
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_outputs = [p] /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+    32 <= sz /\ type_memory_size tyv <= sz /\
+    memory_value_rel tyv v (w2n w) (mstore (w2n w) x s).vs_memory /\
+    val_wf tyv v ==>
+    stmt_state_rel H ctx func cenv cx
+      (es with scopes :=
+         (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
+      (mstore (w2n w) x s)
+Proof
   rpt strip_tac >>
-  rename1 `local_region cenv es'.scopes t n b z` >>
-  Cases_on `n = id`
-  >- (gvs[local_region_def] >> metis_tac[]) >>
-  disj1_tac >> qexists_tac `n` >>
-  fs[local_region_def] >>
-  rename1 `FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z)` >>
-  `~not_local_ptr cenv es.scopes q` by
-    (simp[not_local_ptr_def] >> metis_tac[]) >>
-  metis_tac[]
+  `!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
+     mem_bytes_at b sz' s.vs_memory =
+     mem_bytes_at b sz' (mstore (w2n w) x s).vs_memory` by
+    (rpt strip_tac >>
+     `regions_disjoint (w2n w) sz b sz'` by
+       (irule local_ptrs_rel_alloca_disjoint >>
+        qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >>
+        fs[stmt_state_rel_def, state_rel_def]) >>
+     `b + sz' <= w2n w \/ w2n w + 32 <= b` by
+       (fs[regions_disjoint_def] >> DECIDE_TAC) >>
+     irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >> simp[]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+     (mstore (w2n w) x s)` by
+    (irule immutables_rel_mstore_alloca >>
+     reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
+     qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >>
+     fs[stmt_state_rel_def, state_rel_def]) >>
+  `(mstore (w2n w) x s).vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH (mstore (w2n w) x s).vs_memory` by
+    (conj_tac >- simp[mstore_def] >>
+     simp[venomMemPropsTheory.mstore_memory_nondecreasing]) >>
+  irule stmt_state_rel_declare_memory >> simp[] >>
+  qexistsl_tac [`inst`, `s`, `w`] >>
+  fs[mstore_def, LET_THM, lookup_var_def] >> gs[] >> first_assum ACCEPT_TAC
 QED
 
 (* Storing a word into a new local's region, whose ALLOCA ran, binds the
@@ -601,7 +720,7 @@ QED
    variable). *)
 Theorem stmt_state_rel_declare_word:
   !H.
-  !func cenv cx es s id p sz w inst v tyv sc rest cap a ctx.
+  !func cenv cx es s id p sz w inst v tyv sc rest a ctx.
     stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -610,85 +729,20 @@ Theorem stmt_state_rel_declare_word:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ word_value v /\ type_memory_size tyv = 32 /\
-    word_memory_type tyv /\ cap <= w2n w /\
-    (cenv.ce_is_ctor ==>
-       immutable_prefix_bound cenv cx.txn.target cenv.ce_module es cap) ==>
+    word_memory_type tyv ==>
     stmt_state_rel H ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
       (mstore (w2n w) (val_to_w256 v) s)
 Proof
-  gen_tac >>
-  rpt strip_tac >>
-  qabbrev_tac `s' = mstore (w2n w) (val_to_w256 v) s` >>
-  qabbrev_tac `entry = <| assignable := a; type := tyv; value := v; popped := [] |>` >>
-  qabbrev_tac `scs' = (sc |+ (id, entry)) :: rest` >>
-  `s'.vs_vars = s.vs_vars /\ s'.vs_allocas = s.vs_allocas /\
-   s'.vs_alloca_next = s.vs_alloca_next /\ s'.vs_fmp = s.vs_fmp /\
-   s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
-   s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
-   s'.vs_block_ctx = s.vs_block_ctx /\ s'.vs_logs = s.vs_logs /\
-   s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
-   s'.vs_pending_deletions = s.vs_pending_deletions /\
-   s'.vs_immutables = s.vs_immutables /\
-   s'.vs_data_section = s.vs_data_section /\ s'.vs_labels = s.vs_labels /\
-   s'.vs_code = s.vs_code` by
-    simp[Abbr `s'`, mstore_def, LET_THM] >>
-  `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
-    fs[stmt_state_rel_def, state_rel_def] >>
-  `!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
-             regions_disjoint (w2n w) sz b sz'` by
-    (rpt strip_tac >> irule local_ptrs_rel_alloca_disjoint >>
-     qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >>
-     simp[]) >>
-  `w2n w + sz <= s.vs_alloca_next` by
-    (fs[alloca_inv_def, alloca_next_valid_def] >> res_tac >> fs[]) >>
-  `!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
-             mem_bytes_at b sz' s.vs_memory =
-             mem_bytes_at b sz' s'.vs_memory` by
-    (rpt strip_tac >>
-     `regions_disjoint (w2n w) sz b sz'` by metis_tac[] >>
-     `b + sz' <= w2n w \/ w2n w + 32 <= b` by
-       (fs[regions_disjoint_def] >> DECIDE_TAC) >>
-     simp[Abbr `s'`] >> irule EQ_SYM >>
-     irule mstore_mem_bytes_at_disjoint >> simp[]) >>
-  `lookup_scopes id scs' = SOME entry /\
-   !n. n <> id ==> lookup_scopes n scs' = lookup_scopes n es.scopes` by
-    simp[Abbr `scs'`, lookup_scopes_def, FLOOKUP_UPDATE] >>
-  `local_backed func p s (w2n w) sz` by
-    (simp[local_backed_def] >> disj1_tac >> qexists_tac `inst` >> simp[]) >>
-  `memory_value_rel tyv v (w2n w) s'.vs_memory` by
-    simp[Abbr `s'`, word_value_memory_rel] >>
+  rpt gen_tac >> strip_tac >>
+  `memory_value_rel tyv v (w2n w) (mstore (w2n w) (val_to_w256 v) s).vs_memory`
+    by simp[word_value_memory_rel] >>
   `val_wf tyv v` by (irule word_value_wf >> simp[]) >>
-  `local_ptrs_rel func cenv scs' s'` by
-    (`entry.type = tyv /\ entry.value = v` by simp[Abbr `entry`] >>
-     qspecl_then [`func`, `cenv`, `es.scopes`, `scs'`, `s`, `s'`, `id`,
-                  `entry`, `p`, `sz`, `w`] mp_tac local_ptrs_rel_write_local >>
-     impl_tac >- (fs[lookup_var_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
-     simp[]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s'` by
-    (simp[Abbr `s'`] >> irule immutables_rel_mstore_outside_prefix >>
-     conj_tac >- (qexists_tac `cap` >> simp[]) >>
-     fs[stmt_state_rel_def, state_rel_def]) >>
-  `state_rel H func cenv cx (es with scopes := scs') s'` by
-    (irule state_rel_frame >> conj_tac >- simp[] >>
-     qexistsl_tac [`es`, `s`] >>
-     simp[vyperStateTheory.evaluation_state_component_equality] >>
-     fs[stmt_state_rel_def]) >>
-  `alloca_inv s'` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
-  `alloca_room ctx func s'` by
-    (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
-  `fmp_room ctx func s'` by
-    (simp_tac bool_ss [Abbr `s'`] >> irule fmp_room_mstore >>
-     fs[stmt_state_rel_def]) >>
-  `immutable_alloca_sep func cenv cx (es with scopes := scs') s'` by
-    (irule immutable_alloca_sep_declare_local >>
-     qexistsl_tac [`entry`, `es`, `id`, `inst`, `p`, `s`, `sz`, `w`] >>
-     simp[] >> fs[stmt_state_rel_def, lookup_var_def]) >>
-  `immutable_base_zero cenv s'` by
-    (irule immutable_base_zero_frame >> qexists_tac `s` >>
-     fs[stmt_state_rel_def, lookup_var_def]) >>
-  fs[stmt_state_rel_def] >> metis_tac[]
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `s`, `id`, `p`, `sz`, `w`, `inst`,
+               `v`, `tyv`, `sc`, `rest`, `a`, `val_to_w256 v`, `ctx`] mp_tac
+    stmt_state_rel_declare_store >>
+  impl_tac >- fs[] >> simp[]
 QED
 
 Theorem emit_inst_unit:
@@ -922,7 +976,7 @@ Proof
   `lookup_var p s = SOME w` by metis_tac[] >> simp[] >>
   qspecl_then [`H`, `func`, `cenv`, `cx`, `es1`, `s`, `id`, `p`, `sz`, `w`,
                `mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]`,
-               `v`, `tyv`, `sc`, `rest`, `cap`, `T`, `ctx`]
+               `v`, `tyv`, `sc`, `rest`, `T`, `ctx`]
     MATCH_MP_TAC stmt_state_rel_declare_word >>
   fs[venomInstTheory.mk_inst_def]
 QED
