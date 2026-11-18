@@ -201,32 +201,6 @@ Proof
   Cases >> EVAL_TAC
 QED
 
-Triviality effect_free_opcode_cases[local]:
-  !op. is_effect_free_op op ==>
-    (op = NOT \/ op = ISZERO) \/
-    (op = ADD \/ op = SUB \/ op = MUL \/ op = Div \/ op = SDIV \/
-     op = Mod \/ op = SMOD \/ op = Exp) \/
-    (op = EQ \/ op = LT \/ op = GT \/ op = SLT \/ op = SGT) \/
-    (op = AND \/ op = OR \/ op = XOR \/ op = SHL \/
-     op = SHR \/ op = SAR \/ op = SIGNEXTEND \/ op = BYTE \/
-     op = OFFSET) \/
-    (op = ADDMOD \/ op = MULMOD) \/
-    (op = CALLER \/ op = ADDRESS \/ op = CALLVALUE \/ op = GAS \/
-     op = ORIGIN \/ op = GASPRICE \/ op = CHAINID \/
-     op = COINBASE \/ op = TIMESTAMP \/ op = NUMBER \/
-     op = PREVRANDAO \/ op = GASLIMIT \/ op = BASEFEE \/
-     op = BLOBBASEFEE \/ op = SELFBALANCE \/ op = CALLDATASIZE \/
-     op = RETURNDATASIZE \/ op = MEMTOP \/ op = CODESIZE) \/
-    (op = MLOAD \/ op = SLOAD \/ op = TLOAD \/ op = ILOAD \/
-     op = DLOAD \/ op = BLOCKHASH \/ op = BLOBHASH \/ op = BALANCE \/
-     op = CALLDATALOAD \/ op = EXTCODESIZE \/ op = EXTCODEHASH) \/
-    (op = SHA3 \/ op = PHI \/ op = ASSIGN \/ op = PARAM \/ op = NOP \/
-     op = GETFMP \/ op = INITIAL_FMP \/ op = BUMP \/
-     op = FMP_PARAM \/ op = RETPC_PARAM)
-Proof
-  Cases >> EVAL_TAC
-QED
-
 Triviality effect_free_not_intret[local]:
   !inst s vals vs'.
     is_effect_free_op inst.inst_opcode ==>

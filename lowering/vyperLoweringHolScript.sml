@@ -39,6 +39,7 @@ Ancestors
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
   stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignTupleMem
+  storageCopyBodyRaisePtr
   stmtSimAssignStorage stmtSimStoreCopy storageCopyLive stmtSimAssignStorageCopy
   stmtSimAssignAttr
   stmtSimAssignAttrStorage stmtSimAugAssignAttr
@@ -92,6 +93,7 @@ Ancestors
   (* providers awaiting their consumers *)
   bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
   bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
+  bodyPtrTypeBuiltinsBytesUintSemantics
   internalReturnMemoryMem bodyFullIntCallByteFrame
   bodyFullIntCall
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
