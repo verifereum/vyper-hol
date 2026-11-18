@@ -1,5 +1,6 @@
 Theory vyperRawCallCalldataTest
 Ancestors
+  vyperSmallStepCV
   arithmetic list words
   jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperContext vyperValue
   vyperValueOperation vyperState vyperInterpreter vyperSmallStep
