@@ -5,6 +5,14 @@ Ancestors
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeCallbacks
   supportedExprTraverse e2eDeployDefs loweringShapeProps
 
+(* Discharge precise opcode premises from the complement-of-seven premise;
+   c7 also discharges generator callbacks with the given precise lemmas. *)
+val base7_tm = ``!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
+  opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
+  opc <> RETURNDATACOPY ==> (P:opcode -> bool) opc``;
+fun b7 th = SIMP_RULE (srw_ss()) [ASSUME base7_tm, DISJ_IMP_THM, FORALL_AND_THM] th;
+fun c7 ths th = SIMP_RULE (srw_ss()) (map b7 ths) (b7 th);
+
 Theorem outcomes_free_compile_log_save_arg:
   (!ce ty vv s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
      EVERY (\i. P i.inst_opcode)
@@ -122,6 +130,38 @@ Proof
   simp[every_state_insts_return]
 QED
 
+Theorem outcomes_free_log_eval_all:
+  (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
+         opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
+         opc <> RETURNDATACOPY ==> P opc) ==>
+  (
+  (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+    ~supported_expr_exists R e /\
+    ~supported_expr_exists expr_shape_root e ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_expr ce ty e st)))) ==>
+  !es ce st.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+  EVERY (\e. ~supported_expr_exists R e /\
+    ~supported_expr_exists expr_shape_root e) es ==>
+  EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_log_eval_all ce es st)))
+  )
+Proof
+  rpt strip_tac >> irule every_state_insts_log_eval_all >>
+  fs[(b7 outcomes_free_unwrap_value), (c7 [(c7 [outcomes_free_alloc_buffer, outcomes_free_unwrap_value, outcomes_free_store_memory] outcomes_free_materialize_vv)] outcomes_free_compile_log_save_arg)] >>
+  simp[Once EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `!ce ty e st. _` irule >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[EVERY_MEM]
+QED
+
 Theorem opcode_every_log_eval_all:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -146,11 +186,7 @@ Theorem opcode_every_log_eval_all:
     (state_insts (SND (compile_log_eval_all ce es st)))
   )
 Proof
-  rpt strip_tac >> irule every_state_insts_log_eval_all >>
-  fs[UNDISCH opcode_every_unwrap_value, UNDISCH opcode_every_log_save_arg] >>
-  simp[Once EVERY_MEM] >> rpt strip_tac >>
-  qpat_x_assum `!ce ty e st. _` irule >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[EVERY_MEM]
+  strip_tac >> match_mp_tac outcomes_free_log_eval_all >> simp[]
 QED
 
 Theorem every_state_insts_reason_message:
@@ -165,6 +201,37 @@ Proof
   recInduct compile_reason_message_ind >> rpt conj_tac >> rpt gen_tac >>
   strip_tac >> simp[compile_reason_message_def] >>
   ho_match_mp_tac every_state_insts_bind >> simp[every_state_insts_return]
+QED
+
+Theorem outcomes_free_reason_message:
+  (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
+         opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
+         opc <> RETURNDATACOPY ==> P opc) ==>
+  (
+  (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+    ~supported_expr_exists R e /\
+    ~supported_expr_exists expr_shape_root e ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_expr ce ty e st)))) ==>
+  !e ce st.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+  ~supported_expr_exists R e /\
+  ~supported_expr_exists expr_shape_root e ==>
+  EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_reason_message ce e st)))
+  )
+Proof
+  rpt strip_tac >> irule every_state_insts_reason_message >>
+  simp[(b7 outcomes_free_bytelike_literal)] >>
+  rpt strip_tac >> qpat_x_assum `!ce ty e st. _` irule >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
 QED
 
 Theorem opcode_every_reason_message:
@@ -191,8 +258,5 @@ Theorem opcode_every_reason_message:
     (state_insts (SND (compile_reason_message ce e st)))
   )
 Proof
-  rpt strip_tac >> irule every_state_insts_reason_message >>
-  simp[UNDISCH opcode_every_bytelike_literal] >>
-  rpt strip_tac >> qpat_x_assum `!ce ty e st. _` irule >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  strip_tac >> match_mp_tac outcomes_free_reason_message >> simp[]
 QED

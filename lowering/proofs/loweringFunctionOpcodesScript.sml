@@ -20,9 +20,8 @@ Proof
     conj_tac, IF_CASES_TAC])
 QED
 
-Theorem opcode_every_fixed_region:
-  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
-         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
+Theorem outcomes_free_fixed_region:
+  P ASSIGN ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_fixed_region_with_id sz st)))
@@ -31,6 +30,16 @@ Proof
   simp[compile_fixed_region_with_id_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, fresh_id_def, fresh_var_def, emit_def,
     state_insts_def, all_blocks_def, mk_inst_def]
+QED
+
+Theorem opcode_every_fixed_region:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
+  EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_fixed_region_with_id sz st)))
+Proof
+  strip_tac >> match_mp_tac outcomes_free_fixed_region >> simp[]
 QED
 
 Theorem opcode_every_nonreentrant_lock:

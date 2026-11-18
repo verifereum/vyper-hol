@@ -57,6 +57,21 @@ Proof
   strip_tac >> match_mp_tac outcomes_free_compile_load_tuple_elements >> simp[]
 QED
 
+Theorem outcomes_free_mcopy_guard:
+  P INVALID ==>
+  (
+  (!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (action st)))) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_mcopy_guard ce action st)))
+  )
+Proof
+  strip_tac >>
+  Cases_on `ce.ce_target CapMcopy` >> simp[compile_mcopy_guard_def, opcode_every_emit_inst]
+QED
+
 Theorem opcode_every_mcopy_guard:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -69,8 +84,7 @@ Theorem opcode_every_mcopy_guard:
       (state_insts (SND (compile_mcopy_guard ce action st)))
   )
 Proof
-  strip_tac >>
-  Cases_on `ce.ce_target CapMcopy` >> simp[compile_mcopy_guard_def, opcode_every_emit_inst]
+  strip_tac >> match_mp_tac outcomes_free_mcopy_guard >> simp[]
 QED
 
 Theorem outcomes_free_compile_internal_return:
