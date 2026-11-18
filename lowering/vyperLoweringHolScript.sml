@@ -58,6 +58,7 @@ Ancestors
   loweringShapeProps
   ctorShapeProps ctorUnitShape
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
+  bodyFullShadowBodyInvLowering
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
