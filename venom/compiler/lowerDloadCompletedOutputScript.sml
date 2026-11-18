@@ -1,6 +1,6 @@
 Theory lowerDloadCompletedOutput
 Ancestors
-  lowerDloadCleanCopy lowerDloadMacroBoundary lowerDloadPhaseBoundary
+  stepTaintVarFrame lowerDloadCleanCopy lowerDloadMacroBoundary lowerDloadPhaseBoundary
   ptrDiscipline venomExecSemantics venomState finite_map list words lowerDloadDefs pred_set
   lowerDloadCopyReadback lowerDloadPairedBoundary lowerDloadOwnership
   venomInstProofs venomExecProofs venomInst lowerDloadOperand
@@ -72,15 +72,6 @@ Proof
 QED
 
 
-Theorem ld_step_taint_var_frame[local]:
-  ~MEM v inst.inst_outputs ==>
-  FLOOKUP (step_taint inst s z tn).t_var v = FLOOKUP tn.t_var v
-Proof
-  simp[step_taint_def, set_var_taint_def] >>
-  Cases_on `inst.inst_outputs` >> simp[FLOOKUP_DRESTRICT] >>
-  Cases_on `t` >> simp[FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >> metis_tac[]
-QED
-
 Theorem ld_load_completed_frame[local]:
   a.inst_opcode = ALLOCA /\ a.inst_outputs = [av] /\
   b.inst_opcode = ADD /\ b.inst_outputs = [bv] /\
@@ -105,7 +96,7 @@ Proof
   imp_res_tac step_inst_preserves_labels_always >>
   imp_res_tac step_preserves_non_output_vars >>
   gvs[lookup_var_def, is_terminator_def] >>
-  rpt strip_tac >> simp[op_taint_def, ld_step_taint_var_frame]
+  rpt strip_tac >> simp[op_taint_def, step_taint_other_var]
 QED
 
 Theorem ld_load_completed_owned:
@@ -153,7 +144,7 @@ Proof
   first_x_assum (qspec_then `v` mp_tac) >>
   simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
     ld_set_prov_def, FLOOKUP_DRESTRICT, op_taint_def,
-    ld_step_taint_var_frame] >>
+    step_taint_other_var] >>
   strip_tac >> qpat_x_assum `!v. v IN V ==> _` (qspec_then `v` mp_tac) >>
   simp[lookup_var_def, op_taint_def]
 QED
