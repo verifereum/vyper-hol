@@ -6,6 +6,23 @@ Ancestors
   instIdxIndep fragExec exprLoweringProps venomInstProofs venomState
   venomExecSemantics venomInst finite_map ptrDiscipline emitHelperProps bodyPtrDefs
 
+Theorem bytestring_source_run:
+  src <> len /\ lookup_var src s = SOME a ==>
+  run_inst_seq [mk_inst i MLOAD [Var src] [len];
+                mk_inst j ADD [Var src;Lit 32w] [dp]] s =
+    OK (update_var dp (a+32w) (update_var len (mload (w2n a) s) s))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst i MLOAD [Var src] [len]) s =
+     OK (update_var len (mload (w2n a) s) s)` by
+    (irule step_MLOAD >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst j ADD [Var src;Lit 32w] [dp])
+     (update_var len (mload (w2n a) s) s) =
+     OK (update_var dp (a+32w) (update_var len (mload (w2n a) s) s))` by
+    (irule step_ADD >> fs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  simp[run_inst_seq_def]
+QED
+
 Theorem bytestring_source_run_endpoint:
   src <> len /\ lookup_var src s = SOME a /\
   run_inst_seq [mk_inst i MLOAD [Var src] [len];
@@ -13,18 +30,11 @@ Theorem bytestring_source_run_endpoint:
   t = update_var dp (a+32w) (update_var len (mload (w2n a) s) s)
 Proof
   strip_tac >>
-  `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>
-  `step_inst_base (mk_inst i MLOAD [Var src] [len]) s =
-     OK (update_var len (mload (w2n a) s) s)` by simp[step_MLOAD] >>
-  `eval_operand (Var src) (update_var len (mload (w2n a) s) s) = SOME a` by
-    fs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  `eval_operand (Lit 32w) (update_var len (mload (w2n a) s) s) = SOME 32w` by
-    simp[eval_operand_def] >>
-  `step_inst_base (mk_inst j ADD [Var src;Lit 32w] [dp])
-      (update_var len (mload (w2n a) s) s) =
-    OK (update_var dp (a+32w) (update_var len (mload (w2n a) s) s))` by
-    (irule step_ADD >> simp[]) >>
-  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >> simp[run_inst_seq_def]
+  `run_inst_seq [mk_inst i MLOAD [Var src] [len];
+                 mk_inst j ADD [Var src;Lit 32w] [dp]] s =
+     OK (update_var dp (a+32w) (update_var len (mload (w2n a) s) s))` by
+    (irule bytestring_source_run >> simp[]) >>
+  gvs[]
 QED
 
 Theorem bytestring_source_uniform_checks:
