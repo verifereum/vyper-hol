@@ -170,7 +170,13 @@ and [dependency inventory](compiler-proof-dependencies.md) for actual owners,
 partial/absent producers and built evidence. [TASK060 final validation](compiler-proof-milestone-1-exit-2026-10-09.md)
 is complete, without proving the admitted stages.
 
-The entire public theorem is:
+This section records the statement as of 2026-10-09. The current
+`vyper_call_correct` (`lowering/e2eCorrectnessScript.sml`) quantifies over
+`fin IN accepted_finalizers`, has no `valid_vyper_call` premise and concludes
+`frame_resource_starved es r es' \/ calldata_result_rel tops am tx es r es'`,
+whose unmatched-calldata arm is described under [Revert data](#revert-data).
+
+The entire public theorem was then:
 
 ```sml
 !policy tops deploy_bc runtime_bc am tx ret es.
@@ -213,10 +219,11 @@ The exact singleton main source must already be installed at `tx.target`, with
 no exports and declared layout slots. Runtime typing readiness likewise requires
 installed sources and ready immutables; it is not readiness for an uninstalled
 source target. The live target account's code must equal the executing frame's
-code. `valid_vyper_call` selects
+code. In the 2026-10-09 statement, `valid_vyper_call` selected
 the exact External declaration, nonreentrant flag F, no defaults, no
 `__default__`, exact argument count, successful bounded binding and encoded
-calldata for the declared argument types; `ret` is the looked-up return type.
+calldata for the declared argument types, and `ret` was the looked-up return type;
+the current theorem has no such premise and cases on `calldata_dispatch` instead.
 
 `frame_outcome` describes both single-frame and nested completion. In the nested
 case our frame is popped, the parent receives the success flag/return data,
@@ -284,8 +291,8 @@ them to EVM readings. The old
   after EVM pending deletions and transient-storage agreement modulo dead target
   storage, ordered concrete logs and
   `LIST_REL (request_agree H tx.target) rqs (call_requests es)`. A source halt (`HaltException`) requires a successful
-  frame outcome with empty output and the same account, transient-storage and
-  request agreement (`effects_agree`). Requests and these effects are compared
+  frame outcome with empty output, the source's ordered logs and the same account,
+  transient-storage and request agreement (`effects_agree`). Requests and these effects are compared
   only on success or halt; `exception_outcome_rel` compares none of them on
   failure. Terminal leftover outcome lists are not related observations.
 - Assertion/raise requires Reverted, except `"UNREACHABLE"` permits any failure.
