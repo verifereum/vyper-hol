@@ -35,22 +35,3 @@ Proof
   irule pure_frame_trans >> simp[] >> qexistsl_tac [`mid`,`sm`,`u`] >>
   fs[wb_frame_def]
 QED
-
-Theorem extract32_join_ghost_kept_at:
-  stmt_state_rel H ctx func cenv cx es s0 /\
-  local_ptrs_reserved cenv sa /\
-  MAP FDOM es.scopes = MAP FDOM mid.scopes /\
-  wb_frame cenv es mid sa s0 u /\
-  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2 /\
-  ghost_kept_at lo cenv mid sm G2 tn2 u G3 tn3 ==>
-  ghost_kept_at lo cenv es sa G0 tn0 s0 G3 tn3
-Proof
-  strip_tac >>
-  `ghost_kept cenv es sa G0 tn0 s0 G2 tn2 /\
-   ghost_kept cenv mid sm G2 tn2 u G3 tn3` by
-    (fs[ghost_kept_def, ghost_kept_at_def] >> metis_tac[]) >>
-  `ghost_kept cenv es sa G0 tn0 s0 G3 tn3` by
-    metis_tac[wordArgsPtrTheory.ghost_kept_wb_trans] >>
-  fs[ghost_kept_def, ghost_kept_at_def] >> metis_tac[]
-QED

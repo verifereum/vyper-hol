@@ -49,7 +49,8 @@ Proof
     dst3 <- emit_op ADD [ib; Lit 96w]; emit_void MSTORE [dst3; y2] od)` >>
   `comp_ignore_bind first second ca = ((),cp)` by
     fs[Abbr `first`, Abbr `second`, comp_ignore_bind_def, comp_bind_assoc] >>
-  Cases_on `first ca` >> Cases_on `q` >>
+  Cases_on `first ca` >> rename1 `first ca = (result,cm)` >>
+  Cases_on `result` >>
   gvs[comp_ignore_bind_def, comp_bind_def] >> metis_tac[]
 QED
 
@@ -86,6 +87,7 @@ Proof
     dst2 <- emit_op ADD [ib; Lit 64w]; emit_void MSTORE [dst2; scalar] od)` >>
   `comp_ignore_bind first second ca = ((),cp)` by
     fs[Abbr `first`, Abbr `second`, comp_ignore_bind_def, comp_bind_assoc] >>
-  Cases_on `first ca` >> Cases_on `q` >>
+  Cases_on `first ca` >> rename1 `first ca = (result,cm)` >>
+  Cases_on `result` >>
   gvs[comp_ignore_bind_def, comp_bind_def] >> metis_tac[]
 QED

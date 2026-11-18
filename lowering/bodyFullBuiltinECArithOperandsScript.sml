@@ -1,7 +1,8 @@
 (* First-point preparation for the full EC arithmetic execution. *)
 Theory bodyFullBuiltinECArithOperands
 Ancestors
-  bodyMemEcArithOperands loweringPosts valueEncoding
+  bodyMemEcArithOperands loweringPosts valueEncoding bodyPtrDefs
+  stateRelProj allocaSiteResource bodyMemoryDefs[qualified,ignore_grammar]
 
 Theorem ec_first_point_staging_ready:
   post_value_type cenv e1 = expr_type e1 /\
@@ -26,4 +27,27 @@ Proof
   `eval_operand x u = SOME w` by metis_tac[] >>
   qexists_tac `w` >> simp[] >>
   irule ec_point_read_capacity >> metis_tac[]
+QED
+
+(* The staging writes introduce no taint into live input regions. *)
+Theorem ec_staging_ghost_kept_at:
+  stmt_state_rel H ctx func cenv cx es s /\
+  (!x. not_fresh_at sa x ==>
+    FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  (!i. i < s.vs_alloca_next /\ i IN tn'.t_mem ==> i IN tn.t_mem) ==>
+  ghost_kept_at lo cenv es sa G tn s G' tn'
+Proof
+  strip_tac >>
+  qpat_assum `stmt_state_rel _ _ _ _ _ _ s`
+    (assume_tac o CONJUNCT2 o MATCH_MP stmt_state_rel_local_ptrs_alloca) >>
+  rewrite_tac[ghost_kept_at_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all alloca_site_registered_below >> strip_tac >>
+      qpat_assum `!i. i < s.vs_alloca_next /\ _ ==> _` irule >>
+      simp[] >> decide_tac) >>
+  rpt strip_tac >> drule_all bodyMemoryDefsTheory.body_local_region_frontier >>
+  strip_tac >>
+  qpat_assum `!i. i < s.vs_alloca_next /\ _ ==> _` irule >>
+  simp[] >> decide_tac
 QED
