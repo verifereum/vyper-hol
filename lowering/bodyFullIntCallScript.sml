@@ -2,8 +2,8 @@
  * supplied-argument, omitted-default, and callee-body stages. *)
 Theory bodyFullIntCall
 Ancestors
-  bodyFullPreds bodyIntCallSeams vyperInterpreter vyperState vyperAST
-  finite_map list
+  bodyFullIntCallDefs bodyFullPreds bodyIntCallSeams bodySim
+  vyperInterpreter vyperState vyperAST finite_map list
 
 val _ = Parse.hide "body";
 
@@ -138,4 +138,39 @@ Proof
   qexistsl_tac [`dvs`, `penv`, `s1`, `sd`, `sd`, `td`,
     `st`, `t1`, `td with scopes := sd.scopes`, `td`, `out`, `vs`] >>
   gvs[return_def]
+QED
+
+(* The entry boundary records both evaluated argument lists, so the body IH
+   can be specialized before dispatching to the callee stage. *)
+Theorem intcall_entry_body_ih[local]:
+  body_inv tops ctx cenv cx /\
+  lookup_callable_function cx.in_deploy name tops =
+    SOME (mut,nr,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+    sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
+  (!s1 vs t1 sd dvs td penv rtv.
+     ~MEM (NONE,name) cx.stk /\
+     eval_exprs cx es s1 = (INL vs,t1) /\
+     eval_exprs (cx with stk updated_by CONS (NONE,name))
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+       (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
+     bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv /\
+     evaluate_type (get_tenv cx) ret = SOME rtv /\
+     (nr ==> IS_SOME cx.nonreentrant_slot) /\
+     (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
+     body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) ==>
+  ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
+   body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss)
+Proof
+  strip_tac >>
+  `nr ==> IS_SOME cx.nonreentrant_slot` by
+    (strip_tac >> drule_all body_inv_nonreentrant_slot >> simp[]) >>
+  qhdtm_x_assum `intcall_entry_full`
+    (fn entry =>
+       map_every strip_assume_tac
+         (List.take (CONJUNCTS (PURE_REWRITE_RULE [intcall_entry_full_def] entry), 3))) >>
+  strip_tac >>
+  first_x_assum irule >>
+  fs[] >> metis_tac[]
 QED
