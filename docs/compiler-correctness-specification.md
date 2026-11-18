@@ -29,6 +29,63 @@ Unless later brought into scope, the following are not verified by the first com
 
 These exclusions must remain visible in theorem statements or in a clearly referenced boundary predicate.
 
+### Executions outside the current theorems
+
+`vyper_call_correct` and `e2e_deploy_correctness` say nothing about an execution
+their premises do not describe. Each limit below follows from a single conjunct
+or check and is easy to miss:
+
+- **A call frame runs the code installed at its own address.** `call_state_rel`
+  (`lowering/e2eDefsScript.sml`) requires
+  `(lookup_account tx.target es.rollback.accounts).code = ctxt.msgParams.code`,
+  and its `frame_tx_rel` conjunct requires `ctxt.msgParams.callee = tx.target`.
+  A frame entered by DELEGATECALL or CALLCODE from a proxy (callee the proxy,
+  code the implementation's) and a call to an EIP-7702 delegated account do not
+  satisfy this, so they are outside `vyper_call_correct`. The conjunct makes the
+  target count as an already-created account, bounds the length of the executing
+  code (`call_state_rel_code_length`), and ties the account code the source reads
+  for `self.codesize` and `self.codehash` to the code the frame executes.
+- **Deployment is a single creation frame.** `deploy_state_rel`
+  (`lowering/e2eDeployDefsScript.sml`) requires `es.contexts = [(ctxt, rb)]`. A
+  creation frame running under a caller (CREATE or CREATE2 from a factory) is not
+  an instance of `e2e_deploy_correctness`. The source models such a creation on
+  the caller's side, through `eval_create` and the call-outcome oracle, but no
+  current theorem covers that caller (next item).
+- **A caller that creates contracts or makes a delegate `raw_call` is not
+  covered.** `vyper_call_correct` assumes `supported_program tops`, which rejects
+  these bodies twice (`lowering/proofs/supported/`): `body_stmts_safe` rejects
+  every `expr_evm_run_root` expression (every `create_*` call and every `raw_call`
+  with `is_delegate_call=True`), and `supported_stmts` admits no `create_*` or
+  `raw_call` at all. The source semantics already models both on the caller's
+  side through the call-outcome oracle (`eval_create`, `eval_raw_call`); these
+  `supported_program` checks are what keep such bodies outside the theorem.
+  Constructors are narrower still: `e2e_deploy_correctness` also assumes
+  `constructor_call_free tops`, which rejects every call and the precompile
+  builtins in `__init__`. The constructor source runs with the frame's outcome
+  list, `load_contract (SOME (MAP SND (call_trace es))) ...` in
+  `deploy_call_result_rel`, and `constructor_call_free` ensures it takes no
+  outcome from it.
+- **Initcode is the deploy bytecode followed by the canonical constructor
+  arguments.** `deploy_state_rel` requires
+  `ctxt.msgParams.code = deploy_bc ++ args_bytes` and
+  `constructor_args_encode tops tx args_bytes`. Initcode with trailing bytes, or
+  with a non-canonical encoding of the constructor arguments, is outside the
+  theorem; the source `load_contract` takes typed argument values, not raw
+  initcode.
+
+One conjunct reads like a limit but is not one: a deployment target that already
+holds ether is covered. `deploy_state_rel` requires
+`account_empty (lookup_account tx.target es.originalAccounts)`, which constrains
+only the original-accounts snapshot. Verifereum resets the creation target's
+entry in that snapshot to `empty_account_state` when a creation starts (both the
+transaction-level creation and `proceed_create`). The live account comes from
+`es.rollback.accounts = accounts_after_transfer tx am.accounts`, and nothing
+constrains its balance to zero.
+
+What the theorems compare on the executions they do cover is in
+[Observational correctness](#observational-correctness) and
+[Observations, resources and limits](#observations-resources-and-limits).
+
 ## Compiler stages
 
 The first end-to-end result should compose:
@@ -51,7 +108,7 @@ Subject to language features represented by the formal AST and pinned lowering d
 - contract creation supported by lowering;
 - nested EVM contexts;
 - fallback and selector dispatch;
-- ABI arguments, return data, and revert data;
+- ABI arguments and return data (for revert data, see [Revert data](#revert-data));
 - persistent and transient storage;
 - memory and immutables;
 - logs and externally visible account effects;
@@ -64,7 +121,8 @@ Unsupported pinned-compiler features must be listed explicitly rather than hidde
 The source and EVM executions need not have identical internal states. Correctness should relate externally meaningful observations, expected to include:
 
 - execution outcome;
-- ABI-encoded return or revert data;
+- ABI-encoded return data, and on failure that the frame failed (revert data is
+  not compared; see [Revert data](#revert-data));
 - persistent account state and balances;
 - transient storage where visible within the transaction model;
 - logs;
@@ -74,6 +132,30 @@ The source and EVM executions need not have identical internal states. Correctne
 Internal Venom variables, compiler temporary memory, spills, labels, stack layout, and program counters are simulation details rather than source observations.
 
 The exact observation type/relation is a phase-2 deliverable. It should support composition and nested calls without requiring equality of irrelevant target internals.
+
+### Revert data
+
+The current theorems observe that a frame failed, not the bytes it returned on
+failure. For a source `AssertException s`, `exception_outcome_rel`
+(`lowering/e2eDefsScript.sml`) requires a failed frame outcome that is `Reverted`
+and raised by the frame itself (`frame_raises es Reverted`), or any failure when
+`s = "UNREACHABLE"`; `deploy_result_rel` (`lowering/e2eDeployDefsScript.sml`)
+requires `Reverted` or, for `"UNREACHABLE"`, any failure. For a source `Error e`
+(custom errors, `raw_revert`, bubbled call or creation failures) both relations
+accept any failed frame outcome; when `unspecified_behaviour_exempt tops e` holds
+(see the exemption under
+[Observations, resources and limits](#observations-resources-and-limits)) they
+constrain the frame not at all. Wherever a failure is required, the output
+bytes of `frame_outcome` are existentially quantified, so reason strings, custom
+error payloads and bubbled revert data are not compared. The one exception is
+calldata for which `calldata_dispatch tops tx.calldata = NONE`
+(`semantics/vyperCalldataScript.sml`): a selector miss in a contract without
+`__default__`, fewer than 4 bytes without `__default__`, or a selector hit whose
+calldata is shorter than its static head or whose arguments fail to decode. There
+`calldata_result_rel` requires `frame_raises es Reverted` and a `Reverted` frame
+outcome with empty return data, unless the frame is resource-starved
+(`frame_resource_starved`), the other disjunct of the conclusion.
+Whether the theorems should promise revert bytes is an open scope question.
 
 ## Calls and nested contexts
 
@@ -160,8 +242,8 @@ Computed value-zero precompiles 1/2/6/7 take their success from the next
 outcome (the EVM can fail them for lack of gas) and, on success, their return
 data from pure input. They record no request: `call_trace` keeps them and
 `call_requests` filters them out. The source's sha256/ecrecover/ecadd/ecmul
-builtins take that outcome too; constructors, which run without the oracle,
-exclude them (`constructor_call_free`). Other
+builtins take that outcome too; constructors, which run with the frame's
+outcome list but take nothing from it, exclude them (`constructor_call_free`). Other
 calls, including nonzero-value precompile calls, remain ordinary oracle calls.
 Verifereum still executes callees and any reentrant calls; the oracle abstracts
 that whole execution into an outcome. Re-applying a frame theorem to an inner
@@ -198,7 +280,8 @@ them to EVM readings. The old
   Non-exempt source Error requires a failed frame. Lowering requires a
   terminating Halt/Abort, never a stuck Error, OK, IntRet or fuel-zero escape;
   escaped Break/Continue/Return control has no corresponding result clause.
-  There is **no revert-data/reason/general abort-kind equality**. The pipeline
+  There is **no revert-data/reason/general abort-kind equality** (see
+  [Revert data](#revert-data)). The pipeline
   is a forward simulation with deliberately weaker failure observations.
 - The sole exemption is exact `RuntimeError "abi_decode invalid"` when a function
   body contains a dynamic ABI decode target. It is not arbitrary ReturnReject,
@@ -278,6 +361,8 @@ The final statements will need explicit assumptions concerning at least:
 - absence or treatment of target resource exhaustion.
 
 Phase 2 must distinguish genuine environment assumptions from compiler invariants that earlier stages are responsible for proving.
+
+The executions the current theorems do not cover at all (proxy and delegated frames, nested creation frames, callers that create, non-canonical initcode) are listed in [Executions outside the current theorems](#executions-outside-the-current-theorems).
 
 ## Planned theorem family
 
