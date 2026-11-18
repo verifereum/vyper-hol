@@ -7,6 +7,7 @@ Ancestors
   loweringPosts bodyFullAllocaFresh bodyFullAbiEncodeAllocOrigin compileEnv exprSimHyps
   context exprSimProps robustCopyTransportPtr valueEncodingDefs
   bodyFullAbiEncodeOriginFloor exprOperandVar
+  assignTuplePtrLocalCompat[qualified,ignore_grammar]
 
 Theorem capture_robust_lowered_source[local]:
   expr_body_pre ce cx env e es /\ ~is_word_type (expr_type e) /\

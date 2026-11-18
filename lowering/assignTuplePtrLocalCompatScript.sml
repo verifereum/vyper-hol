@@ -82,15 +82,3 @@ Proof
   drule buffer_round_no_wrap >> strip_tac >>
   qexists_tac `len` >> fs[word_size_def] >> decide_tac
 QED
-
-(* Both capacity orders admit the same short runtime value. *)
-Theorem bytestring_capacity_orders_probe_ptr[local]:
-  value_has_type (BaseTV (BytesT (Dynamic 1))) (BytesV [0w]) /\
-  value_has_type (BaseTV (BytesT (Dynamic 96))) (BytesV [0w]) /\
-  val_store_size (BaseTV (BytesT (Dynamic 1))) (BytesV [0w]) = 64 /\
-  val_store_size (BaseTV (BytesT (Dynamic 96))) (BytesV [0w]) = 64 /\
-  type_memory_size (BaseTV (BytesT (Dynamic 1))) = 64 /\
-  type_memory_size (BaseTV (BytesT (Dynamic 96))) = 128
-Proof
-  EVAL_TAC
-QED

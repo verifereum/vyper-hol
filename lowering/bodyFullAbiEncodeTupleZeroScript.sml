@@ -60,16 +60,6 @@ Proof
   simp[] >> metis_tac[valueEncodingProofsTheory.return_zero_wf_memory_mutual]
 QED
 
-(* Changing an ignored zero-copy operand does not change compiler output. *)
-Theorem zero_slot_operand_cong[local]:
-  ~is_word_type ty /\ type_memory_bytes ce ty = 0 ==>
-  compile_abi_tuple_slot ce buf off op ty =
-  compile_abi_tuple_slot ce buf off op' ty
-Proof
-  strip_tac >> simp[FUN_EQ_THM, compile_abi_tuple_slot_def,
-    compile_copy_memory_def, comp_bind_def]
-QED
-
 Theorem zero_tuple_operand_cong[local]:
   !xs off a.
   compile_store_abi_tuple ce buf off
