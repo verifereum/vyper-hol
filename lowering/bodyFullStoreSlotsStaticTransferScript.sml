@@ -215,8 +215,12 @@ Proof
   disch_then (qx_choose_then `bb` (qx_choose_then `i`
     (REPEAT_TCL CONJUNCTS_THEN assume_tac))) >>
   `~b.vs_halted` by
-    ((drule gas_origin_ptr_edge_common_fuel >> strip_tac >>
-     gvs[exit_result_def, jump_to_def] >> (metis_tac[exit_result_def, jump_to_def, gas_origin_ptr_edge_common_fuel]))) >>
+    (qpat_assum `gas_origin_ptr_edge _ _ [] (OK b,Gb,tnb)`
+       (mp_tac o MATCH_MP gas_origin_ptr_edge_common_fuel) >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     fs[exit_result_def, jump_to_def] >>
+     qpat_x_assum `OK b = _` (SUBST_ALL_TAC o SYM) >>
+     fs[exit_result_def]) >>
   drule_all (SRULE[MEM] store_slots_readonly_edge_static) >> strip_tac >>
   qpat_x_assum `gas_origin_ptr_edge _ (_ with vs_call_ctx := _,_,_) _ _`
     (mp_then Any mp_tac (cj 2 gas_origin_ptr_path_rules)) >>
