@@ -194,7 +194,8 @@ Definition raw_safe_rq_upto_def:
     ptr_discipline_rq_upto lo k ctx vs /\ taint_within_rq_upto D k ctx vs /\
     !fn inst s.
       raw_reachable vs ctx fn inst s /\ request_cut k s ==>
-      raw_mem_ok ctx fn inst s /\ dload_offset_ok ctx fn inst s
+      raw_mem_ok ctx fn inst s /\ dload_offset_ok ctx fn inst s /\
+      inst_dload_in_section inst s
 End
 
 (* The cut version of ctx_abort_rq: every request the run of ctx' from s'

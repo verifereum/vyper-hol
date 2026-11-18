@@ -531,14 +531,22 @@ Resume intcall_return_stmt_state_rel[immutable]:
       | SOME imms => get_source_immutables cenv.ce_module imms) nm = SOME (tv,old)` by
     (gvs[immutable_metadata_frame_def] >> rpt strip_tac >>
      Cases_on `ALOOKUP out.immutables cx.txn.target` >> gvs[] >>
+     rename1 `FLOOKUP (get_source_immutables cenv.ce_module out_imms) nm =
+                SOME (tv,iv)` >>
      Cases_on `ALOOKUP es1.immutables cx.txn.target` >> gvs[] >>
      qpat_x_assum `!addr. IS_SOME _ <=> _`
        (qspec_then `cx.txn.target` mp_tac) >> simp[] >>
+     rename1 `?old. FLOOKUP (get_source_immutables cenv.ce_module entry_imms)
+                        nm = SOME (tv,old)` >>
      qpat_x_assum `!addr imms imms' src id. _`
-       (qspecl_then [`cx.txn.target`,`x'`,`x`,`cenv.ce_module`,`nm`] mp_tac) >>
+       (qspecl_then [`cx.txn.target`,`entry_imms`,`out_imms`,
+                     `cenv.ce_module`,`nm`] mp_tac) >>
      simp[] >>
-     Cases_on `FLOOKUP (get_source_immutables cenv.ce_module x') nm` >>
-     simp[] >> PairCases_on `x''` >> simp[]) >>
+     Cases_on `FLOOKUP (get_source_immutables cenv.ce_module entry_imms) nm`
+     >- simp[] >>
+     rename1 `FLOOKUP (get_source_immutables cenv.ce_module entry_imms) nm =
+                SOME entry_cell` >>
+     PairCases_on `entry_cell` >> simp[]) >>
   `!id b sz. local_region cenv prev returned id b sz ==>
              local_region cenv prev t id b sz` by
     (simp[loweringStateRelDefsTheory.local_region_def] >> rpt strip_tac >>

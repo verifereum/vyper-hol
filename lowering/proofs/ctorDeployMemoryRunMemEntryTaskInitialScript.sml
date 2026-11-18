@@ -1,7 +1,7 @@
 Theory ctorDeployMemoryRunMemEntryTaskInitial
 Ancestors
   loweringStateRelDefs
-  ctorDeployMemoryRunMemEntryTaskInputs ctorDeployMemoryFrontier
+  ctorDeployMemoryRunMemEntryTaskInputs ctorDeployMemoryFrontier allocaFrontierRoom
   ctorDeployImmBudget ctorDeployDefs e2eEntry o1PassContract venomMemProps
   allocaHistory compileEnv context finite_map fragGasPathMem
   ctorDeployMemoryRunMemEntryTaskRegistration ctorDeployMemoryRunMemEntryPrefix

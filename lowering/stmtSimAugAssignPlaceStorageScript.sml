@@ -39,6 +39,7 @@ Ancestors
   placeStore supportedTargets exprSimProps exprSimSource loweringPosts
   bodyAugPlaceTarget bodySimAugPlaceStore
   bodySimAugPlaceScopes bodySimAugPlaceMemory
+  vyperLocalAccessFrame[qualified,ignore_grammar]
   stmtSimAugAssignPlace targetPlaceLive targetPlaceSimCasesBase
   stmtSimAugAssignPlaceMemory gasOutcome gasSummary gasContext
   targetPlaceSimDefs
@@ -849,8 +850,8 @@ Proof
   >- simp[Once evaluate_def, bind_def, get_scopes_def, ignore_bind_def,
           type_check_def, assert_def, return_def, raise_def, AllCaseEqs(),
           target_root_def]
-  >- (PairCases_on `p` >> simp[Once evaluate_def] >>
-      metis_tac[aug_place_lookup_global_not_memory]) >>
+  >- (PairCases_on `p` >>
+      simp[Once evaluate_def, vyperLocalAccessFrameTheory.lookup_global_not_memory]) >>
   rpt strip_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, return_def, raise_def, AllCaseEqs()] >>

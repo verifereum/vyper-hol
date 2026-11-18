@@ -68,20 +68,12 @@ Datatype:
   | RawLogK eval_continuation
   | RawRevertK eval_continuation
   | SelfDestructK eval_continuation
-  | CreateK (type list) create_kind bool bool (num option) eval_continuation
-  | BlueprintPrefixK (type list) create_kind bool bool (expr list) eval_continuation
-  | BlueprintSuffixK (value list) eval_continuation
-  | RawCreatePrefixK (type list) bool bool (expr list) eval_continuation
-  | RawCreateArgsK (value list) (expr list) eval_continuation
-  | RawCreateSaltK (value list) (value list) eval_continuation
-  | ReadResultsK eval_continuation
+  | CreateK (type list) create_kind bool bool bool eval_continuation
   | IntCallK (nsid |-> type_args) nsid ((identifier # type) list) (expr list) type (stmt list) bool function_mutability eval_continuation
   | IntCallK1 (nsid |-> type_args) nsid ((identifier # type) list) (value list) (scope list) type (stmt list) bool function_mutability eval_continuation
   | IntCallK2 (scope list) type_value bool bool eval_continuation
   | ExprsK (expr list) eval_continuation
   | ExprsK1 value eval_continuation
-  | ExprResultsK (expr list) eval_continuation
-  | ExprResultsK1 eval_result eval_continuation
   | DoneK
 End
 
@@ -203,16 +195,9 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx10 (Call _ SelfDestructTarget es _) st k =
     eval_exprs_cps cx10 es st (SelfDestructK k) ∧
   eval_expr_cps cx10 (Call ty (CreateTarget kind has_salt rof _) es _) st k =
-    (case kind of
-       CreateFromBlueprint raw_args =>
-         eval_exprs_cps cx10 (TAKE (if has_salt then 4 else 3) es) st
-           (BlueprintPrefixK (MAP expr_type es) kind has_salt rof
-             (DROP (if has_salt then 4 else 3) es) k)
-     | RawCreate =>
-         eval_exprs_cps cx10 (TAKE 2 es) st
-           (RawCreatePrefixK (MAP expr_type es) has_salt rof (DROP 2 es) k)
-     | _ => eval_exprs_cps cx10 es st
-         (CreateK (MAP expr_type es) kind has_salt rof NONE k)) ∧
+    eval_exprs_cps cx10 (create_operand_order kind has_salt es) st
+      (CreateK (MAP expr_type es) kind has_salt rof
+         (blueprint_literal_offset cx10 has_salt es) k) ∧
   eval_expr_cps cx10 (Call _ (IntCall (ns, fn)) es _) st k =
     (case do
       type_check (no_recursion (ns, fn) cx10.stk) "recursion";
@@ -239,6 +224,7 @@ Termination
     | INL (cx,e,st,k) => expr_size e
     | INR (cx,es,st,k) => list_size expr_size es)’
   \\ rw[list_size_SUM_MAP, MAP_MAP_o, ETA_AX,
+        LENGTH_create_operand_order, SUM_MAP_create_operand_order,
         list_size_pair_size_map, builtin_args_length_ok_def, check_def, type_check_def,
         assert_def, LENGTH_EQ_NUM_compute] \\ rw[]
   \\ qmatch_goalsub_abbrev_tac `TAKE n es`
@@ -248,13 +234,6 @@ Termination
   \\ strip_tac \\ decide_tac
 End
 
-
-
-Definition eval_expr_results_cps_def:
-  eval_expr_results_cps cx [] st k = AK cx (ApplyResults []) st k ∧
-  eval_expr_results_cps cx (e::es) st k =
-    eval_expr_cps cx e st (ExprResultsK es k)
-End
 
 
 Definition eval_iterator_cps_def:
@@ -442,12 +421,6 @@ Definition apply_exc_def:
   apply_exc cx ex st (RawRevertK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SelfDestructK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CreateK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (BlueprintPrefixK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (BlueprintSuffixK _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (RawCreatePrefixK _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (RawCreateArgsK _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (RawCreateSaltK _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (ReadResultsK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK _ _ _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK1 _ _ _ _ prev _ _ _ _ k) =
     liftk (cx with stk updated_by TL) (K (ApplyExc ex)) (set_scopes prev st) k ∧
@@ -462,8 +435,6 @@ Definition apply_exc_def:
       k ∧
   apply_exc cx ex st (ExprsK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (ExprsK1 _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (ExprResultsK _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (ExprResultsK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st DoneK = AK cx (ApplyExc ex) st DoneK
 End
 
@@ -488,8 +459,6 @@ Definition apply_place_def:
 End
 
 Definition apply_tv_def:
-  apply_tv cx tv st (ExprResultsK es k) =
-    eval_expr_results_cps cx es st (ExprResultsK1 tv k) /\
   apply_tv cx tv st (AssignK t k) =
     liftk cx ApplyVal (read_result cx tv st) (AssignK t k) /\
   apply_tv cx tv st (BasePlaceSubscriptK e k) =
@@ -763,24 +732,8 @@ Definition apply_vals_def:
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
-  apply_vals cx prefix st
-      (BlueprintPrefixK arg_tys kind has_salt rof suffix k) =
-    (case check_create_blueprint has_salt prefix st of
-       (INR ex, st) => AK cx (ApplyExc ex) st k
-     | (INL code_size, st) =>
-         eval_expr_results_cps cx suffix st
-           (ReadResultsK (BlueprintSuffixK prefix
-             (CreateK arg_tys kind has_salt rof (SOME code_size) k)))) ∧
-  apply_vals cx suffix st (BlueprintSuffixK prefix k) =
-    AK cx (ApplyVals (prefix ++ suffix)) st k ∧
-  apply_vals cx prefix st (RawCreatePrefixK arg_tys has_salt rof es k) =
-    eval_expr_results_cps cx (TAKE (LENGTH es - (if has_salt then 1 else 0)) es) st
-      (RawCreateArgsK prefix (DROP (LENGTH es - (if has_salt then 1 else 0)) es)
-        (CreateK arg_tys RawCreate has_salt rof NONE k)) ∧
-  apply_vals cx salt st (RawCreateSaltK prefix args k) =
-    AK cx (ApplyVals (prefix ++ args ++ salt)) st k ∧
-  apply_vals cx vs st (CreateK arg_tys kind has_salt rof blueprint_size k) =
-    (case eval_create cx kind has_salt rof arg_tys vs blueprint_size st of
+  apply_vals cx vs st (CreateK arg_tys kind has_salt rof literal_offset k) =
+    (case eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st of
        (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx vs st DoneK = AK cx (ApplyVals vs) st DoneK ∧
@@ -801,14 +754,6 @@ End
 
 (* Captured arguments keep their locations until the caller stages values. *)
 Definition apply_results_def:
-  apply_results cx results st (ExprResultsK1 tv k) =
-    apply_results cx (tv::results) st k ∧
-  apply_results cx results st (ReadResultsK k) =
-    liftk cx ApplyVals (read_results cx results st) k ∧
-  apply_results cx results st (RawCreateArgsK prefix salt k) =
-    (case read_results cx results st of
-       (INR ex,st) => AK cx (ApplyExc ex) st k
-     | (INL vs,st) => eval_exprs_cps cx salt st (RawCreateSaltK prefix vs k)) ∧
   apply_results cx results st (ForK id tyv n body k) =
     (case do check (compatible_bound (Dynamic n) (LENGTH results)) "For too long";
              return results od st
@@ -1324,9 +1269,7 @@ Theorem eval_cps_aux:
  (∀cx g v st k. cont (assign_tuple_targets_cps cx g v st k) =
    cont (liftk cx (K Apply) (assign_tuple_targets cx g v st) k)) /\
  (∀cx gs vs st k. cont (assign_tuple_target_list_cps cx gs vs st k) =
-   cont (liftk cx (K Apply) (assign_tuple_target_list cx gs vs st) k)) /\
- (∀cx es st k. cont (eval_expr_results_cps cx es st k) =
-   cont (liftk cx ApplyResults (eval_expr_results cx es st) k))
+   cont (liftk cx (K Apply) (assign_tuple_target_list cx gs vs st) k))
 Proof
   ho_match_mp_tac evaluate_ind
   >> pure_rewrite_tac [liftk1]
@@ -2051,72 +1994,12 @@ Proof
     \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
           apply_exc_def, apply_vals_def, ignore_bind_def, bind_def])
   \\ conj_tac >- (
-    Cases_on `kind`
-    >- (
-      rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
-      \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
-      \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
-      \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
-            apply_exc_def, apply_vals_def, ignore_bind_def, bind_def]
-      \\ gvs[check_create_blueprint_state, CaseEq"prod", CaseEq"sum"]
-      \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
-      \\ qpat_x_assum `∀a b c d e f. _` drule_all
-      \\ strip_tac \\ gvs[]
-      \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
-      \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
-            apply_exc_def, apply_vals_def, ignore_bind_def, bind_def])
-    >- (
-      rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
-      \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
-      \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
-      \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
-            apply_exc_def, apply_vals_def])
-    >- (
-      rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
-      \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
-      \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
-      \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
-            apply_exc_def, apply_vals_def]
-      \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
-      \\ qpat_x_assum `∀a b c d e f. _` drule_all
-      \\ strip_tac \\ gvs[]
-      \\ CASE_TAC \\ gvs[]
-      \\ (reverse CASE_TAC >- (
-        gvs[]
-        \\ rw[Once OWHILE_THM, nextk_def, stepk_def, apply_exc_def]
-        \\ rw[Once OWHILE_THM, nextk_def, stepk_def, apply_exc_def]
-        \\ rw[Once OWHILE_THM, nextk_def, stepk_def, apply_exc_def]))
-      \\ gvs[]
-      \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
-            apply_results_def, liftk1]
-      \\ gvs[prod_CASE_rator, sum_CASE_rator]
-      \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
-      \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
-            apply_exc_def, apply_vals_def]
-      \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
-            apply_exc_def, apply_vals_def])
-    \\ rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
     \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
     \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
           apply_exc_def, apply_vals_def]
-    \\ qpat_x_assum `∀a b c. _` drule_all
-    \\ strip_tac \\ gvs[]
-    \\ CASE_TAC \\ gvs[]
-    \\ (reverse CASE_TAC >- (
-      gvs[] \\ rw[Once OWHILE_THM, nextk_def, stepk_def, apply_exc_def]
-      \\ rw[Once OWHILE_THM, nextk_def, stepk_def, apply_exc_def]))
-    \\ gvs[]
-    \\ rw[Once OWHILE_THM, nextk_def, stepk_def, apply_results_def]
-    \\ CASE_TAC \\ gvs[]
-    \\ (reverse CASE_TAC >- (
-      gvs[] \\ rw[Once OWHILE_THM, nextk_def, stepk_def, apply_exc_def]))
-    \\ gvs[]
-    \\ qpat_x_assum `∀a b c d e f g h i. _` drule_all
-    \\ strip_tac \\ gvs[]
     \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
-    \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
-          apply_exc_def, apply_vals_def]
     \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
           apply_exc_def, apply_vals_def])
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, return_def] (* eval_exprs [] *)
@@ -2196,24 +2079,7 @@ Resume eval_cps_aux[Places]:
   >> conj_tac >- rw[assign_tuple_targets_cps_def, evaluate_def, return_def]
   >> conj_tac >- suspend "TupleStoresCons"
   >> conj_tac >- rw[assign_tuple_targets_cps_def, evaluate_def, raise_def]
-  >> conj_tac >- rw[assign_tuple_targets_cps_def, evaluate_def, raise_def]
-  >> conj_tac >- rw[eval_expr_results_cps_def, evaluate_def, return_def]
-  >> suspend "ExprResultsCons"
-QED
-
-Resume eval_cps_aux[ExprResultsCons]:
-  rw[eval_expr_results_cps_def, evaluate_def, bind_def]
-  >> CASE_TAC >> gvs[cont_def] >> reverse CASE_TAC
-  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[Once OWHILE_THM, stepk_def, apply_tv_def]
-  >> qpat_x_assum `∀a b c. _` drule_all >> rw[]
-  >> CASE_TAC >> reverse CASE_TAC
-  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[return_def]
-  >> rw[Once OWHILE_THM, stepk_def, apply_results_def]
-  >> rw[Once OWHILE_THM, SimpRHS, stepk_def, apply_results_def]
-  >> gvs[apply_results_def]
-  >> rw[Once OWHILE_THM, stepk_def]
+  >> rw[assign_tuple_targets_cps_def, evaluate_def, raise_def]
 QED
 
 Resume eval_cps_aux[BasePlaceAttribute]:
@@ -2294,9 +2160,7 @@ Theorem eval_cps_mutual:
  (∀cx g v st k. cont (assign_tuple_targets_cps cx g v st k) =
    cont (liftk cx (K Apply) (assign_tuple_targets cx g v st) k)) /\
  (∀cx gs vs st k. cont (assign_tuple_target_list_cps cx gs vs st k) =
-   cont (liftk cx (K Apply) (assign_tuple_target_list cx gs vs st) k)) /\
- (∀cx es st k. cont (eval_expr_results_cps cx es st k) =
-   cont (liftk cx ApplyResults (eval_expr_results cx es st) k))
+   cont (liftk cx (K Apply) (assign_tuple_target_list cx gs vs st) k))
 Proof
   rpt conj_tac >> metis_tac[eval_cps_aux]
 QED

@@ -306,8 +306,7 @@ Theorem typed_guarded_assignment_immutable_mutual[local]:
       targets /\
     ~supported_assignments_exists expr_internal_call_root targets /\
     assign_tuple_target_list cx targets vs es = (res,es') ==>
-    lookup_immutable cx es' src name = lookup_immutable cx es src name) /\
-  (!(cx:evaluation_context) (es:expr list). T)
+    lookup_immutable cx es' src name = lookup_immutable cx es src name)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >>
   rpt (gen_tac ORELSE disch_then (MAP_EVERY assume_tac o CONJUNCTS))

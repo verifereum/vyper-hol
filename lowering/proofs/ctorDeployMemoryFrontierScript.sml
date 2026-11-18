@@ -3,7 +3,7 @@
  * starts it above the immutables region, which it addresses as a fixed
  * region at offset 0.
  *
- * alloca_frontier_inv_from k is allocaFrontierBound's alloca_frontier_inv
+ * alloca_frontier_inv_from k is the shared alloca frontier invariant
  * with the budget raised by k, and is proved closed the same way.  The
  * other theorems take a unit that passed lowering_context_ok, with its
  * entry function, and give the S3 conjuncts the O1 pipeline's source
@@ -12,7 +12,7 @@
  * frontier's headroom.
  *
  * TOP-LEVEL:
- *   alloca_frontier_inv_from, alloca_frontier_inv_from_closed,
+ *   alloca_frontier_inv_from_closed,
  *   alloca_frontier_inv_from_entry
  *   lowered_unit_raw_memory_ok_from, lowered_unit_dload_headroom_ok_from,
  *   lowered_unit_dload_offset_ok, lowered_unit_ptr_taint
@@ -22,7 +22,7 @@
  *)
 Theory ctorDeployMemoryFrontier
 Ancestors
-  allocaFrontierBound allocaBudgetProps contextCodegenRel
+  allocaFrontierRoom allocaFrontierBound allocaBudgetProps contextCodegenRel
   contextCodegenRelProps fcgPostorder fcgCorrectnessProof fcgDefs
   vyperCompiler venomWf venomExecSemantics venomInst venomState
   memSafeRun ptrSafeRun ptrOkCheck ptrDiscipline unitMemInv
@@ -31,18 +31,6 @@ Ancestors
   finite_map list pred_set relation arithmetic
 
 (* ===== The frontier from k ===== *)
-
-Definition alloca_frontier_inv_from_def:
-  alloca_frontier_inv_from k ctx fn (inst:instruction) s <=>
-    lookup_function fn.fn_name ctx.ctx_functions = SOME fn /\
-    (!g. TC (fn_directly_calls ctx) fn.fn_name g ==>
-         ~TC (fn_directly_calls ctx) g g) /\
-    s.vs_alloca_next + remaining_alloca_budget (fn_insts fn) s +
-    CARD {g | TC (fn_directly_calls ctx) fn.fn_name g} *
-      SUM (MAP alloca_size (FILTER (\i. i.inst_opcode = ALLOCA)
-        (FLAT (MAP fn_insts ctx.ctx_functions)))) <=
-    k + unit_alloca_budget ctx
-End
 
 Theorem alloca_frontier_inv_from_step[local]:
   ctx_inst_ids_distinct ctx /\ alloca_frontier_inv_from k ctx fn inst s /\

@@ -23,11 +23,7 @@ Theorem effect_free_source_mutual:
   (!cx:evaluation_context. !bt:base_assignment_target. T) /\
   (!cx:evaluation_context. !bt:base_assignment_target. T) /\
   (!cx:evaluation_context. !g:assignment_target. !v:value. T) /\
-  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T) /\
-  (!cx args. !es result es'.
-    ~supported_exprs_exists expr_effect_root args /\ eval_expr_results cx args es = (result,es') ==>
-    es' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
-    es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)
+  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   simp[supported_expr_exists_def, expr_effect_root_def]
@@ -46,8 +42,6 @@ Proof
   >- suspend "typebuiltin"
   >- (simp[evaluate_def, return_def])
   >- suspend "exprs_cons"
-  >- (simp[evaluate_def, return_def])
-  >> suspend "results_cons"
 QED
 
 Resume effect_free_source_mutual[ifexp]:
@@ -100,11 +94,6 @@ Resume effect_free_source_mutual[exprs_cons]:
   qpat_x_assum `!a b c d f g. _` (drule_all_then assume_tac) >>
   rpt (qpat_x_assum `!a b c. _` (drule_then assume_tac)) >> metis_tac[]
 QED
-Resume effect_free_source_mutual[results_cons]:
-  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  rpt (qpat_x_assum `!a b c. _` (drule_then assume_tac)) >> metis_tac[]
-QED
-
 Resume effect_free_source_mutual[builtin_len]:
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>

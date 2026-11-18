@@ -18,13 +18,10 @@ Theorem nonmutating_scopes_mutual[local]:
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
-  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
-  (!cx es cenv s v s'. ~exprs_can_mutate cenv es /\
-    eval_expr_results cx es s = (INL v,s') ==> s'.scopes = s.scopes)
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
 Proof
   simp[] >> rpt conj_tac >>
-  metis_tac[eval_expr_no_mutation_scopes, eval_exprs_no_mutation_scopes,
-            eval_expr_results_no_mutation_scopes]
+  metis_tac[eval_expr_no_mutation_scopes, eval_exprs_no_mutation_scopes]
 QED
 
 Theorem not_mutate_expr_scopes:

@@ -721,19 +721,9 @@ Proof
   `o1_pre 7 (stage 7) (stage 8)` by simp[o1_pre_def] >>
   `EVERY wf_ssa (stage 7).ctx_functions` by fs[o1_fn_row_def, EVERY_MEM] >>
   drule_all dft_stage_fn_rel >> strip_tac >>
-  `(stage 8).ctx_functions = MAP dft_fn (stage 7).ctx_functions` by
-    metis_tac[dft_ctx_functions_map] >>
-  `EVERY wf_function (stage 7).ctx_functions` by
-    metis_tac[o1_ctx_shape_wf_functions] >>
-  drule_all dft_ctx_wf_functions >> strip_tac >>
-  drule dft_ctx_block_ids_distinct >> strip_tac >>
-  mp_tac (Q.INST [`ctx:venom_context` |-> `stage 8`, `s:venom_state` |-> `vs_out`]
-            gas_oracle_from_list) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  mp_tac (Q.INST [`ctx:venom_context` |-> `stage 7`, `s:venom_state` |-> `vs_out`]
-            gas_oracle_to_list) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  rename1 `run_context _ (stage 7) (vs_out with vs_gas_readings := rds)` >>
+  drule_all dft_ctx_gas_replay_witness >>
+  disch_then (qspec_then `vs_out`
+    (qx_choosel_then [`orc`, `rds`] strip_assume_tac)) >>
   qabbrev_tac `v7 = vs_out with vs_gas_readings := rds` >>
   qabbrev_tac `vi = v7 with <|vs_fmp := fmp; vs_initial_fmp := fmp|>` >>
   qexists_tac `vi` >> conj_tac

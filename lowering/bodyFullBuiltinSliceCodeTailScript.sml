@@ -16,76 +16,6 @@ Ancestors bodyPtrDefs[qualified,ignore_grammar]
 Libs
   horizonTypeLib
 
-Theorem slice_code_output_resources_at_horizon:
-  stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s ==>
-  compile_slice_out_buf N sa = ((out,data),sc) /\
-  emit_void opc ops sc = ((),sd) /\
-  emit_void MSTORE [out;cnt] sd = ((),sb) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\
-  0 < n /\ n < dimword (:256) /\ 32+n <= N /\ N < dimword (:256) /\
-  LENGTH bytes = n /\
-  eval_operand start s = SOME wa /\ eval_operand cnt s = SOME (n2w n) /\
-  op_taint tn start = {} /\ op_taint tn cnt = {} /\
-  (!x. (start = Var x \/ cnt = Var x) ==> not_fresh_at sa x) /\
-  (((opc = CALLDATACOPY \/ opc = CODECOPY) /\ ops = [data;start;cnt]) \/
-   (opc = EXTCODECOPY /\ ops = [addr;data;start;cnt] /\
-    (?aw. eval_operand addr s = SOME aw) /\ op_taint tn addr = {} /\
-    (!x. addr = Var x ==> not_fresh_at sa x))) /\
-  (!v wd. v.vs_accounts = s.vs_accounts /\ v.vs_call_ctx = s.vs_call_ctx /\
-    v.vs_code = s.vs_code /\
-    eval_operand data v = SOME wd /\ eval_operand start v = SOME wa /\
-    eval_operand cnt v = SOME (n2w n) /\
-    (opc = EXTCODECOPY ==> eval_operand addr v = eval_operand addr s) ==>
-    step_inst_base (mk_inst sc.cs_next_id opc ops []) v =
-      OK (write_memory_with_expansion (w2n wd) bytes v)) /\
-  alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?p w t HG tm.
-    out = Var p /\ not_fresh_at sb p /\
-    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-      (s,G,tn) [] (OK t,HG,tm)) /\
-    t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
-    lookup_var p t = SOME w /\ ptr_covers HG tm p t N /\
-    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,N) /\
-    w2n w+N < dimword (:256) /\ w2n w+N <= t.vs_alloca_next /\
-    val_in_memory (BaseTV (BytesT (Dynamic bound))) (BytesV bytes)
-      (w2n w) t.vs_memory /\
-    (!i. w2n w <= i /\ i < w2n w+32+n ==> i NOTIN tm.t_mem) /\
-    (!H':(bool # bytes32 # type_value) list # num list.
-      stmt_state_rel H' ctx func cenv cx es s ==>
-       stmt_state_rel H' ctx func cenv cx es t) /\
-    alloca_history func t /\ allocas_from lo t /\ lo <= t.vs_alloca_next /\
-    (!x. not_fresh_at sa x ==>
-      lookup_var x t = lookup_var x s /\ FLOOKUP HG x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x)) /\
-    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
-      FLOOKUP t.vs_allocas aid = SOME e) /\
-    (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\
-      aid < sa.cs_next_id ==>
-      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
-    (!name b len. local_region cenv es.scopes s name b len ==>
-      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory /\
-      (!i. b <= i /\ i < b+len /\ i IN tm.t_mem ==> i IN tn.t_mem)) /\
-    mem_bytes_at 0 lo t.vs_memory = mem_bytes_at 0 lo s.vs_memory /\
-    (!i. i < lo /\ i IN tm.t_mem ==> i IN tn.t_mem) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    ghost_kept_at lo cenv es sa G tn s HG tm /\
-    locals_kept cenv es es s t /\ pure_frame cenv func es sa s t /\
-    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_immutables = s.vs_immutables /\
-    s.vs_alloca_next <= t.vs_alloca_next
-Proof
-  strip_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  irule (bytestring_external_output_full_resources
-    |> horizonTypeLib.at_horizon_named "H0" |> horizonTypeLib.at_horizon) >>
-  simp[] >> conj_tac >- (qexistsl_tac [`addr`,`cnt`,`opc`,`ops`,`sd`,`start`,`wa`] >> simp[] >> first_assum ACCEPT_TAC) >>
-  qexists_tac `storage_trace_horizon es.storage_trace` >> simp[]
-QED
-
 Theorem slice_code_tail_full:
   emit_op query_op query_ops sa = (limit,sc) /\
   compile_assert_slice_bounds start cnt limit sc = ((),sd) /\
@@ -401,7 +331,9 @@ Proof
 QED
 
 Resume slice_code_tail_full[copy_and_post]:
-  drule slice_code_output_resources_at_horizon >>
+  qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ zb`
+    (mp_then Any mp_tac (bytestring_external_output_full_resources
+      |> horizonTypeLib.at_horizon_named "H0" |> horizonTypeLib.at_horizon)) >>
   disch_then (drule_at (Pat `compile_slice_out_buf _ _ = _`)) >>
   disch_then (drule_at (Pat `emit_void _ _ _ = _`)) >>
   disch_then (drule_at (Pat `emit_void _ _ _ = _`)) >>

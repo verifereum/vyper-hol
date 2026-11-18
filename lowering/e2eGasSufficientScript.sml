@@ -464,14 +464,10 @@ Proof
             impl_tac >- (qexists_tac `[]` >> simp[]) >>
             disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
          drule_all call_gas_static_no_abort >> metis_tac[]) >>
-     `~vs.vs_call_ctx.cc_static` by
-       (qpat_assum `~tx.is_static` mp_tac >>
-        qpat_assum `initial_venom_state_rel tops am tx vs` mp_tac >>
-        POP_ASSUM_LIST (K ALL_TAC) >>
-        PURE_REWRITE_TAC [initial_venom_state_rel_def, venom_env_rel_def,
-                          loweringStateRelDefsTheory.call_ctx_rel_def] >>
-        strip_tac >> strip_tac >> fs[]) >>
-     `o1_run_state_ok vs` by simp[o1_run_state_ok_def] >>
+     `o1_run_state_ok vs` by
+       (qpat_x_assum `initial_venom_state_rel tops am tx vs` mp_tac >>
+        simp[initial_venom_state_rel_def, venom_env_rel_def,
+             loweringStateRelDefsTheory.call_ctx_rel_def, o1_run_state_ok_def]) >>
      qspecl_then [`D`, `0`, `rpolicy`, `unit`, `out`, `vs`,
                   `vs.vs_initial_fmp`] mp_tac run_venom_pipeline_correct >>
      impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>

@@ -348,6 +348,25 @@ Proof
   simp[exprs_bound_TAKE, exprs_bound_DROP]
 QED
 
+Theorem exprs_bound_APPEND:
+  ∀xs ys. exprs_bound ts (xs ++ ys) = exprs_bound ts xs + exprs_bound ts ys
+Proof
+  Induct >> simp[bound_def]
+QED
+
+Theorem exprs_bound_create_operand_order:
+  exprs_bound ts (create_operand_order kind has_salt es) = exprs_bound ts es
+Proof
+  `∀n xs. exprs_bound ts (DROP n xs) + exprs_bound ts (TAKE n xs) =
+          exprs_bound ts xs`
+    by metis_tac[exprs_bound_APPEND, TAKE_DROP, ADD_COMM] >>
+  Cases_on `kind` >> Cases_on `es` >>
+  simp[create_operand_order_def, bound_def, exprs_bound_APPEND] >>
+  rename1 `_ :: t` >> Cases_on `t` >>
+  simp[create_operand_order_def, bound_def, exprs_bound_APPEND] >>
+  metis_tac[ADD_COMM, ADD_ASSOC]
+QED
+
 (* Extract callable functions - for termination proof *)
 (* Internal and Deploy are separate so we can order Internal before Deploy *)
 Definition dest_Internal_Fn_def:
@@ -1812,33 +1831,14 @@ Definition evaluate_def:
     od else return ();
     raise HaltException
   od ∧
-  (* Blueprint validation interrupts the runtime operand layout before ctor
-     arguments, retaining the modular copy size even if those arguments deploy
-     code at a previously empty target. *)
-  eval_expr cx (Call ty (CreateTarget kind has_salt rof _) es _) =
-    (case kind of
-     | CreateFromBlueprint raw_args => do
-         prefix <- eval_exprs cx (TAKE (if has_salt then 4 else 3) es);
-         code_size <- check_create_blueprint has_salt prefix;
-         results <- eval_expr_results cx (DROP (if has_salt then 4 else 3) es);
-         suffix <- read_results cx results;
-         eval_create cx kind has_salt rof (MAP expr_type es)
-           (prefix ++ suffix) (SOME code_size)
-       od
-     | RawCreate => do
-         prefix <- eval_exprs cx (TAKE 2 es);
-         ctor_es <<- DROP 2 es;
-         nargs <<- LENGTH ctor_es - (if has_salt then 1 else 0);
-         results <- eval_expr_results cx (TAKE nargs ctor_es);
-         args <- read_results cx results;
-         salt <- eval_exprs cx (DROP nargs ctor_es);
-         eval_create cx kind has_salt rof (MAP expr_type es)
-           (prefix ++ args ++ salt) NONE
-       od
-     | _ => do
-         vs <- eval_exprs cx es;
-         eval_create cx kind has_salt rof (MAP expr_type es) vs NONE
-       od) ∧
+  (* Each operand is read as it is evaluated, in the pinned compiler's order:
+     constructor arguments before value=, salt= and code_offset=, and a
+     blueprint's code checked after them all. *)
+  eval_expr cx (Call ty (CreateTarget kind has_salt rof _) es _) = do
+    vs <- eval_exprs cx (create_operand_order kind has_salt es);
+    eval_create_operands cx kind has_salt rof (MAP expr_type es)
+      (blueprint_literal_offset cx has_salt es) vs
+  od ∧
   eval_exprs cx [] = return [] ∧
   eval_exprs cx (e::es) = do
     tv <- eval_expr cx e;
@@ -1879,13 +1879,7 @@ Definition evaluate_def:
     assign_tuple_targets cx g v;
     assign_tuple_target_list cx gs vs
   od ∧
-  assign_tuple_target_list cx gs vs = raise (Error (TypeError "TupleTarget length")) ∧
-  eval_expr_results cx [] = return [] ∧
-  eval_expr_results cx (e::es) = do
-    res <- eval_expr cx e;
-    rest <- eval_expr_results cx es;
-    return (res::rest)
-  od
+  assign_tuple_target_list cx gs vs = raise (Error (TypeError "TupleTarget length"))
 Termination
   qexists_tac `measure (λx. case x of
     INL (cx,s) => 4 * stmt_bound (remcode cx) s
@@ -1898,8 +1892,7 @@ Termination
   | INR (INR (INR (INR (INR (INR (INL (cx,t))))))) => 4 * base_target_bound (remcode cx) t
   | INR (INR (INR (INR (INR (INR (INR (INL (cx,t)))))))) => 4 * base_target_bound (remcode cx) t + 1
   | INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,g,v))))))))) => 4 * target_bound (remcode cx) g + 2
-  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,gs,vs)))))))))) => 4 * targets_bound (remcode cx) gs + 2
-  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,es)))))))))) => 4 * exprs_bound (remcode cx) es)`
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,gs,vs))))))))) => 4 * targets_bound (remcode cx) gs + 2)`
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
   \\ simp_tac pure_ss [prim_recTheory.measure_def, relationTheory.inv_image_def,
@@ -1954,7 +1947,8 @@ Termination
   (* All remaining calls consume a slice of the original operands. *)
   >> irule LESS_EQ_LESS_TRANS
   >> qexists_tac `exprs_bound (remcode cx) es`
-  >> simp[exprs_bound_TAKE_DROP, exprs_bound_TAKE, exprs_bound_DROP, DROP_DROP_T]
+  >> simp[exprs_bound_TAKE_DROP, exprs_bound_TAKE, exprs_bound_DROP, DROP_DROP_T,
+          exprs_bound_create_operand_order]
 End
 
 Theorem eval_exprs_length:
@@ -1966,16 +1960,6 @@ Proof
   \\ gvs[CaseEq"prod", CaseEq"sum"]
   \\ first_x_assum irule
   \\ goal_assum drule
-QED
-
-Theorem eval_expr_results_length:
-  !es cx st results rt.
-    eval_expr_results cx es st = (INL results,rt) ==>
-    LENGTH results = LENGTH es
-Proof
-  Induct >> rw[evaluate_def, return_def, bind_def] >>
-  gvs[CaseEq "prod", CaseEq "sum"] >> first_x_assum irule >>
-  goal_assum drule
 QED
 
 (* An iteration reads its element before binding the loop variable. *)

@@ -524,12 +524,7 @@ Theorem eval_no_halt_every[local]:
                 get_module_code cx NONE = SOME tops /\
                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_atargets gs) ==>
      !st st'. assign_tuple_target_list cx gs vs st = (INR HaltException, st') ==>
-              F) /\
-  (!cx es. EVERY (\e. ~supported_expr_exists expr_halt_root e /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) es ==>
-     !st st'. eval_expr_results cx es st = (INR HaltException, st') ==> F)
+              F)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac
   >~ [`Call _ (IntCall (src_id_opt,fn)) es _`] >- suspend "IntCall"
