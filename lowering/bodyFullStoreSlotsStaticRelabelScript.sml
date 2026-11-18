@@ -35,6 +35,7 @@ Proof
   simp[access_ok_def, taint_ok_def, about_to_revert_def,
        frag_eval_operand_control] >>
   gvs[MEM, mem_safe_step_non_invoke, inst_mem_below_frontier_def,
+      inst_mem_below_frontiers_def,
       inst_dload_in_section_def, source_memory_read_ranges_def,
       source_memory_write_ranges_def, frag_eval_operand_control] >>
   metis_tac[]
