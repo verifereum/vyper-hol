@@ -46,7 +46,7 @@ or check and is easy to miss:
   `vyper_call_correct` whenever its executing bytecode differs from the code
   installed at `tx.target`, which is the usual proxy and delegation case; the
   conjunct compares only bytecode, so a frame whose executing bytecode equals
-  that code (a self-DELEGATECALL, say) is covered. The conjunct makes the
+  that code (a self-DELEGATECALL, say) is not excluded by it. The conjunct makes the
   target an account with installed (nonempty) code, so a nested CREATE cannot
   land on it, bounds the length of the executing
   code (`call_state_rel_code_length`), and ties the account code the source reads
