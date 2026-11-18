@@ -11,6 +11,7 @@ Ancestors
   gasShadowStmtEnv externalCallSelected supportedProgram supportedProgramProps supportedNames
   loweringShapeSource gasShadowRuntimeBodies gasShadowRuntimeOps
   gasShadowModuleOps gasShadowCompileContext gasShadowModuleDefs gasShadowUnitGuards
+  nonreentrantEntryPath
 
 val _ = Parse.hide "body";
 
@@ -112,19 +113,21 @@ QED
    - The shadow stmts_env pairs with the actual one through a
      gas_shadow_compiles result for stmts_env (FST equal: same cenv').
    - gas_shadow_lookup_function gives the shadow partner of func. *)
-Theorem runtime_selected_body_shadow_with_shadow:
-  !tops rpolicy unit lbl ce pos mincd pay key ut iv fbody rt st cenv sa st'
+Theorem runtime_selected_body_shadow_with_shadow_nr:
+  !tops rpolicy unit lbl ce pos mincd pay nr key ut iv fbody rt st cenv sa sl st'
    bindings ctx cx env env' ret.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     runtime_selected_body_start tops rpolicy
-      (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) st /\
+      (lbl,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt) st /\
     compile_register_positional_args ce pos 4 st = (cenv,sa) /\
-    compile_guarded_body cenv F key ut iv fbody rt sa = ((),st') /\
+    (if nr then compile_nonreentrant_lock key ut iv else comp_return ()) sa =
+      ((),sl) /\
+    compile_guarded_body cenv nr key ut iv fbody rt sa = ((),st') /\
     supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
     rt = (if ret = NoneT then NONE else SOME ret) /\
     type_stmts env ret fbody = SOME env' ==>
-    ?func shadow_ctx shadow_func cenv' sb shadow_sa shadow_sb shadow_unit.
+    ?func shadow_ctx shadow_func cenv' sb shadow_sl shadow_sb shadow_unit.
       runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
       shadow_ctx = shadow_unit.cu_context /\
       lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
@@ -132,12 +135,12 @@ Theorem runtime_selected_body_shadow_with_shadow:
       gas_shadow_function func shadow_func /\
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
-      stmts_env cenv NoLoop ret fbody sa = (cenv',sb) /\
-      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
+      stmts_env cenv NoLoop ret fbody sl = (cenv',sb) /\
+      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl =
         (cenv',shadow_sb) /\
-      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
-      fn_has_code sa sb func /\ fn_has_code sb st' func /\
-      fn_has_code shadow_sa shadow_sb shadow_func
+      gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
+      fn_has_code sl sb func /\ fn_has_code sb st' func /\
+      fn_has_code shadow_sl shadow_sb shadow_func
 Proof
   rpt gen_tac >> strip_tac >>
   `runtime_bodies_shape_ok tops` by
@@ -160,7 +163,7 @@ Proof
     (build_selectors (type_env tops) exts)` by
     rewrite_tac[build_selectors_fn_labels] >>
   `EVERY external_fn_shape_ok
-    (pre ++ (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt)::post)` by
+    (pre ++ (lbl,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt)::post)` by
     (`EVERY external_fn_shape_ok
        (MAP (set_external_package_target rpolicy.rpol_target o
          package_external_fn tops T (K global_nonreentrant_slot)) exts)` by
@@ -208,12 +211,11 @@ Proof
   rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
   qpat_x_assum `(_,_) = fresh_label _ _` (assume_tac o SYM) >>
   drule_all run_lowering_pinned_body_interval >> strip_tac >>
-  drule guarded_body_code >> strip_tac >>
-  `?cenv'. stmts_env cenv NoLoop ret fbody sa = (cenv',sb)` by
+  drule_all guarded_body_code_from_registration >> strip_tac >> gvs[] >>
+  rename1 `compile_stmts cenv NoLoop _ fbody sl = ((),sb)` >>
+  `?cenv'. stmts_env cenv NoLoop ret fbody sl = (cenv',sb)` by
     (irule guarded_body_stmts_env >>
      metis_tac[]) >>
-  `fn_has_code sa sb func /\ fn_has_code sb st' func` by
-    metis_tac[fn_has_code_split] >>
   qspec_then `pre` mp_tac gas_shadow_compiles_compile_external_fn_bodies >>
   rewrite_tac[gas_shadow_compiles_def] >>
   disch_then (qspecl_then [`dispatch_st`, `dispatch_st`] mp_tac) >>
@@ -240,19 +242,29 @@ Proof
   Cases_on `compile_register_positional_args ce pos 4 shadow_st` >>
   rename1 `_ = (shadow_cenv,shadow_sa)` >> simp[] >> strip_tac >> gvs[] >>
   `gas_shadow_state
-     (SND (compile_guarded_body cenv F key ut iv fbody
+     (SND (compile_guarded_body cenv nr key ut iv fbody
        (if ret = NoneT then NONE else SOME ret) sa))
-     (SND (compile_guarded_body cenv F key ut iv (MAP gas_shadow_stmt fbody)
+     (SND (compile_guarded_body cenv nr key ut iv (MAP gas_shadow_stmt fbody)
        (if ret = NoneT then NONE else SOME ret) shadow_sa))` by
     (irule (cj 2 (REWRITE_RULE [gas_shadow_compiles_def]
        gas_shadow_compiles_compile_guarded_body)) >> simp[]) >>
-  Cases_on `compile_guarded_body cenv F key ut iv (MAP gas_shadow_stmt fbody)
+  Cases_on `compile_guarded_body cenv nr key ut iv (MAP gas_shadow_stmt fbody)
     (if ret = NoneT then NONE else SOME ret) shadow_sa` >>
   rename1 `_ = (v,shadow_end)` >> Cases_on `v` >> gvs[] >>
+  `gas_shadow_compiles
+    (if nr then compile_nonreentrant_lock key ut iv else comp_return ())
+    (if nr then compile_nonreentrant_lock key ut iv else comp_return ())` by
+    (Cases_on `nr` >> simp[gas_shadow_compiles_nonreentrant_lock,
+                           gas_shadow_compiles_return]) >>
+  Cases_on `(if nr then compile_nonreentrant_lock key ut iv
+             else comp_return ()) shadow_sa` >>
+  rename1 `_ = (answer,shadow_sl)` >> Cases_on `answer` >>
+  qpat_x_assum `gas_shadow_compiles _ _` (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
+  disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >> strip_tac >>
   qspecl_then [`fbody`, `cenv`, `NoLoop`, `ret`] mp_tac gas_shadow_stmts_env >>
   rewrite_tac[gas_shadow_compiles_def] >>
-  disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
-  Cases_on `stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa` >>
+  disch_then (qspecl_then [`sl`, `shadow_sl`] mp_tac) >> simp[] >>
+  Cases_on `stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl` >>
   rename1 `_ = (ec,shadow_sb)` >> simp[] >> strip_tac >> gvs[] >>
   qmatch_asmsub_abbrev_tac `run_lowering sels packs ips fall rpolicy 0 0 [] info "__entry"` >>
   `OPTREL gas_shadow_unit (SOME unit)
@@ -297,13 +309,13 @@ Proof
        irule stmtsEnvRetTyTheory.stmts_env_ret_ty >> metis_tac[]) >> simp[]) >>
   `compile_stmts cenv NoLoop
      (case (if ret = NoneT then NONE else SOME ret) of
-        NONE => BaseT BoolT | SOME t => t) (MAP gas_shadow_stmt fbody) shadow_sa =
+        NONE => BaseT BoolT | SOME t => t) (MAP gas_shadow_stmt fbody) shadow_sl =
       ((),shadow_sb)` by
     (simp[stmtSimPropsTheory.compile_stmts_env] >> gvs[]) >>
-  qpat_x_assum `compile_guarded_body _ _ _ _ _ (MAP _ _) _ _ = _`
-    (mp_tac o MATCH_MP guarded_body_code) >> strip_tac >>
+  qpat_assum `compile_guarded_body _ _ _ _ _ (MAP _ _) _ _ = _`
+    (fn built => qpat_assum `fn_has_code shadow_sa shadow_end func'`
+      (strip_assume_tac o MATCH_MP guarded_body_code_from_registration o CONJ built)) >>
   gvs[] >> rename1 `gas_shadow_state sb shadow_sb` >>
-  `fn_has_code shadow_sa shadow_sb func'` by metis_tac[fn_has_code_split] >>
   `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
     fs[gas_shadow_unit_def] >>
   `gas_shadow_function func func'` by
@@ -320,7 +332,41 @@ Proof
      gvs[runtime_gas_shadow_unit_def, markerTheory.Abbrev_def] >>
      pure_rewrite_tac [gas_shadow_external_package_def, GSYM APPEND_ASSOC, APPEND] >>
      first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`func'`, `shadow_sa`, `shadow_sb`, `shadow_unit`] >> simp[]
+  qexistsl_tac [`func'`, `shadow_sl`, `shadow_sb`, `shadow_unit`] >> simp[]
+QED
+
+Theorem runtime_selected_body_shadow_with_shadow:
+  !tops rpolicy unit lbl ce pos mincd pay key ut iv fbody rt st cenv sa st'
+   bindings ctx cx env env' ret.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    runtime_selected_body_start tops rpolicy
+      (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) st /\
+    compile_register_positional_args ce pos 4 st = (cenv,sa) /\
+    compile_guarded_body cenv F key ut iv fbody rt sa = ((),st') /\
+    supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
+    rt = (if ret = NoneT then NONE else SOME ret) /\
+    type_stmts env ret fbody = SOME env' ==>
+    ?func shadow_ctx shadow_func cenv' sb shadow_sa shadow_sb shadow_unit.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      shadow_ctx = shadow_unit.cu_context /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      gas_shadow_context unit.cu_context shadow_ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      stmts_env cenv NoLoop ret fbody sa = (cenv',sb) /\
+      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
+        (cenv',shadow_sb) /\
+      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+      fn_has_code sa sb func /\ fn_has_code sb st' func /\
+      fn_has_code shadow_sa shadow_sb shadow_func
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`tops`,`rpolicy`,`unit`,`lbl`,`ce`,`pos`,`mincd`,`pay`,
+    `F`,`key`,`ut`,`iv`,`fbody`,`rt`,`st`,`cenv`,`sa`,`sa`,`st'`,
+    `bindings`,`ctx`,`cx`,`env`,`env'`,`ret`] runtime_selected_body_shadow_with_shadow_nr) >>
+  simp[comp_return_def]
 QED
 
 Theorem runtime_selected_body_shadow:

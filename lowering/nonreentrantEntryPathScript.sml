@@ -662,9 +662,9 @@ QED
 
 (* Fragments of the compiled guarded body entered after registration. *)
 Theorem guarded_body_code_from_registration:
-  compile_guarded_body cenv nr nkey T iv stmts rt sa = ((),st') /\
+  compile_guarded_body cenv nr nkey ut iv stmts rt sa = ((),st') /\
   fn_has_code sa st' func ==>
-  ?sl se. (if nr then compile_nonreentrant_lock nkey T iv
+  ?sl se. (if nr then compile_nonreentrant_lock nkey ut iv
            else comp_return ()) sa = ((),sl) /\
           compile_stmts cenv NoLoop
             (case rt of SOME ty => ty | NONE => BaseT BoolT) stmts sl =
@@ -673,7 +673,7 @@ Theorem guarded_body_code_from_registration:
           fn_has_code se st' func
 Proof
   strip_tac >>
-  Cases_on `(if nr then compile_nonreentrant_lock nkey T iv
+  Cases_on `(if nr then compile_nonreentrant_lock nkey ut iv
              else comp_return ()) sa` >>
   rename1 `_ = (answer,sl)` >> Cases_on `answer` >>
   Cases_on `compile_stmts cenv NoLoop
@@ -693,7 +693,7 @@ Proof
           comp_bind_def, comp_ignore_bind_def, comp_get_def]) >>
      simp[] >> Cases_on `block_is_terminated se`
      >- simp[comp_return_def, cs_extends_refl] >>
-     Cases_on `(if nr then compile_nonreentrant_unlock nkey T iv
+     Cases_on `(if nr then compile_nonreentrant_unlock nkey ut iv
                 else comp_return ()) se` >>
      rename1 `_ = (answer,su)` >> Cases_on `answer` >>
      simp[] >> strip_tac >>
