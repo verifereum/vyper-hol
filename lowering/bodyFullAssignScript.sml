@@ -4617,3 +4617,29 @@ Resume body_assign_snapshot_bytes_copy_endpoint[frame]:
 QED
 
 Finalise body_assign_snapshot_bytes_copy_endpoint
+
+Theorem body_assign_snapshot_positive_source_ready:
+  0 < type_memory_size tv /\
+  type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
+  eval_operand op u = SOME w /\
+  ptr_buf_ok ce e op Gu u /\
+  ptr_val_ok cx (post_value_type ce e) v op Gu tnu u /\
+  (type_memory_size tv = 0 \/ w2n w + type_memory_size tv <= u.vs_alloca_next) /\
+  stmt_state_rel H ctx func ce cx ee u ==>
+  ?xs. op = Var xs /\ lookup_var xs u = SOME w /\
+    ptr_covers Gu tnu xs u (type_memory_size tv) /\
+    w2n w + type_memory_size tv <= u.vs_alloca_next /\
+    w2n w + type_memory_size tv < dimword(:256) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `w2n w + type_memory_size tv <= u.vs_alloca_next` by decide_tac >>
+  `w2n w + type_memory_size tv < dimword (:256)` by
+    metis_tac[stmt_state_rel_alloca_room, alloca_room_next_lt, LESS_EQ_LESS_TRANS] >>
+  drule_then assume_tac stmt_state_rel_allocas_below_fmp >>
+  `op_taint tnu op = {}` by fs[ptr_val_ok_def] >>
+  `?xs. op = Var xs /\ ptr_covers Gu tnu xs u (type_memory_size tv)` by
+    (irule assignBasePtrBoundaryTheory.ptr_buf_ok_read_covers >>
+     simp[] >> qexistsl_tac [`ce`,`e`] >> simp[]) >>
+  qexists_tac `xs` >> gvs[eval_operand_def]
+QED
