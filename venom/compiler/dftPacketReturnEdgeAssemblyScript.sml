@@ -1745,11 +1745,10 @@ Theorem dft_packet_return_edge_clauses:
             gas_events_blocks F C7 root_sf (root_entry with vs_gas_readings := gs ++ tail) =
               FST (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail))))) /\
   (* The final packet join supplies the selected-cut projection on the retained tables. *)
-  (!rq rz cuts levels Mcut pms fuel gs tail events u.
+  (!a e bb bt ps xs ys rho hin h0 be hbe count front closed brest q z cuts levels Mcut fuel gs tail events u.
     FLOOKUP blocks (a,e) =
-      SOME (pbb,pbt,pps,pxs,pys,prho,pin,ph0,SOME (pbe,phbe),pn,OK b0,F,NONE) /\
-    FLOOKUP ms_tab (a,e) = SOME pms /\
-    rq < LENGTH pxs /\ rz = DROP (phi_prefix_length pbb.bb_instructions) pps ++ TAKE rq pxs /\
+      SOME (bb,bt,ps,xs,ys,rho,hin,h0,SOME (be,hbe),count,front,closed,brest) /\
+    q < LENGTH xs /\ z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs /\
     MAP (\(ai,ds,ei,qi,zi). ai) cuts =
       REVERSE (GENLIST (\i. DROP i a) (SUC (LENGTH a))) /\
     LENGTH cuts = LENGTH levels /\
@@ -1762,7 +1761,7 @@ Theorem dft_packet_return_edge_clauses:
           SOME (bbi,bti,psi,xsi,ysi,rhoi,ini,hi,bei,counti,fronti,closedi,resti) /\
         orderi = ds ++ ei::later /\
         (if SUC i = LENGTH cuts then
-          ai = a /\ ei = e /\ qi = rq /\ zi = rz
+          ai = a /\ ei = e /\ qi = q /\ zi = z
         else
           ?cid call_h b0 done_at_call child_entry ret.
             EL (SUC i) (MAP (\(aj,djs,ej,qj,zj). aj) cuts) = (ei,cid)::ai /\
@@ -1786,9 +1785,11 @@ Theorem dft_packet_return_edge_clauses:
     N <= fuel /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
     rooted_eval fuel C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
       (events,OK u) ==>
-    ?kgss. LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE rq pms) kgss /\
-      FOLDR (dft_exec_cons (fuel-e) C7) OK (TAKE rq pxs)
-        (pbe with vs_gas_readings := FLAT kgss ++ tail) = OK u) ==>
+    ?kgss.
+      LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+        (TAKE q (THE (FLOOKUP ms_tab (a,e)))) kgss /\
+      FOLDR (dft_exec_cons (fuel-e) C7) OK (TAKE q xs)
+        (be with vs_gas_readings := FLAT kgss ++ tail) = OK u) ==>
   ?acts' blocks' calls' ms_tab' es_tab' ks_tab' packet' raw_slots' sites' unused'.
     acts' = acts |+ (b,(csf,ctf,e,ent,cord,SOME (IntRet ir out),SOME out.vs_gas_readings)) /\
     blocks' = blocks |+
@@ -2712,8 +2713,11 @@ Proof
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
       disch_then (ACCEPT_TAC o SIMP_RULE (srw_ss()) [])) >>
       (* Read the selected cut back through the unchanged fields of the old tables. *)
-      qpat_assum `!rq rz cuts levels Mcut pms fuel gs tail events u. _`
-        (qspecl_then [`rq`,`rz`,`cuts`,`levels`,`Mcut`,`pms`,`B`,`gs0`,`tail0`,
+      qpat_assum `!a e bb bt ps xs ys rho hin h0 be hbe count front closed brest
+        q z cuts levels Mcut fuel gs tail events u. _`
+        (qspecl_then [`a`,`e`,`pbb`,`pbt`,`pps`,`pxs`,`pys`,`prho`,`pin`,`ph0`,
+          `pbe`,`phbe`,`pn`,`OK b0`,`F`,`NONE`,`rq`,`rz`,`cuts`,`levels`,`Mcut`,
+          `B`,`gs0`,`tail0`,
           `FST (rooted_eval B C7 levels (root_entry with vs_gas_readings := gs0 ++ tail0))`,`v`]
           mp_tac) >>
       impl_tac >-
@@ -2779,7 +2783,8 @@ Proof
          >> qpat_assum `SND (rooted_eval B C7 levels _) = OK v` (fn th =>
               CONV_TAC (RHS_CONV (RAND_CONV (REWR_CONV (GSYM th)))) >>
               REWRITE_TAC [pairTheory.PAIR])) >>
-      disch_then ACCEPT_TAC) >>
+      qpat_assum `FLOOKUP ms_tab (a,e) = SOME pms` (fn lk =>
+        disch_then (ACCEPT_TAC o REWRITE_RULE [lk,optionTheory.THE_DEF]))) >>
   mp_tac (Q.INST
     [`csched` |-> `crho`, `psched` |-> `prho`,
      `x` |-> `xp`, `f` |-> `vp`, `q` |-> `rq`,
