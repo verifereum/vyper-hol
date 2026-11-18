@@ -186,8 +186,8 @@ Theorem ctor_capture_live_frame:
   local_ptrs_reserved ce cut /\ wb_frame ce es es' cut s s' /\
   endpoint.cs_next_id <= cut.cs_next_id /\
   endpoint.cs_next_id <= endpoint'.cs_next_id /\
-  es' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-    es with <|gas_obs := []; outcomes := NONE; storage_trace := []|> /\
+  es' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+    es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> /\
   vv_storage_live H cx vv es s /\
   (!t op. vv = StackValue t op ==>
     (!x. op = Var x ==> not_fresh_at cut x) /\ (!l. op <> Label l)) /\
@@ -270,8 +270,8 @@ Theorem ctor_capture_pure_child_frame:
   vv_storage_live H cx vv es' s'
 Proof
   strip_tac >>
-  `es' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-   es with <|gas_obs := []; outcomes := NONE; storage_trace := []|>` by
+  `es' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+   es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>` by
     (irule effect_free_source_projection >> metis_tac[]) >>
   `wb_frame ce es es' cut s s'` by
     (fs[vv_post_def] >> rewrite_tac[wb_frame_def] >> metis_tac[]) >>

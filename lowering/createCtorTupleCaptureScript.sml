@@ -230,8 +230,8 @@ Theorem ctor_capture_pure_raw[local]:
       t.vs_current_bb = c_vvs.cs_current_bb /\
       t.vs_inst_idx = LENGTH c_vvs.cs_current_insts /\
       expr_sim_inv ce cx env ee /\ wb_frame ce es ee c1 s_buf t /\
-      ee with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-        es with <|gas_obs := []; outcomes := NONE; storage_trace := []|>)
+      ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+        es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)
     (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   Induct >> rpt gen_tac
@@ -325,8 +325,8 @@ Resume ctor_capture_pure_raw[head_read]:
       vyperTypeInvariantsTheory.env_context_consistent_def] >>
   gvs[value_runtime_typed_def] >>
   `val_wf tv value` by metis_tac[value_has_type_val_wf] >>
-  `mid with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-   es with <|gas_obs := []; outcomes := NONE; storage_trace := []|>` by
+  `mid with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+   es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>` by
     (drule_all targetPureSourceFrameTheory.effect_free_source_projection >> simp[]) >>
   `~t.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
