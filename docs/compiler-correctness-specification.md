@@ -154,7 +154,11 @@ calldata for which `calldata_dispatch tops tx.calldata = NONE`
 calldata is shorter than its static head or whose arguments fail to decode. There
 `calldata_result_rel` requires `frame_raises es Reverted` and a `Reverted` frame
 outcome with empty return data, unless the frame is resource-starved
-(`frame_resource_starved`), the other disjunct of the conclusion.
+(`frame_resource_starved`), the other disjunct of the conclusion. Deployment
+failures carry these obligations only where its result relation applies:
+`e2e_deploy_correctness` concludes `creation_resource_starved es r es' \/
+deploy_call_result_rel ...`, and `deploy_call_result_rel` requires
+`deploy_result_rel` only for gas fillings that satisfy `deploy_storage_ok`.
 Whether the theorems should promise revert bytes is an open scope question.
 
 ## Calls and nested contexts
@@ -317,8 +321,7 @@ CALL/STATICCALL/DELEGATECALL; a `send` without `gas=` records 0, so its operand
 must be 0. The operand of any other call without `gas=` is unconstrained,
 creations and the precompile builtins record none, and the gas the callee
 actually receives is not related.
-The result relation existentially chooses source gas observations without tying
-them to EVM readings. The old
+The result relation ties source gas observations to the frame's EVM gas readings only through `gas_readings_rel (gas_readings es)`: the readings the source takes explicitly, together with the unused ones, are a permutation of `gas_readings es`, and the result must hold for every filling of the remaining slots. The old
 2026-09-29 gas-oracle account of this design is superseded by the outcome oracle.
 
 ### Observations, resources and limits

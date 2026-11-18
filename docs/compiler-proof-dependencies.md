@@ -159,8 +159,7 @@ The resource alternative is frame OutOfGas/StackOverflow, not an existential gas
 threshold. Entry `cc_gas=0`; Venom GAS consumes the frame's gas readings,
 returning zero on exhaustion.
 There is no static-entry/immutables/msg.gas/fallback guarantee or caller-read
-gas-reading correspondence; the result relation existentially chooses source
-gas observations without tying them to EVM readings. For `gas=`, only the forwarded gas operand is related: on success or halt `request_agree` requires it to equal an explicit source `gas=` value; a `send` without `gas=` must forward 0; other calls without `gas=` and the gas the callee actually receives are unconstrained. Combined environmental satisfiability and transaction/callee
+gas-reading correspondence; the result relation ties source gas observations to the frame's EVM gas readings only through `gas_readings_rel (gas_readings es)`: the readings the source takes explicitly, together with the unused ones, are a permutation of `gas_readings es`, and the result must hold for every filling of the remaining slots. For `gas=`, only the forwarded gas operand is related: on success or halt `request_agree` requires it to equal an explicit source `gas=` value; a `send` without `gas=` must forward 0; other calls without `gas=` and the gas the callee actually receives are unconstrained. Combined environmental satisfiability and transaction/callee
 producers remain Milestone 7 work.
 
 ## Deployment, function simulation and retired contracts
