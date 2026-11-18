@@ -2,7 +2,7 @@
 Theory guardSourceAlignment
 Ancestors
   guardSourceExternal guardStorageTransport loweringStateRelDefs
-  e2eDefs vyperInterpreter vyperStorageFootprint list
+  e2eDefs vyperInterpreter vyperStorageFootprint vyperCallFiniteStorage list
 
 Theorem aligned_trace_storage_observations:
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
@@ -85,4 +85,17 @@ Proof
      fs[storage_trace_backends_well_formed_def]) >>
   fs[regions_consistent_def, storage_locks_separated_def, EVERY_MEM] >>
   metis_tac[]
+QED
+
+Theorem source_call_final_storage_well_formed:
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  call_external_trace orc gobs am tx = (res,am',rqs,obs) /\
+  valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am []) H obs ==>
+  storage_well_formed_on (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am' []) (FST H)
+Proof
+  strip_tac >>
+  drule_all source_typing_ok_runtime_ready >> strip_tac >>
+  drule_all call_external_storage_well_formed_on >> simp[]
 QED
