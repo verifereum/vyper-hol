@@ -12,7 +12,7 @@
  *)
 Theory e2eLifecycle
 Ancestors
-  e2eDefs e2eDeployDefs ctorDeployDeadLoad supportedProgram
+  e2eDefs e2eDeployDefs e2eComposition ctorDeployDeadLoad supportedProgram
   vyperInterpreter vyperTypeContract vyperTypeContractSoundness
   vyperTypeDeploymentMachine vyperTypeExternalCallMachine
   vyperTypeInitialState vyperTypeInvariants
@@ -235,13 +235,6 @@ Proof
   gvs[]
 QED
 
-Theorem gas_readings_rel_mono:
-  gas_readings_rel readings P T /\ (!gs. P gs ==> Q gs) ==>
-  gas_readings_rel readings Q T
-Proof
-  rw[gas_readings_rel_def] >> metis_tac[]
-QED
-
 (* The guarded form: the finite storage guard stays inside the filling. *)
 Theorem deploy_call_result_establishes_call_ready:
   deploy_typing_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
@@ -255,7 +248,7 @@ Theorem deploy_call_result_establishes_call_ready:
             load_contract (SOME (MAP SND (call_trace es))) gs am tx
               [(NONE, tops)] [] = INL (am', rqs) ==>
             call_ready tops runtime_bc (next_source_machine am' es')
-              tx.target) T
+              tx.target)
 Proof
   rw[deploy_call_result_rel_def] >>
   irule gas_readings_rel_mono >> goal_assum (drule_at Any) >>
