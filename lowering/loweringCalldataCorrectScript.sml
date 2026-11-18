@@ -3,6 +3,8 @@ Theory loweringCalldataCorrect
 Ancestors
   e2eDefs vyperLoweringCorrect loweringMemCorrect sourceUnitExecution
   sourceUnitExitSafe ptrDiscipline vyperCalldata sourceCallCount
+  dispatchedCallAssembly dispatchedSelectedEndpoint gasShadowRunLowering
+  loweringShapeProps
 
 (* The call a contract makes of raw calldata: the external entry it
    dispatches to and the arguments it decodes (vyperCalldata), including the
@@ -53,8 +55,21 @@ Theorem lower_vyper_runtime_unit_correct_dispatched:
     ==>
     source_unit_execution_correct tops ret am tx unit vs
 Proof
-  (* HELD ADMISSION SEQ-4939: S1 for noncanonical/__default__ dispatch; needs the entry chain over calldata_exact_owned_run *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
+    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
+     drule supported_program_no_external_defaults >> simp[] >> strip_tac >>
+     drule_at (Pat `classify_functions _ = _`) runtime_gas_shadow_unit_exists >>
+     disch_then (drule_at (Pat `lower_vyper_runtime_unit _ _ = _`)) >>
+     simp[] >> strip_tac >> qexists_tac `shadow_unit` >> simp[]) >>
+  qpat_x_assum `dispatched_vyper_call _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
+  drule_all_then SUBST_ALL_TAC supported_program_external_dflts_nil >>
+  drule_at (Pat `runtime_gas_shadow_unit _ _ = _`)
+    (cj 1 dispatched_call_correct_from_selected_endpoint) >>
+  disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`unit`, `am`, `vs`] mp_tac) >>
+  simp[dispatched_entry_endpoint_selected]
 QED
 
 (* ADMISSION: the dispatched-calldata unit theorem with a shadow context
@@ -81,7 +96,22 @@ Theorem lower_vyper_runtime_unit_correct_dispatched_with:
         source_unit_execution_correct_with shadow_ctx marks
           tops ret am tx unit vs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
+    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
+     drule supported_program_no_external_defaults >> simp[] >> strip_tac >>
+     drule_at (Pat `classify_functions _ = _`) runtime_gas_shadow_unit_exists >>
+     disch_then (drule_at (Pat `lower_vyper_runtime_unit _ _ = _`)) >>
+     simp[] >> strip_tac >> qexists_tac `shadow_unit` >> simp[]) >>
+  qexists_tac `shadow_unit.cu_context` >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dispatched_vyper_call _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
+  drule_all_then SUBST_ALL_TAC supported_program_external_dflts_nil >>
+  drule_at (Pat `runtime_gas_shadow_unit _ _ = _`)
+    (cj 2 dispatched_call_correct_from_selected_endpoint) >>
+  disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`unit`, `am`, `vs`] mp_tac) >>
+  simp[dispatched_entry_endpoint_selected]
 QED
 
 (* S1, calldata that dispatches to nothing: no fallback, a short head, or a
