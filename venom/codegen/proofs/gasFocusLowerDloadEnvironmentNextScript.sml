@@ -111,5 +111,87 @@ Proof
     (drule_at (Pat `ld_envelope _ _ _ _ _ _`) ld_envelope_successor_head >>
      disch_then (qspecl_then [`j`,`ss`,`q`,`ld_image f`] mp_tac) >>
      simp[ADD1, Abbr `ss1`]) >>
-  FAIL_TAC "advance successor"
+  suspend "advance"
 QED
+
+Resume ld_focus_environment_body_next[advance]:
+  `ld_vars P A g` by
+    (mp_tac (ld_vars_inst_indices |> Q.INST
+       [`f` |-> `f with <|lf_src := ss; lf_tgt := u; lf_H := H';
+                         lf_tv := (step_taint inst s ss tn).t_var|>`,
+        `i` |-> `SUC s.vs_inst_idx`, `j` |-> `SUC t.vs_inst_idx`]) >>
+     simp[Abbr `g`, Abbr `ss1`, Abbr `q`]) >>
+  `ld_sync lo P C vs stk PG (step_prov PG G inst ss) (step_taint inst s ss tn)
+     fn i ss1 q A (g::fs) N /\ ld_global lo A (g::fs)` by
+    (drule ld_sync_ordinary_advance >> metis_tac[]) >>
+  `g.lf_serial = f.lf_serial /\ g.lf_fn = f.lf_fn /\
+   g.lf_Q = f.lf_Q /\ g.lf_supply = f.lf_supply /\
+   g.lf_src = ss1 /\ g.lf_tgt = q` by simp[Abbr `g`] >>
+  `^ld_probe_stable lo P Sigma names fs0 f0 A0 A (g::fs)` by
+    (qpat_assum `fs0 = fs` (SUBST_ALL_TAC) >>
+     BETA_TAC >> irule (BETA_RULE ld_stable_head_replace) >> metis_tac[]) >>
+  `ld_return_cont C fn cs (ss with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule ld_return_cont_next >> goal_assum (drule_at Any) >>
+     simp[] >> qexistsl_tac [`inst`,`0`] >> simp[]) >>
+  `ld_image g = ld_image f` by simp[ld_image_def] >>
+  `ss.vs_gas_readings = u.vs_gas_readings` by fs[ld_nonghost_def] >>
+  `LENGTH u.vs_gas_readings <= LENGTH t.vs_gas_readings` by
+    (qspecl_then [`fuel`,`C'`,`inst`,`t`] mp_tac (CONJUNCT1 gas_count_suffix) >>
+     simp[gas_count_suffix_def, LENGTH_DROP] >> decide_tac) >>
+  `EVERY (\a. a.lf_src.vs_gas_readings = a.lf_tgt.vs_gas_readings /\
+              LENGTH ss.vs_gas_readings <= LENGTH a.lf_src.vs_gas_readings) fs` by
+    (qpat_x_assum `EVERY (\a. _ /\ LENGTH s.vs_gas_readings <= _) (f::fs)` mp_tac >>
+     simp[EVERY_MEM] >> strip_tac >> qx_gen_tac `a` >> disch_tac >>
+     qpat_assum `!a. MEM a fs ==> _` (qspec_then `a` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     `LENGTH u.vs_gas_readings <= LENGTH a.lf_src.vs_gas_readings` by
+       (irule LESS_EQ_TRANS >> qexists_tac `LENGTH t.vs_gas_readings` >>
+        conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `a.lf_src.vs_gas_readings = a.lf_tgt.vs_gas_readings`
+       (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  `(ss with vs_inst_idx := SUC s.vs_inst_idx) = ss1` by simp[Abbr `ss1`] >>
+  `ld_prefix C' (ld_image g) Y (SUC t.vs_inst_idx) 0 q q` by
+    (pure_rewrite_tac[ld_prefix_zero, REFL_CLAUSE, AND_CLAUSES] >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qpat_assum `ld_image g = ld_image f` SUBST1_TAC >>
+     qpat_assum `j = EL 0 Y` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  `get_instruction bb (SUC p) = SOME (EL 0 Y)` by
+    (qpat_assum `q.vs_inst_idx = SUC p` (SUBST1_TAC o SYM) >>
+     qpat_assum `j = EL 0 Y` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  `lookup_block u.vs_current_bb (ld_image g).fn_blocks = SOME bb` by
+    (qpat_assum `u.vs_current_bb = t.vs_current_bb` SUBST1_TAC >>
+     qpat_assum `ld_image g = ld_image f` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `(u with vs_inst_idx := SUC t.vs_inst_idx) = q` by simp[Abbr `q`] >>
+  `g.lf_src.vs_gas_readings = ss.vs_gas_readings /\
+   g.lf_tgt.vs_gas_readings = u.vs_gas_readings` by simp[Abbr `ss1`, Abbr `q`] >>
+  `EVERY (\a. a.lf_src.vs_gas_readings = a.lf_tgt.vs_gas_readings /\
+              LENGTH ss.vs_gas_readings <= LENGTH a.lf_src.vs_gas_readings) (g::fs)` by simp[] >>
+  `ld_envelope g.lf_supply fn ss1 (SUC s.vs_inst_idx) Y (SUC t.vs_inst_idx)` by
+    (qpat_assum `g.lf_supply = f.lf_supply` SUBST1_TAC >>
+     qpat_assum `t.vs_inst_idx = p` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `get_instruction bb (SUC t.vs_inst_idx) = SOME (HD Y)` by
+    (qpat_assum `t.vs_inst_idx = p` SUBST1_TAC >>
+     qpat_assum `get_instruction bb (SUC p) = SOME (EL 0 Y)`
+       (ACCEPT_TAC o PURE_REWRITE_RULE [CONJUNCT1 EL])) >>
+  qpat_assum `ld_return_cont C fn cs (ss with vs_inst_idx := SUC s.vs_inst_idx)`
+    (mp_tac) >>
+  qpat_assum `(ss with vs_inst_idx := SUC s.vs_inst_idx) = ss1` SUBST1_TAC >>
+  disch_tac >> qexistsl_tac [`ss`,`g`,`i`,`Y`] >>
+  qpat_assum `(ss with vs_inst_idx := SUC s.vs_inst_idx) = ss1` SUBST1_TAC >>
+  qpat_assum `(u with vs_inst_idx := SUC t.vs_inst_idx) = q` SUBST1_TAC >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- (qpat_assum `g.lf_fn = f.lf_fn` SUBST1_TAC >> first_assum ACCEPT_TAC)) >>
+  ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >-
+    (qpat_x_assum `^ld_probe_stable lo P Sigma names fs0 f0 A0 A (g::fs)`
+       (strip_assume_tac o SRULE [] o BETA_RULE) >>
+     `!a. MEM a fs ==> !v. MEM (SOME v) a.lf_Q ==> v IN ld_slots A fs` by
+       (qpat_assum `!a. MEM a fs0 ==> FRANGE a.lf_H SUBSET ld_slots A fs0 /\ _` mp_tac >>
+        qpat_assum `fs0 = fs` SUBST1_TAC >> metis_tac[]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  qpat_assum `t.vs_inst_idx = p` (SUBST1_TAC o SYM) >>
+  ntac 7 (conj_tac >- first_assum ACCEPT_TAC) >>
+  simp[]
+QED
+
+Finalise ld_focus_environment_body_next
