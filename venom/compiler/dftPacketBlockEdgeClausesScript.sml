@@ -546,149 +546,8 @@ fun choose_all names =
       (map_every assume_tac o CONJUNCTS) names;
 
 (* The structural transport uses the same initialized rows as the native trace. *)
-(* One initialized splice supplies both rooted-cut cases and every updated
-   row projection.  U, Q, R, A, inv_cells, W and S below are literal
-   abbreviations for those clauses, not additional packet witnesses. *)
+(* One initialized splice supplies both rooted-cut cases and every updated row. *)
 Theorem dft_packet_block_edge_clauses:
-let U = (\H acts0 blocks0 m es ks at.
-    !a e bb bt ps xs ys rho hin h be hb cnt front closed brest ms ess keys
-        sf tf inc entry order res nrest.
-      at a e /\ FLOOKUP blocks0 (a,e) =
-        SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,front,closed,brest) /\
-      FLOOKUP m (a,e) = SOME ms /\ FLOOKUP es (a,e) = SOME ess /\
-      FLOOKUP ks (a,e) = SOME keys /\
-      FLOOKUP acts0 a = SOME (sf,tf,inc,entry,order,res,nrest) ==>
-      !F k kgss tail.
-        H <= F /\ k <= LENGTH xs /\
-        EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
-        (!q. q < k /\ (EL q xs).inst_opcode = INVOKE ==> MEM q (TAKE cnt rho)) /\
-        LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE k ms) kgss ==>
-        (?extra. FLAT (TAKE k ess) = gas_events_block (F-e) C7 sf.fn_name
-          <|bb_label := be.vs_current_bb; bb_instructions :=
-            REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
-          (be with vs_gas_readings := FLAT kgss ++ tail) ++ extra) /\
-        (!u. FOLDR (dft_exec_cons (F-e) C7) OK (TAKE k xs)
-          (be with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
-          gas_events_block (F-e) C7 sf.fn_name
-            <|bb_label := be.vs_current_bb; bb_instructions :=
-              REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
-            (be with vs_gas_readings := FLAT kgss ++ tail) = FLAT (TAKE k ess) /\
-          u.vs_gas_readings = tail /\
-          trace_gas (trace_block a e (F-e) C7 sf
-            (bb with bb_instructions := TAKE (LENGTH ps + k) bb.bb_instructions)
-            (be with vs_gas_readings := FLAT kgss ++ tail)) =
-            ZIP (FLAT (TAKE k keys),FLAT kgss) /\
-          (!tail'. FOLDR (dft_exec_cons (F-e) C7) OK (TAKE k xs)
-              (be with vs_gas_readings := FLAT kgss ++ tail') = OK (u with vs_gas_readings := tail') /\
-            gas_events_block (F-e) C7 sf.fn_name
-              <|bb_label := be.vs_current_bb; bb_instructions :=
-                REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
-              (be with vs_gas_readings := FLAT kgss ++ tail') = FLAT (TAKE k ess)))) in
-  let Q = (\H blocks0 m.
-    !a e cid q h b0 done child ret bb bt ps xs ys rho hin hbe be hb cnt front closed brest ms.
-      FLOOKUP calls (a,e,cid) = SOME (q,h,b0,done,child,ret) /\
-      FLOOKUP blocks0 (a,e) =
-        SOME (bb,bt,ps,xs,ys,rho,hin,hbe,SOME (be,hb),cnt,front,closed,brest) /\
-      FLOOKUP m (a,e) = SOME ms ==>
-      !F kgss tail u.
-        H <= F /\ LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE q ms) kgss /\
-        FOLDR (dft_exec_cons (F-e) C7) OK (TAKE q xs)
-          (be with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
-        (!op. MEM op (EL q xs).inst_operands ==> eval_operand op u = eval_operand op b0) /\
-        (!callee args. setup_callee callee args (u with vs_gas_readings := b0.vs_gas_readings) =
-          setup_callee callee args b0)) in
-  let R = (\H acts0 blocks0 m es ks at.
-    !a e sf tf inc entry order res rest bb bt ps xs ys rho hin h be hb cnt r8 u0 ms ess keys.
-      at a e /\ FLOOKUP acts0 a = SOME (sf,tf,inc,entry,order,res,rest) /\
-      FLOOKUP blocks0 (a,e) = SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,r8,T,SOME u0) /\
-      FLOOKUP m (a,e) = SOME ms /\ FLOOKUP es (a,e) = SOME ess /\ FLOOKUP ks (a,e) = SOME keys ==>
-      terminates r8 /\
-      PERM (MAP THE (FILTER IS_SOME (FLAT ms)) ++ u0) be.vs_gas_readings /\
-      (!v. (r8 = OK v \/ (?ir. r8 = IntRet ir v)) ==> EVERY IS_SOME (FLAT ms) /\ u0 = v.vs_gas_readings) /\
-      (!F. H <= F ==> FOLDR (dft_exec_cons (F-e) C8) OK ys be = r8 /\
-        (!gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (FLAT ms) gs ==>
-          (?extra. FLAT ess = gas_events_block (F-e) C7 sf.fn_name
-            <|bb_label := be.vs_current_bb; bb_instructions :=
-              REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|>
-            (be with vs_gas_readings := gs ++ tail) ++ extra) /\
-          ((?f. terminates (FOLDR (dft_exec_cons f C7) OK xs
-              (be with vs_gas_readings := gs ++ tail))) ==>
-            terminates (FOLDR (dft_exec_cons (F-e) C7) OK xs (be with vs_gas_readings := gs ++ tail)) /\
-            dft_res_rel (restore_result [] (FOLDR (dft_exec_cons (F-e) C7) OK xs
-              (be with vs_gas_readings := gs ++ tail))) (restore_result [] r8) /\
-            (((?v. r8 = OK v) \/ (?ir v. r8 = IntRet ir v)) ==>
-              gas_events_block (F-e) C7 sf.fn_name
-                <|bb_label := be.vs_current_bb; bb_instructions :=
-                  REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|>
-                (be with vs_gas_readings := gs ++ tail) = FLAT ess /\
-              residual_result tail r8 (FOLDR (dft_exec_cons (F-e) C7) OK xs
-                (be with vs_gas_readings := gs ++ tail)))) /\
-          (!v. (FOLDR (dft_exec_cons (F-e) C7) OK xs
-                  (be with vs_gas_readings := gs ++ tail) = OK v \/
-                ?ir. FOLDR (dft_exec_cons (F-e) C7) OK xs
-                  (be with vs_gas_readings := gs ++ tail) = IntRet ir v) ==>
-            trace_gas (trace_block a e (F-e) C7 sf
-                <|bb_label := be.vs_current_bb; bb_instructions :=
-                  REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|>
-                (be with vs_gas_readings := gs ++ tail)) = ZIP (FLAT keys,gs))))) in
-  let A = (\H acts0 am ae ak.
-    !a sf tf inc entry order r8 u0.
-      FLOOKUP acts0 a = SOME (sf,tf,inc,entry,order,SOME r8,SOME u0) ==>
-      terminates r8 /\ LENGTH (am a) = LENGTH (ae a) /\ LENGTH (am a) = LENGTH (ak a) /\
-      PERM (MAP THE (FILTER IS_SOME (am a)) ++ u0) entry.vs_gas_readings /\
-      (!v. (r8 = OK v \/ (?ir. r8 = IntRet ir v)) ==> EVERY IS_SOME (am a) /\ u0 = v.vs_gas_readings) /\
-      (!F. H <= F ==> run_blocks (F-inc) C8 tf entry = r8 /\
-        (!gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (am a) gs ==>
-          (?extra. ae a = gas_events_blocks (F-inc) C7 sf
-            (entry with vs_gas_readings := gs ++ tail) ++ extra) /\
-          ((?f. terminates (run_blocks f C7 sf (entry with vs_gas_readings := gs ++ tail))) ==>
-            terminates (run_blocks (F-inc) C7 sf (entry with vs_gas_readings := gs ++ tail)) /\
-            dft_res_rel (restore_result [] (run_blocks (F-inc) C7 sf
-              (entry with vs_gas_readings := gs ++ tail))) (restore_result [] r8) /\
-            (((?v. r8 = OK v) \/ (?ir v. r8 = IntRet ir v)) ==>
-              gas_events_blocks (F-inc) C7 sf
-                (entry with vs_gas_readings := gs ++ tail) = ae a /\
-              residual_result tail r8 (run_blocks (F-inc) C7 sf
-                (entry with vs_gas_readings := gs ++ tail)))) /\
-          (!v. (run_blocks (F-inc) C7 sf (entry with vs_gas_readings := gs ++ tail) = OK v \/
-                ?ir. run_blocks (F-inc) C7 sf (entry with vs_gas_readings := gs ++ tail) = IntRet ir v) ==>
-            trace_gas (trace_blocks a inc (F-inc) C7 sf
-                (entry with vs_gas_readings := gs ++ tail)) = ZIP (ak a,gs))))) in
-  let inv_cells = (\blocks0 m es ks am ae ak at.
-    !a e bb bt ps xs ys rho hin h be hb cnt front closed rest ms ess keys.
-      at a e /\ FLOOKUP blocks0 (a,e) =
-        SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,front,closed,rest) /\
-      FLOOKUP m (a,e) = SOME ms /\ FLOOKUP es (a,e) = SOME ess /\ FLOOKUP ks (a,e) = SOME keys ==>
-      !q. q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE ==>
-        case FLOOKUP calls (a,e,(EL q xs).inst_id) of
-          NONE => EL q ms = [] /\ EL q ess = [] /\ EL q keys = []
-        | SOME call => EL q ms = am ((e,(EL q xs).inst_id)::a) /\
-            EL q ess = ae ((e,(EL q xs).inst_id)::a) /\ EL q keys = ak ((e,(EL q xs).inst_id)::a)) in
-  let W = (\blocks0 at.
-    !a e bb bt ps xs ys rho hin h be hb cnt front closed rest.
-      at a e /\ FLOOKUP blocks0 (a,e) =
-        SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,front,closed,rest) ==>
-      !q. q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE /\ MEM q (TAKE cnt rho) ==>
-        ?ch b done child ir child_out caller_post.
-          FLOOKUP calls (a,e,(EL q xs).inst_id) =
-            SOME (q,ch,b,done,child,SOME (ir,child_out,caller_post))) in
-  let S = (\acts0 blocks0 m es ks.
-    !a e bb bt ps xs ys rho hin h0 be hbe cnt front closed brest mr er kr.
-    FLOOKUP blocks0 (a,e) =
-      SOME (bb,bt,ps,xs,ys,rho,hin,h0,SOME (be,hbe),cnt,front,closed,brest) /\
-    FLOOKUP m (a,e) = SOME mr /\ FLOOKUP es (a,e) = SOME er /\
-    FLOOKUP ks (a,e) = SOME kr ==>
-    LENGTH mr = LENGTH xs /\
-    (!f g ai ent ord r u.
-      FLOOKUP acts0 a = SOME (f,g,ai,ent,ord,r,u) ==>
-      !q. q < LENGTH xs ==>
-        ((EL q xs).inst_opcode = GAS ==>
-          EL q mr = [ALOOKUP obs (a,e,(EL q xs).inst_id)] /\
-          EL q er = [(f.fn_name,(EL q xs).inst_id)] /\
-          EL q kr = [(a,e,(EL q xs).inst_id)]) /\
-        ((EL q xs).inst_opcode <> GAS /\ (EL q xs).inst_opcode <> INVOKE ==>
-          EL q mr = [] /\ EL q er = [] /\ EL q kr = []))) in
-  let all = (\a e. T) in
   row_eval = (\F C owner (bb,e,z) s.
     case eval_phis s bb.bb_instructions of
       OK sp =>
@@ -823,7 +682,21 @@ let U = (\H acts0 blocks0 m es ks at.
   AK = (\a. FLAT (MAP (\f. FLAT (THE (FLOOKUP ks (a,f))))
     (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) /\
   ALL_DISTINCT (AK []) /\
-  S acts blocks m es ks /\
+  (!a e bb bt ps xs ys rho hin h0 be hbe cnt front closed brest mr er kr.
+   FLOOKUP blocks (a,e) =
+     SOME (bb,bt,ps,xs,ys,rho,hin,h0,SOME (be,hbe),cnt,front,closed,brest) /\
+   FLOOKUP m (a,e) = SOME mr /\ FLOOKUP es (a,e) = SOME er /\
+   FLOOKUP ks (a,e) = SOME kr ==>
+   LENGTH mr = LENGTH xs /\
+   (!f g ai ent ord r u.
+     FLOOKUP acts a = SOME (f,g,ai,ent,ord,r,u) ==>
+     !q. q < LENGTH xs ==>
+       ((EL q xs).inst_opcode = GAS ==>
+         EL q mr = [ALOOKUP obs (a,e,(EL q xs).inst_id)] /\
+         EL q er = [(f.fn_name,(EL q xs).inst_id)] /\
+         EL q kr = [(a,e,(EL q xs).inst_id)]) /\
+       ((EL q xs).inst_opcode <> GAS /\ (EL q xs).inst_opcode <> INVOKE ==>
+         EL q mr = [] /\ EL q er = [] /\ EL q kr = []))) /\
   LENGTH (AK []) = LENGTH (AM []) /\
   PERM (MAP (\(key,slot). (key,THE slot))
     (FILTER (\(key,slot). IS_SOME slot) (ZIP (AK [],AM [])))) obs /\
@@ -972,12 +845,122 @@ let U = (\H acts0 blocks0 m es ks at.
     FLOOKUP calls (a,e,cid) = SOME (q,h,b,done,child,SOME (ir,child_out,caller_post)) ==>
     ?csf ctf order rest. FLOOKUP acts ((e,cid)::a) =
       SOME (csf,ctf,e,child,order,SOME (IntRet ir child_out),rest)) /\
-  U N acts blocks m es ks all /\
-  Q N blocks m /\
-  R N acts blocks m es ks all /\
-  A N acts AM AE AK /\
-  inv_cells blocks m es ks AM AE AK all /\
-  W blocks all /\
+  (!a e bb bt ps xs ys rho hin h be hb cnt front closed brest ms ess keys
+       sf tf inc entry order res nrest.
+     FLOOKUP blocks (a,e) =
+       SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,front,closed,brest) /\
+     FLOOKUP m (a,e) = SOME ms /\ FLOOKUP es (a,e) = SOME ess /\
+     FLOOKUP ks (a,e) = SOME keys /\
+     FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==>
+     !F k kgss tail.
+       N <= F /\ k <= LENGTH xs /\
+       EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
+       (!q. q < k /\ (EL q xs).inst_opcode = INVOKE ==> MEM q (TAKE cnt rho)) /\
+       LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE k ms) kgss ==>
+       (?extra. FLAT (TAKE k ess) = gas_events_block (F-e) C7 sf.fn_name
+         <|bb_label := be.vs_current_bb; bb_instructions :=
+           REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
+         (be with vs_gas_readings := FLAT kgss ++ tail) ++ extra) /\
+       (!u. FOLDR (dft_exec_cons (F-e) C7) OK (TAKE k xs)
+         (be with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
+         gas_events_block (F-e) C7 sf.fn_name
+           <|bb_label := be.vs_current_bb; bb_instructions :=
+             REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
+           (be with vs_gas_readings := FLAT kgss ++ tail) = FLAT (TAKE k ess) /\
+         u.vs_gas_readings = tail /\
+         trace_gas (trace_block a e (F-e) C7 sf
+           (bb with bb_instructions := TAKE (LENGTH ps + k) bb.bb_instructions)
+           (be with vs_gas_readings := FLAT kgss ++ tail)) =
+           ZIP (FLAT (TAKE k keys),FLAT kgss) /\
+         (!tail'. FOLDR (dft_exec_cons (F-e) C7) OK (TAKE k xs)
+             (be with vs_gas_readings := FLAT kgss ++ tail') = OK (u with vs_gas_readings := tail') /\
+           gas_events_block (F-e) C7 sf.fn_name
+             <|bb_label := be.vs_current_bb; bb_instructions :=
+               REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
+             (be with vs_gas_readings := FLAT kgss ++ tail') = FLAT (TAKE k ess)))) /\
+  (!a e cid q h b0 done child ret bb bt ps xs ys rho hin hbe be hb cnt front closed brest ms.
+     FLOOKUP calls (a,e,cid) = SOME (q,h,b0,done,child,ret) /\
+     FLOOKUP blocks (a,e) =
+       SOME (bb,bt,ps,xs,ys,rho,hin,hbe,SOME (be,hb),cnt,front,closed,brest) /\
+     FLOOKUP m (a,e) = SOME ms ==>
+     !F kgss tail u.
+       N <= F /\ LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE q ms) kgss /\
+       FOLDR (dft_exec_cons (F-e) C7) OK (TAKE q xs)
+         (be with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
+       (!op. MEM op (EL q xs).inst_operands ==> eval_operand op u = eval_operand op b0) /\
+       (!callee args. setup_callee callee args (u with vs_gas_readings := b0.vs_gas_readings) =
+         setup_callee callee args b0)) /\
+  (!a e sf tf inc entry order res rest bb bt ps xs ys rho hin h be hb cnt r8 u0 ms ess keys.
+     FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,rest) /\
+     FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,r8,T,SOME u0) /\
+     FLOOKUP m (a,e) = SOME ms /\ FLOOKUP es (a,e) = SOME ess /\ FLOOKUP ks (a,e) = SOME keys ==>
+     terminates r8 /\
+     PERM (MAP THE (FILTER IS_SOME (FLAT ms)) ++ u0) be.vs_gas_readings /\
+     (!v. (r8 = OK v \/ (?ir. r8 = IntRet ir v)) ==> EVERY IS_SOME (FLAT ms) /\ u0 = v.vs_gas_readings) /\
+     (!F. N <= F ==> FOLDR (dft_exec_cons (F-e) C8) OK ys be = r8 /\
+       (!gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (FLAT ms) gs ==>
+         (?extra. FLAT ess = gas_events_block (F-e) C7 sf.fn_name
+           <|bb_label := be.vs_current_bb; bb_instructions :=
+             REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|>
+           (be with vs_gas_readings := gs ++ tail) ++ extra) /\
+         ((?f. terminates (FOLDR (dft_exec_cons f C7) OK xs
+             (be with vs_gas_readings := gs ++ tail))) ==>
+           terminates (FOLDR (dft_exec_cons (F-e) C7) OK xs (be with vs_gas_readings := gs ++ tail)) /\
+           dft_res_rel (restore_result [] (FOLDR (dft_exec_cons (F-e) C7) OK xs
+             (be with vs_gas_readings := gs ++ tail))) (restore_result [] r8) /\
+           (((?v. r8 = OK v) \/ (?ir v. r8 = IntRet ir v)) ==>
+             gas_events_block (F-e) C7 sf.fn_name
+               <|bb_label := be.vs_current_bb; bb_instructions :=
+                 REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|>
+               (be with vs_gas_readings := gs ++ tail) = FLAT ess /\
+             residual_result tail r8 (FOLDR (dft_exec_cons (F-e) C7) OK xs
+               (be with vs_gas_readings := gs ++ tail)))) /\
+         (!v. (FOLDR (dft_exec_cons (F-e) C7) OK xs
+                 (be with vs_gas_readings := gs ++ tail) = OK v \/
+               ?ir. FOLDR (dft_exec_cons (F-e) C7) OK xs
+                 (be with vs_gas_readings := gs ++ tail) = IntRet ir v) ==>
+           trace_gas (trace_block a e (F-e) C7 sf
+               <|bb_label := be.vs_current_bb; bb_instructions :=
+                 REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|>
+               (be with vs_gas_readings := gs ++ tail)) = ZIP (FLAT keys,gs))))) /\
+  (!a sf tf inc entry order r8 u0.
+     FLOOKUP acts a = SOME (sf,tf,inc,entry,order,SOME r8,SOME u0) ==>
+     terminates r8 /\ LENGTH (AM a) = LENGTH (AE a) /\ LENGTH (AM a) = LENGTH (AK a) /\
+     PERM (MAP THE (FILTER IS_SOME (AM a)) ++ u0) entry.vs_gas_readings /\
+     (!v. (r8 = OK v \/ (?ir. r8 = IntRet ir v)) ==> EVERY IS_SOME (AM a) /\ u0 = v.vs_gas_readings) /\
+     (!F. N <= F ==> run_blocks (F-inc) C8 tf entry = r8 /\
+       (!gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (AM a) gs ==>
+         (?extra. AE a = gas_events_blocks (F-inc) C7 sf
+           (entry with vs_gas_readings := gs ++ tail) ++ extra) /\
+         ((?f. terminates (run_blocks f C7 sf (entry with vs_gas_readings := gs ++ tail))) ==>
+           terminates (run_blocks (F-inc) C7 sf (entry with vs_gas_readings := gs ++ tail)) /\
+           dft_res_rel (restore_result [] (run_blocks (F-inc) C7 sf
+             (entry with vs_gas_readings := gs ++ tail))) (restore_result [] r8) /\
+           (((?v. r8 = OK v) \/ (?ir v. r8 = IntRet ir v)) ==>
+             gas_events_blocks (F-inc) C7 sf
+               (entry with vs_gas_readings := gs ++ tail) = AE a /\
+             residual_result tail r8 (run_blocks (F-inc) C7 sf
+               (entry with vs_gas_readings := gs ++ tail)))) /\
+         (!v. (run_blocks (F-inc) C7 sf (entry with vs_gas_readings := gs ++ tail) = OK v \/
+               ?ir. run_blocks (F-inc) C7 sf (entry with vs_gas_readings := gs ++ tail) = IntRet ir v) ==>
+           trace_gas (trace_blocks a inc (F-inc) C7 sf
+               (entry with vs_gas_readings := gs ++ tail)) = ZIP (AK a,gs))))) /\
+  (!a e bb bt ps xs ys rho hin h be hb cnt front closed rest ms ess keys.
+     FLOOKUP blocks (a,e) =
+       SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,front,closed,rest) /\
+     FLOOKUP m (a,e) = SOME ms /\ FLOOKUP es (a,e) = SOME ess /\ FLOOKUP ks (a,e) = SOME keys ==>
+     !q. q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE ==>
+       case FLOOKUP calls (a,e,(EL q xs).inst_id) of
+         NONE => EL q ms = [] /\ EL q ess = [] /\ EL q keys = []
+       | SOME call => EL q ms = AM ((e,(EL q xs).inst_id)::a) /\
+           EL q ess = AE ((e,(EL q xs).inst_id)::a) /\ EL q keys = AK ((e,(EL q xs).inst_id)::a)) /\
+  (!a e bb bt ps xs ys rho hin h be hb cnt front closed rest.
+     FLOOKUP blocks (a,e) =
+       SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,front,closed,rest) ==>
+     !q. q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE /\ MEM q (TAKE cnt rho) ==>
+       ?ch b done child ir child_out caller_post.
+         FLOOKUP calls (a,e,(EL q xs).inst_id) =
+           SOME (q,ch,b,done,child,SOME (ir,child_out,caller_post))) /\
   (!q. q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE ==> MEM q (TAKE cnt0 rho0)) /\
   FLOOKUP m (p,d) = SOME ms /\
   FLOOKUP es (p,d) = SOME ess /\
@@ -1301,18 +1284,142 @@ let U = (\H acts0 blocks0 m es ks at.
     EL (EL count sched) xs = next /\
     EVERY (\i. ~is_terminator i.inst_opcode) (TAKE (EL count sched) xs) /\
     (!q. q < EL count sched /\ (EL q xs).inst_opcode = INVOKE ==> MEM q (TAKE count sched))) /\
-    U N' acts' blocks' m' es' ks' all /\
-    Q N' blocks' m' /\
-    R N' acts' blocks' m' es' ks' all /\
-    A N' acts' AM' AE' AK' /\
-    inv_cells blocks' m' es' ks' AM' AE' AK' all /\
-    W blocks' all /\
+    (!a e bb bt ps xs ys rho hin h be hb cnt front closed brest ms ess keys
+         sf tf inc entry order res nrest.
+       FLOOKUP blocks' (a,e) =
+         SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,front,closed,brest) /\
+       FLOOKUP m' (a,e) = SOME ms /\ FLOOKUP es' (a,e) = SOME ess /\
+       FLOOKUP ks' (a,e) = SOME keys /\
+       FLOOKUP acts' a = SOME (sf,tf,inc,entry,order,res,nrest) ==>
+       !F k kgss tail.
+         N' <= F /\ k <= LENGTH xs /\
+         EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
+         (!q. q < k /\ (EL q xs).inst_opcode = INVOKE ==> MEM q (TAKE cnt rho)) /\
+         LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE k ms) kgss ==>
+         (?extra. FLAT (TAKE k ess) = gas_events_block (F-e) C7 sf.fn_name
+           <|bb_label := be.vs_current_bb; bb_instructions :=
+             REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
+           (be with vs_gas_readings := FLAT kgss ++ tail) ++ extra) /\
+         (!u. FOLDR (dft_exec_cons (F-e) C7) OK (TAKE k xs)
+           (be with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
+           gas_events_block (F-e) C7 sf.fn_name
+             <|bb_label := be.vs_current_bb; bb_instructions :=
+               REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
+             (be with vs_gas_readings := FLAT kgss ++ tail) = FLAT (TAKE k ess) /\
+           u.vs_gas_readings = tail /\
+           trace_gas (trace_block a e (F-e) C7 sf
+             (bb with bb_instructions := TAKE (LENGTH ps + k) bb.bb_instructions)
+             (be with vs_gas_readings := FLAT kgss ++ tail)) =
+             ZIP (FLAT (TAKE k keys),FLAT kgss) /\
+           (!tail'. FOLDR (dft_exec_cons (F-e) C7) OK (TAKE k xs)
+               (be with vs_gas_readings := FLAT kgss ++ tail') = OK (u with vs_gas_readings := tail') /\
+             gas_events_block (F-e) C7 sf.fn_name
+               <|bb_label := be.vs_current_bb; bb_instructions :=
+                 REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
+               (be with vs_gas_readings := FLAT kgss ++ tail') = FLAT (TAKE k ess)))) /\
+    (!a e cid q h b0 done child ret bb bt ps xs ys rho hin hbe be hb cnt front closed brest ms.
+       FLOOKUP calls (a,e,cid) = SOME (q,h,b0,done,child,ret) /\
+       FLOOKUP blocks' (a,e) =
+         SOME (bb,bt,ps,xs,ys,rho,hin,hbe,SOME (be,hb),cnt,front,closed,brest) /\
+       FLOOKUP m' (a,e) = SOME ms ==>
+       !F kgss tail u.
+         N' <= F /\ LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE q ms) kgss /\
+         FOLDR (dft_exec_cons (F-e) C7) OK (TAKE q xs)
+           (be with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
+         (!op. MEM op (EL q xs).inst_operands ==> eval_operand op u = eval_operand op b0) /\
+         (!callee args. setup_callee callee args (u with vs_gas_readings := b0.vs_gas_readings) =
+           setup_callee callee args b0)) /\
+    (!a e sf tf inc entry order res rest bb bt ps xs ys rho hin h be hb cnt r8 u0 ms ess keys.
+       FLOOKUP acts' a = SOME (sf,tf,inc,entry,order,res,rest) /\
+       FLOOKUP blocks' (a,e) = SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,r8,T,SOME u0) /\
+       FLOOKUP m' (a,e) = SOME ms /\ FLOOKUP es' (a,e) = SOME ess /\ FLOOKUP ks' (a,e) = SOME keys ==>
+       terminates r8 /\
+       PERM (MAP THE (FILTER IS_SOME (FLAT ms)) ++ u0) be.vs_gas_readings /\
+       (!v. (r8 = OK v \/ (?ir. r8 = IntRet ir v)) ==> EVERY IS_SOME (FLAT ms) /\ u0 = v.vs_gas_readings) /\
+       (!F. N' <= F ==> FOLDR (dft_exec_cons (F-e) C8) OK ys be = r8 /\
+         (!gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (FLAT ms) gs ==>
+           (?extra. FLAT ess = gas_events_block (F-e) C7 sf.fn_name
+             <|bb_label := be.vs_current_bb; bb_instructions :=
+               REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|>
+             (be with vs_gas_readings := gs ++ tail) ++ extra) /\
+           ((?f. terminates (FOLDR (dft_exec_cons f C7) OK xs
+               (be with vs_gas_readings := gs ++ tail))) ==>
+             terminates (FOLDR (dft_exec_cons (F-e) C7) OK xs (be with vs_gas_readings := gs ++ tail)) /\
+             dft_res_rel (restore_result [] (FOLDR (dft_exec_cons (F-e) C7) OK xs
+               (be with vs_gas_readings := gs ++ tail))) (restore_result [] r8) /\
+             (((?v. r8 = OK v) \/ (?ir v. r8 = IntRet ir v)) ==>
+               gas_events_block (F-e) C7 sf.fn_name
+                 <|bb_label := be.vs_current_bb; bb_instructions :=
+                   REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|>
+                 (be with vs_gas_readings := gs ++ tail) = FLAT ess /\
+               residual_result tail r8 (FOLDR (dft_exec_cons (F-e) C7) OK xs
+                 (be with vs_gas_readings := gs ++ tail)))) /\
+           (!v. (FOLDR (dft_exec_cons (F-e) C7) OK xs
+                   (be with vs_gas_readings := gs ++ tail) = OK v \/
+                 ?ir. FOLDR (dft_exec_cons (F-e) C7) OK xs
+                   (be with vs_gas_readings := gs ++ tail) = IntRet ir v) ==>
+             trace_gas (trace_block a e (F-e) C7 sf
+                 <|bb_label := be.vs_current_bb; bb_instructions :=
+                   REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|>
+                 (be with vs_gas_readings := gs ++ tail)) = ZIP (FLAT keys,gs))))) /\
+    (!a sf tf inc entry order r8 u0.
+       FLOOKUP acts' a = SOME (sf,tf,inc,entry,order,SOME r8,SOME u0) ==>
+       terminates r8 /\ LENGTH (AM' a) = LENGTH (AE' a) /\ LENGTH (AM' a) = LENGTH (AK' a) /\
+       PERM (MAP THE (FILTER IS_SOME (AM' a)) ++ u0) entry.vs_gas_readings /\
+       (!v. (r8 = OK v \/ (?ir. r8 = IntRet ir v)) ==> EVERY IS_SOME (AM' a) /\ u0 = v.vs_gas_readings) /\
+       (!F. N' <= F ==> run_blocks (F-inc) C8 tf entry = r8 /\
+         (!gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (AM' a) gs ==>
+           (?extra. AE' a = gas_events_blocks (F-inc) C7 sf
+             (entry with vs_gas_readings := gs ++ tail) ++ extra) /\
+           ((?f. terminates (run_blocks f C7 sf (entry with vs_gas_readings := gs ++ tail))) ==>
+             terminates (run_blocks (F-inc) C7 sf (entry with vs_gas_readings := gs ++ tail)) /\
+             dft_res_rel (restore_result [] (run_blocks (F-inc) C7 sf
+               (entry with vs_gas_readings := gs ++ tail))) (restore_result [] r8) /\
+             (((?v. r8 = OK v) \/ (?ir v. r8 = IntRet ir v)) ==>
+               gas_events_blocks (F-inc) C7 sf
+                 (entry with vs_gas_readings := gs ++ tail) = AE' a /\
+               residual_result tail r8 (run_blocks (F-inc) C7 sf
+                 (entry with vs_gas_readings := gs ++ tail)))) /\
+           (!v. (run_blocks (F-inc) C7 sf (entry with vs_gas_readings := gs ++ tail) = OK v \/
+                 ?ir. run_blocks (F-inc) C7 sf (entry with vs_gas_readings := gs ++ tail) = IntRet ir v) ==>
+             trace_gas (trace_blocks a inc (F-inc) C7 sf
+                 (entry with vs_gas_readings := gs ++ tail)) = ZIP (AK' a,gs))))) /\
+    (!a e bb bt ps xs ys rho hin h be hb cnt front closed rest ms ess keys.
+       FLOOKUP blocks' (a,e) =
+         SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,front,closed,rest) /\
+       FLOOKUP m' (a,e) = SOME ms /\ FLOOKUP es' (a,e) = SOME ess /\ FLOOKUP ks' (a,e) = SOME keys ==>
+       !q. q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE ==>
+         case FLOOKUP calls (a,e,(EL q xs).inst_id) of
+           NONE => EL q ms = [] /\ EL q ess = [] /\ EL q keys = []
+         | SOME call => EL q ms = AM' ((e,(EL q xs).inst_id)::a) /\
+             EL q ess = AE' ((e,(EL q xs).inst_id)::a) /\ EL q keys = AK' ((e,(EL q xs).inst_id)::a)) /\
+    (!a e bb bt ps xs ys rho hin h be hb cnt front closed rest.
+       FLOOKUP blocks' (a,e) =
+         SOME (bb,bt,ps,xs,ys,rho,hin,h,SOME (be,hb),cnt,front,closed,rest) ==>
+       !q. q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE /\ MEM q (TAKE cnt rho) ==>
+         ?ch b done child ir child_out caller_post.
+           FLOOKUP calls (a,e,(EL q xs).inst_id) =
+             SOME (q,ch,b,done,child,SOME (ir,child_out,caller_post))) /\
     (!key mr er kr. FLOOKUP m' key = SOME mr /\ FLOOKUP es' key = SOME er /\
       FLOOKUP ks' key = SOME kr ==>
       LENGTH mr = LENGTH er /\ LENGTH mr = LENGTH kr /\
       LIST_REL (\x y. LENGTH x = LENGTH y) mr er /\
       LIST_REL (\x y. LENGTH x = LENGTH y) mr kr) /\
-    S acts' blocks' m' es' ks' /\
+    (!a e bb bt ps xs ys rho hin h0 be hbe cnt front closed brest mr er kr.
+     FLOOKUP blocks' (a,e) =
+       SOME (bb,bt,ps,xs,ys,rho,hin,h0,SOME (be,hbe),cnt,front,closed,brest) /\
+     FLOOKUP m' (a,e) = SOME mr /\ FLOOKUP es' (a,e) = SOME er /\
+     FLOOKUP ks' (a,e) = SOME kr ==>
+     LENGTH mr = LENGTH xs /\
+     (!f g ai ent ord r u.
+       FLOOKUP acts' a = SOME (f,g,ai,ent,ord,r,u) ==>
+       !q. q < LENGTH xs ==>
+         ((EL q xs).inst_opcode = GAS ==>
+           EL q mr = [ALOOKUP obs (a,e,(EL q xs).inst_id)] /\
+           EL q er = [(f.fn_name,(EL q xs).inst_id)] /\
+           EL q kr = [(a,e,(EL q xs).inst_id)]) /\
+         ((EL q xs).inst_opcode <> GAS /\ (EL q xs).inst_opcode <> INVOKE ==>
+           EL q mr = [] /\ EL q er = [] /\ EL q kr = []))) /\
     (!a e kr. FLOOKUP ks' (a,e) = SOME kr ==> ALL_DISTINCT (FLAT kr)) /\
    (!a e sf tf inc entry order res nrest bb bt ps xs ys rho in_state h0
         body_entry count front closed brest q z.
@@ -1393,7 +1500,6 @@ let U = (\H acts0 blocks0 m es ks at.
               gasEvents$gas_events_blocks F C7 rsf (root_entry with vs_gas_readings := gs ++ tail) =
                 FST (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)))))
 Proof
-  PURE_REWRITE_TAC [LET_THM] >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   PURE_REWRITE_TAC [AND_CLAUSES] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   mp_tac block_edge_initialized_visit >>
