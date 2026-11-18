@@ -482,5 +482,19 @@ Definition call_guard_gas_link_stmt_def:
                   (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
                   (recorded_outcomes_count obs_pre)
                   unit.cu_context out.po_unit.cu_context vs
-                  (opt_entry_state prog prog' cp es)))
+                  (opt_entry_state prog prog' cp es) /\
+                (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+                   mem_inv
+                     (\ctx fn inst s.
+                       (request_cut (recorded_outcomes_count obs_pre) s /\
+                        ~in_static_abort_prefix fn s) ==>
+                       lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
+                     out.po_unit.cu_context (opt_entry_state prog prog' cp es)) /\
+                (fin = asm_opt_finalizer ==>
+                 code_end_offset_ok
+                   (\ctx fn inst s.
+                     raw_reachable (opt_entry_state prog prog' cp es) ctx fn inst s /\
+                     request_cut (recorded_outcomes_count obs_pre) s /\
+                     ~in_static_abort_prefix fn s)
+                   out.po_unit.cu_context)))
 End
