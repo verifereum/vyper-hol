@@ -1,6 +1,7 @@
 (* Opcode-independent ghost frames and clean-write boundaries. *)
 Theory decoderGhostFramePtr
 Ancestors bodyPtrDefs ptrDiscipline venomInst venomState finite_map pred_set list
+  stepTaintVarFrame[qualified,ignore_grammar]
 
 Theorem step_prov_other_output:
   ~MEM x inst.inst_outputs ==>
@@ -17,10 +18,7 @@ Theorem step_taint_other_output:
   ~MEM x inst.inst_outputs ==>
   op_taint (step_taint inst s t tn) (Var x) = op_taint tn (Var x)
 Proof
-  simp[step_taint_def, op_taint_def, set_var_taint_def] >>
-  Cases_on `inst.inst_outputs` >> simp[FLOOKUP_DRESTRICT] >>
-  rename1 `inst.inst_outputs = h::outs` >>
-  Cases_on `outs` >> simp[FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+  simp[op_taint_def, stepTaintVarFrameTheory.step_taint_other_var]
 QED
 
 Theorem step_taint_memory_bound:
