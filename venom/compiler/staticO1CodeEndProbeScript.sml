@@ -86,3 +86,22 @@ val () = require "target offset falsifies the strict bound"
   (aconv (eval ``w2n (^offset - 0w) < dimword (:256) DIV 2``) boolSyntax.F)
 val () = print "Target reaches a code_end-derived CODECOPY at offset 2^255. The strict bound is false.\n"
 
+(* Check the positive case of the revised guard on the failing observation. *)
+val targetBlock = eval ``HD (^fnOut).fn_blocks``
+val copyIndex = eval ``(^reached).vs_inst_idx``
+val faultIndex = ``7:num``
+val () = require "CODECOPY and the first static write use the same block"
+  (aconv (eval ``(^reached).vs_call_ctx.cc_static /\
+    lookup_block (^reached).vs_current_bb (^fnOut).fn_blocks = SOME ^targetBlock``)
+    boolSyntax.T)
+val () = require "first fault is a TSTORE at the end of the guarded interval"
+  (aconv (eval ``^copyIndex <= ^faultIndex /\
+    get_instruction ^targetBlock ^faultIndex = SOME (EL ^faultIndex (fn_insts ^fnOut)) /\
+    (EL ^faultIndex (fn_insts ^fnOut)).inst_opcode = TSTORE``) boolSyntax.T)
+val () = require "no barrier between the observed CODECOPY and the first TSTORE"
+  (aconv (eval ``EVERY (\i. ~is_terminator i.inst_opcode /\
+    ~MEM i.inst_opcode
+      [INVOKE; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; SSTORE; TSTORE; LOG])
+    (TAKE (^faultIndex - ^copyIndex) (DROP ^copyIndex (fn_insts ^fnOut)))``)
+    boolSyntax.T)
+val () = print "The failing CODECOPY lies inside the static-abort prefix, and the source's first step is ExHalt_abort.\n"
