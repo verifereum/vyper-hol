@@ -5,7 +5,9 @@ Ancestors
   vyperInterpreter vyperState vyperStorageBackend vfmState vfmContext
   callTraceFrameProvenance callTraceFrame callTrace guardReentryCode guardReentryAccounts
   guardPushProjections immutableSectionRel vfmExecution vfmExecutionProp
-  e2eCorrectness e2eComposition frameOutcome guardTerminalBackend guardSourceAlignment
+  e2eCorrectness e2eComposition e2eProducers frameOutcome
+  guardTerminalBackend guardSourceAlignment asmOptimizer asmOptNonemptyFinalizer
+  vfmAccountDeletion
   vyperCallFiniteStorageSupport
   vfmDecreasesGas relation pair arithmetic list
 
@@ -151,6 +153,34 @@ Proof
           asm_simp_tac bool_ss []) >>
       first_assum ACCEPT_TAC) >>
   strip_tac >> simp[] >> metis_tac[]
+QED
+
+Triviality guard_frame_runtime_nonempty:
+  vyper_frame_staging fin policy tops runtime_bc am tx es ==>
+  runtime_bc <> []
+Proof
+  strip_tac >> fs[vyper_frame_staging_def, accepted_finalizers_def]
+  >- (gvs[] >> metis_tac[compile_vyper_runtime_nonempty]) >>
+  gvs[] >> drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
+  gvs[] >> metis_tac[codegen_assembly_finalizer_nonempty]
+QED
+
+Triviality guard_staged_run_no_target_deletion:
+  vyper_frame_staging fin policy tops runtime_bc am tx es /\
+  vyper_closed_world fin policy tops runtime_bc am tx H es /\
+  run_call es = SOME (r,es') /\
+  ~MEM tx.target es.rollback.toDelete /\
+  (2 <= LENGTH es.contexts ==> ~MEM tx.target (SND (HD es.contexts)).toDelete) ==>
+  ~MEM tx.target es'.rollback.toDelete
+Proof
+  strip_tac >> drule guard_frame_runtime_nonempty >> strip_tac >>
+  `wf_state es /\ ~NULL (lookup_account tx.target es.rollback.accounts).code` by
+    (fs[vyper_frame_staging_def, call_state_rel_def, evm_state_ok_def,
+        installed_code_rel_def, NULL_EQ] >> metis_tac[APPEND_eq_NIL]) >>
+  `~account_empty (lookup_account tx.target es.originalAccounts)` by
+    fs[vyper_closed_world_def] >>
+  spose_not_then assume_tac >>
+  drule_all run_call_to_delete >> simp[] >> metis_tac[]
 QED
 
 Triviality guard_reentry_staging:
