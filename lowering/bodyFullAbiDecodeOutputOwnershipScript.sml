@@ -2,7 +2,7 @@ Theory bodyFullAbiDecodeOutputOwnership
 Ancestors
   bodyPtrIfExpAllocSeparation exprSimOperands loweringHalt
   revertReasonPrefixPtr ptrDiscipline bufferAllocationExecution
-  bodyPtrIfExpAllocSource exprSimProps loweringStateRelDefs loweringPosts exprLoweringProps
+  bodyPtrIfExpAllocSource exprSimProps loweringStateRelDefs stateRelProj loweringPosts exprLoweringProps
   venomExecSemantics venomState venomInst compileEnv finite_map words arithmetic
 
 (* Allocation sites may be revisited.  The base is the site's existing base
@@ -42,7 +42,9 @@ Proof
   simp[mk_inst_def] >> rpt strip_tac >>
   `local_region ce es.scopes s name b k` by
     (irule local_region_frame >> conj_tac
-     >- (qexists_tac `fn` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+     >- (qexists_tac `fn` >>
+         qpat_assum `stmt_state_rel H ctx fn ce cx es s`
+           (mp_tac o MATCH_MP stmt_state_rel_local_ptrs_alloca) >> simp[]) >>
      qexistsl_tac [`sb`, `es.scopes`, `u`] >> simp[] >>
      metis_tac[]) >>
   drule_all ifexp_alloca_local_separate >>
