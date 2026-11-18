@@ -465,10 +465,9 @@ Proof
             disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
          drule_all call_gas_static_no_abort >> metis_tac[]) >>
      `o1_run_state_ok vs` by
-       (fs[o1_run_state_ok_def] >>
-        gvs[Abbr`vs`, entry_venom_state_def, call_state_rel_def,
-            frame_fresh_def, frame_tx_rel_def, world_rel_def,
-            add_frame_gas_def]) >>
+       (qpat_x_assum `initial_venom_state_rel tops am tx vs` mp_tac >>
+        simp[initial_venom_state_rel_def, venom_env_rel_def,
+             loweringStateRelDefsTheory.call_ctx_rel_def, o1_run_state_ok_def]) >>
      qspecl_then [`D`, `0`, `rpolicy`, `unit`, `out`, `vs`,
                   `vs.vs_initial_fmp`] mp_tac run_venom_pipeline_correct >>
      impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
