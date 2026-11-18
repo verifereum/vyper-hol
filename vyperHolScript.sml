@@ -94,3 +94,4 @@ Ancestors
   codegenSymOwnRel
   (* bytecode: a passing operand-stack checker excludes frame overflow *)
   stackBoundSoundness
+  asmFinalizerPrefix

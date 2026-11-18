@@ -191,6 +191,47 @@ Proof
   simp[fn_insts_blocks_def, MEM_APPEND] >> metis_tac[]
 QED
 
+(* Expose the common block-lowering and root-installation decomposition
+   before applying instruction-specific restrictions. *)
+Theorem fmp_stage_lowered_inst_origin[local]:
+  fmp_stage_lowered infos ctx runner f g /\ MEM j (fn_insts g) ==>
+  MEM j (fn_insts_blocks f.fn_blocks) \/
+  ?sp s1 info users oldpc suffix root newpc s2 plan blocks s3.
+    ir_supply_covers_fn sp f /\ fresh_ir_var sp = (runner,s1) /\
+    split_fmp_entry f = SOME (FmpEntryLayout users oldpc suffix) /\
+    fmp_make_root_layout ctx f info runner s1 =
+      SOME (FmpRootLayout (LENGTH users) root newpc s2) /\
+    analyze_fmp_reclaims infos ctx f = SOME plan /\
+    fmp_lower_blocks infos ctx runner s2 (fmp_plan_to_alist f plan) f.fn_blocks =
+      SOME (FmpBlocksResult blocks [] s3) /\
+    (MEM j (fn_insts_blocks blocks) \/
+     MEM j (OPTION_TO_LIST root) \/ MEM j (OPTION_TO_LIST newpc))
+Proof
+  simp[fmp_stage_lowered_def, fmp_lower_function_with_info_def, AllCaseEqs()] >>
+  strip_tac >> gvs[fn_insts_def] >>
+  drule fmp_checked_seal_some >> strip_tac >> gvs[fmp_seal_def, fn_insts_def] >>
+  Cases_on `root_layout` >> gvs[] >>
+  `?users oldpc suffix. split_fmp_entry f = SOME (FmpEntryLayout users oldpc suffix)` by
+    (qpat_assum `fmp_make_root_layout _ _ _ _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[fmp_make_root_layout_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_all fmp_make_root_layout_prefix >> strip_tac >> gvs[] >>
+  drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >>
+  `entry.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail` by
+    (Cases_on `oldpc` >> fs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
+  qpat_x_assum `blocks = entry::rest` SUBST_ALL_TAC >>
+  rename1 `fresh_ir_var sp = (runner,s1)` >>
+  rename1 `fmp_make_root_layout ctx f info runner s1 =
+      SOME (FmpRootLayout (LENGTH users) root newpc s2)` >>
+  rename1 `fmp_lower_blocks infos ctx runner s2 (fmp_plan_to_alist f plan)
+      f.fn_blocks = SOME (FmpBlocksResult (entry::rest) [] s3)` >>
+  drule_all (SRULE [fn_insts_def] fmp_install_root_instruction_origin) >>
+  disch_then assume_tac >>
+  disj2_tac >>
+  qexistsl [`sp`, `s1`, `info`, `root`, `newpc`, `s2`, `entry::rest`, `s3`] >>
+  asm_rewrite_tac[]
+QED
+
 Theorem fmp_lowered_protected_origin[local]:
   fmp_stage_lowered infos ctx runner f g /\
   pre_fmp_ops f /\ MEM d (fn_insts f) /\ MEM x d.inst_outputs /\ d.inst_opcode = ADD /\
@@ -200,11 +241,14 @@ Theorem fmp_lowered_protected_origin[local]:
   MEM j (fn_insts f)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `fmp_stage_lowered _ _ _ _ _` mp_tac >>
-  simp[fmp_stage_lowered_def, fmp_lower_function_with_info_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  drule fmp_checked_seal_some >> strip_tac >> gvs[fmp_seal_def, fn_insts_def] >>
-  Cases_on `root_layout` >> gvs[] >>
+  drule_all fmp_stage_lowered_inst_origin >>
+  disch_then (DISJ_CASES_THEN2 assume_tac
+    (qx_choosel_then [`sp`, `s1`, `info`, `users`, `oldpc`, `suffix`,
+       `root`, `newpc`, `s2`, `plan`, `blocks`, `s3`]
+       (map_every assume_tac o CONJUNCTS)))
+  >- simp[fn_insts_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [fn_insts_def]) >>
+  PURE_REWRITE_TAC[fn_insts_def] >>
   `MEM x (fn_ir_vars f)` by
     (fs[fn_ir_vars_member, fn_insts_blocks_MEM] >> metis_tac[]) >>
   `MEM x sp.irs_used_vars` by
@@ -224,13 +268,11 @@ Proof
     (drule (REWRITE_RULE [Once (GSYM AND_IMP_INTRO)] fmp_lower_blocks_protected) >>
      disch_then (qspecl_then [`x`, `d`] mp_tac) >>
      fs[pre_fmp_ops_def, fn_insts_def, EVERY_MEM] >> metis_tac[]) >>
-  `?users oldpc suffix. split_fmp_entry f = SOME (FmpEntryLayout users oldpc suffix)` by
-    (qpat_assum `fmp_make_root_layout _ _ _ _ _ = _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[fmp_make_root_layout_def, AllCaseEqs()] >> metis_tac[]) >>
   `!i. MEM i (OPTION_TO_LIST oldpc) ==>
        MEM i (fn_insts_blocks f.fn_blocks) /\ i.inst_opcode = RETPC_PARAM` by
-    (drule split_fmp_entry_reconstruct >> strip_tac >>
+    (qpat_assum `split_fmp_entry f = _` (fn layout =>
+       POP_ASSUM_LIST (K ALL_TAC) >> assume_tac layout) >>
+     drule split_fmp_entry_reconstruct >> strip_tac >>
      Cases_on `oldpc` >>
      fs[callLayoutDefsTheory.OPTION_TO_LIST_def, fn_insts_blocks_MEM] >>
      metis_tac[MEM, MEM_APPEND, split_fmp_entry_retpc_opcode]) >>
@@ -241,14 +283,9 @@ Proof
      conj_tac >> strip_tac
      >- (`old = d` by metis_tac[] >> gvs[]) >>
      `old.inst_opcode = CODECOPY` by metis_tac[] >> gvs[]) >>
-  drule_all fmp_make_root_layout_prefix >> strip_tac >> gvs[] >>
-  drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >>
-  `entry.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail` by
-    (Cases_on `oldpc` >> fs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
-  qpat_x_assum `blocks = entry::rest` SUBST_ALL_TAC >>
   drule_all fmp_make_root_layout_opaque_shape >> strip_tac >>
   drule fmp_make_root_layout_runner_outputs >> strip_tac >>
-  drule_all (SRULE [fn_insts_def] fmp_install_root_instruction_origin) >> strip_tac
+  qpat_x_assum `MEM j (fn_insts_blocks blocks) \/ _` strip_assume_tac
   >- (fs[] >> metis_tac[]) >>
   (Cases_on `MEM (Var x) j.inst_operands`
    >- metis_tac[fmp_make_root_layout_operand_origin] >>
@@ -317,30 +354,22 @@ Theorem fmp_code_end_inst_origin[local]:
   MEM j (fn_insts f)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `fmp_stage_lowered _ _ _ _ _` mp_tac >>
-  simp[fmp_stage_lowered_def, fmp_lower_function_with_info_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  drule fmp_checked_seal_some >> strip_tac >> gvs[fmp_seal_def, fn_insts_def] >>
-  Cases_on `root_layout` >> gvs[] >>
-  `?users oldpc suffix. split_fmp_entry f = SOME (FmpEntryLayout users oldpc suffix)` by
-    (qpat_assum `fmp_make_root_layout _ _ _ _ _ = _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[fmp_make_root_layout_def, AllCaseEqs()] >> metis_tac[]) >>
-  drule_all fmp_make_root_layout_prefix >> strip_tac >> gvs[] >>
-  drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >>
-  `entry.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail` by
-    (Cases_on `oldpc` >> fs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
-  qpat_x_assum `blocks = entry::rest` SUBST_ALL_TAC >>
+  drule_all fmp_stage_lowered_inst_origin >>
+  disch_then (DISJ_CASES_THEN2 assume_tac
+    (qx_choosel_then [`sp`, `s1`, `info`, `users`, `oldpc`, `suffix`,
+       `root`, `newpc`, `s2`, `plan`, `blocks`, `s3`]
+       (map_every assume_tac o CONJUNCTS)))
+  >- simp[fn_insts_def] >>
   drule_all fmp_make_root_layout_opaque_shape >> strip_tac >>
-  `MEM j (fn_insts (f with fn_blocks := entry::rest))` by
-    (drule_all (SRULE [fn_insts_def] fmp_install_root_instruction_origin) >>
-     strip_tac >> fs[fn_insts_def] >>
-     qpat_x_assum `!i. MEM i _ ==> i.inst_opcode = _ \/ _`
+  `MEM j (fn_insts_blocks blocks)` by
+    (qpat_x_assum `MEM j (fn_insts_blocks blocks) \/ _` strip_assume_tac >>
+     qpat_x_assum `j.inst_opcode = ADD /\ _ \/ _` strip_assume_tac >>
+     qpat_x_assum `!i. MEM i (OPTION_TO_LIST root) ==> _`
        (qspec_then `j` mp_tac) >>
-     qpat_x_assum `!i. MEM i _ ==> i.inst_opcode = RETPC_PARAM`
+     qpat_x_assum `!i. MEM i (OPTION_TO_LIST newpc) ==> i.inst_opcode = RETPC_PARAM`
        (qspec_then `j` mp_tac) >> simp[]) >>
   fs[fn_insts_def] >>
-  qpat_x_assum `MEM j (fn_insts_blocks (entry::rest))` mp_tac >>
+  qpat_x_assum `MEM j (fn_insts_blocks blocks)` mp_tac >>
   pure_rewrite_tac[fn_insts_blocks_MEM] >>
   strip_tac >>
   (drule_all fmp_lower_blocks_origin >> strip_tac

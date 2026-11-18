@@ -193,3 +193,52 @@ Proof
   qspecl_then [`p`, `F`, `[]`] mp_tac prune_unreachable_walk_refines_under >>
   simp[]
 QED
+
+(* Quantitative interface for nonterminal symbolic prefixes. *)
+Theorem terminal_prefix_splice_ok:
+  asm_terminal_op t /\ ~asm_reachable_marker x /\
+  asm_static_wf (pre ++ [t;x] ++ post) ==>
+  asm_splice_ok [t;x] [t]
+Proof
+  strip_tac >>
+  `~is_data_inst x` by
+    (strip_tac >> drule_all terminal_data_not_wf >>
+     disch_then (qspecl_then [`post`, `pre`] mp_tac) >> gvs[rich_listTheory.APPEND_ASSOC_CONS]) >>
+  gvs[asm_terminal_op_def, asm_reachable_marker_def,
+      asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
+      symbolResolveTheory.asm_inst_size_def]
+QED
+
+Theorem terminal_prefix_window:
+  asm_terminal_op t /\ ~asm_reachable_marker x /\
+  u.sym_base.as_pc = LENGTH pre ==>
+  (!i a. i < 1 /\ sym_steps (pre ++ [t;x] ++ post) env i u = SymOK a ==>
+     ~(a.sym_base.as_pc < LENGTH (pre ++ [t;x] ++ post) /\
+       EL a.sym_base.as_pc (pre ++ [t;x] ++ post) = AsmOp "GAS")) /\
+  (!a. sym_steps (pre ++ [t;x] ++ post) env 1 u = SymOK a ==>
+     sym_steps (pre ++ [t] ++ post) env 1 u =
+       SymOK (sym_with_pc (splice_pc (LENGTH pre) 2 1 a.sym_base.as_pc) a) /\
+     (a.sym_base.as_pc <= LENGTH pre \/ LENGTH pre + 2 <= a.sym_base.as_pc))
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> `i = 0` by decide_tac >>
+      gvs[sym_steps_def, EL_APPEND_EQN, asm_terminal_op_def]) >>
+  `!l. x <> AsmLabel l` by
+    (rpt strip_tac >> gvs[asm_reachable_marker_def]) >>
+  simp[sym_steps_one, EL_APPEND_EQN] >>
+  Cases_on `t = AsmOp "JUMP"`
+  >- (gvs[sym_step_def, sym_step_op_def, sym_jump_def] >>
+      Cases_on `u.sym_stack` >> simp[] >>
+      rename1 `u.sym_stack = dest :: stk` >>
+      Cases_on `dest` >> simp[sym_jump_dest_def] >>
+      rename1 `u.sym_stack = Lab l d :: stk` >>
+      Cases_on `d = 0` >> simp[] >>
+      mp_tac (Q.INST [`pfx` |-> `pre`, `pat` |-> `[AsmOp "JUMP"; x]`,
+                       `repl` |-> `[AsmOp "JUMP"]`, `sfx` |-> `post`]
+                      splice_index_of_label) >> simp[] >> strip_tac >>
+      Cases_on `INDEX_OF (AsmLabel l) (pre ++ [AsmOp "JUMP"; x] ++ post)` >>
+      gvs[] >> rpt strip_tac >> gvs[] >>
+      simp[sym_with_pc_def, sym_state_component_equality,
+           asm_state_component_equality] >> metis_tac[]) >>
+  rpt strip_tac >> metis_tac[sym_step_halting_not_ok]
+QED
