@@ -19,7 +19,7 @@ Proof
        ignore_bind_def, bind_def, return_def]
 QED
 
-Theorem abi_args_singleton_source[local]:
+Theorem abi_args_singleton_source:
   eval_exprs cx [e] = bind (bind (eval_expr cx e) (read_result cx))
     (\v. return [v])
 Proof

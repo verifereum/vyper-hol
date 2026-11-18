@@ -93,6 +93,7 @@ Proof
     (`isPREFIX (emitted_insts sm sb) (DROP u.vs_inst_idx bb.bb_instructions)` by
        (qpat_assum `emitted_insts sm sb = _` (pure_rewrite_tac o single) >>
         first_assum ACCEPT_TAC) >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
      drule_all computed_emitted_suffix_paths >>
      disch_then (qspec_then `PG` (strip_assume_tac o SRULE [])) >>
      gvs[] >> metis_tac[]) >>

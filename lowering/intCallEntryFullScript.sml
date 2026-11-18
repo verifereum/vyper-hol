@@ -7,11 +7,12 @@ Ancestors
   contextCodegenRel codegenRel memSafeRun unitTransformDefs
   instIdxIndep venomExecProofs
   exprLoweringProps fragExec venomMemProps finite_map pred_set contextProps
+  venomInstProofs1
 
 Theorem internal_capture_inst_ptr:
   MEM inst.inst_opcode [PARAM; RETPC_PARAM; ASSIGN] /\
   inst.inst_operands = [Lit idx] /\ inst.inst_outputs = [out] /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D lo fuel ctx func G tn inst s
 Proof
   strip_tac >> fs[MEM] >>
@@ -54,7 +55,7 @@ Theorem internal_capture_seq_ptr:
       MEM inst.inst_opcode [PARAM; RETPC_PARAM; ASSIGN] /\
       ?idx out. inst.inst_operands = [Lit idx] /\
                 inst.inst_outputs = [out]) code /\
-    allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     run_inst_seq code s = OK t ==>
     ?G' tn'. !D. inst_seq_ptr D lo ctx func PG G tn code s G' tn'
 Proof
@@ -74,6 +75,11 @@ Proof
     metis_tac[step_inst_base_preserves_allocas] >>
   `allocas_from lo (u with vs_inst_idx := SUC s.vs_inst_idx)` by
     (fs[allocas_from_def] >> first_assum ACCEPT_TAC) >>
+  `u.vs_initial_fmp = s.vs_initial_fmp /\ u.vs_fmp = s.vs_fmp` by
+    (drule step_inst_base_preserves_all >>
+     fs[MEM, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (fs[allocas_below_fmp_def] >> metis_tac[]) >>
   first_x_assum (qspecl_then
     [`u with vs_inst_idx := SUC s.vs_inst_idx`,
      `t with vs_inst_idx := SUC s.vs_inst_idx`,
@@ -257,7 +263,7 @@ Theorem internal_capture_seq_origin_ptr_path:
     MEM inst.inst_opcode [PARAM; RETPC_PARAM; ASSIGN] /\
     ?idx out. inst.inst_operands = [Lit idx] /\
               inst.inst_outputs = [out]) code /\
-  ~s.vs_halted /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq code s = OK t /\
@@ -291,7 +297,7 @@ Theorem internal_capture_origin_ptr_path:
     MEM inst.inst_opcode [PARAM; RETPC_PARAM; ASSIGN] /\
     ?idx out. inst.inst_operands = [Lit idx] /\
               inst.inst_outputs = [out]) code /\
-  ~s.vs_halted /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq code s = OK t ==>
@@ -313,7 +319,7 @@ Theorem compile_internal_entry_prefix_joint:
   fresh_vars_wrt sa s /\
   (if has_rb then 1 else 0) + LENGTH params <= LENGTH s.vs_params /\
   LENGTH s.vs_params < dimword (:256) /\
-  ~s.vs_halted /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t G' tn' x.
@@ -346,7 +352,7 @@ Theorem compile_internal_entry_prefix_origin_ptr:
   fresh_vars_wrt sa s /\
   (if has_rb then 1 else 0) + LENGTH params <= LENGTH s.vs_params /\
   LENGTH s.vs_params < dimword (:256) /\
-  ~s.vs_halted /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t G' tn' x.
@@ -371,7 +377,7 @@ QED
 Theorem compile_internal_fixed_region_joint:
   compile_fixed_region_with_id region_size sa = ((id,buf),sb) /\
   fresh_vars_wrt sa s /\ ~s.vs_halted /\ allocas_from lo s /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t G' tn'.

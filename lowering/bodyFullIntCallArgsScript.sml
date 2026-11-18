@@ -10,6 +10,7 @@ Ancestors vyperCallOutcome[qualified,ignore_grammar] fragGasPath compileVyper[qu
   compileExprAllocaFresh[qualified,ignore_grammar]
   compilerInstructionSuffix[qualified,ignore_grammar]
   abiEncoderProps[qualified,ignore_grammar]
+  runtimeSymSrcClassifiedSource[qualified,ignore_grammar]
   bodyFullIntCallDefs bodyIntCallSeams bodyFullPreds bodySimFull bodyFullUnwrap
   gasOutcomeFull bodyPtrDefs gasShadow gasShadowShape gasContext exprSimHypsDefs
   exprSimIfExpWidenedAdapter exprSimSliceCompose
@@ -240,6 +241,20 @@ Proof
   gvs[EVERY_MAP, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
 QED
 
+Theorem intcall_args_selected_constants[local]:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
+  subst_consts_fn (module_consts_env tops [])
+    (mut,nr,rr,name,args,dflts,ret,ss) = (mut,nr,rr,name,args,dflts,ret,ss)
+Proof
+  strip_tac >>
+  qpat_assum `body_inv _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
+  irule runtimeSymSrcClassifiedSourceTheory.runtime_sym_supported_function_subst >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexists_tac `Internal` >> simp[]
+QED
+
 (* The compiler table selects exactly the source's omitted-default suffix. *)
 Theorem intcall_args_omitted_defaults:
   body_inv tops ctx cenv cx /\
@@ -268,9 +283,10 @@ Proof
     gvs[supportedProgramTheory.supported_program_def,
         supportedNamesTheory.supported_declaration_names_def,
         supportedDeclsTheory.supported_declaration_headers_def] >>
-  `module_consts_env tops [] = []` by
-    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
-     qexists_tac `tops` >> simp[]) >>
+  `subst_consts_fn (module_consts_env tops [])
+      (mut,nr,rr,name,args,dflts,ret,ss) = (mut,nr,rr,name,args,dflts,ret,ss)` by
+    (irule intcall_args_selected_constants >> first_assum (irule_at Any) >>
+     qexistsl_tac [`cx`,`ctx`,`cenv`] >> first_assum ACCEPT_TAC) >>
   `cenv.ce_func_param_types name = MAP SND args` by
     (gvs[] >> irule intCallLookupTheory.build_func_param_types_distinct >>
      conj_tac >- simp[] >>
@@ -1180,10 +1196,10 @@ Proof
   `supported_pure_exprs tops dflts` by
     (drule_all supportedProgramTheory.supported_program_declaration >>
      simp[supportedProgramTheory.supported_declaration_body_def]) >>
-  `module_consts_env tops [] = []` by
-    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
-     qexists `tops` >> gvs[supportedProgramTheory.supported_program_def,
-         supportedDeclsTheory.supported_declaration_headers_def]) >>
+  `subst_consts_fn (module_consts_env tops [])
+      (mut,nr,rr,name,args,dflts,ret,ss) = (mut,nr,rr,name,args,dflts,ret,ss)` by
+    (irule intcall_args_selected_constants >> first_assum (irule_at Any) >>
+     qexistsl_tac [`cx`,`ctx`,`cenv`] >> first_assum ACCEPT_TAC) >>
   `MEM (mut,nr,rr,name,args,dflts,ret,ss)
       (FST (SND (classify_functions tops)))` by
     (simp[loweringShapePropsTheory.MEM_classify_internal] >>

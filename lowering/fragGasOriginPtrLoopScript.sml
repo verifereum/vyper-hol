@@ -311,7 +311,7 @@ QED
 Theorem jmp_origin_ptr_path:
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst iid JMP [Label lbl] []) /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
   gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
     (OK (jump_to lbl s), G, tn)
 Proof
@@ -339,7 +339,7 @@ Theorem jnz_origin_ptr_path:
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst iid JNZ [cond; Label l1; Label l2] []) /\
   eval_operand cond s = SOME w /\ op_taint tn cond = {} /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
   gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
     (OK (jump_to (if w <> 0w then l1 else l2) s), G, tn)
 Proof

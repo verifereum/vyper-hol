@@ -3,7 +3,7 @@ Theory defaultEntrySourcePreparation
 Ancestors
   defaultDispatchFacts defaultGetterArguments entryParameterAdmissibility
     vyperTypeContractContext
-  vyperLoweringCorrect entryStateRel list
+  vyperLoweringCorrect entryStateRel constSubst list
   immutableLocationProps immutableRelation compileVyper
 
 Theorem targeted_external_package_layout:
@@ -42,10 +42,12 @@ Theorem default_entry_source_preparation:
   SUM (MAP tv_abi_size tvs) <= LENGTH (DROP 4 vs.vs_call_ctx.cc_calldata) /\
   LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256) /\
   (MEM (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
-       tx.function_name,args,([]:expr list),ret,fbody) (FST (classify_functions tops)) \/
+       tx.function_name,args,([]:expr list),ret,
+       subst_consts_stmts (module_consts_env tops []) fbody) (FST (classify_functions tops)) \/
    FST (SND (SND (classify_functions tops))) =
      SOME (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
-       tx.function_name,args,([]:expr list),ret,fbody))
+       tx.function_name,args,([]:expr list),ret,
+       subst_consts_stmts (module_consts_env tops []) fbody))
 Proof
   strip_tac >>
   drule_all selected_external_params_ok >>
@@ -78,7 +80,12 @@ Proof
      Cases_on `EL n args` >> gvs[] >>
      metis_tac[pairTheory.SND]) >>
   gvs[] >> drule_all default_dispatch_source_cases >>
-  strip_tac >> gvs[LENGTH_DROP]
+  strip_tac >> gvs[LENGTH_DROP] >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  drule_all default_fallback_lookup_decl >> strip_tac >>
+  drule_all checked_supported_external_subst >>
+  simp[subst_consts_fn_def, pairTheory.PAIR_EQ] >> metis_tac[]
 QED
 
 Theorem default_entry_package_preparation:
@@ -88,8 +95,8 @@ Theorem default_entry_package_preparation:
     SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
     (package_external_fn tops T keys
-      (mut,F,rr,tx.function_name,args,([]:expr list),ret,fbody)) =
-    (lbl,ce,pa,mc,pay,F,key,ut,view,fbody,rt) ==>
+      (mut,F,rr,tx.function_name,args,([]:expr list),ret,compiled_body)) =
+    (lbl,ce,pa,mc,pay,F,key,ut,view,compiled_body,rt) ==>
   ce.ce_module = NONE /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
   ce.ce_return_pc = NONE /\ ce.ce_return_buf = NONE /\
   storage_vars_rel ce (initial_evaluation_context am.sources am.layouts tx NONE) /\
@@ -105,7 +112,7 @@ Proof
     (get_struct_fields (make_struct_fields_map tops)) tops 0
     (add_module_var_locations tops FEMPTY)` by
     (Cases_on `package_external_fn tops T keys
-       (mut,F,rr,tx.function_name,args,([]:expr list),ret,fbody)` >>
+       (mut,F,rr,tx.function_name,args,([]:expr list),ret,compiled_body)` >>
      PairCases_on `r` >> gvs[compileVyperTheory.set_external_package_target_def] >>
      drule_all package_external_fn_vars >> simp[]) >>
   `ce.ce_return_pc = NONE` by

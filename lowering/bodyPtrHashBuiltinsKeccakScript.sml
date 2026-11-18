@@ -13,7 +13,7 @@ Theorem hash_sha3_inst_ok:
     op_taint tn (Var p) = {} /\ op_taint tn len = {} /\
     (!i. w2n w <= i /\ i < w2n w + w2n n ==> i NOTIN tn.t_mem) /\
     mem_bytes_at (w2n w) (w2n n) s.vs_memory = bs /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn
       (mk_inst id SHA3 [Var p; len] [out]) s
 Proof
@@ -40,7 +40,7 @@ Theorem hash_sha3_counted_edge:
     op_taint tn (Var p) = {} /\ op_taint tn len = {} /\
     (!i. w2n w <= i /\ i < w2n w + w2n n ==> i NOTIN tn.t_mem) /\
     mem_bytes_at (w2n w) (w2n n) s.vs_memory = bs /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?t. step_inst_base (mk_inst id SHA3 [Var p; len] [out]) s = OK t /\
       gas_path_ptr_edge D 0 ctx fn PG G tn s 0
         (step_prov PG G (mk_inst id SHA3 [Var p; len] [out]) t)

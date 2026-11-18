@@ -135,6 +135,7 @@ Proof
     (gvs[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
   `ptr_covers G tn dst s (w2n (32w:256 word))` by simp[wordsTheory.dimword_def] >>
   `s.vs_outcomes <> []` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all computed_emitted_suffix_paths >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `?q. run_inst_seq (emitted_insts sm sl) s = OK q` by

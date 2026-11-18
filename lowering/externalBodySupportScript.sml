@@ -5,7 +5,7 @@
 Theory externalBodySupport
 Ancestors
   list pair finite_map
-  e2eDefs supportedProgram supportedDecls
+  e2eDefs supportedProgram supportedDecls compileVyper constSubst constSubstCorrect constSubstStmts
   vyperTypeSystem vyperTypeInvariants vyperTypeContract vyperTypeContractFunction
   vyperTypeContractContext vyperTypeContractSoundness vyperTypeContractGetter
   vyperTypeExternalDefaults vyperTypeInitialState vyperTypeBindArguments vyperTypeCallStackSoundness
@@ -237,4 +237,81 @@ Proof
          initial_evaluation_context_def] >>
   irule check_contract_functions_well_typed_initial >>
   gvs[checked_contract_runtime_ready_def] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem external_source_body_substitution_nr:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+       <| outcomes := SOME os; requests := [] |>) = (INL (),es0) /\
+  lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+    nr (is_view_mut mut) es0 = (INL (),es_lock) ==>
+  !gx. eval_stmts
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (subst_consts_stmts (module_consts_env tops []) fbody)
+    (es_lock with gas_obs := gx) =
+  eval_stmts
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    fbody (es_lock with gas_obs := gx)
+Proof
+  strip_tac >> drule external_body_lock_frame >> strip_tac >>
+  Cases_on `classify_functions tops` >>
+  rename1 `classify_functions tops = (exts,tail)` >> PairCases_on `tail` >>
+  drule_all lower_vyper_runtime_unit_consts_guard >> strip_tac >>
+  drule_all external_lookup_body_typing >> strip_tac >>
+  drule source_typing_ok_consts_ready >> strip_tac >> gvs[] >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]` by
+    fs[source_deployment_rel_def] >>
+  mp_tac (Q.INST
+    [`cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
+     `mods` |-> `[(NONE,tops)]`, `artifact` |-> `art`,
+     `imms` |-> `account_immutables am tx.target`,
+     `sc` |-> `[env]`, `current_src` |-> `NONE`]
+    checked_module_consts_subst_context) >>
+  impl_tac >- simp[initial_evaluation_context_def] >> strip_tac >>
+  `const_subst_context roots
+     (initial_evaluation_context am.sources am.layouts tx NONE)
+     env_t (module_consts_env tops []) [(NONE,tops)] art` by
+    (irule const_subst_context_static >> goal_assum (drule_at Any) >>
+     simp[artifact_env_def, get_tenv_def, initial_evaluation_context_def]) >>
+  `es0.immutables = am.immutables` by
+    (`machine_well_typed am` by fs[source_typing_ok_def] >>
+     drule_all external_body_prefix_state >> simp[]) >>
+  gen_tac >> irule const_subst_eval_stmts >>
+  goal_assum (drule_at Any) >> qexists_tac `ret` >>
+  fs[const_cells_agree_def, initial_state_def]
+QED
+
+Theorem external_source_body_substitution:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+       <| outcomes := SOME os; requests := [] |>) = (INL (),es0) ==>
+  !gx. eval_stmts
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (subst_consts_stmts (module_consts_env tops []) fbody)
+    (es0 with gas_obs := gx) =
+  eval_stmts
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    fbody (es0 with gas_obs := gx)
+Proof
+  strip_tac >>
+  `lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+     F (is_view_mut mut) es0 = (INL (),es0)` by
+    simp[lock_if_nr_def, vyperStateTheory.return_def] >>
+  drule_all
+    (Q.INST [`nr` |-> `F`] (SPEC_ALL external_source_body_substitution_nr)) >>
+  simp[]
 QED
