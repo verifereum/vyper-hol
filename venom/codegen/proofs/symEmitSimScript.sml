@@ -5,6 +5,7 @@ Ancestors asmSymOwnCode[qualified,ignore_grammar]
   strongPrefixSim asmSplice contextCodegenRel codegenRel finite_map list
   fnBlockBodyHelpers asmSymOwnCode asmSpliceOwn
   symEmitNamedDispatch symEmitCodesizeOwn symEmitDataReplay symEmitFixedBlockSuffix
+  symEmitCodecopyDecode
 
 (* Reuse the bridge's closed structural relation as syntax, not a new definition. *)
 val emit_bridge_core_tm = let
@@ -2691,9 +2692,9 @@ Theorem asm_sym_codecopy_values:
   IS_SOME (eval_operand src vs)
 Proof
   strip_tac >>
-  gvs[asmSymBridgeTheory.asm_sym_rel_def, LIST_REL_CONS1,
-      asmSymBridgeTheory.sval_conc_def, venomStateTheory.eval_operands_def,
-      AllCaseEqs()]
+  `LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+     ss.sym_stack cs.as_stack` by fs[asmSymBridgeTheory.asm_sym_rel_def] >>
+  drule_all asm_sym_codecopy_decode >> simp[]
 QED
 
 Theorem codecopy_source_range:
@@ -2744,8 +2745,7 @@ Proof
      simp[] >> disch_then irule >> gvs[MEM] >> metis_tac[]) >>
   `eval_operand dst vs = SOME dw /\ eval_operand sz vs = SOME nw /\
    sval_conc slo sw = eval_operand src vs /\ IS_SOME (eval_operand src vs)` by
-    gvs[LIST_REL_CONS1, asmSymBridgeTheory.sval_conc_def,
-        venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+    (drule_all asm_sym_codecopy_decode >> simp[]) >>
   `!b. b IN FDOM ss.sym_mem_labels ==>
     ~in_mem_range (w2n dw) (w2n nw) b` by
     (rpt strip_tac >>
