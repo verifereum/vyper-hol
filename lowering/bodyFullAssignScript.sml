@@ -1939,22 +1939,22 @@ Proof
     (CONJUNCTS_THEN2 mp_tac assume_tac)) >>
   Cases_on `e` >> simp[] >>
   pure_once_rewrite_tac [CONJUNCT1 compile_expr_raw_def]
-  >~ [`Literal ann lit`] >-
+  >~ [`compile_expr_body _ _ _ _ _ (Literal _ _) _`] >-
     (simp[compile_expr_body_def, expr_type_def] >>
      disch_then (mp_tac o MATCH_MP reason_compile_literal) >>
      gvs[reason_result_shape_def])
-  >~ [`IfExp ann cond th el`] >-
+  >~ [`compile_expr_body _ _ _ _ _ (IfExp _ _ _ _) _`] >-
     (disch_then (mp_tac o MATCH_MP reason_compile_ifexp) >>
      gvs[reason_result_shape_def])
-  >~ [`StructLit ann nm fields`] >-
+  >~ [`compile_expr_body _ _ _ _ _ (StructLit _ _ _) _`] >-
     (disch_then (mp_tac o MATCH_MP reason_compile_structlit) >>
      gvs[reason_result_shape_def])
-  >~ [`Call ann dest args dflt`] >-
+  >~ [`compile_expr_body _ _ _ _ _ (Call _ _ _ _) _`] >-
     (simp[compile_expr_body_def, expr_type_def] >>
      disch_then (mp_tac o MATCH_MP reason_compile_call) >>
      gvs[reason_result_shape_def])
-  >~ [`Builtin ann bi args`] >- suspend "builtin"
-  >~ [`TypeBuiltin ann tb rt args`] >- suspend "typebuiltin" >>
+  >~ [`compile_expr_body _ _ _ _ _ (Builtin _ _ _) _`] >- suspend "builtin"
+  >~ [`compile_expr_body _ _ _ _ _ (TypeBuiltin _ _ _ _) _`] >- suspend "typebuiltin" >>
   simp[compile_expr_body_def, expr_type_def, compile_name_vv_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_ptr_def, AllCaseEqs()] >>
   rename1 `FLOOKUP cenv.ce_vars nm` >>
