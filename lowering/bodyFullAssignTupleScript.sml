@@ -4877,3 +4877,81 @@ Proof
     decoderGhostFramePtrTheory.step_prov_other_output,
     decoderGhostFramePtrTheory.step_taint_other_output, mk_inst_def, istore_def, mstore_def]
 QED
+
+(* The loop's dynamic source address and its load are one live prefix. *)
+Theorem tuple_runtime_source_word[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX [mk_inst id ADD [Var src;offset] [addr];
+            mk_inst (id+1) MLOAD [Var addr] [x]]
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\
+  eval_operand offset s = SOME (n2w off) /\ op_taint tn offset = {} /\
+  off + 32 <= capacity /\ w2n a + off < dimword (:256) /\
+  w2n a + off + 32 <= s.vs_alloca_next /\ src <> addr /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted ==>
+  ?t Gf tf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    eval_operand (Var x) t = SOME (mload (w2n a + off) s) /\
+    op_taint tf (Var x) = mem_word_taint tn.t_mem (w2n a + off) /\
+    op_prov Gf (Var x) = NONE /\
+    (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+    t.vs_inst_idx = s.vs_inst_idx + 2 /\
+    (!p. p <> addr /\ p <> x ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p)) /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
+  drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
+  qabbrev_tac `i = mk_inst id ADD [Var src;offset] [addr]` >>
+  qabbrev_tac `raw = update_var addr (a + n2w off) s` >>
+  qabbrev_tac `r = raw with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `Gr = step_prov PG G i raw` >>
+  qabbrev_tac `tr = step_taint i s raw tn` >>
+  `op_taint tn (Var src) = {}` by fs[ptr_covers_def] >>
+  `step_inst_base i s = OK raw` by
+    (simp[Abbr `i`, Abbr `raw`] >> irule step_ADD >> simp[eval_operand_def]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK r,Gr,tr)` by
+    (gen_tac >> simp[Abbr `r`, Abbr `Gr`, Abbr `tr`] >>
+     irule decoderNavigationPtrTheory.straight_line_step_origin >>
+     `ptr_inst_ok D lo 0 ctx fn G tn i s /\ inst_mem_below_frontier i s /\
+       inst_dload_in_section i s` by
+       (fs[Abbr `i`, Abbr `raw`] >>
+        drule_all (typed_copy_origin_ptr_binop_checks |>
+          Q.INST [`opc` |-> `ADD`] |> SRULE []) >> simp[]) >>
+     simp[Abbr `i`, mk_inst_def, is_terminator_def]) >>
+  `ptr_covers Gr tr addr r 32` by
+    (simp[Abbr `r`, Abbr `Gr`, Abbr `tr`, Abbr `i`, Abbr `raw`] >>
+     irule typed_copy_origin_ptr_offset_covers >> simp[] >> metis_tac[]) >>
+  `w2n (a + n2w off) = w2n a + off` by
+    (`off < dimword (:256)` by decide_tac >>
+     simp[wordsTheory.w2n_add_2, wordsTheory.w2n_n2w, LESS_MOD]) >>
+  `lookup_block r.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb r.vs_inst_idx = SOME (mk_inst (id+1) MLOAD [Var addr] [x]) /\
+   lookup_var addr r = SOME (a+n2w off) /\ ~r.vs_halted /\
+   w2n (a+n2w off) + 32 <= r.vs_alloca_next /\ allocas_from lo r /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp r)` by
+     (simp[Abbr `r`, Abbr `raw`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+      fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  drule_all (Q.INST [`s` |-> `r`, `G` |-> `Gr`, `tn` |-> `tr`]
+    tuple_runtime_mload_cursor) >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `tr.t_mem = tn.t_mem /\ tr.t_stor = tn.t_stor /\
+   tr.t_trans = tn.t_trans /\ tr.t_imm = tn.t_imm /\
+   (!p. p <> addr ==> lookup_var p r = lookup_var p s /\
+     FLOOKUP Gr p = FLOOKUP G p /\ op_taint tr (Var p) = op_taint tn (Var p))` by
+    (simp[Abbr `r`, Abbr `Gr`, Abbr `tr`, Abbr `i`, Abbr `raw`,
+       typed_copy_origin_ptr_binop_ghost_frame] >>
+     simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  qexistsl_tac [`t`,`Gf`,`tf`] >>
+  conj_tac >-
+    (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gr`,`r`,`tr`] >> simp[]) >>
+  simp[] >>
+  conj_tac >- simp[Abbr `r`, Abbr `raw`, update_var_def, mload_def] >>
+  conj_tac >-
+    simp[Abbr `r`, Abbr `raw`, update_var_def, venom_state_component_equality] >>
+  simp[Abbr `r`] >> metis_tac[]
+QED
