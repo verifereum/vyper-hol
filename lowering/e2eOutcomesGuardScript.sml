@@ -504,6 +504,7 @@ Triviality guard_trace_storage_induction:
     vyper_closed_world fin policy tops runtime_bc am tx H e /\
     LENGTH (call_trace e) < 2 ** 64 /\
     2 <= LENGTH e.contexts /\ run_call e = SOME (r,e') /\
+    ~MEM tx.target (SND (HD e.contexts)).toDelete /\
     storage_well_formed_on
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (empty_state with <|accounts := (SND (HD e.contexts)).accounts;
@@ -560,6 +561,12 @@ Proof
     (map_every assume_tac o CONJUNCTS))) >>
   qpat_x_assum `calldata_dispatch _ _ = NONE \/ _` strip_assume_tac
   >- (drule_all guard_undispatched_reentry_rollback >> simp[]) >>
+  `(SND (HD e.contexts)).toDelete = e.rollback.toDelete` by
+    metis_tac[step_push_saved_to_delete] >>
+  `~MEM tx_e.target (SND (HD e.contexts)).toDelete` by
+    (qpat_assum `vyper_frame_staging fin policy tops runtime_bc am_e tx_e e`
+       (mp_tac o REWRITE_RULE [vyper_frame_staging_def]) >>
+     asm_simp_tac bool_ss []) >>
   `($< LEX $<) (contexts_weight 0 e.contexts) (contexts_weight 0 es.contexts)` by
     (drule_all guard_reached_step_weight >> simp[]) >>
   `!st. storage_well_formed_on
