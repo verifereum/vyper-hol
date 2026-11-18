@@ -8,7 +8,7 @@ Ancestors
   loweringHalt exprLoweringProps compileEnv emitHelperProps venomInst venomState venomExecSemantics
   words list rich_list finite_map
 
-(* These are the installed caller quotations, reproduced without alteration. *)
+(* Concrete 256-word horizon-type instances of the installed caller propositions. *)
 val owned_decoder_state = ``\st s G tn.
   alloca_history fn s /\ lo <= s.vs_alloca_next /\
   s0.vs_alloca_next <= s.vs_alloca_next /\
@@ -29,7 +29,7 @@ val owned_decoder_state = ``\st s G tn.
     op_taint tn (Var p) = {} /\ k = LENGTH bytes /\
     mem_bytes_at b k s.vs_memory = bytes /\ b+k <= s.vs_alloca_next) live /\
   EVERY (\(a,bytes). mem_bytes_at a (LENGTH bytes) s.vs_memory = bytes) protected /\
-  (!H. V H ==> stmt_state_rel H ctx fn ce cx es s /\
+  (!H:((bool # (256 word) # type_value) list # num list). V H ==> stmt_state_rel H ctx fn ce cx es s /\
     ghost_inv_at (DF H) lo delta ce cx es G tn s /\
     ghost_kept_at lo ce es0 origin G0 tn0 s0 G tn) /\
   (?inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
@@ -48,14 +48,14 @@ val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b dat
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
-  s.vs_inst_idx = LENGTH st.cs_current_insts /\ (?H. V H) /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\ (?H:((bool # (256 word) # type_value) list # num list). V H) /\
   alloca_history fn s /\ lo <= s.vs_alloca_next /\
   s0.vs_alloca_next <= s.vs_alloca_next /\
   (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
     aid < origin.cs_next_id ==> off+sz <= s.vs_alloca_next) /\
   (!name a sz. local_region ce es0.scopes s0 name a sz ==>
     a+sz <= s.vs_alloca_next) /\
-  (!H. V H ==> stmt_state_rel H ctx fn ce cx es s /\
+  (!H:((bool # (256 word) # type_value) list # num list). V H ==> stmt_state_rel H ctx fn ce cx es s /\
     ghost_inv_at (DF H) lo delta ce cx es G tn s /\
     ghost_kept_at lo ce es0 origin G0 tn0 s0 G tn) /\
   data = Var data_var /\ eval_operand data s = SOME (n2w b) /\
@@ -124,11 +124,12 @@ Theorem abi_decode_caller_allocation_joint:
   (!x. not_fresh_at st x ==>
     lookup_var x u = lookup_var x s /\ FLOOKUP Gh x = FLOOKUP G x /\
     op_taint tnh (Var x) = op_taint tn (Var x)) /\
-  (!H. V H ==> stmt_state_rel H ctx fn ce cx es u /\
+  (!H:((bool # (256 word) # type_value) list # num list).
+    V H ==> stmt_state_rel H ctx fn ce cx es u /\
     ghost_inv_at (DF H) lo delta ce cx es Gh tnh u /\
     ghost_kept_at lo ce es0 origin G0 tn0 s0 Gh tnh) ==>
   ?t G' tn'.
-    (!H. V H ==> gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+    (!H:((bool # (256 word) # type_value) list # num list). V H ==> gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
       (u,Gh,tnh) [] (OK t,G',tn')) /\
     (!obs. fn_has_code header_st ready obs ==> gas_path ctx obs u 0 (OK t)) /\
     (^caller_setup_success) st ready ops s G tn b min_size max_size outsz t G' tn' d
@@ -200,7 +201,51 @@ Resume abi_decode_caller_allocation_joint[observer]:
 QED
 
 Resume abi_decode_caller_allocation_joint[owned]:
-  FAIL_TAC "owned allocation package"
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  `abi_builtin_decode_output_site st min_size max_size = header_st.cs_next_id` by
+    simp[abi_builtin_decode_output_site_def] >>
+  `buffer_allocation_base u header_st.cs_next_id = d` by
+    (pure_rewrite_tac[buffer_allocation_base_def] >>
+     qpat_x_assum `abi_builtin_decode_output_site _ _ _ = _`
+       (fn th => pure_rewrite_tac[GSYM th]) >> simp[]) >>
+  drule_all ifexp_alloca_step_site >> strip_tac >>
+  `a = d` by metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
+  drule_all bodyPtrIfExpAllocSourceTheory.alloca_step_contracts >> strip_tac >>
+  `~not_fresh_at origin out /\ input <> out` by
+    (gvs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+         abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LESS_EQ_TRANS,
+       arithmeticTheory.LESS_EQ_ADD]) >>
+  `w2n (n2w (b+32):256 word) = b+32` by
+    (simp[wordsTheory.w2n_n2w] >> irule arithmeticTheory.LESS_MOD >> decide_tac) >>
+  `!H. V H ==> stmt_state_rel H ctx fn ce cx es u` by metis_tac[] >>
+  `!H. V H ==> ghost_inv_at (DF H) lo delta ce cx es G1 tn1 v /\
+     ghost_kept_at lo ce es0 origin G0 tn0 s0 G1 tn1 /\
+     abi_decode_ptr_window G1 tn1 v input (n2w (b+32)) (LENGTH input_bytes) /\
+     (!x. x <> out ==> lookup_var x v = lookup_var x u /\
+       FLOOKUP G1 x = FLOOKUP Gh x /\ op_taint tn1 (Var x) = op_taint tnh (Var x)) /\
+     stmt_state_rel H ctx fn ce cx es v` by
+    (qx_gen_tac `h` >> disch_tac >>
+     `ghost_inv_at (DF h) lo delta ce cx es Gh tnh u /\
+       ghost_kept_at lo ce es0 origin G0 tn0 s0 Gh tnh` by metis_tac[] >>
+     `st.cs_next_var <= header_st.cs_next_var` by simp[] >>
+     `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
+      (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x)` by
+       metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
+     `w2n (n2w (b+32):256 word)+LENGTH input_bytes <= u.vs_alloca_next /\
+      lo <= u.vs_alloca_next` by simp[] >>
+     `(!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
+       aid < origin.cs_next_id ==> off+sz <= u.vs_alloca_next) /\
+      (!name a sz. local_region ce es0.scopes s0 name a sz ==>
+       a+sz <= u.vs_alloca_next)` by metis_tac[] >>
+     drule_all abi_decode_scratch_alloc_frame_joint >>
+     disch_then (qspec_then `PG` strip_assume_tac) >>
+     gvs[]) >>
+  qexistsl_tac [`out`, `input`] >>
+  simp[lookup_var_inst_idx, eval_operand_inst_idx,
+       exprLoweringPropsTheory.stmt_state_rel_inst_idx,
+       ghostPcTransportPtrTheory.ghost_inv_at_inst_idx] >>
+  FAIL_TAC "owned remainder"
 QED
 
 Finalise abi_decode_caller_allocation_joint
