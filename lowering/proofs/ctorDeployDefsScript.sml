@@ -138,25 +138,29 @@ Definition opt_deploy_entry_state_def:
     opt_entry_state prog prog' cplan es with vs_alloca_next := imm_len tops
 End
 
-(* ADMISSION: at the identity finalizer the optimized deploy entry state is
-   the deploy entry state.  Waits for its proof. *)
 Theorem opt_deploy_entry_state_identity:
   !tops am tx prog cplan es.
     deploy_state_rel tops (assemble prog) am tx es ==>
     opt_deploy_entry_state prog prog cplan tops es =
     deploy_entry_state prog cplan tops es
 Proof
-  cheat
+  rw[deploy_state_rel_def, opt_deploy_entry_state_def,
+     deploy_entry_state_def, opt_entry_state_def,
+     venom_state_component_equality, entry_venom_state_frame_fields] >>
+  gvs[listTheory.DROP_APPEND]
 QED
 
-(* ADMISSION: at the identity finalizer the deploy entry state's code is the
-   transaction's.  Waits for its proof. *)
 Theorem deploy_txp_identity:
   !tops am tx prog cplan es.
     deploy_state_rel tops (assemble prog) am tx es ==>
     tx with code := (opt_deploy_entry_state prog prog cplan tops es).vs_code = tx
 Proof
-  cheat
+  rpt gen_tac >> rename1 `(opt_deploy_entry_state prog prog cplan tops es).vs_code` >>
+  strip_tac >>
+  qspecl_then [`tops`, `am`, `tx`, `prog`, `cplan`, `es`]
+    (fn th => first_assum (SUBST1_TAC o MATCH_MP th)) opt_deploy_entry_state_identity >>
+  gvs[deploy_state_rel_def, deploy_entry_state_def,
+      entry_venom_state_frame_fields, call_txn_component_equality]
 QED
 
 (* ADMISSION: the deploy result relation does not read the transaction's code
