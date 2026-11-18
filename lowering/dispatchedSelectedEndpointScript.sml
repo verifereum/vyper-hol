@@ -167,9 +167,12 @@ Resume dispatched_selected_registration_joint[relations]:
       (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
        tx.function_name,args,([]:expr list),ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt)` by
-    (rewrite_tac[Q.INST [`E` |-> `module_consts_env tops []`]
-       entryDispatchPropsTheory.external_package_subst_consts,
-       constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
+    (once_rewrite_tac
+       [SIMP_RULE std_ss
+          [constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def]
+          (Q.INST [`E` |-> `module_consts_env tops []`,
+                   `defaults` |-> `[]:expr list`]
+             entryDispatchPropsTheory.external_package_subst_consts)] >>
      first_assum ACCEPT_TAC) >>
   drule_all_then MATCH_ACCEPT_TAC registration_actual_endpoint_relations_from_prefix
 QED

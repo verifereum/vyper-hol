@@ -363,7 +363,7 @@ Proof
   simp[Once supported_nested_type_def, supported_scalar_type_def]
 QED
 
-Theorem build_getter_subst[local]:
+Theorem build_getter_subst:
   !e kt vt n args ret exp.
     build_getter e kt vt n = (args,ret,exp) ==>
     !E. build_getter (subst_consts_expr E e) kt vt n =

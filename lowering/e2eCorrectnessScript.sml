@@ -1301,6 +1301,8 @@ Proof
               initial_evaluation_context_def] >> metis_tac[]) >> gvs[]) >>
   `fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
   `~program_reads_self_code tops` by fs[] >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[entryStateRelTheory.source_typing_ok_vtype_keys_distinct] >>
   drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
   drule_all o1_pipeline_label_flow_preserved >> strip_tac >>
   drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>
@@ -2061,6 +2063,8 @@ Proof
           eom <= w2n vs.vs_initial_fmp` by
     (qspecl_then [`out.po_unit.cu_context`, `cplan`, `vs`]
        mp_tac generate_context_plan_eom_room >> simp[]) >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[entryStateRelTheory.source_typing_ok_vtype_keys_distinct] >>
   drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
   `!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
      ~MEM (Label "runtime_begin") inst.inst_operands` by

@@ -64,7 +64,7 @@ Proof
   simp[shadow_root_def, shadow_root_contexts_def]
 QED
 
-Theorem opt_deploy_codegen_asm_entry_rel[local]:
+Theorem opt_deploy_codegen_asm_entry_rel:
   !tops prog prog' am tx es cplan u.
   deploy_state_rel tops (assemble prog') am tx es /\ unit_shape_ok u ==>
   codegen_asm_entry_rel cplan prog (opt_deploy_entry_state prog prog' cplan tops es)
@@ -80,7 +80,7 @@ Proof
   gvs[entry_venom_state_def, venomStateTheory.init_venom_state_def, contextCodegenRelTheory.context_memory_rel_def]
 QED
 
-Theorem opt_deploy_asm_frame_rel[local]:
+Theorem opt_deploy_asm_frame_rel:
   !tops prog prog' am tx es cplan u.
   deploy_state_rel tops (assemble prog') am tx es /\ unit_shape_ok u /\
   assemble prog' <> [] ==>
@@ -141,7 +141,7 @@ QED
 
 (* The bridges at the deployment entry: the S4 memory facts of vs from its
    memory-safe and pointer-safe runs from "__deploy". *)
-Theorem deploy_selected_memory[local]:
+Theorem deploy_selected_memory:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_source_ok tops am tx /\
@@ -379,6 +379,8 @@ Proof
      `fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
      `supported_program tops /\ supported_program_deploy tops /\
       ~program_reads_self_code tops` by fs[deploy_source_ok_def] >>
+     `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+       (fs[deploy_source_ok_def] >> metis_tac[deploy_typing_ok_vtype_keys_distinct]) >>
      drule_all lower_vyper_deploy_unit_sym_src_ok >> strip_tac >>
      drule_all deploy_unit_defs_reach_uses >> strip_tac >>
      drule_all o1_pipeline_label_flow_preserved >> strip_tac >>
