@@ -4306,3 +4306,193 @@ Resume tuple_immutable_normalized_prefix[post]:
 QED
 
 Finalise tuple_immutable_normalized_prefix
+
+(* The fixed store consumes the actual normalized buffer, while pending
+   members keep their original tuple window. *)
+Theorem tuple_immutable_normalized_fixed_joint[local]:
+  compile_assign_value ce (Lit (n2w off)) LocCode (Var xs) F NONE dty sty
+    (type_memory_bytes ce dty) sa = ((),sb) /\
+  dty <> sty /\ ~is_bytestring_type dty /\ 0 < type_slot_size dtv /\
+  type_memory_bytes ce dty = type_memory_size dtv /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ ~block_is_terminated sb /\
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env st /\ ce.ce_is_ctor /\
+  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME dty /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME dty /\
+  local_ptrs_reserved ce sa /\
+  (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!base. ce.ce_imm_alloca = SOME base ==> eval_operand base s = SOME 0w /\
+    copy_old_operand sa base /\ op_taint tn base = {} /\ op_prov G base = NONE) /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
+  sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+       sz = type_memory_size tv) fields) /\
+  type_widens_to (get_tenv cx) sty dty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\ evaluate_type (get_tenv cx) dty = SOME dtv /\
+  value_has_type stv v /\ value_has_type dtv v /\
+  write_place cx (ImmutablePlace ce.ce_module id []) v st = (INL (),fin) /\
+  stmt_state_rel (H0 : (bool # 'a word # type_value) list # num list) ctx fn ce cx st s /\
+  not_fresh_at sa xs /\ lookup_var xs s = SOME sw /\
+  ptr_covers G tn xs s (type_memory_size stv) /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory stv v (w2n sw) mem) /\
+  off + type_memory_size dtv <= lo /\ lo <= p /\
+  type_memory_size dtv < dimword (:256) /\
+  w2n sw + type_memory_size stv < dimword (:256) /\
+  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  p <= w2n sw /\ w2n sw + type_memory_size stv <= p+k /\
+  (?a len. a <= p /\ p+k <= a+len /\
+    ((?aid. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len)) \/
+     (?name. local_region ce st.scopes s name a len))) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?q Gq tq.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK q,Gq,tq)) /\
+    (!H : (bool # 'b word # type_value) list # num list.
+      stmt_state_rel H ctx fn ce cx st s /\ storage_well_formed_on cx st (FST H) ==>
+      stmt_post H ctx fn cx lctx ce ce sa sb st s (INL ()) fin q) /\
+    (!(H : (bool # 'b word # type_value) list # num list) D.
+      stmt_state_rel H ctx fn ce cx st s /\ dead_lo_ok H D lo ce cx /\
+      ghost_inv_at D lo d ce cx st G tn s ==> ghost_inv_at D lo d ce cx fin Gq tq q) /\
+    (!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==> val_in_memory dtv v off mem) /\
+    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    s.vs_alloca_next <= q.vs_alloca_next /\
+    q.vs_call_ctx = s.vs_call_ctx /\ q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> FLOOKUP q.vs_allocas aid = SOME entry) /\
+    (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s /\
+      FLOOKUP Gq x = FLOOKUP G x /\ op_taint tq (Var x) = op_taint tn (Var x)) /\
+    (!x cap. not_fresh_at sa x /\ ptr_covers G tn x s cap ==> ptr_covers Gq tq x q cap) /\
+    tq.t_stor = tn.t_stor /\ tq.t_trans = tn.t_trans /\
+    mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory /\
+    (!i. p <= i /\ i < p+k ==> (i IN tq.t_mem <=> i IN tn.t_mem)) /\
+    alloca_frame ce st sa s ce fin q
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all tuple_immutable_normalized_cursors >>
+  disch_then (qx_choose_then `buf` (qx_choose_then `sm` (qx_choose_then `su`
+    (map_every assume_tac o CONJUNCTS)))) >>
+  qpat_assum `type_memory_bytes ce dty = _` (fn eq =>
+    qpat_x_assum `compile_alloc_buffer _ sa = _` (assume_tac o REWRITE_RULE [eq])) >>
+  `ci_mono sa sm` by
+    (qpat_assum `compile_alloc_buffer _ sa = _` (fn th =>
+       mp_tac (Q.SPECL [`type_memory_size dtv`,`sa`]
+         exprLoweringPropsTheory.ci_mono_compile_alloc_buffer) >> simp[th])) >>
+  `sa.cs_next_id <= su.cs_next_id` by
+    gvs[exprLoweringPropsTheory.ci_mono_def] >>
+  (Cases_on `?Ha : (bool # 'b word # type_value) list # num list.
+                   stmt_state_rel Ha ctx fn ce cx st s`
+   >- (pop_assum (qx_choose_then `Ha` assume_tac) >>
+       qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
+       drule_all (INST_TYPE [alpha |-> beta] tuple_immutable_normalized_prefix) >>
+       disch_then (qspecl_then [`explicit`,`PG`]
+         (qx_choose_then `t` (qx_choose_then `root` (qx_choose_then `b`
+           (qx_choose_then `G1` (qx_choose_then `tn1`
+             (map_every assume_tac o CONJUNCTS))))))) >>
+       `stmt_state_rel Ha ctx fn ce cx st t` by
+         (qpat_assum `!H. stmt_state_rel H ctx fn ce cx st s ==> _`
+            (drule_then ACCEPT_TAC)) >>
+       suspend "suffix") >>
+   drule_all (INST_TYPE [beta |-> alpha] tuple_immutable_normalized_prefix) >>
+   disch_then (qspecl_then [`explicit`,`PG`]
+     (qx_choose_then `t` (qx_choose_then `root` (qx_choose_then `b`
+       (qx_choose_then `G1` (qx_choose_then `tn1`
+         (map_every assume_tac o CONJUNCTS))))))) >>
+   `stmt_state_rel H0 ctx fn ce cx st t` by
+     (qpat_x_assum `!H. stmt_state_rel H ctx fn ce cx st s ==> _`
+        (drule_then ACCEPT_TAC)) >>
+   `!(H : (bool # 'b word # type_value) list # num list).
+       stmt_state_rel H ctx fn ce cx st s ==> stmt_state_rel H ctx fn ce cx st t` by
+     (qx_gen_tac `Hb` >> disch_tac >>
+      `?Ha : (bool # 'b word # type_value) list # num list.
+         stmt_state_rel Ha ctx fn ce cx st s` by (qexists_tac `Hb` >> simp[]) >>
+      gvs[])) >>
+  suspend "suffix"
+QED
+
+Resume tuple_immutable_normalized_fixed_joint[suffix]:
+  markerLib.RESUME_TAC >>
+  `alloca_room ctx fn t` by
+    (qpat_assum `stmt_state_rel _ ctx fn ce cx st t`
+       (mp_then Any ACCEPT_TAC stateRelProjTheory.stmt_state_rel_alloca_room)) >>
+  `t.vs_alloca_next < dimword (:256)` by
+    (drule_then ACCEPT_TAC exprLoweringPropsTheory.alloca_room_next_lt) >>
+  `lo <= t.vs_alloca_next` by
+    (irule LESS_EQ_TRANS >> qexists_tac `s.vs_alloca_next` >> simp[]) >>
+  `!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at su x` by
+    (rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at su x /\ _`
+       (qspec_then `x` mp_tac) >> simp[]) >>
+  `!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at su x` by
+    (rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at su x /\ _`
+       (qspec_then `x` mp_tac) >> simp[]) >>
+  `t.vs_labels = s.vs_labels` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) [] (OK t,G1,tn1)`
+       (qspec_then `<| d_stor := K (K {}); d_trans := K (K {});
+                     d_imm := K {}; d_ret := K {} |>` assume_tac) >>
+     drule fragGasOriginPtrTheory.gas_origin_ptr_path_projections >> strip_tac >>
+     drule fragGasOriginTheory.gas_origin_path_erase >>
+     disch_then (mp_then Any ACCEPT_TAC stmtSimAugAssignPlaceMemoryTheory.aug_place_marked_path_labels)) >>
+  `!base. ce.ce_imm_alloca = SOME base ==> eval_operand base t = SOME 0w /\
+    copy_old_operand su base /\ op_taint tn1 base = {} /\ op_prov G1 base = NONE` by
+    (qx_gen_tac `base_op` >> disch_tac >>
+     qpat_assum `!base. ce.ce_imm_alloca = SOME base ==> eval_operand base s = _ /\ _`
+       (drule_then (map_every assume_tac o CONJUNCTS)) >>
+     Cases_on `base_op` >> gvs[eval_operand_def,copy_old_operand_def,op_taint_def,op_prov_def]) >>
+  qpat_assum `buf.buf_operand = Var root` (fn eq =>
+    qpat_x_assum `compile_assign_value _ _ _ buf.buf_operand _ _ _ _ _ su = _`
+      (assume_tac o REWRITE_RULE [eq])) >>
+  drule_all (INST_TYPE [alpha |-> beta] tuple_immutable_fixed_stmt_path) >>
+  disch_then (qspecl_then [`lctx`,`explicit`,`d`,`PG`]
+    (qx_choose_then `q` (qx_choose_then `Gq` (qx_choose_then `tq`
+      (map_every assume_tac o CONJUNCTS))))) >>
+  qexistsl_tac [`q`,`Gq`,`tq`] >>
+  (conj_tac >- (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+    qexistsl_tac [`G1`,`t`,`tn1`] >> simp[])) >>
+  (conj_tac >- suspend "stmt_post") >>
+  (conj_tac >- suspend "ghost_post") >>
+  suspend "frames"
+QED
+
+Resume tuple_immutable_normalized_fixed_joint[stmt_post]:
+  markerLib.RESUME_TAC >>
+  rpt strip_tac >>
+  `stmt_state_rel H ctx fn ce cx st t` by simp[] >>
+  irule stmtSimDeclComposeTheory.stmt_post_entry_frame >>
+  qexistsl_tac [`st`,`t`,`su`] >> simp[]
+QED
+
+Resume tuple_immutable_normalized_fixed_joint[ghost_post]:
+  markerLib.RESUME_TAC >>
+  qx_gen_tac `Hb` >> qx_gen_tac `D` >> strip_tac >>
+  `stmt_state_rel Hb ctx fn ce cx st t` by simp[] >>
+  qpat_assum `!H D. _ ==> ghost_inv_at D lo d ce cx fin Gq tq q`
+    (qspecl_then [`Hb`,`D`] mp_tac) >> simp[]
+QED
+
+Resume tuple_immutable_normalized_fixed_joint[frames]:
+  markerLib.RESUME_TAC >>
+  `regions_disjoint p k off (type_memory_size dtv)` by
+    (simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `mem_bytes_at p k q.vs_memory = mem_bytes_at p k t.vs_memory` by simp[] >>
+  `!i. p <= i /\ i < p+k ==> (i IN tq.t_mem <=> i IN tn1.t_mem)` by
+    (qx_gen_tac `i` >> strip_tac >>
+     `~(i < off + type_memory_size dtv)` by decide_tac >> simp[]) >>
+  `fin.scopes = st.scopes` by
+    (drule_then ACCEPT_TAC vyperPlaceFramesTheory.write_immutable_place_scopes) >>
+  `!x. not_fresh_at su x ==> lookup_var x q = lookup_var x t` by simp[] >>
+  `alloca_frame ce st su t ce fin q` by
+    (qpat_assum `stmt_state_rel _ ctx fn ce cx st t`
+       (mp_then Any mp_tac immutableAssignComposeTheory.immutable_assign_suffix_alloca_frame) >>
+     disch_then (drule_at (Pat `FLOOKUP ce.ce_module_vars _ = SOME (ImmutableLoc off)`)) >>
+     disch_then (drule_all_then ACCEPT_TAC)) >>
+  simp[] >> irule stmtSimDefsTheory.alloca_frame_trans >>
+  qexistsl_tac [`ce`,`st`,`t`,`su`] >> simp[]
+QED
+
+Finalise tuple_immutable_normalized_fixed_joint[local]
