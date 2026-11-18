@@ -6,7 +6,7 @@
  * valid_vyper_call, compiled_event_info,
  * return_bytes, tx_return_bytes,
  * unspecified_behaviour_exempt, source_exempt, gas_readings_rel,
- * effects_agree, exception_outcome_rel, call_result_rel, logs_correspond.
+ * effects_agree, exception_outcome_rel, call_result_rel_guarded, logs_correspond.
  * Transaction boundary (Milestone 7 lifecycle): next_source_machine.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
@@ -834,8 +834,8 @@ Definition call_result_rel_at_def:
     | INR exc => exception_outcome_rel tops exc es r es'
 End
 
-Definition call_result_rel_def:
-  call_result_rel tops am tx es r es' <=>
+Definition call_result_rel_guarded_def:
+  call_result_rel_guarded tops am tx es r es' <=>
     let os = MAP SND (call_trace es) in
     gas_readings_rel (gas_readings es)
       (\gobs. call_storage_ok am tx os gobs ==>

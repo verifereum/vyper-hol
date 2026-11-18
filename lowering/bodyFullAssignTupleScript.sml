@@ -8,7 +8,7 @@
  *)
 Theory bodyFullAssignTuple
 Ancestors
-  bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
+  bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyFullLocalCopy robustCopyTransportPtr exprSimProps typedMemoryCopy
@@ -1949,7 +1949,13 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sa`,`su`,`shadow_sa`,`shadow_su`,`op`,
     `s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        mp_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
+  disch_tac >>
   rewrite_tac[stmtSimAssignTupleTheory.eval_assign_tuple_action] >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all >> BETA_TAC >> rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
@@ -1987,8 +1993,10 @@ Proof
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (CONJUNCTS_THEN2
-    (qx_choose_then `v` (CONJUNCTS_THEN2 SUBST_ALL_TAC
-      (map_every assume_tac o CONJUNCTS)))
+    (CONJUNCTS_THEN2
+      (qx_choose_then `v` (CONJUNCTS_THEN2 SUBST_ALL_TAC
+        (map_every assume_tac o CONJUNCTS)))
+      assume_tac)
     (map_every assume_tac o CONJUNCTS)) >>
   simp[] >>
   `bind (eval_expr cx e) (read_result cx)
@@ -2117,7 +2125,13 @@ Proof
           (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
            qexistsl_tac [`cenv`,`s0`,`sa`] >> simp[]) >>
         fs[expr_post_def,ghost_kept_at_def] >>
-        gvs[stmt_lands_def,stmtSimPropsTheory.cenv_top_ext_refl] >>
+        `return_buf_sep d cenv mid t` by
+          (irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+           conj_tac >- fs[] >>
+           qexistsl_tac [`H`, `ctx`, `cx`, `es`, `func`, `s0`, `sa`] >>
+           rpt conj_tac >> first_assum ACCEPT_TAC) >>
+        gvs[stmt_lands_def,stmtSimPropsTheory.cenv_top_ext_refl,
+            return_buf_sep_gas_obs] >>
         first_assum ACCEPT_TAC) >>
       first_assum ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -2554,6 +2568,34 @@ Proof
   `return_buf_frame d cenv sb sf` by
     (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
      qexistsl_tac [`cenv`,`s0`,`sa`] >> simp[]) >>
+  `return_buf_frame d cenv su t` by
+    (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+     qexistsl_tac [`cenv`,`s0`,`sa`] >> simp[]) >>
+  `return_buf_sep d cenv mid t` by
+    (irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+     conj_tac >- fs[] >>
+     qexistsl_tac [`storage_trace_horizon mid.storage_trace`, `ctx`, `cx`,
+                   `es`, `func`, `s0`, `sa`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!bw cap. d = SOME (bw, cap) ==> allocas_from (w2n bw + cap) sf` by
+    (`gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (t,G1,tn1) [] (OK sf,Gf,tf)` by
+       (qpat_assum `r = OK sf` (fn eq =>
+          qpat_assum `!D. gas_origin_ptr_path _ (t,G1,tn1) [] (r,Gf,tf)`
+            (qspec_then `DF H` (ACCEPT_TAC o REWRITE_RULE [eq])))) >>
+     qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) [] (OK sf,Gf,tf)` (fn path =>
+       qpat_assum `return_buf_frame d cenv su t` (fn frame =>
+         qpat_assum `return_buf_sep d cenv mid t` (fn sep =>
+           mp_tac (MATCH_MP return_buf_allocas_path (LIST_CONJ [path,frame,sep]))))) >>
+     simp[]) >>
+  `return_buf_sep d cenv ee sf` by
+    (irule return_buf_sep_transport >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`cenv`, `mid`, `t`] >> simp[] >>
+     rpt strip_tac >>
+     irule (INST_TYPE [alpha |-> ``:256``] stmtSimDefsTheory.local_region_kept) >>
+     conj_tac
+     >- (qexistsl_tac [`mid`, `u`, `su`] >> simp[]) >>
+     qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> first_assum ACCEPT_TAC) >>
   qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1`
     (strip_assume_tac o PURE_REWRITE_RULE [ghost_kept_at_def]) >>
   `!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
@@ -2618,7 +2660,12 @@ Proof
     (rewrite_tac[stmt_lands_def] >> disj1_tac >>
      rpt conj_tac >> simp[NoAsms] >> first_assum ACCEPT_TAC) >>
   conj_tac >- MATCH_ACCEPT_TAC stmtSimPropsTheory.cenv_top_ext_refl >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC,
+         simp_tac (srw_ss()) [stmt_state_rel_start_gas_obs, return_buf_sep_gas_obs] >>
+         first_assum ACCEPT_TAC,
+         qpat_assum `alloca_frame cenv es sa s0 cenv ee sf` mp_tac >>
+         simp_tac (srw_ss()) [alloca_frame_def]]
 QED
 
 (* Every target a local. *)

@@ -748,7 +748,7 @@ Theorem gas_origin_ptr_focus_frame_facts:
   lo <= vs.vs_alloca_next /\
   reserved_intervals_wf ctx.ctx_global_reserved /\
   EVERY (\f. f.fn_eom = NONE) ctx.ctx_functions /\
-  ~ctx_has_dalloca ctx /\ fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
+  fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
   mem_inv dload_headroom_ok ctx vs /\
   w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   code_layout_valid vs ==>
@@ -793,7 +793,9 @@ Theorem gas_origin_ptr_focus_o1_safe_upto:
   lo <= vs.vs_alloca_next /\
   reserved_intervals_wf ctx.ctx_global_reserved /\
   EVERY (\f. f.fn_eom = NONE) ctx.ctx_functions /\
-  ~ctx_has_dalloca ctx /\ fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
+  fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
+  (ctx_has_dalloca ctx ==>
+   !fn inst s. raw_reachable vs ctx fn inst s ==> dalloca_no_wrap inst s) /\
   mem_inv dload_headroom_ok ctx vs /\
   w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   code_layout_valid vs ==>
@@ -827,10 +829,18 @@ Proof
     (qpat_x_assum `mem_inv _ _ _` mp_tac >>
      simp[mem_inv_raw_reachable, dload_headroom_ok_def] >>
      rpt strip_tac >> res_tac >> decide_tac) >>
-  `!fn inst s. raw_reachable vs ctx fn inst s ==>
+  `!fn inst s. raw_reachable vs ctx fn inst s /\ gas_cut k vs s ==>
      dalloca_no_wrap inst s /\
      w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
     (rpt gen_tac >> strip_tac >>
+     Cases_on `ctx_has_dalloca ctx`
+     >- (conj_tac >- metis_tac[] >>
+         drule ptr_raw_reachable_frame >> strip_tac >>
+         qpat_x_assum `!stk PG G tn fn inst s.
+            _ ==> (!fuel. ptr_inst_ok _ _ fuel _ _ _ _ _ _) /\ _`
+           (qspecl_then [`stk`, `PG`, `G`, `tn`, `fn`, `inst`, `s`] mp_tac) >>
+         simp[] >> disch_then (qspec_then `0` mp_tac o CONJUNCT1) >>
+         simp[ptr_inst_ok_def, allocas_below_fmp_def]) >>
      `EVERY pre_fmp_ops ctx.ctx_functions` by
        fs[o1PassContractTheory.fmp_free_ctx_def, EVERY_MEM] >>
      drule raw_reachable_fmp_fixed >> simp[] >> strip_tac >>
@@ -855,7 +865,7 @@ Theorem gas_origin_ptr_focus_dload_upto:
   lo <= vs.vs_alloca_next /\
   reserved_intervals_wf ctx.ctx_global_reserved /\
   EVERY (\f. f.fn_eom = NONE) ctx.ctx_functions /\
-  ~ctx_has_dalloca ctx /\ fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
+  fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
   mem_inv dload_headroom_ok ctx vs /\
   w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   code_layout_valid vs ==>

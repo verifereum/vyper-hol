@@ -198,6 +198,16 @@ Definition expr_vv_sim_full_def:
           (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 End
 
+(* The caller's return buffer is separate from callee allocations and
+   live local regions, including borrowed parameters. *)
+Definition return_buf_sep_def:
+  (return_buf_sep NONE cenv es s <=> T) /\
+  (return_buf_sep (SOME (bw : bytes32, capacity)) cenv es s <=>
+    allocas_from (w2n bw + capacity) s /\
+    !n b sz. local_region cenv es.scopes s n b sz ==>
+             loweringStateRelDefs$regions_disjoint (w2n bw) capacity b sz)
+End
+
 (* Both compilations include local declarations and return the same
    environment, as stmt_env and stmts_env do. *)
 Definition stmt_frag_full_def:
@@ -223,6 +233,7 @@ Definition stmt_frag_full_def:
       ~block_is_terminated sa /\
       gas_admissible source (stmt_res_ok lctx) es /\
       return_buf_frame d cenv sa s0 /\
+      return_buf_sep d cenv es s0 /\
       alloca_history func s0 /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
       (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
@@ -242,6 +253,7 @@ Definition stmt_frag_full_def:
           stmt_state_rel H ctx func cenv'' cx ee t /\
           storage_well_formed_on cx ee (FST H) /\
           return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+          return_buf_sep d cenv'' ee t /\
           (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
           s0.vs_alloca_next <= t.vs_alloca_next /\
           ghost_inv_at (DF H) lo d cenv'' cx ee G tn t /\

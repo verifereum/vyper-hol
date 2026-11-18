@@ -117,6 +117,9 @@ current series contains:
   declared later. Overflowing and incompatible intermediate expressions reject;
   accepted bounds stay unchanged and their syntax receives type metadata. The
   backport preserves the pin's positive-size rule and absent ternary folding.
+- `5386-complex-compare-reject.patch`, vyperlang/vyper#5386: `==` and `!=` on
+  structs, arrays and tuples are rejected with `TypeMismatch`, as in legacy
+  codegen, instead of comparing the operands' memory pointers.
 - `local-dft-create-abort.patch`, not upstream: makes Python's DFT schedule as
   the HOL pass does where it deliberately departs from upstream:
   `create`/`create2` count as aborts. Its name sorts after the PR files it

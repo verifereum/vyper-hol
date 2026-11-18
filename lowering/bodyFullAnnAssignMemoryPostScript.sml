@@ -1,7 +1,7 @@
 Theory bodyFullAnnAssignMemoryPost
 Ancestors
   bodyFullMemoryStage bodyFullMemoryStore bodyFullPathHistory stateRelProj
-  bodyFullLog
+  bodyFullLog bodyFullShared
   stmtLowering exprLoweringProps compileEnv context localPtrsProps
   fragGasOriginPtr fragGasSeqPtr fragExec emitHelperProps
   reasonCopySourcePtr allocaSiteResource venomMemDefs venomState
@@ -14,6 +14,36 @@ Ancestors
   stmtSimDeclMem bodyFullAllocaFresh stmtSimDecl stmtSimProps stmtLoweringMono gasOutcomeFullCompose vyperTypeEnvPreservation contextRawReachable unitTransformDefs freshWrites loweringHalt
   gasShadowCompileStmtHelpers gasShadowCompileStmtBase gasShadowCompileContext
   gasShadow gasShadowState loweringSlice emitHelper gasShadowCompileConvert exprLowering
+
+(* The newly visible local is backed by its preserved allocation. For
+   every other name the declaration keeps both the binding and the pointer. *)
+Theorem annassign_memory_return_buf_sep:
+  return_buf_sep d old es s0 /\
+  (!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) t) /\
+  storage_trace_domain cx st0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func old cx es s0) /\
+  local_ptrs_reserved old sa /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         lookup_var x t = SOME w) /\
+  (!n. n <> id ==> FLOOKUP ce.ce_vars n = FLOOKUP old.ce_vars n) /\
+  MAP FDOM (sc::rest) = MAP FDOM es.scopes /\
+  out.scopes = (sc |+ (id,entry))::rest /\
+  FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  lookup_var p t = SOME w /\ FLOOKUP t.vs_allocas aid = SOME (w2n w,sz) ==>
+  return_buf_sep d ce out t
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace)
+     es.storage_trace` by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_allocated_local) >>
+  qpat_assum `FLOOKUP ce.ce_vars id = SOME _` (irule_at Any) >>
+  qpat_assum `FLOOKUP t.vs_allocas aid = SOME _` (irule_at Any) >>
+  qexistsl_tac [`sa`,`s0`,`func`,`es`,`cx`,`ctx`,`old`,
+                `storage_trace_horizon es.storage_trace`] >>
+  simp[] >> rpt strip_tac >>
+  drule_all_then ACCEPT_TAC lookup_scopes_declared_other
+QED
 
 (* Static decomposition shared by the allocation and RHS producers.  In the
    empty branch b is the compile_expr endpoint: no unwrap is performed. *)
@@ -548,6 +578,8 @@ Theorem annassign_memory_full_installation_post:
     t.vs_inst_idx = LENGTH sf.cs_current_insts /\ ~block_is_terminated sf /\
     return_buf_frame d ce sf t /\ alloca_history func t /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp t) ==>
+    lookup_var p t = SOME w /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
     stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sf /\
     cenv_top_ext old ce out.scopes /\
     stmt_state_rel H ctx func ce cx out t /\
@@ -1230,6 +1262,8 @@ Theorem annassign_memory_full_suffix_post:
   return_buf_frame d ce b s /\ ~block_is_terminated sf /\
   b.cs_next_var <= sf.cs_next_var ==>
   ?t Gf tf.
+    lookup_var p t = SOME dw /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n dw,sz) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,Gf,tf)) /\
     !H. valid_horizon cx st0 H out.storage_trace ==>
@@ -1265,6 +1299,12 @@ Proof
     suspend "staging_taint" >>
   `return_buf_frame d ce sf t` by suspend "return_frame" >>
   qexistsl_tac [`t`,`Gf`,`tf`] >>
+  conj_tac
+  >- fs[typedMemoryCopyTheory.typed_copy_state_frame_def,
+         venomStateTheory.venom_state_component_equality] >>
+  conj_tac
+  >- fs[typedMemoryCopyTheory.typed_copy_state_frame_def,
+         venomStateTheory.venom_state_component_equality] >>
   (conj_tac >- first_assum ACCEPT_TAC) >>
   qx_gen_tac `H` >> disch_tac >>
   qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _`
@@ -1276,7 +1316,14 @@ Proof
              stmt_state_rel h _ _ _ _ _ u` irule >> simp[]) >>
      qpat_assum `!dead depth. ghost_inv_at dead _ depth _ _ _ G tn s ==>
        ghost_inv_at dead _ depth _ _ _ Gu tnu u` irule >> simp[]) >>
-  match_mp_tac (GEN_ALL annassign_memory_full_installation_post) >>
+  match_mp_tac
+    (let
+       val theorem = annassign_memory_full_installation_post
+       val (vars, _) = strip_forall (concl theorem)
+       val body = UNDISCH (SPECL vars theorem)
+     in
+       GENL vars (DISCH_ALL (CONJUNCT2 (CONJUNCT2 body)))
+     end) >>
   qexistsl_tac [`mid`,`sm`,`u`,`Gu`,`tnu`,`id`,`p`,`sz`,`dw`,
     `inst`,`type_memory_size dtv`,`dtv`,`v`,`sc`,`rest`] >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC, metis_tac[]]
@@ -1479,6 +1526,8 @@ Theorem annassign_memory_full_bytes_suffix_post:
   return_buf_frame d ce b s /\ ~block_is_terminated sf /\
   b.cs_next_var <= sf.cs_next_var ==>
   ?t Gf tf.
+    lookup_var p t = SOME dw /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n dw,sz) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,Gf,tf)) /\
     !H. valid_horizon cx st0 H out.storage_trace ==>
@@ -1524,10 +1573,23 @@ Proof
     (metis_tac[body_full_path_alloca_history]) >>
   `return_buf_frame d ce sf t` by suspend "return_frame" >>
   qexistsl_tac [`t`,`Gf`,`tf`] >>
+  conj_tac
+  >- fs[typedMemoryCopyTheory.typed_copy_state_frame_def,
+         venomStateTheory.venom_state_component_equality] >>
+  conj_tac
+  >- fs[typedMemoryCopyTheory.typed_copy_state_frame_def,
+         venomStateTheory.venom_state_component_equality] >>
   (conj_tac >- first_assum ACCEPT_TAC) >>
   qx_gen_tac `H` >> disch_tac >>
   qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` (drule_then strip_assume_tac) >>
-  match_mp_tac (GEN_ALL annassign_memory_full_installation_post) >>
+  match_mp_tac
+    (let
+       val theorem = annassign_memory_full_installation_post
+       val (vars, _) = strip_forall (concl theorem)
+       val body = UNDISCH (SPECL vars theorem)
+     in
+       GENL vars (DISCH_ALL (CONJUNCT2 (CONJUNCT2 body)))
+     end) >>
   qexistsl_tac [`mid`,`b`,`s`,`G`,`tn`,`id`,`p`,`sz`,`dw`,
     `inst`,`type_memory_size dtv`,`dtv`,`v`,`sc`,`rest`] >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC, metis_tac[]]

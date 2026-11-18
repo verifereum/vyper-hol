@@ -164,7 +164,7 @@ Proof
     by (irule alloca_frame_same >> simp[jump_to_def]) >>
   qexists_tac `cenv` >>
   simp[stmt_lands_def, cenv_top_ext_refl, ghost_inv_at_jump_to,
-       return_buf_frame_jump_to] >>
+       return_buf_frame_jump_to, return_buf_sep_jump, return_buf_sep_gas_obs] >>
   gvs[Abbr `lbl`, Abbr `exc`, Abbr `st`, jump_to_def, lookup_var_def])
 QED
 
@@ -295,6 +295,11 @@ Proof
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `t1`, `op`, `s0`,
     `G0`, `tn0`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        mp_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
   strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ condQ condR` >>
   `eval_stmt cx (Assert e ak) =
@@ -402,10 +407,16 @@ Resume compile_assert_frag_full[true]:
        (mp_then Any mp_tac expr_post_alloca_frame) >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then ACCEPT_TAC) >>
+  `return_buf_sep d cenv (mid with gas_obs := []) (jump_to ok t)` by
+    (simp[return_buf_sep_jump, return_buf_sep_gas_obs] >>
+     irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+     conj_tac >- fs[] >>
+     qexistsl_tac [`H`, `ctx`, `cx`, `es`, `func`, `s0`, `sa`] >>
+     fs[expr_post_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any mp_tac assert_success_post_mem) >> simp[] >>
   disch_then (qspecl_then [`sb`, `lctx`, `d`] mp_tac) >> simp[] >>
-  strip_tac >> gvs[ghost_inv_at_jump, ghost_kept_at_def] >>
+  strip_tac >> gvs[ghost_inv_at_jump, ghost_kept_at_def, return_buf_sep_gas_obs] >>
   rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC,
          irule alloca_frame_same_state >> qexists_tac `t` >>
