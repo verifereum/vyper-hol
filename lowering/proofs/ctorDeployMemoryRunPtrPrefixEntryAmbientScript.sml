@@ -60,6 +60,13 @@ Proof
   qpat_x_assum `_ = vs.vs_call_ctx` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `_ = vs.vs_tx_ctx` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `_ = vs.vs_block_ctx` (SUBST_ALL_TAC o SYM) >>
-  simp[] >>
-  qpat_x_assum `tx_env_ok tx` mp_tac >> simp[tx_env_ok_def]
+  simp[accounts_agree_def, transient_agree_def] >>
+  qpat_x_assum `tx_env_ok tx` mp_tac >> simp[tx_env_ok_def] >>
+  rpt strip_tac >>
+  Cases_on `n < tx.block_number /\ tx.block_number <= n + 256` >> gvs[] >>
+  `tx.block_number - (n + 1) < 256` by decide_tac >>
+  simp[listTheory.EL_TAKE, listTheory.LENGTH_TAKE_EQ] >>
+  rw[] >> gvs[] >>
+  Cases_on `256 <= LENGTH es.txParams.prevHashes` >>
+  gvs[listTheory.LENGTH_TAKE_EQ] >> decide_tac
 QED

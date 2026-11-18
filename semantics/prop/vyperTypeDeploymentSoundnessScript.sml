@@ -541,7 +541,7 @@ Proof
     (ignore_bind (set_scopes [scope]) (ignore_bind lock_action (eval_stmts cx body)))` >>
   gs[bind_def, ignore_bind_def, set_scopes_def, return_def, AllCaseEqs()] >>
   FIRST_PROVE
-    [metis_tac[vyperTypeEvalSoundnessTheory.stmts_no_control_escape_eval_stmts_no_loop_control],
+    [metis_tac[vyperTypeEvalProofsTheory.stmts_no_control_escape_eval_stmts_no_loop_control],
      drule send_call_value_no_control_c53 >> rw[no_control_exc_def] >> gvs[],
      qunabbrev_tac `lock_action` >> fs[ignore_bind_def] >>
        drule (SRULE [ignore_bind_def] call_lock_action_no_control_c53) >>
