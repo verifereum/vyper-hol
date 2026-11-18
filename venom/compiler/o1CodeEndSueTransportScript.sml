@@ -145,10 +145,10 @@ Proof
   metis_tac[]
 QED
 
-Theorem sue_code_end_stage_preserves[local]:
+Theorem sue_code_end_stage_preserves:
   ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
-  EVERY (o1_fn_row 6) C.ctx_functions /\ o1_run_state_ok vs /\
+  EVERY (o1_fn_row 6) C.ctx_functions /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
   code_end_offset_ok (raw_reachable vs) C ==>
   code_end_offset_ok (raw_reachable vs) C'
 Proof
@@ -159,8 +159,7 @@ Proof
   simp[code_end_offset_ok_def] >> rpt gen_tac >> strip_tac >>
   `frame_origin vs C C' fn inst vs'` by
     (irule frame_sim_raw_origins >> simp[] >>
-     fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def,
-        ctx_pass_stage_def] >>
+     fs[ctx_pass_stage_def] >>
      irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `frame_origin _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[frame_origin_def] >>
@@ -198,7 +197,9 @@ Proof
    o1_inv D 7 C' s` by (first_x_assum irule >> simp[]) >>
   simp[] >>
   `EL 6 o1_fn_passes = CFP_Simple VP_SingleUseExpansion` by EVAL_TAC >>
-  fs[o1_inv_def, o1_ssa_inv_def] >> irule sue_code_end_stage_preserves >>
+  fs[o1_inv_def, o1_ssa_inv_def, o1_run_state_ok_def,
+     unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  irule sue_code_end_stage_preserves >>
   simp[] >> qexistsl [`C`, `rpolicy`, `o1_walk_view rpolicy 6`] >>
   fs[o1_pre_def, o1_fn_row_def, o1_lowered_inv_def]
 QED

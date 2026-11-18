@@ -8,99 +8,6 @@ Ancestors
   exprLoweringProps emitHelperProps venomState venomInst venomExecSemantics
   ptrDiscipline finite_map words arithmetic list pred_set
 
-Theorem double_check_uniform_prefix[local]:
-  MEM opc1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
-  MEM opc2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
-  run_inst_seq [mk_inst id opc1 [x;Lit lower] [a];
-    mk_inst (id+1) ISZERO [Var a] [b]] s = OK u /\
-  run_inst_seq [mk_inst (id+2) opc2 [x;Lit upper] [c];
-    mk_inst (id+3) ISZERO [Var c] [d]] u = OK v /\
-  run_inst_seq [mk_inst (id+4) AND [Var b;Var d] [e]] v = OK w ==>
-  ?H th.
-    (!D q. inst_seq_ptr D 0 ctx fn PG G tn
-      [mk_inst id opc1 [x;Lit lower] [a];
-       mk_inst (id+1) ISZERO [Var a] [b];
-       mk_inst (id+2) opc2 [x;Lit upper] [c];
-       mk_inst (id+3) ISZERO [Var c] [d];
-       mk_inst (id+4) AND [Var b;Var d] [e]]
-      (s with vs_inst_idx := q) H th) /\
-    op_prov H (Var e) = NONE /\ op_taint th (Var e) = {} /\
-    op_prov H x = NONE /\ op_taint th x = {} /\
-    (!p. ~MEM p [a;b;c;d;e] ==> FLOOKUP H p = FLOOKUP G p /\
-      op_taint th (Var p) = op_taint tn (Var p)) /\
-    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
-    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
-Proof
-  strip_tac >> drule_all scalar_double_checked_prefix >>
-  disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
-  qexistsl [`H`,`th`] >> simp[] >> rpt gen_tac >>
-  drule_all scalar_double_checked_prefix >>
-  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  `H' = H /\ th' = th` by metis_tac[inst_seq_ptr_ghost_unique] >>
-  qpat_x_assum `H' = H` SUBST_ALL_TAC >>
-  qpat_x_assum `th' = th` SUBST_ALL_TAC >>
-  first_assum (qspec_then `q` ACCEPT_TAC)
-QED
-
-Theorem double_check_uniform_certificate[local]:
-  MEM opc1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
-  MEM opc2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
-  (run_inst_seq
-    [mk_inst id opc1 [x;Lit lower] [a]; mk_inst (id+1) ISZERO [Var a] [b];
-     mk_inst (id+2) opc2 [x;Lit upper] [c]; mk_inst (id+3) ISZERO [Var c] [d];
-     mk_inst (id+4) AND [Var b;Var d] [e]; mk_inst (id+5) ASSERT [Var e] []] s = OK t \/
-   run_inst_seq
-    [mk_inst id opc1 [x;Lit lower] [a]; mk_inst (id+1) ISZERO [Var a] [b];
-     mk_inst (id+2) opc2 [x;Lit upper] [c]; mk_inst (id+3) ISZERO [Var c] [d];
-     mk_inst (id+4) AND [Var b;Var d] [e]; mk_inst (id+5) ASSERT [Var e] []] s = Abort err t) ==>
-  ?H th.
-    (!D q. inst_seq_ptr D 0 ctx fn PG G tn
-      [mk_inst id opc1 [x;Lit lower] [a]; mk_inst (id+1) ISZERO [Var a] [b];
-       mk_inst (id+2) opc2 [x;Lit upper] [c]; mk_inst (id+3) ISZERO [Var c] [d];
-       mk_inst (id+4) AND [Var b;Var d] [e]; mk_inst (id+5) ASSERT [Var e] []]
-      (s with vs_inst_idx := q) H th) /\
-    op_prov H x = NONE /\ op_taint th x = {} /\
-    (!p. ~MEM p [a;b;c;d;e] ==> FLOOKUP H p = FLOOKUP G p /\
-      op_taint th (Var p) = op_taint tn (Var p)) /\
-    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
-    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all scalar_double_check_prefix_runs >> strip_tac >>
-  drule_all double_check_uniform_prefix >>
-  disch_then (qspecl_then [`fn`,`PG`] strip_assume_tac) >>
-  qexistsl [`H`,`th`] >> simp[] >> rpt gen_tac >>
-  irule (PURE_REWRITE_RULE [APPEND] (Q.INST
-    [`xs` |-> `[mk_inst id opc1 [x;Lit lower] [a];
-      mk_inst (id+1) ISZERO [Var a] [b]; mk_inst (id+2) opc2 [x;Lit upper] [c];
-      mk_inst (id+3) ISZERO [Var c] [d]; mk_inst (id+4) AND [Var b;Var d] [e]]`]
-    (Q.INST [`id` |-> `id+5`] (SPEC_ALL checked_prefix_assert_certificate)))) >>
-  imp_res_tac bodyPtrSignedConvertScalarOpsTheory.convert_scalar_opcode_filter >>
-  simp[mk_inst_def, is_terminator_def] >>
-  simp[GSYM mk_inst_def] >>
-  qexistsl [`w with vs_inst_idx := q`,`value`] >>
-  simp[eval_operand_def, lookup_var_def] >>
-  qpat_x_assum `_ \/ _` kall_tac >>
-  conj_tac
-  >- (qpat_abbrev_tac `code = [_;_;_;_;_]` >>
-      `run_inst_seq code s = OK w` by
-        (simp[Abbr `code`] >>
-         qpat_assum `run_inst_seq [_;_] s = OK u` (mp_tac o MATCH_MP run_inst_seq_append) >>
-         disch_then (qspec_then
-           `[mk_inst (id+2) opc2 [x;Lit upper] [c];
-             mk_inst (id+3) ISZERO [Var c] [d];
-             mk_inst (id+4) AND [Var b;Var d] [e]]` mp_tac) >>
-         simp[] >> disch_then SUBST1_TAC >>
-         qpat_assum `run_inst_seq [_;_] u = OK v` (mp_tac o MATCH_MP run_inst_seq_append) >>
-         disch_then (qspec_then `[mk_inst (id+4) AND [Var b;Var d] [e]]` mp_tac) >>
-         simp[]) >>
-      simp[run_inst_seq_inst_idx, Abbr `code`, mk_inst_def,
-           is_terminator_def, exec_result_map_def]) >>
-  fs[eval_operand_def, lookup_var_def]
-QED
-
 Theorem double_check_runtime_endpoint[local]:
   MEM opc1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   MEM opc2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
@@ -216,7 +123,7 @@ Proof
       op_taint th (Var p) = op_taint tn (Var p)) /\
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm` by
-    (simp[] >> irule (SRULE [] double_check_uniform_certificate) >> simp[] >> metis_tac[]) >>
+    (simp[] >> irule (SRULE [] scalar_double_check_uniform_certificate) >> simp[] >> metis_tac[]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
       i.inst_opcode <> GAS) (emitted_insts sa sb)` by
     simp[mk_inst_def, is_terminator_def] >>

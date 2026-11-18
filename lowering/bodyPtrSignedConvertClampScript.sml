@@ -1,5 +1,6 @@
 Theory bodyPtrSignedConvertClamp
 Ancestors
+  instSeqPtrUniform
   bodyPtrSignedConvertScalarOps bodyPtrSignedConvertBool bodyPtrSignedConvertIszero
   venomExecSemantics exprSendPtr fragGasSeqPtr bodyPtrSignedConvertScalarTransfer list
   instSeqComposePtr fragExec instIdxIndep exprLowering exprLoweringProps emitHelperProps
@@ -461,6 +462,65 @@ Proof
   simp[]
 QED
 
+Theorem scalar_double_check_uniform_certificate:
+  MEM opc1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM opc2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  (run_inst_seq
+    [mk_inst id opc1 [x;Lit lower] [a]; mk_inst (id+1) ISZERO [Var a] [b];
+     mk_inst (id+2) opc2 [x;Lit upper] [c]; mk_inst (id+3) ISZERO [Var c] [d];
+     mk_inst (id+4) AND [Var b;Var d] [e]; mk_inst (id+5) ASSERT [Var e] []] s = OK t \/
+   run_inst_seq
+    [mk_inst id opc1 [x;Lit lower] [a]; mk_inst (id+1) ISZERO [Var a] [b];
+     mk_inst (id+2) opc2 [x;Lit upper] [c]; mk_inst (id+3) ISZERO [Var c] [d];
+     mk_inst (id+4) AND [Var b;Var d] [e]; mk_inst (id+5) ASSERT [Var e] []] s = Abort err t) ==>
+  ?H th.
+    (!D q. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id opc1 [x;Lit lower] [a]; mk_inst (id+1) ISZERO [Var a] [b];
+       mk_inst (id+2) opc2 [x;Lit upper] [c]; mk_inst (id+3) ISZERO [Var c] [d];
+       mk_inst (id+4) AND [Var b;Var d] [e]; mk_inst (id+5) ASSERT [Var e] []]
+      (s with vs_inst_idx := q) H th) /\
+    op_prov H x = NONE /\ op_taint th x = {} /\
+    (!p. ~MEM p [a;b;c;d;e] ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  ho_match_mp_tac inst_seq_ptr_uniformize >> gen_tac >>
+  drule_all scalar_double_check_prefix_runs >> strip_tac >>
+  drule_all scalar_double_checked_prefix >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  qexistsl [`H`,`th`] >> simp[] >> gen_tac >>
+  irule (PURE_REWRITE_RULE [APPEND] (Q.INST
+    [`xs` |-> `[mk_inst id opc1 [x;Lit lower] [a];
+      mk_inst (id+1) ISZERO [Var a] [b]; mk_inst (id+2) opc2 [x;Lit upper] [c];
+      mk_inst (id+3) ISZERO [Var c] [d]; mk_inst (id+4) AND [Var b;Var d] [e]]`]
+    (Q.INST [`id` |-> `id+5`] (SPEC_ALL checked_prefix_assert_certificate)))) >>
+  imp_res_tac convert_scalar_opcode_filter >>
+  simp[mk_inst_def, is_terminator_def] >>
+  simp[GSYM mk_inst_def] >>
+  qexistsl [`w with vs_inst_idx := q`,`value`] >>
+  simp[eval_operand_def, lookup_var_def] >>
+  qpat_x_assum `_ \/ _` kall_tac >>
+  conj_tac
+  >- (qpat_abbrev_tac `code = [_;_;_;_;_]` >>
+      `run_inst_seq code s = OK w` by
+        (simp[Abbr `code`] >>
+         qpat_assum `run_inst_seq [_;_] s = OK u` (mp_tac o MATCH_MP run_inst_seq_append) >>
+         disch_then (qspec_then
+           `[mk_inst (id+2) opc2 [x;Lit upper] [c];
+             mk_inst (id+3) ISZERO [Var c] [d];
+             mk_inst (id+4) AND [Var b;Var d] [e]]` mp_tac) >>
+         simp[] >> disch_then SUBST1_TAC >>
+         qpat_assum `run_inst_seq [_;_] u = OK v` (mp_tac o MATCH_MP run_inst_seq_append) >>
+         disch_then (qspec_then `[mk_inst (id+4) AND [Var b;Var d] [e]]` mp_tac) >>
+         simp[]) >>
+      simp[run_inst_seq_inst_idx, Abbr `code`, mk_inst_def,
+           is_terminator_def, exec_result_map_def]) >>
+  fs[eval_operand_def, lookup_var_def]
+QED
+
 Theorem scalar_double_check_certificate:
   MEM opc1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   MEM opc2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
@@ -485,25 +545,10 @@ Theorem scalar_double_check_certificate:
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all scalar_double_check_prefix_runs >> strip_tac >>
-  drule_all scalar_double_checked_prefix >>
-  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`th`] >> reverse conj_tac
-  >- (simp[] >> metis_tac[]) >>
-  irule (PURE_REWRITE_RULE [APPEND] (Q.INST
-    [`xs` |-> `[mk_inst id opc1 [x; Lit lo] [a];
-     mk_inst (id+1) ISZERO [Var a] [b];
-     mk_inst (id+2) opc2 [x; Lit hi] [c];
-     mk_inst (id+3) ISZERO [Var c] [d];
-     mk_inst (id+4) AND [Var b; Var d] [e]]`]
-    (Q.INST [`id` |-> `id+5`] (SPEC_ALL checked_prefix_assert_certificate)))) >>
-  imp_res_tac convert_scalar_opcode_filter >>
-  simp[GSYM mk_inst_def, is_terminator_def] >>
-  qexistsl_tac [`w`,`value`] >> simp[] >>
-  qpat_x_assum `_ \/ _` kall_tac >>
-  qpat_x_assum `MEM opc1 _` kall_tac >>
-  qpat_x_assum `MEM opc2 _` kall_tac >>
-  gvs[run_inst_seq_def, AllCaseEqs()] >> metis_tac[]
+  drule_all scalar_double_check_uniform_certificate >>
+  disch_then (qspecl_then [`fn`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`th`] >> simp[] >>
+  first_x_assum (qspecl_then [`D`,`s.vs_inst_idx`] mp_tac) >> simp[]
 QED
 
 Theorem int_clamp_signed_fixed_certificate:
