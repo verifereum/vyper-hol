@@ -5,7 +5,7 @@ Ancestors
   loweringBudgetCreateCopy loweringBudgetAccountCodes e2eDefs
   loweringBudgetRecorderOutcomes loweringCallBudgetHistory contextCodegenRel
   contextRawReachable vyperLoweringCorrect compileVyper vyperCompiler unitTransformDefs
-  venomExecProofs
+  venomExecProofs o1LowerDloadRunnerBoundary
   o1PassContract venomLayout venomState venomInst venomExecSemantics
   finite_map words arithmetic list
 
@@ -52,11 +52,7 @@ Proof
       (imp_res_tac enters_block_preserves_outcomes >>
        imp_res_tac account_codes_enters_block >> fs[]) >>
     `entered.vs_call_ctx = vs0.vs_call_ctx` by
-      (qpat_x_assum `enters_block _ _ _` mp_tac >>
-       simp[enters_block_def] >> strip_tac >>
-       drule eval_phis_only_updates_vs_vars >>
-       disch_then (mp_tac o AP_TERM ``\(v:venom_state). v.vs_call_ctx``) >>
-       simp[]) >>
+      (drule ld_enters_block_call_ctx >> simp[]) >>
     mp_tac (Q.INST [`root` |-> `<| bp_stack := []; bp_params := [];
       bp_prov := FEMPTY; bp_taint := entry_taint; bp_fn := entry;
       bp_state := entered |>`, `ctx` |-> `unit.cu_context`, `lo` |-> `cp_fmp`,

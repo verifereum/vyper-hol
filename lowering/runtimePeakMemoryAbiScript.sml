@@ -49,8 +49,9 @@ Proof
   gvs[] >>
   TRY (first_assum irule >> simp[] >> NO_TAC) >>
   TRY (qexists_tac `x` >> simp[] >> NO_TAC) >>
-  TRY (qpat_x_assum `!a b dp buf. _`
-    (qspecl_then [`SUM (MAP (λ(_3,abi_sz,_4,_5). abi_sz) (v26::v27))`,
+  TRY (rename1 `SUM (MAP (λ(_3,abi_sz,_4,_5). abi_sz) (item::items))` >>
+       qpat_x_assum `!a b dp buf. _`
+    (qspecl_then [`SUM (MAP (λ(_3,abi_sz,_4,_5). abi_sz) (item::items))`,
                   `T`, `x.buf_operand`, `x`] mp_tac) >> simp[] >> NO_TAC) >>
   metis_tac[ADD_COMM]
 QED

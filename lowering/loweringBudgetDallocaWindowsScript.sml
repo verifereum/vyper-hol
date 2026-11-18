@@ -656,47 +656,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem lower_budget_raw_call_history_certificate:
-  root.bp_stack = [] /\ MEM root.bp_fn ctx.ctx_functions /\
-  enters_block root.bp_fn start root.bp_state /\
-  lower_budget_path F (D,lo,explicit,ctx) root h marks q /\
-  LENGTH root.bp_state.vs_call_ctx.cc_calldata < 2 ** 64 /\
-  (!fn. MEM fn ctx.ctx_functions ==> ALL_DISTINCT (fn_labels fn)) /\
-  (!fn i s. MEM fn ctx.ctx_functions /\ active_inst fn i s /\
-      i.inst_opcode = DALLOCA ==> raw_call_dalloca_window fn i s) ==>
-  ?pair. lower_history_pairs h pair /\ lower_history_current h pair q /\
-    (!n. n < LENGTH h /\ lower_event_allocates (EL n h) ==>
-       ?fn ai pre op sz post. lower_alloc_record h n fn ai pre op sz post)
-Proof
-  strip_tac >> match_mp_tac lower_history_pairs_from_windows >>
-  conj_tac
-  >- (rpt strip_tac >> drule_all lower_budget_alloc_event >> strip_tac >>
-      drule_all lower_budget_path_at_base_step >> strip_tac >>
-      `MEM p.bp_fn ctx.ctx_functions` by metis_tac[lower_budget_path_current_fn_mem] >>
-      `ALL_DISTINCT (fn_labels p.bp_fn)` by metis_tac[] >>
-      `^raw_call_window_quote p.bp_fn i p.bp_state` by metis_tac[raw_call_dalloca_window_def] >>
-      mp_tac (Q.INST [`n` |-> `a`, `ai` |-> `i`, `af` |-> `fuel`,
-                        `post` |-> `t`, `aq` |-> `q'`, `last` |-> `q`]
-        lower_budget_raw_call_event_window) >>
-      asm_rewrite_tac[]) >>
-  rpt strip_tac >>
-  drule_all lower_budget_path_current_fn_mem >> strip_tac >>
-  `ALL_DISTINCT (fn_labels q.bp_fn)` by metis_tac[] >>
-  `raw_call_dalloca_window q.bp_fn i q.bp_state` by metis_tac[] >>
-  qpat_x_assum `raw_call_dalloca_window _ _ _` mp_tac >>
-  PURE_REWRITE_TAC [raw_call_dalloca_window_def] >> BETA_TAC >>
-  disch_then (qx_choosel_then [`bb`, `k`, `size_id`, `alloc_id`, `copy_id`, `x`, `y`,
-                     `call`, `gas`, `addr`, `value`, `rbuf`, `rsz`, `rest`]
-               (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
-  `k < LENGTH bb.bb_instructions /\
-   EL k bb.bb_instructions = mk_inst size_id CALLDATASIZE [] [x]` by
-    metis_tac[DROP_EQ_CONS] >>
-  drule_all lower_budget_dalloca_calldata_size >> strip_tac >>
-  `op = Var x` by gvs[mk_inst_def] >>
-  `w2n sz < 2 ** 64` by metis_tac[optionTheory.SOME_11] >>
-  decide_tac
-QED
-
 (* Recover the start of an emitted prologue, including prefixes that reach
    its DALLOCA without reaching its consuming effect. *)
 Theorem lower_budget_before_window:
