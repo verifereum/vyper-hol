@@ -3,7 +3,7 @@ Theory gasFocusStaticExitLift
 Ancestors
   o1PipelineCompose o1RequestContract o1PassContract ptrDiscipline
   unitMemInv staticAbortDefs stackPlanGen venomExecSemantics passSimulationDefs
-  venomState words
+  codegenSymRel venomState words
 
 Theorem focus_static_exit_lift:
   dead_wf D /\ ctx_sim D A B a b /\ ctx_abort_rq D A B a b /\
@@ -37,4 +37,41 @@ Proof
   Cases_on `run_context fuel A a` >> gvs[dead_result_rel_def] >>
   rename1 `reason = ExHalt_abort` >>
   Cases_on `reason` >> gvs[]
+QED
+
+(* An optimizer offset failure can select the abort exit even with ordinary
+   lowered memory. Both inputs describe the same source execution. *)
+Theorem focus_static_code_end_exit:
+  (opt ==>
+    code_end_offset_ok
+      (\ctx fn inst s. raw_reachable c ctx fn inst s /\ ~in_static_abort_prefix fn s) C /\
+    (code_end_offset_ok (raw_reachable c) C \/
+     !fuel. terminates (run_context fuel A a) ==>
+            ?u. run_context fuel A a = Abort ExHalt_abort u)) /\
+  (o1_lowered_inv C c \/
+   ((?eom. max_live_eom C = SOME eom /\
+      mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+        lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s) C c) /\
+    !fuel. terminates (run_context fuel A a) ==>
+           ?u. run_context fuel A a = Abort ExHalt_abort u)) ==>
+  (opt ==>
+    code_end_offset_ok
+      (\ctx fn inst s. raw_reachable c ctx fn inst s /\ ~in_static_abort_prefix fn s) C) /\
+  ((o1_lowered_inv C c /\ (opt ==> code_end_offset_ok (raw_reachable c) C)) \/
+   ((?eom. max_live_eom C = SOME eom /\
+      mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+        lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s) C c) /\
+    !fuel. terminates (run_context fuel A a) ==>
+           ?u. run_context fuel A a = Abort ExHalt_abort u))
+Proof
+  strip_tac
+  >- (`?eom. max_live_eom C = SOME eom /\
+        mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+          lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s) C c` by
+        (fs[o1_lowered_inv_def] >>
+         irule mem_inv_mono >>
+         qexists_tac `lowered_mem_fact eom` >>
+         simp[lowered_mem_fact_def]) >>
+      metis_tac[]) >>
+  metis_tac[]
 QED

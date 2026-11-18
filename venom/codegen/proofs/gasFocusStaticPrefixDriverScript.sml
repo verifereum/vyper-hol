@@ -1,6 +1,7 @@
 Theory gasFocusStaticPrefixDriver
 Ancestors
-  gasFocusPrefixDriver o1StaticPipelineCorrect o1SafeUpto o1PassContract
+  gasFocusPrefixDriver gasFocusPacketPipelineStages gasFocusStaticExitLift
+  o1StaticPipelineCorrect o1SafeUpto o1PassContract
   o1RequestContract o1PassLift gasEvents codegenEntryRel codegenEntrySim
   codegenAsmProgOk
   asmFrameRel asmSem asmOptimizer callTrace vfmExecution venomExecProps
