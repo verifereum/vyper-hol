@@ -380,6 +380,7 @@ Proof
      ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
   gvs[Excl "consume_call_outcome_eq"] >>
   Cases_on `~s.vs_call_ctx.cc_static /\ r1.vs_requests <> s.vs_requests /\
+            ~computed_precompile (LAST r1.vs_requests) /\
             r2.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
   gvs[word_agree_except_def] >> metis_tac[]
 QED
