@@ -15,7 +15,7 @@
 Theory bodyFullAllocaFresh
 Ancestors
   bodyFullUnwrapRun bodyFullGhostFrame exprSimAlloc allocationPtr exprPtrUnwrapAllocation
-  bodyPtrIfExpAllocLocals bodyPtrStructLitMonotoneRepresentation
+  bodyPtrIfExpAllocLocals robustCopyTransportPtr
   ptrSafetyTransport fragExecPtr fragGasSeqPtr fragExecMem instMemFrontier
   decoderGhostFramePtr abiBuiltinAllocation emitHelperProps exprLoweringProps
   loweringHalt bodyPtrDefs loweringStateRelDefs ptrDiscipline venomMemDefs
@@ -362,7 +362,7 @@ Proof
       qspecl_then [`entry.type`, `entry.value`, `w2n w`, `w2n w`,
                    `val_footprint entry.type entry.value`, `tn.t_mem`,
                    `tn'.t_mem`, `s.vs_memory`, `t.vs_memory`]
-        mp_tac robust_val_in_memory_copy_transport_mono >>
+        mp_tac robust_val_in_memory_decreasing_taint_transport >>
       impl_tac
       >- (simp[] >> rpt strip_tac >>
           qpat_x_assum `!i. i IN tn'.t_mem /\ _ ==> _` irule >> simp[]) >>
