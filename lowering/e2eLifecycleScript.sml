@@ -287,7 +287,7 @@ Proof
        ctxt.msgParams.code /\
      (lookup_account tx.target es.rollback.accounts).code =
        ctxt.msgParams.code` by
-    (fs[call_state_rel_def] >> metis_tac[]) >>
+    (fs[call_state_rel_def, evm_state_ok_def] >> metis_tac[]) >>
   `accounts_well_typed es'.rollback.accounts` by
     (irule run_call_accounts_well_typed >>
      goal_assum $ drule_at Any >> simp[]) >>
