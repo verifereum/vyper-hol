@@ -1,6 +1,6 @@
 Theory deployOutcomesFreeGeneralBuiltinBody
 Ancestors
-  deployOutcomesFreeBuiltinBody deployOutcomesFreeSelectors
+  deployOutcomesFreeSelectors
   deployOutcomesFreeExprBody deployOutcomesFreeGenerators exprLowering list
   deployOutcomesFreeBinaryBuiltinBody deployOutcomesFreeAggregateBuiltinBody
 

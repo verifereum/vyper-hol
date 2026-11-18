@@ -194,16 +194,6 @@ Proof
     conj_tac, IF_CASES_TAC, first_assum irule]) >> simp[]
 QED
 
-Theorem outcomes_free_aggregate_typed_callbacks:
-  (!e ty st. well_typed_expr env e /\ ~supported_expr_exists root e /\
-     Q st ==> Q (SND (f ce ty e st))) /\
-  well_typed_exprs env es /\ ~supported_exprs_exists root es ==>
-  (!e ty st. MEM e es /\ Q st ==> Q (SND (f ce ty e st)))
-Proof
-  simp[constSubstCorrectTheory.frame_well_typed_exprs_every, supported_exprs_exists_every,
-    EVERY_MEM, EXISTS_MEM] >> metis_tac[]
-QED
-
 Theorem outcomes_free_aggregate_typed:
   (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
     MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;

@@ -1,6 +1,6 @@
 Theory deployOutcomesFreeLowering
 Ancestors
-  loweringShapeDefs emitHelper compileEnv venomInst list pair
+  loweringShapeDefs emitHelper compileEnv venomInst list pair ctorCallFreeRules
 
 (* Instruction predicates are kept generic: the constructor application
    instantiates P with exclusion of the six oracle/call opcodes. *)
@@ -54,7 +54,5 @@ Theorem outcomes_free_emit_ops:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (emit_void opc ops s))) /\
   EVERY (\i. P i.inst_opcode) (state_insts (SND (emit_inst opc ops outs s)))
 Proof
-  simp[emit_op_def, emit_void_def, emit_inst_def, comp_ignore_bind_def, comp_bind_def,
-       fresh_id_def, fresh_var_def, emit_def, comp_return_def,
-       outcomes_free_state_insts, mk_inst_def]
+  metis_tac[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]
 QED

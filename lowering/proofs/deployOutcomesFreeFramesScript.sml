@@ -3,11 +3,10 @@ Ancestors
   loweringBudgetFrameOracleTransport
   ptrDiscipline deployOutcomesFreeStep venomState venomExecSemantics codegenRel contextCodegenRel ctxLookupAgreeHelpers
 
-Theorem outcomes_operand[simp]:
-  eval_operand op (s with vs_outcomes := os) = eval_operand op s /\
+Theorem outcomes_lookup_var[simp]:
   lookup_var v (s with vs_outcomes := os) = lookup_var v s
 Proof
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
+  simp[lookup_var_def]
 QED
 
 Theorem outcomes_provenance[simp]:

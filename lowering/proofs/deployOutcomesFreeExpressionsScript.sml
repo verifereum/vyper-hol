@@ -2,7 +2,7 @@ Theory deployOutcomesFreeExpressions
 Ancestors
   deployOutcomesFreeLowering deployOutcomesFreeGenerators
   exprLowering exprCallBounds e2eDeployDefs supportedExprTraverse vyperTypeSystem
-  deployOutcomesFreeExprBody deployOutcomesFreeBuiltinBody
+  deployOutcomesFreeExprBody
   deployOutcomesFreeGeneralBuiltinBody deployOutcomesFreeBodyGenerators
   deployOutcomesFreeExprGenerators deployOutcomesFreeBuiltinGenerators
   deployOutcomesFreeAggregateGenerators deployOutcomesFreeAbiGenerators
@@ -184,42 +184,6 @@ Resume outcomes_free_builtin_generators[generators]:
 QED
 Finalise outcomes_free_builtin_generators
 
-(* The dispatch only emits MSTORE; arbitrary emit_void preservation is not
-   valid for the concrete invariant. This narrows that callback boundary. *)
-Theorem outcomes_free_type_encode_mstore[local]:
-  (!e ity st. well_typed_expr env e /\
-     ~supported_expr_exists constructor_call_root e /\ Q st ==>
-     Q (SND (f ce ity e st))) /\
-  (!v st. Q st ==> Q (SND (unwrap_value ce v st))) /\
-  (!n st. Q st ==> Q (SND (compile_alloc_buffer n st))) /\
-  (!vs st. Q st ==> Q (SND (emit_void MSTORE vs st))) /\
-  (!(ensure:bool) mid v info sz st. Q st ==>
-     Q (SND (lower_abi_encode ensure mid v info sz st))) /\
-  (!es st. well_typed_exprs env es /\
-     ~supported_exprs_exists constructor_call_root es /\ Q st ==>
-     Q (SND (compile_abi_encode_args f ce es st))) /\
-  (!v off vs st. Q st ==> Q (SND (compile_store_abi_tuple ce v off vs st))) /\
-  well_typed_exprs env args /\
-  ~supported_exprs_exists constructor_call_root args /\ Q s ==>
-  Q (SND (compile_type_builtin_dispatch_body f ce rt ty
-    (AbiEncode ensure mid) target_ty args s))
-Proof
-  strip_tac >> simp[compile_type_builtin_dispatch_body_def] >>
-  IF_CASES_TAC
-  >- (`well_typed_expr env (HD args) /\
-       ~supported_expr_exists constructor_call_root (HD args)` by
-        (drule_all outcomes_free_typed_children >> strip_tac >>
-         `args <> []` by (strip_tac >> gvs[]) >>
-         drule_all outcomes_free_head >> simp[]) >>
-      `!ity st. Q st ==> Q (SND (lower_value f ce ity (HD args) st))` by
-        (rpt strip_tac >>
-         irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
-      IF_CASES_TAC >> rpt (pairarg_tac >> simp[]) >>
-      simp[deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair] >> metis_tac[pairTheory.SND]) >>
-  rpt (pairarg_tac >> simp[]) >> simp[deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair] >>
-  metis_tac[pairTheory.SND]
-QED
-
 Theorem outcomes_free_materialize[local]:
   (!n st. Q st ==> Q (SND (compile_alloc_buffer n st))) /\
   (!v st. Q st ==> Q (SND (unwrap_value ce v st))) /\
@@ -238,7 +202,7 @@ val safe_type_bodies = map
     i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE) (state_insts s)`])
   [outcomes_free_type_builtin_constants, outcomes_free_type_builtin_convert,
    outcomes_free_type_builtin_extract32, outcomes_free_type_builtin_decode,
-   outcomes_free_type_encode_mstore, outcomes_free_materialize];
+   outcomes_free_type_builtin_encode, outcomes_free_materialize];
 
 val safe_abi = map
   (SRULE [DISJ_IMP_THM, FORALL_AND_THM] o

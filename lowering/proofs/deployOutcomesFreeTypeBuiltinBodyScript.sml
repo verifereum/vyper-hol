@@ -100,13 +100,14 @@ Proof
   metis_tac[pairTheory.SND]
 QED
 
+(* The dispatch emits only MSTORE, so only that emit_void callback is needed. *)
 Theorem outcomes_free_type_builtin_encode:
   (!e ity st. well_typed_expr env e /\
      ~supported_expr_exists constructor_call_root e /\ Q st ==>
      Q (SND (f ce ity e st))) /\
   (!v st. Q st ==> Q (SND (unwrap_value ce v st))) /\
   (!n st. Q st ==> Q (SND (compile_alloc_buffer n st))) /\
-  (!op vs st. Q st ==> Q (SND (emit_void op vs st))) /\
+  (!vs st. Q st ==> Q (SND (emit_void MSTORE vs st))) /\
   (!(ensure:bool) mid v info sz st. Q st ==>
      Q (SND (lower_abi_encode ensure mid v info sz st))) /\
   (!es st. well_typed_exprs env es /\
@@ -133,43 +134,4 @@ Proof
       metis_tac[pairTheory.SND]) >>
   rpt (pairarg_tac >> simp[]) >> simp[deployOutcomesFreeGeneratorsTheory.as_ptr_val_pair] >>
   metis_tac[pairTheory.SND]
-QED
-
-(* The ABI encoder's unused ensure parameter is polymorphic in its definition;
-   fix it to bool here, as in the actual dispatch call. *)
-Theorem outcomes_free_type_builtin_body:
-  (!e ity st. well_typed_expr env e /\
-     ~supported_expr_exists constructor_call_root e /\ Q st ==>
-     Q (SND (f ce ity e st))) /\
-  (!v st. Q st ==> Q (SND (unwrap_value ce v st))) /\
-  (!sz z st. Q st ==> Q (SND (compile_builtin_empty_complex sz z st))) /\
-  (!sz v old st. Q st ==> Q (SND (compile_bytestring_widen_copy sz v old st))) /\
-  (!v cv st. Q st ==> Q (SND (compile_type_convert v cv st))) /\
-  (!v st. Q st ==> Q (SND (compile_bytestring_src v st))) /\
-  (!len data off st. Q st ==> Q (SND (compile_extract32_load len data off st))) /\
-  (!v vt st. Q st ==> Q (SND (compile_clamp_basetype v vt st))) /\
-  (!v info lo hi sz st. Q st ==> Q (SND (lower_abi_decode v info lo hi sz st))) /\
-  (!n st. Q st ==> Q (SND (compile_alloc_buffer n st))) /\
-  (!op vs st. Q st ==> Q (SND (emit_void op vs st))) /\
-  (!(ensure:bool) mid v info sz st. Q st ==>
-     Q (SND (lower_abi_encode ensure mid v info sz st))) /\
-  (!es st. well_typed_exprs env es /\
-     ~supported_exprs_exists constructor_call_root es /\ Q st ==>
-     Q (SND (compile_abi_encode_args f ce es st))) /\
-  (!v off vs st. Q st ==> Q (SND (compile_store_abi_tuple ce v off vs st))) /\
-  well_typed_exprs env args /\
-  ~supported_exprs_exists constructor_call_root args /\
-  well_typed_type_builtin_args tb target_ty (MAP expr_type args) /\ Q s ==>
-  Q (SND (compile_type_builtin_dispatch_body f ce rt ty tb target_ty args s))
-Proof
-  strip_tac >> Cases_on `tb`
-  >~ [`compile_type_builtin_dispatch_body _ _ _ _ Convert`]
-      >- (irule outcomes_free_type_builtin_convert >> simp[] >> metis_tac[])
-  >~ [`compile_type_builtin_dispatch_body _ _ _ _ Extract32`]
-      >- (irule outcomes_free_type_builtin_extract32 >> simp[] >> metis_tac[])
-  >~ [`compile_type_builtin_dispatch_body _ _ _ _ (AbiEncode _ _)`]
-      >- (irule outcomes_free_type_builtin_encode >> simp[] >> metis_tac[])
-  >~ [`compile_type_builtin_dispatch_body _ _ _ _ (AbiDecode _)`]
-      >- (irule outcomes_free_type_builtin_decode >> simp[] >> metis_tac[]) >>
-  irule outcomes_free_type_builtin_constants >> simp[]
 QED

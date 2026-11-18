@@ -40,7 +40,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (SRULE [] (Q.INST [`P` |-> `\opc. ~MEM opc
     [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]`]
-    outcomes_free_compile_stmts_conditional)) >>
+    (cj 2 outcomes_free_compile_statements_mutual))) >>
   impl_tac >- (simp safe_generators >>
     conj_tac >- metis_tac[SRULE [] outcomes_free_compile_expr] >>
     conj_tac >- metis_tac[SRULE [] outcomes_free_compile_get_target_ptr] >>

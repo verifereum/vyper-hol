@@ -2,7 +2,7 @@
 Theory deployOutcomesFreeEntry
 Ancestors
   ctorCallFreeRules loweringPackageInsts
-  vyperCompiler list venomInst deployOutcomesFreeArgs deployOutcomesFreeScaffold
+  vyperCompiler list venomInst deployOutcomesFreeArgs
   ctorUnitShape ctorGeneratorShape ctorShapeProps loweringShapeProps supportedStmtTraverse moduleLowering deployOutcomesFreeLowering loweringShapeDefs
   context emitHelper compileEnv ctorDeployLoweringCode compileVyper ctorDeployDefs stmtLowering
 Libs
