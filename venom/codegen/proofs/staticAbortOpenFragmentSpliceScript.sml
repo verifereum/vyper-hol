@@ -8,39 +8,38 @@ Theorem open_fragment_splice:
  (V1:(num#num)->bool) (V2:(num#num)->bool) X2 e1 e2 z
  (r1:(num#num)->num) (r2:(num#num)->num)
  (I1:(num#num)->'a) (I2:(num#num)->'a) R1 R2 f.
-let Frag = \V X r I R.
+!Frag. Frag = (\V X r I R.
   FINITE V /\ X SUBSET V /\
   (!x. x IN V ==> ?t:asm_state. K (I x) t) /\
   (!x. x IN V DIFF X ==> Good (I x)) /\
   (!x y. R x y ==> x IN V DIFF X /\ y IN V /\
      r y < r x /\ OK (I x) (I y)) /\
   (!x t. x IN V DIFF X /\ K (I x) t ==>
-     Fail t \/ ?y u. R x y /\ Step t u /\ K (I y) u)
-in
-let Reach = \R e x. ?n (path:num->num#num).
-  path 0=e /\ path n=x /\ !k. k<n ==> R (path k) (path(SUC k))
-in
-let L = \x:num#num. (f,2*SND x);
-    D = \x:num#num. (f,2*SND x+1)
-in
-let d = \x. if x=z then D e2 else L x in
-let U = IMAGE L (V1 DELETE z) UNION IMAGE D V2;
-    Y = IMAGE D X2;
-    e = d e1;
-    E = \a b. (?x y. R1 x y /\ a=L x /\ b=d y) \/
-              (?x y. R2 x y /\ a=D x /\ b=D y)
-in
+     Fail t \/ ?y u. R x y /\ Step t u /\ K (I y) u)) ==>
+!Reach. Reach = (\R e x. ?n (path:num->num#num).
+  path 0=e /\ path n=x /\ !k. k<n ==> R (path k) (path(SUC k))) ==>
+!L. L = (\x:num#num. (f,2*SND x)) ==>
+!D. D = (\x:num#num. (f,2*SND x+1)) ==>
+!d. d = (\x. if x=z then D e2 else L x) ==>
+!U. U = IMAGE L (V1 DELETE z) UNION IMAGE D V2 ==>
+!e. e = d e1 ==>
+!E. E = (\a b. (?x y. R1 x y /\ a=L x /\ b=d y) \/
+                (?x y. R2 x y /\ a=D x /\ b=D y)) ==>
 Frag V1 {z} r1 I1 R1 /\ Frag V2 X2 r2 I2 R2 /\
 e1 IN V1 /\ e2 IN V2 /\ I1 z=I2 e2 /\
 (!x. x IN V1 ==> FST x=f /\ Reach R1 e1 x) /\
 (!x. x IN V2 ==> FST x=f /\ Reach R2 e2 x) ==>
-?r I. Frag U Y r I E /\ e IN U /\ I e=I1 e1 /\
+?r I. Frag U (IMAGE D X2) r I E /\ e IN U /\ I e=I1 e1 /\
   (!x. x IN V1 DELETE z ==> I(L x)=I1 x) /\
   (!x. x IN V2 ==> I(D x)=I2 x) /\
   (!x. x IN U ==> FST x=f /\ Reach E e x)
 Proof
-  rpt gen_tac >> rpt BasicProvers.LET_ELIM_TAC >>
-  fs[Abbr `Frag`] >>
+  ntac 18 gen_tac >>
+  map_every (fn name => qx_gen_tac name >> disch_then
+    (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
+    [`Frag`, `Reach`, `L`, `D`, `d`, `U`, `e`, `E`] >>
+  qabbrev_tac `Y = IMAGE D X2` >>
+  fs[Abbr `Frag`] >> strip_tac >>
   qabbrev_tac `B=MAX_SET (IMAGE r2 V2)` >>
   qabbrev_tac `J= \(x:num#num).
     if EVEN(SND x) then I1(f,SND x DIV 2) else I2(f,SND x DIV 2)` >>

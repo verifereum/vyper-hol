@@ -48,44 +48,32 @@ Proof
   MATCH_ACCEPT_TAC (SIMP_RULE bool_ss [asmIRTheory.asm_inst_case_def] check_op_dispatch)
 QED
 
-(* Match the original dispatch before exposing any of its row combinators. *)
-fun prove_check_row_presentation g =
-  (qmatch_goalsub_abbrev_tac `LET _ ordinary` >>
-   CONV_TAC (RAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-   CONV_TAC (RAND_CONV (HO_REWR_CONV (GSYM check_case_presentation))) >>
-   qpat_x_assum `Abbrev (ordinary = _)`
-     (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-   CONV_TAC (DEPTH_CONV BETA_CONV) >> REFL_TAC) g
-
 Theorem prune_one_relocated_check:
   !pre t x tail (V:(num#num)->bool) cc pc height
     (tag:(num#num)->num->(string#num)option) edge.
-    let p = pre ++ [t;x] ++ tail in
-    let q = pre ++ [t] ++ tail in
-    let d = LENGTH pre+1 in
-    let r = \i. if i < d then i else i-1 in
-    let Z = \l j. j < LENGTH q /\
-      (EL j q = AsmPushLabel l \/ EL j q = AsmPushOfst l 0) in
-    let pick = \l. @j. Z l j in
-    let tagQ = \v k. OPTION_MAP (\(l,i). (l,if i=d then pick l else r i))
-      (tag v k) in
-    let Hit = \p l j.
+  !p q d r tagQ Hit Target fall taken Check.
+    p = pre ++ [t;x] ++ tail ==> q = pre ++ [t] ++ tail ==>
+    d = LENGTH pre+1 ==> r = (\i. if i < d then i else i-1) ==>
+    tagQ = (\v k. OPTION_MAP (\(l,i). (l,if i=d then
+      (@j. j < LENGTH q /\ (EL j q = AsmPushLabel l \/ EL j q = AsmPushOfst l 0))
+      else r i)) (tag v k)) ==>
+    Hit = (\p l j.
       ?off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
-        off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME j in
-    let Target = \p pc tag (a:num#num) (b:num#num).
-      ?l i. tag a 0 = SOME(l,i) /\ Hit p l (pc b) in
-    let fall = \a b. edge a b /\ ~asm_terminal_op (EL (pc a) p) /\ pc b = pc a+1 in
-    let taken = \a l b. edge a b /\
+        off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME j) ==>
+    Target = (\p pc tag (a:num#num) (b:num#num).
+      ?l i. tag a 0 = SOME(l,i) /\ Hit p l (pc b)) ==>
+    fall = (\a b. edge a b /\ ~asm_terminal_op (EL (pc a) p) /\ pc b = pc a+1) ==>
+    taken = (\a l b. edge a b /\
       (EL (pc a) p = AsmOp "JUMP" \/ EL (pc a) p = AsmOp "JUMPI") /\
-      (?i. tag a 0 = SOME(l,i)) /\ Hit p l (pc b) in
-    let Check = \p cc pc height tag edge x.
-      let h = height x in
-      let fall = \y. pc y = pc x + 1 in
-      let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-      let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-      let next = \n. arm fall n /\ legal fall n in
-      let untagged = \a. !k. k<a ==> tag x k=NONE in
-      let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
+      (?i. tag a 0 = SOME(l,i)) /\ Hit p l (pc b)) ==>
+    Check = (\p cc pc height tag edge x.
+      !h fall arm legal next untagged stop.
+      h = height x ==> fall = (\y. pc y = pc x + 1) ==>
+      arm = (\P n. ?y. edge x y /\ P y /\ height y = n) ==>
+      legal = (\P n. !y. edge x y ==> P y /\ height y = n) ==>
+      next = (\n. arm fall n /\ legal fall n) ==>
+      untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+      stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
       case EL (pc x) p of
         AsmLabel l => next h
       | AsmPush bs => next (h+1)
@@ -112,7 +100,7 @@ Theorem prune_one_relocated_check:
                    else
                       ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                           untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-      | _ => F in
+      | _ => F) ==>
     (!v. v IN V ==> pc v < LENGTH p /\ Check p cc pc height tag edge v) /\
     (!a b. edge a b ==> a IN V /\ b IN V) /\ asm_static_wf q /\
     (!v. v IN V ==> pc v <> d /\ r (pc v) < LENGTH q /\
@@ -128,12 +116,9 @@ Theorem prune_one_relocated_check:
     !v. v IN V ==> (r o pc) v < LENGTH q /\ Check q cc (r o pc) height tagQ edge v
 Proof
   rpt gen_tac >>
-  map_every (fn selector =>
-    qmatch_goalsub_abbrev_tac selector >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ p`, `LET _ q`, `LET _ d`, `LET _ r`, `LET _ Z`, `LET _ pick`,
-     `LET _ tagQ`, `LET _ Hit`, `LET _ Target`, `LET _ fall`, `LET _ taken`,
-     `LET _ Check`] >>
+  ntac 9 (disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def])) >>
+  disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def] o
+                        SIMP_RULE (pure_ss ++ boolSimps.UNWIND_ss) []) >>
   strip_tac >> qx_gen_tac `v` >> disch_tac >>
   qpat_x_assum `!v. v IN V ==> pc v <> d /\ _`
     (drule_then strip_assume_tac) >>
@@ -198,8 +183,10 @@ Proof
       | _ => F` by
     (qpat_x_assum `Abbrev (Check = _)`
        (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     ntac 7 ABS_TAC >> ntac 7 (AP_THM_TAC >> AP_TERM_TAC >> ABS_TAC) >>
-     prove_check_row_presentation) >>
+     ntac 7 ABS_TAC >>
+     SIMP_TAC pure_ss [LET_THM] >> BETA_TAC >>
+     CONV_TAC (RAND_CONV (HO_REWR_CONV (GSYM check_case_presentation))) >>
+     BETA_TAC >> REFL_TAC) >>
   pop_assum SUBST1_TAC >>
   qpat_x_assum `Abbrev (Check = _)` kall_tac >>
   (* The resisting route exposed both large string decision trees:
