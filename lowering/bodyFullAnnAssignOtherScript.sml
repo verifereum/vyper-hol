@@ -2,7 +2,7 @@
 Theory bodyFullAnnAssignOther
 Ancestors
   bodySim bodySimFull bodyFullPreds bodyFullAllocaFresh bodyFullUnwrap
-  bodyFullAnnAssignMemoryPost bodyInvNoDalloca gasOutcomeFullCompose
+  bodyFullShared bodyFullAnnAssignMemoryPost bodyInvNoDalloca gasOutcomeFullCompose
   stmtSimDeclSource gasOutcomeFullStmts gasExemptCert vyperStorageTrace
   stmtLoweringMono allocLimits exprSimAggregateLayout bodyDeclCopyMemory
   annassignRelayoutSource memoryLocalRhsProps exprSimHyps exprSimHypsDefs
@@ -131,6 +131,10 @@ Proof
      first_assum ACCEPT_TAC) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+    qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+      irule (MATCH_MP gas_outcome_full_use_return_buf_allocas
+        (CONJ frame sep)))) >>
   drule_all annassign_full_prefix_parts >>
   disch_then (qx_choosel_then
     [`r`,`shadow_r`,`p`,`sz`,`a`,`shadow_a`,`vv`,`sv`,`shadow_sv`,`op`,`b`,`shadow_b`]
@@ -289,7 +293,13 @@ Resume annassign_other_typed_full_execution[success]:
         (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
       metis_tac[cj 1 ci_mono_stmt_helpers, exprLoweringPropsTheory.ci_mono_def,
                 pairTheory.SND]) >>
+   `sa.cs_next_id < b.cs_next_id` by
+     (qpat_assum `lower_value compile_expr cenv' (expr_type e) e a = (op,b)`
+       (mp_tac o MATCH_MP (cj 2 exprLoweringPropsTheory.compile_expr_grows)) >>
+      strip_tac >> decide_tac) >>
    `?u Gf tf.
+      lookup_var p u = SOME w /\
+      FLOOKUP u.vs_allocas (inst.inst_id) = SOME (w2n w,type_memory_size dtv) /\
       (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (t,G1,tn1) [] (OK u,Gf,tf)) /\
       !H. valid_horizon cx st0 H out.storage_trace ==>
@@ -328,26 +338,31 @@ Resume annassign_other_typed_full_execution[success]:
         simp[arithmeticTheory.ADD_SYM])
       >- (irule compile_assign_value_typed_open >>
           qpat_assum `compile_assign_value cenv' _ _ _ _ _ _ _ _ b = ((),sb)`
-            (irule_at Any) >> fs[]) >>
+            (irule_at Any) >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
       TRY (qpat_assum `ghost_inv_at _ lo d cenv' cx mid G1 tn1 t`
         (strip_assume_tac o PURE_REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >>
         first_assum ACCEPT_TAC) >>
-      qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`b`,`dtv`,`typ`,`w`] >>
-      qexistsl_tac [`id`,`inst`,`mid`,`type_memory_size stv`,`p`,`rest`,`sc`] >>
-      qexistsl_tac [`vv_location vv`,`a`,`stv`,`expr_type e`,`sw`,`type_memory_size dtv`,`v`,`xs`] >>
+      TRY (qpat_assum `inst.inst_id = sa.cs_next_id` (fn th => PURE_REWRITE_TAC [th, arithmeticTheory.LESS_EQ_REFL])) >>
+      qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`b`,`dtv`,`typ`] >>
+      qexistsl_tac [`id`,`mid`,`type_memory_size stv`,`rest`,`sc`] >>
+      qexistsl_tac [`vv_location vv`,`a`,`stv`,`expr_type e`,`sw`,`v`,`xs`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      TRY (simp[NoAsms])
-      >- (gen_tac >> disch_tac >>
-          qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-            (qspec_then `H` mp_tac) >>
-          (impl_tac >- fs[Abbr `out`]) >>
-          POP_ASSUM_LIST (K all_tac) >> simp[NoAsms,expr_post_def]) >>
-      TRY decide_tac
-      >- (qpat_assum `op = Var xs` (fn eq =>
-            qpat_assum `!ty. type_memory_bytes cenv' ty = type_memory_bytes cenv ty` (fn decl =>
-            qpat_assum `type_memory_bytes cenv typ = type_memory_size dtv` (fn sz =>
-              qpat_assum `compile_assign_value cenv' _ _ op _ _ _ _ _ b = ((),sb)` mp_tac >>
-              simp[NoAsms,eq,decl,sz])))) >>
+      TRY (simp[NoAsms]) >> TRY decide_tac >>
+      TRY (qpat_assum `op = Var xs` (fn op_eq =>
+        qpat_assum `!ty. type_memory_bytes cenv' ty = type_memory_bytes cenv ty` (fn decl =>
+          qpat_assum `type_memory_bytes cenv typ = type_memory_size dtv` (fn size =>
+            PURE_REWRITE_TAC [op_eq, Q.SPEC `typ` decl, size] >>
+            first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [op_eq, Q.SPEC `typ` decl, size])))))
+      >> TRY (qpat_assum `w2n sw + type_memory_size stv <= w2n w`
+                (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
+              metis_tac[arithmeticTheory.ADD_COMM] >> NO_TAC)
+      >> TRY (strip_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
+      TRY (gen_tac >> disch_tac >>
+           qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+             (qspec_then `H` mp_tac) >>
+           (impl_tac >- fs[Abbr `out`]) >>
+           POP_ASSUM_LIST (K all_tac) >> simp[NoAsms,expr_post_def] >> NO_TAC) >>
+      TRY decide_tac >>
       TRY (strip_tac >> decide_tac) >>
       TRY (qpat_assum `lower_value compile_expr cenv' (expr_type e) e a = (op,b)`
             (mp_tac o MATCH_MP (cj 2 exprLoweringPropsTheory.compile_expr_grows)) >>
@@ -370,7 +385,7 @@ Resume annassign_other_typed_full_execution[success]:
      >- (drule new_variable_success_gas_obs >> simp[NoAsms])) >>
     gen_tac >> disch_tac >>
     (conj_tac >- first_assum MATCH_ACCEPT_TAC) >>
-    BETA_TAC >> qexists_tac `cenv'` >>
+    BETA_TAC >> strip_tac >> qexists_tac `cenv'` >>
     `out with gas_obs := [] = out` by
       (qpat_assum `mid.gas_obs = []`
          (fn th => simp[NoAsms,Abbr `out`,GSYM th])) >>
@@ -379,8 +394,24 @@ Resume annassign_other_typed_full_execution[success]:
     qpat_assum `!H. valid_horizon cx st0 H out.storage_trace ==> _`
       (qspec_then `H` mp_tac) >>
     (impl_tac >- first_assum ACCEPT_TAC) >>
-    POP_ASSUM_LIST (K all_tac) >>
-    strip_tac >> gvs[] >>
+    strip_tac >>
+    `return_buf_sep d cenv' out u` by
+    (`MAP FDOM (sc::rest) = MAP FDOM es.scopes` by
+       (qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
+          (qspec_then `[]` (mp_tac o SRULE [])) >>
+        strip_tac >> drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+     irule annassign_memory_return_buf_sep >>
+     qpat_assum `FLOOKUP cenv'.ce_vars id = SOME _` (irule_at Any) >>
+     qpat_assum `FLOOKUP u.vs_allocas _ = SOME (w2n w,_)` (irule_at Any) >>
+     qexistsl_tac [`st0`,`sc`,`sa`,`s0`,`rest`,`cenv`,`func`,`es`,`<|assignable := T; type := dtv; value := v; popped := []|>`,`cx`,`ctx`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     TRY (rpt gen_tac >> strip_tac >>
+          qpat_assum `!bw cap. d = SOME (bw,cap) ==>
+                        allocas_from (cap + w2n bw) u`
+            (qspecl_then [`bw`,`cap`] mp_tac) >>
+          asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM] >> NO_TAC) >>
+     simp[Abbr `out`]) >>
+    asm_simp_tac bool_ss [] >>
     qpat_assum `!aid off len i. _ ==> i IN tn0.t_mem`
       (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
     disch_tac >> rpt gen_tac >> strip_tac >>

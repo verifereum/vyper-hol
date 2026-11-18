@@ -4,7 +4,7 @@ Ancestors
   allocaFootprint arithmetic assignBasePtrLocalBodyFacts augAssignFullStore
   bodyBinopFragMemory bodyFullMemoryFrames bodyFullPreds bodyFullUnwrapRun bodyMemoryDefs
   bodyPtrBytestringBuiltinsUintGhost bodyPtrDefs bodyPtrPrecompileBuiltinsArithmeticValue
-  bodySimFull codegenRel context contextCodegenRel emitHelperProps exprLoweringProps
+  bodyFullShared bodySimFull codegenRel context contextCodegenRel emitHelperProps exprLoweringProps
   exprPtrCtorImmStore exprPtrUnwrapCopyEdges exprSimCopy exprSimHypsDefs finite_map fragExec
   fragExecMem fragGasOriginPtr fragGasOriginPtrDead fragGasOriginPtrLoop fragGasSeqPtr
   gasOutcomeFullCompose immutableCopyExecution immutableDeployOperandTransfer list
@@ -360,6 +360,7 @@ Proof
      simp[Abbr `ee`, PULL_EXISTS] >>
      `id IN FDOM env''` by fs[FLOOKUP_DEF] >>
      simp[pred_setTheory.ABSORPTION_RWT]) >>
+  `return_buf_sep d cenv (ee with gas_obs := []) t` by suspend "separation" >>
   `stmt_state_rel H ctx func cenv cx ee t` by suspend "state" >>
   `return_buf_frame d cenv sb t` by suspend "ret" >>
   `ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) Gf tf t` by
@@ -374,6 +375,19 @@ Proof
      qpat_assum `storage_well_formed_on cx es (FST H)`
        (ACCEPT_TAC o PURE_REWRITE_RULE [storage_well_formed_on_def])) >>
   simp[] >> (bossLib.gvs [pred_setTheory.SUBSET_DEF])
+QED
+
+Resume body_assign_local_memory_empty_full[separation]:
+  simp[return_buf_sep_gas_obs] >>
+  irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+  conj_tac
+  >- (Cases_on `d` >- simp[] >>
+      rename1 `return_buf_sep (SOME buf) _ _ _` >> PairCases_on `buf` >>
+      qpat_assum `return_buf_sep (SOME (buf0,buf1)) cenv es s0`
+        (mp_tac o CONJUNCT1 o REWRITE_RULE [return_buf_sep_def]) >>
+      simp[allocas_from_def, mstore_def]) >>
+  qexistsl_tac [`H`,`ctx`,`cx`,`es`,`func`,`s0`,`sa`] >>
+  simp[lookup_var_def, mstore_def]
 QED
 
 Resume body_assign_local_memory_empty_full[state]:
