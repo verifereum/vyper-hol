@@ -274,8 +274,8 @@ val reading_base = reading_place_operations :: reading_base;
 Theorem reading_call_primitives[local]:
   (frame_call_value cx vo st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
   (precompile_call_success bt st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
-  (take_call_outcome addr data vo st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
-  (take_delegate_outcome addr data vo st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
+  (take_call_outcome gas_cap addr data vo st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
+  (take_delegate_outcome gas_cap addr data vo st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
   (adopt_call_outcome rq co st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
   (create_oracle_result salt value code rof st = (INR ^missing_exc,st') ==> st'.gas_obs = [])
 Proof
