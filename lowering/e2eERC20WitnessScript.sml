@@ -2,8 +2,7 @@
 Theory e2eERC20Witness
 Ancestors
   e2eWitnessCompute e2eWitness e2eDefs e2eDeployDefs e2eCorrectness e2eLifecycle
-  compileVyper venomPipelineDriver supportedProgram
-  concretizeMemLocDefs codegenReadyCompute alist integer_word
+  e2eERC20Compile supportedProgram alist integer_word
   vyperInterpreter vyperHashMapStorage vfmCompute
   callTrace frameOutcome asmOptimizer accountsRelProps
 Libs
@@ -13,53 +12,11 @@ val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset
 val () = computeLib.upd_compset intReduce.add_int_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos])
-
-Definition erc20_tops_def:
-  erc20_tops =
-    [HashMapDecl Private F "balances" (BaseT AddressT)
-       (Type (BaseT (UintT 256))) (SOME 0);
-     FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT
-       [Assign
-          (BaseTarget (SubscriptTarget
-            (TopLevelNameTarget (NONE, "balances"))
-            (Builtin (BaseT AddressT) (Env Sender) [])))
-          (Literal (BaseT (UintT 256)) (IntL 100))];
-     FunctionDecl External Nonpayable F F "transfer"
-       [("to", BaseT AddressT); ("amount", BaseT (UintT 256))]
-       [] (BaseT BoolT)
-       [AugAssign (BaseT (UintT 256))
-          (SubscriptTarget (TopLevelNameTarget (NONE, "balances"))
-            (Builtin (BaseT AddressT) (Env Sender) []))
-          Sub (Name (BaseT (UintT 256)) "amount");
-        AugAssign (BaseT (UintT 256))
-          (SubscriptTarget (TopLevelNameTarget (NONE, "balances"))
-            (Name (BaseT AddressT) "to"))
-          Add (Name (BaseT (UintT 256)) "amount");
-        Return (SOME (Literal (BaseT BoolT) (BoolL T)))]]
-End
-
-val erc20_compile_eval =
-  EVAL ``compile_vyper (K SOME) (o1_policy all_capabilities) erc20_tops``;
-
-val (erc20_deploy_bytes, erc20_runtime_bytes) =
-  pairSyntax.dest_pair (optionSyntax.dest_some (rhs (concl erc20_compile_eval)));
-
-Definition erc20_deploy_bc_def:
-  erc20_deploy_bc : word8 list = ^erc20_deploy_bytes
-End
-
-Definition erc20_runtime_bc_def:
-  erc20_runtime_bc : word8 list = ^erc20_runtime_bytes
-End
-
-Theorem erc20_compile:
-  compile_vyper (K SOME) (o1_policy all_capabilities) erc20_tops =
-    SOME (erc20_deploy_bc, erc20_runtime_bc)
-Proof
-  PURE_REWRITE_TAC
-    [erc20_compile_eval, erc20_deploy_bc_def, erc20_runtime_bc_def] >> REFL_TAC
-QED
-
+(* Reuse the fixture's selector and storage hashes in the source evaluations. *)
+val () = computeLib.add_funs
+  [cv_eval ``function_selector "transfer" [Address; Uint 256]``,
+   cv_eval ``hashmap_slot 0w 1w``,
+   cv_eval ``hashmap_slot 0w 3w``];
 
 Definition erc20_initial_machine_def:
   erc20_initial_machine = initial_machine_state with
@@ -81,14 +38,6 @@ Definition erc20_transfer_calldata_def:
   erc20_transfer_calldata : word8 list =
     ^(rhs (concl erc20_transfer_calldata_eval))
 End
-
-Theorem erc20_transfer_calldata_encodes:
-  erc20_transfer_calldata =
-    function_selector "transfer" [Address; Uint 256] ++
-    enc (Tuple [Address; Uint 256]) (ListV [NumV 3; NumV 7])
-Proof
-  REWRITE_TAC [erc20_transfer_calldata_eval, erc20_transfer_calldata_def]
-QED
 
 Definition erc20_transfer_tx_def:
   erc20_transfer_tx = empty_call_txn with
@@ -334,19 +283,6 @@ QED
 
 val erc20_transfer_lookup = EVAL
   ``vyperInterpreter$lookup_function NONE "transfer" External erc20_tops``;
-
-Theorem erc20_valid_transfer:
-  valid_vyper_call erc20_tops erc20_transfer_tx erc20_transfer_calldata
-    (BaseT BoolT)
-Proof
-  simp[valid_vyper_call_def, erc20_transfer_tx_def,
-       vyperContextTheory.empty_call_txn_def, erc20_transfer_lookup,
-       vyperInterpreterTheory.bind_arguments_def,
-       selectorDispatchTheory.calldata_encodes_def,
-       erc20_transfer_calldata_encodes, byteTheory.word_of_bytes_be_def,
-       byteTheory.word_of_bytes_word_to_bytes, dividesTheory.divides_def] >>
-  EVAL_TAC
-QED
 
 val erc20_constructor_encoding = EVAL
   ``constructor_args_encode erc20_tops erc20_deploy_tx []``;
