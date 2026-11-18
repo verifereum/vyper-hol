@@ -4338,3 +4338,57 @@ Proof
      simp[] >> decide_tac) >>
   gvs[immSectionDeadTheory.mem_dead_bytes_def, w2n_n2w]
 QED
+
+Theorem body_assign_immutable_rep_sensitivity_mutual[local]:
+  (!tv v a mem dirty.
+    well_formed_type_value tv /\
+    (value_has_type tv v \/ v = default_value tv) /\ val_wf tv v /\
+    (!m. mem_agree_outside dirty mem m ==> val_in_memory tv v a m) ==>
+    !j. j < type_memory_size tv /\ a+j IN dirty ==>
+      mem_dead_bytes mem a tv (a+j)) /\
+  (!tvs tv. MEM tv tvs ==> !v a mem dirty.
+    well_formed_type_value tv /\
+    (value_has_type tv v \/ v = default_value tv) /\ val_wf tv v /\
+    (!m. mem_agree_outside dirty mem m ==> val_in_memory tv v a m) ==>
+    !j. j < type_memory_size tv /\ a+j IN dirty ==>
+      mem_dead_bytes mem a tv (a+j)) /\
+  (!(fields : (identifier # type_value) list) name tv. MEM (name,tv) fields ==> !v a mem dirty.
+    well_formed_type_value tv /\
+    (value_has_type tv v \/ v = default_value tv) /\ val_wf tv v /\
+    (!m. mem_agree_outside dirty mem m ==> val_in_memory tv v a m) ==>
+    !j. j < type_memory_size tv /\ a+j IN dirty ==>
+      mem_dead_bytes mem a tv (a+j))
+Proof
+  ho_match_mp_tac type_memory_size_ind >> rpt conj_tac
+  >>~- ([`BaseTV _`], metis_tac[body_assign_immutable_sensitivity_base])
+  >>~- ([`FlagTV _`], metis_tac[body_assign_immutable_sensitivity_base])
+  >~ [`NoneTV`] >- metis_tac[body_assign_immutable_sensitivity_base]
+  >~ [`TupleTV _`]
+  >- (gen_tac >> disch_tac >>
+      MATCH_MP_TAC body_assign_immutable_sensitivity_tuple >>
+      first_assum ACCEPT_TAC)
+  >~ [`ArrayTV _ (Fixed _)`]
+  >- (rpt gen_tac >> disch_tac >>
+      MATCH_MP_TAC body_assign_immutable_sensitivity_fixed >>
+      first_assum ACCEPT_TAC)
+  >~ [`ArrayTV _ (Dynamic _)`]
+  >- (rpt gen_tac >> disch_tac >>
+      MATCH_MP_TAC body_assign_immutable_sensitivity_dynamic >>
+      first_assum ACCEPT_TAC)
+  >~ [`StructTV _`]
+  >- (gen_tac >> disch_tac >>
+      MATCH_MP_TAC body_assign_immutable_sensitivity_struct >>
+      first_assum ACCEPT_TAC)
+  >> simp[] >> metis_tac[]
+QED
+
+Theorem body_assign_immutable_rep_sensitivity:
+  !tv v a mem dirty.
+    well_formed_type_value tv /\
+    (value_has_type tv v \/ v = default_value tv) /\ val_wf tv v /\
+    (!m. mem_agree_outside dirty mem m ==> val_in_memory tv v a m) ==>
+    !j. j < type_memory_size tv /\ a+j IN dirty ==>
+      mem_dead_bytes mem a tv (a+j)
+Proof
+  metis_tac[body_assign_immutable_rep_sensitivity_mutual]
+QED
