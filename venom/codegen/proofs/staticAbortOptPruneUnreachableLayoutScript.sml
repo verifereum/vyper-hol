@@ -59,14 +59,12 @@ Proof
 QED
 
 Theorem prune_one_canonical_layout:
-  !pre t x tail.
-  let p = pre ++ [t;x] ++ tail in
-  let q = pre ++ [t] ++ tail in
-  let d = LENGTH pre + 1 in
-  let r = (\i. if i < d then i else i-1) in
-  let R = (\prog l j. j < LENGTH prog /\
+  !pre t x tail p q d r R.
+  p = pre ++ [t;x] ++ tail ==> q = pre ++ [t] ++ tail ==>
+  d = LENGTH pre + 1 ==> r = (\i. if i < d then i else i-1) ==>
+  R = (\prog l j. j < LENGTH prog /\
     (EL j prog = AsmPushLabel l \/
-     (?delta. EL j prog = AsmPushOfst l delta) \/ EL j prog = AsmDataLabel l)) in
+     (?delta. EL j prog = AsmPushOfst l delta) \/ EL j prog = AsmDataLabel l)) ==>
   asm_terminal_op t /\ ~asm_reachable_marker x /\ asm_static_wf p ==>
   (!l old dest. FLOOKUP (SND (compute_label_offsets p)) l = SOME old /\
        FLOOKUP (build_offset_to_pc p) old = SOME dest ==>
@@ -79,6 +77,7 @@ Theorem prune_one_canonical_layout:
      R p l origin /\ (origin = d ==> R q l (pick l)) ==>
      R q l (if origin = d then pick l else r origin))
 Proof
+  SIMP_TAC bool_ss [] >>
   rpt gen_tac >> pure_rewrite_tac [GSYM listTheory.APPEND_ASSOC, APPEND] >> simp[] >>
   qabbrev_tac `p = pre ++ t :: x :: tail` >>
   qabbrev_tac `q = pre ++ t :: tail` >>
