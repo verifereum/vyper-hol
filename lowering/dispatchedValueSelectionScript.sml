@@ -50,21 +50,21 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
-Theorem classified_source_lookup[local]:
-  supported_program tops /\
+Theorem classified_external_source_lookup:
   ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
   MEM (mut,nr,rr,name,args,ds,ret,body) (FST (classify_functions tops)) ==>
-  vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,nr,args,ds,ret,body)
+  ?rawdefaults rawbody.
+    vyperInterpreter$lookup_function NONE name External tops =
+      SOME (mut,nr,args,rawdefaults,ret,rawbody) /\
+    ds = subst_consts_exprs (module_consts_env tops []) rawdefaults /\
+    body = subst_consts_stmts (module_consts_env tops []) rawbody
 Proof
   strip_tac >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supportedDeclsTheory.supported_headers_module_consts_env,
-      supported_program_def, supportedDeclsTheory.supported_declaration_headers_def] >>
   drule classify_functions_external_source >> strip_tac >>
-  gvs[constSubstTheory.subst_consts_fn_empty]
+  gvs[constSubstTheory.subst_consts_fn_def] >>
+  qexistsl_tac [`rawdefaults`, `rawbody`] >> simp[]
   >- (irule lookup_function_external_unique_decl >> simp[] >>
-      qexists_tac `FunctionDecl External mut nr rr name args ds ret body` >>
+      qexists_tac `FunctionDecl External mut nr rr name args rawdefaults ret rawbody` >>
       simp[vyperInterpreterTheory.lookup_function_def,
            vyperTypeContractTheory.external_name_keys_toplevel_def]) >>
   drule public_getter_lookup_singleton >> strip_tac >>
@@ -99,21 +99,21 @@ Proof
 QED
 
 Theorem fallback_source_lookup[local]:
-  supported_program tops /\
   ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
   FST (SND (SND (classify_functions tops))) =
     SOME (mut,nr,rr,name,args,ds,ret,body) ==>
-  vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,nr,args,ds,ret,body)
+  ?rawdefaults rawbody.
+    vyperInterpreter$lookup_function NONE name External tops =
+      SOME (mut,nr,args,rawdefaults,ret,rawbody) /\
+    ds = subst_consts_exprs (module_consts_env tops []) rawdefaults /\
+    body = subst_consts_stmts (module_consts_env tops []) rawbody
 Proof
   strip_tac >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supportedDeclsTheory.supported_headers_module_consts_env,
-      supported_program_def, supportedDeclsTheory.supported_declaration_headers_def] >>
   drule classify_functions_fallback_mem >> strip_tac >>
-  gvs[constSubstTheory.subst_consts_fn_empty] >>
+  gvs[constSubstTheory.subst_consts_fn_def] >>
+  qexistsl_tac [`rawdefaults`, `rawbody`] >> simp[] >>
   irule lookup_function_external_unique_decl >> simp[] >>
-  qexists_tac `FunctionDecl External mut nr rr name args ds ret body` >>
+  qexists_tac `FunctionDecl External mut nr rr name args rawdefaults ret rawbody` >>
   simp[vyperInterpreterTheory.lookup_function_def,
        vyperTypeContractTheory.external_name_keys_toplevel_def]
 QED
@@ -126,7 +126,8 @@ Theorem signature_hit_entry[local]:
     (abi_external_signatures tops) = SOME (name,tys) /\
   vyperInterpreter$lookup_function NONE name External tops =
     SOME (mut,nr,args,[],ret,fbody) ==>
-  (?rr. MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops))) /\
+  (?rr. MEM (mut,nr,rr,name,args,[],ret,
+      subst_consts_stmts (module_consts_env tops []) fbody) (FST (classify_functions tops))) /\
   !fb. linear_dispatch_target cd
     (MAP (\(sel,lbl,z). (sel,lbl))
       (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
@@ -142,7 +143,8 @@ Proof
       (FST (classify_functions tops)))` by metis_tac[] >>
   pop_assum mp_tac >> simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
   strip_tac >> gvs[] >>
-  drule_all classified_source_lookup >> strip_tac >> gvs[] >>
+  drule_all classified_external_source_lookup >> strip_tac >>
+  gvs[constSubstTheory.subst_consts_expr_def] >>
   conj_tac >- metis_tac[] >> gen_tac >>
   irule linear_dispatch_target_distinct >>
   conj_tac
@@ -167,14 +169,16 @@ Theorem source_dispatched_linear_target_nr:
   calldata_dispatch tops cd = SOME (name,vals) /\
   vyperInterpreter$lookup_function NONE name External tops =
     SOME (mut,nr,args,[],ret,fbody) ==>
-  (?rr. MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
+  (?rr. MEM (mut,nr,rr,name,args,[],ret,
+      subst_consts_stmts (module_consts_env tops []) fbody) (FST (classify_functions tops)) /\
     !fb. linear_dispatch_target cd
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
       "fn_" ++ name) \/
   (name = "__default__" /\ EXISTS is_default_decl tops /\
     (?rr. FST (SND (SND (classify_functions tops))) =
-      SOME (mut,nr,rr,name,args,[],ret,fbody)) /\
+      SOME (mut,nr,rr,name,args,[],ret,
+        subst_consts_stmts (module_consts_env tops []) fbody)) /\
     !fb. linear_dispatch_target cd
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops)))) fb = fb)
@@ -182,9 +186,11 @@ Proof
   strip_tac >>
   `name = "__default__" /\ EXISTS is_default_decl tops ==>
     ?rr. FST (SND (SND (classify_functions tops))) =
-      SOME (mut,nr,rr,name,args,[],ret,fbody)` by
+      SOME (mut,nr,rr,name,args,[],ret,
+        subst_consts_stmts (module_consts_env tops []) fbody)` by
     (strip_tac >> drule default_classified_present >> strip_tac >>
-     drule_all fallback_source_lookup >> strip_tac >> gvs[] >> metis_tac[]) >>
+     drule_all fallback_source_lookup >> strip_tac >>
+     gvs[constSubstTheory.subst_consts_expr_def] >> metis_tac[]) >>
   Cases_on `LENGTH cd < 4`
   >- (gvs[calldata_dispatch_def] >>
       disj2_tac >> simp[linear_dispatch_target_short]) >>
@@ -210,14 +216,16 @@ Theorem source_dispatched_linear_target:
   calldata_dispatch tops cd = SOME (name,vals) /\
   vyperInterpreter$lookup_function NONE name External tops =
     SOME (mut,F,args,[],ret,fbody) ==>
-  (?rr. MEM (mut,F,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
+  (?rr. MEM (mut,F,rr,name,args,[],ret,
+        subst_consts_stmts (module_consts_env tops []) fbody) (FST (classify_functions tops)) /\
     !fb. linear_dispatch_target cd
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
       "fn_" ++ name) \/
   (name = "__default__" /\ EXISTS is_default_decl tops /\
     (?rr. FST (SND (SND (classify_functions tops))) =
-      SOME (mut,F,rr,name,args,[],ret,fbody)) /\
+      SOME (mut,F,rr,name,args,[],ret,
+        subst_consts_stmts (module_consts_env tops []) fbody)) /\
     !fb. linear_dispatch_target cd
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops)))) fb = fb)
@@ -250,5 +258,5 @@ Proof
   disch_then (qspecl_then [`name`,`x1`] (fn th => REWRITE_TAC [th])) >>
   simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
   strip_tac >> gvs[] >>
-  drule_all classified_source_lookup >> simp[] >> metis_tac[]
+  drule_all classified_external_source_lookup >> simp[] >> metis_tac[]
 QED

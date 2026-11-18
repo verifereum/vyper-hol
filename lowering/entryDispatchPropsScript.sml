@@ -393,45 +393,6 @@ Proof
   simp[MEM_public_getters] >> metis_tac[]
 QED
 
-(* Supported headers currently exclude every module constant, so the compiler's
-   substitution preserves the source body and defaults at this entry boundary. *)
-Theorem supported_headers_external_member:
-  supported_declaration_headers tops /\ name <> "__default__" /\
-  lookup_function NONE name External tops =
-    SOME (mut,nr,args,dflts,ret,body) ==>
-  ?rr. MEM (mut,nr,rr,name,args,dflts,ret,body)
-    (FST (classify_functions tops))
-Proof
-  strip_tac >>
-  `module_consts_env tops [] = []` by
-    (metis_tac[supported_declaration_headers_def,
-               supported_headers_module_consts_env]) >>
-  drule_all lookup_function_external_member >>
-  simp[subst_consts_fn_empty]
-QED
-
-Theorem supported_headers_external_plain_member:
-  supported_declaration_headers tops /\
-  lookup_function NONE name External tops = SOME (mut,nr,args,dflts,ret,body) /\
-  name <> "__default__" /\
-  ~lookup_raw_return_or_F (NONE:num option) name External tops ==>
-  MEM (mut,nr,F,name,args,dflts,ret,body) (FST (classify_functions tops))
-Proof
-  strip_tac >>
-  `module_consts_env tops [] = []` by
-    (metis_tac[supported_declaration_headers_def,
-               supported_headers_module_consts_env]) >>
-  drule lookup_function_external_raw_cases >> strip_tac
-  >- (gvs[lookup_raw_return_or_F_def] >>
-      drule_all classify_fold_external_member >>
-      simp[classify_functions_def] >> pairarg_tac >>
-      gvs[MEM_MAP, subst_consts_fn_empty] >> metis_tac[]) >>
-  `public_getter decl = SOME (mut,nr,F,name,args,dflts,ret,body)` by
-    simp[public_getter_source_tuple] >>
-  simp[classify_functions_def] >> pairarg_tac >>
-  simp[MEM_MAP, MEM_public_getters] >> metis_tac[]
-QED
-
 Theorem lookup_function_external_mem:
   !tops src name mut nr args dflts ret body.
     lookup_function src name External tops =

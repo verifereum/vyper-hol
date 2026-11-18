@@ -75,6 +75,7 @@ Proof
 QED
 
 Theorem runtime_sym_runtime_insts:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
   !fn. MEM fn unit.cu_context.ctx_functions ==>
@@ -92,6 +93,7 @@ Proof
 QED
 
 Theorem runtime_sym_runtime_no_codesize:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
@@ -102,6 +104,7 @@ Proof
 QED
 
 Theorem runtime_sym_runtime_codecopy_source:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) /\
@@ -113,6 +116,7 @@ Proof
 QED
 
 Theorem runtime_sym_runtime_no_code_end:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>

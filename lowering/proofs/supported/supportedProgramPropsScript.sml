@@ -234,10 +234,12 @@ Theorem supported_declaration_exclusions_assembled:
   supported_program
     [FunctionDecl External Pure F T "raw" [] []
        (BaseT (BytesT (Dynamic 8))) []] /\
+  supported_program
+    [VariableDecl Private (Constant expr_test_uint) "x" (BaseT (UintT 256)) NONE] /\
   EVERY (\top. ~supported_program [top])
     [FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT [];
      VariableDecl Private Immutable "x" (BaseT (UintT 256)) (SOME 0);
-     VariableDecl Private (Constant expr_test_uint) "x" (BaseT (UintT 256)) NONE;
+     VariableDecl Private (Constant expr_test_internal) "x" (BaseT (UintT 256)) NONE;
      VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
      VariableDecl Private Storage "x" (BaseT (UintT 8)) (SOME 0);
      StructDecl "S" [("f",StructT (SOME 0,"S"))]]

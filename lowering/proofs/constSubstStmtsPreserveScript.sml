@@ -10,6 +10,21 @@ Ancestors
 
 (* ===== abi_decode targets ===== *)
 
+Theorem constant_expr_no_abi_decode:
+  (!e. constant_expr mods e ==>
+     ~supported_expr_exists (expr_abi_decode_target_root tgt) e) /\
+  (!es. EVERY (constant_expr mods) es ==>
+     ~supported_exprs_exists (expr_abi_decode_target_root tgt) es) /\
+  (!fs. EVERY (constant_expr mods) (MAP SND fs) ==>
+     ~supported_fields_exists (expr_abi_decode_target_root tgt) fs)
+Proof
+  ho_match_mp_tac const_local_refs_ind >>
+  simp[constant_expr_def, supported_expr_exists_def, expr_abi_decode_target_root_def] >>
+  rpt strip_tac >>
+  Cases_on `bi` >>
+  gvs[constant_type_builtin_def, expr_abi_decode_target_root_def]
+QED
+
 Theorem subst_consts_expr_abi_decode_target:
   (!env e.
     (!id r. ALOOKUP env id = SOME r ==>
@@ -307,6 +322,26 @@ Proof
   drule supported_constant_decl_not_root >> simp[]
 QED
 
+Theorem subst_consts_supported_fn_unchanged:
+  (!id. IS_SOME (ALOOKUP E id) ==>
+     ?vis c ty slot.
+       supported_variable_decl tops (NONE,id) = SOME (vis,Constant c,ty,slot)) /\
+  supported_pure_exprs tops defaults /\
+  supported_function_body tops vis args fbody ==>
+  subst_consts_fn E (mut,nr,rr,name,args,defaults,ret,fbody) =
+    (mut,nr,rr,name,args,defaults,ret,fbody)
+Proof
+  strip_tac >> simp[subst_consts_fn_def] >>
+  conj_tac
+  >- (irule (cj 3 subst_consts_expr_unchanged) >>
+      drule_then irule (cj 2 supported_pure_no_name_root) >>
+      rpt strip_tac >> gvs[] >>
+      first_x_assum drule >> strip_tac >>
+      drule supported_constant_decl_not_root >> simp[]) >>
+  fs[supported_function_body_def] >>
+  metis_tac[subst_consts_supported_stmts_unchanged]
+QED
+
 (* ===== P1's premise at entry: every substituted name is a constant ===== *)
 
 Theorem checked_module_consts_env_names_constant:
@@ -323,4 +358,76 @@ Proof
       ALOOKUP_MEM] >>
   drule distinct_module_consts_env_names_constant >> disch_then irule >>
   spose_not_then assume_tac >> gvs[GSYM ALOOKUP_NONE]
+QED
+
+Theorem checked_constructor_body_subst:
+  supported_program_deploy tops /\
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP mods NONE = SOME tops /\
+  MEM (FunctionDecl Deploy mut nr rr fname args defaults ret fbody) tops ==>
+  subst_consts_stmts (module_consts_env tops []) fbody = fbody
+Proof
+  strip_tac >> drule_all supported_program_deploy_function >> strip_tac >>
+  irule subst_consts_supported_stmts_unchanged >>
+  fs[supported_function_body_def] >>
+  qexistsl_tac [`args ++ supported_stmts_bindings T fbody ++
+                supported_stmts_bindings F fbody`, `tops`] >> simp[] >>
+  metis_tac[checked_module_consts_env_names_constant]
+QED
+
+Theorem checked_supported_function_subst:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  supported_program tops /\ vis <> Deploy /\
+  MEM (FunctionDecl vis mut nr rr name args defaults ret fbody) tops ==>
+  subst_consts_fn (module_consts_env tops [])
+    (mut,nr,rr,name,args,defaults,ret,fbody) =
+    (mut,nr,rr,name,args,defaults,ret,fbody)
+Proof
+  strip_tac >>
+  `!id. IS_SOME (ALOOKUP (module_consts_env tops []) id) ==>
+    ?v c ty slot.
+      supported_variable_decl tops (NONE,id) = SOME (v,Constant c,ty,slot)` by
+    (drule checked_module_consts_env_names_constant >> simp[]) >>
+  drule_all supported_program_declaration >>
+  simp[supported_declaration_body_def] >> strip_tac >>
+  irule subst_consts_supported_fn_unchanged >> metis_tac[]
+QED
+
+
+Theorem checked_const_substitution_abi_decode_target:
+  check_contract mode layouts addr mods = SOME artifact /\
+  ALOOKUP mods NONE = SOME tops /\
+  constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
+  supported_stmts_expr_exists (expr_abi_decode_target_root tgt)
+    (subst_consts_stmts (module_consts_env tops []) ss) ==>
+  supported_stmts_expr_exists (expr_abi_decode_target_root tgt) ss
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  drule_all checked_module_consts_env_agrees >> strip_tac >>
+  `!id r. ALOOKUP (module_consts_env tops []) id = SOME r ==>
+     ~supported_expr_exists (expr_abi_decode_target_root tgt) r` by
+    (fs[const_acc_agrees_def] >> metis_tac[constant_expr_no_abi_decode]) >>
+  metis_tac[CONJUNCT2 subst_consts_stmt_abi_decode_target]
+QED
+
+Theorem constant_expr_no_internal_calls[local]:
+  (!e. constant_expr mods e ==> int_calls_expr e = []) /\
+  (!es. EVERY (constant_expr mods) es ==> int_calls_exprs es = []) /\
+  (!fs. EVERY (constant_expr mods) (MAP SND fs) ==> int_calls_named_exprs fs = [])
+Proof
+  ho_match_mp_tac const_local_refs_ind >>
+  simp[constant_expr_def, int_calls_expr_def, SF ETA_ss] >>
+  rpt strip_tac >> gvs[SF ETA_ss]
+QED
+
+Theorem checked_const_substitution_int_calls:
+  check_contract mode layouts addr mods = SOME artifact /\
+  ALOOKUP mods NONE = SOME tops /\
+  constants_fold_module mods imms NONE tops FEMPTY = SOME A ==>
+  int_calls_stmts (subst_consts_stmts (module_consts_env tops []) ss) =
+  int_calls_stmts ss
+Proof
+  strip_tac >> drule_all checked_module_consts_env_agrees >> strip_tac >>
+  irule (CONJUNCT2 subst_consts_stmt_int_calls) >>
+  fs[const_acc_agrees_def] >> metis_tac[constant_expr_no_internal_calls]
 QED

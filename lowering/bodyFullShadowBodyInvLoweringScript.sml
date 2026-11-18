@@ -8,7 +8,8 @@ Ancestors
   loweringShapeProps loweringShapeDefs loweringShapeSource
   ctorDeployLoweringCode ctorDeployLoweringDefs ctorDeployDefs ctorGeneratorShape
   supportedProgram supportedDecls constSubst venomInst venomWf list rich_list
-  venomCompilerTypes sorting
+  venomCompilerTypes sorting constSubstStmtsPreserve supportedNameRoot
+  vyperTypeContractStaticMaps e2eDeployDefs
 
 (* The generator run with no internal packages ends just before the suffix. *)
 Theorem compile_runtime_internal_suffix[local]:
@@ -140,6 +141,7 @@ QED
 
 Theorem shadow_body_inv_from_internal_runs[local]:
   supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   (if is_ctor then lower_vyper_deploy_unit tops rp bc = SOME unit
    else lower_vyper_runtime_unit tops rp = SOME unit) /\
   name = (if is_ctor then "__deploy" else "__entry") /\
@@ -173,13 +175,22 @@ Proof
       `cap` |-> `if is_ctor then imm_len tops else 0`, `id` |-> `build_func_ids 0 tops fname`,
       `tys` |-> `MAP SND (args : (string # type) list)`] packaged_internal_mode) >> fs[]) >>
   qpat_x_assum `mode = is_ctor` SUBST_ALL_TAC >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supported_program_def, supported_declaration_headers_def,
-      supported_headers_module_consts_env] >>
+  `subst_consts_fn (module_consts_env tops [])
+    (mut,nr,rr,fname,args,dflts,ret,ss) = (mut,nr,rr,fname,args,dflts,ret,ss)` by
+    (drule_all supported_program_declaration >>
+     simp[supported_declaration_body_def] >> strip_tac >>
+     irule subst_consts_supported_fn_unchanged >>
+     qexistsl [`tops`, `Internal`] >> simp[] >>
+     drule distinct_module_consts_env_names_constant >> strip_tac >>
+     rpt strip_tac >> first_x_assum irule >>
+     Cases_on `ALOOKUP (module_consts_env tops []) id` >>
+     gvs[] >> drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+     simp[MEM_MAP] >> qexists_tac `(id,x)` >> simp[]) >>
   `MEM (mut,nr,rr,fname,args,dflts,ret,ss) srcs` by
     (qpat_assum `PERM srcs _` (mp_tac o MATCH_MP PERM_MEM_EQ) >>
      disch_then (qspec_then `(mut,nr,rr,fname,args,dflts,ret,ss)` SUBST1_TAC) >>
-     simp[MEM_classify_internal]) >>
+     simp[MEM_classify_internal] >>
+     qexistsl [`dflts`, `ss`] >> simp[]) >>
   `EVERY internal_fn_shape_ok ips /\
    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips) /\
    ALL_DISTINCT (MAP FST (internal_fn_descriptors ips))` by
@@ -236,6 +247,7 @@ Proof
 QED
 
 Theorem runtime_shadow_body_inv:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ lower_vyper_runtime_unit tops rp = SOME unit /\
   runtime_gas_shadow_unit tops rp = SOME shadow_unit ==>
   shadow_body_inv tops unit.cu_context shadow_unit.cu_context
@@ -314,6 +326,8 @@ Theorem deploy_shadow_body_inv:
     shadow_body_inv tops unit.cu_context shadow_unit.cu_context
 Proof
   rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    (fs[deploy_source_ok_def] >> metis_tac[deploy_typing_ok_vtype_keys_distinct]) >>
   qabbrev_tac `srcs = order_internals (deploy_internal_order (SOME cf) ints) ints` >>
   qabbrev_tac `ips = MAP (set_internal_package_target rp.rpol_target o
     package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) srcs` >>

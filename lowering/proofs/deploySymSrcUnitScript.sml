@@ -16,6 +16,7 @@ Theorem lower_vyper_deploy_unit_sym_src_ok:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan.
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ supported_program_deploy tops /\
   ~program_reads_self_code tops ==>
   label_flow_ok dunit.cu_context /\

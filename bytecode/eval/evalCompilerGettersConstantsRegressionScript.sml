@@ -1,6 +1,6 @@
 (* Source-level computations, not independent bytecode parity claims. *)
 Theory evalCompilerGettersConstantsRegression
-Ancestors compileVyper supportedDecls
+Ancestors compileVyper supportedDecls supportedProgram
 
 Definition regression_uint_def:
   regression_uint = BaseT (UintT 256)
@@ -72,6 +72,22 @@ Proof
   EVAL_TAC
 QED
 
+Theorem supported_public_literal_constant_getter:
+  ?decl.
+    decl = VariableDecl (Public F) (Constant (Literal regression_uint (IntL 7)))
+      "A" regression_uint NONE /\
+    supported_program [decl] /\
+    public_getter decl =
+      SOME (View,F,F,"A",[],[],regression_uint,[Return (SOME (regression_ref "A"))]) /\
+    FST (classify_functions [decl]) =
+      [(View,F,F,"A",[],[],regression_uint,
+         [Return (SOME (Literal regression_uint (IntL 7)))])]
+Proof
+  qexists_tac `VariableDecl (Public F) (Constant (Literal regression_uint (IntL 7)))
+    "A" regression_uint NONE` >>
+  EVAL_TAC
+QED
+
 Theorem public_header_slot_and_constant_boundaries:
   supported_declaration_header []
     (VariableDecl (Public F) Storage "g" regression_uint (SOME 0)) /\
@@ -79,8 +95,8 @@ Theorem public_header_slot_and_constant_boundaries:
     (VariableDecl (Public T) Transient "g" regression_uint (SOME 0)) /\
   ~supported_declaration_header []
     (VariableDecl (Public F) Storage "g" regression_uint NONE) /\
-  ~supported_declaration_header []
-    (regression_constant "A" (Name regression_uint "literal"))
+  supported_declaration_header []
+    (regression_constant "A" (Literal regression_uint (IntL 7)))
 Proof
   EVAL_TAC
 QED

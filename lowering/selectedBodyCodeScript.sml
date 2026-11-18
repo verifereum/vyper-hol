@@ -39,22 +39,6 @@ Proof
   goal_assum $ drule_at Any >> metis_tac[cs_extends_trans]
 QED
 
-Theorem external_lookup_raw_package_member:
-  supported_declaration_headers tops /\
-  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
-  vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,nr,args,dflts,ret,stmts) /\ name <> "__default__" ==>
-  MEM (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,
-       name,args,dflts,ret,stmts) (FST (classify_functions tops))
-Proof
-  strip_tac >>
-  `module_consts_env tops [] = []` by
-    (irule supported_headers_module_consts_env >>
-     qexists_tac `tops` >>
-     fs[supported_declaration_headers_def]) >>
-  drule_all lookup_function_external_raw_member >> simp[subst_consts_fn_empty]
-QED
-
 Theorem source_selected_body_code:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ name <> "__default__" /\
@@ -70,20 +54,26 @@ Theorem source_selected_body_code:
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) ==>
   ?st cenv sa st'.
     compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
-    compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((),st') /\
+    compile_guarded_body cenv F nkey ut' iv
+      (subst_consts_stmts (module_consts_env tops []) fbody) rt sa = ((),st') /\
     fn_has_code sa st' efn /\ shape_state sa /\ cs_extends sa st'
 Proof
   strip_tac >>
-  `supported_declaration_headers tops` by fs[supported_program_def] >>
-  drule_all external_lookup_raw_package_member >> strip_tac >>
+  drule_all lookup_function_external_raw_member >> strip_tac >>
   drule_all source_runtime_external_packages >> strip_tac >>
-  `MEM (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt)
-    extpkgs` by
-    (qpat_x_assum `set_external_package_target _ _ = _` (SUBST1_TAC o SYM) >>
-     qpat_x_assum `extpkgs = _` (fn th => rewrite_tac[th]) >>
-     simp[MEM_MAP] >>
-     qexists_tac `(mut,F,lookup_raw_return_or_F (NONE:num option) name External tops,
-        name,args,([] : expr list),ret,fbody)` >> simp[]) >>
+  `set_external_package_target rpolicy.rpol_target
+     (package_external_fn tops T (K global_nonreentrant_slot)
+       (subst_consts_fn (module_consts_env tops [])
+         (mut,F,lookup_raw_return_or_F (NONE:num option) name External tops,
+          name,args,[],ret,fbody))) =
+   (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,
+    subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
+    (rewrite_tac[GSYM external_package_subst_consts] >> simp[]) >>
+  `MEM (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,
+      subst_consts_stmts (module_consts_env tops []) fbody,rt) extpkgs` by
+    (pop_assum (SUBST1_TAC o SYM) >>
+     qpat_x_assum `extpkgs = _` SUBST1_TAC >>
+     simp[MEM_MAP] >> goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `MEM (lbl,_,_,_,_,_,_,_,_,_,_) extpkgs` mp_tac >>
   rewrite_tac[MEM_SPLIT] >> strip_tac >>
   qpat_x_assum `extpkgs = _` SUBST_ALL_TAC >>
