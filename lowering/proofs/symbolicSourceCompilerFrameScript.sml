@@ -190,6 +190,8 @@ Resume symbolic_frame_expr[builtin]:
 QED
 
 Resume symbolic_frame_expr[type_builtin]:
+  qpat_x_assum `!child env ty st. ~F /\ _ ==> _`
+    (assume_tac o REWRITE_RULE [NOT_CLAUSES, AND_CLAUSES]) >>
   asm "type_builtin" (irule o REWRITE_RULE [symbolic_frame_def]) >>
   rpt conj_tac >> rpt gen_tac >>
   rewrite_tac[expr_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >> rewrite_tac[COND_CLAUSES] >>
