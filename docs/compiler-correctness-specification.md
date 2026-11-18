@@ -40,10 +40,13 @@ or check and is easy to miss:
   `(lookup_account tx.target es.rollback.accounts).code = ctxt.msgParams.code`,
   and its `frame_tx_rel` conjunct requires `ctxt.msgParams.callee = tx.target`.
   In a frame entered by DELEGATECALL or CALLCODE from a proxy, the callee is the
-  proxy but the executing bytecode is the implementation's, which differs from the
-  bytecode installed at the proxy; in a call to an EIP-7702 delegated account, the
-  executing bytecode is the delegate's, not the delegation designator installed at
-  `tx.target`. Such frames are outside `vyper_call_correct`. The conjunct makes the
+  proxy but the executing bytecode is the implementation's; in a call to an
+  EIP-7702 delegated account, the executing bytecode is the delegate's, not the
+  delegation designator installed at `tx.target`. Such a frame is outside
+  `vyper_call_correct` whenever its executing bytecode differs from the code
+  installed at `tx.target`, which is the usual proxy and delegation case; the
+  conjunct compares only bytecode, so a frame whose executing bytecode equals
+  that code (a self-DELEGATECALL, say) is covered. The conjunct makes the
   target an account with installed (nonempty) code, so a nested CREATE cannot
   land on it, bounds the length of the executing
   code (`call_state_rel_code_length`), and ties the account code the source reads
