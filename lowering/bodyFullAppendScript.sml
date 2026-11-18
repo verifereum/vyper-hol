@@ -1839,7 +1839,10 @@ Resume append_nested_after_target_full[suffix]:
       state_well_typed (es with gas_obs := gs) /\ context_well_typed cx /\
       accounts_well_typed (es with gas_obs := gs).accounts /\
       functions_well_typed cx /\ env.type_defs = get_tenv cx` by
-       (fs[targetPlaceSimTheory.target_pre_def, expr_sim_inv_def] >>
+       (qpat_assum `target_pre cenv cx env bt (es with gas_obs := gs)` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[targetPlaceSimTheory.target_pre_def, expr_sim_inv_def] >>
+        rpt strip_tac >>
         gvs[vyperTypeInvariantsTheory.env_consistent_def,
             vyperTypeInvariantsTheory.env_context_consistent_def]) >>
      drule_all exprSimPopNestedLocalSourceTheory.eval_target_place_runtime_facts >>
