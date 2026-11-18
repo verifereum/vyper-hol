@@ -198,6 +198,36 @@ Proof
   simp[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM]
 QED
 
+(* Replay the target list's oracle in source order, with both reachability lifts. *)
+Theorem dft_ctx_gas_replay_witness:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C ==>
+  ?orc rds. FINITE {e | orc e <> 0w} /\
+    (!fuel. gas_res_rel (run_context fuel C' s) (ev_context orc fuel C' s)) /\
+    (!fn inst t. raw_reachable s C' fn inst t ==>
+      ?p d. ev_reachable orc s C' p d fn inst
+        (t with vs_gas_readings := s.vs_gas_readings)) /\
+    (!fuel. gas_res_rel (run_context fuel C (s with vs_gas_readings := rds))
+      (ev_context orc fuel C s)) /\
+    (!p d fn inst t. ev_reachable orc s C p d fn inst t ==>
+      ?ws. raw_reachable (s with vs_gas_readings := rds) C fn inst
+        (t with vs_gas_readings := ws))
+Proof
+  strip_tac >>
+  `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
+    metis_tac[dft_ctx_functions_map] >>
+  drule dft_ctx_block_ids_distinct >> strip_tac >>
+  drule_all o1_ctx_shape_wf_functions >> strip_tac >>
+  drule_all dft_ctx_wf_functions >> strip_tac >>
+  mp_tac (Q.INST [`ctx` |-> `C'`, `s` |-> `s`] gas_oracle_from_list) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  mp_tac (Q.INST [`ctx` |-> `C`, `s` |-> `s`] gas_oracle_to_list) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `run_context _ C (s with vs_gas_readings := rds)` >>
+  qexistsl [`orc`, `rds`] >> asm_rewrite_tac[]
+QED
+
 Theorem gas_res_rel_terminates:
   gas_res_rel r e /\ terminates r ==> terminates e
 Proof
@@ -248,18 +278,10 @@ Theorem dft_ctx_sim_gas_oracle:
          ?ws. raw_reachable vs C fn inst (t with vs_gas_readings := ws))
 Proof
   strip_tac >>
-  `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
-    metis_tac[dft_ctx_functions_map] >>
-  drule dft_ctx_block_ids_distinct >> strip_tac >>
-  drule_all o1_ctx_shape_wf_functions >> strip_tac >>
-  drule_all dft_ctx_wf_functions >> strip_tac >>
-  mp_tac (Q.INST [`ctx:venom_context` |-> `C'`, `s:venom_state` |-> `vs'`]
-            gas_oracle_from_list) >>
-  impl_tac >- simp[] >> strip_tac >>
-  mp_tac (Q.INST [`ctx:venom_context` |-> `C`, `s:venom_state` |-> `vs'`]
-            gas_oracle_to_list) >>
-  impl_tac >- simp[] >> strip_tac >>
-  rename1 `run_context _ C (vs' with vs_gas_readings := rds)` >>
+  drule dft_ctx_functions_map >> strip_tac >>
+  drule_all dft_ctx_gas_replay_witness >>
+  disch_then (qspec_then `vs'`
+    (qx_choosel_then [`orc`, `rds`] strip_assume_tac)) >>
   qexistsl_tac [`vs' with vs_gas_readings := rds`,`orc`] >>
   conj_tac >- simp[gas_variant_def, venom_state_component_equality] >>
   conj_tac
@@ -323,18 +345,10 @@ Theorem dft_ctx_sim_gas_revert_empty_conditional:
               t.vs_returndata = [])
 Proof
   strip_tac >> strip_tac >>
-  `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
-    metis_tac[dft_ctx_functions_map] >>
-  drule dft_ctx_block_ids_distinct >> strip_tac >>
-  drule_all o1_ctx_shape_wf_functions >> strip_tac >>
-  drule_all dft_ctx_wf_functions >> strip_tac >>
-  mp_tac (Q.INST [`ctx:venom_context` |-> `C'`, `s:venom_state` |-> `vs'`]
-            gas_oracle_from_list) >>
-  impl_tac >- simp[] >> strip_tac >>
-  mp_tac (Q.INST [`ctx:venom_context` |-> `C`, `s:venom_state` |-> `vs'`]
-            gas_oracle_to_list) >>
-  impl_tac >- simp[] >> strip_tac >>
-  rename1 `run_context _ C (vs' with vs_gas_readings := rds)` >>
+  drule dft_ctx_functions_map >> strip_tac >>
+  drule_all dft_ctx_gas_replay_witness >>
+  disch_then (qspec_then `vs'`
+    (qx_choosel_then [`orc`, `rds`] strip_assume_tac)) >>
   qexists_tac `vs' with vs_gas_readings := rds` >>
   conj_tac >- simp[gas_variant_def, venom_state_component_equality] >>
   conj_tac

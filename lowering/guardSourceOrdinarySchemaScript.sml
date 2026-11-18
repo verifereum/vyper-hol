@@ -11,7 +11,7 @@ Libs
 val (horizon, old_body) = dest_forall
   (concl vyperFiniteStoragePreservationTheory.eval_storage_well_formed_on_mutual);
 val old_clauses = strip_conj old_body;
-val structural_arities = [2,2,2,5,2,2,2,2,3,3,2];
+val structural_arities = [2,2,2,5,2,2,2,2,3,3];
 val finite_prefix_extra = ``
   IS_SOME st.outcomes /\
   valid_horizon cx initial_st H st.storage_trace /\
@@ -74,7 +74,7 @@ QED
 
 (* Fail loudly if a source-interface change leaves unintended free variables,
  * changes the number of predicates, or changes a branch label. *)
-val _ = if length finite_prefix_predicates = 11 andalso
+val _ = if length finite_prefix_predicates = 10 andalso
            List.all (fn v => aconv v horizon) (free_vars finite_prefix_ind_term)
         then () else raise Fail "Unexpected free variables in prefix schema";
 val finite_prefix_expected = list_mk_conj
@@ -106,7 +106,7 @@ val finite_prefix_labels =
    "BasePlaceRoot_TopLevelNameTarget", "BasePlaceRoot_AttributeTarget",
    "BasePlaceRoot_SubscriptTarget", "TargetPlace", "TupleStore_BaseTarget",
    "TupleStore_TupleTarget", "TupleStores_nil_nil", "TupleStores_cons_cons",
-   "TupleStores_nil_cons", "TupleStores_cons_nil", "Results_nil", "Results_cons"];
+   "TupleStores_nil_cons", "TupleStores_cons_nil"];
 val _ = if map #1 (guardSourceSchemaLib.manifest finite_prefix_evaluate_ind) =
            finite_prefix_labels
         then () else raise Fail "Evaluator branch manifest has changed";

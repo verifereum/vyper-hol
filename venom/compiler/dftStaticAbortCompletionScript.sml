@@ -1,6 +1,7 @@
 Theory dftStaticAbortCompletion
 Ancestors
-  dftGasInvExtraction dftGasInvPairedHistory dftGasInvPairedPrefix
+  dftStaticAbortInterval dftGasInvExtraction dftGasInvPairedHistory
+  dftGasInvPairedPrefix staticAbortDefs
   dftGasInvInversion dftSsaPreserve sorting
   dftStaticReachAvailability dftGasInvSSAProbe dftGasInvPrefixReach
   dftGasInvMemoryObservation staticShadowEventReachable dftGasToListReachBoundary
@@ -18,6 +19,42 @@ Theorem inv_reached_static_write_fails:
 Proof
   strip_tac >> gvs[] >>
   simp[Once ev_step_def, Once step_inst_def, Once step_inst_base_def]
+QED
+
+Theorem inv_missing_write_static_abort_prefix:
+  dft_fn_rel fn fn' /\ MEM bb fn.fn_blocks /\
+  lookup_block name fn.fn_blocks = SOME bb /\
+  lookup_block name fn'.fn_blocks = SOME bb' /\
+  bb.bb_instructions = pseudos ++ (srcpre ++ obs::srcpost) /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) (srcpre ++ obs::srcpost) /\
+  MAP (\i. i.inst_id) bb'.bb_instructions =
+    MAP (\i. i.inst_id) pseudos ++
+    MAP (\i. i.inst_id) (consumed ++ obs::later) /\
+  ALL_DISTINCT (srcpre ++ obs::srcpost) /\
+  PERM (consumed ++ obs::later) (srcpre ++ obs::srcpost) /\
+  fn' = dft_fn fn /\ EVERY (\i. is_pseudo i.inst_opcode) pseudos /\
+  EVERY (\x. ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]) consumed /\
+  inv_memory_observation obs.inst_opcode /\
+  srcpre = a ++ w::b /\ ~MEM w consumed /\
+  MEM w.inst_opcode [SSTORE; TSTORE; LOG] /\
+  initial.vs_call_ctx.cc_static /\ ev_reachable orc initial C' p d fn' obs t /\
+  name = t.vs_current_bb /\ t.vs_inst_idx = LENGTH pseudos + LENGTH consumed ==>
+  in_static_abort_prefix fn' t
+Proof
+  strip_tac >>
+  `static_abort_at bb' (LENGTH pseudos + LENGTH consumed)` by
+    (mp_tac (Q.INST [`fn` |-> `fn`, `fn'` |-> `fn'`, `bb` |-> `bb`,
+       `bb'` |-> `bb'`, `name` |-> `name`, `pseudos` |-> `pseudos`,
+       `consumed` |-> `consumed`, `srcpre` |-> `srcpre`,
+       `obs` |-> `obs`, `srcpost` |-> `srcpost`, `later` |-> `later`]
+       inv_missing_write_target_abort) >>
+     impl_tac
+     >- (asm_simp_tac std_ss [MEM_FILTER, MEM_APPEND, MEM] >>
+         qexists_tac `w` >> fs[]) >>
+     simp[]) >>
+  `t.vs_call_ctx.cc_static` by metis_tac[static_shadow_ev_reachable] >>
+  simp[in_static_abort_prefix_def] >> gvs[]
 QED
 
 Theorem inv_static_observation_normalized_setup:

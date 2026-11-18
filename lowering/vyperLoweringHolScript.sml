@@ -19,7 +19,7 @@ Ancestors
   moduleLowering
   (* property statements and proofs *)
   bodyMemStorageCopyStage
-  createCtorTupleExecution dallocaBlueprintArgs
+  dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
   loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
   loweringCallBudgetBounds
