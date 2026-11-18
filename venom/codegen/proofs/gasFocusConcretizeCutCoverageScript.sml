@@ -1544,7 +1544,7 @@ Theorem ptr_cut_range_geometry[local]:
   (!aid pa sz. FLOOKUP positions (Allocation aid) = SOME (pa,sz) ==>
      pa + sz < dimword (:256)) /\
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
-  (x = y /\ (w2n x + len <= lo \/ dyn <= w2n x)) \/
+  (x = y /\ (w2n x + len <= lo \/ dyn <= w2n x) /\ op_prov TG ops.iao_ofst = NONE) \/
   (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
     FLOOKUP births (token,aid) = SOME (b,sz) /\
     FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
@@ -1580,6 +1580,250 @@ Proof
     (irule ptr_closed_relocation_value >> simp[] >> qexists `sz` >> simp[] >> decide_tac) >>
   disj2_tac >> qexistsl [`v`,`token`,`aid`,`b`,`sz`,`pa`] >> simp[]
 QED
+
+(* Byte content at a read fetch does not depend on a successor step. *)
+Theorem focus_cut_paired_read_bytes:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ EVERY all_reachable C.ctx_functions /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  o1_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ ptr_stage_placements C' positions /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  gas_cut n vs at.po_state /\ ~in_revert_forward a.po_fn a.po_state /\
+  mem_read_ops a.po_inst = SOME ops /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\
+  MEM (w2n x,len) (source_memory_read_ranges a.po_inst a.po_state) /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
+    (SOME x) (SOME y) ==>
+  !j. j < len /\ w2n x+j NOTIN a.po_taint.t_mem ==>
+    read_byte (w2n x+j) a.po_state.vs_memory =
+    read_byte (w2n y+j) at.po_state.vs_memory
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >> strip_tac >>
+  `o1_ptr_safe_upto D lo n C vs` by fs[o1_safe_upto_def] >>
+  `ptr_discipline_upto lo n C vs /\ fixed_region_reserved lo C /\
+    EVERY (\f. f.fn_eom = NONE) C.ctx_functions` by fs[o1_ptr_safe_upto_def] >>
+  drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
+     metis_tac[ptr_fn_inst_wf_flat, EVERY_MEM]) >>
+  drule_all ptr_source_ownership_erases_upto >> strip_tac >>
+  `!aid pa sz. FLOOKUP positions (Allocation aid) = SOME (pa,sz) ==>
+      pa + sz < dimword (:256)` by
+    (rpt strip_tac >> drule_all ptr_stage_placements_strict_bound >> simp[]) >>
+  `a.po_inst.inst_opcode <> ASSIGN` by gvs[mem_read_ops_def, AllCaseEqs()] >>
+  `0 < len` by decide_tac >>
+  Q.SUBGOAL_THEN
+    `(x = y /\ (w2n x+len <= lo \/ dyn_floor C vs <= w2n x) /\
+       op_prov TG ops.iao_ofst = NONE) \/
+     (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
+       FLOOKUP births (token,aid) = SOME (b,sz) /\
+       FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+       b <= w2n x /\ w2n x+len <= b+sz /\ w2n y = pa + (w2n x-b))`
+    (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 (SUBST_ALL_TAC o SYM) assume_tac) strip_assume_tac)
+  >- (irule ptr_cut_range_geometry >>
+      qpat_assum `ptr_lookup_transport _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `access_ok _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `ptr_ledger_erases _ _ _ _` (irule_at Any) >> simp[] >> metis_tac[])
+  >- (`w2n x+j < lo \/ dyn_floor C vs <= w2n x+j` by
+        (qpat_x_assum `(_ + len <= lo \/ _) /\ _` strip_assume_tac >> decide_tac) >>
+      drule ptr_paired_fixed_read_recovery_upto >> disch_then irule >> simp[] >>
+      rpt conj_tac >> goal_assum (drule_at Any) >> simp[]) >>
+  suspend "owned"
+QED
+
+Resume focus_cut_paired_read_bytes[owned]:
+  `ptr_observation_reachable vs C a` by simp[ptr_observation_reachable_def] >>
+  `vs.vs_allocas = FEMPTY` by fs[o1_initial_state_ok_def] >>
+  drule_all ptr_source_ownership_live_prov >> pure_rewrite_tac[MEM_EL] >>
+  disch_then (qx_choose_then `k` strip_assume_tac) >>
+  drule ptr_source_ownership_caches >> strip_tac >>
+  drule ptr_source_birth_caches_slices >> strip_tac >>
+  `LENGTH tokens = SUC (LENGTH a.po_stack)` by
+    (drule ptr_source_birth_caches_activations >> strip_tac >>
+     drule ptr_source_activations_length >> simp[]) >>
+  qabbrev_tac `d = LENGTH a.po_stack - k` >>
+  `d <= LENGTH a.po_stack /\ LENGTH a.po_stack - d = k` by
+    (simp[Abbr `d`] >> decide_tac) >>
+  `EL (LENGTH a.po_stack - d) tokens = token` by simp[] >>
+  `FLOOKUP (ptr_owner_view d a).cf_state.vs_allocas aid = SOME (b,sz)` by
+    (qpat_assum `ptr_birth_slices _ _ _` mp_tac >>
+     pure_rewrite_tac[ptr_birth_slices_def] >>
+     disch_then (qspecl_then [`d`,`aid`] mp_tac) >> fs[]) >>
+  `allocas_from lo (ptr_owner_view d a).cf_state` by
+    (irule ptr_cut_owner_allocas_from >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `b + sz <= dyn_floor C vs` by
+    (irule ptr_cut_owner_below_floor >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `lo <= b` by
+    (qpat_assum `allocas_from lo (ptr_owner_view d a).cf_state`
+      (mp_tac o REWRITE_RULE [allocas_from_def]) >> disch_then drule >> simp[]) >>
+  `inst_read_op a.po_inst = SOME (Var v)` by simp[inst_read_op_def] >>
+  `MEM (Var v) a.po_inst.inst_operands` by
+    metis_tac[lowerDloadDescriptorObservationTheory.ld_descriptor_offset_operand] >>
+  `b <= w2n x+j /\ w2n x+j < b+sz /\ lo <= w2n x+j /\ w2n x+j < dyn_floor C vs` by decide_tac >>
+  `w2n y+j = pa + (w2n x+j-b)` by decide_tac >>
+  qpat_assum `w2n y+j = _` SUBST1_TAC >>
+  drule ptr_paired_owned_read_recovery_upto >> disch_then irule >> simp[] >>
+  rpt conj_tac >> goal_assum (drule_at Any) >> simp[]
+  >> (metis_tac[])
+QED
+
+Finalise focus_cut_paired_read_bytes
+
+(* Positive read and write ranges at a kept fetch. The descriptor branch
+   retains the actual evaluations and the current allocation owner. *)
+Theorem focus_cut_paired_access_ranges:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  ptr_discipline_upto lo n C vs /\ EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ ptr_stage_placements C' positions /\
+  gas_cut n vs at.po_state /\ ~in_revert_forward a.po_fn a.po_state /\
+  at.po_inst = a.po_inst /\
+  ((mops = mem_read_ops a.po_inst /\
+    rs = source_memory_read_ranges a.po_inst a.po_state /\
+    rt = source_memory_read_ranges at.po_inst at.po_state) \/
+   (mops = mem_write_ops a.po_inst /\
+    rs = source_memory_write_ranges a.po_inst a.po_state /\
+    rt = source_memory_write_ranges at.po_inst at.po_state)) /\
+  MEM (off,len) rt /\ 0 < len ==>
+  ?off_s. MEM (off_s,len) rs /\
+    ((off = off_s /\ off_s + len <= lo /\
+       (!ops. mops = SOME ops ==> op_prov a.po_prov ops.iao_ofst = NONE /\
+                                  op_prov TG ops.iao_ofst = NONE)) \/
+     (?ops x y. mops = SOME ops /\
+       eval_operand ops.iao_ofst a.po_state = SOME x /\
+       eval_operand ops.iao_ofst at.po_state = SOME y /\
+       off_s = w2n x /\ off = w2n y /\
+       ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
+         (SOME x) (SOME y) /\
+       ((x = y /\ op_prov TG ops.iao_ofst = NONE /\
+           (w2n x + len <= lo \/ dyn_floor C vs <= w2n x)) \/
+        (?v token aid b sz pa d owner output.
+          ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
+          FLOOKUP a.po_prov v = SOME (b,sz) /\
+          EL (LENGTH h - 1) H = (tokens,registry,births,PT,TG,saved,entries) /\
+          d <= LENGTH a.po_stack /\ EL (LENGTH a.po_stack - d) tokens = token /\
+          FLOOKUP registry token = SOME owner /\ owner = (ptr_owner_view d a).cf_fn /\
+          FLOOKUP (ptr_owner_view d a).cf_state.vs_allocas aid = SOME (b,sz) /\
+          lookup_function owner.fn_name C'.ctx_functions = SOME output /\
+          MEM (Allocation aid,pa,sz) output.fn_mems_used /\
+          FLOOKUP births (token,aid) = SOME (b,sz) /\
+          FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+          b <= w2n x /\ w2n x + len <= b + sz /\
+          w2n y = pa + (w2n x - b) /\ pa + sz <= eom /\ w2n y + len <= eom))))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
+      a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
+    (fs[ptr_paired_sample_def] >> metis_tac[ptr_history_content_labels]) >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
+     metis_tac[ptr_fn_inst_wf_flat, EVERY_MEM]) >>
+  drule ptr_discipline_upto_fn_ptr_ok >> strip_tac >>
+  drule_all ptr_frame_current_static >> strip_tac >>
+  rename1 `ptr_static_support P a.po_fn a.po_prov` >>
+  `FDOM a.po_prov SUBSET fn_pv P a.po_fn` by
+    (fs[ptr_static_support_def, SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  `MEM a.po_inst (fn_insts a.po_fn)` by
+    (drule concretizePtrChronologicalDemandTheory.ptr_frame_operand_instructions >> simp[]) >>
+  `fn_ptr_ok P a.po_fn /\ inst_wf a.po_inst /\ opaque_use_ok a.po_fn /\
+   label_positions_ok a.po_inst` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, inst_shape_ok_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  drule_all ptr_source_ownership_erases_upto >> strip_tac >>
+  Q.SUBGOAL_THEN
+    `((rs = source_memory_read_ranges a.po_inst a.po_state /\ mops = mem_read_ops a.po_inst) \/
+      (rs = source_memory_write_ranges a.po_inst a.po_state /\ mops = mem_write_ops a.po_inst))`
+    assume_tac >- metis_tac[] >>
+  Q.SUBGOAL_THEN
+    `?off_s. MEM (off_s,len) rs /\
+      ((off = off_s /\ ~(?ops. mops = SOME ops /\ op_prov a.po_prov ops.iao_ofst <> NONE)) \/
+       (?ops x y. mops = SOME ops /\ eval_operand ops.iao_ofst a.po_state = SOME x /\
+        eval_operand ops.iao_ofst at.po_state = SOME y /\ off_s = w2n x /\ off = w2n y /\
+        ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y)))`
+    (qx_choose_then `off_s` (CONJUNCTS_THEN2 assume_tac strip_assume_tac))
+  >- (irule ptr_current_range_transport >>
+      qpat_assum `ptr_mixed_vars _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `ptr_ledger_erases _ _ _ _` (irule_at Any) >> simp[] >> metis_tac[]) >>
+  qexists `off_s` >> simp[]
+  >- suspend "scalar" >>
+  suspend "descriptor"
+QED
+
+Resume focus_cut_paired_access_ranges[scalar]:
+  disj1_tac >> simp[] >>
+  `off_s + len <= lo` by
+    (drule_all ptr_access_range_classification >> simp[] >> strip_tac >>
+     fs[op_prov_def] >> metis_tac[]) >>
+  simp[] >> rpt strip_tac >>
+  `op_prov a.po_prov ops.iao_ofst = NONE` by metis_tac[] >>
+  drule ptr_owner_op_projection >> disch_then (qspec_then `ops.iao_ofst` mp_tac) >>
+  Cases_on `op_prov TG ops.iao_ofst` >>
+  simp[ptr_owner_erases_def, FLOOKUP_DEF]
+QED
+
+Resume focus_cut_paired_access_ranges[descriptor]:
+  `!aid pa sz. FLOOKUP positions (Allocation aid) = SOME (pa,sz) ==>
+      pa + sz < dimword (:256)` by
+    (rpt strip_tac >> drule_all ptr_stage_placements_strict_bound >> simp[]) >>
+  `MEM (w2n x,len) rs` by metis_tac[] >>
+  drule_all ptr_cut_range_geometry >> strip_tac
+  >- (disj2_tac >> disj1_tac >> gvs[])
+  >- (disj2_tac >> disj1_tac >> gvs[]) >>
+  suspend "owner"
+QED
+
+Resume focus_cut_paired_access_ranges[owner]:
+  `FLOOKUP a.po_prov v = SOME (b,sz)` by
+    (drule ptr_owner_op_projection >> disch_then (qspec_then `Var v` mp_tac) >>
+     simp[ptr_owner_erases_def, op_prov_def]) >>
+  drule ptr_structural_transcript_endpoint >> strip_tac >>
+  `LENGTH h - 1 < LENGTH h` by decide_tac >>
+  `H <> []` by (Cases_on `H` >> gvs[]) >>
+  `EL (LENGTH h - 1) H = (tokens,registry,births,PT,TG,saved,entries)` by
+    (drule (REWRITE_RULE [PRE_SUB1] LAST_EL) >> metis_tac[]) >>
+  `EL (LENGTH h - 1) h = a` by
+    (drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_end >> strip_tac >>
+     qpat_x_assum `LAST h = a` mp_tac >> simp[LAST_EL, PRE_SUB1]) >>
+  `?d owner output p.
+    d <= LENGTH a.po_stack /\ EL (LENGTH a.po_stack - d) tokens = token /\
+    FLOOKUP registry token = SOME owner /\ owner = (ptr_owner_view d a).cf_fn /\
+    FLOOKUP (ptr_owner_view d a).cf_state.vs_allocas aid = SOME (b,sz) /\
+    lookup_function owner.fn_name C'.ctx_functions = SOME output /\
+    MEM (Allocation aid,p,sz) output.fn_mems_used /\
+    FLOOKUP positions (Allocation aid) = SOME (p,sz)` by
+    ((drule_at (Pat `ptr_structural_transcript _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+       (Q.SPECL [`LENGTH (h:ptr_observation list) - 1`, `LENGTH (h:ptr_observation list) - 1`]
+         (GENL [``i:num``,``j:num``] ptr_transcript_historical_placement_upto)) >>
+     simp[] >> disch_then drule_all >> simp[] >> (metis_tac[]))) >>
+  `pa + sz <= eom` by
+    (irule ptr_stage_placements_endpoint_bound >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `w2n y + len <= eom` by decide_tac >>
+  disj2_tac >> disj2_tac >> qexistsl [`v`,`aid`,`b`,`sz`,`pa`,`d`,`output`] >> gvs[]
+QED
+
+Finalise focus_cut_paired_access_ranges
 
 Theorem concretize_cut_samples_append[local]:
   ptr_paired_prefix R lp positions lo vs C Ct
@@ -1840,7 +2084,8 @@ Resume focus_concretize_cut_coverage[memory]:
       FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
       b <= w2n x /\ w2n x+len <= b+sz /\ w2n y = pa + (w2n x-b))` by
     (rpt gen_tac >> strip_tac >>
-     `(x = y /\ (w2n x+len <= lo \/ dyn_floor C vs <= w2n x)) \/
+     `(x = y /\ (w2n x+len <= lo \/ dyn_floor C vs <= w2n x) /\
+       op_prov TG ops.iao_ofst = NONE) \/
       (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
         FLOOKUP births (token,aid) = SOME (b,sz) /\
         FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
@@ -1860,12 +2105,6 @@ Resume focus_concretize_cut_coverage[memory]:
   `a.po_inst.inst_opcode <> ASSIGN` by fs[MEM] >>
   `fixed_region_reserved lo C` by fs[o1_ptr_safe_upto_def] >>
   `vs.vs_allocas = FEMPTY` by fs[o1_initial_state_ok_def] >>
-  `ptr_observation_reachable vs C a` by simp[ptr_observation_reachable_def] >>
-  drule ptr_source_ownership_caches >> strip_tac >>
-  drule ptr_source_birth_caches_slices >> strip_tac >>
-  `LENGTH tokens = SUC (LENGTH a.po_stack)` by
-    (drule ptr_source_birth_caches_activations >> strip_tac >>
-     drule ptr_source_activations_length >> simp[]) >>
   `!ops x y len j.
     mem_read_ops a.po_inst = SOME ops /\ MEM ops.iao_ofst a.po_inst.inst_operands /\
     eval_operand ops.iao_ofst a.po_state = SOME x /\
@@ -1875,47 +2114,7 @@ Resume focus_concretize_cut_coverage[memory]:
       (SOME x) (SOME y) /\ j < len /\ w2n x+j NOTIN a.po_taint.t_mem ==>
     read_byte (w2n x+j) a.po_state.vs_memory =
     read_byte (w2n y+j) at.po_state.vs_memory` by
-    (rpt gen_tac >> strip_tac >>
-     `(x = y /\ (w2n x+len <= lo \/ dyn_floor C vs <= w2n x)) \/
-      (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
-        FLOOKUP births (token,aid) = SOME (b,sz) /\
-        FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
-        b <= w2n x /\ w2n x+len <= b+sz /\ w2n y = pa + (w2n x-b))` suffices_by
-       (DISCH_THEN (DISJ_CASES_THEN2
-          (CONJUNCTS_THEN2 (SUBST_ALL_TAC o SYM) assume_tac) strip_assume_tac)
-        >- (`w2n x+j < lo \/ dyn_floor C vs <= w2n x+j` suffices_by
-              (disch_tac >> drule ptr_paired_fixed_read_recovery_upto >>
-               disch_then irule >> simp[] >>
-               rpt conj_tac >> goal_assum (drule_at Any) >> simp[]) >>
-            pop_assum strip_assume_tac >> decide_tac) >>
-        drule_all ptr_source_ownership_live_prov >> pure_rewrite_tac[MEM_EL] >>
-        disch_then (qx_choose_then `k` strip_assume_tac) >>
-        qabbrev_tac `d = LENGTH a.po_stack - k` >>
-        `d <= LENGTH a.po_stack /\ LENGTH a.po_stack - d = k` by
-          (simp[Abbr `d`] >> decide_tac) >>
-        `EL (LENGTH a.po_stack - d) tokens = token` by simp[] >>
-        `FLOOKUP (ptr_owner_view d a).cf_state.vs_allocas aid = SOME (b,sz)` by
-          (qpat_assum `ptr_birth_slices _ _ _` mp_tac >>
-           pure_rewrite_tac[ptr_birth_slices_def] >>
-           disch_then (qspecl_then [`d`,`aid`] mp_tac) >> fs[]) >>
-        `allocas_from lo (ptr_owner_view d a).cf_state` by
-          (irule ptr_cut_owner_allocas_from >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
-        `b + sz <= dyn_floor C vs` by
-          (irule ptr_cut_owner_below_floor >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
-        `lo <= b` by
-          (qpat_assum `allocas_from lo (ptr_owner_view d a).cf_state`
-             (mp_tac o REWRITE_RULE [allocas_from_def]) >>
-           disch_then drule >> simp[]) >>
-        `inst_read_op a.po_inst = SOME (Var v)` by simp[inst_read_op_def] >>
-        `b <= w2n x+j /\ w2n x+j < b+sz /\
-         lo <= w2n x+j /\ w2n x+j < dyn_floor C vs` by decide_tac >>
-        `w2n y+j = pa + (w2n x+j-b)` by decide_tac >>
-        `MEM (Var v) a.po_inst.inst_operands` by metis_tac[] >>
-        qpat_assum `w2n y+j = _` SUBST1_TAC >>
-        drule ptr_paired_owned_read_recovery_upto >>
-        disch_then irule >> simp[] >>
-        rpt conj_tac >> goal_assum (drule_at Any) >> simp[]) >>
-     irule ptr_cut_range_geometry >> `0 < len` by decide_tac >> metis_tac[]) >>
+    (rpt gen_tac >> strip_tac >> drule_all focus_cut_paired_read_bytes >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [MLOAD; ILOAD]`
   >- (`opaque_use_ok a.po_fn` by (fs[EVERY_MEM] >> metis_tac[]) >>
       `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
