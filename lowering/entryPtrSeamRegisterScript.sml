@@ -1588,7 +1588,7 @@ Resume registration_argument_prepare_guarded_joint[guard]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Finalise registration_argument_prepare_guarded_joint[local]
+Finalise registration_argument_prepare_guarded_joint
 
 Theorem registration_argument_prepare_guarded_robust_resources:
   compile_alloc_buffer n st = (buf,a) /\

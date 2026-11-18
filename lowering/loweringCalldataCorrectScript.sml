@@ -3,6 +3,7 @@ Theory loweringCalldataCorrect
 Ancestors
   e2eDefs vyperLoweringCorrect loweringMemCorrect sourceUnitExecution
   sourceUnitExitSafe ptrDiscipline vyperCalldata
+  calldataNoneEntryController calldataNoneDecoder acceptedContextPhi
 
 (* The call a contract makes of raw calldata: the external entry it
    dispatches to and the arguments it decodes (vyperCalldata), including the
@@ -112,8 +113,30 @@ Theorem lower_vyper_runtime_unit_reverts:
                   (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                               vs_inst_idx := 0 |>))
 Proof
-  (* HELD ADMISSION: S1 revert on a NONE dispatch; needs the selector-miss and decode-failure entry runs *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule none_entry_reject_from_decoder >>
+  disch_then (drule_at (Pat `source_typing_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `initial_venom_state_rel _ _ _ _`)) >>
+  disch_then irule >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `!bb. venomInst$lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0` by
+    (rpt strip_tac >> drule_all lower_vyper_runtime_unit_block_phi >> simp[]) >>
+  drule (BETA_RULE none_coherent_decode_paths) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) o
+    Q.INST [`limit` |-> `last`, `lo` |-> `0`, `PG` |-> `[]`] o SPEC_ALL) >>
+  disch_then (drule_at (Pat `alloca_frontier_inv _ _ _ _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME _`)) >>
+  disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+  disch_then (qspec_then `p` mp_tac) >>
+  (impl_tac >-
+    (simp[allocas_from_def] >> rpt gen_tac >> strip_tac >>
+     qpat_assum `!id. first.cs_next_id <= id ==> _`
+       (drule_then (fs o single)))) >>
+  metis_tac[]
 QED
 
 (* S3 at the marks of S1's certificate (lower_vyper_runtime_unit_correct_dispatched),
