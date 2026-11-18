@@ -1234,8 +1234,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-(* A static aggregate storage or transient variable. *)
-Theorem body_assign_toplevel_copy_after_rhs_frame:
+Theorem body_assign_toplevel_copy_after_rhs_frame[local]:
   get_module_code cx src = SOME tops /\
   find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id_str) /\
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -1547,7 +1546,7 @@ Proof
   simp[] >> qexistsl_tac [`op`,`sm`] >> simp[]
 QED
 
-Theorem body_assign_toplevel_copy_entry:
+Theorem body_assign_toplevel_copy_entry[local]:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -1621,6 +1620,7 @@ Proof
   qexistsl_tac [`op`,`sm`,`shadow_sm`] >> simp[]
 QED
 
+(* A static aggregate storage or transient variable. *)
 Theorem body_assign_toplevel_copy_full:
   !cx nsid mut ty slot e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
