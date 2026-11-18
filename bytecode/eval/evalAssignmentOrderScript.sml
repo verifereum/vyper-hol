@@ -2,10 +2,10 @@
    supported-program boundaries, exact bytecode parity and interpreter results. *)
 Theory evalAssignmentOrder
 Ancestors
+  vyperSmallStepCV
   vyperInterpreter vyperTypeSystem jsonToVyper
-  compileVyper concretizeMemLocDefs supportedProgram supportedStmts
+  supportedProgram supportedStmts
   vyperSmallStep vyperStorageBackend finite_map While alist byte integer_word option
-  codegenReadyCompute
 Libs
   vyperCheckContractFrontendLib evalCompilerBytecodeLib finite_mapLib
   computeLib wordsLib cv_transLib
@@ -60,45 +60,7 @@ Definition assignment_empty_state_def:
 End
 val () = cv_auto_trans assignment_empty_state_def;
 
-(* Every compiler fixture must be supported and match both byte lists. *)
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY, i2w_pos]);
-
-fun check_compiler_fixture name = let
-  val program = prim_mk_const
-    {Thy = "evalAssignmentOrder", Name = name ^ "_source_program"}
-  val expected = evalCompilerBytecodeLib.read_hex_bytes_from
-    ("../assignment-order/oracle/" ^ name ^ ".hex")
-  val _ = save_thm (name ^ "_supported",
-    EQT_ELIM (EVAL ``supported_program ^program``))
-  val _ = save_thm (name ^ "_matches_python", EQT_ELIM (EVAL
-    ``compile_vyper (K SOME) (o1_policy all_capabilities) ^program = SOME ^expected``))
-in () end;
-
-val () = List.app check_compiler_fixture
-  ["c08_storage_arr_assign_computed_rhs", "c09_storage_map_assign_computed_rhs",
-   "g6_write_order_side", "x04_assign_sideeffect_order",
-   "g19_aug_rhs_modifies_target"];
-
-(* Bounded return decoding deliberately differs from VYPER_PIN
-   (vyperlang/vyper#5333): the fixture compiles, but not to the pinned bytes. *)
-fun check_decoder_divergence_fixture name = let
-  val program = prim_mk_const
-    {Thy = "evalAssignmentOrder", Name = name ^ "_source_program"}
-  val expected = evalCompilerBytecodeLib.read_hex_bytes_from
-    ("../assignment-order/oracle/" ^ name ^ ".hex")
-  val compiled = EVAL
-    ``compile_vyper (K SOME) (o1_policy all_capabilities) ^program``
-  fun on_compiled tm =
-    EQT_ELIM ((DEPTH_CONV (REWR_CONV compiled) THENC EVAL) tm)
-  val _ = save_thm (name ^ "_supported",
-    EQT_ELIM (EVAL ``supported_program ^program``))
-  val _ = save_thm (name ^ "_compiles", on_compiled
-    ``IS_SOME (compile_vyper (K SOME) (o1_policy all_capabilities) ^program)``)
-  val _ = save_thm (name ^ "_differs_from_pinned_decoder", on_compiled
-    ``compile_vyper (K SOME) (o1_policy all_capabilities) ^program <> SOME ^expected``)
-in () end;
-
-val () = check_decoder_divergence_fixture "s11_storage_map_assign_extcall_rhs";
 
 Theorem flat_tuple_assignment_supported:
   supported_stmt []

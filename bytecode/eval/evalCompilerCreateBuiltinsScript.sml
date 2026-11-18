@@ -36,7 +36,26 @@ QED
 
 val suffix = "_matches_python_oracle"
 val checked_names = List.concat (map DB.theorems
-  ["evalCompilerCreateBuiltins1", "evalCompilerCreateBuiltins2", "evalCompilerCreateBuiltins"])
+  ["evalCompilerCreateBuiltins1",
+   "evalCompilerCreateBuiltins2",
+   "evalCompilerCreateBuiltinsNest01CreateInCall",
+   "evalCompilerCreateBuiltinsCc02CopySaltValue",
+   "evalCompilerCreateBuiltinsCc03CopyRof",
+   "evalCompilerCreateBuiltinsNest02StmtCreate",
+   "evalCompilerCreateBuiltinsCp02ProxyValueSalt",
+   "evalCompilerCreateBuiltinsCp03ProxyRof",
+   "evalCompilerCreateBuiltinsCp04ForwarderAlias",
+   "evalCompilerCreateBuiltinsCb04BlueprintOffsetSaltValue",
+   "evalCompilerCreateBuiltinsCb03BlueprintRawargs",
+   "evalCompilerCreateBuiltinsCb08BlueprintRuntimeOffset",
+   "evalCompilerCreateBuiltinsCb09BlueprintFoldedOffset",
+   "evalCompilerCreateBuiltinsCb10BlueprintFlagOffset",
+   "evalCompilerCreateBuiltinsCb11BlueprintFoldedWeiOffset",
+   "evalCompilerCreateBuiltinsCb12BlueprintUnsafeOffset",
+   "evalCompilerCreateBuiltinsCb13BlueprintMixedBytesOffset",
+   "evalCompilerCreateBuiltinsCb14BlueprintMixedHighOffset",
+   "evalCompilerCreateBuiltinsCb15BlueprintMembershipFlag",
+   "evalCompilerCreateBuiltins"])
   |> map #1
   |> List.filter (String.isSuffix suffix)
   |> map (fn name => String.substring (name, 0, size name - size suffix))

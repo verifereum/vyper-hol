@@ -1,6 +1,7 @@
 (* Emit the existing CV translation of run_test, without changing its semantics. *)
 Theory vyperTestEmit
 Ancestors
+  vyperSmallStepCV
   vyperTestRunner cv jsonToVyper vyperState vyperValueOperation
   jsonToVyperCV
 Libs
