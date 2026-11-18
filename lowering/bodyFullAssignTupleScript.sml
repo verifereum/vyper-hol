@@ -4497,6 +4497,46 @@ QED
 
 Finalise tuple_immutable_normalized_fixed_joint[local]
 
+(* The loaded word may carry payload taint; reading does not change it in memory. *)
+Theorem tuple_runtime_mload_cursor[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id MLOAD [Var p] [x]) /\
+  ptr_covers G tn p s 32 /\ lookup_var p s = SOME a /\
+  w2n a + 32 <= s.vs_alloca_next /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted ==>
+  ?t Gf tf. t = (update_var x (mload (w2n a) s) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
+    eval_operand (Var x) t = SOME (mload (w2n a) s) /\
+    op_taint tf (Var x) = mem_word_taint tn.t_mem (w2n a) /\
+    op_prov Gf (Var x) = NONE /\
+    (!q. q <> x ==> lookup_var q t = lookup_var q s /\
+      FLOOKUP Gf q = FLOOKUP G q /\ op_taint tf (Var q) = op_taint tn (Var q)) /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `eval_operand (Var p) s = SOME a` by simp[eval_operand_def] >>
+  qabbrev_tac `i = mk_inst id MLOAD [Var p] [x]` >>
+  qabbrev_tac `r = update_var x (mload (w2n a) s) s` >>
+  qexistsl_tac [`r with vs_inst_idx := SUC s.vs_inst_idx`,
+    `step_prov PG G i r`, `step_taint i s r tn`] >> simp[] >>
+  conj_tac >-
+    (gen_tac >> irule decoderNavigationPtrTheory.straight_line_step_origin >>
+     goal_assum (drule_at Any) >>
+     simp[Abbr `i`, Abbr `r`, ptr_inst_ok_mload_lo, step_MLOAD,
+       below_frontier_MLOAD, inst_dload_in_section_def, mk_inst_def, is_terminator_def]) >>
+  `op_prov (step_prov PG G i r) (Var x) = NONE` by
+    (irule step_prov_out_none >>
+     simp[Abbr `i`, mk_inst_def, out_prov_other_none]) >>
+  simp[Abbr `i`, Abbr `r`,
+    exprPtrCtorCodeLoadTheory.load_word_output_taint,
+    exprPtrCtorCodeLoadTheory.load_word_taint_frame] >>
+  simp[decoderGhostFramePtrTheory.step_prov_other_output,
+    decoderGhostFramePtrTheory.step_taint_other_output, mk_inst_def,
+    eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
 (* Read the live bytestring header without assuming freshness of the machine. *)
 Theorem tuple_runtime_header_load[local]:
   emit_op MLOAD [Var src] sa = (v,sm) /\ fn_has_code sa sm fn /\
@@ -4519,61 +4559,24 @@ Theorem tuple_runtime_header_load[local]:
 Proof
   strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
-  `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>
-  `!out. step_inst_base (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s =
-      OK (update_var out (mload (w2n a) s) s)` by simp[step_MLOAD] >>
-  `!out D. ptr_inst_ok D lo 0 ctx fn G tn
-      (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s` by simp[ptr_inst_ok_mload_lo] >>
-  `!out. inst_mem_below_frontier (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s /\
-     inst_dload_in_section (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s` by
-      simp[below_frontier_MLOAD, inst_dload_in_section_def, mk_inst_def] >>
   qabbrev_tac `x = STRING #"%" (toString sa.cs_next_var)` >>
-  qabbrev_tac `raw = update_var x (mload (w2n a) s) s` >>
-  qabbrev_tac `i = mk_inst sa.cs_next_id MLOAD [Var src] [x]` >>
   `sm.cs_current_bb = sa.cs_current_bb` by
     (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
   drule_all fn_has_code_same_block >> strip_tac >>
-  `get_instruction bb s.vs_inst_idx = SOME i` by
-    ((qpat_assum `!j. j < LENGTH _ ==> _` (qspec_then `0` mp_tac) >> simp[] >> (gvs[]))) >>
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-      (OK (raw with vs_inst_idx := SUC s.vs_inst_idx),step_prov PG G i raw,
-        step_taint i s raw tn)` by
-    (gen_tac >>
-     `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-       (OK (raw with vs_inst_idx := SUC s.vs_inst_idx),step_prov PG G i raw,
-         step_taint i s raw tn)` by
-       (`i.inst_opcode = MLOAD` by simp[Abbr `i`, mk_inst_def] >>
-        mp_tac (Q.INST [`i` |-> `i`, `u` |-> `raw`, `func` |-> `fn`]
-          straight_line_origin_ptr_edge) >>
-        simp[is_terminator_def, Abbr `i`, Abbr `raw`]) >>
-     irule (gas_origin_ptr_path_rules |> cj 2 |> SPEC_ALL |>
-       Q.INST [`left` |-> `[]`, `right` |-> `[]`] |> SRULE []) >>
-     goal_assum (drule_at Any) >> irule (cj 1 gas_origin_ptr_path_rules) >>
-     simp[Abbr `raw`, update_var_def]) >>
-  qexistsl_tac [`raw with vs_inst_idx := SUC s.vs_inst_idx`,
-    `step_prov PG G i raw`, `step_taint i s raw tn`, `x`] >>
-  `op_taint (step_taint i s raw tn) (Var x) = {} /\
-   op_prov (step_prov PG G i raw) (Var x) = NONE /\
-   (step_taint i s raw tn).t_mem = tn.t_mem /\
-   (step_taint i s raw tn).t_stor = tn.t_stor /\
-   (step_taint i s raw tn).t_trans = tn.t_trans /\
-   (step_taint i s raw tn).t_imm = tn.t_imm /\
-   (!p. p <> x ==> lookup_var p raw = lookup_var p s /\
-     FLOOKUP (step_prov PG G i raw) p = FLOOKUP G p /\
-     op_taint (step_taint i s raw tn) (Var p) = op_taint tn (Var p))` by
-    (simp[Abbr `i`, Abbr `raw`] >>
-     mp_tac (setup_mload_ghost |>
-       Q.INST [`t` |-> `update_var x (mload (w2n a) s) s`,
-         `H` |-> `step_prov PG G (mk_inst id MLOAD [Var q] [x])
-                    (update_var x (mload (w2n a) s) s)`,
-         `u` |-> `step_taint (mk_inst id MLOAD [Var q] [x]) s
-                    (update_var x (mload (w2n a) s) s) tn`] |>
-       Q.INST [`id` |-> `sa.cs_next_id`, `q` |-> `src`]) >> simp[]) >>
+  `get_instruction bb s.vs_inst_idx = SOME (mk_inst sa.cs_next_id MLOAD [Var src] [x])` by
+    (qpat_assum `!j. j < LENGTH _ ==> _` (qspec_then `0` mp_tac) >> simp[] >> gvs[]) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
+  drule_all tuple_runtime_mload_cursor >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `mem_word_taint tn.t_mem (w2n a) = {}` by
+    (simp[mem_word_taint_def, EXTENSION] >> qx_gen_tac `k` >>
+     Cases_on `k < 32` >> simp[] >>
+     qpat_assum `!i. w2n a <= i /\ _ ==> _` irule >> decide_tac) >>
+  qexistsl_tac [`t`,`Gf`,`tf`,`x`] >>
   `!p. not_fresh_at sa p ==> p <> x` by simp[Abbr `x`, not_fresh_at_def] >>
   `v = Var x` by simp[Abbr `x`] >>
-  gvs[Abbr `raw`, eval_operand_def, lookup_var_def, update_var_def,
-      not_fresh_at_def, Abbr `x`, ASCIInumbersTheory.toString_11, FLOOKUP_UPDATE,
-      venom_state_component_equality]
+  gvs[update_var_def, not_fresh_at_def, Abbr `x`, ASCIInumbersTheory.toString_11,
+      venom_state_component_equality] >> metis_tac[]
 QED
 
 (* The count and loop control consume the same clean scalar boundary. *)
