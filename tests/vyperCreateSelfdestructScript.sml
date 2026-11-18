@@ -784,7 +784,7 @@ fun decoded_blueprint_offset name = let
   val translated = rhs (concl (cv_eval ``translate_annotated_ast ^ast``))
   val (sources, _) = pairSyntax.dest_pair (optionSyntax.dest_some translated)
   val call = find_term (can (match_term
-    ``vyperAST$Call ty (CreateTarget kind salted rof ctor) es cont``)) sources
+    ``vyperAST$Call ty (CreateTarget kind salted rof ctor) es fallback``)) sources
   val args = #2 (strip_comb call)
   val offset = List.nth (#1 (listSyntax.dest_list (List.nth (args, 2))), 2)
   val cx = ``blueprint_test_context with sources := [(41w, ^sources)]``
