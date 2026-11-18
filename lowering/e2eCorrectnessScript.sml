@@ -1329,10 +1329,11 @@ Proof
       qpat_x_assum `txp = tx` SUBST_ALL_TAC >>
       `initial_ctx_rel cplan prog out.po_unit.cu_context vs0 es` by
         metis_tac[entry_venom_state_initial_ctx_rel] >>
-      Cases_on `o1_lowered_inv out.po_unit.cu_context vs0 /\
-                (fin = asm_opt_finalizer ==>
-                   code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)`
-      >- (fs[] >> drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
+      qpat_x_assum `(o1_lowered_inv _ _ /\ _) \/ _`
+        (DISJ_CASES_THEN STRIP_ASSUME_TAC)
+      >- (qspecl_then [`out`, `cplan`, `vs0`]
+            mp_tac o1_pipeline_memory_obligations_raw >>
+          impl_tac >- gvs[] >> strip_tac >>
           drule_all o1_pipeline_codegen_obligations >> strip_tac >>
           `!n. ?r' es''. run_call es = SOME (r',es'') /\
              (frame_resource_starved es r' es'' \/
@@ -1382,10 +1383,11 @@ Proof
     (irule codegen_assembly_finalizer_nonempty >> metis_tac[]) >>
   drule_all opt_entry_asm_frame_rel >>
   disch_then (qspecl_then [`prog`, `cplan`] assume_tac) >>
-  Cases_on `o1_lowered_inv out.po_unit.cu_context vs0 /\
-            (fin = asm_opt_finalizer ==>
-               code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)`
-  >- (fs[] >> drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
+  qpat_x_assum `(o1_lowered_inv _ _ /\ _) \/ _`
+    (DISJ_CASES_THEN STRIP_ASSUME_TAC)
+  >- (qspecl_then [`out`, `cplan`, `vs0`]
+        mp_tac o1_pipeline_memory_obligations_raw >>
+      impl_tac >- gvs[] >> strip_tac >>
       drule_all o1_pipeline_codegen_obligations >> strip_tac >>
       `!n. ?r' es''. run_call es = SOME (r',es'') /\
          (frame_resource_starved es r' es'' \/
