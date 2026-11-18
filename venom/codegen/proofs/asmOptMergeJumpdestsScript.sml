@@ -938,8 +938,9 @@ Proof
           conj_tac >- simp[Once sym_steps_def, EL_MAP] >> decide_tac) >>
       gen_tac >> disch_tac >>
       qpat_x_assum `!op. _ ==> ?m b. _` (qspec_then `op` mp_tac) >>
-      (impl_tac >- fs[]) >> strip_tac >>
-      qexistsl_tac [`SUC m'`, `b'`] >>
+      (impl_tac >- fs[]) >>
+      disch_then (qx_choosel_then [`m2`, `b2`] strip_assume_tac) >>
+      qexistsl_tac [`SUC m2`, `b2`] >>
       simp[Once sym_steps_def, EL_MAP]) >>
   `t.sym_base.as_stack = []`
     by (irule sym_step_base_stack >> metis_tac[rn_rel_def]) >>
@@ -958,8 +959,9 @@ Proof
       conj_tac >- simp[Once sym_steps_def, EL_MAP] >> decide_tac) >>
   gen_tac >> disch_tac >>
   qpat_x_assum `!op. _ ==> ?m b. _` (qspec_then `op` mp_tac) >>
-  (impl_tac >- fs[]) >> strip_tac >>
-  qexistsl_tac [`SUC m'`, `b'`] >> simp[Once sym_steps_def, EL_MAP]
+  (impl_tac >- fs[]) >>
+  disch_then (qx_choosel_then [`m2`, `b2`] strip_assume_tac) >>
+  qexistsl_tac [`SUC m2`, `b2`] >> simp[Once sym_steps_def, EL_MAP]
 QED
 
 Theorem rename_site_prefix_transport:
@@ -995,7 +997,8 @@ Proof
   disch_then (qspecl_then [`n`, `sym_init s`, `sym_init s`, `a`] mp_tac) >>
   (impl_tac >- simp[rn_rel_def, sym_init_def, ml_rel_def, mem_blocks_ok_def]) >>
   strip_tac >> conj_tac >- metis_tac[] >>
-  rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
-  qexistsl_tac [`m'`, `b'`] >> fs[rn_rel_def] >>
+  rpt strip_tac >> first_x_assum drule_all >>
+  disch_then (qx_choosel_then [`m2`, `b2`] strip_assume_tac) >>
+  qexistsl_tac [`m2`, `b2`] >> fs[rn_rel_def] >>
   metis_tac[sv_rel_list_vals, ml_rel_fdom]
 QED

@@ -17,44 +17,32 @@ Ancestors
   stackPlanGen vyperLoweringCorrect loweringShapeSource contextRawReachable
   venomWf list rich_list words arithmetic
 
-Theorem joint_trace_config_reachable[local]:
-  joint_trace vs0 C q0 es qs q /\ j <= LENGTH es ==>
-  joint_config_reachable vs0 C (EL j (q0::qs))
-Proof
-  strip_tac >> Cases_on `j < LENGTH es`
-  >- (drule_all joint_trace_edge_at >> strip_tac >> gvs[]) >>
-  `j = LENGTH es` by decide_tac >>
-  drule joint_trace_endpoint >> drule joint_trace_reachable >> simp[]
-QED
-
-(* The memory obligations of the frame driver at every configuration of a
-   trace that ends at a call step below the cut. *)
-Theorem request_cut_trace_memory[local]:
-  generate_context_plan ctx = SOME cplan /\
+(* A configuration of a trace that ends at a call step: it is
+   raw-reachable, off the revert-forwarding and static-abort prefixes, and
+   below the call's request cut. *)
+Theorem request_cut_trace_config:
   EVERY wf_function ctx.ctx_functions /\
-  vs0.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
-  max_live_eom ctx = SOME eom /\
-  mem_inv (\ctx fn inst u.
-    (request_cut (LENGTH t.vs_requests) u /\ ~in_static_abort_prefix fn u) ==>
-    lowered_mem_ok eom (w2n u.vs_initial_fmp) ctx fn inst u) ctx vs0 /\
   joint_trace vs0 ctx q0 evs qs
     (JointConfig stk PG G tn fn inst t oms om hs h) /\
   active_inst fn inst t /\
   MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
   j <= LENGTH evs /\
-  EL j (q0::qs) = JointConfig stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1 /\
-  ~in_revert_forward fn1 s1 ==>
-  source_memory_reads_disjoint cplan inst1 s1 /\
-  context_source_memory_writes_disjoint cplan inst1 s1
+  EL j (q0::qs) = JointConfig stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1 ==>
+  raw_reachable vs0 ctx fn1 inst1 s1 /\ ~in_revert_forward fn1 s1 /\
+  ~in_static_abort_prefix fn1 s1 /\
+  request_cut (LENGTH t.vs_requests) s1
 Proof
   strip_tac >>
-  drule generate_context_plan_spill_gap >> strip_tac >> gvs[] >>
   `joint_config_reachable vs0 ctx
      (JointConfig stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1)` by
-    metis_tac[joint_trace_config_reachable] >>
+    metis_tac[joint_trace_reachable_at] >>
   drule_all joint_config_raw >> strip_tac >>
   `wf_function fn1` by metis_tac[raw_reachable_wf] >>
   `ALL_DISTINCT (fn_labels fn1)` by fs[wf_function_def] >>
+  `~MEM inst.inst_opcode [RETURNDATACOPY; ASSIGN; REVERT]` by
+    (qpat_x_assum `MEM inst.inst_opcode _` mp_tac >> rw[] >> simp[]) >>
+  `~in_revert_forward fn1 s1` by
+    (irule joint_trace_nonforward_endpoint >> metis_tac[]) >>
   `~in_static_abort_prefix fn1 s1` by
     (irule joint_trace_call_not_static_prefix >> conj_tac >- simp[] >>
      qexistsl_tac [`ctx`, `G`, `G1`, `PG`, `PG1`, `evs`, `h`, `h1`, `hs`,
@@ -68,8 +56,31 @@ Proof
        `h`, `hs1`, `hs`, `inst1`, `inst`, `LENGTH evs`, `j`, `om1`, `om`,
        `oms1`, `oms`, `JointConfig stk PG G tn fn inst t oms om hs h`,
        `q0`, `qs`, `stk1`, `stk`, `tn1`, `tn`, `vs0`] >> simp[]) >>
-  `request_cut (LENGTH t.vs_requests) s1` by
-    (simp[request_cut_def] >> metis_tac[IS_PREFIX_LENGTH]) >>
+  simp[request_cut_def] >> metis_tac[IS_PREFIX_LENGTH]
+QED
+
+(* The memory obligations of the frame driver at every configuration of a
+   trace that ends at a call step below the cut. *)
+Theorem request_cut_trace_memory:
+  generate_context_plan ctx = SOME cplan /\
+  EVERY wf_function ctx.ctx_functions /\
+  vs0.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
+  max_live_eom ctx = SOME eom /\
+  mem_inv (\ctx fn inst u.
+    (request_cut (LENGTH t.vs_requests) u /\ ~in_static_abort_prefix fn u) ==>
+    lowered_mem_ok eom (w2n u.vs_initial_fmp) ctx fn inst u) ctx vs0 /\
+  joint_trace vs0 ctx q0 evs qs
+    (JointConfig stk PG G tn fn inst t oms om hs h) /\
+  active_inst fn inst t /\
+  MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
+  j <= LENGTH evs /\
+  EL j (q0::qs) = JointConfig stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1 ==>
+  source_memory_reads_disjoint cplan inst1 s1 /\
+  context_source_memory_writes_disjoint cplan inst1 s1
+Proof
+  strip_tac >>
+  drule_all request_cut_trace_config >> strip_tac >>
+  drule generate_context_plan_spill_gap >> strip_tac >> gvs[] >>
   `s1.vs_initial_fmp = n2w cplan.cp_initial_fmp` by
     metis_tac[raw_reachable_initial_fmp] >>
   `w2n s1.vs_initial_fmp = cplan.cp_initial_fmp` by gvs[w2n_n2w, LESS_MOD] >>

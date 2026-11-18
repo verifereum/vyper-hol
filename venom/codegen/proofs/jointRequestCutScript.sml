@@ -20,17 +20,6 @@ Libs
 
 (* ===== Revert forwarding ===== *)
 
-Theorem active_inst_lookup_get[local]:
-  ALL_DISTINCT (fn_labels fn) /\ active_inst fn inst s /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
-  get_instruction bb s.vs_inst_idx = SOME inst
-Proof
-  rw[active_inst_def, fn_labels_def] >>
-  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb'` by
-    (irule venomExecProofsTheory.MEM_lookup_block >> simp[]) >>
-  gvs[get_instruction_def]
-QED
-
 Theorem joint_revert_suffix_opcode:
   ALL_DISTINCT (fn_labels fn) /\
   joint_revert_suffix fn bb i r
@@ -39,7 +28,7 @@ Theorem joint_revert_suffix_opcode:
   MEM inst.inst_opcode [RETURNDATACOPY; ASSIGN; REVERT]
 Proof
   rw[joint_revert_suffix_def] >>
-  drule_all active_inst_lookup_get >> strip_tac >>
+  drule_all forwarding_active_lookup >> strip_tac >>
   gvs[revert_forward_pair_def] >>
   Cases_on `s.vs_inst_idx = i` >> gvs[] >>
   Cases_on `s.vs_inst_idx = r` >> gvs[] >>
@@ -123,7 +112,7 @@ Proof
   strip_tac >>
   qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
   simp[Once joint_transition_cases] >> rpt strip_tac >> gvs[] >>
-  drule_all active_inst_lookup_get >> strip_tac >>
+  drule_all forwarding_active_lookup >> strip_tac >>
   `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
    (s.vs_inst_idx = r ==> MEM inst.inst_opcode [SSTORE; TSTORE; LOG])` by
     (qpat_x_assum `static_abort_pair _ _ _` mp_tac >>
@@ -187,7 +176,7 @@ Proof
   `LENGTH es <= LENGTH es` by simp[] >>
   qspecl_then [`LENGTH es`, `k`] (fn th => drule_all (GEN_ALL th))
     joint_trace_static_prefix >> strip_tac >> gvs[] >>
-  drule_all active_inst_lookup_get >> strip_tac >>
+  drule_all forwarding_active_lookup >> strip_tac >>
   qpat_x_assum `static_abort_pair _ _ _` mp_tac >>
   rewrite_tac[static_abort_pair_def] >> strip_tac >>
   Cases_on `laststate.vs_inst_idx = j` >> gvs[get_instruction_def] >>
