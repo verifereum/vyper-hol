@@ -29,8 +29,13 @@ Proof
   rpt strip_tac >>
   gvs[well_typed_expr_def, supported_expr_exists_def, short_builtin_args_def, AllCaseEqs()] >>
   rpt (qpat_x_assum `_ \/ _` strip_assume_tac) >>
-  res_tac >> imp_res_tac well_typed_builtin_app_arity >>
-  imp_res_tac well_typed_type_builtin_args_arity >> gvs[]
+  res_tac >> gvs[] >>
+  FIRST [qpat_assum `LENGTH es < builtin_arity blt` (K (Cases_on `blt`)),
+         Cases_on `tb`] >>
+  gvs[well_typed_builtin_app_def, builtin_arity_def,
+      well_typed_type_builtin_args_def, type_builtin_arity_def] >>
+  qpat_assum `MAP expr_type es = _`
+    (mp_tac o AP_TERM ``LENGTH : type list -> num``) >> simp[]
 QED
 
 Theorem typed_assignment_builtin_arity[local]:
