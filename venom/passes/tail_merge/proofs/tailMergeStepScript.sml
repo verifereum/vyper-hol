@@ -772,7 +772,7 @@ val ee_UNIV_exec_ext_call = prove(``
   gvs[exec_ext_call_def, venom_call_request_def, read_memory_def] >>
   rpt (CASE_TAC >> gvs[]) >>
   simp[execution_equiv_def, update_var_def,
-       write_memory_with_expansion_def]);
+       write_memory_with_expansion_def, halt_state_def, set_returndata_def]);
 
 val ee_UNIV_exec_delegatecall = prove(``
   !inst1 inst2 s1 s2 gas addr ao as_ ro rs.
@@ -789,7 +789,7 @@ val ee_UNIV_exec_delegatecall = prove(``
   gvs[exec_delegatecall_def, venom_call_request_def, read_memory_def] >>
   rpt (CASE_TAC >> gvs[]) >>
   simp[execution_equiv_def, update_var_def,
-       write_memory_with_expansion_def]);
+       write_memory_with_expansion_def, halt_state_def, set_returndata_def]);
 
 Theorem ee_UNIV_exec_create:
   !inst1 inst2 s1 s2 value offset sz salt_opt.
@@ -807,6 +807,7 @@ Proof
   gvs[exec_create_def] >>
   Cases_on `t` >> Cases_on `t'` >> gvs[] >>
   Cases_on `w2n sz > 2 * max_code_size` >>
+  Cases_on `s2.vs_outcomes = []` >>
   simp[venom_create_request_def, consume_create_outcome_eq,
        read_memory_def, execution_equiv_def, update_var_def,
        halt_state_def, set_returndata_def]

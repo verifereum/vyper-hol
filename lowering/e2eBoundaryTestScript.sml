@@ -64,7 +64,7 @@ Proof
   strip_tac >>
   drule call_state_rel_parsed >> strip_tac >>
   drule call_state_rel_code_length >> strip_tac >>
-  fs[call_state_rel_def] >>
+  fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def] >>
   qpat_x_assum `es.contexts = _` (fn th => gvs[th])
 QED
 
@@ -82,7 +82,8 @@ Theorem boundary_pending_deletions:
   call_state_rel tops code am tx es ==>
   es.rollback.toDelete = am.pending_deletions
 Proof
-  simp[call_state_rel_def] >> metis_tac[]
+  simp[call_state_rel_def, frame_fresh_def, frame_tx_rel_def,
+       world_rel_def] >> metis_tac[]
 QED
 
 Theorem no_genesis_or_unbounded_hash_environment:
@@ -206,13 +207,16 @@ QED
 
 (* The compiler packages the same getter that source lookup selects. *)
 Theorem source_lookup_getter_supported:
-  let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
+  EVERY (\tops.
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\
-    supported_program tops
+    supported_program tops)
+    [[VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0);
+      EventDecl "Batch" [(("values",ArrayT (BaseT (UintT 256)) (Dynamic 4)),F)]]]
 Proof
-  simp_tac bool_ss [LET_THM] >> conj_tac >- EVAL_TAC >>
+  simp_tac bool_ss [listTheory.EVERY_DEF, AND_CLAUSES] >>
+  conj_tac >- EVAL_TAC >>
   simp[supported_program_def, supported_declaration_headers_def,
     supported_declaration_header_def, supported_declaration_body_def,
     supportedNamesTheory.supported_declaration_names_def,

@@ -261,14 +261,21 @@ Proof
   simp[abi_decode_clean_allocas_def]
 QED
 
+Theorem abi_decode_clean_outcomes[local]:
+  (abi_decode_clean_allocas func s).vs_outcomes = s.vs_outcomes
+Proof
+  simp[abi_decode_clean_allocas_def]
+QED
+
 Theorem abi_decode_clean_exec_ext_call_iff:
   exec_ext_call inst (abi_decode_clean_allocas func s) gas addr v ao az ro rz st = OK u <=>
   ?t. exec_ext_call inst s gas addr v ao az ro rz st = OK t /\
       u = abi_decode_clean_allocas func t
 Proof
-  Cases_on `consume_call_outcome (venom_call_request s addr v ao az st)
+  Cases_on `consume_call_outcome
+              (venom_call_request s addr v ao az st with cr_gas := SOME (w2n gas))
               (w2n ro) (w2n rz) s` >>
-  simp[exec_ext_call_def, abi_decode_clean_consume_call,
+  simp[exec_ext_call_def, abi_decode_clean_consume_call, abi_decode_clean_outcomes,
        Excl "consume_call_outcome_eq", AllCaseEqs()] >>
   metis_tac[]
 QED
@@ -279,7 +286,7 @@ Theorem abi_decode_clean_exec_create_iff:
       u = abi_decode_clean_allocas func t
 Proof
   Cases_on `consume_create_outcome (venom_create_request s v off sz salt) s` >>
-  simp[exec_create_def, abi_decode_clean_consume_create,
+  simp[exec_create_def, abi_decode_clean_consume_create, abi_decode_clean_outcomes,
        Excl "consume_create_outcome_eq", AllCaseEqs()] >>
   metis_tac[]
 QED
