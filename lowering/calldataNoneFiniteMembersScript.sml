@@ -66,7 +66,7 @@ val member_frame = ``\a b ctx fn site limit lower s (G:string |-> num # num) tn 
   (!op. abi_decoder_operand_live a.cs_next_var op ==>
        eval_operand op t = eval_operand op s) /\
   (!name. not_fresh_at a name ==> FLOOKUP H name = FLOOKUP G name /\
-       FLOOKUP u.t_var name = FLOOKUP tn.t_var name) /\
+       op_taint u (Var name) = op_taint tn (Var name)) /\
   abi_decode_footprint_frame ((d,sz)::sc) s t /\
   (!q k. MEM (q,k) sc ==> ?id. a.cs_next_id <= id /\ id < b.cs_next_id /\
        FLOOKUP t.vs_allocas id = SOME (q,k)) /\
@@ -224,11 +224,9 @@ Proof
             (qspecl_then [`id`,`q'`,`k`] mp_tac) >>
           impl_tac >- (rpt (conj_tac >- decide_tac) >> first_assum ACCEPT_TAC) >>
           disch_then ACCEPT_TAC) >>
-      gen_tac >> strip_tac >> conj_tac
-      >- (qpat_assum `!x. not_fresh_at a x ==> lookup_var x r = _ /\ _`
-            (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
-      qpat_assum `!x. not_fresh_at a x ==> FLOOKUP u.t_var x = _`
-        (drule_then ACCEPT_TAC)) >>
+      gen_tac >> strip_tac >>
+      qpat_assum `!x. not_fresh_at a x ==> lookup_var x r = _ /\ _`
+        (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
   rpt gen_tac >> strip_tac >>
   qpat_assum `!id q k. a.cs_next_id <= id /\ id < c.cs_next_id /\ _ ==> _`
     (qspecl_then [`id`,`q'`,`k`] mp_tac) >>
@@ -249,19 +247,32 @@ Proof
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `not_fresh_at a root /\ (!q. src = Var q ==> not_fresh_at a q)` by
     metis_tac[calldata_operand_live_not_fresh] >>
-  drule (REWRITE_RULE [listTheory.EVERY_DEF]
-    (Q.INST [`prefix` |-> `[]`] calldataMembersRawSubregionTheory.calldata_member_raw_prefix_frame_subregion)) >>
-  disch_then (qspecl_then [`u`,`tn`,`a`,`src`,`extent`,`root`,`oid`,`b`,`cap`,`owner`,`H`,`G`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `eval_operand src t = SOME p` by asm_rewrite_tac[] >>
+  `eval_operand src t = SOME p /\ lookup_var root t = lookup_var root s` by
+    metis_tac[eval_operand_def] >>
+  `ptr_covers H u root t extent` by
+    metis_tac[assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame] >>
+  `op_taint u src = {} /\ op_prov H src = NONE` by
+    (Cases_on `src` >>
+     TRY (simp[NoAsms, ptrDisciplineTheory.op_taint_def,
+                ptrDisciplineTheory.op_prov_def] >> NO_TAC) >>
+     rename1 `op_taint u (Var x) = _` >>
+     `not_fresh_at a x` by
+       (qpat_assum `!q. Var x = Var q ==> _` (qspec_then `x` mp_tac) >>
+        simp[NoAsms]) >>
+     qpat_assum `!name. not_fresh_at a name ==> FLOOKUP H name = _ /\ _`
+       (qspec_then `x` (drule_then mp_tac)) >>
+     qpat_assum `op_prov G (Var x) = NONE` mp_tac >>
+     qpat_assum `op_taint tn (Var x) = {}` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
+  `FLOOKUP t.vs_allocas oid = SOME (owner,cap)` by metis_tac[] >>
+  `t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `abi_decode_footprint_frame _ s t` mp_tac >>
+     simp[NoAsms, abiDecoderFrameTheory.abi_decode_footprint_frame_def]) >>
   `abi_decoder_operand_live b.cs_next_var src /\ abi_decoder_operand_live b.cs_next_var (Var root)` by
     (conj_tac >> irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
      qexists `a.cs_next_var` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `eval_operand (Var root) t = SOME (n2w root_addr)` by
-    (qpat_assum `!op. abi_decoder_operand_live a.cs_next_var op ==> _`
-       (qspec_then `Var root` mp_tac) >> strip_tac >> metis_tac[]) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[eval_operand_def]
 QED
 
 (* Starting history is needed only when a member is revisited.  The prefix
