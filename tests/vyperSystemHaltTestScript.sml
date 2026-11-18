@@ -1,6 +1,7 @@
 (* Executable source/CPS regressions for raw system calls and EIP-6780. *)
 Theory vyperSystemHaltTest
 Ancestors
+  vyperSmallStepCV
   vyperInterpreter vyperSmallStep vyperContext vyperState vyperAST vyperValue
   vfmState vfmExecution finite_map list option pair While
   vyperCallOutcome extCallOracle venomCallOracleDefs asmSem callTrace vfmContext

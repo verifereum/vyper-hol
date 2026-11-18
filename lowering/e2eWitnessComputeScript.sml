@@ -5,6 +5,7 @@
  *)
 Theory e2eWitnessCompute
 Ancestors
+  vyperSmallStepCV
   compileVyper venomPipelineDriver asmOptimizer supportedProgram
   concretizeMemLocDefs codegenReadyCompute alist integer_word option
   e2eDefs callTrace frameOutcome

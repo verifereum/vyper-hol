@@ -5,6 +5,7 @@
    execute concrete NONE. *)
 Theory vyperOracleIntegrationTest
 Ancestors
+  vyperSmallStepCV
   vyperOracleEntryTest vyperSendCpsCVTest vyperExtCallCpsCVTest
   vyperInterpreter vyperSmallStep vyperCall vyperState vyperContext vyperAST
   vyperValue extCallOracle vfmState vfmExecution finite_map list option pair

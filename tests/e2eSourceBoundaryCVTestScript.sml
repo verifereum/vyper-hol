@@ -3,6 +3,7 @@
    compiler or fixture definition is changed. *)
 Theory e2eSourceBoundaryCVTest
 Ancestors
+  vyperSmallStepCV
   vyperSendCpsCVTest vyperExtCallCpsCVTest vyperSmallStep[ignore_grammar]
   vyperInterpreter vyperState vyperContext vyperAST vyperValue
   extCallOracle selectorDispatch
