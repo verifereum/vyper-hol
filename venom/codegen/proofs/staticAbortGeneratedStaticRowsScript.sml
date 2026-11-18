@@ -14,14 +14,16 @@ Ancestors staticAbortEmitRows[qualified,ignore_grammar] staticAbortChunk[qualifi
 (* Quoted interfaces, not logical constants. *)
 val flow_tm = ``
   \p pc height tag boolean (x:num#num) (y:num#num).
-  let hi = height x; hj = height y; ins = EL (pc x) p in
-  let inherit =
+  !hi. hi = height x ==>
+  !hj. hj = height y ==>
+  !ins. ins = EL (pc x) p ==>
+  !inherit. inherit = (
     \(src:num -> num option) (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a)) in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
   case ins of
     AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
   | AsmPush bs => hj = hi+1 /\
@@ -43,7 +45,9 @@ val flow_tm = ``
        | NONE => case ALOOKUP swap_table name of
            SOME n => 0 < n /\ n < hi /\ hj = hi /\
              inherit (\k. SOME(if k=0 then n else if k=n then 0 else k)) (\k. NONE) (\k. F)
-         | NONE => let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+         | NONE =>
+             !a. a = asm_op_arity name ==>
+             !m. m = hj + a - hi ==>
              a <= hi /\ hj = m+(hi-a) /\
              ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
              inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -58,11 +62,12 @@ val reach_tm = ``\(edge:(num#num)->(num#num)->bool) e x.
   ?n (path:num->num#num).
     path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))``;
 
-val rows_tm = ``\p cc V X (rank:num#num->num) pc height need tag boolean edge.
-  let lo = SND(compute_label_offsets p); otp = build_offset_to_pc p in
-  let target = \x y.
+val rows_tm = ``\Flow p cc V X (rank:num#num->num) pc height need tag boolean edge.
+  !lo. lo = SND(compute_label_offsets p) ==>
+  !otp. otp = build_offset_to_pc p ==>
+  !target. target = (\x y.
     ?l origin off. tag x 0 = SOME(l,origin) /\ FLOOKUP lo l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP otp off = SOME(pc y) in
+      off < dimword(:256) /\ FLOOKUP otp off = SOME(pc y)) ==>
   (!x. x IN V ==>
     (need x ==> cc.cc_static) /\
     (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
@@ -72,16 +77,16 @@ val rows_tm = ``\p cc V X (rank:num#num->num) pc height need tag boolean edge.
        ?off dest. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
                   FLOOKUP otp off = SOME dest)) /\
   (!x y. edge x y ==> x IN V DIFF X /\ y IN V /\ rank y < rank x /\
-    ^flow_tm p pc height tag boolean x y) /\
+    Flow p pc height tag boolean x y) /\
   (!x. x IN V DIFF X ==>
     pc x < LENGTH p /\
-    let h = height x in
-    let fall = \y. pc y = pc x+1 in
-    let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-    let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-    let next = \n. arm fall n /\ legal fall n in
-    let untagged = \a. !k. k<a ==> tag x k=NONE in
-    let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
+    (!h. h = height x ==>
+    !fall. fall = (\y. pc y = pc x+1) ==>
+    !arm. arm = (\P n. ?y. edge x y /\ P y /\ height y = n) ==>
+    !legal. legal = (\P n. !y. edge x y ==> P y /\ height y = n) ==>
+    !next. next = (\n. arm fall n /\ legal fall n) ==>
+    !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+    !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
     case EL (pc x) p of
       AsmLabel l => next h
     | AsmPush bs => next (h+1)
@@ -106,16 +111,18 @@ val rows_tm = ``\p cc V X (rank:num#num->num) pc height need tag boolean edge.
                  else
                     ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                         untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-    | _ => F)``;
+    | _ => F))``;
 
 val table_tm = ``\p cc f V X e (rank:num#num->num) I R.
   FINITE V /\ X SUBSET V /\ e IN V /\
   (!x. x IN V ==> FST x=f /\ ^reach_tm R e x) /\
-  ^rows_tm p cc V X rank (\x. FST (I x)) (\x. FST (SND (I x)))
+  ^rows_tm ^flow_tm p cc V X rank (\x. FST (I x)) (\x. FST (SND (I x)))
     (\x. FST (SND (SND (I x)))) (\x. FST (SND (SND (SND (I x)))))
     (\x. SND (SND (SND (SND (I x))))) R``;
 
-val lets_conv = REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]);
+(* Recover the concrete predicates before replaying the existing row proofs. *)
+val lets_conv = TOP_DEPTH_CONV
+  (FIRST_CONV [HO_REWR_CONV UNWIND_FORALL_THM2, REWR_CONV LET_THM, BETA_CONV]);
 val lets = CONV_TAC lets_conv;
 val norm_lets = CONV_RULE lets_conv;
 val admin_micro = norm_lets generated_admin_micro_coverage;
@@ -124,12 +131,12 @@ Theorem static_admin_rows[local]:
   !p cc f b fmp ops h extra.
   prefix_wf (SND(compute_label_offsets p)) h ops /\
   asm_block_at p b (execute_plan fmp ops) ==>
-  let k = LENGTH(execute_plan fmp ops) in
-  let root = (b,h+extra,F,(\_:num. NONE:(string#num)option),(\_:num. F));
-      exit = (b+k,prefix_end_len (SND(compute_label_offsets p)) h ops+extra,
-              F,(\_:num. NONE:(string#num)option),(\_:num. F)) in
   ?V e z rank I edge.
-    ^table_tm p cc f V {z} e rank I edge /\ I e=root /\ I z=exit
+    ^table_tm p cc f V {z} e rank I edge /\
+    I e=(b,h+extra,F,(\_:num. NONE:(string#num)option),(\_:num. F)) /\
+    I z=(b+LENGTH(execute_plan fmp ops),
+         prefix_end_len (SND(compute_label_offsets p)) h ops+extra,
+         F,(\_:num. NONE:(string#num)option),(\_:num. F))
 Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (MATCH_MP admin_prefix_open_fragment admin_micro) >>
@@ -231,9 +238,10 @@ Finalise static_admin_rows
 
 Theorem static_placed_rows[local]:
   !p b f cc fmp inst topics ps6 emit ps7 H.
-  let code=execute_plan fmp emit;
-      lo=SND(compute_label_offsets p); invmap=build_offset_to_pc p in
-  let iface = \a n. (a,n,F,(\_:num. NONE:(string#num)option),(\_:num. F)) in
+  !code. code = execute_plan fmp emit ==>
+  !lo. lo = SND (compute_label_offsets p) ==>
+  !invmap. invmap = build_offset_to_pc p ==>
+  !iface. iface = (\a n. (a,n,F,(\_:num. NONE:(string#num)option),(\_:num. F))) ==>
   generate_emit_ops inst topics ps6=(emit,ps7) /\ asm_block_at p b code ==>
   (!nin nout.
     ~is_terminator inst.inst_opcode /\
@@ -378,7 +386,7 @@ Proof
      (^empty_iface_tm (pc+LENGTH(execute_plan fmp a)) (LENGTH mid.ps_stack+extra))` by
     suspend "tail" >>
   pop_assum (mk_asm "tail_table") >>
-  qpat_x_assum `let inst = _ in _` (mp_tac o norm_lets) >>
+  qpat_x_assum `!inst. inst = _ ==> _` (mp_tac o norm_lets) >>
   disch_then (DISJ_CASES_THEN2 strip_assume_tac strip_assume_tac)
   >- suspend "nop" >>
   suspend "regular_head"
@@ -407,7 +415,7 @@ Resume static_interval_rows[nop]:
 QED
 
 Resume static_interval_rows[terminal_head]:
-  qpat_x_assum `let inst = _ in _` (mp_tac o norm_lets) >>
+  qpat_x_assum `!inst. inst = _ ==> _` (mp_tac o norm_lets) >>
   disch_then (DISJ_CASES_THEN2 strip_assume_tac strip_assume_tac)
   >- (`F` suffices_by simp[] >>
       qpat_assum `static_abort_pair bb i j` mp_tac >>
@@ -421,7 +429,7 @@ Resume static_interval_rows[terminal_head]:
     MATCH_MP_TAC static_rows_link >>
   conj_tac
   >- (qspecl_then [`prog`,`cc`,`f`,`pc`,`fmp`,`pre`,`LENGTH ps.ps_stack`,`extra`]
-        mp_tac static_admin_rows >>
+        mp_tac (norm_lets static_admin_rows) >>
       (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
       lets >> qpat_assum `prefix_end_len _ _ pre=m` (fn len =>
         disch_then (ACCEPT_TAC o PURE_REWRITE_RULE [len] o norm_lets))) >>
@@ -509,7 +517,7 @@ Resume static_interval_rows[regular_splice]:
     MATCH_MP_TAC static_rows_link >>
   conj_tac
   >- (qspecl_then [`prog`,`cc`,`f`,`pc`,`fmp`,`pre`,`LENGTH ps.ps_stack`,`extra`]
-        mp_tac static_admin_rows >>
+        mp_tac (norm_lets static_admin_rows) >>
       (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
       lets >> qpat_assum `prefix_end_len _ _ pre=m` (fn len =>
         disch_then (ACCEPT_TAC o PURE_REWRITE_RULE [len] o norm_lets))) >>
@@ -534,7 +542,7 @@ Resume static_interval_rows[regular_post]:
     MATCH_MP_TAC static_rows_link >>
   reverse conj_tac >- asm "tail_table" ACCEPT_TAC >>
   qspecl_then [`prog`,`cc`,`f`,`pc+LENGTH(execute_plan fmp pre)+LENGTH(execute_plan fmp emit)`,
-    `fmp`,`post`,`h`,`extra`] mp_tac static_admin_rows >>
+    `fmp`,`post`,`h`,`extra`] mp_tac (norm_lets static_admin_rows) >>
   (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
   lets >> qpat_assum `prefix_end_len _ _ post = LENGTH mid.ps_stack` (fn len =>
     qpat_assum `pc+LENGTH(execute_plan fmp a) = _` (fn loc =>
@@ -550,7 +558,7 @@ val target_tm = ``\p pc (tag:(num#num)->num->(string#num)option) (x:num#num) (y:
 
 Theorem static_row_edge_control[local]:
   !p cc V rank pc height need tag boolean edge x y.
-    ^rows_tm p cc V {} rank pc height need tag boolean edge /\ edge x y ==>
+    ^rows_tm ^flow_tm p cc V {} rank pc height need tag boolean edge /\ edge x y ==>
     ^flow_tm p pc height tag boolean x y /\
     (if EL (pc x) p = AsmOp "JUMP" then ^target_tm p pc tag x y
      else if EL (pc x) p = AsmOp "JUMPI" then pc y=pc x+1 \/ ^target_tm p pc tag x y
@@ -596,29 +604,32 @@ val shape_tm = ``\p cc req pc height need tag boolean (i:num#num) (t:asm_state).
     (!k. boolean i k ==> k < height i /\
        (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))``;
 
-val open_tm = ``\p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need tag boolean edge.
-  let S = ^shape_tm p cc req pc height need tag boolean in
-  let target = ^target_tm p pc tag in
+val open_tm = ``\S Flow p (cc:call_context) req (V:(num#num)->bool) X
+  (rank:(num#num)->num) pc (height:(num#num)->num) (need:(num#num)->bool)
+  tag (boolean:(num#num)->num->bool) edge.
+  !S_here. S_here = S p cc req pc height need tag boolean ==>
+  !target. target = ^target_tm p pc tag ==>
   FINITE V /\ X SUBSET V /\
-  (!x. x IN V ==> ?t. S x t) /\
+  (!x. x IN V ==> ?t. S_here x t) /\
   (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
   (!x y. edge x y ==>
      x IN V DIFF X /\ y IN V /\ rank y < rank x /\
-     ^flow_tm p pc height tag boolean x y /\
+     Flow p pc height tag boolean x y /\
      (if EL (pc x) p = AsmOp "JUMP" then target x y
       else if EL (pc x) p = AsmOp "JUMPI" then pc y = pc x+1 \/ target x y
       else pc y = pc x+1)) /\
-  (!x t. x IN V DIFF X /\ S x t ==>
+  (!x t. x IN V DIFF X /\ S_here x t ==>
      (?u. (asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
                   p 1 t = AsmRevert u \/
             asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
                   p 1 t = AsmFault u) /\ u.as_requests=req) \/
      (?y u. edge x y /\
         asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-          p 1 t = AsmOK u /\ S y u))``;
+          p 1 t = AsmOK u /\ S_here y u))``;
 
 Theorem generated_static_cut_rows:
-  let Shape = ^shape_tm; Open = ^open_tm; Reach = ^reach_tm; Rows = ^rows_tm in
+  !Shape. Shape = ^shape_tm ==>
+  !Flow. Flow = ^flow_tm ==>
   body_inv_abort rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 cvs cut Inv
@@ -630,9 +641,9 @@ Theorem generated_static_cut_rows:
   asm_static_wf prog /\ (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
   in_static_abort_prefix fn cvs ==>
   ?V e rank pc height need tag boolean edge.
-    Open prog cut.as_call_ctx cut.as_requests V {} rank pc height need tag boolean edge /\
-    Rows prog cut.as_call_ctx V {} rank pc height need tag boolean edge /\
-    e IN V /\ (!x. x IN V ==> Reach edge e x) /\
+    ^open_tm Shape Flow prog cut.as_call_ctx cut.as_requests V {} rank pc height need tag boolean edge /\
+    ^rows_tm Flow prog cut.as_call_ctx V {} rank pc height need tag boolean edge /\
+    e IN V /\ (!x. x IN V ==> ^reach_tm edge e x) /\
     Shape prog cut.as_call_ctx cut.as_requests pc height need tag boolean e cut /\
     (!j. tag e j=NONE /\ ~boolean e j)
 Proof
@@ -670,9 +681,9 @@ Resume generated_static_cut_rows[certify]:
   qexistsl [`V`,`e`,`rank`,`pch`,`ht`,`nd`,`tg`,`bl`,`edge`] >>
   (* The interpreter's rank comparison is rational; it preserves the
      natural comparison after embedding. *)
-  mp_tac (Q.SPECL [`prog`,`sc`,`cut`,`V`,`e`,`\x. rat$rat_of_num (rank x)`,
+  mp_tac (norm_lets (Q.SPECL [`prog`,`sc`,`cut`,`V`,`e`,`\x. rat$rat_of_num (rank x)`,
                   `pch`,`ht`,`nd`,`tg`,`bl`,`edge`]
-    staticAbortOptMergeIszeroBranchPackageTheory.pending_rows_rooted_package) >>
+    staticAbortOptMergeIszeroBranchPackageTheory.pending_rows_rooted_package)) >>
   lets >> PURE_REWRITE_TAC [DIFF_EMPTY,ratTheory.RAT_OF_NUM_LES] >>
   impl_tac >- (
     conj_tac >- asm "finite" ACCEPT_TAC >>
