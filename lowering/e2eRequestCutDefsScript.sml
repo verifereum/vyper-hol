@@ -139,7 +139,8 @@ Ancestors
   venomExecSemantics passSimulationDefs ptrDiscipline unitMemInv
   unitTransformDefs lowerDloadDefs contextRawReachable o1PassContract
   o1RequestContract o1PipelineCorrect codegen stackPlanGen symbolResolve
-  asmOptimizer staticAbortDefs loweringStateRelDefs loweringCalldataCorrect
+  asmOptimizer staticAbortDefs codegenSymRel memSafeRun
+  loweringStateRelDefs loweringCalldataCorrect
   gasSummary e2eEntry e2eProducers fragGasOrigin fragExec ptrSafeRun
   gasShadowUnit gasExplicitSites fragGasOriginPtr venomCompilerTypes
 
@@ -416,7 +417,12 @@ Definition call_guard_gas_link_stmt_def:
                 (cx_dead H' (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
                 unit.cu_context vs /\
               mem_inv dload_offset_ok unit.cu_context vs /\
-              mem_inv dload_headroom_ok unit.cu_context vs ==>
+              mem_inv dload_headroom_ok unit.cu_context vs /\
+              mem_inv
+                (\ctx fn inst s. inst_dload_in_section inst s /\
+                  s.vs_code = vs.vs_code /\
+                  s.vs_data_section = vs.vs_data_section)
+                unit.cu_context vs ==>
               ctx_sim
                 (cx_dead H' (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
                 unit.cu_context out.po_unit.cu_context vs
@@ -425,7 +431,17 @@ Definition call_guard_gas_link_stmt_def:
                 (cx_dead H' (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
                 unit.cu_context out.po_unit.cu_context vs
                 (opt_entry_state prog prog' cp es) /\
-              (o1_lowered_inv out.po_unit.cu_context (opt_entry_state prog prog' cp es) \/
+              (fin = asm_opt_finalizer ==>
+               code_end_offset_ok
+                 (\ctx fn inst s.
+                   raw_reachable (opt_entry_state prog prog' cp es) ctx fn inst s /\
+                   ~in_static_abort_prefix fn s)
+                 out.po_unit.cu_context) /\
+              ((o1_lowered_inv out.po_unit.cu_context (opt_entry_state prog prog' cp es) /\
+                (fin = asm_opt_finalizer ==>
+                 code_end_offset_ok
+                   (raw_reachable (opt_entry_state prog prog' cp es))
+                   out.po_unit.cu_context)) \/
                ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
                   mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
                             lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
