@@ -4,7 +4,7 @@
  * __default__ included: the entry reaches the payable check, which aborts.
  *
  * TOP-LEVEL:
- *   external_entry_value_revert_dispatched
+ *   external_entry_value_revert_dispatched_nr
  *)
 Theory dispatchedEntryValueRevert
 Ancestors
@@ -15,8 +15,8 @@ Ancestors
   venomInst vyperCompiler list runtimeExternalPackageCode compileEnv emitHelper
   entryValueRevertPtr e2eDefs venomWf
 
-Theorem external_entry_value_revert_dispatched:
-  !tops rpolicy unit am tx ret vs mut args fbody env e st.
+Theorem external_entry_value_revert_dispatched_nr:
+  !tops rpolicy unit am tx ret vs mut nr args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -26,7 +26,7 @@ Theorem external_entry_value_revert_dispatched:
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
+      SOME (mut, nr, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
     send_call_value mut
       (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -48,8 +48,8 @@ Proof
      gvs[fresh_label_def, initial_compile_state_def]) >>
   drule_all initial_entry_rejected_value >> strip_tac >>
   `value_transfer_ok tx am.accounts` by gvs[initial_venom_state_rel_def] >>
-  drule_all source_dispatched_value_reject_trace >> strip_tac >>
-  drule_all source_dispatched_value_reject_error >> strip_tac >>
+  drule_all source_dispatched_value_reject_trace_nr >> strip_tac >>
+  drule_all source_dispatched_value_reject_error_nr >> strip_tac >>
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   `?fb ds de opened checked min_cds.
     compile_selector_dispatch_linear
@@ -94,17 +94,17 @@ Proof
   suspend "joint_certificate"
 QED
 
-Resume external_entry_value_revert_dispatched[installed_checks]:
-  drule_all source_dispatched_linear_target >> strip_tac
-  >- (drule_all source_member_entry_check_code >> strip_tac >>
+Resume external_entry_value_revert_dispatched_nr[installed_checks]:
+  drule_all source_dispatched_linear_target_nr >> strip_tac
+  >- (drule_all source_member_entry_check_code_nr >> strip_tac >>
       qexistsl_tac [`fb`, `ds`, `de`, `opened`, `checked`, `min_cds`] >> gvs[]) >>
   qpat_x_assum `FST (SND (SND _)) = SOME _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
-  drule_all source_fallback_entry_check_code >> strip_tac >>
+  drule_all source_fallback_entry_check_code_nr >> strip_tac >>
   qexistsl_tac [`fb`, `ds`, `de`, `opened`, `checked`, `0`] >> gvs[]
 QED
 
-Resume external_entry_value_revert_dispatched[joint_certificate]:
+Resume external_entry_value_revert_dispatched_nr[joint_certificate]:
   rewrite_tac[source_unit_execution_correct_def, source_unit_execution_correct_at_def] >>
   qexists_tac `[]` >>
   qexistsl_tac [`unit.cu_context`, `fn`, `fn`] >>
@@ -132,11 +132,11 @@ Resume external_entry_value_revert_dispatched[joint_certificate]:
        external_call_result_rel_def]
 QED
 
-Finalise external_entry_value_revert_dispatched
+Finalise external_entry_value_revert_dispatched_nr
 
 (* The rejecting prefix is independent of which gas shadow was supplied. *)
-Theorem external_entry_value_revert_dispatched_with:
-  !tops rpolicy unit am tx ret vs mut args fbody env e st shadow_ctx.
+Theorem external_entry_value_revert_dispatched_with_nr:
+  !tops rpolicy unit am tx ret vs mut nr args fbody env e st shadow_ctx.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -146,7 +146,7 @@ Theorem external_entry_value_revert_dispatched_with:
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
+      SOME (mut, nr, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
     send_call_value mut
       (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -172,8 +172,8 @@ Proof
      gvs[fresh_label_def, initial_compile_state_def]) >>
   drule_all initial_entry_rejected_value >> strip_tac >>
   `value_transfer_ok tx am.accounts` by gvs[initial_venom_state_rel_def] >>
-  drule_all source_dispatched_value_reject_trace >> strip_tac >>
-  drule_all source_dispatched_value_reject_error >> strip_tac >>
+  drule_all source_dispatched_value_reject_trace_nr >> strip_tac >>
+  drule_all source_dispatched_value_reject_error_nr >> strip_tac >>
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   `?fb ds de opened checked min_cds.
     compile_selector_dispatch_linear
@@ -218,17 +218,17 @@ Proof
   suspend "joint_certificate"
 QED
 
-Resume external_entry_value_revert_dispatched_with[installed_checks]:
-  drule_all source_dispatched_linear_target >> strip_tac
-  >- (drule_all source_member_entry_check_code >> strip_tac >>
+Resume external_entry_value_revert_dispatched_with_nr[installed_checks]:
+  drule_all source_dispatched_linear_target_nr >> strip_tac
+  >- (drule_all source_member_entry_check_code_nr >> strip_tac >>
       qexistsl_tac [`fb`, `ds`, `de`, `opened`, `checked`, `min_cds`] >> gvs[]) >>
   qpat_x_assum `FST (SND (SND _)) = SOME _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
-  drule_all source_fallback_entry_check_code >> strip_tac >>
+  drule_all source_fallback_entry_check_code_nr >> strip_tac >>
   qexistsl_tac [`fb`, `ds`, `de`, `opened`, `checked`, `0`] >> gvs[]
 QED
 
-Resume external_entry_value_revert_dispatched_with[joint_certificate]:
+Resume external_entry_value_revert_dispatched_with_nr[joint_certificate]:
   rewrite_tac[source_unit_execution_correct_with_def] >>
   qexistsl_tac [`fn`, `shadow_fn`] >>
   asm_rewrite_tac[] >> disj2_tac >>
@@ -251,4 +251,53 @@ Resume external_entry_value_revert_dispatched_with[joint_certificate]:
        external_call_result_rel_def]
 QED
 
-Finalise external_entry_value_revert_dispatched_with
+Finalise external_entry_value_revert_dispatched_with_nr
+
+Theorem external_entry_value_revert_dispatched:
+  !tops rpolicy unit am tx ret vs mut args fbody env e st.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
+      SOME (tx.function_name, tx.args) /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INR e, st) ==>
+    source_unit_execution_correct tops ret am tx unit vs
+Proof
+  rpt gen_tac >>
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] (SPEC_ALL external_entry_value_revert_dispatched_nr))
+QED
+
+Theorem external_entry_value_revert_dispatched_with:
+  !tops rpolicy unit am tx ret vs mut args fbody env e st shadow_ctx.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
+      SOME (tx.function_name, tx.args) /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INR e, st) /\
+    gas_shadow_context unit.cu_context shadow_ctx ==>
+    source_unit_execution_correct_with shadow_ctx [] tops ret am tx unit vs
+Proof
+  rpt gen_tac >>
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] (SPEC_ALL external_entry_value_revert_dispatched_with_nr))
+QED
