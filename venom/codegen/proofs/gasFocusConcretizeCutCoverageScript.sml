@@ -16,6 +16,10 @@ Ancestors
   concretizePtrComparisonTransport concretizePtrWriteClassification ptrDiscipline
   concretizePtrOwnerPath concretizePtrAllocationOwnership
   concretizeLayoutAccessGeometry frameAllocationOwnership ptrDisciplineEmptyTaint
+  concretizePtrRevertHistory concretizePtrActualWrites concretizePtrActualByteFrame
+  concretizePtrEventEmbedding concretizePtrActiveWriteOwner concretizePtrSourceOwnership
+  concretizePtrActivationBirths concretizePtrActivationChronology concretizePtrBytes
+  codegenRel unitTransformDefs
   o1LowerDloadPtrDiscipline o1SafeUpto list finite_map arithmetic words pred_set
 
 (* The pairing is determined by the stage's static layout equations. No
@@ -390,3 +394,174 @@ Proof
      drule_all ptr_active_alloc_frontier >> fs[Abbr `states`] >> gvs[]) >>
   decide_tac
 QED
+
+(* At a fixed untainted byte, use the actual last writer, not a maximum
+   output range; the retained target suffix cannot write it. *)
+Theorem ptr_paired_fixed_read_recovery_upto[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+  code_layout_valid vs /\ EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  alloca_frontier_upto n C vs /\ fixed_region_reserved lo C /\
+  ptr_discipline_upto lo n C vs /\ gas_cut n vs at.po_state /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  (x < lo \/ dyn_floor C vs <= x) /\ x NOTIN endpoint.po_taint.t_mem /\
+  ~in_revert_forward endpoint.po_fn endpoint.po_state /\
+  endpoint.po_inst.inst_opcode <> ASSIGN ==>
+  read_byte x endpoint.po_state.vs_memory = read_byte x at.po_state.vs_memory
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  drule ptr_structural_trace_target >> strip_tac >>
+  drule ptr_structural_trace_embedding >> strip_tac >>
+  drule_all ptr_chrono_ordinary_non_revert >> strip_tac >>
+  `LENGTH ht = SUC (LENGTH done)` by fs[ptr_event_embedding_def] >>
+  `!q. q < LENGTH done ==> SUC (EL q done) < LENGTH h /\
+    ~in_revert_forward (EL (EL q done) h).po_fn
+      (EL (EL q done) h).po_state` by
+    (rpt strip_tac >>
+     qpat_assum `ptr_event_embedding _ _ _` mp_tac >>
+     pure_rewrite_tac[ptr_event_embedding_def] >> strip_tac >>
+     `EL q done < LENGTH h - 1` by
+       (first_x_assum (qspecl_then [`q`,`LENGTH done`] mp_tac) >>
+        simp[EL_APPEND_EQN]) >>
+     fs[EVERY_EL] >>
+     `EL q done < LENGTH h` by decide_tac >> metis_tac[]) >>
+  `!q. q < LENGTH done /\
+    x NOTIN range_bytes (step_writes (EL (EL q done) h).po_inst
+      (EL (EL q done) h).po_state (EL (SUC (EL q done)) h).po_state) ==>
+    x NOTIN range_bytes (step_writes (EL q ht).po_inst
+      (EL q ht).po_state (EL (SUC q) ht).po_state)` by
+    (rpt strip_tac >> drule_all ptr_paired_fixed_actual_write_reflection_upto >>
+     metis_tac[]) >>
+  drule_all ptr_chrono_last_actual_or_none >> strip_tac
+  >- (`read_byte x endpoint.po_state.vs_memory = read_byte x vs.vs_memory` by
+        (irule ptr_chrono_history_no_actual_write_byte >> simp[] >> metis_tac[]) >>
+      `read_byte x at.po_state.vs_memory = read_byte x vs.vs_memory` by
+        (irule ptr_chrono_history_no_actual_write_byte >>
+         qexistsl [`C'`,`ht`] >> simp[] >>
+         rpt strip_tac >> `k < LENGTH done` by decide_tac >> metis_tac[]) >>
+      metis_tac[]) >>
+  suspend "writer"
+QED
+
+Resume ptr_paired_fixed_read_recovery_upto[writer]:
+  drule ptr_structural_trace_actual_writer_retained >>
+  disch_then (qspecl_then [`w`,`x`] mp_tac) >> simp[] >> strip_tac >>
+  `!j. j < LENGTH h ==> ptr_observation_reachable vs C (EL j h) /\
+    gas_cut n vs (EL j h).po_state` by
+    (qpat_assum `ptr_chrono_history vs C h endpoint`
+       (mp_then Any strip_assume_tac ptr_chrono_history_reachable) >>
+     `EVERY (\b. gas_cut n vs b.po_state) h` by
+       (irule ptr_chrono_history_cut >> metis_tac[]) >>
+     fs[EVERY_EL]) >>
+  `(EL w h).po_inst.inst_opcode <> DRET /\
+   dyn_floor C (EL w h).po_state = dyn_floor C vs` by
+    (`w < LENGTH h` by decide_tac >>
+     qpat_assum `!j. j < LENGTH h ==> _` (drule_then strip_assume_tac) >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_operand_instructions >> strip_tac >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     drule ptr_discipline_upto_fn_ptr_ok >> strip_tac >>
+     drule frame_reachable_initial_fmp >> strip_tac >>
+     fs[dyn_floor_def, EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
+  `~is_terminator (EL w h).po_inst.inst_opcode /\
+   (EL w h).po_inst.inst_opcode <> INVOKE` by
+    (qpat_assum `(EL w h).po_inst.inst_opcode <> DRET` mp_tac >>
+     Cases_on `(EL w h).po_inst.inst_opcode` >>
+     simp[is_terminator_def] >>
+     qpat_x_assum `x IN range_bytes _` mp_tac >>
+     qpat_assum `(EL w h).po_inst.inst_opcode = _`
+       (fn th => simp_tac (srw_ss())
+         [th,step_writes_def,source_memory_write_ranges_def,range_bytes_def]) >>
+     qpat_x_assum `DRET <> DRET` mp_tac >> simp[]) >>
+  drule ptr_paired_prefix_writes >> strip_tac >>
+  `?rho. MEM (w,q,rho) ws` by
+    (qpat_assum `ptr_paired_writes _ _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[ptr_paired_writes_def] >> strip_tac >>
+     first_x_assum (qspec_then `q` mp_tac) >> simp[] >> metis_tac[NOT_IN_EMPTY]) >>
+  drule_all ptr_paired_write_event >> simp[ptr_paired_write_def] >> strip_tac >>
+  suspend "byte"
+QED
+
+Resume ptr_paired_fixed_read_recovery_upto[byte]:
+  rename1 `ptr_ledger_write_pair C C' reloc _ _ _ _` >>
+  drule ptr_structural_transcript_ownership >>
+  disch_then (qspec_then `SUC w` mp_tac) >> simp[] >>
+  qabbrev_tac `snap = EL (SUC w) H` >> PairCases_on `snap` >>
+  simp[ptr_snapshot_ownership_def] >> strip_tac >>
+  drule ptr_source_ownership_caches >> strip_tac >>
+  drule_all ptr_source_birth_caches_slices >> strip_tac >>
+  drule ptr_source_birth_caches_activations >> strip_tac >>
+  drule ptr_source_activations_length >> strip_tac >>
+  `ptr_observation_reachable vs C (EL (SUC w) h) /\
+   gas_cut n vs (EL (SUC w) h).po_state` by
+    (qpat_assum `!j. j < LENGTH h ==> _` irule >> simp[]) >>
+  `!d. d <= LENGTH (EL (SUC w) h).po_stack ==>
+    allocas_from lo (ptr_owner_view d (EL (SUC w) h)).cf_state` by
+    metis_tac[ptr_cut_owner_allocas_from] >>
+  `vs.vs_allocas = FEMPTY` by fs[o1_initial_state_ok_def] >>
+  `reloc x = x` by
+    (`x < lo \/ (dyn_floor C (EL w h).po_state <= x /\
+       !d aid b0 sz. d <= LENGTH (EL (SUC w) h).po_stack /\
+         FLOOKUP (ptr_owner_view d (EL (SUC w) h)).cf_state.vs_allocas aid = SOME (b0,sz) ==>
+         b0 + sz <= dyn_floor C (EL w h).po_state)` by
+      (simp[] >> Cases_on `x < lo` >> simp[] >>
+       `dyn_floor C vs <= x` by metis_tac[] >> simp[] >>
+       rpt strip_tac >> metis_tac[ptr_cut_owner_below_floor]) >>
+     metis_tac[ptr_paired_write_owner_fixed]) >>
+  `read_byte x (EL (SUC w) h).po_state.vs_memory =
+   read_byte x (EL (SUC q) ht).po_state.vs_memory` by
+    (qpat_x_assum `ptr_ledger_write_pair _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[ptr_ledger_write_pair_def, ptr_bytes_agree_def] >>
+     strip_tac >>
+     qpat_x_assum `!i. _ ==> read_byte i _ = _` (qspec_then `x` mp_tac) >> simp[]) >>
+  suspend "frame"
+QED
+
+Resume ptr_paired_fixed_read_recovery_upto[frame]:
+  `!j. q < j /\ j < LENGTH done ==> w < EL j done` by
+    (qpat_assum `ptr_event_embedding _ _ _` mp_tac >>
+     pure_rewrite_tac[ptr_event_embedding_def] >> strip_tac >>
+     rpt strip_tac >> first_x_assum (qspecl_then [`q`,`j`] mp_tac) >>
+     simp[EL_APPEND_EQN]) >>
+  `!j. SUC q <= j /\ j < LENGTH ht-1 ==>
+    x NOTIN range_bytes (step_writes (EL j ht).po_inst
+      (EL j ht).po_state (EL (SUC j) ht).po_state)` by
+    (rpt gen_tac >> strip_tac >>
+     `j < LENGTH done /\ w < EL j done` by
+       (conj_tac >- decide_tac >> first_x_assum irule >> decide_tac) >>
+     metis_tac[]) >>
+  `EL (LENGTH h-1) h = endpoint /\ LENGTH h-1 < LENGTH h` by
+    (qpat_assum `ptr_chrono_history vs C h endpoint`
+       (mp_tac o MATCH_MP ptr_chrono_history_end) >>
+     strip_tac >> Cases_on `h` >> gvs[LAST_EL]) >>
+  `EL (LENGTH ht-1) ht = at /\ LENGTH ht-1 < LENGTH ht` by
+    (qpat_assum `ptr_chrono_history vs C' ht at`
+       (mp_tac o MATCH_MP ptr_chrono_history_end) >>
+     strip_tac >> Cases_on `ht` >> gvs[LAST_EL]) >>
+  `read_byte x endpoint.po_state.vs_memory =
+    read_byte x (EL (SUC w) h).po_state.vs_memory` by
+    (`read_byte x (EL (LENGTH h-1) h).po_state.vs_memory =
+      read_byte x (EL (SUC w) h).po_state.vs_memory` suffices_by simp[] >>
+     irule ptr_chrono_history_actual_interval_byte_frame >>
+     conj_tac >- (rpt strip_tac >>
+       qpat_x_assum `!n. w < n /\ SUC n < LENGTH h ==> _`
+         (qspec_then `k` mp_tac) >> simp[] >> decide_tac) >>
+     simp[] >> metis_tac[]) >>
+  `read_byte x at.po_state.vs_memory =
+    read_byte x (EL (SUC q) ht).po_state.vs_memory` by
+    (`read_byte x (EL (LENGTH ht-1) ht).po_state.vs_memory =
+      read_byte x (EL (SUC q) ht).po_state.vs_memory` suffices_by simp[] >>
+     irule ptr_chrono_history_actual_interval_byte_frame >>
+     conj_tac >- simp[] >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Finalise ptr_paired_fixed_read_recovery_upto
