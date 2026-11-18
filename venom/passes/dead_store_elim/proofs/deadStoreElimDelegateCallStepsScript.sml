@@ -80,10 +80,14 @@ Theorem dse_exec_delegatecall_ok:
     s1.vs_allocas = s.vs_allocas /\ t1.vs_allocas = t.vs_allocas
 Proof
   strip_tac >> drule_all dse_call_request >> strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[dse_local_agrees_def, dse_pending_space_def, dse_equiv_def,
+       dse_frame_def, venom_state_component_equality] >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
   namedCases_on `consume_call_outcome
-    (venom_call_request t addr 0w off sz F with cr_kind := DelegateMessageCall)
+    (venom_call_request t addr 0w off sz F with
+      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>)
     (w2n ro) (w2n rs) s` ["output source"] >>
   simp[Excl "consume_call_outcome_eq"] >>
   strip_tac >> gvs[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
@@ -125,22 +129,29 @@ QED
 
 Theorem dse_exec_delegatecall_results:
   (?s1. exec_delegatecall inst s gas addr ao sz ro rs = OK s1) \/
-  (?e. exec_delegatecall inst s gas addr ao sz ro rs = Error e)
+  (?e. exec_delegatecall inst s gas addr ao sz ro rs = Error e) \/
+  exec_delegatecall inst s gas addr ao sz ro rs =
+    Abort ExHalt_abort (halt_state (set_returndata [] s))
 Proof
   simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
   pairarg_tac >> simp[Excl "consume_call_outcome_eq"] >>
   Cases_on `inst.inst_outputs` >> simp[] >>
-  rename1 `h::rest` >> Cases_on `rest` >> simp[]
+  rename1 `h::rest` >> Cases_on `rest` >> simp[] >>
+  Cases_on `s.vs_outcomes = []` >> simp[]
 QED
 
 Theorem dse_delegatecall_results:
   inst.inst_opcode = DELEGATECALL ==>
   (?s1. step_inst fuel ctx inst s = OK s1) \/
-  (?e. step_inst fuel ctx inst s = Error e)
+  (?e. step_inst fuel ctx inst s = Error e) \/
+  step_inst fuel ctx inst s =
+    Abort ExHalt_abort (halt_state (set_returndata [] s))
 Proof
   strip_tac >> Cases_on `step_inst fuel ctx inst s` >> simp[] >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  fs[] >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  fs[] >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+    AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
   rpt strip_tac >>
-  metis_tac[dse_exec_delegatecall_results, exec_result_distinct]
+  gvs[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  pairarg_tac >> gvs[AllCaseEqs(), Excl "consume_call_outcome_eq"]
 QED

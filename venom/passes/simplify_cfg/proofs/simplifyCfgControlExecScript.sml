@@ -261,8 +261,10 @@ Theorem scfg_ctrl_ext_call:
   exec_result_map (scfg_ctrl c p n)
     (exec_ext_call i s gas addr v ao az ro rz static)
 Proof
+  `(scfg_ctrl c p n s).vs_outcomes = s.vs_outcomes` by simp[scfg_ctrl_def] >>
   Cases_on `consume_call_outcome
-    (venom_call_request s addr v ao az static) (w2n ro) (w2n rz) s` >>
+    (venom_call_request s addr v ao az static with cr_gas := SOME (w2n gas))
+    (w2n ro) (w2n rz) s` >>
   drule scfg_ctrl_consume_outcome >> strip_tac >>
   simp[exec_ext_call_def, scfg_ctrl_call_request] >>
   rpt (PURE_TOP_CASE_TAC >>
@@ -282,8 +284,10 @@ Theorem scfg_ctrl_delegatecall:
   exec_result_map (scfg_ctrl c p n)
     (exec_delegatecall i s gas addr ao az ro rz)
 Proof
+  `(scfg_ctrl c p n s).vs_outcomes = s.vs_outcomes` by simp[scfg_ctrl_def] >>
   Cases_on `consume_call_outcome
-    (venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall)
+    (venom_call_request s addr 0w ao az F with
+      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>)
     (w2n ro) (w2n rz) s` >>
   drule scfg_ctrl_consume_outcome >> strip_tac >>
   simp[exec_delegatecall_def, scfg_ctrl_call_request] >>
@@ -313,6 +317,7 @@ Theorem scfg_ctrl_create:
   exec_create i (scfg_ctrl c p n s) v off sz salt =
   exec_result_map (scfg_ctrl c p n) (exec_create i s v off sz salt)
 Proof
+  `(scfg_ctrl c p n s).vs_outcomes = s.vs_outcomes` by simp[scfg_ctrl_def] >>
   simp[exec_create_def, scfg_ctrl_create_request,
        Excl "consume_create_outcome_eq", scfg_ctrl_consume_create] >>
   Cases_on `consume_create_outcome (venom_create_request s v off sz salt) s` >>

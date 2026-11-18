@@ -2,7 +2,7 @@
 Theory loweringRuntimeRawVariantHistory
 Ancestors
   loweringCallBudgetHistory vyperLoweringCorrect
-  ptrDiscipline contextRawReachable sourceCallCount compileVyper
+  ptrDiscipline contextRawReachable compileVyper
   vyperCompiler e2eDefs lowerDloadDefs o1PassContract
   list arithmetic
 
@@ -14,7 +14,7 @@ Theorem lower_vyper_runtime_unit_raw_variant_history:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     k <= 2 ** 64 /\
-    (!obs. source_calls_within k am tx vs.vs_outcomes obs) /\
+    LENGTH vs.vs_outcomes <= k /\
     (!marks.
       call_storage_ok am tx vs.vs_outcomes
         (gas_explicit marks vs.vs_gas_readings)) /\
@@ -52,7 +52,7 @@ Theorem lower_vyper_runtime_unit_raw_variant_history:
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
+    LENGTH vs.vs_outcomes < 2 ** 64 /\
     (!gs.
       call_storage_ok am tx vs.vs_outcomes gs) /\
     (!gs. ~source_exempt tops

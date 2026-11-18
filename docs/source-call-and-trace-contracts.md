@@ -1,48 +1,17 @@
-# Source-call bounds and call-trace frames
+# Call outcome bounds and trace frames
 
-The source-call bound and EVM frame results provide interfaces for reasoning
-about external calls during a compiled execution. The source bound limits
-outcome consumption; the frame results describe the origin of observed
-request/outcome snapshots and how account properties pass between them.
-
-## Source-call bounds
-
-`lowering/sourceCallCountScript.sml` defines three entry runners:
-
-- `fn_entry_run` performs entry setup, evaluates missing argument defaults,
-  binds arguments, applies the nonreentrant lock and evaluates the body.
-- `call_entry_run` selects an exported function and invokes that runner.
-- `deploy_entry_run` initializes the constructor environment and invokes
-  the same runner.
-
-The runners take explicit outcome and gas-observation lists. Their results
-expose the interpreter state, including its remaining outcomes and requests.
-They do not by themselves establish ABI dispatch or compiler correctness.
-
-`entry_calls_within n os run` takes at most `n` supplied outcomes and calls
-`entry_calls_within_from` with the remaining budget. At budget zero, an
-unavailable entry (`NONE`) satisfies the predicate; an available execution
-must leave an outcome list other than `SOME []`. At a successor budget, the
-predicate appends a probe outcome. If execution exhausts that extended list,
-it appends a failed outcome to the original prefix and checks the smaller
-budget recursively. Otherwise the bound holds at this step.
-
-The probe differs from `empty_failed_outcome` in its account balances. The
-definition uses the distinction to detect CREATE outcome-account validation
-and select the request-specific failed outcome when required. It does not
-assert that arbitrary supplied outcomes satisfy the callee contracts.
-
-`source_calls_within` and `deploy_source_calls_within` specialize this shared
-predicate to the call and deployment runners. The bound alone does not
-establish that an entry exists or that its execution succeeds.
+The source interpreter raises a runtime error when a call or create
+needs an outcome and the oracle list is empty. Venom aborts on exhaustion.
+The call correctness premise bounds the length of the EVM frame's
+`call_trace` by `LENGTH (call_trace es) < 2 ** 64`. Each outcome supplied
+to the source and Venom comes from that trace.
 
 ## Concrete deployment and call checkpoint
 
 `lowering/e2eWitnessComputeScript.sml` evaluates the `p23_imm_uint256`
 fixture's compilation and deployment, then constructs a call from the
 committed deployment state. Its theorems establish a source result of
-`IntV 42`, the corresponding EVM return bytes, empty call/GAS traces and
-source-call bounds for both entries with arbitrary gas-observation lists.
+`IntV 42`, the corresponding EVM return bytes, and empty call and gas-reading traces.
 
 These results cover this concrete checkpoint. They do not constitute the
 general deploy-to-call lifecycle theorem or discharge its source
