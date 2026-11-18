@@ -137,10 +137,8 @@ Proof
   fs[EL_APPEND, Abbr `rp`] >> gvs[]
 QED
 
-Theorem fmp_cover_inserted_from_root:
+Theorem fmp_cover_inserted_from_root_structural:
   EVERY P [ASSIGN; ADD; NOT; AND; BUMP; INITIAL_FMP; FMP_PARAM; RETPC_PARAM] /\
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\ MEM fn C.ctx_functions /\
-  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
   fmp_stage_lowered infos ctx runner fn fn' /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
   idx < LENGTH bb.bb_instructions /\
@@ -273,4 +271,29 @@ Proof
    fmp_stage_tidx FEMPTY NONE lbl bb.bb_instructions (SUC idx) = SUC idx` by fs[] >>
   `i = idx` by (Cases_on `idx = 0` >> gvs[]) >>
   qexists_tac `bb` >> fs[] >> metis_tac[]
+QED
+
+Theorem fmp_cover_inserted_from_root:
+  EVERY P [ASSIGN; ADD; NOT; AND; BUMP; INITIAL_FMP; FMP_PARAM; RETPC_PARAM] /\
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\ MEM fn C.ctx_functions /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  idx < LENGTH bb.bb_instructions /\
+  (if idx = 0 then 0
+   else fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+          (fmp_stage_root infos ctx fn) lbl bb.bb_instructions idx) <= i /\
+  i < fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+        (fmp_stage_root infos ctx fn) lbl bb.bb_instructions (SUC idx) /\
+  (i = fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+         (fmp_stage_root infos ctx fn) lbl bb.bb_instructions idx +
+       (if (lbl,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0) ==>
+   MEM (EL idx bb.bb_instructions).inst_opcode [DALLOCA; RETPC_PARAM]) ==>
+  ?bb'. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+    i < LENGTH bb'.bb_instructions /\ P (EL i bb'.bb_instructions).inst_opcode
+Proof
+  strip_tac >> irule fmp_cover_inserted_from_root_structural >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  qexists_tac `runner` >> simp[]
 QED
