@@ -15,13 +15,13 @@ fun windows_tac thms =
     irule dalloca_windows_ignore_bind >> conj_tac,
     COND_CASES_TAC, BasicProvers.TOP_CASE_TAC]);
 
-Theorem dalloca_windows_get[local]:
+Theorem dalloca_windows_get:
   preserves_dalloca_windows window comp_get
 Proof
   simp[preserves_dalloca_windows_def, comp_get_def]
 QED
 
-Theorem dalloca_windows_jmp_if_live[local]:
+Theorem dalloca_windows_jmp_if_live:
   preserves_dalloca_windows window (emit_jmp_if_not_terminated label)
 Proof
   simp[emit_jmp_if_not_terminated_def] >> windows_tac [dalloca_windows_get]
@@ -49,7 +49,7 @@ Proof
   windows_tac [dalloca_windows_get, dalloca_windows_jmp_if_live]
 QED
 
-Theorem dalloca_windows_range_checks[local]:
+Theorem dalloca_windows_range_checks:
   preserves_dalloca_windows window (compile_range_bound_checks s e n bound signed)
 Proof
   simp[compile_range_bound_checks_def] >> windows_tac []
@@ -83,7 +83,7 @@ Proof
   windows_tac [dalloca_windows_get, dalloca_windows_declare_stmt_local]
 QED
 
-Theorem dalloca_windows_iter_elem_copy[local]:
+Theorem dalloca_windows_iter_elem_copy:
   preserves_dalloca_windows window
     (compile_iter_elem_copy cenv src dst n loc slots dst_ty src_ty)
 Proof

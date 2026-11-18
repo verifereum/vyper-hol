@@ -400,6 +400,15 @@ Proof
   simp[DROP_LENGTH_APPEND]
 QED
 
+Theorem dalloca_windows_bind_result:
+  preserves_dalloca_windows window m /\ (!st. P (FST (m st))) /\
+  (!x. P x ==> preserves_dalloca_windows window (f x)) ==>
+  preserves_dalloca_windows window (comp_bind m f)
+Proof
+  rw[preserves_dalloca_windows_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >> metis_tac[pairTheory.FST]
+QED
+
 Theorem dalloca_windows_ignore_bind:
   preserves_dalloca_windows window m /\ preserves_dalloca_windows window n ==>
   preserves_dalloca_windows window (comp_ignore_bind m n)
