@@ -208,7 +208,7 @@ Proof
           gvs[] >>
           fs[LIST_REL_EL_EQN] >>
           qx_gen_tac `i` >> strip_tac >>
-          `request_agree H cx (EL i rqs) (EL i s.vs_requests)` by
+          `request_agree H cx.txn.target (EL i rqs) (EL i s.vs_requests)` by
             (qpat_x_assum `!n. _ ==> request_agree _ _ _ _`
                (qspec_then `i` mp_tac) >> simp[]) >>
           `request_agree_except

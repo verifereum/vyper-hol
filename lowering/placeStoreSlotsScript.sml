@@ -331,7 +331,7 @@ Resume store_slots_bytes_entry[compose]:
 QED
 Finalise store_slots_bytes_entry
 
-Theorem store_slots_elements_layout[local]:
+Theorem store_slots_elements_layout:
   compile_copy_elements_to_slots cenv src slot elem cnt tr sa = ((),sb) ==>
   ?hdr body exit cv a b c init p q h lt h1 done h2 hj body_start
    so b1 sp b2 doff b3 dp sc sd inc tail1 tail2 tail3.

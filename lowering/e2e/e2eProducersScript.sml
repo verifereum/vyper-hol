@@ -19,6 +19,9 @@ Ancestors
   e2eEntry vyperLoweringCorrect codegenCorrectness
   unitShapeDefs unitTransformDefs contextCodegenRel contextPlanLayoutProps
   venomPipelineDriverProps venomCompilerWf venomWf asmCodePrefix
+  contextStaticAbortRel o1PipelineMemoryLoweredAbort asmOptimizer
+  unitMemInv ctxLookupAgree stepWriteFootprint o1SymStaticPipeline
+  o1SymStaticData codegenSymRel
 
 Theorem gas_variant_code_layout_valid:
   gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
@@ -109,6 +112,35 @@ Proof
   goal_assum $ drule_at Any >> gvs[]
 QED
 
+Theorem compile_vyper_runtime_phases_asm_opt:
+  compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) ==>
+  ?rpolicy unit out prog prog' cplan.
+    resolve_o1_policy policy = SOME rpolicy /\
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    out.po_final_assembly = rpolicy.rpol_final_assembly /\
+    codegen_assembly rpolicy out.po_unit = SOME prog /\
+    generate_context_plan out.po_unit.cu_context = SOME cplan /\
+    assembly_target_safe rpolicy.rpol_target prog /\
+    prog = execute_plan cplan.cp_initial_fmp (context_plan_ops cplan) ++
+           data_segment_asm out.po_unit.cu_data_segment ++
+           [AsmDataHeader "code_end"] /\
+    asm_opt_finalizer rpolicy prog = SOME prog' /\
+    assembly_target_safe rpolicy.rpol_target prog' /\
+    runtime_bc = assemble prog'
+Proof
+  simp[compile_vyper_def] >> strip_tac >>
+  drule compile_vyper_with_success_phases >> strip_tac >>
+  gvs[finalize_codegen_def, o1PipelineCorrectTheory.o1_pipeline_def,
+      AllCaseEqs()] >>
+  rename1 `lower_vyper_runtime_unit tops rpolicy = SOME unit` >>
+  rename1 `run_venom_pipeline (K T) (K T) (K T)
+             rpolicy o1_pipeline_spec unit = SOME out` >>
+  qpat_x_assum `codegen_assembly rpolicy out.po_unit = SOME _`
+    (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
+  goal_assum $ drule_at Any >> gvs[]
+QED
+
 (* The returned immutable suffix cannot become the first code byte: the
    actual identity-finalized runtime always contains the revert postamble. *)
 Theorem compile_vyper_runtime_nonempty:
@@ -149,6 +181,47 @@ Proof
   rpt strip_tac >> drule_all entry_fn_first_lookup >> simp[]
 QED
 
+(* The structural checks also supply the static-abort context obligations. *)
+Theorem o1_pipeline_codegen_obligations_abort:
+  !rpolicy unit out cp Inv.
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    generate_context_plan out.po_unit.cu_context = SOME cp /\
+    unit_shape_ok out.po_unit /\
+    codegen_memory_obligations_abort Inv out.po_unit.cu_context cp ==>
+    codegen_context_obligations_abort Inv out.po_unit.cu_context cp
+Proof
+  simp[o1PipelineCorrectTheory.o1_pipeline_def] >> rpt strip_tac >>
+  drule run_venom_pipeline_success_boundary >> strip_tac >>
+  drule generate_context_plan_layout_wf >> strip_tac >>
+  gvs[codegen_context_obligations_abort_def, unit_wf_def, venom_wf_def,
+      reachable_call_graph_acyclic_def, unit_shape_ok_def] >>
+  rpt strip_tac >> drule_all entry_fn_first_lookup >> simp[]
+QED
+
+(* Lowered memory and structural checks share the reachability invariant. *)
+Theorem o1_pipeline_context_obligations_lowered_abort:
+  !rpolicy unit out cp vs.
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    generate_context_plan out.po_unit.cu_context = SOME cp /\
+    unit_shape_ok out.po_unit /\
+    (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+      mem_inv (\ctx fn inst s.
+        in_static_abort_prefix fn s \/ lowered_mem_fact eom ctx fn inst s)
+        out.po_unit.cu_context vs) /\
+    vs.vs_initial_fmp = n2w cp.cp_initial_fmp ==>
+    ?Inv. codegen_context_obligations_abort Inv out.po_unit.cu_context cp /\
+          codegen_reachability_package Inv out.po_unit.cu_context vs
+Proof
+  rpt strip_tac >>
+  rename1 `generate_context_plan _ = SOME plan` >>
+  mp_tac (Q.SPECL [`out`, `plan`, `vs`]
+    o1_pipeline_memory_obligations_lowered_abort) >>
+  impl_tac >- metis_tac[] >> strip_tac >>
+  goal_assum $ drule_at Any >>
+  irule o1_pipeline_codegen_obligations_abort >> simp[] >>
+  goal_assum $ drule_at Any >> simp[]
+QED
+
 (* L6: exact source-to-Venom entry boundary, including LIVE transferred state. *)
 Theorem entry_venom_state_initial_venom_state_rel:
   !tops prog am tx es cp.
@@ -178,6 +251,7 @@ Theorem entry_venom_state_initial_ctx_rel:
   initial_ctx_rel cp prog u.cu_context (entry_venom_state prog cp es) es
 Proof
   rpt strip_tac >> rename1 `entry_venom_state prog cplan es` >>
+  drule call_state_rel_parsed >> strip_tac >>
   `((FST (HD es.contexts)).msgParams.code <> [] ==>
     account_already_created
       (lookup_account (FST (HD es.contexts)).msgParams.callee
@@ -191,7 +265,7 @@ Proof
      gvs[unit_shape_ok_def]) >>
   `(entry_venom_state prog cplan es).vs_params = []` by
     simp[entry_venom_state_def, venomStateTheory.init_venom_state_def] >>
-  gvs[unit_shape_ok_def, entry_fn_first_def, call_state_rel_def,
+  gvs[unit_shape_ok_def, entry_fn_first_def, call_state_rel_def, evm_state_ok_def,
       initial_ctx_rel_def, entry_venom_state_fresh,
       entry_venom_state_frame_fields]
 QED
@@ -202,3 +276,52 @@ Theorem type_env_all_modules_single:
 Proof
   simp[type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2]
 QED
+
+(* Codegen's memory obligations and static-ok fact for an O1 pipeline output,
+   shared by the call and deploy correctness theories. *)
+Theorem o1_pipeline_memory_obligations_raw:
+  !out cplan vs.
+    generate_context_plan out.po_unit.cu_context = SOME cplan /\
+    o1_lowered_inv out.po_unit.cu_context vs /\
+    vs.vs_initial_fmp = n2w cplan.cp_initial_fmp
+    ==>
+    codegen_memory_obligations (raw_reachable vs) out.po_unit.cu_context cplan /\
+    codegen_reachability_package (raw_reachable vs) out.po_unit.cu_context vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule generate_context_plan_spill_gap >> strip_tac >>
+  `?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+         mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
+           out.po_unit.cu_context vs` by
+    (fs[o1_lowered_inv_def, mem_inv_raw_reachable] >>
+     rpt strip_tac >> first_x_assum drule >>
+     drule ctxLookupAgreeTheory.raw_reachable_initial_fmp >>
+     simp[lowered_mem_fact_def, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]) >>
+  gvs[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
+  metis_tac[mem_inv_codegen_obligations, step_write_footprint_holds]
+QED
+
+Theorem o1_pipeline_sym_unit_static_ok:
+  !rpolicy unit out.
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
+                    ds.ds_items) unit.cu_data_segment /\
+  ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
+              MEM inst (fn_insts fn) /\
+              MEM (Label "runtime_begin") inst.inst_operands) ==>
+   EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) ==>
+  sym_unit_static_ok out.po_unit
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`rpolicy`, `unit`, `out`] mp_tac
+    o1_pipeline_runtime_reference_reflects >>
+  impl_tac >- simp[] >> strip_tac >>
+  fs[o1PipelineCorrectTheory.o1_pipeline_def] >>
+  drule_all run_venom_pipeline_bytes_only >> strip_tac >>
+  drule run_venom_pipeline_success_unit_wf >> strip_tac >>
+  fs[sym_unit_static_ok_def, unit_wf_def, venom_wf_def] >>
+  metis_tac[]
+QED
+
