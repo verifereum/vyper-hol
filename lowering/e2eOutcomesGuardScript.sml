@@ -8,7 +8,9 @@ Ancestors
   e2eCorrectness e2eComposition e2eProducers frameOutcome
   guardTerminalBackend guardSourceAlignment asmOptimizer asmOptNonemptyFinalizer
   vfmAccountDeletion e2eEntry
-  vyperCallFiniteStorageSupport
+  vyperCallFiniteStorageSupport guardRequestCutAlignment loweringCalldataCorrect
+  callRawVariant callCodeTrace sourceUnitExecution vyperLoweringCorrect gasSummary
+  stackPlanGen
   vfmDecreasesGas relation pair arithmetic list
 
 Triviality guard_closed_world_inherit:
@@ -582,4 +584,136 @@ Proof
       simp[inv_image_def] >>
       disch_then (qspecl_then [`am_e`, `tx_e`, `rq'`, `co'`] mp_tac) >> simp[]) >>
   simp[]
+QED
+
+(* Each reading carries an outcome-prefix simulation and a result proof
+   conditional on storage. The re-entry induction closes that condition. *)
+Triviality guard_compiler_readings:
+  call_guard_gas_link_stmt /\
+  vyper_call_staging fin policy tops runtime_bc am tx ret es /\
+  vyper_closed_world fin policy tops runtime_bc am tx H es /\
+  s1_request_prefix tops /\
+  run_call es = SOME (r,es') /\ ~frame_resource_starved es r es' ==>
+  gas_readings_rel (gas_readings es)
+    (\gs.
+       (call_storage_ok am tx (MAP SND (call_trace es)) gs ==>
+        call_result_rel_at gs tops am tx es r es') /\
+       !res am' rqs obs pre rq co sfx.
+         call_external_trace (SOME (MAP SND (call_trace es))) gs am tx =
+           (res,am',rqs,obs) /\
+         obs = pre ++ StorageOutcome rq co :: sfx /\
+         valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+           (initial_state am []) H pre ==>
+         (co.co_accounts = rq.cr_accounts /\ co.co_tStorage = rq.cr_tStorage) \/
+         ?rq'. MEM (rq',co) (call_trace es) /\ request_agree H tx.target rq rq')
+Proof
+  strip_tac >>
+  qpat_assum `call_guard_gas_link_stmt`
+    (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `am`,
+      `tx`, `ret`, `es`, `r`, `es'`] mp_tac o
+      REWRITE_RULE [call_guard_gas_link_stmt_def]) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (fn bridge => match_mp_tac (MATCH_MP
+    (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_mono) bridge)) >>
+  qx_gen_tac `gs` >> BETA_TAC >>
+  disch_then (qx_choosel_then
+    [`rpolicy`, `unit`, `out`, `prog`, `prog'`, `cplan`, `fmp`, `vs`, `marks`, `tail`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qabbrev_tac `vs0 = opt_entry_state prog prog' cplan es` >>
+  qabbrev_tac `txp = tx with code := vs0.vs_code` >>
+  `txp.target = tx.target` by simp[Abbr `txp`] >>
+  qpat_assum `vyper_call_staging _ _ _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [vyper_call_staging_def]) >>
+  `external_return_type tops tx.function_name = ret` by
+    (qpat_assum `dispatched_vyper_call _ _ _ _`
+       (mp_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
+     strip_tac >> simp[external_return_type_def]) >>
+  qpat_assum `vyper_frame_staging _ _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [vyper_frame_staging_def]) >>
+  qpat_x_assum `?deploy_bc. compile_vyper _ _ _ = _`
+    (qx_choose_then `deploy_bc` assume_tac) >>
+  `call_state_rel tops (assemble prog') am tx es` by metis_tac[] >>
+  `source_typing_ok tops am txp /\
+   (!gobs. call_external_trace (SOME (MAP SND (call_trace es))) gobs am txp =
+           call_external_trace (SOME (MAP SND (call_trace es))) gobs am tx) /\
+   (call_storage_ok am txp (MAP SND (call_trace es)) gs <=>
+    call_storage_ok am tx (MAP SND (call_trace es)) gs) /\
+   (call_result_rel_at gs tops am txp es r es' <=>
+    call_result_rel_at gs tops am tx es r es')` by
+    (Cases_on `txp = tx` >- asm_simp_tac bool_ss [] >>
+     `tx with code := (opt_entry_state prog prog' cplan es).vs_code <> tx` by
+       fs[Abbr `txp`, Abbr `vs0`] >>
+     `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+      ~program_reads_self_code tops` by metis_tac[guard_opt_entry_code_update] >>
+     `LENGTH vs0.vs_code < 2 ** 256` by
+       (drule loweringShapeSourceTheory.supported_program_raw_shape_free_program >> strip_tac >>
+        `?art. vyperTypeContract$check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
+          metis_tac[source_typing_ok_def] >>
+        drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+        drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+        drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
+        drule_all o1PipelineCorrectTheory.run_venom_pipeline_output_shape >> strip_tac >>
+        `lowerDloadDefs$code_layout_valid vs0` by
+          metis_tac[Abbr `vs0`, opt_entry_code_layout_valid] >>
+        qpat_assum `lowerDloadDefs$code_layout_valid vs0`
+          (mp_tac o REWRITE_RULE [lowerDloadDefsTheory.code_layout_valid_def]) >>
+        simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+        strip_tac >> irule LESS_EQ_LESS_TRANS >> qexists_tac `2 ** 255` >> fs[]) >>
+     asm_simp_tac list_ss [Abbr `txp`, source_typing_ok_code_update,
+       call_external_trace_no_self_code_update, call_storage_ok_code_update,
+       call_result_rel_at_code_update]) >>
+  conj_tac
+  >- (strip_tac >>
+      qspecl_then [`fin`, `policy`, `tops`, `deploy_bc`,
+        `runtime_bc`, `rpolicy`, `unit`, `out`, `prog`, `prog'`,
+        `cplan`, `am`, `tx`, `txp`, `ret`, `es`, `vs0`, `fmp`,
+        `vs`, `marks`] mp_tac vyper_call_correct_at_marks >>
+      impl_tac
+      >- (asm_simp_tac bool_ss [Abbr `vs0`, Abbr `txp`] >>
+          metis_tac[]) >>
+      strip_tac >> gvs[] >> metis_tac[]) >>
+  map_every qx_gen_tac [`res`, `am'`, `rqs`, `obs`, `pre`, `rq`,
+    `co`, `sfx`] >> strip_tac >>
+  `vs.vs_outcomes = MAP SND (call_trace es)` by
+    (drule raw_variant_outcomes >>
+     simp[Abbr `vs0`, opt_entry_state_def, entry_venom_state_frame_fields]) >>
+  `~source_exempt tops (res,am',rqs)` by
+    (drule call_external_trace_result >> strip_tac >>
+     fs[vyper_closed_world_def] >>
+     qpat_assum `call_external _ gs am tx = _` (fn source_result =>
+       qpat_assum `!gobs. ~source_exempt _ (call_external _ _ _ _)`
+         (qspec_then `gs` (ACCEPT_TAC o REWRITE_RULE [source_result])))) >>
+  `valid_horizon (initial_evaluation_context am.sources am.layouts txp NONE)
+    (initial_state am []) H pre` by
+    (`(initial_evaluation_context am.sources am.layouts txp NONE).txn.target =
+      (initial_evaluation_context am.sources am.layouts tx NONE).txn.target` by
+       simp[initial_evaluation_context_def] >>
+     metis_tac[guard_valid_horizon_target]) >>
+  qpat_assum `!tail' res am' rqs obs obs_pre rq outcome sfx H. _`
+    (qspecl_then [`tail`, `res`, `am'`, `rqs`, `obs`, `pre`,
+      `rq`, `co`, `sfx`, `H`] mp_tac) >>
+  impl_tac
+  >- (asm_simp_tac bool_ss [Abbr `vs0`, Abbr `txp`] >> metis_tac[]) >>
+  strip_tac >> Cases_on `computed_precompile rq` >- gvs[] >>
+  qpat_x_assum `~computed_precompile rq ==> _` (strip_assume_tac o
+    REWRITE_RULE [ASSUME ``~computed_precompile rq``]) >>
+  qabbrev_tac `k = recorded_outcomes_count pre` >>
+  qabbrev_tac `D = cx_dead H
+    (initial_evaluation_context am.sources am.layouts txp NONE)` >>
+  `k < LENGTH (call_requests es) /\
+   request_agree_except D (EL k s'.vs_requests) (EL k (call_requests es)) /\
+   s.vs_outcomes <> [] /\
+   MEM (EL k (call_requests es), HD s.vs_outcomes) (call_trace es)` by
+    (qspecl_then [`fin`, `tops`, `am`, `tx`, `rpolicy`, `unit`,
+      `out`, `prog`, `cplan`, `prog'`, `es`, `r`, `es'`, `vs0`, `D`,
+      `k`, `vs`, `fn`, `inst`, `s`, `fuel`, `s'`, `fn'`,
+      `inst'`, `t`, `fuel'`, `t'`] mp_tac codegen_request_cut_outcome >>
+     asm_simp_tac bool_ss [Abbr `k`, Abbr `D`, Abbr `vs0`, Abbr `txp`] >>
+     metis_tac[]) >>
+  disj2_tac >> qexists_tac `EL k (call_requests es)` >>
+  conj_tac >- fs[] >>
+  `D = external_call_dead H tx (res,am',rqs)` by
+    simp[Abbr `D`, cx_dead_def, external_call_dead_def, initial_evaluation_context_def] >>
+  `request_agree H tx.target rq (EL k s'.vs_requests)` by fs[Abbr `k`] >>
+  metis_tac[request_agree_dead_trans]
 QED
