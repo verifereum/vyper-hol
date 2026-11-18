@@ -275,14 +275,14 @@ Proof
   EVAL_TAC
 QED
 
-(* msg.gas is on the whitelist (the gas proofs cover it), so it is a
-   supported default expression too. Functions with default arguments are
-   outside the whitelist for now, so no such program is supported. *)
 Theorem supported_default_expression_checks:
-  EVERY (supported_default_expression
+  supported_default_expression
     [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
-       [expr_test_uint] NoneT []])
-    [expr_test_uint; Builtin (BaseT (UintT 256)) (Env MsgGas) []] /\
+       [expr_test_uint] NoneT []] expr_test_uint /\
+  EVERY (\e. ~supported_default_expression [] e)
+    [Builtin (BaseT (UintT 256)) (Env MsgGas) [];
+     Builtin (BaseT (UintT 256)) (Bop Add)
+       [expr_test_uint; Builtin (BaseT (UintT 256)) (Env MsgGas) []]] /\
   ~supported_program
     [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
        [expr_test_uint] NoneT []] /\
