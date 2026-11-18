@@ -4,23 +4,29 @@ Ancestors
   asmSplice asmSymPc asmDataEnv asmOptimizer staticAbortStraight
   finite_map words alist list pred_set arithmetic rat
 
+(* Normalize naming equalities without unfolding either certificate. *)
+val branch_norm = TOP_DEPTH_CONV (FIRST_CONV
+  [HO_REWR_CONV UNWIND_FORALL_THM2, BETA_CONV, REWR_CONV DIFF_EMPTY,
+   REWR_CONV ratTheory.RAT_OF_NUM_LES]);
+
 (* The table expresses required arms and outgoing heights separately.
    The package expresses them together, with each outgoing PC checked. *)
 Triviality branch_dispatch_views:
   !p pc height (tag:(num#num)->num->(string#num)option) edge (cc:call_context) (x:num#num).
-  let lo = SND (compute_label_offsets p) in
-  let otp = build_offset_to_pc p in
-  let ins = EL (pc x) p; h = height x in
-  let fall = \y. pc y = pc x+1 in
-  let target = \y. ?l origin off. tag x 0=SOME(l,origin) /\
-    FLOOKUP lo l=SOME off /\ off<dimword(:256) /\ FLOOKUP otp off=SOME (pc y) in
-  let arm = \P n. ?y. edge x y /\ P y /\ height y=n in
-  let legal = \P n. !y. edge x y ==> P y /\ height y=n in
-  let next = \n. arm fall n /\ legal fall n in
-  let out = \n. !y. edge x y ==> height y=n in
-  let consumed = \n. !k. k<n ==> tag x k=NONE in
-  let terminal = !y. ~edge x y in
-  let stop = \n. n<=h /\ consumed n /\ terminal in
+  !lo. lo = SND (compute_label_offsets p) ==>
+  !ins. ins = EL (pc x) p ==>
+  !h. h = height x ==>
+  !fall. fall = (\y. pc y = pc x+1) ==>
+  !target. target = (\y. ?l origin off. tag x 0=SOME(l,origin) /\
+    FLOOKUP lo l=SOME off /\ off<dimword(:256) /\
+    FLOOKUP (build_offset_to_pc p) off=SOME (pc y)) ==>
+  !arm. arm = (\P n. ?y. edge x y /\ P y /\ height y=n) ==>
+  !legal. legal = (\P n. !y. edge x y ==> P y /\ height y=n) ==>
+  !next. next = (\n. arm fall n /\ legal fall n) ==>
+  !out. out = (\n. !y. edge x y ==> height y=n) ==>
+  !consumed. consumed = (\n. !k. k<n ==> tag x k=NONE) ==>
+  !terminal. terminal = (!y. ~edge x y) ==>
+  !stop. stop = (\n. n<=h /\ consumed n /\ terminal) ==>
   (!y. edge x y ==>
     if ins=AsmOp "JUMP" then target y
     else if ins=AsmOp "JUMPI" then fall y \/ target y else fall y) ==>
@@ -67,7 +73,7 @@ Triviality branch_dispatch_views:
                     consumed (asm_op_arity name) /\ (?y. edge x y /\ fall y) /\ out (h-asm_op_arity name+m)))
      | _ => F))
 Proof
-  rpt gen_tac >> simp[LET_THM, Excl "MEM"] >>
+  ntac 7 gen_tac >> CONV_TAC branch_norm >> simp[Excl "MEM"] >>
   Cases_on `EL (pc x) p` >> simp[Excl "MEM"] >>
   TRY (metis_tac[] >> NO_TAC) >>
   rename1 `EL (pc x) p = AsmOp name` >>
@@ -80,18 +86,13 @@ Proof
   Cases_on `ALOOKUP swap_table name` >> simp[] >> metis_tac[]
 QED
 
-(* Normalize lexical bindings without unfolding either certificate. *)
-val branch_norm = TOP_DEPTH_CONV (FIRST_CONV
-  [BETA_CONV, REWR_CONV LET_THM, REWR_CONV DIFF_EMPTY,
-   REWR_CONV ratTheory.RAT_OF_NUM_LES]);
-
 fun branch_dispatch_tac prog cc =
   mp_tac (CONV_RULE branch_norm
     (Q.SPECL [prog,`pc`,`height`,`tag`,`edge`,cc,`x`] branch_dispatch_views));
 
 (* Use the same tuple for the table and for the reachable package. *)
 Theorem merge_iszero_jumpi_cut_rows:
-  let Shape = \p cc req pc height need tag boolean i (t:asm_state).
+  !Shape. Shape = (\p cc req pc height need tag boolean i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -103,16 +104,18 @@ Theorem merge_iszero_jumpi_cut_rows:
          off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
-  let Flow = \p pc height tag boolean (x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit = \(src:num -> num option)
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !Flow. Flow = (\p pc height tag boolean (x:num#num) (y:num#num).
+    !hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !ins. ins = EL (pc x) p ==>
+    !inherit. inherit = (\(src:num -> num option)
          (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a)) in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\
@@ -136,7 +139,8 @@ Theorem merge_iszero_jumpi_cut_rows:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -145,21 +149,21 @@ Theorem merge_iszero_jumpi_cut_rows:
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins t = AsmOK u ==>
                      (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F in
-  let Target = \p pc tag (x:num#num) (y:num#num).
+    | _ => F) ==>
+  !Target. Target = (\p pc tag (x:num#num) (y:num#num).
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
       off < dimword(:256) /\
-      FLOOKUP (build_offset_to_pc p) off = SOME(pc y) in
-  let Control = \p pc tag x y.
+      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
+  !Control. Control = (\p pc tag x y.
     if EL (pc x) p = AsmOp "JUMP" then Target p pc tag x y
     else if EL (pc x) p = AsmOp "JUMPI"
          then pc y = pc x+1 \/ Target p pc tag x y
-    else pc y = pc x+1 in
-  let Open = \p cc req (V:(num#num)->bool) X rank pc height need
+    else pc y = pc x+1) ==>
+  !Open. Open = (\p cc req (V:(num#num)->bool) X rank pc height need
         (tag:(num#num)->num->(string#num)option)
         (boolean:(num#num)->num->bool) edge.
-    let S = Shape p cc req pc height need tag boolean in
+    !S. S = Shape p cc req pc height need tag boolean ==>
       FINITE V /\ X SUBSET V /\
       (!x. x IN V ==> ?t. S x t) /\
       (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -173,33 +177,33 @@ Theorem merge_iszero_jumpi_cut_rows:
                       p 1 t = AsmFault u) /\ u.as_requests=req) \/
          (?y u. edge x y /\
             asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-              p 1 t = AsmOK u /\ S y u)) in
-  let Reach = \(edge:(num#num)->(num#num)->bool) e x.
+              p 1 t = AsmOK u /\ S y u))) ==>
+  !Reach. Reach = (\(edge:(num#num)->(num#num)->bool) e x.
     ?n (path:num->num#num).
-      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k)) in
-  let Slots = \p cc height need tag boolean (x:num#num).
+      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) ==>
+  !Slots. Slots = (\p cc height need tag boolean (x:num#num).
     (need x ==> cc.cc_static) /\
     (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
     (!k l origin. tag x k = SOME(l,origin) ==>
        k < height x /\ origin < LENGTH p /\
        (EL origin p = AsmPushLabel l \/ EL origin p = AsmPushOfst l 0) /\
        ?off dest. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-         off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest) in
-  let Rows = \p cc (V:(num#num)->bool) X (rank:num#num->num) pc height need tag boolean edge.
-    let lo = SND(compute_label_offsets p) in
+         off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest)) ==>
+  !Rows. Rows = (\p cc (V:(num#num)->bool) X (rank:num#num->num) pc height need tag boolean edge.
+    !lo. lo = SND(compute_label_offsets p) ==>
     (!x. x IN V ==> Slots p cc height need tag boolean x) /\
     (!x y. edge x y ==>
        x IN V DIFF X /\ y IN V /\ rank y < rank x /\
        Flow p pc height tag boolean x y) /\
     (!x. x IN V DIFF X ==>
        pc x < LENGTH p /\
-       let h = height x in
-       let fall = \y. pc y = pc x + 1 in
-       let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-       let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-       let next = \n. arm fall n /\ legal fall n in
-       let untagged = \a. !k. k<a ==> tag x k=NONE in
-       let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
+       !h. h = height x ==>
+       !fall. fall = (\y. pc y = pc x + 1) ==>
+       !arm. arm = (\P n. ?y. edge x y /\ P y /\ height y = n) ==>
+       !legal. legal = (\P n. !y. edge x y ==> P y /\ height y = n) ==>
+       !next. next = (\n. arm fall n /\ legal fall n) ==>
+       !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+       !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
        case EL (pc x) p of
          AsmLabel l => next h
        | AsmPush bs => next (h+1)
@@ -224,25 +228,25 @@ Theorem merge_iszero_jumpi_cut_rows:
                          legal (\y. fall y \/ Target p pc tag x y) (h-2)
                        else ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                                 untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-       | _ => F) in
-  let Root = \p ss a pc height need tag boolean e.
+       | _ => F)) ==>
+  !Root. Root = (\p ss a pc height need tag boolean e.
     Shape p a.as_call_ctx a.as_requests pc height need tag boolean e a /\
     (!k l origin. tag e k=SOME(l,origin) ==>
        k<LENGTH ss.sym_stack /\ EL k ss.sym_stack=Lab l 0) /\
     (!k. boolean e k ==> k<LENGTH ss.sym_stack /\
-       (EL k ss.sym_stack=Val 0w \/ EL k ss.sym_stack=Val 1w)) in
-  let Cert = \p ss a. ?V e rank pc height need tag boolean edge.
+       (EL k ss.sym_stack=Val 0w \/ EL k ss.sym_stack=Val 1w))) ==>
+  !Cert. Cert = (\p ss a. ?V e rank pc height need tag boolean edge.
     Rows p a.as_call_ctx V {} rank pc height need tag boolean edge /\
     Open p a.as_call_ctx a.as_requests V {} rank pc height need tag boolean edge /\
     e IN V /\ (!x. x IN V ==> Reach edge e x) /\
-    Root p ss a pc height need tag boolean e in
-  let b = LENGTH pre; c = ss.sym_base.as_pc in
-  let ep = asm_data_env p (assemble p ++ data);
-      eq = asm_data_env q (assemble q ++ data) in
+    Root p ss a pc height need tag boolean e) ==>
+  !b. b = LENGTH pre ==>
+  !c. c = ss.sym_base.as_pc ==>
   p = pre ++ [AsmOp "ISZERO";AsmOp "ISZERO";AsmPushLabel l;AsmOp "JUMPI"] ++ tail /\
   q = pre ++ [AsmPushLabel l;AsmOp "JUMPI"] ++ tail /\
-  asm_static_wf p /\ asm_sym_rel p ep a ss /\ Cert p ss a /\
-  asm_sym_rel q eq t u /\ t.as_call_ctx=a.as_call_ctx /\ t.as_requests=a.as_requests /\
+  asm_static_wf p /\ asm_sym_rel p (asm_data_env p (assemble p ++ data)) a ss /\ Cert p ss a /\
+  asm_sym_rel q (asm_data_env q (assemble q ++ data)) t u /\
+  t.as_call_ctx=a.as_call_ctx /\ t.as_requests=a.as_requests /\
   (if b<c /\ c<b+4 then
      u.sym_base.as_pc=b /\ ?w stk. u.sym_stack=Val w::stk /\
        ss.sym_stack=(if c-b=3 then [Lab l 0] else []) ++
@@ -250,10 +254,8 @@ Theorem merge_iszero_jumpi_cut_rows:
    else u=sym_with_pc (splice_pc b 4 2 c) ss) ==>
   Cert q u t
 Proof
-  map_every (fn q =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
-    qx_gen_tac q >> disch_tac)
+  map_every (fn name => qx_gen_tac name >> disch_then (assume_tac o
+    CONV_RULE (RAND_CONV branch_norm THENC REWR_CONV (GSYM markerTheory.Abbrev_def))))
     [`Shape`,`Flow`,`Target`,`Control`,`Open`,`Reach`,`Slots`,`Rows`,`Root`,`Cert`] >>
   CONV_TAC branch_norm >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
