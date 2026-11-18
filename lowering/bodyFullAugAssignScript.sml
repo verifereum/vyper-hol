@@ -149,7 +149,7 @@ Theorem body_augassign_attr_storage_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e)))
       (eval_stmt cx (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e)) es
 Proof
-  cheat
+  suspend "use_ordinary"
 QED
 
 (* Every other base target. *)
@@ -854,6 +854,23 @@ Resume body_augassign_attr_local_full[use_ordinary]:
 QED
 
 Finalise body_augassign_attr_local_full
+
+Resume body_augassign_attr_storage_full[use_ordinary]:
+  rpt gen_tac >> strip_tac >>
+  `?pt. supported_target_info tops bindings
+          (AttributeTarget (TopLevelNameTarget nsid) fld) = SOME pt` by
+    (irule bodyAugPlaceTargetTheory.aug_place_supported_stmt_target_info >>
+     qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
+     qpat_assum `body_inv _ _ _ _` (irule_at Any) >> simp[]) >>
+  `~immutable_root cx (AttributeTarget (TopLevelNameTarget nsid) fld)` by
+    metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable] >>
+  irule augassign_ordinary_full >>
+  qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
+  qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+Finalise body_augassign_attr_storage_full
 
 Resume body_augassign_other_full[ordinary]:
   irule augassign_ordinary_full >>
