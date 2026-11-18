@@ -235,53 +235,7 @@ Proof
   metis_tac[event_decl_names_mem]
 QED
 
-(* A scalar type's ABI type does not look at the type environment. *)
-Theorem scalar_abi_types_env[local]:
-  !ts env env'.
-    EVERY supported_scalar_type ts ==>
-    vyper_to_abi_types env ts = vyper_to_abi_types env' ts
-Proof
-  Induct >> simp[] >> Cases >>
-  simp[supported_scalar_type_def, supported_word_type_def,
-       supported_string_type_def]
-QED
-
-(* body_inv's ce_event_info is build_event_info's for the program, whose
-   event names supported_program makes distinct, and the source finds the
-   same declaration in the module get_module_code gives. *)
-Theorem body_log_metadata:
-  !tops ctx cenv cx id fields.
-    body_inv tops ctx cenv cx /\ supported_event_fields tops id = SOME fields ==>
-    ?h. cenv.ce_event_info (nsid_to_string id) =
-          SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
-        lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
-          SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
-        LENGTH (FILTER I (MAP SND fields)) <= 3 /\
-        EVERY supported_scalar_type (MAP (SND o FST) fields)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule supported_event_fields_some >> strip_tac >> gvs[] >>
-  `EVERY supported_scalar_type (MAP (SND o FST) fields) /\
-   LENGTH (FILTER I (MAP SND fields)) <= 3` by
-    (gvs[body_inv_def, supported_program_def,
-         supported_declaration_headers_def, EVERY_MEM] >>
-     qpat_x_assum `!e. MEM e tops ==> supported_declaration_header _ _`
-       drule >>
-     simp[supported_declaration_header_def, EVERY_MAP, combinTheory.o_DEF,
-          MEM_MAP, PULL_EXISTS] >>
-     strip_tac >> gvs[EVERY_MEM]) >>
-  `event_decl_unique name tops` by
-    gvs[body_inv_def, supported_program_def,
-        supported_declaration_names_def, event_names_unique] >>
-  gvs[body_inv_def, nsid_to_string_def, build_event_info_lookup_event_metadata_in,
-      lookup_event_metadata_def, get_module_code_def, AllCaseEqs(),
-      event_hash_def] >>
-  metis_tac[scalar_abi_types_env]
-QED
-
-(* ===== The arguments ===== *)
-
-(* The argument's explicit body-safety facts supply the call preconditions. *)
+(* Both metadata lookups resolve the same declaration and its event hash. *)
 Theorem body_log_aggregate_metadata:
   !tops ctx cenv cx id fields.
     body_inv tops ctx cenv cx /\ supported_event_fields tops id = SOME fields ==>
@@ -301,10 +255,7 @@ Proof
     (gvs[body_inv_def, supported_program_def,
          supported_declaration_headers_def, EVERY_MEM] >>
      qpat_x_assum `!e. MEM e tops ==> supported_declaration_header _ _` drule >>
-     simp[supported_declaration_header_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
-     `!ty. supported_scalar_type ty ==> supported_place_type tops ty` by
-       simp[supported_place_type_def, Once supported_nested_type_def] >>
-     metis_tac[]) >>
+     simp[supported_declaration_header_def, EVERY_MEM]) >>
   `EVERY (supported_place_type tops) (MAP (SND o FST) fields)` by
     (gvs[EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD, combinTheory.o_DEF] >>
      rpt strip_tac >>
@@ -320,6 +271,23 @@ Proof
   gvs[body_inv_def, nsid_to_string_def, build_event_info_lookup_event_metadata_in,
       lookup_event_metadata_def, get_module_code_def, AllCaseEqs(), event_hash_def]
 QED
+
+Theorem body_log_metadata:
+  !tops ctx cenv cx id fields.
+    body_inv tops ctx cenv cx /\ supported_event_fields tops id = SOME fields /\
+    EVERY supported_scalar_type (MAP (SND o FST) fields) ==>
+    ?h. cenv.ce_event_info (nsid_to_string id) =
+          SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
+        lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
+          SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
+        LENGTH (FILTER I (MAP SND fields)) <= 3 /\
+        EVERY supported_scalar_type (MAP (SND o FST) fields)
+Proof
+  rpt strip_tac >>
+  drule_all body_log_aggregate_metadata >> metis_tac[]
+QED
+
+(* ===== The arguments ===== *)
 
 Theorem log_arg_body_pre[local]:
   !tops ctx cenv cx env e calls es.
