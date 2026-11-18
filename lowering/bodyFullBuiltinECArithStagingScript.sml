@@ -1,7 +1,7 @@
 (* Join the two concrete layouts; the suffix consumes this common interface. *)
 Theory bodyFullBuiltinECArithStaging
 Ancestors
-  bodyFullBuiltinECAddStaging bodyFullBuiltinECMulStaging compileEnv
+  bodyFullBuiltinECAddStaging bodyFullBuiltinECMulStagingCore compileEnv
   bodyFullBuiltinECArithSourceMatch bodyFullBuiltinECArithOperands
   exprSimSource exprSimHyps exprSimHypsDefs exprSimOperands exprSimWordArgs
   loweringPosts stateRelProj
@@ -280,7 +280,7 @@ Resume ec_arith_staged_cut[join]:
     asm_x "stage_premises" (fn common =>
       DISJ_CASES_THEN2
         (mp_tac o MATCH_MP ecadd_staging_full o C CONJ common)
-        (mp_tac o MATCH_MP ecmul_staging_full o C CONJ common) layouts)) >>
+        (mp_tac o MATCH_MP ecmul_staging_full_from_transfers o C CONJ common) layouts)) >>
   disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
   `res = Var dst` by
     qpat_assum `_ sm = (res,sb)` (mp_then Any ACCEPT_TAC (cj 1 computed_suffix_shape)) >>
