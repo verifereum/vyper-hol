@@ -108,5 +108,67 @@ Proof
      qexistsl_tac [`cx`, `BaseTV (BytesT (Dynamic n))`, `expr_type e`,
        `BytesV input_bytes`] >>
      simp[loweringPostsTheory.val_footprint_def]) >>
-  FAIL_TAC "window"
+  `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) =
+     SOME (BaseTV (BytesT (Dynamic n)))` by metis_tac[] >>
+  drule_all ptr_val_ok_bytes_read_clean >>
+  disch_then (CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `data = Var p` SUBST_ALL_TAC >>
+  `op_taint tn (Var p) = {}` by fs[bodyPtrDefsTheory.ptr_covers_def] >>
+  `abi_decode_ptr_window G tn s p (n2w b) (32+LENGTH input_bytes)` by
+    (simp[abiDecodePtrMemberFrameTheory.abi_decode_ptr_window_def] >>
+     conj_tac >- fs[venomStateTheory.eval_operand_def] >>
+     rpt strip_tac >> Cases_on `i < w2n (n2w b : bytes32) + 32`
+     >- (gvs[]) >>
+     qpat_x_assum `!i. w2n (n2w b) + 32 <= i /\ _ ==> _`
+       (qspec_then `i` mp_tac) >> gs[] >> decide_tac) >>
+  `fn_has_code st ready fn` by
+    (`cs_extends st ready` by
+       (drule abi_builtin_decode_setup_shape >> strip_tac >>
+        simp[compileEnvTheory.cs_extends_def] >> qexists_tac `[]` >> simp[]) >>
+     `cs_extends ready final` by
+       (drule abiBuiltinDecodeCorrectTheory.lower_abi_decode_setup_trace >>
+        disch_then (qx_choose_then `other_ops` (qx_choose_then `other_ready`
+          (CONJUNCTS_THEN2 mp_tac (CONJUNCTS_THEN assume_tac)))) >>
+        asm_rewrite_tac[] >> simp[] >> strip_tac >>
+        mp_tac (cj 1 abiDecoderAppendTheory.cs_appends_abi_decode_mutual) >>
+        simp[fragExecTheory.cs_appends_def] >> metis_tac[]) >>
+     metis_tac[fragExecTheory.fn_has_code_split]) >>
+  `stmt_state_rel H ctx fn ce cx es0 s0` by metis_tac[] >>
+  `alloca_inv s0` by metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca] >>
+  qpat_assum `abi_builtin_decode_site_resources _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [exprSimAbiDecodeBuiltinTheory.abi_builtin_decode_site_resources_def]) >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `s.vs_alloca_next < dimword (:256)` by
+    (irule alloca_room_next_lt >>
+     metis_tac[actualDecoderSitesTheory.decode_site_resources_def]) >>
+  `b+32+LENGTH input_bytes < dimword (:256)` by
+    metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS] >>
+  qpat_x_assum `wty = _` kall_tac >>
+  qexistsl_tac [`b`, `p`, `d`] >> BETA_TAC >> asm_rewrite_tac[] >>
+  conj_tac >- fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
+  conj_tac >-
+    (rpt strip_tac >>
+     `off+sz <= s0.vs_alloca_next` by
+       metis_tac[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     simp[]) >>
+  conj_tac >-
+    (rpt strip_tac >> drule_all abi_args_local_region_frontier >> simp[]) >>
+  conj_tac >-
+    (qx_gen_tac `hhorizon` >> strip_tac >>
+     qpat_assum `!H. V H ==> expr_post H ctx fn ce cx e es0 origin st s0 es _ _ s /\ _`
+       (qspec_then `hhorizon` mp_tac) >>
+     asm_rewrite_tac[] >> metis_tac[exprSimWordArgsTheory.expr_post_state]) >>
+  conj_tac >-
+    (`not_fresh_at st p` by metis_tac[compile_lower_value_var] >>
+     fs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+        abiDecoderReentryTheory.abi_decoder_older_vars_def,
+        loweringStateRelDefsTheory.not_fresh_at_def]) >>
+  conj_tac >-
+    (drule representationCleanPtrTheory.val_in_memory_bytes_word >>
+     simp[valueEncodingPropsTheory.mem_word_at_eq_mload]) >>
+  conj_tac >-
+    (irule representationCleanPtrTheory.val_in_memory_bytes_payload >>
+     qexists_tac `BaseTV (BytesT (Dynamic n))` >> simp[]) >>
+  simp[abiDecoderLayoutBoundsTheory.abi_static_size_le_size_bound] >>
+  fs[abiDecoderFrameTheory.abi_footprint_disjoint_def]
 QED
