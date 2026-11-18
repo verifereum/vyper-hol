@@ -148,7 +148,7 @@ Finalise ao_main_residual_ordinary_OK
 
 Theorem ao_main_static_abort_base[local]:
   inst_wf inst /\
-  MEM inst.inst_opcode [SSTORE; TSTORE; LOG; CALL] /\
+  MEM inst.inst_opcode [SSTORE; TSTORE; LOG; CALL; STATICCALL; DELEGATECALL] /\
   (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
     eval_operand (ao_resolve_iszero_op targets inst.inst_opcode a) r = SOME w) /\
   (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
@@ -158,7 +158,7 @@ Theorem ao_main_static_abort_base[local]:
   execution_equiv UNIV v (halt_state (set_returndata [] r))
 Proof
   strip_tac >>
-  `r.vs_call_ctx = s.vs_call_ctx` by
+  `r.vs_call_ctx = s.vs_call_ctx /\ r.vs_outcomes = s.vs_outcomes` by
     gvs[venomStateTheory.venom_state_component_equality] >>
   `!vals. eval_operands inst.inst_operands s = SOME vals ==>
      eval_operands (MAP (ao_resolve_iszero_op targets inst.inst_opcode) inst.inst_operands) r = SOME vals` by
@@ -185,14 +185,16 @@ Proof
       gvs[stateEquivTheory.execution_equiv_def, stateFrameTheory.execution_frame_def,
           venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def,
           venomStateTheory.venom_state_component_equality]) >>
-  qpat_x_assum `step_inst_base inst s = Abort a v` mp_tac >>
-  simp[step_inst_base_opcode_eqs, exec_ext_call_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  fs[RIGHT_AND_OVER_OR, DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[ao_resolve_iszero_inst_def, step_inst_base_opcode_eqs] >>
-  gvs[stateEquivTheory.execution_equiv_def, stateFrameTheory.execution_frame_def,
-      venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def,
-      venomStateTheory.venom_state_component_equality]
+  (qpat_x_assum `step_inst_base inst s = Abort a v` mp_tac >>
+   simp[step_inst_base_opcode_eqs, exec_ext_call_abort_iff,
+        exec_delegatecall_abort_iff, AllCaseEqs()] >>
+   strip_tac >> gvs[] >>
+   fs[RIGHT_AND_OVER_OR, DISJ_IMP_THM, FORALL_AND_THM] >>
+   simp[ao_resolve_iszero_inst_def, step_inst_base_opcode_eqs,
+        exec_ext_call_abort_iff, exec_delegatecall_abort_iff] >>
+   gvs[stateEquivTheory.execution_equiv_def, stateFrameTheory.execution_frame_def,
+       venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def,
+       venomStateTheory.venom_state_component_equality])
 QED
 
 Theorem ao_main_residual_exact_base:
@@ -240,7 +242,7 @@ Proof
   >- suspend "ordinary"
   >- (drule step_inst_base_halt_opcodes >> fs[MEM])
   >- (drule step_inst_base_abort_opcodes >> fs[MEM] >> strip_tac >>
-      `MEM inst.inst_opcode [SSTORE; TSTORE; LOG; CALL]` by gvs[MEM] >>
+      `MEM inst.inst_opcode [SSTORE; TSTORE; LOG; CALL; STATICCALL; DELEGATECALL]` by gvs[MEM] >>
       drule_all ao_main_static_abort_base >> simp[stateEquivTheory.lift_result_def]) >>
   drule step_inst_base_intret_opcodes >> fs[MEM]
 QED

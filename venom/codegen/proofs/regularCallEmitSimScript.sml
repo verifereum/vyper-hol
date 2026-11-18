@@ -160,6 +160,7 @@ QED
 Theorem consume_call_outcome_venom_asm_rel:
   !lo ps vs st base rs ro rq result vb ao az stk.
   venom_asm_rel lo ps vs st /\
+  vs.vs_outcomes <> [] /\
   plan_slots_bounded base ps /\
   (rs = 0 \/ ro + rs <= ps.ps_alloc.sa_spill_base \/
    ps.ps_alloc.sa_next_offset <= ro) /\
@@ -202,6 +203,7 @@ QED
 Theorem consume_create_outcome_venom_asm_rel[local]:
   !lo ps vs st rq result vb off sz stk.
   venom_asm_rel lo ps vs st /\
+  vs.vs_outcomes <> [] /\
   consume_create_outcome rq vs = (result, vb) ==>
   ?ab.
     asm_consume_create_outcome rq stk
@@ -334,7 +336,8 @@ Theorem ext_call_emit_venom_asm_rel:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac std_ss [exec_ext_call_def, LET_THM] >> pairarg_tac >>
+  Cases_on `vs.vs_outcomes = []` >- simp[exec_ext_call_def] >>
+  asm_simp_tac std_ss [exec_ext_call_def, LET_THM] >> pairarg_tac >>
   pure_asm_rewrite_tac[] >> strip_tac >>
   rename1 `consume_call_outcome _ _ _ _ = (output, vb)` >>
   `asm_call_request st addr value (w2n ao) (w2n az) static =
@@ -377,7 +380,8 @@ Theorem delegatecall_emit_venom_asm_rel:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac std_ss [exec_delegatecall_def, LET_THM] >> pairarg_tac >>
+  Cases_on `vs.vs_outcomes = []` >- simp[exec_delegatecall_def] >>
+  asm_simp_tac std_ss [exec_delegatecall_def, LET_THM] >> pairarg_tac >>
   pure_asm_rewrite_tac[] >> strip_tac >>
   rename1 `consume_call_outcome _ _ _ _ = (output, vb)` >>
   `asm_call_request st addr 0w (w2n ao) (w2n az) F =
@@ -418,6 +422,7 @@ Theorem create_emit_venom_asm_rel:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `exec_create _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `vs.vs_outcomes = []` >- simp[exec_create_def] >>
   simp_tac std_ss [exec_create_def, LET_THM] >>
   Cases_on `w2n sz > 2 * max_code_size` >- simp[] >>
   asm_simp_tac std_ss [] >> pairarg_tac >>

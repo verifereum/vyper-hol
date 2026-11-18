@@ -75,7 +75,8 @@ Proof
   drule same_call_env_preds >> strip_tac >>
   simp[source_typing_ok_def, checked_contract_runtime_ready_def,
        call_tx_well_typed_def, call_outcomes_ok_def,
-       call_state_rel_def, tx_block_fields_rel_def, value_transfer_ok_def,
+       call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+       tx_block_fields_rel_def, value_transfer_ok_def,
        accounts_after_transfer_def, source_deployment_rel_def,
        layouts_agree_def, loweringStateRelDefsTheory.tx_env_ok_def] >>
   fs[same_call_env_def, initial_evaluation_context_def]

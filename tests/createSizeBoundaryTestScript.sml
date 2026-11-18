@@ -14,7 +14,9 @@ QED
 
 Theorem create_at_limit_consumes:
   exec_create (mk_inst 0 CREATE [] ["out"]) s value offset 49152w salt =
-    OK (update_var "out"
+    if s.vs_outcomes = [] then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else OK (update_var "out"
       (FST (consume_create_outcome
         (venom_create_request s value offset 49152w salt) s))
       (SND (consume_create_outcome

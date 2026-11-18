@@ -6,7 +6,7 @@ Ancestors
 
 Theorem Send_outcome_preserves_locals:
   (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    (rq,outcome) <- take_call_outcome gas_cap target [] (SOME amount);
     check outcome.co_success "send failed";
     adopt_call_outcome rq outcome;
     return (Value NoneV)
@@ -607,7 +607,7 @@ Proof
 QED
 
 Theorem scope_pop_effect_outcome_primitives[simp]:
-  scope_pop_effect (vyperCallOutcome$take_call_outcome target calldata value_opt) /\
+  scope_pop_effect (vyperCallOutcome$take_call_outcome gas_cap target calldata value_opt) /\
   scope_pop_effect (vyperCallOutcome$adopt_call_outcome rq co)
 Proof
   conj_tac
