@@ -558,8 +558,14 @@ Proof
     (!b. context_spill_byte cp' b /\ ~closure_spill_byte ctx cp' fn.fn_name b ==>
       FLOOKUP sout.sym_mem_labels b = FLOOKUP labs0 b) /\
     (!b. b IN FDOM sout.sym_mem_labels ==> context_spill_byte cp' b)` by
-    (irule sym_ret_symbolic_exact_mode_conditional >> asm_rewrite_tac[] >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+    (qspecl_then
+       [`allow_own`, `code_ok`, `own`, `fuel`, `ctx`, `cp'`, `lo`, `prog`,
+        `liveness`, `dfg`, `cfg`, `fn`, `inst`, `next_liveness`, `is_halting`,
+        `next_is_term`, `bb_label`, `base'`, `ps`, `vs`, `cs`, `ops`, `final`,
+        `ra`, `rest`, `mem0`, `pc_ret`, `env`, `ret`, `srest`, `labs0`, `ss`,
+        `rv`, `vs'`, `out`] mp_tac sym_ret_symbolic_exact_mode_conditional >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   qexistsl [`LENGTH (execute_plan cp'.cp_initial_fmp ops)`, `out`, `sout`] >>
   asm_rewrite_tac[] >> qexists_tac `m` >> simp[]
 QED
