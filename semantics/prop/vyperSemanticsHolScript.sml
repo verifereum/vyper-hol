@@ -2,6 +2,7 @@ Theory vyperSemanticsHol
 Ancestors
   vyperCallFiniteStorage
   vyperFiniteStoragePreservation
+  vyperImmutableAccessFrame
   vyperLogPreservation
   vyperEvalPureExpr
   vyperTypeSoundness

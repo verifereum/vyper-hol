@@ -36,7 +36,9 @@ QED
 
 val suffix = "_matches_python_oracle"
 val checked_names = List.concat (map DB.theorems
-  ["evalCompilerCreateBuiltinsNest01CreateInCall",
+  ["evalCompilerCreateBuiltins1",
+   "evalCompilerCreateBuiltins2",
+   "evalCompilerCreateBuiltinsNest01CreateInCall",
    "evalCompilerCreateBuiltinsCc02CopySaltValue",
    "evalCompilerCreateBuiltinsCc03CopyRof",
    "evalCompilerCreateBuiltinsNest02StmtCreate",
