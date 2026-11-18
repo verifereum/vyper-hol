@@ -89,6 +89,27 @@ fun exercise_generator () = let
                        not (exists (part tests n))) [1, 2])
   val () = contains "small suite uses original API" (get (path defs))
     ("make_definitions_for_file (\"" ^ id ^ "\"")
+  (* Selection admits every directory; a file with nothing selected (here a
+     traceless negative test) gets no theories. *)
+  val () = List.app OS.FileSys.mkDir
+    ["vyper-test-exports/functional/examples", "vyper-test-exports/functional/syntax"]
+  val example = "vyper-test-exports/functional/examples/test_example.json"
+  val traceless = "vyper-test-exports/functional/syntax/test_traceless.json"
+  val () = put example (String.concat ["{\"case\":{\"item_type\":\"test\",",
+    "\"deps\":[],\"source_code\":\"pass\",\"traces\":[{\"trace_type\":\"not_decodable\"}]}}"])
+  val () = put traceless "{\"case\":{\"item_type\":\"test\",\"deps\":[]}}"
+  val () = generate_tests ()
+  val () = assert "a traced file outside codegen gets both targets"
+    (exists "vyperTestDefs_functional_examples_test_example" andalso
+     exists "vyperTest_functional_examples_test_example")
+  val () = assert "a file with nothing selected gets no targets"
+    (not (exists "vyperTestDefs_functional_syntax_test_traceless") andalso
+     not (exists "vyperTest_functional_syntax_test_traceless"))
+  val () = write_coverage_report "coverage.txt"
+  val () = contains "a traceless file is admitted and reported as traceless"
+    (get "coverage.txt")
+    ("excluded file=" ^ traceless ^ " test=case reason=no exported traces")
+  val () = List.app OS.FileSys.remove [example, traceless, "coverage.txt"]
   val () = OS.FileSys.remove json
   val () = generate_tests ()
 in

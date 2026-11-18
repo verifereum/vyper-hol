@@ -1,0 +1,4 @@
+Theory vyperTest_functional_syntax_test_chainid[no_sig_docs]
+Ancestors vyperTestDefs_functional_syntax_test_chainid
+Libs vyperTestRunnerLib
+val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_syntax_test_chainid";

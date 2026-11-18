@@ -73,19 +73,6 @@ fun check_generate_dirs () = (
   else raise Fail "generated/ not found - run from tests/ directory"
 )
 
-(* Directory-level allowlist plus small explicit allowlist. *)
-val allowed_test_prefixes = [
-  "vyper-test-exports/functional/codegen/",
-  "vyper-test-exports/functional/builtins/codegen/",
-  "vyper-test-exports/functional/builtins/folding/"
-]
-
-val allowed_test_patterns = [
-  "vyper-test-exports/functional/builtins/codegen/test_blobhash.json",
-  (* Tuple-return traces exercise literal subscripts of internal/external calls. *)
-  "vyper-test-exports/functional/syntax/test_return_tuple.json"
-]
-
 (* Path exclusions carry reportable reasons and tracking issues. *)
 val excluded_test_file_rules = [
   (* Unbounded (INF-length) types; vyper-hol models only bounded ones, so
@@ -95,16 +82,12 @@ val excluded_test_file_rules = [
    "https://github.com/vyperlang/vyper/pull/5127")
 ]
 
-val outside_admitted_suites_reason = "outside currently admitted test suites"
-val outside_admitted_suites_issue =
-  "https://github.com/verifereum/vyper-hol/issues/36"
-
-(* Negative tests assert a compile-time diagnostic, so they record no deployment
-   and no call and there is nothing to replay.  Kept in their own bucket rather
-   than counted as semantic exclusions: the checks they need are frontend and
-   elaboration work, behind the missing formal front end (issues/46) and the
-   partial type checker (issues/47). *)
-val no_traces_reason = "no exported traces (negative test, frontend diagnostics)"
+(* Compile-only tests (a compile-time diagnostic or a successful compile)
+   record no deployment and no call, so there is nothing to replay.  Kept in
+   their own bucket rather than counted as semantic exclusions: the checks they
+   need are frontend and elaboration work, behind the missing formal front end
+   (issues/46) and the partial type checker (issues/47). *)
+val no_traces_reason = "no exported traces (compile-only test)"
 val no_traces_issue = "https://github.com/verifereum/vyper-hol/issues/46"
 
 (* Individual test names that bypass unsupported pattern checks *)
@@ -126,7 +109,18 @@ val excluded_test_names = [
      stays excluded *)
   "test_json_abi_bytes_slice",
   (* Out-of-gas test - we don't model gas *)
-  "test_ecrecover_oog_handling"
+  "test_ecrecover_oog_handling",
+  (* The JSON frontend translates `self.codesize` and `self.codehash` as
+     storage variables, not as the address members of `self`
+     (https://github.com/verifereum/vyper-hol/issues/1542). *)
+  "test_self_codesize_in_constructor",
+  "test_get_extcodehash",
+  (* Each raw `precompiled_contract` fixture was created with the nonce the
+     module-scoped deployer had reached in earlier tests; replay starts every
+     test at nonce 0, so the CREATE address check fails
+     (https://github.com/verifereum/vyper-hol/issues/1543). *)
+  "test_address_code_runtime_error_slice_too_long",
+  "test_address_code_slice[5-10-*"
 ]
 
 fun glob_match pat str =
@@ -150,13 +144,7 @@ fun test_file_disposition path =
   case List.find (fn (pat,_,_) => glob_match pat path)
                  excluded_test_file_rules of
     SOME (_,reason,issue) => ExcludedTestFile (reason,issue)
-  | NONE =>
-      if List.exists (fn prefix => String.isPrefix prefix path)
-           allowed_test_prefixes orelse
-         List.exists (fn pat => glob_match pat path) allowed_test_patterns
-      then AdmittedTestFile
-      else ExcludedTestFile
-        (outside_admitted_suites_reason,outside_admitted_suites_issue)
+  | NONE => AdmittedTestFile
 
 fun is_supported_test_file path =
   case test_file_disposition path of
@@ -936,9 +924,12 @@ in
       (raw_payload_weight json) fixtures) selected
 end
 
+(* A file with no selected test gets no theories; the coverage report still
+   accounts for each of its items. *)
 fun generated_test_plan () =
   List.concat (List.map (fn (id, path) => let
-    val chunks = test_chunks (id, read_test_weights path)
+    val weights = read_test_weights path
+    val chunks = if List.null weights then [] else test_chunks (id, weights)
     val chunked = List.length chunks > 1
   in
     List.map (fn chunk => (chunk, id, path, chunked)) chunks
