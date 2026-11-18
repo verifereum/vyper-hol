@@ -9,59 +9,39 @@ Libs
 
 val _ = Parse.hide "count";
 
-Theorem compile_imm_store_loop_none_path:
+Theorem compile_imm_store_loop_none_code:
   compile_word_copy_loop_base src dst count LocMemory LocCode T NONE sa = (u,sb) /\
-  fn_has_code sa sb func /\ n < dimword (:256) /\
-  (!x. src = Var x \/ dst = Var x \/ count = Var x ==> not_fresh_at sa x) /\
-  eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
-  eval_operand count s = SOME (n2w n) /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (t with <|vs_vars := s.vs_vars;
-                vs_current_bb := s.vs_current_bb;
-                vs_prev_bb := s.vs_prev_bb;
-                vs_inst_idx := s.vs_inst_idx|>) =
-        immutable_transfers T T a b n 0 s /\
-      (fresh_vars_wrt sa s ==> immutable_operand_frame sa s sb t) /\
-      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts
+  fn_has_code sa sb func ==>
+  ?hdr body_lbl cv tv mv sv vv dm dv nv id0 idh idb bb0 bbh bbb.
+  lookup_block sa.cs_current_bb func.fn_blocks = SOME bb0 /\
+  isPREFIX
+    [mk_inst id0 ASSIGN [Lit 0w] [cv];
+     mk_inst (id0+1) JMP [Label hdr] []]
+    (DROP (LENGTH sa.cs_current_insts) bb0.bb_instructions) /\
+  lookup_block hdr func.fn_blocks = SOME bbh /\
+  isPREFIX
+    [mk_inst idh EQ [Var cv; count] [tv];
+     mk_inst (idh+1) JNZ [Var tv; Label sb.cs_current_bb; Label body_lbl] []]
+    bbh.bb_instructions /\
+  lookup_block body_lbl func.fn_blocks = SOME bbb /\
+  isPREFIX
+    [mk_inst idb MUL [Var cv; Lit 32w] [mv];
+     mk_inst (idb+1) ADD [src; Var mv] [sv];
+     mk_inst (idb+2) MLOAD [Var sv] [vv];
+     mk_inst (idb+3) MUL [Var cv; Lit 32w] [dm];
+     mk_inst (idb+4) ADD [dst; Var dm] [dv];
+     mk_inst (idb+5) ISTORE [Var dv; Var vv] [];
+     mk_inst (idb+6) ADD [Var cv; Lit 1w] [nv];
+     mk_inst (idb+7) ASSIGN [Var nv] [cv];
+     mk_inst (idb+8) JMP [Label hdr] []]
+    bbb.bb_instructions /\
+  LENGTH sb.cs_current_insts = 0 /\
+  sb.cs_next_var = sa.cs_next_var + 8 /\
+  ALL_DISTINCT [cv;tv;mv;sv;vv;dm;dv;nv] /\
+  (!x. MEM x [cv;tv;mv;sv;vv;dm;dv;nv] ==> not_fresh_at sb x) /\
+  (!x. not_fresh_at sa x ==> ~MEM x [cv;tv;mv;sv;vv;dm;dv;nv])
 Proof
   strip_tac >>
-  `?hdr body_lbl cv tv mv sv vv dm dv nv id0 idh idb bb0 bbh bbb.
-    lookup_block sa.cs_current_bb func.fn_blocks = SOME bb0 /\
-    isPREFIX
-      [mk_inst id0 ASSIGN [Lit 0w] [cv];
-       mk_inst (id0+1) JMP [Label hdr] []]
-      (DROP (LENGTH sa.cs_current_insts) bb0.bb_instructions) /\
-    lookup_block hdr func.fn_blocks = SOME bbh /\
-    isPREFIX
-      [mk_inst idh EQ [Var cv; count] [tv];
-       mk_inst (idh+1) JNZ [Var tv; Label sb.cs_current_bb; Label body_lbl] []]
-      bbh.bb_instructions /\
-    lookup_block body_lbl func.fn_blocks = SOME bbb /\
-    isPREFIX
-      [mk_inst idb MUL [Var cv; Lit 32w] [mv];
-       mk_inst (idb+1) ADD [src; Var mv] [sv];
-       mk_inst (idb+2) MLOAD [Var sv] [vv];
-       mk_inst (idb+3) MUL [Var cv; Lit 32w] [dm];
-       mk_inst (idb+4) ADD [dst; Var dm] [dv];
-       mk_inst (idb+5) ISTORE [Var dv; Var vv] [];
-       mk_inst (idb+6) ADD [Var cv; Lit 1w] [nv];
-       mk_inst (idb+7) ASSIGN [Var nv] [cv];
-       mk_inst (idb+8) JMP [Label hdr] []]
-      bbb.bb_instructions /\
-    LENGTH sb.cs_current_insts = 0 /\
-    sb.cs_next_var = sa.cs_next_var + 8 /\
-    ALL_DISTINCT [cv;tv;mv;sv;vv;dm;dv;nv] /\
-    (!x. MEM x [cv;tv;mv;sv;vv;dm;dv;nv] ==> not_fresh_at sb x) /\
-    (!x. not_fresh_at sa x ==> ~MEM x [cv;tv;mv;sv;vv;dm;dv;nv])`
-    by suspend "shape" >>
-  suspend "execute"
-QED
-
-Resume compile_imm_store_loop_none_path[shape]:
   gvs[compile_word_copy_loop_base_def, word_scale_def,
       compile_ptr_load_def, compile_ptr_store_def, compile_imm_store_word_def,
       comp_bind_def, comp_ignore_bind_def, comp_return_def,
@@ -86,6 +66,30 @@ Resume compile_imm_store_loop_none_path[shape]:
   simp[Abbr `cv`, Abbr `tv`, Abbr `mv`, Abbr `sv`, Abbr `vv`,
        Abbr `dm`, Abbr `dv`, Abbr `nv`, fresh_var_distinct] >>
   rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+Theorem compile_imm_store_loop_none_path:
+  compile_word_copy_loop_base src dst count LocMemory LocCode T NONE sa = (u,sb) /\
+  fn_has_code sa sb func /\ n < dimword (:256) /\
+  (!x. src = Var x \/ dst = Var x \/ count = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
+  eval_operand count s = SOME (n2w n) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (t with <|vs_vars := s.vs_vars;
+                vs_current_bb := s.vs_current_bb;
+                vs_prev_bb := s.vs_prev_bb;
+                vs_inst_idx := s.vs_inst_idx|>) =
+        immutable_transfers T T a b n 0 s /\
+      (fresh_vars_wrt sa s ==> immutable_operand_frame sa s sb t) /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  drule_all compile_imm_store_loop_none_code >> strip_tac >>
+  suspend "execute"
 QED
 
 Resume compile_imm_store_loop_none_path[execute]:
