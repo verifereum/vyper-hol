@@ -108,7 +108,7 @@ QED
 Theorem membership_loop_contract_init:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G' tn' t.

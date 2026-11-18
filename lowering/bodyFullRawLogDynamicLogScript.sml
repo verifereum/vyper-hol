@@ -22,7 +22,7 @@ Theorem raw_log_dynamic_log_joint:
   mem_bytes_at p (LENGTH bs) t.vs_memory = bs /\
   stmt_state_rel H ctx func cenv cx ee t /\
   storage_well_formed_on cx ee (FST H) /\
-  ghost_inv_at D lo d cenv cx ee G tn t /\ ~ctx_has_dalloca ctx ==>
+  ghost_inv_at D lo d cenv cx ee G tn t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) ==>
   let i = mk_inst id LOG
     (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [];
       ee' = ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs];

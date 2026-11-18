@@ -105,7 +105,7 @@ Theorem toplevel_slot_copy_allocation_entry:
   compile_expr cenv ty (TopLevelName ann nsid) ca = (place,sa) /\
   compile_alloc_buffer nb sa = (buf,sm) /\ fn_has_code sa sm func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME p /\ op_taint tn src = {} /\ 32*n <= nb ==>
@@ -161,7 +161,7 @@ Theorem toplevel_slot_copy_entry_joint:
   compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   nb < dimword (:256) /\ n < 2**256 /\ 32*n <= nb /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\

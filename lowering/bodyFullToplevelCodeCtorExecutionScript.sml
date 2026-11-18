@@ -13,7 +13,7 @@ Theorem toplevel_code_ctor_execution_full:
   compile_imm_copy_to_memory T imm src buf.buf_operand n 0 mid = ((),sb) /\
   fn_has_code sm mid func /\ fn_has_code mid sb func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword(:256) /\ 32*n <= nb /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sm x) /\

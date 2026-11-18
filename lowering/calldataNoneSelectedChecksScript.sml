@@ -9,7 +9,7 @@ Theorem selected_checks_reject_or_continue:
   fn_has_code opened checked fn /\ fresh_vars_wrt opened s /\
   ~s.vs_halted /\ s.vs_current_bb = opened.cs_current_bb /\
   s.vs_inst_idx = LENGTH opened.cs_current_insts /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   m < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
   4 <= LENGTH s.vs_call_ctx.cc_calldata ==>
   (?z H u. z.vs_returndata = [] /\

@@ -182,7 +182,7 @@ Theorem nonpayable_check_joint_reject:
   fn_has_code opened checked fn /\ opened.cs_current_insts = [] /\
   ~block_is_terminated opened /\ fresh_vars_wrt opened s /\
   ~s.vs_halted /\ s.vs_current_bb = opened.cs_current_bb /\
-  s.vs_inst_idx = 0 /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = 0 /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_call_ctx.cc_callvalue <> 0w ==>
   ?t G' tn'.
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
