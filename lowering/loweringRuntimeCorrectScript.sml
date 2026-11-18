@@ -864,12 +864,11 @@ Proof
   simp[Excl "lock_if_nr_def"]
 QED
 
-Theorem external_entry_lock_revert[local]:
+Theorem runtime_lock_abort_result:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
   source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\
-  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
   initial_venom_state_rel tops am tx vs /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,T,args,[],ret,fbody) /\
@@ -879,27 +878,36 @@ Theorem external_entry_lock_revert[local]:
     (initial_state am [env] with
        <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) /\
   lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
-    T (is_view_mut mut) es0 = (INR exc,es_abort) ==>
-  source_unit_execution_correct_at [] tops ret am tx unit vs
+    T (is_view_mut mut) es0 = (INR exc,es_abort) /\
+  unit.cu_context.ctx_entry = SOME "__entry" /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions =
+    SOME func /\
+  fn_entry_label func = SOME "__entry" /\
+  lookup_block "__entry" func.fn_blocks = SOME bb /\
+  phi_prefix_length bb.bb_instructions = 0 /\
+  expr_exit (INR exc : unit + exception) (Abort a t) /\
+  (exc = Error (RuntimeError "nonreentrant lock") \/
+   exc = Error (RuntimeError "write in static context")) /\
+  (!D explicit. gas_origin_ptr_path
+     (D,0,explicit,unit.cu_context,func,[])
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                vs_inst_idx := 0|>,FEMPTY,entry_taint) [] (Abort a t,G,tn)) ==>
+  source_unit_execution_correct_at [] tops ret am tx unit vs /\
+  (!gs. FST (call_external (SOME vs.vs_outcomes) gs am tx) <>
+    INR (Error (RuntimeError "msg.gas: no gas reading")))
 Proof
-  strip_tac >>
-  drule_all external_entry_lock_abort_joint >>
-  disch_then (qx_choosel_then [`func`,`a`,`t`,`G`,`tn`]
-    (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
+  DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
   `!gs. call_external_trace (SOME vs.vs_outcomes) gs am tx =
     (INR exc,am,[],[StorageLock global_nonreentrant_slot])` by
     (mp_tac (Q.INST [`cx` |->
        `initial_evaluation_context am.sources am.layouts tx NONE`,
        `os` |-> `vs.vs_outcomes`] (SPEC_ALL external_lock_failure_trace)) >>
      impl_tac >- asm_rewrite_tac[] >> disch_then ACCEPT_TAC) >>
-  `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
-  drule source_typing_ok_external_names_distinct >> strip_tac >>
-  drule_all runtime_entry_function_no_phi_nr >> strip_tac >>
-  `func' = func` by
-    (qpat_assum `venomInst$lookup_function "__entry" _ = SOME func'`
-      (fn th => qpat_assum `venomInst$lookup_function "__entry" _ = SOME func`
-        (ACCEPT_TAC o REWRITE_RULE [optionTheory.SOME_11] o TRANS (SYM th)))) >>
-  qpat_x_assum `func' = func` SUBST_ALL_TAC >>
+  reverse conj_tac
+  >- (gen_tac >>
+      qpat_x_assum `!gs. call_external_trace _ gs _ _ = _`
+        (qspec_then `gs` (mp_tac o MATCH_MP call_external_trace_result)) >>
+      Cases_on `exc = Error (RuntimeError "nonreentrant lock")` >> gvs[]) >>
   `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
                 gas_shadow_unit unit shadow_unit` by
     (Cases_on `classify_functions tops` >> PairCases_on `r` >>
@@ -976,6 +984,43 @@ Proof
   qpat_assum `lookup_block entry.vs_current_bb func.fn_blocks = SOME bb`
     (fn th => qpat_assum `ptr_safe_run _ _ _ _ _ _ _ _ _`
       (ACCEPT_TAC o SIMP_RULE (srw_ss()) [ptrSafeRunTheory.ptr_safe_run_def,th]))
+QED
+
+Theorem external_entry_lock_revert_readings[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  tx.function_name <> "__default__" /\
+  calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+    tx.args vs.vs_call_ctx.cc_calldata /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,T,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+       <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) /\
+  lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+    T (is_view_mut mut) es0 = (INR exc,es_abort) ==>
+  source_unit_execution_correct_at [] tops ret am tx unit vs /\
+  (!gs. FST (call_external (SOME vs.vs_outcomes) gs am tx) <>
+        INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  strip_tac >>
+  `LENGTH tx.args = LENGTH args` by (drule bind_arguments_length >> simp[]) >>
+  drule_all external_entry_lock_abort_joint >>
+  disch_then (qx_choosel_then [`func`,`a`,`s`,`G`,`tn`]
+    (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
+  drule source_typing_ok_external_names_distinct >> strip_tac >>
+  drule_all runtime_entry_function_no_phi_nr >> strip_tac >>
+  `func' = func` by
+    (qpat_assum `venomInst$lookup_function "__entry" _ = SOME func'`
+      (fn th => qpat_assum `venomInst$lookup_function "__entry" _ = SOME func`
+        (ACCEPT_TAC o REWRITE_RULE [optionTheory.SOME_11] o TRANS (SYM th)))) >>
+  qpat_x_assum `func' = func` SUBST_ALL_TAC >>
+  drule_all runtime_lock_abort_result >> simp[]
 QED
 
 val selected_entry_split_tac =
