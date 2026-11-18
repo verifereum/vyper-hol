@@ -159,22 +159,52 @@ Whether the theorems should promise revert bytes is an open scope question.
 
 ## Calls and nested contexts
 
-### Current Milestone 1 runtime contract (2026-10-09)
+### Fixed storage regions
 
-The broader intended scope elsewhere in this planning specification is **future
-scope**, not today's certificate. The accepted primary source is `e4cb0914`.
-The saved `e2eCorrectness.vyper_call_correct` is composed from **ADMITTED S1–S7**;
+The public single-call theorem `vyper_call_correct` quantifies over a fixed
+set of storage regions and lock slots `H`. Its storage premises are
+`storage_ok H am tx`, which requires the initial source state to decode on
+those regions, and `call_within H tops am tx es`, which checks the dispatched
+source storage trace for every gas filling. The trace check includes the
+storage backends the source adopts from external call outcomes.
+
+```sml
+  !fin policy tops deploy_bc runtime_bc am tx es H.
+    fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    storage_ok H am tx /\
+    call_within H tops am tx es
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       calldata_result_rel H tops am tx es r es')
+```
+
+Outside the resource-starvation case, unmatched calldata raises an empty
+revert. For dispatched calldata, `call_result_rel H` requires result
+agreement at the run's own storage horizon and `storage_ok H am' tx` for the
+source machine returned by the call, for each filling covered by
+`gas_readings_rel`. The guarded theorem `vyper_call_correct_guarded` supplies
+the underlying per-filling result.
+
+### Milestone 1 runtime contract (2026-10-09)
+
+The following subsections document the Milestone 1 boundary at `e4cb0914`.
+At that revision, `e2eCorrectness.vyper_call_correct` composed **ADMITTED S1–S7**;
 clean generic composition and structural producers do not prove those stages.
 See the [dated audit](compiler-proof-status-2026-10-09.md#public-runtime-theorem)
 and [dependency inventory](compiler-proof-dependencies.md) for actual owners,
 partial/absent producers and built evidence. [TASK060 final validation](compiler-proof-milestone-1-exit-2026-10-09.md)
 is complete, without proving the admitted stages.
 
-This section records the statement as of 2026-10-09. The current
-`vyper_call_correct` (`lowering/e2eCorrectnessScript.sml`) quantifies over
-`fin IN accepted_finalizers`, has no `valid_vyper_call` premise and concludes
-`frame_resource_starved es r es' \/ calldata_result_rel tops am tx es r es'`,
-whose unmatched-calldata arm is described under [Revert data](#revert-data).
+The current statement is under [Fixed storage regions](#fixed-storage-regions);
+its unmatched-calldata arm is described under [Revert data](#revert-data).
 
 The entire public theorem was then:
 
@@ -279,7 +309,14 @@ records readiness/input/constants/protected-storage/oracle hypotheses.
 The shared entry Venom state has **cc_gas=0**, concrete assembly labels and plan
 FMP fields. Venom GAS consumes the frame-local `gas_readings es`, returning zero
 when exhausted; assembly also uses frame-local EVM gas readings. There is **no caller-read
-gas-reading correspondence**, source `msg.gas` guarantee or `gas=` keyword guarantee.
+gas-reading correspondence** and no source `msg.gas` guarantee. For `gas=`, the
+theorem relates only the operand: where requests are compared (success or halt),
+`request_agree` requires `r1.cr_gas = SOME g ==> r2.cr_gas = SOME g`, so a call
+with an explicit source `gas=` value forwards exactly that gas operand on its
+CALL/STATICCALL/DELEGATECALL; a `send` without `gas=` records 0, so its operand
+must be 0. The operand of any other call without `gas=` is unconstrained,
+creations and the precompile builtins record none, and the gas the callee
+actually receives is not related.
 The result relation existentially chooses source gas observations without tying
 them to EVM readings. The old
 2026-09-29 gas-oracle account of this design is superseded by the outcome oracle.
@@ -290,7 +327,9 @@ them to EVM readings. The old
   bytes for raw-return functions, otherwise `return_bytes`), account agreement
   after EVM pending deletions and transient-storage agreement modulo dead target
   storage, ordered concrete logs and
-  `LIST_REL (request_agree H tx.target) rqs (call_requests es)`. A source halt (`HaltException`) requires a successful
+  `LIST_REL (request_agree H tx.target) rqs (call_requests es)`, where `H` is the
+  run's own storage horizon in `call_result_rel_at`, not the theorem's fixed
+  `H`. A source halt (`HaltException`) requires a successful
   frame outcome with empty output, the source's ordered logs and the same account,
   transient-storage and request agreement (`effects_agree`). Requests and these effects are compared
   only on success or halt; `exception_outcome_rel` compares none of them on
@@ -324,7 +363,8 @@ them to EVM readings. The old
   storage premises, OutOfGas implies oversized deposited code or a reached
   `RETURNDATACOPY`. The per-finalizer case theorems give the stronger
   code-size-only alternative. Its assembly-optimizer case also remains admitted.
-- Static entry, runtime immutables, msg.gas/gas=, fallback invocation and
+- Static entry, runtime immutables, msg.gas, `gas=` beyond its forwarded operand,
+  fallback invocation and
   arbitrary unsupported programs are outside this runtime contract. Outgoing
   STATICCALL is not a static-entry guarantee. Environmental satisfiability,
   transaction entry/storage and callee-outcome producers remain Milestone 7

@@ -1,6 +1,8 @@
 # Compiler proof dependencies
 
-Current Milestone 1 boundary: accepted primary `e4cb0914`, audited 2026-10-09.
+Milestone 1 boundary at `e4cb0914`, audited 2026-10-09. The current
+`vyper_call_correct` theorem takes a
+[fixed storage region set](compiler-correctness-specification.md#fixed-storage-regions).
 This is a dependency/assumption inventory, **not a fully verified compiler**.
 The [dated audit](compiler-proof-status-2026-10-09.md) contains the entire public
 schema, exact saved-object receipts and historical evidence identities.
@@ -156,9 +158,9 @@ body (including a return rejection producing that same message); not arbitrary
 The resource alternative is frame OutOfGas/StackOverflow, not an existential gas
 threshold. Entry `cc_gas=0`; Venom GAS consumes the frame's gas readings,
 returning zero on exhaustion.
-There is no static-entry/immutables/msg.gas/gas=/fallback guarantee or caller-read
+There is no static-entry/immutables/msg.gas/fallback guarantee or caller-read
 gas-reading correspondence; the result relation existentially chooses source
-gas observations without tying them to EVM readings. Combined environmental satisfiability and transaction/callee
+gas observations without tying them to EVM readings. For `gas=`, only the forwarded gas operand is related: on success or halt `request_agree` requires it to equal an explicit source `gas=` value; a `send` without `gas=` must forward 0; other calls without `gas=` and the gas the callee actually receives are unconstrained. Combined environmental satisfiability and transaction/callee
 producers remain Milestone 7 work.
 
 ## Deployment, function simulation and retired contracts

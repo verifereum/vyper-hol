@@ -1,0 +1,4 @@
+Theory vyperTest_functional_examples_auctions_test_simple_open_auction[no_sig_docs]
+Ancestors vyperTestDefs_functional_examples_auctions_test_simple_open_auction
+Libs vyperTestRunnerLib
+val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_examples_auctions_test_simple_open_auction";

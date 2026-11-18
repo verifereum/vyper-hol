@@ -1,0 +1,4 @@
+Theory vyperTest_functional_examples_safe_remote_purchase_test_safe_remote_purchase[no_sig_docs]
+Ancestors vyperTestDefs_functional_examples_safe_remote_purchase_test_safe_remote_purchase
+Libs vyperTestRunnerLib
+val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_examples_safe_remote_purchase_test_safe_remote_purchase";

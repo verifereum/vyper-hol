@@ -1,7 +1,6 @@
 (* End-to-End Vyper-to-EVM Correctness (PLAN §2.1/§8.1).
- * TOP-LEVEL: vyper_call_correct (exact §2.1, composed from S1-S7, over the
- * accepted finalizers; vyper_call_correct_identity and
- * vyper_call_correct_asm_opt are its two cases),
+ * TOP-LEVEL: vyper_call_correct (single-call correctness over fixed storage
+ * regions), vyper_call_correct_guarded (per-filling storage guard),
  * e2e_vyper_to_evm (admission-free generic §8.1 composition),
  * e2e_venom_pipeline, compile_vyper_runtime_bytecode (preserved proved APIs).
  * e2e_deploy_correctness (the §5.11 admission) is in e2eDeployCorrectness.
@@ -42,7 +41,7 @@ Ancestors
   venomCompilerWf venomWf o1LabelFlowCompose
   contextStaticAbortRel
   list callRawVariant ctorDeployRunBounded rawReachableFmp ctxLookupAgreeHelpers
-  callCodeTrace callCodeStorage
+  callCodeTrace callCodeStorage guardSourceAlignment vyperCallFiniteStorageSupport
 
 
 (* =====================================================================
@@ -879,12 +878,12 @@ QED
 Theorem call_result_rel_code_update:
   ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
   ~program_reads_self_code tops ==>
-  (call_result_rel tops am (tx with code := c) es r es' <=>
-   call_result_rel tops am tx es r es')
+  (call_result_rel_guarded tops am (tx with code := c) es r es' <=>
+   call_result_rel_guarded tops am tx es r es')
 Proof
   strip_tac >>
   drule_all_then (fn th =>
-    simp[call_result_rel_def, LET_THM, th, call_result_rel_at_code_update])
+    simp[call_result_rel_guarded_def, LET_THM, th, call_result_rel_at_code_update])
     call_storage_ok_code_update
 QED
 
@@ -1492,12 +1491,12 @@ Theorem vyper_call_correct_from_gas_link:
             source_unit_execution_correct_at marks tops ret am txp unit vs))
     ==>
     frame_resource_starved es r es' \/
-    call_result_rel tops am txp es r es'
+    call_result_rel_guarded tops am txp es r es'
 Proof
   rpt strip_tac >>
   Cases_on `frame_resource_starved es r es'` >> fs[] >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
-  simp[call_result_rel_def] >>
+  simp[call_result_rel_guarded_def] >>
   drule gas_readings_rel_mono >> disch_then irule >>
   rpt gen_tac >> BETA_TAC >> rpt strip_tac >>
   qpat_x_assum `call_storage_ok _ _ _ gs ==> _` mp_tac >>
@@ -1522,7 +1521,7 @@ Theorem vyper_call_correct_identity:
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       call_result_rel tops am tx es r es')
+       call_result_rel_guarded tops am tx es r es')
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
@@ -1612,7 +1611,7 @@ Theorem vyper_call_correct_asm_opt:
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       call_result_rel tops am tx es r es')
+       call_result_rel_guarded tops am tx es r es')
 Proof
   cheat
 QED
@@ -1635,7 +1634,7 @@ Theorem vyper_call_correct_dispatched:
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       call_result_rel tops am tx es r es')
+       call_result_rel_guarded tops am tx es r es')
 Proof
   rpt gen_tac >> strip_tac >>
   `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
@@ -1702,7 +1701,7 @@ QED
 
 (* ===== Every calldata ===== *)
 
-Theorem raw_variant_revert_facts[local]:
+Theorem raw_variant_revert_facts:
   !tops rpolicy unit am tx vs vi.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\ source_typing_ok tops am tx /\
@@ -2163,24 +2162,24 @@ QED
 (* What the call does for the calldata tx carries: revert with empty
    returndata when it dispatches to nothing, else the source result of
    the external call it dispatches to. *)
-Definition calldata_result_rel_def:
-  calldata_result_rel tops am tx es r es' <=>
+Definition calldata_result_rel_guarded_def:
+  calldata_result_rel_guarded tops am tx es r es' <=>
     case calldata_dispatch tops tx.calldata of
       NONE => frame_raises es Reverted /\
               ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs
     | SOME (f, vals) =>
-        call_result_rel tops am
+        call_result_rel_guarded tops am
           (tx with <| function_name := f; args := vals |>) es r es'
 End
 
-(* TOP-LEVEL: compiler correctness for a single external call, for every
+(* Guarded compiler correctness for a single external call, for every
    calldata and both accepted finalizers (Python's -O none and O1 final
    assembly; the optimizer's case excludes, for now, programs that read
    their own code): the compiled contract does what the source does with
    the call the calldata dispatches to (tx supplies only the environment:
    sender, target, value, block), and reverts with empty returndata when it
    dispatches to nothing. *)
-Theorem vyper_call_correct:
+Theorem vyper_call_correct_guarded:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
     (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
@@ -2193,9 +2192,9 @@ Theorem vyper_call_correct:
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       calldata_result_rel tops am tx es r es')
+       calldata_result_rel_guarded tops am tx es r es')
 Proof
-  rpt strip_tac >> simp[calldata_result_rel_def] >>
+  rpt strip_tac >> simp[calldata_result_rel_guarded_def] >>
   `tx.calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
     gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def,
         world_rel_def] >>
@@ -2212,4 +2211,139 @@ Proof
     mp_tac vyper_call_correct_dispatched >>
   impl_tac >- gvs[dispatched_vyper_call_def, call_premises_dispatch_invariant] >>
   strip_tac >> simp[external_return_type_def] >> metis_tac[]
+QED
+
+(* The fixed persistent and transient regions decode in the source state,
+   with consistent layouts and separated nonreentrant locks. *)
+Definition storage_ok_def:
+  storage_ok H am tx <=>
+    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
+      regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
+      storage_well_formed_on cx (initial_state am []) (FST H)
+End
+
+(* Every gas filling of the dispatched call stays within the fixed regions. *)
+Definition call_within_def:
+  call_within H tops am tx es <=>
+    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
+    !f vals gobs.
+      calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+      storage_observations_ok cx H
+        (source_storage_trace am (tx with <| function_name := f; args := vals |>)
+           (MAP SND (call_trace es)) gobs)
+End
+
+(* Result agreement at the run's own storage horizon and preservation of H. *)
+Definition call_result_rel_def:
+  call_result_rel H tops am tx es r es' <=>
+    let os = MAP SND (call_trace es) in
+    gas_readings_rel (gas_readings es)
+      (\gobs. call_result_rel_at gobs tops am tx es r es' /\
+              let (res, am', rqs) = call_external (SOME os) gobs am tx in
+                storage_ok H am' tx)
+End
+
+Definition calldata_result_rel_def:
+  calldata_result_rel H tops am tx es r es' <=>
+    case calldata_dispatch tops tx.calldata of
+      NONE => frame_raises es Reverted /\
+              ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs
+    | SOME (f, vals) =>
+        call_result_rel H tops am (tx with <| function_name := f; args := vals |>) es r es'
+End
+
+Triviality valid_horizon_for_dispatch:
+  storage_ok H am tx /\ call_within H tops am tx es /\
+  calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+  valid_horizon
+    (initial_evaluation_context am.sources am.layouts
+       (tx with <| function_name := f; args := vals |>) NONE)
+    (initial_state am []) H
+    (source_storage_trace am (tx with <| function_name := f; args := vals |>)
+       (MAP SND (call_trace es)) gobs)
+Proof
+  simp[storage_ok_def, call_within_def, valid_horizon_def] >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `storage_well_formed_on cx _ _` >>
+  qmatch_goalsub_abbrev_tac `storage_well_formed_on dispatched_cx _ _` >>
+  `dispatched_cx.txn.target = cx.txn.target` by
+    simp[Abbr `cx`, Abbr `dispatched_cx`, initial_evaluation_context_def] >>
+  `storage_well_formed_on dispatched_cx (initial_state am []) (FST H) <=>
+   storage_well_formed_on cx (initial_state am []) (FST H)` by
+    (irule storage_well_formed_on_target >> simp[]) >>
+  drule storage_observations_ok_target >> strip_tac >>
+  fs[]
+QED
+
+Triviality call_result_rel_from_guarded:
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  (!gobs. valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+     (initial_state am []) H (source_storage_trace am tx (MAP SND (call_trace es)) gobs)) /\
+  call_result_rel_guarded tops am tx es r es' ==>
+  call_result_rel H tops am tx es r es'
+Proof
+  simp[call_result_rel_guarded_def, call_result_rel_def] >>
+  strip_tac >>
+  drule gas_readings_rel_mono >> disch_then irule >>
+  qx_gen_tac `gobs` >> BETA_TAC >> strip_tac >>
+  qpat_x_assum `!gobs. valid_horizon _ _ _ _` (qspec_then `gobs` assume_tac) >>
+  conj_tac
+  >- (qpat_x_assum `call_storage_ok _ _ _ gobs ==> _` match_mp_tac >>
+      irule valid_horizon_call_storage_ok >> qexists_tac `H` >> simp[]) >>
+  qabbrev_tac `os = MAP SND (call_trace es)` >>
+  `?res am' rqs obs. call_external_trace (SOME os) gobs am tx =
+     (res,am',rqs,obs)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
+  drule call_external_trace_result >> strip_tac >>
+  `valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+     (initial_state am []) H obs` by fs[] >>
+  drule_all source_call_final_storage_well_formed >> strip_tac >>
+  `storage_well_formed_on (initial_evaluation_context am'.sources am'.layouts tx NONE)
+     (initial_state am' []) (FST H) <=>
+   storage_well_formed_on (initial_evaluation_context am.sources am.layouts tx NONE)
+     (initial_state am' []) (FST H)` by
+    (irule storage_well_formed_on_target >> simp[initial_evaluation_context_def]) >>
+  fs[storage_ok_def, valid_horizon_def]
+QED
+
+(* TOP-LEVEL: single-call compiler correctness with fixed storage regions. *)
+Theorem vyper_call_correct:
+  !fin policy tops deploy_bc runtime_bc am tx es H.
+    fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    storage_ok H am tx /\
+    call_within H tops am tx es
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       calldata_result_rel H tops am tx es r es')
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all vyper_call_correct_guarded >>
+  disch_then (qx_choose_then `r` (qx_choose_then `es'` strip_assume_tac)) >>
+  qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
+  DISJ2_TAC >>
+  qpat_x_assum `calldata_result_rel_guarded _ _ _ _ _ _` mp_tac >>
+  simp[calldata_result_rel_def, calldata_result_rel_guarded_def] >>
+  Cases_on `calldata_dispatch tops tx.calldata` >> simp[] >>
+  rename1 `_ = SOME entry` >> PairCases_on `entry` >>
+  simp[pairTheory.pair_case_thm] >>
+  rename1 `calldata_dispatch tops tx.calldata = SOME (f, vals)` >>
+  strip_tac >>
+  qabbrev_tac `dispatched_tx = tx with <| function_name := f; args := vals |>` >>
+  `source_typing_ok tops am dispatched_tx /\
+   call_state_rel tops runtime_bc am dispatched_tx es` by
+    simp[Abbr `dispatched_tx`, call_premises_dispatch_invariant] >>
+  `source_deployment_rel tops am dispatched_tx` by
+    (qpat_assum `call_state_rel _ _ _ dispatched_tx _`
+       (strip_assume_tac o REWRITE_RULE [call_state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
+  irule call_result_rel_from_guarded >> simp[] >>
+  gen_tac >> simp[Abbr `dispatched_tx`] >>
+  irule valid_horizon_for_dispatch >> simp[] >> qexists_tac `tops` >> simp[]
 QED
