@@ -1,7 +1,7 @@
 (* Generic instruction predicates suffice: reuse state_insts rather than
    introduce a second compiler-state invariant.  These boundaries include
    finalized blocks and separately packaged internal functions. *)
-Theory runtimeSymSrcEmissionProbe
+Theory runtimeSymSrcBlockEmission
 Ancestors
   loweringPackageInsts
   loweringShapeDefs vyperCompiler compileEnv list venomInst venomState

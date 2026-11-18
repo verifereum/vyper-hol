@@ -1,7 +1,7 @@
 Theory runtimeSymSrcModuleDispatch
 Ancestors
   runtimeSymSrcInterfaces runtimeSymSrcEmission moduleLowering compileEnv
-  emitHelper list pair loweringShapeDefs runtimeSymSrcEmissionProbe stackPlanTypes
+  emitHelper list pair loweringShapeDefs runtimeSymSrcBlockEmission stackPlanTypes
 
 Theorem runtime_sym_selector_checks:
   !sels mid s u s'. ~is_label_operand mid /\

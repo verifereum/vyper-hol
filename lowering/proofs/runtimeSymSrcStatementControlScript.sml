@@ -1,6 +1,6 @@
 Theory runtimeSymSrcStatementControl
 Ancestors
-  runtimeSymSrcInterfaces runtimeSymSrcEmission runtimeSymSrcEmissionProbe runtimeSymSrcModuleDispatch stmtLowering compileEnv
+  runtimeSymSrcInterfaces runtimeSymSrcEmission runtimeSymSrcBlockEmission runtimeSymSrcModuleDispatch stmtLowering compileEnv
   supportedStmts supportedStmtTraverse supportedExprs context venomInst stackPlanTypes
   emitHelper loweringShapeDefs list
 

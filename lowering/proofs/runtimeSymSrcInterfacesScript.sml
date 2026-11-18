@@ -5,7 +5,7 @@
    calls supplied by an induction hypothesis, not for the current expression. *)
 Theory runtimeSymSrcInterfaces
 Ancestors
-  runtimeSymSrcEmissionProbe loweringShapeDefs ctorCallFreeRules compileEnv
+  runtimeSymSrcBlockEmission loweringShapeDefs ctorCallFreeRules compileEnv
   context emitHelper
   list venomInst exprLowering stmtLowering supportedExprs supportedStmts
   supportedExprForms exprOracleStorageInterfaces

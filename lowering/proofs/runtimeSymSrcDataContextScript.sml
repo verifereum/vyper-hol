@@ -281,6 +281,10 @@ Proof
   simp[compile_store_immutable_def]
 QED
 
+fun apply_symbolic_frame theorem =
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data` (Q.GEN `R` theorem)))
+
 Theorem runtime_data_frame_store_slots[simp]:
   (!cenv src slot ty trans.
     runtime_data_frame (compile_store_slots cenv src slot ty trans)) /\
@@ -289,34 +293,25 @@ Theorem runtime_data_frame_store_slots[simp]:
   (!cenv src slot elem count trans.
     runtime_data_frame (compile_copy_elements_to_slots cenv src slot elem count trans))
 Proof
-  ho_match_mp_tac compile_store_slots_ind >> rpt strip_tac >>
-  simp[Once compile_store_slots_def, comp_ignore_bind_def] >>
-  rpt (IF_CASES_TAC >> simp[]) >>
-  simp[compile_word_copy_loop_op_def] >>
-  rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  rpt (CASE_TAC >> gvs[]) >>
-  Cases_on `acyclic_struct_metadata cenv.ce_struct_fields` >> gvs[] >>
-  rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_store_slots >> simp[]
 QED
 
 Theorem runtime_data_frame_iload_memory[simp]:
   !n. runtime_data_frame (compile_iload_to_memory src dst n)
 Proof
-  Induct >> simp[compile_iload_to_memory_def]
+  apply_symbolic_frame symbolic_frame_iload_memory >> simp[]
 QED
 
 Theorem runtime_data_frame_gep_memory[simp]:
   !n. runtime_data_frame (compile_gep_to_memory bp src dst n)
 Proof
-  Induct >> simp[compile_gep_to_memory_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_gep_memory >> simp[]
 QED
 
 Theorem runtime_data_frame_load_immutable_ctor[simp]:
   runtime_data_frame (compile_load_immutable_ctor off b wc n imm)
 Proof
-  Cases_on `imm` >> simp[compile_load_immutable_ctor_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_load_immutable_ctor >> simp[]
 QED
 
 Theorem runtime_data_frame_encode_log_topic[simp]:

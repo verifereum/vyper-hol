@@ -1,6 +1,6 @@
 Theory runtimeSymSrcBuiltinStrings
 Ancestors
-  runtimeSymSrcEmissionProbe
+  runtimeSymSrcBlockEmission
   runtimeSymSrcContext runtimeSymSrcContextCopy runtimeSymSrcModuleDispatch
   runtimeSymSrcEmission runtimeSymSrcInterfaces builtinStrings
   compileEnv emitHelper loweringShapeDefs venomInst list stackPlanTypes

@@ -1,6 +1,6 @@
 Theory runtimeSymSrcArrayLoopBlocks
 Ancestors
-  runtimeSymSrcEmissionProbe
+  runtimeSymSrcBlockEmission
   runtimeSymSrcArrayIterator runtimeSymSrcInterfaces runtimeSymSrcEmission
   supportedStmts supportedExprs supportedExprTraverse exprLowering vyperAST
   runtimeSymSrcContext runtimeSymSrcContextTypedArrays runtimeSymSrcContextCopy compileEnv

@@ -1,7 +1,7 @@
 Theory runtimeSymSrcExprBody
 Ancestors
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission runtimeSymSrcInterfaces
-  runtimeSymSrcEmissionProbe exprLowering compileEnv context emitHelper
+  runtimeSymSrcBlockEmission exprLowering compileEnv context emitHelper
   supportedExprs supportedExprTraverse exprCallBounds exprSimHypsDefs vyperAST list venomInst stackPlanTypes finite_map
 
 Theorem runtime_sym_expr_body:

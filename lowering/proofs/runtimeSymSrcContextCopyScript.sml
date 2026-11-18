@@ -1,6 +1,6 @@
 Theory runtimeSymSrcContextCopy
 Ancestors
-  runtimeSymSrcContext runtimeSymSrcEmissionProbe runtimeSymSrcEmission
+  runtimeSymSrcContext runtimeSymSrcBlockEmission runtimeSymSrcEmission
   context compileEnv emitHelper loweringShapeDefs venomInst list stackPlanTypes
 
 Theorem runtime_sym_assign:

@@ -1,7 +1,7 @@
 Theory runtimeSymSrcStoreSlotsLoop
 Ancestors
   runtimeSymSrcContextCopy runtimeSymSrcEmission runtimeSymSrcContext
-  runtimeSymSrcEmissionProbe context compileEnv emitHelper list venomInst stackPlanTypes
+  runtimeSymSrcBlockEmission context compileEnv emitHelper list venomInst stackPlanTypes
 
 Theorem runtime_sym_copy_elements_to_slots_step:
   (!a b st u st'.

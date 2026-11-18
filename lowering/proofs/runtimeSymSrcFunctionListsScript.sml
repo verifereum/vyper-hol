@@ -1,6 +1,6 @@
 Theory runtimeSymSrcFunctionLists
 Ancestors
-  runtimeSymSrcEmissionProbe moduleLowering compileEnv loweringShapeDefs list
+  runtimeSymSrcBlockEmission moduleLowering compileEnv loweringShapeDefs list
 
 Theorem runtime_sym_internal_fn_bodies:
   !xs.

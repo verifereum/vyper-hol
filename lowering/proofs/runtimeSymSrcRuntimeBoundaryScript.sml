@@ -3,7 +3,7 @@ Ancestors
   runtimeSymSrcPackageTransport runtimeSymSrcModuleArgs
   runtimeSymSrcModuleBodies runtimeSymSrcInternalFunction
   runtimeSymSrcFunctionLists runtimeSymSrcModuleDispatch
-  runtimeSymSrcGeneratorContracts runtimeSymSrcEmissionProbe vyperCompiler compileVyper
+  runtimeSymSrcGeneratorContracts runtimeSymSrcBlockEmission vyperCompiler compileVyper
   list loweringShapeDefs compileEnv venomInst
   runtimeSymSrcOrdinaryPackages runtimeSymSrcGroupedPackages loweringShapeProps
   runtimeSymSrcInterfaces loweringPackageInsts

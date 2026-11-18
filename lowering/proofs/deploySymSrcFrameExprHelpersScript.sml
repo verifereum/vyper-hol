@@ -441,19 +441,17 @@ Theorem deploy_blocks_frame_store_abi_tuple:
   (!dst src n. deploy_blocks_frame (compile_copy_memory dst src n)) ==>
   !vs buf off. deploy_blocks_frame (compile_store_abi_tuple cenv buf off vs)
 Proof
-  strip_tac >> Induct >> simp[compile_store_abi_tuple_def] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  simp[compile_store_abi_tuple_def, comp_ignore_bind_def] >>
-  match_mp_tac deploy_blocks_frame_bind >> conj_tac >- simp[] >>
-  gen_tac >> BETA_TAC >> match_mp_tac deploy_blocks_frame_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[]) >> simp[]
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_store_abi_tuple >> simp[]
 QED
 
 Theorem deploy_blocks_frame_materialize_vv:
   (!vv. deploy_blocks_frame (unwrap_value cenv vv)) /\
   (!v dst ty sty. deploy_blocks_frame (compile_store_memory cenv v dst ty sty)) ==>
   deploy_blocks_frame (compile_materialize_vv cenv ty vv)
-Proof simp[compile_materialize_vv_def, comp_ignore_bind_def]
+Proof
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_materialize_vv >> simp[]
 QED
 
 Theorem deploy_blocks_frame_ifexp_arm:
@@ -461,14 +459,17 @@ Theorem deploy_blocks_frame_ifexp_arm:
   (!v dst ty sty. deploy_blocks_frame (compile_store_memory cenv v dst ty sty)) ==>
   deploy_blocks_frame (compile_ifexp_arm cenv rt at vv)
 Proof
-  strip_tac >> rw[compile_ifexp_arm_def, comp_ignore_bind_def] >> simp[]
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_ifexp_arm >> simp[]
 QED
 
 Theorem deploy_blocks_frame_snapshot_vv:
   (!vv. deploy_blocks_frame (unwrap_value cenv vv)) /\
   (!ty vv. deploy_blocks_frame (compile_materialize_vv cenv ty vv)) ==>
   deploy_blocks_frame (compile_snapshot_vv cenv copy vv)
-Proof strip_tac >> rw[compile_snapshot_vv_def] >> simp[]
+Proof
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_snapshot_vv >> simp[]
 QED
 
 Theorem deploy_blocks_frame_struct_lit:
@@ -625,12 +626,8 @@ Theorem deploy_blocks_frame_ext_call_args:
   (!copy vv. deploy_blocks_frame (compile_snapshot_vv cenv copy vv)) ==>
   deploy_blocks_frame (compile_ext_call_args cfn cenv kw_es tys es)
 Proof
-  qid_spec_tac `tys` >> Induct_on `es` >>
-  simp[compile_ext_call_args_def] >>
-  gen_tac >> Cases_on `tys` >> simp[compile_ext_call_args_def] >>
   strip_tac >>
-  rpt (match_mp_tac deploy_blocks_frame_bind >> conj_tac
-       >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  apply_symbolic_frame symbolic_frame_ext_call_args >> simp[]
 QED
 
 Theorem deploy_blocks_frame_get_target_ptr:

@@ -4,7 +4,7 @@ Ancestors
   deploySymSrcHistory deploySymSrcGenerate deploySymSrcConstructorArgs deploySymSrcConstructorSource
   deploySymSrcInternalBodies deploySymSrcGeneratorFrame runtimeSymSrcInstructions
   runtimeSymSrcContext runtimeSymSrcModuleArgPreservation runtimeSymSrcRuntimeBoundary
-  runtimeSymSrcEmissionProbe compileVyper vyperCompiler moduleLowering compileEnv
+  runtimeSymSrcBlockEmission compileVyper vyperCompiler moduleLowering compileEnv
   loweringShapeDefs context list
 
 Theorem deploy_sym_run_lowering[local]:

@@ -1,6 +1,6 @@
 Theory deploySymSrcGenerate
 Ancestors
-  runtimeSymSrcEmissionProbe
+  runtimeSymSrcBlockEmission
   deploySymSrcHistory runtimeSymSrcModuleBodies runtimeSymSrcInternalFunction
   runtimeSymSrcModuleArgPreservation runtimeSymSrcEmission runtimeSymSrcInterfaces
   runtimeSymSrcModuleDispatch

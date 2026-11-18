@@ -1,6 +1,6 @@
 Theory runtimeSymSrcStatementRange
 Ancestors
-  runtimeSymSrcEmissionProbe
+  runtimeSymSrcBlockEmission
   runtimeSymSrcStatementControl runtimeSymSrcDeclarations runtimeSymSrcEmission
   runtimeSymSrcModuleDispatch runtimeSymSrcInterfaces stmtLowering compileEnv
   supportedStmts supportedStmtTraverse supportedExprs context venomInst

@@ -1,7 +1,7 @@
 Theory runtimeSymSrcStoreSlotsStatic
 Ancestors
   runtimeSymSrcContextCopy runtimeSymSrcEmission runtimeSymSrcContext
-  runtimeSymSrcEmissionProbe context compileEnv emitHelper list venomInst
+  runtimeSymSrcBlockEmission context compileEnv emitHelper list venomInst
 
 Theorem runtime_sym_store_slots_static:
   ~is_abi_dynamic cenv.ce_struct_fields ty /\

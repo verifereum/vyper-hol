@@ -1,6 +1,6 @@
 Theory runtimeSymSrcSystemCreate
 Ancestors
-  runtimeSymSrcEmissionProbe
+  runtimeSymSrcBlockEmission
   runtimeSymSrcContext runtimeSymSrcContextTypedBase runtimeSymSrcEmission
   runtimeSymSrcInterfaces
   builtinSystem builtinCreate builtinSimple compileEnv emitHelper

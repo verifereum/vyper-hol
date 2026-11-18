@@ -10,9 +10,11 @@ Theorem runtime_data_frame_register_constructor_args:
 Proof
   Induct >> simp[compile_register_constructor_args_def] >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  rename1 `compile_register_constructor_args _ ((name,_,_,_,_) :: _) _ _` >>
   simp[compile_register_constructor_args_def] >>
-  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
-  Cases_on `var_location_memory_size x` >> simp[comp_ignore_bind_def] >>
+  Cases_on `FLOOKUP cenv.ce_vars name` >> simp[] >>
+  rename1 `FLOOKUP cenv.ce_vars name = SOME loc` >>
+  Cases_on `var_location_memory_size loc` >> simp[comp_ignore_bind_def] >>
   rpt (match_mp_tac runtime_data_frame_bind >> conj_tac >- simp[] >>
        gen_tac >> BETA_TAC) >>
   simp[runtime_data_frame_decode_args, runtime_data_frame_abi_decode_to_buf]

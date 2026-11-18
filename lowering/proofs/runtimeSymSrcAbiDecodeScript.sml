@@ -204,14 +204,14 @@ Resume runtime_sym_abi_decode_mutual[loop]:
   drule_all runtime_sym_jump >> strip_tac >>
   rename1 `new_block hdr_lbl jumped = (bu,blocked)` >>
   `EVERY runtime_sym_inst (state_insts blocked)` by
-    metis_tac[runtimeSymSrcEmissionProbeTheory.runtime_sym_new_block, pairTheory.SND] >>
+    metis_tac[runtimeSymSrcBlockEmissionTheory.runtime_sym_new_block, pairTheory.SND] >>
   rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
   drule_all runtime_sym_abi_dec_addr >> strip_tac >>
   ntac 3 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
   drule_all runtime_sym_jnz >> strip_tac >>
   rename1 `new_block body_lbl bs = (bu2,body_state)` >>
   `EVERY runtime_sym_inst (state_insts body_state)` by
-    metis_tac[runtimeSymSrcEmissionProbeTheory.runtime_sym_new_block, pairTheory.SND] >>
+    metis_tac[runtimeSymSrcBlockEmissionTheory.runtime_sym_new_block, pairTheory.SND] >>
   ntac 4 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
   rename1 `(if dec_info_needs_offset ei then _ else _) nav_s = (actual_src,nav_t)` >>
   `EVERY runtime_sym_inst (state_insts nav_t) /\ ~is_label_operand actual_src` by
@@ -223,7 +223,7 @@ Resume runtime_sym_abi_decode_mutual[loop]:
   rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
   rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def] >> strip_tac >>
   drule_all runtime_sym_jump >> strip_tac >>
-  metis_tac[runtimeSymSrcEmissionProbeTheory.runtime_sym_new_block, pairTheory.SND]
+  metis_tac[runtimeSymSrcBlockEmissionTheory.runtime_sym_new_block, pairTheory.SND]
 QED
 Finalise runtime_sym_abi_decode_mutual
 

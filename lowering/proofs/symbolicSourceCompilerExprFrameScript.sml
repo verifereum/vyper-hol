@@ -224,7 +224,11 @@ Theorem symbolic_frame_array_membership_loop:
   symbolic_frame R (compile_array_membership_loop n arr len sz off loader bd isin)
 Proof
   strip_tac >> Cases_on `bd` >> Cases_on `off > 0` >> Cases_on `isin` >>
-  simp[compile_array_membership_loop_def] >> frame_tac
+  simp[compile_array_membership_loop_def] >>
+  rpt (FIRST [irule symbolic_frame_ignore_bind >> conj_tac,
+              irule symbolic_frame_bind >> conj_tac,
+              gen_tac,
+              CHANGED_TAC (asm_simp_tac bool_ss [symbolic_frame_return])])
 QED
 
 Theorem symbolic_frame_var_array_membership:
@@ -267,4 +271,57 @@ Theorem symbolic_frame_extcodesize_check[simp]:
 Proof
   strip_tac >>
   simp[compile_extcodesize_check_def] >> frame_tac
+QED
+
+Theorem symbolic_frame_ext_call_args:
+  (!e ty. MEM e es ==> symbolic_frame R (cfn cenv ty e)) /\
+  (!copy vv. symbolic_frame R (compile_snapshot_vv cenv copy vv)) ==>
+  symbolic_frame R (compile_ext_call_args cfn cenv kw_es tys es)
+Proof
+  qid_spec_tac `tys` >> Induct_on `es` >>
+  simp[compile_ext_call_args_def] >>
+  gen_tac >> Cases_on `tys` >> simp[compile_ext_call_args_def] >>
+  strip_tac >>
+  rpt (match_mp_tac symbolic_frame_bind >> conj_tac
+       >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+QED
+
+Theorem symbolic_frame_store_abi_tuple:
+  (!op args. symbolic_frame R (emit_op op args)) /\
+  (!op args. symbolic_frame R (emit_void op args)) /\
+  (!dst src n. symbolic_frame R (compile_copy_memory dst src n)) ==>
+  !vs buf off. symbolic_frame R (compile_store_abi_tuple cenv buf off vs)
+Proof
+  strip_tac >> Induct >> simp[compile_store_abi_tuple_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[compile_store_abi_tuple_def, comp_ignore_bind_def] >>
+  match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >>
+  gen_tac >> BETA_TAC >> match_mp_tac symbolic_frame_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[]) >> simp[]
+QED
+
+Theorem symbolic_frame_materialize_vv:
+  (!n. symbolic_frame R (compile_alloc_buffer n)) /\
+  (!vv. symbolic_frame R (unwrap_value cenv vv)) /\
+  (!v dst ty sty. symbolic_frame R (compile_store_memory cenv v dst ty sty)) ==>
+  symbolic_frame R (compile_materialize_vv cenv ty vv)
+Proof
+  simp[compile_materialize_vv_def, comp_ignore_bind_def]
+QED
+
+Theorem symbolic_frame_ifexp_arm:
+  (!n. symbolic_frame R (compile_alloc_buffer n)) /\
+  (!vv. symbolic_frame R (unwrap_value cenv vv)) /\
+  (!v dst ty sty. symbolic_frame R (compile_store_memory cenv v dst ty sty)) ==>
+  symbolic_frame R (compile_ifexp_arm cenv rt at vv)
+Proof
+  strip_tac >> rw[compile_ifexp_arm_def, comp_ignore_bind_def] >> simp[]
+QED
+
+Theorem symbolic_frame_snapshot_vv:
+  (!vv. symbolic_frame R (unwrap_value cenv vv)) /\
+  (!ty vv. symbolic_frame R (compile_materialize_vv cenv ty vv)) ==>
+  symbolic_frame R (compile_snapshot_vv cenv copy vv)
+Proof
+  strip_tac >> rw[compile_snapshot_vv_def] >> simp[]
 QED

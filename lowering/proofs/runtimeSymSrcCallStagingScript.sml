@@ -2,7 +2,7 @@ Theory runtimeSymSrcCallStaging
 Ancestors
   runtimeSymSrcContextComplete runtimeSymSrcContext runtimeSymSrcContextTypedBase
   runtimeSymSrcContextCopy
-  runtimeSymSrcEmission runtimeSymSrcEmissionProbe runtimeSymSrcInterfaces exprLowering builtinSimple
+  runtimeSymSrcEmission runtimeSymSrcBlockEmission runtimeSymSrcInterfaces exprLowering builtinSimple
   compileEnv emitHelper loweringShapeDefs venomInst list stackPlanTypes
   supportedExprs supportedExprTraverse
 

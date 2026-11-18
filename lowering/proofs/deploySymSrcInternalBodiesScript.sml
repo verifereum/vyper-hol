@@ -1,6 +1,6 @@
 Theory deploySymSrcInternalBodies
 Ancestors
-  deploySymSrcHistory runtimeSymSrcEmissionProbe runtimeSymSrcPackageTransport
+  deploySymSrcHistory runtimeSymSrcBlockEmission runtimeSymSrcPackageTransport
   runtimeSymSrcInstructions compileVyper moduleLowering compileEnv loweringShapeDefs list
 
 Theorem deploy_sym_internal_fn_bodies_cond:

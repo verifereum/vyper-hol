@@ -3,7 +3,7 @@ Ancestors
   runtimeSymSrcPackageTransport runtimeSymSrcModuleArgs runtimeSymSrcModuleBodies runtimeSymSrcModuleDispatch
   runtimeSymSrcInternalFunction runtimeSymSrcFunctionLists
   runtimeSymSrcGetterSource runtimeSymSrcGetterReturn runtimeSymSrcAbiEncode
-  runtimeSymSrcInterfaces runtimeSymSrcEmissionProbe
+  runtimeSymSrcInterfaces runtimeSymSrcBlockEmission
   compileVyper moduleLowering compileEnv loweringShapeDefs list
 
 Theorem runtime_sym_external_package_body:

@@ -1,5 +1,6 @@
 Theory runtimeSymSrcDataExprCallbacks
 Ancestors
+  symbolicSourceCompilerExprFrame
   runtimeSymSrcDataFrame exprLowering compileEnv
 
 Theorem runtime_data_frame_lower_value:
@@ -94,16 +95,16 @@ Proof
        >- simp[runtime_data_frame_lower_value] >> gen_tac >> BETA_TAC) >> simp[]
 QED
 
+fun apply_symbolic_frame theorem =
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data` (Q.GEN `R` theorem)))
+
 Theorem runtime_data_frame_store_abi_tuple:
   (!dst src n. runtime_data_frame (compile_copy_memory dst src n)) ==>
   !vs buf off. runtime_data_frame (compile_store_abi_tuple cenv buf off vs)
 Proof
-  strip_tac >> Induct >> simp[compile_store_abi_tuple_def] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  simp[compile_store_abi_tuple_def, comp_ignore_bind_def] >>
-  match_mp_tac runtime_data_frame_bind >> conj_tac >- simp[] >>
-  gen_tac >> BETA_TAC >> match_mp_tac runtime_data_frame_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[]) >> simp[]
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_store_abi_tuple >> simp[]
 QED
 
 Theorem runtime_data_frame_materialize_vv:
@@ -112,7 +113,8 @@ Theorem runtime_data_frame_materialize_vv:
   (!v dst ty sty. runtime_data_frame (compile_store_memory cenv v dst ty sty)) ==>
   runtime_data_frame (compile_materialize_vv cenv ty vv)
 Proof
-  simp[compile_materialize_vv_def, comp_ignore_bind_def]
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_materialize_vv >> simp[]
 QED
 
 Theorem runtime_data_frame_ifexp_arm:
@@ -121,7 +123,8 @@ Theorem runtime_data_frame_ifexp_arm:
   (!v dst ty sty. runtime_data_frame (compile_store_memory cenv v dst ty sty)) ==>
   runtime_data_frame (compile_ifexp_arm cenv rt at vv)
 Proof
-  strip_tac >> rw[compile_ifexp_arm_def, comp_ignore_bind_def] >> simp[]
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_ifexp_arm >> simp[]
 QED
 
 Theorem runtime_data_frame_snapshot_vv:
@@ -129,7 +132,8 @@ Theorem runtime_data_frame_snapshot_vv:
   (!ty vv. runtime_data_frame (compile_materialize_vv cenv ty vv)) ==>
   runtime_data_frame (compile_snapshot_vv cenv copy vv)
 Proof
-  strip_tac >> rw[compile_snapshot_vv_def] >> simp[]
+  strip_tac >>
+  apply_symbolic_frame symbolic_frame_snapshot_vv >> simp[]
 QED
 
 Theorem runtime_data_frame_struct_lit:

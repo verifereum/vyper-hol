@@ -1,6 +1,6 @@
 Theory runtimeSymSrcExternalPrimitive
 Ancestors
-  runtimeSymSrcEmissionProbe
+  runtimeSymSrcBlockEmission
   runtimeSymSrcCallStaging runtimeSymSrcContextComplete runtimeSymSrcContextCopy
   runtimeSymSrcContext
   runtimeSymSrcEmission runtimeSymSrcInterfaces exprLowering compileEnv emitHelper

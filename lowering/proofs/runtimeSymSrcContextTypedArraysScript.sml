@@ -1,6 +1,6 @@
 Theory runtimeSymSrcContextTypedArrays
 Ancestors
-  runtimeSymSrcEmissionProbe
+  runtimeSymSrcBlockEmission
   runtimeSymSrcContextTypedBase runtimeSymSrcContextCopy runtimeSymSrcContext
   runtimeSymSrcEmission context compileEnv emitHelper loweringShapeDefs
   venomInst stackPlanTypes list
