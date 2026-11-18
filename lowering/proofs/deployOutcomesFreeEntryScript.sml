@@ -9,17 +9,6 @@ Libs
   monadsyntax
 
 
-Theorem package_internal_blocks_entry_every:
-  !ds blocks entry fs P.
-    package_internal_blocks ds blocks = SOME (entry,fs) /\
-    EVERY P blocks ==> EVERY P entry
-Proof
-  Cases_on `ds` >> simp[package_internal_blocks_def] >>
-  rename1 `d::rest` >> PairCases_on `d` >>
-  simp[package_internal_blocks_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  drule loweringPackageInstsTheory.split_blocks_at_partition >> strip_tac >> gvs[]
-QED
-
 Theorem extract_context_entry_every:
   extract_context_with_internals label internals st = SOME (ctx,data) /\
   (!entry fs.

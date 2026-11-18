@@ -1,7 +1,7 @@
 Theory deployOutcomesFreeStmtAssignCases
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeStmtControl stmtLowering compileEnv list
+  stmtLowering compileEnv list
   ctorCallFreeStmtStorage
 
 Theorem outcomes_free_stmt_annassign:

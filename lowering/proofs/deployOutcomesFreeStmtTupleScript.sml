@@ -2,7 +2,7 @@ Theory deployOutcomesFreeStmtTuple
 Ancestors
   ctorCallFreeRules
   deployOutcomesFreeTyping
-  deployOutcomesFreeStmtValues stmtLowering supportedStmtTraverse compileEnv list
+  stmtLowering supportedStmtTraverse compileEnv list
 
 Theorem outcomes_free_compile_tuple_store_all:
   P INVALID /\

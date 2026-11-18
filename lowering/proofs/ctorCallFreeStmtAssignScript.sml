@@ -6,6 +6,31 @@ Ancestors
   ctorCallFreeStmtStorage ctorCallFreeStmtTargets supportedExprTraverse
   supportedStmtTraverse e2eDeployDefs loweringShapeProps
 
+Theorem outcomes_free_dynarray_append:
+  (!opc. MEM opc [MLOAD; SLOAD; TLOAD; ILOAD; DLOAD; CALLDATALOAD;
+     MSTORE; SSTORE; TSTORE; ISTORE; INVALID; LT; ASSERT; ADD; MUL] ==> P opc) /\
+  (!ce a b ty sty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_store_memory ce a b ty sty st)))) /\
+  (!ce src slot ty tr st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_store_slots ce src slot ty tr st)))) ==>
+  !ce a b ws sz ty sty cap prim loc s.
+    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_dynarray_append ce a b ws sz ty sty cap prim loc s)))
+Proof
+  strip_tac >> rpt gen_tac >> qid_spec_tac `s` >>
+  simp[compile_dynarray_append_def] >>
+  rpt (FIRST [ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, IF_CASES_TAC >> qid_spec_tac `s`,
+    CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+        every_state_insts_return,
+      outcomes_free_ptr_load, outcomes_free_ptr_store, outcomes_free_imm_store_words]),
+    first_assum irule])
+QED
+
 Theorem opcode_every_dynarray_append[local]:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -15,16 +40,9 @@ Theorem opcode_every_dynarray_append[local]:
     (state_insts (SND (compile_dynarray_append ce base_op value ws sz dt sy cap prim loc st)))
   )
 Proof
-  strip_tac >>
-  simp[compile_dynarray_append_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, IF_CASES_TAC >> qid_spec_tac `st`,
-    CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-      (UNDISCH opcode_every_ptr_load), (UNDISCH opcode_every_ptr_store),
-      (UNDISCH opcode_every_imm_store_words),
-      (UNDISCH opcode_every_store_memory), (UNDISCH opcode_every_word_copy_loop), every_state_insts_return,
-      cj 1 (UNDISCH opcode_every_store_slots)])])
+  rpt strip_tac >> irule outcomes_free_dynarray_append >>
+  simp[DISJ_IMP_THM, FORALL_AND_THM, UNDISCH opcode_every_store_memory,
+    cj 1 (UNDISCH opcode_every_store_slots)]
 QED
 
 Theorem opcode_every_tuple_unpack_from_expr[local]:

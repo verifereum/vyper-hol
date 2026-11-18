@@ -27,8 +27,8 @@ Theorem outcomes_eval_phis:
 Proof
   Induct >> simp[eval_phis_def, map_result_state_def] >> rpt gen_tac >>
   Cases_on `h.inst_opcode = PHI` >> simp[] >>
-  Cases_on `eval_one_phi s h` >> simp[map_result_state_def] >>
-  PairCases_on `x` >> simp[] >>
+  namedCases_on `eval_one_phi s h` ["", "p"] >> simp[map_result_state_def] >>
+  PairCases_on `p` >> simp[] >>
   Cases_on `eval_phis s insts` >> simp[map_result_state_def]
 QED
 

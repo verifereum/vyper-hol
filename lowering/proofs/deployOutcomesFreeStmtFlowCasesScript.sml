@@ -1,7 +1,7 @@
 Theory deployOutcomesFreeStmtFlowCases
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeStmtControl stmtLowering compileEnv emitHelper venomInst
+  stmtLowering compileEnv emitHelper venomInst
   ctorCallFreeStmtStorage
 
 Theorem outcomes_free_emit_jmp_if_not_terminated:

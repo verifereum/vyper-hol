@@ -1,7 +1,8 @@
 Theory deployOutcomesFreeAbiGenerators
 Ancestors
   ctorCallFreeRules
-  deployOutcomesFreeGenerators deployOutcomesFreeArgs
+  deployOutcomesFreeGenerators ctorCallFreeABIEncode ctorCallFreeABIDecode
+  ctorCallFreeMemory
   context emitHelper builtinAbi builtinBytes
   builtinSimple exprLowering abiEncoder list pair
   ctorCallFreeValues
@@ -50,76 +51,9 @@ Theorem outcomes_free_extract32_load:
     (state_insts (SND (compile_extract32_load len data_op off s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_extract32_load_def, compile_assert_slice_bounds_def] >> abi_preserve_tac
-QED
-
-Theorem outcomes_free_abi_encode_static:
-  P MLOAD /\ P MSTORE /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_abi_encode_static dst src s)))
-Proof
-  strip_tac >> simp[compile_abi_encode_static_def] >> abi_preserve_tac
-QED
-
-Theorem outcomes_free_abi_encode_static_info:
-  P MLOAD /\ P MSTORE /\ P MCOPY /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_abi_encode_static_info dst src info s)))
-Proof
-  strip_tac >> Cases_on `info` >>
-  simp[compile_abi_encode_static_info_def, outcomes_free_abi_encode_static] >>
-  abi_preserve_tac
-QED
-
-Theorem outcomes_free_abi_encode_dyn_static_loop:
-  (!opc. MEM opc [ALLOCA; MLOAD; MSTORE; MCOPY; JMP; LT; ISZERO; JNZ;
-    ADD; MUL] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_abi_encode_dyn_static_loop dst src info asz msz len s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_abi_encode_dyn_static_loop_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_abi_encode_static_info]),
-    CHANGED_TAC abi_preserve_tac])
-QED
-
-val abi_encode_case_tac =
-  simp[Once compile_abi_encode_child_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_abi_encode_static,
-    outcomes_free_abi_encode_dyn_static_loop, DISJ_IMP_THM, FORALL_AND_THM]),
-    CHANGED_TAC abi_preserve_tac, CHANGED_TAC (gvs[]),
-    first_x_assum irule]) >> gvs[];
-
-Theorem outcomes_free_abi_encode:
-  (!dst src info dyn off dp s.
-    (!opc. MEM opc [ALLOCA; MLOAD; MSTORE; MCOPY; JMP; LT; ISZERO; JNZ;
-      ADD; MUL; AND; NOT] ==> P opc) /\
-    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_abi_encode_child dst src info dyn off dp s)))) /\
-  (!dst src info s.
-    (!opc. MEM opc [ALLOCA; MLOAD; MSTORE; MCOPY; JMP; LT; ISZERO; JNZ;
-      ADD; MUL; AND; NOT] ==> P opc) /\
-    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_abi_encode_to_buf dst src info s)))) /\
-  (!dst src elems so ho dp s.
-    (!opc. MEM opc [ALLOCA; MLOAD; MSTORE; MCOPY; JMP; LT; ISZERO; JNZ;
-      ADD; MUL; AND; NOT] ==> P opc) /\
-    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_abi_encode_complex_elems dst src elems so ho dp s)))) /\
-  (!dst src info asz msz len s.
-    (!opc. MEM opc [ALLOCA; MLOAD; MSTORE; MCOPY; JMP; LT; ISZERO; JNZ;
-      ADD; MUL; AND; NOT] ==> P opc) /\
-    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_abi_encode_dyn_loop dst src info asz msz len s))))
-Proof
-  ho_match_mp_tac compile_abi_encode_child_ind >> rpt strip_tac >>
-  fs[DISJ_IMP_THM, FORALL_AND_THM] >> abi_encode_case_tac
+  simp[compile_extract32_load_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[SRULE [DISJ_IMP_THM, FORALL_AND_THM]
+    outcomes_free_compile_assert_slice_bounds]), CHANGED_TAC abi_preserve_tac])
 QED
 
 Theorem outcomes_free_lower_abi_encode:
@@ -145,6 +79,8 @@ Theorem outcomes_free_lower_abi_decode:
     (state_insts (SND (lower_abi_decode src info lo hi sz s)))
 Proof
   strip_tac >> simp[lower_abi_decode_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[cj 1 outcomes_free_abi_decode]),
+  rpt (FIRST [CHANGED_TAC (simp[cj 1 (SRULE [DISJ_IMP_THM, FORALL_AND_THM]
+    (Q.INST [`P` |-> `\op. op <> CALL /\ op <> STATICCALL /\ op <> DELEGATECALL /\
+      op <> CREATE /\ op <> CREATE2 /\ op <> INVOKE`] outcomes_free_abi_decode))]),
     CHANGED_TAC abi_preserve_tac])
 QED

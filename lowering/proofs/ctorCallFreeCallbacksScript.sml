@@ -2,7 +2,7 @@
 Theory ctorCallFreeCallbacks
 Ancestors
   list pair compileEnv venomInst loweringShapeDefs emitHelper context exprLowering
-  ctorCallFreeRules supportedExprTraverse
+  ctorCallFreeRules supportedExprTraverse ctorCallFreeValues
 
 Theorem every_state_insts_lower_value:
   (!st. EVERY P (state_insts st) ==>
@@ -341,6 +341,19 @@ Proof
   gen_tac >> simp[every_state_insts_bind, every_state_insts_return]
 QED
 
+Theorem outcomes_free_mapping_subscript:
+  P ALLOCA /\ P MSTORE /\ P ADD /\ P SHA3 /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_mapping_subscript b k s)))
+Proof
+  strip_tac >> simp[compile_mapping_subscript_def] >>
+  rpt (FIRST [gen_tac, strip_tac,
+    CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+        outcomes_free_alloc_buffer]),
+    irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac])
+QED
+
 (* Strict subscript prerequisites; allocation remains a cross-family premise. *)
 Theorem opcode_every_mapping_subscript:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
@@ -354,11 +367,20 @@ Theorem opcode_every_mapping_subscript:
       (state_insts (SND (compile_mapping_subscript base key st)))
   )
 Proof
-  strip_tac >>
-  strip_tac >> rpt gen_tac >> qid_spec_tac `st` >> simp[compile_mapping_subscript_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void])])
+  rpt strip_tac >> irule outcomes_free_mapping_subscript >> simp[]
+QED
+
+Theorem outcomes_free_keccak256_key:
+  P ALLOCA /\ P MSTORE /\ P ADD /\ P MLOAD /\ P SHA3 /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_keccak256_key k flag s)))
+Proof
+  strip_tac >> Cases_on `flag` >> simp[compile_keccak256_key_def] >>
+  rpt (FIRST [gen_tac, strip_tac,
+    CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+        outcomes_free_alloc_buffer]),
+    irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac])
 QED
 
 Theorem opcode_every_keccak256_key:
@@ -370,10 +392,16 @@ Theorem opcode_every_keccak256_key:
       (state_insts (SND (compile_keccak256_key v F st)))
   )
 Proof
-  strip_tac >>
-  gen_tac >> simp[compile_keccak256_key_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op])])
+  rpt strip_tac >> irule outcomes_free_keccak256_key >> simp[]
+QED
+
+Theorem outcomes_free_tuple_subscript:
+  P ADD /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_tuple_subscript b n s)))
+Proof
+  simp[compile_tuple_subscript_def, opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst]
 QED
 
 Theorem opcode_every_tuple_subscript:
@@ -385,8 +413,23 @@ Theorem opcode_every_tuple_subscript:
     (state_insts (SND (compile_tuple_subscript base off st)))
   )
 Proof
-  strip_tac >>
-  simp[compile_tuple_subscript_def, opcode_every_emit_op]
+  rpt strip_tac >> irule outcomes_free_tuple_subscript >> simp[]
+QED
+
+Theorem outcomes_free_array_subscript:
+  (!b st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (loader b st)))) /\
+  P SLT /\ P LT /\ P ISZERO /\ P OR /\ P ASSERT /\ P ADD /\ P MUL /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_array_subscript b i d n ws sz sg loader s)))
+Proof
+  strip_tac >> Cases_on `d` >> Cases_on `sg` >>
+  simp[compile_array_subscript_def] >>
+  rpt (FIRST [gen_tac, strip_tac,
+    CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst,
+        every_state_insts_return]),
+    irule ctorCallFreeRulesTheory.every_state_insts_bind, irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac])
 QED
 
 Theorem opcode_every_array_subscript:
@@ -402,10 +445,5 @@ Theorem opcode_every_array_subscript:
       (state_insts (SND (compile_array_subscript base idx dyn count ws sz signed loader st)))
   )
 Proof
-  strip_tac >>
-  rpt gen_tac >> strip_tac >> Cases_on `dyn` >> Cases_on `signed` >> simp[compile_array_subscript_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-      every_state_insts_return])])
+  rpt strip_tac >> irule outcomes_free_array_subscript >> simp[]
 QED

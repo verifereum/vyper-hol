@@ -3,8 +3,8 @@ Ancestors
   ctorCallFreeRules deployOutcomesFreeGenerators
   exprLowering exprCallBounds e2eDeployDefs supportedExprTraverse vyperTypeSystem
   deployOutcomesFreeExprBody
-  deployOutcomesFreeGeneralBuiltinBody deployOutcomesFreeBodyGenerators
-  deployOutcomesFreeExprGenerators deployOutcomesFreeBuiltinGenerators
+  deployOutcomesFreeGeneralBuiltinBody ctorCallFreeCallbacks
+  deployOutcomesFreeBuiltinGenerators
   deployOutcomesFreeAggregateGenerators deployOutcomesFreeAbiGenerators
   deployOutcomesFreeTypeBuiltinBody deployOutcomesFreeSelectors compileEnv
   ctorCallFreeOps ctorCallFreeValues

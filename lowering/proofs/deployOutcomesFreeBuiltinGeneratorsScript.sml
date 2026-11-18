@@ -4,7 +4,7 @@ Ancestors
   deployOutcomesFreeGenerators builtinMisc builtinStrings builtinHashing
   builtinBytes builtinMath builtinSimple exprLowering context emitHelper
   compileEnv venomInst list pair
-  ctorCallFreeOps ctorCallFreeValues
+  ctorCallFreeOps ctorCallFreeValues ctorCallFreeMemory
 
 (* The implementation boundary is monadic preservation of the instruction
    inventory. This tactic only decomposes binds and their finite branches. *)
@@ -13,7 +13,8 @@ val builtin_preserve_tac =
       opcode_every_emit_void, opcode_every_emit_inst,
     outcomes_free_alloc_buffer, every_state_insts_fresh_id, every_state_insts_fresh_var,
         every_state_insts_fresh_label, every_state_insts_new_block,
-    outcomes_free_ptr_load]),
+    outcomes_free_ptr_load,
+    SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_compile_assert_slice_bounds]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
     irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC]);
 
@@ -33,15 +34,6 @@ Theorem outcomes_free_compile_builtin_len:
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   simp[compile_builtin_len_def, outcomes_free_ptr_load]
-QED
-
-Theorem outcomes_free_compile_assert_slice_bounds:
-  (!opc. MEM opc [ADD; LT; GT; OR; ISZERO; ASSERT] ==> P opc) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_assert_slice_bounds a b c s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_assert_slice_bounds_def] >> builtin_preserve_tac
 QED
 
 Theorem outcomes_free_compile_bytestring_src:
@@ -64,7 +56,7 @@ Theorem outcomes_free_compile_slice_data:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_slice_data a b c d sz s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_slice_data_def, compile_assert_slice_bounds_def] >> builtin_preserve_tac
+  simp[compile_slice_data_def] >> builtin_preserve_tac
 QED
 
 Theorem outcomes_free_compile_slice_calldata:
@@ -73,7 +65,7 @@ Theorem outcomes_free_compile_slice_calldata:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_slice_calldata a b sz s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_slice_calldata_def, compile_slice_out_buf_def, compile_assert_slice_bounds_def] >>
+  simp[compile_slice_calldata_def, compile_slice_out_buf_def] >>
   builtin_preserve_tac >> pairarg_tac >> gvs[] >> builtin_preserve_tac
 QED
 
@@ -83,7 +75,7 @@ Theorem outcomes_free_compile_slice_code:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_slice_code a b sz s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_slice_code_def, compile_slice_out_buf_def, compile_assert_slice_bounds_def] >>
+  simp[compile_slice_code_def, compile_slice_out_buf_def] >>
   builtin_preserve_tac >> pairarg_tac >> gvs[] >> builtin_preserve_tac
 QED
 
@@ -93,8 +85,7 @@ Theorem outcomes_free_compile_slice_extcode:
   EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_slice_extcode a b c sz s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_slice_extcode_def, compile_assert_slice_bounds_def,
-    compile_slice_out_buf_def] >> builtin_preserve_tac >>
+  simp[compile_slice_extcode_def, compile_slice_out_buf_def] >> builtin_preserve_tac >>
   pairarg_tac >> gvs[] >> builtin_preserve_tac
 QED
 

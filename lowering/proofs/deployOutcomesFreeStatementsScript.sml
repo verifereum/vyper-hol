@@ -2,8 +2,7 @@ Theory deployOutcomesFreeStatements
 Ancestors
   ctorCallFreeRules
   deployOutcomesFreeCustomErrors
-  deployOutcomesFreeStmtLog deployOutcomesFreeStmtValues
-  deployOutcomesFreeStmtControl deployOutcomesFreeTyping
+  ctorCallFreeStmtLogs ctorCallFreeStmtReturns deployOutcomesFreeTyping
   ctorCallFreeStmtStorage deployOutcomesFreeStmtTuple
   deployOutcomesFreeStmtAssignCases deployOutcomesFreeStmtExitCases
   deployOutcomesFreeStmtFlowCases
@@ -22,10 +21,7 @@ Theorem outcomes_free_compile_reason_message:
     well_typed_expr env e /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_reason_message ce e s)))
 Proof
-  strip_tac >> gen_tac >> recInduct compile_reason_message_ind >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  simp[compile_reason_message_def]
-  >- (irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[every_state_insts_return]) >>
+  rpt strip_tac >> irule every_state_insts_reason_message >> simp[] >>
   metis_tac[]
 QED
 
@@ -43,15 +39,11 @@ Theorem outcomes_free_compile_log_eval_all:
     EVERY (well_typed_expr env) es /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_log_eval_all ce es s)))
 Proof
-  strip_tac >> Induct >> simp[compile_log_eval_all_def, every_state_insts_return,
-    supported_expr_exists_def] >> rpt strip_tac >>
-  irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac
-  >- (rpt strip_tac >> simp[lower_value_def] >>
-      irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >> BETA_TAC >>
-  irule ctorCallFreeRulesTheory.every_state_insts_bind >> reverse conj_tac >- simp[] >>
-  rpt gen_tac >> strip_tac >> BETA_TAC >>
-  irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[every_state_insts_return] >> metis_tac[]
+  rpt strip_tac >> irule every_state_insts_log_eval_all >> fs[] >>
+  simp[Once listTheory.EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `!env ce ty e s. _` irule >>
+  fs[supported_exprs_exists_every, listTheory.EXISTS_MEM,
+    listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
 (* The expression and target certificates are deliberately typed and quantify

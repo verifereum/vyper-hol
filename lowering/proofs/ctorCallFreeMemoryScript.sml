@@ -134,6 +134,17 @@ Proof
       opcode_every_emit_op, opcode_every_emit_void, every_state_insts_return])])
 QED
 
+Theorem outcomes_free_compile_assert_slice_bounds:
+  (!opc. MEM opc [ADD; LT; GT; OR; ISZERO; ASSERT] ==> P opc) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_assert_slice_bounds a b c s)))
+Proof
+  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[compile_assert_slice_bounds_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void]),
+    gen_tac, strip_tac, irule every_state_insts_bind])
+QED
+
 Theorem opcode_every_assert_slice_bounds[local]:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -143,10 +154,8 @@ Theorem opcode_every_assert_slice_bounds[local]:
     (state_insts (SND (compile_assert_slice_bounds start len src_len st)))
   )
 Proof
-  strip_tac >>
-  qid_spec_tac `st` >> simp[compile_assert_slice_bounds_def] >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void])])
+  rpt strip_tac >> irule outcomes_free_compile_assert_slice_bounds >>
+  simp[DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
 Theorem opcode_every_bytestring_src:

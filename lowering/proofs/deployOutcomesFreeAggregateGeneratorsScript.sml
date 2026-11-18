@@ -4,7 +4,7 @@ Ancestors
   deployOutcomesFreeGenerators exprLowering context emitHelper compileEnv
   list pair venomInst vyperAST deployOutcomesFreeTyping
   supportedExprTraverse vyperTypeSystem
-  ctorCallFreeValues
+  ctorCallFreeValues ctorCallFreeCallbacks
 
 Theorem outcomes_free_make_tuple:
   !es tys buf off s.
@@ -85,7 +85,8 @@ Proof
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   simp[compile_multi_exprs_def, every_state_insts_return] >>
   rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_lower_value_opcodes]),
+      every_state_insts_lower_value,
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind, conj_tac,
     first_assum irule]) >> simp[]
 QED
@@ -148,7 +149,8 @@ Proof
   PairCases_on `h'` >> simp[compile_concat_def] >>
   rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
       opcode_every_emit_inst,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_lower_value_opcodes]),
+      every_state_insts_lower_value,
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value]),
     gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
     irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC, first_assum irule]) >>
   simp[]
@@ -173,7 +175,8 @@ Proof
     gen_tac, strip_tac]) >>
   `EVERY (\i. P i.inst_opcode)
      (state_insts (SND (lower_value f ce (BaseT AddressT) e s)))` by
-    (irule outcomes_free_lower_value_opcodes >> simp[DISJ_IMP_THM, FORALL_AND_THM]) >>
+    (irule every_state_insts_lower_value >>
+     simp[SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value]) >>
   gvs[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst] >>
   rpt (pairarg_tac >> gvs[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]) >>
   metis_tac[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst, SND]

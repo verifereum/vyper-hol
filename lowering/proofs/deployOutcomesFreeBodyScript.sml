@@ -3,9 +3,9 @@ Ancestors
   ctorCallFreeRules
   deployOutcomesFreeExpressions deployOutcomesFreeStatements
   deployOutcomesFreeConstructorTyping deployOutcomesFreeGenerators
-  deployOutcomesFreeExprGenerators deployOutcomesFreeStmtLog
-  deployOutcomesFreeStmtValues deployOutcomesFreeAbiGenerators
-  supportedStmtTraverse deployOutcomesFreeBodyGenerators
+  ctorCallFreeCallbacks ctorCallFreeStmtLogs
+  ctorCallFreeStmtReturns deployOutcomesFreeAbiGenerators
+  supportedStmtTraverse ctorCallFreeStmtAssign ctorCallFreeABIEncode
   exprLowering ctorCallFreeStmtStorage
   ctorCallFreeOps ctorCallFreeValues loweringFunctionOpcodes
 
