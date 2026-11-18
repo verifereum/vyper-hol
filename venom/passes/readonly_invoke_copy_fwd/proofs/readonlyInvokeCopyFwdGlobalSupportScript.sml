@@ -132,7 +132,7 @@ Theorem ricf_global_support_actual_next:
   ricf_global_support_origins vs C ctx0 a fn U stk
     (occurrence_sites_step a B inst s') E
 Proof
-  strip_tac >> drule occ_frame_reachable_annotation >> strip_tac >>
+  strip_tac >> drule occ_frame_reachable_annotation_static >> strip_tac >>
   fs[occurrence_annotation_ok_def] >>
   metis_tac[occ_frame_reachable_next, ricf_global_support_next]
 QED
@@ -170,7 +170,7 @@ Theorem ricf_global_support_located_activate:
     ricf_global_support_origins vs C ctx0 a fn U stk B (E UNION {p.rpe_dst})
 Proof
   strip_tac >> drule_all ricf_located_event_actual_origin >> strip_tac >>
-  drule occ_frame_reachable_annotation >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> strip_tac >>
   `occurrence_allocas_ok B p.rpe_owner p.rpe_before` by
     fs[occurrence_annotation_ok_def] >>
   drule_all ricf_history_origin_endpoints >> strip_tac >>

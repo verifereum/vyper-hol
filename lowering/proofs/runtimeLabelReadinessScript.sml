@@ -156,8 +156,10 @@ Proof
   rpt gen_tac >> Cases_on `f` >> simp[package_fallback_fn_def,
     set_fallback_package_target_def, rb_fallback_ok_def] >> PairCases_on `x` >>
   simp[package_fallback_fn_def, set_fallback_package_target_def,
-       rb_fallback_ok_def, rb_build_compile_env] >>
-  simp[update_cenv_nonreentrant_def, rb_build_compile_env_ctor]
+       rb_fallback_ok_def, rb_env_updates] >>
+  Cases_on `x6 = NoneT` >> simp[rb_build_compile_env] >>
+  simp[update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
+       rb_build_compile_env_ctor]
 QED
 
 Theorem rb_build_selectors[local]:

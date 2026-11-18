@@ -62,16 +62,24 @@ Proof
 QED
 
 Theorem entry_code_range_loop_callback[local]:
-  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et start_e)) /\
-  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et end_e)) /\
-  (!ce' lc' rt'. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et start_e)) /\
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et end_e)) /\
+  (!ce' lc' rt'.
+     ce'.ce_func_defaults = ce.ce_func_defaults ==> entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
      (compile_stmts ce' lc' rt' stmts)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (For id fty (Range start_e end_e) bound stmts))
 Proof
   strip_tac >> simp[Once compile_stmt_def, comp_ignore_bind_def] >>
+  ntac 2 (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_lower_value] >> rpt gen_tac >> BETA_TAC) >>
+  match_mp_tac (Q.ISPEC `\env. env.ce_func_defaults = ce.ce_func_defaults`
+    (Q.GEN `Q` entry_code_bind_result)) >>
+  conj_tac >- simp[declare_local_defaults] >>
+  conj_tac >- simp[entry_code_declare_local] >>
+  gen_tac >> strip_tac >> fs[] >> BETA_TAC >>
   rpt (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_lower_value, entry_code_declare_local,
             entry_code_emit_local_alloca, entry_code_fresh_label,
@@ -109,9 +117,10 @@ Proof
 QED
 
 Theorem entry_code_array_loop_callback[local]:
-  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et arr_e)) /\
-  (!ce' lc' rt'. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et arr_e)) /\
+  (!ce' lc' rt'.
+     ce'.ce_func_defaults = ce.ce_func_defaults ==> entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
      (compile_stmts ce' lc' rt' stmts)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (For id fty (Array arr_e) bound stmts))
@@ -122,6 +131,11 @@ Proof
   irule entry_code_bind >> reverse conj_tac
   >- (IF_CASES_TAC >> simp[entry_code_ptr_load, entry_code_return]) >>
   rpt gen_tac >> BETA_TAC >>
+  match_mp_tac (Q.ISPEC `\env. env.ce_func_defaults = ce.ce_func_defaults`
+    (Q.GEN `Q` entry_code_bind_result)) >>
+  conj_tac >- simp[declare_local_defaults] >>
+  conj_tac >- simp[entry_code_declare_local] >>
+  gen_tac >> strip_tac >> fs[] >> BETA_TAC >>
   rpt (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_declare_local, entry_code_emit_local_alloca,
             entry_code_fresh_label, entry_code_fresh_var,
@@ -153,8 +167,10 @@ Proof
 QED
 
 Theorem entry_code_supported_for:
+  EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults /\
   supported_iterator tops fty iter bound /\
-  (!ce' lc' rt'. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+  (!ce' lc' rt'.
+     ce'.ce_func_defaults = ce.ce_func_defaults ==> entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
      (compile_stmts ce' lc' rt' stmts)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (For id fty iter bound stmts))
@@ -165,7 +181,7 @@ Proof
       gvs[supported_iterator_def]
       >~ [`entry_preserves_code _ (compile_expr _ _ (Literal _ _))`] >- (
         namedCases_on `e0` ["", "", "", "", "ann2 lit2", "", "", "", "", "", "", ""] >> gvs[]
-        >~ [`(!xce et. entry_preserves_code _ (compile_expr xce et (Literal _ _))) /\ (!xce et. entry_preserves_code _ (compile_expr xce et (Literal _ _)))`] >- (
+        >~ [`(!et. entry_preserves_code _ (compile_expr ce et (Literal _ _))) /\ (!et. entry_preserves_code _ (compile_expr ce et (Literal _ _)))`] >- (
           Cases_on `lit` >> Cases_on `lit2` >> gvs[] >>
           metis_tac[entry_code_supported_pure_expr, entry_code_literal_expression]) >>
         metis_tac[entry_code_supported_pure_expr]) >>

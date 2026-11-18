@@ -53,30 +53,6 @@ Proof
   simp[below_frontier_no_ranges, inst_dload_in_section_def]
 QED
 
-Theorem append_storage_header_agree_mem:
-  stmt_state_rel H ctx func cenv cx es s /\
-  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
-  declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) ==>
-  (if tr then tload slot s else sload slot s) =
-    lookup_storage slot (get_storage cx es tr)
-Proof
-  strip_tac >>
-  `storage_rel H cx.txn.target es s /\ transient_rel H cx.txn.target es s` by
-    fs[stmt_state_rel_def, state_rel_def] >>
-  `storage_read_live H tr (get_storage cx es tr) slot
-     (ArrayTV tv (Dynamic cap))` by
-    metis_tac[observed_storage_region_read_live] >>
-  `storage_agree (storage_dead H tr (get_storage cx es tr))
-      (get_storage cx es tr)
-      (if tr then contract_transient s else contract_storage s)` by
-    (Cases_on `tr` >>
-     gvs[storage_rel_def, transient_rel_def, get_storage_def, lookup_account_def]) >>
-  `0 < type_slot_size (ArrayTV tv (Dynamic cap))` by
-    simp[type_slot_size_def] >>
-  drule_all storage_agree_read_head >>
-  Cases_on `tr` >> simp[tload_def, sload_def]
-QED
-
 Theorem append_storage_place_preserves_gas:
   append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v st =
     (res,st') ==> st'.gas_obs = st.gas_obs

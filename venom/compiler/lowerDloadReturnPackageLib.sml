@@ -80,6 +80,23 @@ val ld_covered_ambient = ``\lo C C' vs0 Sigma names fn fn'.
   ^ld_probe_ambient lo C C' vs0 Sigma names fn fn' /\
   (!f. MEM f C.ctx_functions ==> ir_supply_covers_fn (Sigma f.fn_name) f)``;
 
+val ld_probe_ambient_static = ``\lo C C' vs0 Sigma names fn fn'.
+  o1_ctx_shape C /\
+  (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+   code_layout_valid vs0) /\
+  reserved_intervals_wf C.ctx_global_reserved /\ fixed_region_reserved lo C /\
+  ptr_discipline lo C vs0 /\ fmp_free_ctx C /\
+  mem_inv raw_mem_ok C vs0 /\ mem_inv dload_offset_ok C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\ callee_first names C.ctx_functions /\
+  (!f. MEM f C.ctx_functions ==>
+    lookup_function f.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma f.fn_name) f))) /\
+  fn' = FST (lower_dload_function_supply (Sigma fn.fn_name) fn)``;
+
+val ld_covered_ambient_static = ``\lo C C' vs0 Sigma names fn fn'.
+  ^ld_probe_ambient_static lo C C' vs0 Sigma names fn fn' /\
+  (!f. MEM f C.ctx_functions ==> ir_supply_covers_fn (Sigma f.fn_name) f)``;
+
 val ld_probe_S = ``\Ambient Point Terminal (k:num) ctx ti t z.
   !(lo:num) (P:string -> num set) (C:venom_context) (C':venom_context)
    (vs0:venom_state) (stk:call_frame list) (fn:ir_function) (fn':ir_function)

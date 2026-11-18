@@ -36,7 +36,7 @@ Ancestors
   compileEnv
   vyperInterpreter vyperState vyperValue vyperExprNoControl
   vyperStatePreservation
-  venomExecSemantics venomInst venomState
+  venomExecSemantics venomInst venomState reasonSourceProps
 Libs
   monadsyntax
 
@@ -171,59 +171,6 @@ Proof
   drule unwrap_value_extends >> strip_tac >>
   `cs_extends sm sb` by metis_tac[cs_extends_trans] >>
   drule_all fn_has_code_split >> simp[]
-QED
-
-Theorem eval_raise_reason_bind[local]:
-  eval_stmt cx (Raise (RaiseReason r)) =
-  bind (eval_expr cx r)
-    (\tv. do v <- read_result cx tv;
-             str <- lift_option_type (dest_StringV v) "not StringV";
-             raise (AssertException str) od)
-Proof
-  simp[FUN_EQ_THM, Once evaluate_def, bind_def] >> gen_tac >>
-  Cases_on `eval_expr cx r x` >> rename1 `_ = (raw, ee)` >>
-  Cases_on `raw` >> simp[bind_def]
-QED
-
-Theorem raise_reason_raw_admissible[local]:
-  gas_admissible (eval_stmt cx (Raise (RaiseReason r)))
-    (stmt_res_ok lctx) es ==>
-  gas_admissible (eval_expr cx r) expr_vv_res_ok es
-Proof
-  strip_tac >> irule forced_expr_admissible_raw >>
-  simp[gas_admissible_def] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-  simp[gas_admissible_def] >>
-  disch_then (qspec_then `gs` mp_tac) >>
-  Cases_on `eval_stmt cx (Raise (RaiseReason r)) (es with gas_obs := gs)` >>
-  rename1 `_ = (res, esf)` >> simp[] >> strip_tac >>
-  drule_all eval_raise_reason_cases >> strip_tac >>
-  rule_assum_tac (CONV_RULE (DEPTH_CONV ETA_CONV)) >> gvs[]
-QED
-
-Theorem raise_reason_raw_exempt[local]:
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (eval_expr cx r) (return ()))
-    (es,s0) marks (err,ee) (leaf,finstate) ==>
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (eval_stmt cx (Raise (RaiseReason r))) (return ()))
-    (es,s0) marks (err,ee) (leaf,finstate)
-Proof
-  strip_tac >>
-  `ignore_bind (eval_stmt cx (Raise (RaiseReason r))) (return ()) =
-   bind (eval_expr cx r)
-     (\tv. ignore_bind
-       (do v <- read_result cx tv;
-           str <- lift_option_type (dest_StringV v) "not StringV";
-           (raise (AssertException str) : evaluation_state -> unit evaluation_result)
-        od) (return ()))` by
-    (rewrite_tac[eval_raise_reason_bind] >>
-     simp[FUN_EQ_THM, ignore_bind_def, bind_def] >> gen_tac >>
-     Cases_on `eval_expr cx r x` >>
-     qmatch_asmsub_rename_tac `eval_expr cx r x = (captured, est)` >>
-     Cases_on `captured` >> simp[bind_def]) >>
-  pop_assum SUBST1_TAC >>
-  irule gas_exempt_cert_error_result >> simp[]
 QED
 
 Theorem reason_vv_read_success[local]:

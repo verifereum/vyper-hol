@@ -2,7 +2,7 @@ Theory o1CodeEndMiddleTransport
 Ancestors
   o1CodeEndConcretizeTransport o1CodeEndFmpTransport o1CodeEndSsaTransport
   o1CodeEndConcretizeLifetime o1CodeEndFmpLifetime
-  o1PassContract venomPassSchedule venomInst list
+  o1PassContract venomPassSchedule venomInst ptrDiscipline list
 
 Theorem code_end_middle_stage_contracts:
   ctx_pass_stage rpolicy (EL 2 o1_fn_passes) (o1_walk_view rpolicy 2) C2 C3 /\
@@ -12,6 +12,8 @@ Theorem code_end_middle_stage_contracts:
   ctx_pass_stage rpolicy (EL 4 o1_fn_passes) (o1_walk_view rpolicy 4) C4 C5 /\
   o1_pre 2 C2 C3 /\ o1_pre 3 C3 C4 /\ o1_pre 4 C4 C5 /\
   o1_ctx_shape C2 /\ o1_ctx_shape C3 /\ o1_ctx_shape C4 /\
+  EVERY no_raw_fmp_ops C2.ctx_functions /\
+  EVERY no_raw_fmp_ops C3.ctx_functions /\
   dead_wf D /\ o1_run_state_ok s /\ o1_inv D 2 C2 s /\
   code_end_offset_ok (raw_reachable s) C2 /\
   EVERY (\f. !x. code_end_var f x ==> ?d op. MEM d (fn_insts f) /\
@@ -32,6 +34,9 @@ Theorem code_end_middle_stage_contracts:
   o1_inv D 5 C5 s /\ code_end_offset_ok (raw_reachable s) C5
 Proof
   strip_tac >>
+  `~ctx_has_dalloca C2` by
+    (fs[no_raw_fmp_ops_def, ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >>
+     metis_tac[is_raw_fmp_opcode_def]) >>
   `ctx_pass_stage rpolicy (EL 3 o1_fn_passes)
      (o1_walk_view rpolicy 3) C3 C4` by
     (qpat_x_assum `ctx_pass_stage _ (EL 3 _) _ _ _` mp_tac >>

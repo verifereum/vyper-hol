@@ -168,10 +168,12 @@ End
 
 (* Entry code (internal = F) never returns through RET and declares no
    parameters; internal-function code (internal = T) never halts the
-   transaction with STOP or RETURN. *)
+   transaction with STOP or RETURN.  Shaped code allocates no dynamic
+   memory: no DALLOCA. *)
 Definition lowered_inst_ok_def:
   lowered_inst_ok internal inst <=>
-    raw_opcode_ok inst.inst_opcode /\ inst_shape_ok inst /\
+    raw_opcode_ok inst.inst_opcode /\ inst.inst_opcode <> DALLOCA /\
+    inst_shape_ok inst /\
     inst_jump_labels_ok inst /\
     (internal ==> ~MEM inst.inst_opcode [STOP; RETURN]) /\
     (~internal ==> inst.inst_opcode <> RET /\

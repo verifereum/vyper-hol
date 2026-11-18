@@ -83,7 +83,7 @@ QED
 
 Theorem compile_concat_child_callback:
   !args m f cenv dp infos op.
-    EVERY (\e. expr_size e < m) args ==>
+    EVERY (\e. expr_size e + cenv_defaults_size cenv < m) args ==>
     compile_concat (expr_child_callback m f) cenv args dp infos op =
     compile_concat f cenv args dp infos op
 Proof
@@ -117,13 +117,17 @@ Proof
     (`!bt args. names_builtin bt args ==> !n. bt <> Concat n` suffices_by
        metis_tac[] >>
      ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]) >>
-  `EVERY (\e. expr_size e < list_size expr_size args) args` by
-    simp[EVERY_MEM, expr_list_member_bound] >>
+  `!f dp infos op.
+     compile_concat
+       (expr_child_callback (cenv_defaults_size cenv + list_size expr_size args) f)
+       cenv args dp infos op = compile_concat f cenv args dp infos op` by
+    (rpt gen_tac >> irule compile_concat_child_callback >>
+     simp[EVERY_MEM, expr_list_member_bound]) >>
   simp[compile_expr_builtin_dispatch] >>
   simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
        compile_builtin_dispatch_body_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  simp[compile_concat_child_callback] >>
+  simp[] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   qpat_x_assum `UNCURRY _ _ = _` mp_tac >>
   Cases_on `emit_void MSTORE [buf_op_alloc.buf_operand; final_offset] st4` >>

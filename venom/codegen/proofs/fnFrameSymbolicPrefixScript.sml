@@ -1,6 +1,7 @@
 (* Symbolic annotations of the finite source-frame packets. *)
 Theory fnFrameSymbolicPrefix
 Ancestors
+  codegenEntryFacts
   fnFramePrefixDriver fnFramePrefix fnFramePrefixEntry fnFramePrefixStack
   codegenLabelDisciplined codegenEntrySim codegenEntryRel codegenSymRel
   symFrameBoundary symFrameInst symFrameInvoke symFrameControl

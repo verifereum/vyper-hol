@@ -124,7 +124,7 @@ Theorem ricf_history_relevant_call_endpoints:
   dfg_get_def (dfg_build_function fn) sv = SOME ai /\
   MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [sv] /\
   fn_inst_wf fn /\ fn_inst_ids_distinct fn /\ occurrence_syntax_origin fn a H /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
   occurrence_natural_geometry lo a U B stk s /\
   FLOOKUP B (a,di.inst_id) = SOME (db,z) /\
   FLOOKUP B (a,ai.inst_id) = SOME (sb,z) /\ 0 < z /\

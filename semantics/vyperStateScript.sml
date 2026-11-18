@@ -992,6 +992,21 @@ End
 
 val read_popped_pre_def = cv_auto_trans_pre "read_popped_pre" read_popped_def;
 
+Theorem read_popped_owner:
+  !history tv path v.
+    read_popped tv path history = SOME v ==>
+    ?prefix owner ptv suffix.
+      MEM (prefix,owner) history /\ path = prefix ++ suffix /\
+      subscripts_type tv prefix = SOME ptv /\
+      evaluate_subscripts ptv owner suffix = INL v
+Proof
+  Induct >> simp[read_popped_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[read_popped_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  gvs[IS_PREFIX_APPEND, DROP_LENGTH_APPEND] >> metis_tac[]
+QED
+
 Theorem read_popped_pre[cv_pre]:
   !tv path history. read_popped_pre tv path history
 Proof

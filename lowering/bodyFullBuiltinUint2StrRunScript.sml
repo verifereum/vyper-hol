@@ -12,7 +12,7 @@ Theorem u2s_setup_exit_joint:
   (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
   fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
-  not_local_ptr cenv es.scopes q /\ n+32 <= sz /\ 78 <= n /\
+  not_local_ptr cenv es.scopes q /\ n+32 <= sz /\ LENGTH (num_to_dec_string X) <= n /\
   X < dimword(:256) /\ b+sz < dimword(:256) /\ lo <= b /\
   ~ctx_has_dalloca ctx /\
   eval_operand op s = SOME (n2w X) /\ op_prov G op = NONE /\ op_taint tn op = {} /\
@@ -52,6 +52,7 @@ Theorem u2s_setup_exit_joint:
     t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
   strip_tac >>
+  `0 < n` by (Cases_on `num_to_dec_string X` >> gvs[] >> decide_tac) >>
   drule_all u2s_setup_joint_transition >>
   disch_then (qspecl_then [`explicit`, `PG`]
     (qx_choose_then `ss` (qx_choose_then `Gs`

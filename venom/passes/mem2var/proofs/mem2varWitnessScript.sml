@@ -5,6 +5,7 @@ Ancestors
   venomInst venomState venomExecSemantics finite_map words byte list
   vfmTypes
   ptrDiscipline unitTransformDefs venomWf memSafeRun allocaFrontierBound ptrSafeRun ptrOkCheck
+  ctxLookupAgree contextRawReachable stepWriteFootprintBase
 Libs
   finite_mapLib wordsLib
 
@@ -196,6 +197,27 @@ Theorem m2v_witness_raw_memory[local]:
     (init_venom_state "entry")
 Proof
   irule mem_safe_raw_unit_memory_ok >>
+  conj_tac
+  >- (rpt strip_tac >>
+      drule raw_reachable_initial_fmp >>
+      simp[init_venom_state_def] >> disch_tac >> simp[] >>
+      `lookup_function f.fn_name
+         (mk_venom_context [m2v_witness_access] (SOME "main")).ctx_functions =
+       SOME f` by
+        (qspecl_then [`K T`,
+           `mk_venom_context [m2v_witness_access] (SOME "main")`,
+           `mk_venom_context [m2v_witness_access] (SOME "main")`,
+           `init_venom_state "entry"`] mp_tac raw_reachable_ctx_agree >>
+         simp[ctx_agree_def, fn_calls_within_def, EVERY_MEM,
+              inst_calls_within_def] >> metis_tac[]) >>
+      `MEM f [m2v_witness_access]` by
+        (drule venomInstTheory.lookup_function_MEM >>
+         simp[mk_venom_context_def]) >>
+      gvs[] >> drule raw_reachable_active >>
+      disch_then (assume_tac o MATCH_MP active_inst_mem_fn_insts) >>
+      fs[dalloca_no_wrap_def, m2v_witness_access_def,
+         mk_raw_function_def, fn_insts_def, fn_insts_blocks_def, mk_inst_def] >>
+      gvs[]) >>
   conj_tac >- EVAL_TAC >>
   qexistsl_tac [`alloca_frontier_inv`, `m2v_witness_access`, `"entry"`, `"main"`] >>
   conj_tac
