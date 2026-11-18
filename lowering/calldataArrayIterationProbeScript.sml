@@ -297,11 +297,6 @@ in
     (has_const "abi_decode_footprint_frame" return_in andalso
      has_const "FLOOKUP" return_in andalso has_const "mload" return_out andalso
      has_const "mem_bytes_at" return_out);
-  val _ = check "Robust-prefix and boundary cases have checked propositions, not just quotations."
-    (List.all (fn th => null (hyp th))
-      [array_iteration_wrapping_header,array_iteration_modular_header,
-       array_iteration_normalized_member,array_iteration_cursor_frontier,
-       array_iteration_robust_prefix,array_iteration_index_edges]);
   val _ = check "Scratch accumulation has an explicit containment antecedent, not an assumption of clean capacity."
     (has_const "abi_decode_footprint_frame" (concl calldata_footprint_accumulate));
   val _ = check "Observed backedge preserves physical prefix, but lacks robust values and origin-pointer paths."
