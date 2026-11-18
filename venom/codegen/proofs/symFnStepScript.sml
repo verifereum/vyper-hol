@@ -12,6 +12,8 @@
  *)
 Theory symFnStep
 Ancestors
+  symFnStepOwn symFnPrefixOwn symFrameBoundaryPairing asmSymOwnStep
+  asmOwnCodeInvariant codegenSymOwnRel fnBlockBodySteps fnPlanPlaceRevertPostamble
   symBlockBody symFrameBoundary symFnSimSpec codegenSymRel fnEntryStep
   fnBlockStep fnBlockStepHelpers fnBlockBody fnSimSpec asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel venomExecSemantics
@@ -818,210 +820,6 @@ QED
 
 Finalise sym_block_step_prefix
 
-Theorem sym_fn_entry_block_step:
-  !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
-         sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel ==>
-         sym_fn_sim_at (SUC fuel)
-Proof
-  gen_tac >> strip_tac >> rewrite_tac[sym_fn_sim_at_def] >>
-  rpt gen_tac >> strip_tac >> suspend "entry_plan"
-QED
-
-Resume sym_fn_entry_block_step[entry_plan]:
-  drule_all step_fn_shape >> strip_tac >> suspend "entry_region"
-QED
-
-Resume sym_fn_entry_block_step[entry_region]:
-  drule_all fnEntryPlanTheory.region_fn_plan >> strip_tac >>
-  suspend "entry_block"
-QED
-
-Resume sym_fn_entry_block_step[entry_block]:
-  drule_all fnEntryPlanTheory.entry_block_plan >> strip_tac >>
-  suspend "entry_placed"
-QED
-
-Resume sym_fn_entry_block_step[entry_placed]:
-  rename1 `generate_context_plan ctx = SOME cplan` >>
-  `asm_block_at prog as.as_pc (execute_plan cplan.cp_initial_fmp
-     (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops)) /\
-   asm_block_at prog as.as_pc (execute_plan cplan.cp_initial_fmp
-     (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))` by
-    (suspend "entry_placed_fact") >>
-  suspend "entry_spills"
-QED
-
-Resume sym_fn_entry_block_step[entry_placed_fact]:
-  qpat_x_assum `asm_block_at _ _ (execute_plan _ r.sr_plan)` mp_tac >>
-  qpat_assum `r.sr_plan = _` (fn th => rewrite_tac[th]) >>
-  suspend "entry_placed_reduce"
-QED
-
-Resume sym_fn_entry_block_step[entry_placed_reduce]:
-  rewrite_tac[execute_plan_append, asm_block_at_append] >>
-  rpt strip_tac >> fs[]
-QED
-
-Resume sym_fn_entry_block_step[entry_spills]:
-  `!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)` by
-    (rpt strip_tac >> irule region_subplan_spill_offsets >>
-     suspend "entry_spill_witness") >>
-  suspend "entry_prefix"
-QED
-
-Resume sym_fn_entry_block_step[entry_spill_witness]:
-  qexistsl_tac [`cplan`, `ctx`, `param_ops`, `body_ops ++ rest_ops`,
-                `[SOLabel (HD fn.fn_blocks).bb_label]`, `r`] >> simp[]
-QED
-
-Resume sym_fn_entry_block_step[entry_prefix]:
-  prefix_contract_tac SRULE
-    (drule_at (Pat `prepare_params_plan _ _ _ = _`))
-    [`ch` |-> `cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
-       (fcg_analyze ctx) fn.fn_name`,
-     `growth` |-> `cleanup_growth_table ctx (fcg_analyze ctx)`,
-     `spill_base` |-> `r.sr_spill_base`, `lbl_ctr` |-> `lbl_ctr`]
-    [] sym_entry_prefix_frame_sim >>
-  disch_then (drule_at (Pat `fn_entry_state_rel _ _ _ _ _ _`)) >>
-  suspend "entry_prefix_symbolic"
-QED
-
-Resume sym_fn_entry_block_step[entry_prefix_symbolic]:
-  disch_then (drule_at (Pat `asm_sym_rel _ _ _ _`)) >>
-  suspend "entry_prefix_inputs"
-QED
-
-Resume sym_fn_entry_block_step[entry_prefix_inputs]:
-  disch_then (drule_at (Pat `fn_entry_inv _ _ _ _`)) >>
-  disch_then (drule_at (Pat `MEM _ _.cp_regions`)) >>
-  suspend "entry_prefix_stack"
-QED
-
-Resume sym_fn_entry_block_step[entry_prefix_stack]:
-  disch_then (drule_at (Pat `_.sym_stack = _`)) >>
-  simp[] >> suspend "entry_prefix_last"
-QED
-
-Resume sym_fn_entry_block_step[entry_prefix_last]:
-  disch_then (qspecl_then [`lbl_ctr`, `fuel`] mp_tac) >>
-  (impl_tac >- metis_tac[listTheory.MEM_EL, unitShapeDefsTheory.unit_shape_ok_def,
-                         listTheory.EVERY_MEM]) >>
-  strip_tac >> suspend "entry_body"
-QED
-
-Resume sym_fn_entry_block_step[entry_body]:
-  drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`) sym_entry_body_inv >>
-  disch_then (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
-  suspend "entry_body_match"
-QED
-
-Resume sym_fn_entry_block_step[entry_body_match]:
-  disch_then (drule_at (Pat `generate_fn_plan_with_cleanup_analyzed _ _ _ _ _ _ _ _ = _`)) >>
-  simp[] >> suspend "entry_body_remaining"
-QED
-
-Resume sym_fn_entry_block_step[entry_body_remaining]:
-  qpat_x_assum `ctx = unit.cu_context` SUBST_ALL_TAC >>
-  disch_then (drule_at (Pat `codegen_assembly _ _ = _`)) >>
-  disch_then (drule_at (Pat `codegen_context_obligations _ _ _`)) >>
-  suspend "entry_body_index"
-QED
-
-Resume sym_fn_entry_block_step[entry_body_index]:
-  disch_then (qspecl_then [`i`, `as.as_pc`, `pc_ret`] mp_tac) >>
-  (impl_tac >- (simp[Once arithmeticTheory.ADD_COMM] >>
-                fs[fn_entry_state_rel_def] >> metis_tac[])) >>
-  suspend "entry_body_finish" 
-QED
-
-Resume sym_fn_entry_block_step[entry_body_finish]:
-  strip_tac >>
-  drule_all sym_block_body_frame_sim >>
-  suspend "entry_body_result"
-QED
-
-Resume sym_fn_entry_block_step[entry_body_result]:
-  strip_tac >> drule_all sym_body_result_prefix >>
-  suspend "entry_run_rest"
-QED
-
-Resume sym_fn_entry_block_step[entry_run_rest]:
-  strip_tac >>
-  `run_blocks (SUC fuel) unit.cu_context fn vs =
-   block_rest fuel unit.cu_context fn (HD fn.fn_blocks) vs_p` by
-    (irule entry_step_run_rest >> metis_tac[exec_block_def]) >>
-  suspend "entry_finish_result"
-QED
-
-Resume sym_fn_entry_block_step[entry_finish_result]:
-  reverse (rpt conj_tac) >- (suspend "entry_intret") >>
-  fs[sym_body_result_def]
-QED
-
-Resume sym_fn_entry_block_step[entry_intret]:
-  rpt gen_tac >> strip_tac >>
-  irule sym_entry_return_result >> suspend "entry_intret_inputs"
-QED
-
-Resume sym_fn_entry_block_step[entry_intret_inputs]:
-  metis_tac[]
-QED
-
-Finalise sym_fn_entry_block_step
-
-Theorem sym_fn_block_frame_step:
-  !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
-         sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel ==>
-         sym_fn_frame_sim_at (SUC fuel)
-Proof
-  gen_tac >> strip_tac >> rewrite_tac[sym_fn_frame_sim_at_def] >>
-  rpt gen_tac >> strip_tac >> suspend "frame_phis"
-QED
-
-Resume sym_fn_block_frame_step[frame_phis]:
-  qspecl_then [`vs`, `bb.bb_instructions`] strip_assume_tac
-    eval_phis_ok_or_error_defs
-  >- suspend "frame_prefix"
-  >> simp[run_blocks_unfold, run_block_def]
-QED
-
-Resume sym_fn_block_frame_step[frame_prefix]:
-  `MEM fn ctx.ctx_functions /\ fn_shape_ok fn` by
-    metis_tac[listTheory.MEM_EL, unitShapeDefsTheory.unit_shape_ok_def,
-              listTheory.EVERY_MEM] >>
-  drule_all sym_block_step_prefix >> suspend "frame_prefix_result"
-QED
-
-Resume sym_fn_block_frame_step[frame_prefix_result]:
-  strip_tac >> drule venomExecPropsTheory.lookup_block_label >>
-  strip_tac >> suspend "frame_body"
-QED
-
-Resume sym_fn_block_frame_step[frame_body]:
-  `dfs_block_state liveness dfg cfg fn
-     (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label ps_dfs` by
-    metis_tac[] >>
-  drule_all sym_nonentry_body_inv >> suspend "frame_body_match"
-QED
-
-Resume sym_fn_block_frame_step[frame_body_match]:
-  strip_tac >>
-  drule_all sym_block_body_frame_sim >>
-  suspend "frame_result"
-QED
-
-Resume sym_fn_block_frame_step[frame_result]:
-  strip_tac >> drule_all sym_body_result_prefix >>
-  suspend "frame_finish"
-QED
-
-Resume sym_fn_block_frame_step[frame_finish]:
-  strip_tac >> drule_all sym_nonentry_run_rest >>
-  disch_then (fn th => rewrite_tac[th]) >> fs[sym_body_result_def]
-QED
-
-Finalise sym_fn_block_frame_step
-
 (* General symbolic simulation over agreeing code labels and fixed code bytes. *)
 Theorem sym_fn_sims_all_own:
   !allow_own fuel.
@@ -1030,18 +828,39 @@ Theorem sym_fn_sims_all_own:
     sym_fn_sim_at_own allow_own fuel /\
     sym_fn_frame_sim_at_own allow_own fuel
 Proof
-  cheat
+  gen_tac >> rewrite_tac[GSYM gen_fn_sim_at_simple_reloc_def,
+                        GSYM gen_fn_frame_sim_at_simple_reloc_def] >>
+  Induct
+  >- (simp[gen_fn_sim_at_simple_reloc_def, gen_fn_frame_sim_at_simple_reloc_def,
+           gen_fn_sim_at_reloc_def, gen_fn_frame_sim_at_reloc_def,
+           sym_fn_sim_at_own_def, sym_fn_frame_sim_at_own_def] >>
+      rpt strip_tac >> gvs[Once run_blocks_def]) >>
+  metis_tac[fn_entry_block_step_reloc, fn_block_frame_step_reloc,
+            sym_fn_entry_block_step_own, sym_fn_block_frame_step_own]
 QED
 
 Theorem sym_fn_sims_all:
   !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
          sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel
 Proof
-  Induct
-  >- (simp[gen_fn_sim_at_simple_def, gen_fn_frame_sim_at_simple_def,
-           gen_fn_sim_at_def, gen_fn_frame_sim_at_def, sym_fn_sim_at_def,
-           sym_fn_frame_sim_at_def] >>
-      rpt strip_tac >> gvs[Once run_blocks_def]) >>
-  metis_tac[fn_entry_block_step, fn_block_frame_step,
-            sym_fn_entry_block_step, sym_fn_block_frame_step]
+  gen_tac >> qspecl_then [`F`, `fuel`] strip_assume_tac sym_fn_sims_all_own >>
+  metis_tac[gen_fn_sim_at_reloc_specialize, gen_fn_frame_sim_at_reloc_specialize,
+            gen_fn_sim_at_simple_def, gen_fn_frame_sim_at_simple_def,
+            sym_fn_sim_at_own_canonical, sym_fn_frame_sim_at_own_canonical]
+QED
+
+Theorem sym_fn_entry_block_step:
+  !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
+         sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel ==>
+         sym_fn_sim_at (SUC fuel)
+Proof
+  metis_tac[sym_fn_sims_all]
+QED
+
+Theorem sym_fn_block_frame_step:
+  !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
+         sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel ==>
+         sym_fn_frame_sim_at (SUC fuel)
+Proof
+  metis_tac[sym_fn_sims_all]
 QED
