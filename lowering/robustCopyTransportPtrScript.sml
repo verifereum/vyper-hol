@@ -52,9 +52,10 @@ Theorem copied_window_agree_witness:
           mem_bytes_at src n mix = mem_bytes_at dst n m
 Proof
   rpt gen_tac >> strip_tac >>
+  `!i. i < n /\ dst+i IN tn' ==> src+i IN tn` by metis_tac[] >>
   qspecl_then [`tn`, `tn'`, `mem`, `mem'`, `src`, `dst`, `n`, `m`]
-    mp_tac copied_window_decreasing_taint_witness >>
-  simp[] >> metis_tac[]
+    MATCH_MP_TAC copied_window_decreasing_taint_witness >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem robust_val_in_memory_decreasing_taint_transport:
@@ -87,10 +88,10 @@ Theorem robust_val_in_memory_copy_transport:
     !m. mem_agree_outside tn' mem' m ==> val_in_memory tv v dst m
 Proof
   rpt gen_tac >> strip_tac >>
+  `!i. i < n /\ dst+i IN tn' ==> src+i IN tn` by metis_tac[] >>
   qspecl_then [`tv`, `v`, `src`, `dst`, `n`, `tn`, `tn'`, `mem`, `mem'`]
-    mp_tac robust_val_in_memory_decreasing_taint_transport >>
-  impl_tac >- (simp[] >> metis_tac[]) >>
-  simp[]
+    MATCH_MP_TAC robust_val_in_memory_decreasing_taint_transport >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem robust_val_in_memory_exterior_frame:

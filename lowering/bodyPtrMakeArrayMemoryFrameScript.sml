@@ -61,10 +61,13 @@ Theorem shrinking_window_agree_witness:
           mem_bytes_at p n mix = mem_bytes_at p n m
 Proof
   rpt gen_tac >> strip_tac >>
+  `!i. i < n /\ p+i IN T' ==> p+i IN T` by
+    (rpt strip_tac >>
+     qpat_x_assum `!i. p <= i /\ _ ==> _` (qspec_then `p+i` irule) >>
+     simp[]) >>
   qspecl_then [`T`, `T'`, `mem`, `mem'`, `p`, `p`, `n`, `m`]
-    mp_tac copied_window_decreasing_taint_witness >>
-  impl_tac >- (simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
-  simp[]
+    MATCH_MP_TAC copied_window_decreasing_taint_witness >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem robust_val_in_memory_shrinking_frame:
@@ -76,10 +79,13 @@ Theorem robust_val_in_memory_shrinking_frame:
     !m. mem_agree_outside T' mem' m ==> val_in_memory tv v p m
 Proof
   rpt gen_tac >> strip_tac >>
+  `!i. i < n /\ p+i IN T' ==> p+i IN T` by
+    (rpt strip_tac >>
+     qpat_x_assum `!i. p <= i /\ _ ==> _` (qspec_then `p+i` irule) >>
+     simp[]) >>
   qspecl_then [`tv`, `v`, `p`, `p`, `n`, `T`, `T'`, `mem`, `mem'`]
-    mp_tac robust_val_in_memory_decreasing_taint_transport >>
-  impl_tac >- (simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
-  simp[]
+    MATCH_MP_TAC robust_val_in_memory_decreasing_taint_transport >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem literal_prefix_store_frame:
