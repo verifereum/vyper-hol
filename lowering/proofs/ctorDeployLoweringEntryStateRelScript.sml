@@ -48,7 +48,14 @@ Proof
  gvs[venom_state_component_equality, call_ctx_rel_def, tx_block_fields_rel_def] >>
  qpat_x_assum `_ = vs.vs_call_ctx` (assume_tac o GSYM) >>
  qpat_x_assum `_ = vs.vs_tx_ctx` (assume_tac o GSYM) >>
- qpat_x_assum `_ = vs.vs_block_ctx` (assume_tac o GSYM) >> fs[tx_env_ok_def]
+ qpat_x_assum `_ = vs.vs_block_ctx` (assume_tac o GSYM) >>
+ gvs[tx_env_ok_def] >> rpt strip_tac >>
+ Cases_on `n < tx.block_number /\ tx.block_number <= n + 256` >> gvs[] >>
+ `tx.block_number - (n + 1) < 256` by decide_tac >>
+ simp[listTheory.EL_TAKE, listTheory.LENGTH_TAKE_EQ] >>
+ rw[] >> gvs[] >>
+ Cases_on `256 <= LENGTH vs.vs_prev_hashes` >>
+ gvs[listTheory.LENGTH_TAKE_EQ] >> decide_tac
 QED
 (* Deployment analogue of entryStateRel's private immutable-map boundary. *)
 Theorem deploy_ctor_module_lookup_immutable_frame[local]:
@@ -180,5 +187,6 @@ Proof
       accounts_rel_def, logs_rel_def, contract_storage_def, contract_transient_def,
       accountsRelPropsTheory.storage_agree_refl,
       accountsRelPropsTheory.accounts_agree_refl,
-      accountsRelPropsTheory.transient_agree_refl]
+      accountsRelPropsTheory.transient_agree_refl,
+      accounts_agree_def, transient_agree_def, storage_agree_def]
 QED

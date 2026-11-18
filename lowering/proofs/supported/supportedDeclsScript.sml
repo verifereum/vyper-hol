@@ -37,7 +37,8 @@ Definition supported_declaration_header_def:
         ~NULL fields /\ EVERY (supported_place_type tops o SND) fields
     | EventDecl name fields =>
         (* Python rejects more than three indexed fields (EventT) *)
-        EVERY (supported_scalar_type o SND o FST) fields /\
+        EVERY (\f. if SND f then supported_scalar_type (SND (FST f))
+                    else supported_place_type tops (SND (FST f))) fields /\
         LENGTH (FILTER I (MAP SND fields)) <= 3
     | InterfaceDecl name methods => T
     | FlagDecl name members => T

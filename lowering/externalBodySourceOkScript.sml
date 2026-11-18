@@ -30,7 +30,7 @@ Proof
   `machine_well_typed am` by gvs[source_typing_ok_def] >>
   drule_all external_body_prefix_state >> strip_tac >>
   drule_all external_selected_env_consistent >> strip_tac >>
-  drule external_source_context_typed >> strip_tac >>
+  drule_all external_source_context_typed >> strip_tac >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
   `no_type_error_eval (eval_stmts cx fbody (es0 with gas_obs := gs))` by
     (irule eval_stmts_no_type_error >> simp[] >> metis_tac[]) >>
@@ -40,10 +40,7 @@ Proof
       drule_all stmts_no_control_escape_eval_stmts_no_loop_control >>
       strip_tac >> Cases_on `y` >> gvs[stmt_res_ok_def]
       >~ [`Error e`]
-      >- (Cases_on `e` >> gvs[stmt_res_ok_def, no_type_error_result_def]) >>
-      `get_module_code cx NONE = SOME tops` by
-        (unabbrev_all_tac >> metis_tac[source_deployment_context]) >>
-      metis_tac[external_body_no_halt]) >>
+      >- (Cases_on `e` >> gvs[stmt_res_ok_def, no_type_error_result_def])) >>
   strip_tac >> Cases_on `ret = NoneT` >> simp[] >>
   `stmts_no_fallthrough fbody` by simp[] >>
   drule (cj 2 no_fallthrough_eval_no_success) >> metis_tac[]
