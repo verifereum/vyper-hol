@@ -339,9 +339,9 @@ Proof
   metis_tac[build_getter_ret_checked]
 QED
 
-Theorem return_selected_type_evaluates:
+Theorem return_selected_type_evaluates_nr[local]:
   supported_program tops /\ source_typing_ok tops am tx /\
-  lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) ==>
+  lookup_function NONE fname External tops = SOME (mut,nr,args,[],ret,fbody) ==>
   ?tv. evaluate_type (type_env tops) ret = SOME tv
 Proof
   strip_tac >> drule lookup_function_External_cases >> strip_tac
@@ -349,7 +349,7 @@ Proof
       `module_allocated am.layouts tx.target NONE tops` by
         (fs[check_contract_def, main_module_allocated_def]) >>
       `check_function_body am.layouts tx.target [(NONE,tops)] art NONE External
-         mut F args [] ret fbody` by
+         mut nr args [] ret fbody` by
         (irule check_contract_runtime_function_body_MEM >> simp[] >> metis_tac[]) >>
       gvs[check_function_body_def, IS_SOME_EXISTS] >>
       gvs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def]) >>
@@ -361,6 +361,14 @@ Proof
   simp[check_value_type_def, IS_SOME_EXISTS,
        vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def] >>
   metis_tac[assignable_type_well_formed, well_formed_type_def, IS_SOME_EXISTS]
+QED
+
+Theorem return_selected_type_evaluates:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) ==>
+  ?tv. evaluate_type (type_env tops) ret = SOME tv
+Proof
+  metis_tac[return_selected_type_evaluates_nr]
 QED
 
 Theorem return_selected_plan:
@@ -383,4 +391,35 @@ Theorem return_selected_plan:
 Proof
   strip_tac >> drule_all return_selected_type_evaluates >> strip_tac >>
   drule_all return_supported_selected_plan >> simp[]
+QED
+
+Theorem return_selected_plan_nr:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lookup_function NONE fname External tops = SOME (mut,nr,args,[],ret,fbody) /\
+  ret <> NoneT /\
+  set_external_package_target target
+    (package_external_fn tops ut nkey_map
+      (mut,nr,rr,fname,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args off st = (cenv,sa) ==>
+  abi_enc_plan (type_env tops)
+    (if needs_external_call_wrap ret /\
+        is_dynamic (vyper_to_abi_type (type_env tops) ret)
+     then TupleT [ret] else ret) cenv.ce_ret_enc_info /\
+  vyper_abi_size_bound (type_env tops)
+    (if needs_external_call_wrap ret /\
+        is_dynamic (vyper_to_abi_type (type_env tops) ret)
+     then TupleT [ret] else ret) <= cenv.ce_max_return_size
+Proof
+  strip_tac >>
+  drule_all return_selected_type_evaluates_nr >> strip_tac >>
+  drule_all return_selected_external_support >> strip_tac >> gvs[] >>
+  drule return_source_type_keys >> strip_tac >>
+  drule return_package_target_inversion >> strip_tac >>
+  drule return_package_metadata >> strip_tac >>
+  drule return_register_metadata >> strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `update_cenv_ret_abi bcenv ret` >>
+  `bcenv.ce_struct_fields = make_struct_fields_map tops` by
+    simp[Abbr `bcenv`, build_compile_env_ce_struct_fields] >>
+  drule_all return_update_plan_supported_place >> simp[]
 QED
