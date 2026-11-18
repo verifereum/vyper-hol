@@ -661,7 +661,11 @@ Theorem create_oracle_result_frame:
   isPREFIX st.logs st'.logs
 Proof
   Cases_on `salt` >> Cases_on `st.outcomes` >>
-  simp[create_oracle_result_def, take_create_outcome_def] >>
+  simp[create_oracle_result_def, take_create_outcome_def,
+       rich_listTheory.IS_PREFIX_REFL] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[create_oracle_result_def, take_create_outcome_def,
+       rich_listTheory.IS_PREFIX_REFL] >>
   pairarg_tac >>
   rw[adopt_call_outcome_equation, create_outcome_request_def, evaluation_state_accfupds] >>
   gvs[AllCaseEqs(), evaluation_state_accfupds, rich_listTheory.IS_PREFIX_REFL,
@@ -673,6 +677,8 @@ Theorem create_oracle_result_exception:
   ?err. ex = Error err /\ (!msg. err <> TypeError msg)
 Proof
   Cases_on `salt` >> Cases_on `st.outcomes` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
   simp[create_oracle_result_def, take_create_outcome_def] >>
   pairarg_tac >> rw[] >>
   gvs[AllCaseEqs(), vyperValueOperationTheory.error_distinct]
@@ -691,6 +697,8 @@ Theorem create_oracle_result_address:
   ?addr. tv = Value (AddressV addr)
 Proof
   Cases_on `salt` >> Cases_on `st.outcomes` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
   simp[create_oracle_result_def, take_create_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[AllCaseEqs()] >> metis_tac[]
 QED

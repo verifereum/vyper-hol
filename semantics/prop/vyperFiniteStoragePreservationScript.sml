@@ -549,10 +549,10 @@ Proof
    goal_assum (drule_at Any) >> simp[] >>
    metis_tac[unchanged_backends_preserve_finite_storage]) >>
   all_tac >>~-
-  ([`take_call_outcome _ _ _ _ = _`],
+  ([`take_call_outcome _ _ _ _ _ = _`],
    irule unchanged_backends_preserve_finite_storage >>
    goal_assum (drule_at Any) >> simp[]) >>~-
-  ([`take_delegate_outcome _ _ _ _ = (INR _,_)`],
+  ([`take_delegate_outcome _ _ _ _ _ = (INR _,_)`],
    irule unchanged_backends_preserve_finite_storage >>
    goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `run_raw_call _ _ _ _ _ _ _ _ = SOME result` mp_tac >>
@@ -597,7 +597,7 @@ Proof
    irule adopt_call_outcome_preserves_finite_storage >>
    goal_assum (drule_at Any) >> simp[] >>
    metis_tac[unchanged_backends_preserve_finite_storage]) >>~-
-  ([`take_call_outcome _ _ _ _ = _`],
+  ([`take_call_outcome _ _ _ _ _ = _`],
    irule unchanged_backends_preserve_finite_storage >>
    goal_assum (drule_at Any) >> simp[]) >>
   irule observed_backend_preserves_storage_well_formed_on >>
@@ -629,7 +629,7 @@ Proof
    irule adopt_call_outcome_preserves_finite_storage >>
    goal_assum (drule_at Any) >> simp[] >>
    metis_tac[unchanged_backends_preserve_finite_storage]) >>~-
-  ([`take_call_outcome _ _ _ _ = _`],
+  ([`take_call_outcome _ _ _ _ _ = _`],
    irule unchanged_backends_preserve_finite_storage >>
    goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `run_ext_call _ _ _ _ _ _ _ _ = SOME result` mp_tac >>

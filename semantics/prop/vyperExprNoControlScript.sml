@@ -132,8 +132,8 @@ Theorem no_control_prims:
   (check_not_static cx s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (release_nonreentrant_lock a n s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (adopt_call_outcome rq oc s = (INR exc,s') ⇒ no_control_exc exc) ∧
-  (take_call_outcome t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
-  (take_delegate_outcome t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
+  (take_call_outcome gas_cap t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
+  (take_delegate_outcome gas_cap t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (eval_create cx k hs rof tys vs bs s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (check_create_blueprint hs literal_offset vs s = (INR exc,s') ⇒ no_control_exc exc)
 Proof
@@ -620,7 +620,7 @@ QED
 
 Theorem Send_outcome_runtime_error:
   (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    (rq,outcome) <- take_call_outcome gas_cap target [] (SOME amount);
     check outcome.co_success "send failed";
     adopt_call_outcome rq outcome;
     return (Value NoneV)

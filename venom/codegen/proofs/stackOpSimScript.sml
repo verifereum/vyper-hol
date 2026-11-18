@@ -419,6 +419,7 @@ Theorem asm_consume_call_outcome_pc[local]:
     asm_consume_call_outcome rq ro rs stk s = AsmOK s2 ==>
     s2.as_pc = s.as_pc + 1
 Proof
+  rpt gen_tac >> Cases_on `s.as_outcomes = []` >>
   simp[asm_consume_call_outcome_def, pairTheory.pair_CASE_def,
        pairTheory.UNCURRY, asm_next_def, LET_THM] >>
   rpt strip_tac >> gvs[]
@@ -429,6 +430,7 @@ Theorem asm_consume_create_outcome_pc[local]:
     asm_consume_create_outcome rq stk s = AsmOK s2 ==>
     s2.as_pc = s.as_pc + 1
 Proof
+  rpt gen_tac >> Cases_on `s.as_outcomes = []` >>
   simp[asm_consume_create_outcome_def, pairTheory.pair_CASE_def,
        pairTheory.UNCURRY, asm_next_def, LET_THM] >>
   rpt strip_tac >> gvs[]

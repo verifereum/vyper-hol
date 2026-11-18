@@ -699,11 +699,13 @@ Theorem storage_trace_frame_take_request:
 Proof
   pure_rewrite_tac[storage_trace_frame_def] >> rpt gen_tac >>
   Cases_on `st.outcomes` >> simp[take_request_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
+  simp[take_request_outcome_def] >>
   pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
 QED
 
 Theorem storage_trace_frame_take_call:
-  storage_trace_frame (take_call_outcome target calldata value_opt)
+  storage_trace_frame (take_call_outcome gas_cap target calldata value_opt)
 Proof
   simp[storage_trace_frame_def, take_call_outcome_def, call_outcome_request_def] >>
   metis_tac[storage_trace_frame_def, storage_trace_frame_take_request]
@@ -714,6 +716,8 @@ Theorem storage_trace_frame_take_create:
 Proof
   pure_rewrite_tac[storage_trace_frame_def] >> rpt gen_tac >>
   Cases_on `st.outcomes` >>
+  simp[take_create_outcome_def, create_outcome_request_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
   simp[take_create_outcome_def, create_outcome_request_def] >>
   pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
 QED
@@ -768,7 +772,7 @@ Proof
 QED
 
 Theorem storage_trace_frame_take_delegate:
-  storage_trace_frame (take_delegate_outcome target calldata value_opt)
+  storage_trace_frame (take_delegate_outcome gas_cap target calldata value_opt)
 Proof
   simp[storage_trace_frame_def, take_delegate_outcome_def,
        delegate_outcome_request_def, call_outcome_request_def] >>

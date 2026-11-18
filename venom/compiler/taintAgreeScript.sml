@@ -802,8 +802,8 @@ Theorem taint_agree_consume_call_request:
   (computed_precompile (venom_call_request s addr value ao az static) \/
    (accounts_agree_except D s.vs_accounts t.vs_accounts /\
     transient_agree_except D s.vs_transient t.vs_transient)) /\
-  consume_call_outcome (venom_call_request s addr value ao az static) ro rs s = (w,r) ==>
-  ?u. consume_call_outcome (venom_call_request t addr value ao az static) ro rs t = (w,u) /\
+  consume_call_outcome (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) ro rs s = (w,r) ==>
+  ?u. consume_call_outcome (venom_call_request t addr value ao az static with cr_gas := SOME (w2n gas)) ro rs t = (w,u) /\
     taint_agree D X
       (tn with <|t_mem := tn.t_mem DIFF
         {i | ro <= i /\ i < ro + LENGTH (TAKE rs r.vs_returndata)};
@@ -816,20 +816,21 @@ Theorem taint_agree_consume_call_request:
 Proof
   rpt gen_tac >> disch_tac >>
   `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
-  `((computed_precompile (venom_call_request s addr value ao az static) /\
-     computed_precompile (venom_call_request t addr value ao az static) /\
-     (venom_call_request s addr value ao az static).cr_target =
-       (venom_call_request t addr value ao az static).cr_target /\
-     (venom_call_request s addr value ao az static).cr_data =
-       (venom_call_request t addr value ao az static).cr_data) \/
-    request_agree_except D (venom_call_request s addr value ao az static)
-      (venom_call_request t addr value ao az static))` by
+  `((computed_precompile (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) /\
+     computed_precompile (venom_call_request t addr value ao az static with cr_gas := SOME (w2n gas)) /\
+     (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)).cr_target =
+       (venom_call_request t addr value ao az static with cr_gas := SOME (w2n gas)).cr_target /\
+     (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)).cr_data =
+       (venom_call_request t addr value ao az static with cr_gas := SOME (w2n gas)).cr_data) \/
+    request_agree_except D (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas))
+      (venom_call_request t addr value ao az static with cr_gas := SOME (w2n gas)))` by
     (fs[Excl "consume_call_outcome_eq"]
      >- (disj1_tac >> gvs[computed_precompile_def, venom_call_request_def,
            Excl "consume_call_outcome_eq"]) >>
-     disj2_tac >> irule ld_venom_call_request_masked >>
-     simp[Excl "consume_call_outcome_eq"]) >>
-  Cases_on `consume_call_outcome (venom_call_request t addr value ao az static) ro rs t` >>
+     disj2_tac >>
+     simp[request_agree_except_def, venom_call_request_def,
+          Excl "consume_call_outcome_eq"]) >>
+  Cases_on `consume_call_outcome (venom_call_request t addr value ao az static with cr_gas := SOME (w2n gas)) ro rs t` >>
   fs[Excl "consume_call_outcome_eq"] >>
   qpat_assum `consume_call_outcome _ _ _ s = _`
     (mp_then Any mp_tac taint_agree_consume_call) >>
@@ -898,6 +899,7 @@ Theorem taint_agree_exec_delegatecall:
        with t_var := set_var_taint tn.t_var [out] {}) s' (update_var out w u)
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
   `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
@@ -907,7 +909,7 @@ Proof
   simp[AllCaseEqs(), Excl "consume_call_outcome_eq"] >> strip_tac >>
   gvs[Excl "consume_call_outcome_eq"] >>
   qabbrev_tac `rq2 = venom_call_request t addr 0w off sz F with
-                       cr_kind := DelegateMessageCall` >>
+                       <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
   Cases_on `consume_call_outcome rq2 (w2n ro) (w2n rs) t` >>
   rename1 `consume_call_outcome rq2 _ _ t = (w2,u)` >>
   `request_agree_except D rq1 rq2` by
@@ -1015,6 +1017,7 @@ Theorem taint_agree_delegatecall_abort:
   ?t'. step_inst_base inst t = Abort a t'
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
     (rpt strip_tac >> irule taint_agree_external_operands >>
      qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
@@ -1045,6 +1048,8 @@ Theorem taint_agree_exec_create_request:
       s' (update_var out w u)
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
+  `s.vs_outcomes <> []` by (CCONTR_TAC >> gvs[exec_create_def, AllCaseEqs()]) >>
   qpat_x_assum `exec_create _ _ _ _ _ _ = _` mp_tac >>
   namedCases_on `inst.inst_outputs` ["", "out outs"] >>
   simp[exec_create_def, Excl "consume_create_outcome_eq"] >>
@@ -1217,6 +1222,7 @@ Theorem taint_agree_create_abort:
   ?t'. step_inst_base inst t = Abort a t'
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
     (rpt strip_tac >> irule taint_agree_external_operands >>
      qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
@@ -1271,7 +1277,7 @@ Theorem taint_agree_exec_ext_call:
   exec_ext_call inst s gas addr value ao az ro rs static = OK s' ==>
   ?out w r u. inst.inst_outputs = [out] /\ s' = update_var out w r /\
     exec_ext_call inst t gas addr value ao az ro rs static = OK (update_var out w u) /\
-    consume_call_outcome (venom_call_request s addr value ao az static)
+    consume_call_outcome (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas))
       (w2n ro) (w2n rs) s = (w,r) /\
     taint_agree D X
       ((tn with <|t_mem := tn.t_mem DIFF
@@ -1286,6 +1292,8 @@ Theorem taint_agree_exec_ext_call:
 Proof
   rpt gen_tac >> disch_tac >>
   qpat_x_assum `_ /\ _` strip_assume_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
+  `s.vs_outcomes <> []` by (CCONTR_TAC >> gvs[exec_ext_call_def, AllCaseEqs()]) >>
   qpat_x_assum `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   namedCases_on `inst.inst_outputs` ["", "out outs"] >>
   simp[exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
@@ -1311,6 +1319,7 @@ Theorem taint_agree_call_abort:
   ?t'. step_inst_base inst t = Abort a t'
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[taint_agree_def, ld_shared_agree_def] >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
     (rpt strip_tac >> irule taint_agree_external_operands >>
      qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
@@ -1348,6 +1357,10 @@ Proof
        (accounts_agree_except D s.vs_accounts t.vs_accounts /\
         transient_agree_except D s.vs_transient t.vs_transient)` by
     (rpt strip_tac >>
+     `computed_precompile (venom_call_request s addr value ao az static with
+        cr_gas := SOME (w2n gas)) =
+      computed_precompile (venom_call_request s addr value ao az static)` by
+       simp[computed_precompile_def] >>
      Cases_on `computed_precompile (venom_call_request s addr value ao az static)` >> simp[] >>
      irule taint_agree_request_snapshots >>
      qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>

@@ -978,10 +978,11 @@ QED
 (* Shared execution after raw_call operands have been evaluated and decoded.
    Both input forms retain the same static/revert/output and state effects.
    Every raw call, delegate or not, takes its outcome from the external-call
-   oracle when st.outcomes is SOME, as extcall does (eval_ext_call_effects);
-   without the oracle it runs the callee. *)
+   oracle when st.outcomes is SOME, as extcall does (eval_ext_call_effects),
+   its request recording the gas= operand gas_opt; without the oracle it runs
+   the callee with the gas forwarded_gas gives. *)
 Definition eval_raw_call_def:
-  eval_raw_call cx flags target_addr calldata amount gas = do
+  eval_raw_call cx flags target_addr calldata amount gas_opt = do
     type_check
       (¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
        ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0))
@@ -993,16 +994,18 @@ Definition eval_raw_call_def:
       if IS_SOME outcomes then do
         (rq, outcome) <-
           if flags.rcf_is_delegate then
-            vyperCallOutcome$take_delegate_outcome target_addr calldata value_opt
-          else vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
+            vyperCallOutcome$take_delegate_outcome (OPTION_BIND gas_opt dest_NumV)
+              target_addr calldata value_opt
+          else vyperCallOutcome$take_call_outcome (OPTION_BIND gas_opt dest_NumV)
+                 target_addr calldata value_opt;
         vyperCallOutcome$adopt_call_outcome rq outcome;
         return (call_outcome_success outcome, call_outcome_return_data outcome)
       od else do
         accounts <- get_accounts;
         tStorage <- get_transient_storage;
         result <- lift_option
-          (run_raw_call cx flags target_addr calldata amount gas accounts
-             tStorage)
+          (run_raw_call cx flags target_addr calldata amount
+             (forwarded_gas default_evm_gas_limit gas_opt) accounts tStorage)
           "raw_call run failed";
         success <<- FST result; result1 <<- SND result;
         returnData <<- FST result1; result2 <<- SND result1;
@@ -1089,11 +1092,12 @@ End
 (* Call effects after calldata and keyword evaluation; the account snapshot
    is the one used by the caller's preceding code-presence check. *)
 Definition eval_ext_call_effects_def:
-  eval_ext_call_effects cx target_addr calldata value_opt gas accounts = do
+  eval_ext_call_effects cx target_addr calldata value_opt gas_opt accounts = do
     outcomes <- (λst. return st.outcomes st);
     case outcomes of
       | SOME _ => do
-          (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
+          (rq, outcome) <- vyperCallOutcome$take_call_outcome
+                             (OPTION_BIND gas_opt dest_NumV) target_addr calldata value_opt;
           (if call_outcome_success outcome then return ()
            else raise $ Error $ RevertData $ call_outcome_return_data outcome);
           vyperCallOutcome$adopt_call_outcome rq outcome;
@@ -1103,7 +1107,7 @@ Definition eval_ext_call_effects_def:
           tStorage <- get_transient_storage;
           result <- lift_option
             (run_ext_call cx.txn.target target_addr calldata value_opt
-                          gas
+                          (forwarded_gas default_evm_gas_limit gas_opt)
                           accounts tStorage (vyper_to_tx_params cx.txn))
             "ExtCall run failed";
           success <<- FST result; result1 <<- SND result;
@@ -1150,7 +1154,7 @@ Definition eval_ext_call_def:
           "ExtCall target has no code";
     value_opt <- frame_call_value cx value_opt;
     returnData <- eval_ext_call_effects cx target_addr calldata value_opt
-      (forwarded_gas default_evm_gas_limit gas_opt) accounts;
+      gas_opt accounts;
     case (if returnData = [] then default_opt else NONE) of
     | SOME default_v => do
         accounts' <- get_accounts;
@@ -1181,7 +1185,9 @@ Definition eval_send_def:
     outcomes <- (λst. return st.outcomes st);
     case outcomes of
     | SOME _ => do
-      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] value_opt;
+      (rq, outcome) <- vyperCallOutcome$take_call_outcome
+        (SOME (case OPTION_BIND gas_opt dest_NumV of NONE => 0 | SOME g => g))
+        toAddr [] value_opt;
       check (call_outcome_success outcome) "send failed";
       vyperCallOutcome$adopt_call_outcome rq outcome;
       return $ Value $ NoneV
@@ -1739,8 +1745,7 @@ Definition evaluate_def:
     amount <- lift_option_type (raw_call_value flags.rcf_kws (DROP 2 vs))
                 "raw_call value";
     eval_raw_call cx flags target_addr calldata amount
-      (forwarded_gas default_evm_gas_limit
-         (ext_call_kwarg EKGas flags.rcf_kws (DROP 2 vs)))
+      (ext_call_kwarg EKGas flags.rcf_kws (DROP 2 vs))
   od ∧
   eval_expr cx (Call ty (RawCallCalldataTarget flags) es _) = do
     vs <- eval_exprs cx es;
@@ -1749,8 +1754,7 @@ Definition evaluate_def:
     amount <- lift_option_type (raw_call_value flags.rcf_kws (DROP 1 vs))
                 "raw_call value";
     eval_raw_call cx flags target_addr cx.txn.calldata amount
-      (forwarded_gas default_evm_gas_limit
-         (ext_call_kwarg EKGas flags.rcf_kws (DROP 1 vs)))
+      (ext_call_kwarg EKGas flags.rcf_kws (DROP 1 vs))
   od ∧
   (* raw_log(topics_list, data)
      args = [topics_array; data_bytes] *)
