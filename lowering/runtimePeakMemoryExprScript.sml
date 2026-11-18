@@ -301,3 +301,65 @@ Proof
   windows_tac [dalloca_windows_store_memory_typed, dalloca_windows_copy_memory,
                dalloca_windows_store_bytestring]
 QED
+
+Theorem dalloca_windows_stage_intcall_args:
+  !cfn cenv es flags tys.
+    (!ty e. MEM e es ==> preserves_dalloca_windows window (cfn cenv ty e)) ==>
+    preserves_dalloca_windows window (compile_stage_intcall_args cfn cenv es flags tys)
+Proof
+  ho_match_mp_tac compile_stage_intcall_args_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  simp[Once compile_stage_intcall_args_def] >>
+  windows_tac [dalloca_windows_unwrap_value, dalloca_windows_store_memory,
+               dalloca_windows_store_bytestring] >>
+  fs[] >> metis_tac[]
+QED
+
+Theorem dalloca_windows_fresh_vars[local]:
+  !n. preserves_dalloca_windows window (fresh_vars n)
+Proof
+  Induct >> simp[fresh_vars_def] >> windows_pure_tac
+QED
+
+Theorem dalloca_windows_invoke_multi[local]:
+  preserves_dalloca_windows window (emit_multi_op INVOKE ops n)
+Proof
+  simp[emit_multi_op_def] >> windows_tac [dalloca_windows_fresh_vars]
+QED
+
+Theorem dalloca_windows_store_multi_results[local]:
+  !ops offset. preserves_dalloca_windows window (store_multi_results buf_op ops offset)
+Proof
+  Induct >> simp[store_multi_results_def] >> windows_pure_tac
+QED
+
+Theorem dalloca_windows_result_state:
+  (preserves_dalloca_windows window m <=>
+   !st. compiler_dalloca_windows window st ==>
+     compiler_dalloca_windows window (SND (m st)))
+Proof
+  simp[preserves_dalloca_windows_def] >> EQ_TAC >> rpt strip_tac
+  >- (qpat_x_assum `!st x st'. _` (qspec_then `st` mp_tac) >>
+      Cases_on `m st` >> simp[]) >>
+  qpat_x_assum `!st. _` (qspec_then `st` mp_tac) >> simp[]
+QED
+
+Theorem dalloca_windows_compile_internal_call:
+  (!ct e. MEM e args ==>
+     preserves_dalloca_windows window (cfn cenv ct e)) /\
+  (!ct e. MEM e (omitted_defaults cenv (nsid_to_string func_id) (LENGTH args)) ==>
+     preserves_dalloca_windows window
+       (cfn (cenv_without_defaults cenv (nsid_to_string func_id)) ct e)) ==>
+  preserves_dalloca_windows window (compile_call cfn cenv ret_ty ty (IntCall func_id) args d)
+Proof
+  strip_tac >>
+  imp_res_tac dalloca_windows_stage_intcall_args >>
+  simp[dalloca_windows_result_state, compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+  gen_tac >> strip_tac >>
+  windows_tac [] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [dalloca_windows_result_state]) >>
+  let val stages = map (irule o SIMP_RULE (srw_ss()) [dalloca_windows_result_state])
+    [dalloca_windows_store_multi_results, dalloca_windows_invoke_multi,
+     cj 2 dalloca_windows_emit_helpers, dalloca_windows_alloc_buffer]
+  in rpt (FIRST (CHANGED_TAC (simp[]) :: first_assum irule :: stages)) end
+QED
