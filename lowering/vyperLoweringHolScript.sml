@@ -13,7 +13,7 @@ Ancestors
   dispatchedValueSelection dispatchedValueSource fallbackEntryEndpoint
   loweringCalldataCorrect registrationGuardRejectOrigin
   dispatchedEntryValueRevert
-  e2eLifecycle
+  e2eLifecycle e2eTransactionWorld
   e2eCodeFrame
   (* definitions *)
   moduleLowering
