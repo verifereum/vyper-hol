@@ -904,7 +904,7 @@ Proof
 QED
 
 Theorem storage_trace_frame_check_create_blueprint:
-  !has_salt vs. storage_trace_frame (check_create_blueprint has_salt vs)
+  !has_salt literal_offset vs. storage_trace_frame (check_create_blueprint has_salt literal_offset vs)
 Proof
   rpt gen_tac >> pure_rewrite_tac[check_create_blueprint_def] >>
   irule storage_trace_frame_bind_all >>
@@ -957,6 +957,15 @@ Proof
       simp[storage_trace_frame_raise, storage_trace_frame_return]) >>
   irule storage_trace_frame_ignore_bind >>
   simp[storage_trace_frame_state_updates, storage_trace_frame_return]
+QED
+
+Theorem storage_trace_frame_create_operands:
+  storage_trace_frame
+    (eval_create_operands cx kind has_salt rof arg_tys literal_offset vs)
+Proof
+  Cases_on `kind` >>
+  simp[eval_create_operands_def, storage_trace_frame_create,
+       storage_trace_frame_bind_all, storage_trace_frame_check_create_blueprint]
 QED
 
 Theorem storage_trace_frame_prefix:
@@ -1021,7 +1030,8 @@ val trace_frame_atoms = List.concat (map (CONJUNCTS o SPEC_ALL)
    storage_trace_frame_append_place,
    storage_trace_frame_pop_place, storage_trace_frame_raw_call,
    storage_trace_frame_ext_call, storage_trace_frame_send,
-   storage_trace_frame_create, storage_trace_frame_conditional_result,
+   storage_trace_frame_create, storage_trace_frame_create_operands,
+   storage_trace_frame_conditional_result,
    storage_trace_frame_check_create_blueprint,
    storage_trace_frame_precompile_call_success]);
 
@@ -1056,12 +1066,11 @@ Theorem evaluate_storage_trace_frame:
   (!cx t. storage_trace_frame (eval_base_place cx t)) /\
   (!cx t. storage_trace_frame (eval_target_place cx t)) /\
   (!cx t v. storage_trace_frame (assign_tuple_targets cx t v)) /\
-  (!cx ts vs. storage_trace_frame (assign_tuple_target_list cx ts vs)) /\
-  (!cx es. storage_trace_frame (eval_expr_results cx es))
+  (!cx ts vs. storage_trace_frame (assign_tuple_target_list cx ts vs))
 Proof
   ho_match_mp_tac evaluate_ind >>
   map_every (fn n => conj_tac >- suspend ("c" ^ Int.toString n))
-    (List.tabulate (62, fn n => n + 1)) >> suspend "c63"
+    (List.tabulate (60, fn n => n + 1)) >> suspend "c61"
 QED
 
 Resume evaluate_storage_trace_frame[c24]:
@@ -1255,12 +1264,6 @@ Resume evaluate_storage_trace_frame[c60]:
   TRACE_FRAME_CONSTRUCTOR_TAC
 QED
 Resume evaluate_storage_trace_frame[c61]:
-  TRACE_FRAME_CONSTRUCTOR_TAC
-QED
-Resume evaluate_storage_trace_frame[c62]:
-  TRACE_FRAME_CONSTRUCTOR_TAC
-QED
-Resume evaluate_storage_trace_frame[c63]:
   TRACE_FRAME_CONSTRUCTOR_TAC
 QED
 
