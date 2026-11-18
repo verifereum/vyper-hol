@@ -224,3 +224,31 @@ Theorem source_dispatched_linear_target:
 Proof
   MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] (SPEC_ALL source_dispatched_linear_target_nr))
 QED
+
+(* A successful dispatch names an external declaration or its getter. *)
+Theorem calldata_dispatch_has_source_entry:
+  supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+  calldata_dispatch tops cd = SOME (name,vals) ==>
+  ?mut nr args dflts ret fbody.
+    vyperInterpreter$lookup_function NONE name External tops =
+      SOME (mut,nr,args,dflts,ret,fbody)
+Proof
+  strip_tac >>
+  Cases_on `if LENGTH cd < 4 then NONE else
+    FIND (\(n,tys). abi_method_id (type_env tops) n tys = cd_selector cd)
+      (abi_external_signatures tops)`
+  >- (gvs[calldata_dispatch_def, AllCaseEqs()] >>
+      drule default_classified_present >> strip_tac >>
+      drule_all fallback_source_lookup >> simp[] >> metis_tac[]) >>
+  PairCases_on `x` >>
+  gvs[calldata_dispatch_def, AllCaseEqs()] >>
+  `MEM (name,x1) (abi_external_signatures tops)` by
+    metis_tac[venomInstTheory.FIND_MEM] >>
+  qpat_x_assum `MEM _ (abi_external_signatures _)` mp_tac >>
+  drule source_signature_table >>
+  disch_then (qspecl_then [`name`,`x1`] (fn th => REWRITE_TAC [th])) >>
+  simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+  strip_tac >> gvs[] >>
+  drule_all classified_source_lookup >> simp[] >> metis_tac[]
+QED
