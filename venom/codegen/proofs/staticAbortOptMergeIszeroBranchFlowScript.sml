@@ -15,19 +15,22 @@ local
     end)
 in
   fun expose_binding name = use_binding name SUBST1_TAC >> BETA_TAC
+  fun intro_binding conv name = qx_gen_tac name >>
+    disch_then (assume_tac o CONV_RULE
+      (RAND_CONV conv THENC REWR_CONV (GSYM markerTheory.Abbrev_def)))
 end
 
 Theorem merge_iszero_branch_flow:
-  let Inherit = \hi hj (ta:num->(string#num)option) tb ba bb
+  !Inherit. Inherit = (\hi hj (ta:num->(string#num)option) tb ba bb
        (src:num->num option) (newtag:num->(string#num)option) newbool.
     (!k nm org. tb k = SOME(nm,org) ==>
        k < hj /\ (newtag k = SOME(nm,org) \/
           ?j. src k = SOME j /\ j < hi /\ ta j = SOME(nm,org))) /\
     (!k. bb k ==> k < hj /\
-       (newbool k \/ ?j. src k = SOME j /\ j < hi /\ ba j)) in
-  let Flow = \p pc height tag boolean (x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit = Inherit hi hj (tag x) (tag y) (boolean x) (boolean y) in
+       (newbool k \/ ?j. src k = SOME j /\ j < hi /\ ba j))) ==>
+  !Flow. Flow = (\p pc height tag boolean (x:num#num) (y:num#num).
+    !hi. hi = height x ==> !hj. hj = height y ==> !ins. ins = EL (pc x) p ==>
+    !inherit. inherit = Inherit hi hj (tag x) (tag y) (boolean x) (boolean y) ==>
     case ins of
       AsmLabel nm => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\
@@ -52,7 +55,7 @@ Theorem merge_iszero_branch_flow:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==> !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -61,22 +64,13 @@ Theorem merge_iszero_branch_flow:
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins s = AsmOK u ==>
                      (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F in
+    | _ => F) ==>
   !p q pre tail l (V:(num#num)->bool) e c (rank:(num#num)->num)
      pc height tag boolean edge next v.
-  let b = LENGTH pre in
-  let keep = \i. i < b \/ b+2 <= i in
-  let f = \i. if i < b then i else i-2 in
-  let M = OPTION_MAP (\(nm,org). (nm,f org)) in
-  let pcq = \x. if x=v then b else f (pc x) in
-  let hq = \x. if x=v then height e-1 else height x in
-  let tq = \x k. if x=v then (if k=0 then NONE else M(tag e (k+1)))
-    else if (pc x=b+2 /\ k=0) \/ (pc x=b+3 /\ k=1) then NONE
-    else if pc x=b+3 /\ k=0 then SOME(l,b) else M(tag x k) in
-  let Bq = \x k. if x=v then 0<k /\ boolean e (k+1)
-    else ~((pc x=b+2 /\ k=0) \/ (pc x=b+3 /\ k<=1)) /\ boolean x k in
-  let relEdge = \x y. (x=v /\ c=b+3 /\ y=e) \/
-    (x IN V /\ keep(pc x) /\ ?z. edge x z /\ y=next z) in
+  !b. b = LENGTH pre ==>
+  !keep. keep = (\i. i < b \/ b+2 <= i) ==>
+  !f. f = (\i. if i < b then i else i-2) ==>
+  !M. M = OPTION_MAP (\(nm,org). (nm,f org)) ==>
   p = pre ++ [AsmOp "ISZERO"; AsmOp "ISZERO"; AsmPushLabel l; AsmOp "JUMPI"] ++ tail /\
   q = pre ++ [AsmPushLabel l; AsmOp "JUMPI"] ++ tail /\ asm_static_wf p /\
   e IN V /\ pc e=c /\ v NOTIN V /\
@@ -94,16 +88,24 @@ Theorem merge_iszero_branch_flow:
     (!k. 0<k /\ boolean (next x) k ==> boolean x k)) /\
   (!x z. x IN V /\ keep(pc x) /\ edge x z /\ pc(next z)=b+3 ==>
     next z=z /\ pc x=b+2) ==>
-  !x y. relEdge x y ==> Flow q pcq hq tq Bq x y
+  !x y. (x=v /\ c=b+3 /\ y=e) \/
+        (x IN V /\ keep(pc x) /\ ?z. edge x z /\ y=next z) ==>
+    Flow q
+      (\x. if x=v then b else f (pc x))
+      (\x. if x=v then height e-1 else height x)
+      (\x k. if x=v then (if k=0 then NONE else M(tag e (k+1)))
+        else if (pc x=b+2 /\ k=0) \/ (pc x=b+3 /\ k=1) then NONE
+        else if pc x=b+3 /\ k=0 then SOME(l,b) else M(tag x k))
+      (\x k. if x=v then 0<k /\ boolean e (k+1)
+        else ~((pc x=b+2 /\ k=0) \/ (pc x=b+3 /\ k<=1)) /\ boolean x k) x y
 Proof
-  map_every (fn pat => qmatch_goalsub_abbrev_tac pat >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ Inherit`, `LET _ Flow`] >>
-  rpt gen_tac >>
-  map_every (fn pat => qmatch_goalsub_abbrev_tac pat >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ b`, `LET _ keep`, `LET _ f`, `LET _ M`, `LET _ pcq`, `LET _ hq`,
-     `LET _ tq`, `LET _ Bq`, `LET _ relEdge`] >>
+  intro_binding ALL_CONV `Inherit` >>
+  intro_binding (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) `Flow` >>
+  ntac 16 gen_tac >> map_every (intro_binding ALL_CONV) [`b`, `keep`, `f`, `M`] >>
+  qmatch_goalsub_abbrev_tac `Flow q pcq _ _ _ _ _` >>
+  qmatch_goalsub_abbrev_tac `Flow q pcq hq _ _ _ _` >>
+  qmatch_goalsub_abbrev_tac `Flow q pcq hq tq _ _ _` >>
+  qmatch_goalsub_abbrev_tac `Flow q pcq hq tq Bq _ _` >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `EL (b+2) p = AsmPushLabel l /\ EL (b+3) p = AsmOp "JUMPI" /\
    EL b q = AsmPushLabel l` by
@@ -115,8 +117,6 @@ Proof
          (\k. if k=0 then NONE else SOME(k-1))
          (\k. if k=0 then SOME(nm,rpc u) else NONE) (\k. F))` by suspend "pushrow" >>
   rpt gen_tac >>
-  qpat_assum `Abbrev (relEdge = _)`
-    (rewrite_tac o single o REWRITE_RULE [markerTheory.Abbrev_def]) >> BETA_TAC >>
   disch_then (DISJ_CASES_THEN2 strip_assume_tac
     (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac strip_assume_tac)))
   >- suspend "fresh" >>
@@ -144,8 +144,9 @@ QED
 Resume merge_iszero_branch_flow[fetch]:
   mp_tac (Q.INST [`pat` |-> `[AsmOp "ISZERO"; AsmOp "ISZERO"; AsmPushLabel l; AsmOp "JUMPI"]`,
                   `repl` |-> `[AsmPushLabel l; AsmOp "JUMPI"]`]
-      merge_iszero_one_canonical_layout) >>
-  simp[NoAsms, LET_THM] >>
+      (CONV_RULE (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2))
+        merge_iszero_one_canonical_layout)) >>
+  simp[NoAsms] >>
   impl_tac >- (simp[] >> metis_tac[]) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   simp[Abbr `keep`, Abbr `f`, Abbr `b`] >> first_assum ACCEPT_TAC
