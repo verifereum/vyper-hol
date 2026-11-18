@@ -532,7 +532,7 @@ Proof
   asm_rewrite_tac[] >> simp[mk_inst_def]
 QED
 
-Theorem extract32_source_post_view:
+Theorem extract32_source_post_alloca_bound:
   expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -998,5 +998,8 @@ Proof
       alloc_limits_expr_def, int_calls_expr_def,
       supportedExprTraverseTheory.supported_expr_exists_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm] >>
+  qpat_x_assum `well_typed_exprs env [src;off]` mp_tac >>
+  simp[Once well_typed_expr_def] >> simp[Once well_typed_expr_def] >>
+  strip_tac >>
   metis_tac[call_evaluation_safe_append_right]
 QED

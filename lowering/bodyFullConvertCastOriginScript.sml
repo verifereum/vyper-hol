@@ -149,7 +149,7 @@ Proof
   `EVERY (\ins. ins.inst_opcode <> INVOKE /\ ~is_terminator ins.inst_opcode /\
       ins.inst_opcode <> GAS) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
   `!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th` by
-    (gen_tac >> irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_transport >> simp[] >>
+    (gen_tac >> irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_from_alloca_next >> simp[] >>
      conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
      qexists `0` >> simp[]) >>
   `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
