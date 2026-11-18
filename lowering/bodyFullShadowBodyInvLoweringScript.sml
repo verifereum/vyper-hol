@@ -327,9 +327,7 @@ Theorem deploy_shadow_body_inv:
 Proof
   rpt gen_tac >> strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-    (fs[deploy_source_ok_def, deploy_typing_ok_def] >>
-     metis_tac[check_contract_runtime_namespaces,
-       contract_namespaces_ok_module_toplevel_vtype_keys, listTheory.MEM]) >>
+    (fs[deploy_source_ok_def] >> metis_tac[deploy_typing_ok_vtype_keys_distinct]) >>
   qabbrev_tac `srcs = order_internals (deploy_internal_order (SOME cf) ints) ints` >>
   qabbrev_tac `ips = MAP (set_internal_package_target rp.rpol_target o
     package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) srcs` >>
