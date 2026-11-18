@@ -441,3 +441,19 @@ Proof
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`vars`,`G'`,`tn'`] >> simp[]
 QED
+
+Theorem guard_compare_output_clean:
+  MEM opc [LT; SLT] ==>
+  op_prov (step_prov PG G (mk_inst id opc ops [out]) t) (Var out) = NONE /\
+  op_taint (step_taint (mk_inst id opc ops [out]) s t tn) (Var out) = {}
+Proof
+  simp[MEM] >> strip_tac >>
+  gvs[op_prov_def, step_prov_def, set_prov_def, out_prov_def,
+      mk_inst_def, FLOOKUP_DRESTRICT, op_taint_def, step_taint_def,
+      set_var_taint_def, FLOOKUP_UPDATE, out_taint_def] >>
+  (namedCases_on `ops` ["", "a rest"] >> simp[] >>
+   namedCases_on `rest` ["", "b tail"]
+   >- (Cases_on `eval_operand a s` >> simp[]) >>
+   Cases_on `tail` >> simp[] >>
+   Cases_on `eval_operand a s` >> simp[])
+QED

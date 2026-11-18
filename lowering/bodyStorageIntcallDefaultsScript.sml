@@ -18,6 +18,7 @@ Ancestors
   vyperTypeExprSoundness vyperTypeEvalSoundness vyperTypeStoragePreservation
   vyperStorageLayoutSafety vyperEvalOutcomeSuffix vyperTypeEvalStoragePreservation
   bodyStorageCases list
+  vyperTypeEvalCaseProofs vyperTypeEvalProofs
 
 Theorem intcall_defaults_oracle_storage:
   well_typed_exprs (defaults_env env_body) dflts /\
