@@ -3,6 +3,7 @@ Theory symInstPhiOwn
 Ancestors
   symPostfixSim symPlannerSim stackPlanGen stackPlanOps stackModel asmSplice
   planExec codegenSymRel asmSymSem doSwapSim genBlockSim symInstKinds
+  symPhiRenameFacts
 
 Theorem sym_phi_rename_own:
   ssa_form fn /\ retpc_shape_ok fn /\ label_flow_own_ok ctx /\
@@ -14,8 +15,7 @@ Theorem sym_phi_rename_own:
   sym_kinds_ok cplan fn ret srest
     (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) ss
 Proof
-  strip_tac >> drule phi_depth_operand >> strip_tac >>
-  irule sym_kinds_ok_poke >> simp[] >> metis_tac[phi_var_output_kind_own]
+  MATCH_ACCEPT_TAC symPhiRenameFactsTheory.sym_phi_rename_own
 QED
 
 Theorem sym_phi_dup_rename_own:
