@@ -41,7 +41,7 @@ Proof
   pop_assum SUBST1_TAC >> simp[]
 QED
 
-Theorem literal_add_ghost[local]:
+Theorem lit_add_lit_ghost[local]:
   ghost_step fuel ctx PG G tn (mk_inst iid ADD [Lit (u:bytes32);Lit (v:bytes32)] [x]) s =
   (DRESTRICT G (COMPL {x}), tn with t_var := tn.t_var |+ (x,{}))
 Proof
@@ -273,7 +273,7 @@ Resume default_word_registration_prelude_footprint[origin]:
      asm_rewrite_tac[] >>
      conj_tac >- simp[ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke, mk_inst_def] >>
      conj_tac >-
-       simp[literal_add_ghost] >>
+       simp[lit_add_lit_ghost] >>
      irule ctorDeployMemoryRunPtrPrefixBoolBodyTheory.prefix_bool_body_arith_ptr_step >>
      simp[eval_operand_def,op_taint_def,allocas_from_def,update_var_def,FLOOKUP_UPDATE] >>
      rpt strip_tac >> gvs[allocas_from_def] >>
