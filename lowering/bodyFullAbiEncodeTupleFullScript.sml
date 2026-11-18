@@ -2,7 +2,7 @@
 Theory bodyFullAbiEncodeTupleFull
 Ancestors
   bodyFullPreds bodySimFull bodyInvNoDalloca
-  bodyFullAbiEncodeArgs bodyFullAbiEncodeTupleAlloc bodyFullAbiEncodeTupleZero
+  bodyFullAbiEncodePureFrame bodyFullAbiEncodeTuplePrepared bodyFullAbiEncodeTupleTail
   bodyFullAbiEncodeUniformTranslation bodyFullAbiEncodeSuffix
   bodyFullAbiEncodeSetupTail bodyFullAbiEncodeFinish
   exprSimAbiEncodeTupleCase exprSimAbiEncodeRuntimeInputs
@@ -72,10 +72,11 @@ Proof
   rpt gen_tac >> strip_tac >>
   `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `1 <= LENGTH args` by
-    (qpat_assum `expr_body_pre ce cx env (TypeBuiltin _ _ _ _) es` mp_tac >>
-     simp[expr_body_pre_def, Once well_typed_expr_def,
-       well_typed_type_builtin_args_def, type_builtin_args_length_ok_def] >>
-     Cases_on `args` >> simp[]) >>
+    (Cases_on `args` >> simp[] >>
+     `well_typed_expr env (TypeBuiltin ann (AbiEncode ensure mid) ty [])`
+       by fs[expr_body_pre_def] >>
+     pop_assum mp_tac >> simp[Once well_typed_expr_def,
+       well_typed_type_builtin_args_def]) >>
   `body_exprs_full_ok cx args` by
     (qpat_x_assum `!s'' x t. _` (qspecl_then [`es`, `()`, `es`] mp_tac) >>
      simp[type_check_def, type_builtin_args_length_ok_def, assert_def, return_def]) >>
@@ -103,8 +104,9 @@ Proof
     bind (eval_expr cx e) (read_result cx) q = (INL v,q') ==>
     expr_sim_inv ce cx env q' /\ MAP FDOM q'.scopes = MAP FDOM q.scopes) args` by
     (fs[EVERY_MEM] >> metis_tac[abi_args_success_ready]) >>
-  drule_all (SRULE [] (Q.INST [`Inv` |-> `expr_sim_inv ce cx env`]
-    (SPEC_ALL abi_encode_args_full))) >>
+  drule_all (SRULE [] (Q.INST [`Inv` |-> `expr_sim_inv ce cx env`,
+    `ann` |-> `ann`, `ensure` |-> `ensure`, `mid` |-> `mid`, `ty` |-> `ty`]
+    (SPEC_ALL abi_encode_args_full_pure_frame))) >>
   disch_then (qspec_then `PG` assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ argsQ argsR` >>
   dep_rewrite.DEP_REWRITE_TAC [exprSimAbiEncodeTupleCaseTheory.eval_expr_abi_encode_tuple_action] >> simp[] >>
@@ -133,5 +135,98 @@ Proof
   qpat_assum `!H. valid_horizon _ _ _ _ ==> argsQ _ _ _ _ _ _`
     (drule_then assume_tac) >>
   fs[Abbr `argsQ`] >>
-  FAIL_TAC "tuple physical continuation"
+  `out' = out` by fs[mk_ptr_def] >>
+  qpat_x_assum `out' = out` SUBST_ALL_TAC >>
+  drule abi_args_post_lengths >> strip_tac >>
+  `abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)) =
+    type_memory_bytes ce (TupleT (MAP (lowered_value_type ce) args))` by
+    simp[abiTupleEncodeMemoryTheory.abi_tuple_encode_bytes_zip] >>
+  qmatch_asmsub_abbrev_tac `compile_alloc_buffer n st = (buf,allocated)` >>
+  `cs_extends st allocated` by metis_tac[loweringHaltTheory.compile_alloc_buffer_extends] >>
+  `cs_extends allocated staged` by
+    metis_tac[externalEntryShapeTheory.compile_store_abi_tuple_labels,pairTheory.SND] >>
+  `fn_has_code st allocated func /\ fn_has_code allocated staged func /\
+   fn_has_code staged sb func` by
+    metis_tac[fn_has_code_split,cs_extends_trans] >>
+  `sa.cs_next_var <= st.cs_next_var /\ sa.cs_next_id <= st.cs_next_id` by
+    (qspec_then `args` mp_tac abi_args_compile_mono >>
+     disch_then (qspecl_then [`ce`,`sa`] mp_tac) >> simp[ci_mono_def]) >>
+  `local_ptrs_reserved ce st` by
+    (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
+  `allocas_from lo t /\ lo <= t.vs_alloca_next` by
+    (qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ t`
+       (strip_assume_tac o REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >> simp[]) >>
+  `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
+   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x)` by
+    (conj_tac >> rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
+     qexists `sa` >> simp[]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ (eval_exprs _ _) _ _ _` kall_tac >>
+  drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    abi_encode_args_tuple_prepared_state_frame >>
+  disch_then (drule_at (Pat `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _`)) >>
+  disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_store_abi_tuple _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `allocas_from _ _`)) >>
+  disch_then (mp_tac o Q.INST [`tvs` |-> `tvs`, `G` |-> `G1`, `tn` |-> `tn1`,
+    `tn0` |-> `tn0`, `G0` |-> `G0`, `d` |-> `d`,
+    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `PG` |-> `PG`] o SPEC_ALL) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `src` (qx_choose_then `bw` (qx_choose_then `prepared`
+    (qx_choose_then `Gp` (qx_choose_then `tnp` strip_assume_tac))))) >>
+  qpat_x_assum `abi_tuple_bytes _ _ = n` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `res = INL vs` SUBST_ALL_TAC >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  irule_at Any (BETA_RULE abi_encode_staged_tuple_full_tail) >>
+  qpat_assum `body_inv tops ctx ce cx` (irule_at Any) >>
+  qpat_assum `expr_body_pre ce cx env (TypeBuiltin ann _ _ _) es` (irule_at Any) >>
+  qpat_assum `compile_abi_encode_args _ ce args sa = _` (irule_at Any) >>
+  qpat_assum `compile_alloc_buffer _ st = (buf,allocated)` (irule_at Any) >>
+  qpat_assum `lower_abi_encode _ _ buf.buf_operand _ _ staged = (out,sb)` (irule_at Any) >>
+  qpat_assum `return_buf_frame d ce sa s0` (irule_at Any) >>
+  (* Fix the staging witnesses, gas marks and entry ghost before any horizon. *)
+  qexistsl [`tvs`, `tnp`, `tn0`, `src`, `prepared`, `marks`, `bw`, `Gp`, `G0`] >>
+  simp[] >>
+  conj_tac >- suspend "args_horizons" >>
+  conj_tac >- suspend "prepared_disjoint" >>
+  conj_tac >- suspend "prepared_horizons" >>
+  suspend "receiver_post"
 QED
+
+Resume abi_encode_tuple_vv_full_from_packaging[args_horizons]:
+  gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==> ?vlist tlist. _`
+    (drule_then (qx_choose_then `vs'` (qx_choose_then `ts` strip_assume_tac))) >>
+  `vs' = vs` by fs[] >>
+  qpat_x_assum `vs' = vs` SUBST_ALL_TAC >>
+  qexists `ts` >> simp[] >>
+  gen_tac >> strip_tac >>
+  qpat_assum `!i. i < LENGTH args ==> evaluate_type _ _ = SOME (EL i ts) /\ _`
+    (qspec_then `i` mp_tac) >>
+  qpat_assum `!i. i < LENGTH args ==> evaluate_type _ _ = SOME (EL i tvs) /\ _`
+    (qspec_then `i` mp_tac) >> simp[]
+QED
+
+Resume abi_encode_tuple_vv_full_from_packaging[prepared_disjoint]:
+  rpt strip_tac >>
+  qpat_assum `!name z k. local_region ce mid'.scopes t name z k ==> _` irule >>
+  goal_assum (drule_at Any)
+QED
+
+Resume abi_encode_tuple_vv_full_from_packaging[prepared_horizons]:
+  gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==> ?vlist tlist. _`
+    (drule_then strip_assume_tac) >>
+  qpat_assum `!D. ghost_inv_at D lo d ce cx mid' G1 tn1 t ==> _` irule >>
+  first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_tuple_vv_full_from_packaging[receiver_post]:
+  `is_bytestring_type (expr_type (TypeBuiltin ann (AbiEncode ensure mid) ty args))` by
+    ((qpat_assum `expr_body_pre ce cx env (TypeBuiltin ann _ _ _) es` mp_tac >>
+     simp[expr_body_pre_def, Once well_typed_expr_def, type_builtin_result_ok_def,
+          vyperASTTheory.expr_type_def, is_bytestring_type_def] >>
+     rpt strip_tac >> simp[] >> (gvs[expr_body_pre_def, Once well_typed_expr_def, type_builtin_result_ok_def, vyperASTTheory.expr_type_def, is_bytestring_type_def]))) >>
+  simp[]
+QED
+
+Finalise abi_encode_tuple_vv_full_from_packaging
