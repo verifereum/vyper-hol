@@ -9,7 +9,7 @@
 Theory bodyFullAnnAssign
 Ancestors
   bodyFullAnnAssignWord bodyFullAnnAssignWidened bodyFullAnnAssignMemoryPost
-  bodyFullAnnAssignOther exprSimAggregateLayout typedMemoryCopy
+  bodyFullAnnAssignMemory bodyFullAnnAssignOther exprSimAggregateLayout typedMemoryCopy
   bodyDeclCopyMemory vyperTypeInvariants allocLimits
   bodyInvNoDalloca loweringPosts
   vyperTypeCallGraph supportedExprTraverse
@@ -201,7 +201,51 @@ Theorem body_annassign_memory_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `well_typed_expr env e /\ assignable_type env.type_defs typ /\
+   type_widens_to env.type_defs (expr_type e) typ /\
+   id NOTIN FDOM env.var_types` by
+    gvs[type_stmt_annassign, AllCaseEqs()] >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (irule declared_name_unbound >> metis_tac[]) >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  `body_expr_full_ok cx e` by
+    (first_x_assum irule >>
+     qexistsl_tac [`es`,`es`,`get_tenv cx`,`tyv`] >>
+     simp[lift_option_type_def, return_def]) >>
+  `supported_expr tops e` by fs[supported_stmt_annassign] >>
+  `body_stmt_safe tops (AnnAssign id typ e)` by
+    metis_tac[supported_stmt_body_safe] >>
+  `expr_body_pre cenv cx env e es` by metis_tac[body_annassign_rhs_pre] >>
+  `lookup_scopes id es.scopes = NONE` by
+    (fs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _`
+       (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
+  `lowered_value_type cenv e = expr_type e \/
+   is_bytestring_type (expr_type e) \/
+   is_bytestring_type (lowered_value_type cenv e) \/
+   arg_type_fits (lowered_value_type cenv e) (expr_type e)` by
+    (qpat_assum
+       `lowered_value_type cenv e = expr_type e \/ _ /\ _ /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  irule annassign_memory_full_execution >>
+  rpt (FIRST [conj_tac,
+    MATCH_ACCEPT_TAC annassign_memory_full_installation_post,
+    MATCH_ACCEPT_TAC annassign_memory_full_assign_path,
+    qexistsl_tac [`env`,`tops`]]) >>
+  simp[] >>
+  rpt gen_tac >> disch_tac >>
+  drule_all_then strip_assume_tac annassign_full_declared_rhs_pre >>
+  qpat_assum `body_expr_full_ok cx e`
+    (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+  disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,
+    `shadow_ctx`,`func`,`shadow_func`,`ce`,`env`,`ty`,`es`] mp_tac) >>
+  simp[]
 QED
 
 (* A memory local whose source is a widened aggregate. *)
