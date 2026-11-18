@@ -223,7 +223,7 @@ Proof
 QED
 
 (* Source lookup covers both explicit functions and generated getters. *)
-Theorem selected_nonreentrant_lock_metadata[local]:
+Theorem selected_nonreentrant_lock_metadata:
   source_deployment_rel tops am tx /\ source_typing_ok tops am tx /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
     SOME (mut,T,args,[],ret,fbody) ==>
