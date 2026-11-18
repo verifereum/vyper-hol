@@ -57,12 +57,11 @@ Theorem generated_static_head_factors:
       (execute_plan cplan.cp_initial_fmp b) /\
     (i < j ==> static_abort_pair bb (SUC i) j /\
                 SUC j - SUC i < SUC j - i) /\
-    (let inst = EL i bb.bb_instructions;
-         lo = SND (compute_label_offsets prog);
-         fmp = cplan.cp_initial_fmp;
-         topics = (case inst.inst_opcode of LOG =>
-           (case HD inst.inst_operands of Lit v => w2n v | _ => 0) | _ => 0)
-     in
+    (!inst. inst = EL i bb.bb_instructions ==>
+     !lo. lo = SND (compute_label_offsets prog) ==>
+     !fmp. fmp = cplan.cp_initial_fmp ==>
+     !topics. topics = (case inst.inst_opcode of LOG =>
+       (case HD inst.inst_operands of Lit v => w2n v | _ => 0) | _ => 0) ==>
        (inst.inst_opcode = NOP /\ a = [] /\ mid = ps) \/
        ?pre emit post ps6 ps7 m h.
          a = pre ++ emit ++ post /\
@@ -90,11 +89,10 @@ Proof
   drule_all generated_static_prefix_shared_edge >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
   qpat_x_assum `!t. _` kall_tac >>
-  (* E0140: qexistsl [`a`, `mid`, `b`] >> simp[] >> simp[LET_THM]
-     eliminated the nested accounting witnesses too early. *)
+  (* Project the witnesses before substituting the accounting aliases. *)
   map_every Q.EXISTS_TAC [`a`, `mid`, `b`] >>
   ntac 7 (conj_tac >- first_assum ACCEPT_TAC) >>
-  pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+  ntac 4 (gen_tac >> disch_then SUBST1_TAC) >>
   qmatch_goalsub_abbrev_tac `inst.inst_opcode = NOP` >>
   `i <= j /\ j < LENGTH bb.bb_instructions /\ i < LENGTH bb.bb_instructions` by
     gvs[static_abort_pair_def] >>

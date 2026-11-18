@@ -8,7 +8,7 @@ Ancestors
 
 Theorem pending_static_emit_rows:
   generate_emit_ops inst topics ps = (ops,ps') ==>
-  let code = execute_plan fmp ops in
+  !fmp b a code. code = execute_plan fmp ops ==>
   (static_abort_emit_io inst a b ==>
     (?name. code = [AsmOp name] /\
        static_abort_straight name b /\ a = asm_op_arity name) \/
@@ -52,7 +52,7 @@ Theorem pending_static_emit_rows:
       MEM name ["LOG0"; "LOG1"; "LOG2"; "LOG3"; "LOG4"]) /\
      asm_op_arity name = if inst.inst_opcode = LOG then 2 + topics else 2)
 Proof
-  simp[] >> strip_tac >> conj_tac
+  strip_tac >> rpt gen_tac >> disch_then SUBST1_TAC >> conj_tac
   >- (simp[static_abort_emit_io_def] >> strip_tac
       >- (drule generate_emit_ops_some >>
           disch_then (qspecl_then [`topics`, `ps`] assume_tac) >>
