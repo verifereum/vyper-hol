@@ -13,6 +13,8 @@ Ancestors
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullStructLit bodyFullPop
+  bodyFullTypeBuiltinEmpty bodyFullTypeBuiltinWords bodyFullTypeBuiltinConvert
+  bodyFullTypeBuiltinExtract32 bodyFullTypeBuiltinAbiDecode bodyFullTypeBuiltinAbiEncode
   bodyFullRawCallCalldata
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullBuiltinEnv
@@ -1346,7 +1348,7 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_type_builtin_case_ptr_at (bodyPtrExprCases). *)
+(* Join the TypeBuiltin constructor proofs. *)
 Theorem body_type_builtin_case_full:
   !cx v11 tb typ es.
     (!s'' x t.
@@ -1355,5 +1357,13 @@ Theorem body_type_builtin_case_full:
        body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (TypeBuiltin v11 tb typ es)
 Proof
-  cheat
+  rpt gen_tac >> Cases_on `tb`
+  >- MATCH_ACCEPT_TAC bodyFullTypeBuiltinEmptyTheory.empty_expr_full_ok
+  >- simp[bodyFullTypeBuiltinWordsTheory.bound_builtin_expr_full_ok]
+  >- simp[bodyFullTypeBuiltinWordsTheory.bound_builtin_expr_full_ok]
+  >- simp[bodyFullTypeBuiltinWordsTheory.bound_builtin_expr_full_ok]
+  >- MATCH_ACCEPT_TAC bodyFullTypeBuiltinConvertTheory.convert_expr_full_ok
+  >- MATCH_ACCEPT_TAC bodyFullTypeBuiltinExtract32Theory.extract32_expr_full_ok
+  >- MATCH_ACCEPT_TAC bodyFullTypeBuiltinAbiDecodeTheory.abi_decode_expr_full_ok >>
+  MATCH_ACCEPT_TAC bodyFullTypeBuiltinAbiEncodeTheory.abi_encode_expr_full_ok
 QED
