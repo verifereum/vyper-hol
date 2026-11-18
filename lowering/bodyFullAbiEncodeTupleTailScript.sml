@@ -14,7 +14,9 @@ Ancestors
   venomMemDefs bodyPtrDefs robustCopyTransportPtr exprSimProps
   bodyFullAbiEncodeSetupSourceFrame
   venomExecSemantics venomState venomInst ptrDiscipline finite_map pred_set
-
+  bodyFullAbiEncodeReadyFinish bodyFullAbiEncodeResultResources bodyFullAbiEncodePureFrame
+  exprSimAbiEncodeTupleResult exprSimAbiEncodeRuntimeInputs exprSimAbiEncodeNonwordCase
+  exprSimAbiEncodeExecFrame abiCallerAllocation bodyMemoryDefs
 
 Theorem literal_alloca_step_resources_ptr[local]:
   alloca_inv s /\ alloca_room ctx fn s /\ fn_inst_ids_distinct fn /\
@@ -801,3 +803,1280 @@ Resume abi_encode_staged_tuple_ready_origin[allocation_frame]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise abi_encode_staged_tuple_ready_origin
+
+(* The argument bind and the tuple staging have already selected their endpoints. *)
+Theorem abi_encode_staged_tuple_full_tail:
+  body_inv tops ctx ce cx /\
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) ty args) es /\
+  ~(LENGTH args = 1 /\ ~ensure) /\
+  compile_abi_encode_args compile_expr ce args origin = (ops,st) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) st =
+    (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0
+    (ZIP (ops,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
+  lower_abi_encode ensure (OPTION_MAP bytes_method_id_word mid) buf.buf_operand
+    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged =
+      (out,final_st) /\
+  fn_has_code origin st func /\ fn_has_code st allocated func /\
+  fn_has_code allocated staged func /\ fn_has_code staged final_st func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce origin /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
+  return_buf_frame d ce origin s0 /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!tail. eval_exprs cx args (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+    (INL vs,ee with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    (?ts. LENGTH ts = LENGTH args /\
+    abi_args_post H ctx func ce cx es origin st s0 ee args ops vs initial /\
+    (!i. i < LENGTH args ==>
+      evaluate_type (get_tenv cx) (lowered_value_type ce (EL i args)) = SOME (EL i ts) /\
+      value_has_type (EL i ts) (EL i vs) /\
+      type_memory_bytes ce (lowered_value_type ce (EL i args)) = type_memory_size (EL i ts) /\
+      type_memory_size (EL i ts) < 2**64) /\
+    ghost_inv_at (DF H) lo d ce cx ee G tn initial /\
+    ghost_kept_at lo ce es origin G0 tn0 s0 G tn /\
+    alloca_history func initial /\ s0.vs_alloca_next <= initial.vs_alloca_next) /\
+    (~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid) ty args) ==>
+      pure_frame ce func es origin s0 initial)) /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  LENGTH tvs = LENGTH args /\ LENGTH vs = LENGTH args /\
+  (!i. i < LENGTH args ==>
+    evaluate_type (get_tenv cx) (lowered_value_type ce (EL i args)) = SOME (EL i tvs)) /\
+  buf.buf_operand = Var src /\ not_fresh_at staged src /\
+  lookup_var src prepared = SOME bw /\
+  ptr_covers Gp tnp src prepared (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) /\
+  w2n bw + abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)) < dimword(:256) /\
+  lo <= w2n bw /\
+  FLOOKUP prepared.vs_allocas st.cs_next_id = SOME
+    (w2n bw,abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) /\
+  w2n bw + abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)) <=
+    prepared.vs_alloca_next /\
+  (!mem. mem_agree_outside tnp.t_mem prepared.vs_memory mem ==>
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n bw) mem) /\
+  ~prepared.vs_halted /\ prepared.vs_current_bb = staged.cs_current_bb /\
+  prepared.vs_inst_idx = LENGTH staged.cs_current_insts /\
+  prepared.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
+  prepared.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
+  allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\
+  alloca_history func prepared /\ local_ptrs_rel func ce ee.scopes prepared /\
+  locals_kept ce ee ee initial prepared /\
+  initial.vs_alloca_next <= prepared.vs_alloca_next /\
+  (!name z k. local_region ce ee.scopes initial name z k ==>
+    loweringStateRelDefs$regions_disjoint (w2n bw)
+      (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) z k) /\
+  (!z k. loweringStateRelDefs$regions_disjoint (w2n bw)
+      (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) z k ==>
+    mem_bytes_at z k prepared.vs_memory = mem_bytes_at z k initial.vs_memory) /\
+  (!i row. FLOOKUP initial.vs_allocas i = SOME row ==>
+    FLOOKUP prepared.vs_allocas i = SOME row) /\
+  (!x. not_fresh_at st x ==> lookup_var x prepared = lookup_var x initial) /\
+  stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func ce cx ee prepared /\
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (initial,G,tn) [] (OK prepared,Gp,tnp)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv_at (DF H) lo d ce cx ee Gp tnp prepared /\
+    ghost_kept_at lo ce es origin G0 tn0 s0 Gp tnp) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    ((\vs ee. ((case evaluate_type_builtin cx (AbiEncode ensure mid) ty
+       (MAP expr_type args) vs of INL w => INL (Value w) | INR err => INR (Error err)),ee)) vs)
+    (ee,initial,G,tn)
+    (\H res ef Gf tnf t. ?tv. res = INL tv /\
+      vv_post H ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid) ty args)
+        es origin final_st s0 ef tv (LocatedValue ann (mk_ptr out LocMemory)) t /\
+      vv_store_bound cx (post_value_type ce (TypeBuiltin ann (AbiEncode ensure mid) ty args))
+        (lowered_value_type ce (TypeBuiltin ann (AbiEncode ensure mid) ty args))
+        ef tv (LocatedValue ann (mk_ptr out LocMemory)) t /\
+      t.vs_current_bb = final_st.cs_current_bb /\ t.vs_inst_idx = LENGTH final_st.cs_current_insts /\
+      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d ce cx ef Gf tnf t /\
+      ptr_vv_ok cx (post_value_type ce (TypeBuiltin ann (AbiEncode ensure mid) ty args))
+        tv (LocatedValue ann (mk_ptr out LocMemory)) ef Gf tnf t /\
+      (ce.ce_is_ctor /\ vv_location (LocatedValue ann (mk_ptr out LocMemory)) = SOME LocCode ==>
+        ?val. read_result cx tv ef = (INL val,ef) /\
+        !rt w. evaluate_type (get_tenv cx)
+          (post_value_type ce (TypeBuiltin ann (AbiEncode ensure mid) ty args)) = SOME rt /\
+          eval_operand (vv_operand (LocatedValue ann (mk_ptr out LocMemory))) t = SOME w ==>
+          w2n w + type_memory_size rt <= lo /\
+          (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==> val_in_memory rt val (w2n w) mem)) /\
+      (!t' op. LocatedValue ann (mk_ptr out LocMemory) = StackValue t' op /\
+        ~is_word_type (post_value_type ce (TypeBuiltin ann (AbiEncode ensure mid) ty args)) ==>
+        ptr_buf_ok ce (TypeBuiltin ann (AbiEncode ensure mid) ty args) op Gf t) /\
+      (!t' p. LocatedValue ann (mk_ptr out LocMemory) = LocatedValue t' p /\
+        p.ptr_location = LocMemory ==>
+        ptr_buf_ok ce (TypeBuiltin ann (AbiEncode ensure mid) ty args) p.ptr_operand Gf t) /\
+      ghost_kept_at lo ce es origin G0 tn0 s0 Gf tnf)
+    (\H res ef gt r. expr_exit res r /\ halt_exit H cx ef res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+Proof
+  strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> (?ts. _) /\ _` (drule_then strip_assume_tac) >>
+  qpat_assum `!tail. eval_exprs _ _ _ = _` (qspec_then `[]` (assume_tac o SRULE [APPEND_NIL])) >>
+  `expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) ty args)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
+  drule_all exprSimAbiEncodeRuntimeInputsTheory.abi_encode_body_args_runtime_typed >>
+  simp[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def] >> strip_tac >>
+  `?avs. vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs` by
+    (irule (cj 2 vyperTypeABITheory.vyper_to_abi_total) >>
+     qexists `tvs'` >> simp[vyperTypeDefaultsTheory.values_have_types_LIST_REL,
+       listTheory.LIST_REL_MAP1, combinTheory.o_DEF] >> fs[]) >>
+  `ts = tvs` by
+    (simp[listTheory.LIST_EQ_REWRITE] >> qx_gen_tac `i` >> strip_tac >>
+     qpat_assum `!j. j < LENGTH args ==> evaluate_type _ _ = SOME (EL j ts) /\ _`
+       (qspec_then `i` mp_tac) >>
+     qpat_assum `!j. j < LENGTH args ==> evaluate_type _ _ = SOME (EL j tvs)`
+       (qspec_then `i` mp_tac) >> simp[]) >>
+  qpat_x_assum `ts = tvs` (SUBST_ALL_TAC o SYM) >>
+  `abi_args_post (storage_trace_horizon ee.storage_trace) ctx func ce cx
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) origin st s0
+     (ee with gas_obs := []) args ops vs initial` by suspend "observed_args" >>
+  `lookup_var src prepared = SOME (n2w (w2n bw))` by simp[] >>
+  `!i. i < LENGTH args ==>
+       evaluate_type (get_tenv cx) (lowered_value_type ce (EL i args)) = SOME (EL i ts) /\
+       value_has_type (EL i ts) (EL i vs) /\
+       type_memory_bytes ce (lowered_value_type ce (EL i args)) = type_memory_size (EL i ts)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!i. i < LENGTH args ==> _ /\ _ /\ _ /\ _`
+       (drule_then strip_assume_tac) >> simp[]) >>
+  `LENGTH args = 1 ==> ensure` by (strip_tac >> fs[]) >>
+  drule_at (Pat `eval_exprs _ _ _ = _`)
+    (SIMP_RULE bool_ss [LET_THM] abi_encode_staged_tuple_ready_origin) >>
+  disch_then (drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then drule_all >>
+  strip_tac >>
+  pop_assum (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `a` (qx_choose_then `alloc_run`
+      (qx_choose_then `Ga` (qx_choose_then `tna`
+        (qx_choose_then `ready_run` (qx_choose_then `Gr`
+          (qx_choose_then `tnr` strip_assume_tac)))))))) >>
+  qmatch_asmsub_abbrev_tac `compile_abi_encode_to_buf (Var dp) (Var src) ei ready = _` >>
+  qmatch_asmsub_abbrev_tac `abi_builtin_encode_setup (OPTION_MAP bytes_method_id_word mid) M staged = _` >>
+  qmatch_asmsub_abbrev_tac `abi_builtin_encode_finish _ _ k body_end = _` >>
+  qmatch_asmsub_abbrev_tac `compile_alloc_buffer N staged = _` >>
+  qabbrev_tac `selector = case OPTION_MAP bytes_method_id_word mid of NONE => []
+    | SOME w => abi_builtin_encode_method_bytes w` >>
+  `LENGTH selector = k` by (simp[Abbr `selector`, Abbr `k`] >>
+    Cases_on `OPTION_MAP bytes_method_id_word mid` >>
+    simp[abiBuiltinEncodeMethodTheory.abi_builtin_encode_method_bytes_length]) >>
+  `!mem. mem_agree_outside tnr.t_mem ready_run.vs_memory mem ==>
+    mem_bytes_at (p+32) (LENGTH selector) mem = selector` by suspend "selector" >>
+  suspend "protect_ready"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[observed_args]:
+  `!b. get_storage cx (ee with gas_obs := []) b = get_storage cx ee b` by
+    (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  qpat_assum `abi_args_post _ _ _ _ _ es _ _ _ ee _ _ _ _`
+    (strip_assume_tac o SRULE [abi_args_post_def]) >>
+  pure_rewrite_tac [abi_args_post_def, exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qpat_x_assum `storage_well_formed_on cx ee _` mp_tac >>
+      qpat_assum `!b. get_storage cx (_ with gas_obs := _) b = _`
+        (fn th => rewrite_tac [vyperStorageFootprintTheory.storage_well_formed_on_def,th])) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qpat_x_assum `LIST_REL _ ops _` mp_tac >>
+      SIMP_TAC (srw_ss()) [loweringPostsTheory.expr_val_at_def]) >>
+  qpat_x_assum `wb_frame ce es ee _ _ _` mp_tac >>
+  SIMP_TAC (srw_ss()) [loweringPostsTheory.wb_frame_def,
+    loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_staged_tuple_full_tail[selector]:
+  qpat_assum `(case OPTION_MAP bytes_method_id_word mid of NONE => T | SOME _ => _)` mp_tac >>
+  simp[Abbr `selector`, NoAsms] >>
+  Cases_on `OPTION_MAP bytes_method_id_word mid`
+  >- simp[NoAsms,valueEncodingDefsTheory.mem_bytes_at_def] >>
+  simp[NoAsms,abiBuiltinEncodeMethodTheory.abi_builtin_encode_method_bytes_length] >>
+  disch_tac >> gen_tac >> strip_tac >>
+  `mem_word_at (p+32) mem = x << 224` by
+    (qpat_assum `!m. mem_agree_outside _ _ m ==> mem_word_at _ m = _`
+       (drule_then ACCEPT_TAC)) >>
+  pop_assum mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+  qspecl_then [`p+32`,`0`,`4`,`32`,`mem`] mp_tac
+    abiCanonicalHeadSizeTheory.mem_bytes_at_window >>
+  simp[NoAsms] >>
+  disch_then (SUBST1_TAC o SYM) >>
+  rewrite_tac[abiEncoderMemoryTheory.abi_encoder_word_window,
+              abiBuiltinEncodeMethodTheory.abi_builtin_encode_method_bytes_def] >>
+  disch_then SUBST1_TAC >> REFL_TAC
+QED
+
+Resume abi_encode_staged_tuple_full_tail[protect_ready]:
+  qpat_assum `abi_args_post _ _ _ _ _ es _ _ _ ee _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_args_post_def]) >>
+  qpat_assum `wb_frame ce es ee origin s0 initial`
+    (assume_tac o cj 2 o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `wb_frame ce es ee origin s0 initial` mp_tac >>
+     simp[NoAsms, loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def]) >>
+  `ci_mono origin st` by
+    (mp_tac (Q.SPECL [`args`,`ce`,`origin`] abi_args_compile_mono) >> simp[]) >>
+  qpat_assum `ci_mono origin st` (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >>
+  drule_all_then strip_assume_tac abiTupleEncodePrepareTheory.abi_tuple_encode_stage_shape >>
+  drule_then strip_assume_tac abi_builtin_encode_setup_shape >>
+  `staged.cs_next_id < ready.cs_next_id /\ staged.cs_next_var <= ready.cs_next_var` by
+    (qpat_assum `ready.cs_next_id = _` SUBST1_TAC >>
+     qpat_assum `ready.cs_next_var = _` SUBST1_TAC >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `OPTION_MAP bytes_method_id_word mid` >> simp[]) >>
+  `staged.cs_next_var <= a.cs_next_var` by
+    (qpat_assum `compile_alloc_buffer N staged = _` (fn th =>
+       mp_tac (REWRITE_RULE [th,pairTheory.SND,ci_mono_def]
+         (Q.SPECL [`N`,`staged`] ci_mono_compile_alloc_buffer))) >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  `st.cs_next_var <= staged.cs_next_var` by
+    (qpat_assum `staged.cs_next_var = _` SUBST1_TAC >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `local_ptrs_reserved ce st` by
+    (irule local_ptrs_reserved_next_var >> qexists `origin` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `local_ptrs_reserved ce staged` by
+    (irule local_ptrs_reserved_next_var >> qexists `st` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `local_ptrs_reserved ce ready` by
+    (irule local_ptrs_reserved_next_var >> qexists `staged` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `!x. not_fresh_at staged x ==> lookup_var x ready_run = lookup_var x prepared` by
+    (rpt strip_tac >>
+     `not_fresh_at a x` by
+       (irule stmtFragPtrTheory.not_fresh_at_mono >> qexists `staged` >>
+        conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `typed_copy_state_frame a _ _ alloc_run ready_run`
+       (drule_then SUBST1_TAC o cj 2 o REWRITE_RULE [typedMemoryCopyTheory.typed_copy_state_frame_def]) >>
+     qpat_assum `!x. not_fresh_at staged x ==> lookup_var x alloc_run = _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+  `!i row. FLOOKUP prepared.vs_allocas i = SOME row ==>
+     FLOOKUP ready_run.vs_allocas i = SOME row` by
+    (rpt strip_tac >>
+     qpat_assum `ready_run.vs_allocas = _` SUBST1_TAC >>
+     qpat_assum `alloc_run.vs_allocas = _` SUBST1_TAC >>
+     qpat_assum `FLOOKUP prepared.vs_allocas i = SOME row` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[abi_builtin_allocate_state_def,FLOOKUP_UPDATE] >>
+     Cases_on `FLOOKUP prepared.vs_allocas staged.cs_next_id` >> simp[] >>
+     Cases_on `staged.cs_next_id = i`
+     >- (qpat_assum `staged.cs_next_id = i` (SUBST1_TAC o SYM) >> simp[]) >>
+     simp[FLOOKUP_UPDATE]) >>
+  suspend "setup_frames"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[setup_frames]:
+  `alloc_run with <|vs_vars := prepared.vs_vars; vs_allocas := prepared.vs_allocas;
+     vs_alloca_next := prepared.vs_alloca_next; vs_inst_idx := prepared.vs_inst_idx|> = prepared` by
+    (qpat_assum `alloc_run with <|vs_vars := _; vs_allocas := _;
+        vs_alloca_next := _; vs_inst_idx := _|> = prepared` mp_tac >>
+     qpat_assum `prepared.vs_allocas = _` (pure_once_rewrite_tac o single o SYM) >>
+     qpat_assum `prepared.vs_alloca_next = _` (pure_once_rewrite_tac o single o SYM) >>
+     qpat_assum `prepared.vs_inst_idx = _` (pure_once_rewrite_tac o single o SYM) >>
+     disch_then ACCEPT_TAC) >>
+  `alloc_run.vs_memory = prepared.vs_memory` by
+    (qpat_assum `alloc_run with <|vs_vars := _; vs_allocas := prepared.vs_allocas;
+          vs_alloca_next := _; vs_inst_idx := _|> = prepared`
+        (mp_tac o AP_TERM ``venom_state_vs_memory``) >>
+     simp[NoAsms]) >>
+  `cs_extends staged ready` by
+    (irule cs_extends_trans >> qexists `a` >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `cs_extends ready body_end` by
+    (qpat_assum `compile_abi_encode_to_buf (Var dp) (Var src) ei ready = (len,body_end)`
+       (ACCEPT_TAC o MATCH_MP compile_abi_encode_to_buf_extends)) >>
+  `cs_extends body_end final_st` by
+    (qpat_assum `abi_builtin_encode_finish _ _ _ body_end = ((),final_st)`
+       (strip_assume_tac o MATCH_MP abi_builtin_encode_finish_shape) >>
+     irule cs_extends_same_block >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `cs_extends ready final_st` by
+    (irule cs_extends_trans >> qexists `body_end` >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `fn_has_code staged ready func` by
+    (mp_tac (Q.SPECL [`staged`,`ready`,`final_st`,`func`] fn_has_code_split) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+  suspend "setup_locals"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[setup_locals]:
+  `prepared.vs_alloca_next <= alloc_run.vs_alloca_next` by
+    (qpat_assum `prepared.vs_alloca_next = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `!i row. FLOOKUP prepared.vs_allocas i = SOME row ==>
+     FLOOKUP alloc_run.vs_allocas i = SOME row` by
+    (qpat_assum `!i row. FLOOKUP prepared.vs_allocas i = SOME row ==> FLOOKUP ready_run.vs_allocas i = SOME row`
+       mp_tac >>
+     qpat_assum `ready_run.vs_allocas = alloc_run.vs_allocas` (pure_rewrite_tac o single) >>
+     disch_then ACCEPT_TAC) >>
+  `!i b sz. FLOOKUP alloc_run.vs_allocas i = SOME (b,sz) /\
+     FLOOKUP prepared.vs_allocas i = NONE ==> prepared.vs_alloca_next <= b` by
+    (qpat_assum `alloc_run.vs_allocas = _` SUBST1_TAC >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[abi_builtin_allocate_state_def] >>
+     Cases_on `FLOOKUP prepared.vs_allocas staged.cs_next_id` >> simp[FLOOKUP_UPDATE] >>
+     gen_tac >> Cases_on `staged.cs_next_id = i` >> simp[] >>
+     rpt strip_tac >> fs[]) >>
+  `!name entry x sz. lookup_scopes name ee.scopes = SOME entry /\
+     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz) ==>
+     lookup_var x alloc_run = lookup_var x prepared` by
+    (rpt strip_tac >>
+     `not_fresh_at staged x` by
+       (qpat_assum `local_ptrs_reserved ce staged`
+          (mp_tac o cj 2 o REWRITE_RULE [loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+        qpat_assum `FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+     qpat_assum `!x. not_fresh_at staged x ==> lookup_var x alloc_run = _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+  `local_ptrs_rel func ce ee.scopes alloc_run` by
+    (irule localPtrsPropsTheory.local_ptrs_rel_mem_agree >> qexists `prepared` >>
+     conj_tac >- (qpat_assum `alloc_run.vs_memory = prepared.vs_memory` (rewrite_tac o single)) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "setup_disjoint"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[setup_disjoint]:
+  `fn_has_code staged a func` by
+    (mp_tac (Q.SPECL [`staged`,`a`,`ready`,`func`] fn_has_code_split) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+  `MEM (mk_inst staged.cs_next_id ALLOCA [Lit (n2w N)] [root]) (fn_insts func) /\
+   ~not_fresh_at staged root` by
+    (qpat_assum `compile_alloc_buffer N staged = (output_buf,a)` mp_tac >>
+     qpat_assum `fn_has_code staged a func` mp_tac >>
+     qpat_assum `output_buf.buf_operand = Var root` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule compile_alloc_buffer_emission >> strip_tac >>
+     drule_all fn_has_code_split >> strip_tac >>
+     drule_all emit_inst_fn_member >> gvs[]) >>
+  `alloca_inv alloc_run` by
+    (irule localPtrsPropsTheory.alloca_inv_fields >> qexists `ready_run` >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >> sym_tac >> first_assum ACCEPT_TAC) >>
+  `FLOOKUP alloc_run.vs_allocas staged.cs_next_id = SOME (p,N)` by
+    (qpat_assum `ready_run.vs_allocas = alloc_run.vs_allocas`
+       (pure_rewrite_tac o single o SYM) >> first_assum ACCEPT_TAC) >>
+  `not_local_ptr ce ee.scopes root` by
+    (irule exprSimOperandsTheory.fresh_not_local_ptr >> qexists `staged` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `!name b sz. local_region ce ee.scopes alloc_run name b sz ==>
+     loweringStateRelDefs$regions_disjoint p N b sz` by
+    (rpt strip_tac >>
+     qabbrev_tac `inst = mk_inst staged.cs_next_id ALLOCA [Lit (n2w N)] [root]` >>
+     `MEM inst (fn_insts func)` by
+       (simp[NoAsms,Abbr `inst`] >> first_assum ACCEPT_TAC) >>
+     `inst.inst_outputs = [root] /\ inst.inst_id = staged.cs_next_id` by
+       simp[NoAsms,Abbr `inst`,mk_inst_def] >>
+     `FLOOKUP alloc_run.vs_allocas inst.inst_id = SOME (p,N)` by
+       (qpat_assum `inst.inst_id = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     irule localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >>
+     qexistsl_tac [`ce`,`func`,`inst`,`name`,`root`,`ee.scopes`,`alloc_run`] >>
+     asm_rewrite_tac[]) >>
+  suspend "setup_selector_frame"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[setup_selector_frame]:
+  qabbrev_tac `wlen = case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME v => 32` >>
+  `32 + wlen <= N` by
+    (simp[NoAsms,Abbr `N`,Abbr `wlen`,Abbr `k`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `OPTION_MAP bytes_method_id_word mid` >>
+     simp[] >> mp_tac (Q.SPEC `M + 4` abiBuiltinAllocationTheory.abi_builtin_word_size_capacity) >>
+     Cases_on `word_size (M + 4)` >> simp[]) >>
+  `!name b sz. local_region ce ee.scopes alloc_run name b sz ==>
+     loweringStateRelDefs$regions_disjoint (p+32) wlen b sz` by
+    (rpt strip_tac >>
+     qpat_assum `!name b sz. local_region ce ee.scopes alloc_run name b sz ==>
+           loweringStateRelDefs$regions_disjoint p N b sz` drule >>
+     qpat_assum `32 + wlen <= N` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     rw[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `!z n. z+n <= p+32 \/ p+32+wlen <= z ==>
+      mem_bytes_at z n ready_run.vs_memory = mem_bytes_at z n alloc_run.vs_memory` by
+    (qpat_assum `typed_copy_state_frame a (p+32) wlen alloc_run ready_run` mp_tac >>
+     rewrite_tac[typedMemoryCopyTheory.typed_copy_state_frame_def,
+                 typedMemoryCopyTheory.typed_copy_frame_def] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  `!name entry x sz. lookup_scopes name ee.scopes = SOME entry /\
+      FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz) ==>
+      lookup_var x ready_run = lookup_var x alloc_run` by
+    (rpt strip_tac >>
+     `not_fresh_at staged x` by
+       (qpat_assum `local_ptrs_reserved ce staged`
+          (mp_tac o cj 2 o REWRITE_RULE [loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+        qpat_assum `FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+     qpat_assum `!x. not_fresh_at staged x ==> lookup_var x ready_run = _` (drule_then SUBST1_TAC) >>
+     qpat_assum `!name entry x sz. _ ==> lookup_var x alloc_run = lookup_var x prepared`
+       (drule_all_then (ACCEPT_TAC o SYM))) >>
+  `!name b sz. local_region ce ee.scopes alloc_run name b sz ==>
+      mem_bytes_at b sz alloc_run.vs_memory = mem_bytes_at b sz ready_run.vs_memory` by
+    (rpt strip_tac >> sym_tac >>
+     qpat_assum `!z n. z+n <= p+32 \/ _ ==> _` irule >>
+     qpat_assum `!name b sz. local_region ce ee.scopes alloc_run name b sz ==>
+       loweringStateRelDefs$regions_disjoint (p+32) wlen b sz` drule >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `local_ptrs_rel func ce ee.scopes ready_run` by
+    (irule localPtrsPropsTheory.local_ptrs_rel_mem_agree >> qexists `alloc_run` >>
+     asm_rewrite_tac[] >> rpt strip_tac >>
+     pop_assum mp_tac >> pop_assum mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  suspend "setup_ghost"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[setup_ghost]:
+  `!x. not_fresh_at origin x ==> not_fresh_at staged x` by
+    (gen_tac >> strip_tac >> irule stmtFragPtrTheory.not_fresh_at_mono >>
+     qexists `origin` >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+     irule arithmeticTheory.LESS_EQ_TRANS >> qexists `st.cs_next_var` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `!x. not_fresh_at staged x ==> not_fresh_at a x` by
+    (gen_tac >> strip_tac >> irule stmtFragPtrTheory.not_fresh_at_mono >>
+     qexists `staged` >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at staged x` by
+    (rpt strip_tac >> qpat_assum `!x. not_fresh_at origin x ==> _` irule >>
+     qpat_assum `!x sz. ce.ce_return_buf = _ ==> _` (drule_then ACCEPT_TAC)) >>
+  `!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at staged x` by
+    (rpt strip_tac >> qpat_assum `!x. not_fresh_at origin x ==> _` irule >>
+     qpat_assum `!x sz. ce.ce_return_pc = _ ==> _` (drule_then ACCEPT_TAC)) >>
+  `!i. i IN tna.t_mem <=> i IN tnp.t_mem \/ (prepared.vs_alloca_next <= i /\ i < p+N)` by
+    (qpat_assum `prepared.vs_alloca_next = _` (pure_once_rewrite_tac o single) >>
+     first_assum ACCEPT_TAC) >>
+  `allocas_from lo alloc_run` by
+    (qpat_assum `allocas_from lo ready_run` mp_tac >>
+     qpat_assum `ready_run.vs_allocas = alloc_run.vs_allocas` (fn th =>
+       rewrite_tac [allocas_from_def,th])) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       ghost_inv_at (DF H) lo d ce cx ee Ga tna alloc_run` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ _ _ ==> ghost_inv_at _ _ _ _ _ _ Gp tnp prepared /\ _`
+       (drule_then strip_assume_tac) >>
+     drule_at (Pat `ghost_inv_at _ _ _ _ _ _ Gp tnp prepared`)
+       (Q.INST [`sa` |-> `staged`, `e` |-> `p+N`, `t` |-> `alloc_run`,
+         `G'` |-> `Ga`, `tn'` |-> `tna`]
+         (SPEC_ALL bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at_locals)) >>
+     disch_then (drule_at (Pat `local_ptrs_rel func ce ee.scopes prepared`)) >>
+     disch_then irule >> asm_rewrite_tac[] >>
+     conj_tac >- (qexistsl_tac [`N`,`p`] >> REWRITE_TAC[]) >>
+     qexists `staged` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "setup_ghost_ready"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[setup_ghost_ready]:
+  `!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x` by
+    (rpt strip_tac >> qpat_assum `!x. not_fresh_at staged x ==> not_fresh_at a x` irule >>
+     qpat_assum `!x sz. ce.ce_return_buf = _ ==> not_fresh_at staged x` (drule_then ACCEPT_TAC)) >>
+  `!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x` by
+    (rpt strip_tac >> qpat_assum `!x. not_fresh_at staged x ==> not_fresh_at a x` irule >>
+     qpat_assum `!x sz. ce.ce_return_pc = _ ==> not_fresh_at staged x` (drule_then ACCEPT_TAC)) >>
+  `local_ptrs_reserved ce a` by
+    (irule local_ptrs_reserved_next_var >> qexists `staged` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `!name x sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x` by
+    (qpat_assum `local_ptrs_reserved ce a` (mp_tac o cj 2 o REWRITE_RULE [loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  `!x. lo <> 0 /\ ce.ce_imm_alloca = SOME (Var x) ==> not_fresh_at a x` by
+    (rpt strip_tac >> irule local_ptrs_reserved_imm_base >> qexists `ce` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       ghost_inv_at (DF H) lo d ce cx ee Gr tnr ready_run` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ _ _ ==> ghost_inv_at _ _ _ _ _ _ Ga tna alloc_run`
+       (drule_then assume_tac) >>
+     qpat_assum `!D d ce cx es. ghost_inv_at _ _ _ _ _ _ Ga tna alloc_run /\ _ ==> _` irule >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "setup_kept"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[setup_kept]:
+  qpat_assum `stmt_state_rel _ ctx func ce cx ee prepared`
+    (strip_assume_tac o MATCH_MP stmt_state_rel_local_ptrs_alloca) >>
+  `!i row. FLOOKUP s0.vs_allocas i = SOME row ==>
+       FLOOKUP prepared.vs_allocas i = SOME row` by
+    (rpt strip_tac >>
+     qpat_assum `!i row. FLOOKUP initial.vs_allocas i = SOME row ==> _` irule >>
+     qpat_assum `!i row. FLOOKUP s0.vs_allocas i = SOME row ==> _`
+       (drule_then ACCEPT_TAC)) >>
+  `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
+      aid < origin.cs_next_id ==> off+sz <= prepared.vs_alloca_next` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!i row. FLOOKUP s0.vs_allocas i = SOME row ==> FLOOKUP prepared.vs_allocas i = SOME row`
+       (drule_then (mp_then (Pat `FLOOKUP _ _ = _`) irule alloca_site_registered_below)) >>
+     first_assum ACCEPT_TAC) >>
+  `!name b sz. local_region ce es.scopes s0 name b sz ==>
+      local_region ce ee.scopes initial name b sz` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `wb_frame ce es ee origin s0 initial`
+       (assume_tac o cj 1 o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     qpat_assum `local_region ce es.scopes s0 name b sz` mp_tac >>
+     qpat_assum `local_ptrs_reserved ce origin` mp_tac >>
+     qpat_assum `MAP FDOM ee.scopes = MAP FDOM es.scopes` mp_tac >>
+     qpat_assum `!x w. not_fresh_at origin x /\ lookup_var x s0 = SOME w ==> lookup_var x initial = SOME w` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[exprSimPropsTheory.local_region_frame_fwd]) >>
+  `!name b sz. local_region ce es.scopes s0 name b sz ==>
+       b+sz <= prepared.vs_alloca_next` by
+    (rpt gen_tac >> strip_tac >>
+     irule arithmeticTheory.LESS_EQ_TRANS >> qexists `initial.vs_alloca_next` >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `stmt_state_rel _ ctx func ce cx ee initial`
+       (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule body_local_region_frontier) >>
+     qpat_assum `!name b sz. local_region ce es.scopes s0 name b sz ==> local_region ce ee.scopes initial name b sz`
+       (drule_then assume_tac) >>
+     goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`))) >>
+  suspend "setup_kept_transport"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[setup_kept_transport]:
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> ghost_inv_at _ _ _ _ _ _ Gp tnp prepared /\ _`
+    (drule_then (assume_tac o CONJUNCT2)) >>
+  `!x. not_fresh_at origin x ==>
+     FLOOKUP Ga x = FLOOKUP Gp x /\ op_taint tna (Var x) = op_taint tnp (Var x)` by
+    (qx_gen_tac `oldvar` >> disch_tac >>
+     `not_fresh_at staged oldvar` by
+       (qpat_assum `!x. not_fresh_at origin x ==> not_fresh_at staged x`
+         (qspec_then `oldvar` irule) >> first_assum ACCEPT_TAC) >>
+     qpat_assum `!x. not_fresh_at staged x ==> lookup_var x alloc_run = _ /\ _`
+       (qspec_then `oldvar` (drule_then (ACCEPT_TAC o CONJUNCT2)))) >>
+  `ghost_kept_at lo ce es origin G0 tn0 s0 Ga tna` by
+    (qpat_assum `ghost_kept_at lo ce es origin G0 tn0 s0 Gp tnp`
+       (mp_then (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`) irule
+         (Q.INST [`s` |-> `prepared`, `e` |-> `p+N`]
+           (SPEC_ALL bodyFullAllocaFreshTheory.alloc_buffer_ghost_kept_at))) >>
+     asm_rewrite_tac[] >> qexistsl_tac [`N`,`p`,`prepared`] >> asm_rewrite_tac[]) >>
+  `ghost_kept_at lo ce es origin G0 tn0 s0 Gr tnr` by
+    (qpat_assum `!ce es origin G0 tn0 s0. ghost_kept_at _ _ _ _ _ _ _ Ga tna /\ _ ==> _` irule >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     gen_tac >> disch_tac >>
+     qpat_assum `!x. not_fresh_at staged x ==> not_fresh_at a x` irule >>
+     qpat_assum `!x. not_fresh_at origin x ==> not_fresh_at staged x` (drule_then ACCEPT_TAC)) >>
+  suspend "ready_protected"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[ready_protected]:
+  `!name entry x sz. lookup_scopes name ee.scopes = SOME entry /\
+      FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz) ==>
+      lookup_var x prepared = lookup_var x initial` by
+    (rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at st x ==> lookup_var x prepared = _` irule >>
+     qpat_assum `local_ptrs_reserved ce st`
+       (mp_tac o cj 2 o REWRITE_RULE [loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+     qpat_assum `FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  `!name b sz. local_region ce ee.scopes ready_run name b sz <=>
+       local_region ce ee.scopes alloc_run name b sz` by
+    (rpt gen_tac >> irule loweringStateRelDefsTheory.local_region_lookup_cong >>
+     first_assum ACCEPT_TAC) >>
+  `!name b sz. local_region ce ee.scopes alloc_run name b sz <=>
+       local_region ce ee.scopes prepared name b sz` by
+    (rpt gen_tac >> irule loweringStateRelDefsTheory.local_region_lookup_cong >>
+     first_assum ACCEPT_TAC) >>
+  `!name b sz. local_region ce ee.scopes prepared name b sz <=>
+       local_region ce ee.scopes initial name b sz` by
+    (rpt gen_tac >> irule loweringStateRelDefsTheory.local_region_lookup_cong >>
+     first_assum ACCEPT_TAC) >>
+  `!name b sz. local_region ce es.scopes s0 name b sz ==>
+       local_region ce ee.scopes ready_run name b sz` by
+    (rpt gen_tac >>
+     qpat_assum `!name b sz. local_region ce ee.scopes ready_run name b sz <=> _` (rewrite_tac o single) >>
+     qpat_assum `!name b sz. local_region ce ee.scopes alloc_run name b sz <=> _` (rewrite_tac o single) >>
+     qpat_assum `!name b sz. local_region ce ee.scopes prepared name b sz <=> _` (rewrite_tac o single) >>
+     qpat_assum `!name b sz. local_region ce es.scopes s0 name b sz ==> local_region ce ee.scopes initial name b sz`
+       MATCH_ACCEPT_TAC) >>
+  `!name b sz. local_region ce ee.scopes ready_run name b sz ==>
+       loweringStateRelDefs$regions_disjoint p N b sz` by
+    (rpt gen_tac >>
+     qpat_assum `!name b sz. local_region ce ee.scopes ready_run name b sz <=> _` (rewrite_tac o single) >>
+     qpat_assum `!name b sz. local_region ce ee.scopes alloc_run name b sz ==> _`
+       MATCH_ACCEPT_TAC) >>
+  suspend "scratch_rows"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[scratch_rows]:
+  `!id. id IN window_alloca_sites func (frag_ids ready body_end) ==>
+       ?inst q. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+         inst.inst_id = id /\ inst.inst_id IN frag_ids ready body_end /\
+         inst.inst_outputs = [q] /\ not_local_ptr ce ee.scopes q` by
+    (simp_tac (srw_ss()) [abiEncoderWindowContractTheory.window_alloca_sites_def] >>
+     rpt strip_tac >>
+     drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)
+       (Q.INST [`func` |-> `func`, `obs` |-> `func`, `earlier` |-> `ready`,
+                `scopes` |-> `ee.scopes`, `ce` |-> `ce`]
+         (SPEC_ALL exprSimAbiEncodeSiteResourcesTheory.abi_encode_compiled_scratch_site)) >>
+     disch_then (drule_at (Pat `MEM i (fn_insts func)`)) >>
+     disch_then (qspecl_then [`ee`,`ce`] mp_tac) >>
+     (impl_tac >- simp[]) >>
+     disch_then (qx_choose_then `q` strip_assume_tac o CONJUNCT2) >>
+     qexistsl_tac [`inst`,`q`] >> asm_rewrite_tac[]) >>
+  `!id b sz name z n. id IN window_alloca_sites func (frag_ids ready body_end) /\
+       FLOOKUP ready_run.vs_allocas id = SOME (b,sz) /\
+       local_region ce ee.scopes ready_run name z n ==>
+       loweringStateRelDefs$regions_disjoint b sz z n` by
+    (rpt strip_tac >>
+     qpat_assum `!id. id IN window_alloca_sites _ _ ==> _`
+       (drule_then (qx_choose_then `inst` (qx_choose_then `q` strip_assume_tac))) >>
+     `FLOOKUP ready_run.vs_allocas inst.inst_id = SOME (b,sz)` by
+       (qpat_assum `inst.inst_id = id` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     irule localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >>
+     qexistsl_tac [`ce`,`func`,`inst`,`name`,`q`,`ee.scopes`,`ready_run`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "protected_bytes"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[protected_bytes]:
+  `origin.cs_next_id <= staged.cs_next_id` by
+    (qpat_assum `origin.cs_next_id <= st.cs_next_id` mp_tac >>
+     qpat_assum `st.cs_next_id < staged.cs_next_id` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `!id. id IN window_alloca_sites func (frag_ids ready body_end) ==> staged.cs_next_id < id` by
+    (qpat_assum `staged.cs_next_id < ready.cs_next_id` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[abiEncoderWindowContractTheory.window_alloca_sites_def,abiEncoderPropsTheory.frag_ids_def] >>
+     rpt strip_tac >> decide_tac) >>
+  `!id b sz id' b' sz'. id <> id' /\
+      FLOOKUP ready_run.vs_allocas id = SOME (b,sz) /\
+      FLOOKUP ready_run.vs_allocas id' = SOME (b',sz') ==>
+      b + sz <= b' \/ b' + sz' <= b` by
+    (qpat_assum `alloca_inv ready_run` (mp_tac o CONJUNCT1 o REWRITE_RULE [venomMemDefsTheory.alloca_inv_def]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[venomMemDefsTheory.allocas_non_overlapping_def] >> metis_tac[]) >>
+  `!id row. FLOOKUP s0.vs_allocas id = SOME row ==> FLOOKUP ready_run.vs_allocas id = SOME row` by
+    (rpt strip_tac >>
+     qpat_assum `!i row. FLOOKUP prepared.vs_allocas i = SOME row ==> FLOOKUP ready_run.vs_allocas i = SOME row` irule >>
+     qpat_assum `!i row. FLOOKUP s0.vs_allocas i = SOME row ==> FLOOKUP prepared.vs_allocas i = SOME row`
+       (drule_then ACCEPT_TAC)) >>
+  `!name b sz. local_region ce ee.scopes ready_run name b sz ==> b+sz <= ready_run.vs_alloca_next` by
+    (rpt gen_tac >>
+     qpat_assum `!name b sz. local_region ce ee.scopes ready_run name b sz <=> _` (pure_rewrite_tac o single) >>
+     qpat_assum `!name b sz. local_region ce ee.scopes alloc_run name b sz <=> _` (pure_rewrite_tac o single) >>
+     strip_tac >>
+     `b+sz <= prepared.vs_alloca_next` by
+       (qpat_assum `stmt_state_rel _ ctx func ce cx ee prepared`
+         (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule body_local_region_frontier) >>
+        goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`))) >>
+     qpat_assum `ready_run.vs_alloca_next = alloc_run.vs_alloca_next` SUBST1_TAC >>
+     irule arithmeticTheory.LESS_EQ_TRANS >> qexists `prepared.vs_alloca_next` >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!id b sz. id IN window_alloca_sites func (frag_ids ready body_end) /\
+      FLOOKUP ready_run.vs_allocas id = SOME (b,sz) ==>
+      venomMemDefs$regions_disjoint (p+32,k) (b,sz)` by
+    (rpt strip_tac >>
+     qpat_assum `!id. id IN window_alloca_sites _ _ ==> _`
+       (drule_then (qx_choose_then `inst` (qx_choose_then `q` strip_assume_tac))) >>
+     `FLOOKUP ready_run.vs_allocas inst.inst_id = SOME (b,sz)` by
+       (qpat_assum `inst.inst_id = id` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     qpat_assum `!inst b sz. MEM inst (fn_insts func) /\ _ ==> sz = 32 /\ _`
+       (qspecl_then [`inst`,`b`,`sz`] mp_tac) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  suspend "protected_set"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[protected_set]:
+  `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < origin.cs_next_id ==>
+      off+sz <= ready_run.vs_alloca_next /\ (off+sz <= p \/ p+N <= off) /\
+      !id b n. id IN window_alloca_sites func (frag_ids ready body_end) /\
+        FLOOKUP ready_run.vs_allocas id = SOME (b,n) ==> off+sz <= b \/ b+n <= off` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!id row. FLOOKUP s0.vs_allocas id = SOME row ==> FLOOKUP ready_run.vs_allocas id = SOME row`
+       (drule_then assume_tac) >>
+     conj_tac >-
+       (irule alloca_site_registered_below >> (metis_tac[])) >>
+     conj_tac >-
+       (`aid <> staged.cs_next_id` by
+          (qpat_assum `aid < origin.cs_next_id` mp_tac >>
+           qpat_assum `origin.cs_next_id <= staged.cs_next_id` mp_tac >>
+           POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+        qpat_assum `!id b sz id' b' sz'. _ ==> _`
+          (qspecl_then [`aid`,`off`,`sz`,`staged.cs_next_id`,`p`,`N`] mp_tac) >>
+        (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+        disch_then ACCEPT_TAC) >>
+     rpt gen_tac >> strip_tac >>
+     `aid <> id` by
+       (qpat_assum `!id. id IN window_alloca_sites _ _ ==> staged.cs_next_id < id`
+          (drule_then mp_tac) >> qpat_assum `aid < origin.cs_next_id` mp_tac >>
+        qpat_assum `origin.cs_next_id <= staged.cs_next_id` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+     qpat_assum `!id b sz id' b' sz'. _ ==> _`
+       (qspecl_then [`aid`,`off`,`sz`,`id`,`b`,`n`] mp_tac) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then ACCEPT_TAC) >>
+  qabbrev_tac `P = {i | i < lo \/
+      (?name b sz. local_region ce ee.scopes ready_run name b sz /\ b <= i /\ i < b+sz) \/
+      (?aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < origin.cs_next_id /\ off <= i /\ i < off+sz) \/
+      (p+32 <= i /\ i < p+32+k)}` >>
+  `!i. i IN P <=> i < lo \/
+      (?name b sz. local_region ce ee.scopes ready_run name b sz /\ b <= i /\ i < b+sz) \/
+      (?aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < origin.cs_next_id /\ off <= i /\ i < off+sz) \/
+      (p+32 <= i /\ i < p+32+k)` by simp[NoAsms, Abbr `P`] >>
+  pop_assum (mk_asm "protected_membership") >>
+  suspend "protected_bounds"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[protected_bounds]:
+  `!i. i IN P ==> i < ready_run.vs_alloca_next /\
+      (i < p+32+k \/ p+32+k+LENGTH (enc ct rv) <= i) /\
+      (!id b sz. id IN window_alloca_sites func (frag_ids ready body_end) /\
+        FLOOKUP ready_run.vs_allocas id = SOME (b,sz) ==> i < b \/ b+sz <= i)` by
+    (asm "protected_membership" (pure_rewrite_tac o single) >>
+     qx_gen_tac `j` >> disch_tac >>
+     pop_assum (REPEAT_TCL DISJ_CASES_THEN STRIP_ASSUME_TAC) >-
+     (conj_tac >-
+       (qpat_assum `j < lo` mp_tac >> qpat_assum `lo <= ready_run.vs_alloca_next` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+      conj_tac >-
+       (qpat_assum `j < lo` mp_tac >> qpat_assum `lo <= p` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+      rpt gen_tac >> strip_tac >>
+      qpat_assum `allocas_from lo ready_run` (mp_tac o REWRITE_RULE [allocas_from_def]) >>
+      disch_then (drule_then mp_tac) >> qpat_assum `j < lo` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac)
+     >- suspend "protected_local"
+     >- suspend "protected_old"
+     >- suspend "protected_selector") >>
+  suspend "ready_finish"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[protected_local]:
+  rename1 `local_region ce ee.scopes ready_run name b sz` >>
+  qpat_assum `!name b sz. local_region ce ee.scopes ready_run name b sz ==> b+sz <= _`
+    (drule_then assume_tac) >>
+  conj_tac >-
+    (qpat_assum `j < b+sz` mp_tac >> qpat_assum `b+sz <= ready_run.vs_alloca_next` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  conj_tac >-
+    (qpat_assum `!name b sz. local_region ce ee.scopes ready_run name b sz ==> loweringStateRelDefs$regions_disjoint p N b sz`
+       (drule_then (mp_tac o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def])) >>
+     qpat_assum `32+k+LENGTH (enc ct rv) <= N` mp_tac >>
+     qpat_assum `j < b+sz` mp_tac >> qpat_assum `b <= j` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!id b sz name z n. _ ==> loweringStateRelDefs$regions_disjoint b sz z n`
+    (drule_all_then (mp_tac o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def])) >>
+  qpat_assum `j < b+sz` mp_tac >> qpat_assum `b <= j` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> decide_tac
+QED
+
+Resume abi_encode_staged_tuple_full_tail[protected_old]:
+  rename1 `FLOOKUP s0.vs_allocas aid = SOME (off,sz)` >>
+  qpat_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> _`
+    (drule_all_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 (mk_asm "old_out") (mk_asm "old_scratch")))) >>
+  conj_tac >-
+    (qpat_assum `j < off+sz` mp_tac >> qpat_assum `off+sz <= ready_run.vs_alloca_next` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  conj_tac >-
+    (asm "old_out" mp_tac >> qpat_assum `32+k+LENGTH (enc ct rv) <= N` mp_tac >>
+     qpat_assum `j < off+sz` mp_tac >> qpat_assum `off <= j` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  asm "old_scratch" (drule_all_then mp_tac) >>
+  qpat_assum `j < off+sz` mp_tac >> qpat_assum `off <= j` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> decide_tac
+QED
+
+Resume abi_encode_staged_tuple_full_tail[protected_selector]:
+  conj_tac >-
+    (qpat_assum `j < p+32+k` mp_tac >> qpat_assum `32+k+LENGTH (enc ct rv) <= N` mp_tac >>
+     qpat_assum `p+N <= ready_run.vs_alloca_next` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!id b sz. _ ==> venomMemDefs$regions_disjoint (p+32,k) (b,sz)`
+    (drule_all_then (mp_tac o REWRITE_RULE [venomMemDefsTheory.regions_disjoint_def])) >>
+  qpat_assum `!id. id IN window_alloca_sites _ _ ==> ?inst q. _`
+    (drule_then (qx_choose_then `ins` (qx_choose_then `q` strip_assume_tac))) >>
+  rename1 `FLOOKUP ready_run.vs_allocas id = SOME (b,n)` >>
+  `FLOOKUP ready_run.vs_allocas ins.inst_id = SOME (b,n)` by
+    (qpat_assum `ins.inst_id = id` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  qpat_assum `!inst b sz. MEM inst (fn_insts func) /\ _ ==> sz = 32 /\ _`
+    (qspecl_then [`ins`,`b`,`n`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  qpat_assum `j < p+32+k` mp_tac >> qpat_assum `p+32 <= j` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> decide_tac
+QED
+
+Resume abi_encode_staged_tuple_full_tail[ready_finish]:
+  qabbrev_tac `cap = val_footprint (TupleTV ts) (ArrayV (TupleV vs))` >>
+  `32 <= N /\ p < dimword(:256) /\
+   LENGTH (enc ct rv) + k < dimword(:256) /\
+   p+32+k+LENGTH (enc ct rv) <= ready_run.vs_alloca_next` by
+    (qpat_assum `32+k+LENGTH (enc ct rv) <= N` mp_tac >>
+     qpat_assum `p+N < dimword(:256)` mp_tac >>
+     qpat_assum `p+N <= ready_run.vs_alloca_next` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `ptr_covers Gr tnr dp ready_run (LENGTH (enc ct rv))` by
+    (irule reasonCopySourcePtrTheory.ptr_covers_mono >> qexists `M` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `venomMemDefs$regions_disjoint (w2n bw,cap) (p+32+k,LENGTH (enc ct rv))` by
+    (qpat_assum `venomMemDefs$regions_disjoint (w2n bw,cap) (p,N)` mp_tac >>
+     qpat_assum `32+k+LENGTH (enc ct rv) <= N` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `!name b sz. local_region ce ee.scopes ready_run name b sz ==>
+     loweringStateRelDefs$regions_disjoint p 32 b sz` by
+    (rpt strip_tac >>
+     qpat_assum `!name b sz. local_region ce ee.scopes ready_run name b sz ==> loweringStateRelDefs$regions_disjoint p N b sz`
+       (drule_then mp_tac) >>
+     qpat_assum `32 <= N` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `!x. not_fresh_at origin x ==> not_fresh_at ready x` by
+    (rpt strip_tac >> irule stmtFragPtrTheory.not_fresh_at_mono >> qexists `staged` >>
+     qpat_assum `!x. not_fresh_at origin x ==> not_fresh_at staged x` (drule_then assume_tac) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at ready x` by
+    (rpt strip_tac >> qpat_assum `!x. not_fresh_at origin x ==> not_fresh_at ready x` irule >>
+     qpat_assum `!x sz. ce.ce_return_buf = _ ==> not_fresh_at origin x` (drule_then ACCEPT_TAC)) >>
+  `!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at ready x` by
+    (rpt strip_tac >> qpat_assum `!x. not_fresh_at origin x ==> not_fresh_at ready x` irule >>
+     qpat_assum `!x sz. ce.ce_return_pc = _ ==> not_fresh_at origin x` (drule_then ACCEPT_TAC)) >>
+  `abi_encoder_admissible ei` by
+    simp[NoAsms, Abbr `ei`, abiEncoderAdmissibleTheory.abi_encoder_translation_admissible] >>
+  suspend "finish_apply"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[finish_apply]:
+  qpat_assum `compile_abi_encode_to_buf (Var dp) (Var src) ei ready = (len,body_end)`
+    (mp_tac o Q.INST [`fin` |-> `final_st`,
+      `site` |-> `staged.cs_next_id`, `sa` |-> `origin`,
+      `s` |-> `ready_run`, `G` |-> `Gr`, `tn` |-> `tnr`, `ret` |-> `d`,
+      `at` |-> `ct`, `av` |-> `rv`, `sb` |-> `w2n (bw:256 word)`, `dstcap` |-> `M`]
+      o PART_MATCH (boolSyntax.lhand o boolSyntax.lhand)
+          bodyFullAbiEncodeReadyFinishTheory.abi_encode_ready_finish_origin_split
+      o concl) >>
+  qpat_assum `LENGTH selector = k` (pure_rewrite_tac o single) >>
+  (impl_tac >- suspend "finish_premises") >>
+  disch_then (qx_choose_then `t` (qx_choose_then `Gf` (qx_choose_then `tnf`
+    (qx_choose_then `u` (qx_choose_then `Gu` (qx_choose_then `tnu` strip_assume_tac)))))) >>
+  suspend "pure_frame_join"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[finish_premises]:
+  `0 < cap ==> w2n bw + cap <= ready_run.vs_alloca_next /\
+      venomMemDefs$regions_disjoint (w2n bw,cap) (p+32+k,LENGTH (enc ct rv)) /\
+      ?x. Var src = Var x /\ ptr_covers Gr tnr x ready_run cap` by
+    (disch_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists `src` >> REWRITE_TAC[] >> first_assum ACCEPT_TAC) >>
+  `0 < LENGTH (enc ct rv) ==> ptr_covers Gr tnr dp ready_run (LENGTH (enc ct rv))` by
+    (disch_tac >> first_assum ACCEPT_TAC) >>
+  `!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_id IN frag_ids ready body_end /\
+      FLOOKUP ready_run.vs_allocas inst.inst_id = SOME (b,sz) ==>
+      sz = 32 /\ (0 < cap ==> venomMemDefs$regions_disjoint (w2n bw,cap) (b,sz)) /\
+      venomMemDefs$regions_disjoint (p+32+k,LENGTH (enc ct rv)) (b,sz)` by
+    (rpt strip_tac >>
+     qpat_assum `!inst b sz. MEM inst (fn_insts func) /\ _ ==> sz = 32 /\ _`
+       (drule_all_then (MAP_EVERY assume_tac o CONJUNCTS)) >>
+     first_assum ACCEPT_TAC) >>
+  `!name b sz i. local_region ce ee.scopes ready_run name b sz /\ b <= i /\ i < b+sz ==> i IN P` by
+    (rpt strip_tac >> asm "protected_membership" (pure_once_rewrite_tac o single) >>
+     disj2_tac >> disj1_tac >> qexistsl_tac [`name`,`b`,`sz`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!name b sz i. local_region ce es.scopes s0 name b sz /\ b <= i /\ i < b+sz ==> i IN P` by
+    (rpt strip_tac >>
+     qpat_assum `!name b sz i. local_region ce ee.scopes ready_run name b sz /\ _ ==> i IN P`
+       (qspecl_then [`name`,`b`,`sz`,`i`] mp_tac) >>
+     (impl_tac >-
+       (reverse conj_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+        qpat_assum `!name b sz. local_region ce es.scopes s0 name b sz ==> local_region ce ee.scopes ready_run name b sz`
+          (drule_then ACCEPT_TAC))) >>
+     disch_then ACCEPT_TAC) >>
+  `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < origin.cs_next_id /\
+      (!n b sz'. local_region ce es.scopes s0 n b sz' ==> off+sz <= b \/ b+sz' <= off) /\
+      off <= i /\ i < off+sz ==> i IN P` by
+    (rpt gen_tac >> strip_tac >> asm "protected_membership" (pure_once_rewrite_tac o single) >>
+     disj2_tac >> disj2_tac >> disj1_tac >> qexistsl_tac [`aid`,`off`,`sz`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!i. i < lo ==> i IN P` by
+    (rpt strip_tac >> asm "protected_membership" (pure_once_rewrite_tac o single) >>
+     disj1_tac >> first_assum ACCEPT_TAC) >>
+  `!i. p+32 <= i /\ i < p+32+k ==> i IN P` by
+    (rpt strip_tac >> asm "protected_membership" (pure_once_rewrite_tac o single) >>
+     ntac 3 disj2_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `LENGTH selector = k` (fn th =>
+    qpat_assum `!mem. _ ==> mem_bytes_at (p+32) (LENGTH selector) mem = selector`
+      (assume_tac o PURE_REWRITE_RULE [th])) >>
+  `!x. Var src = Var x ==> not_fresh_at ready x` by
+    (simp[NoAsms] >> first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_staged_tuple_full_tail[pure_frame_join]:
+  `~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid) ty args) ==>
+   pure_frame ce func es origin s0 t` by suspend "pure_frame_premises" >>
+  suspend "result_source"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[pure_frame_premises]:
+  qpat_assum `LENGTH selector = k` (fn th =>
+    qpat_assum `window_strong_result _ _ _ _ _ _ _ _ ready_run u`
+      (assume_tac o PURE_REWRITE_RULE [th])) >>
+  disch_tac >>
+  irule (INST_TYPE [Type.alpha |-> ``:256``]
+    bodyFullAbiEncodePureFrameTheory.abi_encode_tuple_pure_frame_join) >>
+  qpat_assum `window_strong_result ctx func ready body_end len ct rv
+      (p+32+k) ready_run u` (irule_at Any) >>
+  qpat_assum `abi_builtin_encode_setup _ M staged = ((Var root,Var dp),ready)` (irule_at Any) >>
+  qpat_assum `typed_copy_state_frame a (p+32) wlen alloc_run ready_run` (irule_at Any) >>
+  qpat_assum `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func ce cx ee prepared`
+    (irule_at Any) >>
+  qpat_assum `compile_alloc_buffer _ st = (buf,allocated)` (irule_at Any) >>
+  qpat_assum `wb_frame ce es ee origin s0 initial` (irule_at Any) >>
+  qpat_assum `~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid) ty args)` (irule_at Any) >>
+  qpat_assum `FLOOKUP prepared.vs_allocas st.cs_next_id = SOME (_,_)` (irule_at Any) >>
+  qpat_assum `FLOOKUP ready_run.vs_allocas staged.cs_next_id = SOME (p,N)` (irule_at Any) >>
+  qpat_assum `buf.buf_operand = Var src` (pure_rewrite_tac o single) >>
+  qpat_assum `compile_abi_encode_to_buf (Var dp) (Var src) ei ready = (len,body_end)`
+    (irule_at Any) >>
+  `st.cs_next_id <= staged.cs_next_id` by
+    (qpat_assum `st.cs_next_id < staged.cs_next_id` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `!x. not_fresh_at staged x ==> lookup_var x alloc_run = lookup_var x prepared` by
+    (rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at staged x ==> lookup_var x alloc_run = _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+  asm_rewrite_tac[] >>
+  simp[NoAsms, Abbr `N`, Abbr `k`, Abbr `wlen`]
+QED
+
+Resume abi_encode_staged_tuple_full_tail[result_source]:
+  `well_typed_type_builtin_args (AbiEncode ensure mid) ty (MAP expr_type args)` by
+    (qpat_assum `expr_body_pre ce cx env (TypeBuiltin ann _ _ _) es` mp_tac >>
+     simp[NoAsms, exprSimHypsDefsTheory.expr_body_pre_def,
+       Once vyperTypeSystemTheory.well_typed_expr_def]) >>
+  qabbrev_tac `payload = abi_encode_method_id_bytes mid ++ enc ct rv` >>
+  `evaluate_type_builtin cx (AbiEncode ensure mid) ty (MAP expr_type args) vs =
+    INL (BytesV payload)` by
+    (qpat_assum `well_typed_type_builtin_args _ _ _`
+       (strip_assume_tac o SRULE [vyperTypeSystemTheory.well_typed_type_builtin_args_def]) >>
+     qpat_assum `ty = TupleT _` SUBST1_TAC >>
+     qpat_assum `Abbrev (payload = _)` (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     qpat_assum `enc ct rv = _` SUBST1_TAC >>
+     match_mp_tac (PURE_REWRITE_RULE [vyperABITheory.vyper_to_abi_type_def]
+       abiBuiltinEncodeSourceTheory.abi_builtin_encode_source_tuple) >>
+     reverse conj_tac >- (qpat_assum `vyper_to_abi_list _ _ _ = SOME avs`
+       (fn th => simp[NoAsms, vyperABITheory.vyper_to_abi_def, th])) >>
+     qpat_assum `args <> []` mp_tac >>
+     qpat_assum `LENGTH args = 1 ==> ensure` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `args` >> simp[] >>
+     rename1 `1 <= LENGTH rest` >> Cases_on `rest` >> simp[]) >>
+  suspend "result_bound"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[result_bound]:
+  `?limit. expr_type (TypeBuiltin ann (AbiEncode ensure mid) ty args) = BaseT (BytesT (Dynamic limit)) /\
+    vyper_abi_size_bound (get_tenv cx) (TupleT (MAP expr_type args)) + abi_encode_method_id_size mid <= limit` by
+    (qpat_assum `expr_body_pre ce cx env (TypeBuiltin ann _ _ _) es` mp_tac >>
+     qpat_assum `~(LENGTH args = 1 /\ ~ensure)` mp_tac >>
+     qpat_assum `env.type_defs = get_tenv cx` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[exprSimHypsDefsTheory.expr_body_pre_def, Once vyperTypeSystemTheory.well_typed_expr_def,
+       vyperTypeSystemTheory.type_builtin_result_ok_def, vyperTypeSystemTheory.abi_encode_size_ok_def] >>
+     rpt strip_tac >> Cases_on `args` >> gvs[vyperASTTheory.expr_type_def] >>
+     rename1 `rest = [] ==> ensure` >> Cases_on `rest` >> gvs[]) >>
+  `LENGTH (enc ct rv) <= vyper_abi_size_bound (get_tenv cx) (TupleT (MAP expr_type args))` by
+    (qpat_assum `enc ct rv = _` SUBST1_TAC >>
+     irule (cj 2 vyperABIValidTheory.vyper_to_abi_enc_le_size_bound) >>
+     qpat_assum `vyper_to_abi_list _ _ _ = SOME avs` (irule_at Any) >>
+     qexists `tvs'` >>
+     qpat_assum `LIST_REL (\e tv. evaluate_type _ (expr_type e) = _) _ _` mp_tac >>
+     qpat_assum `LIST_REL value_has_type tvs' vs` mp_tac >>
+     qpat_assum `env.type_defs = get_tenv cx` SUBST1_TAC >>
+     simp[NoAsms, listTheory.LIST_REL_MAP1, combinTheory.o_DEF,
+       vyperTypeDefaultsTheory.values_have_types_LIST_REL]) >>
+  `LENGTH payload <= limit` by
+    (qpat_assum `LENGTH (enc ct rv) <= vyper_abi_size_bound _ _` mp_tac >>
+     qpat_assum `vyper_abi_size_bound _ _ + _ <= limit` mp_tac >>
+     simp[NoAsms, Abbr `payload`, vyperTypeSystemTheory.abi_encode_method_id_size_def] >>
+     decide_tac) >>
+  suspend "byte_resources"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[byte_resources]:
+  `selector = abi_encode_method_id_bytes mid` by
+    (qpat_assum `well_typed_type_builtin_args _ _ _`
+       (assume_tac o MATCH_MP abiBuiltinEncodeSourceTheory.abi_builtin_encode_checked_prefix) >>
+     qpat_assum `abi_builtin_encode_prefix _ = _` (pure_once_rewrite_tac o single o GSYM) >>
+     Cases_on `mid` >> simp[NoAsms, Abbr `selector`, abiBuiltinEncodeRunTheory.abi_builtin_encode_prefix_def]) >>
+  `payload = selector ++ enc ct rv` by
+    (qpat_assum `selector = _` SUBST1_TAC >> simp[NoAsms, Abbr `payload`]) >>
+  `LENGTH payload <= M+k /\ 32+LENGTH payload <= N` by
+    (qpat_assum `payload = selector ++ _` (pure_once_rewrite_tac o single) >>
+     qpat_assum `LENGTH selector = k` (fn th => rewrite_tac[listTheory.LENGTH_APPEND,th]) >>
+     qpat_assum `32+k+LENGTH (enc ct rv) <= N` mp_tac >>
+     qpat_assum `LENGTH (enc ct rv) <= M` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+      val_in_memory (BaseTV (BytesT (Dynamic limit))) (BytesV payload) p mem` by
+    (qx_gen_tac `mem` >> strip_tac >>
+     qpat_assum `!mem. _ ==> mem_word_at p mem = _ /\ _`
+       (qspec_then `mem` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     qpat_assum `payload = selector ++ _` (fn th =>
+       simp_tac (srw_ss()) [th, valueEncodingDefsTheory.val_in_memory_def,listTheory.LENGTH_APPEND]) >>
+     conj_tac >-
+       (qpat_assum `LENGTH selector = k` (pure_once_rewrite_tac o single) >>
+        once_rewrite_tac[arithmeticTheory.ADD_COMM] >> first_assum ACCEPT_TAC) >>
+     once_rewrite_tac[valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
+     qpat_assum `LENGTH selector = k` (pure_rewrite_tac o single) >>
+     qpat_assum `mem_bytes_at (p+32) k mem = _` (pure_rewrite_tac o single) >>
+     qpat_assum `mem_bytes_at (p+32+k) _ mem = _` (pure_rewrite_tac o single) >>
+     REFL_TAC) >>
+  `p+N <= t.vs_alloca_next` by
+    (irule abiEncoderWindowContractTheory.window_alloca_growth_frontier >>
+     qexists `ready_run` >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `type_memory_bytes ce (lowered_value_type ce (TypeBuiltin ann (AbiEncode ensure mid) ty args)) = N` by
+    (qpat_assum `~(LENGTH args = 1 /\ ~ensure)` (fn th =>
+       simp_tac (srw_ss()) [Once exprLoweringTheory.lowered_value_type_def,LET_THM,EQF_INTRO th]) >>
+     Cases_on `mid` >>
+     simp[NoAsms, Abbr `N`, Abbr `M`, Abbr `k`, compileEnvTheory.type_memory_bytes_def,
+       vfmConstantsTheory.word_size_def, arithmeticTheory.MULT_COMM]) >>
+  `val_store_size (BaseTV (BytesT (Dynamic limit))) (BytesV payload) <= N` by
+    (`word_size (LENGTH payload) <= word_size (M+k)` by simp[exprSimPropsTheory.word_size_monotone] >>
+     qpat_assum `word_size (LENGTH payload) <= word_size (M+k)` mp_tac >>
+     simp[NoAsms, exprSimPropsTheory.val_store_size_def, Abbr `N`]) >>
+  `eval_operand (Var root) t = SOME (n2w p)` by
+    (rewrite_tac[venomStateTheory.eval_operand_def] >> first_assum ACCEPT_TAC) >>
+  `w2n (n2w p : 256 word) = p` by simp[wordsTheory.w2n_n2w] >>
+  mp_tac (Q.INST [`s` |-> `t`, `q` |-> `root`, `capacity` |-> `N`,
+    `w` |-> `(n2w p : 256 word)`, `G` |-> `Gf`, `tn` |-> `tnf`,
+    `N` |-> `limit`, `ann` |-> `ann`, `ensure` |-> `ensure`, `target` |-> `ty`,
+    `args` |-> `args`, `mid` |-> `mid`, `ce` |-> `ce`, `cx` |-> `cx`,
+    `ee` |-> `ee with gas_obs := []`, `payload` |-> `payload`]
+      bodyFullAbiEncodeResultResourcesTheory.abi_encode_bytes_full_resources) >>
+  (impl_tac >-
+    (qpat_assum `w2n (n2w p : 256 word) = p` (pure_rewrite_tac o single) >>
+     qpat_assum `type_memory_bytes ce (lowered_value_type ce (TypeBuiltin ann _ _ _)) = N`
+       (fn th => rewrite_tac[th, arithmeticTheory.LESS_EQ_REFL]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  strip_tac >> suspend "result_outcome"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[result_outcome]:
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (initial,G,tn) [] (OK t,Gf,tnf)` by
+    (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl [`Gr`,`ready_run`,`tnr`] >> reverse conj_tac
+     >- (qpat_assum `!D. gas_origin_ptr_path _ (ready_run,Gr,tnr) [] (OK t,Gf,tnf)`
+          (qspec_then `D` ACCEPT_TAC)) >>
+     irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl [`Gp`,`prepared`,`tnp`] >> conj_tac
+     >- (qpat_assum `!D. gas_origin_ptr_path _ (initial,G,tn) [] (OK prepared,Gp,tnp)`
+          (qspec_then `D` ACCEPT_TAC)) >>
+     qpat_assum `!D. gas_origin_ptr_path _ (prepared,Gp,tnp) [] (OK ready_run,Gr,tnr)`
+       (qspec_then `D` ACCEPT_TAC)) >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`Gf`,`ee`,`INL (Value (BytesV payload))`,`t`,`tnf`] >>
+  conj_tac >- (qpat_assum `evaluate_type_builtin _ _ _ _ _ = INL (BytesV payload)`
+    (fn th => simp_tac (srw_ss()) [th])) >>
+  qx_gen_tac `H` >> strip_tac >>
+  conj_tac >- (qpat_assum `!D. gas_origin_ptr_path _ (initial,G,tn) [] (OK t,Gf,tnf)`
+    (qspec_then `DF H` ACCEPT_TAC)) >>
+  `ghost_inv_at (DF H) lo d ce cx (ee with gas_obs := []) Gf tnf t` by
+    (qpat_assum `!H. valid_horizon _ _ _ _ ==> ghost_inv_at _ _ _ _ _ _ Gr tnr ready_run`
+       (drule_then assume_tac) >>
+     qpat_assum `!D. ghost_inv_at D _ _ _ _ ee Gr tnr ready_run ==> _`
+       (qspec_then `DF H` (drule_then mp_tac)) >>
+     simp_tac (srw_ss()) [bodyPtrDefsTheory.ghost_inv_at_def] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  BETA_TAC >> qexists `Value (BytesV payload)` >>
+  qpat_assum `out = Var root` SUBST1_TAC >>
+  conj_tac >- REFL_TAC >>
+  suspend "result_post"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[result_post]:
+  reverse conj_tac >-
+    (`alloca_history func t` by
+       (qpat_assum `alloca_history func ready_run ==> alloca_history func t`
+          (drule_then ACCEPT_TAC)) >>
+     `s0.vs_alloca_next <= t.vs_alloca_next` by
+       (qpat_assum `window_alloca_growth ready_run t`
+          (mp_tac o CONJUNCT1 o REWRITE_RULE [abiEncoderWindowContractTheory.window_alloca_growth_def]) >>
+        qpat_assum `ready_run.vs_alloca_next = alloc_run.vs_alloca_next` (rewrite_tac o single) >>
+        qpat_assum `prepared.vs_alloca_next <= alloc_run.vs_alloca_next` mp_tac >>
+        qpat_assum `initial.vs_alloca_next <= prepared.vs_alloca_next` mp_tac >>
+        qpat_assum `s0.vs_alloca_next <= initial.vs_alloca_next` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+     qpat_assum `~ctx_has_dalloca ctx` (fn th =>
+        simp[NoAsms, th, contextTheory.mk_ptr_def, contextTheory.vv_location_def]) >>
+     qpat_assum `vv_store_bound _ _ _ _ _ _ t`
+        (assume_tac o SRULE [loweringPostsTheory.post_value_type_def, contextTheory.mk_ptr_def]) >>
+     qpat_assum `ptr_vv_ok _ _ _ _ _ Gf tnf t`
+        (assume_tac o SRULE [loweringPostsTheory.post_value_type_def, contextTheory.mk_ptr_def]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "result_vv"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[result_vv]:
+  `stmt_state_rel H ctx func ce cx (ee with gas_obs := []) t` by
+    suspend "result_state" >>
+  `wb_frame ce es (ee with gas_obs := []) origin s0 t` by
+    suspend "result_writeback" >>
+  `!name b sz. local_region ce ee.scopes t name b sz ==> p+N <= b \/ b+sz <= p` by
+    suspend "result_disjoint" >>
+  `storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
+    suspend "result_storage" >>
+  `val_in_memory (BaseTV (BytesT (Dynamic limit))) (BytesV payload) p t.vs_memory` by
+    (qpat_assum `!mem. _ ==> val_in_memory _ _ p mem` irule >> simp[NoAsms, mem_agree_outside_def]) >>
+  irule (CONV_RULE (RAND_CONV (SIMP_CONV (srw_ss()) [vyperASTTheory.expr_type_def,
+      Once exprSimUint2StrTheory.vv_post_located_mk_ptr]))
+    (Q.INST [`e` |-> `TypeBuiltin ann (AbiEncode ensure mid) ty args`,
+             `result` |-> `Value (BytesV payload)`]
+       exprSimAbiEncodeNonwordResultTheory.abi_encode_bytes_vv_post)) >>
+  qpat_assum `FLOOKUP t.vs_allocas staged.cs_next_id = SOME (p,N)` (irule_at Any) >>
+  qpat_assum `val_in_memory _ _ p t.vs_memory` (irule_at Any) >>
+  simp_tac (srw_ss()) [vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  qpat_assum `~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid) ty args) ==> pure_frame ce func es origin s0 t`
+    (rewrite_tac o single o SRULE []) >>
+  qpat_assum `stmt_state_rel H ctx func ce cx (ee with gas_obs := []) t`
+    (rewrite_tac o single o REWRITE_RULE [exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
+  suspend "result_vv_premises"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[result_vv_premises]:
+  `p < dimword (:256)` by
+    (qpat_assum `p+N < dimword (:256)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `staged.cs_next_id < final_st.cs_next_id` by
+    (drule_then ACCEPT_TAC exprSimAbiEncodeBytesOwnershipTheory.abi_encode_strict_id_growth) >>
+  conj_tac >- qpat_assum `storage_well_formed_on cx _ (FST H)` ACCEPT_TAC >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_staged_tuple_full_tail[result_storage]:
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> (?ts. _) /\ _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `!b. get_storage cx (ee with gas_obs := []) b = get_storage cx ee b` by
+    (Cases >> simp[NoAsms, vyperStorageBackendTheory.get_storage_def]) >>
+  qpat_assum `abi_args_post H _ _ _ _ es _ _ _ ee _ _ _ _`
+    (mp_tac o cj 2 o REWRITE_RULE [abi_args_post_def]) >>
+  qpat_assum `!b. get_storage cx (_ with gas_obs := _) b = _`
+    (fn th => rewrite_tac[vyperStorageFootprintTheory.storage_well_formed_on_def,th])
+QED
+
+Resume abi_encode_staged_tuple_full_tail[result_disjoint]:
+  rpt gen_tac >> strip_tac >>
+  irule (INST_TYPE [Type.alpha |-> ``:256``]
+    exprSimAbiEncodeBytesOwnershipTheory.abi_encode_setup_row_local_exclusion) >>
+  qpat_assum `stmt_state_rel H ctx func ce cx (ee with gas_obs := []) t` (irule_at Any) >>
+  qpat_assum `FLOOKUP t.vs_allocas staged.cs_next_id = SOME (p,N)` (irule_at Any) >>
+  qpat_assum `abi_builtin_encode_setup _ M staged = ((Var root,Var dp),ready)` (irule_at Any) >>
+  rename1 `local_region ce ee.scopes t nm b sz` >> qexists `nm` >>
+  simp[NoAsms] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_staged_tuple_full_tail[result_writeback]:
+  rewrite_tac[exprSimWordArgsTheory.wb_frame_gas_obs] >>
+  `!b n. loweringStateRelDefs$regions_disjoint (w2n bw)
+          (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) b n /\
+        (b+n <= p \/ p+N <= b) /\ (!i. b <= i /\ i < b+n ==> i IN P) ==>
+        mem_bytes_at b n t.vs_memory = mem_bytes_at b n initial.vs_memory` by
+    suspend "writeback_interval" >>
+  qpat_assum `wb_frame ce es ee origin s0 initial`
+    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+  rewrite_tac[loweringPostsTheory.wb_frame_def] >>
+  conj_tac >- suspend "writeback_vars" >>
+  conj_tac >- (rpt strip_tac >>
+    irule abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_allocated >>
+    qpat_assum `abi_encoder_registered_effect _ _ ready_run t` (irule_at Any) >>
+    qpat_assum `!id row. FLOOKUP s0.vs_allocas id = SOME row ==> FLOOKUP ready_run.vs_allocas id = SOME row`
+      (drule_then ACCEPT_TAC)) >>
+  conj_tac >- suspend "writeback_rows" >>
+  irule exprSimPropsTheory.locals_kept_regions_tail >> qexists `initial` >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  suspend "writeback_locals"
+QED
+
+Resume abi_encode_staged_tuple_full_tail[writeback_interval]:
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_assum `!z k. loweringStateRelDefs$regions_disjoint (w2n bw) _ z k ==> mem_bytes_at z k prepared.vs_memory = _`
+    (drule_then (fn th => rewrite_tac[GSYM th])) >>
+  qpat_assum `alloc_run.vs_memory = prepared.vs_memory` (fn th => rewrite_tac[GSYM th]) >>
+  `mem_bytes_at b n ready_run.vs_memory = mem_bytes_at b n alloc_run.vs_memory` by
+    (qpat_assum `!z n. _ ==> mem_bytes_at z n ready_run.vs_memory = mem_bytes_at z n alloc_run.vs_memory` irule >>
+     qpat_assum `b+n <= p \/ p+N <= b` mp_tac >>
+     qpat_assum `32+wlen <= N` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  irule abiDecodeStaticPropsTheory.mem_bytes_at_bytewise >> qx_gen_tac `i` >> strip_tac >>
+  `i IN P` by (first_assum irule >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `(i:num) < p \/ p+32 <= i` by
+    (qpat_assum `b+n <= p \/ p+N <= b` mp_tac >> qpat_assum `32 <= N` mp_tac >>
+     qpat_assum `b <= i` mp_tac >> qpat_assum `i < b+n` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  qpat_assum `!i. i IN P /\ _ ==> mem_bytes_at i 1 t.vs_memory = _ /\ _`
+    (qspec_then `i` mp_tac) >>
+  asm_rewrite_tac[] >> metis_tac[]
+QED
+
+Resume abi_encode_staged_tuple_full_tail[writeback_vars]:
+  rpt strip_tac >>
+  `not_fresh_at ready x /\ not_fresh_at staged x` by
+    (conj_tac >> first_assum (drule_then ACCEPT_TAC)) >>
+  `not_fresh_at st x` by
+    (qpat_assum `not_fresh_at origin x` mp_tac >>
+     qpat_assum `origin.cs_next_var <= st.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+  `lookup_var x initial = SOME w` by
+    ((qpat_assum `!x w. not_fresh_at origin x /\ lookup_var x s0 = SOME w ==> _`
+       (qspecl_then [`x`,`w`] mp_tac) >> asm_rewrite_tac[] >> (simp[]))) >>
+  `lookup_var x ready_run = SOME w` by
+    (qpat_assum `!x. not_fresh_at staged x ==> lookup_var x ready_run = lookup_var x prepared`
+       (drule_then SUBST1_TAC) >>
+     qpat_assum `!x. not_fresh_at st x ==> lookup_var x prepared = lookup_var x initial`
+       (drule_then SUBST1_TAC) >> first_assum ACCEPT_TAC) >>
+  qpat_assum `!x w. not_fresh_at ready x /\ lookup_var x ready_run = SOME w ==> _`
+    irule >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_staged_tuple_full_tail[writeback_rows]:
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < origin.cs_next_id /\ _ ==> mem_bytes_at off sz initial.vs_memory = _`
+    (drule_all_then (fn th => rewrite_tac[GSYM th])) >>
+  qpat_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> off+sz <= ready_run.vs_alloca_next /\ _`
+    (drule_all_then (assume_tac o cj 2)) >>
+  `loweringStateRelDefs$regions_disjoint (w2n bw)
+     (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) off sz` by
+    (`aid <> st.cs_next_id` by
+       (qpat_assum `aid < origin.cs_next_id` mp_tac >> qpat_assum `origin.cs_next_id <= st.cs_next_id` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+     qpat_assum `!id b sz id' b' sz'. _ ==> b+sz <= b' \/ b'+sz' <= b`
+       (qspecl_then [`aid`,`off`,`sz`,`st.cs_next_id`,`w2n bw`,
+          `abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))`] mp_tac) >>
+     (impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- first_assum (drule_then ACCEPT_TAC) >>
+       first_assum ACCEPT_TAC)) >>
+     rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
+     disch_then (DISJ_CASES_THEN assume_tac) >> simp[NoAsms, Once DISJ_COMM] >>
+     asm_rewrite_tac[]) >>
+  `!i. off <= i /\ i < off+sz ==> i IN P` by
+    (rpt strip_tac >> asm "protected_membership" (pure_once_rewrite_tac o single) >>
+     disj2_tac >> disj2_tac >> disj1_tac >> qexistsl [`aid`,`off`,`sz`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  first_assum irule >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_staged_tuple_full_tail[writeback_locals]:
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!name b sz. local_region ce es.scopes s0 name b sz ==> local_region ce ee.scopes initial name b sz`
+    (drule_then assume_tac) >>
+  qpat_assum `!name b sz. local_region ce es.scopes s0 name b sz ==> local_region ce ee.scopes ready_run name b sz`
+    (drule_then assume_tac) >>
+  qpat_assum `!name b sz. local_region ce ee.scopes ready_run name b sz ==> loweringStateRelDefs$regions_disjoint p N b sz`
+    (drule_then (assume_tac o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def, Once DISJ_COMM])) >>
+  qpat_assum `!name b sz. local_region ce ee.scopes initial name b sz ==> loweringStateRelDefs$regions_disjoint (w2n bw) _ b sz`
+    (drule_then assume_tac) >>
+  `!i. b <= i /\ i < b+sz ==> i IN P` by
+    (rpt strip_tac >> asm "protected_membership" (pure_once_rewrite_tac o single) >>
+     disj2_tac >> disj1_tac >> qexistsl [`n`,`b`,`sz`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  first_assum irule >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_staged_tuple_full_tail[result_state]:
+  FAIL_TAC "remaining state observation"
+QED
+
+Finalise abi_encode_staged_tuple_full_tail
