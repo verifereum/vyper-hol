@@ -906,17 +906,22 @@ Proof
   cheat
 QED
 
-(* ADMISSION: statement only.  Waits for its proof from eval_stmts_missing_gas_reading_empty at a nonempty tail. *)
 Theorem gas_marked_eval_stmts_readings_available:
   !memory ctx func cx body st vs marks res st' rv.
     gas_marked_exec memory (ctx,func) (eval_stmts cx body)
       (st,vs) marks res st' rv ==>
     res <> INR (Error (RuntimeError "msg.gas: no gas reading"))
 Proof
-  cheat
+  rpt gen_tac >>
+  simp_tac std_ss [gasSummaryTheory.gas_marked_exec_def] >> strip_tac >>
+  disch_tac >>
+  qpat_x_assum `!tail. eval_stmts _ _ _ = _`
+    (qspec_then `[0w:bytes32]` mp_tac) >>
+  asm_rewrite_tac[] >>
+  disch_then (mp_tac o MATCH_MP eval_stmts_missing_gas_reading_empty) >>
+  simp[]
 QED
 
-(* ADMISSION: statement only.  Waits for its proof (trace-only adapter). *)
 Theorem call_external_marked_readings_available:
   !os prefix am tx src.
     (!tail. call_external (SOME os) (prefix ++ tail) am tx = src) /\
@@ -927,7 +932,7 @@ Theorem call_external_marked_readings_available:
       FST (call_external (SOME os) (prefix ++ tail) am tx) <>
       INR (Error (RuntimeError "msg.gas: no gas reading"))
 Proof
-  cheat
+  metis_tac[]
 QED
 
 (* ADMISSION: statement only.  Waits for its proof from the three reading
