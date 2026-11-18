@@ -56,6 +56,10 @@
  *     is not an INVOKE, so no builtin runs between s and the take.
  *     Scope: GATED.  The four builtins are admitted
  *     (supportedExprFormsScript.sml:115-117) and take an oracle entry.
+ *     Since record_request keeps every request and the four builtins take
+ *     their entry through take_call_outcome, each oracle entry taken has its
+ *     StorageOutcome and its request, so recorded_outcomes_count counts every
+ *     StorageOutcome.
  *
  * (C) Closed world.  vyper_call_staging combines vyper_frame_staging, a
  *     dispatched_vyper_call and the call trace bound.  For a non-static
@@ -134,7 +138,7 @@ Ancestors
 Definition recorded_outcomes_count_def:
   recorded_outcomes_count observations =
     LENGTH (FILTER (\observation. case observation of
-      StorageOutcome rq outcome => ~computed_precompile rq | _ => F)
+      StorageOutcome rq outcome => T | _ => F)
       observations)
 End
 
@@ -142,7 +146,8 @@ End
 
 (* s has made at most k external-call requests: the states up to and
    including the one making the request at index k.  Requests only grow,
-   and computed precompiles record none (record_request). *)
+   and every call records one, computed precompiles included
+   (record_request). *)
 Definition request_cut_def:
   request_cut (k:num) (s:venom_state) <=> LENGTH s.vs_requests <= k
 End
@@ -219,7 +224,7 @@ End
 (* The same marking supplies the unit certificate and request alignment.
    The shadow is chosen by the program, before am, tx, ret and vs.  At each
    outcome whose preceding trace obs_pre is a valid horizon for H and whose
-   request rq is recorded: the source's k-th request
+   request rq is not a computed precompile: the source's k-th request
    (k = recorded_outcomes_count obs_pre) is rq, the raw run is safe up to
    the request cut k, and the reachable raw state s whose step issues the
    raw k-th request makes one that agrees with rq, and the outcome is the
