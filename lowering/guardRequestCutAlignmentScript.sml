@@ -12,6 +12,7 @@ Theorem codegen_request_cut_outcome:
   !fin tops am tx rpolicy unit out prog cplan prog' es r es'
    vs0 D k vs fn inst s fuel s' fn' inst' t fuel' t'.
     fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     supported_program tops /\ source_typing_ok tops am tx /\
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
