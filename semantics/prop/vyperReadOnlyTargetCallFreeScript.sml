@@ -36,9 +36,7 @@ Theorem target_call_free_evaluate[local]:
   (!cx g v. !mods. atarget_mutability_ok mods View g /\ int_calls_atarget g = [] ==>
      state_rel_frame machine_frame (assign_tuple_targets cx g v)) /\
   (!cx gs vs. !mods. EVERY (atarget_mutability_ok mods View) gs /\ int_calls_atargets gs = [] ==>
-     state_rel_frame machine_frame (assign_tuple_target_list cx gs vs)) /\
-  (!cx es. !mods. EVERY (expr_mutability_ok mods View) es /\ int_calls_exprs es = [] ==>
-     state_rel_frame machine_frame (eval_expr_results cx es))
+     state_rel_frame machine_frame (assign_tuple_target_list cx gs vs))
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
   >- simp[Once evaluate_def, machine_frame_primitives]
@@ -100,10 +98,7 @@ Proof
   >- suspend "target_tuple"
   >- simp[Once evaluate_def, machine_frame_primitives]
   >- suspend "targets_cons"
-  >- simp[Once evaluate_def, machine_frame_primitives]
-  >- simp[Once evaluate_def, machine_frame_primitives]
-  >- simp[Once evaluate_def, machine_frame_primitives]
-  >> suspend "expr_results_cons"
+  >> simp[Once evaluate_def, machine_frame_primitives]
 QED
 
 Resume target_call_free_evaluate[return_some]:
@@ -433,12 +428,6 @@ Resume target_call_free_evaluate[target_place]:
   strip_calls >> simp[Once evaluate_def] >>
   match_mp_tac machine_frame_bind >> simp[machine_frame_get_place] >> metis_tac[]
 QED
-Resume target_call_free_evaluate[expr_results_cons]:
-  strip_calls >> simp[Once evaluate_def] >>
-  irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
-  >- (rpt strip_tac >> match_mp_tac machine_frame_bind >> simp[] >> metis_tac[]) >> metis_tac[]
-QED
-
 Finalise target_call_free_evaluate
 
 Theorem target_call_free_exprs_frame:

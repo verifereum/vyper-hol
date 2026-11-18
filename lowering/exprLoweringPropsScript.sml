@@ -4050,22 +4050,41 @@ Proof
   simp[compile_create_salt_def] >> ci_mono_create_tac []
 QED
 
+Theorem ci_mono_compile_create_ctor_args:
+  ∀cfn cenv args sa.
+    (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
+    ci_mono sa (SND (compile_create_ctor_args cfn cenv args sa))
+Proof
+  Induct_on `args` >> rpt strip_tac
+  >- simp[compile_create_ctor_args_def, ci_mono_comp_return] >>
+  simp[Once compile_create_ctor_args_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_snapshot_vv] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (first_x_assum irule >> simp[]) >>
+  simp[ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_create_ctor_tuple:
   ∀cfn cenv args sa.
     (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
     ci_mono sa (SND (compile_create_ctor_tuple cfn cenv args sa))
 Proof
   rpt gen_tac >> strip_tac >> simp[compile_create_ctor_tuple_def] >>
-  ci_mono_create_tac []
+  ci_mono_create_tac [ci_mono_compile_create_ctor_args]
 QED
 
 Theorem ci_mono_compile_create_blueprint_args:
-  ∀cfn cenv raw args sa.
+  ∀cfn cenv raw later_es args sa.
     (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
-    ci_mono sa (SND (compile_create_blueprint_args cfn cenv raw args sa))
+    ci_mono sa (SND (compile_create_blueprint_args cfn cenv raw later_es args sa))
 Proof
   rpt gen_tac >> strip_tac >> simp[compile_create_blueprint_args_def] >>
-  ci_mono_create_tac [ci_mono_compile_create_ctor_tuple]
+  ci_mono_create_tac [ci_mono_compile_create_ctor_tuple,
+    ci_mono_compile_snapshot_vv, ci_mono_unwrap_value]
 QED
 
 Theorem ci_mono_compile_create_snapshot:

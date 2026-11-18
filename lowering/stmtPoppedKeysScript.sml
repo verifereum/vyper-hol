@@ -213,8 +213,7 @@ Proof
     runtime_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets gs) /\
     assign_tuple_target_list cx gs vs st = (res,st') /\
-    popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
-   (!(cx:evaluation_context) (es:expr list). T)` suffices_by metis_tac[] >>
+    popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes)` suffices_by metis_tac[] >>
   ho_match_mp_tac evaluate_ind >> rewrite_tac[] >> rpt conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `assign_tuple_targets _ (BaseTarget _) _ _ = _` mp_tac >>
@@ -508,8 +507,7 @@ Theorem eval_statement_loop_popped_keys_mutual[local]:
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
-  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
-  (!(cx:evaluation_context) (es:expr list). T)
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
 Proof
   ho_match_mp_tac evaluate_ind >> rewrite_tac[] >> rpt conj_tac
   >- (rpt strip_tac >> gvs[Once evaluate_def, return_def])

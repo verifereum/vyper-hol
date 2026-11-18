@@ -3,7 +3,7 @@ Ancestors
   arithmetic combin pair list While
   vyperMisc vyperNsidFmap vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
   vyperCallOutcome[ignore_grammar]
-  vyperSmallStep vyperInterpreterCV
+  vyperSmallStep vyperInterpreterCV constSubstCV
 Libs
   cv_transLib wordsLib
 
@@ -16,6 +16,8 @@ val () = eval_base_place_cps_def
   |> cv_auto_trans;
 
 val () = cv_auto_trans eval_target_place_cps_def;
+
+val () = cv_auto_trans blueprint_literal_offset_def;
 
 val eval_expr_cps_pre_def = eval_expr_cps_def
    |> SRULE
@@ -35,8 +37,6 @@ Proof
   \\ first_x_assum irule
   \\ gvs[bind_def, ignore_bind_def, lift_option_def, lift_option_type_def, assert_def]
 QED
-
-val () = cv_auto_trans eval_expr_results_cps_def;
 
 val () = cv_auto_trans eval_iterator_cps_def;
 
