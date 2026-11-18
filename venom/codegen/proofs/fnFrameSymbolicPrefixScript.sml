@@ -1,7 +1,8 @@
 (* Symbolic annotations of the finite source-frame packets. *)
 Theory fnFrameSymbolicPrefix
 Ancestors
-  codegenEntryFacts
+  codegenEntryFacts codegenEntrySymbolicOwn fnFramePairedPrefixOwn
+  fnPlanPlaceRevertPostamble asmSymOwnStep
   fnFramePrefixDriver fnFramePrefix fnFramePrefixEntry fnFramePrefixStack
   codegenLabelDisciplined codegenEntrySim codegenEntryRel codegenSymRel
   symFrameBoundary symFrameInst symFrameInvoke symFrameControl
@@ -325,20 +326,57 @@ Theorem joint_trace_paired_prefix:
     sym_steps prog env n ss0 = SymOK ss /\
     R (EL j (q0::qs)) a ss
 Proof
-  Induct_on `j`
-  >- (rpt strip_tac >> qexistsl [`0`, `a0`, `ss0`] >>
-      simp[asm_steps_def, asmSpliceTheory.sym_steps_def])
-  >> rpt strip_tac
-  >> `?n a ss.
-        asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-          prog n a0 = AsmOK a /\
-        sym_steps prog env n ss0 = SymOK ss /\
-        R (EL j (q0::qs)) a ss` by
-       (first_x_assum irule >> simp[])
-  >> qpat_x_assum `!i a ss. _` (qspecl_then [`j`, `a`, `ss`] mp_tac)
-  >> simp[] >> strip_tac
-  >> qexistsl [`n + n'`, `a1`, `ss1`]
-  >> metis_tac[blockSimHelpersTheory.asm_steps_compose_ok, sym_steps_compose]
+  MATCH_ACCEPT_TAC
+    (Q.INST [`lo` |-> `SND (compute_label_offsets prog)`,
+             `allow_own` |-> `F`] joint_trace_paired_prefix_own
+     |> REWRITE_RULE [sym_steps_mode_def])
+QED
+
+Theorem normal_frame_symbolic_initial_own:
+  generate_context_plan unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl /\
+  code_labels_agree prog lo /\
+  codegen_asm_entry_rel_reloc lo cpl prog vs0 (entry_asm_state vs0 es0) /\
+  joint_initial vs0 unit.cu_context q /\
+  vs0.vs_code = own /\ asm_data_env_lo_ok lo prog env own ==>
+  normal_frame_symbolic_plan_own allow_own lo env own rpolicy unit cpl prog vs0 es0 q
+    (entry_asm_state vs0 es0) (sym_init (entry_asm_state vs0 es0))
+Proof
+  strip_tac >>
+  qpat_assum `codegen_asm_entry_rel_reloc _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [codegen_asm_entry_rel_reloc_def]) >>
+  `!fe rest lbl.
+    unit.cu_context.ctx_functions = fe :: rest /\
+    get_params (HD fe.fn_blocks).bb_instructions = [] /\
+    fn_entry_label fe = SOME lbl ==>
+    fn_entry_state_rel cpl fe
+      (vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+      (entry_asm_state vs0 es0) 0w []` by
+    metis_tac[codegen_entry_fn_state_rel_fields] >>
+  drule_all entry_frame_plan_initial_reloc >> strip_tac >>
+  drule_all codegen_entry_sym_init_own_fields >> strip_tac >>
+  `get_params (HD fn.fn_blocks).bb_instructions = []` by
+    gvs[unit_shape_ok_def, entry_fn_first_def] >>
+  qpat_x_assum `joint_initial _ _ _` mp_tac >>
+  simp[Once joint_initial_cases] >> rpt strip_tac >>
+  gvs[lookup_function_def, FIND_thm] >>
+  qabbrev_tac `start = vs0 with
+    <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>` >>
+  `codegen_ready_fn fn` by
+    fs[codegen_context_obligations_def, codegen_ready_def] >>
+  `enters_block fn start (start with vs_inst_idx := 0)` by
+    metis_tac[fnEntryParamsTheory.entry_prefix_enters] >>
+  `s1 = start` by gvs[enters_block_def, Abbr `start`] >>
+  simp[normal_frame_symbolic_plan_own_def] >>
+  qexistsl_tac [`entry_asm_state vs0 es0`, `0w`, `[]`,
+    `(entry_asm_state vs0 es0).as_memory`,
+    `sym_init (entry_asm_state vs0 es0)`, `""`, `[]`, `FEMPTY`] >>
+  conj_tac
+  >- (irule frame_stack_symbolic_plan_own_entry >>
+      fs[shared_state_rel_def, Abbr `start`]) >>
+  disj2_tac >> qexistsl_tac [`start`, `0`] >>
+  simp[entry_frame_symbolic_plan_own_def, fn_has_retpc_def, Abbr `start`]
 QED
 
 Theorem normal_frame_symbolic_initial:
