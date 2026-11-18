@@ -1,4 +1,16 @@
-(* Parse the six dynamic peak-memory headers without asserting them. *)
+(* Parse the dynamic peak-memory headers without asserting them.
+ * Revised from 070ae52753:lowering/peakMemoryHeadersScript.sml:
+ *   - H1..H4 and H6 are byte-for-byte unchanged.
+ *   - H5 (lower_vyper_runtime_unit_dynamic_peak_memory_bound) drops the
+ *     circular memory-erased gas_origin_path F / marks / tail premise and
+ *     adds the explicit non-vacuous blueprint-free gate covering the two
+ *     Venom-bounded DALLOCA forms (raw_call forwarding msg.data and
+ *     create_copy_of).
+ *   - H5b (lower_vyper_runtime_unit_blueprint_dynamic_peak_memory_bound) is
+ *     the split companion covering create_from_blueprint under P13's widened
+ *     supported_program and universal storage/exemption observations, also
+ *     without gas_origin_path F.
+ *)
 Theory peakMemoryHeaders
 Ancestors
   vfmCalldataBound vfmExecution vfmExecutionProp vfmState vfmContext
@@ -12,9 +24,9 @@ Ancestors
   loweringRuntimeCorrect loweringMemCorrect loweringPtrCorrect
   loweringCalldataCorrect sourceUnitExecution vyperCalldata
   vyperLoweringCorrect compileVyper vyperCompiler vyperInterpreter e2eDefs
+  vyperAST supportedStmtTraverse supportedExprTraverse supportedProgram
   o1PassContract unitMemInv ptrSafeRun
   contextRawReachable contextCodegenRel
-  fragGasOrigin gasExplicitSites gasShadow
   ptrDiscipline lowerDloadDefs
   venomExecSemantics venomInst venomState
   arithmetic list rich_list pair words finite_map
@@ -235,42 +247,83 @@ val create_from_blueprint_peak_memory_step_quote : term = “
 ”;
 
 (*
- * 5. Whole-run dynamic FMP and DALLOCA no-wrap bound across all three
- *    compile_alloc_dynamic forms (raw_call with msg.data, create_copy_of,
- *    create_from_blueprint), replacing the rejected 2026-11-17 static
- *    allocation-budget entry interface (ac0e363f9).
+ * 5. [REVISED H5 — Venom-bounded dynamic allocation forms (raw_call msg.data,
+ *     create_copy_of)]
  *
- * Uses separate optimized (cp_fmp on vs) and raw (fmp on vs0 via
- * raw_variant fmp vs0 vs) entry floors, tracks fmp_frontier_rel from
- * cp_fmp and w2n fmp, and covers both non-dispatching reverts
- * (calldata_dispatch = NONE) and dispatched/valid calls at the selected
- * (marks, tail) where call_storage_ok and ~source_exempt hold.
+ * Whole-run dynamic FMP and DALLOCA no-wrap bound for runtime units without
+ * CreateFromBlueprint, replacing the rejected 2026-11-17 static
+ * allocation-budget entry interface (ac0e363f9) without the circular
+ * gas_origin_path F premise and without vacuity under today's pre-P13
+ * supported_program.
  *)
 val lower_vyper_runtime_unit_dynamic_peak_memory_bound_quote : term = “
-  !tops rpolicy (unit:compilation_unit) (cp_fmp:num) am tx ret
-   (fmp:bytes32) vs vs0 marks tail.
+  !tops rpolicy (unit:compilation_unit) (cp_fmp:num) am tx
+   (fmp:bytes32) vs vs0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    (!vis mut nr rr name args dflts ret body.
+       MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+       vis <> Deploy ==>
+       ~supported_stmts_expr_exists
+         (\e. ?ty raw salted rof order es d.
+            e = Call ty
+                  (CreateTarget (CreateFromBlueprint raw) salted rof order)
+                  es d)
+         body /\
+       EVERY (\d0. ~supported_expr_exists
+         (\e. ?ty raw salted rof order es d.
+            e = Call ty
+                  (CreateTarget (CreateFromBlueprint raw) salted rof order)
+                  es d)
+         d0) dflts) /\
+    initial_venom_state_rel tops am tx vs /\
+    vs.vs_initial_fmp = n2w cp_fmp /\
+    vs.vs_fmp = n2w cp_fmp /\
+    cp_fmp <= w2n fmp /\
+    w2n fmp < 2 ** 254 /\
+    unit_alloca_budget unit.cu_context +
+      32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+    raw_variant fmp vs0 vs /\
+    LENGTH vs0.vs_outcomes < 2 ** 64 /\
+    outcomes_accounts_typed (SOME vs0.vs_outcomes) /\
+    LENGTH vs0.vs_call_ctx.cc_calldata < 2 ** 64 ==>
+    !fn i s.
+      raw_reachable vs0 unit.cu_context fn i s ==>
+      s.vs_initial_fmp = fmp /\
+      w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
+      fmp_frontier_rel cp_fmp (w2n fmp)
+        (cp_fmp + (w2n s.vs_fmp - w2n fmp)) s.vs_fmp /\
+      (i.inst_opcode = DALLOCA ==>
+       w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64 /\
+       !sz_op sz.
+         i.inst_operands = [sz_op] /\ eval_operand sz_op s = SOME sz ==>
+         w2n s.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256))
+”;
+
+(*
+ * 5b. [BLUEPRINT COMPANION H5b — all three DALLOCA forms including
+ *      create_from_blueprint under P13's widened supported_program]
+ *
+ * Split companion covering CreateFromBlueprint (including raw_args=True) via
+ * joint prefix simulation along lower_budget_path F under P13's widened
+ * supported_program and universal storage/exemption observations, without any
+ * circular gas_origin_path F premise.
+ *)
+val lower_vyper_runtime_unit_blueprint_dynamic_peak_memory_bound_quote : term = “
+  !tops rpolicy (unit:compilation_unit) (cp_fmp:num) am tx ret
+   (fmp:bytes32) vs vs0.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     (calldata_dispatch tops vs0.vs_call_ctx.cc_calldata = NONE \/
      ((valid_vyper_call tops tx vs0.vs_call_ctx.cc_calldata ret \/
        dispatched_vyper_call tops tx vs0.vs_call_ctx.cc_calldata ret) /\
-      (?shadow_unit func r.
-         lower_vyper_runtime_unit (MAP gas_shadow_toplevel tops) rpolicy =
-           SOME shadow_unit /\
-         lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-         fn_entry_label func = SOME "__entry" /\
-         exit_result r /\
-         gas_origin_path F
-           (gas_explicit_sites unit.cu_context shadow_unit.cu_context)
-           unit.cu_context func
-           (vs0 with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                        vs_inst_idx := 0 |>) marks r) /\
-      call_storage_ok am tx vs0.vs_outcomes
-        (gas_explicit marks vs0.vs_gas_readings ++ tail) /\
-      ~source_exempt tops
-        (call_external (SOME vs0.vs_outcomes)
-          (gas_explicit marks vs0.vs_gas_readings ++ tail) am tx))) /\
+      (!obs.
+         call_storage_ok am tx vs0.vs_outcomes obs /\
+         ~source_exempt tops
+           (call_external (SOME vs0.vs_outcomes) obs am tx)))) /\
     initial_venom_state_rel tops am tx vs /\
     vs.vs_initial_fmp = n2w cp_fmp /\
     vs.vs_fmp = n2w cp_fmp /\
@@ -352,6 +405,8 @@ val peak_memory_headers : (string * term) list =
       create_from_blueprint_peak_memory_step_quote),
      ("lower_vyper_runtime_unit_dynamic_peak_memory_bound",
       lower_vyper_runtime_unit_dynamic_peak_memory_bound_quote),
+     ("lower_vyper_runtime_unit_blueprint_dynamic_peak_memory_bound",
+      lower_vyper_runtime_unit_blueprint_dynamic_peak_memory_bound_quote),
      ("lower_vyper_runtime_unit_memory_ptr_dynamic_companion",
       lower_vyper_runtime_unit_memory_ptr_dynamic_companion_quote)];
 
@@ -375,12 +430,17 @@ val expected_constant_owners =
                    "lookup_var", "Lit", "Var"]),
    ("venomExecSemantics", ["OK"]),
    ("builtinSystem", ["compile_msg_data_to_memory"]),
-   ("fragExec", ["exit_result", "fn_has_code"]),
+   ("fragExec", ["fn_has_code"]),
    ("loweringStateRelDefs", ["local_ptrs_reserved", "not_fresh_at"]),
    ("emitHelper", ["emit_op", "emit_void"]),
    ("context", ["compile_alloc_dynamic", "compile_copy_memory_dynamic"]),
    ("builtinCreate", ["compile_create_blueprint_check"]),
    ("compileVyper", ["lower_vyper_runtime_unit"]),
+   ("vyperAST", ["FunctionDecl", "Deploy", "Call", "CreateTarget",
+                 "CreateFromBlueprint"]),
+   ("supportedStmtTraverse", ["supported_stmts_expr_exists"]),
+   ("supportedExprTraverse", ["supported_expr_exists"]),
+   ("supportedProgram", ["supported_program"]),
    ("vyperCalldata", ["calldata_dispatch"]),
    ("loweringCalldataCorrect", ["dispatched_vyper_call"]),
    ("e2eDefs", ["source_typing_ok", "source_deployment_rel", "valid_vyper_call",
@@ -389,16 +449,12 @@ val expected_constant_owners =
    ("vyperCompiler", ["unit_alloca_budget"]),
    ("lowerDloadDefs", ["ctx_dload_count"]),
    ("o1PassContract", ["raw_variant"]),
-   ("gasSummary", ["gas_explicit"]),
    ("vyperInterpreter", ["call_external"]),
    ("exprSimHypsDefs", ["outcomes_accounts_typed"]),
    ("contextRawReachable", ["raw_reachable"]),
    ("ptrSafeRun", ["ptr_safe_blocks"]),
    ("unitTransformDefs", ["inst_mem_below_frontiers", "raw_unit_memory_ok"]),
-   ("contextCodegenRel", ["revert_forward_at"]),
-   ("fragGasOrigin", ["gas_origin_path"]),
-   ("gasExplicitSites", ["gas_explicit_sites"]),
-   ("gasShadow", ["gas_shadow_toplevel"])];
+   ("contextCodegenRel", ["revert_forward_at"])];
 
 fun constant_owner tm =
   let val {Thy, Name, ...} = dest_thy_const tm in (Name, Thy) end;

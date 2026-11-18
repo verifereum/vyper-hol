@@ -9,7 +9,7 @@ Ancestors
   (* allocation limits, conversions, concat buffers, shared callee memory *)
   compilerLoweringTest
   (* dynamic peak-memory statement type and constant bindings *)
-  peakMemoryHeaders
+  peakMemoryHeaders deployPeakMemoryHeaders
   (* fixed-program regressions: ranges, allocation budget, immutables,
      assignment order, the O1 source-stage unit shape, the pop() subscript
      rejection, a name declared at two types in sibling scopes *)
