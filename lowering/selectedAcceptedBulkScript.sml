@@ -125,15 +125,15 @@ Proof
        ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.access_ok_def,
        ptrDisciplineTheory.taint_ok_def, ptrDisciplineTheory.about_to_revert_def]) >>
   `ptr_safe_step D lo fuel ctx fn PG G tn i s` by metis_tac[] >>
-  `step_inst_base i s = OK z` by
-    gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  `ptr_inst_ok D lo 0 ctx fn G tn i s` by
-    fs[ptrSafeRunTheory.ptr_safe_step_def, ptrSafeRunTheory.ptr_inst_ok_def,
-       venomExecSemanticsTheory.step_inst_non_invoke] >>
-  `inst_mem_below_frontier i s /\ inst_dload_in_section i s` by
-    gvs[memSafeRunTheory.mem_safe_step_non_invoke] >>
-  drule_all fragGasSeqPtrTheory.straight_line_origin_ptr_edge >>
-  Cases_on `i.inst_opcode = GAS` >> gvs[gasEventsTheory.gas_events_step_def]
+  `mem_safe_step fuel ctx i s` by fs[] >>
+  PURE_REWRITE_TAC[fragGasOriginPtrTheory.gas_origin_ptr_edge_def] >> conj_tac
+  >- (PURE_REWRITE_TAC[fragGasOriginTheory.gas_origin_edge_def] >>
+      conj_tac >- simp[] >>
+      qexistsl_tac [`fuel`, `bb`, `i`, `OK z`] >> simp[]) >>
+  PURE_REWRITE_TAC[fragGasPathPtrTheory.gas_path_ptr_edge_def] >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`fuel`, `bb`, `i`, `OK z`] >>
+  simp[gasEventsTheory.gas_events_length]
 QED
 
 (* Replay the exact clipped suffix, not an unrestricted path that may
