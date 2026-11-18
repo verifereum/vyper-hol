@@ -10,7 +10,7 @@ val _ = Parse.hide "cp";
 val _ = Parse.hide "base";
 
 Theorem stopped_body_sequential_case:
-  let A = \rpolicy unit cpl prog ctx lo o2pc Inv env ast ss vs'.
+  !A. A = (\rpolicy unit cpl prog ctx lo o2pc Inv env ast ss vs'.
     (?n out. (asm_steps lo o2pc prog n ast = AsmRevert out \/
               asm_steps lo o2pc prog n ast = AsmFault out) /\
        sym_terminal (sym_steps prog env n ss) /\ out.as_requests <<= vs'.vs_requests) \/
@@ -25,9 +25,8 @@ Theorem stopped_body_sequential_case:
          raC pcretC restC memC /\
        sym_frame_inv prog env ctx cpl fnC retC srestC labsC psC cut sc /\
        (in_static_abort_prefix fnC cvsC \/ in_revert_forward fnC cvsC) /\
-       cut.as_requests = vs'.vs_requests)
-  in
-  let R = \rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest srest labs0 ast ss res.
+       cut.as_requests = vs'.vs_requests)) ==>
+  !R. R = (\rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest srest labs0 ast ss res.
     (!vs'. res = Halt vs' ==>
        ?n out. asm_steps lo o2pc prog n ast = AsmHalt out /\
          venom_asm_terminal_rel vs' out /\ sym_terminal (sym_steps prog env n ss)) /\
@@ -43,8 +42,7 @@ Theorem stopped_body_sequential_case:
          ss'.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
          (!b. context_spill_byte cpl b /\ ~closure_spill_byte ctx cpl fn.fn_name b ==>
            FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b) /\
-         (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cpl b))
-  in
+         (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cpl b))) ==>
   (!n ast0 ast1 ss0 ss1 vs'.
     asm_steps lo o2pc prog n ast0 = AsmOK ast1 /\
     sym_steps prog env n ss0 = SymOK ss1 /\
@@ -83,10 +81,9 @@ Theorem stopped_body_sequential_case:
   R rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest srest labs0 ast ss
     (block_rest fuel ctx fn bb vs)
 Proof
-  qmatch_goalsub_abbrev_tac `LET _ A` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ R` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >> strip_tac >>
+  gen_tac >> disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  gen_tac >> disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  strip_tac >>
   drule body_inv_abort_plan >> strip_tac >>
   drule body_plan_inv_facts >> strip_tac >>
   drule_all body_plan_inv_inst >> strip_tac >>

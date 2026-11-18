@@ -22,16 +22,18 @@ Proof
 QED
 
 Theorem prune_one_rooted_flow:
-  let Inherit = \height tag boolean (a:num#num) (b:num#num)
+  !Inherit Flow.
+  Inherit = (\height tag boolean (a:num#num) (b:num#num)
       (src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
     (!k l origin. tag b k = SOME(l,origin) ==>
        k < height b /\ (fresh k = SOME(l,origin) \/
          ?j. src k = SOME j /\ j < height a /\ tag a j = SOME(l,origin))) /\
     (!k. boolean b k ==> k < height b /\
-       (bnew k \/ ?j. src k = SOME j /\ j < height a /\ boolean a j)) in
-  let Flow = \p pc height tag boolean (a:num#num) (b:num#num).
-    let hi = height a; hj = height b; ins = EL (pc a) p in
-    let inherit = Inherit height tag boolean a b in
+       (bnew k \/ ?j. src k = SOME j /\ j < height a /\ boolean a j))) ==>
+  Flow = (\p pc height tag boolean (a:num#num) (b:num#num).
+    !hi hj ins inherit.
+    hi = height a ==> hj = height b ==> ins = EL (pc a) p ==>
+    inherit = Inherit height tag boolean a b ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs =>
@@ -61,7 +63,7 @@ Theorem prune_one_rooted_flow:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let ar = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !ar m. ar = asm_op_arity name ==> m = hj + ar - hi ==>
                ar <= hi /\ hj = m+(hi-ar) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+ar)) (\k. NONE)
@@ -70,34 +72,29 @@ Theorem prune_one_rooted_flow:
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins s = AsmOK u ==>
                      (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F in
-  let Reach = \(edge:(num#num)->(num#num)->bool) e v.
-    ?n (path:num->num#num).
-      path 0=e /\ path n=v /\ !k. k<n ==> edge (path k) (path(SUC k)) in
-  !pre t x tail V e pc height tag boolean edge.
-    let p = pre ++ [t;x] ++ tail in
-    let q = pre ++ [t] ++ tail in
-    let d = LENGTH pre+1 in
-    let r = \i. if i<d then i else i-1 in
-    let Z = \l j. j<LENGTH q /\ (EL j q=AsmPushLabel l \/ EL j q=AsmPushOfst l 0) in
-    let pick = \l. @j. Z l j in
-    let tagQ = \v k. OPTION_MAP (\(l,i). (l,if i=d then pick l else r i)) (tag v k) in
-    e IN V /\ (!v. v IN V ==> Reach edge e v) /\
+    | _ => F) ==>
+  !pre t x tail V e pc height tag boolean edge p q d r.
+    p = pre ++ [t;x] ++ tail ==> q = pre ++ [t] ++ tail ==>
+    d = LENGTH pre+1 ==> r = (\i. if i<d then i else i-1) ==>
+    e IN V /\ (!v. v IN V ==> ?n (path:num->num#num).
+      path 0=e /\ path n=v /\ !k. k<n ==> edge (path k) (path (SUC k))) /\
     (!a b. edge a b ==> a IN V /\ b IN V /\ Flow p pc height tag boolean a b) /\
     (!a b name. edge a b /\ EL (pc a) p = AsmOp name ==>
        IS_SOME (ALOOKUP dup_table name) \/ IS_SOME (ALOOKUP swap_table name) \/
        name="JUMP" \/ name="JUMPI" \/ (?m. static_abort_straight name m)) /\
     (!a. a IN V ==> pc a<>d /\ r (pc a)<LENGTH q /\ EL (r (pc a)) q=EL (pc a) p) ==>
     (!v k l. v IN V /\ tag v k=SOME(l,d) ==> ?j. tag e j=SOME(l,d)) /\
-    (!a b. edge a b ==> Flow q (r o pc) height tagQ boolean a b)
+    (!a b. edge a b ==> Flow q (r o pc) height
+      (\v k. OPTION_MAP (\(l,i). (l,if i=d then
+        (@j. j<LENGTH q /\ (EL j q=AsmPushLabel l \/ EL j q=AsmPushOfst l 0))
+        else r i)) (tag v k)) boolean a b)
 Proof
-  map_every (fn q => qmatch_goalsub_abbrev_tac q >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ Inherit`, `LET _ Flow`, `LET _ Reach`] >>
+  ntac 2 gen_tac >>
+  ntac 2 (disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def] o
+    SIMP_RULE (pure_ss ++ boolSimps.UNWIND_ss) [])) >>
   rpt gen_tac >>
-  map_every (fn q => qmatch_goalsub_abbrev_tac q >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ p`, `LET _ q`, `LET _ d`, `LET _ r`, `LET _ Z`, `LET _ pick`, `LET _ tagQ`] >>
+  ntac 4 (disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def])) >>
+  qmatch_goalsub_abbrev_tac `Flow q (r o pc) height tagQ boolean _ _` >>
   strip_tac >> conj_tac >- suspend "traceback" >> suspend "transport"
 QED
 
@@ -116,8 +113,7 @@ Resume prune_one_rooted_flow[traceback]:
        (qspecl_then [`k`,`l`,`d`] mp_tac) >>
      simp[AllCaseEqs()] >> strip_tac >> goal_assum (drule_at Any)) >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!v. v IN V ==> Reach edge e v` drule >>
-  simp[Abbr `Reach`] >> strip_tac >>
+  qpat_x_assum `!v. v IN V ==> ?n path. _` (drule_then strip_assume_tac) >>
   qpat_x_assum `!a b. edge a b ==> _` kall_tac >>
   `!i. i <= n ==> !s. tag (path i) s = SOME(l,d) ==> ?j. tag e j = SOME(l,d)` by
     (Induct >> simp[] >- metis_tac[] >> rpt strip_tac >>
@@ -135,7 +131,8 @@ Resume prune_one_rooted_flow[transport]:
   qpat_x_assum `!a b. edge a b ==> _` (drule_then strip_assume_tac) >>
   qpat_x_assum `!a. a IN V ==> pc a <> d /\ _` (qspec_then `a` mp_tac) >>
   simp[] >> strip_tac >>
-  qabbrev_tac `retag = \(l,i). (l,if i=d then pick l else r i)` >>
+  qabbrev_tac `retag = \(l,i). (l,if i=d then
+    (@j. j<LENGTH q /\ (EL j q=AsmPushLabel l \/ EL j q=AsmPushOfst l 0)) else r i)` >>
   `!k. tagQ a k = OPTION_MAP retag (tag a k) /\ tagQ b k = OPTION_MAP retag (tag b k)` by
     simp[Abbr `tagQ`,Abbr `retag`] >>
   `!l. retag (l,pc a) = (l,r (pc a))` by simp[Abbr `retag`] >>

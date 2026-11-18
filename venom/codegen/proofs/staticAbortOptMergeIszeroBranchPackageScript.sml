@@ -232,8 +232,7 @@ Resume pending_rows_rooted_package[step]:
   map_every qunabbrev_tac [`Shape`,`lo`,`otp`] >>
   BETA_TAC >> RULE_ASSUM_TAC BETA_RULE >>
   match_mp_tac (GEN_ALL
-    (CONV_RULE (TOP_DEPTH_CONV (FIRST_CONV
-      [HO_REWR_CONV UNWIND_FORALL_THM2, REWR_CONV LET_THM, BETA_CONV]))
+    (CONV_RULE (REDEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2 ORELSEC BETA_CONV))
       pending_role_step)) >>
   asm "dispatch" (qspec_then `x` (drule_then
     (CONJUNCTS_THEN2 assume_tac (mk_asm "row")))) >>
