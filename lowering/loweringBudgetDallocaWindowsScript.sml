@@ -476,6 +476,10 @@ val lower_history_window_quote = “\h q a.
             ~lower_event_consumes (EL j h) /\
             ~lower_event_allocates (EL j h) /\ ~is_terminator ji.inst_opcode”;
 
+Definition lower_history_window_def:
+  lower_history_window h q a <=> ^lower_history_window_quote h q a
+End
+
 Theorem lower_history_pairs_from_windows:
   (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
     ^lower_history_window_quote h q a) /\
@@ -521,6 +525,20 @@ Proof
   >- metis_tac[]
   >- metis_tac[LESS_OR_EQ] >>
   metis_tac[]
+QED
+
+Theorem lower_history_pairs_from_recorded_windows:
+  (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+    lower_history_window h q a) /\
+  (!i op sz. active_inst q.bp_fn i q.bp_state /\ i.inst_opcode = DALLOCA /\
+     i.inst_operands = [op] /\ eval_operand op q.bp_state = SOME sz ==>
+     w2n sz <= 2 ** 255 + 2 ** 64) ==>
+  ?pair. lower_history_pairs h pair /\ lower_history_current h pair q /\
+    (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+      ?fn ai pre op sz post. lower_alloc_record h a fn ai pre op sz post)
+Proof
+  pure_rewrite_tac[lower_history_window_def] >>
+  ACCEPT_TAC lower_history_pairs_from_windows
 QED
 
 val raw_call_window_quote = “\fn i s.
@@ -612,7 +630,22 @@ Proof
   metis_tac[]
 QED
 
-Theorem lower_budget_alloc_event[local]:
+Theorem lower_budget_raw_call_recorded_window:
+  root.bp_stack = [] /\
+  enters_block root.bp_fn start root.bp_state /\
+  lower_budget_path F (D,lo,explicit,ctx) root h marks last /\
+  LENGTH root.bp_state.vs_call_ctx.cc_calldata < 2 ** 64 /\
+  n < LENGTH h /\
+  EL n h = BudgetStep n p ai af (OK post) aq /\
+  ALL_DISTINCT (fn_labels p.bp_fn) /\
+  raw_call_dalloca_window p.bp_fn ai p.bp_state ==>
+  lower_history_window h last n
+Proof
+  pure_rewrite_tac[raw_call_dalloca_window_def, lower_history_window_def] >>
+  ACCEPT_TAC lower_budget_raw_call_event_window
+QED
+
+Theorem lower_budget_alloc_event:
   lower_budget_path F (D,lo,explicit,ctx) root h marks last /\
   n < LENGTH h /\ lower_event_allocates (EL n h) ==>
   ?p i fuel t q. EL n h = BudgetStep n p i fuel (OK t) q /\
