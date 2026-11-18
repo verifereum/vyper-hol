@@ -7,10 +7,10 @@ Ancestors
 Theorem merge_iszero_branch_selector:
   !p cc req (V:(num#num)->bool) (nrank:(num#num)->num) pc height need
      tag boolean edge b.
-  let keep = \i. i < b \/ b+2 <= i in
-  let lo = SND (compute_label_offsets p) in
-  let otp = build_offset_to_pc p in
-  let Shape = \(x:num#num) (s:asm_state).
+  !keep. keep = (\i. i < b \/ b+2 <= i) ==>
+  !lo. lo = SND (compute_label_offsets p) ==>
+  !otp. otp = build_offset_to_pc p ==>
+  !Shape. Shape = (\(x:num#num) (s:asm_state).
     s.as_pc = pc x /\ LENGTH s.as_stack = height x /\
     s.as_call_ctx = cc /\ s.as_requests = req /\
     (need x ==> s.as_call_ctx.cc_static) /\
@@ -21,68 +21,61 @@ Theorem merge_iszero_branch_selector:
        ?off dest. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
          FLOOKUP otp off = SOME dest /\ EL k s.as_stack = (n2w off:bytes32)) /\
     (!k. boolean x k ==> k < height x /\
-       (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w))
-  in
-  let Target = \(x:num#num) (y:num#num).
+       (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w))) ==>
+  !Target. Target = (\(x:num#num) (y:num#num).
     ?l origin off. tag x 0 = SOME(l,origin) /\ FLOOKUP lo l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP otp off = SOME(pc y)
-  in
-  let Flow = \(x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit =
-      \(src:num -> num option)
-        (fresh:num -> (string#num)option) (bnew:num -> bool).
-        (!k l origin. tag y k = SOME(l,origin) ==>
-           k < hj /\ (fresh k = SOME(l,origin) \/
-             ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
-        (!k. boolean y k ==> k < hj /\
-           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-    in
-    case ins of
-      AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
-    | AsmPush bs => hj = hi+1 /\
-        inherit (\k. if k=0 then NONE else SOME(k-1)) (\k. NONE)
-          (\k. k=0 /\ !s v. asm_step lo otp (AsmPush bs) s = AsmOK v ==>
-                  (EL 0 v.as_stack = 0w \/ EL 0 v.as_stack = 1w))
-    | AsmPushLabel l => hj = hi+1 /\
-        inherit (\k. if k=0 then NONE else SOME(k-1))
-          (\k. if k=0 then SOME(l,pc x) else NONE) (\k. F)
-    | AsmPushOfst l d => hj = hi+1 /\
-        inherit (\k. if k=0 then NONE else SOME(k-1))
-          (\k. if k=0 /\ d=0 then SOME(l,pc x) else NONE) (\k. F)
-    | AsmOp name =>
-        (case ALOOKUP dup_table name of
-           SOME n => n < hi /\ hj = hi+1 /\
-             inherit (\k. SOME(if k=0 then n else k-1)) (\k. NONE) (\k. F)
-         | NONE => case ALOOKUP swap_table name of
-             SOME n => 0 < n /\ n < hi /\ hj = hi /\
-               inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
-                 (\k. NONE) (\k. F)
-           | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
-               a <= hi /\ hj = m+(hi-a) /\
-               ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
-               inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
-                 (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
-                   !s v. LENGTH s.as_stack=hi /\ asm_step lo otp ins s=AsmOK v ==>
-                     (EL 0 v.as_stack=0w \/ EL 0 v.as_stack=1w)))
-    | _ => F
-  in
-  let Structure =
-    (!x y. edge x y ==> x IN V /\ y IN V /\ nrank y < nrank x /\ Flow x y /\
-      (if EL (pc x) p = AsmOp "JUMP" then Target x y
-       else if EL (pc x) p = AsmOp "JUMPI" then pc y = pc x+1 \/ Target x y
-       else pc y = pc x+1))
-  in
-  let Open =
-    (FINITE V /\ (!x. x IN V ==> ?s. Shape x s) /\
-     (!x. x IN V ==> pc x < LENGTH p) /\ Structure /\
-     (!x s. x IN V /\ Shape x s ==>
-        (?v. (asm_steps lo otp p 1 s = AsmRevert v \/
-              asm_steps lo otp p 1 s = AsmFault v) /\ v.as_requests=req) \/
-        (?y v. edge x y /\ asm_steps lo otp p 1 s = AsmOK v /\ Shape y v)))
-  in
-  Open /\
+      off < dimword(:256) /\ FLOOKUP otp off = SOME(pc y)) ==>
+  (FINITE V /\ (!x. x IN V ==> ?s. Shape x s) /\
+   (!x. x IN V ==> pc x < LENGTH p) /\
+   (!x y. edge x y ==> x IN V /\ y IN V /\ nrank y < nrank x /\
+     (!hi. hi = height x ==>
+      !hj. hj = height y ==>
+      !ins. ins = EL (pc x) p ==>
+      !inherit. inherit =
+        (\(src:num -> num option)
+          (fresh:num -> (string#num)option) (bnew:num -> bool).
+          (!k l origin. tag y k = SOME(l,origin) ==>
+             k < hj /\ (fresh k = SOME(l,origin) \/
+               ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
+          (!k. boolean y k ==> k < hj /\
+             (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
+      case ins of
+        AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
+      | AsmPush bs => hj = hi+1 /\
+          inherit (\k. if k=0 then NONE else SOME(k-1)) (\k. NONE)
+            (\k. k=0 /\ !s v. asm_step lo otp (AsmPush bs) s = AsmOK v ==>
+                    (EL 0 v.as_stack = 0w \/ EL 0 v.as_stack = 1w))
+      | AsmPushLabel l => hj = hi+1 /\
+          inherit (\k. if k=0 then NONE else SOME(k-1))
+            (\k. if k=0 then SOME(l,pc x) else NONE) (\k. F)
+      | AsmPushOfst l d => hj = hi+1 /\
+          inherit (\k. if k=0 then NONE else SOME(k-1))
+            (\k. if k=0 /\ d=0 then SOME(l,pc x) else NONE) (\k. F)
+      | AsmOp name =>
+          (case ALOOKUP dup_table name of
+             SOME n => n < hi /\ hj = hi+1 /\
+               inherit (\k. SOME(if k=0 then n else k-1)) (\k. NONE) (\k. F)
+           | NONE => case ALOOKUP swap_table name of
+               SOME n => 0 < n /\ n < hi /\ hj = hi /\
+                 inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
+                   (\k. NONE) (\k. F)
+             | NONE =>
+                 !a. a = asm_op_arity name ==>
+                 !m. m = hj + a - hi ==>
+                 a <= hi /\ hj = m+(hi-a) /\
+                 ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
+                 inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
+                   (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
+                     !s v. LENGTH s.as_stack=hi /\ asm_step lo otp ins s=AsmOK v ==>
+                       (EL 0 v.as_stack=0w \/ EL 0 v.as_stack=1w)))
+      | _ => F) /\
+     (if EL (pc x) p = AsmOp "JUMP" then Target x y
+      else if EL (pc x) p = AsmOp "JUMPI" then pc y = pc x+1 \/ Target x y
+      else pc y = pc x+1)) /\
+   (!x s. x IN V /\ Shape x s ==>
+      (?v. (asm_steps lo otp p 1 s = AsmRevert v \/
+            asm_steps lo otp p 1 s = AsmFault v) /\ v.as_requests=req) \/
+      (?y v. edge x y /\ asm_steps lo otp p 1 s = AsmOK v /\ Shape y v))) /\
   (!i. i=b \/ i=b+1 ==> asm_block_at p i (REPLICATE (b+2-i) (AsmOp "ISZERO"))) ==>
   ?next. !x. x IN V ==>
     next x IN V /\ keep (pc (next x)) /\ height (next x)=height x /\
@@ -91,8 +84,8 @@ Theorem merge_iszero_branch_selector:
     (!k nm org. 0<k /\ tag (next x) k=SOME(nm,org) ==> tag x k=SOME(nm,org)) /\
     (!k. 0<k /\ boolean (next x) k ==> boolean x k)
 Proof
-  rpt gen_tac >>
-  CONV_TAC (REDEPTH_CONV (BETA_CONV ORELSEC REWR_CONV LET_THM)) >>
+  ntac 12 gen_tac >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2 ORELSEC BETA_CONV)) >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "open") (mk_asm "suffix")) >>
   qabbrev_tac `R = \x z. z IN V /\ pc z=b+2 /\ height z=height x /\
     nrank z<nrank x /\
@@ -108,10 +101,10 @@ Proof
   `asm_block_at p (pc x) (REPLICATE (b+2-pc x) (AsmOp "ISZERO"))` by
     (asm "suffix" irule >> decide_tac) >>
   (let
-     val expand = REDEPTH_CONV (BETA_CONV ORELSEC REWR_CONV LET_THM)
+     val expand = TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2 ORELSEC BETA_CONV)
      val normalize = SIMP_RULE bool_ss [RAT_OF_NUM_LES, EMPTY_SUBSET, DIFF_EMPTY]
                      o CONV_RULE expand
-     val live = merge_iszero_pending_root_contraction |> SPEC_ALL |>
+     val live = merge_iszero_pending_root_contraction |> CONV_RULE expand |> SPEC_ALL |>
        Q.INST [`rank` |-> `\z:num#num. rat_of_num (nrank z)`] |>
        normalize |> ONCE_REWRITE_RULE [GSYM AND_IMP_INTRO] |>
        Q.INST [`v` |-> `x`, `d` |-> `b+2-pc x`]

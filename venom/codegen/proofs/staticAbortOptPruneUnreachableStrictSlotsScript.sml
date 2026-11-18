@@ -5,17 +5,14 @@ Ancestors
   arithmetic finite_map list option pair pred_set words
 
 Theorem prune_one_strict_slots:
-  !pre t x tail V e height need tag boolean cc env n s ss.
-  let p = pre ++ [t;x] ++ tail in
-  let q = pre ++ [t] ++ tail in
-  let d = LENGTH pre+1 in
-  let r = \i. if i<d then i else i-1 in
-  let Z = \l j. j<LENGTH q /\ (EL j q=AsmPushLabel l \/ EL j q=AsmPushOfst l 0) in
-  let pick = \l. @j. Z l j in
-  let tagQ = \v k. OPTION_MAP (\(l,i). (l,if i=d then pick l else r i)) (tag v k) in
-  let Hit = \prog l j. ?off.
+  !pre t x tail V e height need tag boolean cc env n s ss p q d r Z tagQ Hit.
+  p = pre ++ [t;x] ++ tail ==> q = pre ++ [t] ++ tail ==>
+  d = LENGTH pre+1 ==> r = (\i. if i<d then i else i-1) ==>
+  Z = (\l j. j<LENGTH q /\ (EL j q=AsmPushLabel l \/ EL j q=AsmPushOfst l 0)) ==>
+  tagQ = (\v k. OPTION_MAP (\(l,i). (l,if i=d then (@j. Z l j) else r i)) (tag v k)) ==>
+  Hit = (\prog l j. ?off.
     FLOOKUP (SND(compute_label_offsets prog)) l = SOME off /\
-    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc prog) off = SOME j in
+    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc prog) off = SOME j) ==>
   asm_terminal_op t /\ ~asm_reachable_marker x /\ asm_static_wf p /\
   (!v:num#num. v IN V ==>
     (need v ==> cc.cc_static) /\
@@ -33,13 +30,10 @@ Theorem prune_one_strict_slots:
     (!k l j. tagQ v k=SOME(l,j) ==> k<height v /\ Z l j /\ ?dest. Hit q l dest)
 Proof
   rpt gen_tac >>
-  map_every (fn q => qmatch_goalsub_abbrev_tac q >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ p`, `LET _ q`, `LET _ d`, `LET _ r`, `LET _ Z`, `LET _ pick`,
-     `LET _ tagQ`, `LET _ Hit`] >>
+  ntac 7 (disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def])) >>
   strip_tac >>
   `!l dest. Hit p l dest ==> Hit q l (r dest)` by
-    (qspecl_then [`pre`,`t`,`x`,`tail`] mp_tac prune_one_canonical_layout >>
+    (qspecl_then [`pre`,`t`,`x`,`tail`] mp_tac (SIMP_RULE bool_ss [] prune_one_canonical_layout) >>
      simp[Abbr `Hit`, Abbr `p`, Abbr `q`, Abbr `r`, Abbr `d`, LET_THM] >>
      strip_tac >> rpt gen_tac >> strip_tac >>
      qpat_x_assum `!l old dest. _` (drule_all_then strip_assume_tac) >>
@@ -92,7 +86,7 @@ Proof
       `MEM (Lab l 0) (sym_with_pc (r ss.sym_base.as_pc) ss).sym_stack` by
         (simp[sym_with_pc_def] >> metis_tac[EL_MEM]) >>
       `?j. Z l j` suffices_by
-        (disch_then (assume_tac o SELECT_RULE) >> simp[Abbr `pick`]) >>
+        (disch_then (assume_tac o SELECT_RULE) >> simp[]) >>
       drule_all stopped_lab_zero_producer >>
       disch_then (qx_choose_then `m` (qx_choose_then `u` strip_assume_tac)) >>
       qexists `u.sym_base.as_pc` >> simp[Abbr `Z`]) >>
