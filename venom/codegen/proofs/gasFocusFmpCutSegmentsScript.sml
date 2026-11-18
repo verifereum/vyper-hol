@@ -306,6 +306,66 @@ Proof
   metis_tac[]
 QED
 
+(* The ordinary slice changes the active index by one. The root has
+   already been crossed or is still strictly ahead, and the analysis
+   stack and ledger are transported on the same lowering witness. *)
+Theorem cut_ordinary_frame_suc[local]:
+  wf_function fn /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\ EL s.vs_inst_idx bb.bb_instructions = inst /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM; SETFMP] /\
+  (!infos ctx runner rl rp.
+    fmp_stage_lowered infos ctx runner fn fn' /\
+    fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
+    (fn_is_context_entry ctx fn ==> entry_fn_no_params fn) /\
+    ~MEM runner inst.inst_outputs) /\
+  fmp_frame_rel sm fmp0 raw0 eb elo lo F fn fn' PG G tv s t /\
+  fmp_env_rel sm fn (live_vars_at (liveness_analyze fn) s.vs_current_bb (SUC s.vs_inst_idx))
+    G' tv' (s1 with vs_inst_idx := SUC s.vs_inst_idx) (t1 with vs_inst_idx := SUC t.vs_inst_idx) /\
+  (!env. fmp_base_analyze (fn_insts fn) = SOME env /\
+         fmp_frame_covers sm env eb lo G ==> fmp_frame_covers sm env eb lo G') /\
+  (!v. ~MEM v inst.inst_outputs ==> lookup_var v t1 = lookup_var v t) /\
+  s1.vs_current_bb = s.vs_current_bb /\ s1.vs_prev_bb = s.vs_prev_bb /\
+  s1.vs_params = s.vs_params /\ s1.vs_call_ctx = s.vs_call_ctx /\
+  s1.vs_tx_ctx = s.vs_tx_ctx /\ s1.vs_block_ctx = s.vs_block_ctx /\
+  s1.vs_data_section = s.vs_data_section /\ s1.vs_labels = s.vs_labels /\
+  s1.vs_code = s.vs_code /\ s1.vs_prev_hashes = s.vs_prev_hashes /\
+  s1.vs_initial_fmp = s.vs_initial_fmp /\ s1.vs_fmp = s.vs_fmp /\
+  t1.vs_current_bb = t.vs_current_bb /\ t1.vs_prev_bb = t.vs_prev_bb /\
+  t1.vs_params = t.vs_params /\ t1.vs_call_ctx = t.vs_call_ctx /\
+  t1.vs_tx_ctx = t.vs_tx_ctx /\ t1.vs_block_ctx = t.vs_block_ctx /\
+  t1.vs_data_section = t.vs_data_section /\ t1.vs_labels = t.vs_labels /\
+  t1.vs_code = t.vs_code /\ t1.vs_prev_hashes = t.vs_prev_hashes /\
+  t1.vs_initial_fmp = t.vs_initial_fmp ==>
+  fmp_frame_rel sm fmp0 raw0 eb elo lo F fn fn' PG G' tv'
+    (s1 with vs_inst_idx := SUC s.vs_inst_idx) (t1 with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >> fs[fmp_frame_rel_def] >>
+  qexistsl [`infos`, `ctx`, `runner`] >>
+  `~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM]` by fs[] >>
+  `!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
+     (fn_is_context_entry ctx fn ==> entry_fn_no_params fn)` by metis_tac[] >>
+  drule_all cut_ordinary_control_suc >> strip_tac >>
+  qpat_x_assum `s.vs_current_bb = t.vs_current_bb` (SUBST_ALL_TAC o SYM) >>
+  fs[fmp_params_rel_def] >>
+  qpat_assum `t.vs_inst_idx = _` SUBST_ALL_TAC >> gs[] >>
+  conj_tac >-
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!b z c id. FLOOKUP sm (b,z) = _ ==> _`
+       (qspecl_then [`b`, `z`, `c`, `id`] mp_tac) >> simp[]) >>
+  Cases_on `fmp_stage_root infos ctx fn` >- fs[] >>
+  PairCases_on `x` >> fs[] >>
+  rename1 `fmp_stage_root infos ctx fn = SOME (rl,rp)` >>
+  `s.vs_current_bb = rl ==> rp <> SUC s.vs_inst_idx` by metis_tac[] >>
+  `~MEM runner inst.inst_outputs` by metis_tac[] >>
+  `~MEM inst.inst_opcode [INVOKE; DALLOCA; SETFMP]` by fs[] >>
+  drule_all cut_ordinary_root_suc >>
+  disch_then (qspec_then `SUC (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+    (SOME (rl,rp)) s.vs_current_bb bb.bb_instructions s.vs_inst_idx)` strip_assume_tac) >>
+  qexists `st'` >> gvs[]
+QED
+
 Theorem cut_gas_frame_suc[local]:
   wf_function fn /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
   MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
@@ -322,14 +382,7 @@ Theorem cut_gas_frame_suc[local]:
     ((update_var out x (s with vs_gas_readings := rs)) with vs_inst_idx := SUC s.vs_inst_idx)
     ((update_var out x (t with vs_gas_readings := rs)) with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
-  strip_tac >> fs[fmp_frame_rel_def] >>
-  qexistsl [`infos`, `ctx`, `runner`] >>
-  `~is_terminator inst.inst_opcode /\
-   ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM] /\
-   ~MEM inst.inst_opcode [INVOKE; DALLOCA; SETFMP]` by simp[is_terminator_def] >>
-  `!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
-     (fn_is_context_entry ctx fn ==> entry_fn_no_params fn)` by metis_tac[] >>
-  drule_all cut_ordinary_control_suc >> strip_tac >>
+  strip_tac >>
   `!v. MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb (SUC s.vs_inst_idx)) /\
        v <> out ==> MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)` by
     (rpt strip_tac >> drule live_vars_at_propagate >> simp[inst_defs_def] >>
@@ -338,32 +391,14 @@ Proof
     (DRESTRICT G (COMPL {out})) (tv |+ (out,{}))
     ((update_var out x (s with vs_gas_readings := rs)) with vs_inst_idx := SUC s.vs_inst_idx)
     ((update_var out x (t with vs_gas_readings := rs)) with vs_inst_idx := SUC t.vs_inst_idx)` by
-    (irule cut_gas_env_suc >> metis_tac[]) >>
-  simp[NoAsms, update_var_def, fmp_params_rel_def] >>
-  qpat_x_assum `s.vs_current_bb = t.vs_current_bb` (SUBST_ALL_TAC o SYM) >>
-  fs[fmp_params_rel_def, update_var_def] >>
-  qpat_assum `t.vs_inst_idx = _` SUBST_ALL_TAC >> gs[] >>
-  conj_tac >-
-    (rpt gen_tac >> disch_tac >>
-     qpat_assum `!b z c id. FLOOKUP sm (b,z) = _ ==> _`
-       (qspecl_then [`b`, `z`, `c`, `id`] mp_tac) >> simp[]) >>
-  Cases_on `fmp_stage_root infos ctx fn` >- fs[] >>
-  PairCases_on `x'` >> fs[] >>
-  rename1 `fmp_stage_root infos ctx fn = SOME (rl,rp)` >>
-  `s.vs_current_bb = rl ==> rp <> SUC s.vs_inst_idx` by metis_tac[] >>
-  `~MEM runner inst.inst_outputs` by (simp[] >> metis_tac[]) >>
-  qabbrev_tac `s1 = update_var out x (s with vs_gas_readings := rs)` >>
-  qabbrev_tac `t1 = update_var out x (t with vs_gas_readings := rs)` >>
-  `s1.vs_params = s.vs_params /\ t1.vs_params = t.vs_params /\
-    (!v. ~MEM v inst.inst_outputs ==> lookup_var v t1 = lookup_var v t)` by
-    simp[Abbr `s1`, Abbr `t1`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  `~MEM inst.inst_opcode [INVOKE; DALLOCA; SETFMP] /\ ~is_terminator inst.inst_opcode` by simp[] >>
-  drule_all cut_ordinary_root_suc >>
-  disch_then (qspec_then `SUC (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
-    (SOME (rl,rp)) s.vs_current_bb bb.bb_instructions s.vs_inst_idx)` mp_tac) >>
-  simp[Abbr `t1`, update_var_def] >> strip_tac >>
-  qexists `st'` >> simp[] >>
-  fs[fmp_frame_covers_def, FLOOKUP_DRESTRICT] >> metis_tac[]
+    (irule cut_gas_env_suc >>
+     qexists `live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx` >>
+     gvs[fmp_frame_rel_def]) >>
+  irule cut_ordinary_frame_suc >>
+  simp[update_var_def, is_terminator_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`G`,`tv`] >> simp[] >>
+  simp[fmp_frame_covers_def, FLOOKUP_DRESTRICT] >> metis_tac[]
 QED
 
 (* Rebuild the stage relation on the two actual scalar updates. The site
