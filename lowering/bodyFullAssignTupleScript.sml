@@ -3304,6 +3304,23 @@ Proof
   metis_tac[fn_has_code_split,cs_extends_trans,cj 1 ci_mono_typed_memory_family,pairTheory.SND]
 QED
 
+(* The allocation packet transports the horizon type selected at its input. *)
+Theorem tuple_immutable_alloc_horizon_bridge[local]:
+  stmt_state_rel (H0 : (bool # 'a word # type_value) list # num list) ctx fn ce cx st s /\
+  (if (?Ha : (bool # 'b word # type_value) list # num list.
+         stmt_state_rel Ha ctx fn ce cx st s)
+   then (!H : (bool # 'b word # type_value) list # num list.
+           stmt_state_rel H ctx fn ce cx st s ==> stmt_state_rel H ctx fn ce cx st u)
+   else (!K : (bool # 'a word # type_value) list # num list.
+           stmt_state_rel K ctx fn ce cx st s ==> stmt_state_rel K ctx fn ce cx st u)) ==>
+  alloca_inv u /\
+  (!H : (bool # 'b word # type_value) list # num list.
+    stmt_state_rel H ctx fn ce cx st s ==> stmt_state_rel H ctx fn ce cx st u)
+Proof
+  IF_CASES_TAC >> simp[] >>
+  metis_tac[bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv]
+QED
+
 Theorem tuple_immutable_normalized_prefix[local]:
   compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand dty (Var xs) sty sm = ((),su) /\
@@ -3361,16 +3378,17 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `?Ha : (bool # 'b word # type_value) list # num list.
                 stmt_state_rel Ha ctx fn ce cx st s`
-  >- (pop_assum (qx_choose_then `Ha` assume_tac) >>
-      drule_all bodyFullMemoryFramesTheory.body_full_alloc_buffer_path >>
+  >- (drule_all bodyFullMemoryFramesTheory.body_full_alloc_buffer_path >>
       disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
         (qx_choose_then `u` (qx_choose_then `root` (qx_choose_then `b`
           (qx_choose_then `G1` (qx_choose_then `tn1`
             (fn packet => mk_asm "alloc_state" (cj 3 packet) >>
                           map_every assume_tac (CONJUNCTS packet)))))))) >>
-      `alloca_inv u` by
-        (asm "alloc_state" (qspec_then `Ha` mp_tac) >> simp[] >>
-         metis_tac[bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv]) >>
+      `alloca_inv u /\
+       (!H : (bool # 'b word # type_value) list # num list.
+         stmt_state_rel H ctx fn ce cx st s ==> stmt_state_rel H ctx fn ce cx st u)` by
+        (match_mp_tac tuple_immutable_alloc_horizon_bridge >>
+         asm_rewrite_tac[]) >>
       suspend "copy") >>
   drule_all (INST_TYPE [beta |-> alpha] bodyFullMemoryFramesTheory.body_full_alloc_buffer_path) >>
   disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
@@ -3378,9 +3396,11 @@ Proof
       (qx_choose_then `G1` (qx_choose_then `tn1`
         (fn packet => mk_asm "alloc_state" (cj 3 packet) >>
                       map_every assume_tac (CONJUNCTS packet)))))))) >>
-  `alloca_inv u` by
-    (asm "alloc_state" (qspec_then `H0` mp_tac) >> simp[] >>
-     metis_tac[bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv]) >>
+  `alloca_inv u /\
+   (!H : (bool # 'b word # type_value) list # num list.
+     stmt_state_rel H ctx fn ce cx st s ==> stmt_state_rel H ctx fn ce cx st u)` by
+    (match_mp_tac tuple_immutable_alloc_horizon_bridge >>
+     asm_rewrite_tac[]) >>
   suspend "copy"
 QED
 
