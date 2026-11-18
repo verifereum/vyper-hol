@@ -5,7 +5,8 @@ Ancestors
   vyperInterpreter vyperState vyperStorageBackend vfmState vfmContext
   callTraceFrameProvenance callTraceFrame callTrace guardReentryCode guardReentryAccounts
   guardPushProjections immutableSectionRel vfmExecution vfmExecutionProp
-  e2eCorrectness frameOutcome guardTerminalBackend vyperCallFiniteStorageSupport
+  e2eCorrectness frameOutcome guardTerminalBackend guardSourceAlignment
+  vyperCallFiniteStorageSupport
   vfmDecreasesGas relation pair arithmetic list
 
 Triviality guard_closed_world_inherit:
@@ -45,6 +46,57 @@ Proof
   qpat_x_assum `!s child. run_call_reaches es s /\ _ ==> _`
     (qspecl_then [`s`, `child`] mp_tac) >>
   impl_tac >- (simp[] >> decide_tac) >> simp[]
+QED
+
+Triviality guard_closed_world_storage_at_readings:
+  vyper_frame_staging fin policy tops runtime_bc am tx es /\
+  vyper_closed_world fin policy tops runtime_bc am tx H es /\
+  call_external_trace (SOME (MAP SND (call_trace es))) gs am tx =
+    (res,am',rqs,obs) /\
+  (!pre rq co sfx.
+    obs = pre ++ StorageOutcome rq co :: sfx /\
+    valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am []) H pre ==>
+    (co.co_accounts = rq.cr_accounts /\ co.co_tStorage = rq.cr_tStorage) \/
+    ?rq'. MEM (rq',co) (call_trace es) /\ request_agree H tx.target rq rq') /\
+  (!rq co.
+    MEM (rq,co) (call_trace es) /\
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := rq.cr_accounts;
+                         tStorage := rq.cr_tStorage|>) (FST H) ==>
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (empty_state with <|accounts := co.co_accounts;
+                         tStorage := co.co_tStorage|>) (FST H)) ==>
+  call_storage_ok am tx (MAP SND (call_trace es)) gs /\
+  storage_well_formed_on (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am' []) (FST H)
+Proof
+  strip_tac >>
+  `source_typing_ok tops am tx /\ source_deployment_rel tops am tx` by
+    fs[vyper_frame_staging_def, call_state_rel_def] >>
+  `regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
+   storage_well_formed_on (initial_evaluation_context am.sources am.layouts tx NONE)
+     (initial_state am []) (FST H) /\
+   horizon_covers H am tx (MAP SND (call_trace es))` by
+    fs[vyper_closed_world_def] >>
+  drule call_external_trace_result >> strip_tac >>
+  `EVERY (\r. MEM r (FST H)) (storage_trace_regions obs) /\
+   EVERY (\l. MEM l (SND H)) (storage_trace_locks obs) /\ storage_roots_fit obs` by
+    (qpat_assum `horizon_covers _ _ _ _`
+      (mp_tac o Q.SPEC `gs` o REWRITE_RULE [horizon_covers_def]) >> simp[]) >>
+  `(initial_evaluation_context am.sources am.layouts tx NONE).txn.target = tx.target` by
+    simp[initial_evaluation_context_def] >>
+  `storage_observations_ok (initial_evaluation_context am.sources am.layouts tx NONE) H obs` by
+    (mp_tac (Q.INST [`os` |-> `MAP SND (call_trace es)`, `trace` |-> `call_trace es`,
+       `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`]
+       aligned_trace_storage_observations) >> asm_rewrite_tac[]) >>
+  `valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+     (initial_state am []) H obs` by simp[valid_horizon_def] >>
+  conj_tac
+  >- (irule valid_horizon_call_storage_ok >> qexists_tac `H` >> simp[]) >>
+  drule_all source_call_final_storage_well_formed >> simp[]
 QED
 
 Triviality guard_reentry_staging:
