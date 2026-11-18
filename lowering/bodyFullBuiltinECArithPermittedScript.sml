@@ -12,7 +12,6 @@ Ancestors
   vyperAST list vyperStorageFootprint exprSimOperands context
   gasOutcomeFullCompose gasSummary wordArgsPtr exprSimMemDefs vyperStorageTrace
 
-(* BODY manager a6eac232: only the nonempty instances are available here. *)
 Theorem ec_nonempty_oracle_failure[local]:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit outsz];

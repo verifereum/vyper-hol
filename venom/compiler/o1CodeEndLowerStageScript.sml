@@ -9,9 +9,10 @@ Ancestors
   lowerDloadSupplyProofs unitLabelMapIdentity venomInst list words finite_map
   venomPassSchedule lowerDloadPtrStatic
 
-Theorem lower_dload_stage_code_end[local]:
+Theorem lower_dload_stage_code_end_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  dead_wf D /\ o1_ctx_shape C /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
   mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
     s.vs_code = v.vs_code /\ s.vs_data_section = v.vs_data_section) C vs /\
@@ -21,15 +22,15 @@ Theorem lower_dload_stage_code_end[local]:
   code_end_offset_ok (raw_reachable vs) C'
 Proof
   rpt strip_tac >>
-  drule_all ld_stage_ambient >> strip_tac >>
+  drule_all ld_stage_ambient_static >> strip_tac >>
   `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
     metis_tac[lower_dload_stage_no_dalloca] >>
   `mem_inv raw_mem_ok C vs` by fs[o1_src_inv_def] >>
   RULE_ASSUM_TAC BETA_RULE >>
   rewrite_tac[code_end_offset_ok_def] >> rpt strip_tac >>
-  drule_all (BETA_RULE ld_raw_coverage_fixed) >>
+  drule_all (BETA_RULE ld_raw_coverage_fixed_static) >>
   disch_then (DISJ_CASES_THEN assume_tac)
-  >- (drule_all (BETA_RULE ld_raw_owned_elim) >> strip_tac >>
+  >- (drule_all (BETA_RULE ld_raw_owned_elim_static) >> strip_tac >>
       rename1 `ld_sync lo P C vs stk PG G tn source si s t0 A (f::fs) N` >>
       drule ld_sync_active >> simp[] >> strip_tac >>
       `MEM source C.ctx_functions` by
@@ -76,6 +77,6 @@ Proof
   simp[o1_run_contract_def, o1_fn_passes_def, o1_stage_contract_def] >>
   rpt strip_tac
   >- metis_tac[] >>
-  irule lower_dload_stage_code_end >>
-  fs[o1_inv_def] >> metis_tac[]
+  irule lower_dload_stage_code_end_static >>
+  fs[o1_inv_def, o1_run_state_ok_def] >> metis_tac[]
 QED

@@ -3,7 +3,7 @@ Ancestors
   o1ContractCfgNorm o1ContractCfgNormStep cfgNormSupplySim cfgNormDefs
   cfgNormSupplyProofs codegenSymRel o1LabelFlowLateCfgNorm irSupply
   lowerDloadPtrStatic o1PassContract o1PassLift list venomInst venomFnScheduleRunner
-  contextCodegenRel venomExecProofs venomState venomFnInstsProofs
+  contextCodegenRel venomExecProofs venomState venomFnInstsProofs staticAbortDefs
 
 Theorem cfg_old_code_end_var[local]:
   !g x. code_end_var g x ==> !f.
@@ -52,7 +52,8 @@ Theorem cfg_split_codecopy_back[local]:
   MEM (Var x) j.inst_operands /\ code_end_var g x ==>
   ?u. frame_reach C f s0 j u /\ code_end_var f x /\
     eval_operand (Var x) u = eval_operand (Var x) v /\
-    execution_frame u = execution_frame v
+    execution_frame u = execution_frame v /\
+    (in_static_abort_prefix f u ==> in_static_abort_prefix g v)
 Proof
   strip_tac >>
   `supply_frame_phase C f g s pred target split repls s0 j v` by
@@ -76,6 +77,21 @@ Proof
       `code_end_var f x` by
         (drule cfg_old_code_end_var >> disch_then irule >> simp[] >>
          rpt strip_tac >> irule cfg_split_old_definition >> metis_tac[]) >>
+      `in_static_abort_prefix f a ==> in_static_abort_prefix g v` by
+        (strip_tac >> gvs[in_static_abort_prefix_def] >>
+         `lookup_block bb.bb_label f.fn_blocks = SOME bb` by
+           (irule MEM_lookup_block >> gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
+         gvs[] >>
+         `~MEM split.bb_label (fn_labels f)` by metis_tac[supply_split_label_not_old] >>
+         `split.bb_label <> bb.bb_label` by
+           (gvs[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+         `lookup_block bb.bb_label g.fn_blocks =
+            SOME (supply_block_image pred target split repls bb)` by
+           (irule insert_split_supply_image_lookup >> metis_tac[]) >>
+         simp[] >> conj_tac
+         >- gvs[supply_state_agree_def, stateFrameTheory.execution_frame_def] >>
+         gvs[static_abort_at_def] >>
+         metis_tac[supply_block_image_static_abort_pair]) >>
       qexists_tac `a` >> gvs[supply_state_agree_def, eval_operand_def]) >>
   drule supply_frame_split_witness >> strip_tac >>
   drule supply_split_opcodes >> rewrite_tac[EVERY_EL] >>
@@ -89,7 +105,8 @@ Theorem cfg_round_codecopy_back[local]:
   MEM (Var x) j.inst_operands /\ code_end_var g x ==>
   ?u. frame_reach C f s0 j u /\ code_end_var f x /\
     eval_operand (Var x) u = eval_operand (Var x) v /\
-    execution_frame u = execution_frame v
+    execution_frame u = execution_frame v /\
+    (in_static_abort_prefix f u ==> in_static_abort_prefix g v)
 Proof
   strip_tac >> drule cfg_norm_round_supply_cases >> strip_tac
   >- (qexists_tac `v` >> gvs[]) >>
@@ -111,7 +128,8 @@ Theorem cfg_iter_codecopy_back[local]:
   MEM (Var x) j.inst_operands /\ code_end_var g x ==>
   ?u. frame_reach C f s0 j u /\ code_end_var f x /\
     eval_operand (Var x) u = eval_operand (Var x) v /\
-    execution_frame u = execution_frame v
+    execution_frame u = execution_frame v /\
+    (in_static_abort_prefix f u ==> in_static_abort_prefix g v)
 Proof
   mp_tac (Q.INST [`R` |-> `\f g.
     fn_entry_label g = fn_entry_label f /\
@@ -120,7 +138,8 @@ Proof
       MEM (Var x) j.inst_operands /\ code_end_var g x ==>
       ?u. frame_reach C f s0 j u /\ code_end_var f x /\
         eval_operand (Var x) u = eval_operand (Var x) v /\
-        execution_frame u = execution_frame v`]
+        execution_frame u = execution_frame v /\
+        (in_static_abort_prefix f u ==> in_static_abort_prefix g v)`]
     supply_iter_relation) >> BETA_TAC >> impl_tac
   >- (rpt conj_tac
       >- metis_tac[]
@@ -132,7 +151,8 @@ Proof
       >- metis_tac[supply_round_semantics] >>
       rpt gen_tac >> strip_tac >>
       drule_all cfg_round_codecopy_back >> simp[]) >>
-  metis_tac[]
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> simp[]
 QED
 
 Theorem cfg_fn_codecopy_back[local]:
@@ -142,7 +162,8 @@ Theorem cfg_fn_codecopy_back[local]:
   MEM (Var x) j.inst_operands /\ code_end_var g x ==>
   ?u. frame_reach C f s0 j u /\ code_end_var f x /\
     eval_operand (Var x) u = eval_operand (Var x) v /\
-    execution_frame u = execution_frame v
+    execution_frame u = execution_frame v /\
+    (in_static_abort_prefix f u ==> in_static_abort_prefix g v)
 Proof
   strip_tac >> `frame_reach C g s0 j v` by
     metis_tac[supply_frame_reach_ctx_back] >>
@@ -169,20 +190,26 @@ Proof
   simp[supply_norm_inv_def] >> metis_tac[]
 QED
 
-Theorem cfg_code_end_stage_preserves[local]:
+Theorem cfg_norm_code_end_offset_ok:
   ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
-  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\ o1_run_state_ok vs /\
-  code_end_offset_ok (raw_reachable vs) C ==>
-  code_end_offset_ok (raw_reachable vs) C'
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  code_end_offset_ok
+    (\ctx fn inst s. raw_reachable vs ctx fn inst s /\
+                     (guarded ==> ~in_static_abort_prefix fn s)) C ==>
+  code_end_offset_ok
+    (\ctx fn inst s. raw_reachable vs ctx fn inst s /\
+                     (guarded ==> ~in_static_abort_prefix fn s)) C'
 Proof
   strip_tac >> `ctx_bisim C C'` by metis_tac[cfg_norm_stage_bisim] >>
   drule_all cfg_code_end_stage_pairs >>
   disch_then (qspec_then `vs.vs_labels` assume_tac) >>
-  simp[code_end_offset_ok_def] >> rpt gen_tac >> strip_tac >>
+  simp[code_end_offset_ok_def] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `raw_reachable vs C' fn inst vs'` >>
   `frame_origin vs C C' fn inst vs'` by
     (irule frame_sim_raw_origins >> simp[] >>
-     fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def,
-        ctx_pass_stage_def] >>
+     fs[ctx_pass_stage_def] >>
      irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `frame_origin _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[frame_origin_def] >>
@@ -198,6 +225,18 @@ Proof
     (qpat_x_assum `execution_frame _ = _` mp_tac >> simp[]) >>
   qpat_x_assum `code_end_offset_ok _ _` mp_tac >>
   simp[code_end_offset_ok_def] >> metis_tac[]
+QED
+
+Theorem cfg_code_end_stage_preserves[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\ o1_run_state_ok vs /\
+  code_end_offset_ok (raw_reachable vs) C ==>
+  code_end_offset_ok (raw_reachable vs) C'
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`guarded` |-> `F`] cfg_norm_code_end_offset_ok) >>
+  fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def,
+     code_end_offset_ok_def] >> metis_tac[]
 QED
 
 Theorem cfg_norm_code_end_run_contract:

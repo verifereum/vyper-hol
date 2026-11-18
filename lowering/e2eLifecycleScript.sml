@@ -1,13 +1,14 @@
 (*
  * Milestone 7 lifecycle producers: the environmental premises of
  * vyper_call_correct that depend only on the source machine and the
- * contract's address hold after a deployment and again after every call,
- * on the machine the next transaction starts from (next_source_machine).
+ * contract's address hold across deployment and call handoffs.
  *
  * call_ready: those premises, for every later transaction to the address.
  * deploy_establishes_call_ready / deploy_call_result_establishes_call_ready:
  *   deployment to call handoff.
- * call_preserves_call_ready: call to call handoff, for every call result.
+ * call_preserves_call_ready: readiness of next_source_machine at the
+ *   call-to-call handoff. It is the next transaction's machine after a
+ *   successful call. A failed call continues from the pre-call machine.
  * deploy_empty_storage_well_formed_on: zero storage decodes on every region.
  *)
 Theory e2eLifecycle
