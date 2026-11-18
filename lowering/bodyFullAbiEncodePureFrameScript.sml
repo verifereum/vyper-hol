@@ -657,7 +657,7 @@ Proof
 QED
 
 (* The setup cut is observed through the existing allocation and store frames. *)
-Theorem abi_encode_tuple_setup_frames[local]:
+Theorem abi_encode_tuple_setup_frames:
   MEM (mk_inst staged.cs_next_id ALLOCA [Lit (n2w N)] [root]) (fn_insts func) /\
   N < dimword(:256) /\ staged.cs_next_var <= a.cs_next_var /\
   alloc.vs_allocas = (abi_builtin_allocate_state staged.cs_next_id N prepared).vs_allocas /\
