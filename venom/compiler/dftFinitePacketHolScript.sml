@@ -66,4 +66,4 @@ Ancestors
   dftPacketChangedCallerSuccess dftPacketCallFreshRoot dftPacketFreshRootGeometry
   dftPacketBlockPathConservation dftPacketBlockReplayClosed
   dftPacketReturnNewCuts dftPacketBlockPathUpdate dftPacketBlockReplayFrame
-  dftPacketBlockInitializedReplay
+  dftPacketBlockInitializedHistory dftPacketBlockInitializedReplay
