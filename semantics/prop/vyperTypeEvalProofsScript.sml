@@ -110,6 +110,17 @@ Proof
   simp[well_typed_exprs_EVERY] >> metis_tac[PERM_EVERY]
 QED
 
+Theorem well_typed_exprs_create_operand_order:
+  well_typed_exprs env es ==>
+  well_typed_exprs env (create_operand_order kind has_salt es)
+Proof
+  rewrite_tac[well_typed_exprs_EVERY] >>
+  Cases_on `kind` >> Cases_on `es` >>
+  simp[create_operand_order_def] >>
+  TRY (rename1 `_ :: t` >> Cases_on `t` >> simp[create_operand_order_def]) >>
+  metis_tac[EVERY_TAKE, EVERY_DROP]
+QED
+
 Theorem MEM_int_calls_exprs[local]:
   MEM call (int_calls_exprs es) ⇔
   ∃e. MEM e es ∧ MEM call (int_calls_expr e)
@@ -126,6 +137,19 @@ Proof
   qexists_tac `int_calls_exprs xs` >>
   simp[MEM_int_calls_exprs] >>
   metis_tac[PERM_MEM_EQ]
+QED
+
+Theorem call_evaluation_safe_create_operand_order:
+  call_evaluation_safe cx (int_calls_exprs es) ==>
+  call_evaluation_safe cx
+    (int_calls_exprs (create_operand_order kind has_salt es))
+Proof
+  strip_tac >> irule call_evaluation_safe_mono >>
+  qexists_tac `int_calls_exprs es` >> simp[MEM_int_calls_exprs] >>
+  Cases_on `kind` >> Cases_on `es` >>
+  simp[create_operand_order_def] >>
+  TRY (rename1 `_ :: t` >> Cases_on `t` >> simp[create_operand_order_def]) >>
+  metis_tac[MEM_TAKE, MEM_DROP_IMP, MEM]
 QED
 
 Theorem fn_sigs_consistent_FLOOKUP:
