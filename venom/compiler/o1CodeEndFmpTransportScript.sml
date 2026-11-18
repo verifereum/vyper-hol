@@ -342,18 +342,20 @@ Proof
   fs[fn_insts_def] >>
   qpat_x_assum `MEM j (fn_insts_blocks (entry::rest))` mp_tac >>
   pure_rewrite_tac[fn_insts_blocks_MEM] >>
-  strip_tac >> drule_all fmp_lower_blocks_origin >> strip_tac >>
-  TRY (rename1 `fmp_lower_inst _ _ _ _ src_inst = SOME _` >>
+  strip_tac >>
+  (drule_all fmp_lower_blocks_origin >> strip_tac
+   >- (rename1 `fmp_lower_inst _ _ _ _ src_inst = SOME _` >>
        `pre_fmp_opcode src_inst.inst_opcode` by
          (fs[pre_fmp_ops_def, fn_insts_def, fn_insts_blocks_MEM, EVERY_MEM] >>
           metis_tac[]) >>
        gvs[fmp_lower_inst_def, AllCaseEqs(), mk_inst_def, pre_fmp_opcode_def] >>
        metis_tac[]) >>
-  gvs[mk_inst_def] >>
-  rename1 `MEM (restore_point,restore_base) (fmp_plan_to_alist f plan)` >>
-  `FLOOKUP plan restore_point = SOME restore_base` by metis_tac[MEM_fmp_plan_to_alist] >>
-  drule_all analyze_fmp_reclaims_output >> strip_tac >>
-  drule_all code_end_var_def_inst >> simp[]
+   gvs[mk_inst_def] >>
+   rename1 `MEM (restore_point,restore_base) (fmp_plan_to_alist f plan)` >>
+   `FLOOKUP plan restore_point = SOME restore_base` by
+     metis_tac[MEM_fmp_plan_to_alist] >>
+   drule_all analyze_fmp_reclaims_output >> strip_tac >>
+   drule_all code_end_var_def_inst >> simp[])
 QED
 
 Theorem fmp_code_end_var_backward[local]:
