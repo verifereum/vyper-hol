@@ -6,7 +6,7 @@
  * and constructor frames alike.
  *
  * TOP-LEVEL:
- *   body_sim_full_mutual -- the eleven predicates, by evaluate_ind
+ *   body_sim_full_mutual -- the ten predicates, by evaluate_ind
  *   body_stmts_sim_full -- the statement-list judgment it gives
  *)
 Theory bodySimFullMain
@@ -47,10 +47,7 @@ val body_ind = evaluate_ind
           body_tuple_target_full_ok cx g v`,
        `\cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops) ==>
-          body_tuple_targets_full_ok cx gs vs`,
-       `\cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-          body_results_full_ok cx es`]
+          body_tuple_targets_full_ok cx gs vs`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV);
 
 val full_case_simps =
@@ -89,10 +86,7 @@ Theorem body_sim_full_mutual:
     body_tuple_target_full_ok cx g v) /\
   (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops) ==>
-    body_tuple_targets_full_ok cx gs vs) /\
-  (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_results_full_ok cx es)
+    body_tuple_targets_full_ok cx gs vs)
 Proof
   mp_tac body_ind >> impl_tac
   >- (rpt conj_tac >| [
@@ -143,7 +137,10 @@ Proof
     (* 44 *) full_case body_raw_log_case_full,
     (* 45 *) full_case body_raw_revert_case_full,
     (* 46 *) full_case body_selfdestruct_case_full,
-    (* 47 *) full_case body_create_case_full,
+    (* 47 *) rw[body_expr_full_ok_def] >>
+             gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+                 supportedExprTraverseTheory.expr_has_evm_run_thm,
+                 supportedExprTraverseTheory.expr_evm_run_root_def],
     (* 48 *) simp[body_exprs_full_ok_def],
     (* 49 *) rpt strip_tac >> fs[] >> rw[body_exprs_full_ok_def] >> metis_tac[],
     (* 50 *) simp[body_base_target_full_ok_def],
@@ -156,9 +153,7 @@ Proof
     (* 57 *) simp[body_tuple_target_full_ok_def],
     (* 58 *) rpt strip_tac >> fs[] >> rw[body_tuple_target_full_ok_def] >> metis_tac[],
     (* 59 *) simp[body_tuple_target_full_ok_def],
-    (* 60 *) simp[body_tuple_target_full_ok_def],
-    (* 61 *) simp[body_results_full_ok_def],
-    (* 62 *) rpt strip_tac >> fs[] >> rw[body_results_full_ok_def] >> metis_tac[]
+    (* 60 *) simp[body_tuple_target_full_ok_def]
   ]) >>
   simp[]
 QED

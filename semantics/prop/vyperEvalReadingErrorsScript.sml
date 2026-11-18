@@ -331,14 +331,24 @@ val reading_base = reading_raw_call :: reading_ext_call :: reading_send ::
 
 Theorem reading_evaluator_primitives[local]:
   (lock_if_nr cx nr view st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
-  (check_create_blueprint has_salt vs st = (INR ^missing_exc,st') ==> st'.gas_obs = [])
+  (check_create_blueprint has_salt literal_offset vs st = (INR ^missing_exc,st') ==> st'.gas_obs = [])
 Proof
   READING_WALK reading_base [lock_if_nr_def, check_create_blueprint_def]
 QED
 
+Theorem reading_create_operands[local]:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st =
+    (INR ^missing_exc,st') ==> st'.gas_obs = []
+Proof
+  Cases_on `kind` >>
+  READING_WALK (reading_evaluator_primitives :: reading_base)
+    [eval_create_operands_def]
+QED
+
 val READING_CONSTRUCTOR_TAC =
   rpt READING_INTRO >> simp_tac bool_ss [Once evaluate_def] >>
-  READING_WALK (reading_evaluator_primitives :: reading_base) [switch_BoolV_def];
+  READING_WALK (reading_create_operands :: reading_evaluator_primitives :: reading_base)
+    [switch_BoolV_def];
 
 Theorem evaluate_missing_reading_state:
   (!cx s st st'. eval_stmt cx s st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
@@ -350,8 +360,7 @@ Theorem evaluate_missing_reading_state:
   (!cx t st st'. eval_base_place cx t st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
   (!cx t st st'. eval_target_place cx t st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
   (!cx g v st st'. assign_tuple_targets cx g v st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
-  (!cx gs vs st st'. assign_tuple_target_list cx gs vs st = (INR ^missing_exc,st') ==> st'.gas_obs = []) /\
-  (!cx es st st'. eval_expr_results cx es st = (INR ^missing_exc,st') ==> st'.gas_obs = [])
+  (!cx gs vs st st'. assign_tuple_target_list cx gs vs st = (INR ^missing_exc,st') ==> st'.gas_obs = [])
 Proof
   ho_match_mp_tac evaluate_ind >>
   map_every (fn n => conj_tac >- suspend ("c" ^ Int.toString n))

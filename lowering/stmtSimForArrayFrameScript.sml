@@ -4,7 +4,7 @@ Ancestors
   list rich_list finite_map vyperState vyperLookup vyperScopePreservation
   supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter vyperCallOutcomeFrame
   vyperStatePreservation supportedExprForms supportedExprTraverse
-  vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits vyperCreateFrame
+  vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits vyperCreate vyperCreateFrame
   vyperLocalAccessFrame
 
 (* select_result, extend_place and lookup_global record a storage
@@ -208,17 +208,6 @@ Proof
   metis_tac[supported_pure_scopes_mutual]
 QED
 
-Theorem supported_pure_expr_results_scopes:
-  !exprs tops cx es res es'.
-    EVERY (supported_pure_expr tops) exprs /\
-    eval_expr_results cx exprs es = (res,es') ==> es'.scopes = es.scopes
-Proof
-  Induct_on `exprs` >>
-  simp[Once evaluate_def, return_def] >> rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac supported_pure_scopes_mutual >> metis_tac[]
-QED
-
 Theorem supported_effect_scopes_mutual:
   (!tops e. supported_effect_expr tops e ==>
     ~supported_expr_exists expr_internal_call_root e ==>
@@ -256,7 +245,7 @@ Resume supported_effect_scopes_mutual[external]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac eval_ext_call_preserves_non_accounts >>
   imp_res_tac read_results_state >> imp_res_tac supported_pure_scopes_mutual >>
-  gvs[] >> metis_tac[supported_pure_exprs_scopes, supported_pure_expr_results_scopes]
+  gvs[] >> metis_tac[supported_pure_exprs_scopes]
 QED
 
 Resume supported_effect_scopes_mutual[send2]:
@@ -309,23 +298,6 @@ Proof
   Induct_on `exprs` >> simp[Once evaluate_def, return_def] >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> gvs[] >> metis_tac[supported_expr_scopes]
-QED
-
-
-Theorem subscript_write_contains_name[local]:
-  !name key.
-    place_contains (SubscriptTarget (NameTarget name) key) (NameTarget name)
-Proof
-  simp[place_contains_def, place_access_def]
-QED
-
-Theorem iterator_unmodified_rejects_element_write[local]:
-  !name key ty rhs.
-    ~iterator_unmodified (Array (Name ty name))
-      [Assign (BaseTarget (SubscriptTarget (NameTarget name) key)) rhs]
-Proof
-  simp[iterator_unmodified_def, expr_places_def, stmt_writes_ok_def,
-       atarget_writes_ok_def, subscript_write_contains_name]
 QED
 
 
@@ -561,9 +533,7 @@ Theorem eval_observation_frame_pred[local]:
   (!cx bt. target_writes_ok ok bt /\ ~supported_target_exists P bt ==>
     !st res st'. eval_target_place cx bt st = (res,st') ==> obs cx st' = obs cx st) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
-  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
-  (!cx es. EVERY (expr_writes_ok ok) es /\ ~supported_exprs_exists P es ==>
-    !st res st'. eval_expr_results cx es st = (res,st') ==> obs cx st' = obs cx st)
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `?f. !c s. obs c s = f c s.scopes s.immutables` by
@@ -691,20 +661,18 @@ Resume eval_observation_frame_pred[Create]:
   qpat_x_assum `_ \/ !e. _` kall_tac >>
   qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
   rename1 `CreateTarget kind has_salt rof _` >>
-  `!n m. EVERY (expr_writes_ok ok) (TAKE n es) /\
-         EVERY (expr_writes_ok ok) (DROP n es) /\
-         EVERY (expr_writes_ok ok) (TAKE n (DROP m es)) /\
-         EVERY (expr_writes_ok ok) (DROP n (DROP m es))` by
-    (gvs[expr_writes_ok_def, SF ETA_ss] >> simp[EVERY_TAKE, EVERY_DROP]) >>
-  `!n m. ~supported_exprs_exists P (TAKE n es) /\
-         ~supported_exprs_exists P (DROP n es) /\
-         ~supported_exprs_exists P (TAKE n (DROP m es)) /\
-         ~supported_exprs_exists P (DROP n (DROP m es))` by
-    (gvs[supported_expr_exists_def, supported_exprs_exists_every, NOT_EXISTS,
-         combinTheory.o_DEF] >>
-     simp[EVERY_TAKE, EVERY_DROP]) >>
+  `EVERY (expr_writes_ok ok) (create_operand_order kind has_salt es) /\
+   ~supported_exprs_exists P (create_operand_order kind has_salt es)` by
+    (gvs[expr_writes_ok_def, supported_expr_exists_def,
+         supported_exprs_exists_every, NOT_EXISTS, combinTheory.o_DEF, SF ETA_ss] >>
+     Cases_on `kind` >> Cases_on `es` >> simp[create_operand_order_def] >>
+     rename1 `head::rest` >> Cases_on `rest` >>
+     gvs[create_operand_order_def] >>
+     rpt conj_tac >> FIRST [irule EVERY_TAKE, irule EVERY_DROP] >> simp[]) >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  Cases_on `kind` >> simp[Once evaluate_def, bind_def, AllCaseEqs(), LET_THM] >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> Cases_on `kind` >>
+  gvs[eval_create_operands_def, bind_def, AllCaseEqs(), LET_THM] >>
   rpt strip_tac >> gvs[expr_writes_ok_def, supported_expr_exists_def, SF ETA_ss, LET_THM] >>
   imp_res_tac read_results_state >>
   imp_res_tac check_create_blueprint_result_state >>
@@ -781,11 +749,7 @@ Theorem eval_observation_frame_mutual:
   (!cx bt. target_writes_ok ok bt /\
      ((!c s t. s.scopes = t.scopes ==> obs c s = obs c t) \/
       ~supported_target_exists expr_internal_call_root bt) ==>
-    !st res st'. eval_target_place cx bt st = (res,st') ==> obs cx st' = obs cx st) /\
-  (!cx es. EVERY (expr_writes_ok ok) es /\
-     ((!c s t. s.scopes = t.scopes ==> obs c s = obs c t) \/
-      ~supported_exprs_exists expr_internal_call_root es) ==>
-    !st res st'. eval_expr_results cx es st = (res,st') ==> obs cx st' = obs cx st)
+    !st res st'. eval_target_place cx bt st = (res,st') ==> obs cx st' = obs cx st)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `!c s t. s.scopes = t.scopes ==> obs c s = obs c t`
@@ -820,10 +784,7 @@ Theorem eval_name_projection_mutual:
     !st res st'. eval_target_place cx bt st = (res,st') ==>
       MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
-  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
-  (!cx es. EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) es ==>
-    !st res st'. eval_expr_results cx es st = (res,st') ==>
-      MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes)
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
 Proof
   gen_tac >> ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   simp[] >> rpt gen_tac >> rpt strip_tac
@@ -918,13 +879,17 @@ QED
 
 Resume eval_name_projection_mutual[Create]:
   rename1 `CreateTarget kind has_salt rof _` >>
-  `!n m. EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (TAKE n es) /\
-         EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (DROP n es) /\
-         EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (TAKE n (DROP m es)) /\
-         EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (DROP n (DROP m es))` by
-    (gvs[expr_writes_ok_def, SF ETA_ss] >> simp[EVERY_TAKE, EVERY_DROP]) >>
+  `EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name))
+     (create_operand_order kind has_salt es)` by
+    (gvs[expr_writes_ok_def, SF ETA_ss] >>
+     Cases_on `kind` >> Cases_on `es` >> simp[create_operand_order_def] >>
+     rename1 `head::rest` >> Cases_on `rest` >>
+     gvs[create_operand_order_def] >>
+     rpt conj_tac >> FIRST [irule EVERY_TAKE, irule EVERY_DROP] >> simp[]) >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  Cases_on `kind` >> simp[Once evaluate_def, bind_def, AllCaseEqs(), LET_THM] >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> Cases_on `kind` >>
+  gvs[eval_create_operands_def, bind_def, AllCaseEqs(), LET_THM] >>
   rpt strip_tac >> gvs[expr_writes_ok_def, SF ETA_ss, LET_THM] >>
   imp_res_tac read_results_state >>
   imp_res_tac check_create_blueprint_result_state >>
@@ -1204,8 +1169,7 @@ Theorem typed_guarded_assignment_projection_mutual[local]:
     EVERY (atarget_writes_ok (\t. ~place_contains t (NameTarget name))) targets /\
     assign_tuple_target_list cx targets vs es = (res,es') ==>
     MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
-    LENGTH es'.scopes = LENGTH es.scopes) /\
-  (!(cx:evaluation_context) (es:expr list). T)
+      LENGTH es'.scopes = LENGTH es.scopes)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >>
   rpt gen_tac >> rpt strip_tac

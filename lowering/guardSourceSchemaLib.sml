@@ -11,7 +11,7 @@ struct
         val n = head h
     in (List.exists (fn s => s = n)
           ["eval_stmt", "eval_stmts", "eval_iterator", "eval_for",
-           "eval_expr", "eval_exprs", "eval_expr_results", "eval_base_place",
+           "eval_expr", "eval_exprs", "eval_base_place",
            "eval_target_place"] andalso
         length args = (if n = "eval_for" then 6 else 3)) orelse
        (List.exists (fn s => s = n)
@@ -54,7 +54,6 @@ struct
        else if n = "eval_for" then "For_" ^ shape (List.nth (args,4))
        else if n = "eval_expr" then expr arg
        else if n = "eval_exprs" then "Exprs_" ^ shape arg
-       else if n = "eval_expr_results" then "Results_" ^ shape arg
        else if n = "eval_base_place" then "BasePlaceRoot_" ^ head arg
        else if n = "eval_target_place" then "TargetPlace"
        else if n = "assign_tuple_targets" then "TupleStore_" ^ head arg
@@ -81,7 +80,7 @@ struct
   fun owner name =
     if starts "Expr_Call_" name then "calls"
     else if List.exists (fn p => starts p name)
-      ["Stmts_", "Exprs_", "Results_", "Iterator_", "For_"] orelse
+      ["Stmts_", "Exprs_", "Iterator_", "For_"] orelse
       List.exists (fn n => n = name) ["If", "Expr_IfExp", "For"] then "lists"
     else if List.exists (fn p => starts p name)
       ["Assign_", "TupleStore_", "TupleStores_"] orelse

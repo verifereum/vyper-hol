@@ -730,12 +730,7 @@ Theorem evaluate_finite_frame:
     LIST_REL (value_runtime_typed env) tys vs /\ ^typed_state env cx st /\
     call_evaluation_safe cx (int_calls_atargets gs) /\ ^callable_closed cx A R /\
     ^safe_accesses A R (accesses_atargets gs) (int_calls_atargets gs) /\
-    assign_tuple_target_list cx gs vs st = (res,st') ==> ^frame cx A st st') /\
-  (!cx es. !A R env st res st'.
-    well_typed_exprs env es /\ ^typed_state env cx st /\
-    call_evaluation_safe cx (int_calls_exprs es) /\ ^callable_closed cx A R /\
-    ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) /\
-    eval_expr_results cx es st = (res,st') ==> ^frame cx A st st')
+    assign_tuple_target_list cx gs vs st = (res,st') ==> ^frame cx A st st')
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
   >- (rpt gen_tac >> simp[Once evaluate_def, return_def] >>
@@ -800,10 +795,6 @@ Proof
                 suspend "tuple_list_cons" g
               else if has ``LIST_REL (\g ty. well_typed_atarget env g ty) gs tys`` then
                 suspend "tuple_list_error" g
-              else if has ``eval_expr_results cx (e::es) st`` then
-                suspend "results_cons" g
-              else if has ``eval_expr_results cx [] st`` then
-                suspend "results_nil" g
               else if has ``eval_target_place cx bt st`` then
                 suspend "target_place" g
               else if has ``eval_exprs cx [] st`` then suspend "exprs_nil" g
@@ -2293,51 +2284,6 @@ Resume evaluate_finite_frame[intcall]:
   simp[lift_option_type_def, option_CASE_rator, return_def, raise_def,
        AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   qexists_tac `ws` >> simp[] >> gvs[]
-QED
-
-Resume evaluate_finite_frame[results_nil]:
-  rpt gen_tac >> simp[Once evaluate_def, return_def] >>
-  rpt strip_tac >> gvs[] >> qexists_tac `[]` >> simp[]
-QED
-
-Resume evaluate_finite_frame[results_cons]:
-  rpt gen_tac >>
-  disch_then (CONJUNCTS_THEN2 (mk_asm "tail_ih") (mk_asm "head_ih")) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `^callable_closed cx A R` (mk_asm "closure") >>
-  gvs[vyperTypeSystemTheory.well_typed_expr_def, accesses_expr_def, int_calls_expr_def,
-      safe_accesses_append] >>
-  drule call_evaluation_safe_append_left >> strip_tac >>
-  drule call_evaluation_safe_append_right >> strip_tac >>
-  Cases_on `eval_expr cx e st` >> rename1 `eval_expr cx e st = (r1,s1)` >>
-  `^frame cx A st s1` by
-    (BETA_TAC >> asm "head_ih" (irule o BETA_RULE) >>
-     goal_assum (drule_at Any) >> simp[] >>
-     (conj_tac >- (qexists_tac `R` >> conj_tac
-       >- asm "closure" (ACCEPT_TAC o SRULE []) >> simp[])) >>
-     qexists_tac `env` >> simp[vyperTypeSystemTheory.well_typed_expr_def]) >>
-  qpat_x_assum `^frame cx A st s1` (mk_asm "prefix") >>
-  asm_x "head_ih" kall_tac >>
-  qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, return_def] >>
-  reverse (Cases_on `r1`) >> simp[]
-  >- (strip_tac >> gvs[] >> asm "prefix" (ACCEPT_TAC o BETA_RULE)) >>
-  strip_tac >> asm_x "tail_ih" drule >> disch_then (mk_asm "tail_ih") >>
-  qspecl_then [`cx`,`e`] (drule_all o CONJUNCT1)
-    (cj 5 eval_scc_type_sound_results_mutual) >> strip_tac >> gvs[] >>
-  Cases_on `eval_expr_results cx es s1` >>
-  rename1 `eval_expr_results cx es s1 = (r2,s2)` >>
-  `^frame cx A s1 s2` by
-    (BETA_TAC >> asm "tail_ih" (irule o BETA_RULE) >>
-     goal_assum (drule_at Any) >> simp[] >>
-     (conj_tac >- (qexists_tac `R` >> conj_tac
-       >- asm "closure" (ACCEPT_TAC o SRULE []) >> simp[])) >>
-     qexists_tac `env` >> simp[]) >>
-  qpat_x_assum `^frame cx A s1 s2` (mk_asm "suffix") >>
-  gvs[AllCaseEqs()] >>
-  irule (BETA_RULE finite_frame_trans) >> qexists_tac `s1` >>
-  (conj_tac >- asm "prefix" (ACCEPT_TAC o SRULE [])) >>
-  asm "suffix" (ACCEPT_TAC o SRULE [])
 QED
 
 Resume evaluate_finite_frame[target_place]:

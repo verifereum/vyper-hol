@@ -254,7 +254,8 @@ Resume annassign_widened_full_execution[source]:
   >- (irule gas_outcome_full_post_source >>
       qpat_assum `gas_outcome_full _ _ _ _ _ _ rhs_post _` (irule_at Any) >>
       simp[] >> rpt strip_tac >> Cases_on `res`
-      >- fs[exprSimDefsTheory.expr_exit_def] >>
+      >- (qpat_x_assum `expr_exit (INL _) _` mp_tac >>
+          simp_tac (srw_ss()) [exprSimDefsTheory.expr_exit_def]) >>
       qpat_x_assum `expr_exit _ _` mp_tac >>
       qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>

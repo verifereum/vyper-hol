@@ -12,61 +12,6 @@ Ancestors
   vyperAST list vyperStorageFootprint exprSimOperands context
   gasOutcomeFullCompose gasSummary wordArgsPtr exprSimMemDefs vyperStorageTrace
 
-Theorem ec_nonempty_oracle_failure[local]:
-  (do gas <- emit_op GAS [];
-      success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit outsz];
-      emit_void ASSERT [success]; return op od) sm = (res,sb) /\
-  eval_operand ip s = SOME wi /\ eval_operand op s = SOME wo /\
-  (!x. ip = Var x ==> not_fresh_at sm x) /\
-  (!x. op = Var x ==> not_fresh_at sm x) /\
-  computed_precompile (venom_call_request s target 0w wi insz T) /\
-  (s.vs_outcomes = [] \/ ?co rest. s.vs_outcomes = co::rest /\ ~co.co_success) /\
-  s.vs_outcomes <> [] ==>
-  ?u. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort u
-Proof
-  strip_tac >>
-  qpat_assum `_ sm = (_,sb)` (mp_then Any mp_tac computed_suffix_oracle_failure) >>
-  disch_then (qspecl_then [`wo`,`wi`,`s`] mp_tac o SRULE []) >>
-  simp[] >> metis_tac[]
-QED
-
-Theorem ec_nonempty_emitted_paths[local]:
-  (do gas <- emit_op GAS [];
-      success <- emit_op STATICCALL
-        [gas; Lit target; Var src; Lit insz; Var dst; Lit outsz];
-      emit_void ASSERT [success]; return (Var dst) od) sm = (res,sb) /\
-  not_fresh_at sm src /\ not_fresh_at sm dst /\
-  eval_operand (Var src) s = SOME wi /\ eval_operand (Var dst) s = SOME wo /\
-  computed_precompile (venom_call_request s target 0w wi insz T) /\
-  ptr_covers G tn src s (w2n insz) /\ ptr_covers G tn dst s (w2n outsz) /\
-  (!i. w2n wi <= i /\ i < w2n wi + w2n insz ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
-  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
-    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
-  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
-    (s.vs_transient s.vs_call_ctx.cc_address) /\
-  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  s.vs_outcomes <> [] ==>
-  ?u v G' tn'.
-    step_inst_base (EL 0 (emitted_insts sm sb)) s = OK u /\
-    step_inst_base (EL 1 (emitted_insts sm sb)) u = OK v /\
-    G' = step_prov PG (step_prov PG G (EL 0 (emitted_insts sm sb)) u)
-          (EL 1 (emitted_insts sm sb)) v /\
-    tn' = step_taint (EL 1 (emitted_insts sm sb)) u v
-          (step_taint (EL 0 (emitted_insts sm sb)) s u tn) /\
-    (!t. run_inst_seq (emitted_insts sm sb) s = OK t ==>
-      gas_path_ptr D lo ctx fn PG G tn s 1 G' tn'
-        (OK (t with vs_inst_idx := s.vs_inst_idx + 3))) /\
-    (!t. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort t ==>
-      ?n j. gas_path_ptr D lo ctx fn PG G tn s n G' tn'
-        (Abort Revert_abort (t with vs_inst_idx := j)))
-Proof
-  strip_tac >> irule computed_emitted_suffix_paths >> simp[] >>
-  qexistsl [`dst`, `insz`, `outsz`, `res`, `src`, `target`, `wi`, `wo`] >>
-  simp[arithmeticTheory.ADD_COMM]
-QED
-
 (* An aborting run with two normal prefix steps is an ASSERT failure. *)
 Theorem ec_assert_failure_bit[local]:
   step_inst_base gi u = OK sg /\ step_inst_base ci sg = OK sc /\
@@ -144,7 +89,7 @@ Proof
     (`isPREFIX (emitted_insts sm sb) (DROP u.vs_inst_idx bb.bb_instructions)` by
        (qpat_assum `emitted_insts sm sb = _` (pure_rewrite_tac o single) >>
         first_assum ACCEPT_TAC) >>
-     drule_all ec_nonempty_emitted_paths >>
+     drule_all computed_emitted_suffix_paths >>
      disch_then (qspec_then `PG` (strip_assume_tac o SRULE [])) >>
      gvs[] >> metis_tac[]) >>
   rename [`step_inst_base gi u = OK sg`, `step_inst_base ci sg = OK sc`] >>
@@ -166,7 +111,7 @@ Proof
      `?co rest. u.vs_outcomes = co::rest /\ ~co.co_success` by
        (Cases_on `point_result` >> Cases_on `u.vs_outcomes` >> gvs[] >>
         metis_tac[pairTheory.PAIR]) >>
-     qpat_assum `_ sm = (_,sb)` (mp_then Any mp_tac ec_nonempty_oracle_failure) >>
+     qpat_assum `_ sm = (_,sb)` (mp_then Any mp_tac exprSimPrecompilesTheory.computed_suffix_oracle_failure) >>
      disch_then (qspecl_then [`wo`,`wi`,`u`] mp_tac o SRULE []) >> simp[]) >>
   drule_all ec_assert_failure_bit >> simp[]
 QED
