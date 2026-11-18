@@ -158,20 +158,16 @@ QED
 Resume compile_assert_frag[false]:
   markerLib.RESUME_TAC >> (
   gvs[] >>
-  `?a u. step_inst_base
-      (mk_inst s5.cs_next_id (if ak = AssertBare then REVERT else INVALID)
-        (if ak = AssertBare then [Lit 0w; Lit 0w] else []) [])
-      (jump_to s5.cs_current_bb t) = Abort a u /\
-      expr_exit (INR (AssertException
-        (if ak = AssertBare then "" else "UNREACHABLE")) : unit + exception)
-        (Abort a u)` by
-    (simp[Abbr `ak`, expr_exit_def] >>
-     metis_tac[step_revert_zero, step_invalid]) >>
-  `gas_path ctx func (jump_to s5.cs_current_bb t) 0 (Abort a u)` by
-    (irule emit_abort_zero_path >> simp[jump_to_def] >>
-     qexistsl_tac [`if ak = AssertBare then REVERT else INVALID`,
-                   `if ak = AssertBare then [Lit 0w; Lit 0w] else []`, `s5`, `s6`] >>
-     gvs[jump_to_def, Abbr `ak`]) >>
+  `?a u. expr_exit (INR (AssertException
+           (if ak = AssertBare then "" else "UNREACHABLE")) : unit + exception)
+           (Abort a u) /\
+         gas_path ctx func (jump_to s5.cs_current_bb t) 0 (Abort a u)` by
+    (qspecl_then [`if ak = AssertBare then REVERT else INVALID`,
+                  `if ak = AssertBare then [Lit 0w; Lit 0w] else []`,
+                  `if ak = AssertBare then "" else "UNREACHABLE"`, `s5`, `s6`,
+                  `jump_to s5.cs_current_bb t`, `func`, `ctx`]
+       mp_tac abort_zero_exit >>
+     impl_tac >- (gvs[jump_to_def, Abbr `ak`] >> rw[]) >> simp[]) >>
   qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`INR (AssertException
       (if ak = AssertBare then "" else "UNREACHABLE"))`, `es_end`, `Abort a u`] >>
