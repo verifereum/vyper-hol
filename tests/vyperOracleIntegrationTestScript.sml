@@ -89,8 +89,7 @@ QED
 
 Theorem public_call_exhaustion_and_guard_failure_requests:
   integration_call_observe F (SOME [])
-    (INR (Error (RuntimeError "send failed"))) 3 2w 4w cpscv_initial_logs
-    [(9w,7,[],F,3,2w,4w)] /\
+    (INR (Error (RuntimeError "take_call_outcome"))) 3 2w 4w cpscv_initial_logs [] /\
   integration_call_observe F (SOME [send_outcome T [] (2 ** 256)])
     (INR (Error (RuntimeError "call outcome accounts"))) 3 2w 4w cpscv_initial_logs
     [(9w,7,[],F,3,2w,4w)] /\
@@ -119,7 +118,7 @@ Definition integration_load_observe_def:
     let loaded = load_contract
       (SOME [send_outcome T [] 17; send_outcome T [] 23]) [] integration_machine tx mods [] in
       failed = INR (Error (RuntimeError "send failed")) /\
-      exhausted = INR (Error (RuntimeError "send failed")) /\
+      exhausted = INR (Error (RuntimeError "take_call_outcome")) /\
       (case loaded of INR _ => F | INL (am,rqs) =>
         integration_machine_snapshot 23 9w 8w
           (cpscv_adopted_logs ++ [<|logger := 11w; topics := [1w]; data := [8w]|>]) am /\
@@ -182,15 +181,15 @@ Definition integration_raw_call_requests_def:
 End
 val () = cv_auto_trans integration_raw_call_requests_def;
 
-(* With the oracle, a non-delegate raw_call consumes the next source outcome
-   and records its request, as extcall does: a missing or failed outcome
-   reverts under revert_on_failure and is returned as BoolV F otherwise, and
-   returndata is cut to max_outsize. Address20 is empty. *)
+(* A non-delegate raw_call consumes an available source outcome and
+   records its request. A failed outcome reverts under revert_on_failure
+   and returns BoolV F otherwise. Exhaustion errors before recording a
+   request. Returndata is cut to max_outsize. Address20 is empty. *)
 Theorem RawCall_takes_source_oracle:
   integration_raw_call_observe F T 0 20w NONE (INL (Value NoneV))
     NONE send_initial_requests /\
   integration_raw_call_observe F T 0 20w (SOME [])
-    (INR (Error (RevertData []))) (SOME 0) (integration_raw_call_requests 20w) /\
+    (INR (Error (RuntimeError "take_call_outcome"))) (SOME 0) send_initial_requests /\
   integration_raw_call_observe F T 0 20w
     (SOME [send_outcome F [7w] (2 ** 256)])
     (INR (Error (RevertData [7w]))) (SOME 0)
@@ -230,7 +229,7 @@ Definition integration_raw_call_adopt_observe_def:
       FST r = expected /\
       send_snapshot balance nonce code persistent transient logs rqs rest (SND r) /\
       (MEM DelegateMessageCall (MAP (λrq. rq.cr_kind) (SND r).requests) <=>
-       delegate)
+       case os of SOME (_::_) => delegate | _ => F)
 End
 val () = cv_auto_trans integration_raw_call_adopt_observe_def;
 
@@ -249,8 +248,8 @@ QED
 
 (* With the oracle, a delegate raw_call takes the next outcome too, under a
    request with no value and the frame's static flag, and adopts it as a CALL
-   does: its accounts carry the effects on self's storage.  A failed or
-   missing outcome changes nothing but the request and outcome lists. *)
+   does: its accounts carry the effects on self's storage. A failed
+   outcome updates the request and outcome lists. Exhaustion preserves both. *)
 Theorem RawCall_delegate_adopts_source_oracle:
   integration_raw_call_adopt_observe T T 1 20w
     (SOME [send_outcome T [5w; 6w] 17; cpscv_tail])
@@ -261,8 +260,8 @@ Theorem RawCall_delegate_adopts_source_oracle:
     (INL (Value (BoolV F))) 3 0 [] 2w 4w cpscv_initial_logs
     (send_requests 20w 0) cpscv_tail_snapshot /\
   integration_raw_call_adopt_observe T T 0 20w (SOME [])
-    (INR (Error (RevertData []))) 3 0 [] 2w 4w cpscv_initial_logs
-    (send_requests 20w 0) (SOME [])
+    (INR (Error (RuntimeError "take_call_outcome"))) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests (SOME [])
 Proof
   conj_tac >- CONV_TAC cv_eval >>
   conj_tac >- CONV_TAC cv_eval >>

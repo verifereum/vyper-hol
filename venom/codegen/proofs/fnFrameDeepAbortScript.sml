@@ -698,7 +698,7 @@ Theorem step_inst_static_abort:
   step_inst fuel ctx inst vs = Abort a vs' ==>
   a = ExHalt_abort /\ vs' = halt_state (set_returndata [] vs) /\
   ?vals. eval_operands inst.inst_operands vs = SOME vals /\
-    (inst.inst_opcode = CALL ==> EL 2 vals <> 0w)
+    (inst.inst_opcode = CALL ==> EL 2 vals <> 0w \/ vs.vs_outcomes = [])
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
@@ -720,25 +720,24 @@ Theorem static_write_fault_step:
     MEM (name, LENGTH vals)
       [("SSTORE",2); ("TSTORE",2); ("SELFDESTRUCT",1); ("CREATE",3);
        ("CREATE2",4); ("CALL",7)] /\
-    (name = "CALL" ==> EL 2 vals <> 0w) /\
+    (name = "CALL" ==> EL 2 vals <> 0w \/ st.as_outcomes = []) /\
     venom_asm_terminal_rel vs st ==>
     ?st'. asm_steps lo o2pc prog 1 st = AsmFault st' /\
       venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st'
 Proof
   rpt strip_tac >>
   fs[asm_block_at_def] >>
-  `asm_step lo o2pc (AsmOp name) st =
-   AsmFault (st with as_returndata := [])` by
-    (gvs[LENGTH_EQ_NUM_compute] >>
-     simp[asm_step_def, asm_step_op_def,
-          asm_step_arith_def, asm_step_compare_def,
-          asm_step_bitwise_def, asm_step_memory_def,
-          asm_step_control_def, asm_step_extcall_def,
-          asm_sstore_def, asm_tstore_def, asm_selfdestruct_def,
-          asm_exec_call_def, asm_exec_create_def, asm_exec_create2_def]) >>
+  gvs[LENGTH_EQ_NUM_compute] >>
   `1 = SUC 0` by simp[] >>
   pop_assum SUBST1_TAC >>
-  simp[Once asm_steps_def, asm_steps_def] >>
+  simp[Once asm_steps_def, asm_step_def, asm_step_op_def,
+       asm_step_arith_def, asm_step_compare_def,
+       asm_step_bitwise_def, asm_step_memory_def,
+       asm_step_control_def, asm_step_extcall_def,
+       asm_sstore_def, asm_tstore_def, asm_selfdestruct_def,
+       asm_exec_call_def, asm_exec_create_def, asm_exec_create2_def,
+       asm_consume_call_outcome_def] >>
+  rw[] >>
   gvs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
 QED
 
@@ -772,7 +771,8 @@ Theorem gen_inst_ext_fault_frame_sim_deep:
   !inst cplan vs fn r final base ps nl lo ra dfg ops ctx rest mem0 st
     lv cfg halting term label prog fuel a vs' o2pc.
   MEM inst.inst_opcode
-    [CREATE; CREATE2; RETURNDATACOPY; SSTORE; TSTORE; SELFDESTRUCT; CALL] /\
+    [CREATE; CREATE2; RETURNDATACOPY; SSTORE; TSTORE; SELFDESTRUCT; CALL;
+     STATICCALL; DELEGATECALL] /\
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
   MEM r cplan.cp_regions /\
   r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
@@ -805,7 +805,7 @@ Theorem gen_inst_ext_fault_frame_sim_deep:
 Proof
   rpt gen_tac >> strip_tac >>
   `?name. venom_to_evm_name inst.inst_opcode = SOME name` by
-    (gvs[venom_to_evm_name_def]) >>
+    (gvs[MEM, venom_to_evm_name_def]) >>
   `inst.inst_opcode <> INVOKE /\ ~is_commutative inst.inst_opcode /\
    LENGTH inst.inst_outputs <= 1` by gvs[inst_wf_def, is_commutative_def] >>
   `generate_regular_inst_plan lv dfg cfg fn inst nl halting term label ps = (ops,final)` by
@@ -818,7 +818,10 @@ Proof
   `?out. a = ExHalt_abort /\
     asm_steps lo o2pc prog 1 (mid with as_stack := mid.as_stack ++ rest) = AsmFault out /\
     venom_asm_terminal_rel vs' out` by
-    (Cases_on `vs.vs_call_ctx.cc_static /\
+    (Cases_on `vs.vs_outcomes = [] /\
+       MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
+     >- suspend "exhausted_call" >>
+     Cases_on `vs.vs_call_ctx.cc_static /\
        MEM inst.inst_opcode [SSTORE; TSTORE; SELFDESTRUCT; CALL; CREATE; CREATE2]`
      >- suspend "static" >>
      (* outside the static case only CREATE/CREATE2 (oversize, non-static)
@@ -838,6 +841,26 @@ Proof
   rewrite_tac[ONE, ADD_CLAUSES, create_safe_prefix_suc] >>
   conj_tac >- suspend "safe_opcode" >>
   simp[asm_result_distinct]
+QED
+
+Resume gen_inst_ext_fault_frame_sim_deep[exhausted_call]:
+  qpat_x_assum `vs.vs_outcomes = [] /\ _` strip_assume_tac >>
+  drule_all step_inst_exhausted_call_abort >> strip_tac >> gvs[] >>
+  `mid.as_stack = vals ++ DROP (LENGTH inst.inst_operands) mid.as_stack` by
+    (irule abort_frame_arranged_stack >> simp[] >> conj_tac
+     >- (qexists `dfg` >> gvs[]) >>
+     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+     gvs[MEM] >> metis_tac[]) >>
+  `LENGTH vals = LENGTH inst.inst_operands` by
+    metis_tac[logEmitSimTheory.eval_operands_length] >>
+  `MEM (name,LENGTH vals)
+    [("CALL",7); ("STATICCALL",6); ("DELEGATECALL",6);
+     ("CREATE",3); ("CREATE2",4)]` by
+    gvs[MEM, venom_to_evm_name_def, inst_wf_def] >>
+  `mid.as_outcomes = []` by fs[venom_asm_rel_def, frame_view_def] >>
+  irule terminal_exhausted_call_fault_step >> simp[] >>
+  qexistsl_tac [`name`, `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest`, `vals`] >>
+  gvs[APPEND_ASSOC]
 QED
 
 Resume gen_inst_ext_fault_frame_sim_deep[safe_opcode]:
@@ -869,11 +892,13 @@ Resume gen_inst_ext_fault_frame_sim_deep[static]:
   `MEM inst.inst_opcode [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE; CREATE;
      CREATE2; RETURNDATACOPY; SSTORE; TSTORE; SELFDESTRUCT; CALL]` by fs[] >>
   `mid.as_stack = vals ++ DROP (LENGTH inst.inst_operands) mid.as_stack` by
-    (irule abort_frame_arranged_stack >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+    (irule abort_frame_arranged_stack >> simp[] >> conj_tac
      >- (qexists `dfg` >> gvs[]) >>
-     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >> gvs[] >> metis_tac[]) >>
+     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+     gvs[MEM] >> metis_tac[]) >>
   `LENGTH vals = LENGTH inst.inst_operands` by metis_tac[logEmitSimTheory.eval_operands_length] >>
-  `mid.as_call_ctx = vs.vs_call_ctx` by fs[venom_asm_rel_def, frame_view_def] >>
+  `mid.as_call_ctx = vs.vs_call_ctx /\ mid.as_outcomes = vs.vs_outcomes` by
+    fs[venom_asm_rel_def, frame_view_def] >>
   qspecl_then [`lo`, `o2pc`, `prog`, `mid with as_stack := mid.as_stack ++ rest`,
     `name`, `vals`, `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest`, `vs`]
     mp_tac static_write_fault_step >>
@@ -888,7 +913,7 @@ Resume gen_inst_ext_fault_frame_sim_deep[static]:
       >- gvs[venom_to_evm_name_def, inst_wf_def]
       >- (strip_tac >>
           qpat_x_assum `vs.vs_call_ctx.cc_static /\ _` strip_assume_tac >>
-          gvs[venom_to_evm_name_def]) >>
+          gvs[MEM, venom_to_evm_name_def]) >>
       fs[]) >>
   strip_tac >> gvs[]
 QED
@@ -1083,7 +1108,8 @@ Resume gen_inst_log_static_frame_sim_deep[prepared]:
      qpat_x_assum `LENGTH mid.as_stack = _` mp_tac >>
      qpat_x_assum `LENGTH lops = _` mp_tac >>
      simp_tac arith_ss []) >>
-  `mid.as_call_ctx = vs.vs_call_ctx` by fs[venom_asm_rel_def, frame_view_def] >>
+  `mid.as_call_ctx = vs.vs_call_ctx /\ mid.as_outcomes = vs.vs_outcomes` by
+    fs[venom_asm_rel_def, frame_view_def] >>
   `asm_block_at prog mid.as_pc [AsmOp ("LOG" ++ num_to_dec_string (w2n tc))]` by
     (qpat_x_assum `mid.as_pc = _` (fn th => rewrite_tac[th]) >>
      qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
@@ -1196,7 +1222,8 @@ Proof
       disch_then (qspec_then `o2pc` strip_assume_tac) >>
       qexistsl_tac [`n`, `out`] >> simp[]) >>
   `MEM inst.inst_opcode
-     [CREATE; CREATE2; RETURNDATACOPY; SSTORE; TSTORE; SELFDESTRUCT; CALL]` by
+     [CREATE; CREATE2; RETURNDATACOPY; SSTORE; TSTORE; SELFDESTRUCT; CALL;
+      STATICCALL; DELEGATECALL]` by
     (drule step_inst_abort_opcodes >> simp[] >> metis_tac[]) >>
   drule_all gen_inst_ext_fault_frame_sim_deep >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
@@ -1298,6 +1325,6 @@ Proof
   `MEM (name, LENGTH vals)
     [("SSTORE",2); ("TSTORE",2); ("SELFDESTRUCT",1); ("CREATE",3);
      ("CREATE2",4); ("CALL",7)]` by gvs[inst_wf_def] >>
-  `(name = "CALL" ==> EL 2 vals <> 0w)` by gvs[] >>
+  `(name = "CALL" ==> EL 2 vals <> 0w \/ st.as_outcomes = [])` by gvs[] >>
   drule_all static_write_fault_step >> simp[])
 QED

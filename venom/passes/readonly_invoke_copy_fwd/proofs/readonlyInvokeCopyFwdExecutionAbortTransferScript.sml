@@ -15,6 +15,7 @@ Theorem ricf_abort_frame_observations[local]:
   ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H certificates E sites maps targets tn ==>
   s.vs_call_ctx = t.vs_call_ctx /\ s.vs_returndata = t.vs_returndata /\
+  s.vs_outcomes = t.vs_outcomes /\
   (!op. IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))
 Proof
   strip_tac >>
@@ -30,6 +31,11 @@ Proof
   >- (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def] >>
       drule taint_agree_frame >>
       disch_then (mp_tac o Q.AP_TERM `\st. st.vs_returndata`) >>
+      simp[ricf_opaque_view_def]) >>
+  conj_tac
+  >- (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def] >>
+      drule taint_agree_frame >>
+      disch_then (mp_tac o Q.AP_TERM `\st. st.vs_outcomes`) >>
       simp[ricf_opaque_view_def]) >>
   metis_tac[ricf_opaque_frame_operand_defined]
 QED
@@ -128,7 +134,7 @@ Proof
        rpt (IF_CASES_TAC >> simp[]))) >> simp[]) >>
   qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
   simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs(),
-    exec_call_helpers_no_halt_abort] >>
+    exec_ext_call_abort_iff] >>
   strip_tac >> gvs[] >>
   `IS_SOME (eval_operands inst.inst_operands t)` by
     (simp[eval_operands_IS_SOME_EVERY] >> rpt conj_tac >>
@@ -136,7 +142,23 @@ Proof
   qpat_x_assum `IS_SOME (eval_operands _ t)` mp_tac >>
   simp[eval_operands_IS_SOME_EVERY, optionTheory.IS_SOME_EXISTS] >>
   rpt strip_tac >> gvs[step_inst_non_invoke,
-    step_inst_base_opcode_eqs]
+    step_inst_base_opcode_eqs, exec_ext_call_abort_iff]
+QED
+
+Theorem ricf_abort_readonly_call[local]:
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
+    n a U B HP H certificates E sites maps targets tn /\
+  MEM inst.inst_opcode [STATICCALL;DELEGATECALL] /\
+  step_inst fuel C inst s = Abort reason u ==>
+  ?v. step_inst fuel Ct inst t = Abort reason v
+Proof
+  strip_tac >> drule ricf_abort_frame_observations >> strip_tac >>
+  qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
+  gvs[MEM] >> simp[step_inst_non_invoke] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  simp[exec_ext_call_abort_iff, exec_delegatecall_abort_iff, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
 QED
 
 Theorem ricf_execution_noninvoke_abort:
@@ -169,6 +191,9 @@ Proof
   Cases_on `inst.inst_opcode = CALL`
   >- (drule_all ricf_abort_call >> disch_then (qspec_then `Ct` strip_assume_tac) >>
       metis_tac[]) >>
+  Cases_on `MEM inst.inst_opcode [STATICCALL;DELEGATECALL]`
+  >- (drule_all ricf_abort_readonly_call >>
+      disch_then (qspec_then `Ct` strip_assume_tac) >> metis_tac[]) >>
   Cases_on `MEM inst.inst_opcode [ASSERT;ASSERT_UNREACHABLE]`
   >- (drule_all ricf_execution_assert_abort >>
       disch_then (qspec_then `Ct` strip_assume_tac) >> metis_tac[]) >>

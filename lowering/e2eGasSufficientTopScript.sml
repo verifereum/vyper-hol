@@ -35,9 +35,8 @@ Theorem vyper_call_gas_sufficient_asm_opt:
          (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
       (!obs. ~gas_source_exempt tops tx
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-            obs am tx) /\
-       source_calls_within (2 ** 64) am tx
-         (MAP SND (call_trace (add_frame_gas g' es))) obs)
+            obs am tx)) /\
+      LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
@@ -100,9 +99,8 @@ Theorem vyper_call_gas_sufficient:
             (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
          (!obs. ~gas_source_exempt tops tx
             (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-               obs am tx) /\
-          source_calls_within (2 ** 64) am tx
-            (MAP SND (call_trace (add_frame_gas g' es))) obs) /\
+               obs am tx)) /\
+         LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
          frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
@@ -113,9 +111,8 @@ Proof
         (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
      (!obs. ~gas_source_exempt tops tx
         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-           obs am tx) /\
-      source_calls_within (2 ** 64) am tx
-        (MAP SND (call_trace (add_frame_gas g' es))) obs)
+           obs am tx)) /\
+     LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64
      ==>
      ?r es'.
        run_call (add_frame_gas g' es) = SOME (r, es') /\

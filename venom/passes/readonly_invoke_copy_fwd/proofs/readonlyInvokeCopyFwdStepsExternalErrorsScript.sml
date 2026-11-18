@@ -12,7 +12,8 @@ Theorem ricf_ext_call_error_iff:
 Proof
   simp[exec_ext_call_def] >>
   Cases_on `inst.inst_outputs` >> simp[] >>
-  rename1 `h::tl` >> Cases_on `tl` >> simp[]
+  rename1 `h::tl` >> Cases_on `tl` >> simp[] >>
+  Cases_on `s.vs_outcomes = []` >> simp[]
 QED
 
 Theorem ricf_create_error_iff:
@@ -22,7 +23,8 @@ Theorem ricf_create_error_iff:
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_create_def] >>
   rename1 `h::tl` >> Cases_on `tl` >> simp[exec_create_def] >>
-  IF_CASES_TAC >> simp[] >> pairarg_tac >> simp[]
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `s.vs_outcomes = []` >> simp[] >> pairarg_tac >> simp[]
 QED
 
 Theorem ricf_delegatecall_error_iff:
@@ -32,7 +34,7 @@ Theorem ricf_delegatecall_error_iff:
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_delegatecall_def] >>
   rename1 `h::tl` >> Cases_on `tl` >> simp[exec_delegatecall_def] >>
-  pairarg_tac >> simp[]
+  Cases_on `s.vs_outcomes = []` >> simp[] >> pairarg_tac >> simp[]
 QED
 
 Theorem ricf_delegatecall_error:

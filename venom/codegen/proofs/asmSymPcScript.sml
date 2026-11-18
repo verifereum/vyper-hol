@@ -67,6 +67,8 @@ Theorem asm_consume_call_outcome_pc_add[local]:
   asm_consume_call_outcome rq ro rs stk (s with as_pc := s.as_pc + n) =
   asm_result_pc_add n (asm_consume_call_outcome rq ro rs stk s)
 Proof
+  Cases_on `s.as_outcomes = []`
+  >- simp[asm_consume_call_outcome_def, asm_result_pc_add_def] >>
   simp[asm_consume_call_outcome_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >>
   simp[asm_result_pc_add_def, asm_next_def]
@@ -76,6 +78,8 @@ Theorem asm_consume_create_outcome_pc_add[local]:
   asm_consume_create_outcome rq stk (s with as_pc := s.as_pc + n) =
   asm_result_pc_add n (asm_consume_create_outcome rq stk s)
 Proof
+  Cases_on `s.as_outcomes = []`
+  >- simp[asm_consume_create_outcome_def, asm_result_pc_add_def] >>
   simp[asm_consume_create_outcome_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >>
   simp[asm_result_pc_add_def, asm_next_def]
