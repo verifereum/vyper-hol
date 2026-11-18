@@ -139,10 +139,12 @@ QED
    CFG's DFS order, as every frame_reachable block is), and fmp_env_rel
    relates live variables other than the return pc's.  Literals and
    labels evaluate alike on both sides. *)
-Theorem fmp_stage_operand:
+Theorem fmp_env_operand:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
-  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  fmp_env_rel sm fn
+    (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+    G tn.t_var s t /\ s.vs_labels = t.vs_labels /\
   inst.inst_opcode <> PHI /\ MEM op inst.inst_operands /\
   (!v. op = Var v ==> ~retpc_var fn v) /\
   eval_operand op s = SOME x ==>
@@ -151,10 +153,6 @@ Theorem fmp_stage_operand:
 Proof
   strip_tac >>
   drule_all fmp_stage_frame_facts >> strip_tac >>
-  `fmp_env_rel sm fn
-     (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
-     G tn.t_var s t /\ s.vs_labels = t.vs_labels` by
-    (gvs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
   Cases_on `op` >>
   gvs[venomStateTheory.eval_operand_def, op_prov_def, op_taint_def,
       fmp_value_rel_def, o1LowerDloadRelocationKernelTheory.ld_value_agree_def,
@@ -170,6 +168,24 @@ Proof
       gvs[fmp_value_rel_def,
           o1LowerDloadRelocationKernelTheory.ld_value_agree_def,
           word_agree_except_def])
+QED
+
+Theorem fmp_stage_operand:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  inst.inst_opcode <> PHI /\ MEM op inst.inst_operands /\
+  (!v. op = Var v ==> ~retpc_var fn v) /\
+  eval_operand op s = SOME x ==>
+  ?y. eval_operand op t = SOME y /\
+      fmp_value_rel sm (op_prov G op) (op_taint tn op) x y
+Proof
+  strip_tac >>
+  `fmp_env_rel sm fn
+     (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+     G tn.t_var s t /\ s.vs_labels = t.vs_labels` by
+    (gvs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
+  drule_all fmp_env_operand >> simp[]
 QED
 
 (* Why: fmp_frame_rel lets its lowering witness (infos, ctx, runner) be
