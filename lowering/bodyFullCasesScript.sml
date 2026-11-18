@@ -36,7 +36,7 @@ Proof
        flag_member_expr_full_ok, literal_expr_full_ok]
 QED
 
-(* Admitted: the joint twin of body_annassign_case_ptr_at (bodyPtrAssignCases). *)
+(* Joint annotated declaration, split by the source and destination layouts. *)
 Theorem body_annassign_case_full:
   !cx id typ e.
     (!tenv s'' tyv t.

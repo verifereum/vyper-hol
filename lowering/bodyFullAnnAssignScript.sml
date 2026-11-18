@@ -234,10 +234,7 @@ Proof
        `lowered_value_type cenv e = expr_type e \/ _ /\ _ /\ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   irule annassign_memory_full_execution >>
-  rpt (FIRST [conj_tac,
-    MATCH_ACCEPT_TAC annassign_memory_full_installation_post,
-    MATCH_ACCEPT_TAC annassign_memory_full_assign_path,
-    qexistsl_tac [`env`,`tops`]]) >>
+  rpt (conj_tac ORELSE qexistsl_tac [`env`,`tops`]) >>
   simp[] >>
   rpt gen_tac >> disch_tac >>
   drule_all_then strip_assume_tac annassign_full_declared_rhs_pre >>
@@ -309,8 +306,6 @@ Proof
   `type_memory_bytes cenv typ < 2 ** 64` by
     fs[stmt_exprs_ok_def, alloc_limits_stmt_def, type_alloc_ok_def] >>
   irule annassign_widened_full_execution >>
-  conj_tac >- MATCH_ACCEPT_TAC annassign_memory_full_installation_post >>
-  conj_tac >- MATCH_ACCEPT_TAC annassign_memory_full_assign_path >>
   simp[] >> qexistsl_tac [`env`, `tops`] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   drule_all annassign_full_declared_rhs_pre >> strip_tac >>
@@ -379,8 +374,6 @@ Proof
          qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _`
            (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
       irule annassign_other_typed_full_execution >>
-      conj_tac >- MATCH_ACCEPT_TAC annassign_memory_full_installation_post >>
-      conj_tac >- MATCH_ACCEPT_TAC annassign_memory_full_assign_path >>
       fs[] >> qexistsl_tac [`env`, `tops`] >> simp[] >>
       rpt gen_tac >> strip_tac >>
       drule_all annassign_full_declared_rhs_pre >> strip_tac >>

@@ -288,33 +288,6 @@ Proof
   fs[loweringPostsTheory.expr_post_def, bodyPtrDefsTheory.ghost_kept_at_def] >> metis_tac[]
 QED
 
-Theorem annassign_word_full_prefix_frame:
-  stmt_state_rel H ctx func old cx es s0 /\ local_ptrs_reserved old sa /\
-  lookup_scopes id es.scopes = NONE /\
-  (!n. n <> id ==> FLOOKUP ce.ce_vars n = FLOOKUP old.ce_vars n) /\
-  entry.vs_memory = s0.vs_memory /\
-  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-         lookup_var x entry = SOME w) ==>
-  alloca_frame old es sa s0 ce es entry
-Proof
-  strip_tac >>
-  `alloca_frame old es sa s0 old es entry` by
-    (irule stmtSimDefsTheory.alloca_frame_of_mem_frame >>
-     asm_rewrite_tac[] >> simp[] >>
-     qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >>
-  qpat_x_assum `alloca_frame old es sa s0 old es entry`
-    (assume_tac o REWRITE_RULE [stmtSimDefsTheory.alloca_frame_def]) >>
-  pure_rewrite_tac[stmtSimDefsTheory.alloca_frame_def] >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!aid off sz. _` (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
-  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
-  conj_tac >- simp[] >> rpt strip_tac >>
-  qpat_x_assum `!n b sz'. local_region old es.scopes entry n b sz' ==> _` irule >>
-  qexists_tac `n` >>
-  fs[loweringStateRelDefsTheory.local_region_def] >>
-  `n <> id` by (strip_tac >> gvs[]) >> metis_tac[]
-QED
-
 Theorem annassign_word_full_frame_post:
   alloca_frame old es sa s0 ce es entry /\
   alloca_frame ce es a entry ce mid u /\ sa.cs_next_id <= a.cs_next_id /\
