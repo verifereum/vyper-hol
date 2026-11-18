@@ -71,3 +71,4 @@ Ancestors
   dftPacketReturnNewCuts dftPacketBlockPathUpdate dftPacketBlockReplayFrame
   dftPacketBlockInitializedHistory dftPacketBlockInitializedReplay
   dftPacketBlockInitializedStructure dftPacketBlockInitializedFreshCut
+  dftPacketBlockEdgeClauses
