@@ -14,6 +14,7 @@ Proof
   strip_tac >> irule lower_vyper_deploy_unit_entry_excludes_outcomes >>
   rpt (goal_assum (drule_at Any)) >> rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
+  rename1 `classify_functions tops = (_,_,_,SOME cf)` >>
   `ctor_named_init (SOME cf)` by
     (drule_all lower_vyper_deploy_unit_ctor_named_init >> simp[]) >>
   irule outcomes_free_constructor_body >>

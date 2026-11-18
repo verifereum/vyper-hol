@@ -150,8 +150,9 @@ Proof
   drule_all compile_generate_deploy_entry_package >> strip_tac >>
   qpat_x_assum `run_deploy_lowering _ _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[run_deploy_lowering_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  `?fn. ctx.ctx_entry = SOME "__deploy" /\
-    lookup_function "__deploy" ctx.ctx_functions = SOME fn /\
+  rename1 `extract_context_with_internals _ _ _ = SOME (cx,_)` >>
+  `?fn. cx.ctx_entry = SOME "__deploy" /\
+    lookup_function "__deploy" cx.ctx_functions = SOME fn /\
     EVERY (\i. ~MEM i.inst_opcode
       [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (fn_insts fn)` by
     (drule extract_context_entry_every >> disch_then irule >>

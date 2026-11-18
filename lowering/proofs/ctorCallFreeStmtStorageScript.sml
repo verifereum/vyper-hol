@@ -31,8 +31,7 @@ Proof
 QED
 
 Theorem outcomes_free_store_immutable_bytestring:
-  (!opc. MEM opc [ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD; MLOAD;
-    SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE; TSTORE; SHR]
+  (!opc. MEM opc [ADD; MUL; ASSIGN; JMP; EQ; JNZ; MLOAD; ISTORE; SHR]
     ==> P opc) /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_store_immutable_bytestring imm src dst s)))
@@ -41,19 +40,25 @@ Proof
   simp[compile_store_immutable_bytestring_def] >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[outcomes_free_bytestring_word_count] >>
   rpt strip_tac >> irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >>
-  simp[every_state_insts_return,
-    SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_word_copy_base]
+  simp[every_state_insts_return] >> rpt strip_tac >>
+  irule outcomes_free_word_copy_base >>
+  simp[DISJ_IMP_THM, compile_ptr_load_def, compile_ptr_store_def,
+    opcode_every_emit_op, outcomes_free_imm_store]
 QED
 
 Theorem outcomes_free_slot_to_memory:
   (!opc. MEM opc [ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD; MLOAD;
-    SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE; TSTORE]
-    ==> P opc) /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    SLOAD; TLOAD; CALLDATALOAD; MSTORE] ==> P opc) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_slot_to_memory src dst n loc s)))
 Proof
-  strip_tac >> simp[compile_slot_to_memory_def] >>
-  irule (cj 1 outcomes_free_word_copy) >> simp[]
+  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[compile_slot_to_memory_def, compile_word_copy_loop_def,
+    compile_word_copy_loop_op_def] >>
+  irule outcomes_free_word_copy_base >>
+  simp[DISJ_IMP_THM, outcomes_free_ptr_load, compile_ptr_store_def,
+    opcode_every_emit_void]
 QED
 
 Theorem outcomes_free_range_bound_checks:

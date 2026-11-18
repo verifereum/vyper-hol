@@ -73,20 +73,24 @@ Proof
 QED
 
 Theorem outcomes_free_word_copy_base:
-  (!opc. MEM opc [ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD; MLOAD;
-                  SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE;
-                  SSTORE; TSTORE] ==> P opc) /\
+  (!opc. MEM opc [ADD; MUL; ASSIGN; JMP; EQ; JNZ] ==> P opc) /\
+  (!off st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_ptr_load ctor imm load off st)))) /\
+  (!off v st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_ptr_store ctor imm store off v st)))) /\
   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND
       (compile_word_copy_loop_base src dst nwords load store ctor imm s)))
 Proof
-  strip_tac >> simp[compile_word_copy_loop_base_def] >>
+  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[compile_word_copy_loop_base_def] >>
   rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
       opcode_every_emit_inst, every_state_insts_return,
                every_state_insts_fresh_id, every_state_insts_fresh_var,
-                   every_state_insts_fresh_label, every_state_insts_new_block,
-               outcomes_free_ptr_load, outcomes_free_ptr_store]),
+                   every_state_insts_fresh_label, every_state_insts_new_block]),
        gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
        irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC]) >>
   gvs[]
@@ -104,8 +108,10 @@ Theorem outcomes_free_word_copy:
     (state_insts (SND
       (compile_word_copy_loop_op src dst nwop load store ctor s)))
 Proof
-  strip_tac >> simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def] >>
-  conj_tac >> irule outcomes_free_word_copy_base >> simp[]
+  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def] >>
+  conj_tac >> irule outcomes_free_word_copy_base >>
+  simp[DISJ_IMP_THM, outcomes_free_ptr_load, outcomes_free_ptr_store]
 QED
 
 Theorem outcomes_free_lit_offset:
@@ -185,12 +191,13 @@ Proof
 QED
 
 Theorem outcomes_free_bytestring_copy:
-  P MLOAD /\ P NOT /\ P ADD /\ P AND /\ P MCOPY /\
+  P MLOAD /\ P NOT /\ P ADD /\ P AND /\
   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_bytestring_copy_len src s))) /\
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_store_bytestring src dst s)))
+  (P MCOPY ==>
+   EVERY (\i. P i.inst_opcode)
+     (state_insts (SND (compile_store_bytestring src dst s))))
 Proof
   strip_tac >> simp[compile_bytestring_copy_len_def, compile_store_bytestring_def] >>
   rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
@@ -363,6 +370,23 @@ Proof
         irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind, conj_tac])
 QED
 
+Theorem outcomes_free_materialize_vv:
+  (!n st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_alloc_buffer n st)))) /\
+  (!v st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (unwrap_value ce v st)))) /\
+  (!a b ty sty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_store_memory ce a b ty sty st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_materialize_vv ce ty vv s)))
+Proof
+  strip_tac >> simp[compile_materialize_vv_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> metis_tac[pairTheory.SND]
+QED
+
 Theorem outcomes_free_snapshot:
   (!ce v st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (unwrap_value ce v st)))) /\
@@ -379,10 +403,7 @@ Proof
   >- (irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[every_state_insts_return]) >>
   IF_CASES_TAC >> simp[every_state_insts_return] >>
   irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[every_state_insts_return] >>
-  simp[compile_materialize_vv_def] >> rpt gen_tac >> strip_tac >>
-  irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >> rpt gen_tac >> strip_tac >> BETA_TAC >>
-  irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[] >> rpt gen_tac >> strip_tac >> BETA_TAC >>
-  irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind >> simp[every_state_insts_return]
+  rpt strip_tac >> irule outcomes_free_materialize_vv >> simp[]
 QED
 
 Theorem opcode_every_alloc_buffer:
@@ -484,7 +505,7 @@ Theorem opcode_every_word_copy_loop_base:
   )
 Proof
   rpt strip_tac >> irule outcomes_free_word_copy_base >>
-  simp[DISJ_IMP_THM, FORALL_AND_THM]
+  simp[DISJ_IMP_THM, outcomes_free_ptr_load, outcomes_free_ptr_store]
 QED
 
 Theorem opcode_every_word_copy_loop:
@@ -721,22 +742,6 @@ Proof
   rpt strip_tac >> irule outcomes_free_ifexp_arm >> simp[]
 QED
 
-Theorem outcomes_free_materialize_vv:
-  (!n st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_alloc_buffer n st)))) /\
-  (!v st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (unwrap_value ce v st)))) /\
-  (!a b ty sty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_store_memory ce a b ty sty st)))) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_materialize_vv ce ty vv s)))
-Proof
-  strip_tac >> simp[compile_materialize_vv_def, comp_bind_def,
-    comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> simp[]) >> metis_tac[pairTheory.SND]
-QED
 
 Theorem opcode_every_materialize_vv:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\

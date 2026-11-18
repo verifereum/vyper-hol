@@ -5,13 +5,11 @@ Ancestors
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeCallbacks
   supportedExprTraverse supportedStmtTraverse e2eDeployDefs loweringShapeProps
 
-(* Discharge precise opcode premises from the complement-of-seven premise;
-   c7 also discharges generator callbacks with the given precise lemmas. *)
+(* Discharge precise opcode premises from the complement-of-seven premise. *)
 val base7_tm = ``!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
   opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
   opc <> RETURNDATACOPY ==> (P:opcode -> bool) opc``;
 fun b7 th = SIMP_RULE (srw_ss()) [ASSUME base7_tm, DISJ_IMP_THM, FORALL_AND_THM] th;
-fun c7 ths th = SIMP_RULE (srw_ss()) (map b7 ths) (b7 th);
 
 Theorem outcomes_free_get_target_ptr:
   (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
