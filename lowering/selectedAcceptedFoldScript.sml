@@ -244,9 +244,9 @@ Proof
     metis_tac[pairTheory.SND] >>
   `i < LENGTH (MAP FST args)` by simp[] >>
   `EL i (MAP FST args) = name` by simp[EL_MAP] >>
-  `?loc. FLOOKUP ce.ce_vars (EL i (MAP FST args)) = SOME loc /\
-    var_location_memory_size loc = SOME (type_memory_size (EL i tvs))` by
-    (qpat_assum `!j. i <= j /\ _ ==> _` (qspec_then `i` mp_tac) >>
+  Q.SUBGOAL_THEN `?loc. FLOOKUP ce.ce_vars (EL i (MAP FST args)) = SOME loc /\
+    var_location_memory_size loc = SOME (type_memory_size (EL i tvs))` ASSUME_TAC
+  >- (qpat_assum `!j. i <= j /\ _ ==> _` (qspec_then `i` mp_tac) >>
      (impl_tac >- decide_tac) >>
      qpat_assum `EL i (MAP FST args) = name` (pure_once_rewrite_tac o single) >>
      qpat_assum `EL i args = (name,ty)` (pure_once_rewrite_tac o single) >>
@@ -275,7 +275,7 @@ Proof
   disch_then (drule_at (Pat `selected_registration_resources _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `selected_slot_accepts _ _ _ _ _`)) >>
   disch_then (qspec_then `PG` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[]))) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
   `ce1 = ce0 with ce_vars := ce1.ce_vars` by
     (qpat_assum `ce1 = ce with ce_vars := ce1.ce_vars` (SUBST1_TAC) >>
@@ -399,6 +399,7 @@ Proof
   `gas_path_mem ctx fn s 0 (OK t)` by metis_tac[selected_zero_path_mem] >>
   `alloca_history fn t` by
     metis_tac[gas_path_mem_zero_history, aggregate_mem_path_alloca_inv] >>
-  qexistsl [`t`,`H`,`u`] >> rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
-    metis_tac[selected_zero_path_ptr_pullback])
+  qexistsl [`t`,`H`,`u`] >>
+  ntac 9 (conj_tac >- first_assum ACCEPT_TAC) >>
+  metis_tac[selected_zero_path_ptr_pullback]
 QED
