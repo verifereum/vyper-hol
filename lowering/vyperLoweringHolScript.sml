@@ -22,6 +22,7 @@ Ancestors
   dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
   rawCallCalldataPeakMemory
+  runtimePeakMemoryBound
   loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
   loweringCallBudgetBounds
   moduleLoweringProps entryDispatchProps entryDecodeProps

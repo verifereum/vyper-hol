@@ -7,7 +7,7 @@ Ancestors
   externalReturnBounds exprSimAggregateChildren representationCleanPtr
   vyperTypeSystem vyperTypeInvariants vyperInterpreter vyperState
   compileEnv venomState venomMemDefs words arithmetic
-  bodyFullAnnAssignMemoryPost bodyInvNoDalloca bodySim bodyExprPreFacts
+  bodyFullShared bodyFullAnnAssignMemoryPost bodyInvNoDalloca bodySim bodyExprPreFacts
   stmtSimDeclSource stmtSimDeclCompose stmtSimProps gasOutcomeFullStmts
   gasExemptCert vyperStorageTrace bodyMemoryDefs stmtLoweringMono freshWrites
   emitHelperProps fragExec allocaHistory typedMemoryCopy bodyDeclCopyMemory exprLowering stmtLowering
@@ -175,6 +175,10 @@ Proof
   rewrite_tac[stmt_frag_full_def] >>
   map_every qx_gen_tac [`st0`,`sa`,`sf`,`shadow_sa`,`shadow_sf`,`s0`,`G0`,`tn0`,`ce`] >>
   strip_tac >>
+  qpat_assum `return_buf_frame d old sa s0` (fn frame =>
+    qpat_assum `return_buf_sep d old es s0` (fn sep =>
+      irule (MATCH_MP gas_outcome_full_use_return_buf_allocas
+        (CONJ frame sep)))) >>
   `old.ce_alloca_locals /\ ~ctx_has_dalloca ctx` by
     (conj_tac >- fs[body_inv_def] >> drule body_inv_no_dalloca >> simp[]) >>
   drule_all annassign_full_prefix_parts >> strip_tac >>
@@ -295,6 +299,8 @@ Resume annassign_widened_full_execution[suffix]:
   markerLib.RESUME_TAC >>
   qpat_x_assum `op = Var xs` SUBST_ALL_TAC >>
   `?u Gu tu.
+    lookup_var p u = SOME w /\
+    FLOOKUP u.vs_allocas (sa.cs_next_id) = SOME (w2n w,type_memory_bytes old typ) /\
     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (t,G1,tn1) [] (OK u,Gu,tu)) /\
     !H. valid_horizon cx st0 H out.storage_trace ==>
@@ -312,12 +318,17 @@ Resume annassign_widened_full_execution[suffix]:
         (!name a cap. local_region old es.scopes s0 name a cap ==>
           off+len <= a \/ a+cap <= off) /\
         off <= i /\ i < off+len /\ i IN tu.t_mem ==> i IN tn0.t_mem)` by
-    (match_mp_tac (GEN_ALL annassign_memory_full_suffix_post) >>
-     qexistsl_tac [`xs`,`x`,`type_memory_bytes old typ`,`sw`,
-       `lowered_value_type old e`,`stv`,`a`,`vv_location vv`,`sc`,`rest`,
-       `p`,`type_memory_size stv`,`mid`,
-       `mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes old typ))] [p]`,
-       `id`,`w`,`typ`,`tyv`,`b`,`storage_trace_horizon mid.storage_trace`] >>
+    (mp_tac (Q.INST [
+       `s` |-> `t`, `G` |-> `G1`, `tn` |-> `tn1`,
+       `explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
+       `v` |-> `x`, `dw` |-> `w`, `dty` |-> `typ`, `dtv` |-> `tyv`,
+       `sty` |-> `lowered_value_type old e`, `sz` |-> `type_memory_bytes old typ`,
+       `n` |-> `type_memory_size stv`, `src_loc` |-> `vv_location vv`,
+       `start` |-> `a`, `H0` |-> `storage_trace_horizon mid.storage_trace`,
+       `inst` |-> `mk_inst sa.cs_next_id ALLOCA
+         [Lit (n2w (type_memory_bytes old typ))] [p]`]
+       annassign_memory_full_suffix_post) >>
+     (impl_tac >- (
      `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
      drule_all immutable_assign_copy_metadata >> strip_tac >>
      `not_fresh_at b xs` by
@@ -365,7 +376,7 @@ Resume annassign_widened_full_execution[suffix]:
      `~block_is_terminated b` by (drule_all unwrap_value_open >> simp[]) >>
      irule compile_assign_memory_relayout_open >>
      goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
-     simp[]) >>
+     simp[])) >> simp[venomInstTheory.mk_inst_def]) >>
   suspend "pure"
 QED
 
@@ -378,10 +389,22 @@ Resume annassign_widened_full_execution[pure]:
   gen_tac >> disch_tac >> conj_tac >- first_assum MATCH_ACCEPT_TAC >>
   `out with gas_obs := [] = out` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
-  simp_tac (srw_ss()) [] >>
-  qpat_x_assum `!H. valid_horizon cx st0 H out.storage_trace ==> _` drule >>
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H out.storage_trace ==> _` drule >>
   simp[ADD_COMM] >> strip_tac >>
-  pop_assum mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+  `return_buf_sep d ce out u` by
+    (`MAP FDOM (sc::rest) = MAP FDOM es.scopes` by
+       (qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
+          (qspec_then `[]` (mp_tac o SRULE [])) >>
+        strip_tac >> drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+     irule annassign_memory_return_buf_sep >>
+     qpat_assum `FLOOKUP ce.ce_vars id = SOME _` (irule_at Any) >>
+     qpat_assum `FLOOKUP u.vs_allocas _ = SOME (w2n w,_)` (irule_at Any) >>
+     qexistsl_tac [`st0`,`sc`,`sa`,`s0`,`rest`,`old`,`func`,`es`,`<|assignable := T; type := tyv; value := x; popped := []|>`,`cx`,`ctx`] >>
+     simp[Abbr `out`] >> metis_tac[]) >>
+  simp[ADD_COMM,return_buf_sep_gas_obs] >>
+  qpat_assum `!aid off len i. _ ==> i IN tn0.t_mem`
+    (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
   metis_tac[ADD_COMM])
 QED
 

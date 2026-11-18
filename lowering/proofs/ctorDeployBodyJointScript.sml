@@ -685,7 +685,7 @@ Proof
   disch_then (qspecl_then [`initial_state am []`, `sa`, `sb`, `shadow_sa`,
     `shadow_sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
   impl_tac
-  >- (simp[ret_pc_ok_def, return_buf_frame_def] >> rpt conj_tac
+  >- (simp[ret_pc_ok_def, return_buf_frame_def, return_buf_sep_def] >> rpt conj_tac
       >- metis_tac[deploy_dead_lo_ok]
       >- fs[return_buf_frame_def]
       >- (rpt strip_tac >>

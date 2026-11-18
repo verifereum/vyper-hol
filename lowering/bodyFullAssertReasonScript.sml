@@ -88,6 +88,11 @@ Proof
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `t1`, `op`, `s0`,
     `G0`, `tn0`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        mp_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
   strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ condQ condR` >>
   rewrite_tac[eval_assert_reason_bind] >>
@@ -190,8 +195,15 @@ Resume compile_assert_reason_frag_full_from_raise[true]:
        (mp_then Any mp_tac expr_post_alloca_frame) >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then ACCEPT_TAC) >>
+  `return_buf_sep d cenv (mid with gas_obs := []) (jump_to sb.cs_current_bb t)` by
+    (simp[return_buf_sep_jump, return_buf_sep_gas_obs] >>
+     irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+     conj_tac >- fs[] >>
+     qexistsl_tac [`H`, `ctx`, `cx`, `es`, `func`, `s0`, `sa`] >>
+     fs[expr_post_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   gvs[ghost_kept_at_def] >>
   drule_all assert_reason_true_post_full >> strip_tac >>
+  fs[return_buf_sep_gas_obs] >>
   rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC,
          irule alloca_frame_same_state >> qexists_tac `t` >>
@@ -254,6 +266,27 @@ Resume compile_assert_reason_frag_full_from_raise[entry]:
      match_mp_tac assert_reason_false_entry_full >>
      goal_assum (drule_at Any) >> simp[] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!tail. bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+      (INL (BoolV F), mid with gas_obs := tail)` by fs[] >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+     es.storage_trace` by
+    (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+       (irule storage_trace_frame_bind_all >>
+        simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+     qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule_all storage_trace_frame_prefix >> strip_tac >>
+     fs[] >> metis_tac[valid_horizon_append]) >>
+  `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
+  `return_buf_sep d cenv mid (jump_to entry.cs_current_bb t)` by
+    (simp[return_buf_sep_jump] >>
+     irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+     conj_tac >- fs[] >>
+     qexistsl_tac [`storage_trace_horizon mid.storage_trace`, `ctx`, `cx`,
+                   `es`, `func`, `s0`, `sa`] >>
+     fs[expr_post_def, locals_kept_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
   pop_assum SUBST_ALL_TAC >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _ /\ _ /\ local_ptrs_reserved _ _ /\ _`

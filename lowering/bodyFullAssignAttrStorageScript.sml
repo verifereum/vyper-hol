@@ -1,7 +1,7 @@
 (* Direct joint execution of a word-field assignment. *)
 Theory bodyFullAssignAttrStorage
 Ancestors
-  bodyFullAssignAttrStorageAddress bodyFullAssignAttrStorageStore augAssignFullStore
+  bodyFullShared bodyFullAssignAttrStorageAddress bodyFullAssignAttrStorageStore augAssignFullStore
   bodyFullUnwrapWord bodyFullHashKeccakFixed bodySimFull gasOutcomeFullCompose gasOutcomeFull
   stmtSimAssignAttrStorage stmtSimAssignStorage stmtSimForced assignTuplePtrStorage
   stmtSimProps stmtSimDefs bodyMemoryDefs bodyPtrDefs
@@ -95,7 +95,12 @@ Proof
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`, `vv`,
                            `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  disch_then (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        assume_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   rewrite_tac[eval_assign_attr_toplevel_action] >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
@@ -359,12 +364,14 @@ Resume compile_assign_attr_storage_full[continue]:
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ _`
        (qspec_then `H` assume_tac) >>
      metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
-  conj_tac
-  >- (qunabbrev_tac `stored_state` >> qunabbrev_tac `tnf` >> qunabbrev_tac `u` >>
-      qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) [] (OK z,Gu,tu)` mp_tac >>
-      qpat_assum `gas_origin_ptr_path _ (z,Gu,tu) [] _` mp_tac >>
-      rpt (pop_assum kall_tac) >> rpt strip_tac >>
-      metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+  `gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (t,G1,tn1) [] (OK stored_state,Gu,tnf)` by
+    (qunabbrev_tac `stored_state` >> qunabbrev_tac `tnf` >> qunabbrev_tac `u` >>
+     qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) [] (OK z,Gu,tu)` mp_tac >>
+     qpat_assum `gas_origin_ptr_path _ (z,Gu,tu) [] _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   `tnf.t_mem = tu.t_mem` by
     (simp[Abbr `tnf`] >> irule (cj 1 clean_storage_step_taint_ptr) >>
      Cases_on `tr` >> simp[Abbr `u`, tstore_def, sstore_def] >>
@@ -374,7 +381,31 @@ Resume compile_assign_attr_storage_full[continue]:
   `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
     (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
        (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
+     simp[]) >>
+  `return_buf_frame d cenv sm t` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> vv_post H ctx func cenv cx e es sa sm s0 mid tv vv t /\ _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     irule return_buf_frame_frame >> qexistsl_tac [`cenv`,`s0`,`sa`] >>
+     fs[vv_post_def]) >>
+  `!bw capacity. d = SOME (bw, capacity) ==>
+     allocas_from (w2n bw + capacity) t` by fs[] >>
+  `!bw capacity. d = SOME (bw, capacity) ==>
+     allocas_from (w2n bw + capacity) stored_state` by
+    (qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) [] (OK stored_state,Gu,tnf)` (fn path =>
+       qpat_assum `return_buf_frame d cenv sm t` (fn frame =>
+         qpat_assum `!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) t` (fn floor =>
+           mp_tac (MATCH_MP return_buf_allocas_suffix (LIST_CONJ [path,frame,floor]))))) >>
+     simp[]) >>
+  `return_buf_sep d cenv ff stored_state` by
+    (irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+     conj_tac >- fs[] >>
+     qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`, `cx`,
+                   `es`, `func`, `s0`, `sa`] >>
+     simp[] >>
+     simp[Abbr `stored_state`, Abbr `u`] >> Cases_on `tr` >>
+     fs[expr_post_def, tstore_def, sstore_def, lookup_var_def]) >>
+  pop_assum (fn th => PURE_REWRITE_TAC [th, AND_CLAUSES]) >>
   `alloca_frame cenv es sa s0 cenv ff stored_state` by
     (irule alloca_frame_same_state >> qexists_tac `z` >> rpt conj_tac
      >~ [`alloca_frame`]
