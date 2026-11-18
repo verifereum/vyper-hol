@@ -14,7 +14,8 @@ Ancestors ptrDiscipline[qualified,ignore_grammar]
   exprReasonOperand haltExitProj typedMemoryCopy
   logStoreDataOriginPtr annassignRelayoutSource bodyFullPathHistory
   wideningZeroLayout exprSimHyps exprSimSend aggregateEvaluatedLayout vyperTypeSystem context compileEnv
-  exprLowering vyperInterpreter vyperState vyperAST vyperStorageTrace fragExec list
+  exprLowering vyperInterpreter vyperTypeEvalProofs vyperState vyperAST
+  vyperStorageTrace fragExec list
   ctorDeployLoweringFrameSupport[qualified]
 
 val _ = Parse.hide "body";
@@ -1072,7 +1073,7 @@ Proof
   `IS_SOME (FLOOKUP tenv.fn_sigs (NONE,name))` by
     (qpat_x_assum `well_typed_expr _ (Call _ _ _ _)` mp_tac >>
      simp[Once well_typed_expr_def] >> metis_tac[optionTheory.IS_SOME_DEF]) >>
-  drule_all vyperTypeEvalSoundnessTheory.callable_body_typing_from_env_consistent >>
+  drule_all vyperTypeEvalProofsTheory.callable_body_typing_from_env_consistent >>
   strip_tac >>
   `tenv.type_defs = get_tenv cx` by
     gvs[vyperTypeInvariantsTheory.env_consistent_def,
@@ -1203,7 +1204,7 @@ Proof
     metis_tac[intcall_args_defaults_inv] >>
   `call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
      (int_calls_exprs (DROP k dflts))` by
-    metis_tac[vyperTypeEvalSoundnessTheory.intcall_call_evaluation_safe_needed_defaults] >>
+    metis_tac[vyperTypeEvalProofsTheory.intcall_call_evaluation_safe_needed_defaults] >>
   `supported_pure_exprs tops dflts` by
     (drule_all supportedProgramTheory.supported_program_declaration >>
      simp[supportedProgramTheory.supported_declaration_body_def]) >>
