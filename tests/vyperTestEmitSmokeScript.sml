@@ -1,6 +1,7 @@
 (* Same JSON inputs for the standalone decoder and kernel-checked replay. *)
 Theory vyperTestEmitSmoke
 Ancestors
+  vyperSmallStepCV
   vyperTestRunner cv
 Libs
   vyperJsonReplayLib cv_transLib cv_repLib cv_miscLib cv_computeLib

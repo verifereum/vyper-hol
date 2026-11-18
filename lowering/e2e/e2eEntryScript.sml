@@ -131,7 +131,12 @@ Theorem entry_venom_state_source_environment:
   venom_env_rel tx (entry_venom_state prog cp es)
 Proof
   rw[call_state_rel_def, tx_block_fields_rel_def] >>
-  simp[venom_env_rel_def, call_ctx_rel_def, entry_venom_state_def]
+  simp[venom_env_rel_def, call_ctx_rel_def, entry_venom_state_def] >>
+  gen_tac >>
+  Cases_on `n < tx.block_number /\ tx.block_number <= n + 256` >> gvs[] >>
+  `tx.block_number - (n + 1) < 256` by decide_tac >>
+  simp[listTheory.EL_TAKE, listTheory.LENGTH_TAKE_EQ] >>
+  rw[] >> gvs[] >> decide_tac
 QED
 
 (* Creation status is read from transaction-original accounts, not a saved
@@ -161,4 +166,35 @@ Proof
       entry_venom_state_fresh, entry_venom_state_frame_fields,
       entry_venom_state_created_in_tx,
       asm_pc_to_offset_zero, context_memory_rel_def]
+QED
+
+(* es's entry state with prog's code and labels: prog's code followed by
+   the section es's code has after prog'. *)
+Definition opt_entry_state_def:
+  opt_entry_state prog prog' cplan es =
+    entry_venom_state prog cplan es with
+      <| vs_code := assemble prog ++
+           DROP (LENGTH (assemble prog')) (FST (HD es.contexts)).msgParams.code;
+         vs_data_section :=
+           DROP (LENGTH (assemble prog')) (FST (HD es.contexts)).msgParams.code |>
+End
+
+(* ADMISSION: at the identity finalizer the optimized entry state is the
+   entry state.  Waits for its proof. *)
+Theorem opt_entry_state_identity:
+  !tops am tx prog cp es.
+    call_state_rel tops (assemble prog) am tx es ==>
+    opt_entry_state prog prog cp es = entry_venom_state prog cp es
+Proof
+  cheat
+QED
+
+(* ADMISSION: at the identity finalizer the entry state's code is the
+   transaction's.  Waits for its proof. *)
+Theorem opt_entry_txp_identity:
+  !tops am tx prog cp es.
+    call_state_rel tops (assemble prog) am tx es ==>
+    tx with code := (opt_entry_state prog prog cp es).vs_code = tx
+Proof
+  cheat
 QED

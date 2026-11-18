@@ -16,8 +16,8 @@ Ancestors
 
 Theorem gas_readings_rel_mono:
   !readings P Q.
-    gas_readings_rel readings P T /\ (!gs. P gs ==> Q gs) ==>
-    gas_readings_rel readings Q T
+    gas_readings_rel readings P /\ (!gs. P gs ==> Q gs) ==>
+    gas_readings_rel readings Q
 Proof
   rw[gas_readings_rel_def] >> metis_tac[]
 QED
@@ -33,9 +33,9 @@ QED
 
 Theorem source_exempt_call_result_rel:
   source_exempt tops (call_external (SOME (MAP SND (call_trace es))) gobs am tx) ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
-  simp[source_exempt_def, call_result_rel_at_def, call_success_rel_def, exception_outcome_rel_def, LET_THM] >>
+  simp[source_exempt_def, call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM] >>
   Cases_on `call_external (SOME (MAP SND (call_trace es))) gobs am tx` >>
   rename1 `call_external _ _ am tx = (res, tail)` >>
   Cases_on `tail` >> Cases_on `res` >> simp[] >>
@@ -147,36 +147,35 @@ Proof
 QED
 
 Theorem accounts_agree_storage_dead_trans:
-  accounts_agree H cx a0 a1 /\
+  accounts_agree H target a0 a1 /\
   (!a. (a1 a with storage := (a2 a).storage) = a2 a) /\
-  (!a. a <> cx.txn.target ==> (a1 a).storage = (a2 a).storage) /\
-  storage_agree (storage_dead H F (a1 cx.txn.target).storage)
-    (a1 cx.txn.target).storage (a2 cx.txn.target).storage ==>
-  accounts_agree H cx a0 a2
+  (!a. a <> target ==> (a1 a).storage = (a2 a).storage) /\
+  storage_agree (storage_dead H F (a1 target).storage)
+    (a1 target).storage (a2 target).storage ==>
+  accounts_agree H target a0 a2
 Proof
   rw[accounts_agree_def] >>
   TRY (irule storage_agree_dead_trans >>
-       qexists_tac `(a1 cx.txn.target).storage` >> gvs[] >> NO_TAC) >>
+       qexists_tac `(a1 target).storage` >> gvs[] >> NO_TAC) >>
   gvs[vfmStateTheory.account_state_component_equality]
 QED
 
 Theorem transient_agree_storage_dead_trans:
-  transient_agree H cx t0 t1 /\
-  (!a. a <> cx.txn.target ==> t1 a = t2 a) /\
-  storage_agree (storage_dead H T (t1 cx.txn.target))
-    (t1 cx.txn.target) (t2 cx.txn.target) ==>
-  transient_agree H cx t0 t2
+  transient_agree H target t0 t1 /\
+  (!a. a <> target ==> t1 a = t2 a) /\
+  storage_agree (storage_dead H T (t1 target))
+    (t1 target) (t2 target) ==>
+  transient_agree H target t0 t2
 Proof
   rw[transient_agree_def] >>
   irule storage_agree_dead_trans >>
-  qexists_tac `t1 cx.txn.target` >> gvs[]
+  qexists_tac `t1 target` >> gvs[]
 QED
 
 Theorem accounts_agree_dead_trans[local]:
-  cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
-  accounts_agree H cx a0 a1 /\
+  accounts_agree H tx.target a0 a1 /\
   accounts_agree_except (external_call_dead H tx (res, am', rqs)) a1 a2 ==>
-  accounts_agree H cx a0 a2
+  accounts_agree H tx.target a0 a2
 Proof
   rw[accounts_agree_except_external_call_dead] >>
   irule accounts_agree_storage_dead_trans >>
@@ -199,10 +198,9 @@ Proof
 QED
 
 Theorem transient_agree_dead_trans[local]:
-  cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
-  transient_agree H cx t0 t1 /\
+  transient_agree H tx.target t0 t1 /\
   transient_agree_except (external_call_dead H tx (res, am', rqs)) t1 t2 ==>
-  transient_agree H cx t0 t2
+  transient_agree H tx.target t0 t2
 Proof
   rw[transient_agree_except_external_call_dead] >>
   irule transient_agree_storage_dead_trans >>
@@ -210,10 +208,9 @@ Proof
 QED
 
 Theorem request_agree_dead_trans:
-  cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
-  request_agree H cx r0 r1 /\
+  request_agree H tx.target r0 r1 /\
   request_agree_except (external_call_dead H tx (res, am', rqs)) r1 r2 ==>
-  request_agree H cx r0 r2
+  request_agree H tx.target r0 r2
 Proof
   rw[request_agree_def, request_agree_except_def]
   >- gvs[extCallOracleTheory.call_request_component_equality]
@@ -244,23 +241,30 @@ Proof
        NO_TAC) >>
   Cases_on `src0` >> TRY (rename1 `INR y` >> Cases_on `y`) >>
   gvs[external_call_result_rel_def, AllCaseEqs()] >>
-  qmatch_goalsub_abbrev_tac `accounts_agree H cx` >>
   `v'.vs_returndata = v.vs_returndata` by
     (irule LIST_EQ >> gvs[external_call_dead_def])
   (* A normal return, then a halt, which has no return-bytes conjunct. *)
   >- (rpt conj_tac
       >- gvs[]
-      >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
+      >- (irule (REWRITE_RULE [external_call_dead_def] accounts_agree_dead_trans) >>
+          qexists_tac `process_deletions v'.vs_pending_deletions v.vs_accounts` >>
+          gvs[external_call_dead_def] >>
           metis_tac[accounts_agree_except_process_deletions])
-      >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
+      >- (irule (REWRITE_RULE [external_call_dead_def] transient_agree_dead_trans) >>
+          gvs[external_call_dead_def] >> metis_tac[]) >>
       gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
-      irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
+      irule (REWRITE_RULE [external_call_dead_def] request_agree_dead_trans) >>
+      gvs[external_call_dead_def] >> metis_tac[]) >>
   rpt conj_tac
-  >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
+  >- (irule (REWRITE_RULE [external_call_dead_def] accounts_agree_dead_trans) >>
+          qexists_tac `process_deletions v'.vs_pending_deletions v.vs_accounts` >>
+          gvs[external_call_dead_def] >>
       metis_tac[accounts_agree_except_process_deletions])
-  >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
+  >- (irule (REWRITE_RULE [external_call_dead_def] transient_agree_dead_trans) >>
+          gvs[external_call_dead_def] >> metis_tac[]) >>
   gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
-  irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]
+  irule (REWRITE_RULE [external_call_dead_def] request_agree_dead_trans) >>
+      gvs[external_call_dead_def] >> metis_tac[]
 QED
 
 Theorem external_call_result_rel_terminal:
@@ -313,22 +317,25 @@ Proof
 QED
 
 Theorem external_call_result_rel_frame_success:
+  external_return_type tops tx.function_name = ret /\
   call_external (SOME (MAP SND (call_trace es))) gobs am tx = (INL v, am', rqs) /\
   external_call_result_rel
     (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs))
     tops ret tx (INL v, am', rqs) (Halt ss) /\
   venom_frame_rel es r es' (Halt ss) ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
     simp[FUN_EQ_THM, log_entry_corresponds_def] >>
   simp[external_call_result_rel_def, venom_frame_rel_def,
-       call_result_rel_at_def, call_success_rel_def, exception_outcome_rel_def, LET_THM] >>
+       call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def,
+       tx_return_bytes_def, LET_THM] >>
   rpt strip_tac >> qexists_tac `ss.vs_returndata` >>
   gvs[logs_correspond_def, LIST_REL_eq]
 QED
 
 Theorem external_call_result_rel_frame_assertion:
+  external_return_type tops tx.function_name = ret /\
   call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR (AssertException s), am', rqs) /\
   external_call_result_rel
@@ -336,14 +343,15 @@ Theorem external_call_result_rel_frame_assertion:
     tops ret tx
     (INR (AssertException s), am', rqs) (Abort a ss) /\
   venom_frame_rel es r es' (Abort a ss) ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
-  rpt strip_tac >> gvs[call_result_rel_at_def, call_success_rel_def, exception_outcome_rel_def, LET_THM] >>
+  rpt strip_tac >> gvs[call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM] >>
   irule venom_frame_rel_assertion >> qexistsl_tac [`a`, `ss`] >>
   simp[] >> Cases_on `a` >> gvs[external_call_result_rel_def]
 QED
 
 Theorem external_call_result_rel_frame_halt:
+  external_return_type tops tx.function_name = ret /\
   call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR HaltException, am', rqs) /\
   external_call_result_rel
@@ -351,12 +359,12 @@ Theorem external_call_result_rel_frame_halt:
     tops ret tx
     (INR HaltException, am', rqs) (Halt ss) /\
   venom_frame_rel es r es' (Halt ss) ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
     simp[FUN_EQ_THM, log_entry_corresponds_def] >>
   simp[external_call_result_rel_def, venom_frame_rel_def,
-       call_result_rel_at_def, call_success_rel_def, exception_outcome_rel_def, LET_THM] >>
+       call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM] >>
   rpt strip_tac >> gvs[logs_correspond_def, LIST_REL_eq]
 QED
 
@@ -364,23 +372,24 @@ Theorem external_call_result_rel_frame_runtime:
   call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR (Error (RuntimeError m)), am', rqs) /\
   venom_frame_rel es r es' (Abort a ss) ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   rpt strip_tac >> drule venom_frame_rel_abort_failure >>
-  simp[call_result_rel_at_def, call_success_rel_def, exception_outcome_rel_def, LET_THM]
+  simp[call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM]
 QED
 
 Theorem external_call_result_rel_frame_error:
+  external_return_type tops tx.function_name = ret /\
   call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR (Error e), am', rqs) /\
   external_call_result_rel
     (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs))
     tops ret tx (INR (Error e), am', rqs) res /\
   venom_frame_rel es r es' res ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   rpt strip_tac >> Cases_on `e` >> Cases_on `res` >>
-  gvs[external_call_result_rel_def, call_result_rel_at_def, call_success_rel_def, exception_outcome_rel_def, LET_THM,
+  gvs[external_call_result_rel_def, call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM,
       AllCaseEqs()] >>
   FIRST [gvs[venom_frame_rel_def] >> NO_TAC,
          drule venom_frame_rel_abort_failure >> simp[]]
@@ -390,12 +399,13 @@ QED
  * A Halt paired with Error can only be the deliberately exempt decoder case.
  *)
 Theorem external_call_result_rel_frame:
+  external_return_type tops tx.function_name = ret /\
   external_call_result_rel
     (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs))
     tops ret tx
     (call_external (SOME (MAP SND (call_trace es))) gobs am tx) res /\
   venom_frame_rel es r es' res ==>
-  call_result_rel_at gobs tops ret am tx es r es'
+  call_result_rel_at gobs tops am tx es r es'
 Proof
   rpt strip_tac >>
   Cases_on `call_external (SOME (MAP SND (call_trace es))) gobs am tx` >>
