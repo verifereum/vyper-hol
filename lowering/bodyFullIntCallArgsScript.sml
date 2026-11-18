@@ -2736,7 +2736,10 @@ Proof
      rpt gen_tac >> eq_tac >> strip_tac >>
      qexistsl_tac [`entry`,`p`,`w`] >> simp[] >>
      `not_fresh_at ci p` by
-       (fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
+       (qpat_assum `local_ptrs_reserved cenv ci`
+          (qspecl_then [`n`,`n`,`p`,`sz`,`sz`] mp_tac o hd o tl o CONJUNCTS o
+           REWRITE_RULE [loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+        simp[]) >>
      qpat_assum `!x. not_fresh_at ci x ==> lookup_var x at = lookup_var x t /\ _`
        drule >> simp[]) >>
   `!sn H. ci.cs_next_id <= sn.cs_next_id /\
@@ -4637,5 +4640,49 @@ Theorem intcall_args_full:
         (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
         (es0, s0, G0, tn0) Q R
 Proof
-  cheat
+  rpt strip_tac >>
+  `get_module_code cx NONE = SOME tops` by gvs[bodySimTheory.body_inv_def] >>
+  `call_evaluation_safe cx ((NONE,name)::int_calls_exprs es)` by
+    (qpat_assum `expr_body_pre _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE
+         [expr_body_pre_def, vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+     first_assum ACCEPT_TAC) >>
+  drule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_target_not_mem >>
+  strip_tac >>
+  `LENGTH args - LENGTH es <= LENGTH dflts` by decide_tac >>
+  `eval_expr cx (Call ann (IntCall (NONE,name)) es dflt) =
+   bind (eval_exprs cx es) (\vs.
+     bind get_scopes (\prev.
+       bind (finally
+         (ignore_bind (set_scopes [FEMPTY])
+           (eval_exprs (cx with stk updated_by CONS (NONE,name))
+             (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)))
+         (set_scopes prev)) (\dvs.
+       bind (lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dvs))
+                "IntCall bind_arguments") (\penv.
+       bind (lift_option_type (evaluate_type (get_tenv cx) ret)
+                "IntCall eval ret") (\rtv.
+       ignore_bind (lock_if_nr cx nr (is_view_mut mut))
+         (bind (push_function (NONE,name) penv cx) (\cxf.
+          bind (finally_unless_halt
+            (finally
+              (try (ignore_bind (eval_stmts cxf ss) (return NoneV)) handle_function)
+              (pop_function prev))
+            (unlock_if_nr cx nr (is_view_mut mut))) (\rv.
+          bind (lift_option_type (safe_cast rtv rv) "IntCall cast ret")
+               (\crv. return (Value crv))))))))))` by
+    simp[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
+         ignore_bind_def, bind_apply, return_def, FUN_EQ_THM] >>
+  qpat_x_assum `eval_expr _ _ = _` SUBST_ALL_TAC >>
+  pure_rewrite_tac[bind_assoc] >>
+  qpat_x_assum `gas_admissible _ P es0`
+    (assume_tac o PURE_REWRITE_RULE [bind_assoc]) >>
+  `body_exprs_full_ok cx es` by
+    (qpat_x_assum `~MEM _ _ ==> body_exprs_full_ok _ _` mp_tac >>
+     pure_asm_rewrite_tac[] >> simp[]) >>
+  Cases_on `compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa` >>
+  rename1 `compile_expr _ _ _ sa = (vv,sm)` >>
+  `kc vv sm = (out,sb)` by
+    (qpat_x_assum `comp_bind _ _ sa = _` mp_tac >> simp[comp_bind_def]) >>
+  FAIL_TAC "factored source and compiler continuation"
 QED
