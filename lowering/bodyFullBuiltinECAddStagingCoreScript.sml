@@ -203,7 +203,6 @@ Theorem ecadd_staging_full_from_transfers:
       tnu.t_trans SUBSET (DF H).d_trans u.vs_call_ctx.cc_address
         (u.vs_transient u.vs_call_ctx.cc_address) /\
       (!i. w2n wi <= i /\ i < w2n wi + w2n an ==> i NOTIN tnu.t_mem) /\
-      (addr = 1w ==> !i. w2n wo <= i /\ i < w2n wo + 32 ==> i NOTIN tnu.t_mem) /\
       (!name b sz. local_region cenv es2.scopes u name b sz ==>
         regions_disjoint (w2n wo) (w2n (64w:256 word)) b sz) /\
       (!aid b sz. aid < s2.cs_next_id /\ FLOOKUP u.vs_allocas aid = SOME (b,sz) ==>
@@ -956,55 +955,14 @@ Resume ecadd_staging_full_from_transfers[after_output_ghost]:
 QED
 
 Resume ecadd_staging_full_from_transfers[before_ghost_kept]:
-  `!aid b sz. FLOOKUP t2.vs_allocas aid = SOME (b,sz) ==>
-     b+sz <= t2.vs_alloca_next` by
-    (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ t2`
-       (assume_tac o CONJUNCT2 o MATCH_MP stmt_state_rel_local_ptrs_alloca) >>
-     rpt strip_tac >> drule_all_then ACCEPT_TAC alloca_site_registered_below) >>
-  `local_ptrs_rel func cenv es2.scopes t2` by
-    (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ t2`
-       (ACCEPT_TAC o CONJUNCT1 o MATCH_MP stmt_state_rel_local_ptrs_alloca)) >>
   `ghost_kept_at lo cenv es2 s2 G2 tn2 t2 Gu tnu` by
-    (MATCH_MP_TAC (Q.INST [`Gi` |-> `G2`,`ti` |-> `tn2`,
-       `G` |-> `G2`,`tn` |-> `tn2`,`s0` |-> `t2`]
-       (SPEC_ALL bodyFullUnwrapSlotPostTheory.unwrap_slot_copy_ghost_kept_at)) >>
-     conj_tac >- simp[bodyPtrDefsTheory.ghost_kept_at_def] >>
-     conj_tac >-
-       (gen_tac >> strip_tac >>
-        qpat_assum `!z. not_fresh_at s2 z ==> lookup_var z u = _ /\ _`
-          (qspec_then `x` mp_tac) >> simp[]) >>
-     conj_tac >-
-       (qx_genl_tac [`aid`,`off`,`sz`,`i`] >> strip_tac >>
-        `off+sz <= t2.vs_alloca_next` by
-          (qpat_assum `!aid b sz. FLOOKUP t2.vs_allocas aid = SOME (b,sz) ==> _`
-             (qspecl_then [`aid`,`off`,`sz`] MATCH_MP_TAC) >>
-           first_assum ACCEPT_TAC) >>
-        `i < t2.vs_alloca_next` by decide_tac >>
-        qpat_assum `!i. i < t2.vs_alloca_next /\ i IN tnu.t_mem ==> _`
-          (qspec_then `i` MATCH_MP_TAC) >> simp[]) >>
-     conj_tac >-
-       (qx_genl_tac [`name`,`b`,`sz`,`i`] >> strip_tac >>
-        `i < t2.vs_alloca_next` by
-          (CCONTR_TAC >>
-           `t2.vs_alloca_next <= i` by decide_tac >>
-           `regions_disjoint b sz i 1` by
-             (MATCH_MP_TAC (Q.SPECL [`func`,`cenv`,`es2.scopes`,`t2`,
-                `name`,`b`,`sz`,`i`,`1`]
-                localPtrsPropsTheory.local_ptrs_rel_above_frontier) >>
-              rpt conj_tac >> first_assum ACCEPT_TAC) >>
-           qpat_assum `regions_disjoint b sz i 1`
-             (fn sep => qpat_assum `b <= i`
-               (fn lb => qpat_assum `i < b+sz`
-                 (fn ub => POP_ASSUM_LIST (K all_tac) >>
-                   MAP_EVERY mp_tac [sep,lb,ub]))) >>
-           pure_rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
-           decide_tac) >>
-        qpat_assum `!i. i < t2.vs_alloca_next /\ i IN tnu.t_mem ==> _`
-          (qspec_then `i` MATCH_MP_TAC) >> simp[]) >>
-     rpt strip_tac >>
-     `i < t2.vs_alloca_next` by decide_tac >>
-     qpat_assum `!i. i < t2.vs_alloca_next /\ i IN tnu.t_mem ==> _`
-       (qspec_then `i` MATCH_MP_TAC) >> simp[]) >>
+    (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ t2`
+       (mp_then Any MATCH_MP_TAC ec_staging_ghost_kept_at) >>
+     conj_tac
+     >- (gen_tac >> strip_tac >>
+         qpat_assum `!z. not_fresh_at s2 z ==> lookup_var z u = _ /\ _`
+           (qspec_then `x` mp_tac) >> simp[]) >>
+     first_assum ACCEPT_TAC) >>
   suspend "after_ghost_kept"
 QED
 
