@@ -41,18 +41,17 @@ val check_placed_fetch =
   PURE_ONCE_REWRITE_TAC [asm_inst_case_def] >> BETA_TAC >> select_emit_arm
 
 Theorem placed_static_emit_rows:
-let Flow =
-  \p pc height tag boolean (x:num#num) (y:num#num).
-  let hi = height x; hj = height y; ins = EL (pc x) p in
-  let inherit =
-    \(src:num -> num option)
+!Flow. Flow =
+  (\p pc height tag boolean (x:num#num) (y:num#num).
+  !hi. hi = height x ==> !hj. hj = height y ==> !ins. ins = EL (pc x) p ==>
+  !inherit. inherit =
+    (\(src:num -> num option)
       (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-  in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
   case ins of
     AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
   | AsmPush bs =>
@@ -82,7 +81,7 @@ let Flow =
              inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                (\k. NONE) (\k. F)
          | NONE =>
-           let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+           !a. a = asm_op_arity name ==> !m. m = hj + a - hi ==>
            a <= hi /\ hj = m+(hi-a) /\
            ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
            inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -91,17 +90,20 @@ let Flow =
                  asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                    ins t = AsmOK u ==>
                  (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-  | _ => F
-in
-let Reach = \(edge:(num#num)->(num#num)->bool) e x.
-  ?n (path:num->num#num).
-    path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))
-in
-let Rows = \p cc V X (rank:num#num->num) pc height need tag boolean edge.
-  let lo = SND(compute_label_offsets p); invmap = build_offset_to_pc p in
-  let target = \x y.
+  | _ => F) ==>
+!Table. Table =
+  (\p cc f b H V X e (rank:num#num->num) pc height need tag boolean edge.
+  FINITE V /\ X SUBSET V /\ e IN V /\
+  (!x. x IN V ==> FST x=f /\
+    ?n (path:num->num#num).
+      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) /\
+  pc e=b /\ height e=H /\
+  (!x. ~need x) /\ (!x k. ~boolean x k) /\ (!k. tag e k=NONE) /\
+  (!lo. lo = SND(compute_label_offsets p) ==>
+   !invmap. invmap = build_offset_to_pc p ==>
+   !target. target = (\x y.
     ?l origin off. tag x 0 = SOME(l,origin) /\ FLOOKUP lo l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP invmap off = SOME(pc y) in
+      off < dimword(:256) /\ FLOOKUP invmap off = SOME(pc y)) ==>
   (!x. x IN V ==>
     (need x ==> cc.cc_static) /\
     (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
@@ -115,13 +117,13 @@ let Rows = \p cc V X (rank:num#num->num) pc height need tag boolean edge.
     Flow p pc height tag boolean x y) /\
   (!x. x IN V DIFF X ==>
     pc x < LENGTH p /\
-    let h = height x in
-    let fall = \y. pc y = pc x + 1 in
-    let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-    let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-    let next = \n. arm fall n /\ legal fall n in
-    let untagged = \a. !k. k<a ==> tag x k=NONE in
-    let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
+    (!h. h = height x ==>
+     !fall. fall = (\y. pc y = pc x + 1) ==>
+     !arm. arm = (\P n. ?y. edge x y /\ P y /\ height y = n) ==>
+     !legal. legal = (\P n. !y. edge x y ==> P y /\ height y = n) ==>
+     !next. next = (\n. arm fall n /\ legal fall n) ==>
+     !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+     !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
     case EL (pc x) p of
       AsmLabel l => next h
     | AsmPush bs => next (h+1)
@@ -146,17 +148,11 @@ let Rows = \p cc V X (rank:num#num->num) pc height need tag boolean edge.
                  else
                     ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                         untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-    | _ => F)
-in
-let Table = \p cc f b H V X e rank pc height need tag boolean edge.
-  FINITE V /\ X SUBSET V /\ e IN V /\
-  (!x. x IN V ==> FST x=f /\ Reach edge e x) /\ pc e=b /\ height e=H /\
-  (!x. ~need x) /\ (!x k. ~boolean x k) /\ (!k. tag e k=NONE) /\
-  Rows p cc V X rank pc height need tag boolean edge
-in
+    | _ => F)))) ==>
 !p b f cc fmp inst topics ps6 emit ps7 H.
-  let code=execute_plan fmp emit;
-      lo=SND(compute_label_offsets p); invmap=build_offset_to_pc p in
+  !code. code = execute_plan fmp emit ==>
+  !lo. lo = SND(compute_label_offsets p) ==>
+  !invmap. invmap = build_offset_to_pc p ==>
   generate_emit_ops inst topics ps6=(emit,ps7) /\ asm_block_at p b code ==>
   (!nin nout.
     ~is_terminator inst.inst_opcode /\
@@ -186,16 +182,16 @@ in
        Table p cc f b H {e} {} e rank pc height need tag boolean edge /\
        (!x k. tag x k=NONE) /\ (!x y. ~edge x y))
 Proof
-  simp_tac bool_ss[LET_THM] >> rpt gen_tac >> strip_tac >>
+  simp_tac bool_ss[] >> rpt gen_tac >> strip_tac >>
   reverse conj_tac
-  >- (strip_tac >> drule (SIMP_RULE bool_ss[LET_THM] pending_static_emit_rows) >>
+  >- (strip_tac >> drule (SIMP_RULE bool_ss [] pending_static_emit_rows) >>
       disch_then (qspecl_then [`fmp`, `0`, `0`] (mp_tac o CONJUNCT2)) >>
       (impl_tac >- simp[]) >>
       disch_then (qx_choose_then `name` (CONJUNCTS_THEN2 assume_tac
                                            (CONJUNCTS_THEN2 (mk_asm "opcode_case") assume_tac))) >>
       suspend "terminal") >>
   rpt gen_tac >> strip_tac >>
-  drule (SIMP_RULE bool_ss[LET_THM] pending_static_emit_rows) >>
+  drule (SIMP_RULE bool_ss [] pending_static_emit_rows) >>
   disch_then (qspecl_then [`fmp`, `nout`, `nin`] (mp_tac o CONJUNCT1)) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then strip_assume_tac
