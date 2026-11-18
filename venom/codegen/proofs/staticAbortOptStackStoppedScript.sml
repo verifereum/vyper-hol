@@ -17,18 +17,18 @@ Proof
   simp[sym_step_def, sym_step_op_def, dup_table_def, swap_table_def]
 QED
 Theorem literal_stack_visit[local]:
-  let p = pre ++ pat ++ tail; q = pre ++ repl ++ tail; b = LENGTH pre in
+  !b. b = LENGTH pre ==>
   ((pat = [AsmOp "DUP1"; AsmOp "SWAP2"; AsmOp "SWAP1"] /\
       repl = [AsmOp "SWAP1"; AsmOp "DUP2"]) \/
    (pat = [AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"] /\ repl = []) \/
    (pat = [AsmOp "SWAP1"; AsmOp "POP"; AsmOp "POP"] /\
       repl = [AsmOp "POP"; AsmOp "POP"]) \/
    (pat = [AsmOp "DUP1"; AsmOp "SWAP1"] /\ repl = [AsmOp "DUP1"])) /\
-  u.sym_base.as_pc = b /\ sym_steps p env (LENGTH pat) u = SymOK v ==>
-  sym_steps q env (LENGTH repl) u =
+  u.sym_base.as_pc = b /\ sym_steps (pre ++ pat ++ tail) env (LENGTH pat) u = SymOK v ==>
+  sym_steps (pre ++ repl ++ tail) env (LENGTH repl) u =
     SymOK (sym_with_pc (splice_pc b (LENGTH pat) (LENGTH repl) v.sym_base.as_pc) v)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >> rpt strip_tac >> gvs[] >>
+  CONV_TAC (HO_REWR_CONV UNWIND_FORALL_THM2) >> rpt strip_tac >> gvs[] >>
   qpat_x_assum `sym_steps _ _ _ _ = _` mp_tac >>
   Cases_on `u.sym_stack` >>
   simp[sym_steps_pos, sym_steps_def, EL_APPEND_EQN, literal_stack_dispatch,
@@ -44,12 +44,12 @@ Proof
 QED
 
 Theorem equal_swaps_visit[local]:
-  let p = pre ++ [AsmOp name; AsmOp name] ++ tail; b = LENGTH pre in
+  !b. b = LENGTH pre ==>
   asm_swap_op (AsmOp name) /\ u.sym_base.as_pc = b /\
-  sym_steps p env 2 u = SymOK v ==>
+  sym_steps (pre ++ [AsmOp name; AsmOp name] ++ tail) env 2 u = SymOK v ==>
   u = sym_with_pc (splice_pc b 2 0 v.sym_base.as_pc) v
 Proof
-  rewrite_tac[LET_THM, APPEND] >> BETA_TAC >> strip_tac >>
+  CONV_TAC (HO_REWR_CONV UNWIND_FORALL_THM2) >> rewrite_tac[APPEND] >> strip_tac >>
   `isPREFIX "SWAP" name` by fs[asm_swap_op_def] >>
   Cases_on `ALOOKUP swap_table name`
   >- (drule_all swap_prefix_unknown >> strip_tac >>
@@ -67,11 +67,11 @@ Proof
 QED
 
 Theorem commutative_visit[local]:
-  let p = pre ++ [AsmOp "SWAP1"; AsmOp name] ++ tail;
-      q = pre ++ [AsmOp name] ++ tail; b = LENGTH pre in
+  !b. b = LENGTH pre ==>
   asm_commutative_op (AsmOp name) /\ u.sym_base.as_pc = b /\
-  sym_steps p env 2 u = SymOK v ==>
-  sym_steps q env 1 u = SymOK (sym_with_pc (splice_pc b 2 1 v.sym_base.as_pc) v)
+  sym_steps (pre ++ [AsmOp "SWAP1"; AsmOp name] ++ tail) env 2 u = SymOK v ==>
+  sym_steps (pre ++ [AsmOp name] ++ tail) env 1 u =
+    SymOK (sym_with_pc (splice_pc b 2 1 v.sym_base.as_pc) v)
 Proof
   simp[] >> strip_tac >>
   qabbrev_tac `p = pre ++ [AsmOp "SWAP1"; AsmOp name] ++ tail` >>
@@ -159,9 +159,11 @@ QED
 
 Theorem stack_peephole_one_stopped_prefix:
   !pre pat repl tail env s n ss.
-    let p = pre ++ pat ++ tail; q = pre ++ repl ++ tail;
-        b = LENGTH pre; m = LENGTH pat; c = ss.sym_base.as_pc in
-    let r = splice_pc b m (LENGTH repl) in
+    !p. p = pre ++ pat ++ tail ==>
+    !q. q = pre ++ repl ++ tail ==>
+    !b. b = LENGTH pre ==>
+    !m. m = LENGTH pat ==>
+    !c. c = ss.sym_base.as_pc ==>
     ((pat = [AsmOp "DUP1"; AsmOp "SWAP2"; AsmOp "SWAP1"] /\
         repl = [AsmOp "SWAP1"; AsmOp "DUP2"]) \/
      (pat = [AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"] /\ repl = []) \/
@@ -176,9 +178,10 @@ Theorem stack_peephole_one_stopped_prefix:
         sym_steps p env h (sym_init s)=SymOK u /\ u.sym_base.as_pc=b /\
         sym_steps p env (c-b) u=SymOK ss /\ sym_steps q env j (sym_init s)=SymOK u
     else
-      ?j. sym_steps q env j (sym_init s)=SymOK (sym_with_pc (r c) ss)
+      ?j. sym_steps q env j (sym_init s)=SymOK (sym_with_pc (splice_pc b m (LENGTH repl) c) ss)
 Proof
-  rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
+  rpt gen_tac >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "rewrite") strip_assume_tac) >>
   qabbrev_tac `p = pre ++ pat ++ tail` >> qabbrev_tac `q = pre ++ repl ++ tail` >>
   `2 <= LENGTH pat /\

@@ -17,10 +17,13 @@ QED
 
 Theorem stack_peephole_one_layout:
   !pre pat repl tail.
-    let p = pre ++ pat ++ tail; q = pre ++ repl ++ tail;
-        b = LENGTH pre; m = LENGTH pat; n = LENGTH repl in
-    let f = splice_pc b m n in
-    let Retained = \i. i < b \/ b+m <= i in
+    !p. p = pre ++ pat ++ tail ==>
+    !q. q = pre ++ repl ++ tail ==>
+    !b. b = LENGTH pre ==>
+    !m. m = LENGTH pat ==>
+    !n. n = LENGTH repl ==>
+    !f. f = splice_pc b m n ==>
+    !Retained. Retained = (\i. i < b \/ b+m <= i) ==>
     ((pat = [AsmOp "DUP1"; AsmOp "SWAP2"; AsmOp "SWAP1"] /\
         repl = [AsmOp "SWAP1"; AsmOp "DUP2"]) \/
      (pat = [AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"] /\ repl = []) \/
@@ -49,7 +52,8 @@ Theorem stack_peephole_one_layout:
     f b = b /\ f (b+m) = b+n /\
     (!i. i < LENGTH p /\ Retained i ==> f (i+1) = f i + 1)
 Proof
-  rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
+  rpt gen_tac >> BETA_TAC >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "rule") assume_tac) >>
   `asm_splice_ok pat repl /\ 0 < LENGTH pat /\
    (!a. MEM a (pat ++ repl) ==> ?name. a = AsmOp name)` by suspend "window" >>
