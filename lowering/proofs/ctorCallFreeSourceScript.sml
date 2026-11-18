@@ -1,5 +1,5 @@
 (* Source-side boundary for the constructor's call-free lowering proof.
- * TOP-LEVEL: classified_constructor_call_free_source.
+ * TOP-LEVEL: named_constructor_call_free_source, classified_constructor_call_free_source.
  * Helpers: constant substitution keeps a constructor body free of calls
  * when the substituted constants are (constant_expr has no Call case).
  *)
@@ -161,19 +161,17 @@ Proof
   metis_tac[type_stmt_raw_shape]
 QED
 
-Theorem classified_constructor_call_free_source:
-  !tops rpolicy runtime_bc dunit am tx exts ints fb
-   mut nr rr fname args defaults ret ctor_body.
-    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
+(* The constructor body is call- and shape-free whenever the source names
+   it __init__; lowering a deploy unit is one way to know that. *)
+Theorem named_constructor_call_free_source:
+  !tops am tx mut nr rr args defaults ret ctor_body.
     constructor_call_free tops /\ deploy_typing_ok tops am tx /\
-    classify_functions tops =
-      (exts, ints, fb, SOME (mut,nr,rr,fname,args,defaults,ret,ctor_body)) ==>
+    SND (SND (SND (classify_functions tops))) =
+      SOME (mut,nr,rr,"__init__",args,defaults,ret,ctor_body) ==>
     ~supported_stmts_expr_exists expr_call_root ctor_body /\
     ~supported_stmts_expr_exists expr_shape_root ctor_body
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all lower_vyper_deploy_unit_ctor_named_init >>
-  simp[ctor_named_init_def] >> strip_tac >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
     classify_functions_ctor_lookup >>
   simp[subst_consts_fn_def] >> strip_tac >>
@@ -191,4 +189,21 @@ Proof
   rpt strip_tac >>
   drule checked_module_consts_env_replacement_shape >> simp[] >>
   qexistsl [`r`, `id`] >> simp[]
+QED
+
+Theorem classified_constructor_call_free_source:
+  !tops rpolicy runtime_bc dunit am tx exts ints fb
+   mut nr rr fname args defaults ret ctor_body.
+    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
+    constructor_call_free tops /\ deploy_typing_ok tops am tx /\
+    classify_functions tops =
+      (exts, ints, fb, SOME (mut,nr,rr,fname,args,defaults,ret,ctor_body)) ==>
+    ~supported_stmts_expr_exists expr_call_root ctor_body /\
+    ~supported_stmts_expr_exists expr_shape_root ctor_body
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lower_vyper_deploy_unit_ctor_named_init >>
+  simp[ctor_named_init_def] >> strip_tac >> gvs[] >>
+  qspecl_then [`tops`, `am`, `tx`, `mut`, `nr`, `rr`, `args`, `defaults`, `ret`,
+    `ctor_body`] mp_tac named_constructor_call_free_source >> simp[]
 QED

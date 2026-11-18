@@ -76,7 +76,10 @@ Proof
       Cases_on `ann` >> simp[is_int_type_def, is_word_type_def,
         is_numeric_type_def, is_bool_type_def, is_flag_type_def] >>
       rename1 `BaseT bt` >> Cases_on `bt` >>
-      simp[is_int_type_def, is_word_type_def, is_bool_type_def] >> metis_tac[])
+      simp[is_int_type_def, is_word_type_def, is_bool_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      simp[is_word_type_def, well_formed_type_def, evaluate_type_def,
+           AllCaseEqs()] >> metis_tac[])
   >- (Cases_on `e` >> simp[env_item_type_def, is_word_type_def])
   >> Cases_on `a` >> gvs[account_item_type_def, is_word_type_def]
 QED

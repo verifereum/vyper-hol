@@ -125,13 +125,6 @@ val excluded_test_names = [
   (* Compiles with unbounded (INF-length) types, which are not modelled;
      stays excluded *)
   "test_json_abi_bytes_slice",
-  (* raw_create evaluates value= after the positional args (source order);
-     the interpreter evaluates it first. Back with the CREATE semantics
-     change. *)
-  "test_raw_create_eval_order",
-  (* create_from_blueprint must revert on a code_offset that wraps; the
-     interpreter doesn't revert. Back with the CREATE semantics change. *)
-  "test_create_from_blueprint_bad_code_offset",
   (* Out-of-gas test - we don't model gas *)
   "test_ecrecover_oog_handling"
 ]

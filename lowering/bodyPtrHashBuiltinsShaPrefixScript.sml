@@ -143,7 +143,8 @@ Theorem hash_bytes_prepare_frame:
   (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s) /\
   (!z. len_op = Var z \/ data_op = Var z ==> not_fresh_at sm z) /\
   sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
-  sm.cs_next_var = sa.cs_next_var+2 /\ sm.cs_next_id = sa.cs_next_id+2
+  sm.cs_next_var = sa.cs_next_var+2 /\ sm.cs_next_id = sa.cs_next_id+2 /\
+  tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans
 Proof
   rpt gen_tac >> strip_tac >>
   `b < dimword (:256)` by decide_tac >>

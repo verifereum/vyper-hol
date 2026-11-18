@@ -6,7 +6,7 @@ Ancestors decoderNavigationPtr fragGasOriginPtr fragGasSeqPtr fragGasSeqMem frag
   codegenRel emitHelperProps contextCodegenRel exprLoweringProps
   venomExecSemantics venomState venomInst finite_map pred_set words list arithmetic
 
-Theorem decoder_index_header_ptr_core_uniform_origin:
+Theorem decoder_index_header_ptr_core_uniform_origin_frame:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions =
     abi_decode_header_insts id (Var q) src CALLDATALOAD iv cv cmp done body_lbl exit_lbl /\
@@ -41,7 +41,8 @@ Theorem decoder_index_header_ptr_core_uniform_origin:
       !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
         (s,G,tn) [] (OK t,H,u)) /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
-       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!x. ~MEM x [iv;cv;cmp;done] ==> FLOOKUP u.t_var x = FLOOKUP tn.t_var x)
 Proof
   strip_tac >>
   qabbrev_tac `a = update_var iv (n2w j) s` >>
@@ -294,6 +295,8 @@ Proof
         `!D explicit. gas_origin_ptr_path _ (d with vs_inst_idx := 4,H4,u4) [] _`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      metis_tac[gas_origin_ptr_path_append, APPEND]) >>
+  `!x. ~MEM x [iv;cv;cmp;done] ==> FLOOKUP u4.t_var x = FLOOKUP tn.t_var x` by
+    simp[FLOOKUP_UPDATE] >>
   qexistsl_tac [`H4`,`u4`,`t`] >> simp[] >>
   rpt strip_tac >>
   rpt (qpat_x_assum `slot + 32 <= s.vs_alloca_next ==> _` kall_tac) >>
@@ -380,6 +383,48 @@ Proof
   simp[Once ptr_safe_blocks_def] >>
   gvs[ptr_safe_run_def, Abbr `gg`, jump_to_def] >>
   qpat_x_assum `!fuel. option_CASE _ _ _` (qspec_then `n` mp_tac) >> simp[]
+QED
+
+Theorem decoder_index_header_ptr_core_uniform_origin:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions =
+    abi_decode_header_insts id (Var q) src CALLDATALOAD iv cv cmp done body_lbl exit_lbl /\
+  s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  ALL_DISTINCT [q;iv;cv;cmp;done] /\ src <> Var iv /\
+  ptr_covers G tn q s 32 /\ lookup_var q s = SOME (n2w slot) /\
+  slot + 32 < dimword (:256) /\ mload slot s = n2w j /\
+  DISJOINT {a | slot <= a /\ a < slot + 32} tn.t_mem /\
+  eval_operand src s = SOME srcaddr /\ op_taint tn src = {} /\
+  abi_decode_load CALLDATALOAD srcaddr s = n2w ncount /\
+  j <= ncount /\ ncount < dimword (:256) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  lookup_block body_lbl fn.fn_blocks = SOME body_bb /\
+  phi_prefix_length body_bb.bb_instructions = 0 /\
+  lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
+  phi_prefix_length exit_bb.bb_instructions = 0 ==>
+  ?H u t.
+    t = jump_to (if j < ncount then body_lbl else exit_lbl)
+          (abi_decode_header_state iv cv cmp done j ncount s) /\
+    t.vs_allocas = s.vs_allocas /\
+    t.vs_initial_fmp = s.vs_initial_fmp /\ t.vs_fmp = s.vs_fmp /\
+    ptr_covers H u q t 32 /\ mload slot t = n2w j /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+    u.t_imm = tn.t_imm /\
+    (!x. ~MEM x [iv;cv;cmp;done] ==>
+       lookup_var x t = lookup_var x s /\
+       FLOOKUP H x = FLOOKUP G x /\
+       op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!x. MEM x [iv;cv;cmp;done] ==>
+       op_taint u (Var x) = {} /\ op_prov H (Var x) = NONE) /\
+    (slot + 32 <= s.vs_alloca_next ==>
+      !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+        (s,G,tn) [] (OK t,H,u)) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all decoder_index_header_ptr_core_uniform_origin_frame >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`,`t`] >> simp[]
 QED
 
 Theorem decoder_index_header_ptr_core_uniform:

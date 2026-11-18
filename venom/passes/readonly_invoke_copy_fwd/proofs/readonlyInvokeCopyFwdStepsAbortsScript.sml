@@ -61,6 +61,7 @@ QED
 Theorem ricf_create_abort:
   inst.inst_opcode = CREATE /\ inst.inst_operands = [value; off; sz] /\
   s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
+  (s.vs_outcomes = [] <=> t.vs_outcomes = []) /\
   (!op. MEM op inst.inst_operands ==>
     (IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))) /\
   eval_operand sz s = eval_operand sz t /\
@@ -81,6 +82,7 @@ QED
 Theorem ricf_create2_abort:
   inst.inst_opcode = CREATE2 /\ inst.inst_operands = [value; off; sz; salt] /\
   s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
+  (s.vs_outcomes = [] <=> t.vs_outcomes = []) /\
   (!op. MEM op inst.inst_operands ==>
     (IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))) /\
   eval_operand sz s = eval_operand sz t /\

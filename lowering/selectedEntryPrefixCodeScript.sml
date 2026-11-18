@@ -8,12 +8,13 @@ Ancestors selectedBodyCode runtimeExternalPackageCode entryCheckIntervals
   exprOpenTerminals allocaFrontierBound externalEntryChecks runtimeBodyStartDefs
   entryDispatchProps
 
-Theorem source_selected_entry_prefix_code_nr:
+Theorem classified_entry_prefix_code:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ name <> "__default__" /\
+  supported_program tops /\
   ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
-  vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,nr,args,[],ret,fbody) /\
+  MEM (subst_consts_fn (module_consts_env tops [])
+    (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,
+     name,args,([] : expr list),ret,fbody)) (FST (classify_functions tops)) /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   fn_entry_label efn = SOME elbl /\
   set_external_package_target rpolicy.rpol_target
@@ -41,7 +42,6 @@ Theorem source_selected_entry_prefix_code_nr:
     de.cs_next_var <= opened.cs_next_var
 Proof
   strip_tac >>
-  drule_all lookup_function_external_raw_member >> strip_tac >>
   drule_all source_runtime_external_packages >> strip_tac >>
   `MEM (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,pbody,rt) extpkgs` by
     (qpat_x_assum `set_external_package_target _ _ = _` (SUBST1_TAC o SYM) >>
@@ -114,6 +114,43 @@ Proof
   strip_tac >> gvs[block_is_terminated_def]
 QED
 
+Theorem source_selected_entry_prefix_code_nr:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ name <> "__default__" /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
+  vyperInterpreter$lookup_function NONE name External tops =
+    SOME (mut,nr,args,[],ret,fbody) /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  fn_entry_label efn = SOME elbl /\
+  set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops T (K global_nonreentrant_slot)
+      (subst_consts_fn (module_consts_env tops [])
+        (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,
+         name,args,([] : expr list),ret,fbody))) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,pbody,rt) ==>
+  ?fb ds de opened st cenv sa st'.
+    runtime_selected_body_start tops rpolicy
+      (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,pbody,rt) st /\
+    compile_selector_dispatch_linear
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops))))
+      fb ds = ((),de) /\
+    compile_entry_checks min_cds is_payable opened = ((),st) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+    compile_guarded_body cenv nr nkey ut' iv pbody rt sa = ((),st') /\
+    fn_has_code ds de efn /\ fn_has_code opened st efn /\
+    fn_has_code st sa efn /\ fn_has_code sa st' efn /\
+    ds.cs_current_bb = elbl /\ ds.cs_current_insts = [] /\ ds.cs_next_var = 0 /\
+    opened.cs_current_bb = lbl /\ opened.cs_current_insts = [] /\
+    ~block_is_terminated opened /\
+    shape_state opened /\ shape_state st /\ shape_state sa /\
+    de.cs_next_var <= opened.cs_next_var
+Proof
+  strip_tac >>
+  drule_all lookup_function_external_raw_member >> strip_tac >>
+  drule_all_then ACCEPT_TAC classified_entry_prefix_code
+QED
+
 Theorem source_selected_entry_prefix_code:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ name <> "__default__" /\
@@ -179,6 +216,52 @@ Proof
     venomFnInstsProofsTheory.fn_insts_blocks_map_id]
 QED
 
+Theorem classified_entry_prefix_structure:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
+  MEM (subst_consts_fn (module_consts_env tops [])
+    (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,
+     name,args,([] : expr list),ret,fbody)) (FST (classify_functions tops)) /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  fn_entry_label efn = SOME elbl /\
+  set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops T (K global_nonreentrant_slot)
+      (subst_consts_fn (module_consts_env tops [])
+        (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,
+         name,args,([] : expr list),ret,fbody))) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,pbody,rt) ==>
+  ?fb ds de opened st cenv sa st'.
+    runtime_selected_body_start tops rpolicy
+      (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,pbody,rt) st /\
+    compile_selector_dispatch_linear
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops))))
+      fb ds = ((),de) /\
+    compile_entry_checks min_cds is_payable opened = ((),st) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+    compile_guarded_body cenv nr nkey ut' iv pbody rt sa = ((),st') /\
+    fn_has_code ds de efn /\ fn_has_code opened st efn /\
+    fn_has_code st sa efn /\ fn_has_code sa st' efn /\
+    ds.cs_current_bb = elbl /\ ds.cs_current_insts = [] /\ ds.cs_next_var = 0 /\
+    opened.cs_current_bb = lbl /\ opened.cs_current_insts = [] /\
+    ~block_is_terminated opened /\
+    shape_state opened /\ shape_state st /\ shape_state sa /\
+    de.cs_next_var <= opened.cs_next_var /\
+    local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
+    cenv.ce_return_buf = NONE /\ fn_inst_ids_distinct efn
+Proof
+  strip_tac >> drule_all classified_entry_prefix_code >> strip_tac >>
+  qpat_assum `set_external_package_target _ _ = _`
+    (assume_tac o REWRITE_RULE [constSubstTheory.subst_consts_fn_def, MAP]) >>
+  drule_all target_external_registration_locals >> strip_tac >>
+  drule_all compile_entry_checks_open >> strip_tac >>
+  drule_all compile_register_positional_args_open >> strip_tac >>
+  drule lookup_function_MEM >> strip_tac >>
+  drule_all lowered_runtime_function_inst_ids_distinct >> strip_tac >>
+  qexistsl_tac [`fb`, `ds`, `de`, `opened`, `st`, `cenv`, `sa`, `st'`] >> simp[]
+QED
+
 Theorem source_selected_entry_prefix_structure_nr:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ name <> "__default__" /\
@@ -213,15 +296,9 @@ Theorem source_selected_entry_prefix_structure_nr:
     local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
     cenv.ce_return_buf = NONE /\ fn_inst_ids_distinct efn
 Proof
-  strip_tac >> drule_all source_selected_entry_prefix_code_nr >> strip_tac >>
-  qpat_assum `set_external_package_target _ _ = _`
-    (assume_tac o REWRITE_RULE [constSubstTheory.subst_consts_fn_def, MAP]) >>
-  drule_all target_external_registration_locals >> strip_tac >>
-  drule_all compile_entry_checks_open >> strip_tac >>
-  drule_all compile_register_positional_args_open >> strip_tac >>
-  drule lookup_function_MEM >> strip_tac >>
-  drule_all lowered_runtime_function_inst_ids_distinct >> strip_tac >>
-  qexistsl_tac [`fb`, `ds`, `de`, `opened`, `st`, `cenv`, `sa`, `st'`] >> simp[]
+  strip_tac >>
+  drule_all lookup_function_external_raw_member >> strip_tac >>
+  drule_all_then ACCEPT_TAC classified_entry_prefix_structure
 QED
 
 Theorem source_selected_entry_prefix_structure:

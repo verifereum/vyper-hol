@@ -23,7 +23,7 @@ Ancestors
   exprSimUnopProps fragExec gasExemptCert vyperStorageTrace gasOutcomeFull
   vyperStorageFootprint exprSimDefs contextRawReachable unitMemInv
   exprSimExtract32Post bodyFullGhostFrame stmtSimDefs bodyPtrHashBuiltinsGhostCompose
-  bodyFullBopWordLayout bodyFullBopWordOperands bodyFullBopWordSuffix
+  bodyFullBopWordLayout bodyFullBopWordOperands bodyFullBopWordSuffix bodyFullBopWordExtract
   bodyFullBopRestWordCompose exprSimBopRestWordFacts
   gasOutcomeFullCompose exprSimProps exprSimSource exprLoweringProps
   bodyFullBopBytestringCuts bodyFullBopBytestringChild bodyFullBopBytestringPost
@@ -36,23 +36,6 @@ Ancestors
   vyperContext vyperAST vyperInterpreter vyperState vyperValue venomState list
 
 val _ = Parse.hide "body";
-
-val core_exit_transport =
-  disch_then (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
-  simp[Once gas_outcome_full_def] >> qexists_tac `marks`
-  >- (disj1_tac >> metis_tac[])
-  >- (disj2_tac >> disj1_tac >>
-      qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >>
-      asm_rewrite_tac [] >>
-      `res <> INR HaltException` by
-        (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
-         qpat_x_assum `!st st'. eval_expr _ _ st <> _` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         simp[bind_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-         metis_tac[evalNoHaltTheory.read_result_no_halt]) >>
-      rpt strip_tac >> first_x_assum drule >>
-      simp[Abbr `R`, halt_exit_def]) >>
-  disj2_tac >> disj2_tac >> metis_tac[];
 
 (* ===== Leaves ===== *)
 
@@ -185,6 +168,478 @@ QED
    (exprSimOperators' compile_bop_stack), so only the value judgment is
    stated; the vv judgment follows from it. *)
 
+(* in and not in on an array literal of words, which the lowering unrolls
+   to a comparison with each element, so it takes the elements'
+   judgments where e1 evaluates and is read. *)
+Theorem bop_in_literal_word_sim_full:
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+   e1 a t n elems es.
+    (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
+    body_expr_full_ok cx e1 /\
+    ((?s0 tv s1 s2 v s3. eval_expr cx e1 s0 = (INL tv, s1) /\
+                         read_result cx tv s2 = (INL v, s3)) ==>
+     builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+     body_exprs_full_ok cx elems) /\
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env
+      (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems])
+      es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all literal_body_typing >> strip_tac >>
+  drule_all literal_body_evaluate_types >> strip_tac >>
+  `body_exprs_full_ok cx (e1::elems)` by
+    (simp[Once body_exprs_full_ok_def] >> rpt strip_tac >>
+     first_x_assum irule >> simp[builtin_args_length_ok_def] >> metis_tac[]) >>
+  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  simp[] >>
+  `is_ArrayT a` by gvs[vyperASTTheory.is_ArrayT_def] >>
+  drule_all literal_lower_value >> strip_tac >>
+  `wb_args_shape cenv expr_type (e1::elems)` by
+    (irule literal_args_shape >> metis_tac[]) >>
+  drule_all lower_word_args_shape_ready >> strip_tac >>
+  `cs_extends sm sb` by
+    (Cases_on `bop = In` >> gvs[] >>
+     metis_tac[literal_membership_straight, exprSimUnopPropsTheory.straight_fresh_cs_extends]) >>
+  `fn_has_code sa sm func` by
+    metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
+  `!shadow_xs shadow_sm.
+    lower_word_args cenv expr_type (MAP gas_shadow_expr (e1::elems)) shadow_sa =
+      (shadow_xs,shadow_sm) ==> fn_has_code shadow_sa shadow_sm shadow_func` by
+    (rpt strip_tac >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _` mp_tac >>
+     simp[NoAsms, gas_shadow_expr_def, gas_shadow_builtin_def] >>
+     disch_then (mp_then Any strip_assume_tac literal_lower_value) >>
+     qpat_x_assum `(bop = In \/ bop = NotIn) /\ is_ArrayT a ==> _` mp_tac >>
+     simp[] >> strip_tac >>
+     `shadow_sm = sm'` by gvs[] >>
+     `cs_extends sm' shadow_sb` by
+       (Cases_on `bop = In` >> gvs[] >>
+        metis_tac[literal_membership_straight, straight_fresh_cs_extends]) >>
+     irule fn_has_code_mid >>
+     reverse conj_tac
+     >- (qexistsl_tac [`shadow_sb`, `shadow_sa`] >>
+         simp[compileEnvTheory.cs_extends_refl]) >>
+     `!args ss oo ff.
+        lower_word_args cenv expr_type args ss = (oo,ff) ==> cs_extends ss ff` by
+       (Induct >> simp[lower_word_args_nil, compileEnvTheory.cs_extends_refl] >>
+        rpt gen_tac >> simp[lower_word_args_cons] >> rpt strip_tac >>
+        metis_tac[cj 2 compile_expr_grows, compileEnvTheory.cs_extends_trans]) >>
+     metis_tac[]) >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `!e. MEM e (e1::elems) ==> MEM e (e1::elems)` by simp[] >>
+  drule_all (Q.SPEC `e1::elems` bop_in_literal_operands_clean_full_halt) >>
+  disch_then (qspec_then `PG` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ PrefixPost _` >>
+  qpat_x_assum `ann = _` SUBST_ALL_TAC >>
+  qpat_x_assum `a = _` SUBST_ALL_TAC >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  drule_all literal_body_action_flat >> disch_then (fn th => rewrite_tac[th]) >>
+  irule gas_outcome_full_bind_all >> BETA_TAC >>
+  conj_tac >- simp[storage_trace_frame_return] >>
+  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_bind_values >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_error_values >> metis_tac[]) >>
+  conj_tac >- simp[evaluate_storage_trace_frame] >>
+  qexists_tac `\H res ee G tn u. PrefixPost H res ee G tn u /\
+    ~u.vs_halted /\ ee.gas_obs = []` >> reverse conj_tac
+  >- (irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
+      BETA_TAC >> conj_tac >- simp[] >>
+      rpt gen_tac >> disch_tac >> Cases_on `res` >>
+      gvs[exprSimDefsTheory.expr_exit_INL, stmtSimPropsTheory.expr_exit_INR_type,
+          halt_exit_def]) >>
+  map_every qx_gen_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`s1`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+      mid.storage_trace` by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (strip_assume_tac o BETA_RULE) >>
+  qunabbrev_tac `PrefixPost` >> RULE_ASSUM_TAC BETA_RULE >>
+  qpat_x_assum `(?vs. _)` strip_assume_tac >>
+  Cases_on `vs` >- gvs[] >>
+  rename1 `LIST_REL _ (needle::xs) (v::vs)` >>
+  disj1_tac >> qexists_tac `v::vs` >> simp[] >>
+  `fn_has_code sm sb func` by
+    metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
+  `EVERY (\x. !p. x = Var p ==> not_fresh_at sm p) (needle::xs)` by
+    (qpat_assum `EVERY (\x. _ /\ (!l. x <> Label l)) _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[EVERY_MEM] >> metis_tac[]) >>
+  simp[expr_type_def, post_value_type_def, is_word_type_def] >>
+  irule (SRULE [is_word_type_def] bop_in_literal_continuation_full_exit) >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (`(mid with gas_obs := []) = mid` by
+        simp[evaluation_state_component_equality] >>
+      simp[] >> rpt gen_tac >> disch_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _` drule >>
+      simp[] >> strip_tac >>
+      simp[EXISTS_MEM, EVERY_MEM])
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (qexistsl_tac [`expr_type e1`,`needle`,`sm`,`tv`,`xs`] >>
+      simp[NoAsms] >>
+      gvs[is_word_type_def]) >>
+  first_assum ACCEPT_TAC
+QED
+
+(* == and != on bytestrings: keccak256 of each operand's bytes. *)
+Theorem bop_bytestring_eqne_sim_full:
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+   e1 e2 es.
+    (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
+    body_exprs_full_ok cx [e1; e2] /\
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
+    (qpat_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def]) >>
+  `ann = BaseT BoolT /\ expr_type e2 = expr_type e1` by
+    metis_tac[well_typed_binop_def] >>
+  simp[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
+  map_every qunabbrev_tac [`Q`, `R`] >>
+  drule_all bop_bytestring_selected_compile_cuts >> strip_tac >>
+  drule_all bop_bytestring_selected_code_intervals >> strip_tac >>
+  `(!m cb. bytestring_literal_hash (gas_shadow_expr e1) = NONE /\
+      lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa = (m,cb) ==>
+      fn_has_code shadow_sa cb shadow_func) /\
+   (!m cb. bytestring_literal_hash (gas_shadow_expr e2) = NONE /\
+      lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_sh1 = (m,cb) ==>
+      fn_has_code shadow_sh1 cb shadow_func)` by
+    (qpat_x_assum `lower_value _ _ _ (Builtin _ _ [e1;e2]) _ = _` kall_tac >>
+     qpat_x_assum `lower_value _ _ _ (gas_shadow_expr (Builtin _ _ _)) _ = _`
+       (assume_tac o SIMP_RULE (srw_ss()) [gas_shadow_expr_def, gas_shadow_builtin_def, MAP]) >>
+     `is_bytestring_type (expr_type (gas_shadow_expr e1)) /\
+      expr_type (gas_shadow_expr e2) = expr_type (gas_shadow_expr e1)` by simp[] >>
+     drule_all bop_bytestring_selected_code_intervals >>
+     simp[] >> strip_tac >> simp[]) >>
+  `expr_body_pre cenv cx env e1 es` by
+    (irule expr_body_pre_builtin_arg >>
+     (conj_tac >- gvs[expr_body_pre_def]) >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e1) e1 es` by
+    (qpat_assum `body_exprs_full_ok _ _`
+       (strip_assume_tac o REWRITE_RULE [body_exprs_full_ok_def]) >>
+     qpat_x_assum `body_expr_full_ok cx e1` mp_tac >>
+     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+  pure_once_rewrite_tac[REWRITE_RULE [ETA_AX] eval_expr_bop_bind] >>
+  irule gas_outcome_full_bind_all >>
+  irule_at (Pos last)
+    (gasOutcomeFullTheory.gas_outcome_full_post_mono |> Q.INST [`Q'` |-> `Q`] |> SIMP_RULE std_ss []) >>
+  irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`) bop_bytestring_selected_child_full_halt >>
+  simp[] >>
+  qexistsl_tac [`tops`, `sh1`, `shadow_func`, `shadow_ctx`, `sa`, `h1`, `env`, `d`, `cenv`] >>
+  simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_assum `!m cb. bytestring_literal_hash e1 = NONE /\ _ ==> ?shadow_cb. _` drule_all >>
+      strip_tac >> qexistsl_tac [`shadow_sa`, `shadow_cb`] >> simp[] >>
+      irule expr_body_pre_gas_admissible >> metis_tac[]) >>
+  conj_tac >- (rpt gen_tac >>
+    rename1 `expr_exit result stop /\ _ ==> _` >>
+    Cases_on `result` >> simp[expr_exit_def]) >>
+  conj_tac
+  >- (gen_tac >> irule storage_trace_frame_bind_all >> reverse conj_tac
+      >- (irule storage_trace_frame_bind_all >>
+          simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+      simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def]) >>
+  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
+  conj_tac
+  >- (irule storage_trace_frame_bind_all >>
+      simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `v1` (qx_choose_then `contents1`
+    (map_every assume_tac o CONJUNCTS))) >>
+  disj1_tac >> qexists_tac `v1` >> simp[] >>
+  `expr_sim_inv cenv cx env mid` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     `expr_body_pre cenv cx env e1
+        (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ [])` by simp[] >>
+     qpat_x_assum `expr_body_pre _ _ _ _ (_ with gas_obs := _)`
+       (mp_then Any mp_tac (cj 1 exprSimSourceTheory.expr_body_pre_eval)) >>
+     simp[SF ETA_ss] >>
+     qpat_x_assum `bind _ _ _ = _` (assume_tac o REWRITE_RULE [APPEND_NIL]) >>
+     disch_then drule >> simp[]) >>
+  `expr_body_pre cenv cx env e2 mid` by
+    (irule expr_body_pre_builtin_arg >> conj_tac >- simp[] >>
+     qexistsl_tac [`ann`, `[e1; e2]`, `Bop bop`, `es`] >> simp[]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e2) e2 mid` by
+    (qpat_assum `body_exprs_full_ok _ _`
+       (strip_assume_tac o REWRITE_RULE [body_exprs_full_ok_def]) >>
+     `body_expr_full_ok cx e2` by
+       (first_x_assum irule >>
+        qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+        simp[NoAsms, vyperStateTheory.bind_def, AllCaseEqs()] >>
+        rpt strip_tac >> gvs[] >> metis_tac[]) >>
+     qpat_x_assum `body_expr_full_ok cx e2` mp_tac >>
+     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+  `local_ptrs_reserved cenv sh1` by
+    metis_tac[local_ptrs_reserved_next_var] >>
+  `!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sh1 x` by
+    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+  `!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sh1 x` by
+    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx mid t /\
+       storage_well_formed_on cx mid (FST H) /\
+       ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t` by
+    (gen_tac >> disch_tac >>
+     `storage_well_formed_on cx mid (FST H)` suffices_by metis_tac[] >>
+     qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     qpat_assum `res = INL v1` (fn th =>
+       simp[NoAsms, th, vyperStateTheory.bind_def, AllCaseEqs()]) >>
+     strip_tac >> drule vyperStateTheory.read_result_state >>
+     disch_then (SUBST_ALL_TAC o SYM) >>
+     `valid_horizon cx st0 H es.storage_trace` by
+       (qpat_assum `eval_expr _ _ _ = _`
+          (mp_then Any mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+        simp[evaluate_storage_trace_frame]) >>
+     `storage_well_formed_on cx (mid with gas_obs := []) (FST H)` suffices_by
+       (simp[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+        strip_tac >> rpt gen_tac >>
+        qpat_x_assum `!b slot tv. _`
+          (qspecl_then [`b`, `slot`, `tv`] mp_tac) >>
+        Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+     irule (cj 1 (cj 5 vyperFiniteStoragePreservationTheory.eval_storage_well_formed_on_mutual)) >>
+     simp[] >>
+     reverse conj_tac >-
+       (qpat_assum `valid_horizon cx st0 H mid.storage_trace`
+          (mp_tac o REWRITE_RULE [vyperStorageFootprintTheory.valid_horizon_def]) >>
+        strip_tac >>
+        qpat_assum `expr_body_pre cenv cx env e1 es`
+          (strip_assume_tac o REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
+        simp[] >>
+        qexistsl_tac [`e1`, `env`, `v`,
+          `es with gas_obs := gas_explicit marks s0.vs_gas_readings`] >>
+        simp[] >>
+        `storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+        reverse conj_tac >-
+          (qpat_x_assum `storage_well_formed_on cx es (FST H)` mp_tac >>
+           simp[NoAsms, vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+           strip_tac >> rpt gen_tac >>
+           qpat_x_assum `!b slot tv. _` (qspecl_then [`b`, `slot`, `tv`] mp_tac) >>
+           Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+        qpat_assum `expr_body_pre cenv cx env e1 es` mp_tac >>
+        simp[expr_body_pre_def, expr_sim_inv_def,
+             vyperTypeExprSoundnessTheory.runtime_consistent_def]) >>
+     qpat_assum `expr_sim_inv cenv cx env mid`
+       (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
+     simp[]) >>
+  irule gas_outcome_full_bind_all >>
+  irule_at (Pos last)
+    (gasOutcomeFullTheory.gas_outcome_full_post_mono |> Q.INST [`Q'` |-> `Q`] |> SIMP_RULE std_ss []) >>
+  irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`) bop_bytestring_selected_child_full_halt >>
+  simp[] >>
+  qexistsl_tac [`tops`, `sh2`, `shadow_func`, `shadow_ctx`, `sh1`, `h2`, `env`, `d`, `cenv`] >>
+  simp[] >>
+  (conj_tac >- metis_tac[]) >>
+  (conj_tac >- metis_tac[]) >>
+  conj_tac >-
+    (rpt gen_tac >> strip_tac >>
+     `lower_value compile_expr cenv (expr_type e2) e2 sh1 = (m,cb)` by metis_tac[] >>
+     qpat_assum `!m cb. bytestring_literal_hash e2 = NONE /\ _ ==> ?shadow_cb. _` drule_all >>
+     strip_tac >> qexistsl_tac [`shadow_sh1`, `shadow_cb`] >> simp[] >>
+     `gas_admissible (bind (eval_expr cx e2) (read_result cx)) expr_res_ok mid` by
+       (irule expr_body_pre_gas_admissible >> metis_tac[]) >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+     qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >>
+     fs[wb_frame_def]) >>
+  conj_tac >- (rpt gen_tac >>
+    rename1 `expr_exit result stop /\ _ ==> _` >>
+    Cases_on `result` >> simp[expr_exit_def]) >>
+  conj_tac >- simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def] >>
+  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
+  conj_tac >-
+    (irule storage_trace_frame_bind_all >>
+     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid'.storage_trace) mid'.storage_trace` by
+    gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon mid'.storage_trace` mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `v2` (qx_choose_then `contents2`
+    (map_every assume_tac o CONJUNCTS))) >>
+  disj1_tac >> qexists_tac `v2` >> simp[] >>
+  `eval_operand h1 t' = SOME (word_of_bytes_be (Keccak_256_w64 contents1)) /\
+   op_prov G1' h1 = NONE /\ op_taint tn1' h1 = {}` by
+    (qpat_assum `wb_frame cenv mid mid' sh1 t t'`
+       (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+     qpat_assum `ghost_kept_at lo cenv mid sh1 G1 tn1 t G1' tn1'`
+       (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
+     qpat_x_assum `eval_operand h1 t = _` mp_tac >>
+     qpat_x_assum `op_prov G1 h1 = NONE` mp_tac >>
+     qpat_x_assum `op_taint tn1 h1 = {}` mp_tac >>
+     qpat_x_assum `!z. h1 = Var z ==> _` mp_tac >>
+     qpat_x_assum `!l. h1 <> Label l` mp_tac >>
+     Cases_on `h1` >> simp[eval_operand_def, op_prov_def, op_taint_def] >>
+     rpt strip_tac >> metis_tac[]) >>
+  `!z. h1 = Var z ==> not_fresh_at sh2 z` by
+    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+  `allocas_from lo t'` by fs[ghost_inv_at_def] >>
+  drule_all bop_bytestring_digest_operational >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] assume_tac) >>
+  `(?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) =
+             (INL v1,mid with gas_obs := [])) /\
+      (?gs. bind (eval_expr cx e2) (read_result cx) (mid with gas_obs := gs) =
+             (INL v2,mid' with gas_obs := []))` by
+       (conj_tac >- (qexists_tac `gas_explicit marks s0.vs_gas_readings ++ []` >> metis_tac[]) >>
+        qexists_tac `gas_explicit marks' t.vs_gas_readings ++ []` >> metis_tac[]) >>
+     qpat_assum `expr_body_pre cenv cx env e1 es`
+       (mp_then Any mp_tac bodyPtrBopTypedSourceTheory.bop_typed_source_witness) >>
+     disch_then (qspecl_then [`v1`, `mid with gas_obs := []`] mp_tac) >>
+     (impl_tac >- metis_tac[]) >> strip_tac >>
+     qpat_assum `expr_body_pre cenv cx env e2 mid`
+       (mp_then Any mp_tac bodyPtrBopTypedSourceTheory.bop_typed_source_witness) >>
+     disch_then (qspecl_then [`v2`, `mid' with gas_obs := []`] mp_tac) >>
+     (impl_tac >- metis_tac[]) >> strip_tac >>
+  `tv' = tv` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `tv' = tv` SUBST_ALL_TAC >>
+  irule gas_outcome_full_post_source >>
+  irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`) bop_bytestring_digest_suffix_full_exit >>
+  qexistsl_tac [`word_of_bytes_be (Keccak_256_w64 contents2)`,
+    `word_of_bytes_be (Keccak_256_w64 contents1)`, `tv`] >>
+  qpat_x_assum `?raw t Gf tnf. _` strip_assume_tac >>
+  qexistsl_tac [`tnf`, `t''`, `sb`, `sh2`, `raw`, `op`] >>
+  `?cap. expr_type e1 = BaseT (BytesT (Dynamic cap)) \/
+         expr_type e1 = BaseT (StringT cap)` by
+    metis_tac[bodyMemBopHeldFactsTheory.held_bytestring_eqne_types] >>
+  qexistsl_tac [`cap`,
+    `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`, `Gf`] >> simp[] >>
+  (conj_tac >- metis_tac[byteTheory.word_of_bytes_be_def]) >>
+  (conj_tac >- metis_tac[byteTheory.word_of_bytes_be_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 H mid.storage_trace` by
+    (qpat_assum `bind (eval_expr cx e2) _ _ = _`
+       (mp_then Any mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+          storage_trace_frame_read_result]) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (qpat_assum `bind (eval_expr cx e1) _ _ = _`
+       (mp_then Any mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+          storage_trace_frame_read_result]) >>
+  qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `local_ptrs_reserved cenv sh2` by metis_tac[local_ptrs_reserved_next_var] >>
+  `!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sh2 x` by
+    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+  `!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sh2 x` by
+    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+  `sa.cs_next_id <= sh1.cs_next_id` by
+    (Q.UNDISCH_TAC `(case bytestring_literal_hash e1 of
+        NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e1) e1 sa))
+       (SND (lower_value compile_expr cenv (expr_type e1) e1 sa))
+      | SOME digest => (Lit digest,sa)) = (h1,sh1)` >>
+     Cases_on `bytestring_literal_hash e1`
+     >- (Cases_on `lower_value compile_expr cenv (expr_type e1) e1 sa` >>
+         simp[NoAsms] >> disch_tac >> drule (cj 2 compile_expr_grows) >>
+         drule compile_bytestring_hash_shape >>
+         simp[ci_mono_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+     simp[NoAsms] >> strip_tac >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+    (qpat_assum `MAP FDOM es.scopes = _` mp_tac >> simp[NoAsms]) >>
+  `storage_well_formed_on cx mid' (FST H)` by
+    (Q.UNDISCH_THEN `!tail. bind (eval_expr cx e2) (read_result cx)
+      (mid with gas_obs := gas_explicit marks' t.vs_gas_readings ++ tail) =
+      (res',mid' with gas_obs := tail)` (qspec_then `[]` mp_tac) >>
+     Q.PAT_ASSUM `res' = INL v2` (fn th =>
+       simp[NoAsms, th, vyperStateTheory.bind_def, AllCaseEqs()]) >>
+     strip_tac >> drule vyperStateTheory.read_result_state >>
+     disch_then (SUBST_ALL_TAC o SYM) >>
+     `!b. get_storage cx (mid' with gas_obs := []) b = get_storage cx mid' b` by
+       (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+     `storage_well_formed_on cx (mid' with gas_obs := []) (FST H)` suffices_by
+       (simp[vyperStorageFootprintTheory.storage_well_formed_on_def]) >>
+     irule (cj 1 (cj 5 vyperFiniteStoragePreservationTheory.eval_storage_well_formed_on_mutual)) >>
+     simp[] >>
+     reverse conj_tac >-
+       (qpat_assum `valid_horizon cx st0 H mid'.storage_trace`
+          (mp_tac o REWRITE_RULE [vyperStorageFootprintTheory.valid_horizon_def]) >>
+        strip_tac >>
+        qpat_assum `expr_body_pre cenv cx env e2 mid`
+          (strip_assume_tac o REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
+        simp[] >>
+        qexistsl_tac [`e2`, `env`, `v'`,
+          `mid with gas_obs := gas_explicit marks' t.vs_gas_readings`] >>
+        simp[] >>
+        `storage_well_formed_on cx mid (FST H)` by metis_tac[] >>
+        reverse conj_tac >-
+          (`!b. get_storage cx (mid with gas_obs := gas_explicit marks' t.vs_gas_readings) b =
+                 get_storage cx mid b` by
+             (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+           Q.UNDISCH_TAC `storage_well_formed_on cx mid (FST H)` >>
+           qpat_x_assum `!b. get_storage cx (mid with gas_obs := _) b = _`
+             (fn th => simp[NoAsms, vyperStorageFootprintTheory.storage_well_formed_on_def, th])) >>
+        qpat_assum `expr_body_pre cenv cx env e2 mid` mp_tac >>
+        simp[expr_body_pre_def, expr_sim_inv_def,
+             vyperTypeExprSoundnessTheory.runtime_consistent_def]) >>
+     qpat_assum `expr_sim_inv cenv cx env mid`
+       (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
+     simp[]) >>
+  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  (qmatch_goalsub_rename_tac `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ final` >>
+  qmatch_abbrev_tac `postA /\ postB /\ postTail` >>
+  qsuff_tac `postA /\ postB /\ final.vs_current_bb = sb.cs_current_bb /\
+    final.vs_inst_idx = LENGTH sb.cs_current_insts /\ postTail`
+  >- simp[] >>
+  map_every qunabbrev_tac [`postA`, `postB`, `postTail`] >>
+  pure_rewrite_tac[post_value_type_def] >>
+  irule (PURE_REWRITE_RULE [post_value_type_def] bop_bytestring_final_post) >>
+  simp[] >>
+  conj_tac >-
+    (`!b. get_storage cx (mid' with gas_obs := []) b = get_storage cx mid' b` by
+       (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+     qpat_assum `storage_well_formed_on cx mid' (FST H)` mp_tac >>
+     qpat_x_assum `!b. get_storage cx (mid' with gas_obs := []) b = _`
+       (fn th => simp[NoAsms, vyperStorageFootprintTheory.storage_well_formed_on_def, th])) >>
+  qexistsl_tac [`G1`, `G1'`, `mid`, `h1`, `h2`, `raw'`, `raw`,
+    `sh1`, `sh2`, `t`, `tn1`, `tn1'`, `t'`] >>
+  simp[] >>
+  conj_tac >-
+    (qpat_x_assum `final = _` SUBST_ALL_TAC >>
+     rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at sh2 x ==> lookup_var x _ = _ /\ _`
+       (qspec_then `z` mp_tac) >> simp[]) >>
+  simp[exprSimWordArgsTheory.wb_frame_gas_obs] >>
+  qpat_assum `ghost_inv_at (DF H) lo d cenv cx mid' G1' tn1' t'` mp_tac >>
+  simp[NoAsms, ghost_inv_at_def] >> strip_tac >> simp[])
+QED
+
+(* ===== Binary operators =====
+   Each family is a binary operator lowered to a StackValue
+   (exprSimOperators' compile_bop_stack), so only the value judgment is
+   stated; the vv judgment follows from it. *)
+
 (* Both operands of word_value_type. *)
 Theorem bop_word_sim_full:
   !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
@@ -206,30 +661,16 @@ Proof
   simp[] >>
   drule_all bop_word_full_layout >> strip_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
-  `!st st'. eval_expr cx (Builtin ann (Bop bop) [e1;e2]) st <>
-     (INR HaltException,st')` by
-    (rpt gen_tac >> irule eval_expr_calls_no_halt >> gvs[expr_body_pre_def]) >>
-  qsuff_tac `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
-    (bind (eval_expr cx (Builtin ann (Bop bop) [e1;e2])) (read_result cx))
-    (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)`
-  >- suspend "exit_transport" >>
-  irule (SRULE [LET_THM] bop_word_operands_full_cps) >>
-  simp[] >>
+  irule (SRULE [LET_THM] bop_word_operands_full_cps_exit) >>
+  simp[Abbr `R`] >>
   qexistsl_tac [`cenv`, `d`, `env`, `s1`, `s2`, `sa`, `shadow_func`,
     `shadow_s1`, `shadow_s2`, `shadow_sa`, `tops`, `x`, `y`] >>
   simp[] >>
   rpt gen_tac >> strip_tac >> simp[] >>
-  mp_tac (SRULE [LET_THM] bop_word_suffix_full) >>
+  mp_tac (SRULE [LET_THM] bop_word_suffix_full_halt) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   simp[Abbr `Q`, expr_type_def]
 QED
-
-Resume bop_word_sim_full[exit_transport]:
-  core_exit_transport
-QED
-
-Finalise bop_word_sim_full
 
 (* == and != on address and bytesN. *)
 Theorem bop_bytes_eq_sim_full:
@@ -702,359 +1143,61 @@ QED
 Finalise bop_bytes_eq_sim_full
 
 
-(* == and != on bytestrings: keccak256 of each operand's bytes. *)
-Theorem bop_bytestring_eqne_sim_full:
+
+
+
+(* The rest, as exprSimBopRestWord's compile_bop_rest_word_case leaves it:
+   in and not in on an array of words that is not a literal. *)
+Theorem bop_bytes_sim_full[local]:
   !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
    e1 e2 es.
-    (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
+    (?m. expr_type e1 = BaseT (BytesT (Fixed m))) /\
+    MEM bop [And;Or;XOr;ShL;ShR] /\
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
-    (qpat_assum `expr_body_pre _ _ _ _ _` mp_tac >>
-     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def]) >>
-  `ann = BaseT BoolT /\ expr_type e2 = expr_type e1` by
-    metis_tac[well_typed_binop_def] >>
-  simp[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  drule expr_body_pre_bop >> strip_tac >>
+  `?tv. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv` by
+    (qpat_assum `expr_body_pre _ _ _ e1 _`
+       (mp_tac o MATCH_MP expr_body_pre_type_evaluates) >>
+     simp[optionTheory.IS_SOME_EXISTS]) >>
+  `is_word_type ann /\ is_word_type (expr_type e1) /\
+   is_word_type (expr_type e2)` by
+    (qpat_x_assum `expr_type e1 = BaseT (BytesT (Fixed m))` SUBST_ALL_TAC >>
+     gvs[well_typed_binop_def, is_int_type_def, is_word_type_def,
+         vyperValueTheory.evaluate_type_def, optionTheory.IF_EQUALS_OPTION] >>
+     Cases_on `expr_type e2` >> gvs[is_int_type_def, is_word_type_def] >>
+     rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+     gvs[is_int_type_def, is_word_type_def]) >>
+  `post_value_type cenv (Builtin ann (Bop bop) [e1;e2]) = ann` by
+    simp[post_value_type_word, expr_type_def] >>
   simp[] >>
+  drule_all bop_full_layout >> strip_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
-  `!st st'. eval_expr cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2]) st <>
-     (INR HaltException,st')` by
-    (rpt gen_tac >> irule eval_expr_calls_no_halt >> gvs[expr_body_pre_def]) >>
-  qsuff_tac `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
-    (bind (eval_expr cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])) (read_result cx))
-    (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)`
-  >- suspend "exit_transport" >>
-  qunabbrev_tac `Q` >>
-  drule_all bop_bytestring_selected_compile_cuts >> strip_tac >>
-  drule_all bop_bytestring_selected_code_intervals >> strip_tac >>
-  `(!m cb. bytestring_literal_hash (gas_shadow_expr e1) = NONE /\
-      lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa = (m,cb) ==>
-      fn_has_code shadow_sa cb shadow_func) /\
-   (!m cb. bytestring_literal_hash (gas_shadow_expr e2) = NONE /\
-      lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_sh1 = (m,cb) ==>
-      fn_has_code shadow_sh1 cb shadow_func)` by
-    (qpat_x_assum `lower_value _ _ _ (Builtin _ _ [e1;e2]) _ = _` kall_tac >>
-     qpat_x_assum `lower_value _ _ _ (gas_shadow_expr (Builtin _ _ _)) _ = _`
-       (assume_tac o SIMP_RULE (srw_ss()) [gas_shadow_expr_def, gas_shadow_builtin_def, MAP]) >>
-     `is_bytestring_type (expr_type (gas_shadow_expr e1)) /\
-      expr_type (gas_shadow_expr e2) = expr_type (gas_shadow_expr e1)` by simp[] >>
-     drule_all bop_bytestring_selected_code_intervals >>
-     simp[] >> strip_tac >> simp[]) >>
-  `expr_body_pre cenv cx env e1 es` by
-    (irule expr_body_pre_builtin_arg >>
-     (conj_tac >- gvs[expr_body_pre_def]) >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (expr_type e1) e1 es` by
-    (qpat_assum `body_exprs_full_ok _ _`
-       (strip_assume_tac o REWRITE_RULE [body_exprs_full_ok_def]) >>
-     qpat_x_assum `body_expr_full_ok cx e1` mp_tac >>
-     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
-  pure_once_rewrite_tac[REWRITE_RULE [ETA_AX] eval_expr_bop_bind] >>
-  irule gas_outcome_full_bind_all >>
-  irule_at (Pos last)
-    (gasOutcomeFullTheory.gas_outcome_full_post_mono |> Q.INST [`Q'` |-> `Q`] |> SIMP_RULE std_ss []) >>
-  irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`) bop_bytestring_selected_child_full >>
-  simp[] >>
-  qexistsl_tac [`tops`, `sh1`, `shadow_func`, `shadow_ctx`, `sa`, `h1`, `env`, `d`, `cenv`] >>
-  simp[] >> conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      qpat_assum `!m cb. bytestring_literal_hash e1 = NONE /\ _ ==> ?shadow_cb. _` drule_all >>
-      strip_tac >> qexistsl_tac [`shadow_sa`, `shadow_cb`] >> simp[] >>
-      irule expr_body_pre_gas_admissible >> metis_tac[]) >>
-  conj_tac >- (Cases >> simp[]) >>
-  conj_tac
-  >- (gen_tac >> irule storage_trace_frame_bind_all >> reverse conj_tac
-      >- (irule storage_trace_frame_bind_all >>
-          simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
-      simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def]) >>
-  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
-  conj_tac
-  >- (irule storage_trace_frame_bind_all >>
-      simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  `!H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r ==>
+    R H res ee gt r` by simp[Abbr `R`] >>
+  mp_tac (SRULE [LET_THM] bop_operands_full_cps_exit) >>
+  (impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >>
-  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
-    gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
-    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-  (impl_tac >- simp[]) >>
-  disch_then (qx_choose_then `v1` (qx_choose_then `contents1`
-    (map_every assume_tac o CONJUNCTS))) >>
-  disj1_tac >> qexists_tac `v1` >> simp[] >>
-  `expr_sim_inv cenv cx env mid` by
-    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
-     `expr_body_pre cenv cx env e1
-        (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ [])` by simp[] >>
-     qpat_x_assum `expr_body_pre _ _ _ _ (_ with gas_obs := _)`
-       (mp_then Any mp_tac (cj 1 exprSimSourceTheory.expr_body_pre_eval)) >>
-     simp[SF ETA_ss] >>
-     qpat_x_assum `bind _ _ _ = _` (assume_tac o REWRITE_RULE [APPEND_NIL]) >>
-     disch_then drule >> simp[]) >>
-  `expr_body_pre cenv cx env e2 mid` by
-    (irule expr_body_pre_builtin_arg >> conj_tac >- simp[] >>
-     qexistsl_tac [`ann`, `[e1; e2]`, `Bop bop`, `es`] >> simp[]) >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (expr_type e2) e2 mid` by
-    (qpat_assum `body_exprs_full_ok _ _`
-       (strip_assume_tac o REWRITE_RULE [body_exprs_full_ok_def]) >>
-     `body_expr_full_ok cx e2` by
-       (first_x_assum irule >>
-        qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
-        simp[NoAsms, vyperStateTheory.bind_def, AllCaseEqs()] >>
-        rpt strip_tac >> gvs[] >> metis_tac[]) >>
-     qpat_x_assum `body_expr_full_ok cx e2` mp_tac >>
-     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
-  `local_ptrs_reserved cenv sh1` by
-    metis_tac[local_ptrs_reserved_next_var] >>
-  `!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sh1 x` by
-    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-  `!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sh1 x` by
-    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-  `!H. valid_horizon cx st0 H mid.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx mid t /\
-       storage_well_formed_on cx mid (FST H) /\
-       ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t` by
-    (gen_tac >> disch_tac >>
-     `storage_well_formed_on cx mid (FST H)` suffices_by metis_tac[] >>
-     qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
-     qpat_assum `res = INL v1` (fn th =>
-       simp[NoAsms, th, vyperStateTheory.bind_def, AllCaseEqs()]) >>
-     strip_tac >> drule vyperStateTheory.read_result_state >>
-     disch_then (SUBST_ALL_TAC o SYM) >>
-     `valid_horizon cx st0 H es.storage_trace` by
-       (qpat_assum `eval_expr _ _ _ = _`
-          (mp_then Any mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
-        simp[evaluate_storage_trace_frame]) >>
-     `storage_well_formed_on cx (mid with gas_obs := []) (FST H)` suffices_by
-       (simp[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
-        strip_tac >> rpt gen_tac >>
-        qpat_x_assum `!b slot tv. _`
-          (qspecl_then [`b`, `slot`, `tv`] mp_tac) >>
-        Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
-     irule (cj 1 (cj 5 vyperFiniteStoragePreservationTheory.eval_storage_well_formed_on_mutual)) >>
-     simp[] >>
-     reverse conj_tac >-
-       (qpat_assum `valid_horizon cx st0 H mid.storage_trace`
-          (mp_tac o REWRITE_RULE [vyperStorageFootprintTheory.valid_horizon_def]) >>
-        strip_tac >>
-        qpat_assum `expr_body_pre cenv cx env e1 es`
-          (strip_assume_tac o REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
-        simp[] >>
-        qexistsl_tac [`e1`, `env`, `v`,
-          `es with gas_obs := gas_explicit marks s0.vs_gas_readings`] >>
-        simp[] >>
-        `storage_well_formed_on cx es (FST H)` by metis_tac[] >>
-        reverse conj_tac >-
-          (qpat_x_assum `storage_well_formed_on cx es (FST H)` mp_tac >>
-           simp[NoAsms, vyperStorageFootprintTheory.storage_well_formed_on_def] >>
-           strip_tac >> rpt gen_tac >>
-           qpat_x_assum `!b slot tv. _` (qspecl_then [`b`, `slot`, `tv`] mp_tac) >>
-           Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
-        qpat_assum `expr_body_pre cenv cx env e1 es` mp_tac >>
-        simp[expr_body_pre_def, expr_sim_inv_def,
-             vyperTypeExprSoundnessTheory.runtime_consistent_def]) >>
-     qpat_assum `expr_sim_inv cenv cx env mid`
-       (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
-     simp[]) >>
-  irule gas_outcome_full_bind_all >>
-  irule_at (Pos last)
-    (gasOutcomeFullTheory.gas_outcome_full_post_mono |> Q.INST [`Q'` |-> `Q`] |> SIMP_RULE std_ss []) >>
-  irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`) bop_bytestring_selected_child_full >>
-  simp[] >>
-  qexistsl_tac [`tops`, `sh2`, `shadow_func`, `shadow_ctx`, `sh1`, `h2`, `env`, `d`, `cenv`] >>
-  simp[] >>
-  (conj_tac >- metis_tac[]) >>
-  (conj_tac >- metis_tac[]) >>
-  conj_tac >-
-    (rpt gen_tac >> strip_tac >>
-     `lower_value compile_expr cenv (expr_type e2) e2 sh1 = (m,cb)` by metis_tac[] >>
-     qpat_assum `!m cb. bytestring_literal_hash e2 = NONE /\ _ ==> ?shadow_cb. _` drule_all >>
-     strip_tac >> qexistsl_tac [`shadow_sh1`, `shadow_cb`] >> simp[] >>
-     `gas_admissible (bind (eval_expr cx e2) (read_result cx)) expr_res_ok mid` by
-       (irule expr_body_pre_gas_admissible >> metis_tac[]) >>
-     simp[] >> conj_tac >- metis_tac[] >>
-     irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-     qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >>
-     fs[wb_frame_def]) >>
-  conj_tac >- (Cases >> simp[]) >>
-  conj_tac >- simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def] >>
-  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
-  conj_tac >-
-    (irule storage_trace_frame_bind_all >>
-     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
-  rpt gen_tac >> strip_tac >>
-  `valid_horizon cx st0 (storage_trace_horizon mid'.storage_trace) mid'.storage_trace` by
-    gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==> _`
-    (qspec_then `storage_trace_horizon mid'.storage_trace` mp_tac) >>
-  (impl_tac >- simp[]) >>
-  disch_then (qx_choose_then `v2` (qx_choose_then `contents2`
-    (map_every assume_tac o CONJUNCTS))) >>
-  disj1_tac >> qexists_tac `v2` >> simp[] >>
-  `eval_operand h1 t' = SOME (word_of_bytes_be (Keccak_256_w64 contents1)) /\
-   op_prov G1' h1 = NONE /\ op_taint tn1' h1 = {}` by
-    (qpat_assum `wb_frame cenv mid mid' sh1 t t'`
-       (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
-     qpat_assum `ghost_kept_at lo cenv mid sh1 G1 tn1 t G1' tn1'`
-       (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
-     qpat_x_assum `eval_operand h1 t = _` mp_tac >>
-     qpat_x_assum `op_prov G1 h1 = NONE` mp_tac >>
-     qpat_x_assum `op_taint tn1 h1 = {}` mp_tac >>
-     qpat_x_assum `!z. h1 = Var z ==> _` mp_tac >>
-     qpat_x_assum `!l. h1 <> Label l` mp_tac >>
-     Cases_on `h1` >> simp[eval_operand_def, op_prov_def, op_taint_def] >>
-     rpt strip_tac >> metis_tac[]) >>
-  `!z. h1 = Var z ==> not_fresh_at sh2 z` by
-    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-  `allocas_from lo t'` by fs[ghost_inv_at_def] >>
-  drule_all bop_bytestring_digest_operational >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] assume_tac) >>
-  `(?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) =
-             (INL v1,mid with gas_obs := [])) /\
-      (?gs. bind (eval_expr cx e2) (read_result cx) (mid with gas_obs := gs) =
-             (INL v2,mid' with gas_obs := []))` by
-       (conj_tac >- (qexists_tac `gas_explicit marks s0.vs_gas_readings ++ []` >> metis_tac[]) >>
-        qexists_tac `gas_explicit marks' t.vs_gas_readings ++ []` >> metis_tac[]) >>
-     qpat_assum `expr_body_pre cenv cx env e1 es`
-       (mp_then Any mp_tac bodyPtrBopTypedSourceTheory.bop_typed_source_witness) >>
-     disch_then (qspecl_then [`v1`, `mid with gas_obs := []`] mp_tac) >>
-     (impl_tac >- metis_tac[]) >> strip_tac >>
-     qpat_assum `expr_body_pre cenv cx env e2 mid`
-       (mp_then Any mp_tac bodyPtrBopTypedSourceTheory.bop_typed_source_witness) >>
-     disch_then (qspecl_then [`v2`, `mid' with gas_obs := []`] mp_tac) >>
-     (impl_tac >- metis_tac[]) >> strip_tac >>
-  `tv' = tv` by metis_tac[optionTheory.SOME_11] >>
-  qpat_x_assum `tv' = tv` SUBST_ALL_TAC >>
-  irule gas_outcome_full_post_source >>
-  irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`) bop_bytestring_digest_suffix_full >>
-  qexistsl_tac [`word_of_bytes_be (Keccak_256_w64 contents2)`,
-    `word_of_bytes_be (Keccak_256_w64 contents1)`, `tv`] >>
-  qpat_x_assum `?raw t Gf tnf. _` strip_assume_tac >>
-  qexistsl_tac [`tnf`, `t''`, `sb`, `sh2`, `raw`, `op`] >>
-  `?cap. expr_type e1 = BaseT (BytesT (Dynamic cap)) \/
-         expr_type e1 = BaseT (StringT cap)` by
-    metis_tac[bodyMemBopHeldFactsTheory.held_bytestring_eqne_types] >>
-  qexistsl_tac [`cap`, `Gf`] >> simp[] >>
-  (conj_tac >- metis_tac[byteTheory.word_of_bytes_be_def]) >>
-  (conj_tac >- metis_tac[byteTheory.word_of_bytes_be_def]) >>
-  rpt gen_tac >> strip_tac >>
-  `valid_horizon cx st0 H mid.storage_trace` by
-    (qpat_assum `bind (eval_expr cx e2) _ _ = _`
-       (mp_then Any mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
-     simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
-          storage_trace_frame_read_result]) >>
-  `valid_horizon cx st0 H es.storage_trace` by
-    (qpat_assum `bind (eval_expr cx e1) _ _ = _`
-       (mp_then Any mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
-     simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
-          storage_trace_frame_read_result]) >>
-  qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==> _`
-    (qspec_then `H` mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  `local_ptrs_reserved cenv sh2` by metis_tac[local_ptrs_reserved_next_var] >>
-  `!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sh2 x` by
-    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-  `!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sh2 x` by
-    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-  `sa.cs_next_id <= sh1.cs_next_id` by
-    (Q.UNDISCH_TAC `(case bytestring_literal_hash e1 of
-        NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e1) e1 sa))
-       (SND (lower_value compile_expr cenv (expr_type e1) e1 sa))
-      | SOME digest => (Lit digest,sa)) = (h1,sh1)` >>
-     Cases_on `bytestring_literal_hash e1`
-     >- (Cases_on `lower_value compile_expr cenv (expr_type e1) e1 sa` >>
-         simp[NoAsms] >> disch_tac >> drule (cj 2 compile_expr_grows) >>
-         drule compile_bytestring_hash_shape >>
-         simp[ci_mono_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-     simp[NoAsms] >> strip_tac >> simp[]) >>
-  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
-    (qpat_assum `MAP FDOM es.scopes = _` mp_tac >> simp[NoAsms]) >>
-  `storage_well_formed_on cx mid' (FST H)` by
-    (Q.UNDISCH_THEN `!tail. bind (eval_expr cx e2) (read_result cx)
-      (mid with gas_obs := gas_explicit marks' t.vs_gas_readings ++ tail) =
-      (res',mid' with gas_obs := tail)` (qspec_then `[]` mp_tac) >>
-     Q.PAT_ASSUM `res' = INL v2` (fn th =>
-       simp[NoAsms, th, vyperStateTheory.bind_def, AllCaseEqs()]) >>
-     strip_tac >> drule vyperStateTheory.read_result_state >>
-     disch_then (SUBST_ALL_TAC o SYM) >>
-     `!b. get_storage cx (mid' with gas_obs := []) b = get_storage cx mid' b` by
-       (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
-     `storage_well_formed_on cx (mid' with gas_obs := []) (FST H)` suffices_by
-       (simp[vyperStorageFootprintTheory.storage_well_formed_on_def]) >>
-     irule (cj 1 (cj 5 vyperFiniteStoragePreservationTheory.eval_storage_well_formed_on_mutual)) >>
-     simp[] >>
-     reverse conj_tac >-
-       (qpat_assum `valid_horizon cx st0 H mid'.storage_trace`
-          (mp_tac o REWRITE_RULE [vyperStorageFootprintTheory.valid_horizon_def]) >>
-        strip_tac >>
-        qpat_assum `expr_body_pre cenv cx env e2 mid`
-          (strip_assume_tac o REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
-        simp[] >>
-        qexistsl_tac [`e2`, `env`, `v'`,
-          `mid with gas_obs := gas_explicit marks' t.vs_gas_readings`] >>
-        simp[] >>
-        `storage_well_formed_on cx mid (FST H)` by metis_tac[] >>
-        reverse conj_tac >-
-          (`!b. get_storage cx (mid with gas_obs := gas_explicit marks' t.vs_gas_readings) b =
-                 get_storage cx mid b` by
-             (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
-           Q.UNDISCH_TAC `storage_well_formed_on cx mid (FST H)` >>
-           qpat_x_assum `!b. get_storage cx (mid with gas_obs := _) b = _`
-             (fn th => simp[NoAsms, vyperStorageFootprintTheory.storage_well_formed_on_def, th])) >>
-        qpat_assum `expr_body_pre cenv cx env e2 mid` mp_tac >>
-        simp[expr_body_pre_def, expr_sim_inv_def,
-             vyperTypeExprSoundnessTheory.runtime_consistent_def]) >>
-     qpat_assum `expr_sim_inv cenv cx env mid`
-       (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
-     simp[]) >>
-  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
-    (qspec_then `H` mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  (qmatch_goalsub_rename_tac `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ final` >>
-  qmatch_abbrev_tac `postA /\ postB /\ postTail` >>
-  qsuff_tac `postA /\ postB /\ final.vs_current_bb = sb.cs_current_bb /\
-    final.vs_inst_idx = LENGTH sb.cs_current_insts /\ postTail`
-  >- simp[] >>
-  map_every qunabbrev_tac [`postA`, `postB`, `postTail`] >>
-  pure_rewrite_tac[post_value_type_def] >>
-  irule (PURE_REWRITE_RULE [post_value_type_def] bop_bytestring_final_post) >>
-  simp[] >>
-  conj_tac >-
-    (`!b. get_storage cx (mid' with gas_obs := []) b = get_storage cx mid' b` by
-       (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
-     qpat_assum `storage_well_formed_on cx mid' (FST H)` mp_tac >>
-     qpat_x_assum `!b. get_storage cx (mid' with gas_obs := []) b = _`
-       (fn th => simp[NoAsms, vyperStorageFootprintTheory.storage_well_formed_on_def, th])) >>
-  qexistsl_tac [`G1`, `G1'`, `mid`, `h1`, `h2`, `raw'`, `raw`,
-    `sh1`, `sh2`, `t`, `tn1`, `tn1'`, `t'`] >>
-  simp[] >>
-  conj_tac >-
-    (qpat_x_assum `final = _` SUBST_ALL_TAC >>
-     rpt strip_tac >>
-     qpat_assum `!x. not_fresh_at sh2 x ==> lookup_var x _ = _ /\ _`
-       (qspec_then `z` mp_tac) >> simp[]) >>
-  simp[exprSimWordArgsTheory.wb_frame_gas_obs] >>
-  qpat_assum `ghost_inv_at (DF H) lo d cenv cx mid' G1' tn1' t'` mp_tac >>
-  simp[NoAsms, ghost_inv_at_def] >> strip_tac >> simp[])
+  mp_tac (SRULE [LET_THM] bop_bytes_suffix_extract) >>
+  (impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >~ [`?n. expr_type e1 = BaseT (BytesT (Fixed n))`]
+     >- (qexists_tac `m` >> first_assum ACCEPT_TAC) >>
+     fs[])) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (SRULE [LET_THM] bop_suffix_full_halt) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[Abbr `Q`, expr_type_def])) >> simp[]
 QED
 
-Resume bop_bytestring_eqne_sim_full[exit_transport]:
-  core_exit_transport
-QED
-
-Finalise bop_bytestring_eqne_sim_full
-
-(* The rest, as exprSimBopRestWord's compile_bop_rest_word_case leaves it:
-   in and not in on an array of words that is not a literal. *)
 Theorem bop_rest_word_sim_full:
   !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
    e1 e2 es.
@@ -1075,147 +1218,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
     fs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
-  drule_all rest_word_typed_membership >> strip_tac >>
+  drule_all rest_word_typed_membership >> strip_tac
+  >- (irule bop_bytes_sim_full >> metis_tac[]) >>
   irule compile_rest_word_membership_full >> metis_tac[]
 QED
-
-(* in and not in on an array literal of words, which the lowering unrolls
-   to a comparison with each element, so it takes the elements'
-   judgments where e1 evaluates and is read. *)
-Theorem bop_in_literal_word_sim_full:
-  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
-   e1 a t n elems es.
-    (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
-    body_expr_full_ok cx e1 /\
-    ((?s0 tv s1 s2 v s3. eval_expr cx e1 s0 = (INL tv, s1) /\
-                         read_result cx tv s2 = (INL v, s3)) ==>
-     builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-     body_exprs_full_ok cx elems) /\
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env
-      (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems])
-      es
-Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all literal_body_typing >> strip_tac >>
-  drule_all literal_body_evaluate_types >> strip_tac >>
-  `body_exprs_full_ok cx (e1::elems)` by
-    (simp[Once body_exprs_full_ok_def] >> rpt strip_tac >>
-     first_x_assum irule >> simp[builtin_args_length_ok_def] >> metis_tac[]) >>
-  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
-  simp[] >>
-  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
-  `!st st'. eval_expr cx
-     (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) st <>
-     (INR HaltException,st')` by
-    (rpt gen_tac >> irule eval_expr_calls_no_halt >> gvs[expr_body_pre_def]) >>
-  qsuff_tac `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
-    (bind (eval_expr cx (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]))
-      (read_result cx)) (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)`
-  >- suspend "exit_transport" >>
-  qunabbrev_tac `Q` >>
-  `is_ArrayT a` by gvs[vyperASTTheory.is_ArrayT_def] >>
-  drule_all literal_lower_value >> strip_tac >>
-  `wb_args_shape cenv expr_type (e1::elems)` by
-    (irule literal_args_shape >> metis_tac[]) >>
-  drule_all lower_word_args_shape_ready >> strip_tac >>
-  `cs_extends sm sb` by
-    (Cases_on `bop = In` >> gvs[] >>
-     metis_tac[literal_membership_straight, exprSimUnopPropsTheory.straight_fresh_cs_extends]) >>
-  `fn_has_code sa sm func` by
-    metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
-  `!shadow_xs shadow_sm.
-    lower_word_args cenv expr_type (MAP gas_shadow_expr (e1::elems)) shadow_sa =
-      (shadow_xs,shadow_sm) ==> fn_has_code shadow_sa shadow_sm shadow_func` by
-    (rpt strip_tac >>
-     qpat_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _` mp_tac >>
-     simp[NoAsms, gas_shadow_expr_def, gas_shadow_builtin_def] >>
-     disch_then (mp_then Any strip_assume_tac literal_lower_value) >>
-     qpat_x_assum `(bop = In \/ bop = NotIn) /\ is_ArrayT a ==> _` mp_tac >>
-     simp[] >> strip_tac >>
-     `shadow_sm = sm'` by gvs[] >>
-     `cs_extends sm' shadow_sb` by
-       (Cases_on `bop = In` >> gvs[] >>
-        metis_tac[literal_membership_straight, straight_fresh_cs_extends]) >>
-     irule fn_has_code_mid >>
-     reverse conj_tac
-     >- (qexistsl_tac [`shadow_sb`, `shadow_sa`] >>
-         simp[compileEnvTheory.cs_extends_refl]) >>
-     `!args ss oo ff.
-        lower_word_args cenv expr_type args ss = (oo,ff) ==> cs_extends ss ff` by
-       (Induct >> simp[lower_word_args_nil, compileEnvTheory.cs_extends_refl] >>
-        rpt gen_tac >> simp[lower_word_args_cons] >> rpt strip_tac >>
-        metis_tac[cj 2 compile_expr_grows, compileEnvTheory.cs_extends_trans]) >>
-     metis_tac[]) >>
-  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  `!e. MEM e (e1::elems) ==> MEM e (e1::elems)` by simp[] >>
-  drule_all (Q.SPEC `e1::elems` bop_in_literal_operands_clean_full) >>
-  disch_then (qspec_then `PG` assume_tac) >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ PrefixPost _` >>
-  drule_all literal_body_action_flat >> disch_then (fn th => rewrite_tac[th]) >>
-  irule gas_outcome_full_bind_all >> BETA_TAC >>
-  conj_tac >- simp[storage_trace_frame_return] >>
-  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_bind_values >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_error_values >> metis_tac[]) >>
-  conj_tac >- simp[evaluate_storage_trace_frame] >>
-  qexists_tac `\H res ee G tn u. PrefixPost H res ee G tn u /\
-    ~u.vs_halted /\ ee.gas_obs = []` >> reverse conj_tac
-  >- (irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
-      BETA_TAC >> conj_tac >- simp[] >>
-      rpt gen_tac >> disch_tac >> Cases_on `res` >>
-      gvs[exprSimDefsTheory.expr_exit_INL, stmtSimPropsTheory.expr_exit_INR_type]) >>
-  map_every qx_gen_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`s1`] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
-      mid.storage_trace` by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-  impl_tac >- first_assum ACCEPT_TAC >>
-  disch_then (strip_assume_tac o BETA_RULE) >>
-  qunabbrev_tac `PrefixPost` >> RULE_ASSUM_TAC BETA_RULE >>
-  qpat_x_assum `(?vs. _)` strip_assume_tac >>
-  Cases_on `vs` >- gvs[] >>
-  rename1 `LIST_REL _ (needle::xs) (v::vs)` >>
-  disj1_tac >> qexists_tac `v::vs` >> simp[] >>
-  `fn_has_code sm sb func` by
-    metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
-  `EVERY (\x. !p. x = Var p ==> not_fresh_at sm p) (needle::xs)` by
-    (qpat_assum `EVERY (\x. _ /\ (!l. x <> Label l)) _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> simp[EVERY_MEM] >> metis_tac[]) >>
-  simp[expr_type_def, post_value_type_def, is_word_type_def] >>
-  irule (SRULE [is_word_type_def] bop_in_literal_continuation_full) >>
-  rpt conj_tac
-  >- first_assum ACCEPT_TAC
-  >- first_assum ACCEPT_TAC
-  >- (`(mid with gas_obs := []) = mid` by
-        simp[evaluation_state_component_equality] >>
-      simp[] >> rpt gen_tac >> disch_tac >>
-      qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _` drule >>
-      simp[] >> strip_tac >>
-      simp[EXISTS_MEM, EVERY_MEM])
-  >- first_assum ACCEPT_TAC
-  >- first_assum ACCEPT_TAC
-  >- first_assum ACCEPT_TAC
-  >- first_assum ACCEPT_TAC
-  >- first_assum ACCEPT_TAC
-  >- first_assum ACCEPT_TAC
-  >- first_assum ACCEPT_TAC
-  >- (qexistsl_tac [`expr_type e1`,`needle`,`sm`,`tv`,`xs`] >>
-      simp[NoAsms] >>
-      gvs[is_word_type_def]) >>
-  first_assum ACCEPT_TAC
-QED
-
-Resume bop_in_literal_word_sim_full[exit_transport]:
-  qpat_x_assum `ann = _` SUBST_ALL_TAC >>
-  qpat_x_assum `a = _` SUBST_ALL_TAC >>
-  qpat_x_assum `t = _` SUBST_ALL_TAC >>
-  core_exit_transport
-QED
-
-Finalise bop_in_literal_word_sim_full

@@ -82,9 +82,8 @@ Proof
      conj_tac
      >- (fs[supportedExprTraverseTheory.supported_exprs_exists_every,
             listTheory.EXISTS_MEM, listTheory.EVERY_MEM] >>
-         metis_tac[supportedExprTraverseTheory.supported_expr_no_evm_run,
-           supportedExprsTheory.supported_expr_def,
-           supportedExprTraverseTheory.expr_has_evm_run_def]) >>
+         metis_tac[supportedExprTraverseTheory.supported_expr_no_halt,
+           supportedExprsTheory.supported_expr_def]) >>
      disj1_tac >>
      irule (cj 3 no_internal_call_int_calls) >>
      fs[supportedExprTraverseTheory.supported_exprs_exists_every,

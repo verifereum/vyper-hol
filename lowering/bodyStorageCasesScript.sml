@@ -28,7 +28,7 @@ Theorem supported_callable_body_contract:
   IS_SOME (supported_function_decl tops (NONE,name) Internal) /\
   lookup_callable_function deploy name tops =
     SOME (mut,nr,args,defaults,ret,stmts) ==>
-  defaults = [] /\ ?bindings. supported_stmts tops bindings stmts
+  supported_pure_exprs tops defaults /\ ?bindings. supported_stmts tops bindings stmts
 Proof
   strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >>
   rename1 `supported_function_decl _ _ _ = SOME decl` >> PairCases_on `decl` >>
@@ -93,6 +93,7 @@ QED
 Theorem supported_target_info_storage_syntax:
   !tops bindings target.
     IS_SOME (supported_target_info tops bindings target) ==>
+    ~supported_target_exists expr_halt_root target /\
     ~supported_target_exists expr_evm_run_root target /\
     ~supported_target_exists call_operands_effect_root target /\
     EVERY (\c. FST c = NONE /\
@@ -110,12 +111,13 @@ Proof
   qmatch_goalsub_rename_tac `int_calls_target tgt` >>
   first_x_assum (qspec_then `tgt` mp_tac) >> simp[] >>
   simp[GSYM optionTheory.IS_SOME_EXISTS] >>
-  metis_tac[supported_expr_no_evm_run, expr_has_evm_run_def,
+  metis_tac[supported_expr_no_halt, supported_expr_no_evm_run, expr_has_evm_run_def,
             supported_expr_main_calls, supported_expr_no_call_operand_effects, optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem supported_target_storage_syntax:
   supported_target tops bindings target ==>
+  ~supported_target_exists expr_halt_root target /\
   ~supported_target_exists expr_evm_run_root target /\
   ~supported_target_exists call_operands_effect_root target /\
   EVERY (\c. FST c = NONE /\
@@ -125,12 +127,13 @@ Proof
   simp[supported_target_def, supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def] >>
   qmatch_goalsub_rename_tac `supported_target_exists _ tgt` >> Cases_on `tgt` >>
   simp[supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def] >>
-  metis_tac[supported_expr_no_evm_run, expr_has_evm_run_def,
+  metis_tac[supported_expr_no_halt, supported_expr_no_evm_run, expr_has_evm_run_def,
             supported_expr_main_calls, supported_expr_no_call_operand_effects]
 QED
 
 Theorem supported_assignment_storage_syntax:
   supported_assignment tops bindings tgt e ==>
+  ~supported_assignment_exists expr_halt_root tgt /\
   ~supported_assignment_exists expr_evm_run_root tgt /\
   ~supported_assignment_exists call_operands_effect_root tgt /\
   EVERY (\c. FST c = NONE /\
@@ -160,6 +163,7 @@ QED
 
 Theorem supported_iterator_storage_syntax:
   supported_iterator tops ty iter n ==>
+  ~supported_iterator_exists expr_halt_root iter /\
   ~supported_iterator_exists expr_evm_run_root iter /\
   ~supported_iterator_exists call_operands_effect_root iter /\
   EVERY (\c. FST c = NONE /\
@@ -171,19 +175,19 @@ Proof
       Cases_on `arr`
       >~ [`Name _ _`]
       >- simp[supported_expr_exists_def, call_operands_effect_root_def,
-              expr_evm_run_root_def, int_calls_expr_def]
+              expr_halt_root_def, expr_evm_run_root_def, int_calls_expr_def]
       >~ [`TopLevelName _ _`]
       >- simp[supported_expr_exists_def, call_operands_effect_root_def,
-              expr_evm_run_root_def, int_calls_expr_def] >>
+              expr_halt_root_def, expr_evm_run_root_def, int_calls_expr_def] >>
       simp[supported_iterator_def] >> strip_tac >>
-      metis_tac[supported_expr_main_calls, supported_expr_no_evm_run,
+      metis_tac[supported_expr_main_calls, supported_expr_no_halt, supported_expr_no_evm_run,
                 supported_expr_no_call_operand_effects, expr_has_evm_run_def]) >>
   simp[supported_iterator_def, supported_iterator_exists_def,
        int_calls_iterator_def, EVERY_APPEND] >>
   qmatch_goalsub_rename_tac `~supported_expr_exists _ lo /\ ~supported_expr_exists _ hi` >>
   strip_tac >>
   `supported_pure_expr tops lo /\ supported_pure_expr tops hi` suffices_by
-    metis_tac[supported_pure_main_calls, supported_expr_no_evm_run,
+    metis_tac[supported_pure_main_calls, supported_expr_no_halt, supported_expr_no_evm_run,
               supported_expr_no_call_operand_effects,
               supported_expr_def, expr_has_evm_run_def] >>
   BasicProvers.EVERY_CASE_TAC >> simp[supported_pure_expr_def]
@@ -191,6 +195,7 @@ QED
 
 Theorem supported_string_reason_storage_syntax:
   supported_string_reason tops e ==>
+  ~supported_expr_exists expr_halt_root e /\
   ~supported_expr_exists expr_evm_run_root e /\
   ~supported_expr_exists call_operands_effect_root e /\
   EVERY (\c. FST c = NONE /\
@@ -198,7 +203,7 @@ Theorem supported_string_reason_storage_syntax:
 Proof
   strip_tac >>
   `supported_pure_expr tops e` suffices_by
-    metis_tac[supported_pure_main_calls, supported_expr_no_evm_run,
+    metis_tac[supported_pure_main_calls, supported_expr_no_halt, supported_expr_no_evm_run,
               supported_expr_no_call_operand_effects,
               supported_expr_def, expr_has_evm_run_def] >>
   Cases_on `e` >> gvs[supported_string_reason_def] >>
@@ -208,11 +213,13 @@ QED
 
 Theorem supported_reasons_storage_syntax:
   (!tops reason. supported_assert_reason tops reason ==>
+    ~supported_assert_exists expr_halt_root reason /\
     ~supported_assert_exists expr_evm_run_root reason /\
     ~supported_assert_exists call_operands_effect_root reason /\
     EVERY (\c. FST c = NONE /\
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_assert_reason reason)) /\
   (!tops reason. supported_raise_reason tops reason ==>
+    ~supported_raise_exists expr_halt_root reason /\
     ~supported_raise_exists expr_evm_run_root reason /\
     ~supported_raise_exists call_operands_effect_root reason /\
     EVERY (\c. FST c = NONE /\
@@ -227,6 +234,7 @@ QED
 
 Theorem supported_pure_exprs_storage_syntax:
   supported_pure_exprs tops es ==>
+  ~supported_exprs_exists expr_halt_root es /\
   ~supported_exprs_exists expr_evm_run_root es /\
   ~supported_exprs_exists call_operands_effect_root es /\
   EVERY (\c. FST c = NONE /\
@@ -235,24 +243,39 @@ Proof
   Induct_on `es` >>
   simp[supported_pure_expr_def, supported_expr_exists_def, call_operands_effect_root_def,
        int_calls_expr_def, EVERY_APPEND] >>
-  metis_tac[supported_expr_no_evm_run, supported_expr_def,
+  metis_tac[supported_expr_no_halt, supported_expr_no_evm_run, supported_expr_def,
             expr_has_evm_run_def, supported_pure_main_calls,
             supported_expr_no_call_operand_effects]
 QED
 
 Theorem supported_append_target_storage_syntax:
   supported_append_target tops tgt ==>
+  ~supported_target_exists expr_halt_root tgt /\
   ~supported_target_exists expr_evm_run_root tgt /\
   ~supported_target_exists call_operands_effect_root tgt /\
   EVERY (\c. FST c = NONE /\
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_target tgt)
 Proof
+  `(!e:expr. T) /\
+   !bt. supported_target_pure tops bt ==>
+     EVERY (\c. FST c = NONE /\
+       IS_SOME (supported_function_decl tops c Internal)) (int_calls_target bt)` by
+    (ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+     simp[supported_target_pure_def, int_calls_expr_def, EVERY_APPEND] >>
+     metis_tac[supported_pure_main_calls]) >>
   Cases_on `tgt` >>
-  simp[supported_append_target_def, supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def]
+  simp[supported_append_target_def, supported_target_pure_def,
+       supported_expr_exists_def,
+       call_operands_effect_root_def, int_calls_expr_def, EVERY_APPEND] >>
+  metis_tac[supported_target_pure_expr_exclusion, supported_expr_no_halt,
+            supported_expr_no_evm_run,
+            supported_expr_no_call_operand_effects, supported_expr_def,
+            expr_has_evm_run_def, supported_pure_main_calls]
 QED
 
 Theorem supported_aug_target_storage_syntax:
   supported_aug_target tops bindings tgt ==>
+  ~supported_target_exists expr_halt_root tgt /\
   ~supported_target_exists expr_evm_run_root tgt /\
   ~supported_target_exists call_operands_effect_root tgt /\
   EVERY (\c. FST c = NONE /\
@@ -267,11 +290,13 @@ QED
 
 Theorem supported_stmts_storage_syntax:
   (!tops bindings s. supported_stmt tops bindings s ==>
+    ~supported_stmt_expr_exists expr_halt_root s /\
     ~supported_stmt_expr_exists expr_evm_run_root s /\
     ~supported_stmt_expr_exists call_operands_effect_root s /\
     EVERY (\c. FST c = NONE /\
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) /\
   (!tops bindings ss. supported_stmts tops bindings ss ==>
+    ~supported_stmts_expr_exists expr_halt_root ss /\
     ~supported_stmts_expr_exists expr_evm_run_root ss /\
     ~supported_stmts_expr_exists call_operands_effect_root ss /\
     EVERY (\c. FST c = NONE /\
@@ -285,6 +310,7 @@ Proof
   imp_res_tac supported_assignment_def >>
   imp_res_tac supported_log_def >>
   imp_res_tac (REWRITE_RULE [DISJ_IMP_THM] (iffRL supported_expr_def)) >>
+  imp_res_tac supportedExprTraverseTheory.supported_expr_no_halt >>
   imp_res_tac supportedExprTraverseTheory.supported_expr_no_evm_run >>
   imp_res_tac supported_expr_main_calls >>
   imp_res_tac supported_expr_no_call_operand_effects >>
@@ -303,14 +329,21 @@ Theorem supported_callable_storage_syntax:
   IS_SOME (supported_function_decl tops (NONE,name) Internal) /\
   lookup_callable_function deploy name tops =
     SOME (mut,nr,args,defaults,ret,stmts) ==>
-  defaults = [] /\
+  ~supported_exprs_exists expr_halt_root defaults /\
+  ~supported_exprs_exists expr_evm_run_root defaults /\
+  EVERY (\c. FST c = NONE /\
+             IS_SOME (supported_function_decl tops c Internal))
+    (int_calls_exprs defaults) /\
+  ~supported_stmts_expr_exists expr_halt_root stmts /\
   ~supported_stmts_expr_exists expr_evm_run_root stmts /\
   EVERY (\c. FST c = NONE /\
              IS_SOME (supported_function_decl tops c Internal))
     (int_calls_stmts stmts)
 Proof
   strip_tac >> drule_all supported_callable_body_contract >> strip_tac >>
-  drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[]
+  drule supported_pure_exprs_storage_syntax >>
+  drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[] >>
+  simp[EVERY_MEM] >> metis_tac[]
 QED
 
 (* Entry transport separates semantic runtime preservation from storage
@@ -355,38 +388,6 @@ QED
 
 (* List sequencing is independent of the syntactic source of the recursive
    preservation premises.  Consumers discharge these premises using their IH. *)
-Theorem body_eval_expr_results_cons_storage:
-  (!s r s'. runtime_storage_consistent env cx s /\
-    IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
-    eval_expr cx e s = (r,s') ==> contract_storage_well_formed cx s') /\
-  (!tv s r s'. eval_expr cx e st = (INL tv,s) /\
-    runtime_storage_consistent env cx s /\
-    IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
-    eval_expr_results cx es s = (r,s') ==> contract_storage_well_formed cx s') /\
-  well_typed_expr env e /\ runtime_storage_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
-  IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
-  eval_expr_results cx (e::es) st = (res,st') ==>
-  contract_storage_well_formed cx st'
-Proof
-  strip_tac >>
-  qpat_x_assum `eval_expr_results _ (_::_) _ = _` mp_tac >>
-  simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_expr cx e st` >>
-  rename1 `eval_expr cx e st = (head_res,head_st)` >>
-  `contract_storage_well_formed cx head_st` by metis_tac[] >>
-  `runtime_consistent env cx head_st` by
-    metis_tac[eval_expr_preserves_runtime_consistent,
-              runtime_storage_consistent_runtime] >>
-  `outcome_suffix st.outcomes head_st.outcomes` by
-    (drule (cj 5 eval_outcome_suffix_mutual) >> simp[]) >>
-  drule_all body_oracle_storage_entry_transfer >> strip_tac >>
-  Cases_on `head_res` >> gvs[] >> rpt strip_tac >> gvs[] >>
-  Cases_on `eval_expr_results cx es head_st` >>
-  rename1 `eval_expr_results cx es head_st = (tail_res,tail_st)` >>
-  `contract_storage_well_formed cx tail_st` by metis_tac[] >>
-  Cases_on `tail_res` >> gvs[bind_def] >> rpt strip_tac >> gvs[]
-QED
 Theorem body_eval_exprs_cons_storage:
   (!s r s'. runtime_storage_consistent env cx s /\
     IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
@@ -734,9 +735,9 @@ Proof
   >- (rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
       Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
       gvs[return_def, raise_def] >>
-      Cases_on `precompile_call_success bt args_st` >>
+      Cases_on `precompile_call_success bt vs args_st` >>
       imp_res_tac precompile_call_success_state >> gvs[] >>
-      rename1 `precompile_call_success bt args_st = (pres,_)` >>
+      rename1 `precompile_call_success bt vs args_st = (pres,_)` >>
       Cases_on `pres` >> gvs[return_def, raise_def] >> rpt strip_tac >>
       gvs[] >> irule contract_storage_well_formed_storage_frame >>
       qexists_tac `args_st` >> simp[] >>
@@ -1004,12 +1005,12 @@ Proof
   strip_tac >>
   `well_typed_exprs env (TAKE 1 es) /\
    well_typed_exprs env (TAKE (LENGTH argtys) (DROP 1 es))` by
-    metis_tac[vyperTypeEvalSoundnessTheory.well_typed_exprs_TAKE,
-              vyperTypeEvalSoundnessTheory.well_typed_exprs_DROP] >>
+    metis_tac[vyperTypeEvalProofsTheory.well_typed_exprs_TAKE,
+              vyperTypeEvalProofsTheory.well_typed_exprs_DROP] >>
   `call_evaluation_safe cx (int_calls_exprs (TAKE 1 es)) /\
    call_evaluation_safe cx (int_calls_exprs (TAKE (LENGTH argtys) (DROP 1 es)))` by
-    metis_tac[vyperTypeEvalSoundnessTheory.call_evaluation_safe_exprs_TAKE,
-              vyperTypeEvalSoundnessTheory.call_evaluation_safe_exprs_DROP] >>
+    metis_tac[vyperTypeEvalProofsTheory.call_evaluation_safe_exprs_TAKE,
+              vyperTypeEvalProofsTheory.call_evaluation_safe_exprs_DROP] >>
   qpat_x_assum `eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) _ = _` mp_tac >>
   simp_tac (srw_ss()) [Once evaluate_def, Once bind_apply] >>
   Cases_on `eval_exprs cx (TAKE 1 es) st` >>
@@ -1508,7 +1509,7 @@ Proof
       >- (rename1 `read_result cx pv rhs_st = (INL v,rhs_st)` >>
           `value_runtime_typed env (expr_type e) v` by
             (fs[runtime_consistent_def] >>
-             drule_all vyperTypeEvalSoundnessTheory.read_live_result_success_type >>
+             drule_all vyperTypeEvalProofsTheory.read_live_result_success_type >>
              simp[]) >>
           Cases_on `eval_target_place cx bt rhs_st` >>
           rename1 `eval_target_place cx bt rhs_st = (target_res,target_st)` >>
@@ -1559,7 +1560,7 @@ Proof
       >- (rename1 `read_result cx tv rhs_st = (INL v,rhs_st)` >>
           `value_runtime_typed env (expr_type e) v` by
             (fs[runtime_consistent_def] >>
-             drule_all vyperTypeEvalSoundnessTheory.read_live_result_success_type >>
+             drule_all vyperTypeEvalProofsTheory.read_live_result_success_type >>
              simp[]) >>
           strip_tac >> first_x_assum drule_all >> simp[]) >>
       rpt strip_tac >> gvs[]) >>
@@ -1926,7 +1927,7 @@ Proof
      runtime_place_typed cx st p (ArrayTV elem_tv (Dynamic n))` by
     gvs[eval_result_typed_def, evaluate_type_def, AllCaseEqs()] >>
   `runtime_place_typed cx st1 p (ArrayTV elem_tv (Dynamic n))` by
-    (drule_all vyperTypeEvalSoundnessTheory.runtime_place_typed_transport >> simp[]) >>
+    (drule_all vyperTypeEvalProofsTheory.runtime_place_typed_transport >> simp[]) >>
   qpat_x_assum `do _ od _ = _` mp_tac >> simp[bind_def] >>
   Cases_on `read_result cx pv st1` >>
   rename1 `read_result cx pv st1 = (read_res,read_st)` >>
@@ -1935,7 +1936,7 @@ Proof
   >- (rename1 `read_result cx pv st1 = (INL v,st1)` >>
       `value_runtime_typed env (expr_type e) v` by
         (fs[runtime_consistent_def] >>
-         drule_all vyperTypeEvalSoundnessTheory.read_live_result_success_type >> simp[]) >>
+         drule_all vyperTypeEvalProofsTheory.read_live_result_success_type >> simp[]) >>
       strip_tac >>
       `value_has_type elem_tv v` by
         (gvs[value_runtime_typed_def] >>
@@ -2074,7 +2075,7 @@ Proof
   `vyperImmutableMetadataFrame$immutable_metadata_frame st st1` by
     (drule (cj 5 vyperImmutableMetadataFrameTheory.eval_metadata_frame_mutual) >> simp[]) >>
   `runtime_place_typed cx st1 p ptv` by
-    (drule_all vyperTypeEvalSoundnessTheory.runtime_place_typed_transport >> simp[]) >>
+    (drule_all vyperTypeEvalProofsTheory.runtime_place_typed_transport >> simp[]) >>
   `storage_layout_safe cx` by metis_tac[runtime_storage_consistent_layout] >>
   `state_well_typed st1` by gvs[runtime_consistent_def] >>
   drule_all update_place_tail_preserves_storage >> simp[]
@@ -2124,7 +2125,7 @@ Proof
   `state_well_typed target_st` by gvs[runtime_consistent_def] >>
   simp_tac (srw_ss()) [] >> Cases_on `read_place cx p target_st` >>
   rename1 `read_place cx p target_st = (read_res,read_st)` >>
-  drule_all vyperTypeEvalSoundnessTheory.live_place_read_sound >> strip_tac >> gvs[] >>
+  drule_all vyperTypeEvalCaseProofsTheory.live_place_read_sound >> strip_tac >> gvs[] >>
   reverse (Cases_on `read_res`) >- (simp[] >> strip_tac >> gvs[]) >>
   suspend "rhs"
 QED
@@ -2283,9 +2284,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `PERM (custom_error_exprs err) es` by
     (drule order_custom_error_args_perm >> simp[]) >>
-  `well_typed_exprs env es` by metis_tac[vyperTypeEvalSoundnessTheory.well_typed_exprs_perm] >>
+  `well_typed_exprs env es` by metis_tac[vyperTypeEvalProofsTheory.well_typed_exprs_perm] >>
   `call_evaluation_safe cx (int_calls_exprs es)` by
-    metis_tac[vyperTypeEvalSoundnessTheory.call_evaluation_safe_exprs_perm] >>
+    metis_tac[vyperTypeEvalProofsTheory.call_evaluation_safe_exprs_perm] >>
   `~supported_exprs_exists expr_evm_run_root (custom_error_exprs err)` by
     fs[supported_exprs_exists_every] >>
   drule_all body_exprs_syntax_perm >> strip_tac >>
@@ -2650,7 +2651,7 @@ Proof
   Cases_on `read_result cx r st` >>
   rename1 `read_result cx r st = (rd_res,rd_st)` >>
   `rd_st = st /\ (!v. rd_res = INL v ==> value_has_type tyv v)` by
-    (drule_all vyperTypeEvalSoundnessTheory.iterator_result_read_typed >> Cases_on `rd_res` >> simp[]) >>
+    (drule_all vyperTypeEvalProofsTheory.iterator_result_read_typed >> Cases_on `rd_res` >> simp[]) >>
   qpat_x_assum `rd_st = st` SUBST_ALL_TAC >>
   reverse (Cases_on `rd_res`)
   >- (qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
@@ -3013,7 +3014,7 @@ Theorem body_tuple_nested_consumer:
 Proof
   disch_tac >> rpt gen_tac >> strip_tac >>
   gvs[well_typed_atarget_def, supported_assignment_exists_def, int_calls_atarget_def] >>
-  drule vyperTypeEvalSoundnessTheory.value_runtime_typed_tuple_components >> strip_tac >> gvs[] >>
+  drule vyperTypeEvalCaseProofsTheory.value_runtime_typed_tuple_components >> strip_tac >> gvs[] >>
   qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >> first_x_assum drule_all >> simp[]
 QED
@@ -3144,7 +3145,7 @@ Proof
      (cx with stk updated_by CONS (env_body.current_src,fn)) st /\
    context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn))` by
     (fs[runtime_consistent_def] >>
-     drule vyperTypeEvalSoundnessTheory.intcall_default_env_side_conditions >>
+     drule vyperTypeEvalProofsTheory.intcall_default_env_side_conditions >>
      disch_then (qspecl_then [`env_body`, `env_body.current_src`, `fn`] mp_tac) >>
      simp[]) >>
   `env_consistent env_body
@@ -3153,7 +3154,7 @@ Proof
    state_well_typed (lock_st with scopes := [call_env]) /\
    accounts_well_typed (lock_st with scopes := [call_env]).accounts` by
     (fs[runtime_consistent_def] >>
-     drule vyperTypeEvalSoundnessTheory.intcall_live_pushed_body_preconditions >>
+     drule vyperTypeEvalProofsTheory.intcall_live_pushed_body_preconditions >>
      disch_then (qspecl_then
        [`env_body`, `st`, `lock_st`, `call_env`, `fn`, `nr`, `is_view`] mp_tac) >>
      fs[lock_if_nr_def, env_scopes_consistent_def, vyperContextTheory.get_tenv_def] >>
@@ -3168,7 +3169,8 @@ Theorem body_intcall_guard_apply:
   (!s0 vs t0 prev s1 dflt_vs t1 s3 call_env t3
       s4 rtv t4 s5 t5 s6 cxf t6.
     eval_exprs cx es s0 = (INL vs,t0) /\
-    finally (do set_scopes [FEMPTY]; eval_exprs (cx with stk updated_by CONS (NONE,fn)) [] od)
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (NONE,fn)) needed od)
       (set_scopes prev.scopes) s1 = (INL dflt_vs,t1) /\
     lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
       "IntCall bind_arguments" s3 = (INL call_env,t3) /\
@@ -3185,9 +3187,12 @@ Theorem body_intcall_guard_apply:
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\
       eval_stmts cxf ss st = (res,st') ==> contract_storage_well_formed cxf st')) /\
   eval_exprs cx es st = (INL vs,args_st) /\
-  bind_arguments (get_tenv cx) args vs = SOME call_env /\
+  finally (do set_scopes [FEMPTY];
+              eval_exprs (cx with stk updated_by CONS (NONE,fn)) needed od)
+    (set_scopes args_st.scopes) args_st = (INL dflt_vs,d_st) /\
+  bind_arguments (get_tenv cx) args (vs ++ dflt_vs) = SOME call_env /\
   evaluate_type (get_tenv cx) ret = SOME rtv /\
-  lock_if_nr cx nr (is_view_mut mut) args_st = (INL (),lock_st) /\
+  lock_if_nr cx nr (is_view_mut mut) d_st = (INL (),lock_st) /\
   push_function (NONE,fn) call_env cx lock_st = (INL cxf,body_st) ==> (!tops env ret_ty env' st res st'.
       type_stmts env ret_ty ss = SOME env' /\
       supported_program tops /\ get_module_code cxf NONE = SOME tops /\
@@ -3198,11 +3203,64 @@ Theorem body_intcall_guard_apply:
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\
       eval_stmts cxf ss st = (res,st') ==> contract_storage_well_formed cxf st')
 Proof
-  strip_tac >> first_x_assum match_mp_tac >>
-  goal_assum $ drule_at Any >>
-  goal_assum $ drule_at Any >>
-  goal_assum $ drule_at Any >>
-  qexistsl_tac [`args_st`, `args_st`, `[]`, `args_st`, `args_st`, `args_st`,
-               `args_st`, `rtv`, `args_st`] >>
-  simp[eval_empty_defaults_finally, lift_option_type_def, return_def]
+  strip_tac >>
+  first_x_assum (qspecl_then [`st`, `vs`, `args_st`, `args_st`, `args_st`,
+    `dflt_vs`, `d_st`, `d_st`, `call_env`, `d_st`, `d_st`,
+    `rtv`, `d_st`, `d_st`, `lock_st`, `lock_st`, `cxf`, `body_st`] mp_tac) >>
+  simp[lift_option_type_def, return_def]
+QED
+
+(* The source call after its arguments and omitted defaults evaluated. *)
+Theorem supported_exprs_exists_DROP:
+  !es n. ~supported_exprs_exists p es ==> ~supported_exprs_exists p (DROP n es)
+Proof
+  Induct >> rw[supported_expr_exists_def] >>
+  Cases_on `n` >> simp[supported_expr_exists_def]
+QED
+
+Theorem int_calls_exprs_DROP_EVERY:
+  !es n. EVERY P (int_calls_exprs es) ==> EVERY P (int_calls_exprs (DROP n es))
+Proof
+  Induct >> rw[int_calls_expr_def] >>
+  Cases_on `n` >> gvs[int_calls_expr_def, EVERY_APPEND]
+QED
+
+Theorem eval_expr_intcall_defaults_step:
+  ~MEM (NONE,fn) cx.stk /\ get_module_code cx NONE = SOME tops /\
+  lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,dflts,ret,ss) /\
+  LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH es + LENGTH dflts /\
+  eval_exprs cx es st = (args_res,args_st) ==>
+  eval_expr cx (Call ty (IntCall (NONE,fn)) es kw) st =
+  case args_res of
+    INR e => (INR e,args_st)
+  | INL vs =>
+    case finally (do set_scopes [FEMPTY];
+                     eval_exprs (cx with stk updated_by CONS (NONE,fn))
+                       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) od)
+           (set_scopes args_st.scopes) args_st of
+      (INR e,d_st) => (INR e,d_st)
+    | (INL dflt_vs,d_st) =>
+      (do call_env <- lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+            "IntCall bind_arguments";
+          rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+          lock_if_nr cx nr (is_view_mut mut);
+          cxf <- push_function (NONE,fn) call_env cx;
+          rv <- finally_unless_halt
+            (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+              (pop_function args_st.scopes))
+            (unlock_if_nr cx nr (is_view_mut mut));
+          crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+          return (Value crv) od) d_st
+Proof
+  strip_tac >>
+  simp[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
+       bind_apply, ignore_bind_apply, return_def, get_scopes_def] >>
+  Cases_on `args_res` >> simp[] >>
+  rename1 `finally _ _ args_st` >>
+  Cases_on `finally (do set_scopes [FEMPTY];
+                       eval_exprs (cx with stk updated_by CONS (NONE,fn))
+                         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) od)
+              (set_scopes args_st.scopes) args_st` >>
+  rename1 `_ = (d_res,d_st)` >> Cases_on `d_res` >>
+  gvs[bind_apply, ignore_bind_apply]
 QED

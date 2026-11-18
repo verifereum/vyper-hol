@@ -14,20 +14,16 @@ Theorem effect_free_source_mutual:
   (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:eval_result list. T) /\
   (!cx e. !es result es'.
     ~supported_expr_exists expr_effect_root e /\ eval_expr cx e es = (result,es') ==>
-    es' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-    es with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
+    es' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+    es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
   (!cx args. !es result es'.
     ~supported_exprs_exists expr_effect_root args /\ eval_exprs cx args es = (result,es') ==>
-    es' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-    es with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
+    es' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+    es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
   (!cx:evaluation_context. !bt:base_assignment_target. T) /\
   (!cx:evaluation_context. !bt:base_assignment_target. T) /\
   (!cx:evaluation_context. !g:assignment_target. !v:value. T) /\
-  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T) /\
-  (!cx args. !es result es'.
-    ~supported_exprs_exists expr_effect_root args /\ eval_expr_results cx args es = (result,es') ==>
-    es' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-    es with <|gas_obs := []; outcomes := NONE; storage_trace := []|>)
+  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   simp[supported_expr_exists_def, expr_effect_root_def]
@@ -46,8 +42,6 @@ Proof
   >- suspend "typebuiltin"
   >- (simp[evaluate_def, return_def])
   >- suspend "exprs_cons"
-  >- (simp[evaluate_def, return_def])
-  >> suspend "results_cons"
 QED
 
 Resume effect_free_source_mutual[ifexp]:
@@ -100,11 +94,6 @@ Resume effect_free_source_mutual[exprs_cons]:
   qpat_x_assum `!a b c d f g. _` (drule_all_then assume_tac) >>
   rpt (qpat_x_assum `!a b c. _` (drule_then assume_tac)) >> metis_tac[]
 QED
-Resume effect_free_source_mutual[results_cons]:
-  rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  rpt (qpat_x_assum `!a b c. _` (drule_then assume_tac)) >> metis_tac[]
-QED
-
 Resume effect_free_source_mutual[builtin_len]:
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -143,8 +132,8 @@ Resume effect_free_source_mutual[builtin_ordinary]:
   imp_res_tac precompile_call_success_state >> gvs[] >>
   drule_at (Pos last) builtin_operands_preserve >>
   disch_then (qspec_then
-    `\a b. b with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-           a with <|gas_obs := []; outcomes := NONE; storage_trace := []|>` mp_tac) >>
+    `\a b. b with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+           a with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>` mp_tac) >>
   simp[] >>
   (impl_tac >- (rpt conj_tac >> rpt strip_tac >>
     gvs[code_slice_source_SOME, supported_expr_exists_def, expr_effect_root_def] >>
@@ -155,14 +144,13 @@ QED
 Finalise effect_free_source_mutual[local]
 
 
-(* Effects exclude calls and Pop, not gas readings or precompile outcomes.
-   Clearing only the observational fields therefore gives the frame needed
-   for captured raw results, including local places. *)
+(* The projection for captured raw results clears gas readings, remaining
+   outcomes, recorded precompile requests and the storage observation log. *)
 Theorem effect_free_source_projection:
   !cx e es result es'.
     ~expr_has_effect e /\ eval_expr cx e es = (result,es') ==>
-    es' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-    es with <|gas_obs := []; outcomes := NONE; storage_trace := []|>
+    es' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+    es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>
 Proof
   rpt strip_tac >> irule (cj 5 effect_free_source_mutual) >>
   gvs[expr_has_effect_def] >> metis_tac[]
@@ -172,23 +160,23 @@ QED
 Theorem target_pure_source_mutual:
   (!tops e. supported_pure_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
+      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
   (!tops es. supported_pure_exprs tops es ==>
     (!cx s r s'. eval_exprs cx es s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
+      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
     (!e. MEM e es ==> !cx s r s'. eval_expr cx e s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>)) /\
+      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)) /\
   (!tops fields. supported_pure_fields tops fields ==>
     !cx s r s'. eval_exprs cx (MAP SND fields) s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
+      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
   (!tops e. supported_place_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>)
+      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)
 Proof
   rpt conj_tac >> rpt gen_tac >> strip_tac >> rpt strip_tac >>
   imp_res_tac supported_pure_no_effect >>
@@ -206,8 +194,8 @@ Theorem target_pure_base_source_projection:
   !bt tops cx s r s'.
     supported_target_pure tops bt /\
     eval_base_place cx bt s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
-      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>
+      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
   rpt gen_tac
@@ -231,7 +219,8 @@ QED
 
 Theorem target_pure_base_source_frame:
   supported_target_pure tops bt /\ eval_base_place cx bt s = (r,s') ==>
-  ?gs os st. s' = s with <|gas_obs := gs; outcomes := os; storage_trace := st|>
+  ?gs os rqs st.
+    s' = s with <|gas_obs := gs; outcomes := os; requests := rqs; storage_trace := st|>
 Proof
   strip_tac >> drule_all target_pure_base_source_projection >>
   simp[evaluation_state_component_equality] >> fs[evaluation_state_component_equality] >> metis_tac[]

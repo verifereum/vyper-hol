@@ -50,7 +50,9 @@ Theorem hash_bytes_prepare_endpoint:
    (?aid lb k. FLOOKUP a.vs_allocas aid = SOME (lb,k) /\
       aid < sm.cs_next_id /\ lb <= b+32 /\ b+32+n <= lb+k) \/
    (?name lb k. local_region cenv es.scopes a name lb k /\
-      lb <= b+32 /\ b+32+n <= lb+k))
+      lb <= b+32 /\ b+32+n <= lb+k)) /\
+  a.vs_accounts = s.vs_accounts /\ a.vs_transient = s.vs_transient /\
+  a.vs_call_ctx = s.vs_call_ctx /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all hash_bytes_prepare_frame >>
@@ -70,9 +72,11 @@ Proof
     (irule hash_readonly_input_window >> qexistsl_tac [`s`, `sa`] >> simp[]) >>
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
    t.vs_outcomes = s.vs_outcomes /\ t.vs_halted = s.vs_halted /\
-   t.vs_current_bb = s.vs_current_bb` by
+   t.vs_current_bb = s.vs_current_bb /\ t.vs_accounts = s.vs_accounts /\
+   t.vs_transient = s.vs_transient /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_assum `(t with vs_vars := _) = s`
-       (mp_tac o Q.AP_TERM `\v. (v.vs_memory,v.vs_allocas,v.vs_outcomes,v.vs_halted,v.vs_current_bb)`) >> simp[]) >>
+       (mp_tac o Q.AP_TERM `\v. (v.vs_memory,v.vs_allocas,v.vs_outcomes,v.vs_halted,v.vs_current_bb,
+         v.vs_accounts,v.vs_transient,v.vs_call_ctx)`) >> simp[]) >>
   `!z. not_fresh_at sa z ==> FLOOKUP t.vs_vars z = FLOOKUP s.vs_vars z` by
     (qpat_x_assum `!z. not_fresh_at sa z ==> lookup_var z t = _` mp_tac >>
      simp[lookup_var_def]) >>

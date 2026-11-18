@@ -87,6 +87,7 @@ QED
 
 Theorem ricf_cert_exec_create:
   ricf_cert_core D ids stk PG G tn fn sites maps targets H un cur curs s t /\
+  s.vs_outcomes <> [] /\
   un.t_stor = {} /\ un.t_trans = {} /\ inst.inst_outputs = [out] /\
   w2n sz <= 2 * max_code_size /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t ==>
@@ -101,6 +102,9 @@ Theorem ricf_cert_exec_create:
       (update_var out w r) (update_var out w u)
 Proof
   strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[ricf_cert_core_def, ricf_live_boundary_core_def, ricf_frame_agree_def,
+       taint_agree_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
   `venom_create_request s value off sz salt =
      venom_create_request t value off' sz salt` by
     (irule ricf_create_request_agree >>
@@ -123,9 +127,11 @@ Definition ricf_call_taint_def:
     tn with <|t_mem := tn.t_mem DIFF
       {i | ro <= i /\ i < ro + LENGTH (TAKE rs r.vs_returndata)};
       t_stor := if ~rq.cr_static /\ r.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r.vs_requests) /\
         r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
         then {} else tn.t_stor;
       t_trans := if ~rq.cr_static /\ r.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r.vs_requests) /\
         r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
         then {} else tn.t_trans|>
 End
@@ -162,9 +168,7 @@ QED
 
 Theorem ricf_frame_consume_call:
   ricf_frame_agree D X sites PG H tn s t /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-    request_agree_except D rq1 rq2) /\
+  request_agree_except D rq1 rq2 /\
   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
   consume_call_outcome rq1 ro rs s = (w,r) /\
@@ -229,9 +233,7 @@ QED
 
 Theorem ricf_cert_consume_call:
   ricf_cert_core D ids stk PG G tn fn sites maps targets H un cur curs s t /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-    request_agree_except D rq1 rq2) /\
+  request_agree_except D rq1 rq2 /\
   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
   consume_call_outcome rq1 ro rs s = (w,r) /\
@@ -284,34 +286,25 @@ QED
 Theorem ricf_call_request_compatible:
   ricf_frame_agree D X sites PG H tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n ao') (w2n az) t /\
-  (computed_precompile (venom_call_request s addr value ao az static) \/
-   (accounts_agree_except D s.vs_accounts t.vs_accounts /\
-    transient_agree_except D s.vs_transient t.vs_transient)) ==>
-  ((computed_precompile (venom_call_request s addr value ao az static) /\
-    computed_precompile (venom_call_request t addr value ao' az static) /\
-    (venom_call_request s addr value ao az static).cr_target =
-      (venom_call_request t addr value ao' az static).cr_target /\
-    (venom_call_request s addr value ao az static).cr_data =
-      (venom_call_request t addr value ao' az static).cr_data) \/
-   request_agree_except D (venom_call_request s addr value ao az static)
-     (venom_call_request t addr value ao' az static))
+  accounts_agree_except D s.vs_accounts t.vs_accounts /\
+  transient_agree_except D s.vs_transient t.vs_transient ==>
+  request_agree_except D (venom_call_request s addr value ao az static)
+    (venom_call_request t addr value ao' az static)
 Proof
   rpt gen_tac >> disch_tac >>
   `s.vs_call_ctx = t.vs_call_ctx` by
     (fs[ricf_frame_agree_def] >> drule taint_agree_call_ctx >> simp[]) >>
-  fs[Excl "consume_call_outcome_eq"]
-  >- (disj1_tac >> gvs[extCallOracleTheory.computed_precompile_def, venom_call_request_def]) >>
-  disj2_tac >> irule o1LowerDloadJointExternalTheory.ld_venom_call_request_masked >> simp[]
+  irule o1LowerDloadJointExternalTheory.ld_venom_call_request_masked >> simp[]
 QED
 
 Theorem ricf_cert_exec_ext_call:
   ricf_cert_core D ids stk PG G tn fn sites maps targets H un cur curs s t /\
+  s.vs_outcomes <> [] /\
   inst.inst_outputs = [out] /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n ao') (w2n az) t /\
-  (computed_precompile (venom_call_request s addr value ao az static) \/
-   (accounts_agree_except D s.vs_accounts t.vs_accounts /\
-    transient_agree_except D s.vs_transient t.vs_transient)) /\
-  consume_call_outcome (venom_call_request s addr value ao az static)
+  accounts_agree_except D s.vs_accounts t.vs_accounts /\
+  transient_agree_except D s.vs_transient t.vs_transient /\
+  consume_call_outcome (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas))
     (w2n ro) (w2n rs) s = (w,r) /\
   (!gam db sb sz k.
     (gam = ricf_site_triples sites \/ MEM gam (MAP ricf_site_triples maps) \/
@@ -323,33 +316,35 @@ Theorem ricf_cert_exec_ext_call:
     ricf_cert_core D ids stk PG
       (ricf_effective_prov fn (update_var out w r) (set_prov H [out] NONE))
       (ricf_effective_taint fn (update_var out w r)
-        (ricf_call_taint un (venom_call_request s addr value ao az static) s r
+        (ricf_call_taint un (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) s r
           (w2n ro) (w2n rs) with t_var := set_var_taint un.t_var [out] {})) fn
       sites maps targets (set_prov H [out] NONE)
-      (ricf_call_taint un (venom_call_request s addr value ao az static) s r
+      (ricf_call_taint un (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) s r
         (w2n ro) (w2n rs) with t_var := set_var_taint un.t_var [out] {}) cur curs
       (update_var out w r) (update_var out w u)
 Proof
   strip_tac >> (
-  `((computed_precompile (venom_call_request s addr value ao az static) /\
-    computed_precompile (venom_call_request t addr value ao' az static) /\
-    (venom_call_request s addr value ao az static).cr_target =
-      (venom_call_request t addr value ao' az static).cr_target /\
-    (venom_call_request s addr value ao az static).cr_data =
-      (venom_call_request t addr value ao' az static).cr_data) \/
-   request_agree_except D (venom_call_request s addr value ao az static)
-     (venom_call_request t addr value ao' az static))` by
-    (irule ricf_call_request_compatible >>
-     fs[ricf_cert_core_def, ricf_live_boundary_core_def, Excl "consume_call_outcome_eq"] >>
-     metis_tac[]) >>
-  Cases_on `consume_call_outcome (venom_call_request t addr value ao' az static)
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[ricf_cert_core_def, ricf_live_boundary_core_def, ricf_frame_agree_def,
+       taint_agree_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
+  `request_agree_except D
+     (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas))
+     (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas))` by
+    (`request_agree_except D (venom_call_request s addr value ao az static)
+        (venom_call_request t addr value ao' az static)` suffices_by
+       simp[venom_call_request_def, request_agree_except_def] >>
+     irule ricf_call_request_compatible >>
+     fs[ricf_cert_core_def, ricf_live_boundary_core_def,
+        Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
+  Cases_on `consume_call_outcome (venom_call_request t addr value ao' az static with cr_gas := SOME (w2n gas))
     (w2n ro) (w2n rs) t` >>
   `w = q /\ ricf_cert_core D ids stk PG
     (ricf_effective_prov fn r H)
     (ricf_effective_taint fn r
-      (ricf_call_taint un (venom_call_request s addr value ao az static) s r (w2n ro) (w2n rs))) fn
+      (ricf_call_taint un (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) s r (w2n ro) (w2n rs))) fn
     sites maps targets H
-      (ricf_call_taint un (venom_call_request s addr value ao az static) s r (w2n ro) (w2n rs))
+      (ricf_call_taint un (venom_call_request s addr value ao az static with cr_gas := SOME (w2n gas)) s r (w2n ro) (w2n rs))
     cur curs r r'` by
     (irule ricf_cert_consume_call >>
      qpat_assum `ricf_cert_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>

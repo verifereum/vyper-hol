@@ -38,7 +38,7 @@ Proof
   strip_tac >>
   `mem_safe_step 0 ctx inst s` by
     (simp[mem_safe_step_non_invoke] >>
-     irule below_frontier_no_ranges >> gvs[]) >>
+     disj1_tac >> irule below_frontier_no_ranges >> gvs[]) >>
   `gas_path_mem_edge ctx fn s 0 (OK (jump_to lbl s))` by
     (simp[gas_path_mem_edge_def] >> qexists `0:num` >>
      gvs[step_inst_non_invoke, gas_count_step_def, is_terminator_def] >>

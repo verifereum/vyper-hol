@@ -56,11 +56,17 @@ Proof
   `exec_ext_call ci u (HD (s.vs_gas_readings ++ [0w])) addr 0w wi an wo rn T =
     OK (update_var cv 1w ((write_memory_with_expansion (w2n wo)
        (TAKE (w2n rn) data) u) with
-       <|vs_returndata := data; vs_outcomes := DROP 1 u.vs_outcomes|>))` by
+       <|vs_returndata := data; vs_outcomes := DROP 1 u.vs_outcomes;
+         vs_requests := u.vs_requests ++
+           [venom_call_request u addr 0w wi an T with
+             cr_gas := SOME (w2n (HD (s.vs_gas_readings ++ [0w])))]|>))` by
     (irule computed_static_exec_success >> gvs[mk_inst_def, update_var_def]) >>
   `v = update_var cv 1w ((write_memory_with_expansion (w2n wo)
        (TAKE (w2n rn) data) u) with
-       <|vs_returndata := data; vs_outcomes := DROP 1 u.vs_outcomes|>)` by
+       <|vs_returndata := data; vs_outcomes := DROP 1 u.vs_outcomes;
+         vs_requests := u.vs_requests ++
+           [venom_call_request u addr 0w wi an T with
+             cr_gas := SOME (w2n (HD (s.vs_gas_readings ++ [0w])))]|>)` by
     (qpat_x_assum `step_inst_base ci u = OK v` mp_tac >>
      gvs[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
           update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>

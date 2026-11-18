@@ -201,7 +201,7 @@ Resume raw_log_expr_sim_full[continuation]:
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type data) data mid` by
     (qpat_assum `body_expr_full_ok cx data`
-       (mp_tac o CONJUNCT1 o REWRITE_RULE [Once body_expr_full_ok_def]) >>
+       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
      disch_then drule_all >> metis_tac[]) >>
   FIRST [qpat_assum `expr_type data = BaseT (BytesT (Fixed 32))`
            (K all_tac) >> suspend "fixed_data",
