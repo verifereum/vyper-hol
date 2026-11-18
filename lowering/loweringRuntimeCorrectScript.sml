@@ -989,44 +989,6 @@ Proof
       (ACCEPT_TAC o SIMP_RULE (srw_ss()) [ptrSafeRunTheory.ptr_safe_run_def,th]))
 QED
 
-Theorem runtime_lock_abort_result:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\
-  source_typing_ok tops am tx /\
-  source_deployment_rel tops am tx /\
-  initial_venom_state_rel tops am tx vs /\
-  lookup_function NONE tx.function_name External tops =
-    SOME (mut,T,args,[],ret,fbody) /\
-  bind_arguments (type_env tops) args tx.args = SOME env /\
-  send_call_value mut
-    (initial_evaluation_context am.sources am.layouts tx NONE)
-    (initial_state am [env] with
-       <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) /\
-  lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
-    T (is_view_mut mut) es0 = (INR exc,es_abort) /\
-  unit.cu_context.ctx_entry = SOME "__entry" /\
-  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions =
-    SOME func /\
-  fn_entry_label func = SOME "__entry" /\
-  lookup_block "__entry" func.fn_blocks = SOME bb /\
-  phi_prefix_length bb.bb_instructions = 0 /\
-  expr_exit (INR exc : unit + exception) (Abort a t) /\
-  (exc = Error (RuntimeError "nonreentrant lock") \/
-   exc = Error (RuntimeError "write in static context")) /\
-  (!D explicit. gas_origin_ptr_path
-     (D,0,explicit,unit.cu_context,func,[])
-     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                vs_inst_idx := 0|>,FEMPTY,entry_taint) [] (Abort a t,G,tn)) ==>
-  source_unit_execution_correct_at [] tops ret am tx unit vs /\
-  (!gs. FST (call_external (SOME vs.vs_outcomes) gs am tx) <>
-    INR (Error (RuntimeError "msg.gas: no gas reading")))
-Proof
-  DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
-  drule_all runtime_lock_abort_result_with >> strip_tac >>
-  simp[source_unit_execution_correct_at_with] >>
-  qexists_tac `shadow_unit.cu_context` >> simp[]
-QED
-
 val selected_entry_split_tac =
   `?mut args fbody.
      lookup_function NONE tx.function_name External tops =

@@ -504,64 +504,6 @@ Proof
   simp[]
 QED
 
-Theorem external_entry_lock_abort_joint:
-  !tops rpolicy unit am tx ret vs mut args fbody env es0 exc es_abort.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    tx.function_name <> "__default__" /\
-    LENGTH tx.args = LENGTH args /\
-    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
-      tx.args vs.vs_call_ctx.cc_calldata /\
-    initial_venom_state_rel tops am tx vs /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut,T,args,[],ret,fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-        <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) /\
-    lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
-      T (is_view_mut mut) es0 = (INR exc,es_abort) ==>
-    ?func a s G tn.
-      unit.cu_context.ctx_entry = SOME "__entry" /\
-      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-      fn_entry_label func = SOME "__entry" /\
-      expr_exit (INR exc : unit + exception) (Abort a s) /\
-      (exc = Error (RuntimeError "nonreentrant lock") \/
-       exc = Error (RuntimeError "write in static context")) /\
-      s.vs_gas_readings = vs.vs_gas_readings /\
-      !D explicit.
-        gas_origin_ptr_path (D,0,explicit,unit.cu_context,func,[])
-          (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                     vs_inst_idx := 0|>,FEMPTY,entry_taint) [] (Abort a s,G,tn)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all selected_nonreentrant_lock_metadata >> strip_tac >>
-  drule_all registration_supported_no_dalloca >> strip_tac >>
-  drule_all external_entry_registration_joint >>
-  disch_then (qx_choosel_then
-    [`pbody`,`lbl`,`cenv0`,`pos_args`,`min_cds`,`is_payable`,`nkey`,`ut'`,
-     `iv`,`rt`,`st`,`cenv`,`sa`,`st'`,`func`,`s0`,`G0`,`tn0`] strip_assume_tac) >>
-  drule return_package_target_inversion >> strip_tac >>
-  qpat_assum `package_external_fn _ _ _ _ = _`
-    (assume_tac o SIMP_RULE (srw_ss()) [constSubstTheory.subst_consts_fn_def]) >>
-  drule return_package_metadata >> strip_tac >>
-  `nkey = global_nonreentrant_slot /\ ut' = T /\ iv = (mut = View)` by simp[] >>
-  qpat_x_assum `nkey = _` SUBST_ALL_TAC >>
-  qpat_x_assum `ut' = _` SUBST_ALL_TAC >>
-  qpat_x_assum `iv = _` SUBST_ALL_TAC >>
-  mp_tac (Q.INST [`fbody` |-> `pbody`, `ctx` |-> `unit.cu_context`, `cx` |->
-      `initial_evaluation_context am.sources am.layouts tx NONE`,
-      `ss` |-> `vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                          vs_inst_idx := 0|>`]
-    (SPEC_ALL external_entry_abort_from_registration)) >>
-  impl_tac >- simp[] >>
-  disch_then (qx_choosel_then [`a`,`s`,`G`,`tn`] strip_assume_tac) >>
-  qexistsl_tac [`func`,`a`,`s`,`G`,`tn`] >> simp[]
-QED
-
 Theorem external_entry_subst_consts_joint:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
