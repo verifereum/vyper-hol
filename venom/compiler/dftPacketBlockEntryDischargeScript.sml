@@ -164,10 +164,12 @@ Proof
     (`strict_dom_vars_defined sf (in_state with vs_gas_readings := gs)` by
        (qpat_x_assum `strict_dom_vars_defined sf in_state` mp_tac >>
         simp[strict_dom_vars_defined_def]) >>
-     drule_all dft_successor_available >> simp[strict_dom_vars_defined_def]) >>
+     drule_at (Pos (el 8)) dft_successor_available >>
+     disch_then (qspec_then `sf` mp_tac) >>
+     simp[strict_dom_vars_defined_def] >> metis_tac[]) >>
   `ctx_labels_bound C7 post.vs_labels /\ ctx_labels_bound C8 post.vs_labels` by
-    (drule ctx_labels_bound_run_block >> simp[] >>
-     drule ctx_labels_bound_run_block >> simp[]) >>
+    (drule_at (Pos (el 2)) ctx_labels_bound_run_block >> simp[] >>
+     disch_then (fn th => conj_tac >> irule th >> simp[])) >>
   `?bb1. lookup_block post.vs_current_bb sf.fn_blocks = SOME bb1` by
     (Cases_on `lookup_block post.vs_current_bb sf.fn_blocks` >>
      metis_tac[dft_fn_lookup_block_none,optionTheory.NOT_NONE_SOME]) >>
@@ -178,13 +180,35 @@ Proof
   `EVERY inst_shape_ok bb1.bb_instructions` by suspend "shape" >>
   `s1.vs_inst_idx = LENGTH ps ==> dft_remaining_inv sf bb1 xs1 s1` by
     (drule_all dft_packet_callee_body_initialized >> simp[]) >>
-  qexistsl [`bb1`,`ps`,`xs1`,`ys`,`rho1`] >> simp[] >>
-  rpt gen_tac >> irule dft_packet_block_fresh_entry >> simp[] >>
-  qexistsl [`C8`,`post`,`sp1`] >> simp[]
+  qexistsl [`bb1`,`ps`,`xs1`,`ys`,`rho1`] >>
+  rpt (conj_tac >- (simp[] >> NO_TAC)) >>
+  rpt gen_tac >> irule dft_packet_block_fresh_entry >> gvs[]
 QED
 
 Resume dft_packet_block_entry_discharge[source_run]:
-  FAIL_TAC "source_run"
+  `eval_phis (in_state with vs_gas_readings := gs) bb0.bb_instructions =
+     OK (sp0 with vs_gas_readings := gs)` by
+    (mp_tac (Q.INST [`gs` |-> `gs`, `s` |-> `in_state`,
+       `insts` |-> `bb0.bb_instructions`] eval_phis_restore) >>
+     simp[] >> Cases_on `eval_phis (in_state with vs_gas_readings := gs) bb0.bb_instructions` >>
+     simp[restore_rel_def]) >>
+  `bb0.bb_instructions <> [] /\
+   is_terminator (LAST bb0.bb_instructions).inst_opcode` by simp[LAST_APPEND_NOT_NIL] >>
+  `(LAST bb0.bb_instructions).inst_opcode <> PHI` by
+    (Cases_on `(LAST bb0.bb_instructions).inst_opcode` >> gvs[is_terminator_def]) >>
+  `phi_prefix_length bb0.bb_instructions < LENGTH bb0.bb_instructions` by
+    metis_tac[phi_prefix_length_lt_last_non_phi] >>
+  simp[run_block_def] >>
+  `exec_block fuel C7 bb0
+      ((sp0 with vs_gas_readings := gs) with
+        vs_inst_idx := phi_prefix_length bb0.bb_instructions) =
+    FOLDR (dft_exec_cons fuel C7) OK
+      (DROP (phi_prefix_length bb0.bb_instructions) bb0.bb_instructions)
+      ((sp0 with vs_gas_readings := gs) with
+        vs_inst_idx := phi_prefix_length bb0.bb_instructions)` by
+    (irule native_exec_block_terminated_fold >>
+     gvs[DROP_EQ_NIL,last_drop,LAST_APPEND_NOT_NIL]) >>
+  gvs[]
 QED
 
 Resume dft_packet_block_entry_discharge[shape]:
