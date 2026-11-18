@@ -6,7 +6,7 @@ Ancestors
   bufferAllocationExecution allocaHistory ptrSafetyTransport
   abiBuiltinDecodeHeader abiBuiltinAllocation fragExec loweringStateRelDefs
   loweringHalt exprLoweringProps compileEnv emitHelperProps venomInst venomState venomExecSemantics
-  words list rich_list finite_map
+  words list rich_list finite_map allocaBudgetProps
 
 (* Concrete 256-word horizon-type instances of the installed caller propositions. *)
 val owned_decoder_state = ``\st s G tn.
@@ -241,11 +241,109 @@ Resume abi_decode_caller_allocation_joint[owned]:
      drule_all abi_decode_scratch_alloc_frame_joint >>
      disch_then (qspec_then `PG` strip_assume_tac) >>
      gvs[]) >>
+  `~not_fresh_at header_st out /\ not_fresh_at ready out` by
+    (fs[] >> (metis_tac[])) >>
+  `!x. not_fresh_at st x ==> x <> out` by
+    (`st.cs_next_var <= header_st.cs_next_var` by simp[] >>
+     metis_tac[stmtFragPtrTheory.not_fresh_at_mono]) >>
+  `FST inputs <> Var out` by
+    (strip_tac >>
+     gvs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+         abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `alloca_inv u` by metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca] >>
+  `alloca_history fn (v with vs_inst_idx := SUC u.vs_inst_idx)` by
+    (drule_all allocaHistoryTheory.alloca_history_base_step >>
+     simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  `u.vs_alloca_next <= v.vs_alloca_next` by
+    (`(mk_inst header_st.cs_next_id ALLOCA [Lit (n2w outsz)] [out]).inst_opcode = ALLOCA` by
+       simp[venomInstTheory.mk_inst_def] >>
+     drule_all allocaBudgetPropsTheory.step_inst_base_alloca_effect >>
+     IF_CASES_TAC >> simp[]) >>
+  `allocas_from lo v` by
+    (qpat_assum `!h. V h ==> ghost_inv_at _ _ _ _ _ _ G1 tn1 v /\ _`
+       (drule o cj 1) >>
+     pure_rewrite_tac[bodyPtrDefsTheory.ghost_inv_at_def] >> strip_tac >>
+     asm_rewrite_tac[]) >>
+  `lo <= d` by metis_tac[ptrDisciplineTheory.allocas_from_def] >>
+  `not_local_ptr ce es.scopes out` by metis_tac[exprSimOperandsTheory.fresh_not_local_ptr] >>
+  `!k name lb n. local_region ce es.scopes (v with vs_inst_idx := k) name lb n <=>
+                 local_region ce es.scopes v name lb n` by
+    (rpt gen_tac >> irule loweringStateRelDefsTheory.local_region_lookup_cong >>
+     simp[venomStateTheory.lookup_var_def]) >>
+  `!k. abi_decode_ptr_window G1 tn1 (v with vs_inst_idx := k) input
+              (n2w (b+32)) (LENGTH input_bytes)` by
+    (`abi_decode_ptr_window G1 tn1 v input (n2w (b+32)) (LENGTH input_bytes)` by metis_tac[] >>
+     gs[abiDecodePtrMemberFrameTheory.abi_decode_ptr_window_def, venomStateTheory.lookup_var_def]) >>
+  qpat_assum `!h. V h ==> ghost_inv_at _ _ _ _ _ _ G1 tn1 v /\ _`
+    (drule o cj 4) >> strip_tac >>
+  `eval_operand (FST inputs) v = SOME (n2w (LENGTH input_bytes))` by
+    (drule allocationPtrTheory.alloca_step_operand_preserved >>
+     disch_then (qspec_then `FST inputs` mp_tac) >> simp[]) >>
+  `op_prov G1 (FST inputs) = NONE /\ op_taint tn1 (FST inputs) = {}` by
+    (Cases_on `FST inputs` >>
+     gvs[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def] >>
+     metis_tac[ptrDisciplineTheory.op_taint_def]) >>
+  `op_taint tn1 (Var out) = {} /\ op_taint tn1 (Var input) = {}` by
+    metis_tac[bodyPtrDefsTheory.ptr_covers_def] >>
+  `FLOOKUP G1 out = SOME (d,outsz)` by
+    (qpat_x_assum `G1 = _` SUBST1_TAC >>
+     `FLOOKUP v.vs_allocas header_st.cs_next_id = SOME (d,outsz)` by metis_tac[] >>
+     drule fragExecPtrTheory.step_prov_alloca >> simp[FLOOKUP_UPDATE]) >>
+  `!h. V h ==> ghost_kept_at lo ce es0 origin G0 tn0 s0 G1 tn1` by
+    qpat_assum `!h. V h ==> ghost_inv_at _ _ _ _ _ _ G1 tn1 v /\ _`
+      (CHECK_ASSUME_TAC o cj 2) >>
+  `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
+    aid < origin.cs_next_id ==> off+sz <= v.vs_alloca_next` by
+    metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
+  `!name a sz. local_region ce es0.scopes s0 name a sz ==>
+    a+sz <= v.vs_alloca_next` by metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
+  `?inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_outputs = [out] /\ inst.inst_id = header_st.cs_next_id` by
+    (qexists_tac `mk_inst header_st.cs_next_id ALLOCA [Lit (n2w outsz)] [out]` >>
+     simp[venomInstTheory.mk_inst_def]) >>
+  `!name a k. local_region ce es.scopes v name a k ==>
+    d+outsz <= a \/ a+k <= d` by
+    metis_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
+  `header_st.cs_next_var <= ready.cs_next_var` by simp[] >>
+  `abi_decoder_operand_live ready.cs_next_var (Var out) /\
+   abi_decoder_operand_live ready.cs_next_var (Var input) /\
+   abi_decoder_operand_live ready.cs_next_var (FST inputs)` by
+    (conj_tac >- (gvs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+                     abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def]) >>
+     metis_tac[abiDecoderReentryTheory.abi_decoder_operand_live_mono]) >>
+  `!x. not_fresh_at st x ==>
+    lookup_var x v = lookup_var x s /\ FLOOKUP G1 x = FLOOKUP G x /\
+    op_taint tn1 (Var x) = op_taint tn (Var x)` by metis_tac[] >>
+  `lo <= v.vs_alloca_next /\ s0.vs_alloca_next <= v.vs_alloca_next /\
+    b+32+LENGTH input_bytes <= v.vs_alloca_next /\
+    origin.cs_next_var <= ready.cs_next_var` by
+    metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD] >>
+  `SUC u.vs_inst_idx = LENGTH ready.cs_current_insts /\
+    header_st.cs_next_id < ready.cs_next_id` by simp[] >>
+  `ptr_covers G1 tn1 out v outsz` by
+    qpat_assum `ptr_covers G1 tn1 out (v with vs_inst_idx := _) outsz`
+      (CHECK_ASSUME_TAC o REWRITE_RULE[ghostPcTransportPtrTheory.ptr_covers_inst_idx]) >>
+  `!h. V h ==> stmt_state_rel h ctx fn ce cx es v /\
+    ghost_inv_at (DF h) lo delta ce cx es G1 tn1 v /\
+    ghost_kept_at lo ce es0 origin G0 tn0 s0 G1 tn1` by metis_tac[] >>
+  (* Keep the certified allocation site, compiler counters and ghosts abstract. *)
+  map_every (fn p => qpat_x_assum p kall_tac)
+    [`header_st.cs_next_id = _`, `ready.cs_next_id = _`,
+     `header_st.cs_next_var = _`, `ready.cs_next_var = _`,
+     `G1 = _`, `tn1 = _`, `ready.cs_current_insts = _`,
+     `u.vs_inst_idx = _`] >>
   qexistsl_tac [`out`, `input`] >>
-  simp[lookup_var_inst_idx, eval_operand_inst_idx,
+  qpat_assum `w2n (n2w (b+32):256 word) = _`
+    (fn th => pure_rewrite_tac[th]) >>
+  simp[NoAsms, blockPrefixEquivTheory.lookup_var_set_inst_idx,
+       ghostPcTransportPtrTheory.eval_operand_inst_idx,
        exprLoweringPropsTheory.stmt_state_rel_inst_idx,
        ghostPcTransportPtrTheory.ghost_inv_at_inst_idx] >>
-  FAIL_TAC "owned remainder"
+  asm_rewrite_tac[] >>
+  qpat_assum `!name a k. local_region ce es.scopes v name a k ==>
+    d + outsz <= a \/ a + k <= d` mp_tac >>
+  simp[SF SFY_ss, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+  >> (gvs[])
 QED
 
 Finalise abi_decode_caller_allocation_joint
