@@ -533,6 +533,65 @@ Proof
   metis_tac[venomRunBoundedTheory.venom_run_bounded_word_ceiling]
 QED
 
+Theorem o1_pipeline_pre_dft_raw_code_end_offset_fixed:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\ o1_source_unit_ok unit /\
+  unit_entry_no_params unit /\
+  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
+    (init_ir_supply unit) = SOME (pre,t) /\
+  pre.cu_context.ctx_entry = SOME entry /\
+  stage 0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context /\
+  stage (LENGTH o1_fn_passes) = out.po_unit.cu_context /\
+  (!k. k < LENGTH o1_fn_passes ==>
+       ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+         (stage k) (stage (SUC k))) /\
+  (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
+  (!k. k <= LENGTH o1_fn_passes ==>
+       EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  dead_wf D /\ o1_initial_state_ok vs_out /\
+  vs_out.vs_fmp = vs_out.vs_initial_fmp /\ code_layout_valid vs_out /\
+  LENGTH vs_out.vs_data_section < dimword (:256) DIV 2 /\
+  v7 = (vs_out with vs_gas_readings := rds) /\
+  vi = (v7 with <|vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+  o1_pre_walk_inv D unit.cu_context vi /\
+  fmp_variant_room (SOME fmp) out.po_unit.cu_context vs_out /\
+  mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+    s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section)
+    unit.cu_context vi /\
+  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+    ~MEM (Label "code_end") inst.inst_operands) ==>
+  code_end_offset_ok (raw_reachable v7) (stage 7)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `o1_pre_walk_inv D unit.cu_context
+     ((vs_out with vs_gas_readings := rds) with
+       <|vs_fmp := fmp; vs_initial_fmp := fmp|>)` by
+    (qpat_assum `v7 = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+     qpat_assum `vi = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+     first_assum ACCEPT_TAC) >>
+  `o1_inv D 0 (stage 0) vi` by
+    (drule_all o1_pipeline_pre_dft_source_facts_static_abort_fixed >> simp[]) >>
+  `unit_wf unit /\ ALL_DISTINCT (unit_label_namespace unit)` by
+    (qpat_assum `o1PipelineCorrect$o1_pipeline _ _ = _`
+       (mp_tac o MATCH_MP o1_driver_runs o REWRITE_RULE [o1PipelineCorrectTheory.o1_pipeline_def]) >>
+     simp[]) >>
+  `o1_ctx_shape unit.cu_context /\ ir_supply_inst_ok (init_ir_supply unit)` by
+    (simp[init_ir_supply_inst_ok] >> metis_tac[o1_source_unit_ok_ctx_shape]) >>
+  `vi.vs_vars = FEMPTY /\ ~vi.vs_halted` by fs[o1_initial_state_ok_def] >>
+  `EVERY simplify_cfg_fn_ok unit.cu_context.ctx_functions /\
+   EVERY (\f. EVERY (\i. i.inst_opcode <> PHI) (fn_insts f)) unit.cu_context.ctx_functions` by
+    (fs[o1_pre_walk_inv_def, o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_def, SRULE [EVERY_MEM] simplify_cfg_fn_ok_no_phi]) >>
+  `EVERY make_ssa_input_ok (stage 0).ctx_functions` by fs[o1_inv_def, o1_walk_src_inv_def] >>
+  qpat_assum `!k. k < LENGTH _ ==> _`
+    (qspec_then `0` (assume_tac o SIMP_RULE (srw_ss()) [o1_fn_passes_def])) >>
+  qpat_assum `stage 0 = _` (fn th =>
+    drule_all (REWRITE_RULE [GSYM th]
+      (Q.INST [`pre` |-> `pre`, `fcg` |-> `fcg_analyze pre.cu_context`]
+        code_end_source_prefix_transport))) >> strip_tac >>
+  `fmp_variant_room (SOME fmp) (stage (LENGTH o1_fn_passes)) vs_out` by simp[] >>
+  drule_all o1_code_end_pre_dft_bound_fixed >> simp[]
+QED
+
 Theorem o1_pipeline_code_end_offset_ok_static_abort_fixed:
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\ o1_source_unit_ok unit /\
   unit_entry_no_params unit /\
@@ -576,65 +635,35 @@ Theorem o1_pipeline_code_end_offset_ok_static_abort_fixed:
      ?u. run_context fuel unit.cu_context vi = Abort ExHalt_abort u)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `o1_pre_walk_inv D unit.cu_context
+     ((vs_out with vs_gas_readings := rds) with
+       <|vs_fmp := fmp; vs_initial_fmp := fmp|>)` by
+    (qpat_assum `v7 = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+     qpat_assum `vi = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+     first_assum ACCEPT_TAC) >>
+  `code_end_offset_ok (raw_reachable v7) (stage 7)` by
+    (drule_all o1_pipeline_pre_dft_raw_code_end_offset_fixed >> simp[]) >>
   `LENGTH o1_fn_passes = 9` by EVAL_TAC >>
-  `!k. k < 9 ==> o1_pre k (stage k) (stage (SUC k))` by
-    (rw[o1_pre_def] >> first_x_assum irule >> simp[]) >>
-  mp_tac (Q.INST [`rpolicy` |-> `rpolicy`, `stage` |-> `stage`, `D` |-> `D`,
-    `unit` |-> `unit`, `out` |-> `out`, `pre` |-> `pre`, `t` |-> `t`,
-    `entry` |-> `entry`, `vs_out` |-> `vs_out`, `rds` |-> `rds`, `fmp` |-> `fmp`]
-    o1_pipeline_pre_dft_source_facts_static_abort_fixed) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  PURE_REWRITE_TAC [LET_THM] >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  qpat_assum `v7 = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
-  qpat_assum `vi = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
-  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  `unit_wf unit /\ ALL_DISTINCT (unit_label_namespace unit)` by
-    (qpat_assum `o1PipelineCorrect$o1_pipeline _ _ = _`
-       (mp_tac o MATCH_MP o1_driver_runs o REWRITE_RULE [o1PipelineCorrectTheory.o1_pipeline_def]) >>
-     simp[]) >>
-  `o1_ctx_shape unit.cu_context /\ ir_supply_inst_ok (init_ir_supply unit)` by
-    (simp[init_ir_supply_inst_ok] >> metis_tac[o1_source_unit_ok_ctx_shape]) >>
-  `vi.vs_vars = FEMPTY /\ ~vi.vs_halted` by fs[o1_initial_state_ok_def] >>
-  `EVERY simplify_cfg_fn_ok unit.cu_context.ctx_functions /\
-   EVERY (\f. EVERY (\i. i.inst_opcode <> PHI) (fn_insts f)) unit.cu_context.ctx_functions` by
-    (fs[o1_pre_walk_inv_def, o1_ctx_shape_def, EVERY_MEM] >>
-     metis_tac[o1_fn_shape_def, SRULE [EVERY_MEM] simplify_cfg_fn_ok_no_phi]) >>
-  `EVERY make_ssa_input_ok (stage 0).ctx_functions` by fs[o1_inv_def, o1_walk_src_inv_def] >>
   map_every (fn k =>
     qpat_assum `!k. k < LENGTH _ ==> _`
       (qspec_then k (assume_tac o SIMP_RULE (srw_ss()) [o1_fn_passes_def])) >>
     qpat_assum `!k. k <= LENGTH _ ==> o1_ctx_shape _`
-      (qspec_then k (assume_tac o SIMP_RULE (srw_ss()) [o1_fn_passes_def])) >>
-    qpat_assum `!k. k <= LENGTH _ ==> EVERY _ _`
-      (qspec_then k (assume_tac o SIMP_RULE (srw_ss()) [o1_fn_passes_def])))
-    [`0`, `7`, `8`] >>
-  mp_tac (Q.INST [`C1` |-> `stage 1`, `fcg` |-> `fcg_analyze pre.cu_context`,
-    `vs` |-> `vi`, `view` |-> `o1_walk_view rpolicy 0`, `rp` |-> `rpolicy`,
-    `supply` |-> `init_ir_supply unit`, `supply'` |-> `t`]
-    code_end_source_prefix_transport) >>
-  qpat_assum `stage 0 = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
-  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >> strip_tac >>
-  `fmp_variant_room (SOME fmp) (stage (LENGTH o1_fn_passes)) vs_out` by simp[] >>
-  drule_all o1_code_end_pre_dft_bound_fixed >> strip_tac >>
+      (qspec_then k (assume_tac o SIMP_RULE (srw_ss()) [o1_fn_passes_def]))) [`7`, `8`] >>
+  qpat_assum `!k. k <= LENGTH _ ==> EVERY _ _`
+    (qspec_then `7` (assume_tac o SIMP_RULE (srw_ss()) [o1_fn_passes_def])) >>
   `EVERY wf_ssa (stage 7).ctx_functions` by fs[o1_fn_row_def, EVERY_MEM] >>
   `o1_pre 7 (stage 7) (stage 8)` by simp[o1_pre_def] >>
-  `code_end_offset_ok
-    (\ctx fn inst s. raw_reachable vs_out ctx fn inst s /\ ~in_static_abort_prefix fn s) (stage 9) /\
-   (code_end_offset_ok (raw_reachable vs_out) (stage 9) \/
-    !fuel. terminates (run_context fuel (stage 7) v7) ==>
-      ?u. run_context fuel (stage 7) v7 = Abort ExHalt_abort u)` by
-    (mp_tac (Q.INST [`C7` |-> `stage 7`, `C8` |-> `stage 8`, `C9` |-> `stage 9`,
-      `rp` |-> `rpolicy`, `vs_out` |-> `vs_out`, `rds` |-> `rds`, `orc` |-> `orc`,
-      `dft_view` |-> `o1_walk_view rpolicy 7`, `cfg_view` |-> `o1_walk_view rpolicy 8`]
-      o1_code_end_dft_exit_fixed) >>
-     qpat_assum `v7 = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
-     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-     disch_then ACCEPT_TAC) >>
   `stage 9 = out.po_unit.cu_context` by fs[] >>
   qpat_assum `stage 9 = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  TRY (disj1_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `v7 = _` (fn th =>
+    drule_all (PURE_REWRITE_RULE [GSYM th]
+      (Q.INST [`vs_out` |-> `vs_out`, `rds` |-> `rds`] o1_code_end_dft_exit_fixed))) >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (DISJ_CASES_THEN assume_tac)) >>
+  (conj_tac >- first_assum ACCEPT_TAC)
+  >- (disj1_tac >> first_assum ACCEPT_TAC) >>
   disj2_tac >> rpt strip_tac >>
+  `ctx_sim_fuel I D unit.cu_context (stage 7) vi v7` by
+    (drule_all o1_pipeline_pre_dft_source_facts_static_abort_fixed >> simp[]) >>
   `dead_result_rel D (run_context fuel unit.cu_context vi)
      (run_context fuel (stage 7) v7)` by fs[ctx_sim_fuel_def] >>
   `terminates (run_context fuel (stage 7) v7)` by metis_tac[dead_result_rel_terminates] >>
