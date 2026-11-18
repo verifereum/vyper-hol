@@ -289,7 +289,8 @@ Theorem none_array_iteration_paths:
       IS_SOME (cd_decode F a.vs_call_ctx.cc_calldata tv (w2n (n2w pos:bytes32))) /\
       ~r.vs_halted /\ r.vs_current_bb = last.cs_current_bb /\
       r.vs_inst_idx = LENGTH last.cs_current_insts /\
-      fresh_vars_wrt limit r /\ entry_decoder_obs a r /\
+      fresh_vars_wrt limit r /\
+      r.vs_call_ctx = a.vs_call_ctx /\ r.vs_data_section = a.vs_data_section /\
       alloca_inv r /\ alloca_frontier_inv ctx fn site r /\ allocas_from lo r /\
       a.vs_alloca_next <= r.vs_alloca_next /\
       (!id p k. FLOOKUP a.vs_allocas id = SOME (p,k) ==> FLOOKUP r.vs_allocas id = SOME (p,k)) /\
@@ -315,7 +316,8 @@ Theorem none_array_iteration_paths:
   ?t H u scratch.
     IS_SOME (cd_decode F s.vs_call_ctx.cc_calldata tv pos) /\
     ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
-    fresh_vars_wrt limit t /\ entry_decoder_obs s t /\
+    fresh_vars_wrt limit t /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
     alloca_inv t /\ alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
     s.vs_alloca_next <= t.vs_alloca_next /\
     mload slot t = n2w (SUC j) /\ ptr_covers H u q t 32 /\ ptr_covers H u root t cap /\
@@ -362,7 +364,14 @@ Proof
   `ptr_covers H u root t cap` by metis_tac[ptr_covers_frame] >>
   `lookup_var q t = SOME (n2w slot) /\ lookup_var root t = SOME (n2w d) /\
    not_fresh_at st q /\ not_fresh_at st root /\
-   (!x. src = Var x ==> not_fresh_at st x)` by metis_tac[] >>
+   (!x. src = Var x ==> not_fresh_at st x)` by
+    (qpat_assum `!x. x IN protect ==> lookup_var x t = _ /\ _` mp_tac >>
+     qpat_assum `!x. x IN protect ==> not_fresh_at st x /\ _` mp_tac >>
+     qpat_assum `!x. src = Var x ==> x IN protect` mp_tac >>
+     qpat_assum `lookup_var q s = _` mp_tac >>
+     qpat_assum `lookup_var root s = _` mp_tac >>
+     qpat_assum `q IN protect` mp_tac >> qpat_assum `root IN protect` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `abi_decoder_operand_live st.cs_next_var (Var root)` by simp[calldata_operand_live_not_fresh] >>
   `j < dimword (:256) /\ ready.cs_next_var <= limit.cs_next_var /\
    d+32+j*type_memory_size tv < dimword (:256) /\ type_memory_size tv < dimword (:256)` by decide_tac >>
@@ -399,7 +408,7 @@ Proof
       rpt gen_tac >> irule gas_origin_ptr_path_trans >>
       qexistsl_tac [`A`,`a`,`ta`] >> metis_tac[]) >>
   disj2_tac >>
-  rename1 `entry_decoder_obs a r` >>
+  rename1 `r.vs_call_ctx = a.vs_call_ctx` >>
   rename1 `tr.t_mem SUBSET ta.t_mem` >>
   rename1 `gas_origin_ptr_path _ (a,A,ta) [] (OK r,R,tr)` >>
   (Q.SUBGOAL_THEN `slot+32 <= d+32+j*type_memory_size tv \/
@@ -457,9 +466,11 @@ Proof
       (cd_member_ptr F s.vs_call_ctx.cc_calldata tv (cd_at F sb 32) (j*tv_abi_size tv)))` by
     (qpat_x_assum `IS_SOME (cd_decode F _ tv _)` mp_tac >>
      asm_rewrite_tac[none_array_member_pointer_range]) >>
-  `entry_decoder_obs s b /\ alloca_inv b /\ alloca_frontier_inv ctx fn site b` by
-    metis_tac[entry_decoder_obs_trans, calldata_alloca_inv_fields,
-              calldata_alloca_frontier_inv_fields] >>
+  `b.vs_call_ctx = s.vs_call_ctx /\ b.vs_data_section = s.vs_data_section` by
+    (qpat_assum `entry_decoder_obs r b` mp_tac >>
+     simp[NoAsms, entry_decoder_obs_def] >> asm_rewrite_tac[]) >>
+  `alloca_inv b /\ alloca_frontier_inv ctx fn site b` by
+    metis_tac[calldata_alloca_inv_fields, calldata_alloca_frontier_inv_fields] >>
   `allocas_from lo b` by
     (qpat_assum `allocas_from lo r` (mp_tac o REWRITE_RULE[allocas_from_def]) >>
      asm_rewrite_tac[allocas_from_def]) >>
