@@ -143,7 +143,8 @@ Resume none_selected_check_prefix[placement]:
   `external_fn_shape_ok ("fn_" ++ name,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt)` by
     fs[EVERY_APPEND] >>
   fs[external_fn_shape_ok_def] >>
-  drule_all external_function_registration_boundary >> strip_tac >>
+  drule_all external_function_registration_boundary >>
+  disch_then (qx_choosel_then [`registered_env`,`registered`] strip_assume_tac) >>
   drule register_positional_args_suffix_extends >> strip_tac >>
   `cs_extends after external_st` by
     (drule_all compile_external_function_body_shape >>
@@ -201,7 +202,7 @@ Resume none_selected_check_prefix[execution]:
        entry_prov_def, entry_taint_vars_def, phis_prov_def, phis_taint_def,
        Abbr `ss`]) >>
   qexistsl_tac [`rr`,`ce`,`pay`,`key`,`ut`,`iv`,`rt`,`opened`,`checked`,
-    `ce'`,`registered`,`t`,`dispatch_prov`,`dispatch_taint`] >>
+    `registered_env`,`registered`,`t`,`dispatch_prov`,`dispatch_taint`] >>
   gvs[block_is_terminated_def, Abbr `ss`, entry_taint_def] >>
   qpat_assum `MEM (mut,nr,rr,name,args,[],ret,fbody) _`
     (mp_tac o ONCE_REWRITE_RULE [MEM_SPLIT]) >>
