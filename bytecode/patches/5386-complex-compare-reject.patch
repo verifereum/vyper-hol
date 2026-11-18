@@ -1,0 +1,134 @@
+Upstream: https://github.com/vyperlang/vyper/pull/5386
+Status: merged (2026-11-18)
+Commit: d3d07ad34192759ea4978cfd02250c0270161683
+
+Backport the Venom codegen guard that rejects `==`/`!=` on structs, static
+and dynamic arrays and tuples with TypeMismatch, as legacy codegen does,
+instead of comparing the two memory pointers (issue #4960). Bytestrings
+still compare by hash: that branch returns before the guard.
+The unit test calls the pin's `generate_runtime_venom` in place of master's
+`generate_venom_runtime`; the rest applies unchanged.
+
+diff --git a/tests/functional/codegen/features/test_comparison.py b/tests/functional/codegen/features/test_comparison.py
+index 5a86ffb4..8a9cede1 100644
+--- a/tests/functional/codegen/features/test_comparison.py
++++ b/tests/functional/codegen/features/test_comparison.py
+@@ -2,6 +2,9 @@
+ # most tests under tests/ast/nodes/test_evaluate_compare.py
+ import pytest
+ 
++from tests.utils import decimal_to_int
++from vyper.exceptions import TypeMismatch
++
+ 
+ def test_3034_verbatim(get_contract):
+     # test GH issue 3034 exactly
+@@ -46,3 +49,55 @@ def test_in(addr: address) -> bool:
+         assert c.test_in(t) is (True if not invert else False)
+     for t in should_not_in:
+         assert c.test_in(t) is (True if invert else False)
++
++
++composite_compares = [
++    ("uint256[3]", "a: uint256[3], b: uint256[3]", "a", "b"),
++    ("DynArray[uint256, 4]", "a: DynArray[uint256, 4], b: DynArray[uint256, 4]", "a", "b"),
++    ("S", "a: S, b: S", "a", "b"),
++    ("(uint256, uint256)", "x: uint256, y: uint256", "(x, y)", "(y, x)"),
++    ("uint256[2]", "", "self.arr", "self.arr"),
++    ("uint256[2]", "a: uint256[2]", "a", "empty(uint256[2])"),
++]
++
++
++@pytest.mark.parametrize("op", ["==", "!="])
++@pytest.mark.parametrize("typ,args,lhs,rhs", composite_compares)
++def test_compare_complex_types_blocked(get_contract, op, typ, args, lhs, rhs):
++    # GH issue 4960: venom used to compile these to a compare of the two memory
++    # pointers. both pipelines must reject them until GH issue 2638 is done
++    code = f"""
++struct S:
++    x: uint256
++    y: uint256
++
++arr: uint256[2]
++
++@external
++def foo({args}) -> bool:
++    return {lhs} {op} {rhs}
++    """
++    with pytest.raises(TypeMismatch) as e:
++        get_contract(code)
++    assert e.value.message == f"operation not yet supported for {typ}, {typ}, see issue #2638"
++
++
++def test_compare_word_types(get_contract):
++    # word types that reach the composite type check in Compare still compile
++    code = """
++flag F:
++    A
++    B
++
++interface I:
++    def foo(): nonpayable
++
++@external
++def foo(f: F, i: I, b: bytes4, d: decimal, t: bool) -> bool:
++    return f == F.A and i != I(self) and b == 0x01020304 and d == 1.5 and t == True
++    """
++    c = get_contract(code)
++    assert c.foo(1, c.address, b"\x01\x02\x03\x04", decimal_to_int("1.5"), True) is False
++    assert c.foo(1, "0x" + "00" * 20, b"\x01\x02\x03\x04", decimal_to_int("1.5"), True) is True
++    assert c.foo(2, "0x" + "00" * 20, b"\x01\x02\x03\x04", decimal_to_int("1.5"), True) is False
++    assert c.foo(1, "0x" + "00" * 20, b"\x01\x02\x03\x04", decimal_to_int("1.5"), False) is False
+diff --git a/tests/unit/compiler/venom/test_compare_complex_types.py b/tests/unit/compiler/venom/test_compare_complex_types.py
+new file mode 100644
+index 00000000..c43daa6b
+--- /dev/null
++++ b/tests/unit/compiler/venom/test_compare_complex_types.py
+@@ -0,0 +1,29 @@
++import pytest
++
++from vyper.codegen_venom.module import generate_runtime_venom
++from vyper.compiler.phases import CompilerData
++from vyper.compiler.settings import OptimizationLevel, Settings, anchor_settings
++from vyper.exceptions import TypeMismatch
++
++CODE = """
++struct S:
++    x: uint256
++    y: uint256
++
++@external
++def foo(a: {typ}, b: {typ}) -> bool:
++    return a {op} b
++"""
++
++
++# GH issue 4960: venom codegen lowered these to an `eq` of the two memory
++# pointers, so the result did not depend on the values
++@pytest.mark.parametrize("op", ["==", "!="])
++@pytest.mark.parametrize("typ", ["uint256[3]", "DynArray[uint256, 4]", "S"])
++def test_compare_complex_types_blocked(op, typ):
++    settings = Settings(experimental_codegen=True, optimize=OptimizationLevel.NONE)
++    compiler_data = CompilerData(CODE.format(typ=typ, op=op), settings=settings)
++    with anchor_settings(compiler_data.settings):
++        with pytest.raises(TypeMismatch) as e:
++            generate_runtime_venom(compiler_data.global_ctx, compiler_data.settings)
++    assert e.value.message == f"operation not yet supported for {typ}, {typ}, see issue #2638"
+diff --git a/vyper/codegen_venom/expr.py b/vyper/codegen_venom/expr.py
+index 10b7087c..b2c30124 100644
+--- a/vyper/codegen_venom/expr.py
++++ b/vyper/codegen_venom/expr.py
+@@ -571,6 +571,13 @@ class Expr:
+                     result_typ,
+                 )
+ 
++        # Block complex types (mirrors legacy codegen), otherwise we would
++        # compare the pointers. See issue #2638 for context
++        if not (left_typ._is_prim_word and right_typ._is_prim_word):
++            raise TypeMismatch(
++                f"operation not yet supported for {left_typ}, {right_typ}, see issue #2638", node.op
++            )
++
+         # Non-bytestring: get values directly
+         left = Expr(node.left, self.ctx).lower_value()
+         right = Expr(node.right, self.ctx).lower_value()
