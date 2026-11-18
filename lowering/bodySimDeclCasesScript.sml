@@ -125,7 +125,7 @@ QED
 
 (* ===== AnnAssign ===== *)
 
-Theorem body_annassign_rhs_pre[local]:
+Theorem body_annassign_rhs_pre:
   !cenv cx env e es tops id typ ctx.
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
     (!target. supported_stmt_expr_exists
