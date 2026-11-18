@@ -526,7 +526,7 @@ Theorem alloc_buffer_source_path_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all alloc_buffer_source_path_mem_endpoint >> strip_tac >>
-  drule_all exprSimUnwrapTheory.alloc_buffer_fields >> strip_tac >>
+  drule_all exprSimAllocTheory.alloc_buffer_fields >> strip_tac >>
   `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `u = _` SUBST1_TAC >> simp[]) >>

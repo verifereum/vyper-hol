@@ -8,8 +8,11 @@ val window = ``\pre pat repl post D.
     sym_state_labels_in (asm_label_refs (pre ++ pat ++ post)) u ==>
     ?d. 0 < d /\ d <= D /\
       (!i a. i < d /\ sym_steps (pre ++ pat ++ post) env i u = SymOK a ==>
-        ~(a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
-          EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp "GAS")) /\
+        !op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} /\
+          a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
+          EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp op ==>
+          i = 0 /\ repl <> [] /\ HD repl = HD pat) /\
       (!a. sym_steps (pre ++ pat ++ post) env d u = SymOK a ==>
         ?e. sym_steps (pre ++ repl ++ post) env e u =
           SymOK (sym_with_pc
@@ -24,8 +27,9 @@ Proof
   BETA_TAC >> rpt gen_tac >> strip_tac >>
   `?name. y = AsmOp name` by (Cases_on `y` >> gvs[asm_commutative_op_def]) >>
   gvs[] >> rpt gen_tac >> strip_tac >> qexists_tac `2` >> simp[] >>
-  `name <> "GAS"` by
-    (strip_tac >> gvs[] >> qpat_x_assum `asm_commutative_op _` mp_tac >> EVAL_TAC) >>
+  `~(name IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"})` by
+    (rw[] >> strip_tac >> gvs[] >>
+     qpat_x_assum `asm_commutative_op _` mp_tac >> EVAL_TAC) >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >> `i = 0 \/ i = 1` by decide_tac >>
       gvs[sym_steps_pos, sym_steps_def, EL_APPEND_EQN, sym_step_def, sym_step_op_def,

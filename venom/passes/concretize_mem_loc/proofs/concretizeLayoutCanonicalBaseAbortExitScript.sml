@@ -59,7 +59,7 @@ Proof
         (FIRST
           [`MEM i.inst_opcode [ASSERT; ASSERT_UNREACHABLE; SELFDESTRUCT]` by simp[] >>
              drule_all layout_guard_abort_step,
-           `MEM i.inst_opcode [CALL; CREATE; CREATE2]` by simp[] >>
+           `MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` by simp[] >>
              drule_all layout_external_abort_step,
            `MEM i.inst_opcode [INVALID; REVERT; SSTORE; TSTORE; LOG]` by simp[] >>
              drule_all layout_simple_abort_step] >> metis_tac[]) >>

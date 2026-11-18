@@ -8,8 +8,11 @@ val window = ``\pre pat repl post D.
     sym_state_labels_in (asm_label_refs (pre ++ pat ++ post)) u ==>
     ?d. 0 < d /\ d <= D /\
       (!i a. i < d /\ sym_steps (pre ++ pat ++ post) env i u = SymOK a ==>
-        ~(a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
-          EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp "GAS")) /\
+        !op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} /\
+          a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
+          EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp op ==>
+          i = 0 /\ repl <> [] /\ HD repl = HD pat) /\
       (!a. sym_steps (pre ++ pat ++ post) env d u = SymOK a ==>
         ?e. sym_steps (pre ++ repl ++ post) env e u =
           SymOK (sym_with_pc
@@ -22,7 +25,8 @@ Theorem swap_pair_bounded_window:
     ^window pre [AsmOp name; AsmOp name] [] post 2
 Proof
   BETA_TAC >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  `name <> "GAS"` by (strip_tac >> gvs[]) >>
+  `~(name IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"})` by
+    (rw[] >> strip_tac >> gvs[]) >>
   qexists_tac `2` >> simp[] >>
   Cases_on `ALOOKUP swap_table name`
   >- (drule_all swap_prefix_unknown >> strip_tac >>

@@ -1037,22 +1037,6 @@ Proof
       exec_alloca_def, AllCaseEqs(), update_var_def]
 QED
 
-(* The buffer allocation leaves the Venom fields the horizon-dependent
-   part of state_rel reads unchanged. *)
-Theorem alloc_buffer_fields:
-  compile_alloc_buffer sz sa = (buf,sm) /\
-  run_inst_seq (emitted_insts sa sm) s = OK t ==>
-  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-  t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
-Proof
-  simp[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def, comp_bind_def,
-       comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
-       emit_def] >> strip_tac >> gvs[emitted_insts_def,
-       rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
-       step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
-  gvs[update_var_def]
-QED
-
 Theorem alloc_buffer_source_path[local]:
   !ctx func cenv cx es sm mid buf sz s src a.
     compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\

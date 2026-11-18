@@ -10,7 +10,7 @@ Ancestors
   pred_set valueEncoding valueEncodingProps
   abiDecoderIndexInit fragExec instIdxIndep abiDecoderLoop emitHelperProps
   abiDecoderArrayLoopInit abiDecoderArrayHeader abiDecoderVarSequence abiDecoderDynamicLoopSetup
-  ctorDeployMemoryFrontier allocaFrontierBound allocaBudgetProps
+  ctorDeployMemoryFrontier allocaFrontierRoom allocaFrontierBound allocaBudgetProps
   abiDecoderReentry abiDecoderContract abiEncoderRegisteredEffect
   venomMemDefs venomState venomExecSemantics compileEnv finite_map list words arithmetic
 

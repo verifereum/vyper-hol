@@ -8,7 +8,7 @@ Ancestors
   ctorDeployMemoryRunMemEntryArraySteps
   ctorDeployMemoryRunMemEntryShiftedIndex
   ctorDeployMemoryRunMemEntryShiftedObservation
-  ctorDeployMemoryRunMemEntryShiftedFrame ctorDeployMemoryFrontier
+  ctorDeployMemoryRunMemEntryShiftedFrame ctorDeployMemoryFrontier allocaFrontierRoom
   ctorAbiActualAlloc ctorAbiActualFrame ctorAbiActualSites
   valueEncodingProps abiDecoderContract abiDecoderArrayLoopInit
   abiDecoderIndexInit allocaFrontierBound allocaBudgetProps abiDecoderExecution

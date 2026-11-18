@@ -3,6 +3,7 @@
    pre-adoption request snapshots are observed, not just helper parameters. *)
 Theory vyperSendCpsCVTest
 Ancestors
+  vyperSmallStepCV
   vyperExtCallCpsCVTest vyperSmallStep[ignore_grammar] extCallOracle
   vyperCallOutcome[ignore_grammar] vfmState[ignore_grammar]
   vfmExecution[ignore_grammar] vyperState vyperContext vyperAST vyperValue
@@ -104,10 +105,10 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem send_cps_exhaustion_records_request:
+Theorem send_cps_exhaustion_runtime_error:
   send_observe 9w 7 (SOME [])
-    (INR (Error (RuntimeError "send failed"))) 3 0 [] 2w 4w cpscv_initial_logs
-    (send_requests 9w 7) (SOME [])
+    (INR (Error (RuntimeError "take_call_outcome"))) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests (SOME [])
 Proof
   CONV_TAC cv_eval
 QED
@@ -137,13 +138,12 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* Shared computed behavior for all four special addresses: the head
-   outcome's success bit is taken and no request is recorded. Send has empty
-   calldata so the EC cases are valid zero points. *)
-Theorem send_cps_computed_consumes_no_request:
+(* Computed sends take the head outcome's success bit and append the
+   request. Send has empty calldata, so the EC cases are valid zero points. *)
+Theorem send_cps_computed_records_request:
   EVERY (λtarget. send_observe target 0 (SOME [cpscv_tail; cpscv_tail])
     (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
-    send_initial_requests cpscv_tail_snapshot) [1w;2w;6w;7w]
+    (send_requests (w2w target) 0) cpscv_tail_snapshot) [1w;2w;6w;7w]
 Proof
   simp[EVERY_DEF] >> CONV_TAC cv_eval
 QED

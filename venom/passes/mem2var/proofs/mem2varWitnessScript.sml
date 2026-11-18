@@ -238,6 +238,16 @@ Proof
   qexists_tac `"main"` >> EVAL_TAC
 QED
 
+(* Evaluate the block one instruction at a time. Loaded data and the
+   revert-forwarding test are irrelevant to this witness's pointer checks. *)
+val eval_ptr_witness = CONV_TAC (computeLib.RESTR_EVAL_CONV
+  [``ptr_safe_block``, ``ptr_inst_ok``, ``mload``,
+   ``contextCodegenRel$in_revert_forward``]);
+
+val check_ptr_witness = simp[ptr_inst_ok_def] >> eval_ptr_witness >>
+  rpt conj_tac >> TRY (simp[] >> rpt gen_tac >>
+    Cases_on `op` >> simp[] >> rw[] >> gvs[] >> NO_TAC);
+
 Theorem m2v_witness_ptr_safe[local]:
   ptr_safe_blocks
     <| d_stor := (\a s. UNIV); d_trans := (\a s. UNIV);
@@ -245,9 +255,27 @@ Theorem m2v_witness_ptr_safe[local]:
     0 2 (mk_venom_context [m2v_witness_access] (SOME "main"))
     m2v_witness_access [] FEMPTY entry_taint (init_venom_state "entry")
 Proof
-  EVAL_TAC >> simp[set_byte_bit_field_insert, byte_index_def] >> EVAL_TAC >>
-  rpt conj_tac >> simp[] >> rpt gen_tac >>
-  Cases_on `op` >> simp[] >> rw[] >> gvs[]
+  eval_ptr_witness >>
+  ONCE_REWRITE_TAC [ptr_safe_block_def] >>
+  eval_ptr_witness >> check_ptr_witness >>
+  ONCE_REWRITE_TAC [ptr_safe_block_def] >>
+  eval_ptr_witness >> check_ptr_witness >>
+  ONCE_REWRITE_TAC [ptr_safe_block_def] >>
+  eval_ptr_witness >> check_ptr_witness >>
+  ONCE_REWRITE_TAC [ptr_safe_block_def] >>
+  eval_ptr_witness >>
+  simp[set_byte_bit_field_insert, byte_index_def] >>
+  eval_ptr_witness >> check_ptr_witness >>
+  ONCE_REWRITE_TAC [ptr_safe_block_def] >>
+  eval_ptr_witness >>
+  simp[set_byte_bit_field_insert, byte_index_def] >>
+  eval_ptr_witness >> check_ptr_witness >>
+  ONCE_REWRITE_TAC [ptr_safe_block_def] >>
+  eval_ptr_witness >> check_ptr_witness >>
+  ONCE_REWRITE_TAC [ptr_safe_block_def] >>
+  eval_ptr_witness >> check_ptr_witness >>
+  ONCE_REWRITE_TAC [ptr_safe_block_def] >>
+  eval_ptr_witness >> check_ptr_witness >> simp[]
 QED
 
 Theorem m2v_witness_ptr_structure[local]:

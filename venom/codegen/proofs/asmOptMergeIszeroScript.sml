@@ -13,6 +13,7 @@
 
 Theory asmOptMergeIszero
 Ancestors
+  asmSpliceWithin asmRefinesWithin asmSymSemWithin
   asmSplice asmSymPc finalizerContract asmSymSem asmOptimizer asmWf
   asmSem vfmExecution list
 
@@ -35,6 +36,7 @@ Theorem consume_zero_or_one[local]:
   asm_consume_call_outcome rq ro rs stk s = AsmOK t ==>
   ?w tail. t.as_stack = w :: tail /\ (w = 0w \/ w = 1w)
 Proof
+  Cases_on `s.as_outcomes = []` >>
   simp[asm_consume_call_outcome_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   simp[asm_next_def] >> strip_tac >> gvs[] >>
@@ -104,11 +106,11 @@ Proof
   rw[] >> simp[one_ne_zero_bytes32]
 QED
 
-Theorem iszero_pair_window_refines:
+Theorem iszero_pair_window_refines_within[local]:
   asm_returns_zero_or_one x ⇒
-  asm_window_refines pfx [x; AsmOp "ISZERO"; AsmOp "ISZERO"] [x] rest
+  asm_window_refines_within pfx [x; AsmOp "ISZERO"; AsmOp "ISZERO"] [x] rest
 Proof
-  rw[asm_window_refines_def] >>
+  rw[asm_window_refines_within_def] >>
   `x ≠ AsmOp "JUMP" ∧ x ≠ AsmOp "JUMPI"`
     by gvs[asm_returns_zero_or_one_def] >>
   qabbrev_tac `p = pfx ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest` >>
@@ -121,7 +123,43 @@ Proof
    LENGTH pfx + 2 < LENGTH p ∧ EL (LENGTH pfx + 2) p = AsmOp "ISZERO" ∧
    LENGTH pfx < LENGTH q ∧ EL (LENGTH pfx) q = x`
     by simp[Abbr `p`, Abbr `q`, listTheory.EL_APPEND_EQN] >>
-  qexistsl_tac [`3`, `1`] >> simp[sym_steps_pos] >>
+  qexistsl_tac [`3`, `1`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  CONV_TAC (REWR_CONV CONJ_ASSOC) >> reverse conj_tac
+  >- (rpt strip_tac >>
+      `0 < k` by (Cases_on `k` >> gvs[sym_run_within_def]) >>
+      Cases_on `Q x`
+      >- (disj1_tac >>
+          `∃n. 2 * k = SUC n` by (qexists_tac `2 * k - 1` >> simp[]) >>
+          simp[sym_run_within_def]) >>
+      reverse (Cases_on `∃s1. sym_step q env x ss = SymOK s1`)
+      >- (disj1_tac >> irule within_same_halting_step >>
+          first_assum (irule_at Any) >> gvs[]) >>
+      disj2_tac >> pop_assum (qx_choose_then `s1` assume_tac) >>
+      `sym_step p env x ss = SymOK s1` by simp[] >>
+      drule_all sym_step_zero_or_one >>
+      disch_then (qx_choosel_then [`w`, `stk`] (CONJUNCTS_THEN assume_tac)) >>
+      `s1.sym_base.as_pc = LENGTH pfx + 1`
+        by (drule_at (Pos last) sym_step_pc_next >> simp[]) >>
+      drule_then (qspecl_then [`p`, `env`] assume_tac) sym_step_iszero_val >>
+      qmatch_asmsub_abbrev_tac `sym_step p env (AsmOp "ISZERO") s1 = SymOK s2` >>
+      `s2.sym_stack = Val (b2w (w = 0w)) :: stk ∧
+       s2.sym_base.as_pc = LENGTH pfx + 2`
+        by simp[Abbr `s2`, asmSemTheory.asm_next_def] >>
+      drule_then (qspecl_then [`p`, `env`] assume_tac) sym_step_iszero_val >>
+      qmatch_asmsub_abbrev_tac `sym_step p env (AsmOp "ISZERO") s2 = SymOK s3` >>
+      `asm_plain_inst (AsmOp "ISZERO")`
+        by simp[asm_plain_inst_def, is_data_inst_def] >>
+      `¬Q (AsmOp "ISZERO")` by gvs[sym_within_ok_def] >>
+      `sym_steps p env 3 ss = SymOK s3`
+        by simp[sym_steps_pos, sym_steps_def] >>
+      `sym_steps_ok (λi stk. T) Q p env 3 ss`
+        by simp[sym_steps_ok_pos, sym_steps_ok_def] >>
+      drule_all sym_run_within_steps >> strip_tac >>
+      simp[sym_steps_ok_one] >>
+      qpat_x_assum `sym_steps_ok P Q p env 3 ss` mp_tac >>
+      simp[sym_steps_ok_pos]) >>
+  simp[sym_steps_pos] >>
   Cases_on `sym_step q env x ss` >>
   simp[sym_terminal_def, sym_result_rel_refl] >>
   rename1 `sym_step q env x ss = SymOK s1` >>
@@ -146,6 +184,13 @@ Proof
        asmSemTheory.asm_state_component_equality]
 QED
 
+Theorem iszero_pair_window_refines:
+  asm_returns_zero_or_one x ⇒
+  asm_window_refines pfx [x; AsmOp "ISZERO"; AsmOp "ISZERO"] [x] rest
+Proof
+  metis_tac[iszero_pair_window_refines_within, asm_window_refines_of_within]
+QED
+
 Theorem merge_iszero_pairs_fst:
   FST (merge_iszero_pairs (x :: y :: z :: rest)) =
   if asm_returns_zero_or_one x ∧ y = AsmOp "ISZERO" ∧ z = AsmOp "ISZERO"
@@ -155,31 +200,37 @@ Proof
   simp[Once merge_iszero_pairs_def] >> rw[] >> pairarg_tac >> simp[]
 QED
 
-Theorem merge_iszero_pairs_refines_under:
-  ∀sfx pfx. asm_refines (pfx ++ sfx) (pfx ++ FST (merge_iszero_pairs sfx))
+Theorem merge_iszero_pairs_refines_under_both[local]:
+  ∀sfx pfx. asm_refines_both (pfx ++ sfx) (pfx ++ FST (merge_iszero_pairs sfx))
 Proof
   ho_match_mp_tac merge_iszero_pairs_ind >>
   reverse (rpt conj_tac)
-  >- simp[merge_iszero_pairs_def, asm_refines_refl]
-  >- simp[merge_iszero_pairs_def, asm_refines_refl]
-  >- simp[merge_iszero_pairs_def, asm_refines_refl] >>
+  >- simp[merge_iszero_pairs_def, asm_refines_both_refl]
+  >- simp[merge_iszero_pairs_def, asm_refines_both_refl]
+  >- simp[merge_iszero_pairs_def, asm_refines_both_refl] >>
   rpt gen_tac >> strip_tac >> simp[merge_iszero_pairs_fst] >>
-  reverse IF_CASES_TAC >- (gvs[] >> irule asm_refines_cons >> simp[]) >>
+  reverse IF_CASES_TAC >- (gvs[] >> irule asm_refines_both_cons >> simp[]) >>
   gvs[] >> gen_tac >>
   `∃name. x = AsmOp name` by gvs[asm_returns_zero_or_one_def] >>
   gvs[] >>
-  irule asm_refines_trans >>
+  irule asm_refines_both_trans >>
   qexists_tac `pfx ++ AsmOp name :: rest` >> simp[] >>
   `asm_splice_ok [AsmOp name; AsmOp "ISZERO"; AsmOp "ISZERO"] [AsmOp name]`
     by simp[asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
             symbolResolveTheory.asm_inst_size_def] >>
-  drule iszero_pair_window_refines >> strip_tac >>
+  drule iszero_pair_window_refines_within >> strip_tac >>
   mp_tac (Q.INST [`pat` |-> `[AsmOp name; AsmOp "ISZERO"; AsmOp "ISZERO"]`,
                   `repl` |-> `[AsmOp name]`, `sfx` |-> `rest`]
-            asm_splice_window_refines) >>
+            asm_splice_window_refines_both) >>
   impl_tac >- simp[] >>
   REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
   disch_then ACCEPT_TAC
+QED
+
+Theorem merge_iszero_pairs_refines_under:
+  ∀sfx pfx. asm_refines (pfx ++ sfx) (pfx ++ FST (merge_iszero_pairs sfx))
+Proof
+  metis_tac[merge_iszero_pairs_refines_under_both, relationTheory.RINTER]
 QED
 
 (* ===== ISZERO ISZERO PUSHLABEL l JUMPI ===== *)
@@ -190,11 +241,11 @@ Proof
   Cases_on `w = 0w` >> simp[one_ne_zero_bytes32, GSYM one_ne_zero_bytes32]
 QED
 
-Theorem iszero_jumpi_window_refines:
-  asm_window_refines pfx [AsmOp "ISZERO"; AsmOp "ISZERO"] []
+Theorem iszero_jumpi_window_refines_within[local]:
+  asm_window_refines_within pfx [AsmOp "ISZERO"; AsmOp "ISZERO"] []
     (AsmPushLabel l :: AsmOp "JUMPI" :: rest)
 Proof
-  rw[asm_window_refines_def] >>
+  rw[asm_window_refines_within_def] >>
   qabbrev_tac `p = pfx ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++
                    AsmPushLabel l :: AsmOp "JUMPI" :: rest` >>
   qabbrev_tac `q = pfx ++ AsmPushLabel l :: AsmOp "JUMPI" :: rest` >>
@@ -214,11 +265,21 @@ Proof
                         `sfx` |-> `AsmPushLabel l :: AsmOp "JUMPI" :: rest`]
                   splice_index_of_label) >>
         simp[Abbr `p`, Abbr `q`]) >>
-  qexistsl_tac [`4`, `2`] >> simp[] >>
+  qexistsl_tac [`4`, `2`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  CONV_TAC (REWR_CONV CONJ_ASSOC) >>
   qspecl_then [`ss`, `p`, `env`] strip_assume_tac
     (GEN_ALL sym_step_iszero_cases)
-  >~ [`SymError`] >- simp[sym_steps_pos, sym_terminal_def]
-  >~ [`SymBad`] >- simp[sym_steps_pos, sym_terminal_def] >>
+  >~ [`SymError`] >- (reverse conj_tac
+      >- (rpt strip_tac >> irule window_bounded_cases >>
+          simp[sym_steps_pos, sym_terminal_def, sym_steps_ok_one,
+               sym_steps_ok_pos, asm_plain_inst_def, is_data_inst_def]) >>
+      simp[sym_steps_pos, sym_terminal_def])
+  >~ [`SymBad`] >- (reverse conj_tac
+      >- (rpt strip_tac >> irule window_bounded_cases >>
+          simp[sym_steps_pos, sym_terminal_def, sym_steps_ok_one,
+               sym_steps_ok_pos, asm_plain_inst_def, is_data_inst_def]) >>
+      simp[sym_steps_pos, sym_terminal_def]) >>
   drule_then (qspecl_then [`p`, `env`] assume_tac) sym_step_iszero_val >>
   qmatch_asmsub_abbrev_tac `sym_step p env (AsmOp "ISZERO") ss = SymOK s1` >>
   `s1.sym_stack = Val (b2w (w = 0w)) :: stk ∧
@@ -246,6 +307,12 @@ Proof
    t1.sym_base.as_pc = LENGTH pfx + 1`
     by simp[Abbr `t1`, asmSemTheory.asm_next_def] >>
   drule_then (qspecl_then [`q`, `env`] assume_tac) sym_step_jumpi_label >>
+  reverse conj_tac
+  >- (rpt strip_tac >> irule window_bounded_cases >>
+      Cases_on `w = 0w` >> Cases_on `INDEX_OF (AsmLabel l) p` >>
+      simp[sym_steps_pos, sym_steps_def, b2w_b2w_eq_zero, sym_terminal_def,
+           sym_steps_ok_pos, sym_steps_ok_def, asm_plain_inst_def,
+           is_data_inst_def]) >>
   simp[sym_steps_pos, sym_steps_def, b2w_b2w_eq_zero] >>
   IF_CASES_TAC >> simp[sym_terminal_def]
   >- simp[Abbr `s1`, Abbr `s2`, Abbr `s3`, Abbr `t1`,
@@ -258,6 +325,13 @@ Proof
        asmSemTheory.asm_state_component_equality]
 QED
 
+Theorem iszero_jumpi_window_refines:
+  asm_window_refines pfx [AsmOp "ISZERO"; AsmOp "ISZERO"] []
+    (AsmPushLabel l :: AsmOp "JUMPI" :: rest)
+Proof
+  metis_tac[iszero_jumpi_window_refines_within, asm_window_refines_of_within]
+QED
+
 Theorem merge_iszero_jumpi_fst:
   FST (merge_iszero_jumpi (a :: b :: c :: d :: rest)) =
   if a = AsmOp "ISZERO" ∧ b = AsmOp "ISZERO" ∧ asm_is_push_label c ∧
@@ -268,30 +342,36 @@ Proof
   simp[Once merge_iszero_jumpi_def] >> rw[] >> pairarg_tac >> simp[]
 QED
 
-Theorem merge_iszero_jumpi_refines_under:
-  ∀sfx pfx. asm_refines (pfx ++ sfx) (pfx ++ FST (merge_iszero_jumpi sfx))
+Theorem merge_iszero_jumpi_refines_under_both[local]:
+  ∀sfx pfx. asm_refines_both (pfx ++ sfx) (pfx ++ FST (merge_iszero_jumpi sfx))
 Proof
   ho_match_mp_tac merge_iszero_jumpi_ind >>
   reverse (rpt conj_tac)
-  >- simp[merge_iszero_jumpi_def, asm_refines_refl]
-  >- simp[merge_iszero_jumpi_def, asm_refines_refl]
-  >- simp[merge_iszero_jumpi_def, asm_refines_refl]
-  >- simp[merge_iszero_jumpi_def, asm_refines_refl] >>
+  >- simp[merge_iszero_jumpi_def, asm_refines_both_refl]
+  >- simp[merge_iszero_jumpi_def, asm_refines_both_refl]
+  >- simp[merge_iszero_jumpi_def, asm_refines_both_refl]
+  >- simp[merge_iszero_jumpi_def, asm_refines_both_refl] >>
   rpt gen_tac >> strip_tac >> simp[merge_iszero_jumpi_fst] >>
-  reverse IF_CASES_TAC >- (gvs[] >> irule asm_refines_cons >> simp[]) >>
+  reverse IF_CASES_TAC >- (gvs[] >> irule asm_refines_both_cons >> simp[]) >>
   Cases_on `c` >> gvs[asm_is_push_label_def] >> gen_tac >>
   qmatch_goalsub_rename_tac `AsmPushLabel lbl` >>
-  irule asm_refines_trans >>
+  irule asm_refines_both_trans >>
   qexists_tac `pfx ++ AsmPushLabel lbl :: AsmOp "JUMPI" :: rest` >> simp[] >>
   mp_tac (Q.INST [`pat` |-> `[AsmOp "ISZERO"; AsmOp "ISZERO"]`,
                   `repl` |-> `[]`,
                   `sfx` |-> `AsmPushLabel lbl :: AsmOp "JUMPI" :: rest`]
-            asm_splice_window_refines) >>
+            asm_splice_window_refines_both) >>
   impl_tac
-  >- simp[asm_splice_ok_def, iszero_jumpi_window_refines, is_data_inst_def,
+  >- simp[asm_splice_ok_def, iszero_jumpi_window_refines_within, is_data_inst_def,
           asm_label_refs_def, symbolResolveTheory.asm_inst_size_def] >>
   REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
   disch_then ACCEPT_TAC
+QED
+
+Theorem merge_iszero_jumpi_refines_under:
+  ∀sfx pfx. asm_refines (pfx ++ sfx) (pfx ++ FST (merge_iszero_jumpi sfx))
+Proof
+  metis_tac[merge_iszero_jumpi_refines_under_both, relationTheory.RINTER]
 QED
 
 (* ===== The rule ===== *)
@@ -312,5 +392,17 @@ Proof
   qspecl_then [`p`, `[]`] mp_tac merge_iszero_pairs_refines_under >>
   qspecl_then [`FST (merge_iszero_pairs p)`, `[]`] mp_tac
     merge_iszero_jumpi_refines_under >>
+  simp[]
+QED
+
+Theorem merge_iszero_refines_both:
+  ∀p. asm_refines_both p (FST (merge_iszero p))
+Proof
+  gen_tac >> simp[merge_iszero_fst] >>
+  irule asm_refines_both_trans >>
+  qexists_tac `FST (merge_iszero_pairs p)` >>
+  qspecl_then [`p`, `[]`] mp_tac merge_iszero_pairs_refines_under_both >>
+  qspecl_then [`FST (merge_iszero_pairs p)`, `[]`] mp_tac
+    merge_iszero_jumpi_refines_under_both >>
   simp[]
 QED

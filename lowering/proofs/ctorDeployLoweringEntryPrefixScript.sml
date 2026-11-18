@@ -2,7 +2,7 @@
 Theory ctorDeployLoweringEntryPrefix
 Ancestors
   loweringStateRelDefs
- ctorDeployDefs context ctorDeployLoweringDefs deployUnitProducers ctorDeployMemoryFrontier
+ ctorDeployDefs context ctorDeployLoweringDefs deployUnitProducers ctorDeployMemoryFrontier allocaFrontierRoom
  moduleLoweringProps fragExec venomExecSemantics venomInst venomState
  vyperCompiler compileEnv o1PassContract e2eEntry finite_map list
  ctorDeployLoweringPrefix ctorDeployShape unitShapeDefs compileVyper

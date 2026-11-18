@@ -5193,6 +5193,11 @@ Resume ctor_create_call_first_emission[blueprint]:
   ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >> gen_tac >>
   ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_at (Pos last) first_emission_create_blueprint_args >>
+      disch_then irule >> asm_rewrite_tac[]) >>
+  Cases >> simp_tac (srw_ss()) [] >>
+  ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >> gen_tac >>
   simp_tac (srw_ss()) [LET_THM] >>
   ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
@@ -5203,9 +5208,7 @@ Resume ctor_create_call_first_emission[blueprint]:
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- metis_tac[compilerFirstEmissionTheory.ctor_create_blueprint_check_first_emission_strong] >>
   rewrite_tac[GSYM cs_appends_def] >> gen_tac >> irule ctor_ci_mono_appends >>
-  gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- simp[ci_mono_compile_create_blueprint_args] >>
-  gen_tac >> pairarg_tac >> simp[ctor_create_blueprint_append_ci_mono]
+  simp[ctor_create_blueprint_append_ci_mono]
 QED
 
 Finalise ctor_create_call_first_emission

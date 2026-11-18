@@ -254,6 +254,8 @@ Proof
   drule_all ld_joint_delegatecall_operands >>
   disch_then (qx_choose_then `di_target` (qx_choose_then `dr_target` assume_tac)) >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  `s.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_delegatecall_def, AllCaseEqs()]) >>
   `inst.inst_opcode <> INVOKE` by simp[] >>
   `LENGTH s.vs_requests < LENGTH s1.vs_requests` by
     (qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
@@ -277,10 +279,11 @@ Proof
   `s.vs_outcomes = t.vs_outcomes /\ s.vs_logs = t.vs_logs /\
    s.vs_pending_deletions = t.vs_pending_deletions` by
     fs[ld_joint_boundary_def, ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   qabbrev_tac `rq1 = venom_call_request s daval 0w dival dzval F with
-                      cr_kind := DelegateMessageCall` >>
+                      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n dgval)|>` >>
   qabbrev_tac `rq2 = venom_call_request t daval 0w di_target dzval F with
-                      cr_kind := DelegateMessageCall` >>
+                      <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n dgval)|>` >>
   `request_agree_except D rq1 rq2` by
     simp[Abbr `rq1`, Abbr `rq2`, request_agree_except_def,
          venom_call_request_def, call_request_component_equality] >>
@@ -801,9 +804,7 @@ Theorem ld_call_outcome_effects[local]:
   ld_shared_agree D A tn s t /\
   rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
-  ((computed_precompile rq1 /\ computed_precompile rq2 /\
-     rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-   request_agree_except D rq1 rq2) /\
+  request_agree_except D rq1 rq2 /\
   consume_call_outcome rq1 ro1 rs1 s = (w1,s1) /\
   consume_call_outcome rq2 ro2 rs2 t = (w2,t1) ==>
   w1 = w2 /\ s1.vs_returndata = t1.vs_returndata /\
@@ -813,19 +814,15 @@ Theorem ld_call_outcome_effects[local]:
     s1 t1 /\
   ld_shared_agree D A
     (tn with <|t_stor := if ~rq1.cr_static /\ s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
                   s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                 then {} else tn.t_stor;
                t_trans := if ~rq1.cr_static /\ s1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s1.vs_requests) /\
                   s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                 then {} else tn.t_trans|>) s1 t1
 Proof
-  strip_tac
-  >- (`s1.vs_requests = s.vs_requests` by
-        (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
-         simp[consume_call_outcome_eq, record_request_def] >> strip_tac >>
-         gvs[Excl "consume_call_outcome_eq"]) >>
-      drule_all ld_consume_precompile_shared >> strip_tac >>
-      simp[Excl "consume_call_outcome_eq"]) >>
+  strip_tac >>
   `s.vs_outcomes = t.vs_outcomes /\
    LIST_REL (request_agree_except D) s.vs_requests t.vs_requests` by
     fs[ld_shared_agree_def] >>
@@ -871,6 +868,11 @@ Proof
      gvs[MEM] >> simp[step_inst_non_invoke] >>
      asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
      simp[AllCaseEqs()] >> metis_tac[]) >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[ld_joint_boundary_def, ld_shared_agree_def] >>
+  `s.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_ext_call_def, AllCaseEqs()]) >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   `inst.inst_opcode = CALL ==> ~(s.vs_call_ctx.cc_static /\ value <> 0w)` by
     (strip_tac >>
      qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
@@ -888,8 +890,8 @@ Proof
     (drule ld_joint_call_operands >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> gvs[MEM] >> metis_tac[]) >>
   `s.vs_call_ctx = t.vs_call_ctx` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
-  qabbrev_tac `rq1 = venom_call_request s addr value off sz static` >>
-  qabbrev_tac `rq2 = venom_call_request t addr value off' sz static` >>
+  qabbrev_tac `rq1 = venom_call_request s addr value off sz static with cr_gas := SOME (w2n gas)` >>
+  qabbrev_tac `rq2 = venom_call_request t addr value off' sz static with cr_gas := SOME (w2n gas)` >>
   `rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
    rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
@@ -905,11 +907,8 @@ Proof
    `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
      fs[ld_joint_boundary_def] >>
    SUBGOAL_THEN
-     ``((computed_precompile rq1 /\ computed_precompile rq2 /\
-      rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-     request_agree_except D rq1 rq2)`` assume_tac
-   >- (Cases_on `computed_precompile rq1` >- metis_tac[] >>
-      disj2_tac >>
+     ``request_agree_except D rq1 rq2`` assume_tac
+   >- (
       `LENGTH s.vs_requests < LENGTH s1.vs_requests` by
         (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
          simp[consume_call_outcome_eq] >> strip_tac >>
@@ -921,7 +920,7 @@ Proof
          qexistsl_tac [`fuel`,`update_var out w1 r1`] >>
          simp[Excl "consume_call_outcome_eq", update_var_def]) >>
       simp[Abbr `rq1`, Abbr `rq2`] >>
-      irule ld_venom_call_request_masked >> simp[]) >>
+      simp[request_agree_except_def, venom_call_request_def]) >>
    drule_all ld_call_outcome_effects >> strip_tac >>
    qexistsl_tac [`out`,`w1`,`r1`,`r2`,`rq1`,`rq2`,`ro`,`rs`,`ro'`] >>
    simp[Excl "consume_call_outcome_eq"] >>
