@@ -6,6 +6,27 @@ Ancestors
 Libs
   cv_transLib wordsLib intLib
 
+(* Keep Vyper's shared value helpers and vfmCompute's word arithmetic when
+   the independently translated source and EVM theories meet. *)
+val () = List.app cv_rep_delete
+  ["vyperValueOperation.cv_word_rem_thm",
+   "vyperValueOperation.cv_word_exp_thm",
+   "vyperValueOperation.cv_word_quot_thm",
+   "vyperStorage.MAP_CHR_o_w2n_ho",
+   "vyperStorage.MAP_n2w_o_ORD_ho",
+   "vyperStorage.cv_i2w_thm",
+   "vyperABI.MAP_CHR_o_w2n_ho",
+   "vyperABI.MAP_n2w_o_ORD_ho",
+   "vyperABI.cv_within_int_bound_thm",
+   "contractABI.cv_i2w_thm",
+   "vfmCompute.MAP_o_n2w_ORD_CONS_CHR_110_CON_ho",
+   "vfmCompute.cv_dimword_thm",
+   "vfmCompute.cv_rep_bool_bool_itself_datatype",
+   "vfmCompute.cv_word_size_thm",
+   "vfmRoot.cv_word_to_bytes'_thm",
+   "vfmRoot.cv_word_to_bytes_aux'_thm",
+   "vfmRoot.cv_get_byte'_thm",
+   "vfmRoot.cv_byte_index'_thm"];
 
 (* Environment and context for a contract call *)
 

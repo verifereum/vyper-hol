@@ -138,6 +138,9 @@ QED
 
 Theorem rb_compile_call_internal:
   rb_env_ok ce /\
+  (!e. MEM e (omitted_defaults ce (nsid_to_string id) (LENGTH args)) ==>
+    rb_step rb_value_ok
+      (cfn (cenv_without_defaults ce (nsid_to_string id)) (expr_type e) e)) /\
   (!e. MEM e args ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
   rb_step rb_value_ok (compile_call cfn ce ret_ty ty (IntCall id) args default_ret)
 Proof
@@ -154,6 +157,11 @@ Proof
     (Q.ISPEC `EVERY rb_operand_ok` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
     irule rb_compile_stage_intcall_args >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `EVERY rb_operand_ok` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_compile_stage_intcall_args >> simp[rb_env_ok_without_defaults]) >>
   gen_tac >> strip_tac >> suspend "invoke"
 QED
 Resume rb_compile_call_internal[alloc]:
@@ -472,12 +480,7 @@ Resume rb_compile_call_raw_calldata[finish]:
     (Q.ISPEC `rb_operand_ok` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
     irule rb_compile_raw_call_finish >> Cases_on `x0` >> gvs[]) >>
-  gen_tac >> strip_tac >>
-  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
-    (Q.INST [`P` |-> `K T`] (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind))) >> BETA_TAC >>
-  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
-    irule rb_emit_void >> simp[]) >>
-  gen_tac >> Cases_on `rcf.rcf_max_outsize = 0` >> simp[] >>
+  gen_tac >> strip_tac >> Cases_on `rcf.rcf_max_outsize = 0` >> simp[] >>
   (pure_rewrite_tac[GSYM comp_return_def] >>
    CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
    irule rb_step_return >> simp[rb_value_ok_def, rb_mk_ptr])
@@ -642,6 +645,9 @@ Theorem rb_compile_call:
      rb_operand_ok dst /\ rb_operand_ok src /\ rb_operand_ok bop /\ rb_operand_ok hi ==>
      rb_step (K T) (compile_abi_decode_to_buf dst src opc bop hi info)) /\
   rb_env_ok ce /\
+  (!id. target = IntCall id ==>
+    !e ty. MEM e (omitted_defaults ce (nsid_to_string id) (LENGTH args)) ==>
+      rb_step rb_value_ok (cfn (cenv_without_defaults ce (nsid_to_string id)) ty e)) /\
   (!e ty. expr_size e < list_size expr_size args ==>
      rb_step rb_value_ok (cfn ce ty e)) ==>
   rb_step rb_value_ok (compile_call cfn ce ret_ty ty target args default_ret)

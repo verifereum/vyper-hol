@@ -38,6 +38,20 @@ Proof
   CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC
 QED
 
+val json_expr_names_pre_def = cv_auto_trans_pre
+  "json_expr_names_pre json_exprs_names_pre json_keywords_names_pre"
+  json_expr_names_def;
+
+Theorem json_expr_names_pre[cv_pre]:
+  (∀e. json_expr_names_pre e) ∧
+  (∀es. json_exprs_names_pre es) ∧
+  (∀kws. json_keywords_names_pre kws)
+Proof
+  ho_match_mp_tac json_expr_names_ind >>
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC [json_expr_names_pre_def] >> rw[] >> gvs[]
+QED
+
 val translate_module_compute = save_thm ("translate_module_compute",
   PURE_REWRITE_RULE [GSYM translate_toplevels_implementation] translate_module_def);
 val () = cv_auto_trans translate_module_compute;

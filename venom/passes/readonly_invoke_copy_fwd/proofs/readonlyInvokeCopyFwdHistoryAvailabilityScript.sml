@@ -65,7 +65,7 @@ Proof
      metis_tac[occurrence_alias_reachable_operand]) >>
   `FLOOKUP B (a,da.inst_id) = SOME (db,w2n sz) /\
    FLOOKUP B (a,sa.inst_id) = SOME (sb,w2n sz)` by
-    metis_tac[occ_frame_reachable_annotation, occurrence_annotation_ok_def,
+    metis_tac[occ_frame_reachable_annotation_static, occurrence_annotation_ok_def,
               occurrence_allocas_ok_def] >>
   qexistsl_tac [`dst`,`sv`,`dr`,`sz`,`da`,`sa`,`db`,`sb`] >>
   simp[eval_operands_def, eval_operand_def, Once step_inst_def, step_inst_base_def]

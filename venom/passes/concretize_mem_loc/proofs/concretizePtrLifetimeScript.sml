@@ -13,7 +13,7 @@ Definition ptr_bottom_state_def:
 End
 
 Theorem ptr_chrono_bottom_lookup_step:
-  ptr_chrono_step ctx a b /\ a.po_inst.inst_opcode <> DALLOCA /\
+  ptr_chrono_step ctx a b /\
   d <= LENGTH a.po_stack /\ d <= LENGTH b.po_stack /\
   FLOOKUP (ptr_bottom_state d a).vs_allocas aid = SOME site ==>
   FLOOKUP (ptr_bottom_state d b).vs_allocas aid = SOME site
@@ -52,7 +52,6 @@ QED
 Theorem ptr_chrono_bottom_lookup_interval:
   ptr_chrono_history vs0 ctx h endpoint /\ i <= j /\ j < LENGTH h /\
   (!k. i <= k /\ k <= j ==> d <= LENGTH (EL k h).po_stack) /\
-  (!k. i <= k /\ k < j ==> (EL k h).po_inst.inst_opcode <> DALLOCA) /\
   FLOOKUP (ptr_bottom_state d (EL i h)).vs_allocas aid = SOME site ==>
   FLOOKUP (ptr_bottom_state d (EL j h)).vs_allocas aid = SOME site
 Proof
@@ -72,7 +71,6 @@ QED
 Theorem ptr_chrono_bottom_owner_identity:
   ptr_chrono_history vs0 ctx h endpoint /\ i <= j /\ j < LENGTH h /\
   (!k. i <= k /\ k <= j ==> d <= LENGTH (EL k h).po_stack) /\
-  (!k. i <= k /\ k < j ==> (EL k h).po_inst.inst_opcode <> DALLOCA) /\
   FLOOKUP (ptr_bottom_state d (EL i h)).vs_allocas aid = SOME (b,sz) /\
   b <= x /\ x < b + sz /\
   ptr_active_alloc_geometry (ptr_obs_states (EL j h)) /\
