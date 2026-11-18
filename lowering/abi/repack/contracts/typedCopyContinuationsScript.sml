@@ -43,5 +43,6 @@ Proof
   ho_match_mp_tac compile_store_memory_typed_ind >> rpt conj_tac >> rpt strip_tac >>
   simp_tac bool_ss [Once compile_store_memory_typed_def, LET_THM] >>
   NTAC 2 (TRY typed_cut_step) >> NTAC 2 (TRY typed_cut_step) >>
-  NTAC 2 (TRY typed_cut_step) >> NTAC 2 (TRY typed_cut_step) >> rpt typed_cut_step
+  NTAC 2 (TRY typed_cut_step) >> NTAC 2 (TRY typed_cut_step) >>
+  FIRST [NTAC 2 (TRY typed_cut_step)] >> FIRST [rpt typed_cut_step]
 QED
