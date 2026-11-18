@@ -210,8 +210,9 @@ Proof
   `~mem_labels_hit ss.sym_mem_labels
      (asm_op_mem_reads ("LOG" ++ num_to_dec_string (w2n tc))
        (TAKE (LENGTH selected) mid.as_stack))` by
-    (pure_rewrite_tac[mem_labels_hit_def] >>
-     metis_tac[log_source_read_coverage, source_read_byte_no_labels]) >>
+    (pure_rewrite_tac[mem_labels_hit_def] >> strip_tac >>
+     drule_all log_source_read_coverage >> strip_tac >>
+     drule_all source_read_byte_no_labels >> simp[]) >>
   `!msg. (if allow_own then sym_step_own prog env own
        (AsmOp ("LOG" ++ num_to_dec_string (w2n tc))) ss
      else sym_step prog env (AsmOp ("LOG" ++ num_to_dec_string (w2n tc))) ss) <> SymBad msg` by
