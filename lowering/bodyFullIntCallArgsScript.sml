@@ -18,6 +18,7 @@ Ancestors ptrDiscipline[qualified,ignore_grammar]
   vyperStorageTrace fragExec list
   ctorDeployLoweringFrameSupport[qualified]
   exprLoweringProps[qualified,ignore_grammar]
+  exprSimDefs[qualified,ignore_grammar]
   loweringStateRelDefs[qualified,ignore_grammar]
   vyperTypeInvariants[qualified,ignore_grammar]
 
@@ -4573,6 +4574,15 @@ Proof
        vyperTypeEvalProofsTheory.get_module_code_stk_irrelevant,
        vyperTypeInvariantsTheory.lookup_var_slot_from_layout_context,
        vyperTypeEvalProofsTheory.get_tenv_stk_irrelevant]
+QED
+
+Theorem intcall_args_halt_exit_pop[local]:
+  halt_exit H (cx with stk updated_by CONS (NONE,name)) es
+    (INR HaltException : 'a + exception) r ==>
+  halt_exit H cx es (INR HaltException : 'a + exception) r
+Proof
+  simp[exprSimDefsTheory.halt_exit_def, loweringStateRelDefsTheory.halt_rel_def,
+       loweringStateRelDefsTheory.accounts_rel_def]
 QED
 
 (* (a) Arguments and frame setup, at (DF H, lo).  The caller's code up to
