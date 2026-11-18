@@ -13,6 +13,12 @@ val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos])
 
+(* Mirrors the premises of e2e_deploy_correctness and vyper_call_correct at
+   e1bf916782. Both require supported programs, and deployment requires a
+   call-free constructor. The call premises bound the trace length and use
+   calldata dispatch with external lookup.
+   The earlier call_outcomes_ok, 0xEF-prefix and valid_vyper_call premises were
+   dropped from the tops. The result relations carry the finite-storage guards. *)
 Definition vyper_deploy_and_call_premises_def:
   vyper_deploy_and_call_premises fin policy tops deploy_bc runtime_bc
       am_dep tx_dep es_dep am_call tx_call es_call <=>
