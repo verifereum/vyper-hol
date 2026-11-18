@@ -2,6 +2,7 @@
    production observer's initcode fields with the source oracle request. *)
 Theory vyperCreateMemoryTest
 Ancestors
+  vyperSmallStepCV
   vyperCreateOracleTest vyperCreateSelfdestruct vyperCreate vyperCallOutcome
   vyperState vyperContext vyperEvmBoundary extCallOracle callTrace
   vfmCompute vfmContext vfmState vfmExecution vfmBuffer finite_map finite_set list
