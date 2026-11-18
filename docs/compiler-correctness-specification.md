@@ -42,7 +42,8 @@ or check and is easy to miss:
   A frame entered by DELEGATECALL or CALLCODE from a proxy (callee the proxy,
   code the implementation's) and a call to an EIP-7702 delegated account do not
   satisfy this, so they are outside `vyper_call_correct`. The conjunct makes the
-  target count as an already-created account, bounds the length of the executing
+  target an account with installed (nonempty) code, so a nested CREATE cannot
+  land on it, bounds the length of the executing
   code (`call_state_rel_code_length`), and ties the account code the source reads
   for `self.codesize` and `self.codehash` to the code the frame executes.
 - **Deployment is a single creation frame.** `deploy_state_rel`
@@ -238,8 +239,8 @@ with 101 fixture membership proofs; it is not typing or semantic correctness.
 
 A call frame is the head EVM context. `run_call` is Verifereum's execution until
 that frame ends; parent frames below it are arbitrary. It is not a claim about
-running the entire transaction. `call_state_rel` requires a fresh **nonstatic**
-frame: wf_state/Collect mode, memory output, code `runtime_bc ++ section` with
+running the entire transaction. `call_state_rel` requires a fresh frame, static or
+not (`ctxt.msgParams.static = tx.is_static`): wf_state/Collect mode, memory output, code `runtime_bc ++ section` with
 `immutables_section_rel tops (account_immutables am tx.target) section`, its
 `parse_code 0 FEMPTY` map, size <=24576, jumpDest NONE, PC0 and empty stack,
 memory, logs and return data. Message caller/callee/value and transaction/block
@@ -321,7 +322,7 @@ CALL/STATICCALL/DELEGATECALL; a `send` without `gas=` records 0, so its operand
 must be 0. The operand of any other call without `gas=` is unconstrained,
 creations and the precompile builtins record none, and the gas the callee
 actually receives is not related.
-The result relation ties source gas observations to the frame's EVM gas readings only through `gas_readings_rel (gas_readings es)`: the readings the source takes explicitly, together with the unused ones, are a permutation of `gas_readings es`, and the result must hold for every filling of the remaining slots. The old
+The result relation ties source gas observations to the frame's EVM gas readings only through `gas_readings_rel (gas_readings es)`: it fixes some slots of the source's gas observations so that the fixed (`SOME`) slots together with the unused readings are a permutation of `gas_readings es`, and the result must hold for every value in an unfixed (`NONE`) slot and every appended tail, which the EVM readings do not constrain. The old
 2026-09-29 gas-oracle account of this design is superseded by the outcome oracle.
 
 ### Observations, resources and limits
@@ -366,10 +367,11 @@ The result relation ties source gas observations to the frame's EVM gas readings
   storage premises, OutOfGas implies oversized deposited code or a reached
   `RETURNDATACOPY`. The per-finalizer case theorems give the stronger
   code-size-only alternative. Its assembly-optimizer case also remains admitted.
-- Static entry, runtime immutables, msg.gas, `gas=` beyond its forwarded operand,
-  fallback invocation and
-  arbitrary unsupported programs are outside this runtime contract. Outgoing
-  STATICCALL is not a static-entry guarantee. Environmental satisfiability,
+- msg.gas beyond `gas_readings_rel`, `gas=` beyond its forwarded operand and
+  arbitrary unsupported programs are outside this runtime contract. Static entry
+  (`ctxt.msgParams.static = tx.is_static`), runtime immutables (`installed_code_rel`
+  over `account_immutables am tx.target`) and a `__default__` reached by
+  `calldata_dispatch` are covered. Environmental satisfiability,
   transaction entry/storage and callee-outcome producers remain Milestone 7
   obligations; selected boundary regressions do not discharge them.
 

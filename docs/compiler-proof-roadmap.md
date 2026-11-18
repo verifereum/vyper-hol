@@ -212,7 +212,8 @@ and the full request list `call_requests es` (every trace entry's request,
 computed precompiles included) via `request_agree`. A source halt relates the
 same logs, accounts, transient storage and requests (`effects_agree`) with empty output.
 Failed-run requests, leftover terminal outcomes, revert data/reason and general
-abort kind are not compared. `unspecified_behaviour_exempt` covers exact
+abort kind are not compared, except that calldata with `calldata_dispatch` `NONE`
+requires a raised `Reverted` outcome with empty output outside resource starvation. `unspecified_behaviour_exempt` covers exact
 `RuntimeError "abi_decode invalid"` with a dynamic ABI target occurring in a
 function body; it may also cover a callee-return rejection with that exact
 message, not arbitrary ReturnReject/conversion/static decode failure.
