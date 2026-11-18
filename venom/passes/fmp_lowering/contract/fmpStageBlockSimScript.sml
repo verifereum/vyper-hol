@@ -17,6 +17,12 @@ Ancestors
   venomExecProofs venomInstProofs venomStepProps venomWf venomExecSemantics
   venomState venomInst finite_map words list
   dftGasRequestObservation o1LowerDloadShared o1LowerDloadRequestForward
+  concretizePtrObservationInterface passSharedFrame
+  fmpStageOpFrame fmpStageOpSimPureCopy o1LowerDloadJointAssign
+  fmpStageOpFrameForwardFetch fmpStageOpFrameForwardScalars
+  frameViewFacts unitShapeDefs o1LowerDloadRelocationKernel opcodeClass
+  livenessDefs pointerConfinedDefs
+  dftGasToListReachBoundary
 
 Theorem fmp_stage_block_entry:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -136,8 +142,71 @@ Proof
   drule fmp_target_run_exec_block >> simp[]
 QED
 
+Theorem fmp_forward_env_revert_size[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  fmp_env_rel sm fn
+    (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+    G tn.t_var s t /\ s.vs_labels = t.vs_labels /\
+  inst.inst_opcode = REVERT /\ inst.inst_operands = [addr;sz] /\
+  eval_operand sz s = SOME x ==>
+  eval_operand sz t = SOME x
+Proof
+  strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
+  `FDOM G SUBSET fn_pv P fn` by metis_tac[fmp_stage_prov_support] >>
+  `ptr_use_static_ok P (fn_pv P fn) inst` by
+    (fs[EVERY_MEM, fn_static_ptr_ok_def] >> metis_tac[]) >>
+  `ptr_use_ok P (fn_pv P fn) inst` by
+    (qpat_x_assum `ptr_use_static_ok _ _ _` mp_tac >>
+     simp[ptr_use_ok_def, ptr_use_static_ok_def]) >>
+  `op_prov G sz = NONE` by metis_tac[ptr_terminal_length_prov] >>
+  `op_taint tn sz = {}` by metis_tac[ptr_terminal_length_taint] >>
+  `!v. sz = Var v ==> ~retpc_var fn v` by
+    (rpt gen_tac >> disch_tac >> irule ordinary_operand_not_retpc >>
+     conj_tac >- gvs[o1_fn_shape_def, fn_shape_ok_def] >>
+     qexists_tac `inst` >> gvs[]) >>
+  `MEM sz inst.inst_operands /\ inst.inst_opcode <> PHI` by simp[] >>
+  drule_all fmp_env_operand >> strip_tac >>
+  gvs[fmp_value_rel_def] >> metis_tac[ld_value_agree_clean]
+QED
+
+Theorem fmp_step_revert_empty[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  inst.inst_opcode <> INVOKE /\
+  step_inst k C inst s = Abort Revert_abort se /\
+  step_inst k' C' inst t = Abort ab' te /\ se.vs_returndata = [] ==>
+  te.vs_returndata = []
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = REVERT`
+  >- (drule_all fmp_stage_frame_facts >> strip_tac >>
+      qpat_x_assum `step_inst k C inst s = _` mp_tac >>
+      simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      strip_tac >> gvs[] >>
+      rename1 `inst.inst_operands = [offop;sizeop]` >>
+      rename1 `eval_operand sizeop s = SOME len` >>
+      `fmp_env_rel sm fn
+         (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+         G tn.t_var s t /\ s.vs_labels = t.vs_labels` by
+        (gvs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
+      `eval_operand sizeop t = SOME len` by
+        (drule_all fmp_forward_env_revert_size >> simp[]) >>
+      qpat_x_assum `step_inst k' C' inst t = _` mp_tac >>
+      simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      strip_tac >> gvs[revert_state_def, set_returndata_def]) >>
+  `~is_terminator inst.inst_opcode` by
+    (drule step_inst_abort_opcodes >> rpt strip_tac >>
+     gvs[is_terminator_def, step_inst_non_invoke,
+         step_inst_base_opcode_eqs, AllCaseEqs()]) >>
+  irule step_inst_base_abort_returndata >>
+  qexistsl_tac [`ab'`, `inst`, `t`] >> gvs[step_inst_non_invoke]
+QED
+
 Theorem dead_result_stage_result[local]:
   dead_result_rel D r r' /\
+  (!se te ab'. r = Abort Revert_abort se /\ se.vs_returndata = [] /\
+     r' = Abort ab' te ==> te.vs_returndata = []) /\
   (!a se a' te. r = Abort a se /\ r' = Abort a' te ==>
      LIST_REL (request_agree_except D) se.vs_requests te.vs_requests) ==>
   fmp_stage_result D C C' vs fmp0 raw0 eom stk PG fn ts r r'
@@ -216,6 +285,229 @@ Proof
      qexists_tac `bb` >> simp[get_instruction_def]) >>
   qexists_tac `EL (SUC s.vs_inst_idx) bb.bb_instructions` >> simp[] >>
   irule frame_reachable_next >> simp[] >> metis_tac[]
+QED
+
+Theorem fmp_forward_env_assign[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  fmp_env_rel sm fn
+    (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+    G tn.t_var s t /\ s.vs_labels = t.vs_labels /\
+  inst.inst_opcode = ASSIGN /\ step_inst k C inst s = OK s1 ==>
+  ?t1. step_inst k C' inst t = OK t1 /\
+    fmp_env_rel sm fn
+      (live_vars_at (liveness_analyze fn) s.vs_current_bb (SUC s.vs_inst_idx))
+      (step_prov PG G inst s1) (step_taint inst s s1 tn).t_var
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx) /\
+    s1.vs_labels = t1.vs_labels
+Proof
+  strip_tac >>
+  `?op out x. inst.inst_operands = [op] /\ inst.inst_outputs = [out] /\
+    eval_operand op s = SOME x /\ s1 = update_var out x s` by
+    metis_tac[ld_assign_success_iff] >>
+  `?y. eval_operand op t = SOME y /\
+    (~retpc_var fn out ==> fmp_value_rel sm (op_prov G op) (op_taint tn op) x y)` by
+    (Cases_on `!v. op = Var v ==> ~retpc_var fn v`
+     >- (`MEM op inst.inst_operands /\ inst.inst_opcode <> PHI` by simp[] >>
+         drule_all fmp_env_operand >> metis_tac[]) >>
+     gvs[] >> drule_all fmp_stage_frame_facts >> strip_tac >>
+     `retpc_var fn out` by
+       (gvs[retpc_var_def] >> irule (cj 2 copy_phi_var_rules) >>
+        qexistsl_tac [`inst`, `v`] >> simp[]) >>
+     fs[eval_operand_def, lookup_var_def, fmp_env_rel_def] >> metis_tac[]) >>
+  qexists_tac `update_var out y t` >>
+  conj_tac >- (simp[ld_assign_success_iff] >> metis_tac[]) >>
+  conj_tac
+  >- (`~retpc_var fn out ==> fmp_value_rel sm
+         (out_prov PG G inst s1) (out_taint tn inst s) x y` by
+        (gvs[out_prov_def, first_prov_def, out_taint_def] >>
+         Cases_on `op_prov G op` >> gvs[]) >>
+      `!v. MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb
+              (SUC s.vs_inst_idx)) /\ ~MEM v inst.inst_outputs ==>
+           MEM v (live_vars_at (liveness_analyze fn)
+              s.vs_current_bb s.vs_inst_idx)` by
+        (rpt strip_tac >> drule_all fmp_live_ordinary_suc >> simp[]) >>
+      drule_all fmp_copy_write_value >> strip_tac >>
+      irule fmp_env_rel_step >> conj_tac >- metis_tac[] >>
+      qexistsl_tac [`live_vars_at (liveness_analyze fn)
+        s.vs_current_bb s.vs_inst_idx`, `t`] >>
+      simp[]) >>
+  gvs[update_var_def]
+QED
+
+Theorem fmp_forward_suffix_revert_empty[local]:
+  !d s t G tn cur.
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn cur s /\ active_inst fn cur s /\
+  fmp_env_rel sm fn
+    (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+    G tn.t_var s t /\ s.vs_labels = t.vs_labels /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME cur /\
+  (!h. h <= d ==> get_instruction bb (s.vs_inst_idx + h) =
+                  get_instruction bb' (t.vs_inst_idx + h)) /\
+  get_instruction bb (s.vs_inst_idx + d) = SOME ri /\
+  ri.inst_opcode = REVERT /\
+  (!h ii. h < d /\ get_instruction bb (s.vs_inst_idx + h) = SOME ii ==>
+          ii.inst_opcode = ASSIGN) /\
+  exec_block k C bb s = Abort Revert_abort se /\ se.vs_returndata = [] ==>
+  ?te. exec_block k C' bb' t = Abort Revert_abort te /\ te.vs_returndata = []
+Proof
+  Induct_on `d`
+  >- (rpt gen_tac >> simp[] >> strip_tac >>
+      `cur = ri` by metis_tac[optionTheory.SOME_11] >> gvs[] >>
+      qpat_x_assum `exec_block k C bb s = _` mp_tac >>
+      asm_simp_tac (srw_ss()) [Once exec_block_def, is_terminator_def,
+        step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+      simp[AllCaseEqs()] >> strip_tac >>
+      gvs[is_terminator_def, step_inst_non_invoke,
+          step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      rename1 `cur.inst_operands = [offop;sizeop]` >>
+      rename1 `eval_operand sizeop s = SOME len` >>
+      `eval_operand sizeop t = SOME len` by
+        (irule fmp_forward_env_revert_size >> metis_tac[]) >>
+      `?y. eval_operand offop t = SOME y` by
+        (Cases_on `offop` >> gvs[eval_operand_def, lookup_var_def,
+          fmp_env_rel_def] >> metis_tac[]) >>
+      asm_simp_tac (srw_ss()) [Once exec_block_def, is_terminator_def,
+        step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+      gvs[revert_state_def, set_returndata_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `get_instruction bb' t.vs_inst_idx = SOME cur` by
+    (qpat_x_assum `!h. h <= SUC d ==> _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `cur.inst_opcode = ASSIGN` by
+    (qpat_x_assum `!h ii. _` (qspecl_then [`0`, `cur`] mp_tac) >> simp[]) >>
+  qpat_assum `exec_block k C bb s = _` mp_tac >>
+  simp[IgnAsm `exec_block k C bb s = _`,
+       Once exec_block_def, is_terminator_def, AllCaseEqs()] >> strip_tac
+  >- (rename1 `step_inst k C cur s = OK scopy` >>
+      drule_all fmp_forward_env_assign >> strip_tac >>
+      `terminates (Abort Revert_abort se)` by simp[terminates_def] >>
+      `cur.inst_opcode <> INVOKE /\ ~is_terminator cur.inst_opcode` by
+        simp[is_terminator_def] >>
+      drule_all source_next_active >> strip_tac >>
+      `?out x. scopy = update_var out x s` by metis_tac[ld_assign_success_iff] >>
+      `?out y. t1 = update_var out y t` by metis_tac[ld_assign_success_iff] >>
+      `?te. exec_block k C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx) =
+              Abort Revert_abort te /\ te.vs_returndata = []` by
+        (first_x_assum irule >> simp[] >>
+         goal_assum (drule_at Any) >> simp[] >>
+         gvs[update_var_def, arithmeticTheory.ADD_CLAUSES] >>
+         conj_tac
+         >- (rpt strip_tac >>
+             qpat_x_assum `!h ii. _` (qspecl_then [`SUC h`, `ii`] mp_tac) >>
+             simp[NoAsms, arithmeticTheory.ADD_CLAUSES] >> metis_tac[]) >>
+         conj_tac
+         >- (rpt strip_tac >>
+             qpat_x_assum `!h. h <= SUC d ==> _` (qspec_then `SUC h` mp_tac) >>
+             simp[arithmeticTheory.ADD_CLAUSES]) >>
+         drule_all fmp_stage_frame_facts >> strip_tac >>
+         `ALL_DISTINCT (fn_labels fn)` by gvs[o1_fn_shape_def, wf_function_def] >>
+         drule_all active_inst_lookup_distinct >> simp[] >> metis_tac[]) >>
+      qexists_tac `te` >> simp[] >>
+      simp[Once exec_block_def, is_terminator_def] >>
+      metis_tac[]) >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+Theorem fmp_forward_revert_empty[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  ~s.vs_halted /\ in_revert_forward fn s /\
+  inst.inst_opcode = RETURNDATACOPY /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  exec_block k C bb s = Abort Revert_abort se /\ se.vs_returndata = [] ==>
+  ?fn' bb' te.
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    exec_block k C' bb' t = Abort Revert_abort te /\ te.vs_returndata = []
+Proof
+  strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by gvs[o1_fn_shape_def, wf_function_def] >>
+  `get_instruction bb s.vs_inst_idx = SOME inst` by
+    metis_tac[active_inst_lookup_distinct, optionTheory.SOME_11] >>
+  `?j. revert_forward_pair bb s.vs_inst_idx j` by
+    (gvs[in_revert_forward_def, revert_forward_at_def]
+     >- metis_tac[] >> gvs[revert_forward_pair_def]) >>
+  drule_all fmp_forward_fetch >> strip_tac >>
+  `?dst src sz. inst.inst_operands = [dst;src;sz]` by
+    (gvs[revert_forward_pair_def] >> metis_tac[]) >>
+  drule_all fmp_forward_copy_scalars >> strip_tac >>
+  `fmp_env_rel sm fn
+     (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+     G tn.t_var s t /\ s.vs_labels = t.vs_labels /\
+     s.vs_returndata = t.vs_returndata` by
+    gvs[fmp_stage_rel_def, fmp_frame_rel_def] >>
+  qpat_assum `exec_block k C bb s = _` mp_tac >>
+  simp[IgnAsm `exec_block k C bb s = _`,
+       Once exec_block_def, AllCaseEqs(), is_terminator_def] >> strip_tac >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  qabbrev_tac `scopy = write_memory_with_expansion (w2n destOffset)
+    (TAKE (w2n size_val) (DROP (w2n offset) s.vs_returndata)) s` >>
+  `step_inst k C inst s = OK scopy` by
+    (simp[step_inst_non_invoke, Abbr `scopy`] >>
+     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >> simp[]) >>
+  `?dst'. eval_operand dst t = SOME dst'` by
+    (Cases_on `dst` >> gvs[eval_operand_def, lookup_var_def,
+       fmp_env_rel_def] >> metis_tac[]) >>
+  qabbrev_tac `tcopy = write_memory_with_expansion (w2n dst')
+    (TAKE (w2n size_val) (DROP (w2n offset) t.vs_returndata)) t` >>
+  `step_inst k C' inst t = OK tcopy` by
+    (simp[step_inst_non_invoke, Abbr `tcopy`] >>
+     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >> simp[]) >>
+  `terminates (Abort Revert_abort se)` by simp[terminates_def] >>
+  `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode` by
+    simp[is_terminator_def] >>
+  drule_all source_next_active >> strip_tac >>
+  `inst.inst_outputs = []` by
+    (fs[o1_fn_shape_def, fn_inst_wf_def, fn_insts_def,
+        fn_insts_blocks_MEM] >>
+     `inst_wf inst` by metis_tac[] >> gvs[inst_wf_def]) >>
+  `fmp_env_rel sm fn
+     (live_vars_at (liveness_analyze fn) s.vs_current_bb (SUC s.vs_inst_idx))
+     (step_prov PG G inst scopy) (step_taint inst s scopy tn).t_var
+     (scopy with vs_inst_idx := SUC s.vs_inst_idx)
+     (tcopy with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (`!v. MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb
+            (SUC s.vs_inst_idx)) /\ ~MEM v inst.inst_outputs ==>
+         MEM v (live_vars_at (liveness_analyze fn)
+            s.vs_current_bb s.vs_inst_idx)` by
+       (rpt strip_tac >> drule_all fmp_live_ordinary_suc >> simp[]) >>
+     irule fmp_env_rel_step >> simp[] >>
+     qexistsl_tac [`live_vars_at (liveness_analyze fn)
+       s.vs_current_bb s.vs_inst_idx`, `t`] >>
+     simp[Abbr `scopy`, Abbr `tcopy`, write_memory_with_expansion_def, write_memory_def]) >>
+  `?te. exec_block k C' bb' (tcopy with vs_inst_idx := SUC t.vs_inst_idx) =
+          Abort Revert_abort te /\ te.vs_returndata = []` by
+    (irule fmp_forward_suffix_revert_empty >>
+     goal_assum (drule_at (Pat `frame_reachable _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `fmp_stage_ctx _ _ _ _ _ _ _ _`)) >>
+     simp[] >>
+     goal_assum (drule_at (Pat `fmp_env_rel _ _ _ _ _ _ _`)) >>
+     qexists_tac `j - SUC s.vs_inst_idx` >>
+     gvs[revert_forward_pair_def] >>
+     conj_tac
+     >- (rpt strip_tac >>
+         `s.vs_inst_idx < h + SUC s.vs_inst_idx /\
+          h + SUC s.vs_inst_idx < j` by decide_tac >> metis_tac[]) >>
+     conj_tac
+     >- (rpt strip_tac >>
+         `SUC h <= j - s.vs_inst_idx` by decide_tac >>
+         qpat_x_assum `!h. h <= j - s.vs_inst_idx ==> _`
+           (qspec_then `SUC h` mp_tac) >> simp[arithmeticTheory.ADD_CLAUSES]) >>
+     conj_tac
+     >- gvs[Abbr `scopy`, Abbr `tcopy`, write_memory_with_expansion_def, write_memory_def] >>
+     drule active_inst_lookup_distinct >>
+     disch_then (qspecl_then [`i2`, `scopy with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+     simp[] >> strip_tac >> gvs[]) >>
+  qexists_tac `te` >> simp[] >>
+  `get_instruction bb' t.vs_inst_idx = SOME inst` by
+    (qpat_x_assum `!h. h <= _ ==> _` (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[Once exec_block_def, is_terminator_def] >>
+  metis_tac[]
 QED
 
 (* The induction step: the source goes on at the next index, and the
@@ -464,7 +756,7 @@ Proof
       `dead_result_rel D q r'` by (Cases_on `q` >> gvs[]) >>
       `exec_block k C' bb' t = r'` by metis_tac[target_dead_run] >>
       gvs[] >> irule dead_result_stage_result >> simp[] >>
-      rpt strip_tac >> metis_tac[fmp_step_abort_requests]) >>
+      rpt strip_tac >> metis_tac[fmp_step_abort_requests, fmp_step_revert_empty]) >>
   gvs[] >> rename1 `step_inst k C' inst t1 = OK t3` >>
   `exec_block k C bb s = Halt s1` by
      (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
@@ -613,8 +905,21 @@ Proof
       `?j. revert_forward_pair bb s.vs_inst_idx j` by
         (gvs[in_revert_forward_def, revert_forward_at_def]
          >- metis_tac[] >> gvs[revert_forward_pair_def]) >>
-      irule dead_result_stage_result >> simp[] >> rpt strip_tac >>
-      metis_tac[fmp_forward_abort_requests]) >>
+      irule dead_result_stage_result >> simp[] >> conj_tac
+      >- (rpt strip_tac >> irule fmp_forward_abort_requests >>
+          goal_assum (drule_at (Pat `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+          goal_assum (drule_at (Pat `fmp_stage_ctx _ _ _ _ _ _ _ _`)) >>
+          simp[] >> metis_tac[]) >>
+      rpt strip_tac >>
+      `?fn2 bb2 te2.
+         lookup_function fn.fn_name C'.ctx_functions = SOME fn2 /\
+         lookup_block t.vs_current_bb fn2.fn_blocks = SOME bb2 /\
+         exec_block k C' bb2 t = Abort Revert_abort te2 /\ te2.vs_returndata = []` by
+        (irule fmp_forward_revert_empty >>
+         goal_assum (drule_at (Pat `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+         goal_assum (drule_at (Pat `fmp_stage_ctx _ _ _ _ _ _ _ _`)) >>
+         simp[] >> metis_tac[]) >>
+      gvs[]) >>
   Cases_on `inst.inst_opcode = PHI`
   >- gvs[venomExecProofsTheory.step_inst_phi_error, terminates_def] >>
   Cases_on `inst.inst_opcode = RETPC_PARAM`
@@ -675,7 +980,7 @@ Proof
             (irule exec_block_target_dead_rel >> metis_tac[]) >>
           gvs[] >>
           irule dead_result_stage_result >> simp[] >>
-          rpt strip_tac >> metis_tac[fmp_step_abort_requests]) >>
+          rpt strip_tac >> metis_tac[fmp_step_abort_requests, fmp_step_revert_empty]) >>
       (* OK *)
       qpat_x_assum `?s1. q = OK s1` (qx_choose_then `s1` SUBST_ALL_TAC) >>
       qpat_x_assum `exec_result_CASE (OK s1) _ _ _ _ _`
