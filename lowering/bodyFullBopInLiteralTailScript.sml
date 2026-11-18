@@ -234,7 +234,7 @@ Proof
   simp[ptr_val_ok_def, is_word_type_def]
 QED
 
-Theorem bop_in_literal_continuation_full:
+Theorem bop_in_literal_continuation_full_exit:
   (bop = In \/ bop = NotIn) /\
   (if bop = In then compile_list_membership_in needle xs
    else compile_list_membership_notin needle xs) sm = (op,sb) /\
@@ -276,7 +276,7 @@ Theorem bop_in_literal_continuation_full:
        ptr_buf_ok cenv (Builtin (BaseT BoolT) (Bop bop)
          [e1; Builtin a (MakeArray t n) elems]) op G z) /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-    (\H res ee gt r. expr_exit res r)
+    R
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all bop_in_literal_actual_uniform >>
@@ -326,4 +326,52 @@ Proof
        (strip_assume_tac o REWRITE_RULE [rich_listTheory.IS_PREFIX_APPEND]) >>
      simp[DROP_APPEND, rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
   gvs[is_word_type_def] >> gvs[Abbr `z`]
+QED
+
+Theorem bop_in_literal_continuation_full:
+  (bop = In \/ bop = NotIn) /\
+  (if bop = In then compile_list_membership_in needle xs
+   else compile_list_membership_notin needle xs) sm = (op,sb) /\
+  is_word_type et /\ evaluate_type (get_tenv cx) et = SOME tv /\
+  value_has_type tv v /\ EVERY (value_has_type tv) vs /\
+  LIST_REL (\x v. eval_operand x s = SOME (typed_val_to_w256 tv v)) xs vs /\
+  eval_operand needle s = SOME (typed_val_to_w256 tv v) /\
+  EVERY (\x. !p. x = Var p ==> not_fresh_at sm p) (needle::xs) /\
+  op_prov G needle = NONE /\ op_taint tn needle = {} /\
+  EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
+  ~ctx_has_dalloca ctx /\ fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  sa.cs_next_var <= sm.cs_next_var /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s /\
+    storage_well_formed_on cx (ee with gas_obs := []) (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) G tn s /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+    wb_frame cenv es (ee with gas_obs := []) sa s0 s /\
+    (~expr_has_effect e1 /\ EVERY ($~ o expr_has_effect) elems ==>
+      pure_frame cenv func es sa s0 s)) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (return (BoolV (if bop = In then MEM v vs else ~MEM v vs))) (ee,s,G,tn)
+    (\H res ee G tn z. ?v. res = INL v /\
+      expr_post H ctx func cenv cx
+        (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray t n) elems])
+        es sa sb s0 ee v op z /\
+      expr_store_bound cx (BaseT BoolT) v op z /\
+      z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func z /\ s0.vs_alloca_next <= z.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ee G tn z /\
+      ptr_val_ok cx (BaseT BoolT) v op G tn z /\
+      (~is_word_type (BaseT BoolT) ==>
+       ptr_buf_ok cenv (Builtin (BaseT BoolT) (Bop bop)
+         [e1; Builtin a (MakeArray t n) elems]) op G z) /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
+    (\H res ee gt r. expr_exit res r)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule bop_in_literal_continuation_full_exit >> metis_tac[]
 QED
