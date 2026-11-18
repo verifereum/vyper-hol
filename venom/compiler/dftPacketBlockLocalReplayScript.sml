@@ -73,3 +73,60 @@ Proof
     qpat_x_assum `case FLOOKUP calls _ of NONE => _ | SOME call => _`
       (strip_assume_tac o SIMP_RULE (srw_ss()) [th])) >> simp[]
 QED
+
+(* ReplayFrame's completion exception: every source INVOKE in the closing
+   row already has a returned record; the fresh row has an empty prefix. *)
+Theorem block_exceptional_completion:
+  FLOOKUP blocks (p,d) =
+    SOME (bb,bt,ps,xs,rho_y,ord,hin,h0,SOME (be,hb),cnt,OK s,F,NONE) /\
+  (!q. q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE ==>
+    MEM q (TAKE cnt ord)) /\
+  (!a e bb bt ps xs ys ord hin h be hb cnt front closed rest.
+    FLOOKUP blocks (a,e) =
+      SOME (bb,bt,ps,xs,ys,ord,hin,h,SOME (be,hb),cnt,front,closed,rest) ==>
+    !q. q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE /\ MEM q (TAKE cnt ord) ==>
+      ?ch b done child ir child_out caller_post.
+        FLOOKUP calls (a,e,(EL q xs).inst_id) =
+          SOME (q,ch,b,done,child,SOME (ir,child_out,caller_post))) /\
+  blocks' = (blocks |+ ((p,d),(bb,bt,ps,xs,rho_y,ord,hin,h0,SOME (be,hb),
+      LENGTH rho_y,OK post,T,SOME post.vs_gas_readings))) |+
+    ((p,SUC d),(bb1,bt1,ps1,xs1,ys1,ord1,post,h1,body1,0,OK s1,F,NONE)) ==>
+  !a e bb bt ps xs ys ord hin h be hb cnt front closed rest.
+    ((a,e) = (p,d) \/ (a,e) = (p,SUC d)) /\
+    FLOOKUP blocks' (a,e) =
+      SOME (bb,bt,ps,xs,ys,ord,hin,h,SOME (be,hb),cnt,front,closed,rest) ==>
+    !q. q < LENGTH xs /\ (EL q xs).inst_opcode = INVOKE /\ MEM q (TAKE cnt ord) ==>
+      ?ch b done child ir child_out caller_post.
+        FLOOKUP calls (a,e,(EL q xs).inst_id) =
+          SOME (q,ch,b,done,child,SOME (ir,child_out,caller_post))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >> strip_tac
+  >- (gvs[FLOOKUP_UPDATE] >> gen_tac >> strip_tac >>
+      qpat_assum `!a e bb bt ps xs ys ord hin h be hb cnt front closed rest. _`
+        (drule_then irule) >> simp[]) >>
+  gvs[FLOOKUP_UPDATE]
+QED
+
+(* A single lookup of a live row supplies the other two lookups because
+   the old tables have the same domain. *)
+Theorem ancestor_lupdates_separate:
+  !m es ks m' es' ks' live key am ae ak pos.
+  FDOM m = FDOM es /\ FDOM m = FDOM ks /\
+  (!i x y z. live i /\
+    FLOOKUP m (key i) = SOME x /\ FLOOKUP es (key i) = SOME y /\
+    FLOOKUP ks (key i) = SOME z ==>
+    FLOOKUP m' (key i) = SOME (LUPDATE (am i) (pos i) x) /\
+    FLOOKUP es' (key i) = SOME (LUPDATE (ae i) (pos i) y) /\
+    FLOOKUP ks' (key i) = SOME (LUPDATE (ak i) (pos i) z)) ==>
+  (!i x. live i /\ FLOOKUP m (key i) = SOME x ==>
+    FLOOKUP m' (key i) = SOME (LUPDATE (am i) (pos i) x)) /\
+  (!i y. live i /\ FLOOKUP es (key i) = SOME y ==>
+    FLOOKUP es' (key i) = SOME (LUPDATE (ae i) (pos i) y)) /\
+  (!i z. live i /\ FLOOKUP ks (key i) = SOME z ==>
+    FLOOKUP ks' (key i) = SOME (LUPDATE (ak i) (pos i) z))
+Proof
+  rpt gen_tac >> strip_tac >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  `key i IN FDOM m /\ key i IN FDOM es /\ key i IN FDOM ks` by
+    metis_tac[finite_mapTheory.flookup_thm] >>
+  metis_tac[venomExecProofsTheory.FDOM_FLOOKUP]
+QED

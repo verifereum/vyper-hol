@@ -6,28 +6,6 @@ Ancestors
   dftPacketSuccessfulTerminalRow dftGasToListReplay stateEquiv
   dftIndexedExec dftRunRel venomExecProofs venomInst venomState list rich_list
 
-(* A single lookup of a live row supplies the other two lookups because
-   the old tables have the same domain. *)
-Theorem ancestor_lupdates_separate[local]:
-  FDOM m = FDOM es /\ FDOM m = FDOM ks /\
-  (!i x y z. live i /\
-    FLOOKUP m (key i) = SOME x /\ FLOOKUP es (key i) = SOME y /\
-    FLOOKUP ks (key i) = SOME z ==>
-    FLOOKUP m' (key i) = SOME (LUPDATE (am i) (pos i) x) /\
-    FLOOKUP es' (key i) = SOME (LUPDATE (ae i) (pos i) y) /\
-    FLOOKUP ks' (key i) = SOME (LUPDATE (ak i) (pos i) z)) ==>
-  (!i x. live i /\ FLOOKUP m (key i) = SOME x ==>
-    FLOOKUP m' (key i) = SOME (LUPDATE (am i) (pos i) x)) /\
-  (!i y. live i /\ FLOOKUP es (key i) = SOME y ==>
-    FLOOKUP es' (key i) = SOME (LUPDATE (ae i) (pos i) y)) /\
-  (!i z. live i /\ FLOOKUP ks (key i) = SOME z ==>
-    FLOOKUP ks' (key i) = SOME (LUPDATE (ak i) (pos i) z))
-Proof
-  strip_tac >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  `key i IN FDOM m /\ key i IN FDOM es /\ key i IN FDOM ks` by
-    metis_tac[finite_mapTheory.flookup_thm] >>
-  metis_tac[FDOM_FLOOKUP]
-QED
 (* At the source entry the same pseudo phase precedes the terminal body.
    Replaying it does not consume any of the body filling. *)
 Theorem block_source_full_fold[local]:
