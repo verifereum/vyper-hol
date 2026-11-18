@@ -33,16 +33,16 @@ No pending retirement remains in this ledger.
 | e2eLegacyDefs: `finalizer_correct_legacy` | identity finalizer `K SOME`, `finalize_codegen_identity` and L1 |
 | e2eLegacyDefs: `source_deployment_rel_legacy` | exact singleton main module / layouts `e2eDefs$source_deployment_rel` |
 | e2eLegacyDefs: `return_data_encodes_legacy` | `return_bytes`, including ABI single-dynamic-value wrapping |
-| e2eLegacyDefs: `state_effects_match_legacy` | success clause of `call_result_rel`, concrete events and requests |
+| e2eLegacyDefs: `state_effects_match_legacy` | success clause of `call_result_rel_guarded`, concrete events and requests |
 | e2eLegacyDefs: `state_unchanged_legacy` | explicit failure `frame_outcome`, no fabricated source-success effects |
-| e2eLegacyDefs: `vyper_evm_correspondence_legacy` | `call_result_rel`, frame-aware `run_call`, not whole-transaction `run` |
+| e2eLegacyDefs: `vyper_evm_correspondence_legacy` | `call_result_rel_guarded`, frame-aware `run_call`, not whole-transaction `run` |
 | e2eLegacyDefs: `initial_evm_rel_legacy` | L8 `entry_venom_state_initial_ctx_rel` |
 | e2eLegacyDefs: `valid_function_call_legacy` | exact `valid_vyper_call`, no selector-table compatibility obligation |
 | e2eLegacyDefs: `run_call_legacy` (old LOCAL run_call) | Verifereum `vfmExecution$run_call`, totality `run_call_total` |
 | e2eLegacyDefs: `call_state_rel_legacy` | live transferred accounts / fresh head-frame `call_state_rel` |
 | e2eLegacyDefs: `valid_vyper_call_legacy` | `valid_vyper_call tops tx calldata ret` |
 | e2eLegacyDefs: `caller_pre_logs_legacy` | residual caller logs inside `frame_outcome` |
-| e2eLegacyDefs: `call_result_matches_legacy` | `call_result_rel` / explicit exceptional-frame outcomes |
+| e2eLegacyDefs: `call_result_matches_legacy` | `call_result_rel_guarded` / explicit exceptional-frame outcomes |
 | e2eCorrectness: `source_unit_execution_correct_legacy` | `vyperLoweringCorrect$source_unit_execution_correct`, oracle triple |
 | vyperLoweringCorrect: `external_logs_rel` | `logs_correspond` / concrete ordered events in clean result relation |
 | vyperLoweringCorrect: `external_call_state_rel` | success observables in `external_call_result_rel`; entry environment in L6 |
@@ -69,7 +69,7 @@ compiler, emitter, fixture or test expectation changes.
 | e2eCorrectness: `source_unit_execution_through_pipeline` (local) | `ctx_transform_correct_forward` plus clean result transport |
 | e2eCorrectness: `e2e_vyper_to_evm_legacy` | exact admission-free `e2e_vyper_to_evm` (§8.1) |
 | e2eCorrectness: `evm_correspondence_to_call_result` (local, direct admission) | frame-aware generic composition; removed, not proved by alias |
-| e2eCorrectness: old `vyper_call_correct` | exact §2.1 public theorem, S1–S7 only |
+| e2eCorrectness: old `vyper_call_correct` | `vyper_call_correct_guarded`, the basis of the fixed-storage headline |
 | configuredE2ECorrectness: `e2e_vyper_to_evm_O1` | exact §2.1 O1 top theorem; wrapper no longer configured |
 | codegenCorrectness: `codegen_correct_legacy` (direct admission) | planned S7 `codegen_correct`, real frame/resource-starvation conclusion |
 | vyperEntryCompat: `call_external_simple_projection` | full NONE-mode entry regressions `entry_none_cv`, body requests / rollback |

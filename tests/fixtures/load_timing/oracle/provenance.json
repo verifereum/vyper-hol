@@ -97,6 +97,10 @@
       "sha256": "8fc529af55b5857843b37642e03f7f0e298ea8cad8852670bc8687568a6ebea4"
     },
     {
+      "path": "bytecode/patches/5386-complex-compare-reject.patch",
+      "sha256": "f250f2017de5cf9854b471b032aff6a5189973eec3f4f9333ed9552339770cdf"
+    },
+    {
       "path": "bytecode/patches/local-dft-create-abort.patch",
       "sha256": "0c4a28b798de3df8978a7ca2a1965c107a71f6322fa97c22e6aa7356642a5290"
     }

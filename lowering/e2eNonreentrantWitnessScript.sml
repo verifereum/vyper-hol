@@ -12,10 +12,12 @@ val () = computeLib.upd_compset intReduce.add_int_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos])
 
-(* A Constant declaration would fail supported_constants_rejected.
-   The contract has an ordinary getter and a locked getter. The ordinary
-   getter supplies the current call gas premise, and the locked getter
-   exercises the widened call correctness premise. *)
+(* The supported-program gate excludes constants (supported_constants_rejected).
+   Both getters meet the call correctness and outer gas-sufficiency premises
+   after the same optimized deployment. The ordinary getter also satisfies
+   valid_vyper_call. The trace and storage facts here hold at the fixture's
+   gas limits. The gas theorems' guards at arbitrary added gas need a
+   separate proof. *)
 local
   val tops = ``
     [FunctionDecl External Nonpayable F F "get" [] [] (BaseT (UintT 256))
