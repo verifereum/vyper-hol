@@ -181,7 +181,9 @@ QED
 
 Resume abi_encode_word_vv_full_from_packaging[word_resources]:
   `well_typed_type_builtin_args (AbiEncode F mid) ty [expr_type e]` by
-    fs[exprSimHypsDefsTheory.expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
+    (qpat_assum `expr_body_pre ce cx env (TypeBuiltin ann _ _ _) es` mp_tac >>
+     simp[NoAsms, exprSimHypsDefsTheory.expr_body_pre_def,
+       Once vyperTypeSystemTheory.well_typed_expr_def]) >>
   `LENGTH (abi_encode_method_id_bytes mid ++ enc ct rv) <= N` by
     (qpat_assum `enc ct rv = _` (fn th => once_rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
   qabbrev_tac `k = case OPTION_MAP bytes_method_id_word mid of NONE => 0 | SOME _ => 4` >>
