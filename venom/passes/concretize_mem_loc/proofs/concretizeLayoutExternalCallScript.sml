@@ -248,7 +248,8 @@ Theorem ext_call_success_envelope[local]:
   exec_ext_call inst s (gas:bytes32) (addr:bytes32) (value:bytes32)
     (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) is_static = OK post ==>
   ?out w p. inst.inst_outputs = [out] /\
-    consume_call_outcome (venom_call_request s addr value off sz is_static)
+    consume_call_outcome (venom_call_request s addr value off sz is_static with
+      cr_gas := SOME (w2n gas))
       (w2n ro) (w2n rs) s = (w,p) /\ post = update_var out w p
 Proof
   simp[exec_ext_call_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
@@ -277,8 +278,15 @@ Theorem concretize_ext_call_observation:
       post'.vs_vars = (update_var out w t).vs_vars)
 Proof
   strip_tac >>
-  qabbrev_tac `rq = venom_call_request s addr value off sz is_static` >>
-  qabbrev_tac `rqT = venom_call_request t addr value offT sz is_static` >>
+  `s.vs_outcomes <> []` by
+    (CCONTR_TAC >> gvs[exec_ext_call_def, AllCaseEqs()]) >>
+  qabbrev_tac `rq = venom_call_request s addr value off sz is_static with
+    cr_gas := SOME (w2n gas)` >>
+  qabbrev_tac `rqT = venom_call_request t addr value offT sz is_static with
+    cr_gas := SOME (w2n gas)` >>
+  `computed_precompile rq =
+   computed_precompile (venom_call_request s addr value off sz is_static)` by
+    simp[Abbr `rq`, computed_precompile_def] >>
   `rq.cr_accounts = s.vs_accounts /\ rqT.cr_accounts = t.vs_accounts /\
    rq.cr_tStorage = s.vs_transient /\ rqT.cr_tStorage = t.vs_transient /\
    rq.cr_kind = MessageCall /\
@@ -522,6 +530,9 @@ Theorem ext_call_execution_request_growth:
 Proof
   strip_tac >> drule ext_call_success_envelope >> strip_tac >>
   qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
+  `computed_precompile rq =
+   computed_precompile (venom_call_request s addr value off sz is_static)` by
+    simp[Abbr `rq`, computed_precompile_def] >>
   Cases_on `take_outcome rq s.vs_outcomes` >>
   rename1 `take_outcome rq s.vs_outcomes = (oc,rest)` >>
   Cases_on `adopt_outcome rq oc (s.vs_accounts,s.vs_transient,s.vs_logs)` >>
@@ -557,7 +568,8 @@ Proof
   PairCases_on `r` >> drule_all call_completion_taint_masks >>
   disch_then (qspec_then `tn` strip_assume_tac) >>
   gvs[step_taint_def, store_taint_def, adopt_reset_def, update_var_def,
-      Abbr `rq`, venom_call_request_def, Excl "consume_call_outcome_eq"]
+      Abbr `rq`, venom_call_request_def, computed_precompile_def,
+      Excl "consume_call_outcome_eq"]
 QED
 
 Theorem ext_call_execution_reset_agreement:

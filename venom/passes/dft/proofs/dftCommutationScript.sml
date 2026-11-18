@@ -484,13 +484,6 @@ Proof
      contract_transient_def, update_var_def]
 QED
 
-Theorem write_mem_expand_update_var[local]:
-  (write_memory_with_expansion off bytes (update_var x v s)).vs_memory =
-    (write_memory_with_expansion off bytes s).vs_memory
-Proof
-  rw[write_memory_with_expansion_def, update_var_def]
-QED
-
 (* resolve_phi returns an element of the operand list *)
 Theorem resolve_phi_MEM:
   !prev ops op. resolve_phi prev ops = SOME op ==> MEM op ops
@@ -566,6 +559,9 @@ Proof
   Cases_on `inst.inst_outputs` >> gvs[exec_ext_call_def, map_result_state_def] >>
   rename1 `inst.inst_outputs = out::rest_outputs` >>
   Cases_on `rest_outputs` >> gvs[exec_ext_call_def, map_result_state_def] >>
+  Cases_on `s.vs_outcomes = []` >>
+  simp[update_var_def, map_result_state_def, halt_state_def,
+       set_returndata_def] >>
   simp[venom_call_request_def, read_memory_def, update_var_def,
        write_memory_with_expansion_def, venom_state_component_equality,
        finite_mapTheory.FUPDATE_COMMUTES]
@@ -584,6 +580,9 @@ Proof
   Cases_on `inst.inst_outputs` >> gvs[exec_delegatecall_def, map_result_state_def] >>
   rename1 `inst.inst_outputs = out::rest_outputs` >>
   Cases_on `rest_outputs` >> gvs[exec_delegatecall_def, map_result_state_def] >>
+  Cases_on `s.vs_outcomes = []` >>
+  simp[update_var_def, map_result_state_def, halt_state_def,
+       set_returndata_def] >>
   simp[venom_call_request_def, read_memory_def, update_var_def,
        write_memory_with_expansion_def, venom_state_component_equality,
        finite_mapTheory.FUPDATE_COMMUTES]
@@ -604,6 +603,9 @@ Proof
   Cases_on `rest_outputs` >> gvs[exec_create_def, map_result_state_def] >>
   Cases_on `w2n sz > 2 * max_code_size`
   >- simp[map_result_state_def, halt_state_def, set_returndata_def, update_var_def] >>
+  Cases_on `s.vs_outcomes = []` >>
+  simp[update_var_def, map_result_state_def, halt_state_def,
+       set_returndata_def] >>
   simp[map_result_state_def, venom_create_request_def, read_memory_def, update_var_def,
        venom_state_component_equality, finite_mapTheory.FUPDATE_COMMUTES]
 QED

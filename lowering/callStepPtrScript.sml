@@ -229,7 +229,7 @@ Proof
 QED
 
 Theorem consume_call_no_reset_accounts:
-  rq = venom_call_request s aw vw ao az F /\
+  rq = (venom_call_request s aw vw ao az F with cr_gas := gas_cap) /\
   t = SND (consume_call_outcome rq ro rz s) /\
   ~(~s.vs_call_ctx.cc_static /\ t.vs_requests <> s.vs_requests /\
     t.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) ==>
@@ -242,7 +242,7 @@ Proof
   Cases_on `s.vs_outcomes` >>
   gvs[consume_call_outcome_eq, take_outcome_def, adopt_outcome_def,
       failed_outcome_def, record_request_def, venom_call_request_def] >>
-  `s.vs_requests ++ [venom_call_request s aw vw ao az F] <> s.vs_requests` by
+  `s.vs_requests ++ [venom_call_request s aw vw ao az F with cr_gas := gas_cap] <> s.vs_requests` by
     (strip_tac >> pop_assum (mp_tac o AP_TERM ``LENGTH : call_request list -> num``) >>
      simp[]) >>
   `t' <> h::t'` by

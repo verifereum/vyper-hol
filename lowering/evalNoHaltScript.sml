@@ -147,8 +147,8 @@ Theorem call_ops_nh[local]:
   (next_gas_reading s = (INR HaltException, s') ==> F) /\
   (precompile_call_success bt s = (INR HaltException, s') ==> F) /\
   (frame_call_value cx vo s = (INR HaltException, s') ==> F) /\
-  (take_call_outcome tg cd vo s = (INR HaltException, s') ==> F) /\
-  (take_delegate_outcome tg cd vo s = (INR HaltException, s') ==> F) /\
+  (take_call_outcome gas_cap tg cd vo s = (INR HaltException, s') ==> F) /\
+  (take_delegate_outcome gas_cap tg cd vo s = (INR HaltException, s') ==> F) /\
   (adopt_call_outcome rq oc s = (INR HaltException, s') ==> F) /\
   (acquire_nonreentrant_lock a sl iv s = (INR HaltException, s') ==> F) /\
   (release_nonreentrant_lock a sl s = (INR HaltException, s') ==> F)
