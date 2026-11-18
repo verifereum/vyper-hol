@@ -432,7 +432,7 @@ The final statements will need explicit assumptions concerning at least:
 
 Phase 2 must distinguish genuine environment assumptions from compiler invariants that earlier stages are responsible for proving.
 
-The executions the current theorems do not cover at all (proxy and delegated frames, nested creation frames, callers that create, non-canonical initcode) are listed in [Executions outside the current theorems](#executions-outside-the-current-theorems).
+The executions the current theorems do not cover at all (proxy and delegated frames whose executing bytecode differs from the target's code, nested creation frames, callers that create, non-canonical initcode) are listed in [Executions outside the current theorems](#executions-outside-the-current-theorems).
 
 ## Planned theorem family
 
