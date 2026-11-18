@@ -4,7 +4,7 @@ Ancestors
   loweringStateRelDefs
   ctorDeployMemoryRunMemEntrySequenceWorld
   ctorDeployMemoryRunMemEntryWord ctorDeployMemoryRunMemEntryBytes
-  ctorDeployMemoryRunMemEntryShiftedFrame ctorDeployMemoryFrontier
+  ctorDeployMemoryRunMemEntryShiftedFrame ctorDeployMemoryFrontier allocaFrontierRoom
   ctorAbiActualWorld ctorAbiActualFrame ctorAbiActualObservations
   ctorAbiActualLabelWord ctorAbiActualLabelBytes
   abiDecoderPrimitiveCaller abiDecoderCoherence abiDecoderTypedContract

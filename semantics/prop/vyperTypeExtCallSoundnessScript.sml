@@ -494,13 +494,13 @@ Proof
   rename1 `frame_call_value _ _ _ = (INL value_opt,_)` >>
   Cases_on `flags.rcf_is_delegate` >> Cases_on `IS_SOME st.outcomes` >>
   simp[]
-  >>~- ([`take_call_outcome _ _ _ _`],
-    (Cases_on `take_call_outcome target_addr calldata value_opt st` >>
-      rename1 `take_call_outcome _ _ _ _ = (taken,mid)` >>
+  >>~- ([`take_call_outcome _ _ _ _ _`],
+    (Cases_on `take_call_outcome (OPTION_BIND gas dest_NumV) target_addr calldata value_opt st` >>
+      rename1 `take_call_outcome _ _ _ _ _ = (taken,mid)` >>
       `runtime_consistent env cx mid` by
         (drule_all take_call_outcome_runtime_consistent >> simp[]) >>
       Cases_on `taken` >> simp[]
-      >- (rename1 `take_call_outcome _ _ _ _ = (INL ro,_)` >> PairCases_on `ro` >>
+      >- (rename1 `take_call_outcome _ _ _ _ _ = (INL ro,_)` >> PairCases_on `ro` >>
           Cases_on `adopt_call_outcome ro0 ro1 mid` >>
           rename1 `adopt_call_outcome ro0 ro1 mid = (adopted,final)` >>
           drule vyperCallOutcomeTheory.adopt_call_outcome_frame >>
@@ -512,13 +512,13 @@ Proof
           simp[] >> RAW_CALL_FINISH_TAC) >>
       strip_tac >> drule vyperCallOutcomePropsTheory.take_call_outcome_error >>
       strip_tac >> gvs[no_type_error_result_def]))
-  >>~- ([`take_delegate_outcome _ _ _ _`],
-    (Cases_on `take_delegate_outcome target_addr calldata value_opt st` >>
-      rename1 `take_delegate_outcome _ _ _ _ = (taken,mid)` >>
+  >>~- ([`take_delegate_outcome _ _ _ _ _`],
+    (Cases_on `take_delegate_outcome (OPTION_BIND gas dest_NumV) target_addr calldata value_opt st` >>
+      rename1 `take_delegate_outcome _ _ _ _ _ = (taken,mid)` >>
       `runtime_consistent env cx mid` by
         (drule_all take_delegate_outcome_runtime_consistent >> simp[]) >>
       Cases_on `taken` >> simp[]
-      >- (rename1 `take_delegate_outcome _ _ _ _ = (INL ro,_)` >> PairCases_on `ro` >>
+      >- (rename1 `take_delegate_outcome _ _ _ _ _ = (INL ro,_)` >> PairCases_on `ro` >>
           Cases_on `adopt_call_outcome ro0 ro1 mid` >>
           rename1 `adopt_call_outcome ro0 ro1 mid = (adopted,final)` >>
           drule vyperCallOutcomeTheory.adopt_call_outcome_frame >>
@@ -531,8 +531,8 @@ Proof
       strip_tac >> drule vyperCallOutcomePropsTheory.take_delegate_outcome_error >>
       strip_tac >> gvs[no_type_error_result_def])) >>
   (qmatch_goalsub_abbrev_tac
-      `run_raw_call cx flags target_addr calldata call_amount gas st.accounts st.tStorage` >>
-    Cases_on `run_raw_call cx flags target_addr calldata call_amount gas
+      `run_raw_call cx flags target_addr calldata call_amount (forwarded_gas default_evm_gas_limit gas) st.accounts st.tStorage` >>
+    Cases_on `run_raw_call cx flags target_addr calldata call_amount (forwarded_gas default_evm_gas_limit gas)
       st.accounts st.tStorage` >>
     simp[]
     >- (strip_tac >> gvs[no_type_error_result_def]) >>
@@ -918,7 +918,10 @@ Theorem create_oracle_result_accounts_well_typed:
   create_oracle_result salt value code rof st = (res,st') ==>
   accounts_well_typed st'.accounts
 Proof
+  rpt strip_tac >>
   Cases_on `salt` >> Cases_on `st.outcomes` >>
+  gvs[create_oracle_result_def, vyperCallOutcomeTheory.take_create_outcome_def] >>
+  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
   gvs[create_oracle_result_def, vyperCallOutcomeTheory.take_create_outcome_def] >>
   rpt strip_tac >> gvs[] >> pairarg_tac >>
   rw[vyperCallOutcomeTheory.adopt_call_outcome_equation,
@@ -1433,7 +1436,7 @@ Theorem ext_call_effects_concrete_result[local]:
   runtime_consistent env cx st' /\ no_type_error_result res
 Proof
   strip_tac >>
-  Cases_on `run_ext_call cx.txn.target target calldata value_opt gas st.accounts
+  Cases_on `run_ext_call cx.txn.target target calldata value_opt (forwarded_gas default_evm_gas_limit gas) st.accounts
     st.tStorage (vyper_to_tx_params cx.txn)`
   >- gvs[eval_ext_call_effects_def, bind_def, ignore_bind_def,
          get_transient_storage_def, lift_option_def, return_def, raise_def,
@@ -1460,14 +1463,14 @@ Theorem ext_call_effects_oracle_result[local]:
   eval_ext_call_effects cx target calldata value_opt gas st.accounts st = (res,st') ==>
   runtime_consistent env cx st' /\ no_type_error_result res
 Proof
-  strip_tac >> Cases_on `take_call_outcome target calldata value_opt st` >>
-  rename1 `take_call_outcome target calldata value_opt st = (taken,mid)` >>
+  strip_tac >> Cases_on `take_call_outcome (OPTION_BIND gas dest_NumV) target calldata value_opt st` >>
+  rename1 `take_call_outcome (OPTION_BIND gas dest_NumV) target calldata value_opt st = (taken,mid)` >>
   `runtime_consistent env cx mid` by
     (drule_all take_call_outcome_runtime_consistent >> simp[]) >>
   Cases_on `taken`
-  >- (rename1 `take_call_outcome _ _ _ _ = (INL call_pair,mid)` >>
+  >- (rename1 `take_call_outcome _ _ _ _ _ = (INL call_pair,mid)` >>
       PairCases_on `call_pair` >>
-      rename1 `take_call_outcome _ _ _ _ = (INL (rq,outcome),mid)` >>
+      rename1 `take_call_outcome _ _ _ _ _ = (INL (rq,outcome),mid)` >>
       Cases_on `outcome.co_success`
       >- (Cases_on `adopt_call_outcome rq outcome mid` >>
           rename1 `adopt_call_outcome rq outcome mid = (adopted,final)` >>

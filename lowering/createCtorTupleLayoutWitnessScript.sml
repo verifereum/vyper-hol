@@ -30,7 +30,8 @@ Proof
   strip_tac >>
   `toString (0:num) = "0" /\ toString (1:num) = "1" /\
    toString (2:num) = "2"` by EVAL_TAC >>
-  simp[compile_create_ctor_tuple_def, compile_multi_vvs_def,
+  simp[compile_create_ctor_tuple_def, compile_create_ctor_args_def,
+       compile_snapshot_vv_def, expr_can_mutate_def, vv_type_def,
        Once compile_expr_def, compile_call_def,
        compile_stage_intcall_args_def, compile_extcall_store_values_def,
        unwrap_value_def, tuple_call_def, tuple_narrow_def, tuple_wide_def,

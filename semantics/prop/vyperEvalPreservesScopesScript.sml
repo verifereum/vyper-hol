@@ -198,8 +198,7 @@ Proof
    (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==>
       MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
    (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==>
-      MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
-   (!(cx:evaluation_context) (es:expr list). T)` suffices_by metis_tac[] >>
+      MAP FDOM st.scopes = MAP FDOM st'.scopes)` suffices_by metis_tac[] >>
   ho_match_mp_tac evaluate_ind >> simp[] >> rpt conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `assign_tuple_targets _ (BaseTarget _) _ _ = _` mp_tac >>
@@ -672,8 +671,7 @@ Theorem scopes_dom_extended[local]:
   (!cx bt st res st'. eval_base_place cx bt st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
   (!cx bt st res st'. eval_target_place cx bt st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
-  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
-  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes)
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt strip_tac
   (* === Statement cases === *)
@@ -736,7 +734,6 @@ Proof
   >> FIRST (map (fn th => drule th >> simp[] >> NO_TAC)
        [eval_expr_preserves_scopes_dom, eval_exprs_preserves_scopes_dom,
         eval_base_place_preserves_scopes_dom, eval_target_place_preserves_scopes_dom,
-        eval_expr_results_preserves_scopes_dom,
         cj 1 place_evaluators_scopes_dom, cj 2 place_evaluators_scopes_dom])
 QED
 
@@ -838,8 +835,7 @@ Theorem new_in_head_extended[local]:
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
-  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
-  (!(cx:evaluation_context) (es:expr list). T)
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
 Proof
   ho_match_mp_tac evaluate_ind
   >> conj_tac >- (rpt strip_tac >> gvs[evaluate_def, return_def]) (* Pass *)
@@ -1218,7 +1214,7 @@ QED
 val EXPR_TV_TAC =
   rpt strip_tac >> drule scope_pop_effect_preserves_tv >> disch_then irule >>
   imp_res_tac eval_metadata_frame_with_results >>
-  fs[eval_mutual_scope_pop_effect, eval_expr_results_scope_pop_effect];
+  fs[eval_mutual_scope_pop_effect];
 
 Theorem eval_expr_preserves_tv:
   eval_expr cx e st = (res,st') ==> preserves_tv cx st st'
@@ -1240,12 +1236,6 @@ QED
 
 Theorem eval_target_place_preserves_tv:
   eval_target_place cx t st = (res,st') ==> preserves_tv cx st st'
-Proof
-  EXPR_TV_TAC
-QED
-
-Theorem eval_expr_results_preserves_tv:
-  eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st'
 Proof
   EXPR_TV_TAC
 QED
@@ -1482,8 +1472,7 @@ Proof
    (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==>
       preserves_tv cx st st') /\
    (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==>
-      preserves_tv cx st st') /\
-   (!(cx:evaluation_context) (es:expr list). T)` suffices_by metis_tac[] >>
+      preserves_tv cx st st')` suffices_by metis_tac[] >>
   ho_match_mp_tac evaluate_ind >> simp[] >> rpt conj_tac >> rpt strip_tac >>
   pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
@@ -1496,7 +1485,7 @@ Proof
   >> irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]
 QED
 
-Theorem eval_preserves_tv_with_results:
+Theorem eval_preserves_tv:
   (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒
      preserves_tv cx st st') ∧
   (∀cx ss st res st'. eval_stmts cx ss st = (res, st') ⇒
@@ -1512,8 +1501,7 @@ Theorem eval_preserves_tv_with_results:
   (!cx t st res st'. eval_base_place cx t st = (res,st') ==> preserves_tv cx st st') /\
   (!cx t st res st'. eval_target_place cx t st = (res,st') ==> preserves_tv cx st st') /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st')
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st')
 Proof
   ho_match_mp_tac evaluate_ind >>
   conj_tac >- rw[evaluate_def, return_def] >>
@@ -1755,30 +1743,8 @@ Proof
   rpt conj_tac >> rpt strip_tac >>
   FIRST (map (fn th => drule th >> simp[] >> NO_TAC)
     [eval_expr_preserves_tv, eval_exprs_preserves_tv, eval_base_place_preserves_tv,
-     eval_target_place_preserves_tv, eval_expr_results_preserves_tv,
+     eval_target_place_preserves_tv,
      cj 1 assign_targets_preserves_tv, cj 2 assign_targets_preserves_tv])
-QED
-
-Theorem eval_preserves_tv:
-  (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒
-     preserves_tv cx st st') ∧
-  (∀cx ss st res st'. eval_stmts cx ss st = (res, st') ⇒
-     preserves_tv cx st st') ∧
-  (∀cx it st res st'. eval_iterator cx it st = (res, st') ⇒
-     preserves_tv cx st st') ∧
-  (∀cx tyv nm body vs st res st'. eval_for cx tyv nm body vs st = (res, st') ⇒
-     preserves_tv cx st st') ∧
-  (∀cx e st res st'. eval_expr cx e st = (res, st') ⇒
-     preserves_tv cx st st') ∧
-  (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒
-     preserves_tv cx st st') /\
-  (!cx t st res st'. eval_base_place cx t st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx t st res st'. eval_target_place cx t st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st')
-Proof
-  ACCEPT_TAC (LIST_CONJ
-    (List.take (CONJUNCTS eval_preserves_tv_with_results, 10)))
 QED
 
 Theorem eval_stmt_preserves_tv:
@@ -1832,7 +1798,7 @@ Theorem ExtCall_outcome_preserves_tv:
     (if ret_type = NoneT then
        check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
      else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success "ExtCall reverted";
     adopt_call_outcome rq outcome;
     k outcome.co_returnData

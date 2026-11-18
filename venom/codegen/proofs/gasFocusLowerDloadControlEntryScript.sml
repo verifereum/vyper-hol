@@ -1,10 +1,7 @@
 (* Pointwise branch entry, retaining one correlated source/frame witness. *)
 Theory gasFocusLowerDloadControlEntry
 Ancestors
-  lowerDloadSafetyControlCoverage lowerDloadReturnOrdinary
-  lowerDloadSafetyRelation lowerDloadSafetyAmbient lowerDloadSafetyKernel
-  contextCodegenRel concretizeLayoutCutSafe venomExecSemantics venomState
-  ptrDiscipline o1PassContract list
+  gasFocusLowerDloadControlEntryExact
 Libs lowerDloadReturnPackageLib
 
 Theorem ld_focus_control_entry:
@@ -43,26 +40,7 @@ Theorem ld_focus_control_entry:
     EVERY (\g. g.lf_src.vs_gas_readings = g.lf_tgt.vs_gas_readings /\
       LENGTH s1.vs_gas_readings <= LENGTH g.lf_src.vs_gas_readings) (g::fs)
 Proof
-  strip_tac >> qmatch_goalsub_abbrev_tac `Goal` >>
-  `enters_block (ld_image f) q t1 /\ active_inst (ld_image f) ti t1` by
-    metis_tac[] >>
-  `o1_ctx_shape C /\ ld_global lo A (f::fs) /\
-   EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
-   EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
-     j IN P f.lf_fn.fn_name) (f::fs) /\
-   (!j k. j < k /\ k < LENGTH (f::fs) ==>
-     list_precedes (EL j (f::fs)).lf_fn.fn_name
-                   (EL k (f::fs)).lf_fn.fn_name names)` by fs[] >>
-  drule_all ld_sync_control_entry >> strip_tac >>
-  `^ld_probe_stable lo P Sigma names fs f A A (g::fs)` by
-    (irule ld_stable_head_replace >> conj_tac >- asm_rewrite_tac[] >>
-     qexists_tac `f` >> asm_rewrite_tac[] >>
-     rpt (pop_assum kall_tac) >> simp[]) >>
-  `s1.vs_gas_readings = s.vs_gas_readings /\
-   t1.vs_gas_readings = t.vs_gas_readings` by
-    (imp_res_tac enters_block_readings >> gvs[jump_to_def]) >>
-  simp[NoAsms, Abbr `Goal`] >>
-  qexistsl_tac [`lbl`,`H'`,`G'`,`ni`,`s1`,`X`] >>
-  qpat_x_assum `MEM inst.inst_opcode [JMP; JNZ; DJMP]` kall_tac >>
-  gvs[] >> metis_tac[]
+  strip_tac >> drule_all ld_focus_control_entry_exact >> strip_tac >>
+  qexistsl_tac [`lbl`,`H'`,`entry_prov fn (jump_to lbl s) G`,`ni`,`s1`,`g`,`X`] >>
+  asm_rewrite_tac[]
 QED

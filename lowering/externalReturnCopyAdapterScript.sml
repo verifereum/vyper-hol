@@ -1,6 +1,7 @@
 (* Actual-footprint and execution-point adapters for recursive return copies. *)
 Theory externalReturnCopyAdapter
 Ancestors
+  typedMemoryCopy
   externalReturnCopyFrame externalReturnCopyTransport externalReturnCopyBase
   fragExec context compileEnv valueEncoding valueEncodingDefs valueEncodingProps
   vyperTypeSystem vyperTyping vyperValue vfmConstants loweringPosts arithmetic words list
@@ -31,7 +32,7 @@ Theorem return_copy_entry_layout_footprint:
      w2n dw + type_memory_size dtv <= w2n sw)) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\t. val_in_memory dtv v (w2n dw) t.vs_memory /\
-         return_copy_frame sa (w2n dw) (type_memory_size dtv) s t) (\r. F)
+         typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t) (\r. F)
 Proof
   rw[return_copy_entry_def] >> first_x_assum irule >>
   simp[] >> qexistsl_tac [`dst`, `src`, `sw`] >> simp[] >> decide_tac
@@ -51,12 +52,12 @@ Theorem return_copy_bytes_extent_frame:
   (!p mem. val_in_memory stv v p mem ==> val_in_memory dtv v p mem) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\t. val_in_memory dtv v (w2n dw) t.vs_memory /\
-         return_copy_frame sa (w2n dw) (type_memory_size dtv) s t) (\r. F)
+         typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t) (\r. F)
 Proof
   strip_tac >>
   drule_all return_typed_bytestring_copy_extent_explicit >> strip_tac >>
   irule frag_exec_conseq >> first_assum (irule_at Any) >>
-  simp[return_copy_frame_def, return_copy_memory_frame_def] >>
+  simp[typed_copy_state_frame_def, typed_copy_frame_def] >>
   rpt strip_tac >>
   qpat_x_assum `!p n. _ \/ _ ==> mem_bytes_at _ _ _ = _`
     (qspecl_then [`a`, `n`] mp_tac) >> simp[ADD_COMM]
@@ -107,7 +108,7 @@ Theorem return_copy_dynamic_bytes:
   frag_exec ctx sa sb (\u. u = s)
     (\t. val_in_memory (BaseTV (BytesT (Dynamic dn))) (BytesV bs)
            (w2n dw) t.vs_memory /\
-         return_copy_frame sa (w2n dw)
+         typed_copy_state_frame sa (w2n dw)
            (type_memory_size (BaseTV (BytesT (Dynamic dn)))) s t) (\r. F)
 Proof
   strip_tac >> irule return_copy_bytes_extent_frame >>
@@ -135,7 +136,7 @@ Theorem return_copy_string:
   w2n dw + type_memory_size (BaseTV (StringT dn)) < dimword (:256) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\t. val_in_memory (BaseTV (StringT dn)) (StringV str) (w2n dw) t.vs_memory /\
-         return_copy_frame sa (w2n dw) (type_memory_size (BaseTV (StringT dn))) s t)
+         typed_copy_state_frame sa (w2n dw) (type_memory_size (BaseTV (StringT dn))) s t)
     (\r. F)
 Proof
   strip_tac >> irule return_copy_bytes_extent_frame >>
@@ -181,7 +182,7 @@ Theorem return_copy_entry_actual_footprint:
      w2n dw + type_memory_size dtv <= w2n sw)) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\t. val_in_memory dtv v (w2n dw) t.vs_memory /\
-         return_copy_frame sa (w2n dw) (type_memory_size dtv) s t) (\r. F)
+         typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t) (\r. F)
 Proof
   strip_tac >>
   qspecl_then [`stv`, `v`] strip_assume_tac return_adapter_footprint_cases

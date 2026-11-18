@@ -9,7 +9,7 @@
    that every declared indexed field has an evaluated type. *)
 Theory whitelistLogWiden
 Ancestors
-  allocLimits allocLimitsProps eventLoweringStructure
+  allocLimits allocLimitsProps eventEncodingProps eventLoweringStructure
   valueCopyBytes valueTypingMemoryProps vyperEventCompatibility
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   stmtSimLogArgsRun stmtSimLogArgsGrowth stmtSimLogSuffix stmtSimLogSource
@@ -21,7 +21,7 @@ Ancestors
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq rich_list fragGasSeqAbort
   stmtSimLogCompose stmtSimLog bodySimLogArgs e2eDefs vyperEvent vyperEventArgCompat vyperABI
-  vyperTypeSystem supportedTypes supportedDecls supportedStmts
+  vyperEventSoundness vyperTypeSystem supportedTypes supportedDecls supportedStmts
   supportedExprs supportedExprTraverse supportedStmtTraverse
   exprSimSource bodyExprPreFacts exprSimHypsDefs bodySim exprSimHyps
   compileVyper vyperTypeInvariants supportedProgram supportedNames vyperContext
@@ -43,6 +43,24 @@ Proof
   logWidenTacticsLib.compatible_cases
 QED
 
+Theorem event_leaf_arg_compatible:
+  !fty aty tenv.
+    supported_event_leaf_type fty /\ event_arg_compatible fty aty ==>
+    supported_event_leaf_type aty /\
+    vyper_to_abi_type tenv aty = vyper_to_abi_type tenv fty /\
+    (!v. vyper_to_abi tenv aty v = vyper_to_abi tenv fty v) /\
+    (!v. encode_event_topic aty v = encode_event_topic fty v)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule (CONJUNCT1 event_arg_compatible_cases) >> strip_tac >>
+  gvs[supported_event_leaf_type_def, supported_scalar_type_def,
+      supported_word_type_def, supported_string_type_def] >>
+  rw[supported_event_leaf_type_def, supported_scalar_type_def,
+     supported_word_type_def, supported_string_type_def, encode_event_topic_def,
+     is_event_bytestring_type_def] >>
+  Cases_on `v` >> simp[]
+QED
+
 Theorem scalar_event_arg_compatible:
   !fty aty tenv.
     supported_scalar_type fty /\ event_arg_compatible fty aty ==>
@@ -52,12 +70,20 @@ Theorem scalar_event_arg_compatible:
     (!v. encode_event_topic aty v = encode_event_topic fty v)
 Proof
   rpt gen_tac >> strip_tac >>
+  `supported_event_leaf_type fty` by simp[supported_event_leaf_type_def] >>
+  drule_all event_leaf_arg_compatible >> strip_tac >> simp[] >>
   drule (CONJUNCT1 event_arg_compatible_cases) >> strip_tac >>
   gvs[supported_scalar_type_def, supported_word_type_def,
-      supported_string_type_def] >>
-  rw[supported_string_type_def, encode_event_topic_def,
-     is_event_bytestring_type_def] >>
-  Cases_on `v` >> simp[]
+      supported_string_type_def]
+QED
+
+Theorem event_leaf_compatible_topics_eq:
+  !tys atys flags vals.
+    EVERY supported_event_leaf_type tys /\ LIST_REL event_arg_compatible tys atys ==>
+    encode_indexed_event_topics flags atys vals =
+    encode_indexed_event_topics flags tys vals
+Proof
+  logWidenTacticsLib.topics_eq event_leaf_arg_compatible
 QED
 
 Theorem compatible_topics_eq[local]:
@@ -66,17 +92,31 @@ Theorem compatible_topics_eq[local]:
     encode_indexed_event_topics flags atys vals =
     encode_indexed_event_topics flags tys vals
 Proof
-  logWidenTacticsLib.topics_eq scalar_event_arg_compatible
+  rpt gen_tac >> strip_tac >>
+  irule event_leaf_compatible_topics_eq >>
+  simp[EVERY_MEM, supported_event_leaf_type_def] >> metis_tac[EVERY_MEM]
 QED
 
-Theorem compatible_non_indexed[local]:
+Theorem compatible_non_indexed:
   !flags tys atys.
-    EVERY supported_scalar_type tys /\ LIST_REL event_arg_compatible tys atys ==>
-    EVERY supported_scalar_type (log_non_indexed_types flags tys) /\
+    EVERY P tys /\ LIST_REL event_arg_compatible tys atys ==>
+    EVERY P (log_non_indexed_types flags tys) /\
     LIST_REL event_arg_compatible (log_non_indexed_types flags tys)
       (log_non_indexed_types flags atys)
 Proof
-  logWidenTacticsLib.non_indexed
+  rpt strip_tac >>
+  mp_tac (Q.INST [`R` |-> `event_arg_compatible`, `Q` |-> `K T`,
+                  `ftys` |-> `tys`] log_non_indexed_types_preserve) >>
+  simp[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem event_leaf_compatible_abi_eq:
+  !tys atys vals.
+    EVERY supported_event_leaf_type tys /\ LIST_REL event_arg_compatible tys atys ==>
+    vyper_to_abi_types tenv atys = vyper_to_abi_types tenv tys /\
+    vyper_to_abi_list tenv atys vals = vyper_to_abi_list tenv tys vals
+Proof
+  logWidenTacticsLib.abi_eq event_leaf_arg_compatible
 QED
 
 Theorem compatible_abi_eq[local]:
@@ -85,14 +125,15 @@ Theorem compatible_abi_eq[local]:
     vyper_to_abi_types tenv atys = vyper_to_abi_types tenv tys /\
     vyper_to_abi_list tenv atys vals = vyper_to_abi_list tenv tys vals
 Proof
-  logWidenTacticsLib.abi_eq scalar_event_arg_compatible
+  rpt gen_tac >> strip_tac >> irule event_leaf_compatible_abi_eq >>
+  simp[EVERY_MEM, supported_event_leaf_type_def] >> metis_tac[EVERY_MEM]
 QED
 
 (* log_source_event_encoded with the metadata at the field types tys and
    the values typed at compatible argument types atys. *)
 Theorem log_source_event_encoded_widen:
   lookup_event_metadata tenv sources target id = SOME (h, tys, flags) /\
-  EVERY supported_scalar_type tys /\
+  EVERY supported_event_leaf_type tys /\
   LIST_REL event_arg_compatible tys atys /\
   LIST_REL (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\
                             value_has_type tv v) atys vals /\
@@ -108,28 +149,31 @@ Theorem log_source_event_encoded_widen:
                           (ListV avs) |>
 Proof
   strip_tac >>
-  `EVERY supported_scalar_type atys` by
+  `EVERY supported_event_leaf_type atys` by
     (gvs[EVERY_EL, LIST_REL_EL_EQN] >>
-     metis_tac[scalar_event_arg_compatible]) >>
+     metis_tac[event_leaf_arg_compatible]) >>
   `LENGTH atys = LENGTH tys /\ LENGTH vals = LENGTH atys` by
     metis_tac[LIST_REL_LENGTH] >>
-  qspecl_then [`atys`, `flags`, `vals`] mp_tac log_scalar_topics_exist >>
-  impl_tac >- simp[] >> strip_tac >>
-  qspecl_then [`flags`, `atys`, `vals`] mp_tac log_non_indexed_scalars_typed >>
-  impl_tac >- simp[] >> strip_tac >>
-  drule_all log_scalar_abi_list_exists >> strip_tac >>
-  qspecl_then [`flags`, `tys`, `atys`] mp_tac compatible_non_indexed >>
+  `LENGTH flags = LENGTH atys /\ LENGTH flags = LENGTH vals` by simp[] >>
+  drule_all typed_event_args_total >> strip_tac >>
+  `?vs. non_indexed_event_args flags atys vals = SOME vs /\
+        MAP FST vs = log_non_indexed_types flags atys /\
+        MAP SND vs = log_non_indexed_values flags vals` by
+    metis_tac[non_indexed_event_args_exists] >>
+  gvs[] >>
+  qspecl_then [`flags`, `tys`, `atys`] mp_tac
+    (Q.INST [`P` |-> `supported_event_leaf_type`] compatible_non_indexed) >>
   impl_tac >- simp[] >> strip_tac >>
   qspecl_then [`log_non_indexed_types flags tys`,
                `log_non_indexed_types flags atys`,
-               `log_non_indexed_values flags vals`] mp_tac compatible_abi_eq >>
+               `log_non_indexed_values flags vals`] mp_tac event_leaf_compatible_abi_eq >>
   impl_tac >- simp[] >> strip_tac >>
   `encode_indexed_event_topics flags tys vals = SOME topics` by
-    metis_tac[compatible_topics_eq] >>
-  `LENGTH flags = LENGTH vals` by simp[] >>
-  mp_tac (Q.INST [`flags` |-> `flags`, `tys` |-> `tys`, `vals` |-> `vals`]
-            (SPEC_ALL non_indexed_event_args_exists)) >>
-  impl_tac >- simp[] >> strip_tac >>
+    metis_tac[event_leaf_compatible_topics_eq] >>
+  `?vs. non_indexed_event_args flags tys vals = SOME vs /\
+        MAP FST vs = log_non_indexed_types flags tys /\
+        MAP SND vs = log_non_indexed_values flags vals` by
+    metis_tac[non_indexed_event_args_exists] >>
   gvs[encode_source_event_def, encode_vyper_event_metadata_def]
 QED
 
@@ -298,6 +342,8 @@ Resume compile_log_ready_stmt_frag_widen[args_value]:
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def, Excl "enc_def"] >>
      metis_tac[gas_marked_path_exec, gas_path_normal]) >>
+  `EVERY supported_event_leaf_type tys` by
+    (gvs[EVERY_MEM, supported_event_leaf_type_def, Excl "enc_def"] >> metis_tac[]) >>
   drule_all log_source_event_encoded_widen >> strip_tac >>
   qabbrev_tac `ds = ZIP (MAP FST ys,tys)` >>
   qpat_x_assum `xs = ds` SUBST_ALL_TAC >>
@@ -456,10 +502,9 @@ Resume compile_log_ready_stmt_frag_widen[post]:
      simp[]) >>
   `alloca_frame cenv (es_end with gas_obs := []) sm t cenv
      (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>) u` by
-    (qpat_assum `stmt_state_rel H1 _ _ _ _ _ t`
+    ((qpat_assum `stmt_state_rel H1 _ _ _ _ _ t`
        (mp_then (Pos hd) irule log_suffix_alloca_frame) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     simp[Excl "enc_def"]) >>
+     simp[Excl "enc_def"] >> (gvs[Excl "enc_def", log_suffix_alloca_frame]))) >>
   `sa.cs_next_id <= sm.cs_next_id` by
     (drule compile_log_eval_all_grows >> simp[]) >>
   drule log_args_post_frame >> simp[wb_frame_def, Excl "enc_def"] >> strip_tac >>
@@ -586,6 +631,7 @@ Theorem body_log_widen_case:
     body_exprs_ok cx args /\ body_inv tops ctx cenv cx /\
     supported_pure_exprs tops args /\
     supported_event_fields tops id = SOME fields /\
+    EVERY supported_scalar_type (MAP (SND o FST) fields) /\
     LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) args fields /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Log id args) ==>

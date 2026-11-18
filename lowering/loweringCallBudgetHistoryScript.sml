@@ -6,8 +6,7 @@
 Theory loweringCallBudgetHistory
 Ancestors
   ptrDiscipline ptrSafeRun gasOutcomeFull gasEvents gasExplicitSites
-  sourceCallCount sourceCallCountEntryReplay sourceCallCountMonotone
-  sourceCallCountWitness loweringStateRelDefs compileVyper vyperCompiler
+  loweringStateRelDefs compileVyper vyperCompiler
   o1PassContract fragGasOriginPtr contextRawReachable sourceUnitExecution
   vyperLoweringCorrect e2eDefs exprSimHypsDefs lowerDloadDefs
   list rich_list arithmetic pred_set
@@ -47,7 +46,7 @@ End
 
 (* All recorded base Step events in the five rules have an actual OK
  * result. Static/size aborts have no advancing Step event and no debit.
- * Empty-oracle CALL/CREATE still return OK and therefore debit one.
+ * An empty-oracle CALL/CREATE aborts, so each debit takes one outcome.
  *)
 Definition lower_event_consumes_def:
   (lower_event_consumes (BudgetStep n p i f r q) <=>
@@ -283,10 +282,9 @@ End
  * HOL4 IS_PREFIX takes the complete list first, candidate prefix second.
  *)
 Definition lower_budget_continuation_def:
-  lower_budget_continuation k C es (D,lo,explicit,ctx) root h_cert <=>
+  lower_budget_continuation k es (D,lo,explicit,ctx) root h_cert <=>
     es.outcomes = SOME root.bp_state.vs_outcomes /\
-    ((!obs. entry_calls_within k root.bp_state.vs_outcomes
-        (\xs. SOME (C (es with <| outcomes := SOME xs; gas_obs := obs |>)))) ==>
+    (LENGTH root.bp_state.vs_outcomes <= k ==>
       !h marks q.
         lower_budget_path T (D,lo,explicit,ctx) root h marks q /\
         IS_PREFIX h_cert h ==>
@@ -306,7 +304,7 @@ End
  * cannot serve as the normal exit certificate.
  *)
 Definition gas_outcome_full_budget_def:
-  gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
+  gas_outcome_full_budget k (DF,lo,explicit,ctx,func,PG)
       tops cx st0 source (es,s,G,tn) Q R certificates <=>
     (?marks.
       (gas_bad_storage_at cx st0 source es s marks /\
@@ -337,7 +335,7 @@ Definition gas_outcome_full_budget_def:
         <| bp_stack := []; bp_params := PG; bp_prov := G;
            bp_taint := tn; bp_fn := func; bp_state := s |>
         h_cert marks out /\
-      lower_budget_continuation k C es (DF H,lo,explicit,ctx)
+      lower_budget_continuation k es (DF H,lo,explicit,ctx)
         <| bp_stack := []; bp_params := PG; bp_prov := G;
            bp_taint := tn; bp_fn := func; bp_state := s |> h_cert)
 End
@@ -370,18 +368,17 @@ val call_budget_headers = [
     (!i. active_inst q.bp_fn i q.bp_state /\ i.inst_opcode = DALLOCA ==>
       LENGTH (FILTER lower_event_allocates h) <= lower_history_count h)``),
   ("gas_outcome_full_budget_forget",
-   ``!k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R certificates.
-    gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
+   ``!k DF lo explicit ctx func PG tops cx st0 source es s G tn Q R certificates.
+    gas_outcome_full_budget k (DF,lo,explicit,ctx,func,PG)
       tops cx st0 source (es,s,G,tn) Q R certificates ==>
     gas_outcome_full (DF,lo,explicit,ctx,func,PG)
       tops cx st0 source (es,s,G,tn) Q R``),
   ("gas_outcome_full_budget_prefix",
-   ``!k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R
+   ``!k DF lo explicit ctx func PG tops cx st0 source es s G tn Q R
     certificates H h_cert cert_marks out h marks q.
-    gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
+    gas_outcome_full_budget k (DF,lo,explicit,ctx,func,PG)
       tops cx st0 source (es,s,G,tn) Q R certificates /\
-    (!obs. entry_calls_within k s.vs_outcomes
-      (\xs. SOME (C (es with <| outcomes := SOME xs; gas_obs := obs |>)))) /\
+    LENGTH s.vs_outcomes <= k /\
     (H,h_cert,cert_marks,out) IN certificates /\ IS_PREFIX h_cert h /\
     lower_budget_path T (DF H,lo,explicit,ctx)
       <| bp_stack := []; bp_params := PG; bp_prov := G;
@@ -417,11 +414,9 @@ val call_budget_headers = [
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     k <= 2 ** 64 /\
-    (!obs. source_calls_within k am tx vs.vs_outcomes obs) /\
+    LENGTH vs.vs_outcomes <= k /\
     (!marks.
-      source_storage_ok am tx vs.vs_outcomes
-        (gas_explicit marks vs.vs_gas_readings) /\
-      call_outcomes_storage_ok am tx vs.vs_outcomes
+      call_storage_ok am tx vs.vs_outcomes
         (gas_explicit marks vs.vs_gas_readings)) /\
     (!marks. ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
@@ -458,11 +453,9 @@ val call_budget_headers = [
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
+    LENGTH vs.vs_outcomes < 2 ** 64 /\
     (!marks.
-      source_storage_ok am tx vs.vs_outcomes
-        (gas_explicit marks vs.vs_gas_readings) /\
-      call_outcomes_storage_ok am tx vs.vs_outcomes
+      call_storage_ok am tx vs.vs_outcomes
         (gas_explicit marks vs.vs_gas_readings)) /\
     (!marks. ~source_exempt tops
       (call_external (SOME vs.vs_outcomes)
@@ -502,7 +495,7 @@ val call_budget_headers = [
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     k <= 2 ** 64 /\
-    (!obs. source_calls_within k am tx vs.vs_outcomes obs) /\
+    LENGTH vs.vs_outcomes <= k /\
     vs.vs_fmp = vs.vs_initial_fmp /\
     w2n vs.vs_initial_fmp < 2 ** 254 /\
     unit_alloca_budget unit.cu_context +
@@ -518,9 +511,7 @@ val call_budget_headers = [
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       (((!tail.
-           ~(source_storage_ok am tx vs.vs_outcomes
-               (gas_explicit marks vs.vs_gas_readings ++ tail) /\
-             call_outcomes_storage_ok am tx vs.vs_outcomes
+           ~(call_storage_ok am tx vs.vs_outcomes
                (gas_explicit marks vs.vs_gas_readings ++ tail))) /\
         ?(H : (bool # bytes32 # type_value) list # num list)
            leaf leaf_pg leaf_g leaf_tn finish.
@@ -593,10 +584,9 @@ val call_budget_headers = [
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
+    LENGTH vs.vs_outcomes < 2 ** 64 /\
     (!gs.
-      source_storage_ok am tx vs.vs_outcomes gs /\
-      call_outcomes_storage_ok am tx vs.vs_outcomes gs) /\
+      call_storage_ok am tx vs.vs_outcomes gs) /\
     (!gs. ~source_exempt tops
       (call_external (SOME vs.vs_outcomes) gs am tx)) /\
     w2n fmp < 2 ** 254 /\
@@ -944,8 +934,8 @@ Proof
 QED
 
 Theorem gas_outcome_full_budget_forget:
-  !k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R certificates.
-    gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
+  !k DF lo explicit ctx func PG tops cx st0 source es s G tn Q R certificates.
+    gas_outcome_full_budget k (DF,lo,explicit,ctx,func,PG)
       tops cx st0 source (es,s,G,tn) Q R certificates ==>
     gas_outcome_full (DF,lo,explicit,ctx,func,PG)
       tops cx st0 source (es,s,G,tn) Q R
@@ -979,12 +969,11 @@ Proof
 QED
 
 Theorem gas_outcome_full_budget_prefix:
-  !k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R
+  !k DF lo explicit ctx func PG tops cx st0 source es s G tn Q R
     certificates H h_cert cert_marks out h marks q.
-    gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
+    gas_outcome_full_budget k (DF,lo,explicit,ctx,func,PG)
       tops cx st0 source (es,s,G,tn) Q R certificates /\
-    (!obs. entry_calls_within k s.vs_outcomes
-      (\xs. SOME (C (es with <| outcomes := SOME xs; gas_obs := obs |>)))) /\
+    LENGTH s.vs_outcomes <= k /\
     (H,h_cert,cert_marks,out) IN certificates /\ IS_PREFIX h_cert h /\
     lower_budget_path T (DF H,lo,explicit,ctx)
       <| bp_stack := []; bp_params := PG; bp_prov := G;

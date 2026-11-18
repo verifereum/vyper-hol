@@ -40,7 +40,7 @@ Ancestors
   vyperExprNoControl vyperValueOperation
   gasOutcome gasContext gasExemptCert gasSummary gasSummaryCompose stmtSimForRounds vyperArith
   aggregateCountedOutcome
-  stmtSimDeclGas stmtSimDeclCompose
+  stmtSimDeclGas stmtSimDeclCompose stmtSimDeclPath
   fragGasSeq fragGasSeqAbort fragGasPath fragGasMode gasCount instIdxIndep
   venomExecSemantics venomExecProofs venomInst venomState integer_word
 Libs
@@ -323,20 +323,6 @@ Theorem eval_operand_update_other_op[local]:
              eval_operand op (update_var x w s) = eval_operand op s
 Proof
   Cases >> simp[eval_operand_def, lookup_var_update_var, update_var_def]
-QED
-
-Theorem exec_alloca_frame[local]:
-  !inst s n s1 p.
-    inst.inst_outputs = [p] /\ exec_alloca inst s n = OK s1 ==>
-    s1.vs_current_bb = s.vs_current_bb /\ s1.vs_inst_idx = s.vs_inst_idx /\
-    s1.vs_halted = s.vs_halted /\
-    (!x. x <> p ==> lookup_var x s1 = lookup_var x s) /\
-    (!a b. FLOOKUP s.vs_allocas a = SOME b ==>
-           FLOOKUP s1.vs_allocas a = SOME b)
-Proof
-  rpt gen_tac >> simp[exec_alloca_def] >> BasicProvers.every_case_tac >>
-  rw[] >> fs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> rw[] >>
-  fs[FLOOKUP_DEF] >> metis_tac[]
 QED
 
 Theorem eval_operand_jump_to_frame[local]:
@@ -722,6 +708,10 @@ Proof
   rw[]
 QED
 
+(* Kept beside compile_for_range_parts, not shared with it: the checked
+   range's entry block (three instructions against ten, four variables
+   against nine) and its range-check revert branches differ, so a common
+   statement would need both layouts as parameters. *)
 (* The code of a range loop after its ends, which are not both literals,
    its locals held through pointers: the loop variable's ALLOCA ending the
    block it starts in, the entry block (the counter, the rounds, the range
@@ -1101,6 +1091,8 @@ QED
 
 Finalise forced_endpoint_bind_outcome
 
+(* Kept apart from For's tail: the range-check revert branches have no
+   counterpart there. *)
 Theorem for_range_checked_tail_outcome[local]:
   for_range_checked_code cenv lctx ty id fty bound stmts op1 op2 st =
     ((), sf) /\
@@ -1196,21 +1188,11 @@ Resume for_range_checked_tail_outcome[allocation]:
   `A.inst_opcode = ALLOCA /\ A.inst_operands = [Lit (n2w sz)] /\
    A.inst_outputs = [p] /\ A.inst_id = st.cs_next_id` by
     simp[Abbr `A`, mk_inst_def] >>
-  `?sA. exec_alloca A t0 (n2w sz : bytes32) = OK sA` by
-    (Cases_on `FLOOKUP t0.vs_allocas A.inst_id`
-     >- simp[exec_alloca_def] >>
-     rename1 `_ = SOME entry` >> PairCases_on `entry` >> simp[exec_alloca_def]) >>
   `step_inst_base A t0 = exec_alloca A t0 (n2w sz : bytes32)` by
     simp[step_inst_base_def, eval_operand_def] >>
-  `step_inst_base A t0 = OK sA` by simp[] >>
   `stmt_state_rel H0 ctx func cenv cx es t0` by metis_tac[] >>
-  drule_all stmt_state_rel_exec_alloca >> strip_tac >>
-  `!(H :(bool # bytes32 # type_value) list # num list).
-     stmt_state_rel H ctx func cenv cx es t0 ==>
-     stmt_state_rel H ctx func cenv cx es sA` by
-    (rpt strip_tac >>
-     qspec_then `H` drule_all stmt_state_rel_exec_alloca >> simp[]) >>
-  drule_all exec_alloca_frame >> strip_tac >>
+  drule_all for_alloca_state >> strip_tac >> rename1 `step_inst_base A t0 = OK sA` >>
+  `exec_alloca A t0 (n2w sz : bytes32) = OK sA` by metis_tac[] >>
   `w2n (n2w sz : bytes32) = sz` by simp[Abbr `sz`] >>
   `gas_marked_path F ctx func t0 0 (OK (jump_to entry_lbl sA))` by
     (irule for_start_zero_path >> simp[] >>

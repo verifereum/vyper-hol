@@ -314,10 +314,7 @@ Theorem outcomes_replace_evaluate_call_free:
       (FST (assign_tuple_targets cx target v s), SND (assign_tuple_targets cx target v s) with outcomes := oc)) /\
   (!cx targets vs. ~supported_assignments_exists constructor_call_root targets ==>
     !s oc. assign_tuple_target_list cx targets vs (s with outcomes := oc) =
-      (FST (assign_tuple_target_list cx targets vs s), SND (assign_tuple_target_list cx targets vs s) with outcomes := oc)) /\
-  (!cx es. ~supported_exprs_exists constructor_call_root es ==>
-    !s oc. eval_expr_results cx es (s with outcomes := oc) =
-      (FST (eval_expr_results cx es s), SND (eval_expr_results cx es s) with outcomes := oc))
+      (FST (assign_tuple_target_list cx targets vs s), SND (assign_tuple_target_list cx targets vs s) with outcomes := oc))
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   simp[supported_stmt_expr_exists_def, supported_expr_exists_def,

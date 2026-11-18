@@ -568,7 +568,7 @@ Proof
    actual.vs_requests = s.vs_requests /\ actual.vs_call_ctx = s.vs_call_ctx` by
     (qpat_assum `compile_alloc_buffer _ _ = _` (fn c =>
        qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK _` (fn r =>
-         mp_tac (MATCH_MP exprSimUnwrapTheory.alloc_buffer_fields (CONJ c r)))) >>
+         mp_tac (MATCH_MP exprSimAllocTheory.alloc_buffer_fields (CONJ c r)))) >>
      qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_tac o REWRITE_RULE [abi_encode_staged_observation_def]) >>
      qpat_assum `Abbrev (initial = _)` mp_tac >>

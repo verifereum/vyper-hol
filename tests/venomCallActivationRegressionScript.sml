@@ -26,11 +26,13 @@ val call_clauses =
    has no alternate dispatch. This equation is also used by focused probes. *)
 Theorem probe_call_dispatch:
   step_inst_base (probe_call target) s =
-    OK (update_var "result"
+    if s.vs_outcomes = [] then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else OK (update_var "result"
       (FST (consume_call_outcome (venom_call_request s target 0w 0w 1w
-         s.vs_call_ctx.cc_static) 1 3 s))
+         s.vs_call_ctx.cc_static with cr_gas := SOME 7) 1 3 s))
       (SND (consume_call_outcome (venom_call_request s target 0w 0w 1w
-         s.vs_call_ctx.cc_static) 1 3 s)))
+         s.vs_call_ctx.cc_static with cr_gas := SOME 7) 1 3 s)))
 Proof
   simp[probe_call_def, mk_inst_def, step_inst_base_def, eval_operand_def,
        exec_ext_call_def]
@@ -83,42 +85,45 @@ Proof
 QED
 
 Theorem activated_exhausted:
-  ?t. step_inst_base (probe_call 8w) call_probe_state = OK t /\
-    lookup_var "result" t = SOME 0w /\ t.vs_outcomes = [] /\
-    t.vs_requests = [call_probe_request] /\ t.vs_returndata = [] /\
-    t.vs_memory = call_probe_state.vs_memory /\
-    t.vs_accounts = call_probe_state.vs_accounts /\
-    t.vs_transient = call_probe_state.vs_transient /\
-    t.vs_logs = call_probe_state.vs_logs
+  step_inst_base (probe_call 8w) call_probe_state =
+    Abort ExHalt_abort (halt_state (set_returndata [] call_probe_state))
 Proof
   simp[probe_call_dispatch] >> EVAL_TAC
 QED
+
+val inherited_static_state = ``call_probe_state with <|
+  vs_outcomes := [call_probe_outcome];
+  vs_call_ctx := empty_call_context with cc_static := T |>``;
+val inherited_static_request = ``
+  venom_call_request ^inherited_static_state 8w 0w 0w 1w F with cr_gas := SOME 7``;
 
 Theorem activated_inherited_static:
-  let s = call_probe_state with <| vs_outcomes := [call_probe_outcome];
-    vs_call_ctx := empty_call_context with cc_static := T |>;
-    rq = venom_call_request s 8w 0w 0w 1w F
-  in ?t. step_inst_base (probe_call 8w) s = OK t /\
-    rq.cr_static /\ lookup_var "result" t = SOME 1w /\
-    t.vs_outcomes = [] /\ t.vs_requests = [rq] /\
+  ?t. step_inst_base (probe_call 8w) ^inherited_static_state = OK t /\
+    (^inherited_static_request).cr_static /\ lookup_var "result" t = SOME 1w /\
+    t.vs_outcomes = [] /\ t.vs_requests = [^inherited_static_request] /\
     t.vs_returndata = [9w] /\ t.vs_memory = [1w; 9w; 3w; 4w] /\
-    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-    t.vs_logs = s.vs_logs
+    t.vs_accounts = (^inherited_static_state).vs_accounts /\
+    t.vs_transient = (^inherited_static_state).vs_transient /\
+    t.vs_logs = (^inherited_static_state).vs_logs
 Proof
   simp[probe_call_dispatch] >> EVAL_TAC
 QED
 
+val staticcall_state = ``call_probe_state with vs_outcomes := [call_probe_outcome]``;
+val staticcall_request = ``
+  venom_call_request ^staticcall_state 8w 0w 0w 1w T with cr_gas := SOME 7``;
+
 Theorem activated_staticcall_zero_value:
-  let s = call_probe_state with vs_outcomes := [call_probe_outcome];
-    rq = venom_call_request s 8w 0w 0w 1w T;
-    inst = mk_inst 1 STATICCALL [Lit 7w; Lit 8w; Lit 0w; Lit 1w; Lit 1w; Lit 3w]
-      ["result"]
-  in ?t. step_inst_base inst s = OK t /\
-    rq.cr_static /\ rq.cr_value = 0 /\ lookup_var "result" t = SOME 1w /\
-    t.vs_outcomes = [] /\ t.vs_requests = [rq] /\ t.vs_returndata = [9w] /\
-    t.vs_memory = [1w; 9w; 3w; 4w] /\
-    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-    t.vs_logs = s.vs_logs
+  ?t. step_inst_base
+        (mk_inst 1 STATICCALL [Lit 7w; Lit 8w; Lit 0w; Lit 1w; Lit 1w; Lit 3w]
+          ["result"]) ^staticcall_state = OK t /\
+    (^staticcall_request).cr_static /\ (^staticcall_request).cr_value = 0 /\
+    lookup_var "result" t = SOME 1w /\
+    t.vs_outcomes = [] /\ t.vs_requests = [^staticcall_request] /\
+    t.vs_returndata = [9w] /\ t.vs_memory = [1w; 9w; 3w; 4w] /\
+    t.vs_accounts = (^staticcall_state).vs_accounts /\
+    t.vs_transient = (^staticcall_state).vs_transient /\
+    t.vs_logs = (^staticcall_state).vs_logs
 Proof
   simp ([LET_THM, probe_call_def, mk_inst_def, eval_operand_def,
          exec_ext_call_def] @ call_clauses) >> EVAL_TAC
@@ -131,8 +136,11 @@ End
 
 Theorem probe_computed_dispatch[local]:
   ~s.vs_call_ctx.cc_static /\
-  consume_call_outcome (venom_call_request s target 0w 0w sz F) 1 0 s = (v,t) ==>
-  step_inst_base (probe_computed target sz) s = OK (update_var "result" v t)
+  consume_call_outcome (venom_call_request s target 0w 0w sz F with cr_gas := SOME 7) 1 0 s = (v,t) ==>
+  step_inst_base (probe_computed target sz) s =
+    if s.vs_outcomes = [] then
+      Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else OK (update_var "result" v t)
 Proof
   strip_tac >>
   simp[Excl "consume_call_outcome_eq", probe_computed_def, mk_inst_def,
@@ -168,7 +176,9 @@ Theorem activated_computed_ecrecover:
   let s = call_probe_state with <| vs_outcomes := [call_probe_outcome];
     vs_requests := [call_probe_request] |>
   in step_inst_base (probe_computed 1w 0w) s =
-    OK (update_var "result" 1w (s with <|vs_returndata := []; vs_outcomes := []|>))
+    OK (update_var "result" 1w (s with <|vs_returndata := []; vs_outcomes := [];
+                   vs_requests := s.vs_requests ++
+                     [venom_call_request s 1w 0w 0w 0w F with cr_gas := SOME 7]|>))
 Proof
   simp computed_defs
 QED
@@ -178,10 +188,12 @@ Theorem activated_computed_sha256:
     vs_requests := [call_probe_request] |>
   in ?t. step_inst_base (probe_computed 2w 0w) s = OK t /\
     lookup_var "result" t = SOME 1w /\ LENGTH t.vs_returndata = 32 /\
-    t.vs_outcomes = [] /\ t.vs_requests = s.vs_requests /\
+    t.vs_outcomes = [] /\ t.vs_requests = s.vs_requests ++
+      [venom_call_request s 2w 0w 0w 0w F with cr_gas := SOME 7] /\
     t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
     t.vs_transient = s.vs_transient /\ t.vs_logs = s.vs_logs
 Proof
+  simp ([LET_THM, probe_computed_def, mk_inst_def] @ call_clauses) >>
   simp computed_defs
 QED
 
@@ -190,24 +202,32 @@ Theorem activated_computed_empty_ec:
     vs_requests := [call_probe_request] |>
   in step_inst_base (probe_computed 6w 0w) s =
        OK (update_var "result" 1w
-         (s with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := []|>)) /\
+         (s with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := [];
+                   vs_requests := s.vs_requests ++
+                     [venom_call_request s 6w 0w 0w 0w F with cr_gas := SOME 7]|>)) /\
      step_inst_base (probe_computed 7w 0w) s =
        OK (update_var "result" 1w
-         (s with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := []|>))
+         (s with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := [];
+                   vs_requests := s.vs_requests ++
+                     [venom_call_request s 7w 0w 0w 0w F with cr_gas := SOME 7]|>))
 Proof
   mp_tac consume_computed_empty_ec >>
   simp[Excl "consume_call_outcome_eq", LET_THM] >> strip_tac >>
-  simp[Excl "consume_call_outcome_eq", probe_computed_dispatch]
+  imp_res_tac probe_computed_dispatch >> gvs[]
 QED
 
 Theorem consume_invalid_ec_zero_output:
   s = call_probe_state with <|
         vs_memory := REPLICATE 63 0w ++ [1w];
         vs_outcomes := [call_probe_outcome]; vs_requests := [call_probe_request] |> ==>
-  consume_call_outcome (venom_call_request s 6w 0w 0w 64w F) 1 0 s =
-       (0w, s with <|vs_returndata := []; vs_outcomes := []|>) /\
-     consume_call_outcome (venom_call_request s 7w 0w 0w 64w F) 1 0 s =
-       (0w, s with <|vs_returndata := []; vs_outcomes := []|>)
+  consume_call_outcome (venom_call_request s 6w 0w 0w 64w F with cr_gas := SOME 7) 1 0 s =
+       (0w, s with <|vs_returndata := []; vs_outcomes := [];
+                   vs_requests := s.vs_requests ++
+                     [venom_call_request s 6w 0w 0w 64w F with cr_gas := SOME 7]|>) /\
+     consume_call_outcome (venom_call_request s 7w 0w 0w 64w F with cr_gas := SOME 7) 1 0 s =
+       (0w, s with <|vs_returndata := []; vs_outcomes := [];
+                   vs_requests := s.vs_requests ++
+                     [venom_call_request s 7w 0w 0w 64w F with cr_gas := SOME 7]|>)
 Proof
   disch_then SUBST1_TAC >>
   mp_tac (SIMP_RULE bool_ss [LET_THM] consume_computed_invalid_ec) >>
@@ -223,30 +243,37 @@ Theorem activated_computed_invalid_ec:
     vs_outcomes := [call_probe_outcome]; vs_requests := [call_probe_request] |>
   in step_inst_base (probe_computed 6w 64w) s =
        OK (update_var "result" 0w
-         (s with <|vs_returndata := []; vs_outcomes := []|>)) /\
+         (s with <|vs_returndata := []; vs_outcomes := [];
+                   vs_requests := s.vs_requests ++
+                     [venom_call_request s 6w 0w 0w 64w F with cr_gas := SOME 7]|>)) /\
      step_inst_base (probe_computed 7w 64w) s =
        OK (update_var "result" 0w
-         (s with <|vs_returndata := []; vs_outcomes := []|>))
+         (s with <|vs_returndata := []; vs_outcomes := [];
+                   vs_requests := s.vs_requests ++
+                     [venom_call_request s 7w 0w 0w 64w F with cr_gas := SOME 7]|>))
 Proof
-  mp_tac consume_computed_invalid_ec >>
-  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
-  conj_tac >> irule probe_computed_dispatch >>
-  simp[Excl "consume_call_outcome_eq"] >>
-  irule consume_call_outcome_empty_output_size >> simp[Excl "consume_call_outcome_eq"] >>
-  qexists_tac `3` >> simp[Excl "consume_call_outcome_eq", venom_state_fupdcanon]
+  mp_tac (Q.INST [`s` |-> `call_probe_state with <|
+    vs_memory := REPLICATE 63 0w ++ [1w];
+    vs_outcomes := [call_probe_outcome]; vs_requests := [call_probe_request] |>`]
+    consume_invalid_ec_zero_output) >>
+  simp[Excl "consume_call_outcome_eq", LET_THM] >> strip_tac >>
+  imp_res_tac probe_computed_dispatch >> gvs[]
 QED
 
+val nonzero_precompile_state = ``call_probe_state with <|
+  vs_outcomes := [call_probe_outcome; failed_outcome call_probe_request];
+  vs_requests := [call_probe_request] |>``;
+
 Theorem activated_nonzero_precompile_ordinary:
-  let s = call_probe_state with <|
-    vs_outcomes := [call_probe_outcome; failed_outcome call_probe_request];
-    vs_requests := [call_probe_request] |>;
-    rq = venom_call_request s 2w 1w 0w 1w F;
-    inst = mk_inst 1 CALL
-      [Lit 7w; Lit 2w; Lit 1w; Lit 0w; Lit 1w; Lit 1w; Lit 3w] ["result"]
-  in ?t. step_inst_base inst s = OK t /\ lookup_var "result" t = SOME 1w /\
+  ?t. step_inst_base
+        (mk_inst 1 CALL
+          [Lit 7w; Lit 2w; Lit 1w; Lit 0w; Lit 1w; Lit 1w; Lit 3w] ["result"])
+        ^nonzero_precompile_state = OK t /\
+    lookup_var "result" t = SOME 1w /\
     t.vs_outcomes = [failed_outcome call_probe_request] /\
-    t.vs_requests = [call_probe_request; rq] /\ t.vs_returndata = [9w] /\
-    t.vs_memory = [1w; 9w; 3w; 4w]
+    t.vs_requests = [call_probe_request;
+      venom_call_request ^nonzero_precompile_state 2w 1w 0w 1w F with cr_gas := SOME 7] /\
+    t.vs_returndata = [9w] /\ t.vs_memory = [1w; 9w; 3w; 4w]
 Proof
   simp ([LET_THM, probe_call_def, mk_inst_def, eval_operand_def,
          exec_ext_call_def] @ call_clauses) >> EVAL_TAC
@@ -263,13 +290,26 @@ Proof
          exec_ext_call_def] @ call_clauses) >> EVAL_TAC
 QED
 
-Theorem activated_gas_value_ignored:
-  step_inst_base (probe_call 8w) s =
-  step_inst_base ((probe_call 8w) with inst_operands :=
-    [Lit 999w; Lit 8w; Lit 0w; Lit 0w; Lit 1w; Lit 1w; Lit 3w]) s
+Theorem activated_gas_value_recorded:
+  s.vs_outcomes <> [] ==>
+  ?t7 t999.
+    step_inst_base (probe_call 8w) s = OK t7 /\
+    step_inst_base ((probe_call 8w) with inst_operands :=
+      [Lit 999w; Lit 8w; Lit 0w; Lit 0w; Lit 1w; Lit 1w; Lit 3w]) s = OK t999 /\
+    t7.vs_requests = s.vs_requests ++
+      [venom_call_request s 8w 0w 0w 1w s.vs_call_ctx.cc_static with cr_gas := SOME 7] /\
+    t999.vs_requests = s.vs_requests ++
+      [venom_call_request s 8w 0w 0w 1w s.vs_call_ctx.cc_static with cr_gas := SOME 999] /\
+    t7 with vs_requests := s.vs_requests = t999 with vs_requests := s.vs_requests
 Proof
-  simp[probe_call_def, mk_inst_def, step_inst_base_def, eval_operand_def,
-       exec_ext_call_def]
+  strip_tac >>
+  simp ([probe_call_def, mk_inst_def, eval_operand_def, exec_ext_call_def,
+         Excl "consume_call_outcome_eq"] @ call_clauses) >>
+  simp[consume_call_outcome_eq, update_var_def] >>
+  simp[take_outcome_def, computed_precompile_def, failed_outcome_def,
+       record_request_def, adopt_outcome_def, adopt_outcome_deletions_def,
+       venom_call_request_def] >>
+  simp[precompile_result_def]
 QED
 
 Theorem activated_gas_expression_evaluated:
@@ -289,8 +329,8 @@ Theorem activated_output_arity:
   step_inst_base ((probe_call 8w) with inst_outputs := ["a"; "b"]) s =
     Error "ext_call requires single output"
 Proof
-  simp[probe_call_def, mk_inst_def, step_inst_base_def, eval_operand_def,
-       exec_ext_call_def]
+  simp ([probe_call_def, mk_inst_def, eval_operand_def,
+         exec_ext_call_def] @ call_clauses)
 QED
 
 Theorem activated_unequal_targets:

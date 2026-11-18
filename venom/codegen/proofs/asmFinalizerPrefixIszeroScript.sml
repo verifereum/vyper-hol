@@ -9,8 +9,11 @@ Theorem iszero_pair_prefix_window:
     ss.sym_base.as_stack = [] ==>
     (!i a. i < 3 /\ sym_steps (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) env i ss = SymOK
       a ==>
-       ~(a.sym_base.as_pc < LENGTH (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) /\ EL
-         a.sym_base.as_pc (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) = AsmOp "GAS")) /\
+       !op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} /\
+         a.sym_base.as_pc < LENGTH (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) /\ EL
+         a.sym_base.as_pc (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) = AsmOp op ==>
+         i = 0) /\
     (!a. sym_steps (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) env 3 ss = SymOK a ==>
        sym_steps (pre ++ [x] ++ rest) env 1 ss =
          SymOK (sym_with_pc (splice_pc (LENGTH pre) 3 1 a.sym_base.as_pc) a) /\
@@ -41,7 +44,7 @@ Proof
         by simp[Abbr `s2`, asm_next_def] >>
       drule_then (qspecl_then [`p`, `env`] assume_tac) sym_step_iszero_val >>
       conj_tac
-      >- (rpt gen_tac >> strip_tac >>
+      >- (rpt strip_tac >>
           `i = 0 \/ i = 1 \/ i = 2` by decide_tac >>
           gvs[sym_steps_pos, sym_steps_def]) >>
       `s1.sym_base.as_stack = []`
@@ -52,7 +55,7 @@ Proof
            wordsTheory.n2w_11, wordsTheory.ONE_LT_dimword,
            b2w_def]) >>
   (conj_tac
-   >- (rpt gen_tac >> strip_tac >>
+   >- (rpt strip_tac >>
        `i = 0 \/ i = 1 \/ i = 2` by decide_tac >>
        gvs[sym_steps_pos, sym_steps_def]) >>
    simp[sym_steps_pos])
@@ -63,10 +66,12 @@ Theorem iszero_jumpi_prefix_window:
     ss.sym_base.as_pc = LENGTH pre /\ ss.sym_base.as_stack = [] ==>
     (!i a. i < 4 /\ sym_steps (pre ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++
                     AsmPushLabel l :: AsmOp "JUMPI" :: rest) env i ss = SymOK a ==>
+       !op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} ==>
        ~(a.sym_base.as_pc < LENGTH (pre ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++
                     AsmPushLabel l :: AsmOp "JUMPI" :: rest) /\ EL a.sym_base.as_pc (pre ++ [AsmOp
                       "ISZERO"; AsmOp "ISZERO"] ++
-                    AsmPushLabel l :: AsmOp "JUMPI" :: rest) = AsmOp "GAS")) /\
+                    AsmPushLabel l :: AsmOp "JUMPI" :: rest) = AsmOp op)) /\
     (!a. sym_steps (pre ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++
                     AsmPushLabel l :: AsmOp "JUMPI" :: rest) env 4 ss = SymOK a ==>
        sym_steps (pre ++ AsmPushLabel l :: AsmOp "JUMPI" :: rest) env 2 ss =
@@ -96,12 +101,12 @@ Proof
     (GEN_ALL sym_step_iszero_cases)
   >~ [`SymError`] >-
     (conj_tac
-     >- (rpt gen_tac >> strip_tac >>
+     >- (rpt strip_tac >>
          `i = 0 \/ i = 1 \/ i = 2 \/ i = 3` by decide_tac >>
          gvs[sym_steps_pos, sym_steps_def]) >> simp[sym_steps_pos])
   >~ [`SymBad`] >-
     (conj_tac
-     >- (rpt gen_tac >> strip_tac >>
+     >- (rpt strip_tac >>
          `i = 0 \/ i = 1 \/ i = 2 \/ i = 3` by decide_tac >>
          gvs[sym_steps_pos, sym_steps_def]) >> simp[sym_steps_pos]) >>
   drule_then (qspecl_then [`p`, `env`] assume_tac) sym_step_iszero_val >>
@@ -121,7 +126,7 @@ Proof
    s3.sym_base.as_pc = LENGTH pre + 3`
     by simp[Abbr `s3`, asm_next_def] >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >>
+  >- (rpt strip_tac >>
       `i = 0 \/ i = 1 \/ i = 2 \/ i = 3` by decide_tac >>
       gvs[sym_steps_pos, sym_steps_def]) >>
   drule_then (qspecl_then [`p`, `env`] assume_tac) sym_step_jumpi_label >>
@@ -240,11 +245,15 @@ QED
 val transport = ``\p q.
   ?K. 0 < K /\ !env s n a.
     s.as_pc = 0 /\ sym_steps p env n (sym_init s) = SymOK a ==>
-    (?m b. sym_steps q env m (sym_init s) = SymOK b /\ n <= K * (m + 1)) /\
-    (a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp "GAS" ==>
-      ?m b. sym_steps q env m (sym_init s) = SymOK b /\
-            b.sym_base.as_pc < LENGTH q /\ EL b.sym_base.as_pc q = AsmOp "GAS" /\
-            b.sym_base.as_gas_readings = a.sym_base.as_gas_readings)``;
+    (?m b. sym_steps q env m (sym_init s) = SymOK b /\ n <= K * (m+1)) /\
+    (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} /\
+       a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp op ==>
+     ?m b. sym_steps q env m (sym_init s) = SymOK b /\
+       b.sym_base.as_pc < LENGTH q /\ EL b.sym_base.as_pc q = AsmOp op /\
+       (b.sym_base with as_pc := 0) = (a.sym_base with as_pc := 0) /\
+       MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
+       FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)``;
 
 val single_site = ``!pre pat repl post D.
   asm_splice_ok pat repl /\ asm_static_wf (pre ++ pat ++ post) /\
@@ -253,8 +262,11 @@ val single_site = ``!pre pat repl post D.
     sym_state_labels_in (asm_label_refs (pre ++ pat ++ post)) u ==>
     ?d. 0 < d /\ d <= D /\
       (!i a. i < d /\ sym_steps (pre ++ pat ++ post) env i u = SymOK a ==>
-        ~(a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
-          EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp "GAS")) /\
+        !op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} /\
+          a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
+          EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp op ==>
+          i = 0 /\ repl <> [] /\ HD repl = HD pat) /\
       (!a. sym_steps (pre ++ pat ++ post) env d u = SymOK a ==>
         ?e. sym_steps (pre ++ repl ++ post) env e u =
             SymOK (sym_with_pc (splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl)
@@ -282,9 +294,15 @@ Proof
   rpt gen_tac >> strip_tac >> qexists_tac `3` >> simp[] >>
   mp_tac (Q.SPECL [`pre`, `AsmOp name`, `rest`, `env`, `u`]
                  iszero_pair_prefix_window) >>
-  simp_tac bool_ss [LET_THM] >> (impl_tac >- simp[]) >> strip_tac >> fs[] >>
-  conj_tac >- gvs[] >> rpt strip_tac >>
-  qexists_tac `1` >> simp[] >> metis_tac[]
+  (impl_tac >- simp[]) >> strip_tac >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> gen_tac >> disch_tac >>
+      qpat_x_assum `!i a. _ ==> !op. _` (qspecl_then [`i`, `a`] mp_tac) >>
+      (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+      disch_then (qspec_then `op` irule) >> fs[]) >>
+  qpat_x_assum `!i a. _ ==> !op. _` kall_tac >>
+  rpt strip_tac >> qpat_x_assum `!a. _ ==> _` drule >> strip_tac >>
+  qexists_tac `1` >> fs[]
 QED
 
 Theorem iszero_jumpi_site_conditional[local]:
@@ -303,7 +321,7 @@ Proof
   mp_tac (Q.SPECL [`pre`, `l`, `rest`, `env`, `u`]
                  iszero_jumpi_prefix_window) >>
   simp_tac bool_ss [LET_THM] >> (impl_tac >- simp[]) >> strip_tac >> fs[] >>
-  conj_tac >- gvs[] >> rpt strip_tac >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >> rpt strip_tac >>
   qexists_tac `2` >> simp[] >> metis_tac[]
 QED
 

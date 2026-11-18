@@ -16,7 +16,8 @@ Ancestors
   venomCompilerTypes venomState venomInst o1ComposeSupport fmpStepContract
   fmpStageRunner fmpStageCoverage list
   o1RequestContract fcgDefs ctxLookupAgreeHelpers fmpAnalysisProps
-  fmpStageFmpStepsCallAbi
+  fmpStageFmpStepsCallAbi ctxSealAgree
+  fmpStageRel ptrDiscipline passSimulationDefs
 
 (* The analysis gives an FMP-free function with sealed F/F callees no
    need and no publication. *)
@@ -215,6 +216,33 @@ Proof
      simp[fn_pass_tag_def, fn_pass_static_layout_effect_def]) >>
   simp[o1_inv_def, o1_lowered_inv_def] >>
   fs[o1_pre_def, EVERY_MEM, o1_fn_row_def]
+QED
+
+Theorem fmp_lowering_stage_revert_empty:
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+  code_layout_valid vs' /\
+  o1_inv D 3 C (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\
+  fmp_variant_room (SOME fmp) C' vs' /\
+  run_context fuel C (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) =
+    Abort Revert_abort s /\
+  s.vs_returndata = [] ==>
+  ?t. run_context fuel C' vs' = Abort Revert_abort t /\ t.vs_returndata = []
+Proof
+  strip_tac >>
+  `?eom. max_live_eom C = SOME eom` by
+    (fs[o1_inv_def, o1_static_inv_def] >> metis_tac[]) >>
+  `fmp_stage_ctx rpolicy D C C'
+     (vs' with <|vs_fmp := fmp; vs_initial_fmp := fmp|>) vs' fmp eom` by
+    simp[fmpStageRelTheory.fmp_stage_ctx_def] >>
+  `terminates (run_context fuel C
+     (vs' with <|vs_fmp := fmp; vs_initial_fmp := fmp|>))` by
+    simp[terminates_def] >>
+  drule_all fmp_runner_entry >> strip_tac >>
+  Cases_on `run_context fuel C' vs'` >>
+  gvs[dead_result_rel_def] >> metis_tac[]
 QED
 
 Theorem o1_static_stage_fmp_lowering:

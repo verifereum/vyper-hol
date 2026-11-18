@@ -3,6 +3,7 @@
  * SOME Send consumes/records an outcome. *)
 Theory vyperOracleStateTest
 Ancestors
+  vyperSmallStepCV
   arithmetic integer words list option finite_map finite_set cv_type While
   vfmState[ignore_grammar] vfmContext[ignore_grammar] vfmExecution[ignore_grammar]
   vyperAST vyperValue vyperValueOperation vyperContext vyperEvmBoundary

@@ -8,6 +8,24 @@ Ancestors
   stmtSimLogDataRun abiEncoderCounters abiDecoderReentry abiEncoderAppend
   loweringHalt vyperABI contractABI abiBuiltinAllocation
 
+Theorem log_scalar_source_args_event[local]:
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs ==>
+  LIST_REL (\arg v. supported_event_leaf_type (SND arg) /\
+    ?aty tv. supported_event_leaf_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs
+Proof
+  strip_tac >> irule LIST_REL_mono >> goal_assum (drule_at Any) >>
+  simp[supportedTypesTheory.supported_event_leaf_type_def] >> metis_tac[]
+QED
+
 Theorem log_emit_continuation:
   ~cx.txn.is_static /\
   emit_inst LOG
@@ -169,6 +187,7 @@ Proof
   `LIST_REL (log_arg_rel ce cx sa sm es s)
      (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
     (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  drule log_scalar_source_args_event >> strip_tac >>
   drule_all compile_split_log_topics_run >> strip_tac >>
   `LENGTH (Lit (n2w h)::ops) < dimword (:256)` by
     (drule_all log_emitted_topic_count_exact >> simp[dimword_def]) >>
@@ -482,6 +501,7 @@ Resume log_success_suffix_run[data]:
   `LIST_REL (log_arg_rel ce cx sa sm es s)
      (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
     (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  drule log_scalar_source_args_event >> strip_tac >>
   drule_all compile_split_log_topics_run >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
   drule_all log_selected_typed >> strip_tac >>
@@ -559,6 +579,7 @@ Proof
   `emit_inst LOG
     (Lit (n2w (LENGTH (Lit (n2w h)::ops))) ::
       REVERSE (Lit (n2w h)::ops) ++ [Lit 0w;Lit 0w]) [] st = ((),sb)` by gvs[] >>
+  drule log_scalar_source_args_event >> strip_tac >>
   drule_all compile_split_log_topics_run >> strip_tac >>
   `eval_operands (Lit (n2w h)::ops) t = SOME (n2w h::topics)` by
     (drule log_operands_values >> simp[eval_operands_def, eval_operand_def]) >>
@@ -690,6 +711,7 @@ Resume log_static_suffix_run[data]:
   `LIST_REL (log_arg_rel ce cx sa sm es s)
      (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
     (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  drule log_scalar_source_args_event >> strip_tac >>
   drule_all compile_split_log_topics_run >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
   drule_all log_selected_typed >> strip_tac >>

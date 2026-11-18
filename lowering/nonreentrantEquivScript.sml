@@ -73,7 +73,7 @@ Theorem state_rel_transient_update:
     (tstore key value ss)
 Proof
   strip_tac >>
-  `transient_agree H cx vs.tStorage ss.vs_transient` by
+  `transient_agree H cx.txn.target vs.tStorage ss.vs_transient` by
     gvs[state_rel_def, accounts_rel_def] >>
   drule_all transient_agree_update >> strip_tac >>
   `storage_agree
