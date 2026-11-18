@@ -37,10 +37,12 @@ bounds are not excluded by this whitelist; typing and allocation are separate.
   `check_contract` separately validates their headers);
   private explicitly slotted storage of storage types; private explicitly slotted
   transient full words; private non-transient non-nested maps with permitted
-  keys and full-word values; value-typed struct/interface fields; word/string
-  event fields (thus no indexed aggregates or bytes20), at most three of them
-  indexed; no flags, constants,
-  immutables, public storage, or missing slots.
+  keys and full-word values; value-typed struct fields; event fields as below;
+  no constants, public storage, or missing slots.
+- Indexed event fields must have `supported_event_leaf_type` (scalars, flags,
+  or fixed bytes of any width from 0 to 32). At most three fields may be
+  indexed. Non-indexed fields also allow arrays, tuples, and structs through
+  `supported_nested_type supported_event_leaf_type`.
 - `supported_interface_signature tops (name,args,ret,mut)` checks types only.
 - `supported_variable_decl tops id`: option of `(visibility,mutability,type,slot)`.
 - `supported_hashmap_decl tops id`: option of `(visibility,transient,key,value,slot)`.
