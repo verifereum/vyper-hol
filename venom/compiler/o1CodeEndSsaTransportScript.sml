@@ -137,7 +137,7 @@ Proof
   fs[EVERY_MEM, fn_entry_label_def] >> metis_tac[MEM_EL]
 QED
 
-Theorem code_end_ssa_stage_bound[local]:
+Theorem code_end_ssa_stage_bound:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\

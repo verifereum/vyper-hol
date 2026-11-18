@@ -30,7 +30,7 @@ Theorem dispatched_selector_args_bind:
   OPT_MMAP (evaluate_type (type_env tops)) tys = SOME tvs /\
   calldata_decode_args calldata tvs 0 = SOME vals /\
   vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,F,args,[],ret,fbody) ==>
+    SOME (mut,nr,args,[],ret,fbody) ==>
   ?env. bind_arguments (type_env tops) args vals = SOME env
 Proof
   rpt strip_tac >> drule_all dispatched_signature_args >> strip_tac >> gvs[] >>
@@ -43,7 +43,7 @@ Theorem dispatched_fallback_args_bind:
   supported_program tops /\ source_typing_ok tops am tx /\
   EXISTS is_default_decl tops /\
   vyperInterpreter$lookup_function NONE "__default__" External tops =
-    SOME (mut,F,args,[],ret,fbody) ==>
+    SOME (mut,nr,args,[],ret,fbody) ==>
   ?env. bind_arguments (type_env tops) args [] = SOME env
 Proof
   rpt strip_tac >>
@@ -65,12 +65,12 @@ Proof
 QED
 
 Theorem dispatched_vyper_call_bind:
-  !tops calldata name vals mut args ret fbody am tx.
+  !tops calldata name vals mut nr args ret fbody am tx.
     supported_program tops /\
     source_typing_ok tops am tx /\
     calldata_dispatch tops calldata = SOME (name, vals) /\
     vyperInterpreter$lookup_function NONE name External tops =
-      SOME (mut, F, args, [], ret, fbody) ==>
+      SOME (mut, nr, args, [], ret, fbody) ==>
     ?env. bind_arguments (type_env tops) args vals = SOME env
 Proof
   rpt strip_tac >>
