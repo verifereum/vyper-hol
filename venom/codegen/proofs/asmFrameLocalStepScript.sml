@@ -534,7 +534,7 @@ Resume frame_asm_group_observers[context]:
 QED
 Finalise frame_asm_group_observers[local]
 
-Theorem frame_asm_step_observers[local]:
+Theorem frame_asm_step_observers:
   (!name. inst = AsmOp name ==>
     ~is_evm_call_name name /\ name <> "GAS" /\ name <> "SELFDESTRUCT") /\
   (asm_step labels pc inst a = AsmOK a1 \/

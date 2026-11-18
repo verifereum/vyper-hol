@@ -4,7 +4,7 @@ Ancestors
  ctorDeployLoweringEntryInputs ctorDeployLoweringEntryPrefix
  ctorDeployLoweringEntryRegisterRun ctorDeployLoweringEntryTransport
  ctorDeployLoweringDefs ctorDeployDefs compileEnv compileVyper
- abiDecoderLoop ctorDeployMemoryFrontier
+ abiDecoderLoop ctorDeployMemoryFrontier allocaFrontierRoom
  ctorDeployLoweringEntrySelection e2eDeployDefs ctorDeployInitcode
  allocaFrontierBound finite_map venomState venomInst moduleLoweringProps
 

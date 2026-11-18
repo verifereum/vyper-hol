@@ -3,7 +3,7 @@ Theory ctorDeployLoweringEntryArrayFrame
 Ancestors
   valueEncodingDefs
   ctorDeployLoweringEntryAllocation ctorAbiActualArrayContext
-  ctorAbiActualArrayInvariant ctorAbiActualArrayEntry ctorDeployMemoryFrontier
+  ctorAbiActualArrayInvariant ctorAbiActualArrayEntry ctorDeployMemoryFrontier allocaFrontierRoom
   abiDecoderTypedContract abiDecoderContract abiDecoderReentry abiEncoderRegisteredEffect
   ctorAbiActualFrame ctorAbiActualSites
   allocaBudgetProps allocaFrontierBound valueEncoding valueEncodingProps

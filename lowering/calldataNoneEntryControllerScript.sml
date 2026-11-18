@@ -1,6 +1,7 @@
 (* The entry controller needs only the installed local decoder alternative. *)
 Theory calldataNoneEntryController
 Ancestors
+  allocaFrontierRoom
   calldataNoneEntryAssembly calldataNoneSelectedPrefix calldataNoneRegisterInit
   calldataNoneRegisterFold calldataNoneRegisterOne venomInstIdsProps
   defaultConcreteRegistrationDefs ctorDeployMemoryFrontier allocaFrontierBound
