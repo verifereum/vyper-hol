@@ -299,3 +299,176 @@ Proof
   `p <> x /\ p <> y` by metis_tac[] >>
   simp[FLOOKUP_DRESTRICT, ptrDisciplineTheory.op_taint_def, FLOOKUP_UPDATE]
 QED
+
+(* Lift the count load's raw run without changing its normalized endpoint. *)
+Theorem abi_decode_loop_count_observed[local]:
+  emit_op ADD [Var input;src] sb = (addr,sc) /\
+  emit_op MLOAD [addr] sc = (count_op,sd) /\
+  fn_has_code sb sd obs /\ ~u.vs_halted /\
+  u.vs_current_bb = sb.cs_current_bb /\
+  u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  run_inst_seq (emitted_insts sb sd) u = OK raw ==>
+  gas_path ctx obs u 0 (OK (raw with vs_inst_idx := LENGTH sd.cs_current_insts))
+Proof
+  strip_tac >>
+  `sd.cs_current_bb = sb.cs_current_bb /\
+   sd.cs_current_insts = sb.cs_current_insts ++ emitted_insts sb sd /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sb sd) /\
+   LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sb sd)) = 0` by
+    gvs[emit_op_eq, emitted_insts_def, APPEND_ASSOC, DROP_APPEND1,
+        mk_inst_def, is_terminator_def] >>
+  drule_all abi_decode_finite_success_observed >>
+  disch_then (qspec_then `ctx` ACCEPT_TAC)
+QED
+
+(* The concrete header segments select one endpoint before any horizon. *)
+Theorem abi_decode_loop_header_joint_exact:
+  emit_op MLOAD [Var counter] sa = (Var idx,sb) /\
+  compile_abi_dec_addr (Var input) src sb = (addr,sc) /\
+  emit_op MLOAD [addr] sc = (count_op,sd) /\
+  emit_op LT [Var idx;count_op] sd = (lt,se) /\
+  emit_op ISZERO [lt] se = (done,sf) /\
+  emit_inst JNZ [done;Label exit_lbl;Label body_lbl] [] sf = ((),sg) /\
+  fn_has_code sa sb fn /\ fn_has_code sb sd fn /\ fn_has_code sd sg fn /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ sa.cs_current_insts = [] /\
+  s.vs_inst_idx = 0 /\ allocas_from lo s /\
+  (^owned_decoder_state) sa s G tn /\
+  not_fresh_at sa input /\ not_fresh_at sa counter /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. hi = Var x ==> not_fresh_at sa x) /\
+  local_ptrs_reserved ce sa /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  lookup_var counter s = SOME (n2w cell) /\ ptr_covers G tn counter s 32 /\
+  mem_word_at cell s.vs_memory = n2w j /\
+  (!i. cell <= i /\ i < cell+32 ==> i NOTIN tn.t_mem) /\
+  cell+32 <= s.vs_alloca_next /\ cell < dimword (:256) /\
+  eval_operand src s = SOME (n2w srcoff) /\ op_taint tn src = {} /\
+  eval_operand hi s = SOME (n2w h) /\
+  srcoff+32+n*asz <= h /\ h <= LENGTH input_bytes /\
+  w2n input_word+LENGTH input_bytes < dimword (:256) /\
+  mem_word_at (w2n input_word+srcoff) s.vs_memory = n2w n /\
+  j <= n /\ n < dimword (:256) ==>
+  ?t Gf tnf.
+    (!obs. fn_has_code sa sg obs ==> gas_path ctx obs s 0 (OK t)) /\
+    (!H. V H ==> gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,Gf,tnf)) /\
+    (^owned_decoder_state) sg t Gf tnf /\
+    ~t.vs_halted /\ t.vs_inst_idx = 0 /\
+    t.vs_current_bb = (if j = n then exit_lbl else body_lbl) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_labels = s.vs_labels /\
+    tnf.t_mem = tn.t_mem /\
+    eval_operand src t = SOME (n2w srcoff) /\
+    eval_operand hi t = SOME (n2w h) /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+   (!i. w2n (n2w cell :256 word) <= i /\
+     i < w2n (n2w cell :256 word)+32 ==> i NOTIN tn.t_mem) /\
+   w2n (n2w cell :256 word)+32 <= s.vs_alloca_next` by simp[] >>
+  drule_all abi_decode_loop_counter_load_exact >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  rename1 `eval_operand (Var idx) u = _` >>
+  `sa.cs_next_var <= sb.cs_next_var` by
+    gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+        fresh_var_def, fresh_id_def, emit_def, comp_return_def] >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sb x` by
+    (qpat_x_assum `sa.cs_next_var <= sb.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
+  `not_fresh_at sb input /\ local_ptrs_reserved ce sb /\
+   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sb x) /\
+   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sb x)` by
+    (conj_tac >- simp[] >>
+     conj_tac >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+     conj_tac >> rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at sb x` irule >>
+     metis_tac[]) >>
+  `eval_operand src u = SOME (n2w srcoff) /\ op_taint tnf src = {}` by
+    (Cases_on `src` >> gvs[eval_operand_def, ptrDisciplineTheory.op_taint_def]) >>
+  `srcoff+32 <= LENGTH input_bytes` by decide_tac >>
+  `allocas_from lo u` by
+    (simp[ptrDisciplineTheory.allocas_from_def] >>
+     qpat_x_assum `allocas_from lo s` mp_tac >>
+     simp[ptrDisciplineTheory.allocas_from_def]) >>
+  drule_all abi_decode_owned_relative_load_exact >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `emit_op ADD [Var input;src] sb = (addr,sc)` by
+    gvs[abiEncoderTheory.compile_abi_dec_addr_def] >>
+  `sb.cs_next_var <= sd.cs_next_var /\ not_fresh_at sb idx` by
+    gvs[abiEncoderTheory.compile_abi_dec_addr_def, emit_op_def, emit_inst_def,
+        comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+        emit_def, comp_return_def, not_fresh_at_def] >>
+  `!x. not_fresh_at sb x ==> not_fresh_at sd x` by
+    (qpat_x_assum `sb.cs_next_var <= sd.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
+  `not_fresh_at sd input /\ local_ptrs_reserved ce sd /\
+   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sd x) /\
+   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sd x)` by
+    (conj_tac >- simp[] >>
+     conj_tac >- (irule local_ptrs_reserved_next_var >> qexists_tac `sb` >> simp[]) >>
+     conj_tac >> rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at sb x ==> not_fresh_at sd x` irule >>
+     metis_tac[]) >>
+  `lookup_var idx t = SOME (n2w j) /\ FLOOKUP Gf' idx = NONE /\
+   op_taint tnf' (Var idx) = {} /\
+   eval_operand count_op t = SOME (n2w n)` by
+    (fs[eval_operand_def, ptrDisciplineTheory.op_prov_def,
+        valueEncodingPropsTheory.mem_word_at_eq_mload] >>
+     gvs[mload_def]) >>
+  `allocas_from lo t` by
+    (simp[ptrDisciplineTheory.allocas_from_def] >>
+     qpat_x_assum `allocas_from lo u` mp_tac >>
+     simp[ptrDisciplineTheory.allocas_from_def]) >>
+  drule_all abi_decode_loop_owned_branch_exact >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `!p. not_fresh_at sa p ==> not_fresh_at sb p /\ not_fresh_at sd p` by
+    (simp[not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
+  `!p. not_fresh_at sa p ==>
+    lookup_var p t' = lookup_var p s /\ FLOOKUP Gf'' p = FLOOKUP G p /\
+    op_taint tnf'' (Var p) = op_taint tn (Var p)` by metis_tac[] >>
+  `eval_operand src t' = SOME (n2w srcoff) /\
+   eval_operand hi t' = SOME (n2w h)` by
+    (conj_tac
+     >- (qpat_x_assum `eval_operand src s = _` mp_tac >>
+         Cases_on `src` >> simp[eval_operand_def] >> metis_tac[]) >>
+     qpat_x_assum `eval_operand hi s = _` mp_tac >>
+     Cases_on `hi` >> simp[eval_operand_def] >> metis_tac[]) >>
+  qexistsl_tac [`t'`,`Gf''`,`tnf''`] >>
+  conj_tac >- suspend "observer" >>
+  asm_rewrite_tac[] >> rpt strip_tac >>
+  irule gas_origin_ptr_path_trans >>
+  qexistsl_tac [`Gf`,`u`,`tnf`] >> simp[] >>
+  irule gas_origin_ptr_path_trans >>
+  qexistsl_tac [`Gf'`,`t`,`tnf'`] >> simp[]
+QED
+
+Resume abi_decode_loop_header_joint_exact[observer]:
+  rpt strip_tac >>
+  `cs_extends sa sb /\ cs_extends sb sc /\ cs_extends sc sd /\
+   cs_extends sd se /\ cs_extends se sf /\ cs_extends sf sg` by
+    metis_tac[typed_copy_emit_op_mono, ci_mono_def, cs_extends_emit_inst] >>
+  `cs_extends sb sd /\ cs_extends sd sg /\ cs_extends sb sg` by
+    metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sb obs /\ fn_has_code sb sd obs /\ fn_has_code sd sg obs` by
+    metis_tac[fn_has_code_split] >>
+  `gas_path ctx obs s 0 (OK u)` by simp[] >>
+  `gas_path ctx obs t 0 (OK t')` by simp[] >>
+  `gas_path ctx obs u 0 (OK t)` by
+    (qpat_x_assum `fn_has_code sb sd fn` kall_tac >>
+     drule_all abi_decode_loop_count_observed >> simp[]) >>
+  qpat_assum `gas_path ctx obs s 0 (OK u)` mp_tac >>
+  qpat_assum `gas_path ctx obs u 0 (OK t)` mp_tac >>
+  qpat_assum `gas_path ctx obs t 0 (OK t')` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  metis_tac[gas_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []]
+QED
+
+Finalise abi_decode_loop_header_joint_exact
