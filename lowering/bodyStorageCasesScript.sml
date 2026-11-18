@@ -1021,12 +1021,12 @@ Proof
   strip_tac >>
   `well_typed_exprs env (TAKE 1 es) /\
    well_typed_exprs env (TAKE (LENGTH argtys) (DROP 1 es))` by
-    metis_tac[vyperTypeEvalSoundnessTheory.well_typed_exprs_TAKE,
-              vyperTypeEvalSoundnessTheory.well_typed_exprs_DROP] >>
+    metis_tac[vyperTypeEvalProofsTheory.well_typed_exprs_TAKE,
+              vyperTypeEvalProofsTheory.well_typed_exprs_DROP] >>
   `call_evaluation_safe cx (int_calls_exprs (TAKE 1 es)) /\
    call_evaluation_safe cx (int_calls_exprs (TAKE (LENGTH argtys) (DROP 1 es)))` by
-    metis_tac[vyperTypeEvalSoundnessTheory.call_evaluation_safe_exprs_TAKE,
-              vyperTypeEvalSoundnessTheory.call_evaluation_safe_exprs_DROP] >>
+    metis_tac[vyperTypeEvalProofsTheory.call_evaluation_safe_exprs_TAKE,
+              vyperTypeEvalProofsTheory.call_evaluation_safe_exprs_DROP] >>
   qpat_x_assum `eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) _ = _` mp_tac >>
   simp_tac (srw_ss()) [Once evaluate_def, Once bind_apply] >>
   Cases_on `eval_exprs cx (TAKE 1 es) st` >>
@@ -1525,7 +1525,7 @@ Proof
       >- (rename1 `read_result cx pv rhs_st = (INL v,rhs_st)` >>
           `value_runtime_typed env (expr_type e) v` by
             (fs[runtime_consistent_def] >>
-             drule_all vyperTypeEvalSoundnessTheory.read_live_result_success_type >>
+             drule_all vyperTypeEvalProofsTheory.read_live_result_success_type >>
              simp[]) >>
           Cases_on `eval_target_place cx bt rhs_st` >>
           rename1 `eval_target_place cx bt rhs_st = (target_res,target_st)` >>
@@ -1576,7 +1576,7 @@ Proof
       >- (rename1 `read_result cx tv rhs_st = (INL v,rhs_st)` >>
           `value_runtime_typed env (expr_type e) v` by
             (fs[runtime_consistent_def] >>
-             drule_all vyperTypeEvalSoundnessTheory.read_live_result_success_type >>
+             drule_all vyperTypeEvalProofsTheory.read_live_result_success_type >>
              simp[]) >>
           strip_tac >> first_x_assum drule_all >> simp[]) >>
       rpt strip_tac >> gvs[]) >>
@@ -1943,7 +1943,7 @@ Proof
      runtime_place_typed cx st p (ArrayTV elem_tv (Dynamic n))` by
     gvs[eval_result_typed_def, evaluate_type_def, AllCaseEqs()] >>
   `runtime_place_typed cx st1 p (ArrayTV elem_tv (Dynamic n))` by
-    (drule_all vyperTypeEvalSoundnessTheory.runtime_place_typed_transport >> simp[]) >>
+    (drule_all vyperTypeEvalProofsTheory.runtime_place_typed_transport >> simp[]) >>
   qpat_x_assum `do _ od _ = _` mp_tac >> simp[bind_def] >>
   Cases_on `read_result cx pv st1` >>
   rename1 `read_result cx pv st1 = (read_res,read_st)` >>
@@ -1952,7 +1952,7 @@ Proof
   >- (rename1 `read_result cx pv st1 = (INL v,st1)` >>
       `value_runtime_typed env (expr_type e) v` by
         (fs[runtime_consistent_def] >>
-         drule_all vyperTypeEvalSoundnessTheory.read_live_result_success_type >> simp[]) >>
+         drule_all vyperTypeEvalProofsTheory.read_live_result_success_type >> simp[]) >>
       strip_tac >>
       `value_has_type elem_tv v` by
         (gvs[value_runtime_typed_def] >>
@@ -2091,7 +2091,7 @@ Proof
   `vyperImmutableMetadataFrame$immutable_metadata_frame st st1` by
     (drule (cj 5 vyperImmutableMetadataFrameTheory.eval_metadata_frame_mutual) >> simp[]) >>
   `runtime_place_typed cx st1 p ptv` by
-    (drule_all vyperTypeEvalSoundnessTheory.runtime_place_typed_transport >> simp[]) >>
+    (drule_all vyperTypeEvalProofsTheory.runtime_place_typed_transport >> simp[]) >>
   `storage_layout_safe cx` by metis_tac[runtime_storage_consistent_layout] >>
   `state_well_typed st1` by gvs[runtime_consistent_def] >>
   drule_all update_place_tail_preserves_storage >> simp[]
@@ -2141,7 +2141,7 @@ Proof
   `state_well_typed target_st` by gvs[runtime_consistent_def] >>
   simp_tac (srw_ss()) [] >> Cases_on `read_place cx p target_st` >>
   rename1 `read_place cx p target_st = (read_res,read_st)` >>
-  drule_all vyperTypeEvalSoundnessTheory.live_place_read_sound >> strip_tac >> gvs[] >>
+  drule_all vyperTypeEvalCaseProofsTheory.live_place_read_sound >> strip_tac >> gvs[] >>
   reverse (Cases_on `read_res`) >- (simp[] >> strip_tac >> gvs[]) >>
   suspend "rhs"
 QED
@@ -2300,9 +2300,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `PERM (custom_error_exprs err) es` by
     (drule order_custom_error_args_perm >> simp[]) >>
-  `well_typed_exprs env es` by metis_tac[vyperTypeEvalSoundnessTheory.well_typed_exprs_perm] >>
+  `well_typed_exprs env es` by metis_tac[vyperTypeEvalProofsTheory.well_typed_exprs_perm] >>
   `call_evaluation_safe cx (int_calls_exprs es)` by
-    metis_tac[vyperTypeEvalSoundnessTheory.call_evaluation_safe_exprs_perm] >>
+    metis_tac[vyperTypeEvalProofsTheory.call_evaluation_safe_exprs_perm] >>
   `~supported_exprs_exists expr_evm_run_root (custom_error_exprs err)` by
     fs[supported_exprs_exists_every] >>
   drule_all body_exprs_syntax_perm >> strip_tac >>
@@ -2667,7 +2667,7 @@ Proof
   Cases_on `read_result cx r st` >>
   rename1 `read_result cx r st = (rd_res,rd_st)` >>
   `rd_st = st /\ (!v. rd_res = INL v ==> value_has_type tyv v)` by
-    (drule_all vyperTypeEvalSoundnessTheory.iterator_result_read_typed >> Cases_on `rd_res` >> simp[]) >>
+    (drule_all vyperTypeEvalProofsTheory.iterator_result_read_typed >> Cases_on `rd_res` >> simp[]) >>
   qpat_x_assum `rd_st = st` SUBST_ALL_TAC >>
   reverse (Cases_on `rd_res`)
   >- (qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
@@ -3030,7 +3030,7 @@ Theorem body_tuple_nested_consumer:
 Proof
   disch_tac >> rpt gen_tac >> strip_tac >>
   gvs[well_typed_atarget_def, supported_assignment_exists_def, int_calls_atarget_def] >>
-  drule vyperTypeEvalSoundnessTheory.value_runtime_typed_tuple_components >> strip_tac >> gvs[] >>
+  drule vyperTypeEvalCaseProofsTheory.value_runtime_typed_tuple_components >> strip_tac >> gvs[] >>
   qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >> first_x_assum drule_all >> simp[]
 QED
@@ -3161,7 +3161,7 @@ Proof
      (cx with stk updated_by CONS (env_body.current_src,fn)) st /\
    context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn))` by
     (fs[runtime_consistent_def] >>
-     drule vyperTypeEvalSoundnessTheory.intcall_default_env_side_conditions >>
+     drule vyperTypeEvalProofsTheory.intcall_default_env_side_conditions >>
      disch_then (qspecl_then [`env_body`, `env_body.current_src`, `fn`] mp_tac) >>
      simp[]) >>
   `env_consistent env_body
@@ -3170,7 +3170,7 @@ Proof
    state_well_typed (lock_st with scopes := [call_env]) /\
    accounts_well_typed (lock_st with scopes := [call_env]).accounts` by
     (fs[runtime_consistent_def] >>
-     drule vyperTypeEvalSoundnessTheory.intcall_live_pushed_body_preconditions >>
+     drule vyperTypeEvalProofsTheory.intcall_live_pushed_body_preconditions >>
      disch_then (qspecl_then
        [`env_body`, `st`, `lock_st`, `call_env`, `fn`, `nr`, `is_view`] mp_tac) >>
      fs[lock_if_nr_def, env_scopes_consistent_def, vyperContextTheory.get_tenv_def] >>
