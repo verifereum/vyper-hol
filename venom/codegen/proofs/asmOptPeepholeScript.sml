@@ -271,13 +271,6 @@ Proof
   gvs[asm_plain_inst_def, is_data_inst_def]
 QED
 
-Theorem dup1_swap2_swap1_window[local]:
-  asm_window_refines pfx [AsmOp "DUP1"; AsmOp "SWAP2"; AsmOp "SWAP1"]
-    [AsmOp "SWAP1"; AsmOp "DUP2"] sfx
-Proof
-  metis_tac[dup1_swap2_swap1_window_within, asm_window_refines_of_within]
-QED
-
 Theorem dup1_swap1_pop_window_within[local]:
   asm_window_refines_within pfx [AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"] [] sfx
 Proof
@@ -301,12 +294,6 @@ Proof
   rpt strip_tac >> irule straight_window_bounded >> simp[] >>
   rpt strip_tac >> `i = 0 ∨ i = 1 ∨ i = 2` by decide_tac >>
   gvs[asm_plain_inst_def, is_data_inst_def]
-QED
-
-Theorem dup1_swap1_pop_window[local]:
-  asm_window_refines pfx [AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"] [] sfx
-Proof
-  metis_tac[dup1_swap1_pop_window_within, asm_window_refines_of_within]
 QED
 
 Theorem swap1_pop_pop_window_within[local]:
@@ -342,13 +329,6 @@ Proof
   gvs[asm_plain_inst_def, is_data_inst_def]
 QED
 
-Theorem swap1_pop_pop_window[local]:
-  asm_window_refines pfx [AsmOp "SWAP1"; AsmOp "POP"; AsmOp "POP"]
-    [AsmOp "POP"; AsmOp "POP"] sfx
-Proof
-  metis_tac[swap1_pop_pop_window_within, asm_window_refines_of_within]
-QED
-
 Theorem dup1_swap1_window_within[local]:
   asm_window_refines_within pfx [AsmOp "DUP1"; AsmOp "SWAP1"] [AsmOp "DUP1"] sfx
 Proof
@@ -372,12 +352,6 @@ Proof
   rpt strip_tac >> irule straight_window_bounded >>
   simp[lt_small, DISJ_IMP_THM, FORALL_AND_THM, asm_plain_inst_def,
        is_data_inst_def]
-QED
-
-Theorem dup1_swap1_window[local]:
-  asm_window_refines pfx [AsmOp "DUP1"; AsmOp "SWAP1"] [AsmOp "DUP1"] sfx
-Proof
-  metis_tac[dup1_swap1_window_within, asm_window_refines_of_within]
 QED
 
 Theorem swap_pair_window_within[local]:
@@ -423,13 +397,6 @@ Proof
        sym_set_stack_def, swap_swap_id, sym_terminal_def, splice_pc_def,
        sym_with_pc_def, sym_state_component_equality,
        asm_state_component_equality]
-QED
-
-Theorem swap_pair_window[local]:
-  isPREFIX "SWAP" name ⇒
-  asm_window_refines pfx [AsmOp name; AsmOp name] [] sfx
-Proof
-  metis_tac[swap_pair_window_within, asm_window_refines_of_within]
 QED
 
 Theorem swap1_commutative_window_within[local]:
@@ -536,147 +503,13 @@ Proof
        asm_state_component_equality]
 QED
 
-Theorem swap1_commutative_window[local]:
-  asm_commutative_op (AsmOp name) ⇒
-  asm_window_refines pfx [AsmOp "SWAP1"; AsmOp name] [AsmOp name] sfx
-Proof
-  metis_tac[swap1_commutative_window_within, asm_window_refines_of_within]
-QED
-
-(* ===== Splices ===== *)
+(* ===== Three-instruction peepholes ===== *)
 
 Theorem dup2_opcode:
   IS_SOME (evm_opcode_byte "DUP2")
 Proof
   EVAL_TAC
 QED
-
-Theorem dup1_swap2_swap1_refines[local]:
-  asm_refines (pfx ++ AsmOp "DUP1" :: AsmOp "SWAP2" :: AsmOp "SWAP1" :: rest)
-              (pfx ++ AsmOp "SWAP1" :: AsmOp "DUP2" :: rest)
-Proof
-  mp_tac (Q.INST [`pat` |-> `[AsmOp "DUP1"; AsmOp "SWAP2"; AsmOp "SWAP1"]`,
-                  `repl` |-> `[AsmOp "SWAP1"; AsmOp "DUP2"]`,
-                  `sfx` |-> `rest`] asm_splice_window_refines) >>
-  impl_tac
-  >- (rpt conj_tac
-      >- simp[asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
-              asm_inst_size_def, dup2_opcode, DISJ_IMP_THM, FORALL_AND_THM]
-      >- simp[]
-      >- simp[dup1_swap2_swap1_window]) >>
-  REWRITE_TAC [GSYM APPEND_ASSOC, APPEND] >> disch_then ACCEPT_TAC
-QED
-
-Theorem dup1_swap1_pop_refines[local]:
-  asm_refines (pfx ++ AsmOp "DUP1" :: AsmOp "SWAP1" :: AsmOp "POP" :: rest)
-              (pfx ++ rest)
-Proof
-  mp_tac (Q.INST [`pat` |-> `[AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"]`,
-                  `repl` |-> `[]`, `sfx` |-> `rest`]
-            asm_splice_window_refines) >>
-  impl_tac
-  >- (rpt conj_tac
-      >- simp[asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
-              asm_inst_size_def, dup2_opcode, DISJ_IMP_THM, FORALL_AND_THM]
-      >- simp[]
-      >- simp[dup1_swap1_pop_window]) >>
-  REWRITE_TAC [GSYM APPEND_ASSOC, APPEND] >> disch_then ACCEPT_TAC
-QED
-
-Theorem swap1_pop_pop_refines[local]:
-  asm_refines (pfx ++ AsmOp "SWAP1" :: AsmOp "POP" :: AsmOp "POP" :: rest)
-              (pfx ++ AsmOp "POP" :: AsmOp "POP" :: rest)
-Proof
-  mp_tac (Q.INST [`pat` |-> `[AsmOp "SWAP1"; AsmOp "POP"; AsmOp "POP"]`,
-                  `repl` |-> `[AsmOp "POP"; AsmOp "POP"]`, `sfx` |-> `rest`]
-            asm_splice_window_refines) >>
-  impl_tac
-  >- (rpt conj_tac
-      >- simp[asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
-              asm_inst_size_def, dup2_opcode, DISJ_IMP_THM, FORALL_AND_THM]
-      >- simp[]
-      >- simp[swap1_pop_pop_window]) >>
-  REWRITE_TAC [GSYM APPEND_ASSOC, APPEND] >> disch_then ACCEPT_TAC
-QED
-
-Theorem swap_pair_refines[local]:
-  isPREFIX "SWAP" name ⇒
-  asm_refines (pfx ++ AsmOp name :: AsmOp name :: rest) (pfx ++ rest)
-Proof
-  strip_tac >>
-  mp_tac (Q.INST [`pat` |-> `[AsmOp name; AsmOp name]`,
-                  `repl` |-> `[]`, `sfx` |-> `rest`]
-            asm_splice_window_refines) >>
-  impl_tac
-  >- (rpt conj_tac
-      >- simp[asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
-              asm_inst_size_def, dup2_opcode, DISJ_IMP_THM, FORALL_AND_THM]
-      >- simp[]
-      >- simp[swap_pair_window]) >>
-  REWRITE_TAC [GSYM APPEND_ASSOC, APPEND] >> disch_then ACCEPT_TAC
-QED
-
-Theorem swap1_commutative_refines[local]:
-  asm_commutative_op y ⇒
-  asm_refines (pfx ++ AsmOp "SWAP1" :: y :: rest) (pfx ++ y :: rest)
-Proof
-  strip_tac >>
-  `∃name. y = AsmOp name` by (Cases_on `y` >> gvs[asm_commutative_op_def]) >>
-  gvs[] >>
-  mp_tac (Q.INST [`pat` |-> `[AsmOp "SWAP1"; AsmOp name]`,
-                  `repl` |-> `[AsmOp name]`, `sfx` |-> `rest`]
-            asm_splice_window_refines) >>
-  impl_tac
-  >- (rpt conj_tac
-      >- simp[asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
-              asm_inst_size_def, dup2_opcode, DISJ_IMP_THM, FORALL_AND_THM]
-      >- simp[]
-      >- simp[swap1_commutative_window]) >>
-  REWRITE_TAC [GSYM APPEND_ASSOC, APPEND] >> disch_then ACCEPT_TAC
-QED
-
-Theorem dup1_swap1_refines[local]:
-  asm_refines (pfx ++ AsmOp "DUP1" :: AsmOp "SWAP1" :: rest)
-              (pfx ++ AsmOp "DUP1" :: rest)
-Proof
-  mp_tac (Q.INST [`pat` |-> `[AsmOp "DUP1"; AsmOp "SWAP1"]`,
-                  `repl` |-> `[AsmOp "DUP1"]`, `sfx` |-> `rest`]
-            asm_splice_window_refines) >>
-  impl_tac
-  >- (rpt conj_tac
-      >- simp[asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
-              asm_inst_size_def, dup2_opcode, DISJ_IMP_THM, FORALL_AND_THM]
-      >- simp[]
-      >- simp[dup1_swap1_window]) >>
-  REWRITE_TAC [GSYM APPEND_ASSOC, APPEND] >> disch_then ACCEPT_TAC
-QED
-
-(* ===== The three rules at one index ===== *)
-
-Theorem peep_swap_pair_refines[local]:
-  peep_swap_pair a b c rest = (l, ch) ⇒
-  asm_refines (pfx ++ a :: b :: c :: rest) (pfx ++ l)
-Proof
-  rw[peep_swap_pair_def] >> simp[asm_refines_refl] >>
-  Cases_on `a` >> gvs[asm_swap_op_def] >>
-  irule swap_pair_refines >> simp[]
-QED
-
-Theorem peep_swap_comm_refines[local]:
-  peep_swap_comm l = SOME (l', ch) ⇒ asm_refines (pfx ++ l) (pfx ++ l')
-Proof
-  rw[peep_swap_comm_def, AllCaseEqs()] >> simp[asm_refines_refl] >>
-  irule swap1_commutative_refines >> simp[]
-QED
-
-Theorem peep_dup_swap_refines[local]:
-  peep_dup_swap l = SOME (l', ch) ⇒ asm_refines (pfx ++ l) (pfx ++ l')
-Proof
-  rw[peep_dup_swap_def, AllCaseEqs()] >>
-  simp[asm_refines_refl, dup1_swap1_refines]
-QED
-
-(* ===== The rule ===== *)
 
 Theorem stack_peephole_opts_cons3:
   stack_peephole_opts (a :: b :: c :: rest) = SOME (out, ch) ⇒
@@ -700,53 +533,6 @@ Proof
                      pairTheory.EXISTS_PROD] >>
   imp_res_tac peep_dup_swap_length >>
   rename1 `peep_dup_swap _ = SOME (l3, _)` >> Cases_on `l3` >> gvs[]
-QED
-
-Theorem stack_peephole_opts_refines_under[local]:
-  ∀asm pfx out c.
-    stack_peephole_opts asm = SOME (out, c) ⇒
-    asm_refines (pfx ++ asm) (pfx ++ out)
-Proof
-  measureInduct_on `LENGTH asm` >>
-  Cases_on `asm` >- simp[Once stack_peephole_opts_def, asm_refines_refl] >>
-  rename1 `a :: t1` >> Cases_on `t1`
-  >- simp[Once stack_peephole_opts_def, asm_refines_refl] >>
-  rename1 `a :: b :: t2` >> Cases_on `t2`
-  >- simp[Once stack_peephole_opts_def, asm_refines_refl] >>
-  rename1 `a :: b :: c1 :: rest` >> rpt gen_tac >> strip_tac >>
-  drule stack_peephole_opts_cons3 >> strip_tac >> gvs[]
-  >~ [`stack_peephole_opts (AsmOp "SWAP1" :: AsmOp "DUP2" :: _)`]
-  >- (irule asm_refines_trans >>
-      qexists_tac `pfx ++ AsmOp "SWAP1" :: AsmOp "DUP2" :: rest` >>
-      simp[dup1_swap2_swap1_refines] >>
-      first_x_assum irule >> simp[] >> first_assum (irule_at Any))
-  >~ [`stack_peephole_opts rest = SOME _`]
-  >- (irule asm_refines_trans >> qexists_tac `pfx ++ rest` >>
-      simp[dup1_swap1_pop_refines] >>
-      first_x_assum irule >> simp[] >> first_assum (irule_at Any))
-  >~ [`stack_peephole_opts (AsmOp "POP" :: AsmOp "POP" :: _)`]
-  >- (irule asm_refines_trans >>
-      qexists_tac `pfx ++ AsmOp "POP" :: AsmOp "POP" :: rest` >>
-      simp[swap1_pop_pop_refines] >>
-      first_x_assum irule >> simp[] >> first_assum (irule_at Any)) >>
-  imp_res_tac peep_swap_pair_length >>
-  imp_res_tac peep_swap_comm_length >>
-  imp_res_tac peep_dup_swap_length >>
-  irule asm_refines_trans >> qexists_tac `pfx ++ l1` >> conj_tac
-  >- (drule peep_swap_pair_refines >> simp[]) >>
-  irule asm_refines_trans >> qexists_tac `pfx ++ l2` >> conj_tac
-  >- (drule peep_swap_comm_refines >> simp[]) >>
-  irule asm_refines_trans >> qexists_tac `pfx ++ h :: t` >> conj_tac
-  >- (drule peep_dup_swap_refines >> simp[]) >>
-  irule asm_refines_cons >> gen_tac >>
-  first_x_assum irule >> gvs[] >> first_assum (irule_at Any)
-QED
-
-Theorem stack_peephole_opts_refines:
-  ∀p p' c. stack_peephole_opts p = SOME (p', c) ⇒ asm_refines p p'
-Proof
-  rpt strip_tac >> drule stack_peephole_opts_refines_under >>
-  disch_then (qspec_then `[]` mp_tac) >> simp[]
 QED
 
 Theorem dup1_swap2_swap1_refines_both[local]:
@@ -917,4 +703,10 @@ Theorem stack_peephole_opts_refines_both:
 Proof
   rpt strip_tac >> drule stack_peephole_opts_refines_under_both >>
   disch_then (qspec_then `[]` mp_tac) >> simp[]
+QED
+
+Theorem stack_peephole_opts_refines:
+  ∀p p' c. stack_peephole_opts p = SOME (p', c) ⇒ asm_refines p p'
+Proof
+  metis_tac[stack_peephole_opts_refines_both, relationTheory.RINTER]
 QED

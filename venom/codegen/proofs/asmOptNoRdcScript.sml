@@ -6,7 +6,7 @@
  *)
 Theory asmOptNoRdc
 Ancestors
-  asmOptMergeJumpdests
+  asmOptMergeJumpdests asmOptPeephole
   asmOptNonemptyCompose
   asmOptimizer list
 
@@ -111,9 +111,7 @@ Proof
         (rpt strip_tac >> first_x_assum (qspec_then `y` mp_tac) >>
          impl_tac >- simp[] >> disch_then drule_all >> simp[]) >>
       qpat_x_assum `!y. LENGTH y < _ ==> _` kall_tac >>
-      qpat_x_assum `stack_peephole_opts _ = _` mp_tac >>
-      ONCE_REWRITE_TAC [stack_peephole_opts_def] >> simp[] >>
-      rw[] >> gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+      drule stack_peephole_opts_cons3 >> strip_tac >> gvs[] >>
       imp_res_tac peep_chain_no_rdc >> gvs[] >>
       first_x_assum (drule_then mp_tac) >> simp[]) >>
   qpat_x_assum `!y. LENGTH y < _ ==> _` kall_tac >>
@@ -122,7 +120,6 @@ Proof
   Cases_on `t'` >- gvs[Once stack_peephole_opts_def] >>
   gvs[]
 QED
-
 
 Theorem optimize_round_no_rdc[local]:
   !p q ch. no_rdc p /\ optimize_round p = SOME (q, ch) ==> no_rdc q

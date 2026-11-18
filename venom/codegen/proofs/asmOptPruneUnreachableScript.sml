@@ -180,38 +180,6 @@ Proof
   gvs[]
 QED
 
-Theorem prune_one_refines:
-  asm_terminal_op t ∧ ¬asm_reachable_marker x ⇒
-  asm_refines (pfx ++ t :: x :: rest) (pfx ++ t :: rest)
-Proof
-  strip_tac >>
-  Cases_on `is_data_inst x`
-  >- (simp[asm_refines_def] >> metis_tac[terminal_data_not_wf]) >>
-  `∀l. x ≠ AsmLabel l` by (rpt strip_tac >> gvs[asm_reachable_marker_def]) >>
-  `∃name. t = AsmOp name` by gvs[asm_terminal_op_def] >>
-  drule_all terminal_window_refines >>
-  disch_then (qspecl_then [`rest`, `pfx`] assume_tac) >>
-  mp_tac (Q.INST [`pat` |-> `[t; x]`, `repl` |-> `[t]`, `sfx` |-> `rest`]
-            asm_splice_window_refines) >>
-  impl_tac
-  >- gvs[asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
-         symbolResolveTheory.asm_inst_size_def] >>
-  REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
-  disch_then ACCEPT_TAC
-QED
-
-(* ===== The walk ===== *)
-
-Theorem prune_unreachable_walk_fst:
-  FST (prune_unreachable_walk d (inst :: rest)) =
-  if d ∧ ¬asm_reachable_marker inst then FST (prune_unreachable_walk T rest)
-  else inst :: FST (prune_unreachable_walk (asm_terminal_op inst) rest)
-Proof
-  simp[Once prune_unreachable_walk_def] >> rw[] >>
-  rpt (pairarg_tac >> gvs[])
-QED
-
-(* While dropping, the prefix ends in a terminal op. *)
 Theorem prune_one_refines_both[local]:
   asm_terminal_op t ∧ ¬asm_reachable_marker x ⇒
   asm_refines_both (pfx ++ t :: x :: rest) (pfx ++ t :: rest)
@@ -231,6 +199,24 @@ Proof
          symbolResolveTheory.asm_inst_size_def] >>
   REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
   disch_then ACCEPT_TAC
+QED
+
+Theorem prune_one_refines:
+  asm_terminal_op t ∧ ¬asm_reachable_marker x ⇒
+  asm_refines (pfx ++ t :: x :: rest) (pfx ++ t :: rest)
+Proof
+  metis_tac[prune_one_refines_both, relationTheory.RINTER]
+QED
+
+(* ===== The walk ===== *)
+
+Theorem prune_unreachable_walk_fst:
+  FST (prune_unreachable_walk d (inst :: rest)) =
+  if d ∧ ¬asm_reachable_marker inst then FST (prune_unreachable_walk T rest)
+  else inst :: FST (prune_unreachable_walk (asm_terminal_op inst) rest)
+Proof
+  simp[Once prune_unreachable_walk_def] >> rw[] >>
+  rpt (pairarg_tac >> gvs[])
 QED
 
 Theorem prune_unreachable_walk_refines_under_both[local]:

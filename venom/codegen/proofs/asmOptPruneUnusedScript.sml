@@ -73,24 +73,6 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-Theorem filter_unused_refines_under[local]:
-  ∀sfx pfx.
-    (∀l. MEM l (asm_label_refs (pfx ++ sfx)) ⇒ MEM l used) ⇒
-    asm_refines (pfx ++ sfx)
-      (pfx ++ FILTER ($~ o asm_unused_label used) sfx)
-Proof
-  metis_tac[filter_unused_refines_under_both, relationTheory.RINTER]
-QED
-
-Theorem prune_unused_jumpdests_refines:
-  ∀p. asm_refines p (FST (prune_unused_jumpdests p))
-Proof
-  gen_tac >>
-  qspecl_then [`p`, `[]`] mp_tac
-    (Q.INST [`used` |-> `asm_label_refs p`] filter_unused_refines_under) >>
-  simp[prune_unused_jumpdests_def]
-QED
-
 Theorem prune_unused_jumpdests_refines_both:
   ∀p. asm_refines_both p (FST (prune_unused_jumpdests p))
 Proof
@@ -98,4 +80,10 @@ Proof
   qspecl_then [`p`, `[]`] mp_tac
     (Q.INST [`used` |-> `asm_label_refs p`] filter_unused_refines_under_both) >>
   simp[prune_unused_jumpdests_def]
+QED
+
+Theorem prune_unused_jumpdests_refines:
+  ∀p. asm_refines p (FST (prune_unused_jumpdests p))
+Proof
+  metis_tac[prune_unused_jumpdests_refines_both, relationTheory.RINTER]
 QED
