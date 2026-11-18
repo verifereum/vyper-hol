@@ -3,7 +3,7 @@ Ancestors
   bodyFullAbiDecodeInterface bodyFullAbiDecodeLoopSetup
   bodyFullAbiDecodeLoopBackedge gasOriginPtrLabels abiDecoderCoherence
   abiDecoderMemberInfos abiDecoderReentry abiDecoderOffset abiEncoder compileEnv
-  venomInst venomExecSemantics venomState loweringStateRelDefs
+  venomInst venomExecSemantics venomState loweringStateRelDefs stateRelProj
   words list rich_list finite_map arithmetic valueEncodingProps ptrDiscipline
 
 (* Interface's state quotation, with the two snapshot lists explicit. *)
@@ -458,7 +458,7 @@ Proof
     (qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es t /\ _`
        (qspec_then `H` mp_tac) >>
      qpat_assum `V H` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
-     simp[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
+     metis_tac[stmt_state_rel_local_ptrs_alloca]) >>
   qabbrev_tac `snapshots =
     (w2n input_word,input_bytes)::
     (d,mem_bytes_at d (32+j*msz) s.vs_memory)::
