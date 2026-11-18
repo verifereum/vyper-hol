@@ -2,6 +2,7 @@ Theory gasOriginPtrLabels
 Ancestors
   fragGasOriginPtrLoop fragGasOriginPtrExec fragGasOrigin fragGasOriginPtr fragExec
   venomExecProps venomExecSemantics venomState
+  ptrSafetyTransport[qualified] ptrDiscipline
 
 Theorem gas_origin_edge_preserves_labels[local]:
   gas_origin_edge memory explicit ctx func s marks (OK t) ==>
@@ -29,4 +30,14 @@ Theorem gas_origin_ptr_path_preserves_labels:
     (s,G,tn) marks (OK t,G',tn') ==> t.vs_labels = s.vs_labels
 Proof
   metis_tac[gas_origin_ptr_path_projections, gas_origin_path_preserves_labels]
+QED
+
+Theorem member_origin_allocas_from:
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) marks (OK t,G',tn') /\
+  allocas_from lower s /\ lower <= s.vs_alloca_next /\ lo <= lower ==>
+  allocas_from lower t /\ lower <= t.vs_alloca_next
+Proof
+  strip_tac >> drule gas_origin_ptr_path_projections >> strip_tac >>
+  drule ptrSafetyTransportTheory.member_path_allocas_from >> simp[]
 QED
