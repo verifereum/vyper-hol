@@ -1398,7 +1398,7 @@ QED
    entry state carrying the S4 facts and the selected-run certificate.  The
    raw state, marks and tail are chosen inside each filling.  The only
    admission on vyper_call_correct_identity's path. *)
-(* HELD ADMISSION SEQ-4994: call-side gas synchronization; gas-link track owns removal. *)
+(* HELD ADMISSION: call-side gas synchronization; gas-link track owns removal. *)
 Theorem call_pipeline_gas_link:
   !fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
    am tx txp ret es vs0 fmp r es'.
