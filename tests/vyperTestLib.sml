@@ -114,13 +114,7 @@ val excluded_test_names = [
      storage variables, not as the address members of `self`
      (https://github.com/verifereum/vyper-hol/issues/1542). *)
   "test_self_codesize_in_constructor",
-  "test_get_extcodehash",
-  (* Each raw `precompiled_contract` fixture was created with the nonce the
-     module-scoped deployer had reached in earlier tests; replay starts every
-     test at nonce 0, so the CREATE address check fails
-     (https://github.com/verifereum/vyper-hol/issues/1543). *)
-  "test_address_code_runtime_error_slice_too_long",
-  "test_address_code_slice[5-10-*"
+  "test_get_extcodehash"
 ]
 
 fun glob_match pat str =
