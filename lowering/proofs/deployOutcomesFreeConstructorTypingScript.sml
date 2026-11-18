@@ -7,21 +7,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem checked_constructor_body_subst[local]:
-  supported_program_deploy tops /\
-  check_contract T layouts addr mods = SOME art /\
-  ALOOKUP mods NONE = SOME tops /\
-  MEM (FunctionDecl Deploy mut nr rr fname args defaults ret body) tops ==>
-  subst_consts_stmts (module_consts_env tops []) body = body
-Proof
-  strip_tac >> drule_all supported_program_deploy_function >> strip_tac >>
-  irule subst_consts_supported_stmts_unchanged >>
-  fs[supported_function_body_def] >>
-  qexistsl_tac [`args ++ supported_stmts_bindings T body ++
-                supported_stmts_bindings F body`, `tops`] >> simp[] >>
-  metis_tac[checked_module_consts_env_names_constant]
-QED
-
 Theorem outcomes_free_classified_constructor_typing:
   !layouts addr mods art tops mut nr rr fname args defaults ret fbody.
   supported_program_deploy tops /\

@@ -360,6 +360,21 @@ Proof
   spose_not_then assume_tac >> gvs[GSYM ALOOKUP_NONE]
 QED
 
+Theorem checked_constructor_body_subst:
+  supported_program_deploy tops /\
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP mods NONE = SOME tops /\
+  MEM (FunctionDecl Deploy mut nr rr fname args defaults ret fbody) tops ==>
+  subst_consts_stmts (module_consts_env tops []) fbody = fbody
+Proof
+  strip_tac >> drule_all supported_program_deploy_function >> strip_tac >>
+  irule subst_consts_supported_stmts_unchanged >>
+  fs[supported_function_body_def] >>
+  qexistsl_tac [`args ++ supported_stmts_bindings T fbody ++
+                supported_stmts_bindings F fbody`, `tops`] >> simp[] >>
+  metis_tac[checked_module_consts_env_names_constant]
+QED
+
 Theorem checked_supported_function_subst:
   check_contract mode layouts addr [(NONE,tops)] = SOME art /\
   supported_program tops /\ vis <> Deploy /\

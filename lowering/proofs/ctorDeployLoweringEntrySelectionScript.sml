@@ -17,14 +17,10 @@ Proof
   >- gvs[subst_consts_stmt_def] >>
   `supported_program_deploy tops /\ deploy_typing_ok tops am tx` by
     fs[deploy_source_ok_def] >>
-  drule_all supported_program_deploy_function >> strip_tac >>
   `?art. check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
     fs[deploy_typing_ok_def] >>
-  irule subst_consts_supported_stmts_unchanged >>
-  fs[supported_function_body_def] >>
-  qexistsl_tac [`args ++ supported_stmts_bindings T body ++
-                 supported_stmts_bindings F body`, `tops`] >> simp[] >>
-  drule checked_module_consts_env_names_constant >> simp[]
+  `ALOOKUP [((NONE:num option),tops)] NONE = SOME tops` by simp[] >>
+  drule_all checked_constructor_body_subst >> simp[]
 QED
 
 Theorem deploy_ctor_entry_selection_agrees:
