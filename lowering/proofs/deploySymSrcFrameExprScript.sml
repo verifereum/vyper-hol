@@ -322,7 +322,8 @@ Theorem deploy_blocks_frame_expr_mutual_cond:
 Proof
   strip_tac >>
   match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
-    (Q.INST [`R` |-> `\blocks s t. t = s with cs_blocks := s.cs_blocks ++ blocks`] symbolic_frame_expr)) >>
+    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
+      (Q.GEN `R` symbolic_frame_expr))) >>
   simp[deploy_blocks_frame_expr_body_assembled,
        deploy_blocks_frame_builtin_body_assembled,
        deploy_blocks_frame_type_body_assembled]

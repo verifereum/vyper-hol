@@ -17,7 +17,8 @@ Theorem runtime_data_frame_expr_mutual:
       st.cs_data_sections)
 Proof
   mp_tac (REWRITE_RULE [symbolic_frame_runtime]
-    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] symbolic_frame_expr)) >>
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` symbolic_frame_expr))) >>
   simp[runtime_data_frame_expr_body_assembled,
        runtime_data_frame_builtin_body_assembled,
        runtime_data_frame_type_body_assembled] >>

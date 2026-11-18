@@ -82,7 +82,8 @@ Theorem runtime_data_frame_abi_encode_mutual:
 Proof
   strip_tac >>
   match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
-    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] symbolic_frame_abi_encode)) >>
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` symbolic_frame_abi_encode))) >>
   simp[runtime_data_frame_abi_encode_dyn_static_loop]
 QED
 
@@ -175,7 +176,8 @@ Theorem runtime_data_frame_abi_decode_mutual:
 Proof
   strip_tac >>
   match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
-    (Q.INST [`R` |-> `\data s t. s = t /\ s.cs_data_sections = data`] symbolic_frame_abi_decode)) >>
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` symbolic_frame_abi_decode))) >>
   simp[runtime_data_frame_abi_decode_static]
 QED
 
