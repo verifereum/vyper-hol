@@ -38,11 +38,11 @@ Theorem deploy_raw_fmp_exists:
       w2n (opt_deploy_entry_state prog prog' cplan tops es).vs_initial_fmp <=
         w2n fmp /\
       w2n fmp < 2 ** 254 /\
-      unit_alloca_budget dunit.cu_context +
+      imm_len tops + unit_alloca_budget dunit.cu_context +
         32 * ctx_dload_count dunit.cu_context <= w2n fmp
 Proof
   rpt strip_tac >>
-  `unit_alloca_budget dunit.cu_context +
+  `imm_len tops + unit_alloca_budget dunit.cu_context +
      32 * ctx_dload_count dunit.cu_context < 2 ** 254` by
     (qpat_x_assum `deploy_phases _ _ _ _` mp_tac >>
      simp[deploy_phases_def] >> strip_tac >>
@@ -50,14 +50,15 @@ Proof
      simp[lower_vyper_deploy_unit_def] >>
      pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> rpt strip_tac >>
      drule run_deploy_lowering_static_headroom >>
-     simp[ctx_dload_count_def, rich_listTheory.FILTER_FLAT,
+     simp[immSectionDeadTheory.imm_len_def,
+          ctx_dload_count_def, rich_listTheory.FILTER_FLAT,
           rich_listTheory.LENGTH_FLAT, listTheory.MAP_MAP_o,
           combinTheory.o_DEF] >> decide_tac) >>
   `cplan.cp_initial_fmp < 2 ** 254` by
     (fs[deploy_phases_def, generate_context_plan_def] >>
      drule generate_context_plan_with_headroom >> simp[]) >>
   qabbrev_tac `n = MAX cplan.cp_initial_fmp
-    (unit_alloca_budget dunit.cu_context +
+    (imm_len tops + unit_alloca_budget dunit.cu_context +
        32 * ctx_dload_count dunit.cu_context)` >>
   `n < 2 ** 254` by simp[Abbr `n`, MAX_DEF] >>
   `n < dimword (:256) /\ cplan.cp_initial_fmp < dimword (:256)` by
@@ -147,7 +148,7 @@ Theorem deploy_raw_fmp_focus_mask_entry:
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
-    unit_alloca_budget dunit.cu_context +
+    imm_len tops + unit_alloca_budget dunit.cu_context +
       32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
     (!vs. raw_variant fmp vs vs_out ==>
        ?marks. deploy_unit_execution_correct_with shadow_ctx marks

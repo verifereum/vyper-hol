@@ -20,7 +20,7 @@ Theorem deploy_certificate_raw_entry_boundary:
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
-    unit_alloca_budget dunit.cu_context +
+    imm_len tops + unit_alloca_budget dunit.cu_context +
       32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
     v = vs_out with <|vs_gas_readings := gs; vs_fmp := fmp;
                      vs_initial_fmp := fmp|> /\
