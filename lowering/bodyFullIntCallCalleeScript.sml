@@ -1527,9 +1527,9 @@ Proof
   simp[Abbr `u`, Abbr `t`, update_var_def, lookup_var_def,
     finite_mapTheory.FLOOKUP_UPDATE, venom_state_component_equality,
     ptrDisciplineTheory.op_taint_def] >>
-  TRY (irule alloca_room_fields >> goal_assum (drule_at Any) >> simp[]) >>
-  TRY (fs[ptrDisciplineTheory.allocas_from_def, finite_mapTheory.FLOOKUP_UPDATE,
-          AllCaseEqs()] >> metis_tac[])
+  TRY (irule alloca_room_fields >> goal_assum (drule_at Any) >> simp[])
+  >- (fs[ptrDisciplineTheory.allocas_from_def, finite_mapTheory.FLOOKUP_UPDATE,
+         AllCaseEqs()] >> metis_tac[])
   >- (rpt strip_tac >> simp[loweringStateRelDefsTheory.fresh_vars_wrt_def, Abbr `out`] >>
       fs[loweringStateRelDefsTheory.fresh_vars_wrt_def])
   >- (fs[finite_mapTheory.FLOOKUP_DEF] >> rw[] >> gvs[])
@@ -4486,6 +4486,8 @@ Proof
      `state_rel H callee body_ce cx (es1 with scopes := []) t` by
        (irule state_rel_cenv_cong >> qexists_tac `ce` >>
         simp[vyperStateTheory.lookup_scopes_def]) >>
+     `LENGTH t.vs_memory <= LENGTH at_pro.vs_memory` by
+       (simp[Abbr `at_mat`] >> metis_tac[]) >>
      `immutables_rel body_ce cx.txn.target body_ce.ce_module body_ce.ce_is_ctor es1 at_pro` by
        (irule loweringSliceTheory.immutables_rel_mem_agree >> qexists_tac `t` >>
         qpat_assum `state_rel H callee body_ce cx _ t`
@@ -4493,8 +4495,6 @@ Proof
         rpt conj_tac >>
         TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
         TRY (simp[Abbr `at_mat`] >> NO_TAC) >>
-        TRY (rename1 `LENGTH t.vs_memory <= LENGTH at_pro.vs_memory` >>
-             simp[Abbr `at_mat`] >> metis_tac[]) >>
         TRY (qpat_assum `immutables_rel body_ce _ _ _ (es1 with scopes := []) t` mp_tac >>
              simp[NoAsms, loweringStateRelDefsTheory.immutables_rel_def] >> NO_TAC) >>
         qpat_assum `internal_immutable_regions body_ce cx es1 _`
