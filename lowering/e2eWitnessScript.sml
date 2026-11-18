@@ -95,7 +95,8 @@ Proof
        tx_block_fields_rel_def, p23_tx_params_def,
        loweringStateRelDefsTheory.tx_env_ok_def,
        vfmTotalBalanceTheory.balance_bounded_def, p23_total_balance_empty,
-       vfmExecutionPropTheory.all_accounts_def]
+       vfmExecutionPropTheory.all_accounts_def,
+       vfmReturndataBoundTheory.returndata_bounded_def]
 QED
 
 val p23_call_machine_eval = EVAL ``p23_am_call``;
@@ -112,20 +113,8 @@ Proof
        p23_runtime_length_eval,
        p23_get_calldata_def] >>
   conj_tac >-
-   (simp[vyperTypeContractSoundnessTheory.checked_contract_runtime_ready_def,
-         vyperTypeContractTheory.exports_ok_def,
-         vyperABIEntriesTheory.abi_deployed_signatures_def,
-         vyperABIEntriesTheory.abi_external_signatures_def,
-         vyperABIEntriesTheory.abi_decl_signatures_def,
-         vyperTypeContractTheory.var_allocated_def,
-         vyperStateTheory.find_var_decl_by_name_def] >>
-    rw[vyperTypeInitialStateTheory.immutables_ready_def,
-       vyperStateTheory.get_source_immutables_def,
-       vyperInterpreterTheory.initial_evaluation_context_def,
-       vyperContextTheory.get_module_code_def,
-       vyperContextTheory.get_tenv_def,
-       finite_mapTheory.FLOOKUP_UPDATE] >>
-    gvs[vyperStateTheory.find_var_decl_by_name_def] >> EVAL_TAC) >>
+   (rw[global_cells_typed_def, vyperStateTheory.get_source_immutables_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >> gvs[] >> EVAL_TAC) >>
   conj_tac >- (rw[vyperTypeInvariantsTheory.accounts_well_typed_def] >>
     Cases_on `addr = 2w` >>
     simp[vyperTypeInvariantsTheory.account_well_typed_def,
