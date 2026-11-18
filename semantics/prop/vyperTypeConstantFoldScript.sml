@@ -537,7 +537,7 @@ End
 (* Constant folding runs without the outcome oracle, so a precompile's
    success check passes without consuming anything. *)
 Theorem precompile_call_success_initial_state:
-  precompile_call_success bt (initial_state am sc) =
+  precompile_call_success bt vs (initial_state am sc) =
   return () (initial_state am sc)
 Proof
   simp[precompile_call_success_def, initial_state_def]

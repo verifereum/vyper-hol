@@ -42,7 +42,6 @@ Theorem compiled_request_outcome_alignment:
   codegen_context_obligations Inv lowered.cu_context cplan /\
   codegen_reachability_package Inv lowered.cu_context so /\
   initial_ctx_rel cplan prog lowered.cu_context so es /\
-  EVERY (\p. ~computed_precompile (FST p)) (call_trace es) /\
   si.vs_outcomes = MAP SND (call_trace es) /\
   k < LENGTH si.vs_outcomes ==>
   MEM (EL k (call_requests es), EL k si.vs_outcomes) (call_trace es) /\
@@ -55,9 +54,7 @@ Proof
   mp_tac (Q.SPECL [`matched_fuel`, `rpolicy`, `lowered`, `cplan`,
     `prog`, `Inv`, `so`, `es`, `matched_state`] codegen_request_prefix) >>
   impl_tac >- asm_rewrite_tac[] >> disch_tac >>
-  `call_requests es = MAP FST (call_trace es)` by
-    (simp[call_requests_def, FILTER_EQ_ID, EVERY_MAP] >>
-     gvs[EVERY_MEM, FORALL_PROD]) >>
+  `call_requests es = MAP FST (call_trace es)` by simp[call_requests_def] >>
   `k < LENGTH (call_trace es)` by metis_tac[LENGTH_MAP] >>
   conj_tac
   >- (simp[MEM_EL] >> qexists_tac `k` >> simp[EL_MAP]) >>
@@ -81,7 +78,6 @@ Theorem source_compiled_request_alignment:
   o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cplan es) /\
   (run_context fuel unit.cu_context vs = Halt ss \/
    ?a. run_context fuel unit.cu_context vs = Abort a ss) /\
-  EVERY (\p. ~computed_precompile (FST p)) (call_trace es) /\
   k < LENGTH vs.vs_outcomes /\
   request_agree H tx.target
     rq (EL k ss.vs_requests) ==>

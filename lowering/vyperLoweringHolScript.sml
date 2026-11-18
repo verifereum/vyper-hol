@@ -94,6 +94,7 @@ Ancestors
   (* providers awaiting their consumers *)
   bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
   bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
+  bodyFullTypeBuiltinAbiEncode
   bodyPtrTypeBuiltinsBytesUintSemantics
   internalReturnMemoryMem bodyFullIntCallByteFrame
   bodyFullIntCall

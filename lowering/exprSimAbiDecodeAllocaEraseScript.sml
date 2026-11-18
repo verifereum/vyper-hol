@@ -27,7 +27,8 @@ Theorem abi_decode_clean_fields[simp]:
   (abi_decode_clean_allocas func s).vs_alloca_next = s.vs_alloca_next /\
   (abi_decode_clean_allocas func s).vs_current_bb = s.vs_current_bb /\
   (abi_decode_clean_allocas func s).vs_inst_idx = s.vs_inst_idx /\
-  (abi_decode_clean_allocas func s).vs_fmp = s.vs_fmp
+  (abi_decode_clean_allocas func s).vs_fmp = s.vs_fmp /\
+  (abi_decode_clean_allocas func s).vs_outcomes = s.vs_outcomes
 Proof
   simp[abi_decode_clean_allocas_def]
 QED

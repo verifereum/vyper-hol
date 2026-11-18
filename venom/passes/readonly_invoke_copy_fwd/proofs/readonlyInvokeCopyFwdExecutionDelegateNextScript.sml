@@ -51,6 +51,7 @@ Proof
        ircf_cross_def, word_agree_except_def] >>
      rpt strip_tac >> metis_tac[]) >>
   Cases_on `~rq1.cr_static /\ r.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST r.vs_requests) /\
     r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
   fs[ricf_call_taint_def, Excl "consume_call_outcome_eq"] >>
   first_x_assum (qspec_then `tn with t_mem := tn.t_mem DIFF

@@ -73,7 +73,8 @@ QED
 
 Theorem call_adopted_stor_taint_ok:
   inst.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-  s'.vs_requests <> s.vs_requests /\ s'.vs_outcomes <> s.vs_outcomes /\
+  s'.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST s'.vs_requests) /\ s'.vs_outcomes <> s.vs_outcomes /\
   (HD s.vs_outcomes).co_success /\ tn.t_imm = {} ==>
   stor_taint_ok H cx (step_taint inst s s' tn) s'
 Proof
@@ -178,7 +179,8 @@ Theorem exec_ext_call_storage_cases:
   u.vs_call_ctx = s.vs_call_ctx /\
   ((u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient) \/
    (~stat /\ ~s.vs_call_ctx.cc_static /\
-    u.vs_requests <> s.vs_requests /\ u.vs_outcomes <> s.vs_outcomes /\
+    u.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST u.vs_requests) /\ u.vs_outcomes <> s.vs_outcomes /\
     (HD s.vs_outcomes).co_success))
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def] >>
@@ -200,7 +202,8 @@ Proof
   rename1 `s.vs_outcomes = outcome::rest` >>
   Cases_on `outcome.co_success` >>
   simp[adopt_outcome_def, record_request_def, Abbr `rq`, venom_call_request_def] >>
-  Cases_on `stat` >> Cases_on `s.vs_call_ctx.cc_static` >> simp[]
+  Cases_on `stat` >> Cases_on `s.vs_call_ctx.cc_static` >>
+  gvs[venom_call_request_def, computed_precompile_def]
 QED
 
 Theorem exec_ext_call_stor_taint_ok:
