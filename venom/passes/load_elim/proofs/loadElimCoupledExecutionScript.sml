@@ -593,7 +593,7 @@ Proof
   `MEM i.inst_opcode
     [STOP; RETURN; SINK; SELFDESTRUCT; INVOKE; REVERT; INVALID;
      ASSERT; ASSERT_UNREACHABLE; CREATE; CREATE2; RETURNDATACOPY;
-     RET; RETFMP; DRET]` by
+     CALL; STATICCALL; DELEGATECALL; RET; RETFMP; DRET]` by
     (Cases_on `step_inst k C i s` >> gvs[]
      >- metis_tac[step_inst_halt_opcodes, MEM]
      >- (drule step_inst_abort_opcodes >> strip_tac >> gvs[]) >>

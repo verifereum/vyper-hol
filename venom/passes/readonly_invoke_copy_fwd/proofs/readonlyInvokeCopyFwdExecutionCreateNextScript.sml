@@ -103,9 +103,16 @@ Proof
     (fs[MEM] >> gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
       eval_operands_def]) >>
   `?out w r. inst.inst_outputs = [out] /\
-    w2n size_word <= 2 * max_code_size /\
+    w2n size_word <= 2 * max_code_size /\ s.vs_outcomes <> [] /\
     consume_create_outcome (venom_create_request s value off size_word salt) s = (w,r) /\
     u = update_var out w r` by metis_tac[dload_exec_create_success_iff] >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def,
+        Excl "consume_create_outcome_eq"] >>
+     drule taint_agree_frame >>
+     disch_then (mp_tac o AP_TERM ``\v:venom_state. v.vs_outcomes``) >>
+     simp[ricf_opaque_view_def]) >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   `venom_create_request s value off size_word salt =
     venom_create_request t value off' size_word salt` by
     (mp_tac (Q.INST [`X` |-> `ircf_dead (ricf_original_copy_ids C) s stk`,

@@ -9,7 +9,8 @@ Ancestors
   bodyPtrTypeBuiltinsBytesWordParts bodyPtrTypeBuiltinsBytesWordTypes
   exprSimConvertFromBytes fragGasOriginPtr fragGasCopyLoop compileEnv exprLowering
   builtinConvertPrefix exprSimConvert vyperTypeConversions vyperValueOperation
-  bodyPtrSignedConvertUnsignedCompose reasonCopySourcePtr instSeqComposePtr
+  bodyPtrSignedConvertSourceFixed bodyPtrSignedConvertUnsignedCompose
+  reasonCopySourcePtr instSeqComposePtr
   bodyPtrSignedConvertUnsignedLoad bodyPtrDefs fragExec venomState
   venomInst venomExecSemantics finite_map words arithmetic exprLoweringProps list varsExt
 
@@ -98,7 +99,7 @@ Proof
   strip_tac >> drule_all unsigned_loader_shape_fresh >> strip_tac >>
   `ptr_covers G tn src s 64` by (irule ptr_covers_mono >> metis_tac[]) >>
   `src <> len` by fs[] >>
-  drule_all bytestring_source_run >>
+  drule_all bodyPtrSignedConvertSourceFixedTheory.bytestring_source_run >>
   disch_then (qspecl_then [`sa.cs_next_id+1`,`sa.cs_next_id`,`dp`] assume_tac) >>
   qabbrev_tac `u = update_var dp (a+32w) (update_var len (mload (w2n a) s) s)` >>
   `ALL_DISTINCT [src;len;dp] /\

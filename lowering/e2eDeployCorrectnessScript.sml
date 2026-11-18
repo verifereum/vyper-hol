@@ -9,7 +9,6 @@ Ancestors
   deployUnitExecution ctorDeployBodyJoint ctorDeployDead ctorDeployFrame
   compileVyper compilePhasesProps codegen e2eProducers e2eComposition
   o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
-  sourceCallCount
   lowerDloadDefs e2eEntry gasSummary asmOptimizer
 
 (* A successful compilation exposes the deployment unit's phases. *)
@@ -28,17 +27,6 @@ Proof
   goal_assum $ drule_at Any >> gvs[]
 QED
 
-(* ADMISSION: the deploy gas link's call bound, for a call-free constructor.
-   Waits for its proof. *)
-Theorem deploy_source_calls_within_call_free:
-  !tops am tx os gobs.
-    deploy_source_ok tops am tx /\
-    tx.function_name = "__init__" ==>
-    deploy_source_calls_within (2 ** 64) tops am tx os gobs
-Proof
-  cheat
-QED
-
 (* ADMITTED: SEQ-1314 (the raw_slots mask and the sites-to-slots link).
    Where the frame is not starved, every filling of its gas readings that
    meets the constructor run's storage guard extends the marked readings of
@@ -54,8 +42,6 @@ Theorem deploy_pipeline_gas_link:
     deploy_state_rel tops (assemble prog') am tx es /\
     vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
-    (!gobs. deploy_source_calls_within (2 ** 64) tops am (tx with code := vs_out.vs_code)
-      (MAP SND (call_trace es)) gobs) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
     unit_alloca_budget dunit.cu_context +
@@ -156,10 +142,6 @@ Proof
   `K SOME rpolicy prog = SOME prog` by simp[] >>
   `tx with code := (opt_deploy_entry_state prog prog cplan tops es).vs_code = tx`
     by metis_tac[deploy_txp_identity] >>
-  `!gobs. deploy_source_calls_within (2 ** 64) tops am tx
-      (MAP SND (call_trace es)) gobs` by
-    (irule deploy_source_calls_within_call_free >>
-     fs[deploy_state_rel_def]) >>
   drule deploy_raw_fmp_exists >>
   disch_then (qspecl_then [`prog`, `es`] strip_assume_tac) >>
   drule_all deploy_unit_execution_correct_raw_fmp >>

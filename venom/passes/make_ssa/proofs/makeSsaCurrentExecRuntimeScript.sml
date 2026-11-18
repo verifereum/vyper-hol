@@ -494,18 +494,21 @@ Theorem current_exec_ext_call_pair:
       state_rel sg1 t t'
 Proof
   strip_tac >>
+  `st.vs_outcomes = st'.vs_outcomes` by fs[state_rel_def, execution_frame_def] >>
   `venom_call_request st addr value ao sz static =
    venom_call_request st' addr value ao sz static` by
     metis_tac[current_exec_oracle_requests_pair] >>
   qmatch_asmsub_abbrev_tac `venom_call_request st addr value ao sz static = rq` >>
-  `FST (consume_call_outcome rq (w2n ro) (w2n rs) st) = FST (consume_call_outcome rq (w2n ro) (w2n rs) st') /\
-   state_rel sg (SND (consume_call_outcome rq (w2n ro) (w2n rs) st))
-                (SND (consume_call_outcome rq (w2n ro) (w2n rs) st'))` by
+  `FST (consume_call_outcome (rq with cr_gas := SOME (w2n gas)) (w2n ro) (w2n rs) st) =
+   FST (consume_call_outcome (rq with cr_gas := SOME (w2n gas)) (w2n ro) (w2n rs) st') /\
+   state_rel sg (SND (consume_call_outcome (rq with cr_gas := SOME (w2n gas)) (w2n ro) (w2n rs) st))
+                (SND (consume_call_outcome (rq with cr_gas := SOME (w2n gas)) (w2n ro) (w2n rs) st'))` by
     metis_tac[current_exec_consume_call_pair] >>
   fs[exec_ext_call_def, AllCaseEqs()] >>
   `LENGTH inst.inst_outputs = 1` by fs[current_last_output_slots_def] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
-  metis_tac[current_exec_update_last_slots]
+  irule current_exec_update_last_slots >> qexists_tac `sg` >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem current_exec_create_pair:
@@ -515,6 +518,7 @@ Theorem current_exec_create_pair:
   ?t. exec_create inst st value off sz salt = OK t /\ state_rel sg1 t t'
 Proof
   strip_tac >>
+  `st.vs_outcomes = st'.vs_outcomes` by fs[state_rel_def, execution_frame_def] >>
   `venom_create_request st value off sz salt =
    venom_create_request st' value off sz salt` by
     metis_tac[current_exec_oracle_requests_pair] >>
@@ -523,10 +527,13 @@ Proof
    state_rel sg (SND (consume_create_outcome rq st))
                 (SND (consume_create_outcome rq st'))` by
     metis_tac[current_exec_consume_create_pair] >>
-  fs[exec_create_def, AllCaseEqs()] >>
+  Cases_on `consume_create_outcome rq st` >>
+  Cases_on `consume_create_outcome rq st'` >>
+  fs[exec_create_def, AllCaseEqs(), Excl "consume_create_outcome_eq"] >>
   `LENGTH inst.inst_outputs = 1` by fs[current_last_output_slots_def] >>
-  Cases_on `inst.inst_outputs` >> gvs[] >>
-  metis_tac[current_exec_update_last_slots]
+  Cases_on `inst.inst_outputs` >> gvs[Excl "consume_create_outcome_eq"] >>
+  irule current_exec_update_last_slots >> qexists_tac `sg` >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem current_exec_call_opcodes_pair:
@@ -592,14 +599,15 @@ Theorem current_exec_delegatecall_pair:
   ?t. exec_delegatecall inst st gas addr ao sz ro rs = OK t /\ state_rel sg1 t t'
 Proof
   strip_tac >>
+  `st.vs_outcomes = st'.vs_outcomes` by fs[state_rel_def, execution_frame_def] >>
   `venom_call_request st addr 0w ao sz F =
    venom_call_request st' addr 0w ao sz F` by
     metis_tac[current_exec_oracle_requests_pair] >>
   qmatch_asmsub_abbrev_tac `venom_call_request st addr 0w ao sz F = rq` >>
-  `FST (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st) =
-   FST (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st') /\
-   state_rel sg (SND (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st))
-                (SND (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st'))` by
+  `FST (consume_call_outcome (rq with <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n ro) (w2n rs) st) =
+   FST (consume_call_outcome (rq with <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n ro) (w2n rs) st') /\
+   state_rel sg (SND (consume_call_outcome (rq with <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n ro) (w2n rs) st))
+                (SND (consume_call_outcome (rq with <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>) (w2n ro) (w2n rs) st'))` by
     metis_tac[current_exec_consume_call_pair] >>
   fs[exec_delegatecall_def, AllCaseEqs()] >>
   `LENGTH inst.inst_outputs = 1` by fs[current_last_output_slots_def] >>
@@ -755,16 +763,9 @@ Proof
   fs[state_rel_def, execution_frame_def, halt_state_def, set_returndata_def]
 QED
 
-(* Existing no-Abort facts in passSharedFrame and ssaRenamedSim are local. *)
-Theorem current_exec_ext_call_not_abort:
-  exec_ext_call inst st gas addr value ao as_ ro rs is_static <> Abort reason t
-Proof
-  rw[exec_ext_call_def] >> gvs[AllCaseEqs()]
-QED
-
 Theorem current_exec_simple_abort_pair:
   MEM inst.inst_opcode [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE;
-                       SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; CREATE; CREATE2;
+                       SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2;
                        RETURNDATACOPY] /\
   inst_pair sg inst inst' /\ state_rel sg st st' /\
   step_inst_base inst' st' = Abort reason t' ==>
@@ -775,11 +776,12 @@ Proof
   `eval_operands inst'.inst_operands st' = eval_operands inst.inst_operands st` by
     metis_tac[eval_operands_rel] >>
   `st'.vs_call_ctx = st.vs_call_ctx /\ st'.vs_memory = st.vs_memory /\
-   st'.vs_returndata = st.vs_returndata` by fs[state_rel_def, execution_frame_def] >>
+   st'.vs_returndata = st.vs_returndata /\ st'.vs_outcomes = st.vs_outcomes` by
+    fs[state_rel_def, execution_frame_def] >>
   fs[MEM] >>
   qpat_x_assum `inst'.inst_opcode = inst.inst_opcode` mp_tac >> simp[] >>
   strip_tac >> stepInstBaseLib.with_opcode_clause fs >>
-  gvs[current_exec_ext_call_not_abort, exec_write2_def, exec_create_abort_iff,
+  gvs[exec_ext_call_abort_iff, exec_delegatecall_abort_iff, exec_write2_def, exec_create_abort_iff,
       AllCaseEqs()] >>
   rpt (qpat_x_assum `SOME _ = eval_operand _ _` (assume_tac o SYM)) >> simp[] >>
   fs[state_rel_def, execution_frame_def, halt_state_def, revert_state_def,
@@ -924,7 +926,7 @@ Theorem current_exec_noninvoke_abort_pair:
 Proof
   strip_tac >> `inst'.inst_opcode = inst.inst_opcode` by fs[inst_pair_def] >>
   `MEM inst.inst_opcode [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE;
-                        SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; CREATE; CREATE2;
+                        SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2;
                         RETURNDATACOPY]` by
     (drule step_inst_base_abort_opcodes >> simp[MEM] >> metis_tac[]) >>
   drule_all current_exec_simple_abort_pair >> simp[]

@@ -187,7 +187,7 @@ Theorem raw_call_calldata_operand_order_test:
   eval_expr cx value_e target_st = (INL (Value amount_v), value_st) /\
   dest_AddressV target_v = SOME to /\ dest_NumV amount_v = SOME amount ==>
   eval_expr cx (Call ty (RawCallCalldataTarget flags) [target; value_e] drv) st =
-    eval_raw_call cx flags to cx.txn.calldata amount default_evm_gas_limit value_st
+    eval_raw_call cx flags to cx.txn.calldata amount NONE value_st
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def, bind_def] >>
@@ -205,7 +205,7 @@ Theorem raw_call_bytes_operand_order_test:
   eval_expr cx value_e data_st = (INL (Value amount_v), value_st) /\
   dest_AddressV target_v = SOME to /\ dest_NumV amount_v = SOME amount ==>
   eval_expr cx (Call ty (RawCallTarget flags) [target; data_e; value_e] drv) st =
-    eval_raw_call cx flags to data amount default_evm_gas_limit value_st
+    eval_raw_call cx flags to data amount NONE value_st
 Proof
   rpt strip_tac >> simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
@@ -265,9 +265,10 @@ Theorem raw_call_calldata_original_input_test:
   ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
   (cx.txn.is_static ==> amount = 0) /\
   cx.txn.calldata = [1w; 2w; 3w; 4w; 10w; 11w; 99w] /\
-  run_raw_call cx flags to cx.txn.calldata amount gas st.accounts st.tStorage =
+  run_raw_call cx flags to cx.txn.calldata amount
+    (forwarded_gas default_evm_gas_limit gas_opt) st.accounts st.tStorage =
       SOME (success, retdata, accounts', transient', logs', deletions) ==>
-  eval_raw_call cx flags to cx.txn.calldata amount gas st =
+  eval_raw_call cx flags to cx.txn.calldata amount gas_opt st =
     (if flags.rcf_revert_on_failure then
        if success then INL (Value (if flags.rcf_max_outsize = 0 then NoneV
          else BytesV (TAKE flags.rcf_max_outsize retdata)))

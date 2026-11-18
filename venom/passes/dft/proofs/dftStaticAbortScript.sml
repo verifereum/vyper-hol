@@ -12,7 +12,9 @@ Theorem static_nonroot_exhalt_opcodes[local]:
   ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
     write_effects x.inst_opcode = empty_effects) /\
   opcode_fail_class x.inst_opcode = CanExHalt ==>
-  MEM x.inst_opcode [RETURNDATACOPY; CREATE; CREATE2; SSTORE; TSTORE; LOG; CALL]
+  MEM x.inst_opcode
+    [RETURNDATACOPY; CREATE; CREATE2; SSTORE; TSTORE; LOG; CALL;
+     STATICCALL; DELEGATECALL]
 Proof
   strip_tac >> Cases_on `x.inst_opcode` >>
   gvs[opcode_fail_class_def, is_terminator_def, inst_wf_def,
@@ -21,7 +23,9 @@ QED
 
 Theorem static_exhalt_partner[local]:
   dft_gas_swap_pair x y /\
-  MEM x.inst_opcode [RETURNDATACOPY; CREATE; CREATE2; SSTORE; TSTORE; LOG; CALL] ==>
+  MEM x.inst_opcode
+    [RETURNDATACOPY; CREATE; CREATE2; SSTORE; TSTORE; LOG; CALL;
+     STATICCALL; DELEGATECALL] ==>
   y.inst_opcode <> INVOKE /\ ~dft_swap_runtime_error_opcode y.inst_opcode
 Proof
   strip_tac >>
@@ -31,21 +35,6 @@ Proof
   simp[dft_swap_runtime_error_opcode_def] >> rpt strip_tac >>
   qpat_x_assum `effects_independent _ _` mp_tac >>
   asm_rewrite_tac[] >> EVAL_TAC
-QED
-
-Theorem static_assert_total[local]:
-  inst_wf i /\ i.inst_opcode = ASSERT /\
-  (!op. MEM op i.inst_operands ==> ?v. eval_operand op s = SOME v) ==>
-  (?t. step_inst fuel C i s = OK t) \/
-  (?t. step_inst fuel C i s = Abort Revert_abort t)
-Proof
-  strip_tac >>
-  `?arg. i.inst_operands = [arg]` by
-    gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
-  gvs[] >>
-  `?v. eval_operand arg s = SOME v` by metis_tac[MEM] >>
-  simp[step_inst_non_invoke] >> with_opcode_clause simp >>
-  IF_CASES_TAC >> simp[]
 QED
 
 Theorem dft_nongas_suffix_first_abort_static:
@@ -73,13 +62,14 @@ Proof
          disj1_tac >> irule dft_swap_guarded_nofail_total >> simp[]) >>
      drule_all dft_swap_nonroot_abort_class >> strip_tac >> gvs[] >>
      `MEM x.inst_opcode
-        [RETURNDATACOPY; CREATE; CREATE2; SSTORE; TSTORE; LOG; CALL]` by
+        [RETURNDATACOPY; CREATE; CREATE2; SSTORE; TSTORE; LOG; CALL;
+         STATICCALL; DELEGATECALL]` by
        (irule static_nonroot_exhalt_opcodes >> simp[]) >>
      drule_all static_exhalt_partner >> strip_tac >>
      `!op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v` by
        metis_tac[] >>
      Cases_on `y.inst_opcode = ASSERT`
-     >- (drule_all static_assert_total >> metis_tac[]) >>
+     >- (drule_all dft_assert_total >> metis_tac[]) >>
      `opcode_fail_class y.inst_opcode = NoFail \/
       opcode_fail_class y.inst_opcode = CanExHalt` by
        (Cases_on `y.inst_opcode` >> simp[opcode_fail_class_def] >> gvs[]) >>

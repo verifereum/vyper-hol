@@ -13,8 +13,8 @@ End
 Theorem ptr_history_call_shell:
   ptr_history_content tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t ==>
-  ptr_request_shell (venom_call_request s addr value ao az st)
-    (venom_call_request t addr value at az st)
+  ptr_request_shell (venom_call_request s addr value ao az st with cr_gas := gas_cap)
+    (venom_call_request t addr value at az st with cr_gas := gas_cap)
 Proof
   simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
        ptr_core_shared_def, ptr_shared_fields_def, venom_call_request_def,
@@ -22,15 +22,15 @@ Proof
 QED
 
 Theorem ptr_call_completion_adopted:
-  consume_call_outcome (venom_call_request s addr value ao az st) ro rz s = (w,u) ==>
+  consume_call_outcome (venom_call_request s addr value ao az st with cr_gas := gas_cap) ro rz s = (w,u) ==>
   (ptr_call_adopted s u <=>
     ~s.vs_call_ctx.cc_static /\
-    ~computed_precompile (venom_call_request s addr value ao az st) /\
+    ~computed_precompile (venom_call_request s addr value ao az st with cr_gas := gas_cap) /\
     s.vs_outcomes <> [] /\ (HD s.vs_outcomes).co_success)
 Proof
   simp[consume_call_outcome_eq] >> strip_tac >> gvs[ptr_call_adopted_def] >>
   Cases_on `s.vs_outcomes` >> simp[take_outcome_def, record_request_def] >>
-  Cases_on `computed_precompile (venom_call_request s addr value ao az st)` >>
+  Cases_on `computed_precompile (venom_call_request s addr value ao az st with cr_gas := gas_cap)` >>
   simp[] >>
   metis_tac[LENGTH, LENGTH_APPEND, DECIDE ``!n:num. n + 1 <> n``,
             DECIDE ``!n:num. n <> SUC n``]
@@ -39,13 +39,13 @@ QED
 Theorem ptr_history_completion_guard:
   ptr_history_content tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
-  consume_call_outcome (venom_call_request s addr value ao az st) ro rz s = (w,u) /\
-  consume_call_outcome (venom_call_request t addr value at az st) rt rz t = (v,z) ==>
+  consume_call_outcome (venom_call_request s addr value ao az st with cr_gas := gas_cap) ro rz s = (w,u) /\
+  consume_call_outcome (venom_call_request t addr value at az st with cr_gas := gas_cap) rt rz t = (v,z) ==>
   (ptr_call_adopted s u <=> ptr_call_adopted t z)
 Proof
   strip_tac >>
-  `ptr_request_shell (venom_call_request s addr value ao az st)
-     (venom_call_request t addr value at az st)` by
+  `ptr_request_shell (venom_call_request s addr value ao az st with cr_gas := gas_cap)
+     (venom_call_request t addr value at az st with cr_gas := gas_cap)` by
     (irule ptr_history_call_shell >> metis_tac[]) >>
   drule ptr_request_shell_classification >>
   drule ptr_call_completion_adopted >>
@@ -57,24 +57,24 @@ QED
 Theorem ptr_history_call_completion:
   ptr_history_content tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
-  consume_call_outcome (venom_call_request s addr value ao az st) ro rz s = (w,u) /\
-  consume_call_outcome (venom_call_request t addr value at az st) rt rz t = (v,z) ==>
+  consume_call_outcome (venom_call_request s addr value ao az st with cr_gas := gas_cap) ro rz s = (w,u) /\
+  consume_call_outcome (venom_call_request t addr value at az st with cr_gas := gas_cap) rt rz t = (v,z) ==>
   w = v /\ u.vs_returndata = z.vs_returndata /\
   ptr_history_content
     (tn with <| t_stor := if ~st /\ ptr_call_adopted s u then {} else tn.t_stor;
                 t_trans := if ~st /\ ptr_call_adopted s u then {} else tn.t_trans |>) u z
 Proof
   strip_tac >>
-  `ptr_request_shell (venom_call_request s addr value ao az st)
-     (venom_call_request t addr value at az st)` by
+  `ptr_request_shell (venom_call_request s addr value ao az st with cr_gas := gas_cap)
+     (venom_call_request t addr value at az st with cr_gas := gas_cap)` by
     (irule ptr_history_call_shell >> metis_tac[]) >>
   `ptr_request_history
-     (record_request (venom_call_request s addr value ao az st) s.vs_requests)
-     (record_request (venom_call_request t addr value at az st) t.vs_requests)` by
+     (record_request (venom_call_request s addr value ao az st with cr_gas := gas_cap) s.vs_requests)
+     (record_request (venom_call_request t addr value at az st with cr_gas := gas_cap) t.vs_requests)` by
     (irule ptr_request_record >> gvs[ptr_history_content_def]) >>
   `ptr_call_adopted s u <=>
     ~s.vs_call_ctx.cc_static /\
-    ~computed_precompile (venom_call_request s addr value ao az st) /\
+    ~computed_precompile (venom_call_request s addr value ao az st with cr_gas := gas_cap) /\
     s.vs_outcomes <> [] /\ (HD s.vs_outcomes).co_success` by
     (irule ptr_call_completion_adopted >> metis_tac[]) >>
   fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
@@ -110,12 +110,12 @@ QED
    overwrite clears the current mask, without editing either history. *)
 Theorem ptr_request_store_call_overwrite_probe:
   s.vs_outcomes = [] /\
-  ~computed_precompile (venom_call_request (sstore k 1w s) addr 0w 0w 0w F) /\
+  ~computed_precompile (venom_call_request (sstore k 1w s) addr 0w 0w 0w F with cr_gas := gas_cap) /\
   consume_call_outcome
-    (venom_call_request (sstore k 1w s) addr 0w 0w 0w F)
+    (venom_call_request (sstore k 1w s) addr 0w 0w 0w F with cr_gas := gas_cap)
     0 0 (sstore k 1w s) = (w,u) /\
   consume_call_outcome
-    (venom_call_request (sstore k 2w s) addr 0w 0w 0w F)
+    (venom_call_request (sstore k 2w s) addr 0w 0w 0w F with cr_gas := gas_cap)
     0 0 (sstore k 2w s) = (v,z) ==>
   ptr_history_content (tn with t_stor := key_update tn.t_stor k {b | b < 32}) u z /\
   ptr_history_content
@@ -125,9 +125,9 @@ Theorem ptr_request_store_call_overwrite_probe:
   (sstore k 0w z).vs_requests = z.vs_requests /\
   key_taint (key_update (key_update tn.t_stor k {b | b < 32}) k {}) k = {} /\
   u.vs_requests = s.vs_requests ++
-    [venom_call_request (sstore k 1w s) addr 0w 0w 0w F] /\
+    [venom_call_request (sstore k 1w s) addr 0w 0w 0w F with cr_gas := gas_cap] /\
   z.vs_requests = s.vs_requests ++
-    [venom_call_request (sstore k 2w s) addr 0w 0w 0w F]
+    [venom_call_request (sstore k 2w s) addr 0w 0w 0w F with cr_gas := gas_cap]
 Proof
   strip_tac >>
   `ptr_history_content
@@ -148,7 +148,7 @@ Proof
     disch_then (qspecl_then [`0w`, `0w`, `{}`, `k`] mp_tac) >>
     simp[word_agree_except_def]) >>
   simp[sstore_def, key_taint_def, key_update_def, EXTENSION] >>
-  `~computed_precompile (venom_call_request (sstore k 2w s) addr 0w 0w 0w F)` by
+  `~computed_precompile (venom_call_request (sstore k 2w s) addr 0w 0w 0w F with cr_gas := gas_cap)` by
     gvs[computed_precompile_def, venom_call_request_def, sstore_def, read_memory_def] >>
   qpat_x_assum `consume_call_outcome _ _ _ _ = (w,u)` mp_tac >>
   qpat_x_assum `consume_call_outcome _ _ _ _ = (v,z)` mp_tac >>
