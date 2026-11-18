@@ -72,17 +72,47 @@ Proof
   EVAL_TAC
 QED
 
-(* The checker still admits scalar leaves outside the supported type gate. *)
-Theorem supported_event_field_leaf_residual:
+Theorem supported_event_field_leaves_positive:
   EVERY (\ty. EVERY (\indexed.
     EVERY (\tops. IS_SOME (check_contract F layouts addr [(NONE,tops)]) /\
-                 ~supported_declaration_header tops (LAST tops))
+                  supported_program tops)
       [[FlagDecl "Mode" ["A"]; EventDecl "Changed" [(("value",ty),indexed)]]])
     [F;T])
     [FlagT (NONE,"Mode"); BaseT (BytesT (Fixed 0)); BaseT (BytesT (Fixed 20))]
 Proof
   EVAL_TAC >>
   simp[finite_mapTheory.FUNION_FEMPTY_2, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* Event headers recurse through typed leaves independently of the separate
+   StructDecl whitelist header. The checker still validates all declarations. *)
+Theorem supported_event_nested_leaves_positive:
+  EVERY (\tops. EVERY (\ty.
+    IS_SOME (check_contract F layouts addr
+      [(NONE,tops ++ [EventDecl "Changed" [(("value",ty),F)]])]) /\
+    supported_declaration_header tops
+      (EventDecl "Changed" [(("value",ty),F)]))
+    [ArrayT (FlagT (NONE,"Mode")) (Fixed 2);
+     ArrayT (BaseT (BytesT (Fixed 0))) (Dynamic 3);
+     TupleT [FlagT (NONE,"Mode"); BaseT (BytesT (Fixed 0));
+             BaseT (BytesT (Fixed 20))];
+     StructT (NONE,"Payload");
+     ArrayT (TupleT [StructT (NONE,"Payload");
+                    ArrayT (BaseT (BytesT (Fixed 20))) (Dynamic 3)]) (Fixed 2)])
+    [[FlagDecl "Mode" ["A"];
+      StructDecl "Payload"
+        [("mode",FlagT (NONE,"Mode"));
+         ("empty",BaseT (BytesT (Fixed 0)));
+         ("tag",BaseT (BytesT (Fixed 20)))]]]
+Proof
+  EVAL_TAC >>
+  simp[finite_mapTheory.FUNION_FEMPTY_2, finite_mapTheory.FLOOKUP_UPDATE,
+       vyperValueTheory.evaluate_type_def, vyperValueTheory.type_slot_size_def,
+       vyperTypeSystemTheory.assignable_type_def,
+       vyperTypeSystemTheory.well_formed_type_def,
+       wordsTheory.dimword_def] >>
+  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >>
+  simp[vyperValueTheory.type_slot_size_def]
 QED
 
 Theorem supported_internal_locals_and_loops:
