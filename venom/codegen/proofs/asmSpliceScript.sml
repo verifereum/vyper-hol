@@ -854,7 +854,7 @@ Proof
   rw[splice_pc_def] >> decide_tac
 QED
 
-Theorem sym_steps_base_stack[local]:
+Theorem sym_steps_base_stack:
   !j ss a. ss.sym_base.as_stack = [] /\
     sym_steps p env j ss = SymOK a ==> a.sym_base.as_stack = []
 Proof
@@ -965,7 +965,7 @@ Proof
   gvs[sym_set_stack_def, asmSemTheory.asm_next_def, sym_with_pc_def]
 QED
 
-Theorem splice_inst_step_ok[local]:
+Theorem splice_inst_step_ok:
   asm_splice_ok pat repl /\
   (!l. MEM (AsmLabel l) pat ==> ~MEM l (asm_label_refs (pfx ++ pat ++ sfx))) /\
   sym_state_labels_in (asm_label_refs (pfx ++ pat ++ sfx)) ss /\
@@ -1033,7 +1033,7 @@ Proof
   rw[sym_terminal_def]
 QED
 
-Theorem splice_inst_step_terminal[local]:
+Theorem splice_inst_step_terminal:
   asm_splice_ok pat repl /\
   sym_terminal (sym_step (pfx ++ pat ++ sfx) env inst ss) ==>
   sym_result_rel (sym_step (pfx ++ pat ++ sfx) env inst ss)
