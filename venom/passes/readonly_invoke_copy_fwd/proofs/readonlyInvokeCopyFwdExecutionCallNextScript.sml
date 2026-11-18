@@ -94,20 +94,15 @@ Proof
      disch_then (mp_tac o AP_TERM ``\v:venom_state. v.vs_outcomes``) >>
      simp[ricf_opaque_view_def]) >>
   `t.vs_outcomes <> []` by metis_tac[] >>
-  `((computed_precompile rq1 /\ computed_precompile rq2 /\
-      rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
-    request_agree_except D rq1 rq2)` by
-    (Cases_on `computed_precompile rq1`
-     >- (disj1_tac >>
-         gvs[Abbr `rq1`, Abbr `rq2`, computed_precompile_def, venom_call_request_def]) >>
-     `LENGTH s.vs_requests < LENGTH u.vs_requests` by
+  `request_agree_except D rq1 rq2` by
+    (`LENGTH s.vs_requests < LENGTH u.vs_requests` by
        (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
         simp[consume_call_outcome_eq] >> strip_tac >>
         gvs[update_var_def, record_request_def]) >>
      mp_tac ricf_execution_call_request_compatible >>
      (impl_tac >- simp[]) >>
      fs[Abbr `rq1`, Abbr `rq2`, request_agree_except_def,
-        venom_call_request_def, computed_precompile_def]) >>
+        venom_call_request_def]) >>
   `source_memory_write_ranges inst s = [(w2n ro,w2n rs)]` by
     (fs[MEM] >> gvs[source_memory_write_ranges_def]) >>
   `step_prov PG G inst (update_var out w r) = set_prov G [out] NONE /\

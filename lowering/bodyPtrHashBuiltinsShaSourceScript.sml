@@ -1,7 +1,7 @@
 (* Source outcome consumption and implicit-GAS exceptional summaries. *)
 Theory bodyPtrHashBuiltinsShaSource
 Ancestors exprSimHash exprLoweringProps compileEnv loweringStateRelDefs vyperState vyperInterpreter
-  gasSummaryComposePtr fragGasPathPtr list rich_list
+  gasSummaryComposePtr fragGasPathPtr vyperCallOutcomeProps list rich_list
 
 Theorem hash_counted_exit_summary:
   (!tail. source (ee with gas_obs := tail) =
@@ -25,9 +25,9 @@ Theorem hash_sha256_source_success:
   !tail.
   (case builtin_result cx (ee with gas_obs := tail).accounts ann Sha256 tys [v] of
      INR exc => (INR exc,ee with gas_obs := tail)
-   | INL w => (do precompile_call_success Sha256; return (Value w) od)
+   | INL w => (do precompile_call_success Sha256 [v]; return (Value w) od)
        (ee with gas_obs := tail)) =
-  (INL (Value r),(ee with outcomes := SOME rest) with gas_obs := tail)
+  (INL (Value r),(SND (take_call_outcome NONE 2w (precompile_input Sha256 [v]) NONE ee)) with gas_obs := tail)
 Proof
   strip_tac >>
   `ee.outcomes = SOME s.vs_outcomes` by
@@ -40,12 +40,12 @@ Theorem hash_sha256_source_failure:
   builtin_result cx ee.accounts ann Sha256 tys [v] = INL r /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
   ?ef. ef = (case s.vs_outcomes of [] => ee
-                        | outcome::rest => ee with outcomes := SOME rest) /\
+                        | outcome::rest => SND (take_call_outcome NONE 2w (precompile_input Sha256 [v]) NONE ee)) /\
     ef.gas_obs = [] /\
     !tail.
     (case builtin_result cx (ee with gas_obs := tail).accounts ann Sha256 tys [v] of
        INR exc => (INR exc,ee with gas_obs := tail)
-     | INL w => (do precompile_call_success Sha256; return (Value w) od)
+     | INL w => (do precompile_call_success Sha256 [v]; return (Value w) od)
          (ee with gas_obs := tail)) =
     (INR (Error (RuntimeError "precompile failed")),ef with gas_obs := tail)
 Proof
@@ -56,7 +56,7 @@ Proof
   >- (qexists_tac `ee` >>
       simp[ignore_bind_def, bind_def, sha256_source_outcome_step]) >>
   rename1 `s.vs_outcomes = outcome::rest` >>
-  qexists_tac `ee with outcomes := SOME rest` >>
+  qexists_tac `SND (take_call_outcome NONE 2w (precompile_input Sha256 [v]) NONE ee)` >>
   gvs[ignore_bind_def, bind_def, sha256_source_outcome_step, return_def]
 QED
 
@@ -70,7 +70,7 @@ Theorem hash_sha256_abort_summary:
   gas_summary_ptr_at D (ctx,fn) PG cx st0 [F]
     (\es'. case builtin_result cx es'.accounts ann Sha256 tys [v] of
        INR exc => (INR exc,es')
-     | INL w => (do precompile_call_success Sha256; return (Value w) od) es')
+     | INL w => (do precompile_call_success Sha256 [v]; return (Value w) od) es')
     (ee,s,G,tn) Q (\H res ef gt rr. expr_exit res rr)
 Proof
   strip_tac >> drule_all hash_sha256_source_failure >> strip_tac >>

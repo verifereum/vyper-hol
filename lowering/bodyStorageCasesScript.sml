@@ -735,9 +735,9 @@ Proof
   >- (rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
       Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
       gvs[return_def, raise_def] >>
-      Cases_on `precompile_call_success bt args_st` >>
+      Cases_on `precompile_call_success bt vs args_st` >>
       imp_res_tac precompile_call_success_state >> gvs[] >>
-      rename1 `precompile_call_success bt args_st = (pres,_)` >>
+      rename1 `precompile_call_success bt vs args_st = (pres,_)` >>
       Cases_on `pres` >> gvs[return_def, raise_def] >> rpt strip_tac >>
       gvs[] >> irule contract_storage_well_formed_storage_frame >>
       qexists_tac `args_st` >> simp[] >>

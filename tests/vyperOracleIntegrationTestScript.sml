@@ -299,15 +299,13 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* A computed precompile (here SHA-256 at Address2) takes its success bit
-   from the head outcome and records no request.  A delegate raw_call to the
-   same address is no computed precompile: it records its request and takes
-   the head outcome as is. *)
+(* Both calls record their request. The static SHA-256 call uses the oracle
+   head for its success bit. The delegate call takes the head outcome as is. *)
 Theorem RawCall_precompile_takes_outcome:
   integration_raw_call_observe F F 0 2w (SOME [send_outcome F [] 0])
-    (INL (Value (BoolV F))) (SOME 0) send_initial_requests /\
+    (INL (Value (BoolV F))) (SOME 0) (integration_raw_call_requests 2w) /\
   integration_raw_call_observe F F 0 2w (SOME [send_outcome T [] 0])
-    (INL (Value (BoolV T))) (SOME 0) send_initial_requests /\
+    (INL (Value (BoolV T))) (SOME 0) (integration_raw_call_requests 2w) /\
   integration_raw_call_observe T F 0 2w (SOME [send_outcome T [] 0])
     (INL (Value (BoolV T))) (SOME 0) (send_requests 2w 0)
 Proof
@@ -334,6 +332,28 @@ Theorem Sha256_builtin_takes_outcome:
     (INR (Error (RuntimeError "precompile failed")), SOME 0) /\
   SND (integration_sha256_observe (SOME [])) =
     (INR (Error (RuntimeError "precompile failed")), SOME 0)
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* The sha256 builtin records a static value-zero request to address 2
+   carrying its input bytes, kept when the outcome reports failure; with no
+   outcome left it records none. *)
+Definition integration_sha256_requests_observe_def:
+  integration_sha256_requests_observe os =
+    send_request_fields (SND (cpscv_run
+      (Builtin (BaseT (BytesT (Fixed 32))) Sha256
+        [Literal (BaseT (BytesT (Dynamic 3))) (BytesL [1w; 2w; 3w])])
+      (send_state with outcomes := os)))
+End
+val () = cv_auto_trans integration_sha256_requests_observe_def;
+
+Theorem Sha256_builtin_records_request:
+  integration_sha256_requests_observe (SOME [send_outcome T [] 0]) =
+    send_initial_requests ++ [(2w,0,[1w; 2w; 3w],T,3,2w,4w)] /\
+  integration_sha256_requests_observe (SOME [send_outcome F [] 0]) =
+    send_initial_requests ++ [(2w,0,[1w; 2w; 3w],T,3,2w,4w)] /\
+  integration_sha256_requests_observe (SOME []) = send_initial_requests
 Proof
   CONV_TAC cv_eval
 QED

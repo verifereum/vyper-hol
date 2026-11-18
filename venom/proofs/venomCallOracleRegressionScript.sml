@@ -183,7 +183,7 @@ QED
 (* The precompile contracts are already kernel-proved in extCallOracle.
  * These probes check the actual Venom completion, using arbitrary nonempty
  * oracle/trace payloads: computed calls consume one outcome for their
- * success bit and record no request.
+ * success bit and record the request.
  *)
 Theorem consume_computed_ecrecover:
   let s = call_probe_state with <| vs_outcomes := [call_probe_outcome];
@@ -191,7 +191,7 @@ Theorem consume_computed_ecrecover:
       rq = venom_call_request s 1w 0w 0w 0w F;
       (word, t) = consume_call_outcome rq 1 3 s
   in word = 1w /\ t.vs_outcomes = [] /\
-     t.vs_requests = s.vs_requests /\ t.vs_returndata = [] /\
+     t.vs_requests = s.vs_requests ++ [rq] /\ t.vs_returndata = [] /\
      t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
      t.vs_transient = s.vs_transient /\ t.vs_logs = s.vs_logs
 Proof
@@ -211,7 +211,7 @@ Theorem consume_computed_sha256:
       rq = venom_call_request s 2w 0w 0w 0w F;
       (word, t) = consume_call_outcome rq 1 0 s
   in word = 1w /\ t.vs_outcomes = [] /\
-     t.vs_requests = s.vs_requests /\ LENGTH t.vs_returndata = 32 /\
+     t.vs_requests = s.vs_requests ++ [rq] /\ LENGTH t.vs_returndata = 32 /\
      t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
      t.vs_transient = s.vs_transient /\ t.vs_logs = s.vs_logs
 Proof
@@ -231,11 +231,13 @@ Theorem consume_computed_empty_ec:
   consume_call_outcome
     (venom_call_request ^empty_ec_state 6w 0w 0w 0w F with cr_gas := SOME 7)
     1 0 ^empty_ec_state =
-      (1w, ^empty_ec_state with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := []|>) /\
+      (1w, ^empty_ec_state with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := [];
+        vs_requests := [call_probe_request; (venom_call_request ^empty_ec_state 6w 0w 0w 0w F with cr_gas := SOME 7)]|>) /\
   consume_call_outcome
     (venom_call_request ^empty_ec_state 7w 0w 0w 0w F with cr_gas := SOME 7)
     1 0 ^empty_ec_state =
-      (1w, ^empty_ec_state with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := []|>)
+      (1w, ^empty_ec_state with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := [];
+        vs_requests := [call_probe_request; (venom_call_request ^empty_ec_state 7w 0w 0w 0w F with cr_gas := SOME 7)]|>)
 Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
@@ -255,11 +257,13 @@ Theorem consume_computed_invalid_ec:
   consume_call_outcome
     (venom_call_request ^invalid_ec_state 6w 0w 0w 64w F with cr_gas := SOME 7)
     1 3 ^invalid_ec_state =
-      (0w, ^invalid_ec_state with <|vs_returndata := []; vs_outcomes := []|>) /\
+      (0w, ^invalid_ec_state with <|vs_returndata := []; vs_outcomes := [];
+        vs_requests := [call_probe_request; (venom_call_request ^invalid_ec_state 6w 0w 0w 64w F with cr_gas := SOME 7)]|>) /\
   consume_call_outcome
     (venom_call_request ^invalid_ec_state 7w 0w 0w 64w F with cr_gas := SOME 7)
     1 3 ^invalid_ec_state =
-      (0w, ^invalid_ec_state with <|vs_returndata := []; vs_outcomes := []|>)
+      (0w, ^invalid_ec_state with <|vs_returndata := []; vs_outcomes := [];
+        vs_requests := [call_probe_request; (venom_call_request ^invalid_ec_state 7w 0w 0w 64w F with cr_gas := SOME 7)]|>)
 Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
@@ -280,7 +284,7 @@ Theorem consume_computed_starved_sha256:
       rq = venom_call_request s 2w 0w 0w 0w F;
       (word, t) = consume_call_outcome rq 1 0 s
   in word = 0w /\ t.vs_outcomes = [] /\
-     t.vs_requests = s.vs_requests /\ t.vs_returndata = [] /\
+     t.vs_requests = s.vs_requests ++ [rq] /\ t.vs_returndata = [] /\
      t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts
 Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,

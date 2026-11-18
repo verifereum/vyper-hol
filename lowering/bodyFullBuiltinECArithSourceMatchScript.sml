@@ -1,6 +1,6 @@
 Theory bodyFullBuiltinECArithSourceMatch
 Ancestors
-  exprSimECArith bodyPtrPrecompileBuiltinsArithmeticValue
+  exprSimECArith vyperInterpreter
   valueEncodingProofs venomCallOracleDefs
 
 Theorem ec_arith_staged_source_match:
@@ -25,6 +25,7 @@ Theorem ec_arith_staged_source_match:
       (case r of NONE => INR (RuntimeError
          (if bt = ECAdd then "ECAdd invalid point" else "ECMul invalid point"))
        | SOME xy => INL (mk_ec_result xy)) /\
+    precompile_input bt [v1;v2] = read_memory (w2n wi) (w2n an) u /\
     precompile_result (venom_call_request u addr 0w wi an T).cr_target
       (venom_call_request u addr 0w wi an T).cr_data =
       SOME (OPTION_MAP (\(rx,ry).
@@ -36,12 +37,18 @@ Proof
   strip_tac >>
   Cases_on `bt = ECAdd` >> gvs[]
   >- (qpat_assum `value_has_type _ v1`
-        (mp_then Any mp_tac bodyPtrPrecompileBuiltinsArithmeticSourceTheory.ecadd_memory_semantics) >>
-      disch_then (qspec_then `v2` mp_tac) >>
-      disch_then (qspecl_then [`t`,`y`,`x`,`cx`] mp_tac) >>
+        (mp_then Any mp_tac (cj 2 ec_memory_semantics)) >>
+      disch_then (qspecl_then [`v2`,`cx`,`x`,`y`,`t`] mp_tac) >>
       simp[] >> strip_tac >> gvs[] >>
       qmatch_asmsub_abbrev_tac `option_CASE r` >>
       qexists `r` >> simp[] >>
+      conj_tac
+      >- (simp[venomStateTheory.read_memory_def,
+             GSYM valueEncodingDefsTheory.mem_bytes_at_def, wordsTheory.dimword_def] >>
+          rewrite_tac[SRULE [] (Q.SPECL [`w2n wi`,`64`,`64`] mem_bytes_at_split_padded),
+            SRULE [] (Q.SPECL [`w2n wi`,`32`,`32`] mem_bytes_at_split_padded),
+            SRULE [] (Q.SPECL [`w2n wi+64`,`32`,`32`] mem_bytes_at_split_padded)] >>
+          simp[mem_bytes_at_word, arithmeticTheory.ADD_ASSOC]) >>
       reverse conj_tac
       >- (rpt strip_tac >> irule ec_source_tail_gas_obs >> simp[]) >>
       simp[venom_call_request_def, venomStateTheory.read_memory_def,
@@ -62,12 +69,17 @@ Proof
          simp[]) >>
       simp[exprSimPrecompilesTheory.padded_num_to_be_bytes_word32]) >>
   qpat_assum `value_has_type _ v1`
-    (mp_then Any mp_tac bodyPtrPrecompileBuiltinsArithmeticSourceTheory.ecmul_memory_semantics) >>
-  disch_then (qspec_then `v2` mp_tac) >>
-  disch_then (qspecl_then [`t`,`y`,`x`,`cx`] mp_tac) >>
+    (mp_then Any mp_tac (cj 1 ec_memory_semantics)) >>
+  disch_then (qspecl_then [`v2`,`cx`,`x`,`y`,`t`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
   qmatch_asmsub_abbrev_tac `option_CASE r` >>
   qexists `r` >> simp[] >>
+  conj_tac
+  >- (simp[venomStateTheory.read_memory_def,
+         GSYM valueEncodingDefsTheory.mem_bytes_at_def, wordsTheory.dimword_def] >>
+      rewrite_tac[SRULE [] (Q.SPECL [`w2n wi`,`64`,`32`] mem_bytes_at_split_padded),
+        SRULE [] (Q.SPECL [`w2n wi`,`32`,`32`] mem_bytes_at_split_padded)] >>
+      simp[mem_bytes_at_word, arithmeticTheory.ADD_ASSOC]) >>
   reverse conj_tac
   >- (rpt strip_tac >> irule ec_source_tail_gas_obs >> simp[]) >>
   simp[venom_call_request_def, venomStateTheory.read_memory_def,
