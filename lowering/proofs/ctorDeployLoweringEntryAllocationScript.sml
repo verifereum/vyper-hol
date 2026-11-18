@@ -2,7 +2,7 @@
 Theory ctorDeployLoweringEntryAllocation
 Ancestors
   loweringStateRelDefs
-  ctorDeployLoweringEntryRegistration ctorDeployMemoryFrontier
+  ctorDeployLoweringEntryRegistration ctorDeployMemoryFrontier allocaFrontierRoom
   actualAllocCredit actualAllocExec allocaBudgetProps allocaFrontierBound
   ctorAbiActualAlloc ctorAbiActualFrame ctorAbiActualMemory
   abiEncoderRegisteredEffect abiEncoderPrimitiveEffect compileEnv

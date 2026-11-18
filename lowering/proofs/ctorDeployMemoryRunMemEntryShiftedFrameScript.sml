@@ -1,7 +1,7 @@
 (* Allocation-map frames and address bounds for reserved constructor memory. *)
 Theory ctorDeployMemoryRunMemEntryShiftedFrame
 Ancestors
-  ctorDeployMemoryRunMemEntryShiftedFrontier ctorDeployMemoryFrontier
+  ctorDeployMemoryRunMemEntryShiftedFrontier ctorDeployMemoryFrontier allocaFrontierRoom
   allocaBudgetProps venomState arithmetic words
 
 Theorem alloca_frontier_inv_from_frame:
