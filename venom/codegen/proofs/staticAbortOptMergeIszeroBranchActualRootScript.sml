@@ -4,9 +4,9 @@ Ancestors
   finite_map pred_set arithmetic pair
 
 Theorem merge_iszero_branch_actual_root:
-  let b = LENGTH pre; c = ss.sym_base.as_pc in
-  let B = \w:bytes32. (b2w (w=0w):bytes32) in
-  let Shape = \p cc req pc height need tag boolean (i:num#num) (s:asm_state).
+  !b. b = LENGTH pre ==>
+  !c. c = ss.sym_base.as_pc ==>
+  !Shape. Shape = (\p cc req pc height need tag boolean (i:num#num) (s:asm_state).
     s.as_pc = pc i /\ LENGTH s.as_stack = height i /\
     s.as_call_ctx = cc /\ s.as_requests = req /\
     (need i ==> s.as_call_ctx.cc_static) /\
@@ -18,13 +18,13 @@ Theorem merge_iszero_branch_actual_root:
          off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k s.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w)) in
-  let Just = \ss tag boolean (e:num#num).
+       (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w))) ==>
+  !Just. Just = (\ss tag boolean (e:num#num).
     (!k l origin. tag e k=SOME(l,origin) ==>
        k<LENGTH ss.sym_stack /\ EL k ss.sym_stack=Lab l 0) /\
     (!k. boolean e k ==>
-       k<LENGTH ss.sym_stack /\ (EL k ss.sym_stack=Val 0w \/ EL k ss.sym_stack=Val 1w)) in
-  let Slots = \p cc V height need tag boolean.
+       k<LENGTH ss.sym_stack /\ (EL k ss.sym_stack=Val 0w \/ EL k ss.sym_stack=Val 1w))) ==>
+  !Slots. Slots = (\p cc V height need tag boolean.
     !x:num#num. x IN V ==>
       (need x ==> cc.cc_static) /\
       (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
@@ -32,21 +32,19 @@ Theorem merge_iszero_branch_actual_root:
          k < height x /\ origin < LENGTH p /\
          (EL origin p = AsmPushLabel l \/ EL origin p = AsmPushOfst l 0) /\
          ?off dest. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-           off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest) in
-  let keep = \i. i<b \/ b+2<=i;
-      f = \i. if i<b then i else i-2;
-      fresh = (c=b+3) in
-  let M = OPTION_MAP (\(nm,org). (nm,f org)) in
-  let Vq = {x | x IN V /\ keep (pc x)} UNION (if fresh then {v} else {});
-      root = if fresh then v else next e;
-      pcq = \x. if x=v then b else f (pc x);
-      hq = \x. if x=v then height e-1 else height x;
-      nq = \x. x<>v /\ need x;
-      tq = \x k. if x=v then (if k=0 then NONE else M (tag e (k+1)))
+           off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest)) ==>
+  !keep. keep = (\i. i<b \/ b+2<=i) ==>
+  !f. f = (\i. if i<b then i else i-2) ==>
+  !fresh. fresh = (c=b+3) ==>
+  !M. M = OPTION_MAP (\(nm,org). (nm,f org)) ==>
+  !root. root = (if fresh then v else next e) ==>
+  !hq. hq = (\x. if x=v then height e-1 else height x) ==>
+  !nq. nq = (\x. x<>v /\ need x) ==>
+  !tq. tq = (\x k. if x=v then (if k=0 then NONE else M (tag e (k+1)))
         else if (pc x=b+2 /\ k=0) \/ (pc x=b+3 /\ k=1) then NONE
-        else if pc x=b+3 /\ k=0 then SOME(l,b) else M (tag x k);
-      Bq = \x k. if x=v then 0<k /\ boolean e (k+1)
-        else ~((pc x=b+2 /\ k=0) \/ (pc x=b+3 /\ k<=1)) /\ boolean x k in
+        else if pc x=b+3 /\ k=0 then SOME(l,b) else M (tag x k)) ==>
+  !Bq. Bq = (\x k. if x=v then 0<k /\ boolean e (k+1)
+        else ~((pc x=b+2 /\ k=0) \/ (pc x=b+3 /\ k<=1)) /\ boolean x k) ==>
   asm_sym_rel p (asm_data_env p (assemble p ++ data)) a ss /\
   asm_sym_rel q (asm_data_env q (assemble q ++ data)) t u /\
   e IN V /\ Shape p a.as_call_ctx a.as_requests pc height need tag boolean e a /\
@@ -54,21 +52,22 @@ Theorem merge_iszero_branch_actual_root:
   (if b < c /\ c < b+4 then u.sym_base.as_pc=b /\ ?w stk.
      u.sym_stack=Val w::stk /\
      ss.sym_stack=(if c-b=3 then [Lab l 0] else []) ++
-        (Val (FUNPOW B (MIN (c-b) 2) w)::stk)
+        (Val (FUNPOW (\w:bytes32. (b2w (w=0w):bytes32)) (MIN (c-b) 2) w)::stk)
    else u=sym_with_pc (splice_pc b 4 2 c) ss) /\
   (!x. x IN V ==> next x IN V /\ keep (pc (next x)) /\ height (next x)=height x /\
      (if keep (pc x) then next x=x else pc (next x)=b+2 /\ rank (next x)<(rank:num#num->num) x) /\
      (!k nm org. 0<k /\ tag (next x) k=SOME(nm,org) ==> tag x k=SOME(nm,org)) /\
      (!k. 0<k /\ boolean (next x) k ==> boolean x k)) /\
-  v NOTIN V /\ Slots q t.as_call_ctx Vq hq nq tq Bq ==>
-  Shape q t.as_call_ctx t.as_requests pcq hq nq tq Bq root t /\ Just u tq Bq root
+  v NOTIN V /\ Slots q t.as_call_ctx
+    ({x | x IN V /\ keep (pc x)} UNION (if fresh then {v} else {})) hq nq tq Bq ==>
+  Shape q t.as_call_ctx t.as_requests (\x. if x=v then b else f (pc x))
+    hq nq tq Bq root t /\ Just u tq Bq root
 Proof
-  map_every (fn name =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
-    qx_gen_tac name >> disch_tac)
-    [`b`,`c`,`B`,`Shape`,`Just`,`Slots`,`keep`,`f`,`fresh`,`M`,`Vq`,`root`,
-     `pcq`,`hq`,`nq`,`tq`,`Bq`] >>
+  map_every (fn name => qx_gen_tac name >>
+    disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]))
+    [`b`,`c`,`Shape`,`Just`,`Slots`,`keep`,`f`,`fresh`,`M`,`root`,`hq`,`nq`,`tq`,`Bq`] >>
+  qabbrev_tac `Vq = {x | x IN V /\ keep (pc x)} UNION (if fresh then {v} else {})` >>
+  qabbrev_tac `pcq = \x. if x=v then b else f (pc x)` >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `pc e=c /\ height e=LENGTH ss.sym_stack` by
     (qpat_assum `asm_sym_rel p _ a ss` (mp_tac o MATCH_MP asm_sym_rel_pc) >>

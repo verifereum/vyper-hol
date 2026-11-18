@@ -9,14 +9,12 @@ Theorem open_fragment_compose:
  (OK:(num#num)->'a->bool) (Good:(num#num)->bool)
  (R:(num#num)->(num#num)->bool) link
  (local_rank:(num#num)->num) (order:num->num) (B:num) req.
-let A = V DIFF X in
-let dest = \z. if z IN X then link z else z in
-let E = \x y. x IN A /\ ?z. R x z /\ y = dest z in
-let reachable = \x.
+!A. A = V DIFF X ==>
+!E. E = (\x y. x IN A /\ ?z. R x z /\ y = (if z IN X then link z else z)) ==>
+!W. W = {x | x IN A /\
   ?n (path:num->num#num). path 0 = e /\ path n = x /\
-    (!k. k < n ==> E (path k) (path(SUC k))) in
-let W = {x | x IN A /\ reachable x} in
-let rank = \x. order (FST x) * (B+1) + local_rank x in
+    (!k. k < n ==> E (path k) (path(SUC k)))} ==>
+!rank. rank = (\x. order (FST x) * (B+1) + local_rank x) ==>
 FINITE V /\ X SUBSET V /\ e IN A /\
 (!x. x IN V ==> local_rank x <= B /\ ?t. S x t) /\
 (!x. x IN A ==> Good x) /\
@@ -53,15 +51,21 @@ FINITE W /\ e IN W /\
      asm_steps (SND(compute_label_offsets p))
        (build_offset_to_pc p) p 1 t = AsmOK u /\ S y u))
 Proof
-  rpt gen_tac >> simp_tac pure_ss [LET_THM] >>
-  qabbrev_tac `A = V DIFF X` >>
+  ntac 14 gen_tac >>
+  qx_gen_tac `A` >> disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
   qabbrev_tac `dest = \z. if z IN X then link z else z` >>
-  qabbrev_tac `E = \x y. x IN A /\ ?z. R x z /\ y = dest z` >>
+  qx_gen_tac `E` >>
+  disch_then (fn eq => qpat_assum `Abbrev (dest = _)`
+    (fn d => assume_tac (eq |> REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] d)]
+      |> CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))) >>
   qabbrev_tac `reach = \x. ?n (path:num->num#num).
     path 0 = e /\ path n = x /\
     !k. k < n ==> E (path k) (path(SUC k))` >>
-  qabbrev_tac `nodes = {x | x IN A /\ reach x}` >>
-  qabbrev_tac `rank = \x. order (FST x) * (B+1) + local_rank x` >>
+  qx_gen_tac `nodes` >> disch_tac >>
+  `Abbrev (nodes = {x | x IN A /\ reach x})` by
+    simp[markerTheory.Abbrev_def, Abbr `reach`] >>
+  qpat_x_assum `nodes = _` kall_tac >>
+  qx_gen_tac `rank` >> disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
   strip_tac >>
   `!z. z IN V ==> dest z IN A /\ I' (dest z) = I' z /\
       (!t. S' (dest z) t <=> S' z t)` by

@@ -1560,9 +1560,9 @@ Resume prune_jump_cut_rows[package]:
         REWR_CONV ratTheory.RAT_OF_NUM_LES, HO_REWR_CONV check_case_presentation])
    in
      rule_assum_tac (CONV_RULE normalize) >> CONV_TAC normalize >>
-     mp_tac (CONV_RULE normalize
+     mp_tac (CONV_RULE normalize (prune_specialize
        (Q.SPECL [`q`,`v`,`t`,`A`,`z`,`\u. rat$rat_of_num (rank u)`,
-                  `pcQ`,`height`,`need`,`tagQ`,`boolean`,`E`] pending_rows_rooted_package))
+                  `pcQ`,`height`,`need`,`tagQ`,`boolean`,`E`] pending_rows_rooted_package)))
    end) >>
   (impl_tac >- (
     ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
