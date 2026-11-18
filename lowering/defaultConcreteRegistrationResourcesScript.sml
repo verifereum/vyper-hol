@@ -37,7 +37,8 @@ Theorem default_registration_resources_transport:
       inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit w] /\ n = w2n w) /\
   alloca_inv t /\ alloca_frontier_inv_from k ctx fn site t /\
   alloca_history fn t /\ allocas_from 0 t /\
-  ~ctx_has_dalloca ctx /\ lookup_function fn.fn_name ctx.ctx_functions = SOME fn /\
+  (ctx_has_dalloca ctx ==> fmp_room ctx fn t) /\
+  lookup_function fn.fn_name ctx.ctx_functions = SOME fn /\
   u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
   u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
   ~t.vs_halted /\ t.vs_current_bb = st1.cs_current_bb /\
@@ -58,7 +59,8 @@ Proof
   `alloca_room ctx fn t` by
     (irule deploy_ctor_frontier_alloca_room >> qexistsl [`k`,`site`] >> simp[]) >>
   `fmp_room ctx fn t` by
-    (drule venomInstTheory.lookup_function_MEM >>
+    (Cases_on `ctx_has_dalloca ctx` >- fs[] >>
+     drule venomInstTheory.lookup_function_MEM >>
      gvs[ptrDisciplineTheory.ctx_has_dalloca_def, fmp_room_def, EXISTS_MEM] >>
      metis_tac[]) >>
   simp[] >> conj_tac >- (rpt strip_tac >> first_x_assum drule >>

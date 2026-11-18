@@ -171,14 +171,12 @@ Proof
  rpt gen_tac >> strip_tac >>
  drule_all ctor_task_aligned_inputs >> strip_tac >>
  `tx.function_name = "__init__"` by gvs[deploy_state_rel_def] >>
+ qpat_assum `deploy_ctor_start _ _ _ _`
+   (strip_assume_tac o REWRITE_RULE [ctorDeployLoweringDefsTheory.deploy_ctor_start_def]) >>
  `vyperInterpreter$lookup_function NONE tx.function_name Deploy tops =
    SOME (mut,F,fargs,[],NoneT,stmts)` by
-   (`module_consts_env tops [] = []` by
-      metis_tac[deploy_source_ok_def, supportedProgramTheory.supported_program_def,
-        supportedDeclsTheory.supported_declaration_headers_def,
-        supportedDeclsTheory.supported_headers_module_consts_env] >>
-    qspecl_then [`tops`, `NONE`, `fname`] mp_tac classify_functions_ctor_lookup >>
-    simp[] >> strip_tac >> gvs[constSubstTheory.subst_consts_fn_empty]) >>
+   (qspecl_then [`tops`, `NONE`, `fname`] mp_tac classify_functions_ctor_lookup >>
+    simp[] >> strip_tac >> gvs[constSubstTheory.subst_consts_fn_def]) >>
  gvs[] >> metis_tac[deploy_ctor_source_start_fields]
 QED
 

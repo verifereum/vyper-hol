@@ -149,6 +149,8 @@ Proof
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
     (drule lower_vyper_runtime_unit_global_reserved >>
      simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[entryStateRelTheory.source_typing_ok_vtype_keys_distinct] >>
   drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
   drule_all o1_pipeline_label_flow_preserved >> strip_tac >>
   drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>
@@ -367,6 +369,8 @@ Proof
   `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
   `assemble prog' <> []` by
     (irule codegen_assembly_finalizer_nonempty >> metis_tac[]) >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[deploy_typing_ok_vtype_keys_distinct] >>
   drule_all lower_vyper_deploy_unit_sym_src_ok >> strip_tac >>
   drule_all o1_pipeline_label_flow_preserved >> strip_tac >>
   drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>

@@ -2,7 +2,7 @@
 Theory calldataNoneMetadata
 Ancestors
   registrationRejectMetadata entryExternalParameterAdmissibility
-  checkedSelectorTableProps loweringShapeProps entryDispatchProps
+  checkedSelectorTableProps loweringShapeProps entryDispatchProps dispatchedValueSelection
   supportedProgram supportedDecls e2eDefs vyperTypeContract
   vyperTypeContractContext vyperTypeSystem publicGetterProps constSubst
   compileVyper vyperABIEntries vyperMisc vyperTypeArgFits list sorting
@@ -35,8 +35,8 @@ Resume none_signature_evaluates[signature]:
   simp[external_has_defaults_def, NULL_EQ] >> strip_tac >> gvs[] >>
   gvs[abi_function_signatures_no_defaults] >>
   rename1 `MEM (mut,nr,rr,name,args,[],ret,fbody) _` >>
-  `lookup_function NONE name External tops =
-     SOME (mut,nr,args,[],ret,fbody)` by suspend "lookup" >>
+  `?rawbody. lookup_function NONE name External tops =
+     SOME (mut,nr,args,[],ret,rawbody)` by suspend "lookup" >>
   `supported_declaration_headers tops` by fs[supported_program_def] >>
   drule_all source_typing_ok_external_params_ok >> strip_tac >>
   `?tvs. LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv)
@@ -51,20 +51,11 @@ Resume none_signature_evaluates[signature]:
   first_x_assum (drule_then assume_tac) >> gvs[]
 QED
 Resume none_signature_evaluates[lookup]:
-  `module_consts_env tops [] = []` by
-    metis_tac[supported_headers_module_consts_env,
-      supported_program_def, supported_declaration_headers_def] >>
   `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
     (fs[source_typing_ok_def] >>
      drule check_contract_external_names_distinct >> simp[contract_keys_def]) >>
-  drule classify_functions_external_source >> strip_tac >>
-  gvs[subst_consts_fn_empty]
-  >- (irule lookup_function_external_unique_decl >> simp[] >>
-      qexists_tac `FunctionDecl External mut nr rr name args [] ret fbody` >>
-      simp[vyperInterpreterTheory.lookup_function_def,
-           external_name_keys_toplevel_def]) >>
-  drule public_getter_lookup_singleton >> strip_tac >>
-  metis_tac[lookup_function_external_unique_decl]
+  drule_all classified_external_source_lookup >> strip_tac >>
+  Cases_on `rawdefaults` >> gvs[subst_consts_expr_def] >> metis_tac[]
 QED
 Finalise none_signature_evaluates
 
@@ -73,7 +64,6 @@ Theorem none_selected_package_metadata:
   lower_vyper_runtime_unit tops policy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
   MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
-  lookup_function NONE name External tops = SOME (mut,nr,args,[],ret,fbody) /\
   OPT_MMAP (evaluate_type (type_env tops)) (MAP SND args) = SOME tvs /\
   set_external_package_target policy.rpol_target
     (package_external_fn tops ut nk (mut,nr,rr,name,args,[],ret,fbody)) =

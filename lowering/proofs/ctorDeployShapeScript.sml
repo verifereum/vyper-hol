@@ -43,12 +43,13 @@ Theorem package_constructor_shape_ok:
 Proof
   rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
   drule classify_functions_ctor_mem >> strip_tac >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def,
-              supportedDeclsTheory.supported_headers_module_consts_env] >>
-  gvs[constSubstTheory.subst_consts_fn_empty] >>
+  gvs[constSubstTheory.subst_consts_fn_def] >>
   drule_all supported_program_deploy_function >> strip_tac >>
-  drule supported_function_body_shape >> strip_tac >>
+  `~supported_stmts_expr_exists expr_shape_root
+      (subst_consts_stmts (module_consts_env tops []) raw_body)` by
+    (irule (cj 2 subst_consts_stmt_shape) >> conj_tac
+     >- metis_tac[supported_program_const_replacement_shape] >>
+     metis_tac[supported_function_body_shape]) >>
   gvs[package_constructor_def, set_constructor_package_target_def,
       update_cenv_nonreentrant_def, build_compile_env_non_internal_no_return_pc] >>
   simp[cenv_static_ok_def] >>
@@ -66,15 +67,9 @@ Theorem package_internal_fn_ctor_shape_ok:
          (package_internal_fn tops use_trans nkey_map T imm src))
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
-  drule (iffLR MEM_classify_internal) >> strip_tac >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supported_program_def,
-      supportedDeclsTheory.supported_declaration_headers_def,
-      supportedDeclsTheory.supported_headers_module_consts_env] >>
-  gvs[constSubstTheory.subst_consts_fn_empty] >>
-  `Internal <> Deploy` by simp[] >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> strip_tac >>
+  `~supported_stmts_expr_exists expr_shape_root src7` by
+    (drule supported_program_runtime_bodies_shape_ok >>
+     simp[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
        cenv_static_ok_def] >>

@@ -44,7 +44,6 @@ QED
 Theorem lower_vyper_runtime_unit_exit_mem_safe_blocks:
   !tops rpolicy unit func s n r.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    ~ctx_has_dalloca unit.cu_context /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
     s.vs_inst_idx = 0 /\
     gas_path_mem unit.cu_context func s n r /\ exit_result r ==>
@@ -68,7 +67,6 @@ Theorem source_unit_exit_safe_runs:
   !marks tops ret am tx unit vs rpolicy.
     source_unit_execution_correct_at marks tops ret am tx unit vs /\
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    ~ctx_has_dalloca unit.cu_context /\
     call_storage_ok am tx vs.vs_outcomes
       (gas_explicit marks vs.vs_gas_readings) /\
     ~source_exempt tops

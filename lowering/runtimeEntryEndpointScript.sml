@@ -1,7 +1,7 @@
 (*
  * The state where the runtime entry hands over to an external body, on
  * finite horizons: the conclusion of externalEntryJoint's
- * external_entry_joint, with the body placed either among the selected
+ * external_entry_subst_consts_joint, with the body placed either among the selected
  * external packages or at the __default__ fallback.  The body's joint
  * proof (loweringRuntimeCorrect's runtime_body_joint_from_start) starts
  * from it, so every entry that reaches it (canonical, any dispatched
@@ -13,7 +13,7 @@
  *)
 Theory runtimeEntryEndpoint
 Ancestors
-  externalEntryJoint runtimeBodyStartDefs
+  externalEntryJoint runtimeBodyStartDefs entryDispatchProps constSubst
 
 Definition runtime_entry_endpoint_def:
   runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret fbody <=>
@@ -103,15 +103,18 @@ Theorem external_entry_joint_endpoint:
       (initial_state am [env] with
          <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
       (INL (), es0) ==>
-    runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret fbody
+    runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret
+      (subst_consts_stmts (module_consts_env tops []) fbody)
 Proof
   rpt strip_tac >>
-  drule_all (INST_TYPE [alpha |-> ``:expr``] external_entry_joint) >>
-  strip_tac >> pure_rewrite_tac[runtime_entry_endpoint_def] >>
+  drule_all (INST_TYPE [alpha |-> ``:expr``] external_entry_subst_consts_joint) >>
+  strip_tac >> gvs[] >> pure_rewrite_tac[runtime_entry_endpoint_def] >>
   qexistsl_tac [`lbl`, `cenv0`, `cenv0`, `pos_args`, `min_cds`, `is_payable`, `nkey`,
                 `ut'`, `iv`, `rt`, `st`, `cenv`, `sa`, `st'`, `func`, `s0`,
                 `G0`, `tn0`] >>
-  fs[] >> first_assum ACCEPT_TAC
+  simp[] >> conj_tac
+  >- fs[subst_consts_fn_def, subst_consts_expr_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem runtime_entry_endpoint_body_projection:
