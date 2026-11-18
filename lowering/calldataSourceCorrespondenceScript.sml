@@ -54,3 +54,26 @@ Proof
   Cases_on `h` >> simp[tv_abi_dynamic_def, vyper_to_abi_type_def] >>
   metis_tac[]
 QED
+
+Theorem member_source_decode:
+  abi_decoder_coherent ce env sf ty tv ==>
+  cd_decode F s.vs_call_ctx.cc_calldata tv
+    (w2n (if dec_info_needs_offset (type_to_abi_dec_info sf ce ty)
+          then p + abi_decode_load CALLDATALOAD (p + n2w ao) s
+          else p + n2w ao)) =
+  cd_decode F s.vs_call_ctx.cc_calldata tv
+    (cd_member_ptr F s.vs_call_ctx.cc_calldata tv (w2n p) ao)
+Proof
+  strip_tac >>
+  Cases_on `type_to_abi_dec_info sf ce ty = DecComplex T []`
+  >- gvs[abiDecoderOffsetTheory.abi_decoder_empty_dynamic_translation,
+         abi_decoder_coherent_array_iff, cd_decode_def] >>
+  `dec_info_needs_offset (type_to_abi_dec_info sf ce ty) = tv_abi_dynamic tv` by
+    (drule abiDecoderDynamicTheory.abi_decoder_coherent_dynamic >>
+     drule abi_decoder_coherent_header >>
+     simp[abi_decoder_header_def] >>
+     metis_tac[abiDecoderOffsetTheory.abi_decoder_nonempty_offset, calldata_coherent_dynamic]) >>
+  Cases_on `tv_abi_dynamic tv` >>
+  simp[cd_member_ptr_def, cd_at_def, calldata_decode_load_word, word_add_def,
+       w2n_n2w, MOD_PLUS]
+QED

@@ -993,43 +993,6 @@ Definition cx_ru_fn2_def:
        instruction 1 STOP [] []]]
 End
 
-(* Both functions satisfy wf_ssa (vacuously: no variable uses) *)
-Theorem cx_ru_fn1_wf_ssa[local]:
-  wf_ssa cx_ru_fn1
-Proof
-  simp[venomWfTheory.wf_ssa_def, cx_ru_fn1_def,
-       venomWfTheory.ssa_form_def,
-       venomWfTheory.def_dominates_uses_def] >>
-  EVAL_TAC >> simp[] >> rpt strip_tac >> gvs[]
-QED
-
-(* pass_correct {} is FALSE between fn1 and fn2.
-   Original halts with vs_vars("v1") = 42w.
-   Transformed halts with vs_vars("v1") unchanged.
-   execution_equiv {} requires all vars equal => fails on "v1". *)
-(* pass_correct {} is FALSE: original halts with v1=42w,
-   transformed halts with v1 unchanged => execution_equiv {} fails on "v1" *)
-Theorem pass_correct_empty_false_for_nop[local]:
-  ~pass_correct (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-    (\fuel. run_blocks fuel ARB cx_ru_fn1
-       ((init_venom_state "entry") with <|vs_vars := FEMPTY;
-                   vs_current_bb := "entry"; vs_inst_idx := 0; vs_halted := F|>))
-    (\fuel. run_blocks fuel ARB cx_ru_fn2
-       ((init_venom_state "entry") with <|vs_vars := FEMPTY;
-                   vs_current_bb := "entry"; vs_inst_idx := 0; vs_halted := F|>))
-Proof
-  simp[passSimulationDefsTheory.pass_correct_def,
-       cx_ru_fn1_def, cx_ru_fn2_def] >>
-  CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  simp[passSimulationDefsTheory.terminates_def] >>
-  strip_tac >>
-  qexistsl_tac [`SUC 0`, `SUC 0`] >>
-  EVAL_TAC >>
-  simp[stateEquivTheory.lift_result_def,
-       stateEquivTheory.execution_equiv_def]
-QED
-
-
 (* fn_cfg_edge implies cfg_succs_of membership under wf_function *)
 Theorem fn_cfg_edge_cfg_succs:
   !fn a b.

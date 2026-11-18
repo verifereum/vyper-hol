@@ -222,27 +222,33 @@ Definition delegate_designation_state_def:
 End
 val () = cv_auto_trans delegate_designation_state_def;
 
+val designation_result = ``
+  if FST (mode : bool # bool) then vyperSmallStep$fromtvk (vyperSmallStep$cont
+    (vyperSmallStep$eval_expr_cps delegate_context
+      (delegate_expression (SND mode) (delegate_flags 128 T) 0)
+      delegate_designation_state vyperSmallStep$DoneK))
+  else eval_raw_call delegate_context (delegate_flags 128 T) 42w
+    delegate_context.txn.calldata 0 NONE delegate_designation_state``;
+val designation_final = ``SND ^designation_result``;
+val designation_account = ``lookup_account a (^designation_final).accounts``;
+
 Theorem delegate_designation_executes_implementation_in_proxy_context:
   EVERY (\mode.
-    let r = if FST mode then vyperSmallStep$fromtvk (vyperSmallStep$cont
-        (vyperSmallStep$eval_expr_cps delegate_context
-          (delegate_expression (SND mode) (delegate_flags 128 T) 0)
-          delegate_designation_state vyperSmallStep$DoneK))
-      else eval_raw_call delegate_context (delegate_flags 128 T) 42w
-        delegate_context.txn.calldata 0 NONE
-        delegate_designation_state in
-    FST r = INL (Value (BytesV delegate_words)) /\
-    let final = SND r in
-    MAP (\slot. lookup_storage slot (lookup_account 41w final.accounts).storage)
+    FST ^designation_result = INL (Value (BytesV delegate_words)) /\
+    MAP (\slot. lookup_storage slot
+      (lookup_account 41w (^designation_final).accounts).storage)
       [0w;1w;2w;3w;4w] = [42w;43w;19w;41w;4w] /\
-    MAP (\a. let acc = lookup_account a final.accounts in
-      (acc.balance,acc.nonce,acc.code,lookup_storage 0w acc.storage)) [42w;43w;44w] =
+    MAP (\a. ((^designation_account).balance, (^designation_account).nonce,
+      (^designation_account).code, lookup_storage 0w (^designation_account).storage))
+      [42w;43w;44w] =
       [(5,4,vfmContext$make_delegation 44w,99w);
        (7,6,[],0w);(11,8,delegate_success_code,66w)] /\
-    (lookup_account 41w final.accounts).balance = 3 /\
-    lookup_storage 0w (vfmExecution$lookup_transient_storage 41w final.tStorage) = 8w /\
-    lookup_storage 0w (vfmExecution$lookup_transient_storage 42w final.tStorage) = 9w /\
-    final.logs = delegate_logs)
+    (lookup_account 41w (^designation_final).accounts).balance = 3 /\
+    lookup_storage 0w
+      (vfmExecution$lookup_transient_storage 41w (^designation_final).tStorage) = 8w /\
+    lookup_storage 0w
+      (vfmExecution$lookup_transient_storage 42w (^designation_final).tStorage) = 9w /\
+    (^designation_final).logs = delegate_logs)
     [(F,F);(T,F);(T,T)]
 Proof
   simp[EVERY_DEF] >> CONV_TAC cv_eval

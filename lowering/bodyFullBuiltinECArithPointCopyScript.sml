@@ -49,7 +49,8 @@ Proof
     dst <- emit_op ADD [Var bp; Lit (n2w (pd+32))]; emit_void MSTORE [dst;value] od)` >>
   `comp_ignore_bind first second sa = ((),sb)` by
     fs[Abbr `first`, Abbr `second`, comp_ignore_bind_def, comp_bind_assoc] >>
-  Cases_on `first sa` >> Cases_on `q` >> rename1 `first sa = ((),sm)` >>
+  Cases_on `first sa` >> rename1 `first sa = (result,sm)` >>
+  Cases_on `result` >>
   `second sm = ((),sb)` by fs[comp_ignore_bind_def, comp_bind_def] >>
   qunabbrev_tac `first` >> qunabbrev_tac `second` >>
   drule ec_point_word_transfer_shape >> strip_tac >>
