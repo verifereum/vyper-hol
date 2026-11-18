@@ -202,7 +202,9 @@ Theorem not_starved_on_success:
 Proof
   simp[frame_resource_starved_def, frame_outcome_def] >>
   rpt gen_tac >> disj2_tac >> disj1_tac >> rpt strip_tac >>
-  Cases_on `rest` >> TRY (PairCases_on `h`) >> gvs[]
+  (namedCases_on `rest` ["", "parent_frame outer_frames"]
+   >- gvs[] >>
+   PairCases_on `parent_frame` >> gvs[])
 QED
 
 Theorem p23_call_storage_ok:
@@ -228,7 +230,8 @@ Proof
           pred_setTheory.SUM_IMAGE_ZERO] >>
      simp[p23_es_dep_post_def, vfmExecutionTheory.process_deletions_def,
           vfmStateTheory.lookup_account_def] >>
-     gen_tac >> EVAL_TAC >> Cases_on `2w = x` >> simp[] >> EVAL_TAC) >>
+     qx_gen_tac `address` >> EVAL_TAC >>
+     Cases_on `2w = address` >> simp[] >> EVAL_TAC) >>
   rewrite_tac[p23_es_call_from_post] >>
   simp[p23_es_call_of_def, LET_THM, vfmTotalBalanceTheory.balance_bounded_def,
        vfmReturndataBoundTheory.returndata_bounded_def,
@@ -268,7 +271,8 @@ Proof
            p23_es_dep_post_def, vfmExecutionTheory.process_deletions_def,
            vfmStateTheory.lookup_account_def,
            vfmExecutionPropTheory.wf_account_state_def] >>
-      gen_tac >> EVAL_TAC >> Cases_on `2w = x` >> simp[] >> EVAL_TAC) >>
+      qx_gen_tac `address` >> EVAL_TAC >>
+      Cases_on `2w = address` >> simp[] >> EVAL_TAC) >>
   rewrite_tac[immutableSectionRelTheory.installed_code_rel_def] >>
   conj_tac
   >- (simp[vfmStateTheory.account_empty_def, EQT_ELIM p23_committed_code_eval] >>
