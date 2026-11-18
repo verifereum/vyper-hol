@@ -60,22 +60,6 @@ Proof
   CASE_TAC >> simp[]
 QED
 
-(* From t, one step of either program leaves the window or ends the same
-   way. *)
-Theorem window_bounded_plain1[local]:
-  sym_steps p env 1 ss = SymOK b ∧
-  sym_steps_ok (λi stk. asm_plain_inst i) (λi. F) p env 1 ss ∧
-  sym_steps_ok (λi stk. asm_plain_inst i) (λi. F) p' env j' ss ∧
-  sym_within_ok P Q ∧ sym_run_within P Q p env k ss ⇒
-  sym_run_within P Q p' env (2 * k) ss ∨
-  ∃a. sym_steps p env 1 ss = SymOK a ∧
-      sym_run_within P Q p env (k - 1) a ∧
-      sym_steps_ok P Q p' env j' ss
-Proof
-  strip_tac >> disj2_tac >> qexists_tac `b` >> simp[] >>
-  drule_all window_within_plain >> simp[]
-QED
-
 Theorem terminal_window_refines_within[local]:
   asm_terminal_op t ∧ ¬asm_reachable_marker x ⇒
   asm_window_refines_within pfx [t; x] [t] rest
@@ -98,9 +82,14 @@ Proof
       Cases_on `name = "JUMP"`
       >- (gvs[] >>
           Cases_on `∃a. sym_step p env (AsmOp "JUMP") ss = SymOK a`
-          >- (gvs[] >> irule window_bounded_plain1 >>
-              simp[sym_steps_one, sym_steps_ok_one, asm_plain_inst_def,
-                   is_data_inst_def]) >>
+          >- (gvs[] >>
+              `sym_steps p env 1 ss = SymOK a ∧
+               sym_steps_ok (λi stk. asm_plain_inst i) (λi. F) p env 1 ss ∧
+               sym_steps_ok (λi stk. asm_plain_inst i) (λi. F) q env 1 ss`
+                by simp[sym_steps_one, sym_steps_ok_one, asm_plain_inst_def,
+                        is_data_inst_def] >>
+              drule_all (Q.INST [`p'` |-> `q`, `j'` |-> `1`] window_bounded_plain) >>
+              simp[]) >>
           `asm_plain_inst (AsmOp "JUMP")` by simp[asm_plain_inst_def, is_data_inst_def] >>
           `¬Q (AsmOp "JUMP")` by gvs[sym_within_ok_def] >>
           Cases_on `k` >> gvs[sym_run_within_def] >>

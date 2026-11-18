@@ -417,51 +417,17 @@ Proof
   `asm_plain_inst (AsmOp name) ∧ asm_plain_inst (AsmOp "SWAP1")`
     by (conj_tac >- (irule commutative_plain >> simp[]) >>
         simp[asm_plain_inst_def, is_data_inst_def]) >>
-  `(∃e. sym_swap 1 ss = SymError e) ∨ ∃a b stk. ss.sym_stack = a :: b :: stk`
-    by (Cases_on `ss.sym_stack` >> simp[sym_swap_def] >>
-        rename1 `_ = _ :: t` >> Cases_on `t` >> simp[]) >>
   qexistsl_tac [`2`, `1`] >>
   (conj_tac >- simp[]) >> (conj_tac >- simp[]) >>
-  CONV_TAC (REWR_CONV CONJ_ASSOC) >> (reverse conj_tac
-  >- (rpt strip_tac >> irule window_bounded_cases >>
-      gvs[sym_steps_pos, sym_terminal_def, sym_steps_ok_pos] >>
-      qabbrev_tac `s1 = ss with <| sym_base := asm_next ss.sym_base;
-                                   sym_stack := b :: a :: stk |>` >>
-      `sym_swap 1 ss = SymOK s1`
-        by simp[Abbr `s1`, sym_swap_def, sym_set_stack_def, LUPDATE_compute] >>
-      `s1.sym_base.as_pc = LENGTH pfx + 1`
-        by simp[Abbr `s1`, asm_next_def] >>
-      (reverse (Cases_on `MEM name ["ADD"; "MUL"; "EQ"; "AND"; "OR"; "XOR"]`)
-       >- (drule_all commutative_unknown >> strip_tac >>
-           drule_all sym_step_unknown_op >>
-           disch_then (qspecl_then [`s1`, `p`, `env`] strip_assume_tac) >>
-           simp[sym_steps_pos, sym_terminal_def, sym_steps_ok_pos,
-                sym_steps_ok_one])) >>
-      `s1 = sym_with_pc (ss.sym_base.as_pc + 1)
-              (ss with sym_stack := b :: a :: stk)`
-        by simp[Abbr `s1`, sym_with_pc_def, asm_next_def] >>
-      `AsmOp name ≠ AsmOp "JUMP" ∧ AsmOp name ≠ AsmOp "JUMPI"` by gvs[] >>
-      `sym_step p env (AsmOp name) s1 =
-       sym_result_pc_add 1 (sym_step q env (AsmOp name) ss)`
-        by (qpat_x_assum `s1 = _` SUBST1_TAC >>
-            mp_tac (Q.INST [`inst` |-> `AsmOp name`, `n` |-> `1`,
-                            `ss` |-> `ss with sym_stack := b :: a :: stk`]
-                      sym_step_pc_add) >>
-            impl_tac >- simp[] >>
-            disch_then (SUBST1_TAC o SIMP_RULE (srw_ss()) []) >>
-            mp_tac sym_step_commutative_swap >>
-            impl_tac >- simp[] >>
-            disch_then SUBST1_TAC >>
-            `(ss with sym_stack := a :: b :: stk) = ss`
-              by simp[sym_state_component_equality] >>
-            pop_assum SUBST1_TAC >> AP_TERM_TAC >>
-            irule sym_step_prog_cong >> simp[Abbr `p`, Abbr `q`]) >>
-      qpat_x_assum `s1 = sym_with_pc _ _` kall_tac >>
-      Cases_on `sym_step q env (AsmOp name) ss` >>
-      simp[sym_steps_pos, sym_steps_def, sym_result_pc_add_def,
-           sym_terminal_def, sym_steps_ok_pos, sym_steps_ok_one,
-           sym_steps_ok_def, sym_with_pc_def])) >>
-  gvs[sym_steps_pos, sym_terminal_def] >>
+  CONV_TAC (REWR_CONV CONJ_ASSOC) >>
+  Cases_on `∃e. sym_swap 1 ss = SymError e`
+  >- (gvs[] >> conj_tac
+      >- gvs[sym_steps_pos, sym_terminal_def] >>
+      rpt strip_tac >> irule window_bounded_cases >>
+      gvs[sym_steps_pos, sym_terminal_def, sym_steps_ok_pos]) >>
+  `∃a b stk. ss.sym_stack = a :: b :: stk`
+    by (Cases_on `ss.sym_stack` >> gvs[sym_swap_def] >>
+        rename1 `_ = _ :: t` >> Cases_on `t` >> gvs[sym_swap_def]) >>
   qabbrev_tac `s1 = ss with <| sym_base := asm_next ss.sym_base;
                                sym_stack := b :: a :: stk |>` >>
   `sym_swap 1 ss = SymOK s1`
@@ -472,7 +438,11 @@ Proof
   >- (drule_all commutative_unknown >> strip_tac >>
       drule_all sym_step_unknown_op >>
       disch_then (qspecl_then [`s1`, `p`, `env`] strip_assume_tac) >>
-      simp[sym_steps_pos, sym_terminal_def]) >>
+      conj_tac
+      >- simp[sym_steps_pos, sym_terminal_def] >>
+      rpt strip_tac >> irule window_bounded_cases >>
+      simp[sym_steps_pos, sym_terminal_def, sym_steps_ok_pos,
+           sym_steps_ok_one]) >>
   `s1 = sym_with_pc (ss.sym_base.as_pc + 1)
           (ss with sym_stack := b :: a :: stk)`
     by simp[Abbr `s1`, sym_with_pc_def, asm_next_def] >>
@@ -493,6 +463,12 @@ Proof
         pop_assum SUBST1_TAC >> AP_TERM_TAC >>
         irule sym_step_prog_cong >> simp[Abbr `p`, Abbr `q`]) >>
   qpat_x_assum `s1 = sym_with_pc _ _` kall_tac >>
+  reverse conj_tac
+  >- (rpt strip_tac >> irule window_bounded_cases >>
+      Cases_on `sym_step q env (AsmOp name) ss` >>
+      simp[sym_steps_pos, sym_steps_def, sym_result_pc_add_def,
+           sym_terminal_def, sym_steps_ok_pos, sym_steps_ok_one,
+           sym_steps_ok_def, sym_with_pc_def]) >>
   Cases_on `sym_step q env (AsmOp name) ss` >>
   simp[sym_steps_pos, sym_steps_def, sym_result_pc_add_def, sym_terminal_def,
        sym_result_rel_def, sym_obs_def, sym_with_pc_def] >>

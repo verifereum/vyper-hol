@@ -6,7 +6,7 @@
  *)
 Theory asmOptNoRdc
 Ancestors
-  asmOptMergeJumpdests asmOptPeephole
+  asmOptMergeJumpdests asmOptNonemptyWitness
   asmOptNonemptyCompose
   asmOptimizer list
 
@@ -64,61 +64,17 @@ Proof
   rw[optimize_inefficient_jumps_def] >> rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem peep_swap_pair_mem[local]:
-  peep_swap_pair a b c rest = (l1, ch) /\ MEM x l1 ==> MEM x (a::b::c::rest)
-Proof
-  rw[peep_swap_pair_def] >> gvs[] >> metis_tac[]
-QED
-
-Theorem peep_swap_comm_mem[local]:
-  peep_swap_comm l = SOME (l', ch) /\ MEM x l' ==> MEM x l
-Proof
-  rw[peep_swap_comm_def, AllCaseEqs()] >> gvs[] >> metis_tac[]
-QED
-
-Theorem peep_dup_swap_mem[local]:
-  peep_dup_swap l = SOME (l', ch) /\ MEM x l' ==> MEM x l
-Proof
-  rw[peep_dup_swap_def, AllCaseEqs()] >> gvs[] >> metis_tac[]
-QED
-
-Theorem peep_chain_no_rdc[local]:
-  peep_swap_pair a b c rest = (l1, ch1) ==>
-  peep_swap_comm l1 = SOME (l2, ch2) ==>
-  peep_dup_swap l2 = SOME (l3, ch3) ==>
-  LENGTH (TL l3) <= LENGTH rest + 2 /\
-  (no_rdc (a::b::c::rest) ==>
-   HD l3 <> AsmOp "RETURNDATACOPY" /\ no_rdc (TL l3))
-Proof
-  rpt disch_tac >>
-  imp_res_tac peep_swap_pair_length >> imp_res_tac peep_swap_comm_length >>
-  imp_res_tac peep_dup_swap_length >>
-  `!x. MEM x l3 ==> MEM x (a::b::c::rest)` by
-    metis_tac[peep_swap_pair_mem, peep_swap_comm_mem, peep_dup_swap_mem] >>
-  Cases_on `l3` >> fs[] >>
-  `LENGTH t <= LENGTH rest + 2` by decide_tac >> simp[] >>
-  rpt strip_tac >> metis_tac[MEM]
-QED
-
 Theorem stack_peephole_opts_no_rdc[local]:
   !l out c. stack_peephole_opts l = SOME (out, c) /\ no_rdc l ==> no_rdc out
 Proof
-  measureInduct_on `LENGTH l` >> rpt gen_tac >> strip_tac >>
-  Cases_on `?a b c rest. l = a::b::c::rest`
-  >- (gvs[] >>
-      `!y out' c'. stack_peephole_opts y = SOME (out', c') ==>
-                   LENGTH y <= LENGTH rest + 2 ==> no_rdc y ==> no_rdc out'` by
-        (rpt strip_tac >> first_x_assum (qspec_then `y` mp_tac) >>
-         impl_tac >- simp[] >> disch_then drule_all >> simp[]) >>
-      qpat_x_assum `!y. LENGTH y < _ ==> _` kall_tac >>
-      drule stack_peephole_opts_cons3 >> strip_tac >> gvs[] >>
-      imp_res_tac peep_chain_no_rdc >> gvs[] >>
-      first_x_assum (drule_then mp_tac) >> simp[]) >>
-  qpat_x_assum `!y. LENGTH y < _ ==> _` kall_tac >>
-  Cases_on `l` >- gvs[Once stack_peephole_opts_def] >>
-  Cases_on `t` >- gvs[Once stack_peephole_opts_def] >>
-  Cases_on `t'` >- gvs[Once stack_peephole_opts_def] >>
-  gvs[]
+  rpt strip_tac >>
+  qabbrev_tac `is_rdc = \i. i = AsmOp "RETURNDATACOPY"` >>
+  `FILTER is_rdc out = FILTER is_rdc l` by
+    (irule stack_peephole_opts_filter >>
+     simp[Abbr `is_rdc`, asm_swap_op_def] >>
+     first_assum (irule_at Any) >> simp[]) >>
+  pop_assum (mp_tac o AP_TERM ``MEM (AsmOp "RETURNDATACOPY")``) >>
+  simp[MEM_FILTER, Abbr `is_rdc`]
 QED
 
 Theorem optimize_round_no_rdc[local]:
