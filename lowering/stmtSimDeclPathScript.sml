@@ -34,9 +34,9 @@ Proof
   rpt strip_tac >> gvs[update_var_def, AllCaseEqs()]
 QED
 
-(* The loop variable's ALLOCA, run from a related state: it hands the pointer
-   p a fresh region of sz bytes and keeps the state related and every other
-   variable and allocation. *)
+(* The loop variable's ALLOCA puts the base of its sz-byte allocation in p.
+   It can reuse the existing allocation for this instruction ID. The step
+   preserves the state relation, all other variables, and existing allocations. *)
 Theorem for_alloca_state:
   !(H :(bool # 'a word # type_value) list # num list) ctx func cenv cx es s
    A p sz.
