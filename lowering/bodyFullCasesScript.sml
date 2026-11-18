@@ -15,6 +15,7 @@ Ancestors
   bodyFullStructLit bodyFullPop
   bodyFullRawCallCalldata
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
+  bodyFullMakeArray
   bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps exprSimAggregateLayout loweringPosts bodyExprPreFacts supportedStmts
@@ -331,14 +332,18 @@ Proof
   metis_tac[eval_expr_builtin_value]
 QED
 
-(* Admitted: the joint twin of bodyPtrMakeArray's make_array_expr_ptr_ok. *)
+(* Joint MakeArray execution and result ownership. *)
 Theorem make_array_expr_full_ok:
   !cx ty bt es.
     (?t n. bt = MakeArray t n) /\
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule make_array_builtin_sim_full >>
+      metis_tac[]) >>
+  simp[]
 QED
 
 (* Admitted: the joint twin of bodyPtrWordBuiltins's word_builtin_expr_ptr_ok. *)
