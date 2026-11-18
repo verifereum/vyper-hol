@@ -1,7 +1,7 @@
-(* Named source dispatch.  Opcode semantics and the shared source kernels
-   remain with their existing owners; this is only the finite family join. *)
+(* Mode-dependent emitters for the shared named-source dispatch. *)
 Theory symEmitNamedOwn
-Ancestors symEmitSim symEmitCodecopyOwn symEmitCodeEndOwn list
+Ancestors symEmitSim symEmitCodecopyOwn symEmitCodeEndOwn
+  symEmitNamedDispatch symEmitCodesizeOwn list
 
 Theorem sym_codesize_source_emit_mode_conditional:
   allow_own /\
@@ -23,7 +23,7 @@ Theorem sym_codesize_source_emit_mode_conditional:
     ss'.sym_mem_labels = ss.sym_mem_labels /\
     sym_kinds_ok cplan fn ret srest qs ss'
 Proof
-  MATCH_ACCEPT_TAC symEmitSimTheory.sym_codesize_source_emit_core
+  MATCH_ACCEPT_TAC symEmitCodesizeOwnTheory.sym_codesize_source_emit_kernel
 QED
 
 Theorem sym_named_source_emit_mode_conditional:
@@ -99,58 +99,23 @@ Theorem sym_named_source_emit_mode_conditional:
     sym_kinds_ok cplan fn ret srest qs ss'
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `inst.inst_opcode = CODECOPY`
-  >- suspend "codecopy" >>
-  Cases_on `?op. inst.inst_opcode = ADD /\
-    inst.inst_operands = [op; Label "code_end"]`
-  >- suspend "code_end_add" >>
-  Cases_on `inst.inst_opcode = CODESIZE`
-  >- suspend "codesize" >>
-  drule_all symEmitSimTheory.sym_named_numeric_source_emit_core >> simp[]
-QED
-
-Resume sym_named_source_emit_mode_conditional[codecopy]:
-  drule_all named_codecopy_selection_shape >> strip_tac >>
-  gvs[asmIRTheory.venom_to_evm_name_def,
-    stackPlanGenTheory.compute_operands_def, venomInstTheory.python_stack_operands_def,
-    venomInstTheory.ir_specific_operand_order_def] >>
-  `!cs ss. R cs ss ==>
-    LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack` by
-    metis_tac[] >>
-  irule (SRULE [EVERY_MEM, MEM]
-    symEmitCodecopyOwnTheory.sym_codecopy_source_emit_mode_conditional) >>
-  simp[] >> conj_tac >- metis_tac[] >>
-  goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `_.inst_operands = _`)) >>
-  simp[MEM] >> qexists `slo` >> simp[] >> rpt conj_tac >> rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-
-Resume sym_named_source_emit_mode_conditional[code_end_add]:
-  pop_assum strip_assume_tac >>
-  drule_all named_code_end_add_selection_shape >> strip_tac >>
   `ss.sym_base.as_pc = cs.as_pc` by metis_tac[] >>
-  `name = "ADD"` by gvs[asmIRTheory.venom_to_evm_name_def] >>
-  `asm_block_at p ss.sym_base.as_pc [AsmOp "ADD"]` by metis_tac[] >>
-  drule_at (Pat `asm_steps _ _ _ _ _ = _`)
-    symEmitCodeEndOwnTheory.sym_code_end_add_source_emit_mode_conditional >>
-  disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
-  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `_.inst_opcode = ADD`)) >>
-  disch_then (drule_at (Pat `_.ps_stack = _`)) >>
-  simp[] >> disch_then (qspecl_then [`own`, `env`, `ctx`, `allow_own`, `R`] mp_tac) >>
-  simp[] >> metis_tac[]
+  drule_at (Pat `asm_step _ _ (AsmOp _) _ = _`) sym_named_source_emit_dispatch >>
+  disch_then (drule_at (Pat `!op. MEM op selected ==> eval_operand op st = operand_val st vlo op`)) >>
+  disch_then (drule_at (Pat `qs = ps with ps_stack := FOLDL _ _ _`)) >>
+  disch_then (drule_at (Pat `ps.ps_stack = residual ++ selected`)) >>
+  disch_then irule >> rpt conj_tac >> IF (first_assum ACCEPT_TAC) all_tac all_tac
+  >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      `!cs ss. R cs ss ==> ss.sym_base.as_pc = cs.as_pc` by metis_tac[] >>
+      qpat_assum `inst.inst_opcode = CODESIZE ==> _` (drule_then strip_assume_tac) >>
+      drule_all sym_codesize_source_emit_kernel >> simp[])
+  >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      drule_all symEmitCodeEndOwnTheory.sym_code_end_add_source_emit_mode_conditional >> simp[])
+  >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      `!cs ss. R cs ss ==>
+        LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack` by
+        metis_tac[] >>
+      drule_all symEmitCodecopyOwnTheory.sym_codecopy_source_emit_mode_conditional >> simp[]) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all sym_named_numeric_source_emit_core >> simp[]
 QED
-
-Resume sym_named_source_emit_mode_conditional[codesize]:
-  gvs[asmIRTheory.venom_to_evm_name_def, venomWfTheory.inst_wf_def,
-    stackPlanGenTheory.compute_operands_def, venomInstTheory.python_stack_operands_def,
-    venomInstTheory.ir_specific_operand_order_def, LENGTH_EQ_NUM_compute,
-    stackModelTheory.stack_pop_def, stackModelTheory.stack_push_def,
-    opcodeClassTheory.ef_read0_def] >>
-  irule sym_codesize_source_emit_mode_conditional >>
-  simp[stackModelTheory.stack_push_def] >>
-  conj_tac >- (qexistsl [`cs`, `slo`] >> simp[] >> metis_tac[]) >>
-  qexistsl [`inst`, `ps`, `h`] >> simp[]
-QED
-
-Finalise sym_named_source_emit_mode_conditional

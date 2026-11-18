@@ -4,6 +4,7 @@ Ancestors asmSymOwnCode[qualified,ignore_grammar]
   symInstKinds symPostfixSim codegenSymRel asmSymSem asmSem
   strongPrefixSim asmSplice contextCodegenRel codegenRel finite_map list
   fnBlockBodyHelpers asmSymOwnCode asmSpliceOwn
+  symEmitNamedDispatch symEmitCodesizeOwn
 
 (* Reuse the bridge's closed structural relation as syntax, not a new definition. *)
 val emit_bridge_core_tm = let
@@ -3189,8 +3190,7 @@ Proof
   simp[] >> metis_tac[sym_emit_run_endpoint]
 QED
 
-(* Consume the own CODESIZE opcode equation and correspondence at the source
-   boundary; the opcode simulation itself is supplied by asmSymOwnStep. *)
+(* Compatibility export for the CODESIZE source boundary. *)
 Theorem sym_codesize_source_emit_core:
   allow_own /\
   (!cs ss. R cs ss ==> ss.sym_base.as_pc = cs.as_pc) /\
@@ -3211,19 +3211,7 @@ Theorem sym_codesize_source_emit_core:
     ss'.sym_mem_labels = ss.sym_mem_labels /\
     sym_kinds_ok cplan fn ret srest qs ss'
 Proof
-  strip_tac >>
-  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[] >>
-  qmatch_asmsub_abbrev_tac `sym_step_op_own p env own "CODESIZE" ss = SymOK final` >>
-  qexists `final` >> rpt conj_tac
-  >- (mp_tac (Q.INST [`inst` |-> `AsmOp "CODESIZE"`] sym_steps_mode_single) >>
-      simp[asmSymOwnCodeTheory.sym_step_own_def])
-  >- metis_tac[]
-  >- simp[Abbr `final`] >>
-  simp[Abbr `final`] >>
-  `op_kind_ok fn ret (Var x) (Val (n2w (LENGTH own)))` by
-    (irule ordinary_output_kind >> simp[] >> qexists `inst` >> simp[]) >>
-  fs[sym_kinds_ok_def, stackModelTheory.stack_push_def, SNOC_APPEND,
-     REVERSE_APPEND] >> metis_tac[]
+  MATCH_ACCEPT_TAC symEmitCodesizeOwnTheory.sym_codesize_source_emit_kernel
 QED
 
 (* Exhaustive source split for ordinary prepared emission. *)
@@ -3272,10 +3260,7 @@ Theorem named_codecopy_selection_shape:
   ?dst src sz. inst.inst_operands = [dst;src;sz] /\
     inst.inst_outputs = [] /\ selected = [sz;src;dst]
 Proof
-  strip_tac >>
-  gvs[venomWfTheory.inst_wf_def, stackPlanGenTheory.compute_operands_def,
-    venomEffectsTheory.is_commutative_def, venomInstTheory.python_stack_operands_def,
-    venomInstTheory.ir_specific_operand_order_def, LENGTH_EQ_NUM_compute]
+  MATCH_ACCEPT_TAC symEmitNamedDispatchTheory.named_codecopy_selection_shape_core
 QED
 
 Theorem named_code_end_add_selection_shape:
@@ -3289,10 +3274,7 @@ Theorem named_code_end_add_selection_shape:
   (?x. inst.inst_outputs = [x]) /\
   (selected = [op;Label "code_end"] \/ selected = [Label "code_end";op])
 Proof
-  strip_tac >>
-  gvs[venomWfTheory.inst_wf_def, stackPlanGenTheory.compute_operands_def,
-    venomInstTheory.python_stack_operands_def,
-    venomInstTheory.ir_specific_operand_order_def, LENGTH_EQ_NUM_compute]
+  MATCH_ACCEPT_TAC symEmitNamedDispatchTheory.named_code_end_add_selection_shape_core
 QED
 
 Theorem sym_named_source_emit:
@@ -3338,45 +3320,24 @@ Theorem sym_named_source_emit:
     sym_kinds_ok cplan fn ret srest qs ss'
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `inst.inst_opcode = CODECOPY`
-  >- suspend "codecopy" >>
-  Cases_on `?op. inst.inst_opcode = ADD /\
-    inst.inst_operands = [op; Label "code_end"]`
-  >- suspend "code_end_add" >>
-  irule sym_named_numeric_source_emit >> metis_tac[]
+  `ss.sym_base.as_pc = cs.as_pc` by fs[asmSymBridgeTheory.asm_sym_rel_def] >>
+  `inst.inst_opcode <> CODESIZE` by metis_tac[label_flow_inst_not_codesize] >>
+  drule_at (Pat `asm_step _ _ (AsmOp _) _ = _`)
+    (Q.INST [`allow_own` |-> `F`, `own` |-> `[]`, `R` |-> `asm_sym_rel p env`]
+      sym_named_source_emit_dispatch |>
+      PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  disch_then (drule_at (Pat `!op. MEM op selected ==> eval_operand op st = operand_val st vlo op`)) >>
+  disch_then (drule_at (Pat `qs = ps with ps_stack := FOLDL _ _ _`)) >>
+  disch_then (drule_at (Pat `ps.ps_stack = residual ++ selected`)) >>
+  disch_then irule >> rpt conj_tac >> IF (first_assum ACCEPT_TAC) all_tac all_tac
+  >- simp[]
+  >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      drule_all sym_code_end_add_source_emit >> simp[])
+  >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      drule_all sym_codecopy_source_emit >> simp[]) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all sym_named_numeric_source_emit >> simp[]
 QED
-
-Resume sym_named_source_emit[codecopy]:
-  drule_all named_codecopy_selection_shape >> strip_tac >>
-  gvs[asmIRTheory.venom_to_evm_name_def,
-    stackPlanGenTheory.compute_operands_def, venomInstTheory.python_stack_operands_def,
-    venomInstTheory.ir_specific_operand_order_def] >>
-  drule_at (Pat `asm_step _ _ _ _ = _`) sym_codecopy_source_emit >>
-  disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
-  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `_.inst_opcode = CODECOPY`)) >>
-  simp[EVERY_MEM, MEM] >>
-  disch_then (qspecl_then [`env`, `ctx`] mp_tac) >>
-  impl_tac >- (simp[] >> metis_tac[]) >> simp[]
-QED
-
-Resume sym_named_source_emit[code_end_add]:
-  pop_assum strip_assume_tac >>
-  drule_all named_code_end_add_selection_shape >> strip_tac >>
-  `ss.sym_base.as_pc = cs.as_pc` by
-    gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
-  gvs[asmIRTheory.venom_to_evm_name_def,
-    stackPlanGenTheory.compute_operands_def, venomInstTheory.python_stack_operands_def,
-    venomInstTheory.ir_specific_operand_order_def] >>
-  drule_at (Pat `asm_steps _ _ _ _ _ = _`) sym_code_end_add_source_emit >>
-  disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
-  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `_.inst_opcode = ADD`)) >>
-  disch_then (drule_at (Pat `_.ps_stack = _`)) >>
-  simp[] >> metis_tac[]
-QED
-
-Finalise sym_named_source_emit
 
 Theorem asm_sym_rel_localize_stack_core:
   bridge_core lo code_ok cs ss /\ ss.sym_stack = top ++ stail /\
