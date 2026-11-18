@@ -419,13 +419,12 @@ Proof
 QED
 
 Theorem aug_place_precompile_storage:
-  precompile_call_success bt s = (r,s') ==>
+  precompile_call_success bt vs s = (r,s') ==>
   get_storage cx s' tr = get_storage cx s tr
 Proof
-  simp[precompile_call_success_def] >>
-  Cases_on `precompile_builtin bt` >>
-  gvs[return_def, check_def, assert_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> Cases_on `tr` >> gvs[vyperStorageBackendTheory.get_storage_def]
+  strip_tac >> drule vyperStatePreservationTheory.precompile_call_success_state >>
+  strip_tac >> gvs[] >> Cases_on `tr` >>
+  simp[vyperStorageBackendTheory.get_storage_def]
 QED
 
 Theorem aug_place_singleton_storage:
