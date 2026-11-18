@@ -2963,21 +2963,6 @@ Proof
   irule_at Any frag_observer_cut_instruction >> simp[frag_observer_cut_lookup]
 QED
 
-Theorem abi_dyn_region_end[local]:
-  !sa sb s. cs_extends sa sb /\
-    (!bb. MEM bb (emitted_blocks sa sb) ==> bb.bb_label <> sb.cs_current_bb) /\
-    at_point sb s ==> (^dyn_R) sa sb s
-Proof
-  rpt gen_tac >> strip_tac >> simp_tac std_ss [] >>
-  reverse conj_tac >- gvs[at_point_def] >>
-  strip_tac >> drule frag_extends_emitted_shape >>
-  Cases_on `emitted_blocks sa sb = []`
-  >- (simp[] >> strip_tac >> gvs[at_point_def, rich_listTheory.IS_PREFIX_APPEND]) >>
-  simp[] >> strip_tac >>
-  `MEM (LAST (emitted_blocks sa sb)) (emitted_blocks sa sb)`
-    by simp[rich_listTheory.MEM_LAST_NOT_NIL] >> gvs[at_point_def] >> metis_tac[]
-QED
-
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
 
