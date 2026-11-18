@@ -6,6 +6,7 @@ Ancestors
   ptrDiscipline venomState venomExecSemantics venomInst codegenRel
   contextCodegenRel memSafeRun finite_map pred_set list words arithmetic
   context stmtLowering fragGasCopyLoop stmtSimStoreCopy fragGasOriginPtr exprSimCopy
+  bodyFullStoreSlotsFrame
 
 (* Expanded lower-rank hypothesis; no new logical predicate. *)
 val members_child = ``
@@ -32,7 +33,7 @@ val members_child = ``
   (type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
   encode_value tv v = SOME writes /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -107,7 +108,7 @@ val members_case = ``
   (type_memory_size_list tvs = 0 \/
     w2n sw+mo+type_memory_size_list tvs <= s.vs_alloca_next) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -299,7 +300,7 @@ Theorem members_tail_run[local]:
  so+(type_slot_size_list (tv::tvs)+w2n dw) <= dimword(:256) /\
  (type_memory_size_list (tv::tvs) = 0 \/
    32*so+(type_memory_size_list (tv::tvs)+w2n sw) <= s.vs_alloca_next) /\
- fn_has_code sc sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+ fn_has_code sc sb func /\ fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~s.vs_call_ctx.cc_static /\
  sa.cs_next_var <= sc.cs_next_var /\
  (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
@@ -392,7 +393,7 @@ Theorem members_head_run[local]:
  w2n (dw+n2w so)+type_slot_size tv <= dimword(:256) /\
  (type_memory_size_list (tv::tvs) = 0 \/
   32*so+(type_memory_size_list (tv::tvs)+w2n sw) <= u.vs_alloca_next) /\
- fn_has_code b sc func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+ fn_has_code b sc func /\ fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
  allocas_from lo u /\ lo <= u.vs_alloca_next /\ ~u.vs_call_ctx.cc_static /\ ~u.vs_halted /\
  u.vs_current_bb = b.cs_current_bb /\ u.vs_inst_idx = LENGTH b.cs_current_insts ==>
  ?t ks Gf tf writes. ^members_head_post
@@ -426,7 +427,7 @@ Theorem members_offsets_run[local]:
  (type_memory_size_list (tv::tvs) <> 0 ==> ?x. src = Var x /\
    ptr_covers G tn x s (32*so+type_memory_size_list (tv::tvs))) /\
  32*so+(type_memory_size_list (tv::tvs)+w2n sw) < dimword(:256) /\
- ~ctx_has_dalloca ctx /\ fn_has_code sa a func /\ fn_has_code a b func /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa a func /\ fn_has_code a b func /\
  ~s.vs_halted /\ allocas_from lo s /\
  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
  ?u2 Gf' tf'.
@@ -455,8 +456,17 @@ Proof
    (Cases_on `slot` >> fs[eval_operand_def, op_taint_def]) >>
  `allocas_from lo u1` by
    (qpat_assum `allocas_from lo s` mp_tac >> pure_rewrite_tac[allocas_from_def] >> asm_rewrite_tac[]) >>
- drule_all (Q.SPEC `slot` compile_lit_byte_offset_origin_ptr_path) >>
- disch_then (qspecl_then [`explicit`,`PG`,`Gf`] strip_assume_tac) >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp u1` by
+   metis_tac[store_slots_normalize_allocas_below_fmp] >>
+ qpat_assum `compile_lit_byte_offset slot so a = (ds,b)`
+   (mp_then Any mp_tac compile_lit_byte_offset_origin_ptr_path) >>
+ disch_then (qspec_then `u1` mp_tac) >>
+ disch_then (drule_at (Pat `eval_operand slot _ = _`)) >>
+ disch_then (drule_at (Pat `op_taint _ slot = _`)) >>
+ disch_then (drule_at (Pat `fn_has_code a b _`)) >>
+ disch_then (drule_at (Pat `allocas_from _ u1`)) >>
+ disch_then (qspecl_then [`ctx`,`explicit`,`PG`,`Gf`] mp_tac) >>
+ impl_tac >- simp[] >> strip_tac >>
  rename1 `eval_operand ds u2 = SOME (dw+n2w so)` >>
  `(type_memory_size tv <> 0 ==> ?x. ms = Var x /\ ptr_covers Gf' tf' x u2 (type_memory_size tv))` by
    (MATCH_MP_TAC (Q.INST [`G1` |-> `Gf`, `t1` |-> `tf`] members_head_offset_covers) >> simp[]) >>
@@ -557,7 +567,7 @@ val members_cons_entry = ``
  so+(type_slot_size_list (tv::tvs)+w2n dw) <= dimword(:256) /\
  (type_memory_size_list (tv::tvs) = 0 \/
    32*so+(type_memory_size_list (tv::tvs)+w2n sw) <= s.vs_alloca_next) /\
- fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+ fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~s.vs_call_ctx.cc_static /\
  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -592,6 +602,8 @@ Proof
     fs[copy_old_operand_def, loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
  `allocas_from lo u2` by (qpat_assum `allocas_from lo s` mp_tac >>
     pure_rewrite_tac[allocas_from_def] >> asm_rewrite_tac[]) >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp u2` by
+   metis_tac[store_slots_normalize_allocas_below_fmp] >>
  asm "child" (mp_tac o MATCH_MP members_head_run) >>
  disch_then (qspecl_then [`u2`,`Gf'`,`tf'`] mp_tac) >>
  impl_tac >- (asm_x "child" kall_tac >> asm_x "mono" kall_tac >> asm_x "tail" kall_tac >>
@@ -602,6 +614,9 @@ Proof
     FLOOKUP Gf'' x = FLOOKUP G x /\ op_taint tf'' (Var x) = op_taint tn (Var x)` by
    (asm_x "child" kall_tac >> asm_x "mono" kall_tac >> asm_x "tail" kall_tac >>
     fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+   (drule store_slots_normalize_allocas_below_fmp >>
+    simp[store_slots_fold_allocas_below_fmp]) >>
  asm_x "tail" (mp_tac o MATCH_MP members_tail_run) >>
  disch_then (qspecl_then [`s`,`t`,`Gf''`,`tf''`] mp_tac) >>
  impl_tac >- (asm_x "child" kall_tac >> asm_x "mono" kall_tac >>

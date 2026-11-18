@@ -93,7 +93,10 @@ Proof
      `i.inst_opcode <> DALLOCA` by
        (fs[ctx_has_dalloca_def, listTheory.EVERY_MEM,
            listTheory.EXISTS_MEM] >> metis_tac[]) >>
-     Cases_on `i.inst_opcode` >> fs[is_raw_fmp_opcode_def]) >>
+     qpat_x_assum `is_raw_fmp_opcode _` mp_tac >>
+     rpt (qpat_x_assum `i.inst_opcode <> _` mp_tac) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `i.inst_opcode` >> simp[is_raw_fmp_opcode_def]) >>
   `!f inst s. raw_reachable vs unit.cu_context f inst s ==>
      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
     (rpt strip_tac >> drule raw_reachable_no_raw_fmp_fixed >>

@@ -8,6 +8,8 @@
  *)
 Theory bodyFullAppend
 Ancestors
+  bodyFullStoreSlotsPath bodyFullStoreSlotsStatic
+  memoryPlaceStorePost
   stateRelProj bodyFullAppendLocalFrames bodyFullAppendNestedFrames
   bodyFullMemoryFrames bodyFullMemoryCopy typedCopyOriginPtrBase
   robustCopyTransportPtr typedMemoryCopy loweringStateRelDefs
@@ -816,51 +818,6 @@ Proof
   fs[supported_stmt_append_form]
 QED
 
-Theorem append_nested_robust_path_assign:
-  !path tv k ltv a b mem mem' v old result tm tm'.
-    mem_path_offset tv path = SOME (k,ltv) /\
-    value_has_type tv a /\ value_has_type ltv v /\
-    evaluate_subscripts tv a path = INL old /\
-    assign_subscripts tv a path (Replace v) = INL result /\
-    (!m. mem_agree_outside tm mem m ==> val_in_memory tv a b m) /\
-    (!m. mem_agree_outside tm' mem' m ==> val_in_memory ltv v (b+k) m) /\
-    (!q. q < b+k \/ b+k+type_memory_size ltv <= q ==>
-      mem_bytes_at q 1 mem = mem_bytes_at q 1 mem') /\
-    (!q. (q < b+k \/ b+k+type_memory_size ltv <= q) /\ q IN tm' ==>
-      q IN tm) ==>
-    (!m. mem_agree_outside tm' mem' m ==> val_in_memory tv result b m)
-Proof
-  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
-  qabbrev_tac `hybrid = GENLIST
-    (\q. HD (mem_bytes_at q 1
-      (if b+k <= q /\ q < b+k+type_memory_size ltv then mem else m)))
-    (MAX (LENGTH mem) (LENGTH m))` >>
-  `!q. mem_bytes_at q 1 hybrid = mem_bytes_at q 1
-    (if b+k <= q /\ q < b+k+type_memory_size ltv then mem else m)` by
-    (gen_tac >> irule LIST_EQ >>
-     simp[valueEncodingProofsTheory.LENGTH_mem_bytes_at_proof] >>
-     simp[valueEncodingProofsTheory.EL_mem_bytes_at, Abbr `hybrid`,
-          EL_GENLIST, GSYM EL] >>
-     Cases_on `b+k <= q /\ q < b+k+type_memory_size ltv` >>
-     simp[] >> Cases_on `q < LENGTH mem` >>
-     Cases_on `q < LENGTH m` >> simp[]) >>
-  `mem_agree_outside tm mem hybrid` by
-    (rw[mem_agree_outside_def] >>
-     Cases_on `b+k <= i /\ i < b+k+type_memory_size ltv`
-     >- simp[] >>
-     `i < b+k \/ b+k+type_memory_size ltv <= i` by decide_tac >>
-     `i NOTIN tm'` by metis_tac[] >>
-     fs[mem_agree_outside_def] >> metis_tac[]) >>
-  `val_in_memory tv a b hybrid` by metis_tac[] >>
-  irule place_store_path_assign >>
-  goal_assum (drule_at Any) >>
-  goal_assum (drule_at (Pat `mem_path_offset _ _ = _`)) >>
-  qexistsl_tac [`old`, `v`] >> simp[] >>
-  rpt strip_tac >>
-  `~(b+k <= q /\ q < b+k+type_memory_size ltv)` by decide_tac >>
-  simp[]
-QED
-
 Theorem append_nested_robust_array_project:
   mem_path_offset rt path = SOME (k,ArrayTV tv (Dynamic cap)) /\
   value_has_type rt a /\ well_formed_type_value rt /\
@@ -1369,12 +1326,17 @@ Resume append_nested_memory_cont_full[success]:
         vyperTypingTheory.all_have_type_EVERY, EVERY_APPEND]) >>
   `!mem. mem_agree_outside tnf.t_mem u.vs_memory mem ==>
       val_in_memory entry.type updated (w2n rootw) mem` by
-    (rpt strip_tac >> irule append_nested_robust_path_assign >>
-     goal_assum (drule_at (Pat `assign_subscripts _ _ _ _ = INL _`)) >>
-     goal_assum (drule_at (Pat `mem_path_offset _ _ = _`)) >>
-     qexistsl_tac [`t.vs_memory`, `u.vs_memory`,
-       `ArrayV (DynArrayV vs)`, `tn.t_mem`, `tnf.t_mem`] >>
-     simp[GSYM markerTheory.Abbrev_def] >>
+    (match_mp_tac (SRULE [] (Q.INST
+       [`entry` |-> `entry`,
+        `entry'` |-> `entry with <|value := updated; popped := []|>`,
+        `path` |-> `path`, `k` |-> `k`,
+        `ptv` |-> `ArrayTV tv (Dynamic cap)`,
+        `off` |-> `w2n rootw`, `v` |-> `ArrayV (DynArrayV (vs ++ [v]))`,
+        `tm` |-> `tn.t_mem`, `tm'` |-> `tnf.t_mem`,
+        `mem` |-> `t.vs_memory`, `mem'` |-> `u.vs_memory`]
+       memoryPlaceStorePostTheory.memory_place_replace_robust)) >>
+     pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
+     simp[replace_memory_entry_def, GSYM markerTheory.Abbrev_def] >>
      conj_tac
      >- (rpt strip_tac >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
          qpat_assum `w2n bp = _` (fn th => rewrite_tac[GSYM th]) >>
@@ -2726,11 +2688,12 @@ Resume append_nested_after_target_full[suffix]:
       state_well_typed (es with gas_obs := gs) /\ context_well_typed cx /\
       accounts_well_typed (es with gas_obs := gs).accounts /\
       functions_well_typed cx /\ env.type_defs = get_tenv cx` by
-       (fs[targetPlaceSimTheory.target_pre_def, expr_sim_inv_def] >>
-        qpat_x_assum `env_consistent env cx es` mp_tac >>
+       (qpat_assum `target_pre cenv cx env bt (es with gas_obs := gs)` mp_tac >>
         POP_ASSUM_LIST (K all_tac) >>
-        simp[vyperTypeInvariantsTheory.env_consistent_def,
-             vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+        simp[targetPlaceSimTheory.target_pre_def, expr_sim_inv_def] >>
+        rpt strip_tac >>
+        gvs[vyperTypeInvariantsTheory.env_consistent_def,
+            vyperTypeInvariantsTheory.env_context_consistent_def]) >>
      drule_all exprSimPopNestedLocalSourceTheory.eval_target_place_runtime_facts >>
      strip_tac >>
      `evaluate_type (get_tenv cx) (ArrayT (expr_type e) (Dynamic cap)) =

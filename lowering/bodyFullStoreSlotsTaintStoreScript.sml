@@ -1,14 +1,14 @@
 Theory bodyFullStoreSlotsTaintStore
 Ancestors
   assignBasePtrWordStore fragGasCopyLoop bodyFullStoreSlotsRetired
-  fragGasSeqPtr fragGasOriginPtr fragExecMem exprLoweringProps
+  fragGasSeqPtr fragGasSeqPtrContext fragGasOriginPtr fragExecMem exprLoweringProps
   emitHelperProps emitHelper compileEnv venomExecSemantics venomState
   venomInst ptrDiscipline contextCodegenRel codegenRel unitTransformDefs
   memSafeRun
 
 Theorem storage_tainted_singleton[local]:
   eval_operand addr s = SOME slot /\ eval_operand op s = SOME w /\
-  op_taint tn addr = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn addr = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_call_ctx.cc_static ==>
   run_inst_seq [mk_inst id (if tr then TSTORE else SSTORE) [addr;op] []] s =
     OK (if tr then tstore slot w s else sstore slot w s) /\
@@ -23,7 +23,11 @@ Proof
     (Cases_on `tr` >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]) >>
   simp[run_inst_seq_def, inst_seq_ptr_def] >>
   conj_tac
-  >- (irule assign_base_ptr_inst_ok_storage_word >> Cases_on `tr` >> simp[]) >>
+  >- (irule ptr_inst_ok_restore_ctx >>
+      conj_tac >- (Cases_on `tr` >> simp[mk_inst_def]) >>
+      conj_tac >- simp[] >>
+      irule assign_base_ptr_inst_ok_storage_word >>
+      Cases_on `tr` >> simp[ctx_has_dalloca_def]) >>
   qpat_x_assum `eval_operand addr s = SOME slot`
     (mp_then (Pos (el 2)) mp_tac assign_base_storage_word_ghost) >>
   disch_then (qspec_then `if tr then TSTORE else SSTORE` mp_tac) >>
@@ -35,7 +39,7 @@ QED
 Theorem storage_tainted_word_store_origin_ptr:
  !tr addr op sa sb func s ctx slot w tn lo explicit PG G.
   emit_void (if tr then TSTORE else SSTORE) [addr;op] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_call_ctx.cc_static /\ allocas_from lo s /\

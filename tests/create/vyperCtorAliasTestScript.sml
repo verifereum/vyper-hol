@@ -6,6 +6,7 @@
    semantics. *)
 Theory vyperCtorAliasTest
 Ancestors
+  vyperSmallStepCV
   vyperCreateMemoryTest createCtorAliasCompileTest vyperCreateSelfdestruct
   vyperSmallStep[ignore_grammar] vyperCreate vyperState vyperContext
   vfmCompute vfmContext vfmState finite_map finite_set list

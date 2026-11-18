@@ -6,10 +6,11 @@ Ancestors
   logTopicScalarPtr typedCopyPtr fragGasSeqPtr fragExecMem
   exprSimStorageCopy exprLoweringProps unitTransformDefs memSafeRun
   contextCodegenRel codegenRel bodyFullStoreSlotsRetired emitHelperProps stmtSimStoreCopy
+  bodyPtrAttributeAdd
 
 Theorem offset_add_joint[local]:
   eval_operand op s = SOME a /\ op_taint tn op = {} /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ allocas_from lo s /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id ADD [op;Lit off] [out]]
     (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -26,7 +27,9 @@ Proof
   `!D. inst_seq_ptr D 0 ctx func PG G tn
     [mk_inst id ADD [op;Lit off] [out]] s Gf tf` by
     (gvs[fragGasSeqPtrTheory.inst_seq_ptr_def] >> rpt gen_tac >>
-     irule typedCopyPtrTheory.ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+     irule (cj 1 typed_copy_origin_ptr_binop_checks) >>
+     simp[op_taint_def, ptrDisciplineTheory.allocas_from_def] >>
+     metis_tac[ptrDisciplineTheory.allocas_from_def]) >>
   conj_tac
   >- (gen_tac >>
       irule (SRULE [GSYM arithmeticTheory.ADD1]
@@ -47,7 +50,7 @@ Theorem compile_lit_byte_offset_origin_ptr_path:
  !op off sa r sb s a tn ctx func lo explicit PG G.
   compile_lit_byte_offset op off sa = (r,sb) /\
   copy_old_operand sa op /\ eval_operand op s = SOME a /\
-  op_taint tn op = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\ allocas_from lo s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -77,18 +80,47 @@ Proof
       qexistsl [`s`,`G`,`tn`] >>
       simp[gas_origin_ptr_path_rules, op_taint_def, op_prov_def, copy_old_operand_def,
         store_copy_normalize_def, venom_state_component_equality]) >>
-  drule_all compile_lit_byte_offset_checked >>
-  disch_then (qspecl_then [`func`,`PG`,`G`,`ARB`] strip_assume_tac) >>
+  (drule_all copy_runtime_offset >> strip_tac >>
   gvs[compile_lit_byte_offset_def] >>
+  `eval_operand (Lit (n2w off)) s = SOME (n2w off) /\
+   op_taint tn (Lit (n2w off)) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`,
+    `w` |-> `(x:256 word) + y`] typed_copy_origin_ptr_binop_path)) >>
+  disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`,`G`,`ARB`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `emit_op ADD [left;Lit (n2w off)] sa = _` >>
+  `step_inst_base (mk_inst sa.cs_next_id ADD [left;Lit (n2w off)] [out]) s =
+     OK (update_var out (a+n2w off) s)` by
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+  `inst_seq_ptr ARB 0 ctx func PG G tn
+     [mk_inst sa.cs_next_id ADD [left;Lit (n2w off)] [out]] s
+     (step_prov PG G (mk_inst sa.cs_next_id ADD [left;Lit (n2w off)] [out])
+       (update_var out (a+n2w off) s))
+     (step_taint (mk_inst sa.cs_next_id ADD [left;Lit (n2w off)] [out]) s
+       (update_var out (a+n2w off) s) tn)` by
+    (simp[inst_seq_ptr_def] >> irule (cj 1 typed_copy_origin_ptr_binop_checks) >>
+     simp[op_taint_def, allocas_from_def] >> metis_tac[allocas_from_def]) >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
   gvs[copy_runtime_frame_def] >>
   drule_all bop_suffix_placement >> strip_tac >>
-  qpat_x_assum `!k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
-    (qspec_then `s.vs_inst_idx` assume_tac) >> fs[] >>
-  drule_all (SRULE [] offset_add_joint) >> strip_tac >>
-  qexistsl [`t with vs_inst_idx := SUC s.vs_inst_idx`,`Gf`,`tf`] >>
-  gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
-      exec_pure2_def, eval_operand_def] >>
-  gvs[update_var_def, lookup_var_def, same_blocks_def,
-      arithmeticTheory.ADD1, store_copy_normalize_def, venom_state_component_equality]
+  drule_all offset_add_joint >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `inst_seq_ptr ARB 0 ctx func PG G tn
+    [mk_inst _ ADD _ [out]] s Gf tf` >>
+  qexistsl [`update_var out (a+n2w off) s with vs_inst_idx := SUC s.vs_inst_idx`,
+    `step_prov PG G (mk_inst sa.cs_next_id ADD [left;Lit (n2w off)] [out])
+       (update_var out (a+n2w off) s)`,
+    `step_taint (mk_inst sa.cs_next_id ADD [left;Lit (n2w off)] [out]) s
+       (update_var out (a+n2w off) s) tn`] >>
+  simp[typed_copy_origin_ptr_binop_ghost_frame, copy_old_operand_def] >>
+  qpat_x_assum `!explicit. _` (qspec_then `explicit` strip_assume_tac) >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (gvs[Abbr `out`, loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- simp[Abbr `Gf`, op_prov_def, attribute_add_provenance, Abbr `left`] >>
+  simp[Abbr `Gf`, update_var_def, store_copy_normalize_def,
+    venom_state_component_equality] >>
+  rpt strip_tac >> `x <> out` by metis_tac[] >>
+  simp[Abbr `tf`, typed_copy_origin_ptr_binop_ghost_frame,
+    update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[GSYM update_var_def, typed_copy_origin_ptr_binop_ghost_frame])
 QED
