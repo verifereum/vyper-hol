@@ -4,7 +4,7 @@ Ancestors asmSymOwnCode[qualified,ignore_grammar]
   symInstKinds symPostfixSim codegenSymRel asmSymSem asmSem
   strongPrefixSim asmSplice contextCodegenRel codegenRel finite_map list
   fnBlockBodyHelpers asmSymOwnCode asmSpliceOwn
-  symEmitNamedDispatch symEmitCodesizeOwn
+  symEmitNamedDispatch symEmitCodesizeOwn symEmitDataReplay symEmitFixedBlockSuffix
 
 (* Reuse the bridge's closed structural relation as syntax, not a new definition. *)
 val emit_bridge_core_tm = let
@@ -2816,17 +2816,14 @@ Theorem sym_codecopy_data_replay:
     ss'.sym_mem_labels = ss.sym_mem_labels /\ ss'.sym_stack = tail
 Proof
   strip_tac >>
-  `cs.as_pc < LENGTH p /\ EL cs.as_pc p = AsmOp "CODECOPY"` by
-    (fs[asm_block_at_def] >> first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `?ss'. sym_step p env (AsmOp "CODECOPY") ss = SymOK ss' /\
-    asm_sym_rel p env cs' ss'` by
-    (drule asm_sym_step_success_from_safe >>
-     disch_then (qspecl_then [`ss`, `env`, `cs'`, `cs`] mp_tac) >>
-     simp[] >> metis_tac[sym_codecopy_data_safe]) >>
-  qexists `ss'` >> simp[] >> conj_tac
-  >- (irule sym_steps_single_emit >>
-      fs[asmSymBridgeTheory.asm_sym_rel_def] >> metis_tac[]) >>
-  irule sym_codecopy_data_result >> metis_tac[]
+  `ss.sym_base.as_pc = cs.as_pc` by
+    (drule asmSymBridgeTheory.asm_sym_rel_pc >> simp[]) >>
+  mp_tac (Q.SPECL [`F`, `[]`] sym_codecopy_data_replay_selected |>
+    Q.INST [`lo` |-> `SND (compute_label_offsets p)`, `R` |-> `asm_sym_rel p env`] |>
+    PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  simp[sym_step_codecopy_data] >>
+  impl_tac >- (rpt strip_tac >> drule_all sym_emit_run_endpoint >> simp[]) >>
+  simp[]
 QED
 
 Theorem sym_codecopy_source_emit_core:
@@ -3604,8 +3601,14 @@ Theorem sym_assert_steps_ok_stack_suffix:
   sym_steps p env 3 (ss with sym_stack := ss.sym_stack ++ tail) =
     SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
 Proof
-  strip_tac >> drule_all sym_assert_success_run >> strip_tac >> gvs[] >>
-  qspecl_then [`ss with sym_stack := Val w :: (stk ++ tail)`, `stk ++ tail`] mp_tac
+  strip_tac >>
+  irule (Q.SPECL [`F`, `[]`] sym_fixed_block_stack_suffix |>
+    Q.INST [`input` |-> `[Val w]`, `output` |-> `[]`, `stk` |-> `stk`,
+            `next_base` |-> `ss.sym_base with <| as_stack := [];
+                                                as_pc := ss.sym_base.as_pc + 3 |>`] |>
+    PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  simp[] >> gen_tac >>
+  qspecl_then [`ss with sym_stack := Val w :: rest`, `rest`] mp_tac
     (Q.GENL [`ss`, `tail`] sym_assert_success_run) >> simp[]
 QED
 
@@ -3618,8 +3621,14 @@ Theorem sym_assert_unreachable_steps_ok_stack_suffix:
   sym_steps p env 3 (ss with sym_stack := ss.sym_stack ++ tail) =
     SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
 Proof
-  strip_tac >> drule_all sym_assert_unreachable_success_run >> strip_tac >> gvs[] >>
-  qspecl_then [`ss with sym_stack := Val w :: (stk ++ tail)`, `stk ++ tail`] mp_tac
+  strip_tac >>
+  irule (Q.SPECL [`F`, `[]`] sym_fixed_block_stack_suffix |>
+    Q.INST [`input` |-> `[Val w]`, `output` |-> `[]`, `stk` |-> `stk`,
+            `next_base` |-> `ss.sym_base with <| as_stack := [];
+                                                as_pc := ss.sym_base.as_pc + 4 |>`] |>
+    PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  simp[] >> gen_tac >>
+  qspecl_then [`ss with sym_stack := Val w :: rest`, `rest`] mp_tac
     (Q.GENL [`ss`, `tail`] sym_assert_unreachable_success_run) >> simp[]
 QED
 
@@ -3630,9 +3639,15 @@ Theorem sym_bump_steps_ok_stack_suffix:
   sym_steps p env 2 (ss with sym_stack := ss.sym_stack ++ tail) =
     SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
 Proof
-  strip_tac >> drule_all sym_bump_success_run >> strip_tac >> gvs[] >>
-  qspecl_then [`ss with sym_stack := Val delta :: Val fmp :: (stk ++ tail)`,
-               `stk ++ tail`] mp_tac
+  strip_tac >>
+  irule (Q.SPECL [`F`, `[]`] sym_fixed_block_stack_suffix |>
+    Q.INST [`input` |-> `[Val delta; Val fmp]`,
+            `output` |-> `[Val (fmp + delta); Val fmp]`, `stk` |-> `stk`,
+            `next_base` |-> `ss.sym_base with <| as_stack := [];
+                                                as_pc := ss.sym_base.as_pc + 2 |>`] |>
+    PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  simp[] >> gen_tac >>
+  qspecl_then [`ss with sym_stack := Val delta :: Val fmp :: rest`, `rest`] mp_tac
     (Q.GENL [`ss`, `tail`] sym_bump_success_run) >> simp[]
 QED
 
@@ -3644,9 +3659,15 @@ Theorem sym_istore_steps_ok_stack_suffix:
   sym_steps p env 2 (ss with sym_stack := ss.sym_stack ++ tail) =
     SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
 Proof
-  strip_tac >> drule_all sym_istore_success_run >> strip_tac >> gvs[] >>
-  qspecl_then [`ss with sym_stack := Val value :: Val off :: (stk ++ tail)`,
-               `stk ++ tail`] mp_tac
+  strip_tac >>
+  irule (Q.SPECL [`F`, `[]`] sym_fixed_block_stack_suffix |>
+    Q.INST [`input` |-> `[Val value; Val off]`, `output` |-> `[]`, `stk` |-> `stk`,
+            `next_base` |-> `ss.sym_base with <| as_stack := [];
+              as_memory := mem_write32 (w2n (off:bytes32)) value ss.sym_base.as_memory;
+              as_pc := ss.sym_base.as_pc + 2 |>`] |>
+    PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  simp[] >> gen_tac >>
+  qspecl_then [`ss with sym_stack := Val value :: Val off :: rest`, `rest`] mp_tac
     (Q.GENL [`ss`, `tail`] sym_istore_success_run) >> simp[]
 QED
 
@@ -3656,7 +3677,13 @@ Theorem sym_initial_fmp_steps_ok_stack_suffix:
   sym_steps p env 1 (ss with sym_stack := ss.sym_stack ++ tail) =
     SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
 Proof
-  strip_tac >> drule_all sym_initial_fmp_run >> strip_tac >> gvs[] >>
-  qspec_then `ss with sym_stack := ss.sym_stack ++ tail` mp_tac
+  strip_tac >>
+  irule (Q.SPECL [`F`, `[]`] sym_fixed_block_stack_suffix |>
+    Q.INST [`input` |-> `[]`, `output` |-> `[Val (n2w initial_fmp)]`,
+            `stk` |-> `ss.sym_stack`,
+            `next_base` |-> `asm_next (ss.sym_base with as_stack := [])`] |>
+    PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]) >>
+  simp[] >> qexists `initial_fmp` >> gen_tac >>
+  qspec_then `ss with sym_stack := rest` mp_tac
     (Q.GEN `ss` sym_initial_fmp_run) >> simp[]
 QED

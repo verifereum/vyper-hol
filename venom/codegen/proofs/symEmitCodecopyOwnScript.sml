@@ -2,7 +2,7 @@
    in symEmitSim; this theory only supplies the subject replay interface. *)
 Theory symEmitCodecopyOwn
 Ancestors symEmitSim codegenSymRel asmSymBridge asmSymSem asmSem
-  asmSplice strongPrefixSim symInstKinds list finite_map
+  asmSplice strongPrefixSim symInstKinds list finite_map symEmitDataReplay
 
 Theorem asm_sym_codecopy_values_core:
   LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack /\
@@ -58,23 +58,14 @@ Theorem sym_codecopy_data_replay_mode_conditional:
   ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss' /\
     ss'.sym_mem_labels = ss.sym_mem_labels /\ ss'.sym_stack = tail
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `?t. asm_copy_to_mem (DROP d (env ' l))
-     (ss.sym_base with as_stack := [dst; 0w; sz]) = AsmOK t /\ t.as_stack = []` by
-    simp[asm_copy_to_mem_def, asm_next_def] >>
-  drule_all symEmitSimTheory.sym_step_codecopy_data_mode >>
-  disch_then (qspecl_then [`allow_own`, `own`] assume_tac) >>
-  `asm_block_at p ss.sym_base.as_pc [AsmOp "CODECOPY"]` by metis_tac[] >>
-  drule codegenSymRelTheory.sym_steps_mode_single >>
-  disch_then (qspecl_then [`own`, `env`, `allow_own`] mp_tac) >>
-  simp[] >> strip_tac >>
-  `asm_steps slo (build_offset_to_pc p) p 1 cs = AsmOK cs'` by
-    (gvs[asm_block_at_def] >>
-     pure_rewrite_tac [numLib.num_CONV ``1:num``] >>
-     pure_once_rewrite_tac [asmSemTheory.asm_steps_def] >>
-     simp[asmSemTheory.asm_steps_def]) >>
-  irule symEmitSimTheory.sym_emit_run_endpoint_mode_conditional >>
-  metis_tac[]
+  strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[] >>
+  mp_tac (Q.SPECL [`allow_own`, `own`] sym_codecopy_data_replay_selected |>
+    Q.INST [`lo` |-> `slo`]) >>
+  simp[sym_step_codecopy_data_mode] >>
+  impl_tac
+  >- (rpt strip_tac >> drule_all sym_emit_run_endpoint_mode_conditional >> simp[]) >>
+  simp[]
 QED
 
 Theorem sym_codecopy_source_emit_mode_conditional:
