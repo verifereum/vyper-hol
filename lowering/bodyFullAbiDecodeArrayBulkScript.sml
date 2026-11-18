@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeArrayBulk
 Ancestors
+  exprSimWordBuiltins[qualified,ignore_grammar]
   bodyFullAbiDecodeInterface bodyFullAbiDecodeFiniteGuard
   bodyFullAbiDecodeTailAdd bodyFullAbiDecodeOwnedCopy abiDecoderBulk
   bodyPtrBopScalarCompile bodyPtrBopScalarOutcome bodyPtrBopScalarSeq
@@ -199,7 +200,7 @@ Proof
   `eval_operand src
      (update_var (STRING #"%" (toString sa.cs_next_var)) (n2w (n*msz)) s) =
    eval_operand src s` by
-    (irule bodyPtrTypeBuiltinsBoundsTheory.eval_operand_update_old >>
+    (irule exprSimWordBuiltinsTheory.eval_operand_update_not_fresh >>
      qexists_tac `sa` >> simp[] >> rpt strip_tac >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
   simp_tac (srw_ss()) [emitted_insts_def] >>

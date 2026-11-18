@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeMemberPrefix
 Ancestors
+  exprSimWordBuiltins[qualified,ignore_grammar]
   gasOriginPtrLabels bodyFullAbiDecodeInterface bodyFullAbiDecodeFiniteGuard
   bodyFullAbiDecodeLeafCases abiDecodePtrPrims abiDecodePtrHead abiDecodePtrBytesTail
   instSeqPtrLo fragGasSeqPtr fragGasOriginPtrLoop fragExecMem abiDecoderCoherence
@@ -31,7 +32,7 @@ Proof
         comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   simp[eval_operand_update_var, word_add_n2w] >>
   conj_tac >-
-    (rpt strip_tac >> irule eval_operand_update_old >>
+    (rpt strip_tac >> irule exprSimWordBuiltinsTheory.eval_operand_update_not_fresh >>
      qexists_tac `sa` >>
      conj_tac >-
        (rpt strip_tac >> gvs[abi_decoder_operand_live_def,
@@ -140,7 +141,7 @@ Proof
   `!n w u. sa.cs_next_var <= n ==>
     eval_operand src (update_var (STRING #"%" (toString n)) w u) =
       eval_operand src u` by
-    (rpt strip_tac >> irule eval_operand_update_old >>
+    (rpt strip_tac >> irule exprSimWordBuiltinsTheory.eval_operand_update_not_fresh >>
      qexists_tac `sa` >> conj_tac >-
        (rpt strip_tac >> gvs[abi_decoder_operand_live_def,
           abi_decoder_older_vars_def, not_fresh_at_def]) >> simp[]) >>

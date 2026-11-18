@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeLoopSelectExact
 Ancestors fragExec[qualified,ignore_grammar]
+  exprSimWordBuiltins[qualified,ignore_grammar]
   bodyFullAbiDecodeLeafCases bodyFullAbiDecodeMemberPrefix
   bodyFullAbiDecodeFiniteGuard abiDecodePtrBytesMember abiDecoderGuard
   abiEncoder compileEnv emitHelper emitHelperProps venomInst venomExecSemantics
@@ -59,14 +60,14 @@ Proof
   `!n w u. sa.cs_next_var <= n ==>
     eval_operand src (update_var (STRING #"%" (toString n)) w u) =
       eval_operand src u` by
-    (rpt strip_tac >> irule bodyPtrTypeBuiltinsBoundsTheory.eval_operand_update_old >>
+    (rpt strip_tac >> irule exprSimWordBuiltinsTheory.eval_operand_update_not_fresh >>
      qexists_tac `sa` >> conj_tac >-
        (rpt strip_tac >> gvs[abi_decoder_operand_live_def,
           abi_decoder_older_vars_def, not_fresh_at_def]) >> simp[]) >>
   `!n w u. sa.cs_next_var <= n ==>
     eval_operand hi (update_var (STRING #"%" (toString n)) w u) =
       eval_operand hi u` by
-    (rpt strip_tac >> irule bodyPtrTypeBuiltinsBoundsTheory.eval_operand_update_old >>
+    (rpt strip_tac >> irule exprSimWordBuiltinsTheory.eval_operand_update_not_fresh >>
      qexists_tac `sa` >> conj_tac >-
        (rpt strip_tac >> gvs[abi_decoder_operand_live_def,
           abi_decoder_older_vars_def, not_fresh_at_def]) >> simp[]) >>
@@ -138,7 +139,7 @@ Proof
   `!n w u. sa.cs_next_var <= n ==>
     eval_operand data (update_var (STRING #"%" (toString n)) w u) =
       eval_operand data u` by
-    (rpt strip_tac >> irule bodyPtrTypeBuiltinsBoundsTheory.eval_operand_update_old >>
+    (rpt strip_tac >> irule exprSimWordBuiltinsTheory.eval_operand_update_not_fresh >>
      qexists_tac `sa` >> conj_tac >-
        (rpt strip_tac >> gvs[abi_decoder_operand_live_def,
           abi_decoder_older_vars_def, not_fresh_at_def]) >> simp[]) >>

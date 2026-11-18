@@ -86,6 +86,8 @@ Ancestors
   extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
   abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
   (* providers awaiting their consumers *)
+  bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
+  bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
   internalReturnMemoryMem bodyFullIntCallByteFrame
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa
