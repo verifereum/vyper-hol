@@ -284,20 +284,14 @@ Proof
   irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]
 QED
 
-(* Zeroing transient storage preserves each horizon relation. *)
-Theorem optional_transient_unlock_source_joint:
+Theorem optional_transient_unlock_stmt_state_rel:
   unlock_if_nr cx nr iv es = (INL (),us) /\
   (nr /\ ~iv ==> cx.nonreentrant_slot = SOME nkey /\
                   nkey < dimword (:256)) /\
   u = ((if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
          vs_inst_idx := n) /\
-  tn' = (if nr /\ ~iv then
-    tn with t_trans := key_update tn.t_trans (n2w nkey) {} else tn) /\
-  dead_lo_ok H (DF H) lo cenv cx /\
-  stmt_state_rel H ctx func cenv cx es s /\
-  ghost_inv_at (DF H) lo d cenv cx es G tn s ==>
-  stmt_state_rel H ctx func cenv cx us u /\
-  ghost_inv_at (DF H) lo d cenv cx us G tn' u
+  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx us u
 Proof
   strip_tac >> Cases_on `nr /\ ~iv`
   >- (`cx.nonreentrant_slot = SOME nkey` by fs[] >>
@@ -331,10 +325,38 @@ Proof
            stmt_state_rel_allocas_frame) >>
          simp[tstore_def] >>
          fs[stmt_state_rel_def, immutable_base_zero_alt, tstore_def]) >>
+      gvs[stmt_state_rel_inst_idx]) >>
+  `us = es` by gvs[unlock_if_nr_def, vyperStateTheory.return_def] >>
+  gvs[stmt_state_rel_inst_idx]
+QED
+
+(* Zeroing transient storage preserves each horizon relation. *)
+Theorem optional_transient_unlock_source_joint:
+  unlock_if_nr cx nr iv es = (INL (),us) /\
+  (nr /\ ~iv ==> cx.nonreentrant_slot = SOME nkey /\
+                  nkey < dimword (:256)) /\
+  u = ((if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+         vs_inst_idx := n) /\
+  tn' = (if nr /\ ~iv then
+    tn with t_trans := key_update tn.t_trans (n2w nkey) {} else tn) /\
+  dead_lo_ok H (DF H) lo cenv cx /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv_at (DF H) lo d cenv cx es G tn s ==>
+  stmt_state_rel H ctx func cenv cx us u /\
+  ghost_inv_at (DF H) lo d cenv cx us G tn' u
+Proof
+  strip_tac >> conj_tac
+  >- (drule_all optional_transient_unlock_stmt_state_rel >> disch_then ACCEPT_TAC) >>
+  Cases_on `nr /\ ~iv`
+  >- (`cx.nonreentrant_slot = SOME nkey` by fs[] >>
+      `us = es with <|
+         storage_trace := es.storage_trace ++ [StorageLock nkey];
+         tStorage := (cx.txn.target =+ update_storage (n2w nkey) 0w
+           (es.tStorage cx.txn.target)) es.tStorage |>` by
+        gvs[unlock_if_nr_def, release_nonreentrant_lock_execution] >>
       `stor_taint_ok_at (DF H) tn' u` by
         (irule optional_transient_unlock_stor_taint >>
          fs[ghost_inv_at_def] >> metis_tac[]) >>
-      conj_tac >- gvs[stmt_state_rel_inst_idx] >>
       qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
       simp[ghost_inv_at_def] >> strip_tac >>
       Cases_on `d`
@@ -347,5 +369,5 @@ Proof
           tstore_def, op_taint_def, lookup_var_def, allocas_from_def] >>
       metis_tac[]) >>
   `us = es` by gvs[unlock_if_nr_def, vyperStateTheory.return_def] >>
-  gvs[stmt_state_rel_inst_idx, ghost_inv_at_inst_idx]
+  gvs[ghost_inv_at_inst_idx]
 QED
