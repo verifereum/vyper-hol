@@ -1,5 +1,6 @@
 Theory o1CodeEndDftTransport
 Ancestors
+  o1CodeEndCfgNormTransport unitTransformDefs
   dftGasInvResidualTrace gasOracleReplay dftGasInvMemoryObservation
   o1LabelFlowLateDft o1ContractDft codegenSymRel
   dftGasOracleDefs dftRunRel venomExecSemantics venomInstProofs1
@@ -209,4 +210,47 @@ Proof
   Cases_on `code_end_offset_ok (raw_reachable vs) C'` >> simp[] >>
   qpat_x_assum `~code_end_offset_ok (raw_reachable vs) C'` mp_tac >>
   simp[code_end_offset_ok_def] >> metis_tac[]
+QED
+
+Theorem o1_code_end_dft_exit_fixed:
+  ctx_pass_stage rp (CFP_Simple VP_DFT) dft_view C7 C8 /\ o1_pre 7 C7 C8 /\
+  ctx_pass_stage rp (CFP_Simple VP_CFGNormalization) cfg_view C8 C9 /\
+  o1_ctx_shape C7 /\ EVERY wf_ssa C7.ctx_functions /\ o1_ctx_shape C8 /\
+  o1_initial_state_ok vs_out /\ vs_out.vs_fmp = vs_out.vs_initial_fmp /\
+  code_layout_valid vs_out /\
+  (!fuel. gas_res_rel
+    (run_context fuel C7 (vs_out with vs_gas_readings := rds))
+    (ev_context orc fuel C7 vs_out)) /\
+  (!p d fn inst t. ev_reachable orc vs_out C7 p d fn inst t ==>
+     ?ws. raw_reachable (vs_out with vs_gas_readings := rds) C7 fn inst
+              (t with vs_gas_readings := ws)) /\
+  (!fn inst t. raw_reachable vs_out C8 fn inst t ==>
+     ?p d. ev_reachable orc vs_out C8 p d fn inst
+              (t with vs_gas_readings := vs_out.vs_gas_readings)) /\
+  code_end_offset_ok (raw_reachable (vs_out with vs_gas_readings := rds)) C7 ==>
+  code_end_offset_ok
+    (\ctx fn inst s. raw_reachable vs_out ctx fn inst s /\ ~in_static_abort_prefix fn s)
+    C9 /\
+  (code_end_offset_ok (raw_reachable vs_out) C9 \/
+   !fuel. terminates (run_context fuel C7 (vs_out with vs_gas_readings := rds)) ==>
+      ?u. run_context fuel C7 (vs_out with vs_gas_readings := rds) = Abort ExHalt_abort u)
+Proof
+  strip_tac >> drule_all dft_stage_fn_rel >> strip_tac >>
+  `EVERY wf_ssa C8.ctx_functions` by
+    (irule dft_stage_wf_ssa >> metis_tac[]) >>
+  `ctx_labels_bound C7 vs_out.vs_labels` by
+    (irule dft_ctx_labels_bound >> simp[]) >>
+  drule_all dft_code_end_offset_ok_fixed >>
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  `vs_out.vs_vars = FEMPTY /\ ~vs_out.vs_halted` by fs[o1_initial_state_ok_def] >>
+  conj_tac
+  >- (mp_tac (Q.INST [`guarded` |-> `T`, `C` |-> `C8`, `C'` |-> `C9`,
+      `vs` |-> `vs_out`, `rpolicy` |-> `rp`, `view` |-> `cfg_view`] cfg_norm_code_end_offset_ok) >>
+      simp[]) >>
+  qpat_x_assum `code_end_offset_ok (raw_reachable vs_out) C8 \/ _`
+    (DISJ_CASES_THEN assume_tac) >> simp[] >>
+  disj1_tac >>
+  mp_tac (Q.INST [`guarded` |-> `F`, `C` |-> `C8`, `C'` |-> `C9`,
+    `vs` |-> `vs_out`, `rpolicy` |-> `rp`, `view` |-> `cfg_view`] cfg_norm_code_end_offset_ok) >>
+  fs[code_end_offset_ok_def] >> metis_tac[]
 QED

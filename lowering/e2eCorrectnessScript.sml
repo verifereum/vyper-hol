@@ -2115,7 +2115,13 @@ Proof
      `taint_within D0 unit.cu_context vcode` by
        simp[Abbr `D0`, taint_within_def] >>
      qpat_assum `!vi. raw_variant _ vi vs ==> _`
-       (qspec_then `vcode` (drule_then strip_assume_tac)) >> metis_tac[]) >>
+       (qspec_then `vcode` (drule_then strip_assume_tac)) >>
+     qpat_x_assum `raw_unit_memory_ok _ vcode /\ _ ==> _` mp_tac >>
+     (impl_tac >- metis_tac[]) >>
+     disch_then (CONJUNCTS_THEN2 kall_tac strip_assume_tac) >> simp[] >>
+     rename1 `run_context fuel unit.cu_context vcode = Abort Revert_abort s` >>
+     qpat_x_assum `!fuel. terminates (run_context fuel unit.cu_context vcode) ==> _`
+       (qspec_then `fuel` mp_tac) >> simp[terminates_def]) >>
   qspecl_then [`D0`, `0`, `rpolicy`, `unit`, `out`, `vs`, `vs.vs_initial_fmp`]
     mp_tac run_venom_pipeline_correct_static_abort >>
   impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>

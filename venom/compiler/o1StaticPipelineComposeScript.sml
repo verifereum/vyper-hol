@@ -21,7 +21,7 @@ Proof
 QED
 
 (* The prefix up to DFT keeps the readings chosen by the caller. *)
-Theorem o1_walk_pre_dft_sim_static_abort_fixed:
+Theorem o1_walk_pre_dft_stage_facts_static_abort_fixed:
   (!k. k < LENGTH o1_fn_passes ==>
        ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
          (stage k) (stage (SUC k))) /\
@@ -36,6 +36,9 @@ Theorem o1_walk_pre_dft_sim_static_abort_fixed:
     fmp_variant_room (SOME fmp) (stage (LENGTH o1_fn_passes)) vs_out ==>
     ctx_sim_fuel I D (stage 0) (stage 7) v3 v7 /\
     ctx_abort_rq D (stage 0) (stage 7) v3 v7 /\
+    o1_inv D 1 (stage 1) v3 /\ o1_inv D 2 (stage 2) v3 /\
+    o1_inv D 3 (stage 3) v3 /\ o1_inv D 4 (stage 4) v7 /\
+    o1_inv D 5 (stage 5) v7 /\ o1_inv D 6 (stage 6) v7 /\
     o1_inv D 7 (stage 7) v7
 Proof
   strip_tac >> simp[LET_THM] >>
@@ -144,6 +147,28 @@ Proof
    ctx_abort_rq D (stage 0) (stage 7) v3 v7` by
     metis_tac[ctx_sim_abort_rq_I_trans] >>
   fs[Abbr `v3`, Abbr `v7`]
+QED
+
+Theorem o1_walk_pre_dft_sim_static_abort_fixed:
+  (!k. k < LENGTH o1_fn_passes ==>
+       ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+         (stage k) (stage (SUC k))) /\
+  (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
+  (!k. k <= LENGTH o1_fn_passes ==>
+       EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  dead_wf D /\ o1_initial_state_ok vs_out /\
+  vs_out.vs_fmp = vs_out.vs_initial_fmp /\ code_layout_valid vs_out ==>
+  let v7 = vs_out with vs_gas_readings := rds in
+  let v3 = v7 with <|vs_fmp := fmp; vs_initial_fmp := fmp|> in
+    o1_inv D 0 (stage 0) v3 /\
+    fmp_variant_room (SOME fmp) (stage (LENGTH o1_fn_passes)) vs_out ==>
+    ctx_sim_fuel I D (stage 0) (stage 7) v3 v7 /\
+    ctx_abort_rq D (stage 0) (stage 7) v3 v7 /\
+    o1_inv D 7 (stage 7) v7
+Proof
+  strip_tac >> simp[LET_THM] >> strip_tac >>
+  drule_all o1_walk_pre_dft_stage_facts_static_abort_fixed >>
+  simp[LET_THM] >> metis_tac[]
 QED
 
 Theorem o1_cfg_norm_after_dft_static_abort[local]:
