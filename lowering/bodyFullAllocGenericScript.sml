@@ -178,11 +178,7 @@ Proof
   simp[ghost_kept_at_def] >>
   conj_tac >- gvs[ghost_kept_def] >>
   conj_tac >- gvs[ghost_kept_def] >>
-  conj_tac >- gvs[ghost_kept_def] >>
-  rpt strip_tac >>
-  `i < s.vs_alloca_next` by decide_tac >>
-  drule_all alloca_step_taint_below_frontier >>
-  gvs[ghost_kept_at_def] >> metis_tac[]
+  gvs[ghost_kept_def]
 QED
 
 Theorem inst_seq_ptr_lower_bound_transport[local]:

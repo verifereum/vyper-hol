@@ -12,6 +12,7 @@ Overload ctor_tuple_start[local] =
 
 (* A widened annotation retains the physical internal-call return layout. *)
 Theorem create_ctor_tuple_widened_code[local]:
+  omitted_defaults ce (nsid_to_string (NONE,"f")) 0 = [] /\
   ce.ce_func_info (nsid_to_string (NONE,"f")) = (0,128,[]) /\
   ce.ce_func_return_type (nsid_to_string (NONE,"f")) = tuple_narrow ==>
   (SND (compile_create_ctor_tuple compile_expr ce [tuple_call]
@@ -88,6 +89,7 @@ Overload ctor_tuple_callee[local] =
 
 (* Execute the helper itself, including its real internal-call instruction. *)
 Theorem create_ctor_tuple_widened_execution[local]:
+  omitted_defaults ce (nsid_to_string (NONE,"f")) 0 = [] /\
   ce.ce_func_info (nsid_to_string (NONE,"f")) = (0,128,[]) /\
   ce.ce_func_return_type (nsid_to_string (NONE,"f")) = tuple_narrow ==>
   ?t.
@@ -115,6 +117,7 @@ Proof
 QED
 
 Theorem create_ctor_tuple_widened_window_execution:
+  omitted_defaults ce (nsid_to_string (NONE,"f")) 0 = [] /\
   ce.ce_func_info (nsid_to_string (NONE,"f")) = (0,128,[]) /\
   ce.ce_func_return_type (nsid_to_string (NONE,"f")) = tuple_narrow /\
   FLOOKUP env.fn_sigs (NONE,"f") = SOME sig /\

@@ -36,6 +36,9 @@ Ancestors
   o1PassLift
   (* O1: the pipeline's request companion at an abort *)
   o1PipelineRequests
+  (* O1: joint simulation, abort requests and memory for static frames *)
+  o1StaticPipelineCorrect
+  o1PipelineMemoryLoweredAbort
   (* codegen and compiler units: frame simulation, stack planning, unit checks,
      codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
@@ -50,12 +53,27 @@ Ancestors
   placeTypingE2EProps
   (* lowering: entry decoding, allocation frames and registration, constructor
      arguments, nonreentrancy, byte-builtin and concat memory, conversion from
-     bytes, widened returns, body memory *)
+     bytes, widened returns *)
   actualDecoderPackaging actualRegistrationCode actualEntryAllocationFrame
   allocaHistoryFragment ctorRegisterArgs
   nonreentrantEntry nonreentrantSource nonreentrantExit
   builtinBytesMemory concatMemory exprSimConvertFromBytes
-  stmtSimReturnWiden bodyMemory
+  stmtSimReturnWiden
+  (* body memory pieces kept for the builtin and raw_call lanes, and the S1
+     statement reason theories *)
+  bodyMemArrayLayout bodyMemTupleLayout bodyMemBiMethodIdEndpoint
+  bodyMemEcArithAssemble bodyMemEcArithSafe bodyMemRawCallFinish
+  stmtReasonKindsMemory stmtSimAugAssignPlaceStorage
+  stmtSimIfCounted stmtSimRaise stmtSimSeqMem
+  (* assignment-to-place pieces the deleted stmtSimAssignPlace imported *)
+  immutableAssignMetadata immutableAssignRepresentation immutableAssignStore
+  immutableDeployAssignRestore immutableAssignCode immutableAssignEmpty
+  immutableAssignCompose immutableAssignOpen
+  assignPlacePureFacts assignPlacePureCode assignPlaceEmpty
+  assignPlaceEmptyCompose assignPlaceContinuation assignPlaceCallerFacts
+  assignPlaceGasCompose assignPlaceStoreReady
+  assignEffectfulIndexNonempty assignEffectfulIndexUnifiedStore
+  assignEffectfulIndexEmptyCase assignEffectfulIndexNonmutating
   (* whitelist: retained raw-call and CREATE compiler shape proofs *)
   whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
@@ -68,9 +86,11 @@ Ancestors
   e2eGasSufficient e2eGasSufficientTop
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
-  (* body induction: custom-error rows, admitted until the gate admits them *)
-  bodyCustomErrorCases
+  (* body induction: custom-error raise and assert pieces *)
+  bodyCustomErrorRaise bodyCustomErrorAssert stmtSimCustomErrorPath
+  bodyCustomErrorMemRaise bodyCustomErrorMemAssert stmtSimCustomErrorMemPath
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
   codegenLabelDisciplined
   codegenSymOwnRel
-  asmFinalizerPrefix
+  (* bytecode: a passing operand-stack checker excludes frame overflow *)
+  stackBoundSoundness

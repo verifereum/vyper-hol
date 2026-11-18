@@ -187,7 +187,8 @@ O_pre /\ O_first /\ O_dload /\ O_concretize /\ O_fmp /\
 O_second /\ O_late ==>
 !rpolicy unit out.
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+  unit_entry_no_params unit /\
   unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
   label_flow_own_ok unit.cu_context /\
   (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>

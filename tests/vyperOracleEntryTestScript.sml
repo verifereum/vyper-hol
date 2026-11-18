@@ -3,6 +3,7 @@
    TASK056: obsolete pair-projection owner removed; direct clean entry API. *)
 Theory vyperOracleEntryTest
 Ancestors
+  vyperSmallStepCV
   vyperInterpreter vyperSmallStep vyperCall extCallOracle
   vyperState vyperContext vyperValue vyperAST finite_map list option
 Libs cv_transLib wordsLib

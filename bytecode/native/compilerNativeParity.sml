@@ -2,7 +2,9 @@
  * Bytecode parity runner for the generated compiler (compilerNativeML).
  * For each fixture it runs compile_vyper natively and compares the deploy
  * and runtime bytes against the pinned Python oracle file (deploy=/runtime=
- * lines, as read by evalCompilerBytecodeLib.read_hex_bytes).
+ * lines, as read by evalCompilerBytecodeLib.read_hex_bytes).  The
+ * python-o1-asm-opt fixtures compile with asm_opt_finalizer, the others with
+ * K SOME.
  *
  * Usage: bytecode_parity_native.exe BYTECODE_DIR [PATH ...]
  * A fixture is named by its .hex file's path relative to BYTECODE_DIR, such as
@@ -97,22 +99,24 @@ structure compilerNativeParity = struct
 
   (* Oracles out of parity until their vyperlang/vyper#5127 port lands, as
      listed in ../pending-5127-port.md: `main/NAME` is the main corpus
-     (python-o1-no-asm-opt/NAME.hex), `SUITE/NAME` a feature suite's
-     SUITE/oracle/NAME.hex, except load_timing under ../tests/fixtures. *)
+     (python-o1-no-asm-opt/NAME.hex and python-o1-asm-opt/NAME.hex),
+     `SUITE/NAME` a feature suite's SUITE/oracle/NAME.hex, except load_timing
+     under ../tests/fixtures. *)
   fun pending_oracles root = let
     val path = OS.Path.concat (root, "pending-5127-port.md")
     val prefix = "- `"
-    fun name line =
+    fun names line =
       if String.isPrefix prefix line then
         case String.fields (fn c => c = #"/")
                (hd (String.fields (fn c => c = #"`")
                       (String.extract (line, size prefix, NONE)))) of
-          ["main", n] => SOME ("python-o1-no-asm-opt/" ^ n ^ ".hex")
-        | ["load_timing", n] => SOME ("../tests/fixtures/load_timing/oracle/" ^ n ^ ".hex")
-        | [suite, n] => SOME (suite ^ "/oracle/" ^ n ^ ".hex")
-        | _ => NONE
-      else NONE
-  in List.mapPartial name (String.tokens (fn c => c = #"\n") (read_all path))
+          ["main", n] => ["python-o1-no-asm-opt/" ^ n ^ ".hex",
+                          "python-o1-asm-opt/" ^ n ^ ".hex"]
+        | ["load_timing", n] => ["../tests/fixtures/load_timing/oracle/" ^ n ^ ".hex"]
+        | [suite, n] => [suite ^ "/oracle/" ^ n ^ ".hex"]
+        | _ => []
+      else []
+  in List.concat (map names (String.tokens (fn c => c = #"\n") (read_all path)))
   end handle IO.Io _ => []
 
   fun run_one dir (name, thunk) = let

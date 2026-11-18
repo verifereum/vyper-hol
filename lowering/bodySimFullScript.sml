@@ -174,6 +174,11 @@ Definition expr_vv_sim_full_def:
           s0.vs_alloca_next <= t.vs_alloca_next /\
           ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
           ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn t /\
+          (!v. tv = Value v /\ ~is_word_type (post_value_type cenv e) /\
+               ~is_bytestring_type (post_value_type cenv e) ==>
+               vv_own cenv cx (post_value_type cenv e) sa sb ee tv vv t /\
+               (!t' p. vv = LocatedValue t' p ==>
+                       p.ptr_location = LocMemory)) /\
           (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
            ?val. read_result cx tv ee = (INL val, ee) /\
                  !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) =
@@ -246,13 +251,61 @@ Definition stmt_frag_full_def:
                    FLOOKUP t.vs_allocas aid = SOME b) /\
           (!x. not_fresh_at sa x ==>
                FLOOKUP G x = FLOOKUP G0 x /\
-               op_taint tn (Var x) = op_taint tn0 (Var x)))
+               op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+          alloca_frame cenv es sa s0 cenv'' ee t /\
+          (!aid off sz i.
+             FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+             (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                        off + sz <= b \/ b + sz' <= off) /\
+             off <= i /\ i < off + sz /\ i IN tn.t_mem ==>
+             i IN tn0.t_mem))
         (\H res ee gt r.
           (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
           halt_exit H cx ee res r /\
           (ctx_has_dalloca ctx ==>
            !s. (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 End
+
+(* The bytes of the older allocations clear of the live locals gain no
+   taint across two fragments, the first keeping its allocations and the
+   frame (alloca_frame) of those it started with. *)
+Theorem alloca_taint_kept_trans:
+  alloca_frame c0 e0 sa0 s0 c1 e1 s1 /\ sa0.cs_next_id <= sa1.cs_next_id /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP s1.vs_allocas aid = SOME b) /\
+  (!aid off sz i.
+     FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa0.cs_next_id /\
+     (!n b sz'. local_region c0 e0.scopes s0 n b sz' ==>
+                off + sz <= b \/ b + sz' <= off) /\
+     off <= i /\ i < off + sz /\ i IN tn1.t_mem ==>
+     i IN tn0.t_mem) /\
+  (!aid off sz i.
+     FLOOKUP s1.vs_allocas aid = SOME (off, sz) /\ aid < sa1.cs_next_id /\
+     (!n b sz'. local_region c1 e1.scopes s1 n b sz' ==>
+                off + sz <= b \/ b + sz' <= off) /\
+     off <= i /\ i < off + sz /\ i IN tn2.t_mem ==>
+     i IN tn1.t_mem) ==>
+  !aid off sz i.
+    FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa0.cs_next_id /\
+    (!n b sz'. local_region c0 e0.scopes s0 n b sz' ==>
+               off + sz <= b \/ b + sz' <= off) /\
+    off <= i /\ i < off + sz /\ i IN tn2.t_mem ==>
+    i IN tn0.t_mem
+Proof
+  rewrite_tac[alloca_frame_def] >> rpt strip_tac >>
+  qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas _ = _ /\ _ ==> _ /\ _`
+    (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  `FLOOKUP s1.vs_allocas aid = SOME (off, sz)` by res_tac >>
+  `aid < sa1.cs_next_id` by decide_tac >>
+  `i IN tn1.t_mem` by
+    (qpat_x_assum `!aid off sz i. FLOOKUP s1.vs_allocas _ = _ /\ _ ==> _`
+       (qspecl_then [`aid`, `off`, `sz`, `i`] mp_tac) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  qpat_x_assum `!aid off sz i. FLOOKUP s0.vs_allocas _ = _ /\ _ ==> _`
+    (qspecl_then [`aid`, `off`, `sz`, `i`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]
+QED
 
 Definition frame_ret_ok_full_def:
   frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

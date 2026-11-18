@@ -13,7 +13,7 @@ Ancestors
   readonlyInvokeCopyFwdHistoryCopyAbort readonlyInvokeCopyFwdHistoryInheritedAccess
   readonlyInvokeCopyFwdHistorySuspension readonlyInvokeCopyFwdOpaqueStep
   readonlyInvokeCopyFwdOperationalEntry readonlyInvokeCopyFwdOrdinaryPremises
-  readonlyInvokeCopyFwdSteps readonlyInvokeCopyFwdStepsDelegate
+  readonlyInvokeCopyFwdSteps
   readonlyInvokeCopyFwdStepsErrors readonlyInvokeCopyFwdStepsHash
   readonlyInvokeCopyFwdStepsMemoryAll readonlyInvokeCopyFwdStepsSelfdestruct
   readonlyInvokeCopyFwdStepsValues
@@ -126,9 +126,17 @@ Proof
        mk_inst_def, entry_block_def, entry_param_outputs_def,
        collect_param_info_def, has_ret_instruction_def, build_param_index_def,
        rma_init_state_def, FLOOKUP_UPDATE] >>
+  qmatch_goalsub_abbrev_tac `dfg_build_function callee_fn` >>
+  qabbrev_tac `callee_dfg = dfg_build_function callee_fn` >>
+  qunabbrev_tac `callee_fn` >>
+  qmatch_goalsub_abbrev_tac `dfg_build_function main_fn` >>
+  qabbrev_tac `main_dfg = dfg_build_function main_fn` >>
+  qunabbrev_tac `main_fn` >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >>
-  simp[rma_fixpoint_step_def, FLOOKUP_UPDATE, rma_analyze_fn_def,
-       mem_write_ops_def] >>
+  simp[rma_fixpoint_step_def, FLOOKUP_UPDATE] >>
+  simp[rma_analyze_fn_def] >>
+  simp[mem_write_ops_def] >>
+  simp[FLOOKUP_UPDATE] >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >>
   simp[]
 QED
@@ -725,16 +733,10 @@ Proof
         `"main"`, `ricf_witness_main`, `"main"`]
        ptr_safe_ptr_discipline) >>
      simp[ricf_witness_ptr_static]) >>
-  `mem_inv raw_mem_ok ricf_witness_ctx (init_venom_state "main")` by
-    (simp[raw_unit_memory_ok_mem_inv] >> conj_tac
-     >- (qx_choose_then `J` strip_assume_tac ricf_witness_frontier_package >>
-         match_mp_tac (Q.SPECL
-           [`ricf_witness_ctx`, `init_venom_state "main"`, `"main"`,
-            `ricf_witness_main`, `"main"`, `J`]
-           mem_safe_raw_unit_memory_ok) >>
-         simp[ricf_witness_ptr_static] >>
-         qpat_x_assum `!f inst s. J _ _ _ _ ==> _` ACCEPT_TAC) >>
-     `EVERY pre_fmp_ops ricf_witness_ctx.ctx_functions /\
+  `!fn inst s.
+     raw_reachable (init_venom_state "main") ricf_witness_ctx fn inst s ==>
+     dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (`EVERY pre_fmp_ops ricf_witness_ctx.ctx_functions /\
       ~ctx_has_dalloca ricf_witness_ctx` by EVAL_TAC >>
      rpt gen_tac >> strip_tac >>
      drule raw_reachable_fmp_fixed >> simp[] >> strip_tac >>
@@ -744,6 +746,16 @@ Proof
           (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
         imp_res_tac EVERY_active_inst >> gvs[]) >>
      simp[dalloca_no_wrap_def, init_venom_state_def]) >>
+  `mem_inv raw_mem_ok ricf_witness_ctx (init_venom_state "main")` by
+    (simp[raw_unit_memory_ok_mem_inv] >> conj_tac
+     >- (qx_choose_then `J` strip_assume_tac ricf_witness_frontier_package >>
+         match_mp_tac (Q.SPECL
+           [`ricf_witness_ctx`, `init_venom_state "main"`, `"main"`,
+            `ricf_witness_main`, `"main"`, `J`]
+           mem_safe_raw_unit_memory_ok) >>
+         simp[ricf_witness_ptr_static] >>
+         conj_tac >> first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   qexistsl_tac
     [`<| d_stor := K (K UNIV); d_trans := K (K UNIV);
          d_imm := K UNIV; d_ret := K UNIV |>`, `0`,

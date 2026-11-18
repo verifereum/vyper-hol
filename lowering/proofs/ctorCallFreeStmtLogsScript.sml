@@ -74,12 +74,18 @@ Theorem opcode_every_log_eval_all:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !es ce st.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   EVERY (\e. ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e) es ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -91,11 +97,12 @@ Proof
   strip_tac >> Induct >> simp[compile_log_eval_all_def, every_state_insts_return] >>
   rpt gen_tac >> strip_tac >> qid_spec_tac `st` >>
   ho_match_mp_tac every_state_insts_bind >> conj_tac
-  >- (ho_match_mp_tac every_state_insts_lower_value >> simp[(UNDISCH opcode_every_unwrap_value)]) >>
+  >- (ho_match_mp_tac every_state_insts_lower_value >>
+      simp[(UNDISCH opcode_every_unwrap_value)] >> metis_tac[]) >>
   gen_tac >> ho_match_mp_tac every_state_insts_bind >> conj_tac
   >- simp[(UNDISCH opcode_every_log_save_arg)] >>
   gen_tac >> ho_match_mp_tac every_state_insts_bind >>
-  simp[every_state_insts_return]
+  simp[every_state_insts_return] >> metis_tac[]
 QED
 
 Theorem opcode_every_reason_message:
@@ -103,12 +110,18 @@ Theorem opcode_every_reason_message:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!ce ty e st.
+    (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+      EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !e ce st.
+  (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
+    EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
+                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_expr_exists R e /\
   ~supported_expr_exists expr_shape_root e ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -117,7 +130,13 @@ Theorem opcode_every_reason_message:
   )
 Proof
   strip_tac >>
-  strip_tac >> Cases >> simp[compile_reason_message_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `!ty e st. ~supported_expr_exists R e /\
+    ~supported_expr_exists expr_shape_root e ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_expr ce ty e st)))`
+    by metis_tac[] >>
+  Cases_on `e` >> simp[compile_reason_message_def] >>
   rename1 `Literal ty lit` >> Cases_on `ty` >> simp[compile_reason_message_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >> simp[compile_reason_message_def] >>
   Cases_on `lit` >> simp[compile_reason_message_def,

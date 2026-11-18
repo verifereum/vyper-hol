@@ -18,7 +18,7 @@ Theorem fmp_dalloca_source:
 Proof
   strip_tac >>
   gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(), terminates_def] >>
-  gvs[dalloca_no_wrap_def] >>
+  gvs[unitTransformDefsTheory.dalloca_no_wrap_def] >>
   simp[GSYM word_add_n2w, WORD_ADD_COMM]
 QED
 
@@ -245,7 +245,7 @@ Proof
   `?plus31 mask aligned ai ni mi bi tail.
      DROP (if (s.vs_current_bb,s.vs_inst_idx) IN FDOM (fmp_stage_plan infos ctx fn)
            then 1 else 0) code =
-       [mk_inst ai ADD [Lit 31w;size_op] [plus31];
+       [mk_inst ai ADD [size_op;Lit 31w] [plus31];
         mk_inst ni NOT [Lit 31w] [mask];
         mk_inst mi AND [Var plus31;Var mask] [aligned];
         mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] ++ tail /\

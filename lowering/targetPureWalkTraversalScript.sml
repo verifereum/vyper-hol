@@ -4,6 +4,7 @@ Ancestors
   targetPureWalkCallees vyperTypeEvalSoundness vyperReadOnlyBranches vyperReadOnlyCalls vyperReadOnlyTargets
   vyperMachineFrame vyperCallOutcomeFrame vyperInterpreter vyperState
   stmtLowering exprLowering vyperTypeCallGraph rich_list vyperEvalFrame
+  vyperTypeEvalProofs
 Libs monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";

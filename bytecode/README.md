@@ -9,6 +9,8 @@ HOL-supported-subset corpus (6 of them not parity-checked; see [`pending-5127-po
   theories.
 - `python-o1-no-asm-opt/` contains the pinned Python Vyper deployment/runtime
   bytecode and its provenance record.
+- `python-o1-asm-opt/` contains the same fixtures compiled with Python's final
+  assembly optimizer on (O1), the oracle for `asm_opt_finalizer`.
 - `python_o1_bytecode_oracle.py` generates the oracle.
 - `python-o1-bytecode-fixtures` reproduces it.
 
@@ -35,12 +37,24 @@ removed when a new pin includes them. The pin already contains
 vyperlang/vyper#5127 (external calls send `4 + encoded length` bytes). The
 current series contains:
 
+- `5236-ternary-arm-widening.patch`, vyperlang/vyper#5236: a ternary arm
+  whose type is narrower than the result's (a nested `DynArray` with a
+  smaller inner bound, say) is copied into the result type's layout, in both
+  codegens.
 - `5239-declared-variable-type.patch`, vyperlang/vyper#5239: a storage,
   transient or immutable variable is read at its own declared type, not at a
   wider expected type (such as an external call's parameter type), whose
   layout differs for nested bounded types.
 - `5254-inliner-retpc.patch`, vyperlang/vyper#5254: the inliner binds the
   unused return-PC parameter to zero instead of the removed callee's label.
+- `5256-tuple-widening-layout.patch`, vyperlang/vyper#5256: assigning a tuple
+  to a tuple of wider member types copies it member by member into the
+  target's layout.
+- `5274-base-ptr-all-uses.patch`, vyperlang/vyper#5274: the base pointer
+  analysis sweeps every block until nothing changes, so a pointer that reaches
+  a join through a later-visited predecessor is seen at all its uses. Before
+  it, memory allocation could give a ternary arm's buffer the slot of a
+  temporary still live, e.g. an aggregate ternary iterated by a `for` loop.
 - `5280-target-subscript-overlap.patch`, vyperlang/vyper#5280: the array of an
   `append` or `pop` is lowered as a target, so it is rejected
   (`CompilerPanic("risky overlap")`) when one of its subscripts has a base that
@@ -51,9 +65,25 @@ current series contains:
   hunk only): an assignment whose target indices can modify memory or storage
   (`self.m[self.f()] = self.x`) freezes the right-hand side before lowering the
   target, so the store sees the value from before those effects.
+- `5295-concat-buffer-bound.patch`, vyperlang/vyper#5295: `concat` sizes its
+  buffer for the furthest byte its full-word `bytesM` stores reach, which can
+  be up to 31 bytes past the result type's size.
+- `5297-base-ptr-ret-reads.patch`, vyperlang/vyper#5297: the base pointer
+  analysis models `retfmp` and `dret`, like `ret`, as reads of an unknown
+  location, since they hand control back to the caller.
+- `5298-int-decimal-clamp.patch`, vyperlang/vyper#5298: `convert` of an
+  integer to `decimal` clamps against the lower bound rounded toward zero.
+- `5322-signed-empty-bytestring.patch`, vyperlang/vyper#5322: converting an
+  empty bytestring to a signed type gives 0 for every bytestring, not only
+  unbounded ones, in both codegens.
+- `5331-ternary-arm-buffer.patch`, vyperlang/vyper#5331: a ternary arm that
+  is a narrower bytestring is copied into a buffer of the result's size.
 - `5332-immutable-runtime-length.patch`, vyperlang/vyper#5332: constructor
   immutable bytestring stores copy the length word and live data words, rather
   than the declared capacity.
+- `5333-memory-bytestring-payload.patch`, vyperlang/vyper#5333: the ABI
+  decoder copies only the present payload of a bytestring decoded from a
+  memory buffer, rather than the destination's maximum bound.
 - `5336-dft-abort-order.patch`, vyperlang/vyper#5336: DFT keeps aborting
   instructions (an `assert`, an internal call) in their order, scheduling each
   after the previous run of aborting instructions.
@@ -163,8 +193,9 @@ holbuild executable bytecode_parity_native
 
 CI's `native-parity` job runs it on every suite.
 
-The 101 retained fixtures in `python-o1-no-asm-opt/` and the witnessed fixtures
-of each feature suite are covered, except those listed in
+The 101 retained fixtures in `python-o1-no-asm-opt/`, the same fixtures in
+`python-o1-asm-opt/` (compiled with `asm_opt_finalizer`), and the witnessed
+fixtures of each feature suite are covered, except those listed in
 [`pending-5127-port.md`](pending-5127-port.md); together they check the deployment and
 runtime byte lists of each. The runner is trusted rather than kernel-checked
 (see its Trust section). The independent oracle appears only in parity claims.

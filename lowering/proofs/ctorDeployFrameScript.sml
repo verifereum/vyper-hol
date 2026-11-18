@@ -8,11 +8,11 @@
 Theory ctorDeployFrame
 Ancestors
   ctorDeployDefs deployFrameReplay codegenCorrectness e2eDeployFrame
-  frameOutcome vfmRunCall vfmState passSimulationDefs e2eDeployDefs
+  frameOutcome vfmRunCall vfmState passSimulationDefs e2eDeployDefs accountsRelProps
   frameGas venomRunBounded ctorDeployCallFree o1OpcodeAbsence
   codegenAsmProgOk frameRunRaises frameStep ctorDeployEntry immutableSectionRel
   unitMemInv ctxLookupAgree stepWriteFootprintBase contextCodegenRel
-  o1PassContract venomPipelineDriverProps venomWf venomInst
+  o1PassContract venomPipelineDriverProps venomWf venomInst vyperInterpreter
 
 (* Single-frame outcomes depend on the start state only through its one
    context's logs and the transaction parameters. *)
@@ -66,6 +66,40 @@ Proof
   gen_tac >> irule shadow_root_frame_outcome_exc >> metis_tac[]
 QED
 
+Theorem deploy_shadow_not_starved:
+  es.contexts = [(ctxt, rb)] /\
+  run_call es = SOME (r, es') /\
+  ~creation_resource_starved es r es' /\
+  run_call (shadow_root es) = SOME (sr, sg) ==>
+  ~frame_resource_starved (shadow_root es) sr sg
+Proof
+  strip_tac >> strip_tac >>
+  gvs[frame_resource_starved_def] >>
+  drule_all deploy_frame_exception >> strip_tac >> gvs[] >>
+  fs[creation_resource_starved_def] >> metis_tac[]
+QED
+
+Theorem deploy_shadow_run_not_starved:
+  es.contexts = [(ctxt, rb)] /\
+  run_call es = SOME (r, es') /\
+  ~creation_resource_starved es r es' ==>
+  ?sr sg.
+    run_call (shadow_root es) = SOME (sr, sg) /\
+    ~frame_resource_starved (shadow_root es) sr sg
+Proof
+  strip_tac >>
+  `LENGTH es.contexts = 1` by simp[] >>
+  `run es = SOME (r, es')` by
+    metis_tac[run_call_eq_run_single_context] >>
+  `es.contexts <> []` by simp[] >>
+  drule_all shadow_root_run_exists >> strip_tac >>
+  `LENGTH (shadow_root es).contexts = 1` by
+    simp[shadow_root_def, shadow_root_contexts_def] >>
+  `run_call (shadow_root es) = SOME (sr, sg)` by
+    metis_tac[run_call_eq_run_single_context] >>
+  metis_tac[deploy_shadow_not_starved]
+QED
+
 (* A halting shadow run is the real run up to the root's halt handler. *)
 Theorem deploy_frame_halt_mid[local]:
   es.contexts = [(c0,rb0)] /\
@@ -91,22 +125,6 @@ Proof
   qexistsl [`mid`,`ctxt`,`rb`] >>
   gvs[root_output_to_def, run_call_eq_run_single_context] >>
   gvs[frame_outcome_def, shadow_root_def, shadow_root_contexts_def]
-QED
-
-(* A pending deletion erases any earlier update of the deleted account. *)
-Theorem process_deletions_update_mem[local]:
-  !dels accs a x.
-    MEM a dels ==>
-    process_deletions dels (update_account a x accs) =
-    process_deletions dels accs
-Proof
-  Induct >> fs[vfmExecutionTheory.process_deletions_def, update_account_def] >>
-  rpt gen_tac >> Cases_on `h = a` >> fs[combinTheory.UPDATE_EQ] >>
-  strip_tac >>
-  `(h =+ empty_account_state) ((a =+ x) accs) =
-   (a =+ x) ((h =+ empty_account_state) accs)` by
-    (irule combinTheory.UPDATE_COMMUTES >> simp[]) >>
-  simp[]
 QED
 
 Theorem deploy_venom_frame:
@@ -142,7 +160,7 @@ Proof
       Cases_on `src`
       >- (PairCases_on `x` >>
           Cases_on `ALOOKUP x0.sources tx.target = NONE`
-          >- (gvs[deploy_venom_result_rel_def,
+          >- (gvs[deploy_venom_result_rel_def, initial_evaluation_context_def,
                   e2eDefsTheory.logs_correspond_def,
                   e2eDefsTheory.log_entry_corresponds_def, listTheory.LIST_REL_eq] >>
               qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
@@ -163,7 +181,7 @@ Proof
                process_deletions ss.vs_pending_deletions ss.vs_accounts` by
                 (irule process_deletions_update_mem >> simp[]) >>
               fs[update_account_def, lookup_account_def]) >>
-          gvs[deploy_venom_result_rel_def,
+          gvs[deploy_venom_result_rel_def, initial_evaluation_context_def,
               e2eDefsTheory.logs_correspond_def,
               e2eDefsTheory.log_entry_corresponds_def, listTheory.LIST_REL_eq] >>
           qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac

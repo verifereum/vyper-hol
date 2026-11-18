@@ -439,8 +439,7 @@ QED
 (* ===== The checker's conversion domain ===== *)
 
 (* The checker on Python's exported ASTs of conversions outside Vyper's input
-   sets: it rejects those whose HOL lowering and source semantics disagree,
-   and accepts those where they agree. *)
+   sets: it rejects them, like the pinned Vyper's type checker. *)
 fun check_conversion_in dir expected name = let
   val path = "../bytecode/conversions/" ^ dir ^ "/" ^ name ^ ".json"
   val input = vyperCheckContractFrontendLib.prepare_check_input
@@ -467,9 +466,7 @@ val () = List.app (check_conversion_in "checker-oracle" true)
 val () = List.app (check_conversion_in "typecheck-rejected" false)
   ["u256_to_b4", "bys33_to_bool", "bys64_to_u256", "bys8_to_b4",
    "str8_to_b4", "u256_to_bys16", "b4_to_bys2",
-   "b4_to_bys", "b4_to_str", "u256_to_bys"]
-val () = List.app (check_conversion_in "typecheck-rejected" true)
-  ["i8_to_addr", "i256_to_addr"]
+   "b4_to_bys", "b4_to_str", "u256_to_bys", "i8_to_addr", "i256_to_addr"]
 
 (* The HOL typed AST permits a struct variable named msg.  Its data field
    is memory, even though its syntax also satisfies is_msg_data.  Real
@@ -498,6 +495,32 @@ End
 Theorem slice_struct_field_copies_memory:
   EXISTS (\i. i.inst_opcode = MCOPY) slice_struct_field_insts /\
   ~EXISTS (\i. i.inst_opcode = CALLDATACOPY) slice_struct_field_insts
+Proof
+  EVAL_TAC
+QED
+
+(* Internal defaults share the constant substitution used by function bodies. *)
+Theorem internal_default_constant_substitution:
+  build_func_defaults
+    [VariableDecl Private
+       (Constant (Literal (BaseT (UintT 256)) (IntL 7)))
+       "C" (BaseT (UintT 256)) NONE;
+     FunctionDecl Internal Pure F F "f" [("x", BaseT (UintT 256))]
+       [TopLevelName (BaseT (UintT 256)) (NONE, "C")]
+       (BaseT (UintT 256))
+       [Return (SOME (Name (BaseT (UintT 256)) "x"))]] =
+    [("f", [Literal (BaseT (UintT 256)) (IntL 7)])] /\
+  omitted_defaults
+    (build_compile_env
+      [VariableDecl Private
+         (Constant (Literal (BaseT (UintT 256)) (IntL 7)))
+         "C" (BaseT (UintT 256)) NONE;
+       FunctionDecl Internal Pure F F "f" [("x", BaseT (UintT 256))]
+         [TopLevelName (BaseT (UintT 256)) (NONE, "C")]
+         (BaseT (UintT 256))
+         [Return (SOME (Name (BaseT (UintT 256)) "x"))]]
+      Internal Pure "caller" [] (BaseT (UintT 256)) [] F) "f" 0 =
+    [Literal (BaseT (UintT 256)) (IntL 7)]
 Proof
   EVAL_TAC
 QED

@@ -373,7 +373,10 @@ Proof
   fs[taint_ok_def, step_taint_def, adopt_reset_def, store_taint_def,
      imm_taint_def, update_var_def, venom_call_request_def,
      ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
-  gvs[Excl "consume_call_outcome_eq"]
+  gvs[Excl "consume_call_outcome_eq"] >>
+  Cases_on `~s.vs_call_ctx.cc_static /\ r1.vs_requests <> s.vs_requests /\
+            r2.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
+  gvs[word_agree_except_def] >> metis_tac[]
 QED
 
 Theorem fmp_mem_call_clean_taint[local]:
@@ -450,7 +453,7 @@ Proof
   qexists_tac `update_var out w2 r2` >>
   gvs[Excl "consume_call_outcome_eq"] >>
   `s.vs_halted = t.vs_halted` by fs[fmp_stage_rel_def] >>
-  gvs[update_var_def, consume_call_outcome_eq, FLOOKUP_UPDATE] >>
+  FIRST [gvs[update_var_def, consume_call_outcome_eq, FLOOKUP_UPDATE]] >>
   simp[step_prov_def, out_prov_def, set_prov_def, step_taint_def,
        op_taint_def, set_var_taint_def, fmp_value_rel_def, ld_value_agree_def,
        FLOOKUP_DRESTRICT, MEM] >>

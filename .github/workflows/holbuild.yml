@@ -426,7 +426,9 @@ jobs:
 
   holbuild-success:
     if: always() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
-    runs-on: ubuntu-26.04-arm
+    # Only checks `needs` results: not on the ARM pool, so a runner shortage
+    # there can't leave the finished run's required check unstarted.
+    runs-on: ubuntu-latest
     needs: [build, native-parity, tested, test-deps, python-o1-oracle, export-vyper-tests, export-parity, vyper-tests]
     steps:
       # A merge group's tested job reads the commit from this step's name.

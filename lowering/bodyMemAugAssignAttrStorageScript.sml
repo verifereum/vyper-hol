@@ -13,7 +13,6 @@ Theory bodyMemAugAssignAttrStorage
 Ancestors
   fragGasSeqAbort
   supportedExprTraverse allocLimitsProps
-  bodySimStmtCases
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignTopWord bodyDeclMemoryCounted
   bodyDeclMemoryCore bodyMemEmitOpFrame allocaFootprint instMemFrontier memSafeRun
@@ -363,7 +362,7 @@ QED
    simulation there too).  Before: expr_sim_mem ... (es with gas_obs := gs).
    After: the same at (es with storage_trace := es.storage_trace ++
    [StorageRoot tr slot (StructTV fs)]) with gas_obs := gs. *)
-Theorem compile_augassign_attr_storage_mem[local]:
+Theorem compile_augassign_attr_storage_mem_typed[local]:
   !d ctx func cx lctx RetQ cenv ty0 env src id fld sid ty fsz bop e es
    ts tr id_str slot fs off ftv.
     (!gs. expr_sim_mem ctx func cenv cx ty e
@@ -385,7 +384,8 @@ Theorem compile_augassign_attr_storage_mem[local]:
     struct_field_offset_slots
       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld = off /\
     (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    (bop = ShL \/ bop = ShR ==>
+      shift_amount_ok e \/ augassign_shift_amount_ok ty e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
@@ -398,9 +398,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  `word_value_type ty /\ word_value_type (expr_type e)` by
-    metis_tac[well_typed_binop_augassign_word] >>
-  `is_word_type ty` by metis_tac[word_value_type_word] >>
+  `is_word_type ty /\ is_word_type (expr_type e)` by
+    metis_tac[well_typed_binop_augassign_is_word] >>
   `!es'. eval_target_place cx
      (AttributeTarget (TopLevelNameTarget (src,id)) fld) es' =
      (INL (StoragePlace tr (n2w slot + n2w off) ftv),
@@ -446,7 +445,7 @@ Proof
   suspend "load"
 QED
 
-Resume compile_augassign_attr_storage_mem[load]:
+Resume compile_augassign_attr_storage_mem_typed[load]:
   `cs_extends sa sn /\ cs_extends sn s1` by
     metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
   `cs_extends sa s1` by metis_tac[cs_extends_trans] >>
@@ -560,7 +559,7 @@ Resume compile_augassign_attr_storage_mem[load]:
   simp[]
 QED
 
-Resume compile_augassign_attr_storage_mem[rhs_summary]:
+Resume compile_augassign_attr_storage_mem_typed[rhs_summary]:
   qexists_tac `marks` >>
   Cases_on `gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
               ((es with storage_trace :=
@@ -587,7 +586,7 @@ Resume compile_augassign_attr_storage_mem[rhs_summary]:
   metis_tac[expr_exit_INR_type]
 QED
 
-Resume compile_augassign_attr_storage_mem[rhs_normal]:
+Resume compile_augassign_attr_storage_mem_typed[rhs_normal]:
   gvs[] >> rename1 `gas_marked_exec _ _ _ _ _ _ ee (OK u)` >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
     (qspec_then `H2` mp_tac) >> impl_tac >- simp[] >>
@@ -625,7 +624,6 @@ Resume compile_augassign_attr_storage_mem[rhs_normal]:
     metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
   `value_has_type ftv v0` by
     metis_tac[read_storage_slot_success_type] >>
-  `word_value v0` by metis_tac[word_value_type_typed] >>
   `well_formed_type (get_tenv cx) ty` by simp[well_formed_type_def] >>
   `type_bits ty MOD 8 = 0` by metis_tac[well_formed_type_bits] >>
   `expr_body_pre cenv cx env e
@@ -633,42 +631,43 @@ Resume compile_augassign_attr_storage_mem[rhs_normal]:
                 storage_trace :=
                   es.storage_trace ++ [StorageRoot tr slot (StructTV fs)]|>)` by
     simp[] >>
-  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_result) >>
+  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_type_result) >>
   strip_tac >> gvs[] >>
   rename1 `value_has_type etv v` >>
   drule (REWRITE_RULE [ETA_AX] eval_expr_read_INL) >> strip_tac >>
   `!n. expr_int_literal e = SOME n ==> v = IntV n` by
     metis_tac[eval_expr_int_literal_agrees] >>
-  `(bop = ShL \/ bop = ShR ==> ?i. v = IntV i /\ 0 <= i)` by
-    (disch_then (fn th =>
-       qpat_x_assum `_ ==> shift_amount_ok e` (assume_tac o C MP th)) >>
-     drule_all eval_expr_shift_amount >> simp[]) >>
+  `(bop = ShL \/ bop = ShR ==>
+      (?i. v = IntV i /\ 0 <= i) \/
+      (ty = BaseT (BytesT (Fixed 32)) /\
+       ?bs. v = BytesV bs /\ LENGTH bs = 32))` by
+    (strip_tac >> irule augassign_shift_operand >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   suspend "binop"
 QED
 
-Resume compile_augassign_attr_storage_mem[binop]:
-  `binop_frag_val_mem ctx func cenv cx bop ty ty NONE
+Resume compile_augassign_attr_storage_mem_typed[binop]:
+  `binop_frag_mem_post (expr_val_rel cx ty)
+     ctx func cenv cx bop ty ty NONE
      (if bop = Exp then expr_int_literal e else NONE)
-     [ty; expr_type e] v0 v (ee with gas_obs := [])` by
-    (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `bop`, `ty`,
-       `TopLevelName ty (src, id)`, `e`, `v0`, `v`, `ee with gas_obs := []`,
-       `ftv`, `etv`] mp_tac binop_frag_typed_mem >>
-     simp[vyperASTTheory.expr_type_def, expr_int_literal_def] >>
-     disch_then irule >>
-     strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
-     Cases_on `expr_int_literal e` >> gvs[]) >>
+     [ty; expr_type e] v0 v
+     (typed_val_to_w256 ftv v0) (typed_val_to_w256 etv v)
+     (ee with gas_obs := [])` by
+    (irule augassign_binop_frag_typed_mem >> simp[] >> conj_tac
+     >- (strip_tac >>
+         gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
+         Cases_on `expr_int_literal e` >> gvs[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `expr_type e` >> simp[]) >>
   `expr_post H2 ctx func cenv cx e
      ((es with storage_trace :=
          es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])
       with gas_obs := []) s1 s2 t (ee with gas_obs := []) v rhs_op u` by
     metis_tac[] >>
-  `eval_operand (Var out) t = SOME (val_to_w256 v0)` by
-    simp[typed_val_to_w256_word_value] >>
-  `eval_operand rhs_op u = SOME (val_to_w256 v)` by
-    (irule expr_val_rel_word >>
-     fs[expr_post_def] >> goal_assum (drule_at Any) >>
-     simp[word_value_type_word]) >>
-  `eval_operand (Var out) u = SOME (val_to_w256 v0)` by
+  `eval_operand rhs_op u = SOME (typed_val_to_w256 etv v)` by
+    (irule expr_val_rel_typed >>
+     fs[expr_post_def] >> goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand (Var out) u = SOME (typed_val_to_w256 ftv v0)` by
     (irule eval_operand_frame >> simp[] >>
      qexistsl_tac [`s1`, `t`] >> gvs[expr_post_def]) >>
   `eval_operand (Var dv) u = SOME (n2w slot + n2w off)` by
@@ -678,8 +677,8 @@ Resume compile_augassign_attr_storage_mem[binop]:
     metis_tac[freshWritesTheory.not_fresh_at_mono, local_ptrs_reserved_next_var] >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-  qpat_x_assum `binop_frag_val_mem _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [binop_frag_val_mem_def, binop_frag_mem_def]) >>
+  qpat_x_assum `binop_frag_mem_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [binop_frag_mem_post_def]) >>
   disch_then (qspecl_then [`st0`, `s2`, `s3`, `Var out`, `rhs_op`, `res_op`, `u`]
     mp_tac) >>
   impl_tac
@@ -693,15 +692,15 @@ Resume compile_augassign_attr_storage_mem[binop]:
   strip_tac >- suspend "operator_normal" >> suspend "operator_exit"
 QED
 
-Resume compile_augassign_attr_storage_mem[operator_normal]:
-  gvs[] >> rename1 `eval_operand res_op s = SOME (val_to_w256 result)` >>
+Resume compile_augassign_attr_storage_mem_typed[operator_normal]:
+  gvs[] >> rename1 `expr_val_rel cx ty result res_op s` >>
   `bop_result cx ty bop [ty; expr_type e] v0 v ee =
      case evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        ftv bop v0 v of
        INL x => INL x | INR err => INR (Error err)` by
     (irule bop_result_augassign >>
-     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
+     metis_tac[augassign_compare_not_bytes]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      ftv bop v0 v = INL result` by gvs[AllCaseEqs()] >>
@@ -714,7 +713,7 @@ Resume compile_augassign_attr_storage_mem[operator_normal]:
        well_typed_binop_success_type) >> simp[]) >>
   `type_slot_size ftv = 1` by metis_tac[word_type_slot_size] >>
   `eval_operand res_op s = SOME (typed_val_to_w256 ftv result)` by
-    simp[typed_val_to_w256_word_value] >>
+    (irule expr_val_rel_typed >> simp[] >> metis_tac[]) >>
   `encode_value ftv result = SOME [(0, typed_val_to_w256 ftv result)]` by
     metis_tac[stmtSimAssignStorageFactsTheory.encode_value_word_typed] >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -800,7 +799,7 @@ Resume compile_augassign_attr_storage_mem[operator_normal]:
   suspend "store"
 QED
 
-Resume compile_augassign_attr_storage_mem[store]:
+Resume compile_augassign_attr_storage_mem_typed[store]:
   mp_tac (Q.SPECL [`ctx`, `func`, `tr`, `Var dv`, `n2w slot + n2w off`, `res_op`,
     `typed_val_to_w256 ftv result`, `s`, `s3`, `sb`] storage_store_op_path_mem) >>
   impl_tac >- simp[] >>
@@ -832,7 +831,7 @@ Resume compile_augassign_attr_storage_mem[store]:
   suspend "post"
 QED
 
-Resume compile_augassign_attr_storage_mem[post]:
+Resume compile_augassign_attr_storage_mem_typed[post]:
   `valid_horizon cx st0 H ee.storage_trace` by
     (qpat_x_assum `valid_horizon _ _ H _` mp_tac >>
      qpat_assum `fin.storage_trace = ee.storage_trace`
@@ -945,14 +944,14 @@ Resume compile_augassign_attr_storage_mem[post]:
   >- first_assum ACCEPT_TAC
 QED
 
-Resume compile_augassign_attr_storage_mem[operator_exit]:
+Resume compile_augassign_attr_storage_mem_typed[operator_exit]:
   `bop_result cx ty bop [ty; expr_type e] v0 v ee =
      case evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        ftv bop v0 v of
        INL x => INL x | INR err => INR (Error err)` by
     (irule bop_result_augassign >>
-     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
+     metis_tac[augassign_compare_not_bytes]) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        ftv bop v0 v`
@@ -978,7 +977,43 @@ Resume compile_augassign_attr_storage_mem[operator_exit]:
   metis_tac[expr_exit_INR_type]
 QED
 
-Finalise compile_augassign_attr_storage_mem
+Finalise compile_augassign_attr_storage_mem_typed
+
+Theorem compile_augassign_attr_storage_mem:
+  !d ctx func cx lctx RetQ cenv ty0 env src id fld sid ty fsz bop e es
+   ts tr id_str slot fs off ftv.
+    (!gs. expr_sim_mem ctx func cenv cx ty e
+       ((es with storage_trace :=
+           es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])
+        with gas_obs := gs)) /\
+    expr_body_pre cenv cx env e es /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts =
+      SOME (StorageVarDecl tr (StructT sid), id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME (StructT sid) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (ty, fsz) /\
+    evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+    struct_field_slot fs fld = SOME (off, ftv) /\
+    evaluate_type (get_tenv cx) ty = SOME ftv /\
+    struct_field_offset_slots
+      (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld = off /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    stmt_frag_mem d ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty0
+         (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
+            bop e))
+      (eval_stmt cx
+         (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
+            bop e)) es
+Proof
+  rpt strip_tac >> irule compile_augassign_attr_storage_mem_typed >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
 
 Theorem body_augassign_attr_storage_mem:
   !cx ty src id fld bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
@@ -1026,7 +1061,8 @@ Proof
   `well_typed_expr env e /\
    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
    (bop = Exp ==> nonneg_int_literal e) /\
-   (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
+   (bop = ShL ==> augassign_shift_amount_ok ty e) /\
+   (bop = ShR ==> augassign_shift_amount_ok ty e)` by
     (gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
      metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
@@ -1129,7 +1165,7 @@ Proof
     (qspecl_then [`d`, `ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ret_ty`,
        `env`, `NONE`, `id`, `fld`, `sid`, `ty`, `fsz`, `bop`, `e`, `es`, `tops`,
        `tr`, `id`, `lslot`, `fs`, `off`, `ftv`] mp_tac
-       compile_augassign_attr_storage_mem >>
+       compile_augassign_attr_storage_mem_typed >>
      impl_tac >- simp[DISJ_IMP_THM] >> simp[]) >>
   pop_assum (mp_tac o REWRITE_RULE [stmt_frag_mem_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sb`, `s0`, `cenv'`] mp_tac) >>

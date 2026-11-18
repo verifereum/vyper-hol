@@ -21,6 +21,7 @@ Ancestors
   moduleLowering
   compileEnv
   venomInst
+  venomLayout
   venomCompilerTypes
   venomWf
   fcgDefs
@@ -277,7 +278,7 @@ End
 
 (* ===== Checked pointer confinement ===== *)
 
-(* For a unit without DALLOCA, ptr_ok_check decides ptrDiscipline's
+(* ptr_ok_check decides ptrDiscipline's
    fn_ptr_ok for every function and its reachable part, with the pointer
    parameters it computes (ctx_ptr_param_list); ptrOkCheck proves it sound.
    It is executable as the rest of the lowering is: no quantifiers and no
@@ -485,15 +486,8 @@ Definition fn_reachable_blocks_def:
       FILTER (\bb. cfg_reachable_of (cfg_analyze fn) bb.bb_label) fn.fn_blocks
 End
 
-(* S3's pointer discipline covers units without DALLOCA, the O1 source
-   shape (o1_source_unit_ok), so a unit with DALLOCA passes unchecked: the
-   lowering restores the free memory pointer with SETFMP after a
-   dynamically sized buffer (create_copy_of, create_from_blueprint, raw_call
-   with msg.data), which the pointer discipline does not admit. *)
 Definition ptr_ok_check_def:
   ptr_ok_check ctx <=>
-    EXISTS (\fn. EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts fn))
-      ctx.ctx_functions \/
     EVERY (\fn. fn_ptr_ok_check (ctx_ptr_param_list ctx) fn /\
                 wf_function fn /\
                 EVERY (\i. i.inst_opcode <> PHI) (fn_insts fn) /\
@@ -505,13 +499,14 @@ End
    (mem_safe_raw_unit_memory_ok, alloca_frontier_inv_entry) asks of the
    unit: every function's labels distinct and an entry block, and the
    reachable call graph acyclic.  ptr_ok_check is what S3's pointer
-   discipline asks of a unit without DALLOCA (fn_ptr_ok).  The last
+   discipline asks of a unit (fn_ptr_ok).  The last
    conjunct is definite assignment (every use is written on every path to
    it), which SimplifyCFG's input contract asks for.  Like the inst-id and
    budget checks, they are decided on the unit rather than proved of the
    lowering.  The budget check leaves room for 32 bytes per DLOAD:
    LowerDload gives each DLOAD a 32-byte scratch ALLOCA, so its output's
-   frontier runs that far past the input's. *)
+   frontier runs that far past the input's. The 2^254 cap also leaves
+   initial headroom for the separate dynamic-allocation proof. *)
 Definition lowering_context_ok_def:
   lowering_context_ok ctx <=>
     ALL_DISTINCT (ctx_fn_names ctx) /\
@@ -521,7 +516,7 @@ Definition lowering_context_ok_def:
     unit_alloca_budget ctx +
       32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
                      (FLAT (MAP fn_insts ctx.ctx_functions))) <
-      dimword (:256) /\
+      2 ** 254 /\
     EVERY (\fn. ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn)
       ctx.ctx_functions /\
     reachable_fcg_acyclic ctx (fcg_analyze ctx) /\
@@ -562,11 +557,22 @@ Proof
   simp[lowering_context_ok_def]
 QED
 
+Theorem lowering_context_ok_static_headroom:
+  lowering_context_ok ctx ==>
+  unit_alloca_budget ctx +
+    32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
+                   (FLAT (MAP fn_insts ctx.ctx_functions))) < 2 ** 254
+Proof
+  simp[lowering_context_ok_def]
+QED
+
 Theorem lowering_context_ok_alloca_budget:
   !ctx. lowering_context_ok ctx ==>
         unit_alloca_budget ctx < dimword (:256)
 Proof
-  simp[lowering_context_ok_def] >> rpt strip_tac >> decide_tac
+  simp[lowering_context_ok_def, wordsTheory.dimword_def,
+       venomLayoutTheory.dimindex_256] >>
+  rpt strip_tac >> decide_tac
 QED
 
 Theorem lowering_context_ok_dload_budget:
@@ -576,7 +582,9 @@ Theorem lowering_context_ok_dload_budget:
                          (FLAT (MAP fn_insts ctx.ctx_functions))) <
           dimword (:256)
 Proof
-  simp[lowering_context_ok_def]
+  simp[lowering_context_ok_def, wordsTheory.dimword_def,
+       venomLayoutTheory.dimindex_256] >>
+  rpt strip_tac >> decide_tac
 QED
 
 Theorem lowering_context_ok_bridge:
@@ -697,7 +705,7 @@ End
 (* Deploy lowering owns both the runtime size and runtime data installation.
    The constructor's immutables occupy [0, immutables_len), and the unit's
    alloca frontier starts past them, so the budget check also leaves room
-   for that region below 2^256; and the epilogue returns runtime_size +
+   for that region below 2^254; and the epilogue returns runtime_size +
    immutables_len bytes, so it leaves room for the runtime code too. *)
 Definition run_deploy_lowering_def:
   run_deploy_lowering has_constructor (rpolicy : resolved_compiler_policy)
@@ -721,7 +729,7 @@ Definition run_deploy_lowering_def:
                unit_alloca_budget ctx' +
                32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
                               (FLAT (MAP fn_insts ctx'.ctx_functions))) <
-               dimword (:256)
+               2 ** 254
           then
             SOME <| cu_context := ctx';
                     cu_data_segment :=
@@ -731,6 +739,18 @@ Definition run_deploy_lowering_def:
           else NONE
     else NONE
 End
+
+Theorem run_deploy_lowering_static_headroom:
+  run_deploy_lowering has_constructor rpolicy runtime_bc immutables_len
+    constructor_args data_size ctor_internal_fns cenv stmts is_payable
+    is_nonreentrant nkey use_transient entry_label = SOME unit ==>
+  LENGTH runtime_bc + immutables_len + unit_alloca_budget unit.cu_context +
+    32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
+      (FLAT (MAP fn_insts unit.cu_context.ctx_functions))) < 2 ** 254
+Proof
+  simp[run_deploy_lowering_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
 
 Theorem run_deploy_lowering_global_reserved:
   run_deploy_lowering has_constructor rpolicy runtime_bytecode immutables_len

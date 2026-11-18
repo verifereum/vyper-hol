@@ -62,8 +62,6 @@ Ancestors
   (* dead function traversal *)
   dftCorrectnessFinal
   dftGasMaskRequests dftGasPrefixProvider
-  dftGasOracleKeyReplay
-  dftFinitePacket
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
@@ -81,3 +79,4 @@ Ancestors
   o1LabelFlowOwnLate
   (* symbolic assembly finalizers and their codegen correctness bridge *)
   asmOptNonemptyFinalizer codegenAsmOpt
+  codegenAsmOptRevert

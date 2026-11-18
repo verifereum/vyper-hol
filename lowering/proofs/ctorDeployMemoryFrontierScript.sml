@@ -27,7 +27,7 @@ Ancestors
   vyperCompiler venomWf venomExecSemantics venomInst venomState
   memSafeRun ptrSafeRun ptrOkCheck ptrDiscipline unitMemInv
   unitTransformDefs lowerDloadDefs ctorDeployDefs deployUnitProducers
-  o1PassContract
+  o1PassContract rawReachableFmp ctxLookupAgree
   finite_map list pred_set relation arithmetic
 
 (* ===== The frontier from k ===== *)
@@ -201,13 +201,17 @@ Proof
 QED
 
 (* raw_unit_memory_ok from a memory-safe run, with
-   alloca_frontier_inv_from k as the frontier bound. *)
+   alloca_frontier_inv_from k as the frontier bound.  With no DALLOCA and
+   no free-memory-pointer opcode the pointer never moves, so the entry
+   state's pointer at or above its initial one gives the pointer facts. *)
 Theorem lowered_unit_raw_memory_ok_from:
   !k ctx name fn lbl vs.
     lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
     lookup_function name ctx.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
     vs.vs_alloca_next = k /\ k + unit_alloca_budget ctx < dimword (:256) /\
+    ~ctx_has_dalloca ctx /\ EVERY pre_fmp_ops ctx.ctx_functions /\
+    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
     (!fuel. mem_safe_blocks fuel ctx fn
               (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                           vs_inst_idx := 0 |>))
@@ -222,52 +226,37 @@ Proof
   >~ [`reachability_closed _ _`]
   >- (irule alloca_frontier_inv_from_closed >> simp[])
   >~ [`fn_entry_inv _ _ _ _`]
-  >- (irule alloca_frontier_inv_from_entry >> simp[] >> metis_tac[]) >>
-  rw[alloca_frontier_inv_from_def] >> decide_tac
+  >- (irule alloca_frontier_inv_from_entry >> simp[] >> metis_tac[])
+  >- (rw[alloca_frontier_inv_from_def] >> decide_tac) >>
+  rpt strip_tac >>
+  drule_all raw_reachable_fmp_fixed >> strip_tac >>
+  drule raw_reachable_initial_fmp >> strip_tac >> simp[] >>
+  `inst.inst_opcode <> DALLOCA` by
+    (fs[ctx_has_dalloca_def, EXISTS_MEM] >>
+     metis_tac[active_inst_mem_fn_insts]) >>
+  simp[dalloca_no_wrap_def]
 QED
 
-(* Every reachable DLOAD/DLOADBYTES offset is at most the data section's
-   length (the memory-safe run checks it, inst_dload_in_section), and the
-   code and the data section never change. *)
+(* A memory-safe run keeps every reachable DLOAD inside its data section. *)
 Theorem lowered_unit_dload_in_section:
   !ctx name fn lbl vs.
     lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
     lookup_function name ctx.ctx_functions = SOME fn /\
-    fn_entry_label fn = SOME lbl /\ code_layout_valid vs /\
+    fn_entry_label fn = SOME lbl /\
     (!fuel. mem_safe_blocks fuel ctx fn
               (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                          vs_inst_idx := 0 |>))
-    ==> mem_inv (\c f inst s. inst_dload_in_section inst s /\
-                               s.vs_code = vs.vs_code /\
-                               s.vs_data_section = vs.vs_data_section) ctx vs
+                          vs_inst_idx := 0 |>)) ==>
+    !f inst s. raw_reachable vs ctx f inst s ==>
+      inst_dload_in_section inst s
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   drule_all lowered_unit_entry_facts >> strip_tac >> gvs[] >>
-  rewrite_tac[mem_inv_def, codegen_reachability_package_def] >>
-  qexists_tac `\c f i s. mem_safe_point c f i s /\
-                         s.vs_code = vs.vs_code /\
-                         s.vs_data_section = vs.vs_data_section` >>
-  rpt conj_tac
-  >- (qspecl_then [`mem_safe_point`,
-        `\c f i s. s.vs_code = vs.vs_code /\
-                   s.vs_data_section = vs.vs_data_section`,
-        `ctx`] mp_tac reachability_closed_conj >>
-      simp[mem_safe_point_closed, code_data_closed])
-  >- (qexistsl [`name`, `fn`, `lbl`] >> simp[] >>
-      qspecl_then [`mem_safe_point`,
-        `\c f i s. s.vs_code = vs.vs_code /\
-                   s.vs_data_section = vs.vs_data_section`,
-        `ctx`, `fn`,
-        `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                    vs_inst_idx := 0 |>`] mp_tac fn_entry_inv_conj >>
-      impl_tac >- (
-        conj_tac >- (irule mem_safe_point_entry >> simp[]) >>
-        qspecl_then [`ctx`, `fn`,
-          `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                      vs_inst_idx := 0 |>`] mp_tac code_data_entry >>
-        simp[]) >>
-      simp[]) >>
-  rw[] >> metis_tac[mem_safe_point_dload]
+  `mem_inv mem_safe_point ctx vs` by
+    (rewrite_tac[mem_inv_def, codegen_reachability_package_def] >>
+     qexists_tac `mem_safe_point` >>
+     simp[mem_safe_point_closed] >>
+     irule mem_safe_point_entry >> simp[]) >>
+  fs[mem_inv_raw_reachable] >> metis_tac[mem_safe_point_dload]
 QED
 
 (* Every reachable DLOAD/DLOADBYTES offset, added to the length of the code
@@ -285,21 +274,32 @@ Theorem lowered_unit_dload_offset_ok:
                           vs_inst_idx := 0 |>))
     ==> mem_inv dload_offset_ok ctx vs
 Proof
-  rpt strip_tac >> irule unitMemInvTheory.mem_inv_mono >>
-  qexists_tac `\c f inst s. inst_dload_in_section inst s /\
-                            s.vs_code = vs.vs_code /\
+  rpt gen_tac >> strip_tac >>
+  `!f inst s. raw_reachable vs ctx f inst s ==>
+     inst_dload_in_section inst s` by
+    (rpt strip_tac >> irule lowered_unit_dload_in_section >> metis_tac[]) >>
+  `mem_inv (\c f i s. s.vs_code = vs.vs_code /\
+                       s.vs_data_section = vs.vs_data_section) ctx vs` by
+    (rewrite_tac[mem_inv_def, codegen_reachability_package_def] >>
+     qexists_tac `\c f i s. s.vs_code = vs.vs_code /\
                             s.vs_data_section = vs.vs_data_section` >>
-  conj_tac
-  >- (rw[dload_offset_ok_def] >>
-      `w2n off <= LENGTH s.vs_data_section` by
-        (fs[inst_dload_in_section_def] >> metis_tac[]) >>
-      gvs[code_layout_valid_def, wordsTheory.dimword_def]) >>
-  irule lowered_unit_dload_in_section >> metis_tac[]
+     simp[code_data_closed] >>
+     qspecl_then [`ctx`, `fn`,
+       `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                   vs_inst_idx := 0 |>`] mp_tac code_data_entry >>
+     simp[]) >>
+  fs[mem_inv_raw_reachable] >>
+  simp[] >> rpt strip_tac >>
+  `inst_dload_in_section inst s /\ s.vs_code = vs.vs_code /\
+   s.vs_data_section = vs.vs_data_section` by metis_tac[] >>
+  rw[dload_offset_ok_def] >>
+  `w2n off <= LENGTH s.vs_data_section` by
+    (fs[inst_dload_in_section_def] >> metis_tac[]) >>
+  gvs[code_layout_valid_def, wordsTheory.dimword_def]
 QED
 
 (* The pointer discipline and taint bound from a pointer-safe run, with
-   the pointer parameters ptr_ok_check (in lowering_context_ok) finds.
-   ptr_ok_check vouches for them only in a unit without DALLOCA. *)
+   the pointer parameters ptr_ok_check (in lowering_context_ok) finds. *)
 Theorem lowered_unit_ptr_taint:
   !D lo ctx name fn lbl vs.
     lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\

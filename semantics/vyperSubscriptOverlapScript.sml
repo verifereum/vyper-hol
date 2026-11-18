@@ -18,8 +18,6 @@
 Theory vyperSubscriptOverlap
 Ancestors
   list alist vyperAST vyperTypeCallGraph
-Libs
-  cv_transLib
 
 Datatype:
   var_ref = LocalRef identifier | StateRef nsid
@@ -41,7 +39,6 @@ Definition risky_builtin_def:
   risky_builtin _ = F
 End
 
-val () = cv_auto_trans risky_builtin_def;
 
 (* extcall, staticcall, send, raw_call and the create builtins.
    Mirrors Python: expr.py _contains_risky_call, _RISKY_BUILTINS *)
@@ -54,7 +51,6 @@ Definition risky_call_target_def:
   risky_call_target _ = F
 End
 
-val () = cv_auto_trans risky_call_target_def;
 
 (* A written variable is also read, as Python logs every assignment target
    as a read (local.py ExprVisitor.visit). *)
@@ -112,7 +108,6 @@ Termination
        listTheory.list_size_map, SF ETA_ss]
 End
 
-val () = cv_auto_trans accesses_expr_def;
 
 Definition accesses_atarget_def:
   accesses_atarget (BaseTarget tgt) = accesses_target tgt ∧
@@ -126,14 +121,12 @@ Termination
   simp[assignment_target_size_def, listTheory.list_size_def]
 End
 
-val () = cv_auto_trans accesses_atarget_def;
 
 Definition accesses_iterator_def:
   accesses_iterator (Array e) = accesses_expr e ∧
   accesses_iterator (Range x y) = accesses_expr x ++ accesses_expr y
 End
 
-val () = cv_auto_trans accesses_iterator_def;
 
 Definition accesses_assert_reason_def:
   accesses_assert_reason AssertBare = [] ∧
@@ -143,7 +136,6 @@ Definition accesses_assert_reason_def:
     accesses_exprs (custom_error_exprs err)
 End
 
-val () = cv_auto_trans accesses_assert_reason_def;
 
 Definition accesses_raise_reason_def:
   accesses_raise_reason RaiseBare = [] ∧
@@ -153,7 +145,6 @@ Definition accesses_raise_reason_def:
     accesses_exprs (custom_error_exprs err)
 End
 
-val () = cv_auto_trans accesses_raise_reason_def;
 
 Definition accesses_stmt_def:
   accesses_stmt Pass = [] ∧
@@ -183,7 +174,6 @@ Termination
   simp[]
 End
 
-val () = cv_auto_trans accesses_stmt_def;
 
 Definition find_function_def:
   find_function name [] = NONE ∧
@@ -192,7 +182,6 @@ Definition find_function_def:
   find_function name (_ :: tls) = find_function name tls
 End
 
-val () = cv_auto_trans find_function_def;
 
 (* A callee's own locals are not the caller's variables. *)
 Definition callee_accesses_def:
@@ -202,7 +191,6 @@ Definition callee_accesses_def:
   callee_accesses (a :: accs) = a :: callee_accesses accs
 End
 
-val () = cv_auto_trans callee_accesses_def;
 
 (* The accesses of the internal function name of module src. *)
 Definition function_accesses_def:
@@ -216,21 +204,7 @@ Definition function_accesses_def:
             callee_accesses (accesses_exprs dflts ++ accesses_stmts body)
 End
 
-val () = cv_auto_trans function_accesses_def;
 
-val () = cv_auto_trans int_calls_expr_def;
-val () = cv_auto_trans int_calls_atarget_def;
-val () = cv_auto_trans int_calls_iterator_def;
-val () = cv_auto_trans int_calls_assert_reason_def;
-val () = cv_auto_trans int_calls_raise_reason_def;
-val () = cv_auto_trans int_calls_stmt_def;
-val () = cv_auto_trans function_int_calls_def;
-val () = cv_auto_trans toplevel_call_edges_def;
-val () = cv_auto_trans module_call_edges_def;
-val () = cv_auto_trans contract_call_edges_def;
-val () = cv_auto_trans contract_call_nodes_def;
-val () = cv_auto_trans direct_callees_def;
-val () = cv_auto_trans reachable_nodes_def;
 
 (* The internal functions e calls, directly or through other internal calls.
    Calls form an acyclic graph (Vyper forbids recursion), so no call chain is
@@ -244,7 +218,6 @@ Definition reached_functions_def:
                      direct))
 End
 
-val () = cv_auto_trans reached_functions_def;
 
 (* What e reads and writes, and its risky calls, including those of the
    internal functions it reaches: a callee's state-variable reads and writes,
@@ -261,7 +234,6 @@ Definition expr_accesses_def:
     FLAT (MAP (function_accesses mods) (reached_functions mods e))
 End
 
-val () = cv_auto_trans expr_accesses_def;
 
 Definition constant_decl_def:
   constant_decl id [] = F ∧
@@ -270,7 +242,6 @@ Definition constant_decl_def:
   constant_decl id (_ :: tls) = constant_decl id tls
 End
 
-val () = cv_auto_trans constant_decl_def;
 
 (* The variables read, other than constants.
    Mirrors Python: expr.py _subscript_read_write_overlap (base_reads) *)
@@ -285,15 +256,19 @@ Definition nonconstant_reads_def:
   nonconstant_reads mods (_ :: accs) = nonconstant_reads mods accs
 End
 
-val nonconstant_reads_pre_def =
-  cv_auto_trans_pre "nonconstant_reads_pre" nonconstant_reads_def;
 
-Theorem nonconstant_reads_pre[cv_pre]:
-  ∀mods accs. nonconstant_reads_pre mods accs
+
+Theorem nonconstant_reads_lookup_cong:
+  (!src. ALOOKUP mods1 src = ALOOKUP mods2 src) ==>
+  nonconstant_reads mods1 accs = nonconstant_reads mods2 accs
 Proof
-  ho_match_mp_tac nonconstant_reads_ind \\ rw[]
-  \\ rw[Once nonconstant_reads_pre_def]
-  \\ gvs[]
+  strip_tac >> Induct_on `accs` >> simp[nonconstant_reads_def] >>
+  qx_gen_tac `acc` >> Cases_on `acc` >>
+  simp[nonconstant_reads_def] >>
+  rename1 `ReadAcc ref` >> Cases_on `ref` >>
+  simp[nonconstant_reads_def] >>
+  rename1 `StateRef ns` >> Cases_on `ns` >>
+  simp[nonconstant_reads_def]
 QED
 
 Definition any_written_def:
@@ -301,7 +276,6 @@ Definition any_written_def:
   any_written (v :: vs) accs = (MEM (WriteAcc v) accs ∨ any_written vs accs)
 End
 
-val () = cv_auto_trans any_written_def;
 
 (* Whether array subscript base[idx] copies its base before the index, in a
    contract whose modules are mods: the base passes through a dynamic-array
@@ -317,7 +291,6 @@ Definition subscript_overlap_def:
         any_written reads idx_as ∨ MEM RiskyAcc idx_as
 End
 
-val () = cv_auto_trans subscript_overlap_def;
 
 Theorem subscript_overlap_through_dynarray:
   subscript_overlap mods base idx ⇒

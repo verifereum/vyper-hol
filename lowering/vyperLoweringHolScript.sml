@@ -1,6 +1,18 @@
 (* Rollup theory for Vyper->Venom lowering + e2e correctness *)
 Theory vyperLoweringHol
 Ancestors
+  (* arbitrary-calldata entry and S1 suppliers *)
+  calldataArrayIterationProbe calldataArrayLiveMemory calldataArrayModularSetup
+  calldataBulkOperationalCertificate calldataBulkSourceOutcome calldataCoherentOwnedEndpoint
+  calldataExactBytesJoint calldataExactMemberValues calldataExactMembersJoint
+  calldataExactScalarAccepted calldataExactScalarRejected calldataNoneFallbackJoint
+  calldataNoneMetadata calldataRegistrationRawAddress calldataRegistrationSingletonProbe
+  calldataRegistrationTerminalBindings calldataValidHeaderLocalFrontier dispatchedArgsBind
+  dispatchedSelectedFacts dispatchedSelectedPrefix dispatchedSelectedRelations
+  dispatchedValueEntry dispatchedValueFallback dispatchedValuePrefix
+  dispatchedValueSelection dispatchedValueSource fallbackEntryEndpoint
+  loweringCalldataCorrect registrationGuardRejectOrigin
+  dispatchedEntryValueRevert
   e2eCodeFrame
   (* definitions *)
   moduleLowering
@@ -21,7 +33,7 @@ Ancestors
   varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
-  exprSimMain bodySimMain bodySimFullMain bodyFullStructLit externalReturnValuedFull ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimSeq stmtSimExpr
+  exprSimBuiltins exprSimExtCallCase bodyIntCallSeams bodySimFullMain bodyFullStructLit externalReturnValuedFull ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimSeq stmtSimExpr
   stmtSimBreak stmtSimContinue stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
@@ -65,10 +77,23 @@ Ancestors
   asmOptOwnPruneUnused
   asmOptFinalizerOwn
   asmOptOwnPruneJumps
+  asmSymSemWithin
+  asmSpliceWithin
   (* reached here instead of as holproject.toml roots *)
   targetPtrFacts bodyFullTarget
   extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
   extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
   abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
   (* providers awaiting their consumers *)
+  internalReturnMemoryMem bodyFullIntCallByteFrame
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
+  o1LabelFlowOwnSecondSsa
+  assignBasePtrStoragePath assignTuplePtrBytesCopy
+  bodyPtrBytestringBuiltinsConcatArmSemantics
+  bodyPtrBytestringBuiltinsConcatOperand
+  bodyPtrPrecompileBuiltinsArithmeticSource
+  bodyPtrPrecompileBuiltinsArithmeticValue bodyPtrSignedConvertSourceFixed
+  forPtrAllocationFrame internalReturnImmutableTypes logBytesCodePtr
+  logBytesRobustSeqPtr logBytesSeqPtr revertReasonPrefixPtr
+  reasonCompilerProps reasonLiteralBufferPtr reasonSourceProps
+  reasonTypingProps revertReasonPrefixCodePtr revertReasonSuffixPathPtr

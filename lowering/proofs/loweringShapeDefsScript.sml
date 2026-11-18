@@ -58,14 +58,6 @@ Definition state_insts_def:
     FLAT (MAP (\bb. bb.bb_instructions) (all_blocks st))
 End
 
-Theorem state_insts_emit:
-  EVERY P (state_insts (SND (emit inst st))) <=>
-  EVERY P (state_insts st) /\ P inst
-Proof
-  simp[state_insts_def, all_blocks_def, emit_def, MAP_APPEND,
-       FLAT_APPEND, EVERY_APPEND]
-QED
-
 (* Internal entry labels are internal_fn_label's "internal ..." spelling;
    every internal function's code starts with a block of one, and no other
    block has one. *)
@@ -176,10 +168,12 @@ End
 
 (* Entry code (internal = F) never returns through RET and declares no
    parameters; internal-function code (internal = T) never halts the
-   transaction with STOP or RETURN. *)
+   transaction with STOP or RETURN.  Shaped code allocates no dynamic
+   memory: no DALLOCA. *)
 Definition lowered_inst_ok_def:
   lowered_inst_ok internal inst <=>
-    raw_opcode_ok inst.inst_opcode /\ inst_shape_ok inst /\
+    raw_opcode_ok inst.inst_opcode /\ inst.inst_opcode <> DALLOCA /\
+    inst_shape_ok inst /\
     inst_jump_labels_ok inst /\
     (internal ==> ~MEM inst.inst_opcode [STOP; RETURN]) /\
     (~internal ==> inst.inst_opcode <> RET /\

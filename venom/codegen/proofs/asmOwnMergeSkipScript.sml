@@ -25,7 +25,8 @@ Proof
       by simp[INDEX_OF_APPEND, INDEX_OF_CONS] >>
     Cases_on `fuel`
     >- gvs[Once sym_run_own_def, sym_terminal_def] >>
-    qexistsl_tac [`LENGTH pre + 1`, `n`] >>
+    rename1 `SUC remaining` >>
+    qexistsl_tac [`LENGTH pre + 1`, `remaining`] >>
     simp[Once sym_run_own_def, EL_APPEND_EQN, sym_step_own_eq,
          sym_step_def, asm_step_def, sym_lift_def, asm_next_def] >>
     AP_TERM_TAC >>
@@ -50,16 +51,19 @@ Proof
             sym_step_own_eq, sym_step_def, sym_set_stack_def, asm_next_def] >>
   Cases_on `fuel`
   >- gvs[Once sym_run_own_def, sym_terminal_def] >>
-  Cases_on `n`
+  rename1 `SUC after_label` >>
+  Cases_on `after_label`
   >- gvs[Once sym_run_own_def, sym_terminal_def] >>
-  Cases_on `n'`
+  rename1 `SUC (SUC after_push)` >>
+  Cases_on `after_push`
   >- gvs[Once sym_run_own_def, sym_terminal_def] >>
+  rename1 `SUC (SUC (SUC after_jump))` >>
   Cases_on `INDEX_OF (AsmLabel y) p`
   >- (qpat_x_assum `sym_terminal _` mp_tac >>
       simp[] >> simp[Once sym_run_own_def, Abbr `t2`, Abbr `t1`,
         asm_next_def, sym_step_own_eq, sym_step_def, sym_step_op_def,
         sym_jump_def, sym_jump_dest_def, sym_terminal_def]) >>
-  rename1 `SOME j` >> qexistsl_tac [`j`, `n`] >> simp[] >>
+  rename1 `SOME j` >> qexistsl_tac [`j`, `after_jump`] >> simp[] >>
   simp[Once sym_run_own_def, Abbr `t2`, Abbr `t1`, asm_next_def,
        sym_step_own_eq, sym_step_def, sym_step_op_def, sym_jump_def,
        sym_jump_dest_def] >>

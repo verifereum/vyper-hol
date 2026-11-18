@@ -131,6 +131,44 @@ Definition deploy_entry_state_def:
     entry_venom_state prog cplan es with vs_alloca_next := imm_len tops
 End
 
+(* deploy_entry_state with prog's layout over es's code, which has prog'
+   in front of the constructor arguments. *)
+Definition opt_deploy_entry_state_def:
+  opt_deploy_entry_state prog prog' cplan tops es =
+    opt_entry_state prog prog' cplan es with vs_alloca_next := imm_len tops
+End
+
+(* ADMISSION: at the identity finalizer the optimized deploy entry state is
+   the deploy entry state.  Waits for its proof. *)
+Theorem opt_deploy_entry_state_identity:
+  !tops am tx prog cplan es.
+    deploy_state_rel tops (assemble prog) am tx es ==>
+    opt_deploy_entry_state prog prog cplan tops es =
+    deploy_entry_state prog cplan tops es
+Proof
+  cheat
+QED
+
+(* ADMISSION: at the identity finalizer the deploy entry state's code is the
+   transaction's.  Waits for its proof. *)
+Theorem deploy_txp_identity:
+  !tops am tx prog cplan es.
+    deploy_state_rel tops (assemble prog) am tx es ==>
+    tx with code := (opt_deploy_entry_state prog prog cplan tops es).vs_code = tx
+Proof
+  cheat
+QED
+
+(* ADMISSION: the deploy result relation does not read the transaction's code
+   for programs that do not read their own code.  Waits for its proof. *)
+Theorem deploy_call_result_rel_code_update:
+  supported_program tops /\ ~program_reads_self_code tops ==>
+  (deploy_call_result_rel tops runtime_bc am (tx with code := c) es r es' <=>
+   deploy_call_result_rel tops runtime_bc am tx es r es')
+Proof
+  cheat
+QED
+
 (* The source-side hypotheses of e2e_deploy_correctness that hold at every
    gas filling; the finite storage guard deploy_storage_ok depends on the
    filling, so the unit theorem states it per filling. *)
@@ -185,26 +223,26 @@ Definition deploy_venom_result_rel_def:
            * deletion on both sides. *)
           ss.vs_returndata = [] /\
           MEM tx.target ss.vs_pending_deletions /\
-          accounts_agree H cx am'.accounts
+          accounts_agree H cx.txn.target am'.accounts
             (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-          transient_agree H cx am'.tStorage ss.vs_transient /\
+          transient_agree H cx.txn.target am'.tStorage ss.vs_transient /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs ss.vs_logs /\
-          LIST_REL (request_agree H cx) rqs ss.vs_requests
+          LIST_REL (request_agree H cx.txn.target) rqs ss.vs_requests
         else
         ?section.
           ss.vs_returndata = runtime_bc ++ section /\
           immutables_section_rel tops (account_immutables am' tx.target) section /\
-          accounts_agree H cx am'.accounts
+          accounts_agree H cx.txn.target am'.accounts
             (process_deletions ss.vs_pending_deletions
                (update_account tx.target
                   (lookup_account tx.target ss.vs_accounts with
                      code := (lookup_account tx.target am'.accounts).code)
                   ss.vs_accounts)) /\
-          transient_agree H cx am'.tStorage ss.vs_transient /\
+          transient_agree H cx.txn.target am'.tStorage ss.vs_transient /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs ss.vs_logs /\
-          LIST_REL (request_agree H cx) rqs ss.vs_requests
+          LIST_REL (request_agree H cx.txn.target) rqs ss.vs_requests
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error e), Abort _ _) => T
