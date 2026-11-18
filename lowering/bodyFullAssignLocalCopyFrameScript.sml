@@ -205,7 +205,7 @@ Proof
   `eval_operand (Var xs) u = SOME sw /\ eval_operand (Var xd) u = SOME dw /\
    (!x. Var xs = Var x \/ Var xd = Var x ==> not_fresh_at sa x)` by
     (simp[eval_operand_def] >> rpt strip_tac >> gvs[]) >>
-  `n = 32 + 32 * word_size len` by simp[word_size_def] >>
+  `n = 32 + 32 * word_size len` by simp[vfmConstantsTheory.word_size_def] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) u` by suspend "safe" >>
   drule bytesCopyCodeTheory.compile_store_bytestring_code >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by fs[same_blocks_def] >>
