@@ -153,7 +153,7 @@ Proof
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `r.vs_call_ctx = s.vs_call_ctx` by
     (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>`
-       (fn th => simp[Once th])) >>
+       (fn th => pure_once_rewrite_tac [th]) >> simp[]) >>
   qexistsl [`r`,`H`,`u`,`q`] >>
   goal_assum (drule_at Any) >>
   drule selected_member_source_decode >>
@@ -254,4 +254,142 @@ Proof
   `FLOOKUP s.vs_allocas id = SOME (q,k)` by metis_tac[] >>
   qpat_assum `!id q k. _ ==> k = 32 /\ _` (qspecl_then [`id`,`q`,`k`] mp_tac) >>
   metis_tac[LESS_EQ_TRANS]
+QED
+
+Theorem selected_setup_frame[local]:
+  r = s with <| vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx |> /\
+  (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op r = eval_operand op s) /\
+  (!name. not_fresh_at st name ==> FLOOKUP H name = FLOOKUP G name /\
+    FLOOKUP u.t_var name = FLOOKUP tn.t_var name) /\
+  u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+  u.t_imm = tn.t_imm ==>
+  selected_member_frame st mid (s,G,tn) (r,H,u) /\
+  abi_decode_footprint_frame fp s r
+Proof
+  strip_tac >>
+  `r.vs_allocas = s.vs_allocas /\ r.vs_alloca_next = s.vs_alloca_next /\
+   r.vs_memory = s.vs_memory /\ r.vs_call_ctx = s.vs_call_ctx /\
+   r.vs_data_section = s.vs_data_section /\ r.vs_code = s.vs_code /\
+   r.vs_accounts = s.vs_accounts /\ r.vs_transient = s.vs_transient /\
+   r.vs_logs = s.vs_logs /\ r.vs_outcomes = s.vs_outcomes /\
+   r.vs_requests = s.vs_requests /\ r.vs_pending_deletions = s.vs_pending_deletions /\
+   r.vs_tx_ctx = s.vs_tx_ctx /\ r.vs_block_ctx = s.vs_block_ctx /\
+   r.vs_fmp = s.vs_fmp /\ r.vs_gas_readings = s.vs_gas_readings` by
+    (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>`
+       (fn th => pure_once_rewrite_tac [th]) >> simp[]) >>
+  simp[selected_member_frame_def, abi_decode_footprint_frame_def]
+QED
+
+Theorem selected_member_run[local]:
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,mid) /\
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) mid = ((),en) /\
+  fn_has_code st mid fn /\ fn_has_code mid en fn /\ fn_inst_ids_distinct fn /\
+  st.cs_next_var <= mid.cs_next_var /\ mid.cs_next_var <= en.cs_next_var /\
+  en.cs_next_var <= limit.cs_next_var /\
+  st.cs_next_id <= mid.cs_next_id /\ mid.cs_next_id <= en.cs_next_id /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  (en.cs_current_insts = [] ==> !bb.
+    lookup_block en.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  abi_decoder_coherent ce env sf ty tv /\ selected_decoder_accepts ce env sf ty tv /\
+  cd_decode F s.vs_call_ctx.cc_calldata tv
+    (cd_member_ptr F s.vs_call_ctx.cc_calldata tv (w2n p) ao) = SOME x /\
+  eval_operand (Var root) s = SOME (n2w d) /\ eval_operand src s = SOME p /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var (Var root) /\
+  ptr_covers G tn root s extent /\ op_taint tn src = {} /\ op_prov G src = NONE /\
+  vo + type_memory_size tv <= extent /\ d + extent < dimword (:256) /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\ selected_member_replays st en fn s /\
+  FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+  (oid < st.cs_next_id \/ en.cs_next_id <= oid) /\
+  base_addr <= d /\ d + extent <= base_addr + cap /\
+  fresh_vars_wrt limit s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?v scratch J z.
+    ~v.vs_halted /\ v.vs_current_bb = en.cs_current_bb /\
+    v.vs_inst_idx = LENGTH en.cs_current_insts /\ value_has_type tv x /\ val_wf tv x /\
+    (!mem. mem_agree_outside z.t_mem v.vs_memory mem ==> val_in_memory tv x (d+vo) mem) /\
+    alloca_inv v /\ alloca_frontier_inv ctx fn site v /\ allocas_from lo v /\
+    fresh_vars_wrt limit v /\ selected_member_replays st en fn v /\
+    selected_member_frame st en (s,G,tn) (v,J,z) /\
+    abi_decode_footprint_frame ((d+vo,type_memory_size tv)::scratch) s v /\
+    (!q k. MEM (q,k) scratch ==> ?id. st.cs_next_id <= id /\ id < en.cs_next_id /\
+      FLOOKUP v.vs_allocas id = SOME (q,k)) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK v,J,z))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `mid.cs_next_var <= limit.cs_next_var` by decide_tac >>
+  drule_all selected_member_setup_accepts >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  `r.vs_allocas = s.vs_allocas /\ r.vs_alloca_next = s.vs_alloca_next /\ ~r.vs_halted` by
+    (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>`
+       (fn th => pure_once_rewrite_tac [th]) >> simp[]) >>
+  `alloca_inv r /\ alloca_frontier_inv ctx fn site r /\ allocas_from lo r` by
+    (drule selected_setup_frontier >> simp[]) >>
+  `selected_member_frame st mid (s,G,tn) (r,H,u)` by
+    (drule_all selected_setup_frame >> simp[]) >>
+  `selected_member_replays mid en fn s` by
+    metis_tac[selected_member_replays_narrow, LESS_EQ_REFL] >>
+  `selected_member_replays mid en fn r` by
+    (rewrite_tac[selected_member_replays_def] >> asm_rewrite_tac[] >>
+     qpat_assum `selected_member_replays mid en fn s`
+       (ACCEPT_TAC o REWRITE_RULE[selected_member_replays_def])) >>
+  SUBGOAL_THEN ``oid < mid.cs_next_id \/ en.cs_next_id <= oid`` assume_tac
+  >- decide_tac >>
+  `base_addr <= d+vo /\ d+vo+type_memory_size tv <= base_addr+cap /\
+   d+vo+type_memory_size tv < dimword (:256)` by decide_tac >>
+  `!fp. abi_decode_footprint_frame fp s r` by
+    (drule_all selected_setup_frame >> simp[]) >>
+  qpat_x_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>` kall_tac >>
+  `eval_operand (Var q) r = SOME (n2w (d+vo)) /\ abi_decoder_operand_live mid.cs_next_var (Var q)` by
+    metis_tac[] >>
+  `lo <= r.vs_alloca_next /\ FLOOKUP r.vs_allocas oid = SOME (base_addr,cap)` by simp[] >>
+  `compile_abi_decode_to_buf (Var q) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) mid = ((),en)` by metis_tac[] >>
+  qpat_assum `selected_member_replays mid en fn r`
+    (assume_tac o REWRITE_RULE[selected_member_replays_def]) >>
+  qpat_x_assum `selected_decoder_accepts ce env sf ty tv`
+    (drule_all o REWRITE_RULE[selected_decoder_accepts_def]) >>
+  disch_then (qspec_then `PG`
+    (qx_choose_then `v` (qx_choose_then `scratch`
+      (qx_choose_then `J` (qx_choose_then `z` strip_assume_tac))))) >>
+  `selected_member_replays mid en fn v` by
+    (rewrite_tac[selected_member_replays_def] >> first_assum ACCEPT_TAC) >>
+  `selected_member_frame mid en (r,H,u) (v,J,z)` by
+    (rewrite_tac[selected_member_frame_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `selected_member_replays st mid fn r` by
+    (`selected_member_replays st mid fn s` by
+       (qpat_assum `selected_member_replays st en fn s` mp_tac >>
+        qpat_assum `mid.cs_next_id <= en.cs_next_id` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        metis_tac[selected_member_replays_narrow, LESS_EQ_REFL]) >>
+     rewrite_tac[selected_member_replays_def] >> asm_rewrite_tac[] >>
+     qpat_assum `selected_member_replays st mid fn s`
+       (ACCEPT_TAC o REWRITE_RULE[selected_member_replays_def])) >>
+  `selected_member_replays st mid fn v` by
+    (qpat_assum `selected_member_frame mid en (r,H,u) (v,J,z)` mp_tac >>
+     qpat_assum `selected_member_replays st mid fn r` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[selected_member_replays_outside, LESS_EQ_REFL]) >>
+  qexistsl [`v`,`scratch`,`J`,`z`] >>
+  ntac 10 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (irule selected_member_replays_join >> metis_tac[]) >>
+  conj_tac >- (drule_all selected_member_frame_trans >> first_assum ACCEPT_TAC ORELSE
+    metis_tac[selected_member_frame_trans]) >>
+  conj_tac >-
+    (qpat_assum `abi_decode_footprint_frame _ r v` mp_tac >>
+     qpat_assum `!fp. abi_decode_footprint_frame fp s r` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[abi_decode_footprint_frame_trans]) >>
+  conj_tac >-
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!q k. MEM (q,k) scratch ==> _` drule >> strip_tac >>
+     qexists_tac `id` >> rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE decide_tac)) >>
+  rpt gen_tac >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK r,H,u)` mp_tac >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ (r,H,u) [] (OK v,J,z)` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_origin_ptr_path_trans]
 QED
