@@ -12,6 +12,7 @@ Ancestors
   gasFocusFmpGasPair fmpStageOpFrame lowerDloadPtrScalar decoderGhostFramePtr
   ptrDiscipline o1LowerDloadRelocationKernel o1LowerDloadShared
   livenessProofs venomExecSemantics rich_list codegenRel pred_set
+  analysisSimDefs venomWfProps ctxLookupAgreeHelpers cfgWf gasEvents
 
 Theorem cut_ordinary_not_reclaim[local]:
   ~is_terminator inst.inst_opcode /\
@@ -363,4 +364,101 @@ Proof
   simp[Abbr `t1`, update_var_def] >> strip_tac >>
   qexists `st'` >> simp[] >>
   fs[fmp_frame_covers_def, FLOOKUP_DRESTRICT] >> metis_tac[]
+QED
+
+(* Rebuild the stage relation on the two actual scalar updates. The site
+   geometry, memory and suspended frames do not change. *)
+Theorem cut_gas_stage_suc[local]:
+  wf_function fn /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
+  MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\ EL s.vs_inst_idx bb.bb_instructions = inst /\
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
+  (!infos ctx runner rl rp.
+    fmp_stage_lowered infos ctx runner fn fn' /\
+    fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
+    (fn_is_context_entry ctx fn ==> entry_fn_no_params fn) /\ runner <> out) /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts /\
+  s1 = update_var out x (s with vs_gas_readings := rs) /\
+  u = update_var out x (t with vs_gas_readings := rs) ==>
+  fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG
+    (step_prov PG G inst s1) (step_taint inst s s1 tn) fn
+    (s1 with vs_inst_idx := SUC s.vs_inst_idx) lo
+    (u with vs_inst_idx := SUC t.vs_inst_idx) ts
+Proof
+  strip_tac >>
+  qpat_x_assum `u = _` mp_tac >> drule_all cut_gas_ghost_updates >> strip_tac >> strip_tac >>
+  qpat_assum `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [fmp_stage_rel_def]) >>
+  `fn'' = fn'` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `fn'' = fn'` SUBST_ALL_TAC >>
+  rewrite_tac[fmp_stage_rel_def] >>
+  conj_tac >- simp[update_var_def] >>
+  conj_tac >-
+    (qexists `fn'` >> conj_tac >- first_assum ACCEPT_TAC >>
+     drule_all cut_gas_frame_suc >>
+     (simp[])) >>
+  simp[update_var_def] >> fs[ld_shared_agree_def]
+QED
+
+Theorem focus_fmp_cut_gas_segment:
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  o1_ctx_shape C /\ EVERY (o1_fn_row 3) C.ctx_functions /\
+  lookup_function fn.fn_name C.ctx_functions = SOME fn /\
+  ssa_form fn /\ fn.fn_fmp_signature = NONE /\
+  active_inst fn inst s /\ inst.inst_opcode = GAS /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts /\
+  step_inst k C inst s = OK s1 ==>
+  ?fn' bb bb' tail u.
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    DROP t.vs_inst_idx bb'.bb_instructions = inst::tail /\
+    (!k'. fmp_target_run k' C' fn.fn_name t 1
+      (u with vs_inst_idx := SUC t.vs_inst_idx)) /\
+    (!k. gas_events_step k C fn.fn_name inst s = [(fn.fn_name,inst.inst_id)]) /\
+    (!k'. gas_events_step k' C' fn'.fn_name inst t = [(fn.fn_name,inst.inst_id)]) /\
+    fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG
+      (step_prov PG G inst s1) (step_taint inst s s1 tn) fn
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx) lo
+      (u with vs_inst_idx := SUC t.vs_inst_idx) ts
+Proof
+  strip_tac >>
+  `MEM fn C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `wf_function fn /\ (C.ctx_entry = SOME fn.fn_name ==> entry_fn_no_params fn)` by
+    fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
+  `pre_fmp_ops fn /\ all_reachable fn` by
+    fs[o1_fn_row_def, make_ssa_input_ok_def, EVERY_MEM] >>
+  drule_all focus_fmp_selected_root_pin >> strip_tac >>
+  drule_all focus_fmp_gas_pair >> disch_then (qspec_then `C` strip_assume_tac) >>
+  qpat_x_assum `!k s1. step_inst _ _ _ _ = OK _ ==> _` (drule_then strip_assume_tac) >>
+  rename1 `!k'. step_inst k' C' inst t = OK u` >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions /\ EL s.vs_inst_idx bb.bb_instructions = inst /\
+   t.vs_inst_idx < LENGTH bb'.bb_instructions /\ EL t.vs_inst_idx bb'.bb_instructions = inst` by
+    fs[get_instruction_def, AllCaseEqs()] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `MEM inst (fn_insts fn)` by
+    (simp[fn_insts_def, fn_insts_blocks_MEM] >> qexists `bb` >> simp[] >> metis_tac[MEM_EL]) >>
+  `MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[all_reachable_def, fn_reachable_in_cfg_dfs_pre] >>
+  `!infos ctx runner rl rp.
+    fmp_stage_lowered infos ctx runner fn fn' /\
+    fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
+    (fn_is_context_entry ctx fn ==> entry_fn_no_params fn) /\ runner <> out` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!infos ctx runner rl rp. _ ==> _`
+       (drule_all_then strip_assume_tac) >>
+     conj_tac >- simp[] >>
+     qpat_x_assum `!j. MEM j (fn_insts fn) ==> _` (qspec_then `inst` mp_tac) >> simp[]) >>
+  drule_all cut_gas_stage_suc >> strip_tac >>
+  `DROP t.vs_inst_idx bb'.bb_instructions = inst::DROP (t.vs_inst_idx+1) bb'.bb_instructions` by
+    (drule DROP_EL_CONS >> simp[]) >>
+  qexistsl [`fn'`,`bb`,`bb'`,`DROP (t.vs_inst_idx+1) bb'.bb_instructions`,`u`] >>
+  simp[] >> gen_tac >>
+  simp[fmp_target_run_def] >> qexists `u` >>
+  simp[run_insts_def, arithmeticTheory.ADD1]
 QED
