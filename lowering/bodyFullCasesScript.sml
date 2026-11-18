@@ -15,6 +15,7 @@ Ancestors
   bodyFullStructLit bodyFullPop
   bodyFullRawCallCalldata
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
+  bodyFullBuiltinECRecover bodyFullBuiltinECArithCompose
   bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps exprSimAggregateLayout loweringPosts bodyExprPreFacts supportedStmts
@@ -387,14 +388,20 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of bodyPtrPrecompileBuiltins's precompile_builtin_expr_ptr_ok. *)
+(* Joint precompile execution, including aggregate result ownership. *)
 Theorem precompile_builtin_expr_full_ok:
   !cx ty bt es.
     (bt = ECRecover \/ bt = ECAdd \/ bt = ECMul) /\
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `bt = ECRecover` >> gvs[]
+      >- (irule ecrecover_builtin_sim_full >> metis_tac[]) >>
+      irule ec_arith_builtin_sim_full >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
 (* msg.gas, by msgGasFull's joint fragment: typing fixes the
