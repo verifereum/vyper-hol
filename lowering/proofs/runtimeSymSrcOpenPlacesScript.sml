@@ -106,7 +106,7 @@ Resume runtime_sym_subscript_step[branches]:
        conj_tac >- asm_rewrite_tac[] >>
        conj_tac >- asm_rewrite_tac[] >>
        goal_assum (drule_at (Pos last)) >> asm_rewrite_tac[] >>
-       asm "key_safe" (qspec_then `expr_type key` (fn th => simp[th]))) >>
+       rpt strip_tac >> asm "key_safe" drule_all >> simp[]) >>
    Cases_on `t` >> simp[NoAsms] >>
    CONV_TAC (DEPTH_CONV (ETA_CONV ORELSEC HO_REWR_CONV (GSYM comp_bind_assoc))) >> strip_tac >>
    irule runtime_sym_locate_sequence >>

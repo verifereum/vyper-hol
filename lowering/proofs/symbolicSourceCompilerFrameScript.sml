@@ -71,10 +71,10 @@ Proof
   rpt (irule compiler_preserves_bind >>
        reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
   rpt IF_CASES_TAC >>
-  gvs[arithmeticTheory.ADD_COMM] >>
+  simp[arithmeticTheory.ADD_COMM] >>
   rpt (irule compiler_preserves_bind >>
-       reverse conj_tac >- gvs[comp_ignore_bind_def] >>
-       gen_tac >> BETA_TAC) >> gvs[comp_ignore_bind_def]
+       reverse conj_tac >- simp[comp_ignore_bind_def] >>
+       gen_tac >> BETA_TAC) >> simp[comp_ignore_bind_def]
 QED
 
 Theorem compiler_preserves_abi_decode:
@@ -113,7 +113,7 @@ Proof
     [irule compiler_preserves_bind >>
        reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC,
      CHANGED_TAC (pure_asm_rewrite_tac [COND_CLAUSES, comp_ignore_bind_def]),
-     IF_CASES_TAC]) >> gvs[arithmeticTheory.ADD_COMM]
+     IF_CASES_TAC]) >> simp[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem compiler_preserves_expr:

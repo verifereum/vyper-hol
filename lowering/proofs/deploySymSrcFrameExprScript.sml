@@ -1,7 +1,7 @@
 Theory deploySymSrcFrameExpr
 Ancestors
   deploySymSrcBlockFrame deploySymSrcFrameExprHelpers exprLowering exprCallBounds
-  emitHelper compileEnv builtinAbi builtinBytes context
+  emitHelper compileEnv builtinAbi builtinBytes context symbolicSourceCompilerFrame
 
 val _ = augment_srw_ss [rewrites [deploy_blocks_frame_bind,
                                 deploy_blocks_frame_ignore_bind]];

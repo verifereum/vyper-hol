@@ -1,7 +1,7 @@
 Theory runtimeSymSrcDataExpr
 Ancestors
   runtimeSymSrcDataExprHelpers runtimeSymSrcDataExprBodies
-  runtimeSymSrcDataFrame exprCallBounds exprLowering
+  runtimeSymSrcDataFrame exprCallBounds exprLowering symbolicSourceCompilerFrame
 
 (* The generated induction quantifies recursive calls over every compiler
    state.  Thus its hypotheses discharge the universal frame of callbacks,

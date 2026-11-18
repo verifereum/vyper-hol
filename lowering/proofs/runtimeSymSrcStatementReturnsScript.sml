@@ -320,7 +320,9 @@ Proof
   simp[runtime_sym_stmt_contract_def] >> rpt strip_tac >>
   fs[supported_stmt_def, supported_stmt_expr_exists_def,
      supportedExprTraverseTheory.supported_expr_exists_def] >>
-  irule runtime_sym_return_some_step >>
-  qexists_tac `tops` >> asm_rewrite_tac[] >>
-  gvs[runtime_sym_expr_contract_def]
+  mp_tac (Q.INST [`tops` |-> `tops`, `ce` |-> `ce`, `e` |-> `e`,
+    `ty` |-> `ty`, `lc` |-> `lc`] runtime_sym_return_some_step) >>
+  simp[] >> impl_tac
+  >- (rpt strip_tac >> fs[runtime_sym_expr_contract_def]) >>
+  disch_then drule_all >> simp[]
 QED

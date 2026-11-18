@@ -1,5 +1,5 @@
 Theory exprLoweringEquations
-Ancestors exprLowering
+Ancestors exprLowering vyperAST
 
 Theorem compile_expr_body_builtin_default:
   ~(?at a bt b mt m. bi = AddMod /\ es = [Name at a; Name bt b; Name mt m]) /\
