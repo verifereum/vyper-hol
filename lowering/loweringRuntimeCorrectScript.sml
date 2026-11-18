@@ -1617,9 +1617,19 @@ Proof
                (qspec_then `[]` mp_tac) >>
              qpat_assum `!gas. eval_stmts _ compiled_body _ = eval_stmts _ fbody _` (fn th => simp[th])) >>
           runtime_locked_unlock_tac >>
+          qpat_assum `call_external_trace _ gx am tx = (cr,_,_,_)` (fn trace =>
+            qpat_assum `call_external_trace _ gx am tx = (r,_,_,_)`
+              (mp_tac o REWRITE_RULE [trace, pairTheory.PAIR_EQ])) >>
+          qpat_assum `res <> INR (Error (RuntimeError "msg.gas: no gas reading"))`
+            mp_tac >>
+          qpat_assum `res = INL () ==> r = INL NoneV /\ _` mp_tac >>
+          qpat_assum `!v. res = INR (ReturnException v) ==> _` mp_tac >>
+          qpat_assum `res = INR HaltException ==> r = INR HaltException /\ _` mp_tac >>
+          qpat_assum `!e. res = INR e /\ _ ==> r = INR e /\ _` mp_tac >>
+          POP_ASSUM_LIST (K ALL_TAC) >>
           namedCases_on `res` ["u", "e"]
-          >- (Cases_on `u` >> gvs[]) >>
-          Cases_on `e` >> gvs[AllCaseEqs()])) >>
+          >- (Cases_on `u` >> simp[]) >>
+          Cases_on `e` >> simp[AllCaseEqs()] >> rpt strip_tac >> gvs[])) >>
   runtime_selected_readings_finish_tac
     ((qexistsl_tac [`shadow_unit`,`marks`] >>
       conj_tac >- first_assum ACCEPT_TAC), ALL_TAC)

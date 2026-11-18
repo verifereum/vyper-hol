@@ -196,6 +196,7 @@ fun registered_lock_result_tac placement =
      `ss` |-> `vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
                          vs_inst_idx := 0|>`,
      `es_abort` |-> `es_lock`,
+     `fbody` |-> `subst_consts_stmts (module_consts_env tops []) fbody`,
      `rt` |-> `if ret = NoneT then NONE else SOME ret`]
     (SPEC_ALL externalEntryJointTheory.external_entry_abort_from_registration)) >>
   impl_tac >- (asm_rewrite_tac[] >> simp[]) >>

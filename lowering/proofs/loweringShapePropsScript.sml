@@ -86,7 +86,7 @@ Proof
   Induct >> simp[subst_consts_expr_def]
 QED
 
-Theorem subst_consts_exprs_null[local,simp]:
+Theorem subst_consts_exprs_null[local]:
   NULL (subst_consts_exprs env es) <=> NULL es
 Proof
   Cases_on `es` >> simp[subst_consts_expr_def]
@@ -14398,7 +14398,7 @@ Theorem supported_program_no_external_defaults:
 Proof
   rw[NOT_EXISTS, EVERY_MEM, pairTheory.FORALL_PROD, external_has_defaults_def] >>
   drule classify_functions_external_source >> strip_tac >>
-  gvs[subst_consts_fn_def]
+  gvs[subst_consts_fn_def, subst_consts_exprs_null]
   >- (drule_all supported_program_declaration >>
       simp[supportedDeclsTheory.supported_function_header_contract,
            subst_consts_expr_def]) >>
