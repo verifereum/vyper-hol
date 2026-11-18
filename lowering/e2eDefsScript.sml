@@ -307,30 +307,48 @@ Definition evm_state_ok_def:
     returndata_bounded s /\ calldata_bounded s
 End
 
+(* ctxt hasn't run yet *)
+Definition frame_fresh_def:
+  frame_fresh ctxt <=>
+    ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\ ctxt.returnData = [] /\
+    buffer_to_list ctxt.memory = [] /\ ctxt.jumpDest = NONE
+End
+
+(* ctxt's message and es's transaction are the ones tx describes *)
+Definition frame_tx_rel_def:
+  frame_tx_rel tx es ctxt <=>
+    ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
+    ctxt.msgParams.value = tx.value /\ ctxt.msgParams.static = tx.is_static /\
+    buffer_to_list ctxt.msgParams.data = tx.calldata /\
+    ctxt.msgParams.code = tx.code /\
+    tx.created_in_tx =
+      account_empty (lookup_account tx.target es.originalAccounts) /\
+    tx_block_fields_rel tx es.txParams
+End
+
+(* es's accounts, transient storage and deletion queue are am's after tx's value transfer *)
+Definition world_rel_def:
+  world_rel am tx es <=>
+    value_transfer_ok tx am.accounts /\
+    es.rollback.accounts = accounts_after_transfer tx am.accounts /\
+    es.rollback.tStorage = am.tStorage /\
+    es.rollback.toDelete = am.pending_deletions /\
+    am.logs = []
+End
+
+(* es is a fresh frame running the installed code, started from am by tx *)
 Definition call_state_rel_def:
   call_state_rel tops runtime_bc am tx es <=>
     ?ctxt rb rest.
       es.contexts = (ctxt, rb) :: rest /\
       evm_state_ok es /\ (?d. es.msdomain = Collect d) /\
-      ctxt.jumpDest = NONE /\ ctxt.msgParams.static = tx.is_static /\
-      (?mr. ctxt.msgParams.outputTo = Memory mr) /\
+      frame_fresh ctxt /\ (?mr. ctxt.msgParams.outputTo = Memory mr) /\
+      frame_tx_rel tx es ctxt /\
+      world_rel am tx es /\
       installed_code_rel tops runtime_bc (account_immutables am tx.target)
         ctxt.msgParams.code /\
       (lookup_account tx.target es.rollback.accounts).code =
         ctxt.msgParams.code /\
-      ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
-      ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
-      value_transfer_ok tx am.accounts /\
-      es.rollback.accounts = accounts_after_transfer tx am.accounts /\
-      es.rollback.toDelete = am.pending_deletions /\
-      es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
-      ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
-      ctxt.msgParams.value = tx.value /\
-      tx.created_in_tx =
-        account_empty (lookup_account tx.target es.originalAccounts) /\
-      buffer_to_list ctxt.msgParams.data = tx.calldata /\
-      ctxt.msgParams.code = tx.code /\
-      tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
 End
 
@@ -339,7 +357,8 @@ Theorem call_state_rel_parsed:
   (FST (HD es.contexts)).msgParams.parsed =
     parse_code 0 FEMPTY (FST (HD es.contexts)).msgParams.code
 Proof
-  rw[call_state_rel_def, evm_state_ok_def] >>
+  rw[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+     evm_state_ok_def] >>
   gvs[wf_state_def, wf_context_def]
 QED
 
@@ -351,7 +370,8 @@ Proof
   `wf_state es /\
    (lookup_account tx.target es.rollback.accounts).code =
      (FST (HD es.contexts)).msgParams.code` by
-    gvs[call_state_rel_def, evm_state_ok_def] >>
+    gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+        evm_state_ok_def] >>
   `wf_accounts es.rollback.accounts` by fs[wf_state_def, all_accounts_def] >>
   fs[wf_accounts_def, wf_account_state_def, lookup_account_def] >>
   first_x_assum (qspec_then `tx.target` mp_tac) >> simp[]
@@ -447,7 +467,8 @@ Theorem call_state_rel_call_outcomes_ok:
 Proof
   strip_tac >>
   `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
-    fs[call_state_rel_def, evm_state_ok_def] >>
+    fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+       evm_state_ok_def] >>
   drule_all call_trace_outcomes_bounded >>
   qpat_x_assum `EVERY _ (MAP SND (call_trace es))` mp_tac >>
   simp[call_outcomes_ok_def, listTheory.EVERY_MEM] >>

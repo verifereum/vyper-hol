@@ -177,7 +177,6 @@ Definition deploy_gas_source_exempt_def:
     src = INR (Error (RuntimeError "create initcode too large"))
 End
 
-(* ADMISSION: statement only.  Waits for its proof from gas_source_exempt's static disjunct and the source result relation. *)
 Theorem call_static_abort_gas_source_exempt:
   !H tops ret tx src u.
     tx.is_static /\
@@ -185,7 +184,12 @@ Theorem call_static_abort_gas_source_exempt:
     external_call_result_rel H tops ret tx src (Abort ExHalt_abort u) ==>
     gas_source_exempt tops tx src
 Proof
-  cheat
+  rpt gen_tac >> PairCases_on `src` >>
+  Cases_on `src0` >> simp[external_call_result_rel_def] >>
+  rename1 `INR ex` >> Cases_on `ex` >>
+  simp[external_call_result_rel_def, gas_source_exempt_def] >>
+  rename1 `Error e` >> Cases_on `e` >>
+  simp[external_call_result_rel_def, gas_source_exempt_def]
 QED
 
 Theorem call_gas_static_no_abort[local]:
@@ -302,7 +306,8 @@ Proof
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
-  `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
+  `source_deployment_rel tops am tx` by fs[call_state_rel_def, frame_fresh_def,
+                                           frame_tx_rel_def, world_rel_def] >>
   `~ctx_has_dalloca unit.cu_context` by
     (irule every_no_dalloca >>
      drule_all lower_vyper_runtime_unit_no_dalloca_checked >> simp[]) >>
@@ -336,11 +341,13 @@ Proof
     (`wf_state (add_frame_gas g' es) /\
       balance_bounded (2 ** 256 - 1) (add_frame_gas g' es) /\
       returndata_bounded (add_frame_gas g' es)` by
-       (fs[call_state_rel_def, evm_state_ok_def, add_frame_gas_bounded] >>
+       (fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+           evm_state_ok_def, add_frame_gas_bounded] >>
         irule add_frame_gas_wf_state >> simp[]) >>
      drule_all call_trace_outcomes_bounded >>
      simp[outcomes_accounts_typed_def, listTheory.EVERY_MEM]) >>
-  `wf_state es` by fs[call_state_rel_def, evm_state_ok_def] >>
+  `wf_state es` by fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def,
+                      world_rel_def, evm_state_ok_def] >>
   qpat_x_assum `valid_vyper_call _ _ _ _` mp_tac >>
   ONCE_REWRITE_TAC [GSYM (Q.SPECL [`g'`, `es`] add_frame_gas_calldata)] >>
   strip_tac >>
@@ -460,6 +467,7 @@ Proof
      `o1_run_state_ok vs` by
        (fs[o1_run_state_ok_def] >>
         gvs[Abbr`vs`, entry_venom_state_def, call_state_rel_def,
+            frame_fresh_def, frame_tx_rel_def, world_rel_def,
             add_frame_gas_def]) >>
      qspecl_then [`D`, `0`, `rpolicy`, `unit`, `out`, `vs`,
                   `vs.vs_initial_fmp`] mp_tac run_venom_pipeline_correct >>
@@ -713,7 +721,6 @@ Proof
   simp[]
 QED
 
-(* ADMISSION: statement only.  Waits for the static gas consumer's proof; the reading-availability premise is discharged inside the gas proof. *)
 Theorem call_gas_static_lowered_inv:
   !H tops ret am tx fuel unit out vs_in vs marks tail.
     tx.is_static /\
@@ -734,5 +741,9 @@ Theorem call_gas_static_lowered_inv:
        ?u. run_context n unit.cu_context vs_in = Abort ExHalt_abort u)) ==>
     o1_lowered_inv out.po_unit.cu_context vs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!n. terminates _ ==> _` (qspec_then `fuel` mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!rest. FST _ <> _` (qspec_then `tail` assume_tac) >>
+  gvs[] >> metis_tac[call_static_abort_gas_source_exempt]
 QED
