@@ -98,7 +98,7 @@ Ancestors
   bodyFullTypeBuiltinAbiEncode
   bodyPtrTypeBuiltinsBytesUintSemantics
   internalReturnMemoryMem bodyFullIntCallByteFrame
-  bodyFullIntCall
+  bodyFullIntCall compileExprAllocaFresh
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa
   assignBasePtrStoragePath assignTuplePtrBytesCopy
