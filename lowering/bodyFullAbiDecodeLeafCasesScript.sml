@@ -1,7 +1,7 @@
 Theory bodyFullAbiDecodeLeafCases
 Ancestors
   bodyFullGhostFrame bodyFullUnwrapRun assignTuplePtrLoadStep
-  stateFrame compileEnv loweringStateRelDefs bodyFullAbiDecodeAge
+  stateFrame compileEnv loweringStateRelDefs stateRelProj bodyFullAbiDecodeAge
   abiDecoderWordTyped exprSimAbiDecodeChildBounds externalEntryShape
   entryDecoderHistoryFrame abiDecodeClampShape
   allocaHistory freshWrites abiDecodePtrMemberFrame ptrDiscipline exprSimCopy bodyPtrDefs
@@ -530,7 +530,7 @@ Proof
   qabbrev_tac `u = mstore a w s` >>
   qabbrev_tac `Gf = step_prov PG G store_inst u` >>
   qabbrev_tac `tnf = step_taint store_inst s u tn` >>
-  `local_ptrs_rel fn ce es.scopes s` by metis_tac[stmt_state_rel_def, state_rel_def] >>
+  `local_ptrs_rel fn ce es.scopes s` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   `lo <= a /\ (!name b k. local_region ce es.scopes s name b k ==>
     a+32 <= b \/ b+k <= a)` by
     (conj_tac >- decide_tac >> rpt strip_tac >>
