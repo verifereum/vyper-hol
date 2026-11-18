@@ -12,7 +12,8 @@ val () = computeLib.upd_compset intReduce.add_int_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos])
 
-(* The contract has an ordinary getter and a locked getter. The ordinary
+(* A Constant declaration would fail supported_constants_rejected.
+   The contract has an ordinary getter and a locked getter. The ordinary
    getter supplies the current call gas premise, and the locked getter
    exercises the widened call correctness premise. *)
 local
