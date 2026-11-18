@@ -2,6 +2,7 @@
    failed tactic is retained below as provenance; active CV gates now pass. *)
 Theory vyperExtCallCpsEquivalenceTest
 Ancestors
+  vyperSmallStepCV
   vyperExtCallConsumptionTest vyperSmallStep[ignore_grammar]
   extCallOracle[ignore_grammar] vyperCallOutcome[ignore_grammar]
   vyperInterpreter vyperState vyperContext vyperABI vyperAST vyperValue
