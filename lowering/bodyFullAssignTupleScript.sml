@@ -1429,8 +1429,10 @@ Theorem body_assign_tuple_store_targets_full_path:
            val_wf (TupleTV fulltys) (ArrayV (TupleV fullvs)) /\
            (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
                   val_in_memory (TupleTV fulltys) (ArrayV (TupleV fullvs)) b mem) /\
-           (!name a len. local_region cenv es.scopes s name a len ==>
-                          b + type_memory_size (TupleTV fulltys) <= a \/ a + len <= b)) /\
+           (!i id a cap. i < LENGTH gs /\ EL i gs = BaseTarget (NameTarget id) /\
+              local_region cenv es.scopes s id a cap ==>
+              b + type_memory_size (TupleTV fulltys) <= a \/
+              a + type_memory_size (EL i tvs) <= b)) /\
     body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es0 /\
     stmt_state_rel Hseed ctx func cenv cx eseed sseed /\ dead_lo_ok Hseed Dseed lo cenv cx /\
     (!name a len. local_region cenv es.scopes s name a len <=>
@@ -1631,6 +1633,11 @@ Resume body_assign_tuple_store_targets_full_path[head]:
   `tuple_target_aligned cenv cx (BaseTarget (NameTarget id)) ty entry.type /\
    tuple_target_layout es.scopes (BaseTarget (NameTarget id)) ty entry.type v` by
     simp[tuple_target_aligned_local,tuple_target_layout_local] >>
+  `m ==> b + type_memory_size (TupleTV fulltys) <= w2n dw \/
+         w2n dw + type_memory_size entry.type <= b` by
+    (disch_tac >> qpat_assum `m ==> DROP k fulltys = _ /\ _`
+       (mp_tac o List.last o CONJUNCTS o UNDISCH) >>
+     disch_then (qspecl_then [`0`,`id`,`w2n dw`,`cap`] mp_tac) >> simp[]) >>
   qabbrev_tac `snapbase = if m then b else w2n dw` >>
   qabbrev_tac `snaptys = if m then fulltys else []` >>
   qabbrev_tac `snapvs = if m then fullvs else []` >>
@@ -1641,10 +1648,11 @@ Resume body_assign_tuple_store_targets_full_path[head]:
           val_in_memory (TupleTV snaptys) (ArrayV (TupleV snapvs)) snapbase mem)`
     (map_every assume_tac o CONJUNCTS) >-
     (Cases_on `m` >-
-       (qpat_assum `m ==> DROP k fulltys = _ /\ _` (mp_tac o UNDISCH) >>
-        simp[Abbr `snapbase`, Abbr `snaptys`, Abbr `snapvs`] >> strip_tac >>
-        qpat_assum `!name a len. local_region cenv eseed.scopes sseed name a len ==> _`
-          (qspecl_then [`id`,`w2n dw`,`cap`] mp_tac) >> simp[] >> (gvs[])) >>
+       (qpat_assum `m ==> DROP k fulltys = _ /\ _`
+          (map_every assume_tac o CONJUNCTS o UNDISCH) >>
+        qpat_assum `T ==> b + type_memory_size (TupleTV fulltys) <= w2n dw \/ _`
+          (mp_tac o UNDISCH) >>
+        simp[Abbr `snapbase`, Abbr `snaptys`, Abbr `snapvs`]) >>
      simp[Abbr `snapbase`, Abbr `snaptys`, Abbr `snapvs`,
           valueEncodingDefsTheory.val_wf_def,valueEncodingDefsTheory.val_in_memory_def,
           valueEncodingTheory.type_memory_size_def]) >>
@@ -1716,8 +1724,10 @@ Resume body_assign_tuple_store_targets_full_path[snapshot_member]:
        (simp[] >> qpat_assum `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory (TupleTV fulltys) _ _ mem`
           (mp_tac o SRULE [valueEncodingDefsTheory.val_in_memory_def]) >> simp[])) >>
      simp[Abbr `addr`]) >>
-  qpat_assum `!name a len. local_region cenv eseed.scopes sseed name a len ==> _`
-    (qspecl_then [`id`,`w2n dw`,`cap`] mp_tac) >> simp[] >> (gvs[])
+  qpat_assum `entry.type = tv` SUBST_ALL_TAC >>
+  qpat_assum `s.vs_alloca_next = sseed.vs_alloca_next` SUBST_ALL_TAC >>
+  qpat_assum `m ==> b + type_memory_size (TupleTV fulltys) <= w2n dw \/ _`
+    (mp_tac o UNDISCH) >> decide_tac
 QED
 
 Resume body_assign_tuple_store_targets_full_path[local_join]:
@@ -1847,10 +1857,10 @@ Resume body_assign_tuple_store_targets_full_path[tail]:
         simp[rich_listTheory.DROP_SUC] >>
         qpat_assum `DROP k fullvs = v::vs1`
           (mp_tac o AP_TERM ``LENGTH : value list -> num``) >> simp[] >>
-        rpt strip_tac >>
-        `local_region cenv es.scopes s name a len` by simp[] >>
-        qpat_assum `!name a len. local_region cenv es.scopes s name a len ==> _`
-          (qspecl_then [`name`,`a`,`len`] mp_tac) >> simp[]) >>
+        disch_tac >> map_every qx_gen_tac [`i`,`id`,`a`,`cap`] >> strip_tac >>
+        `local_region cenv es.scopes s id a cap` by simp[] >>
+        qpat_assum `!i id a cap. i < LENGTH (BaseTarget bt::gs) /\ _ ==> _`
+          (qspecl_then [`SUC i`,`id`,`a`,`cap`] mp_tac) >> simp[listTheory.EL_restricted]) >>
      conj_tac >-
        (rpt strip_tac >>
         `not_fresh_at st x'` by
