@@ -506,3 +506,129 @@ Proof
   qpat_assum `!D explicit. gas_origin_ptr_path _ (t,H,u) [] (OK v,J,z)` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_origin_ptr_path_trans]
 QED
+
+(* Fold over the compiler's suffix at the source ABI and memory cursors. *)
+Theorem selected_member_list_run[local]:
+  !tys tvs xs ao vo st last limit ctx fn site lo PG root src s G tn p d extent oid base_addr cap.
+    LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+    LIST_REL (selected_decoder_accepts ce env sf) tys tvs /\
+    compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+       (abi_decoder_member_infos sf ce tys) ao vo st = ((),last) /\
+    fn_has_code st last fn /\ fn_inst_ids_distinct fn /\ last.cs_next_var <= limit.cs_next_var /\
+    unit_alloca_budget ctx < dimword (:256) /\
+    (last.cs_current_insts = [] ==> !bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+    cd_decode_list F s.vs_call_ctx.cc_calldata tvs (w2n p) ao = SOME xs /\
+    eval_operand (Var root) s = SOME (n2w d) /\ eval_operand src s = SOME p /\
+    abi_decoder_operand_live st.cs_next_var src /\
+    abi_decoder_operand_live st.cs_next_var (Var root) /\
+    ptr_covers G tn root s extent /\ op_taint tn src = {} /\ op_prov G src = NONE /\
+    vo + type_memory_size_list tvs <= extent /\ d + extent < dimword (:256) /\
+    alloca_inv s /\ alloca_frontier_inv ctx fn site s /\ selected_member_replays st last fn s /\
+    FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+    (oid < st.cs_next_id \/ last.cs_next_id <= oid) /\
+    base_addr <= d /\ d + extent <= base_addr + cap /\
+    fresh_vars_wrt limit s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?v scratch J z.
+      selected_member_segment ctx fn site lo PG limit st last (d+vo) (type_memory_size_list tvs)
+        (s,G,tn) (v,J,z) scratch /\
+      LIST_REL value_has_type tvs xs /\
+      (!mem. mem_agree_outside z.t_mem v.vs_memory mem ==> tuple_in_memory xs tvs (d+vo) mem)
+Proof
+  Induct
+  >- (simp[abiDecoderMemberInfosTheory.abi_decoder_member_infos_def,
+       Once compile_abi_decode_to_buf_def,comp_return_def] >> rpt gen_tac >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      gvs[Once cd_decode_def] >>
+      qexistsl [`s`,`[]`,`G`,`tn`] >>
+      simp[selected_member_segment_def,selected_member_frame_refl,
+           abi_decode_footprint_frame_refl,val_in_memory_def] >>
+      metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_rules]) >>
+  rpt gen_tac >>
+  Cases_on `tvs` >- simp[] >>
+  rename1 `LIST_REL _ (ty::tys) (tv::tvs)` >>
+  simp[Once cd_decode_def,CaseEq "option",
+       abiDecoderMemberInfosTheory.abi_decoder_member_infos_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?v. cd_decode F _ tv _ = SOME v /\ _`
+    (qx_choose_then `y` strip_assume_tac) >>
+  rename1 `cd_decode_list F s.vs_call_ctx.cc_calldata tvs (w2n p) (ao + tv_abi_size tv) = SOME ys` >>
+  rename1 `cd_decode F s.vs_call_ctx.cc_calldata tv _ = SOME y` >>
+  drule_all selected_member_cons_trace >> strip_tac >>
+  `abi_embedded_static_size ce.ce_struct_fields ty = tv_abi_size tv /\
+   type_memory_bytes ce ty = type_memory_size tv` by
+    (drule abi_decoder_coherent_header >> simp[abi_decoder_header_def] >>
+     metis_tac[calldataSourceSizeTheory.calldata_coherent_embedded_size]) >>
+  `vo + type_memory_size tv <= extent /\
+   vo + type_memory_size tv + type_memory_size_list tvs <= extent` by
+    (qpat_assum `vo + type_memory_size_list (tv::tvs) <= extent`
+       (assume_tac o REWRITE_RULE[type_memory_size_def]) >> decide_tac) >>
+  `en.cs_next_var <= limit.cs_next_var` by decide_tac >>
+  SUBGOAL_THEN ``oid < st.cs_next_id \/ en.cs_next_id <= oid`` assume_tac
+  >- decide_tac >>
+  `selected_member_replays st en fn s` by
+    (irule selected_member_replays_narrow >> metis_tac[LESS_EQ_REFL]) >>
+  `en.cs_current_insts = [] ==> !bb. lookup_block en.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[selected_member_exit_phi] >>
+  drule_all selected_member_run >>
+  disch_then (qspec_then `PG` (qx_choose_then `t` (qx_choose_then `sc`
+    (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac))))) >>
+  drule_all selected_member_root_frame >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `st.cs_next_id <= en.cs_next_id` by decide_tac >>
+  `selected_member_replays en last fn s` by
+    (irule selected_member_replays_narrow >> metis_tac[LESS_EQ_REFL]) >>
+  `selected_member_replays en last fn t` by
+    (qpat_assum `selected_member_frame st en (s,G,tn) (t,H,u)` mp_tac >>
+     qpat_assum `selected_member_replays en last fn s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[selected_member_replays_outside,LESS_EQ_REFL]) >>
+  `FLOOKUP t.vs_allocas oid = SOME (base_addr,cap) /\ lo <= t.vs_alloca_next` by
+    (qpat_assum `selected_member_frame st en (s,G,tn) (t,H,u)`
+      (mp_tac o REWRITE_RULE[selected_member_frame_def]) >>
+     strip_tac >> conj_tac >- metis_tac[] >> decide_tac) >>
+  `abi_decoder_operand_live en.cs_next_var src /\
+   abi_decoder_operand_live en.cs_next_var (Var root)` by
+    (`st.cs_next_var <= en.cs_next_var` by decide_tac >>
+     metis_tac[abi_decoder_operand_live_mono]) >>
+  SUBGOAL_THEN ``oid < en.cs_next_id \/ last.cs_next_id <= oid`` assume_tac
+  >- decide_tac >>
+  `compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+      (abi_decoder_member_infos sf ce tys) (ao + tv_abi_size tv) (vo + type_memory_size tv) en = ((),last)` by
+    (simp[abiDecoderMemberInfosTheory.abi_decoder_member_infos_def] >> metis_tac[]) >>
+  `cd_decode_list F t.vs_call_ctx.cc_calldata tvs (w2n p) (ao + tv_abi_size tv) = SOME ys /\
+   eval_operand (Var root) t = SOME (n2w d) /\ eval_operand src t = SOME p` by simp[] >>
+  last_x_assum (qspecl_then [`tvs`,`ys`,`ao + tv_abi_size tv`,`vo + type_memory_size tv`,
+    `en`,`last`,`limit`,`ctx`,`fn`,`site`,`lo`,`PG`,`root`,`src`,`t`,`H`,`u`,`p`,`d`,`extent`,
+    `oid`,`base_addr`,`cap`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `v` (qx_choose_then `sd`
+    (qx_choose_then `J` (qx_choose_then `z` strip_assume_tac)))) >>
+  `(d + vo) + type_memory_size tv = d + (vo + type_memory_size tv)` by decide_tac >>
+  `selected_member_segment ctx fn site lo PG limit st en (d+vo) (type_memory_size tv)
+     (s,G,tn) (t,H,u) sc` by
+    (rewrite_tac[selected_member_segment_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `selected_member_segment ctx fn site lo PG limit en last ((d+vo) + type_memory_size tv)
+     (type_memory_size_list tvs) (t,H,u) (v,J,z) sd` by simp[] >>
+  `st.cs_next_var <= en.cs_next_var` by decide_tac >>
+  qpat_assum `selected_member_segment _ _ _ _ _ _ st en _ _ _ _ sc`
+    (mp_then (Pos hd) mp_tac selected_member_segment_append) >>
+  disch_then (drule_all_then assume_tac) >>
+  `!mem. mem_agree_outside z.t_mem v.vs_memory mem ==> val_in_memory tv y (d+vo) mem` by
+    (qpat_assum `selected_member_segment _ _ _ _ _ _ en last _ _ _ _ sd`
+        (map_every assume_tac o CONJUNCTS o REWRITE_RULE[selected_member_segment_def]) >>
+     `base_addr <= d+vo /\ d+vo+type_memory_size tv <= base_addr+cap` by decide_tac >>
+     gen_tac >> disch_tac >>
+     qpat_assum `selected_member_frame en last (t,H,u) (v,J,z)`
+       (mp_then (Pos hd) irule selected_member_window_survives) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- (qexistsl [`base_addr`,`cap`,`oid`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     goal_assum (drule_at (Pat `abi_decode_footprint_frame _ _ _`)) >>
+     rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE decide_tac)) >>
+  qexistsl [`v`,`sc++sd`,`J`,`z`] >>
+  conj_tac >- (rewrite_tac[type_memory_size_def] >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `y::ys = xs` (fn th => rewrite_tac[GSYM th]) >>
+  simp[val_in_memory_def] >> metis_tac[]
+QED
