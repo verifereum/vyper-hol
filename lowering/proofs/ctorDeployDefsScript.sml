@@ -244,7 +244,7 @@ Proof
       vyperStateTheory.check_not_static_def]
 QED
 
-Theorem load_contract_trace_code_update[local]:
+Theorem load_contract_trace_code_update:
   supported_program tops /\ ~program_reads_self_code tops ==>
   load_contract_trace orc gs am (tx with code := c) [(NONE,tops)] [] =
   load_contract_trace orc gs am tx [(NONE,tops)] []
@@ -278,22 +278,28 @@ Proof
   AP_TERM_TAC >> simp[FUN_EQ_THM] >> Cases >> simp[]
 QED
 
+Theorem deploy_storage_ok_code_update:
+  supported_program tops /\ ~program_reads_self_code tops ==>
+  (deploy_storage_ok tops am (tx with code := c) os gs <=>
+   deploy_storage_ok tops am tx os gs)
+Proof
+  strip_tac >>
+  `deploy_storage_trace (SOME os) gs am (tx with code := c) tops =
+   deploy_storage_trace (SOME os) gs am tx tops` by
+    simp[deploy_storage_trace_def, load_contract_trace_code_update] >>
+  Cases_on `storage_trace_horizon (deploy_storage_trace (SOME os) gs am tx tops)` >>
+  simp[deploy_storage_ok_def, deploy_storage_checks_code_update]
+QED
+
 Theorem deploy_call_result_rel_code_update:
   supported_program tops /\ ~program_reads_self_code tops ==>
   (deploy_call_result_rel tops runtime_bc am (tx with code := c) es r es' <=>
    deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
   strip_tac >>
-  `!os gs. deploy_storage_ok tops am (tx with code := c) os gs <=>
-           deploy_storage_ok tops am tx os gs` by
-    (rpt gen_tac >>
-     `deploy_storage_trace (SOME os) gs am (tx with code := c) tops =
-      deploy_storage_trace (SOME os) gs am tx tops` by
-       simp[deploy_storage_trace_def, load_contract_trace_code_update] >>
-     Cases_on `storage_trace_horizon (deploy_storage_trace (SOME os) gs am tx tops)` >>
-     simp[deploy_storage_ok_def, deploy_storage_checks_code_update]) >>
   simp[deploy_call_result_rel_def, deploy_storage_trace_def,
-       load_contract_def, load_contract_trace_code_update, deploy_result_rel_def]
+       load_contract_def, load_contract_trace_code_update, deploy_storage_ok_code_update,
+       deploy_result_rel_def]
 QED
 
 (* The source-side hypotheses of e2e_deploy_correctness that hold at every
