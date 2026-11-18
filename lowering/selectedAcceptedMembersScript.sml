@@ -10,6 +10,8 @@ Ancestors
   abiDecoderCoherence compileEnv exprLowering abiEncoder words finite_map list arithmetic
   venomMemDefs allocaFrontierBound allocaBudgetProps ptrDiscipline pred_set
   bodyPtrDefs abiDecoderReentry loweringStateRelDefs venomState
+  calldataRecursiveProducers typeLayoutProps vyperTypeDefaults
+  abiDecoderFixedMemory vyperTypeABI exprSimAggregateEncoding abiStaticDynarrayLayout
 
 (* The addition uses a word literal, even if the mathematical head cursor
    does not fit in a word. The source also reduces that cursor modulo 2^256. *)
@@ -642,8 +644,9 @@ Theorem selected_complex_accepts[local]:
   LIST_REL (selected_decoder_accepts ce env' sf') tys tvs /\
   (!cd pos x. cd_decode F cd tv pos = SOME x ==>
     ?xs. cd_decode_list F cd tvs pos 0 = SOME xs /\
-      (LIST_REL value_has_type tvs xs ==> value_has_type tv x) /\
-      (!d mem. tuple_in_memory xs tvs d mem ==> val_in_memory tv x d mem)) ==>
+      (LIST_REL value_has_type tvs xs ==>
+        value_has_type tv x /\
+        !d mem. tuple_in_memory xs tvs d mem ==> val_in_memory tv x d mem)) ==>
   selected_decoder_accepts ce env sf ty tv
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -665,13 +668,11 @@ Proof
    d + type_memory_size_list tvs <= base_addr+cap` by
     (qpat_assum `type_memory_size tv = _` (rewrite_tac o single o SYM) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qspecl_then [`tys`,`tvs`,`xs`,`0`,`0`,`st`,`last`,`limit`,`ctx`,`fn`,`site`,`lower`,
-     `PG`,`child`,`src`,`initial`,`G`,`tn`,`p`,`d`,`type_memory_size_list tvs`,`oid`,`base_addr`,`cap`]
-    (mp_tac o REWRITE_RULE[ADD_CLAUSES,LESS_EQ_REFL])
-    (Q.INST [`env` |-> `env'`, `sf` |-> `sf'`] selected_member_list_run) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then (qx_choose_then `v` (qx_choose_then `sc`
-    (qx_choose_then `H` (qx_choose_then `u` (map_every assume_tac o CONJUNCTS))))) >>
+  `type_memory_size_list tvs <= type_memory_size_list tvs` by rewrite_tac[LESS_EQ_REFL] >>
+  drule_all (REWRITE_RULE[ADD_CLAUSES]
+    (Q.SPECL [`tys`,`tvs`,`xs`,`0`,`0`] selected_member_list_run)) >>
+  disch_then (qspec_then `PG` (qx_choose_then `v` (qx_choose_then `sc`
+    (qx_choose_then `H` (qx_choose_then `u` (map_every assume_tac o CONJUNCTS)))))) >>
   qpat_assum `selected_member_segment _ _ _ _ _ _ _ _ _ _ _ _ _`
      (map_every assume_tac o CONJUNCTS o REWRITE_RULE[selected_member_segment_def]) >>
   drule_all selected_member_root_frame >>
@@ -696,4 +697,86 @@ Proof
   (first_assum ACCEPT_TAC ORELSE
     (qpat_assum `type_memory_size tv = _` (rewrite_tac o single) >>
      first_assum ACCEPT_TAC))
+QED
+
+Theorem selected_tuple_accepts[local]:
+  abi_decoder_coherent ce env sf (TupleT tys) atv /\
+  (!tvs. LIST_REL (abi_decoder_coherent ce env sf) tys tvs ==>
+    LIST_REL (selected_decoder_accepts ce env sf) tys tvs) ==>
+  selected_decoder_accepts ce env sf (TupleT tys) atv
+Proof
+  strip_tac >> drule calldata_tuple_member_metadata >> strip_tac >>
+  irule selected_complex_accepts >>
+  goal_assum (drule_at (Pat `type_to_abi_dec_info _ _ _ = _`)) >>
+  qexistsl [`env`,`tvs`] >>
+  simp[GSYM typeLayoutPropsTheory.type_memory_size_list_sum] >>
+  rpt gen_tac >> gvs[Once cd_decode_def, CaseEq "option"] >>
+  strip_tac >> qexists_tac `vs` >>
+  gvs[value_has_type_def, values_have_types_LIST_REL, val_in_memory_def]
+QED
+
+Theorem selected_struct_accepts[local]:
+  abi_decoder_coherent ce env sf (StructT nsid) atv /\
+  (!args tvs. FLOOKUP env nsid = SOME (StructArgs args) /\
+    LIST_REL (abi_decoder_coherent ce (env \\ nsid) (sf \\ nsid_to_string nsid))
+      (MAP SND args) tvs ==>
+    LIST_REL (selected_decoder_accepts ce (env \\ nsid) (sf \\ nsid_to_string nsid))
+      (MAP SND args) tvs) ==>
+  selected_decoder_accepts ce env sf (StructT nsid) atv
+Proof
+  strip_tac >> drule calldata_struct_member_metadata >> strip_tac >>
+  `LENGTH (MAP FST args) = LENGTH tvs` by simp[] >>
+  irule selected_complex_accepts >>
+  goal_assum (drule_at (Pat `type_to_abi_dec_info _ _ _ = _`)) >>
+  qexistsl [`env \\ nsid`,`tvs`] >>
+  simp[type_memory_size_def, type_memory_size_fields_zip] >>
+  qpat_x_assum `MAP _ fields = args` kall_tac >>
+  rpt gen_tac >> simp[Once cd_decode_def, MAP_ZIP, CaseEq "option"] >>
+  strip_tac >> qexists_tac `vs` >> gvs[] >> strip_tac >>
+  `LENGTH vs = LENGTH tvs` by metis_tac[LIST_REL_LENGTH] >>
+  `struct_has_type (ZIP (MAP FST args,tvs)) (ZIP (MAP FST args,vs))` by
+    (irule vyperTypeABITheory.struct_has_type_ZIP >>
+     simp[values_have_types_LIST_REL]) >>
+  simp[value_has_type_def,val_in_memory_def] >>
+  rpt strip_tac >> irule static_fields_memory_zip >> simp[MAP_ZIP]
+QED
+
+Theorem selected_fixed_accepts[local]:
+  abi_decoder_coherent ce env sf (ArrayT ty (Fixed n)) atv /\
+  (!tv. abi_decoder_coherent ce env sf ty tv ==>
+    selected_decoder_accepts ce env sf ty tv) ==>
+  selected_decoder_accepts ce env sf (ArrayT ty (Fixed n)) atv
+Proof
+  strip_tac >> drule calldata_fixed_member_metadata >> strip_tac >>
+  irule selected_complex_accepts >>
+  goal_assum (drule_at (Pat `type_to_abi_dec_info _ _ _ = _`)) >>
+  qexistsl [`env`,`REPLICATE n tv`] >>
+  simp[type_memory_size_def,type_memory_size_list_replicate,rich_listTheory.LIST_REL_REPLICATE_same] >>
+  rpt gen_tac >> simp[Once cd_decode_def, selected_fixed_source_list, CaseEq "option"] >>
+  strip_tac >> qexists_tac `vs` >> gvs[] >> strip_tac >>
+  `LENGTH vs = n /\ EVERY (value_has_type tv) vs` by
+    (gvs[LIST_REL_EL_EQN, EVERY_EL, rich_listTheory.EL_REPLICATE] >> metis_tac[]) >>
+  simp[vyperValueTheory.make_array_value_def,value_has_type_def,enumerate_static_array_sorted] >>
+  conj_tac >- (irule sparse_has_type_enumerate >> simp[]) >>
+  rpt strip_tac >> irule abi_decoder_fixed_array_memory >> simp[]
+QED
+
+Theorem selected_members_accepts:
+  (abi_decoder_coherent ce env sf (TupleT tys) atv /\
+   (!tvs. LIST_REL (abi_decoder_coherent ce env sf) tys tvs ==>
+     LIST_REL (selected_decoder_accepts ce env sf) tys tvs) ==>
+   selected_decoder_accepts ce env sf (TupleT tys) atv) /\
+  (abi_decoder_coherent ce env sf (StructT nsid) atv /\
+   (!args tvs. FLOOKUP env nsid = SOME (StructArgs args) /\
+     LIST_REL (abi_decoder_coherent ce (env \\ nsid) (sf \\ nsid_to_string nsid))
+       (MAP SND args) tvs ==>
+     LIST_REL (selected_decoder_accepts ce (env \\ nsid) (sf \\ nsid_to_string nsid))
+       (MAP SND args) tvs) ==>
+   selected_decoder_accepts ce env sf (StructT nsid) atv) /\
+  (abi_decoder_coherent ce env sf (ArrayT ty (Fixed n)) atv /\
+   (!tv. abi_decoder_coherent ce env sf ty tv ==>
+     selected_decoder_accepts ce env sf ty tv) ==>
+   selected_decoder_accepts ce env sf (ArrayT ty (Fixed n)) atv)
+Proof
+  simp[selected_tuple_accepts,selected_struct_accepts,selected_fixed_accepts]
 QED
