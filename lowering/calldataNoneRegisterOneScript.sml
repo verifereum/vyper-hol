@@ -115,8 +115,9 @@ Proof
   `(4w + abi_decode_load CALLDATALOAD ((4w+n2w ofs):bytes32) s) <+ 4w` by
     (gvs[word_add_n2w, WORD_LO, w2n_n2w, ADD_COMM, dimword_def] >>
      simp[word_add_n2w, WORD_LO, w2n_n2w, ADD_COMM, dimword_def]) >>
+  rename1 `emit_op CALLDATALOAD [head] b = (offset_operand,c)` >>
   irule registration_wrapped_prefix_origin >> simp[] >>
-  qexistsl [`b`,`c`,`a`,`buf`,`cap`,`first`,`head`,`g`,`4+ofs`,`delta'`,`src`,`st`] >>
+  qexistsl [`b`,`c`,`a`,`buf`,`cap`,`first`,`head`,`g`,`4+ofs`,`offset_operand`,`src`,`st`] >>
   simp[]
 QED
 

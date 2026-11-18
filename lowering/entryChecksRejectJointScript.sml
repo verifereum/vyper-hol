@@ -1,6 +1,6 @@
 (* Joint abort endpoint for installed entry checks. *)
 Theory entryChecksRejectJoint
-Ancestors entryChecksLayout entryChecksPassPtr entryPrefixPtr entryDispatchPtr fragGasOriginPtr
+Ancestors entryChecksLayout entryChecksPassPtr entryPrefixPtr entryDispatchPtr fragGasOriginPtr fragGasOriginPtrLoop
   arithmetic moduleLoweringProps exprLoweringProps
   fragGasOrigin fragGasPathPtr fragGasPathMem fragExec ptrSafeRun ptrDiscipline
   unitTransformDefs instMemFrontier contextCodegenRel memSafeRun gasCount gasEvents venomExecSemantics venomInst venomState
@@ -57,14 +57,6 @@ Resume compile_entry_size_reject_joint[lt]:
   suspend "iszero"
 QED
 
-Theorem checks_origin_then[local]:
-  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,H,u)) /\
-  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (t,H,u) [] (r,J,v)) ==>
-  !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (r,J,v)
-Proof
-  metis_tac[gas_origin_ptr_path_append, APPEND]
-QED
-
 Theorem assert_revert_origin_ptr:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSERT [op] []) /\
@@ -113,9 +105,9 @@ Resume compile_entry_size_reject_joint[iszero]:
        `Var (STRING #"%" (toString (st.cs_next_var + 2)))`] >> fs[ADD1]) >>
   qexistsl_tac [`revert_state (set_returndata [] s3)`, `G3`, `tn3`] >>
   conj_tac >- simp[revert_state_def, set_returndata_def] >>
-  irule checks_origin_then >> qexistsl_tac [`G1`, `s1`, `tn1`] >> simp[] >>
-  irule checks_origin_then >> qexistsl_tac [`G2`, `s2`, `tn2`] >> simp[] >>
-  irule checks_origin_then >> qexistsl_tac [`G3`, `s3`, `tn3`] >> simp[]
+  rpt gen_tac >> irule gas_origin_ptr_path_trans >> qexistsl_tac [`G1`, `s1`, `tn1`] >> simp[] >>
+  rpt gen_tac >> irule gas_origin_ptr_path_trans >> qexistsl_tac [`G2`, `s2`, `tn2`] >> simp[] >>
+  rpt gen_tac >> irule gas_origin_ptr_path_trans >> qexistsl_tac [`G3`, `s3`, `tn3`] >> simp[]
 QED
 
 Finalise compile_entry_size_reject_joint
@@ -166,8 +158,8 @@ Proof
        `Var (STRING #"%" (toString (st.cs_next_var + 1)))`] >> fs[ADD1]) >>
   qexistsl_tac [`revert_state (set_returndata [] s2)`, `G2`, `tn2`] >>
   conj_tac >- simp[revert_state_def, set_returndata_def] >>
-  irule checks_origin_then >> qexistsl_tac [`G1`, `s1`, `tn1`] >> simp[] >>
-  irule checks_origin_then >> qexistsl_tac [`G2`, `s2`, `tn2`] >> simp[]
+  rpt gen_tac >> irule gas_origin_ptr_path_trans >> qexistsl_tac [`G1`, `s1`, `tn1`] >> simp[] >>
+  rpt gen_tac >> irule gas_origin_ptr_path_trans >> qexistsl_tac [`G2`, `s2`, `tn2`] >> simp[]
 QED
 
 Theorem compile_entry_checks_reject_joint:
@@ -206,7 +198,7 @@ Proof
         (irule compile_entry_size_reject_joint >>
          simp[] >> qexistsl_tac [`last`, `m`, `mid`] >> simp[]) >>
       qexistsl_tac [`z`, `H`, `u`] >> simp[] >>
-      irule checks_origin_then >> qexistsl_tac [`G1`, `s1`, `tn1`] >> simp[]) >>
+      rpt gen_tac >> irule gas_origin_ptr_path_trans >> qexistsl_tac [`G1`, `s1`, `tn1`] >> simp[]) >>
   gvs[] >> irule compile_entry_value_reject_joint >>
   simp[] >> qexistsl_tac [`mid`, `st`] >> simp[]
 QED

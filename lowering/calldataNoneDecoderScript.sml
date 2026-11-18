@@ -237,10 +237,11 @@ Resume none_coherent_decode_paths[tuple]:
     (once_rewrite_tac[cd_decode_def] >>
      Cases_on `cd_decode_list F s.vs_call_ctx.cc_calldata tvs (w2n p) 0` >> simp[]) >>
   qpat_x_assum `IS_SOME (cd_decode _ _ (TupleTV _) _) = _` SUBST1_TAC >>
+  rename1 `FLOOKUP s.vs_allocas oid = SOME (owner_base,cap)` >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) (BETA_RULE decode_finite_paths) >>
   disch_then irule >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (qexistsl [`cap`,`oid`,`base'`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  >- (qexistsl [`cap`,`oid`,`owner_base`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `env` >> first_assum ACCEPT_TAC
 QED
 
@@ -258,6 +259,7 @@ Resume none_coherent_decode_paths[fixed]:
      rewrite_tac[REWRITE_RULE [MULT_CLAUSES] (Q.SPECL [`n`,`0`] decode_fixed_source)] >>
      Cases_on `cd_decode_elems F s.vs_call_ctx.cc_calldata tv (w2n p) 0 n` >> simp[]) >>
   qpat_x_assum `IS_SOME (cd_decode _ _ (ArrayTV _ _) _) = _` SUBST1_TAC >>
+  rename1 `FLOOKUP s.vs_allocas oid = SOME (owner_base,cap)` >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
     (BETA_RULE decode_finite_paths) >>
   disch_then (irule o BETA_RULE o
@@ -265,7 +267,7 @@ Resume none_coherent_decode_paths[fixed]:
     Q.INST [`tvs` |-> `REPLICATE n tv`] o SPEC_ALL) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- (qexists_tac `env` >> disch_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
-  qexistsl [`cap`,`oid`,`base'`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+  qexistsl [`cap`,`oid`,`owner_base`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume none_coherent_decode_paths[struct]:
@@ -287,9 +289,10 @@ Resume none_coherent_decode_paths[struct]:
      qpat_assum `MAP SND (ZIP _) = tvs` (rewrite_tac o single) >>
      Cases_on `cd_decode_list F s.vs_call_ctx.cc_calldata tvs (w2n p) 0` >> simp[]) >>
   pop_assum SUBST1_TAC >>
+  rename1 `FLOOKUP s.vs_allocas oid = SOME (owner_base,cap)` >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) (BETA_RULE decode_finite_paths) >>
   disch_then irule >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (qexistsl [`cap`,`oid`,`base'`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  >- (qexistsl [`cap`,`oid`,`owner_base`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `env \\ nsid` >> first_assum ACCEPT_TAC
 QED
 

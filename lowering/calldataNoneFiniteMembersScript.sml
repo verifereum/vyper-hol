@@ -56,14 +56,6 @@ val member_abort = ``\lo ctx fn PG s G tn.
   ?z H u. z.vs_returndata = [] /\ (^member_path) lo ctx fn PG s G tn
        (Abort Revert_abort z) H u``;
 
-Theorem finite_member_paths_compose[local]:
-  (^member_path) lo ctx fn PG s G tn (OK r) H u /\
-  (^member_path) lo ctx fn PG r H u res J v ==>
-  (^member_path) lo ctx fn PG s G tn res J v
-Proof
-  simp[] >> metis_tac[gas_origin_ptr_path_trans]
-QED
-
 val member_child = ``\ctx fn site limit lo PG di tv.
   !mid en q src s p d oid base cap G tn.
     compile_abi_decode_to_buf (Var q) src CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -123,15 +115,16 @@ Proof
       qexists `r` >> conj_tac >>
       irule abiDecoderFrameTheory.abi_decode_footprint_frame_weaken >>
       goal_assum (drule_at Any) >>
-      rewrite_tac[listTheory.MEM,listTheory.MEM_APPEND] >> rpt gen_tac >> strip_tac
+      rewrite_tac[listTheory.MEM,listTheory.MEM_APPEND] >>
+      qx_genl_tac [`range_base`,`range_size`] >> strip_tac
       >- (qexistsl [`d`,`n+m`] >>
-          qpat_assum `(d',sz) = _` (strip_assume_tac o REWRITE_RULE[pairTheory.PAIR_EQ]) >>
+          qpat_assum `(range_base,range_size) = _` (strip_assume_tac o REWRITE_RULE[pairTheory.PAIR_EQ]) >>
           asm_rewrite_tac[] >> decide_tac)
-      >- (qexistsl [`d'`,`sz`] >> asm_rewrite_tac[] >> decide_tac)
+      >- (qexistsl [`range_base`,`range_size`] >> asm_rewrite_tac[] >> decide_tac)
       >- (qexistsl [`d`,`n+m`] >>
-          qpat_assum `(d',sz) = _` (strip_assume_tac o REWRITE_RULE[pairTheory.PAIR_EQ]) >>
+          qpat_assum `(range_base,range_size) = _` (strip_assume_tac o REWRITE_RULE[pairTheory.PAIR_EQ]) >>
           asm_rewrite_tac[] >> decide_tac) >>
-      qexistsl [`d'`,`sz`] >> asm_rewrite_tac[] >> decide_tac) >>
+      qexistsl [`range_base`,`range_size`] >> asm_rewrite_tac[] >> decide_tac) >>
   conj_tac
   >- (rewrite_tac[listTheory.MEM_APPEND] >> rpt gen_tac >> strip_tac
       >- (qpat_assum `!q k. MEM (q,k) sc ==> _` drule >>
@@ -196,17 +189,17 @@ Proof
       abiDecoderFrameTheory.abi_decode_footprint_frame_def] >>
   conj_tac
   >- (conj_tac >- (rpt gen_tac >> strip_tac >> `F` by decide_tac) >>
-      conj_tac >- (rpt gen_tac >> strip_tac >>
+      conj_tac >- (qx_genl_tac [`id`,`slot_base`,`k`] >> strip_tac >>
           qpat_assum `!id q k. a.cs_next_id <= id /\ id < c.cs_next_id /\ _ ==> _`
-            (qspecl_then [`id`,`q'`,`k`] mp_tac) >>
+            (qspecl_then [`id`,`slot_base`,`k`] mp_tac) >>
           impl_tac >- (rpt (conj_tac >- decide_tac) >> first_assum ACCEPT_TAC) >>
           disch_then ACCEPT_TAC) >>
       gen_tac >> strip_tac >>
       qpat_assum `!x. not_fresh_at a x ==> lookup_var x r = _ /\ _`
         (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
-  rpt gen_tac >> strip_tac >>
+  qx_genl_tac [`id`,`slot_base`,`k`] >> strip_tac >>
   qpat_assum `!id q k. a.cs_next_id <= id /\ id < c.cs_next_id /\ _ ==> _`
-    (qspecl_then [`id`,`q'`,`k`] mp_tac) >>
+    (qspecl_then [`id`,`slot_base`,`k`] mp_tac) >>
   impl_tac >- (rpt (conj_tac >- decide_tac) >> first_assum ACCEPT_TAC) >>
   disch_then ACCEPT_TAC
 QED
@@ -362,9 +355,9 @@ Proof
           POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
      TRY (qpat_assum `d + vo + _ < dimword (:256)` mp_tac >>
           POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
-     rpt gen_tac >> strip_tac >>
+     qx_genl_tac [`id`,`slot_base`,`k`] >> strip_tac >>
      qpat_assum `!id q k. b.cs_next_id <= id /\ id < c.cs_next_id /\ FLOOKUP r.vs_allocas id = SOME (q,k) ==> _`
-       (qspecl_then [`id`,`q'`,`k`] mp_tac) >>
+       (qspecl_then [`id`,`slot_base`,`k`] mp_tac) >>
      (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
        qpat_assum `id < e.cs_next_id` mp_tac >>
        qpat_assum `e.cs_next_id <= c.cs_next_id` mp_tac >>
@@ -375,11 +368,11 @@ Proof
     (qx_choose_then `t1` (qx_choose_then `J` (qx_choose_then `v`
       (qx_choose_then `sc1` (map_every assume_tac o CONJUNCTS))))))
   >- (disj1_tac >> qexistsl [`z`,`gh`,`w`] >> conj_tac >- first_assum ACCEPT_TAC >>
-      irule (BETA_RULE finite_member_paths_compose) >>
-      qexistsl [`H`,`r`,`u`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      rpt gen_tac >> irule gas_origin_ptr_path_trans >>
+      qexistsl [`H`,`r`,`u`] >> simp[]) >>
   `(^member_path) lo ctx fn PG s G tn (OK t1) J v` by
-    (BETA_TAC >> irule (BETA_RULE finite_member_paths_compose) >>
-     qexistsl [`H`,`r`,`u`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (BETA_TAC >> rpt gen_tac >> irule gas_origin_ptr_path_trans >>
+     qexistsl [`H`,`r`,`u`] >> simp[]) >>
   `a.cs_next_id <= b.cs_next_id` by (irule LESS_IMP_LESS_OR_EQ >> first_assum ACCEPT_TAC) >>
   (Q_TAC (fn t => SUBGOAL_THEN t (mk_asm "prefix_frame" o BETA_RULE))
     `(^member_frame) a e ctx fn site limit lo s G tn (d+vo) (type_memory_size tv) t1 J v sc1`
@@ -433,8 +426,8 @@ Proof
     (qx_choose_then `t2` (qx_choose_then `gh` (qx_choose_then `w`
       (qx_choose_then `sc2` (map_every assume_tac o CONJUNCTS))))))
   >- (disj1_tac >> qexistsl [`z`,`gh`,`w`] >> conj_tac >- first_assum ACCEPT_TAC >>
-      irule (BETA_RULE finite_member_paths_compose) >>
-      qexistsl [`J`,`t1`,`v`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      rpt gen_tac >> irule gas_origin_ptr_path_trans >>
+      qexistsl [`J`,`t1`,`v`] >> simp[]) >>
   disj2_tac >> qexistsl [`t2`,`gh`,`w`,`sc1 ++ sc2`] >>
   conj_tac
   >- ((`IS_SOME (cd_decode F s.vs_call_ctx.cc_calldata tv
@@ -454,8 +447,8 @@ Proof
       qpat_assum `cd_decode_list F _ tvs _ _ = SOME _` (fn th => rewrite_tac[th]) >>
       rewrite_tac[IS_SOME_DEF] >> (simp[Once cd_decode_def, IS_SOME_DEF, member_source_decode]))) >>
   conj_tac
-  >- (irule (BETA_RULE finite_member_paths_compose) >>
-      qexistsl [`J`,`t1`,`v`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  >- (rpt gen_tac >> irule gas_origin_ptr_path_trans >>
+      qexistsl [`J`,`t1`,`v`] >> simp[]) >>
   rewrite_tac[listTheory.MAP,listTheory.SUM] >>
   mp_tac (BETA_RULE (Q.INST [`b` |-> `e`, `r` |-> `t1`, `H` |-> `J`, `u` |-> `v`,
     `t` |-> `t2`, `J` |-> `gh`, `v` |-> `w`, `sc` |-> `sc1`, `tc` |-> `sc2`,

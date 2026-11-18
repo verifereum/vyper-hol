@@ -184,8 +184,8 @@ Resume none_selected_check_prefix[execution]:
   drule compile_selector_dispatch_linear_ptr_endpoint >>
   disch_then (qspecl_then [`entry_taint`, `ss`, `0`, `func`] mp_tac) >>
   disch_then (qspecl_then [`unit.cu_context`, `[]`, `FEMPTY`] mp_tac) >>
-  (impl_tac >- simp[Abbr `ss`]) >> strip_tac >>
-  rename1 `vars_pc_only ss t` >>
+  (impl_tac >- simp[Abbr `ss`]) >>
+  disch_then (qx_choosel_then [`t`,`dispatch_prov`,`dispatch_taint`] strip_assume_tac) >>
   `fresh_vars_wrt opened t` by
     (irule fresh_vars_wrt_mono >> qexists_tac `dispatch_st` >> simp[]) >>
   `vars_pc_only vs t` by
@@ -201,7 +201,7 @@ Resume none_selected_check_prefix[execution]:
        entry_prov_def, entry_taint_vars_def, phis_prov_def, phis_taint_def,
        Abbr `ss`]) >>
   qexistsl_tac [`rr`,`ce`,`pay`,`key`,`ut`,`iv`,`rt`,`opened`,`checked`,
-    `ce'`,`registered`,`t`,`G'`,`tn'`] >>
+    `ce'`,`registered`,`t`,`dispatch_prov`,`dispatch_taint`] >>
   gvs[block_is_terminated_def, Abbr `ss`, entry_taint_def] >>
   qpat_assum `MEM (mut,nr,rr,name,args,[],ret,fbody) _`
     (mp_tac o ONCE_REWRITE_RULE [MEM_SPLIT]) >>

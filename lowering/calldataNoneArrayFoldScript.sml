@@ -130,12 +130,13 @@ Proof
          r+32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword(:256))`
     >- metis_tac[] >>
   drule_all actual_array_init_endpoint_ptr_origin_core >>
-  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`,`ARB`] strip_assume_tac) >>
+  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`,`ARB`]
+    (qx_choosel_then [`HG`,`u`,`q`,`header_base`] strip_assume_tac)) >>
   suspend "finish"
 QED
 
 Resume none_array_first_header[finish]:
-  `p' = p` by
+  `header_base = p` by
     (qpat_assum `(FLOOKUP s.vs_allocas hs.cs_next_id = NONE /\ _) \/ _`
        strip_assume_tac >> gvs[]) >>
   `d + 32 <= s.vs_alloca_next` by decide_tac >>
