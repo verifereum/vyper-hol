@@ -2,7 +2,7 @@
 Theory symInvokeEntryOwn
 Ancestors
   symInvokeEntryFacts codegenSymRel asmSymOwnStep codegenSymOwnRel asmSymBridge
-  asmOwnCodeInvariant
+  asmOwnCodeInvariant symFrameBoundaryPairing[qualified,ignore_grammar]
 
 Theorem sym_invoke_frame_own_canonical:
   asm_static_wf p ==>
@@ -10,8 +10,7 @@ Theorem sym_invoke_frame_own_canonical:
      ctx cplan fn ret srest labs0 ps cs ss <=>
    sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\ cs.as_code = own)
 Proof
-  simp[sym_frame_inv_own_def, sym_frame_inv_def, asm_sym_rel_own_canonical] >>
-  metis_tac[]
+  MATCH_ACCEPT_TAC symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own
 QED
 
 Theorem sym_invoke_canonical_lockstep:
@@ -22,11 +21,10 @@ Theorem sym_invoke_canonical_lockstep:
     ?cs'. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p n cs = AsmOK cs' /\
       asm_sym_rel_own (SND (compute_label_offsets p)) p env own cs' ss'
 Proof
-  strip_tac >> simp[asm_sym_rel_own_canonical, sym_steps_mode_def] >>
-  rpt strip_tac >>
-  drule_all asm_sym_steps_lockstep >> strip_tac >>
-  drule asm_steps_code_preserved >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[]
+  simp[sym_steps_mode_def] >> rpt strip_tac >>
+  irule symFrameBoundaryPairingTheory.asm_sym_legacy_steps_own >>
+  simp[fnPlanPlaceRevertPostambleTheory.code_labels_agree_refl] >>
+  HINT_EXISTS_TAC >> simp[]
 QED
 
 Theorem sym_invoke_prefix_pair_own:
