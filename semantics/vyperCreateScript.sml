@@ -399,7 +399,6 @@ val () = cv_auto_trans blueprint_copy_size_def;
 val () = cv_auto_trans blueprint_initcode_def;
 val () = cv_auto_trans raw_create_initcode_def;
 val () = cv_auto_trans blueprint_size_ok_def;
-val () = cv_auto_trans blueprint_literal_offset_def;
 val () = cv_auto_trans blueprint_prefix_size_def;
 val () = check_create_blueprint_def
   |> SRULE [FUN_EQ_THM, bind_def, get_accounts_def, return_def,
