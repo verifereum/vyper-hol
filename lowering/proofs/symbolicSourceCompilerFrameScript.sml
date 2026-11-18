@@ -94,18 +94,56 @@ Proof
   abi_frame_tac
 QED
 
-(* The guarded callback selects one recursive branch. Keep only its
-   induction hypothesis when solving the pointwise frame. *)
-fun callback_frame_tac pattern =
-  rpt strip_tac >>
-  qpat_x_assum pattern (fn ih =>
-    rpt (qpat_x_assum `!x. _` kall_tac) >> metis_tac[ih])
-
-val invalid_callback_frame_tac =
-  rpt strip_tac >>
-  asm "invalid" (fn th =>
-    rpt (qpat_x_assum `!x. _` kall_tac) >>
-    metis_tac[REWRITE_RULE [symbolic_frame_def] th])
+(* Use the frame for the selected callback at exactly the two input states. *)
+fun callback_frame_tac (state as (_, goal)) =
+  let
+    val (premise, result) = dest_imp goal
+    val [ghost, src, dst] = snd (strip_comb premise)
+    fun is_callback tm =
+      let val (f, args) = strip_comb tm in
+        is_const f andalso not (null args) andalso
+        aconv (List.last args) src andalso
+        List.exists (same_const f)
+          [Term `invalid_expr_call`, Term `compile_expr`,
+           Term `compile_builtin_dispatch`, Term `compile_type_builtin_dispatch`]
+      end
+    val (f, args) = strip_comb (find_term is_callback result)
+    fun apply_frame relation frame =
+      let val fact = MP frame relation in
+        FIRST (map ACCEPT_TAC (fact :: CONJUNCTS fact))
+      end
+    fun recursive_frame relation pattern arguments =
+      qpat_assum pattern (fn ih =>
+        first_assum (fn bound =>
+          apply_frame relation (SPECL [ghost,dst] (MP (SPECL arguments ih) bound))))
+    fun prove relation =
+      if same_const f (Term `invalid_expr_call`) then
+        asm "invalid" (fn th =>
+          apply_frame relation
+            (SPECL [src,ghost,dst] (REWRITE_RULE [symbolic_frame_def] (SPEC (hd args) th))))
+      else if same_const f (Term `compile_expr`) then
+        let val [ce,ty,e,s] = args in
+          recursive_frame relation
+            `!e ce ty s. _ ==> !g t. R g s t ==> _ /\ R g (SND (compile_expr ce ty e s)) _`
+            [e,ce,ty,s]
+        end
+      else if same_const f (Term `compile_builtin_dispatch`) then
+        let val [ce,rt,ty,bi,es,s] = args in
+          recursive_frame relation
+            `!args ce rt ty bi s. _ ==> !g t. R g s t ==> _ /\
+              R g (SND (compile_builtin_dispatch ce rt ty bi args s)) _`
+            [es,ce,rt,ty,bi,s]
+        end
+      else
+        let val [ce,vt,ty,tb,rt,es,s] = args in
+          recursive_frame relation
+            `!args ce vt ty tb rt s. _ ==> !g t. R g s t ==> _ /\
+              R g (SND (compile_type_builtin_dispatch ce vt ty tb rt args s)) _`
+            [es,ce,vt,ty,tb,rt,s]
+        end
+  in
+    disch_then prove state
+  end
 
 Theorem symbolic_frame_expr:
   (!ty. symbolic_frame R (invalid_expr_call ty)) /\
@@ -141,36 +179,21 @@ Resume symbolic_frame_expr[expr]:
   rpt conj_tac >> rpt gen_tac >>
   rewrite_tac[expr_child_callback_def, builtin_child_callback_def,
               type_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >> rewrite_tac[COND_CLAUSES] >>
-  TRY (FIRST_ASSUM ACCEPT_TAC)
-  >~ [`invalid_expr_call`] >- invalid_callback_frame_tac
-  >~ [`compile_expr`] >- callback_frame_tac
-      `!e ce ty s. _ ==> !g t. R g s t ==> _ /\ R g (SND (compile_expr ce ty e s)) _`
-   >~ [`compile_builtin_dispatch`] >- callback_frame_tac
-      `!args ce rt ty bi s. _ ==> !g t. R g s t ==> _ /\
-        R g (SND (compile_builtin_dispatch ce rt ty bi args s)) _`
-   >> callback_frame_tac
-      `!args ce vt ty tb rt s. _ ==> !g t. R g s t ==> _ /\
-        R g (SND (compile_type_builtin_dispatch ce vt ty tb rt args s)) _`
+  (FIRST_ASSUM ACCEPT_TAC ORELSE callback_frame_tac)
 QED
 
 Resume symbolic_frame_expr[builtin]:
   asm "builtin" (irule o REWRITE_RULE [symbolic_frame_def]) >>
   rpt conj_tac >> rpt gen_tac >>
   rewrite_tac[expr_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >> rewrite_tac[COND_CLAUSES] >>
-  TRY (FIRST_ASSUM ACCEPT_TAC)
-  >~ [`invalid_expr_call`] >- invalid_callback_frame_tac
-  >> callback_frame_tac
-    `!e ce ty s. _ ==> !g t. R g s t ==> _ /\ R g (SND (compile_expr ce ty e s)) _`
+  (FIRST_ASSUM ACCEPT_TAC ORELSE callback_frame_tac)
 QED
 
 Resume symbolic_frame_expr[type_builtin]:
   asm "type_builtin" (irule o REWRITE_RULE [symbolic_frame_def]) >>
   rpt conj_tac >> rpt gen_tac >>
   rewrite_tac[expr_child_callback_def] >> BETA_TAC >> TRY IF_CASES_TAC >> rewrite_tac[COND_CLAUSES] >>
-  TRY (FIRST_ASSUM ACCEPT_TAC)
-  >~ [`invalid_expr_call`] >- invalid_callback_frame_tac
-  >> callback_frame_tac
-    `!e ce ty s. _ ==> !g t. R g s t ==> _ /\ R g (SND (compile_expr ce ty e s)) _`
+  (FIRST_ASSUM ACCEPT_TAC ORELSE callback_frame_tac)
 QED
 
 Finalise symbolic_frame_expr
