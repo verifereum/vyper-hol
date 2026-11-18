@@ -4231,7 +4231,9 @@ Resume raw_call_outbuf_positive_tail_vv_path[tuple_positive]:
   disch_then (drule_at (Pat `_ sc = (result,sb)`)) >>
   disch_then (qspecl_then [`w`,`outcome.co_success`,`q`] mp_tac) >>
   `cs_extends sc sb` by
-    (drule_at (Pat `0 < _`) raw_call_nonrevert_suffix_code >> simp[] >>
+    (drule_at (Pat `0 < _`) raw_call_nonrevert_suffix_code >>
+     qpat_assum `0 < cap`
+       (fn pos => simp[NoAsms, arithmeticTheory.GREATER_DEF, pos]) >>
      disch_then drule >> strip_tac >> metis_tac[cs_extends_trans]) >>
   `fn_has_code sc sb func` by metis_tac[fn_has_code_split] >>
   `bool_to_word outcome.co_success = (if outcome.co_success then 1w else 0w)` by
