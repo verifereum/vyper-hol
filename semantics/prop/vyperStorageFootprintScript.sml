@@ -3,7 +3,7 @@ Theory vyperStorageFootprint
 Ancestors
   vyperStorageTrace vyperStorageWritePreservation vyperStorageLayoutSafety vyperStorageBackend
   vyperValue vyperTyping vyperLookupStorage vyperStorage vyperStorageFrame
-  vyperRuntimeAccounts vyperState extCallOracle
+  vyperRuntimeAccounts vyperState extCallOracle vyperCallOutcome
   list
 Libs
   wordsLib
@@ -181,6 +181,25 @@ Definition valid_horizon_def:
     storage_well_formed_on cx st (FST H) /\
     storage_observations_ok cx H observations
 End
+
+Theorem take_call_outcome_storage_observations[simp]:
+  storage_trace_horizon
+    (SND (take_call_outcome gas_cap target calldata value_opt es)).storage_trace =
+    storage_trace_horizon es.storage_trace /\
+  (valid_horizon cx st H
+    (SND (take_call_outcome gas_cap target calldata value_opt es)).storage_trace <=>
+   valid_horizon cx st H es.storage_trace)
+Proof
+  Cases_on `es.outcomes` >>
+  simp[take_call_outcome_def, take_request_outcome_def] >>
+  rename1 `es.outcomes = SOME os` >> Cases_on `os` >> simp[] >>
+  pairarg_tac >> simp[] >> IF_CASES_TAC >>
+  simp[storage_trace_horizon_def, valid_horizon_def,
+       storage_observations_ok_def, storage_trace_regions_def,
+       storage_trace_locks_def, storage_roots_fit_def,
+       storage_trace_backends_well_formed_def, MAP_APPEND, FLAT_APPEND,
+       EVERY_APPEND]
+QED
 
 (* Intrinsic goodness uses exactly the roots of this observed prefix. *)
 Definition storage_trace_domain_def:

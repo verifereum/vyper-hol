@@ -510,6 +510,11 @@ val ricf_witness_ptr_clean =
     FLOOKUP_UPDATE, op_prov_def, op_taint_def,
     RIGHT_AND_OVER_OR, DISJ_IMP_THM, FORALL_AND_THM];
 
+val ricf_witness_ghost_step =
+  NTAC 2 (simp[Once ghost_step_def, step_inst_def, step_inst_base_opcode_eqs,
+    update_var_def, is_terminator_def]) >>
+  simp[step_taint_def];
+
 Theorem ricf_witness_ptr_safe_three[local]:
   ptr_safe_blocks
     (<| d_stor := K (K UNIV); d_trans := K (K UNIV);
@@ -545,6 +550,10 @@ Proof
   >- (simp[Once ptr_safe_blocks_def, lookup_block_def, FIND_thm,
         eval_phis_def, phi_prefix_length_def] >>
       simp[Once ptr_safe_block_def, get_instruction_def] >>
+      qpat_abbrev_tac `copied_memory : byte list = TAKE 32 _ ++ TAKE 32 _ ++ DROP 64 _` >>
+      conj_tac
+      >- (simp[Once ptr_safe_step_def] >> ricf_witness_ptr_clean) >>
+      ricf_witness_ghost_step >>
       computeLib.RESTR_EVAL_TAC [``ptr_inst_ok``, ``ptr_safe_block``, ``ptr_safe_blocks``,
         ``mload``, ``word_to_bytes``, ``read_memory``] >>
       ricf_witness_ptr_clean >>
@@ -590,6 +599,7 @@ Proof
   simp[Once ghost_blocks_def, lookup_block_def, FIND_thm,
     eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
   simp[Once ghost_block_def, get_instruction_def] >>
+  ricf_witness_ghost_step >>
   computeLib.RESTR_EVAL_TAC [``ghost_block``, ``ptr_inst_ok``,
     ``ptr_safe_block``, ``ptr_safe_blocks``,
     ``mload``, ``word_to_bytes``, ``read_memory``] >>

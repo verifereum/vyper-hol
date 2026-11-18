@@ -104,7 +104,7 @@ val () = cv_auto_trans failed_outcome_def;
 
 (* A computed precompile's success is the next outcome's, since the EVM can
  * fail it for lack of gas; on success its return data is still computed.
- * Its request is not recorded: it has no effects. *)
+ * It has no effects, but its request is recorded like any other. *)
 Definition take_outcome_def:
   take_outcome rq os =
     case os of
@@ -124,10 +124,17 @@ End
 val () = cv_auto_trans take_outcome_def;
 
 Definition record_request_def:
-  record_request rq rqs = if computed_precompile rq then rqs else rqs ++ [rq]
+  record_request rq rqs = rqs ++ [rq]
 End
 
 val () = cv_auto_trans record_request_def;
+
+Theorem record_request_changed:
+  record_request rq rqs <> rqs
+Proof
+  simp[record_request_def] >> strip_tac >>
+  pop_assum (mp_tac o AP_TERM ``LENGTH:call_request list -> num``) >> simp[]
+QED
 
 (* A failed CREATE keeps its effects on the creator (its nonce); a failed
  * message call, delegate or not, has none. *)
@@ -319,7 +326,7 @@ Theorem take_outcome_computed_valid:
     ((if outcome.co_success then
         failed_outcome rq with <| co_success := T; co_returnData := bs |>
       else failed_outcome rq), rest) /\
-  record_request rq rqs = rqs
+  record_request rq rqs = rqs ++ [rq]
 Proof
   strip_tac >>
   simp[computed_precompile_def, take_outcome_def, record_request_def] >>
@@ -327,13 +334,13 @@ Proof
 QED
 
 (* In particular invalid ecrecover is a successful computed call, unlike
- * invalid EC points. Neither records a request. *)
+ * invalid EC points. Both record their request. *)
 Theorem take_outcome_empty_ecrecover:
   rq.cr_kind = MessageCall /\ rq.cr_value = 0 /\ rq.cr_target = 1w /\ rq.cr_data = [] /\
   outcome.co_success ==>
   take_outcome rq (outcome::rest) =
     (failed_outcome rq with <| co_success := T; co_returnData := [] |>, rest) /\
-  record_request rq rqs = rqs
+  record_request rq rqs = rqs ++ [rq]
 Proof
   strip_tac >>
   mp_tac (Q.INST [`bs` |-> `[]`] take_outcome_computed_valid) >>
@@ -343,7 +350,7 @@ QED
 Theorem take_outcome_computed_invalid:
   rq.cr_kind = MessageCall /\ rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME NONE ==>
   take_outcome rq os = (failed_outcome rq, DROP 1 os) /\
-  record_request rq rqs = rqs
+  record_request rq rqs = rqs ++ [rq]
 Proof
   strip_tac >> Cases_on `os` >>
   simp[computed_precompile_def, take_outcome_def, record_request_def]
@@ -353,26 +360,19 @@ Theorem take_outcome_invalid_ec:
   rq.cr_kind = MessageCall /\ rq.cr_value = 0 /\ (rq.cr_target = 6w \/ rq.cr_target = 7w) /\
   rq.cr_data = REPLICATE 63 0w ++ [1w] ==>
   take_outcome rq os = (failed_outcome rq, DROP 1 os) /\
-  record_request rq rqs = rqs
+  record_request rq rqs = rqs ++ [rq]
 Proof
   strip_tac >> irule take_outcome_computed_invalid >>
   simp[precompile_result_invalid_ec]
 QED
 
-(* Every call, computed or not, consumes one outcome; a computed one records
- * no request. *)
+(* Every call, computed or not, consumes one outcome. *)
 Theorem take_outcome_rest:
   SND (take_outcome rq os) = DROP 1 os
 Proof
   Cases_on `os` >> rw[take_outcome_def] >>
   Cases_on `precompile_result rq.cr_target rq.cr_data` >> simp[] >>
   rename1 `SOME result` >> Cases_on `result` >> rw[]
-QED
-
-Theorem computed_precompile_no_request:
-  computed_precompile rq ==> record_request rq rqs = rqs
-Proof
-  simp[record_request_def]
 QED
 
 (* A computed call succeeds only on a successful outcome and valid input. *)

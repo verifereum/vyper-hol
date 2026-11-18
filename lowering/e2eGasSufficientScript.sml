@@ -17,9 +17,8 @@
  * Only gas starvation is ruled out: a StackOverflow outcome, which
  * frame_resource_starved also allows, does not depend on gas.
  *
- * The identity finalizer's case is composed from three planned
- * admissions: S1b (lower_vyper_runtime_unit_run_bounded), S6b
- * (run_venom_pipeline_run_bounded) and S7g (codegen_gas_sufficient).
+ * The call case joins uniform runtime-unit fuel, the dispatch rejection
+ * or selected-call certificate, the O1 bound, and codegen gas sufficiency.
  *
  * Deployment runs in one creation frame and the constructor makes no calls,
  * so there is no RETURNDATACOPY exemption: with enough gas the creation
@@ -42,7 +41,9 @@ Ancestors
   loweringShapeProps loweringShapeSource passSimulationDefs
   codegenCorrectness immutableCodeLayout frameOutcome frameGas
   venomRunBounded unitMemInv o1OpcodeAbsence
-  loweringRuntimeNoCreate venomPipelineDriverProps
+  loweringRuntimeNoCreate venomPipelineDriverProps fragFuelUnit
+  e2eCorrectness loweringCalldataCorrect dispatchedValueSelection callPremiseDispatch entryStateRel
+  callRawVariant
   asmOptimizer callTrace
   e2eDeployCorrectness e2eDeployAtMarks e2eDeployDefs ctorDeployDefs ctorDeployBodyJoint
   ctorDeployFrame ctorDeployShape ctorDeployDefsReach ctorDeployInitcode
@@ -72,7 +73,7 @@ Proof
        add_frame_gas_fields, MAP_MAP_o, combinTheory.o_DEF, EVERY_MAP]
 QED
 
-Theorem entry_venom_state_add_frame_gas[local]:
+Theorem entry_venom_state_add_frame_gas:
   !prog cp g es.
     entry_venom_state prog cp (add_frame_gas g es) =
     entry_venom_state prog cp es with
@@ -192,7 +193,7 @@ Proof
   simp[external_call_result_rel_def, gas_source_exempt_def]
 QED
 
-Theorem call_gas_static_no_abort[local]:
+Theorem call_gas_static_no_abort:
   !tops ret am tx unit vs marks.
     tx.is_static /\ o1_source_unit_ok unit /\
     source_unit_execution_correct_at marks tops ret am tx unit vs /\
@@ -263,31 +264,179 @@ Proof
   impl_tac >- (fs[] >> metis_tac[]) >> disch_then drule_all >> simp[]
 QED
 
-(* vyper_call_correct's hypotheses.  The two that range over the call
-   trace, and so over what the callees do with the gas they get, are
-   stated at the new gas.  ~gas_source_exempt is S3's ~source_exempt (on
+(* A uniform bound on every terminating run of the runtime unit, before
+   choosing the entry state or decoding the calldata. *)
+Theorem call_gas_uniform_fuel:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops ==>
+  ?fuel. !n s. terminates (run_context n unit.cu_context s) ==>
+               terminates (run_context fuel unit.cu_context s)
+Proof
+  strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  qspecl_then [`tops`, `rpolicy`, `unit`] mp_tac
+    lower_vyper_runtime_unit_fns_stable >>
+  impl_tac >- simp[] >> strip_tac >>
+  drule_all run_context_terminates_uniform >> simp[]
+QED
+
+Triviality initial_venom_state_rel_dispatch:
+  initial_venom_state_rel tops am
+    (tx with <| function_name := f; args := vals |>) vs <=>
+  initial_venom_state_rel tops am tx vs
+Proof
+  simp[initial_venom_state_rel_def, venom_env_rel_def,
+       loweringStateRelDefsTheory.call_ctx_rel_def,
+       loweringStateRelDefsTheory.tx_env_ok_def, value_transfer_ok_def,
+       accounts_after_transfer_def]
+QED
+
+(* Dispatch rejection provides the raw facts directly. On a selected call
+   they come from the execution certificate at its own gas marks. *)
+Theorem call_gas_raw_variant_facts:
+  !tops rpolicy unit am tx vs vi fuel.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    ~ctx_has_dalloca unit.cu_context /\ o1_source_unit_ok unit /\
+    code_layout_valid vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    raw_variant vs.vs_initial_fmp vi vs /\
+    (!n s. terminates (run_context n unit.cu_context s) ==>
+           terminates (run_context fuel unit.cu_context s)) /\
+    (!f vals. calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+       (!obs. call_storage_ok am
+          (tx with <| function_name := f; args := vals |>) vs.vs_outcomes obs) /\
+       (!obs. ~gas_source_exempt tops
+          (tx with <| function_name := f; args := vals |>)
+          (call_external (SOME vs.vs_outcomes) obs am
+             (tx with <| function_name := f; args := vals |>)))) ==>
+    raw_unit_memory_ok unit.cu_context vi /\
+    ptr_discipline 0 unit.cu_context vi /\
+    mem_inv dload_offset_ok unit.cu_context vi /\
+    mem_inv dload_headroom_ok unit.cu_context vi /\
+    mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                              s.vs_code = vi.vs_code /\
+                              s.vs_data_section = vi.vs_data_section)
+      unit.cu_context vi /\
+    terminates (run_context fuel unit.cu_context vi) /\
+    (tx.is_static ==>
+     ~(!n. terminates (run_context n unit.cu_context vi) ==>
+          ?u. run_context n unit.cu_context vi = Abort ExHalt_abort u))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `vs.vs_call_ctx.cc_calldata = tx.calldata` by
+    fs[initial_venom_state_rel_def, venom_env_rel_def,
+       loweringStateRelDefsTheory.call_ctx_rel_def] >>
+  Cases_on `calldata_dispatch tops tx.calldata`
+  >- (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `vi`]
+        mp_tac raw_variant_revert_facts >>
+      simp[] >> strip_tac >>
+      rename1 `run_context n unit.cu_context vi = Abort Revert_abort _` >>
+      `terminates (run_context n unit.cu_context vi)` by
+        simp[terminates_def] >>
+      simp[] >> conj_tac >- metis_tac[] >>
+      strip_tac >> qexists_tac `n` >> simp[]) >>
+  rename1 `_ = SOME fv` >> PairCases_on `fv` >>
+  drule source_typing_ok_external_names_distinct >> strip_tac >>
+  drule_all_then strip_assume_tac calldata_dispatch_has_source_entry >>
+  qpat_x_assum `!f vals. SOME (fv0, fv1) = SOME (f, vals) ==> _`
+    (qspecl_then [`fv0`, `fv1`] mp_tac) >> simp[] >> strip_tac >>
+  qabbrev_tac `td = tx with <| function_name := fv0; args := fv1 |>` >>
+  `gas_variant vi vs` by metis_tac[raw_variant_gas_variant] >>
+  `initial_venom_state_rel tops am tx vi` by
+    metis_tac[raw_variant_initial_venom_state_rel] >>
+  `vi.vs_outcomes = vs.vs_outcomes /\ vi.vs_call_ctx = vs.vs_call_ctx` by
+    metis_tac[gas_variant_outcomes, gas_variant_call_ctx] >>
+  `code_layout_valid vi` by metis_tac[gas_variant_code_layout_valid] >>
+  `dispatched_vyper_call tops td vi.vs_call_ctx.cc_calldata ret` by
+    (simp[Abbr`td`, dispatched_vyper_call_def] >> metis_tac[]) >>
+  `source_typing_ok tops am td` by
+    simp[Abbr`td`, call_premises_dispatch_invariant] >>
+  `source_deployment_rel tops am td /\ td.is_static = tx.is_static` by
+    fs[Abbr`td`, source_deployment_rel_def, layouts_agree_def] >>
+  `initial_venom_state_rel tops am td vi` by
+    simp[Abbr`td`, initial_venom_state_rel_dispatch] >>
+  `outcomes_accounts_typed (SOME vi.vs_outcomes)` by fs[] >>
+  drule_all lower_vyper_runtime_unit_correct_dispatched_readings_available >>
+  disch_then (qx_choose_then `marks` strip_assume_tac) >>
+  qabbrev_tac `obs = gas_explicit marks vi.vs_gas_readings` >>
+  `call_storage_ok am td vi.vs_outcomes obs /\
+   ~gas_source_exempt tops td (call_external (SOME vi.vs_outcomes) obs am td)` by
+    metis_tac[] >>
+  `FST (call_external (SOME vi.vs_outcomes) obs am td) <>
+     INR (Error (RuntimeError "msg.gas: no gas reading"))` by
+    (qpat_x_assum `(?tail. _) ==> _` mp_tac >>
+     impl_tac >- (qexists_tac `[]` >> fs[Abbr`obs`]) >>
+     disch_then (qspec_then `[]` mp_tac) >> simp[Abbr`obs`]) >>
+  `~source_exempt tops (call_external (SOME vi.vs_outcomes) obs am td)` by
+    fs[gas_source_exempt_def] >>
+  `?n. terminates (run_context n unit.cu_context vi)` by
+    (qpat_assum `source_unit_execution_correct_at _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def])
+     >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >>
+         fs[Abbr`obs`])
+     >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
+           (qspec_then `[]` assume_tac) >> fs[] >>
+         drule vyperInterpreterTheory.call_external_trace_result >>
+         strip_tac >> gvs[Abbr`obs`]) >>
+     drule_all e2eCorrectnessTheory.selected_run >> strip_tac >>
+     rename1 `run_context n unit.cu_context vi = _` >>
+     qexists_tac `n` >>
+     Cases_on `run_context n unit.cu_context vi` >>
+     gvs[terminates_def, fragExecTheory.exit_result_def]) >>
+  `terminates (run_context fuel unit.cu_context vi)` by metis_tac[] >>
+  qunabbrev_tac `obs` >>
+  qspecl_then [`marks`, `tops`, `ret`, `am`, `td`, `unit`, `vi`, `rpolicy`]
+    mp_tac source_unit_exit_safe_runs >>
+  impl_tac >- simp[] >> strip_tac >>
+  `vi.vs_fmp = vi.vs_initial_fmp` by
+    fs[raw_variant_def, gas_variant_def,
+       venomStateTheory.venom_state_component_equality] >>
+  `w2n vi.vs_initial_fmp <= w2n vi.vs_fmp` by simp[] >>
+  drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
+  `mem_inv dload_offset_ok unit.cu_context vi` by
+    (irule lower_vyper_runtime_unit_dload_offset_ok >> metis_tac[]) >>
+  `mem_inv dload_headroom_ok unit.cu_context vi` by
+    (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
+  `mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                           s.vs_code = vi.vs_code /\
+                           s.vs_data_section = vi.vs_data_section)
+     unit.cu_context vi` by
+    (irule lower_vyper_runtime_unit_dload_in_section >> metis_tac[]) >>
+  simp[] >> strip_tac >>
+  qspecl_then [`tops`, `ret`, `am`, `td`, `unit`, `vi`, `marks`] mp_tac
+    call_gas_static_no_abort >>
+  simp[]
+QED
+
+(* The selected-call guards range over the trace at the raised gas
+   and over the source call the calldata dispatches to.  ~gas_source_exempt is S3's ~source_exempt (on
    the exempt inputs, malformed data to a dynamic abi_decode, the compiled
    code may read at any offset, so no gas is enough) plus no oversized
    CREATE initcode.  It is stated for every list of GAS
    observations, since the source run S4 relates the compiled run to may
    read other GAS values than the EVM run does. *)
 Theorem vyper_call_gas_sufficient_identity:
-  !policy tops deploy_bc runtime_bc am tx ret es.
+  !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx
-      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
+    call_state_rel tops runtime_bc am tx es
     ==>
     ?g. !g'.
       g <= g' /\
-      (!gs. call_storage_ok am tx
-         (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-      (!obs. ~gas_source_exempt tops tx
-         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-            obs am tx)) /\
-      LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64
+      (!f vals.
+         calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+           (!gs. call_storage_ok am
+              (tx with <| function_name := f; args := vals |>)
+              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+           (!obs. ~gas_source_exempt tops
+              (tx with <| function_name := f; args := vals |>)
+              (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+                 obs am (tx with <| function_name := f; args := vals |>))) /\
+           LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64)
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
@@ -318,10 +467,8 @@ Proof
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
     (drule lower_vyper_runtime_unit_global_reserved >>
      simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>
-  (* S1b, S6b and S7g, at bounds that hold for every entry state *)
-  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`] mp_tac
-    lower_vyper_runtime_unit_run_bounded >>
-  impl_tac >- simp[] >> disch_then (qx_choose_then `fuel` assume_tac) >>
+  drule_all call_gas_uniform_fuel >>
+  disch_then (qx_choose_then `fuel` assume_tac) >>
   qspecl_then [`0`, `rpolicy`, `unit`, `out`, `cplan`, `fuel`] mp_tac
     run_venom_pipeline_run_bounded_static_abort >>
   impl_tac >- simp[] >>
@@ -348,17 +495,12 @@ Proof
      simp[outcomes_accounts_typed_def, listTheory.EVERY_MEM]) >>
   `wf_state es` by fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def,
                       world_rel_def, evm_state_ok_def] >>
-  qpat_x_assum `valid_vyper_call _ _ _ _` mp_tac >>
-  ONCE_REWRITE_TAC [GSYM (Q.SPECL [`g'`, `es`] add_frame_gas_calldata)] >>
-  strip_tac >>
   qspecl_then [`prog`, `cplan`, `add_frame_gas g' es`] assume_tac
     entry_venom_state_o1_initial_state_ok >>
   qabbrev_tac `vs = entry_venom_state prog cplan (add_frame_gas g' es)` >>
   `vs.vs_outcomes = MAP SND (call_trace (add_frame_gas g' es)) /\
-   vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
-   vs.vs_call_ctx.cc_calldata =
-     buffer_to_list (FST (HD (add_frame_gas g' es).contexts)).msgParams.data`
-    by simp[Abbr`vs`, entry_venom_state_def] >>
+   vs.vs_initial_fmp = n2w cplan.cp_initial_fmp` by
+    simp[Abbr`vs`, entry_venom_state_def] >>
   `o1_initial_state_ok vs /\ code_layout_valid vs` by fs[Abbr`vs`] >>
   `vs.vs_fmp = vs.vs_initial_fmp` by
     simp[Abbr`vs`, entry_venom_state_def] >>
@@ -370,60 +512,34 @@ Proof
   qabbrev_tac `D = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
                       d_imm := K UNIV; d_ret := K UNIV |>` >>
   `dead_wf D` by simp[Abbr`D`, dead_wf_def] >>
-  (* every input state S4 may pick: a gas variant of vs *)
-  `!vi. gas_variant vi vs ==>
+  `!f vals. calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+      (!obs. call_storage_ok am
+         (tx with <| function_name := f; args := vals |>) vs.vs_outcomes obs) /\
+      (!obs. ~gas_source_exempt tops
+         (tx with <| function_name := f; args := vals |>)
+         (call_external (SOME vs.vs_outcomes) obs am
+            (tx with <| function_name := f; args := vals |>)))` by
+    simp[] >>
+  `outcomes_accounts_typed (SOME vs.vs_outcomes)` by simp[] >>
+  `!vi. raw_variant vs.vs_initial_fmp vi vs ==>
         raw_unit_memory_ok unit.cu_context vi /\
         ptr_discipline 0 unit.cu_context vi /\
         taint_within D unit.cu_context vi /\
         mem_inv dload_offset_ok unit.cu_context vi /\
         mem_inv dload_headroom_ok unit.cu_context vi /\
-        terminates (run_context fuel unit.cu_context vi)` by
+        terminates (run_context fuel unit.cu_context vi) /\
+        (tx.is_static ==>
+         ~(!n. terminates (run_context n unit.cu_context vi) ==>
+               ?u. run_context n unit.cu_context vi = Abort ExHalt_abort u))` by
     (gen_tac >> strip_tac >>
-     `initial_venom_state_rel tops am tx vi` by
-       (irule gas_variant_initial_venom_state_rel >> qexists_tac `vs` >>
-        simp[]) >>
-     `vi.vs_outcomes = vs.vs_outcomes` by
-       (irule gas_variant_outcomes >> simp[]) >>
-     `vi.vs_call_ctx = vs.vs_call_ctx` by
-       (irule gas_variant_call_ctx >> simp[]) >>
-     `valid_vyper_call tops tx vi.vs_call_ctx.cc_calldata ret /\
-      outcomes_accounts_typed (SOME vi.vs_outcomes) /\
-      (!marks.
-        call_storage_ok am tx vi.vs_outcomes
-          (gas_explicit marks vi.vs_gas_readings)) /\
-      !marks. ~source_exempt tops
-        (call_external (SOME vi.vs_outcomes)
-           (gas_explicit marks vi.vs_gas_readings) am tx)`
-       by fs[gas_source_exempt_def] >>
-     `code_layout_valid vi` by
-       (irule gas_variant_code_layout_valid >> qexists_tac `vs` >>
-        fs[o1_run_state_ok_def]) >>
-     `~ctx_has_dalloca unit.cu_context` by simp[] >>
-     drule_all lower_vyper_runtime_unit_correct >>
-     disch_then (qx_choose_then `marks` assume_tac o
-       REWRITE_RULE [source_unit_execution_correct_def]) >>
-     qspecl_then [`marks`, `tops`, `ret`, `am`, `tx`, `unit`, `vi`, `rpolicy`]
-       mp_tac source_unit_exit_safe_runs >>
-     impl_tac >- fs[] >> strip_tac >>
-     `w2n vi.vs_initial_fmp <= w2n vi.vs_fmp` by
-       (qpat_x_assum `gas_variant vi vs` mp_tac >>
-        simp[gas_variant_def] >>
-        disch_then (mp_tac o Q.AP_TERM
-          `\s:venom_state. w2n s.vs_initial_fmp <= w2n s.vs_fmp`) >>
-        simp[Abbr`vs`, entry_venom_state_def]) >>
-     drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
-     `mem_inv dload_offset_ok unit.cu_context vi` by
-       (irule lower_vyper_runtime_unit_dload_offset_ok >> metis_tac[]) >>
-     `mem_inv dload_headroom_ok unit.cu_context vi` by
-       (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
-     `terminates (run_context fuel unit.cu_context vi)` by
-       (qpat_x_assum `!vs. _ ==> terminates (run_context fuel _ _)` irule >>
-        simp[]) >>
+     qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `vi`, `fuel`]
+       mp_tac call_gas_raw_variant_facts >>
+     impl_tac >- (rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
      simp[Abbr`D`, taint_within_def]) >>
   `venom_run_bounded fuel' M out.po_unit.cu_context vs` by
     (qpat_x_assum `!D vs fmp. _ ==> venom_run_bounded _ _ _ _`
        (qspecl_then [`D`, `vs`, `vs.vs_initial_fmp`] mp_tac) >>
-     impl_tac >- (simp[] >> metis_tac[raw_variant_gas_variant]) >> simp[]) >>
+     impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
   (* S4's input state, for the codegen obligations *)
   `!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
          eom <= w2n vs.vs_initial_fmp` by
@@ -434,36 +550,11 @@ Proof
                       `vs.vs_initial_fmp`] mp_tac
            run_venom_pipeline_correct_static_abort >>
          impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
-         `gas_variant vs_in vs` by metis_tac[raw_variant_gas_variant] >>
-         `raw_unit_memory_ok unit.cu_context vs_in /\
-          ptr_discipline 0 unit.cu_context vs_in /\
-          taint_within D unit.cu_context vs_in /\
-          mem_inv dload_offset_ok unit.cu_context vs_in /\
-          mem_inv dload_headroom_ok unit.cu_context vs_in` by
-           (qpat_x_assum `!vi. gas_variant vi vs ==> _`
-              (qspec_then `vs_in` mp_tac) >> simp[]) >>
-         qpat_x_assum `_ ==> ctx_sim _ _ _ _ _ /\ _` drule_all >> strip_tac >>
-         `initial_venom_state_rel tops am tx vs_in` by
-           metis_tac[gas_variant_initial_venom_state_rel] >>
-         `vs_in.vs_outcomes = vs.vs_outcomes /\
-          vs_in.vs_call_ctx = vs.vs_call_ctx` by
-           metis_tac[gas_variant_outcomes, gas_variant_call_ctx] >>
-         `valid_vyper_call tops tx vs_in.vs_call_ctx.cc_calldata ret /\
-          outcomes_accounts_typed (SOME vs_in.vs_outcomes)` by fs[] >>
-         drule_all lower_vyper_runtime_unit_correct_readings_available >>
-         strip_tac >>
-         `call_storage_ok am tx vs_in.vs_outcomes
-            (gas_explicit marks vs_in.vs_gas_readings) /\
-          ~gas_source_exempt tops tx
-            (call_external (SOME vs_in.vs_outcomes)
-              (gas_explicit marks vs_in.vs_gas_readings) am tx)` by fs[] >>
-         `FST (call_external (SOME vs_in.vs_outcomes)
-            (gas_explicit marks vs_in.vs_gas_readings) am tx) <>
-            INR (Error (RuntimeError "msg.gas: no gas reading"))` by
-           (qpat_x_assum `(?tail. _) ==> _` mp_tac >>
-            impl_tac >- (qexists_tac `[]` >> simp[]) >>
-            disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
-         drule_all call_gas_static_no_abort >> metis_tac[]) >>
+         qpat_assum `!vi. raw_variant _ vi vs ==> _`
+           (qspec_then `vs_in` mp_tac) >>
+         impl_tac >- FIRST_ASSUM ACCEPT_TAC >> strip_tac >>
+         qpat_x_assum `_ ==> ctx_sim _ _ _ _ _ /\ _` drule_all >>
+         metis_tac[]) >>
      `o1_run_state_ok vs` by
        (qpat_x_assum `initial_venom_state_rel tops am tx vs` mp_tac >>
         simp[initial_venom_state_rel_def, venom_env_rel_def,
@@ -471,7 +562,6 @@ Proof
      qspecl_then [`D`, `0`, `rpolicy`, `unit`, `out`, `vs`,
                   `vs.vs_initial_fmp`] mp_tac run_venom_pipeline_correct >>
      impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
-     `gas_variant vs_in vs` by metis_tac[raw_variant_gas_variant] >>
      qpat_x_assum `_ ==> ctx_sim _ _ _ _ _ /\ _` mp_tac >>
      impl_tac >- metis_tac[] >> simp[]) >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
