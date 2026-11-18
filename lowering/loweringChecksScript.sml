@@ -5,13 +5,14 @@
    other parity suites use the native runner (bytecode/native/). *)
 Theory loweringChecks
 Ancestors
+  constSubstCV
   (* allocation limits, conversions, concat buffers, shared callee memory *)
   compilerLoweringTest
   (* fixed-program regressions: ranges, allocation budget, immutables,
      assignment order, the O1 source-stage unit shape, the pop() subscript
      rejection, a name declared at two types in sibling scopes *)
   evalCompilerRange evalCompilerAllocationBudget evalCompilerInternalImmutables
-  evalAssignmentOrder evalCompilerSourceShape evalCompilerPopSubscriptOverlap
+  evalAssignmentOrderChecks evalCompilerSourceShape evalCompilerPopSubscriptOverlap
   evalCompilerSiblingScopeTypes
   (* exact Python parity for every retained raw-system and creation fixture *)
   evalCompilerRawSystem evalCompilerCreateBuiltins
@@ -32,7 +33,7 @@ Ancestors
   stackBoundWitnesses
   (* the supported subset: per-construct contracts, membership matrix *)
   supportedExprFormProps supportedExprProps supportedProgramProps
-  vyperMembershipMatrixTest
+  vyperMembershipParityTest vyperMembershipMatrixTest
   (* more interface contracts on concrete inputs; raw RETURN's copy *)
   e2eBoundaryTest groupedDispatchProps rawReturnCopy
   (* compiled creation code and events *)

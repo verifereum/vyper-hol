@@ -960,7 +960,7 @@ QED
 val dyn_closed = ``\T m. !a r b. m a = (r,b) ==>
   (^dyn_F) ((^dyn_J) (T UNION (^dyn_B) a b)) a b``;
 
-Theorem abi_dyn_branchless_closed[local]:
+Theorem abi_dyn_branchless_closed:
   !m. code_action (\opc. opc <> JMP /\ opc <> JNZ) m ==>
     !T. (^dyn_closed) T m
 Proof
@@ -969,7 +969,7 @@ Proof
   simp[] >> irule EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem abi_dyn_closed_bind[local]:
+Theorem abi_dyn_closed_bind:
   !T m f. (^dyn_closed) T m /\
     (!x. (^(inst [alpha |-> beta] dyn_closed)) T (f x)) ==>
     (^(inst [alpha |-> beta] dyn_closed)) T (comp_bind m f)
@@ -982,7 +982,7 @@ Proof
   qexists_tac `r'` >> simp[]
 QED
 
-Theorem abi_dyn_closed_ignore_bind[local]:
+Theorem abi_dyn_closed_ignore_bind:
   !T m n. (^dyn_closed) T m /\
     (^(inst [alpha |-> beta] dyn_closed)) T n ==>
     (^(inst [alpha |-> beta] dyn_closed)) T (comp_ignore_bind m n)
@@ -991,14 +991,14 @@ Proof
   ho_match_mp_tac (BETA_RULE abi_dyn_closed_bind) >> simp[]
 QED
 
-Theorem abi_dyn_closed_return[local]:
+Theorem abi_dyn_closed_return:
   !T v. (^dyn_closed) T (comp_return v)
 Proof
   rpt gen_tac >> qspec_then `comp_return v` mp_tac abi_dyn_branchless_closed >>
   simp[code_action_return]
 QED
 
-Theorem abi_dyn_closed_emit_op[local]:
+Theorem abi_dyn_closed_emit_op:
   !T opc ops. opc <> JMP /\ opc <> JNZ ==>
     (^(inst [alpha |-> ``:operand``] dyn_closed)) T (emit_op opc ops)
 Proof
@@ -1007,7 +1007,7 @@ Proof
   simp[code_action_emit_op]
 QED
 
-Theorem abi_dyn_closed_emit_inst[local]:
+Theorem abi_dyn_closed_emit_inst:
   !T opc ops outs. (^dyn_J) T (mk_inst 0 opc ops outs) ==>
     (^(inst [alpha |-> ``:unit``] dyn_closed)) T (emit_inst opc ops outs)
 Proof
@@ -1018,7 +1018,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem abi_dyn_closed_emit_void[local]:
+Theorem abi_dyn_closed_emit_void:
   !T opc ops. (^dyn_J) T (mk_inst 0 opc ops []) ==>
     (^(inst [alpha |-> ``:unit``] dyn_closed)) T (emit_void opc ops)
 Proof
@@ -1026,7 +1026,7 @@ Proof
   metis_tac[BETA_RULE abi_dyn_closed_emit_inst]
 QED
 
-Theorem abi_dyn_closed_label[local]:
+Theorem abi_dyn_closed_label:
   !T suffix. (^(inst [alpha |-> ``:string``] dyn_closed)) T (fresh_label suffix)
 Proof
   ntac 2 gen_tac >> qspec_then `fresh_label suffix` mp_tac abi_dyn_branchless_closed >>
@@ -1082,7 +1082,7 @@ val dyn_skel = ``\hdr body exit (p:compile_state -> unit # compile_state)
     (h:compile_state -> unit # compile_state) (q:compile_state -> unit # compile_state).
   do p; new_block hdr; h; new_block body; q; new_block exit; return () od``;
 
-Theorem abi_dyn_skeleton_closed[local]:
+Theorem abi_dyn_skeleton_closed:
   !T hdr body exit p h q.
     (^(inst [alpha |-> ``:unit``] dyn_closed)) (T UNION {hdr;body;exit}) p /\
     (^(inst [alpha |-> ``:unit``] dyn_closed)) (T UNION {hdr;body;exit}) h /\

@@ -34,6 +34,7 @@ Ancestors
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
   venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map
   callLayoutDefs fmpWfDefs list rich_list pred_set reorderSim planWf stackModel
+  fmpWfProps
   regularMemorySim fcgPostorder contextPlanLayoutProps fmpLowerProps generatedPrefixSim allocMono spillPlanSim
 
 Theorem invoke_source_ok:
@@ -178,15 +179,6 @@ Proof
     metis_tac[invoke_caller_region_outside_callee] >>
   gvs[fn_return_state_rel_def] >> first_x_assum irule >>
   simp[context_spill_byte_def] >> qexists `r` >> simp[] >> decide_tac
-QED
-
-Theorem invoke_lowered_targets_wf:
-  fmp_lowered_context_wf ctx ==> wf_invoke_targets ctx
-Proof
-  rw[fmp_lowered_context_wf_def, wf_invoke_targets_def] >>
-  first_x_assum drule_all >>
-  simp[invoke_layout_wf_def] >> strip_tac >>
-  metis_tac[lookup_function_mem, ctx_fn_names_def]
 QED
 
 Theorem invoke_context_no_cycle:
