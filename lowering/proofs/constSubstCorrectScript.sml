@@ -1471,7 +1471,7 @@ Theorem protected_cell_frame_call_primitives:
   state_rel_frame (protected_cell_frame addr src id) (update_transient upd_t) /\
   state_rel_frame (protected_cell_frame addr src id) (adopt_call_outcome rq co) /\
   state_rel_frame (protected_cell_frame addr src id)
-    (take_call_outcome target calldata value_opt)
+    (take_call_outcome gas_cap target calldata value_opt)
 Proof
   rpt conj_tac >> irule protected_cell_frame_eq_op >>
   simp[return_def, raise_def, get_accounts_def, get_transient_storage_def,

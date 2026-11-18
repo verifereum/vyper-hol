@@ -62,10 +62,15 @@ QED
 
 Theorem asm_consume_requests[local]:
   (asm_consume_call_outcome rq ro rs stk s = r ==>
+   r = AsmFault (s with as_returndata := []) \/
    ?s1. r = AsmOK s1 /\ s1.as_requests = record_request rq s.as_requests) /\
   (asm_consume_create_outcome rq stk s = r ==>
+   r = AsmFault (s with as_returndata := []) \/
    ?s1. r = AsmOK s1 /\ s1.as_requests = record_request rq s.as_requests)
 Proof
+  Cases_on `s.as_outcomes = []`
+  >- simp[asm_consume_call_outcome_exhausted,
+          asm_consume_create_outcome_exhausted] >>
   conj_tac >> strip_tac >> gvs[]
   >- simp[asm_consume_call_outcome_eq, asm_next_def] >>
   simp[asm_consume_create_outcome_def] >>

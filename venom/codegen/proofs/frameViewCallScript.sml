@@ -95,7 +95,7 @@ Proof
 QED
 
 Theorem exec_ext_call_frame_view:
-  ~retpc_var fn out /\ inst.inst_outputs = [out] /\
+  s.vs_outcomes <> [] /\ ~retpc_var fn out /\ inst.inst_outputs = [out] /\
   read_memory (w2n argsOff) (w2n argsSize) (s with vs_memory := m) =
     read_memory (w2n argsOff) (w2n argsSize) s ==>
   exec_ext_call inst (frame_view fn ra s with vs_memory := m)
@@ -103,19 +103,19 @@ Theorem exec_ext_call_frame_view:
   OK (frame_view fn ra
     (update_var out
       (FST (consume_call_outcome
-        (venom_call_request s addr value argsOff argsSize is_static)
+        (venom_call_request s addr value argsOff argsSize is_static with cr_gas := SOME (w2n gas))
         (w2n retOff) (w2n retSize) s))
       (SND (consume_call_outcome
-        (venom_call_request s addr value argsOff argsSize is_static)
+        (venom_call_request s addr value argsOff argsSize is_static with cr_gas := SOME (w2n gas))
         (w2n retOff) (w2n retSize) s))) with
     vs_memory := (SND (consume_call_outcome
-      (venom_call_request s addr value argsOff argsSize is_static)
+      (venom_call_request s addr value argsOff argsSize is_static with cr_gas := SOME (w2n gas))
       (w2n retOff) (w2n retSize) (s with vs_memory := m))).vs_memory)
 Proof
   strip_tac >>
   drule venom_call_request_frame_view >> strip_tac >>
   simp[exec_ext_call_def, consume_call_outcome_frame_view,
-       frame_view_update_var, update_var_def]
+       frame_view_update_var, frame_view_def, update_var_def]
 QED
 
 val opcode_equations = CONJUNCTS step_inst_base_opcode_eqs;
@@ -151,7 +151,7 @@ Proof
   pairarg_tac >> simp[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
   strip_tac >> gvs[Excl "consume_call_outcome_eq"] >>
   rename1 `consume_call_outcome
-    (venom_call_request s target _ argOff argSize _) (w2n retOff) (w2n retSize) s = (w,t)` >>
+    (venom_call_request s target _ argOff argSize _ with cr_gas := _) (w2n retOff) (w2n retSize) s = (w,t)` >>
   rename1 `inst.inst_outputs = [out]` >>
   `~retpc_var fn out` by
     (irule noncopy_output_not_retpc >> simp[] >> qexists_tac `inst` >> simp[]) >>
@@ -197,6 +197,7 @@ Theorem exec_delegatecall_frame_view:
         (s with vs_memory := m)).vs_memory)
 Proof
   strip_tac >>
+  Cases_on `s.vs_outcomes = []` >- gvs[exec_delegatecall_def] >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = OK t` mp_tac >>
   simp[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
   pairarg_tac >> simp[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
@@ -206,7 +207,7 @@ Proof
   qexists_tac `TAKE (w2n retSize) u.vs_returndata` >>
   drule venom_call_request_frame_view >> strip_tac >>
   simp[exec_delegatecall_def, consume_call_outcome_frame_view,
-       frame_view_update_var, LENGTH_TAKE_EQ, Excl "consume_call_outcome_eq"] >>
+       frame_view_update_var, frame_view_def, LENGTH_TAKE_EQ, Excl "consume_call_outcome_eq"] >>
   gvs[Abbr `rq`, consume_call_outcome_eq, update_var_def]
 QED
 
@@ -220,6 +221,7 @@ Theorem exec_create_frame_view:
   t.vs_memory = s.vs_memory
 Proof
   strip_tac >>
+  Cases_on `s.vs_outcomes = []` >- gvs[exec_create_def] >>
   drule venom_create_request_frame_view >> strip_tac >>
   qpat_x_assum `exec_create _ _ _ _ _ _ = OK t` mp_tac >>
   Cases_on `w2n sz > 2 * max_code_size` >- simp[exec_create_def] >>

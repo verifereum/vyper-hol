@@ -86,7 +86,7 @@ val step_base_result_tac =
 
 val _ = augment_srw_ss [rewrites
   [exec_result_helpers_not_intret, exec_call_helpers_not_intret,
-   exec_call_helpers_no_halt_abort]];
+   exec_call_helpers_no_halt]];
 
 (* ===================================================================== *)
 (* ===== External call update_var lemmas =============================== *)
@@ -103,6 +103,7 @@ val exec_ext_call_update_var = prove(
     | Halt s' => Halt (update_var x w s')
     | IntRet vs s' => IntRet vs (update_var x w s')``,
   rw[exec_ext_call_def, venom_call_request_def, read_memory_def, update_var_def,
+     halt_state_def, set_returndata_def,
      make_venom_call_state_def, venom_to_tx_params_def,
      extract_venom_result_def, write_memory_with_expansion_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]);
@@ -118,6 +119,7 @@ val exec_delegatecall_update_var = prove(
     | Halt s' => Halt (update_var x w s')
     | IntRet vs s' => IntRet vs (update_var x w s')``,
   rw[exec_delegatecall_def, venom_call_request_def, read_memory_def,
+     halt_state_def, set_returndata_def,
      update_var_def, make_venom_delegatecall_state_def, venom_to_tx_params_def,
      extract_venom_result_def, write_memory_with_expansion_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]);
