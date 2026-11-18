@@ -98,7 +98,8 @@ Theorem entry_venom_state_installed_section:
   (entry_venom_state prog cp es).vs_code = assemble prog ++
     (entry_venom_state prog cp es).vs_data_section
 Proof
-  rw[call_state_rel_def, entry_venom_state_def] >>
+  rw[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+     entry_venom_state_def] >>
   drule installed_code_rel_section >> simp[]
 QED
 
@@ -121,7 +122,8 @@ Theorem call_state_rel_block_number_bound:
   call_state_rel tops runtime_bc am tx es ==>
   es.txParams.blockNumber < dimword (:256)
 Proof
-  rw[call_state_rel_def, tx_block_fields_rel_def, tx_env_ok_def] >>
+  rw[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+     tx_block_fields_rel_def, tx_env_ok_def] >>
   irule lt_dimword_256 >> qexists_tac `255` >> simp[]
 QED
 
@@ -130,7 +132,8 @@ Theorem entry_venom_state_source_environment:
   call_state_rel tops (assemble prog) am tx es ==>
   venom_env_rel tx (entry_venom_state prog cp es)
 Proof
-  rw[call_state_rel_def, tx_block_fields_rel_def] >>
+  rw[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+     tx_block_fields_rel_def] >>
   simp[venom_env_rel_def, call_ctx_rel_def, entry_venom_state_def] >>
   gen_tac >>
   Cases_on `n < tx.block_number /\ tx.block_number <= n + 256` >> gvs[] >>
@@ -160,7 +163,8 @@ Proof
   rpt strip_tac >>
   drule call_state_rel_block_number_bound >> strip_tac >>
   qpat_x_assum `call_state_rel _ _ _ _ _` mp_tac >>
-  simp[call_state_rel_def] >> strip_tac >>
+  simp[call_state_rel_def, frame_fresh_def, frame_tx_rel_def,
+       world_rel_def] >> strip_tac >>
   drule_all entry_venom_state_evm_environment >> strip_tac >>
   gvs[initial_state_rel_def, stack_params_rel_def,
       entry_venom_state_fresh, entry_venom_state_frame_fields,

@@ -303,7 +303,8 @@ Proof
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
-  `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
+  `source_deployment_rel tops am tx` by fs[call_state_rel_def, frame_fresh_def,
+                                           frame_tx_rel_def, world_rel_def] >>
   `~ctx_has_dalloca unit.cu_context` by
     (irule every_no_dalloca >>
      drule_all lower_vyper_runtime_unit_no_dalloca_checked >> simp[]) >>
@@ -337,11 +338,13 @@ Proof
     (`wf_state (add_frame_gas g' es) /\
       balance_bounded (2 ** 256 - 1) (add_frame_gas g' es) /\
       returndata_bounded (add_frame_gas g' es)` by
-       (fs[call_state_rel_def, evm_state_ok_def, add_frame_gas_bounded] >>
+       (fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+           evm_state_ok_def, add_frame_gas_bounded] >>
         irule add_frame_gas_wf_state >> simp[]) >>
      drule_all call_trace_outcomes_bounded >>
      simp[outcomes_accounts_typed_def, listTheory.EVERY_MEM]) >>
-  `wf_state es` by fs[call_state_rel_def, evm_state_ok_def] >>
+  `wf_state es` by fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def,
+                      world_rel_def, evm_state_ok_def] >>
   qpat_x_assum `valid_vyper_call _ _ _ _` mp_tac >>
   ONCE_REWRITE_TAC [GSYM (Q.SPECL [`g'`, `es`] add_frame_gas_calldata)] >>
   strip_tac >>
@@ -461,6 +464,7 @@ Proof
      `o1_run_state_ok vs` by
        (fs[o1_run_state_ok_def] >>
         gvs[Abbr`vs`, entry_venom_state_def, call_state_rel_def,
+            frame_fresh_def, frame_tx_rel_def, world_rel_def,
             add_frame_gas_def]) >>
      qspecl_then [`D`, `0`, `rpolicy`, `unit`, `out`, `vs`,
                   `vs.vs_initial_fmp`] mp_tac run_venom_pipeline_correct >>

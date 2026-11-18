@@ -33,6 +33,62 @@ Proof
   simp[DROP_LENGTH_APPEND, mk_inst_def]
 QED
 
+Theorem compile_encode_log_topic_event_seq_ptr:
+  stmt_state_rel H ctx func cenv cx es s /\
+  log_arg_rel cenv cx sa sm es s (x,ty) v /\
+  supported_event_leaf_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  value_has_type tv v /\
+  (!z. x = Var z ==> not_fresh_at sm z) /\
+  compile_encode_log_topic x (is_bytestring_type ty) sm = (op,sb) /\
+  ptr_val_ok cx ty v x G tn s /\ ~ctx_has_dalloca ctx ==>
+  ?t Gf tnf topic.
+    run_inst_seq (emitted_insts sm sb) s = OK t /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sm sb) s Gf tnf /\
+    encode_event_topic ty v = SOME topic /\ eval_operand op t = SOME topic /\
+    op_taint tnf op = {} /\ (t with vs_vars := s.vs_vars) = s /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sm p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule_all compile_encode_log_topic_event_run >> strip_tac >>
+  Cases_on `is_bytestring_type ty`
+  >- suspend "bytes" >>
+  suspend "word"
+QED
+Resume compile_encode_log_topic_event_seq_ptr[bytes]:
+  `supported_scalar_type ty` by
+    (Cases_on `ty` >>
+     gvs[supportedTypesTheory.supported_event_leaf_type_def,
+         supportedTypesTheory.supported_scalar_type_def,
+         supportedTypesTheory.supported_word_type_def,
+         supportedTypesTheory.supported_string_type_def, is_bytestring_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[supportedTypesTheory.supported_word_type_def,
+         supportedTypesTheory.supported_string_type_def, is_bytestring_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> gvs[is_bytestring_type_def]) >>
+  drule_all log_bytestring_arg_view_ptr >> strip_tac >> gvs[] >>
+  `lookup_var src s = SOME (n2w b)` by gvs[eval_operand_def] >>
+  `w2n (n2w b : bytes32) = b` by simp[] >>
+  `mload (w2n (n2w b : bytes32)) s = n2w (LENGTH bs)` by gvs[mload_def, mem_word_at_def] >>
+  drule (Q.INST [`a` |-> `n2w b`, `bs` |-> `bs`]
+    compile_encode_log_topic_bytes_seq_ptr) >>
+  disch_then (drule_at Any) >>
+  disch_then (drule_at Any) >>
+  simp[ADD_COMM] >> strip_tac >>
+  gvs[] >> first_x_assum drule_all >>
+  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
+  `tnf.t_imm = tn.t_imm` by
+    (drule_all compile_encode_log_topic_immutable_taint_frame >> simp[]) >>
+  qexistsl_tac [`Gf`, `tnf`] >> simp[]
+QED
+Resume compile_encode_log_topic_event_seq_ptr[word]:
+  gvs[compile_encode_log_topic_def, comp_return_def, emitted_insts_def,
+      inst_seq_ptr_def, ptr_val_ok_def]
+QED
+Finalise compile_encode_log_topic_event_seq_ptr
+
 Theorem compile_encode_log_topic_scalar_seq_ptr:
   stmt_state_rel H ctx func cenv cx es s /\
   log_arg_rel cenv cx sa sm es s (x,ty) v /\
@@ -52,32 +108,9 @@ Theorem compile_encode_log_topic_scalar_seq_ptr:
       lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >> drule_all compile_encode_log_topic_scalar_run >> strip_tac >>
-  Cases_on `is_bytestring_type ty`
-  >- suspend "bytes" >>
-  suspend "word"
+  strip_tac >> irule compile_encode_log_topic_event_seq_ptr >>
+  simp[supportedTypesTheory.supported_event_leaf_type_def] >> metis_tac[]
 QED
-Resume compile_encode_log_topic_scalar_seq_ptr[bytes]:
-  drule_all log_bytestring_arg_view_ptr >> strip_tac >> gvs[] >>
-  `lookup_var src s = SOME (n2w b)` by gvs[eval_operand_def] >>
-  `w2n (n2w b : bytes32) = b` by simp[] >>
-  `mload (w2n (n2w b : bytes32)) s = n2w (LENGTH bs)` by gvs[mload_def, mem_word_at_def] >>
-  drule (Q.INST [`a` |-> `n2w b`, `bs` |-> `bs`]
-    compile_encode_log_topic_bytes_seq_ptr) >>
-  disch_then (drule_at Any) >>
-  disch_then (drule_at Any) >>
-  simp[ADD_COMM] >> strip_tac >>
-  gvs[] >> first_x_assum drule_all >>
-  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
-  `tnf.t_imm = tn.t_imm` by
-    (drule_all compile_encode_log_topic_immutable_taint_frame >> simp[]) >>
-  qexistsl_tac [`Gf`, `tnf`] >> simp[]
-QED
-Resume compile_encode_log_topic_scalar_seq_ptr[word]:
-  gvs[compile_encode_log_topic_def, comp_return_def, emitted_insts_def,
-      inst_seq_ptr_def, ptr_val_ok_def]
-QED
-Finalise compile_encode_log_topic_scalar_seq_ptr
 
 Theorem compile_encode_log_topic_scalar_seq_ptr_ghost:
   stmt_state_rel H ctx func cenv cx es s /\
