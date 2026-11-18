@@ -4592,6 +4592,613 @@ QED
    the call and f from an intcall_entry_full state (source, memory and
    pointer facts at t) runs the whole call and f.  Supplied arguments and
    omitted defaults use their respective expression-list judgments. *)
+Theorem intcall_args_selected_invoke[local]:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
+    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 u G tn ==>
+  ?bb inst ops argv callee setup entered.
+    lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb u.vs_inst_idx = SOME inst /\
+    inst.inst_opcode = INVOKE /\
+    decode_invoke inst = SOME
+      (internal_fn_label (build_func_ids 0 tops name) name (MAP SND args)
+         cx.in_deploy,ops) /\
+    eval_operands ops u = SOME argv /\
+    lookup_function
+      (internal_fn_label (build_func_ids 0 tops name) name (MAP SND args)
+         cx.in_deploy) ctx.ctx_functions = SOME callee /\
+    setup_callee callee argv u = SOME setup /\
+    gas_invoke_entry (ctx,func) u callee entered /\
+    enters_block callee setup entered /\ ~u.vs_halted
+Proof
+  strip_tac >>
+  `cenv.ce_func_ids = build_func_ids 0 tops /\
+   cenv.ce_is_ctor = cx.in_deploy /\
+   cenv.ce_func_param_types name = MAP SND args` by
+    (qpat_assum `body_inv _ _ _ _` (mp_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
+     strip_tac >> simp[] >>
+     irule intCallLookupTheory.build_func_param_types_distinct >>
+     simp[] >> first_assum (irule_at Any) >>
+     fs[supportedProgramTheory.supported_program_def,
+        supportedNamesTheory.supported_declaration_names_def]) >>
+  qhdtm_x_assum `intcall_entry_full`
+    (strip_assume_tac o REWRITE_RULE [intcall_entry_full_def]) >>
+  map_every (fn p => qpat_assum p mp_tac)
+    [`cenv.ce_func_ids = _`, `cenv.ce_is_ctor = _`,
+     `cenv.ce_func_param_types name = _`, `_ = internal_fn_label _ _ _ _`,
+     `lookup_block u.vs_current_bb func.fn_blocks = _`,
+     `get_instruction _ u.vs_inst_idx = _`, `decode_invoke _ = _`,
+     `eval_operands _ u = _`, `gas_invoke_entry _ _ _ _`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >> ntac 9 strip_tac >>
+  qpat_assum `gas_invoke_entry _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [fragGasFocusTheory.gas_invoke_entry_def]) >>
+  gvs[nsid_to_string_def, contextCodegenRelTheory.enters_block_def] >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
+QED
+
+(* Recover the argument evidence at the selected package and the
+   decoded INVOKE, before entering the callee. *)
+Theorem intcall_args_selected_package_entry[local]:
+  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
+    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 u G tn /\
+  lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb u.vs_inst_idx = SOME inst /\
+  decode_invoke inst = SOME (label,ops) /\ eval_operands ops u = SOME argv /\
+  lookup_function label ctx.ctx_functions = SOME callee /\
+  setup_callee callee argv u = SOME setup /\
+  set_internal_package_target cenv.ce_target
+    (package_internal_fn tops T (K global_nonreentrant_slot) cenv.ce_is_ctor
+      (if cenv.ce_is_ctor then imm_len tops else 0)
+      (mut,nr,rr,name,args,(dflts : expr list),ret,ss)) =
+    (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,ss,rt) ==>
+  (!mem. mem_agree_outside tn.t_mem u.vs_memory mem ==>
+    internal_args_rel ce params penv (if has_rb then 1 else 0) argv
+      u.vs_alloca_next mem) /\
+  (!i off sz.
+    i < LENGTH params /\ ~SND (EL i params) /\
+    FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc off sz) ==>
+    ?b bsz.
+      op_prov G (EL ((if has_rb then 1 else 0) + i) ops) = SOME (b,bsz) /\
+      b <= w2n (EL ((if has_rb then 1 else 0) + i) argv) /\
+      w2n (EL ((if has_rb then 1 else 0) + i) argv) + sz <= b + bsz) /\
+  u.vs_alloca_next + internal_stack_size ce params < dimword (:256) /\
+  alloca_room ctx callee setup /\ EVERY (\op. op_taint tn op = {}) ops /\
+  ghost_inv_at (DF H) lo d cenv cx (es1 with scopes := prev) G tn u
+Proof
+  strip_tac >>
+  qhdtm_x_assum `intcall_entry_full`
+    (strip_assume_tac o REWRITE_RULE [intcall_entry_full_def]) >>
+  `bb' = bb` by
+    (ntac 2 (qpat_x_assum `lookup_block u.vs_current_bb func.fn_blocks = SOME _` mp_tac) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  pop_assum SUBST_ALL_TAC >>
+  `inst' = inst` by
+    (ntac 2 (qpat_x_assum `get_instruction _ u.vs_inst_idx = SOME _` mp_tac) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  pop_assum SUBST_ALL_TAC >>
+  `lbl = label /\ arg_ops = ops` by
+    (ntac 2 (qpat_x_assum `decode_invoke _ = SOME _` mp_tac) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  qpat_x_assum `arg_ops = ops` SUBST_ALL_TAC >>
+  qpat_x_assum `lbl = label` SUBST_ALL_TAC >>
+  `argv' = argv` by
+    (ntac 2 (qpat_x_assum `eval_operands _ u = SOME _` mp_tac) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  pop_assum SUBST_ALL_TAC >>
+  qpat_x_assum `!bb inst lbl ops argv. lookup_block _ _ = SOME bb /\ _ ==> _`
+    drule_all >> strip_tac >>
+  qpat_x_assum `!callee setup use_trans nkeys ilen dflts lbl' ce params has_rb
+      is_nr key trans view ctor ilen' ss' rt.
+       _ ==> (lbl' = lbl /\ _)`
+    (drule_at_then (Pat `set_internal_package_target _ _ = _`)
+       (drule_all_then strip_assume_tac)) >>
+  qpat_x_assum `!callee setup use_trans nkeys ilen dflts lbl' ce params has_rb
+      is_nr key trans view ctor ilen' ss' rt.
+       _ ==> ((!mem. mem_agree_outside _ _ mem ==> _) /\ _)`
+    drule_all >> strip_tac >>
+  rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])
+QED
+
+(* The packaged function's entry is the first block at its lookup name,
+   not merely a block covered by the compiler interval. *)
+Theorem intcall_args_packaged_head[local]:
+  extract_context_with_internals entry ips cs = SOME (ctx,data) /\
+  ALL_DISTINCT (ctx_fn_names ctx) /\ lbl <> entry /\
+  lookup_function lbl ctx.ctx_functions = SOME callee ==>
+  (HD callee.fn_blocks).bb_label = lbl
+Proof
+  simp[vyperCompilerTheory.extract_context_with_internals_def, AllCaseEqs()] >>
+  strip_tac >>
+  gvs[venomInstTheory.mk_venom_context_def, venomInstTheory.ctx_fn_names_def,
+      venomInstTheory.lookup_function_def, listTheory.FIND_thm,
+      venomInstTheory.mk_raw_function_def] >>
+  fs[GSYM venomInstTheory.lookup_function_def] >>
+  drule venomInstTheory.lookup_function_MEM >> strip_tac >>
+  drule fmpAnalysisPropsTheory.lookup_function_name >> strip_tac >>
+  drule vyperCompilerTheory.package_internal_blocks_metadata >> strip_tac >>
+  `MAP FST (internal_fn_descriptors ips) = MAP (\f. f.fn_name) functions` by
+    (irule LIST_EQ >> gvs[LIST_REL_EL_EQN, EL_MAP] >> rpt strip_tac >>
+     first_x_assum drule >> Cases_on `EL x (internal_fn_descriptors ips)` >>
+     rename1 `EL x (internal_fn_descriptors ips) = p` >> PairCases_on `p` >>
+     simp[vyperCompilerTheory.internal_fn_matches_descriptor_def]) >>
+  drule_all LIST_REL_MEM_IMP_R >> strip_tac >>
+  rename1 `internal_fn_matches_descriptor p callee` >> PairCases_on `p` >>
+  gvs[vyperCompilerTheory.internal_fn_matches_descriptor_def] >>
+  `ALL_DISTINCT (MAP FST (internal_fn_descriptors ips))` by simp[] >>
+  drule_all intCallLookupTheory.package_internal_blocks_mem >> strip_tac >>
+  qpat_assum `MEM (mk_internal_function _ _ _ _) _`
+    (mp_then Any mp_tac intCallLookupTheory.lookup_function_distinct_mem) >>
+  gvs[vyperCompilerTheory.mk_internal_function_metadata] >>
+  disch_then (fn th => simp[Once th, vyperCompilerTheory.mk_internal_function_metadata])
+QED
+
+Theorem intcall_args_selected_head[local]:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  lookup_function (internal_fn_label (build_func_ids 0 tops name) name
+                     (MAP SND args) cx.in_deploy) ctx.ctx_functions = SOME callee ==>
+  (HD callee.fn_blocks).bb_label =
+    internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) cx.in_deploy
+Proof
+  strip_tac >>
+  qpat_x_assum `body_inv _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
+  Cases_on `cx.in_deploy` >> fs[]
+  >- (Cases_on `classify_functions tops` >>
+      rename1 `classify_functions tops = packages` >> PairCases_on `packages` >>
+      Cases_on `packages3` >> fs[] >>
+      drule_all ctorDeployLoweringCodeTheory.deploy_ctor_lowering_trace >>
+      strip_tac >>
+      fs[vyperCompilerTheory.install_immutable_reservation_def,
+         vyperCompilerTheory.lowering_context_ok_def, venomInstTheory.ctx_fn_names_def] >>
+      rename1 `extract_context_with_internals "__deploy" _ _ = SOME (raw,_)` >>
+      `internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) T <>
+         "__deploy"` by simp[internal_fn_label_def] >>
+      qpat_assum `extract_context_with_internals _ _ _ = _`
+        (mp_then Any mp_tac intcall_args_packaged_head) >>
+      simp[venomInstTheory.ctx_fn_names_def] >>
+      disch_then irule >> simp[]) >>
+  drule_all intCallLookupTheory.lower_vyper_runtime_unit_internal_lookup >>
+  strip_tac >> gvs[vyperCompilerTheory.mk_internal_function_metadata]
+QED
+
+(* A freshly set-up callee has no predecessor, so a successful entry
+   cannot skip a nonempty PHI prefix. *)
+Theorem intcall_args_entered_capture[local]:
+  setup_callee callee argv u = SOME setup /\
+  enters_block callee setup entered /\
+  (HD callee.fn_blocks).bb_label = label /\
+  new_block label before = (old,entry) ==> 
+  entered = setup /\ fresh_vars_wrt entry entered /\
+  entered.vs_params = argv /\ entered.vs_current_bb = entry.cs_current_bb /\
+  entered.vs_inst_idx = LENGTH entry.cs_current_insts /\
+  entered.vs_alloca_next = u.vs_alloca_next /\ entered.vs_allocas = FEMPTY /\
+  entered.vs_transient = u.vs_transient /\ entered.vs_call_ctx = u.vs_call_ctx /\
+  entered.vs_memory = u.vs_memory /\ ~entered.vs_halted
+Proof
+  strip_tac >> drule emitHelperPropsTheory.new_block_props >> strip_tac >>
+  qpat_x_assum `enters_block _ _ _`
+    (strip_assume_tac o REWRITE_RULE [contextCodegenRelTheory.enters_block_def]) >>
+  `setup.vs_prev_bb = NONE /\ setup.vs_inst_idx = 0` by
+    gvs[venomExecSemanticsTheory.setup_callee_def, AllCaseEqs()] >>
+  drule_all venomExecProofsTheory.eval_phis_no_prev >> strip_tac >>
+  gvs[venomExecSemanticsTheory.setup_callee_def, AllCaseEqs(),
+      loweringStateRelDefsTheory.fresh_vars_wrt_def]
+QED
+
+(* Capture stays in the entry block and preserves the parameter layout. *)
+Theorem intcall_args_param_decls_cut[local]:
+  !params idx a caps next b.
+    compile_internal_param_decls params idx a = ((caps,next),b) ==>
+    MAP (\c. (FST c,FST (SND c))) caps = params /\
+    b.cs_blocks = a.cs_blocks /\ b.cs_current_bb = a.cs_current_bb /\
+    isPREFIX a.cs_current_insts b.cs_current_insts
+Proof
+  Induct >- simp[moduleLoweringTheory.compile_internal_param_decls_def, comp_return_def] >>
+  Cases >> rpt gen_tac >>
+  simp[moduleLoweringTheory.compile_internal_param_decls_def,
+       loweringShapeRulesTheory.emit_op_eq, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  Cases_on `rest_result` >> gvs[] >>
+  first_x_assum drule >> simp[] >> strip_tac >> simp[] >>
+  irule rich_listTheory.IS_PREFIX_TRANS >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem intcall_args_capture_cut[local]:
+  compile_internal_entry_prefix ce params has_rb a = ((ce1,caps,rpc),b) ==>
+  MAP (\c. (FST c,FST (SND c))) caps = params /\
+  b.cs_blocks = a.cs_blocks /\ b.cs_current_bb = a.cs_current_bb /\
+  isPREFIX a.cs_current_insts b.cs_current_insts
+Proof
+  Cases_on `has_rb` >>
+  simp[intCallCalleeTheory.compile_internal_entry_prefix_def,
+       loweringShapeRulesTheory.emit_op_eq, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  Cases_on `pr` >> gvs[] >>
+  drule intcall_args_param_decls_cut >> simp[] >> strip_tac >> simp[] >>
+  qpat_x_assum `_ ≼ _` mp_tac >>
+  simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  simp[APPEND_ASSOC]
+QED
+
+Theorem intcall_args_entry_cuts[local]:
+  compile_internal_function_entry ce params has_rb ctor ilen rt a =
+    ((ce2,rpc,imm),lock_start) ==>
+  ?ce1 caps cap_end fix_end mat_end.
+    compile_internal_entry_prefix ce params has_rb a = ((ce1,caps,rpc),cap_end) /\
+    (if ctor /\ ilen > 0 then
+       ?id buf. compile_fixed_region_with_id ilen cap_end = ((id,buf),fix_end) /\
+                imm = SOME buf.buf_operand
+     else fix_end = cap_end /\ imm = NONE) /\
+    materialize_internal_params ce1 caps fix_end = (ce2,mat_end) /\
+    (case rt of
+       NONE => lock_start = mat_end
+     | SOME ty => if ce.ce_returns_count > 0 then
+                    ?buf. compile_alloc_buffer (type_memory_bytes ce ty) mat_end =
+                            (buf,lock_start)
+                  else lock_start = mat_end)
+Proof
+  simp[intCallCalleeTheory.compile_internal_function_entry_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rename1 `compile_internal_entry_prefix _ _ _ _ = (prefix,_)` >>
+  PairCases_on `prefix` >> gvs[] >>
+  Cases_on `ctor /\ ilen > 0` >> gvs[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> Cases_on `rt` >> gvs[] >>
+  rw[] >> rpt (pairarg_tac >> gvs[comp_return_def]) >>
+  gvs[comp_return_def] >>
+  gvs[comp_bind_def] >> rpt (pairarg_tac >> gvs[comp_return_def]) >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  TRY (Cases_on `ar` >> simp[]) >>
+  Cases_on `ce.ce_returns_count > 0` >> gvs[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[comp_return_def]) >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem intcall_args_lock_cuts[local]:
+  compile_internal_function ce params has_rb T key trans view ctor ilen
+    ss rt a = ((),final) ==>
+  ?ce2 rpc imm lock_start lock_end.
+    compile_internal_function_entry ce params has_rb ctor ilen rt a =
+      ((ce2,rpc,imm),lock_start) /\
+    compile_nonreentrant_lock key trans view lock_start = ((),lock_end) /\
+    cs_extends lock_start lock_end /\ cs_extends lock_end final
+Proof
+  simp[intCallCalleeTheory.compile_internal_function_entry_factorization,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, comp_get_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rename1 `compile_internal_function_entry _ _ _ _ _ _ _ = (entry,_)` >>
+  PairCases_on `entry` >> gvs[] >> strip_tac >>
+  rpt (goal_assum (drule_at Any)) >>
+  conj_tac
+  >- metis_tac[entryCompileIntervalsTheory.cs_appends_nonreentrant, cs_appends_def] >>
+  drule (SRULE [cs_appends_def] entryCompileIntervalsTheory.cs_appends_stmts) >>
+  strip_tac >>
+  qmatch_asmsub_rename_tac `block_is_terminated body_end` >>
+  Cases_on `block_is_terminated body_end` >> gvs[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  drule (SRULE [cs_appends_def] (cj 2 entryCompileIntervalsTheory.cs_appends_nonreentrant)) >>
+  strip_tac >> Cases_on `rt` >> gvs[] >>
+  metis_tac[cs_extends_trans, cs_appends_def, cs_appends_emit_helpers]
+QED
+
+(* The capture prefix executes at the new block's actual runtime cursor. *)
+Theorem intcall_args_capture_path[local]:
+  compile_internal_entry_prefix ce params has_rb entry = ((ce1,caps,rpc),cap_end) /\
+  cs_extends cap_end final /\ fn_has_code entry final callee /\
+  entered.vs_current_bb = entry.cs_current_bb /\
+  entered.vs_inst_idx = LENGTH entry.cs_current_insts /\
+  fresh_vars_wrt entry entered /\ ~entered.vs_halted /\
+  allocas_from lo entered /\ ~ctx_has_dalloca ctx /\
+  (if has_rb then 1 else 0) + LENGTH params <= LENGTH entered.vs_params /\
+  LENGTH entered.vs_params < dimword (:256) ==>
+  ?t G' tn' x.
+    run_inst_seq (emitted_insts entry cap_end) entered = OK t /\
+    t = entered with vs_vars := t.vs_vars /\ fresh_vars_wrt cap_end t /\
+    rpc = Var x /\ not_fresh_at cap_end x /\
+    lookup_var x t = SOME entered.vs_return_pc_token /\
+    (!i. i < LENGTH params ==>
+      ?p. SND (SND (EL i caps)) = Var p /\ not_fresh_at cap_end p /\
+          lookup_var p t = SOME (EL ((if has_rb then 1 else 0) + i) entered.vs_params) /\
+          FLOOKUP G' p = (if (if has_rb then 1 else 0) + i < LENGTH PG then
+            EL ((if has_rb then 1 else 0) + i) PG else NONE) /\
+          op_taint tn' (Var p) = {}) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!D. inst_seq_ptr D lo ctx callee PG G tn (emitted_insts entry cap_end)
+           entered G' tn' /\
+      !explicit. gas_origin_ptr_path (D,lo,explicit,ctx,callee,PG) (entered,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH cap_end.cs_current_insts),G',tn'))
+Proof
+  strip_tac >> drule intcall_args_capture_cut >> strip_tac >>
+  `cs_extends entry cap_end` by (irule cs_extends_same_block >> simp[]) >>
+  `fn_has_code entry cap_end callee` by metis_tac[fn_has_code_split] >>
+  `cap_end.cs_current_insts = entry.cs_current_insts ++ emitted_insts entry cap_end` by
+    (qpat_x_assum `_ ≼ _` mp_tac >>
+     simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+     simp[exprLoweringPropsTheory.emitted_insts_def,rich_listTheory.DROP_LENGTH_APPEND]) >>
+  drule_all stmtReasonLitFragMemoryTheory.fn_has_code_code >> strip_tac >>
+  `entered.vs_inst_idx + LENGTH (emitted_insts entry cap_end) =
+      LENGTH cap_end.cs_current_insts` by
+    (qpat_x_assum `cap_end.cs_current_insts = _` (fn th => simp[Once th])) >>
+  `lookup_block entered.vs_current_bb callee.fn_blocks = SOME bb /\
+   isPREFIX (emitted_insts entry cap_end) (DROP entered.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  drule_all intCallEntryFullTheory.compile_internal_entry_prefix_joint >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `(ARB : dead)` (assume_tac o CONJUNCT1)) >>
+  drule intCallCalleeTheory.compile_internal_entry_prefix_capture_code >> strip_tac >>
+  drule_all intCallEntryFullTheory.internal_capture_seq_ghost_frame >> strip_tac >>
+  drule_all intCallEntryFullTheory.compile_internal_entry_prefix_ghost_outputs >> strip_tac >>
+  drule intCallCalleeTheory.compile_internal_entry_prefix_shape >> strip_tac >>
+  qpat_x_assum `rpc = Var (STRING _ _)` kall_tac >>
+  `!i. i < LENGTH params ==>
+     ?p. SND (SND (EL i caps)) = Var p /\ not_fresh_at cap_end p /\
+         lookup_var p t = SOME (EL ((if has_rb then 1 else 0) + i) entered.vs_params) /\
+         FLOOKUP G' p = (if (if has_rb then 1 else 0) + i < LENGTH PG then
+           EL ((if has_rb then 1 else 0) + i) PG else NONE) /\
+         op_taint tn' (Var p) = {}` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!i. i < LENGTH params ==> ?p. _` drule >> strip_tac >>
+     qexists `p` >> simp[] >>
+     qpat_assum `!i. i < LENGTH params ==> SND (SND (EL i caps)) = _` drule >>
+     simp[] >> disch_then SUBST1_TAC >>
+     qpat_assum `!i. i < _ ==> FLOOKUP G' _ = _ /\ _`
+       (qspec_then `(if has_rb then 1 else 0) + i` mp_tac) >>
+     qpat_assum `i < LENGTH params` (fn th =>
+       simp[NoAsms, th, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM])) >>
+  qexistsl [`t`, `G'`, `tn'`, `x`] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >> gen_tac >>
+  qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `D` (strip_assume_tac o CONJUNCT1)) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `D` (mp_tac o CONJUNCT2)) >>
+  qpat_assum `entered.vs_inst_idx + LENGTH (emitted_insts entry cap_end) = _`
+    SUBST1_TAC >> simp[NoAsms]
+QED
+
+(* The optional fixed-region reservation is an ASSIGN at the actual entry
+   cursor. Its output does not replace any of the captured argument values. *)
+Theorem intcall_args_fixed_region_path[local]:
+  (sb = sa \/ ?ilen id buf. compile_fixed_region_with_id ilen sa = ((id,buf),sb)) /\
+  cs_extends sb final /\ fn_has_code sa final func /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fresh_vars_wrt sa s /\ ~s.vs_halted /\ allocas_from lo s /\
+  ~ctx_has_dalloca ctx ==>
+  ?t G' tn'.
+    fresh_vars_wrt sb t /\ t.vs_current_bb = sb.cs_current_bb /\
+    t = s with <|vs_vars := t.vs_vars;
+                 vs_inst_idx := LENGTH sb.cs_current_insts|> /\
+    (!p w. lookup_var p s = SOME w ==> lookup_var p t = SOME w) /\
+    (!p. not_fresh_at sa p ==> not_fresh_at sb p) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==>
+       FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+       (s,G,tn) [] (OK t,G',tn'))
+Proof
+  strip_tac
+  >- (gvs[] >> qexistsl [`s`, `G`, `tn`] >>
+      simp[venomStateTheory.venom_state_component_equality,
+           fragGasOriginPtrTheory.gas_origin_ptr_path_rules]) >>
+  `sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb` by
+    (drule contextPropsTheory.compile_fixed_region_as_assign >>
+     simp[loweringShapeRulesTheory.emit_op_eq] >> strip_tac >> gvs[]) >>
+  drule contextTheory.compile_fixed_region_with_id_result >> strip_tac >>
+  `cs_extends sa sb` by
+    (irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND]) >>
+  `fn_has_code sa sb func` by metis_tac[fn_has_code_split] >>
+  `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
+    simp[exprLoweringPropsTheory.emitted_insts_def,rich_listTheory.DROP_LENGTH_APPEND] >>
+  drule_all stmtReasonLitFragMemoryTheory.fn_has_code_code >> strip_tac >>
+  `s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
+    (qpat_assum `sb.cs_current_insts = _ ++ emitted_insts _ _` SUBST1_TAC >>
+     qpat_assum `s.vs_inst_idx = _` SUBST1_TAC >> simp[NoAsms]) >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  drule_all intCallEntryFullTheory.compile_internal_fixed_region_joint >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  drule_all contextPropsTheory.compile_fixed_region_zero_correct >> strip_tac >>
+  qabbrev_tac `fi = mk_inst sa.cs_next_id ASSIGN [Lit 0w]
+    ["%" ++ toString sa.cs_next_var]` >>
+  `emitted_insts sa sb = [fi]` by
+    (qpat_assum `sb.cs_current_insts = _ ++ [fi]` mp_tac >>
+     simp[NoAsms, exprLoweringPropsTheory.emitted_insts_def,
+          rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `EVERY (\i. MEM i.inst_opcode [PARAM; RETPC_PARAM; ASSIGN] /\
+       ?idx x. i.inst_operands = [Lit idx] /\ i.inst_outputs = [x])
+     (emitted_insts sa sb)` by simp[Abbr `fi`, venomInstTheory.mk_inst_def] >>
+  qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `(ARB : dead)` (assume_tac o CONJUNCT1)) >>
+  drule_all intCallEntryFullTheory.internal_capture_seq_ghost_frame >> strip_tac >>
+  `!p. not_fresh_at sa p ==>
+     FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)` by
+    (rpt strip_tac >> first_x_assum (qspec_then `p` mp_tac) >>
+     simp[Abbr `fi`, venomInstTheory.mk_inst_def] >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
+  qexistsl [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `G'`, `tn'`] >>
+  simp[loweringStateRelDefsTheory.fresh_vars_wrt_def, venomStateTheory.lookup_var_def] >>
+  rpt conj_tac
+  >- fs[loweringStateRelDefsTheory.fresh_vars_wrt_def]
+  >- (qpat_assum `t = s with vs_vars := _` SUBST1_TAC >> simp[])
+  >- (qpat_assum `t = s with vs_vars := _` SUBST1_TAC >> simp[NoAsms])
+  >- (rpt strip_tac >>
+      `ss' = t` by
+        (ntac 2 (qpat_x_assum `run_inst_seq _ s = OK _` mp_tac) >>
+         POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+      qpat_x_assum `!op w. eval_operand op s = SOME w ==> _`
+        (qspec_then `Var p` mp_tac) >>
+      gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def])
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists `sa` >> simp[])
+  >> rpt gen_tac >>
+  qpat_x_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `D` (qspec_then `explicit` mp_tac o CONJUNCT2)) >> simp[]
+QED
+
+(* At the selected INVOKE, the captured values give the initial
+   materialization invariant for the same runtime state and argument map. *)
+Theorem intcall_args_capture_materialization_pre[local]:
+  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
+    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 u G tn /\
+  lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb u.vs_inst_idx = SOME inst /\
+  decode_invoke inst = SOME (label,ops) /\ eval_operands ops u = SOME argv /\
+  lookup_function label ctx.ctx_functions = SOME callee /\
+  setup_callee callee argv u = SOME setup /\
+  enters_block callee setup entered /\ (HD callee.fn_blocks).bb_label = label /\
+  new_block label before = (old,entry) /\
+  set_internal_package_target cenv.ce_target
+    (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
+       (if cx.in_deploy then imm_len tops else 0)
+       (mut,nr,rr,name,args,(dflts : expr list),ret,ss)) =
+    (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,ss,rt) /\
+  (cx.in_deploy = cenv.ce_is_ctor) /\
+  compile_internal_entry_prefix ce params has_rb entry = ((ce1,caps,rpc),cap_end) /\
+  (fix_end = cap_end \/
+   ?n id buf. compile_fixed_region_with_id n cap_end = ((id,buf),fix_end)) /\
+  cs_extends cap_end final /\ cs_extends fix_end final /\
+  fn_has_code entry final callee /\ ~ctx_has_dalloca ctx ==>
+  ?t G' tn' mr.
+    t.vs_current_bb = fix_end.cs_current_bb /\
+    t = entered with <|vs_vars := t.vs_vars;
+                       vs_inst_idx := LENGTH fix_end.cs_current_insts|> /\
+    mat_pending ce1 penv fix_end t u.vs_alloca_next mr caps /\
+    mat_inv callee ce1 penv fix_end t u.vs_alloca_next mr /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!i. i < LENGTH caps ==>
+      ?p. SND (SND (EL i caps)) = Var p /\ not_fresh_at fix_end p /\
+          lookup_var p t = SOME (EL ((if has_rb then 1 else 0) + i) argv) /\
+          FLOOKUP G' p = op_prov G (EL ((if has_rb then 1 else 0) + i) ops) /\
+          op_taint tn' (Var p) = {}) /\
+    (!n1 n2 b1 sz1 b2 sz2.
+       n1 <> n2 /\ mr n1 = SOME (b1,sz1) /\ mr n2 = SOME (b2,sz2) ==>
+       regions_disjoint b1 sz1 b2 sz2) /\
+    (!D explicit. gas_origin_ptr_path
+        (D,lo,explicit,ctx,callee,MAP (op_prov G) ops)
+        (entered,FEMPTY,tn with t_var := FEMPTY) [] (OK t,G',tn'))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `tn_start = tn with t_var := FEMPTY` >>
+  drule_all intcall_args_entered_capture >> strip_tac >>
+  qpat_assum `cx.in_deploy = cenv.ce_is_ctor` (fn th =>
+    qpat_assum `set_internal_package_target _ _ = _`
+      (assume_tac o REWRITE_RULE [th])) >>
+  drule_all intcall_args_selected_package_entry >> strip_tac >>
+  `internal_args_rel ce params penv (if has_rb then 1 else 0) argv
+      u.vs_alloca_next u.vs_memory` by
+    (first_x_assum irule >> simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
+  `(if has_rb then 1 else 0) + LENGTH params <= LENGTH entered.vs_params /\
+   LENGTH entered.vs_params < dimword (:256)` by
+    fs[intCallCalleeTheory.internal_args_rel_def] >>
+  `allocas_from lo entered` by simp[ptrDisciplineTheory.allocas_from_def] >>
+  drule_all intcall_args_capture_path >>
+  disch_then (qspecl_then [`tn_start`, `MAP (op_prov G) ops`, `FEMPTY`]
+    strip_assume_tac) >>
+  drule intcall_args_capture_cut >> strip_tac >>
+  `cs_extends entry cap_end` by (irule cs_extends_same_block >> simp[]) >>
+  `fn_has_code cap_end final callee` by metis_tac[fn_has_code_split] >>
+  qabbrev_tac `captured = t with vs_inst_idx := LENGTH cap_end.cs_current_insts` >>
+  `fresh_vars_wrt cap_end captured` by
+    (qpat_x_assum `fresh_vars_wrt cap_end t` mp_tac >>
+     simp[Abbr `captured`, loweringStateRelDefsTheory.fresh_vars_wrt_def]) >>
+  `~captured.vs_halted /\ allocas_from lo captured /\
+   captured.vs_current_bb = cap_end.cs_current_bb /\
+   captured.vs_inst_idx = LENGTH cap_end.cs_current_insts` by
+    (simp[Abbr `captured`, ptrDisciplineTheory.allocas_from_def] >>
+     qpat_assum `t = entered with vs_vars := _` SUBST1_TAC >> simp[]) >>
+  drule_all intcall_args_fixed_region_path >>
+  disch_then (qspecl_then [`tn'`, `MAP (op_prov G) ops`, `G'`]
+    (qx_choose_then `fixed` (qx_choose_then `Gf` (qx_choose_then `tnf` strip_assume_tac)))) >>
+  drule intCallCalleeTheory.compile_internal_entry_prefix_shape >> strip_tac >>
+  `internal_args_rel ce1 params penv (if has_rb then 1 else 0) argv
+     u.vs_alloca_next u.vs_memory` by gvs[intCallCalleeTheory.internal_args_rel_def] >>
+  `LENGTH caps = LENGTH params` by metis_tac[LENGTH_MAP] >>
+  drule tupleLoadPropsTheory.eval_operands_length >> strip_tac >>
+  `(if has_rb then 1 else 0) + LENGTH params <= LENGTH ops` by
+    fs[intCallCalleeTheory.internal_args_rel_def] >>
+  `!i. i < LENGTH params ==>
+       FST (EL i caps) = FST (EL i params) /\
+       FST (SND (EL i caps)) = SND (EL i params) /\
+       ?p. SND (SND (EL i caps)) = Var p /\ not_fresh_at fix_end p /\
+           lookup_var p fixed = SOME (EL ((if has_rb then 1 else 0) + i) argv) /\
+           FLOOKUP Gf p = op_prov G (EL ((if has_rb then 1 else 0) + i) ops) /\
+           op_taint tnf (Var p) = {}` by
+    (gen_tac >> disch_tac >>
+     `EL i params = (FST (EL i caps), FST (SND (EL i caps)))` by
+       (qpat_x_assum `MAP _ caps = params` (SUBST1_TAC o SYM) >> simp[EL_MAP]) >>
+     conj_tac >- simp[] >> conj_tac >- simp[] >>
+     qpat_assum `!i. i < LENGTH params ==> ?p. _` drule >> strip_tac >>
+     `lookup_var p captured = SOME (EL ((if has_rb then 1 else 0) + i) argv)` by
+       (qpat_assum `lookup_var p t = SOME _` mp_tac >>
+        qpat_assum `entered.vs_params = argv` (fn th =>
+          simp[NoAsms, th, Abbr `captured`, venomStateTheory.lookup_var_def,
+               AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM])) >>
+     `(if has_rb then 1 else 0) + i < LENGTH ops` by
+       (qpat_assum `_ + LENGTH params <= LENGTH ops` mp_tac >>
+        qpat_assum `i < LENGTH params` mp_tac >>
+        Cases_on `has_rb` >> simp[NoAsms] >> decide_tac) >>
+     `FLOOKUP G' p = op_prov G (EL ((if has_rb then 1 else 0) + i) ops)` by
+       (qpat_assum `FLOOKUP G' p = (if _ then _ else _)` mp_tac >>
+        qpat_assum `_ + i < LENGTH ops` (fn th =>
+          rewrite_tac[LENGTH_MAP, th] >>
+          simp[NoAsms, EL_MAP, th,
+               AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM])) >>
+     qexists `p` >>
+     qpat_assum `!p. not_fresh_at cap_end p ==> FLOOKUP Gf p = _ /\ _`
+       drule >> simp[]) >>
+  `!i. i < LENGTH caps ==>
+       ?p. SND (SND (EL i caps)) = Var p /\ not_fresh_at fix_end p /\
+           lookup_var p fixed = SOME (EL ((if has_rb then 1 else 0) + i) argv) /\
+           FLOOKUP Gf p = op_prov G (EL ((if has_rb then 1 else 0) + i) ops) /\
+           op_taint tnf (Var p) = {}` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!i. i < LENGTH params ==> _ /\ _ /\ ?p. _`
+       (qspec_then `i` mp_tac) >> simp[]) >>
+  `fixed = entered with <|vs_vars := fixed.vs_vars;
+                          vs_inst_idx := LENGTH fix_end.cs_current_insts|>` by
+    (qpat_assum `fixed = captured with <|vs_vars := _; vs_inst_idx := _|>`
+       (fn th => CONV_TAC (LAND_CONV (REWR_CONV th))) >>
+     simp[NoAsms, Abbr `captured`] >>
+     qpat_assum `t = entered with vs_vars := _` SUBST1_TAC >> simp[NoAsms]) >>
+  `fixed.vs_memory = u.vs_memory /\ fixed.vs_alloca_next = u.vs_alloca_next /\
+   fixed.vs_allocas = FEMPTY` by
+    (qpat_assum `fixed = entered with <|vs_vars := _; vs_inst_idx := _|>`
+       SUBST1_TAC >> simp[]) >>
+  `!i. i < LENGTH params ==>
+       FST (EL i caps) = FST (EL i params) /\
+       FST (SND (EL i caps)) = SND (EL i params) /\
+       ?p. SND (SND (EL i caps)) = Var p /\ not_fresh_at fix_end p /\
+           lookup_var p fixed = SOME (EL ((if has_rb then 1 else 0) + i) argv)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!i. i < LENGTH params ==> _ /\ _ /\ ?p. _`
+       (qspec_then `i` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexists `p` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all intCallCalleeTheory.internal_args_materialization_pre >>
+  disch_then (qspec_then `callee` strip_assume_tac) >>
+  qpat_x_assum `!n b sz. mr n = SOME (b,sz) <=> _` kall_tac >>
+  `tn_start.t_mem = tn.t_mem /\ tn_start.t_stor = tn.t_stor /\
+   tn_start.t_trans = tn.t_trans /\ tn_start.t_imm = tn.t_imm` by
+    simp[NoAsms, Abbr `tn_start`] >>
+  `tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+   tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm` by simp[] >>
+  qexistsl [`fixed`, `Gf`, `tnf`, `mr`] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >> rpt gen_tac >>
+  qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `D` (qspec_then `explicit` assume_tac o CONJUNCT2)) >>
+  drule fragGasOriginPtrTheory.gas_origin_ptr_path_append >>
+  disch_then (qspecl_then [`captured`, `G'`, `tn'`, `[]`]
+    (irule o SIMP_RULE (srw_ss()) [])) >> simp[]
+QED
+
 Theorem intcall_args_full:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
