@@ -1,6 +1,7 @@
 (* Clean scalar validation fragments used by calldata decoders. *)
 Theory calldataClampPtr
-Ancestors fragGasSeqPtr calldataDecodePtr fragGasOriginPtr fragGasSeqPtr memSafeRun instMemFrontier venomInstProofs abiDecoderClamp abiEncoder compileEnv loweringStateRelDefs emitHelper exprLoweringProps
+Ancestors bodyPtrBopScalarCompile bodyPtrBopScalarDynamic bodyPtrBopScalarSeq bodyPtrBopScalarOutcome instSeqComposePtr
+  fragGasSeqPtr calldataDecodePtr fragGasOriginPtr fragGasSeqPtr memSafeRun instMemFrontier venomInstProofs abiDecoderClamp abiEncoder compileEnv loweringStateRelDefs emitHelper exprLoweringProps
   unitTransformDefs fragExec venomInst list arithmetic words bodyPtrDefs decoderGhostFramePtr
   ptrDiscipline ptrSafeRun venomState venomExecSemantics entryDispatchPtr
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep contextCodegenRel
@@ -806,4 +807,81 @@ Proof
   strip_tac >> drule_all calldata_clamp_prefix_framed_uniform >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
+QED
+
+Theorem abi_decode_clamp_scalar:
+  compile_abi_clamp_basetype value clamp sa = ((),sb) /\ value IN A /\
+  (!w. Lit w IN A) /\ (!x. x IN R ==> not_fresh_at sa x) ==>
+  ?B. bop_scalar_seq R A (emitted_insts sa sb) B /\ A SUBSET B /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var
+Proof
+  Cases_on `clamp`
+  >- (simp[compile_abi_clamp_basetype_def, comp_return_def] >> strip_tac >>
+      gvs[] >> qexists_tac `A` >> simp[emitted_insts_def, same_blocks_def])
+  >~ [`IntClamp bits signed`] >>> HEADGOAL (Cases_on `signed`) >>
+  (simp[compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+       compile_abi_bytes_clamp_def, comp_ignore_bind_def] >> strip_tac >>
+  drule bop_scalar_compile_bind_run >>
+  disch_then (qspecl_then [`R`, `\v B. T`, `\u B. u IN B`, `A`] mp_tac) >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> drule bop_scalar_compile_emit_op >> simp[]) >>
+      rpt strip_tac >> rule_assum_tac BETA_RULE >>
+      `!x. x IN R ==> not_fresh_at m x` by
+        metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+      `value IN B` by metis_tac[SUBSET_DEF] >>
+      Cases_on `v` >> drule bop_scalar_compile_emit_checked >> simp[]) >> simp[])
+QED
+
+Theorem scalar_seq_abort_replay_ptr:
+  bop_scalar_seq R A code B /\
+  (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  ~ctx_has_dalloca ctx /\ run_inst_seq code s = Abort a t ==>
+  ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. x IN R ==> FLOOKUP G' x = FLOOKUP G x /\
+                     FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
+Proof
+  strip_tac >> drule_all bop_scalar_seq_abort_prefix >> strip_tac >>
+  qpat_x_assum `bop_scalar_seq R A code B` kall_tac >>
+  drule bop_scalar_seq_assert_abort_checked >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then drule >> simp[] >>
+  disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >> simp[] >>
+  disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
+  `run_inst_seq (prefix ++ [mk_inst id opc [op] []]) s = Abort a t` by
+    (drule run_inst_seq_append >> disch_then (qspec_then `[mk_inst id opc [op] []]` mp_tac) >>
+     simp[run_inst_seq_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+    (prefix ++ [mk_inst id opc [op] []])` by
+    (drule bop_scalar_seq_opcodes >> simp[EVERY_CONJ, mk_inst_def, is_terminator_def] >>
+     metis_tac[]) >>
+  qexistsl_tac [`G'`, `tn'`] >> simp[] >>
+  irule inst_seq_ptr_abort_append >> metis_tac[]
+QED
+
+Theorem abi_decode_clamp_abort_ptr:
+  compile_abi_clamp_basetype value clamp sa = ((),sb) /\
+  op_prov G value = NONE /\ op_taint tn value = {} /\
+  (!x. x IN R ==> not_fresh_at sa x) /\
+  ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = Abort a t ==>
+  ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. x IN R ==> FLOOKUP G' x = FLOOKUP G x /\
+                     FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
+Proof
+  strip_tac >>
+  `?B. bop_scalar_seq R ({value} UNION IMAGE Lit UNIV)
+    (emitted_insts sa sb) B` by
+    (drule abi_decode_clamp_scalar >>
+     disch_then (qspecl_then [`R`, `{value} UNION IMAGE Lit UNIV`] mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  `!op. op IN {value} UNION IMAGE Lit UNIV ==>
+    op_prov G op = NONE /\ op_taint tn op = {}` by
+    (simp[IN_UNION, IN_SING, IN_IMAGE] >> rpt strip_tac >>
+     gvs[op_prov_def, op_taint_def]) >>
+  drule_all scalar_seq_abort_replay_ptr >> simp[]
 QED
