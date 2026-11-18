@@ -422,7 +422,7 @@ Resume prune_unreachable_abort_certificate[interpret_rows]:
       (CONV_RULE prune_lets (PURE_REWRITE_RULE eqs (Q.SPECL
         [`q`,`uq`,`tq`,`V`,`e`,`\z. rat_of_num (level z)`,
          `(r:num->num) o pc`,`height`,`need`,`tagQ`,`boolean`,`edge`]
-        pending_rows_rooted_package))))) >>
+        (prune_worker pending_rows_rooted_package)))))) >>
   (impl_tac >- suspend "interpreter_inputs") >>
   suspend "destination_package"
 QED
