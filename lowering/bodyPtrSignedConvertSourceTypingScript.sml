@@ -1,6 +1,6 @@
 (* Source typing at the actual lowered type, allowing widened internal returns. *)
 Theory bodyPtrSignedConvertSourceTyping
-Ancestors memoryLocalRhsProps bodyPtrSignedConvertLayout bodySim
+Ancestors exprSimHyps memoryLocalRhsProps bodyPtrSignedConvertLayout bodySim
   supportedExprs supportedExprForms vyperTypeSystem exprLowering exprSimHypsDefs compileEnv
   vyperTypeEvalProofs
 Libs monadsyntax
@@ -178,58 +178,6 @@ Proof
   drule_all body_internal_lowered_bytestring >> simp[lowered_value_type_def]
 QED
 
-Theorem body_internal_read_lowered_typed[local]:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env (Call ann (IntCall id) args drv) es /\
-  (do r <- eval_expr cx (Call ann (IntCall id) args drv);
-      read_result cx r od) es = (INL v, es') ==>
-  value_runtime_typed env
-    (lowered_value_type cenv (Call ann (IntCall id) args drv)) v
-Proof
-  strip_tac >> drule_all body_internal_return_signature >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  `well_formed_type env.type_defs sig.ret_ty` by
-    (`env_consistent env cx es /\ functions_well_typed cx` by
-       gvs[expr_sim_inv_def] >>
-     `env.type_defs = get_tenv cx /\ fn_sigs_consistent env.fn_sigs cx` by
-       (qpat_x_assum `env_consistent _ _ _` mp_tac >>
-        simp[vyperTypeInvariantsTheory.env_consistent_def,
-             vyperTypeInvariantsTheory.env_context_consistent_def]) >>
-     Cases_on `id` >>
-     qpat_assum `fn_sigs_consistent _ _` mp_tac >>
-     pure_rewrite_tac[vyperTypeInvariantsTheory.fn_sigs_consistent_def] >>
-     disch_then drule >> strip_tac >>
-     `IS_SOME (FLOOKUP env.fn_sigs (q,r))` by simp[] >>
-     drule_all vyperTypeEvalProofsTheory.callable_body_typing_from_env_consistent >>
-     simp[] >> strip_tac >> simp[well_formed_type_def]) >>
-  `well_typed_expr env (Call sig.ret_ty (IntCall id) args drv)` by
-    (Cases_on `id` >>
-     gvs[expr_body_pre_def, well_typed_expr_def, type_widens_to_def] >> metis_tac[]) >>
-  `eval_expr cx (Call sig.ret_ty (IntCall id) args drv) =
-   eval_expr cx (Call ann (IntCall id) args drv)` by
-    (Cases_on `id` >> once_rewrite_tac[vyperInterpreterTheory.evaluate_def] >> REFL_TAC) >>
-  `(do r <- eval_expr cx (Call sig.ret_ty (IntCall id) args drv);
-       read_result cx r od) es = (INL v, es')` by metis_tac[] >>
-  drule_at (Pat `bind _ _ _ = _`) vyperTypeEvalSoundnessTheory.eval_expr_read_type_sound >>
-  disch_then (qspec_then `env` mp_tac) >>
-  gvs[expr_body_pre_def, expr_sim_inv_def,
-      vyperTypeCallGraphTheory.int_calls_expr_def, vyperASTTheory.expr_type_def,
-      lowered_value_type_def] >>
-  qpat_x_assum `!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> _`
-    (fn th => drule th) >> simp[]
-QED
-
-Theorem body_source_read_lowered_typed:
-  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
-  (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
-  value_runtime_typed env (lowered_value_type cenv e) v
-Proof
-  Cases_on `?a id args drv. e = Call a (IntCall id) args drv`
-  >- (gvs[] >> metis_tac[body_internal_read_lowered_typed]) >>
-  strip_tac >> irule exprSimHypsTheory.memory_rhs_read_lowered_typed_unwidened >>
-  metis_tac[]
-QED
-
 Theorem body_source_read_lowered_layout:
   body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
   is_bytestring_type (expr_type e) /\
@@ -241,7 +189,7 @@ Theorem body_source_read_lowered_layout:
 Proof
   strip_tac >> conj_tac
   >- (drule_all body_source_lowered_bytestring >> simp[]) >>
-  drule_all body_source_read_lowered_typed >> strip_tac >>
+  drule_all memory_rhs_read_lowered_typed_unwidened >> strip_tac >>
   gvs[expr_body_pre_def] >> drule_all memory_rhs_runtime_layout >> simp[]
 QED
 
@@ -263,7 +211,7 @@ Theorem body_source_lowered_zero_empty:
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
   v = BytesV [] \/ v = StringV []
 Proof
-  strip_tac >> drule_all body_source_read_lowered_typed >> strip_tac >>
+  strip_tac >> drule_all memory_rhs_read_lowered_typed_unwidened >> strip_tac >>
   gvs[expr_body_pre_def] >> drule_all memory_rhs_runtime_layout >>
   simp[vyperValueTheory.evaluate_type_def] >> strip_tac >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
