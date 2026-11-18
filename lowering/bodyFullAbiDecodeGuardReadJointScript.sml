@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeGuardReadJoint
 Ancestors
+  bodyFullAbiDecodeGuardReadObserved
   bodyFullAbiDecodeLeafCases bodyFullAbiDecodeFiniteGuard bodyFullAbiDecodeScalarNoAlloca
   bodyFullAbiDecodeAge bodyFullAbiDecodeBytesArithmetic bodyFullAbiDecodeClampMemory
   abiDecoderBytesBound abiDecoderBytesPhases abiDecoderRange abiDecoderGuards
@@ -21,25 +22,7 @@ Theorem abi_decode_bytes_head_run[local]:
        w2n (n2w (off+32):bytes32) <= w2n (n2w h:bytes32)) \/
   (?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
 Proof
-  simp[abi_decode_bytes_head_def, compile_abi_decode_range_check_def,
-       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  strip_tac >> gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
-    fresh_id_def, fresh_var_def, emit_def] >>
-  simp_tac (srw_ss()) [emitted_insts_def] >>
-  pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-  simp_tac (srw_ss()) [DROP_LENGTH_APPEND] >>
-  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
-       exec_pure1_def, exec_pure2_def, eval_operand_def,
-       lookup_var_update_var, eval_operand_update_other,
-       ASCIInumbersTheory.toString_inj, word_add_n2w] >>
-  Cases_on `src` >> Cases_on `hi` >>
-  gvs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
-      abiDecoderReentryTheory.abi_decoder_older_vars_def, eval_operand_def,
-      lookup_var_update_var, ASCIInumbersTheory.toString_inj,
-      bool_to_word_def] >>
-  IF_CASES_TAC >>
-  gvs[lookup_var_update_var, ASCIInumbersTheory.toString_inj]
+  MATCH_ACCEPT_TAC bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_head_run
 QED
 
 Theorem abi_decode_bytes_count_run[local]:
@@ -52,16 +35,7 @@ Theorem abi_decode_bytes_count_run[local]:
   (?t. run_inst_seq (emitted_insts sa sb) s = OK t /\ c <= n) \/
   (?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)
 Proof
-  simp[emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[] >>
-  simp_tac (srw_ss()) [emitted_insts_def] >>
-  pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-  simp_tac (srw_ss()) [DROP_LENGTH_APPEND] >>
-  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
-       exec_pure1_def, exec_pure2_def, eval_operand_def,
-       lookup_var_update_var, eval_operand_update_other,
-       ASCIInumbersTheory.toString_inj, bool_to_word_def] >>
-  Cases_on `c <= n` >> simp[]
+  MATCH_ACCEPT_TAC bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_count_run
 QED
 
 val owned_decoder_state = ``\st s G tn.
@@ -124,60 +98,8 @@ Theorem abi_decode_bytes_scalar_frame_joint:
        lookup_var x u = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
        op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >>
-  drule_all (bodyPtrBopScalarSeqTheory.bop_scalar_seq_run |>
-    Q.INST [`D` |-> `<|d_stor := K (K {}); d_trans := K (K {});
-      d_imm := K {}; d_ret := K {}|>`]) >>
-  disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
-  `lo <= s.vs_alloca_next` by fs[] >>
-  `inst_seq_ptr <|d_stor := K (K {}); d_trans := K (K {});
-      d_imm := K {}; d_ret := K {}|> lo ctx fn PG G tn
-      (emitted_insts sa sb) s G' tn'` by
-    (irule instSeqPtrLoTheory.inst_seq_ptr_zero_to_lo >> simp[] >>
-     qexists_tac `<|d_stor := K (K {}); d_trans := K (K {});
-       d_imm := K {}; d_ret := K {}|>` >> simp[]) >>
-  qpat_x_assum `inst_seq_ptr _ 0 _ _ _ _ _ _ _ _ _` kall_tac >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-      i.inst_opcode <> GAS) (emitted_insts sa sb)` by
-    metis_tac[bodyPtrBopScalarSeqTheory.bop_scalar_seq_opcodes] >>
-  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
-    metis_tac[bodyFullAbiDecodeClampMemoryTheory.abi_decode_scalar_seq_mem_ok] >>
-  drule_all fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
-  disch_then (qspec_then `explicit` assume_tac) >>
-  drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
-  qabbrev_tac `u = t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  `state_frame u = state_frame (s with vs_inst_idx := u.vs_inst_idx) /\
-   ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-   u.vs_inst_idx = LENGTH sb.cs_current_insts /\ u.vs_allocas = s.vs_allocas /\
-   u.vs_memory = s.vs_memory` by
-    (simp[Abbr `u`] >>
-     qpat_x_assum `t = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
-     simp[stateFrameTheory.state_frame_def]) >>
-  suspend "scalar_owned"
+  MATCH_ACCEPT_TAC bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_scalar_frame_joint
 QED
-
-Resume abi_decode_bytes_scalar_frame_joint[scalar_owned]:
-  `!x. not_fresh_at sa x ==>
-     lookup_var x u = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
-     op_taint tn' (Var x) = op_taint tn (Var x)` by
-    (simp[Abbr `u`, lookup_var_def, op_taint_def] >> gvs[]) >>
-  `alloca_history fn s` by fs[] >>
-  `alloca_history fn u` by
-    (irule abi_decode_no_alloca_endpoint_history >>
-     qexistsl_tac [`s`, `sa`, `sb`] >> simp[] >>
-     gvs[inst_extends_def]) >>
-  `(^owned_decoder_state) sb u G' tn'` by
-    (irule abi_decode_owned_scalar_frame_with_history >>
-     conj_tac >- asm_rewrite_tac[] >>
-     qexistsl_tac [`G`, `s`, `sa`, `tn`] >> asm_rewrite_tac[]) >>
-  `allocas_from lo u` by metis_tac[allocas_from_def] >>
-  qexistsl_tac [`u`, `G'`, `tn'`] >> asm_rewrite_tac[] >>
-  simp[Abbr `u`] >> gen_tac >>
-  irule fragGasOriginPtrDeadTheory.gas_origin_ptr_path_from_no_dead >>
-  asm_rewrite_tac[]
-QED
-
-Finalise abi_decode_bytes_scalar_frame_joint
 
 Theorem abi_decode_bytes_head_joint:
   abi_decode_bytes_head src hi sa = (head,sb) /\ hi <> Lit 0w /\
@@ -209,36 +131,10 @@ Theorem abi_decode_bytes_head_joint:
       (s,G,tn) [] (Abort Revert_abort t,Gf,tnf))
 Proof
   strip_tac >>
-  `sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id` by
-    (qpat_x_assum `abi_decode_bytes_head _ _ _ = _` mp_tac >>
-     simp[abi_decode_bytes_head_def, compile_abi_decode_range_check_def,
-          emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
-          comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-     strip_tac >> gvs[]) >>
-  drule abi_decode_bytes_head_fragment_shape >> strip_tac >>
-  `?B. bop_scalar_seq {x | not_fresh_at sa x} {src;hi;Lit 32w}
-     (emitted_insts sa sb) B /\ {src;hi;Lit 32w} SUBSET B /\ head IN B` by
-    (irule abi_decode_bytes_head_scalar >> simp[] >> metis_tac[]) >>
-  `!op. op IN {src;hi;Lit 32w} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
-    (rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
-  `lo <= s.vs_alloca_next` by fs[] >>
-  drule_all abi_decode_bytes_head_run >> strip_tac
-  >- (disj1_tac >>
-      `off+32 <= h` by
-        (irule abi_decode_checked_add_bound >>
-         asm_simp_tac (srw_ss()) [LESS_MOD] >>
-         conj_tac >- simp[dimword_def] >>
-         (bossLib.gvs [wordsTheory.w2n_n2w , arithmeticTheory.MOD_LESS_EQ , arithmeticTheory.LESS_EQ_TRANS])) >>
-      `EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sa sb)` by
-        metis_tac[abi_decode_scalar_seq_no_alloca] >>
-      `inst_extends sa sb` by simp[inst_extends_def] >>
-      drule_all abi_decode_bytes_scalar_frame_joint >>
-      disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
-      qexistsl_tac [`u`, `Gf`, `tnf`] >>
-      simp[eval_operand_def, lookup_var_def] >> metis_tac[]) >>
-  disj2_tac >> drule_all abi_decode_scalar_guard_abort_joint >>
-  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
-  qexistsl_tac [`t with vs_inst_idx := j`, `Gf`, `tnf`] >> simp[]
+  drule_all bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_head_joint_observed >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac)
+  >- (disj1_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]) >>
+  disj2_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]
 QED
 
 Theorem abi_decode_bytes_count_joint:
@@ -266,43 +162,10 @@ Theorem abi_decode_bytes_count_joint:
       (s,G,tn) [] (Abort Revert_abort t,Gf,tnf))
 Proof
   strip_tac >>
-  `sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
-   sb.cs_current_bb = sa.cs_current_bb /\ inst_extends sa sb` by
-    (qpat_x_assum `abi_decode_le_guard _ _ _ = _` mp_tac >>
-     simp[abiDecoderGuardTheory.abi_decode_le_guard_def,
-          emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
-          comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-     rpt (pop_assum kall_tac) >> strip_tac >> gvs[] >>
-     simp_tac (srw_ss()) [inst_extends_def, emitted_insts_def] >>
-     pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-     simp_tac (srw_ss()) [DROP_LENGTH_APPEND]) >>
-  `?B. bop_scalar_seq {x | not_fresh_at sa x} {cnt;Lit (n2w n)}
-     (emitted_insts sa sb) B /\ {cnt;Lit (n2w n)} SUBSET B` by
-    (irule abi_decode_le_guard_scalar >> simp[] >> metis_tac[]) >>
-  `!op. op IN {cnt;Lit (n2w n)} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
-    (rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
-  `lo <= s.vs_alloca_next` by fs[] >>
-  `(?t. run_inst_seq (emitted_insts sa sb) s = OK t /\ c <= n) \/
-   (?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)` by
-    (Cases_on `emit_op GT [cnt;Lit (n2w n)] sa` >>
-     rename1 `emit_op GT [cnt;Lit (n2w n)] sa = (many,c1)` >>
-     Cases_on `emit_op ISZERO [many] c1` >>
-     rename1 `emit_op ISZERO [many] c1 = (ok,c2)` >>
-     `emit_void ASSERT [ok] c2 = ((),sb)` by
-       (qpat_x_assum `abi_decode_le_guard _ _ _ = _` mp_tac >>
-        simp[abiDecoderGuardTheory.abi_decode_le_guard_def,
-             comp_bind_def, comp_ignore_bind_def]) >>
-     drule_all abi_decode_bytes_count_run >> simp[]) >>
-  pop_assum strip_assume_tac
-  >- (disj1_tac >>
-      `EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sa sb)` by
-        metis_tac[abi_decode_scalar_seq_no_alloca] >>
-      drule_all abi_decode_bytes_scalar_frame_joint >>
-      disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
-      qexistsl_tac [`u`, `Gf`, `tnf`] >> simp[]) >>
-  disj2_tac >> drule_all abi_decode_scalar_guard_abort_joint >>
-  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
-  qexistsl_tac [`t with vs_inst_idx := j`, `Gf`, `tnf`] >> simp[]
+  drule_all bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_count_joint_observed >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac)
+  >- (disj1_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]) >>
+  disj2_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]
 QED
 
 (* Retain the canonical load's fresh address certificate at its actual endpoint. *)
@@ -338,95 +201,7 @@ Theorem abi_decode_bytes_owned_load_frame_joint:
        op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
-  `abi_decode_ptr_window G tn s input input_word (LENGTH input_bytes) /\
-   lo <= s.vs_alloca_next /\
-   w2n input_word+LENGTH input_bytes <= s.vs_alloca_next /\
-   alloca_history fn s` by fs[] >>
-  drule_all (abiDecodePtrReadTheory.abi_decode_ptr_relative_load |>
-    Q.INST [`D` |-> `ARB`, `PG` |-> `PG`]) >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
-  `!D. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sc) s G' tn'` by
-    (gen_tac >>
-     drule_all (abiDecodePtrReadTheory.abi_decode_ptr_relative_load |>
-       Q.INST [`D` |-> `D`, `PG` |-> `PG`]) >>
-     disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-     qpat_assum `inst_seq_ptr ARB _ _ _ _ _ _ _ _ _ _`
-       (mp_then Any mp_tac fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique) >>
-     disch_then drule >> simp[] >> strip_tac >> gvs[]) >>
-  `!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sc) s G' tn'` by
-    (gen_tac >> irule instSeqPtrLoTheory.inst_seq_ptr_zero_to_lo >>
-     simp[] >> qexists_tac `D` >> simp[]) >>
-  `emit_op ADD [Var input;pos] sa = (addr,sb)` by
-    gvs[compile_abi_dec_addr_def] >>
-  `inst_extends sa sb /\ inst_extends sb sc /\ inst_extends sa sc` by
-    metis_tac[inst_extends_emit_op, inst_extends_trans] >>
-  `sc.cs_current_bb = sa.cs_current_bb` by gvs[inst_extends_def] >>
-  qpat_assum `emit_op ADD _ _ = _`
-    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-  qpat_assum `emit_op MLOAD _ _ = _`
-    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-  `emitted_insts sa sc = emitted_insts sa sb ++ emitted_insts sb sc` by
-    (irule emitted_insts_append >> metis_tac[]) >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-       i.inst_opcode <> GAS) (emitted_insts sa sc)` by
-    simp[mk_inst_def, is_terminator_def] >>
-  `run_inst_seq_mem_ok (emitted_insts sa sc) s` by
-    suspend "load_memory" >>
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
-     (s,G,tn) [] (OK t,G',tn')` by
-    (gen_tac >>
-     qpat_x_assum `inst_seq_ptr ARB _ _ _ _ _ _ _ _ _ _` kall_tac >>
-     qpat_x_assum `!D. inst_seq_ptr D 0 _ _ _ _ _ _ _ _ _` kall_tac >>
-     qpat_x_assum `!D. inst_seq_ptr D lo _ _ _ _ _ _ _ _ _`
-       (qspec_then `D` assume_tac) >>
-     drule_all fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
-     disch_then (qspec_then `explicit` mp_tac) >>
-     `((t with vs_inst_idx := s.vs_inst_idx) with
-         vs_inst_idx := LENGTH sc.cs_current_insts) = t` by
-       simp[venom_state_component_equality] >> asm_rewrite_tac[]) >>
-  suspend "load_owned"
+  drule_all bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_owned_load_frame_joint_observed >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`out`, `ar`, `t`, `Gf`, `tnf`] >> asm_rewrite_tac[]
 QED
-
-Resume abi_decode_bytes_owned_load_frame_joint[load_memory]:
-  `lookup_var input s = SOME input_word` by
-    gvs[abiDecodePtrMemberFrameTheory.abi_decode_ptr_window_def] >>
-  asm_rewrite_tac[] >>
-  simp[fragExecMemTheory.run_inst_seq_mem_ok_def] >>
-  conj_tac
-  >- (irule instMemFrontierTheory.below_frontier_no_ranges >> simp[mk_inst_def]) >>
-  `step_inst_base (mk_inst sa.cs_next_id ADD [Var input;pos]
-    [STRING #"%" (toString sa.cs_next_var)]) s =
-    OK (update_var (STRING #"%" (toString sa.cs_next_var))
-      (input_word+n2w p) s)` by
-    (irule step_ADD >> simp[eval_operand_def]) >>
-  simp[] >>
-  simp[instMemFrontierTheory.below_frontier_MLOAD, eval_operand_def,
-       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  conj_tac
-  >- (`w2n (input_word+n2w p) = w2n input_word+p` by
-        (irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> decide_tac) >>
-      decide_tac) >>
-  BasicProvers.TOP_CASE_TAC >> simp[]
-QED
-
-Resume abi_decode_bytes_owned_load_frame_joint[load_owned]:
-  `isPREFIX sa.cs_current_insts sc.cs_current_insts` by
-    metis_tac[inst_extends_def, IS_PREFIX_APPEND] >>
-  `EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sa sc)` by
-    simp[mk_inst_def] >>
-  `alloca_history fn t` by
-    (irule abi_decode_no_alloca_endpoint_history >> metis_tac[]) >>
-  `sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id` by
-    simp[] >>
-  `(^owned_decoder_state) sc t G' tn'` by
-    (irule abi_decode_owned_scalar_frame_with_history >>
-     conj_tac >- asm_rewrite_tac[] >>
-     qexistsl_tac [`G`, `s`, `sa`, `tn`] >> asm_rewrite_tac[]) >>
-  `allocas_from lo t` by
-    (fs[allocas_from_def, stateFrameTheory.state_frame_def] >> metis_tac[]) >>
-  qexistsl_tac [`out`, `ap`, `t`, `G'`, `tn'`] >>
-  asm_rewrite_tac[] >> simp[eval_operand_def] >>
-  metis_tac[operand_11, ADD_COMM]
-QED
-
-Finalise abi_decode_bytes_owned_load_frame_joint
