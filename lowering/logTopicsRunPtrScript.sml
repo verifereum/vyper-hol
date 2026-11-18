@@ -78,7 +78,7 @@ Theorem compile_log_topic_ops_seq_ptr:
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
               (!l. FST p <> Label l)) xs /\
   LIST_REL (\arg v. log_arg_rel cenv cx sa sm es s arg v /\
-    supported_scalar_type (SND arg) /\
+    supported_event_leaf_type (SND arg) /\
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
   encode_indexed_event_topics (REPLICATE (LENGTH xs) T) (MAP SND xs) vs = SOME topics /\
   LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) G tn s) xs vs /\
@@ -101,7 +101,7 @@ Proof
   simp[compile_log_topic_ops_cons] >> strip_tac >> gvs[] >>
   rename1 `log_arg_rel cenv cx sa sm es s arg v` >>
   Cases_on `arg` >> gvs[] >>
-  drule_all compile_encode_log_topic_scalar_seq_ptr >>
+  drule_all compile_encode_log_topic_event_seq_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   drule_all log_topic_frontier >> strip_tac >> suspend "tail"
 QED
@@ -130,14 +130,14 @@ QED
 Resume compile_log_topic_ops_seq_ptr[shift]:
   map_every (fn pat => qpat_x_assum pat kall_tac)
     [`log_arg_rel _ _ _ _ _ _ _ _`, `ptr_val_ok _ _ _ _ _ _ _`,
-     `supported_scalar_type _`, `evaluate_type _ _ = _`, `value_has_type _ _`,
+     `supported_event_leaf_type _`, `evaluate_type _ _ = _`, `value_has_type _ _`,
      `encode_event_topic _ _ = _`, `stmt_state_rel _ _ _ _ _ _ s`,
      `local_ptrs_reserved cenv sm`, `!z. x = Var z ==> _`, `!l. x <> Label l`,
      `LIST_REL (\arg v. ptr_val_ok _ _ _ _ G tn s) xs t`,
      `LIST_REL (\arg v. log_arg_rel _ _ _ sm _ s _ _ /\ _) xs t`] >>
   `stmt_state_rel H ctx func cenv cx es ua` by simp[Abbr `ua`, stmt_state_rel_inst_idx] >>
   `LIST_REL (\arg v. log_arg_rel cenv cx sa sc es ua arg v /\
-      supported_scalar_type (SND arg) /\
+      supported_event_leaf_type (SND arg) /\
       ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs t` by
     simp[Abbr `ua`] >>
   `LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) Gf tnf ua) xs t` by
@@ -222,8 +222,8 @@ Proof
      irule LIST_REL_mono >>
      qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ _ _ /\ _) (SND _) _`
        (irule_at Any) >> simp[]) >>
-  `LIST_REL (\arg v. supported_scalar_type (SND arg) /\
-     ?aty tv. supported_scalar_type aty /\
+  `LIST_REL (\arg v. supported_event_leaf_type (SND arg) /\
+     ?aty tv. supported_event_leaf_type aty /\
        log_arg_rel cenv cx sa sm es s (FST arg,aty) v /\
        evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
        (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
@@ -233,7 +233,8 @@ Proof
        supported_scalar_type (SND arg) /\
        ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v` >>
      simp[] >> qx_gen_tac `arg` >> qx_gen_tac `v` >> strip_tac >>
-     qexistsl_tac [`SND arg`, `tv`] >> simp[]) >>
+     conj_tac >- simp[supportedTypesTheory.supported_event_leaf_type_def] >>
+     qexistsl_tac [`SND arg`, `tv`] >> simp[supportedTypesTheory.supported_event_leaf_type_def]) >>
   drule_all compile_split_log_topics_run >> strip_tac >>
   `LENGTH vs = LENGTH xs` by metis_tac[LIST_REL_LENGTH] >>
   qpat_assum `LIST_REL (\arg v. ptr_val_ok _ _ _ _ _ _ _) xs vs`
@@ -253,6 +254,12 @@ Proof
      (REPLICATE (LENGTH (MAP FST (FILTER SND (ZIP (xs,flags))))) T)
      (MAP SND (MAP FST (FILTER SND (ZIP (xs,flags)))))
      (MAP FST (FILTER SND (ZIP (vs,flags)))) = SOME topics` by metis_tac[] >>
+  `LIST_REL (\arg v. log_arg_rel cenv cx sa sm es s arg v /\
+      supported_event_leaf_type (SND arg) /\
+      ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
+      (MAP FST (FILTER SND (ZIP (xs,flags))))
+      (MAP FST (FILTER SND (ZIP (vs,flags))))` by
+    (gvs[LIST_REL_EL_EQN, supportedTypesTheory.supported_event_leaf_type_def] >> metis_tac[]) >>
   drule_all compile_log_topic_ops_seq_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   suspend "post"

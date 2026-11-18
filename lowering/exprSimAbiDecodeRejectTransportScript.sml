@@ -13,7 +13,8 @@ Proof
   qpat_x_assum `step_inst_base inst s = Abort Revert_abort u` mp_tac >>
   pure_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[] >>
   pure_rewrite_tac[opcode_case_def] >>
-  simp[exec_create_abort_iff, exec_write2_def, exec_ext_call_def, AllCaseEqs()]
+  simp[exec_create_abort_iff, exec_write2_def, exec_ext_call_def,
+       exec_delegatecall_def, AllCaseEqs()]
 QED
 
 Theorem abi_decode_noninvoke_revert_vars_extend:

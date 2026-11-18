@@ -32,7 +32,7 @@ Theorem sha_alloc_abort_ptr_at:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
-  ?t Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+  ?t Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t /\
     inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tf
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
