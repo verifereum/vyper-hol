@@ -2,7 +2,20 @@ Theory whitelistS2CreateShape
 Ancestors
   list loweringShapeProps loweringShapeRules loweringShapeDefs
   builtinCreate context compileEnv emitHelper unitShapeDefs venomInst
-  exprLowering exprLoweringEquations supportedExprTraverse vyperAST
+  exprLowering supportedExprTraverse vyperAST
+
+Theorem compile_multi_vvs_length:
+  !args cfn cenv st vs st'.
+    compile_multi_vvs cfn cenv args st = (vs, st') ==>
+    LENGTH vs = LENGTH args
+Proof
+  Induct >> simp[compile_multi_vvs_def, comp_return_def] >>
+  rpt gen_tac >>
+  simp[comp_bind_def] >>
+  pairarg_tac >> pairarg_tac >> simp[comp_return_def] >>
+  Cases_on `compile_multi_vvs cfn cenv args cs'` >>
+  simp[] >> strip_tac >> gvs[] >> first_x_assum drule >> simp[]
+QED
 
 Theorem compile_create_proxy_buf_shape[local]:
   shape_step internal compiler_label (\st. plain_operand st target)

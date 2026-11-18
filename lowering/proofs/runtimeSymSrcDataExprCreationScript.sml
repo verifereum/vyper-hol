@@ -1,30 +1,33 @@
 Theory runtimeSymSrcDataExprCreation
 Ancestors
+  symbolicSourceCompilerCreateFrame
   runtimeSymSrcDataFrame runtimeSymSrcDataExprCallbacks exprLowering compileEnv
+
+fun apply_symbolic_frame theorem =
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` theorem)))
 
 Theorem runtime_data_frame_create_ctor_tuple:
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
   (!vs p off. runtime_data_frame (compile_extcall_store_values cenv vs p off)) /\
-  runtime_data_frame (compile_multi_vvs cfn cenv es) ==>
+  (!copy vv. runtime_data_frame (compile_snapshot_vv cenv copy vv)) /\
+  (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
   runtime_data_frame (compile_create_ctor_tuple cfn cenv es)
 Proof
-  strip_tac >> simp[compile_create_ctor_tuple_def, comp_ignore_bind_def]
+  strip_tac >> apply_symbolic_frame symbolic_frame_create_ctor_tuple >> simp[]
 QED
 
 Theorem runtime_data_frame_create_blueprint_args:
+  (!copy vv. runtime_data_frame (compile_snapshot_vv cenv copy vv)) /\
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
   (!p s enc. runtime_data_frame (compile_abi_encode_to_buf p s enc)) /\
   runtime_data_frame (compile_create_ctor_tuple cfn cenv es) /\
   (!vv. runtime_data_frame (unwrap_value cenv vv)) /\
   (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
-  runtime_data_frame (compile_create_blueprint_args cfn cenv raw es)
+  runtime_data_frame (compile_create_blueprint_args cfn cenv raw later_es es)
 Proof
-  strip_tac >> Cases_on `raw`
-  >- (Cases_on `es` >> simp[compile_create_blueprint_args_def] >>
-      Cases_on `t` >> simp[compile_create_blueprint_args_def,
-        runtime_data_frame_lower_value] >>
-      Cases_on `t'` >> simp[compile_create_blueprint_args_def]) >>
-  rw[compile_create_blueprint_args_def] >> simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_create_blueprint_args >> simp[]
 QED
 
 Theorem runtime_data_frame_create_snapshot:
@@ -34,10 +37,7 @@ Theorem runtime_data_frame_create_snapshot:
   (!d s n. runtime_data_frame (compile_copy_memory_dynamic d s n)) ==>
   runtime_data_frame (compile_create_snapshot cenv vv ty)
 Proof
-  strip_tac >> simp[compile_create_snapshot_def, comp_ignore_bind_def] >>
-  match_mp_tac runtime_data_frame_bind >> simp[] >> gen_tac >>
-  Cases_on `vv_location vv` >> simp[] >>
-  rename1 `vv_location vv = SOME loc` >> Cases_on `loc` >> simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_create_snapshot >> simp[]
 QED
 
 Theorem runtime_data_frame_raw_create:
@@ -52,14 +52,7 @@ Theorem runtime_data_frame_raw_create:
   (!p n v s b. runtime_data_frame (compile_create_dispatch p n v s b)) ==>
   runtime_data_frame (compile_raw_create cfn cenv bytecode value es salt rof)
 Proof
-  strip_tac >> simp[compile_raw_create_def, comp_ignore_bind_def] >>
-  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac >- simp[] >>
-       gen_tac >> BETA_TAC) >>
-  match_mp_tac runtime_data_frame_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[] >>
-      rpt (match_mp_tac runtime_data_frame_bind >> conj_tac >- simp[] >>
-           gen_tac >> BETA_TAC) >> simp[]) >>
-  simp[pairTheory.FORALL_PROD]
+  strip_tac >> apply_symbolic_frame symbolic_frame_raw_create >> simp[]
 QED
 
 Theorem runtime_data_frame_create_call:
@@ -70,8 +63,8 @@ Theorem runtime_data_frame_create_call:
   (!is_lit v off. runtime_data_frame (compile_create_blueprint_check is_lit v off)) /\
   (!v w s off n p len b.
      runtime_data_frame (compile_create_blueprint_append v w s off n p len b)) /\
-  (!es raw. (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
-     runtime_data_frame (compile_create_blueprint_args cfn cenv raw es)) /\
+  (!es raw later_es. (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
+     runtime_data_frame (compile_create_blueprint_args cfn cenv raw later_es es)) /\
   (!bytecode value es salt b.
      runtime_data_frame (cfn cenv (expr_type bytecode) bytecode) /\
      runtime_data_frame (cfn cenv (expr_type value) value) /\
@@ -81,30 +74,5 @@ Theorem runtime_data_frame_create_call:
   (!e. MEM e args ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
   runtime_data_frame (compile_create_call cfn cenv ck has_salt rof args)
 Proof
-  strip_tac >> Cases_on `args` >> simp[compile_create_call_def] >>
-  Cases_on `t` >> simp[compile_create_call_def] >>
-  rename1 `target::value::rest` >>
-  Cases_on `ck` >> Cases_on `has_salt` >>
-  simp[compile_create_call_def, runtime_data_frame_lower_value,
-       runtime_data_frame_create_salt] >>
-  Cases_on `rest` >> simp[compile_create_call_def,
-    runtime_data_frame_lower_value, runtime_data_frame_create_salt] >>
-  gvs[] >>
-  simp[runtime_data_frame_lower_value, runtime_data_frame_create_salt] >>
-  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac
-       >- (simp[runtime_data_frame_lower_value, runtime_data_frame_create_salt] >>
-           rpt (BasicProvers.TOP_CASE_TAC >> simp[runtime_data_frame_lower_value])) >>
-       gen_tac >> BETA_TAC) >>
-  simp[]
-  >~ [`compile_create_blueprint_args`]
-  >- (Cases_on `t` >> gvs[] >>
-      rpt (match_mp_tac runtime_data_frame_bind >> conj_tac
-           >- (simp[runtime_data_frame_lower_value, runtime_data_frame_create_salt] >>
-               rpt (BasicProvers.TOP_CASE_TAC >> simp[runtime_data_frame_lower_value])) >>
-           gen_tac >> BETA_TAC) >>
-      pairarg_tac >> simp[])
-  >~ [`compile_create_blueprint_append`]
-  >- (pairarg_tac >> simp[]) >>
-  first_x_assum irule >> simp[] >>
-  metis_tac[rich_listTheory.MEM_FRONT, rich_listTheory.MEM_LAST, listTheory.MEM]
+  strip_tac >> apply_symbolic_frame symbolic_frame_create_call >> simp[]
 QED

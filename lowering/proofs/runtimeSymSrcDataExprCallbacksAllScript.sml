@@ -13,8 +13,7 @@ Theorem runtime_data_frame_create_call_composed:
   (!vv. runtime_data_frame (unwrap_value cenv vv)) /\
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
   (!vs p off. runtime_data_frame (compile_extcall_store_values cenv vs p off)) /\
-  (!es. (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
-    runtime_data_frame (compile_multi_vvs cfn cenv es)) /\
+  (!copy vv. runtime_data_frame (compile_snapshot_vv cenv copy vv)) /\
   (!p s enc. runtime_data_frame (compile_abi_encode_to_buf p s enc)) /\
   (!p d n loc. runtime_data_frame (compile_slot_to_memory p d n loc)) /\
   (!b a p d n off. runtime_data_frame (compile_imm_copy_to_memory b a p d n off)) /\

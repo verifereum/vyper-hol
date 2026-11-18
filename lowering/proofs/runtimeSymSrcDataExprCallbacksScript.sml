@@ -1,14 +1,20 @@
 Theory runtimeSymSrcDataExprCallbacks
 Ancestors
+  symbolicSourceCompilerCreateFrame
   symbolicSourceCompilerExprFrame
   runtimeSymSrcDataFrame exprLowering compileEnv
+
+fun apply_symbolic_frame theorem =
+  match_mp_tac (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` theorem)))
 
 Theorem runtime_data_frame_lower_value:
   runtime_data_frame (cfn cenv ty e) /\
   (!vv. runtime_data_frame (unwrap_value cenv vv)) ==>
   runtime_data_frame (lower_value cfn cenv ty e)
 Proof
-  simp[lower_value_def]
+  strip_tac >> apply_symbolic_frame symbolic_frame_lower_value >> simp[]
 QED
 
 Theorem runtime_data_frame_lower_value_with_loc:
@@ -190,5 +196,5 @@ Theorem runtime_data_frame_create_salt:
   (!e. opt = SOME e ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
   runtime_data_frame (compile_create_salt cfn cenv opt)
 Proof
-  Cases_on `opt` >> simp[compile_create_salt_def, runtime_data_frame_lower_value]
+  strip_tac >> apply_symbolic_frame symbolic_frame_create_salt >> simp[]
 QED

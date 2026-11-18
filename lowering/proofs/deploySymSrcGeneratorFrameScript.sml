@@ -41,8 +41,12 @@ Theorem deploy_blocks_frame_create_call_closed:
   (!ty e. deploy_blocks_frame (cf ce ty e)) ==>
   deploy_blocks_frame (compile_create_call cf ce ck salt rof args)
 Proof
-  strip_tac >> irule deploy_blocks_frame_create_call >> simp[] >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >> simp[]
+  strip_tac >>
+  `!copy vv. deploy_blocks_frame (compile_snapshot_vv ce copy vv)` by
+    (rpt gen_tac >> irule deploy_blocks_frame_snapshot_vv >> simp[]) >>
+  `!es. deploy_blocks_frame (compile_create_ctor_tuple cf ce es)` by
+    (gen_tac >> irule deploy_blocks_frame_create_ctor_tuple >> simp[]) >>
+  irule deploy_blocks_frame_create_call >> simp[]
 QED
 
 val _ = augment_srw_ss [rewrites [deploy_blocks_frame_create_call_closed]];
