@@ -1,5 +1,5 @@
 Theory runtimeSymSrcDataStmt
-Ancestors runtimeSymSrcDataCustomError
+Ancestors runtimeSymSrcDataCustomError runtimeSymSrcDataContext
   runtimeSymSrcDataFrame stmtLowering compileEnv
 
 (* Distribute the projection frame through control selection, keeping branch
