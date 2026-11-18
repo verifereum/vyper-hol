@@ -40,16 +40,7 @@
  *     380-386), a non-exempt error, and obs_pre (the trace before g's
  *     outcome) is a valid horizon.
  *
- * (B) Outcome index.  The k-th recorded request's outcome was claimed to be
- *     EL (recorded_outcomes_count obs_pre) vs.vs_outcomes, but take_outcome
- *     consumes an entry for computed precompiles too while record_request
- *     skips them; and the builtins ECRecover, ECAdd, ECMul and Sha256 take
- *     one through precompile_call_success (vyperInterpreterScript.sml:
- *     1336-1345) with no trace event at all, so no count over obs_pre is
- *     the index (an earlier draft counted every StorageOutcome; witness:
- *     `p: uint256[2] = ecadd([1, 2], [1, 2])` then
- *     `return extcall I(a).g()`, whose call reads entry 1 after zero
- *     StorageOutcomes).  Now: requests are indexed by
+ * (B) Outcome index.  Requests are indexed by
  *     recorded_outcomes_count obs_pre, and the outcome is read from the raw
  *     state s whose step issues request k, before its take_outcome: HD
  *     s.vs_outcomes, or failed_outcome rq when s.vs_outcomes = [].  The step
