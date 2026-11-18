@@ -5,8 +5,7 @@ Ancestors
   gasFocusFmpCutSites gasFocusChronologicalCut gasFocusFmpStagePin
   gasFocusFmpRetPoint fmpStageFmpStepsLedgerRestrict
   fmpStageFmpStepsRetSource fmpStageFmpStepsRetCaller
-  fmpStageFmpStepsRetInvokeCode fmpStageFmpStepsRetInvokeObserved
-  fmpStageFmpStepsRetInvokeOrigin fmpStageFmpStepsCallAbi
+  fmpStageFmpStepsRetInvokeCode gasFocusFmpCutInvokeOutputs
   fmpStageFmpStepsInvokePosition fmpStageFmpStepsRetBind
   fmpStageFmpStepsRetAnalysis fmpStageFmpStepsRetFresh
   concretizeStageLookup concretizePtrChronologicalHistory fmpStepBridge
@@ -70,48 +69,6 @@ Proof
   metis_tac[LESS_LESS_EQ_TRANS]
 QED
 
-Theorem pop_observed_nonpublishing[local]:
-  ctx_pass_stage rp (CFP_Simple VP_FmpLowering) (o1_walk_view rp 3) C C' /\
-  fmp_free_ctx C /\ o1_walk_view rp 3 C' fn observed /\
-  ctx_fn_names observed.cu_context = ctx_fn_names C /\
-  MEM name (fn_invoke_targets fn) /\
-  lookup_function name observed.cu_context.ctx_functions = SOME g ==>
-  !sig. g.fn_fmp_signature = SOME sig ==> ~sig.fms_publishes
-Proof
-  strip_tac >>
-  `MEM name (ctx_fn_names observed.cu_context)` by
-    (drule lookup_function_MEM >> drule fmpAnalysisPropsTheory.lookup_function_name >>
-     rpt strip_tac >> pure_rewrite_tac[ctx_fn_names_def, MEM_MAP] >> metis_tac[]) >>
-  `?src. lookup_function name C.ctx_functions = SOME src` by
-    (Cases_on `lookup_function name C.ctx_functions` >>
-     gvs[ctx_fn_names_def] >> metis_tac[lookup_function_not_mem]) >>
-  drule_all fmp_return_stage_callee_signature >> strip_tac >>
-  drule_all fmp_call_walk_signature >> strip_tac >> gvs[]
-QED
-
-Theorem pop_invoke_outputs[local]:
-  ctx_pass_stage rp (CFP_Simple VP_FmpLowering) (o1_walk_view rp 3) C C' /\
-  fmp_free_ctx C /\ lookup_function fn.fn_name C.ctx_functions = SOME fn /\
-  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
-  fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
-  MEM j (fn_insts fn') /\ j.inst_opcode = INVOKE /\ j.inst_id = inst.inst_id ==>
-  j.inst_outputs = inst.inst_outputs
-Proof
-  strip_tac >> drule_all ctx_pass_stage_lookup >> strip_tac >> gvs[] >>
-  drule fmp_fn_pass_step_result >> strip_tac >>
-  `!i name args callee sig.
-     MEM i (fn_insts fn) /\ i.inst_opcode = INVOKE /\
-     i.inst_operands = Label name::args /\
-     lookup_function name observed.cu_context.ctx_functions = SOME callee /\
-     callee.fn_fmp_signature = SOME sig ==> ~sig.fms_publishes` by
-    (rpt strip_tac >>
-     `MEM name (fn_invoke_targets fn)` by
-       (simp[concretizeAnalysisMetadataOwnershipTheory.invoke_target_instruction] >> metis_tac[]) >>
-     drule_all pop_observed_nonpublishing >> simp[]) >>
-  drule fmp_return_function_origin >> disch_then (qspec_then `j` mp_tac) >>
-  simp[] >> strip_tac >> metis_tac[fn_inst_ids_distinct_inj]
-QED
-
 Theorem pop_resume_caller[local]:
   ctx_pass_stage rp (CFP_Simple VP_FmpLowering) (o1_walk_view rp 3) C C' /\
   o1_ctx_shape C /\ fmp_free_ctx C /\ ssa_form fn /\ pre_fmp_ops fn /\
@@ -155,7 +112,8 @@ Proof
      first_assum ACCEPT_TAC) >>
   drule_all frame_reachable_dfs >> strip_tac >>
   drule_all fmp_frame_invoke_position >> strip_tac >>
-  `j.inst_outputs = inst.inst_outputs` by (drule_all pop_invoke_outputs >> simp[]) >>
+  `j.inst_outputs = inst.inst_outputs` by
+    (drule_all focus_fmp_cut_invoke_outputs >> simp[]) >>
   `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
         MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
         s.vs_inst_idx < LENGTH bb.bb_instructions /\
