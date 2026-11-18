@@ -366,6 +366,81 @@ Proof
   qexists `st'` >> gvs[]
 QED
 
+(* Once the concrete executions have supplied their output and memory effects,
+   all other fields follow from nonterminator preservation. *)
+Theorem cut_ordinary_stage_suc[local]:
+  wf_function fn /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
+  MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\ EL s.vs_inst_idx bb.bb_instructions = inst /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM; SETFMP] /\
+  ~is_alloca_op inst.inst_opcode /\
+  (!infos ctx runner rl rp.
+    fmp_stage_lowered infos ctx runner fn fn' /\
+    fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
+    (fn_is_context_entry ctx fn ==> entry_fn_no_params fn) /\
+    ~MEM runner inst.inst_outputs) /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts /\
+  step_inst_base inst s = OK s1 /\ step_inst_base inst t = OK t1 /\
+  (!env. fmp_base_analyze (fn_insts fn) = SOME env /\
+     fmp_frame_covers sm env (fmp_frame_base raw0 stk) lo G ==>
+     fmp_frame_covers sm env (fmp_frame_base raw0 stk) lo (step_prov PG G inst s1)) /\
+  (!v x. MEM v inst.inst_outputs /\ FLOOKUP s1.vs_vars v = SOME x ==>
+    ?y. FLOOKUP t1.vs_vars v = SOME y /\
+      (~retpc_var fn v ==> fmp_value_rel sm
+        (FLOOKUP (step_prov PG G inst s1) v)
+        (op_taint (step_taint inst s s1 tn) (Var v)) x y)) /\
+  ld_memory_agree (fmp_ld_sites sm) eom
+    (step_taint inst s s1 tn).t_mem s1.vs_memory t1.vs_memory /\
+  ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn) s1 t1 /\
+  s1.vs_returndata = t1.vs_returndata ==>
+  fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG
+    (step_prov PG G inst s1) (step_taint inst s s1 tn) fn
+    (s1 with vs_inst_idx := SUC s.vs_inst_idx) lo
+    (t1 with vs_inst_idx := SUC t.vs_inst_idx) ts
+Proof
+  strip_tac >>
+  map_every (fn eq => qpat_assum eq
+    (mp_then (Pat `step_inst_base _ _ = OK _`) mp_tac step_inst_base_preserves_all) >>
+    simp[] >> strip_tac)
+    [`step_inst_base inst s = OK s1`, `step_inst_base inst t = OK t1`] >>
+  qpat_assum `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [fmp_stage_rel_def]) >>
+  `fn'' = fn'` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `fn'' = fn'` SUBST_ALL_TAC >>
+  `fmp_env_rel sm fn (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+     G tn.t_var s t` by fs[fmp_frame_rel_def] >>
+  `fmp_env_rel sm fn (live_vars_at (liveness_analyze fn) s.vs_current_bb (SUC s.vs_inst_idx))
+    (step_prov PG G inst s1) (step_taint inst s s1 tn).t_var
+    (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+    (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (simp[fmp_env_rel_def] >> rpt strip_tac >> Cases_on `MEM v inst.inst_outputs`
+     >- (qpat_assum `!v x. MEM v inst.inst_outputs /\ _ ==> _`
+           (drule_all_then strip_assume_tac) >> qexists `y` >> fs[op_taint_def]) >>
+     `FLOOKUP s.vs_vars v = SOME x /\ FLOOKUP t1.vs_vars v = FLOOKUP t.vs_vars v` by
+       gvs[GSYM lookup_var_def] >>
+     qpat_assum `fmp_env_rel _ _ _ _ _ _ _`
+       (qspecl_then [`v`, `x`] mp_tac o REWRITE_RULE [fmp_env_rel_def]) >>
+     simp[] >> strip_tac >> qexists `y` >>
+     simp[step_prov_other_output] >> strip_tac >>
+     `MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)` by
+       (drule live_vars_at_propagate >> simp[inst_defs_def] >>
+        disch_then irule >> simp[] >> qexists `bb` >> simp[]) >>
+     `op_taint (step_taint inst s s1 tn) (Var v) = op_taint tn (Var v)` by
+       simp[step_taint_other_output] >>
+     fs[op_taint_def]) >>
+  rewrite_tac[fmp_stage_rel_def] >>
+  conj_tac >- gvs[] >>
+  conj_tac >-
+    (qexists `fn'` >> conj_tac >- first_assum ACCEPT_TAC >>
+     irule cut_ordinary_frame_suc >> gs[] >> metis_tac[]) >>
+  qpat_assum `ld_shared_agree D _ _ s1 t1`
+    (mp_tac o REWRITE_RULE [ld_shared_agree_def]) >>
+  simp[ld_shared_agree_def]
+QED
+
 Theorem cut_gas_frame_suc[local]:
   wf_function fn /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
   MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
