@@ -9,6 +9,7 @@ Ancestors
   abiDecoderGuards emitHelper calldataCountGuardRejectOrigin calldataNoneArrayIteration
   abiDecoderCoherence calldataSourceCorrespondence calldataSourceSize calldataSourceDecisions
   abiDecoderFrame abiCallerAllocation abiDecoderCounters abiDecoderRecursiveLoopLayout
+  gasOriginPtrLabels
   calldataDynInit fragBlockPath valueEncoding exprLowering abiDecoderLoopEmit entryDecoderStateFrame
   compileEnv emitHelperProps venomState venomInst venomExecSemantics
   venomMemDefs bodyPtrDefs ptrSafetyTransport codegenRel contextCodegenRel
@@ -436,5 +437,464 @@ Proof
   drule_all none_array_first_header >>
   disch_then (qspec_then `PG` (qx_choose_then `first` (qx_choose_then `A0`
     (qx_choose_then `tn0` (qx_choose_then `q` (map_every assume_tac o CONJUNCTS)))))) >>
-  FAIL_TAC "passing fold"
+  qabbrev_tac `cnt = w2n (abi_decode_load CALLDATALOAD sw initial)` >>
+  qabbrev_tac `sb = w2n sw` >>
+  `n2w sb : bytes32 = sw /\ cnt < dimword(:256) /\
+   abi_decode_load CALLDATALOAD sw initial = n2w cnt /\
+   w2n (cd_word initial.vs_call_ctx.cc_calldata sb) = cnt` by
+    simp[Abbr `sb`, Abbr `cnt`, w2n_lt, calldata_decode_load_word] >>
+  `cnt <= maxn` by
+    (`maxn MOD dimword(:256) <= maxn` by simp[MOD_LESS_EQ] >>
+     qpat_assum `cnt <= _` mp_tac >> decide_tac) >>
+  Q_TAC (fn tm => SUBGOAL_THEN tm assume_tac) `tv_abi_dynamic tv \/ tv_needs_clamp tv`
+  >- (qpat_assum `abi_decoder_coherent ce env sf ty tv`
+       (fn th => qpat_assum `is_abi_dynamic _ ty \/ _`
+         (ACCEPT_TAC o PURE_REWRITE_RULE
+           [MATCH_MP calldata_coherent_dynamic th, MATCH_MP calldata_coherent_clamp th]))) >>
+  `DISJOINT {x | slot <= x /\ x < slot+32} tn0.t_mem /\ tn0.t_mem SUBSET tn.t_mem` by
+    (qpat_assum `tn0.t_mem = _` SUBST1_TAC >>
+     POP_ASSUM_LIST (K all_tac) >> SET_TAC[]) >>
+  `middle.cs_next_var <= st1.cs_next_var` by
+    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ middle = _`
+      (mp_tac o MATCH_MP abi_decoder_variable_counter) >> simp[]) >>
+  `last.cs_next_var = st1.cs_next_var + 1` by
+    (qpat_assum `abi_decode_loop_suffix _ _ _ _ st1 = _` mp_tac >>
+     qpat_assum `FST ops = _` (fn th =>
+       simp[NoAsms,th,abi_decode_loop_suffix_shape]) >>
+     disch_then (fn th => simp[NoAsms, GSYM th, abi_decode_loop_suffix_state_def])) >>
+  `st0.cs_next_var = loop_st.cs_next_var + 4` by
+    (qpat_assum `abi_decode_loop_prefix _ _ _ _ loop_st = _` mp_tac >>
+     simp[NoAsms,abi_decode_loop_prefix_shape] >>
+     disch_then (fn th => simp[NoAsms,GSYM (CONJUNCT2 th),
+       abi_decode_loop_prefix_state_def,abi_decode_position_header_delta_def])) >>
+  `loop_st.cs_next_var + 3 < middle.cs_next_var` by
+    (qpat_assum `!op. abi_decoder_operand_live st0.cs_next_var op ==> _` mp_tac >>
+     simp[NoAsms,abi_decoder_operand_live_def,abi_decoder_older_vars_def] >>
+     disch_then (qspec_then `Var (STRING #"%" (toString (loop_st.cs_next_var+3)))` mp_tac) >>
+     simp[NoAsms,ASCIInumbersTheory.toString_inj] >>
+     decide_tac) >>
+  `st1.cs_next_var < limit.cs_next_var /\ loop_st.cs_next_var <= limit.cs_next_var` by decide_tac >>
+  qmatch_asmsub_abbrev_tac `lookup_block (FST labels) fn.fn_blocks = SOME hdr_bb` >>
+  qmatch_asmsub_abbrev_tac `lookup_block st1.cs_current_bb fn.fn_blocks = SOME back_bb` >>
+  `phi_prefix_length hdr_bb.bb_instructions = 0 /\
+    (st1.cs_current_insts = [] ==> phi_prefix_length back_bb.bb_instructions = 0)` by
+    simp[NoAsms, Abbr `hdr_bb`, Abbr `back_bb`, abi_decode_header_insts_def,
+      abi_decode_backedge_insts_def, phi_prefix_length_def, mk_inst_def] >>
+  qabbrev_tac `iv = STRING #"%" (toString loop_st.cs_next_var)` >>
+  qabbrev_tac `cv = STRING #"%" (toString (loop_st.cs_next_var+1))` >>
+  qabbrev_tac `cmp = STRING #"%" (toString (loop_st.cs_next_var+2))` >>
+  qabbrev_tac `done = STRING #"%" (toString (loop_st.cs_next_var+3))` >>
+  qabbrev_tac `ix = STRING #"%" (toString st0.cs_next_var)` >>
+  qabbrev_tac `nv = STRING #"%" (toString st1.cs_next_var)` >>
+  qabbrev_tac `protect = {x | x = q \/ not_fresh_at st x}` >>
+  `q IN protect /\ root IN protect /\ (!x. src = Var x ==> x IN protect)` by
+    (simp[NoAsms,Abbr `protect`,GSYM calldataDynOwnedTheory.calldata_operand_live_not_fresh] >>
+     (conj_tac >- asm_rewrite_tac[]) >> gen_tac >> disch_tac >>
+     pop_assum (fn th => qpat_assum `abi_decoder_operand_live st.cs_next_var src`
+       (mp_tac o REWRITE_RULE[th])) >>
+     disch_then (fn th => simp[NoAsms,th])) >>
+  `!x. x IN protect ==> not_fresh_at st0 x /\ not_fresh_at middle x /\
+       ~MEM x [iv;cv;cmp;done] /\ x <> nv` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!op. op = src \/ _ ==> _` (qspec_then `Var x` mp_tac) >>
+     (impl_tac >- (qpat_assum `x IN protect` mp_tac >>
+       qpat_assum `ip = Var q` (fn th =>
+         simp[NoAsms,Abbr `protect`,th,GSYM calldataDynOwnedTheory.calldata_operand_live_not_fresh]))) >>
+     disch_then (fn th =>
+       (map_every assume_tac (CONJUNCTS th) >>
+        qpat_assum `!op. abi_decoder_operand_live st0.cs_next_var op ==> _`
+          (qspec_then `Var x` drule) >>
+        mp_tac th >>
+        simp[NoAsms,MEM,GSYM calldataDynOwnedTheory.calldata_operand_live_not_fresh]))) >>
+  `ALL_DISTINCT [q;iv;cv;cmp;done]` by
+     (qpat_assum `!x. x IN protect ==> not_fresh_at st0 x /\ _` (qspec_then `q` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >>
+      simp[NoAsms,ALL_DISTINCT,MEM,Abbr `iv`,Abbr `cv`,Abbr `cmp`,Abbr `done`,
+           ASCIInumbersTheory.toString_inj]) >>
+  `!x. MEM x [iv;cv;cmp;done] ==>
+       ?k. x = STRING #"%" (toString k) /\ k < limit.cs_next_var` by
+    (simp[NoAsms,Abbr `iv`,Abbr `cv`,Abbr `cmp`,Abbr `done`,
+          DISJ_IMP_THM, FORALL_AND_THM, ASCIInumbersTheory.toString_inj] >>
+     decide_tac) >>
+  `abi_decoder_operand_live st0.cs_next_var src /\ src <> Var iv` by
+    (qpat_assum `!op. op = src \/ _ ==> _` (qspec_then `src` mp_tac) >> simp[NoAsms]) >>
+  `hdr_bb.bb_instructions = abi_decode_header_insts (loop_st.cs_next_id+1)
+         (Var q) src CALLDATALOAD iv cv cmp done (FST (SND labels)) (SND (SND labels)) /\
+   back_bb.bb_instructions = st1.cs_current_insts ++ abi_decode_backedge_insts
+         st1.cs_next_id ix nv (Var q) (FST labels)` by
+    (qpat_assum `ip = Var q` (fn th => simp[NoAsms,Abbr `hdr_bb`,Abbr `back_bb`,th])) >>
+  `st1.cs_current_insts = [] ==> !b. lookup_block st1.cs_current_bb fn.fn_blocks = SOME b ==>
+       phi_prefix_length b.bb_instructions = 0` by
+    (asm_rewrite_tac[] >> simp[NoAsms] >> disch_tac >> first_assum irule >> asm_rewrite_tac[]) >>
+  qabbrev_tac `Q = \s A ta.
+    ~s.vs_halted /\ s.vs_call_ctx = initial.vs_call_ctx /\
+    s.vs_data_section = initial.vs_data_section /\ s.vs_labels = initial.vs_labels /\
+    alloca_inv s /\ alloca_frontier_inv ctx fn site s /\ allocas_from lo s /\
+    initial.vs_alloca_next <= s.vs_alloca_next /\ fresh_vars_wrt limit s /\
+    ptr_covers A ta root s cap /\
+    (!id p k. st.cs_next_id <= id /\ id < last.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (p,k) ==>
+      k = 32 /\ p < dimword (:256) /\ p+32 <= s.vs_alloca_next /\
+      ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\ ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+    (!id p k. FLOOKUP initial.vs_allocas id = SOME (p,k) ==> FLOOKUP s.vs_allocas id = SOME (p,k)) /\
+    (!id. id < st.cs_next_id \/ last.cs_next_id <= id ==> FLOOKUP s.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (!x. not_fresh_at st x ==> lookup_var x s = lookup_var x initial /\
+        FLOOKUP A x = FLOOKUP G x /\ op_taint ta (Var x) = op_taint tn (Var x)) /\
+    ta.t_mem SUBSET tn.t_mem /\ ta.t_stor = tn.t_stor /\ ta.t_trans = tn.t_trans /\ ta.t_imm = tn.t_imm /\
+    (?sc. abi_decode_footprint_frame ((d,cap)::(slot,32)::sc) initial s /\
+      !p k. MEM (p,k) sc ==> ?id. st.cs_next_id <= id /\ id < last.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (p,k))` >>
+  qabbrev_tac `H = \i s A ta. Q s A ta /\ i <= cnt /\
+    s.vs_current_bb = FST labels /\ s.vs_inst_idx = 0 /\
+    lookup_var q s = SOME (n2w slot) /\ ptr_covers A ta q s 32 /\
+    mload slot s = n2w i /\ DISJOINT {x | slot <= x /\ x < slot+32} ta.t_mem /\
+    slot+32 <= s.vs_alloca_next /\ FLOOKUP s.vs_allocas header_st.cs_next_id = SOME (slot,32)` >>
+  qabbrev_tac `R = \s A ta. Q s A ta /\ s.vs_current_bb = SND (SND labels) /\
+    s.vs_inst_idx = 0 /\ FLOOKUP s.vs_allocas header_st.cs_next_id = SOME (slot,32)` >>
+  `!s A ta t B u. (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+        (s,A,ta) [] (OK t,B,u)) ==> t.vs_labels = s.vs_labels` by
+    (rpt gen_tac >> disch_then (qspecl_then [`ARB`,`ARB`]
+      (ACCEPT_TAC o MATCH_MP gas_origin_ptr_path_preserves_labels))) >>
+  `not_fresh_at st root` by
+     (qpat_assum `abi_decoder_operand_live st.cs_next_var (Var root)` mp_tac >>
+      simp[NoAsms,calldataDynOwnedTheory.calldata_operand_live_not_fresh]) >>
+  `!x. src = Var x ==> not_fresh_at st x` by
+     (gen_tac >> disch_then (fn th => qpat_assum `abi_decoder_operand_live st.cs_next_var src`
+        (mp_tac o REWRITE_RULE[th])) >> simp[NoAsms,calldataDynOwnedTheory.calldata_operand_live_not_fresh]) >>
+  `!s A ta. Q s A ta ==>
+    lookup_var root s = SOME (n2w d) /\ eval_operand src s = SOME sw /\
+    op_taint ta src = {} /\ op_prov A src = NONE /\
+    abi_decode_load CALLDATALOAD sw s = n2w cnt` by
+    (simp[NoAsms,Abbr `Q`] >> rpt gen_tac >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     `lookup_var root s = lookup_var root initial` by
+       (qpat_assum `!x. not_fresh_at st x ==> lookup_var x s = _ /\ _`
+          (qspec_then `root` drule) >> disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+     `abi_decode_load CALLDATALOAD sw s = n2w cnt` by
+       (qpat_assum `abi_decode_load CALLDATALOAD sw initial = _` mp_tac >>
+        qpat_assum `s.vs_call_ctx = initial.vs_call_ctx` (fn th =>
+          simp[NoAsms,calldata_decode_load_word,th])) >>
+     qpat_assum `lookup_var root initial = _` (fn th =>
+       qpat_assum `lookup_var root s = _` (fn th' =>
+         qpat_assum `abi_decode_load CALLDATALOAD sw s = _` (fn th'' =>
+           simp[NoAsms,th,th',th'']))) >>
+     qpat_assum `!x. not_fresh_at st x ==> lookup_var x s = _ /\ _` mp_tac >>
+     qpat_assum `!x. src = Var x ==> not_fresh_at st x` mp_tac >>
+     qpat_assum `eval_operand src initial = _` mp_tac >>
+     qpat_assum `op_taint tn src = _` mp_tac >>
+     qpat_assum `op_prov G src = _` mp_tac >>
+     qpat_assum `s.vs_labels = initial.vs_labels` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `src` >>
+     simp[eval_operand_def,op_taint_def,op_prov_def]) >>
+  mp_tac (Q.INST [`H` |-> `H`, `R` |-> `R`, `cnt` |-> `cnt`,
+    `cd` |-> `initial.vs_call_ctx.cc_calldata`, `arr_head` |-> `cd_at F sb 32`]
+    none_nonbulk_suffix_paths) >>
+  impl_tac
+  >- (reverse conj_tac >- suspend "exit" >> suspend "iteration") >>
+  disch_then (qspecl_then [`cnt`,`0`,`first`,`A0`,`tn0`] mp_tac) >>
+  rewrite_tac[ADD_CLAUSES] >> impl_tac
+  >- suspend "initial" >> suspend "compose"
 QED
+
+Resume none_nonbulk_fold_paths[exit]:
+  map_every qx_gen_tac [`s`,`A`,`ta`] >>
+  simp[NoAsms,Abbr `H`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `!s A ta. Q s A ta ==> _` drule >> strip_tac >>
+  (qpat_assum `Q s A ta` mp_tac >> simp[NoAsms, Abbr `Q`]) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME hdr_bb` by asm_rewrite_tac[] >>
+  mp_tac (Q.INST [`bb` |-> `hdr_bb`, `id` |-> `loop_st.cs_next_id+1`,
+    `G` |-> `A`, `tn` |-> `ta`, `body_lbl` |-> `FST (SND (labels:string#string#string))`,
+    `exit_lbl` |-> `SND (SND (labels:string#string#string))`] none_array_final_header) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  disch_then (qx_choose_then `v` (qx_choose_then `B` (qx_choose_then `u`
+    (map_every assume_tac o CONJUNCTS)))) >>
+  qexistsl_tac [`v`,`B`,`u`] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  simp[NoAsms,Abbr `R`] >>
+  `!x. not_fresh_at st x ==> ~MEM x [iv;cv;cmp;done]` by
+    (gen_tac >> disch_tac >>
+     `x IN protect` by simp[Abbr `protect`] >>
+     qpat_assum `!x. x IN protect ==> not_fresh_at st0 x /\ _` (qspec_then `x` drule) >>
+     disch_then (ACCEPT_TAC o cj 3)) >>
+  `!x. not_fresh_at st x ==> lookup_var x v = lookup_var x s /\
+      FLOOKUP B x = FLOOKUP A x /\ op_taint u (Var x) = op_taint ta (Var x)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!x. ~MEM x _ ==> lookup_var x v = _ /\ _` (qspec_then `x` mp_tac) >> simp[]) >>
+  `ptr_covers B u root v cap` by
+    (qpat_assum `!x. not_fresh_at st x ==> lookup_var x v = _ /\ _`
+       (qspec_then `root` drule) >> strip_tac >>
+     drule_all decoderGhostFramePtrTheory.ptr_covers_frame >> simp[]) >>
+  `v.vs_labels = s.vs_labels` by
+    (qpat_assum `!s A ta t B u. _ ==> t.vs_labels = s.vs_labels`
+       (qspecl_then [`s`,`A`,`ta`,`v`,`B`,`u`] drule) >> simp[]) >>
+  `fresh_vars_wrt limit v` by
+    (qpat_assum `!limit. _ ==> fresh_vars_wrt limit v` (qspec_then `limit` irule) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `alloca_inv v /\ alloca_frontier_inv ctx fn site v` by
+    (conj_tac >- (first_assum irule >> first_assum ACCEPT_TAC) >>
+     first_assum irule >> first_assum ACCEPT_TAC) >>
+  asm_rewrite_tac[] >>
+  conj_tac
+  >- (gen_tac >> disch_tac >>
+      qpat_assum `!x. not_fresh_at st x ==> lookup_var x v = _ /\ _`
+        (qspec_then `x` drule) >>
+      qpat_assum `!x. not_fresh_at st x ==> lookup_var x s = _ /\ _`
+        (qspec_then `x` drule) >>
+      disch_then (fn th => disch_then (fn th' => simp[NoAsms,th,th']))) >>
+  qpat_assum `?sc. abi_decode_footprint_frame _ initial s /\ _`
+    (qx_choose_then `sc` (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  qexists_tac `sc` >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_assum `abi_decode_footprint_frame _ initial s` mp_tac >>
+  qpat_assum `v.vs_memory = s.vs_memory` (fn m =>
+    qpat_assum `v.vs_call_ctx = s.vs_call_ctx` (fn c =>
+      qpat_assum `v.vs_data_section = s.vs_data_section` (fn d =>
+        simp[NoAsms,abi_decode_footprint_frame_def,m,c,d])))
+QED
+
+Resume none_nonbulk_fold_paths[iteration]:
+  map_every qx_gen_tac [`i`,`s`,`A`,`ta`] >>
+  simp[NoAsms,Abbr `H`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `!s A ta. Q s A ta ==> _` drule >> strip_tac >>
+  qpat_assum `Abbrev (Q = _)` (fn def =>
+    qpat_assum `Q s A ta`
+      (map_every assume_tac o CONJUNCTS o BETA_RULE o
+        REWRITE_RULE[REWRITE_RULE[markerTheory.Abbrev_def] def])) >>
+  `32+i*type_memory_size tv+type_memory_size tv <= cap` by
+    (`SUC i <= maxn` by decide_tac >>
+     `SUC i * type_memory_size tv <= maxn * type_memory_size tv` by
+       (irule numberTheory.LE_MONO_MULT2 >> simp[]) >>
+     pop_assum mp_tac >>
+     qpat_assum `Abbrev (cap = _)` (fn th =>
+       rewrite_tac[REWRITE_RULE[markerTheory.Abbrev_def] th, MULT_CLAUSES, ADD_ASSOC]) >>
+     decide_tac) >>
+  `FLOOKUP s.vs_allocas oid = SOME (base_addr,owner_cap)` by
+    (first_assum irule >> first_assum ACCEPT_TAC) >>
+  (SUBGOAL_THEN ``oid < middle.cs_next_id \/ st1.cs_next_id <= oid`` assume_tac
+   >- decide_tac) >>
+  `lo <= s.vs_alloca_next` by decide_tac >>
+  `!id p k. middle.cs_next_id <= id /\ id < st1.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (p,k) ==>
+    k = 32 /\ p < dimword (:256) /\ p+32 <= s.vs_alloca_next /\
+    ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\ ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]` by
+    (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     qpat_assum `!id p k. st.cs_next_id <= id /\ _ /\ FLOOKUP s.vs_allocas id = SOME (p,k) ==> _`
+       (qspecl_then [`id`,`p`,`k`] mp_tac) >>
+     `st.cs_next_id <= id /\ id < last.cs_next_id` by decide_tac >>
+     (impl_tac >- asm_rewrite_tac[]) >> disch_then ACCEPT_TAC) >>
+  mp_tac (none_array_iteration_paths |>
+    CONV_RULE (REWR_CONV LET_THM THENC BETA_CONV THENC REWR_CONV LET_THM THENC BETA_CONV) |>
+    Q.INST [`st` |-> `st0`, `ready` |-> `middle`, `last` |-> `st1`, `j` |-> `i`,
+      `G` |-> `A`, `tn` |-> `ta`, `hid` |-> `loop_st.cs_next_id+1`,
+      `hdr` |-> `FST (labels:string#string#string)`,
+      `body_lbl` |-> `FST (SND (labels:string#string#string))`,
+      `exit_lbl` |-> `SND (SND (labels:string#string#string))`,
+      `counter_id` |-> `header_st.cs_next_id`]) >>
+  (impl_tac >-
+    (asm_rewrite_tac[] >> conj_tac
+     >- (qpat_assum `ip = Var q` (fn th => rewrite_tac[GSYM th]) >> first_assum ACCEPT_TAC) >>
+     conj_tac >- simp[NoAsms, Abbr `nv`] >>
+     conj_tac >- decide_tac >>
+     map_every qx_gen_tac [`a`,`C`,`ct`,`child`] >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     qmatch_asmsub_abbrev_tac `eval_operand (FST (SND ops)) a = SOME (n2w pos : bytes32)` >>
+     qmatch_asmsub_abbrev_tac `lookup_var child a = SOME (n2w e : bytes32)` >>
+     qpat_assum `!a b child sop s p e A ta. _`
+       (qspecl_then [`middle`,`st1`,`child`,`FST (SND ops)`,`a`,
+         `n2w pos : bytes32`,`e`,`C`,`ct`] mp_tac) >>
+     (impl_tac >-
+       (asm_rewrite_tac[eval_operand_def] >> conj_tac
+        >- (qpat_assum `SND (SND ops) = Var child` (fn th => rewrite_tac[GSYM th]) >>
+            first_assum ACCEPT_TAC) >>
+        qpat_assum `Abbrev (e = _)` (fn th => rewrite_tac[REWRITE_RULE[markerTheory.Abbrev_def] th]) >>
+        decide_tac)) >>
+     (disch_then (DISJ_CASES_THEN2 assume_tac
+       (qx_choose_then `r` (qx_choose_then `sc` (qx_choose_then `B` (qx_choose_then `u`
+         (map_every assume_tac o CONJUNCTS))))))
+      >- (disj1_tac >> first_assum ACCEPT_TAC)) >>
+     disj2_tac >> qexistsl_tac [`r`,`B`,`u`,`sc`] >> asm_rewrite_tac[])) >>
+  (disch_then (DISJ_CASES_THEN2 assume_tac
+    (qx_choose_then `t` (qx_choose_then `B` (qx_choose_then `u` (qx_choose_then `new`
+      (map_every assume_tac o CONJUNCTS))))))
+   >- (disj1_tac >> first_assum ACCEPT_TAC)) >>
+  disj2_tac >> qexistsl_tac [`t`,`B`,`u`] >>
+  reverse conj_tac
+  >- (reverse conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_assum `s.vs_call_ctx = initial.vs_call_ctx` (fn eq =>
+        qpat_assum `IS_SOME (cd_decode F s.vs_call_ctx.cc_calldata tv _)`
+          (ACCEPT_TAC o REWRITE_RULE[eq]))) >>
+  `t.vs_labels = s.vs_labels` by
+    (qpat_assum `!s A ta t B u. _ ==> t.vs_labels = s.vs_labels`
+      (qspecl_then [`s`,`A`,`ta`,`t`,`B`,`u`] drule) >> simp[]) >>
+  `!x. not_fresh_at st x ==> lookup_var x t = lookup_var x initial /\
+     FLOOKUP B x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> disch_tac >>
+     `x IN protect` by simp[Abbr `protect`] >>
+     qpat_assum `!x. x IN protect ==> lookup_var x t = _ /\ _` (qspec_then `x` drule) >>
+     qpat_assum `!x. not_fresh_at st x ==> lookup_var x s = _ /\ _` (qspec_then `x` drule) >>
+     disch_then (fn th => disch_then (fn th' => rewrite_tac[th,th']))) >>
+  `lookup_var q t = SOME (n2w slot)` by
+    (qpat_assum `!x. x IN protect ==> lookup_var x t = _ /\ _` (qspec_then `q` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (fn th => rewrite_tac[CONJUNCT1 th] >> first_assum ACCEPT_TAC)) >>
+  `slot+32 <= t.vs_alloca_next` by decide_tac >>
+  `FLOOKUP t.vs_allocas header_st.cs_next_id = SOME (slot,32)` by
+    (qpat_assum `!id p k. FLOOKUP s.vs_allocas id = SOME (p,k) ==> _` irule >>
+     first_assum ACCEPT_TAC) >>
+  asm_rewrite_tac[] >> simp[NoAsms,Abbr `Q`] >> asm_rewrite_tac[] >>
+  conj_tac >- decide_tac >>
+  conj_tac
+  >- (map_every qx_gen_tac [`id`,`p`,`k`] >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      Cases_on `middle.cs_next_id <= id /\ id < st1.cs_next_id`
+      >- (qpat_assum `!id p k. middle.cs_next_id <= id /\ _ /\ FLOOKUP t.vs_allocas id = _ ==> _`
+            (qspecl_then [`id`,`p`,`k`] mp_tac) >>
+          (impl_tac >- (asm_rewrite_tac[] >> decide_tac)) >> disch_then ACCEPT_TAC) >>
+      `FLOOKUP s.vs_allocas id = SOME (p,k)` by
+        (qpat_assum `!id. _ ==> FLOOKUP t.vs_allocas id = _` (qspec_then `id` mp_tac) >>
+         (impl_tac >- decide_tac) >>
+         disch_then (fn th => rewrite_tac[GSYM th]) >> first_assum ACCEPT_TAC) >>
+      qpat_assum `!id p k. st.cs_next_id <= id /\ _ /\ FLOOKUP s.vs_allocas id = _ ==> _`
+        (qspecl_then [`id`,`p`,`k`] mp_tac) >>
+      (impl_tac >- asm_rewrite_tac[]) >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      asm_rewrite_tac[] >> decide_tac) >>
+  conj_tac
+  >- (rpt gen_tac >> disch_tac >>
+      qpat_assum `!id p k. FLOOKUP s.vs_allocas id = _ ==> _` irule >>
+      qpat_assum `!id p k. FLOOKUP initial.vs_allocas id = _ ==> FLOOKUP s.vs_allocas id = _` irule >>
+      first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (qx_gen_tac `id` >> disch_tac >>
+      qpat_assum `!id. _ ==> FLOOKUP t.vs_allocas id = _` (qspec_then `id` mp_tac) >>
+      (impl_tac >- decide_tac) >> disch_then (fn th => rewrite_tac[th]) >>
+      qpat_assum `!id. _ ==> FLOOKUP s.vs_allocas id = _` (qspec_then `id` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
+  conj_tac >- (irule SUBSET_TRANS >> qexists_tac `ta.t_mem` >> asm_rewrite_tac[]) >>
+  qpat_assum `?sc. abi_decode_footprint_frame _ initial s /\ _`
+    (qx_choose_then `old` (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  qexists_tac `old ++ new` >>
+  conj_tac
+  >- (irule abi_decode_footprint_frame_trans >> qexists_tac `s` >>
+      conj_tac
+      >- (irule abi_decode_footprint_frame_weaken >>
+          qexists_tac `(d,cap)::(slot,32)::old` >>
+          reverse conj_tac >- first_assum ACCEPT_TAC >>
+          map_every qx_gen_tac [`a`,`n`] >> disch_tac >> qexistsl_tac [`a`,`n`] >>
+          pop_assum mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+          simp[MEM,MEM_APPEND] >> metis_tac[]) >>
+      irule abi_decode_footprint_frame_weaken >>
+      qexists_tac `(d+32+i*type_memory_size tv,type_memory_size tv)::(slot,32)::new` >>
+      reverse conj_tac >- first_assum ACCEPT_TAC >>
+      rewrite_tac[MEM,MEM_APPEND] >> map_every qx_gen_tac [`a`,`n`] >>
+      disch_then (DISJ_CASES_THEN2 assume_tac assume_tac)
+      >- (qexistsl_tac [`d`,`cap`] >> pop_assum mp_tac >>
+          simp[NoAsms] >> decide_tac) >>
+      qexistsl_tac [`a`,`n`] >> pop_assum mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]) >>
+  rewrite_tac[MEM_APPEND] >> map_every qx_gen_tac [`p`,`k`] >>
+  disch_then (DISJ_CASES_THEN assume_tac)
+  >- (qpat_assum `!p k. MEM (p,k) old ==> _` (qspecl_then [`p`,`k`] mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> disch_then (qx_choose_then `id` strip_assume_tac) >>
+      qexists_tac `id` >> asm_rewrite_tac[] >>
+      qpat_assum `!id p k. FLOOKUP s.vs_allocas id = _ ==> _` irule >> first_assum ACCEPT_TAC) >>
+  qpat_assum `!p k. MEM (p,k) new ==> _` (qspecl_then [`p`,`k`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> disch_then (qx_choose_then `id` strip_assume_tac) >>
+  qexists_tac `id` >> asm_rewrite_tac[] >> decide_tac
+QED
+
+Resume none_nonbulk_fold_paths[initial]:
+  `first.vs_labels = initial.vs_labels` by
+    (qpat_assum `!s A ta t B u. _ ==> t.vs_labels = s.vs_labels`
+       (qspecl_then [`initial`,`G`,`tn`,`first`,`A0`,`tn0`] mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
+  `fresh_vars_wrt limit first` by
+    ((qpat_assum `!limit. _ ==> fresh_vars_wrt limit first`
+       (qspec_then `limit` mp_tac) >> asm_rewrite_tac[] >> (simp[]))) >>
+  simp[NoAsms,Abbr `H`,Abbr `Q`] >> asm_rewrite_tac[] >>
+  conj_tac
+  >- (map_every qx_gen_tac [`id`,`p`,`k`] >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      Cases_on `id = header_st.cs_next_id`
+      >- (`p = slot /\ k = 32` by
+            (qpat_assum `FLOOKUP first.vs_allocas id = SOME (p,k)` (fn th =>
+               qpat_assum `id = header_st.cs_next_id` (fn eq =>
+                 mp_tac (REWRITE_RULE [eq] th))) >> asm_rewrite_tac[] >> simp[NoAsms]) >>
+          `p < dimword (:256) /\ p+32 <= first.vs_alloca_next` by decide_tac >>
+          asm_rewrite_tac[] >> qexists_tac `ins` >> asm_rewrite_tac[]) >>
+      `FLOOKUP initial.vs_allocas id = SOME (p,k)` by
+        (qpat_assum `!id. id <> header_st.cs_next_id ==> _` (qspec_then `id` mp_tac) >>
+         (impl_tac >- first_assum ACCEPT_TAC) >>
+         disch_then (fn th => rewrite_tac[GSYM th]) >> first_assum ACCEPT_TAC) >>
+      qpat_assum `!id p k. st.cs_next_id <= id /\ _ /\ FLOOKUP initial.vs_allocas id = _ ==> _`
+        (qspecl_then [`id`,`p`,`k`] mp_tac) >>
+      (impl_tac >- asm_rewrite_tac[]) >>
+      disch_then (map_every assume_tac o CONJUNCTS) >> asm_rewrite_tac[] >> decide_tac) >>
+  conj_tac
+  >- (qx_gen_tac `id` >> disch_tac >>
+      qpat_assum `!id. id <> header_st.cs_next_id ==> _` (qspec_then `id` mp_tac) >>
+      (impl_tac >- decide_tac) >> disch_then ACCEPT_TAC) >>
+  qexists_tac `[]` >> simp[NoAsms,abi_decode_footprint_frame_def] >> asm_rewrite_tac[] >>
+  map_every qx_gen_tac [`a`,`n`] >> disch_tac >>
+  qpat_assum `abi_footprint_disjoint a n _` (mp_tac o REWRITE_RULE [abi_footprint_disjoint_def]) >>
+  disch_then (fn th =>
+    mp_tac (Q.SPECL [`d`,`cap`] th) >> mp_tac (Q.SPECL [`slot`,`32`] th)) >>
+  simp[NoAsms] >> rpt disch_tac >>
+  qpat_assum `!a n. (a+n <= d \/ _) /\ _ ==> _` (qspecl_then [`a`,`n`] mp_tac) >>
+  (impl_tac >- decide_tac) >> disch_then ACCEPT_TAC
+QED
+
+Resume none_nonbulk_fold_paths[compose]:
+  disch_then (DISJ_CASES_THEN2
+    (qx_choose_then `z` (qx_choose_then `B` (qx_choose_then `u`
+      (CONJUNCTS_THEN2 assume_tac assume_tac))))
+    (qx_choose_then `v` (qx_choose_then `B` (qx_choose_then `u`
+      (map_every assume_tac o CONJUNCTS)))))
+  >- (disj1_tac >> qexistsl_tac [`z`,`B`,`u`] >> conj_tac
+      >- first_assum ACCEPT_TAC >>
+      rpt gen_tac >> qpat_assum `!D explicit. gas_origin_ptr_path _ (initial,G,tn) [] _`
+        (qspecl_then [`D`,`explicit`] (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+      disch_then (qspecl_then [`first`,`A0`,`tn0`,`[]`,`Abort Revert_abort z`,`B`,`u`] mp_tac) >>
+      asm_rewrite_tac[APPEND_NIL]) >>
+  `IS_SOME (cd_decode F initial.vs_call_ctx.cc_calldata (ArrayTV tv (Dynamic maxn)) sb)` by
+    (qpat_assum `IS_SOME (cd_decode_elems F _ tv _ 0 cnt)` mp_tac >>
+     qpat_assum `w2n (cd_word _ sb) = cnt` (fn eq =>
+       qpat_assum `tv_abi_dynamic tv \/ tv_needs_clamp tv` mp_tac >>
+       qpat_assum `cnt <= maxn` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >>
+       simp[cd_decode_def,eq] >> rpt strip_tac >>
+       TOP_CASE_TAC >> gvs[])) >>
+  qpat_x_assum `R v B u` (fn packet =>
+    qpat_assum `Abbrev (R = _)` (fn r_def =>
+      qpat_assum `Abbrev (Q = _)` (fn q_def =>
+        map_every assume_tac (CONJUNCTS (BETA_RULE (REWRITE_RULE
+          [REWRITE_RULE [markerTheory.Abbrev_def] r_def,
+           REWRITE_RULE [markerTheory.Abbrev_def] q_def] packet)))))) >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op v = eval_operand op initial` by
+    (qpat_assum `!x. not_fresh_at st x ==> lookup_var x v = _ /\ _` mp_tac >>
+     qpat_assum `v.vs_labels = initial.vs_labels` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >> Cases >>
+     simp[eval_operand_def,calldataDynOwnedTheory.calldata_operand_live_not_fresh]) >>
+  qpat_assum `?sc. abi_decode_footprint_frame _ initial v /\ _`
+    (qx_choose_then `sc` (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  disj2_tac >> qexistsl_tac [`v`,`(slot,32)::sc`,`B`,`u`] >>
+  qpat_assum `Abbrev (cap = _)` (fn th =>
+    rewrite_tac[GSYM (REWRITE_RULE[markerTheory.Abbrev_def] th)]) >>
+  `LENGTH last.cs_current_insts = 0` by asm_rewrite_tac[LENGTH] >>
+  `!x. not_fresh_at st x ==> FLOOKUP B x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!x. not_fresh_at st x ==> lookup_var x v = _ /\ _`
+       (qspec_then `x` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (ACCEPT_TAC o CONJUNCT2)) >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (simp[NoAsms,MEM] >> map_every qx_gen_tac [`p`,`k`] >>
+      disch_then (DISJ_CASES_THEN2 assume_tac assume_tac)
+      >- (qexists_tac `header_st.cs_next_id` >>
+          pop_assum (CONJUNCTS_THEN2 SUBST1_TAC SUBST1_TAC) >>
+          asm_rewrite_tac[]) >>
+      qpat_assum `!p k. MEM (p,k) sc ==> _` (qspecl_then [`p`,`k`] mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
+  rpt gen_tac >> qpat_assum `!D explicit. gas_origin_ptr_path _ (initial,G,tn) [] _`
+    (qspecl_then [`D`,`explicit`] (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+  disch_then (qspecl_then [`first`,`A0`,`tn0`,`[]`,`OK v`,`B`,`u`] mp_tac) >>
+  asm_rewrite_tac[APPEND_NIL]
+QED
+
+Finalise none_nonbulk_fold_paths
