@@ -151,7 +151,7 @@ Theorem audit_call_clipped_byte:
   eval_operand v s = SOME value /\ eval_operand ao s = SOME aoff /\
   eval_operand az s = SOME asize /\ eval_operand ro s = SOME 0w /\
   eval_operand rz s = SOME 2w /\
-  rq = venom_call_request s addr value aoff asize st /\
+  rq = (venom_call_request s addr value aoff asize st with cr_gas := SOME (w2n gas)) /\
   take_outcome rq s.vs_outcomes = (outcome,rest) /\
   outcome.co_returnData = [byte] /\
   exec_ext_call inst s gas addr value aoff asize (0w:bytes32) (2w:bytes32) st = OK post ==>
@@ -166,7 +166,8 @@ Proof
   `post.vs_returndata = [byte] /\
    post.vs_memory = (write_memory_with_expansion 0 [byte] s).vs_memory /\
    post.vs_allocas = s.vs_allocas /\ post.vs_fmp = s.vs_fmp` by
-    (gvs[exec_ext_call_def, consume_call_outcome_eq, update_var_def]) >>
+    (Cases_on `s.vs_outcomes = []` >>
+     gvs[exec_ext_call_def, consume_call_outcome_eq, update_var_def]) >>
   `source_memory_write_ranges inst s = [(0,2)]` by
     simp[source_memory_write_ranges_def] >>
   `step_writes inst s post = [(0,1)]` by simp[step_writes_def] >>
@@ -422,7 +423,8 @@ Resume ptr_paired_owned_read_recovery_static[target_frame]:
      `j < LENGTH done /\ w < EL j done` by
        (conj_tac >- decide_tac >> first_x_assum irule >> decide_tac) >>
      irule ptr_paired_actual_protected_write_exclusion_static >>
-     goal_assum (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (irule_at Any) >>
      goal_assum (drule_at (Pat `FLOOKUP positions (Allocation _) = _`)) >>
      goal_assum (drule_at (Pat `FLOOKUP (ptr_owner_view _ endpoint).cf_state.vs_allocas _ = _`)) >>
      goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>

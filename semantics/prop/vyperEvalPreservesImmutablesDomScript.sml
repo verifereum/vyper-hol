@@ -148,24 +148,24 @@ Proof
 QED
 
 (* Integration audit: immutable-domain exports must remain kernel closed. *)
-Theorem eval_expr_results_preserves_immutables_addr_dom:
-  eval_expr_results cx es st = (res,st') ==>
+Theorem eval_create_operands_preserves_immutables_addr_dom:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st = (res,st') ==>
     !tgt. IS_SOME (ALOOKUP st.immutables tgt) <=>
           IS_SOME (ALOOKUP st'.immutables tgt)
 Proof
-  metis_tac[eval_expr_results_immutable_metadata_frame,
+  metis_tac[eval_create_operands_immutable_metadata_frame,
             immutable_metadata_frame_def]
 QED
 
-Theorem eval_expr_results_preserves_immutables_dom:
-  eval_expr_results cx es st = (res,st') ==>
+Theorem eval_create_operands_preserves_immutables_dom:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st = (res,st') ==>
     !src n imms imms'.
       ALOOKUP st.immutables cx.txn.target = SOME imms /\
       ALOOKUP st'.immutables cx.txn.target = SOME imms' ==>
       (IS_SOME (FLOOKUP (get_source_immutables src imms) n) <=>
        IS_SOME (FLOOKUP (get_source_immutables src imms') n))
 Proof
-  rpt strip_tac >> drule eval_expr_results_immutable_metadata_frame >>
+  rpt strip_tac >> drule eval_create_operands_immutable_metadata_frame >>
   disch_then (mp_tac o MATCH_MP immutable_metadata_frame_preserves_dom) >>
   rw[preserves_immutables_dom_def]
 QED
@@ -200,7 +200,7 @@ Theorem ExtCall_outcome_preserves_immutables_dom:
     (if ret_type = NoneT then
        check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
      else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    (rq,outcome) <- take_call_outcome gas_cap target calldata value_opt;
     check outcome.co_success "ExtCall reverted";
     adopt_call_outcome rq outcome;
     k outcome.co_returnData
@@ -227,7 +227,7 @@ QED
 
 Theorem Send_outcome_preserves_immutables_dom:
   (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    (rq,outcome) <- take_call_outcome gas_cap target [] (SOME amount);
     check outcome.co_success "send failed";
     adopt_call_outcome rq outcome;
     return (Value NoneV)

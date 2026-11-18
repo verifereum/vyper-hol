@@ -524,11 +524,9 @@ Resume ifexp_selected_arm_step_full[nocopy]:
      qpat_x_assum `expr_post H ctx func cenv cx e es1 sa sb u ee v op z'` mp_tac >>
      simp[NoAsms, expr_post_def, post_value_type_def, expr_type_def] >>
      rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  qexistsl_tac [`v`,`z'`,`G'`,`tn'`] >> gns[] >> rpt strip_tac >>
-  (fn (g as (_,goal)) =>
-    case total dest_thy_const (fst (strip_comb goal)) of
-      SOME {Name = "vv_own", ...} =>
-        (Cases_on `?id path. tva = PlaceR (MemoryPlace id path)`
+  qexistsl_tac [`v`,`z'`,`G'`,`tn'`] >> gns[] >> rpt strip_tac
+  >>~- ([`vv_own _ _ _ _ _ _ _ _ _ (* g *)`],
+    (Cases_on `?id path. tva = PlaceR (MemoryPlace id path)`
          >- (`v' = v` by metis_tac[ifexp_conditional_value_eq] >>
              Cases_on `t = NoneT`
              >- (gvs[] >> qpat_assum `vv_at cenv cx NoneT sa sb ee _ _ z'` mp_tac >>
@@ -539,20 +537,19 @@ Resume ifexp_selected_arm_step_full[nocopy]:
                       valueEncodingTheory.type_memory_size_def, val_footprint_def] >>
                  rpt strip_tac >> metis_tac[]) >>
              gvs[] >> drule_all typed_aggregate_memory_conditional >> simp[]) >>
-         suspend "nocopyown") g
-    | SOME {Name = "ptr_buf_ok", ...} =>
-        (irule ifexp_nocopy_physical_buffer >>
-         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) g
-    | _ =>
-        (qpat_assum `~is_word_type t ==> !w. eval_operand op z' = SOME w ==> _` mp_tac >>
-         qpat_assum `same_memory_layout cenv _ t` mp_tac >>
-         qpat_assum `!ty' tvt. evaluate_type _ ty' = SOME tvt ==> _` mp_tac >>
-         qpat_assum `evaluate_type _ (lowered_value_type cenv _) = SOME _` mp_tac >>
-         qpat_assum `evaluate_type _ t = SOME _` mp_tac >>
-         qpat_assum `~is_word_type t` mp_tac >>
-         qpat_assum `eval_operand op z' = SOME _` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         simp[same_memory_layout_def] >> rpt strip_tac >> metis_tac[]) g)
+         suspend "nocopyown"))
+  >>~- ([`ptr_buf_ok _ _ _ _ _ (* g *)`],
+    (irule ifexp_nocopy_physical_buffer >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[])) >>
+  qpat_assum `~is_word_type t ==> !w. eval_operand op z' = SOME w ==> _` mp_tac >>
+  qpat_assum `same_memory_layout cenv _ t` mp_tac >>
+  qpat_assum `!ty' tvt. evaluate_type _ ty' = SOME tvt ==> _` mp_tac >>
+  qpat_assum `evaluate_type _ (lowered_value_type cenv _) = SOME _` mp_tac >>
+  qpat_assum `evaluate_type _ t = SOME _` mp_tac >>
+  qpat_assum `~is_word_type t` mp_tac >>
+  qpat_assum `eval_operand op z' = SOME _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[same_memory_layout_def] >> rpt strip_tac >> metis_tac[]
 QED
 
 Resume ifexp_selected_arm_step_full[physical]:

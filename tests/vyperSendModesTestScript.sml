@@ -2,6 +2,7 @@
    CPS equations above are executed directly by CV, not substituted here. *)
 Theory vyperSendModesTest
 Ancestors
+  vyperSmallStepCV
   vyperSendCpsCVTest vyperExtCallCpsCVTest vyperInterpreter vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperState vyperContext vyperABI vyperAST vyperValue
   vyperValueOperation list option pair finite_map words vfmTypes
@@ -58,7 +59,7 @@ Theorem send_bigstep_after_arguments:
     (case st.outcomes of
      | NONE => send_concrete_backend 9w 7
      | SOME _ => do
-         (rq,co) <- take_call_outcome 9w [] (SOME 7);
+         (rq,co) <- take_call_outcome (SOME 0) 9w [] (SOME 7);
          check co.co_success "send failed";
          adopt_call_outcome rq co;
          return (Value NoneV)
@@ -84,7 +85,7 @@ Theorem send_zero_bigstep_after_arguments:
     (case st.outcomes of
      | NONE => send_concrete_backend 0w 0
      | SOME _ => do
-         (rq,co) <- take_call_outcome 0w [] (SOME 0);
+         (rq,co) <- take_call_outcome (SOME 0) 0w [] (SOME 0);
          check co.co_success "send failed";
          adopt_call_outcome rq co;
          return (Value NoneV)
@@ -99,15 +100,13 @@ Proof
 QED
 
 (* Closed actual counterexample to the old inert-mode Send conjunct, saved
-   before amending it: ordinary zero-value Send still records/exhausts. *)
+   before amending it: ordinary zero-value Send still takes an outcome, so
+   on an empty outcome list it stops with the exhaustion error. *)
 Theorem send_zero_initial_state_not_inert:
-  let st = initial_state initial_machine_state [FEMPTY] with outcomes := SOME [] in
-    eval_expr empty_evaluation_context (send_call 0w 0) st =
-      (INR (Error (RuntimeError "send failed")),
-       st with <|requests := [call_outcome_request 0w [] (SOME 0) st];
-         storage_trace := [StorageOutcome (call_outcome_request 0w [] (SOME 0) st)
-           (failed_outcome (call_outcome_request 0w [] (SOME 0) st))]|>) /\
-    eval_expr empty_evaluation_context (send_call 0w 0) st <> (INL (Value NoneV),st)
+  eval_expr empty_evaluation_context (send_call 0w 0)
+    (initial_state initial_machine_state [FEMPTY] with outcomes := SOME []) =
+  (INR (Error (RuntimeError "take_call_outcome")),
+   initial_state initial_machine_state [FEMPTY] with outcomes := SOME [])
 Proof
   simp (send_monad_simps @ [send_zero_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, initial_state_def,
        take_call_outcome_def, take_request_outcome_def, call_outcome_request_def, take_outcome_def,
@@ -121,9 +120,9 @@ Theorem send_bigstep_failure_whole_state:
     (INR (Error (RuntimeError "send failed")),
      send_state with <|outcomes := SOME [cpscv_tail];
        requests := send_state.requests ++
-         [call_outcome_request 9w [] (SOME 7) send_state];
+         [(call_outcome_request 9w [] (SOME 7) send_state with cr_gas := SOME 0)];
        storage_trace := send_state.storage_trace ++
-         [StorageOutcome (call_outcome_request 9w [] (SOME 7) send_state)
+         [StorageOutcome (call_outcome_request 9w [] (SOME 7) send_state with cr_gas := SOME 0)
            (send_outcome F [] (2 ** 256))]|>)
 Proof
   simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, take_call_outcome_def, take_request_outcome_def,
@@ -148,9 +147,9 @@ Theorem send_bigstep_success_whole_state:
         pending_deletions := (send_outcome T [99w] 17).co_toDelete;
         outcomes := SOME [cpscv_tail];
         requests := send_state.requests ++
-          [call_outcome_request 9w [] (SOME 7) send_state];
+          [(call_outcome_request 9w [] (SOME 7) send_state with cr_gas := SOME 0)];
         storage_trace := send_state.storage_trace ++
-          [StorageOutcome (call_outcome_request 9w [] (SOME 7) send_state)
+          [StorageOutcome (call_outcome_request 9w [] (SOME 7) send_state with cr_gas := SOME 0)
              (send_outcome T [99w] 17);
            StorageBackend (send_outcome T [99w] 17).co_accounts
              (send_outcome T [99w] 17).co_tStorage]|>)

@@ -571,7 +571,7 @@ Resume send_expr_sim_full[suffix_post]:
 QED
 
 Resume send_expr_sim_full[suffix_finish]:
-  simp[venomStateTheory.eval_operand_def] >>
+  simp[venomStateTheory.eval_operand_def, ext_call_kwarg_def] >>
   rpt gen_tac >> strip_tac >> conj_tac
   >- (strip_tac >> irule callStepPtrTheory.ptr_buf_ok_zero_type >>
       simp[Abbr `send_expr`,callStepPtrTheory.send_none_buffer_size]) >>
@@ -722,6 +722,8 @@ Resume send_expr_sim_full[gas_call_tail]:
     metis_tac[address_typed_dest] >>
   `dest_NumV value = SOME (w2n (typed_val_to_w256 (BaseTV (UintT 256)) value))` by
     metis_tac[uint256_typed_dest] >>
+  `dest_NumV gas_v = SOME (w2n (typed_val_to_w256 (BaseTV (UintT 256)) gas_v))` by
+    metis_tac[uint256_typed_dest] >>
   `outcomes_accounts_typed gas_end.outcomes /\
    accounts_runtime_well_typed gas_end.accounts` by
     (qpat_assum `expr_sim_inv cenv cx env gas_end` mp_tac >>
@@ -752,6 +754,7 @@ Resume send_expr_sim_full[gas_suffix_post]:
     `typed_val_to_w256 (BaseTV (UintT 256)) gas_v`,`gas_op`,`es`,`d`,`cenv`,
     `typed_val_to_w256 (BaseTV AddressT) v`,`addr_op`] >>
   simp[GSYM ptrDisciplineTheory.op_taint_def,Abbr `amountR`,
+       ext_call_kwarg_def,
        exprSimMemDefsTheory.expr_store_bound_none,
        callStepPtrTheory.ptr_val_ok_none] >>
   suspend "gas_suffix_finish"

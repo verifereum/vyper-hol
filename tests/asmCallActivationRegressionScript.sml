@@ -31,7 +31,7 @@ Theorem call_ordinary_success:
     (s with as_stack := [gas; 8w; 0w; 0w; 0w; 0w; 0w]) =
   AsmOK (asm_next (s with <|
     as_stack := [1w]; as_outcomes := rest;
-    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 F];
+    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 F with cr_gas := SOME (w2n gas)];
     as_accounts := outcome.co_accounts; as_transient := outcome.co_tStorage;
     as_logs := s.as_logs ++ outcome.co_logs;
     as_pending_deletions := outcome.co_toDelete ++ s.as_pending_deletions;
@@ -51,7 +51,7 @@ Theorem call_ordinary_failure:
     (s with as_stack := [gas; 8w; 0w; 0w; 0w; 0w; 0w]) =
   AsmOK (asm_next (s with <|
     as_stack := [0w]; as_outcomes := rest;
-    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 F];
+    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 F with cr_gas := SOME (w2n gas)];
     as_returndata := outcome.co_returnData |>))
 Proof
   strip_tac >>
@@ -69,7 +69,7 @@ Theorem call_inherits_staticness:
     (s with as_stack := [gas; 8w; 0w; 0w; 0w; 0w; 0w]) =
   AsmOK (asm_next (s with <|
     as_stack := [1w]; as_outcomes := rest;
-    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 F];
+    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 F with cr_gas := SOME (w2n gas)];
     as_returndata := outcome.co_returnData |>)) /\
   (asm_call_request s 8w 0w 0 0 F).cr_static
 Proof
@@ -87,7 +87,7 @@ Theorem staticcall_success_zero_value:
     (s with as_stack := [gas; 8w; 0w; 0w; 0w; 0w]) =
   AsmOK (asm_next (s with <|
     as_stack := [1w]; as_outcomes := rest;
-    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 T];
+    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 T with cr_gas := SOME (w2n gas)];
     as_returndata := outcome.co_returnData |>)) /\
   (asm_call_request s 8w 0w 0 0 T).cr_value = 0 /\
   (asm_call_request s 8w 0w 0 0 T).cr_static
@@ -104,36 +104,37 @@ Theorem call_and_staticcall_exhaustion:
   s.as_outcomes = [] ==>
   asm_step lo otp (AsmOp "CALL")
     (s with as_stack := [gas; 8w; 0w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <|
-    as_stack := [0w]; as_requests := s.as_requests ++
-      [asm_call_request s 8w 0w 0 0 F]; as_returndata := [] |>)) /\
+  AsmFault (s with <|
+    as_stack := [gas; 8w; 0w; 0w; 0w; 0w; 0w]; as_returndata := [] |>) /\
   asm_step lo otp (AsmOp "STATICCALL")
     (s with as_stack := [gas; 8w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <|
-    as_stack := [0w]; as_requests := s.as_requests ++
-      [asm_call_request s 8w 0w 0 0 T]; as_returndata := [] |>))
+  AsmFault (s with <|
+    as_stack := [gas; 8w; 0w; 0w; 0w; 0w]; as_returndata := [] |>)
 Proof
   strip_tac >>
   simp[asm_step_call_staticcall_gas, asm_exec_call_def, asm_exec_staticcall_def,
-       asm_consume_call_outcome_eq, asm_call_memory_def, asm_call_request_def,
-       computed_precompile_addresses, take_outcome_def, record_request_def,
-       adopt_outcome_def, adopt_outcome_deletions_def,
-       failed_outcome_def, asm_next_def,
+       asm_consume_call_outcome_exhausted, asm_call_memory_def,
        asm_state_component_equality]
 QED
 
 (* A computed call takes its success from the next outcome, its data from
-   precompile_result, and records no request. *)
+   precompile_result, and records the request. *)
 Theorem computed_empty_ecrecover_dispatch:
   s.as_outcomes = outcome::rest /\ outcome.co_success ==>
   asm_step lo otp (AsmOp "CALL")
     (s with as_stack := [gas; 1w; 0w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [1w]; as_returndata := [];
-                            as_outcomes := rest |>)) /\
+  AsmOK (asm_next (s with <| as_stack := [1w];
+    as_requests := s.as_requests ++
+      [asm_call_request s 1w 0w 0 0 F with cr_gas := SOME (w2n gas)];
+    as_returndata := [];
+    as_outcomes := rest |>)) /\
   asm_step lo otp (AsmOp "STATICCALL")
     (s with as_stack := [gas; 1w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [1w]; as_returndata := [];
-                            as_outcomes := rest |>))
+  AsmOK (asm_next (s with <| as_stack := [1w];
+    as_requests := s.as_requests ++
+      [asm_call_request s 1w 0w 0 0 T with cr_gas := SOME (w2n gas)];
+    as_returndata := [];
+    as_outcomes := rest |>))
 Proof
   strip_tac >>
   simp[asm_step_call_staticcall_gas, asm_exec_call_def, asm_exec_staticcall_def,
@@ -154,14 +155,14 @@ Theorem call_staticcall_short_write:
     (s with as_stack := [gas; 8w; 0w; 0w; 0w; 2w; 8w]) =
   AsmOK (asm_next (s with <|
     as_stack := [0w]; as_outcomes := rest;
-    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 F];
+    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 F with cr_gas := SOME (w2n gas)];
     as_returndata := [77w; 88w];
     as_memory := REPLICATE 2 9w ++ [77w; 88w] ++ REPLICATE 28 9w |>)) /\
   asm_step lo otp (AsmOp "STATICCALL")
     (s with as_stack := [gas; 8w; 0w; 0w; 2w; 8w]) =
   AsmOK (asm_next (s with <|
     as_stack := [0w]; as_outcomes := rest;
-    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 T];
+    as_requests := s.as_requests ++ [asm_call_request s 8w 0w 0 0 T with cr_gas := SOME (w2n gas)];
     as_returndata := [77w; 88w];
     as_memory := REPLICATE 2 9w ++ [77w; 88w] ++ REPLICATE 28 9w |>))
 Proof
@@ -210,17 +211,26 @@ Theorem computed_sha256_and_ec_dispatch:
   s.as_outcomes = outcome::rest /\ outcome.co_success ==>
   asm_step lo otp (AsmOp "CALL")
     (s with as_stack := [gas; 2w; 0w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [1w]; as_outcomes := rest;
+  AsmOK (asm_next (s with <| as_stack := [1w];
+    as_requests := s.as_requests ++
+      [asm_call_request s 2w 0w 0 0 F with cr_gas := SOME (w2n gas)];
+    as_outcomes := rest;
     as_returndata := word_to_bytes
       (0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855w:bytes32) T |>)) /\
   asm_step lo otp (AsmOp "STATICCALL")
     (s with as_stack := [gas; 6w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [1w]; as_outcomes := rest;
-                            as_returndata := REPLICATE 64 0w |>)) /\
+  AsmOK (asm_next (s with <| as_stack := [1w];
+    as_requests := s.as_requests ++
+      [asm_call_request s 6w 0w 0 0 T with cr_gas := SOME (w2n gas)];
+    as_outcomes := rest;
+    as_returndata := REPLICATE 64 0w |>)) /\
   asm_step lo otp (AsmOp "CALL")
     (s with as_stack := [gas; 7w; 0w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [1w]; as_outcomes := rest;
-                            as_returndata := REPLICATE 64 0w |>))
+  AsmOK (asm_next (s with <| as_stack := [1w];
+    as_requests := s.as_requests ++
+      [asm_call_request s 7w 0w 0 0 F with cr_gas := SOME (w2n gas)];
+    as_outcomes := rest;
+    as_returndata := REPLICATE 64 0w |>))
 Proof
   strip_tac >> rpt conj_tac >>
   simp[asm_step_call_staticcall_gas, asm_exec_call_def, asm_exec_staticcall_def,
@@ -236,7 +246,8 @@ Theorem asm_invalid_ec_request:
   s.as_memory = REPLICATE 63 0w ++ [1w] /\ (addr = 6w \/ addr = 7w) ==>
   take_outcome (asm_call_request s addr 0w 0 64 static) os =
     (failed_outcome (asm_call_request s addr 0w 0 64 static),DROP 1 os) /\
-  record_request (asm_call_request s addr 0w 0 64 static) rqs = rqs
+  record_request (asm_call_request s addr 0w 0 64 static) rqs =
+    rqs ++ [asm_call_request s addr 0w 0 64 static]
 Proof
   strip_tac >> irule take_outcome_invalid_ec >>
   simp[asm_call_request_def, asm_expand_memory_def, TAKE_LENGTH_TOO_LONG]
@@ -246,12 +257,18 @@ Theorem computed_invalid_ec_dispatch:
   s.as_memory = REPLICATE 63 (0w:byte) ++ [1w] /\ s.as_outcomes = outcome::rest ==>
   asm_step lo otp (AsmOp "CALL")
     (s with as_stack := [gas; 6w; 0w; 0w; 64w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [0w]; as_returndata := [];
-                            as_outcomes := rest |>)) /\
+  AsmOK (asm_next (s with <| as_stack := [0w];
+    as_requests := s.as_requests ++
+      [asm_call_request s 6w 0w 0 64 F with cr_gas := SOME (w2n gas)];
+    as_returndata := [];
+    as_outcomes := rest |>)) /\
   asm_step lo otp (AsmOp "STATICCALL")
     (s with as_stack := [gas; 7w; 0w; 64w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [0w]; as_returndata := [];
-                            as_outcomes := rest |>))
+  AsmOK (asm_next (s with <| as_stack := [0w];
+    as_requests := s.as_requests ++
+      [asm_call_request s 7w 0w 0 64 T with cr_gas := SOME (w2n gas)];
+    as_returndata := [];
+    as_outcomes := rest |>))
 Proof
   strip_tac >> conj_tac >>
   simp[Excl "asm_consume_call_outcome_eq", asm_step_call_staticcall_gas,
@@ -270,8 +287,11 @@ Theorem computed_starved_sha256_dispatch:
   s.as_outcomes = outcome::rest /\ ~outcome.co_success ==>
   asm_step lo otp (AsmOp "STATICCALL")
     (s with as_stack := [gas; 2w; 0w; 0w; 0w; 0w]) =
-  AsmOK (asm_next (s with <| as_stack := [0w]; as_returndata := [];
-                            as_outcomes := rest |>))
+  AsmOK (asm_next (s with <| as_stack := [0w];
+    as_requests := s.as_requests ++
+      [asm_call_request s 2w 0w 0 0 T with cr_gas := SOME (w2n gas)];
+    as_returndata := [];
+    as_outcomes := rest |>))
 Proof
   strip_tac >>
   simp[asm_step_call_staticcall_gas, asm_exec_staticcall_def,
@@ -288,7 +308,7 @@ Theorem nonzero_value_precompile_shaped_call:
     (s with as_stack := [gas; 1w; 9w; 0w; 0w; 0w; 0w]) =
   AsmOK (asm_next (s with <|
     as_stack := [0w]; as_outcomes := rest;
-    as_requests := s.as_requests ++ [asm_call_request s 1w 9w 0 0 F];
+    as_requests := s.as_requests ++ [asm_call_request s 1w 9w 0 0 F with cr_gas := SOME (w2n gas)];
     as_returndata := outcome.co_returnData |>))
 Proof
   strip_tac >>

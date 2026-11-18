@@ -13,10 +13,14 @@ Theorem hash_sha256_call_load_check:
     c <= w2n r /\ w2n r+32 <= c+cap /\ q <> success /\
     (!op. MEM op [gas;Lit 2w;Var p;len;Var q;Lit 32w] ==> op_taint tn op = {}) /\
     (!i. w2n w <= i /\ i < w2n w+w2n n ==> i NOTIN tn.t_mem) /\
+    tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
     ~ctx_has_dalloca ctx /\
     step_inst_base (mk_inst ic STATICCALL
       [gas;Lit 2w;Var p;len;Var q;Lit 32w] [success]) s = OK t /\
-    t.vs_requests = s.vs_requests /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_allocas = s.vs_allocas /\
     t.vs_fmp = s.vs_fmp /\ LENGTH t.vs_returndata = 32 /\
     lookup_var success t = SOME 1w /\ eval_operand (Var q) t = SOME r ==>
     inst_seq_ptr D 0 ctx fn PG G tn
@@ -69,10 +73,14 @@ Theorem hash_sha256_call_abort_check:
     c <= w2n r /\ w2n r+32 <= c+cap /\
     (!op. MEM op [gas;Lit 2w;Var p;len;Var q;Lit 32w] ==> op_taint tn op = {}) /\
     (!i. w2n w <= i /\ i < w2n w+w2n n ==> i NOTIN tn.t_mem) /\
+    tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
     ~ctx_has_dalloca ctx /\
     step_inst_base (mk_inst ic STATICCALL
       [gas;Lit 2w;Var p;len;Var q;Lit 32w] [success]) s = OK t /\
-    t.vs_requests = s.vs_requests /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_allocas = s.vs_allocas /\
     t.vs_fmp = s.vs_fmp /\ lookup_var success t = SOME 0w ==>
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst ic STATICCALL [gas;Lit 2w;Var p;len;Var q;Lit 32w] [success];

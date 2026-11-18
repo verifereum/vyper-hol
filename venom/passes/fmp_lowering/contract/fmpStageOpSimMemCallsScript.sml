@@ -203,16 +203,18 @@ Theorem fmp_mem_call_observe[local]:
   fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
   inst.inst_opcode <> INVOKE /\ step_inst k C inst s = OK (update_var out w1 r1) /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
-  rq1 = (venom_call_request s addr value off sz static with cr_kind := kind) /\
-  rq2 = (venom_call_request t addr value off' sz static with cr_kind := kind) /\
+  rq1 = (venom_call_request s addr value off sz static with <|cr_kind := kind; cr_gas := SOME (w2n (gas:bytes32))|>) /\
+  rq2 = (venom_call_request t addr value off' sz static with <|cr_kind := kind; cr_gas := SOME (w2n gas)|>) /\
   consume_call_outcome rq1 ro rs s = (w1,r1) /\
   consume_call_outcome rq2 ro' rs t = (w2,r2) ==>
   w1 = w2 /\ r1.vs_returndata = r2.vs_returndata /\
   ld_shared_agree D s.vs_call_ctx.cc_address
     (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_stor;
                t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_trans|>) r1 r2
 Proof
@@ -224,13 +226,6 @@ Proof
    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
    computed_precompile rq1 = computed_precompile rq2` by
     simp[venom_call_request_def, computed_precompile_def] >>
-  Cases_on `computed_precompile rq1`
-  >- (`computed_precompile rq2` by metis_tac[] >> `r1.vs_requests = s.vs_requests` by
-        (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
-         simp[consume_call_outcome_eq, record_request_def] >> strip_tac >>
-         gvs[Excl "consume_call_outcome_eq"]) >>
-      drule_all ld_consume_precompile_shared >> strip_tac >>
-      gvs[Excl "consume_call_outcome_eq"]) >>
   `LENGTH s.vs_requests < LENGTH (update_var out w1 r1).vs_requests` by
     (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
      simp[consume_call_outcome_eq, record_request_def, update_var_def] >>
@@ -253,11 +248,11 @@ Theorem fmp_mem_call_execute[local]:
   fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
   ~in_revert_forward fn s /\ MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] /\
   step_inst k C inst s = OK s1 ==>
-  ?out w1 w2 r1 r2 addr value off off' sz (ro:bytes32) (ro':bytes32) (rs:bytes32) static kind rq1 rq2.
+  ?out w1 w2 r1 r2 (gas:bytes32) addr value off off' sz (ro:bytes32) (ro':bytes32) (rs:bytes32) static kind rq1 rq2.
     inst.inst_outputs = [out] /\ s1 = update_var out w1 r1 /\
     step_inst k C' inst t = OK (update_var out w2 r2) /\
-    rq1 = (venom_call_request s addr value off sz static with cr_kind := kind) /\
-    rq2 = (venom_call_request t addr value off' sz static with cr_kind := kind) /\
+    rq1 = (venom_call_request s addr value off sz static with <|cr_kind := kind; cr_gas := SOME (w2n gas)|>) /\
+    rq2 = (venom_call_request t addr value off' sz static with <|cr_kind := kind; cr_gas := SOME (w2n gas)|>) /\
     consume_call_outcome rq1 (w2n ro) (w2n rs) s = (w1,r1) /\
     consume_call_outcome rq2 (w2n ro') (w2n rs) t = (w2,r2) /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
@@ -290,8 +285,8 @@ Proof
   qpat_x_assum `!op x. _` kall_tac >>
   `s.vs_call_ctx = t.vs_call_ctx` by fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
   qabbrev_tac `kind = if inst.inst_opcode = DELEGATECALL then DelegateMessageCall else MessageCall` >>
-  qabbrev_tac `rq1 = venom_call_request s addr value off sz static with cr_kind := kind` >>
-  qabbrev_tac `rq2 = venom_call_request t addr value off' sz static with cr_kind := kind` >>
+  qabbrev_tac `rq1 = venom_call_request s addr value off sz static with <|cr_kind := kind; cr_gas := SOME (w2n gas)|>` >>
+  qabbrev_tac `rq2 = venom_call_request t addr value off' sz static with <|cr_kind := kind; cr_gas := SOME (w2n gas)|>` >>
   Cases_on `consume_call_outcome rq1 (w2n ro) (w2n rs) s` >>
   rename1 `consume_call_outcome rq1 _ _ s = (w1,r1)` >>
   Cases_on `consume_call_outcome rq2 (w2n ro') (w2n rs) t` >>
@@ -299,7 +294,15 @@ Proof
   `?out. inst.inst_outputs = [out] /\ s1 = update_var out w1 r1` by
     (gvs[Abbr `rq1`, Abbr `kind`, exec_ext_call_def, exec_delegatecall_def,
          venom_call_request_def, Excl "consume_call_outcome_eq", AllCaseEqs()] >> metis_tac[]) >>
-  qexistsl_tac [`out`,`w1`,`w2`,`r1`,`r2`,`addr`,`value`,`off`,`off'`,`sz`,
+  `s.vs_outcomes <> []` by
+    (Cases_on `s.vs_outcomes = []` >>
+     gvs[exec_ext_call_def, exec_delegatecall_def,
+         Excl "consume_call_outcome_eq", AllCaseEqs()] >>
+     pairarg_tac >> gvs[Excl "consume_call_outcome_eq"]) >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[fmp_stage_rel_def, ld_shared_agree_def] >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
+  qexistsl_tac [`out`,`w1`,`w2`,`r1`,`r2`,`gas`,`addr`,`value`,`off`,`off'`,`sz`,
                 `ro`,`ro'`,`rs`,`static`,`kind`,`rq1`,`rq2`] >>
   simp[Excl "consume_call_outcome_eq", Abbr `rq1`, Abbr `rq2`] >>
   gvs[MEM, Abbr `kind`, Excl "consume_call_outcome_eq"] >>
@@ -357,12 +360,14 @@ Theorem fmp_mem_call_shared[local]:
   taint_ok fn tn inst s /\
   static = (if inst.inst_opcode = CALL then s.vs_call_ctx.cc_static
             else inst.inst_opcode = STATICCALL) /\
-  rq1 = (venom_call_request s addr value off sz static with cr_kind := kind) /\
+  rq1 = (venom_call_request s addr value off sz static with <|cr_kind := kind; cr_gas := SOME (w2n (gas:bytes32))|>) /\
   ld_shared_agree D s.vs_call_ctx.cc_address
     (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_stor;
                t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_trans|>) r1 r2 ==>
   ld_shared_agree D s.vs_call_ctx.cc_address
@@ -375,6 +380,7 @@ Proof
      ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
   gvs[Excl "consume_call_outcome_eq"] >>
   Cases_on `~s.vs_call_ctx.cc_static /\ r1.vs_requests <> s.vs_requests /\
+            ~computed_precompile (LAST r1.vs_requests) /\
             r2.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
   gvs[word_agree_except_def] >> metis_tac[]
 QED
@@ -431,9 +437,11 @@ Proof
   `w1 = w2 /\ r1.vs_returndata = r2.vs_returndata /\
    ld_shared_agree D s.vs_call_ctx.cc_address
     (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_stor;
                t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_trans|>) r1 r2` by
     (irule fmp_mem_call_observe >>
@@ -469,14 +477,17 @@ QED
 Theorem fmp_mem_call_exception[local]:
   MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] /\
   step_inst k C inst s = r /\ terminates r /\ ~(?s1. r = OK s1) ==>
-  inst.inst_opcode = CALL /\
-  ?gop adop vop offop szop rop rsop gas addr value off sz ro rs.
-    inst.inst_operands = [gop;adop;vop;offop;szop;rop;rsop] /\
+  ?gop adop vop offop szop rop rsop gas addr value off sz ro rs prefix.
     eval_operand gop s = SOME gas /\ eval_operand adop s = SOME addr /\
-    eval_operand vop s = SOME value /\ eval_operand offop s = SOME off /\
-    eval_operand szop s = SOME sz /\ eval_operand rop s = SOME ro /\
-    eval_operand rsop s = SOME rs /\
-    s.vs_call_ctx.cc_static /\ value <> 0w /\
+    eval_operand offop s = SOME off /\ eval_operand szop s = SOME sz /\
+    eval_operand rop s = SOME ro /\ eval_operand rsop s = SOME rs /\
+    ((inst.inst_opcode = CALL /\ prefix = [gop;adop;vop] /\
+      eval_operand vop s = SOME value) \/
+     (MEM inst.inst_opcode [STATICCALL;DELEGATECALL] /\ prefix = [gop;adop] /\
+      value = 0w)) /\
+    inst.inst_operands = prefix ++ [offop;szop;rop;rsop] /\
+    ((inst.inst_opcode = CALL /\ s.vs_call_ctx.cc_static /\ value <> 0w) \/
+     ((?out. inst.inst_outputs = [out]) /\ s.vs_outcomes = [])) /\
     r = Abort ExHalt_abort (halt_state (set_returndata [] s))
 Proof
   strip_tac >> qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >> fs[MEM] >>
@@ -496,7 +507,9 @@ Theorem fmp_mem_calls_dead[local]:
   r = Abort ExHalt_abort (halt_state (set_returndata [] s))
 Proof
   strip_tac >> drule_all fmp_mem_call_exception >> strip_tac >>
-  `(!op x. MEM op ([gop;adop;vop] ++ [szop;rsop]) /\ eval_operand op s = SOME x ==>
+  `!op. MEM op prefix ==> ?w. eval_operand op s = SOME w` by
+    (gvs[] >> metis_tac[]) >>
+  `(!op x. MEM op (prefix ++ [szop;rsop]) /\ eval_operand op s = SOME x ==>
      eval_operand op t = SOME x) /\
    ?off' ro'. eval_operand offop t = SOME off' /\ eval_operand rop t = SOME ro' /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
@@ -504,18 +517,22 @@ Proof
      (?id b c z j. FLOOKUP (fmp_ld_sites sm) id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))` by
     (irule fmp_mem_call_operands >> simp[] >>
-     conj_tac >- metis_tac[] >>
      goal_assum (drule_at (Pat `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `fmp_stage_ctx _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `frame_reachable _ _ _ _ _ _ _ _ _`)) >>
      fs[] >> metis_tac[]) >>
   `eval_operand gop t = SOME gas /\ eval_operand adop t = SOME addr /\
-   eval_operand vop t = SOME value /\ eval_operand szop t = SOME sz /\
-   eval_operand rsop t = SOME rs` by (fs[] >> metis_tac[]) >>
+   eval_operand szop t = SOME sz /\ eval_operand rsop t = SOME rs /\
+   (inst.inst_opcode = CALL ==> eval_operand vop t = SOME value)` by
+    (irule fmp_mem_call_scalar_values >> metis_tac[]) >>
   qpat_x_assum `!op x. _` kall_tac >>
   `s.vs_call_ctx = t.vs_call_ctx` by fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
-  gvs[Excl "consume_call_outcome_eq"] >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs]
+  `s.vs_outcomes = t.vs_outcomes` by
+    fs[fmp_stage_rel_def, ld_shared_agree_def] >>
+  gvs[MEM, Excl "consume_call_outcome_eq"] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+       exec_ext_call_abort_iff, exec_delegatecall_abort_iff] >>
+  IF_CASES_TAC >> simp[exec_ext_call_abort_iff]
 QED
 
 (* The external message-call part of the frozen call simulation. *)

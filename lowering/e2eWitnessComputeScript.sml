@@ -1,15 +1,14 @@
 (* Concrete compilation and deploy/get runs for p23_imm_uint256.
  * TOP-LEVEL: p23_compile, p23_dep_run, p23_call_run, p23_load,
- * p23_source_call_42, p23_evm_return_42, p23_deploy_entry_no_calls,
- * p23_call_entry_no_calls, p23_deploy_source_calls_within,
- * p23_source_calls_within.
+ * p23_source_call_42, p23_evm_return_42, p23_dep_trace, p23_call_trace.
  * Helpers: the concrete p23 states and the quiet-frame trace observer.
  *)
 Theory e2eWitnessCompute
 Ancestors
+  vyperSmallStepCV
   compileVyper venomPipelineDriver asmOptimizer supportedProgram
   concretizeMemLocDefs codegenReadyCompute alist integer_word option
-  e2eDefs sourceCallCount callTrace frameOutcome
+  e2eDefs callTrace frameOutcome
   vyperInterpreter vfmCompute
 Libs
   memoryStoreWitnessLib finite_mapLib cv_transLib computeLib wordsLib BasicProvers
@@ -62,7 +61,7 @@ QED
 Definition p23_deploy_tx_def:
   p23_deploy_tx = empty_call_txn with
     <| target := 2w; sender := 1w; function_name := "__init__";
-       code := p23_deploy_bc;
+       code := p23_deploy_bc; created_in_tx := T;
        block_number := 1; block_hashes := [0w] |>
 End
 
@@ -359,66 +358,4 @@ Theorem p23_call_data:
     p23_get_calldata
 Proof
   simp[p23_es_call_from_post, p23_es_call_of_def, p23_frame_def]
-QED
-
-(* These evaluations leave both oracle lists symbolic. Empty EVM traces
-   alone would not establish a bound on source execution. *)
-val p23_deploy_entry_eval = EVAL
-  ``case deploy_entry_run os obs p23_tops initial_machine_state p23_deploy_tx of
-      NONE => F
-    | SOME (res, st) => st.outcomes = SOME os /\ st.requests = []``;
-
-Theorem p23_deploy_entry_no_calls:
-  !os obs.
-    case deploy_entry_run os obs p23_tops initial_machine_state p23_deploy_tx of
-      NONE => F
-    | SOME (res, st) => st.outcomes = SOME os /\ st.requests = []
-Proof
-  REWRITE_TAC [p23_deploy_entry_eval]
-QED
-
-val p23_call_entry_eval = EVAL
-  ``case call_entry_run os obs p23_am_call p23_call_tx of
-      NONE => F
-    | SOME (res, st) => st.outcomes = SOME os /\ st.requests = []``;
-
-Theorem p23_call_entry_no_calls:
-  !os obs.
-    case call_entry_run os obs p23_am_call p23_call_tx of
-      NONE => F
-    | SOME (res, st) => st.outcomes = SOME os /\ st.requests = []
-Proof
-  REWRITE_TAC [p23_call_entry_eval]
-QED
-
-Theorem p23_deploy_source_calls_within:
-  !obs. deploy_source_calls_within (2 ** 64) p23_tops initial_machine_state
-          p23_deploy_tx (MAP SND (call_trace p23_es_dep)) obs
-Proof
-  gen_tac >>
-  `?k. 2 ** 64 = SUC k` by
-    (qexists_tac `2 ** 64 - 1` >> simp[]) >>
-  pop_assum SUBST1_TAC >>
-  simp[p23_dep_trace, deploy_source_calls_within_def,
-    entry_calls_within_def] >>
-  PURE_ONCE_REWRITE_TAC [entry_calls_within_from_def] >> simp[] >>
-  mp_tac (Q.SPECL [`[probe_failed_outcome]`, `obs`]
-    p23_deploy_entry_no_calls) >>
-  every_case_tac >> gvs[]
-QED
-
-Theorem p23_source_calls_within:
-  !obs. source_calls_within (2 ** 64) p23_am_call p23_call_tx
-          (MAP SND (call_trace p23_es_call)) obs
-Proof
-  gen_tac >>
-  `?k. 2 ** 64 = SUC k` by
-    (qexists_tac `2 ** 64 - 1` >> simp[]) >>
-  pop_assum SUBST1_TAC >>
-  simp[p23_call_trace, source_calls_within_def,
-    entry_calls_within_def] >>
-  PURE_ONCE_REWRITE_TAC [entry_calls_within_from_def] >> simp[] >>
-  mp_tac (Q.SPECL [`[probe_failed_outcome]`, `obs`]
-    p23_call_entry_no_calls) >>
-  every_case_tac >> gvs[]
 QED

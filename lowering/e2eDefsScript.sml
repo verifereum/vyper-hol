@@ -1,13 +1,12 @@
 (* PLAN 5.5 boundary, not a compiler correctness certificate.
  * TOP-LEVEL: layouts_agree, source_deployment_rel, source_typing_ok,
- * source_storage_ok, call_outcomes_storage_ok, tx_block_fields_rel,
+ * call_storage_ok, tx_block_fields_rel,
  * tx_env_ok (defined in compileEnv, as part of call_ctx_rel),
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
- * call_external_transaction_pending_deletions,
- * load_contract_pending_deletions, valid_vyper_call, compiled_event_info,
+ * valid_vyper_call, compiled_event_info,
  * return_bytes, tx_return_bytes,
  * unspecified_behaviour_exempt, source_exempt, gas_readings_rel,
- * call_success_rel, exception_outcome_rel, call_result_rel, logs_correspond.
+ * effects_agree, exception_outcome_rel, call_result_rel, logs_correspond.
  * Transaction boundary (Milestone 7 lifecycle): next_source_machine.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
@@ -17,7 +16,7 @@
 Theory e2eDefs
 Ancestors
   vfmExecution vfmExecutionProp vfmState vfmRunCall
-  vfmTotalBalance vfmReturndataBound vfmWfState
+  vfmTotalBalance vfmReturndataBound vfmCalldataBound vfmWfState
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
@@ -92,29 +91,164 @@ Proof
   rpt strip_tac >> simp[]
 QED
 
-Definition source_typing_ok_def:
-  source_typing_ok tops am tx <=>
-    ?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
-          checked_contract_runtime_ready art [(NONE, tops)] am tx /\
-          machine_well_typed am /\ call_tx_well_typed tx
+Definition account_immutables_def:
+  account_immutables (am:abstract_machine) addr =
+    case ALOOKUP am.immutables addr of
+      NONE => empty_immutables
+    | SOME imms => imms
 End
 
-Definition source_storage_ok_def:
-  source_storage_ok am tx os gs <=>
+(* TOP-LEVEL: every declared bare global has a cell whose type tag is its
+   type.  Constants are bare globals, so this covers their cells too. *)
+Definition global_cells_typed_def:
+  global_cells_typed tops globals imms <=>
+    !src id ty.
+      FLOOKUP globals (src, id) = SOME ty ==>
+      ?tv v.
+        FLOOKUP (get_source_immutables src imms) id = SOME (tv, v) /\
+        evaluate_type (type_env tops) ty = SOME tv
+End
+
+(* TOP-LEVEL: the source checks, and the target's constant cells hold the
+   contract's folded constants (load_contract leaves them so). *)
+Definition source_typing_ok_def:
+  source_typing_ok tops am tx <=>
+    ?art cenv.
+      check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+      global_cells_typed tops art.cta_bare_globals (account_immutables am tx.target) /\
+      constants_fold_module [(NONE, tops)] (account_immutables am tx.target) NONE tops FEMPTY = SOME cenv /\
+      cenv SUBMAP get_source_immutables NONE (account_immutables am tx.target) /\
+      machine_well_typed am /\ call_tx_well_typed tx
+End
+
+Theorem checked_contract_runtime_ready_global_cells_typed:
+  checked_contract_runtime_ready art [(NONE, tops)] am tx /\
+  source_deployment_rel tops am tx ==>
+  global_cells_typed tops art.cta_bare_globals (account_immutables am tx.target)
+Proof
+  rw[global_cells_typed_def] >>
+  drule source_deployment_context >> strip_tac >>
+  fs[checked_contract_runtime_ready_def, immutables_ready_def,
+     account_immutables_def, vyperStateTheory.empty_immutables_def,
+     initial_evaluation_context_def] >>
+  metis_tac[optionTheory.IS_SOME_EXISTS, pairTheory.PAIR]
+QED
+
+(* The checker plus the cells clause give the runtime readiness the call
+   machinery reads; the deployment relation supplies the source lookup. *)
+Theorem source_typing_ok_runtime_ready:
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx ==>
+  ?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+        checked_contract_runtime_ready art [(NONE, tops)] am tx /\
+        machine_well_typed am /\ call_tx_well_typed tx
+Proof
+  strip_tac >>
+  fs[source_typing_ok_def, global_cells_typed_def] >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
+   (case ALOOKUP am.exports tx.target of NONE => [] | SOME exps => exps) = []` by
+    (fs[source_deployment_rel_def] >>
+     Cases_on `ALOOKUP am.exports tx.target` >> gvs[]) >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
+  TRY (qexists_tac `art`) >>
+  simp[checked_contract_runtime_ready_def] >>
+  conj_tac >- metis_tac[check_contract_single_module_exports_ok] >>
+  mp_tac (Q.INST
+    [`layouts` |-> `am.layouts`, `addr` |-> `tx.target`,
+     `mods` |-> `[(NONE, tops)]`, `art` |-> `art`,
+     `sources` |-> `am.sources`, `tx` |-> `tx`]
+    vyperTypeContractStaticMapsTheory.check_contract_toplevel_vtypes_consistent_initial) >>
+  simp[] >> strip_tac >>
+  mp_tac (Q.INST
+    [`layouts` |-> `am.layouts`, `addr` |-> `tx.target`,
+     `mods` |-> `[(NONE, tops)]`, `art` |-> `art`,
+     `sources` |-> `am.sources`, `tx` |-> `tx`]
+    vyperTypeContractStaticMapsTheory.check_contract_bare_globals_consistent_initial) >>
+  simp[] >> strip_tac >>
+  fs[account_immutables_def, vyperStateTheory.empty_immutables_def,
+     vyperContextTheory.get_module_code_def, initial_evaluation_context_def] >>
+  simp[immutables_ready_def, initial_evaluation_context_def,
+       vyperContextTheory.get_tenv_def, vyperContextTheory.get_module_code_def,
+       vyperContextTheory.type_env_all_modules_def,
+       GSYM vyperContextTheory.type_env_def] >>
+  conj_tac >- metis_tac[optionTheory.IS_SOME_EXISTS] >>
+  conj_tac >-
+   (rpt strip_tac >>
+    qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> ?tv v. _` drule >>
+    strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `FLOOKUP art.cta_toplevel_vtypes (NONE,id) = SOME (Type ty)` >>
+  Cases_on `FLOOKUP art.cta_bare_globals (NONE,id)`
+  >- (qpat_x_assum `!src id ty. _ /\ FLOOKUP art.cta_bare_globals (src,id) = NONE ==> _`
+        (qspecl_then [`NONE`,`id`,`ty`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[]) >>
+  rename1 `FLOOKUP art.cta_bare_globals (NONE,id) = SOME bare_ty` >>
+  qpat_x_assum `!src id ty. _ ==> ?ts. _ /\ FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\ _`
+    (qspecl_then [`NONE`,`id`,`bare_ty`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> ?tv v. _`
+    (qspecl_then [`NONE`,`id`,`bare_ty`] mp_tac) >>
+  simp[]
+QED
+
+(* The constant-cell hypotheses of constSubstCorrect's
+   checked_module_consts_substitution, for the called contract. *)
+Theorem source_typing_ok_consts_ready:
+  source_typing_ok tops am tx ==>
+  ?art A.
+    check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+    constants_fold_module [(NONE, tops)] (account_immutables am tx.target)
+      NONE tops FEMPTY = SOME A /\
+    (!src. IS_SOME src ==>
+       get_source_immutables src (constant_machine_immutables am tx.target) =
+       get_source_immutables src (account_immutables am tx.target)) /\
+    (!id tv v. FLOOKUP A id = SOME (tv,v) ==>
+       FLOOKUP (get_source_immutables NONE
+         (constant_machine_immutables am tx.target)) id = SOME (tv,v)) /\
+    deployment_constant_cells_typed (type_env_all_modules [(NONE, tops)])
+      tx.target [(NONE, tops)] am
+Proof
+  rw[source_typing_ok_def] >>
+  `constant_machine_immutables am tx.target = account_immutables am tx.target` by
+    simp[vyperTypeConstantFoldTheory.constant_machine_immutables_def,
+         account_immutables_def, vyperStateTheory.empty_immutables_def] >>
+  qexistsl [`art`, `cenv`] >> simp[] >>
+  conj_tac >- metis_tac[finite_mapTheory.SUBMAP_FLOOKUP_EQN] >>
+  simp[vyperTypeConstantCellsTheory.deployment_constant_cells_typed_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `FLOOKUP art.cta_bare_globals (NONE, id) = SOME ty` by
+    (drule vyperTypeContractStaticMapsTheory.check_contract_artifact_fields >>
+     strip_tac >> simp[] >>
+     irule vyperTypeContractStaticMapsTheory.build_contract_type_artifact_bare_globals_complete >>
+     simp[] >> metis_tac[]) >>
+  qpat_x_assum `global_cells_typed _ _ _`
+    ((qspecl_then [`NONE`, `id`, `ty`] mp_tac) o REWRITE_RULE [global_cells_typed_def]) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `machine_well_typed am`
+    (strip_assume_tac o REWRITE_RULE [machine_well_typed_def]) >>
+  Cases_on `ALOOKUP am.immutables tx.target` >>
+  gvs[account_immutables_def, vyperStateTheory.empty_immutables_def,
+      vyperStateTheory.get_source_immutables_def] >>
+  conj_tac
+  >- gvs[vyperContextTheory.type_env_all_modules_def,
+         vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2] >>
+  qabbrev_tac `imms0 = constant_machine_immutables am tx.target` >>
+  `MEM (tx.target, imms0) am.immutables` by metis_tac[alistTheory.ALOOKUP_MEM] >>
+  gvs[listTheory.EVERY_MEM] >>
+  first_x_assum (qspec_then `(tx.target, imms0)` mp_tac) >> simp[] >>
+  Cases_on `ALOOKUP imms0 NONE` >> gvs[vyperTypeInvariantsTheory.imms_well_typed_def] >>
+  metis_tac[]
+QED
+
+Definition call_storage_ok_def:
+  call_storage_ok am tx os gobs <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-    let obs = source_storage_trace am tx os gs in
+    let obs = source_storage_trace am tx os gobs in
     let (regions, locks) = storage_trace_horizon obs in
       storage_roots_fit obs ∧ regions_consistent regions ∧
       storage_locks_separated regions locks ∧
-      storage_well_formed_on cx (initial_state am []) regions
-End
-
-Definition call_outcomes_storage_ok_def:
-  call_outcomes_storage_ok am tx os gs <=>
-    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-    let obs = source_storage_trace am tx os gs in
-      storage_trace_backends_well_formed cx
-        (FST (storage_trace_horizon obs)) obs
+      storage_well_formed_on cx (initial_state am []) regions ∧
+      storage_trace_backends_well_formed cx regions obs
 End
 
 (* The global storage-and-bounds predicate remains available independently.
@@ -144,7 +278,7 @@ Definition tx_block_fields_rel_def:
     txp.blobHashes = tx.blob_hashes /\
     txp.baseFeePerBlobGas = tx.blob_base_fee /\
     txp.prevRandao = n2w tx.prev_randao /\
-    txp.prevHashes = tx.block_hashes /\ tx_env_ok tx
+    tx.block_hashes = TAKE 256 txp.prevHashes /\ tx_env_ok tx
 End
 
 Definition value_transfer_ok_def:
@@ -165,45 +299,83 @@ Definition accounts_after_transfer_def:
         accounts
 End
 
-(* ===== Fresh nonstatic frame: LIVE post-transfer accounts ===== *)
+(* ===== Fresh frame: LIVE post-transfer accounts ===== *)
 
-Definition account_immutables_def:
-  account_immutables (am:abstract_machine) addr =
-    case ALOOKUP am.immutables addr of
-      NONE => empty_immutables
-    | SOME imms => imms
+Definition evm_state_ok_def:
+  evm_state_ok s <=>
+    wf_state s /\ balance_bounded (2 ** 256 - 1) s /\
+    returndata_bounded s /\ calldata_bounded s
 End
 
+(* ctxt hasn't run yet *)
+Definition frame_fresh_def:
+  frame_fresh ctxt <=>
+    ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\ ctxt.returnData = [] /\
+    buffer_to_list ctxt.memory = [] /\ ctxt.jumpDest = NONE
+End
+
+(* ctxt's message and es's transaction are the ones tx describes *)
+Definition frame_tx_rel_def:
+  frame_tx_rel tx es ctxt <=>
+    ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
+    ctxt.msgParams.value = tx.value /\ ctxt.msgParams.static = tx.is_static /\
+    buffer_to_list ctxt.msgParams.data = tx.calldata /\
+    ctxt.msgParams.code = tx.code /\
+    tx.created_in_tx =
+      account_empty (lookup_account tx.target es.originalAccounts) /\
+    tx_block_fields_rel tx es.txParams
+End
+
+(* es's accounts, transient storage and deletion queue are am's after tx's value transfer *)
+Definition world_rel_def:
+  world_rel am tx es <=>
+    value_transfer_ok tx am.accounts /\
+    es.rollback.accounts = accounts_after_transfer tx am.accounts /\
+    es.rollback.tStorage = am.tStorage /\
+    es.rollback.toDelete = am.pending_deletions /\
+    am.logs = []
+End
+
+(* es is a fresh frame running the installed code, started from am by tx *)
 Definition call_state_rel_def:
   call_state_rel tops runtime_bc am tx es <=>
     ?ctxt rb rest.
       es.contexts = (ctxt, rb) :: rest /\
-      wf_state es /\ (?d. es.msdomain = Collect d) /\
-      ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\ ~tx.is_static /\
-      (?mr. ctxt.msgParams.outputTo = Memory mr) /\
+      evm_state_ok es /\ (?d. es.msdomain = Collect d) /\
+      frame_fresh ctxt /\ (?mr. ctxt.msgParams.outputTo = Memory mr) /\
+      frame_tx_rel tx es ctxt /\
+      world_rel am tx es /\
       installed_code_rel tops runtime_bc (account_immutables am tx.target)
         ctxt.msgParams.code /\
       (lookup_account tx.target es.rollback.accounts).code =
         ctxt.msgParams.code /\
-      ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
-      LENGTH ctxt.msgParams.code <= 24576 /\
-      ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
-      ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
-      balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es /\
-      value_transfer_ok tx am.accounts /\
-      es.rollback.accounts = accounts_after_transfer tx am.accounts /\
-      es.rollback.toDelete = am.pending_deletions /\
-      es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
-      am.pending_deletions = [] /\
-      ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
-      ctxt.msgParams.value = tx.value /\
-      tx.created_in_tx =
-        account_empty (lookup_account tx.target es.originalAccounts) /\
-      buffer_to_list ctxt.msgParams.data = tx.calldata /\
-      ctxt.msgParams.code = tx.code /\
-      tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
 End
+
+Theorem call_state_rel_parsed:
+  call_state_rel tops runtime_bc am tx es ==>
+  (FST (HD es.contexts)).msgParams.parsed =
+    parse_code 0 FEMPTY (FST (HD es.contexts)).msgParams.code
+Proof
+  rw[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+     evm_state_ok_def] >>
+  gvs[wf_state_def, wf_context_def]
+QED
+
+Theorem call_state_rel_code_length:
+  call_state_rel tops runtime_bc am tx es ==>
+  LENGTH (FST (HD es.contexts)).msgParams.code <= 24576
+Proof
+  strip_tac >>
+  `wf_state es /\
+   (lookup_account tx.target es.rollback.accounts).code =
+     (FST (HD es.contexts)).msgParams.code` by
+    gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+        evm_state_ok_def] >>
+  `wf_accounts es.rollback.accounts` by fs[wf_state_def, all_accounts_def] >>
+  fs[wf_accounts_def, wf_account_state_def, lookup_account_def] >>
+  first_x_assum (qspec_then `tx.target` mp_tac) >> simp[]
+QED
 
 (* ===== Outcome bounds of the real run ===== *)
 
@@ -295,7 +467,8 @@ Theorem call_state_rel_call_outcomes_ok:
 Proof
   strip_tac >>
   `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
-    fs[call_state_rel_def] >>
+    fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+       evm_state_ok_def] >>
   drule_all call_trace_outcomes_bounded >>
   qpat_x_assum `EVERY _ (MAP SND (call_trace es))` mp_tac >>
   simp[call_outcomes_ok_def, listTheory.EVERY_MEM] >>
@@ -318,33 +491,6 @@ Definition next_source_machine_def:
                 logs := [];
                 pending_deletions := [] |>
 End
-
-(* call_state_rel's am.pending_deletions = [] holds of every machine that
-   deployments and transactions reach from one with none: a successful
-   deployment or call commits its deletions (finalize_pending_deletions),
-   and a failed call returns the machine it was given. *)
-Theorem call_external_transaction_pending_deletions:
-  !orc gobs am tx r am' rqs.
-    call_external_transaction orc gobs am tx = (r, am', rqs) /\
-    am.pending_deletions = [] ==>
-    am'.pending_deletions = []
-Proof
-  rw[call_external_transaction_def] >> Cases_on `r`
-  >- (fs[call_external_def, call_external_trace_def, AllCaseEqs()] >> gvs[]) >>
-  rename1 `call_external orc gobs (clear_machine_logs am) tx = (INR exn, am', rqs)` >>
-  reverse (Cases_on `exn = HaltException`)
-  >- (drule call_external_error_rollback >> simp[clear_machine_logs_def]) >>
-  gvs[call_external_def, call_external_trace_def, AllCaseEqs()]
-QED
-
-Theorem load_contract_pending_deletions:
-  !orc gobs am tx mods exps am' rqs.
-    load_contract orc gobs am tx mods exps = INL (am', rqs) ==>
-    am'.pending_deletions = []
-Proof
-  rw[load_contract_def, load_contract_trace_def] >>
-  BasicProvers.every_case_tac >> gvs[]
-QED
 
 (* Exact PLAN lookup: the source lookup_function API, no invented additional
    MEM/selector-uniqueness premise. Supported-program restrictions are separate. *)
@@ -379,19 +525,31 @@ Definition return_bytes_def:
                  else enc (vyper_to_abi_type (type_env tops) ret) abi_v
 End
 
+(* The declared return type of the external entry f, which fixes how the
+   call's return bytes encode the source result.  Every f that
+   calldata_dispatch returns is found by lookup_function, so the NoneT
+   default is never read there. *)
+Definition external_return_type_def:
+  external_return_type tops f =
+    case vyperInterpreter$lookup_function NONE f External tops of
+      SOME (_, _, _, _, ret, _) => ret
+    | NONE => NoneT
+End
+
 (* Observe the selected function's decorator at the transaction boundary. *)
 Definition tx_return_bytes_def:
-  tx_return_bytes tops ret tx v out <=>
+  tx_return_bytes tops tx v out <=>
     if lookup_raw_return_or_F (NONE : num option) tx.function_name External tops
     then raw_return_bytes v = SOME out
-    else return_bytes tops ret v out
+    else return_bytes tops (external_return_type tops tx.function_name) v out
 End
 
 Definition unspecified_behaviour_exempt_def:
   unspecified_behaviour_exempt tops e <=>
-    e = RuntimeError "abi_decode invalid" /\
+    (e = RuntimeError "abi_decode invalid" /\
     ?ty. occurs_abi_decode_target ty tops /\
-         is_dynamic (vyper_to_abi_type (type_env tops) ty)
+         is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
+    e = RuntimeError "transfer_value recipient overflow"
 End
 
 Definition source_exempt_def:
@@ -589,24 +747,25 @@ End
 (* Primitive source/Venom result boundary at one observed storage horizon. *)
 Definition external_call_result_rel_def:
   external_call_result_rel H tops ret tx (res, am', rqs) vres <=>
-    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
     case (res, vres) of
       (INL v, Halt ss) =>
-        tx_return_bytes tops ret tx v ss.vs_returndata /\
-        accounts_agree H cx am'.accounts
+        (if lookup_raw_return_or_F (NONE : num option) tx.function_name External tops
+         then raw_return_bytes v = SOME ss.vs_returndata
+         else return_bytes tops ret v ss.vs_returndata) /\
+        accounts_agree H tx.target am'.accounts
           (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-        transient_agree H cx am'.tStorage ss.vs_transient /\
+        transient_agree H tx.target am'.tStorage ss.vs_transient /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
-        LIST_REL (request_agree H cx) rqs ss.vs_requests
+        LIST_REL (request_agree H tx.target) rqs ss.vs_requests
     | (INR HaltException, Halt ss) =>
         ss.vs_returndata = [] /\
-        accounts_agree H cx am'.accounts
+        accounts_agree H tx.target am'.accounts
           (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-        transient_agree H cx am'.tStorage ss.vs_transient /\
+        transient_agree H tx.target am'.tStorage ss.vs_transient /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
-        LIST_REL (request_agree H cx) rqs ss.vs_requests
+        LIST_REL (request_agree H tx.target) rqs ss.vs_requests
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error (RevertData _)), Abort Revert_abort _) => T
@@ -616,26 +775,22 @@ Definition external_call_result_rel_def:
 End
 
 (* Fixed slots use distinct observations; absent slots must be irrelevant
-   to the observation selected by run. *)
+   to the predicate selected by the caller. *)
 Definition gas_readings_rel_def:
-  gas_readings_rel readings run out <=>
+  gas_readings_rel readings P <=>
     ?slots unused.
       PERM (MAP THE (FILTER IS_SOME slots) ++ unused) readings /\
       !gobs tail.
         LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots gobs ==>
-        run (gobs ++ tail) = out
+        P (gobs ++ tail)
 End
 
-Definition call_success_rel_def:
-  call_success_rel H tops ret tx (v, am', rqs) es r es' <=>
-    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-    ?out.
-      frame_outcome es r es' NONE out am'.logs /\
-      tx_return_bytes tops ret tx v out /\
-      accounts_agree H cx am'.accounts
-        (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-      transient_agree H cx am'.tStorage es'.rollback.tStorage /\
-      LIST_REL (request_agree H cx) rqs (call_requests es)
+Definition effects_agree_def:
+  effects_agree H tx (am', rqs) es es' <=>
+    accounts_agree H tx.target am'.accounts
+      (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+    transient_agree H tx.target am'.tStorage es'.rollback.tStorage /\
+    LIST_REL (request_agree H tx.target) rqs (call_requests es)
 End
 
 Definition exception_outcome_rel_def:
@@ -666,28 +821,23 @@ QED
 
 (* Fixed-reading transport used by the compiler proof. *)
 Definition call_result_rel_at_def:
-  call_result_rel_at gobs tops ret am tx es r es' <=>
-    let H = storage_trace_horizon
-      (source_storage_trace am tx (MAP SND (call_trace es)) gobs) in
-    let (res, am', rqs) =
-      call_external (SOME (MAP SND (call_trace es))) gobs am tx in
+  call_result_rel_at gobs tops am tx es r es' <=>
+    let os = MAP SND (call_trace es) in
+    let H = storage_trace_horizon (source_storage_trace am tx os gobs) in
+    let (res, am', rqs) = call_external (SOME os) gobs am tx in
     case res of
-      INL v => call_success_rel H tops ret tx (v, am', rqs) es r es'
-    | INR HaltException =>
-        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-          frame_outcome es r es' NONE [] am'.logs /\
-          accounts_agree H cx am'.accounts
-            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-          transient_agree H cx am'.tStorage es'.rollback.tStorage /\
-          LIST_REL (request_agree H cx) rqs (call_requests es)
+      INL v => ?out. tx_return_bytes tops tx v out /\
+                     frame_outcome es r es' NONE out am'.logs /\
+                     effects_agree H tx (am', rqs) es es'
+    | INR HaltException => frame_outcome es r es' NONE [] am'.logs /\
+                           effects_agree H tx (am', rqs) es es'
     | INR exc => exception_outcome_rel tops exc es r es'
 End
 
 Definition call_result_rel_def:
-  call_result_rel tops ret am tx es r es' <=>
+  call_result_rel tops am tx es r es' <=>
+    let os = MAP SND (call_trace es) in
     gas_readings_rel (gas_readings es)
-      (\gobs.
-        source_storage_ok am tx (MAP SND (call_trace es)) gobs ∧
-        call_outcomes_storage_ok am tx (MAP SND (call_trace es)) gobs ==>
-        call_result_rel_at gobs tops ret am tx es r es') T
+      (\gobs. call_storage_ok am tx os gobs ==>
+              call_result_rel_at gobs tops am tx es r es')
 End

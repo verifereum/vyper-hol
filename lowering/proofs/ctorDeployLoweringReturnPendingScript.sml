@@ -191,11 +191,15 @@ Theorem pending_frame_scope_handlers:
   state_rel_frame (\(s:evaluation_state) t. t.pending_deletions = s.pending_deletions)
     next_gas_reading /\
   state_rel_frame (\(s:evaluation_state) t. t.pending_deletions = s.pending_deletions)
-    (precompile_call_success bt)
+    (precompile_call_success bt vs)
 Proof
+  rpt conj_tac
+  >~ [`state_rel_frame _ (precompile_call_success bt vs)`] >-
+    (simp[state_rel_frame_result] >> rpt strip_tac >>
+     drule precompile_call_success_state >> strip_tac >> simp[]) >>
   simp[state_rel_frame_def, push_scope_def, pop_scope_def,
     push_scope_with_var_def, new_variable_def, get_scopes_def, set_scopes_def,
-    next_gas_reading_def, precompile_call_success_def,
+    next_gas_reading_def,
     bind_def, ignore_bind_def, lift_option_type_def,
     check_def, type_check_def, assert_def, return_def, raise_def,
     AllCaseEqs()] >> rpt strip_tac >>
@@ -356,9 +360,7 @@ Theorem pending_call_free_expressions:
   (!cx target v st res st'. ~supported_assignment_exists constructor_call_root target /\
     assign_tuple_targets cx target v st = (res,st') ==> st'.pending_deletions = st.pending_deletions) /\
   (!cx targets vs st res st'. ~supported_assignments_exists constructor_call_root targets /\
-    assign_tuple_target_list cx targets vs st = (res,st') ==> st'.pending_deletions = st.pending_deletions) /\
-  (!cx es st res st'. ~supported_exprs_exists constructor_call_root es /\
-    eval_expr_results cx es st = (res,st') ==> st'.pending_deletions = st.pending_deletions)
+    assign_tuple_target_list cx targets vs st = (res,st') ==> st'.pending_deletions = st.pending_deletions)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >>
   rpt strip_tac >>
@@ -478,13 +480,6 @@ Proof
       match_mp_tac pending_frame_bind >> conj_tac
       >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
       simp[pending_frame_primitives])
-  >~ [`state_rel_frame _ (bind (eval_expr _ _) _)`]
-  >- (match_mp_tac pending_frame_bind_guarded >> conj_tac
-      >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
-      rpt strip_tac >> BETA_TAC >>
-      match_mp_tac pending_frame_bind >> conj_tac
-      >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
-      simp[pending_frame_primitives])
   >~ [`write_place`]
   >- (match_mp_tac pending_frame_bind >> conj_tac
       >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
@@ -589,8 +584,7 @@ Theorem pending_call_free_statements:
   (!cx t st res st'. eval_base_place cx t st = (res,st') ==> T) /\
   (!cx t st res st'. eval_target_place cx t st = (res,st') ==> T) /\
   (!cx t v st res st'. assign_tuple_targets cx t v st = (res,st') ==> T) /\
-  (!cx ts vs st res st'. assign_tuple_target_list cx ts vs st = (res,st') ==> T) /\
-  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> T)
+  (!cx ts vs st res st'. assign_tuple_target_list cx ts vs st = (res,st') ==> T)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >>
   rpt strip_tac >>

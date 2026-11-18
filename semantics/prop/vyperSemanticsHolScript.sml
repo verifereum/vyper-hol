@@ -1,12 +1,8 @@
 Theory vyperSemanticsHol
 Ancestors
   vyperCallFiniteStorage
-  sourceCallCount
-  sourceCallCountMonotone
-  sourceCallCountEntryReplay
-  sourceCallCountWitness
-  sourceCallCountWitnessTest
   vyperFiniteStoragePreservation
+  vyperImmutableAccessFrame
   vyperLogPreservation
   vyperEvalPureExpr
   vyperTypeSoundness

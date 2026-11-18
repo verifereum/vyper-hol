@@ -145,9 +145,9 @@ Proof
 QED
 
 Theorem machine_frame_precompile_call_success:
-  state_rel_frame machine_frame (precompile_call_success bt)
+  state_rel_frame machine_frame (precompile_call_success bt vs)
 Proof
-  rw[state_rel_frame_def] >> Cases_on `precompile_call_success bt st` >>
+  rw[state_rel_frame_def] >> Cases_on `precompile_call_success bt vs st` >>
   drule precompile_call_success_state >> rw[] >> simp[machine_frame_def]
 QED
 
@@ -257,7 +257,7 @@ QED
 Theorem machine_frame_unchanged_reads:
   state_rel_frame machine_frame (conditional_result cx r) /\
   state_rel_frame machine_frame (check_not_static cx) /\
-  state_rel_frame machine_frame (check_create_blueprint has_salt vs)
+  state_rel_frame machine_frame (check_create_blueprint has_salt literal_offset vs)
 Proof
   simp[state_rel_frame_result] >>
   metis_tac[conditional_result_state, vyperCreateTheory.check_create_blueprint_state,

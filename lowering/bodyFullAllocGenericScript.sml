@@ -181,7 +181,7 @@ Proof
   gvs[ghost_kept_def]
 QED
 
-Theorem inst_seq_ptr_lower_bound_transport[local]:
+Theorem inst_seq_ptr_lower_bound_from_alloca_next:
   !code s G tn Gf tnf.
     inst_seq_ptr D lo0 ctx fn PG G tn code s Gf tnf /\
     lo0 <= lo /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
@@ -252,7 +252,7 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE) (emitted_insts sa sb)` by
     gvs[listTheory.EVERY_MEM] >>
   `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tnf` by
-    (irule inst_seq_ptr_lower_bound_transport >>
+    (irule inst_seq_ptr_lower_bound_from_alloca_next >>
      simp[] >> qexists_tac `0` >>
      gvs[bytes_copy_insts_def, mk_inst_def]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)

@@ -4,18 +4,17 @@ Ancestors
   codegenEntryRel codegenSymRel asmDataEnv asmSymBridge asmSymSem arithmetic
 
 val transport = ``\p q.
-  ?K. 0 < K /\
-    !env s n a.
-      s.as_pc = 0 /\
-      sym_steps p env n (sym_init s) = SymOK a ==>
-      (?m b. sym_steps q env m (sym_init s) = SymOK b /\
-             n <= K * (m + 1)) /\
-      (a.sym_base.as_pc < LENGTH p /\
-       EL a.sym_base.as_pc p = AsmOp "GAS" ==>
-       ?m b. sym_steps q env m (sym_init s) = SymOK b /\
-             b.sym_base.as_pc < LENGTH q /\
-             EL b.sym_base.as_pc q = AsmOp "GAS" /\
-             b.sym_base.as_gas_readings = a.sym_base.as_gas_readings)``;
+  ?K. 0 < K /\ !env s n a.
+    s.as_pc = 0 /\ sym_steps p env n (sym_init s) = SymOK a ==>
+    (?m b. sym_steps q env m (sym_init s) = SymOK b /\ n <= K * (m+1)) /\
+    (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} /\
+       a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp op ==>
+     ?m b. sym_steps q env m (sym_init s) = SymOK b /\
+       b.sym_base.as_pc < LENGTH q /\ EL b.sym_base.as_pc q = AsmOp op /\
+       (b.sym_base with as_pc := 0) = (a.sym_base with as_pc := 0) /\
+       MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
+       FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)``;
 
 Theorem focus_finalizer_prefix_bridge_conditional:
 !fin rpolicy unit cpl prog prog' vs0 es0 result final.
@@ -75,6 +74,11 @@ Proof
       qexists_tac `k * (m + 1)` >> simp[]) >>
   strip_tac >>
   `ss.sym_base.as_pc = ast.as_pc` by metis_tac[asm_sym_rel_pc] >>
+  qpat_x_assum `!op. _ ==> ?m b. _` (qspec_then `"GAS"` mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`mg`, `bg`] strip_assume_tac) >>
+  `bg.sym_base.as_gas_readings = ss.sym_base.as_gas_readings` by
+    fs[asmSemTheory.asm_state_component_equality] >>
   gvs[] >>
   qpat_x_assum `sym_steps prog' _ m _ = SymOK b` kall_tac >>
   drule_all asm_sym_steps_lockstep >> strip_tac >>

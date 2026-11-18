@@ -43,6 +43,24 @@ Proof
   simp[ghost_kept_def, SUBSET_DEF] >> metis_tac[]
 QED
 
+Theorem ghost_kept_disjoint_taint_frame:
+  (!x. not_fresh_at sa x ==>
+    FLOOKUP G' x = FLOOKUP G x /\
+    op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  tn'.t_mem SUBSET tn.t_mem UNION {i | b <= i /\ i < b+n} /\
+  (!aid a len. FLOOKUP s.vs_allocas aid = SOME (a,len) /\
+    aid < sa.cs_next_id ==> regions_disjoint b n a len) /\
+  (!name a len. local_region cenv es.scopes s name a len ==>
+    regions_disjoint b n a len) ==>
+  ghost_kept cenv es sa G tn s G' tn'
+Proof
+  simp[ghost_kept_def, SUBSET_DEF, regions_disjoint_def] >>
+  rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `!x. x IN tn'.t_mem ==> _` drule >>
+  strip_tac >> gvs[] >> decide_tac
+QED
+
 Theorem literal_clean_ptr_mem_ok:
   lookup_var p s = SOME w /\ FLOOKUP G p = SOME (base_addr,sz) /\
   base_addr <= w2n w /\

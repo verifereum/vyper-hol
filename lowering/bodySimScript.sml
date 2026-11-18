@@ -510,7 +510,7 @@ Definition body_stmts_ok_def:
         (eval_stmts cx ss) es
 End
 
-(* The same, evaluated without reading (eval_expr_results). *)
+(* The same, for operands evaluated without being read. *)
 Definition body_results_ok_def:
   body_results_ok cx [] = T /\
   body_results_ok cx (e::es) =

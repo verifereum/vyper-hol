@@ -15,9 +15,28 @@ Ancestors
   vyperSubscriptOverlap vyperInterpreter vyperState vyperScopePreservation vyperCallOutcomeFrame
   pair list rich_list vyperAST vyperContext vyperMisc vyperLookup
   vyperEvalExprPreservesScopesDom vyperStatePreservation vyperCallFrame
-  vyperCreateFrame vyperPlaceFrames vyperStoragePlaceProvenance
+  vyperCreate vyperCreateFrame vyperPlaceFrames vyperStoragePlaceProvenance
 Libs
   pairLib
+
+Theorem eval_create_operands_success_value:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st =
+    (INL pv,st') ==> ?v. pv = Value v
+Proof
+  Cases_on `kind` >>
+  simp[eval_create_operands_def, bind_def, AllCaseEqs()] >>
+  metis_tac[eval_create_success_value]
+QED
+
+Theorem eval_create_operands_preserves_scopes:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st =
+    (res,st') ==> st'.scopes = st.scopes
+Proof
+  Cases_on `kind` >>
+  simp[eval_create_operands_def, bind_def, AllCaseEqs()] >>
+  metis_tac[eval_create_preserves_scopes_immutables,
+            check_create_blueprint_result_state]
+QED
 
 (* Why it holds (a reader may ignore this): Pop ty tgt runs
    eval_target_place then pop_place, which changes scopes only on a
@@ -234,10 +253,7 @@ Resume eval_expr_memory_access[call]:
   >~ [`eval_raw_call`]
   >- (drule vyperCallFrameTheory.eval_raw_call_success_value >> simp[])
   >~ [`CreateTarget`]
-  >- (rename1 `CreateTarget kind _ _ _` >> Cases_on `kind` >>
-      gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
-          AllCaseEqs()] >>
-      drule vyperCreateFrameTheory.eval_create_success_value >> simp[])
+  >- (drule eval_create_operands_success_value >> simp[])
 QED
 Finalise eval_expr_memory_access
 
@@ -308,11 +324,7 @@ Theorem evaluate_unwritten_local[local]:
     ~MEM (WriteAcc (LocalRef id)) (accesses_target bt) ==>
     lookup_scopes id st'.scopes = lookup_scopes id st.scopes) /\
   (!cx:evaluation_context. !g:assignment_target. !v:value. T) /\
-  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T) /\
-  (!cx es st res st' id.
-    eval_expr_results cx es st = (res,st') /\
-    ~MEM (WriteAcc (LocalRef id)) (accesses_exprs es) ==>
-    lookup_scopes id st'.scopes = lookup_scopes id st.scopes)
+  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[accesses_expr_def]
   >- suspend "name"
@@ -342,8 +354,6 @@ Proof
   >- suspend "baseattribute"
   >- suspend "basesubscript"
   >- suspend "target"
-  >- (rpt strip_tac >> gvs[Once evaluate_def, return_def])
-  >> suspend "results"
 QED
 
 Resume evaluate_unwritten_local[name]:
@@ -534,27 +544,15 @@ Resume evaluate_unwritten_local[selfdestruct]:
 QED
 Resume evaluate_unwritten_local[create]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  fs[accesses_exprs_unwritten] >>
-  `!n. EVERY (\e. ~MEM (WriteAcc (LocalRef id)) (accesses_expr e))
-      (TAKE n es)` by metis_tac[EVERY_TAKE] >>
-  `!n. EVERY (\e. ~MEM (WriteAcc (LocalRef id)) (accesses_expr e))
-      (DROP n es)` by metis_tac[EVERY_DROP] >>
-  `!n. EVERY (\e. ~MEM (WriteAcc (LocalRef id)) (accesses_expr e))
-      (TAKE n (DROP 2 es))` by metis_tac[EVERY_TAKE, EVERY_DROP] >>
-  `!n. EVERY (\e. ~MEM (WriteAcc (LocalRef id)) (accesses_expr e))
-      (DROP n (DROP 2 es))` by metis_tac[EVERY_DROP] >>
-  fs[GSYM accesses_exprs_unwritten] >>
-  Cases_on `kind` >> gvs[] >>
+  `~MEM (WriteAcc (LocalRef id))
+      (accesses_exprs (create_operand_order kind has_salt es))` by
+    (fs[accesses_exprs_unwritten] >> Cases_on `kind` >>
+     Cases_on `es` >> simp[create_operand_order_def] >>
+     rename1 `head::rest` >>
+     Cases_on `rest` >> gvs[create_operand_order_def] >>
+     conj_tac >> FIRST [irule EVERY_TAKE, irule EVERY_DROP] >> simp[]) >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
-  imp_res_tac check_create_blueprint_result_state >> gvs[] >>
-  imp_res_tac read_results_state >> gvs[] >>
-  imp_res_tac eval_create_preserves_scopes_immutables >> gvs[] >>
-  rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
-  rpt (qpat_x_assum `!a b c d e f g h i j. _` drule_all >> strip_tac) >>
-  rpt (qpat_x_assum `!a b c. _` drule >> strip_tac) >>
-  rpt (qpat_x_assum `!a b c d. _` drule >> simp[] >> strip_tac) >>
-  rpt (qpat_x_assum `!id'. _` (qspec_then `id` mp_tac) >> simp[] >> strip_tac) >>
-  gvs[]
+  imp_res_tac eval_create_operands_preserves_scopes >> gvs[] >> metis_tac[]
 QED
 Resume evaluate_unwritten_local[exprs]:
   rpt strip_tac >> gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
@@ -581,10 +579,6 @@ QED
 Resume evaluate_unwritten_local[target]:
   rpt strip_tac >> gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
   imp_res_tac get_place_state >> gvs[] >> metis_tac[]
-QED
-Resume evaluate_unwritten_local[results]:
-  rpt strip_tac >> gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  metis_tac[]
 QED
 Finalise evaluate_unwritten_local
 

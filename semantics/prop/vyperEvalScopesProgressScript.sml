@@ -137,9 +137,7 @@ Theorem eval_mutual_scopes_progress[local]:
   (!cx bt st res st'. eval_target_place cx bt st = (res,st') ==>
     scopes_progress st.scopes st'.scopes) /\
   (!cx:evaluation_context. !g:assignment_target. !v:value. T) /\
-  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T) /\
-  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==>
-    scopes_progress st.scopes st'.scopes)
+  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[]
   >- (rpt strip_tac >>
@@ -214,12 +212,6 @@ Proof
       qpat_x_assum `eval_target_place cx _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
       imp_res_tac get_place_state >> gvs[] >> metis_tac[])
-  >- simp[Once evaluate_def, return_def]
-  >> rpt strip_tac >>
-  qpat_x_assum `eval_expr_results cx (_::_) _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  strip_tac >> imp_res_tac eval_expr_preserves_scopes_dom >>
-  metis_tac[scopes_progress_trans]
 QED
 
 Resume eval_mutual_scopes_progress[Builtin]:
@@ -290,7 +282,6 @@ Resume eval_mutual_scopes_progress[ExtCall]:
   rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
   rpt (qpat_x_assum `!a b c. _` drule_all >> strip_tac) >>
   imp_res_tac eval_exprs_preserves_scopes_dom >>
-  imp_res_tac eval_expr_results_preserves_scopes_dom >>
   metis_tac[scopes_progress_trans]
 QED
 
@@ -339,19 +330,12 @@ Resume eval_mutual_scopes_progress[Transfer]:
 QED
 
 Resume eval_mutual_scopes_progress[CreateTarget]:
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  Cases_on `kind` >> gvs[] >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `kind` >> gvs[eval_create_operands_def, bind_def, AllCaseEqs()] >>
   imp_res_tac check_create_blueprint_result_state >> gvs[] >>
-  imp_res_tac read_results_state >> gvs[] >>
-  rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
-  rpt (qpat_x_assum `!st res st'. _` drule_all >> strip_tac) >>
-  imp_res_tac eval_create_preserves_scopes_immutables >> gvs[] >>
-  imp_res_tac eval_expr_preserves_scopes_dom >>
-  imp_res_tac eval_exprs_preserves_scopes_dom >>
-  imp_res_tac eval_expr_results_preserves_scopes_dom >>
-  irule scopes_progress_trans >> goal_assum (drule_at Any) >> simp[] >>
-  irule scopes_progress_trans >> goal_assum (drule_at Any) >> simp[]
+  imp_res_tac eval_create_preserves_scopes_immutables >> gvs[]
 QED
 
 Resume eval_mutual_scopes_progress[IntCall]:
@@ -427,8 +411,6 @@ Theorem eval_scopes_progress:
   (!cx bt st res st'. eval_base_place cx bt st = (res,st') ==>
      scopes_progress st.scopes st'.scopes) /\
   (!cx bt st res st'. eval_target_place cx bt st = (res,st') ==>
-     scopes_progress st.scopes st'.scopes) /\
-  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==>
      scopes_progress st.scopes st'.scopes)
 Proof
   metis_tac[eval_mutual_scopes_progress]

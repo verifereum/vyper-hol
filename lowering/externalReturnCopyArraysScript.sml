@@ -1,6 +1,7 @@
 (* Task-owned array representation interfaces; no typedMemoryCopy import. *)
 Theory externalReturnCopyArrays
 Ancestors
+  typedMemoryCopy
   externalReturnCopyDynamic externalReturnCopyBulk externalReturnCopyArrayLoop fragExec valueEncoding valueEncodingDefs valueEncodingProps
   valueEncodingProofs vyperTypeSystem vyperTypeArgFits vyperTyping
   vyperValue list pair alist sorting arithmetic words context compileEnv
@@ -193,10 +194,10 @@ Theorem return_copy_sarray_frag:
        w2n dw + type_memory_size dtv <= w2n sw)) ==>
     frag_exec ctx a b (\u. u = s)
       (\t. val_in_memory dtv (f i) (w2n dw) t.vs_memory /\
-        return_copy_frame a (w2n dw) (type_memory_size dtv) s t) (\r. F)) ==>
+        typed_copy_state_frame a (w2n dw) (type_memory_size dtv) s t) (\r. F)) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\t. val_in_memory (ArrayTV dtv (Fixed N)) (ArrayV (SArrayV kvs)) (w2n dw) t.vs_memory /\
-      return_copy_frame sa (w2n dw) (type_memory_size (ArrayTV dtv (Fixed N))) s t) (\r. F)
+      typed_copy_state_frame sa (w2n dw) (type_memory_size (ArrayTV dtv (Fixed N))) s t) (\r. F)
 Proof
   strip_tac >> drule_all return_copy_sarray_representation >> strip_tac >>
   `!i. i < N ==> val_wf stv (f i) /\ val_wf dtv (f i) /\
@@ -205,7 +206,7 @@ Proof
   `frag_exec ctx sa sb (\u. u = s)
     (\t. (!i. i < N ==> val_in_memory dtv (f i)
       (w2n dw + i * type_memory_size dtv) t.vs_memory) /\
-      return_copy_frame sa (w2n dw) (N * type_memory_size dtv) s t) (\r. F)` by
+      typed_copy_state_frame sa (w2n dw) (N * type_memory_size dtv) s t) (\r. F)` by
     (qpat_x_assum `!i. f i = _` kall_tac >>
      qpat_x_assum `value_has_type _ _` kall_tac >>
      qpat_x_assum `val_wf (ArrayTV stv _) _` kall_tac >>
@@ -255,10 +256,10 @@ Theorem return_copy_dynarray_frag:
        w2n dw + type_memory_size dtv <= w2n sw)) ==>
     frag_exec ctx a b (\u. u = s)
       (\t. val_in_memory dtv (EL i vs) (w2n dw) t.vs_memory /\
-        return_copy_frame a (w2n dw) (type_memory_size dtv) s t) (\r. F)) ==>
+        typed_copy_state_frame a (w2n dw) (type_memory_size dtv) s t) (\r. F)) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\t. val_in_memory (ArrayTV dtv (Dynamic capacity)) (ArrayV (DynArrayV vs)) (w2n dw) t.vs_memory /\
-      return_copy_frame sa (w2n dw) (type_memory_size (ArrayTV dtv (Dynamic capacity))) s t) (\r. F)
+      typed_copy_state_frame sa (w2n dw) (type_memory_size (ArrayTV dtv (Dynamic capacity))) s t) (\r. F)
 Proof
   strip_tac >>
   fs[return_copy_dynarray_wf, return_copy_dynarray_representation] >>
@@ -268,7 +269,7 @@ Proof
     (\t. mem_word_at (w2n dw) t.vs_memory = n2w (LENGTH vs) /\
       (!i. i < LENGTH vs ==> val_in_memory dtv (EL i vs)
         (w2n dw + 32 + i * type_memory_size dtv) t.vs_memory) /\
-      return_copy_frame sa (w2n dw) (32 + capacity * type_memory_size dtv) s t) (\r. F)` by
+      typed_copy_state_frame sa (w2n dw) (32 + capacity * type_memory_size dtv) s t) (\r. F)` by
     (Cases_on `type_memory_size dtv = type_memory_size stv /\ dty = sty`
      >- (`stv = dtv` by metis_tac[] >>
          qpat_x_assum `stv = dtv` SUBST_ALL_TAC >>
