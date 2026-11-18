@@ -408,8 +408,10 @@ Proof
   ho_match_mp_tac mem_safe_defs_ind >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
       fs[] >> `inst.inst_opcode <> DRET` by gvs[raw_opcode_ok_def] >>
-      once_rewrite_tac[mem_safe_step_def] >>
-      simp[PURE_REWRITE_RULE [venom_state_fupdcanon] memory_checks_fmp_fields] >>
+      `~ctx_has_dalloca ctx` by
+        (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+      simp[mem_safe_step_no_dalloca,
+           PURE_REWRITE_RULE [venom_state_fupdcanon] memory_checks_fmp_fields] >>
       Cases_on `inst.inst_opcode = INVOKE` >> simp[] >>
       Cases_on `decode_invoke inst` >> simp[] >>
       rename1 `decode_invoke inst = SOME pair` >> PairCases_on `pair` >>

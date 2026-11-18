@@ -86,7 +86,7 @@ Proof
   ci_mono_chain_tac ci_mono_grows_rws
 QED
 
-Theorem ci_mono_compile_bytestring_word_count[local]:
+Theorem ci_mono_compile_bytestring_word_count:
   !src sa. ci_mono sa (SND (compile_bytestring_word_count src sa))
 Proof
   simp[compile_bytestring_word_count_def] >> ci_mono_chain_tac ci_mono_grows_rws

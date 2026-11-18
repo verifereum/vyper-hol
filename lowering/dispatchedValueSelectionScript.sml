@@ -125,8 +125,8 @@ Theorem signature_hit_entry[local]:
   FIND (\(n,tys). abi_method_id (type_env tops) n tys = cd_selector cd)
     (abi_external_signatures tops) = SOME (name,tys) /\
   vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,F,args,[],ret,fbody) ==>
-  (?rr. MEM (mut,F,rr,name,args,[],ret,fbody) (FST (classify_functions tops))) /\
+    SOME (mut,nr,args,[],ret,fbody) ==>
+  (?rr. MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops))) /\
   !fb. linear_dispatch_target cd
     (MAP (\(sel,lbl,z). (sel,lbl))
       (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
@@ -161,20 +161,20 @@ Proof
   drule cd_selector_method_id >> simp[calldata_hits_selector_def]
 QED
 
-Theorem source_dispatched_linear_target:
+Theorem source_dispatched_linear_target_nr:
   supported_program tops /\
   ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
   calldata_dispatch tops cd = SOME (name,vals) /\
   vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,F,args,[],ret,fbody) ==>
-  (?rr. MEM (mut,F,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
+    SOME (mut,nr,args,[],ret,fbody) ==>
+  (?rr. MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
     !fb. linear_dispatch_target cd
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
       "fn_" ++ name) \/
   (name = "__default__" /\ EXISTS is_default_decl tops /\
     (?rr. FST (SND (SND (classify_functions tops))) =
-      SOME (mut,F,rr,name,args,[],ret,fbody)) /\
+      SOME (mut,nr,rr,name,args,[],ret,fbody)) /\
     !fb. linear_dispatch_target cd
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops)))) fb = fb)
@@ -182,7 +182,7 @@ Proof
   strip_tac >>
   `name = "__default__" /\ EXISTS is_default_decl tops ==>
     ?rr. FST (SND (SND (classify_functions tops))) =
-      SOME (mut,F,rr,name,args,[],ret,fbody)` by
+      SOME (mut,nr,rr,name,args,[],ret,fbody)` by
     (strip_tac >> drule default_classified_present >> strip_tac >>
      drule_all fallback_source_lookup >> strip_tac >> gvs[] >> metis_tac[]) >>
   Cases_on `LENGTH cd < 4`
@@ -202,4 +202,53 @@ Proof
   gvs[calldata_dispatch_def, AllCaseEqs()] >>
   disj1_tac >> `4 <= LENGTH cd` by decide_tac >>
   drule_all signature_hit_entry >> simp[] >> metis_tac[]
+QED
+
+Theorem source_dispatched_linear_target:
+  supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+  calldata_dispatch tops cd = SOME (name,vals) /\
+  vyperInterpreter$lookup_function NONE name External tops =
+    SOME (mut,F,args,[],ret,fbody) ==>
+  (?rr. MEM (mut,F,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
+    !fb. linear_dispatch_target cd
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
+      "fn_" ++ name) \/
+  (name = "__default__" /\ EXISTS is_default_decl tops /\
+    (?rr. FST (SND (SND (classify_functions tops))) =
+      SOME (mut,F,rr,name,args,[],ret,fbody)) /\
+    !fb. linear_dispatch_target cd
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops)))) fb = fb)
+Proof
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] (SPEC_ALL source_dispatched_linear_target_nr))
+QED
+
+(* A successful dispatch names an external declaration or its getter. *)
+Theorem calldata_dispatch_has_source_entry:
+  supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+  calldata_dispatch tops cd = SOME (name,vals) ==>
+  ?mut nr args dflts ret fbody.
+    vyperInterpreter$lookup_function NONE name External tops =
+      SOME (mut,nr,args,dflts,ret,fbody)
+Proof
+  strip_tac >>
+  Cases_on `if LENGTH cd < 4 then NONE else
+    FIND (\(n,tys). abi_method_id (type_env tops) n tys = cd_selector cd)
+      (abi_external_signatures tops)`
+  >- (gvs[calldata_dispatch_def, AllCaseEqs()] >>
+      drule default_classified_present >> strip_tac >>
+      drule_all fallback_source_lookup >> simp[] >> metis_tac[]) >>
+  PairCases_on `x` >>
+  gvs[calldata_dispatch_def, AllCaseEqs()] >>
+  `MEM (name,x1) (abi_external_signatures tops)` by
+    metis_tac[venomInstTheory.FIND_MEM] >>
+  qpat_x_assum `MEM _ (abi_external_signatures _)` mp_tac >>
+  drule source_signature_table >>
+  disch_then (qspecl_then [`name`,`x1`] (fn th => REWRITE_TAC [th])) >>
+  simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+  strip_tac >> gvs[] >>
+  drule_all classified_source_lookup >> simp[] >> metis_tac[]
 QED

@@ -15,13 +15,14 @@
  *)
 
 Theory asmOptMergeJumpdests
-Ancestors
+Ancestors bool[qualified,ignore_grammar] arithmetic[qualified,ignore_grammar]
+  asmSpliceWithin asmRefinesWithin asmSymSemWithin
   asmSplice asmSymPc asmSymBridge finalizerContract asmSymSem asmOptimizer
   asmWf asmSem symbolResolve list rich_list finite_map
 
 (* ===== The renamed program's static facts ===== *)
 
-Theorem rename_push_label_facts[local]:
+Theorem rename_push_label_facts:
   (rename_push_label x y i = AsmLabel l ⇔ i = AsmLabel l) ∧
   (rename_push_label x y i = AsmDataHeader l ⇔ i = AsmDataHeader l) ∧
   (rename_push_label x y i = AsmDataLabel l ⇔ i = AsmDataLabel l) ∧
@@ -578,6 +579,63 @@ Proof
   simp[sym_state_component_equality, asmSemTheory.asm_state_component_equality]
 QED
 
+Theorem rename_adjacent_label_steps[local]:
+  p = pre ++ AsmLabel x :: AsmLabel y :: sfx ∧
+  asm_labels_unique p ∧ y ≠ x ∧
+  t.sym_base.as_pc = LENGTH pre ∧ t.sym_base.as_stack = [] ⇒
+  INDEX_OF (AsmLabel y) p = SOME (LENGTH pre + 1) ∧
+  ∀n. sym_steps p env (SUC n) t =
+    sym_steps p env n
+      (t with sym_base := t.sym_base with as_pc := LENGTH pre + 1)
+Proof
+  strip_tac >> qpat_x_assum `p = _` SUBST_ALL_TAC >>
+  `¬MEM (AsmLabel y) pre`
+    by (irule asm_labels_unique_append_not_mem >>
+        qexists_tac `AsmLabel x :: AsmLabel y :: sfx` >> fs[]) >>
+  simp[INDEX_OF_APPEND, INDEX_OF_CONS, sym_steps_def,
+       EL_APPEND_EQN, sym_step_label_skip]
+QED
+
+Theorem rename_jump_steps[local]:
+  p = pre ++ AsmLabel x :: AsmPushLabel y :: AsmOp "JUMP" :: more ∧
+  t.sym_base.as_pc = LENGTH pre ∧ t.sym_base.as_stack = [] ⇒
+  (∀n. sym_steps p env (SUC (SUC (SUC n))) t =
+    case INDEX_OF (AsmLabel y) p of
+      NONE => SymBad "jump target"
+    | SOME j => sym_steps p env n
+        (t with sym_base := t.sym_base with as_pc := j)) ∧
+  (∀Q. (∀i. asm_plain_inst i ⇒ ¬Q i) ⇒
+    sym_steps_ok (λi stk. T) Q p env 3 t)
+Proof
+  strip_tac >>
+  qabbrev_tac `t1 = t with sym_base := t.sym_base with
+                      as_pc := LENGTH pre + 1` >>
+  qabbrev_tac `t2 = t1 with <| sym_base := asm_next t1.sym_base;
+                               sym_stack := Lab y 0 :: t.sym_stack |>` >>
+  `LENGTH pre < LENGTH p ∧ EL (LENGTH pre) p = AsmLabel x ∧
+   LENGTH pre + 1 < LENGTH p ∧ EL (LENGTH pre + 1) p = AsmPushLabel y ∧
+   LENGTH pre + 2 < LENGTH p ∧ EL (LENGTH pre + 2) p = AsmOp "JUMP"`
+    by (qpat_x_assum `p = _` SUBST1_TAC >> simp[EL_APPEND_EQN]) >>
+  `sym_step p env (AsmLabel x) t = SymOK t1`
+    by simp[Abbr `t1`, sym_step_label_skip] >>
+  `sym_step p env (AsmPushLabel y) t1 = SymOK t2`
+    by (simp[Abbr `t2`, sym_step_push_label] >> simp[Abbr `t1`]) >>
+  `t1.sym_base.as_pc = LENGTH pre + 1 ∧ t2.sym_base.as_pc = LENGTH pre + 2 ∧
+   t2.sym_stack = Lab y 0 :: t.sym_stack`
+    by simp[Abbr `t1`, Abbr `t2`, asm_next_def] >>
+  qpat_x_assum `p = _` kall_tac >>
+  conj_tac
+  >- (gen_tac >> simp[sym_steps_def] >>
+      simp[sym_step_def, sym_step_op_def, sym_jump_def, sym_jump_dest_def] >>
+      Cases_on `INDEX_OF (AsmLabel y) p` >>
+      simp[Abbr `t2`, Abbr `t1`, asm_next_def,
+           sym_state_component_equality,
+           asmSemTheory.asm_state_component_equality]) >>
+  rpt strip_tac >>
+  simp[sym_steps_ok_pos, sym_steps_ok_def, asm_plain_inst_def, is_data_inst_def] >>
+  Cases_on `sym_step p env (AsmOp "JUMP") t2` >> simp[]
+QED
+
 Theorem rename_skip[local]:
   p = pre ++ AsmLabel x :: next :: sfx ∧ asm_labels_unique p ∧
   (next = AsmLabel y ∧ y ≠ x ∨
@@ -590,55 +648,22 @@ Theorem rename_skip[local]:
 Proof
   strip_tac >> qpat_x_assum `p = _` SUBST_ALL_TAC >>
   qpat_x_assum `next = _` SUBST_ALL_TAC
-  >- (
-    `¬MEM (AsmLabel y) pre`
-      by (irule asm_labels_unique_append_not_mem >>
-          qexists_tac `AsmLabel x :: AsmLabel y :: sfx` >> fs[]) >>
-    `INDEX_OF (AsmLabel y) (pre ++ AsmLabel x :: AsmLabel y :: sfx) =
-     SOME (LENGTH pre + 1)`
-      by simp[INDEX_OF_APPEND, INDEX_OF_CONS] >>
-    `sym_steps (pre ++ AsmLabel x :: AsmLabel y :: sfx) env 1 t =
-     SymOK (t with sym_base := t.sym_base with as_pc := LENGTH pre + 1)`
-      by simp[sym_steps_pos, EL_APPEND_EQN, sym_step_label_skip,
-              sym_steps_def] >>
-    drule_then (qspec_then `1` mp_tac) sym_run_terminal_steps >>
-    simp[] >> strip_tac >> qexists_tac `fuel - 1` >> simp[]) >>
+  >- (mp_tac (Q.INST [`p` |-> `pre ++ AsmLabel x :: AsmLabel y :: sfx`]
+        rename_adjacent_label_steps) >>
+      simp[] >>
+      disch_then (CONJUNCTS_THEN2 assume_tac (qspec_then `0` (assume_tac o SIMP_RULE (srw_ss()) [arithmeticTheory.ADD1]))) >>
+      drule_then (qspec_then `1` mp_tac) sym_run_terminal_steps >>
+      fs[sym_steps_def] >> strip_tac >> qexists_tac `fuel - 1` >> simp[]) >>
   qpat_x_assum `sfx = _` SUBST_ALL_TAC >>
   qabbrev_tac `p = pre ++ AsmLabel x :: AsmPushLabel y :: AsmOp "JUMP" :: more` >>
-  qabbrev_tac `t1 = t with sym_base := t.sym_base with
-                      as_pc := LENGTH pre + 1` >>
-  qabbrev_tac `t2 = t1 with <| sym_base := asm_next t1.sym_base;
-                               sym_stack := Lab y 0 :: t.sym_stack |>` >>
-  `LENGTH pre < LENGTH p ∧ EL (LENGTH pre) p = AsmLabel x ∧
-   LENGTH pre + 1 < LENGTH p ∧ EL (LENGTH pre + 1) p = AsmPushLabel y ∧
-   LENGTH pre + 2 < LENGTH p ∧ EL (LENGTH pre + 2) p = AsmOp "JUMP"`
-    by simp[Abbr `p`, EL_APPEND_EQN] >>
-  `sym_step p env (AsmLabel x) t = SymOK t1`
-    by simp[Abbr `t1`, sym_step_label_skip] >>
-  `sym_step p env (AsmPushLabel y) t1 = SymOK t2`
-    by (simp[Abbr `t2`, sym_step_push_label] >> simp[Abbr `t1`]) >>
-  `t1.sym_base.as_pc = LENGTH pre + 1 ∧ t2.sym_base.as_pc = LENGTH pre + 2 ∧
-   t2.sym_stack = Lab y 0 :: t.sym_stack`
-    by simp[Abbr `t1`, Abbr `t2`, asm_next_def] >>
-  Cases_on `INDEX_OF (AsmLabel y) p`
-  >- (
-    `sym_steps p env 3 t = SymBad "jump target"`
-      by (simp[sym_steps_pos] >>
-          simp[sym_step_def, sym_step_op_def, sym_jump_def,
-               sym_jump_dest_def]) >>
-    drule_then (qspec_then `3` mp_tac) sym_run_terminal_steps >>
-    simp[] >> strip_tac >> gvs[sym_terminal_def]) >>
-  rename1 `SOME j` >>
-  `sym_steps p env 3 t =
-   SymOK (t with sym_base := t.sym_base with as_pc := j)`
-    by (simp[sym_steps_pos] >>
-        simp[sym_step_def, sym_step_op_def, sym_jump_def,
-             sym_jump_dest_def, sym_steps_def] >>
-        simp[Abbr `t2`, Abbr `t1`, asm_next_def,
-             sym_state_component_equality,
-             asmSemTheory.asm_state_component_equality]) >>
+  mp_tac (Q.INST [`p` |-> `p`] rename_jump_steps) >>
+  (impl_tac >- simp[Abbr `p`]) >>
+  disch_then (CONJUNCTS_THEN2 (qspec_then `0` (assume_tac o SIMP_RULE (srw_ss()) [arithmeticTheory.ADD1])) (K all_tac)) >>
+  Cases_on `INDEX_OF (AsmLabel y) p` >>
   drule_then (qspec_then `3` mp_tac) sym_run_terminal_steps >>
-  simp[] >> strip_tac >> qexists_tac `fuel - 3` >> simp[]
+  fs[sym_steps_def] >> strip_tac
+  >- gvs[sym_terminal_def] >>
+  qexists_tac `fuel - 3` >> simp[]
 QED
 
 (* ===== Runs ===== *)
@@ -702,7 +727,7 @@ Proof
   `sym_run p env fuel ss = sym_step p env (EL ss.sym_base.as_pc p) ss`
     by simp[Once sym_run_def] >>
   pop_assum SUBST1_TAC >>
-  qpat_x_assum `∀f. _` (qspec_then `0` assume_tac) >>
+  qpat_x_assum `∀f. _` (qspec_then `0` (assume_tac o SIMP_RULE (srw_ss()) [arithmeticTheory.ADD1])) >>
   qexists_tac `SUC 0` >> gvs[sym_result_rel_def, sym_obs_def]
 QED
 
@@ -753,23 +778,164 @@ QED
 
 (* ===== The walk ===== *)
 
-Theorem merge_jumpdests_walk_refines[local]:
+
+
+Theorem sv_rel_list_vals[local]:
+  !l l'. LIST_REL (sv_rel x y) l l' ==> MAP sval_val l' = MAP sval_val l
+Proof
+  Induct >> simp[LIST_REL_CONS1, PULL_EXISTS] >> rpt strip_tac >> res_tac >>
+  gvs[sv_rel_def, sval_val_def]
+QED
+
+Theorem within_ok_rename[local]:
+  sym_within_ok R Q ∧ LIST_REL (sv_rel x y) stk stk' ⇒
+  (Q (rename_push_label x y i) ⇔ Q i) ∧
+  (R (rename_push_label x y i) stk' ⇔ R i stk)
+Proof
+  strip_tac >> drule sv_rel_list_vals >> strip_tac >>
+  Cases_on `i = AsmPushLabel x`
+  >- (`asm_plain_inst (AsmPushLabel x) ∧ asm_plain_inst (AsmPushLabel y)`
+        by simp[asm_plain_inst_def, is_data_inst_def] >>
+      gvs[rename_push_label_def, sym_within_ok_def]) >>
+  simp[rename_push_label_other] >> gvs[sym_within_ok_def] >> metis_tac[]
+QED
+
+Theorem within_skip[local]:
+  p = pre ++ AsmLabel x :: next :: sfx ∧ asm_labels_unique p ∧
+  (next = AsmLabel y ∧ y ≠ x ∨
+   next = AsmPushLabel y ∧ ∃more. sfx = AsmOp "JUMP" :: more) ∧
+  t.sym_base.as_pc = LENGTH pre ∧ t.sym_base.as_stack = [] ∧
+  sym_within_ok R Q ∧ sym_run_within R Q p env k t ⇒
+  ∃j k2. INDEX_OF (AsmLabel y) p = SOME j ∧ k2 < k ∧
+    sym_run_within R Q p env k2
+      (t with sym_base := t.sym_base with as_pc := j)
+Proof
+  strip_tac >>
+  `0 < k` by (Cases_on `k` >> gvs[sym_run_within_def]) >>
+  `∀i. asm_plain_inst i ⇒ ¬Q i` by fs[sym_within_ok_def] >>
+  qpat_x_assum `p = _` SUBST_ALL_TAC >>
+  qpat_x_assum `next = _` SUBST_ALL_TAC
+  >- (mp_tac (Q.INST [`p` |-> `pre ++ AsmLabel x :: AsmLabel y :: sfx`]
+        rename_adjacent_label_steps) >>
+      simp[] >>
+      disch_then (CONJUNCTS_THEN2 assume_tac (qspec_then `0` (assume_tac o SIMP_RULE (srw_ss()) [arithmeticTheory.ADD1]))) >>
+      fs[sym_steps_def] >>
+      `sym_steps_ok (λi stk. T) Q (pre ++ AsmLabel x :: AsmLabel y :: sfx)
+         env 1 t`
+        by simp[sym_steps_ok_one, EL_APPEND_EQN, asm_plain_inst_def,
+                is_data_inst_def] >>
+      drule_all sym_run_within_steps >> strip_tac >>
+      qexists_tac `k - 1` >> simp[]) >>
+  qpat_x_assum `sfx = _` SUBST_ALL_TAC >>
+  qabbrev_tac `p = pre ++ AsmLabel x :: AsmPushLabel y :: AsmOp "JUMP" :: more` >>
+  mp_tac (Q.INST [`p` |-> `p`] rename_jump_steps) >>
+  (impl_tac >- simp[Abbr `p`]) >>
+  disch_then (CONJUNCTS_THEN2 (qspec_then `0` (assume_tac o SIMP_RULE (srw_ss()) [arithmeticTheory.ADD1])) (qspec_then `Q` mp_tac)) >>
+  simp[] >> strip_tac >>
+  Cases_on `INDEX_OF (AsmLabel y) p` >> fs[sym_steps_def]
+  >- (drule_all sym_run_within_steps_error >> simp[]) >>
+  drule_all sym_run_within_steps >> strip_tac >>
+  qexists_tac `k - 3` >> simp[]
+QED
+
+Theorem rename_run_within[local]:
+  ∀p i x y env R Q.
+  asm_static_wf p ∧ INDEX_OF (AsmLabel x) p = SOME i ∧ sym_within_ok R Q ∧
+  (∀t k. t.sym_base.as_pc = i ∧ t.sym_base.as_stack = [] ∧
+         sym_run_within R Q p env k t ⇒
+         ∃j k2. INDEX_OF (AsmLabel y) p = SOME j ∧ k2 < k ∧
+           sym_run_within R Q p env k2
+             (t with sym_base := t.sym_base with as_pc := j)) ⇒
+  ∀k ss ss'.
+    rn_rel x y ss ss' ∧ sym_run_within R Q p env k ss ⇒
+    sym_run_within R Q (MAP (rename_push_label x y) p) env k ss'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (AsmLabel x) p`
+    by metis_tac[INDEX_OF_eq_NONE, optionTheory.NOT_SOME_NONE] >>
+  `¬sym_data_label p env x`
+    by (fs[asm_static_wf_def, sym_data_label_def] >> metis_tac[]) >>
+  completeInduct_on `k` >> rpt strip_tac >>
+  `ss'.sym_base = ss.sym_base ∧
+   LIST_REL (sv_rel x y) ss.sym_stack ss'.sym_stack ∧
+   ss.sym_base.as_stack = []` by fs[rn_rel_def] >>
+  Cases_on `k` >- gvs[sym_run_within_def] >>
+  rename1 `SUC k0` >>
+  qpat_x_assum `sym_run_within _ _ _ _ (SUC _) _` mp_tac >>
+  simp[sym_run_within_def] >> strip_tac >>
+  drule_all within_ok_rename >>
+  disch_then (qspec_then `EL ss.sym_base.as_pc p` strip_assume_tac) >>
+  simp[EL_MAP] >>
+  Cases_on `Q (EL ss.sym_base.as_pc p)` >> gvs[] >>
+  mp_tac (Q.INST [`inst` |-> `EL ss.sym_base.as_pc p`] rename_step) >>
+  simp[] >>
+  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >>
+  gvs[res_rel_def] >> strip_tac >> gvs[] >>
+  rename1 `sym_step p env _ ss = SymOK t` >>
+  `t.sym_base.as_stack = []` by metis_tac[sym_step_base_stack]
+  >- (first_x_assum (qspec_then `k0` mp_tac) >> simp[] >>
+      disch_then irule >> qexists_tac `t` >> simp[]) >>
+  first_x_assum (qspecl_then [`t`, `k0`] mp_tac) >> simp[] >>
+  strip_tac >>
+  qpat_x_assum `∀j. _ ⇒ ∃t'. _` drule >> strip_tac >> simp[] >>
+  irule sym_run_within_mono >> qexists_tac `k2` >> simp[] >>
+  first_x_assum (qspec_then `k2` mp_tac) >> simp[] >>
+  disch_then irule >>
+  qexists_tac `t with sym_base := t.sym_base with as_pc := j` >> simp[]
+QED
+
+Theorem rename_refines_both[local]:
+  (next = AsmLabel y ∧ y ≠ x ∨ next = AsmPushLabel y ∧ third = AsmOp "JUMP") ⇒
+  asm_refines_both (pre ++ AsmLabel x :: next :: third :: more)
+    (MAP (rename_push_label x y) (pre ++ AsmLabel x :: next :: third :: more))
+Proof
+  disch_tac >> PURE_REWRITE_TAC[relationTheory.RINTER] >>
+  conj_tac >- (irule rename_refines >> first_assum ACCEPT_TAC) >>
+  qabbrev_tac `P = pre ++ AsmLabel x :: next :: third :: more` >>
+  simp[asm_refines_within_def] >> strip_tac >>
+  `asm_labels_unique P` by fs[asm_static_wf_def] >>
+  `INDEX_OF (AsmLabel x) P = SOME (LENGTH pre)`
+    by (`¬MEM (AsmLabel x) pre`
+          by (irule asm_labels_unique_append_not_mem >>
+              qexists_tac `AsmLabel x :: next :: third :: more` >>
+              fs[Abbr `P`]) >>
+        simp[Abbr `P`, INDEX_OF_APPEND, INDEX_OF_CONS]) >>
+  qexists_tac `1` >> qx_genl_tac [`R`, `Q`, `env`, `s`, `k`] >>
+  strip_tac >> simp[] >>
+  `∀t k1. t.sym_base.as_pc = LENGTH pre ∧ t.sym_base.as_stack = [] ∧
+          sym_run_within R Q P env k1 t ⇒
+          ∃j k2. INDEX_OF (AsmLabel y) P = SOME j ∧ k2 < k1 ∧
+            sym_run_within R Q P env k2
+              (t with sym_base := t.sym_base with as_pc := j)`
+    by (rpt strip_tac >>
+        mp_tac (Q.INST [`p` |-> `P`, `sfx` |-> `third :: more`,
+                        `k` |-> `k1`] within_skip) >>
+        fs[Abbr `P`]) >>
+  qspecl_then [`P`, `LENGTH pre`, `x`, `y`, `env`, `R`, `Q`] mp_tac
+    rename_run_within >>
+  impl_tac >- simp[] >>
+  disch_then irule >> qexists_tac `sym_init s` >> simp[] >>
+  simp[rn_rel_def, sym_init_def, ml_rel_def, mem_blocks_ok_def,
+       listTheory.LIST_REL_EL_EQN, sv_rel_def]
+QED
+
+Theorem merge_jumpdests_walk_refines_both[local]:
   ∀n done rest changed.
     LENGTH rest = n ⇒
-    asm_refines (REVERSE done ++ rest)
+    asm_refines_both (REVERSE done ++ rest)
       (FST (merge_jumpdests_walk done rest changed))
 Proof
   completeInduct_on `n` >> rpt strip_tac >>
   `∀d r c. LENGTH r < LENGTH rest ⇒
-           asm_refines (REVERSE d ++ r) (FST (merge_jumpdests_walk d r c))`
+           asm_refines_both (REVERSE d ++ r) (FST (merge_jumpdests_walk d r c))`
     by metis_tac[] >>
   qpat_x_assum `∀m. m < n ⇒ _` kall_tac >>
   Cases_on `rest`
-  >- simp[Once merge_jumpdests_walk_def, asm_refines_refl] >>
+  >- simp[Once merge_jumpdests_walk_def, asm_refines_both_refl] >>
   rename1 `h :: t` >> Cases_on `t`
-  >- simp[Once merge_jumpdests_walk_def, asm_refines_refl] >>
+  >- simp[Once merge_jumpdests_walk_def, asm_refines_both_refl] >>
   rename1 `h :: next :: t` >> Cases_on `t`
-  >- simp[Once merge_jumpdests_walk_def, asm_refines_refl] >>
+  >- simp[Once merge_jumpdests_walk_def, asm_refines_both_refl] >>
   rename1 `h :: next :: third :: more` >>
   qpat_x_assum `LENGTH _ = n` kall_tac >>
   Cases_on `∃x. h = AsmLabel x`
@@ -789,11 +955,11 @@ Proof
             qpat_x_assum `_ ∨ _` strip_assume_tac >>
             gvs[LET_THM, rename_push_label_other]) >>
       pop_assum SUBST1_TAC >>
-      irule asm_refines_trans >>
+      irule asm_refines_both_trans >>
       qexists_tac `MAP (rename_push_label x y)
                      (REVERSE done ++ AsmLabel x :: next :: third :: more)` >>
       conj_tac
-      >- (irule rename_refines >> metis_tac[]) >>
+      >- (irule rename_refines_both >> metis_tac[]) >>
       qmatch_goalsub_abbrev_tac `merge_jumpdests_walk _ _ cc` >>
       qpat_x_assum `∀d r c. _`
         (qspecl_then [`AsmLabel x :: MAP (rename_push_label x y) done`,
@@ -820,10 +986,192 @@ Proof
   simp[] >> REWRITE_TAC [GSYM APPEND_ASSOC, APPEND]
 QED
 
+Theorem merge_jumpdests_walk_refines[local]:
+  ∀n done rest changed.
+    LENGTH rest = n ⇒
+    asm_refines (REVERSE done ++ rest)
+      (FST (merge_jumpdests_walk done rest changed))
+Proof
+  metis_tac[merge_jumpdests_walk_refines_both, relationTheory.RINTER]
+QED
+
 Theorem merge_jumpdests_refines:
   ∀p. asm_refines p (FST (merge_jumpdests p))
 Proof
   simp[merge_jumpdests_def] >> rpt gen_tac >>
   qspecl_then [`LENGTH p`, `[]`, `p`, `F`] mp_tac merge_jumpdests_walk_refines >>
   simp[]
+QED
+
+Theorem merge_jumpdests_refines_both:
+  ∀p. asm_refines_both p (FST (merge_jumpdests p))
+Proof
+  simp[merge_jumpdests_def] >> rpt gen_tac >>
+  qspecl_then [`LENGTH p`, `[]`, `p`, `F`] mp_tac merge_jumpdests_walk_refines_both >>
+  simp[]
+QED
+
+(* A successful prefix either stops inside the redirect, or has reached
+   the destination with at most three additional source instructions. *)
+Theorem rename_prefix_skip[local]:
+  !pre x y next third more env t n a.
+    (next = AsmLabel y /\ y <> x \/
+     next = AsmPushLabel y /\ third = AsmOp "JUMP") /\
+    asm_labels_unique (pre ++ AsmLabel x::next::third::more) /\
+    t.sym_base.as_pc = LENGTH pre /\ t.sym_base.as_stack = [] /\
+    sym_steps (pre ++ AsmLabel x::next::third::more) env n t = SymOK a ==>
+    (n <= 2 /\ a.sym_base.as_pc < LENGTH (pre ++ AsmLabel x::next::third::more) /\
+      !op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"} ==>
+        EL a.sym_base.as_pc (pre ++ AsmLabel x::next::third::more) <> AsmOp op) \/
+    (?k j. 0 < k /\ k <= 3 /\ k <= n /\
+      INDEX_OF (AsmLabel y) (pre ++ AsmLabel x::next::third::more) = SOME j /\
+      sym_steps (pre ++ AsmLabel x::next::third::more) env (n-k)
+        (t with sym_base := t.sym_base with as_pc := j) = SymOK a)
+Proof
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 mp_tac strip_assume_tac) >> disch_tac >>
+  Cases_on `n` >- gvs[sym_steps_def, EL_APPEND_EQN] >>
+  qpat_x_assum `_ \/ _` strip_assume_tac
+  >- (gvs[] >>
+      mp_tac (Q.INST [`p` |-> `pre ++ AsmLabel x :: AsmLabel y :: third :: more`,
+                      `sfx` |-> `third :: more`] rename_adjacent_label_steps) >>
+      simp[] >> strip_tac >>
+      disj2_tac >> qexists_tac `1` >> gvs[]) >>
+  gvs[] >> Cases_on `n'`
+  >- (disj1_tac >>
+      gvs[sym_steps_def, EL_APPEND_EQN, sym_step_label_skip]) >>
+  Cases_on `n`
+  >- (disj1_tac >>
+      gvs[sym_steps_def, EL_APPEND_EQN, sym_step_label_skip,
+          sym_step_push_label, asm_next_def]) >>
+  mp_tac (Q.INST [`p` |-> `pre ++ AsmLabel x :: AsmPushLabel y :: AsmOp "JUMP" :: more`]
+    rename_jump_steps) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `sym_steps _ _ _ _ = _` mp_tac >>
+  simp[] >> Cases_on `INDEX_OF (AsmLabel y)
+    (pre ++ AsmLabel x::AsmPushLabel y::AsmOp "JUMP"::more)` >> simp[] >>
+  strip_tac >> qexists_tac `3` >> simp[arithmeticTheory.ADD1]
+QED
+
+Theorem rename_prefix_boundaries[local]:
+  !p pre x y next third more env.
+    p = pre ++ AsmLabel x::next::third::more /\
+    (next = AsmLabel y /\ y <> x \/
+     next = AsmPushLabel y /\ third = AsmOp "JUMP") /\
+    asm_static_wf p ==>
+    !n ss ss' a.
+      rn_rel x y ss ss' /\ sym_steps p env n ss = SymOK a ==>
+      (?m b. sym_steps (MAP (rename_push_label x y) p) env m ss' = SymOK b /\
+        n <= 4 * (m+1)) /\
+      (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"} /\
+         a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp op ==>
+       ?m b. sym_steps (MAP (rename_push_label x y) p) env m ss' = SymOK b /\
+         b.sym_base.as_pc < LENGTH p /\
+         EL b.sym_base.as_pc (MAP (rename_push_label x y) p) = AsmOp op /\
+         rn_rel x y a b)
+Proof
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  `asm_labels_unique p` by metis_tac[asm_static_wf_def] >>
+  `INDEX_OF (AsmLabel x) p = SOME (LENGTH pre)`
+    by (`~MEM (AsmLabel x) pre`
+          by (irule asm_labels_unique_append_not_mem >>
+              qexists_tac `AsmLabel x::next::third::more` >>
+              conj_tac >- metis_tac[] >> simp[]) >>
+        simp[INDEX_OF_APPEND, INDEX_OF_CONS]) >>
+  `MEM (AsmLabel x) p`
+    by metis_tac[INDEX_OF_eq_NONE, optionTheory.NOT_SOME_NONE] >>
+  `~sym_data_label p env x`
+    by metis_tac[asm_static_wf_def, sym_data_label_def] >>
+  qpat_x_assum `p = _` (mk_asm "program") >>
+  completeInduct_on `n` >> rpt gen_tac >> strip_tac >>
+  `ss'.sym_base = ss.sym_base` by metis_tac[rn_rel_def] >>
+  Cases_on `n = 0`
+  >- (qpat_x_assum `n = 0` SUBST_ALL_TAC >>
+      qpat_x_assum `sym_steps _ _ _ _ = _` mp_tac >>
+      simp[Once sym_steps_def] >> disch_then SUBST_ALL_TAC >> conj_tac
+      >- (qexistsl_tac [`0`, `ss'`] >> simp[sym_steps_def]) >>
+      rpt strip_tac >> qexistsl_tac [`0`, `ss'`] >>
+      simp[sym_steps_def, EL_MAP, rename_push_label_facts]) >>
+  `ss.sym_base.as_pc < LENGTH p`
+    by (spose_not_then assume_tac >>
+        qpat_x_assum `sym_steps _ _ _ _ = _` mp_tac >>
+        Cases_on `n` >- gvs[] >> simp[Once sym_steps_def]) >>
+  qpat_x_assum `sym_steps _ _ _ _ = _` mp_tac >>
+  simp[sym_steps_pos] >>
+  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> simp[] >>
+  rename1 `sym_step p env _ ss = SymOK t` >> disch_tac >>
+  mp_tac (Q.INST [`inst` |-> `EL ss.sym_base.as_pc p`] rename_step) >>
+  simp[] >> disch_tac >>
+  qpat_x_assum `( ?t'. _) \/ _` strip_assume_tac
+  >- (qpat_x_assum `!m. m < n ==> _` (qspec_then `n-1` mp_tac) >>
+      simp[] >> disch_then drule_all >> strip_tac >> conj_tac
+      >- (qexistsl_tac [`SUC m`, `b`] >>
+          conj_tac >- simp[Once sym_steps_def, EL_MAP] >> decide_tac) >>
+      gen_tac >> disch_tac >>
+      qpat_x_assum `!op. _ ==> ?m b. _` (qspec_then `op` mp_tac) >>
+      (impl_tac >- fs[]) >>
+      disch_then (qx_choosel_then [`m2`, `b2`] strip_assume_tac) >>
+      qexistsl_tac [`SUC m2`, `b2`] >>
+      simp[Once sym_steps_def, EL_MAP]) >>
+  `t.sym_base.as_stack = []`
+    by (irule sym_step_base_stack >> metis_tac[rn_rel_def]) >>
+  mp_tac rename_prefix_skip >>
+  disch_then (qspecl_then [`pre`,`x`,`y`,`next`,`third`,`more`,`env`,`t`,`n-1`,`a`] mp_tac) >>
+  asm "program" (fn th => simp[GSYM th]) >>
+  strip_tac
+  >- (conj_tac
+      >- (qexistsl_tac [`0`, `ss'`] >> simp[sym_steps_def] >> decide_tac) >>
+      metis_tac[]) >>
+  qpat_x_assum `!j. _ ==> ?t'. _` drule >> strip_tac >>
+  qpat_x_assum `!m. m < n ==> _` (qspec_then `n-1-k` mp_tac) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  conj_tac
+  >- (qexistsl_tac [`SUC m`, `b`] >>
+      conj_tac >- simp[Once sym_steps_def, EL_MAP] >> decide_tac) >>
+  gen_tac >> disch_tac >>
+  qpat_x_assum `!op. _ ==> ?m b. _` (qspec_then `op` mp_tac) >>
+  (impl_tac >- fs[]) >>
+  disch_then (qx_choosel_then [`m2`, `b2`] strip_assume_tac) >>
+  qexistsl_tac [`SUC m2`, `b2`] >> simp[Once sym_steps_def, EL_MAP]
+QED
+
+Theorem rename_site_prefix_transport:
+  !pre x y next third more.
+    (next = AsmLabel y /\ y <> x \/
+     next = AsmPushLabel y /\ third = AsmOp "JUMP") /\
+    asm_static_wf (pre ++ AsmLabel x::next::third::more) ==>
+    ?K. 0 < K /\ !env s n a.
+      s.as_pc = 0 /\
+      sym_steps (pre ++ AsmLabel x::next::third::more) env n (sym_init s) = SymOK a ==>
+      (?m b. sym_steps (MAP (rename_push_label x y)
+        (pre ++ AsmLabel x::next::third::more)) env m (sym_init s) = SymOK b /\
+        n <= K * (m+1)) /\
+      (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"} /\
+         a.sym_base.as_pc < LENGTH (pre ++ AsmLabel x::next::third::more) /\
+         EL a.sym_base.as_pc (pre ++ AsmLabel x::next::third::more) = AsmOp op ==>
+       ?m b. sym_steps (MAP (rename_push_label x y)
+         (pre ++ AsmLabel x::next::third::more)) env m (sym_init s) = SymOK b /\
+         b.sym_base.as_pc < LENGTH (MAP (rename_push_label x y)
+           (pre ++ AsmLabel x::next::third::more)) /\
+         EL b.sym_base.as_pc (MAP (rename_push_label x y)
+           (pre ++ AsmLabel x::next::third::more)) = AsmOp op /\
+         (b.sym_base with as_pc := 0) = (a.sym_base with as_pc := 0) /\
+         MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
+         FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)
+Proof
+  rpt gen_tac >> disch_tac >> qexists_tac `4` >>
+  conj_tac >- decide_tac >>
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[LENGTH_MAP] >>
+  qspecl_then [`pre ++ AsmLabel x::next::third::more`, `pre`, `x`, `y`, `next`,
+    `third`, `more`, `env`] mp_tac rename_prefix_boundaries >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qspecl_then [`n`, `sym_init s`, `sym_init s`, `a`] mp_tac) >>
+  (impl_tac >- simp[rn_rel_def, sym_init_def, ml_rel_def, mem_blocks_ok_def]) >>
+  strip_tac >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >> first_x_assum drule_all >>
+  disch_then (qx_choosel_then [`m2`, `b2`] strip_assume_tac) >>
+  qexistsl_tac [`m2`, `b2`] >> fs[rn_rel_def] >>
+  metis_tac[sv_rel_list_vals, ml_rel_fdom]
 QED

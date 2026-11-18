@@ -64,30 +64,6 @@ Proof
   qexists_tac `[]` >> simp[]
 QED
 
-Theorem topcopy_region:
-  !cx mid id tr off tvt.
-    storage_layout_safe cx /\
-    storage_var_info cx mid id = SOME (tr,off,tvt) /\
-    0 < type_slot_size tvt ==>
-    off + type_slot_size tvt <= dimword (:256) /\
-    (!mid' n' subs' k' tv'.
-      declared_storage_region cx mid' n' subs' = SOME (tr,k',tv') /\
-      (k',tv') <> (n2w off,tvt) ==>
-      ranges_disjoint off (type_slot_size tvt) (w2n k') (type_slot_size tv'))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `off + type_slot_size tvt <= dimword (:256)` by
-    (drule storage_layout_safe_layout >>
-     simp[well_formed_layout_def] >> metis_tac[]) >>
-  `off < dimword (:256)` by decide_tac >>
-  `w2n (n2w off : 256 word) = off` by simp[] >>
-  drule declared_storage_region_ordinary >> strip_tac >>
-  simp[] >> rpt strip_tac >>
-  `(mid,id,[]) <> (mid',n',subs')` by
-    (strip_tac >> gvs[]) >>
-  drule_all storage_layout_safe_region_separation >> simp[]
-QED
-
 Theorem find_var_decl_storage_some[local]:
   !ts vis mut id ty init.
     MEM (VariableDecl vis mut id ty init) ts /\

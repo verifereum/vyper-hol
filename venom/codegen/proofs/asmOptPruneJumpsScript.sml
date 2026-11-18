@@ -12,13 +12,14 @@
 
 Theory asmOptPruneJumps
 Ancestors
+  asmSpliceWithin asmRefinesWithin asmSymSemWithin
   asmSplice asmSymPc finalizerContract asmSymSem asmOptimizer asmWf
 
-Theorem jump_to_next_window_refines:
-  asm_window_refines pfx [AsmPushLabel x; AsmOp "JUMP"] []
+Theorem jump_to_next_window_refines_within[local]:
+  asm_window_refines_within pfx [AsmPushLabel x; AsmOp "JUMP"] []
     (AsmLabel x :: rest)
 Proof
-  rw[asm_window_refines_def, asm_static_wf_def] >>
+  rw[asm_window_refines_within_def, asm_static_wf_def] >>
   `¬MEM (AsmLabel x) pfx`
     by (qpat_x_assum `asm_labels_unique _`
           (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
@@ -44,10 +45,22 @@ Proof
     by simp[sym_step_def, sym_step_op_def, sym_jump_def,
             sym_jump_dest_def] >>
   qexistsl_tac [`2`, `0`] >>
+  reverse (rpt conj_tac)
+  >- (rpt strip_tac >> irule window_bounded_plain >>
+      simp[sym_steps_pos, sym_steps_def, sym_steps_ok_pos,
+           sym_steps_ok_def] >>
+      simp[asm_plain_inst_def, asmWfTheory.is_data_inst_def]) >>
   simp[sym_steps_pos, sym_steps_def, sym_terminal_def] >>
   simp[Abbr `s1`, splice_pc_def, sym_with_pc_def,
        sym_state_component_equality,
        asmSemTheory.asm_state_component_equality, asmSemTheory.asm_next_def]
+QED
+
+Theorem jump_to_next_window_refines:
+  asm_window_refines pfx [AsmPushLabel x; AsmOp "JUMP"] []
+    (AsmLabel x :: rest)
+Proof
+  metis_tac[jump_to_next_window_refines_within, asm_window_refines_of_within]
 QED
 
 Theorem prune_inefficient_jumps_fst:
@@ -59,30 +72,37 @@ Proof
   pairarg_tac >> simp[]
 QED
 
+Theorem prune_inefficient_jumps_refines_under_both[local]:
+  ∀sfx pfx.
+    asm_refines_both (pfx ++ sfx) (pfx ++ FST (prune_inefficient_jumps sfx))
+Proof
+  ho_match_mp_tac prune_inefficient_jumps_ind >>
+  reverse (rpt conj_tac)
+  >- simp[prune_inefficient_jumps_def, asm_refines_both_refl]
+  >- simp[prune_inefficient_jumps_def, asm_refines_both_refl]
+  >- simp[prune_inefficient_jumps_def, asm_refines_both_refl] >>
+  rpt gen_tac >> strip_tac >> simp[prune_inefficient_jumps_fst] >>
+  reverse IF_CASES_TAC >- (gvs[] >> irule asm_refines_both_cons >> simp[]) >>
+  Cases_on `a` >> gvs[asm_jump_to_next_def] >>
+  Cases_on `c` >> gvs[] >> gen_tac >>
+  qmatch_goalsub_rename_tac `AsmPushLabel lbl` >>
+  irule asm_refines_both_trans >>
+  qexists_tac `pfx ++ AsmLabel lbl :: rest` >> simp[] >>
+  mp_tac (Q.INST [`pat` |-> `[AsmPushLabel lbl; AsmOp "JUMP"]`,
+                  `repl` |-> `[]`,
+                  `sfx` |-> `AsmLabel lbl :: rest`] asm_splice_window_refines_both) >>
+  impl_tac
+  >- simp[asm_splice_ok_def, jump_to_next_window_refines_within, is_data_inst_def,
+          asm_label_refs_def, symbolResolveTheory.asm_inst_size_def] >>
+  REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
+  disch_then ACCEPT_TAC
+QED
+
 Theorem prune_inefficient_jumps_refines_under:
   ∀sfx pfx.
     asm_refines (pfx ++ sfx) (pfx ++ FST (prune_inefficient_jumps sfx))
 Proof
-  ho_match_mp_tac prune_inefficient_jumps_ind >>
-  reverse (rpt conj_tac)
-  >- simp[prune_inefficient_jumps_def, asm_refines_refl]
-  >- simp[prune_inefficient_jumps_def, asm_refines_refl]
-  >- simp[prune_inefficient_jumps_def, asm_refines_refl] >>
-  rpt gen_tac >> strip_tac >> simp[prune_inefficient_jumps_fst] >>
-  reverse IF_CASES_TAC >- (gvs[] >> irule asm_refines_cons >> simp[]) >>
-  Cases_on `a` >> gvs[asm_jump_to_next_def] >>
-  Cases_on `c` >> gvs[] >> gen_tac >>
-  qmatch_goalsub_rename_tac `AsmPushLabel lbl` >>
-  irule asm_refines_trans >>
-  qexists_tac `pfx ++ AsmLabel lbl :: rest` >> simp[] >>
-  mp_tac (Q.INST [`pat` |-> `[AsmPushLabel lbl; AsmOp "JUMP"]`,
-                  `repl` |-> `[]`,
-                  `sfx` |-> `AsmLabel lbl :: rest`] asm_splice_window_refines) >>
-  impl_tac
-  >- simp[asm_splice_ok_def, jump_to_next_window_refines, is_data_inst_def,
-          asm_label_refs_def, symbolResolveTheory.asm_inst_size_def] >>
-  REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
-  disch_then ACCEPT_TAC
+  metis_tac[prune_inefficient_jumps_refines_under_both, relationTheory.RINTER]
 QED
 
 Theorem prune_inefficient_jumps_refines:
@@ -90,5 +110,13 @@ Theorem prune_inefficient_jumps_refines:
 Proof
   gen_tac >>
   qspecl_then [`p`, `[]`] mp_tac prune_inefficient_jumps_refines_under >>
+  simp[]
+QED
+
+Theorem prune_inefficient_jumps_refines_both:
+  ∀p. asm_refines_both p (FST (prune_inefficient_jumps p))
+Proof
+  gen_tac >>
+  qspecl_then [`p`, `[]`] mp_tac prune_inefficient_jumps_refines_under_both >>
   simp[]
 QED

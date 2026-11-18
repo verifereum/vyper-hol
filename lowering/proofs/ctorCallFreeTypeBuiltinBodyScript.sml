@@ -6,6 +6,29 @@ Ancestors
   ctorCallFreeCallbacks supportedExprTraverse e2eDeployDefs
   abiBuiltinDispatchCorrect exprBopLowering builtinAbi
 
+Theorem type_builtin_member_callback[local]:
+  (!e ety st. expr_size e < list_size expr_size args /\
+      ~supported_expr_exists R e /\
+      ~supported_expr_exists expr_shape_root e ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (cfn cenv ety e st)))) /\
+  ~supported_exprs_exists R args /\
+  ~supported_exprs_exists expr_shape_root args ==>
+  !e ety st. MEM e args ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (cfn cenv ety e st)))
+Proof
+  rpt strip_tac >> first_x_assum irule >>
+  metis_tac[expr_list_member_bound, supported_exprs_exists_every, EXISTS_MEM]
+QED
+
+val member_callback_tac =
+  drule_then (drule_then (drule_then
+    (assume_tac o PURE_REWRITE_RULE [GSYM AND_IMP_INTRO])))
+  type_builtin_member_callback;
+
 local
   val finish_ptr =
     qmatch_goalsub_abbrev_tac `as_ptr_val vv_ty LocMemory action` >>
@@ -88,10 +111,6 @@ local
       metis_tac[pairTheory.SND] >> finish_ptr;
 
   val encode_general =
-    `!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-      EVERY (\i. P i.inst_opcode)
-        (state_insts (SND (compile_abi_encode_args cfn cenv args st)))` by
-      simp[(UNDISCH opcode_every_abi_encode_args)] >>
     simp[compile_type_builtin_dispatch_body_def] >> rpt strip_tac >>
     ntac 3 (pairarg_tac >> simp[]) >>
     rename1 `compile_abi_encode_args cfn cenv args st = (vs,st1)` >>
@@ -104,6 +123,97 @@ local
     `EVERY (\i. P i.inst_opcode) (state_insts st3)` by
       metis_tac[pairTheory.SND] >> finish_ptr;
 in
+Theorem outcomes_free_type_builtin_dispatch_body:
+  P MSTORE ==>
+  (
+  (!ce vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (unwrap_value ce vv st)))) /\
+  (!sz st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_alloc_buffer sz st)))) /\
+  (!v cop st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_type_convert v cop st)))) /\
+  (!sz v srcsz st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_bytestring_widen_copy sz v srcsz st)))) /\
+  (!sz z st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_builtin_empty_complex sz z st)))) /\
+  (!v st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_bytestring_src v st)))) /\
+  (!len data off st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_extract32_load len data off st)))) /\
+  (!v t st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_clamp_basetype v t st)))) /\
+  (!(ensure:bool) mid src info maxlen st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (lower_abi_encode ensure mid src info maxlen st)))) /\
+  (!data info minsz maxsz outsz st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (lower_abi_decode data info minsz maxsz outsz st)))) /\
+  (!ce buf off vs st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_store_abi_tuple ce buf off vs st)))) /\
+  (!ce t vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_materialize_vv ce t vv st)))) ==>
+  !args cfn cenv vv_ty ty tb ret_ty.
+  (!e ety st. expr_size e < list_size expr_size args /\
+      ~supported_expr_exists R e /\
+      ~supported_expr_exists expr_shape_root e ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (cfn cenv ety e st)))) /\
+  (!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_abi_encode_args cfn cenv args st)))) /\
+  type_builtin_arity tb <= LENGTH args /\
+  ~supported_exprs_exists R args /\
+  ~supported_exprs_exists expr_shape_root args ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args st)))
+  )
+Proof
+  strip_tac >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  member_callback_tac >>
+  `!e ety. MEM e args ==> !st.
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (lower_value cfn cenv ety e st)))` by
+    (rpt strip_tac >> irule every_state_insts_lower_value >> simp[]) >>
+  Cases_on `tb`
+  >~ [`compile_type_builtin_dispatch_body _ _ _ _ Empty _ _`]
+  >- (simp[compile_type_builtin_dispatch_body_def] >>
+      Cases_on `is_word_type ret_ty` >> simp[] >> rpt strip_tac >>
+      pairarg_tac >> simp[] >> metis_tac[pairTheory.SND])
+  >~ [`compile_type_builtin_dispatch_body _ _ _ _ MaxValue _ _`]
+  >- (simp[compile_type_builtin_dispatch_body_def] >> pairarg_tac >> simp[])
+  >~ [`compile_type_builtin_dispatch_body _ _ _ _ MinValue _ _`]
+  >- (simp[compile_type_builtin_dispatch_body_def] >> pairarg_tac >> simp[])
+  >~ [`compile_type_builtin_dispatch_body _ _ _ _ Epsilon _ _`]
+  >- simp[compile_type_builtin_dispatch_body_def]
+  >~ [`compile_type_builtin_dispatch_body _ _ _ _ Convert _ _`]
+  >- convert_case
+  >~ [`compile_type_builtin_dispatch_body _ _ _ _ Extract32 _ _`]
+  >- extract_case
+  >~ [`compile_type_builtin_dispatch_body _ _ _ _ (AbiDecode unwrap) _ _`]
+  >- decode_case
+  >> rename1 `compile_type_builtin_dispatch_body _ _ _ _ (AbiEncode ensure mid) _ _` >>
+  Cases_on `LENGTH args = 1 /\ ~ensure`
+  >- (Cases_on `args` >- gvs[] >> rename1 `arg::rest` >> gvs[] >>
+      Cases_on `is_word_type (expr_type arg)` >- encode_word >> encode_nonword) >>
+  encode_general
+QED
+
+end
+
 Theorem opcode_every_type_builtin_dispatch_body:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -159,42 +269,9 @@ Theorem opcode_every_type_builtin_dispatch_body:
       (state_insts (SND (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args st)))
   )
 Proof
-  strip_tac >>
+  strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `P MSTORE` by simp[] >>
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  `!e ety st. MEM e args ==>
-    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (cfn cenv ety e st)))` by
-    (rpt strip_tac >> first_x_assum irule >>
-     metis_tac[expr_list_member_bound, supported_exprs_exists_every, EXISTS_MEM]) >>
-  `!e ety. MEM e args ==> !st.
-    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (lower_value cfn cenv ety e st)))` by
-    (rpt strip_tac >> irule every_state_insts_lower_value >> simp[]) >>
-  Cases_on `tb`
-  >~ [`compile_type_builtin_dispatch_body _ _ _ _ Empty _ _`]
-  >- (simp[compile_type_builtin_dispatch_body_def] >>
-      Cases_on `is_word_type ret_ty` >> simp[] >> rpt strip_tac >>
-      pairarg_tac >> simp[] >> metis_tac[pairTheory.SND])
-  >~ [`compile_type_builtin_dispatch_body _ _ _ _ MaxValue _ _`]
-  >- (simp[compile_type_builtin_dispatch_body_def] >> pairarg_tac >> simp[])
-  >~ [`compile_type_builtin_dispatch_body _ _ _ _ MinValue _ _`]
-  >- (simp[compile_type_builtin_dispatch_body_def] >> pairarg_tac >> simp[])
-  >~ [`compile_type_builtin_dispatch_body _ _ _ _ Epsilon _ _`]
-  >- simp[compile_type_builtin_dispatch_body_def]
-  >~ [`compile_type_builtin_dispatch_body _ _ _ _ Convert _ _`]
-  >- convert_case
-  >~ [`compile_type_builtin_dispatch_body _ _ _ _ Extract32 _ _`]
-  >- extract_case
-  >~ [`compile_type_builtin_dispatch_body _ _ _ _ (AbiDecode unwrap) _ _`]
-  >- decode_case
-  >> rename1 `compile_type_builtin_dispatch_body _ _ _ _ (AbiEncode ensure mid) _ _` >>
-  Cases_on `LENGTH args = 1 /\ ~ensure`
-  >- (Cases_on `args` >- gvs[] >> rename1 `arg::rest` >> gvs[] >>
-      Cases_on `is_word_type (expr_type arg)` >- encode_word >> encode_nonword) >>
-  encode_general
+  member_callback_tac >>
+  rpt strip_tac >> irule outcomes_free_type_builtin_dispatch_body >>
+  simp[UNDISCH opcode_every_abi_encode_args] >> qexists_tac `R` >> simp[]
 QED
-
-end

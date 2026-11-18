@@ -237,10 +237,6 @@ val im_exprs = ``\cx es. !A R st res st'.
   ^callable_closed cx A R /\
   ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) /\
   eval_exprs cx es st = (res,st') ==> ^immutable_frame cx A st st'``;
-val im_results = ``\cx es. !A R st res st'.
-  ^callable_closed cx A R /\
-  ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) /\
-  eval_expr_results cx es st = (res,st') ==> ^immutable_frame cx A st st'``;
 val im_expr = ``\cx e. !A R st res st'.
   ^callable_closed cx A R /\
   ^safe_accesses A R (accesses_expr e) (int_calls_expr e) /\
@@ -281,7 +277,7 @@ val immutable_ind_cases = let
   val (_,core) = strip_forall (concl evaluate_ind)
   val cs = strip_conj (fst (dest_imp core))
   val preds = [("P1",im_stmts),("P4",im_expr),("P5",im_exprs),
-    ("P6",im_base),("P7",im_target),("P10",im_results)]
+    ("P6",im_base),("P7",im_target)]
   fun inst t = subst (List.mapPartial (fn (n,p) =>
     Option.map (fn v => v |-> p)
       (List.find (fn v => fst (dest_var v) = n) (free_vars t))) preds) t
@@ -433,25 +429,6 @@ Proof
       accesses_expr_def, int_calls_expr_def] >>
   imp_res_tac read_result_state >> gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
   rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
-  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
-    simp[] >> disch_then drule_all >> strip_tac) >>
-  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
-  metis_tac[]
-QED
-
-Theorem evaluate_immutable_results_nil_case[local]:
-  ^(hd (immutable_predicate_cases "P10"))
-Proof
-  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, return_def]
-QED
-
-Theorem evaluate_immutable_results_cons_case[local]:
-  ^(List.nth (immutable_predicate_cases "P10",1))
-Proof
-  BETA_TAC >> rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def,
-      accesses_expr_def, int_calls_expr_def, DISJ_IMP_THM, FORALL_AND_THM] >>
-  rpt (qpat_x_assum `!a b c. eval_expr _ _ _ = _ ==> _` drule_all >> strip_tac) >>
   rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
     simp[] >> disch_then drule_all >> strip_tac) >>
   qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
@@ -902,18 +879,6 @@ Proof
 QED
 
 (* Fix analysis parameters before consuming a guarded recursive IH. *)
-Theorem immutable_exprs_frame_rule[local]:
-  ^im_exprs cx es /\ ^callable_closed cx A R /\
-  ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) ==>
-  !st res st'. eval_exprs cx es st = (res,st') ==>
-    ^immutable_frame cx A st st'
-Proof
-  BETA_TAC >> strip_tac >> gvs[] >>
-  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
-  simp[] >> disch_tac >> rpt strip_tac >>
-  first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
-QED
-
 Theorem immutable_exprs_frame_rule[local]:
   ^im_exprs cx es /\ ^callable_closed cx A R /\
   ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) ==>
@@ -1647,8 +1612,7 @@ Theorem evaluate_immutable_frame_untyped[local]:
   (!cx t. ^im_base cx t) /\
   (!cx t. ^im_target cx t) /\
   (!cx g v. ^im_atarget cx g v) /\
-  (!cx gs vs. ^im_atargets cx gs vs) /\
-  (!cx es. ^im_results cx es)
+  (!cx gs vs. ^im_atargets cx gs vs)
 Proof
   BETA_TAC >> ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   BETA_TAC >> FIRST (map (ACCEPT_TAC o BETA_RULE) [
@@ -1658,8 +1622,7 @@ Proof
     evaluate_immutable_attribute_case, evaluate_immutable_subscript_case,
     evaluate_immutable_baseattribute_case, evaluate_immutable_basesubscript_case,
     evaluate_immutable_target_case, evaluate_immutable_exprs_nil_case,
-    evaluate_immutable_exprs_cons_case, evaluate_immutable_results_nil_case,
-    evaluate_immutable_results_cons_case, evaluate_immutable_struct_case,
+    evaluate_immutable_exprs_cons_case, evaluate_immutable_struct_case,
     evaluate_immutable_typebuiltin_case, evaluate_immutable_ifexp_case,
     evaluate_immutable_pop_case, evaluate_immutable_rawrevert_case,
     evaluate_immutable_rawlog_case, evaluate_immutable_selfdestruct_case,

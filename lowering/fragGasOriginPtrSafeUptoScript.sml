@@ -560,11 +560,14 @@ Proof
         (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
          simp[Once step_inst_def, AllCaseEqs()] >> metis_tac[]) >>
       `!e. run_blocks fuel ctx callee cs <> Error e` by simp[] >>
+      `mem_safe_blocks fuel ctx callee cs` by
+        (qspecl_then [`fuel`, `ctx`, `inst`, `s`, `nm`, `ops`,
+           `callee`, `args`, `cs`] mp_tac mem_safe_step_invoke >> simp[]) >>
       conj_tac
       >- (irule (cj 3 (SPEC_ALL enters_block_run)) >>
           qexists_tac `cs` >> simp[] >> gen_tac >>
           drule_all_then assume_tac ptr_safe_step_invoke >>
-          drule_all_then assume_tac mem_safe_step_invoke >> gvs[] >>
+          gvs[] >>
           conj_tac
           >- (irule ptr_safe_blocks_all_fuel >> qexists_tac `fuel` >>
               simp[]) >>

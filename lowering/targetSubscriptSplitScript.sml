@@ -304,10 +304,7 @@ Theorem target_subscript_nopop_scopes_mutual[local]:
     ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
     eval_target_place cx bt st = (res,st') ==> st'.scopes = st.scopes) /\
   (!cx:evaluation_context. !g:assignment_target. !v:value. T) /\
-  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T) /\
-  (!cx es st res st'.
-    ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) es /\
-    eval_expr_results cx es st = (res,st') ==> st'.scopes = st.scopes)
+  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   simp[supported_expr_exists_def]
@@ -461,26 +458,22 @@ Proof
       qpat_x_assum `eval_target_place cx _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
       imp_res_tac get_place_state >> gvs[] >> metis_tac[])
-  >- simp[Once evaluate_def, return_def]
-  >> rpt strip_tac >>
-  qpat_x_assum `eval_expr_results cx (_::_) _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  strip_tac >> metis_tac[]
 QED
 
 Resume target_subscript_nopop_scopes_mutual[CreateTarget]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  fs[supported_exprs_exists_every, GSYM EVERY_NOT_EXISTS] >>
-  drule_then assume_tac EVERY_TAKE >>
-  drule_then assume_tac EVERY_DROP >>
-  `!n. EVERY ($~ o supported_expr_exists (\x. ?ty t. x = Pop ty t))
-      (TAKE n (DROP 2 es))` by metis_tac[EVERY_TAKE, EVERY_DROP] >>
-  `!n. EVERY ($~ o supported_expr_exists (\x. ?ty t. x = Pop ty t))
-      (DROP n (DROP 2 es))` by metis_tac[EVERY_DROP] >>
-  Cases_on `kind` >> gvs[] >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  `~supported_exprs_exists (\x. ?ty t. x = Pop ty t)
+      (create_operand_order kind has_salt es)` by
+    (fs[supported_exprs_exists_every, GSYM EVERY_NOT_EXISTS] >>
+     Cases_on `kind` >> Cases_on `es` >>
+     gvs[vyperCreateTheory.create_operand_order_def, EVERY_TAKE, EVERY_DROP] >>
+     rename1 `create_operand_order RawCreate _ (operand :: rest)` >>
+     Cases_on `rest` >>
+     gvs[vyperCreateTheory.create_operand_order_def, EVERY_TAKE, EVERY_DROP]) >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  Cases_on `kind` >>
+  gvs[vyperCreateTheory.eval_create_operands_def, bind_def, AllCaseEqs()] >>
   imp_res_tac check_create_blueprint_result_state >> gvs[] >>
-  imp_res_tac read_results_state >> gvs[] >>
   imp_res_tac eval_create_preserves_scopes_immutables >> gvs[]
   >> rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac)
   >> rpt (qpat_x_assum `!a b c d e f g h i j. _` drule_all >> strip_tac)
@@ -547,13 +540,6 @@ Theorem target_subscript_nopop_target_scopes:
   eval_target_place cx bt es = (res, ee) ==> ee.scopes = es.scopes
 Proof
   metis_tac[cj 8 target_subscript_nopop_scopes_mutual]
-QED
-
-Theorem target_subscript_nopop_results_scopes:
-  ~supported_exprs_exists (\x. ?ty t. x = Pop ty t) xs /\
-  eval_expr_results cx xs es = (res, ee) ==> ee.scopes = es.scopes
-Proof
-  metis_tac[cj 11 target_subscript_nopop_scopes_mutual]
 QED
 
 Theorem target_subscript_local_base_live:

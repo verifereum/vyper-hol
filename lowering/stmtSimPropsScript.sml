@@ -108,7 +108,7 @@ Proof
      qexists_tac `0:num` >>
      `mem_safe_step 0 ctx (mk_inst sa.cs_next_id JMP [Label lbl] []) s` by
        (simp[mem_safe_step_non_invoke, mk_inst_def] >>
-        irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+        disj1_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
      simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
           step_jmp_behavior, is_terminator_def] >>
      metis_tac[]) >>
@@ -408,7 +408,7 @@ Proof
      qexists_tac `0:num` >>
      `mem_safe_step 0 ctx (mk_inst sa.cs_next_id JNZ [op; Label lt; Label lf] []) s` by
        (simp[mem_safe_step_non_invoke, mk_inst_def] >>
-        irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+        disj1_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
      simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
           step_jnz_behavior, is_terminator_def] >>
      Cases_on `b` >> gvs[] >> metis_tac[]) >>

@@ -717,6 +717,21 @@ Proof
 QED
 
 
+Theorem eval_create_operands_preserves_storage_well_formed_on[local]:
+  storage_well_formed_on cx st (FST H) /\
+  storage_observations_ok cx H st'.storage_trace /\
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st =
+    (res,st') ==>
+  storage_well_formed_on cx st' (FST H)
+Proof
+  Cases_on `kind` >>
+  simp[vyperCreateTheory.eval_create_operands_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  imp_res_tac vyperCreateFrameTheory.check_create_blueprint_result_state >>
+  gvs[] >> metis_tac[eval_create_preserves_storage_well_formed_on]
+QED
+
+
 Theorem storage_observations_ok_lock_bound[local]:
   storage_observations_ok cx H observations /\
   MEM (StorageLock lock) observations ==>
@@ -1064,14 +1079,6 @@ Theorem eval_storage_well_formed_on_mutual:
     call_evaluation_safe cx (int_calls_atargets tgts) /\
     storage_observations_ok cx H st'.storage_trace /\
     assign_tuple_target_list cx tgts vs st = (res,st') ==>
-    storage_well_formed_on cx st' (FST H)) /\
-  (!cx es. !env st res st'.
-    well_typed_exprs env es /\ runtime_consistent env cx st /\
-    regions_consistent (FST H) /\
-    storage_locks_separated (FST H) (SND H) /\
-    storage_well_formed_on cx st (FST H) /\
-    functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
-    storage_observations_ok cx H st'.storage_trace /\ eval_expr_results cx es st = (res,st') ==>
     storage_well_formed_on cx st' (FST H))
 Proof
   gen_tac >> ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
@@ -1084,7 +1091,7 @@ Proof
             val n = head h
         in (List.exists (fn s => s = n)
               ["eval_stmt", "eval_stmts", "eval_iterator", "eval_for",
-               "eval_expr", "eval_exprs", "eval_expr_results", "eval_base_place", "eval_target_place"]
+               "eval_expr", "eval_exprs", "eval_base_place", "eval_target_place"]
             andalso length args = (if n = "eval_for" then 6 else 3)) orelse
            (List.exists (fn s => s = n)
               ["assign_tuple_targets", "assign_tuple_target_list"] andalso length args = 4)
@@ -1118,7 +1125,6 @@ Proof
         else if n = "eval_for" then "For_" ^ shape (el 5 args)
         else if n = "eval_expr" then expr_label arg
         else if n = "eval_exprs" then "Exprs_" ^ shape arg
-        else if n = "eval_expr_results" then "Results_" ^ shape arg
         else if n = "eval_base_place" then "BasePlaceRoot_" ^ head arg
         else if n = "eval_target_place" then "TargetPlace"
         else if n = "assign_tuple_targets" then "TupleStore_" ^ head arg
@@ -1194,10 +1200,6 @@ Resume eval_storage_well_formed_on_mutual[Stmts_nil]:
 QED
 
 Resume eval_storage_well_formed_on_mutual[Exprs_nil]:
-  gvs[Once evaluate_def, return_def]
-QED
-
-Resume eval_storage_well_formed_on_mutual[Results_nil]:
   gvs[Once evaluate_def, return_def]
 QED
 
@@ -1462,38 +1464,6 @@ Resume eval_storage_well_formed_on_mutual[Exprs_cons]:
   Cases_on `ers` >> gvs[bind_def, return_def] >> rpt strip_tac >> gvs[] >>
   `?suffix. st'.storage_trace = st1.storage_trace ++ suffix` by
     metis_tac[storage_trace_frame_prefix, cj 6 evaluate_storage_trace_frame] >>
-  `storage_observations_ok cx H st1.storage_trace` by
-    metis_tac[storage_observations_ok_prefix] >>
-  `storage_well_formed_on cx st1 (FST H)` by
-    (first_x_assum drule_all >> simp[]) >>
-  `runtime_consistent env cx st1` by
-    metis_tac[eval_expr_preserves_runtime_consistent] >>
-  first_x_assum drule_all >> simp[]
-QED
-
-Resume eval_storage_well_formed_on_mutual[Results_cons]:
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe cx (int_calls_exprs (e::es))` mp_tac >>
-  pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
-  drule call_evaluation_safe_append_left >> strip_tac >>
-  drule call_evaluation_safe_append_right >> strip_tac >>
-  qpat_x_assum `well_typed_exprs env (e::es)` mp_tac >>
-  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-  qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_expr cx e st` >> rename1 `eval_expr cx e st = (er,st1)` >>
-  reverse (Cases_on `er`)
-  >- (qpat_x_assum `!s'' v t. eval_expr cx e s'' = (INL v,t) ==> _` kall_tac >>
-      simp_tac(srw_ss())[] >> rpt strip_tac >> gvs[] >>
-      first_x_assum drule_all >> simp[]) >>
-  simp_tac(srw_ss())[] >>
-  qpat_x_assum `!s'' v t. eval_expr cx e s'' = (INL v,t) ==> _` (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  strip_tac >>
-  Cases_on `eval_expr_results cx es st1` >>
-  rename1 `eval_expr_results cx es st1 = (ers,st3)` >>
-  Cases_on `ers` >> gvs[bind_def, return_def] >> rpt strip_tac >> gvs[] >>
-  `?suffix. st'.storage_trace = st1.storage_trace ++ suffix` by
-    metis_tac[storage_trace_frame_prefix, cj 11 evaluate_storage_trace_frame] >>
   `storage_observations_ok cx H st1.storage_trace` by
     metis_tac[storage_observations_ok_prefix] >>
   `storage_well_formed_on cx st1 (FST H)` by
@@ -3220,170 +3190,21 @@ Resume eval_storage_well_formed_on_mutual[Expr_Call_CreateTarget]:
      irule call_evaluation_safe_append_left >> goal_assum (drule_at Any)) >>
   qpat_x_assum `well_typed_expr env (Call _ _ _ _)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-  Cases_on `kind` >>
-  rule_assum_tac (REWRITE_RULE [vyperASTTheory.create_kind_11, vyperASTTheory.create_kind_distinct]) >>
-  rpt BasicProvers.VAR_EQ_TAC
-  >~ [`RawCreate`] >- suspend "FiniteRawCreate"
-  >~ [`CreateFromBlueprint raw_args`] >- suspend "FiniteBlueprint" >>
-  full_simp_tac bool_ss [vyperASTTheory.create_kind_11, vyperASTTheory.create_kind_distinct] >>
+  `well_typed_exprs env (create_operand_order kind has_salt es)` by
+    metis_tac[well_typed_exprs_create_operand_order] >>
+  `call_evaluation_safe cx
+     (int_calls_exprs (create_operand_order kind has_salt es))` by
+    metis_tac[call_evaluation_safe_create_operand_order] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_apply] >>
-  Cases_on `eval_exprs cx es st` >>
-  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+  Cases_on `eval_exprs cx (create_operand_order kind has_salt es) st` >>
+  rename1 `eval_exprs _ _ st = (args_res,args_st)` >>
   Cases_on `args_res` >> simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
   `storage_observations_ok cx H args_st.storage_trace` by
-    metis_tac[storage_trace_frame_prefix, storage_trace_frame_create,
+    metis_tac[storage_trace_frame_prefix, storage_trace_frame_create_operands,
               storage_observations_ok_prefix] >>
   first_x_assum drule_all >> strip_tac >>
-  metis_tac[eval_create_preserves_storage_well_formed_on]
-QED
-
-Resume eval_storage_well_formed_on_mutual[FiniteBlueprint]:
-  markerLib.RESUME_TAC >>
-  full_simp_tac bool_ss [vyperASTTheory.create_kind_11, vyperASTTheory.create_kind_distinct] >>
-  `well_typed_exprs env (TAKE (if has_salt then 4 else 3) es) /\
-   well_typed_exprs env (DROP (if has_salt then 4 else 3) es)` by
-    metis_tac[well_typed_exprs_TAKE, well_typed_exprs_DROP] >>
-  `call_evaluation_safe cx (int_calls_exprs (TAKE (if has_salt then 4 else 3) es)) /\
-   call_evaluation_safe cx (int_calls_exprs (DROP (if has_salt then 4 else 3) es))` by
-    metis_tac[call_evaluation_safe_exprs_TAKE, call_evaluation_safe_exprs_DROP] >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_apply] >>
-  Cases_on `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st` >>
-  rename1 `eval_exprs _ _ st = (prefix_res,prefix_st)` >>
-  Cases_on `prefix_res` >> simp_tac(srw_ss())[bind_apply, LET_THM]
-  >- (Cases_on `check_create_blueprint has_salt x prefix_st` >>
-      rename1 `check_create_blueprint _ _ _ = (gate_res,gate_st)` >>
-      `gate_st = prefix_st` by
-        (qpat_assum `check_create_blueprint _ _ _ = _`
-          (mp_tac o Q.AP_TERM `SND`) >> simp[]) >>
-      qpat_x_assum `gate_st = prefix_st` SUBST_ALL_TAC >>
-      Cases_on `gate_res` >> simp_tac(srw_ss())[bind_apply, LET_THM]
-      >- (Cases_on `eval_expr_results cx (DROP (if has_salt then 4 else 3) es) prefix_st` >>
-          rename1 `eval_expr_results _ _ _ = (suffix_res,suffix_st)` >>
-          Cases_on `suffix_res` >> simp_tac(srw_ss())[bind_apply, LET_THM]
-          >- (rename1 `eval_expr_results _ _ _ = (INL results,suffix_st)` >>
-              Cases_on `read_results cx results suffix_st` >>
-              drule read_results_state >> strip_tac >> gvs[] >>
-              Cases_on `q` >> simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
-              suspend "FiniteBlueprintSuffix") >>
-          strip_tac >> gvs[] >> suspend "FiniteBlueprintCaptureError") >>
-      strip_tac >> gvs[] >>
-      first_x_assum drule_all >> simp[]) >>
-  strip_tac >> gvs[] >> first_x_assum drule_all >> simp[]
-QED
-
-Resume eval_storage_well_formed_on_mutual[FiniteBlueprintSuffix]:
-  markerLib.RESUME_TAC >>
-  rename1 `eval_expr_results _ _ prefix_st = (INL results,suffix_st)` >>
-  `storage_observations_ok cx H suffix_st.storage_trace` by
-    metis_tac[storage_trace_frame_prefix, storage_trace_frame_create,
-              storage_observations_ok_prefix] >>
-  `storage_observations_ok cx H prefix_st.storage_trace` by
-    metis_tac[storage_trace_frame_prefix, cj 11 evaluate_storage_trace_frame,
-              storage_observations_ok_prefix] >>
-  `storage_well_formed_on cx prefix_st (FST H)` by
-    (first_x_assum drule_all >> simp[]) >>
-  `runtime_consistent env cx prefix_st` by
-    metis_tac[eval_exprs_preserves_runtime_consistent] >>
-  qpat_x_assum `!s prefix t s1 code_size t1. _ ==> _` drule_all >>
-  strip_tac >>
-  `storage_well_formed_on cx suffix_st (FST H)` by
-    (first_x_assum drule_all >> simp[]) >>
-  metis_tac[eval_create_preserves_storage_well_formed_on]
-QED
-
-Resume eval_storage_well_formed_on_mutual[FiniteBlueprintCaptureError]:
-  markerLib.RESUME_TAC >>
-  `storage_observations_ok cx H prefix_st.storage_trace` by
-    metis_tac[storage_trace_frame_prefix, cj 11 evaluate_storage_trace_frame,
-              storage_observations_ok_prefix] >>
-  `storage_well_formed_on cx prefix_st (FST H)` by
-    (first_x_assum drule_all >> simp[]) >>
-  `runtime_consistent env cx prefix_st` by
-    metis_tac[eval_exprs_preserves_runtime_consistent] >>
-  qpat_x_assum `!s prefix t s1 code_size t1. _ ==> _` drule_all >>
-  strip_tac >> first_x_assum drule_all >> simp[]
-QED
-
-Resume eval_storage_well_formed_on_mutual[FiniteRawCreate]:
-  markerLib.RESUME_TAC >>
-  full_simp_tac bool_ss [vyperASTTheory.create_kind_11, vyperASTTheory.create_kind_distinct] >>
-  `well_typed_exprs env (TAKE 2 es) /\
-   well_typed_exprs env (TAKE (LENGTH es - 2 - (if has_salt then 1 else 0)) (DROP 2 es)) /\
-   well_typed_exprs env (DROP (LENGTH es - 2 - (if has_salt then 1 else 0)) (DROP 2 es))` by
-    metis_tac[well_typed_exprs_TAKE, well_typed_exprs_DROP] >>
-  `call_evaluation_safe cx (int_calls_exprs (TAKE 2 es)) /\
-   call_evaluation_safe cx (int_calls_exprs (TAKE (LENGTH es - 2 - (if has_salt then 1 else 0)) (DROP 2 es))) /\
-   call_evaluation_safe cx (int_calls_exprs (DROP (LENGTH es - 2 - (if has_salt then 1 else 0)) (DROP 2 es)))` by
-    metis_tac[call_evaluation_safe_exprs_TAKE, call_evaluation_safe_exprs_DROP] >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_apply] >>
-  Cases_on `eval_exprs cx (TAKE 2 es) st` >>
-  rename1 `eval_exprs _ _ st = (prefix_res,prefix_st)` >>
-  Cases_on `prefix_res` >> simp_tac(srw_ss())[bind_apply, LET_THM, LENGTH_DROP]
-  >- (Cases_on `eval_expr_results cx (TAKE (LENGTH es - 2 - (if has_salt then 1 else 0)) (DROP 2 es)) prefix_st` >>
-      rename1 `eval_expr_results _ _ _ = (capture_res,capture_st)` >>
-      Cases_on `capture_res` >> simp_tac(srw_ss())[bind_apply, LET_THM]
-      >- (rename1 `eval_expr_results _ _ _ = (INL results,capture_st)` >>
-          Cases_on `read_results cx results capture_st` >>
-          drule read_results_state >> strip_tac >>
-          rename1 `read_results _ _ _ = (read_res,read_st)` >>
-          qpat_x_assum `read_st = capture_st` SUBST_ALL_TAC >>
-          Cases_on `read_res` >> simp_tac(srw_ss())[bind_apply, LET_THM]
-          >- (Cases_on `eval_exprs cx (DROP (LENGTH es - 2 - (if has_salt then 1 else 0)) (DROP 2 es)) capture_st` >>
-              rename1 `eval_exprs _ _ capture_st = (salt_res,salt_st)` >>
-              Cases_on `salt_res` >> simp_tac(srw_ss())[] >>
-              strip_tac >> gvs[] >> suspend "FiniteRawSalt") >>
-          strip_tac >> gvs[] >> suspend "FiniteRawCapture") >>
-      strip_tac >> gvs[] >> suspend "FiniteRawCapture") >>
-  strip_tac >> gvs[] >> first_x_assum drule_all >> simp[]
-QED
-
-Resume eval_storage_well_formed_on_mutual[FiniteRawCapture]:
-  markerLib.RESUME_TAC >>
-  rename1 `eval_expr_results _ _ prefix_st = (_,capture_st)` >>
-  `storage_observations_ok cx H prefix_st.storage_trace` by
-    metis_tac[storage_trace_frame_prefix, cj 11 evaluate_storage_trace_frame,
-              storage_observations_ok_prefix] >>
-  `storage_well_formed_on cx prefix_st (FST H)` by
-    (first_x_assum drule_all >> simp[]) >>
-  `runtime_consistent env cx prefix_st` by
-    metis_tac[eval_exprs_preserves_runtime_consistent] >>
-  qpat_x_assum `!s prefix t. _ ==> _` drule_all >> strip_tac >>
-  rule_assum_tac (REWRITE_RULE [LENGTH_DROP]) >>
-  first_x_assum drule_all >> simp[]
-QED
-
-Resume eval_storage_well_formed_on_mutual[FiniteRawSalt]:
-  markerLib.RESUME_TAC >>
-  rename1 `eval_expr_results _ _ prefix_st = (INL results,capture_st)` >>
-  rename1 `eval_exprs _ (DROP _ (DROP 2 es)) capture_st = (_,salt_st)` >>
-  `storage_observations_ok cx H salt_st.storage_trace` by
-    metis_tac[storage_trace_frame_prefix, storage_trace_frame_create,
-              storage_observations_ok_prefix] >>
-  `storage_observations_ok cx H capture_st.storage_trace` by
-    metis_tac[storage_trace_frame_prefix, cj 6 evaluate_storage_trace_frame,
-              storage_observations_ok_prefix] >>
-  `storage_observations_ok cx H prefix_st.storage_trace` by
-    metis_tac[storage_trace_frame_prefix, cj 11 evaluate_storage_trace_frame,
-              storage_observations_ok_prefix] >>
-  `storage_well_formed_on cx prefix_st (FST H)` by
-    (first_x_assum drule_all >> simp[]) >>
-  `runtime_consistent env cx prefix_st` by
-    metis_tac[eval_exprs_preserves_runtime_consistent] >>
-  `storage_well_formed_on cx capture_st (FST H)` by
-    (qpat_x_assum `!s prefix t. _ ==> _` drule_all >>
-     strip_tac >> first_x_assum drule_all >> simp[]) >>
-  `runtime_consistent env cx capture_st` by
-    (fs[vyperTypeExprSoundnessTheory.runtime_consistent_def] >>
-     drule_all (cj 1 (SPEC_ALL (cj 11 eval_scc_type_sound_results_mutual))) >>
-     simp[vyperTypeExprSoundnessTheory.runtime_consistent_def]) >>
-  qpat_x_assum `!s prefix t s1 results t1 s2 args t2. _ ==> _` drule_all >>
-  strip_tac >>
-  `storage_well_formed_on cx salt_st (FST H)` by
-    (first_x_assum drule_all >> simp[]) >>
-  metis_tac[eval_create_preserves_storage_well_formed_on]
+  metis_tac[eval_create_operands_preserves_storage_well_formed_on]
 QED
 
 Resume eval_storage_well_formed_on_mutual[Expr_Call_IntCall]:

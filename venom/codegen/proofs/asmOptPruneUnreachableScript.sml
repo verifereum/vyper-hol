@@ -15,6 +15,7 @@
 
 Theory asmOptPruneUnreachable
 Ancestors
+  asmSpliceWithin asmRefinesWithin asmSymSemWithin
   asmSplice asmSymPc finalizerContract asmSymSem asmOptimizer asmWf
   asmSem list
 
@@ -59,13 +60,11 @@ Proof
   CASE_TAC >> simp[]
 QED
 
-(* From t, one step of either program leaves the window or ends the same
-   way. *)
-Theorem terminal_window_refines:
+Theorem terminal_window_refines_within[local]:
   asm_terminal_op t ∧ ¬asm_reachable_marker x ⇒
-  asm_window_refines pfx [t; x] [t] rest
+  asm_window_refines_within pfx [t; x] [t] rest
 Proof
-  rw[asm_window_refines_def] >>
+  rw[asm_window_refines_within_def] >>
   `∃name. t = AsmOp name` by gvs[asm_terminal_op_def] >>
   `∀l. x ≠ AsmLabel l ∧ x ≠ AsmDataHeader l`
     by (rpt strip_tac >> gvs[asm_reachable_marker_def]) >>
@@ -74,7 +73,36 @@ Proof
   `LENGTH pfx < LENGTH p ∧ EL (LENGTH pfx) p = t ∧
    LENGTH pfx < LENGTH q ∧ EL (LENGTH pfx) q = t`
     by simp[Abbr `p`, Abbr `q`, listTheory.EL_APPEND_EQN] >>
-  qexistsl_tac [`1`, `1`] >> simp[sym_steps_one] >>
+  qexistsl_tac [`1`, `1`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  CONV_TAC (REWR_CONV CONJ_ASSOC) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      `0 < k` by (Cases_on `k` >> gvs[sym_run_within_def]) >>
+      Cases_on `name = "JUMP"`
+      >- (gvs[] >>
+          Cases_on `∃a. sym_step p env (AsmOp "JUMP") ss = SymOK a`
+          >- (gvs[] >>
+              `sym_steps p env 1 ss = SymOK a ∧
+               sym_steps_ok (λi stk. asm_plain_inst i) (λi. F) p env 1 ss ∧
+               sym_steps_ok (λi stk. asm_plain_inst i) (λi. F) q env 1 ss`
+                by simp[sym_steps_one, sym_steps_ok_one, asm_plain_inst_def,
+                        is_data_inst_def] >>
+              drule_all (Q.INST [`p'` |-> `q`, `j'` |-> `1`] window_bounded_plain) >>
+              simp[]) >>
+          `asm_plain_inst (AsmOp "JUMP")` by simp[asm_plain_inst_def, is_data_inst_def] >>
+          `¬Q (AsmOp "JUMP")` by gvs[sym_within_ok_def] >>
+          Cases_on `k` >> gvs[sym_run_within_def] >>
+          Cases_on `sym_step p env (AsmOp "JUMP") ss` >>
+          gvs[sym_step_def, sym_step_op_def, sym_jump_def, AllCaseEqs()]) >>
+      `sym_step q env (AsmOp name) ss = sym_step p env (AsmOp name) ss`
+        by (irule sym_step_prog_cong >> gvs[asm_terminal_op_def] >>
+            simp[Abbr `p`, Abbr `q`] >> metis_tac[]) >>
+      `∀a. sym_step p env (AsmOp name) ss ≠ SymOK a`
+        by (gen_tac >> irule sym_step_halting_not_ok >> gvs[]) >>
+      disj1_tac >> irule within_same_halting_step >>
+      first_assum (irule_at Any) >> gvs[]) >>
+  simp[sym_steps_one] >>
   Cases_on `name = "JUMP"`
   >- (gvs[sym_step_def, sym_step_op_def, sym_jump_def] >>
       Cases_on `ss.sym_stack` >> simp[sym_terminal_def] >>
@@ -100,6 +128,13 @@ Proof
   simp[] >>
   Cases_on `sym_step p env (AsmOp name) ss` >>
   gvs[sym_terminal_def, sym_result_rel_def]
+QED
+
+Theorem terminal_window_refines:
+  asm_terminal_op t ∧ ¬asm_reachable_marker x ⇒
+  asm_window_refines pfx [t; x] [t] rest
+Proof
+  metis_tac[terminal_window_refines_within, asm_window_refines_of_within]
 QED
 
 Theorem data_at_end_after_header[local]:
@@ -134,24 +169,32 @@ Proof
   gvs[]
 QED
 
-Theorem prune_one_refines:
+Theorem prune_one_refines_both[local]:
   asm_terminal_op t ∧ ¬asm_reachable_marker x ⇒
-  asm_refines (pfx ++ t :: x :: rest) (pfx ++ t :: rest)
+  asm_refines_both (pfx ++ t :: x :: rest) (pfx ++ t :: rest)
 Proof
   strip_tac >>
   Cases_on `is_data_inst x`
-  >- (simp[asm_refines_def] >> metis_tac[terminal_data_not_wf]) >>
+  >- (simp[relationTheory.RINTER, asm_refines_def, asm_refines_within_def] >>
+      metis_tac[terminal_data_not_wf]) >>
   `∀l. x ≠ AsmLabel l` by (rpt strip_tac >> gvs[asm_reachable_marker_def]) >>
   `∃name. t = AsmOp name` by gvs[asm_terminal_op_def] >>
-  drule_all terminal_window_refines >>
+  drule_all terminal_window_refines_within >>
   disch_then (qspecl_then [`rest`, `pfx`] assume_tac) >>
   mp_tac (Q.INST [`pat` |-> `[t; x]`, `repl` |-> `[t]`, `sfx` |-> `rest`]
-            asm_splice_window_refines) >>
+            asm_splice_window_refines_both) >>
   impl_tac
   >- gvs[asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
          symbolResolveTheory.asm_inst_size_def] >>
   REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
   disch_then ACCEPT_TAC
+QED
+
+Theorem prune_one_refines:
+  asm_terminal_op t ∧ ¬asm_reachable_marker x ⇒
+  asm_refines (pfx ++ t :: x :: rest) (pfx ++ t :: rest)
+Proof
+  metis_tac[prune_one_refines_both, relationTheory.RINTER]
 QED
 
 (* ===== The walk ===== *)
@@ -165,19 +208,18 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-(* While dropping, the prefix ends in a terminal op. *)
-Theorem prune_unreachable_walk_refines_under:
+Theorem prune_unreachable_walk_refines_under_both[local]:
   ∀sfx d pfx.
     (d ⇒ ∃pre t. pfx = pre ++ [t] ∧ asm_terminal_op t) ⇒
-    asm_refines (pfx ++ sfx) (pfx ++ FST (prune_unreachable_walk d sfx))
+    asm_refines_both (pfx ++ sfx) (pfx ++ FST (prune_unreachable_walk d sfx))
 Proof
-  Induct >- simp[prune_unreachable_walk_def, asm_refines_refl] >>
+  Induct >- simp[prune_unreachable_walk_def, asm_refines_both_refl] >>
   rpt strip_tac >> simp[prune_unreachable_walk_fst] >>
   IF_CASES_TAC
-  >- (gvs[] >> irule asm_refines_trans >>
+  >- (gvs[] >> irule asm_refines_both_trans >>
       qexists_tac `pre ++ t :: sfx` >> conj_tac
       >- (REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
-          irule prune_one_refines >> simp[]) >>
+          irule prune_one_refines_both >> simp[]) >>
       first_x_assum (qspecl_then [`T`, `pre ++ [t]`] mp_tac) >>
       impl_tac >- (strip_tac >> qexistsl_tac [`pre`, `t`] >> simp[]) >>
       REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]) >>
@@ -186,10 +228,75 @@ Proof
   REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]
 QED
 
+Theorem prune_unreachable_walk_refines_under:
+  ∀sfx d pfx.
+    (d ⇒ ∃pre t. pfx = pre ++ [t] ∧ asm_terminal_op t) ⇒
+    asm_refines (pfx ++ sfx) (pfx ++ FST (prune_unreachable_walk d sfx))
+Proof
+  metis_tac[prune_unreachable_walk_refines_under_both, relationTheory.RINTER]
+QED
+
 Theorem prune_unreachable_code_refines:
   ∀p. asm_refines p (FST (prune_unreachable_code p))
 Proof
   gen_tac >> simp[prune_unreachable_code_def] >>
   qspecl_then [`p`, `F`, `[]`] mp_tac prune_unreachable_walk_refines_under >>
   simp[]
+QED
+
+Theorem prune_unreachable_code_refines_both:
+  ∀p. asm_refines_both p (FST (prune_unreachable_code p))
+Proof
+  gen_tac >> simp[prune_unreachable_code_def] >>
+  qspecl_then [`p`, `F`, `[]`] mp_tac prune_unreachable_walk_refines_under_both >>
+  simp[]
+QED
+
+(* Quantitative interface for nonterminal symbolic prefixes. *)
+Theorem terminal_prefix_splice_ok:
+  asm_terminal_op t /\ ~asm_reachable_marker x /\
+  asm_static_wf (pre ++ [t;x] ++ post) ==>
+  asm_splice_ok [t;x] [t]
+Proof
+  strip_tac >>
+  `~is_data_inst x` by
+    (strip_tac >> drule_all terminal_data_not_wf >>
+     disch_then (qspecl_then [`post`, `pre`] mp_tac) >> gvs[rich_listTheory.APPEND_ASSOC_CONS]) >>
+  gvs[asm_terminal_op_def, asm_reachable_marker_def,
+      asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
+      symbolResolveTheory.asm_inst_size_def]
+QED
+
+Theorem terminal_prefix_window:
+  asm_terminal_op t /\ ~asm_reachable_marker x /\
+  u.sym_base.as_pc = LENGTH pre ==>
+  (!i a. i < 1 /\ sym_steps (pre ++ [t;x] ++ post) env i u = SymOK a ==>
+     ~(a.sym_base.as_pc < LENGTH (pre ++ [t;x] ++ post) /\
+       EL a.sym_base.as_pc (pre ++ [t;x] ++ post) = AsmOp "GAS")) /\
+  (!a. sym_steps (pre ++ [t;x] ++ post) env 1 u = SymOK a ==>
+     sym_steps (pre ++ [t] ++ post) env 1 u =
+       SymOK (sym_with_pc (splice_pc (LENGTH pre) 2 1 a.sym_base.as_pc) a) /\
+     (a.sym_base.as_pc <= LENGTH pre \/ LENGTH pre + 2 <= a.sym_base.as_pc))
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> `i = 0` by decide_tac >>
+      gvs[sym_steps_def, EL_APPEND_EQN, asm_terminal_op_def]) >>
+  `!l. x <> AsmLabel l` by
+    (rpt strip_tac >> gvs[asm_reachable_marker_def]) >>
+  simp[sym_steps_one, EL_APPEND_EQN] >>
+  Cases_on `t = AsmOp "JUMP"`
+  >- (gvs[sym_step_def, sym_step_op_def, sym_jump_def] >>
+      Cases_on `u.sym_stack` >> simp[] >>
+      rename1 `u.sym_stack = dest :: stk` >>
+      Cases_on `dest` >> simp[sym_jump_dest_def] >>
+      rename1 `u.sym_stack = Lab l d :: stk` >>
+      Cases_on `d = 0` >> simp[] >>
+      mp_tac (Q.INST [`pfx` |-> `pre`, `pat` |-> `[AsmOp "JUMP"; x]`,
+                       `repl` |-> `[AsmOp "JUMP"]`, `sfx` |-> `post`]
+                      splice_index_of_label) >> simp[] >> strip_tac >>
+      Cases_on `INDEX_OF (AsmLabel l) (pre ++ [AsmOp "JUMP"; x] ++ post)` >>
+      gvs[] >> rpt strip_tac >> gvs[] >>
+      simp[sym_with_pc_def, sym_state_component_equality,
+           asm_state_component_equality] >> metis_tac[]) >>
+  rpt strip_tac >> metis_tac[sym_step_halting_not_ok]
 QED

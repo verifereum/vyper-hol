@@ -448,10 +448,16 @@ Theorem eval_mutual_log_extends =
   REWRITE_RULE [state_rel_frame_result]
     (MATCH_MP eval_state_rel_frame log_extends_eval_frame);
 
-Theorem eval_expr_results_log_extends:
-  eval_expr_results cx es st = (res,st') ==> log_extends st st'
+Theorem eval_create_operands_log_extends:
+  eval_create_operands cx kind has_salt rof arg_tys literal_offset vs st =
+    (res,st') ==> log_extends st st'
 Proof
-  metis_tac[eval_mutual_log_extends]
+  Cases_on `kind` >>
+  simp[eval_create_operands_def, LET_THM, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+  imp_res_tac eval_create_logs_extend >>
+  simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL]
 QED
 
 Theorem eval_stmt_log_extends:
