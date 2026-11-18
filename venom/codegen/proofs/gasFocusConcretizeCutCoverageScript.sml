@@ -5,6 +5,9 @@ Ancestors
   concretizeStageShape concretizeStepStructure
   o1PassContract venomWf venomInst unitShapeDefs concretizeMemLocDefs
   venomPassDispatcher
+  gasFocusConcretizeEndpointCut gasFocusChronologicalCut
+  concretizePtrPairedPrefix concretizePtrStructuralTranscript concretizePtrStructuralTrace
+  concretizePtrChronologicalHistory concretizeLayoutCutSafe
   o1SafeUpto list finite_map
 
 (* The pairing is determined by the stage's static layout equations. No
@@ -114,4 +117,31 @@ Proof
       qpat_x_assum `!i. _ ==> _ /\ _` (drule_then strip_assume_tac) >>
       fs[fn_labels_def] >> metis_tac[concretize_positions_labels, fn_labels_def, EL_MEM]) >>
   simp[ptr_paired_code_def, Abbr `R`] >> metis_tac[]
+QED
+
+(* Source observations already traversed by a paired prefix are still in
+   the cut: the remaining readings can only decrease along the history. *)
+Theorem concretize_paired_history_safety[local]:
+  ptr_paired_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_discipline_upto lo n C vs /\ gas_cut n vs at.po_state ==>
+  !obs. MEM obs h ==>
+    access_ok lo obs.po_prov obs.po_fn obs.po_inst obs.po_state /\
+    taint_ok obs.po_fn obs.po_taint obs.po_inst obs.po_state /\
+    allocas_from lo obs.po_state /\
+    (ctx_has_dalloca C ==> allocas_below_fmp obs.po_state)
+Proof
+  strip_tac >>
+  drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  drule_all ptr_chrono_history_cut >> simp[EVERY_MEM] >> strip_tac >>
+  drule ptr_chrono_history_reachable >>
+  simp[EVERY_MEM, ptr_observation_reachable_def] >> strip_tac >>
+  rpt strip_tac >>
+  qpat_assum `!b. MEM b h ==> gas_cut _ _ _` (drule_then assume_tac) >>
+  qpat_assum `!x. MEM x h ==> frame_reachable _ _ _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
+  drule_all ptr_discipline_upto_at >> simp[]
 QED
