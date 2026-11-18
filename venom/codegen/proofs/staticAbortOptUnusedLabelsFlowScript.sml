@@ -7,32 +7,32 @@ Ancestors
 Theorem unused_label_one_selected_flow:
   !pre l tail V (pc:(num#num)->num) (height:(num#num)->num)
     tag boolean edge src fresh bnew H z.
-  let p = pre++[AsmLabel l]++tail in
-  let d = LENGTH pre in
-  let q = pre++tail in
-  let r = splice_pc d 1 0 in
-  let pcQ = r o pc in
-  let C = \s n w. ?off. FLOOKUP (SND (compute_label_offsets s)) n = SOME off /\
-                     off < dimword(:256) /\ FLOOKUP (build_offset_to_pc s) off = SOME w in
-  let P = OPTION_MAP (\(n,j). (n,r j)) in
-  let Tags = \x k. P (tag x k) in
-  let keep = {u:num#num | u IN V /\ pc u<>d} in
-  let Legal = \u a.
+  !p. p = pre++[AsmLabel l]++tail ==>
+  !d. d = LENGTH pre ==>
+  !q. q = pre++tail ==>
+  !r. r = splice_pc d 1 0 ==>
+  !pcQ. pcQ = r o pc ==>
+  !P. P = OPTION_MAP (\(n,j). (n,r j)) ==>
+  !Tags. Tags = (\x k. P (tag x k)) ==>
+  !keep. keep = {u:num#num | u IN V /\ pc u<>d} ==>
+  !Legal. Legal = (\u a.
     edge u (SND a) /\
     (if FST a then
        (EL (pc u) p = AsmOp "JUMP" \/ EL (pc u) p = AsmOp "JUMPI") /\
-       (?n j. tag u 0 = SOME(n,j) /\ C p n (pc (SND a)))
-     else EL (pc u) p <> AsmOp "JUMP" /\ pc (SND a) = pc u+1) in
-  let E_z = \u w. u IN keep /\ ?a. Legal u a /\ w=z u a in
-  let Inherit = \u (w:num#num) tg (s:num->num option) (f:num->(string#num)option) b.
+       (?n j off. tag u 0 = SOME(n,j) /\
+          FLOOKUP (SND (compute_label_offsets p)) n = SOME off /\
+          off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME (pc (SND a)))
+     else EL (pc u) p <> AsmOp "JUMP" /\ pc (SND a) = pc u+1)) ==>
+  !Inherit. Inherit = (\u (w:num#num) tg (s:num->num option) (f:num->(string#num)option) b.
     (!k n j. tg w k = SOME(n,j) ==> k < height w /\
        (f k = SOME(n,j) \/ ?h. s k = SOME h /\ h < height u /\ tg u h = SOME(n,j))) /\
     (!k. boolean w k ==> k < height w /\
-       (b k \/ ?h. s k = SOME h /\ h < height u /\ boolean u h)) in
+       (b k \/ ?h. s k = SOME h /\ h < height u /\ boolean u h))) ==>
   (* The numerical part of Flow, with its slot interpretation as a parameter.
      This binds the same descriptor in the source and selected-arm premises. *)
-  let Row = \prog pos u hj inherit.
-    let hi = height u; ins = EL (pos u) prog in
+  !Row. Row = (\prog pos u hj inherit.
+    !hi. hi = height u ==>
+    !ins. ins = EL (pos u) prog ==>
     case ins of
       AsmLabel n => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs =>
@@ -62,7 +62,8 @@ Theorem unused_label_one_selected_flow:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-             let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+             !a. a = asm_op_arity name ==>
+             !m. m = hj + a - hi ==>
              a <= hi /\ hj = m+(hi-a) /\
              ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
              inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -71,7 +72,7 @@ Theorem unused_label_one_selected_flow:
                    asm_step (SND(compute_label_offsets prog)) (build_offset_to_pc prog)
                      ins t = AsmOK v ==>
                    (EL 0 v.as_stack=0w \/ EL 0 v.as_stack=1w)))
-    | _ => F in
+    | _ => F) ==>
   (!u. u IN keep ==> pcQ u < LENGTH q /\ EL (pcQ u) q = EL (pc u) p) /\
   (!u a. u IN keep /\ Legal u a ==>
     Row p pc u (H u) (\s f b. src u = s /\ fresh u = f /\ bnew u = b) /\
@@ -79,14 +80,15 @@ Theorem unused_label_one_selected_flow:
        IS_SOME (ALOOKUP dup_table name) \/ IS_SOME (ALOOKUP swap_table name) \/
        name="JUMP" \/ name="JUMPI" \/ (?m. static_abort_straight name m)) /\
     height (z u a) = H u /\ Inherit u (z u a) Tags (src u) (P o fresh u) (bnew u)) ==>
-  !u w. E_z u w ==> Row q pcQ u (height w) (Inherit u w Tags)
+  !u w. (u IN keep /\ ?a. Legal u a /\ w = z u a) ==>
+    Row q pcQ u (height w) (Inherit u w Tags)
 Proof
-  rpt gen_tac >>
-  map_every (fn pat => qmatch_goalsub_abbrev_tac pat >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ p`, `LET _ d`, `LET _ q`, `LET _ r`, `LET _ pcQ`, `LET _ C`,
-     `LET _ P`, `LET _ Tags`, `LET _ keep`, `LET _ Legal`, `LET _ E_z`, `LET _ Inherit`, `LET _ Row`] >>
-  strip_tac >> rpt gen_tac >> simp[Abbr `E_z`] >> strip_tac >>
+  map_every qx_gen_tac [`pre`,`l`,`tail`,`V`,`pc`,`height`,`tag`,`boolean`,`edge`,
+     `src`,`fresh`,`bnew`,`H`,`z`] >>
+  map_every (fn name => qx_gen_tac name >>
+    disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
+    [`p`,`d`,`q`,`r`,`pcQ`,`P`,`Tags`,`keep`,`Legal`,`Inherit`,`Row`] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `!u a. u IN keep /\ Legal u a ==> _` (drule_all_then strip_assume_tac) >>
   qpat_x_assum `!u. u IN keep ==> _` (drule_then strip_assume_tac) >>
   qpat_x_assum `w = z u a` SUBST_ALL_TAC >>
