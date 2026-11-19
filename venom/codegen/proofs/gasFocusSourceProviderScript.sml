@@ -40,6 +40,9 @@ Ancestors lowerDloadSafetyKernel[qualified,ignore_grammar]
   lowerDloadReachability lowerDloadRevertSuffix concretizeMemLocDefs
   venomExecProofs pred_set passSharedDefs concretizeStepStructure
   concretizePtrPairedFields unitLabelMapIdentity stepWriteFootprintBase
+  memLocDefs concretizePtrObservationInterface concretizePtrComparisonTransport
+  concretizePtrPrefixLedger concretizePtrValueTransport
+  concretizePtrHistoricalWriteExclusion concretizePtrPlacementBounds
 
 (* Entry and source-point facts for the bounded FMP frame induction. *)
 Theorem focus_fmp_src_active[local]:
@@ -2312,6 +2315,100 @@ Resume focus_concretize_cut_read[corridor]:
 QED
 
 Finalise focus_concretize_cut_read
+
+(* A positive range either keeps its fixed address or uses its owner's slot. *)
+Theorem focus_layout_range_geometry[local]:
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  ((ranges = source_memory_read_ranges inst s /\ mops = mem_read_ops inst) \/
+   (ranges = source_memory_write_ranges inst s /\ mops = mem_write_ops inst)) /\
+  mops = SOME ops /\ MEM (w2n x,len) ranges /\ 0 < len /\
+  ptr_ledger_erases dyn births TG G /\
+  (!aid pa sz. FLOOKUP positions (Allocation aid) = SOME (pa,sz) ==>
+     pa + sz < dimword (:256)) /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
+  (x = y /\ (w2n x + len <= lo \/ dyn <= w2n x) /\ op_prov TG ops.iao_ofst = NONE) \/
+  (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
+    FLOOKUP births (token,aid) = SOME (b,sz) /\
+    FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+    b <= w2n x /\ w2n x + len <= b + sz /\ w2n y = pa + (w2n x - b))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `len = 0 \/ (w2n x + len <= lo /\ op_prov G ops.iao_ofst = NONE) \/
+     (?v b sz. ops.iao_ofst = Var v /\ FLOOKUP G v = SOME (b,sz) /\
+        b <= w2n x /\ w2n x + len <= b + sz)` by
+    (drule_all ptr_access_range_classification >> simp[]) >>
+  pop_assum strip_assume_tac >- fs[]
+  >- (`op_prov TG ops.iao_ofst = NONE` by
+        (Cases_on `ops.iao_ofst` >> gs[op_prov_def] >>
+         rename1 `FLOOKUP G v = NONE` >>
+         Cases_on `FLOOKUP TG v` >> simp[] >>
+         fs[ptr_ledger_erases_def] >>
+         qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `v` mp_tac) >>
+         simp[ptr_owner_erases_def, FLOOKUP_DEF] >> metis_tac[]) >>
+      gvs[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]) >>
+  `ptr_owner_erases dyn births (FLOOKUP TG v) (SOME (b,sz))` by
+    (fs[ptr_ledger_erases_def] >> metis_tac[]) >>
+  Cases_on `FLOOKUP TG v`
+  >- gvs[ptr_owner_erases_def, op_prov_def, ptr_lookup_transport_def,
+         ptr_value_transport_scalar_empty] >>
+  rename1 `FLOOKUP TG v = SOME tag` >> PairCases_on `tag` >>
+  rename1 `FLOOKUP TG v = SOME (token,aid)` >>
+  `FLOOKUP births (token,aid) = SOME (b,sz)` by fs[ptr_owner_erases_def] >>
+  `?pa. FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+    y = x - n2w b + n2w pa` by
+    gvs[ptr_lookup_transport_def, ptr_value_transport_def, op_prov_def] >>
+  `pa + sz < dimword (:256)` by metis_tac[] >>
+  `w2n y = pa + (w2n x - b)` by
+    (irule ptr_closed_relocation_value >> simp[] >> qexists `sz` >> simp[] >> decide_tac) >>
+  disj2_tac >> qexistsl [`v`,`token`,`aid`,`b`,`sz`,`pa`] >> simp[]
+QED
+
+Theorem focus_layout_read_cases[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ EVERY all_reachable C.ctx_functions /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ ptr_stage_placements C' positions /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  gas_cut n vs at.po_state /\ ~in_revert_forward a.po_fn a.po_state /\
+  mem_read_ops a.po_inst = SOME ops /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\
+  MEM (w2n x,len) (source_memory_read_ranges a.po_inst a.po_state) /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
+    (SOME x) (SOME y) /\ 0 < len ==>
+  (x = y /\ (w2n x+len <= lo \/ dyn_floor C vs <= w2n x) /\
+     op_prov TG ops.iao_ofst = NONE) \/
+  (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
+     FLOOKUP births (token,aid) = SOME (b,sz) /\
+     FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+     b <= w2n x /\ w2n x+len <= b+sz /\ w2n y = pa + (w2n x-b))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ptr_discipline_upto lo n C vs /\ fixed_region_reserved lo C /\
+    EVERY (\f. f.fn_eom = NONE) C.ctx_functions` by fs[o1_ptr_safe_upto_def] >>
+  drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
+     metis_tac[ptr_fn_inst_wf_flat, EVERY_MEM]) >>
+  drule_all ptr_source_ownership_erases_upto >> strip_tac >>
+  `!aid pa sz. FLOOKUP positions (Allocation aid) = SOME (pa,sz) ==>
+      pa + sz < dimword (:256)` by
+    (rpt strip_tac >> drule_all ptr_stage_placements_strict_bound >> simp[]) >>
+  `a.po_inst.inst_opcode <> ASSIGN` by gvs[mem_read_ops_def, AllCaseEqs()] >>
+  irule focus_layout_range_geometry >>
+  qpat_assum `ptr_lookup_transport _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `access_ok _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ptr_ledger_erases _ _ _ _` (irule_at Any) >> simp[] >> metis_tac[]
+QED
 
 (* Scratch statement for elaboration and independent review.
    Use the actual stopped six tables and their C8 chronology. Split a
