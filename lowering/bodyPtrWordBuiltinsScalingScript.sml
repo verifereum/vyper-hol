@@ -138,8 +138,9 @@ Proof
       irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
       qexistsl [`[i]`, `u`] >>
       simp[run_inst_seq_def] >>
-      Cases_on `i.inst_opcode` >>
-      fs[MEM, venomInstTheory.is_alloca_op_def, venomInstTheory.is_terminator_def]) >>
+      qpat_x_assum `MEM i.inst_opcode [MUL; Div; EQ; ISZERO; OR; ASSERT]`
+        (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC o SIMP_RULE bool_ss [MEM]) >>
+      simp[is_alloca_op_def, is_terminator_def]) >>
   conj_tac >- (irule word_scale_step_ghost_inv >> simp[] >>
     fs[local_ptrs_reserved_def] >> metis_tac[MEM]) >>
   irule word_scale_step_ghost_kept >> simp[] >> metis_tac[MEM])) >>
