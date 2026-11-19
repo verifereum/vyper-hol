@@ -531,20 +531,7 @@ Theorem e2e_deploy_correctness_asm_opt:
        deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
   rpt gen_tac >> strip_tac >>
-  `?rpolicy dunit dout prog prog' cplan.
-     deploy_phases policy tops (assemble prog,runtime_bc)
-       (rpolicy,dunit,dout,prog,cplan) /\
-     asm_opt_finalizer rpolicy prog = SOME prog' /\ deploy_bc = assemble prog'` by
-    (qpat_assum `compile_vyper asm_opt_finalizer policy tops = SOME _`
-       (strip_assume_tac o MATCH_MP compile_vyper_with_success_phases o
-        REWRITE_RULE [compile_vyper_def]) >>
-     gvs[finalize_codegen_def, AllCaseEqs()] >>
-     qpat_assum `codegen_assembly rpolicy deploy_out.po_unit = SOME _`
-       (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
-     rename1 `generate_context_plan deploy_out.po_unit.cu_context = SOME cplan` >>
-     rename1 `asm_opt_finalizer rpolicy prog = SOME prog'` >>
-     qexistsl_tac [`rpolicy`, `deploy_unit`, `deploy_out`, `prog`, `prog'`, `cplan`] >>
-     asm_simp_tac bool_ss [deploy_phases_def, o1PipelineCorrectTheory.o1_pipeline_def]) >>
+  drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
   `asm_opt_finalizer IN accepted_finalizers` by simp[accepted_finalizers_def] >>
   drule_all compile_vyper_runtime_not_ef >> strip_tac >>
   qspec_then `es` strip_assume_tac run_call_total >>

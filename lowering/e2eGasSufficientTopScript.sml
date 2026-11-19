@@ -312,23 +312,6 @@ Proof
   fs[Abbr`eg`]
 QED
 
-Triviality compile_vyper_deploy_phases_asm_opt:
-  compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) ==>
-  ?rpolicy dunit dout prog prog' cplan.
-    deploy_phases policy tops (assemble prog, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    asm_opt_finalizer rpolicy prog = SOME prog' /\
-    deploy_bc = assemble prog'
-Proof
-  simp[compile_vyper_def, deploy_phases_def] >> strip_tac >>
-  drule compile_vyper_with_success_phases >> strip_tac >>
-  gvs[finalize_codegen_def, o1PipelineCorrectTheory.o1_pipeline_def,
-      AllCaseEqs()] >>
-  qpat_x_assum `codegen_assembly rpolicy deploy_out.po_unit = SOME _`
-    (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
-  goal_assum $ drule_at Any >> gvs[]
-QED
-
 (* The constructor's finalized creation frame reserves enough gas at each
    step to pay the largest permitted code deposit. *)
 Theorem e2e_deploy_gas_sufficient_asm_opt:
