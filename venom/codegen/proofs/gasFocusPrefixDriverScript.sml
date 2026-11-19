@@ -8,6 +8,7 @@ Ancestors
   list rich_list pred_set words arithmetic focusJointChainBound gasFocusBoundedFrontier
   contextRawReachable dftGasOracleDefs fcgDefs irSupply memSafeRun
   venomPassSchedule venomPipelineRunner staticAbortDefs
+  gasFocusWalkInventoryReplay[qualified,ignore_grammar]
 
 (* verifereum's calldata-bound frame_rel is in scope; the statements below
    use frame_rel as a variable. *)
@@ -633,8 +634,7 @@ Proof
   ACCEPT_TAC gasFocusBoundedFrontierTheory.focus_bounded_frontier_stops
 QED
 
-(* Signed selection and replay goal. The theorem is exported once proved. *)
-val focus_finalizer_select_replay_goal : term = ``
+Theorem focus_finalizer_select_replay:
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
   o1_source_unit_ok unit /\ unit_entry_no_params unit /\
   unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
@@ -747,4 +747,54 @@ val focus_finalizer_select_replay_goal : term = ``
                  ?u. run_context fuel unit.cu_context
                        (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) =
                      Abort ExHalt_abort u))
-``;
+Proof
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  (let
+    fun normalize th =
+      CONV_RULE (DEPTH_CONV BETA_CONV) (PURE_REWRITE_RULE [LET_THM] th)
+    fun match_fact facts tm =
+      case List.find (fn th => aconv (concl th) tm) facts of
+        SOME th => th
+      | NONE =>
+          if is_conj tm then
+            let val (left, right) = dest_conj tm in
+              CONJ (match_fact facts left) (match_fact facts right)
+            end
+          else raise mk_HOL_ERR "focus_finalizer_select_replay" "premise"
+            (term_to_string tm)
+    fun apply_rule facts rule =
+      MP rule (match_fact facts (lhand (concl rule)))
+    fun finish selected =
+      qx_gen_tac `raw` >> disch_tac >> conj_tac >-
+        (fn (asl, goal) =>
+          ACCEPT_TAC (apply_rule (map ASSUME asl @ selected)
+            (Q.SPEC `raw` (List.last selected))) (asl, goal)) >>
+      gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      (fn (asl, goal) =>
+        ACCEPT_TAC (apply_rule (map ASSUME asl @ selected)
+          (normalize gasFocusWalkInventoryReplayTheory.focus_stopped_filling_replay))
+          (asl, goal))
+  in
+    fn (asl, goal) =>
+      let
+        val selected = apply_rule (map ASSUME asl)
+          (normalize gasFocusWalkInventoryReplayTheory.focus_walk_stopped_selection)
+        val witnesses = fst (strip_exists (concl selected))
+        fun use_selection th =
+          let
+            val facts = CONJUNCTS th
+            val prefix = List.take (witnesses, 3)
+          in
+            map_every EXISTS_TAC prefix >> conj_tac >- first_assum ACCEPT_TAC >>
+            conj_tac >- first_assum ACCEPT_TAC >> finish facts
+          end
+        fun project th (asl, goal) =
+          (assume_tac th >> map_every assume_tac (CONJUNCTS th) >>
+           use_selection th) (asl, goal)
+      in
+        foldr (fn (w, next) => X_CHOOSE_THEN w next) project
+          witnesses selected (asl, goal)
+      end
+  end)
+QED
