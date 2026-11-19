@@ -7,10 +7,9 @@ Ancestors
    the strict initial visit and cannot alias an ordinary visit. *)
 Theorem conditional_port_wiring[local]:
   !keep D (e:num#num) initial (z0:num#num->num#num) z1 (r:num#num->num) old.
-  let Visit = \i u. (u IN D /\ i < 4) \/ (initial /\ u=e /\ 4<=i /\ i<8) in
-  let Entry = \u. u IN keep \/ u IN D in
+  !Visit. Visit = (\i u. (u IN D /\ i < 4) \/ (initial /\ u=e /\ 4<=i /\ i<8)) ==>
   FINITE keep /\ FINITE D /\ (!u. u IN keep ==> u NOTIN D) /\
-  (!u v. u IN keep /\ old u v ==> Entry v /\ r v < r u) /\
+  (!u v. u IN keep /\ old u v ==> (v IN keep \/ v IN D) /\ r v < r u) /\
   (!u. u IN D \/ (initial /\ u=e) ==>
      z0 u IN keep /\ z1 u IN keep /\ r (z0 u) < r u /\ r (z1 u) < r u) ==>
   ?copy owner phase (wset:(num#num)->bool) E rank.
@@ -27,7 +26,8 @@ Theorem conditional_port_wiring[local]:
          (i MOD 4=3 /\ y=copy 0 (z1 u)))) /\
     (!a y. E a y ==> a IN wset /\ y IN wset /\ rank y < (rank a:num))
 Proof
-  rpt gen_tac >> simp[LET_THM] >> strip_tac >>
+  ntac 8 gen_tac >>
+  CONV_TAC (HO_REWR_CONV UNWIND_FORALL_THM2) >> simp[] >> strip_tac >>
   qabbrev_tac `copy = \i (u:num#num). (FST u * 8 + i, SND u)` >>
   qabbrev_tac `owner = \a:num#num. (FST a DIV 8, SND a)` >>
   qabbrev_tac `phase = \a:num#num. FST a MOD 8` >>
@@ -126,9 +126,9 @@ QED
 Theorem port_reachable_restriction[local]:
   !(family:(num#num)->bool) E root (rank:(num#num)->num)
     (raw:(num#num)->num->(string#num)option) b.
-  let Reach = \E root a. ?n (path:num->num#num).
-    path 0=root /\ path n=a /\ !k. k<n ==> E (path k) (path(SUC k)) in
-  let active = {a | a IN family /\ Reach E root a} in
+  !Reach. Reach = (\E root a. ?n (path:num->num#num).
+    path 0=root /\ path n=a /\ !k. k<n ==> E (path k) (path(SUC k))) ==>
+  !active. active = {a | a IN family /\ Reach E root a} ==>
   FINITE family /\ root IN family /\
   (!a y. E a y ==> a IN family /\ y IN family /\ rank y < rank a) /\
   (!a y k l. E a y /\ raw y k=SOME(l,b) ==> ?j. raw a j=SOME(l,b)) ==>
@@ -137,7 +137,8 @@ Theorem port_reachable_restriction[local]:
   (!a y. a IN active /\ E a y ==> y IN active /\ rank y < rank a) /\
   (!a k l. a IN active /\ raw a k=SOME(l,b) ==> ?j. raw root j=SOME(l,b))
 Proof
-  rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
+  ntac 6 gen_tac >>
+  CONV_TAC (TOP_DEPTH_CONV (FIRST_CONV [HO_REWR_CONV UNWIND_FORALL_THM2, BETA_CONV])) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   conj_tac
   >- (irule SUBSET_FINITE >> qexists `family` >> simp[SUBSET_DEF]) >>
@@ -154,9 +155,9 @@ QED
 (* A reached visit has both retained exits in the same closed active set. *)
 Theorem port_visit_exits_reached[local]:
   !D (e:num#num) initial keep copy owner phase family E root A z0 z1.
-  let Visit = \i u. (u IN D /\ i<4) \/ (initial /\ u=e /\ 4<=i /\ i<8) in
-  let Reach = \a. ?n (path:num->num#num).
-    path 0=root /\ path n=a /\ !k. k<n ==> E (path k) (path(SUC k)) in
+  !Visit. Visit = (\i u. (u IN D /\ i<4) \/ (initial /\ u=e /\ 4<=i /\ i<8)) ==>
+  !Reach. Reach = (\a. ?n (path:num->num#num).
+    path 0=root /\ path n=a /\ !k. k<n ==> E (path k) (path(SUC k))) ==>
   (!i u. i<8 ==> owner (copy i u)=u /\ phase (copy i u)=i) /\
   (!a. a IN family ==> phase a<8 /\ a=copy (phase a) (owner a) /\
       ((phase a=0 /\ owner a IN keep) \/ Visit (phase a) (owner a))) /\
@@ -169,9 +170,10 @@ Theorem port_visit_exits_reached[local]:
   !a. a IN A /\ Visit (phase a) (owner a) ==>
      copy 0 (z0 (owner a)) IN A /\ copy 0 (z1 (owner a)) IN A
 Proof
-  rpt gen_tac >>
-  map_every (fn pat => qmatch_goalsub_abbrev_tac pat >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV)) [`LET _ Visit`,`LET _ Reach`] >>
+  ntac 13 gen_tac >>
+  map_every (fn v => qx_gen_tac v >>
+    disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]))
+    [`Visit`,`Reach`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!u i. (i=0 \/ i=4) /\ copy i u IN A /\ Visit i u ==>
        copy 0 (z0 u) IN A /\ copy 0 (z1 u) IN A` by
@@ -239,17 +241,19 @@ Finalise port_visit_exits_reached
    recorded at the OLD origin b+2, even though its new PC is b+1. *)
 Theorem visit_raw_deleted_origin[local]:
   !b label (left:num->(string#num)option) right.
-  let union = \k. case left k of NONE => right k | SOME t => SOME t in
-  let raw = \(i:num) k.
+  !union. union = (\k. case left k of NONE => right k | SOME t => SOME t) ==>
+  !raw. raw = (\(i:num) k.
     if i<2 then (if k=0 then NONE else union (k-1)) else
     if i=2 then (if k=0 then SOME(label,b+2) else if k=1 then NONE else union (k-2))
-    else right k in
+    else right k) ==>
   (!k t s. left k=SOME t /\ right k=SOME s ==> t=s) ==>
   (!i k l. i<3 /\ raw (i+1) k=SOME(l,b) ==> ?j. raw i j=SOME(l,b)) /\
   (!k l. left k=SOME(l,b) ==> ?j. raw 2 j=SOME(l,b)) /\
   (!k l. right k=SOME(l,b) ==> ?j. raw 3 j=SOME(l,b))
 Proof
-  rpt gen_tac >> simp_tac (srw_ss()) [LET_THM] >> strip_tac >> conj_tac
+  ntac 4 gen_tac >>
+  CONV_TAC (TOP_DEPTH_CONV (FIRST_CONV [HO_REWR_CONV UNWIND_FORALL_THM2, BETA_CONV])) >>
+  simp_tac (srw_ss()) [] >> strip_tac >> conj_tac
   >- (rpt gen_tac >> strip_tac >> `i=0 \/ i=1 \/ i=2` by decide_tac >>
       gvs[]
       >- (qexists `k` >> simp[])
@@ -279,14 +283,14 @@ QED
 Theorem port_table_raw_predecessor[local]:
   !keep D (e:num#num) initial z0 z1 old copy owner phase family E
     (tag:(num#num)->num->(string#num)option) b label.
-  let Visit = \i u. (u IN D /\ i < 4) \/ (initial /\ u=e /\ 4<=i /\ i<8) in
-  let U = \u k. case tag (z0 u) k of NONE => tag (z1 u) k | SOME t => SOME t in
-  let vraw = \u (i:num) k.
+  !Visit. Visit = (\i u. (u IN D /\ i < 4) \/ (initial /\ u=e /\ 4<=i /\ i<8)) ==>
+  !U. U = (\u k. case tag (z0 u) k of NONE => tag (z1 u) k | SOME t => SOME t) ==>
+  !vraw. vraw = (\u (i:num) k.
     if i<2 then (if k=0 then NONE else U u (k-1)) else
     if i=2 then (if k=0 then SOME(label,b+2) else if k=1 then NONE else U u (k-2))
-    else tag (z1 u) k in
-  let raw = \a. if phase a=0 /\ owner a IN keep then tag (owner a)
-    else vraw (owner a) (phase a MOD 4) in
+    else tag (z1 u) k) ==>
+  !raw. raw = (\a. if phase a=0 /\ owner a IN keep then tag (owner a)
+    else vraw (owner a) (phase a MOD 4)) ==>
   (!i u. i<8 ==> owner (copy i u)=u /\ phase (copy i u)=i) /\
   (!a. a IN family ==> phase a<8 /\ a=copy (phase a) (owner a) /\
        ((phase a=0 /\ owner a IN keep) \/ Visit (phase a) (owner a))) /\
@@ -303,7 +307,11 @@ Theorem port_table_raw_predecessor[local]:
                                       tag u (k+1)=SOME t)) ==>
   !a y k l. E a y /\ raw y k=SOME(l,b) ==> ?j. raw a j=SOME(l,b)
 Proof
-  rpt gen_tac >> rpt BasicProvers.LET_ELIM_TAC >>
+  ntac 15 gen_tac >>
+  map_every (fn v => qx_gen_tac v >>
+    disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]))
+    [`Visit`,`U`,`vraw`,`raw`] >>
+  strip_tac >> map_every qx_gen_tac [`a`,`y`,`k`,`l`] >> strip_tac >>
   `!u k t. u IN D /\ vraw u 0 k = SOME t ==> tag u k = SOME t` by
     (rpt strip_tac >> gvs[Abbr `vraw`, Abbr `U`] >>
      qspecl_then [`tag`, `u`, `z0 u`, `z1 u`] mp_tac visit_entrance_raw_inclusion >>
@@ -314,8 +322,10 @@ Proof
      (!k l. tag (z1 u) k=SOME(l,b) ==> ?j. vraw u 3 j=SOME(l,b))` by
     (gen_tac >> disch_tac >>
      `!k t s. tag (z0 u) k=SOME t /\ tag (z1 u) k=SOME s ==> t=s` by metis_tac[] >>
-     qspecl_then [`b`,`label`,`tag (z0 u)`,`tag (z1 u)`] mp_tac visit_raw_deleted_origin >>
-     rewrite_tac[LET_THM] >> BETA_TAC >> (impl_tac >- first_assum ACCEPT_TAC) >>
+     qspecl_then [`b`,`label`,`tag (z0 u)`,`tag (z1 u)`]
+       (mp_tac o CONV_RULE (TOP_DEPTH_CONV
+         (FIRST_CONV [HO_REWR_CONV UNWIND_FORALL_THM2, BETA_CONV]))) visit_raw_deleted_origin >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
      simp[Abbr `vraw`, Abbr `U`]) >>
   `a IN family /\ y IN family` by (first_x_assum drule >> simp[]) >>
   `phase a<8 /\ a=copy (phase a) (owner a)` by
@@ -386,29 +396,22 @@ Finalise port_table_raw_predecessor
 Theorem conditional_jump_port_table:
   !p q b x V e (rank:(num#num)->num) (pc:(num#num)->num) height need
     (tag:(num#num)->num->(string#num)option) boolean old cc req z z0 z1.
-  let r = splice_pc b 4 3 in
-  let C = \p l d. ?off. FLOOKUP (SND(compute_label_offsets p)) l=SOME off /\
-                       off<dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME d in
-  let Producer = \p l i. i<LENGTH p /\
-       (EL i p=AsmPushLabel l \/ EL i p=AsmPushOfst l 0) /\ ?d. C p l d in
-  let Slots = \p h n tg bl.
+  !r. r = splice_pc b 4 3 ==>
+  !C. C = (\p l d. ?off. FLOOKUP (SND(compute_label_offsets p)) l=SOME off /\
+                       off<dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME d) ==>
+  !Producer. Producer = (\p l i. i<LENGTH p /\
+       (EL i p=AsmPushLabel l \/ EL i p=AsmPushOfst l 0) /\ ?d. C p l d) ==>
+  !Slots. Slots = (\p h n tg bl.
     (n ==> cc.cc_static) /\ (!k. bl k ==> k<h /\ tg k=NONE) /\
-    (!k l i. tg k=SOME(l,i) ==> k<h /\ Producer p l i) in
-  let Shape = \p h d n tg bl (t:asm_state).
-    t.as_pc=d /\ LENGTH t.as_stack=h /\ t.as_call_ctx=cc /\ t.as_requests=req /\
-    (n ==> cc.cc_static) /\
-    (!k l i. tg k=SOME(l,i) ==> k<h /\ i<LENGTH p /\
-       (EL i p=AsmPushLabel l \/ (?a. EL i p=AsmPushOfst l a) \/ EL i p=AsmDataLabel l) /\
-       ?off dst. FLOOKUP (SND(compute_label_offsets p)) l=SOME off /\
-         off<dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME dst /\
-         EL k t.as_stack=(n2w off:bytes32)) /\
-    (!k. bl k ==> k<h /\ (EL k t.as_stack=0w \/ EL k t.as_stack=1w)) in
-  let Flow = \p pc height tag boolean (u:num#num) (v:num#num).
-    let hi=height u; hj=height v; ins=EL (pc u) p in
-    let inherit = \(src:num->num option) (fresh:num->(string#num)option) bnew.
+    (!k l i. tg k=SOME(l,i) ==> k<h /\ Producer p l i)) ==>
+  !Flow. Flow = (\p pc height tag boolean (u:num#num) (v:num#num).
+    !hi. hi = height u ==>
+    !hj. hj = height v ==>
+    !ins. ins = EL (pc u) p ==>
+    !inherit. inherit = (\(src:num->num option) (fresh:num->(string#num)option) bnew.
       (!k l i. tag v k=SOME(l,i) ==> k<hj /\
         (fresh k=SOME(l,i) \/ ?a. src k=SOME a /\ a<hi /\ tag u a=SOME(l,i))) /\
-      (!k. boolean v k ==> k<hj /\ (bnew k \/ ?a. src k=SOME a /\ a<hi /\ boolean u a)) in
+      (!k. boolean v k ==> k<hj /\ (bnew k \/ ?a. src k=SOME a /\ a<hi /\ boolean u a))) ==>
     case ins of
       AsmLabel l => hj=hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj=hi+1 /\
@@ -428,25 +431,28 @@ Theorem conditional_jump_port_table:
          | NONE => case ALOOKUP swap_table name of
              SOME n => 0<n /\ n<hi /\ hj=hi /\
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k)) (\k. NONE) (\k. F)
-           | NONE => let a=asm_op_arity name; m=hj+asm_op_arity name-hi in
+           | NONE =>
+               !a. a = asm_op_arity name ==>
+               !m. m = hj+a-hi ==>
                a<=hi /\ hj=m+(hi-a) /\ ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
                  (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
                    !t s. LENGTH t.as_stack=hi /\
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p) ins t=AsmOK s ==>
                        EL 0 s.as_stack=0w \/ EL 0 s.as_stack=1w))
-    | _ => F in
-  let Target = \p tg d. ?l i. tg 0=SOME(l,i) /\ C p l d in
-  let Legal = \p i tg j.
+    | _ => F) ==>
+  !Target. Target = (\p tg d. ?l i. tg 0=SOME(l,i) /\ C p l d) ==>
+  !Legal. Legal = (\p i tg j.
     if EL i p=AsmOp "JUMP" then Target p tg j else
-    if EL i p=AsmOp "JUMPI" then j=i+1 \/ Target p tg j else j=i+1 in
-  let Row = \p i h tg (edge:(num#num)->bool) pc height.
-    let arm = \P n. ?v. edge v /\ P (pc v) /\ height v=n in
-    let legal = \P n. !v. edge v ==> P (pc v) /\ height v=n in
-    let fall = \d. d=i+1; taken = Target p tg in
-    let next = \n. arm fall n /\ legal fall n in
-    let untagged = \a. !k. k<a ==> tg k=NONE in
-    let stop = \a. a<=h /\ untagged a /\ !v. ~edge v in
+    if EL i p=AsmOp "JUMPI" then j=i+1 \/ Target p tg j else j=i+1) ==>
+  !Row. Row = (\p i h tg (edge:(num#num)->bool) pc height.
+    !arm. arm = (\P n. ?v. edge v /\ P (pc v) /\ height v=n) ==>
+    !legal. legal = (\P n. !v. edge v ==> P (pc v) /\ height v=n) ==>
+    !fall. fall = (\d. d=i+1) ==>
+    !taken. taken = Target p tg ==>
+    !next. next = (\n. arm fall n /\ legal fall n) ==>
+    !untagged. untagged = (\a. !k. k<a ==> tg k=NONE) ==>
+    !stop. stop = (\a. a<=h /\ untagged a /\ !v. ~edge v) ==>
     case EL i p of
       AsmLabel l => next h
     | AsmPush bs => next (h+1)
@@ -465,30 +471,26 @@ Theorem conditional_jump_port_table:
                        arm taken (h-2) /\ legal (\d. fall d \/ taken d) (h-2) else
                      ?m. static_abort_straight name m /\ asm_op_arity name<=h /\
                        untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-    | _ => F in
-  let Reach = \(edge:(num#num)->(num#num)->bool) root a.
-    ?n (path:num->num#num). path 0=root /\ path n=a /\ !k. k<n ==> edge (path k) (path(SUC k)) in
-  let keep = {u | u IN V /\ (pc u<b \/ b+4<=pc u)};
-      D = {u | u IN V /\ pc u=b}; initial = (pc e=b+1);
-      late = (pc e=b+2 \/ pc e=b+3) in
-  let H = \u. if initial /\ u=e then height u-1 else height u in
-  let U = \u k. case tag (z0 u) k of NONE => tag (z1 u) k | SOME t => SOME t in
-  let UB = \u k. boolean (z0 u) k \/ boolean (z1 u) k in
-  let vraw = \u (i:num) k.
+    | _ => F) ==>
+  !keep. keep = {u | u IN V /\ (pc u<b \/ b+4<=pc u)} ==>
+  !D. D = {u | u IN V /\ pc u=b} ==>
+  !initial. initial = (pc e=b+1) ==>
+  !late. late = (pc e=b+2 \/ pc e=b+3) ==>
+  !H. H = (\u. if initial /\ u=e then height u-1 else height u) ==>
+  !U. U = (\u k. case tag (z0 u) k of NONE => tag (z1 u) k | SOME t => SOME t) ==>
+  !UB. UB = (\u k. boolean (z0 u) k \/ boolean (z1 u) k) ==>
+  !vraw. vraw = (\u (i:num) k.
     if i<2 then (if k=0 then NONE else U u (k-1)) else
     if i=2 then (if k=0 then SOME(x,b+2) else if k=1 then NONE else U u (k-2))
-    else if i=4 then tag (z0 u) k else tag (z1 u) k in
-  let vb = \u (i:num) k.
+    else if i=4 then tag (z0 u) k else tag (z1 u) k) ==>
+  !vb. vb = (\u (i:num) k.
     if i=0 then k<>0 /\ UB u (k-1) else if i=1 then k=0 \/ UB u (k-1) else
     if i=2 then k=1 \/ (2<=k /\ UB u (k-2)) else
-    if i=4 then boolean (z0 u) k else boolean (z1 u) k in
-  let vp = \u (i:num). if i<4 then b+i else if i=4 then r(pc(z0 u)) else r(pc(z1 u));
-      vh = \u (i:num). if i<2 then H u else if i=2 then H u+1 else H u-1;
-      vn = \u (i:num). (i=4 /\ need(z0 u)) \/ (i=5 /\ need(z1 u)) in
-  let VE = \(i:num) j. (i<3 /\ j=i+1) \/ (i=2 /\ j=4) \/ (i=3 /\ j=5) in
-  let rt = \u. if u IN keep then tag u else vraw u 0;
-      rb = \u. if u IN keep then boolean u else vb u 0 in
-  let Tr = \rho tg k. OPTION_MAP (\(l,i). (l,rho l i)) (tg k) in
+    if i=4 then boolean (z0 u) k else boolean (z1 u) k) ==>
+  !vp. vp = (\u (i:num). if i<4 then b+i else if i=4 then r(pc(z0 u)) else r(pc(z1 u))) ==>
+  !vh. vh = (\u (i:num). if i<2 then H u else if i=2 then H u+1 else H u-1) ==>
+  !VE. VE = (\(i:num) j. (i<3 /\ j=i+1) \/ (i=2 /\ j=4) \/ (i=3 /\ j=5)) ==>
+  !Tr. Tr = (\rho tg k. OPTION_MAP (\(l,i). (l,rho l i)) (tg k)) ==>
   FINITE V /\ e IN V /\
   (!u. u IN V ==> Slots p (height u) (need u) (tag u) (boolean u)) /\
   (!u v. u IN keep /\ old u v ==> (v IN keep \/ v IN D) /\ rank v<rank u) /\
@@ -508,15 +510,14 @@ Theorem conditional_jump_port_table:
      (!k t. (tag (z0 u) k=SOME t \/ tag (z1 u) k=SOME t) ==>
        tag u (if initial /\ u=e then k+2 else k+1)=SOME t) /\
      (!k. UB u k ==> boolean u (if initial /\ u=e then k+2 else k+1)) /\
-     (!rho.
-       let P = \v:num#num. vp u (FST v) in
-       let J = \v:num#num. vh u (FST v) in
-       let T = \(v:num#num) k. if FST v=2 /\ k=0 then SOME(x,b+1) else Tr rho (vraw u (FST v)) k in
-       let B = \v:num#num. vb u (FST v) in
+     (!rho P J T B.
+       P = (\v:num#num. vp u (FST v)) /\ J = (\v:num#num. vh u (FST v)) /\
+       T = (\(v:num#num) k. if FST v=2 /\ k=0 then SOME(x,b+1) else Tr rho (vraw u (FST v)) k) /\
+       B = (\v:num#num. vb u (FST v)) ==>
        (!i j. VE i j ==> Flow q P J T B (i,0) (j,0)) /\
        (C q x (r(pc(z0 u))) /\
         (!v k l i. (v=z0 u \/ v=z1 u) /\ tag v k=SOME(l,i) ==> Producer q l (rho l i)) ==>
-        (!i. i<4 ==> Slots q (vh u i) (vn u i) (T (i,0)) (B (i,0))) /\
+        (!i. i<4 ==> Slots q (vh u i) ((i=4 /\ need(z0 u)) \/ (i=5 /\ need(z1 u))) (T (i,0)) (B (i,0))) /\
         (!i. i<4 ==> vp u i<LENGTH q /\ Row q (vp u i) (vh u i) (T (i,0))
                               (\v. VE i (FST v)) P J) /\
         (!i j. VE i j ==> Legal q (vp u i) (T (i,0)) (vp u j))))) /\
@@ -524,11 +525,15 @@ Theorem conditional_jump_port_table:
      (!l. EL (pc u) p=AsmPushLabel l \/ EL (pc u) p=AsmPushOfst l 0 ==> rho l (pc u)=r(pc u)) ==>
      r(pc u)<LENGTH q /\ Row q (r(pc u)) (height u) (Tr rho (tag u)) (old u) (r o pc) height /\
      (!v. old u v ==> Legal q (r(pc u)) (Tr rho (tag u)) (r(pc v)) /\
-        Flow q (r o pc) height (\v. if v=u then Tr rho (tag u) else Tr rho (rt v))
-          (\v. if v=u then boolean u else rb v) u v)) ==>
+        Flow q (r o pc) height
+          (\v. if v=u then Tr rho (tag u) else Tr rho (if v IN keep then tag v else vraw v 0))
+          (\v. if v=u then boolean u else if v IN keep then boolean v else vb v 0) u v)) ==>
   ?family A root (R:(num#num)->num) P J N raw B E.
-    let src = \k. if initial \/ pc e=b+3 then k+1 else k in
-    FINITE family /\ A={a | a IN family /\ Reach E root a} /\ FINITE A /\ root IN A /\
+    !src. src = (\k. if initial \/ pc e=b+3 then k+1 else k) ==>
+    FINITE family /\
+    A={a | a IN family /\ ?n (path:num->num#num).
+      path 0=root /\ path n=a /\ !k. k<n ==> E (path k) (path(SUC k))} /\
+    FINITE A /\ root IN A /\
     (!a y. a IN A /\ E a y ==> y IN A /\ R y<R a) /\
     (!a k l. a IN A /\ raw a k=SOME(l,b) ==> ?j. raw root j=SOME(l,b)) /\
     P root=(if late then r(pc z) else r(pc e)) /\
@@ -537,18 +542,41 @@ Theorem conditional_jump_port_table:
     (!k l i. raw root k=SOME(l,i) ==> (initial ==> k<>0) /\ tag e (src k)=SOME(l,i)) /\
     (!k. B root k ==> (initial ==> k<>0) /\ boolean e (src k)) /\
     ((!k l. raw root k=SOME(l,b) ==> ?i. Producer q l i) ==>
-     ?rho. let T = \a. Tr rho (raw a) in
+     ?rho. !T. T = (\a. Tr rho (raw a)) ==>
        (!a. a IN A ==> Slots q (J a) (N a) (T a) (B a) /\
-          (?t. Shape q (J a) (P a) (N a) (T a) (B a) t) /\
+          (?t:asm_state.
+            t.as_pc=P a /\ LENGTH t.as_stack=J a /\ t.as_call_ctx=cc /\ t.as_requests=req /\
+            (N a ==> cc.cc_static) /\
+            (!k l i. T a k=SOME(l,i) ==> k<J a /\ i<LENGTH q /\
+              (EL i q=AsmPushLabel l \/ (?d. EL i q=AsmPushOfst l d) \/ EL i q=AsmDataLabel l) /\
+              ?off dst. FLOOKUP (SND(compute_label_offsets q)) l=SOME off /\
+                off<dimword(:256) /\ FLOOKUP (build_offset_to_pc q) off=SOME dst /\
+                EL k t.as_stack=(n2w off:bytes32)) /\
+            (!k. B a k ==> k<J a /\ (EL k t.as_stack=0w \/ EL k t.as_stack=1w))) /\
           P a<LENGTH q /\ Row q (P a) (J a) (T a) (\y. E a y) P J) /\
        (!a y. a IN A /\ E a y ==> Legal q (P a) (T a) (P y) /\ Flow q P J T B a y))
 Proof
-  rpt gen_tac >>
-  map_every (fn pat => qmatch_goalsub_abbrev_tac pat >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ r`,`LET _ C`,`LET _ Producer`,`LET _ Slots`,`LET _ Shape`,
-     `LET _ Flow`,`LET _ Target`,`LET _ Legal`,`LET _ Row`,`LET _ Reach`] >>
-  rpt BasicProvers.LET_ELIM_TAC >>
+  ntac 18 gen_tac >>
+  map_every (fn v => qx_gen_tac v >>
+    CONV_TAC (LAND_CONV (RAND_CONV (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)))) >>
+    disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]))
+    [`r`,`C`,`Producer`,`Slots`,`Flow`,`Target`,`Legal`,`Row`,`keep`,`D`,`initial`,`late`,
+     `H`,`U`,`UB`,`vraw`,`vb`,`vp`,`vh`,`VE`,`Tr`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `Reach = \(edge:(num#num)->(num#num)->bool) root a.
+    ?n (path:num->num#num). path 0=root /\ path n=a /\ !k. k<n ==> edge (path k) (path(SUC k))` >>
+  qabbrev_tac `Shape = \p h d n tg bl (t:asm_state).
+    t.as_pc=d /\ LENGTH t.as_stack=h /\ t.as_call_ctx=cc /\ t.as_requests=req /\
+    (n ==> cc.cc_static) /\
+    (!k l i. tg k=SOME(l,i) ==> k<h /\ i<LENGTH p /\
+       (EL i p=AsmPushLabel l \/ (?a. EL i p=AsmPushOfst l a) \/ EL i p=AsmDataLabel l) /\
+       ?off dst. FLOOKUP (SND(compute_label_offsets p)) l=SOME off /\
+         off<dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off=SOME dst /\
+         EL k t.as_stack=(n2w off:bytes32)) /\
+    (!k. bl k ==> k<h /\ (EL k t.as_stack=0w \/ EL k t.as_stack=1w))` >>
+  qabbrev_tac `vn = \u (i:num). (i=4 /\ need(z0 u)) \/ (i=5 /\ need(z1 u))` >>
+  qabbrev_tac `rt = \u. if u IN keep then tag u else vraw u 0` >>
+  qabbrev_tac `rb = \u. if u IN keep then boolean u else vb u 0` >>
   qabbrev_tac `Visit = \(i:num) u. (u IN D /\ i < 4) \/ (initial /\ u=e /\ 4<=i /\ i<8)` >>
   `? (copy:num->(num#num)->num#num) owner phase family E R.
       FINITE family /\
@@ -563,17 +591,17 @@ Proof
     (`FINITE keep /\ FINITE D` by
        (conj_tac >> irule SUBSET_FINITE >> qexists `V` >>
         simp[SUBSET_DEF, Abbr `keep`, Abbr `D`]) >>
-     simp_tac bool_ss [Abbr `Visit`] >>
-     irule (SIMP_RULE bool_ss [LET_THM] conditional_port_wiring) >>
-     conj_tac >- (simp[Abbr `keep`, Abbr `D`] >> decide_tac) >>
-     reverse conj_tac >- simp[] >>
-     qexists `rank` >> simp[] >> conj_tac
+     qspecl_then [`keep`,`D`,`e`,`initial`,`z0`,`z1`,`rank`,`old`,`Visit`]
+       mp_tac conditional_port_wiring >>
+     (impl_tac >- simp[Abbr `Visit`]) >>
+     impl_tac >- (simp[] >> conj_tac
+       >- (simp[Abbr `keep`, Abbr `D`] >> decide_tac) >> conj_tac
      >- (rpt gen_tac >> strip_tac >>
          qpat_assum `!u v. u IN keep /\ old u v ==> _`
            (qspecl_then [`u`,`v`] mp_tac) >> simp[])
      >- (gen_tac >> disch_tac >>
          qpat_assum `!u. u IN D \/ (initial /\ u=e) ==> _`
-           (qspec_then `u` mp_tac) >> simp[])) >>
+           (qspec_then `u` mp_tac) >> simp[])) >> simp[]) >>
   `!a. a IN family ==> phase a<8 /\ a=copy (phase a) (owner a) /\
          ((phase a=0 /\ owner a IN keep) \/ Visit (phase a) (owner a))` by
     (gen_tac >> disch_tac >>
@@ -614,6 +642,9 @@ Proof
     (!a k l. a IN A /\ raw a k=SOME(l,b) ==> ?j. raw root j=SOME(l,b))` by
     suspend "restrict" >>
   qexistsl [`family`,`A`,`root`,`R`,`P`,`J`,`N`,`raw`,`B`,`E`] >>
+  CONV_TAC (HO_REWR_CONV UNWIND_FORALL_THM2) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp[Abbr `A`, Abbr `Reach`] >>
   simp[markerTheory.Abbrev_def, SF CONJ_ss] >>
   suspend "rows"
 QED
@@ -693,12 +724,13 @@ Resume conditional_jump_port_table[predecessor]:
        (qpat_assum `phase a MOD 4 < 4` mp_tac >> decide_tac) >>
      simp[Abbr `raw`,Abbr `isRet`,Abbr `vraw`]) >>
   qspecl_then [`keep`,`D`,`e`,`initial`,`z0`,`z1`,`old`,`copy`,`owner`,
-    `phase`,`family`,`E`,`tag`,`b`,`x`] mp_tac port_table_raw_predecessor >>
-  rewrite_tac[LET_THM] >> BETA_TAC >> impl_tac
-  >- (conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- simp[Abbr `Visit`] >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- simp[Abbr `Visit`] >>
+    `phase`,`family`,`E`,`tag`,`b`,`x`,`Visit`]
+    mp_tac port_table_raw_predecessor >>
+  (impl_tac >- simp[Abbr `Visit`]) >>
+  disch_then (mp_tac o CONV_RULE (TOP_DEPTH_CONV
+    (FIRST_CONV [HO_REWR_CONV UNWIND_FORALL_THM2, BETA_CONV]))) >>
+  impl_tac
+  >- (ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
       conj_tac >- (rpt gen_tac >> disch_tac >>
         qpat_assum `!a y. E a y ==> a IN family /\ y IN family /\ R y < R a`
           (qspecl_then [`a`,`y`] mp_tac) >> simp[]) >>
@@ -707,7 +739,9 @@ Resume conditional_jump_port_table[predecessor]:
 QED
 
 Resume conditional_jump_port_table[restrict]:
-  qspecl_then [`family`,`E`,`root`,`R`,`raw`,`b`] mp_tac port_reachable_restriction >>
+  qspecl_then [`family`,`E`,`root`,`R`,`raw`,`b`]
+    (mp_tac o CONV_RULE (TOP_DEPTH_CONV
+      (FIRST_CONV [HO_REWR_CONV UNWIND_FORALL_THM2, BETA_CONV]))) port_reachable_restriction >>
   rewrite_tac[LET_THM] >> BETA_TAC >> impl_tac
   >- (conj_tac >- first_assum ACCEPT_TAC >>
       conj_tac >- first_assum ACCEPT_TAC >>
@@ -764,10 +798,11 @@ Resume conditional_jump_port_table[rows]:
   `!u i. copy i u IN A /\ Visit i u ==>
      copy 0 (z0 u) IN A /\ copy 0 (z1 u) IN A` by
     (qspecl_then [`D`,`e`,`initial`,`keep`,`copy`,`owner`,`phase`,`family`,
-      `E`,`root`,`A`,`z0`,`z1`] mp_tac port_visit_exits_reached >>
-     rewrite_tac[LET_THM] >> BETA_TAC >>
-     qpat_assum `Abbrev (Visit = _)`
-       (fn th => pure_rewrite_tac[GSYM (REWRITE_RULE[markerTheory.Abbrev_def] th)]) >>
+      `E`,`root`,`A`,`z0`,`z1`,`Visit`]
+      mp_tac port_visit_exits_reached >>
+     (impl_tac >- simp[Abbr `Visit`]) >>
+     disch_then (mp_tac o CONV_RULE (TOP_DEPTH_CONV
+       (FIRST_CONV [HO_REWR_CONV UNWIND_FORALL_THM2, BETA_CONV]))) >>
      impl_tac
      >- (conj_tac >- first_assum ACCEPT_TAC >>
          conj_tac >- first_assum ACCEPT_TAC >>
@@ -823,7 +858,7 @@ Resume conditional_jump_port_table[rows]:
       (!v. e1 v ==> ?w. e2 w /\ p2 w=p1 v /\ h2 w=h1 v) /\
       (!w. e2 w ==> ?v. e1 v /\ p1 v=p2 w /\ h1 v=h2 w) ==>
       (Row q i h tg e1 p1 h1 <=> Row q i h tg e2 p2 h2)` by
-    (qpat_x_assum `Abbrev (Row = _)` mp_tac >> POP_ASSUM_LIST kall_tac >>
+    ((qpat_x_assum `Abbrev (Row = _)` mp_tac >> POP_ASSUM_LIST kall_tac >>
      strip_tac >> rpt gen_tac >> strip_tac >>
      `(\f n. ?v. e1 v /\ f (p1 v) /\ h1 v=n) =
       (\f n. ?w. e2 w /\ f (p2 w) /\ h2 w=n)` by
@@ -837,7 +872,7 @@ Resume conditional_jump_port_table[rows]:
        (pure_rewrite_tac o single) >>
      qpat_assum `(\f n. !v. e1 v ==> f (p1 v) /\ h1 v=n) = _`
        (pure_rewrite_tac o single) >>
-     qpat_assum `(!v. ~e1 v) <=> _` (rewrite_tac o single)) >>
+     qpat_assum `(!v. ~e1 v) <=> _` (rewrite_tac o single) >> (gvs[FUN_EQ_THM]))) >>
   `!a a' y y' p1 h1 t1 b1 p2 h2 t2 b2.
       p1 a=p2 a' /\ h1 a=h2 a' /\ h1 y=h2 y' /\
       t1 a=t2 a' /\ t1 y=t2 y' /\ b1 a=b2 a' /\ b1 y=b2 y' ==>
@@ -936,9 +971,10 @@ Resume conditional_jump_port_table[rows]:
         (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
         `B (copy 0 u) = boolean u` by simp[Abbr `rb`] >>
         simp[Abbr `tgR`])) >>
-     disch_then (fn th =>
-       qpat_assum `Flow q (r o pc) height _ _ u v`
-         (ACCEPT_TAC o MATCH_MP (iffLR th)))) >>
+     disch_then (irule o iffLR) >>
+     simp[NoAsms, Abbr `rt`, Abbr `rb`, Abbr `Tr`] >>
+     qpat_assum `Flow q (r o pc) height _ _ u v`
+       (mp_tac o SIMP_RULE (srw_ss()) [Abbr `rt`, Abbr `rb`, Abbr `Tr`]) >> simp[]) >>
   `!u i. Visit i u ==>
      tgR (copy i u) = (\k. if i MOD 4=2 /\ k=0 then SOME(x,b+1)
                          else Tr relocate (vraw u (i MOD 4)) k)` by
@@ -973,14 +1009,9 @@ Resume conditional_jump_port_table[rows]:
      qabbrev_tac `lt = \(v:num#num) k. if FST v=2 /\ k=0 then SOME(x,b+1)
                                 else Tr relocate (vraw u (FST v)) k` >>
      qabbrev_tac `lb = \v:num#num. vb u (FST v)` >>
-     qpat_assum `!rho P J. Abbrev (J = _) ==> _`
-       (qspecl_then [`relocate`,`lp`,`lh`] mp_tac) >>
-     (impl_tac >- simp[NoAsms, markerTheory.Abbrev_def]) >>
-     disch_then (qspec_then `lt` mp_tac) >>
-     (impl_tac >- simp[NoAsms, markerTheory.Abbrev_def, Abbr `lt`]) >>
-     disch_then (qspec_then `lb` mp_tac) >>
-     (impl_tac >- simp[NoAsms, markerTheory.Abbrev_def, Abbr `lb`]) >>
-     (impl_tac >- simp[NoAsms, markerTheory.Abbrev_def, Abbr `lp`]) >>
+     qpat_assum `!rho P J T B. _ ==> _`
+       (qspecl_then [`relocate`,`lp`,`lh`,`lt`,`lb`] mp_tac) >>
+     (impl_tac >- simp[NoAsms, Abbr `lp`, Abbr `lh`, Abbr `lt`, Abbr `lb`]) >>
      disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
      (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
      qabbrev_tac `dst = \j:num. if j=4 then copy 0 (z0 u) else
@@ -1018,7 +1049,10 @@ Resume conditional_jump_port_table[rows]:
        (simp[Abbr `lp`, Abbr `lh`, Abbr `lt`, Abbr `lb`, Abbr `m`, Abbr `vn`,
              arithmeticTheory.MOD_LESS, FUN_EQ_THM] >> decide_tac) >>
      `Slots q (vh u m) (vn u m) (lt (m,0)) (lb (m,0))` by
-       (qpat_assum `!i. i<4 ==> Slots q _ _ _ _` (qspec_then `m` mp_tac) >> simp[]) >>
+       (`m <> 4 /\ m <> 5` by decide_tac >>
+        qpat_assum `!i. i<4 ==> Slots q _ _ _ _` (drule_then mp_tac) >>
+        map_every (fn p => qpat_assum p mp_tac) [`m <> 4`,`m <> 5`] >>
+        csimp[NoAsms, Abbr `vn`]) >>
      `vp u m < LENGTH q /\ Row q (vp u m) (vh u m) (lt (m,0))
        (\v. VE m (FST v)) lp lh` by
        (qpat_assum `!i. i<4 ==> vp u i < LENGTH q /\ _` (qspec_then `m` mp_tac) >> simp[]) >>
@@ -1087,8 +1121,17 @@ Resume conditional_jump_port_table[rows]:
       (!a y. a IN A /\ E a y ==> Legal q (P a) (T a) (P y) /\ Flow q P J T B a y)`
   >- (disch_then (qx_choose_then `tags` strip_assume_tac) >>
       qpat_x_assum `tags = _` SUBST_ALL_TAC >>
-      qexists `relocate` >> rewrite_tac[LET_THM, ETA_AX] >>
-      conj_tac >> first_assum (ACCEPT_TAC o REWRITE_RULE [ETA_AX] o BETA_RULE)) >>
+      qexists `relocate` >>
+      conj_tac
+      >- (gen_tac >> disch_tac >>
+          qpat_assum `!a. a IN A ==> Slots q _ _ _ _ /\ _`
+            (drule_then (strip_assume_tac o BETA_RULE)) >>
+          SIMP_TAC bool_ss [SF ETA_ss] >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          reverse conj_tac >- simp[] >>
+          goal_assum (drule_at Any)) >>
+      qpat_assum `!a y. a IN A /\ E a y ==> Legal q _ _ _ /\ _` (mp_tac o BETA_RULE) >>
+      SIMP_TAC bool_ss [SF ETA_ss]) >>
   qexists `tgR` >> (conj_tac >- simp[Abbr `tgR`]) >>
   conj_tac
   >- (gen_tac >> disch_tac >>
@@ -1101,32 +1144,6 @@ Resume conditional_jump_port_table[rows]:
   qpat_assum `!a. a IN A ==> Slots q _ _ _ _ /\ _` (drule_then strip_assume_tac) >>
   qpat_assum `!y. E a y ==> Legal _ _ _ _ /\ Flow _ _ _ _ _ _ _`
     (drule_then ACCEPT_TAC)
-(* E0808: stopped per-conjunct normalization attempt.
-  qexists `relocate` >> conj_tac
-  >- (gen_tac >> disch_tac >>
-      qpat_assum `!a. a IN A ==> Slots q _ _ _ _ /\ _` (drule_then strip_assume_tac) >>
-      `?t. Shape q (J a) (P a) (N a) (tgR a) (B a) t` by
-        (qpat_assum `!h d n tg bl. Slots q h n tg bl ==> _` irule >> first_assum ACCEPT_TAC) >>
-      qpat_assum `Abbrev (tgR = _)` (fn th =>
-        let val norm = REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] th, ETA_AX]
-        in
-          conj_tac
-          >- qpat_assum `Slots q _ _ (tgR a) _` (ACCEPT_TAC o norm) >>
-          conj_tac
-          >- (qexists `t` >> qpat_assum `Shape q _ _ _ (tgR a) _ t` (ACCEPT_TAC o norm)) >>
-          conj_tac
-          >- first_assum ACCEPT_TAC >>
-          qpat_assum `Row q _ _ (tgR a) _ _ _` (ACCEPT_TAC o norm)
-        end)) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_assum `!a. a IN A ==> Slots q _ _ _ _ /\ _` (drule_then strip_assume_tac) >>
-  qpat_assum `Abbrev (tgR = _)` (fn th =>
-    let val norm = REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] th, ETA_AX]
-    in
-      qpat_assum `!y. E a y ==> Legal _ _ _ _ /\ Flow _ _ _ _ _ _ _`
-        (drule_then (ACCEPT_TAC o norm))
-    end)
-*)
 QED
 
 Finalise conditional_jump_port_table
