@@ -4,15 +4,6 @@ Ancestors
   symInvokeEntryFacts codegenSymRel asmSymOwnStep codegenSymOwnRel asmSymBridge
   asmOwnCodeInvariant symFrameBoundaryPairing[qualified,ignore_grammar]
 
-Theorem sym_invoke_frame_own_canonical:
-  asm_static_wf p ==>
-  (sym_frame_inv_own (SND (compute_label_offsets p)) p env own
-     ctx cplan fn ret srest labs0 ps cs ss <=>
-   sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\ cs.as_code = own)
-Proof
-  MATCH_ACCEPT_TAC symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own
-QED
-
 Theorem sym_invoke_canonical_lockstep:
   asm_static_wf p ==>
   !n cs ss ss'.

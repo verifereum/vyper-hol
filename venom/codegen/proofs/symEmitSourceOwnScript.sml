@@ -2,7 +2,7 @@
    with the canonical API or imported from their subject owners. *)
 Theory symEmitSourceOwn
 Ancestors symEmitSim symEmitFrameOwn symEmitStoreOwn symEmitCodecopyOwn
-  symEmitCodeEndOwn symEmitNamedOwn asmSymBridge
+  symEmitNamedOwn asmSymBridge
   symEmitCodesizeOwn
 
 Theorem sym_initial_fmp_source_emit_own_conditional:

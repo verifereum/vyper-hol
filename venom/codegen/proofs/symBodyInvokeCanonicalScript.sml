@@ -2,7 +2,8 @@
 Theory symBodyInvokeCanonical
 Ancestors
   symBodyInvokePointwise symBodyStaticFacts symFrameInvokeSupport
-  symInvokeEntryOwn asmOwnCodeInvariant fnBlockBodySteps fnBlockBodyClasses
+  symInvokeEntryOwn
+  symFrameBoundaryPairing[qualified,ignore_grammar] asmOwnCodeInvariant fnBlockBodySteps fnBlockBodyClasses
   codegenSymRel asmSymBridge asmSymOwnStep
 
 Theorem sym_body_invoke_step_canonical_kernel:
@@ -59,7 +60,7 @@ Proof
   `asm_data_env_lo_ok lo prog env as.as_code` by
     gvs[sym_frame_inv_def, asm_sym_rel_def, asm_data_env_lo_ok_canonical] >>
   `sym_frame_inv_own lo prog env as.as_code ctx cpl fn ret srest labs0 ps as ss` by
-    gvs[sym_invoke_frame_own_canonical] >>
+    gvs[symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own] >>
   drule_at (Pos (el 3))
     (sym_body_invoke_step_pointwise |>
       Q.INST [`allow_own` |-> `F`, `own` |-> `as.as_code`] |>
@@ -92,7 +93,7 @@ Proof
      strip_tac >>
      drule asm_steps_code_preserved >> strip_tac >>
      rpt (goal_assum (drule_at Any)) >> simp[])) >>
-  simp[sym_invoke_frame_own_canonical] >> strip_tac >>
+  simp[symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own] >> strip_tac >>
   qexistsl [`ops`, `ps'`, `rest'`] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!vs1. step_inst _ _ _ _ = OK vs1 ==> _` drule >>

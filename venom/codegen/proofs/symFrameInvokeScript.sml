@@ -12,7 +12,8 @@ Theory symFrameInvoke
 Ancestors
   symFrameInvokeSupport symFrameInvokePrefixOwn symFrameInvokeEntryAssembly
   symFrameInvokeTerminalSource symFrameInvokeReturnSource symFrameInvokeSourceOwn
-  symInvokeEntryFacts symInvokeEntryOwn asmSymOwnStep
+  symInvokeEntryFacts symInvokeEntryOwn
+  symFrameBoundaryPairing[qualified,ignore_grammar] asmSymOwnStep
   symPostfixSim
   symFnSimSpec codegenSymRel fnFrameDeepInvoke asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
@@ -64,11 +65,11 @@ Proof
   disch_then (qspecl_then [`cs.as_code`, `env`] assume_tac) >>
   `sym_frame_inv_own (SND (compute_label_offsets p)) p env cs.as_code
      ctx cplan fn ret srest labs0 ps cs ss` by
-    simp[sym_invoke_frame_own_canonical] >>
+    simp[symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own] >>
   `sym_steps_mode F p env cs.as_code n ss = SymOK ss'` by
     simp[sym_steps_mode_def] >>
   drule_all sym_invoke_prefix_pair_own >>
-  simp[sym_invoke_frame_own_canonical]
+  simp[symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own]
 QED
 
 Theorem sym_invoke_selected_frame_prefix:
@@ -105,9 +106,9 @@ Proof
   disch_then (qspecl_then [`cs.as_code`, `env`] assume_tac) >>
   `sym_frame_inv_own (SND (compute_label_offsets p)) p env cs.as_code
      ctx cplan fn ret srest labs0 ps cs ss` by
-    simp[sym_invoke_frame_own_canonical] >>
+    simp[symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own] >>
   drule_all sym_invoke_selected_frame_prefix_own >>
-  simp[sym_steps_mode_def, sym_invoke_frame_own_canonical] >> metis_tac[]
+  simp[sym_steps_mode_def, symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own] >> metis_tac[]
 QED
 
 Theorem sym_invoke_argument_list_words:
@@ -191,7 +192,7 @@ Proof
   disch_then (qspecl_then [`mid.as_code`, `env`] assume_tac) >>
   `sym_frame_inv_own (SND (compute_label_offsets p)) p env mid.as_code
      ctx cplan fn ret srest labs0 arranged mid sms` by
-    simp[sym_invoke_frame_own_canonical] >>
+    simp[symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own] >>
   `sym_steps_mode F p env mid.as_code n ss = SymOK sms` by
     simp[sym_steps_mode_def] >>
   drule_all (REWRITE_RULE [boolTheory.COND_CLAUSES] (Q.SPEC `F` sym_invoke_entry_symbolic_boundary_own)) >>
@@ -253,9 +254,9 @@ Proof
   disch_then (qspecl_then [`cs.as_code`, `env`] assume_tac) >>
   `sym_frame_inv_own (SND (compute_label_offsets p)) p env cs.as_code
      ctx cplan fn ret srest labs0 ps cs ss` by
-    simp[sym_invoke_frame_own_canonical] >>
+    simp[symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own] >>
   drule_all (REWRITE_RULE [boolTheory.COND_CLAUSES] (Q.SPEC `F` sym_invoke_selected_entry_pair_own)) >>
-  simp[sym_steps_mode_def, sym_invoke_frame_own_canonical,
+  simp[sym_steps_mode_def, symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own,
        asm_sym_rel_own_canonical] >> metis_tac[]
 QED
 
@@ -386,12 +387,12 @@ Proof
   rename1 `generate_context_plan ctx = SOME cplan` >>
   `sym_frame_inv_own (SND (compute_label_offsets prog)) prog env st.as_code
      ctx cplan fn ret srest labs0 ps st ss` by
-    simp[sym_invoke_frame_own_canonical] >>
+    simp[symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own] >>
   drule_at (Pat `sym_frame_inv_own _ _ _ _ _ _ _ _ _ _ _ _ _`)
     (symFrameInvokePrefixOwnTheory.sym_invoke_enter_callee_prefix_own
       |> Q.SPEC `F` |> PURE_REWRITE_RULE [COND_CLAUSES]) >>
   disch_then drule_all >>
-  simp[sym_steps_mode_def, sym_invoke_frame_own_canonical,
+  simp[sym_steps_mode_def, symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own,
     asm_sym_rel_own_canonical] >> metis_tac[]
 QED
 
@@ -627,7 +628,7 @@ Proof
   qpat_x_assum `lo = _` SUBST_ALL_TAC >>
   `sym_frame_inv_own (SND (compute_label_offsets prog)) prog env mid.as_code
      ctx cplan fn ret srest labs0 arranged mid sms` by
-    simp[sym_invoke_frame_own_canonical] >>
+    simp[symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own] >>
   drule sym_invoke_canonical_lockstep >>
   disch_then (qspecl_then [`mid.as_code`, `env`] assume_tac) >>
   `!rv v. run_blocks fuel ctx (EL j ctx.ctx_functions) cvs = IntRet rv v ==>
@@ -660,7 +661,7 @@ Proof
   disch_then (drule_at (Pat `sym_steps _ _ _ _ = SymOK _`)) >>
   disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ arranged _ _`)) >>
   disch_then drule_all >>
-  simp[sym_steps_mode_def, sym_invoke_frame_own_canonical] >> metis_tac[]
+  simp[sym_steps_mode_def, symFrameBoundaryPairingTheory.sym_frame_inv_canonical_own] >> metis_tac[]
 QED
 
 Theorem sym_invoke_frame_sim_deep:

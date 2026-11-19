@@ -1,7 +1,7 @@
 (* Unconditional own-mode terminal interfaces. *)
 Theory symControlTerminalDischargeOwn
 Ancestors symFrameControlOwn symControlTerminalOwn asmSymModeOwn asmSymBridge
-  codegenSymRel codegenSymOwnRel spillWordBounds
+  codegenSymRel codegenSymOwnRel spillWordBounds symControlHaltOwn[qualified,ignore_grammar]
 
 val result_rel = mk_var ("R", type_of ``asm_sym_rel p env``);
 val result_body = subst [``asm_sym_rel p env`` |-> result_rel]
@@ -85,7 +85,7 @@ Proof
     (GEN_ALL (SRULE [asm_sym_rel_core_own]
       (Q.INST [`code_ok` |->
         `\code. asm_data_env_lo_ok lo prog env own /\ code = own`]
-        (SPEC_ALL sym_halt_frame_sim_deep_mode_conditional)))) >>
+        (SPEC_ALL symControlHaltOwnTheory.sym_halt_frame_sim_deep_mode_conditional)))) >>
   disch_then (drule_at (Pat `fn_frame_inv`)) >>
   disch_then (drule_at (Pat `generate_inst_plan`)) >>
   disch_then (drule_at (Pat `asm_sym_rel_own`)) >>

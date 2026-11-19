@@ -177,7 +177,7 @@ Proof
   asm_rewrite_tac[] >> simp[]
 QED
 
-Theorem sym_halt_frame_sim_deep_mode_kernel:
+Theorem sym_halt_frame_sim_deep_mode_conditional:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs st ops ps' r ra rest mem0
    env ret srest labs0 ss allow_own own code_ok.

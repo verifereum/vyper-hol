@@ -666,7 +666,17 @@ Theorem sym_reorder_one_decompose:
         else ([],ps1)) = (reduce_ops,ps2) /\
        ops = (restore_ops ++ reduce_ops) ++ suffix /\
        ps2.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset /\
-       reorder_place_expr dfg pending op (LENGTH pending - (idx + 1)) ps2 = (suffix,ps'))
+       (case stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+          (LENGTH pending) ps2.ps_stack of
+          NONE => ([],ps2)
+        | SOME d => if d = LENGTH pending - (idx + 1) then ([],ps2)
+          else if LENGTH pending - (idx + 1) < LENGTH ps2.ps_stack /\
+            operand_equiv dfg op (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack)
+          then ([], ps2 with ps_stack := stack_poke (LENGTH pending - (idx + 1)) op
+            (stack_poke d (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack) ps2.ps_stack))
+          else (case do_swap d ps2 of (os1,p1) =>
+            case do_swap (LENGTH pending - (idx + 1)) p1 of (os2,p2) => (os1 ++ os2,p2)))
+        = (suffix,ps'))
 Proof
   rewrite_tac[stackPlanOpsTheory.reorder_one_def, LET_THM] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>

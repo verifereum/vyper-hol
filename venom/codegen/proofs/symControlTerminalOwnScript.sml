@@ -41,56 +41,6 @@ val _ = Parse.temp_overload_on ("terminal_transfer", ``\lo code_ok p env own all
     bridge_result (bridge_core lo code_ok)
       (if allow_own then sym_step_own p env own ai ss else sym_step p env ai ss) cr``);
 
-Theorem sym_halt_frame_sim_deep_mode_conditional:
-  !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
-   is_halting next_is_term bb_label base ps vs st ops ps' r ra rest mem0
-   env ret srest labs0 ss allow_own own code_ok.
-    (!n cs ss ss'. bridge_core lo code_ok cs ss /\
-      sym_steps_mode allow_own prog env own n ss = SymOK ss' ==>
-      ?cs'. asm_steps lo (build_offset_to_pc prog) prog n cs = AsmOK cs' /\
-        bridge_core lo code_ok cs' ss') /\
-    terminal_transfer lo code_ok prog env own allow_own /\
-    o2pc = build_offset_to_pc prog /\ inst.inst_opcode <> INVOKE /\
-    source_memory_reads_disjoint cp inst vs /\ opaque_use_ok fn /\
-    ~is_param_opcode inst.inst_opcode /\
-    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
-    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
-    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
-    generated_plan_state_wf_marked base ps /\ codegen_ready_fn fn /\
-    MEM inst (fn_insts fn) /\ inst_wf inst /\
-    LENGTH (compute_operands inst) <= 16 /\
-    LENGTH (compute_operands inst) <=
-      LENGTH (SND (emit_input_plan inst.inst_opcode
-        (compute_operands inst) next_liveness ps)).ps_stack /\
-    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
-      IS_SOME (stack_get_depth op ps.ps_stack) \/ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
-    (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
-    (!op. MEM op (compute_operands inst) ==>
-      eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
-    (!op at. MEM op (compute_operands inst) /\
-      (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
-      operand_equiv dfg op at ==>
-      operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
-    EVERY (\op. op <> dead_stack_marker /\
-      !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
-    EVERY (\s. case s of SOSpill off => off < dimword(:256)
-      | SORestore off => off < dimword(:256) | _ => T) ops /\
-    (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
-    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs st /\
-    generate_inst_plan liveness dfg cfg fn inst next_liveness is_halting next_is_term
-      bb_label ps = SOME (ops, ps') /\
-    asm_block_at prog st.as_pc (execute_plan cp.cp_initial_fmp ops) /\
-    dfg = dfg_build_function fn /\ MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
-    (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
-    asm_static_wf prog /\ control_frame lo code_ok prog ctx cp fn ret srest labs0 ps st ss ==>
-    !vs'. step_inst fuel ctx inst vs = Halt vs' ==>
-      ?n out. asm_steps lo o2pc prog n st = AsmHalt out /\
-        venom_asm_terminal_rel vs' out /\
-        sym_terminal (sym_steps_mode allow_own prog env own n ss)
-Proof
-  ACCEPT_TAC symControlHaltOwnTheory.sym_halt_frame_sim_deep_mode_kernel
-QED
-
 Theorem sym_abort_terminal_counts_join_mode:
   ((a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out) \/
    (a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out)) /\

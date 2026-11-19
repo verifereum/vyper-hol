@@ -770,39 +770,6 @@ Proof
     (Q.INST [`allow_own` |-> `F`] (SPEC_ALL sym_asm_plan_runs_compose_mode))) >> simp[]
 QED
 
-Theorem sym_reorder_one_decompose:
-  reorder_one dfg pending idx op ps = (ops,ps') ==>
-  ?restore_ops ps1.
-    (case stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
-        (LENGTH pending) ps.ps_stack of
-       NONE => (case FLOOKUP ps.ps_spilled op of NONE => ([],ps)
-                  | SOME off => do_restore op ps)
-     | SOME d => ([],ps)) = (restore_ops,ps1) /\
-    ((stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
-       (LENGTH pending) ps1.ps_stack = NONE /\ ops = restore_ops /\ ps' = ps1) \/
-     ?dist reduce_ops ps2 suffix.
-       stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
-         (LENGTH pending) ps1.ps_stack = SOME dist /\
-       (if dist > 16 then reduce_depth_plan (LENGTH ps1.ps_stack) pending op
-         (LENGTH pending - (idx + 1)) (LENGTH pending) ps1
-        else ([],ps1)) = (reduce_ops,ps2) /\
-       ops = (restore_ops ++ reduce_ops) ++ suffix /\
-       ps2.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset /\
-       (case stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
-          (LENGTH pending) ps2.ps_stack of
-          NONE => ([],ps2)
-        | SOME d => if d = LENGTH pending - (idx + 1) then ([],ps2)
-          else if LENGTH pending - (idx + 1) < LENGTH ps2.ps_stack /\
-            operand_equiv dfg op (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack)
-          then ([], ps2 with ps_stack := stack_poke (LENGTH pending - (idx + 1)) op
-            (stack_poke d (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack) ps2.ps_stack))
-          else (case do_swap d ps2 of (os1,p1) =>
-            case do_swap (LENGTH pending - (idx + 1)) p1 of (os2,p2) => (os1 ++ os2,p2)))
-        = (suffix,ps'))
-Proof
-  ACCEPT_TAC symControlReorderOwnTheory.sym_reorder_one_decompose
-QED
-
 Theorem control_reorder_one_decompose:
   reorder_one dfg pending idx op ps = (ops,ps') ==>
   ?restore_ops ps1.
@@ -3863,7 +3830,7 @@ Proof
                  sym_steps_mode_def]
     (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
              `code_ok` |-> `asm_data_env_ok prog env`, `own` |-> `[]`]
-      (SPEC_ALL symControlHaltOwnTheory.sym_halt_frame_sim_deep_mode_kernel))) >>
+      (SPEC_ALL symControlHaltOwnTheory.sym_halt_frame_sim_deep_mode_conditional))) >>
   asm_rewrite_tac[] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
       `cs.as_pc < LENGTH prog /\ EL cs.as_pc prog = ai` by

@@ -1,6 +1,6 @@
 (* Mode-dependent emitters for the shared named-source dispatch. *)
 Theory symEmitNamedOwn
-Ancestors symEmitSim symEmitCodecopyOwn symEmitCodeEndOwn
+Ancestors symEmitSim symEmitCodecopyOwn
   symEmitNamedDispatch symEmitCodesizeOwn list
 
 Theorem sym_named_source_emit_mode_conditional:
