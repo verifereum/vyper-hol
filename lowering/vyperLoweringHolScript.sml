@@ -14,7 +14,7 @@ Ancestors
   loweringCalldataCorrect registrationGuardRejectOrigin
   dispatchedEntryValueRevert
   e2eLifecycle e2eTransactionWorld
-  e2eCodeFrame
+  e2eCodeFrame ownSymSrcUnit
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
