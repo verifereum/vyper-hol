@@ -29,10 +29,10 @@ QED
 
 Theorem stack_terminal_certificate_transfer[local]:
   !orig s data req_bound p q ch n out.
-    let bytes = \p. assemble p ++ data in
-    let env0 = asm_data_env orig (bytes orig) in
-    let run = \p j. asm_steps (SND (compute_label_offsets p))
-      (build_offset_to_pc p) p j (s with as_code := bytes p) in
+    !bytes. bytes = (\p. assemble p ++ data) ==>
+    !env0. env0 = asm_data_env orig (bytes orig) ==>
+    !run. run = (\p j. asm_steps (SND (compute_label_offsets p))
+      (build_offset_to_pc p) p j (s with as_code := bytes p)) ==>
     s.as_pc = 0 /\ s.as_code = bytes orig /\
     asm_static_wf orig /\ asm_static_wf p /\
     FILTER is_data_inst p = FILTER is_data_inst orig /\
@@ -45,7 +45,7 @@ Theorem stack_terminal_certificate_transfer[local]:
           sym_terminal (sym_steps q env0 j (sym_init s)) /\
           a.as_requests <<= req_bound
 Proof
-  rpt gen_tac >> simp[LET_THM] >>
+  ntac 9 gen_tac >> simp[UNWIND_FORALL_THM2] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `env = asm_data_env orig (assemble orig ++ data)` >>
   qabbrev_tac `sp = s with as_code := assemble p ++ data` >>
@@ -113,14 +113,16 @@ val target = ``\p (pc:(num#num)->num) (tag:(num#num)->num->(string#num)option) x
     off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc y)``;
 
 val Flow = ``\p pc height tag boolean (x:num#num) (y:num#num).
-  let hi = height x; hj = height y; ins = EL (pc x) p in
-  let inherit = \(src:num -> num option)
+  !hi. hi = height x ==>
+  !hj. hj = height y ==>
+  !ins. ins = EL (pc x) p ==>
+  !inherit. inherit = (\(src:num -> num option)
       (fresh:num -> (string#num)option) (bnew:num -> bool).
     (!k l origin. tag y k = SOME(l,origin) ==>
        k < hj /\ (fresh k = SOME(l,origin) \/
        ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
     (!k. boolean y k ==> k < hj /\
-       (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a)) in
+       (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
   case ins of
     AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
   | AsmPush bs =>
@@ -150,7 +152,8 @@ val Flow = ``\p pc height tag boolean (x:num#num) (y:num#num).
              inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                (\k. NONE) (\k. F)
          | NONE =>
-           let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+           !a. a = asm_op_arity name ==>
+           !m. m = hj + a - hi ==>
            a <= hi /\ hj = m+(hi-a) /\
            ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
            inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -172,13 +175,13 @@ val Slots = ``\p cc h need (g:num->(string#num)option) (B:num->bool).
 
 val Dispatch = ``\p cc (pc:(num#num)->num) height (tag:(num#num)->num->(string#num)option) x S.
   pc x < LENGTH p /\
-  let h = height x in
-  let fall = \y. pc y = pc x+1 in
-  let arm = \P n. ?y. S y /\ P y /\ height y = n in
-  let legal = \P n. !y. S y ==> P y /\ height y = n in
-  let next = \n. arm fall n /\ legal fall n in
-  let untagged = \a. !k. k<a ==> tag x k=NONE in
-  let stop = \a. a<=h /\ untagged a /\ !y. ~S y in
+  (!h. h = height x ==>
+  !fall. fall = (\y. pc y = pc x+1) ==>
+  !arm. arm = (\P n. ?y. S y /\ P y /\ height y = n) ==>
+  !legal. legal = (\P n. !y. S y ==> P y /\ height y = n) ==>
+  !next. next = (\n. arm fall n /\ legal fall n) ==>
+  !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+  !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~S y) ==>
   case EL (pc x) p of
     AsmLabel l => next h
   | AsmPush bs => next (h+1)
@@ -203,7 +206,7 @@ val Dispatch = ``\p cc (pc:(num#num)->num) height (tag:(num#num)->num->(string#n
                else
                   ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                       untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-  | _ => F``;
+  | _ => F)``;
 
 val Rows = ``\p cc (V:(num#num)->bool) (rank:(num#num)->num) pc height need tag boolean edge.
   (!x. x IN V ==> ^Slots p cc (height x) (need x) (tag x) (boolean x)) /\
@@ -218,7 +221,7 @@ val EdgeOK = ``\p pc height tag boolean x y.
    else pc y = pc x+1)``;
 
 val Open = ``\p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need tag boolean edge.
-  let S = ^Shape p cc req pc height need tag boolean in
+  !S. S = ^Shape p cc req pc height need tag boolean ==>
   FINITE V /\ X SUBSET V /\
   (!x. x IN V ==> ?t. S x t) /\
   (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -349,7 +352,10 @@ QED
 
 Resume stack_selected_table_restart[open]:
   ` {x | x IN V /\ ^Reach edge e x} = V` by
-    (simp[EXTENSION] >> BETA_TAC >> metis_tac[]) >>
+    (simp[EXTENSION] >> BETA_TAC >> gen_tac >>
+     eq_tac >- simp[] >> disch_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `!x. x IN V ==> ?n path. path 0 = e /\ path n = x /\ _`
+       (qspec_then `x` (drule_then ACCEPT_TAC))) >>
   `!x y. (x IN V /\ edge x y) = edge x y` by
     (rpt gen_tac >> eq_tac >- (strip_tac >> first_assum ACCEPT_TAC) >>
      disch_tac >> conj_tac >- (
@@ -364,7 +370,8 @@ Resume stack_selected_table_restart[open]:
      first_assum ACCEPT_TAC) >>
   (let
      val normalize = TOP_DEPTH_CONV (FIRST_CONV
-       [BETA_CONV, REWR_CONV LET_THM, REWR_CONV ratTheory.RAT_OF_NUM_LES])
+       [BETA_CONV, REWR_CONV LET_THM, HO_REWR_CONV UNWIND_FORALL_THM2,
+        REWR_CONV ratTheory.RAT_OF_NUM_LES])
    in
      rule_assum_tac (CONV_RULE normalize) >> CONV_TAC normalize >>
      qpat_assum `t.as_call_ctx = cc` (fn ctx_eq =>
@@ -415,8 +422,8 @@ val guard = ``\ins hi hj (G:num->(string#num)option).
            (!k. k<asm_op_arity name ==> G k=NONE) /\ hj=hi-asm_op_arity name+r)``;
 val phases = ``\q cc b f d (height:num#num->num) need (rank:num#num->num) tag boolean v z
   (H:num#num->num) (R:num#num->num) (G:(num#num)->num->(string#num)option) (B:(num#num)->num->bool).
-  let n = LENGTH d in
-  let P = \x:num#num. b+FST x in
+  !n. n = LENGTH d ==>
+  !P. P = (\x:num#num. b+FST x) ==>
   H (0,0) = height v /\ H (n,0) = height z /\
   R (0,0) = rank v /\ R (n,0) = rank z /\
   (!k l i. G (0,0) k = SOME(l,i) ==> ^tr f tag v k = SOME(l,i)) /\
@@ -429,13 +436,15 @@ val phases = ``\q cc b f d (height:num#num->num) need (rank:num#num->num) tag bo
      ^Flow q P H G B (i,0) (SUC i,0) /\
      ^guard (EL i d) (H (i,0)) (H (SUC i,0)) (G (i,0)))``;
 
-val stack_norm = SIMP_RULE bool_ss [LET_THM, DIFF_EMPTY, EMPTY_SUBSET, CONJ_ASSOC];
-val stack_norm_tac = SIMP_TAC bool_ss [LET_THM, DIFF_EMPTY, EMPTY_SUBSET, CONJ_ASSOC];
+val stack_norm = SIMP_RULE bool_ss [LET_THM, UNWIND_FORALL_THM2, DIFF_EMPTY, EMPTY_SUBSET, CONJ_ASSOC];
+val stack_norm_tac = SIMP_TAC bool_ss [LET_THM, UNWIND_FORALL_THM2, DIFF_EMPTY, EMPTY_SUBSET, CONJ_ASSOC];
 
 Theorem stack_select_ports[local]:
   !pre w d tail p q cc req V rank pc height need tag boolean edge.
-  let b = LENGTH pre; m = LENGTH w; n = LENGTH d in
-  let f = splice_pc b m n in
+  !b. b = LENGTH pre ==>
+  !m. m = LENGTH w ==>
+  !n. n = LENGTH d ==>
+  !f. f = splice_pc b m n ==>
   asm_static_wf p /\ p=pre++w++tail /\ q=pre++d++tail /\ ^window w d /\
   ^port_layout p q f /\ ^Rows p cc V rank pc height need tag boolean edge /\
   ^Open p cc req V {} rank pc height need tag boolean edge ==>
@@ -445,7 +454,7 @@ Theorem stack_select_ports[local]:
      else ^phases q cc b f d height need rank tag boolean v (z v)
                   (H v) (R v) (G v) (B v))
 Proof
-  rpt gen_tac >> stack_norm_tac >>
+  ntac 16 gen_tac >> stack_norm_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!A (P:(num#num)->(num#num)->((num#num)->num)->((num#num)->num)->
          ((num#num)->num->(string#num)option)->((num#num)->num->bool)->bool).
@@ -533,7 +542,7 @@ QED
 val Kept = ``\(b:num) m pc (V:(num#num)set). {v | v IN V /\ (pc v < b \/ b+m <= pc v)}``;
 val Heads = ``\(b:num) pc (V:(num#num)set). {v | v IN V /\ pc v=b}``;
 val Layout = ``\p q b m n.
-  let f = splice_pc b m n in
+  !f. f = splice_pc b m n ==>
   asm_static_wf q /\ FILTER is_data_inst q = FILTER is_data_inst p /\
   (!i. i < LENGTH p /\ (i < b \/ b+m <= i) ==> f i < LENGTH q /\ EL (f i) q = EL i p) /\
   ^port_layout p q f /\
@@ -613,7 +622,7 @@ QED
 
 (* A singleton edge needs only the projections at its two endpoints. *)
 val FlowAt = ``\q i hi hj (gi:num->(string#num)option) gj bi bj.
-  let left = \x:num#num. FST x=0 in
+  !left. left = (\x:num#num. FST x=0) ==>
   ^Flow q (\x. i) (\x. if left x then hi else hj)
           (\x. if left x then gi else gj) (\x. if left x then bi else bj)
           (0,0) (1,0)``;
@@ -623,7 +632,9 @@ Theorem stack_flow_at[local]:
   ^Flow q pc height tag boolean x y <=>
   ^FlowAt q (pc x) (height x) (height y) (tag x) (tag y) (boolean x) (boolean y)
 Proof
-  rpt gen_tac >> SIMP_TAC bool_ss [LET_THM, FST] >> simp[]
+  rpt gen_tac >> BETA_TAC >>
+  CONV_TAC (RAND_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
+  SIMP_TAC bool_ss [FST] >> simp[]
 QED
 
 Theorem stack_local_one[local]:
@@ -753,12 +764,12 @@ Resume stack_retained_local[edge]:
   conj_tac >- pure_asm_rewrite_tac [] >>
   conj_tac
   >- (stack_norm_tac >> pure_asm_rewrite_tac [] >> first_assum ACCEPT_TAC) >>
-  BETA_TAC >> irule (BETA_RULE stack_dispatch_motion) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`\u. ?z. edge x z /\ u=g z`,`cc`,`H`] >>
+  BETA_TAC >>
+  qspecl_then [`q`,`cc`,`P`,`H`,`G`,`c`,`\u. ?z. edge x z /\ u=g z`,`y`]
+    (mp_tac o BETA_RULE) stack_dispatch_motion >>
   BETA_TAC >> rule_assum_tac BETA_RULE >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  stack_norm_tac >> first_assum (ACCEPT_TAC o stack_norm o CONJUNCT2)
+  (impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
+  disch_then ACCEPT_TAC
 QED
 
 Finalise stack_retained_local
@@ -778,8 +789,8 @@ val PData = ``\(b:num) (ph_h:(num#num)->(num#num)->num) (ph_r:(num#num)->(num#nu
   (b+i,ph_h v (i,0:num),ph_r v (i,0:num),F,ph_t v (i,0:num),ph_b v (i,0:num))``;
 val Data = ``\cd pd (id:num#num#num#bool#(num->(string#num)option)#(num->bool)) (x:num#num).
   if FST x=0 then id else
-  let v = num_to_pair (PRE (FST x)) in
-  if SND x=0 then cd v else pd v (PRE (SND x))``;
+  (if SND x=0 then cd else combin$C pd (PRE (SND x)))
+    (num_to_pair (PRE (FST x)))``;
 val Pc = ``\(d:(num#num)->num#num#num#bool#(num->(string#num)option)#(num->bool)) x. FST (d x)``;
 val Ht = ``\(d:(num#num)->num#num#num#bool#(num->(string#num)option)#(num->bool)) x. FST (SND (d x))``;
 val Rk = ``\(d:(num#num)->num#num#num#bool#(num->(string#num)option)#(num->bool)) x. FST (SND (SND (d x)))``;
@@ -792,29 +803,53 @@ Theorem stack_port_data[local]:
   (!cd pd id v i. ^Data cd pd id (^Phase v i) = pd v i) /\
   (!cd pd id. ^Data cd pd id ^First = id)
 Proof
-  simp[LET_THM]
+  simp[combinTheory.C_DEF]
 QED
 
 val PortSelection = ``\q cc b m d V pc height rank need tag boolean z H R G B.
-  let n = LENGTH d in let f = splice_pc b m n in
+  !n. n = LENGTH d ==>
+  !f. f = splice_pc b m n ==>
   !v. v IN ^Heads b pc V ==>
     z v IN ^Kept b m pc V /\ pc (z v)=b+m /\ rank (z v)<rank v /\
     (if n=0 then ^same_demands height tag boolean v (z v)
      else ^phases q cc b f d height need rank tag boolean v (z v)
                   (H v) (R v) (G v) (B v))``;
 
-fun stack_lets names = map_every (fn name =>
-  CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-    SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
-  qx_gen_tac name >> disch_tac) names;
+(* Mark a defining equation as proof-local abbreviation without unfolding
+   any of the row predicates under the alias. *)
+val stack_alias_head = QUANT_CONV (LAND_CONV
+  (REWR_CONV (GSYM markerTheory.Abbrev_def)));
+fun stack_intro_aliases names = map_every (fn name =>
+  CONV_TAC stack_alias_head >> qx_gen_tac name >> disch_tac) names;
+fun stack_alias_rule 0 tail = tail
+  | stack_alias_rule n tail = stack_alias_head THENC
+      QUANT_CONV (RAND_CONV (stack_alias_rule (n-1) tail));
+fun stack_aliases n conv = funpow n (fn k => QUANT_CONV k) conv;
+val stack_inline_alias = HO_REWR_CONV UNWIND_FORALL_THM2 THENC DEPTH_CONV BETA_CONV;
+fun stack_inline_lets 0 tail = tail
+  | stack_inline_lets n tail = FIRST_CONV [stack_inline_alias,
+      REWR_CONV LET_THM THENC TRY_CONV BETA_CONV] THENC stack_inline_lets (n-1) tail;
+
+fun stack_apply_aliases [] k th = k th
+  | stack_apply_aliases (pat::pats) k th =
+    qpat_assum pat (fn marked =>
+      let
+        val alias = lhs (concl (REWRITE_RULE [markerTheory.Abbrev_def] marked))
+        val normalize = REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV])
+      in
+        stack_apply_aliases pats k
+          (MP (CONV_RULE (LAND_CONV normalize) (SPEC alias th))
+              (CONV_RULE normalize marked))
+      end);
 
 (* An incoming edge can use either a retained port or the selected head image. *)
 Theorem stack_image_fields[local]:
   !q cc b m d V pc height rank need tag boolean z H R G B id v.
-  let n = LENGTH d in let f = splice_pc b m n in
-  let kept = ^Kept b m pc V in
-  let ann = ^Data (^CData f pc height rank need tag boolean) (^PData b H R G B) id in
-  let y = ^Image kept n z v in
+  !n. n = LENGTH d ==>
+  !f. f = splice_pc b m n ==>
+  !kept. kept = ^Kept b m pc V ==>
+  !ann. ann = ^Data (^CData f pc height rank need tag boolean) (^PData b H R G B) id ==>
+  !y. y = ^Image kept n z v ==>
   ^PortSelection q cc b m d V pc height rank need tag boolean z H R G B /\
   f b=b /\ f (b+m)=b+n /\
   (!x. x IN V ==> need x ==> cc.cc_static) /\
@@ -824,7 +859,7 @@ Theorem stack_image_fields[local]:
   (!k l o'. ^Tg ann y k=SOME(l,o') ==> ?i. tag v k=SOME(l,i) /\ o'=f i) /\
   (!k. ^Bl ann y k ==> boolean v k)
 Proof
-  rpt gen_tac >> stack_lets [`n`,`f`,`kept`,`ann`,`y`] >> BETA_TAC >>
+  ntac 19 gen_tac >> stack_intro_aliases [`n`,`f`,`kept`,`ann`,`y`] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `v IN kept`
   >- (`v IN V` by fs[Abbr `kept`] >>
@@ -833,10 +868,12 @@ Proof
       simp[] >> conj_tac
       >- (qpat_assum `!x. x IN V ==> _` (qspec_then `v` mp_tac) >> simp[]) >>
       simp[AllCaseEqs(), pairTheory.EXISTS_PROD]) >>
-  `v IN ^Heads b pc V` by fs[IN_UNION] >>
-  rule_assum_tac (SIMP_RULE bool_ss [LET_THM]) >>
-  qpat_assum `!v. v IN _ ==> z v IN kept /\ _`
-    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  qpat_assum `!k. k = LENGTH d ==> _`
+    (stack_apply_aliases [`Abbrev (n = _)`,`Abbrev (f = _)`]
+      (qspec_then `v` mp_tac) o CONV_RULE (stack_alias_rule 2 ALL_CONV)) >>
+  (impl_tac >- fs[IN_UNION]) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `z v IN kept` by simp[Abbr `kept`] >>
   `pc v=b /\ v IN V` by fs[] >>
   Cases_on `n=0`
   >- (`ann y = ^CData f pc height rank need tag boolean (z v)` by
@@ -860,10 +897,11 @@ QED
 (* Retained incidences and rows use the very same image of each successor. *)
 Theorem stack_selected_retained[local]:
   !p q cc b m d V pc height rank need tag boolean edge z H R G B id.
-  let n = LENGTH d in let f = splice_pc b m n in
-  let kept = ^Kept b m pc V in
-  let ann = ^Data (^CData f pc height rank need tag boolean) (^PData b H R G B) id in
-  let image = ^Image kept n z in
+  !n. n = LENGTH d ==>
+  !f. f = splice_pc b m n ==>
+  !kept. kept = ^Kept b m pc V ==>
+  !ann. ann = ^Data (^CData f pc height rank need tag boolean) (^PData b H R G B) id ==>
+  !image. image = ^Image kept n z ==>
   0<m /\ ^Layout p q b m n /\ ^Rows p cc V rank pc height need tag boolean edge /\
   ^PortSelection q cc b m d V pc height rank need tag boolean z H R G B ==>
   !x. x IN kept ==>
@@ -871,16 +909,17 @@ Theorem stack_selected_retained[local]:
     ^LocalRow q cc (^Pc ann) (^Ht ann) (^Rk ann) (^Nd ann) (^Tg ann) (^Bl ann)
        (^Copy x) (\u. ?y. edge x y /\ u=image y)
 Proof
-  rpt gen_tac >> stack_lets [`n`,`f`,`kept`,`ann`,`image`] >> BETA_TAC >>
+  ntac 20 gen_tac >> stack_intro_aliases [`n`,`f`,`kept`,`ann`,`image`] >> BETA_TAC >>
   disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 (mk_asm "layout")
     (CONJUNCTS_THEN2 (mk_asm "rows") assume_tac))) >>
   qx_gen_tac `x` >> disch_tac >>
   `x IN V` by fs[Abbr `kept`] >>
   asm "rows" (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
   `^Dispatch p cc pc height tag x (edge x)` by
-    (BETA_TAC >> first_assum (drule_then ACCEPT_TAC)) >>
+    (BETA_TAC >> gvs[]) >>
   `pc x < LENGTH p` by simp[] >>
-  asm "layout" (map_every assume_tac o CONJUNCTS o stack_norm) >>
+  asm "layout" (stack_apply_aliases [`Abbrev (f = _)`]
+    (map_every assume_tac o CONJUNCTS) o CONV_RULE stack_alias_head) >>
   `!y. edge x y ==> y IN kept UNION ^Heads b pc V` by suspend "incidence" >>
   conj_tac >- first_assum (ACCEPT_TAC o BETA_RULE) >>
   `ann (^Copy x) = ^CData f pc height rank need tag boolean x` by
@@ -898,19 +937,18 @@ Resume stack_selected_retained[incidence]:
     (qpat_assum `!u v. edge u v ==> _` (qspecl_then [`x`,`y`] (drule_then strip_assume_tac)) >> simp[]) >>
   `^Motion p pc tag x y` by
     (BETA_TAC >> irule (BETA_RULE stack_dispatch_motion) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl [`edge x`,`cc`,`height`] >> BETA_TAC >>
-     conj_tac >- first_assum (ACCEPT_TAC o BETA_RULE) >>
-     (simp[])) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     gvs[]) >>
   `y IN ^Kept b m pc V UNION ^Heads b pc V` suffices_by
     simp[Abbr `kept`] >>
   BETA_TAC >> irule (BETA_RULE stack_old_retained_edge) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl [`p`,`tag`,`x`] >>
-  conj_tac >- (stack_norm_tac >> first_assum ACCEPT_TAC) >>
-  conj_tac >-
-    (qpat_assum `Abbrev (kept = _)` (SUBST1_TAC o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) >> simp[]) >>
+  conj_tac >- (stack_norm_tac >> first_assum (ACCEPT_TAC o stack_norm)) >>
+  conj_tac >- fs[Abbr `kept`] >>
   first_assum (ACCEPT_TAC o BETA_RULE)
 QED
 
@@ -943,36 +981,33 @@ Finalise stack_selected_retained
    At its last edge the phase-n annotations are those of the copied exit. *)
 Theorem stack_selected_phase[local]:
   !q cc b m d V pc height rank need tag boolean z H R G B id.
-  let n = LENGTH d in let f = splice_pc b m n in
-  let ann = ^Data (^CData f pc height rank need tag boolean) (^PData b H R G B) id in
+  !n. n = LENGTH d ==>
+  !f. f = splice_pc b m n ==>
+  !ann. ann = ^Data (^CData f pc height rank need tag boolean) (^PData b H R G B) id ==>
   ^PortSelection q cc b m d V pc height rank need tag boolean z H R G B /\
   f (b+m)=b+n ==>
   !v i. v IN ^Heads b pc V /\ i<n ==>
     ^LocalRow q cc (^Pc ann) (^Ht ann) (^Rk ann) (^Nd ann) (^Tg ann) (^Bl ann)
       (^Phase v i) (\y. y = ^Next n z v i)
 Proof
-  rpt gen_tac >>
-  map_every (fn name =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      REDEPTH_CONV (FIRST_CONV [BETA_CONV,REWR_CONV combinTheory.S_DEF,
-        REWR_CONV combinTheory.o_THM,REWR_CONV combinTheory.C_DEF])) >>
-    qx_gen_tac name >> disch_tac) [`n`,`f`,`ann`] >>
+  ntac 18 gen_tac >> stack_intro_aliases [`n`,`f`,`ann`] >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac >> rpt gen_tac >> strip_tac >>
   qspecl_then [`q`,`cc`,`^Pc ann`,`^Ht ann`,`^Rk ann`,`^Nd ann`,`^Tg ann`,
     `^Bl ann`,`^Phase v i`,`^Next n z v i`]
     (MATCH_MP_TAC o CONV_RULE (REDEPTH_CONV BETA_CONV)) stack_local_one >>
-  qpat_assum `let x = _ in _` (fn th =>
-    qspec_then `v` mp_tac (SIMP_RULE bool_ss [LET_THM] th)) >>
+  qpat_assum `!k. k = LENGTH d ==> _`
+    (stack_apply_aliases [`Abbrev (n = _)`,`Abbrev (f = _)`]
+       (qspec_then `v` mp_tac) o CONV_RULE (stack_alias_rule 2 ALL_CONV)) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   `n<>0` by decide_tac >>
-  map_every (fn pat => qpat_assum pat (fn th =>
-    CONV_TAC (LAND_CONV (PURE_REWRITE_CONV
-      [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]))))
-    [`Abbrev (n = _)`,`Abbrev (f = _)`] >>
   qpat_assum `n<>0` (fn th =>
     CONV_TAC (LAND_CONV (PURE_REWRITE_CONV [EQF_INTRO th,COND_CLAUSES]))) >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `ann (^Phase v i) = ^PData b H R G B v i` by simp[Abbr `ann`,stack_port_data] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac
+      (stack_apply_aliases [`Abbrev (n = _)`]
+        (map_every assume_tac o CONJUNCTS o CONV_RULE stack_inline_alias) o
+       CONV_RULE stack_alias_head)))) >>
+  `ann (^Phase v i) = ^PData b H R G B v i` by simp[NoAsms, Abbr `ann`,stack_port_data] >>
   `ann (^Next n z v i) = (b+SUC i,H v (SUC i,0),R v (SUC i,0),
       (SUC i=n /\ need (z v)),G v (SUC i,0),B v (SUC i,0))` by suspend "next" >>
   `^PortSlots q cc (H v (i,0)) F (G v (i,0)) (B v (i,0))` by suspend "slots" >>
@@ -1020,38 +1055,18 @@ val rooted_rows = ``\q cc V e rank pc height need tag boolean edge.
 fun stack_project_conv eq = REDEPTH_CONV (FIRST_CONV (BETA_CONV ::
   map REWR_CONV [LET_THM,FST,SND,ratTheory.RAT_OF_NUM_LES,eq]));
 
-(* Open a worker's head LET without substituting its RHS into the row. *)
-val stack_let_head = REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-  REDEPTH_CONV (FIRST_CONV [BETA_CONV, REWR_CONV combinTheory.S_DEF,
-    REWR_CONV combinTheory.o_THM, REWR_CONV combinTheory.C_DEF]);
-
-fun stack_alias_rule 0 tail = tail
-  | stack_alias_rule n tail = stack_let_head THENC
-      QUANT_CONV (RAND_CONV (stack_alias_rule (n-1) tail));
-
-val stack_retained_aliases = CONV_RULE (STRIP_QUANT_CONV
-  (stack_alias_rule 4 (REWR_CONV LET_THM THENC REDEPTH_CONV BETA_CONV)))
-  stack_selected_retained;
-val stack_phase_aliases = CONV_RULE (STRIP_QUANT_CONV
-  (stack_alias_rule 3 ALL_CONV)) stack_selected_phase;
-
 fun stack_packet 0 th = [th]
   | stack_packet n th = CONJUNCT1 th :: stack_packet (n-1) (CONJUNCT2 th);
-
-fun stack_apply_aliases [] k th = k th
-  | stack_apply_aliases (pat::pats) k th =
-    qpat_assum pat (fn marked =>
-      stack_apply_aliases pats k
-        (MP (SPEC (lhs (concl (REWRITE_RULE [markerTheory.Abbrev_def] marked))) th) marked));
 
 Theorem stack_build_selected_table[local]:
   !p q cc req b m d V pc height rank need tag boolean edge z H R G B
     ih ir it ib init j start.
-  let n = LENGTH d in let f = splice_pc b m n in
-  let kept = ^Kept b m pc V in
-  let id = (b,ih,ir,F,it,ib) in
-  let ann = ^Data (^CData f pc height rank need tag boolean) (^PData b H R G B) id in
-  let e = if init then ^First else ^Image kept n z start in
+  !n. n = LENGTH d ==>
+  !f. f = splice_pc b m n ==>
+  !kept. kept = ^Kept b m pc V ==>
+  !id. id = (b,ih,ir,F,it,ib) ==>
+  !ann. ann = ^Data (^CData f pc height rank need tag boolean) (^PData b H R G B) id ==>
+  !e. e = (if init then ^First else ^Image kept n z start) ==>
   FINITE V /\ 0<m /\ ^Layout p q b m n /\ ^Rows p cc V rank pc height need tag boolean edge /\
   ^PortSelection q cc b m d V pc height rank need tag boolean z H R G B /\
   (if init then j IN kept else start IN kept UNION ^Heads b pc V) /\
@@ -1059,9 +1074,7 @@ Theorem stack_build_selected_table[local]:
      ^First (\y. y = ^Copy j)) ==>
   ?W R. ^rooted_rows q cc W e (^Rk ann) (^Pc ann) (^Ht ann) (^Nd ann) (^Tg ann) (^Bl ann) R
 Proof
-  rpt gen_tac >>
-  map_every (fn name => CONV_TAC stack_let_head >> qx_gen_tac name >> disch_tac)
-    [`n`,`f`,`kept`,`id`,`ann`,`e`] >>
+  ntac 27 gen_tac >> stack_intro_aliases [`n`,`f`,`kept`,`id`,`ann`,`e`] >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   disch_then (map_every assume_tac o stack_packet 6) >>
   `!v. v IN V ==> need v ==> cc.cc_static` by suspend "static" >>
@@ -1092,9 +1105,11 @@ Resume stack_build_selected_table[copy]:
   qspecl_then [`p`,`q`,`cc`,`b`,`m`,`d`,`V`,`pc`,`height`,`rank`,`need`,`tag`,`boolean`,
       `edge`,`z`,`H`,`R`,`G`,`B`,`id`]
     (stack_apply_aliases [`Abbrev (n = _)`,`Abbrev (f = _)`,
-      `Abbrev (kept = _)`,`Abbrev (ann = _)`] mp_tac) stack_retained_aliases >>
+      `Abbrev (kept = _)`,`Abbrev (ann = _)`] mp_tac)
+    (CONV_RULE (stack_aliases 20 (stack_alias_rule 4 stack_inline_alias))
+       stack_selected_retained) >>
   (impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
-  disch_then ACCEPT_TAC
+  disch_then (ACCEPT_TAC o BETA_RULE)
 QED
 
 Resume stack_build_selected_table[phase]:
@@ -1104,7 +1119,8 @@ Resume stack_build_selected_table[phase]:
   qspecl_then [`q`,`cc`,`b`,`m`,`d`,`V`,`pc`,`height`,`rank`,`need`,`tag`,`boolean`,
       `z`,`H`,`R`,`G`,`B`,`id`]
     (stack_apply_aliases [`Abbrev (n = _)`,`Abbrev (f = _)`,
-      `Abbrev (ann = _)`] mp_tac) stack_phase_aliases >>
+      `Abbrev (ann = _)`] (mp_tac o CONV_RULE (REDEPTH_CONV BETA_CONV)))
+    (CONV_RULE (stack_aliases 18 (stack_alias_rule 3 ALL_CONV)) stack_selected_phase) >>
   (impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
   disch_then ACCEPT_TAC
 QED
@@ -1114,35 +1130,42 @@ Resume stack_build_selected_table[head]:
   `v NOTIN kept` by
     (qpat_assum `v IN _` mp_tac >> qpat_assum `0<m` mp_tac >>
      simp[NoAsms, Abbr `kept`]) >>
-  qpat_assum `let k = LENGTH d in _`
+  qpat_assum `!k. k = LENGTH d ==> _`
     (stack_apply_aliases [`Abbrev (n = _)`,`Abbrev (f = _)`]
-      (drule_then (map_every assume_tac o CONJUNCTS)) o
-     CONV_RULE (stack_alias_rule 2 ALL_CONV)) >>
+      (qspec_then `v` mp_tac) o CONV_RULE (stack_alias_rule 2 ALL_CONV)) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `z v IN kept` by simp[Abbr `kept`] >>
   Cases_on `n=0`
   >- (qpat_x_assum `if n=0 then _ else _` (fn th =>
         qpat_assum `n=0` (fn eq =>
           map_every assume_tac (CONJUNCTS (SIMP_RULE bool_ss [eq] th)))) >>
       `f (b+m)=b+n` by simp[Abbr `f`,asmSpliceTheory.splice_pc_def] >>
-      simp[LET_THM, Abbr `ann`, stack_port_data, pairTheory.EXISTS_PROD] >>
+      `ann (SUC (pair_to_num (z v)),0) =
+        (f (pc (z v)),height (z v),rank (z v),need (z v),^tr f tag (z v),boolean (z v))` by
+        simp[NoAsms, Abbr `ann`, stack_port_data, LET_THM] >>
+      simp[LET_THM] >>
+      simp[NoAsms, pairTheory.EXISTS_PROD] >>
       rpt strip_tac >>
       qpat_assum `!k l i. tag (z v) k = SOME (l,i) ==> _` drule >>
       disch_tac >> goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `if n=0 then _ else _` (fn th =>
     qpat_assum `n<>0` (fn neq =>
-      map_every assume_tac (CONJUNCTS (SIMP_RULE bool_ss [neq,LET_THM] th)))) >>
-  simp[LET_THM, Abbr `ann`, stack_port_data]
+      map_every assume_tac (CONJUNCTS (SIMP_RULE bool_ss
+        [neq, UNWIND_FORALL_THM2] th)))) >>
+  `ann (SUC (pair_to_num v),1) = ^PData b H R G B v 0` by
+    simp[NoAsms, Abbr `ann`, stack_port_data, LET_THM] >>
+  simp[LET_THM]
 QED
 
-fun stack_inline_lets 0 tail = tail
-  | stack_inline_lets n tail = REWR_CONV LET_THM THENC TRY_CONV BETA_CONV THENC
-      stack_inline_lets (n-1) tail;
-
-val stack_table_formals = fst (strip_forall (concl stack_selected_port_table));
+(* Keep the five fields whose names are shared with the caller. *)
+val stack_table_formals = List.take (fst (strip_forall (concl stack_selected_port_table)), 26);
 val stack_table_schema =
   let
     val expose = stack_alias_rule 2 (stack_inline_lets 6
-      (stack_alias_rule 1 (stack_inline_lets 3 (stack_alias_rule 2 ALL_CONV))))
+      (stack_alias_rule 1 (stack_inline_lets 3
+        (stack_alias_rule 1 (stack_inline_lets 1
+          (stack_alias_rule 1 (stack_inline_lets 16 ALL_CONV)))))))
   in
     CONV_RULE expose (SPECL stack_table_formals stack_selected_port_table)
   end;
@@ -1214,32 +1237,38 @@ Resume stack_build_selected_table[table]:
          (f (pc v),height v,rat$rat_of_num (rank v),need v,^tr f tag v,boolean v)
        else (b+PRE (SND x),H v (PRE (SND x),0),rat$rat_of_num (R v (PRE (SND x),0)),F,
          G v (PRE (SND x),0),B v (PRE (SND x),0)))` by
-    (simp[markerTheory.Abbrev_def, FUN_EQ_THM, Abbr `ann`, LET_THM] >>
-     gen_tac >> Cases_on `FST x=0` >> Cases_on `SND x=0` >> simp[]) >>
-  (fn goal =>
+    (qpat_assum `Abbrev (ann = _)` (fn h =>
+       simp[NoAsms, FUN_EQ_THM, LET_THM, markerTheory.Abbrev_def,
+            REWRITE_RULE [markerTheory.Abbrev_def] h]) >>
+     gen_tac >> Cases_on `FST x=0`
+     >- (pop_assum (fn h => simp[NoAsms,h,Abbr `id`])) >>
+     Cases_on `SND x=0` >>
+     pop_assum (fn h => pop_assum (fn j => simp[NoAsms,h,j,combinTheory.C_DEF]))) >>
+  (fn goal => mp_tac (stack_table_instance goal) goal) >>
+  disch_then (fn th => fn goal as (asl,_) =>
     let
-      val beta = CONV_RULE (REDEPTH_CONV BETA_CONV)
-      val project = stack_project_conv (CONJUNCT1 ratTheory.RAT_EQ_NUM_CALCULATE)
-      val norm = CONV_RULE project
-      fun use_lifted pat k th = qpat_assum pat (fn marked =>
-        let
-          val a = beta marked
-          val value = lhs (concl (REWRITE_RULE [markerTheory.Abbrev_def] a))
-          val instance = beta (SPEC value th)
-        in
-          k (MP instance a handle HOL_ERR _ =>
-            raise Fail ("stack table marked equation: " ^
-              Parse.term_to_string (fst (dest_imp (concl instance))) ^
-              " versus " ^ Parse.term_to_string (concl a)))
-        end)
-      val finish = mp_tac o norm
+      val normalize = REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV])
+      fun matches rhs h =
+        let val (l,r) = dest_eq (rand (concl h))
+        in aconv rhs (rhs_of r) end handle HOL_ERR _ => false
+      and rhs_of t = rhs (concl (normalize t)) handle UNCHANGED => t
+      val equations = map ASSUME (List.filter (can (dest_eq o rand)) asl)
+      fun consume 0 th = th
+        | consume n th =
+          let
+            val guard = fst (dest_imp (snd (dest_forall (concl th))))
+            val target = rhs_of (rhs (rand guard))
+            val h = case List.find (matches target) equations of
+                SOME h => h
+              | NONE => raise Fail ("unmatched table guard: " ^ Parse.term_to_string guard)
+            val alias = lhs (rand (concl h))
+          in
+            consume (n-1) (MP (CONV_RULE (LAND_CONV normalize) (SPEC alias th))
+                              (CONV_RULE normalize h))
+          end
     in
-      stack_apply_aliases [`Abbrev (f = _)`,`Abbrev (kept = _)`,`Abbrev (e = _)`]
-        (use_lifted `Abbrev (_ = (b,ih,rat$rat_of_num ir,F,it,ib))`
-          (use_lifted `Abbrev (_ = \x. if FST x = 0 then
-              (_:num#num#rat$rat#bool#(num->(string#num)option)#(num->bool)) else _)`
-            finish))
-        (stack_table_instance goal) goal
+      mp_tac (CONV_RULE (stack_project_conv (CONJUNCT1 ratTheory.RAT_EQ_NUM_CALCULATE))
+              (consume 5 th)) goal
     end) >>
   (impl_tac >-
     (ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -1291,11 +1320,12 @@ Finalise stack_build_selected_table
 Theorem stack_attach_replayed_cut[local]:
   !orig s data req_bound p q cc req b m d V pc height rank need tag boolean edge
     z H R G B ih ir it ib init dest start j u.
-  let n = LENGTH d in let f = splice_pc b m n in
-  let kept = ^Kept b m pc V in
-  let id = (b,ih,ir,F,it,ib) in
-  let ann = ^Data (^CData f pc height rank need tag boolean) (^PData b H R G B) id in
-  let root = if init then ^First else ^Image kept n z start in
+  !n. n = LENGTH d ==>
+  !f. f = splice_pc b m n ==>
+  !kept. kept = ^Kept b m pc V ==>
+  !id. id = (b,ih,ir,F,it,ib) ==>
+  !ann. ann = ^Data (^CData f pc height rank need tag boolean) (^PData b H R G B) id ==>
+  !root. root = (if init then ^First else ^Image kept n z start) ==>
   ^Entry orig s data q /\ req <<= req_bound /\
   FINITE V /\ 0<m /\ ^Layout p q b m n /\ ^Rows p cc V rank pc height need tag boolean edge /\
   ^PortSelection q cc b m d V pc height rank need tag boolean z H R G B /\
@@ -1308,66 +1338,31 @@ Theorem stack_attach_replayed_cut[local]:
   ^Just u (^Tg ann) (^Bl ann) root ==>
   ^Pending orig s data req_bound q
 Proof
-  rpt gen_tac >>
-  map_every (fn name => CONV_TAC stack_let_head >> qx_gen_tac name >> disch_tac)
-    [`n`,`f`,`kept`,`id`,`ann`,`root`] >> BETA_TAC >>
+  ntac 33 gen_tac >>
+  stack_intro_aliases [`n`,`f`,`kept`,`id`,`ann`,`root`] >> BETA_TAC >>
   disch_then (map_every assume_tac o stack_packet 14) >>
   qspecl_then [`p`,`q`,`cc`,`req`,`b`,`m`,`d`,`V`,`pc`,`height`,`rank`,`need`,`tag`,
     `boolean`,`edge`,`z`,`H`,`R`,`G`,`B`,`ih`,`ir`,`it`,`ib`,`init`,`dest`,`start`]
     (stack_apply_aliases [`Abbrev (n = _)`,`Abbrev (f = _)`,`Abbrev (kept = _)`,
       `Abbrev (id = _)`,`Abbrev (ann = _)`,`Abbrev (root = _)`]
-      (mp_tac o BETA_RULE))
-    (CONV_RULE (STRIP_QUANT_CONV (stack_alias_rule 6 ALL_CONV)) stack_build_selected_table) >>
+      (mp_tac o BETA_RULE) o CONV_RULE (stack_alias_rule 6 ALL_CONV))
+    stack_build_selected_table >>
   (impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
   disch_then (X_CHOOSE_THEN ``live:(num#num)->bool``
     (X_CHOOSE_THEN ``live_edge:(num#num)->(num#num)->bool``
-      (map_every assume_tac o stack_packet 4))) >>
+      (map_every (assume_tac o BETA_RULE) o stack_packet 4))) >>
   qspecl_then [`orig`,`s`,`data`,`req_bound`,`q`,`j`,`u`,`cc`,`req`,`live`,`root`,
       `^Rk ann`,`^Pc ann`,`^Ht ann`,`^Nd ann`,`^Tg ann`,`^Bl ann`,`live_edge`]
     (mp_tac o CONV_RULE (REDEPTH_CONV BETA_CONV)) stack_selected_table_restart >>
-  (impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
+  (impl_tac >-
+    (rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >> simp[])) >>
   disch_then ACCEPT_TAC
-QED
-
-Theorem stack_attach_replayed_cut_eqs[local]:
-  !orig s data req_bound p q cc req b m d V pc height rank need tag boolean edge
-    z H R G B ih ir it ib init dest start j u
-    n f kept id ann root.
-  n = LENGTH d /\ f = splice_pc b m n /\ kept = ^Kept b m pc V /\
-  id = (b,ih,ir,F,it,ib) /\
-  ann = ^Data (^CData f pc height rank need tag boolean) (^PData b H R G B) id /\
-  root = (if init then ^First else ^Image kept n z start) /\
-  ^Entry orig s data q /\ req <<= req_bound /\
-  FINITE V /\ 0<m /\ ^Layout p q b m n /\ ^Rows p cc V rank pc height need tag boolean edge /\
-  ^PortSelection q cc b m d V pc height rank need tag boolean z H R G B /\
-  (if init then dest IN kept else start IN kept UNION ^Heads b pc V) /\
-  (init ==> ^LocalRow q cc (^Pc ann) (^Ht ann) (^Rk ann) (^Nd ann) (^Tg ann) (^Bl ann)
-     ^First (\y. y = ^Copy dest)) /\
-  sym_steps q (asm_data_env orig (assemble orig ++ data)) j (sym_init s) = SymOK u /\
-  u.sym_base.as_pc = ^Pc ann root /\ LENGTH u.sym_stack = ^Ht ann root /\
-  u.sym_base.as_call_ctx = cc /\ u.sym_base.as_requests = req /\
-  ^Just u (^Tg ann) (^Bl ann) root ==>
-  ^Pending orig s data req_bound q
-Proof
-  rpt gen_tac >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>
-  disch_then (map_every assume_tac o stack_packet 6) >>
-  qspecl_then [`orig`,`s`,`data`,`req_bound`,`p`,`q`,`cc`,`req`,`b`,`m`,`d`,`V`,
-    `pc`,`height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,`H`,`R`,`G`,`B`,
-    `ih`,`ir`,`it`,`ib`,`init`,`dest`,`start`,`j`,`u`]
-    mp_tac (CONV_RULE (STRIP_QUANT_CONV (stack_alias_rule 6 ALL_CONV))
-      stack_attach_replayed_cut) >>
-  map_every (fn name =>
-    disch_then (qspec_then name mp_tac) >>
-    (impl_tac >- (REWRITE_TAC [markerTheory.Abbrev_def] >> first_assum ACCEPT_TAC)))
-    [`n`,`f`,`kept`,`id`,`ann`,`root`] >>
-  disch_then (match_mp_tac o BETA_RULE) >>
-  first_assum ACCEPT_TAC
 QED
 
 Theorem stack_attach_replayed_image[local]:
   !orig s data req_bound p q cc req b m d V pc height rank need tag boolean edge
     z H R G B v j u.
-  let f = splice_pc b m (LENGTH d) in
+  !f. f = splice_pc b m (LENGTH d) ==>
   ^Entry orig s data q /\ req <<= req_bound /\
   FINITE V /\ 0<m /\ ^Layout p q b m (LENGTH d) /\
   ^Rows p cc V rank pc height need tag boolean edge /\
@@ -1379,16 +1374,16 @@ Theorem stack_attach_replayed_image[local]:
   ^Just u tag boolean v ==>
   ^Pending orig s data req_bound q
 Proof
-  rpt gen_tac >> CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >> BETA_TAC >>
+  ntac 27 gen_tac >> CONV_TAC stack_inline_alias >> BETA_TAC >>
   disch_then (fn th =>
     let val ps = stack_packet 13 th
-        val layout = stack_packet 8 (CONV_RULE (REWR_CONV LET_THM THENC BETA_CONV) (List.nth (ps,4)))
+        val layout = stack_packet 8 (CONV_RULE stack_inline_alias (List.nth (ps,4)))
     in map_every assume_tac
       (List.nth (layout,6) :: List.nth (layout,7) :: CONJUNCT1 (List.nth (ps,5)) :: ps) end) >>
   qspecl_then [`q`,`cc`,`b`,`m`,`d`,`V`,`pc`,`height`,`rank`,`need`,`tag`,`boolean`,
     `z`,`H`,`R`,`G`,`B`,`(b,0:num,0:num,F,(\k:num. NONE:(string#num)option),\k:num. F)`,`v`]
-    (mp_tac o CONV_RULE (REDEPTH_CONV BETA_CONV))
-    (CONV_RULE (STRIP_QUANT_CONV (stack_inline_lets 5 ALL_CONV)) stack_image_fields) >>
+    (mp_tac o CONV_RULE (stack_inline_lets 5 ALL_CONV THENC REDEPTH_CONV BETA_CONV))
+    stack_image_fields >>
   (impl_tac >-
     (ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
      conj_tac >- (gen_tac >> disch_tac >>
@@ -1399,8 +1394,9 @@ Proof
   qspecl_then [`orig`,`s`,`data`,`req_bound`,`p`,`q`,`cc`,`req`,`b`,`m`,`d`,`V`,`pc`,
     `height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,`H`,`R`,`G`,`B`,
     `0`,`0`,`\k:num. NONE:(string#num)option`,`\k:num. F`,`F`,`v`,`v`,`j`,`u`]
-    (mp_tac o PURE_REWRITE_RULE [COND_CLAUSES, F_IMP] o CONV_RULE (REDEPTH_CONV BETA_CONV))
-    (CONV_RULE (STRIP_QUANT_CONV (stack_inline_lets 6 ALL_CONV)) stack_attach_replayed_cut) >>
+    (mp_tac o PURE_REWRITE_RULE [COND_CLAUSES, F_IMP] o
+      CONV_RULE (stack_inline_lets 6 ALL_CONV THENC REDEPTH_CONV BETA_CONV))
+    stack_attach_replayed_cut >>
   (impl_tac >-
     (ntac 8 (conj_tac >- first_assum ACCEPT_TAC) >>
      conj_tac >- rewrite_tac[] >>
@@ -1423,8 +1419,9 @@ QED
 Theorem stack_replayed_nonstrict[local]:
   !pre w d tail orig s data req_bound p q cc req V pc height rank need tag boolean edge
    z H R G B e k u.
-   let b = LENGTH pre; m = LENGTH w in
-   let f = splice_pc b m (LENGTH d) in
+   !b. b = LENGTH pre ==>
+  !m. m = LENGTH w ==>
+   !f. f = splice_pc b m (LENGTH d) ==>
    ^window w d /\ p=pre++w++tail /\ q=pre++d++tail /\
    ^Entry orig s data p /\ ^Entry orig s data q /\ req <<= req_bound /\
    FINITE V /\ ^Layout p q b m (LENGTH d) /\
@@ -1436,9 +1433,7 @@ Theorem stack_replayed_nonstrict[local]:
    u.sym_base.as_call_ctx=cc /\ u.sym_base.as_requests=req /\ ^Just u tag boolean e ==>
    ^Pending orig s data req_bound q
 Proof
-  rpt gen_tac >>
-  map_every (fn name => CONV_TAC stack_let_head >> qx_gen_tac name >> disch_tac)
-    [`b`,`m`,`f`] >> BETA_TAC >>
+  ntac 28 gen_tac >> stack_intro_aliases [`b`,`m`,`f`] >> BETA_TAC >>
   disch_then (fn th =>
     let val ps = stack_packet 17 th in
       map_every assume_tac (CONJUNCTS (List.nth (ps,3)) @ ps)
@@ -1485,7 +1480,7 @@ Proof
     `height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,`H`,`R`,`G`,`B`,`e`,`j`,
     `sym_with_pc (f (pc e)) u`]
     (stack_apply_aliases [`Abbrev (f = _)`] (mp_tac o BETA_RULE))
-    (CONV_RULE (STRIP_QUANT_CONV stack_let_head) stack_attach_replayed_image) >>
+    (CONV_RULE (stack_aliases 27 stack_alias_head) stack_attach_replayed_image) >>
   (impl_tac >-
     (ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
      conj_tac >- first_assum ACCEPT_TAC >>
@@ -1500,8 +1495,9 @@ QED
 Theorem stack_replayed_shuffle[local]:
   !pre w d tail orig s data req_bound p q cc req V pc height rank need tag boolean edge
     z H R G B e k t u.
-  let b = LENGTH pre; m = LENGTH w in
-  let f = splice_pc b m (LENGTH d) in
+  !b. b = LENGTH pre ==>
+  !m. m = LENGTH w ==>
+  !f. f = splice_pc b m (LENGTH d) ==>
   ^window w d /\ ~^comm w d /\ p=pre++w++tail /\ q=pre++d++tail /\
   ^Entry orig s data p /\ ^Entry orig s data q /\ req <<= req_bound /\
   FINITE V /\ ^Layout p q b m (LENGTH d) /\
@@ -1514,9 +1510,7 @@ Theorem stack_replayed_shuffle[local]:
   ^Shape p cc req pc height need tag boolean e t /\ ^Just u tag boolean e ==>
   ^Pending orig s data req_bound q
 Proof
-  rpt gen_tac >>
-  map_every (fn name => CONV_TAC stack_let_head >> qx_gen_tac name >> disch_tac)
-    [`b`,`m`,`f`] >> BETA_TAC >>
+  ntac 29 gen_tac >> stack_intro_aliases [`b`,`m`,`f`] >> BETA_TAC >>
   disch_then (fn th =>
     let val ps = stack_packet 20 th
         val [slots,flows,dispatch] = CONJUNCTS (List.nth (ps,9))
@@ -1571,7 +1565,7 @@ Proof
   qspecl_then [`orig`,`s`,`data`,`req_bound`,`p`,`q`,`cc`,`req`,`b`,`m`,`d`,`V`,
     `pc`,`height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,`H`,`R`,`G`,`B`,`exit`,`j`,`out`]
     (stack_apply_aliases [`Abbrev (f = _)`] (mp_tac o BETA_RULE))
-    (CONV_RULE (STRIP_QUANT_CONV stack_let_head) stack_attach_replayed_image) >>
+    (CONV_RULE (stack_aliases 27 stack_alias_head) stack_attach_replayed_image) >>
   (impl_tac >-
     (rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
      TRY (qpat_assum `b < pc e` mp_tac >> qpat_assum `pc e < b+m` mp_tac >> decide_tac) >>
@@ -1591,7 +1585,7 @@ QED
 Theorem stack_replayed_comm[local]:
   !pre a tail orig s data req_bound p q cc req V pc height rank need tag boolean edge
     z H R G B e k u.
-  let b = LENGTH pre in
+  !b. b = LENGTH pre ==>
   ^Entry orig s data p /\ ^Entry orig s data q /\ req <<= req_bound /\
   asm_commutative_op a /\ p=pre++[AsmOp "SWAP1";a]++tail /\ q=pre++[a]++tail /\
   FINITE V /\ ^Layout p q b 2 1 /\
@@ -1604,7 +1598,7 @@ Theorem stack_replayed_comm[local]:
   u.sym_base.as_call_ctx=cc /\ u.sym_base.as_requests=req /\ ^Just u tag boolean e ==>
   ^Pending orig s data req_bound q
 Proof
-  rpt gen_tac >> CONV_TAC stack_let_head >> qx_gen_tac `b` >> disch_tac >> BETA_TAC >>
+  ntac 27 gen_tac >> stack_intro_aliases [`b`] >> BETA_TAC >>
   disch_then (fn th =>
     let val ps = stack_packet 18 th
     in map_every assume_tac (List.concat (map (CONJUNCTS o (fn i => List.nth (ps,i)))
@@ -1615,8 +1609,9 @@ Proof
     qspecl_then [`pre`,`a`,`tail`,`asm_data_env orig (assemble orig ++ data)`,`s`,`k`,`u`,
       `cc`,`req`,`V`,`rank`,`pc`,`height`,`need`,`tag`,`boolean`,`edge`,`e`]
       (mp_tac o PURE_REWRITE_RULE
-        (map (GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) [hp,hq,hb]))
-      (CONV_RULE (STRIP_QUANT_CONV (stack_inline_lets 10 ALL_CONV)) stack_comm_strict_endpoint_row)))) >>
+        (map (GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) [hp,hq,hb]) o
+        CONV_RULE (stack_inline_lets 10 ALL_CONV))
+      stack_comm_strict_endpoint_row))) >>
   (impl_tac >- suspend "endpoint_input") >>
   suspend "attach"
 QED
@@ -1647,9 +1642,9 @@ Resume stack_replayed_comm[attach]:
   qabbrev_tac `ib = \k. 2<=k /\ boolean e k` >>
   qabbrev_tac `ann = ^Data (^CData (splice_pc b 2 1) pc height rank need tag boolean)
       (^PData b H R G B) (b,height e,rank e,F,it,ib)` >>
-  `ann ^First = (b,height e,rank e,F,it,ib)` by simp[Abbr `ann`,stack_port_data] >>
+  `ann ^First = (b,height e,rank e,F,it,ib)` by simp[NoAsms, Abbr `ann`,stack_port_data] >>
   `ann (^Copy exit) = ^CData (splice_pc b 2 1) pc height rank need tag boolean exit`
-    by simp[Abbr `ann`,stack_port_data] >>
+    by simp[NoAsms, Abbr `ann`,stack_port_data] >>
   Q.SUBGOAL_THEN
     `^LocalRow q cc (^Pc ann) (^Ht ann) (^Rk ann) (^Nd ann) (^Tg ann) (^Bl ann)
       ^First (\y. y = ^Copy exit)` (mk_asm "stack-initial-row") >-
@@ -1670,7 +1665,17 @@ Resume stack_replayed_comm[initial_row]:
         metis_tac[]) >>
      ntac 3 (conj_tac >- (first_assum ACCEPT_TAC ORELSE (sym_tac >> first_assum ACCEPT_TAC))) >>
      conj_tac >-
-       (qexists `name` >> simp[Abbr `it`] >> qexists `1` >> simp[]) >>
+       (qexists `name` >>
+        qpat_assum `EL b q = AsmOp name` (fn hins =>
+        qpat_assum `ALOOKUP dup_table name = NONE` (fn hdup =>
+        qpat_assum `ALOOKUP swap_table name = NONE` (fn hswap =>
+          simp[NoAsms,hins,hdup,hswap]))) >>
+        qexists `1` >>
+        qpat_assum `asm_op_arity name = 2` (fn ha =>
+        qpat_assum `height exit = height e - 1` (fn hh =>
+        qpat_assum `static_abort_straight name 1` (fn hn =>
+        qpat_assum `2 <= height e` (fn h2 =>
+          simp[NoAsms, Abbr `it`,ha,hh,hn,h2] >> decide_tac))))) >>
      SIMP_TAC bool_ss [LET_THM,FST,Abbr `it`,Abbr `ib`,arithmeticTheory.ONE,numTheory.NOT_SUC] >>
      asm "comm-row-flow" (ACCEPT_TAC o SIMP_RULE bool_ss
        [LET_THM,arithmeticTheory.ONE,numTheory.NOT_SUC]))) >>
@@ -1681,20 +1686,24 @@ QED
 Resume stack_replayed_comm[restart]:
   qspecl_then [`orig`,`s`,`data`,`req_bound`,`p`,`q`,`cc`,`req`,`b`,`2`,`[a]`,`V`,`pc`,
     `height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,`H`,`R`,`G`,`B`,
-    `height e`,`rank e`,`it`,`ib`,`T`,`exit`,`e`,`j`,`out`,`1`,`splice_pc b 2 1`,
-    `^Kept b 2 pc V`,`(b,height e,rank e,F,it,ib)`,`ann`,`^First`]
+    `height e`,`rank e`,`it`,`ib`,`T`,`exit`,`e`,`j`,`out`]
     (mp_tac o CONV_RULE (REDEPTH_CONV BETA_CONV) o
       PURE_REWRITE_RULE [LENGTH,GSYM arithmeticTheory.ONE,COND_CLAUSES,IMP_CLAUSES])
-    stack_attach_replayed_cut_eqs >>
+    stack_attach_replayed_cut >>
+  map_every (fn (term,solve) =>
+    disch_then (qspec_then term mp_tac) >> (impl_tac >- solve))
+    [(`1`, REFL_TAC), (`splice_pc b 2 1`, REFL_TAC),
+     (`^Kept b 2 pc V`, BETA_TAC >> REFL_TAC),
+     (`(b,height e,rank e,F,it,ib)`, REFL_TAC),
+     (`ann`, SIMP_TAC bool_ss [Abbr `ann`]), (`^First`, REFL_TAC)] >>
   (impl_tac >-
-    (ntac 4 (conj_tac >- REFL_TAC) >>
-     conj_tac >- simp[Abbr `ann`] >>
-     conj_tac >- REFL_TAC >>
-     ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+    (ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
      conj_tac >- simp[NoAsms] >>
      ntac 3 (conj_tac >- (first_assum ACCEPT_TAC ORELSE first_assum
        (ACCEPT_TAC o PURE_REWRITE_RULE [LENGTH,GSYM arithmeticTheory.ONE,COND_CLAUSES,IMP_CLAUSES]))) >>
-     conj_tac >- (simp[] >> decide_tac) >>
+     conj_tac >-
+       (qpat_assum `exit IN V` (fn hV =>
+        qpat_assum `pc exit = b+2` (fn hpc => simp[NoAsms,hV,hpc]))) >>
      conj_tac >-
        asm "stack-initial-row" (ACCEPT_TAC o CONV_RULE (REDEPTH_CONV BETA_CONV)) >>
      conj_tac >- first_assum ACCEPT_TAC >>
@@ -1711,14 +1720,15 @@ Finalise stack_replayed_comm[local]
    replay endpoint. Terminal inputs use the whole-pass refinement separately. *)
 Theorem stack_pending_contextual[local]:
   !orig s data req_bound pre w d tail.
-  let p = pre++w++tail in let q = pre++d++tail in
-  let b = LENGTH pre in let m = LENGTH w in
+  !p. p = pre++w++tail ==>
+  !q. q = pre++d++tail ==>
+  !b. b = LENGTH pre ==>
+  !m. m = LENGTH w ==>
   ^window w d /\ ^Entry orig s data p /\ ^Pending orig s data req_bound p ==>
   ^Entry orig s data q /\ ^Pending orig s data req_bound q
 Proof
-  rpt gen_tac >>
-  map_every (fn name => CONV_TAC stack_let_head >> qx_gen_tac name >> disch_tac)
-    [`p`,`q`,`b`,`m`] >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  ntac 8 gen_tac >> stack_intro_aliases [`p`,`q`,`b`,`m`] >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   disch_then (fn th =>
     let val [win,entry,pending] = stack_packet 2 th
     in assume_tac win >> assume_tac entry >>
@@ -1734,7 +1744,7 @@ Proof
   Q.SUBGOAL_THEN `^Layout p q b m (LENGTH d)`
     (fn th => let val h = CONV_RULE (REDEPTH_CONV BETA_CONV) th
                   val parts = stack_packet 4
-                    (CONV_RULE (REWR_CONV LET_THM THENC TRY_CONV BETA_CONV) h)
+                    (CONV_RULE stack_inline_alias h)
               in map_every assume_tac (h :: List.take (parts,4)) end) >- suspend "layout" >>
   Q.SUBGOAL_THEN `^Entry orig s data q` (assume_tac o BETA_RULE) >- suspend "entry" >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -1750,7 +1760,10 @@ Resume stack_pending_contextual[layout]:
     (qpat_assum `Abbrev (p = _)` (fn h => PURE_REWRITE_TAC
        [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] h)]) >>
      conj_tac >> first_assum ACCEPT_TAC)) >>
-  SIMP_TAC bool_ss [Abbr `p`,Abbr `q`,Abbr `b`,Abbr `m`]
+  BETA_TAC >> CONV_TAC (RAND_CONV stack_inline_alias) >>
+  SIMP_TAC bool_ss [Abbr `p`,Abbr `q`,Abbr `b`,Abbr `m`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume stack_pending_contextual[entry]:
@@ -1762,14 +1775,14 @@ QED
 
 Resume stack_pending_contextual[ports]:
   qspecl_then [`pre`,`w`,`d`,`tail`,`p`,`q`,`cc`,`req`,`V`,`rank`,`pc`,`height`,`need`,`tag`,`boolean`,`edge`]
-    (mp_tac o SIMP_RULE bool_ss [LET_THM]) stack_select_ports >>
+    (mp_tac o CONV_RULE (stack_inline_lets 4 ALL_CONV)) stack_select_ports >>
   map_every (fn pat => qpat_assum pat
       (PURE_REWRITE_TAC o single o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]))
     [`Abbrev (b = _)`,`Abbrev (m = _)`] >>
   (impl_tac >-
     (ntac 6 (conj_tac >- (first_assum ACCEPT_TAC ORELSE first_assum
        (ACCEPT_TAC o SIMP_RULE bool_ss [LET_THM,markerTheory.Abbrev_def]))) >>
-     asm "stack-source-open" (ACCEPT_TAC o SIMP_RULE bool_ss [LET_THM]))) >>
+     asm "stack-source-open" ACCEPT_TAC)) >>
   disch_then (foldr (fn (name,k) => qx_choose_then name k) assume_tac [`z`,`H`,`R`,`G`,`B`]) >>
   qexistsl [`z`,`H`,`R`,`G`,`B`] >>
   SIMP_TAC bool_ss [LET_THM,IN_GSPEC_IFF] >>
@@ -1781,12 +1794,12 @@ Resume stack_pending_contextual[ports]:
   disch_then (map_every assume_tac o stack_packet 3) >>
   conj_tac >- simp[] >>
   ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
-  first_assum ACCEPT_TAC
+  first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [LET_THM,IN_GSPEC_IFF])
 QED
 
 Resume stack_pending_contextual[restart]:
   asm "stack-source-open" (assume_tac o CONJUNCT1 o
-    CONV_RULE (REWR_CONV LET_THM THENC BETA_CONV)) >>
+    CONV_RULE stack_inline_alias) >>
   `u.sym_base.as_pc = pc e /\ LENGTH u.sym_stack = height e /\
    u.sym_base.as_call_ctx = cc /\ u.sym_base.as_requests = req` by
     (map_every (fn pat => qpat_assum pat (PURE_REWRITE_TAC o single o GSYM))
@@ -1805,8 +1818,8 @@ QED
 Resume stack_pending_contextual[outside]:
   qspecl_then [`pre`,`w`,`d`,`tail`,`orig`,`s`,`data`,`req_bound`,`p`,`q`,
     `cc`,`req`,`V`,`pc`,`height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,
-    `H`,`R`,`G`,`B`,`e`,`k`,`u`] (mp_tac o BETA_RULE)
-    (CONV_RULE (STRIP_QUANT_CONV (stack_inline_lets 3 ALL_CONV)) stack_replayed_nonstrict) >>
+    `H`,`R`,`G`,`B`,`e`,`k`,`u`]
+    (mp_tac o BETA_RULE o CONV_RULE (stack_inline_lets 3 ALL_CONV)) stack_replayed_nonstrict >>
   map_every (fn pat => qpat_assum pat
       (PURE_REWRITE_TAC o single o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]))
     [`Abbrev (b = _)`,`Abbrev (m = _)`] >>
@@ -1818,8 +1831,8 @@ QED
 Resume stack_pending_contextual[shuffle]:
   qspecl_then [`pre`,`w`,`d`,`tail`,`orig`,`s`,`data`,`req_bound`,`p`,`q`,
     `cc`,`req`,`V`,`pc`,`height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,
-    `H`,`R`,`G`,`B`,`e`,`k`,`t`,`u`] (mp_tac o BETA_RULE)
-    (CONV_RULE (STRIP_QUANT_CONV (stack_inline_lets 3 ALL_CONV)) stack_replayed_shuffle) >>
+    `H`,`R`,`G`,`B`,`e`,`k`,`t`,`u`]
+    (mp_tac o BETA_RULE o CONV_RULE (stack_inline_lets 3 ALL_CONV)) stack_replayed_shuffle >>
   map_every (fn pat => qpat_assum pat
       (PURE_REWRITE_TAC o single o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]))
     [`Abbrev (b = _)`,`Abbrev (m = _)`] >>
@@ -1831,18 +1844,22 @@ QED
 
 Resume stack_pending_contextual[comm]:
   qpat_assum `?a. asm_commutative_op a /\ w=[AsmOp "SWAP1";a] /\ d=[a]` (qx_choose_then `a` (map_every assume_tac o CONJUNCTS) o BETA_RULE) >>
-  `m = 2` by simp[Abbr `m`] >>
+  `m = 2` by
+    (qpat_assum `w = [AsmOp "SWAP1"; a]` (fn hw => simp[NoAsms, Abbr `m`, hw])) >>
   `pc e = b+1` by
-    (qpat_assum `b<pc e /\ pc e<b+m` mp_tac >> simp[] >> decide_tac) >>
+    (qpat_assum `m = 2` (fn hm =>
+       qpat_assum `b<pc e /\ pc e<b+m` (mp_tac o REWRITE_RULE [hm])) >> decide_tac) >>
   qspecl_then [`pre`,`a`,`tail`,`orig`,`s`,`data`,`req_bound`,`p`,`q`,
     `cc`,`req`,`V`,`pc`,`height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,
-    `H`,`R`,`G`,`B`,`e`,`k`,`u`] (mp_tac o BETA_RULE)
-    (CONV_RULE (STRIP_QUANT_CONV (stack_inline_lets 1 ALL_CONV)) stack_replayed_comm) >>
+    `H`,`R`,`G`,`B`,`e`,`k`,`u`]
+    (mp_tac o BETA_RULE o CONV_RULE (stack_inline_lets 1 ALL_CONV)) stack_replayed_comm >>
   qpat_assum `Abbrev (b = _)` (PURE_REWRITE_TAC o single o GSYM o
     REWRITE_RULE [markerTheory.Abbrev_def]) >>
   (impl_tac >-
     (ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
-     ntac 2 (conj_tac >- simp[Abbr `p`,Abbr `q`]) >>
+     ntac 2 (conj_tac >-
+       (qpat_assum `w = [AsmOp "SWAP1"; a]` (fn hw =>
+          qpat_assum `d = [a]` (fn hd => simp[NoAsms,Abbr `p`,Abbr `q`,hw,hd])))) >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- (qpat_assum `m = 2` (fn hm =>
        qpat_assum `d = [a]` (fn hd => first_assum
@@ -1874,9 +1891,8 @@ Proof
        fun close_window w d prove_window =
          qspecl_then [`orig`,`s`,`data`,`req_bound`,`pre`,w,d,`tail`]
            (mp_tac o PURE_REWRITE_RULE [GSYM APPEND_ASSOC,APPEND,APPEND_NIL] o
-              CONV_RULE (REDEPTH_CONV BETA_CONV))
-           (CONV_RULE (STRIP_QUANT_CONV (stack_inline_lets 4 ALL_CONV))
-             stack_pending_contextual) >>
+              CONV_RULE (REDEPTH_CONV BETA_CONV) o
+              CONV_RULE (stack_inline_lets 4 ALL_CONV)) stack_pending_contextual >>
          (impl_tac >-
            (conj_tac >- prove_window >>
             first_assum ACCEPT_TAC)) >>
@@ -1911,202 +1927,31 @@ QED
 
 Theorem stack_peephole_abort_certificate:
   !orig s data req_bound.
-  let Shape = \p cc req pc height need tag boolean i (t:asm_state).
-    t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
-    t.as_call_ctx = cc /\ t.as_requests = req /\
-    (need i ==> t.as_call_ctx.cc_static) /\
-    (!k l origin. tag i k = SOME(l,origin) ==>
-       k < height i /\ origin < LENGTH p /\
-       (EL origin p = AsmPushLabel l \/
-        (?d. EL origin p = AsmPushOfst l d) \/ EL origin p = AsmDataLabel l) /\
-       ?off dest.
-         FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-         off < dimword(:256) /\
-         FLOOKUP (build_offset_to_pc p) off = SOME dest /\
-         EL k t.as_stack = (n2w off:bytes32)) /\
-    (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-  in
-  let target = \p pc tag (x:num#num) (y:num#num).
-    ?l origin off. tag x 0 = SOME(l,origin) /\
-      FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-  in
-  let Flow = \p pc height tag boolean (x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit =
-      \(src:num -> num option)
-        (fresh:num -> (string#num)option) (bnew:num -> bool).
-        (!k l origin. tag y k = SOME(l,origin) ==>
-           k < hj /\ (fresh k = SOME(l,origin) \/
-             ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
-        (!k. boolean y k ==> k < hj /\
-           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-    in
-    case ins of
-      AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
-    | AsmPush bs => hj = hi+1 /\
-        inherit (\k. if k=0 then NONE else SOME(k-1)) (\k. NONE)
-          (\k. k=0 /\ !t u.
-            asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
-              (AsmPush bs) t = AsmOK u ==>
-            (EL 0 u.as_stack = 0w \/ EL 0 u.as_stack = 1w))
-    | AsmPushLabel l => hj = hi+1 /\
-        inherit (\k. if k=0 then NONE else SOME(k-1))
-          (\k. if k=0 then SOME(l,pc x) else NONE) (\k. F)
-    | AsmPushOfst l d => hj = hi+1 /\
-        inherit (\k. if k=0 then NONE else SOME(k-1))
-          (\k. if k=0 /\ d=0 then SOME(l,pc x) else NONE) (\k. F)
-    | AsmOp name =>
-        (case ALOOKUP dup_table name of
-           SOME n => n < hi /\ hj = hi+1 /\
-             inherit (\k. SOME(if k=0 then n else k-1)) (\k. NONE) (\k. F)
-         | NONE => case ALOOKUP swap_table name of
-             SOME n => 0 < n /\ n < hi /\ hj = hi /\
-               inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
-                 (\k. NONE) (\k. F)
-           | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
-               a <= hi /\ hj = m+(hi-a) /\
-               ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
-               inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
-                 (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
-                   !t u. LENGTH t.as_stack=hi /\
-                     asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
-                       ins t=AsmOK u ==>
-                     (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F
-  in
-  let Rows = \p cc V rank pc height need tag boolean edge.
-    let lo = SND (compute_label_offsets p) in
-    let otp = build_offset_to_pc p in
-    (!x. x IN V ==>
-      (need x ==> cc.cc_static) /\
-      (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
-      (!k l origin. tag x k = SOME(l,origin) ==>
-         k < height x /\ origin < LENGTH p /\
-         (EL origin p = AsmPushLabel l \/ EL origin p = AsmPushOfst l 0) /\
-         ?off dest. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
-                    FLOOKUP otp off = SOME dest)) /\
-    (!x y. edge x y ==> x IN V /\ y IN V /\ rank y < rank x /\ Flow p pc height tag boolean x y) /\
-    (!x. x IN V ==>
-      pc x < LENGTH p /\
-      let h = height x in
-      let fall = \y. pc y = pc x+1 in
-      let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-      let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-      let next = \n. arm fall n /\ legal fall n in
-      let untagged = \a. !k. k<a ==> tag x k=NONE in
-      let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
-      case EL (pc x) p of
-        AsmLabel l => next h
-      | AsmPush bs => next (h+1)
-      | AsmPushLabel l => IS_SOME (FLOOKUP lo l) /\ next (h+1)
-      | AsmPushOfst l d => IS_SOME (FLOOKUP lo l) /\ next (h+1)
-      | AsmOp name =>
-          if name="INVALID" then stop 0
-          else if name="REVERT" then stop 2
-          else if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
-               then cc.cc_static /\ stop (asm_op_arity name)
-          else
-            (case ALOOKUP dup_table name of
-               SOME n => n<h /\ next (h+1)
-             | NONE => case ALOOKUP swap_table name of
-                 SOME n => 0<n /\ n<h /\ next h
-               | NONE =>
-                   if name="JUMP" then
-                      1<=h /\ arm (target p pc tag x) (h-1) /\ legal (target p pc tag x) (h-1)
-                   else if name="JUMPI" then
-                      2<=h /\ tag x 1=NONE /\ arm fall (h-2) /\ arm (target p pc tag x) (h-2) /\
-                      legal (\y. fall y \/ target p pc tag x y) (h-2)
-                   else
-                      ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
-                          untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-      | _ => F)
-  in
-  let Open = \p cc req (V:(num#num)->bool) X rank pc height need
-    (tag:(num#num)->num->(string#num)option)
-    (boolean:(num#num)->num->bool) edge.
-    let S = Shape p cc req pc height need tag boolean in
-    FINITE V /\ X SUBSET V /\
-    (!x. x IN V ==> ?t. S x t) /\
-    (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
-    (!x y. edge x y ==>
-       x IN V DIFF X /\ y IN V /\ rank y < rank x /\
-       Flow p pc height tag boolean x y /\
-       (if EL (pc x) p = AsmOp "JUMP" then target p pc tag x y
-        else if EL (pc x) p = AsmOp "JUMPI" then pc y = pc x+1 \/ target p pc tag x y
-        else pc y = pc x+1)) /\
-    (!x t. x IN V DIFF X /\ S x t ==>
-       (?u. (asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-                    p 1 t = AsmRevert u \/
-              asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-                    p 1 t = AsmFault u) /\ u.as_requests=req) \/
-       (?y u. edge x y /\
-          asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-            p 1 t = AsmOK u /\ S y u))
-  in
-  let Reach = \(edge:(num#num)->(num#num)->bool) e x.
-    ?n (path:num->num#num).
-      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))
-  in
-  let bytes = \p. assemble p ++ data in
-  let env0 = asm_data_env orig (bytes orig) in
-  let M_R = \p.
-    let envp = asm_data_env p (bytes p) in
-    let start = s with as_code := bytes p in
-    let run = asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p in
-    s.as_pc = 0 /\ s.as_code = bytes orig /\
-    asm_static_wf orig /\ asm_static_wf p /\
-    FILTER is_data_inst p = FILTER is_data_inst orig /\
-    ((?n out.
-        (run n start = AsmRevert out \/ run n start = AsmFault out) /\
-        sym_terminal (sym_steps p env0 n (sym_init s)) /\
-        out.as_requests <<= req_bound) \/
-     (?j t u cc req (V:(num#num)->bool) e (rank:(num#num)->num)
-         pc height need tag boolean edge.
-        run j start = AsmOK t /\
-        sym_steps p env0 j (sym_init s) = SymOK u /\
-        asm_sym_rel p envp t u /\
-        t.as_pc = u.sym_base.as_pc /\ LENGTH t.as_stack = LENGTH u.sym_stack /\
-        t.as_call_ctx = u.sym_base.as_call_ctx /\ t.as_requests = u.sym_base.as_requests /\
-        t.as_call_ctx = cc /\ t.as_requests = req /\ req <<= req_bound /\
-        Rows p cc V rank pc height need tag boolean edge /\
-        Open p cc req V {} rank pc height need tag boolean edge /\
-        e IN V /\ (!x. x IN V ==> Reach edge e x) /\
-        Shape p cc req pc height need tag boolean e t /\
-        (!k l origin. tag e k = SOME(l,origin) ==>
-           k < LENGTH u.sym_stack /\ EL k u.sym_stack = Lab l 0) /\
-        (!k. boolean e k ==>
-           k < LENGTH u.sym_stack /\ (EL k u.sym_stack = Val 0w \/ EL k u.sym_stack = Val 1w))))
-  in
+  !M_R. M_R = (\p. ^Entry orig s data p /\
+                    (^Terminal orig s data req_bound p \/
+                     ^Pending orig s data req_bound p)) ==>
   !p q ch. M_R p /\ stack_peephole_opts p = SOME(q,ch) ==> M_R q
 Proof
   map_every qx_gen_tac [`orig`,`s`,`data`,`req_bound`] >>
-  CONV_TAC (stack_inline_lets 9 ALL_CONV) >>
-  rpt gen_tac >>
-  CONV_TAC (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV])) >>
+  CONV_TAC stack_inline_alias >>
+  rpt gen_tac >> BETA_TAC >>
   disch_then (fn th =>
-    let val [pc,code,orig_wf,p_wf,filter,cases] = stack_packet 5 (CONJUNCT1 th)
-    in map_every assume_tac [pc,code,orig_wf,p_wf,filter,CONJUNCT2 th] >>
-       DISJ_CASES_TAC cases end) >>
-  ntac 3 (conj_tac >- first_assum ACCEPT_TAC)
+    let val (entry,cases) = CONJ_PAIR (CONJUNCT1 th)
+    in map_every assume_tac (CONJUNCT2 th :: CONJUNCTS entry) >>
+       DISJ_CASES_TAC cases end)
   >- (pop_assum (qx_choose_then `n` (qx_choose_then `out`
         (map_every assume_tac o CONJUNCTS))) >>
       qspecl_then [`orig`,`s`,`data`,`req_bound`,`p`,`q`,`ch`,`n`,`out`]
-        (mp_tac o CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV])))
+        (mp_tac o CONV_RULE (stack_inline_lets 3 ALL_CONV))
         stack_terminal_certificate_transfer >>
       (impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC,conj_tac])) >>
       disch_then (map_every assume_tac o stack_packet 2) >>
-      ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+      conj_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
       disj1_tac >> first_assum ACCEPT_TAC) >>
   qspecl_then [`orig`,`s`,`data`,`req_bound`,`p`,`q`,`ch`]
-    (mp_tac o CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV])))
-    stack_pending_walk >>
+    (mp_tac o BETA_RULE) stack_pending_walk >>
   (impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC,conj_tac])) >>
-  disch_then (fn th =>
-    let val entry = stack_packet 4 (CONJUNCT1 th)
-    in map_every assume_tac (CONJUNCT2 th :: entry) end) >>
-  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   disj2_tac >> first_assum ACCEPT_TAC
 QED

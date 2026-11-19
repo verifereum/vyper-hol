@@ -41,8 +41,8 @@ Triviality fixed_step_projection:
      ("SWAP2",3,I,(\k. if k=0 then 2 else if k=2 then 0 else k));
      ("POP",1,(\h. h-1),(\k. k+1))] ==>
   !lo opcs t.
-  let h = LENGTH t.as_stack;
-      r = asm_step lo opcs (AsmOp name) t in
+  !h. h = LENGTH t.as_stack ==>
+  !r. r = asm_step lo opcs (AsmOp name) t ==>
     ((?u. r = AsmOK u) \/ (?msg. r = AsmError msg)) /\
     ((!u. r = AsmOK u ==> m <= h) /\
      (m <= h ==> ?u. r = AsmOK u)) /\
@@ -80,15 +80,15 @@ val fixed_shape = ``
 
 val op_flow = ``
   \p name (hi:num) (hj:num) (ti:num -> (string#num) option) tj bi bj.
-  let inherit =
-    \(src:num -> num option)
+  !inherit. inherit =
+    (\(src:num -> num option)
       (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tj k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ ti a = SOME(l,origin))) /\
       (!k. bj k ==> k < hj /\
          (bnew k \/ ?a. src k = SOME a /\ a < hi /\ bi a))
-  in
+    ) ==>
   case ALOOKUP dup_table name of
     SOME n =>
       n < hi /\ hj = hi+1 /\
@@ -100,7 +100,8 @@ val op_flow = ``
         inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
           (\k. NONE) (\k. F)
     | NONE =>
-      let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+      !a. a = asm_op_arity name ==>
+      !m. m = hj + a - hi ==>
         a <= hi /\ hj = m+(hi-a) /\
         ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
         inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -160,8 +161,8 @@ Proof
 QED
 
 Theorem fixed_source_next[local]:
-  let shp = ^fixed_shape p cc req pc height need tag boolean in
-  let runstep = asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p 1 in
+  !shp. shp = (^fixed_shape p cc req pc height need tag boolean) ==>
+  !runstep. runstep = asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p 1 ==>
   MEM (name,m,H,f) ^fixed_rows /\ x IN V /\ pc x < LENGTH p /\
   EL (pc x) p = AsmOp name /\ (?t. shp x t) /\
   (!t. shp x t ==>
@@ -175,7 +176,7 @@ Theorem fixed_source_next[local]:
       height y = H (height x) /\ ^pull_demands height tag boolean x y f /\
       !t. shp x t ==> ?u. runstep t = AsmOK u /\ shp y u
 Proof
-  rewrite_tac[LET_THM] >>
+  CONV_TAC (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
   qabbrev_tac `shp = ^fixed_shape p cc req pc height need tag boolean` >>
   qabbrev_tac `runstep = asm_steps (SND(compute_label_offsets p))
                                      (build_offset_to_pc p) p 1` >>
@@ -229,17 +230,18 @@ QED
 
 val fixed_flow = ``
   \p pc height tag boolean (x:num#num) (y:num#num).
-  let hi = height x; hj = height y; ins = EL (pc x) p in
-  let inherit =
-    \(src:num -> num option)
+  !hi. hi = height x ==>
+  !hj. hj = height y ==>
+  !inherit. inherit =
+    (\(src:num -> num option)
       (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
          (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-  in
-  case ins of
+    ) ==>
+  case EL (pc x) p of
     AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
   | AsmPush bs =>
       hj = hi+1 /\
@@ -261,13 +263,12 @@ val fixed_flow = ``
 
 val fixed_open = ``
   \p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need tag boolean edge.
-  let shp = ^fixed_shape p cc req pc height need tag boolean in
-  let target = \x y.
+  !shp. shp = (^fixed_shape p cc req pc height need tag boolean) ==>
+  !target. target = (\x y.
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
       off < dimword(:256) /\
-      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-  in
+      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
     FINITE V /\ X SUBSET V /\
     (!x. x IN V ==> ?t. shp x t) /\
     (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -296,8 +297,8 @@ val fixed_next = ``
         !t. shp x t ==> ?u. runstep t = AsmOK u /\ shp y u``;
 
 Triviality fixed_open_next:
-  let shp = ^fixed_shape p cc req pc height need tag boolean in
-  let runstep = asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p 1 in
+  !shp. shp = (^fixed_shape p cc req pc height need tag boolean) ==>
+  !runstep. runstep = asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p 1 ==>
     ^fixed_open p cc req V {} rank pc height need tag boolean edge ==>
     !name m H f x.
       MEM (name,m,H,f) ^fixed_rows /\ x IN V /\ EL (pc x) p = AsmOp name ==>
@@ -403,8 +404,8 @@ QED
 (* Supply the path induction with Open's identity and single-edge cases,
    and fetch each row from its occurrence in the source window. *)
 Triviality fixed_walk_window:
-  let shp = ^fixed_shape p cc req pc height need tag boolean in
-  let runstep = asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p 1 in
+  !shp. shp = (^fixed_shape p cc req pc height need tag boolean) ==>
+  !runstep. runstep = asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p 1 ==>
     ^fixed_open p cc req V {} rank pc height need tag boolean edge ==>
     !rows v pre tail.
       EVERY (\r. MEM r ^fixed_rows) rows /\ v IN V /\ pc v=LENGTH pre /\
@@ -454,10 +455,10 @@ val dup_swap2_swap1_rows = ``
    ("SWAP1",2,I,(\k. if k=0 then 1 else if k=1 then 0 else k))]``;
 
 Theorem stack_fixed_source_demand_paths:
-  let shp = ^fixed_shape p cc req pc height need tag boolean in
-  let runstep = asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p 1 in
-  let result = ^fixed_window_result p pre V rank pc height tag boolean edge shp runstep v in
-  let h = height v in
+  !shp. shp = (^fixed_shape p cc req pc height need tag boolean) ==>
+  !runstep. runstep = asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p 1 ==>
+  !result. result = (^fixed_window_result p pre V rank pc height tag boolean edge shp runstep v) ==>
+  !h. h = height v ==>
     ^fixed_open p cc req V {} rank pc height need tag boolean edge /\
     v IN V /\ pc v = LENGTH pre ==>
     result ["DUP1";"SWAP2";"SWAP1"] 2 (h+1)
