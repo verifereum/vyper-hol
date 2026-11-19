@@ -31,6 +31,13 @@ Ancestors
   gasFocusFmpCutSourceCall gasFocusFmpCutInvokePush gasFocusFmpCutInvokeOutputs
   gasFocusFmpCutSourceReturn gasFocusFmpCutInvokePop
   concretizePtrCoverageStaticMemReachability frameAllocationOwnership
+  lowerDloadSafetyKeyedEnvironmentReadEffects lowerDloadSafetyAccountReadEffects
+  lowerDloadSafetyStorageReadEffects lowerDloadSafetyHashLog
+  lowerDloadSafetyImmutableWriteEffects lowerDloadSafetyWriteAssembly
+  lowerDloadSafetyTaintWidth lowerDloadSafetyAllocBounds lowerDloadDynHeadroom
+  lowerDloadFrontier lowerDloadSafetyUpdates lowerDloadSafetyValues
+  memLocDefs pointerConfinedDefs venomEffects gasCount lowerDloadSafetyKernel
+  lowerDloadSafetyRelation lowerDloadOracleCallAssembly
 
 (* Entry and source-point facts for the bounded FMP frame induction. *)
 Theorem focus_fmp_src_active[local]:
@@ -1501,6 +1508,292 @@ Proof
   goal_assum (drule_at (Pat `ld_envelope _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
 QED
+
+(* The residual singleton cases use the current cut only. *)
+Theorem focus_opt_ld_data_next[local]:
+  ^focus_opt_ld_row lo P C C' vs Sigma names gn ti t
+    stk PG G tn fn inst s t0 A f fs N [inst] p h /\
+  o1_ctx_shape C /\ pre_fmp_ops fn /\ o1_safe_upto D lo n C vs /\
+  ~in_revert_forward fn s /\
+  (MEM inst.inst_opcode [BLOCKHASH;BLOBHASH;CALLDATALOAD;BALANCE;
+                         SELFBALANCE;EXTCODESIZE;EXTCODEHASH;SLOAD;TLOAD] \/
+   MEM inst.inst_opcode [NOP;ASSERT;ASSERT_UNREACHABLE;ISTORE;SHA3;INITIAL_FMP;BUMP]) /\
+  step_inst fuel C' ti t = OK u /\
+  active_inst gn j (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+  gas_cut n vs (u with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j
+    (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `h = 0` by fs[] >> qpat_x_assum `h = 0` SUBST_ALL_TAC >>
+  qpat_x_assum `ld_prefix _ _ _ _ 0 _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [ld_prefix_zero]) >>
+  `ti = inst` by fs[] >> qpat_x_assum `ti = inst` SUBST_ALL_TAC >>
+  qpat_x_assum `t = t0` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `t.vs_inst_idx = p` (SUBST_ALL_TAC o SYM) >>
+  drule ld_sync_active >> simp[HD, Excl "MEM"] >> strip_tac >>
+  drule ld_sync_source >> strip_tac >>
+  drule_all ld_sync_fn_shape >> disch_then (strip_assume_tac o MATCH_MP o1_fn_shape_components) >>
+  drule ld_sync_memory >> strip_tac >>
+  drule ld_sync_ghosts >> simp[HD, Excl "MEM"] >> strip_tac >>
+  drule ld_sync_dyn_agree >> strip_tac >>
+  `MEM inst (fn_insts fn)` by metis_tac[ld_active_inst_member] >>
+  `inst_wf inst` by metis_tac[fmpStepStructuralTheory.fn_inst_wf_fn_insts, EVERY_MEM] >>
+  `tn.t_var = f.lf_tv` by metis_tac[] >>
+  `fn_ptr_ok P fn /\ s.vs_labels = t.vs_labels` by metis_tac[ld_sync_ptr_ok, ld_sync_labels] >>
+  `gn = FST (lower_dload_function_supply f.lf_supply fn)` by fs[ld_image_def] >>
+  `ld_global lo A (f::fs)` by simp[] >>
+  `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by metis_tac[ld_global_selected, MEM] >>
+  `EVERY (\a. a.lf_src.vs_gas_readings = a.lf_tgt.vs_gas_readings /\
+    LENGTH s.vs_gas_readings <= LENGTH a.lf_src.vs_gas_readings) fs` by fs[EVERY_DEF] >>
+  `pre_fmp_opcode inst.inst_opcode` by fs[pre_fmp_ops_def, EVERY_MEM] >>
+  `MEM inst.inst_opcode [BLOCKHASH;BLOBHASH;CALLDATALOAD;BALANCE;SELFBALANCE;
+      EXTCODESIZE;EXTCODEHASH;SLOAD;TLOAD;NOP;ASSERT;ASSERT_UNREACHABLE;ISTORE;SHA3]` by
+    (qpat_assum `_ \/ _` mp_tac >> qpat_assum `pre_fmp_opcode _` mp_tac >>
+     simp[NoAsms, pre_fmp_opcode_def, MEM] >> metis_tac[NoAsms]) >>
+  `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+    (qpat_assum `MEM inst.inst_opcode (BLOCKHASH::_)` mp_tac >>
+     pure_rewrite_tac[MEM] >> strip_tac >> simp[is_terminator_def]) >>
+  `step_inst_base inst t = OK u` by fs[step_inst_non_invoke] >>
+  `gas_cut n vs s` by
+    (irule gas_cut_readings_mono >>
+     qexists_tac `u with vs_inst_idx := SUC t.vs_inst_idx` >> simp[] >>
+     qspecl_then [`fuel`,`C'`,`inst`,`t`] mp_tac (CONJUNCT1 gas_count_suffix) >>
+     simp[gas_count_suffix_def, LENGTH_DROP]) >>
+  `lo <= vs.vs_alloca_next /\ access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
+    (qpat_assum `o1_safe_upto _ _ _ _ _` (strip_assume_tac o
+       REWRITE_RULE[o1_safe_upto_def, o1_ptr_safe_upto_def]) >>
+     drule_all ptr_discipline_upto_at >> simp[] >> fs[ptr_discipline_upto_def]) >>
+  Cases_on `MEM inst.inst_opcode [NOP;ASSERT;ASSERT_UNREACHABLE]`
+  >- suspend "identity" >>
+  `mem_inv dload_headroom_ok C vs` by fs[o1_safe_upto_def] >>
+  `dload_headroom_ok C fn inst s` by metis_tac[ld_sync_source_mem_inv] >>
+  `t.vs_alloca_next < dimword (:256)` by metis_tac[ld_sync_target_headroom] >>
+  drule ld_sync_slots >> strip_tac >> drule ld_sync_maps >> strip_tac >>
+  `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==>
+     b+sz <= s.vs_alloca_next /\ c+sz <= t.vs_alloca_next` by
+    (rpt gen_tac >> strip_tac >> drule_all ld_alloc_frontiers >> simp[HD]) >>
+  `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword (:256)` by
+    (rpt gen_tac >> strip_tac >> res_tac >> decide_tac) >>
+  Cases_on `inst.inst_opcode = ISTORE`
+  >- suspend "istore" >>
+  suspend "read"
+QED
+
+local
+  val finish_data_row =
+    irule (CONV_RULE (RAND_CONV (SCONV [])) (BETA_RULE focus_opt_ld_effect_row)) >>
+    rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE metis_tac[])) >>
+    goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    goal_assum (drule_at (Pat `ld_vars _ _ (_ with <|lf_src := _;lf_tgt := _;lf_H := _;lf_tv := _|>)`)) >>
+    qexists_tac `fuel` >>
+    rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[NoAsms]) >> gvs[]
+in
+  val focus_opt_ld_finish_data_row = finish_data_row
+end
+
+Resume focus_opt_ld_data_next[identity]:
+  `inst.inst_outputs = []` by
+    (qpat_assum `MEM inst.inst_opcode (NOP::_)` (strip_assume_tac o REWRITE_RULE[MEM]) >> fs[inst_wf_def]) >>
+  `eval_operands inst.inst_operands s = eval_operands inst.inst_operands t` by
+    (`!v. MEM (Var v) inst.inst_operands ==>
+        MEM v (fn_ir_vars f.lf_fn) /\ v NOTIN fn_pv P f.lf_fn` by
+       (qpat_assum `f.lf_fn = fn` SUBST1_TAC >> gen_tac >> strip_tac >> conj_tac
+        >- metis_tac[ld_inst_input_ir] >>
+        irule ld_ptr_use_scalar >> simp[Excl "MEM"] >> qexists_tac `inst` >>
+        qpat_assum `MEM inst.inst_opcode (NOP::_)` (strip_assume_tac o REWRITE_RULE[MEM]) >>
+        simp[mem_read_ops_def, mem_write_ops_def, is_pointer_preserving_op_def]) >>
+     `~MEM inst.inst_opcode
+       [ASSIGN;PHI;RET;RETFMP;DRET;MUL;SHL;SHR;SAR;MSTORE;SSTORE;TSTORE;ISTORE]` by
+       (qpat_assum `MEM inst.inst_opcode (NOP::_)` (strip_assume_tac o REWRITE_RULE[MEM]) >> simp[]) >>
+     map_every (fn pat => qpat_assum pat (SUBST_ALL_TAC o SYM))
+       [`f.lf_fn = fn`,`f.lf_src = s`,`f.lf_tgt = t`] >>
+     metis_tac[ld_vars_numeric_operands_equal]) >>
+  `u = t /\ step_inst_base inst s = OK s` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`eval_operands inst.inst_operands s = _`,`MEM inst.inst_opcode (NOP::_)`,
+        `step_inst_base inst t = OK u`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     disch_tac >> disch_then (strip_assume_tac o REWRITE_RULE[MEM]) >> disch_tac >>
+     qpat_assum `step_inst_base inst t = OK u` mp_tac >>
+     pure_once_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[opcode_case_def] >>
+     simp[Once step_inst_base_def] >>
+     Cases_on `inst.inst_operands` >> simp[] >>
+     rename1 `h::rest` >> Cases_on `rest` >> simp[] >>
+     gvs[eval_operands_def, AllCaseEqs()] >> simp[Once step_inst_base_def] >> gvs[AllCaseEqs()]) >>
+  `step_taint inst s s tn = tn /\ step_prov PG G inst s = G` by
+    (qpat_assum `inst.inst_outputs = []` mp_tac >>
+     qpat_assum `MEM inst.inst_opcode (NOP::_)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     disch_then (strip_assume_tac o REWRITE_RULE[MEM]) >> disch_tac >>
+     simp[step_prov_def, set_prov_def, step_taint_def, mem_taint_def,
+          written_taint_def, new_site_bytes_def, step_writes_def,
+          codegenRelTheory.source_memory_write_ranges_def, range_bytes_def, set_var_taint_def,
+          store_taint_def, adopt_reset_def, imm_taint_def,
+          taint_component_equality, FLOOKUP_DEF, DRESTRICT_UNIV, SF CONJ_ss] >>
+     Cases_on `inst.inst_operands` >> simp[] >>
+     Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
+     Cases_on `t` >> simp[] >> pred_setLib.SET_TAC[]) >>
+  `step_inst fuel C inst s = OK s` by simp[step_inst_non_invoke] >>
+  `f with <|lf_src := s; lf_tgt := u; lf_H := f.lf_H; lf_tv := tn.t_var|> = f` by
+    (qpat_assum `u = t` SUBST1_TAC >>
+     map_every (fn pat => qpat_assum pat (SUBST1_TAC o SYM))
+       [`f.lf_src = s`,`f.lf_tgt = t`,`f.lf_tv = tn.t_var`] >>
+     simp[NoAsms, Once ld_frame_component_equality]) >>
+  `ld_vars P A (f with <|lf_src := s; lf_tgt := u; lf_H := f.lf_H;
+       lf_tv := (step_taint inst s s tn).t_var|>)` by
+    (map_every (fn pat => qpat_assum pat SUBST1_TAC)
+       [`step_taint inst s s tn = tn`,`f with <|lf_src := s; lf_tgt := u; lf_H := f.lf_H; lf_tv := tn.t_var|> = f`] >>
+     first_assum ACCEPT_TAC) >>
+  `ld_memory lo A (step_taint inst s s tn) s u /\
+   ld_nonghost (step_taint inst s s tn) s u /\
+   ld_ghost_ok (dyn_floor C vs) A f.lf_H (step_prov PG G inst s) /\
+   ld_dyn_agree (dyn_floor C vs) (step_taint inst s s tn).t_mem s.vs_memory u.vs_memory /\
+   u.vs_allocas = t.vs_allocas /\ u.vs_alloca_next = t.vs_alloca_next /\
+   u.vs_current_bb = t.vs_current_bb /\ u.vs_prev_bb = t.vs_prev_bb` by
+    (map_every (fn pat => qpat_assum pat SUBST1_TAC)
+       [`u = t`, `step_taint inst s s tn = tn`, `step_prov PG G inst s = G`] >>
+     rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE REFL_TAC)) >>
+  focus_opt_ld_finish_data_row
+QED
+
+Resume focus_opt_ld_data_next[istore]:
+  `raw_reachable vs C fn inst s` by metis_tac[lowerDloadPtrRawReachableTheory.frame_reachable_raw] >>
+  drule_all ld_raw_dyn_headroom >> strip_tac >>
+  drule ld_raw_reachable_frontier >> strip_tac >>
+  drule ld_sync_frontier >> strip_tac >>
+  `lo <= dyn_floor C vs /\ s.vs_alloca_next <= dyn_floor C vs /\
+     t.vs_alloca_next <= dyn_floor C vs` by
+    (qpat_assum `ld_charge _ <= _` mp_tac >> decide_tac) >>
+  `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==>
+     b+sz <= dyn_floor C vs /\ c+sz <= dyn_floor C vs` by
+    (rpt gen_tac >> strip_tac >> res_tac >> decide_tac) >>
+  `?ss. step_inst_base inst s = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := u; lf_H := f.lf_H;
+      lf_tv := (step_taint inst s ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst s ss tn) ss u /\
+    ld_nonghost (step_taint inst s ss tn) ss u /\
+    ld_dyn_agree (dyn_floor C vs) (step_taint inst s ss tn).t_mem ss.vs_memory u.vs_memory /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H) inst ss =
+      ld_erase A o_f f.lf_H /\
+    ss.vs_allocas = s.vs_allocas /\ ss.vs_alloca_next = s.vs_alloca_next /\
+    ss.vs_current_bb = s.vs_current_bb /\ ss.vs_prev_bb = s.vs_prev_bb /\
+    u.vs_allocas = t.vs_allocas /\ u.vs_alloca_next = t.vs_alloca_next /\
+    u.vs_current_bb = t.vs_current_bb /\ u.vs_prev_bb = t.vs_prev_bb` by
+    (map_every (fn pat => qpat_assum pat (SUBST_ALL_TAC o SYM))
+       [`f.lf_fn = fn`,`f.lf_src = s`,`f.lf_tgt = t`] >>
+     `MEM inst.inst_opcode [MSTORE;MSTORE8;ISTORE]` by simp[] >>
+     drule_all ld_write2_operands >> strip_tac >>
+     rename1 `inst.inst_operands = [addr; value]` >>
+     `!oper. MEM oper inst.inst_operands ==> op_prov f.lf_H oper = NONE` by
+       (rpt strip_tac >> Cases_on `oper` >> simp[NoAsms, op_prov_def] >>
+        irule ld_vars_unselected >> qexistsl [`A`,`P`] >>
+        reverse conj_tac >- first_assum ACCEPT_TAC >>
+        qpat_assum `fn_ptr_ok P f.lf_fn` mp_tac >> simp[NoAsms, fn_ptr_ok_def] >>
+        metis_tac[]) >>
+     `op_prov f.lf_H addr = NONE /\ op_prov f.lf_H value = NONE` by simp[] >>
+     `word_agree_except (op_taint tn value) x y` by
+       (irule ld_write_scalar_observation >> qexistsl [`A`,`P`,`f`,`inst`] >>
+        map_every (fn pat => qpat_assum pat SUBST1_TAC)
+          [`inst.inst_opcode = ISTORE`,`inst.inst_operands = [addr;value]`] >>
+        simp[NoAsms] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     `op_taint tn addr = {}` by metis_tac[ld_write2_taint] >>
+     `dst = dst'` by
+       (irule (cj 1 ld_write_address_observation) >>
+        qexistsl [`A`,`P`,`f`,`inst`,`addr`,`tn`] >>
+        map_every (fn pat => qpat_assum pat SUBST1_TAC)
+          [`inst.inst_opcode = ISTORE`,`inst.inst_operands = [addr;value]`] >>
+        simp[NoAsms] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `dst = dst'` (SUBST_ALL_TAC o SYM) >>
+     `?ops. mem_write_ops inst = SOME ops /\ ops.iao_ofst = addr` by
+       simp[mem_write_ops_def] >>
+     `MEM (w2n dst,32) (source_memory_write_ranges inst f.lf_src)` by
+       (map_every (fn pat => qpat_assum pat SUBST1_TAC)
+          [`inst.inst_opcode = ISTORE`,`inst.inst_operands = [addr;value]`] >>
+        simp[codegenRelTheory.source_memory_write_ranges_def, codegenRelTheory.fixed_source_write_range_def]) >>
+     `0 < (32:num)` by simp[] >>
+     `(op_prov f.lf_H ops.iao_ofst = NONE ==> dst = dst) /\
+      (!k. op_prov f.lf_H ops.iao_ofst = SOME k ==> ld_wordrel A (SOME k) dst dst)` by simp[] >>
+     (Q.SUBGOAL_THEN
+       `w2n dst+32 <= lo \/
+        (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+          w2n dst=b+delta /\ w2n dst=c+delta /\ delta+32 <= sz) \/
+        dyn_floor C vs <= w2n dst` assume_tac
+      >- (drule_all (Q.INST [`n` |-> `32`] (cj 2 ld_access_dyn_cases)) >> metis_tac[])) >>
+     `op_taint tn value SUBSET {j | j < 32}` by metis_tac[ld_reachable_op_taint_width] >>
+     drule_all ld_istore_effect >> disch_then (qx_choose_then `ss` strip_assume_tac) >>
+     qexists_tac `ss` >> rpt conj_tac >>
+     (first_assum ACCEPT_TAC ORELSE
+       (qpat_assum `ld_vars P A (f with <|lf_src := ss; lf_tgt := u; lf_tv := _|>)`
+          mp_tac >> simp[NoAsms, ld_vars_def]))) >>
+  `step_inst fuel C inst s = OK ss` by simp[step_inst_non_invoke] >>
+  drule_all ld_sync_ghost_step >> strip_tac >>
+  focus_opt_ld_finish_data_row
+QED
+
+Resume focus_opt_ld_data_next[read]:
+  `MEM inst.inst_opcode [BLOCKHASH;BLOBHASH;CALLDATALOAD;BALANCE;
+      SELFBALANCE;EXTCODESIZE;EXTCODEHASH;SLOAD;TLOAD;SHA3]` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`MEM inst.inst_opcode [BLOCKHASH;BLOBHASH;CALLDATALOAD;BALANCE;
+         SELFBALANCE;EXTCODESIZE;EXTCODEHASH;SLOAD;TLOAD;NOP;ASSERT;ASSERT_UNREACHABLE;ISTORE;SHA3]`,
+        `~MEM inst.inst_opcode (NOP::_)`,`inst.inst_opcode <> ISTORE`] >>
+     simp[NoAsms, MEM] >> metis_tac[NoAsms]) >>
+  `?ss. step_inst_base inst s = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := u;
+      lf_H := set_prov f.lf_H inst.inst_outputs NONE;
+      lf_tv := (step_taint inst s ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst s ss tn) ss u /\
+    ld_nonghost (step_taint inst s ss tn) ss u /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H) inst ss =
+      ld_erase A o_f set_prov f.lf_H inst.inst_outputs NONE /\
+    ss.vs_allocas = s.vs_allocas /\ ss.vs_alloca_next = s.vs_alloca_next /\
+    ss.vs_current_bb = s.vs_current_bb /\ ss.vs_prev_bb = s.vs_prev_bb /\
+    u.vs_allocas = t.vs_allocas /\ u.vs_alloca_next = t.vs_alloca_next /\
+    u.vs_current_bb = t.vs_current_bb /\ u.vs_prev_bb = t.vs_prev_bb` by
+    (map_every (fn pat => qpat_assum pat (SUBST_ALL_TAC o SYM))
+       [`f.lf_fn = fn`,`f.lf_src = s`,`f.lf_tgt = t`] >>
+     let
+       fun finish effect =
+         drule_all effect >>
+         disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q`
+           (qx_choose_then `ss` strip_assume_tac)) >>
+         qexists_tac `ss` >> rpt conj_tac >>
+         FIRST [first_assum ACCEPT_TAC, sym_tac >> first_assum ACCEPT_TAC]
+     in
+       Cases_on `MEM inst.inst_opcode [BLOCKHASH;BLOBHASH;CALLDATALOAD]`
+       >- finish ld_keyed_environment_read_effect >>
+       Cases_on `MEM inst.inst_opcode [BALANCE;SELFBALANCE;EXTCODESIZE;EXTCODEHASH]`
+       >- finish ld_account_read_effect >>
+       Cases_on `MEM inst.inst_opcode [SLOAD;TLOAD]`
+       >- finish ld_storage_read_effect >>
+       `inst.inst_opcode = SHA3` by
+         (map_every (fn pat => qpat_assum pat mp_tac)
+            [`MEM inst.inst_opcode [BLOCKHASH;BLOBHASH;CALLDATALOAD;BALANCE;
+                SELFBALANCE;EXTCODESIZE;EXTCODEHASH;SLOAD;TLOAD;SHA3]`,
+             `~MEM inst.inst_opcode (BLOCKHASH::_)`,`~MEM inst.inst_opcode (BALANCE::_)`,
+             `~MEM inst.inst_opcode (SLOAD::_)`] >>
+          simp[NoAsms, MEM] >> metis_tac[NoAsms]) >>
+       drule_all ld_sha3_operands >> strip_tac >> finish ld_sha3_effect
+     end) >>
+  `step_inst fuel C inst s = OK ss` by simp[step_inst_non_invoke] >>
+  drule_all ld_sync_ghost_step >> strip_tac >>
+  `!a. a IN FRANGE (set_prov f.lf_H inst.inst_outputs NONE) ==> a IN FDOM A` by
+    (rpt strip_tac >>
+     drule (SRULE [pred_setTheory.SUBSET_DEF]
+       (Q.INST [`q` |-> `NONE`] ld_set_prov_range)) >> simp[] >> metis_tac[]) >>
+  `~is_alloca_op inst.inst_opcode /\ Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
+   source_memory_write_ranges inst s = []` by
+    (qpat_assum `MEM inst.inst_opcode (BLOCKHASH::_)` mp_tac >>
+     pure_rewrite_tac[MEM] >> strip_tac >>
+     qpat_assum `inst.inst_opcode = _` (fn eq =>
+       simp[NoAsms, eq, is_alloca_op_def, write_effects_def, empty_effects_def,
+            codegenRelTheory.source_memory_write_ranges_def])) >>
+  drule_all ld_sync_dyn_agree_unwritten >> strip_tac >>
+  focus_opt_ld_finish_data_row
+QED
+
+Finalise focus_opt_ld_data_next[local]
 
 Theorem focus_row_visit_inverse[local]:
   !xs be.
