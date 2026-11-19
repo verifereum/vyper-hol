@@ -163,8 +163,13 @@ Proof
 QED
 
 Theorem supported_builtin_exclusion_coverage:
-  EVERY (\blt. ~supported_builtin_form [] (BaseT (UintT 256)) blt [expr_test_uint])
-    [Keccak256; Concat 32; Slice 32; Floor; MakeArray NONE (Dynamic 1)] /\
+  (!tops ty n es.
+     ~supported_builtin_form tops ty Keccak256 es /\
+     ~supported_builtin_form tops ty (Concat n) es /\
+     ~supported_builtin_form tops ty (Slice n) es /\
+     ~supported_builtin_form tops ty Floor es) /\
+  ~supported_builtin_form [] (BaseT (UintT 256))
+    (MakeArray NONE (Dynamic 1)) [expr_test_uint] /\
   supported_builtin_form [] (TupleT []) (MakeArray NONE (Fixed 0)) [] /\
   supported_builtin_form [] (TupleT [BaseT (UintT 256)])
     (MakeArray NONE (Fixed 1)) [expr_test_uint] /\
@@ -181,7 +186,7 @@ Theorem supported_builtin_exclusion_coverage:
     [expr_test_uint] /\
   ~supported_builtin_form [] (BaseT (BytesT (Dynamic 4))) (CalldataSlice 4) []
 Proof
-  EVAL_TAC
+  conj_tac >- simp[supported_builtin_form_def] >> EVAL_TAC
 QED
 
 Theorem supported_memory_construction_forms:

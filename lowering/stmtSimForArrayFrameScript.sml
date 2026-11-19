@@ -198,8 +198,9 @@ Resume supported_pure_scopes_mutual[builtin]:
      gvs[code_slice_source_SOME, supported_builtin_form_def]) >>
   Cases_on `blt = Len`
   >- (`?e. exprs = [e]` by
-       (Cases_on `exprs` >> gvs[supported_builtin_form_def] >>
-        Cases_on `t` >> gvs[supported_builtin_form_def]) >>
+       (namedCases_on `exprs` ["", "arg tail"] >>
+        gvs[supported_builtin_form_def] >>
+        Cases_on `tail` >> gvs[supported_builtin_form_def]) >>
       gvs[] >> qpat_x_assum `eval_expr _ (Builtin _ Len _) _ = _` mp_tac >>
       simp[NoAsms, Once evaluate_def, type_check_def, assert_def, bind_def,
            ignore_bind_def, return_def, raise_def, AllCaseEqs(),
