@@ -2,6 +2,7 @@
 Theory bodyFullRawCallOutbuf
 Ancestors
   bodyFullRawCallOutbufAlloc bodyFullRawCallOutbufAdd
+  rawCallOutbufCompile[qualified,ignore_grammar]
   bodyFullAllocaFresh bodyFullGhostFrame bodyFullUnwrapRun stateRelProj
   bodyPtrSignedConvertSourceFrame
   decoderArraySetupPtr fragExec bodyMemoryDefs arithmeticProps
@@ -12,20 +13,6 @@ Ancestors
   bodyPtrDefs loweringStateRelDefs compileEnv ptrDiscipline
   fragGasSeqPtr fragExecMem ptrSafetyTransport venomMemDefs
   venomState venomInst venomExecSemantics finite_map words list rich_list
-
-Theorem outbuf_parts[local]:
-  compile_raw_call_outbuf M sa = ((ov,op),sb) ==>
-  ?buf sm.
-    compile_alloc_buffer (if M = 0 then 0 else ((M+31) DIV 32)*32+32) sa = (buf,sm) /\
-    ov = buf.buf_operand /\
-    (if M = 0 then op = ov /\ sb = sm
-     else emit_op ADD [ov;Lit 32w] sm = (op,sb))
-Proof
-  Cases_on `M = 0` >>
-  simp[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[comp_bind_def, comp_return_def]) >>
-  strip_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]
-QED
 
 Theorem raw_call_outbuf_joint:
   compile_raw_call_outbuf M sa = ((ov,op),sb) /\
@@ -89,7 +76,7 @@ Proof
   strip_tac >>
   `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s` by
     (fs[storage_trace_domain_def] >> metis_tac[]) >>
-  drule outbuf_parts >> strip_tac >>
+  drule rawCallOutbufCompileTheory.calldata_outbuf_compile >> strip_tac >>
   Cases_on `M = 0`
   >- (gvs[] >>
       drule_all (SRULE [] (Q.INST
