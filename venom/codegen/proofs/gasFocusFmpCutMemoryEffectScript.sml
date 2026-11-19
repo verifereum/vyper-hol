@@ -1,6 +1,6 @@
 (* Concrete ordinary memory effects at a related FMP cut point. *)
 Theory gasFocusFmpCutMemoryEffect
-Ancestors arithmetic[qualified,ignore_grammar]
+Ancestors fmpStageOpSimMemReads[qualified] arithmetic[qualified,ignore_grammar]
   fmpStageRel o1LowerDloadRangeTransport lowerDloadSafetyBytes contextCodegenRel
   o1LowerDloadMemoryConsumer o1LowerDloadRelocationKernel codegenRel
   o1LowerDloadShared fmpStagePointRanges ptrStaticDiscipline frameRelocationCleanOperands
@@ -229,25 +229,6 @@ Proof
   goal_assum (drule_at Any) >> (metis_tac[])
 QED
 
-Theorem focus_fmp_cut_read_ghost[local]:
-  MEM inst.inst_opcode [MLOAD;ILOAD;SHA3] /\ inst.inst_outputs = [out] ==>
-  step_prov PG G inst (update_var out w s) = DRESTRICT G (COMPL {out}) /\
-  step_taint inst s (update_var out w s) tn =
-    tn with t_var := tn.t_var |+ (out,out_taint tn inst s)
-Proof
-  strip_tac >> fs[] >>
-  simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
-       set_var_taint_def, adopt_reset_def, store_taint_def, imm_taint_def,
-       mem_taint_def, new_site_bytes_def, step_writes_def,
-       source_memory_write_ranges_def,
-       range_bytes_def, update_var_def, FLOOKUP_DEF, EXTENSION,
-       taint_component_equality, SF CONJ_ss] >>
-  namedCases_on `inst.inst_operands` ["", "a rest"] >> simp[written_taint_def] >>
-  namedCases_on `rest` ["", "b rest2"] >> simp[written_taint_def] >>
-  namedCases_on `rest2` ["", "c rest3"] >> simp[written_taint_def] >>
-  Cases_on `rest3` >> simp[written_taint_def]
-QED
-
 (* For a successful read the sole updated variable is scalar; its byte
    mask is the source output mask, not the address operand's mask. *)
 Theorem focus_fmp_cut_read_output[local]:
@@ -264,7 +245,7 @@ Theorem focus_fmp_cut_read_output[local]:
            (op_taint (step_taint inst s s1 tn) (Var v)) a b)) /\
   (step_taint inst s s1 tn).t_mem = tn.t_mem
 Proof
-  strip_tac >> drule_all focus_fmp_cut_read_ghost >> strip_tac >>
+  strip_tac >> drule_all fmpStageOpSimMemReadsTheory.fmp_mem_read_ghost >> strip_tac >>
   gvs[update_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def,
       fmp_value_rel_def, ld_value_agree_scalar]
 QED
@@ -754,7 +735,7 @@ Theorem focus_fmp_cut_read_data[local]:
   ^cut_data
 Proof
   strip_tac >> drule_all focus_fmp_cut_read_output >> strip_tac >>
-  drule_all focus_fmp_cut_read_ghost >> strip_tac >>
+  drule_all fmpStageOpSimMemReadsTheory.fmp_mem_read_ghost >> strip_tac >>
   fs[fmp_stage_rel_def] >>
   gvs[update_var_def, ld_shared_agree_def]
 QED

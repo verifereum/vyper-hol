@@ -1,6 +1,6 @@
 (* Resume a successful LowerDload block body after a singleton binding. *)
 Theory gasFocusLowerDloadAssignmentParamNext
-Ancestors
+Ancestors lowerDloadArithmeticPointEffect[qualified]
   o1SafeUpto gasCount lowerDloadSafetyAssignSteps lowerDloadSafetyRetpcEffects
   lowerDloadSafetyParamCoverage lowerDloadSafetyArithmeticCoverage
   lowerDloadSafetyAdvance lowerDloadReturnOrdinary lowerDloadReturnAlignment
@@ -109,7 +109,7 @@ Resume ld_focus_assignment_param_body_next[binding_effect]:
        simp[] >> strip_tac >>
        qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs
          (first_prov f.lf_H inst.inst_operands)`] >>
-       simp[step_inst_non_invoke] >> metis_tac[ld_set_first_prov_selected])) >>
+       simp[step_inst_non_invoke] >> metis_tac[lowerDloadArithmeticPointEffectTheory.ld_set_first_prov_in_domain])) >>
   `inst.inst_opcode = RETPC_PARAM` by fs[MEM] >>
   drule ld_retpc_param_effect >>
   disch_then (qspecl_then [`u`,`tn`,`lo`,`inst`] mp_tac) >>

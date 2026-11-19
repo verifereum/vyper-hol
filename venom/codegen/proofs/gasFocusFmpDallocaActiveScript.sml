@@ -8,21 +8,6 @@ Ancestors
   livenessProofs simplifyCfgDefs venomExecProofs contextCodegenRel
   ptrDiscipline venomInst venomState finite_map list words pair
 
-Theorem dalloca_output_value[local]:
-  inst.inst_opcode = DALLOCA /\ inst.inst_outputs = [out] /\
-  w2n s.vs_fmp + z < dimword (:256) /\
-  s1 = update_var out s.vs_fmp (s with vs_fmp := n2w (w2n s.vs_fmp+z)) /\
-  sm1 = (if z=0 then sm else sm |+ ((w2n s.vs_fmp,z),(lo,inst.inst_id))) ==>
-  fmp_value_rel sm1 (FLOOKUP (step_prov PG G inst s1) out)
-    (op_taint (step_taint inst s s1 tn) (Var out)) s.vs_fmp (n2w lo)
-Proof
-  strip_tac >>
-  simp[step_prov_def, out_prov_def, set_prov_def, lookup_var_def,
-       update_var_def, FLOOKUP_UPDATE, fmp_value_rel_def] >>
-  gvs[] >> Cases_on `z=0` >>
-  simp[ld_value_agree_def, FLOOKUP_fmp_ld_sites, FLOOKUP_UPDATE, WORD_ADD_SUB2]
-QED
-
 Theorem dalloca_active_env[local]:
   wf_function fn /\ MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -52,7 +37,7 @@ Proof
   `!v. MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb
                (SUC s.vs_inst_idx)) ==> ~MEM v [plus31;mask;aligned;runner]` by
     (rpt strip_tac >> drule fmp_live_ir_vars >> gvs[EVERY_MEM] >> metis_tac[]) >>
-  drule_all dalloca_output_value >> strip_tac >>
+  drule_all fmpStageFmpStepsDallocaDataTheory.fmp_dalloca_output_value >> strip_tac >>
   irule fmp_dalloca_env_transition >>
   qexists_tac `G` >> goal_assum (drule_at Any) >>
   qexistsl_tac [`s`,`sm`,`t`,`tn.t_var`,`s.vs_fmp`,`n2w lo`] >>

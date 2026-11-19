@@ -530,7 +530,7 @@ Proof
        codegenRelTheory.source_memory_write_ranges_def]
 QED
 
-Theorem sue_eval_operands_related[local]:
+Theorem sue_eval_operands_related:
   !xs ys. LIST_REL (\op newop. eval_operand newop t = eval_operand op s) xs ys ==>
     eval_operands ys t = eval_operands xs s
 Proof

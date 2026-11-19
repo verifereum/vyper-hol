@@ -1,32 +1,11 @@
 (* Reflect an access at a kept fetch before using pointwise relocation. *)
 Theory gasFocusFmpCutKeptRanges
-Ancestors
+Ancestors fmpStageCoverMemOperands[qualified]
   fmpStagePointRanges fmpStageOpBase fmpStageRel lowerDloadRangeTransport
   lowerDloadDescriptorObservation frameViewFacts o1PassContract unitShapeDefs
   ptrStaticDiscipline ptrDiscipline pointerConfinedDefs memLocDefs unitMemInv
   contextCodegenRel venomWf venomInst venomState words arithmetic
   finite_map pred_set list pair
-
-(* A variable in a size position cannot be the unique pointer offset:
-   if it also appears at an offset, the filter has at least two entries. *)
-Theorem kept_size_not_pointer[local]:
-  ptr_use_static_ok P pv inst /\
-  (mem_read_ops inst = SOME ops \/ mem_write_ops inst = SOME ops) /\
-  ops.iao_max_size = SOME (Var v) ==> v NOTIN pv
-Proof
-  strip_tac >> disch_tac >> Cases_on `inst.inst_opcode` >>
-  FIRST [gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()]] >>
-  qpat_x_assum `ptr_use_static_ok _ _ _`
-    (mp_tac o REWRITE_RULE [ptr_use_static_ok_def]) >>
-  disch_then (CONJUNCTS_THEN2 kall_tac (qspec_then `v` mp_tac)) >>
-  (impl_tac >- (simp[is_pointer_preserving_op_def] >>
-                 metis_tac[MEM_REVERSE, MEM])) >>
-  strip_tac >> gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()] >>
-  qpat_x_assum `FILTER _ _ = _`
-    (mp_tac o AP_TERM ``REVERSE : operand list -> operand list``) >>
-  pure_rewrite_tac[GSYM FILTER_REVERSE] >>
-  asm_rewrite_tac[FILTER, REVERSE_DEF, CONS_11] >> simp[]
-QED
 
 Theorem kept_descriptor_nonretpc[local]:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
@@ -57,7 +36,7 @@ Proof
        metis_tac[ld_descriptor_size_operand] >> gvs[]) >>
   `~retpc_var fn v` by metis_tac[kept_descriptor_nonretpc] >>
   `op_taint tn (Var v) = {}` by metis_tac[ld_descriptor_size_clean] >>
-  `v NOTIN pv` by metis_tac[kept_size_not_pointer] >>
+  `v NOTIN pv` by metis_tac[fmpStageCoverMemOperandsTheory.fmp_static_descriptor_size_nonpointer] >>
   `op_prov G (Var v) = NONE` by
     (fs[op_prov_def, SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
   `IS_SOME (lookup_var v s)` by simp[] >>

@@ -17,16 +17,6 @@ Ancestors
   gasFocusFmpCutPureEffect gasFocusFmpCutMemoryEffect gasFocusFmpCutSharedEffect
   gasFocusFmpCutExternalEffect fmpStageOpBase frameViewFacts passSimulationDefs
 
-Theorem cut_ordinary_not_reclaim[local]:
-  ~is_terminator inst.inst_opcode /\
-  ~MEM inst.inst_opcode [INVOKE; DALLOCA] ==>
-  ~fmp_is_reclaim_point infos inst
-Proof
-  strip_tac >> spose_not_then assume_tac >>
-  drule fmp_reclaim_point_opcodes >>
-  gvs[] >> metis_tac[is_terminator_def]
-QED
-
 (* Ordinary instructions have no reclaim prefix, so the related target cursor
    points at the kept instruction itself. *)
 Theorem cut_ordinary_kept_fetch[local]:
@@ -44,7 +34,7 @@ Proof
   strip_tac >>
   gvs[fmp_stage_rel_def, fmp_frame_rel_def] >>
   `~fmp_is_reclaim_point infos (EL s.vs_inst_idx bb.bb_instructions)` by
-    (irule cut_ordinary_not_reclaim >> simp[]) >>
+    (irule fmpStageOpFrameTheory.fmp_ordinary_not_reclaim >> simp[]) >>
   `~((t.vs_current_bb,s.vs_inst_idx) IN FDOM (fmp_stage_plan infos ctx fn))` by
     metis_tac[fmp_stage_plan_point] >>
   `~MEM (EL s.vs_inst_idx bb.bb_instructions).inst_opcode
@@ -67,7 +57,7 @@ Theorem cut_ordinary_analysis_suc[local]:
     st'.frs_stack = st.frs_stack
 Proof
   strip_tac >>
-  `~fmp_is_reclaim_point infos inst` by (irule cut_ordinary_not_reclaim >> gvs[]) >>
+  `~fmp_is_reclaim_point infos inst` by (irule fmpStageOpFrameTheory.fmp_ordinary_not_reclaim >> gvs[]) >>
   `~fmp_clears_marks infos inst` by
     gvs[fmp_clears_marks_def, fmp_callee_info_def, fmp_invoke_target_def] >>
   `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
@@ -95,7 +85,7 @@ Theorem cut_ordinary_control_suc[local]:
 Proof
   strip_tac >> conj_asm1_tac
   >- (strip_tac >> drule_all fmp_stage_plan_point >> strip_tac >>
-      `~fmp_is_reclaim_point infos inst` by (irule cut_ordinary_not_reclaim >> gvs[]) >>
+      `~fmp_is_reclaim_point infos inst` by (irule fmpStageOpFrameTheory.fmp_ordinary_not_reclaim >> gvs[]) >>
       gvs[]) >>
   conj_asm1_tac
   >- (rpt strip_tac >> metis_tac[fmp_stage_root_crossing, MEM]) >>

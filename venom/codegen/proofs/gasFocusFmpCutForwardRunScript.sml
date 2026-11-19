@@ -7,15 +7,6 @@ Ancestors
   contextCodegenRel venomExecSemantics venomInst venomState
   venomWf arithmetic finite_map pred_set list
 
-Theorem cut_forward_operand_available[local]:
-  s.vs_labels = t.vs_labels /\
-  (!v x. FLOOKUP s.vs_vars v = SOME x ==> ?y. FLOOKUP t.vs_vars v = SOME y) /\
-  eval_operand op s = SOME x ==>
-  ?y. eval_operand op t = SOME y
-Proof
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_def] >> metis_tac[]
-QED
-
 Theorem cut_forward_assign_ok[local]:
   s.vs_labels = t.vs_labels /\
   (!v x. FLOOKUP s.vs_vars v = SOME x ==> ?y. FLOOKUP t.vs_vars v = SOME y) /\
@@ -27,7 +18,7 @@ Theorem cut_forward_assign_ok[local]:
 Proof
   strip_tac >> qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> strip_tac >>
-  drule_all cut_forward_operand_available >> strip_tac >>
+  drule_all fmpStageOpFrameForwardAbortTheory.fmp_forward_operand >> strip_tac >>
   simp[step_inst_base_opcode_eqs, update_var_def] >>
   rpt strip_tac >>
   Cases_on `out = v'` >> gvs[update_var_def, FLOOKUP_UPDATE] >>
@@ -49,7 +40,7 @@ Theorem cut_forward_copy_ok[local]:
 Proof
   strip_tac >> qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> strip_tac >>
-  `?d. eval_operand dst t = SOME d` by metis_tac[cut_forward_operand_available] >>
+  `?d. eval_operand dst t = SOME d` by metis_tac[fmpStageOpFrameForwardAbortTheory.fmp_forward_operand] >>
   `eval_operand src t = SOME offset /\ eval_operand sz t = SOME size_val` by
     metis_tac[] >>
   qpat_x_assum `write_memory_with_expansion _ _ s = s1` (SUBST_ALL_TAC o SYM) >>

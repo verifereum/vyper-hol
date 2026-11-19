@@ -1,5 +1,5 @@
 Theory gasFocusSueFiniteEvents
-Ancestors
+Ancestors o1ContractSue[qualified]
   singleUseExpansionSupplySim gasEvents o1PassLift
   singleUseExpansionSupplyProofs singleUseExpansionDefs irSupply
   stateFrame stateEquiv venomExecProps venomExecProofs
@@ -37,14 +37,6 @@ Proof
   disch_then irule >> simp[]
 QED
 
-Theorem sue_events_eval_operands[local]:
-  !xs ys. LIST_REL (\op newop. eval_operand newop t = eval_operand op s) xs ys ==>
-    eval_operands ys t = eval_operands xs s
-Proof
-  Induct >> Cases_on `ys` >> simp[eval_operands_def] >>
-  rpt strip_tac >> first_x_assum drule >> simp[]
-QED
-
 Theorem sue_rewritten_gas_events_step[local]:
   inst_wf inst /\ execution_frame s = execution_frame t /\
   LIST_REL (\op newop. eval_operand newop t = eval_operand op s)
@@ -59,7 +51,7 @@ Proof
       `newop = Label lbl` by
         (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
       gvs[decode_invoke_def] >>
-      drule sue_events_eval_operands >> strip_tac >>
+      drule o1ContractSueTheory.sue_eval_operands_related >> strip_tac >>
       `!callee args. setup_callee callee args t = setup_callee callee args s` by
         (rpt gen_tac >> irule setup_callee_execution_frame >> simp[]) >>
       simp[gas_events_step_def, decode_invoke_def]) >>
@@ -78,20 +70,6 @@ Proof
   simp[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
   irule sue_state_rel_eval_operand >> qexists_tac `P` >>
   simp[sue_state_rel_def] >> metis_tac[listTheory.MEM_EL]
-QED
-
-Theorem sue_events_drop_prefix[local]:
-  !prefix xs k inst tail. DROP k xs = prefix ++ inst::tail ==>
-    k + LENGTH prefix < LENGTH xs /\ EL (k + LENGTH prefix) xs = inst
-Proof
-  rpt gen_tac >> strip_tac >>
-  `k + LENGTH prefix < LENGTH xs` by
-    (qpat_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH``) >>
-     simp[listTheory.LENGTH_DROP]) >>
-  conj_tac >- simp[] >>
-  `LENGTH prefix + k < LENGTH xs` by decide_tac >>
-  qspecl_then [`LENGTH prefix`, `k`, `xs`] mp_tac listTheory.EL_DROP >>
-  simp[listTheory.EL_APPEND_EQN, arithmeticTheory.ADD_COMM]
 QED
 
 Theorem sue_segment_indexed_gas_events[local]:
@@ -158,7 +136,7 @@ Resume sue_segment_indexed_gas_events[expanded]:
   `sue_segment_offset segs i + LENGTH assigns < LENGTH bb'.bb_instructions /\
     EL (sue_segment_offset segs i + LENGTH assigns) bb'.bb_instructions =
       inst with inst_operands := ops` by
-    (drule sue_events_drop_prefix >> simp[]) >>
+    (drule singleUseExpansionSupplySimTheory.sue_drop_prefix_index >> simp[]) >>
   qexistsl [`sue_segment_offset segs i + LENGTH assigns`,
     `u with vs_inst_idx := sue_segment_offset segs i + LENGTH assigns`,
     `inst with inst_operands := ops`] >>

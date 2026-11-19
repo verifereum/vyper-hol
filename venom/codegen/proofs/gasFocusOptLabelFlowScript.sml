@@ -1,5 +1,5 @@
 Theory gasFocusOptLabelFlow
-Ancestors
+Ancestors o1LabelFlowCompose[qualified]
   o1LabelFlowSource o1LabelFlowMiddle o1LabelFlowLateContracts
   fmpLowerDefs fmpStepBridge fmpStepLayout fmpStepOpaque fmpStepRewriteOrigin
   fmpStepRewriteSupply fmpLowerIndexedProps fmpStepRetpcShape
@@ -515,13 +515,6 @@ Proof
   goal_assum $ drule_at (Pat `fmp_install_root _ _ _ _ = _`) >> simp[]
 QED
 
-Theorem focus_label_flow_singleton[local]:
-  label_flow_ok (C with ctx_functions := [f]) <=>
-  label_flow_ok (D with ctx_functions := [f])
-Proof
-  simp[label_flow_ok_def]
-QED
-
 Theorem focus_label_flow_lower_dload[local]:
   fn_pass_step rp (CFP_Simple VP_LowerDload) observed s f out /\
   (!i. MEM i (fn_insts f) ==> ~MEM (Label "code_end") i.inst_operands) /\
@@ -615,10 +608,10 @@ Theorem focus_label_flow_late_step[local]:
 Proof
   strip_tac >>
   `label_flow_ok (observed.cu_context with ctx_functions := [f])` by
-    metis_tac[focus_label_flow_singleton] >>
+    metis_tac[o1LabelFlowComposeTheory.label_flow_singleton_context] >>
   `label_flow_ok (observed.cu_context with ctx_functions := [out.fpo_function])` by
     metis_tac[o1_late_row_label_flow_ok] >>
-  metis_tac[focus_label_flow_singleton]
+  metis_tac[o1LabelFlowComposeTheory.label_flow_singleton_context]
 QED
 
 (* Carry only the label-flow facts needed at each row.  Running the enriched

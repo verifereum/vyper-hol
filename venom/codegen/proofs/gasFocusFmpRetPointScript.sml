@@ -1,7 +1,7 @@
 (* Pointwise RET constructor for the bounded FMP simulation.  No whole-run
    stage context is assumed; the bounded caller supplies the current facts. *)
 Theory gasFocusFmpRetPoint
-Ancestors
+Ancestors fmpStageRetStep[qualified]
   fmpStageRel fmpStageControl fmpLowerDefs fmpLowerProps
   o1LowerDloadOpaque o1LowerDloadGhost ptrStaticDiscipline
   pointerConfinedDefs memLocDefs pred_set finite_map list rich_list
@@ -29,28 +29,6 @@ Proof
   simp[operand_var_in_inst_uses]
 QED
 
-Theorem ret_point_no_provenance[local]:
-  ptr_use_static_ok P pv inst /\ inst.inst_opcode = RET /\
-  FDOM G SUBSET pv /\ MEM op inst.inst_operands ==>
-  op_prov G op = NONE
-Proof
-  strip_tac >> Cases_on `op` >> simp[op_prov_def] >>
-  rename1 `MEM (Var v) inst.inst_operands` >>
-  `v NOTIN pv` by
-    (strip_tac >> gvs[ptr_use_static_ok_def, is_pointer_preserving_op_def,
-       mem_read_ops_def, mem_write_ops_def] >> metis_tac[]) >>
-  fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]
-QED
-
-Theorem ret_point_operand_defined[local]:
-  fmp_env_rel sm fn live G tv s t /\ s.vs_labels = t.vs_labels /\
-  IS_SOME (eval_operand op s) ==> IS_SOME (eval_operand op t)
-Proof
-  strip_tac >> Cases_on `op` >>
-  gvs[eval_operand_def, lookup_var_def, fmp_env_rel_def] >>
-  metis_tac[optionTheory.IS_SOME_EXISTS]
-QED
-
 Theorem ret_point_front_equal[local]:
   wf_function fn /\ make_ssa_input_ok fn /\ opaque_use_ok fn /\
   active_inst fn inst s /\ inst.inst_opcode = RET /\
@@ -70,7 +48,7 @@ Proof
      metis_tac[MEM_EL]) >>
   `!v. op = Var v ==> ~retpc_var fn v` by
     metis_tac[ret_front_non_retpc] >>
-  `op_prov G op = NONE` by metis_tac[ret_point_no_provenance] >>
+  `op_prov G op = NONE` by metis_tac[fmpStageRetStepTheory.fmp_run_ret_clean] >>
   `op_taint tn op = {}` by metis_tac[ret_operand_untainted] >>
   Cases_on `op` >>
   gvs[eval_operand_def, op_prov_def, op_taint_def] >>
@@ -130,7 +108,7 @@ Proof
     (gvs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
   `!op. MEM op inst.inst_operands ==>
      (IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))` by
-    metis_tac[ret_point_operand_defined] >>
+    metis_tac[fmpStageRetStepTheory.fmp_run_operand_defined] >>
   `!op. MEM op (FRONT inst.inst_operands) ==>
      eval_operand op s = eval_operand op t` by
     (rpt strip_tac >>

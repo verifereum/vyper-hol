@@ -62,7 +62,7 @@ Proof
   drule_all fmp_live_ordinary_suc >> simp[]
 QED
 
-Theorem fmp_dalloca_output_value[local]:
+Theorem fmp_dalloca_output_value:
   inst.inst_opcode = DALLOCA /\ inst.inst_outputs = [out] /\
   w2n s.vs_fmp + z < dimword (:256) /\
   s1 = update_var out s.vs_fmp

@@ -8,13 +8,6 @@ Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyKernel ptrDiscipline
   venomExecSemantics finite_map pred_set list
 
-Theorem ld_set_first_prov_selected:
-  (!a. a IN FRANGE H ==> a IN FDOM A) ==>
-  !a. a IN FRANGE (set_prov H outs (first_prov H ops)) ==> a IN FDOM A
-Proof
-  MATCH_ACCEPT_TAC ld_set_first_prov_in_domain
-QED
-
 Theorem ld_sync_arithmetic_effect:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\

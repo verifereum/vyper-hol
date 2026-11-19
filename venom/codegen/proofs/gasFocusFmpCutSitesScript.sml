@@ -20,23 +20,6 @@ Proof
   imp_res_tac EVERY_active_inst >> gvs[]
 QED
 
-Theorem cut_sites_block_fmp[local]:
-  enters_block fn s t ==> t.vs_fmp = s.vs_fmp
-Proof
-  rw[enters_block_def] >> drule eval_phis_only_updates_vs_vars >>
-  disch_then (mp_tac o AP_TERM (Term `\u:venom_state. u.vs_fmp`)) >>
-  simp[]
-QED
-
-Theorem cut_sites_nonalloc_fmp[local]:
-  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA /\
-  inst.inst_opcode <> DALLOCA /\ pre_fmp_opcode inst.inst_opcode /\
-  step_inst fuel C inst s = OK t ==> t.vs_fmp = s.vs_fmp
-Proof
-  strip_tac >> irule allocation_free_step_fmp_ok >>
-  gvs[allocation_free_opcode_def, pre_fmp_opcode_def] >> metis_tac[]
-QED
-
 Theorem cut_sites_dalloca_growth[local]:
   inst.inst_opcode = DALLOCA /\ dalloca_no_wrap inst s /\
   step_inst fuel C inst s = OK t ==>
@@ -99,7 +82,7 @@ QED
 
 Resume cut_sites_invariant[entry]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  drule cut_sites_block_fmp >>
+  drule fmpStageReclaimSoundTheory.fmp_enters_block_frontier >>
   simp[fmp_frame_base_def, prov_sites_def, param_sites_def]
 QED
 
@@ -122,7 +105,7 @@ Resume cut_sites_invariant[next]:
          Cases >> simp[] >> rpt strip_tac >>
          qpat_x_assum `!b z. out_prov _ _ _ _ = _ ==> _` drule >>
          strip_tac >> decide_tac) >>
-     drule_all cut_sites_nonalloc_fmp >> simp[]) >>
+     drule_all fmpStageReclaimSoundTheory.fmp_source_nonalloc_frontier >> simp[]) >>
   reverse conj_tac >- (qpat_assum `!pre f rest. _` ACCEPT_TAC) >>
   pure_rewrite_tac[venom_state_accfupds, venom_state_accessors] >>
   rpt conj_tac >- simp[] >- decide_tac
@@ -147,8 +130,8 @@ Resume cut_sites_invariant[block]:
   qpat_x_assum `!n raw0. _` (qspecl_then [`n`, `raw0`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   drule_all cut_sites_source_point >> strip_tac >>
-  drule_all_then assume_tac cut_sites_nonalloc_fmp >>
-  drule_then assume_tac cut_sites_block_fmp >>
+  drule_all_then assume_tac fmpStageReclaimSoundTheory.fmp_source_nonalloc_frontier >>
+  drule_then assume_tac fmpStageReclaimSoundTheory.fmp_enters_block_frontier >>
   reverse conj_tac >- (qpat_assum `!pre f rest. _` ACCEPT_TAC) >>
   gvs[prov_sites_entry]
 QED
@@ -161,7 +144,7 @@ Resume cut_sites_invariant[call]:
   qpat_x_assum `!n raw0. _` (qspecl_then [`n`, `raw0`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   drule_then strip_assume_tac setup_callee_frame >>
-  drule_then assume_tac cut_sites_block_fmp >>
+  drule_then assume_tac fmpStageReclaimSoundTheory.fmp_enters_block_frontier >>
   conj_tac
   >- (simp[fmp_frame_base_def, prov_sites_def, param_sites_def, MEM_MAP] >>
       Cases >> simp[] >> rpt strip_tac >>

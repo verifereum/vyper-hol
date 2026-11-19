@@ -74,7 +74,7 @@ Proof
 QED
 
 (* The five passes after FmpLowering keep the user PARAM count. *)
-Theorem o1_walk_suffix_user_param_count[local]:
+Theorem o1_walk_suffix_user_param_count:
   fn_steps_from (\m h. o1_fn_shape C h /\ o1_fn_row m h) rpolicy 4
     (DROP 4 o1_fn_passes) f g ==>
   LENGTH (fn_user_param_insts g) = LENGTH (fn_user_param_insts f)

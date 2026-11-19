@@ -1,5 +1,5 @@
 Theory gasFocusLowerDloadFrameRequestRow
-Ancestors
+Ancestors o1PipelineCompose[qualified]
   lowerDloadRequestObservation lowerDloadSafetyLocations
   gasFocusLowerDloadCutGuards lowerDloadPtrAggregate lowerDloadPublicTrace
   contextCodegenRel lowerDloadDefs list o1SafeUpto lowerDloadSafetyAmbient
@@ -32,14 +32,6 @@ Proof
   drule_all ld_envelope_ordinary >> strip_tac >> gvs[]
 QED
 
-Theorem ld_storage_agree_mono[local]:
-  X SUBSET Y /\ storage_agree_except X st1 st2 ==>
-  storage_agree_except Y st1 st2
-Proof
-  rw[storage_agree_except_def, word_agree_except_def, key_taint_def,
-     SUBSET_DEF] >> metis_tac[]
-QED
-
 Theorem ld_shared_state_at_boundary[local]:
   dload_equal_environment s t /\ dload_shared_store tn un s t ==>
   ld_shared_state tn un s t
@@ -48,11 +40,11 @@ Proof
        dload_shared_store_def, ld_shared_state_def, FLOOKUP_DEF] >>
   strip_tac >> rpt conj_tac
   >- (gen_tac >> first_x_assum (qspec_then `a` strip_assume_tac) >>
-      irule ld_storage_agree_mono >>
+      irule o1PipelineComposeTheory.storage_agree_except_mono >>
       goal_assum (drule_at Any) >>
       Cases_on `a = t.vs_call_ctx.cc_address` >> simp[EMPTY_SUBSET])
   >- (gen_tac >> first_x_assum (qspec_then `a` strip_assume_tac) >>
-      irule ld_storage_agree_mono >>
+      irule o1PipelineComposeTheory.storage_agree_except_mono >>
       goal_assum (drule_at Any) >>
       Cases_on `a = t.vs_call_ctx.cc_address` >> simp[EMPTY_SUBSET]) >>
   metis_tac[]
@@ -144,10 +136,10 @@ Resume ld_focus_frame_request_row[calls]:
   conj_tac
   >- (irule dead_stor_taint_transport >> simp[] >>
       qexistsl [`tn.t_stor`, `(s.vs_accounts s.vs_call_ctx.cc_address).storage`] >>
-      simp[GSYM SUBSET_REFL] >> metis_tac[ld_storage_agree_mono]) >>
+      simp[GSYM SUBSET_REFL] >> metis_tac[o1PipelineComposeTheory.storage_agree_except_mono]) >>
   irule dead_trans_taint_transport >> simp[] >>
   qexistsl [`tn.t_trans`, `s.vs_transient s.vs_call_ctx.cc_address`] >>
-  simp[] >> metis_tac[ld_storage_agree_mono]
+  simp[] >> metis_tac[o1PipelineComposeTheory.storage_agree_except_mono]
 QED
 
 Resume ld_focus_frame_request_row[backward_growth]:

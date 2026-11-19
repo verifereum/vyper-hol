@@ -1,6 +1,6 @@
 (* Static ABI and actual callee entry at a restored bounded INVOKE. *)
 Theory gasFocusFmpCutInvokePush
-Ancestors
+Ancestors fmpStageCallArity[qualified]
   gasFocusFmpCutInvokeSite fmpStageFmpStepsInvokePosition
   fmpStageFmpStepsCallAbi fmpStageRel fmpLowerDefs fmpAnalysisDefs
   fmpAnalysisProps fcgBridge fcgDefs concretizeStageLookup fmpStepBridge
@@ -157,42 +157,6 @@ Proof
   qpat_x_assum `if _ then _ else _` mp_tac >> simp[]
 QED
 
-(* The observed callee is the C4 callee run through the five later passes.
-   Their actual replay equations preserve its number of user arguments. *)
-Theorem invoke_suffix_user_param_count[local]:
-  fn_steps_from (\m h. o1_fn_shape C h /\ o1_fn_row m h) rpolicy 4
-    (DROP 4 o1_fn_passes) f g ==>
-  LENGTH (fn_user_param_insts g) = LENGTH (fn_user_param_insts f)
-Proof
-  simp[o1_fn_passes_def, fn_steps_from_def] >> strip_tac >> gvs[] >>
-  rename1 `fn_pass_step _ (CFP_Simple VP_MakeSSA) _ _ f a` >>
-  rename1 `fn_pass_step _ (CFP_Simple VP_SimplifyCFG) _ _ a.fpo_function b` >>
-  rename1 `fn_pass_step _ (CFP_Simple VP_SingleUseExpansion) _ _ b.fpo_function c` >>
-  rename1 `fn_pass_step _ (CFP_Simple VP_DFT) _ _ c.fpo_function d` >>
-  rename1 `fn_pass_step _ (CFP_Simple VP_CFGNormalization) _ _ d.fpo_function e` >>
-  `LENGTH (fn_user_param_insts a.fpo_function) = LENGTH (fn_user_param_insts f)` by
-    (drule make_ssa_pass_step_replay >> strip_tac >>
-     irule make_ssa_step_user_param_count >> metis_tac[]) >>
-  `LENGTH (fn_user_param_insts b.fpo_function) =
-     LENGTH (fn_user_param_insts a.fpo_function)` by
-    (drule simplify_cfg_pass_step_function >> disch_then SUBST1_TAC >>
-     irule simplify_cfg_fn_user_param_count >> fs[o1_fn_row_def] >> metis_tac[]) >>
-  `LENGTH (fn_user_param_insts c.fpo_function) =
-     LENGTH (fn_user_param_insts b.fpo_function)` by
-    (drule sue_pass_step_replay >> strip_tac >>
-     drule sue_expand_function_supply_user_param_count >> simp[]) >>
-  `LENGTH (fn_user_param_insts d.fpo_function) =
-     LENGTH (fn_user_param_insts c.fpo_function)` by
-    (`d.fpo_function = dft_fn c.fpo_function` by gvs[fn_pass_step_def] >>
-     pop_assum SUBST1_TAC >> irule dft_fn_user_param_count >> metis_tac[]) >>
-  `LENGTH (fn_user_param_insts e.fpo_function) =
-     LENGTH (fn_user_param_insts d.fpo_function)` by
-    (drule cfg_norm_pass_step_replay >> strip_tac >>
-     irule cfg_norm_function_supply_user_param_count >>
-     simp[supply_o1_inv_def] >> metis_tac[]) >>
-  simp[]
-QED
-
 (* The sealed-callee signature in the scheduled caller's view determines
    the ABI of the actual C4 callee, even if the frame used another view. *)
 Theorem selected_invoke_scheduled_abi[local]:
@@ -233,7 +197,7 @@ Proof
     (qpat_assum `o1_walk_view rpolicy 3 C4 fn observed`
        (mp_tac o REWRITE_RULE [o1_walk_view_def,walk_view_def]) >>
      disch_then (qspecl_then [`nm`,`callee'`] mp_tac) >> simp[]) >>
-  drule invoke_suffix_user_param_count >> strip_tac >>
+  drule fmpStageCallArityTheory.o1_walk_suffix_user_param_count >> strip_tac >>
   qexistsl [`sig`,`runner`] >> gvs[]
 QED
 

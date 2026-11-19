@@ -3,7 +3,7 @@ Ancestors
   venomExecSemantics venomExecProps venomState
   venomInst contextCodegenRel finite_map list
 
-Theorem fmp_forward_operand[local]:
+Theorem fmp_forward_operand:
   s.vs_labels = t.vs_labels /\
   (!v x. FLOOKUP s.vs_vars v = SOME x ==>
          ?y. FLOOKUP t.vs_vars v = SOME y) /\
