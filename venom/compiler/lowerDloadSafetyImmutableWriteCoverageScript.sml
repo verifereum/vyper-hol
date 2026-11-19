@@ -1,6 +1,6 @@
 (* Reachable ISTORE effects; ownership is retained by the ordinary adapter. *)
 Theory lowerDloadSafetyImmutableWriteCoverage
-Ancestors
+Ancestors lowerDloadMemoryWritePointEffect[qualified]
   lowerDloadSafetyImmutableWriteEffects lowerDloadSafetyWriteAssembly
   lowerDloadOracleCallAssembly
   lowerDloadSafetyAssemblyPremises lowerDloadSafetyTaintWidth
@@ -15,7 +15,7 @@ Theorem ld_istore_operand_unselected[local]:
   MEM op inst.inst_operands ==> op_prov f.lf_H op = NONE
 Proof
   strip_tac >> Cases_on `op` >> simp[op_prov_def] >>
-  irule ld_vars_unselected >> simp[] >>
+  irule lowerDloadMemoryWritePointEffectTheory.ld_vars_unselected >> simp[] >>
   fs[fn_ptr_ok_def] >> metis_tac[]
 QED
 
@@ -77,16 +77,16 @@ QED
 
 Resume ld_sync_istore_effect[operands]:
   `MEM inst.inst_opcode [MSTORE;MSTORE8;ISTORE]` by simp[] >>
-  drule_all ld_write2_operands >> strip_tac >>
+  drule_all lowerDloadMemoryWritePointEffectTheory.ld_write2_operands >> strip_tac >>
   `op_prov f.lf_H a = NONE /\ op_prov f.lf_H v = NONE` by
     (conj_tac >> irule ld_istore_operand_unselected >>
      metis_tac[MEM]) >>
   `word_agree_except (op_taint tn v) x y` by
-    (irule ld_write_scalar_observation >> simp[] >>
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_scalar_observation >> simp[] >>
      qexistsl_tac [`A`,`P`,`f`,`inst`] >> simp[]) >>
-  `op_taint tn a = {}` by metis_tac[ld_write2_taint] >>
+  `op_taint tn a = {}` by metis_tac[lowerDloadMemoryWritePointEffectTheory.ld_write2_taint] >>
   `dst = dst'` by
-    (drule ld_write_address_observation >> simp[] >>
+    (drule lowerDloadMemoryWritePointEffectTheory.ld_write_address_observation >> simp[] >>
      disch_then (qspecl_then [`dst'`,`dst`,`tn`,`a`,`inst`] mp_tac) >>
      fs[]) >>
   gvs[] >> suspend "write"

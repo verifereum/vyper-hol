@@ -1,5 +1,6 @@
 Theory gasFocusLowerDloadCodecopyPoint
 Ancestors
+  lowerDloadMemoryWritePointEffect[qualified]
   lowerDloadPublicTrace lowerDloadSafetyAmbient lowerDloadSafetyRelation
   lowerDloadSafetyKernel lowerDloadSafetyValues lowerDloadSafetyWriteAssembly
   lowerDloadOracleCallAssembly lowerDloadDefs
@@ -26,7 +27,7 @@ Proof
       fs[inst_dload_in_section_def] >> metis_tac[]) >>
   `taint_ok f.lf_fn tn inst f.lf_src` by simp[] >>
   `MEM op inst.inst_operands` by simp[] >>
-  drule_all ld_write_operand_defined >> strip_tac >>
+  drule_all lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> strip_tac >>
   `x = off` by (irule ld_dloadbytes_scalar_observation >> metis_tac[]) >>
   fs[inst_dload_in_section_def] >> metis_tac[]
 QED

@@ -1,5 +1,5 @@
 Theory lowerDloadSafetyStorageWriteCoverage
-Ancestors
+Ancestors lowerDloadMemoryWritePointEffect[qualified]
   lowerDloadSafetyStorageWriteEffects lowerDloadSafetyOrdinaryCoverage
   lowerDloadOracleCallAssembly lowerDloadSafetyWriteAssembly
   lowerDloadSafetyAssemblyPremises lowerDloadSafetyValues
@@ -55,10 +55,10 @@ Proof
      simp[exec_write2_def, eval_operands_def, AllCaseEqs()] >>
      rpt strip_tac >> gvs[]) >>
   `?src_key. eval_operand a f.lf_src = SOME src_key` by
-    (irule ld_write_operand_defined >> simp[] >> conj_tac
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> simp[] >> conj_tac
      >- (qexists_tac `inst` >> simp[]) >> metis_tac[]) >>
   `?x. eval_operand v f.lf_src = SOME x` by
-    (irule ld_write_operand_defined >> simp[] >> conj_tac
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> simp[] >> conj_tac
      >- (qexists_tac `inst` >> simp[]) >> metis_tac[]) >>
   `op_taint tn a = {}` by
     (spose_not_then assume_tac >>

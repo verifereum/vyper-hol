@@ -1,6 +1,6 @@
 (* Pointwise source safety for an ordinary LowerDload instruction. *)
 Theory gasFocusLowerDloadOrdinarySafety
-Ancestors lowerDloadDescriptorObservation lowerDloadRangeFrontier
+Ancestors lowerDloadMemoryWritePointEffect[qualified] lowerDloadDescriptorObservation lowerDloadRangeFrontier
   lowerDloadSafetyAmbient lowerDloadSafetyRelation lowerDloadSafetyValues
   lowerDloadSafetyWriteAssembly lowerDloadRangeTransport
   lowerDloadSafetyKernel lowerDloadSafetyAllocBounds lowerDloadOracleCallAssembly
@@ -73,7 +73,7 @@ Resume ld_sync_ordinary_raw_pointwise[ranges]:
      ?x. eval_operand op s = SOME x` by
     (rpt strip_tac >>
      `?x. eval_operand op f.lf_src = SOME x` suffices_by metis_tac[] >>
-     irule ld_write_operand_defined >> metis_tac[]) >>
+     irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> metis_tac[]) >>
   `!ops szop. (mem_read_ops inst = SOME ops \/ mem_write_ops inst = SOME ops) /\
       ops.iao_max_size = SOME szop ==>
       eval_operand szop s = eval_operand szop t` by

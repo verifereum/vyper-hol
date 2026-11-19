@@ -2747,7 +2747,7 @@ Theorem ld_frame_istore_unselected[local]:
   MEM op inst.inst_operands ==> op_prov f.lf_H op = NONE
 Proof
   strip_tac >> Cases_on `op` >> simp[op_prov_def] >>
-  irule ld_vars_unselected >> simp[] >>
+  irule lowerDloadMemoryWritePointEffectTheory.ld_vars_unselected >> simp[] >>
   fs[fn_ptr_ok_def] >> metis_tac[]
 QED
 
@@ -4617,7 +4617,7 @@ Resume ld_frame_actual_occurrence[singleton_istore]:
   `step_inst_base inst f.lf_tgt = OK s'` by metis_tac[step_inst_non_invoke] >>
   `tn.t_var = f.lf_tv` by (sym_tac >> first_assum ACCEPT_TAC) >>
   `MEM inst.inst_opcode [MSTORE;MSTORE8;ISTORE]` by simp[] >>
-  drule_all ld_write2_operands >> strip_tac >>
+  drule_all lowerDloadMemoryWritePointEffectTheory.ld_write2_operands >> strip_tac >>
   rename1 `inst.inst_operands = [addr; value]` >>
   `op_prov f.lf_H addr = NONE /\ op_prov f.lf_H value = NONE` by
     (conj_tac >>
@@ -4625,14 +4625,14 @@ Resume ld_frame_actual_occurrence[singleton_istore]:
       >- (qexists_tac `inst` >> simp[])
       >> qexistsl [`A`,`P`] >> simp[])) >>
   `word_agree_except (op_taint tn value) x y` by
-    (irule ld_write_scalar_observation >>
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_scalar_observation >>
      qexistsl [`A`,`P`,`f`,`inst`] >>
      qpat_assum `inst.inst_opcode = ISTORE` (rewrite_tac o single) >>
      qpat_assum `inst.inst_operands = [addr;value]` (rewrite_tac o single) >>
      simp[NoAsms] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `op_taint tn addr = {}` by metis_tac[ld_write2_taint] >>
+  `op_taint tn addr = {}` by metis_tac[lowerDloadMemoryWritePointEffectTheory.ld_write2_taint] >>
   `dst = dst'` by
-    (irule (cj 1 ld_write_address_observation) >>
+    (irule (cj 1 lowerDloadMemoryWritePointEffectTheory.ld_write_address_observation) >>
      qexistsl [`A`,`P`,`f`,`inst`,`addr`,`tn`] >>
      qpat_assum `inst.inst_opcode = ISTORE` (rewrite_tac o single) >>
      qpat_assum `inst.inst_operands = [addr;value]` (rewrite_tac o single) >>
