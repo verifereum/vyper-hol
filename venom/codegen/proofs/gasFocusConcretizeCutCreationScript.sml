@@ -53,52 +53,6 @@ Proof
   gvs[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]
 QED
 
-Theorem focus_create_execute[local]:
-  ptr_mixed_vars births positions TG tn f g s t /\
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
-  MEM i.inst_opcode [CREATE; CREATE2] /\
-  i.inst_outputs = [out] /\ ~retpc_var f out /\
-  exec_create i t value off' sz salt = OK z ==>
-  ?u. exec_create i s value off sz salt = OK u /\
-    ptr_history_content tn u z /\
-    ptr_mixed_vars births positions (step_prov PT TG i u)
-      (step_taint i s u tn) f g u z
-Proof
-  strip_tac >> drule_all concretizePtrCreateFamilyTheory.ptr_create_family_current_stores >> strip_tac >>
-  `venom_create_request s value off sz salt = venom_create_request t value off' sz salt`
-    by (irule venom_create_request_eq_from_slice >> simp[]) >>
-  `s.vs_outcomes = t.vs_outcomes` by
-    fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-       ptr_core_shared_def, ptr_shared_fields_def] >>
-  drule_all ld_create_exec_steps >> strip_tac >>
-  gvs[Excl "consume_create_outcome_eq"] >>
-  (conj_tac
-  >- (qmatch_asmsub_abbrev_tac `consume_create_outcome rq s` >>
-      `ptr_request_history (record_request rq s.vs_requests)
-         (record_request rq t.vs_requests)` by
-        (irule ptr_request_record >> fs[ptr_history_content_def]) >>
-      fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-         ptr_core_shared_def, ptr_shared_fields_def] >>
-      gvs[consume_create_outcome_eq] >>
-      simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-           ptr_core_shared_def, ptr_shared_fields_def,
-           contract_storage_def, contract_transient_def,
-           storage_agree_except_def, word_agree_except_def])) >>
-  `ptr_mixed_vars births positions TG tn f g rs rt` by
-    (irule ptr_mixed_vars_fields >>
-     rpt (goal_assum (drule_at Any)) >>
-     qpat_x_assum `consume_create_outcome _ s = _` mp_tac >>
-     qpat_x_assum `consume_create_outcome _ t = _` mp_tac >>
-     simp[consume_create_outcome_eq] >> rpt strip_tac >> gvs[]) >>
-  drule ptr_mixed_vars_update >> disch_then irule >> simp[] >>
-  fs[MEM] >>
-  simp[step_prov_def, out_prov_def, set_prov_def,
-       step_taint_def, set_var_taint_def, out_taint_def,
-       FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, op_taint_def, ptr_value_transport_def] >>
-  rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def, word_agree_except_def]
-QED
-
 (* The read premise refers only to the range evaluated by this instruction. *)
 Theorem focus_create_reflect[local]:
   ptr_mixed_vars births positions TG tn f g s t /\
@@ -147,7 +101,7 @@ Proof
      conj_tac >- (qexists `w2n sz` >> simp[]) >>
      qexists `<|iao_ofst := oop; iao_size := SOME sop; iao_max_size := SOME sop|>` >>
      qpat_assum `_ \/ _` strip_assume_tac >> gvs[mem_read_ops_def]) >>
-  drule_all focus_create_execute >>
+  drule_all concretizePtrCreateFamilyTheory.ptr_create_family_mixed_execution >>
   disch_then (qspec_then `PT` (qx_choose_then `u` strip_assume_tac)) >>
   qexists `u` >> asm_rewrite_tac[] >>
   qpat_x_assum `_ \/ _` strip_assume_tac >>

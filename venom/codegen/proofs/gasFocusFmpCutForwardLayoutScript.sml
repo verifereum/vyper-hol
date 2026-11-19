@@ -6,6 +6,7 @@ Ancestors
   contextCodegenRel ctxLookupAgreeHelpers venomFnScheduleRunner
   venomFnScheduleRunnerProps irSupply o1PassContract venomWf venomWfProps
   venomInst venomExecSemantics venomExecProofs rich_list list finite_map
+  fmpStageCoverForwardAssemble[qualified,ignore_grammar]
 
 Theorem cut_forward_fetches[local]:
   fmp_stage_lowered infos ctx runner fn fn' /\
@@ -67,15 +68,6 @@ Proof
   simp[get_instruction_def, arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM]
 QED
 
-Theorem cut_forward_operand_var[local]:
-  lookup_block lbl fn.fn_blocks = SOME bb /\ MEM i bb.bb_instructions /\
-  MEM (Var v) i.inst_operands ==> MEM v (fn_ir_vars fn)
-Proof
-  strip_tac >> simp[fn_ir_vars_member] >>
-  qexistsl_tac [`bb`,`i`] >> simp[inst_uses_def, MEM_operand_vars_eq_Var] >>
-  metis_tac[venomExecProofsTheory.lookup_block_MEM]
-QED
-
 Theorem cut_forward_resolved_var[local]:
   lookup_block lbl fn.fn_blocks = SOME bb /\
   (!v. op = Var v ==> MEM v (fn_ir_vars fn)) /\
@@ -86,7 +78,8 @@ Proof
   mp_tac (Q.SPECL [`REVERSE (TAKE n (DROP i bb.bb_instructions))`,
                    `op`, `set (fn_ir_vars fn)`] resolve_block_assigns_tracked) >>
   simp[] >> disch_then irule >> rpt strip_tac >>
-  irule cut_forward_operand_var >> qexistsl_tac [`bb`,`q`,`lbl`] >> simp[] >>
+  irule fmpStageCoverForwardAssembleTheory.fmp_cover_block_operand >>
+  qexistsl_tac [`bb`,`lbl`,`q`] >> simp[] >>
   metis_tac[MEM_TAKE, MEM_DROP_IMP]
 QED
 
@@ -124,7 +117,7 @@ Proof
      conj_tac >- (qexists `p` >> decide_tac) >> qexists `j` >> simp[]) >>
   `!arg v. MEM arg [dst;src;rds;rdst;rsize] /\ arg = Var v ==>
     MEM v (fn_ir_vars fn)` by
-    (rpt strip_tac >> fs[] >> metis_tac[cut_forward_operand_var, MEM]) >>
+    (rpt strip_tac >> fs[] >> metis_tac[fmpStageCoverForwardAssembleTheory.fmp_cover_block_operand, MEM]) >>
   `!a b. (!v. a = Var v ==> MEM v (fn_ir_vars fn)) /\
          (!v. b = Var v ==> MEM v (fn_ir_vars fn)) /\
          same_after_assigns (REVERSE (TAKE p bb.bb_instructions)) a b ==>

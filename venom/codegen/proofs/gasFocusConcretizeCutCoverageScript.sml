@@ -56,6 +56,7 @@ Ancestors
   ctxLookupAgree[qualified] lowerDloadDefs[qualified]
   frameRawProjection unitMemInv
   venomExecSemantics gasFocusConcretizeCutActualWrite
+  concretizePtrHistoryCoverage[qualified,ignore_grammar]
 
 (* The pairing is determined by the stage's static layout equations. No
    execution, including one outside the cut, is needed to construct it. *)
@@ -1507,31 +1508,6 @@ QED
 
 Finalise focus_cut_paired_access_ranges
 
-Theorem concretize_cut_samples_append:
-  ptr_paired_prefix R lp positions lo vs C Ct
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  EVERY (\i. ~in_revert_forward (EL i h).po_fn (EL i h).po_state) done /\
-  ~in_revert_forward a.po_fn a.po_state ==>
-  EVERY (\i. ~in_revert_forward (EL i (h ++ delta)).po_fn
-    (EL i (h ++ delta)).po_state) (done ++ [LENGTH h - 1])
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule ptr_paired_prefix_samples >> strip_tac >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_source >> strip_tac >>
-  drule ptr_chrono_history_end >> strip_tac >>
-  `0 < LENGTH h` by (Cases_on `h` >> gvs[]) >>
-  `EL (LENGTH h - 1) h = a` by
-    (qpat_x_assum `LAST h = a` mp_tac >> simp[LAST_EL, PRE_SUB1]) >>
-  simp[EVERY_APPEND] >> conj_tac
-  >- (fs[ptr_paired_samples_def, ptr_sample_list_def, EVERY_MEM] >>
-      qx_gen_tac `i` >> strip_tac >>
-      `i < LENGTH h` by metis_tac[] >>
-      simp[EL_APPEND_EQN] >> metis_tac[]) >>
-  simp[EL_APPEND_EQN]
-QED
-
 (* A paired layout belongs to a fixed root and target context. Keep those
    parameters fixed when instantiating the general chronology induction. *)
 Theorem concretize_cut_history_ind:
@@ -1638,7 +1614,7 @@ Resume focus_concretize_cut_coverage_ptr_safe[successor]:
         (strip_tac >>
          `EVERY (\i. ~in_revert_forward (EL i (h ++ delta)).po_fn
           (EL i (h ++ delta)).po_state) (done ++ [LENGTH h - 1])` by
-           (irule concretize_cut_samples_append >>
+           (irule concretizePtrHistoryCoverageTheory.ptr_paired_history_safe_append >>
             rpt (goal_assum (drule_at Any)) >> simp[]) >>
          qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ _) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
            (irule_at Any) >> simp[]) >>

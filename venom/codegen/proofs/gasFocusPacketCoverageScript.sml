@@ -18,6 +18,8 @@ Ancestors
   o1RequestContract unitTransformDefs ptrDiscipline passSimulationDefs
   vfmExecution codegen asmIR
   finite_map list rich_list words arithmetic
+  dftGasInvPairedPrefix[qualified,ignore_grammar]
+  stepWriteFootprintForward[qualified,ignore_grammar]
 
 Libs stepInstBaseLib
 
@@ -213,33 +215,6 @@ Proof
   simp[APPEND_ASSOC]
 QED
 
-Triviality cover_fold_event_prefix:
-  !rows step.
-    (!es r row.
-      step (es,r) row =
-        (es ++ FST (step ([],r) row), SND (step ([],r) row))) ==>
-    !es r.
-      FOLDL step (es,r) rows =
-        (es ++ FST (FOLDL step ([],r) rows),
-         SND (FOLDL step ([],r) rows))
-Proof
-  Induct >- simp[] >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >>
-  rename1 `FOLDL next (es,r) (h::rows)` >>
-  first_x_assum (qspec_then `next` mp_tac) >>
-  impl_tac >- first_assum ACCEPT_TAC >>
-  strip_tac >> pure_rewrite_tac [FOLDL] >>
-  first_assum (qspecl_then [`es`, `r`, `h`] SUBST1_TAC) >>
-  Cases_on `next ([],r) h` >>
-  rename1 `next ([],r) h = (local_events,local_result)` >>
-  simp[NoAsms] >>
-  qpat_assum `!es r. FOLDL next (es,r) rows = _`
-    (qspecl_then [`es ++ local_events`, `local_result`] SUBST1_TAC) >>
-  qpat_assum `!es r. FOLDL next (es,r) rows = _`
-    (qspecl_then [`local_events`, `local_result`] SUBST1_TAC) >>
-  simp[NoAsms, APPEND_ASSOC]
-QED
-
 Triviality cover_cfg_block_opcodes:
   !C rounds cells. cfg_norm_cursors C rounds cells ==>
   !ss fn m tt gn i a pending j v.
@@ -280,32 +255,6 @@ Proof
   qpat_assum `MEM _ [ASSIGN; JMP; JNZ]`
     (fn th => PURE_REWRITE_TAC [th]) >>
   simp[]
-QED
-
-Triviality cover_revert_step:
-  i.inst_opcode = REVERT ==>
-  step_inst f C i s <> OK u /\ step_inst f C i s <> IntRet ir u
-Proof
-  strip_tac >> simp[step_inst_non_invoke, step_inst_base_def] >>
-  Cases_on `i.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
-  Cases_on `eval_operand h s` >> simp[] >>
-  Cases_on `eval_operand h' s` >> simp[]
-QED
-
-Triviality cover_revert_fold:
-  !pre s.
-    EVERY (\i. ~is_terminator i.inst_opcode) pre /\ i.inst_opcode = REVERT ==>
-    FOLDR (dft_exec_cons f C) OK (pre ++ [i]) s <> OK u /\
-    FOLDR (dft_exec_cons f C) OK (pre ++ [i]) s <> IntRet ir u
-Proof
-  Induct >> simp[dftIndexedExecTheory.dft_exec_cons_def] >> rpt strip_tac
-  >- (Cases_on `step_inst f C i s` >> gvs[cover_revert_step, is_terminator_def])
-  >- (Cases_on `step_inst f C i s` >> gvs[cover_revert_step, is_terminator_def])
-  >- (Cases_on `step_inst f C h s` >> gvs[] >>
-      metis_tac[dftRunRelTheory.dft_swap_nonterminator_no_intret])
-  >- (Cases_on `step_inst f C h s` >> gvs[] >>
-      metis_tac[dftRunRelTheory.dft_swap_nonterminator_no_intret])
 QED
 
 Triviality cover_fold_rows:
@@ -1321,17 +1270,6 @@ Proof
   ONCE_REWRITE_TAC [MEM_EL] >>
   qexists `k` >> simp[EL_TAKE, LENGTH_TAKE_EQ, MIN_DEF]
 QED
-Triviality cover_phi_before_body:
-  !ps xs. EVERY (\i. ~is_pseudo i.inst_opcode) xs ==>
-    phi_prefix_length (ps ++ xs) <= LENGTH ps
-Proof
-  Induct >> simp[phi_prefix_length_def]
-  >- (Cases_on `xs` >> simp[phi_prefix_length_def] >>
-      rpt strip_tac >> `h.inst_opcode <> PHI` by metis_tac[is_pseudo_def] >> simp[]) >>
-  rpt strip_tac >> Cases_on `h.inst_opcode = PHI` >>
-  simp[phi_prefix_length_def]
-QED
-
 Theorem cover_last_row_source:
   bb_well_formed bb /\ bb.bb_instructions = ps ++ xs /\
   xs <> [] /\ (LAST bb.bb_instructions).inst_opcode = REVERT /\
@@ -1358,7 +1296,7 @@ Proof
        ASSUME ``(EL (LENGTH ps + j) (ps ++ xs):instruction) = EL j xs``] >>
      decide_tac) >>
   `phi_prefix_length bb.bb_instructions <= LENGTH ps` by
-    metis_tac[cover_phi_before_body] >>
+    metis_tac[dftGasInvPairedPrefixTheory.inv_phi_prefix_pseudo_bound] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
   >- (simp[EVERY_EL, LENGTH_TAKE, EL_TAKE] >>
@@ -2859,7 +2797,7 @@ Resume focus_packet_coverage[forward]:
        qpat_assum `sites = endE ++ ender` (fn th =>
          (simp_tac (srw_ss()) [th,IS_PREFIX_APPEND] >> NO_TAC)),
        qpat_assum `endinst.inst_opcode = REVERT` (fn th =>
-         let val failure = MATCH_MP cover_revert_step th in
+         let val failure = MATCH_MP stepWriteFootprintForwardTheory.step_revert_no_normal th in
            simp_tac (srw_ss()) [th,cj 1 failure,cj 2 failure]
          end)]) >>
   irule cover_taken_at_fuel >> qexists `fuel` >>

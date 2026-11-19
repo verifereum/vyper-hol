@@ -30,7 +30,7 @@ Proof
   simp[middle_code_end_lifetime_def, fn_insts_def]
 QED
 
-Theorem middle_lower_dload_step[local]:
+Theorem middle_lower_dload_step:
   fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed s f out /\
   (!i. MEM i (fn_insts f) ==> ~MEM (Label "code_end") i.inst_operands) /\
   label_flow_ok (ctx with ctx_functions := [f]) ==>
@@ -70,7 +70,7 @@ Proof
   metis_tac[label_flow_ok_same_blocks, middle_lifetime_same_blocks]
 QED
 
-Theorem middle_concretize_step[local]:
+Theorem middle_concretize_step:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s f out /\
   label_flow_ok (ctx with ctx_functions := [f]) /\ middle_code_end_lifetime f ==>
   label_flow_ok (ctx with ctx_functions := [out.fpo_function]) /\
