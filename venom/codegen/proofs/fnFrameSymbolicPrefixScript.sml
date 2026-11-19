@@ -2075,14 +2075,6 @@ Proof
   gvs[sym_steps_mode_def] >> metis_tac[normal_frame_symbolic_plan_from_own]
 QED
 
-Theorem canonical_data_headers[local]:
-  MEM (AsmDataHeader l) prog ==> l IN FDOM (asm_data_env prog code)
-Proof
-  strip_tac >> simp[asm_data_env_def, FDOM_DRESTRICT,
-    symbolResolveTheory.compute_label_offsets_def, asmToBytecodeProofsTheory.clo_step_eq] >>
-  irule clo_FDOM >> simp[]
-QED
-
 Theorem sym_body_plan_ordinary_ok_own[local]:
   body_plan_inv_reloc rpolicy unit cpl prog unit.cu_context
     lo (build_offset_to_pc prog)
@@ -2204,7 +2196,7 @@ Proof
     gvs[focus_s7_symbolic_context_def, focus_s7_symbolic_context_own_def,
         focus_s7_symbolic_guard_def, focus_s7_symbolic_guard_own_def] >>
   `!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env` by
-    metis_tac[canonical_data_headers] >>
+    metis_tac[asmDataEnvTheory.asm_data_env_header_fdom] >>
   rfs[body_plan_inv_reloc_specialize] >>
   `sym_frame_inv_own (SND (compute_label_offsets prog)) prog env ast.as_code
      unit.cu_context cpl fn ret srest labs0 ps ast ss` by
@@ -2307,7 +2299,7 @@ Proof
     gvs[focus_s7_symbolic_context_def, focus_s7_symbolic_context_own_def,
         focus_s7_symbolic_guard_def, focus_s7_symbolic_guard_own_def] >>
   `!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env` by
-    metis_tac[canonical_data_headers] >>
+    metis_tac[asmDataEnvTheory.asm_data_env_header_fdom] >>
   drule frame_stack_symbolic_plan_to_own >> simp[] >> strip_tac >>
   `s.vs_code = vs0.vs_code` by
     (fs[joint_config_reachable_def] >>
@@ -2459,7 +2451,7 @@ Proof
     fs[focus_s7_symbolic_context_def, focus_s7_symbolic_context_own_def,
        focus_s7_symbolic_guard_def, focus_s7_symbolic_guard_own_def] >>
   `!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env` by
-    metis_tac[canonical_data_headers] >>
+    metis_tac[asmDataEnvTheory.asm_data_env_header_fdom] >>
   `s.vs_code = vs0.vs_code` by
     (fs[joint_config_reachable_def] >>
      drule joint_origin_history_projection >> strip_tac >>
@@ -2555,7 +2547,7 @@ Proof
   qspecl_then [`F`, `SND (compute_label_offsets prog)`, `vs0.vs_code`, `j`]
     mp_tac normal_frame_symbolic_trace_prefix_own >>
   impl_tac
-  >- (simp[code_labels_agree_refl, canonical_data_headers,
+  >- (simp[code_labels_agree_refl, asmDataEnvTheory.asm_data_env_header_fdom,
            asm_data_env_lo_ok_canonical, asm_data_env_ok_asm_data_env] >>
       rewrite_tac[focus_s7_symbolic_guard_own_def, GSYM focus_s7_symbolic_guard_def] >>
       rpt gen_tac >> strip_tac >> metis_tac[]) >>

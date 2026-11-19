@@ -1380,7 +1380,7 @@ Theorem sym_terminal_step_runs:
   sym_steps p env 1 ss = sym_step p env inst ss
 Proof
   metis_tac [SRULE [sym_steps_mode_def] (Q.INST [`allow_own` |-> `F`]
-    symControlTerminalSafetyOwnTheory.sym_terminal_step_runs_mode)]
+    codegenSymRelTheory.sym_steps_mode_single)]
 QED
 
 Theorem sym_terminal_opcode_safe:

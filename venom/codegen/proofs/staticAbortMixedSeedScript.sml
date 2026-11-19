@@ -188,7 +188,7 @@ Proof
     simp[asm_state_component_equality] >>
   qabbrev_tac `env0 = asm_data_env prog (assemble prog ++ vs.vs_data_section)` >>
   `!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env0` by
-    simp[Abbr `env0`, codegenAsmOptTheory.asm_data_env_header_fdom] >>
+    simp[Abbr `env0`, asmDataEnvTheory.asm_data_env_header_fdom] >>
   `asm_data_env_ok prog env0 vs.vs_code` by
     simp[Abbr `env0`, asm_data_env_ok_asm_data_env] >>
   CONV_TAC seed_names_conv >>

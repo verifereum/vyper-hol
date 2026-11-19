@@ -146,15 +146,6 @@ Proof
       sym_step_def, sym_terminal_opcode_concrete]
 QED
 
-Theorem sym_terminal_step_runs_mode:
-  asm_block_at p ss.sym_base.as_pc [inst] ==>
-  sym_steps_mode allow_own p env own 1 ss =
-    (if allow_own then sym_step_own p env own inst ss
-     else sym_step p env inst ss)
-Proof
-  metis_tac[sym_steps_mode_single]
-QED
-
 Theorem sym_terminal_opcode_safe_mode:
   MEM name ["STOP"; "RETURN"; "REVERT"; "INVALID"; "SELFDESTRUCT";
             "CREATE"; "CREATE2"; "RETURNDATACOPY"; "CALL"; "STATICCALL"; "DELEGATECALL"] /\
@@ -191,7 +182,7 @@ Proof
   `sym_steps_mode allow_own p env own 1 ss =
     (if allow_own then sym_step_own p env own inst ss
      else sym_step p env inst ss)` by
-    (irule sym_terminal_step_runs_mode >> asm_rewrite_tac[]) >>
+    (irule codegenSymRelTheory.sym_steps_mode_single >> asm_rewrite_tac[]) >>
   pop_assum SUBST1_TAC >>
   qpat_x_assum `!cs ss ai cr. _` (drule_all_then assume_tac) >>
   drule_all bridge_result_terminal >> simp[]
