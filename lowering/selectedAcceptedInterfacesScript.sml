@@ -1,6 +1,7 @@
 (* Positive induction interfaces for registration on the actual calldata. *)
 Theory selectedAcceptedInterfaces
 Ancestors
+  exprLoweringProps
   calldataRegistrationRawAddress abiDecoderCoherence abiDecoderReentry
   abiDecoderFrame fragGasOriginPtr fragGasOriginPtrExec gasPathPtrExec ptrSafeRun
   fragGasPathMem moduleLowering ptrDiscipline bodyPtrDefs compileEnv loweringStateRelDefs
@@ -38,7 +39,10 @@ Definition selected_decoder_accepts_def:
     ptr_covers G tn child initial (type_memory_size tv) /\
     op_taint tn src = {} /\ op_prov G src = NONE /\
     fresh_vars_wrt limit initial /\ allocas_from lower initial /\
-    lower <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    lower <= initial.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+       initial.vs_alloca_next + pending_alloca_size fn initial <=
+         w2n initial.vs_initial_fmp) /\
     ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
     initial.vs_inst_idx = LENGTH st.cs_current_insts /\
     cd_decode F initial.vs_call_ctx.cc_calldata tv (w2n p) = SOME x ==>
@@ -59,6 +63,9 @@ Definition selected_decoder_accepts_def:
       v.vs_pending_deletions = initial.vs_pending_deletions /\
       v.vs_tx_ctx = initial.vs_tx_ctx /\ v.vs_block_ctx = initial.vs_block_ctx /\
       v.vs_fmp = initial.vs_fmp /\ v.vs_gas_readings = initial.vs_gas_readings /\
+      v.vs_initial_fmp = initial.vs_initial_fmp /\
+      v.vs_alloca_next + pending_alloca_size fn v <=
+        initial.vs_alloca_next + pending_alloca_size fn initial /\
       alloca_inv v /\ alloca_frontier_inv ctx fn site v /\ allocas_from lower v /\
       (!id q k. st.cs_next_id <= id /\ id < last.cs_next_id /\
         FLOOKUP v.vs_allocas id = SOME (q,k) ==>
@@ -109,7 +116,9 @@ Definition selected_slot_accepts_def:
     last.cs_next_var <= limit.cs_next_var /\
     fresh_vars_wrt st s /\ fresh_vars_wrt limit s /\
     allocas_from lo s /\ lo <= s.vs_alloca_next /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+       s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
+    ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
     cd_decode F s.vs_call_ctx.cc_calldata tv srcpos = SOME x ==>
     ?t H u q p.
@@ -140,6 +149,9 @@ Definition selected_slot_accepts_def:
        (!inst w b k. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
         inst.inst_operands = [Lit w] /\
         FLOOKUP t.vs_allocas inst.inst_id = SOME (b,k) ==> k = w2n w)) /\
+      t.vs_initial_fmp = s.vs_initial_fmp /\
+      t.vs_alloca_next + pending_alloca_size fn t <=
+        s.vs_alloca_next + pending_alloca_size fn s /\
       alloca_inv t /\ alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
       s.vs_alloca_next <= t.vs_alloca_next /\
       fresh_vars_wrt last t /\ fresh_vars_wrt limit t /\

@@ -115,7 +115,8 @@ Theorem selected_nonbulk_parent_to_header:
   ptr_covers G tn root s (type_memory_size (ArrayTV tv (Dynamic maxn))) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   fresh_vars_wrt limit s /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   cd_decode F s.vs_call_ctx.cc_calldata (ArrayTV tv (Dynamic maxn)) (w2n p) = SOME x ==>
   ?ip cnt guard_st header_st loop_st labels st0 ops middle st1 body_bb exit_bb n vs t h H u q b.
