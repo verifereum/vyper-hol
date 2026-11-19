@@ -12,7 +12,92 @@ Ancestors
   contextCodegenRel lowerDloadDefs staticAbortDefs frameOutcome callTrace
   o1RequestContract unitTransformDefs ptrDiscipline passSimulationDefs
   vfmExecution codegen asmIR
+  gasFocusCfgNormSpillRanges dftFinitePacketReachability
+  dftGasInvCrossingProbe dftGasInvMemoryRanges ctxLookupAgree
+  lowerDloadOracleCallAssembly stepWriteFootprintBase contextPlanLayoutProps
+  codegenEntrySim dretDesugarDefs
   finite_map list rich_list words arithmetic
+
+Theorem focus_cut_replay_ranges[local]:
+  inst.inst_opcode <> DRET /\ ~in_revert_forward fn s /\
+  (~in_revert_forward fn s ==> ~in_revert_forward sf u) /\
+  lowered_mem_fact eom C7 sf inst u /\
+  (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op s) /\
+  u.vs_initial_fmp = s.vs_initial_fmp ==>
+  lowered_mem_fact eom C8 fn inst s
+Proof
+  strip_tac >>
+  `inst_mem_ranges inst u = inst_mem_ranges inst s` by
+    (irule inv_non_dret_ranges_cong >> simp[]) >>
+  gvs[lowered_mem_fact_def, lowered_mem_ok_def]
+QED
+
+Theorem focus_current_point_ranges[local]:
+  cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
+    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
+    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) /\
+  ~in_revert_forward fn9 s9 /\ generate_context_plan C9 = SOME cpl /\
+  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
+  root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|> /\
+  C8.ctx_entry = SOME nm /\ lookup_function nm C8.ctx_functions = SOME root_tf /\
+  fn_entry_label root_tf = SOME lbl7 /\
+  j < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry) /\
+  EL j (trace_blocks [] 0 N C8 root_tf root_entry) = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
+  EVERY (o1_fn_shape C8) C8.ctx_functions /\
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8) raw_slots sites unused /\
+  (inv_memory_observation inst8.inst_opcode ==>
+    ?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
+      body_entry count front closed brest q z src_inst u.
+      FLOOKUP acts p = SOME (sf,fn8,inc,entry,order,res,nrest) /\
+      FLOOKUP blocks (p,d) =
+        SOME (bb,bt,ps,xs,ys,rho,in_state,h0,body_entry,count,front,closed,brest) /\
+      src_inst = EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
+      ((IS_SOME body_entry /\ q < LENGTH xs /\ EL q xs = inst8 /\
+        z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs) \/
+       body_entry = NONE) /\
+      lowered_mem_fact cpl.cp_max_static_eom C7 sf src_inst u /\
+      (~in_revert_forward fn8 s8 ==> ~in_revert_forward sf u) /\
+      (IS_SOME body_entry ==>
+        (!op. MEM op inst8.inst_operands ==> eval_operand op u = eval_operand op s8) /\
+        u.vs_initial_fmp = s8.vs_initial_fmp)) ==>
+  source_memory_reads_disjoint cpl inst9 s9 /\
+  context_source_memory_writes_disjoint cpl inst9 s9
+Proof
+  strip_tac >> irule focus_cfg_norm_pre_edge_ranges >>
+  qpat_assum `cfg_norm_joint_cursors _ _ _ _ _` (irule_at Any) >> simp[] >> strip_tac >>
+  `MEM fn8 C8.ctx_functions` by
+    (Cases_on `current` >> fs[cfg_norm_joint_cursors_def] >>
+     metis_tac[MEM_MAP, pairTheory.FST]) >>
+  `MEM ((p,d,inst8.inst_id),fn8,inst8,s8) (trace_blocks [] 0 N C8 root_tf root_entry)` by
+    (simp[MEM_EL] >> qexists `j` >> gvs[]) >>
+  `raw_reachable root_entry C8 fn8 inst8 s8` by
+    (irule dft_packet_trace_raw_reachable >> gvs[] >> metis_tac[]) >>
+  `cpl.cp_initial_fmp <= w2n s8.vs_initial_fmp` by
+    (drule raw_reachable_initial_fmp >>
+     fs[codegen_asm_entry_rel_def] >> strip_tac >>
+     drule generate_context_plan_spill_gap >> strip_tac >>
+     qpat_x_assum `n2w _ = vs0.vs_initial_fmp` (SUBST1_TAC o SYM) >>
+     simp[LESS_MOD]) >>
+  `o1_fn_shape C8 fn8` by metis_tac[EVERY_MEM] >>
+  `active_inst fn8 inst8 s8` by metis_tac[raw_reachable_active] >>
+  `inst_shape_ok inst8 /\ inst8.inst_opcode <> DRET` by
+    (drule ld_active_inst_member >>
+     fs[o1_fn_shape_def, fn_shape_ok_def, no_dret_def, EVERY_MEM]) >>
+  `inv_memory_observation inst8.inst_opcode` by
+    metis_tac[inv_memory_observation_covers_ranges] >>
+  qpat_x_assum `inv_memory_observation _ ==> _` drule >> strip_tac >>
+  drule dft_packet_guarded_cursor_structure >> (impl_tac >- simp[]) >>
+  strip_tac >> gvs[] >>
+  rename1 `FLOOKUP blocks _ = SOME (bb,_,ps,xs,ys,_,_,_,_,_,_,_,_)` >>
+  rename1 `lowered_mem_fact _ _ _ (EL (_ + qi) _) _` >>
+  `EL (LENGTH (DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE qi xs))
+      (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) = EL qi xs` by
+    (irule dft_packet_cut_instruction >> fs[]) >>
+  gvs[] >> irule focus_cut_replay_ranges >>
+  qpat_assum `lowered_mem_fact _ _ _ _ _` (irule_at Any) >> simp[]
+QED
 
 (* Scratch statement for elaboration and independent review.
    For the given compatible filling, use the H1 bounded family.
