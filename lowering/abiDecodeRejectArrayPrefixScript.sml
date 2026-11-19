@@ -81,7 +81,7 @@ Theorem malformed_dynarray_prefix_or_bulk_joint:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   ~(^abi_ok) env (ArrayT ty (Dynamic cap)) (DROP p xs) /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ abi_decode_ptr_window G tn s source (n2w B) L /\
   op_prov G pos = NONE /\ op_taint tn pos = {} /\
   op_prov G hi = NONE /\ op_taint tn hi = {} /\ allocas_from lo s ==>
   (?u H z.

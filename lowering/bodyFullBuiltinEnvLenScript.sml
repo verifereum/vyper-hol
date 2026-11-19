@@ -28,7 +28,6 @@ Theorem len_builtin_sim_full:
       cenv cx ty (Builtin a bt args) es
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule len_pre_args >> strip_tac >> gvs[] >>
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >> disch_then irule >>

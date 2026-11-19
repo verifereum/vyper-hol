@@ -10,6 +10,7 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   exprSimCopy abiBuiltinAllocation emitHelperProps valueEncoding
   loweringPosts bodyPtrDefs vyperStorageTrace vyperStorageFootprint
   vyperInterpreter vyperState venomState venomInst
+  bodyFullIfExpReach
 
 val _ = Parse.hide "base";
 
@@ -28,7 +29,6 @@ Proof
   pure_once_rewrite_tac [GSYM (PURE_REWRITE_RULE [make_array_completed_def]
     make_array_packaging_ok_def)] >>
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `expr_sim_inv cenv cx env es /\ compatible_bound n (LENGTH args)` by
     gvs[expr_body_pre_def,cj 9 vyperTypeSystemTheory.well_typed_expr_def,
         vyperTypeSystemTheory.well_typed_builtin_app_def] >>
@@ -82,6 +82,16 @@ Resume make_tuple_vv_sim_full_conditional[loop]:
   `fn_has_code ssm shadow_sb shadow_func` by
     (irule (cj 2 fragExecTheory.fn_has_code_split) >>
      conj_tac >- fs[ci_mono_def] >> qexists `shadow_sa` >> fs[ci_mono_def]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+  `!fn i z. frag_reachable ctx func si fn i z ==> dalloca_no_wrap i z` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK si,Gi,tni)`
+       (qspec_then `DF (storage_trace_horizon es.storage_trace)` assume_tac) >>
+     qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) [] (OK si,Gi,tni)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
+         qpat_assum `!fn i z. frag_reachable ctx func s0 fn i z ==> _`
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+            CONJ path o CONJ no_phi)))) >>
   mp_tac (Q.INST [`csbase` |-> `sa`, `ebase` |-> `es`, `sbase` |-> `s0`,
     `Gbase` |-> `G0`, `tnbase` |-> `tn0`, `aid` |-> `sa.cs_next_id`,
     `base` |-> `w2n (w:256 word)`, `cap` |-> `type_memory_size_list tvs`]
@@ -89,7 +99,10 @@ Resume make_tuple_vv_sim_full_conditional[loop]:
   disch_then (qspecl_then [`args`,`tys`,`tvs`,`0`,`[]`,`sm`,`sb`,
     `ssm`,`shadow_sb`,`es`,`si`,`Gi`,`tni`] mp_tac) >>
   (impl_tac >-
-    (fs[ci_mono_def] >> rpt conj_tac >> rpt strip_tac >> simp[]
+    (fs[ci_mono_def] >> rpt conj_tac
+     >~ [`!fn inst z. frag_reachable ctx func si fn inst z ==> dalloca_no_wrap inst z`]
+     >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >> simp[]
      >- (qpat_x_assum `!name b len. local_region _ _ _ name b len ==> _` irule >>
          goal_assum (drule_at Any)))) >>
   strip_tac >>

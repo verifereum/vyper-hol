@@ -87,7 +87,7 @@ Theorem convert_signed_decimal_suffix_origin_path:
   (!p. not_fresh_at sa p ==> ~MEM p [a;b;c;d;e]) /\
   (!p. x = Var p ==> not_fresh_at sa p) /\
   op_prov G x = NONE /\ op_taint tn x = {} /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
@@ -190,7 +190,7 @@ Theorem convert_signed_clamp_origin_path:
   compile_int_clamp T bits x sa = (out,sb) /\
   (!p. x = Var p ==> not_fresh_at sa p) /\
   op_prov G x = NONE /\ op_taint tn x = {} /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\

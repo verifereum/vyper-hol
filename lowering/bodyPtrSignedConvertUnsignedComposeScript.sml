@@ -45,6 +45,7 @@ Proof
    (!x. w2n a <= x /\ x < w2n a+32 ==> x NOTIN tn.t_mem)` by
     (conj_tac >- decide_tac >> gen_tac >> disch_then strip_assume_tac >> qpat_x_assum `!x. _ ==> x NOTIN tn.t_mem` irule >> decide_tac) >>
   `ALL_DISTINCT [src;len;dp]` by fs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bytestring_source_fixed_frame >>
   disch_then (qspecl_then [`D`,`fn`,`PG`]
     (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac))) >>
