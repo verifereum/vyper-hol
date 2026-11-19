@@ -31,6 +31,9 @@ Ancestors
   gasFocusFmpCutSourceCall gasFocusFmpCutInvokePush gasFocusFmpCutInvokeOutputs
   gasFocusFmpCutSourceReturn gasFocusFmpCutInvokePop
   concretizePtrCoverageStaticMemReachability frameAllocationOwnership
+  fmpStageCoverMemAssemble fmpStageOpBase fmpStepRewriteOrigin fmpStepOpaque
+  fmpLowerIndexedProps lowerDloadRevertSuffix lowerDloadReachability frameViewFacts
+  o1LowerDloadRelocationKernel pred_set pointerConfinedDefs memLocDefs
 
 (* Entry and source-point facts for the bounded FMP frame induction. *)
 Theorem focus_fmp_src_active[local]:
@@ -1190,6 +1193,229 @@ Resume focus_opt_fmp_cut_cover[ret]:
 QED
 
 Finalise focus_opt_fmp_cut_cover[local]
+
+(* The two sources of non-kept code are the root layout and the indexed
+   block walk. Neither can introduce a new code-end chain: the only
+   extra ASSIGNs are restores from DALLOCA outputs. *)
+Theorem focus_fmp_code_end_layout_origin[local]:
+  fmp_stage_lowered infos ctx runner f g /\ MEM j (fn_insts g) ==>
+  MEM j (fn_insts_blocks f.fn_blocks) \/
+  ?sp s1 info users oldpc suffix root newpc s2 plan blocks s3.
+    ir_supply_covers_fn sp f /\ fresh_ir_var sp = (runner,s1) /\
+    split_fmp_entry f = SOME (FmpEntryLayout users oldpc suffix) /\
+    fmp_make_root_layout ctx f info runner s1 =
+      SOME (FmpRootLayout (LENGTH users) root newpc s2) /\
+    analyze_fmp_reclaims infos ctx f = SOME plan /\
+    fmp_lower_blocks infos ctx runner s2 (fmp_plan_to_alist f plan) f.fn_blocks =
+      SOME (FmpBlocksResult blocks [] s3) /\
+    (MEM j (fn_insts_blocks blocks) \/
+     MEM j (OPTION_TO_LIST root) \/ MEM j (OPTION_TO_LIST newpc))
+Proof
+  simp[fmp_stage_lowered_def, fmp_lower_function_with_info_def, AllCaseEqs()] >>
+  strip_tac >> gvs[fn_insts_def] >>
+  drule fmp_checked_seal_some >> strip_tac >> gvs[fmp_seal_def, fn_insts_def] >>
+  Cases_on `root_layout` >> gvs[] >>
+  `?users oldpc suffix. split_fmp_entry f = SOME (FmpEntryLayout users oldpc suffix)` by
+    (qpat_assum `fmp_make_root_layout _ _ _ _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[fmp_make_root_layout_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_all fmp_make_root_layout_prefix >> strip_tac >> gvs[] >>
+  drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >>
+  `entry.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail` by
+    (Cases_on `oldpc` >> fs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
+  qpat_x_assum `blocks = entry::rest` SUBST_ALL_TAC >>
+  rename1 `fresh_ir_var sp = (runner,s1)` >>
+  rename1 `fmp_make_root_layout ctx f info runner s1 =
+      SOME (FmpRootLayout (LENGTH users) root newpc s2)` >>
+  rename1 `fmp_lower_blocks infos ctx runner s2 (fmp_plan_to_alist f plan)
+      f.fn_blocks = SOME (FmpBlocksResult (entry::rest) [] s3)` >>
+  drule_all (SRULE [fn_insts_def] fmp_install_root_instruction_origin) >>
+  disch_then assume_tac >>
+  disj2_tac >>
+  metis_tac[]
+QED
+
+Theorem focus_fmp_code_end_inst_origin[local]:
+  fmp_stage_lowered infos ctx runner f g /\ pre_fmp_ops f /\ ssa_form f /\
+  MEM j (fn_insts g) /\
+  ((j.inst_opcode = ADD /\ ?op. j.inst_operands = [op; Label "code_end"]) \/
+   (j.inst_opcode = ASSIGN /\ ?y. j.inst_operands = [Var y] /\ code_end_var f y)) ==>
+  MEM j (fn_insts f)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all focus_fmp_code_end_layout_origin >>
+  disch_then (DISJ_CASES_THEN2 assume_tac
+    (qx_choosel_then [`sp`, `s1`, `info`, `users`, `oldpc`, `suffix`,
+       `root`, `newpc`, `s2`, `plan`, `blocks`, `s3`]
+       (map_every assume_tac o CONJUNCTS)))
+  >- simp[fn_insts_def] >>
+  drule_all fmp_make_root_layout_opaque_shape >> strip_tac >>
+  `MEM j (fn_insts_blocks blocks)` by
+    (qpat_x_assum `MEM j (fn_insts_blocks blocks) \/ _` strip_assume_tac >>
+     qpat_x_assum `j.inst_opcode = ADD /\ _ \/ _` strip_assume_tac >>
+     qpat_x_assum `!i. MEM i (OPTION_TO_LIST root) ==> _`
+       (qspec_then `j` mp_tac) >>
+     qpat_x_assum `!i. MEM i (OPTION_TO_LIST newpc) ==> i.inst_opcode = RETPC_PARAM`
+       (qspec_then `j` mp_tac) >> simp[]) >>
+  fs[fn_insts_def] >>
+  qpat_x_assum `MEM j (fn_insts_blocks blocks)` mp_tac >>
+  pure_rewrite_tac[fn_insts_blocks_MEM] >> strip_tac >>
+  drule_all fmp_lower_blocks_origin >> strip_tac >>
+  TRY (rename1 `fmp_lower_inst _ _ _ _ src_inst = SOME _` >>
+       `pre_fmp_opcode src_inst.inst_opcode` by
+         (fs[pre_fmp_ops_def, fn_insts_def, fn_insts_blocks_MEM, EVERY_MEM] >>
+          metis_tac[]) >>
+       gvs[fmp_lower_inst_def, AllCaseEqs(), mk_inst_def, pre_fmp_opcode_def] >>
+       metis_tac[] >> NO_TAC) >>
+  gvs[mk_inst_def] >>
+  rename1 `MEM (restore_point,restore_base) (fmp_plan_to_alist f plan)` >>
+  `FLOOKUP plan restore_point = SOME restore_base` by
+    metis_tac[fmpLowerPropsTheory.MEM_fmp_plan_to_alist] >>
+  drule_all analyze_fmp_reclaims_output >> strip_tac >>
+  drule_all code_end_var_def_inst >> simp[]
+QED
+
+Theorem focus_fmp_code_end_var_backward[local]:
+  !g x. code_end_var g x ==> !infos ctx runner f.
+    fmp_stage_lowered infos ctx runner f g /\ pre_fmp_ops f /\ ssa_form f ==>
+    code_end_var f x
+Proof
+  Induct_on `code_end_var` >> rpt strip_tac
+  >- (`MEM inst (fn_insts f)` by
+        (irule focus_fmp_code_end_inst_origin >> metis_tac[]) >>
+      metis_tac[code_end_var_rules]) >>
+  rename1 `inst.inst_operands = [Var y]` >>
+  `code_end_var f y` by metis_tac[] >>
+  `MEM inst (fn_insts f)` by
+    (irule focus_fmp_code_end_inst_origin >> metis_tac[]) >>
+  metis_tac[code_end_var_rules]
+QED
+
+Theorem focus_fmp_codecopy_scalar[local]:
+  o1_fn_shape C fn /\ make_ssa_input_ok fn /\ active_inst fn inst s /\
+  taint_ok fn tn inst s /\ ptr_use_static_ok P (fn_pv P fn) inst /\
+  FDOM G SUBSET fn_pv P fn /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dst; Var x; sz] /\
+  IS_SOME (lookup_var x s) ==>
+  eval_operand (Var x) s = eval_operand (Var x) t
+Proof
+  strip_tac >>
+  `x NOTIN fn_pv P fn` by
+    (strip_tac >> qpat_x_assum `ptr_use_static_ok _ _ _` mp_tac >>
+     pure_rewrite_tac[ptr_use_static_ok_def] >>
+     disch_then (CONJUNCTS_THEN2 kall_tac (qspec_then `x` mp_tac)) >>
+     simp[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def] >>
+     Cases_on `dst = Var x` >> gvs[AllCaseEqs()]) >>
+  `op_prov G (Var x) = NONE` by
+    (gvs[op_prov_def, SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
+  `op_taint tn (Var x) = {}` by
+    (gvs[taint_ok_def] >> metis_tac[MEM]) >>
+  `~retpc_var fn x` by
+    (irule ordinary_operand_not_retpc >> conj_tac
+     >- fs[o1_fn_shape_def, fn_shape_ok_def] >>
+     qexists_tac `inst` >> simp[] >> metis_tac[active_inst_mem_fn_insts]) >>
+  `wf_function fn /\ inst.inst_opcode <> PHI /\ MEM (Var x) inst.inst_operands /\
+    (!v. Var x = Var v ==> ~retpc_var fn v)` by fs[o1_fn_shape_def] >>
+  `?w. eval_operand (Var x) s = SOME w` by
+    (Cases_on `lookup_var x s` >> gvs[eval_operand_def]) >>
+  drule_all fmp_stage_operand_point >>
+  simp[fmp_value_rel_def] >> strip_tac >>
+  metis_tac[ld_value_agree_clean]
+QED
+
+(* A CODECOPY is not a restore, a rewritten INVOKE, or an FMP primitive. *)
+Theorem focus_fmp_codecopy_inst[local]:
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ idx < LENGTH bb.bb_instructions /\
+  pre_fmp_ops fn /\ inst = EL idx bb.bb_instructions /\
+  lookup_block lbl fn'.fn_blocks = SOME bt /\ get_instruction bt i = SOME ti /\
+  ti.inst_opcode = CODECOPY /\
+  i = fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+                      lbl bb.bb_instructions idx +
+      (if restored /\ (lbl,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0) ==>
+  ti = inst
+Proof
+  strip_tac >>
+  qabbrev_tac `q = fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+                                  lbl bb.bb_instructions idx` >>
+  qabbrev_tac `k = q + (if (lbl,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0)` >>
+  `q <= i /\ i <= k` by (Cases_on `restored` >> gvs[Abbr `k`]) >>
+  `i < fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+                      lbl bb.bb_instructions (SUC idx)` by
+    (qspecl_then [`fmp_stage_plan infos ctx fn`, `fmp_stage_root infos ctx fn`,
+       `lbl`, `bb.bb_instructions`, `idx`] mp_tac
+       (Q.GENL [`plan`, `root`, `lbl`, `insts`, `idx`] fmp_cov_tidx_lt) >>
+     strip_tac >> Cases_on `restored` >> gvs[Abbr `k`, Abbr `q`]) >>
+  Cases_on `i <> k \/ MEM inst.inst_opcode [DALLOCA; RETPC_PARAM]`
+  >- (`?bt'. lookup_block lbl fn'.fn_blocks = SOME bt' /\ i < LENGTH bt'.bb_instructions /\
+              fmp_inserted_op (EL i bt'.bb_instructions).inst_opcode` by
+        (irule fmp_cover_inserted_from_root_structural >>
+         simp[fmp_inserted_op_def] >>
+         qexistsl [`bb`, `ctx`, `fn`, `idx`, `infos`, `runner`] >>
+         Cases_on `idx = 0` >> gvs[Abbr `k`, Abbr `q`] >> metis_tac[]) >>
+      gvs[get_instruction_def, fmp_inserted_op_def]) >>
+  `pre_fmp_opcode inst.inst_opcode` by
+    (fs[pre_fmp_ops_def, EVERY_MEM, fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[EL_MEM, lookup_block_member_label]) >>
+  `i = k` by fs[] >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (`(EL idx bb.bb_instructions).inst_opcode = INVOKE` by metis_tac[] >>
+      drule_all fmp_stage_invoke_inst >> gvs[get_instruction_def, Abbr `k`, Abbr `q`]) >>
+  `~MEM inst.inst_opcode [DALLOCA; INVOKE; RETPC_PARAM]` by fs[] >>
+  drule_all fmp_stage_kept_inst >> gvs[get_instruction_def, Abbr `k`, Abbr `q`]
+QED
+
+Theorem focus_opt_fmp_bound_from_cover[local]:
+  o1_ctx_shape C3 /\ o1_ctx_shape C4 /\
+  EVERY (o1_fn_row 3) C3.ctx_functions /\ EVERY ssa_form C3.ctx_functions /\
+  o1_initial_state_ok root4 /\ fmp_free_ctx C3 /\
+  root3 = root4 with <|vs_fmp := fmp; vs_initial_fmp := fmp|> /\
+  ^focus_fmp_fields /\
+  (!stk' PG' G' tn' fn' ti t.
+     frame_reachable root4 C4 stk' PG' G' tn' fn' ti t /\ gas_cut n root4 t ==>
+     ^focus_fmp_matched \/ ^focus_fmp_tail) /\
+  code_end_offset_ok (\ctx fn i s. raw_reachable root3 ctx fn i s /\ gas_cut n root3 s) C3 ==>
+  code_end_offset_ok (\ctx fn i s. raw_reachable root4 ctx fn i s /\ gas_cut n root4 s) C4
+Proof
+  strip_tac >> simp[code_end_offset_ok_def] >>
+  map_every qx_gen_tac [`fn'`, `ti`, `t`, `dst`, `x`, `sz`, `w`, `bword`] >> strip_tac >>
+  drule ptr_raw_reachable_frame >> strip_tac >>
+  `active_inst fn' ti t` by metis_tac[scfg_frame_reachable_active] >>
+  qpat_x_assum `!stk' PG' G' tn' fn' ti t. frame_reachable root4 _ _ _ _ _ _ _ _ /\ _ ==> _`
+    drule_all >> strip_tac
+  >- (`MEM fn' C4.ctx_functions` by
+        metis_tac[frameAllocationOwnershipTheory.frame_reachable_functions_member] >>
+      `ALL_DISTINCT (fn_labels fn')` by
+        fs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def, wf_function_def] >>
+      `get_instruction bb t.vs_inst_idx = SOME ti` by
+        metis_tac[active_inst_block_lookup, optionTheory.SOME_11] >>
+      Cases_on `t.vs_inst_idx < u.vs_inst_idx`
+      >- (qpat_assum `!i. _ <= i /\ _ ==> _` (qspec_then `t.vs_inst_idx` mp_tac) >>
+          (impl_tac >- decide_tac) >> strip_tac >>
+          gvs[get_instruction_def, fmp_inserted_op_def]) >>
+      `u = t` by
+        (qpat_assum `!k. fmp_target_run k _ _ _ _ _` (qspec_then `0` mp_tac) >>
+         `u.vs_inst_idx - t.vs_inst_idx = 0` by decide_tac >>
+         simp[] >> metis_tac[fmp_target_run_zero]) >>
+      qpat_x_assum `u = t` SUBST_ALL_TAC >>
+      `root3.vs_vars = FEMPTY /\ ~root3.vs_halted` by fs[o1_initial_state_ok_def] >>
+      drule_all focus_fmp_source_points >> strip_tac >>
+      drule_all focus_fmp_aligned_layout >> strip_tac >>
+      `ti = inst` by (irule focus_fmp_codecopy_inst >> metis_tac[]) >>
+      `ssa_form fn` by metis_tac[EVERY_MEM, lookup_function_MEM] >>
+      `code_end_var fn x` by
+        (drule focus_fmp_code_end_var_backward >> metis_tac[]) >>
+      `IS_SOME (lookup_var x s)` by fs[] >>
+      `eval_operand (Var x) s = eval_operand (Var x) t` by
+        (irule focus_fmp_codecopy_scalar >> metis_tac[]) >>
+      `s.vs_labels = t.vs_labels` by fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
+      `raw_reachable root3 C3 fn inst s` by metis_tac[ld_frame_reachable_raw] >>
+      fs[code_end_offset_ok_def] >> metis_tac[]) >>
+  `get_instruction bb t.vs_inst_idx = SOME ti` by
+    metis_tac[active_inst_block_lookup, optionTheory.SOME_11] >>
+  drule_all ld_revert_pair_suffix_opcode >> simp[]
+QED
 
 Theorem focus_opt_c1_section[local]:
   o1PipelineCorrect$o1_pipeline rp unit = SOME out /\
