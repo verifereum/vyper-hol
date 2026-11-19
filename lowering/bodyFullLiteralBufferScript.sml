@@ -65,7 +65,9 @@ Proof
           eval_operand_def, AllCaseEqs()] >>
      rpt strip_tac >> gvs[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   gvs[Once inst_seq_ptr_def] >>
-  simp_tac bool_ss [Once inst_seq_ptr_def] >> conj_tac >- metis_tac[] >>
+  simp_tac bool_ss [Once inst_seq_ptr_def] >> conj_tac
+  >- (first_x_assum irule >>
+      simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   Cases_on `step_inst_base i2 (v with vs_inst_idx := SUC s.vs_inst_idx)` >> gvs[] >>
   rename1 `step_inst_base i2 _ = OK z` >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp
@@ -74,7 +76,9 @@ Proof
      simp[Abbr `i2`, step_inst_base_def, mk_inst_def, exec_write2_def,
           eval_operand_def, AllCaseEqs()] >>
      rpt strip_tac >> gvs[allocas_below_fmp_def, mstore_def] >> metis_tac[]) >>
-  fs[Abbr `rest`] >> first_x_assum irule >> metis_tac[]
+  fs[Abbr `rest`] >> first_x_assum irule >>
+  simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
+  qexists_tac `ctx0` >> first_assum ACCEPT_TAC
 QED
 
 (* The pointer twin is exprSimPtrLiteralBuffer's literal_bytelike_ptr_run at

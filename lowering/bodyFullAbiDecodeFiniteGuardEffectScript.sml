@@ -68,6 +68,7 @@ Theorem abi_decode_scalar_guard_success_joint_effect:
     tnf.t_mem = tn.t_mem
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (bop_scalar_seq_run |> Q.INST [`D` |-> `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]) >>
   disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
   `lo <= s.vs_alloca_next` by fs[] >>

@@ -39,6 +39,7 @@ Proof
      ((uL with vs_inst_idx := SUC s.vs_inst_idx) with
        vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
      OK (t with vs_inst_idx := SUC (SUC s.vs_inst_idx))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SIMP_RULE (srw_ss()) [] (GEN_ALL bop_hash_sequence_checked)) >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   goal_assum (drule_at Any) >> simp[]

@@ -234,7 +234,7 @@ Proof
     (s with vs_inst_idx := q) HG th` by
     (rpt gen_tac >> irule inst_seq_ptr_zero_to_lo >>
      simp[allocas_from_def] >>
-     conj_tac >- metis_tac[allocas_from_def] >> qexists_tac `D` >> simp[]) >>
+     qexists_tac `D` >> simp[]) >>
   conj_tac >- suspend "success" >> suspend "abort"
 QED
 

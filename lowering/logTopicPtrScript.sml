@@ -143,6 +143,7 @@ Resume compile_encode_log_topic_bytes_seq_ptr[load]:
   `lookup_var src u = SOME a /\ ptr_covers G1 tn1 src u 32 /\
    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn1.t_mem)` by
     (gvs[Abbr `u`, ptr_covers_def, lookup_var_def] >> metis_tac[ADD_COMM, LESS_EQ_ADD, LESS_LESS_EQ_TRANS]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all emit_mload_clean_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`]
     (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `v` strip_assume_tac)))) >>

@@ -2,6 +2,7 @@
 Theory stmtAppendStorageRunPtr
 Ancestors
   appendStorageGhostPtr fragGasSeqPtr stmtSimAppendStorage
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
   typedCopyLoopHeaderPtr ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
   venomExecSemantics venomInst venomState emitHelperProps finite_map list
   ghostPcTransportPtr exprLoweringProps compileEnv loweringStateRelDefs instSeqComposePtr instIdxIndep fragExec
@@ -9,7 +10,7 @@ Ancestors
 Theorem append_scalar_inst_check:
   MEM opc [ADD; SLOAD; TLOAD; SSTORE; TSTORE; ASSERT] /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id opc ops outs) s = OK s' /\
   s'.vs_requests = s.vs_requests ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops outs) s
@@ -21,7 +22,7 @@ Proof
 QED
 
 Theorem append_assert_abort_check:
-  op_taint tn op = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id ASSERT [op] []) s = Abort a t ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id ASSERT [op] []) s
 Proof
@@ -123,7 +124,7 @@ Theorem emit_storage_load_ptr:
   op_taint tn bop = {} /\ eval_operand bop s = SOME slot /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'.
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G' tn' /\
     op_taint tn' lop = {} /\ tn'.t_mem = tn.t_mem /\
@@ -161,7 +162,7 @@ Theorem emit_append_arith_ptr:
   run_inst_seq (emitted_insts st st') s = OK t /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'.
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G' tn' /\
     op_taint tn' rop = {} /\ tn'.t_mem = tn.t_mem /\
@@ -195,7 +196,7 @@ Proof
        op_taint_def, FLOOKUP_UPDATE]
 QED
 
-Theorem emit_storage_store_ptr_fmp:
+Theorem emit_storage_store_ptr:
   emit_void (if tr then TSTORE else SSTORE) [a;v] st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t /\
   op_taint tn a = {} /\ op_taint tn v = {} /\
@@ -222,26 +223,12 @@ Proof
   simp[Abbr `i`] >> sym_tac >> irule scalar_storage_store_taint >> simp[]
 QED
 
-Theorem emit_storage_store_ptr:
-  emit_void (if tr then TSTORE else SSTORE) [a;v] st = ((),st') /\
-  run_inst_seq (emitted_insts st st') s = OK t /\
-  op_taint tn a = {} /\ op_taint tn v = {} /\
-  eval_operand a s = SOME slot /\
-  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
-  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G
-    (if tr then tn with t_trans := key_update tn.t_trans slot {}
-     else tn with t_stor := key_update tn.t_stor slot {})
-Proof
-  metis_tac[emit_storage_store_ptr_fmp]
-QED
-
 Theorem emit_append_assert_ptr:
   emit_void ASSERT [a] st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t /\
   op_taint tn a = {} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G tn
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
@@ -258,7 +245,7 @@ QED
 Theorem emit_append_assert_abort_ptr:
   emit_void ASSERT [a] st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = Abort ex t /\
-  op_taint tn a = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn a = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G tn
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
@@ -274,12 +261,12 @@ Theorem emit_append_assert_uniform_ptr:
   run_inst_seq (emitted_insts st st') s = OK t /\
   op_taint tn a = {} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
         (s with vs_inst_idx := k) G tn
 Proof
   rpt strip_tac >> irule emit_append_assert_ptr >>
-  simp[] >> reverse conj_tac >- metis_tac[] >>
+  simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >> reverse conj_tac >- metis_tac[] >>
   qexists_tac `t with vs_inst_idx := k` >>
   drule emitted_insts_emit_void >> strip_tac >>
   simp[run_inst_seq_inst_idx, exec_result_map_def, mk_inst_def,
@@ -289,12 +276,12 @@ QED
 Theorem emit_append_assert_abort_uniform_ptr:
   emit_void ASSERT [a] st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = Abort ex t /\
-  op_taint tn a = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn a = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
         (s with vs_inst_idx := k) G tn
 Proof
   rpt strip_tac >> irule emit_append_assert_abort_ptr >>
-  simp[] >> reverse conj_tac >- metis_tac[] >>
+  simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >> reverse conj_tac >- metis_tac[] >>
   qexistsl_tac [`ex`, `t with vs_inst_idx := k`] >>
   drule emitted_insts_emit_void >> strip_tac >>
   simp[run_inst_seq_inst_idx, exec_result_map_def, mk_inst_def,
@@ -324,7 +311,7 @@ Theorem emit_append_arith_uniform_ptr:
   run_inst_seq (emitted_insts st st') s = OK t /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
             (s with vs_inst_idx := k) G' tn') /\
@@ -345,7 +332,7 @@ Proof
   simp[] >> ho_match_mp_tac scalar_uniform_endpoints >>
   simp[] >> gen_tac >>
   qpat_assum `emitted_insts st st' = [i]` (SUBST1_TAC o SYM) >>
-  irule emit_append_arith_ptr >> simp[] >>
+  irule emit_append_arith_ptr >> simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
   reverse conj_tac >- metis_tac[] >>
   qexists_tac `t with vs_inst_idx := k` >>
   simp[run_inst_seq_def, step_inst_inst_idx_indep, exec_result_map_def]
@@ -357,7 +344,7 @@ Theorem emit_storage_load_uniform_ptr:
   op_taint tn bop = {} /\ eval_operand bop s = SOME slot /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
             (s with vs_inst_idx := k) G' tn') /\
@@ -377,7 +364,7 @@ Proof
   simp[] >> ho_match_mp_tac scalar_uniform_endpoints >>
   simp[] >> gen_tac >>
   qpat_assum `emitted_insts st st' = [i]` (SUBST1_TAC o SYM) >>
-  irule emit_storage_load_ptr >> simp[] >>
+  irule emit_storage_load_ptr >> simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
   reverse conj_tac >- metis_tac[] >>
   qexists_tac `t with vs_inst_idx := k` >>
   simp[run_inst_seq_def, step_inst_inst_idx_indep, exec_result_map_def]
@@ -389,13 +376,14 @@ Theorem emit_storage_store_uniform_ptr:
   op_taint tn a = {} /\ op_taint tn v = {} /\
   eval_operand a s = SOME slot /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
     (s with vs_inst_idx := k) G
     (if tr then tn with t_trans := key_update tn.t_trans slot {}
      else tn with t_stor := key_update tn.t_stor slot {})
 Proof
-  rpt strip_tac >> irule emit_storage_store_ptr >> simp[] >>
+  rpt strip_tac >> irule emit_storage_store_ptr >>
+  simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
   reverse conj_tac >- metis_tac[] >>
   qexists_tac `t with vs_inst_idx := k` >>
   drule emitted_insts_emit_void >> strip_tac >>

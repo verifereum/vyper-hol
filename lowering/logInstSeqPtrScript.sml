@@ -4,6 +4,8 @@ Ancestors
   wordLoadStorePtr fragGasSeqPtr fragExec instIdxIndep ghostPcTransportPtr exprLoweringProps
   typedCopyPtr fragExecPtr emitHelperProps emitHelper compileEnv loweringStateRelDefs context finite_map words
   ptrSafeRun ptrDiscipline venomExecSemantics venomInst venomState list arithmetic
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
+  fragGasSeqPtrContext[qualified,ignore_grammar]
 
 Theorem inst_seq_ptr_singleton:
   ptr_inst_ok D lo 0 ctx fn G tn i s /\ step_inst_base i s = OK t ==>
@@ -53,7 +55,7 @@ Theorem emit_copy_len_binop_seq_ptr:
   emit_op opc [left;right] sa = (Var out,sb) /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf sf.
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
@@ -99,7 +101,7 @@ Theorem emit_mload_clean_seq_ptr:
   emit_op MLOAD [Var src] sa = (Var out,sb) /\
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf sf.
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
@@ -148,7 +150,7 @@ Theorem emit_mstore_clean_seq_ptr:
   emit_void MSTORE [Var dst;value] sa = ((),sb) /\
   ptr_covers G tn dst s 32 /\ op_taint tn value = {} /\
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?tnf sf.
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G tnf /\
@@ -183,7 +185,7 @@ Theorem emit_mcopy_seq_ptr:
   eval_operand count_op s = SOME n /\ op_taint tn count_op = {} /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn src s (w2n n) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?tnf sf.
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G tnf /\
@@ -221,7 +223,7 @@ Theorem emit_round_pair_seq_ptr:
   emit_op ADD [left;Lit 31w] sa = (Var tmp,sm) /\
   emit_op AND [Var tmp;Lit mask] sm = (Var out,sb) /\
   eval_operand left s = SOME a /\ op_taint tn left = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf t sf.
     run_inst_seq (emitted_insts sa sm) s = OK t /\
     run_inst_seq (emitted_insts sm sb)
@@ -242,6 +244,13 @@ Proof
   `eval_operand (Var tmp) u = SOME (a + 31w) /\
    eval_operand (Lit mask) u = SOME mask /\ op_taint tn1 (Lit mask) = {}` by
     gvs[Abbr `u`, eval_operand_def, lookup_var_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (strip_tac >> simp[Abbr `u`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl [`emitted_insts sa sm`, `s`] >>
+     qpat_assum `emit_op ADD _ sa = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `AND`, `f` |-> `word_and`]
     emit_copy_len_binop_seq_ptr)) >>
   disch_then (qspecl_then [`fn`, `PG`, `G1`, `D`]

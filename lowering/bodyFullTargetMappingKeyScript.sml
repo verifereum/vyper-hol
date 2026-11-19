@@ -74,6 +74,7 @@ Proof
         compile_keccak256_key_run >>
       disch_then (qspecl_then [`s`, `bs`, `b`] mp_tac) >>
       simp[] >> strip_tac >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       `b+32+LENGTH bs <= base'+cap /\
        (!i. b <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem)` by gvs[] >>
       drule_all map_key_inst_seq >>

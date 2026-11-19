@@ -2,6 +2,8 @@ Theory rawCallBufferPtr
 Ancestors fragExecPtr
   wordLoadStorePtr bodyPtrDefs representationCleanPtr exprSimProps oracleCallStepPtr typedCopyPtr
   finite_map pred_set exprSimMemoryTransport valueEncodingProps valueEncodingProofs
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
+  fragGasSeqPtrContext[qualified,ignore_grammar]
   venomMemProofs list fragGasSeqPtr fragGasPathPtr fragExec gasCount decoderGhostFramePtr robustCopyTransportPtr
 
 Theorem ptr_mem_ok_site:
@@ -77,7 +79,7 @@ Theorem ptr_inst_ok_forward_revert:
   inst.inst_opcode = REVERT /\ inst.inst_operands = [p; n] /\
   in_revert_forward fn s /\
   EVERY (\op. op_taint tn op = {}) inst.inst_operands /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn inst s
 Proof
   strip_tac >>
@@ -93,7 +95,7 @@ Theorem ptr_inst_ok_forward_copy:
   inst.inst_opcode = RETURNDATACOPY /\ inst.inst_operands = [p; src; n] /\
   in_revert_forward fn s /\ about_to_revert fn inst s /\
   EVERY (\op. op_taint tn op = {}) inst.inst_operands /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn inst s
 Proof
   strip_tac >>
@@ -233,7 +235,7 @@ QED
 (* The semantic step equations are supplied by the simulation; the pointer
    checks need neither provenance for the scratch region nor clean payload. *)
 Theorem revert_forward_pair_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME copy /\
   get_instruction bb (SUC s.vs_inst_idx) = SOME rev /\
@@ -266,6 +268,11 @@ Proof
     (irule ptr_inst_ok_forward_copy >>
      fs[ptrDisciplineTheory.op_taint_def]) >>
   qabbrev_tac `s' = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s'` by
+    (simp[Abbr `s'`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
+     strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[copy]`, `s`] >>
+     simp[exprLoweringPropsTheory.run_inst_seq_def, venomInstTheory.is_alloca_op_def]) >>
   `in_revert_forward fn s'` by
     (irule forwarding_pair_active >> simp[Abbr `s'`] >> metis_tac[]) >>
   `ptr_inst_ok D 0 0 ctx fn (step_prov PG G copy u)
@@ -471,7 +478,7 @@ Proof
 QED
 
 Theorem ptr_inst_ok_returndatasize:
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx func G tn (mk_inst iid RETURNDATASIZE [] [out]) s
 Proof
   strip_tac >>

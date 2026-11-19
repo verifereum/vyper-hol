@@ -191,7 +191,6 @@ Resume compile_external_return_raw_joint[return_check]:
      simp[] >> rpt strip_tac >>
      qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem`
        (qspec_then `i` mp_tac) >> simp[] >> metis_tac[]) >>
-  conj_tac >- gvs[allocas_from_def] >>
   conj_tac >-
     gvs[stor_taint_ok_at_def, Abbr `tn2`, Abbr `tn1`, Abbr `j`, Abbr `i`,
         step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,

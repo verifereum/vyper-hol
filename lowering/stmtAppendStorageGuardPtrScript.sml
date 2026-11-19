@@ -5,6 +5,7 @@ Ancestors stmtAppendStorageRunPtr instSeqComposePtr stmtSimAppendStorage
   exprLoweringProps emitHelperProps fragGasSeqPtr contextCodegenRel freshWrites
   stateFrame venomInst venomState ptrDiscipline finite_map list arithmetic compileEnv loweringStateRelDefs
   emittedSeqComposePtr abiDecoderArrayInit
+  fragGasSeqPtrContext[qualified,ignore_grammar]
 
 Theorem emit_append_lt_uniform_ptr:
   !v cap st rop st' s t tn ctx.
@@ -12,7 +13,7 @@ Theorem emit_append_lt_uniform_ptr:
   run_inst_seq (emitted_insts st st') s = OK t /\
   op_taint tn (Var v) = {} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !D fn PG G. ?G' tn'.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
             (s with vs_inst_idx := k) G' tn') /\
@@ -36,7 +37,7 @@ Theorem append_storage_check_ptr:
   state_frame s1 = state_frame s /\ state_frame s2 = state_frame s1 /\
   op_taint tn bop = {} /\ eval_operand bop s = SOME slot /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G2 tn2.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st0 st2)
            (s with vs_inst_idx := k) G2 tn2) /\
@@ -55,10 +56,18 @@ Proof
     metis_tac[state_frame_ptr_fields] >>
   qpat_x_assum `state_frame s1 = _` kall_tac >>
   qpat_x_assum `state_frame s2 = _` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emit_storage_load_uniform_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >>
   `?v. lop = Var v` by metis_tac[emitted_insts_emit_op] >>
   qpat_x_assum `lop = Var v` SUBST_ALL_TAC >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts st0 st1`, `s`] >> simp[] >>
+     qpat_assum `emit_op (if tr then TLOAD else SLOAD) _ st0 = _`
+       (mp_tac o MATCH_MP emitted_insts_emit_op) >>
+     Cases_on `tr` >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all emit_append_lt_uniform_ptr >>
   disch_then (qspecl_then [`D`, `fn`, `PG`, `G'`] strip_assume_tac) >>
   `st0.cs_next_var <= st1.cs_next_var /\ not_fresh_at st1 v` by
@@ -77,6 +86,16 @@ Proof
   metis_tac[]
 QED
 
+Theorem append_state_frame_allocas[local]:
+  state_frame t = state_frame s ==>
+  (allocas_below_fmp t <=> allocas_below_fmp s)
+Proof
+  `!u. allocas_below_fmp (state_frame u) <=> allocas_below_fmp u` by
+    simp[state_frame_def, allocas_below_fmp_def] >>
+  disch_then (mp_tac o Q.AP_TERM `allocas_below_fmp`) >>
+  simp[]
+QED
+
 Theorem append_storage_guard_ptr:
   emit_op (if tr then TLOAD else SLOAD) [bop] st0 = (lop,st1) /\
   emit_op LT [lop; Lit cap] st1 = (valid,st2) /\
@@ -88,7 +107,7 @@ Theorem append_storage_guard_ptr:
   state_frame s3 = state_frame s2 /\
   op_taint tn bop = {} /\ eval_operand bop s = SOME slot /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G2 tn2.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st0 st3)
            (s with vs_inst_idx := k) G2 tn2) /\
@@ -105,6 +124,9 @@ Proof
    s3.vs_requests = s2.vs_requests` by
     metis_tac[state_frame_ptr_fields] >>
   qpat_x_assum `state_frame s3 = _` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (`state_frame s2 = state_frame s` by metis_tac[] >>
+     drule append_state_frame_allocas >> simp[]) >>
   `!k. inst_seq_ptr D 0 ctx fn PG G2 tn2 (emitted_insts st2 st3)
           (s2 with vs_inst_idx := k) G2 tn2` by
     (irule emit_append_assert_uniform_ptr >> simp[] >> metis_tac[]) >>
@@ -131,7 +153,7 @@ Theorem append_storage_guard_abort_ptr:
   state_frame s1 = state_frame s /\ state_frame s2 = state_frame s1 /\
   op_taint tn bop = {} /\ eval_operand bop s = SOME slot /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G2 tn2.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st0 st3)
            (s with vs_inst_idx := k) G2 tn2) /\
@@ -144,6 +166,9 @@ Theorem append_storage_guard_abort_ptr:
 Proof
   strip_tac >> drule_all append_storage_check_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (`state_frame s2 = state_frame s` by metis_tac[] >>
+     drule append_state_frame_allocas >> simp[]) >>
   `!k. inst_seq_ptr D 0 ctx fn PG G2 tn2 (emitted_insts st2 st3)
           (s2 with vs_inst_idx := k) G2 tn2` by
     (irule emit_append_assert_abort_uniform_ptr >> simp[] >> metis_tac[]) >>

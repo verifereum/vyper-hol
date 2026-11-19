@@ -85,6 +85,7 @@ Proof
       (DROP s.vs_inst_idx bb.bb_instructions)` by
     (fs[IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
   qpat_x_assum `bop_scalar_seq R A code B` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule bop_scalar_seq_assert_abort_path >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then drule >> simp[] >>
@@ -108,7 +109,9 @@ Theorem bop_scalar_certificate_result_path:
     (!x. x IN R ==> FLOOKUP G' x = FLOOKUP G x /\
                       FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
 Proof
-  strip_tac >> drule_all bop_scalar_seq_path >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all bop_scalar_seq_path >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`G'`, `tn'`] >> simp[]
 QED

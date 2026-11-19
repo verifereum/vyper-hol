@@ -105,6 +105,7 @@ Proof
      gvs[not_fresh_at_def, Abbr `out`, ASCIInumbersTheory.toString_11] >> decide_tac) >>
   `p <> out` by metis_tac[] >>
   `32*n+32 <= sz` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all empty_zero_pair_uniform_certificate >>
   disch_then (qspecl_then [`D`, `func`, `PG`, `sm.cs_next_id`] strip_assume_tac) >>
   qabbrev_tac `u = update_var out (w+n2w (32*n)) t` >>

@@ -37,7 +37,7 @@ Theorem attribute_add_path_post_ptr:
   compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
-  fn_has_code sm sn func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sm sn func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
@@ -57,6 +57,7 @@ Proof
   strip_tac >>
   `op_taint tn (Lit (n2w off)) = {}` by simp[op_taint_def] >>
   `eval_operand (Lit (n2w off)) s = SOME (n2w off)` by simp[eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (attribute_emit_binop_path_ptr |> SPEC_ALL
     |> Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`] |> SRULE []) >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>

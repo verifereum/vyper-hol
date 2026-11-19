@@ -8,6 +8,42 @@ Ancestors
   exprLoweringProps venomMemDefs venomInst venomState
   revertReasonLayout fragExec rich_list vyperStorageFootprint stmtReasonLitFragMemory
   finite_map arithmetic list
+  bodyFullHashKeccakFixed[qualified,ignore_grammar] stateRelProj[qualified,ignore_grammar]
+
+Theorem reason_tail_allocation_fmp[local]:
+  stmt_state_rel H ctx func cenv cx ee s /\
+  (!i. MEM i (reason_tail j u v op) ==> MEM i (fn_insts func)) ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    (FLOOKUP s.vs_allocas (j+6) = NONE ==>
+      s.vs_alloca_next+32 <= w2n s.vs_initial_fmp))
+Proof
+  strip_tac >> strip_tac >> conj_tac
+  >- metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
+  strip_tac >>
+  `j+6 NOTIN FDOM s.vs_allocas` by fs[FLOOKUP_DEF] >>
+  qabbrev_tac `inst = mk_inst (j+6) ALLOCA [Lit 32w] ["%" ++ toString (u+5)]` >>
+  `MEM inst (reason_tail j u v op)` by simp[Abbr `inst`, reason_tail_def] >>
+  `MEM inst (fn_insts func)` by metis_tac[] >>
+  qabbrev_tac `t = update_var ("%" ++ toString (u+5)) (n2w s.vs_alloca_next)
+    (s with <|vs_allocas := s.vs_allocas |+ (j+6,(s.vs_alloca_next,32));
+      vs_alloca_next := s.vs_alloca_next+32|>)` >>
+  `exec_alloca inst s (32w:bytes32) = OK t` by
+    simp[Abbr `inst`, Abbr `t`, mk_inst_def, venomExecSemanticsTheory.exec_alloca_def,
+      wordsTheory.dimword_def] >>
+  `fmp_room ctx func s` by metis_tac[stateRelProjTheory.stmt_state_rel_fmp_room] >>
+  `fmp_room ctx func t` by
+    (irule fmp_room_exec_alloca >> qexistsl_tac [`inst`,`32w`,`s`] >>
+     simp[Abbr `inst`, mk_inst_def] >> metis_tac[]) >>
+  `t.vs_alloca_next = s.vs_alloca_next+32 /\
+   t.vs_initial_fmp = s.vs_initial_fmp` by simp[NoAsms, Abbr `t`, update_var_def] >>
+  qpat_assum `ctx_has_dalloca ctx` (fn dynamic =>
+    qpat_assum `t.vs_alloca_next = _` (fn next =>
+      qpat_assum `t.vs_initial_fmp = _` (fn initial =>
+        qpat_assum `fmp_room ctx func t`
+          (mp_tac o cj 1 o SIMP_RULE (srw_ss())
+            [fmp_room_def, dynamic, next, initial])))) >>
+  decide_tac
+QED
 
 (* The encoder's size slot is a genuine function allocation, not an
    additional allocation-room assumption at the body call site. *)
@@ -161,6 +197,12 @@ Resume reason_normalized_tail_origin_ptr[allocation]:
     (qpat_assum `wb_frame _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[wb_frame_def] >> metis_tac[]) >>
   `id+3 <> j+6` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    (FLOOKUP s.vs_allocas (j+6) = NONE ==>
+      s.vs_alloca_next+32 <= w2n s.vs_initial_fmp)` by
+    (match_mp_tac (Q.INST [`u` |-> `u`, `v` |-> `v`,
+       `op` |-> `Var src`] (SPEC_ALL reason_tail_allocation_fmp)) >>
+     metis_tac[]) >>
   drule_all reason_tail_allocation_resources >> strip_tac >>
   `alloca_inv s` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
@@ -175,7 +217,7 @@ Resume reason_normalized_tail_origin_ptr[allocation]:
      simp[NoAsms, not_fresh_at_def] >> strip_tac >>
      gen_tac >> first_x_assum irule >> decide_tac) >>
   irule reason_tail_origin_ptr_path >>
-  ntac 5 (conj_tac >- first_assum ACCEPT_TAC) >>
+  ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl_tac [`B`,`LENGTH str`,`M`,`TP`,`bb`,`j`,`w2n w`,`src`,`u`,`v`] >>
   metis_tac[]
 QED

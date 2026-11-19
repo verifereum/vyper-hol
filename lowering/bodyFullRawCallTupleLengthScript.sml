@@ -286,7 +286,6 @@ Resume raw_call_tuple_length_checked[store_safe]:
   irule ptr_inst_ok_mstore_tainted >>
   simp[allocas_from_def, Abbr `u4`, Abbr `u3`, Abbr `u2`,
        Abbr `u1`, Abbr `u0`, update_var_def] >>
-  conj_tac >- gvs[allocas_from_def] >>
   qpat_x_assum `ptr_covers G tn x s _` mp_tac >>
   simp[ptr_covers_def, FLOOKUP_DRESTRICT, op_taint_def,
        FAPPLY_FUPDATE_THM, FLOOKUP_UPDATE, Abbr `tn5`, lookup_var_def] >>

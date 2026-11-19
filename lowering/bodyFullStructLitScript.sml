@@ -721,6 +721,7 @@ Proof
   drule_all emit_op_fetch_boundary >> strip_tac >> gvs[] >>
   `w2n (n2w addr : bytes32) + off < dimword(:256)` by
     (simp[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all (structlit_child_add_full |> Q.INST
     [`n` |-> `type_memory_size ftv`, `sm` |-> `sm`, `sn` |-> `sn`]) >>
   disch_then (qspec_then `PG` strip_assume_tac) >>

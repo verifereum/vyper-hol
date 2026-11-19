@@ -175,11 +175,14 @@ Resume unwrap_slot_copy_origin_ptr_no_dead[single_physical]:
   >- (qpat_x_assum `z = _` SUBST1_TAC >>
       simp[copy_static_def, mstore_def, write_memory_with_expansion_def, update_var_def])
   >- (qpat_x_assum `z = _` SUBST1_TAC >>
-      simp[] >> irule LESS_EQ_TRANS >>
-      qexists `LENGTH (update_var (STRING #"%" (toString mid.cs_next_var))
-        (slot_copy_word (if p.ptr_location = LocStorage then SLOAD else TLOAD) allocated a)
-        allocated).vs_memory` >>
-      conj_tac >- simp[update_var_def] >> simp[abi_encode_mstore_memory_length])
+      mp_tac (Q.INST [`s` |-> `update_var (STRING #"%"
+          (toString mid.cs_next_var))
+          (slot_copy_word (if p.ptr_location = LocStorage then SLOAD else TLOAD)
+            allocated a) allocated`, `off` |-> `w2n (dstword:bytes32)`,
+        `w` |-> `slot_copy_word
+          (if p.ptr_location = LocStorage then SLOAD else TLOAD) allocated a`]
+        abi_encode_mstore_memory_length) >>
+      simp[update_var_def])
   >- (rpt strip_tac >> qpat_x_assum `z = _` SUBST1_TAC >>
       simp_tac (srw_ss()) [] >>
       dep_rewrite.DEP_REWRITE_TAC [mstore_mem_bytes_at_disjoint] >>

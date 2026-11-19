@@ -53,7 +53,7 @@ QED
 Theorem attribute_emit_binop_path_ptr:
   (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
   emit_op opc [left;right] sa = (dst,sb) /\ fn_has_code sa sb func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\

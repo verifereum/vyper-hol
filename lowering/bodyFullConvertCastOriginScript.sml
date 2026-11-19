@@ -27,7 +27,9 @@ Theorem cast_fixed_certificate[local]:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  strip_tac >> drule_all assign_base_bytes_mload_seq >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all assign_base_bytes_mload_seq >>
   disch_then (qspecl_then [`D`,`fn`,`PG`,`id`,`len`] strip_assume_tac) >>
   `eval_operand (Var len) u = SOME (n2w L)` by
     simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>

@@ -2,6 +2,8 @@ Theory bodyPtrBopScalarSeq
 Ancestors
   bodyPtrBopScalarStep bodyPtrBopAssert fragGasSeqPtr exprLoweringProps
   instIdxIndep ptrDiscipline venomExecSemantics venomInst venomState finite_map list pred_set
+  fragGasSeqPtrContext[qualified,ignore_grammar]
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 (* A static availability certificate is needed in addition to inst_seq_ptr:
    it records which operands later scalar instructions are permitted to read,
@@ -56,6 +58,16 @@ Proof
   gvs[mk_inst_def, MEM, is_terminator_def] >> metis_tac[]
 QED
 
+Theorem bop_scalar_seq_ordinary[local]:
+  !code R A B. bop_scalar_seq R A code B ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> GAS /\ ~is_alloca_op i.inst_opcode /\
+             i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA) code
+Proof
+  Induct >> simp[Once bop_scalar_seq_def] >> rpt strip_tac >>
+  gvs[mk_inst_def, MEM, is_terminator_def, is_alloca_op_def] >> metis_tac[]
+QED
+
 Theorem bop_scalar_available_step:
   MEM opc [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD;
            LT; GT; SLT; SGT; EQ; ISZERO; AND; OR; XOR; NOT;
@@ -95,7 +107,7 @@ Theorem bop_scalar_seq_run:
   !code R A B s t G tn.
   bop_scalar_seq R A code B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq code s = OK t ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq code s = OK t ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' /\
     (!op. op IN B ==> op_prov G' op = NONE /\ op_taint tn' op = {}) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
@@ -127,8 +139,15 @@ Resume bop_scalar_seq_run[scalar]:
   `run_inst_seq code (u with vs_inst_idx := SUC s.vs_inst_idx) =
     OK (t with vs_inst_idx := SUC s.vs_inst_idx)` by
     simp[fragExecTheory.run_inst_seq_inst_idx, exec_result_map_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >> strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[mk_inst id opc ops [tmp]]`, `s`] >>
+     simp[run_inst_seq_def, mk_inst_def] >>
+     qpat_x_assum `MEM opc _` mp_tac >> Cases_on `opc` >>
+     simp[is_terminator_def, is_alloca_op_def]) >>
   first_x_assum (drule_at Any) >> disch_then drule >>
-  disch_then drule >> strip_tac >>
+  disch_then drule >> disch_then drule >> strip_tac >>
   qexistsl_tac [`G'`, `tn'`] >>
   simp[Once inst_seq_ptr_def] >>
   rpt strip_tac >> metis_tac[]
@@ -150,9 +169,12 @@ Resume bop_scalar_seq_run[assert]:
   `run_inst_seq code (s with vs_inst_idx := SUC s.vs_inst_idx) =
     OK (t with vs_inst_idx := SUC s.vs_inst_idx)` by
     simp[fragExecTheory.run_inst_seq_inst_idx, exec_result_map_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
   qpat_x_assum `!R A B s t G tn. _` (drule_at Any) >> disch_then drule >>
-  disch_then drule >> strip_tac >>
-  qexistsl_tac [`G'`, `tn'`] >>
+  disch_then drule >> disch_then drule >> strip_tac >>
+  rename1 `inst_seq_ptr D 0 ctx fn PG G tn code (s with vs_inst_idx := _) Gf tf` >>
+  qexistsl_tac [`Gf`, `tf`] >>
   simp[Once inst_seq_ptr_def] >> gvs[Abbr `i`]
 QED
 
@@ -161,7 +183,7 @@ Finalise bop_scalar_seq_run
 Theorem bop_scalar_seq_path:
   bop_scalar_seq R A code B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq code s = OK t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq code s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' /\
@@ -214,7 +236,7 @@ QED
 Theorem bop_scalar_seq_assert_abort_checked:
   bop_scalar_seq R A prefix B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq prefix s = OK t /\ op IN B /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq prefix s = OK t /\ op IN B /\
   (opc = ASSERT \/ opc = ASSERT_UNREACHABLE) /\
   step_inst_base (mk_inst id opc [op] []) t = Abort a v ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn
@@ -238,6 +260,10 @@ Proof
      (t with vs_inst_idx := s.vs_inst_idx + LENGTH prefix) =
    Abort a (v with vs_inst_idx := s.vs_inst_idx + LENGTH prefix)` by
     simp[step_inst_inst_idx_indep, exec_result_map_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`prefix`, `s`] >> simp[] >>
+     drule bop_scalar_seq_ordinary >> simp[EVERY_CONJ]) >>
   gvs[Once inst_seq_ptr_def] >>
   irule bop_assert_ptr_inst_ok >> simp[] >> metis_tac[]
 QED
@@ -245,7 +271,7 @@ QED
 Theorem bop_scalar_seq_assert_abort_path:
   bop_scalar_seq R A prefix B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq prefix s = OK t /\ op IN B /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq prefix s = OK t /\ op IN B /\
   (opc = ASSERT \/ opc = ASSERT_UNREACHABLE) /\
   step_inst_base (mk_inst id opc [op] []) t = Abort a v /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\

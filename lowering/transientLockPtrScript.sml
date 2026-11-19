@@ -42,7 +42,7 @@ QED
 
 (* The TLOAD output is scalar; reuse the shared comparison/assert certificate. *)
 Theorem transient_lock_check_ptr_ghost:
-  ~ctx_has_dalloca ctx /\ key_taint tn.t_trans (n2w nkey) = {} ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\ key_taint tn.t_trans (n2w nkey) = {} ==>
   ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn
     (TAKE 4 (transient_lock_code nkey iv st)) ss G' tn' /\
     G' = DRESTRICT (DRESTRICT (DRESTRICT G
@@ -101,7 +101,7 @@ QED
 
 (* An abort keeps the ghost of the last successful scalar instruction. *)
 Theorem transient_lock_abort_ptr_ghost:
-  ~ctx_has_dalloca ctx /\ key_taint tn.t_trans (n2w nkey) = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\ key_taint tn.t_trans (n2w nkey) = {} /\
   (tload (n2w nkey) ss = 1w \/ ~iv /\ ss.vs_call_ctx.cc_static) ==>
   ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn
     (transient_lock_code nkey iv st) ss G' tn'
@@ -133,6 +133,11 @@ Proof
           inst_seq_ptr_abort_append)) >>
       simp[transient_lock_code_execution]) >>
   `ss.vs_call_ctx.cc_static` by fs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (transient_lock_checked_state st nkey ss)` by
+    (`allocas_below_fmp (transient_lock_checked_state st nkey ss) <=>
+      allocas_below_fmp ss` by
+       simp[transient_lock_checked_state_def, update_var_def, allocas_below_fmp_def] >>
+     simp[]) >>
   mp_tac (Q.INST [`lo` |-> `0`, `fn` |-> `func`]
     (Q.SPECL [`transient_lock_code nkey T st`, `ss`,
       `transient_lock_checked_state st nkey ss`, `G`, `tn`, `G'`, `tn'`,
@@ -145,14 +150,16 @@ Proof
         transient_lock_code_def] >>
       simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, op_taint_def, source_memory_write_ranges_def,
-        source_memory_read_ranges_def] >>
+       source_memory_read_ranges_def, allocas_below_fmp_def] >>
       simp[GSYM mk_inst_def, step_inst_non_invoke, step_TSTORE_lit_static] >>
-      rpt strip_tac >> gvs[]) >>
+      fs[transient_lock_checked_state_def, update_var_def, allocas_below_fmp_def,
+         op_taint_def] >>
+      rpt strip_tac >> gvs[] >> res_tac) >>
   simp[]
 QED
 
 Theorem literal_tstore_inst_seq_ptr_at:
-  ~ctx_has_dalloca ctx /\ ~ss.vs_call_ctx.cc_static /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\ ~ss.vs_call_ctx.cc_static /\
   allocas_from lo ss ==>
   inst_seq_ptr D lo ctx func PG G tn
     [mk_inst id TSTORE [Lit key; Lit value] []] ss G
@@ -180,7 +187,7 @@ Proof
 QED
 
 Theorem literal_tstore_clean_inst_seq_ptr_at:
-  ~ctx_has_dalloca ctx /\ ~ss.vs_call_ctx.cc_static /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\ ~ss.vs_call_ctx.cc_static /\
   allocas_from lo ss /\ (!b. ~((key,b) IN tn.t_trans)) ==>
   inst_seq_ptr D lo ctx func PG G tn
     [mk_inst id TSTORE [Lit key; Lit value] []] ss G tn
@@ -193,7 +200,7 @@ Proof
 QED
 
 Theorem literal_tstore_clean_inst_seq_ptr:
-  ~ctx_has_dalloca ctx /\ ~ss.vs_call_ctx.cc_static /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\ ~ss.vs_call_ctx.cc_static /\
   (!b. ~((key,b) IN tn.t_trans)) ==>
   inst_seq_ptr D 0 ctx func PG G tn
     [mk_inst id TSTORE [Lit key; Lit value] []] ss G tn
@@ -203,7 +210,7 @@ Proof
 QED
 
 Theorem transient_lock_code_ptr_frame:
-  ~ctx_has_dalloca ctx /\ tload (n2w nkey) ss <> 1w /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\ tload (n2w nkey) ss <> 1w /\
   (~iv ==> ~ss.vs_call_ctx.cc_static) /\
   (!b. ~((n2w nkey,b) IN tn.t_trans)) ==>
   ?G' tn'.
@@ -242,7 +249,8 @@ Proof
       qexistsl_tac [`G1`, `transient_lock_checked_state st nkey ss`, `tn1`] >>
       simp[transient_lock_code_execution] >>
       irule literal_tstore_clean_inst_seq_ptr >>
-      gvs[Abbr `tn1`, transient_lock_checked_state_def, update_var_def]) >>
+      gvs[Abbr `tn1`, transient_lock_checked_state_def, update_var_def,
+          allocas_below_fmp_def] >> metis_tac[]) >>
   simp[Abbr `tn1`] >> qx_gen_tac `x` >> strip_tac >>
   `x <> STRING #"%" (toString st.cs_next_var) /\
    x <> STRING #"%" (toString (st.cs_next_var + 1)) /\

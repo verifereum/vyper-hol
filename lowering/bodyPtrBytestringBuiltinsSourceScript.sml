@@ -41,6 +41,7 @@ Proof
   strip_tac >> rpt gen_tac >>
   `ptr_covers G tn src s 32` by
     (fs[ptr_covers_def] >> metis_tac[arithmeticTheory.LE_ADD]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emit_mload_ptr_path >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   qexistsl_tac [`out`,`G'`,`tn'`] >> gvs[] >>
@@ -113,6 +114,7 @@ Proof
   `32 + L <= 32 + L` by simp[] >>
   `eval_operand (Lit 32w) u = SOME (n2w 32) /\ op_taint tn' (Lit 32w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all emit_pointer_offset_counted_covers >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   suspend "compose"

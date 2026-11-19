@@ -4,6 +4,7 @@ Ancestors wordLoadStorePtr normalizerAllocationFrame revertReasonLayout revertRe
   exprLoweringProps venomMemProps venomInst venomExecSemantics venomState
   fragGasSeqPtr typedCopyPtr fragExecPtr bodyPtrDefs decoderGhostFramePtr ptrDiscipline
   words arithmetic list rich_list finite_map codegenRel venomInstProofs
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem revert_reason_copy_allocation_frame:
   run_inst_seq (revert_reason_copy id v q op) s = OK t ==>
@@ -57,7 +58,7 @@ Theorem mcopy_prefix_checked:
   ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn src s (w2n n) /\
   k <= w2n n /\
   (!i. w2n b <= i /\ i < w2n b+k ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf.
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id MCOPY [Var dst;Var src;count_op] []] s Gf tnf /\
@@ -90,7 +91,7 @@ Theorem revert_reason_copy_checks:
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
   (!k. k < 5 ==> src <> STRING #"%" (toString (v+k)) /\
                     dst <> STRING #"%" (toString (v+k))) /\
-  L+63 < dimword(:256) /\ ~ctx_has_dalloca ctx ==>
+  L+63 < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
     (revert_reason_copy id v (Var dst) (Var src)) s Gf tnf /\
     (!i. w2n b <= i /\ i < w2n b+32 ==> i NOTIN tnf.t_mem)
@@ -106,6 +107,9 @@ Proof
     (simp[Abbr `i`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    simp[Abbr `s1`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `op_taint t1 (Var (STRING #"%" (toString v))) = {}` by
     (simp[Abbr `t1`, Abbr `i`] >>
      qpat_x_assum `mload _ _ = _` (SUBST1_TAC o SYM) >>
@@ -134,6 +138,9 @@ Resume revert_reason_copy_checks[mask]:
     (simp[Abbr `j`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g2 t2 _ s2 _ _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    simp[Abbr `s2`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `op_taint t2 (Var (STRING #"%" (toString (v+1)))) = {}` by
     (simp[Abbr `t2`, Abbr `j`] >> irule (cj 1 copy_len_not_ghost_frame)) >>
   `op_taint t2 (Var (STRING #"%" (toString v))) = {}` by
@@ -163,6 +170,9 @@ Resume revert_reason_copy_checks[controls]:
           update_var_def, lookup_var_def, FLOOKUP_UPDATE, ASCIInumbersTheory.toString_11]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g3 t3 _ s3 _ _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    simp[Abbr `s3`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `op_taint t3 (Var (STRING #"%" (toString (v+2)))) = {}` by
     (simp[Abbr `t3`, Abbr `k`] >>
      irule (cj 1 copy_len_binop_ghost_frame) >> simp[]) >>
@@ -206,6 +216,9 @@ Resume revert_reason_copy_checks[rounded]:
           update_var_def, lookup_var_def, FLOOKUP_UPDATE, ASCIInumbersTheory.toString_11]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g4 t4 _ s4 _ _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s4` by
+    simp[Abbr `s4`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `op_taint t4 (Var (STRING #"%" (toString (v+3)))) = {}` by
     (simp[Abbr `t4`, Abbr `l`] >>
      irule (cj 1 copy_len_binop_ghost_frame) >> simp[]) >>
@@ -236,6 +249,9 @@ Resume revert_reason_copy_checks[count]:
           update_var_def, lookup_var_def, FLOOKUP_UPDATE, word_add_n2w, ADD_COMM]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g5 t5 _ s5 _ _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s5` by
+    simp[Abbr `s5`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `op_taint t5 (Var (STRING #"%" (toString (v+4)))) = {}` by
     (simp[Abbr `t5`, Abbr `m`] >>
      irule (cj 1 copy_len_binop_ghost_frame) >> simp[]) >>
@@ -291,7 +307,7 @@ Theorem revert_reason_copy_path_ptr:
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
   (!k. k < 5 ==> src <> STRING #"%" (toString (v+k)) /\
                     dst <> STRING #"%" (toString (v+k))) /\
-  L+63 < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  L+63 < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (revert_reason_copy id v (Var dst) (Var src))
     (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -352,14 +368,6 @@ Proof
   qpat_x_assum `!k. k < 5 ==> _` mp_tac >>
   disch_then (fn th => map_every (fn k => qspec_then k assume_tac th)
     [`0`, `1`, `2`, `3`, `4`]) >> gvs[]
-QED
-
-Theorem take_padded_prefix[local]:
-  k <= n ==>
-  TAKE k (xs ++ REPLICATE n x) = TAKE k (xs ++ REPLICATE k x)
-Proof
-  strip_tac >> pure_rewrite_tac[TAKE_APPEND, REPLICATE_GENLIST, TAKE_GENLIST] >>
-  AP_TERM_TAC >> AP_TERM_TAC >> simp[MIN_DEF] >> decide_tac
 QED
 
 Theorem revert_reason_copy_mload:
@@ -431,7 +439,7 @@ Theorem revert_reason_copy_boundary_ptr:
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
   (!k. k < 5 ==> src <> STRING #"%" (toString (v+k)) /\
                     dst <> STRING #"%" (toString (v+k))) /\
-  L+63 < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  L+63 < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (revert_reason_copy id v (Var dst) (Var src))
     (DROP s.vs_inst_idx bb.bb_instructions) /\

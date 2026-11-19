@@ -20,6 +20,7 @@ Theorem bop_word_scalar_success_joint:
                        FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.INST [`D` |-> `D0`] bop_scalar_seq_run) >>
   disch_then (qspecl_then [`fn`, `PG`, `D0`] strip_assume_tac) >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >> gen_tac >>

@@ -5,12 +5,13 @@ Ancestors
   bodyPtrTypeBuiltinsEmptyAlloc fragGasSeqPtr fragExecPtr typedCopyPtr
   bodyPtrDefs ptrDiscipline venomExecSemantics venomState venomInst finite_map words
   ghostPcTransportPtr emitHelperProps
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 (* Header zeroing, with no fresh-site or initial-memory cleanliness premise. *)
 Theorem empty_zero_store_certificate:
   !D ctx func PG G tn s id p w sz.
     lookup_var p s = SOME w /\ ptr_covers G tn p s sz /\
-    32 <= sz /\ ~ctx_has_dalloca ctx ==>
+    32 <= sz /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?tn'. inst_seq_ptr D 0 ctx func PG G tn
       [mk_inst id MSTORE [Var p; Lit 0w] []] s G tn' /\
       ptr_covers G tn' p (mstore (w2n w) 0w s) sz /\
@@ -44,7 +45,7 @@ QED
 Theorem empty_zero_pair_certificate:
   !D ctx func PG G tn s id p out w off sz.
     lookup_var p s = SOME w /\ ptr_covers G tn p s sz /\ p <> out /\
-    off+32 <= sz /\ w2n w+sz < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
+    off+32 <= sz /\ w2n w+sz < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn
       [mk_inst id ADD [Var p; Lit (n2w off)] [out];
        mk_inst (id+1) MSTORE [Var out; Lit 0w] []] s G' tn' /\
@@ -68,6 +69,8 @@ Proof
      irule reasonPrefixResourcesPtrTheory.reason_encoder_offset_covers >>
      conj_tac >- decide_tac >> simp[] >> qexists_tac `sz` >> simp[]) >>
   `ptr_covers G1 tn1 p u sz` by suspend "base" >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    simp[Abbr `u`, exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   drule_all (SRULE [] (Q.INST [`sz` |-> `32`] (SPEC_ALL empty_zero_store_certificate))) >>
   disch_then (qspecl_then [`id+1`, `func`, `PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`G1`, `tn'`] >>
@@ -107,7 +110,8 @@ Resume empty_zero_pair_certificate[sequence]:
   `ptr_inst_ok D 0 0 ctx func G1 tn1
      (mk_inst (id+1) MSTORE [Var out; Lit 0w] [])
      (u with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (irule ptr_inst_ok_mstore >> simp[op_taint_def]) >>
+    (irule ptr_inst_ok_mstore >>
+     simp[op_taint_def, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `!k. step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit 0w] [])
       (u with vs_inst_idx := k) =
       OK ((mstore (w2n (w+n2w off)) 0w u) with vs_inst_idx := k)` by
