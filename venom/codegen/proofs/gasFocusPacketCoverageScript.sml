@@ -19,6 +19,7 @@ Ancestors
   vfmExecution codegen asmIR
   finite_map list rich_list words arithmetic
   dftGasInvPairedPrefix[qualified,ignore_grammar]
+  dftPacketOperationalPrefix[qualified,ignore_grammar]
   stepWriteFootprintForward[qualified,ignore_grammar]
 
 Libs stepInstBaseLib
@@ -335,17 +336,6 @@ Proof
   PURE_REWRITE_TAC [IS_PREFIX_EQ_TAKE] >> qexists `n` >> simp[]
 QED
 
-Triviality cover_fold_index:
-  !xs s.
-    EVERY (\i. ~is_terminator i.inst_opcode) xs /\
-    FOLDR (dft_exec_cons f C) OK xs s = OK u ==>
-    u.vs_inst_idx = s.vs_inst_idx + LENGTH xs
-Proof
-  Induct >> simp[dftIndexedExecTheory.dft_exec_cons_def] >> rpt strip_tac >>
-  Cases_on `step_inst f C h s` >> gvs[] >>
-  first_x_assum drule >> simp[ADD_CLAUSES]
-QED
-
 Triviality cover_native_plan:
   replay_row = (\(bb,e,z) s.
     case eval_phis s bb.bb_instructions of
@@ -455,7 +445,7 @@ Proof
           disch_then (map_every assume_tac o CONJUNCTS)
           >- (conj_tac
               >- (`next.vs_inst_idx = phi_prefix_length bb.bb_instructions + LENGTH z` by
-                    (drule_all cover_fold_index >> simp[]) >>
+                    (drule_all dftPacketOperationalPrefixTheory.dft_packet_plain_prefix_index >> simp[]) >>
                   qpat_assum `LENGTH z < LENGTH (DROP _ _)` mp_tac >>
                   simp_tac (srw_ss()) [NoAsms, get_instruction_def, LENGTH_DROP] >> rpt strip_tac >>
                   `phi_prefix_length bb.bb_instructions + LENGTH z <
