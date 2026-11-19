@@ -45,6 +45,9 @@ current series contains:
   transient or immutable variable is read at its own declared type, not at a
   wider expected type (such as an external call's parameter type), whose
   layout differs for nested bounded types.
+- `5248-memory-allocation-order.patch`, vyperlang/vyper#5248: Venom uses
+  insertion-ordered pointer and allocation sets, so layouts with tied live
+  ranges are deterministic across compiler processes.
 - `5254-inliner-retpc.patch`, vyperlang/vyper#5254: the inliner binds the
   unused return-PC parameter to zero instead of the removed callee's label.
 - `5256-tuple-widening-layout.patch`, vyperlang/vyper#5256: assigning a tuple

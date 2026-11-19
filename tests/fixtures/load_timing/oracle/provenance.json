@@ -13,6 +13,10 @@
       "sha256": "d1091e373ce08a9b814bd6fca18bdf260345d6d277e14b6774a8c14a32b6f3dd"
     },
     {
+      "path": "bytecode/patches/5248-memory-allocation-order.patch",
+      "sha256": "1fd364eccc3e6e7c3bd3ab24af98771eac0dc6b7fb666154ada4a95c493281b1"
+    },
+    {
       "path": "bytecode/patches/5254-inliner-retpc.patch",
       "sha256": "492183e866961daed3a7df71f3e459770375e29493722c9195a3b89ad84c3690"
     },
@@ -22,7 +26,7 @@
     },
     {
       "path": "bytecode/patches/5274-base-ptr-all-uses.patch",
-      "sha256": "b6e17c04e28f0f44a4f50021450ebfd286c7c234adecd4fc16d2a910d94d485e"
+      "sha256": "87eceb35165fa9db42c7afb9f8e341247364462e0af17353414abd825e3f65d5"
     },
     {
       "path": "bytecode/patches/5280-target-subscript-overlap.patch",
@@ -38,7 +42,7 @@
     },
     {
       "path": "bytecode/patches/5297-base-ptr-ret-reads.patch",
-      "sha256": "66ecbc017c3b66a10b60499fa9795e87e6fc73d1f7356516964bbe90db1cc9b0"
+      "sha256": "8d3edad6c45180d0501100b4d6d50a581376de8f565deb285844f36d2a49d53e"
     },
     {
       "path": "bytecode/patches/5298-int-decimal-clamp.patch",
