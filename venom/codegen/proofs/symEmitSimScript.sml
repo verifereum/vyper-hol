@@ -2453,42 +2453,6 @@ Proof
   qexistsl [`cs`, `name`, `[]`, `ps`, `slo`] >> simp[] >> gvs[MEM] >> metis_tac[]
 QED
 
-Theorem sym_log_source_emit_mode_conditional:
-  (!cs ss. R cs ss ==>
-    ss.sym_base.as_pc = cs.as_pc /\
-    LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack) /\
-  (!cs ss inst cs'. R cs ss /\ asm_block_at p cs.as_pc [inst] /\
-    asm_step slo (build_offset_to_pc p) inst cs = AsmOK cs' /\
-    (!msg. (if allow_own then sym_step_own p env own inst ss
-            else sym_step p env inst ss) <> SymBad msg) ==>
-    ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss') /\
-  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: selected /\
-  LENGTH selected = w2n tc + 2 /\ REVERSE selected = off :: len :: topics /\
-  ALOOKUP log_table name = SOME (w2n tc) /\
-  opaque_use_ok fn /\
-  (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\ fn_shape_ok fn /\
-  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
-  R cs ss /\
-  sym_kinds_ok cplan fn ret srest ps ss /\
-  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
-  venom_asm_rel lo qs vsout cs' /\
-  ps.ps_stack = residual ++ selected /\
-  EVERY (\op. op <> dead_stack_marker) selected /\
-  (!op. MEM op selected ==>
-    eval_operand op (frame_view fn ra vs with vs_memory := m) =
-    operand_val (frame_view fn ra vs with vs_memory := m) lo op) /\
-  source_memory_reads_disjoint cplan inst vs /\
-  context_source_memory_writes_disjoint cplan inst vs /\
-  qs = ps with ps_stack := stack_pop (LENGTH selected) ps.ps_stack /\
-  asm_block_at p cs.as_pc [AsmOp name] /\
-  asm_step slo (build_offset_to_pc p) (AsmOp name) cs = AsmOK cs' ==>
-  ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss' /\
-    ss'.sym_mem_labels = ss.sym_mem_labels /\
-    sym_kinds_ok cplan fn ret srest qs ss'
-Proof
-  (MATCH_ACCEPT_TAC (DB.fetch "symEmitSim" "sym_log_source_emit_core"))
-QED
-
 Theorem sym_log_source_emit:
   inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: selected /\
   LENGTH selected = w2n tc + 2 /\ REVERSE selected = off :: len :: topics /\

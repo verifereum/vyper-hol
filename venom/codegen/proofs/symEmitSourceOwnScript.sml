@@ -206,7 +206,7 @@ Proof
     LIST_REL (\sv w. sval_conc slo sv = SOME w) ss.sym_stack cs.as_stack` by
     (rpt strip_tac >> gvs[asm_sym_rel_own_def]) >>
   drule_all (Q.INST [`R` |-> `asm_sym_rel_own slo p env own`]
-    symEmitSimTheory.sym_log_source_emit_mode_conditional) >> simp[]
+    symEmitSimTheory.sym_log_source_emit_core) >> simp[]
 QED
 
 Theorem sym_code_end_add_source_emit_own_conditional:
