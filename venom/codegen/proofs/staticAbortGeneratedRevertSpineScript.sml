@@ -290,8 +290,6 @@ Proof
      `!l. MEM (Label l) (compute_operands (EL q bb.bb_instructions)) ==>
        IS_SOME (FLOOKUP lo l)` by metis_tac[] >>
      `LENGTH (compute_operands (EL q bb.bb_instructions)) <= 16` by decide_tac >>
-     (* Full-context goal_assum then simp/gvs left an existential
-        generation equality unmatched (two retired assembly attempts). *)
      qpat_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      qpat_assum `!l. MEM (Label l) (compute_operands _) ==> _` mp_tac >>
      qpat_assum `LENGTH (compute_operands _) <= LENGTH _` mp_tac >>

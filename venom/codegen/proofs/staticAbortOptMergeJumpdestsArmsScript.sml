@@ -373,8 +373,6 @@ Proof
     (simp[markerLib.L "choose", PULL_EXISTS] >> rpt strip_tac >> metis_tac[]) >>
   `!i. i < LENGTH p ==> i < LENGTH q /\
       EL i q = rename_push_label x y (EL i p)` by simp[markerLib.L "program", EL_MAP] >>
-  (* Keep the already checked quantified clauses intact. The earlier
-     `simp[] >> rpt conj_tac` reintroduced their internal implications. *)
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   TRY (simp[markerLib.L "choose"] >> NO_TAC)
   >- (rpt strip_tac >>
@@ -651,17 +649,10 @@ Proof
             first_assum ACCEPT_TAC) >>
         qx_gen_tac `a` >> qx_gen_tac `b` >> disch_tac >>
         asm "edges" (qspecl_then [`a`,`b`] (drule_then strip_assume_tac)) >>
-        (* Pushing both Flow and Control into the conjunctive goal did not
-           discharge it. Normalize each selected fact on its own instead. *)
         rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
         >- (asm "rank_inc" irule >> simp[])
         >- (asm "flow" (fn fl => qpat_assum `Flow p _ _ _ _ _ _ _ _`
               (ACCEPT_TAC o SIMP_RULE bool_ss [fl,LET_THM]))) >>
-        (* The direct conversion did not match the two existential forms:
-           SIMP_TAC bool_ss [GSYM RIGHT_EXISTS_AND_THM] >>
-           asm "control" (fn ct => asm "target" (fn tg => asm "canonical" (fn ca =>
-             qpat_assum `Control p _ _ _`
-               (ACCEPT_TAC o SIMP_RULE bool_ss [ct,tg,ca])))) *)
         asm "target_flat" (fn tf => SIMP_TAC bool_ss [tf,SF ETA_ss]) >>
         asm "control" (fn ct => qpat_assum `Control p _ _ _`
           (ACCEPT_TAC o SIMP_RULE bool_ss [ct])))) >>

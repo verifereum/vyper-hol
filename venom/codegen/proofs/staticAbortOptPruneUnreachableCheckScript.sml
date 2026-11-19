@@ -189,11 +189,6 @@ Proof
      BETA_TAC >> REFL_TAC) >>
   pop_assum SUBST1_TAC >>
   qpat_x_assum `Abbrev (Check = _)` kall_tac >>
-  (* The resisting route exposed both large string decision trees:
-     rewrite_tac[LET_THM,o_THM] >> BETA_TAC >>
-     qpat_assum `EL (r (pc v)) q = EL (pc v) p` (rewrite_tac o single) >>
-     Cases_on `EL (pc v) p` >>
-     SIMP_TAC bool_ss [asmIRTheory.asm_inst_case_def,o_THM] *)
   SIMP_TAC bool_ss [LET_THM,o_THM] >>
   qpat_assum `EL (r (pc v)) q = EL (pc v) p` (rewrite_tac o single) >>
   Cases_on `EL (pc v) p` >>

@@ -167,8 +167,6 @@ Resume generated_static_head_factors[regular]:
        LENGTH (execute_plan cplan.cp_initial_fmp emit))
      (execute_plan cplan.cp_initial_fmp post)` by
     (qpat_assum `asm_block_at prog pc (execute_plan _ a)` mp_tac >>
-     (* Broad simp[execute_plan_append, asm_block_at_append, ADD_ASSOC]
-        timed out on the full planner context. *)
      qpat_assum `a = _` (fn th =>
        pure_rewrite_tac [th, execute_plan_append, asm_block_at_append,
          LENGTH_APPEND, GSYM ADD_ASSOC]) >>

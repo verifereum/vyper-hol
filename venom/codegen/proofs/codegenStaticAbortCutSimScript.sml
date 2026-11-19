@@ -226,9 +226,6 @@ Proof
   (impl_tac >- simp[]) >> strip_tac >>
   drule_all codegen_asm_entry_sym_init >> strip_tac >>
   `asm_static_wf prog` by metis_tac[codegen_asm_static_wf, codegen_context_obligations_def] >>
-  (* Earlier resisting specialization used mp_tac followed by DISCH_THEN:
-     its assumed theorem had free variables in its hypotheses, so matching
-     could not instantiate the fn_entry_state_rel arguments. *)
   drule_at (Pat `fn_entry_state_rel _ _ _ _ _ _`)
     (stopped_fn_simulations |> Unwind.UNWIND_FORALL_RULE
        |> Unwind.UNWIND_FORALL_RULE |> BETA_RULE

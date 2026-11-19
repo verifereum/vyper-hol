@@ -277,29 +277,6 @@ Proof
   >> gvs[EL]
 QED
 
-(* Prior resisting literal_rows proof:
-  SIMP_TAC bool_ss [LET_THM] >> strip_tac
-  >- (qx_gen_tac `i` >> disch_tac >> `i=0 \/ i=1` by gs[] >>
-      pop_assum strip_assume_tac >>
-      gvs[EL, swap_slot_facts, FORALL_AND_THM]
-      >- metis_tac[EL, swap_slot_facts, FORALL_AND_THM]
-      >> conj_tac
-      >- (qx_gen_tac `k` >> qx_gen_tac `ell` >> qx_gen_tac `org` >>
-          disch_then (fn th => assume_tac th >>
-            qpat_assum `!j a b. tz j = SOME (a,b) ==> _`
-              (qspecl_then [`k`,`ell`,`org`] (strip_assume_tac o C MP th))) >>
-          Cases_on `k=0` >> Cases_on `k=1` >> Cases_on `k=2` >> gvs[])
-      >> qx_gen_tac `k` >>
-      disch_then (fn th => assume_tac th >>
-        qpat_assum `!j. bz j ==> _` (qspec_then `k` (strip_assume_tac o C MP th))) >>
-      Cases_on `k=0` >> Cases_on `k=1` >> Cases_on `k=2` >> gvs[])
-  >- (qx_gen_tac `i` >> disch_tac >> `i=0 \/ i=1` by gs[] >>
-      pop_assum strip_assume_tac >>
-      `h-1-1 = h-2` by decide_tac >> gvs[EL, FORALL_AND_THM, ADD_ASSOC] >>
-      rpt strip_tac >> gvs[] >> metis_tac[])
-  >> gvs[EL]
-QED
-*)
 
 (* Specialize the integrated source-path theorem and keep just the annotations
    and path geometry needed to construct the destination phases. *)

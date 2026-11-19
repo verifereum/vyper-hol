@@ -617,8 +617,6 @@ Proof
       asm "tail_intro" (qspec_then `z` mp_tac) >>
       (impl_tac >-
         ((conj_tac >- first_assum ACCEPT_TAC) >>
-         (* Before fixing the rank type, the staged closer was
-            POP_ASSUM_LIST (K (metis_tac[LESS_TRANS, WORD_LESS_TRANS])). *)
          (conj_tac >- (Q_TAC (TRANS_TAC LESS_TRANS) `rank h` >>
                        (conj_tac >- (Q_TAC (TRANS_TAC LESS_TRANS) `rank i` >>
                                      conj_tac >> first_assum ACCEPT_TAC)) >>
@@ -627,9 +625,6 @@ Proof
                        qpat_assum `height i = height z+1` mp_tac >>
                        qpat_assum `height v = height h+1` mp_tac >> POP_ASSUM_LIST (K numLib.ARITH_TAC))) >>
          first_assum ACCEPT_TAC)) >>
-      (* Both `simp[IgnAsm p, th]` and `rewrite_tac [th] >> simp[...]`
-         left the universal Shape clause. Normalize the Tail facts, then
-         use the implication at the chosen state. *)
       disch_then (strip_assume_tac o SRULE []) >>
       qexistsl [`j`,`h`,`i`,`z`,`off`] >> simp[IgnAsm `p = _`] >>
       qx_gen_tac `cur` >> DISCH_TAC >>
