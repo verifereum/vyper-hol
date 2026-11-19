@@ -481,7 +481,7 @@ Proof
   rpt strip_tac >> irule (cj 3 layout_selected_empty_induction) >> metis_tac[]
 QED
 
-Theorem layout_segment_chain[local]:
+Theorem layout_segment_chain:
   !w q qe. joint_segment C q w qe ==>
     joint_chain C q (MAP FST w) (MAP SND w) qe
 Proof
@@ -718,7 +718,9 @@ QED
    target entry function's run. *)
 Theorem layout_stage_prefix_simulation[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ dead_wf D /\
+  o1_ctx_shape C /\
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  dead_wf D /\
   EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
   callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -765,7 +767,7 @@ Proof
   drule_all layout_stage_segment_annotations >> strip_tac >>
   `EVERY bb_well_formed fn.fn_blocks` by fs[wf_function_def, EVERY_MEM] >>
   `vs.vs_allocas = FEMPTY /\ s.vs_allocas = FEMPTY` by
-    fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+    fs[unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `?fn2 positions.
      lookup_function name C'.ctx_functions = SOME fn2 /\
      layout_driver_row C' fn fn2 positions /\
@@ -788,16 +790,59 @@ Proof
     (events_OS C C' (layout_deferred_OS D lo vs C C' q0 w (MAP FST w) (MAP SND w) ass qe))
     (events_OB C C' (layout_canonical_OB D lo vs C C' q0 (MAP FST w) (MAP SND w) ass qe))
     (events_OutR C C' (layout_canonical_OutR D lo vs C C' q0 (MAP FST w) (MAP SND w) ass qe))` by
-    (irule layout_canonical_simulation_contract_fuel >> metis_tac[]) >>
+    (irule layout_canonical_simulation_contract_fuel_headroom_static >> metis_tac[]) >>
   `selected_prefix_certificates C C' q0 w
     (layout_canonical_ES D lo vs C C' q0 w (MAP FST w) (MAP SND w) ass qe)
     (layout_canonical_EB D lo vs C C' q0 (MAP FST w) (MAP SND w) ass qe)
     (layout_canonical_run D lo vs C C' q0 (MAP FST w) (MAP SND w) ass qe)
     (events_OS C C' (layout_deferred_OS D lo vs C C' q0 w (MAP FST w) (MAP SND w) ass qe))
     (events_OB C C' (layout_canonical_OB D lo vs C C' q0 (MAP FST w) (MAP SND w) ass qe))` by
-    (irule layout_canonical_prefix_certificates >> metis_tac[]) >>
+    (irule layout_canonical_prefix_certificates_bounded >> metis_tac[]) >>
   qpat_x_assum `s = _` SUBST_ALL_TAC >>
   drule_all selected_prefix_simulation >> fs[]
+QED
+
+(* Realize the selected prefix at every sufficiently large target fuel. *)
+Theorem layout_stage_prefix_events_eventually:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  dead_wf D /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl /\
+  s = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp) /\
+  o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  n <= LENGTH (gas_events_blocks fuel C fn s) ==>
+  ?fuel0 fn'. C'.ctx_entry = SOME name /\ lookup_function name C'.ctx_functions = SOME fn' /\
+    fn_entry_label fn' = SOME lbl /\
+    !fuel'. fuel0 <= fuel' ==>
+      n <= LENGTH (gas_events_blocks fuel' C' fn' s) /\
+      TAKE n (gas_events_blocks fuel' C' fn' s) = TAKE n (gas_events_blocks fuel C fn s)
+Proof
+  strip_tac >>
+  `MEM fn C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `EVERY wf_function C.ctx_functions` by
+    fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
+  `wf_function fn /\ fn.fn_eom = NONE` by fs[EVERY_MEM, o1_ptr_safe_upto_def] >>
+  `?fn'. lookup_function name C'.ctx_functions = SOME fn' /\
+     fn_entry_label fn' = SOME lbl` by metis_tac[layout_stage_target_entry] >>
+  `C'.ctx_entry = SOME name` by fs[ctx_pass_stage_def] >>
+  Cases_on `n = 0` >- (qexistsl [`0`, `fn'`] >> gvs[]) >>
+  qabbrev_tac `es0 = TAKE n (gas_events_blocks fuel C fn s)` >>
+  `LENGTH es0 = n` by simp[Abbr `es0`, LENGTH_TAKE] >>
+  `?k. !k'. k <= k' ==> ?rest. gas_events_blocks k' C' fn' s = es0 ++ rest`
+    suffices_by
+    (strip_tac >> qexistsl [`k`, `fn'`] >> simp[] >> rpt strip_tac >>
+     first_x_assum drule >> strip_tac >> gvs[TAKE_LENGTH_APPEND]) >>
+  irule finite_run_prefix_realizable >>
+  `finite_run_prefix C fn s es0` by
+    (simp[Abbr `es0`] >> irule gas_events_blocks_prefix >> gvs[]) >>
+  irule layout_stage_prefix_simulation >> metis_tac[]
 QED
 
 (* Root entry, prefix form: the target run has the source's first n GAS
@@ -821,26 +866,11 @@ Theorem layout_stage_prefix_events:
     n <= LENGTH (gas_events_blocks fuel' C' fn' s) /\
     TAKE n (gas_events_blocks fuel' C' fn' s) = TAKE n (gas_events_blocks fuel C fn s)
 Proof
-  strip_tac >>
-  `MEM fn C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
-  `EVERY wf_function C.ctx_functions` by
-    fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
-  `wf_function fn /\ fn.fn_eom = NONE` by fs[EVERY_MEM, o1_ptr_safe_upto_def] >>
-  `?fn'. lookup_function name C'.ctx_functions = SOME fn' /\
-     fn_entry_label fn' = SOME lbl` by metis_tac[layout_stage_target_entry] >>
-  `C'.ctx_entry = SOME name` by fs[ctx_pass_stage_def] >>
-  Cases_on `n = 0` >- (qexistsl [`0`, `fn'`] >> gvs[]) >>
-  qabbrev_tac `es0 = TAKE n (gas_events_blocks fuel C fn s)` >>
-  `LENGTH es0 = n` by simp[Abbr `es0`, LENGTH_TAKE] >>
-  `?k. !k'. k <= k' ==> ?rest. gas_events_blocks k' C' fn' s = es0 ++ rest`
-    suffices_by
-    (strip_tac >> qexistsl [`k`, `fn'`] >>
-     first_x_assum (qspec_then `k` mp_tac) >> simp[] >> strip_tac >>
-     gvs[TAKE_LENGTH_APPEND]) >>
-  irule finite_run_prefix_realizable >>
-  `finite_run_prefix C fn s es0` by
-    (simp[Abbr `es0`] >> irule gas_events_blocks_prefix >> gvs[]) >>
-  irule layout_stage_prefix_simulation >> metis_tac[]
+  simp[o1_run_state_ok_def] >> strip_tac >>
+  drule_all layout_stage_prefix_events_eventually >>
+  disch_then (qx_choosel_then [`k`, `out`] strip_assume_tac) >>
+  qexistsl [`k`, `out`] >>
+  first_x_assum (qspec_then `k` mp_tac) >> simp[]
 QED
 
 Theorem layout_stage_terminating_context_fuel_headroom_static:

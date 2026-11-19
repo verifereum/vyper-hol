@@ -1,6 +1,6 @@
 (* Current-instruction range safety does not require successful execution. *)
 Theory lowerDloadOracleCallSafety
-Ancestors
+Ancestors lowerDloadMemoryWritePointEffect[qualified]
   lowerDloadOracleCallAssembly lowerDloadSafetyAllocBounds lowerDloadRangeFrontier
   lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyRelation lowerDloadSafetyKernel
   unitMemInv unitTransformDefs memLocDefs ptrDiscipline
@@ -136,7 +136,7 @@ Proof
       ?x. eval_operand op s = SOME x` by
     (rpt strip_tac >>
      `?x. eval_operand op f.lf_src = SOME x` suffices_by metis_tac[] >>
-     irule ld_write_operand_defined >> simp[] >> metis_tac[]) >>
+     irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> simp[] >> metis_tac[]) >>
   `raw_mem_ok C fn inst s` by (irule ld_sync_source_mem_inv >> metis_tac[]) >>
   `ld_nonghost tn s t` by fs[ld_sync_def] >>
   `w2n t.vs_initial_fmp <= w2n t.vs_fmp` by

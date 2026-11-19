@@ -14,7 +14,7 @@ Ancestors concretizePtrRequestHistory concretizePtrReturnTransport
   frameViewFacts ptrDiscipline pointerConfinedDefs venomExecSemantics memLocDefs
   venomState venomInst finite_map list pred_set
 
-Theorem ptr_assertion_execution[local]:
+Theorem ptr_assertion_execution:
   MEM inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE] /\
   eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\
   step_inst fuel Ct inst t = OK t' ==>

@@ -1,6 +1,6 @@
 Theory focusFrontierBudget
 Ancestors
-  gasFocusPrefixDriver frameJointTrace list arithmetic
+  focusJointChainBound frameJointTrace list arithmetic
 
 (* Continuation and cost certificates are needed only through the finite
    search horizon. The returned trace carries its explicit length bound. *)

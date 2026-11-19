@@ -72,7 +72,7 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem fmp_enters_block_frontier[local]:
+Theorem fmp_enters_block_frontier:
   enters_block fn s t ==> t.vs_fmp = s.vs_fmp
 Proof
   rw[enters_block_def] >> drule fmp_eval_phis_frontier >> simp[]
@@ -99,7 +99,7 @@ Proof
   simp[adopt_return_fmp_def, merge_callee_state_def]
 QED
 
-Theorem fmp_source_nonalloc_frontier[local]:
+Theorem fmp_source_nonalloc_frontier:
   inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA /\
   inst.inst_opcode <> DALLOCA /\ pre_fmp_opcode inst.inst_opcode /\
   step_inst fuel C inst s = OK t ==>

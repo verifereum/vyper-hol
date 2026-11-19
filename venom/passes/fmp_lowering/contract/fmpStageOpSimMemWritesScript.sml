@@ -1,7 +1,8 @@
 (* Word and byte writes in the FMP stage simulation. *)
 Theory fmpStageOpSimMemWrites
 Ancestors
-  fmpStageOpSimMemSupport fmpStageOpSimMemReads fmpStageOpBase fmpStageRel
+  fmpStageOpSimMemSupport fmpStageOpSimMemReads fmpStagePointRanges[qualified]
+  fmpStageOpBase fmpStageRel
   o1LowerDloadRangeTransport o1LowerDloadMemoryConsumer o1LowerDloadShared
   o1LowerDloadRelocationKernel o1PassContract ptrDiscipline ptrStaticDiscipline
   contextCodegenRel codegenRel unitShapeDefs venomExecSemantics venomWf
@@ -61,7 +62,7 @@ Proof
   `inst.inst_opcode = MSTORE8 ==> v=w` by
     (strip_tac >> `op_taint tn vop = {}` by
       (fs[taint_ok_def] >> gvs[] >> metis_tac[]) >>
-     metis_tac[fmp_mem_value_clean]) >>
+     metis_tac[fmpStagePointRangesTheory.fmp_mem_value_clean]) >>
   `MEM p inst.inst_operands /\ inst.inst_opcode <> PHI` by gvs[] >>
   `mem_write_ops inst = SOME <|iao_ofst := p;
       iao_size := SOME (Lit (if inst.inst_opcode=MSTORE then 32w else 1w));

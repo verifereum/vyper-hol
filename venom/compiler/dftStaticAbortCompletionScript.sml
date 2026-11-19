@@ -1,5 +1,6 @@
 Theory dftStaticAbortCompletion
 Ancestors
+  dftGasInvObservationOracle
   dftStaticAbortInterval dftGasInvExtraction dftGasInvPairedHistory
   dftGasInvPairedPrefix staticAbortDefs
   dftGasInvInversion dftSsaPreserve sorting
@@ -57,13 +58,12 @@ Proof
   simp[in_static_abort_prefix_def] >> gvs[]
 QED
 
-Theorem inv_static_observation_normalized_setup:
+Theorem inv_observation_normalized_setup:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
   ctx_labels_bound C initial.vs_labels /\ o1_initial_state_ok initial /\
   initial.vs_fmp = initial.vs_initial_fmp /\ code_layout_valid initial /\
-  initial.vs_call_ctx.cc_static /\
   ev_reachable orc initial C' p d fn' inst t /\
   inv_memory_observation inst.inst_opcode ==>
   ?fn s0 startinst bb bb' pseudos srcpre srcpost consumed later.
@@ -72,7 +72,7 @@ Theorem inv_static_observation_normalized_setup:
     lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
     lookup_block s0.vs_current_bb fn'.fn_blocks = SOME bb' /\
     s0.vs_current_bb = t.vs_current_bb /\ s0.vs_inst_idx = LENGTH pseudos /\
-    s0.vs_call_ctx.cc_static /\ MEM bb fn.fn_blocks /\
+    MEM bb fn.fn_blocks /\
     bb.bb_instructions = pseudos ++ (srcpre ++ inst::srcpost) /\
     EVERY inst_shape_ok bb.bb_instructions /\
     EVERY (\i. is_pseudo i.inst_opcode) pseudos /\
@@ -111,14 +111,13 @@ Proof
      fs[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM, fn_insts_def] >>
      rpt strip_tac >> first_x_assum irule >>
      simp[fn_insts_blocks_MEM] >> qexists_tac `bb` >> simp[]) >>
-  `s0.vs_call_ctx.cc_static` by metis_tac[static_shadow_ev_reachable] >>
   `dft_remaining_inv fn bb sourcebody s0` by
     (`s0.vs_inst_idx = LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions)` by simp[] >>
      drule_all inv_ev_reachable_source_initialized_static >> simp[]) >>
   suspend "normalize"
 QED
 
-Resume inv_static_observation_normalized_setup[normalize]:
+Resume inv_observation_normalized_setup[normalize]:
   drule_all dft_fn_rel_lookup_order >> strip_tac >>
   `EVERY (from_block bb.bb_instructions) scheduled /\
    EVERY (from_block bb.bb_instructions) targetpost` by
@@ -152,9 +151,43 @@ Resume inv_static_observation_normalized_setup[normalize]:
   metis_tac[APPEND_ASSOC, APPEND]
 QED
 
-Finalise inv_static_observation_normalized_setup
+Finalise inv_observation_normalized_setup
 
-Theorem inv_static_normalized_source_completion:
+Theorem inv_static_observation_normalized_setup:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
+  ctx_labels_bound C initial.vs_labels /\ o1_initial_state_ok initial /\
+  initial.vs_fmp = initial.vs_initial_fmp /\ code_layout_valid initial /\
+  initial.vs_call_ctx.cc_static /\
+  ev_reachable orc initial C' p d fn' inst t /\
+  inv_memory_observation inst.inst_opcode ==>
+  ?fn s0 startinst bb bb' pseudos srcpre srcpost consumed later.
+    MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+    ev_reachable orc initial C p d fn startinst s0 /\
+    lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+    lookup_block s0.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    s0.vs_current_bb = t.vs_current_bb /\ s0.vs_inst_idx = LENGTH pseudos /\
+    s0.vs_call_ctx.cc_static /\ MEM bb fn.fn_blocks /\
+    bb.bb_instructions = pseudos ++ (srcpre ++ inst::srcpost) /\
+    EVERY inst_shape_ok bb.bb_instructions /\
+    EVERY (\i. is_pseudo i.inst_opcode) pseudos /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) (srcpre ++ inst::srcpost) /\
+    MAP (\i. i.inst_id) bb'.bb_instructions =
+      MAP (\i. i.inst_id) pseudos ++ MAP (\i. i.inst_id) (consumed ++ inst::later) /\
+    ALL_DISTINCT (srcpre ++ inst::srcpost) /\
+    PERM (consumed ++ inst::later) (srcpre ++ inst::srcpost) /\
+    dft_remaining_inv fn bb (srcpre ++ inst::srcpost) s0 /\
+    inv_ev_ftrace orc p d C consumed s0 t /\
+    t.vs_inst_idx = LENGTH pseudos + LENGTH consumed
+Proof
+  strip_tac >> drule_all inv_observation_normalized_setup >> strip_tac >>
+  `s0.vs_call_ctx.cc_static` by metis_tac[static_shadow_ev_reachable] >>
+  qexistsl_tac [`fn`,`s0`,`startinst`,`bb`,`bb'`,`pseudos`,
+    `srcpre`,`srcpost`,`consumed`,`later`] >> simp[]
+QED
+
+Theorem inv_static_normalized_source_completion_oracle:
   (!pre s fn bb rest y post orc p d fuel ctx.
     wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
     EVERY inst_wf bb.bb_instructions /\
@@ -185,7 +218,8 @@ Theorem inv_static_normalized_source_completion:
   (?sS. inv_ev_prefix orc p d ctx bb (LENGTH srcpre) s0 sS /\
     sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
     (!op. MEM op obs.inst_operands ==> eval_operand op sS = eval_operand op t) /\
-    sS.vs_initial_fmp = t.vs_initial_fmp) \/
+    sS.vs_initial_fmp = t.vs_initial_fmp /\
+      sS.vs_outcomes = t.vs_outcomes /\ sS.vs_requests = t.vs_requests) \/
   (?a x0 b sX. srcpre = a ++ x0::b /\ ~MEM x0 consumed /\
     MEM x0.inst_opcode [SSTORE; TSTORE; LOG] /\
     inv_ev_prefix orc p d ctx bb (LENGTH a) s0 sX /\
@@ -212,7 +246,7 @@ Proof
   suspend "write"
 QED
 
-Resume inv_static_normalized_source_completion[observation]:
+Resume inv_static_normalized_source_completion_oracle[observation]:
   disj1_tac >>
   `?u. inv_ev_trace orc p d 0 ctx (FILTER (\i. ~MEM i consumed) srcpre) t u /\
        (!op. MEM op obs.inst_operands ==> eval_operand op u = eval_operand op t)` by
@@ -228,30 +262,10 @@ Resume inv_static_normalized_source_completion[observation]:
   drule_all inv_lookup_completed_sort >>
   simp[inv_ev_ftrace_append] >> strip_tac >>
   rename1 `inv_ev_ftrace orc p d ctx srcpre s0 sS` >>
-  `EVERY (\z. MEM z bb.bb_instructions /\ ~is_pseudo z.inst_opcode /\
-     id_before (MAP (\i. i.inst_id) bb.bb_instructions) obs.inst_id z.inst_id /\
-     id_before (MAP (\i. i.inst_id) bb'.bb_instructions) z.inst_id obs.inst_id)
-     (FILTER (\i. MEM i consumed) srcpost)` by
-    (simp[EVERY_MEM, MEM_FILTER] >> gen_tac >> strip_tac >>
-     `MEM z bb.bb_instructions /\ ~is_pseudo z.inst_opcode` by
-       (fs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM]) >>
-     asm_rewrite_tac[MAP_APPEND] >>
-     simp[dftSsaPreserveTheory.id_before_append,
-          dftSsaPreserveTheory.id_before_cons, MEM_MAP] >> metis_tac[]) >>
-  `MEM obs bb.bb_instructions /\ ~is_pseudo obs.inst_opcode` by
-    (fs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM]) >>
-  drule_all inv_lookup_trailing_trace_frame >> strip_tac >>
-  qexists_tac `sS` >>
-  `inv_ev_prefix orc p d ctx bb (LENGTH srcpre) s0 sS` by
-    (irule (iffLR inv_ev_ftrace_slice) >> conj_tac
-     >- (qexistsl [`pseudos`, `obs::srcpost`] >> simp[APPEND_ASSOC]) >>
-     first_assum ACCEPT_TAC) >>
-  qpat_assum `inv_ev_ftrace _ _ _ _ srcpre s0 sS`
-    (mp_tac o MATCH_MP inv_ev_ftrace_idx) >> simp[] >>
-  metis_tac[inv_ev_ftrace_initial_fmp, inv_ev_trace_ftrace]
+  qexists_tac `sS` >> drule_all inv_completed_observation_oracle >> simp[]
 QED
 
-Resume inv_static_normalized_source_completion[write]:
+Resume inv_static_normalized_source_completion_oracle[write]:
   Cases_on `SPLITP (\x. MEM x.inst_opcode [SSTORE; TSTORE; LOG]) srcpre` >>
   rename1 `SPLITP _ srcpre = (a,r)` >>
   `srcpre = a ++ r` by metis_tac[SPLITP_JOIN] >>
@@ -297,7 +311,7 @@ Resume inv_static_normalized_source_completion[write]:
   suspend "write_endpoint"
 QED
 
-Resume inv_static_normalized_source_completion[write_inversion]:
+Resume inv_static_normalized_source_completion_oracle[write_inversion]:
   `id_before (srcpre ++ obs::srcpost) x z` by
     (qpat_x_assum `id_before (a ++ _) x z` mp_tac >>
      simp[dftSsaPreserveTheory.id_before_append,
@@ -337,7 +351,7 @@ Resume inv_static_normalized_source_completion[write_inversion]:
   drule_all inv_lookup_inversion_swap >> simp[]
 QED
 
-Resume inv_static_normalized_source_completion[write_endpoint]:
+Resume inv_static_normalized_source_completion_oracle[write_endpoint]:
   qpat_x_assum `inv_ev_ftrace _ _ _ _ (a ++ _) s0 u` mp_tac >>
   simp[inv_ev_ftrace_append] >> strip_tac >>
   rename1 `inv_ev_ftrace orc p d ctx a s0 sX` >>
@@ -382,7 +396,163 @@ Resume inv_static_normalized_source_completion[write_endpoint]:
   simp[APPEND]
 QED
 
-Finalise inv_static_normalized_source_completion
+Finalise inv_static_normalized_source_completion_oracle
+
+Theorem inv_static_observation_source_completion_oracle:
+  (!pre s fn bb rest y post orc p d fuel ctx.
+    wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+    EVERY inst_wf bb.bb_instructions /\
+    dft_remaining_inv fn bb (pre ++ rest ++ y::post) s /\
+    EVERY (\x. ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]) pre /\
+    inv_memory_observation y.inst_opcode /\
+    EVERY (\x. inst_shape_ok x /\ ~is_terminator x.inst_opcode /\
+      ~dft_must_order x y) pre ==>
+    ?t. inv_ev_trace orc p d fuel ctx pre s t /\
+      dft_remaining_inv fn bb (rest ++ y::post) t /\
+      (!op. MEM op y.inst_operands ==> eval_operand op t = eval_operand op s)) /\
+  (!xs s t orc p d ctx. s.vs_call_ctx.cc_static /\
+    inv_ev_ftrace orc p d ctx xs s t ==>
+    EVERY (\x. ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]) xs) /\
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
+  ctx_labels_bound C initial.vs_labels /\ o1_initial_state_ok initial /\
+  initial.vs_fmp = initial.vs_initial_fmp /\ code_layout_valid initial /\
+  initial.vs_call_ctx.cc_static /\
+  ev_reachable orc initial C' p d fn' inst t /\
+  inv_memory_observation inst.inst_opcode /\ inst.inst_opcode <> DRET ==>
+  ?fn s0 startinst bb bb' pseudos srcpre srcpost consumed later.
+    MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+    ev_reachable orc initial C p d fn startinst s0 /\
+    lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+    lookup_block s0.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    s0.vs_current_bb = t.vs_current_bb /\ s0.vs_inst_idx = LENGTH pseudos /\
+    s0.vs_call_ctx.cc_static /\ MEM bb fn.fn_blocks /\
+    bb.bb_instructions = pseudos ++ (srcpre ++ inst::srcpost) /\
+    EVERY inst_shape_ok bb.bb_instructions /\
+    EVERY (\i. is_pseudo i.inst_opcode) pseudos /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) (srcpre ++ inst::srcpost) /\
+    MAP (\i. i.inst_id) bb'.bb_instructions =
+      MAP (\i. i.inst_id) pseudos ++ MAP (\i. i.inst_id) (consumed ++ inst::later) /\
+    ALL_DISTINCT (srcpre ++ inst::srcpost) /\
+    PERM (consumed ++ inst::later) (srcpre ++ inst::srcpost) /\
+    EVERY (\x. ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]) consumed /\
+    dft_remaining_inv fn bb (srcpre ++ inst::srcpost) s0 /\
+    inv_ev_ftrace orc p d C consumed s0 t /\
+    t.vs_inst_idx = LENGTH pseudos + LENGTH consumed /\
+    ((?sS. inv_ev_prefix orc p d C bb (LENGTH srcpre) s0 sS /\
+      sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
+      (!op. MEM op inst.inst_operands ==> eval_operand op sS = eval_operand op t) /\
+      sS.vs_initial_fmp = t.vs_initial_fmp /\
+      sS.vs_outcomes = t.vs_outcomes /\ sS.vs_requests = t.vs_requests /\
+      ev_reachable orc initial C p d fn inst sS /\ active_inst fn inst sS) \/
+     (?a x0 b sX. srcpre = a ++ x0::b /\ ~MEM x0 consumed /\
+      MEM x0.inst_opcode [SSTORE; TSTORE; LOG] /\
+      inv_ev_prefix orc p d C bb (LENGTH a) s0 sX /\
+      sX.vs_inst_idx = LENGTH pseudos + LENGTH a /\ sX.vs_call_ctx.cc_static /\
+      dft_remaining_inv fn bb (x0::b ++ inst::srcpost) sX /\
+      IS_SOME (eval_operands x0.inst_operands sX) /\
+      ev_reachable orc initial C p d fn x0 sX /\ active_inst fn x0 sX /\
+      (!fuel. ev_step orc p d fuel C x0 sX =
+        Abort ExHalt_abort (halt_state (set_returndata [] sX)))))
+Proof
+  strip_tac >> drule_all inv_static_observation_normalized_setup >> strip_tac >>
+  `EVERY (\x. ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]) consumed` by
+    (first_x_assum irule >> goal_assum (drule_at Any) >> simp[]) >>
+  qexistsl [`fn`, `s0`, `startinst`, `bb`, `bb'`, `pseudos`,
+            `srcpre`, `srcpost`, `consumed`, `later`] >>
+  asm_rewrite_tac[] >>
+  `active_inst fn startinst s0` by
+    (qpat_x_assum `ev_reachable _ _ C _ _ fn startinst s0` mp_tac >>
+     simp[Once ev_reachable_cases] >> metis_tac[]) >>
+  `ALL_DISTINCT (fn_labels fn)` by
+    metis_tac[dft_fn_rel_def, wf_function_def] >>
+  `get_instruction bb s0.vs_inst_idx = SOME startinst` by
+    (drule_all active_inst_lookup_distinct >> strip_tac >> gvs[]) >>
+  `bb.bb_label = s0.vs_current_bb` by metis_tac[lookup_block_label] >>
+  drule_all inv_static_normalized_source_completion_oracle >> strip_tac
+  >- suspend "observation_reach" >>
+  suspend "write_reach"
+QED
+
+Resume inv_static_observation_source_completion_oracle[observation_reach]:
+  `inv_ev_ftrace orc p d C srcpre s0 sS` by
+    (irule (iffRL inv_ev_ftrace_slice) >>
+     qexistsl [`pseudos`, `inst::srcpost`, `bb`] >> simp[APPEND_ASSOC]) >>
+  `sS.vs_current_bb = s0.vs_current_bb` by
+    metis_tac[inv_ev_ftrace_current_bb] >>
+  `get_instruction bb sS.vs_inst_idx = SOME inst` by
+    simp[get_instruction_def, EL_APPEND_EQN] >>
+  `active_inst fn inst sS` by
+    (simp[active_inst_def] >> qexists_tac `bb` >> simp[EL_APPEND_EQN]) >>
+  `ev_reachable orc initial C p d fn inst sS` by
+    metis_tac[inv_ev_prefix_reachable] >>
+  disj1_tac >> qexists_tac `sS` >> simp[]
+QED
+
+Resume inv_static_observation_source_completion_oracle[write_reach]:
+  `inv_ev_ftrace orc p d C a s0 sX` by
+    (irule (iffRL inv_ev_ftrace_slice) >>
+     qexistsl [`pseudos`, `x0::b ++ inst::srcpost`, `bb`] >>
+     simp[APPEND_ASSOC, APPEND]) >>
+  `sX.vs_current_bb = s0.vs_current_bb` by
+    metis_tac[inv_ev_ftrace_current_bb] >>
+  `get_instruction bb sX.vs_inst_idx = SOME x0` by
+    simp[get_instruction_def, EL_APPEND_EQN] >>
+  `active_inst fn x0 sX` by
+    (simp[active_inst_def] >> qexists_tac `bb` >> simp[EL_APPEND_EQN]) >>
+  `ev_reachable orc initial C p d fn x0 sX` by
+    metis_tac[inv_ev_prefix_reachable] >>
+  `!fuel. ev_step orc p d fuel C x0 sX =
+     Abort ExHalt_abort (halt_state (set_returndata [] sX))` by
+    (gen_tac >> irule inv_reached_static_write_fails >> simp[]) >>
+  disj2_tac >> qexistsl [`a`, `x0`, `b`, `sX`] >>
+  asm_rewrite_tac[]
+QED
+
+Finalise inv_static_observation_source_completion_oracle
+
+Theorem inv_static_normalized_source_completion:
+  (!pre s fn bb rest y post orc p d fuel ctx.
+    wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+    EVERY inst_wf bb.bb_instructions /\
+    dft_remaining_inv fn bb (pre ++ rest ++ y::post) s /\
+    EVERY (\x. ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]) pre /\
+    inv_memory_observation y.inst_opcode /\
+    EVERY (\x. inst_shape_ok x /\ ~is_terminator x.inst_opcode /\
+      ~dft_must_order x y) pre ==>
+    ?t. inv_ev_trace orc p d fuel ctx pre s t /\
+      dft_remaining_inv fn bb (rest ++ y::post) t /\
+      (!op. MEM op y.inst_operands ==> eval_operand op t = eval_operand op s)) /\
+  dft_fn_rel fn fn' /\ MEM bb fn.fn_blocks /\
+  lookup_block name fn.fn_blocks = SOME bb /\
+  lookup_block name fn'.fn_blocks = SOME bb' /\
+  bb.bb_instructions = pseudos ++ (srcpre ++ obs::srcpost) /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) (srcpre ++ obs::srcpost) /\
+  MAP (\i. i.inst_id) bb'.bb_instructions =
+    MAP (\i. i.inst_id) pseudos ++ MAP (\i. i.inst_id) (consumed ++ obs::later) /\
+  ALL_DISTINCT (srcpre ++ obs::srcpost) /\
+  PERM (consumed ++ obs::later) (srcpre ++ obs::srcpost) /\
+  fn' = dft_fn fn /\ EVERY (\i. is_pseudo i.inst_opcode) pseudos /\
+  EVERY (\x. ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]) consumed /\
+  inv_memory_observation obs.inst_opcode /\
+  s0.vs_inst_idx = LENGTH pseudos /\ s0.vs_call_ctx.cc_static /\
+  dft_remaining_inv fn bb (srcpre ++ obs::srcpost) s0 /\
+  inv_ev_ftrace orc p d ctx consumed s0 t ==>
+  (?sS. inv_ev_prefix orc p d ctx bb (LENGTH srcpre) s0 sS /\
+    sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
+    (!op. MEM op obs.inst_operands ==> eval_operand op sS = eval_operand op t) /\
+    sS.vs_initial_fmp = t.vs_initial_fmp) \/
+  (?a x0 b sX. srcpre = a ++ x0::b /\ ~MEM x0 consumed /\
+    MEM x0.inst_opcode [SSTORE; TSTORE; LOG] /\
+    inv_ev_prefix orc p d ctx bb (LENGTH a) s0 sX /\
+    sX.vs_inst_idx = LENGTH pseudos + LENGTH a /\ sX.vs_call_ctx.cc_static /\
+    dft_remaining_inv fn bb (x0::b ++ obs::srcpost) sX /\
+    IS_SOME (eval_operands x0.inst_operands sX))
+Proof
+  strip_tac >> drule_all inv_static_normalized_source_completion_oracle >> metis_tac[]
+QED
 
 Theorem inv_static_observation_source_completion:
   (!pre s fn bb rest y post orc p d fuel ctx.
@@ -441,58 +611,5 @@ Theorem inv_static_observation_source_completion:
       (!fuel. ev_step orc p d fuel C x0 sX =
         Abort ExHalt_abort (halt_state (set_returndata [] sX)))))
 Proof
-  strip_tac >> drule_all inv_static_observation_normalized_setup >> strip_tac >>
-  `EVERY (\x. ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]) consumed` by
-    (first_x_assum irule >> goal_assum (drule_at Any) >> simp[]) >>
-  qexistsl [`fn`, `s0`, `startinst`, `bb`, `bb'`, `pseudos`,
-            `srcpre`, `srcpost`, `consumed`, `later`] >>
-  asm_rewrite_tac[] >>
-  `active_inst fn startinst s0` by
-    (qpat_x_assum `ev_reachable _ _ C _ _ fn startinst s0` mp_tac >>
-     simp[Once ev_reachable_cases] >> metis_tac[]) >>
-  `ALL_DISTINCT (fn_labels fn)` by
-    metis_tac[dft_fn_rel_def, wf_function_def] >>
-  `get_instruction bb s0.vs_inst_idx = SOME startinst` by
-    (drule_all active_inst_lookup_distinct >> strip_tac >> gvs[]) >>
-  `bb.bb_label = s0.vs_current_bb` by metis_tac[lookup_block_label] >>
-  drule_all inv_static_normalized_source_completion >> strip_tac
-  >- suspend "observation_reach" >>
-  suspend "write_reach"
+  strip_tac >> drule_all inv_static_observation_source_completion_oracle >> metis_tac[]
 QED
-
-Resume inv_static_observation_source_completion[observation_reach]:
-  `inv_ev_ftrace orc p d C srcpre s0 sS` by
-    (irule (iffRL inv_ev_ftrace_slice) >>
-     qexistsl [`pseudos`, `inst::srcpost`, `bb`] >> simp[APPEND_ASSOC]) >>
-  `sS.vs_current_bb = s0.vs_current_bb` by
-    metis_tac[inv_ev_ftrace_current_bb] >>
-  `get_instruction bb sS.vs_inst_idx = SOME inst` by
-    simp[get_instruction_def, EL_APPEND_EQN] >>
-  `active_inst fn inst sS` by
-    (simp[active_inst_def] >> qexists_tac `bb` >> simp[EL_APPEND_EQN]) >>
-  `ev_reachable orc initial C p d fn inst sS` by
-    metis_tac[inv_ev_prefix_reachable] >>
-  disj1_tac >> qexists_tac `sS` >> simp[]
-QED
-
-Resume inv_static_observation_source_completion[write_reach]:
-  `inv_ev_ftrace orc p d C a s0 sX` by
-    (irule (iffRL inv_ev_ftrace_slice) >>
-     qexistsl [`pseudos`, `x0::b ++ inst::srcpost`, `bb`] >>
-     simp[APPEND_ASSOC, APPEND]) >>
-  `sX.vs_current_bb = s0.vs_current_bb` by
-    metis_tac[inv_ev_ftrace_current_bb] >>
-  `get_instruction bb sX.vs_inst_idx = SOME x0` by
-    simp[get_instruction_def, EL_APPEND_EQN] >>
-  `active_inst fn x0 sX` by
-    (simp[active_inst_def] >> qexists_tac `bb` >> simp[EL_APPEND_EQN]) >>
-  `ev_reachable orc initial C p d fn x0 sX` by
-    metis_tac[inv_ev_prefix_reachable] >>
-  `!fuel. ev_step orc p d fuel C x0 sX =
-     Abort ExHalt_abort (halt_state (set_returndata [] sX))` by
-    (gen_tac >> irule inv_reached_static_write_fails >> simp[]) >>
-  disj2_tac >> qexistsl [`a`, `x0`, `b`, `sX`] >>
-  asm_rewrite_tac[]
-QED
-
-Finalise inv_static_observation_source_completion

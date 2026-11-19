@@ -1,5 +1,5 @@
 Theory lowerDloadSafetyHashLog
-Ancestors
+Ancestors lowerDloadMemoryWritePointEffect[qualified]
   lowerDloadOracleCallAssembly lowerDloadSafetyPublicCopy lowerDloadSafetyWriteAssembly
   lowerDloadSafetyUpdates lowerDloadSafetyValues lowerDloadSafetyKernel
   lowerDloadSafetyAmbient lowerDloadSafetyAssemblyPremises lowerDloadSafetyAllocBounds
@@ -156,7 +156,7 @@ Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all ld_sha3_target_shape >> strip_tac >>
   `?x. eval_operand off f.lf_src = SOME x` by
-    (irule ld_write_operand_defined >> simp[] >>
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> simp[] >>
      conj_tac >- (qexists `inst` >> simp[]) >> metis_tac[]) >>
   `eval_operand len f.lf_src = eval_operand len f.lf_tgt` by
     (irule ld_sha3_length_equal >> simp[] >>
@@ -166,7 +166,7 @@ Proof
      qexistsl [`f.lf_fn`,`inst`,`f.lf_src`] >> simp[]) >>
   `(op_prov f.lf_H off = NONE ==> x = y) /\
    (!k. op_prov f.lf_H off = SOME k ==> ld_wordrel A (SOME k) x y)` by
-    (irule ld_write_address_observation >> simp[] >>
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_address_observation >> simp[] >>
      conj_tac >- (qexists `tn` >> simp[]) >>
      conj_tac >- (qexists `inst` >> simp[]) >> metis_tac[]) >>
   `~about_to_revert f.lf_fn inst f.lf_src` by simp[about_to_revert_def] >>

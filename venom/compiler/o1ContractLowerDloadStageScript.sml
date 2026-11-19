@@ -73,7 +73,7 @@ Proof
 QED
 
 (* A well-formed DLOAD or DLOADBYTES is always expanded. *)
-Theorem lower_dload_inst_supply_no_dload[local]:
+Theorem lower_dload_inst_supply_no_dload:
   lower_dload_inst_supply s i = (xs,t) /\ inst_wf i ==>
   EVERY (\j. j.inst_opcode <> DLOAD /\ j.inst_opcode <> DLOADBYTES) xs
 Proof

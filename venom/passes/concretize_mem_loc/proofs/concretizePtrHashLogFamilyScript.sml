@@ -65,7 +65,7 @@ Proof
   Cases_on `topics` >> simp[]
 QED
 
-Theorem ptr_log_scalar_vars[local]:
+Theorem ptr_log_scalar_vars:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc::rest /\
   REVERSE rest = addr::szop::topics ==>
@@ -414,7 +414,7 @@ Proof
   asm_rewrite_tac[] >> simp[Once opcode_case_def] >> metis_tac[]
 QED
 
-Theorem ptr_log_execution[local]:
+Theorem ptr_log_execution:
   inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc::rest /\
   REVERSE rest = addr::szop::topicops /\ LENGTH rest = w2n tc+2 /\
   s.vs_call_ctx = t.vs_call_ctx /\
@@ -465,7 +465,7 @@ Proof
   qexists_tac `tn` >> simp[]
 QED
 
-Theorem ptr_log_successor_relations[local]:
+Theorem ptr_log_successor_relations:
   ptr_mixed_vars births positions TG tn f g s t /\ ptr_history_content tn s t /\
   inst.inst_opcode = LOG /\ inst.inst_outputs = [] ==>
   ptr_mixed_vars births positions

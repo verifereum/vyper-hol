@@ -25,10 +25,12 @@ Proof
   `ptr_use_static_ok P (fn_pv P fn) inst` by
     metis_tac[fn_static_ptr_ok_def] >>
   `op_prov G op = NONE /\ op_taint tn op = {}` by
-    (Cases_on `op` >> simp[op_prov_def] >>
-     FIRST [gvs[op_prov_def, FLOOKUP_DEF, SUBSET_DEF, ptr_use_static_ok_def,
+    (Cases_on `op` >> simp[op_prov_def]
+     >- simp[op_taint_def]
+     >~ [`op_taint tn (Label _)`] >- simp[op_taint_def] >>
+     gvs[op_prov_def, FLOOKUP_DEF, SUBSET_DEF, ptr_use_static_ok_def,
          mem_read_ops_def, mem_write_ops_def, is_pointer_preserving_op_def,
-         taint_ok_def, MEM]] >> metis_tac[]) >>
+         taint_ok_def, MEM] >> metis_tac[]) >>
   `!v. op = Var v ==> ~retpc_var fn v` by
     (rpt strip_tac >>
      `opaque_use_ok fn` by

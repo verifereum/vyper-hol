@@ -24,7 +24,7 @@ Definition label_flow_row_extra_def:
     (2 <= k /\ k <= 4 ==> middle_code_end_lifetime f)
 End
 
-Theorem label_flow_singleton_context[local]:
+Theorem label_flow_singleton_context:
   label_flow_ok (C with ctx_functions := [f]) <=>
   label_flow_ok (D with ctx_functions := [f])
 Proof

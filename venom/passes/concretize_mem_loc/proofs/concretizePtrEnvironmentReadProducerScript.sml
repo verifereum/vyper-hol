@@ -30,7 +30,7 @@ Proof
   first_x_assum (mp_tac o AP_TERM ``\a:account_state. a.nonce``) >> simp[]
 QED
 
-Theorem ptr_environment_read_execution[local]:
+Theorem ptr_environment_read_execution:
   ptr_history_content tn s t /\
   MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
@@ -335,7 +335,7 @@ Proof
   tautLib.TAUT_TAC
 QED
 
-Theorem ptr_history_content_common_gas_readings[local]:
+Theorem ptr_history_content_common_gas_readings:
   ptr_history_content tn s t ==>
   ptr_history_content tn (s with vs_gas_readings := readings)
     (t with vs_gas_readings := readings)

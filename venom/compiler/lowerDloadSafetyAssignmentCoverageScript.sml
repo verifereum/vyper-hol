@@ -1,5 +1,5 @@
 Theory lowerDloadSafetyAssignmentCoverage
-Ancestors
+Ancestors lowerDloadArithmeticPointEffect[qualified]
   lowerDloadSafetyAssignSteps lowerDloadSafetyRetpcEffects
   lowerDloadSafetyArithmeticCoverage lowerDloadSafetyOrdinaryCoverage
   lowerDloadOracleCallAssembly lowerDloadSafetyAssemblyPremises
@@ -42,7 +42,7 @@ Proof
       disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
       qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs
         (first_prov f.lf_H inst.inst_operands)`] >>
-      simp[] >> metis_tac[ld_set_first_prov_selected]) >>
+      simp[] >> metis_tac[lowerDloadArithmeticPointEffectTheory.ld_set_first_prov_in_domain]) >>
   `inst.inst_opcode = RETPC_PARAM` by gvs[MEM] >>
   drule_all ld_retpc_param_effect >> strip_tac >>
   qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
