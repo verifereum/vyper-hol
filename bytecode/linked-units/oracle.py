@@ -1,6 +1,6 @@
 """Python oracle for the linked-unit (multi-module) parity fixtures.
 
-    python -I -P -s oracle.py OUT CASEDIR...
+    PYTHONHASHSEED=0 python -P -s oracle.py OUT CASEDIR...
 
 Compiles each CASEDIR/main.vy, its imports resolved in CASEDIR, with the
 patched pinned Vyper on the path (see ../README.md: prague, experimental
@@ -23,8 +23,9 @@ from vyper.compiler.settings import OptimizationLevel, Settings
 def main():
     out = Path(sys.argv[1]).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    for case in map(Path, sys.argv[2:]):
-        case = case.resolve()
+    # Resolve every case before the first chdir: the arguments are relative to
+    # the starting directory.
+    for case in [Path(a).resolve() for a in sys.argv[2:]]:
         os.chdir(case)  # some names are relative to the working directory
         settings = Settings(optimize=OptimizationLevel.NONE, evm_version="prague",
                             experimental_codegen=True, enable_decimals=True)
