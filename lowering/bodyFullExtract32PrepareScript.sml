@@ -17,7 +17,7 @@ Theorem extract32_prepare_checks[local]:
   ALL_DISTINCT [src;len;data] /\ lookup_var src s = SOME a /\
   ptr_covers G tn src s capacity /\ 32 <= capacity /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G2 tn2.
     run_inst_seq [mk_inst id MLOAD [Var src] [len];
       mk_inst (id+1) ADD [Var src; Lit 32w] [data]] s = OK u /\
@@ -75,6 +75,10 @@ Proof
       simp[inst_seq_ptr_def] >>
       `allocas_from lo (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
         simp[Abbr `s1`, update_var_def, allocas_from_def] >>
+      `ctx_has_dalloca ctx ==>
+         allocas_below_fmp (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+        (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+         simp[Abbr `s1`, update_var_def, allocas_below_fmp_def]) >>
       simp[Abbr `G2`, Abbr `tn2`] >>
       conj_tac
       >- (simp[Abbr `i2`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
@@ -106,7 +110,7 @@ Theorem extract32_prepare_full:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   alloca_history func s /\ alloca_inv s /\

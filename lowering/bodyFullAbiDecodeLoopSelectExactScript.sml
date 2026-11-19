@@ -366,6 +366,7 @@ Proof
   `(^owned_decoder_state) sa s G tn` by
     (asm_rewrite_tac[] >> metis_tac[]) >>
   `p+32 <= LENGTH input_bytes` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_decode_owned_relative_load_exact >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `!obs. fn_has_code sa s2 obs ==> gas_path ctx obs s 0 (OK t)` by

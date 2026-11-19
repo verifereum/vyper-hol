@@ -251,7 +251,7 @@ Theorem bop_in_literal_continuation_full_exit:
   EVERY (\x. !p. x = Var p ==> not_fresh_at sm p) (needle::xs) /\
   op_prov G needle = NONE /\ op_taint tn needle = {} /\
   EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   sa.cs_next_var <= sm.cs_next_var /\ local_ptrs_reserved cenv sa /\
@@ -285,7 +285,6 @@ Theorem bop_in_literal_continuation_full_exit:
     R
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_in_literal_actual_uniform >>
   disch_then (qspecl_then [`func`,`PG`] strip_assume_tac) >>
   `sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\

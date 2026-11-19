@@ -10,7 +10,7 @@ Ancestors
 
 Theorem abi_encode_mcopy_origin_path:
   !s ctx func bb id dst src count_op a b n D lo explicit PG G tn.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id MCOPY [Var dst;Var src;count_op] []) /\
     lookup_var dst s = SOME b /\ lookup_var src s = SOME a /\

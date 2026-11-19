@@ -84,7 +84,9 @@ QED
 
 Theorem abi_encode_alloc_rows_origin:
   compile_alloc_buffer cap sa = (buf,sc) /\ fn_has_code sa sc func /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   alloca_inv s /\ alloca_room ctx func s /\ fn_inst_ids_distinct func /\
@@ -135,6 +137,7 @@ Proof
   (impl_tac >- (simp[] >> metis_tac[])) >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `ptr_covers g1 tn1 _ _ _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (OK (t with vs_inst_idx := LENGTH sc.cs_current_insts),g1,tn1)` by
     (gen_tac >> irule emitted_origin_ptr_path >> simp[] >>
@@ -485,6 +488,9 @@ Proof
              gvs[w2n_n2w]) >>
          gvs[] >> metis_tac[]) >>
      gvs[abi_builtin_allocate_state_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+    prepared.vs_alloca_next + pending_alloca_size func prepared <=
+      w2n prepared.vs_initial_fmp` by simp[] >>
   drule abi_encode_alloc_rows_origin >>
   disch_then (drule_at (Pat `alloca_inv _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>

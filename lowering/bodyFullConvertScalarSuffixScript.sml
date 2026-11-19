@@ -67,7 +67,9 @@ Theorem scalar_convert_origin_path:
     ?err t Gf tnf.
       !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (Abort err t,Gf,tnf)))
 Proof
-  strip_tac >> drule_all scalar_convert_typed_run >> strip_tac >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all scalar_convert_typed_run >> strip_tac >>
   conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!vout. _` drule >> strip_tac >>

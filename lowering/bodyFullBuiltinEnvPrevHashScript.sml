@@ -15,11 +15,10 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem env_prevhash_value_full[local]:
-  ~ctx_has_dalloca ctx ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Builtin (env_item_type PrevHash) (Env PrevHash) []) es
 Proof
-  strip_tac >> rw[expr_sim_full_def] >>
+  rw[expr_sim_full_def] >>
   irule gas_outcome_full_initial_domain >>
   simp[storage_trace_frame_bind, cj 5 evaluate_storage_trace_frame,
        storage_trace_frame_read_result] >>
@@ -38,7 +37,8 @@ Proof
      (run_inst_seq (emitted_insts sa sb) s0)` by
     (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >> fs[EVERY_MEM]) >>
   gvs[vars_ext_result_def] >> rename1 `vars_ext tt t` >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
   drule_all env_prevhash_seq_ghosts >>
   disch_then (qspecl_then [`tn0`, `func`, `es`, `d`, `cx`, `PG`, `G0`] strip_assume_tac) >>
   `(?bb rest. lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
@@ -86,6 +86,10 @@ Proof
      irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
      simp[lookup_var_def] >> first_x_assum irule >>
      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es t`
+       (ACCEPT_TAC o MATCH_MP
+         bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        expr_store_bound_def, expr_type_def, env_item_type_def, is_word_type_def,
        evaluate_type_def, typed_val_to_w256_def, PAD_RIGHT,
@@ -119,7 +123,6 @@ Theorem env_prevhash_sim_full:
       cenv cx ty (Builtin a bt args) es
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `args = [] /\ a = env_item_type PrevHash` by
     gvs[expr_body_pre_def, cj 9 well_typed_expr_def, well_typed_builtin_app_def] >>
   gvs[] >> conj_tac >- simp[env_prevhash_value_full] >>
