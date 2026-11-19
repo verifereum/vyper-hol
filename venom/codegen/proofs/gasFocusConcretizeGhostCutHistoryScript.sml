@@ -15,7 +15,7 @@ Ancestors
   frameAllocationOwnership venomExecSemantics venomWf o1PassContract contextCodegenRel
   list rich_list finite_map pred_set arithmetic
 
-Theorem focus_concretize_cut_ghost_history:
+Theorem focus_concretize_cut_ghost_history_ptr_safe:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -25,7 +25,7 @@ Theorem focus_concretize_cut_ghost_history:
   o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
   code_layout_valid vs /\ EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   alloca_frontier_upto n C vs /\ fixed_region_reserved lo C /\
-  o1_safe_upto D lo n C vs /\ gas_cut n vs at.po_state /\
+  o1_ptr_safe_upto D lo n C vs /\ gas_cut n vs at.po_state /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
   max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
@@ -212,12 +212,12 @@ Proof
     (qx_gen_tac `r` >> disch_then (map_every assume_tac o CONJUNCTS) >>
      rpt gen_tac >> disch_tac >> rpt gen_tac >>
      disch_then (map_every assume_tac o CONJUNCTS) >> disch_tac >>
-     irule focus_cut_frontier_demanded_reflection >>
+     irule focus_cut_frontier_demanded_reflection_ptr_safe >>
      qhdtm_assum `ptr_paired_prefix` (irule_at Any) >>
      qpat_assum `EL (SUC i) H = _` (irule_at Any) >>
      qpat_assum `FLOOKUP TGw u = SOME (tok,id)` (irule_at Any) >>
      qpat_assum `p + ix IN (EL r ht).po_taint.t_mem` (irule_at Any) >>
-     qpat_assum `o1_safe_upto D lo n C vs` (irule_at Any) >>
+     qpat_assum `o1_ptr_safe_upto D lo n C vs` (irule_at Any) >>
      qpat_assum `max_live_eom C' = SOME eom` (irule_at Any) >>
      qpat_assum `callee_first names C.ctx_functions` (irule_at Any) >>
      qpat_assum `ctx_pass_stage rpolicy _ _ C C'` (irule_at Any) >>
@@ -336,7 +336,7 @@ Proof
     `after_row3`,`after_row4`,`after_row5`,`after_row6`] mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_then (mk_asm "match_demand") >>
-  drule_all focus_concretize_ghost_cut_points >>
+  drule_all focus_concretize_ghost_cut_points_ptr_safe >>
   disch_then (qspec_then `i` mp_tac o cj 2) >>
   (impl_tac >- decide_tac) >> strip_tac >>
   `MEM (EL i h).po_fn C.ctx_functions` by
@@ -383,7 +383,7 @@ Proof
     (drule ptr_structural_transcript_ownership >> disch_then (qspec_then `i` mp_tac) >>
      simp[ptr_snapshot_ownership_def] >> decide_tac) >>
   `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
-    (fs[o1SafeUptoTheory.o1_safe_upto_def, o1SafeUptoTheory.o1_ptr_safe_upto_def,
+    (fs[o1SafeUptoTheory.o1_ptr_safe_upto_def,
         o1SafeUptoTheory.ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   drule_all gasFocusConcretizeTaggedSupportTheory.ptr_focus_source_tagged_support >> strip_tac >>
   `fn_ptr_ok P (EL i h).po_fn` by fs[EVERY_MEM] >>
@@ -420,7 +420,7 @@ Proof
          qhdtm_assum `ptr_paired_prefix` (irule_at Any) >> qexists `q` >> simp[]) >>
      conj_tac >- (
        `ptr_discipline_upto lo n C vs` by
-         fs[o1SafeUptoTheory.o1_safe_upto_def, o1SafeUptoTheory.o1_ptr_safe_upto_def] >>
+         fs[o1SafeUptoTheory.o1_ptr_safe_upto_def] >>
        `~in_revert_forward (EL (EL q done) h).po_fn (EL (EL q done) h).po_state` by
          (qpat_assum `EVERY _ done` (qspec_then `q` mp_tac o REWRITE_RULE [EVERY_EL]) >> simp[]) >>
        qpat_assum `done❲q❳ = i` (SUBST_ALL_TAC o SYM) >>
@@ -730,6 +730,163 @@ Proof
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
+Theorem focus_concretize_cut_ghost_history:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ EVERY all_reachable C.ctx_functions /\
+  EVERY ssa_form C.ctx_functions /\
+  o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+  code_layout_valid vs /\ EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  alloca_frontier_upto n C vs /\ fixed_region_reserved lo C /\
+  o1_safe_upto D lo n C vs /\ gas_cut n vs at.po_state /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  EVERY (\i. ~in_revert_forward (EL i h).po_fn (EL i h).po_state) done ==>
+  !i q.
+    i < LENGTH h /\ q <= LENGTH done /\
+    (q = 0 \/ EL (q-1) done < i) /\
+    i <= EL q (done ++ [LENGTH h - 1]) ==>
+    !tsj rj bj PTj TGj sj ej. EL i H = (tsj,rj,bj,PTj,TGj,sj,ej) ==>
+    ptr_dalloca_ghost_sample lo (dyn_floor C vs) FEMPTY bj
+      (\token aid. F) (EL i h) (EL q ht) /\
+    (!v site. FLOOKUP (EL q ht).po_prov v = SOME site ==>
+      FLOOKUP TGj v = NONE) /\
+    (!v site. FLOOKUP TGj v = NONE /\
+      FLOOKUP (EL i h).po_prov v = SOME site ==>
+      FLOOKUP (EL q ht).po_prov v = SOME site) /\
+    LENGTH PTj = LENGTH (EL i h).po_params /\
+    LENGTH (EL i h).po_params = LENGTH (EL q ht).po_params /\
+    (!k site. k < LENGTH (EL i h).po_params ==>
+      (EL k (EL q ht).po_params = SOME site ==>
+        EL k (EL i h).po_params = SOME site /\ EL k PTj = NONE /\
+        EL k (EL i h).po_state.vs_params =
+          EL k (EL q ht).po_state.vs_params) /\
+      (EL k PTj = NONE /\ EL k (EL i h).po_params = SOME site ==>
+        EL k (EL q ht).po_params = SOME site)) /\
+    LENGTH sj = LENGTH (EL i h).po_stack /\
+    LIST_REL (\((pt,tg),f) ft.
+      ptr_dalloca_ghost_vars f.cf_prov f.cf_tvar f.cf_state
+        ft.cf_prov ft.cf_tvar ft.cf_state /\
+      (!v site. FLOOKUP ft.cf_prov v = SOME site ==> FLOOKUP tg v = NONE) /\
+      (!v site. FLOOKUP tg v = NONE /\ FLOOKUP f.cf_prov v = SOME site ==>
+        FLOOKUP ft.cf_prov v = SOME site) /\
+      f.cf_inst.inst_outputs = ft.cf_inst.inst_outputs /\
+      LENGTH pt = LENGTH f.cf_params /\ LENGTH f.cf_params = LENGTH ft.cf_params /\
+      (!k site. k < LENGTH f.cf_params ==>
+        (EL k ft.cf_params = SOME site ==>
+          EL k f.cf_params = SOME site /\ EL k pt = NONE /\
+          EL k f.cf_state.vs_params = EL k ft.cf_state.vs_params) /\
+        (EL k pt = NONE /\ EL k f.cf_params = SOME site ==>
+          EL k ft.cf_params = SOME site)))
+      (ZIP (sj,(EL i h).po_stack)) (EL q ht).po_stack /\
+    (!v token aid base size pos ix.
+      ~in_revert_forward (EL i h).po_fn (EL i h).po_state /\
+      (EL i h).po_inst.inst_opcode <> ASSIGN /\
+      MEM (Var v) (EL i h).po_inst.inst_operands /\
+      (inst_read_op (EL i h).po_inst = SOME (Var v) \/
+        (EL i h).po_inst.inst_opcode = INVOKE) /\
+      FLOOKUP TGj v = SOME (token,aid) /\
+      FLOOKUP (EL i h).po_prov v = SOME (base,size) /\
+      FLOOKUP bj (token,aid) = SOME (base,size) /\
+      FLOOKUP positions (Allocation aid) = SOME (pos,size) /\ ix < size ==>
+      pos+ix IN (EL q ht).po_taint.t_mem ==>
+        base+ix IN (EL i h).po_taint.t_mem)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `o1_ptr_safe_upto D lo n C vs` by fs[o1SafeUptoTheory.o1_safe_upto_def] >>
+  mp_tac focus_concretize_cut_ghost_history_ptr_safe >> impl_tac
+  >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED
+
+Theorem focus_concretize_cut_ghost_endpoint_ptr_safe:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ EVERY all_reachable C.ctx_functions /\
+  EVERY ssa_form C.ctx_functions /\
+  o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+  code_layout_valid vs /\ EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  alloca_frontier_upto n C vs /\ fixed_region_reserved lo C /\
+  o1_ptr_safe_upto D lo n C vs /\ gas_cut n vs at.po_state /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  EVERY (\i. ~in_revert_forward (EL i h).po_fn (EL i h).po_state) done ==>
+  ptr_dalloca_ghost_sample lo (dyn_floor C vs) FEMPTY births
+    (\token aid. F) endpoint at /\
+  (!v site. FLOOKUP at.po_prov v = SOME site ==> FLOOKUP TG v = NONE) /\
+  (!v site. FLOOKUP TG v = NONE /\ FLOOKUP endpoint.po_prov v = SOME site ==>
+    FLOOKUP at.po_prov v = SOME site) /\
+  LENGTH PT = LENGTH endpoint.po_params /\
+  LENGTH endpoint.po_params = LENGTH at.po_params /\
+  (!k site. k < LENGTH endpoint.po_params ==>
+    (EL k at.po_params = SOME site ==>
+      EL k endpoint.po_params = SOME site /\ EL k PT = NONE /\
+      EL k endpoint.po_state.vs_params = EL k at.po_state.vs_params) /\
+    (EL k PT = NONE /\ EL k endpoint.po_params = SOME site ==>
+      EL k at.po_params = SOME site)) /\
+  LENGTH saved = LENGTH endpoint.po_stack /\
+  LIST_REL (\((pt,tg),f) ft.
+    ptr_dalloca_ghost_vars f.cf_prov f.cf_tvar f.cf_state
+      ft.cf_prov ft.cf_tvar ft.cf_state /\
+    (!v site. FLOOKUP ft.cf_prov v = SOME site ==> FLOOKUP tg v = NONE) /\
+    (!v site. FLOOKUP tg v = NONE /\ FLOOKUP f.cf_prov v = SOME site ==>
+      FLOOKUP ft.cf_prov v = SOME site) /\
+    f.cf_inst.inst_outputs = ft.cf_inst.inst_outputs /\
+    LENGTH pt = LENGTH f.cf_params /\ LENGTH f.cf_params = LENGTH ft.cf_params /\
+    (!k site. k < LENGTH f.cf_params ==>
+      (EL k ft.cf_params = SOME site ==>
+        EL k f.cf_params = SOME site /\ EL k pt = NONE /\
+        EL k f.cf_state.vs_params = EL k ft.cf_state.vs_params) /\
+      (EL k pt = NONE /\ EL k f.cf_params = SOME site ==>
+        EL k ft.cf_params = SOME site)))
+    (ZIP (saved,endpoint.po_stack)) at.po_stack /\
+  (!v token aid base size pos ix.
+    ~in_revert_forward endpoint.po_fn endpoint.po_state /\
+    endpoint.po_inst.inst_opcode <> ASSIGN /\
+    MEM (Var v) endpoint.po_inst.inst_operands /\
+    (inst_read_op endpoint.po_inst = SOME (Var v) \/
+      endpoint.po_inst.inst_opcode = INVOKE) /\
+    FLOOKUP TG v = SOME (token,aid) /\
+    FLOOKUP endpoint.po_prov v = SOME (base,size) /\
+    FLOOKUP births (token,aid) = SOME (base,size) /\
+    FLOOKUP positions (Allocation aid) = SOME (pos,size) /\ ix < size ==>
+    pos+ix IN at.po_taint.t_mem ==> base+ix IN endpoint.po_taint.t_mem)
+Proof
+  disch_then (fn th =>
+    mp_tac (MATCH_MP focus_concretize_cut_ghost_history_ptr_safe th) >>
+    map_every assume_tac (CONJUNCTS th)) >>
+  disch_then (qspecl_then [`LENGTH h - 1`,`LENGTH done`] assume_tac) >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_endpoint >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_embedding >> strip_tac >>
+  drule ptr_structural_trace_source >> disch_then (strip_assume_tac o MATCH_MP ptr_chrono_history_end) >>
+  drule ptr_structural_trace_target >> disch_then (strip_assume_tac o MATCH_MP ptr_chrono_history_end) >>
+  `done <> [] ==> EL (LENGTH done - 1) done < LENGTH h - 1` by
+    (strip_tac >> `LENGTH done - 1 < LENGTH done` by simp[LENGTH_NON_NIL] >>
+     qpat_assum `ptr_event_embedding h ht _`
+       (qspecl_then [`LENGTH done - 1`,`LENGTH done`] mp_tac o
+        cj 3 o REWRITE_RULE [ptr_event_embedding_def]) >>
+     simp[EL_APPEND_EQN]) >>
+  `LENGTH h - 1 < LENGTH h /\ PRE (LENGTH ht) = LENGTH done` by decide_tac >>
+  `H <> []` by (strip_tac >> gvs[]) >>
+  `EL (LENGTH h - 1) h = endpoint` by
+    (qspec_then `h` mp_tac LAST_EL >> simp[PRE_SUB1]) >>
+  `EL (LENGTH done) ht = at` by
+    (qspec_then `ht` mp_tac LAST_EL >> simp[]) >>
+  `EL (LENGTH h - 1) H = (tokens,registry,births,PT,TG,saved,entries)` by
+    (qspec_then `H` mp_tac LAST_EL >> simp[PRE_SUB1]) >>
+  qpat_x_assum `_ ==> !tsj rj bj PTj TGj sj ej. _` mp_tac >>
+  Cases_on `done = []` >> simp[EL_APPEND_EQN] >>
+  disch_then (ACCEPT_TAC o List.last o CONJUNCTS)
+QED
+
 Theorem focus_concretize_cut_ghost_endpoint:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -786,31 +943,9 @@ Theorem focus_concretize_cut_ghost_endpoint:
     FLOOKUP positions (Allocation aid) = SOME (pos,size) /\ ix < size ==>
     pos+ix IN at.po_taint.t_mem ==> base+ix IN endpoint.po_taint.t_mem)
 Proof
-  disch_then (fn th =>
-    mp_tac (MATCH_MP focus_concretize_cut_ghost_history th) >>
-    map_every assume_tac (CONJUNCTS th)) >>
-  disch_then (qspecl_then [`LENGTH h - 1`,`LENGTH done`] assume_tac) >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_structural_transcript_endpoint >> strip_tac >>
-  drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_embedding >> strip_tac >>
-  drule ptr_structural_trace_source >> disch_then (strip_assume_tac o MATCH_MP ptr_chrono_history_end) >>
-  drule ptr_structural_trace_target >> disch_then (strip_assume_tac o MATCH_MP ptr_chrono_history_end) >>
-  `done <> [] ==> EL (LENGTH done - 1) done < LENGTH h - 1` by
-    (strip_tac >> `LENGTH done - 1 < LENGTH done` by simp[LENGTH_NON_NIL] >>
-     qpat_assum `ptr_event_embedding h ht _`
-       (qspecl_then [`LENGTH done - 1`,`LENGTH done`] mp_tac o
-        cj 3 o REWRITE_RULE [ptr_event_embedding_def]) >>
-     simp[EL_APPEND_EQN]) >>
-  `LENGTH h - 1 < LENGTH h /\ PRE (LENGTH ht) = LENGTH done` by decide_tac >>
-  `H <> []` by (strip_tac >> gvs[]) >>
-  `EL (LENGTH h - 1) h = endpoint` by
-    (qspec_then `h` mp_tac LAST_EL >> simp[PRE_SUB1]) >>
-  `EL (LENGTH done) ht = at` by
-    (qspec_then `ht` mp_tac LAST_EL >> simp[]) >>
-  `EL (LENGTH h - 1) H = (tokens,registry,births,PT,TG,saved,entries)` by
-    (qspec_then `H` mp_tac LAST_EL >> simp[PRE_SUB1]) >>
-  qpat_x_assum `_ ==> !tsj rj bj PTj TGj sj ej. _` mp_tac >>
-  Cases_on `done = []` >> simp[EL_APPEND_EQN] >>
-  disch_then (ACCEPT_TAC o List.last o CONJUNCTS)
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `o1_ptr_safe_upto D lo n C vs` by fs[o1SafeUptoTheory.o1_safe_upto_def] >>
+  mp_tac focus_concretize_cut_ghost_endpoint_ptr_safe >> impl_tac
+  >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED

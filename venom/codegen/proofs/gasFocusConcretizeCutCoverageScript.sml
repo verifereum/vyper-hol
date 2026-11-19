@@ -166,33 +166,6 @@ Proof
   simp[ptr_paired_code_def, Abbr `R`] >> metis_tac[]
 QED
 
-(* Source observations already traversed by a paired prefix are still in
-   the cut: the remaining readings can only decrease along the history. *)
-Theorem concretize_paired_history_safety:
-  ptr_paired_prefix R lp positions lo vs C Ct
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_discipline_upto lo n C vs /\ gas_cut n vs at.po_state ==>
-  !obs. MEM obs h ==>
-    access_ok lo obs.po_prov obs.po_fn obs.po_inst obs.po_state /\
-    taint_ok obs.po_fn obs.po_taint obs.po_inst obs.po_state /\
-    allocas_from lo obs.po_state /\
-    (ctx_has_dalloca C ==> allocas_below_fmp obs.po_state)
-Proof
-  strip_tac >>
-  drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_source >> strip_tac >>
-  drule_all ptr_chrono_history_cut >> simp[EVERY_MEM] >> strip_tac >>
-  drule ptr_chrono_history_reachable >>
-  simp[EVERY_MEM, ptr_observation_reachable_def] >> strip_tac >>
-  rpt strip_tac >>
-  qpat_assum `!b. MEM b h ==> gas_cut _ _ _` (drule_then assume_tac) >>
-  qpat_assum `!x. MEM x h ==> frame_reachable _ _ _ _ _ _ _ _ _`
-    (drule_then assume_tac) >>
-  drule_all ptr_discipline_upto_at >> simp[]
-QED
-
 (* At a fixed untainted byte, use the actual last writer, not a maximum
    output range; the retained target suffix cannot write it. *)
 Theorem ptr_paired_fixed_read_recovery_upto[local]:
@@ -2121,27 +2094,6 @@ Resume ptr_cut_paired_static_mem_cut_headroom[kept_range]:
 QED
 
 Finalise ptr_cut_paired_static_mem_cut_headroom
-
-Theorem ptr_cut_paired_static_mem:
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_initial_state_ok vs /\
-  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
-  o1_safe_upto D lo n C vs /\ callee_first names C.ctx_functions /\
-  EVERY (fn_ptr_ok P) C.ctx_functions /\
-  max_live_eom C' = SOME eom /\ ptr_stage_placements C' positions /\
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  a.po_inst.inst_opcode <> NOP /\
-  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
-  gas_cut n vs at.po_state ==>
-  static_mem_ok eom C' at.po_fn at.po_inst at.po_state
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  fs[o1_safe_upto_def] >>
-  `mem_inv (\ctx fn inst s. gas_cut n vs s ==> dload_headroom_ok ctx fn inst s) C vs` by fs[mem_inv_raw_reachable] >>
-  mp_tac ptr_cut_paired_static_mem_cut_headroom >> simp[]
-QED
 
 (* The final REVERT is exempt from the range check. The strict interior
    consists solely of ASSIGNs and hence has no memory ranges. *)
