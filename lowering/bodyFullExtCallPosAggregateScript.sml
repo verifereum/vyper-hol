@@ -341,12 +341,6 @@ Resume extcall_pos_aggregate_outcome[package]:
   rpt gen_tac >> disch_tac >>
   qpat_assum `!H. _ ==> vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _` drule >>
   strip_tac >> simp[gas_origin_ptr_path_rules] >>
-  `post_value_type cenv e = expr_type e \/
-   post_value_type cenv e = lowered_value_type cenv e` by
-    (Cases_on `e` >> simp[post_value_type_def] >>
-     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
-     simp[post_value_type_def, vyperASTTheory.expr_type_def] >>
-     IF_CASES_TAC >> simp[]) >>
   `~expr_has_effect e ==>
    (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
    (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)` by
@@ -402,22 +396,35 @@ Resume extcall_pos_aggregate_outcome[package]:
     (irule compile_nonmemory_lowered_value_type >>
      qpat_assum `compile_expr _ _ e sa = (LocatedValue _ p,sb)`
        (irule_at Any) >> simp[]) >>
-  `post_value_type cenv e = expr_type e` by metis_tac[] >>
+  `post_value_type cenv e = expr_type e` by simp[post_value_type_lowered] >>
   `tag = expr_type e` by fs[vv_holds_def] >>
   gvs[arithmeticTheory.ADD_COMM] >> qexists `tv` >> simp[]
 QED
 
 Resume extcall_pos_aggregate_outcome[retag]:
   markerLib.RESUME_TAC >>
+  `post_value_type cenv e <> lowered_value_type cenv e` by
+    (qpat_assum `lowered_value_type cenv e <> post_value_type cenv e`
+       (ACCEPT_TAC o ONCE_REWRITE_RULE [EQ_SYM_EQ])) >>
   `~is_word_type (expr_type e)` by
-    (strip_tac >> drule_all abi_args_word_fits_eq >> simp[]) >>
+    (strip_tac >>
+     `lowered_value_type cenv e = expr_type e` by (irule abi_args_word_fits_eq >> simp[]) >>
+     fs[post_value_type_word]) >>
+  `post_value_type cenv e = expr_type e` by
+    (Cases_on `e` >> simp[post_value_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+     fs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+     IF_CASES_TAC >> gvs[]) >>
   drule_all (Q.SPECL [`cenv`,`e`] materialize_post_lowered_classify) >> simp[] >> strip_tac >>
   `expr_body_pre cenv cx env e (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
-  drule_at (Pat `vv_holds _ _ _ _ _ _`) snapshot_bytes_retag >>
-  simp[ext_call_arg_value_def] >>
-  disch_then drule >> simp[] >>
-  disch_then (drule_all_then strip_assume_tac) >>
-  qexists `Value v` >> simp[read_result_def, return_def]
+  qmatch_asmsub_abbrev_tac `vv_holds cenv cx _ tv vv0 ee t` >>
+  mp_tac (Q.INST [`ce` |-> `cenv`, `cx` |-> `cx`, `env` |-> `env`, `e` |-> `e`,
+    `es` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+    `ee` |-> `ee`, `raw` |-> `tv`, `v` |-> `v`, `vv` |-> `vv0`,
+    `s` |-> `t`, `G` |-> `G1`, `tn` |-> `tn1`] snapshot_bytes_retag) >>
+  impl_tac >- (fs[Abbr `vv0`] >> metis_tac[]) >>
+  simp[Abbr `vv0`, ext_call_arg_value_def] >> strip_tac >>
+  TRY (qexists_tac `Value v`) >> fs[read_result_def, return_def]
 QED
 
 Finalise extcall_pos_aggregate_outcome

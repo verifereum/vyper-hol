@@ -1,7 +1,7 @@
 Theory bodyFullExtCallAddressOwnedPrefix
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullExtCallPositional bodyFullExtCallTargetOutcome bodyFullExtCallPosList
+  bodyFullExtCallTargetOutcome bodyFullExtCallPosList
   gasOutcomeFull gasOutcomeFullCompose gasExemptCert vyperStorageTrace vyperStorageFootprint
   exprSimDefs bodyFullIfExpReach
   exprSimSource exprSafeOperand exprSimWordArgs exprLoweringProps stmtSimProps

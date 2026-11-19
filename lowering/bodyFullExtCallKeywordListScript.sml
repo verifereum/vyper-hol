@@ -485,20 +485,22 @@ Resume extcall_request_keywords_owned_outcome[tail]:
     (qpat_assum `wb_frame cenv mid ee sm t u`
        (mp_tac o cj 3 o REWRITE_RULE [wb_frame_def]) >>
      disch_then (qspecl_then [`aid`,`w2n w`,`type_memory_size tv`] mp_tac) >>
-     simp[loweringStateRelDefsTheory.regions_disjoint_def, DISJ_COMM]) >>
+     impl_tac >- (simp[GSYM loweringStateRelDefsTheory.regions_disjoint_def] >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   `mem_bytes_at (w2n w) (val_footprint tv v) u.vs_memory =
    mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory` by
     (qpat_assum `mem_bytes_at (w2n w) (type_memory_size tv) u.vs_memory = _`
-       (mp_tac o MATCH_MP (cj 1 mem_bytes_at_agree_window) o SYM) >>
+       (mp_tac o MATCH_MP (cj 1 valueEncodingProofsTheory.mem_bytes_at_agree_window) o SYM) >>
      disch_then (qspecl_then [`w2n w`,`val_footprint tv v`] mp_tac) >> simp[]) >>
   `!i. w2n w <= i /\ i < w2n w + val_footprint tv v /\ i IN tn2.t_mem ==>
        i IN tn1.t_mem` by
     (gen_tac >> strip_tac >>
+     `i < w2n w + type_memory_size tv` by decide_tac >>
      qpat_assum `ghost_kept_at lo cenv mid sm G1 tn1 t G2 tn2`
        (mp_tac o cj 2 o REWRITE_RULE [ghost_kept_at_def]) >>
-     disch_then (qspecl_then [`aid`,`w2n w`,`type_memory_size tv`,`i`] irule) >>
-     simp[GSYM loweringStateRelDefsTheory.regions_disjoint_def] >>
-     qexistsl [`aid`,`tv`,`w`] >> simp[] >> first_assum ACCEPT_TAC) >>
+     disch_then (qspecl_then [`aid`,`w2n w`,`type_memory_size tv`,`i`] mp_tac) >>
+     impl_tac >- (simp[GSYM loweringStateRelDefsTheory.regions_disjoint_def] >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   `!x. op = Var x ==> FLOOKUP G2 x = FLOOKUP G1 x` by
     (rpt strip_tac >> fs[ptrDisciplineTheory.op_prov_def]) >>
   `ptr_mem_ok cx (lowered_value_type cenv e) v op G2 tn2 u` by
