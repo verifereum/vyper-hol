@@ -3297,7 +3297,9 @@ Resume body_assign_local_memory_nonempty_full[rhs_resources]:
   `w2n (sw:bytes32) + type_memory_size stv <= u.vs_alloca_next` by
     (qpat_assum `~is_word_type (post_value_type cenv e) ==> !rt w. _`
        (qspecl_then [`stv`,`sw:bytes32`] mp_tac o UNDISCH) >>
-     asm_rewrite_tac[] >> gvs[]) >>
+     asm_rewrite_tac[] >>
+     qpat_assum `0 < type_memory_size stv` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
   `u.vs_alloca_next < dimword (:256)` by
     (drule stmt_state_rel_alloca_room >>
      disch_then (ACCEPT_TAC o MATCH_MP alloca_room_next_lt)) >>
@@ -18396,7 +18398,7 @@ Resume body_assign_other_nonempty_target_full[snapshot_bytes_slots]:
   conj_tac
   >- (rpt strip_tac >>
       qpat_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN tn0.t_mem`
-        irule >> metis_tac[]) >>
+        (drule_all_then ACCEPT_TAC)) >>
   conj_tac >- (qexists `env` >> simp[]) >>
   qexistsl [`FST r`,`ty`,`op`,`stv`,`lowered_value_type cenv e`,`su`,`n2w b'`] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM] >>
