@@ -5,7 +5,7 @@ Ancestors
   vyperInterpreter vyperState vyperStorageBackend vfmState vfmContext
   callTraceFrameProvenance callTraceFrame callTrace guardReentryCode guardReentryAccounts
   guardPushProjections immutableSectionRel vfmExecution vfmExecutionProp
-  e2eCorrectness e2eComposition e2eProducers frameOutcome
+  e2eCorrectness e2eComposition e2eProducers frameOutcome callGuardGasLinkProof
   guardTerminalBackend guardSourceAlignment asmOptimizer asmOptNonemptyFinalizer
   vfmAccountDeletion e2eEntry
   vyperCallFiniteStorageSupport guardRequestCutAlignment loweringCalldataCorrect
