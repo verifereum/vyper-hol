@@ -443,7 +443,38 @@ Theorem focus_walk_stopped_selection:
       LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
       ?rest. MAP project sites = markf (raw ++ [0w]) ++ rest)
 Proof
-  strip_tac >> drule focus_uniform_frontier >> cheat
+  let
+    val reduce_lets = PURE_REWRITE_CONV [LET_THM] THENC DEPTH_CONV BETA_CONV
+    fun prove_conj facts goal =
+      if is_conj goal then
+        CONJ (prove_conj facts (lhand goal)) (prove_conj facts (rand goal))
+      else
+        Lib.first (fn th => aconv (concl th) goal) facts
+    val fmp = Lib.first (fn tm => fst (dest_var tm) = "fmp")
+      (free_vars (concl focus_uniform_frontier))
+    val (_, fmp_type) = match_term fmp ``fmp:bytes32``
+    val frontier = INST_TYPE fmp_type focus_uniform_frontier
+    val coverage = CONV_RULE reduce_lets focus_packet_coverage
+  in
+    CONV_TAC reduce_lets >>
+    DISCH_THEN (fn roots =>
+      let
+        val root_facts = CONJUNCTS roots
+        val packet = MP frontier (prove_conj root_facts (lhand (concl frontier)))
+        val (variables, _) = strip_exists (concl packet)
+        val witnesses = map (genvar o type_of) variables
+        val coverage = INST (ListPair.mapEq (op |->) (variables, witnesses)) coverage
+      in
+        foldr (fn (w, choose) => X_CHOOSE_THEN w choose) (fn selected =>
+          let
+            val facts = root_facts @ CONJUNCTS (CONV_RULE reduce_lets selected)
+            val covered = MP coverage (prove_conj facts (lhand (concl coverage)))
+          in
+            MAP_EVERY EXISTS_TAC witnesses >>
+            (fn (asl, goal) => ACCEPT_TAC (prove_conj (covered :: facts) goal) (asl, goal))
+          end) witnesses packet
+      end)
+  end
 QED
 
 (* The construction consumes the same selected witness, before raw and D. *)
