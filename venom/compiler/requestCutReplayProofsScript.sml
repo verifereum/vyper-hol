@@ -169,28 +169,6 @@ Proof
   simp[]
 QED
 
-Theorem paired_history_supplement[local]:
-  ptr_history_content tn s t ==>
-  concretize_supplement D tn (s with vs_requests := t.vs_requests) t
-Proof
-  strip_tac >>
-  `LIST_REL (request_agree_except D) t.vs_requests t.vs_requests` by
-    (irule EVERY2_refl >> simp[request_agree_except_refl]) >>
-  fs[ptr_history_content_def, ptr_taint_content_def,
-     ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def] >>
-  fs[concretize_supplement_def, accounts_agree_except_def,
-     transient_agree_except_def, imms_agree_except_def, contract_storage_def,
-     vfmStateTheory.lookup_account_def, contract_transient_def] >>
-  qpat_x_assum `s.vs_call_ctx = t.vs_call_ctx` (fn eq =>
-    RULE_ASSUM_TAC (PURE_REWRITE_RULE [eq]) >> PURE_REWRITE_TAC [eq]) >>
-  rpt conj_tac
-  >- (gen_tac >> Cases_on `a = t.vs_call_ctx.cc_address` >>
-      fs[storage_agree_except_def, word_agree_except_def])
-  >- (gen_tac >> Cases_on `a = t.vs_call_ctx.cc_address` >>
-      fs[storage_agree_except_def, word_agree_except_def]) >>
-  fs[FLOOKUP_DEF] >> metis_tac[]
-QED
-
 Theorem sue_frame_recording_step[local]:
   ctx_bisim C C' /\ fn_inst_wf f /\ EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts f) /\
   sue_frame_align C C' f g entry j t /\
