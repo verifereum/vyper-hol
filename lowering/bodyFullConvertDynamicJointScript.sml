@@ -11,6 +11,7 @@ Ancestors
   exprSimConvertFromBytes exprSimConvert exprSimHyps exprSimSource
   gasShadowCompile gasShadowState exprLoweringProps compileEnv
   vyperContext vyperInterpreter vyperState vyperAST vyperFiniteStoragePreservation
+  bodyFullHashKeccakFixed[qualified,ignore_grammar] stateFrame[qualified,ignore_grammar]
 
 Theorem dynamic_buffer_resources[local]:
   expr_post H ctx func cenv cx e es sa sm s0 mid v x t /\
@@ -82,7 +83,6 @@ Theorem convert_dynamic_vv_sim_full:
     cenv cx ty (TypeBuiltin ann Convert dst [e]) es
 Proof
   strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   `well_formed_type env.type_defs ann` by
     metis_tac[dynamic_convert_typing_boundary] >>
@@ -151,12 +151,9 @@ Proof
   (impl_tac >- (simp[] >> metis_tac[])) >>
   disch_then (qspecl_then
     [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (* Use the carried reachability bound here when this caller is widened. *)
-  (impl_tac >-
-    (simp[] >> rpt strip_tac >>
-     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[])) >>
+  (impl_tac >- (simp[] >>
+     qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s`
+       ACCEPT_TAC)) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   `eval_expr cx (TypeBuiltin (BaseT bt) Convert (BaseT bt) [e]) =
@@ -244,13 +241,17 @@ Resume convert_dynamic_vv_sim_full[continuation]:
     (SRULE [SF ETA_ss] body_source_read_lowered_layout) >>
   disch_then (qspecl_then [`tops`,`env`,`ctx`,`cenv`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
+  `expr_post (storage_trace_horizon mid.storage_trace) ctx func cenv cx
+     e es sa sm s0 mid v x t` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `expr_post _ ctx func cenv cx e es sa sm s0 mid v x t`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o PURE_REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
   Cases_on `lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
     lowered_value_type cenv e = BaseT (StringT 0)`
   >- suspend "zero" >>
   `64 <= type_memory_bytes cenv (lowered_value_type cenv e)` by
     metis_tac[body_source_lowered_nonzero_capacity] >>
-  `expr_post (storage_trace_horizon mid.storage_trace) ctx func cenv cx
-     e es sa sm s0 mid v x t` by metis_tac[] >>
   `~is_word_type (expr_type e)` by
     metis_tac[eventTopicValuePropsTheory.bytestring_type_not_word] >>
   drule dynamic_buffer_resources >>
@@ -311,7 +312,6 @@ Resume convert_dynamic_vv_sim_full[continuation]:
        venomStateTheory.eval_operand_def] >>
      metis_tac[bodyPtrDefsTheory.mem_agree_outside_def]) >>
   `64 <= type_memory_size tv` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   Cases_on `(?k. bt = IntT k) \/ bt = DecimalT`
   >- (Q.SUBGOAL_THEN `(?k. BaseT bt = BaseT (IntT k)) \/ BaseT bt = BaseT DecimalT` assume_tac
       >- metis_tac[] >>
@@ -371,6 +371,13 @@ Resume convert_dynamic_vv_sim_full[unsigned]:
         qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
           (qspec_then `H` mp_tac) >>
         (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+        `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
+          (`t' = (t with vs_inst_idx := t'.vs_inst_idx) with vs_vars := t'.vs_vars` by
+             metis_tac[stateFrameTheory.state_frame_eq_reconstruct] >>
+           qpat_x_assum `t' = (t with vs_inst_idx := _) with vs_vars := _` SUBST1_TAC >>
+           qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+           POP_ASSUM_LIST (K all_tac) >>
+           simp[ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
         drule_all dynamic_endpoint_vv_posts >>
         disch_then (qspecl_then
           [`lowered_value_type cenv (TypeBuiltin (BaseT bt) Convert (BaseT bt) [e])`] mp_tac) >>

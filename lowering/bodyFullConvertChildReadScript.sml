@@ -50,7 +50,8 @@ Theorem expr_sim_full_of_vv_post_buffer_exit:
          !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
                 eval_operand op t = SOME w ==>
                 type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= t.vs_alloca_next))
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   strip_tac >> rpt strip_tac >>
   mp_tac (SPEC_ALL expr_sim_full_of_vv_with_buffer) >>
