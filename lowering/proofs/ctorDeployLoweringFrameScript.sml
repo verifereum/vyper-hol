@@ -5,7 +5,7 @@ Ancestors
   bodySimStmtFacts
   immSectionDead
   ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract bodySim e2eDefs callTrace
-  ctorDeployLoweringFramePayload ctorDeployDefs immSectionDead e2eDeployDefs e2eEntry
+  ctorDeployDefs immSectionDead e2eDeployDefs e2eEntry
   vyperTypeStoragePreservation list supportedDecls supportedProgram
   compileEnv loweringStateRelDefs compileVyper moduleLowering entryLocals ctorEntryLocals bodySimEntry
   exprLoweringProps context finite_map stmtLoweringMono freshWrites fragExec vyperScopePreservation
@@ -40,34 +40,6 @@ Theorem deploy_ctor_immutable_size:
   LENGTH runtime_bc + imm_len tops < dimword(:256)
 Proof
   strip_tac >> drule deploy_imm_budget_ok >> simp[]
-QED
-
-Theorem deploy_ctor_oracle_storage:
-  deploy_state_rel tops deploy_bc am tx es /\
-  EVERY (\co.
-    contract_storage_well_formed (deploy_evaluation_context tops am tx)
-      (initial_state (am with <|accounts := co.co_accounts;
-                                tStorage := co.co_tStorage|>) []))
-    (MAP SND (call_trace es)) /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) ==>
-  oracle_storage_ok (deploy_evaluation_context tops am tx)
-    (es0 with outcomes := SOME vs.vs_outcomes)
-Proof
-  strip_tac >>
-  `vs.vs_outcomes = MAP SND (call_trace es)` by
-    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
-     simp[gas_variant_def] >>
-     disch_then (mp_tac o Q.AP_TERM `\s. s.vs_outcomes`) >>
-     simp[deploy_entry_state_def, entry_venom_state_def]) >>
-  fs[deploy_oracle_storage_payload] >>
-  qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
-  simp[deploy_state_rel_def] >> strip_tac >>
-  fs[EVERY_MEM] >> rpt strip_tac >>
-  irule contract_storage_well_formed_backends_frame >>
-  qexists `initial_state (am with <|accounts := co.co_accounts;
-                                  tStorage := co.co_tStorage|>) []` >>
-  simp[vyperInterpreterTheory.initial_state_def] >>
-  metis_tac[]
 QED
 
 Theorem compile_register_constructor_args_return_pc:
@@ -580,44 +552,6 @@ Proof
   >- simp[supportedStmtsTheory.supported_stmt_def] >>
   drule_all supported_program_deploy_function >>
   simp[supported_function_body_def] >> metis_tac[]
-QED
-
-Theorem deploy_frame_send_value_storage:
-  send_call_value mut cx st = (res,st') /\
-  contract_storage_well_formed cx st ==>
-  contract_storage_well_formed cx st'
-Proof
-  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
-     assert_def, return_def, raise_def] >>
-  gvs[AllCaseEqs()] >>
-  metis_tac[transfer_value_preserves_contract_storage_well_formed]
-QED
-
-Theorem deploy_frame_start_storage:
-  !tops am tx mut nr stmts am_c es0 deploy_bc es.
-    deploy_source_ok tops am tx /\
-    storage_layout_safe (deploy_evaluation_context tops am tx) /\
-    contract_storage_well_formed (deploy_evaluation_context tops am tx)
-      (initial_state am []) /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==>
-    storage_layout_safe (deploy_evaluation_context tops am tx) /\
-    contract_storage_well_formed (deploy_evaluation_context tops am tx) es0 /\
-    popped_keys_indexed es0.scopes
-Proof
-  rpt gen_tac >> strip_tac >>
-  `~nr` by metis_tac[deploy_ctor_not_nonreentrant] >> gvs[] >>
-  drule deploy_frame_ctor_start_scopes >> strip_tac >>
-  gvs[deploy_source_ok_def, deploy_ctor_start_def] >>
-  qpat_x_assum `ignore_bind _ _ _ = _` mp_tac >>
-  simp[lock_if_nr_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  `am_c.accounts = am.accounts /\ am_c.tStorage = am.tStorage` by
-    (drule deploy_frame_all_constants_accounts >>
-     drule deploy_frame_all_constants_tStorage >> simp[]) >>
-  irule deploy_frame_send_value_storage >> goal_assum (drule_at Any) >>
-  irule contract_storage_well_formed_backends_frame >>
-  qexists `initial_state am []` >> simp[initial_state_def]
 QED
 
 Theorem deploy_frame_semantic_setup:
@@ -1416,8 +1350,6 @@ Theorem deploy_ctor_body_frame:
     body_inv tops dunit.cu_context cenv (deploy_evaluation_context tops am tx) /\
     cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
     LENGTH runtime_bc + imm_len tops < dimword(:256) /\
-    (nr ==> ut /\ storage_layout_safe (deploy_evaluation_context tops am tx) /\
-            (deploy_evaluation_context tops am tx).nonreentrant_slot = SOME nkey) /\
     (imm_len tops <> 0 ==>
        cenv.ce_imm_alloca = SOME imm /\
        !x. imm = Var x ==> not_fresh_at st_epilogue x) /\
