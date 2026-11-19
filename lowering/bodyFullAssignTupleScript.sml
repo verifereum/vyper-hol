@@ -7332,7 +7332,7 @@ Proof
        qexists_tac `sa` >> asm_rewrite_tac[]) >>
     `!i:num. i + SUC k = SUC k + i` by decide_tac >>
     qpat_assum `!i:num. i + SUC k = SUC k + i` (fn th => rewrite_tac[th]) >>
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC)) >>>
+    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, ALL_TAC]) >>>
   HEADGOAL (
     qpat_assum `fin.storage_trace = src.storage_trace` (fn tr =>
       qpat_assum `!H. valid_horizon cx st0 H fin.storage_trace ==> _`
@@ -8547,7 +8547,7 @@ Proof
   HEADGOAL (
     irule stmtSimDefsTheory.alloca_frame_trans >>
     qexistsl [`cenv`,`mid`,`m`,`target_cs`] >>
-    rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE decide_tac)) >>>
+    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, decide_tac]) >>>
   HEADGOAL (
     `sa.cs_next_id <= sm.cs_next_id /\ sa.cs_next_var <= sm.cs_next_var` by
       (map_every (fn pat => qpat_assum pat mp_tac)
