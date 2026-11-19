@@ -37,6 +37,7 @@ Proof
      simp[]) >>
   `compile_abi_decode_to_buf (Var child) src CALLDATALOAD (Lit 0w) (Lit 0w)
      (DecPrimWord cl) st = ((),last)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all calldata_word_accepted_resource_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `t = v with vs_inst_idx := initial.vs_inst_idx` by metis_tac[exec_result_11] >>

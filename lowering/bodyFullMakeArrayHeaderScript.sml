@@ -38,6 +38,7 @@ Proof
    eval_operand (Lit (n2w len)) s = SOME (n2w len) /\
    ptrDiscipline$op_taint tn (Lit (n2w len)) = {}` by
     simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` mp_tac) >>
   strip_tac >>

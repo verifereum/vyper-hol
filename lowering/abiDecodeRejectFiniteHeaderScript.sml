@@ -122,6 +122,7 @@ Proof
           eval_operand_def, word_add_n2w, Abbr `x`]) >>
   `w2n (n2w B:bytes32) = B` by simp[w2n_n2w, LESS_MOD] >>
   `w2n (n2w B:bytes32) + p < dimword(:256)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`H`,`u`] >>

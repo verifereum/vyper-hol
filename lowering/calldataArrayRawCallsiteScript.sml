@@ -71,7 +71,8 @@ Theorem calldata_array_raw_child_callsite:
       ?fuel'. run_from fuel' ctx fn s = r /\
         (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)) /\
     (!D lower explicit ctx' func.
-      fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' ==>
+      fn_has_code st ready func /\ allocas_from lower s /\
+      (ctx_has_dalloca ctx' ==> allocas_below_fmp s) ==>
       gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) [] (OK t,HG,u))
 Proof
   strip_tac >>

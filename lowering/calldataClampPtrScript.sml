@@ -48,7 +48,7 @@ Theorem clamp_scalar_step_safe:
   EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
   step_inst fuel ctx (mk_inst id opc ops outs) s = OK t /\
   t.vs_requests = s.vs_requests /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst id opc ops outs) s
 Proof
   strip_tac >>
@@ -134,7 +134,7 @@ Theorem clamp_scalar_continuation:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops outs) /\
   step_inst_base (mk_inst id opc ops outs) s = OK t /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!fuel. ptr_safe_run D lo fuel ctx fn PG
     (step_prov PG G (mk_inst id opc ops outs) t)
     (step_taint (mk_inst id opc ops outs) s t tn)
@@ -159,7 +159,7 @@ Theorem clamp_scalar_indexed_continuation:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb n = SOME (mk_inst id opc ops outs) /\
   step_inst_base (mk_inst id opc ops outs) s = OK t /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!fuel. ptr_safe_run D lo fuel ctx fn PG
     (step_prov PG G (mk_inst id opc ops outs) t)
     (step_taint (mk_inst id opc ops outs) s t tn)
@@ -173,8 +173,8 @@ Proof
      OK (t with vs_inst_idx := n)` by
     simp[step_inst_inst_idx_indep, exec_result_map_def] >>
   irule clamp_scalar_continuation >>
-  simp_tac (srw_ss()) [allocas_from_def] >>
-  asm_rewrite_tac[GSYM allocas_from_def] >>
+  simp_tac (srw_ss()) [allocas_from_def, allocas_below_fmp_def] >>
+  asm_rewrite_tac[GSYM allocas_from_def, GSYM allocas_below_fmp_def] >>
   goal_assum $ drule_at (Pat `get_instruction`) >>
   qexists_tac `t with vs_inst_idx := n` >>
   simp[step_prov_inst_idx, step_taint_inst_idx] >>
@@ -199,7 +199,7 @@ Theorem clamp_scalar_sequence_check[local]:
   MEM opc [SIGNEXTEND; SHR; SHL; EQ; ISZERO; ASSERT] /\
   EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
   step_inst_base (mk_inst id opc ops outs) s = OK t /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !D k. ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id opc ops outs)
     (s with vs_inst_idx := k)
 Proof
@@ -213,7 +213,7 @@ Proof
   `ptr_safe_step D lo 0 ctx fn PG G tn (mk_inst id opc ops outs)
     (s with vs_inst_idx := k)` by
     (irule clamp_scalar_step_safe >> simp[] >>
-     fs[allocas_from_def] >> metis_tac[]) >>
+     fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   fs[ptr_safe_step_def]
 QED
 
@@ -223,7 +223,7 @@ Theorem clamp_scalar_indexed_origin[local]:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb n = SOME (mk_inst id opc ops outs) /\
   step_inst_base (mk_inst id opc ops outs) s = OK t /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (s with vs_inst_idx := n,G,tn) []
     (OK (t with vs_inst_idx := SUC n),
@@ -254,7 +254,8 @@ Proof
        (qpat_assum `t = s with vs_vars := vars` SUBST1_TAC >> simp[]) >>
      mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := n`,
        `t` |-> `t with vs_inst_idx := n`, `fuel` |-> `0:num`]
-       (SPEC_ALL clamp_scalar_step_safe)) >> simp[]) >>
+       (SPEC_ALL clamp_scalar_step_safe)) >> simp[allocas_below_fmp_def] >>
+     fs[allocas_below_fmp_def]) >>
   irule (Q.INST [`i` |-> `mk_inst id opc ops outs`]
     calldataDecodePtrTheory.decoder_indexed_origin_step) >>
   fs[ptr_safe_step_def, MEM, mk_inst_def, is_terminator_def,
@@ -269,7 +270,7 @@ Theorem calldata_clamp_overwrite_prefix_uniform_origin_joint:
   (!x. op = Var x ==> not_fresh_at sa x) /\
   op_taint tn op = {} /\ op_prov G op = NONE /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
@@ -323,6 +324,12 @@ Proof
     (irule clamp_scalar_state_frame >>
      qexistsl_tac [`sa.cs_next_id + 2`, `ASSERT`, `[Var v1]`, `[]:string list`] >>
      simp[Abbr `i2`]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s1) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp s2)` by
+    (qpat_assum `s2 = s1 with vs_vars := _` SUBST1_TAC >>
+     qpat_assum `s1 = s with vs_vars := _` SUBST1_TAC >>
+     conj_tac >> simp_tac (srw_ss()) [allocas_below_fmp_def] >>
+     first_assum (ACCEPT_TAC o REWRITE_RULE [allocas_below_fmp_def])) >>
   `op <> Var v0` by
     (strip_tac >>
      qpat_x_assum `!x. op = Var x ==> _` drule >>
@@ -564,7 +571,9 @@ Theorem calldata_clamp_overwrite_prefix_uniform_origin:
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
       (OK s',G',tn'))
 Proof
-  strip_tac >> drule_all calldata_clamp_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_clamp_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED
@@ -599,7 +608,9 @@ Theorem calldata_clamp_overwrite_prefix_uniform_joint:
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
       (s,G,tn) [] (OK s',G',tn'))
 Proof
-  strip_tac >> drule_all calldata_clamp_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_clamp_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED
@@ -632,7 +643,9 @@ Theorem calldata_clamp_overwrite_prefix_uniform_seq:
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
     (!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn')
 Proof
-  strip_tac >> drule_all calldata_clamp_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_clamp_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED
@@ -666,7 +679,9 @@ Theorem calldata_clamp_overwrite_trace_uniform:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_clamp_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_clamp_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED

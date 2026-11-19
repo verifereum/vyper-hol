@@ -2,7 +2,7 @@
    words and bytestrings, and dynamic arrays of static elements without clamp
    (copied in bulk).  Neither allocates scratch. *)
 Theory sourceOwnedLeafPtr
-Ancestors
+Ancestors decoderOriginAllocationFrame
   fragGasOriginPtr fragGasSeqPtr fragGasSeqMem venomExecSemantics emitHelper
   emitHelperProps compileEnv finite_map pred_set valueEncodingProps
   ptrSafetyTransport fragExecPtr entryDispatchPtr calldataClampPtr decoderNavigationPtr
@@ -55,7 +55,8 @@ Theorem source_owned_primitive_decoder_ptr:
     !bb. lookup_block end_st.cs_current_bb fn.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   end_st.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit r /\
-  allocas_from lower r /\ lower <= r.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lower r /\ lower <= r.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r /\
+      r.vs_alloca_next + pending_alloca_size fn r <= w2n r.vs_initial_fmp) /\
   ~r.vs_halted /\ r.vs_current_bb = middle.cs_current_bb /\
   r.vs_inst_idx = LENGTH middle.cs_current_insts ==>
   ?t H u.
@@ -94,7 +95,10 @@ Theorem source_owned_primitive_decoder_ptr:
     t.vs_requests = r.vs_requests /\
     t.vs_pending_deletions = r.vs_pending_deletions /\ t.vs_tx_ctx = r.vs_tx_ctx /\
     t.vs_block_ctx = r.vs_block_ctx /\ t.vs_fmp = r.vs_fmp /\
-    t.vs_gas_readings = r.vs_gas_readings
+    t.vs_gas_readings = r.vs_gas_readings /\
+    t.vs_initial_fmp = r.vs_initial_fmp /\
+    t.vs_alloca_next + pending_alloca_size fn t <=
+      r.vs_alloca_next + pending_alloca_size fn r
 Proof
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
   `evaluate_type env ty = SOME tv /\
@@ -173,6 +177,13 @@ Proof
      simp[eval_operand_def, lookup_var_def]) >>
   drule_all decoder_run_world_frame >>
   simp_tac (srw_ss()) [] >> strip_tac >>
+  `t.vs_initial_fmp = r.vs_initial_fmp /\
+   t.vs_alloca_next + pending_alloca_size fn t <=
+     r.vs_alloca_next + pending_alloca_size fn r` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) _ [] (OK t,H,u)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     strip_tac >> drule_all decoder_origin_path_allocation_frame >>
+     simp_tac (srw_ss()) []) >>
   qexistsl [`t`,`H`,`u`] >>
   pure_asm_rewrite_tac [] >>
   simp_tac bool_ss [] >>
@@ -233,7 +244,8 @@ Theorem source_owned_bulk_array_ptr:
     !bb. lookup_block end_st.cs_current_bb fn.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   end_st.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit r /\
-  allocas_from lower r /\ lower <= r.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lower r /\ lower <= r.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r /\
+      r.vs_alloca_next + pending_alloca_size fn r <= w2n r.vs_initial_fmp) /\
   ~r.vs_halted /\ r.vs_current_bb = middle.cs_current_bb /\
   r.vs_inst_idx = LENGTH middle.cs_current_insts ==>
   ?t H u.
@@ -273,7 +285,10 @@ Theorem source_owned_bulk_array_ptr:
     t.vs_pending_deletions = r.vs_pending_deletions /\ t.vs_tx_ctx = r.vs_tx_ctx /\
     t.vs_block_ctx = r.vs_block_ctx /\ t.vs_fmp = r.vs_fmp /\
     t.vs_gas_readings = r.vs_gas_readings /\
-    t.vs_allocas = r.vs_allocas /\ t.vs_alloca_next = r.vs_alloca_next
+    t.vs_allocas = r.vs_allocas /\ t.vs_alloca_next = r.vs_alloca_next /\
+    t.vs_initial_fmp = r.vs_initial_fmp /\
+    t.vs_alloca_next + pending_alloca_size fn t <=
+      r.vs_alloca_next + pending_alloca_size fn r
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all source_bulk_array_layout >> strip_tac >>
@@ -341,6 +356,9 @@ Proof
      conj_tac >- metis_tac[calldata_operand_live_not_fresh] >>
      rpt strip_tac >> metis_tac[calldata_operand_live_not_fresh]) >>
   `e+32+LENGTH vs * type_memory_size etv <= r.vs_alloca_next` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp r /\ _`
+       mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   drule_all calldata_bulk_decoder_endpoint_ptr_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qpat_x_assum `_ ==> !D explicit. gas_origin_ptr_path _ _ _ _`
@@ -392,6 +410,13 @@ Proof
     (simp_tac (srw_ss()) [GSYM abi_decode_frame_footprint,
        abiDecoderContractTheory.abi_decode_frame_def] >>
      metis_tac[abiDecoderContractTheory.abi_decode_frame_def]) >>
+  `t.vs_initial_fmp = r.vs_initial_fmp /\
+   t.vs_alloca_next + pending_alloca_size fn (t with vs_inst_idx := LENGTH end_st.cs_current_insts) <=
+     r.vs_alloca_next + pending_alloca_size fn r` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) _ [] (OK (t with vs_inst_idx := LENGTH end_st.cs_current_insts),H,u)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     strip_tac >> drule_all decoder_origin_path_allocation_frame >>
+     simp_tac (srw_ss()) []) >>
   qpat_x_assum `tv = _` SUBST_ALL_TAC >>
   qpat_x_assum `v = _` SUBST_ALL_TAC >>
   qexistsl [`t with vs_inst_idx := LENGTH end_st.cs_current_insts`,`H`,`u`] >>

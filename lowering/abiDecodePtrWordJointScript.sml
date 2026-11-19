@@ -220,6 +220,7 @@ Proof
    r'.vs_inst_idx = LENGTH c2.cs_current_insts` by
     gvs[Abbr `r'`, allocas_from_def, eval_operand_def, lookup_var_def] >>
   `!x. Var value = Var x ==> not_fresh_at c2 x` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r'` by simp[] >>
   drule_all calldata_clamp_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`G'`,`tn'`] >>
