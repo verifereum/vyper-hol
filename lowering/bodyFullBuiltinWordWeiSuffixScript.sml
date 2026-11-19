@@ -32,32 +32,6 @@ Proof
   metis_tac[bodyPtrWordBuiltinsAbsSequenceTheory.word_abs_ghost_step]
 QED
 
-Theorem as_wei_value_inst_ok[local]:
-  MEM inst.inst_opcode [MUL; Div; EQ; ISZERO; OR; ASSERT] /\
-  (!arg. MEM arg inst.inst_operands ==>
-    op_taint tn arg = {} /\ op_prov G arg = NONE) /\
-  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-  ptr_inst_ok D lo 0 ctx fn G tn inst s
-Proof
-  strip_tac >>
-  `!arg. MEM arg inst.inst_operands ==> op_taint tn arg = {}` by metis_tac[] >>
-  `!u v. inst.inst_operands = [Var u; Var v] ==>
-     u NOTIN FDOM G /\ v NOTIN FDOM G` by
-    (rpt strip_tac >>
-     qpat_assum `!arg. _ ==> _ /\ _` (qspec_then `Var u` mp_tac) >>
-     qpat_assum `!arg. _ ==> _ /\ _` (qspec_then `Var v` mp_tac) >>
-     gvs[op_prov_def, FLOOKUP_DEF]) >>
-  gvs[MEM, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-      source_memory_write_ranges_def, source_memory_read_ranges_def] >>
-  simp[step_inst_non_invoke] >>
-  asm_simp_tac bool_ss [venomInstTheory.mk_inst_def, step_inst_base_opcode_eqs,
-    venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds,
-    combinTheory.K_THM] >>
-  asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >>
-  simp[exec_pure1_def, exec_pure2_def, AllCaseEqs(), update_var_def] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-
 Theorem as_wei_value_prefix_ghosts:
   compile_as_wei_value_int v (denomination_multiplier dn) F sa = (op,sb) /\
   emitted_insts sa sb = xs ++ ys /\
@@ -137,7 +111,7 @@ Proof
      >- (rpt strip_tac >>
          `MEM i.inst_opcode [MUL; Div; EQ; ISZERO; OR; ASSERT]` by
            (fs[EVERY_MEM] >> metis_tac[]) >>
-         irule as_wei_value_inst_ok >> simp[] >>
+         irule word_scale_inst_ok >> simp[] >>
          gen_tac >> disch_tac >> Cases_on `arg` >>
          gvs[op_taint_def, op_prov_def] >> metis_tac[]) >>
      conj_tac >- (Cases_on `v` >> gvs[op_prov_def]) >>
@@ -398,7 +372,7 @@ Proof
      >- (qpat_x_assum `u = s with vs_vars := _` SUBST1_TAC >>
          simp[] >> metis_tac[]) >>
      conj_tac >- metis_tac[] >>
-     irule as_wei_value_inst_ok >> simp[] >>
+     irule word_scale_inst_ok >> simp[] >>
      conj_tac
      >- (rpt strip_tac >>
          qpat_x_assum `!x. x IN _ UNION _ ==> _` mp_tac >>
