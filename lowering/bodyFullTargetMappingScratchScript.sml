@@ -151,6 +151,7 @@ Resume mapping_slot_full_run[apply_tail]:
       [STRING #"%" (toString sa.cs_next_var)]).inst_opcode = ALLOCA /\
     FLOOKUP t.vs_allocas (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]).inst_id = SOME (w2n w,64)` by simp[mk_inst_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all mapping_scratch_tail_full_run >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   rename1 `run_inst_seq code t = OK u` >>

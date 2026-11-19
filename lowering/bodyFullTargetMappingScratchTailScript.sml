@@ -20,7 +20,7 @@ Theorem mapping_scratch_tail_full_run:
   lookup_var p s = SOME (n2w b) /\ FLOOKUP G p = SOME (root,cap) /\
   root <= b /\ b+64 <= root+cap /\ lo <= b /\
   b+64 < dimword (:256) /\ b+64 <= s.vs_alloca_next /\
-  op_taint tn (Var p) = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn (Var p) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!x. not_fresh_at sa x ==> x <> q /\ x <> h) /\
   local_ptrs_reserved cenv sa /\
   MEM ai (fn_insts func) /\ ai.inst_opcode = ALLOCA /\

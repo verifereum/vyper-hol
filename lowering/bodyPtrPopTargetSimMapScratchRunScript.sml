@@ -69,7 +69,7 @@ Theorem map_scratch_store_hash_checked:
     op_taint tn base = {} /\ op_taint tn key = {} /\
     lookup_var p s = SOME (n2w b) /\ FLOOKUP G p = SOME (root,cap) /\
     root <= b /\ b+64 <= root+cap /\ b+64 < dimword (:256) /\
-    op_taint tn (Var p) = {} /\ ~ctx_has_dalloca ctx ==>
+    op_taint tn (Var p) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst is MSTORE [Var p;base] [];
        mk_inst ip ADD [Var p;Lit 32w] [q];
@@ -94,6 +94,10 @@ Proof
        (mp_then Any mp_tac toplevel_immutable_mstore_ghost_frame) >>
      disch_then drule >>
      disch_then (qspecl_then [`tn`, `is`, `PG`, `G`] mp_tac) >> simp[]) >>
+  `!k. ctx_has_dalloca ctx ==> allocas_below_fmp (s1 with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `s1`, allocas_below_fmp_def, update_var_def, mstore_def,
+          write_memory_with_expansion_def, NoAsms] >> metis_tac[]) >>
   simp[Once inst_seq_ptr_def] >>
   conj_tac >- (irule ptr_inst_ok_mstore >> simp[] >>
     simp[ptr_covers_def] >> qexists_tac `n2w b` >> simp[] >> decide_tac) >>
@@ -114,6 +118,13 @@ Resume map_scratch_store_hash_checked[add]:
     (simp[Abbr `s2`, Abbr `G2`, Abbr `tn2`] >>
      metis_tac[hash_add_ghost]) >>
   `~is_terminator MSTORE /\ ~is_terminator ADD` by simp[is_terminator_def] >>
+  `!k. ctx_has_dalloca ctx ==> allocas_below_fmp (s2 with vs_inst_idx := k)` by
+    (gen_tac >>
+     qpat_assum `!k. ctx_has_dalloca ctx ==> allocas_below_fmp (s1 with vs_inst_idx := k)`
+       (qspec_then `k` mp_tac) >>
+     qpat_assum `Abbrev (s2 = _)` (fn eq => REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] eq]) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   simp[Once inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def] >>
   conj_tac >- (irule ptr_inst_ok_copy_len_binop >> gvs[Abbr `tn1`, op_taint_def]) >>
   simp[] >> suspend "store"
@@ -136,6 +147,13 @@ Resume map_scratch_store_hash_checked[store]:
    step_taint (mk_inst ik MSTORE [Var q;key] []) s2 s3 tn2 = tn3` by
     (simp[Abbr `s3`, Abbr `tn3`] >>
      drule_all toplevel_immutable_mstore_ghost_frame >> simp[]) >>
+  `!k. ctx_has_dalloca ctx ==> allocas_below_fmp (s3 with vs_inst_idx := k)` by
+    (gen_tac >>
+     qpat_assum `!k. ctx_has_dalloca ctx ==> allocas_below_fmp (s2 with vs_inst_idx := k)`
+       (qspec_then `k` mp_tac) >>
+     qpat_assum `Abbrev (s3 = _)` (fn eq => REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] eq]) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, mstore_def, write_memory_with_expansion_def] >> metis_tac[]) >>
   simp[Once inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def] >>
   conj_tac >- (irule ptr_inst_ok_mstore >> simp[] >>
     simp[ptr_covers_def] >> qexists_tac `n2w (b+32)` >> simp[] >> decide_tac) >>
