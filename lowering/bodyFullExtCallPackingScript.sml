@@ -113,6 +113,7 @@ Proof
    eval_operand (Lit (calldata_method_id bs)) s = SOME (calldata_method_id bs) /\
    op_taint tn (Lit (calldata_method_id bs)) = {}` by
     simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` (qx_choose_then `smach` (qx_choose_then `Gm`
      (qx_choose_then `tm` strip_assume_tac)))) >>

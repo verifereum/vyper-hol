@@ -1,6 +1,6 @@
 (* Actual-site resources at the nonbulk source-array constructor boundary. *)
 Theory sourceOwnedArrayConstructorPtr
-Ancestors decoderNavigationPtr
+Ancestors decoderNavigationPtr decoderOriginAllocationFrame
   actualIndexInitPtr decoderBudgetAllocaCorePtr abiDecoderAllocation wordLoadStorePtr ptrSafetyTransport
   ghostPcTransportPtr sourceOwnedArrayLoopPtr decoderArrayInitPtr physicalArrayInitSequence abiEncoderSequence
   venomInstProofs fragGasSeqAbort venomExecProofs fragExecPtr instMemFrontier decoderGhostFramePtr instIdxIndep fragGasOriginPtr fragGasPathPtr entryDispatchPtr codegenRel contextCodegenRel fragGasSeqPtr fragGasSeqMem fragExecMem stmtForRangeMemoryParts calldataDynInit calldataBytesLeaf
@@ -439,7 +439,9 @@ Theorem source_owned_nonbulk_array_ptr:
       !bb. lookup_block end_st.cs_current_bb fn.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     end_st.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit r /\
-    allocas_from lower r /\ lower <= r.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lower r /\ lower <= r.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp r /\
+      r.vs_alloca_next + pending_alloca_size fn r <= w2n r.vs_initial_fmp) /\
     ~r.vs_halted /\ r.vs_current_bb = middle.cs_current_bb /\
     r.vs_inst_idx = LENGTH middle.cs_current_insts ==>
     ?t H u fp.
@@ -481,7 +483,10 @@ Theorem source_owned_nonbulk_array_ptr:
       t.vs_requests = r.vs_requests /\
       t.vs_pending_deletions = r.vs_pending_deletions /\ t.vs_tx_ctx = r.vs_tx_ctx /\
       t.vs_block_ctx = r.vs_block_ctx /\ t.vs_fmp = r.vs_fmp /\
-      t.vs_gas_readings = r.vs_gas_readings) ==>
+      t.vs_gas_readings = r.vs_gas_readings /\
+      t.vs_initial_fmp = r.vs_initial_fmp /\
+      t.vs_alloca_next + pending_alloca_size fn t <=
+        r.vs_alloca_next + pending_alloca_size fn r) ==>
   !s G tn st last.
     compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (DecDynArray (type_to_abi_dec_info sf ce ty)
@@ -519,7 +524,9 @@ Theorem source_owned_nonbulk_array_ptr:
       ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
         ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
     ptr_covers G tn root s outsz /\ op_taint tn src = {} /\ op_prov G src = NONE /\
-    allocas_from lower s /\ lower <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lower s /\ lower <= s.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts ==>
     ?t H u fp.
@@ -558,7 +565,10 @@ Theorem source_owned_nonbulk_array_ptr:
       t.vs_requests = s.vs_requests /\
       t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
       t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
-      t.vs_gas_readings = s.vs_gas_readings
+      t.vs_gas_readings = s.vs_gas_readings /\
+      t.vs_initial_fmp = s.vs_initial_fmp /\
+      t.vs_alloca_next + pending_alloca_size fn t <=
+        s.vs_alloca_next + pending_alloca_size fn s
 Proof
   disch_tac >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all calldata_nonbulk_parent_shell >> strip_tac >>
@@ -1018,6 +1028,42 @@ Resume source_owned_nonbulk_array_ptr[invoke_loop]:
      (type_memory_size tv) st0 = (ops,middle)` by
     (qpat_assum `ip = Var q` (fn th => rewrite_tac [GSYM th]) >>
      first_assum ACCEPT_TAC) >>
+  `init.vs_fmp = s.vs_fmp` by
+    (`EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
+       (emitted_insts st loop_st)` by
+       (drule abi_decode_array_loop_init_reentry_code >>
+        simp[abi_decode_source_opcode_def]) >>
+     drule_all decoderWorldFramePtrTheory.decoder_run_world_frame >> strip_tac >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`Abbrev (init = _)`, `t.vs_fmp = s.vs_fmp`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[markerTheory.Abbrev_def]) >>
+  `alloca_inv init` by
+    (qpat_assum `Abbrev (h = _)` (fn eq =>
+       qpat_assum `alloca_inv h`
+         (mp_tac o REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] eq])) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+       jump_to_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp init /\
+      init.vs_alloca_next + pending_alloca_size fn init <= w2n init.vs_initial_fmp` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) (s,G,tn) [] _`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_origin_ptr_path (ARB,_,{},ctx,fn,PG) (s,G,tn) [] (OK init,H,u)`,
+        `fn_inst_ids_distinct fn`, `init.vs_fmp = s.vs_fmp`, `alloca_inv init`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp init` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp init /\ _`
+       mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp h /\
+      h.vs_alloca_next + pending_alloca_size fn h <= w2n h.vs_initial_fmp` by
+    (qpat_assum `Abbrev (h = _)`
+       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp init /\ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[allocas_below_fmp_def, pending_alloca_size_def, jump_to_def] >>
+     metis_tac[]) >>
   mp_tac (Q.INST [`body_st` |-> `st0`, `end_st` |-> `st1`,
     `hdr` |-> `FST (labels : string # string # string)`,
     `body_lbl` |-> `FST (SND (labels : string # string # string))`,
@@ -1391,7 +1437,7 @@ Resume source_owned_nonbulk_array_ptr[constructor_safety]:
         POP_ASSUM_LIST (K ALL_TAC) >>
         simp[markerTheory.Abbrev_def, allocas_from_def, jump_to_def]) >>
      qpat_assum `allocas_from lower init` mp_tac >>
-     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp init` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp_tac bool_ss [markerTheory.Abbrev_def] >> rpt strip_tac >>
      `get_instruction bb init.vs_inst_idx = SOME
@@ -1426,7 +1472,7 @@ Resume source_owned_nonbulk_array_ptr[constructor_safety]:
      qpat_assum `init.vs_inst_idx = LENGTH loop_st.cs_current_insts` mp_tac >>
      qpat_assum `~init.vs_halted` mp_tac >>
      qpat_assum `allocas_from lower h` mp_tac >>
-     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp init` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp_tac bool_ss [markerTheory.Abbrev_def] >> rpt strip_tac >>
      irule jump_origin_ptr_path >>
@@ -1447,7 +1493,7 @@ Resume source_owned_nonbulk_array_ptr[constructor_final_safety]:
      qpat_assum `fn_has_code st loop_st fn` mp_tac >>
      qpat_assum `allocas_from lower s` mp_tac >>
      qpat_assum `lower <= s.vs_alloca_next` mp_tac >>
-     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` mp_tac >>
      qpat_assum `s.vs_current_bb = st.cs_current_bb` mp_tac >>
      qpat_assum `s.vs_inst_idx = LENGTH st.cs_current_insts` mp_tac >>
      qpat_assum `init = t with vs_inst_idx := LENGTH loop_st.cs_current_insts` mp_tac >>
@@ -1538,6 +1584,13 @@ Resume source_owned_nonbulk_array_ptr[constructor_packaging]:
         `init = t with vs_inst_idx := LENGTH loop_st.cs_current_insts`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      metis_tac[gas_origin_ptr_path_append, APPEND]) >>
+  `t'.vs_initial_fmp = s.vs_initial_fmp /\
+      t'.vs_alloca_next + pending_alloca_size fn t' <=
+        s.vs_alloca_next + pending_alloca_size fn s` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) (s,G,tn) [] (OK t',H',u')`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >>
+     simp_tac (srw_ss()) []) >>
   (qexistsl [`t'`,`H'`,`u'`,`(p,32)::fp`] >>
    rpt conj_tac >> first_assum ACCEPT_TAC)
 QED

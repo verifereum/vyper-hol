@@ -12,7 +12,10 @@ Theorem actual_index_init_endpoint_ptr_origin_core:
    (?p. FLOOKUP s.vs_allocas sa.cs_next_id = SOME (p,32) /\
       p + 32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword (:256))) ==>
   ?HG u q p. (!D lower explicit ctx' func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code sa sb func /\ allocas_from lower s /\
+      (ctx_has_dalloca ctx' ==>
+        allocas_below_fmp s /\
+        s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
       ~s.vs_halted /\ lower <= s.vs_alloca_next /\
       s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -33,7 +36,8 @@ Theorem actual_index_init_endpoint_ptr_origin_core:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s /\
+        s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
@@ -110,7 +114,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all actual_index_init_endpoint_ptr_origin_core >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
-  qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
+  qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[] >> metis_tac[]
 QED
 
 Theorem actual_index_init_endpoint_joint_core:

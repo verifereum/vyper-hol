@@ -239,6 +239,7 @@ Proof
    bc.bb_instructions = last.cs_current_insts /\ fn_has_code st last clip` by
     simp[Abbr`clip`, Abbr`bc`, fragExecTheory.fn_has_code_def,
       fragExecTheory.emitted_blocks_def, venomInstTheory.lookup_block_def, FIND_thm] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.INST [`func` |-> `clip`] calldata_bulk_decoder_endpoint_ptr_uniform_origin) >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`H`,`u`] >> simp[] >>

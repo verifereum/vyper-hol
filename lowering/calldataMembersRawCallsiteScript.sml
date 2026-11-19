@@ -23,7 +23,7 @@ Theorem calldata_member_raw_child_callsite:
   FLOOKUP s.vs_allocas oid = SOME (d,cap) /\
   vo + type_memory_size tv <= cap /\ d + vo < dimword (:256) /\
   mid.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
-  fn_has_code sa mid fn /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa mid fn /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r H u q.

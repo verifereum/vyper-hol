@@ -1,5 +1,5 @@
 Theory calldataNoneRegisterOne
-Ancestors defaultBytesRegistrationPrelude defaultBytesAddressPrelude
+Ancestors exprLoweringProps defaultBytesRegistrationPrelude defaultBytesAddressPrelude
   registrationGuardRejectOrigin ctorDeployMemoryRunPtrPrefixRegisterAddress
   fragGasOriginPtr loweringShapeDefs loweringStateRelDefs fragExec
   emitHelperProps context compileEnv abiEncoder abiDecoderContract words arithmetic
@@ -261,6 +261,8 @@ Resume none_registration_singleton_paths[pass]:
     ?d. entry = (d,type_memory_size tv) /\ d+type_memory_size tv < dimword (:256)` by
     (qpat_assum `FLOOKUP s.vs_allocas st.cs_next_id = NONE` (fn th => simp[NoAsms, th])) >>
   `0 <= s.vs_alloca_next` by simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
   drule_all (Q.INST [`lo` |-> `0`] entryPtrSeamRegisterTheory.registration_argument_prepare_guarded_joint) >>
   disch_then (qspecl_then [`tn`,`[]`,`G`] strip_assume_tac) >>
   rename1 `lookup_var q t = SOME (n2w d)` >>
