@@ -156,6 +156,7 @@ Proof
   strip_tac >>
   `w2n (n2w d:bytes32) = d` by simp[wordsTheory.w2n_n2w] >>
   `w2n (n2w d:bytes32) + q < dimword(:256)` by asm_rewrite_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `emit_op ADD _ sa = _` (mp_then Any mp_tac emit_addr_add_seq_ptr) >>
   disch_then drule_all >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>

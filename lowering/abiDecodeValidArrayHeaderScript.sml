@@ -203,6 +203,7 @@ Proof
   `lookup_var source s = SOME (n2w B) /\ ptr_covers G tn source s (p+32)` by
     (fs[abi_decode_ptr_window_def] >> metis_tac[ptr_covers_mono]) >>
   `w2n (n2w B:bytes32) + p < dimword (:256)` by simp[w2n_n2w] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emit_addr_add_seq_ptr >>
   disch_then (qspecl_then [`func`, `PG`, `D`]
     (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `v` strip_assume_tac)))) >>
@@ -241,6 +242,7 @@ Proof
    (!i. w2n (n2w (B+p):bytes32) <= i /\ i < w2n (n2w (B+p):bytes32)+32 ==>
        i NOTIN tn1.t_mem)` by
     fs[Abbr `vpc`, ptr_covers_inst_idx, lookup_var_def, abi_decode_ptr_window_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp vpc` by simp[] >>
   drule_all bodyPtrIfExpBytesCountedTheory.emit_mload_clean_seq_ptr >>
   disch_then (qspecl_then [`D`, `func`, `PG`]
     (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `upc` strip_assume_tac)))) >>

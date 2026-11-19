@@ -164,6 +164,7 @@ Proof
   `ptr_covers G tn src s (p+(32+c)) /\ lookup_var src s = SOME (n2w B)` by
     (fs[abi_decode_ptr_window_def] >> irule ptr_covers_mono >> qexists `L` >> simp[]) >>
   `w2n (n2w B : bytes32) + p < dimword (:256)` by simp[w2n_n2w] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emit_addr_add_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts sh sp) s = OK v` >>
@@ -196,6 +197,7 @@ Proof
 QED
 
 Resume abi_decode_bytes_addr_load[load]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp vp` by simp[] >>
   drule_all emit_mload_clean_seq_ptr >>
   disch_then (qspecl_then [`D`, `fn`, `PG`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts sp sl) vp = OK w` >>
