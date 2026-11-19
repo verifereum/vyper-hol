@@ -55,7 +55,8 @@ Proof
     (Cases_on `bt = BlockHash` >> gvs[]) >>
   (conj_asm1_tac
    >- (mp_tac hash_builtin_value_from_suffixes >>
-       (impl_tac >- (conj_tac >- ACCEPT_TAC blockhash_full_suffix >>
+       (impl_tac >- (conj_tac >- (rpt gen_tac >> strip_tac >> irule blockhash_full_suffix >>
+                      simp[] >> qexists_tac `arg` >> simp[]) >>
                      (rpt gen_tac >> strip_tac >> irule blobhash_full_suffix >>
                       simp[] >> qexists_tac `arg` >> simp[]))) >>
        disch_then irule >> metis_tac[]) >>

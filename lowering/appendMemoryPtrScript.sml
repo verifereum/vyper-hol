@@ -453,7 +453,7 @@ Theorem append_memory_word_ptr:
   (!i. w2n bp <= i /\ i < w2n bp+32 ==> i NOTIN tn.t_mem) /\
   op_taint tn vop = {} /\ cap < dimword (:256) /\
   w2n bp+32*(1+cap) <= dimword (:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf.
     (!k. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sf)
       (s with vs_inst_idx := k) Gf tnf) /\
@@ -530,6 +530,9 @@ Resume append_memory_word_ptr[full_path]:
   `!k. ptr_inst_ok D lo 0 ctx fn G tn load (s with vs_inst_idx := k)` by
     (gen_tac >> simp[Abbr `load`] >> irule ptr_inst_ok_mload_lo >>
      simp[allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `s1`, update_var_def, allocas_below_fmp_def]) >>
   `!k. ptr_inst_ok D lo 0 ctx fn G1 tn1 test (s1 with vs_inst_idx := k)` by
     (gen_tac >> irule ptr_inst_ok_lower_bound_transport >>
      conj_tac >- simp[allocas_from_def, Abbr `s1`, Abbr `s2`, update_var_def] >>
@@ -538,7 +541,10 @@ Resume append_memory_word_ptr[full_path]:
      simp[Abbr `test`] >> irule bop_scalar_ptr_inst_ok >>
      simp[step_inst_inst_idx_indep, mk_inst_def, is_terminator_def,
           exec_result_map_def, GSYM mk_inst_def] >>
-     gvs[op_taint_def, op_prov_def]) >>
+     gvs[op_taint_def, op_prov_def, allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[Abbr `s2`, update_var_def, allocas_below_fmp_def]) >>
   `!k. ptr_inst_ok D lo 0 ctx fn G2 tn2
     (mk_inst (sa.cs_next_id+2) ASSERT [Var okvar] [])
     (s2 with vs_inst_idx := k)` by
@@ -546,7 +552,8 @@ Resume append_memory_word_ptr[full_path]:
      conj_tac >- simp[allocas_from_def, Abbr `s1`, Abbr `s2`, update_var_def] >>
      qexists_tac `0` >>
      simp[Abbr `s2`, Abbr `s1`, allocas_from_def, update_var_def] >>
-     irule bop_assert_ptr_inst_ok >> simp[]) >>
+     irule bop_assert_ptr_inst_ok >> simp[] >>
+     fs[allocas_below_fmp_def] >> metis_tac[]) >>
   `~is_terminator load.inst_opcode /\ ~is_terminator test.inst_opcode /\
    ~is_terminator (mk_inst (sa.cs_next_id+2) ASSERT [Var okvar] []).inst_opcode` by
     simp[Abbr `load`, Abbr `test`, mk_inst_def, is_terminator_def] >>
@@ -604,6 +611,10 @@ Resume append_memory_word_ptr[success]:
     (conj_tac >- gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE, ALL_DISTINCT] >>
      Cases_on `vop` >> gvs[eval_operand_def, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE, op_taint_def] >> metis_tac[op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     qpat_assum `t = update_var _ _ _` SUBST1_TAC >>
+     simp[allocas_below_fmp_def, update_var_def]) >>
   mp_tac (append_memory_success_tail |> SPEC_ALL |> Q.INST
     [`G` |-> `H`, `tn` |-> `tm`, `s` |-> `t`, `id` |-> `sa.cs_next_id+3`,
      `L` |-> `w2n (mload (w2n bp) s)`]) >>
