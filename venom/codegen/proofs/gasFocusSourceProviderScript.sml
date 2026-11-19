@@ -2518,7 +2518,10 @@ Proof
   `active_inst (ld_image f) j (u with vs_inst_idx := SUC t.vs_inst_idx)` by metis_tac[] >>
   qpat_x_assum `_ \/ _ \/ _` mp_tac >>
   disch_then (DISJ_CASES_THEN2 assume_tac (DISJ_CASES_THEN assume_tac)) >>
-  MAP_FIRST (drule_all o BETA_RULE o REWRITE_RULE [LET_THM])
+  MAP_FIRST
+    (drule_all o BETA_RULE o REWRITE_RULE [LET_THM] o
+      CONV_RULE (TOP_DEPTH_CONV
+        (HO_REWR_CONV UNWIND_THM2 ORELSEC Unwind.UNWIND_FORALL_CONV)))
     [gasFocusLowerDloadEnvironmentPointTheory.ld_focus_environment_point_next,
      gasFocusLowerDloadArithmeticBindingPointTheory.ld_focus_arithmetic_binding_point_next,
      gasFocusLowerDloadLogStorePointTheory.ld_focus_log_store_point_next] >>
@@ -3240,7 +3243,10 @@ Resume focus_opt_ld_expansion_next[bytes]:
   disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
   `lo <= vs.vs_alloca_next /\ mem_inv dload_headroom_ok C vs` by
     fs[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
-  drule_all (REWRITE_RULE [LET_THM] gasFocusLowerDloadBytesNextTheory.ld_focus_bytes_classified_next) >>
+  drule_all
+    (REWRITE_RULE [LET_THM]
+      (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)
+        gasFocusLowerDloadBytesNextTheory.ld_focus_bytes_classified_next)) >>
   disch_then (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
   `ss.vs_current_bb = s.vs_current_bb` by
     metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
