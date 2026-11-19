@@ -543,10 +543,10 @@ Proof
   BETA_TAC >> conj_tac
   >- (ho_match_mp_tac (GEN_ALL (SIMP_RULE bool_ss [LET_THM] extcall_request_full)) >>
       rpt (goal_assum (drule_at Any)) >>
-      rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE
-          (rpt gen_tac >> strip_tac >>
-           first_assum (irule o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM]) >>
-           metis_tac[]))) >>
+      conj_tac
+      >- qpat_assum `!st target mid src vs ee. _ ==>
+           body_exprs_full_ok cx (DROP (LENGTH sig1 + 1) es)`
+           (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM]) >>
       rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
       mp_tac extcall_return_full >>
       (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_valid_allocated_joint)) >>

@@ -1,7 +1,7 @@
 Theory bodyFullExtCallKeywords
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullExtCallRequest bodyFullPreds bodySimFull gasOutcomeFullCompose
+  bodyFullPreds bodySimFull gasOutcomeFullCompose
   exprSimSource exprSimWordArgs exprLoweringProps contextRawReachable
   ptrDiscipline unitMemInv exprLowering compileEnv gasOutcomeFull loweringPosts
   exprSimSend vyperValue vyperState vyperTyping venomState words

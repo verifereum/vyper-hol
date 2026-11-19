@@ -569,7 +569,8 @@ Resume extcall_kwarg_default_owned_lookup_full[purity]:
                 (mp_tac o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def]) >>
               decide_tac) >>
           disch_then ACCEPT_TAC) >>
-      (first_assum ACCEPT_TAC ORELSE (rpt strip_tac >> metis_tac[]))) >>
+      qpat_assum `!name b sz. local_region cenv es.scopes s0 name b sz ==>
+        regions_disjoint (w2n dw) (type_memory_size ltv) b sz` ACCEPT_TAC) >>
   qpat_assum `eval_expr cx e (es with gas_obs := _) = (INL tv,ee)`
     (mp_then Any mp_tac effect_free_source_projection) >> simp[]
 QED
