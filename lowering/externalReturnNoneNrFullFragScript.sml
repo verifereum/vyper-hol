@@ -19,7 +19,7 @@ Ancestors
 
 Theorem return_selected_none_nr_frag_full:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
-  source_typing_ok tops am tx /\ ~ctx_has_dalloca ctx /\
+  source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,[],ret,fbody) /\
   (nr /\ mut <> View ==> ~cx.txn.is_static) /\
@@ -114,12 +114,23 @@ Proof
   `nr /\ mut <> View ==> ~s0.vs_call_ctx.cc_static` by
     (first_x_assum (drule_then strip_assume_tac) >>
      fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (`stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func ce cx es s0`
+       by metis_tac[] >>
+     first_assum (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   mp_tac (Q.INST [`st` |-> `sa`, `su` |-> `su`, `sb` |-> `sb`,
     `nkey` |-> `global_nonreentrant_slot`, `iv` |-> `mut = View`,
     `lo` |-> `0:num`, `s` |-> `s0`, `G` |-> `G0`, `tn` |-> `tn0`,
     `DF` |-> `DF`, `cenv` |-> `ce`, `cx` |-> `cx`]
-    (INST_TYPE [alpha |-> ``:256``] optional_transient_unlock_stop_joint)) >>
+    (INST_TYPE [alpha |-> ``:256``] optional_transient_unlock_stop_joint_at)) >>
   impl_tac >- simp[allocas_from_def] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ss` by
+    (qpat_assum `ss = _` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s0` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `nr /\ mut <> View` >>
+     simp[ptrDisciplineTheory.allocas_below_fmp_def, halt_state_def, tstore_def] >>
+     metis_tac[]) >>
   irule gas_outcome_full_intro >>
   qexistsl_tac [`G0`, `es`, `[]`,
     `Halt ss`,
@@ -131,8 +142,10 @@ Proof
    ghost_inv_at (DF H) 0 d ce cx es G0 tn0 s0` by metis_tac[] >>
   conj_tac
   >- (first_assum irule >> fs[ghost_inv_at_def]) >>
-  simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def,
-       halt_exit_def] >> gen_tac >>
+  simp[NoAsms, exit_result_def, stmt_exit_ptr_def, expr_exit_def,
+       halt_exit_def] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  simp[] >> gen_tac >>
   `state_rel H func ce cx
     (es with <| scopes := []; gas_obs := tail |>) s0` by
     (fs[stmt_state_rel_def] >>
@@ -155,6 +168,7 @@ Proof
     (SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
       external_halt_success_unlock))) >>
   impl_tac >- simp[] >>
+  Cases_on `nr /\ mut <> View` >>
   simp[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def,
-       abstract_machine_from_state_def, halt_state_def] >> metis_tac[]
+       abstract_machine_from_state_def, halt_state_def, tstore_def]
 QED

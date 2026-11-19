@@ -23,7 +23,7 @@ Theorem abi_encode_nonword_ready_origin:
   cap = val_footprint tv v /\
   lower_abi_encode F midw op ei maxlen sm = (out,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved ce sa /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!tail. bind (eval_expr cx e) (read_result cx)
@@ -261,6 +261,10 @@ Resume abi_encode_nonword_ready_origin[setup]:
          qpat_assum `q = STRING _ _` (fn th => rewrite_tac [th]))
      >> first_assum ACCEPT_TAC) >>
   qpat_assum `buf.buf_operand = Var q` (fn th => rule_assum_tac (REWRITE_RULE [th])) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp allocated_s` by
+    (`stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func ce cx ee allocated_s`
+       by metis_tac[] >>
+     first_assum (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_at (Pat `emit_op _ _ _ = _`) abi_encode_setup_tail_origin >>
   disch_then (drule_at (Pat `abi_builtin_encode_method_id _ _ _ = _`)) >>
   disch_then (drule_at (Pat `ptr_covers G2 tn2 q allocated_s outsz`)) >>

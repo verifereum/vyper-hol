@@ -1993,6 +1993,7 @@ Resume return_selected_valued_frag_full_core[buffered_return_path]:
           (qspec_then `H` mp_tac) >>
         qpat_assum `stor_taint_ok_at (DF H) tn1 t` mp_tac >>
         POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp rencoded` by simp[] >>
      `ptr_inst_ok (DF H) lo 0 ctx func rGenc rtenc ret_inst rencoded` by
        (qunabbrev_tac `ret_inst` >>
         mp_tac (Q.INST
@@ -2985,6 +2986,7 @@ Resume return_selected_valued_frag_full_core[raw_terminal_clean]:
 QED
 
 Resume return_selected_valued_frag_full_core[raw_terminal_joint]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp raw_end` by simp[] >>
   drule_all externalReturnRawJointTheory.compile_external_return_raw_joint >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`]
     (qx_choose_then `raw_ss` (qx_choose_then `raw_final_G`

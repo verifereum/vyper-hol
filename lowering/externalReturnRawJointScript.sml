@@ -13,7 +13,7 @@ Ancestors
 Theorem raw_return_operand_check:
   eval_operand a s = SOME w /\ eval_operand n s = SOME k /\
   op_taint tn a = {} /\ op_taint tn n = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   access_ok lo G fn (mk_inst id RETURN [a;n] []) s /\
   stor_taint_ok_at D tn s /\
   (!i. w2n w <= i /\ i < w2n w + w2n k ==> i NOTIN tn.t_mem) ==>
@@ -38,7 +38,7 @@ Theorem compile_external_return_raw_joint:
   compile_external_return (SOME (Var src)) prim T ei msz F nkey ut iv st =
     (x, st') /\
   fn_has_code st st' func /\ not_fresh_at st src /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   eval_operand (Var src) s = SOME p /\
@@ -272,7 +272,7 @@ Theorem compile_external_return_raw_unlock_joint:
   compile_external_return (SOME (Var src)) prim T ei msz nr nkey T iv st =
     (x,st') /\
   fn_has_code st st' func /\ not_fresh_at st src /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   (nr /\ ~iv ==> ~s.vs_call_ctx.cc_static) /\
@@ -362,6 +362,9 @@ Proof
   `!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==> i NOTIN tn'.t_mem` by
     (qpat_assum `tn'.t_mem = tn.t_mem` (fn th => PURE_REWRITE_TAC [th]) >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `u = _` SUBST1_TAC >>
+     Cases_on `nr /\ ~iv` >> fs[tstore_def, allocas_below_fmp_def] >> metis_tac[]) >>
   mp_tac (Q.INST [`ut` |-> `T`, `st` |-> `st1`, `s` |-> `u`, `tn` |-> `tn'`]
     (SPEC_ALL compile_external_return_raw_joint)) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>

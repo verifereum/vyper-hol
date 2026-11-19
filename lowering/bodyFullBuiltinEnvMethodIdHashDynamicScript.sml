@@ -17,7 +17,7 @@ Theorem method_id_hash_dynamic_full_run:
  lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
  compile_method_id_hash (expr_type e) x sm = (hash,sh) /\
  fn_has_code sm sh func /\ fn_inst_ids_distinct func /\
- ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ local_ptrs_reserved cenv sa /\
  local_ptrs_reserved cenv sm /\
  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\

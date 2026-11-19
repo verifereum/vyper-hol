@@ -26,7 +26,7 @@ Theorem abi_encode_word_stage_window_origin:
   lower_value compile_expr ce (expr_type e) e sa = (op,sm) /\
   compile_alloc_buffer 32 sm = (buf,sn) /\
   emit_void MSTORE [buf.buf_operand;op] sn = ((),sh) /\
-  fn_has_code sm sh func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sm sh func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\

@@ -10,7 +10,7 @@ Theorem emitted_direct_word_store_checked:
   emit_void MSTORE [Var bufroot; v] sa = ((),sb) /\
   ptr_covers G tn bufroot s 32 /\ lookup_var bufroot s = SOME a /\
   eval_operand v s = SOME w /\ op_taint tn v = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t tn'. run_inst_seq (emitted_insts sa sb) s = OK t /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
       (s with vs_inst_idx := k) G tn') /\
@@ -65,7 +65,7 @@ Theorem clean_input_prefix_extend:
   off + 32 <= capacity /\ w2n b + capacity < dimword(:256) /\
   eval_operand v s = SOME w /\ op_taint tn v = {} /\
   (!l. v <> Label l) /\ (!p. v = Var p ==> not_fresh_at sa p) /\
-  not_fresh_at sa bufroot /\ ~ctx_has_dalloca ctx /\
+  not_fresh_at sa bufroot /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
   (!i. ~(w2n b <= i /\ i < w2n b + off) ==>
     mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
   tnu.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + off} /\
@@ -145,6 +145,19 @@ Proof
   simp[emitted_insts_def, DROP_APPEND1, mk_inst_def, is_terminator_def]
 QED
 
+Theorem recovery_offset_store_nonallocating[local]:
+  (do dst <- emit_op ADD [Var bufroot; Lit (n2w off)];
+      emit_void MSTORE [dst; value] od) sa = ((),sb) ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+    i.inst_opcode <> DALLOCA) (emitted_insts sa sb)
+Proof
+  simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[emitted_insts_def, DROP_APPEND1, mk_inst_def,
+    is_terminator_def, is_alloca_op_def]
+QED
+
 Theorem recovery_input_staging_checked:
   emit_void MSTORE [Var bufroot; h] sa = ((),sb) /\
   (do dst <- emit_op ADD [Var bufroot; Lit 32w];
@@ -159,7 +172,7 @@ Theorem recovery_input_staging_checked:
   eval_operand r s = SOME wr /\ eval_operand q s = SOME wq /\
   EVERY (\x. op_taint tn x = {} /\ (!l. x <> Label l) /\
     (!p. x = Var p ==> not_fresh_at sa p)) [h;v;r;q] /\
-  not_fresh_at sa bufroot /\ ~ctx_has_dalloca ctx ==>
+  not_fresh_at sa bufroot /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq (emitted_insts sa sb ++ emitted_insts sb sc ++
       emitted_insts sc sd ++ emitted_insts sd se) s = OK t /\
@@ -196,10 +209,22 @@ Resume recovery_input_staging_checked[v]:
     mem_bytes_at i 1 s1.vs_memory = mem_bytes_at i 1 s.vs_memory` by
     (rpt strip_tac >> irule memory_observation_mstore >> simp[] >>
      qexistsl [`w2n b`, `wh`] >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `s1 = _` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[allocas_below_fmp_def, mstore_def, write_memory_with_expansion_def] >>
+     metis_tac[]) >>
   qpat_x_assum `s1 = _` kall_tac >>
   `!p. not_fresh_at sa p ==>
     lookup_var p s1 = lookup_var p s /\ FLOOKUP G p = FLOOKUP G p /\
     op_taint tn1 (Var p) = op_taint tn (Var p)` by simp[] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+    i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    (qpat_assum `emit_void MSTORE _ sa = _`
+       (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_void) >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   `32 + 32 <= 128` by simp[] >>
   drule_all (Q.INST [`off` |-> `32`, `capacity` |-> `128`]
     clean_input_prefix_extend) >>
@@ -218,6 +243,11 @@ Resume recovery_input_staging_checked[r]:
    EVERY (\i. ~is_terminator i.inst_opcode)
      (emitted_insts sa sb ++ emitted_insts sb sc)` by (simp[] >> decide_tac) >>
   rule_assum_tac (PURE_REWRITE_RULE [EVAL ``32 + 32:num``]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa sb ++ emitted_insts sb sc`, `s`] >>
+     simp[EVERY_APPEND] >> rpt conj_tac >>
+     metis_tac[recovery_offset_store_nonallocating]) >>
   `64 + 32 <= 128` by simp[] >>
   drule_all (Q.INST [`off` |-> `64`, `capacity` |-> `128`]
     clean_input_prefix_extend) >>
@@ -237,6 +267,11 @@ Resume recovery_input_staging_checked[q]:
      ((emitted_insts sa sb ++ emitted_insts sb sc) ++ emitted_insts sc sd)` by
     (simp[] >> decide_tac) >>
   rule_assum_tac (PURE_REWRITE_RULE [EVAL ``64 + 32:num``]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`(emitted_insts sa sb ++ emitted_insts sb sc) ++ emitted_insts sc sd`, `s`] >>
+     simp[EVERY_APPEND] >> rpt conj_tac >>
+     metis_tac[recovery_offset_store_nonallocating]) >>
   `96 + 32 <= 128` by simp[] >>
   drule_all (Q.INST [`off` |-> `96`, `capacity` |-> `128`]
     clean_input_prefix_extend) >>

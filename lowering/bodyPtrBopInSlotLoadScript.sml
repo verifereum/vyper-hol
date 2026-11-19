@@ -5,7 +5,7 @@ Ancestors bodyPtrBopInBaseBoundary bodyPtrBopInElementLoad bodyPtrBopInLiveStora
   ptrSafeRun ptrDiscipline fragGasSeqPtr fragGasPathPtr finite_map arithmetic vyperValue
 
 Theorem membership_positioned_slot_load_path:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id (if tr then TLOAD else SLOAD) [arr_op] [out]) /\
@@ -71,7 +71,7 @@ Proof
 QED
 
 Theorem membership_positioned_slot_load_framed_path:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id (if tr then TLOAD else SLOAD) [arr_op] [out]) /\
@@ -141,7 +141,7 @@ QED
 Theorem membership_slot_load_path:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm (if tr then LocTransient else LocStorage)) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
@@ -234,7 +234,7 @@ QED
 Theorem membership_slot_array_element_prefix:
   compile_array_membership_loop needle arr_op len 1 prefix
     (compile_ptr_load F imm (if tr then LocTransient else LocStorage)) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
@@ -271,6 +271,12 @@ Proof
   disch_then (drule_at (Pat `storage_holds _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ptr_vv_ok _ _ _ _ _ _ _ _`)) >>
   fs[] >> disch_then drule_all >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+    (qpat_assum `membership_loop_frame _ _ _ s0 G1 tn1 q`
+        (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
+        (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   drule (SRULE [] (GEN_ALL membership_slot_load_path)) >>
   disch_then (drule_at (Pat `membership_loop_frame _ _ _ _ G1 tn1 q`)) >>
   disch_then (drule_at (Pat `membership_loop_registers _ _ _ G1 tn1 q`)) >>

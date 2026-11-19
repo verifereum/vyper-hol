@@ -132,6 +132,7 @@ Proof
   `eval_operand (Lit 32w) s = SOME (n2w 32) /\ op_taint tn (Lit 32w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   `ptr_covers G tn src s (32 + LENGTH bs)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.INST [`off` |-> `32`] emit_addr_add_seq_ptr) >>
   disch_then (qspecl_then [`fn`, `PG`, `D`]
     (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `t` strip_assume_tac)))) >>

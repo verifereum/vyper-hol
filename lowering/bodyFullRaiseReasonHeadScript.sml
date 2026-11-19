@@ -15,7 +15,7 @@ Theorem reason_head_origin_ptr_path:
   alloca_room ctx func s /\ alloca_next_valid s /\
   (!x. FLOOKUP s.vs_allocas id = SOME x ==> SND x = 64 + M) /\
   (!x. FLOOKUP s.vs_allocas (id + 3) = SOME x ==> SND x = M) /\
-  stmt_state_rel H0 ctx func cenv cx es s /\ ~ctx_has_dalloca ctx /\
+  stmt_state_rel H0 ctx func cenv cx es s /\
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (reason_head id v M) (DROP s.vs_inst_idx bb.bb_instructions) /\

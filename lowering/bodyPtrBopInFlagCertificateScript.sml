@@ -47,7 +47,7 @@ Theorem membership_flag_certificate_result_path:
   compile_binop bop x y ty bl el st = (v,st') /\ x IN A /\ y IN A /\
   (!w. Lit w IN A) /\ (!z. z IN R ==> not_fresh_at st z) /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts st st') s = OK t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq (emitted_insts st st') s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G' tn' /\

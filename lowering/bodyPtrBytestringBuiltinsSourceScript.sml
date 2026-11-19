@@ -21,7 +21,7 @@ QED
    The explicit loaded value premise is supplied by source representation. *)
 Theorem emit_bytestring_length_counted:
   emit_op MLOAD [Var src] sa = (op,sb) /\ fn_has_code sa sb fn /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ not_fresh_at sa src /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ not_fresh_at sa src /\
   ptr_covers G tn src s (32+L) /\ lookup_var src s = SOME a /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -77,7 +77,7 @@ QED
 Theorem compile_bytestring_src_counted:
   compile_bytestring_src (Var src) sa = ((len,data),sb) /\
   fn_has_code sa sb fn /\ not_fresh_at sa src /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   ptr_covers G tn src s (32+L) /\ lookup_var src s = SOME a /\
   w2n a + 32 < dimword (:256) /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -114,7 +114,9 @@ Proof
   `32 + L <= 32 + L` by simp[] >>
   `eval_operand (Lit 32w) u = SOME (n2w 32) /\ op_taint tn' (Lit 32w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `u`, update_var_def, allocas_below_fmp_def]) >>
   drule_all emit_pointer_offset_counted_covers >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   suspend "compose"
@@ -156,7 +158,7 @@ Finalise compile_bytestring_src_counted
    it does not install a dynamic bytestring length header. *)
 Theorem emit_scratch_word_counted:
   emit_void MSTORE [Var dst; value] sa = ((),sb) /\ fn_has_code sa sb fn /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ ptr_covers G tn dst s 32 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ ptr_covers G tn dst s 32 /\
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
   op_taint tn value = {} /\
   s.vs_current_bb = sa.cs_current_bb /\
