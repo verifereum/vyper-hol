@@ -117,9 +117,10 @@ Proof
 QED
 
 Theorem supported_unary_modular_builtin_coverage:
-  supported_builtin_form [] (BaseT BoolT) Not [expr_test_uint] /\
+  supported_builtin_form [] (BaseT BoolT) Not [Name (BaseT BoolT) "b"] /\
   supported_builtin_form [] (BaseT (UintT 256)) Not [expr_test_uint] /\
-  supported_builtin_form [] (BaseT (UintT 8)) Not [expr_test_uint] /\
+  supported_builtin_form [] (BaseT (BytesT (Fixed 32))) Not
+    [Name (BaseT (BytesT (Fixed 32))) "word"] /\
   supported_builtin_form [] (BaseT (IntT 8)) Neg [expr_test_int] /\
   supported_builtin_form [] (BaseT DecimalT) Neg [expr_test_decimal] /\
   supported_builtin_form [] (BaseT (IntT 256)) Abs [expr_test_int] /\
@@ -170,7 +171,10 @@ Theorem supported_builtin_exclusion_coverage:
      ~supported_builtin_form tops ty Floor es) /\
   ~supported_builtin_form [] (BaseT (UintT 256))
     (MakeArray NONE (Dynamic 1)) [expr_test_uint] /\
-  supported_builtin_form [] (TupleT []) (MakeArray NONE (Fixed 0)) [] /\
+  ~supported_builtin_form [] (TupleT []) (MakeArray NONE (Fixed 0)) [] /\
+  ~supported_builtin_form [] (TupleT [ArrayT (BaseT (UintT 256)) (Fixed 1)])
+    (MakeArray NONE (Fixed 1))
+    [Name (ArrayT (BaseT (UintT 256)) (Fixed 1)) "items"] /\
   supported_builtin_form [] (TupleT [BaseT (UintT 256)])
     (MakeArray NONE (Fixed 1)) [expr_test_uint] /\
   EVERY (\blt. ~supported_builtin_form [] (BaseT (UintT 256)) blt [])

@@ -105,6 +105,8 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
   `supported_type_builtin_form tops ty builtin target args` encode forms and
   arities, including the ABI flags/method-id/single-argument restrictions.
   Array `MakeArray` checks its declared result type and supported place layout.
+  Tuple `MakeArray` requires a nonempty tuple of supported scalars with a
+  supported place layout.
 - `supported_storage_scalar tops id ty`, `supported_storage_array tops id`,
   `supported_storage_dynamic_array tops id`, `supported_subscript_base tops id`,
   `supported_storage_fields tops id`, `supported_storage_field_read tops id field`.
