@@ -14,7 +14,7 @@ Theorem method_id_selector_ghosts[local]:
   eval_operand hash s = SOME w /\ op_taint tn hash = {} /\
   op_prov G hash = NONE /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x)
   ==> ?G' tn'.
@@ -72,8 +72,8 @@ Resume method_id_selector_ghosts[pointer]:
         source_memory_read_ranges_def, source_memory_write_ranges_def,
         step_inst_def, step_inst_base_opcode_eqs, exec_pure2_def,
         eval_operands_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
-        op_taint_def, update_var_def, allocas_from_def] >>
-      fs[allocas_from_def] >> gen_tac >> Cases_on `op` >>
+        op_taint_def, update_var_def, allocas_from_def, allocas_below_fmp_def] >>
+      fs[allocas_from_def, allocas_below_fmp_def] >> gen_tac >> Cases_on `op` >>
       gvs[op_taint_def] >> metis_tac[]) >>
   simp[mem_taint_def, new_site_bytes_def, step_writes_def,
     source_memory_write_ranges_def, written_taint_def, range_bytes_def,
@@ -91,8 +91,8 @@ Resume method_id_selector_ghosts[pointer]:
         source_memory_read_ranges_def, source_memory_write_ranges_def,
         step_inst_def, step_inst_base_opcode_eqs, exec_pure2_def,
         eval_operands_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
-        op_taint_def, update_var_def, allocas_from_def] >>
-      fs[allocas_from_def] >> conj_tac >- (gen_tac >> Cases_on `op` >> simp[] >> metis_tac[]) >> metis_tac[]) >>
+        op_taint_def, update_var_def, allocas_from_def, allocas_below_fmp_def] >>
+      fs[allocas_from_def, allocas_below_fmp_def] >> conj_tac >- (gen_tac >> Cases_on `op` >> simp[] >> metis_tac[]) >> metis_tac[]) >>
   simp[inst_seq_ptr_def, mem_taint_def, new_site_bytes_def, step_writes_def,
     source_memory_write_ranges_def, written_taint_def, range_bytes_def,
     FLOOKUP_DEF, SF CONJ_ss] >>
@@ -109,7 +109,7 @@ Theorem method_id_selector_full_run:
   eval_operand hash s = SOME w /\ op_taint tn hash = {} /\
   op_prov G hash = NONE /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ storage_trace_domain cx st0 ee.storage_trace /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -142,6 +142,10 @@ Proof
   `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee s` by
     (fs[storage_trace_domain_def] >> metis_tac[]) >>
   drule_all method_id_mask_frame >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >> fs[stmt_state_rel_def, fmp_room_def, allocas_below_fmp_def,
+       venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all method_id_selector_ghosts >>
   disch_then (qspecl_then [`func`, `ee`, `d`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)`, `G'`, `tn'`] >>

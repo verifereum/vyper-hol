@@ -91,11 +91,13 @@ Proof
   `w2n p + 32 + LENGTH bs <= a.vs_alloca_next /\
    w2n q + 32 + contractABI$ceil32 (LENGTH bs) <= a.vs_alloca_next` by simp[] >>
   `!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==> i NOTIN tm.t_mem` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
   drule_all bytes_encoder_copy_ghosts >>
   disch_then (qspecl_then [`func`, `PG`] strip_assume_tac) >>
   rename1 `ptr_covers H2 tm2 dst b _` >>
   `allocas_from lo b` by metis_tac[allocas_from_def] >>
   `LENGTH bs + 32 < dimword (:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp b` by simp[] >>
   drule_all bytes_encoder_suffix_ghosts >>
   disch_then (qspecl_then [`func`, `PG`, `H2`] strip_assume_tac) >>
   rename1 `op_taint tm3 (Var (EL 8 N)) = {}` >>

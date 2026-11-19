@@ -85,6 +85,7 @@ Proof
     n2w (w2n (abi_decode_load CALLDATALOAD p initial))` by simp[] >>
   `compile_abi_decode_to_buf (Var child) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring maxn) st = ((),last)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all calldata_bytestring_overwrite_endpoint_core_uniform_origin_sequence >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `t = s' with vs_inst_idx := initial.vs_inst_idx` by metis_tac[exec_result_11] >>
@@ -228,6 +229,7 @@ Resume calldata_exact_bytes_joint_limit[accepted]:
   `type_memory_size tv < dimword (:256) /\ d < dimword (:256)` by decide_tac >>
   `abi_decode_load CALLDATALOAD p initial =
     n2w (w2n (abi_decode_load CALLDATALOAD p initial))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all calldata_bytestring_overwrite_endpoint_core_uniform_origin_sequence >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `v with vs_inst_idx := initial.vs_inst_idx =
