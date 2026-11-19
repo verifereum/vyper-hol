@@ -43,10 +43,8 @@ brings each back.
 | `p103_rbuf_control_word_ret_concat_arg` | internal call with a `concat` argument, word return |
 | `p58_int_bytes_local` | `concat` into a local in the callee |
 
-`supported_builtin_form` does not yet admit `Concat`, `Slice`, `Ceil` or
-`Acc Code`, nor `supported_type_builtin_form` `Extract32`, so these programs
-are outside `supported_program`; their fixtures pin the lowering ahead of
-that relaxation.
+The `Concat`, `Slice` and `Acc Code` fixtures pin the lowering for forms
+that remain outside `supported_program`.
 
 `oracle/` holds the annotated AST/layout JSON and deployment/runtime bytecode
 from the pinned Python Vyper (`VYPER_PIN`), produced as in

@@ -99,20 +99,23 @@ Proof
   gvs[finally_def, pop_scope_def, ignore_bind_def, bind_def, return_def, raise_def]
 QED
 
+Theorem eval_exprs_singleton_end_state:
+  eval_expr cx e s = (r,s') ==> ?r'. eval_exprs cx [e] s = (r',s')
+Proof
+  strip_tac >> Cases_on `r`
+  >- (rename1 `eval_expr cx e s = (INL tv,s')` >>
+      simp[evaluate_def, bind_def, return_def] >>
+      Cases_on `read_result cx tv s'` >>
+      drule read_result_state >> strip_tac >> gvs[] >>
+      rename1 `read_result cx tv s' = (rr,s')` >> Cases_on `rr` >> simp[]) >>
+  simp[evaluate_def, bind_def]
+QED
+
 Theorem singleton_expr_scopes[local]:
   (!r s'. eval_exprs cx [e] s = (r,s') ==> s'.scopes = s.scopes) /\
   eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes
 Proof
-  strip_tac >>
-  `?r'. eval_exprs cx [e] s = (r',s')` by
-    (Cases_on `r`
-     >- (rename1 `eval_expr cx e s = (INL tv,s')` >>
-         simp[evaluate_def, bind_def, return_def] >>
-         Cases_on `read_result cx tv s'` >>
-         drule read_result_state >> strip_tac >> gvs[] >>
-         rename1 `read_result cx tv s' = (rr,s')` >> Cases_on `rr` >> simp[]) >>
-     simp[evaluate_def, bind_def]) >>
-  metis_tac[]
+  strip_tac >> drule eval_exprs_singleton_end_state >> metis_tac[]
 QED
 
 Theorem supported_pure_scopes_mutual:
