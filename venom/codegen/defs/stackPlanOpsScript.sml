@@ -357,3 +357,12 @@ Definition release_dead_spills_def:
                ps_alloc := FOLDL (λal off. free_spill_slot off al)
                  alloc offsets |>
 End
+
+(* Let kernel evaluation reduce the live and dead restrictions on concrete
+   spill maps in stack-planner witnesses. *)
+val () = computeLib.add_persistent_funs [
+  "finite_map.DRESTRICT_FEMPTY",
+  "finite_map.DRESTRICT_FUPDATE",
+  "pred_set.IN_ABS",
+  "pred_set.IN_COMPL"
+];
