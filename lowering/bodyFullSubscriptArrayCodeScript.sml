@@ -1,6 +1,7 @@
 (* Finite-horizon composition for a framed runtime code-array base. *)
 Theory bodyFullSubscriptArrayCode
 Ancestors vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ignore_grammar] exprSimHypsDefs[qualified,ignore_grammar]
+  bodyFullShadowBodyInv
   bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose
   bodyFullAttributeAdd bodyFullGhostFrame bodyFullPathHistory
   bodyFullSubscriptArrayCodeBounds bodyFullSubscriptArrayCodeOps
@@ -187,7 +188,7 @@ QED
 Theorem subscript_array_framed_code_full:
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
-    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\
+    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
     expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et bd /\

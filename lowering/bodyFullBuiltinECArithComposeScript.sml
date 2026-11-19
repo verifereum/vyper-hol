@@ -2,6 +2,7 @@
    Only the continuation at two successful reads needs the EC arithmetic tail. *)
 Theory bodyFullBuiltinECArithCompose
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull exprSimECArith bodyInvNoDalloca
   gasOutcomeFullCompose gasShadowCompile gasShadowCompileStmtHelpers
   exprSimHypsDefs exprLowering loweringPosts vyperAST list
@@ -115,6 +116,7 @@ Theorem ec_arith_vv_from_tail_full:
     (bt = ECAdd \/ bt = ECMul) /\
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es
@@ -399,6 +401,7 @@ Theorem ec_arith_builtin_vv_sim_full:
     (bt = ECAdd \/ bt = ECMul) /\
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es
@@ -492,6 +495,7 @@ Theorem ec_arith_builtin_sim_full:
     (bt = ECAdd \/ bt = ECMul) /\
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es /\

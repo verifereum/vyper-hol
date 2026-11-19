@@ -1,5 +1,6 @@
 Theory bodyFullExtCallRequestStage
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullExtCallAddressOwnedPrefix bodyFullExtCallKeywordList
   bodyFullExtCallRequestPostGasPacking bodyFullExtCallRequestPackingContinuation
   bodyFullExtCallKeywordPackingRows bodyFullExtCallPackingReady
@@ -133,6 +134,7 @@ QED
    request at the endpoint chosen by operand evaluation and ABI packing. *)
 Theorem extcall_request_full:
   body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dr) es /\
   (!st target mid n. eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\

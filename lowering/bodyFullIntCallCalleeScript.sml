@@ -1,5 +1,5 @@
 Theory bodyFullIntCallCallee
-Ancestors sourceUnitExecution[qualified,ignore_grammar] loweringStateRelDefs[qualified,ignore_grammar] bodyPtrDefs[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar] finite_map[qualified,ignore_grammar] pair[qualified,ignore_grammar]
+Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] loweringStateRelDefs[qualified,ignore_grammar] bodyPtrDefs[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar] finite_map[qualified,ignore_grammar] pair[qualified,ignore_grammar]
   transientLockProps[qualified,ignore_grammar] ptrSafeRun[qualified,ignore_grammar]
   runtimeSymSrcClassifiedSource[qualified,ignore_grammar]
   bodySimEntry[qualified,ignore_grammar] nonreentrantEntry[qualified,ignore_grammar]
@@ -2309,6 +2309,7 @@ QED
    from the execution that reaches the body. The return frame is abstract. *)
 Theorem intcall_callee_locked_body_frag[local]:
   body_inv tops ctx caller cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,ds,ret,ss) /\
   MEM (FunctionDecl Internal mut nr rr name args ds ret ss) tops /\
   intcall_entry_full (DF,lo,d) H tops ctx func caller cx tenv name es sa sb vv
@@ -2400,6 +2401,7 @@ QED
    RetQ is supplied by the caller of this lemma, not chosen by the body. *)
 Theorem intcall_callee_locked_body_outcome[local]:
   body_inv tops ctx caller cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,ds,ret,ss) /\
   MEM (FunctionDecl Internal mut nr rr name args ds ret ss) tops /\
   intcall_entry_full (DF,lo,d) H tops ctx func caller cx tenv name es sa sb vv
@@ -3643,6 +3645,7 @@ Theorem intcall_callee_full:
    G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
    rbs pvs dflts.
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
@@ -3665,37 +3668,7 @@ Theorem intcall_callee_full:
       lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
-      eval_operands arg_ops t = SOME argv /\
-      (?rpolicy unit label ce params has_rb nr' key trans view ctor ilen
-        compiled_ss rt before old entry final sf beforeS oldS entryS finalS.
-         (if cx.in_deploy then
-            ?rbc. lower_vyper_deploy_unit tops rpolicy rbc = SOME unit
-          else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
-         ctx = unit.cu_context /\
-         set_internal_package_target rpolicy.rpol_target
-           (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
-             (if cx.in_deploy then
-                compute_immutables_len
-                  (get_struct_fields (make_struct_fields_map tops)) tops
-              else 0)
-             (mut,nr,rr,name,args,dflts,ret,ss)) =
-           (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,
-            compiled_ss,rt) /\
-         compiled_ss = ss /\
-         new_block label before = (old,entry) /\
-         compile_internal_function ce params has_rb nr' key trans view ctor ilen
-           compiled_ss rt entry = ((),final) /\
-         fn_has_code entry final callee /\
-         ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
-         ctx_inst_ids_distinct ctx /\
-         MEM sf shadow_ctx.ctx_functions /\
-         gas_shadow_function callee sf /\
-         new_block label beforeS = (oldS,entryS) /\
-         compile_internal_function ce params has_rb nr' key trans view ctor ilen
-           (MAP gas_shadow_stmt compiled_ss) rt entryS = ((),finalS) /\
-         gas_shadow_state entry entryS /\
-         gas_shadow_state final finalS /\
-         fn_has_code entryS finalS sf) ==>
+      eval_operands arg_ops t = SOME argv ==>
       gas_outcome_full
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
          MAP (op_prov G) arg_ops)
@@ -3722,6 +3695,16 @@ Proof
   drule_all intcall_callee_invoke_label >> strip_tac >>
   `cenv.ce_is_ctor = cx.in_deploy /\ supported_program tops /\
     (cx.in_deploy ==> supported_program_deploy tops)` by fs[bodySimTheory.body_inv_def] >>
+  `lookup_function
+     (internal_fn_label (build_func_ids 0 tops name) name (MAP SND args)
+        cx.in_deploy) ctx.ctx_functions = SOME callee` by
+    (qpat_assum `cenv.ce_is_ctor <=> cx.in_deploy`
+       (fn th => ONCE_REWRITE_TAC [SYM th]) >>
+     qpat_assum `lbl = internal_fn_label _ _ _ _`
+       (fn th => ONCE_REWRITE_TAC [SYM th]) >>
+     first_assum ACCEPT_TAC) >>
+  drule_all bodyFullShadowBodyInvTheory.shadow_body_inv_callee_code >>
+  strip_tac >>
   `label = lbl` by
     (gvs[package_internal_fn_def, set_internal_package_target_def, LET_THM]) >>
   `fn_entry_label callee = SOME lbl` by

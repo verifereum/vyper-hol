@@ -1,5 +1,6 @@
 Theory bodyFullRawCall
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullRawCallPrefix bodyFullRawCallFinishPost
   bodyFullRawCallRequestGas bodyFullOfVV exprSimRawCallCalldata
   extCallOracleStep oracleCallStepPtr fragGasEmitCtrl instMemFrontier
@@ -150,7 +151,7 @@ end
 
 Theorem raw_call_expr_vv_full:
   body_exprs_full_ok cx args /\
-  body_inv tops ctx cenv cx /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
   expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann (RawCallTarget flags) args dflt) es

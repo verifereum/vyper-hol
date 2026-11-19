@@ -2,6 +2,7 @@
    the dynamic bytes header is touched. *)
 Theory bodyFullRawCallForcedArgs
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodyInvNoDalloca exprSimRawCall exprSimSource
   gasOutcomeFullCompose gasExemptCert vyperStorageTrace vyperStorageFootprint
   gasShadowState bodyMemoryDefs contextRawReachable ptrDiscipline unitTransformDefs
@@ -10,7 +11,7 @@ Ancestors
   loweringShapeDefs vyperState stmtSimDefs vyperValue vyperTyping
 
 Theorem raw_call_forced_args_full:
-  body_inv tops ctx cenv cx /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
   body_exprs_full_ok cx (a::d::kws) /\
   lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\

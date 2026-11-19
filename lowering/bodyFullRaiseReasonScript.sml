@@ -9,6 +9,7 @@
  *)
 Theory bodyFullRaiseReason
 Ancestors
+  bodyFullShadowBodyInv
   stateRelProj
   bodyFullRaiseReasonLiteral bodyFullRaiseReasonNonliteral
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
@@ -20,7 +21,8 @@ Theorem compile_raise_reason_frag_full:
   !cx e DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (Raise (RaiseReason e)) /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Raise (RaiseReason e)) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Raise (RaiseReason e)) ==>
        occurs_abi_decode_target target tops) /\

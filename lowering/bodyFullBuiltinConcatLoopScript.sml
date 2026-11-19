@@ -36,6 +36,7 @@ Theorem concat_args_sim_full:
     (!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
        expr_body_pre cenv cx env e st) /\
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
     (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\

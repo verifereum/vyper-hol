@@ -14,6 +14,7 @@
  *)
 Theory ctorDeployBodyJoint
 Ancestors
+  bodyFullShadowBodyInv
   deployUnitExecution ctorDeployDefs ctorDeployLoweringDefs
   ctorDeployMemoryFrontier ctorDeployMemoryRunMemNoCtor
   ctorDeployMemoryRunPtrNoCtor ctorDeployMemoryRunPtrPrefix
@@ -604,6 +605,7 @@ Theorem deploy_ctor_body_joint_with:
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
     deploy_ctor_start tops am tx (mut, nr', body', am_c, es0) /\
+    shadow_body_inv tops dunit.cu_context shadow_ctx /\
     gas_shadow_context dunit.cu_context shadow_ctx /\
     gas_shadow_function func shadow_func /\
     MEM shadow_func shadow_ctx.ctx_functions /\

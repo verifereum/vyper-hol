@@ -6,6 +6,7 @@
    The old pointer judgment alone does not imply this joint result. *)
 Theory bodyFullStructLit
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose gasContext exprSimDefs
   gasShadowCompile bodyFullStructLitAdd bodyFullStructLitInputs
   bodyFullStructLitCopy bodyFullStructLitBytes bodyFullStructLitZeroStore
@@ -510,7 +511,9 @@ Theorem structlit_fields_full[local]:
     gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
     MEM shadow_func shadow_ctx.ctx_functions /\ fn_has_code si sb func /\
     fn_has_code shadow_si shadow_sb shadow_func /\ fn_inst_ids_distinct func /\
-    body_inv (cx_tops cx) ctx ce cx /\ body_exprs_full_ok cx (MAP SND fs) /\
+    body_inv (cx_tops cx) ctx ce cx /\
+    shadow_body_inv (cx_tops cx) ctx shadow_ctx /\
+    body_exprs_full_ok cx (MAP SND fs) /\
     (?Hbase. stmt_state_rel Hbase ctx func ce cx ees sf) /\
     LIST_REL (\t (name,e). ALOOKUP
       (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid)) name =
@@ -1333,7 +1336,8 @@ Theorem structlit_allocated_fields_full[local]:
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_has_code sm sb func /\
   fn_has_code shadow_sm shadow_sb shadow_func /\ fn_inst_ids_distinct func /\
-  body_inv (cx_tops cx) ctx ce cx /\ body_exprs_full_ok cx (MAP SND fs) /\
+  body_inv (cx_tops cx) ctx ce cx /\
+  shadow_body_inv (cx_tops cx) ctx shadow_ctx /\ body_exprs_full_ok cx (MAP SND fs) /\
   (?Hbase. stmt_state_rel Hbase ctx func ce cx es s0) /\
   LIST_REL (\t (name,e). ALOOKUP
     (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid)) name =
@@ -1474,6 +1478,7 @@ Theorem structlit_vv_sim_full[local]:
      cenv env ty es.
     body_exprs_full_ok cx (MAP SND kes) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
@@ -1575,11 +1580,11 @@ Proof
   disch_then (mp_tac o Q.INST [`nsid` |-> `(src_id_opt,id)`, `fs` |-> `kes`,
     `tys` |-> `MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
       (nsid_to_string (src_id_opt,id)))`, `out` |-> `u`] o SPEC_ALL) >>
+  `cx_tops cx = tops` by
+    (irule gasContextTheory.cx_tops_module >> fs[bodySimTheory.body_inv_def]) >>
+  `shadow_body_inv (cx_tops cx) ctx shadow_ctx` by simp[] >>
   simp[] >> (impl_tac >- (conj_tac >- metis_tac[] >>
-    `cx_tops cx = tops` by
-      (irule gasContextTheory.cx_tops_module >> fs[bodySimTheory.body_inv_def]) >>
     conj_tac >- metis_tac[] >>
-    conj_tac >- (qexists_tac `Hbase` >> first_assum ACCEPT_TAC) >>
     conj_tac >- simp[EVERY_MAP, combinTheory.o_DEF] >>
     conj_tac >- (irule structlit_list_admissible >>
       qexistsl_tac [`v7`, `(src_id_opt,id)`] >> first_assum ACCEPT_TAC) >>

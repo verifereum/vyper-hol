@@ -1,5 +1,6 @@
 Theory bodyFullExtCallKeywords
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullExtCallRequest bodyFullPreds bodySimFull gasOutcomeFullCompose
   exprSimSource exprSimWordArgs exprLoweringProps contextRawReachable
   ptrDiscipline unitMemInv exprLowering compileEnv gasOutcomeFull loweringPosts
@@ -9,6 +10,7 @@ Ancestors
    machine step. Keep its frame and exit so the remainder can compose. *)
 Theorem extcall_kwarg_scalar_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env e es /\ ~(k = EKDefault /\ ~is_word_type rt) /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,rt),sb) /\
   compile_ext_call_kwarg compile_expr cenv rt k (gas_shadow_expr e)

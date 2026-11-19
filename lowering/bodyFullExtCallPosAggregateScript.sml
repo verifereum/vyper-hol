@@ -2,6 +2,7 @@
    still performs its immediate read at the child's physical endpoint. *)
 Theory bodyFullExtCallPosAggregate
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull gasOutcomeFullCompose gasOutcomeFull
   exprSimUnwrap exprSimMemorySource exprSimSource exprSimHyps exprSimProps
   exprPtrUnwrapStorageShape targetPureSourceFrame fragGasOriginPtr fragExec
@@ -83,6 +84,7 @@ QED
 
 Theorem extcall_pos_aggregate_outcome:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   compile_expr cenv (expr_type e) e sa = (vv,sb) /\
   compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\

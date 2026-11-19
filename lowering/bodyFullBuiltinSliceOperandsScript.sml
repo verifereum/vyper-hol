@@ -1,6 +1,7 @@
 (* Full child judgments for the actual tail-first code Slice operands. *)
 Theory bodyFullBuiltinSliceOperands
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull exprSimSliceSource exprSimSource exprSimHypsDefs
   exprLowering vyperInterpreter vyperAST list
 
@@ -9,7 +10,8 @@ Theorem slice_code_child_full:
     (Builtin a (Slice n) [Builtin ct (Acc Code) [addr]; start; len]) es /\
   expr_sim_inv cenv cx env ee /\
   (e = start \/ e = len \/ e = addr) /\
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx ==>
+  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty e ee /\
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

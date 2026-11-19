@@ -1,6 +1,7 @@
 (* The guarded VV judgment supplies both simulation conjuncts for ExtCall. *)
 Theory bodyFullExtCallBodyOfVV
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodyFullOfVV bodySimFull bodySim exprSimHyps exprSimSource
   exprSimHypsDefs loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST
 
@@ -8,6 +9,7 @@ Theorem extcall_body_full_ok_of_vv:
   !cx ann stat skip sig opts args dflt.
     (!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
        body_inv tops ctx cenv cx /\
+       shadow_body_inv tops ctx shadow_ctx /\
        expr_body_pre cenv cx env (Call ann (ExtCall stat skip sig opts) args dflt) es ==>
        expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
          cenv cx ty (Call ann (ExtCall stat skip sig opts) args dflt) es) ==>

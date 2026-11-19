@@ -10,7 +10,7 @@
  *   body_stmts_sim_full -- the statement-list judgment it gives
  *)
 Theory bodySimFullMain
-Ancestors
+Ancestors bodyFullShadowBodyInv
   bodyFullCases bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph typedCopyMetadata alist list
 
@@ -161,7 +161,8 @@ QED
 Theorem body_stmts_sim_full:
   !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
    ret_ty lctx RetQ ss es.
-    body_inv tops ctx cenv cx /\ struct_args_unique tops /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
     supported_stmts tops bindings ss /\
     (!target. supported_stmts_expr_exists
        (expr_abi_decode_target_root target) ss ==>

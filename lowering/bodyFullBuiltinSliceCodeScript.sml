@@ -1,6 +1,7 @@
 (* Discharge the integrated code Slice runtime interfaces. *)
 Theory bodyFullBuiltinSliceCode
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullBuiltinSliceCodeSelfCompose bodyFullBuiltinSliceCodeExternalCompose
   bodyFullBuiltinSliceCodeTail bodyFullBuiltinSliceOperands
 
@@ -14,6 +15,7 @@ Theorem slice_builtin_some_vv_full:
            (!s tail_vs t. eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = SOME (code_ty,addr) ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

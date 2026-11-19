@@ -1,6 +1,7 @@
 (* Joint evaluation of the scalar arguments of ECRecover. *)
 Theory bodyFullBuiltinPrecompileRecoveryArgs
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullWordArgs exprSimPrecompiles exprSimSource list
 
 (* Original application anchors typing; the suffix post uses its own start. *)
@@ -9,7 +10,8 @@ Theorem ecrecover_args_suffix_full:
     ann args done entry es st0 sa sm shadow_sa shadow_sm xs s0 G0 tn0.
     expr_body_pre cenv cx env (Builtin ann ECRecover args) entry /\
     args = done ++ todo /\ body_exprs_full_ok cx todo /\
-    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
     lower_word_args cenv (\e. ty) todo sa = (xs,sm) /\
     lower_word_args cenv (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
       (xs,shadow_sm) /\

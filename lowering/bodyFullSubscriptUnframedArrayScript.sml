@@ -1,6 +1,7 @@
 (* Join the copied and uncopied array continuations at the index cut. *)
 Theory bodyFullSubscriptUnframedArray
 Ancestors vyperState[qualified,ignore_grammar] exprSimIfExpWidenedOwnedProvenance[qualified,ignore_grammar]
+  bodyFullShadowBodyInv
   bodyFullSubscriptCopiedBind bodyFullSubscriptNoCopyBind
   bodyFullSubscriptNoCopyMemorySelect[qualified,ignore_grammar]
   bodyFullSubscriptCopySnapshot bodyFullSubscriptLiveSlotSelect
@@ -44,7 +45,7 @@ Theorem subscript_unframed_array_vv_full:
           bind (read_result cx res) (\v. return (Value v))
         else return res) s3 = (INL res',t') ==>
        body_expr_full_ok cx e2) /\
-    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\
+    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Subscript v8 e1 e2) es /\
     expr_type e1 = ArrayT et bd /\
     place_type cenv e1 = ValPT (ArrayT et bd) /\

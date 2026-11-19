@@ -16,6 +16,7 @@ Ancestors exprSimAbiEncodeStateTransport[qualified,ignore_grammar] abiBuiltinEnc
 
 Theorem abi_encode_nonword_vv_full_from_packaging:
   body_inv tops ctx ce cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid) ty [e]) es /\
   body_expr_full_ok cx e /\ ~is_word_type (expr_type e)
   ==> expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

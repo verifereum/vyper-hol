@@ -1,6 +1,7 @@
 (* A single prepared execution for the raw_call arguments and buffers. *)
 Theory bodyFullRawCallPrefix
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullWordArgs bodyInvNoDalloca stateRelProj
   bodyFullRawCallForcedArgs bodyFullIntCallReturnFrame
   bodyFullRawCallHeader bodyFullRawCallGas bodyFullRawCallOutbuf
@@ -14,7 +15,7 @@ Theorem raw_call_prefix_prepared_full:
  !DF lo dframe PG tops ctx shadow_ctx func shadow_func cenv env cx ty ann flags
   a d kws st0 sa sb shadow_sa shadow_sb vv addr data len ptr vo go ignored
   gas ov op result s1 s2 s3 s4 s5 s6 s7 xs es s0 G0 tn0 k Q R.
- body_inv tops ctx cenv cx /\
+ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
  body_exprs_full_ok cx (a::d::kws) /\
  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
  compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) NONE) sa=(vv,sb) /\

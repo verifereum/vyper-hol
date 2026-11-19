@@ -1,6 +1,7 @@
 Theory bodyFullBopWordOperands
 Ancestors
   bodyFullIfExpReach
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull exprSimOperators exprBopSimProps exprSimSource
   gasOutcomeFullCompose gasExemptCert gasStorage gasShadowState gasShadow
   bodyMemoryDefs exprLoweringProps loweringPosts bodyPtrDefs
@@ -10,6 +11,7 @@ Ancestors
 Theorem bop_operands_full_cps_exit:
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
@@ -233,6 +235,7 @@ QED
 Theorem bop_word_operands_full_cps_exit:
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
@@ -313,6 +316,7 @@ QED
 Theorem bop_operands_full_cps:
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
@@ -392,6 +396,7 @@ QED
 Theorem bop_word_operands_full_cps:
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\

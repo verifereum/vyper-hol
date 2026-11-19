@@ -1,6 +1,7 @@
 (* Joint finite-horizon AsWeiValue simulation. *)
 Theory bodyFullBuiltinWordWei
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullBuiltinWordWeiPrefix bodyFullBuiltinWordWeiContinuation
   bodyFullPreds bodySimFull exprSimSource gasOutcomeFullCompose
   exprSimWordBuiltins gasShadowCompileStmtHelpers
@@ -23,6 +24,7 @@ Theorem word_wei_sim_full:
     (?dn. bt = AsWeiValue dn) /\
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a bt args) es /\
