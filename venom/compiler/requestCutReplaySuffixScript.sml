@@ -78,15 +78,6 @@ Proof
   simp[]
 QED
 
-Theorem cfg_norm_cursor_execution_frame[local]:
-  !C rounds cells. cfg_norm_cursors C rounds cells ==>
-    execution_frame (SND (FST (HD cells))) =
-    execution_frame (SND (FST (LAST cells)))
-Proof
-  ho_match_mp_tac cfg_norm_cursors_ind >>
-  simp[LAST_CONS_cond, supply_state_agree_def] >> metis_tac[]
-QED
-
 Theorem cfg_norm_joint_cursor_execution_frame:
   cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
     (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
@@ -95,7 +86,7 @@ Theorem cfg_norm_joint_cursor_execution_frame:
 Proof
   strip_tac >> PairCases_on `current` >>
   gvs[cfg_norm_joint_cursors_def] >>
-  drule cfg_norm_cursor_execution_frame >> simp[]
+  drule cover_cfg_cursors_frame >> simp[]
 QED
 
 Theorem cfg_norm_joint_recording_step:
@@ -124,7 +115,7 @@ Proof
   `execution_frame (u with vs_inst_idx := SUC s8.vs_inst_idx) =
     execution_frame (post with vs_inst_idx := SUC s9.vs_inst_idx)` by
     (qpat_assum `cfg_norm_cursors C8 rounds cursors'`
-       (mp_tac o MATCH_MP cfg_norm_cursor_execution_frame) >> simp[]) >>
+       (mp_tac o MATCH_MP cover_cfg_cursors_frame) >> simp[]) >>
   pop_assum (mp_tac o Q.AP_TERM `\s. (s.vs_requests,s.vs_outcomes)`) >>
   simp[execution_frame_def]
 QED

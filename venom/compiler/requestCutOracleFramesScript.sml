@@ -42,16 +42,6 @@ Proof
   fs[adopt_return_fmp_def, merge_callee_state_def, AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem enters_block_outcome_suffix[local]:
-  enters_block f s t ==>
-  enters_block f (s with vs_outcomes := s.vs_outcomes ++ tail)
-    (t with vs_outcomes := t.vs_outcomes ++ tail)
-Proof
-  rw[enters_block_def] >> qexists_tac `bb` >> simp[eval_phis_outcome_update] >>
-  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
-  disch_then (mp_tac o Q.AP_TERM `\v. v.vs_outcomes`) >> simp[exec_result_map_def]
-QED
-
 Theorem setup_callee_outcome_suffix[local]:
   setup_callee f args s = SOME t ==>
   setup_callee f args (s with vs_outcomes := s.vs_outcomes ++ tail) =

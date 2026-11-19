@@ -55,19 +55,6 @@ Proof
   >> irule step_taint_noncall_outcomes_update >> gvs[MEM]
 QED
 
-Theorem budget_enters_append[local]:
-  enters_block fn s t ==>
-  enters_block fn (s with vs_outcomes := s.vs_outcomes ++ extra)
-    (t with vs_outcomes := t.vs_outcomes ++ extra)
-Proof
-  strip_tac >>
-  `t.vs_outcomes = s.vs_outcomes` by
-    (fs[enters_block_def] >> drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
-     disch_then (mp_tac o Q.AP_TERM `\u. u.vs_outcomes`) >> simp[]) >>
-  drule enters_block_outcomes_update >>
-  disch_then (qspec_then `s.vs_outcomes ++ extra` mp_tac) >> simp[]
-QED
-
 Theorem budget_path_append[local]:
   !checked cfg root h marks p.
     lower_budget_path checked cfg root h marks p ==>
@@ -163,7 +150,7 @@ Resume budget_path_append[block]:
       qpat_assum `step_inst fuel ctx i p.bp_state = OK t`
         (mp_then Any mp_tac budget_step_append) >>
       simp[] >> disch_then (qspecl_then [`p.bp_taint`, `extra`] strip_assume_tac) >>
-      drule budget_enters_append >> disch_then (qspec_then `extra` assume_tac) >>
+      drule enters_block_outcome_suffix >> disch_then (qspec_then `extra` assume_tac) >>
       qmatch_asmsub_abbrev_tac `lower_budget_path F _ _ h' marks pp` >>
       qabbrev_tac `tt = t with vs_outcomes := t.vs_outcomes ++ extra` >>
       qabbrev_tac `ee = entered with vs_outcomes := entered.vs_outcomes ++ extra` >>
@@ -196,7 +183,7 @@ Resume budget_path_append[call]:
         metis_tac[calleeTransportTheory.setup_callee_oracle] >>
       drule setup_callee_outcomes_update >>
       disch_then (qspec_then `p.bp_state.vs_outcomes ++ extra` assume_tac) >>
-      drule budget_enters_append >> disch_then (qspec_then `extra` assume_tac) >>
+      drule enters_block_outcome_suffix >> disch_then (qspec_then `extra` assume_tac) >>
       qmatch_asmsub_abbrev_tac `lower_budget_path F _ _ h' marks pp` >>
       qabbrev_tac `cc = cs with vs_outcomes := cs.vs_outcomes ++ extra` >>
       qabbrev_tac `ee = entered with vs_outcomes := entered.vs_outcomes ++ extra` >>
