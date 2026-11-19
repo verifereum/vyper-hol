@@ -117,6 +117,7 @@ Proof
   drule_all bytes_tail_round_code >> simp[] >> strip_tac >>
   `!op. op IN {cnt;Lit 31w} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
     (simp[] >> rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
@@ -208,7 +209,8 @@ Proof
      OK (mstore (w2n (n2w j:bytes32)) 0w s)` by (irule step_MSTORE >> simp[]) >>
   `step_inst_base i s = OK r` by simp[Abbr `i`, Abbr `r`] >>
   `inst_seq_ptr D 0 ctx fn PG G tn [i] s G (step_taint i s r tn)` by
-    (drule_all clean_word_store_checked_cursors >>
+    (`ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+     drule_all clean_word_store_checked_cursors >>
      disch_then (qspecl_then [`sa.cs_next_id`, `fn`, `PG`, `D`, `s.vs_inst_idx`] mp_tac) >>
      simp[Abbr `i`, Abbr `r`]) >>
   drule_all mstore_raw_ghost_frame >>
@@ -241,6 +243,7 @@ Proof
   strip_tac >>
   `eval_operand (Lit 32w) s = SOME 32w /\ op_taint tn (Lit 32w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `emit_op ADD _ sa = _`
     (mp_then Any mp_tac (SRULE [] (Q.INST
        [`f` |-> `word_add:bytes32 -> bytes32 -> bytes32`, `opc` |-> `ADD`]

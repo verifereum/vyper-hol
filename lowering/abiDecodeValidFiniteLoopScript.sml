@@ -89,6 +89,7 @@ Theorem finite_array_backedge_window:
       (s,G,tn) [] (OK t,G',tn')
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (window_array_backedge_joint |> Q.INST [`explicit` |-> `{}`]) >>
   disch_then (qspec_then `PG`
     (qx_choosel_then [`G1`,`tn1`] strip_assume_tac)) >>

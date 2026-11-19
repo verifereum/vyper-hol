@@ -156,6 +156,7 @@ Theorem malformed_member_scalar_frame[local]:
       FLOOKUP H q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q))
 Proof
   strip_tac >> drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (fn th => assume_tac th >>
     qspecl_then [`func`,`PG`,`ARB:dead`] strip_assume_tac th) >>

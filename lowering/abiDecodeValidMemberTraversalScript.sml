@@ -77,6 +77,7 @@ Proof
   `~sn.vs_halted /\ sn.vs_current_bb = sa.cs_current_bb /\ allocas_from lo sn` by
     (fs[Abbr `sn`, allocas_from_def] >> (metis_tac[Abbr `sn`, allocas_from_def])) >>
   qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK u` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sn` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (fn th => assume_tac th >>
     qspecl_then [`func`, `PG`, `ARB`] strip_assume_tac th) >>

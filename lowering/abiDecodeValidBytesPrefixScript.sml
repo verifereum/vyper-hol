@@ -276,6 +276,7 @@ Proof
   `run_inst_seq code (s with vs_inst_idx := pc) = OK (t with vs_inst_idx := pc)` by
     simp[run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
   qpat_x_assum `run_inst_seq _ s = OK t` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := pc)` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr _ _ _ _ _ _ _ _ _ H u` >>

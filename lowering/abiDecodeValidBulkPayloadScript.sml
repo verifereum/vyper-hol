@@ -201,7 +201,8 @@ Proof
   `~s1.vs_halted` by
     (qpat_assum `s1 with vs_vars := s.vs_vars = s`
       (mp_tac o AP_TERM ``(\v:venom_state. v.vs_halted)``) >> simp[]) >>
-  `allocas_from lo (s1 with vs_inst_idx := LENGTH c1.cs_current_insts)` by
+  `allocas_from lo s1 /\
+   allocas_from lo (s1 with vs_inst_idx := LENGTH c1.cs_current_insts)` by
     (simp[allocas_from_def] >> qpat_assum `allocas_from lo s`
        (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
   qexistsl [`G2`,`tn2`] >> simp[] >> rpt gen_tac >>
@@ -320,7 +321,8 @@ Proof
        (mp_tac o AP_TERM ``(\v:venom_state. v.vs_halted)``) >> simp[]) >>
   `c4.cs_current_bb = c3.cs_current_bb /\ c3.cs_current_bb = c2.cs_current_bb` by
     (imp_res_tac emit_op_same_blocks >> fs[same_blocks_def]) >>
-  `allocas_from lo (s2 with vs_inst_idx := LENGTH c2.cs_current_insts) /\
+  `allocas_from lo s3 /\
+   allocas_from lo (s2 with vs_inst_idx := LENGTH c2.cs_current_insts) /\
    allocas_from lo (s3 with vs_inst_idx := LENGTH c3.cs_current_insts)` by
     (simp[allocas_from_def] >> qpat_assum `allocas_from lo s2`
        (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
@@ -433,11 +435,15 @@ Proof
   `lookup_var data_v (s4 with vs_inst_idx := LENGTH c4.cs_current_insts) = SOME (n2w (d+32)) /\
    lookup_var src_v (s4 with vs_inst_idx := LENGTH c4.cs_current_insts) = SOME (n2w (B+p+32))` by
     fs[lookup_var_def] >>
-  drule_all (SRULE [] (Q.INST [`k` |-> `n*mem_sz`, `b` |-> `B+p+32`,
-    `d` |-> `d+32`, `s` |-> `s4 with vs_inst_idx := LENGTH c4.cs_current_insts`,
-    `t` |-> `t with vs_inst_idx := LENGTH c4.cs_current_insts`, `sa` |-> `c4`]
-    (SPEC_ALL bulk_payload_copy_endpoint))) >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
+  mp_tac (Q.INST [`dst` |-> `data_v`, `src` |-> `src_v`, `lenop` |-> `sz`,
+    `sa` |-> `c4`, `sb` |-> `sb`, `s` |-> `s4 with vs_inst_idx := LENGTH c4.cs_current_insts`,
+    `t` |-> `t with vs_inst_idx := LENGTH c4.cs_current_insts`,
+    `ctx` |-> `ctx`, `func` |-> `func`, `lo` |-> `lo`,
+    `G` |-> `G4`, `tn` |-> `tn4`, `PG` |-> `PG`,
+    `d` |-> `d+32`, `b` |-> `B+p+32`, `k` |-> `n*mem_sz`]
+    (SPEC_ALL bulk_payload_copy_endpoint)) >>
+  impl_tac >- simp[] >>
+  disch_then (strip_assume_tac o SRULE []) >>
   `t = mcopy (d+32) (B+p+32) (n*mem_sz) s4` by
     (qpat_assum `emit_void MCOPY [Var data_v;Var src_v;sz] c4 = _`
        (mp_then Any strip_assume_tac emitted_insts_emit_void) >>

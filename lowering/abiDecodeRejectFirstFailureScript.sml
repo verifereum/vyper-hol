@@ -518,6 +518,7 @@ Theorem malformed_guard_success_cut[local]:
 Proof
   strip_tac >>
   drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_runtime_frame >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`func`, `PG`, `ARB:dead`] strip_assume_tac) >>
   drule abiDecodeScalarRunSafetyTheory.abi_decode_scalar_run_safe >> disch_then (qspec_then `s` strip_assume_tac) >>

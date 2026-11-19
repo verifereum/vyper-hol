@@ -202,6 +202,8 @@ Proof
      ?x. Var src = Var x /\ ptr_covers G tn x s cap) /\
    (0 < LENGTH (contractABI$enc at av) ==> ?x. Var dst = Var x /\
      ptr_covers G tn x s (LENGTH (contractABI$enc at av)))` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all compile_abi_encode_to_buf_window_joint >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `32 <= capacity` by decide_tac >>

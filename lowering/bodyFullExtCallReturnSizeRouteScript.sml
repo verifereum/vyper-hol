@@ -228,6 +228,7 @@ Proof
   disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] strip_assume_tac) >>
   fs[exec_result_map_def] >>
   drule abiDecodeScalarRunSafetyTheory.abi_decode_scalar_run_safe >> disch_then (qspec_then `u` strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`func`,`PG`,`ARB`] strip_assume_tac) >>
   rename1 `inst_seq_ptr ARB 0 ctx func PG G1 tn1 _ u G2 tn2` >>
@@ -282,7 +283,9 @@ Proof
      (prefix ++ [mk_inst id opc [needle] []]) u G2 tn2` by
     (qx_gen_tac `D` >>
      `opc = ASSERT \/ opc = ASSERT_UNREACHABLE` suffices_by
-       (disch_tac >> drule_all bop_scalar_seq_assert_abort_checked >>
+       (disch_tac >>
+        `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
+        drule_all bop_scalar_seq_assert_abort_checked >>
         disch_then (qspecl_then [`func`,`PG`,`D`] strip_assume_tac) >> metis_tac[]) >>
      simp[]) >>
   pop_assum (fn th =>

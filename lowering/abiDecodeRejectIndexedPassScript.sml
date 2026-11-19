@@ -220,6 +220,7 @@ Proof
   `s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
     (fs[IS_PREFIX_APPEND, emitted_insts_def] >> simp[DROP_LENGTH_APPEND]) >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (fn th => assume_tac th >>
     qspecl_then [`func`,`PG`,`ARB`] strip_assume_tac th) >>
