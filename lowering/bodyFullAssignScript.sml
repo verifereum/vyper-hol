@@ -18514,7 +18514,7 @@ Resume body_assign_other_nonempty_target_full[snapshot_bytes_slots]:
   conj_tac
   >- (rpt strip_tac >>
       qpat_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN tn0.t_mem`
-        irule >> metis_tac[]) >>
+        (drule_all_then ACCEPT_TAC)) >>
   conj_tac >- (qexists `env` >> simp[]) >>
   qexistsl [`FST r`,`ty`,`op`,`stv`,`lowered_value_type cenv e`,`su`,`n2w b'`] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM] >>
