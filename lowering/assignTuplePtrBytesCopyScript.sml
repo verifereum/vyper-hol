@@ -129,6 +129,7 @@ Proof
   rename1 `compile_bytestring_copy_len (Var src) sa = (count_op,sc)` >>
   `ptr_covers G tn src s 32` by
     (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all compile_bytestring_copy_len_normalized_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG G tn _ s G1 tn1` >>

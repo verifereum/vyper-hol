@@ -85,6 +85,7 @@ Theorem bytestring_source_prefix_ghost_frame:
       ghost_kept cenv es0 sa G0 tn0 s0 G' tn'
 Proof
   rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bytestring_source_prefix_counted >>
   disch_then (qspecl_then [`D`,`PG`]
     (qx_choose_then `G'` (qx_choose_then `tn'`

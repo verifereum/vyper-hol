@@ -37,6 +37,7 @@ Proof
   `isPREFIX (prefix ++ [mk_inst id opc [op] []])
      (DROP s.vs_inst_idx bb.bb_instructions)` by
     (fs[IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule bop_scalar_seq_assert_abort_checked >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then drule >>

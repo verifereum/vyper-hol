@@ -163,6 +163,7 @@ Proof
   `isPREFIX (emitted_insts sm sl ++
      [mk_inst sl.cs_next_id MLOAD [Var dst] [STRING #"%" (toString sl.cs_next_var)]])
      (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by simp[] >>
   drule_all appended_clean_mload_path >> strip_tac >>
   suspend "endpoints"
 QED

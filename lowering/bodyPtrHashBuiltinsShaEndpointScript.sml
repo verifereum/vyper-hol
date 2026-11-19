@@ -55,6 +55,7 @@ Theorem hash_bytes_prepare_endpoint:
   a.vs_call_ctx = s.vs_call_ctx /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all hash_bytes_prepare_frame >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
   `local_ptrs_reserved cenv sm` by

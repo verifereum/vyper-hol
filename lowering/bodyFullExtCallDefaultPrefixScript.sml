@@ -111,11 +111,13 @@ Proof
      (impl_tac >- fs[storage_trace_domain_def]) >> simp[]) >>
   `!i. i < s.vs_alloca_next ==> (i IN ta.t_mem <=> i IN tn.t_mem)` by
     (rpt strip_tac >> simp[]) >>
-  drule_all extcall_default_unwrap_store_entry >>
-  disch_then (qspecl_then [`explicit`,`PG`]
+  mp_tac (Q.INST [`n` |-> `type_memory_size ltv`]
+    extcall_default_unwrap_store_entry) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then
     (qx_choose_then `v` (qx_choose_then `z` (qx_choose_then `G'`
       (qx_choose_then `tn'` (qx_choose_then `sw`
-        (map_every assume_tac o CONJUNCTS))))))) >>
+        (map_every assume_tac o CONJUNCTS)))))) >>
   `!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x s /\
         FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)` by
     (rpt gen_tac >> strip_tac >>

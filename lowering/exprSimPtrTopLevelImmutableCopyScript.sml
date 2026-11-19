@@ -67,7 +67,7 @@ Theorem toplevel_immutable_byte_offset_ptr:
   compile_lit_byte_offset (Var root) off sa = (Var dst,sb) /\
   ptr_covers G tn root s capacity /\ lookup_var root s = SOME a /\
   off+len <= capacity /\ w2n a+capacity < dimword (:256) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t Gf tnf.
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
@@ -206,7 +206,7 @@ QED
 Theorem toplevel_immutable_offset_frame:
   compile_lit_byte_offset op off sa = (r,sb) /\
   copy_old_operand sa op /\ eval_operand op s = SOME a /\
-  op_taint tn op = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t H tm.
     (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
        (s with vs_inst_idx := pc) H tm) /\
@@ -260,7 +260,7 @@ QED
 Theorem toplevel_immutable_load_frame:
   compile_imm_load_word F imm op sa = (r,sb) /\
   copy_old_operand sa op /\ eval_operand op s = SOME a /\
-  op_taint tn op = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t H tm.
     (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
        (s with vs_inst_idx := pc) H tm) /\
@@ -303,7 +303,7 @@ Theorem toplevel_immutable_store_frame:
   copy_old_operand sa (Var dst) /\ copy_old_operand sa value /\
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
   op_taint tn value = {} /\ ptr_covers G tn dst s 32 /\
-  w2n a = w2n b+off /\ ~ctx_has_dalloca ctx ==>
+  w2n a = w2n b+off /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
     (s with vs_inst_idx := pc) G
     (tn with t_mem := tn.t_mem DIFF {q | w2n a <= q /\ q < w2n a+32})) /\
@@ -375,7 +375,7 @@ Theorem toplevel_immutable_destination_frame:
   compile_lit_byte_offset (Var root) off sa = (r,sb) /\
   not_fresh_at sa root /\ lookup_var root s = SOME b /\
   ptr_covers G tn root s capacity /\ off+32 <= capacity /\
-  w2n b+capacity < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
+  w2n b+capacity < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?dst t H tm.
     r = Var dst /\
     (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
@@ -458,13 +458,25 @@ Proof
   simp[emitted_insts_def, DROP_APPEND, mk_inst_def, is_terminator_def]
 QED
 
+Theorem immutable_copy_ghost_frame_allocas[local]:
+  immutable_copy_ghost_frame sa s G tn sb t H tm off n p /\
+  allocas_below_fmp s ==> allocas_below_fmp t
+Proof
+  simp[immutable_copy_ghost_frame_def, copy_runtime_frame_def] >> strip_tac >>
+  `!u. allocas_below_fmp (copy_static u) <=> allocas_below_fmp u` by
+    simp[copy_static_def, allocas_below_fmp_def] >>
+  qpat_x_assum `copy_static t = copy_static s`
+    (mp_tac o Q.AP_TERM `allocas_below_fmp`) >>
+  simp[]
+QED
+
 Theorem toplevel_immutable_one_frame:
   immutable_copy_one F imm src (Var root) off sa = ((),sb) /\
   copy_old_operand sa src /\ not_fresh_at sa root /\
   eval_operand src s = SOME a /\ lookup_var root s = SOME b /\
   op_taint tn src = {} /\ ptr_covers G tn root s capacity /\
   off+32 <= capacity /\ w2n b+capacity < dimword (:256) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t H tm.
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     (!pc. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
@@ -477,6 +489,11 @@ Proof
   disch_then (qspecl_then [`fn`,`PG`,`G`,`D`] strip_assume_tac) >>
   rename1 `compile_lit_byte_offset src off sa = (sop,s1)` >>
   rename1 `immutable_copy_ghost_frame sa s G tn s1 t1 G1 tn1 _ _ _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
+    (qpat_assum `immutable_copy_ghost_frame _ s _ _ _ t1 _ _ _ _ _` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[immutable_copy_ghost_frame_allocas]) >>
   drule_all toplevel_immutable_load_frame >>
   disch_then (qspecl_then [`fn`,`PG`,`G1`,`D`] strip_assume_tac) >>
   rename1 `compile_imm_load_word F imm sop s1 = (value,s2)` >>
@@ -498,6 +515,11 @@ Proof
          simp[copy_old_operand_def, eval_operand_def]) >>
      metis_tac[immutable_copy_ghost_frame_covers]) >>
   `w2n b+capacity < dimword (:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t2` by
+    (qpat_assum `immutable_copy_ghost_frame _ s _ _ _ t2 _ _ _ _ _` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[immutable_copy_ghost_frame_allocas]) >>
   drule_all toplevel_immutable_destination_frame >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   gvs[] >> suspend "store_and_compose"
@@ -513,6 +535,11 @@ Resume toplevel_immutable_one_frame[store_and_compose]:
     metis_tac[immutable_copy_ghost_frame_operand] >>
   `w2n (b+n2w off) = w2n b+off` by
     (Cases_on `b` >> gvs[wordsTheory.word_add_n2w] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t3` by
+    (qpat_assum `immutable_copy_ghost_frame _ t2 _ _ _ t3 _ _ _ _ _` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t2` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[immutable_copy_ghost_frame_allocas]) >>
   drule_all toplevel_immutable_store_frame >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `immutable_copy_ghost_frame s3 t3 G3 tn3 sb t4 G3 tn4 off 32 b` >>

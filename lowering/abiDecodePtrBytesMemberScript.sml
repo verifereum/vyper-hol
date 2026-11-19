@@ -411,6 +411,7 @@ Proof
     op_prov G op = NONE /\ op_taint tn op = {}` by
     (simp[IN_UNION, IN_IMAGE] >> rpt strip_tac >>
      gvs[op_prov_def, op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG G tn

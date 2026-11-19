@@ -65,7 +65,7 @@ Proof
    ptr_covers (step_prov PG G inst t) (step_taint inst s t tn)
      (STRING #"%" (toString sa.cs_next_var))
      (t with vs_inst_idx := SUC s.vs_inst_idx) sz` by
-    (simp[Abbr `inst`] >> irule literal_alloca_ptr_capacity >>
+    (simp_tac bool_ss [Abbr `inst`] >> irule literal_alloca_ptr_capacity >>
      metis_tac[]) >>
   qexistsl_tac [`t`, `w`, `step_prov PG G inst t`, `step_taint inst s t tn`] >>
   conj_tac >- simp[Abbr `inst`] >> conj_tac >- simp[Abbr `inst`] >>

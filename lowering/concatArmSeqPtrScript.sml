@@ -6,6 +6,8 @@ Ancestors
   context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   venomInst venomState venomExecSemantics ptrDiscipline fragGasSeqPtr
   finite_map words pred_set list
+  fragGasSeqPtrContext[qualified,ignore_grammar]
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 Libs monadsyntax
 
 (* Endpoint coverage is intentional: off may equal capacity when n is zero. *)
@@ -22,7 +24,7 @@ Theorem concat_fixed_seq_ptr:
   not_fresh_at sx dp /\ not_fresh_at sx oq /\
   (!z. x = Var z ==> not_fresh_at sx z) /\
   ptr_covers G tn dp t (bsz-32) /\ ptr_covers G tn oq t 32 /\
-  op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   (!i. w2n ow <= i /\ i < w2n ow+32 ==> i NOTIN tn.t_mem) /\
   mload (w2n ow) t = n2w k /\
   B+bsz < dimword (:256) /\ 32+k+32 <= bsz ==>
@@ -55,7 +57,7 @@ Theorem concat_offset_seq_ptr:
   lookup_var root s = SOME a /\ ptr_covers G tn root s capacity /\
   eval_operand delta s = SOME (n2w off) /\ op_taint tn delta = {} /\
   off+n <= capacity /\ w2n a+off < dimword (:256) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf t.
     run_inst_seq [mk_inst id ADD [Var root;delta] [out]] s = OK t /\
     inst_seq_ptr D 0 ctx fn PG G tn
@@ -84,6 +86,10 @@ QED
 
 Resume concat_fixed_seq_ptr[offset]:
   qabbrev_tac `s0 = t' with vs_inst_idx := SUC t.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+     qpat_assum `t' = update_var _ _ t` (fn th => simp[NoAsms, th, Abbr `s0`,
+       allocas_below_fmp_def, update_var_def]) >> metis_tac[]) >>
   `ptr_covers G' tn' dp s0 (bsz-32)` by
     (irule decoderGhostFramePtrTheory.ptr_covers_frame >>
      qexistsl_tac [`G`,`t`,`tn`] >>
@@ -103,6 +109,13 @@ QED
 
 Resume concat_fixed_seq_ptr[store]:
   qabbrev_tac `s1 = t'' with vs_inst_idx := SUC s0.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     `allocas_below_fmp t''` by
+       (qpat_assum `run_inst_seq [_] s0 = OK t''`
+          (mp_then (Pos last) irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp) >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+     simp[Abbr `s1`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_covers Gf tnf r1 s1 32` by
     gvs[Abbr `s1`, bodyPtrDefsTheory.ptr_covers_def, eval_operand_def, lookup_var_def] >>
   `eval_operand (Var r1) s1 = SOME (n2w (B+32)+n2w k) /\
@@ -112,7 +125,7 @@ Resume concat_fixed_seq_ptr[store]:
          update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `op_taint tnf x = {}` by
     (Cases_on `x` >> gvs[op_taint_def] >> metis_tac[]) >>
-  drule_all ifexp_copy_store_phase >>
+  drule_all mstore_seq_ptr >>
   disch_then (qspecl_then [`sx.cs_next_id+2`,`func`,`PG`,`D`] strip_assume_tac) >>
   suspend "increment"
 QED
@@ -120,6 +133,13 @@ QED
 Resume concat_fixed_seq_ptr[increment]:
   rename1 `run_inst_seq [mk_inst (sx.cs_next_id+2) MSTORE [Var r1;x] []] s1 = OK u` >>
   qabbrev_tac `s2 = u with vs_inst_idx := SUC s1.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >>
+     `allocas_below_fmp u` by
+       (qpat_assum `run_inst_seq [_] s1 = OK u`
+          (mp_then (Pos last) irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp) >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+     simp[Abbr `s2`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `eval_operand (Var r0) s2 = SOME (n2w k)` by
     gvs[Abbr `s2`, Abbr `s1`, eval_operand_def, lookup_var_def,
         mstore_def, write_memory_with_expansion_def, write_memory_def,
@@ -138,6 +158,9 @@ Resume concat_fixed_seq_ptr[last_store]:
   rename1 `inst_seq_ptr D 0 ctx func PG Gf tn''
     [mk_inst (sx.cs_next_id+3) ADD [Var r0;Lit (n2w m)] [r2]] s2 H th` >>
   qabbrev_tac `s3 = update_var r2 (n2w k+n2w m) s2 with vs_inst_idx := SUC s2.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2` mp_tac >>
+     simp[NoAsms, Abbr `s3`, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `lookup_var oq s3 = lookup_var oq t` by
     (gvs[Abbr `s3`, Abbr `s2`, Abbr `s1`, Abbr `s0`,
       lookup_var_def, update_var_def, mstore_def,
@@ -149,7 +172,7 @@ Resume concat_fixed_seq_ptr[last_store]:
   `eval_operand (Var oq) s3 = SOME ow /\
    eval_operand (Var r2) s3 = SOME (n2w k+n2w m)` by
     simp[eval_operand_def, Abbr `s3`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  drule_all ifexp_copy_store_phase >>
+  drule_all mstore_seq_ptr >>
   disch_then (qspecl_then [`sx.cs_next_id+4`,`func`,`PG`,`D`] strip_assume_tac) >>
   suspend "assemble"
 QED
@@ -218,7 +241,7 @@ Theorem concat_bytes_seq_ptr:
   N < dimword (:256) /\ w2n sw+32 < dimword (:256) /\
   (!i. w2n ow <= i /\ i < w2n ow+32 ==> i NOTIN tn.t_mem) /\
   mload (w2n ow) t = n2w k /\
-  B+bsz < dimword (:256) /\ 32+k+N <= bsz /\ ~ctx_has_dalloca ctx ==>
+  B+bsz < dimword (:256) /\ 32+k+N <= bsz /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) ==>
   ?Gf tnf.
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sx sb) t Gf tnf /\
     tnf.t_mem SUBSET tn.t_mem /\ tnf.t_stor = tn.t_stor /\
@@ -253,6 +276,10 @@ QED
 
 Resume concat_bytes_seq_ptr[source_offset]:
   qabbrev_tac `s0 = t' with vs_inst_idx := SUC t.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+     qpat_assum `t' = update_var _ _ t` (fn th => simp[NoAsms, th, Abbr `s0`,
+       allocas_below_fmp_def, update_var_def]) >> metis_tac[]) >>
   `ptr_covers G' tn' src s0 (32+N)` by
     (irule decoderGhostFramePtrTheory.ptr_covers_frame >>
      qexistsl_tac [`G`,`t`,`tn`] >>
@@ -269,6 +296,13 @@ QED
 
 Resume concat_bytes_seq_ptr[offset_load]:
   qabbrev_tac `s1 = t'' with vs_inst_idx := SUC s0.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     `allocas_below_fmp t''` by
+       (qpat_assum `run_inst_seq [_] s0 = OK t''`
+          (mp_then (Pos last) irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp) >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+     simp[Abbr `s1`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_covers Gf tnf oq s1 32` by
     (irule decoderGhostFramePtrTheory.ptr_covers_frame >>
      qexistsl_tac [`G`,`t`,`tn`] >>
@@ -284,6 +318,13 @@ QED
 
 Resume concat_bytes_seq_ptr[dest_offset]:
   qabbrev_tac `s2 = t''' with vs_inst_idx := SUC s1.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >>
+     `allocas_below_fmp t'''` by
+       (qpat_assum `run_inst_seq [_] s1 = OK t'''`
+          (mp_then (Pos last) irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp) >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+     simp[Abbr `s2`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_covers G'' tn'' dp s2 (bsz-32)` by
     (irule decoderGhostFramePtrTheory.ptr_covers_frame >>
      qexistsl_tac [`G`,`t`,`tn`] >>
@@ -303,6 +344,13 @@ QED
 
 Resume concat_bytes_seq_ptr[copy]:
   qabbrev_tac `s3 = t'''' with vs_inst_idx := SUC s2.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (strip_tac >>
+     `allocas_below_fmp t''''` by
+       (qpat_assum `run_inst_seq [_] s2 = OK t''''`
+          (mp_then (Pos last) irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp) >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+     simp[Abbr `s3`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_covers Gf' tnf' r3 s3 N` by simp[Abbr `s3`] >>
   `ptr_covers Gf' tnf' r1 s3 N` by
     (irule decoderGhostFramePtrTheory.ptr_covers_frame >>
@@ -393,6 +441,13 @@ QED
 
 Resume concat_bytes_seq_ptr[increment]:
   qabbrev_tac `s4 = u with vs_inst_idx := SUC s3.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s4` by
+    (strip_tac >>
+     `allocas_below_fmp u` by
+       (qpat_assum `run_inst_seq [_] s3 = OK u`
+          (mp_then (Pos last) irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp) >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+     simp[Abbr `s4`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `eval_operand (Var r2) s4 = SOME (n2w k) /\
    eval_operand (Var r0) s4 = SOME (n2w N)` by
     gvs[Abbr `s4`, Abbr `u`, Abbr `s3`, Abbr `s2`, Abbr `s1`, Abbr `s0`,
@@ -412,6 +467,9 @@ Resume concat_bytes_seq_ptr[last_store]:
   rename1 `inst_seq_ptr D 0 ctx func PG Gf' tc
     [mk_inst (sx.cs_next_id+5) ADD [Var r2;Var r0] [r4]] s4 H th` >>
   qabbrev_tac `s5 = update_var r4 (n2w k+n2w N) s4 with vs_inst_idx := SUC s4.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s5` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s4` mp_tac >>
+     simp[NoAsms, Abbr `s5`, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `lookup_var oq s5 = lookup_var oq t` by
     (gvs[Abbr `s5`, Abbr `s4`, Abbr `u`, Abbr `s3`, Abbr `s2`, Abbr `s1`, Abbr `s0`,
       lookup_var_def, update_var_def, mcopy_def,
@@ -423,7 +481,7 @@ Resume concat_bytes_seq_ptr[last_store]:
   `eval_operand (Var oq) s5 = SOME ow /\
    eval_operand (Var r4) s5 = SOME (n2w k+n2w N)` by
     simp[eval_operand_def, Abbr `s5`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  drule_all ifexp_copy_store_phase >>
+  drule_all mstore_seq_ptr >>
   disch_then (qspecl_then [`sx.cs_next_id+6`,`func`,`PG`,`D`] strip_assume_tac) >>
   suspend "assemble"
 QED

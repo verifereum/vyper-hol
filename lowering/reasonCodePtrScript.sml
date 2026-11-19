@@ -5,7 +5,7 @@ Ancestors
   venomExecSemantics compileEnv codegenRel memLocDefs contextCodegenRel
 
 Theorem ptr_inst_ok_dload:
-  op_taint tn src = {} /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn src = {} /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D lo fuel ctx fn G tn (mk_inst id DLOAD [src] [dst]) s
 Proof
   strip_tac >>
@@ -30,7 +30,7 @@ Theorem reason_code_dload_path_ptr:
   emit_inst DLOAD [src] [dst] sa = ((),sb) /\ fn_has_code sa sb func /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  op_taint tn src = {} /\ allocas_from 0 s /\ ~ctx_has_dalloca ctx /\
+  op_taint tn src = {} /\ allocas_from 0 s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst sa.cs_next_id DLOAD [src] [dst]) s = OK t ==>
   gas_path_ptr D 0 ctx func PG G tn s 0
     (step_prov PG G (mk_inst sa.cs_next_id DLOAD [src] [dst]) t)

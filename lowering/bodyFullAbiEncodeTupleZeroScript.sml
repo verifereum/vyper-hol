@@ -51,6 +51,7 @@ Proof
   simp[compile_abi_tuple_slot_def, comp_bind_def, compile_copy_memory_def,
     comp_return_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   `off + 0 <= total' /\ w2n bw + off < dimword(:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.INST [`n` |-> `0`] (SPEC_ALL abi_encode_owned_offset_origin)) >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `!x. not_fresh_at a x ==> x <> q` by

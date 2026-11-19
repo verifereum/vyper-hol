@@ -71,7 +71,7 @@ Theorem emitted_allocation_frames:
   stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
         [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-  n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  n < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?out G' tn'. buf.buf_operand = Var out /\ not_fresh_at sb out /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)

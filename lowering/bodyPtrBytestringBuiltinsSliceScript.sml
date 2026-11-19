@@ -240,6 +240,7 @@ Proof
     (qpat_assum `u = _` (mp_tac o Q.AP_TERM `\t. t.vs_halted`) >> simp[]) >>
   `~ub.vs_halted /\ ub.vs_current_bb = sc.cs_current_bb /\
    ub.vs_inst_idx = LENGTH sc.cs_current_insts` by simp[Abbr `ub`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ub` by simp[] >>
   drule_all compile_slice_out_buf_counted >>
   disch_then (qspecl_then [`tnb`,`PG`,`Gb`,`D`] strip_assume_tac) >>
   suspend "source_offset"
@@ -279,6 +280,7 @@ Resume compile_slice_data_counted_normal[source_offset]:
   `eval_operand start t = SOME (n2w (w2n wa)) /\ op_taint tn2 start = {}` by simp[] >>
   qpat_x_assum `copy = Var q` SUBST_ALL_TAC >>
   qpat_x_assum `emit_op ADD [Var r; Lit 32w] _ = _` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all (PURE_REWRITE_RULE [wordsTheory.n2w_w2n]
     (Q.SPECL [`src`,`w2n wa`] emit_pointer_offset_counted_covers)) >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>

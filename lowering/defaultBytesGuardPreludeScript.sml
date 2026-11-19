@@ -99,6 +99,7 @@ Proof
   `!op. op IN {src;Lit 4w} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
     (rpt strip_tac >> gvs[] >> simp[op_prov_def, op_taint_def]) >>
   drule_all default_bytes_guard_exec >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
   qexistsl [`G'`,`tn'`] >> simp[] >>

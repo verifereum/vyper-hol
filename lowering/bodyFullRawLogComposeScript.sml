@@ -209,6 +209,12 @@ Resume raw_log_expr_sim_full[continuation]:
 QED
 
 Resume raw_log_expr_sim_full[fixed_data]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+     !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by simp[] >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
+        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_assum `compile_call _ _ _ _ RawLog _ _ _ = _`
     (mp_then (Pat `compile_call _ _ _ _ RawLog _ _ _ = _`) mp_tac raw_log_fixed_data_full) >>
   disch_then (fn th => qpat_assum `compile_alloc_buffer 32 sm = _`
@@ -240,6 +246,10 @@ Resume raw_log_expr_sim_full[fixed_data]:
      >~ [`local_ptrs_reserved cenv sm`]
      >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
          fs[ci_mono_def])
+     >~ [`!fn inst t'. frag_reachable ctx func t fn inst t' ==> dalloca_no_wrap inst t'`]
+     >- (rpt strip_tac >> qpat_assum
+           `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s`
+           (qspecl_then [`fn`, `inst`, `t'`] MATCH_MP_TAC) >> first_assum ACCEPT_TAC)
      >~ [`!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x`]
      >- (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
          qexists_tac `sa` >> fs[ci_mono_def])
