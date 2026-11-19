@@ -1,5 +1,5 @@
 Theory gasFocusSourceProvider
-Ancestors lowerDloadSafetyKernel[qualified,ignore_grammar]
+Ancestors venomInstProps[qualified,ignore_grammar] lowerDloadSourceInterface[qualified,ignore_grammar] lowerDloadSafetyKernel[qualified,ignore_grammar]
   gasFocusSourceStages
   dftFinitePacket dftGasFromListTraceDefs
   o1ContractCfgNormJointCursors frameJointTrace frameJointTransition
@@ -2803,6 +2803,295 @@ Resume focus_opt_ld_expansion_next[bytes]:
 QED
 
 Finalise focus_opt_ld_expansion_next[local]
+
+(* The induction is on the reached point, with cut membership as a guard
+   on the induction hypothesis, not as an assumption on the whole run. *)
+Theorem focus_opt_ld_cut_rows[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  dead_wf D /\ o1_ctx_shape C /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  callee_first names C.ctx_functions /\ o1_safe_upto D lo n C vs /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  (!f. MEM f C.ctx_functions ==>
+    ir_supply_covers_fn (Sigma f.fn_name) f /\
+    lookup_function f.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma f.fn_name) f))) /\
+  C'.ctx_entry = C.ctx_entry /\ C.ctx_entry = SOME name /\
+  lookup_function name C.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl /\
+  lookup_function name C'.ctx_functions =
+    SOME (FST (lower_dload_function_supply (Sigma fn.fn_name) fn)) /\
+  fn_entry_label (FST (lower_dload_function_supply (Sigma fn.fn_name) fn)) = SOME lbl ==>
+  !gn ti t. raw_reachable vs C' gn ti t /\ gas_cut n vs t ==>
+    ^focus_opt_ld_R lo P C C' vs Sigma names gn ti t \/ ^focus_opt_ld_W C' gn ti t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `EVERY pre_fmp_ops C.ctx_functions` by
+    fs[o1_safe_upto_def, o1_ptr_safe_upto_def, fmp_free_ctx_def, EVERY_MEM] >>
+  `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
+    metis_tac[lowerDloadPtrStaticTheory.lower_dload_stage_no_dalloca] >>
+  `^focus_opt_ld_advance_all lo P C C' vs Sigma names` by
+    (BETA_TAC >> rpt gen_tac >> MATCH_ACCEPT_TAC (BETA_RULE focus_opt_ld_advance_row)) >>
+  pop_assum (assume_tac o BETA_RULE) >>
+  `!g. MEM g C.ctx_functions ==> ir_supply_covers_fn (Sigma g.fn_name) g` by
+    (gen_tac >> strip_tac >> first_x_assum drule >> simp[]) >>
+  `!g. MEM g C.ctx_functions ==> lookup_function g.fn_name C'.ctx_functions =
+    SOME (FST (lower_dload_function_supply (Sigma g.fn_name) g))` by
+    (gen_tac >> strip_tac >> first_x_assum drule >> simp[]) >>
+  `!v ctx gn ti t. raw_reachable v ctx gn ti t ==>
+    v = vs /\ ctx = C' /\ gas_cut n vs t ==>
+    ^focus_opt_ld_R lo P C C' vs Sigma names gn ti t \/ ^focus_opt_ld_W C' gn ti t`
+    suffices_by
+      (disch_then (qspecl_then [`vs`,`C'`] assume_tac) >> simp[]) >>
+  ho_match_mp_tac raw_reachable_ind >> rpt conj_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >> suspend "callee"
+QED
+
+Resume focus_opt_ld_cut_rows[entry]:
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >> disj1_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    (drule o1_ctx_shape_distinct_block_labels >> simp[EVERY_MEM] >>
+     disch_then irule >> metis_tac[lookup_function_MEM]) >>
+  drule_all_then (qspecl_then [`lo`,`C'`] strip_assume_tac)
+    (SRULE [] (Q.INST [`fn'` |-> `FST (lower_dload_function_supply u fn)`]
+      gasFocusLowerDloadRootTheory.ld_focus_root_correlated)) >>
+  drule ld_sync_active >> simp[HD] >> strip_tac >>
+  qexistsl [`[]`,`[]`,`FEMPTY`,`entry_taint`,`fn`,`inst`,`t`,`t`,`FEMPTY`,
+            `f`,`[]`,`1`,`X`,`0`] >>
+  simp[ld_image_def] >> metis_tac[lowerDloadSafetyKernelTheory.ld_prefix_bound]
+QED
+
+Resume focus_opt_ld_cut_rows[next]:
+  rpt gen_tac >> strip_tac >>
+  disch_then (CONJUNCTS_THEN2 SUBST_ALL_TAC
+                (CONJUNCTS_THEN2 SUBST_ALL_TAC assume_tac)) >>
+  rename1 `active_inst gn j (u with vs_inst_idx := SUC t.vs_inst_idx)` >>
+  `gas_cut n vs t` by
+    (irule gasFocusLowerDloadCutGuardsTheory.ld_step_ok_cut_back >>
+     fs[gas_cut_def] >> metis_tac[]) >>
+  qpat_x_assum `_ /\ _ /\ _ ==> _ \/ _` (mp_tac o BETA_RULE) >>
+  (impl_tac >- simp[]) >> BETA_TAC >>
+  disch_then (DISJ_CASES_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac))
+  >- suspend "next_row" >>
+  disj2_tac >> BETA_TAC >> conj_tac
+  >- (drule_all (BETA_RULE lowerDloadForwardingCoverageTheory.ld_forward_next) >> simp[]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Resume focus_opt_ld_cut_rows[block]:
+  rpt gen_tac >> strip_tac >>
+  disch_then (CONJUNCTS_THEN2 SUBST_ALL_TAC
+                (CONJUNCTS_THEN2 SUBST_ALL_TAC assume_tac)) >>
+  rename1 `step_inst fuel C' ti t = OK u` >>
+  `gas_cut n vs t` by
+    (drule_all gasFocusLowerDloadCutGuardsTheory.ld_block_entry_cut_back >> simp[]) >>
+  qpat_x_assum `_ /\ _ /\ _ ==> _ \/ _` (mp_tac o BETA_RULE) >>
+  (impl_tac >- simp[]) >> BETA_TAC >>
+  disch_then (DISJ_CASES_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac))
+  >- (disj1_tac >> drule_all (BETA_RULE focus_opt_ld_block_row) >> simp[]) >>
+  drule_all (BETA_RULE lowerDloadForwardingCoverageTheory.ld_forward_no_terminator_ok) >>
+  metis_tac[]
+QED
+
+Resume focus_opt_ld_cut_rows[callee]:
+  rpt gen_tac >> strip_tac >>
+  disch_then (CONJUNCTS_THEN2 SUBST_ALL_TAC
+                (CONJUNCTS_THEN2 SUBST_ALL_TAC assume_tac)) >>
+  rename1 `setup_callee callee args t = SOME cs` >>
+  `gas_cut n vs t` by
+    (drule_all gasFocusLowerDloadCutGuardsTheory.ld_callee_entry_cut_back >> simp[]) >>
+  qpat_x_assum `_ /\ _ /\ _ ==> _ \/ _` (mp_tac o BETA_RULE) >>
+  (impl_tac >- simp[]) >> BETA_TAC >>
+  disch_then (DISJ_CASES_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac))
+  >- (disj1_tac >> drule_all (BETA_RULE focus_opt_ld_callee_row) >> simp[]) >>
+  drule (BETA_RULE lowerDloadForwardingCoverageTheory.ld_forward_no_invoke) >> simp[]
+QED
+
+Resume focus_opt_ld_cut_rows[next_row]:
+  Cases_on `ti.inst_opcode = INVOKE`
+  >- (disj1_tac >>
+      drule_all (BETA_RULE gasFocusLowerDloadRawCompletedInvokeTheory.ld_focus_raw_completed_invoke) >>
+      simp[]) >>
+  qpat_assum `?stk PG G tn fn' inst s t0 A f fs N X p h. _`
+    (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+  rename1 `ld_sync lo P C vs stk PG G tn source inst s t0 A (f::fs) N` >>
+  `ir_supply_covers_fn f.lf_supply source` by
+    (drule_all lowerDloadReturnAlignmentTheory.ld_sync_supply_covered >> simp[]) >>
+  `^focus_opt_ld_row lo P C C' vs Sigma names gn ti t
+    stk PG G tn source inst s t0 A f fs N X p h` by
+    (BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  pop_assum (assume_tac o BETA_RULE) >>
+  Cases_on `SUC h < LENGTH X`
+  >- (disj1_tac >> suspend "expansion") >>
+  `SUC h = LENGTH X` by decide_tac >>
+  suspend "endpoint"
+QED
+
+Resume focus_opt_ld_cut_rows[expansion]:
+  mp_tac (Q.INST [`fn` |-> `source`] (BETA_RULE focus_opt_ld_expansion_next)) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
+  disch_then ACCEPT_TAC
+QED
+
+Resume focus_opt_ld_cut_rows[endpoint]:
+  drule ld_sync_source >> strip_tac >>
+  drule_all ld_sync_fn_shape >> strip_tac >>
+  drule o1_fn_shape_components >> strip_tac >>
+  `EVERY inst_wf (fn_insts source)` by
+    metis_tac[fmpStepStructuralTheory.fn_inst_wf_fn_insts] >>
+  `gn = FST (lower_dload_function_supply f.lf_supply source)` by
+    (drule ld_sync_active >> fs[ld_image_def]) >>
+  `ALL_DISTINCT (fn_labels gn)` by
+    (Cases_on `lower_dload_function_supply f.lf_supply source` >>
+     drule o1ContractLowerDloadTheory.lower_dload_function_supply_labels >>
+     fs[fn_labels_def]) >>
+  Cases_on `in_revert_forward source s`
+  >- suspend "forwarding" >>
+  disj1_tac >>
+  Cases_on `inst.inst_opcode = DLOAD \/ inst.inst_opcode = DLOADBYTES`
+  >- suspend "expansion_end" >>
+  suspend "singleton"
+QED
+
+Resume focus_opt_ld_cut_rows[forwarding]:
+  `gas_cut n vs s` by fs[gas_cut_def] >>
+  `raw_reachable vs C source inst s` by
+    (drule_all lowerDloadReachabilityTheory.ld_frame_reachable_raw >> simp[]) >>
+  qpat_assum `o1_safe_upto _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE[o1_safe_upto_def]) >>
+  `raw_mem_ok C source inst s` by metis_tac[] >>
+  `dload_headroom_ok C source inst s` by
+    (drule_all ld_sync_source_mem_inv >> simp[]) >>
+  drule_then (mp_tac o PURE_REWRITE_RULE [HD])
+    (BETA_RULE lowerDloadOwnedForwardingTheory.ld_selected_forwarding) >>
+  disch_then (qspecl_then [`ti`,`t`,`p`,`h`,`gn`,`X`,`C'`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then assume_tac >>
+  disj2_tac >> conj_tac
+  >- (`ALL_DISTINCT (MAP (\b. b.bb_label) gn.fn_blocks)` by fs[fn_labels_def] >>
+      drule_all (BETA_RULE lowerDloadForwardingCoverageTheory.ld_forward_next) >> simp[]) >>
+  fs[fn_labels_def]
+QED
+
+Resume focus_opt_ld_cut_rows[expansion_end]:
+  mp_tac (Q.INST [`fn` |-> `source`] (BETA_RULE focus_opt_ld_expansion_next)) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+     disj2_tac >> rpt conj_tac >> first_assum ACCEPT_TAC])) >>
+  disch_then ACCEPT_TAC
+QED
+
+Resume focus_opt_ld_cut_rows[singleton]:
+  `X = [inst]` by
+    metis_tac[lowerDloadSafetyLocationsTheory.ld_envelope_ordinary] >>
+  pop_assum SUBST_ALL_TAC >>
+  `h = 0` by (qpat_assum `SUC h = LENGTH [inst]` mp_tac >> simp[NoAsms]) >>
+  pop_assum SUBST_ALL_TAC >>
+  `t0 = t /\ ti = inst` by
+    (qpat_assum `ld_prefix _ _ _ _ 0 _ _` mp_tac >>
+     qpat_assum `ti = EL 0 [inst]` mp_tac >> simp[NoAsms, ld_prefix_zero] >>
+     metis_tac[NoAsms]) >>
+  `p = t.vs_inst_idx` by metis_tac[] >>
+  map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
+    [`ti = inst`, `t0 = t`, `p = t.vs_inst_idx`] >>
+  `^focus_opt_ld_row lo P C C' vs Sigma names gn inst t
+     stk PG G tn source inst s t A f fs N [inst] t.vs_inst_idx 0` by
+    (BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  pop_assum (assume_tac o BETA_RULE) >>
+  Cases_on `MEM inst.inst_opcode
+     [CALLER;ADDRESS;CALLVALUE;GAS;ORIGIN;GASPRICE;CHAINID;COINBASE;
+      TIMESTAMP;NUMBER;PREVRANDAO;GASLIMIT;BASEFEE;BLOBBASEFEE;
+      CALLDATASIZE;RETURNDATASIZE;CODESIZE] \/
+    (MEM inst.inst_opcode
+      [MUL;Div;Mod;SDIV;SMOD;Exp;ADDMOD;MULMOD;SLT;SGT;ISZERO;AND;OR;XOR;
+       NOT;SIGNEXTEND;BYTE;OFFSET;ADD;SUB;SHL;SHR;SAR] \/
+     MEM inst.inst_opcode [ASSIGN;RETPC_PARAM;PARAM]) \/
+    MEM inst.inst_opcode [LOG;SSTORE;TSTORE]`
+  >- (drule_all (BETA_RULE focus_opt_ld_simple_next) >> disch_then ACCEPT_TAC) >>
+  `MEM source C.ctx_functions` by
+    metis_tac[frameAllocationOwnershipTheory.frame_reachable_functions_member] >>
+  `pre_fmp_ops source` by metis_tac[EVERY_MEM] >>
+  `MEM inst (fn_insts source)` by metis_tac[ld_active_inst_member] >>
+  Cases_on `MEM inst.inst_opcode [BLOCKHASH;BLOBHASH;CALLDATALOAD;BALANCE;
+                         SELFBALANCE;EXTCODESIZE;EXTCODEHASH;SLOAD;TLOAD] \/
+            MEM inst.inst_opcode [NOP;ASSERT;ASSERT_UNREACHABLE;ISTORE;SHA3;INITIAL_FMP;BUMP]`
+  >- (drule_all (BETA_RULE focus_opt_ld_data_next) >> disch_then ACCEPT_TAC) >>
+  Cases_on `inst.inst_opcode = ALLOCA`
+  >- (`inst_wf inst` by metis_tac[EVERY_MEM] >>
+      `lo <= vs.vs_alloca_next` by
+        (qpat_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+         simp[NoAsms, o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def]) >>
+      drule_all (BETA_RULE focus_opt_ld_alloca_next) >> disch_then ACCEPT_TAC) >>
+  `?ss H'. ^focus_opt_ld_effect lo P C vs A f tn PG G inst s t u fuel ss H' /\
+          ss.vs_prev_bb = s.vs_prev_bb /\ u.vs_prev_bb = t.vs_prev_bb` by
+    (BETA_TAC >>
+     Cases_on `MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2]`
+     >- (drule_all (BETA_RULE focus_opt_ld_external_effect) >>
+         disch_then (qx_choosel_then [`ss`,`H'`] assume_tac) >>
+         qexistsl [`ss`,`H'`] >> rpt conj_tac >>
+         FIRST [first_assum ACCEPT_TAC,
+           metis_tac[venomInstPropsTheory.step_preserves_control_flow]]) >>
+     Cases_on `MEM inst.inst_opcode [MLOAD;ILOAD;LT;GT;EQ] \/
+       MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY] \/
+       MEM inst.inst_opcode [CODECOPY;CALLDATACOPY;RETURNDATACOPY;EXTCODECOPY] \/
+       inst.inst_opcode = DALLOCA`
+     >- (drule_all (BETA_RULE focus_opt_ld_access_effect) >> disch_then ACCEPT_TAC) >>
+     `fn_ptr_ok P source` by
+       metis_tac[lowerDloadOracleCallAssemblyTheory.ld_sync_ptr_ok] >>
+     drule_all lowerDloadSourceInterfaceTheory.ld_fn_ptr_excluded_opcodes >> strip_tac >>
+     `inst.inst_opcode <> PHI` by metis_tac[step_inst_ok_imp_not_phi] >>
+     `F` suffices_by simp[] >>
+     rpt (qpat_x_assum `~(MEM inst.inst_opcode _ \/ _)` mp_tac) >>
+     rpt (qpat_x_assum `~MEM inst.inst_opcode _` mp_tac) >>
+     rpt (qpat_x_assum `inst.inst_opcode <> _` mp_tac) >>
+     qpat_x_assum `~is_terminator inst.inst_opcode` mp_tac >>
+     qpat_x_assum `~(inst.inst_opcode = DLOAD \/ inst.inst_opcode = DLOADBYTES)` mp_tac >>
+     Cases_on `inst.inst_opcode` >> simp[NoAsms, is_terminator_def]) >>
+  `EVERY (\a. a.lf_src.vs_gas_readings = a.lf_tgt.vs_gas_readings /\
+    LENGTH s.vs_gas_readings <= LENGTH a.lf_src.vs_gas_readings) fs` by
+    (qpat_assum `EVERY (\a. _ /\ LENGTH s.vs_gas_readings <= _) (f::fs)` mp_tac >>
+     simp[NoAsms, EVERY_DEF]) >>
+  RULE_L_ASSUM_TAC (CONJUNCTS o BETA_RULE) >>
+  mp_tac (Q.INST [`fn` |-> `source`] (BETA_RULE focus_opt_ld_effect_row)) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
+  disch_then ACCEPT_TAC
+QED
+
+Finalise focus_opt_ld_cut_rows[local]
+
+Theorem focus_opt_lower_cut_bound[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  dead_wf D /\ o1_ctx_shape C /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  callee_first names C.ctx_functions /\ o1_safe_upto D lo n C vs /\
+  (!g i. MEM g C.ctx_functions /\ MEM i (fn_insts g) ==>
+    ~MEM (Label "code_end") i.inst_operands) /\
+  mem_inv (\ctx g i u. (gas_cut n vs u ==> inst_dload_in_section i u) /\
+    u.vs_code = vs.vs_code /\ u.vs_data_section = vs.vs_data_section) C vs /\
+  LENGTH vs.vs_data_section < dimword (:256) DIV 2 ==>
+  code_end_offset_ok (\ctx fn i s. raw_reachable vs ctx fn i s /\ gas_cut n vs s) C'
+Proof
+  strip_tac >>
+  drule_all gasFocusLowerDloadRootTheory.ld_focus_stage_suppliers >>
+  disch_then (qx_choosel_then [`P`,`Sigma`,`name`,`fn`,`lbl`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  mp_tac (BETA_RULE focus_opt_ld_cut_rows) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then assume_tac >>
+  `!g. MEM g C.ctx_functions ==> ir_supply_covers_fn (Sigma g.fn_name) g` by
+    (gen_tac >> strip_tac >> first_x_assum drule >> simp[]) >>
+  simp[code_end_offset_ok_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gn ti t. raw_reachable _ _ _ _ _ /\ _ ==> _` drule_all >>
+  disch_then (DISJ_CASES_THEN2 strip_assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac))
+  >- (drule_all lowerDloadReturnAlignmentTheory.ld_sync_supply_covered >> simp[] >>
+      strip_tac >> irule focus_opt_lower_row_bound >>
+      goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `ld_prefix _ _ _ _ _ _ _`)) >>
+      qexistsl [`D`,`dst`,`n`,`sz`,`x`] >> gvs[] >> first_assum ACCEPT_TAC) >>
+  drule (BETA_RULE lowerDloadForwardingCoverageTheory.ld_forward_opcode) >> simp[]
+QED
 
 Theorem focus_row_visit_inverse[local]:
   !xs be.
