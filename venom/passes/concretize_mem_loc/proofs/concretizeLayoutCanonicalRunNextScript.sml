@@ -195,11 +195,13 @@ Proof
     metis_tac[EL_MAP] >> metis_tac[]
 QED
 
-Theorem layout_canonical_run_next_entry_certificate:
+(* The entry certificate follows the selected block edge; it needs no
+   nonstatic assumption on the initial state. *)
+Theorem layout_canonical_run_next_entry_certificate_bounded:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\
   EVERY wf_function C.ctx_functions /\
   layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -252,8 +254,7 @@ Proof
   `EVERY bb_well_formed fn.fn_blocks /\
    (!bb. MEM bb fn.fn_blocks ==> EVERY (\i. MEM i (fn_insts fn)) bb.bb_instructions)` by
     (fs[EVERY_MEM, venomWfTheory.wf_function_def, fn_insts_def] >>
-     conj_tac >- metis_tac[] >>
-     metis_tac[MEM_fn_insts_blocks]) >>
+     conj_tac >- metis_tac[] >> metis_tac[MEM_fn_insts_blocks]) >>
   qpat_x_assum `!k. k < LENGTH path ==> _`
     (qspec_then `n + LENGTH wb` mp_tac) >> simp[] >> strip_tac >>
   fs[joint_transition_block_iff] >> gvs[] >>
@@ -273,6 +274,32 @@ Proof
     fs[ADD_CLAUSES, joint_transition_block_iff] >>
     `FST (EL (n + LENGTH wb) path) = SOME (OriginBlock fuel post)` by
       metis_tac[EL_MAP] >> metis_tac[])
+QED
+Theorem layout_canonical_run_next_entry_certificate:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs qend ==>
+  selected_run_next_entry_certificate C C' q0 path
+    (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
+    (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+Proof
+  strip_tac >> irule layout_canonical_run_next_entry_certificate_bounded >> metis_tac[]
 QED
 
 Theorem layout_canonical_run_next_certificate_fuel_headroom_static:
