@@ -9144,7 +9144,8 @@ Proof
       >- (rpt gen_tac >> strip_tac >> qexists `v` >> gvs[arithmeticTheory.ADD_COMM]) >>
       rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def] >> strip_tac >>
       conj_tac >- (simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]) >>
-      conj_tac >- metis_tac[halt_exit_INR_type] >>
+      conj_tac >- (qpat_assum `halt_exit _ _ _ (INR _) _`
+        (MATCH_ACCEPT_TAC o MATCH_MP (iffLR halt_exit_INR_type))) >>
       rpt strip_tac
       >- (qpat_assum `ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u`
             (fn frame => qpat_assum `ctx_has_dalloca ctx` (fn active =>
