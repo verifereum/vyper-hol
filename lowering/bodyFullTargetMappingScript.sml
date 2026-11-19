@@ -14,7 +14,7 @@ Ancestors
   gasOutcomeFull fragGasOriginPtr vyperStorageFootprint loweringPosts
   vyperTypeSystem vyperInterpreter vyperState
   bodyPtrDefs exprOperandVar exprLoweringProps compileEnv ptrDiscipline loweringStateRelDefs
-  stmtLoweringMono vyperEvalExprPreservesScopesDom exprSimWordArgs
+  stmtLoweringMono vyperEvalExprPreservesScopesDom exprSimWordArgs bodyInvNoDalloca
 
 Theorem target_mapping_tail_full:
   body_inv tops ctx cenv cx /\
@@ -45,6 +45,7 @@ Proof
 QED
 
 Resume target_mapping_tail_full[join]:
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid2.storage_trace` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
