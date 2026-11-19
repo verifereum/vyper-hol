@@ -168,6 +168,30 @@ Proof
       entry_venom_state_frame_fields, call_txn_component_equality]
 QED
 
+Definition opt_deploy_entry_state_own_def:
+  opt_deploy_entry_state_own prog prog' cplan tops es =
+    opt_entry_state_own prog prog' cplan es with vs_alloca_next := imm_len tops
+End
+
+Theorem opt_deploy_entry_state_own_identity:
+  !prog cplan tops es.
+    opt_deploy_entry_state_own prog prog cplan tops es =
+    deploy_entry_state prog cplan tops es
+Proof
+  simp[opt_deploy_entry_state_own_def, opt_entry_state_own_identity,
+       deploy_entry_state_def]
+QED
+
+Theorem deploy_own_txp_identity:
+  !tops bc am tx prog prog' cplan es.
+    deploy_state_rel tops bc am tx es ==>
+    tx with code := (opt_deploy_entry_state_own prog prog' cplan tops es).vs_code = tx
+Proof
+  rw[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+     entry_venom_state_frame_fields, call_txn_component_equality] >>
+  gvs[deploy_state_rel_def]
+QED
+
 (* Substitution may insert expressions at names, and folding may replace a
    SHA of a literal. Neither transformation erases a code accessor. *)
 Theorem fold_const_builtin_code_accessor[local]:
