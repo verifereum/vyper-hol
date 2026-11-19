@@ -630,7 +630,15 @@ Proof
      drule chain_facts_row >> disch_then (qspec_then `LENGTH o1_fn_passes` mp_tac) >>
      simp[]) >>
   gvs[stage_ctx_def, stage_fns_def, label_flow_ok_def, MEM_MAP] >>
-  metis_tac[MEM_EL]
+  map_every qx_gen_tac [`fn`, `inst`] >> strip_tac >>
+  qpat_x_assum `MEM _ chains`
+    (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  rename1 `i < LENGTH chains` >>
+  qpat_assum `!i. i < LENGTH u.cu_context.ctx_functions ==>
+      !inst. MEM inst (fn_insts (EL (LENGTH o1_fn_passes) (FST (EL i chains)))) ==> _`
+    (qspec_then `i` mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qspec_then `inst` mp_tac) >> gvs[]
 QED
 
 Theorem focus_opt_label_flow:
