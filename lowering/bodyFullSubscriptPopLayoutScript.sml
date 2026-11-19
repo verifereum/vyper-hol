@@ -1,6 +1,7 @@
 Theory bodyFullSubscriptPopLayout
 Ancestors
   bodyFullSubscriptLayoutByte placeMemoryPathRebuild
+  dynCopyMemory[qualified,ignore_grammar]
   vyperPlaceStatePreservation valueEncodingTyping vyperAssignPreservesType
   arithmetic list alist vyperTyping vyperValue vyperValueOperation vyperState
   valueEncoding valueEncodingDefs typeLayoutProps loweringPosts exprSimProps
@@ -285,14 +286,6 @@ Proof
   `k < LENGTH vs` by decide_tac >> simp[FRONT_EL]
 QED
 
-Theorem layout_stride_bound[local]:
-  !k n sz. k < n ==> sz + k * sz <= n * sz
-Proof
-  rpt strip_tac >>
-  `SUC k * sz <= n * sz` by simp[LE_MULT_RCANCEL] >>
-  pop_assum mp_tac >> rewrite_tac[MULT_CLAUSES] >> decide_tac
-QED
-
 (* All tested bytes lie within the type-sized allocation. For a sparse
    array the capacity bounds each stored index, not the number of pairs. *)
 Theorem layout_range_mutual[local]:
@@ -339,7 +332,8 @@ Proof
       simp[value_has_type_def, default_value_well_typed, type_memory_size_def] >>
       rpt strip_tac >> gvs[] >> TRY (metis_tac[] >> NO_TAC) >>
       `type_memory_size etv + k * type_memory_size etv <= n * type_memory_size etv`
-        by simp[layout_stride_bound] >>
+        by (ONCE_REWRITE_TAC [ADD_COMM] >>
+            irule dynCopyMemoryTheory.array_copy_slot_bound >> first_assum ACCEPT_TAC) >>
       qpat_x_assum `!j. subscript_layout_byte _ (default_value _) _ _ ==> _`
         (qspec_then `k` mp_tac) >> simp[] >> decide_tac)
   >- (Cases_on `tv` >> simp[value_has_type_def, type_memory_size_def])
@@ -349,7 +343,8 @@ Proof
   >- (simp[value_has_type_def] >> rpt strip_tac >> gvs[] >>
       TRY (metis_tac[] >> NO_TAC) >>
       `type_memory_size tv + k * type_memory_size tv <= n * type_memory_size tv`
-        by simp[layout_stride_bound] >> decide_tac)
+        by (ONCE_REWRITE_TAC [ADD_COMM] >>
+            irule dynCopyMemoryTheory.array_copy_slot_bound >> first_assum ACCEPT_TAC) >> decide_tac)
   >> Cases_on `ts` >> simp[value_has_type_def, type_memory_size_def] >>
      rpt strip_tac >> gvs[] >> decide_tac
 QED

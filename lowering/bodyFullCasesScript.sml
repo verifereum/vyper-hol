@@ -1369,8 +1369,9 @@ Theorem body_subscript_case_full:
 Proof
   rpt gen_tac >> strip_tac >>
   irule bodyFullSubscriptTheory.subscript_expr_full_ok_from_place_base >>
-  simp[] >>
-  metis_tac[bodyFullSubscriptUnframedArrayTheory.subscript_unframed_array_vv_full]
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qspecl_then [`cx`, `v8`, `e1`, `e2`] ACCEPT_TAC
+    bodyFullSubscriptUnframedArrayTheory.subscript_unframed_array_vv_full
 QED
 
 (* Join the TypeBuiltin constructor proofs. *)

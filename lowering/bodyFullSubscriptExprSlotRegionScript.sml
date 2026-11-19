@@ -11,17 +11,30 @@ Libs
 (* For a mapping leaf the select itself records the root. For an ordinary
    storage place it extends the existing capacity path. *)
 Theorem select_storage_observed_region[local]:
-  (!tr slot leaf. r = PlaceR (StoragePlace tr slot leaf) ==>
+  (!tr slot leaf. r = PlaceR (StoragePlace tr slot leaf) /\
+    storage_observations_ok cx H st.storage_trace ==>
     ?off root path delta.
       MEM (StorageRoot tr off root) st.storage_trace /\
       storage_subregion root path delta leaf /\
       slot = n2w off + n2w delta) /\
+  storage_observations_ok cx H u.storage_trace /\
   select_result cx ty r sb st = (INL (PlaceR (StoragePlace tr slot leaf)),u) ==>
   ?off root path delta.
     MEM (StorageRoot tr off root) u.storage_trace /\
     storage_subregion root path delta leaf /\
     slot = n2w off + n2w delta
 Proof
+  strip_tac >>
+  `?xs. u.storage_trace = st.storage_trace ++ xs` by
+    metis_tac[storage_trace_frame_prefix, storage_trace_frame_select] >>
+  `storage_observations_ok cx H st.storage_trace` by fs[] >>
+  `!tr slot leaf. r = PlaceR (StoragePlace tr slot leaf) ==>
+    ?off root path delta.
+      MEM (StorageRoot tr off root) st.storage_trace /\
+      storage_subregion root path delta leaf /\
+      slot = n2w off + n2w delta` by metis_tac[] >>
+  qpat_x_assum `select_result cx ty r sb st = _` mp_tac >>
+  pop_assum mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
   Cases_on `r` >>
   simp[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
        return_def, raise_def, AllCaseEqs()]
@@ -148,11 +161,9 @@ Resume subscript_expr_result_slot_region_from_pop[attribute]:
      qpat_x_assum `call_evaluation_safe cx _` mp_tac >>
      simp[Once well_typed_expr_def, int_calls_expr_def]) >>
   drule_at (Pos last) select_storage_observed_region >>
-  disch_then irule >> rpt gen_tac >> disch_tac >> gvs[] >>
-  `storage_observations_ok cx H s''.storage_trace` by
-    (`?xs. u.storage_trace = s''.storage_trace ++ xs` by
-       metis_tac[storage_trace_frame_prefix, storage_trace_frame_select] >>
-     fs[]) >>
+  disch_then irule >> qexists_tac `H` >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
   qpat_x_assum `!y. expr_size y < _ ==> _` (qspec_then `obj` mp_tac) >>
   simp[expr_size_def] >> metis_tac[]
 QED
@@ -173,7 +184,8 @@ Resume subscript_expr_result_slot_region_from_pop[subscript]:
   qpat_x_assum `?v mid. eval_expr cx obj st = (v,mid) /\ _` strip_assume_tac >>
   gnvs[] >>
   drule_at (Pos last) select_storage_observed_region >> disch_then irule >>
-  rpt gen_tac >> disch_tac >>
+  qexists_tac `H` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
   qpat_x_assum `(if subscript_reads_base _ _ _ then _ else _) _ = _` mp_tac >>
   IF_CASES_TAC >> simp[bind_def, return_def, AllCaseEqs()] >> rpt strip_tac >> gnvs[] >>
   rename [`eval_expr cx obj st = (_,mid)`, `eval_expr cx idx mid = (_,idx_end)`,
@@ -184,10 +196,7 @@ Resume subscript_expr_result_slot_region_from_pop[subscript]:
      `?xs. fin.storage_trace = idx_end.storage_trace ++ xs` by
        metis_tac[storage_trace_frame_prefix, storage_trace_frame_read_result] >>
      metis_tac[APPEND_ASSOC]) >>
-  `storage_observations_ok cx H mid.storage_trace` by
-    (`?xs. u.storage_trace = fin.storage_trace ++ xs` by
-       metis_tac[storage_trace_frame_prefix, storage_trace_frame_select] >>
-     fs[]) >>
+  `storage_observations_ok cx H mid.storage_trace` by fs[] >>
   qpat_x_assum `!y. expr_size y < _ ==> _` (qspec_then `obj` mp_tac) >>
   simp[expr_size_def, MEM_APPEND] >> metis_tac[]
 QED

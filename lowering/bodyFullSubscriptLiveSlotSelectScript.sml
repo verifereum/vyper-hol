@@ -98,37 +98,36 @@ Theorem subscript_live_slot_select_full:
     vv_post H ctx func cenv cx obj es sa sm s0 mid (PlaceR (StoragePlace tr slot vt)) bvv s /\
     expr_post H ctx func cenv cx idx mid sm sn s fin key iop u /\
     ghost_inv_at (DF H) lo d cenv cx fin Gi tni u) ==>
-  let vv = LocatedValue ann (mk_ptr dst loc) in
   gas_outcome_full
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
     (select_result cx (ArrayT et bd) (PlaceR (StoragePlace tr slot vt)) (ValueSubscript key))
     (fin,u,Gi,tni)
     (\H res ee G tn t. ?tv. res = INL tv /\
-      vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sb s0 ee tv vv t /\
+      vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sb s0 ee tv (LocatedValue ann (mk_ptr dst loc)) t /\
       vv_store_bound cx (post_value_type cenv (Subscript ann obj idx))
-        (lowered_value_type cenv (Subscript ann obj idx)) ee tv vv t /\
+        (lowered_value_type cenv (Subscript ann obj idx)) ee tv (LocatedValue ann (mk_ptr dst loc)) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
       s0.vs_alloca_next <= t.vs_alloca_next /\
       ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
-      ptr_vv_ok cx (post_value_type cenv (Subscript ann obj idx)) tv vv ee G tn t /\
+      ptr_vv_ok cx (post_value_type cenv (Subscript ann obj idx)) tv (LocatedValue ann (mk_ptr dst loc)) ee G tn t /\
       (!v. tv = Value v /\ ~is_word_type (post_value_type cenv (Subscript ann obj idx)) /\
            ~is_bytestring_type (post_value_type cenv (Subscript ann obj idx)) ==>
-           vv_own cenv cx (post_value_type cenv (Subscript ann obj idx)) sa sb ee tv vv t /\
-           (!t' p. vv = LocatedValue t' p ==> p.ptr_location = LocMemory)) /\
-      (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+           vv_own cenv cx (post_value_type cenv (Subscript ann obj idx)) sa sb ee tv (LocatedValue ann (mk_ptr dst loc)) t /\
+           (!t' p. (LocatedValue ann (mk_ptr dst loc)) = LocatedValue t' p ==> p.ptr_location = LocMemory)) /\
+      (cenv.ce_is_ctor /\ vv_location (LocatedValue ann (mk_ptr dst loc)) = SOME LocCode ==>
        ?val. read_result cx tv ee = (INL val,ee) /\
              !rt w. evaluate_type (get_tenv cx) (post_value_type cenv (Subscript ann obj idx)) =
-                    SOME rt /\ eval_operand (vv_operand vv) t = SOME w ==>
+                    SOME rt /\ eval_operand (vv_operand (LocatedValue ann (mk_ptr dst loc))) t = SOME w ==>
                     w2n w + type_memory_size rt <= lo /\
                     (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
                            val_in_memory rt val (w2n w) mem)) /\
-      (!t' op. vv = StackValue t' op /\
+      (!t' op. (LocatedValue ann (mk_ptr dst loc)) = StackValue t' op /\
                ~is_word_type (post_value_type cenv (Subscript ann obj idx)) ==>
                ptr_buf_ok cenv (Subscript ann obj idx) op G t) /\
-      (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+      (!t' p. (LocatedValue ann (mk_ptr dst loc)) = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
               ptr_buf_ok cenv (Subscript ann obj idx) p.ptr_operand G t) /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
