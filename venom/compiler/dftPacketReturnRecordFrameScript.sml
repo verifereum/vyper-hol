@@ -1,6 +1,6 @@
 Theory dftPacketReturnRecordFrame
 Ancestors
-  dftPacketReturnTables dftPacketReturnParentReplay
+  dftPacketReturnTables dftIndexedExec
   finite_map list rich_list arithmetic
 
 (* Historical agreement sees the immutable fields of both retained rows. *)

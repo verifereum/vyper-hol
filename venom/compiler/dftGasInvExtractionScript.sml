@@ -1,7 +1,7 @@
 Theory dftGasInvExtraction
 Ancestors
   dftGasInvInversion dftGasInvFlexibleTrace dftGasInvResidualTrace dftGasInvCrossingProbe
-  dftGasInvSSAProbe dftGasInvOracleFrame dftGasOracleDefs
+  dftGasInvSSAProbe dftGasInvOracleFrame dftGasOracleDefs dftStaticAbortExtension
   dftRunRel dftScheduleOrder dftCorrectness dftAvailability dftBlockSim dftStructural
   venomExecSemantics venomInst venomState list rich_list pred_set sorting
   dftSsaPreserve dftPermSim venomWf dftWf
@@ -250,18 +250,6 @@ Proof
   first_x_assum drule >> simp[] >> metis_tac[inv_ev_step_initial_fmp]
 QED
 
-
-Theorem inv_ftrace_static_class_nonstatic:
-  !xs s t. inv_ev_ftrace orc p d ctx xs s t ==>
-  ~s.vs_call_ctx.cc_static \/
-  EVERY (\x. ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]) xs
-Proof
-  Induct >> simp[inv_ev_ftrace_def] >> rpt strip_tac >>
-  drule inv_ev_step_call_ctx >> strip_tac >>
-  first_x_assum drule >> gvs[] >>
-  metis_tac[SRULE [] inv_ev_step_static_class_nonstatic]
-QED
-
 Theorem inv_lookup_normalized_observation_core:
   dft_fn_rel fn fn' /\ MEM bb fn.fn_blocks /\
   lookup_block name fn.fn_blocks = SOME bb /\
@@ -306,8 +294,11 @@ Proof
     (drule_all inv_ftrace_remaining >> simp[FILTER_APPEND_DISTRIB]) >>
   `?u. inv_ev_trace orc p d 0 ctx (FILTER (\i. ~MEM i consumed) srcpre) sT u /\
        (!op. MEM op obs.inst_operands ==> eval_operand op u = eval_operand op sT)` by
-    (drule_at (Pat `dft_remaining_inv _ _ _ _`)
-       inv_remaining_trace_extension_core >> simp[] >> metis_tac[]) >>
+    (Cases_on `sT.vs_call_ctx.cc_static`
+     >- (drule_at (Pat `dft_remaining_inv _ _ _ _`)
+           inv_remaining_trace_extension_no_static_writes >> simp[] >> metis_tac[]) >>
+     drule_at (Pat `dft_remaining_inv _ _ _ _`)
+       inv_remaining_trace_extension >> simp[] >> metis_tac[]) >>
   `inv_ev_ftrace orc p d ctx
      (consumed ++ FILTER (\i. ~MEM i consumed) srcpre) s0 u` by
     metis_tac[inv_ev_trace_ftrace, inv_ev_ftrace_append] >>
@@ -386,7 +377,10 @@ Proof
     (qspecl_then [`srcpre`, `pseudos`, `s0`, `sS`] mp_tac
        (Q.INST [`b` |-> `obs::srcpost`] inv_ev_ftrace_slice) >>
      simp[APPEND_ASSOC]) >>
-  drule inv_ftrace_static_class_nonstatic >> strip_tac >>
+  `~s0.vs_call_ctx.cc_static \/
+   EVERY (\x. ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]) srcpre` by
+    (qpat_assum `inv_ev_ftrace orc p d ctx srcpre s0 sS` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[inv_static_ftrace_no_writes]) >>
   `?other. inv_ev_prefix orc p d ctx bb (LENGTH srcpre) s0 other /\
     other.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
     (!op. MEM op obs.inst_operands ==> eval_operand op other = eval_operand op sT) /\
