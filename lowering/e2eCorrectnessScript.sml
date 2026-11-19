@@ -1118,7 +1118,6 @@ Theorem vyper_call_correct_at_marks:
   !fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
    am tx txp ret es vs0 fmp vs marks.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am txp /\
@@ -1709,7 +1708,6 @@ Theorem call_pipeline_gas_link_from_static_focus[local]:
   !fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
    am tx txp ret es vs0 fmp r es'.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am txp /\
@@ -1886,7 +1884,6 @@ Theorem call_pipeline_gas_link:
   !fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
    am tx txp ret es vs0 fmp r es'.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am txp /\
@@ -1959,7 +1956,6 @@ Theorem vyper_call_correct_from_gas_link:
   !fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
    am tx txp ret es vs0 fmp r es'.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am txp /\
@@ -2119,13 +2115,10 @@ Proof
   impl_tac >- (gvs[] >> metis_tac[]) >> simp[]
 QED
 
-(* The final assembly optimizer's case: the program, compiled with Python's
-   O1 final assembly optimizer, under the same hypotheses plus the temporary
-   exclusion of programs that read their own code. *)
+(* The case using Python's final assembly optimizer. *)
 Theorem vyper_call_correct_asm_opt:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
-    ~program_reads_self_code tops /\
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
@@ -2221,12 +2214,10 @@ Proof
 QED
 
 (* TOP-LEVEL: one theorem over the accepted finalizers (Python's -O none and
-   O1 final assembly).  The optimizer's case excludes, for now, programs that
-   read their own code. *)
+   O1 final assembly). *)
 Theorem vyper_call_correct_dispatched:
   !fin policy tops deploy_bc runtime_bc am tx ret es.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -2589,12 +2580,10 @@ Proof
     frameGasTheory.frame_inst_raises_frame_raises)]
 QED
 
-(* The same under the final assembly optimizer, which excludes, for now,
-   programs that read their own code. *)
+(* The same under the final assembly optimizer. *)
 Theorem vyper_call_reverts_asm_opt:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
-    ~program_reads_self_code tops /\
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
@@ -2746,7 +2735,6 @@ QED
 Theorem vyper_call_reverts:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -2782,15 +2770,13 @@ End
 
 (* Guarded compiler correctness for a single external call, for every
    calldata and both accepted finalizers (Python's -O none and O1 final
-   assembly; the optimizer's case excludes, for now, programs that read
-   their own code): the compiled contract does what the source does with
+   assembly): the compiled contract does what the source does with
    the call the calldata dispatches to (tx supplies only the environment:
    sender, target, value, block), and reverts with empty returndata when it
    dispatches to nothing. *)
 Theorem vyper_call_correct_guarded:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -2917,7 +2903,6 @@ QED
 Theorem vyper_call_correct:
   !fin policy tops deploy_bc runtime_bc am tx es H.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\

@@ -140,7 +140,6 @@ Theorem deploy_raw_fmp_focus_mask_entry:
    vs_out fmp shadow_ctx func.
     fin IN accepted_finalizers /\
     fin rpolicy prog = SOME prog' /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\

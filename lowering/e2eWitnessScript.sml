@@ -22,7 +22,6 @@ Definition vyper_deploy_and_call_premises_def:
   vyper_deploy_and_call_premises fin policy tops deploy_bc runtime_bc
       am_dep tx_dep es_dep am_call tx_call es_call <=>
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     supported_program_deploy tops /\

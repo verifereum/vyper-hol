@@ -92,13 +92,10 @@ Proof
   fs[code_layout_valid_def] >> decide_tac
 QED
 
-(* At the finalized call's entry, the raw unit sees the unoptimized code.
-   The storage and source exemption guards transfer because the program
-   cannot observe its own code. *)
+(* Gas sufficiency for calls compiled with the final assembly optimizer. *)
 Theorem vyper_call_gas_sufficient_asm_opt:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
-    ~program_reads_self_code tops /\
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es
@@ -335,7 +332,6 @@ QED
 Theorem e2e_deploy_gas_sufficient_asm_opt:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
-    ~program_reads_self_code tops /\
     supported_program tops /\ supported_program_deploy tops /\
     deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
@@ -621,7 +617,6 @@ QED
 Theorem vyper_call_gas_sufficient:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -682,7 +677,6 @@ QED
 Theorem e2e_deploy_gas_sufficient:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ supported_program_deploy tops /\
     deploy_typing_ok tops am tx /\
