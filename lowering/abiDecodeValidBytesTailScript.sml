@@ -302,6 +302,7 @@ Proof
        (mp_then (Pat `emit_void MCOPY _ _ = _`) mp_tac emit_mcopy_mem_ok) >> simp[]) >>
   `ptr_covers G tn dst s (w2n (n2w n:bytes32)) /\
    ptr_covers G tn ar s (w2n (n2w n:bytes32))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `emit_void MCOPY _ sa = _` (mp_then Any mp_tac emit_mcopy_normalized_ptr) >>
   disch_then drule_all >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
