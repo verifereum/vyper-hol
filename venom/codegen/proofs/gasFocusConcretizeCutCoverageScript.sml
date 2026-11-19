@@ -168,7 +168,7 @@ QED
 
 (* At a fixed untainted byte, use the actual last writer, not a maximum
    output range; the retained target suffix cannot write it. *)
-Theorem ptr_paired_fixed_read_recovery_upto[local]:
+Theorem ptr_paired_fixed_read_recovery_upto:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -1112,7 +1112,7 @@ QED
 
 Finalise focus_cut_owned_writer_path
 
-Theorem ptr_paired_owned_read_recovery_upto[local]:
+Theorem ptr_paired_owned_read_recovery_upto:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -1190,7 +1190,7 @@ QED
 (* The new committed sample is the old source endpoint; earlier samples
    keep both their source index and their forwarding exclusion. *)
 (* Classify one positive range using the selector that produced it. *)
-Theorem ptr_cut_range_geometry[local]:
+Theorem ptr_cut_range_geometry:
   access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
   ((ranges = source_memory_read_ranges inst s /\ mops = mem_read_ops inst) \/
    (ranges = source_memory_write_ranges inst s /\ mops = mem_write_ops inst)) /\
@@ -1507,7 +1507,7 @@ QED
 
 Finalise focus_cut_paired_access_ranges
 
-Theorem concretize_cut_samples_append[local]:
+Theorem concretize_cut_samples_append:
   ptr_paired_prefix R lp positions lo vs C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   EVERY (\i. ~in_revert_forward (EL i h).po_fn (EL i h).po_state) done /\
@@ -1534,7 +1534,7 @@ QED
 
 (* A paired layout belongs to a fixed root and target context. Keep those
    parameters fixed when instantiating the general chronology induction. *)
-Theorem concretize_cut_history_ind[local]:
+Theorem concretize_cut_history_ind:
   (!name fn lbl inst s1.
       Ct.ctx_entry = SOME name /\ lookup_function name Ct.ctx_functions = SOME fn /\
       fn_entry_label fn = SOME lbl /\

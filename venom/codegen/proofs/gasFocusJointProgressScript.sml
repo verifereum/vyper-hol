@@ -1,5 +1,6 @@
 Theory gasFocusJointProgress
 Ancestors passSharedFrame[qualified,ignore_grammar] blast[qualified,ignore_grammar] sat[qualified,ignore_grammar] normalizer[qualified,ignore_grammar] bool[qualified,ignore_grammar] Canon_Port_Context[qualified,ignore_grammar]
+  gasFocusSourceProvider[qualified,ignore_grammar]
   dftFinitePacket dftGasFromListTraceDefs dftPacketNativeSlice
   dftFinitePacketReachability dftGasInvForwardActive dftRunRel dftDefs stepWriteFootprintBase
   dftPacketClosedRowNative dftPacketNativeContinuation
@@ -986,22 +987,6 @@ Proof
        venomEffectsTheory.opcode_fail_class_def,is_pseudo_def]
 QED
 
-Theorem focus_guard_from_block[local]:
-  from_block [x] i /\
-  (inv_memory_observation i.inst_opcode \/ is_fallible i \/ i.inst_opcode = INVOKE) ==>
-  x = i
-Proof
-  rw[dftStructuralTheory.from_block_def] >>
-  Cases_on `x.inst_operands` >> gvs[dftDefsTheory.flip_operands_def] >>
-  Cases_on `t` >> gvs[dftDefsTheory.flip_operands_def] >>
-  Cases_on `t'` >> gvs[dftDefsTheory.flip_operands_def] >>
-  Cases_on `x.inst_opcode` >>
-  gvs[dftGasInvCrossingProbeTheory.inv_memory_observation_def,dftDefsTheory.is_fallible_def,
-      venomEffectsTheory.opcode_fail_class_def,dftDefsTheory.is_flippable_def,
-      venomEffectsTheory.is_commutative_def,passSharedDefsTheory.is_comparator_def,
-      passSharedDefsTheory.flip_comparison_opcode_def]
-QED
-
 (* A retained target cursor yields the same guarded instruction in the source
    schedule.  At a strict-prefix cursor the earlier calls are still recorded. *)
 Theorem focus_guarded_schedule_prefix[local]:
@@ -1026,7 +1011,7 @@ Proof
     (qpat_assum `LIST_REL _ sched ys` (mp_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
      disch_then (fn th => mp_tac (CONJUNCT1 th) >> qspec_then `k` mp_tac (CONJUNCT2 th)) >>
      simp[]) >>
-  `EL q xs = i` by (irule focus_guard_from_block >> simp[]) >>
+  `EL q xs = i` by (irule gasFocusSourceProviderTheory.focus_history_guard_source_inst >> simp[]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
    (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE k sched))` by
     (Cases_on `inv_memory_observation i.inst_opcode`
@@ -1146,7 +1131,7 @@ Proof
     (qpat_assum `LIST_REL _ sched ys`
        (mp_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
      disch_then (qspec_then `k` mp_tac o CONJUNCT2) >>
-     simp[] >> metis_tac[focus_guard_from_block]) >>
+     simp[] >> metis_tac[gasFocusSourceProviderTheory.focus_history_guard_source_inst]) >>
   `MEM (EL k sched) (TAKE nseen sched)` by
     (simp[MEM_EL] >> qexists_tac `k` >> simp[LENGTH_TAKE_EQ, EL_TAKE]) >>
   `?h b0 done child_entry ir child_out caller_post.

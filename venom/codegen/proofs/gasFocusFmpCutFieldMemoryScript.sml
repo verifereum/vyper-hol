@@ -21,7 +21,7 @@ Ancestors
   gasFocusFmpCutSourceReturn gasFocusFmpCutInvokePop gasFocusFmpCutPointMemory
   concretizePtrCoverageStaticMemReachability
 
-Theorem cut_source_entry[local]:
+Theorem cut_source_entry:
   wf_function fn /\ first_block_no_phi fn /\ fn_entry_label fn = SOME lbl ==>
   ?inst. active_inst fn inst
     (root with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
@@ -187,7 +187,7 @@ Proof
     drule_all >> simp[]
 QED
 
-Theorem cut_source_call_arity[local]:
+Theorem cut_source_call_arity:
   ctx_pass_stage rp (CFP_Simple VP_FmpLowering) (o1_walk_view rp 3) C3 C4 /\
   o1_ctx_shape C3 /\ fmp_free_ctx C3 ==>
   !stk PG G tn caller ivk st nm args callee.
@@ -208,7 +208,7 @@ Proof
   drule_all fmp_stage_invoke_arity_static >> simp[]
 QED
 
-Theorem cut_aligned_layout[local]:
+Theorem cut_aligned_layout:
   wf_function fn /\ ALL_DISTINCT (fn_labels fn') /\
   active_inst fn inst s /\ active_inst fn' ti t /\
   fmp_stage_rel D C4 sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
