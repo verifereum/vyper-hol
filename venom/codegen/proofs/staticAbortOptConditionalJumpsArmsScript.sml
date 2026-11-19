@@ -324,8 +324,9 @@ Resume conditional_jump_whole_visit_rows[weak_step]:
   qpat_x_assum `u = v` SUBST_ALL_TAC >>
   qpat_assum `Abbrev (Shape = _)` (fn def =>
     pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >> BETA_TAC >>
-  match_mp_tac (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM, BETA_CONV]))
-    (Q.INST [`x` |-> `v`, `tag` |-> `weak`] pending_role_step)) >>
+  match_mp_tac (Q.INST [`x` |-> `v`, `tag` |-> `weak`]
+    (CONV_RULE (REDEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2 ORELSEC BETA_CONV))
+      pending_role_step)) >>
   conj_tac >- (qpat_assum `!u. u IN V ==> pc u < LENGTH p` irule >>
                first_assum ACCEPT_TAC) >>
   conj_tac

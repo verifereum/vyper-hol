@@ -7,13 +7,12 @@ Ancestors
 (* Re-execute the actual producer, rather than relabelling a concrete word.
    The inverse lookup is partial: the stub's reference can name data. *)
 Theorem merge_rename_reference_step:
-  !p pre x y next third tail i l.
-    let L = \r. SND (compute_label_offsets r) in
-    let B = build_offset_to_pc in
-    let I = EL i p in
-    let q = MAP (rename_push_label x y) p in
-    let a = if I = AsmPushLabel x then y else l in
-    let delta = case I of AsmPushOfst _ d => d | _ => 0 in
+  !p pre x y next third tail i l L. L = (\r. SND (compute_label_offsets r)) ==>
+    !B. B = build_offset_to_pc ==>
+    !I. I = EL i p ==>
+    !q. q = MAP (rename_push_label x y) p ==>
+    !a. a = (if I = AsmPushLabel x then y else l) ==>
+    !delta. delta = (case I of AsmPushOfst _ d => d | _ => 0) ==>
     p = pre ++ [AsmLabel x; next; third] ++ tail /\
     ((next = AsmLabel y /\ y <> x) \/
      (next = AsmPushLabel y /\ third = AsmOp "JUMP")) /\
@@ -30,7 +29,7 @@ Theorem merge_rename_reference_step:
           AsmOK (s with <|as_pc := i+1;
                           as_stack := (n2w (off+delta):bytes32)::s.as_stack|>))
 Proof
-  rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
+  ntac 9 gen_tac >> ntac 6 (CONV_TAC Unwind.UNWIND_FORALL_CONV) >> BETA_TAC >>
   DISCH_THEN (CONJUNCTS_THEN2 (mk_asm "site") (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
   qabbrev_tac `q = MAP (rename_push_label x y) p` >>
   qabbrev_tac `a = if EL i p = AsmPushLabel x then y else l` >>
