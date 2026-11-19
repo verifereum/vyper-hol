@@ -10,7 +10,7 @@ Theory compilerNativeEmit
 Ancestors compileVyper evalCompiler evalCompilerSubsetAbiBuiltins evalCompilerSubsetAbiEvents
   evalCompilerSubsetAbiExternalCalls evalCompilerSubsetAbiExternal evalCompilerSubsetAbiInternalCalls
   evalCompilerSubsetBuiltins evalCompilerSubsetControlDeploy evalCompilerSubsetScalars evalCompilerSubsetState
-  integer_word alist jsonToVyperCV vyperTestRunner supportedProgram asmOptimizer
+  integer_word alist jsonToVyperCV vyperTestRunner supportedProgram probeGate asmOptimizer
 Libs EmitML finite_mapLib wordsLib cv_typeLib memoryStoreWitnessLib
 
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset;
@@ -382,7 +382,8 @@ val native_names = [
   ("fcp", ["dimindex"]),
   ("byte", ["byte_index", "get_byte", "set_byte", "word_of_bytes", "word_of_bytes_be",
             "word_to_bytes", "word_to_bytes_aux"]),
-  ("bitstring", ["v2w", "w2v"])];
+  ("bitstring", ["v2w", "w2v"]),
+  ("probeLift", ["probe_lift"])];
 val result_width_names =
   [("words", "concat_word_list"), ("integer_word", "i2w"), ("byte", "word_of_bytes_be"),
    ("bitstring", "v2w")];
@@ -495,6 +496,16 @@ val code_rewrites = [
   prove (``(?dn. supported_target_info tops bindings target =
                    SOME (ValPT (ArrayT ty (Dynamic dn)))) <=>
            (case supported_target_info tops bindings target of
+              SOME (ValPT (ArrayT ty' (Dynamic dn))) => ty' = ty
+            | _ => F)``,
+    BasicProvers.every_case_tac >> gvs[]),
+  (* gate-off probe: supported_binop's fixed-bytes bitwise operand test *)
+  prove (``(?m. m <= 32 /\ ty = BaseT (BytesT (Fixed m)) /\ rhs_ty = ty) <=>
+           (case ty of BaseT (BytesT (Fixed m)) => m <= 32 /\ rhs_ty = ty | _ => F)``,
+    BasicProvers.every_case_tac >> gvs[]),
+  prove (``(?dn. probe_supported_target_info tops bindings target =
+                   SOME (ValPT (ArrayT ty (Dynamic dn)))) <=>
+           (case probe_supported_target_info tops bindings target of
               SOME (ValPT (ArrayT ty' (Dynamic dn))) => ty' = ty
             | _ => F)``,
     BasicProvers.every_case_tac >> gvs[]),
@@ -684,6 +695,7 @@ val entries = [
   ("compile", ``compile_vyper (K SOME) (o1_policy all_capabilities)``),
   ("annotate_sources_slots", annotate_slots_tm),
   ("supported", ``\tops. supported_program tops /\ supported_program_deploy tops``),
+  ("probe_supported", ``\tops. probe_supported_program tops /\ probe_supported_program_deploy tops``),
   ("cv_num", ``\n. cv$Num n``),
   ("cv_pair", ``\a b. cv$Pair a b``)];
 val root_terms = map #2 entries @ map #2 all_fixtures;

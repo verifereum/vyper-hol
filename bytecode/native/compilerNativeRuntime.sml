@@ -9,6 +9,9 @@
 structure compilerNativeRuntime = struct
   exception Stuck of string
   fun stuck s = raise Stuck s
+  (* gate-off parity probe: the gate rows lifted for this evaluation *)
+  val lifted : IntInf.int list ref = ref []
+  fun hn_probe_lift (n : IntInf.int) = List.exists (fn m => m = n) (!lifted)
 
   type hn_num = IntInf.int
   type hn_int = IntInf.int

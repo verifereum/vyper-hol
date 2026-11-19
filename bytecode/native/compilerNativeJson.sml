@@ -116,12 +116,40 @@ structure compilerNativeJson = struct
       in TextIO.output (os, "deploy=" ^ deploy ^ "\nruntime=" ^ runtime ^ "\n");
          TextIO.closeOut os end
 
+  (* Gate-off parity probe: the gate's exclusion rows (probe_lift numbers).
+     With PROBE_ATTRIB set, each fixture also prints the copy's verdict with
+     no row lifted (none=, a check of the copy) and which rows must be lifted
+     to admit it. *)
+  val probe_rows : IntInf.int list =
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+     21, 22, 23, 24, 25, 26, 27, 31, 32, 33, 34, 35, 36, 37, 38]
+  fun gate_with rows tops =
+    (compilerNativeRuntime.lifted := rows;
+     (compilerNativeML.probe_supported tops before compilerNativeRuntime.lifted := [])
+     handle e => (compilerNativeRuntime.lifted := []; raise e))
+  fun ints rs = String.concatWith "," (map IntInf.toString rs)
+  fun attribution tops = let
+    fun without r = List.filter (fn x => x <> r) probe_rows
+    val all = gate_with probe_rows tops
+    val need = List.filter (fn r => not (gate_with (without r) tops)) probe_rows
+    val none_ok = gate_with [] tops
+    val need_ok = gate_with need tops
+    val plus1 = if need_ok orelse not all then []
+                else List.filter (fn r => gate_with (r :: need) tops) probe_rows
+  in "none=" ^ Bool.toString none_ok ^ " all=" ^ Bool.toString all ^ " need=" ^ ints need ^ " need_ok=" ^
+     Bool.toString need_ok ^ " plus1=" ^ ints plus1
+  end handle compilerNativeRuntime.Stuck s => "gate_stuck: " ^ s
+
   fun run_one dir name = let
     val t0 = Time.now ()
     val supported = ref ""
+    val attrib = ref ""
     val outcome =
       (case (fn tops => (supported := (if compilerNativeML.supported tops
                                        then " sp=T" else " sp=F");
+                         (case OS.Process.getEnv "PROBE_ATTRIB" of
+                            SOME _ => attrib := attribution tops
+                          | NONE => ());
                          compilerNativeML.compile tops))
               (program (OS.Path.concat (dir, name ^ ".json"))) of
          NONE => ("FAIL", "compiler returned NONE")
@@ -142,6 +170,7 @@ structure compilerNativeJson = struct
     print (#1 outcome ^ " " ^ name ^ " " ^ Real.fmt (StringCvt.FIX (SOME 3)) dt ^ "s" ^
            !supported ^
            (if #2 outcome = "" then "" else ": " ^ #2 outcome) ^ "\n");
+    if !attrib = "" then () else print ("ATTR " ^ name ^ " " ^ !attrib ^ "\n");
     #1 outcome
   end
 
