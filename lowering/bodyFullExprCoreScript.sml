@@ -506,6 +506,7 @@ Proof
   `!z. h1 = Var z ==> not_fresh_at sh2 z` by
     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
   `allocas_from lo t'` by fs[ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by simp[] >>
   drule_all bop_bytestring_digest_operational >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] assume_tac) >>
   `(?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) =

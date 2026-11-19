@@ -401,6 +401,7 @@ Resume body_append_local_word_full[append_suffix]:
     (qpat_assum `ptr_covers _ _ _ _ _` mp_tac >> simp[ADD_COMM]) >>
   `op_taint tn1 shadow_op = {}` by fs[ptr_val_ok_def] >>
   `allocas_from lo t` by fs[ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all (Q.INST [`D` |-> `DF (storage_trace_horizon mid.storage_trace)`,
                      `fn` |-> `func`, `PG` |-> `PG`] append_memory_word_ptr) >>
   disch_then (qspecl_then [`mid`, `func`, `PG`, `DF`] strip_assume_tac) >>
