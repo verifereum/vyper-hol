@@ -17,7 +17,7 @@ QED
 Theorem prefix_entry_runtime_label:
   !policy tops bc runtime rp unit dout prog plan0 vs es actual.
   deploy_phases policy tops (bc,runtime) (rp,unit,dout,prog,plan0) /\
-  gas_variant vs (deploy_entry_state prog plan0 tops es) /\
+  gas_variant vs (deploy_entry_state prog plan0 tops es with vs_outcomes := vs.vs_outcomes) /\
   actual.vs_labels = vs.vs_labels ==>
   IS_SOME (FLOOKUP actual.vs_labels "runtime_begin")
 Proof
@@ -37,7 +37,7 @@ Theorem prefix_entry_immutable_base:
   !policy tops bc runtime rp unit dout prog plan0 vs es actual stmts ce nr key ut
     imm exit sa sb sj se sp sf func.
   deploy_phases policy tops (bc,runtime) (rp,unit,dout,prog,plan0) /\
-  gas_variant vs (deploy_entry_state prog plan0 tops es) /\
+  gas_variant vs (deploy_entry_state prog plan0 tops es with vs_outcomes := vs.vs_outcomes) /\
   actual.vs_labels = vs.vs_labels /\ eval_operand imm actual = SOME 0w /\
   deploy_ctor_code tops rp runtime unit
     (stmts,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) ==>

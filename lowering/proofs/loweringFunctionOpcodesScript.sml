@@ -160,12 +160,45 @@ Proof
   qpat_x_assum `!ce off sz st. _` irule >> simp[]
 QED
 
-Theorem outcomes_free_constructor_prefix:
+Theorem register_constructor_args_defaults[local]:
+  !args cenv off sz st.
+    (FST (compile_register_constructor_args cenv args off sz st)).ce_func_defaults =
+    cenv.ce_func_defaults
+Proof
+  Induct >- simp[compile_register_constructor_args_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >>
+  simp[Once compile_register_constructor_args_def] >>
+  qmatch_goalsub_rename_tac `var_location_memory_size loc` >>
+  Cases_on `var_location_memory_size loc` >> simp[] >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem every_state_insts_constructor_args_bind[local]:
+  (!st. EVERY P (state_insts st) ==>
+    EVERY P (state_insts
+      (SND (compile_register_constructor_args ce args off sz st)))) /\
+  (!env. env.ce_func_defaults = ce.ce_func_defaults ==>
+    !st. EVERY P (state_insts st) ==> EVERY P (state_insts (SND (f env st)))) ==>
+  !st. EVERY P (state_insts st) ==>
+    EVERY P (state_insts
+      (SND (comp_bind (compile_register_constructor_args ce args off sz) f st)))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`args`, `ce`, `off`, `sz`, `st`] mp_tac
+    register_constructor_args_defaults >>
+  Cases_on `compile_register_constructor_args ce args off sz st` >>
+  gvs[comp_bind_def] >> metis_tac[pairTheory.SND]
+QED
+
+Theorem constructor_prefix_opcode_every:
   (!opc. MEM opc [CALLVALUE; ASSIGN; TLOAD; SLOAD; TSTORE; SSTORE; CODECOPY;
      RETURN; DLOAD; ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
      SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; DLOADBYTES; ALLOCA; JMP; JNZ]
      ==> P opc) /\
-  (!ce st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!ce st. ce.ce_func_defaults = cenv.ce_func_defaults /\
+     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
      EVERY (\i. P i.inst_opcode)
        (state_insts (SND (compile_stmts ce NoLoop NoneT fbody st)))) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -207,10 +240,46 @@ Proof
      fs[DISJ_IMP_THM, FORALL_AND_THM]) >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   rpt (FIRST [IF_CASES_TAC,
+    (ho_match_mp_tac every_state_insts_constructor_args_bind >> conj_tac
+      >- simp[] >> gen_tac >> disch_tac),
     ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+    gen_tac, CHANGED_TAC (fs[opcode_every_emit_op, opcode_every_emit_void,
       opcode_every_emit_inst, every_state_insts_return, every_state_insts_get,
       every_state_insts_new_block, every_state_insts_fresh_label,
-      outcomes_free_fixed_region, outcomes_free_constructor_epilogue])])
+      outcomes_free_fixed_region, outcomes_free_constructor_epilogue])]) >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem outcomes_free_constructor_prefix:
+  (!opc. MEM opc [CALLVALUE; ASSIGN; TLOAD; SLOAD; TSTORE; SSTORE; CODECOPY;
+     RETURN; DLOAD; ADD; MUL; LT; GT; EQ; AND; NOT; ISZERO; SHR; SHL;
+     SIGNEXTEND; ASSERT; MLOAD; MSTORE; MCOPY; DLOADBYTES; ALLOCA; JMP; JNZ]
+     ==> P opc) /\
+  (!ce st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_stmts ce NoLoop NoneT fbody st)))) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND
+      (do (if ~pay then
+             do cv <- emit_op CALLVALUE [];
+                no_val <- emit_op ISZERO [cv]; emit_void ASSERT [no_val] od
+           else return ());
+          imm <- (if cap > 0 then
+                    do p <- compile_fixed_region_with_id cap;
+                       return (SND p).buf_operand od
+                  else return (Lit 0w));
+          ce <- compile_register_constructor_args
+            (cenv with ce_imm_alloca := (if cap > 0 then SOME imm else NONE)) args 0 sz;
+          (if nr then compile_nonreentrant_lock key trans view else return ());
+          lbl <- fresh_label "ctor_exit";
+          compile_stmts (ce with ce_ctor_exit_label := SOME lbl) NoLoop NoneT fbody;
+          cs <- comp_get;
+          (if block_is_terminated cs then return () else emit_inst JMP [Label lbl] []);
+          new_block lbl;
+          (if nr then compile_nonreentrant_unlock key trans view else return ());
+          compile_constructor_epilogue runtime_size cap imm od st)))
+Proof
+  rpt strip_tac >> irule constructor_prefix_opcode_every >> simp[]
 QED

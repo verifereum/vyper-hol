@@ -19,7 +19,8 @@ Theorem deploy_ctor_body_frag_full:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    call_outcomes_ok am tx vs.vs_outcomes /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -38,8 +39,6 @@ Theorem deploy_ctor_body_frag_full:
       (es0 with outcomes := SOME vs.vs_outcomes)
 Proof
   rpt gen_tac >> strip_tac >>
-  `call_outcomes_ok am tx (MAP SND (call_trace es))` by
-    metis_tac[deploy_state_rel_call_outcomes_ok] >>
   drule_all deploy_ctor_body_frame >> strip_tac >>
   `~nr` by metis_tac[deploy_ctor_not_nonreentrant] >>
   `cenv.ce_ctor_exit_label = SOME exit_lbl /\
