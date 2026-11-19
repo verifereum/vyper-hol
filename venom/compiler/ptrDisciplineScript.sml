@@ -443,19 +443,18 @@ Definition imm_taint_def:
     else tn.t_imm
 End
 
-(* A CALL that adopts its outcome's storage (a non-static call that
-   recorded a request other than a computed precompile and took a
-   successful outcome from the shared oracle list) replaces storage and
-   transient storage in both runs alike, clearing their taint.  Whether it
-   adopts depends only on the shared outcome, not on either run's own
-   storage.  Any other call keeps them: a static call and a failed one
-   change nothing, and a computed precompile keeps the accounts it had.  A
-   DELEGATECALL consumes the shared oracle like a CALL but keeps its taint:
-   its request snapshot is bounded by taint_within, like any call's.
-   taint_ok requires no storage taint at CREATE. *)
+(* A CALL, DELEGATECALL, CREATE or CREATE2 that adopts its outcome's
+   storage (a non-static step that recorded a request other than a computed
+   precompile and took an outcome from the shared oracle list, successful
+   for a call, any for a create) replaces storage and transient storage in
+   both runs alike, clearing their taint.  Whether it adopts depends only on
+   the shared outcome, not on either run's own storage.  Any other step
+   keeps them: a static call and a failed call change nothing, and a
+   computed precompile keeps the accounts it had.  A call's request snapshot
+   is bounded by taint_within. *)
 Definition adopt_reset_def:
   adopt_reset inst adopted (X:'a set) =
-    if inst.inst_opcode = CALL /\ adopted
+    if MEM inst.inst_opcode [CALL; DELEGATECALL; CREATE; CREATE2] /\ adopted
     then {} else X
 End
 
@@ -465,7 +464,8 @@ Definition step_taint_def:
                    s'.vs_requests <> s.vs_requests /\
                    ~computed_precompile (LAST s'.vs_requests) /\
                    s'.vs_outcomes <> s.vs_outcomes /\
-                   (HD s.vs_outcomes).co_success) in
+                   ((HD s.vs_outcomes).co_success \/
+                    MEM inst.inst_opcode [CREATE; CREATE2])) in
     <| t_mem := mem_taint tn inst s s';
        t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst s);
        t_stor := adopt_reset inst adopted
