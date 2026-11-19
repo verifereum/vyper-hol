@@ -154,9 +154,7 @@ Proof
      >- (asm "source_row" mp_tac >> simp[NoAsms]) >>
      gen_tac >> disch_tac >>
      asm "edges" (drule_then (mp_tac o CONJUNCT2 o CONJUNCT2)) >>
-     simp[NoAsms])
-  (* The earlier generic discharger was rpt strip_tac, then unselected
-     forward chaining; replacing it with gvs[] risked a step timeout. *) >>
+     simp[NoAsms]) >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "successor_pc") (mk_asm "relocate")) >>
   conj_asm1_tac >-
     (qx_gen_tac `v` >> disch_tac >>

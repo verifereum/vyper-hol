@@ -1,6 +1,6 @@
 Theory staticAbortOptStackShuffleCut
 Ancestors combin[qualified,ignore_grammar]
-  staticAbortOptStackStopped staticAbortOptStackBoundaryProbe
+  staticAbortOptStackStopped
   stackOpSim asmOptPeephole asmOptimizer asmSplice asmSymSem asmWf asmSem
   codegenSymRel[qualified,ignore_grammar] staticAbortStraight planExec alist
   staticAbortProtectedActualPrefix asmDataEnv asmSymBridge

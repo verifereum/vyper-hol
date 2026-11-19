@@ -3,48 +3,6 @@ Theory staticAbortOptMergeIszeroWalk
 Ancestors
   asmOptimizer asmOptMergeIszero list
 
-(* E0062: retained unsuccessful tactic text (not executed).
-Proof
-  strip_tac >>
-  `!sfx pre. P (pre ++ sfx) ==>
-      P (pre ++ FST (merge_iszero_pairs sfx))` by
-    (ho_match_mp_tac merge_iszero_pairs_ind >>
-     reverse (rpt conj_tac)
-     >- simp[merge_iszero_pairs_def]
-     >- simp[merge_iszero_pairs_def]
-     >- simp[merge_iszero_pairs_def] >>
-     rpt gen_tac >> strip_tac >> simp[merge_iszero_pairs_fst] >>
-     IF_CASES_TAC
-     >- (gvs[] >> rpt strip_tac >> first_x_assum irule >>
-         qpat_x_assum `!pre x tail. asm_returns_zero_or_one x /\ _ ==> _`
-           (qspecl_then [`pre`, `x`, `rest`] mp_tac) >> simp[APPEND]) >>
-     gvs[] >> rpt strip_tac >>
-     first_x_assum (qspec_then `pre ++ [x]` mp_tac) >>
-     simp[GSYM APPEND_ASSOC, APPEND]) >>
-  `!sfx pre. P (pre ++ sfx) ==>
-      P (pre ++ FST (merge_iszero_jumpi sfx))` by
-    (ho_match_mp_tac merge_iszero_jumpi_ind >>
-     reverse (rpt conj_tac)
-     >- simp[merge_iszero_jumpi_def]
-     >- simp[merge_iszero_jumpi_def]
-     >- simp[merge_iszero_jumpi_def]
-     >- simp[merge_iszero_jumpi_def] >>
-     rpt gen_tac >> strip_tac >> simp[merge_iszero_jumpi_fst] >>
-     IF_CASES_TAC
-     >- (Cases_on `c` >> gvs[asm_is_push_label_def] >>
-         rename1 `AsmPushLabel l` >>
-         rpt strip_tac >> first_x_assum irule >>
-         qpat_x_assum `!pre l tail.
-           P (pre ++ [AsmOp "ISZERO"; _; _; _] ++ tail) ==> _`
-           (qspecl_then [`pre`, `l`, `rest`] mp_tac) >> simp[APPEND]) >>
-     gvs[] >> rpt strip_tac >>
-     first_x_assum (qspec_then `pre ++ [a]` mp_tac) >>
-     simp[GSYM APPEND_ASSOC, APPEND]) >>
-  rpt strip_tac >> simp[merge_iszero_fst] >>
-  first_x_assum (qspecl_then [`FST (merge_iszero_pairs p)`, `[]`] mp_tac) >>
-  first_x_assum (qspecl_then [`p`, `[]`] mp_tac) >> simp[]
-QED
-*)
 
 Theorem merge_iszero_walks_preserve_contextual:
   (!pre x tail.

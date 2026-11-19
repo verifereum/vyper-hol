@@ -17,8 +17,6 @@ Theorem merge_jumpdests_walk_preserves_contextual:
     !p. P p ==> P (FST (merge_jumpdests p))
 Proof
   gen_tac >> strip_tac >>
-  (* E0064: recInduct merge_jumpdests_walk_ind followed by broad gvs
-     on its ten threaded-pattern IHs timed out. Do not retry that route. *)
   `!n done rest changed. LENGTH rest = n /\ P (REVERSE done ++ rest) ==>
      P (FST (merge_jumpdests_walk done rest changed))` suffices_by
     (simp[merge_jumpdests_def] >> metis_tac[REVERSE_DEF, APPEND]) >>

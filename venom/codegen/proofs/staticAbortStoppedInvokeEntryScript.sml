@@ -1,4 +1,4 @@
-Theory staticAbortStoppedInvokeProbe
+Theory staticAbortStoppedInvokeEntry
 Ancestors
   fnStaticAbortBodyFacts fnBlockBodyClasses fnBlockBodySteps symFrameInvoke
   codegenSymRel fnStaticAbortBoundary unitShapeDefs genBlockSim

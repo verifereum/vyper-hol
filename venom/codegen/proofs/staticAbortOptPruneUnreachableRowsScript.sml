@@ -227,80 +227,6 @@ Resume prune_one_covered_rows[geometry]:
     simp[] >> goal_assum drule)) >> simp[]
 QED
 
-(* Retired direct packing proof (E0511), kept as diagnostic history.
-Resume prune_one_covered_rows[pack]:
-  qpat_x_assum `!a b. edge a b <=> fall a b \/ _` kall_tac >>
-  `!v k. tagQ v k = NONE <=> tag v k = NONE` by
-    simp[Abbr `tagQ`, optionTheory.OPTION_MAP_EQ_NONE] >>
-  `!v k l j. tagQ v k = SOME(l,j) <=>
-    ?i. tag v k = SOME(l,i) /\ j = (if i=d then pick l else r i)` by
-    simp[Abbr `tagQ`, optionTheory.OPTION_MAP_EQ_SOME, pairTheory.EXISTS_PROD] >>
-  `!a b. edge a b /\ EL (pc a) p <> AsmOp "JUMP" /\ pc b=pc a+1 ==>
-    r (pc b)=r (pc a)+1` by
-    (rpt strip_tac >>
-     qpat_assum `!a b. fall a b ==> _` irule >>
-     simp[Abbr `fall`] >>
-     qpat_assum `!a b. edge a b /\ _ ==> ~asm_terminal_op _`
-       (qspecl_then [`a`,`b`] mp_tac) >> simp[]) >>
-  `!a b. edge a b /\ (EL (pc a) p=AsmOp "JUMP" \/ EL (pc a) p=AsmOp "JUMPI") /\
-           Target p pc tag a b ==> Target q (r o pc) tagQ a b` by
-    (rpt gen_tac >> simp[Abbr `Target`] >> strip_tac >>
-     qexistsl [`l`,`if i=d then pick l else r i`] >> simp[] >>
-     qpat_assum `!a l b. taken a l b ==> Hit q l _` irule >>
-     simp[Abbr `taken`] >> metis_tac[]) >>
-  `!a b. edge a b ==> Legal q (r o pc) tagQ a b` by
-    (rpt strip_tac >>
-     qpat_assum `!a b. edge a b ==> a IN V /\ _` (drule_then strip_assume_tac) >>
-     qpat_assum `!v. v IN V ==> pc v <> d /\ _`
-       (qspec_then `a` mp_tac) >> simp[] >> strip_tac >>
-     qpat_assum `!a b. edge a b /\ _ /\ Target p pc tag a b ==> _`
-       (qspecl_then [`a`,`b`] mp_tac) >>
-     qpat_assum `!a b. edge a b /\ _ /\ pc b = pc a+1 ==> _`
-       (qspecl_then [`a`,`b`] mp_tac) >>
-     qpat_assum `!a b. edge a b ==> Legal p pc tag a b`
-       (qspecl_then [`a`,`b`] mp_tac) >>
-     Cases_on `EL (pc a) p = AsmOp "JUMP"` >>
-     Cases_on `EL (pc a) p = AsmOp "JUMPI"` >>
-     simp[Abbr `Legal`, combinTheory.o_THM] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
-  `!l dest. Hit p l dest ==> Hit q l (r dest)` by
-    (rpt gen_tac >> simp[Abbr `Hit`] >> strip_tac >>
-     qspecl_then [`pre`,`t`,`x`,`tail`] mp_tac prune_one_canonical_layout >>
-     simp[Abbr `p`, Abbr `q`, Abbr `d`, Abbr `r`] >>
-     disch_then (drule_all_then strip_assume_tac o cj 1) >>
-     qexists `fresh` >> simp[]) >>
-  `!v k l j. v IN V /\ tagQ v k=SOME(l,j) ==>
-      k < height v /\ Z l j /\ ?dest. Hit q l dest` by
-    (rpt gen_tac >> simp[] >> strip_tac >>
-     qpat_assum `!v. v IN V ==> (need v ==> _) /\ _`
-       (drule_then (drule_then strip_assume_tac o cj 3)) >>
-     simp[] >> reverse conj_tac >-
-       (qexists `r dest` >> simp[]) >>
-     Cases_on `i=d` >- (
-       gvs[] >>
-       `MEM (Lab l 0) (sym_with_pc (r (pc e)) ss).sym_stack` by
-         (simp[] >>
-          qpat_assum `!v k l. _ /\ tag v k=SOME(l,d) ==> _`
-            (drule_all_then strip_assume_tac) >>
-          qpat_assum `!k l i. tag e k = SOME(l,i) ==> _`
-            (drule_then strip_assume_tac) >>
-          metis_tac[EL_MEM]) >>
-       `?j. Z l j` suffices_by
-         (disch_then (mp_tac o SELECT_RULE) >> simp[Abbr `pick`]) >>
-       drule_all stopped_lab_zero_producer >> strip_tac >>
-       qexists `u.sym_base.as_pc` >> simp[Abbr `Z`]) >>
-     `splice_pc (LENGTH (pre ++ [t])) 1 0 i = r i` by
-       (simp[splice_pc_def, Abbr `r`, Abbr `d`] >> decide_tac) >>
-     `r i < LENGTH q /\ EL (r i) q = EL i p` by
-       (mp_tac (Q.INST [`pfx` |-> `pre ++ [t:asm_inst]`, `pat` |-> `[x]`,
-                        `repl` |-> `[]`, `sfx` |-> `tail`, `i` |-> `i`]
-                   (INST_TYPE [alpha |-> ``:asm_inst``] splice_fetch)) >>
-        pure_rewrite_tac [GSYM listTheory.APPEND_ASSOC, APPEND] >>
-        gns[Abbr `p`, Abbr `q`, Abbr `d`]) >>
-     gvs[Abbr `Z`]) >>
-  FAIL_TAC "pack Check and Shape"
-QED
-*)
 
 (* Compare the worker contracts and the local rows modulo their lexical lets. *)
 val rows_normalize = REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV);
@@ -324,7 +250,6 @@ Resume prune_one_covered_rows[pack]:
     (qspecl_then [`pre`,`t`,`x`,`tail`,`V`,`pc`,`tag`,`edge`] rows_contract
        (rows_unwind prune_one_relocated_legal)) >>
   `!v. v IN V ==> (r o pc) v < LENGTH q /\ Check q cc (r o pc) height tagQ edge v` by
-    (* E0665: rows_contract alone left an unmatched Check premise. *)
     (qpat_x_assum `Abbrev (Check = _)`
        (assume_tac o CONV_RULE (RAND_CONV (RAND_CONV
          (QCHANGED_CONV (ONCE_DEPTH_CONV

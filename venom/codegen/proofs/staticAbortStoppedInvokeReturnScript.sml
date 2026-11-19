@@ -1,6 +1,6 @@
 Theory staticAbortStoppedInvokeReturn
 Ancestors
-  staticAbortStoppedInvokeProbe symFnSimSpec fnStaticAbortInvoke
+  staticAbortStoppedInvokeEntry symFnSimSpec fnStaticAbortInvoke
   symFrameInvoke fnFrameBoundaryInvoke fnFrameDeepInvoke
   contextStaticAbortRel fnStaticAbortBodyFacts fnBlockBodySteps
   contextCodegenRelProps venomExecProps unitShapeDefs list

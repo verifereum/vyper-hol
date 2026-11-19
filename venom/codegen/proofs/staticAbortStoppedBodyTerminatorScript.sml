@@ -142,8 +142,6 @@ Proof
      fs[codegen_ready_inst_def]) >>
   Cases_on `step_inst fuel ctx inst vs`
   >- suspend "ok"
-  (* Previous positional labels were error/halt/abort/return; the actual
-     constructor order is Halt/Abort/IntRet/Error after OK. *)
   >- suspend "halt"
   >- suspend "abort"
   >- suspend "return"
@@ -151,7 +149,6 @@ Proof
 QED
 
 Resume stopped_body_terminator_case[ok]:
-  (* Previously unfinished: FAIL_TAC "jump". *)
   rename1 `step_inst fuel ctx inst vs = OK vs1` >>
   `ctx = unit.cu_context` by fs[body_inv_abort_def] >>
   `focus_s7_symbolic_context unit prog` by
@@ -186,10 +183,6 @@ Resume stopped_body_terminator_case[ok]:
     (qhdtm_assum `body_inv_abort`
        (strip_assume_tac o REWRITE_RULE [body_inv_abort_def]) >>
      rw[fn_entry_inv_def] >> drule_all reachability_closed_block >> simp[]) >>
-  (* Failed continuation route E0112: RP irule, F irule, body_inv_abort
-     extraction, then simp[jump_to_def] / simp[IgnAsm `vs1 = _`] /
-     fs[IgnAsm `vs1 = _`] and goal_assum (drule_at Any) failed to match
-     the heterogeneous normalized F antecedent. *)
   qmatch_asmsub_abbrev_tac `lineage_entry _ _ _ _ _ _ _ pe` >>
   `sym_frame_inv prog env ctx cpl fn ret srest labs0 pe ast1 ss1` by
     (irule sym_frame_inv_plan_transport >>
@@ -205,8 +198,6 @@ Resume stopped_body_terminator_case[ok]:
     (asm "F" irule >>
      goal_assum (drule_at Any) >>
      qpat_assum `sym_frame_inv _ _ _ _ _ _ _ _ pe _ _` (irule_at Any) >>
-     (* Earlier structural attempt matched lineage before selecting tbb;
-        its unknown bb_label projection prevented matching. *)
      qpat_assum `generate_block_plan _ _ _ _ tbb _ = _` (irule_at Any) >>
      qpat_assum `tbb.bb_label = target` (fn th => rewrite_tac[th]) >>
      qpat_assum `lineage_entry _ _ _ _ _ _ _ pe` (irule_at Any) >>
@@ -239,8 +230,6 @@ Resume stopped_body_terminator_case[abort]:
   drule block_rest_other >> disch_then drule >>
   (impl_tac >- simp[]) >> disch_then (qspec_then `fn` SUBST1_TAC) >>
   drule_all sym_abort_protected_abort_step >>
-  (* Previous probe: simp[sym_body_result_def, Abbr `R`, Abbr `A`] >>
-     FAIL_TAC "terminal abort observation". *)
   asm_x "AP" kall_tac >> asm_x "RP" kall_tac >> asm_x "F" kall_tac >>
   simp[sym_body_result_def, Abbr `R`, Abbr `A`] >> strip_tac >>
   disj1_tac >> goal_assum (drule_at Any) >>

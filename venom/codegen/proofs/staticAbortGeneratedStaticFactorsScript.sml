@@ -1,7 +1,7 @@
 (* Structural factors of the first generated instruction in a static interval. *)
 Theory staticAbortGeneratedStaticFactors
 Ancestors
-  staticAbortGeneratedStaticProbe staticAbortPlanBoundary staticAbortInst
+  staticAbortGeneratedStaticEdge staticAbortPlanBoundary staticAbortInst
   fnBlockPlanStatic fnBlockBodySteps fnBlockBodyHelpers staticAbortPrefix fnPlanPrefix
   staticAbortDefs stackPlanGen planExec stackOpSim unitShapeDefs venomWf
   list arithmetic rich_list livenessDefs venomInst asmSem
@@ -117,7 +117,6 @@ Resume generated_static_head_factors[regular]:
     qpat_assum `block_plan_state _ _ _ _ _ _ i ps`
       (mp_then (Pat `block_plan_state _ _ _ _ _ _ _ _`) mp_tac th)) >>
   disch_then (fn th => drule_all (SRULE [] th)) >>
-  (* E0145: simp[] >> strip_tac traversed the existential conclusion. *)
   disch_then (strip_assume_tac o SRULE []) >>
   `inst.inst_opcode <> PHI` by
     (`bb_well_formed bb` by
@@ -148,13 +147,11 @@ Resume generated_static_head_factors[regular]:
        IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)` by
     (rpt strip_tac >> first_x_assum irule >>
      qexistsl [`inst`, `i`] >> simp[get_instruction_def, Abbr `inst`]) >>
-  (* E0124: drule_all on the mixed lv/lbl forms resisted matching. *)
-  (* E0131: fs[] retained analysis equalities without normalizing. *)
+
   qpat_x_assum `lv = _` SUBST_ALL_TAC >>
   qpat_x_assum `dfg = _` SUBST_ALL_TAC >>
   qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
   qpat_x_assum `bb.bb_label = lbl`
-    (* E0145: rewrite_tac [th] implicitly unwound accounting binders. *)
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> pure_rewrite_tac [th]) >>
   (* Incoming state facts retain EL i; normalize only the needed bound. *)
   `LENGTH (compute_operands inst) <=
@@ -162,7 +159,6 @@ Resume generated_static_head_factors[regular]:
      (live_vars_at (liveness_analyze fn) lbl (i+1)) ps)).ps_stack` by
     simp[Abbr `inst`] >>
   drule_all regular_plan_admin_decomposition >> strip_tac >>
-  (* Earlier diagnostic stopped here: FAIL_TAC "placements and arities". *)
   `asm_block_at prog pc (execute_plan cplan.cp_initial_fmp pre) /\
    asm_block_at prog (pc + LENGTH (execute_plan cplan.cp_initial_fmp pre))
      (execute_plan cplan.cp_initial_fmp emit) /\
@@ -177,8 +173,6 @@ Resume generated_static_head_factors[regular]:
        pure_rewrite_tac [th, execute_plan_append, asm_block_at_append,
          LENGTH_APPEND, GSYM ADD_ASSOC]) >>
      strip_tac >> asm_rewrite_tac[]) >>
-  (* E0138: five-witness simp[] left an addition-order placement goal;
-     simp[AC ADD_ASSOC ADD_COMM] timed out. Use explicit projection. *)
   map_every Q.EXISTS_TAC [`pre`, `emit`, `post`, `ps6`, `ps7`, `m`, `h`] >>
   ntac 13 (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >- suspend "nonterminal_io" >> suspend "terminal_io"
@@ -194,14 +188,12 @@ Resume generated_static_head_factors[nonterminal_io]:
          REWRITE_RULE [static_abort_pair_def]) >>
      disch_then (qspecl_then [`i`, `inst`] mp_tac) >>
      simp[get_instruction_def, Abbr `inst`]) >>
-  (* Earlier drule_all lacked the folded inst_wf and param facts. *)
   `inst_wf inst /\ ~is_param_opcode inst.inst_opcode` by
     simp[Abbr `inst`] >>
   drule_all static_abort_regular_net_io >> simp[]
 QED
 
 Resume generated_static_head_factors[terminal_io]:
-  (* Earlier diagnostic: strip_tac >> FAIL_TAC "terminal accounting". *)
   strip_tac >>
   `MEM inst.inst_opcode [SSTORE;TSTORE;LOG]` by
     gvs[static_abort_pair_def, Abbr `inst`, get_instruction_def] >>

@@ -232,9 +232,12 @@ Proof
      qpat_assum `!x a. x IN V /\ shaped x a ==> _ \/ _`
        (qspecl_then [`x`, `a`] mp_tac) >>
      (impl_tac >- simp[]) >> strip_tac
-     >- (disj1_tac >> qexistsl [`1`, `u'`] >> simp[] >> metis_tac[])
-     >- (disj1_tac >> qexistsl [`1`, `u'`] >> simp[] >> metis_tac[]) >>
-     disj2_tac >> qexistsl [`rank y`, `1`, `u'`] >>
+     >- (rename1 `asm_steps _ _ q 1 a = AsmRevert result` >>
+         disj1_tac >> qexistsl [`1`, `result`] >> simp[] >> metis_tac[])
+     >- (rename1 `asm_steps _ _ q 1 a = AsmFault result` >>
+         disj1_tac >> qexistsl [`1`, `result`] >> simp[] >> metis_tac[]) >>
+     rename1 `asm_steps _ _ q 1 a = AsmOK result` >>
+     disj2_tac >> qexistsl [`rank y`, `1`, `result`] >>
      `y IN V /\ rank y < rank x` by metis_tac[] >>
      simp[] >> conj_tac
      >- (irule observer_step_normal >> simp[] >> metis_tac[]) >>

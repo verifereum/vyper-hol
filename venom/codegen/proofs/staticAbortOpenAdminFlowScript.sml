@@ -28,19 +28,6 @@ Theorem admin_success_numerical_flow[local]:
              ((name = "JUMP" \/ name = "JUMPI") ==>
                LENGTH u.as_stack + asm_op_arity name - LENGTH t.as_stack = 0))
   | _ => F
-(* E0111 resisting route, prior to the checked zero-based DUP correction:
-   Cases_on `inst` >>
-   simp[static_abort_admin_def, GENLIST_CONS, dup_name_def, swap_name_def] >>
-   rpt gen_tac >> strip_tac >> gvs[] >>
-   qpat_x_assum `asm_step _ _ _ _ = _` mp_tac >>
-   CONV_TAC (LAND_CONV (LAND_CONV (computeLib.RESTR_EVAL_CONV
-     [``asm_pop``, ``asm_mstore``, ``asm_mload``, ``asm_dup``, ``asm_swap``,
-      ``asm_next``, ``FLOOKUP``]))) >>
-   CONV_TAC (computeLib.RESTR_EVAL_CONV
-     [``asm_pop``, ``asm_mstore``, ``asm_mload``, ``asm_dup``, ``asm_swap``,
-      ``asm_next``, ``FLOOKUP``, ``LENGTH``, ``as_stack``]) >>
-   FAIL_TAC "numerical inversion state"
-*)
 Proof
   Cases_on `inst` >>
   simp[static_abort_admin_def, GENLIST_CONS, dup_name_def, swap_name_def] >>

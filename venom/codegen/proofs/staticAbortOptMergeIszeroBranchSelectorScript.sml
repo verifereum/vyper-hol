@@ -113,29 +113,3 @@ Proof
   disch_then (qx_choose_then `z` strip_assume_tac) >>
   qexists `z` >> `pc z = b+2` by decide_tac >> simp[Abbr `R`] >> metis_tac[]
 QED
-
-(* E0537: the reverse-Skolem proof was stopped before the Live comparison.
-  let
-    val expand = REDEPTH_CONV (BETA_CONV ORELSEC REWR_CONV LET_THM)
-    val normalize = SIMP_RULE bool_ss [RAT_OF_NUM_LES, EMPTY_SUBSET, DIFF_EMPTY]
-                    o CONV_RULE expand
-    val live = merge_iszero_pending_root_contraction |> SPEC_ALL |>
-      Q.INST [`rank` |-> `\z:num#num. rat_of_num (nrank z)`] |>
-      normalize |> ONCE_REWRITE_RULE [GSYM AND_IMP_INTRO]
-  in
-    rpt gen_tac >> CONV_TAC expand >>
-    disch_then (CONJUNCTS_THEN2 (mk_asm "open") assume_tac) >>
-    CONV_TAC (HO_REWR_CONV (GSYM SKOLEM_THM)) >>
-    qx_gen_tac `x` >> simp[GSYM RIGHT_EXISTS_IMP_THM] >> disch_tac >>
-    Cases_on `pc x < b \/ b+2 <= pc x`
-    >- (qexists `x` >> simp[]) >>
-    `asm_block_at p (pc x) (REPLICATE (b+2-pc x) (AsmOp "ISZERO"))` by
-      (first_x_assum irule >> decide_tac) >>
-    asm "open" (fn source =>
-      mp_tac (MATCH_MP
-        (Q.INST [`v` |-> `x`, `d` |-> `b+2-pc x`] live) (normalize source))) >>
-    (impl_tac >- (simp[] >> decide_tac)) >>
-    disch_then (qx_choose_then `z` strip_assume_tac) >>
-    qexists `z` >> `pc z = b+2` by decide_tac >> simp[] >> metis_tac[]
-  end
-*)

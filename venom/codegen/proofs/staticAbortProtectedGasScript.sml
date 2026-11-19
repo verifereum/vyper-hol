@@ -46,16 +46,12 @@ Proof
   `context_spill_step_safe cpl vs vs1` by metis_tac[] >>
   `inst.inst_opcode <> INVOKE` by simp[] >>
   `!e. step_inst fuel ctx inst vs <> Error e` by simp[] >>
-  (* drule_all body_plan_inv_label_resolve failed on the quantified
-     no-Error premise; match its public premises sequentially instead. *)
   drule body_plan_inv_label_resolve >> disch_then drule >>
   disch_then drule >> disch_then drule >> disch_then drule >> strip_tac >>
   qhdtm_assum `body_plan_inv`
     (strip_assume_tac o REWRITE_RULE [body_plan_inv_def]) >>
   `fn_shape_ok fn` by
     (gvs[unit_shape_ok_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
-  (* Backward irule after simp[] failed due to reordered PC addition;
-     without simp it left nested existential inputs.  Match forward. *)
   (* Keep the partially matched theorem in the continuation rather than
      re-assuming its universally quantified implication with disch_then. *)
   drule_at_then (Pat `fn_frame_inv`)
@@ -67,7 +63,5 @@ Proof
   simp[is_terminator_def] >>
   disch_then (qspecl_then [`fuel`, `vs1`] mp_tac) >>
   (impl_tac >- gvs[]) >> strip_tac >>
-  (* The obsolete ending qexistsl_tac [ops, ps', rest', n, as', ss']
-     failed because simp had already eliminated the first three binders. *)
   metis_tac[]
 QED

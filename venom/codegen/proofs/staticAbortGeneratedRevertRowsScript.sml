@@ -2,7 +2,7 @@
 Theory staticAbortGeneratedRevertRows
 Ancestors
   staticAbortAdminRows staticAbortGeneratedAdminMicro staticAbortOpenAdminFlow
-  staticAbortGeneratedRevertSpine staticAbortGeneratedRevertProbe fnStaticAbortBoundary
+  staticAbortGeneratedRevertSpine staticAbortGeneratedRevertStep fnStaticAbortBoundary
   staticAbortRevertOccurrences staticAbortRevertRowsLink staticAbortStraight codegenSymRel
   asmOpSim stackOpAsmSim stackOpSim asmIR asmSem asmOptimizer planExec
   option rich_list list arithmetic pred_set finite_map words pair
@@ -420,7 +420,7 @@ Resume generated_revert_cut_rows[emits]:
       rpt strip_tac >>
       `?u. asm_steps (SND(compute_label_offsets prog)) (build_offset_to_pc prog)
               prog 1 t=AsmRevert u /\ u.as_requests=t.as_requests` by
-        (irule generated_revert_pending_observation_probe >> conj_tac
+        (irule generated_revert_step_requests >> conj_tac
          >- (qpat_x_assum `q=j` SUBST_ALL_TAC >>
              qpat_assum `2<=m j+extra` mp_tac >>
              simp[AC ADD_ASSOC ADD_COMM]) >> simp[]) >>

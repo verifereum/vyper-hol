@@ -1,6 +1,6 @@
 (* Shared planner witnesses and universal instruction-boundary edges.
    This deliberately does not claim micro-window coverage or control tags. *)
-Theory staticAbortGeneratedStaticProbe
+Theory staticAbortGeneratedStaticEdge
 Ancestors
   staticAbortPrefix staticAbortInst fnBlockBodyHelpers fnBlockPlanStatic
   staticAbortDefs staticAbortTrace planExec stackOpSim venomState unitShapeDefs

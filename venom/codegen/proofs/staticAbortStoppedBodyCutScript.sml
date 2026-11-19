@@ -112,30 +112,3 @@ Proof
   goal_assum (drule_at (Pat `body_inv_abort`)) >>
   goal_assum (drule_at (Pat `sym_frame_inv`)) >> simp[]
 QED
-
-(* Failed proof fragments retained for the task's diagnostic history.
-   The first request attempt used the unsimplified alias as a match pattern:
-     irule static_abort_at_abort_requests >>
-     goal_assum (drule_at (Pat `exec_block _ _ _ _ = _`))
-   But the live equality already used run_block_non_phis.
-
-   A positional fetch specialization failed because drule generalized its
-   remaining parameters in a different order:
-     drule ld_forward_fetch_abort_requests >>
-     disch_then (qspecl_then [`bb`, `vs`, `vs'`, `fuel`, `ctx`, `a`] mp_tac)
-   The final proof instead matches the live execution equality.
-
-   The suffix witness trial had its existential witnesses reversed:
-     disch_then irule >> qexistsl_tac [`0`, `vs.vs_inst_idx`] >> simp[] >>
-     qpat_x_assum `revert_forward_pair _ _ _` mp_tac >>
-     simp[revert_forward_pair_def] >> metis_tac[]
-   This produced an impossible suffix condition and timed out. Inspection
-   showed the existential order is j,n, not n,j.
-
-   Before splitting the suffix condition, this selector failed on a
-   conjunctive goal:
-     goal_assum (drule_at (Pat `get_instruction _ _ = SOME _`)) >> simp[]
-   The initial arithmetic branch closer also ignored the assumptions:
-     conj_tac >- (rpt strip_tac >> decide_tac)
-   The final branch uses gvs to discharge the inconsistent bounds.
-*)

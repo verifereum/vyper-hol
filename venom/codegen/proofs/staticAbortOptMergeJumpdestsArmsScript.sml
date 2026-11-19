@@ -221,24 +221,6 @@ Proof
      asm "inherit" assume_tac >> asm "project" assume_tac >>
      drule_all_then ACCEPT_TAC rename_arm_inherit) >>
   pop_assum (mk_asm "transfer") >>
-  (* Earlier dispatch pushed the source Flow over the goal and simplified.
-     This normalized the arithmetic in the destination slot map only.
-  asm "flow" (fn f =>
-    qpat_x_assum `_ p i ins hi hj tag tagw b bw` (mp_tac o REWRITE_RULE [f,LET_THM]) >>
-    rewrite_tac[f,LET_THM]) >>
-  Cases_on `ins` >> simp[rename_push_label_def] >>
-  TRY (rename1 `ALOOKUP dup_table name` >>
-       Cases_on `ALOOKUP dup_table name` >> simp[] >>
-       TRY (rename1 `ALOOKUP swap_table name` >> Cases_on `ALOOKUP swap_table name` >> simp[])) >>
-  TRY (rename1 `if l = x then AsmPushLabel y else AsmPushLabel l` >>
-       Cases_on `l = x` >> simp[]) >>
-  disch_then (fn th =>
-    let val parts = CONJUNCTS th in
-      map_every assume_tac parts >> pure_rewrite_tac (map EQT_INTRO (butlast parts))
-    end) >>
-  asm "transfer" (drule_at_then (Pat `I' hi hj tag tagw b bw _ _ _`) irule) >> simp[] >>
-  FAIL_TAC "fresh producer or Boolean predicate"
-  *)
   namedCases_on `ins` ["name","bs","l","l d","l","l","bs","l"]
   >- (Cases_on `ALOOKUP dup_table name` >>
       (Cases_on `ALOOKUP swap_table name` >>
@@ -580,8 +562,6 @@ Proof
     (rpt gen_tac >> disch_then (CONJUNCTS_THEN2 (mk_asm "hu") (mk_asm "hnone")) >>
      reverse (Cases_on `k < height (FST u)`)
      >- simp[markerLib.L "project"] >>
-     (* The earlier qspec_then `k` mp_tac >> simp[] did not discharge
-        the pointwise implication. Apply the actual bound. *)
      asm "membership" (qspec_then `u` (fn mem =>
        asm "hu" (fn hu =>
        asm "hnone" (fn hn =>
@@ -658,9 +638,6 @@ Proof
     (qx_gen_tac `v` >> strip_tac >>
      mp_tac (Q.INST [`rank:num#num -> num` |-> `N:num#num -> num`]
        (SPEC_ALL (CONV_RULE arm_names_conv merge_rename_root_bypass))) >>
-     (* Earlier reverse folding missed the fully beta-reduced Shape;
-        specializing the live source facts and expanding those is enough.
-        In particular, do not substitute the site decomposition for p. *)
      SIMP_TAC bool_ss [EMPTY_SUBSET, DIFF_EMPTY] >>
      (impl_tac >-
        (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -690,7 +667,6 @@ Proof
           (ACCEPT_TAC o SIMP_RULE bool_ss [ct])))) >>
      disch_then (qx_choose_then `z` (qx_choose_then `off` strip_assume_tac)) >>
      qexists `z` >> simp[markerLib.L "canonical"] >>
-     (* Unrestricted metis over the bypass's full path contract timed out. *)
      conj_tac
      >- (qexists `off` >> asm "site" (fn th => simp[th])) >>
      gen_tac >> Cases_on `tag z k` >> simp[] >>

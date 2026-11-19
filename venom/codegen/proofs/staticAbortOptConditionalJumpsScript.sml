@@ -394,68 +394,6 @@ Resume optimize_inefficient_jumps_abort_certificate[pending]:
   qabbrev_tac `initial = (pc e=b+1)` >>
   qabbrev_tac `H = \v. if initial /\ v=e then height v-1 else height v` >>
   qabbrev_tac `shift = \v. if initial /\ v=e then 2 else 1:num` >>
-  (* Retired E0846 inline extraction:
-  `!v. v IN D \/ (initial /\ v=e) ==> ?z0 z1.
-     0<H v /\ z0 IN keep /\ z1 IN keep /\ rank z0<rank v /\ rank z1<rank v /\
-     height z0=H v-1 /\ height z1=H v-1 /\ C p x (pc z0) /\
-     (!k ta tb. tag z0 k=SOME ta /\ tag z1 k=SOME tb ==> ta=tb) /\
-     (!k ta. (tag z0 k=SOME ta \/ tag z1 k=SOME ta) ==>
-       tag v (k+shift v)=SOME ta) /\
-     (!k. boolean z0 k \/ boolean z1 k ==> boolean v (k+shift v)) /\
-     (!rho.
-       let U = \k. OPTION_MAP (\(l,i). (l,rho l i))
-                     (case tag z0 k of NONE => tag z1 k | SOME ta => SOME ta) in
-       let UB = \k. boolean z0 k \/ boolean z1 k in
-       let P = \(i,j):num#num. if i<4 then b+i else if i=4 then r(pc z0) else r(pc z1) in
-       let J = \(i,j):num#num. if i<2 then H v else if i=2 then H v+1 else H v-1 in
-       let T = \(i,j):num#num. \k.
-         if i<2 then (if k=0 then NONE else U (k-1)) else
-         if i=2 then (if k=0 then SOME(x,b+1) else if k=1 then NONE else U (k-2)) else
-         OPTION_MAP (\(l,i). (l,rho l i)) ((if i=4 then tag z0 else tag z1) k) in
-       let B = \(i,j):num#num. \k.
-         if i=0 then k<>0 /\ UB (k-1) else if i=1 then k=0 \/ UB (k-1) else
-         if i=2 then k=1 \/ (2<=k /\ UB (k-2)) else
-         (if i=4 then boolean z0 else boolean z1) k in
-       let VE = \i j. (i<3 /\ j=i+1) \/ (i=2 /\ j=4) \/ (i=3 /\ j=5) in
-       (!i j. VE i j ==> Flow q P J T B (i,0) (j,0)) /\
-       (C q x (r(pc z0)) /\
-        (!w k l i. (w=z0 \/ w=z1) /\ tag w k=SOME(l,i) ==> Producer q l (rho l i)) ==>
-        (!i. i<4 ==> Slots q (J (i,0)) F (T (i,0)) (B (i,0))) /\
-        (!i. i<4 ==> P (i,0)<LENGTH q /\ Row q (P (i,0)) (J (i,0)) (T (i,0))
-                             (\w. VE i (FST w)) P J) /\
-        (!i j. VE i j ==> Legal q (P (i,0)) (T (i,0)) (P (j,0)))))` by
-    (qx_gen_tac `v` >> DISCH_TAC >> Cases_on `v IN D` >>
-     IF (qpat_assum `v IN D` kall_tac)
-       (`v IN V /\ pc v=b` by (qpat_assum `v IN D` mp_tac >> simp[Abbr `D`]) >>
-        `~(initial /\ v=e)` by
-          (qpat_assum `pc v=b` mp_tac >> simp[Abbr `initial`] >>
-           POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >> strip_tac >> gvs[]) >>
-        qpat_assum `!v. _ ==> IS_SOME (FLOOKUP (SND (compute_label_offsets p)) c) /\ _`
-          (qspec_then `v` mp_tac) >>
-        (impl_tac >- simp[]) >> disch_then (map_every assume_tac o CONJUNCTS) >>
-        mp_tac (CONV_RULE lets_conv conditional_jump_whole_visit_rows) >>
-        fold_abbrevs [`Abbrev (p = _)`, `Abbrev (q = _)`,
-                      `Abbrev (b = _)`, `Abbrev (r = _)`] >>
-        (impl_tac >- (
-          asm "source_open" (map_every assume_tac o CONJUNCTS) >>
-          simp[] >> conj_tac
-          >- (rpt gen_tac >> disch_tac >>
-              qpat_assum `!u y. edge u y ==> u IN V /\ _`
-                (drule_then (map_every assume_tac o CONJUNCTS)) >> simp[]) >>
-          asm "source_open" (ACCEPT_TAC o SIMP_RULE bool_ss [DIFF_EMPTY] o cj 6))) >>
-        disch_then (CONJUNCTS_THEN2 assume_tac
-          (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS))))
-       (`initial /\ v=e` by (qpat_x_assum `v IN D \/ _` mp_tac >> simp[]) >>
-        qpat_x_assum `v=e` SUBST_ALL_TAC >>
-        qpat_assum `(_ /\ (?i. tag e 0=SOME(c,i))) ==> 0<_ /\ ?z0 z1. _` mp_tac >>
-        (impl_tac >- (
-          qpat_assum `pc e=b+1 ==> ?i. tag e 0=SOME(c,i)` mp_tac >>
-          fold_abbrevs [`Abbrev (initial = _)`] >> simp[NoAsms] >>
-          qpat_assum `initial` (fn th => simp[NoAsms, th]))) >>
-        disch_then (CONJUNCTS_THEN2 assume_tac
-          (qx_choose_then `z0` (qx_choose_then `z1` (map_every assume_tac o CONJUNCTS))))) >>
-     FAIL_TAC "align chosen port packet") >>
-  *)
   qabbrev_tac `Visit = \v z0 z1.
      0<H v /\ z0 IN keep /\ z1 IN keep /\ rank z0<rank v /\ rank z1<rank v /\
      height z0=H v-1 /\ height z1=H v-1 /\ C p x (pc z0) /\
@@ -534,15 +472,6 @@ Resume optimize_inefficient_jumps_abort_certificate[whole]:
   (impl_tac >- (
      asm "source_open" (strip_packet o SIMP_RULE bool_ss [EMPTY_SUBSET, DIFF_EMPTY]) >>
      simp_tac bool_ss [EMPTY_SUBSET, DIFF_EMPTY] >>
-     (* Previous consumer-side attempts:
-     FIRST [qx_gen_tac `lc` >> qx_gen_tac `dc` >> disch_tac >>
-            qpat_assum `C = _` (fn cdef =>
-              qpat_assum `!l d. C p l d ==> _`
-                (qspecl_then [`lc`,`dc`] (drule_then (ACCEPT_TAC o CONJUNCT1) o
-                  CONV_RULE lets_conv o PURE_REWRITE_RULE [cdef]))),
-            rpt strip_tac >> first_assum (drule_then
-              (drule_then (ACCEPT_TAC o CONJUNCT2) o CONJUNCT1 o CONJUNCT2))]
-     *)
      rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
        asm "port_range" ACCEPT_TAC ORELSE simp[]))) >>
   disch_then (CONJUNCTS_THEN2 assume_tac

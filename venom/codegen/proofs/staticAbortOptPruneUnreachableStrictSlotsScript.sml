@@ -38,14 +38,6 @@ Proof
      strip_tac >> rpt gen_tac >> strip_tac >>
      qpat_x_assum `!l old dest. _` (drule_all_then strip_assume_tac) >>
      qexists `fresh` >> asm_rewrite_tac[]) >>
-  (* E0534 resisted the generic splice normalization:
-     rpt strip_tac >>
-     `r i = splice_pc d 1 0 i` by
-       (simp[Abbr `r`, splice_pc_def] >> IF_CASES_TAC >> decide_tac) >>
-     mp_tac (Q.INST [`pfx` |-> `pre ++ [t]`, `pat` |-> `[x]`,
-                     `repl` |-> `[]`, `sfx` |-> `tail`, `i` |-> `i`]
-                    (INST_TYPE [alpha |-> ``:asm_inst``] splice_fetch)) >>
-     fs[Abbr `d`, Abbr `p`, Abbr `q`, GSYM APPEND_ASSOC, APPEND] *)
   `!i. i<>d /\ i<LENGTH p ==> r i<LENGTH q /\ EL (r i) q=EL i p` by
     (qabbrev_tac `h = pre ++ [t:asm_inst]` >>
      `p = h ++ x::tail /\ q = h ++ tail /\ LENGTH h = d` by

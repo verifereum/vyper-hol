@@ -2,7 +2,7 @@ Theory staticAbortOptMergeIszero
 Ancestors
   staticAbortOptMergeIszeroPrefix staticAbortOptMergeIszeroLayout
   staticAbortProtectedActualPrefix staticAbortOptMergeIszeroLive
-  staticAbortOptMergeIszeroWalk staticAbortOptMergeIszeroBoundaryProbe
+  staticAbortOptMergeIszeroWalk
   staticAbortOptMergeIszeroInterior staticAbortOptMergeIszeroPairRows
   staticAbortOptMergeIszeroBranchRows
   asmOptMergeIszero asmSplice asmSymPc asmSymBridge asmSymSem asmDataEnv

@@ -1,6 +1,6 @@
 Theory staticAbortOptUnusedLabelsSource
 Ancestors
-  staticAbortOptUnusedLabelsBoundaryProbe asmToBytecodeProofs asmEncodeParse
+  staticAbortOptUnusedLabelsProvenance asmToBytecodeProofs asmEncodeParse
   codegenEncodingWf codegenRel asmWf asmSymSem asmSem asmIR symbolResolve blockSimHelpers
   asmOptimizer list rich_list finite_map pred_set words
   staticAbortOptPruneUnreachableLayout

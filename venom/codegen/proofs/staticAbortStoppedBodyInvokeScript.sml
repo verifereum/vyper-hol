@@ -167,9 +167,6 @@ Proof
 QED
 
 Resume stopped_body_invoke_case[ok]:
-  (* Failed E0106 route: drule_at body_inv_abort then impl_tac left
-     universally quantified arguments. Moving E through simp[Abbr A]
-     left beta-redexes in the other hypotheses, so drule_all failed. *)
   Q.UNABBREV_TAC `A` >> rule_assum_tac BETA_RULE >> BETA_TAC >>
   drule stopped_invoke_normal_return >>
   disch_then drule_all >> strip_tac >>
@@ -190,7 +187,7 @@ QED
 Resume stopped_body_invoke_case[halt]:
   Q.UNABBREV_TAC `A` >> rule_assum_tac BETA_RULE >> BETA_TAC >>
   drule_all fnFrameBoundaryInvokeTheory.invoke_source_halt >> strip_tac >>
-  drule_all staticAbortStoppedInvokeProbeTheory.stopped_invoke_paired_entry >> strip_tac >>
+  drule_all staticAbortStoppedInvokeEntryTheory.stopped_invoke_paired_entry >> strip_tac >>
   qhdtm_assum `body_inv_abort`
     (strip_assume_tac o REWRITE_RULE [body_inv_abort_def]) >>
   `cvs.vs_params = args /\ cvs.vs_labels = vs.vs_labels` by
@@ -217,7 +214,6 @@ Resume stopped_body_invoke_case[halt]:
      first_assum ACCEPT_TAC)) >> strip_tac >>
   drule block_rest_other >> disch_then drule >>
   disch_then (qspec_then `fn` (SUBST1_TAC o SRULE [])) >>
-  (* E0113: contextual simp[Abbr R] timed out over E/K hypotheses. *)
   Q.UNABBREV_TAC `R` >> BETA_TAC >> simp[NoAsms] >>
   (* Backward irule left existential prefix witnesses, not conjuncts. *)
   drule_all symFrameInvokeTheory.sym_invoke_halt_compose >>
@@ -228,7 +224,6 @@ Resume stopped_body_invoke_case[abort]:
   drule stopped_invoke_abort_boundary >> disch_then drule_all >> disch_tac >>
   drule block_rest_other >> disch_then drule >>
   disch_then (qspec_then `fn` (SUBST1_TAC o SRULE [])) >>
-  (* Contextual simp[Abbr R] also timed out here. *)
   Q.UNABBREV_TAC `R` >> BETA_TAC >> simp[NoAsms] >>
   first_assum ACCEPT_TAC
 QED

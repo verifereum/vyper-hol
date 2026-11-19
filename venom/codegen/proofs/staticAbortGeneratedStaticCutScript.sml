@@ -1,6 +1,6 @@
 Theory staticAbortGeneratedStaticCut
 Ancestors
-  fnStaticAbortBoundary codegenSymRel staticAbortGeneratedStaticProbe
+  fnStaticAbortBoundary codegenSymRel staticAbortGeneratedStaticEdge
   fnBlockBodyHelpers fnPlanPrefix venomWf unitShapeDefs rich_list
   contextStaticAbortRel stackPlanGen list venomInst venomExecProps
   fnBlockPlanStatic staticAbortDefs planExec stackOpSim fnBlockBodySteps

@@ -204,9 +204,6 @@ Proof
   `non_param_insts bb = DROP (LENGTH (get_params bb.bb_instructions)) bb.bb_instructions` by
     metis_tac[non_param_insts_drop, codegen_ready_fn_def] >>
   `LENGTH (get_params bb.bb_instructions) <= k` by fs[block_plan_state_def] >>
-  (* Retired E0154 root route: full-context fs/gvs followed by metis
-     timed out; goal_assum drule and qexists j >> simp left equalities
-     bb'=bb and vs_inst_idx=k untransported. *)
   `?j. revert_forward_pair bb k j` by
     (qpat_assum `in_revert_forward fn vs` mp_tac >>
      qpat_assum `lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb` mp_tac >>
@@ -265,8 +262,6 @@ Proof
      `EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
        inst.inst_operands) bb'.bb_instructions) fn.fn_blocks` by
        metis_tac[codegen_ready_fn_no_marker] >>
-     (* E0160 retired forward drule_all / projected drule_at routes:
-        simplification normalized only the theorem's analysis aliases. *)
      `LENGTH (compute_operands (EL q bb.bb_instructions)) <=
        LENGTH (SND (emit_input_plan (EL q bb.bb_instructions).inst_opcode
          (compute_operands (EL q bb.bb_instructions))
@@ -297,8 +292,6 @@ Proof
      `LENGTH (compute_operands (EL q bb.bb_instructions)) <= 16` by decide_tac >>
      (* Full-context goal_assum then simp/gvs left an existential
         generation equality unmatched (two retired assembly attempts). *)
-     (* E0168 wrapper-first irule_at also rejected the equality anchor.
-        Retain only the mathematical plan-piece premises for application. *)
      qpat_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      qpat_assum `!l. MEM (Label l) (compute_operands _) ==> _` mp_tac >>
      qpat_assum `LENGTH (compute_operands _) <= LENGTH _` mp_tac >>
@@ -309,11 +302,7 @@ Proof
      qpat_assum `k<j` mp_tac >> qpat_assum `k<=q` mp_tac >>
      qpat_assum `q<=j` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
-     (* Retired E0172: metis_tac[revert_forward_plan_pieces] timed out.
-        Match generation first, then opcode fixes the interval indices. *)
-     (* E0178 typed diagnostic: cfg has type alpha, whereas lo has
-        type string |-> beta. The goal's lo has range num. Instantiate
-        beta before disch_then makes that type rigid in a hypothesis. *)
+
      drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
        (INST_TYPE [beta |-> ``:num``] revert_forward_plan_pieces) >>
      disch_then (drule_at (Pat `_.inst_opcode = (if _ then _ else _)`)) >>
@@ -332,22 +321,15 @@ Proof
     (qspec_then `q` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
   qpat_assum `!q. k<=q /\ q<=j ==> step' q = _ /\ _`
     (qspec_then `q` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
-  (* Full-context simplification here expanded unrelated analyses (E0178).
-     Only the placed step, its factorization and two endpoint bounds remain. *)
   qpat_assum `get_instruction bb q = _` mp_tac >>
   qpat_assum `_.inst_opcode = (if _ then _ else _)` mp_tac >>
   qpat_assum `asm_block_at prog (pc q) (execute_plan _ (step' q))` mp_tac >>
   qpat_assum `step' q = _` mp_tac >>
   qpat_assum `q=k ==> _` mp_tac >> qpat_assum `q=j ==> _` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt disch_tac >>
-  (* Retired final gvs[execute_plan_append, asm_block_at_append,
-     ADD_ASSOC] timed out even in this six-fact context. Keep placement
-     decomposition purely equational, outside the ambient simpset. *)
   qpat_x_assum `asm_block_at prog (pc q) (execute_plan _ (step' q))` mp_tac >>
   pure_asm_rewrite_tac [execute_plan_append, asm_block_at_append, LENGTH_APPEND] >>
   strip_tac >>
   ASM_SIMP_TAC bool_ss [AC ADD_ASSOC ADD_COMM] >>
-  (* Retired arithmetic-only decide_tac could not rewrite placement
-     arguments or extract endpoint implication conjuncts. *)
   rpt strip_tac >> gvs[]
 QED

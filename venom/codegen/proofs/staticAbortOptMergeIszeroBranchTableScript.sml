@@ -1,7 +1,7 @@
 Theory staticAbortOptMergeIszeroBranchTable
 Ancestors
   staticAbortOptMergeIszeroLayout staticAbortOptMergeIszeroLive
-  staticAbortOptMergeIszeroBoundaryProbe staticAbortStraight
+  staticAbortStraight
   asmSplice asmSymPc asmSymBridge asmSymSem asmDataEnv stackOpSim stackOpAsmSim
   alist finite_map pred_set list rich_list arithmetic words
   staticAbortOptMergeIszeroBranchSelector staticAbortOptMergeIszeroBranchControl
@@ -348,44 +348,6 @@ Resume merge_iszero_jumpi_cut_table[selector]:
   disch_then ACCEPT_TAC
 QED
 
-(* Earlier contraction route (E0474), kept as failure evidence.
-Resume merge_iszero_jumpi_cut_table[skip]:
-  qx_gen_tac `x` >> strip_tac >>
-  `b <= pc x /\ pc x < b+2` by (fs[Abbr `keep`] >> decide_tac) >>
-  `asm_block_at p (pc x) (REPLICATE (b+2-pc x) (AsmOp "ISZERO"))` by
-    (mp_tac (Q.SPECL [`pre`,`l`,`tail`,`b`,`p`,`(pc:(num#num)->num) x`]
-                    branch_test_suffix) >>
-     simp[Abbr `b`] >> decide_tac) >>
-  (* Live's rank is rational; embed the natural rank without changing order. *)
-  mp_tac (Q.SPECL [`p`,`a.as_call_ctx`,`a.as_requests`,`V`,
-        `\z. rat_of_num (rank z)`,`pc`,`height`,`need`,`tag`,`boolean`,`edge`,
-        `x`,`b+2-(pc:(num#num)->num) x`] merge_iszero_pending_root_contraction) >>
-  rewrite_tac[LET_THM] >> BETA_TAC >>
-  rewrite_tac[ratTheory.RAT_OF_NUM_LES, EMPTY_SUBSET, DIFF_EMPTY] >>
-  (impl_tac >-
-     (qpat_assum `Open p _ _ V rank pc height need tag boolean edge` mp_tac >>
-      qpat_assum `Abbrev (Shape = _)` (fn sh =>
-        qpat_assum `Abbrev (Flow = _)` (fn fl =>
-          qpat_assum `Abbrev (Target = _)` (fn tg =>
-            qpat_assum `Abbrev (Structure = _)` (fn st =>
-              qpat_assum `Abbrev (Open = _)` (fn opn =>
-                rewrite_tac (LET_THM ::
-                  map (REWRITE_RULE[markerTheory.Abbrev_def]) [opn,st,tg,fl,sh])))))) >>
-      simp[SF CONJ_ss] >> decide_tac)) >>
-  disch_then (qx_choose_then `y` (map_every assume_tac o CONJUNCTS)) >>
-  qexists_tac `y` >> simp[] >> decide_tac
-QED
-
-Resume merge_iszero_jumpi_cut_table[choose]:
-  simp[GSYM SKOLEM_THM] >> qx_gen_tac `x` >> strip_tac >>
-  Cases_on `keep (pc x)`
-  >- (qexists_tac `x` >> simp[]) >>
-  qpat_assum `!x. x IN V /\ ~keep (pc x) ==> _`
-    (qspec_then `x` mp_tac) >> simp[] >>
-  disch_then (qx_choose_then `y` (map_every assume_tac o CONJUNCTS)) >>
-  qexists_tac `y` >> simp[Abbr `keep`] >> metis_tac[]
-QED
-*)
 
 Resume merge_iszero_jumpi_cut_table[jumpi]:
   qx_gen_tac `x` >> strip_tac >>

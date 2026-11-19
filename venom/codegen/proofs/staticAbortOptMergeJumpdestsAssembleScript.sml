@@ -684,8 +684,6 @@ Resume merge_rename_covered_cut[arms]:
           qpat_assum `!a. a IN V ==> pc a < LENGTH p /\ _`
             (qspec_then `v` (drule_then (map_every assume_tac o CONJUNCTS))) >>
           rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
-          (* E0626: the expanded generic rewrite left the case table;
-             explicit six-variable Q.INST failed to parse. *)
           `Dispatch p cc (pc v) (height v) (tag v) pc height (edge v)` by
             (unfold_named ["dispatch","tgt"] >>
              CONV_TAC expand_names >>
@@ -826,7 +824,6 @@ Resume merge_rename_covered_cut[package]:
        (assume_tac o cj 1) >>
      qpat_assum `!v. v IN verts ==> !k l orig. tags v k = SOME(l,orig) ==> _`
        (qspec_then `entry` (drule_then assume_tac)) >>
-     (* E0703: specializing Slots here and using metis timed out. *)
      rpt (FIRST [first_assum ACCEPT_TAC, conj_tac, (simp[pairTheory.FST] >> NO_TAC)])) >>
   qexistsl [`verts`,`entry`,`nat_rank`,`pos`,`ht`,`needed`,`tags`,`bools`,`arcs`] >>
   reverse conj_tac

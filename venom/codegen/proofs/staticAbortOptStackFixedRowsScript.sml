@@ -352,8 +352,6 @@ Proof
        (qx_choose_then `path` strip_assume_tac)) >>
      gvs[MAP, FORALL_AND_THM] >> qexists `path` >> simp[]
 
-  (* Earlier packaging attempt: simp[MAP] >> strip_tac >>
-     qexists `path` >> simp[]; this left nonexistential conjuncts. *)
 QED
 
 Triviality path_rank_lt:
@@ -416,8 +414,6 @@ Proof
     (asm "literal" strip_assume_tac >> simp[]) >>
   `path (LENGTH w) IN V /\ pc (path (LENGTH w)) = LENGTH pre + LENGTH w` by
     (qpat_assum `!i. i<=LENGTH w ==> _` (qspec_then `LENGTH w` mp_tac) >> simp[]) >>
-  (* Backward matching on the expanded phase terms resisted both irule and
-     MATCH_MP_TAC (E0473). Match the head/exit packet instead. *)
   qsuff_tac `^literals w d /\ ^input_min w <= height v /\
    height (path (LENGTH w)) = ^output_height w (height v) /\
    ^bounds (height v) (tag v) (boolean v) /\

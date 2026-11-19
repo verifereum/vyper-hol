@@ -680,9 +680,6 @@ Resume prune_jump_retained_arm_flow[retag]:
          disch_then (qx_choose_then `origin_pair` strip_assume_tac) >>
          PairCases_on `origin_pair` >> fs[] >>
          qpat_assum `!k l origin. tag z k = _ ==> _` (drule_then strip_assume_tac) >>
-         (* E0616 stopped here with pointwise OPTION_MAP equality:
-            disj1_tac >> qpat_assum `!k. OPTION_MAP _ (f k) = g k`
-              (qspec_then `k` (mp_tac o SYM)) >> simp[]. *)
          simp[] >> disj2_tac >> rename1 `src k = SOME h` >> qexists `h` >> simp[]) >>
      rpt gen_tac >> disch_tac >>
      qpat_assum `!k. boolean z k ==> _` (drule_then strip_assume_tac) >>

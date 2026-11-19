@@ -383,7 +383,6 @@ Resume conditional_jump_strict_ports[copy_shape]:
   `b < LENGTH p` by decide_tac >>
   qpat_assum `!i. i=origin ==> _` (qspec_then `origin` mp_tac) >>
   simp_tac std_ss [] >> disch_then (mk_asm "producer") >>
-  (* E0650 attempted to transport whole Shape directions with FIRST_PROVE. *)
   qx_gen_tac `st` >>
   qabbrev_tac `P = \l i. i < LENGTH p /\
     (EL i p = AsmPushLabel l \/ (?d. EL i p = AsmPushOfst l d) \/

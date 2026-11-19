@@ -247,59 +247,6 @@ Proof
   `0 < height v` by
     (`LENGTH orig.as_stack = height v` by metis_tac[] >>
      Cases_on `height v` >> simp[NoAsms] >> metis_tac[LENGTH_NIL]) >>
-  (* E0277: tagged-head replacement, superseded by the untagged update.
-  `!w. D w <=> ?t stk. shape v t /\ t.as_stack = w::stk` by
-    (qx_gen_tac `w` >> eq_tac
-     >- (strip_tac >>
-         qexistsl [`orig with as_stack := w::stk`,`stk`] >>
-         qpat_x_assum `shape v orig` mp_tac >>
-         qpat_x_assum `D w` mp_tac >>
-         simp[NoAsms, Abbr `D`, Abbr `shape`, Abbr `Shape`, Abbr `lo`] >>
-         ntac 2 strip_tac >> simp[IgnAsm `p = _`] >>
-         (conj_tac >-
-          (qpat_assum `orig.as_stack = hd::stk` (fn st_eq =>
-             qpat_assum `LENGTH orig.as_stack = height v`
-               (ACCEPT_TAC o REWRITE_RULE [st_eq,LENGTH])))) >>
-         (conj_tac >-
-          (qpat_assum `orig.as_call_ctx = cc` (fn ctx_eq =>
-             qpat_assum `need v ==> _`
-               (ACCEPT_TAC o REWRITE_RULE [ctx_eq])))) >>
-         conj_tac
-         >- (qx_gen_tac `k` >> Cases_on `k`
-             >- (map_every qx_gen_tac [`l`,`origin`] >> DISCH_TAC >>
-                 qpat_assum `!k l org. tag v k = SOME(l,org) ==> _`
-                   (qspecl_then [`0`,`l`,`origin`] mp_tac) >>
-                 (impl_tac >- first_assum ACCEPT_TAC) >>
-                 disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-                 qpat_assum `?off dest. _ /\ _ /\ _ /\ _`
-                   (qx_choose_then `oldoff` (qx_choose_then `dest` strip_assume_tac)) >>
-                 qpat_assum `!l org. tag v 0 = SOME(l,org) ==> _`
-                   (qspecl_then [`l`,`origin`] mp_tac) >>
-                 (impl_tac >- first_assum ACCEPT_TAC) >>
-                 disch_then (qx_choose_then `newoff` strip_assume_tac) >>
-                 `oldoff = newoff` by
-                   (qpat_assum `FLOOKUP _ l = SOME oldoff` mp_tac >>
-                    qpat_assum `FLOOKUP _ l = SOME newoff` (fn th => simp[NoAsms, th])) >>
-                 conj_tac >- simp[IgnAsm `p = _`] >>
-                 conj_tac >- first_assum ACCEPT_TAC >>
-                 qexistsl [`oldoff`,`dest`] >>
-                 qpat_assum `FLOOKUP o2pc oldoff = SOME dest` mp_tac >>
-                 simp[IgnAsm `p = _`]) >>
-             map_every qx_gen_tac [`l`,`origin`] >> DISCH_TAC >>
-             qpat_assum `!k l org. tag v k = SOME(l,org) ==> _`
-               (qspecl_then [`SUC n`,`l`,`origin`] mp_tac) >>
-             simp[IgnAsm `p = _`]) >>
-         qx_gen_tac `k` >> Cases_on `k`
-         >- (DISCH_TAC >> qpat_assum `boolean v 0 ==> _` mp_tac >>
-             simp[IgnAsm `p = _`]) >>
-         DISCH_TAC >> qpat_assum `!k. boolean v k ==> _`
-           (qspec_then `SUC n` mp_tac) >> simp[IgnAsm `p = _`]) >>
-     strip_tac >>
-     rename1 `shape v cur` >>
-     qpat_assum `shape v cur` mp_tac >>
-     simp[Abbr `D`, Abbr `shape`, Abbr `Shape`, Abbr `lo`, IgnAsm `p = _`] >>
-     metis_tac[EL]) >>
-  *)
   `!t h xs. shape v t /\ t.as_stack = h::xs ==> D h` by
     (simp[NoAsms, Abbr `shape`, Abbr `Shape`, Abbr `D`, Abbr `lo`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >> strip_tac >>
@@ -330,8 +277,6 @@ Proof
      conj_tac
      >- (qx_gen_tac `k` >> Cases_on `k`
          >- simp[] >>
-         (* E0286: once-specialized contextual simp lost the witness:
-            (qspec_then `SUC n` mp_tac) >> simp[EL] >> metis_tac[] *)
          map_every qx_gen_tac [`l`,`org`] >> DISCH_TAC >>
          qpat_assum `!k l org. tag v k = SOME(l,org) ==> _`
            (qspecl_then [`SUC n`,`l`,`org`] mp_tac) >>
@@ -387,7 +332,6 @@ Proof
          (qspecl_then [`v`,`j`] mp_tac) >> simp[NoAsms] >> metis_tac[]) >>
      qabbrev_tac `dst = u with <|as_stack := xs;
                            as_pc := if w = 0w then b+2 else b+4|>` >>
-     (* Earlier simp-only projections did not close the PC equation. *)
      `u.as_pc = b+1` by metis_tac[IgnAsm `p = _`] >>
      `asm_step lo o2pc (EL (pc j) p) u = AsmOK dst` by
        (Cases_on `w = 0w` >>
@@ -537,7 +481,6 @@ Proof
      strip_tac >>
      `height y = height z + n` by decide_tac >>
      (conj_tac >- simp[]) >>
-     (* A broad Metis call here timed out on the unspecialized slot clauses. *)
      qx_gen_tac `k` >> (conj_tac
      >- (map_every qx_gen_tac [`lbl`,`org`] >> DISCH_TAC >>
          qpat_assum `!k l org. tag z k = SOME(l,org) ==> _`
@@ -634,29 +577,6 @@ Proof
      asm "jump_back" (qspecl_then [`j`,`y`,`2`] mp_tac) >>
      (impl_tac >- simp[IgnAsm `p = _`]) >> strip_tac >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
-     (* E0321 diagnostic (before the explicit natural-rank annotation):
-        qpat_assum `rank y < rank j` mp_tac >>
-        qpat_assum `rank j < rank v` mp_tac >>
-        (fn (asl,g) =>
-           let
-             val (p1,g') = boolSyntax.dest_imp g
-             val (p2,p3) = boolSyntax.dest_imp g'
-             fun parts t =
-               let val (f,rhs) = Term.dest_comb t
-                   val (h,lhs) = Term.dest_comb f
-               in (h,lhs,rhs) end
-             fun describe t =
-               let val (h,lhs,rhs) = parts t
-                   val {Thy,Name,...} = Term.dest_thy_const h
-                   fun operand a = Parse.term_to_string a ^ " : " ^
-                                   Parse.type_to_string (Term.type_of a)
-               in Thy ^ "$" ^ Name ^ " at " ^ operand lhs ^ ", " ^ operand rhs end
-             val (_,mid1,_) = parts p1
-             val (_,_,mid2) = parts p2
-           in FAIL_TAC (String.concatWith " | " (map describe [p1,p2,p3]) ^
-                         " | middle aconv = " ^ Bool.toString (Term.aconv mid1 mid2))
-                (asl,g) end)
-        This found rat$rat_les and identical middle operands. *)
      (conj_tac >- (Q_TAC (TRANS_TAC LESS_TRANS) `rank j` >>
                    conj_tac >> first_assum ACCEPT_TAC)) >>
      (conj_tac >- (qpat_assum `height j = height v+1` mp_tac >>

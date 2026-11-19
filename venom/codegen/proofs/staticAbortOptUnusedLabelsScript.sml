@@ -619,7 +619,6 @@ Resume prune_unused_jumpdests_abort_certificate[pending]:
                           Abbr `KQ`, LET_THM, UNWIND_FORALL_THM2, RIGHT_EXISTS_AND_THM])) >>
      SIMP_TAC bool_ss [Abbr `Flow`, Abbr `TQ`, Abbr `pcQ`, combinTheory.o_THM,
                        LET_THM, UNWIND_FORALL_THM2, RIGHT_EXISTS_AND_THM] >>
-     (* The earlier single rewrite normalized only the worker fetch. *)
      asm "rowfetch" (fn th =>
        rewrite_tac[th, PURE_REWRITE_RULE [combinTheory.o_THM] th])) >>
   (* Restrict the one transported table to occurrences reachable from eQ. *)

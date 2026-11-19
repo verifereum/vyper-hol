@@ -137,21 +137,12 @@ Resume stopped_body_sequential_case[ok]:
   metis_tac[]
 QED
 
-(* Failed nonok suffixes retained for the task's proof history:
-   ntac 2 (qpat_x_assum `!n ast0 ast1 ss0 ss1 x. _` kall_tac) >>
-   qpat_x_assum `!k1 prefix1 rest1 ps1 vs1 ast1 ss1. _` kall_tac
-   removed K before the second selection. Delete K first instead.
-   fs[codegenRelTheory.venom_asm_terminal_rel_def] >> metis_tac[]
-   left reflexivity of the request prefix; supply the witnesses explicitly.
-   drule_all codegen_ready_intret_opcode >> gvs[is_terminator_def]
-   left RET as an antecedent; strip it before simplifying. *)
 Resume stopped_body_sequential_case[nonok]:
   qpat_x_assum `!k1 prefix1 rest1 ps1 vs1 ast1 ss1. _` kall_tac >>
   ntac 2 (qpat_x_assum `!n ast0 ast1 ss0 ss1 x. _` kall_tac) >>
   `!v. step_inst fuel ctx inst vs <> OK v` by metis_tac[] >>
   `block_rest fuel ctx fn bb vs = step_inst fuel ctx inst vs` by
     metis_tac[block_rest_other] >>
-  (* The initial nonok probe stopped after the constructor split. *)
   (* gvs removes EL k = inst; restore its reflexive instance for
      the public per-instruction interfaces. *)
   Cases_on `step_inst fuel ctx inst vs` >> gvs[] >>

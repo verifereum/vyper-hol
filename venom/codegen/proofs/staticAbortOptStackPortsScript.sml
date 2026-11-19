@@ -240,19 +240,6 @@ Triviality erase_fixed_port:
 Proof
   SIMP_TAC bool_ss [LET_THM, UNWIND_FORALL_THM2] >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "open") strip_assume_tac) >>
-  (* The former in-window edge adapter failed before constructor reduction:
-     mp_tac (cj 2 (port_norm stack_fixed_source_demand_paths)) >>
-     impl_tac >-
-       (asm "open" strip_assume_tac >>
-        rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
-        rpt gen_tac >> disch_tac >>
-        qpat_x_assum `p = pre ++ _` kall_tac >>
-        qpat_assum `!x y. edge x y ==> _` (qspecl_then [`x`,`y`] mp_tac) >>
-        impl_tac >- first_assum ACCEPT_TAC >>
-        Cases_on `EL (pc x) p` >> pure_asm_rewrite_tac [asm_inst_case_def] >>
-        disch_then ACCEPT_TAC) >>
-     disch_then (qspecl_then [`^erase_fixed`,`tail`] mp_tac) >> simp[MAP]
-  *)
   asm "open" assume_tac >>
   mp_tac (cj 2 fixed_paths) >>
   impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>

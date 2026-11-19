@@ -89,9 +89,6 @@ Proof
     operand_val (frame_view fn ra vs) lo (stack_peek dist ps.ps_stack) =
     eval_operand val_op (frame_view fn ra vs)` by simp[] >>
   `inst.inst_opcode = ASSERT ==> IS_SOME (FLOOKUP lo "revert")` by simp[] >>
-  (* Failed routes: backward existential matching and frame-first chained
-     drule_at did not specialize the planner tuple. Specialize the original
-     closed theorem directly, leaving its remaining outer names unchanged. *)
   mp_tac (Q.INST
     [`cp:context_plan` |-> `cpl:context_plan`,
      `base:num` |-> `spill_base:num`,

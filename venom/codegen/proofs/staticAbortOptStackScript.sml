@@ -1060,7 +1060,7 @@ fun stack_packet 0 th = [th]
   | stack_packet n th = CONJUNCT1 th :: stack_packet (n-1) (CONJUNCT2 th);
 
 Theorem stack_build_selected_table[local]:
-  !p q cc req b m d V pc height rank need tag boolean edge z H R G B
+  !p q cc b m d V pc height rank need tag boolean edge z H R G B
     ih ir it ib init j start.
   !n. n = LENGTH d ==>
   !f. f = splice_pc b m n ==>
@@ -1075,7 +1075,7 @@ Theorem stack_build_selected_table[local]:
      ^First (\y. y = ^Copy j)) ==>
   ?W R. ^rooted_rows q cc W e (^Rk ann) (^Pc ann) (^Ht ann) (^Nd ann) (^Tg ann) (^Bl ann) R
 Proof
-  ntac 27 gen_tac >> stack_intro_aliases [`n`,`f`,`kept`,`id`,`ann`,`e`] >>
+  ntac 26 gen_tac >> stack_intro_aliases [`n`,`f`,`kept`,`id`,`ann`,`e`] >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   disch_then (map_every assume_tac o stack_packet 6) >>
   `!v. v IN V ==> need v ==> cc.cc_static` by suspend "static" >>
@@ -1342,7 +1342,7 @@ Proof
   ntac 33 gen_tac >>
   stack_intro_aliases [`n`,`f`,`kept`,`id`,`ann`,`root`] >> BETA_TAC >>
   disch_then (map_every assume_tac o stack_packet 14) >>
-  qspecl_then [`p`,`q`,`cc`,`req`,`b`,`m`,`d`,`V`,`pc`,`height`,`rank`,`need`,`tag`,
+  qspecl_then [`p`,`q`,`cc`,`b`,`m`,`d`,`V`,`pc`,`height`,`rank`,`need`,`tag`,
     `boolean`,`edge`,`z`,`H`,`R`,`G`,`B`,`ih`,`ir`,`it`,`ib`,`init`,`dest`,`start`]
     (stack_apply_aliases [`Abbrev (n = _)`,`Abbrev (f = _)`,`Abbrev (kept = _)`,
       `Abbrev (id = _)`,`Abbrev (ann = _)`,`Abbrev (root = _)`]

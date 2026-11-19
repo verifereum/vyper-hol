@@ -295,9 +295,6 @@ Resume merge_rename_short_root[bypass]:
     (SIMP_RULE bool_ss [pairTheory.UNCURRY_DEF]
       (CONV_RULE residual_names_conv merge_rename_root_bypass)) >>
   qexistsl [`z`,`off`] >> asm "reach" (fn th => simp[th])
-  (* The earlier sequential reverse SUBS fold did not expose a matching Open
-     premise, and stripping the redex disjunction lost the required disjunctive
-     assumption. Normalize only the imported theorem and the Open premise. *)
 QED
 
 Resume merge_rename_short_root[successor]:
