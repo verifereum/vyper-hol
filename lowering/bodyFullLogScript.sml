@@ -2416,6 +2416,13 @@ qpat_assum `abi_encoder_window_pre ctx func s3 s4 dst.buf_operand src.buf_operan
     (qspecl_then [`inst`,`b`,`sz`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >> rpt conj_tac >> rpt strip_tac >> first_assum ACCEPT_TAC) >>
+`ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+  prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp` by
+  (qpat_assum `stmt_state_rel H ctx func cenv cx mid prepared` (fn related =>
+     mp_tac (MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp related) >>
+     mp_tac (MATCH_MP stateRelProjTheory.stmt_state_rel_fmp_room related)) >>
+   POP_ASSUM_LIST (K ALL_TAC) >>
+   simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac) >>
 mp_tac (Q.INST
  [`encoder_dst` |-> `dst.buf_operand`, `encoder_src` |-> `src.buf_operand`,
   `ei` |-> `type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT dtys)`,

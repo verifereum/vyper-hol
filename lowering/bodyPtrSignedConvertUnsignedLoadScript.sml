@@ -63,6 +63,7 @@ Theorem mload_counted_tainted_ambient:
         op_taint tn' (Var p) = op_taint tn (Var p))
 Proof
   rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all mload_counted_path >> strip_tac >>
   qexistsl_tac [`step_prov PG G (mk_inst id MLOAD [Var src] [out])
     (update_var out (mload (w2n a) s) s)`,

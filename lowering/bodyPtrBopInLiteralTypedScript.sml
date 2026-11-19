@@ -37,7 +37,8 @@ Proof
   `LIST_REL (\x w. eval_operand x s = SOME w) xs (MAP (typed_val_to_w256 tv) vs)` by
     simp[LIST_REL_MAP2] >>
   drule_all literal_typed_encoding_MEM >> disch_tac >>
-  Cases_on `bop = In` >> gvs[]
+  Cases_on `bop = In` >> gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[]
   >- (drule_all literal_in_path >>
       disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
       gvs[eval_op_inst_idx] >> qexistsl_tac [`u`,`G'`,`tn'`] >> simp[]) >>
@@ -129,7 +130,8 @@ Proof
   `LIST_REL (\x w. eval_operand x (drop_fresh sm s) = SOME w)
     xs (MAP (typed_val_to_w256 tv) vs)` by simp[LIST_REL_MAP2] >>
   drule_all literal_typed_encoding_MEM >> disch_tac >>
-  Cases_on `bop = In` >> gvs[]
+  Cases_on `bop = In` >> gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (drop_fresh sm s)` by simp[]
   >- (drule_all exprSimBopInLiteralWordTheory.literal_in_run >> strip_tac >>
       drule_all literal_in_uniform >>
       disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>

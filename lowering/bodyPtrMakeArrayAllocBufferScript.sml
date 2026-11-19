@@ -24,7 +24,7 @@ Theorem literal_alloc_buffer_ptr_run:
   local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?u w G1 tn1.
@@ -65,7 +65,7 @@ Proof
    ptr_covers (step_prov PG G inst t) (step_taint inst s t tn)
      (STRING #"%" (toString sa.cs_next_var))
      (t with vs_inst_idx := SUC s.vs_inst_idx) sz` by
-    (simp[Abbr `inst`] >> irule literal_alloca_ptr_capacity >>
+    (simp_tac bool_ss [Abbr `inst`] >> irule literal_alloca_ptr_capacity >>
      metis_tac[]) >>
   qexistsl_tac [`t`, `w`, `step_prov PG G inst t`, `step_taint inst s t tn`] >>
   conj_tac >- simp[Abbr `inst`] >> conj_tac >- simp[Abbr `inst`] >>

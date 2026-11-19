@@ -61,7 +61,7 @@ QED
 
 Theorem emit_add_zero_path_ptr:
   emit_inst ADD [left; right] [tmp] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
@@ -128,7 +128,7 @@ QED
 
 Theorem emit_add_member_path_ptr:
   emit_op ADD [Var src; Lit off] sa = (pv,sm) /\
-  fn_has_code sa sm func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sm func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   lookup_var src s = SOME w /\ op_taint tn (Var src) = {} /\
@@ -187,7 +187,7 @@ QED
 
 Theorem emit_mload_member_path_ptr:
   emit_op MLOAD [Var src] sa = (pv,sm) /\
-  fn_has_code sa sm func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sm func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME w /\

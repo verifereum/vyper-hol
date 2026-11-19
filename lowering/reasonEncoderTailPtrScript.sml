@@ -111,6 +111,7 @@ Proof
     (qx_choose_then `s1` strip_assume_tac))) >>
   `lookup_var dst s1 = SOME a /\ ptr_covers G tn1 dst s1 32` by
     metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all reason_copy_mload_resources_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
@@ -209,7 +210,9 @@ Theorem reason_encoder_load_offset_ptr:
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
     (off <> out ==> lookup_var off sf = SOME d /\ op_taint tnf (Var off) = {})
 Proof
-  strip_tac >> drule_all reason_copy_mload_resources_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all reason_copy_mload_resources_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `lookup_var root s1 = SOME a /\ ptr_covers G1 tn1 root s1 capacity` by
@@ -335,7 +338,9 @@ Theorem reason_encoder_tail_zero_ptr:
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >> drule_all reason_load_round_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all reason_load_round_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `lookup_var tail s1 = SOME b /\ ptr_covers G1 tn1 tail s1 capacity /\
@@ -401,7 +406,8 @@ Proof
      irule (SRULE [arithmeticTheory.ADD_COMM] (cj 5 mcopy_operand_ghost_frame)) >> simp[]) >>
   qexistsl_tac [`tnf`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
   conj_tac
-  >- (drule_all reason_mcopy_path_ptr >>
+  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+      drule_all reason_mcopy_path_ptr >>
       disch_then (qspecl_then [`PG`, `D`] mp_tac) >>
       gvs[Abbr `t`, Abbr `tnf`]) >>
   `sb.cs_current_bb = sa.cs_current_bb /\
@@ -443,6 +449,7 @@ Proof
   `eval_operand (Var len) s = SOME n /\
    eval_operand (Lit 32w) s = SOME 32w /\
    op_taint tn (Lit 32w) = {}` by simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
     reason_copy_binop_resources_ptr)) >>
   disch_then (qspecl_then [`PG`, `G`, `D`] (qx_choose_then `G1`
@@ -483,12 +490,15 @@ Theorem reason_encoder_item_length_ptr:
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >> drule_all reason_round_mask_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all reason_round_mask_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `eval_operand (Var rounded) s1 = SOME ((n + 31w) && i2w (-32)) /\
    eval_operand (Lit 32w) s1 = SOME 32w /\
    op_taint tn1 (Lit 32w) = {}` by simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
     reason_copy_binop_resources_ptr)) >>
   disch_then (qspecl_then [`PG`, `G1`, `D`] (qx_choose_then `G2`
@@ -537,6 +547,7 @@ Proof
   `eval_operand (Var off) s1 = SOME d /\ op_taint tn1 (Var off) = {} /\
    eval_operand (Var item) s1 = SOME z /\ op_taint tn1 (Var item) = {}` by
     (simp[eval_operand_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
     reason_copy_binop_resources_ptr)) >>
   disch_then (qspecl_then [`PG`, `G`, `D`] (qx_choose_then `G2`
@@ -766,6 +777,7 @@ Theorem reason_encoder_size_slot_init_ptr:
     (!p k. ptr_covers G1 tn1 p t k ==> ptr_covers G1 tnf p sf k)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1
     (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
     (drule_all reason_encoder_alloc_path_ptr >> simp[]) >>

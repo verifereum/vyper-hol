@@ -8,7 +8,7 @@ Ancestors
   codegenRel contextCodegenRel
 
 Theorem clean_add_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [left;right] [tmp]) /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
@@ -27,7 +27,7 @@ Proof
 QED
 
 Theorem ptr_inst_ok_assert:
-  op_taint tn cond = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn cond = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id ASSERT [cond] []) s
 Proof
   strip_tac >>
@@ -40,7 +40,7 @@ Proof
 QED
 
 Theorem assert_abort_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSERT [cond] []) /\
   op_taint tn cond = {} /\

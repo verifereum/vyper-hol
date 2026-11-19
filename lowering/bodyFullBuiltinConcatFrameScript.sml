@@ -436,6 +436,7 @@ Proof
   `fo = Var (STRING #"%" (toString sa.cs_next_var))` by simp[] >>
   qpat_x_assum `fo = _` SUBST_ALL_TAC >>
   qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all assignTuplePtrLocalBytesCopyTheory.mload_clean_seq_ptr >>
   disch_then (qspecl_then [`ARB`, `func`, `PG`, `sa.cs_next_id`, `out`] strip_assume_tac) >>
   rename1 `inst_seq_ptr ARB 0 ctx func PG G tn _ s Gf tnf` >>

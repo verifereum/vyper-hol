@@ -109,7 +109,7 @@ Proof
     OK (mstore (w2n addr) value (s with vs_inst_idx := k))` by
     simp[storage_copy_store_step] >>
   simp[inst_seq_ptr_def] >> conj_tac
-  >- (irule ptr_inst_ok_mstore_payload >> simp[]) >>
+  >- (irule wordLoadStorePtrTheory.ifexp_materialize_mstore_check >> simp[]) >>
   `mstore (w2n addr) value (s with vs_inst_idx := k) =
    (mstore (w2n addr) value s) with vs_inst_idx := k` by
     simp[mstore_def] >>

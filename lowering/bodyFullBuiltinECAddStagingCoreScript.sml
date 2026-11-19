@@ -808,7 +808,8 @@ Resume ecadd_staging_full_from_transfers[after_output_allocation]:
    (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==>
      not_fresh_at ca z)` by
     (rpt strip_tac >> `not_fresh_at s2 z` by metis_tac[] >>
-     fs[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+     irule loweringShapeDefsTheory.not_fresh_at_mono >>
+     qexists_tac `s2` >> simp[]) >>
   `stmt_state_rel (storage_trace_horizon es2.storage_trace)
      ctx func cenv cx es2 ta` by
     (qpat_assum `!H'. stmt_state_rel H' ctx func cenv cx es2 t2 ==> _`

@@ -435,8 +435,11 @@ Resume raw_call_bytes_success_full_path[storeghost]:
   simp[ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
     finite_mapTheory.DRESTRICT_UNIV] >>
   qmatch_goalsub_abbrev_tac `step_taint inst v (mstore b w vk) tm` >>
-  `vk = v with vs_inst_idx := k` by simp[Abbr `vk`, Abbr `v`] >>
-  pure_asm_rewrite_tac [] >>
+  `?j. vk = v with vs_inst_idx := j` by
+    (qexists_tac `vk.vs_inst_idx` >>
+     simp[Abbr `vk`, Abbr `v`, update_var_def, venom_state_component_equality]) >>
+  pop_assum strip_assume_tac >>
+  qpat_assum `vk = v with vs_inst_idx := j` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [instIdxIndepTheory.mstore_idx,
     ghostPcTransportPtrTheory.step_taint_inst_idx_right] >>
   simp[Abbr `tf`, Abbr `tm`, Abbr `inst`, Abbr `v`, Abbr `w`,
@@ -448,7 +451,8 @@ Resume raw_call_bytes_success_full_path[storeghost]:
   `eval_operand (Var p) v = SOME (n2w b)` by
     simp[Abbr `v`, eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   `eval_operand (Var a4) v = SOME w` by
-    simp[Abbr `v`, Abbr `w`, eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+    simp[Abbr `v`, Abbr `vk`, Abbr `w`, eval_operand_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
   `b < dimword (:256)` by (simp[] >> decide_tac) >>
   qpat_assum `eval_operand (Var p) v = _`
     (mp_then Any mp_tac ifexp_materialize_mstore_taint) >>

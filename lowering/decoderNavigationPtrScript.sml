@@ -326,7 +326,7 @@ Proof
        gvs[Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
      `!fuel. ptr_inst_ok D lower fuel ctx' func G tn
        (mk_inst id opc [left;right] [out]) s` by
-       (gen_tac >> irule setup_scalar_binop_safe >> simp[]) >>
+       (gen_tac >> irule exprPtrUnwrapScalarEdgesTheory.ptr_inst_ok_copy_arith >> simp[]) >>
      irule setup_instruction_continuation >> simp[] >>
      goal_assum (drule_at Any) >> qexistsl_tac [`sa`,`sb`] >>
      gvs[Abbr `HG`, Abbr `u`, Abbr `t`, mk_inst_def, update_var_def,
@@ -342,7 +342,7 @@ Proof
       gvs[Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
     `ptr_inst_ok D lower 0 ctx' func G tn
       (mk_inst id opc [left;right] [out]) s` by
-      (irule setup_scalar_binop_safe >> simp[]) >>
+      (irule exprPtrUnwrapScalarEdgesTheory.ptr_inst_ok_copy_arith >> simp[]) >>
     `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
     qunabbrev_tac `HG` >> qunabbrev_tac `u` >>
     qpat_x_assum `LENGTH sb.cs_current_insts = SUC _` SUBST1_TAC >>
@@ -362,7 +362,7 @@ Proof
      conj_tac >- gvs[Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
      simp[Abbr `HG`, Abbr `u`, Abbr `t`, update_var_def] >>
      rpt strip_tac >> gvs[] >>
-     irule setup_scalar_binop_safe >> simp[allocas_from_def]) >>
+     irule exprPtrUnwrapScalarEdgesTheory.ptr_inst_ok_copy_arith >> simp[allocas_from_def]) >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
   `opc = ADD \/ opc = MUL` by metis_tac[] >>
   drule_at (Pat `HG = step_prov _ _ _ _`) setup_scalar_binop_ghost >>

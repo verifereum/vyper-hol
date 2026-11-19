@@ -20,6 +20,18 @@ Proof
   simp[venom_state_component_equality] >> metis_tac[]
 QED
 
+Theorem reason_scratch_frame_below_fmp[local]:
+  (t with <|vs_vars := vs; vs_memory := mem; vs_inst_idx := k|>) = s ==>
+  (allocas_below_fmp t <=> allocas_below_fmp s)
+Proof
+  disch_then (mp_tac o Q.AP_TERM `allocas_below_fmp`) >>
+  simp[allocas_below_fmp_def]
+QED
+
+val scratch_frame_below_fmp_rule =
+  MATCH_MP (REWRITE_RULE [venom_state_fupdcanon] reason_scratch_frame_below_fmp) o
+  REWRITE_RULE [venom_state_fupdcanon];
+
 (* Actual MCOPY taint, including arbitrary tainted padding, transports the
    robust representation. No cleanliness assumption on payload bytes is used. *)
 Theorem reason_mcopy_robust_representation:
@@ -75,7 +87,7 @@ QED
 
 Theorem reason_mcopy_path_ptr:
   emit_void MCOPY [Var dst;Var src;count_op] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   eval_operand (Var dst) s = SOME b /\
@@ -101,7 +113,7 @@ QED
 
 Theorem reason_copy_binop_path_ptr:
   emit_inst opc [left;right] [out] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
@@ -124,7 +136,7 @@ QED
 
 Theorem reason_copy_mload_path_ptr:
   emit_inst MLOAD [Var src] [out] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s 32 ==>
@@ -146,7 +158,7 @@ QED
    composing the rounded-copy prefix. The ghost frame is reused, not unfolded. *)
 Theorem reason_copy_binop_resources_ptr:
   emit_inst opc [left;right] [out] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
@@ -189,7 +201,7 @@ QED
 
 Theorem reason_copy_mload_resources_ptr:
   emit_inst MLOAD [Var src] [out] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s 32 /\
@@ -237,7 +249,7 @@ QED
 
 Theorem reason_copy_not_resources_ptr:
   emit_inst NOT [Lit 31w] [out] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
   ?Gf tnf sf.
@@ -294,7 +306,7 @@ Theorem reason_round_mask_ptr:
   emit_inst ADD [Var len;Lit 31w] [tmp] c0 = ((),c1) /\
   emit_inst AND [Var tmp;Var mask] [rounded] c1 = ((),sb) /\
   fn_has_code sa c0 func /\ fn_has_code c0 c1 func /\ fn_has_code c1 sb func /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var len s = SOME n /\ op_taint tn (Var len) = {} /\
@@ -319,6 +331,14 @@ Proof
   drule_all reason_copy_not_resources_ptr >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] (qx_choose_then `G0`
     (qx_choose_then `tn0` (qx_choose_then `s0` strip_assume_tac)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s0 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s0 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   `eval_operand (Var len) s0 = SOME n /\
    eval_operand (Lit 31w) s0 = SOME 31w /\
    op_taint tn0 (Var len) = {} /\
@@ -328,6 +348,14 @@ Proof
     reason_copy_binop_resources_ptr)) >>
   disch_then (qspecl_then [`PG`, `G0`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s1 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s0`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s1 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s0`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   `eval_operand (Var tmp) s1 = SOME (n + 31w) /\
    eval_operand (Var mask) s1 = SOME (i2w (-32)) /\
    op_taint tn1 (Var mask) = {}` by
@@ -352,7 +380,7 @@ Theorem reason_round_scalar_ptr:
   emit_inst ADD [Var len;Lit 31w] [tmp] sa = ((),c1) /\
   emit_inst AND [Var tmp;Lit (i2w (-32))] [rounded] c1 = ((),sb) /\
   fn_has_code sa c1 func /\ fn_has_code c1 sb func /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var len s = SOME n /\ op_taint tn (Var len) = {} ==>
@@ -380,6 +408,14 @@ Proof
     reason_copy_binop_resources_ptr)) >>
   disch_then (qspecl_then [`PG`, `G`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s1 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s1 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   `eval_operand (Var tmp) s1 = SOME (n + 31w) /\
    eval_operand (Lit (i2w (-32))) s1 = SOME (i2w (-32)) /\
    op_taint tn1 (Lit (i2w (-32))) = {}` by simp[eval_operand_def, op_taint_def] >>
@@ -400,7 +436,7 @@ Theorem reason_load_round_ptr:
   emit_inst ADD [Var len;Lit 31w] [tmp] c1 = ((),c2) /\
   emit_inst AND [Var tmp;Lit (i2w (-32))] [rounded] c2 = ((),sb) /\
   fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
-  fn_has_code c2 sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code c2 sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s 32 /\
@@ -427,6 +463,14 @@ Proof
   strip_tac >> drule_all reason_copy_mload_resources_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s1 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s1 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   drule_all reason_round_scalar_ptr >>
   disch_then (qspecl_then [`PG`, `G1`, `D`] (qx_choose_then `G2`
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
@@ -446,7 +490,7 @@ Theorem reason_copy_round_prefix_ptr:
   emit_inst ADD [Var v3;Lit 32w] [v4] c3 = ((),sb) /\
   fn_has_code sa c1 func /\ fn_has_code c1 cm func /\ fn_has_code cm c2 func /\
   fn_has_code c2 c3 func /\ fn_has_code c3 sb func /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s 32 /\
@@ -472,9 +516,25 @@ Proof
   drule_all reason_copy_mload_resources_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s1 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s1 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   drule_all reason_round_mask_ptr >>
   disch_then (qspecl_then [`PG`, `G1`, `D`] (qx_choose_then `G3`
     (qx_choose_then `tn3` (qx_choose_then `s3` strip_assume_tac)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s3 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s1`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s3 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s1`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   `eval_operand (Var v3) s3 = SOME (mload (w2n a) s + 31w && i2w (-32)) /\
    eval_operand (Lit 32w) s3 = SOME 32w /\
    op_taint tn3 (Lit 32w) = {}` by simp[eval_operand_def, op_taint_def] >>
@@ -513,7 +573,7 @@ Theorem reason_tuple_copy_path_ptr:
   emit_void MCOPY [Var dst;Var src;Var v4] c4 = ((),sb) /\
   fn_has_code sa c1 func /\ fn_has_code c1 cm func /\ fn_has_code cm c2 func /\
   fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\ fn_has_code c4 sb func /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
@@ -584,6 +644,10 @@ Resume reason_tuple_copy_path_ptr[path]:
       ptr_covers G4 tn4 src s4 (w2n (n2w n : bytes32)) /\
       ptr_covers G4 tn4 dst s4 (w2n (n2w n : bytes32))` by
        gvs[eval_operand_def] >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s4` by
+       (strip_tac >>
+        qpat_assum `(s4 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule) >> simp[]) >>
      drule_all reason_mcopy_path_ptr >>
      disch_then (qspecl_then [`PG`, `D`] mp_tac) >> simp[]) >>
   metis_tac[gas_path_ptr_then, ADD_CLAUSES]

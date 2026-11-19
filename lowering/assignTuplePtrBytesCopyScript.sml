@@ -29,6 +29,7 @@ Theorem emit_mcopy_normalized_ptr:
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `lookup_var src s = SOME a`
     (mp_then (Pat `lookup_var src s = SOME a`) mp_tac mcopy_operand_seq_ptr) >>
   disch_then drule_all >>
@@ -128,6 +129,7 @@ Proof
   rename1 `compile_bytestring_copy_len (Var src) sa = (count_op,sc)` >>
   `ptr_covers G tn src s 32` by
     (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all compile_bytestring_copy_len_normalized_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG G tn _ s G1 tn1` >>

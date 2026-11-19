@@ -907,6 +907,7 @@ Proof
      simp[compile_slice_out_buf_def, contextTheory.compile_alloc_buffer_def, emit_op_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
        fresh_var_def, emit_def] >> strip_tac >> gvs[not_fresh_at_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all compile_slice_out_buf_counted >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
   gvs[] >> qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
@@ -917,60 +918,6 @@ Proof
       simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF,
         pred_setTheory.EXTENSION, SF CONJ_ss]) >>
   first_x_assum drule >> simp[op_taint_def]
-QED
-
-Theorem external_slice_two_source_counted_ok[local]:
-  emit_op sizeopc [] sa = (limit,sc) /\
-  compile_assert_slice_bounds start len limit sc = ((),sd) /\
-  emit_void copyopc [Var data;start;len] sd = ((),se) /\
-  emit_void MSTORE [Var root;len] se = ((),sb) /\
-  fn_has_code sa sc fn /\ fn_has_code sc sd fn /\
-  fn_has_code sd se fn /\ fn_has_code se sb fn /\
-  ((sizeopc = CALLDATASIZE /\ copyopc = CALLDATACOPY /\ src = s.vs_call_ctx.cc_calldata) \/
-   (sizeopc = CODESIZE /\ copyopc = CODECOPY /\ src = s.vs_code)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  (!op z. MEM op [start;len;Var root;Var data] /\ op = Var z ==> not_fresh_at sa z) /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
-  lookup_var root s = SOME b /\ lookup_var data s = SOME d /\
-  32 <= N /\ ptr_covers G tn root s N /\ ptr_covers G tn data s (w2n wn) /\
-  (!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  run_inst_seq (emitted_insts sc sd)
-    ((update_var (STRING #"%" (toString sa.cs_next_var)) (n2w (LENGTH src)) s)
-      with vs_inst_idx := SUC s.vs_inst_idx) = OK u ==>
-  ?r v t HG tm.
-    r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
-    v = (write_memory_with_expansion (w2n d)
-      (TAKE (w2n wn) (DROP (w2n wa) src ++ REPLICATE (w2n wn) 0w)) r)
-        with vs_inst_idx := SUC r.vs_inst_idx /\
-    t = (mstore (w2n b) wn v) with vs_inst_idx := SUC v.vs_inst_idx /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ~t.vs_halted /\ ptr_covers HG tm root t N /\ mem_word_at (w2n b) t.vs_memory = wn /\
-    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    tm.t_mem = (tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + w2n wn})
-      DIFF {i | w2n b <= i /\ i < w2n b + 32}
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `!op z. MEM op ([start;len;Var root;Var data] ++ []) /\ op = Var z ==>
-    not_fresh_at sa z` by simp[] >>
-  Q.SUBGOAL_THEN
-  `((sizeopc = CALLDATASIZE /\ ([]:operand list) = [] /\ copyopc = CALLDATACOPY /\
-      [Var data;start;len] = [Var data;start;len] /\ src = s.vs_call_ctx.cc_calldata) \/
-    (sizeopc = CODESIZE /\ ([]:operand list) = [] /\ copyopc = CODECOPY /\
-      [Var data;start;len] = [Var data;start;len] /\ src = s.vs_code) \/
-    (sizeopc = EXTCODESIZE /\ [] = [(Lit 0w)] /\ copyopc = EXTCODECOPY /\
-      [Var data;start;len] = [(Lit 0w);Var data;start;len] /\
-      eval_operand (Lit 0w) s = SOME 0w /\ op_prov G (Lit 0w) = NONE /\
-      op_taint tn (Lit 0w) = {} /\
-      src = (lookup_account (w2w (0w:bytes32)) s.vs_accounts).code))` assume_tac
-  >- simp[] >>
-  qpat_assum `emit_op sizeopc [] sa = _`
-    (mp_then Any mp_tac external_slice_fragment_counted_ok) >>
-  disch_then drule_all >>
-  disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
 QED
 
 Theorem compile_slice_calldata_bounds_abort:

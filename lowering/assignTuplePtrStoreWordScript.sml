@@ -57,7 +57,7 @@ QED
 
 Theorem emit_mstore_zero_path_ptr:
   emit_inst MSTORE [Var dst; value] [] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   ptr_covers G tn dst s 32 /\ lookup_var dst s = SOME a /\

@@ -9,7 +9,7 @@ Ancestors wordLoadStorePtr bodyPtrEnvBuiltinsAllocation bodyPtrEnvBuiltinsEdges
 
 Theorem mstore_counted_edge:
   ptr_covers G tn dst s 32 /\ op_taint tn value = {} /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id MSTORE [Var dst; value] []) /\
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w ==>

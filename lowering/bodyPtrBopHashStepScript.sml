@@ -9,7 +9,7 @@ Theorem ptr_inst_ok_sha3:
   op_taint tn (Var p) = {} /\ op_taint tn lenop = {} /\
   (0 < w2n nw ==> ptr_covers G tn p s (w2n nw)) /\
   (!i. w2n a <= i /\ i < w2n a + w2n nw ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 0 ctx fn G tn
     (mk_inst id SHA3 [Var p;lenop] [out]) s
 Proof
@@ -39,7 +39,7 @@ Theorem bop_hash_sha3_edge:
   op_taint tn (Var p) = {} /\ op_taint tn lenop = {} /\
   (0 < w2n nw ==> ptr_covers G tn p s (w2n nw)) /\
   (!i. w2n a <= i /\ i < w2n a + w2n nw ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id SHA3 [Var p;lenop] [out]) /\

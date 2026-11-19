@@ -98,7 +98,7 @@ Resume empty_buffer_indexed_frames[finish]:
   `allocas_from lo u /\ lo <= u.vs_alloca_next` by
     metis_tac[ghost_inv_at_def] >>
   qpat_x_assum `!D lo. _` (qspecl_then [`D`, `lo`] mp_tac) >>
-  simp[] >> (impl_tac >- (qpat_x_assum `allocas_from lo u` mp_tac >> simp[allocas_from_def])) >> strip_tac >>
+  simp[] >> strip_tac >>
   qpat_x_assum `inst_seq_ptr D lo ctx func PG G tn _ s Gf tnf` mp_tac >>
   asm_rewrite_tac[inst_seq_ptr_def] >>
   simp[GSYM markerTheory.Abbrev_def] >> strip_tac >>

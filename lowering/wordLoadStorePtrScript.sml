@@ -58,8 +58,8 @@ Proof
        imm_taint_def]
 QED
 
-Theorem ifexp_copy_store_phase:
-  ~ctx_has_dalloca ctx /\ ptr_covers G tn addr s 32 /\
+Theorem mstore_seq_ptr:
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ptr_covers G tn addr s 32 /\
   eval_operand (Var addr) s = SOME d /\ eval_operand value s = SOME w ==>
   ?t tn'.
     run_inst_seq [mk_inst id MSTORE [Var addr;value] []] s = OK t /\
@@ -84,6 +84,23 @@ Proof
   conj_tac >- simp[ifexp_materialize_mstore_taint] >>
   simp[ifexp_materialize_mstore_ghost]
 QED
+
+Theorem ifexp_copy_store_phase:
+  ~ctx_has_dalloca ctx /\ ptr_covers G tn addr s 32 /\
+  eval_operand (Var addr) s = SOME d /\ eval_operand value s = SOME w ==>
+  ?t tn'.
+    run_inst_seq [mk_inst id MSTORE [Var addr;value] []] s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MSTORE [Var addr;value] []]
+      s G tn' /\
+    t = mstore (w2n d) w s /\
+    tn'.t_mem = (tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + 32}) UNION
+      {w2n d + k | k IN op_taint tn value} /\
+    tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >> irule mstore_seq_ptr >> simp[]
+QED
+
 Theorem mstore_local_robust:
   !fn cenv scopes s name entry p sz a w tv tn tn'.
     local_ptrs_rel fn cenv scopes s /\

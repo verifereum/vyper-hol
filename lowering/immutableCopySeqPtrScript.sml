@@ -69,7 +69,9 @@ Theorem immutable_offset_load_checked:
     (!x. not_fresh_at sa x ==>
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >> drule_all compile_lit_byte_offset_checked >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all compile_lit_byte_offset_checked >>
   disch_then (qspecl_then [`fn`,`PG`,`G`,`D`]
     (qx_choose_then `t` (qx_choose_then `G1`
       (qx_choose_then `tn1` strip_assume_tac)))) >>
@@ -91,6 +93,7 @@ Proof
      `op_prov G1 x = op_prov G x` by
        (irule old_operand_provenance_frame >> metis_tac[]) >>
      gvs[first_prov_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all compile_imm_load_word_checked >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm)` by
@@ -128,7 +131,9 @@ Theorem immutable_offset_store_checked:
     (!x. not_fresh_at sa x ==>
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >> drule_all compile_lit_byte_offset_covered >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all compile_lit_byte_offset_covered >>
   disch_then (qspecl_then [`D`,`fn`,`PG`]
     (qx_choose_then `q` (qx_choose_then `t` (qx_choose_then `G1`
       (qx_choose_then `tn1` strip_assume_tac))))) >> gvs[] >>

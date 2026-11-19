@@ -583,7 +583,18 @@ Resume return_selected_valued_frag_full_core[buffered_post]:
        [`func` |-> `func`, `ce` |-> `ce`, `nkey` |-> `nkey`,
         `t` |-> `t`] valued_return_result_unlock) >> simp[]) >>
   pop_assum strip_assume_tac >>
-  qexists_tac `us` >> gvs[]
+  qexists_tac `us` >> conj_tac
+  >- (qpat_assum `nr /\ mut <> View ==> _` mp_tac >>
+      qpat_assum `unlock_if_nr cx nr (is_view_mut mut) _ = (INL (),us)` mp_tac >>
+      qpat_assum `cx.txn.target = tx.target` (fn target =>
+        qpat_assum `nkey = nkey_map tx.function_name` (fn key =>
+          simp[NoAsms, unlock_if_nr_def, vyperInterpreterTheory.is_view_mut_def,
+               target, key])) >>
+      Cases_on `nr` >> Cases_on `mut` >> simp[]) >>
+  qpat_assum `INL v = INL v'` (fn value =>
+    qpat_assum `external_call_result_rel H tops ret tx (INL v,_,_) (Halt buffered_ss)`
+      (mp_tac o REWRITE_RULE [value])) >>
+  simp[NoAsms]
 QED
 
 Resume return_selected_valued_frag_full_core[buffered_normalize]:
@@ -1730,6 +1741,13 @@ Resume return_selected_valued_frag_full_core[buffered_generic_call]:
      qpat_assum `unlocked.vs_alloca_next<=ra.vs_alloca_next` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
   `~ra.vs_halted` by asm_rewrite_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ra /\
+    ra.vs_alloca_next + pending_alloca_size func ra <= w2n ra.vs_initial_fmp` by
+    (qpat_assum `stmt_state_rel _ ctx func ce cx prepared_es ra` (fn related =>
+       mp_tac (MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp related) >>
+       mp_tac (MATCH_MP stateRelProjTheory.stmt_state_rel_fmp_room related)) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac) >>
   mp_tac (Q.INST
     [`window_dst` |-> `retbuf.buf_operand`,`window_src` |-> `(src:operand)`,
      `ei` |-> `ce.ce_ret_enc_info`,`st` |-> `renc_st`,
