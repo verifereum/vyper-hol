@@ -699,7 +699,12 @@ Proof
   simp_tac bool_ss [] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `!m j h Gh th. m = i-j /\ j <= i /\ (^repeat_entry) j h Gh th ==> (^abort) h Gh th`
-    suffices_by (BETA_TAC >> metis_tac[]) >>
+    suffices_by
+      (BETA_TAC >> strip_tac >> qx_genl_tac [`j`,`h`,`Gh`,`th`] >>
+       qpat_x_assum `!m j h Gh th. m = i-j /\ _ ==> _`
+         (qspecl_then [`i-j`,`j`,`h`,`Gh`,`th`] mp_tac) >>
+       qpat_assum `hdr = fresh_label_output "dec_dyn_hdr" ls.cs_next_label`
+         (fn th => simp_tac bool_ss [th])) >>
   BETA_TAC >> completeInduct_on `m` >>
   rpt gen_tac >> strip_tac >> `j < n` by decide_tac >>
   mp_tac (BETA_RULE finite_reject_to_child) >> (impl_tac >- asm_rewrite_tac[]) >>
