@@ -279,7 +279,8 @@ jobs:
 
   export-parity:
     # Compiles every contract of the Vyper test exports natively and compares
-    # the bytes with the patched pinned Vyper's (tools/native_export_parity.py).
+    # the bytes with the patched pinned Vyper's (tools/native_export_parity.py),
+    # and checks the multi-module fixtures in bytecode/linked-units.
     if: ${{ !cancelled() && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     needs: export-vyper-tests
     runs-on: ubuntu-26.04-arm
@@ -316,6 +317,9 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: python3 tools/build_native_json_parity.py
+
+      - name: Check native bytecode parity on the linked-unit fixtures
+        run: bytecode/native/bytecode_parity_json.exe bytecode/linked-units/oracle
 
       - name: Install patched pinned Vyper
         run: |
