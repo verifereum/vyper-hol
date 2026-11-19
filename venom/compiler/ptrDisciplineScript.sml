@@ -617,8 +617,7 @@ End
    only ASSIGNed, shifted by an untainted amount (shift_taint tracks where
    its bytes go), multiplied by an untainted zero/one selector, or stored
    as the value of a store with an untainted
-   address, and tainted memory is only loaded, copied or returned.  A
-   CREATE sees no storage tainted. *)
+   address, and tainted memory is only loaded, copied or returned. *)
 Definition taint_ok_def:
   taint_ok fn tn inst s <=>
     (!op. MEM op inst.inst_operands /\ op_taint tn op <> {} ==>
@@ -638,9 +637,7 @@ Definition taint_ok_def:
        MEM (off,len) (source_memory_read_ranges inst s) /\
        off <= i /\ i < off + len /\ i IN tn.t_mem ==>
        inst.inst_opcode = MLOAD \/ inst.inst_opcode = ILOAD \/
-       inst.inst_opcode = MCOPY \/ inst.inst_opcode = RETURN) /\
-    ((inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2) ==>
-     tn.t_stor = {} /\ tn.t_trans = {})
+       inst.inst_opcode = MCOPY \/ inst.inst_opcode = RETURN)
 End
 
 Theorem taint_ok_observation_operand:
