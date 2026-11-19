@@ -2507,3 +2507,42 @@ Proof
   qpat_x_assum `trace_agrees _ (trace_block _ _ (fuel-e) _ _ _ _)` mp_tac >>
   simp[AC ADD_ASSOC ADD_COMM]
 QED
+
+Theorem focus_history_native_ordinary[local]:
+  wf_function fn /\
+  h < LENGTH (trace_blocks [] 0 N C tf entry) /\
+  EL h (trace_blocks [] 0 N C tf entry) = ((a,e,i.inst_id),fn,i,s) /\
+  joint_transition C (JointConfig stk PG G tn fn i s oms om hs hist)
+    (SOME (OriginOrdinary fuel post)) next ==>
+  ?i' stk' PG' G' tn' oms' om' hs' hist'.
+    SUC h < LENGTH (trace_blocks [] 0 N C tf entry) /\
+    EL (SUC h) (trace_blocks [] 0 N C tf entry) =
+      ((a,e,i'.inst_id),fn,i',post with vs_inst_idx := SUC s.vs_inst_idx) /\
+    next = JointConfig stk' PG' G' tn' fn i'
+      (post with vs_inst_idx := SUC s.vs_inst_idx) oms' om' hs' hist'
+Proof
+  strip_tac >>
+  drule_all_then strip_assume_tac dftPacketNativeContinuationTheory.native_trace_blocks_continuation >>
+  qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
+  simp[joint_transition_ordinary] >> strip_tac >>
+  `post.vs_current_bb = s.vs_current_bb` by
+    (`step_inst_base i s = OK post` by metis_tac[step_inst_non_invoke] >>
+     drule_all_then strip_assume_tac venomInstProofs1Theory.step_inst_base_preserves_all >>
+     first_assum ACCEPT_TAC) >>
+  `step_inst (N-e) C i s = OK post` by metis_tac[ptrSafeRunTheory.step_inst_non_invoke_fuel] >>
+  `ALL_DISTINCT (fn_labels fn)` by fs[wf_function_def] >>
+  drule_all_then strip_assume_tac dftGasToListReachBoundaryTheory.active_inst_lookup_distinct >>
+  gvs[] >>
+  rename1 `get_instruction bt (SUC s.vs_inst_idx) = SOME i'` >>
+  `?suffix. DROP h (trace_blocks [] 0 N C tf entry) =
+    ((a,e,i.inst_id),fn,i,s)::
+    ((a,e,i'.inst_id),fn,i',post with vs_inst_idx := SUC s.vs_inst_idx)::suffix` by
+    (simp[Once trace_defs,trace_step_noninvoke] >> simp[Once trace_defs]) >>
+  `1 + h < LENGTH (trace_blocks [] 0 N C tf entry)` by
+    (qpat_assum `DROP h _ = _::_::_` (mp_tac o AP_TERM ``LENGTH : list_visit list -> num``) >>
+     simp[LENGTH_DROP]) >>
+  drule_then (ASSUME_TAC o GSYM) EL_DROP >>
+  qpat_assum `DROP h _ = _::_::_` (fn th =>
+    qpat_x_assum `_ = EL 1 (DROP h _)` (mp_tac o REWRITE_RULE[th])) >>
+  simp[ADD1] >> metis_tac[]
+QED
