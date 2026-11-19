@@ -43,7 +43,7 @@ Ancestors
      codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
   codegenRequestPrefix callTraceFrame guardPushProjections
-  gasFocusParentProofs
+  gasFocusParentProofs gasFocusStaticPrefixDriver
   gasFocusConcretizeGhostCutHistory gasFocusConcretizeCutFrameSupport
   fnStaticAbortSim
   contextStaticAbortRel
