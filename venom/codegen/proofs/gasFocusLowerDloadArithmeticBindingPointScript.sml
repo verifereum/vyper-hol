@@ -11,7 +11,7 @@ Libs
   lowerDloadReturnPackageLib
 
 Theorem ld_focus_arithmetic_binding_point_next:
-  let q = u with vs_inst_idx := SUC t.vs_inst_idx in
+  !q. q = u with vs_inst_idx := SUC t.vs_inst_idx ==>
   o1_ctx_shape C /\ o1_safe_upto D lo n C vs /\
   ld_sync lo P C vs stk PG G tn fn inst s t A (f::fs) N /\
   ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
@@ -26,7 +26,7 @@ Theorem ld_focus_arithmetic_binding_point_next:
    MEM inst.inst_opcode [ASSIGN; RETPC_PARAM; PARAM]) /\
   step_inst fuel C' inst t = OK u /\ active_inst (ld_image f) j q /\ gas_cut n vs q ==>
   ?ss H' g i Y.
-    let s1 = ss with vs_inst_idx := SUC s.vs_inst_idx in
+    ?s1. s1 = ss with vs_inst_idx := SUC s.vs_inst_idx /\
     step_inst 0 C inst s = OK ss /\
     g = (f with <|lf_src := s1; lf_tgt := q; lf_H := H';
                   lf_tv := (step_taint inst s ss tn).t_var|>) /\
@@ -41,6 +41,7 @@ Theorem ld_focus_arithmetic_binding_point_next:
     EVERY (\a. a.lf_src.vs_gas_readings = a.lf_tgt.vs_gas_readings /\
       LENGTH s1.vs_gas_readings <= LENGTH a.lf_src.vs_gas_readings) (g::fs)
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_THM2 ORELSEC Unwind.UNWIND_FORALL_CONV)) >>
   PURE_REWRITE_TAC[LET_THM] >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `q = u with vs_inst_idx := SUC t.vs_inst_idx` >>
   drule ld_sync_source >> strip_tac >>

@@ -26,13 +26,14 @@ Theorem focus_fmp_dalloca_ledger_push:
       (update_var aligned a (update_var mask m (update_var plus31 p t)))))
       with vs_inst_idx := j /\
   sm1 = (if z = 0 then sm else sm |+ ((w2n s.vs_fmp,z),(lo,inst.inst_id))) ==>
-  let rs1 = <|fr_mark := out; fr_site := inst.inst_id;
-              fr_lo := lo; fr_hi := lo+z|> :: rs in
+  !rs1. rs1 = <|fr_mark := out; fr_site := inst.inst_id;
+              fr_lo := lo; fr_hi := lo+z|> :: rs ==>
     (?st'. df_at NONE states bb.bb_label (SUC i) = SOME st' /\
            st'.frs_stack = MAP (\r. r.fr_mark) rs1) /\
     fmp_ledger_ok (fn_insts fn) env t1 (lo+z) rs1 /\
     fmp_ledger_link sm1 eb (lo+z) rs1
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   strip_tac >>
   `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
     fs[wf_function_def, fn_labels_def] >>

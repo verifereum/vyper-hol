@@ -124,10 +124,9 @@ Theorem focus_retained_row_replay:
               (child_entry with vs_gas_readings := g ++ tail)) = ZIP (EL q ks,g)))) ==>
   !kgss tail.
     LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE k ms) kgss ==>
-    let g = FLAT kgss;
-        B = <|bb_label := be.vs_current_bb; bb_instructions :=
-          REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|>
-    in
+    !g. g = FLAT kgss ==>
+    !B. B = <|bb_label := be.vs_current_bb; bb_instructions :=
+          REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE k xs|> ==>
     (?extra. FLAT (TAKE k ess) =
       gas_events_block (fuel-d) C7 sf.fn_name B (be with vs_gas_readings := g ++ tail) ++ extra) /\
     (!u. FOLDR (dft_exec_cons (fuel-d) C7) OK (TAKE k xs)
@@ -142,6 +141,7 @@ Theorem focus_retained_row_replay:
         gas_events_block (fuel-d) C7 sf.fn_name B
           (be with vs_gas_readings := g ++ tail') = FLAT (TAKE k ess)))
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   map_every qx_gen_tac [`fuel`, `N`, `d`, `ms`, `xs`, `ess`, `ks`, `k`, `sf`, `p`,
     `calls`, `j`, `C8`, `root_tf`, `root_entry`, `C7`, `be`] >> strip_tac >>
   `!a. a <= k ==> !kgss tail.

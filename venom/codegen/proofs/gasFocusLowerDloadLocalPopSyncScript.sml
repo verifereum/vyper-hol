@@ -55,20 +55,20 @@ Proof
 QED
 
 Theorem ld_focus_local_pop_sync:
-  let fl = dyn_floor C vs;
-      outs = c.cf_inst.inst_outputs;
-      K = COMPL (set outs);
-      s1 = sr with vs_inst_idx := SUC c.cf_state.vs_inst_idx;
-      t1 = tr with vs_inst_idx := SUC d.cf_state.vs_inst_idx;
-      tn1 = tn with t_var := DRESTRICT c.cf_tvar K;
-      g = f with <|lf_src := s1; lf_tgt := t1;
-                    lf_H := DRESTRICT f.lf_H K; lf_tv := DRESTRICT f.lf_tv K|>
-  in
+  !fl. fl = dyn_floor C vs ==>
+  !outs. outs = c.cf_inst.inst_outputs ==>
+  !K. K = COMPL (set outs) ==>
+  !s1. s1 = sr with vs_inst_idx := SUC c.cf_state.vs_inst_idx ==>
+  !t1. t1 = tr with vs_inst_idx := SUC d.cf_state.vs_inst_idx ==>
+  !tn1. tn1 = tn with t_var := DRESTRICT c.cf_tvar K ==>
+  !g. g = f with <|lf_src := s1; lf_tgt := t1;
+                    lf_H := DRESTRICT f.lf_H K; lf_tv := DRESTRICT f.lf_tv K|> ==>
     ld_sync lo P C vs (c::cs) PG G tn fn ri s t A (child::f::fs) N /\
     B = DRESTRICT A (ld_slots A (f::fs)) /\ FDOM B = ld_slots B (g::fs) /\
     EVERY (\h. ld_maps B h /\ ld_vars P B h) (f::fs) /\
     (!j. j < LENGTH (c::cs) ==>
-      let cc = EL j (c::cs); h = EL j (f::fs) in
+      !cc. cc = EL j (c::cs) ==>
+      !h. h = EL j (f::fs) ==>
         cc.cf_fn = h.lf_fn /\ cc.cf_state = h.lf_src /\
         ld_ghost_ok fl B h.lf_H cc.cf_prov /\
         ld_params_ok fl B h.lf_Q cc.cf_params /\ cc.cf_tvar = h.lf_tv) /\
@@ -90,6 +90,7 @@ Theorem ld_focus_local_pop_sync:
     dload_equal_environment s1 t1 /\ c.cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address ==>
     ld_sync lo P C vs cs c.cf_params (DRESTRICT c.cf_prov K) tn1 c.cf_fn next s1 t1 B (g::fs) N
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qabbrev_tac `s1 = sr with vs_inst_idx := SUC c.cf_state.vs_inst_idx` >>
   qabbrev_tac `t1 = tr with vs_inst_idx := SUC d.cf_state.vs_inst_idx` >>

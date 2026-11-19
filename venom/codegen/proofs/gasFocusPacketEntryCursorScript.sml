@@ -18,26 +18,23 @@ Theorem focus_packet_entry_cursor:
     C7.ctx_entry = SOME nm /\ lookup_function nm C7.ctx_functions = SOME sf /\
     fn_entry_label sf = SOME lbl ==>
     ?bb bt ps xs ys rho f9 current rooted_eval.
-      let tf = dft_fn sf;
-          E = base with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>;
-          inst = HD bt.bb_instructions;
-          i9 = HD (HD f9.fn_blocks).bb_instructions
-      in
-      let q80 = JointConfig [] [] FEMPTY entry_taint tf inst E [] FEMPTY []
-            [OriginInitial E; OriginObserve (OriginSnapshot tf [] FEMPTY FEMPTY inst E)];
-          q9 = JointConfig [] [] FEMPTY entry_taint f9 i9 E [] FEMPTY []
-            [OriginInitial E; OriginObserve (OriginSnapshot f9 [] FEMPTY FEMPTY i9 E)];
-          T = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 tf E;
-          body_entry = if phi_prefix_length bt.bb_instructions < LENGTH ps
-                       then NONE else SOME (E,0)
-      in
-      let ms = if IS_SOME body_entry then
-                 MAP (\i. if i.inst_opcode = GAS then [NONE] else []) xs else [];
-          es = if IS_SOME body_entry then
-                 MAP (\i. if i.inst_opcode = GAS then [(sf.fn_name,i.inst_id)] else []) xs else [];
-          ks = if IS_SOME body_entry then
-                 MAP (\i. if i.inst_opcode = GAS then [([],1,i.inst_id)] else []) xs else []
-      in
+      ?tf. tf = dft_fn sf /\
+      ?E. E = base with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
+      ?inst. inst = HD bt.bb_instructions /\
+      ?i9. i9 = HD (HD f9.fn_blocks).bb_instructions /\
+      ?q80. q80 = JointConfig [] [] FEMPTY entry_taint tf inst E [] FEMPTY []
+            [OriginInitial E; OriginObserve (OriginSnapshot tf [] FEMPTY FEMPTY inst E)] /\
+      ?q9. q9 = JointConfig [] [] FEMPTY entry_taint f9 i9 E [] FEMPTY []
+            [OriginInitial E; OriginObserve (OriginSnapshot f9 [] FEMPTY FEMPTY i9 E)] /\
+      ?T. T = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 tf E /\
+      ?body_entry. body_entry = (if phi_prefix_length bt.bb_instructions < LENGTH ps
+                       then NONE else SOME (E,0)) /\
+      ?ms. ms = (if IS_SOME body_entry then
+                 MAP (\i. if i.inst_opcode = GAS then [NONE] else []) xs else []) /\
+      ?es. es = (if IS_SOME body_entry then
+                 MAP (\i. if i.inst_opcode = GAS then [(sf.fn_name,i.inst_id)] else []) xs else []) /\
+      ?ks. ks = (if IS_SOME body_entry then
+                 MAP (\i. if i.inst_opcode = GAS then [([],1,i.inst_id)] else []) xs else []) /\
         C8.ctx_entry = SOME nm /\ lookup_function nm C8.ctx_functions = SOME tf /\
         fn_entry_label tf = SOME lbl /\ dft_fn_rel sf tf /\
         lookup_block lbl sf.fn_blocks = SOME bb /\ lookup_block lbl tf.fn_blocks = SOME bt /\
@@ -59,7 +56,9 @@ Theorem focus_packet_entry_cursor:
         fn_entry_label f9 = SOME lbl /\ joint_initial base C9 q9 /\
         cfg_norm_joint_cursors C8 C9 (schedules,current,[]) q80 q9
 Proof
-  strip_tac >> drule_all focus_cfg_entry_cursor >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_THM2)) >>
+  strip_tac >>
+  drule_all (CONV_RULE (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_THM2)) focus_cfg_entry_cursor) >>
   disch_then (qx_choose_then `schedules` (mk_asm "cursor")) >>
   drule_all dft_stage_fn_rel >> strip_tac >>
   qexists `schedules` >> qx_genl_tac [`root`,`N`,`nm`,`sf`,`lbl`] >> strip_tac >>
@@ -113,6 +112,7 @@ Proof
   qpat_x_assum `0 < LENGTH (dftGasFromListTraceDefs$trace_blocks _ _ _ _ _ _)` kall_tac >>
   drule_all (REWRITE_RULE [] (Q.INST [`root_sf` |-> `sf`, `root_tf` |-> `dft_fn sf`,
                     `C7` |-> `C7`, `C8` |-> `C8`, `st` |-> `E`]
-    (SPEC_ALL (PURE_REWRITE_RULE [LET_THM] focus_initial_singleton_packet)))) >>
+    (CONV_RULE (RAND_CONV (REPEATC Unwind.UNWIND_FORALL_CONV))
+       (SPEC_ALL focus_initial_singleton_packet)))) >>
   simp[Abbr `q80`] >> disch_then (irule_at Any)
 QED

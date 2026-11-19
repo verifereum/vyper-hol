@@ -8,10 +8,9 @@ Theorem focus_initial_unvisited_row_replay:
   EVERY (\i. ~is_terminator i.inst_opcode /\
              i.inst_opcode <> INVOKE /\ ~is_pseudo i.inst_opcode) zs /\
   LENGTH gs = LENGTH (FILTER (\i. i.inst_opcode = GAS) zs) ==>
-  let bb = <|bb_label := be.vs_current_bb;
-             bb_instructions := REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ zs|>;
-      sites = MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) zs)
-  in
+  !bb. bb = <|bb_label := be.vs_current_bb;
+             bb_instructions := REPLICATE be.vs_inst_idx (mk_inst 0 STOP [] []) ++ zs|> ==>
+  !sites. sites = MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) zs) ==>
     (?extra. sites = gas_events_block f C owner bb
          (be with vs_gas_readings := gs ++ tail) ++ extra) /\
     (!u. FOLDR (dft_exec_cons f C) OK zs
@@ -23,6 +22,7 @@ Theorem focus_initial_unvisited_row_replay:
           (be with vs_gas_readings := gs ++ tail') =
             OK (u with vs_gas_readings := tail')))
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   ntac 4 gen_tac >> qid_spec_tac `be` >>
   Induct_on `zs`
   >- (simp[] >> rpt gen_tac >>

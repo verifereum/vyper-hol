@@ -100,7 +100,8 @@ Proof
   conj_tac
   >- (disch_tac >> drule_all focus_fmp_cut_halt_point >> metis_tac[]) >>
   gen_tac >> disch_tac >>
-  drule_all focus_fmp_cut_forward_layout >> simp[NoAsms] >> strip_tac >>
+  drule_all (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)
+    focus_fmp_cut_forward_layout) >> simp[NoAsms] >> strip_tac >>
   `bb'' = bb'` by metis_tac[optionTheory.SOME_11] >>
   `FLOOKUP (fmp_stage_plan infos ctx fn) (s.vs_current_bb,s.vs_inst_idx) = NONE` by
     (qpat_assum `!h. _ ==> (_,_) NOTIN FDOM (fmp_stage_plan infos ctx fn) /\ _`

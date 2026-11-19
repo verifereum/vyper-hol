@@ -7,9 +7,9 @@ Ancestors
 
 (* Identify the source fetch from the retained visit's actual body offset. *)
 Theorem focus_old_body_observation:
-  let R = root_entry with vs_gas_readings := gs ++ tail in
-  let x = EL (LENGTH z)
-    (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) in
+  !R. R = root_entry with vs_gas_readings := gs ++ tail ==>
+  !x. x = EL (LENGTH z)
+    (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) ==>
   C7.ctx_entry = SOME nm /\
   lookup_function nm C7.ctx_functions = SOME root_sf /\
   fn_entry_label root_sf = SOME lbl /\
@@ -31,6 +31,7 @@ Theorem focus_old_body_observation:
   raw_reachable R C7 sf inst u /\ u.vs_current_bb = s.vs_current_bb /\
   ~in_revert_forward sf u /\ (!n. gas_cut n R u <=> LENGTH Mcut < n)
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   simp[] >> strip_tac >>
   qpat_x_assum `tf = dft_fn sf` SUBST_ALL_TAC >>
   `phi_prefix_length bb.bb_instructions = phi_prefix_length ps` by

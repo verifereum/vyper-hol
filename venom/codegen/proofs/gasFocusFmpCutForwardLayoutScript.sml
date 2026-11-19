@@ -12,16 +12,16 @@ Theorem cut_forward_fetches[local]:
   (!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
     fn_is_context_entry ctx fn ==> entry_fn_no_params fn) /\
   lookup_block lbl fn.fn_blocks = SOME bb /\ revert_forward_pair bb p j ==>
-  let plan = fmp_stage_plan infos ctx fn;
-      root = fmp_stage_root infos ctx fn;
-      q = fmp_stage_tidx plan root lbl bb.bb_instructions p
-  in
+  !plan. plan = fmp_stage_plan infos ctx fn ==>
+  !root. root = fmp_stage_root infos ctx fn ==>
+  !q. q = fmp_stage_tidx plan root lbl bb.bb_instructions p ==>
   ?bb'. lookup_block lbl fn'.fn_blocks = SOME bb' /\
     !h. h <= j-p ==>
       (lbl,p+h) NOTIN FDOM plan /\
       fmp_stage_tidx plan root lbl bb.bb_instructions (p+h) = q+h /\
       get_instruction bb' (q+h) = get_instruction bb (p+h)
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   strip_tac >> simp[] >>
   `!h. h <= j-p ==>
     fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
@@ -148,10 +148,9 @@ Theorem focus_fmp_cut_forward_layout:
   lookup_function name C'.ctx_functions = SOME fn' /\
   fn.fn_fmp_signature = NONE /\ fmp_stage_lowered infos ctx runner fn fn' /\
   lookup_block lbl fn.fn_blocks = SOME bb /\ revert_forward_pair bb p j ==>
-  let plan = fmp_stage_plan infos ctx fn;
-      root = fmp_stage_root infos ctx fn;
-      q = fmp_stage_tidx plan root lbl bb.bb_instructions p
-  in
+  !plan. plan = fmp_stage_plan infos ctx fn ==>
+  !root. root = fmp_stage_root infos ctx fn ==>
+  !q. q = fmp_stage_tidx plan root lbl bb.bb_instructions p ==>
   ?bb'. lookup_block lbl fn'.fn_blocks = SOME bb' /\
     revert_forward_pair bb' q (q+(j-p)) /\
     !h. h <= j-p ==>
@@ -159,6 +158,7 @@ Theorem focus_fmp_cut_forward_layout:
       fmp_stage_tidx plan root lbl bb.bb_instructions (p+h) = q+h /\
       get_instruction bb' (q+h) = get_instruction bb (p+h)
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   strip_tac >> simp[] >>
   `pre_fmp_ops fn` by fs[o1_fn_row_def] >>
   `o1_fn_shape C fn /\ o1_fn_shape C' fn'` by
@@ -169,7 +169,8 @@ Proof
      `fn.fn_name = name` by metis_tac[lookup_function_selected_name] >>
      `fn'' = fn'` by metis_tac[optionTheory.SOME_11] >>
      fs[o1_fn_shape_def] >> metis_tac[]) >>
-  drule_all cut_forward_fetches >> simp[] >> strip_tac >>
+  drule_all (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)
+    cut_forward_fetches) >> simp[] >> strip_tac >>
   qexists_tac `bb'` >> simp[] >>
   drule_all ctx_pass_stage_lookup >> strip_tac >>
   drule fmp_fn_pass_step_result >> strip_tac >>

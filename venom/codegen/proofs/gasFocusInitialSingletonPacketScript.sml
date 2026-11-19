@@ -42,15 +42,15 @@ Theorem focus_initial_singleton_packet:
   get_instruction bt st.vs_inst_idx = SOME inst /\
   (phi_prefix_length bt.bb_instructions = LENGTH ps ==>
     dft_remaining_inv root_sf bb xs st) ==>
-  let body_entry = if phi_prefix_length bt.bb_instructions < LENGTH ps
-                   then NONE else SOME (st,0);
-      ms = if IS_SOME body_entry then
-        MAP (\i. if i.inst_opcode = GAS then [NONE] else []) xs else [];
-      es = if IS_SOME body_entry then
-        MAP (\i. if i.inst_opcode = GAS then [(root_sf.fn_name,i.inst_id)] else []) xs else [];
-      ks = if IS_SOME body_entry then
-        MAP (\i. if i.inst_opcode = GAS then [([],1,i.inst_id)] else []) xs else [];
-      row_eval = (\F C owner (bb,e,z) s.
+  !body_entry. body_entry = (if phi_prefix_length bt.bb_instructions < LENGTH ps
+                   then NONE else SOME (st,0)) ==>
+  !ms. ms = (if IS_SOME body_entry then
+        MAP (\i. if i.inst_opcode = GAS then [NONE] else []) xs else []) ==>
+  !es. es = (if IS_SOME body_entry then
+        MAP (\i. if i.inst_opcode = GAS then [(root_sf.fn_name,i.inst_id)] else []) xs else []) ==>
+  !ks. ks = (if IS_SOME body_entry then
+        MAP (\i. if i.inst_opcode = GAS then [([],1,i.inst_id)] else []) xs else []) ==>
+  !row_eval. row_eval = (\F C owner (bb,e,z) s.
         case eval_phis s bb.bb_instructions of
           OK sp =>
            (gas_events_block (F-e) C owner
@@ -59,13 +59,13 @@ Theorem focus_initial_singleton_packet:
              (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions),
             FOLDR (dft_exec_cons (F-e) C) OK z
              (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))
-        | other => ([],other));
-      plan_eval = (\F C owner plan entry.
+        | other => ([],other)) ==>
+  !plan_eval. plan_eval = (\F C owner plan entry.
         FOLDL (\(es,r) row.
           case r of
             OK s => (es ++ FST (row_eval F C owner row s), SND (row_eval F C owner row s))
-          | other => (es,other)) ([],OK entry) plan);
-      call_setup = (\C c s.
+          | other => (es,other)) ([],OK entry) plan) ==>
+  !call_setup. call_setup = (\C c s.
         case decode_invoke c of
           NONE => Error "invoke: bad operand format"
         | SOME (nm,ops) =>
@@ -77,8 +77,8 @@ Theorem focus_initial_singleton_packet:
             | SOME args =>
               case setup_callee callee args s of
                 NONE => Error "invoke: empty function"
-              | SOME cs => OK cs);
-      rooted_eval = (\F C levels entry.
+              | SOME cs => OK cs) ==>
+  !rooted_eval. rooted_eval = (\F C levels entry.
         FOLDL (\(prior,r) (sf,plan,call).
           case r of
             OK ent =>
@@ -87,8 +87,8 @@ Theorem focus_initial_singleton_packet:
                 OK caller =>
                   (case call of NONE => OK caller | SOME c => call_setup C c caller)
               | other => other)
-          | other => (prior,other)) ([],OK entry) levels)
-  in dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (0,[])
+          | other => (prior,other)) ([],OK entry) levels) ==>
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (0,[])
     (FEMPTY |+ ([],(root_sf,root_tf,0,root_entry,[1],NONE,NONE)))
     (FEMPTY |+ (([],1),(bb,bt,ps,xs,ys,rho,root_entry,0,body_entry,0,OK st,F,NONE)))
     FEMPTY (FEMPTY |+ (([],1),ms)) (FEMPTY |+ (([],1),es))
@@ -97,9 +97,8 @@ Theorem focus_initial_singleton_packet:
     st.vs_gas_readings
 Proof
   rpt gen_tac >> strip_tac >>
-  simp_tac bool_ss [combinTheory.LET_FORALL_ELIM, combinTheory.S_DEF,
-    combinTheory.o_DEF, combinTheory.C_DEF] >> BETA_TAC >>
-  map_every (fn v => qx_gen_tac v >> disch_tac)
+  map_every (fn v => qx_gen_tac v >>
+    disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
     [`body_entry`,`ms`,`es`,`ks`,`row_eval`,`plan_eval`,`call_setup`,`rooted_eval`] >>
   markerLib.REABBREV_TAC >>
   `sp = root_entry /\ phi_prefix_length bt.bb_instructions = 0` by
@@ -307,15 +306,15 @@ Resume focus_initial_singleton_packet[body_cuts]:
   qspecl_then [`fuel`,`C7`,`root_sf`,`root_entry`] mp_tac focus_initial_singleton_cut >>
   disch_then (qspecl_then [`bb`,`[]`,`bb.bb_instructions`,`root_entry`,`q`] mp_tac) >>
   impl_tac >- simp[] >>
-  ntac 5 (CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV))) >>
+  ntac 5 (CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV)) >>
   qpat_assum `Abbrev (row_eval = _)`
     (fn th => pure_rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
   map_every (fn v =>
-    CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+    CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
     qpat_assum v
       (fn th => pure_rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]))
     [`Abbrev (plan_eval = _)`,`Abbrev (call_setup = _)`,`Abbrev (rooted_eval = _)`] >>
-  ntac 2 (CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV))) >>
+  ntac 2 (CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV)) >>
   disch_then (qspecl_then [`gs`,`tail`] mp_tac) >>
   impl_tac >- (simp[] >> decide_tac) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>

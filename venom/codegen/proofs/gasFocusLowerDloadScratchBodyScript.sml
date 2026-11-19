@@ -26,18 +26,17 @@ Theorem ld_focus_scratch_body_next:
     LENGTH s.vs_gas_readings <= LENGTH g.lf_src.vs_gas_readings) (f::fs) /\
   lookup_block t.vs_current_bb (ld_image f).fn_blocks = SOME bb /\
   get_instruction bb (SUC t.vs_inst_idx) = SOME j ==>
-  let q = u with vs_inst_idx := SUC t.vs_inst_idx in
   ?ss g i Y.
     step_inst 0 C inst s = OK ss /\ g.lf_fn = fn /\
     g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
-    g.lf_tgt = q /\ ld_image g = ld_image f /\
+    g.lf_tgt = (u with vs_inst_idx := SUC t.vs_inst_idx) /\ ld_image g = ld_image f /\
     ld_sync lo P C vs stk PG (step_prov PG G inst ss) (step_taint inst s ss tn)
-      fn i g.lf_src q A (g::fs) N /\
+      fn i g.lf_src (u with vs_inst_idx := SUC t.vs_inst_idx) A (g::fs) N /\
     ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (g::fs) /\
-    ld_envelope g.lf_supply fn g.lf_src g.lf_src.vs_inst_idx Y q.vs_inst_idx /\
-    ld_prefix C' (ld_image g) Y q.vs_inst_idx 0 q q /\
-    lookup_block q.vs_current_bb (ld_image g).fn_blocks = SOME bb /\ HD Y = j /\
-    ld_return_cont C fn cs g.lf_src /\ g.lf_src.vs_gas_readings = q.vs_gas_readings /\
+    ld_envelope g.lf_supply fn g.lf_src g.lf_src.vs_inst_idx Y (u with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx /\
+    ld_prefix C' (ld_image g) Y (u with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx 0 (u with vs_inst_idx := SUC t.vs_inst_idx) (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+    lookup_block (u with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb (ld_image g).fn_blocks = SOME bb /\ HD Y = j /\
+    ld_return_cont C fn cs g.lf_src /\ g.lf_src.vs_gas_readings = (u with vs_inst_idx := SUC t.vs_inst_idx).vs_gas_readings /\
     EVERY (\a. a.lf_src.vs_gas_readings = a.lf_tgt.vs_gas_readings /\
       LENGTH g.lf_src.vs_gas_readings <= LENGTH a.lf_src.vs_gas_readings) (g::fs)
 Proof

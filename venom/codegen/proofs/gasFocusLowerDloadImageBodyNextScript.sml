@@ -29,20 +29,18 @@ Theorem ld_focus_image_body_next:
   ir_supply_covers_fn (HD frames).lf_supply fn /\
   X <> [inst] /\ ti.inst_opcode <> INVOKE /\ ~is_terminator ti.inst_opcode /\
   step_inst fuel C' ti t = OK u /\
-  (let q = u with vs_inst_idx := SUC t.vs_inst_idx in
-     run_block_non_phis fuel C' bb q = z /\
+  (run_block_non_phis fuel C' bb (u with vs_inst_idx := SUC t.vs_inst_idx) = z /\
      ((?v. z = OK v /\ gas_cut n vs v) \/ (?rt v. z = IntRet rt v /\ gas_cut n vs v))) ==>
-  let q = u with vs_inst_idx := SUC t.vs_inst_idx in
   ?PG1 G1 tn1 i s1 b1 A1 frames1 N1 Y p1 h1 j.
     ld_sync lo P C vs stk PG1 G1 tn1 fn i s1 b1 A1 frames1 N1 /\
     ^ld_probe_stable lo P Sigma names fs f0 A0 A1 frames1 /\
     gn = ld_image (HD frames1) /\
     ld_envelope (HD frames1).lf_supply fn s1 s1.vs_inst_idx Y p1 /\
-    b1.vs_inst_idx = p1 /\ ld_prefix C' gn Y p1 h1 b1 q /\
-    lookup_block q.vs_current_bb gn.fn_blocks = SOME bb /\
-    get_instruction bb q.vs_inst_idx = SOME j /\ h1 < LENGTH Y /\ j = EL h1 Y /\
+    b1.vs_inst_idx = p1 /\ ld_prefix C' gn Y p1 h1 b1 (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+    lookup_block (u with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb gn.fn_blocks = SOME bb /\
+    get_instruction bb (u with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = SOME j /\ h1 < LENGTH Y /\ j = EL h1 Y /\
     ld_return_cont C fn cs s1 /\
-    s1.vs_gas_readings = b1.vs_gas_readings /\ b1.vs_gas_readings = q.vs_gas_readings /\
+    s1.vs_gas_readings = b1.vs_gas_readings /\ b1.vs_gas_readings = (u with vs_inst_idx := SUC t.vs_inst_idx).vs_gas_readings /\
     EVERY (\g. g.lf_src.vs_gas_readings = g.lf_tgt.vs_gas_readings /\
                LENGTH s1.vs_gas_readings <= LENGTH g.lf_src.vs_gas_readings) frames1
 Proof

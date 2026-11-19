@@ -11,11 +11,10 @@ Theorem ld_focus_pop_saved_rows:
     FLOOKUP B a = FLOOKUP A a) ==>
   EVERY (\h. ld_maps B h /\ ld_vars P B h) (f::fs) /\
   (!j. j < LENGTH (c::cs) ==>
-    let cc = EL j (c::cs); h = EL j (f::fs) in
-      cc.cf_fn = h.lf_fn /\ cc.cf_state = h.lf_src /\
-      ld_ghost_ok (dyn_floor C vs) B h.lf_H cc.cf_prov /\
-      ld_params_ok (dyn_floor C vs) B h.lf_Q cc.cf_params /\
-      cc.cf_tvar = h.lf_tv)
+    (EL j (c::cs)).cf_fn = (EL j (f::fs)).lf_fn /\ (EL j (c::cs)).cf_state = (EL j (f::fs)).lf_src /\
+    ld_ghost_ok (dyn_floor C vs) B (EL j (f::fs)).lf_H (EL j (c::cs)).cf_prov /\
+    ld_params_ok (dyn_floor C vs) B (EL j (f::fs)).lf_Q (EL j (c::cs)).cf_params /\
+    (EL j (c::cs)).cf_tvar = (EL j (f::fs)).lf_tv)
 Proof
   strip_tac >>
   qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`

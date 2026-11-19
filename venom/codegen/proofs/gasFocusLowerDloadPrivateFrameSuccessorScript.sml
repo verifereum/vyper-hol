@@ -43,11 +43,8 @@ Proof
 QED
 
 Theorem ld_focus_private_frame_successor:
-  let U = set (fn_ir_vars fn) in
-  let V = U DIFF {v | retpc_var fn v} in
-  let orig = set (fn_ir_inst_ids fn) in
-  let q = u with vs_inst_idx := SUC t.vs_inst_idx in
-  let m = EL 3 X in
+  !V. V = (set (fn_ir_vars fn)) DIFF {v | retpc_var fn v} ==>
+  !q. q = u with vs_inst_idx := SUC t.vs_inst_idx ==>
   ld_sync lo P C vs stk PG G tn fn inst s t0 A (f::fs) N /\
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\ o1_initial_state_ok vs /\
   vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\ o1_safe_upto D lo n C vs /\
@@ -58,39 +55,37 @@ Theorem ld_focus_private_frame_successor:
   ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\ t0.vs_inst_idx = p /\
   ld_prefix C' (ld_image f) X p 3 t0 t /\
   dload_boundary_core (dyn_floor C vs) lo (r::rs) V Ws PG PH G H0 tn un0 s t0 stk ds /\
-  r.dr_scratch = FDOM t0.vs_allocas DIFF orig /\
+  r.dr_scratch = FDOM t0.vs_allocas DIFF (set (fn_ir_inst_ids fn)) /\
   dload_control_match f.lf_supply fn (ld_image f) s t0 inst X 0 /\
-  (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t0 = NONE)) /\
+  (!v. v IN (set (fn_ir_vars fn)) ==> (lookup_var v s = NONE <=> lookup_var v t0 = NONE)) /\
   dload_prefix_match pf C' PH X 3 t0 H0 un0 t H un /\
   s.vs_gas_readings = t0.vs_gas_readings /\ t0.vs_gas_readings = t.vs_gas_readings /\
   EVERY (\g. g.lf_src.vs_gas_readings = g.lf_tgt.vs_gas_readings /\
     LENGTH s.vs_gas_readings <= LENGTH g.lf_src.vs_gas_readings) (f::fs) /\
-  step_inst fuel C' m t = OK u /\ active_inst (ld_image f) j q /\ gas_cut n vs q ==>
+  step_inst fuel C' (EL 3 X) t = OK u /\ active_inst (ld_image f) j q /\ gas_cut n vs q ==>
   ?ss g r1 i Y.
-    let ss1 = ss with vs_inst_idx := SUC s.vs_inst_idx in
-    let G1 = step_prov PG G inst ss in
-    let tn1 = step_taint inst s ss tn in
-    let H1 = step_prov PH H m u in
-    let un1 = step_taint m t u un in
+    ?ss1. ss1 = ss with vs_inst_idx := SUC s.vs_inst_idx /\
     step_inst 0 C inst s = OK ss /\
     g = f with <|lf_src := ss1; lf_tgt := q; lf_H := set_prov f.lf_H [out] NONE;
-                 lf_tv := tn1.t_var; lf_E := inst.inst_id INSERT f.lf_E|> /\
+                 lf_tv := (step_taint inst s ss tn).t_var; lf_E := inst.inst_id INSERT f.lf_E|> /\
     ld_global lo A (g::fs) /\
-    ld_sync lo P C vs stk PG G1 tn1 fn i ss1 q A (g::fs) N /\
+    ld_sync lo P C vs stk PG (step_prov PG G inst ss) (step_taint inst s ss tn) fn i ss1 q A (g::fs) N /\
     ld_image g = ld_image f /\
     ld_envelope g.lf_supply fn ss1 ss1.vs_inst_idx Y q.vs_inst_idx /\
     ld_prefix C' (ld_image g) Y q.vs_inst_idx 0 q q /\
     0 < LENGTH Y /\ j = EL 0 Y /\
     r1.dr_source = r.dr_source /\ r1.dr_scratch = (EL 0 X).inst_id INSERT r.dr_scratch /\
-    r1.dr_scratch = FDOM q.vs_allocas DIFF orig /\
-    dload_boundary_core (dyn_floor C vs) lo (r1::rs) V Ws PG PH G1 H1 tn1 un1 ss1 q stk ds /\
+    r1.dr_scratch = FDOM q.vs_allocas DIFF (set (fn_ir_inst_ids fn)) /\
+    dload_boundary_core (dyn_floor C vs) lo (r1::rs) V Ws PG PH (step_prov PG G inst ss) (step_prov PH H (EL 3 X) u) (step_taint inst s ss tn) (step_taint (EL 3 X) t u un) ss1 q stk ds /\
     dload_control_match g.lf_supply fn (ld_image g) ss1 q i Y 0 /\
-    dload_prefix_match pf C' PH Y 0 q H1 un1 q H1 un1 /\
-    (!v. v IN U ==> (lookup_var v ss1 = NONE <=> lookup_var v q = NONE)) /\
+    dload_prefix_match pf C' PH Y 0 q (step_prov PH H (EL 3 X) u) (step_taint (EL 3 X) t u un) q (step_prov PH H (EL 3 X) u) (step_taint (EL 3 X) t u un) /\
+    (!v. v IN (set (fn_ir_vars fn)) ==> (lookup_var v ss1 = NONE <=> lookup_var v q = NONE)) /\
     ss1.vs_gas_readings = q.vs_gas_readings /\
     EVERY (\g. g.lf_src.vs_gas_readings = g.lf_tgt.vs_gas_readings /\
       LENGTH ss1.vs_gas_readings <= LENGTH g.lf_src.vs_gas_readings) (g::fs)
 Proof
+  CONV_TAC (TOP_DEPTH_CONV
+    (HO_REWR_CONV UNWIND_THM2 ORELSEC Unwind.UNWIND_FORALL_CONV)) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
   drule_then strip_assume_tac ld_sync_source >>
   drule_then (strip_assume_tac o REWRITE_RULE [HD]) ld_sync_active >>
@@ -147,7 +142,7 @@ Resume ld_focus_private_frame_successor[ghost]:
   mp_tac (Q.INST [`fl` |-> `dyn_floor C vs`, `orig` |-> `set (fn_ir_inst_ids fn)`,
                   `av` |-> `a`, `cv` |-> `z`, `sigma` |-> `f.lf_supply`,
                   `gn` |-> `ld_image f`]
-    (BETA_RULE (PURE_REWRITE_RULE [LET_THM] ld_focus_scratch_actual_next))) >>
+    (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV) ld_focus_scratch_actual_next)) >>
   (impl_tac >- simp[]) >>
   disch_then (qx_choose_then `r1` (qx_choose_then `i` (qx_choose_then `Y` strip_assume_tac))) >>
   suspend "reset"

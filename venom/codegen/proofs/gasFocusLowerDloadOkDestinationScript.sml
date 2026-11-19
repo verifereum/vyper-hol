@@ -26,20 +26,18 @@ Theorem ld_focus_ok_destination_point:
   is_terminator ti.inst_opcode /\ step_inst k C' ti t = OK q /\ ~q.vs_halted /\
   lookup_block q.vs_current_bb gn.fn_blocks = SOME bb' /\
   eval_phis q bb'.bb_instructions = OK tp /\
-  (let t' = tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions in
-     run_block_non_phis m C' bb' t' = z /\
+  (run_block_non_phis m C' bb' (tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions) = z /\
      ((?v. z = OK v /\ gas_cut n vs v) \/ (?rt v. z = IntRet rt v /\ gas_cut n vs v))) ==>
-  let t' = tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions in
   ?PG1 G1 tn1 i s1 b1 A1 frames1 N1 Y p1 h1 j.
     ld_sync lo P C vs stk PG1 G1 tn1 fn i s1 b1 A1 frames1 N1 /\
     ^ld_probe_stable lo P Sigma names fs f0 A0 A1 frames1 /\
     gn = ld_image (HD frames1) /\
     ld_envelope (HD frames1).lf_supply fn s1 s1.vs_inst_idx Y p1 /\
-    b1.vs_inst_idx = p1 /\ ld_prefix C' gn Y p1 h1 b1 t' /\
-    lookup_block t'.vs_current_bb gn.fn_blocks = SOME bb' /\
-    get_instruction bb' t'.vs_inst_idx = SOME j /\ h1 < LENGTH Y /\ j = EL h1 Y /\
+    b1.vs_inst_idx = p1 /\ ld_prefix C' gn Y p1 h1 b1 (tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions) /\
+    lookup_block (tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions).vs_current_bb gn.fn_blocks = SOME bb' /\
+    get_instruction bb' (tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions).vs_inst_idx = SOME j /\ h1 < LENGTH Y /\ j = EL h1 Y /\
     ld_return_cont C fn cs s1 /\
-    s1.vs_gas_readings = b1.vs_gas_readings /\ b1.vs_gas_readings = t'.vs_gas_readings /\
+    s1.vs_gas_readings = b1.vs_gas_readings /\ b1.vs_gas_readings = (tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions).vs_gas_readings /\
     EVERY (\g. g.lf_src.vs_gas_readings = g.lf_tgt.vs_gas_readings /\
                LENGTH s1.vs_gas_readings <= LENGTH g.lf_src.vs_gas_readings) frames1
 Proof

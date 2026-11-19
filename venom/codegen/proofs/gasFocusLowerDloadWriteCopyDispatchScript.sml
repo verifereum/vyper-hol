@@ -30,20 +30,18 @@ Theorem ld_focus_write_copy_successor_point:
   ir_supply_covers_fn (HD frames).lf_supply fn /\
   MEM ti.inst_opcode [MSTORE;MSTORE8;MCOPY;CODECOPY;CALLDATACOPY;RETURNDATACOPY;EXTCODECOPY] /\
   step_inst fuel C' ti t = OK u /\
-  (let q = u with vs_inst_idx := SUC t.vs_inst_idx in
-     run_block_non_phis fuel C' bb q = z /\
+  (run_block_non_phis fuel C' bb (u with vs_inst_idx := SUC t.vs_inst_idx) = z /\
      ((?v. z = OK v /\ gas_cut n vs v) \/ (?rt v. z = IntRet rt v /\ gas_cut n vs v))) ==>
-  let q = u with vs_inst_idx := SUC t.vs_inst_idx in
   ?PG1 G1 tn1 i s1 b1 A1 frames1 N1 Y p1 h1 j.
     ld_sync lo P C vs stk PG1 G1 tn1 fn i s1 b1 A1 frames1 N1 /\
     ^ld_probe_stable lo P Sigma names fs f0 A0 A1 frames1 /\
     gn = ld_image (HD frames1) /\
     ld_envelope (HD frames1).lf_supply fn s1 s1.vs_inst_idx Y p1 /\
-    b1.vs_inst_idx = p1 /\ ld_prefix C' gn Y p1 h1 b1 q /\
-    lookup_block q.vs_current_bb gn.fn_blocks = SOME bb /\
-    get_instruction bb q.vs_inst_idx = SOME j /\ h1 < LENGTH Y /\ j = EL h1 Y /\
+    b1.vs_inst_idx = p1 /\ ld_prefix C' gn Y p1 h1 b1 (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+    lookup_block (u with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb gn.fn_blocks = SOME bb /\
+    get_instruction bb (u with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = SOME j /\ h1 < LENGTH Y /\ j = EL h1 Y /\
     ld_return_cont C fn cs s1 /\
-    s1.vs_gas_readings = b1.vs_gas_readings /\ b1.vs_gas_readings = q.vs_gas_readings /\
+    s1.vs_gas_readings = b1.vs_gas_readings /\ b1.vs_gas_readings = (u with vs_inst_idx := SUC t.vs_inst_idx).vs_gas_readings /\
     EVERY (\g. g.lf_src.vs_gas_readings = g.lf_tgt.vs_gas_readings /\
                LENGTH s1.vs_gas_readings <= LENGTH g.lf_src.vs_gas_readings) frames1
 Proof
@@ -199,8 +197,8 @@ Resume ld_focus_write_copy_successor_point[bytes]:
        (strip_assume_tac o REWRITE_RULE
           [o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def]) >>
      simp[]) >>
-  drule_all (Q.INST [`t1` |-> `t`] ld_focus_bytes_classified_next) >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  drule_all (Q.INST [`t1` |-> `t`]
+    (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV) ld_focus_bytes_classified_next)) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `active_inst gn j q` by (drule_all contextCodegenRelPropsTheory.lookup_instruction_active >> (simp[contextCodegenRelPropsTheory.lookup_instruction_active])) >>
   `ss.vs_current_bb = s.vs_current_bb` by

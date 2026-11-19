@@ -21,9 +21,10 @@ Theorem ld_focus_bytes_classified_next:
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\ w2n dw = b+delta /\
       w2n dw' = c+delta /\ delta+LENGTH bs <= sz) \/
    (w2n dw = w2n dw' /\ dyn_floor C vs <= w2n dw)) ==>
-  let tn' = step_taint inst s ss tn; G' = step_prov PG G inst ss;
-      g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
-                   lf_tgt := u with vs_inst_idx := SUC t1.vs_inst_idx|> in
+  !tn'. tn' = step_taint inst s ss tn ==>
+  !G'. G' = step_prov PG G inst ss ==>
+  !g. g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+                   lf_tgt := u with vs_inst_idx := SUC t1.vs_inst_idx|> ==>
     G' = G /\ tn' = (tn with t_mem := tn.t_mem DIFF {w2n dw+j | j < LENGTH bs}) /\
     u.vs_inst_idx = t1.vs_inst_idx /\ SUC t1.vs_inst_idx = p + LENGTH X /\
     ss.vs_gas_readings = s.vs_gas_readings /\ u.vs_gas_readings = t0.vs_gas_readings /\
@@ -35,6 +36,7 @@ Theorem ld_focus_bytes_classified_next:
     (!next. active_inst fn next g.lf_src ==>
        ld_sync lo P C vs stk PG G' tn' fn next g.lf_src g.lf_tgt A (g::fs) N)
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule ld_sync_active >> simp[NoAsms] >> strip_tac >>
   drule ld_sync_source >> strip_tac >>

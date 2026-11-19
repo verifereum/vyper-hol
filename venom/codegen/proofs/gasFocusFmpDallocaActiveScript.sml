@@ -131,7 +131,8 @@ Proof
   `df_at NONE states bb.bb_label s.vs_inst_idx = SOME st /\
    MAP (\r. r.fr_mark) regions = SND (fmp_pop_at infos fn
      (liveness_analyze fn) env (bb.bb_label,s.vs_inst_idx) inst st)` by (simp[] >> (gvs[])) >>
-  drule_all focus_fmp_dalloca_ledger_push >> simp[] >> strip_tac >>
+  drule_all (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)
+    focus_fmp_dalloca_ledger_push) >> simp[] >> strip_tac >>
   drule_all dalloca_active_env >> strip_tac >>
   drule_all fmp_dalloca_params_updates >> strip_tac >>
   simp[fmp_frame_rel_def] >> qexistsl [`infos`,`ctx`,`runner`] >>
