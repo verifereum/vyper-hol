@@ -3152,29 +3152,6 @@ Proof
 QED
 
 (* Compatibility export for the CODESIZE source boundary. *)
-Theorem sym_codesize_source_emit_core:
-  allow_own /\
-  (!cs ss. R cs ss ==> ss.sym_base.as_pc = cs.as_pc) /\
-  (!cs ss cs' ss'. R cs ss /\
-    sym_step_op_own p env own "CODESIZE" ss = SymOK ss' /\
-    asm_step slo (build_offset_to_pc p) (AsmOp "CODESIZE") cs = AsmOK cs' ==>
-    R cs' ss') /\
-  sym_step_op_own p env own "CODESIZE" ss = SymOK
-    (ss with <|sym_base := asm_next ss.sym_base;
-               sym_stack := Val (n2w (LENGTH own)) :: ss.sym_stack|>) /\
-  R cs ss /\ sym_kinds_ok cplan fn ret srest ps ss /\
-  inst.inst_opcode = CODESIZE /\ inst.inst_operands = [] /\
-  inst.inst_outputs = [x] /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
-  qs = ps with ps_stack := stack_push (Var x) ps.ps_stack /\
-  asm_block_at p cs.as_pc [AsmOp "CODESIZE"] /\
-  asm_step slo (build_offset_to_pc p) (AsmOp "CODESIZE") cs = AsmOK cs' ==>
-  ?ss'. sym_steps_mode allow_own p env own 1 ss = SymOK ss' /\ R cs' ss' /\
-    ss'.sym_mem_labels = ss.sym_mem_labels /\
-    sym_kinds_ok cplan fn ret srest qs ss'
-Proof
-  MATCH_ACCEPT_TAC symEmitCodesizeOwnTheory.sym_codesize_source_emit_kernel
-QED
-
 (* Exhaustive source split for ordinary prepared emission. *)
 Theorem sym_prepared_emission_families:
   ~is_pre_codegen_opcode inst.inst_opcode /\
@@ -3209,33 +3186,6 @@ Proof
   strip_tac >> drule_all sym_prepared_emission_families >>
   gvs[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM, MEM] >>
   metis_tac[unitShapeDefsTheory.inst_shape_ok_def, MEM]
-QED
-
-Theorem named_codecopy_selection_shape:
-  inst_wf inst /\ inst.inst_opcode = CODECOPY /\
-  (selected = compute_operands inst \/
-   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
-    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
-      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
-       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) ==>
-  ?dst src sz. inst.inst_operands = [dst;src;sz] /\
-    inst.inst_outputs = [] /\ selected = [sz;src;dst]
-Proof
-  MATCH_ACCEPT_TAC symEmitNamedDispatchTheory.named_codecopy_selection_shape_core
-QED
-
-Theorem named_code_end_add_selection_shape:
-  inst_wf inst /\ inst.inst_opcode = ADD /\
-  inst.inst_operands = [op; Label "code_end"] /\
-  (selected = compute_operands inst \/
-   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
-    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
-      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
-       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) ==>
-  (?x. inst.inst_outputs = [x]) /\
-  (selected = [op;Label "code_end"] \/ selected = [Label "code_end";op])
-Proof
-  MATCH_ACCEPT_TAC symEmitNamedDispatchTheory.named_code_end_add_selection_shape_core
 QED
 
 Theorem sym_named_source_emit:

@@ -233,7 +233,7 @@ Definition sym_kinds_ok_def:
     (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b)
 End
 
-Theorem sym_kinds_ok_plan_transport:
+Theorem sym_kinds_relevant_fields:
   !ps' ps cp fn ret srest ss.
   ps'.ps_stack = ps.ps_stack /\ ps'.ps_spilled = ps.ps_spilled /\
   sym_kinds_ok cp fn ret srest ps ss ==>

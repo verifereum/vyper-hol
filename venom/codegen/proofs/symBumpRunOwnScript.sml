@@ -5,6 +5,7 @@ Ancestors
   deepInstSim deepResidualSim genBlockSim stackPlanGen planExec codegenSymRel
   asmSymBridge asmSymSem fnPlanPrefix genFrameSim allocMono venomWf
   fnBlockPlanStaticRegion
+  symInstPiecesFacts
 
 val bump_bridge_core_tm = let
   val (params, body) = strip_forall (concl asmSymBridgeTheory.asm_sym_rel_core_pc)
@@ -234,7 +235,7 @@ Proof
     simp[Abbr `emitted`, stackModelTheory.stack_push_def, listTheory.SNOC_APPEND] >>
   `(if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
     else optimistic_swap_plan dfg inst nl term ps8) = (opts,ps9)` by gvs[] >>
-  drule_at (Pat `(if _ then _ else _) = (opts,ps9)`) sym_bump_postfix_applicability >>
+  drule_at (Pat `(if _ then _ else _) = (opts,ps9)`) symInstPiecesFactsTheory.sym_bump_postfix_applicability >>
   disch_then (drule_at (Pat `generated_plan_state_wf_marked sb emitted`)) >>
   disch_then (drule_at (Pat `(if _ then _ else _) = (pops,ps8)`)) >>
   disch_then (drule_at (Pat `qs = release_dead_spills _ _`)) >>

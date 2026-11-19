@@ -63,14 +63,14 @@ Theorem sym_body_nonterm_prefix_selected_own:
 Proof
   strip_tac >>
   `sym_data_label prog env "code_end"` by
-    (irule codegen_sym_code_end_label_kernel >>
+    (irule symBodyStaticFactsTheory.codegen_sym_code_end_label >>
      gvs[body_inv_reloc_def] >> metis_tac[]) >>
   `(MEM (Label "runtime_begin") inst.inst_operands ==>
     sym_data_label prog env "runtime_begin")` by
     (strip_tac >> drule_all body_inv_inst_reloc >> strip_tac >>
      qhdtm_x_assum `body_inv_reloc` mp_tac >>
      simp_tac (srw_ss()) [body_inv_reloc_def] >> strip_tac >>
-     irule codegen_sym_runtime_begin_label_kernel >>
+     irule symBodyStaticFactsTheory.codegen_sym_runtime_begin_label >>
      asm_simp_tac bool_ss [] >>
      qexistsl [`fn`, `inst`, `rpolicy`, `unit`] >> simp[] >>
      metis_tac[listTheory.MEM_EL]) >>

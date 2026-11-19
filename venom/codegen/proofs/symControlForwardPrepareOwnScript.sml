@@ -172,7 +172,8 @@ QED
 
 Theorem sym_spill_free_stack_only_prefix_sim:
   !ops lo ps ss top srest fn ret cp p fmp env.
-  EVERY is_simple_stack_op ops /\ prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  EVERY is_simple_stack_op ops /\
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
   ss.sym_stack = top ++ srest /\
   LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
   (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\

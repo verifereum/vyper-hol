@@ -42,15 +42,6 @@ val _ = Parse.temp_overload_on ("rf_T", ``\allow_own prog env own lo code_ok.
     bridge_result (bridge_core lo code_ok)
       (if allow_own then sym_step_own prog env own ai ss else sym_step prog env ai ss) cr``);
 
-Theorem sym_revert_operand_kind_mode:
-  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
-  opaque_use_ok fn /\ (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
-  inst.inst_opcode = REVERT /\ MEM op inst.inst_operands /\ ~is_label_operand op /\
-  op_kind_ok fn ret op sv ==> ?w. sv = Val w
-Proof
-  ACCEPT_TAC symControlForwardStackOwnTheory.sym_revert_operand_kind_mode
-QED
-
 Theorem sym_revert_prepared_stack_core:
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
   opaque_use_ok fn /\ (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
@@ -115,7 +106,8 @@ Proof
 QED
 
 Theorem sym_terminal_rel_inst_idx:
-  venom_asm_terminal_rel (s with vs_inst_idx := k) st <=> venom_asm_terminal_rel s st
+  venom_asm_terminal_rel (s with vs_inst_idx := k) st <=>
+  venom_asm_terminal_rel s st
 Proof
   simp[venom_asm_terminal_rel_def]
 QED

@@ -21,11 +21,11 @@ val _ = Parse.temp_overload_on ("control_frame", ``\lo code_ok p ctx cplan fn re
   (fn_has_retpc fn ==> MEM (AsmLabel ret) p)``);
 
 Theorem sym_kinds_ok_pop:
-  !cplan fn ret srest ps ss op sv stk base'.
-  sym_kinds_ok cplan fn ret srest
+  !cp fn ret srest ps ss op sv stk base'.
+  sym_kinds_ok cp fn ret srest
     (ps with ps_stack := SNOC op ps.ps_stack) ss /\
   ss.sym_stack = sv :: stk ==>
-  sym_kinds_ok cplan fn ret srest ps
+  sym_kinds_ok cp fn ret srest ps
     (ss with <|sym_base := base'; sym_stack := stk|>)
 Proof
   rw[sym_kinds_ok_def] >>
@@ -100,13 +100,13 @@ Proof
 QED
 
 Theorem sym_gas_kinds_steps:
-  !cplan fn ret srest ps ss p env out.
-  sym_kinds_ok cplan fn ret srest ps ss /\
+  !cp fn ret srest ps ss p env out.
+  sym_kinds_ok cp fn ret srest ps ss /\
   op_kind_ok fn ret (Var out)
     (Val (HD (ss.sym_base.as_gas_readings ++ [0w]))) /\
   asm_block_at p ss.sym_base.as_pc [AsmOp "GAS"] ==>
   ?ss'. sym_steps p env 1 ss = SymOK ss' /\
-    sym_kinds_ok cplan fn ret srest
+    sym_kinds_ok cp fn ret srest
       (ps with ps_stack := SNOC (Var out) ps.ps_stack) ss' /\
     ss'.sym_mem_labels = ss.sym_mem_labels
 Proof

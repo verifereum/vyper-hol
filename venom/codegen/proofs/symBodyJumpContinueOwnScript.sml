@@ -101,10 +101,10 @@ Theorem sym_body_jmp_step_minimal_own:
 Proof
   simp_tac (srw_ss()) [] >> strip_tac >>
   drule_all body_inv_inst_reloc >> strip_tac >>
-  drule_all jmp_wf_operands_kernel >> disch_then assume_tac >>
+  drule_all symBodyStaticFactsTheory.jmp_wf_operands >> disch_then assume_tac >>
   `is_terminator inst.inst_opcode` by simp[venomInstTheory.is_terminator_def] >>
   `!t. MEM t (get_successors inst) ==> MEM (AsmLabel t) prog` by
-    (rpt strip_tac >> assume_tac placed_nonentry_sym_code_label_kernel >>
+    (rpt strip_tac >> assume_tac symBodyStaticFactsTheory.placed_nonentry_sym_code_label >>
      drule_all body_succ_sym_label_reloc_kernel >> strip_tac >> simp[]) >>
   drule_all sym_body_jmp_prefix_own_kernel >> strip_tac >>
   drule_all (BETA_RULE sym_body_jump_continue_minimal_own) >> simp[]
@@ -130,13 +130,13 @@ Proof
   simp_tac (srw_ss()) [] >> strip_tac >>
   drule body_inv_facts_reloc >> strip_tac >>
   drule_all body_inv_inst_reloc >> strip_tac >>
-  drule_all jnz_wf_operands_kernel >> disch_then assume_tac >>
+  drule_all symBodyStaticFactsTheory.jnz_wf_operands >> disch_then assume_tac >>
   `is_terminator inst.inst_opcode` by simp[venomInstTheory.is_terminator_def] >>
   `!c l1 l2. inst.inst_operands = [c;Label l1;Label l2] ==>
     eval_operand c vs = eval_operand c (frame_view fn ra vs)` by
-    metis_tac[jnz_condition_frame_view_kernel] >>
+    metis_tac[symBodyStaticFactsTheory.jnz_condition_frame_view] >>
   `!t. MEM t (get_successors inst) ==> MEM (AsmLabel t) prog` by
-    (rpt strip_tac >> assume_tac placed_nonentry_sym_code_label_kernel >>
+    (rpt strip_tac >> assume_tac symBodyStaticFactsTheory.placed_nonentry_sym_code_label >>
      drule_all body_succ_sym_label_reloc_kernel >> strip_tac >> simp[]) >>
   drule_all sym_body_jnz_prefix_own_kernel >> strip_tac >>
   drule_all (BETA_RULE sym_body_jump_continue_minimal_own) >> simp[]

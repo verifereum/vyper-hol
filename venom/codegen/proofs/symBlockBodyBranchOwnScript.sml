@@ -83,7 +83,7 @@ fun selected_invoke_tac g =
    `invoke_operands_wf inst` by
      (drule_all body_inv_inst_reloc >> strip_tac >>
       gvs[stackPlanGenTheory.codegen_ready_inst_def]) >>
-   drule_then assume_tac invoke_operands_wf_shape_kernel >>
+   drule_then assume_tac symBodyStaticFactsTheory.invoke_operands_wf_shape >>
    drule_all sym_body_invoke_step_own_kernel >> simp[]) g
 
 Theorem sym_body_nonterm_prefix_own:

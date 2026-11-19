@@ -66,7 +66,7 @@ Proof
          strip_tac >> simp[compute_operands_def]) >> metis_tac[])
 QED
 
-Theorem sym_non_bump_inst_symbolic_run_canonical:
+Theorem sym_non_bump_inst_symbolic_run:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
    env ret srest labs0 ss.
@@ -168,29 +168,29 @@ Proof
   >> metis_tac[]
 QED
 
-Resume sym_non_bump_inst_symbolic_run_canonical[named]:
+Resume sym_non_bump_inst_symbolic_run[named]:
   rpt strip_tac >>
   qpat_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`
     (mp_then (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) mp_tac
       sym_named_inst_symbolic_run) >>
   disch_then (fn th => drule_all th) >> simp[]
 QED
-Resume sym_non_bump_inst_symbolic_run_canonical[assign]:
+Resume sym_non_bump_inst_symbolic_run[assign]:
   strip_tac >> drule_all_then strip_assume_tac sym_generated_assign_sim >>
   gvs[sym_frame_inv_def] >> metis_tac[]
 QED
-Resume sym_non_bump_inst_symbolic_run_canonical[phi]:
+Resume sym_non_bump_inst_symbolic_run[phi]:
   strip_tac >> drule_all_then strip_assume_tac sym_generated_phi_sim >>
   gvs[sym_frame_inv_def] >> metis_tac[]
 QED
-Resume sym_non_bump_inst_symbolic_run_canonical[nop]:
+Resume sym_non_bump_inst_symbolic_run[nop]:
   strip_tac >> drule_all_then strip_assume_tac sym_generated_nop_sim >>
   gvs[sym_frame_inv_def] >> metis_tac[]
 QED
-Resume sym_non_bump_inst_symbolic_run_canonical[initial]:
+Resume sym_non_bump_inst_symbolic_run[initial]:
   rpt strip_tac >> drule_all sym_initial_fmp_inst_symbolic_run >> simp[]
 QED
-Resume sym_non_bump_inst_symbolic_run_canonical[istore]:
+Resume sym_non_bump_inst_symbolic_run[istore]:
   rpt strip_tac >> simp[] >>
   qpat_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`
     (mp_then (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) mp_tac
@@ -202,7 +202,7 @@ Resume sym_non_bump_inst_symbolic_run_canonical[istore]:
   disch_then (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
   disch_then irule >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-Resume sym_non_bump_inst_symbolic_run_canonical[assert]:
+Resume sym_non_bump_inst_symbolic_run[assert]:
   rpt strip_tac >> simp[] >>
   qpat_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`
     (mp_then (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) mp_tac
@@ -214,7 +214,7 @@ Resume sym_non_bump_inst_symbolic_run_canonical[assert]:
   disch_then (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
   disch_then irule >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-Resume sym_non_bump_inst_symbolic_run_canonical[unreachable]:
+Resume sym_non_bump_inst_symbolic_run[unreachable]:
   rpt strip_tac >> simp[] >>
   qpat_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`
     (mp_then (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) mp_tac
@@ -226,7 +226,7 @@ Resume sym_non_bump_inst_symbolic_run_canonical[unreachable]:
   disch_then (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
   disch_then irule >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-Resume sym_non_bump_inst_symbolic_run_canonical[log]:
+Resume sym_non_bump_inst_symbolic_run[log]:
   rpt strip_tac >> simp[] >>
   qpat_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`
     (mp_then (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) mp_tac
@@ -238,7 +238,7 @@ Resume sym_non_bump_inst_symbolic_run_canonical[log]:
   disch_then (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
   disch_then irule >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-Finalise sym_non_bump_inst_symbolic_run_canonical
+Finalise sym_non_bump_inst_symbolic_run
 
 Theorem sym_non_bump_inst_symbolic_run_own:
   !allow_own own fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness

@@ -5,38 +5,6 @@ Theory symFrameInvokeTerminalSource
 Ancestors
   symFrameInvokeSupport symFrameInvokePrefixOwn fnFrameBoundaryInvoke symFrameInvokeCalleePointwise
 
-Theorem sym_invoke_source_halt_local:
-  asm_steps lo o2pc prog k st = AsmOK cas /\
-  sym_steps_mode allow_own prog env own k ss = SymOK scas /\
-  run_blocks fuel ctx callee cvs = Halt vs' /\
-  (!v. run_blocks fuel ctx callee cvs = Halt v ==>
-    ?n a. asm_steps lo o2pc prog n cas = AsmHalt a /\
-      venom_asm_terminal_rel v a /\
-      sym_terminal (sym_steps_mode allow_own prog env own n scas)) ==>
-  ?n as'. asm_steps lo o2pc prog n st = AsmHalt as' /\
-    venom_asm_terminal_rel vs' as' /\
-    sym_terminal (sym_steps_mode allow_own prog env own n ss)
-Proof
-  ACCEPT_TAC sym_invoke_halt_pointwise_compose
-QED
-
-Theorem sym_invoke_source_abort_local:
-  asm_steps lo o2pc prog k st = AsmOK cas /\
-  sym_steps_mode allow_own prog env own k ss = SymOK scas /\
-  run_blocks fuel ctx callee cvs = Abort a vs' /\
-  (!ab v. run_blocks fuel ctx callee cvs = Abort ab v ==>
-    ?n fin. ((ab = Revert_abort /\ asm_steps lo o2pc prog n cas = AsmRevert fin) \/
-             (ab = ExHalt_abort /\ asm_steps lo o2pc prog n cas = AsmFault fin)) /\
-      venom_asm_terminal_rel v fin /\
-      sym_terminal (sym_steps_mode allow_own prog env own n scas)) ==>
-  ?n as'. ((a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert as') \/
-           (a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault as')) /\
-    venom_asm_terminal_rel vs' as' /\
-    sym_terminal (sym_steps_mode allow_own prog env own n ss)
-Proof
-  ACCEPT_TAC sym_invoke_abort_pointwise_compose
-QED
-
 Theorem sym_invoke_source_halt_own:
   !allow_own own fuel Inv unit cp prog ctx lo o2pc liveness dfg cfg fn inst nl halting term label
    base ps vs st ops final r ra rest mem0 nm arg_ops rpolicy env ret srest labs0 ss vs'.

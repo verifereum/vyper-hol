@@ -4,24 +4,6 @@ Ancestors
   genBlockSim stackPlanGen planExec codegenSymRel asmSymBridge asmSymSem
   fnPlanPrefix genFrameSim allocMono venomWf fnBlockPlanStaticRegion symBumpOwn
 
-Theorem bump_plan_decompose:
-  inst.inst_opcode = BUMP /\ inst.inst_operands = [base_op; size_op] /\
-  inst.inst_outputs = [ptr; next] /\
-  generate_inst_plan lv dfg cfg fn inst nl halt term bb ps = SOME (ops,qs) ==>
-  ?iops prepared rops arranged pops ps8 opts ps9.
-    emit_input_plan BUMP [base_op; size_op] nl ps = (iops,prepared) /\
-    reorder_plan dfg [base_op; size_op] prepared = (rops,arranged) /\
-    popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) [ptr;next]))
-       (arranged with ps_stack := stack_push (Var next)
-         (stack_push (Var ptr) (stack_pop 2 arranged.ps_stack))) = (pops,ps8) /\
-    (if FILTER (\out. MEM out nl) [ptr;next] = [] then ([],ps8)
-     else optimistic_swap_plan dfg inst nl term ps8) = (opts,ps9) /\
-    ops = iops ++ rops ++ bump_emit_ops ++ pops ++ opts /\
-    qs = release_dead_spills nl ps9
-Proof
-  ACCEPT_TAC symBumpRunOwnTheory.bump_plan_decompose
-QED
-
 Theorem sym_bump_prepared_full_emit:
   inst.inst_opcode = BUMP /\ inst.inst_operands = [base_op; size_op] /\
   inst.inst_outputs = [ptr; next] /\ ptr <> next /\
@@ -52,16 +34,6 @@ Proof
     (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets p)`,
       `code_ok` |-> `asm_data_env_ok p env`]
       sym_bump_prepared_full_emit_core_mode)) >> simp[]
-QED
-
-Theorem selected_prefix_outputs_absent:
-  emit_input_plan opc operands nl ps = (iops,prepared) /\
-  reorder_plan dfg operands prepared = (rops,arranged) /\
-  LENGTH operands <= LENGTH prepared.ps_stack /\ LENGTH operands <= 17 /\
-  EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled) outputs ==>
-  EVERY (\v. ~MEM (Var v) arranged.ps_stack /\ Var v NOTIN FDOM arranged.ps_spilled) outputs
-Proof
-  ACCEPT_TAC symBumpRunOwnTheory.selected_prefix_outputs_absent
 QED
 
 Theorem sym_bump_inst_symbolic_run:

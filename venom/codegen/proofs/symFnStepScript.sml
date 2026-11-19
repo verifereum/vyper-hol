@@ -211,30 +211,6 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
-Theorem sym_nonentry_run_rest:
-  !fuel ctx fn vs bb s_phi.
-    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
-    eval_phis vs bb.bb_instructions = OK s_phi ==>
-    run_blocks (SUC fuel) ctx fn vs =
-    block_rest fuel ctx fn bb
-      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
-Proof
-  ACCEPT_TAC sym_nonentry_run_rest_kernel
-QED
-
-Theorem sym_phi_entry_inv:
-  !Inv ctx fn vs bb s_phi.
-    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
-    fn_entry_inv Inv ctx fn vs /\
-    eval_phis vs bb.bb_instructions = OK s_phi ==>
-    !inst. active_inst fn inst
-      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) ==>
-      Inv ctx fn inst
-        (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
-Proof
-  ACCEPT_TAC sym_phi_entry_inv_kernel
-QED
-
 Theorem sym_entry_body_inv:
   !rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after pc_bb vs as
@@ -408,68 +384,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   ho_match_mp_tac sym_entry_return_result_kernel >>
   gvs[sym_body_result_def] >> metis_tac[]
-QED
-
-Theorem sym_block_prefix_prepare:
-  !unit cpl prog ctx i fn r liveness dfg cfg ch growth spill_base lbl_ctr
-   fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after vs Inv.
-    ctx = unit.cu_context /\ generate_context_plan ctx = SOME cpl /\
-    unit_shape_ok unit /\ i < LENGTH ctx.ctx_functions /\
-    EL i ctx.ctx_functions = fn /\ EL i cpl.cp_regions = r /\
-    codegen_context_obligations Inv ctx cpl /\
-    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
-    cfg = cfg_analyze fn /\ spill_base = r.sr_spill_base /\
-    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
-      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\ fn_ops = r.sr_plan /\
-    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
-    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\ bb <> HD fn.fn_blocks /\
-    lineage_entry liveness dfg cfg fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred bb.bb_label ps /\
-    dfs_block_state liveness dfg cfg fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr) vs.vs_current_bb ps_dfs /\
-    generate_block_plan liveness dfg cfg fn bb ps_dfs = SOME (block_ops, ps_dfs_after)
-    ==>
-    ?h promised ps_after clean_ops ps2 inst_ops.
-      (?prefixL prefixD core.
-         ps_after.ps_stack = prefixL ++ core /\
-         ps_dfs_after.ps_stack = prefixD ++ core /\
-         (!v. MEM v (live_vars_at liveness bb.bb_label (LENGTH bb.bb_instructions)) ==>
-            ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
-      codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
-      non_param_insts bb = bb.bb_instructions /\ get_params bb.bb_instructions = [] /\
-      lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
-      dfs_block_state liveness dfg cfg fn
-        (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label ps_dfs /\
-      generate_block_plan liveness dfg cfg fn bb
-        (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
-        SOME (block_ops, ps_after) /\
-      ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
-      ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
-      (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
-         clean_stack_plan liveness cfg fn bb
-           (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
-       else ([], ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
-        (clean_ops, ps2) /\
-      generate_block_insts_plan liveness dfg cfg fn bb.bb_label (bb_is_halting bb)
-        (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions) 0
-        (non_param_insts bb) ps2 = SOME (inst_ops, ps_after) /\
-      block_ops = SOLabel bb.bb_label :: clean_ops ++ inst_ops /\
-      generated_plan_state_wf_marked spill_base ps /\
-      (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-        ~MEM op (FLAT (MAP (\inst. inst.inst_operands) (collect_phis bb.bb_instructions))) /\
-        (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
-        ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
-      (LENGTH (cfg_preds_of cfg bb.bb_label) <= 1 ==>
-       !op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-         (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
-         ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
-      MEM r cpl.cp_regions /\ r.sr_fn_name = fn.fn_name /\
-      r.sr_spill_base <= ps_after.ps_alloc.sa_spill_base /\
-      ps_after.ps_alloc.sa_next_offset <= r.sr_spill_end /\
-      (!off. MEM (SOSpill off) (clean_ops ++ inst_ops) \/
-        MEM (SORestore off) (clean_ops ++ inst_ops) ==> off < dimword (:256))
-Proof
-  ACCEPT_TAC sym_block_prefix_prepare_kernel
 QED
 
 Theorem sym_block_step_prefix:

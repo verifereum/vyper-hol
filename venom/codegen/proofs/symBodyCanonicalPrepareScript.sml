@@ -99,7 +99,7 @@ QED
 fun can_selected_invoke_tac shape outcome =
   strip_tac >>
   shape by (drule_all body_inv_inst >> strip_tac >>
-    irule invoke_operands_wf_shape_kernel >> gvs[stackPlanGenTheory.codegen_ready_inst_def]) >>
+    irule symBodyStaticFactsTheory.invoke_operands_wf_shape >> gvs[stackPlanGenTheory.codegen_ready_inst_def]) >>
   outcome suffices_by
     (qpat_x_assum `can_invoke_cut` kall_tac >> simp[SF CONJ_ss] >> strip_tac >>
      rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]) >>

@@ -48,7 +48,7 @@ Proof
   drule body_inv_facts >> strip_tac >>
   drule_all body_inv_inst >> strip_tac >>
   `?nm arg_ops. inst.inst_operands = Label nm :: arg_ops` by
-    (irule invoke_operands_wf_shape_kernel >>
+    (irule symBodyStaticFactsTheory.invoke_operands_wf_shape >>
      gvs[stackPlanGenTheory.codegen_ready_inst_def]) >>
   drule (iffLR body_inv_reloc_specialize) >> strip_tac >>
   qhdtm_assum `body_inv`

@@ -3,6 +3,7 @@ Theory symEmitDischargeOwn
 Ancestors symEmitSourceOwn symEmitCodecopyOwn asmSymModeOwn
   asmSymBridge asmSymForwardOwn asmSymOwnStep asmSymOwnCode asmSymSem asmSem
   codegenSymRel symEmitSim
+  symEmitStoreOwn
 
 Theorem sym_codecopy_data_replay_mode:
   asm_static_wf p /\ code_labels_agree p slo /\
@@ -133,7 +134,7 @@ Proof
     ?cs'. asm_steps slo (build_offset_to_pc p) p n cs = AsmOK cs' /\
       asm_sym_rel_own slo p env own cs' ss'` by
     (rpt strip_tac >> drule_all asm_sym_steps_mode_sim >> simp[]) >>
-  drule_all sym_bump_source_emit_own_conditional >> simp[]
+  drule_all symEmitStoreOwnTheory.sym_bump_source_emit_own_mode_conditional >> simp[]
 QED
 
 Theorem sym_istore_source_emit_mode:
@@ -165,7 +166,7 @@ Proof
     ?cs'. asm_steps slo (build_offset_to_pc p) p n cs = AsmOK cs' /\
       asm_sym_rel_own slo p env own cs' ss'` by
     (rpt strip_tac >> drule_all asm_sym_steps_mode_sim >> simp[]) >>
-  drule_all sym_istore_source_emit_own_conditional >> simp[]
+  drule_all symEmitStoreOwnTheory.sym_istore_source_emit_own_mode_conditional >> simp[]
 QED
 
 Theorem sym_log_source_emit_mode:

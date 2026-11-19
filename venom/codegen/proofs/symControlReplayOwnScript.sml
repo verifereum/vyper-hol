@@ -369,7 +369,8 @@ Theorem do_swap_read_only_kind_replay:
   prefix_spill_wf fmp lo ops qs /\
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
-  (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled /\ ps'.ps_stack <> []
+  (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled /\
+  ps'.ps_stack <> []
 Proof
   strip_tac >> drule_all do_swap_read_only_shallow >> strip_tac >>
   Cases_on `d = 0`
@@ -383,7 +384,8 @@ Proof
 QED
 
 Theorem do_swap_pair_read_only_kind_replay:
-  do_swap d ps = (ops1,ps1) /\ do_swap f ps1 = (ops2,ps2) /\ ps.ps_stack <> [] /\
+  do_swap d ps = (ops1,ps1) /\ do_swap f ps1 = (ops2,ps2) /\
+  ps.ps_stack <> [] /\
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     qs.ps_stack ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled /\
   (!off. ~MEM (SOSpill off) (ops1 ++ ops2)) ==>

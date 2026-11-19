@@ -6,7 +6,7 @@ Ancestors
   codegenSymRel asmSymBridge asmSymSem frameRel contextCodegenRel
   codegenRel unitShapeDefs venomExecSemantics venomState venomInst
 
-Theorem codegen_sym_code_end_label_kernel:
+Theorem codegen_sym_code_end_label:
   codegen_assembly rpolicy unit = SOME prog /\
   (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) ==>
   sym_data_label prog env "code_end"
@@ -15,7 +15,7 @@ Proof
   rpt strip_tac >> gvs[] >> simp[sym_data_label_def]
 QED
 
-Theorem data_segment_asm_header_kernel:
+Theorem data_segment_asm_header:
   !segs ds. MEM ds segs ==>
     MEM (AsmDataHeader ds.ds_label) (data_segment_asm segs)
 Proof
@@ -24,7 +24,7 @@ Proof
   metis_tac[asmIRTheory.data_segment_asm_def]
 QED
 
-Theorem codegen_sym_runtime_begin_label_kernel:
+Theorem codegen_sym_runtime_begin_label:
   codegen_assembly rpolicy unit = SOME prog /\
   sym_unit_static_ok unit /\ MEM fn unit.cu_context.ctx_functions /\
   MEM inst (fn_insts fn) /\ MEM (Label "runtime_begin") inst.inst_operands /\
@@ -36,12 +36,12 @@ Proof
     metis_tac[sym_unit_static_ok_def] >>
   gvs[listTheory.EXISTS_MEM] >>
   `MEM (AsmDataHeader "runtime_begin") (data_segment_asm unit.cu_data_segment)` by
-    metis_tac[data_segment_asm_header_kernel] >>
+    metis_tac[data_segment_asm_header] >>
   gvs[codegenTheory.codegen_assembly_def, AllCaseEqs()] >>
   simp[sym_data_label_def]
 QED
 
-Theorem placed_nonentry_sym_code_label_kernel:
+Theorem placed_nonentry_sym_code_label:
   !bb fn liveness dfg cfg ps ops ps' prog pc initial_fmp.
   bb <> HD fn.fn_blocks /\
   generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, ps') /\
@@ -56,7 +56,7 @@ Proof
   simp[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def]
 QED
 
-Theorem placed_revert_sym_code_label_kernel:
+Theorem placed_revert_sym_code_label:
   asm_block_at prog pc (execute_plan initial_fmp revert_postamble) ==>
   MEM (AsmLabel "revert") prog
 Proof
@@ -66,7 +66,7 @@ Proof
        planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def]
 QED
 
-Theorem invoke_operands_wf_shape_kernel:
+Theorem invoke_operands_wf_shape:
   !inst. invoke_operands_wf inst ==>
     ?nm args. inst.inst_operands = Label nm :: args
 Proof
@@ -75,7 +75,7 @@ Proof
   Cases_on `op` >> simp[stackPlanGenTheory.invoke_operands_wf_def]
 QED
 
-Theorem jmp_wf_operands_kernel:
+Theorem jmp_wf_operands:
   inst_wf inst /\ inst.inst_opcode = JMP ==>
   ?target. inst.inst_operands = [Label target] /\ inst.inst_outputs = [] /\
     is_terminator inst.inst_opcode /\ MEM target (get_successors inst)
@@ -84,7 +84,7 @@ Proof
   rpt strip_tac >> gvs[get_successors_def, get_label_def, is_terminator_def]
 QED
 
-Theorem jnz_wf_operands_kernel:
+Theorem jnz_wf_operands:
   inst_wf inst /\ inst_shape_ok inst /\ inst.inst_opcode = JNZ ==>
   ?c l1 l2. inst.inst_operands = [c; Label l1; Label l2] /\
     inst.inst_outputs = [] /\ ~is_label_operand c /\
@@ -100,7 +100,7 @@ Proof
       is_terminator_def]
 QED
 
-Theorem jnz_condition_frame_view_kernel:
+Theorem jnz_condition_frame_view:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = JNZ /\ inst.inst_operands = [c; Label l1; Label l2] ==>
   eval_operand c vs = eval_operand c (frame_view fn ra vs)

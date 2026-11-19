@@ -5,6 +5,7 @@ Ancestors
   symControlRetDischargeOwn
   symControlForwardContinuationOwn symControlForwardDischargeOwn asmSymModeOwn asmSymBridge
   codegenSymRel codegenSymOwnRel spillWordBounds
+  symControlGasOwn
 
 Theorem sym_gas_frame_sim_deep_own:
   !allow_own own fuel ctx cplan lo o2pc prog liveness dfg cfg fn inst next_liveness
@@ -85,7 +86,7 @@ Proof
     (GEN_ALL (SRULE [asm_sym_rel_core_own]
       (Q.INST [`code_ok` |->
         `\code. asm_data_env_lo_ok lo prog env own /\ code = own`]
-        (SPEC_ALL sym_gas_frame_sim_deep_mode_conditional)))) >>
+        (SPEC_ALL symControlGasOwnTheory.sym_gas_frame_sim_deep_mode_kernel)))) >>
   disch_then (drule_at (Pat `fn_frame_inv`)) >>
   disch_then (drule_at (Pat `generate_inst_plan`)) >>
   disch_then (drule_at (Pat `asm_sym_rel_own`)) >>

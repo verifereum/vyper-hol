@@ -180,49 +180,7 @@ Theorem sym_frame_inv_plan_transport:
   sym_frame_inv prog env ctx cp fn ret srest labs0 ps cs ss ==>
   sym_frame_inv prog env ctx cp fn ret srest labs0 ps' cs ss
 Proof
-  simp[sym_frame_inv_def] >> metis_tac[sym_kinds_ok_plan_transport]
-QED
-
-Theorem codegen_sym_code_end_label:
-  codegen_assembly rpolicy unit = SOME prog /\
-  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) ==>
-  sym_data_label prog env "code_end"
-Proof
-  MATCH_ACCEPT_TAC codegen_sym_code_end_label_kernel
-QED
-
-Theorem data_segment_asm_header:
-  !segs ds. MEM ds segs ==>
-    MEM (AsmDataHeader ds.ds_label) (data_segment_asm segs)
-Proof
-  MATCH_ACCEPT_TAC data_segment_asm_header_kernel
-QED
-
-Theorem codegen_sym_runtime_begin_label:
-  codegen_assembly rpolicy unit = SOME prog /\
-  sym_unit_static_ok unit /\ MEM fn unit.cu_context.ctx_functions /\
-  MEM inst (fn_insts fn) /\ MEM (Label "runtime_begin") inst.inst_operands /\
-  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) ==>
-  sym_data_label prog env "runtime_begin"
-Proof
-  MATCH_ACCEPT_TAC codegen_sym_runtime_begin_label_kernel
-QED
-
-Theorem placed_nonentry_sym_code_label:
-  !bb fn liveness dfg cfg ps ops ps' prog pc initial_fmp.
-  bb <> HD fn.fn_blocks /\
-  generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, ps') /\
-  asm_block_at prog pc (execute_plan initial_fmp ops) ==>
-  MEM (AsmLabel bb.bb_label) prog
-Proof
-  MATCH_ACCEPT_TAC placed_nonentry_sym_code_label_kernel
-QED
-
-Theorem placed_revert_sym_code_label:
-  asm_block_at prog pc (execute_plan initial_fmp revert_postamble) ==>
-  MEM (AsmLabel "revert") prog
-Proof
-  MATCH_ACCEPT_TAC placed_revert_sym_code_label_kernel
+  simp[sym_frame_inv_def] >> metis_tac[codegenSymRelTheory.sym_kinds_relevant_fields]
 QED
 
 Theorem sym_body_ordinary_ok:
@@ -267,10 +225,10 @@ Proof
   `as.as_code = vs.vs_code` by
     gvs[body_inv_def, fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def] >>
   `sym_data_label prog env "code_end"` by
-    (irule codegen_sym_code_end_label_kernel >> gvs[body_inv_def] >> metis_tac[]) >>
+    (irule symBodyStaticFactsTheory.codegen_sym_code_end_label >> gvs[body_inv_def] >> metis_tac[]) >>
   `(MEM (Label "runtime_begin") inst.inst_operands ==>
     sym_data_label prog env "runtime_begin")` by
-    (strip_tac >> irule codegen_sym_runtime_begin_label_kernel >>
+    (strip_tac >> irule symBodyStaticFactsTheory.codegen_sym_runtime_begin_label >>
      drule body_inv_facts >> strip_tac >> drule_all body_inv_inst >> strip_tac >>
      gvs[body_inv_def] >> metis_tac[]) >>
   gvs[body_inv_reloc_specialize] >>
@@ -324,13 +282,6 @@ Proof
   drule_at (Pat `body_inv_reloc`) (SRULE [sym_steps_mode_def]
     (Q.INST [`allow_own` |-> `F`, `own` |-> `vs.vs_code`] sym_body_gas_ok_own_kernel)) >>
   strip_tac >> gvs[sym_frame_inv_canonical_own] >> metis_tac[]
-QED
-
-Theorem invoke_operands_wf_shape:
-  !inst. invoke_operands_wf inst ==>
-    ?nm args. inst.inst_operands = Label nm :: args
-Proof
-  MATCH_ACCEPT_TAC invoke_operands_wf_shape_kernel
 QED
 
 Theorem sym_body_invoke_step:
@@ -422,7 +373,7 @@ Proof
   `(inst.inst_opcode = ASSERT ==> MEM (AsmLabel "revert") prog)` by
     (drule body_inv_facts >> strip_tac >> drule_all body_inv_inst >> strip_tac >>
      drule_all body_inv_static >> strip_tac >>
-     gvs[body_inv_def] >> metis_tac[placed_revert_sym_code_label_kernel]) >>
+     gvs[body_inv_def] >> metis_tac[symBodyStaticFactsTheory.placed_revert_sym_code_label]) >>
   gvs[body_inv_reloc_specialize] >>
   `asm_data_env_lo_ok (SND (compute_label_offsets prog)) prog env vs.vs_code` by
     gvs[sym_frame_inv_def, asm_data_env_lo_ok_canonical, asm_sym_rel_def] >>
@@ -485,7 +436,7 @@ Proof
     gvs[body_inv_def, fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def] >>
   `MEM (AsmLabel "revert") prog` by
     (drule body_inv_facts >> strip_tac >>
-     gvs[body_inv_def] >> metis_tac[placed_revert_sym_code_label_kernel]) >>
+     gvs[body_inv_def] >> metis_tac[symBodyStaticFactsTheory.placed_revert_sym_code_label]) >>
   gvs[body_inv_reloc_specialize] >>
   `asm_data_env_lo_ok (SND (compute_label_offsets prog)) prog env vs.vs_code` by
     gvs[sym_frame_inv_def, asm_data_env_lo_ok_canonical, asm_sym_rel_def] >>
@@ -641,15 +592,7 @@ Theorem body_succ_sym_label:
 Proof
   rewrite_tac[body_inv_reloc_specialize] >> strip_tac >>
   drule_at (Pat `body_inv_reloc`) body_succ_sym_label_reloc_kernel >>
-  metis_tac[placed_nonentry_sym_code_label_kernel]
-QED
-
-Theorem jmp_wf_operands:
-  inst_wf inst /\ inst.inst_opcode = JMP ==>
-  ?target. inst.inst_operands = [Label target] /\ inst.inst_outputs = [] /\
-    is_terminator inst.inst_opcode /\ MEM target (get_successors inst)
-Proof
-  MATCH_ACCEPT_TAC jmp_wf_operands_kernel
+  metis_tac[symBodyStaticFactsTheory.placed_nonentry_sym_code_label]
 QED
 
 Theorem sym_body_jmp_prefix:
@@ -679,24 +622,6 @@ Proof
   strip_tac >> drule (BETA_RULE sym_body_jump_prefix_canonical) >>
   disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
   disch_then (drule_at (Pat `sym_frame_inv`)) >> simp[]
-QED
-
-Theorem jnz_wf_operands:
-  inst_wf inst /\ inst_shape_ok inst /\ inst.inst_opcode = JNZ ==>
-  ?c l1 l2. inst.inst_operands = [c; Label l1; Label l2] /\
-    inst.inst_outputs = [] /\ ~is_label_operand c /\
-    is_terminator inst.inst_opcode /\ MEM c (compute_operands inst) /\
-    MEM l1 (get_successors inst) /\ MEM l2 (get_successors inst)
-Proof
-  MATCH_ACCEPT_TAC jnz_wf_operands_kernel
-QED
-
-Theorem jnz_condition_frame_view:
-  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
-  inst.inst_opcode = JNZ /\ inst.inst_operands = [c; Label l1; Label l2] ==>
-  eval_operand c vs = eval_operand c (frame_view fn ra vs)
-Proof
-  MATCH_ACCEPT_TAC jnz_condition_frame_view_kernel
 QED
 
 Theorem sym_body_jnz_prefix:

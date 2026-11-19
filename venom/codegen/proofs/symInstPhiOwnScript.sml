@@ -5,19 +5,6 @@ Ancestors
   planExec codegenSymRel asmSymSem doSwapSim genBlockSim symInstKinds
   symPhiRenameFacts
 
-Theorem sym_phi_rename_own:
-  ssa_form fn /\ retpc_shape_ok fn /\ label_flow_own_ok ctx /\
-  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
-  MEM x inst.inst_outputs /\ inst.inst_opcode = PHI /\
-  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
-    ps.ps_stack = SOME d /\
-  sym_kinds_ok cplan fn ret srest ps ss ==>
-  sym_kinds_ok cplan fn ret srest
-    (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) ss
-Proof
-  MATCH_ACCEPT_TAC symPhiRenameFactsTheory.sym_phi_rename_own
-QED
-
 Theorem sym_phi_dup_rename_own:
   ssa_form fn /\ retpc_shape_ok fn /\ label_flow_own_ok ctx /\
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
@@ -28,12 +15,12 @@ Theorem sym_phi_dup_rename_own:
   sym_kinds_ok cplan fn ret srest
     (qs with ps_stack := stack_poke 0 (Var x) qs.ps_stack) ss
 Proof
-  strip_tac >> drule phi_depth_operand >> strip_tac >>
+  strip_tac >> drule symPhiRenameFactsTheory.phi_depth_operand >> strip_tac >>
   `d < LENGTH ps.ps_stack` by
     metis_tac[stack_get_phi_depth_var_not_marker] >>
   `qs.ps_stack = ps.ps_stack ++ [stack_peek d ps.ps_stack]` by
     metis_tac[do_dup_stack_exact, pairTheory.SND] >>
-  irule sym_kinds_ok_poke >> simp[stack_peek_def, listTheory.EL_APPEND_EQN] >>
+  irule symPhiRenameFactsTheory.sym_kinds_ok_poke >> simp[stack_peek_def, listTheory.EL_APPEND_EQN] >>
   metis_tac[phi_var_output_kind_own]
 QED
 
@@ -81,7 +68,7 @@ Theorem sym_phi_dead_prefix_sim_mode:
 Proof
   simp[execute_plan_def, exec_stack_op_def, sym_steps_mode_def,
        asmSpliceTheory.sym_steps_def, asmSpliceOwnTheory.sym_steps_own_def] >>
-  metis_tac[sym_phi_rename_own]
+  metis_tac[symPhiRenameFactsTheory.sym_phi_rename_own]
 QED
 
 Theorem sym_singleton_cleanup_sim_mode:
@@ -131,7 +118,7 @@ Proof
   pop_assum (fn th => rewrite_tac[th]) >> strip_tac >>
   `sym_kinds_ok cplan fn ret srest
     (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) ss` by
-    metis_tac[sym_phi_rename_own] >>
+    metis_tac[symPhiRenameFactsTheory.sym_phi_rename_own] >>
   `spill_alloc_layout_wf
     (ps with ps_stack := stack_poke d (Var x) ps.ps_stack).ps_alloc
     (ps with ps_stack := stack_poke d (Var x) ps.ps_stack).ps_spilled` by simp[] >>
@@ -222,7 +209,7 @@ Resume sym_phi_plan_sim_mode[dead]:
   strip_tac >> gvs[] >> qexists `ss` >>
   simp[execute_plan_def, exec_stack_op_def, sym_steps_mode_def,
        asmSpliceTheory.sym_steps_def, asmSpliceOwnTheory.sym_steps_own_def] >>
-  metis_tac[sym_phi_rename_own, listTheory.MEM]
+  metis_tac[symPhiRenameFactsTheory.sym_phi_rename_own, listTheory.MEM]
 QED
 
 Resume sym_phi_plan_sim_mode[dead_pop]:

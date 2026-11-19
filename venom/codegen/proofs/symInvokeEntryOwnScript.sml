@@ -92,7 +92,7 @@ Proof
    plan_slots_bounded spillbase ps /\ residual_budget_wf_marked spillbase [] ps` by
     metis_tac[fnPlanPrefixTheory.generated_plan_state_wf_marked_def,
               deepResidualSimTheory.generated_plan_state_wf_marked_residual_nil] >>
-  drule_all sym_invoke_selected_prefix_sim_marked_core >>
+  drule_all symInvokeEntryFactsTheory.sym_invoke_selected_prefix_sim_marked >>
   disch_then (qspec_then `env` strip_assume_tac) >>
   drule sym_steps_mode_ok >>
   disch_then (qspecl_then [`own`, `allow_own`] assume_tac) >>
@@ -121,7 +121,7 @@ Proof
   `asm_block_at p sms.sym_base.as_pc
      [AsmPushLabel ret_lbl; AsmPushLabel nm; AsmOp "JUMP"]` by
     (gvs[asm_sym_rel_own_def] >> simp[]) >>
-  drule_all sym_invoke_call_packet_core >>
+  drule_all symInvokeEntryFactsTheory.sym_invoke_call_packet >>
   disch_then (qspec_then `env` assume_tac) >>
   drule sym_steps_mode_ok >>
   disch_then (qspecl_then [`own`, `allow_own`] assume_tac) >>
@@ -167,7 +167,7 @@ Proof
   drule_all sym_invoke_arranged_stack_own >> strip_tac >>
   drule_all fnFrameBoundaryInvokeTheory.invoke_packet_block >> strip_tac >>
   drule_all sym_invoke_call_entry_pair_own >> strip_tac >>
-  drule_all sym_invoke_return_code_label_core >> strip_tac >>
+  drule_all symInvokeEntryFactsTheory.sym_invoke_return_code_label >> strip_tac >>
   gvs[sym_kinds_ok_def, sym_steps_mode_add]
 QED
 

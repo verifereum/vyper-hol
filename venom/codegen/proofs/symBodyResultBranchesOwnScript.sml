@@ -81,7 +81,7 @@ Proof
   simp_tac (srw_ss()) [] >> strip_tac >>
   `MEM (AsmLabel "revert") prog` by
     (drule body_inv_facts_reloc >> strip_tac >>
-     drule_all placed_revert_sym_code_label_kernel >> simp[]) >>
+     drule_all symBodyStaticFactsTheory.placed_revert_sym_code_label >> simp[]) >>
   drule_all body_inv_inst_reloc >> strip_tac >>
   `vs.vs_inst_idx = k` by gvs[body_inv_reloc_def] >>
   `get_instruction bb vs.vs_inst_idx = SOME inst` by metis_tac[] >>
@@ -111,7 +111,7 @@ Proof
   simp_tac (srw_ss()) [] >> strip_tac >>
   `MEM (AsmLabel "revert") prog` by
     (drule body_inv_facts_reloc >> strip_tac >>
-     drule_all placed_revert_sym_code_label_kernel >> simp[]) >>
+     drule_all symBodyStaticFactsTheory.placed_revert_sym_code_label >> simp[]) >>
   drule_all sym_body_revert_step_own_kernel >>
   disch_then (qspec_then `fuel` mp_tac) >> simp_tac (srw_ss()) [] >> strip_tac >>
   Cases_on `exec_block fuel ctx bb vs` >> gvs[block_rest_def] >> metis_tac[]

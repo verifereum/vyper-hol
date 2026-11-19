@@ -13,35 +13,6 @@ val assert_bridge_core_tm = let
 in list_mk_abs (params @ [named "cs", named "ss"], core) end;
 val _ = Parse.temp_overload_on ("bridge_core", assert_bridge_core_tm);
 
-Theorem sym_assertion_prepared_run_mode_core:
-  (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
-  inst.inst_operands = [cond] /\ step_inst fuel ctx inst vs = OK vsout /\
-  opaque_use_ok fn /\ (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
-  fn_shape_ok fn /\ MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
-  LIST_REL (\sv w. sval_conc slo sv = SOME w) localtop cs.as_stack /\
-  sym_kinds_ok cplan fn ret [] ps (ss with sym_stack := localtop) /\
-  sym_kinds_ok cplan fn ret srest ps ss /\ ss.sym_stack = localtop ++ srest /\
-  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
-  ps.ps_stack = residual ++ inst.inst_operands /\
-  EVERY (\op. op <> dead_stack_marker) inst.inst_operands /\
-  (!op. MEM op inst.inst_operands ==>
-    eval_operand op (frame_view fn ra vs with vs_memory := m) =
-    operand_val (frame_view fn ra vs with vs_memory := m) lo op) /\
-  (inst.inst_opcode = ASSERT ==>
-    asm_block_at p ss.sym_base.as_pc
-      [AsmOp "ISZERO"; AsmPushLabel "revert"; AsmOp "JUMPI"]) /\
-  (inst.inst_opcode = ASSERT_UNREACHABLE ==>
-    asm_block_at p ss.sym_base.as_pc
-      [AsmPushLabel lbl; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel lbl] /\
-    INDEX_OF (AsmLabel lbl) p = SOME (ss.sym_base.as_pc + 3)) ==>
-  ?full. sym_steps_mode allow_own p env own 3 ss = SymOK full /\
-    full.sym_mem_labels = ss.sym_mem_labels /\
-    sym_kinds_ok cplan fn ret srest
-      (release_dead_spills nl (ps with ps_stack := stack_pop 1 ps.ps_stack)) full
-Proof
-  ACCEPT_TAC symInstAssertSuffixOwnTheory.sym_assertion_prepared_run_mode_core
-QED
-
 Theorem sym_assertion_prepared_run_own:
   (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
   inst.inst_operands = [cond] /\ step_inst fuel ctx inst vs = OK vsout /\
@@ -71,7 +42,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `LIST_REL (\sv w. sval_conc lo sv = SOME w) localtop cs.as_stack` by
     gvs[asmSymBridgeTheory.asm_sym_rel_own_def] >>
-  drule_all sym_assertion_prepared_run_mode_core >> simp[]
+  drule_all symInstAssertSuffixOwnTheory.sym_assertion_prepared_run_mode_core >> simp[]
 QED
 
 Theorem sym_assert_prepared_run_own:
@@ -184,7 +155,7 @@ Proof
     full.sym_mem_labels = ready.sym_mem_labels /\
     sym_kinds_ok cplan fn ret srest
       (release_dead_spills nl (arranged with ps_stack := stack_pop 1 arranged.ps_stack)) full` by
-    (drule_at (Pat `venom_asm_rel _ arranged _ mid`) sym_assertion_prepared_run_mode_core >>
+    (drule_at (Pat `venom_asm_rel _ arranged _ mid`) symInstAssertSuffixOwnTheory.sym_assertion_prepared_run_mode_core >>
      disch_then (drule_at (Pat `sym_kinds_ok _ _ _ [] _ _`)) >>
      disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ ready`)) >>
      disch_then (drule_at (Pat `step_inst _ _ _ vs = _`)) >>
@@ -267,15 +238,6 @@ Proof
   disch_then irule >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >> qexists `r` >> simp[]
-QED
-
-Theorem sym_assert_fresh_release_kinds:
-  sym_kinds_ok cplan fn ret srest
-    (release_dead_spills nl (ps with ps_stack := stack_pop 1 ps.ps_stack)) ss /\
-  fresh_label prefix (ps with ps_stack := stack_pop 1 ps.ps_stack) = (lbl,qs) ==>
-  sym_kinds_ok cplan fn ret srest (release_dead_spills nl qs) ss
-Proof
-  ACCEPT_TAC symInstAssertSuffixOwnTheory.sym_assert_fresh_release_kinds
 QED
 
 Theorem sym_assert_unreachable_inst_symbolic_run_mode_core:

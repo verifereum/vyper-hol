@@ -154,24 +154,6 @@ Proof
     [`allow_own` |-> `F`] symInstPhiOwnTheory.sym_phi_plan_sim_mode)) >> simp[]
 QED
 
-Theorem stack_push_pop_one_poke:
-  !stk out. 0 < LENGTH stk ==>
-    stack_push out (stack_pop 1 stk) = stack_poke 0 out stk
-Proof
-  MATCH_ACCEPT_TAC symInstAssignOwnTheory.stack_push_pop_one_poke
-QED
-
-Theorem sym_assign_output_state:
-  ssa_form fn /\ MEM inst (fn_insts fn) /\ inst.inst_outputs = [x] /\
-  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
-  label_positions_ok inst /\ stack_peek 0 ps.ps_stack = op /\
-  0 < LENGTH ps.ps_stack /\ sym_kinds_ok cplan fn ret srest ps ss ==>
-  sym_kinds_ok cplan fn ret srest
-    (ps with ps_stack := stack_push (Var x) (stack_pop 1 ps.ps_stack)) ss
-Proof
-  MATCH_ACCEPT_TAC symInstAssignOwnTheory.sym_assign_output_state
-QED
-
 Theorem sym_assign_postfix_sim:
   ssa_form fn /\ MEM inst (fn_insts fn) /\ inst.inst_outputs = [x] /\
   inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
@@ -261,13 +243,6 @@ Proof
   strip_tac >> first_x_assum (qspec_then `0` mp_tac) >> simp[]
 QED
 
-Theorem singleton_cleanup_ops_bounded:
-  popmany_plan [v] ps = (ops,qs) /\ plan_slots_bounded sb ps ==>
-  ops_spill_bounded sb qs.ps_alloc.sa_next_offset ops
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.singleton_cleanup_ops_bounded
-QED
-
 Theorem phi_optional_cleanup_ops_bounded:
   (if cleanup then popmany_plan [v] ps else ([],ps)) = (ops,qs) /\
   plan_slots_bounded sb ps ==>
@@ -275,7 +250,7 @@ Theorem phi_optional_cleanup_ops_bounded:
   ps.ps_alloc.sa_next_offset <= qs.ps_alloc.sa_next_offset
 Proof
   Cases_on `cleanup` >> simp[] >> strip_tac
-  >- metis_tac[singleton_cleanup_ops_bounded, allocMonoTheory.popmany_plan_next_offset] >>
+  >- metis_tac[symInstPiecesFactsTheory.singleton_cleanup_ops_bounded, allocMonoTheory.popmany_plan_next_offset] >>
   gvs[] >> simp[]
 QED
 
@@ -355,24 +330,6 @@ Proof
   metis_tac[scratch_ops_region_confined]
 QED
 
-Theorem optimistic_swap_ops_bounded:
-  optimistic_swap_plan dfg inst nl term ps = (ops,qs) /\ plan_slots_bounded sb ps ==>
-  ops_spill_bounded sb qs.ps_alloc.sa_next_offset ops
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.optimistic_swap_ops_bounded
-QED
-
-Theorem assign_postfix_ops_bounded:
-  plan_slots_bounded sb ps7 /\ spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled /\
-  (if halt then ([],ps7) else popmany_plan (if MEM x nl then [] else [Var x]) ps7)
-    = (pops,ps8) /\
-  (if MEM x nl then optimistic_swap_plan dfg inst nl term ps8 else ([],ps8))
-    = (opts,ps9) /\ qs = release_dead_spills nl ps9 ==>
-  ops_spill_bounded sb qs.ps_alloc.sa_next_offset (pops ++ opts)
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.assign_postfix_ops_bounded
-QED
-
 Theorem assign_postfix_ops_region_confined:
   plan_slots_bounded sb ps7 /\ spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled /\
   (if halt then ([],ps7) else popmany_plan (if MEM x nl then [] else [Var x]) ps7)
@@ -384,7 +341,7 @@ Theorem assign_postfix_ops_region_confined:
   !off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
     (r.sr_spill_base <= b /\ b < r.sr_spill_end) /\ context_spill_byte cplan b
 Proof
-  strip_tac >> drule_all assign_postfix_ops_bounded >>
+  strip_tac >> drule_all symInstPiecesFactsTheory.assign_postfix_ops_bounded >>
   simp[planSpillBoundsTheory.ops_spill_bounded_def, in_mem_range_def] >>
   rpt strip_tac >>
   `r.sr_spill_base <= b /\ b < r.sr_spill_end` by
@@ -451,7 +408,7 @@ Proof
       planSpillBoundsTheory.alloc_slots_bounded_def,
       fnPlanPrefixTheory.generated_plan_state_wf_marked_def] >>
   qpat_x_assum `plan_slots_bounded sb arranged` kall_tac >>
-  drule_all assign_postfix_ops_bounded >> strip_tac >>
+  drule_all symInstPiecesFactsTheory.assign_postfix_ops_bounded >> strip_tac >>
   simp[] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `ops_spill_bounded _ _ _` mp_tac >>
   simp[planSpillBoundsTheory.ops_spill_bounded_def] >>
@@ -492,66 +449,6 @@ Proof
       planSpillBoundsTheory.alloc_slots_bounded_def] >>
   simp[] >> rpt gen_tac >> strip_tac >>
   drule_all generate_phi_plan_ops_region_confined >> simp[]
-QED
-
-Theorem regular_postfix_ops_spill_bounded:
-  LENGTH inst.inst_outputs <= 1 /\
-  plan_slots_bounded sb ps7 /\ spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled /\
-  (if inst.inst_outputs = [] \/ halt then ([],ps7)
-   else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) ps7)
-    = (pops,ps8) /\
-  (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
-   else optimistic_swap_plan dfg inst nl term ps8) = (opts,ps9) /\
-  qs = release_dead_spills nl ps9 ==>
-  ops_spill_bounded sb qs.ps_alloc.sa_next_offset (pops ++ opts)
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.regular_postfix_ops_spill_bounded
-QED
-
-Theorem sym_regular_postfix_applicability:
-  LENGTH inst.inst_outputs <= 1 /\ generated_plan_state_wf_marked sb ps7 /\
-  (if inst.inst_outputs = [] \/ halt then ([],ps7)
-   else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) ps7)
-    = (pops,ps8) /\
-  (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
-   else optimistic_swap_plan dfg inst nl term ps8) = (opts,ps9) /\
-  qs = release_dead_spills nl ps9 /\
-  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
-  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
-  qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
-  spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled /\
-  ps7.ps_alloc.sa_spill_base = qs.ps_alloc.sa_spill_base /\
-  ps7.ps_alloc.sa_next_offset <= qs.ps_alloc.sa_next_offset /\
-  (!off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
-    closure_spill_byte ctx cplan name b /\ context_spill_byte cplan b)
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.sym_regular_postfix_applicability
-QED
-
-Theorem sym_regular_prefix_applicability:
-  generated_plan_state_wf_marked sb ps /\
-  (!op. MEM op operands /\ is_var_operand op ==>
-    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-  emit_input_plan opc operands nl ps = (iops,prepared) /\
-  reorder_plan dfg selected prepared = (rops,arranged) /\
-  PERM operands selected /\ LENGTH operands <= 16 /\
-  LENGTH operands <= LENGTH prepared.ps_stack /\
-  emitted = arranged with ps_stack := FOLDL (\stk out. stack_push (Var out) stk)
-    (stack_pop (LENGTH selected) arranged.ps_stack) inst.inst_outputs /\
-  (if inst.inst_outputs = [] \/ halt then ([],emitted)
-   else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) emitted)
-    = (pops,popped) /\
-  (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],popped)
-   else optimistic_swap_plan dfg inst nl term popped) = (opts,tail) /\
-  qs = release_dead_spills nl tail /\
-  MEM r cplan.cp_regions /\ r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
-  qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
-  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
-  plan_slots_bounded sb ps /\ residual_budget_wf_marked sb [] ps /\
-  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
-  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.sym_regular_prefix_applicability
 QED
 
 Theorem sym_prepared_prefix_endpoint:
@@ -778,17 +675,6 @@ Proof
   simp[]
 QED
 
-Theorem sym_log_name_dispatch:
-  n <= 4 ==>
-  ALOOKUP log_table ("LOG" ++ num_to_dec_string n) = SOME n /\
-  ~MEM ("LOG" ++ num_to_dec_string n) ["POP"; "JUMP"; "JUMPI"; "CODESIZE"] /\
-  ALOOKUP dup_table ("LOG" ++ num_to_dec_string n) = NONE /\
-  ALOOKUP swap_table ("LOG" ++ num_to_dec_string n) = NONE /\
-  asm_op_arity ("LOG" ++ num_to_dec_string n) = n + 2
-Proof
-  MATCH_ACCEPT_TAC symInstLogOwnTheory.sym_log_name_dispatch
-QED
-
 Theorem sym_log_prepared_suffix:
   inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: selected /\
   LENGTH selected = w2n tc + 2 /\ REVERSE selected = off :: len :: topics /\
@@ -950,7 +836,7 @@ Proof
     localtop cs.as_stack` by gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
   drule_at (Pat `step_inst _ _ _ _ = _`)
     (REWRITE_RULE [sym_steps_mode_def] (Q.INST [`allow_own` |-> `F`]
-      symInstAssertOwnTheory.sym_assertion_prepared_run_mode_core)) >>
+      symInstAssertSuffixOwnTheory.sym_assertion_prepared_run_mode_core)) >>
   disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
   disch_then (drule_at (Pat `LIST_REL _ _ _`)) >>
   disch_then (drule_at (Pat `sym_kinds_ok _ _ _ [] _ _`)) >>
@@ -1107,22 +993,7 @@ Proof
     localtop cs.as_stack` by gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
   drule_all (REWRITE_RULE [sym_steps_mode_def] (Q.INST
     [`allow_own` |-> `F`]
-    symInstAssertOwnTheory.sym_assertion_prepared_run_mode_core)) >> simp[]
-QED
-
-Theorem asm_unique_label_index:
-  !p i lbl. asm_labels_unique p /\ i < LENGTH p /\ EL i p = AsmLabel lbl ==>
-    INDEX_OF (AsmLabel lbl) p = SOME i
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.asm_unique_label_index
-QED
-
-Theorem asm_static_block_label_index:
-  asm_static_wf p /\ asm_block_at p pc code /\
-  i < LENGTH code /\ EL i code = AsmLabel lbl ==>
-  INDEX_OF (AsmLabel lbl) p = SOME (pc + i)
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.asm_static_block_label_index
+    symInstAssertSuffixOwnTheory.sym_assertion_prepared_run_mode_core)) >> simp[]
 QED
 
 Theorem sym_assert_unreachable_inst_symbolic_run:
@@ -1173,42 +1044,6 @@ Proof
     (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
       `code_ok` |-> `asm_data_env_ok prog env`]
       symInstAssertOwnTheory.sym_assert_unreachable_inst_symbolic_run_mode_core)) >> simp[]
-QED
-
-Theorem sym_bump_postfix_applicability:
-  inst.inst_outputs = [ptr;next] /\ ptr <> next /\
-  ps7.ps_stack = residual ++ [Var ptr;Var next] /\
-  generated_plan_state_wf_marked sb ps7 /\
-  (if inst.inst_outputs = [] \/ halt then ([],ps7)
-   else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) ps7)
-    = (pops,ps8) /\
-  (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
-   else optimistic_swap_plan dfg inst nl term ps8) = (opts,ps9) /\
-  qs = release_dead_spills nl ps9 /\
-  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
-  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
-  qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
-  spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled /\
-  ps7.ps_alloc.sa_spill_base = qs.ps_alloc.sa_spill_base /\
-  ps7.ps_alloc.sa_next_offset <= qs.ps_alloc.sa_next_offset /\
-  (!off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
-    closure_spill_byte ctx cplan name b /\ context_spill_byte cplan b)
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.sym_bump_postfix_applicability
-QED
-
-Theorem istore_plan_decompose:
-  inst.inst_opcode = ISTORE /\ inst_wf inst /\
-  inst.inst_operands = [dst; value] /\
-  generate_inst_plan liveness dfg cfg fn inst nl halt term bb ps = SOME (ops,qs) ==>
-  inst.inst_outputs = [] /\ compute_operands inst = [dst; value] /\
-  ?iops prepared rops arranged.
-    emit_input_plan ISTORE [dst; value] nl ps = (iops,prepared) /\
-    reorder_plan dfg [dst; value] prepared = (rops,arranged) /\
-    ops = iops ++ rops ++ [SOEmit "SWAP1"; SOEmit "MSTORE"] /\
-    qs = release_dead_spills nl (arranged with ps_stack := stack_pop 2 arranged.ps_stack)
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.istore_plan_decompose
 QED
 
 Theorem sym_istore_prepared_run:
@@ -1286,20 +1121,6 @@ Proof
     (Q.INST [`allow_own` |-> `F`, `lo` |-> `SND (compute_label_offsets prog)`,
       `code_ok` |-> `asm_data_env_ok prog env`]
       symInstStoreInitOwnTheory.sym_istore_inst_symbolic_run_mode_core)) >> simp[]
-QED
-
-Theorem initial_fmp_plan_decompose:
-  inst.inst_opcode = INITIAL_FMP /\ inst.inst_operands = [] /\
-  inst.inst_outputs = [x] /\
-  generate_inst_plan liveness dfg cfg fn inst nl halt term bb ps = SOME (ops,qs) ==>
-  ?pops ps8 opts ps9.
-    (if halt then ([],ps with ps_stack := stack_push (Var x) ps.ps_stack)
-     else popmany_plan (if MEM x nl then [] else [Var x])
-       (ps with ps_stack := stack_push (Var x) ps.ps_stack)) = (pops,ps8) /\
-    (if MEM x nl then optimistic_swap_plan dfg inst nl term ps8 else ([],ps8)) = (opts,ps9) /\
-    ops = [SOInitialFmp] ++ (pops ++ opts) /\ qs = release_dead_spills nl ps9
-Proof
-  MATCH_ACCEPT_TAC symInstPiecesFactsTheory.initial_fmp_plan_decompose
 QED
 
 Theorem sym_initial_fmp_generated_cleanup:

@@ -121,7 +121,7 @@ Proof
   simp_tac (srw_ss()) [] >> strip_tac >>
   `?nm arg_ops. inst.inst_operands = Label nm :: arg_ops` by
     (drule_all body_inv_inst_reloc >> strip_tac >>
-     irule invoke_operands_wf_shape_kernel >>
+     irule symBodyStaticFactsTheory.invoke_operands_wf_shape >>
      gvs[stackPlanGenTheory.codegen_ready_inst_def]) >>
   gvs[] >> first_x_assum irule >> simp[] >> metis_tac[]
 QED

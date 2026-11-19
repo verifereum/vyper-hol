@@ -262,7 +262,8 @@ Theorem sym_scratch_spill_bulk_steps:
       (!b. EVERY (\off. ~in_mem_range off 32 b) offsets ==>
         FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
       (!b. b IN FDOM ss'.sym_mem_labels ==>
-        b IN FDOM ss.sym_mem_labels \/ EXISTS (\off. in_mem_range off 32 b) offsets)
+        b IN FDOM ss.sym_mem_labels \/
+        EXISTS (\off. in_mem_range off 32 b) offsets)
 Proof
   Induct >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >>
   rpt strip_tac >>

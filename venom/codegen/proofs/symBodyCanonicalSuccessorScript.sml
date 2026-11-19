@@ -155,17 +155,17 @@ Proof
   drule body_inv_facts >> strip_tac >> drule_all body_inv_inst >> strip_tac >>
   `is_terminator inst.inst_opcode` by metis_tac[is_terminator_def] >>
   `!t. MEM t (get_successors inst) ==> MEM (AsmLabel t) prog` by
-    (rpt strip_tac >> assume_tac placed_nonentry_sym_code_label_kernel >>
+    (rpt strip_tac >> assume_tac symBodyStaticFactsTheory.placed_nonentry_sym_code_label >>
      drule_all body_succ_sym_label_reloc_kernel >> strip_tac >> simp[]) >>
   `jump_prefix_facts (sym_steps prog env)
       (sym_frame_inv_own lo prog env vs.vs_code ctx cpl fn ret srest labs0)` by
     (BETA_TAC >> qpat_x_assum `inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ` strip_assume_tac
-     >- (drule_all_then assume_tac jmp_wf_operands_kernel >>
+     >- (drule_all_then assume_tac symBodyStaticFactsTheory.jmp_wf_operands >>
          canonical_prefix_tac sym_body_jmp_prefix_pointwise)
-     >- (drule_all_then assume_tac jnz_wf_operands_kernel >>
+     >- (drule_all_then assume_tac symBodyStaticFactsTheory.jnz_wf_operands >>
          `!c l1 l2. inst.inst_operands = [c;Label l1;Label l2] ==>
             eval_operand c vs = eval_operand c (frame_view fn ra vs)` by
-           metis_tac[jnz_condition_frame_view_kernel] >>
+           metis_tac[symBodyStaticFactsTheory.jnz_condition_frame_view] >>
          canonical_prefix_tac sym_body_jnz_prefix_pointwise)) >>
   qexistsl [`n`, `as1`, `ss1`, `t`, `off`] >> gvs[sym_frame_inv_canonical_own] >>
   first_assum ACCEPT_TAC

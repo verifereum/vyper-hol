@@ -22,5 +22,5 @@ Theorem sym_frame_inv_plan_transport_own:
   sym_frame_inv_own lo prog env own ctx cp fn ret srest labs0 ps cs ss ==>
   sym_frame_inv_own lo prog env own ctx cp fn ret srest labs0 ps' cs ss
 Proof
-  simp[sym_frame_inv_own_def] >> metis_tac[sym_kinds_ok_plan_transport]
+  simp[sym_frame_inv_own_def] >> metis_tac[codegenSymRelTheory.sym_kinds_relevant_fields]
 QED

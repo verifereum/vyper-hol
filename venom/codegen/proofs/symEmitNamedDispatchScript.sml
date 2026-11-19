@@ -3,7 +3,7 @@
 Theory symEmitNamedDispatch
 Ancestors symInstKinds codegenSymRel asmSem finite_map list
 
-Theorem named_codecopy_selection_shape_core:
+Theorem named_codecopy_selection_shape:
   inst_wf inst /\ inst.inst_opcode = CODECOPY /\
   (selected = compute_operands inst \/
    (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
@@ -19,7 +19,7 @@ Proof
     venomInstTheory.ir_specific_operand_order_def, LENGTH_EQ_NUM_compute]
 QED
 
-Theorem named_code_end_add_selection_shape_core:
+Theorem named_code_end_add_selection_shape:
   inst_wf inst /\ inst.inst_opcode = ADD /\
   inst.inst_operands = [op; Label "code_end"] /\
   (selected = compute_operands inst \/
@@ -96,14 +96,14 @@ Theorem sym_named_source_emit_dispatch:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `inst.inst_opcode = CODECOPY`
-  >- (drule_all named_codecopy_selection_shape_core >>
+  >- (drule_all named_codecopy_selection_shape >>
       disch_then (qx_choose_then `dst` (qx_choose_then `src` (qx_choose_then `sz` strip_assume_tac))) >>
       qpat_x_assum `!dst src sz. _ ==> ?ss'. _` (qspecl_then [`dst`, `src`, `sz`] irule) >>
       fs[asmIRTheory.venom_to_evm_name_def, venomEffectsTheory.is_commutative_def,
          EVERY_MEM, MEM] >> metis_tac[]) >>
   Cases_on `?op. inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label "code_end"]`
   >- (pop_assum (qx_choose_then `op` strip_assume_tac) >>
-      drule_all named_code_end_add_selection_shape_core >>
+      drule_all named_code_end_add_selection_shape >>
       disch_then (CONJUNCTS_THEN2 (qx_choose_then `x` assume_tac) assume_tac) >>
       qpat_x_assum `!op x. _ ==> ?ss'. _` (qspecl_then [`op`, `x`] irule) >>
       fs[asmIRTheory.venom_to_evm_name_def] >> metis_tac[]) >>

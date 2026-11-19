@@ -118,16 +118,6 @@ Proof
   gvs[popmany_plan_top_singleton] >> metis_tac[sym_pop_top_sim, arithmeticTheory.ADD_COMM]
 QED
 
-Theorem sym_kinds_ok_poke:
-  sym_kinds_ok cplan fn ret srest ps ss /\
-  (!sv. op_kind_ok fn ret (stack_peek d ps.ps_stack) sv ==>
-        op_kind_ok fn ret op sv) ==>
-  sym_kinds_ok cplan fn ret srest
-    (ps with ps_stack := stack_poke d op ps.ps_stack) ss
-Proof
-  MATCH_ACCEPT_TAC symPhiRenameFactsTheory.sym_kinds_ok_poke
-QED
-
 
 (* prefix_wf is polymorphic in the label map's range; replay uses num. *)
 Theorem swap_prefix_wf_num[local]:
@@ -280,15 +270,8 @@ Theorem sym_assign_rename_top:
   sym_kinds_ok cplan fn ret srest
     (ps with ps_stack := stack_poke 0 (Var x) ps.ps_stack) ss
 Proof
-  strip_tac >> irule sym_kinds_ok_poke >>
+  strip_tac >> irule symPhiRenameFactsTheory.sym_kinds_ok_poke >>
   simp[] >> metis_tac[assign_output_kind]
-QED
-
-Theorem phi_depth_operand:
-  stack_get_phi_depth (FILTER is_var_operand ops) stk = SOME d ==>
-  ?y. stack_peek d stk = Var y /\ MEM (Var y) ops
-Proof
-  MATCH_ACCEPT_TAC symPhiRenameFactsTheory.phi_depth_operand
 QED
 
 Theorem sym_phi_rename:

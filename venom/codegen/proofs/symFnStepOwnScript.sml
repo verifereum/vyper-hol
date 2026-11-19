@@ -13,7 +13,7 @@ val _ = Theory.add_ML_dependency "prefixContractLib";
 val _ = Parse.hide "base";
 val _ = Parse.hide "body";
 
-Theorem sym_nonentry_run_rest_kernel:
+Theorem sym_nonentry_run_rest:
   !fuel ctx fn vs bb s_phi.
     lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
     eval_phis vs bb.bb_instructions = OK s_phi ==>
@@ -26,7 +26,7 @@ Proof
     (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >> simp[]
 QED
 
-Theorem sym_phi_entry_inv_kernel:
+Theorem sym_phi_entry_inv:
   !Inv ctx fn vs bb s_phi.
     lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
     fn_entry_inv Inv ctx fn vs /\
@@ -198,7 +198,7 @@ Proof
       (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) ==>
       Inv ctx fn inst
         (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
-    metis_tac[sym_phi_entry_inv_kernel] >>
+    metis_tac[sym_phi_entry_inv] >>
   `get_params bb.bb_instructions = []` by
     (irule fnBlockBodyHelpersTheory.no_param_get_params >>
      gvs[callLayoutDefsTheory.no_param_insts_def,
@@ -267,7 +267,7 @@ Proof
   gvs[sym_body_result_own_def] >> metis_tac[]
 QED
 
-Theorem sym_block_prefix_prepare_kernel:
+Theorem sym_block_prefix_prepare:
   !unit cpl prog ctx i fn r liveness dfg cfg ch growth spill_base lbl_ctr
    fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after vs Inv.
     ctx = unit.cu_context /\ generate_context_plan ctx = SOME cpl /\
@@ -421,7 +421,7 @@ Theorem sym_block_step_prefix_own:
       sym_frame_inv_own lo prog env own ctx cpl fn ret srest labs0 ps1 as1 ss1
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all sym_block_prefix_prepare_kernel >>
+  drule_all sym_block_prefix_prepare >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
   qpat_assum `block_ops = _` (fn eq =>
     qpat_x_assum `asm_block_at _ _ _` (mp_tac o REWRITE_RULE [eq])) >>
@@ -562,7 +562,7 @@ Resume sym_fn_block_frame_step_own[frame_body]:
      fs[fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def]) >>
   drule_all symBlockBodyResultOwnTheory.sym_block_body_frame_sim_own >> strip_tac >>
   drule_all symBlockBodyResultOwnTheory.sym_body_result_prefix_own >> strip_tac >>
-  drule_all sym_nonentry_run_rest_kernel >>
+  drule_all sym_nonentry_run_rest >>
   disch_then (fn th => rewrite_tac[th]) >> fs[sym_body_result_own_def]
 QED
 

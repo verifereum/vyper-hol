@@ -15,6 +15,7 @@ Ancestors asmSymModeOwn[qualified,ignore_grammar]
   frameJointTrace frameJointTransition frameOriginHistory
   venomInstProps venomExecSemantics venomExecProofs venomState venomInst fcgDefs
   list rich_list arithmetic finite_map
+  symFnStepOwn symFrameInvokeSupport
 
 Definition active_frame_symbolic_plan_def:
   active_frame_symbolic_plan env rpolicy unit cpl prog fn s a ra rest mem0 ret srest labs0 ss <=>
@@ -532,7 +533,7 @@ Proof
   `sms.sym_mem_labels = sms.sym_mem_labels` by simp[] >>
   `ssr.sym_stack = MAP Val (REVERSE rv.iret_values) ++ (saved_sym ++ srest)` by simp[APPEND_ASSOC] >>
   drule_at (Pat `sym_frame_inv_own _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    (Q.INST [`scas` |-> `sms`] (SPEC_ALL sym_invoke_return_frame_from_callee_own)) >>
+    (Q.INST [`scas` |-> `sms`] (SPEC_ALL symFrameInvokeSupportTheory.sym_invoke_return_frame_from_callee_own)) >>
   disch_then drule_all >> strip_tac >>
   `ALL_DISTINCT f.cf_inst.inst_outputs` by
     metis_tac[genBlockSimTheory.codegen_ready_inst_outputs_distinct] >>
@@ -584,7 +585,7 @@ Proof
     (qpat_x_assum `liveness = liveness_analyze _` SUBST_ALL_TAC >>
      fs[Abbr `final_ps`] >>
      drule_at (Pat `sym_frame_inv_own _ _ _ _ _ _ _ _ _ _ called asr ssr`)
-       (sym_invoke_return_frame_numeric_own
+       (symFrameInvokeSupportTheory.sym_invoke_return_frame_numeric_own
         |> Q.INST [`final` |-> `release_dead_spills nl swapped`]
         |> SIMP_RULE (srw_ss()) [EVERY_APPEND, AC ADD_ASSOC ADD_COMM]) >>
      disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
@@ -776,7 +777,7 @@ QED
 Resume body_plan_symbolic_jnz_step_own[symbolic]:
   markerLib.RESUME_TAC >> rpt strip_tac >>
   `MEM (AsmLabel l1) prog /\ MEM (AsmLabel l2) prog` by
-    metis_tac[symBlockBodyTheory.placed_nonentry_sym_code_label] >>
+    metis_tac[symBodyStaticFactsTheory.placed_nonentry_sym_code_label] >>
   `ssa_form fn` by fs[codegen_ready_fn_def] >>
   `fn_shape_ok fn` by
     (qpat_x_assum `unit_shape_ok unit` mp_tac >>
@@ -1055,7 +1056,7 @@ Proof
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
       (MAP Var (input_vars_from bb.bb_label tbb.bb_instructions
         (live_vars_at liveness target 0)))` by metis_tac[] >>
-  drule_at (Pos last) symFrameControlTheory.sym_jmp_plan_decompose >>
+  drule_at (Pos last) symControlJumpOwnTheory.sym_jmp_plan_decompose >>
   disch_then (qspec_then
     `MAP Var (input_vars_from bb.bb_label tbb.bb_instructions
       (live_vars_at liveness target 0))` mp_tac) >>
@@ -1070,7 +1071,7 @@ Resume body_plan_symbolic_jmp_step_own[replay]:
     (qpat_x_assum `unit_shape_ok unit` mp_tac >>
      simp[unit_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
   `MEM (AsmLabel target) prog` by
-    (drule_all symBlockBodyTheory.placed_nonentry_sym_code_label >> simp[]) >>
+    (drule_all symBodyStaticFactsTheory.placed_nonentry_sym_code_label >> simp[]) >>
   `!off. MEM (SORestore off) rops ==> off < dimword(:256)` by
     (qpat_x_assum `ops = _` (fn th => fs[th])) >>
   qpat_x_assum `o2pc = _` SUBST_ALL_TAC >>
@@ -1223,7 +1224,7 @@ Theorem block_step_symbolic_prefix_own[local]:
     sym_frame_inv_own lo prog env own ctx cpl fn ret srest labs0 ps1 as1 ss1
 Proof
   strip_tac >>
-  drule_all sym_block_prefix_prepare >>
+  drule_all symFnStepOwnTheory.sym_block_prefix_prepare >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
   `MEM fn ctx.ctx_functions /\ fn_shape_ok fn` by
     (fs[unit_shape_ok_def, listTheory.EVERY_EL] >> metis_tac[listTheory.MEM_EL]) >>
@@ -1982,7 +1983,7 @@ Proof
   drule_all fnFrameBoundaryInvokeTheory.invoke_compute_operands >> strip_tac >>
   `fn_shape_ok fn'` by metis_tac[unit_shape_ok_def, EVERY_MEM, EL_MEM] >>
   `fn_shape_ok fn` by metis_tac[unit_shape_ok_def, EVERY_MEM] >>
-  `MEM (AsmLabel nm) prog` by metis_tac[sym_invoke_callee_code_label] >>
+  `MEM (AsmLabel nm) prog` by metis_tac[symFrameInvokeSupportTheory.sym_invoke_callee_code_label] >>
   `EVERY (\op. op <> dead_stack_marker) ops` by
     metis_tac[fnLineageInvSupportTheory.analyzed_compute_operands_no_marker] >>
   `?scas saved_sym.
@@ -2137,10 +2138,10 @@ Proof
    fn_frame_inv unit.cu_context cpl lo fn ra rest mem0 ps s ast` by
     fs[body_plan_inv_reloc_def] >>
   `sym_data_label prog env "code_end"` by
-    metis_tac[symBodyStaticFactsTheory.codegen_sym_code_end_label_kernel] >>
+    metis_tac[symBodyStaticFactsTheory.codegen_sym_code_end_label] >>
   `(MEM (Label "runtime_begin") inst.inst_operands ==>
     sym_data_label prog env "runtime_begin")` by
-    metis_tac[symBodyStaticFactsTheory.codegen_sym_runtime_begin_label_kernel] >>
+    metis_tac[symBodyStaticFactsTheory.codegen_sym_runtime_begin_label] >>
   `?n ast1 ss1.
     asm_steps lo (build_offset_to_pc prog) prog n ast = AsmOK ast1 /\
     fn_frame_inv unit.cu_context cpl lo fn ra rest mem0 ps' post ast1 /\

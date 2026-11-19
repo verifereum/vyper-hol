@@ -16,7 +16,7 @@ Proof
   first_x_assum drule_all >> simp[] >> metis_tac[]
 QED
 
-Theorem sym_invoke_argument_shape_core:
+Theorem sym_invoke_argument_shape:
   fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: args ==>
   opaque_use_ok fn /\ EVERY (\op. ~is_label_operand op) args
@@ -35,7 +35,7 @@ Theorem sym_invoke_argument_word_kind_own:
   ?w. sv = Val w
 Proof
   strip_tac >>
-  drule_all sym_invoke_argument_shape_core >> strip_tac >>
+  drule_all sym_invoke_argument_shape >> strip_tac >>
   `~is_label_operand op` by gvs[EVERY_MEM] >>
   Cases_on `op` >> gvs[is_label_operand_def, op_kind_ok_def] >>
   metis_tac[fnFrameBoundaryInvokeTheory.invoke_arguments_not_retpc,
@@ -57,7 +57,7 @@ Proof
   drule_all sym_invoke_argument_word_kind_own >> simp[]
 QED
 
-Theorem sval_conc_words_core:
+Theorem sval_conc_words:
   !svs ws lo.
   EVERY (\sv. ?w. sv = Val w) svs /\
   LIST_REL (\sv w. sval_conc lo sv = SOME w) svs ws ==>
@@ -97,7 +97,7 @@ Proof
        (qpat_x_assum `_ ++ _ = _ ++ _` mp_tac >>
         pure_rewrite_tac[GSYM APPEND_ASSOC] >>
         strip_tac >> metis_tac[rich_listTheory.APPEND_EQ_APPEND_EQ]) >> gvs[]) >>
-  drule_all sval_conc_words_core >> strip_tac >> gvs[]
+  drule_all sval_conc_words >> strip_tac >> gvs[]
 QED
 
 Theorem sym_invoke_arranged_stack_own:
@@ -117,7 +117,7 @@ Proof
   gvs[asm_sym_rel_own_def] >> metis_tac[]
 QED
 
-Theorem sym_invoke_selected_prefix_sim_marked_core:
+Theorem sym_invoke_selected_prefix_sim_marked:
   EVERY (\op. ~is_label_operand op) operands /\
   (!op. MEM op operands /\ is_var_operand op ==>
     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
@@ -150,7 +150,7 @@ Proof
   drule_all sym_selected_prefix_sim_marked >> simp[]
 QED
 
-Theorem sym_invoke_call_packet_core:
+Theorem sym_invoke_call_packet:
   !p env ss ret_lbl nm pc.
   asm_block_at p ss.sym_base.as_pc
     [AsmPushLabel ret_lbl; AsmPushLabel nm; AsmOp "JUMP"] /\
@@ -165,7 +165,7 @@ Proof
        sym_step_op_def, sym_jump_def, sym_jump_dest_def, asm_next_def]
 QED
 
-Theorem sym_invoke_return_code_label_core:
+Theorem sym_invoke_return_code_label:
   !p pc fmp ret nm post.
   asm_block_at p pc (execute_plan fmp
     ([SOPushLabel ret; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret] ++ post)) ==>

@@ -272,16 +272,6 @@ Proof
   drule_all ordinary_noncopy_operand_word_kind_mode >> simp[]
 QED
 
-Theorem word_prepared_symbolic_stack_core:
-  bridge_core lo code_ok cs ss /\ sym_kinds_ok cplan fn ret srest ps ss /\
-  ps.ps_stack = tail ++ operands /\
-  (!op sv. MEM op operands /\ op_kind_ok fn ret op sv ==> ?w. sv = Val w) /\
-  cs.as_stack = values ++ rest /\ LENGTH values = LENGTH operands ==>
-  ?suffix. ss.sym_stack = MAP Val values ++ suffix
-Proof
-  ACCEPT_TAC symControlWordStackOwnTheory.word_prepared_symbolic_stack_core
-QED
-
 Theorem arranged_word_prepared_symbolic_stack_core:
   venom_asm_rel lo ps vs mid /\ ps.ps_stack = tail ++ operands /\
   EVERY (\op. op <> dead_stack_marker) operands /\
