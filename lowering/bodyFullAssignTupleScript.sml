@@ -7,7 +7,8 @@
  * TOP-LEVEL: the body_*_full sub-shape theorems below.
  *)
 Theory bodyFullAssignTuple
-Ancestors placeMemoryCopyEffect[qualified,ignore_grammar] immSectionDead compileVyper bodyStorageMetadata ctorDeployDeadSectionFrame ctorDeployDeadSection pred_set immutableCopyExecution immutableDeployOperandTransfer fragGasSeqPtr stmtReasonLitFragMemory immutableWordExecution fragExecMem memSafeRun venomExecSemantics exprSimCopy venomInst unitTransformDefs codegenRel contextCodegenRel bodyPtrBopInRepresentation immutableAssignCompose immutableDeployAssignBytes immutableDeployAssignAdmissible valueEncodingProps venomMemProps vyperTypeValues typedCopyOriginPtr placeStoreDynPrepare bodyMemBopRestWordPath allocaSiteResource exprSimPtrLiteralBuffer exprSimAlloc exprOperandVar fragGasMode fragGasOrigin[qualified,ignore_grammar]
+Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
+  placeMemoryCopyEffect[qualified,ignore_grammar] immSectionDead compileVyper bodyStorageMetadata ctorDeployDeadSectionFrame ctorDeployDeadSection pred_set immutableCopyExecution immutableDeployOperandTransfer fragGasSeqPtr stmtReasonLitFragMemory immutableWordExecution fragExecMem memSafeRun venomExecSemantics exprSimCopy venomInst unitTransformDefs codegenRel contextCodegenRel bodyPtrBopInRepresentation immutableAssignCompose immutableDeployAssignBytes immutableDeployAssignAdmissible valueEncodingProps venomMemProps vyperTypeValues typedCopyOriginPtr placeStoreDynPrepare bodyMemBopRestWordPath allocaSiteResource exprSimPtrLiteralBuffer exprSimAlloc exprOperandVar fragGasMode fragGasOrigin[qualified,ignore_grammar]
   words[qualified,ignore_grammar] bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
@@ -3112,93 +3113,8 @@ Proof
   first_assum (irule_at (Pos (el 1))) >> decide_tac
 QED
 
-Theorem tuple_immutable_word_mem_ok[local]:
-  compile_imm_store_word imm dst v sa = ((),sb) /\
-  eval_operand dst s = SOME a /\ w2n a + 32 <= s.vs_alloca_next /\
-  (!base. imm = SOME base ==> eval_operand base s = SOME 0w) ==>
-  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-  run_inst_seq_mem_ok (emitted_insts sa sb) s
-Proof
-  strip_tac >> namedCases_on `imm` ["", "reg"]
-  >- (fs[compile_imm_store_word_def] >>
-      drule emitted_insts_emit_void >> simp[] >> strip_tac >>
-      simp[run_inst_seq_mem_ok_last, below_frontier_ISTORE,
-           inst_dload_in_section_def, mk_inst_def]) >>
-  drule compile_imm_store_word_result >> strip_tac >>
-  `eval_operand reg s = SOME 0w` by fs[] >>
-  `emitted_insts sa sb =
-     [mk_inst sa.cs_next_id ADD [reg; dst] ["%" ++ toString sa.cs_next_var];
-      mk_inst (sa.cs_next_id + 1) ISTORE
-        [Var ("%" ++ toString sa.cs_next_var); v] []]` by
-    simp[emitted_insts_def, DROP_APPEND] >>
-  conj_tac >- simp[] >>
-  simp[run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last,
-       below_frontier_ISTORE] >>
-  simp[inst_dload_in_section_def, mk_inst_def,
-       inst_mem_below_frontier_def, source_memory_read_ranges_def,
-       source_memory_write_ranges_def] >>
-  simp[step_inst_base_opcode_eqs, exec_pure2_def, wordsTheory.WORD_ADD_0,
-       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
-QED
-
 (* Only the access checks: the range's byte and ghost effects come from
    the immutable transfer suppliers. The LocCode destination is a literal. *)
-
-Theorem tuple_immutable_copy_one_mem_ok[local]:
-  immutable_store_one imm src (Lit b) off sa = ((),sb) /\
-  (!x. src = Var x ==> not_fresh_at sa x) /\
-  (!base x. imm = SOME base /\ base = Var x ==> not_fresh_at sa x) /\
-  eval_operand src s = SOME a /\
-  (!base. imm = SOME base ==> eval_operand base s = SOME 0w) /\
-  w2n a + off + 32 <= s.vs_alloca_next /\ w2n a + off < dimword (:256) /\
-  w2n b + off + 32 <= s.vs_alloca_next /\ w2n b + off < dimword (:256) ==>
-  run_inst_seq_mem_ok (emitted_insts sa sb) s
-Proof
-  `!c. compile_lit_byte_offset (Lit b) off c = (Lit (b + n2w off),c)` by
-    (Cases_on `off = 0` >> simp[compile_lit_byte_offset_def,
-       compileEnvTheory.comp_return_def, wordsTheory.WORD_ADD_0]) >>
-  simp[immutable_store_one_def, immutable_comp_bind_cases] >>
-  rpt strip_tac >>
-  rename1 `compile_lit_byte_offset src off sa = (sp,c1)` >>
-  rename1 `emit_op MLOAD [sp] c1 = (loaded,c2)` >>
-  drule_all immutable_byte_offset_old_execution >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts sa c1) s = OK s1` >>
-  drule_all exprSimMapKeyTheory.emit_MLOAD_frame >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts c1 c2) s1 = OK s2` >>
-  drule emit_op_extends >> strip_tac >>
-  `s1.vs_alloca_next = s.vs_alloca_next /\ s2.vs_alloca_next = s.vs_alloca_next /\
-   s2.vs_labels = s.vs_labels` by fs[venom_state_component_equality] >>
-  `!base. imm = SOME base ==> eval_operand base s2 = SOME 0w` by
-    (rpt strip_tac >> irule ctorAbiActualObservationsTheory.ctor_actual_old_operand >>
-     qexistsl_tac [`s`,`sa`] >> simp[] >> rpt strip_tac >>
-     `not_fresh_at c1 x` by fs[loweringStateRelDefsTheory.not_fresh_at_def] >> simp[]) >>
-  `w2n (a + n2w off : bytes32) + 32 <= s1.vs_alloca_next /\
-   w2n (b + n2w off : bytes32) + 32 <= s2.vs_alloca_next` by
-    (simp[] >> conj_tac >>
-     irule bodyImmutableCopyMemoryTheory.body_immutable_copy_offset_range >> simp[]) >>
-  `eval_operand (Lit (b + n2w off)) s2 = SOME (b + n2w off)` by simp[eval_operand_def] >>
-  drule_all tuple_immutable_word_mem_ok >> strip_tac >>
-  `run_inst_seq_mem_ok (emitted_insts c1 c2) s1` by
-    (drule_all allocaFootprintTheory.emit_mload_mem_ok >> simp[]) >>
-  `emitted_insts c1 sb = emitted_insts c1 c2 ++ emitted_insts c2 sb` by
-    (irule emitted_insts_append >> simp[]) >>
-  `sb.cs_current_insts = c1.cs_current_insts ++ emitted_insts c1 sb` by
-    simp[listTheory.APPEND_ASSOC] >>
-  `emitted_insts sa sb = emitted_insts sa c1 ++
-       emitted_insts c1 c2 ++ emitted_insts c2 sb` by
-    (`emitted_insts sa sb = emitted_insts sa c1 ++ emitted_insts c1 sb` by
-       (irule emitted_insts_append >> first_assum (irule_at Any) >>
-        first_assum ACCEPT_TAC) >> simp[]) >>
-  `run_inst_seq_mem_ok (emitted_insts sa c1) s` by
-    (qpat_assum `compile_lit_byte_offset src off sa = _`
-       (mp_then Any mp_tac bodyImmutableCopyMemoryTheory.body_immutable_byte_offset_mem_ok) >> simp[]) >>
-  `run_inst_seq (emitted_insts sa c1 ++ emitted_insts c1 c2) s = OK s2` by
-    (qpat_assum `run_inst_seq (emitted_insts sa c1) s = _`
-       (mp_then Any mp_tac run_inst_seq_append) >> simp[]) >>
-  asm_rewrite_tac[listTheory.APPEND_ASSOC] >>
-  irule run_inst_seq_mem_ok_append >> simp[] >>
-  irule run_inst_seq_mem_ok_append >> simp[]
-QED
 
 Theorem tuple_immutable_copy_range_mem_ok[local]:
   !n off sa sb s a.
@@ -3222,11 +3138,12 @@ Proof
   `off + (w2n a + 32) <= s.vs_alloca_next /\ off + w2n a < dimword (:256) /\
    off + (w2n b + 32) <= s.vs_alloca_next /\ off + w2n b < dimword (:256)` by
     (fs[arithmeticTheory.MULT_SUC] >> decide_tac) >>
+  `eval_operand (Lit b) s = SOME b` by simp[eval_operand_def] >>
   `run_inst_seq_mem_ok (emitted_insts sa sm) s` by
-    (drule tuple_immutable_copy_one_mem_ok >>
+    (drule (Q.INST [`dst` |-> `Lit b`]
+       bodyImmutableStoreMemoryTheory.immutable_direct_one_mem_ok) >>
      disch_then (qspec_then `s` mp_tac) >> simp[] >>
      qexists_tac `a` >> simp[]) >>
-  `eval_operand (Lit b) s = SOME b` by simp[eval_operand_def] >>
   drule (SRULE [] (Q.INST [`dst` |-> `Lit b`] immutable_store_one_old_execution)) >>
   disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK t` >>
@@ -3348,7 +3265,7 @@ Proof
   rename1 `tf.t_stor = tn.t_stor` >>
   rename1 `inst_seq_ptr D lo ctx fn PG G tn _ _ Gf tf` >>
   `w2n a + 32 <= s.vs_alloca_next` by decide_tac >>
-  drule_all tuple_immutable_word_mem_ok >> strip_tac >>
+  drule_all bodyImmutableStoreMemoryTheory.immutable_store_word_mem_ok >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by fs[same_blocks_def] >>
   drule_all fn_has_code_code >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
