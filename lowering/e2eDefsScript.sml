@@ -254,15 +254,11 @@ End
 (* The global storage-and-bounds predicate remains available independently.
    The compiler boundary uses the finite selected-trace guards above. *)
 Definition call_outcomes_ok_def:
-  call_outcomes_ok am tx os <=>
-    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-      EVERY (\outcome.
-               LENGTH outcome.co_returnData < dimword(:256) /\
-               accounts_runtime_well_typed outcome.co_accounts /\
-               contract_storage_well_formed cx
-                 (initial_state (am with <| accounts := outcome.co_accounts;
-                                            tStorage := outcome.co_tStorage |>) []))
-            os
+  call_outcomes_ok (am:abstract_machine) (tx:call_txn) os <=>
+    EVERY (\outcome.
+             LENGTH outcome.co_returnData < dimword(:256) /\
+             accounts_runtime_well_typed outcome.co_accounts)
+          os
 End
 
 (* ===== Transaction environment and entry transfer ===== *)
