@@ -1458,7 +1458,9 @@ Theorem actual_array_init_endpoint_joint_core:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
       fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\
-      ~ctx_has_dalloca ctx' /\ s.vs_current_bb = sa.cs_current_bb /\
+      (ctx_has_dalloca ctx' ==> allocas_below_fmp s /\
+        s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+      s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>

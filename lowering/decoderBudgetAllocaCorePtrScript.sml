@@ -212,7 +212,7 @@ Theorem budget_alloca_endpoint_exact_joint_core:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
