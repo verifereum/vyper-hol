@@ -12,11 +12,8 @@ Proof
   rpt strip_tac >> fs[frame_outcome_def] >>
   rename1 `e.contexts = (ctxt,rb)::rest` >>
   Cases_on `rest` >> gvs[] >>
-  rename1 `e.contexts = (ctxt,rb)::parent::tail` >>
-  PairCases_on `parent` >> gvs[] >>
-  qpat_assum `MAP FST _ = MAP FST _`
-    (mp_tac o AP_TERM ``LENGTH:context list -> num``) >>
-  simp[] >> decide_tac
+  `pre.contexts <> []` by simp[] >>
+  drule_all vfmRunCallTheory.handle_exception_inl_pops >> simp[]
 QED
 
 Theorem guard_processed_backend_well_formed[local]:

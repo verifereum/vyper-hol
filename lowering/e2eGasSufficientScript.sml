@@ -411,6 +411,19 @@ Proof
   simp[]
 QED
 
+Theorem call_state_rel_add_frame_gas_raises:
+  call_state_rel tops runtime_bc am tx es ==>
+  !g. frame_raises (add_frame_gas g es) OutOfGas <=>
+      ?op. frame_inst_raises (add_frame_gas g es) OutOfGas op
+Proof
+  strip_tac >> gen_tac >> irule frame_raises_inst_raises >>
+  qpat_x_assum `call_state_rel _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [call_state_rel_def, evm_state_ok_def]) >>
+  simp[add_frame_gas_wf_state] >>
+  drule add_frame_gas_contexts >> disch_then (qspec_then `g` strip_assume_tac) >>
+  simp[]
+QED
+
 (* The selected-call guards range over the trace at the raised gas
    and over the source call the calldata dispatches to.  ~gas_source_exempt is S3's ~source_exempt (on
    the exempt inputs, malformed data to a dynamic abi_decode, the compiled
@@ -443,7 +456,6 @@ Theorem vyper_call_gas_sufficient_identity:
         (frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
-  PURE_REWRITE_TAC [frame_raises_inst_raises] >>
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
@@ -480,6 +492,8 @@ Proof
           out.po_unit.cu_context vs` by
     metis_tac[o1_runtime_unit_create_size_ok] >>
   qexists_tac `g` >> rpt strip_tac >>
+  drule call_state_rel_add_frame_gas_raises >>
+  disch_then (qspec_then `g'` (fn th => PURE_REWRITE_TAC [th])) >>
   (* Carry only the entry facts that survive the gas top-up. *)
   drule_all call_gas_entry_rel >>
   disch_then (qspecl_then [`cplan`, `g'`] strip_assume_tac) >>

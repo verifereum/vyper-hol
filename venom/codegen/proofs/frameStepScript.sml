@@ -315,7 +315,7 @@ Proof
   strip_tac >>
   `LENGTH es1.contexts = LENGTH es.contexts` by fs[frame_next_def] >>
   drule frame_reaches_next >>
-  fs[frame_inst_at_def] >> metis_tac[]
+  fs[frame_inst_at_step] >> metis_tac[]
 QED
 
 Theorem frame_next_inst_at_prefix:
