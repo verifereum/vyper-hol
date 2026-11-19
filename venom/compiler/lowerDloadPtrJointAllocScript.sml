@@ -5,7 +5,7 @@ Ancestors
   o1PassContract lowerDloadDefs venomExecSemantics venomState venomInst
   contextCodegenRel finite_map list pred_set words
 
-Theorem dload_alloca_step_shape[local]:
+Theorem dload_alloca_step_shape:
   i.inst_opcode = ALLOCA /\ step_inst fuel C i t = OK t1 ==>
   ?amount out. i.inst_operands = [Lit amount] /\ i.inst_outputs = [out] /\
     exec_alloca i t amount = OK t1
@@ -18,7 +18,7 @@ Proof
   simp[exec_alloca_def, AllCaseEqs()] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem dload_alloca_step_fields[local]:
+Theorem dload_alloca_step_fields:
   i.inst_opcode = ALLOCA /\ i.inst_operands = [Lit amount] /\
   i.inst_outputs = [out] ==>
   ?s1. step_inst fuel C i s = OK s1 /\ exec_alloca i s amount = OK s1 /\

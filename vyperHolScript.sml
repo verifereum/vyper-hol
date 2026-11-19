@@ -44,6 +44,7 @@ Ancestors
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
   codegenRequestPrefix callTraceFrame guardPushProjections
   gasFocusPrefixDriver focusFrontierBudget
+  gasFocusConcretizeGhostCutHistory gasFocusConcretizeCutFrameSupport
   fnStaticAbortSim
   contextStaticAbortRel
   staticAbortMemDefs

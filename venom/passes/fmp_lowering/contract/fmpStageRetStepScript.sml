@@ -16,7 +16,7 @@ Ancestors
   venomExecSemantics venomState venomInst finite_map list rich_list
   fmpLowerProps fmpLowerIndexedProps dftGasToListReachBoundary
 
-Theorem fmp_run_ret_clean[local]:
+Theorem fmp_run_ret_clean:
   ptr_use_static_ok P pv inst /\ inst.inst_opcode = RET /\
   FDOM G SUBSET pv /\ MEM op inst.inst_operands ==>
   op_prov G op = NONE
@@ -29,7 +29,7 @@ Proof
   fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]
 QED
 
-Theorem fmp_run_operand_defined[local]:
+Theorem fmp_run_operand_defined:
   fmp_env_rel sm fn live G tv s t /\ s.vs_labels = t.vs_labels /\
   IS_SOME (eval_operand op s) ==> IS_SOME (eval_operand op t)
 Proof

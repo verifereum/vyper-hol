@@ -176,7 +176,7 @@ Proof
   fs[read_memory_def] >> metis_tac[]
 QED
 
-Theorem fmp_mem_read_ghost[local]:
+Theorem fmp_mem_read_ghost:
   MEM inst.inst_opcode [MLOAD;ILOAD;SHA3] /\ inst.inst_outputs = [out] ==>
   step_prov PG G inst (update_var out w s) = DRESTRICT G (COMPL {out}) /\
   step_taint inst s (update_var out w s) tn =
