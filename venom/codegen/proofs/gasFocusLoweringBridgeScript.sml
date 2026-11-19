@@ -1,16 +1,13 @@
 Theory gasFocusLoweringBridge
 Ancestors
-  unitMemInv contextRawReachable
-  gasFocusConcretizeCutFrameAccess gasFocusConcretizeCutTaintWithin
-  o1PassContract o1PassLift o1SafeUpto unitTransformDefs
-  venomPassSchedule ptrDiscipline venomWf lowerDloadDefs stackPlanGen
-  venomState words list
-  gasEvents venomInst
+  gasFocusConcretizeCutFrameAccess gasFocusConcretizeCutFrameSupport
+  gasFocusConcretizeCutTaintWithin gasFocusLayoutStaticPrefixEvents
+  gasFocusFmpCutFieldMemory gasFocusFmpCutFieldEvents concretizeStageShape
+  o1ComposeSupport gasFocusConcretizeCutCoverage o1PassContract o1SafeUpto
+  unitTransformDefs lowerDloadDefs unitMemInv venomPassSchedule venomPassDispatcher
 
-(* Scratch statement for elaboration and independent review.
-   root3 is the shared pre-FMP root at C2 and C3, with the chosen FMP,
-   and root4 restores the assembly entry FMP. The room premise is the
-   existing fmp_variant_room contract plus the stage EOM bound. *)
+(* C2 and C3 share the raw filling. C4 uses the corresponding lowered
+   root, while the finite GAS prefix can use a different fuel at each stage. *)
 Theorem focus_lowering_cut_bridge:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C2 C3 /\
@@ -48,14 +45,56 @@ Theorem focus_lowering_cut_bridge:
       TAKE n (gas_events_blocks fuel2 C2 fn2 (root3 with <|vs_prev_bb := NONE; vs_current_bb := lbl;
         vs_inst_idx := 0|>))
 Proof
-  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
-  sg `taint_within_upto D n C3 root3`
-  >- (irule (Q.INST [`C` |-> `C2`, `lo` |-> `lo`]
-        focus_concretize_cut_taint_within) >> cheat) >>
-  sg `!stk PG G tn fn inst s.
-         frame_reachable root3 C3 stk PG G tn fn inst s /\ gas_cut n root3 s ==>
-         access_ok eom G fn inst s /\ taint_ok fn tn inst s`
-  >- (rpt gen_tac >> strip_tac >> irule (Q.INST [`C` |-> `C2`, `lo` |-> `lo`]
-        focus_concretize_cut_frame_access) >> cheat) >>
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `o1_initial_state_ok root3 /\ root3.vs_fmp = root3.vs_initial_fmp /\
+   code_layout_valid root3` by
+    (simp[] >> gvs[o1_initial_state_ok_def, code_layout_valid_def]) >>
+  `EVERY (o1_fn_row 3) C3.ctx_functions` by fs[o1_pre_def] >>
+  `EVERY (\fn. fn.fn_eom = NONE) C2.ctx_functions /\ fmp_free_ctx C2` by
+    fs[o1_ptr_safe_upto_def] >>
+  drule_all_then assume_tac concretize_stage_ssa_form >>
+  drule_all_then assume_tac concretize_stage_fmp_free >>
+  drule_all_then assume_tac concretize_stage_callee_first >>
+  `eom <= w2n root3.vs_initial_fmp` by simp[] >>
+  `(ctx_has_dalloca C2 ==> eom <= w2n root3.vs_initial_fmp)` by simp[] >>
+  drule_all_then (assume_tac o CONJUNCT1) focus_concretize_cut_fields_cut_headroom >>
+  drule_all_then assume_tac focus_concretize_cut_taint_within >>
+  `!fn inst s. raw_reachable root3 C3 fn inst s /\ gas_cut n root3 s ==>
+     dalloca_no_wrap inst s` by
+    (qpat_assum `mem_inv _ C3 root3` (mp_tac o PURE_REWRITE_RULE [mem_inv_raw_reachable]) >>
+     simp[NoAsms, static_mem_ok_def] >> metis_tac[]) >>
+  `!stk PG G tn fn inst s.
+      frame_reachable root3 C3 stk PG G tn fn inst s /\ gas_cut n root3 s ==>
+      access_ok eom G fn inst s /\ taint_ok fn tn inst s /\
+      allocas_from eom s /\ (ctx_has_dalloca C3 ==> allocas_below_fmp s) /\
+      (?P. fn_static_ptr_ok P fn /\ ptr_use_static_ok P (fn_pv P fn) inst /\
+           FDOM G SUBSET fn_pv P fn)` by
+    (rpt gen_tac >> strip_tac >>
+     drule_all_then strip_assume_tac focus_concretize_cut_frame_access >>
+     drule_all_then strip_assume_tac focus_concretize_cut_frame_support_ptr_safe >>
+     simp[] >> goal_assum drule >> simp[]) >>
+  qabbrev_tac `s3 = root3 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>` >>
+  qabbrev_tac `s4 = root4 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>` >>
+  `s3 = root3 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
+   s4 = root4 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>` by
+    simp[Abbr `s3`, Abbr `s4`] >>
+  `ctx_has_dalloca C2 ==> ?m. max_live_eom C3 = SOME m /\ m <= w2n root3.vs_initial_fmp` by simp[] >>
+  `?fuel3 fn3. C3.ctx_entry = SOME nm /\
+     lookup_function nm C3.ctx_functions = SOME fn3 /\ fn_entry_label fn3 = SOME lbl /\
+     n <= LENGTH (gas_events_blocks fuel3 C3 fn3 s3) /\
+     TAKE n (gas_events_blocks fuel3 C3 fn3 s3) = TAKE n (gas_events_blocks fuel2 C2 fn2 s3)` by
+    (irule focus_layout_stage_prefix_events_static >>
+     rpt (goal_assum (drule_at Any)) >> metis_tac[]) >>
+  conj_tac >- (drule_all focus_fmp_cut_target_memory_fields >> simp[]) >>
+  `!stk PG G tn fn inst s.
+      frame_reachable root3 C3 stk PG G tn fn inst s /\ gas_cut n root3 s ==>
+      access_ok eom G fn inst s /\ taint_ok fn tn inst s /\
+      (?P. fn_static_ptr_ok P fn /\ FDOM G SUBSET fn_pv P fn /\
+           ptr_use_static_ok P (fn_pv P fn) inst)` by metis_tac[] >>
+  drule_all focus_fmp_cut_prefix_events_fields >>
+  disch_then (qx_choose_then `fn4` strip_assume_tac) >>
+  `C4.ctx_entry = SOME nm` by
+    (qpat_assum `ctx_pass_stage _ _ _ C3 C4`
+       (mp_tac o REWRITE_RULE [ctx_pass_stage_def]) >> simp[]) >>
+  qexistsl [`fn4`, `fuel4`] >> asm_rewrite_tac[]
 QED
