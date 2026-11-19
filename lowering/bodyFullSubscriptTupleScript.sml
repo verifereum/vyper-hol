@@ -598,8 +598,7 @@ Resume subscript_tuple_vv_sim_full[selected_ptr_nonmemory]:
   qpat_assum `t.vs_transient = s.vs_transient` SUBST1_TAC >>
   qpat_assum `w2n wp = _` SUBST1_TAC >>
   irule accountsRelPropsTheory.dead_bytes_list_el >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >>
-  simp[]
+  rpt conj_tac >> simp[] >> decide_tac
 QED
 
 Finalise subscript_tuple_vv_sim_full
