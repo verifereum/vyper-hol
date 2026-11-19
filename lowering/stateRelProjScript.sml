@@ -10,6 +10,14 @@ Proof
   simp[state_rel_def]
 QED
 
+Theorem state_rel_scopes_nil_func:
+  state_rel H f1 cenv cx (vs with scopes := []) ss <=>
+  state_rel H f2 cenv cx (vs with scopes := []) ss
+Proof
+  simp[state_rel_def, local_ptrs_rel_def, local_region_def,
+       vyperStateTheory.lookup_scopes_def]
+QED
+
 Theorem stmt_state_rel_local_ptrs_alloca:
   stmt_state_rel H ctx func cenv cx vs ss ==>
   local_ptrs_rel func cenv vs.scopes ss /\ alloca_inv ss

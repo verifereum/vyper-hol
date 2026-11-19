@@ -11,7 +11,7 @@ Theorem compile_entry_size_reject_joint[local]:
   fresh_vars_wrt st s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   4 < m /\ m < dimword (:256) /\
   LENGTH s.vs_call_ctx.cc_calldata < m /\
   LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
@@ -61,7 +61,7 @@ Theorem assert_revert_origin_ptr:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSERT [op] []) /\
   ~s.vs_halted /\ eval_operand op s = SOME 0w /\
-  op_taint tn op = {} /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn op = {} /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
     (Abort Revert_abort (revert_state (set_returndata [] s)),G,tn)
 Proof
@@ -117,7 +117,7 @@ Theorem compile_entry_value_reject_joint[local]:
   fresh_vars_wrt st s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_call_ctx.cc_callvalue <> 0w ==>
   ?z H u. z.vs_returndata = [] /\
     !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
@@ -167,7 +167,7 @@ Theorem compile_entry_checks_reject_joint:
   fresh_vars_wrt st s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   m < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
   ((~pay /\ s.vs_call_ctx.cc_callvalue <> 0w) \/
    (4 < m /\ LENGTH s.vs_call_ctx.cc_calldata < m)) ==>

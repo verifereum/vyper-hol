@@ -532,7 +532,7 @@ Proof
 QED
 
 (* Typed and relational postconditions at the joint load endpoint. *)
-Theorem body_assign_tuple_load_all_path[local]:
+Theorem body_assign_tuple_load_all_path:
   compile_tuple_load_all cenv (Var root) tys off sa = (elems,sb) /\
   not_fresh_at sa root /\ lookup_var root s = SOME w /\
   ptr_covers G tn root s capacity /\ off + type_memory_size_list tvs <= capacity /\

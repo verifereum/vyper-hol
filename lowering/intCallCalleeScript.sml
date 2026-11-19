@@ -414,7 +414,7 @@ Proof
   rpt strip_tac >> gvs[FLOOKUP_UPDATE]
 QED
 
-Theorem materialize_internal_params_reserved[local]:
+Theorem materialize_internal_params_reserved:
  !caps cenv st cenv' st'.
  materialize_internal_params cenv caps st = (cenv',st') /\
  ALL_DISTINCT (MAP FST caps) /\
@@ -2080,7 +2080,7 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem internal_stack_size_vars[local]:
+Theorem internal_stack_size_vars:
   !params cenv ce.
     ce.ce_vars = cenv.ce_vars ==>
     internal_stack_size ce params = internal_stack_size cenv params
@@ -2829,7 +2829,7 @@ QED
 (* materialize_internal_params rebinds each parameter at a MemLoc slot to a
    pointer variable, when the PARAMs' outputs are variables, and leaves a
    variable already held through a pointer variable so held. *)
-Theorem materialize_internal_params_ptrs[local]:
+Theorem materialize_internal_params_ptrs:
   !caps cenv st cenv' st' n.
     materialize_internal_params cenv caps st = (cenv', st') /\
     EVERY (\c. ?p. SND (SND c) = Var p) caps /\

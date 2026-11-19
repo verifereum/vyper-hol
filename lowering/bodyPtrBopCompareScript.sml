@@ -8,7 +8,7 @@ Theorem bop_compare_ptr_inst_ok:
     op_prov G left = NONE /\ op_prov G right = NONE) \/
    (opc = ISZERO /\ ops = [left])) /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops [tmp]) s
 Proof
   rpt strip_tac >> gvs[] >>
@@ -28,7 +28,7 @@ Theorem bop_compare_counted_edge:
     op_prov G left = NONE /\ op_prov G right = NONE) \/
    (opc = ISZERO /\ ops = [left])) /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [tmp]) /\
   step_inst_base (mk_inst id opc ops [tmp]) s = OK u ==>
@@ -95,7 +95,7 @@ QED
 Theorem bop_eq_counted_path:
   op_prov G left = NONE /\ op_prov G right = NONE /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id EQ [left;right] [tmp]) /\
   step_inst_base (mk_inst id EQ [left;right] [tmp]) s = OK u ==>
@@ -129,7 +129,7 @@ Proof
 QED
 
 Theorem bop_iszero_counted_path:
-  op_taint tn arg = {} /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  op_taint tn arg = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ISZERO [arg] [tmp]) /\
   step_inst_base (mk_inst id ISZERO [arg] [tmp]) s = OK u ==>

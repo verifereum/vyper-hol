@@ -292,9 +292,11 @@ Proof
   drule_all scope_pop_trace_keys_indexed >> simp[]
 QED
 
-Theorem expr_body_pre_eval_result:
+Theorem expr_sim_inv_eval_result:
   !cenv cx env e es res es'.
-    expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    call_evaluation_safe cx (int_calls_expr e) /\
+    eval_expr cx e es = (res, es') ==>
     expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
     !tv. res = INL tv ==>
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
@@ -302,9 +304,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `IS_SOME es'.outcomes` by
     (irule eval_expr_outcomes_some >>
-     gvs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
-  qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
-  simp[expr_body_pre_def, expr_sim_inv_def] >> strip_tac >>
+     gvs[expr_sim_inv_def] >> metis_tac[]) >>
+  qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+  simp[expr_sim_inv_def] >> strip_tac >>
   drule_all eval_expr_popped_keys_indexed >> strip_tac >>
   qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
     (cj 5 eval_scc_type_sound_mutual) >>
@@ -321,6 +323,16 @@ Proof
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
 
+Theorem expr_body_pre_eval_result:
+  !cenv cx env e es res es'.
+    expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    !tv. res = INL tv ==>
+         eval_result_typed (env,cx,es') tv (Type (expr_type e))
+Proof
+  simp[expr_body_pre_def] >> metis_tac[expr_sim_inv_eval_result]
+QED
+
 Theorem expr_sim_pre_eval_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
@@ -331,9 +343,11 @@ Proof
   metis_tac[expr_body_pre_eval_result, expr_sim_pre_body_pre]
 QED
 
-Theorem expr_body_pre_eval:
+Theorem expr_sim_inv_read:
   !cenv cx env e es res es'.
-    expr_body_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    call_evaluation_safe cx (int_calls_expr e) /\
+    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
     expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
     !v. res = INL v ==> expr_result_typed env e (Value v)
 Proof
@@ -342,13 +356,22 @@ Proof
    (case res of INL v => value_runtime_typed env (expr_type e) v | INR _ => T)` by
     (drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
      disch_then (qspec_then `env` mp_tac) >>
-     gvs[expr_body_pre_def, expr_sim_inv_def]) >>
+     gvs[expr_sim_inv_def]) >>
   qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
   simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> gvs[] >>
-  drule_all expr_body_pre_eval_result >> strip_tac >> simp[] >>
+  drule_all expr_sim_inv_eval_result >> strip_tac >> simp[] >>
   gvs[expr_result_typed_def, expr_runtime_typed_def, value_runtime_typed_def,
       value_result_typed_def, is_HashMapRef_def]
+QED
+
+Theorem expr_body_pre_eval:
+  !cenv cx env e es res es'.
+    expr_body_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    !v. res = INL v ==> expr_result_typed env e (Value v)
+Proof
+  simp[expr_body_pre_def] >> metis_tac[expr_sim_inv_read]
 QED
 
 Theorem expr_sim_pre_eval:

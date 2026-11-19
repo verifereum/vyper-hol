@@ -14,7 +14,7 @@ Theorem env_reads_step_full:
   compile_env_var item sa = (op,sb) /\
   evaluate_builtin cx es.accounts (env_item_type item) (Env item) [] [] = INL v /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   alloca_history func s0 /\ ~s0.vs_halted /\
@@ -55,6 +55,10 @@ Proof
           exec_read0_def, mk_inst_def] >>
      gvs[evaluate_builtin_def, call_ctx_rel_def,
          val_to_w256_address, val_to_w256_def, integer_wordTheory.i2w_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (strip_tac >> fs[stmt_state_rel_def, fmp_room_def, allocas_below_fmp_def,
+       venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   `ptr_inst_ok (DF H) lo 0 ctx func G0 tn0 inst s0 /\
    inst_mem_below_frontier inst s0 /\ inst_dload_in_section inst s0` by
     (simp[Abbr `inst`, Abbr `opc`, ptr_inst_ok_def, access_ok_def, taint_ok_def,

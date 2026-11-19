@@ -6,7 +6,7 @@ Ancestors
   venomExecSemantics venomExecProofs venomInstProofs exprLoweringProps codegenRel contextCodegenRel
 
 Theorem storage_copy_branch_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id JNZ [op; Label lt; Label lf] []) /\
@@ -45,7 +45,7 @@ Theorem storage_copy_scalar_check:
   (opc = ASSIGN /\ (?v. ops = [Lit v]) \/
    opc = EQ /\ (?v k. ops = [Var v; Lit k])) /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id opc ops [out]) s = OK s' /\
   s'.vs_requests = s.vs_requests ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops [out]) s
@@ -82,7 +82,7 @@ Theorem storage_copy_scalar_path_ptr:
   (opc = ASSIGN /\ (?v. ops = [Lit v]) \/
    opc = EQ /\ (?v k. ops = [Var v; Lit k])) /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) /\
   step_inst_base (mk_inst id opc ops [out]) s = OK u /\
@@ -131,7 +131,7 @@ Proof
 QED
 
 Theorem storage_copy_init_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [Lit 0w] [cv]) /\
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst jid JMP [Label hdr] []) ==>
@@ -155,12 +155,15 @@ Proof
      (update_var cv 0w s with vs_inst_idx := SUC s.vs_inst_idx) 0
      (DRESTRICT G (COMPL {cv})) (tn with t_var := tn.t_var |+ (cv,{}))
      (OK (jump_to hdr (update_var cv 0w s with vs_inst_idx := SUC s.vs_inst_idx)))` by
-    (irule bodyPtrBopInLoopControlTheory.membership_jump_path >> simp[update_var_def] >> metis_tac[]) >>
+    (irule bodyPtrBopInLoopControlTheory.membership_jump_path >>
+     simp[update_var_def, allocas_below_fmp_def] >>
+     conj_tac >- (qexists_tac `jid` >> simp[]) >>
+     fs[allocas_below_fmp_def]) >>
   drule_all gas_path_ptr_then >> simp[]
 QED
 
 Theorem storage_copy_header_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id EQ [Var cv; Lit (n2w n)] [test]) /\
@@ -190,7 +193,11 @@ Proof
       (update_var test (bool_to_word (k = n)) s with vs_inst_idx := SUC s.vs_inst_idx)))` by
     (irule storage_copy_branch_path_ptr >>
      simp[update_var_def, eval_operand_def, lookup_var_def,
-          finite_mapTheory.FLOOKUP_UPDATE, op_taint_def, bool_to_word_def] >>
+          finite_mapTheory.FLOOKUP_UPDATE, op_taint_def, bool_to_word_def,
+          allocas_below_fmp_def] >>
+     reverse conj_tac
+     >- (qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+         simp[allocas_below_fmp_def, IMP_CONJ_THM] >> tautLib.TAUT_TAC) >>
      qexistsl_tac [`jid`, `Var test`] >>
      simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
      Cases_on `k = n` >> simp[bool_to_word_def]) >>
