@@ -1,5 +1,6 @@
 Theory bodyFullExtCallTargetOutcome
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds exprSimSource exprSimWordArgs exprSimHash exprSafeOperand
   gasOutcomeFullCompose fragGasOriginPtr fragGasSeqPtr contextRawReachable
   unitMemInv venomMemProps byte divides loweringPosts compileEnv valueEncoding
@@ -49,6 +50,7 @@ QED
 Theorem extcall_request_head_halt_outcome:
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok cx [addr] /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env addr es /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
   lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr addr)
@@ -133,6 +135,7 @@ QED
 Theorem extcall_request_head_outcome:
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok cx [addr] /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env addr es /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
   lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr addr)

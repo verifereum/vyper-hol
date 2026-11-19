@@ -1,6 +1,7 @@
 (* Source composition for the non-slot Array branch of For. *)
 Theory bodyFullForArrayBranch
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullForArrayRound gasOutcomeFull gasOutcomeFullCompose gasExemptCert
   gasContext gasSummary stmtSimForRounds stmtSimDefs exprSimDefs bodyPtrDefs
   haltExitProj vyperInterpreter vyperState vyperAST vyperValue
@@ -198,7 +199,7 @@ Theorem compile_for_nonslot_array_frag_full:
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
        body_iterator_full_ok cx (Array e)) /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
        occurs_abi_decode_target target tops) /\

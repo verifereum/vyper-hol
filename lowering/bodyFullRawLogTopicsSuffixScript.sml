@@ -2,6 +2,7 @@
 Theory bodyFullRawLogTopicsSuffix
 Ancestors
   bodyFullIfExpReach
+  bodyFullShadowBodyInv
   bodyFullRawLogTopicsPost bodyFullPreds bodySimFull gasOutcomeFullCompose
   bodyRawLogArgPre exprSimSource exprSimProps exprLoweringProps
   gasShadowState loweringPosts bodyPtrDefs fragGasOriginPtr
@@ -85,6 +86,7 @@ Theorem raw_log_topics_suffix_full_under_compose:
        (compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr xs))) /\
   topics = pre ++ rest /\
   body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))

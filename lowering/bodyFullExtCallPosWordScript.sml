@@ -1,6 +1,7 @@
 (* The immediate-read word branch of external-call positional snapshots. *)
 Theory bodyFullExtCallPosWord
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodyFullUnwrap gasOutcomeFullCompose bodySimFull gasOutcomeFull
   exprSimMemDefs loweringPosts bodyPtrDefs gasShadowCompile compileEnv context
   exprSimMemorySource exprLowering exprSimDefs stmtSimProps exprLoweringProps
@@ -30,6 +31,7 @@ QED
 
 Theorem extcall_request_snapshot_word_owned_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   comp_bind (compile_expr cenv (expr_type e) e)
     (\vv. compile_snapshot_vv cenv F

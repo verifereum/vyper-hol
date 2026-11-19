@@ -1,6 +1,7 @@
 (* The conditional head of compile_abi_encode_args, at one joint endpoint. *)
 Theory bodyFullAbiEncodeArgStep
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodyFullAbiEncodeCapture bodyFullAbiEncodeBorrowed
   bodyFullAbiEncodeRetention bodyFullOfVV abiEncodeArgsSim
   abiTupleProps exprSimHyps exprSimSource gasOutcomeFullCompose
@@ -12,6 +13,7 @@ Ancestors
 
 Theorem abi_encode_arg_step_full:
   body_expr_full_ok cx e /\ body_inv tops ctx ce cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre ce cx env e es /\
   compile_expr ce (expr_type e) e sa = (vv,mid) /\
   (if ~is_word_type (expr_type e) /\ exprs_can_mutate ce rest

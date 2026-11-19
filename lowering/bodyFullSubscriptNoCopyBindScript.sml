@@ -2,6 +2,7 @@
    or that the index preserves the source's scopes or immutables. *)
 Theory bodyFullSubscriptNoCopyBind
 Ancestors option[qualified,ignore_grammar] vyperTypeValues[qualified,ignore_grammar] vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ignore_grammar]
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull gasOutcomeFullCompose bodyFullSubscriptCapturedPlace
   bodyInvNoDalloca stateRelProj exprSimSubscriptArraySuffix
   gasShadowCompileStmtHelpers bodyFullBuiltinWordPowCompose
@@ -15,7 +16,7 @@ Ancestors option[qualified,ignore_grammar] vyperTypeValues[qualified,ignore_gram
 Theorem subscript_nocopy_bind_full:
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
     (!s raw t. eval_expr cx e1 s = (INL raw,t) ==> body_expr_full_ok cx e2) /\
-    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\
+    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
     expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et bd /\ place_type cenv e1 = ValPT (ArrayT et bd) /\

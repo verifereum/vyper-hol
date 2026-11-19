@@ -1,5 +1,6 @@
 Theory bodyFullExtCallAddressOwnedPrefix
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullExtCallPositional bodyFullExtCallTargetOutcome bodyFullExtCallPosList
   gasOutcomeFull gasOutcomeFullCompose gasExemptCert vyperStorageTrace vyperStorageFootprint
   exprSimDefs
@@ -83,6 +84,7 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
   xs = TAKE nargs tail /\ kw_es = DROP nargs tail /\
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok cx (TAKE 1 args) /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env addr es /\
   (!st target mid n. eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\
      n = LENGTH arg_types ==> body_exprs_full_ok cx (TAKE n (DROP 1 args))) /\

@@ -1,6 +1,7 @@
 (* Joint RawRevert value composition, conditional on the compiled abort tail. *)
 Theory bodyFullRawRevertValue
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullRawRevertInterfaces bodyFullPreds bodySimFull exprSimHypsDefs bodyInvNoDalloca
   exprLowering gasOutcomeFullCompose
   exprOperandVar exprSimProps loweringPosts bodyPtrDefs exprSimMemDefs
@@ -34,6 +35,7 @@ Theorem raw_revert_value_full_from_tail:
     (!ce ct e. gas_shadow_compiles (lower_value compile_expr ce ct e)
        (lower_value compile_expr ce ct (gas_shadow_expr e))) /\
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Call ann RawRevert args dflt) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann RawRevert args dflt) es

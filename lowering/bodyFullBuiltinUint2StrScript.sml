@@ -3,6 +3,7 @@
    the old lo=0 pointer result does not certify this successful joint prefix. *)
 Theory bodyFullBuiltinUint2Str
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullOfVV bodyFullAllocaFresh bodyInvNoDalloca
   bodyFullGhostFrame bodyFullUnwrapRun bodyFullShared bodyMemoryDefs
   bodyFullBuiltinUint2StrSuffix bodyFullBuiltinUint2StrRun
@@ -24,6 +25,7 @@ Theorem uint2str_builtin_sim_full:
     (builtin_args_length_ok (Uint2Str n) (LENGTH args) ==>
      body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (Uint2Str n) args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Uint2Str n) args) es /\

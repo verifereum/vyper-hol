@@ -1,6 +1,7 @@
 (* Sequential positional operands at a common physical endpoint. *)
 Theory bodyFullExtCallPosList
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullExtCallPosWord bodyFullExtCallPosAggregate bodyFullExtCallPosTransport
   bodyFullPreds bodySimFull gasOutcomeFullCompose gasExemptCert fragGasOriginPtr
   exprLowering exprLoweringProps compileEnv context gasShadowCompile
@@ -56,6 +57,7 @@ QED
 
 Theorem extcall_request_positional_outcome:
   body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_sim_inv cenv cx env es /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e st) /\
@@ -573,6 +575,7 @@ QED
    after evaluating the remaining positional operands. *)
 Theorem extcall_request_positional_packing_outcome:
   body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_sim_inv cenv cx env es /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e st) /\

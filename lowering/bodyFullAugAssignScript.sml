@@ -96,6 +96,7 @@ Theorem body_augassign_local_full:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx (NameTarget id) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (NameTarget id) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (NameTarget id) bop e) ==>
@@ -127,6 +128,7 @@ Theorem body_augassign_toplevel_word_full:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx (TopLevelNameTarget nsid) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (TopLevelNameTarget nsid) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (TopLevelNameTarget nsid) bop e) ==>
@@ -159,6 +161,7 @@ Theorem body_augassign_attr_local_full:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx (AttributeTarget (NameTarget id) fld) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e) ==>
@@ -190,6 +193,7 @@ Theorem body_augassign_attr_storage_full:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx (AttributeTarget (TopLevelNameTarget nsid) fld) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e) ==>
@@ -222,6 +226,7 @@ Theorem body_augassign_other_full:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx t /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty t bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>
@@ -263,6 +268,7 @@ Theorem augassign_ordinary_full[local]:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx t /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty t bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>

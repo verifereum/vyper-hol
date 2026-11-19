@@ -1,5 +1,6 @@
 Theory bodyFullConvertScalarJoint
 Ancestors
+  bodyFullShadowBodyInv
   haltExitProj
   bodyFullPreds bodySimFull bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertScalarSuffix bodyFullConvertScalarFrame bodyFullPathHistory
@@ -10,6 +11,7 @@ Ancestors
 
 Theorem convert_scalar_vv_sim_full:
   body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
   body_expr_full_ok cx e /\ ~is_bytestring_type (expr_type e) /\
   ~is_bytestring_type dst ==>

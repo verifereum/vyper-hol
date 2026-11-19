@@ -1,6 +1,7 @@
 (* Sequential ABI arguments retain the conditional frame at the same endpoint. *)
 Theory bodyFullAbiEncodePureFrame
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullAbiEncodeArgStep bodyFullAbiEncodeArgsFrame bodyFullAbiEncodeReadResources
   bodyFullAbiEncodeOutcomeFrame bodyFullAbiEncodeArgsPost
   bodyFullPreds abiEncodeArgsSim abiEncodeArgsCase gasOutcomeFullCompose
@@ -15,6 +16,7 @@ Theorem abi_encode_args_full_pure_frame_from_step:
   (!cx e tops ctx ce env es sa vv mid rest op sb shadow_sa shadow_mid shadow_sb
     shadow_ctx func shadow_func DF lo d s0 st0 G0 tn0 PG.
   body_expr_full_ok cx e /\ body_inv tops ctx ce cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre ce cx env e es /\
   compile_expr ce (expr_type e) e sa = (vv,mid) /\
   (if ~is_word_type (expr_type e) /\ exprs_can_mutate ce rest
@@ -81,7 +83,8 @@ Theorem abi_encode_args_full_pure_frame_from_step:
     (\H rr ee gt r. expr_exit rr r /\ halt_exit H cx ee rr r)) ==>
   !args cx tops ctx ce Inv env es sa ops sb shadow_sa shadow_sb shadow_ctx
     func shadow_func DF lo PG d st0 s0 G0 tn0.
-  body_exprs_full_ok cx args /\ body_inv tops ctx ce cx /\ Inv es /\
+  body_exprs_full_ok cx args /\ body_inv tops ctx ce cx /\
+  shadow_body_inv tops ctx shadow_ctx /\ Inv es /\
   (!q. Inv q ==> expr_sim_inv ce cx env q) /\
   (!q gs. Inv q ==> Inv (q with gas_obs := gs)) /\
   EVERY (\e. !q. Inv q ==> expr_body_pre ce cx env e q) args /\
@@ -553,7 +556,8 @@ Finalise abi_encode_args_full_pure_frame_from_step
 Theorem abi_encode_args_full_pure_frame:
   !args cx tops ctx ce Inv env es sa ops sb shadow_sa shadow_sb shadow_ctx
     func shadow_func DF lo PG d st0 s0 G0 tn0 ann ensure mid ty.
-  body_exprs_full_ok cx args /\ body_inv tops ctx ce cx /\ Inv es /\
+  body_exprs_full_ok cx args /\ body_inv tops ctx ce cx /\
+  shadow_body_inv tops ctx shadow_ctx /\ Inv es /\
   (!q. Inv q ==> expr_sim_inv ce cx env q) /\
   (!q gs. Inv q ==> Inv (q with gas_obs := gs)) /\
   EVERY (\e. !q. Inv q ==> expr_body_pre ce cx env e q) args /\

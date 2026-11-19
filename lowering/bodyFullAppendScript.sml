@@ -8,6 +8,7 @@
  *)
 Theory bodyFullAppend
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullStoreSlotsPath bodyFullStoreSlotsStatic
   memoryPlaceStorePost
   stateRelProj bodyFullAppendLocalFrames bodyFullAppendNestedFrames
@@ -3124,6 +3125,7 @@ Theorem append_nested_after_target_full[local]:
   supported_stmt (cx_tops cx) bindings (Append bt e) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   body_inv (cx_tops cx) ctx cenv cx /\
+  shadow_body_inv (cx_tops cx) ctx shadow_ctx /\
   supported_full_word_type (expr_type e) /\
   expr_body_pre cenv cx env e es /\ target_pre cenv cx env bt es /\
   body_expr_full_ok cx e /\
@@ -3721,7 +3723,7 @@ Proof
   conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
   simp[] >> strip_tac >>
   drule_all body_target_place_sim_full >>
-  disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `shadow_ctx`, `func`,
+  disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `func`,
     `shadow_func`] assume_tac) >>
   drule_all stmtSimAppendResolvedTheory.append_resolved_target_prefix >>
   strip_tac >> gvs[] >>
@@ -3822,8 +3824,12 @@ Resume body_append_nested_full[target_success]:
   pure_rewrite_tac [ETA_THM] >>
   `~ctx_has_dalloca ctx` by metis_tac[bodyInvNoDallocaTheory.body_inv_no_dalloca] >>
   simp[] >>
-  qpat_assum `~ctx_has_dalloca ctx`
-    (fn th => irule (SRULE [th] append_nested_after_target_full)) >>
+  `shadow_body_inv (cx_tops cx) ctx shadow_ctx` by
+    (qsuff_tac `cx_tops cx = tops` >- simp[] >>
+     fs[body_inv_def, gasContextTheory.cx_tops_def]) >>
+  qpat_assum `~ctx_has_dalloca ctx` (fn no_dalloca =>
+    qpat_assum `shadow_body_inv (cx_tops cx) ctx shadow_ctx` (fn shadow =>
+      irule (SRULE [no_dalloca, shadow] append_nested_after_target_full))) >>
   goal_assum (drule_at Any) >>
   simp[] >>
   conj_tac >- fs[loweringPostsTheory.ret_pc_ok_def] >>
