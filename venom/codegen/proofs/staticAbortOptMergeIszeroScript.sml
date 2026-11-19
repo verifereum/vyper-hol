@@ -145,13 +145,15 @@ fun iszero_fact names pat ttac = iszero_equations names
   (fn eqs => qpat_assum pat (ttac o CONV_RULE iszero_norm o PURE_REWRITE_RULE eqs))
 
 (* Match the worker's naming premises to the local equations, leaving
-   Cert folded. Control and Slots are inlined in the caller. *)
-fun iszero_rows_rule [] th k = k (CONV_RULE iszero_beta th)
+   Cert folded. Inline Control, Slots and the trailing geometry aliases. *)
+fun iszero_rows_rule [] th k =
+      k (CONV_RULE (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2) THENC iszero_beta) th)
   | iszero_rows_rule (NONE::names) th k = iszero_rows_rule names
       (CONV_RULE (HO_REWR_CONV UNWIND_FORALL_THM2) th) k
   | iszero_rows_rule (SOME name::names) th k =
       asm name (fn eq => iszero_rows_rule names
-        (MP (CONV_RULE (LAND_CONV iszero_beta) (SPEC (lhs (concl eq)) th)) eq) k)
+        (MP (CONV_RULE (LAND_CONV iszero_norm) (SPEC (lhs (concl eq)) th))
+            (CONV_RULE iszero_norm eq)) k)
 
 fun iszero_site_facts k =
   qpat_assum `pat = _` (fn hp => qpat_assum `repl = _` (fn hq => k [hp,hq]))
