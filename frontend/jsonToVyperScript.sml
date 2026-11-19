@@ -231,17 +231,31 @@ End
 
 (* Get all externally-callable names from a module's toplevels:
    external functions + public variable/hashmap getters *)
-Definition get_external_func_names_def:
-  get_external_func_names [] = [] ∧
-  get_external_func_names (t::ts) =
+Definition get_external_fn_names_def:
+  get_external_fn_names [] = [] ∧
+  get_external_fn_names (t::ts) =
     if is_external_function t then
       case get_function_name t of
-        SOME name => name :: get_external_func_names ts
-      | NONE => get_external_func_names ts
+        SOME name => name :: get_external_fn_names ts
+      | NONE => get_external_fn_names ts
+    else get_external_fn_names ts
+End
+
+Definition get_public_getter_names_def:
+  get_public_getter_names [] = [] ∧
+  get_public_getter_names (t::ts) =
+    if is_external_function t then get_public_getter_names ts
     else
       case get_public_var_name t of
-        SOME name => name :: get_external_func_names ts
-      | NONE => get_external_func_names ts
+        SOME name => name :: get_public_getter_names ts
+      | NONE => get_public_getter_names ts
+End
+
+(* A module's own exposed functions in the compiler's order: its external
+   functions, then its public getters, each in declaration order. *)
+Definition get_external_func_names_def:
+  get_external_func_names ts =
+    get_external_fn_names ts ++ get_public_getter_names ts
 End
 
 (* Find module body by raw source_id in imports list *)
@@ -337,6 +351,14 @@ Definition find_interface_functions_def:
         | NONE => NONE
 End
 
+(* An interface member exported through module src_id, paired with the module
+   that defines it: src_id may provide it by re-exporting another module's
+   function (exps is src_id's exports). *)
+Definition export_source_def:
+  export_source src_id exps n =
+    (n, case ALOOKUP exps n of SOME final_src_id => final_src_id | NONE => src_id)
+End
+
 (* Expand a single export expression using only compact indexes.
    exports_map: already-computed source_id -> exported (name, defining source_id)
    all_import_maps: source_id -> alias map
@@ -359,10 +381,10 @@ Definition expand_single_export_def:
                 | SOME final_src_id => [(func_name, final_src_id)]
                 | NONE =>
                     case find_interface_functions exports_map all_import_maps src_id func_name of
-                    | SOME iface_fns => MAP (λn. (n, src_id)) iface_fns
+                    | SOME iface_fns => MAP (export_source src_id exps) iface_fns
                     | NONE =>
                         case lookup_inline_interface all_inline_maps src_id func_name of
-                        | SOME iface_fns => MAP (λn. (n, src_id)) iface_fns
+                        | SOME iface_fns => MAP (export_source src_id exps) iface_fns
                         | NONE => [(func_name, src_id)])
            | NONE => [(func_name, src_id)]) ∧
   expand_single_export _ _ _ _ _ = []
@@ -437,7 +459,7 @@ Definition compute_index_exports_def:
     (src_id, import_map, ext_names, inline_map, export_anns) =
     let ext_funcs = MAP (λn. (n, src_id)) ext_names in
     let reexports = expand_export_annotations exports_map all_import_maps all_inline_maps import_map export_anns in
-    ext_funcs ++ reexports
+    reexports ++ ext_funcs
 End
 
 Definition build_exports_map_from_indexes_def:
