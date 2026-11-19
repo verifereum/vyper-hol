@@ -2,7 +2,17 @@
 Theory bodyPtrHashBuiltinsShaTailCall
 Ancestors bodyPtrHashBuiltinsShaTailSteps bodyPtrHashBuiltinsShaCall
   bodyPtrDefs fragGasSeqPtr ptrSafeRun ptrDiscipline venomInst venomState
-  venomExecSemantics words finite_map pred_set
+  venomExecSemantics venomInstProofs1 words finite_map pred_set
+
+Theorem sha256_staticcall_allocas_below_fmp[local]:
+  step_inst_base i s = OK t /\ i.inst_opcode = STATICCALL /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp ==>
+  (allocas_below_fmp t <=> allocas_below_fmp s)
+Proof
+  strip_tac >> drule step_inst_base_preserves_all >>
+  simp[mk_inst_def, is_terminator_def] >> strip_tac >>
+  simp[allocas_below_fmp_def]
+QED
 
 Theorem hash_sha256_call_load_check:
   !D ctx fn PG G tn s t ic ia im gas p len q success out a w n r b sz c cap.
@@ -17,7 +27,7 @@ Theorem hash_sha256_call_load_check:
         (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
     tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
         (s.vs_transient s.vs_call_ctx.cc_address) /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     step_inst_base (mk_inst ic STATICCALL
       [gas;Lit 2w;Var p;len;Var q;Lit 32w] [success]) s = OK t /\
     t.vs_allocas = s.vs_allocas /\
@@ -35,7 +45,12 @@ Proof
   conj_tac >- (irule hash_staticcall_inst_ok >> simp[] >> metis_tac[]) >>
   qabbrev_tac `call = mk_inst ic STATICCALL
     [gas;Lit 2w;Var p;len;Var q;Lit 32w] [success]` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (`call.inst_opcode = STATICCALL` by simp[Abbr `call`, mk_inst_def] >>
+     drule_all sha256_staticcall_allocas_below_fmp >> simp[]) >>
   qabbrev_tac `u = t with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `allocas_below_fmp u <=> allocas_below_fmp t` by
+    simp[Abbr `u`, allocas_below_fmp_def] >>
   qabbrev_tac `G1 = DRESTRICT G (COMPL {success})` >>
   qabbrev_tac `tn1 = step_taint call s t tn` >>
   `step_prov PG G call t = G1` by
@@ -77,7 +92,7 @@ Theorem hash_sha256_call_abort_check:
         (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
     tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
         (s.vs_transient s.vs_call_ctx.cc_address) /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     step_inst_base (mk_inst ic STATICCALL
       [gas;Lit 2w;Var p;len;Var q;Lit 32w] [success]) s = OK t /\
     t.vs_allocas = s.vs_allocas /\
@@ -100,6 +115,9 @@ Proof
      t_mem := tn.t_mem DIFF range_bytes [(w2n r,MIN 32 (LENGTH t.vs_returndata))]|>` by
     (SIMP_TAC (srw_ss()) [Abbr `tn1`, Abbr `call`] >>
      irule (SRULE [] (cj 2 hash_staticcall_ghost)) >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (`call.inst_opcode = STATICCALL` by simp[Abbr `call`, mk_inst_def] >>
+     drule_all sha256_staticcall_allocas_below_fmp >> simp[]) >>
   `inst_seq_ptr D 0 ctx fn PG (DRESTRICT G (COMPL {success})) tn1
      [mk_inst ia ASSERT [Var success] []; mk_inst im MLOAD [Var q] [out]]
      (t with vs_inst_idx := SUC s.vs_inst_idx)

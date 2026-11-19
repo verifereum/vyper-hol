@@ -12,7 +12,7 @@ Theorem bop_bytes_eq_suffix_ptr:
   compile_binop bop x y ty NONE NONE sa = (op,sb) /\
   op_prov G x = NONE /\ op_taint tn x = {} /\
   op_prov G y = NONE /\ op_taint tn y = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?G' tn'.
     (!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn') /\
@@ -71,6 +71,13 @@ Resume bop_bytes_eq_suffix_ptr[neq]:
     (mp_tac (GEN_ALL (Q.INST [`opc` |-> `EQ`] bop_scalar_state_frame)) >>
      simp[Abbr `i`] >> disch_then drule >>
      simp[venom_state_component_equality] >> metis_tac[]) >>
+  `u.vs_initial_fmp = s.vs_initial_fmp` by
+    (mp_tac (GEN_ALL (Q.INST [`opc` |-> `EQ`] bop_scalar_state_frame)) >>
+     simp[Abbr `i`] >> disch_then drule >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (strip_tac >> `allocas_below_fmp s` by simp[] >>
+     fs[Abbr `v`, allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
   `allocas_from lo v` by (gvs[Abbr `v`, allocas_from_def] >> metis_tac[]) >>
   `w.vs_allocas = v.vs_allocas /\ w.vs_fmp = v.vs_fmp` by
     (mp_tac (GEN_ALL (Q.INST [`opc` |-> `ISZERO`] bop_scalar_state_frame)) >>

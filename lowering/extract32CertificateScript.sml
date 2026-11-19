@@ -53,8 +53,9 @@ Theorem slice_bounds_fixed_certificate:
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
   strip_tac >> drule_all slice_bounds_scalar_code >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all scalar_code_inst_seq_ptr >>
-  disch_then (qspecl_then [`fn`, `PG`, `D`, `s`] strip_assume_tac) >>
+  disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   drule_all scalar_seq_metadata_frame >> strip_tac >>
   qexistsl_tac [`H`, `tm`] >>
   conj_tac >- (irule scalar_code_certificate_cursor >> simp[] >>
@@ -85,8 +86,9 @@ Proof
   `scalar_code {x} (emitted_insts sa sb)` by
     (irule scalar_clamp_basetype_code >> simp[scalar_available_def] >> metis_tac[]) >>
   `!v. v IN {x} ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all scalar_code_inst_seq_ptr >>
-  disch_then (qspecl_then [`fn`,`PG`,`D`,`s`] strip_assume_tac) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   drule_all scalar_seq_metadata_frame >> strip_tac >>
   `!p. not_fresh_at sa p ==>
     ~MEM p (FLAT (MAP (\i. i.inst_outputs) (emitted_insts sa sb)))` by

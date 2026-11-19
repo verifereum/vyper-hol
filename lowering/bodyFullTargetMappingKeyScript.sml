@@ -40,7 +40,7 @@ QED
 Theorem mapping_key_prefix_checked[local]:
   (if is_bytestring_type kt then compile_keccak256_key key F sa
    else (key,sa)) = (hashed,sb) /\
-  (!x. key = Var x ==> not_fresh_at sa x) /\ ~ctx_has_dalloca ctx /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (if is_bytestring_type kt then
      ?x b base cap bs.
        key = Var x /\ eval_operand key s = SOME (n2w b) /\
@@ -99,7 +99,7 @@ QED
 Theorem mapping_key_prefix_full_run:
   (if is_bytestring_type kt then compile_keccak256_key key F sa
    else (key,sa)) = (hashed,sb) /\
-  (!x. key = Var x ==> not_fresh_at sa x) /\ ~ctx_has_dalloca ctx /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (if is_bytestring_type kt then
      ?x b base cap bs.
        key = Var x /\ eval_operand key s = SOME (n2w b) /\

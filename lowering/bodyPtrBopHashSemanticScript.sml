@@ -68,6 +68,7 @@ Proof
     (Cases_on `LENGTH bs = 0` >- simp[] >>
      `0 < LENGTH bs` by decide_tac >>
      drule_all bop_payload_offset_no_wrap >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_hash_run_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   goal_assum (drule_at Any) >> simp[]
@@ -110,6 +111,7 @@ Proof
     (Cases_on `LENGTH str = 0` >- simp[] >>
      `0 < LENGTH str` by decide_tac >>
      drule_all bop_payload_offset_no_wrap >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_hash_run_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   goal_assum (drule_at Any) >> simp[]

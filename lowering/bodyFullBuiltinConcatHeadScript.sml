@@ -81,6 +81,7 @@ Theorem concat_head_bytes_uniform:
       mem_bytes_at p n u.vs_memory = mem_bytes_at p n s.vs_memory)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all concat_bytes_arm_full_run >>
   disch_then (qspecl_then [`explicit`,`PG`,
     `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]
@@ -153,6 +154,7 @@ Theorem concat_head_fixed_uniform:
       mem_bytes_at p n u.vs_memory = mem_bytes_at p n s.vs_memory)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all concat_fixed_arm_full_run >>
   disch_then (qspecl_then [`explicit`,`PG`,
     `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]

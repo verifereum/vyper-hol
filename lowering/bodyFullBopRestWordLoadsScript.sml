@@ -221,9 +221,9 @@ Proof
       scalar_shape_def, scalar_binary_def, scalar_available_def, mk_inst_def]) >>
   `!v. v IN {product} ==> op_prov g1 (Var v) = NONE /\ op_taint t1 (Var v) = {}` by
     gvs[op_prov_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u1 with vs_inst_idx := SUC s.vs_inst_idx)` by simp[] >>
   drule_all scalar_code_inst_seq_ptr >>
-  disch_then (qspecl_then [`fn`, `PG`, `D`, `u1 with vs_inst_idx := SUC s.vs_inst_idx`]
-    strip_assume_tac) >>
+  disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG g1 t1 mid _ g2 t2` >>
   drule_all scalar_seq_metadata_frame >> strip_tac >>
   qabbrev_tac `u2 = (if 0 < skip then update_var offset
@@ -399,8 +399,9 @@ Proof
                     op_taint (Ts H) (Var v) = {}` by
     (Cases_on `arr` >> gvs[membership_loop_registers_def, op_prov_def, op_taint_def] >> metis_tac[]) >>
   `scalar_code A code` by gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all scalar_code_inst_seq_ptr >>
-  disch_then (qspecl_then [`fn`, `PG`, `DF H`, `s`] strip_assume_tac) >>
+  disch_then (qspecl_then [`fn`, `PG`, `DF H`] strip_assume_tac) >>
   `op_prov H' (Var dst) = NONE /\ op_taint tm (Var dst) = {}` by
     (drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`) scalar_seq_success_clean >>
      disch_then (drule_at (Pat `run_inst_seq _ _ = OK _`)) >>
@@ -872,9 +873,9 @@ Proof
       scalar_shape_def, scalar_binary_def, scalar_available_def, mk_inst_def]) >>
   `!v. v IN {product} ==> op_prov g1 (Var v) = NONE /\ op_taint t1 (Var v) = {}` by
     gvs[op_prov_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u1 with vs_inst_idx := SUC s.vs_inst_idx)` by simp[] >>
   drule_all scalar_code_inst_seq_ptr >>
-  disch_then (qspecl_then [`fn`, `PG`, `D`, `u1 with vs_inst_idx := SUC s.vs_inst_idx`]
-    strip_assume_tac) >>
+  disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG g1 t1 mid _ g2 t2` >>
   drule_all scalar_seq_metadata_frame >> strip_tac >>
   qabbrev_tac `u2 = (if 0 < skip then update_var offset
@@ -1204,9 +1205,9 @@ Proof
       scalar_shape_def, scalar_binary_def, scalar_available_def, mk_inst_def]) >>
   `!v. v IN {product} ==> op_prov g1 (Var v) = NONE /\ op_taint t1 (Var v) = {}` by
     gvs[op_prov_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u1 with vs_inst_idx := SUC s.vs_inst_idx)` by simp[] >>
   drule_all scalar_code_inst_seq_ptr >>
-  disch_then (qspecl_then [`fn`, `PG`, `D`, `u1 with vs_inst_idx := SUC s.vs_inst_idx`]
-    strip_assume_tac) >>
+  disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG g1 t1 mid _ g2 t2` >>
   drule_all scalar_seq_metadata_frame >> strip_tac >>
   qabbrev_tac `u2 = (if 0 < skip then update_var offset

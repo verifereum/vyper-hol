@@ -76,11 +76,11 @@ Proof
   `!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
     (s with vs_inst_idx := k) G' tn'` by
     (gen_tac >> irule scalar_sequence_check_vars_ext >>
-     conj_tac >- simp[] >> conj_tac >- simp[] >>
+     conj_tac >- simp[] >>
      qexists_tac `drop_fresh sa s with vs_inst_idx := k` >>
-     conj_tac >- simp[run_inst_seq_inst_idx, exec_result_map_def] >>
-     conj_tac >- simp[vars_ext_def, drop_fresh_def, DRESTRICT_SUBMAP,
-                       venom_state_component_equality] >> simp[]) >>
+     simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+     simp[vars_ext_def, drop_fresh_def, DRESTRICT_SUBMAP,
+          venom_state_component_equality]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
     ~is_ext_call_op i.inst_opcode) (emitted_insts sa sb)` by
     (gvs[EVERY_MEM] >> rpt strip_tac >> res_tac >>

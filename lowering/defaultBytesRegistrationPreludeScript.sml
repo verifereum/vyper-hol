@@ -146,6 +146,7 @@ Proof
   drule_all default_bytes_address_prelude_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] (qx_choose_then `a`
     (qx_choose_then `H0` (qx_choose_then `u0` (qx_choose_then `p` strip_assume_tac))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
   drule_all default_bytes_guard_prelude >>
   disch_then (qspec_then `PG` (qx_choose_then `ready` (qx_choose_then `H`
     (qx_choose_then `u` strip_assume_tac)))) >>

@@ -70,7 +70,7 @@ Finalise bop_scalar_seq_abort_prefix
 Theorem bop_scalar_seq_abort_path:
   bop_scalar_seq R A code B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq code s = Abort a t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq code s = Abort a t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?G' tn' n j. gas_path_ptr D 0 ctx fn PG G tn s n G' tn'
@@ -97,7 +97,7 @@ QED
 Theorem bop_scalar_certificate_result_path:
   (?B. bop_scalar_seq R A code B /\ v IN B) /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq code s = OK t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq code s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' /\

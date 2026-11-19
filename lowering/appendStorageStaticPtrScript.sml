@@ -77,6 +77,7 @@ Resume append_storage_word_static_origin_path[pointer]:
     (Cases_on `bop` >> Cases_on `vop` >> gvs[op_taint_def]) >>
   `!x. bop = Var x ==> not_fresh_at s3 x` by metis_tac[] >>
   drule_all append_storage_address_stages_actual >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t3` by simp[] >>
   drule_all append_storage_address_ptr >>
   disch_then (qspecl_then [`func`, `PG`, `G3`, `D`] strip_assume_tac) >>
   suspend "store"

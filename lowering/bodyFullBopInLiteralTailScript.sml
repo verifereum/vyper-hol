@@ -81,6 +81,7 @@ Proof
   `inst_seq_ptr ARB 0 ctx fn PG G tn (emitted_insts sm sb)
      (drop_fresh sm s) G' tn'` by
     (qpat_x_assum `!D k. _` (qspecl_then [`ARB`,`(drop_fresh sm s).vs_inst_idx`] mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (drop_fresh sm s)` by simp[] >>
   drule_all scalar_inst_seq_ptr_vars_ext >> strip_tac >>
   qexistsl_tac [`u1`,`G'`,`tn'`] >> simp[] >>
   `eval_operand dst u1 = SOME (bool_to_word (if bop = In then MEM v vs else ~MEM v vs))` by

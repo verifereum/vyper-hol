@@ -115,6 +115,7 @@ Proof
   `!op. op IN ({x; y} UNION IMAGE Lit UNIV) ==>
      op_prov G op = NONE /\ op_taint tn op = {}` by
     metis_tac[bop_scalar_binop_input_clean] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_abort_path >>
   disch_then (qspecl_then [`PG`, `D`] mp_tac) >> simp[]
 QED

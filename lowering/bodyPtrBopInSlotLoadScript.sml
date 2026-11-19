@@ -261,6 +261,7 @@ Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `op_taint tn0 arr_op = {}` by
     (fs[bodyPtrDefsTheory.ptr_vv_ok_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule (SRULE [] (GEN_ALL membership_runtime_address_prefix)) >>
   simp[] >> disch_then drule_all >>
   disch_then (qspecl_then [`PG`, `D`]
