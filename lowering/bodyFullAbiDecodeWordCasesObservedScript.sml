@@ -255,6 +255,7 @@ Proof
   `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at start x) /\
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at start x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       abi_decode_owned_relative_load_exact)) >>

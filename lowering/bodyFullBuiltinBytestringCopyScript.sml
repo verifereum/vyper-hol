@@ -22,7 +22,7 @@ Theorem bytestring_external_copy_origin_edge:
   op_taint tn start = {} /\ op_taint tn cnt = {} /\
   ptr_covers G tn dst s (w2n wn) /\
   w2n wd + w2n wn <= s.vs_alloca_next /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   step_inst_base (mk_inst sa.cs_next_id opc ops []) s = OK u ==>
@@ -61,7 +61,7 @@ Theorem bytestring_length_store_origin_edge:
   lookup_var root s = SOME b /\ eval_operand cnt s = SOME n /\
   ptr_covers G tn root s 32 /\ op_taint tn cnt = {} /\
   w2n b + 32 <= s.vs_alloca_next /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   !D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
@@ -111,7 +111,7 @@ Theorem bytestring_external_copy_length_full_run:
   32 <= N /\ ptr_covers G tn root s N /\
   w2n wd + w2n wn <= s.vs_alloca_next /\
   w2n b + 32 <= s.vs_alloca_next /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   step_inst_base (mk_inst sa.cs_next_id opc ops []) s =
@@ -169,6 +169,12 @@ Proof
     gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
         comp_return_def, fresh_id_def, emit_def,
         write_memory_with_expansion_def, write_memory_def, expand_memory_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `u = (write_memory_with_expansion _ _ s) with vs_inst_idx := _` SUBST1_TAC >>
+     simp[allocas_below_fmp_def, write_memory_with_expansion_def, write_memory_def,
+          expand_memory_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o SRULE[allocas_below_fmp_def])) >>
   `ptr_covers G tc root u 32` by
     (gvs[ptr_covers_def, op_taint_def, lookup_var_def,
          write_memory_with_expansion_def, write_memory_def,

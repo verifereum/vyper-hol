@@ -50,7 +50,7 @@ QED
 Theorem abi_decode_relative_load_joint_lower:
   compile_abi_dec_addr (Var src) pos sa = (addr,sb) /\
   emit_op MLOAD [addr] sb = (v,sc) /\
-  fn_has_code sa sc fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sc fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   abi_decode_ptr_window G tn s src b h /\
@@ -287,7 +287,7 @@ QED
 Theorem abi_decode_owned_relative_load_exact:
   compile_abi_dec_addr (Var input) pos sa = (addr,sb) /\
   emit_op MLOAD [addr] sb = (v,sc) /\
-  fn_has_code sa sc fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sc fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) sa s G tn /\

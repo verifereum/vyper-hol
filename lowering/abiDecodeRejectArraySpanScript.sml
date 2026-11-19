@@ -11,7 +11,7 @@ val guard_abort = ``
   !PG R A code B G tn ctx lo s func bb t.
     bop_scalar_seq R A code B /\
     (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
+    ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     run_inst_seq code s = Abort Revert_abort t ==>
@@ -29,7 +29,7 @@ val count_compare = ``
     fn_has_code sa sb func /\ sb.cs_current_bb = sa.cs_current_bb /\
     eval_operand cnt s = SOME cv /\ abi_decoder_operand_live sa.cs_next_var cnt /\
     n < dimword(:256) /\ op_prov G cnt = NONE /\ op_taint tn cnt = {} /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
+    ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     if w2n cv <= n then
       ?u G' tn'.
@@ -58,7 +58,7 @@ Theorem malformed_dynarray_span_abort[local]:
   n*stride < dimword(:256) /\ L < q+n*stride /\
   EVERY (abi_decoder_operand_live sc.cs_next_var) [head;cnt;hi] /\
   (!op. op IN {head;cnt;hi} ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
   ?u G' tn'.
     u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
@@ -103,7 +103,7 @@ Theorem malformed_dynarray_compare_span_abort:
   cap < dimword(:256) /\ (w2n cv <= cap ==> w2n cv*stride < dimword(:256) /\ L < q+w2n cv*stride) /\
   EVERY (abi_decoder_operand_live sl.cs_next_var) [head;cnt;hi] /\
   (!op. op IN {head;cnt;hi} ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sl.cs_current_bb /\ s.vs_inst_idx = LENGTH sl.cs_current_insts ==>
   ?u G' tn'.
     u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
@@ -141,11 +141,6 @@ Proof
        (fn th => PURE_REWRITE_TAC[allocas_from_def,th]) >>
      qpat_assum `allocas_from lo s` (ACCEPT_TAC o PURE_REWRITE_RULE[allocas_from_def])) >>
   `w2n cv*stride < dimword(:256) /\ L < q+w2n cv*stride` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
-    (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>` SUBST1_TAC >>
-     simp[allocas_below_fmp_def] >>
-     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
-       (ACCEPT_TAC o SRULE [allocas_below_fmp_def])) >>
   asm "guard_abort" (drule_all o MATCH_MP malformed_dynarray_span_abort) >>
   disch_then (qspec_then `PG` (qx_choose_then `u` (qx_choose_then `H` (qx_choose_then `th` strip_assume_tac)))) >>
   qexistsl_tac [`u`,`H`,`th`] >> simp[] >>

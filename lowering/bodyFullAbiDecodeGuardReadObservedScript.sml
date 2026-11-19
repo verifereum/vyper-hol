@@ -437,6 +437,7 @@ Proof
    lo <= s.vs_alloca_next /\
    w2n input_word+LENGTH input_bytes <= s.vs_alloca_next /\
    alloca_history fn s` by fs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (abiDecodePtrReadTheory.abi_decode_ptr_relative_load |>
     Q.INST [`D` |-> `ARB`, `PG` |-> `PG`]) >>
   disch_then (qspec_then `PG` strip_assume_tac) >>

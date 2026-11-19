@@ -355,6 +355,7 @@ Theorem abi_decode_member_destination_joint_observed[local]:
       op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (abi_decode_ptr_output_address |> Q.INST [`D` |-> `ARB`, `PG` |-> `PG`]) >>
   disch_then (qspecl_then [`fn`, `PG`] mp_tac) >>
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>

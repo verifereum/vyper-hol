@@ -77,7 +77,7 @@ Theorem annassign_memory_full_empty_store_path[local]:
   emit_void MSTORE [Var p; Lit 0w] b = ((),sf) /\
   lookup_var p s = SOME w /\ w2n w + 32 < dimword (:256) /\
   w2n w + 32 <= s.vs_alloca_next /\ ptr_covers G tn p s 32 /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code b sf func /\ ~s.vs_halted /\
   s.vs_current_bb = b.cs_current_bb /\
   s.vs_inst_idx = LENGTH b.cs_current_insts ==>
@@ -108,7 +108,6 @@ Proof
    op_taint tn (Lit 0w) = {}` by
     simp[is_word_type_def, evaluate_type_def, value_has_type_def,
          eval_operand_def, typed_val_to_w256_def, val_to_w256_def, op_taint_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all compile_store_memory_word_origin_ptr_path >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`t`, `Gf`, `tnf`] >>
@@ -206,7 +205,7 @@ Theorem annassign_memory_full_empty_post[local]:
   s0.vs_alloca_next <= s.vs_alloca_next /\
   emit_void MSTORE [Var p; Lit 0w] b = ((),sf) /\
   w2n w + 32 < dimword (:256) /\ w2n w + 32 <= s.vs_alloca_next /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code b sf func /\ ~s.vs_halted /\ ~block_is_terminated sf /\
   s.vs_current_bb = b.cs_current_bb /\ s.vs_inst_idx = LENGTH b.cs_current_insts /\
   return_buf_frame d ce b s /\ alloca_history func s ==>
@@ -251,6 +250,8 @@ Proof
   (conj_tac >- first_assum ACCEPT_TAC) >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
     fs[typed_copy_state_frame_def, venom_state_component_equality] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    metis_tac[typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp] >>
   `return_buf_frame d ce sf t` by suspend "return_frame" >>
   `alloca_history func t` by suspend "history" >>
   qx_gen_tac `H` >> disch_tac >>

@@ -31,7 +31,7 @@ Theorem malformed_indexed_guard_revert_joint:
   (!R A code B G tn ctx lo s func bb raw PG.
     bop_scalar_seq R A code B /\
     (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
+    ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     run_inst_seq code s = Abort Revert_abort raw ==>
@@ -53,7 +53,7 @@ Theorem malformed_indexed_guard_revert_joint:
   (!op. MEM op [src_data;off_val;hi] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
   fn_has_code sa sb func /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted ==>
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted ==>
   ?u G' tn'.
     u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
     u.vs_call_ctx = s.vs_call_ctx /\ u.vs_immutables = s.vs_immutables /\
