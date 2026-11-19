@@ -18,7 +18,7 @@ val bytes_head_cut = ``
     p < dimword(:256) /\ L < dimword(:256) /\
     op_prov G pos = NONE /\ op_taint tn pos = {} /\
     op_prov G hi = NONE /\ op_taint tn hi = {} /\
-    ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
     (?u G' tn'.
        u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
@@ -46,7 +46,7 @@ val scalar_load_cut = ``
     eval_operand pos s = SOME (n2w p) /\
     op_prov G pos = NONE /\ op_taint tn pos = {} /\
     p+32 <= L /\ B+L < dimword(:256) /\ B+p+32 <= s.vs_alloca_next /\
-    ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts ==>
     ?loaded HG th.
@@ -76,7 +76,7 @@ Theorem malformed_dynarray_head_load_outcome:
   abi_decode_ptr_window G tn s source (n2w B) L /\
   op_prov G pos = NONE /\ op_taint tn pos = {} /\
   op_prov G hi = NONE /\ op_taint tn hi = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   (?u H z.
      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
@@ -131,6 +131,11 @@ Proof
   `eval_operand hi r = SOME (n2w L) /\ op_prov G' hi = NONE /\ op_taint tn' hi = {} /\
    abi_decoder_operand_live sh.cs_next_var hi` by
     metis_tac[abi_decoder_operand_live_mono] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
+    (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>` SUBST1_TAC >>
+     simp[allocas_below_fmp_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o SRULE [allocas_below_fmp_def])) >>
   asm_x "load_cut" drule_all >> disch_then (qspec_then `PG` strip_assume_tac) >>
   `!op. abi_decoder_operand_live sh.cs_next_var op ==>
     eval_operand op loaded = eval_operand op r /\

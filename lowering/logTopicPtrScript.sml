@@ -1,7 +1,7 @@
 (* Pointer checks for indexed log topic hashing. *)
 Theory logTopicPtr
 Ancestors
-  logInstSeqPtr logValueFramePtr bodyPtrDefs codegenRel ptrCoverage ptrSafeRun ptrDiscipline
+  fragGasSeqPtrContext logInstSeqPtr logValueFramePtr bodyPtrDefs codegenRel ptrCoverage ptrSafeRun ptrDiscipline
   venomExecSemantics venomInstProofs venomInst venomState
   contextCodegenRelProps contextCodegenRel memLocDefs finite_map words
   exprSimHash emitHelperProps emitHelper compileEnv loweringStateRelDefs context fragExec arithmetic exprLoweringProps logAbiPrefixPtr list rich_list fragGasSeqPtr fragGasPathPtr
@@ -11,7 +11,7 @@ Theorem ptr_inst_ok_sha3_clean:
   lookup_var src s = SOME a /\ eval_operand len s = SOME n /\
   op_taint tn len = {} /\
   (!i. w2n a <= i /\ i < w2n a + w2n n ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
     (mk_inst id SHA3 [Var src;len] [out]) s
 Proof
@@ -56,7 +56,7 @@ Theorem emit_sha3_clean_seq_ptr:
   op_taint tn len = {} /\
   (!i. w2n a <= i /\ i < w2n a + w2n n ==> i NOTIN tn.t_mem) /\
   mem_bytes_at (w2n a) (w2n n) s.vs_memory = bs /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf sf.
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
@@ -106,7 +106,7 @@ Theorem compile_encode_log_topic_bytes_seq_ptr:
   mem_bytes_at (w2n a + 32) (LENGTH bs) s.vs_memory = bs /\
   w2n a + 32 < dimword(:256) /\ LENGTH bs < dimword(:256) /\
   (!i. w2n a <= i /\ i < w2n a + 32 + LENGTH bs ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf sf.
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
@@ -132,7 +132,6 @@ Proof
   `eval_operand (Lit 32w) s = SOME (n2w 32) /\ op_taint tn (Lit 32w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   `ptr_covers G tn src s (32 + LENGTH bs)` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.INST [`off` |-> `32`] emit_addr_add_seq_ptr) >>
   disch_then (qspecl_then [`fn`, `PG`, `D`]
     (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `t` strip_assume_tac)))) >>
@@ -144,7 +143,17 @@ Resume compile_encode_log_topic_bytes_seq_ptr[load]:
   `lookup_var src u = SOME a /\ ptr_covers G1 tn1 src u 32 /\
    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn1.t_mem)` by
     (gvs[Abbr `u`, ptr_covers_def, lookup_var_def] >> metis_tac[ADD_COMM, LESS_EQ_ADD, LESS_LESS_EQ_TRANS]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (strip_tac >>
+     `allocas_below_fmp t` by
+       (irule run_inst_seq_allocas_below_fmp >>
+        qexistsl_tac [`emitted_insts sa sm`,`s`] >>
+        qpat_assum `emit_op ADD _ _ = _`
+          (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def] >>
+        metis_tac[]) >>
+     qpat_assum `allocas_below_fmp t` mp_tac >>
+     simp[Abbr `u`, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all emit_mload_clean_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`]
     (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `v` strip_assume_tac)))) >>
@@ -167,6 +176,17 @@ Resume compile_encode_log_topic_bytes_seq_ptr[hash]:
    mem_bytes_at (w2n (a+32w)) (w2n (n2w (LENGTH bs):bytes32)) w.vs_memory = bs` by
     (gvs[Abbr `w`, Abbr `u`, ptr_covers_def, eval_operand_def, lookup_var_def,
          mload_def, w2n_add_2, w2n_n2w, LESS_MOD] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp w` by
+    (strip_tac >>
+     `allocas_below_fmp v` by
+       (irule run_inst_seq_allocas_below_fmp >>
+        qexistsl_tac [`emitted_insts sm sn`,`u`] >>
+        qpat_assum `emit_op MLOAD _ _ = _`
+          (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def] >>
+        metis_tac[]) >>
+     qpat_assum `allocas_below_fmp v` mp_tac >>
+     simp[Abbr `w`, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all emit_sha3_clean_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`]
     (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `z` strip_assume_tac)))) >>
@@ -222,6 +242,7 @@ Theorem compile_encode_log_topic_bytes_path_ptr:
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all compile_encode_log_topic_bytes_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`]
     (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `t` strip_assume_tac)))) >>
