@@ -2,7 +2,7 @@
 Theory bodyFullBuiltinEnvReads
 Ancestors
   bodyFullBuiltinEnvReadsStep bodyPtrDefs exprSimMemDefs loweringPosts
-  bodyFullExprGeneric bodyFullPreds bodySimFull exprSimHypsDefs bodyInvNoDalloca
+  bodyFullExprGeneric bodyFullPreds bodySimFull exprSimHypsDefs
   bodyFullGhostFrame gasOutcomeFullCompose fragGasSeqPtr
   exprSimSource exprSimProps exprLoweringProps emitHelperProps
   compileEnv exprLowering vyperTypeBuiltins vyperTypeSystem vyperContext vyperState
@@ -49,7 +49,6 @@ Theorem env_reads_sim_full:
       cenv cx ty (Builtin a bt args) es
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `args = [] /\ a = env_item_type i` by
     (gvs[expr_body_pre_def, cj 9 well_typed_expr_def,
          well_typed_builtin_app_def]) >>
@@ -81,6 +80,9 @@ Proof
           rpt gen_tac >> Cases_on `b` >>
           gvs[vyperStorageBackendTheory.get_storage_def] >>
           metis_tac[vyperStorageBackendTheory.get_storage_def]) >>
+      conj_tac
+      >- (qpat_assum `stmt_state_rel H ctx func cenv cx es t`
+            (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
       gvs[ghost_inv_at_def] >> metis_tac[]) >>
   irule expr_vv_sim_stack_full >> simp[expr_type_def] >>
   conj_tac
