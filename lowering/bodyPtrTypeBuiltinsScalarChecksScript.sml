@@ -25,7 +25,8 @@ Theorem convert_address_fixed_certificate:
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
   rewrite_tac[convert_address_clamp] >>
-  MATCH_ACCEPT_TAC int_clamp_unsigned_fixed_certificate
+  strip_tac >> irule int_clamp_unsigned_fixed_certificate >>
+  simp[] >> goal_assum (drule_at Any)
 QED
 
 Theorem convert_flag_fixed_certificate:
@@ -43,7 +44,8 @@ Theorem convert_flag_fixed_certificate:
 Proof
   Cases_on `n < 256`
   >- (simp[compile_type_convert_def] >>
-      MATCH_ACCEPT_TAC int_clamp_unsigned_fixed_certificate) >>
+      strip_tac >> irule int_clamp_unsigned_fixed_certificate >>
+      simp[] >> goal_assum (drule_at Any)) >>
   simp[compile_type_convert_def, comp_return_def] >> strip_tac >> gvs[] >>
   qexistsl_tac [`G`,`tn`] >>
   simp[emitted_insts_def, inst_seq_ptr_def]
@@ -264,7 +266,8 @@ Theorem convert_address_counted_certificate:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  rewrite_tac[convert_address_clamp] >> MATCH_ACCEPT_TAC int_clamp_counted_certificate
+  rewrite_tac[convert_address_clamp] >> strip_tac >>
+  irule int_clamp_counted_certificate >> simp[] >> goal_assum (drule_at Any)
 QED
 
 Theorem convert_address_abort_counted_certificate:
@@ -281,7 +284,9 @@ Theorem convert_address_abort_counted_certificate:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  rewrite_tac[convert_address_clamp] >> MATCH_ACCEPT_TAC int_clamp_abort_counted_certificate
+  rewrite_tac[convert_address_clamp] >> strip_tac >>
+  irule int_clamp_abort_counted_certificate >> simp[] >>
+  qexistsl_tac [`160`, `sb`, `F`] >> simp[]
 QED
 
 Theorem convert_flag_counted_certificate:
@@ -427,6 +432,7 @@ Theorem convert_int_signed_narrow_fixed_certificate:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all convert_int_signed_narrow_code >> strip_tac >> gnvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SIMP_RULE (srw_ss()) [] (Q.INST
     [`opc1` |-> `GT`, `opc2` |-> `SLT`] (SPEC_ALL scalar_double_check_certificate))) >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
@@ -506,7 +512,8 @@ Theorem convert_int_same_sign_fixed_certificate:
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
   Cases_on `out_b < in_b`
-  >- (simp[compile_type_convert_def] >> MATCH_ACCEPT_TAC int_clamp_fixed_certificate) >>
+  >- (simp[compile_type_convert_def] >> strip_tac >>
+      irule int_clamp_fixed_certificate >> simp[] >> goal_assum (drule_at Any)) >>
   simp[compile_type_convert_def, comp_return_def] >> strip_tac >> gvs[] >>
   qexistsl_tac [`G`,`tn`] >> simp[emitted_insts_def, inst_seq_ptr_def]
 QED
@@ -531,7 +538,8 @@ Proof
   >- MATCH_ACCEPT_TAC convert_int_same_sign_fixed_certificate
   >~ [`ConvIntToInt F in_b T out_b`]
   >- (rewrite_tac[convert_int_unsigned_signed_clamp] >>
-      MATCH_ACCEPT_TAC int_clamp_unsigned_fixed_certificate) >>
+      strip_tac >> irule int_clamp_unsigned_fixed_certificate >>
+      simp[] >> goal_assum (drule_at Any)) >>
   Cases_on `out_b < in_b`
   >- (disch_then (map_every assume_tac o CONJUNCTS) >>
       drule_all convert_int_signed_narrow_fixed_certificate >> simp[]) >>

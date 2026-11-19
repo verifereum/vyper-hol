@@ -44,12 +44,14 @@ Proof
   `MEM SIGNEXTEND [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
    op_prov G (Lit w) = NONE /\ op_taint tn (Lit w) = {}` by
     simp[op_prov_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all scalar_clean_frame_certificate >>
   disch_then (qspecl_then [`fn`,`PG`,`D`]
     (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac))) >>
   qpat_x_assum `MEM _ _` kall_tac >>
   `op_prov G1 x = NONE /\ op_taint tn1 x = {}` by metis_tac[] >>
   `MEM EQ [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all scalar_clean_frame_certificate >>
   disch_then (qspecl_then [`fn`,`PG`,`D`]
     (qx_choose_then `H` (qx_choose_then `th` strip_assume_tac))) >>

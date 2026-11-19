@@ -74,6 +74,7 @@ Proof
      qpat_x_assum `run_inst_seq _ _ = Abort _ _` mp_tac >>
      simp[run_inst_seq_def, AllCaseEqs(), convert_scalar_no_abort]) >>
   `MEM SHL [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all scalar_clean_frame_certificate >>
   disch_then (qspecl_then [`fn`,`PG`,`ARB:dead`] strip_assume_tac) >>
   qexistsl_tac [`H`,`th`] >>
