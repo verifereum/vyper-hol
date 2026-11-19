@@ -122,6 +122,7 @@ Proof
     gvs[fn_has_code_def, emitted_blocks_def] >>
   `needed + off <= capacity /\ off + w2n a < dimword(:256)` by decide_tac >>
   gvs[op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_at (Pat `emit_inst _ _ _ _ = _`) reason_encoder_offset_path_ptr >>
   simp[eval_operand_def, op_taint_def, w2n_n2w, arithmeticTheory.LESS_MOD] >>
   disch_then (drule_all_then strip_assume_tac) >>

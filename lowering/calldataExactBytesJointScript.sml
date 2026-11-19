@@ -43,7 +43,7 @@ Theorem calldata_exact_bytes_accepted_origin[local]:
   ptr_covers G tn child initial (type_memory_size tv) /\ op_taint tn src = {} /\
   d+type_memory_size tv <= initial.vs_alloca_next /\
   d+type_memory_size tv < dimword (:256) /\
-  allocas_from lower initial /\ ~ctx_has_dalloca ctx /\
+  allocas_from lower initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?v H u.
@@ -127,7 +127,7 @@ Theorem calldata_exact_bytes_joint_limit:
   ptr_covers G tn child initial (type_memory_size tv) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   fresh_vars_wrt limit initial /\ allocas_from lower initial /\
-  lower <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  lower <= initial.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   (cd_decode F initial.vs_call_ctx.cc_calldata tv (w2n p) = NONE /\

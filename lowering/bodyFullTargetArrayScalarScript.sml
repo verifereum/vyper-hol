@@ -569,7 +569,7 @@ Theorem array_elem_ptr_nonalias_uniform:
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   (!x. idx = Var x ==> not_fresh_at sa x) /\
   op_taint tn bop = {} /\ op_taint tn idx = {} /\
-  op_prov G idx = NONE /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  op_prov G idx = NONE /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
   ?t H tm. run_inst_seq (emitted_insts sa sb) s = OK t /\
     (!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s H tm) /\
@@ -662,7 +662,7 @@ Theorem array_bounds_check_nonalias_uniform:
   (!x. len = Var x ==> not_fresh_at sa x) /\
   op_prov G idx = NONE /\ op_prov G len = NONE /\
   op_taint tn idx = {} /\ op_taint tn len = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   fn_has_code sa sb func /\

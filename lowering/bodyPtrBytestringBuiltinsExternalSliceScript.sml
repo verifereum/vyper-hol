@@ -423,6 +423,7 @@ Proof
      simp[]) >>
   `v.vs_current_bb = sd.cs_current_bb /\
    v.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~v.vs_halted` by simp[Abbr `v`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by simp[] >>
   drule_all emit_scratch_word_counted >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   rename1 `tm.t_var = tc.t_var` >>

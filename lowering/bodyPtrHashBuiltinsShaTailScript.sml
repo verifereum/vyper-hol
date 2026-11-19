@@ -17,7 +17,7 @@ Theorem hash_sha256_tail_success_check:
         (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
     tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
         (s.vs_transient s.vs_call_ctx.cc_address) /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     mem_bytes_at (w2n w) (w2n n) s.vs_memory = bs /\
     s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
     inst_seq_ptr D 0 ctx fn PG G tn
@@ -81,7 +81,7 @@ Resume hash_sha256_tail_success_check[finish]:
     (irule hash_sha256_call_load_check >>
      gvs[ptr_covers_def, eval_operand_def, Abbr `Gg`, Abbr `tg`, Abbr `sg`,
        update_var_def, lookup_var_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
-     rpt strip_tac >> gvs[]) >>
+     rpt strip_tac >> gvs[allocas_below_fmp_def] >> metis_tac[]) >>
   suspend "ghost"
 QED
 
@@ -113,7 +113,7 @@ Theorem hash_sha256_tail_success_path:
         (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
     tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
         (s.vs_transient s.vs_call_ctx.cc_address) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     mem_bytes_at (w2n w) (w2n n) s.vs_memory = bs /\
@@ -167,7 +167,7 @@ Theorem hash_sha256_tail_abort_check:
         (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
     tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
         (s.vs_transient s.vs_call_ctx.cc_address) /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst i0 GAS [] [gv];
@@ -236,7 +236,7 @@ Resume hash_sha256_tail_abort_check[finish]:
     (irule hash_sha256_call_abort_check >>
      gvs[ptr_covers_def, eval_operand_def, Abbr `Gg`, Abbr `tg`, Abbr `sg`,
        update_var_def, lookup_var_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
-     rpt strip_tac >> gvs[]) >>
+     rpt strip_tac >> gvs[allocas_below_fmp_def] >> metis_tac[]) >>
   `step_taint (mk_inst i1 STATICCALL
      [Var gv;Lit 2w;Var p;len;Var q;Lit 32w] [sv]) sg t tg =
      tg with <|t_var := tg.t_var |+ (sv,{});
@@ -290,11 +290,15 @@ Resume hash_sha256_tail_abort_check[exhausted]:
       irule bodyPtrHashBuiltinsBoundaryTheory.hash_staticcall_access >>
       Cases_on `len` >>
       gvs[ptr_covers_def, eval_operand_def, lookup_var_def] >> metis_tac[]) >>
-  simp[GSYM mk_inst_def] >>
-  irule bodyPtrHashBuiltinsBoundaryTheory.hash_staticcall_taint >>
-  Cases_on `len` >>
-  gvs[ptr_covers_def, op_taint_def, Abbr `tg`, eval_operand_def,
-    lookup_var_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+  conj_tac
+  >- (simp[GSYM mk_inst_def] >>
+      irule bodyPtrHashBuiltinsBoundaryTheory.hash_staticcall_taint >>
+      Cases_on `len` >>
+      gvs[ptr_covers_def, op_taint_def, Abbr `tg`, eval_operand_def,
+        lookup_var_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+  simp[ptrDisciplineTheory.allocas_below_fmp_def, update_var_def] >>
+  fs[ptrDisciplineTheory.allocas_below_fmp_def]
 QED
 
 Finalise hash_sha256_tail_abort_check
@@ -384,7 +388,7 @@ Theorem hash_sha256_tail_abort_path:
         (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
     tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
         (s.vs_transient s.vs_call_ctx.cc_address) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
