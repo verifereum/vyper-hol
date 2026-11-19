@@ -87,7 +87,8 @@ Theorem source_unit_exit_safe_runs:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `source_unit_execution_correct_at _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def])
+    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def,
+                                      source_unit_execution_correct_with_def])
   >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> gvs[])
   >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
         (qspec_then `[]` assume_tac) >> fs[] >>
@@ -126,7 +127,8 @@ Theorem source_unit_exit_ptr_safe_horizons:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `source_unit_execution_correct_at _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def])
+    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def,
+                                      source_unit_execution_correct_with_def])
   >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> gvs[])
   >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
         (qspec_then `[]` assume_tac) >> fs[] >>
