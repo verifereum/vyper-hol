@@ -54,6 +54,9 @@ End
 Datatype:
   raw_deployment_trace = <|
     deployer: address
+  (* The deployer's nonce before this deployment, when the export recorded
+     it; replay advances the deployer to it. *)
+  ; deployerNonce: num option
   ; expectedAddress: address
   ; expectedSuccess: bool
   ; value: num
@@ -508,14 +511,19 @@ val () = cv_auto_trans make_create_block_def;
 Definition run_raw_deployment_def:
   run_raw_deployment am (dt: raw_deployment_trace) =
     let sender = lookup_account dt.deployer am.accounts in
-    let tx = make_create_tx dt.deployer sender.nonce dt.value
+    let nonce = case dt.deployerNonce of NONE => sender.nonce | SOME n => n in
+    let am = am with accounts updated_by
+               update_account dt.deployer (sender with nonce := nonce) in
+    let tx = make_create_tx dt.deployer nonce dt.value
                             (dt.initcode ++ dt.callData)
                             dt.gasLimit dt.gasPrice in
-    let expected = callee_from_tx_to dt.deployer sender.nonce NONE in
+    let expected = callee_from_tx_to dt.deployer nonce NONE in
     let blk = make_create_block dt in
+    if nonce < sender.nonce then
+      INR (Error $ RuntimeError "raw deployment deployer nonce below replay")
     (* Failed deployments may record no address (0w); only check the CREATE
        address when the trace recorded one. *)
-    if dt.expectedAddress <> 0w /\ expected <> dt.expectedAddress then
+    else if dt.expectedAddress <> 0w /\ expected <> dt.expectedAddress then
       INR (Error $ RuntimeError "raw deployment address mismatch")
     else
       case vfmExecution$run_transaction (Collect empty_domain) F dt.chainId

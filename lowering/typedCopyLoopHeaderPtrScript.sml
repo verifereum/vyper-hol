@@ -91,7 +91,7 @@ Theorem typed_copy_loop_test_check:
     (opc = LT /\ (?v k. ops = [Var v; Lit k]) \/
      opc = MUL \/ opc = ISZERO \/ opc = JNZ) /\
     (!op. MEM op ops ==> op_taint tn op = {}) /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     step_inst_base (mk_inst id opc ops outs) s = OK s' /\
     s'.vs_requests = s.vs_requests ==>
     ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops outs) s
@@ -225,7 +225,7 @@ Theorem typed_copy_loop_test_ptr_safe:
       SOME target /\ phi_prefix_length target.bb_instructions = 0 /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted /\
     lookup_var ctr s = SOME (n2w i) /\ op_taint tn (Var ctr) = {} /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     i <= n /\ n < dimword(:256) /\ ctr <> lt /\ ctr <> done ==>
     !fuel.
       ptr_safe_run D 0 fuel ctx fn PG
@@ -237,6 +237,7 @@ Theorem typed_copy_loop_test_ptr_safe:
       ptr_safe_run D 0 (SUC fuel) ctx fn PG G tn s
 Proof
   rpt strip_tac >>
+  fs[ptrDisciplineTheory.allocas_below_fmp_def] >>
   `i < dimword(:256)` by decide_tac >>
   simp[ptrSafeRunTheory.ptr_safe_run_def,
        Once ptrSafeRunTheory.ptr_safe_block_def, get_instruction_def,
@@ -251,13 +252,14 @@ Proof
        ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
        ptrDisciplineTheory.out_prov_def] >>
   conj_tac
-  >- (irule (SRULE [mk_inst_def] typed_copy_loop_test_check) >>
+  >- (irule (SRULE [mk_inst_def, ptrDisciplineTheory.allocas_below_fmp_def]
+        typed_copy_loop_test_check) >>
       simp[] >> conj_tac
       >- (rpt strip_tac >> gvs[ptrDisciplineTheory.op_taint_def]) >>
       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
       pure_rewrite_tac[instruction_accessors, instruction_accfupds,
         combinTheory.K_THM, opcode_case_def] >>
-      simp[exec_pure2_def, eval_operand_def, update_var_def]) >>
+      simp[exec_pure2_def, eval_operand_def, update_var_def] >> metis_tac[]) >>
   simp[update_var_def, SRULE [mk_inst_def] typed_copy_loop_arith_ghost_clean] >>
   simp[Once ptrSafeRunTheory.ptr_safe_block_def, get_instruction_def,
        ptrSafeRunTheory.ptr_safe_step_def,
@@ -271,13 +273,14 @@ Proof
        ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
        ptrDisciplineTheory.out_prov_def] >>
   conj_tac
-  >- (irule (SRULE [mk_inst_def] typed_copy_loop_test_check) >>
+  >- (irule (SRULE [mk_inst_def, ptrDisciplineTheory.allocas_below_fmp_def]
+        typed_copy_loop_test_check) >>
       simp[ptrDisciplineTheory.op_taint_def, FLOOKUP_UPDATE] >>
       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
       pure_rewrite_tac[instruction_accessors, instruction_accfupds,
         combinTheory.K_THM, opcode_case_def] >>
       simp[exec_pure1_def, eval_operand_def, lookup_var_def,
-           FLOOKUP_UPDATE, update_var_def]) >>
+           FLOOKUP_UPDATE, update_var_def] >> metis_tac[]) >>
   simp[Once ptrSafeRunTheory.ptr_safe_block_def, get_instruction_def,
        ptrSafeRunTheory.ptr_safe_step_def,
        ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke] >>
@@ -288,7 +291,8 @@ Proof
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
        bool_to_word_def, jump_to_def, is_terminator_def] >>
   (conj_tac
-   >- (irule (SRULE [mk_inst_def] typed_copy_loop_test_check) >>
+   >- (irule (SRULE [mk_inst_def, ptrDisciplineTheory.allocas_below_fmp_def]
+        typed_copy_loop_test_check) >>
        simp[ptrDisciplineTheory.op_taint_def, FLOOKUP_UPDATE] >>
        conj_tac
        >- (rpt strip_tac >> gvs[]) >>
@@ -296,7 +300,7 @@ Proof
        pure_rewrite_tac[instruction_accessors, instruction_accfupds,
          combinTheory.K_THM, opcode_case_def] >>
        simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
-            jump_to_def]) >>
+            jump_to_def] >> metis_tac[]) >>
    gvs[update_var_def, jump_to_def, finite_mapTheory.DRESTRICT_DRESTRICT] >>
    qmatch_goalsub_abbrev_tac `entry_prov fn sj gg` >>
    qmatch_goalsub_abbrev_tac `entry_taint_vars fn sj tt` >>

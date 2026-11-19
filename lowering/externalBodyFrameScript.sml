@@ -1,7 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
-  entryDispatchProps constSubst supportedGetterProps externalRawReturnType
+  entryDispatchProps constSubst constSubstStmtsPreserve supportedGetterProps externalRawReturnType
   externalBodyWidths externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
@@ -82,24 +82,23 @@ Theorem distinct_external_classification:
     MEM (FunctionDecl External mut nr rr name args defaults ret body) tops /\
     classify_functions tops = (exts,ints,fb,ctor) ==>
     (if name = "__default__" then
-       fb = SOME (mut,nr,rr,name,args,defaults,ret,body)
-     else MEM (mut,nr,rr,name,args,defaults,ret,body) exts)
+       fb = SOME (subst_consts_fn (module_consts_env tops [])
+         (mut,nr,rr,name,args,defaults,ret,body))
+     else MEM (subst_consts_fn (module_consts_env tops [])
+       (mut,nr,rr,name,args,defaults,ret,body)) exts)
 Proof
   rpt gen_tac >> strip_tac >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supported_declaration_headers_def,
-              supported_headers_module_consts_env] >>
   Cases_on `name = "__default__"`
   >- (gvs[] >> drule_all distinct_classify_fold_fallback >>
       qpat_x_assum `classify_functions _ = _` mp_tac >>
       simp[classify_functions_def] >> pairarg_tac >>
-      rpt strip_tac >> gvs[subst_consts_fn_empty]) >>
+      rpt strip_tac >> gvs[]) >>
   drule_all classify_fold_external_member >>
   qpat_x_assum `classify_functions _ = _` mp_tac >>
   simp[classify_functions_def] >> pairarg_tac >>
   rpt strip_tac >> gvs[MEM_MAP] >>
   disj1_tac >> qexists `(mut,nr,rr,name,args,defaults,ret,body)` >>
-  simp[subst_consts_fn_empty]
+  simp[]
 QED
 
 Theorem supported_external_classification:
@@ -107,8 +106,10 @@ Theorem supported_external_classification:
   MEM (FunctionDecl External mut nr rr name args defaults ret fbody) tops /\
   classify_functions tops = (exts,ints,fb,ctor) ==>
   (if name = "__default__" then
-     fb = SOME (mut,nr,rr,name,args,defaults,ret,fbody)
-   else MEM (mut,nr,rr,name,args,defaults,ret,fbody) exts)
+     fb = SOME (subst_consts_fn (module_consts_env tops [])
+       (mut,nr,rr,name,args,defaults,ret,fbody))
+   else MEM (subst_consts_fn (module_consts_env tops [])
+      (mut,nr,rr,name,args,defaults,ret,fbody)) exts)
 Proof
   strip_tac >> irule distinct_external_classification >>
   drule supported_program_names >>
@@ -120,7 +121,8 @@ Theorem supported_external_allocs_ok:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
   MEM (FunctionDecl External mut nr rr name args defaults ret fbody) tops ==>
-  fn_allocs_ok tops (mut,nr,rr,name,args,defaults,ret,fbody)
+  fn_allocs_ok tops
+    (subst_consts_fn (module_consts_env tops []) (mut,nr,rr,name,args,defaults,ret,fbody))
 Proof
   strip_tac >> Cases_on `classify_functions tops` >> PairCases_on `r` >>
   drule_all supported_external_classification >> strip_tac >>
@@ -409,7 +411,7 @@ QED
 
 Theorem external_body_support_bounds:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\
+  supported_program tops /\ source_typing_ok tops am tx /\
   MEM (FunctionDecl External mut nr rr name args defaults ret ss) tops /\
   cenv.ce_struct_fields = make_struct_fields_map tops /\
   cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
@@ -425,7 +427,11 @@ Theorem external_body_support_bounds:
   ?bindings. supported_stmts tops bindings ss
 Proof
   strip_tac >>
-  drule_all supported_external_allocs_ok >> strip_tac >>
+  `subst_consts_fn (module_consts_env tops [])
+     (mut,nr,rr,name,args,defaults,ret,ss) = (mut,nr,rr,name,args,defaults,ret,ss)` by
+    (fs[source_typing_ok_def] >>
+     metis_tac[checked_supported_function_subst, vyperASTTheory.function_visibility_distinct]) >>
+  drule_all supported_external_allocs_ok >> strip_tac >> gvs[] >>
   drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ _ _ _) _`)
     supported_program_function >> simp[] >> strip_tac >>
   drule_all external_body_support_bounds_from_allocs >> simp[]
@@ -796,10 +802,11 @@ Theorem external_source_return_buffer_ok:
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,nr,lookup_raw_return_or_F (NONE : num option)
-          tx.function_name External tops,tx.function_name,args,[],ret,fbody)) =
-      (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,fbody,rt) /\
+          tx.function_name External tops,tx.function_name,args,[],ret,
+         subst_consts_stmts (module_consts_env tops []) fbody)) =
+      (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,subst_consts_stmts (module_consts_env tops []) fbody,rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
-    (stmts_valued_return fbody /\ cenv.ce_is_external /\
+    (stmts_valued_return (subst_consts_stmts (module_consts_env tops []) fbody) /\ cenv.ce_is_external /\
      ~cenv.ce_raw_return ==> return_buffer_ok cenv)
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
@@ -812,16 +819,14 @@ Proof
   `same_frame cenv cenv` by simp[] >>
   `~lookup_raw_return_or_F (NONE:num option) tx.function_name External tops` by
     (drule_all external_package_raw_flag >> simp[]) >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supported_headers_module_consts_env,
-              supported_program_def, supported_declaration_headers_def] >>
   `external_return_buffer_ok
-     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,fbody,rt)` by
+     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
     (drule lookup_function_external_raw_cases >> strip_tac
      >- (`MEM (FunctionDecl External mut nr F tx.function_name args [] ret fbody)
             tops` by gvs[lookup_raw_return_or_F_def] >>
          Cases_on `classify_functions tops` >> PairCases_on `r` >>
-         drule_all supported_external_classification >> strip_tac >>
+         drule_all supported_external_classification >>
+         simp[subst_consts_fn_def, subst_consts_expr_def] >> strip_tac >>
          Cases_on `tx.function_name = "__default__"` >> gvs[]
          >- (qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
              simp[lower_vyper_runtime_unit_def, package_fallback_fn_def,
@@ -833,11 +838,13 @@ Proof
      `public_getter decl =
         SOME (mut,nr,F,tx.function_name,args,([]:expr list),ret,fbody)` by
        fs[public_getter_source_tuple] >>
-     `MEM (mut,nr,F,tx.function_name,args,[],ret,fbody)
+     `MEM (mut,nr,F,tx.function_name,args,[],
+          ret,subst_consts_stmts (module_consts_env tops []) fbody)
         (FST (classify_functions tops))` by
-       (simp[classify_functions_def] >> pairarg_tac >>
-        simp[MEM_MAP, MEM_public_getters, subst_consts_fn_empty] >>
-        metis_tac[]) >>
+       (irule (REWRITE_RULE [subst_consts_fn_def, subst_consts_expr_def]
+         (Q.SPECL [`tops`, `(mut,nr,F,tx.function_name,args,[]:expr list,ret,fbody)`]
+           public_getter_classified_mem)) >>
+        simp[MEM_public_getters] >> metis_tac[]) >>
      Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
      drule_all lower_vyper_runtime_unit_return_buffer_ok >>
      gvs[lookup_raw_return_or_F_def]) >>
@@ -860,10 +867,11 @@ Theorem external_selected_return_buffer_ok:
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE : num option)
-          tx.function_name External tops,tx.function_name,args,[],ret,fbody)) =
-      (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
+          tx.function_name External tops,tx.function_name,args,[],ret,
+         subst_consts_stmts (module_consts_env tops []) fbody)) =
+      (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,subst_consts_stmts (module_consts_env tops []) fbody,rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
-    (stmts_valued_return fbody /\ cenv.ce_is_external /\
+    (stmts_valued_return (subst_consts_stmts (module_consts_env tops []) fbody) /\ cenv.ce_is_external /\
      ~cenv.ce_raw_return ==> return_buffer_ok cenv)
 Proof
   rpt strip_tac >> drule_all external_source_return_buffer_ok >> simp[]
@@ -902,27 +910,42 @@ Theorem external_source_body_frame_nr:
       (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, nr, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
-          tx.function_name, args, [], ret, fbody)) =
-      (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, fbody,
+          tx.function_name, args, [], ret,
+          subst_consts_stmts (module_consts_env tops []) fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, subst_consts_stmts (module_consts_env tops []) fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
     body_inv tops unit.cu_context cenv
       (initial_evaluation_context am.sources am.layouts tx NONE) /\
     cenv.ce_return_pc = NONE /\
     ?bindings env_t env'.
-      supported_stmts tops bindings fbody /\
+      supported_stmts tops bindings (subst_consts_stmts (module_consts_env tops []) fbody) /\
       expr_sim_inv cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) env_t es_lock /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
-      type_stmts env_t ret fbody = SOME env' /\
-      stmts_exprs_ok cenv fbody /\
+      type_stmts env_t ret (subst_consts_stmts (module_consts_env tops []) fbody) = SOME env' /\
+      stmts_exprs_ok cenv (subst_consts_stmts (module_consts_env tops []) fbody) /\
       call_evaluation_safe
         (initial_evaluation_context am.sources am.layouts tx NONE)
-        (int_calls_stmts fbody)
+        (int_calls_stmts (subst_consts_stmts (module_consts_env tops []) fbody))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all external_package_body_inv >> strip_tac >> simp[] >>
   drule_all external_lookup_body_typing >> strip_tac >>
+  `?A. constants_fold_module [(NONE,tops)] (account_immutables am tx.target)
+          NONE tops FEMPTY = SOME A` by fs[source_typing_ok_def] >>
+  pop_assum strip_assume_tac >>
+  `env_t.type_defs = type_env_all_modules [(NONE,tops)]` by
+    fs[checked_contract_runtime_ready_def, get_tenv_def, initial_evaluation_context_def] >>
+  `type_stmts env_t ret (subst_consts_stmts (module_consts_env tops []) fbody) =
+     SOME env'` by
+    (irule compiled_selected_external_body_typing >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `int_calls_stmts (subst_consts_stmts (module_consts_env tops []) fbody) =
+     int_calls_stmts fbody` by
+    (irule (INST_TYPE [alpha |-> ``:160 word``] checked_const_substitution_int_calls) >>
+     qexistsl [`A`, `tx.target`, `art`, `account_immutables am tx.target`,
+       `am.layouts`, `F`, `[(NONE,tops)]`] >> simp[]) >>
   `machine_well_typed am` by gvs[source_typing_ok_def] >>
   drule_all external_body_prefix_state >> strip_tac >>
   drule external_body_lock_frame >> strip_tac >>
@@ -943,7 +966,8 @@ Proof
   disch_then (drule_at (Pat `set_external_package_target _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_register_positional_args _ _ _ _ = _`)) >>
   simp[] >> strip_tac >>
-  `supported_function_body tops External args fbody` by
+  `supported_function_body tops External args
+     (subst_consts_stmts (module_consts_env tops []) fbody)` by
     metis_tac[supported_selected_external_body] >>
   `ALL_DISTINCT (MAP FST args)` by
     (drule_all external_selected_args_distinct >> simp[]) >>
@@ -964,18 +988,15 @@ Proof
   `env_context_consistent env_t
      (initial_evaluation_context am.sources am.layouts tx NONE)` by
     gvs[env_consistent_def] >>
-  `stmts_valued_return fbody /\ cenv.ce_is_external /\
-   ~cenv.ce_raw_return ==> return_buffer_ok cenv` by
+  `stmts_valued_return (subst_consts_stmts (module_consts_env tops []) fbody) /\
+   cenv.ce_is_external /\ ~cenv.ce_raw_return ==> return_buffer_ok cenv` by
     (strip_tac >> drule external_source_return_buffer_ok >>
      rpt (disch_then drule) >> simp[]) >>
   drule_all external_package_alloc_env_agree >> strip_tac >>
   `?rr:bool. fn_allocs_ok tops
-     (mut,nr,rr,tx.function_name,args,[],ret,fbody)` by
-    (`module_consts_env tops [] = []` by
-       metis_tac[supported_headers_module_consts_env,
-                 supported_program_def, supported_declaration_headers_def] >>
-     drule lookup_function_external_classified >>
-     simp[subst_consts_fn_empty] >> strip_tac >>
+     (mut,nr,rr,tx.function_name,args,[],ret,subst_consts_stmts (module_consts_env tops []) fbody)` by
+    (drule lookup_function_external_classified >>
+     simp[subst_consts_fn_def, subst_consts_expr_def] >> strip_tac >>
      Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
      qexists `rr` >> irule lower_vyper_runtime_unit_allocs_ok >>
      metis_tac[]) >>
@@ -1109,23 +1130,25 @@ Theorem external_source_body_frame:
       (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
-          tx.function_name, args, [], ret, fbody)) =
-      (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
+          tx.function_name, args, [], ret,
+          subst_consts_stmts (module_consts_env tops []) fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv,
+       subst_consts_stmts (module_consts_env tops []) fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
     body_inv tops unit.cu_context cenv
       (initial_evaluation_context am.sources am.layouts tx NONE) /\
     cenv.ce_return_pc = NONE /\
     ?bindings env_t env'.
-      supported_stmts tops bindings fbody /\
+      supported_stmts tops bindings (subst_consts_stmts (module_consts_env tops []) fbody) /\
       expr_sim_inv cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
-      type_stmts env_t ret fbody = SOME env' /\
-      stmts_exprs_ok cenv fbody /\
+      type_stmts env_t ret (subst_consts_stmts (module_consts_env tops []) fbody) = SOME env' /\
+      stmts_exprs_ok cenv (subst_consts_stmts (module_consts_env tops []) fbody) /\
       call_evaluation_safe
         (initial_evaluation_context am.sources am.layouts tx NONE)
-        (int_calls_stmts fbody)
+        (int_calls_stmts (subst_consts_stmts (module_consts_env tops []) fbody))
 Proof
   rpt strip_tac >>
   mp_tac (Q.SPECL [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`,
@@ -1157,23 +1180,24 @@ Theorem external_body_frame:
       (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
-          tx.function_name, args, [], ret, fbody)) =
-      (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
+          tx.function_name, args, [], ret,
+          subst_consts_stmts (module_consts_env tops []) fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, subst_consts_stmts (module_consts_env tops []) fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
     body_inv tops unit.cu_context cenv
       (initial_evaluation_context am.sources am.layouts tx NONE) /\
     cenv.ce_return_pc = NONE /\
     ?bindings env_t env'.
-      supported_stmts tops bindings fbody /\
+      supported_stmts tops bindings (subst_consts_stmts (module_consts_env tops []) fbody) /\
       expr_sim_inv cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
-      type_stmts env_t ret fbody = SOME env' /\
-      stmts_exprs_ok cenv fbody /\
+      type_stmts env_t ret (subst_consts_stmts (module_consts_env tops []) fbody) = SOME env' /\
+      stmts_exprs_ok cenv (subst_consts_stmts (module_consts_env tops []) fbody) /\
       call_evaluation_safe
         (initial_evaluation_context am.sources am.layouts tx NONE)
-        (int_calls_stmts fbody)
+        (int_calls_stmts (subst_consts_stmts (module_consts_env tops []) fbody))
 Proof
   rpt strip_tac >> drule_all external_source_body_frame >> simp[]
 QED

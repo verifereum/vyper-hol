@@ -4,6 +4,7 @@ Ancestors
   runtimeSymSrcInstructions compileVyper moduleLowering compileEnv loweringShapeDefs list
 
 Theorem deploy_sym_classified_internal_bodies_cond:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   (!ce bindings body ret params rb nr key tr view ct len s u s'.
      runtime_sym_env tops ce /\ supported_stmts tops bindings body /\

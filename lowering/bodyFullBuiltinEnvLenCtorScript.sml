@@ -58,7 +58,7 @@ Theorem len_full_suffix_ctor:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\ ~ctx_has_dalloca ctx /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e) /\
     evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME pvt /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
@@ -278,7 +278,8 @@ Resume len_full_suffix_ctor[base]:
             venomExecSemanticsTheory.step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
             venomExecSemanticsTheory.exec_read1_def, Abbr `u2`, Abbr `s1`, Abbr `u1`, update_var_def] >>
        gvs[arithmeticTheory.ADD1, venomInstTheory.mk_inst_def, eval_operand_def, lookup_var_def,
-           FLOOKUP_UPDATE, mload_def, allocas_from_def, update_var_def] >> metis_tac[])) >> simp[]) >>
+           FLOOKUP_UPDATE, mload_def, allocas_from_def, allocas_below_fmp_def,
+           update_var_def] >> metis_tac[])) >> simp[]) >>
   conj_tac
   >- (`~s1.vs_halted /\ ~(u2 with vs_inst_idx := SUC s1.vs_inst_idx).vs_halted` by
         simp[Abbr `s1`, Abbr `u1`, Abbr `u2`, update_var_def] >>

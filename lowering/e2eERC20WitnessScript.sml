@@ -411,12 +411,12 @@ val erc20_transfer_return = EVAL
       (word_to_bytes (1w : bytes32) T)``;
 
 Theorem erc20_call_result:
-  call_result_rel erc20_tops erc20_am_call erc20_transfer_tx
+  call_result_rel_guarded erc20_tops erc20_am_call erc20_transfer_tx
     erc20_es_transfer (INR NONE) erc20_es_transfer_post
 Proof
   assume_tac (EQT_ELIM erc20_transfer_facts) >>
   assume_tac (EQT_ELIM erc20_transfer_source_logs) >>
-  simp[call_result_rel_def, erc20_transfer_trace, gas_readings_rel_def] >>
+  simp[call_result_rel_guarded_def, erc20_transfer_trace, gas_readings_rel_def] >>
   qexists `[]` >> simp[] >> rpt strip_tac >>
   simp[call_result_rel_at_def, erc20_transfer_trace,
        erc20_source_transfer, effects_agree_def] >>
@@ -566,7 +566,7 @@ Theorem erc20_deploy_transfer_lifecycle:
     SOME (erc20_transfer_tx.function_name, erc20_transfer_tx.args) /\
   call_storage_ok (next_source_machine erc20_am_dep_post erc20_es_dep_post)
     erc20_transfer_tx [] [] /\
-  calldata_result_rel erc20_tops
+  calldata_result_rel_guarded erc20_tops
     (next_source_machine erc20_am_dep_post erc20_es_dep_post)
     erc20_transfer_tx erc20_es_transfer (INR NONE) erc20_es_transfer_post /\
   call_external (SOME []) []
@@ -597,7 +597,7 @@ Proof
     erc20_finite_guards, erc20_transfer_balances, erc20_transfer_dispatch] >>
   asm_simp_tac (srw_ss())
     [accepted_finalizers_def, erc20_constructor_call_free,
-     EQT_ELIM erc20_supported, erc20_transfer_lookup, calldata_result_rel_def,
+     EQT_ELIM erc20_supported, erc20_transfer_lookup, calldata_result_rel_guarded_def,
      erc20_transfer_dispatch, erc20_call_result] >>
   simp[erc20_transfer_tx_def, vyperContextTheory.empty_call_txn_def]
 QED

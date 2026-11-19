@@ -111,6 +111,8 @@ Proof
   `codegen_context_obligations (\_ _ _ _. F) out.po_unit.cu_context cplan` by
     (irule o1_pipeline_codegen_obligations >>
      simp[codegen_memory_obligations_def] >> metis_tac[]) >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[entryStateRelTheory.source_typing_ok_vtype_keys_distinct] >>
   drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
   drule_all o1_pipeline_label_flow_preserved >> strip_tac >>
   drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>

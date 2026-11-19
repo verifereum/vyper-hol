@@ -16,7 +16,7 @@ Theorem raw_revert_compiled_tail_joint:
   compile_raw_revert op sm = ((),sb) /\ fn_has_code sm sb func /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  ~t.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~t.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   (!x. op = Var x ==> not_fresh_at sm x) /\
   expr_post H ctx func cenv cx e es sa sm s0 ee (BytesV bs) op t /\
   expr_store_bound cx (expr_type e) (BytesV bs) op t /\

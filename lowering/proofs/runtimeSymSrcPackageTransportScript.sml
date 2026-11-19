@@ -3,7 +3,7 @@ Ancestors
   runtimeSymSrcRuntimePackaging runtimeSymSrcEmission supportedProgram e2eProducers list
   supportedExprs supportedExprTraverse exprOracleStorageInterfaces runtimeSymSrcInterfaces
   runtimeSymSrcClassifiedSource
-  compileVyper compileEnv loweringShapeProps pair
+  compileVyper compileEnv loweringShapeProps constSubst pair
 
 Theorem runtime_sym_source_exclusions:
   ~program_reads_self_code tops /\
@@ -28,6 +28,7 @@ Proof
 QED
 
 Theorem runtime_sym_source_default:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   MEM (FunctionDecl vis mut nr rr name args defaults ret stmts) tops /\
   MEM e defaults ==>
@@ -40,6 +41,7 @@ Proof
 QED
 
 Theorem runtime_sym_build_compile_env_defaults:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops ==>
   runtime_sym_defaults_ok tops (build_compile_env tops vis mut name args ret stmts trans).
     ce_func_defaults
@@ -49,7 +51,7 @@ Proof
        build_func_defaults_def, EVERY_MAP, EVERY_MEM] >>
   gen_tac >> strip_tac >> gvs[MEM_MAP] >> PairCases_on `y` >> gvs[] >>
   drule (iffLR MEM_classify_internal) >> strip_tac >>
-  gvs[runtime_sym_supported_subst_consts_fn] >>
+  imp_res_tac runtime_sym_supported_function_subst >> gvs[] >>
   drule_all runtime_sym_source_exclusions >> strip_tac >>
   drule_all supported_program_declaration >>
   simp[supported_declaration_body_def, supported_pure_exprs_every, EVERY_MEM]
@@ -89,6 +91,7 @@ Theorem runtime_sym_external_environment:
   set_external_package_target target
     (package_external_fn tops trans keys source) =
       (lbl,ce,args,mincd,pay,nr,key,tr,view,stmts,ret) /\
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops ==>
   runtime_sym_env tops ce
 Proof
@@ -102,6 +105,7 @@ Theorem runtime_sym_internal_environment:
   set_internal_package_target target
     (package_internal_fn tops trans keys ctor imm source) =
       (lbl,ce,params,buf,nr,key,tr,view,ct,im,stmts,ret) /\
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops ==>
   runtime_sym_env tops ce
 Proof
@@ -115,6 +119,7 @@ Theorem runtime_sym_fallback_environment:
   set_fallback_package_target target
     (package_fallback_fn tops trans keys source) =
       SOME (ce,pay,nr,key,tr,view,stmts,ret) /\
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops ==>
   runtime_sym_env tops ce
 Proof
@@ -172,6 +177,7 @@ Theorem runtime_sym_group_environment:
   package_external_group tops target trans keys
     (mut,nr,rr,name,args,defaults,ret,fbody) =
       ExternalDefaults common entries specs mincd /\
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops ==>
   runtime_sym_env tops common.ec_env
 Proof
@@ -221,25 +227,30 @@ Proof
 QED
 
 Theorem runtime_sym_external_source:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   MEM (mut,nr,rr,name,args,defaults,ret,stmts) (FST (classify_functions tops)) ==>
   (supported_stmts tops
     (args ++ supported_stmts_bindings T stmts ++ supported_stmts_bindings F stmts) stmts /\
    ~supported_stmts_expr_exists is_self_code stmts /\
    (!e. MEM e defaults ==> supported_expr tops e /\ ~supported_expr_exists is_self_code e)) \/
-  (?top. MEM top tops /\ public_getter top = SOME (mut,nr,rr,name,args,defaults,ret,stmts))
+  (?top rawdefaults rawbody. MEM top tops /\
+    public_getter top = SOME (mut,nr,rr,name,args,rawdefaults:expr list,ret,rawbody) /\
+    stmts = subst_consts_stmts (module_consts_env tops []) rawbody)
 Proof
   strip_tac >> drule classify_functions_external_source >> strip_tac >>
-  gvs[runtime_sym_supported_subst_consts_fn]
+  imp_res_tac runtime_sym_supported_function_subst >> gvs[]
   >- (disj1_tac >>
       `External <> Deploy` by simp[] >>
       drule_all runtime_sym_source_fbody >>
       drule_all runtime_sym_source_exclusions >> rpt strip_tac >>
       metis_tac[runtime_sym_source_default]) >>
-  disj2_tac >> metis_tac[]
+  disj2_tac >> qexistsl_tac [`top`, `rawdefaults`, `rawbody`] >>
+  gvs[subst_consts_fn_def]
 QED
 
 Theorem runtime_sym_internal_source:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   MEM (mut,nr,rr,name,args,defaults,ret,stmts) (FST (SND (classify_functions tops))) ==>
   supported_stmts tops
@@ -247,13 +258,14 @@ Theorem runtime_sym_internal_source:
   ~supported_stmts_expr_exists is_self_code stmts
 Proof
   strip_tac >> gvs[MEM_classify_internal] >>
-  gvs[runtime_sym_supported_subst_consts_fn] >>
+  imp_res_tac runtime_sym_supported_function_subst >> gvs[] >>
   `Internal <> Deploy` by simp[] >>
   drule_all runtime_sym_source_fbody >>
   drule_all runtime_sym_source_exclusions >> simp[]
 QED
 
 Theorem runtime_sym_fallback_source:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   FST (SND (SND (classify_functions tops))) =
     SOME (mut,nr,rr,name,args,defaults,ret,stmts) ==>
@@ -262,7 +274,7 @@ Theorem runtime_sym_fallback_source:
   ~supported_stmts_expr_exists is_self_code stmts
 Proof
   strip_tac >> drule classify_functions_fallback_mem >> strip_tac >>
-  gvs[runtime_sym_supported_subst_consts_fn] >>
+  imp_res_tac runtime_sym_supported_function_subst >> gvs[] >>
   `External <> Deploy` by simp[] >>
   drule_all runtime_sym_source_fbody >>
   drule_all runtime_sym_source_exclusions >> simp[]

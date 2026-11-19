@@ -4,29 +4,6 @@ Ancestors
   dftGasToListReplay gasEvents frameGasEvents venomExecSemantics
   venomInst venomState venomExecProofs stateEquiv list rich_list arithmetic
 
-Theorem fresh_cut_pseudo_events[local]:
-  !pre bb s t.
-    EVERY (\i. is_pseudo i.inst_opcode) pre /\
-    DROP s.vs_inst_idx bb.bb_instructions = pre ++ rest /\
-    FOLDR (dft_exec_cons f C) OK pre s = OK t ==>
-    gas_events_block f C owner bb s = gas_events_block f C owner bb t
-Proof
-  Induct_on `pre` >- simp[] >> rpt gen_tac >> strip_tac >>
-  `h.inst_opcode <> INVOKE /\ h.inst_opcode <> GAS /\
-   ~is_terminator h.inst_opcode` by
-    (Cases_on `h.inst_opcode` >> gvs[is_pseudo_def,is_terminator_def]) >>
-  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
-    (gvs[LIST_EQ_REWRITE,LENGTH_DROP]) >>
-  `EL s.vs_inst_idx bb.bb_instructions = h /\
-   DROP (SUC s.vs_inst_idx) bb.bb_instructions = pre ++ rest` by
-    gvs[DROP_CONS_EL] >>
-  `get_instruction bb s.vs_inst_idx = SOME h` by simp[get_instruction_def] >>
-  gvs[dft_exec_cons_def,AllCaseEqs()] >>
-  rename1 `step_inst f C h s = OK u` >>
-  simp[Once gas_events_defs,get_instruction_def,gas_events_step_plain] >>
-  first_x_assum irule >> simp[]
-QED
-
 Theorem fresh_cut_body_eval[local]:
   R = (\entry. case eval_phis entry bb.bb_instructions of
     OK sp =>
@@ -77,7 +54,7 @@ Proof
   `gas_events_block f C7 sf.fn_name eb
       (sp' with vs_inst_idx := phi_prefix_length ps) =
     gas_events_block f C7 sf.fn_name eb (be with vs_gas_readings := gs)` by
-    (irule fresh_cut_pseudo_events >>
+    (irule dft_packet_pseudo_events >>
      qexistsl [`DROP (phi_prefix_length ps) ps`,`TAKE q xs`] >>
      simp[EVERY_DROP,Abbr `eb`,DROP_APPEND1,phi_prefix_length_le]) >>
   asm_rewrite_tac[] >>
@@ -200,7 +177,7 @@ Proof
      (sp with <|vs_inst_idx := phi_prefix_length ps; vs_gas_readings := gs|>) =
    gas_events_block f C7 sf.fn_name (bb with bb_instructions := TAKE k ps)
      (t with vs_gas_readings := gs)` by
-    (irule fresh_cut_pseudo_events >>
+    (irule dft_packet_pseudo_events >>
      qexistsl [`DROP (phi_prefix_length ps) (TAKE k ps)`,`[]`] >> simp[]) >>
   asm_rewrite_tac[] >>
   simp[Once gas_events_defs,get_instruction_def,LENGTH_TAKE]

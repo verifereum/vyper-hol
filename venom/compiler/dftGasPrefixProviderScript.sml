@@ -367,7 +367,7 @@ Proof
   gvs[MEM_MAP] >> drule trace_blocks_region >> simp[]
 QED
 
-Theorem native_trace_block_suffix_cong[local]:
+Theorem prefix_trace_block_suffix_cong[local]:
   !xs s bb bb'.
     DROP s.vs_inst_idx bb.bb_instructions = xs /\
     DROP s.vs_inst_idx bb'.bb_instructions = xs ==>
@@ -611,7 +611,7 @@ Proof
     (gen_tac >> conj_tac
      >- (irule venomExecProofsTheory.exec_block_same_suffix >> simp[DROP_APPEND]) >>
      conj_tac
-     >- (irule native_trace_block_suffix_cong >> simp[DROP_APPEND]) >>
+     >- (irule prefix_trace_block_suffix_cong >> simp[DROP_APPEND]) >>
      irule gas_events_block_suffix_cong >> simp[DROP_APPEND]) >>
   simp_tac pure_ss [GSYM APPEND_ASSOC, APPEND] >>
   qpat_x_assum `!xs. exec_block _ _ _ _ = _ /\ _`
@@ -3033,19 +3033,6 @@ Resume native_cut_invoke_extension[child_and_merge]:
 QED
 Finalise native_cut_invoke_extension
 
-Theorem native_cut_fold_continuation[local]:
-  !xs s k.
-  EVERY (\i. ~is_terminator i.inst_opcode) xs ==>
-  FOLDR (dft_exec_cons n C) k xs s =
-    case FOLDR (dft_exec_cons n C) OK xs s of OK u => k u | other => other
-Proof
-  Induct >- simp[] >>
-  rpt gen_tac >> simp_tac bool_ss [EVERY_DEF, FOLDR] >> strip_tac >>
-  simp_tac bool_ss [dftIndexedExecTheory.dft_exec_cons_def] >>
-  Cases_on `step_inst n C h s` >>
-  qpat_x_assum `!s k. _` (qspecl_then [`v with vs_inst_idx := SUC s.vs_inst_idx`, `k`] mp_tac) >> simp[]
-QED
-
 Theorem native_successful_cut_inventory:
   !body key_rows site_rows certs.
   LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
@@ -3116,7 +3103,7 @@ Proof
      step_inst n C i u = OK r /\ q = r with vs_inst_idx := SUC u.vs_inst_idx` by
     (qpat_x_assum `FOLDR _ _ _ _ = OK q` mp_tac >>
      simp[rich_listTheory.FOLDR_APPEND] >>
-     asm_simp_tac bool_ss [Once native_cut_fold_continuation] >>
+     asm_simp_tac bool_ss [Once dftRunRelTheory.dft_exec_prefix_continue] >>
      Cases_on `FOLDR (dft_exec_cons n C) OK A (s with vs_gas_readings := g ++ tail)` >>
      simp[dftIndexedExecTheory.dft_exec_cons_def] >>
      Cases_on `step_inst n C i v` >> simp[]) >>
@@ -4961,7 +4948,7 @@ Proof
   >- (gvs[] >> conj_tac
       >- (irule venomExecProofsTheory.exec_block_same_suffix >> simp[]) >>
       conj_tac
-      >- (AP_TERM_TAC >> irule native_trace_block_suffix_cong >> simp[]) >>
+      >- (AP_TERM_TAC >> irule prefix_trace_block_suffix_cong >> simp[]) >>
       irule gas_events_block_suffix_cong >> simp[]) >>
   `a.vs_inst_idx < LENGTH bb.bb_instructions /\
    get_instruction bb a.vs_inst_idx = SOME h` by

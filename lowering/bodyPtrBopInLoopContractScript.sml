@@ -108,7 +108,7 @@ QED
 Theorem membership_loop_contract_init:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G' tn' t.
@@ -118,7 +118,9 @@ Theorem membership_loop_contract_init:
     t.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1) /\
     t.vs_inst_idx = 0
 Proof
-  strip_tac >> drule membership_compiled_loop_init >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule membership_compiled_loop_init >>
   simp[] >>
   disch_then drule_all >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] mp_tac) >>

@@ -10,7 +10,7 @@
  *)
 Theory bodyFullLog
 Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
-  bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
+  bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
   bodyExprPreFacts allocLimits allocLimitsProps exprSimSource vyperTypeCallGraph
   bodyFullLogArgs bodyFullLogScalarTopics bodyFullLogSuffix
@@ -1177,6 +1177,13 @@ Proof
       impl_tac >- (simp[Abbr `RR`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
       strip_tac >>
       qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ captureQ captureR` >>
+      qpat_x_assum `gas_outcome_full _ _ _ _ _ _ captureQ captureR`
+        (fn outcome =>
+          qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+            qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+              mp_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+                (LIST_CONJ [outcome,frame,sep]))))) >>
+      strip_tac >>
       rewrite_tac[log_eval_bind] >>
       irule gas_outcome_full_bind_all >> rpt conj_tac
       >~ [`gas_marked_exec _ _ _ _ _ _ _`]
@@ -1193,7 +1200,10 @@ Proof
           irule storage_trace_frame_ignore_bind >>
           simp[storage_trace_frame_check_not_static, storage_trace_frame_state_updates]) >>
       qexists_tac `\H res ee G tn t.
-        captureQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
+        (captureQ H res ee G tn t /\
+         (!bw capacity. d = SOME (bw, capacity) ==>
+            allocas_from (w2n bw + capacity) t)) /\
+        ~t.vs_halted /\ ee.gas_obs = []` >>
       reverse conj_tac
       >- (irule gas_outcome_full_post_source >>
           qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
@@ -4023,6 +4033,26 @@ Resume compile_log_frag_full[logged_finish_post]:
  (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
    ghost_inv_at (DF H) lo d cenv cx (done_es with gas_obs := []) Genc tnenc fin`
    (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+`!bw capacity. d = SOME (bw, capacity) ==>
+   allocas_from (w2n bw + capacity) t` by
+ (qpat_assum `!bw cap. d = SOME (bw,cap) ==> allocas_from (cap + w2n bw) t`
+   (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM])) >>
+`!bw capacity. d = SOME (bw, capacity) ==>
+   allocas_from (w2n bw + capacity) fin` by
+ (qpat_assum `!D. gas_origin_ptr_path _ (t,G1,tn1) [] (OK fin,Genc,tnenc)`
+   (qspec_then `DF post_H` (fn path =>
+     qpat_assum `return_buf_frame d cenv sm t` (fn frame =>
+       qpat_assum `!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) t` (fn floor =>
+         mp_tac (MATCH_MP return_buf_allocas_suffix (LIST_CONJ [path,frame,floor])))))) >>
+  simp[]) >>
+`return_buf_sep d cenv (done_es with gas_obs := []) fin` by
+ (irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`storage_trace_horizon es.storage_trace`,`ctx`,`cx`,`es`, `func`,`s0`,`sa`] >>
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC,
+    qpat_assum `MAP FDOM mid.scopes = MAP FDOM es.scopes`
+      (fn th => simp_tac (srw_ss()) [Abbr `done_es`,th]) >> NO_TAC]) >>
 qexists_tac `cenv` >>
 simp_tac bool_ss [stmtSimPropsTheory.cenv_top_ext_refl] >>
 rpt conj_tac >> first_assum ACCEPT_TAC
@@ -4591,6 +4621,22 @@ Resume compile_log_frag_full[empty_finish_post]:
  (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
    ghost_inv_at (DF H) lo d cenv cx (done_es with gas_obs := []) Gp tnp fin`
    (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+`!bw capacity. d = SOME (bw, capacity) ==>
+   allocas_from (w2n bw + capacity) fin` by
+ (qpat_assum `!D. gas_origin_ptr_path _ (t,G1,tn1) [] (OK fin,Gp,tnp)`
+   (qspec_then `DF post_H` (fn path =>
+     qpat_assum `return_buf_frame d cenv sm t` (fn frame =>
+       qpat_assum `!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) t` (fn floor =>
+         mp_tac (MATCH_MP return_buf_allocas_suffix (LIST_CONJ [path,frame,floor])))))) >>
+  simp[]) >>
+`return_buf_sep d cenv (done_es with gas_obs := []) fin` by
+ (irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`storage_trace_horizon es.storage_trace`,`ctx`,`cx`,`es`, `func`,`s0`,`sa`] >>
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC,
+    qpat_assum `MAP FDOM mid.scopes = MAP FDOM es.scopes`
+      (fn th => simp_tac (srw_ss()) [Abbr `done_es`,th]) >> NO_TAC]) >>
 qexists_tac `cenv` >>
 simp_tac bool_ss [stmtSimPropsTheory.cenv_top_ext_refl] >>
 rpt conj_tac >> first_assum ACCEPT_TAC

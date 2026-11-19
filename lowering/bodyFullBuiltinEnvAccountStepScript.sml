@@ -16,7 +16,7 @@ Theorem account_emit_full_run:
  storage_trace_domain cx st0 ee.storage_trace /\ local_ptrs_reserved cenv sa /\
  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
- EVERY (\x. op_taint tn x = {}) xs /\ ~ctx_has_dalloca ctx /\
+ EVERY (\x. op_taint tn x = {}) xs /\
  (!out. step_inst_base (mk_inst sa.cs_next_id opc xs [out]) s = OK (update_var out w s)) /\
  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
@@ -128,6 +128,10 @@ Proof
         contextCodegenRelTheory.source_memory_read_ranges_def] >>
        fs[EVERY_MEM, GSYM IMP_DISJ_THM] >>
        rpt strip_tac >> gvs[] >> metis_tac[op_taint_def]) >>
+    `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+      (strip_tac >> fs[stmt_state_rel_def, fmp_room_def, allocas_below_fmp_def,
+         venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+       rpt strip_tac >> res_tac >> decide_tac) >>
     `ptr_inst_ok (DF H) lo 0 ctx func G tn inst s` by
       (simp[ptr_inst_ok_def] >>
        `allocas_from lo s` by fs[ghost_inv_at_def] >>

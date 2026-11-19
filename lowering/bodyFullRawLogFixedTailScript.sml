@@ -10,7 +10,7 @@ Theorem raw_log_fixed_tail_full:
     emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [] s1 = ((),sb) /\
     compile_alloc_buffer 32 alloc_sa = (buf,data_sa) /\ fn_has_code alloc_sa data_sa func /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
+    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     LENGTH ops < dimword (:256) /\ sa.cs_next_id <= alloc_sa.cs_next_id /\
     sa.cs_next_var <= sm.cs_next_var /\
     EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) (buf.buf_operand::data_op::ops) /\

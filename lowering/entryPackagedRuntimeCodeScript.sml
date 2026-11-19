@@ -17,7 +17,7 @@ Proof
 QED
 
 Theorem entry_code_build_defaults[local]:
-  supported_program tops ==>
+  supported_program tops /\ module_consts_env tops [] = [] ==>
   EVERY (EVERY (supported_expr tops) o SND) (build_func_defaults tops)
 Proof
   strip_tac >> simp[build_func_defaults_def, EVERY_MAP, EVERY_MEM] >>
@@ -57,7 +57,7 @@ Proof
 QED
 
 Theorem entry_code_packaged_externals:
-  supported_program tops ==>
+  supported_program tops /\ module_consts_env tops [] = [] ==>
   EVERY (\(lbl,ce,args,cds,pay,nr,key,tr,vw,fb,rt).
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_external_function_body ce args nr key tr vw fb rt))
@@ -79,7 +79,7 @@ Proof
 QED
 
 Theorem entry_code_packaged_internals:
-  supported_program tops ==>
+  supported_program tops /\ module_consts_env tops [] = [] ==>
   EVERY (\(lbl,ce,ps,buf,nr,key,tr,vw,ctor,im,fb,rt).
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_internal_function ce ps buf nr key tr vw ctor im fb rt))
@@ -100,7 +100,7 @@ Proof
 QED
 
 Theorem entry_code_packaged_fallback:
-  supported_program tops ==>
+  supported_program tops /\ module_consts_env tops [] = [] ==>
   (case set_fallback_package_target target
      (package_fallback_fn tops T (K global_nonreentrant_slot)
        (FST (SND (SND (classify_functions tops))))) of

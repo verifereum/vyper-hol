@@ -97,7 +97,7 @@ Resume ld_focus_invoke_active_entry[sync]:
         (strip_assume_tac o MATCH_MP setup_callee_shared_fields) >>
       qpat_assum `setup_callee _ _ t = SOME ct`
         (strip_assume_tac o MATCH_MP setup_callee_shared_fields) >>
-      drule ld_sync_dyn_agree >> fs[]) 
+      drule ld_sync_dyn_agree >> fs[])
   >~ [`ld_params_ok _ _ _ _`]
   >- (drule ld_sync_ghosts >> simp[] >> strip_tac >>
       rw[ld_params_ok_def, EL_MAP] >>

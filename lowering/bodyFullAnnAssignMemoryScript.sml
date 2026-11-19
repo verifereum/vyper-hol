@@ -13,7 +13,7 @@ Ancestors
   valueEncodingDefs valueEncodingProps valueEncoding vyperTyping ptrDiscipline
   gasOutcomeFullCompose exprSimMemorySource bodyFullStructLitInputs
   immutableDeployPhysicalSource valueCopyBytes gasOutcomeInitialObsPtr
-  bodyFullAnnAssignMemoryPost contextRawReachable unitTransformDefs
+  bodyFullShared bodyFullAnnAssignMemoryPost contextRawReachable unitTransformDefs
   exprLoweringProps assignTuplePtrCopyLen stmtSimDefs stateRelProj
   exprOpenMain exprOpenTerminals stmtSimDeclTypedCode stmtLoweringMono
   valueTypingMemoryProps stmtSimDeclSourceSeparation annassignRelayoutSource
@@ -108,6 +108,7 @@ Proof
    op_taint tn (Lit 0w) = {}` by
     simp[is_word_type_def, evaluate_type_def, value_has_type_def,
          eval_operand_def, typed_val_to_w256_def, val_to_w256_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all compile_store_memory_word_origin_ptr_path >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`t`, `Gf`, `tnf`] >>
@@ -210,6 +211,8 @@ Theorem annassign_memory_full_empty_post[local]:
   s.vs_current_bb = b.cs_current_bb /\ s.vs_inst_idx = LENGTH b.cs_current_insts /\
   return_buf_frame d ce b s /\ alloca_history func s ==>
   ?t Gf tf.
+    lookup_var p t = SOME w /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
     (!DF. gas_origin_ptr_path (DF,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,Gf,tf)) /\
     !H. valid_horizon cx st0 H out.storage_trace ==>
@@ -243,13 +246,22 @@ Proof
   drule_all annassign_memory_full_empty_store_path >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`t`, `Gf`, `tf`] >>
+  conj_tac >- fs[typed_copy_state_frame_def, venom_state_component_equality] >>
+  conj_tac >- fs[typed_copy_state_frame_def, venom_state_component_equality] >>
   (conj_tac >- first_assum ACCEPT_TAC) >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
     fs[typed_copy_state_frame_def, venom_state_component_equality] >>
   `return_buf_frame d ce sf t` by suspend "return_frame" >>
   `alloca_history func t` by suspend "history" >>
   qx_gen_tac `H` >> disch_tac >>
-  match_mp_tac (GEN_ALL annassign_memory_full_installation_post) >>
+  match_mp_tac
+    (let
+       val theorem = annassign_memory_full_installation_post
+       val (vars, _) = strip_forall (concl theorem)
+       val body = UNDISCH (SPECL vars theorem)
+     in
+       GENL vars (DISCH_ALL (CONJUNCT2 (CONJUNCT2 body)))
+     end) >>
   qexistsl_tac [`mid`, `b`, `s`, `G`, `tn`, `id`, `p`, `sz`, `w`,
                  `inst`, `32`, `tyv`, `default_value tyv`, `sc`, `rest`] >>
   qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _`
@@ -856,6 +868,10 @@ Proof
     (qpat_x_assum `stmt_exprs_ok cenv (AnnAssign id typ e)` mp_tac >>
      simp[stmt_exprs_ok_flat, allocLimitsTheory.alloc_limits_stmt_def]) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+    qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+      irule (MATCH_MP gas_outcome_full_use_return_buf_allocas
+        (CONJ frame sep)))) >>
   drule annassign_admissible_type >> strip_tac >>
   `type_memory_bytes cenv typ = type_memory_size tyv` by
     (irule expr_sim_inv_memory_size >> qexistsl_tac [`cx`, `env`, `es`] >> simp[]) >>
@@ -1011,7 +1027,17 @@ Resume annassign_memory_full_execution[empty_continuation]:
   gen_tac >> disch_tac >> (conj_tac >- first_assum MATCH_ACCEPT_TAC) >>
   qpat_assum `!H. valid_horizon cx st0 H out.storage_trace ==> _`
     (drule_then strip_assume_tac) >>
-  BETA_TAC >> qexists_tac `cenv'` >>
+  BETA_TAC >> strip_tac >> qexists_tac `cenv'` >>
+  `return_buf_sep d cenv' out t` by
+    (`MAP FDOM (sc::rest) = MAP FDOM es.scopes` by
+       (qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
+          (qspec_then `[]` (mp_tac o SRULE [])) >>
+        strip_tac >> drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+     irule annassign_memory_return_buf_sep >>
+     qpat_assum `FLOOKUP cenv'.ce_vars id = SOME _` (irule_at Any) >>
+     qpat_assum `FLOOKUP t.vs_allocas _ = SOME (w2n w,_)` (irule_at Any) >>
+     qexistsl_tac [`st0`,`sc`,`sa`,`s0`,`rest`,`cenv`,`func`,`es`,`<|assignable := T; type := tyv; value := default_value tyv; popped := []|>`,`cx`,`ctx`] >>
+     simp[Abbr `out`] >> metis_tac[]) >>
   `ghost_inv_at (DF H) lo d cenv' cx (out with gas_obs := []) Gf tf t <=>
    ghost_inv_at (DF H) lo d cenv' cx out Gf tf t` by
     simp_tac (srw_ss()) [ghost_inv_at_def] >>
@@ -1021,7 +1047,7 @@ Resume annassign_memory_full_execution[empty_continuation]:
   `storage_well_formed_on cx (out with gas_obs := []) (FST H) <=>
    storage_well_formed_on cx out (FST H)` by
     (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
-  simp[exprLoweringPropsTheory.stmt_state_rel_start_gas_obs] >>
+  simp[exprLoweringPropsTheory.stmt_state_rel_start_gas_obs, return_buf_sep_gas_obs] >>
   qpat_assum `!aid off len i. _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> metis_tac[]
 QED
@@ -1219,6 +1245,8 @@ Resume annassign_memory_full_execution[ordinary]:
      simp[NoAsms, expr_post_def] >>
      rpt strip_tac >> simp[]) >>
   `?u Gf tf.
+    lookup_var p u = SOME w /\
+    FLOOKUP u.vs_allocas (inst.inst_id) = SOME (w2n w,sz) /\
     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (t,G1,tn1) [] (OK u,Gf,tf)) /\
     !H. valid_horizon cx st0 H out.storage_trace ==>
@@ -1319,10 +1347,12 @@ Resume annassign_memory_full_execution[ordinary_suffix_premises]:
     simp[arithmeticTheory.ADD_SYM] >> disch_then irule >>
     rpt strip_tac >> first_x_assum drule >>
     simp[arithmeticTheory.ADD_SYM] >> NO_TAC) >>
-  qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`b`,`tyv`,`typ`,`w`] >>
-  qexistsl_tac [`id`,`inst`,`mid`,`type_memory_size stv`,`p`,`rest`,`sc`] >>
+  TRY (qpat_assum `inst.inst_id = sa.cs_next_id`
+    (fn th => PURE_REWRITE_TAC [th, arithmeticTheory.LESS_EQ_REFL])) >>
+  qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`b`,`tyv`,`typ`] >>
+  qexistsl_tac [`id`,`mid`,`type_memory_size stv`,`rest`,`sc`] >>
   qexistsl_tac [`vv_location vv`,`a`,`stv`,`lowered_value_type cenv' e`,
-    `sw`,`sz`,`v`,`src`] >>
+    `sw`,`v`,`src`] >>
   rpt conj_tac >> TRY (first_assum MATCH_ACCEPT_TAC) >>
   TRY (qpat_assum `expr_body_pre cenv' cx env e es`
     (strip_assume_tac o PURE_REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
@@ -1348,7 +1378,7 @@ Resume annassign_memory_full_execution[ordinary_pure]:
   (conj_tac >- (drule new_variable_success_gas_obs >> simp[NoAsms])) >>
   gen_tac >> disch_tac >>
   (conj_tac >- first_assum MATCH_ACCEPT_TAC) >>
-  BETA_TAC >> qexists_tac `cenv'` >>
+  BETA_TAC >> strip_tac >> qexists_tac `cenv'` >>
   `out with gas_obs := [] = out` by
     (qpat_assum `mid.gas_obs = []`
        (fn th => simp[NoAsms,Abbr `out`,GSYM th])) >>
@@ -1357,8 +1387,18 @@ Resume annassign_memory_full_execution[ordinary_pure]:
   qpat_assum `!H. valid_horizon cx st0 H out.storage_trace ==> _`
     (qspec_then `H` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
-  POP_ASSUM_LIST (K all_tac) >>
-  strip_tac >> gvs[] >>
+  strip_tac >>
+  `return_buf_sep d cenv' out u` by
+    (`MAP FDOM (sc::rest) = MAP FDOM es.scopes` by
+       (qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
+          (qspec_then `[]` (mp_tac o SRULE [])) >>
+        strip_tac >> drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+     irule annassign_memory_return_buf_sep >>
+     qpat_assum `FLOOKUP cenv'.ce_vars id = SOME _` (irule_at Any) >>
+     qpat_assum `FLOOKUP u.vs_allocas _ = SOME (w2n w,_)` (irule_at Any) >>
+     qexistsl_tac [`st0`,`sc`,`sa`,`s0`,`rest`,`cenv`,`func`,`es`,`<|assignable := T; type := tyv; value := v; popped := []|>`,`cx`,`ctx`] >>
+     simp[Abbr `out`] >> metis_tac[]) >>
+  asm_simp_tac bool_ss [] >>
   qpat_assum `!aid off len i. _ ==> i IN tn0.t_mem`
     (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
   disch_tac >> rpt gen_tac >> strip_tac >>

@@ -4,10 +4,10 @@ Ancestors bodyPtrPrecompileBuiltinsBoundary fragGasSeqPtr
           venomExecSemantics venomInst venomState finite_map
           contextCodegenRel codegenRel memLocDefs exprSimHash
           decoderGhostFramePtr exprLoweringProps ghostPcTransportPtr venomMemProps
-          instIdxIndep exprSimPrecompiles venomCallOracleDefs
+          instIdxIndep exprSimPrecompiles venomCallOracleDefs venomInstProofs1
 
 Theorem gas_ptr_inst_ok:
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D lo fuel ctx fn G tn (mk_inst id GAS [] [out]) s
 Proof
   strip_tac >>
@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem assert_ptr_inst_ok:
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ op_taint tn op = {} ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ op_taint tn op = {} ==>
   ptr_inst_ok D lo fuel ctx fn G tn (mk_inst id ASSERT [op] []) s
 Proof
   strip_tac >>
@@ -53,7 +53,7 @@ Theorem staticcall_ptr_inst_ok:
   ptr_covers G tn src s (w2n an) /\ ptr_covers G tn dst s (w2n rn) /\
   op_taint tn gp = {} /\ eval_operand (Var src) s = SOME ai /\
   (!i. w2n ai <= i /\ i < w2n ai + w2n an ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
@@ -111,7 +111,7 @@ Theorem suffix_checked:
   ptr_covers G tn src s (w2n an) /\ ptr_covers G tn dst s (w2n rn) /\
   eval_operand (Var src) s = SOME wi /\
   (!i. w2n wi <= i /\ i < w2n wi + w2n an ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
@@ -147,7 +147,7 @@ Resume suffix_checked[call_check]:
          is_terminator_def, exec_result_map_def]) >>
   drule gas_step_taint >>
   simp[Abbr `tn1`] >> strip_tac >>
-  gvs[step_GAS, allocas_from_def, update_var_def,
+  gvs[step_GAS, allocas_from_def, allocas_below_fmp_def, update_var_def,
       mk_inst_def, op_taint_def, FLOOKUP_UPDATE,
       eval_operand_def, lookup_var_def] >>
   metis_tac[]
@@ -157,10 +157,13 @@ Resume suffix_checked[assert_check]:
   `v.vs_allocas = u.vs_allocas` by
     (irule step_inst_base_preserves_allocas >> qexists_tac `ci` >>
      simp[Abbr `ci`, mk_inst_def]) >>
+  `v.vs_initial_fmp = u.vs_initial_fmp /\ v.vs_fmp = u.vs_fmp` by
+    (drule step_inst_base_preserves_all >>
+     simp[Abbr `ci`, mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   irule assert_ptr_inst_ok >>
   simp[Abbr `ci`] >> conj_tac
   >- (irule staticcall_output_taint >> simp[mk_inst_def]) >>
-  gvs[step_GAS, allocas_from_def, update_var_def] >> metis_tac[]
+  gvs[step_GAS, allocas_from_def, allocas_below_fmp_def, update_var_def] >> metis_tac[]
 QED
 
 Resume suffix_checked[sequence]:
@@ -186,7 +189,7 @@ Theorem suffix_abort_checked:
   ptr_covers G tn src s (w2n an) /\ ptr_covers G tn dst s (w2n rn) /\
   eval_operand (Var src) s = SOME wi /\
   (!i. w2n wi <= i /\ i < w2n wi + w2n an ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
@@ -209,7 +212,7 @@ Proof
      conj_tac >- simp[instIdxIndepTheory.step_inst_inst_idx_indep,
        mk_inst_def, is_terminator_def, exec_result_map_def] >>
      drule gas_step_taint >> simp[Abbr `tn1`] >> strip_tac >>
-     gvs[step_GAS, allocas_from_def, update_var_def, mk_inst_def,
+     gvs[step_GAS, allocas_from_def, allocas_below_fmp_def, update_var_def, mk_inst_def,
        op_taint_def, FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>
      metis_tac[]) >>
   gvs[mk_inst_def, Abbr `G1`, Abbr `tn1`, is_terminator_def] >>

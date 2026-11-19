@@ -1,6 +1,6 @@
 Theory dftPacketCalleeAlignment
 Ancestors
-  dftRunRel o1PassLift gasOracleReplay venomExecSemantics venomInst venomState list
+  dftGasInvPairedHistory dftRunRel o1PassLift gasOracleReplay venomExecSemantics venomInst venomState list
 
 Theorem dft_packet_callee_setup_dft:
   tf = dft_fn sf /\ dft_fn_rel sf tf ==>
@@ -8,18 +8,6 @@ Theorem dft_packet_callee_setup_dft:
 Proof
   strip_tac >> irule setup_callee_entry_label >>
   metis_tac[dft_fn_rel_entry_label]
-QED
-
-Theorem dft_packet_paired_lookup[local]:
-  !fs gs name.
-    LIST_REL (\f g. g = dft_fn f) fs gs /\ LIST_REL dft_fn_rel fs gs ==>
-    OPTREL (\f g. g = dft_fn f /\ dft_fn_rel f g)
-      (lookup_function name fs) (lookup_function name gs)
-Proof
-  Induct >> Cases_on `gs` >> simp[lookup_function_def, FIND_thm] >>
-  rpt strip_tac >>
-  `h'.fn_name = h.fn_name` by fs[dft_fn_rel_def] >>
-  simp[] >> IF_CASES_TAC >> gvs[lookup_function_def]
 QED
 
 Theorem dft_packet_callee_alignment:
@@ -40,7 +28,7 @@ Theorem dft_packet_callee_alignment:
       SOME (child_entry with vs_gas_readings := u.vs_gas_readings)
 Proof
   rpt strip_tac >>
-  drule_all dft_packet_paired_lookup >>
+  drule_all inv_paired_function_lookup >>
   disch_then (qspec_then `nm` mp_tac) >>
   Cases_on `lookup_function nm C7.ctx_functions` >> simp[] >>
   strip_tac >>

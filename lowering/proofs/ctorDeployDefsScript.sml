@@ -13,8 +13,10 @@ Ancestors
   venomExecSemantics venomState e2eEntry compileVyper compileEnv valueEncoding
   immutableSectionRel vyperValue vyperContext
   callCodeEval callCodeEvalPrims callCodeLookup
-  supportedDecls supportedProgram vyperInterpreter vyperStorageFootprint
-  vyperCallFiniteStorageSupport
+  supportedDecls supportedProgram supportedExprs supportedExprForms
+  supportedExprTraverse constSubst exprLowering vyperInterpreter vyperState
+  vyperStorageFootprint list
+  vyperCallFiniteStorageSupport exprSimAbiEncodeArgsLabelReplay
 
 val _ = Parse.hide "body";
 
@@ -166,21 +168,97 @@ Proof
       entry_venom_state_frame_fields, call_txn_component_equality]
 QED
 
-(* Supported declarations skip constant evaluation, leaving the same
-   environment and empty observation trace for every transaction code. *)
-Theorem supported_constants_env_trace[local]:
-  !decls tops cx am addr sid env.
-    EVERY (supported_declaration_header tops) decls ==>
-    constants_env_trace cx am addr sid decls env = (SOME env, [])
+(* Substitution may insert expressions at names, and folding may replace a
+   SHA of a literal. Neither transformation erases a code accessor. *)
+Theorem fold_const_builtin_code_accessor[local]:
+  supported_expr_exists (\e. ?t xs. e = Builtin t (Acc Code) xs)
+    (fold_const_builtin ty bi es) <=>
+  supported_expr_exists (\e. ?t xs. e = Builtin t (Acc Code) xs)
+    (Builtin ty bi es)
 Proof
-  Induct >- simp[constants_env_trace_def] >>
-  rpt gen_tac >> Cases_on `h` >>
-  simp[constants_env_trace_def]
-  >~ [`VariableDecl vis mut name ty slot`]
-  >- (Cases_on `mut` >>
-      simp[constants_env_trace_def, supported_constants_rejected] >>
-      metis_tac[]) >>
-  metis_tac[]
+  Cases_on `bi` >>
+  simp[constSubstTheory.fold_const_builtin_def, supported_expr_exists_def] >>
+  Cases_on `es` >> simp[supported_expr_exists_def] >>
+  Cases_on `t` >> simp[supported_expr_exists_def] >>
+  Cases_on `h` >> simp[supported_expr_exists_def] >>
+  rename1 `Literal aty l` >> Cases_on `l` >>
+  simp[supported_expr_exists_def]
+QED
+
+Theorem folded_subst_code_accessor[local]:
+  (!env e.
+    supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es) e ==>
+    supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es)
+      (fold_const_expr (subst_consts_expr env e))) /\
+  (!env t.
+    supported_target_exists (\x. ?ty es. x = Builtin ty (Acc Code) es) t ==>
+    supported_target_exists (\x. ?ty es. x = Builtin ty (Acc Code) es)
+      (fold_const_btarget (subst_consts_btarget env t))) /\
+  (!env es.
+    supported_exprs_exists (\x. ?t xs. x = Builtin t (Acc Code) xs) es ==>
+    supported_exprs_exists (\x. ?t xs. x = Builtin t (Acc Code) xs)
+      (fold_const_exprs (subst_consts_exprs env es))) /\
+  (!env d.
+    supported_opt_exists (\x. ?t es. x = Builtin t (Acc Code) es) d ==>
+    supported_opt_exists (\x. ?t es. x = Builtin t (Acc Code) es)
+      (fold_const_opt (subst_consts_opt env d))) /\
+  (!env fs.
+    supported_fields_exists (\x. ?t es. x = Builtin t (Acc Code) es) fs ==>
+    supported_fields_exists (\x. ?t es. x = Builtin t (Acc Code) es)
+      (fold_const_fields (subst_consts_fields env fs)))
+Proof
+  ho_match_mp_tac constSubstTheory.subst_consts_expr_ind >>
+  rw[constSubstTheory.subst_consts_expr_def,
+     constSubstTheory.fold_const_expr_def, fold_const_builtin_code_accessor,
+     supported_expr_exists_def] >> metis_tac[]
+QED
+
+Theorem supported_pure_no_code_accessor[local]:
+  (!tops e. supported_pure_expr tops e ==>
+    ~supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es) e) /\
+  (!tops es. supported_pure_exprs tops es ==>
+    ~supported_exprs_exists (\x. ?t xs. x = Builtin t (Acc Code) xs) es) /\
+  (!tops fs. supported_pure_fields tops fs ==>
+    ~supported_fields_exists (\x. ?t es. x = Builtin t (Acc Code) es) fs) /\
+  (!tops e. supported_place_expr tops e ==>
+    ~supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es) e)
+Proof
+  ho_match_mp_tac supported_pure_expr_ind >>
+  rw[supported_pure_expr_def, supported_expr_exists_def] >>
+  Cases_on `es` >>
+  gvs[supported_builtin_form_def, supported_expr_exists_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >> Cases_on `t` >> fs[]
+QED
+
+Theorem supported_pure_expr_no_self_code:
+  supported_pure_expr tops e ==> ~supported_expr_exists is_self_code e
+Proof
+  strip_tac >>
+  drule_then assume_tac (cj 1 supported_pure_no_code_accessor) >>
+  `!x. is_self_code x ==> ?t es. x = Builtin t (Acc Code) es` by
+    (recInduct is_self_code_ind >> simp[is_self_code_def]) >>
+  spose_not_then assume_tac >>
+  qpat_x_assum `~supported_expr_exists _ _` mp_tac >>
+  simp[] >>
+  irule (BETA_RULE (Q.SPECL [`is_self_code`, `e`,
+    `\x. ?t es. x = Builtin t (Acc Code) es`] (cj 1 supported_expr_exists_mono))) >>
+  simp[]
+QED
+
+Theorem folded_const_no_self_code[local]:
+  supported_pure_expr tops (fold_const_expr (subst_consts_expr env e)) ==>
+  ~supported_expr_exists is_self_code e
+Proof
+  strip_tac >>
+  `!x. is_self_code x ==> ?t es. x = Builtin t (Acc Code) es` by
+    (recInduct is_self_code_ind >> simp[is_self_code_def]) >>
+  spose_not_then assume_tac >>
+  `supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es) e` by
+    (irule (BETA_RULE (Q.SPECL [`is_self_code`, `e`,
+      `\x. ?t es. x = Builtin t (Acc Code) es`] (cj 1 supported_expr_exists_mono))) >>
+     simp[]) >>
+  drule_then assume_tac (cj 1 supported_pure_no_code_accessor) >>
+  metis_tac[Q.SPECL [`env`, `e`] (cj 1 folded_subst_code_accessor)]
 QED
 
 Theorem deploy_evaluation_context_code_update[local]:
@@ -206,6 +284,71 @@ Proof
        get_module_code_def, alistTheory.ALOOKUP_def,
        lookup_callable_function_def, AllCaseEqs()] >>
   metis_tac[lookup_function_no_self_code]
+QED
+
+Theorem deploy_const_eval_code_update[local]:
+  ~program_reads_self_code tops /\ ~supported_expr_exists is_self_code e ==>
+  bind
+    (eval_expr
+      (set_current_module (deploy_evaluation_context tops am (tx with code := c)) NONE) e)
+    (read_result
+      (set_current_module (deploy_evaluation_context tops am (tx with code := c)) NONE)) st =
+  bind (eval_expr (set_current_module (deploy_evaluation_context tops am tx) NONE) e)
+    (read_result (set_current_module (deploy_evaluation_context tops am tx) NONE)) st
+Proof
+  strip_tac >>
+  qabbrev_tac `cx = set_current_module (deploy_evaluation_context tops am tx) NONE` >>
+  `set_current_module (deploy_evaluation_context tops am (tx with code := c)) NONE =
+   cx with txn := cx.txn with code := c` by
+    simp[Abbr `cx`, deploy_evaluation_context_code_update, set_current_module_def] >>
+  asm_rewrite_tac[] >>
+  `eval_exprs (cx with txn := cx.txn with code := c) [e] = eval_exprs cx [e]` by
+    (mp_tac (Q.INST [`cx` |-> `cx`, `c` |-> `c`] evaluate_no_self_code_update) >>
+     impl_tac >-
+       (simp[Abbr `cx`, set_current_module_def, deploy_evaluation_context_def,
+          initial_evaluation_context_def, get_module_code_def, alistTheory.ALOOKUP_def,
+          lookup_callable_function_def, AllCaseEqs()] >>
+        metis_tac[lookup_function_no_self_code]) >>
+     disch_then (qspec_then `[e]` mp_tac o cj 1) >>
+     simp[supported_expr_exists_def]) >>
+  pop_assum (fn th => mp_tac (Q.AP_THM th `st`)) >>
+  simp[abi_args_singleton_source] >>
+  Cases_on `bind (eval_expr cx e) (read_result cx) st` >>
+  Cases_on `bind (eval_expr (cx with txn := cx.txn with code := c) e)
+    (read_result (cx with txn := cx.txn with code := c)) st` >>
+  simp[bind_def, return_def] >>
+  Cases_on `q` >> Cases_on `q'` >> simp[return_def]
+QED
+
+Theorem constants_env_trace_code_update[local]:
+  !decls env acc.
+    ~program_reads_self_code tops /\
+    EVERY (supported_pure_expr tops o SND) (module_consts_env decls env) ==>
+    constants_env_trace
+      (set_current_module (deploy_evaluation_context tops am (tx with code := c)) NONE)
+      installed tx.target NONE decls acc =
+    constants_env_trace
+      (set_current_module (deploy_evaluation_context tops am tx) NONE)
+      installed tx.target NONE decls acc
+Proof
+  recInduct module_consts_env_ind >>
+  simp[module_consts_env_def, constants_env_trace_def] >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  gvs[]
+  >~ [`constants_env_trace _ _ _ _ decls`]
+  >- (qmatch_asmsub_rename_tac
+        `module_consts_env decls (env ++ [(id,fold_const_expr (subst_consts_expr env e))])` >>
+      `supported_pure_expr tops (fold_const_expr (subst_consts_expr env e))` by
+        (qspec_then `decls`
+          (qspec_then `env ++ [(id,fold_const_expr (subst_consts_expr env e))]`
+            strip_assume_tac) module_consts_env_acc_prefix >>
+         gvs[EVERY_APPEND]) >>
+      drule folded_const_no_self_code >> strip_tac >>
+      imp_res_tac deploy_const_eval_code_update >>
+      gvs[deploy_evaluation_context_code_update, set_current_module_def,
+          get_tenv_def, LET_THM, SF ETA_ss] >>
+      rpt CASE_TAC >> gvs[])
+  >> metis_tac[]
 QED
 
 Theorem deploy_function_trace_code_update[local]:
@@ -235,12 +378,18 @@ Proof
   `eval_stmts (deploy_evaluation_context tops am (tx with code := c)) ss =
    eval_stmts (deploy_evaluation_context tops am tx) ss` by
     (first_x_assum irule >> simp[]) >>
-  `EVERY (supported_declaration_header tops) tops` by
-    gvs[supported_program_def, supported_declaration_headers_def] >>
+  `EVERY (supported_pure_expr tops o SND) (module_consts_env tops [])` by
+    fs[supported_program_def] >>
+  `evaluate_module_constants_trace
+      (deploy_evaluation_context tops am (tx with code := c)) installed tx.target [(NONE,tops)] =
+    evaluate_module_constants_trace
+      (deploy_evaluation_context tops am tx) installed tx.target [(NONE,tops)]` by
+    (mp_tac (Q.SPECL [`tops`, `[]`, `FEMPTY`] constants_env_trace_code_update) >>
+     impl_tac >- simp[] >>
+     simp[evaluate_module_constants_trace_def, LET_THM]) >>
   gvs[call_external_function_trace_def, LET_THM, constants_order_def,
-      evaluate_module_constants_trace_def,
-      Q.SPECL [`tops`, `tops`] supported_constants_env_trace,
       send_call_value_def, deploy_evaluation_context_code_update,
+      deploy_evaluation_context_def, initial_evaluation_context_def,
       vyperStateTheory.check_not_static_def]
 QED
 

@@ -239,7 +239,7 @@ Resume focus_initial_singleton_packet[row_success]:
   conj_tac >- REFL_TAC >>
   conj_tac
   >- (pure_rewrite_tac[GSYM dftGasFromListTraceDefsTheory.trace_gas_def] >>
-      irule dftGasSourcePrefixTheory.noninvoke_prefix_trace_keys >>
+      irule gasFocusSourcePrefixKeysTheory.noninvoke_prefix_trace_keys >>
       simp[] >> gvs[EVERY_MEM] >> metis_tac[]) >>
   gen_tac >>
   qpat_assum `!tail'. FOLDR _ _ _ _ = _`
@@ -358,7 +358,7 @@ Resume focus_initial_singleton_packet[cut_observation]:
        (root_entry with vs_gas_readings := gs ++ tail)) =
      ZIP (MAP (\i. ([],1,i.inst_id))
        (FILTER (\i. i.inst_opcode = GAS) (TAKE q bb.bb_instructions)),gs)` by
-    (irule dftGasSourcePrefixTheory.noninvoke_prefix_trace_keys >>
+    (irule gasFocusSourcePrefixKeysTheory.noninvoke_prefix_trace_keys >>
      rpt (first_assum (irule_at Any)) >> simp[EVERY_MEM] >>
      gvs[EVERY_MEM]) >>
   `ALL_DISTINCT (MAP (\i. (([],1,i.inst_id):gas_event))

@@ -180,8 +180,9 @@ Proof
 QED
 
 Theorem dft_packet_levels_call_extend:
-  !F C rooted_eval plan_ok levels_ok pre sf plan paths incoming root_fn entry
-    a bb0 e0 z0 c nm ops csf bb e z.
+  !(F:num) C rooted_eval plan_ok levels_ok pre sf plan
+    (paths:(num # num) list list) (incoming:num list) root_fn entry
+    a bb0 (e0:num) z0 c nm ops csf bb (e:num) (z:instruction list).
   levels_ok = (\F C levels paths incoming root_fn root_entry root_path root_depth.
     levels <> [] /\ LENGTH paths = LENGTH levels /\
     LENGTH incoming = LENGTH levels /\

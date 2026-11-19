@@ -20,14 +20,17 @@ Related documents:
 
 ## Where we are
 
-**Current statement infrastructure, not a fully verified compiler:**
+The call headline is documented in the
+[fixed-storage call specification](compiler-correctness-specification.md#fixed-storage-regions).
+
+**Milestone 1 statement infrastructure (2026-10-09):**
 
 - The target is actual O1 `compile_vyper (K SOME)`, using
   `run_venom_pipeline (K T) (K T) (K T) ... o1_pipeline_spec`, not a legacy
   mandatory-pass surrogate. Successful compilation is a boundary input;
   identity finalization yields `runtime_bc = assemble prog` via L1.
 - `e2eCorrectness.vyper_call_correct` has the exact
-  [public call schema](compiler-correctness-specification.md#calls-and-nested-contexts).
+  [Milestone 1 call schema](compiler-correctness-specification.md#milestone-1-runtime-contract-2026-10-09).
   Its composition proof inherits **exactly seven ADMITTED stage leaves**, not
   one. The old configured `e2e_vyper_to_evm_O1` export is retired.
 - `e2eCorrectness.e2e_vyper_to_evm` is **proved generic composition** with
@@ -178,33 +181,39 @@ successful empty result. Nonzero value or another precompile is ordinary.
 
 **Gas and observations:** entry `cc_gas = 0` and `vs_gas_readings = gas_readings es`.
 Venom GAS and assembly GAS consume frame-local readings, returning zero on
-exhaustion. `unitShapeDefs.opaque_use_ok` restricts return-address uses. No equality of Venom
-GAS with EVM readings or `msg.gas`/`gas=` guarantee is claimed. The conclusion
-is actual `run_call` and frame OutOfGas / StackOverflow, or `call_result_rel`.
-Sufficient gas is the companion theorem `vyper_call_gas_sufficient`
-(`lowering/e2eGasSufficientTopScript.sml`): under the call theorem's hypotheses,
-some gas `g` exists such that with any `g' >= g` more gas for the frame, the
-run exists, and, provided the outcomes of that run's call trace are
-storage-valid (`call_outcomes_storage_ok`) and none of its source observations
-is exempt (`~gas_source_exempt`), if the frame runs out of gas then it reaches a
-`RETURNDATACOPY` instruction (`frame_inst_at`). Its identity case composes the stage bounds S1b
+exhaustion. `unitShapeDefs.opaque_use_ok` restricts return-address uses.
+`gas_readings_rel` constrains source gas fillings using the EVM readings
+and allows slots with no corresponding reading. The
+[fixed-storage call theorem](compiler-correctness-specification.md#fixed-storage-regions)
+gives a `run_call` result that either is frame-resource-starved or satisfies
+`calldata_result_rel H`, including the unmatched-calldata case.
+
+The companion `vyper_call_gas_sufficient`
+(`lowering/e2eGasSufficientTopScript.sml`) gives a threshold `g` such that
+adding any `g' >= g` gas to the frame yields a run. When
+`calldata_dispatch` selects a source call, the gas guarantee requires the
+raised-gas trace length to be below `2 ** 64`, `call_storage_ok` for every
+gas filling of its outcomes, and `~gas_source_exempt` for every source
+observation of that call. Under those conditions, an OutOfGas run reaches
+a `RETURNDATACOPY` instruction (`frame_inst_at`). The same OutOfGas
+conclusion applies to unmatched calldata.
+The identity case composes the stage bounds S1b
 (`lower_vyper_runtime_unit_run_bounded`), S6b
-(`run_venom_pipeline_run_bounded`) and S7g (`codegen_gas_sufficient`). These
-stage bounds have proofs. The assembly-optimizer sufficiency case remains
-admitted, and the general companion inherits that admission. The deploy twin
+(`run_venom_pipeline_run_bounded`) and S7g (`codegen_gas_sufficient`). The deploy twin
 `e2e_deploy_gas_sufficient` uses the proved S1b-d `deploy_unit_run_bounded`,
 the same S6b, and the proved S7g-d `deploy_frame_gas_sufficient`. Its OutOfGas
 conclusion allows oversized deposited code or a reached `RETURNDATACOPY`;
 the per-finalizer case theorems give the stronger code-size-only alternative.
-Its optimizer case is also admitted. These are conditional results: upstream stage admissions and the
-stated source, storage and execution premises still apply.
+Both assembly-optimizer cases have proofs that inherit upstream admissions.
 
 On success the result relates `tx_return_bytes`, accounts after EVM pending
 deletions and transient storage modulo dead target storage, ordered concrete logs
 and the full request list `call_requests es` (every trace entry's request,
-computed precompiles included) via `request_agree`.
+computed precompiles included) via `request_agree`. A source halt relates the
+same logs, accounts, transient storage and requests (`effects_agree`) with empty output.
 Failed-run requests, leftover terminal outcomes, revert data/reason and general
-abort kind are not compared. `unspecified_behaviour_exempt` covers exact
+abort kind are not compared, except that calldata with `calldata_dispatch` `NONE`
+requires a raised `Reverted` outcome with empty output outside resource starvation. `unspecified_behaviour_exempt` covers exact
 `RuntimeError "abi_decode invalid"` with a dynamic ABI target occurring in a
 function body; it may also cover a callee-return rejection with that exact
 message, not arbitrary ReturnReject/conversion/static decode failure.
@@ -221,14 +230,14 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 
 | Key | Decision / rejected alternative | Current implementation and explicit deviation or limit | Future owner |
 |---|---|---|---|
-| D1 | Full outcome oracle; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption; `call_result_rel` compares the full request list via `request_agree` on success and halt. The trace observer records the forwarded gas operand for CALL/STATICCALL/DELEGATECALL (`NONE` only for CREATE/CREATE2), the source's builtin request carries no gas, and `request_agree` ties gas only to an explicit source `gas=` value; source gas observations are existential and not tied to EVM readings. | 2.1 trace / 7 callee producer |
+| D1 | Full outcome oracle; requests on success or halt | `extCallOracle` records and source SOME/Venom/asm call adoption. `call_result_rel_at` compares the full request list on success and halt via `effects_agree` and `request_agree`. The observer records the message-call gas operand in `cr_gas`, and `request_agree` matches it to the explicit source `gas=` value when present. | 2.1 trace / 7 callee producer |
 | D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas/StackOverflow; a starved computed precompile is an oracle outcome. The gas bound is the separate companion `vyper_call_gas_sufficient`. | 2.1 / 4 |
-| D3 | Frame-local GAS readings | Venom `exec_gas` and `asm_gas` consume readings, zero on exhaustion; entry uses `gas_readings es`. Source observations in the result are existential and not yet tied to EVM readings. | 2.1 / 4.2 |
+| D3 | Frame-local GAS readings | Venom `exec_gas` and `asm_gas` consume readings, zero on exhaustion. The entry uses `gas_readings es`, and `call_result_rel H` checks all source gas fillings allowed by `gas_readings_rel`. | 2.1 / 4.2 |
 | D4 | Compute value-zero precompiles 1/2/6/7's data, take their success from the oracle | `precompile_result`, `take_outcome`, `precompile_call_success`, every request recorded (`record_request`, `call_requests`); helper purity is proved, EVM purity bridge is deferred. | 2.1 |
 | D5 | One evaluator NONE/SOME, not duplicate evaluator or unchecked accounts | Source `evaluation_state.outcomes/requests`, `take_call_outcome` account guard; full triples at call/deploy entry, two-argument initializer retained. Existing storage/type proof guards remain conditional; no universal storage validator. | 6 / 7 |
 | D6 | SOME send requests a real call outcome, not pure transfer | Source Send uses empty-data nonstatic request and requires success; NONE retains concrete transfer behavior. | 6 |
 | D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall is **not admitted**, despite a general helper branch. | 6 |
-| D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects OK/IntRet and other Errors, relates a failed external call's `RevertData` to a Revert abort, and requires terminating run; `call_result_rel` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
+| D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects OK/IntRet and other Errors, relates a failed external call's `RevertData` to a Revert abort, and requires terminating run; `call_result_rel_at` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
 | D9 | Exact unspecified-behaviour exemptions, not weakened source checks | `unspecified_behaviour_exempt`, `occurs_abi_decode_target` inspect function bodies for dynamic decoding. Exact decode message also admits matching return rejection in such a program; not arbitrary ReturnReject. | 6 |
 | D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker/readiness/machine/tx; `supported_program` depends on tops alone. Partial readiness producers are not the whole premise. | 7 |
 | D11 | Whitelist, not open-ended exclusions | `supportedProgram` combines headers/names/body predicates; 101 named fixture membership proofs. No universal membership/compile-success witness. | 6 / 7 |
@@ -248,7 +257,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D25 | Exact External call/count/binding; no fallback/defaults | `valid_vyper_call` implemented via real lookup; no general producer. Fallback invocation remains deferred. | 7 |
 | D26 | Initial and outcome storage validity | `source_storage_ok` + `call_outcomes_ok` use actual context/storage invariants. Account/code guard alone is insufficient; no producer from arbitrary EVM callees. | 7 |
 | D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements; meaningful deployment is a new admission, not a proof upgrade of old T. | every proof owner |
-| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness, uninstalled source target, and empty target account in `es.originalAccounts`. The precompile builtins are excluded, since the constructor runs without the oracle. | 6 item7 |
+| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness, uninstalled source target, and empty target account in `es.originalAccounts`. The precompile builtins are excluded too, so the constructor, which runs with the frame's outcome list, takes no outcome from it. | 6 item7 |
 | D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; separate ADMITTED off-path target. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
 | D30 | Fresh output labels proved; unused false local claims retired | `fresh_label_output_inj` / output-state `fresh_label_produces_external` proved. Assign/zero-pad/generate-runtime correctness claims retired with provenance, not rewritten under the same names; Assign belongs to statement induction, runtime to S1. | 6 |
 | D31 | Do not claim call_state_rel satisfiable in Milestone1 | No general producer or satisfiability theorem; focused checks are not a compiled-program witness. Top-level transaction construction is explicitly future work. | 7 |
@@ -657,7 +666,8 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    `constructor_call_free`, `deploy_typing_ok`, `deploy_storage_ok`,
    `deploy_state_rel`, `deploy_result_rel`. Constructor is source-Call-free,
    including internal Call/Send/nested reasons, and free of the precompile
-   builtins (sha256/ecrecover/ecadd/ecmul), since it runs without the oracle.
+   builtins (sha256/ecrecover/ecadd/ecmul), so it takes no outcome from the
+   frame's outcome list it runs with.
    Existing [e2eDeployChecks](../lowering/e2e/e2eDeployChecksScript.sml)
    `constructor_call_exclusion` is a named negative boundary check;
    `constructor_precompile_builtin_excluded` checks SHA256 excluded, Keccak256 not.

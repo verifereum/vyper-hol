@@ -304,39 +304,12 @@ Theorem return_supported_selected_plan:
      then TupleT [ret] else ret) <= cenv.ce_max_return_size
 Proof
   strip_tac >> drule return_source_type_keys >> strip_tac >>
-  drule_all return_selected_external_support >> strip_tac >> gvs[] >>
-  drule_all return_selected_package_plan >> simp[]
-QED
-
-Theorem return_checked_getter_type[local]:
-  check_contract F
-    (layouts:(address # (storage_layout # storage_layout)) list)
-    (addr:160 word) mods = SOME art /\
-  ALOOKUP mods src = SOME ts /\ module_allocated layouts addr src ts /\
-  MEM decl ts /\ is_public_getter_decl fn decl /\
-  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,stmts) ==>
-  check_value_type (type_env_all_modules mods) (Type ret)
-Proof
-  strip_tac >>
-  `check_toplevel_decl mods art src decl` by
-    metis_tac[check_contract_toplevel_decl_MEM] >>
-  Cases_on `decl` >>
-  gvs[is_public_getter_decl_def, external_getter_tuple_def]
-  >~ [`check_toplevel_decl _ _ _ (VariableDecl vis vmut id typ slot)`]
-  >- (Cases_on `vis` >> gvs[external_getter_tuple_def] >>
-      Cases_on `is_ArrayT typ` >> gvs[getter_def]
-      >- (rpt (pairarg_tac >> gvs[]) >>
-          `check_value_type (type_env_all_modules mods) (Type typ)` by
-            (Cases_on `vmut` >>
-             gvs[check_toplevel_decl_def, check_value_type_def]) >>
-          metis_tac[check_value_type_ArrayT_type, build_getter_ret_checked]) >>
-      Cases_on `vmut` >> gvs[check_toplevel_decl_def, check_value_type_def]) >>
-  rename1 `check_toplevel_decl _ _ _ (HashMapDecl vis tr id kt vt slot)` >>
-  Cases_on `vis` >> gvs[external_getter_tuple_def, getter_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  `check_value_type (type_env_all_modules mods) vt` by
-    gvs[check_toplevel_decl_def] >>
-  metis_tac[build_getter_ret_checked]
+  drule_all return_selected_type_assignable >> strip_tac >>
+  drule_all return_selected_frame_encoding >> strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `update_cenv_ret_abi bcenv ret` >>
+  `bcenv.ce_struct_fields = make_struct_fields_map tops` by
+    simp[Abbr `bcenv`, build_compile_env_ce_struct_fields] >>
+  drule_all update_cenv_ret_abi_plan >> simp[]
 QED
 
 Theorem return_selected_type_evaluates_nr[local]:
@@ -344,23 +317,11 @@ Theorem return_selected_type_evaluates_nr[local]:
   lookup_function NONE fname External tops = SOME (mut,nr,args,[],ret,fbody) ==>
   ?tv. evaluate_type (type_env tops) ret = SOME tv
 Proof
-  strip_tac >> drule lookup_function_External_cases >> strip_tac
-  >- (gvs[source_typing_ok_def] >>
-      `module_allocated am.layouts tx.target NONE tops` by
-        (fs[check_contract_def, main_module_allocated_def]) >>
-      `check_function_body am.layouts tx.target [(NONE,tops)] art NONE External
-         mut nr args [] ret fbody` by
-        (irule check_contract_runtime_function_body_MEM >> simp[] >> metis_tac[]) >>
-      gvs[check_function_body_def, IS_SOME_EXISTS] >>
-      gvs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def]) >>
-  gvs[source_typing_ok_def] >>
-  `module_allocated am.layouts tx.target NONE tops` by
-    (drule check_contract_main_module_allocated >> simp[]) >>
-  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
-  drule_all return_checked_getter_type >>
-  simp[check_value_type_def, IS_SOME_EXISTS,
-       vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def] >>
-  metis_tac[assignable_type_well_formed, well_formed_type_def, IS_SOME_EXISTS]
+  strip_tac >> Cases_on `ret = NoneT` >- simp[evaluate_type_def] >>
+  `assignable_type (type_env tops) ret` by
+    metis_tac[return_selected_type_assignable] >>
+  drule assignable_type_well_formed >>
+  simp[well_formed_type_def, IS_SOME_EXISTS]
 QED
 
 Theorem return_selected_type_evaluates:
@@ -412,8 +373,7 @@ Theorem return_selected_plan_nr:
      then TupleT [ret] else ret) <= cenv.ce_max_return_size
 Proof
   strip_tac >>
-  drule_all return_selected_type_evaluates_nr >> strip_tac >>
-  drule_all return_selected_external_support >> strip_tac >> gvs[] >>
+  drule_all return_selected_type_assignable >> strip_tac >>
   drule return_source_type_keys >> strip_tac >>
   drule return_package_target_inversion >> strip_tac >>
   drule return_package_metadata >> strip_tac >>
@@ -421,5 +381,5 @@ Proof
   qmatch_goalsub_abbrev_tac `update_cenv_ret_abi bcenv ret` >>
   `bcenv.ce_struct_fields = make_struct_fields_map tops` by
     simp[Abbr `bcenv`, build_compile_env_ce_struct_fields] >>
-  drule_all return_update_plan_supported_place >> simp[]
+  drule_all update_cenv_ret_abi_plan >> simp[]
 QED

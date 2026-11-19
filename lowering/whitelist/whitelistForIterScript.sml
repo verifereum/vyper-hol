@@ -65,6 +65,7 @@ Ancestors
   supportedStmts supportedStmtTraverse supportedExprTraverse compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness vyperAST vyperInterpreter vyperState vyperValue
   vyperValueOperation vyperTypeSystem vyperTypeInvariants vyperTypeValues vyperMisc
   targetPlaceSim exprSimTopLevelProps bodyStorageMetadata
+  vyperLocalAccessFrame vyperCallFrame
   vyperTypeEnv valueEncoding valueEncodingProps valueEncodingTyping exprSimAggregateEncoding
   venomState arithmetic
 Libs
@@ -217,4 +218,80 @@ Proof
      (r, es2)` by simp[] >>
   drule_at (Pat `eval_stmts`) array_body_scope_callback >>
   disch_then drule_all >> simp[] >> metis_tac[]
+QED
+
+Theorem memory_iterator_source_classify:
+  !e cx es rv ee.
+    ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+    expr_writes_ok (\_. F) e /\
+    (!tgt nid. loop_iterator_place e = SOME tgt ==>
+       target_root tgt <> TopLevelNameTarget nid) /\
+    eval_expr cx e es = (INL rv,ee) ==>
+    (?v. rv = Value v) \/
+    (?id path tgt. rv = PlaceR (MemoryPlace id path) /\
+       loop_iterator_place e = SOME tgt /\ target_root tgt = NameTarget id)
+Proof
+  ho_match_mp_tac
+    (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
+     SIMP_RULE (srw_ss()) []) >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[supported_expr_exists_def, loop_iterator_place_def,
+       target_root_def, expr_writes_ok_def] >>
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+      type_check_def, check_def, assert_def, lift_option_type_def,
+      AllCaseEqs()]
+  >~ [`lookup_flag_mem cx ns mid es = (INL rv,ee)`]
+  >- (Cases_on `ns` >>
+      gvs[lookup_flag_mem_def, option_CASE_rator,
+          return_def, raise_def, AllCaseEqs()])
+  >~ [`eval_expr cx (StructLit ty ns fields) es = (INL rv,ee)`]
+  >- (Cases_on `ns` >>
+      gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()])
+  >~ [`SubscriptTarget`]
+  >- (`!tgt nid. loop_iterator_place e = SOME tgt ==>
+         target_root tgt <> TopLevelNameTarget nid` by
+        (rpt strip_tac >>
+         qpat_x_assum `!tgt nid. (?tgt'. _) ==> _`
+           (qspecl_then [`SubscriptTarget tgt e'`, `nid`] mp_tac) >>
+         simp[target_root_def] >> metis_tac[]) >>
+      qpat_x_assum `!cx' es' rv' ee'. _ /\ eval_expr cx' e es' = _ ==> _`
+        drule_all >> strip_tac >>
+      gvs[bind_def, return_def, COND_RATOR, AllCaseEqs()] >>
+      gvs[select_result_def, extend_place_def, extend_memory_place_def,
+          bind_def, ignore_bind_def, return_def, lift_option_type_def,
+          lift_sum_def, raise_def, AllCaseEqs()] >>
+      metis_tac[target_root_def])
+  >~ [`AttributeTarget`]
+  >- (`!tgt nid. loop_iterator_place e = SOME tgt ==>
+         target_root tgt <> TopLevelNameTarget nid` by
+        (rpt strip_tac >>
+         qpat_x_assum `!tgt nid. (?tgt'. _) ==> _`
+           (qspecl_then [`AttributeTarget tgt s`, `nid`] mp_tac) >>
+         simp[target_root_def] >> metis_tac[]) >>
+      qpat_x_assum `!cx' es' rv' ee'. _ /\ eval_expr cx' e es' = _ ==> _`
+        drule_all >> strip_tac >>
+      gvs[select_result_def, extend_place_def, extend_memory_place_def,
+          bind_def, ignore_bind_def, return_def, lift_option_type_def,
+          lift_sum_def, raise_def, AllCaseEqs()] >>
+      metis_tac[target_root_def]) >>
+  rename1 `eval_expr cx (Call ty target args drv) es = (INL rv,ee)` >>
+  Cases_on `target` >>
+  TRY (rename1 `IntCall fid` >> Cases_on `fid`) >>
+  TRY (rename1 `CreateTarget kind _ _ _` >> Cases_on `kind`) >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+      type_check_def, check_def, assert_def, lift_option_type_def,
+      raise_def, AllCaseEqs()]
+  >>~- ([`eval_send`], metis_tac[exprSimSendTheory.eval_send_value])
+  >>~- ([`eval_raw_call`],
+       qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >>
+       simp[eval_raw_call_def, bind_def, ignore_bind_def, return_def,
+            raise_def, COND_RATOR, AllCaseEqs(), UNCURRY, LET_THM] >>
+       rw[] >> gvs[])
+  >>~- ([`eval_create_operands`],
+       qpat_assum `eval_create_operands _ _ _ _ _ _ _ _ = (INL _,_)`
+         (ACCEPT_TAC o MATCH_MP vyperLocalAccessFrameTheory.eval_create_operands_success_value)) >>
+  qpat_assum `eval_ext_call _ _ _ _ _ _ _ = (INL _,_)`
+    (ACCEPT_TAC o MATCH_MP vyperCallFrameTheory.eval_ext_call_success_value)
 QED

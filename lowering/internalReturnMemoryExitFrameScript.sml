@@ -5,12 +5,12 @@ Ancestors
   loweringSlice instIdxIndep stmtSimReturn loweringStateRelDefs
   compileEnv venomState vyperState bodySim exprLoweringProps stateRelProj
 
-(* No old-local pointer preservation premise is needed: the source scopes
-   are cleared before framing.  ce_imm_alloca = NONE likewise removes the
-   only immutable-base variable preservation obligation. *)
-Theorem internal_return_memory_copy_exit:
+(* Clearing the local scopes leaves only the immutable base lookup to
+   preserve across the return-buffer copy. *)
+Theorem internal_return_memory_copy_exit_base:
   same_frame ce cenv /\ cenv.ce_returns_count = 0 /\
-  cenv.ce_imm_alloca = NONE /\
+  (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
+       lookup_var x copied = lookup_var x t) /\
   stmt_state_rel H ctx func cenv cx ee t /\
   (cenv.ce_is_ctor ==> !name itv iv off.
     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
@@ -62,7 +62,8 @@ Proof
      (t with <|vs_vars := copied.vs_vars; vs_memory := copied.vs_memory|>)` by
     (irule result_state_memory_frame >> conj_tac
      >- first_assum ACCEPT_TAC >>
-     qexists_tac `t` >> simp[local_region_def, lookup_scopes_def]) >>
+     qexists_tac `t` >> simp[local_region_def, lookup_scopes_def] >>
+     fs[lookup_var_def]) >>
   `stmt_state_rel H ctx func cenv cx (ee with scopes := []) pre` by
     (mp_tac (Q.INST
        [`s` |-> `t with <|vs_vars := copied.vs_vars; vs_memory := copied.vs_memory|>`,
@@ -84,4 +85,55 @@ Proof
   pop_assum SUBST1_TAC >> rewrite_tac[intret_mem_q_gas_obs] >>
   fs[intret_mem_q_def] >>
   irule internal_return_post_frame >> goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem internal_return_memory_copy_exit:
+  same_frame ce cenv /\ cenv.ce_returns_count = 0 /\
+  cenv.ce_imm_alloca = NONE /\
+  stmt_state_rel H ctx func cenv cx ee t /\
+  (cenv.ce_is_ctor ==> !name itv iv off.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+               NONE => FEMPTY
+             | SOME imms => get_source_immutables cenv.ce_module imms) name =
+      SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n bw) (type_memory_size tv)) /\
+  (copied with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>) =
+    return_unlock_state cenv t /\
+  (!a len. a + len <= w2n bw \/ w2n bw + type_memory_size tv <= a ==>
+    mem_bytes_at a len copied.vs_memory = mem_bytes_at a len t.vs_memory) /\
+  LENGTH t.vs_memory <= LENGTH copied.vs_memory /\
+  val_in_memory tv v (w2n bw) copied.vs_memory /\
+  LENGTH (return_unlock_insts cenv iid) <= n /\
+  r = IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+        (copied with vs_inst_idx := n) ==>
+  !tail. intret_mem_q H func ce cx tv bw v
+    ((ee with gas_obs := tail) with scopes := []) r
+Proof
+  strip_tac >>
+  mp_tac (SPEC_ALL internal_return_memory_copy_exit_base) >>
+  impl_tac >- (fs[] >> metis_tac[]) >> simp[]
+QED
+
+Theorem intret_mem_q_set_control:
+  intret_mem_q H func ce cx tv bw v es (IntRet ir s) ==>
+  intret_mem_q H func ce cx tv bw v es
+    (IntRet ir (s with <|vs_prev_bb := prev; vs_current_bb := bb; vs_inst_idx := idx|>))
+Proof
+  simp[intret_mem_q_def, intret_q_def, result_rel_def] >>
+  strip_tac >>
+  rename1 `state_rel H func ce cx es pre` >>
+  qexistsl_tac [`pre with <|vs_prev_bb := prev; vs_current_bb := bb|>`,`idx`] >>
+  conj_tac
+  >- (qabbrev_tac `info = ce.ce_nonreentrant` >> PairCases_on `info` >>
+      Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
+      gvs[return_unlock_state_def, tstore_def, sstore_def]) >>
+  qpat_assum `state_rel H func ce cx es pre` mp_tac >>
+  simp_tac (srw_ss()) [state_rel_def, local_ptrs_rel_def, local_region_def, local_backed_def,
+       lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
+       logs_rel_def, contract_storage_def, contract_transient_def, accounts_rel_def] >>
+  strip_tac >> simp[] >> conj_tac
+  >- (qpat_assum `!name entry p sz. _ ==> ?w. _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  first_assum ACCEPT_TAC
 QED

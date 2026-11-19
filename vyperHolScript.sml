@@ -9,7 +9,7 @@
  *)
 Theory vyperHol
 Ancestors
-  codegenStaticAbort
+  codegenStaticAbort staticAbortAsmOptHol
   runtimeLabelReadiness
   o1LabelReadiness
   runtimeLabelEntry

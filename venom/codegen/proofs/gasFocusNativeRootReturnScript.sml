@@ -4,11 +4,7 @@ Ancestors
   dftGasFromListTraceDefs venomExecSemantics venomInst list rich_list arithmetic
 
 Theorem focus_native_root_return_accounting:
-  !T. T = trace_blocks [] 0 root_fuel C root_fn root_entry ==>
-  !child_trace. child_trace = trace_blocks ((e,c.inst_id)::a) e (root_fuel-e) C child ent ==>
-  !v. v = ((a,e,c.inst_id),parent,c,b0) ==>
-  !resumed. resumed = j + SUC (LENGTH child_trace) ==>
-    j < LENGTH T /\ EL j T = v /\
+    j < LENGTH (trace_blocks [] 0 root_fuel C root_fn root_entry) /\ EL j (trace_blocks [] 0 root_fuel C root_fn root_entry) = ((a,e,c.inst_id),parent,c,b0) /\
     lookup_block b0.vs_current_bb parent.fn_blocks = SOME bb /\
     get_instruction bb b0.vs_inst_idx = SOME c /\
     c.inst_opcode = INVOKE /\ decode_invoke c = SOME (nm,ops) /\
@@ -18,13 +14,12 @@ Theorem focus_native_root_return_accounting:
     bind_outputs c.inst_outputs ir.iret_values
       (adopt_return_fmp ir (merge_callee_state b0 child_out)) = SOME post /\
     get_instruction bb (SUC b0.vs_inst_idx) = SOME next ==>
-    resumed < LENGTH T /\
-    EL resumed T = ((a,e,next.inst_id),parent,next,
+    (j + SUC (LENGTH (trace_blocks ((e,c.inst_id)::a) e (root_fuel-e) C child ent))) < LENGTH (trace_blocks [] 0 root_fuel C root_fn root_entry) /\
+    EL (j + SUC (LENGTH (trace_blocks ((e,c.inst_id)::a) e (root_fuel-e) C child ent))) (trace_blocks [] 0 root_fuel C root_fn root_entry) = ((a,e,next.inst_id),parent,next,
       post with vs_inst_idx := SUC b0.vs_inst_idx) /\
-    TAKE resumed T = TAKE j T ++ [v] ++ child_trace /\
-    trace_gas (TAKE resumed T) = trace_gas (TAKE j T) ++ trace_gas child_trace
+    TAKE (j + SUC (LENGTH (trace_blocks ((e,c.inst_id)::a) e (root_fuel-e) C child ent))) (trace_blocks [] 0 root_fuel C root_fn root_entry) = TAKE j (trace_blocks [] 0 root_fuel C root_fn root_entry) ++ [((a,e,c.inst_id),parent,c,b0)] ++ (trace_blocks ((e,c.inst_id)::a) e (root_fuel-e) C child ent) /\
+    trace_gas (TAKE (j + SUC (LENGTH (trace_blocks ((e,c.inst_id)::a) e (root_fuel-e) C child ent))) (trace_blocks [] 0 root_fuel C root_fn root_entry)) = trace_gas (TAKE j (trace_blocks [] 0 root_fuel C root_fn root_entry)) ++ trace_gas (trace_blocks ((e,c.inst_id)::a) e (root_fuel-e) C child ent)
 Proof
-  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule_all native_trace_blocks_continuation >> strip_tac >>
   gvs[] >>

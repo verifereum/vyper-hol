@@ -7,6 +7,7 @@ Ancestors
   compileVyper moduleLowering compileEnv loweringShapeDefs list
 
 Theorem runtime_sym_external_package_body:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   MEM (mut,nr,rr,name,args,defaults,ret,fbody) (FST (classify_functions tops)) /\
   set_external_package_target target
@@ -47,12 +48,13 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       drule_at (Pat `public_getter _ = _`) runtime_sym_public_getter_stmts >>
       disch_then (drule_at (Pat `compile_stmts _ _ _ _ _ = _`)) >>
-      disch_then (qspec_then `tops` mp_tac) >> simp[] >> disch_then irule >>
+      simp[] >> disch_then irule >>
       rpt gen_tac >> MATCH_ACCEPT_TAC runtime_sym_abi_encode_to_buf) >>
   first_assum ACCEPT_TAC
 QED
 
 Theorem runtime_sym_internal_package_body:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   MEM (mut,nr,rr,name,args,defaults,ret,fbody) (FST (SND (classify_functions tops))) /\
   set_internal_package_target target
@@ -79,6 +81,7 @@ Proof
 QED
 
 Theorem runtime_sym_fallback_package_body:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   FST (SND (SND (classify_functions tops))) =
     SOME (mut,nr,rr,name,args,defaults,ret,fbody) /\
@@ -101,6 +104,7 @@ Proof
 QED
 
 Theorem runtime_sym_external_classified_bodies:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   (!src. MEM src sources ==> MEM src (FST (classify_functions tops))) /\
   packages = MAP (set_external_package_target target o package_external_fn tops trans keys) sources /\
@@ -130,6 +134,7 @@ Proof
 QED
 
 Theorem runtime_sym_internal_classified_bodies:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   (!src. MEM src sources ==> MEM src (FST (SND (classify_functions tops)))) /\
   packages = MAP (set_internal_package_target target o package_internal_fn tops trans keys ctor imm) sources /\

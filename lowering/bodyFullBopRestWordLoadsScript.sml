@@ -145,7 +145,7 @@ Proof
   gvs[scalar_code_def, scalar_shape_def, scalar_binary_def,
     scalar_available_def, mk_inst_def, is_terminator_def] >>
   rpt strip_tac >>
-  gvs[loweringStateRelDefsTheory.not_fresh_at_def, eval_operand_def, lookup_var_def] >>
+  FIRST [gvs[loweringStateRelDefsTheory.not_fresh_at_def, eval_operand_def, lookup_var_def]] >>
   simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure2_def, eval_operands_def,
     eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
     is_terminator_def, GSYM word_mul_n2w, GSYM word_add_n2w,

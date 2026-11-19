@@ -4,7 +4,7 @@ Ancestors
   gasOracleReplay gasEvents frameGasEvents stateEquiv
   venomExecSemantics venomState venomInst list rich_list arithmetic
 
-Theorem fresh_plain_step[local]:
+Theorem fresh_plain_step:
   i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
   step_inst f C i s = OK u ==>
   u.vs_gas_readings = s.vs_gas_readings /\
@@ -24,7 +24,7 @@ Proof
   simp[lift_result_def]
 QED
 
-Theorem fresh_gas_step[local]:
+Theorem fresh_gas_step:
   i.inst_opcode = GAS /\
   step_inst f C i (s with vs_gas_readings := w::tail) = OK u ==>
   u.vs_gas_readings = tail /\
@@ -75,7 +75,7 @@ Proof
   `get_instruction eb s.vs_inst_idx = SOME h /\
    EL s.vs_inst_idx eb.bb_instructions = h /\
    EL s.vs_inst_idx tb.bb_instructions = h /\
-   get_instruction tb s.vs_inst_idx = SOME h /\ 
+   get_instruction tb s.vs_inst_idx = SOME h /\
    DROP (SUC s.vs_inst_idx) eb.bb_instructions = pre /\
    DROP (SUC s.vs_inst_idx) tb.bb_instructions = pre` by
     gvs[DROP_CONS_EL, get_instruction_def] >>

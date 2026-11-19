@@ -24,7 +24,7 @@ Proof
 QED
 
 Theorem assign_ptr_edge:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [arg] [out]) /\
   step_inst_base (mk_inst id ASSIGN [arg] [out]) s = OK u ==>
@@ -48,7 +48,7 @@ QED
    enters its phi-free block instead, entry_ghost_no_phi (reused from
    typedCopyArrayPtr) says exactly the same ghost is used. *)
 Theorem jump_ptr_edge:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) ==>
   gas_path_ptr_edge D 0 ctx fn PG G tn s 0 G tn (OK (jump_to lbl s))
@@ -68,7 +68,7 @@ Proof
 QED
 
 Theorem scalar_join_path:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [arg] [out]) /\
   step_inst_base (mk_inst id ASSIGN [arg] [out]) s = OK u /\
@@ -86,11 +86,11 @@ Proof
   strip_tac >>
   `gas_path_ptr_edge D 0 ctx fn PG G tn s 0 G1 tn1 (OK s1)` by
     (gvs[] >> irule assign_ptr_edge >> metis_tac[]) >>
-  `~s1.vs_halted` by
+  `~s1.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s1)` by
     (qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
      simp[mk_inst_def, step_inst_base_opcode_eqs] >>
      Cases_on `eval_operand arg s` >> gvs[update_var_def] >>
-     strip_tac >> gvs[]) >>
+     strip_tac >> gvs[allocas_below_fmp_def] >> metis_tac[]) >>
   `gas_path_ptr_edge D 0 ctx fn PG G1 tn1 s1 0 G1 tn1
      (OK (jump_to lbl s1))` by
     (irule jump_ptr_edge >> metis_tac[]) >>

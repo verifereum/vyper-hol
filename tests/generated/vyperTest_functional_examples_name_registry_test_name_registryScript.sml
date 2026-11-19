@@ -1,0 +1,4 @@
+Theory vyperTest_functional_examples_name_registry_test_name_registry[no_sig_docs]
+Ancestors vyperTestDefs_functional_examples_name_registry_test_name_registry
+Libs vyperTestRunnerLib
+val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_examples_name_registry_test_name_registry";

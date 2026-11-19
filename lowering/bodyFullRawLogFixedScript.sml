@@ -1,7 +1,7 @@
 (* Fixed bytes32 RawLog continuation, discharging the concrete endpoints. *)
 Theory bodyFullRawLogFixed
 Ancestors bodyFullRawLogFixedCompose bodyFullRawLogFixedAlloc bodyFullRawLogFixedTail
-  bodyFullRawLogFixedTailPath
+  bodyFullRawLogFixedTailPath contextRawReachable ptrDiscipline
 
 Theorem raw_log_fixed_data_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm
@@ -84,5 +84,22 @@ Proof
   (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC raw_log_fixed_tail_full)) >>
   (impl_tac >- (rpt gen_tac >>
     MATCH_ACCEPT_TAC bodyFullRawLogFixedTailPathTheory.raw_log_fixed_static_tail_path)) >>
-  disch_tac >> rpt gen_tac >> first_x_assum MATCH_ACCEPT_TAC
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  `!fn inst t. frag_reachable ctx func s0 fn inst t ==> dalloca_no_wrap inst t` by
+    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> strip_tac >>
+     `ctx_has_dalloca ctx` by
+       (simp_tac bool_ss [ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
+        qexists_tac `fn` >> conj_tac >- first_assum ACCEPT_TAC >>
+        qexists_tac `inst` >> simp[]) >> fs[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
+     !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    simp[] >>
+  qpat_x_assum `!DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm.
+      _` (qspecl_then [`DF`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`,
+        `shadow_func`, `cenv`, `cx`, `data`, `es`, `sd`, `data_op`, `sm`,
+        `shadow_sd`, `shadow_sm`, `sa`, `shadow_sa`, `s0`, `G0`, `tn0`, `st0`,
+        `vals`, `ops`, `ann`, `es_call`, `dflt`, `buf`, `s1`, `sb`, `ret_ty`,
+        `ty`, `topics`, `call_sa`, `vv`, `call_sb`, `env`, `es0`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]
 QED

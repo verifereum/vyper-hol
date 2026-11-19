@@ -747,7 +747,9 @@ Theorem membership_search_initialized:
     ~t.vs_halted /\ t.vs_inst_idx = 0 /\
     t.vs_current_bb = fresh_label_output "in_exit" (sa.cs_next_label+5)
 Proof
-  strip_tac >> drule_all membership_loop_contract_init >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all membership_loop_contract_init >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] mp_tac) >> strip_tac >>
   mp_tac (GEN_ALL (Q.SPEC `0` membership_search_suffix)) >>
   disch_then (drule_all o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss) []) >> strip_tac >>
