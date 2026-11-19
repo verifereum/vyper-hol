@@ -1355,12 +1355,6 @@ Proof
   disch_then drule_all >> simp[]
 QED
 
-Theorem mem_labels_clear_read_safe:
-  ~mem_labels_hit (mem_labels_clear labs P) P
-Proof
-  ACCEPT_TAC symControlTerminalSafetyOwnTheory.mem_labels_clear_read_safe
-QED
-
 Theorem sym_steps_terminal_extend:
   sym_terminal (sym_steps p env n ss) ==>
   sym_steps p env (n + k) ss = sym_steps p env n ss
