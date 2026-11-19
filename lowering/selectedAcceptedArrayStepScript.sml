@@ -1,6 +1,7 @@
 (* Source-exact transition of an installed nonbulk array loop. *)
 Theory selectedAcceptedArrayStep
 Ancestors
+  decoderOriginAllocationFrame
   selectedAcceptedInterfaces calldataArrayRawCallsite calldataMemberResourceFrame
   decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr robustCopyTransportPtr
   fragGasOriginPtrExec vyperCalldataProps vyperCalldata words arithmetic
@@ -53,7 +54,7 @@ Theorem selected_array_setup[local]:
   32+j*type_memory_size tv+type_memory_size tv <= span /\
   d+32+j*type_memory_size tv < dimword (:256) /\ type_memory_size tv < dimword (:256) /\
   ready.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
-  fn_has_code st ready fn /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st ready fn /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?a H u child.
@@ -119,7 +120,7 @@ Theorem selected_array_header[local]:
   DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem /\
   eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\
   abi_decode_load CALLDATALOAD (n2w sb:bytes32) s = n2w cnt /\ j < cnt /\
-  cnt < dimword (:256) /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  cnt < dimword (:256) /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block body_lbl fn.fn_blocks = SOME body_bb /\
   phi_prefix_length body_bb.bb_instructions = 0 /\
   lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
@@ -129,7 +130,8 @@ Theorem selected_array_header[local]:
   ?b H u.
     ~b.vs_halted /\ b.vs_current_bb = body_lbl /\ b.vs_inst_idx = 0 /\
     b.vs_memory = s.vs_memory /\ b.vs_allocas = s.vs_allocas /\
-    b.vs_alloca_next = s.vs_alloca_next /\ entry_decoder_obs s b /\
+    b.vs_alloca_next = s.vs_alloca_next /\ b.vs_initial_fmp = s.vs_initial_fmp /\
+    entry_decoder_obs s b /\
     fresh_vars_wrt limit b /\ ptr_covers H u q b 32 /\ mload slot b = n2w j /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
     u.t_imm = tn.t_imm /\
@@ -189,7 +191,8 @@ Theorem selected_array_child[local]:
   ptr_covers Ga ta child a (type_memory_size tv) /\
   op_taint ta (FST (SND ops)) = {} /\ op_prov Ga (FST (SND ops)) = NONE /\
   fresh_vars_wrt limit a /\ allocas_from lower a /\
-  lower <= a.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  lower <= a.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp a /\
+    a.vs_alloca_next + pending_alloca_size fn a <= w2n a.vs_initial_fmp) /\
   ~a.vs_halted /\ a.vs_current_bb = ready.cs_current_bb /\
   a.vs_inst_idx = LENGTH ready.cs_current_insts /\
   cd = a.vs_call_ctx.cc_calldata /\
@@ -247,7 +250,7 @@ Theorem selected_array_backedge[local]:
   eval_operand (Var iv) v = SOME (n2w j) /\
   op_taint tn (Var iv) = {} /\ op_prov G (Var iv) = NONE /\
   j < cnt /\ cnt < dimword (:256) /\
-  allocas_from lower v /\ ~ctx_has_dalloca ctx /\
+  allocas_from lower v /\ (ctx_has_dalloca ctx ==> allocas_below_fmp v) /\
   lookup_block hdr fn.fn_blocks = SOME hdr_bb /\
   phi_prefix_length hdr_bb.bb_instructions = 0 /\
   fresh_vars_wrt limit v /\ nv = STRING #"%" (toString k) /\ k < limit.cs_next_var /\
@@ -340,7 +343,7 @@ Theorem selected_array_enter_child[local]:
   DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem /\
   eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   abi_decode_load CALLDATALOAD (n2w sb:bytes32) s = n2w cnt /\ j < cnt /\
-  cnt < dimword (:256) /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  cnt < dimword (:256) /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block st.cs_current_bb fn.fn_blocks = SOME body_bb /\
   phi_prefix_length body_bb.bb_instructions = 0 /\ st.cs_current_insts = [] /\
   lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
@@ -421,6 +424,11 @@ Proof
     (qpat_x_assum `DISJOINT _ _` mp_tac >> simp[DISJOINT_ALT]) >>
   `slot+32 <= b.vs_alloca_next /\ j < dimword (:256) /\
     b.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp b` by
+    (qpat_assum `entry_decoder_obs s b` (strip_assume_tac o REWRITE_RULE [entry_decoder_obs_def]) >>
+     `allocas_below_fmp b <=> allocas_below_fmp s` by
+       asm_rewrite_tac[allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all selected_array_setup >> disch_then (qspec_then `PG` strip_assume_tac) >>
   rename1 `a.vs_inst_idx = LENGTH ready.cs_current_insts` >>
   rename1 `ptr_covers Ga ta child a _` >>
@@ -516,7 +524,8 @@ Theorem selected_array_iteration_with_frame:
   eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   abi_decode_load CALLDATALOAD (n2w sb:bytes32) s = n2w cnt /\ j < cnt /\
   cnt < dimword (:256) /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   lookup_block st.cs_current_bb fn.fn_blocks = SOME body_bb /\
   phi_prefix_length body_bb.bb_instructions = 0 /\ st.cs_current_insts = [] /\
   lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
@@ -599,6 +608,7 @@ Proof
    d+32+j*type_memory_size tv+type_memory_size tv <= base_addr+cap /\
    d+32+j*type_memory_size tv < dimword (:256) /\ type_memory_size tv < dimword (:256)` by
     decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (SPEC_ALL selected_array_enter_child) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
   rename1 `a.vs_inst_idx = LENGTH ready.cs_current_insts` >>
@@ -610,6 +620,16 @@ Proof
   qpat_assum `!child. SND (SND ops) = Var child ==> _`
     (qspec_then `child` (fn th => qpat_assum `SND (SND ops) = Var child`
        (assume_tac o MP th))) >>
+  `a.vs_fmp = s.vs_fmp` by
+    (qpat_assum `entry_decoder_obs s a` (ACCEPT_TAC o MATCH_MP entry_decoder_obs_fmp)) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp a /\
+    a.vs_alloca_next + pending_alloca_size fn a <= w2n a.vs_initial_fmp)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK a,Ga,ta)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`fn_inst_ids_distinct fn`,`a.vs_fmp = s.vs_fmp`,`alloca_inv a`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   mp_tac (Q.INST [`cd` |-> `s.vs_call_ctx.cc_calldata`,
       `b` |-> `cd_at F (w2n (n2w sb:bytes32)) 32`,
       `e` |-> `d+32+j*type_memory_size tv`, `xs` |-> `pending`]
@@ -663,6 +683,15 @@ Proof
     (conj_tac >- (strip_tac >> gvs[]) >>
      asm_simp_tac bool_ss [] >> decide_tac) >>
   `lookup_var q v = SOME (n2w slot)` by asm_rewrite_tac[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp v /\
+    v.vs_alloca_next + pending_alloca_size fn v <= w2n v.vs_initial_fmp)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (a,Ga,ta) [] (OK v,Gv,tvn)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`fn_inst_ids_distinct fn`,`v.vs_fmp = a.vs_fmp`,`alloca_inv v`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp a /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by simp[] >>
   mp_tac (Q.INST [`bb` |-> `back_bb`, `prefix` |-> `last.cs_current_insts`,
       `id` |-> `bid`, `hdr` |-> `s.vs_current_bb`, `hdr_bb` |-> `bb`,
       `G` |-> `Gv`, `tn` |-> `tvn`] (SPEC_ALL selected_array_backedge)) >>
@@ -753,7 +782,8 @@ Theorem selected_array_iteration:
   eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   abi_decode_load CALLDATALOAD (n2w sb:bytes32) s = n2w cnt /\ j < cnt /\
   cnt < dimword (:256) /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   lookup_block st.cs_current_bb fn.fn_blocks = SOME body_bb /\
   phi_prefix_length body_bb.bb_instructions = 0 /\ st.cs_current_insts = [] /\
   lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\

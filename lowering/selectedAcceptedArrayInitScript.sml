@@ -2,6 +2,7 @@
    when its index allocation is being replayed. *)
 Theory selectedAcceptedArrayInit
 Ancestors
+  venomFnInstsProofs decoderOriginAllocationFrame
   sourceOwnedArrayConstructorPtr selectedAcceptedInterfaces decoderArrayInitPtr
   physicalArrayInitSequence decoderNavigationPtr fragGasOriginPtrLoop
   entryDecoderStateFrame fragGasPathFrameMem logStoreDataOriginPtr
@@ -34,6 +35,19 @@ Proof
   rpt conj_tac >> first_x_assum irule >> decide_tac
 QED
 
+Triviality array_init_pending_credit:
+  MEM bb fn.fn_blocks /\ bb.bb_instructions = prefix ++ suffix /\
+  bc.bb_instructions = prefix ==>
+  pending_alloca_size (fn with fn_blocks := [bc]) s <= pending_alloca_size fn s
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM bb fn.fn_blocks`
+    (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+  simp[fn_insts_def, fn_insts_blocks_flat, pending_alloca_size_def,
+       MAP_APPEND, FLAT_APPEND, FILTER_APPEND_DISTRIB, SUM_APPEND] >>
+  decide_tac
+QED
+
 Theorem selected_array_init_to_header:
   abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     maxn abi_sz st = ((ip,cnt),loop_st) /\
@@ -55,7 +69,8 @@ Theorem selected_array_init_to_header:
   base_addr <= d /\ 32 <= outsz /\ d+outsz <= base_addr+owner_cap /\
   d+outsz < dimword (:256) /\ ptr_covers G tn root s outsz /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
-  allocas_from lower s /\ lower <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lower s /\ lower <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   (!id p k. st.cs_next_id <= id /\ id < last.cs_next_id /\
@@ -206,6 +221,18 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      fs[Abbr `init`, allocas_from_def] >>
      rpt gen_tac >> Cases_on `aid = header_st.cs_next_id` >> gvs[] >> metis_tac[]) >>
+  `init.vs_fmp = s.vs_fmp` by
+    (qpat_assum `entry_decoder_obs s t` (assume_tac o MATCH_MP entry_decoder_obs_fmp) >>
+     asm_simp_tac bool_ss [Abbr `init`, venom_state_accfupds, combinTheory.K_THM]) >>
+  `alloca_inv init` by
+    (irule calldata_alloca_inv_fields >> qexists_tac `t` >> simp[Abbr `init`]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp init` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK init,H,u)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`fn_inst_ids_distinct fn`,`init.vs_fmp = s.vs_fmp`,`alloca_inv init`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   qabbrev_tac `h = jump_to hdr init` >>
   `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
     (s,G,tn) [] (OK h,H,u)` by
@@ -228,6 +255,20 @@ Proof
    fn_has_code st loop_st clip` by
     simp[Abbr `clip`, Abbr `bc`, fn_has_code_def, emitted_blocks_def,
       lookup_block_def, FIND_thm, emitted_insts_def] >>
+  `pending_alloca_size clip s <= pending_alloca_size fn s` by
+    (qpat_assum `Abbrev (clip = _)` (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     irule array_init_pending_credit >>
+     qexists_tac `bb` >>
+     qpat_assum `lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME bb`
+       (assume_tac o MATCH_MP venomExecProofsTheory.lookup_block_MEM) >>
+     simp[Abbr `bc`]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size clip s <= w2n s.vs_initial_fmp)` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`,
+        `pending_alloca_size clip s <= pending_alloca_size fn s`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `ctx_has_dalloca ctx` >> simp[] >> decide_tac) >>
   `gas_path_ptr ARB lower ctx clip PG G tn s 0 H u (OK init)` by
     (`gas_origin_ptr_path (ARB,lower,{},ctx,clip,PG) (s,G,tn) [] (OK init,H,u)`
        by simp[Abbr `init`] >>
