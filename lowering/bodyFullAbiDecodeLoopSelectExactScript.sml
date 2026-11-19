@@ -422,7 +422,12 @@ Proof
      simp[abi_decode_ge_guard_def,compile_abi_decode_range_check_def,
        emit_op_def,emit_void_def,fresh_var_def,fresh_id_def,emit_def,
        comp_bind_def,comp_ignore_bind_def,comp_return_def] >>
-     rpt strip_tac >> gvs[]) >>
+     rpt strip_tac >>
+     map_every (fn pat => qpat_assum pat
+       (mp_tac o AP_TERM ``\s:compile_state.
+         (s.cs_current_bb, s.cs_next_var, s.cs_next_id)``))
+       [`_ = s3`, `_ = s4`, `_ = s5`, `_ = sb`] >>
+     POP_ASSUM_LIST (K all_tac) >> simp[] >> decide_tac) >>
   `(!op. op IN {data;loadval;hi;Lit (n2w asz)} ==>
      op_prov Gf op = NONE /\ op_taint tnf op = {}) /\
    allocas_from lo t /\ lo <= t.vs_alloca_next` by
