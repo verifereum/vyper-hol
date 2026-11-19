@@ -14,6 +14,46 @@ Ancestors
   vfmExecution codegen asmIR
   finite_map list rich_list words arithmetic
 
+Theorem focus_row_visit_inverse[local]:
+  !xs be.
+    DROP be.vs_inst_idx bt.bb_instructions = xs /\
+    MEM ((a,e,i.inst_id),tf,i,t)
+      (trace_block a e fuel C tf bt be) ==>
+    ?pre rest. xs = pre ++ i::rest /\
+      t.vs_inst_idx = be.vs_inst_idx + LENGTH pre /\
+      EVERY (\x. ~is_terminator x.inst_opcode) pre /\
+      FOLDR (dft_exec_cons fuel C) OK pre be = OK t
+Proof
+  Induct
+  >- (rpt strip_tac >>
+      `LENGTH bt.bb_instructions <= be.vs_inst_idx` by
+        (gvs[GSYM LENGTH_NIL, LENGTH_DROP]) >>
+      fs[Once (cj 2 trace_defs), get_instruction_def]) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `DROP be.vs_inst_idx bt.bb_instructions = head::xs` >>
+  `be.vs_inst_idx < LENGTH bt.bb_instructions` by
+    (qpat_assum `DROP _ _.bb_instructions = _::_`
+       (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[NoAsms, LENGTH_DROP]) >>
+  `get_instruction bt be.vs_inst_idx = SOME head /\
+   DROP (SUC be.vs_inst_idx) bt.bb_instructions = xs` by
+    (drule DROP_BY_DROP_SUC >> simp[get_instruction_def]) >>
+  drule_then assume_tac trace_block_visit >>
+  qpat_x_assum `MEM _ (trace_block _ _ _ _ _ _ _)` mp_tac >>
+  asm_rewrite_tac[MEM, MEM_APPEND, pairTheory.PAIR_EQ] >> strip_tac
+  >- (gvs[] >> qexistsl [`[]`,`xs`] >> simp[])
+  >- (`MEM (a,e,i.inst_id) (MAP FST (trace_step a e fuel C tf head be))` by
+        (simp[MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+      metis_tac[dftGasFromListTraceNamesTheory.trace_step_not_root]) >>
+  Cases_on `step_inst fuel C head be` >> gvs[] >>
+  Cases_on `is_terminator head.inst_opcode` >> gvs[] >>
+  rename1 `step_inst fuel C head be = OK post` >>
+  qpat_x_assum `!s. DROP _ _ = _ /\ MEM _ _ ==> _`
+    (qspec_then `post with vs_inst_idx := SUC be.vs_inst_idx` mp_tac) >>
+  simp[] >> strip_tac >>
+  qexistsl [`head::pre`,`rest`] >> simp[dftIndexedExecTheory.dft_exec_cons_def]
+QED
+
 (* A child frame keeps its call site throughout the child's trace. Changing
    the selected instruction ID does not move that frame to another site. *)
 Theorem focus_child_row_excludes[local]:
