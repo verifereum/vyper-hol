@@ -25,7 +25,7 @@ QED
 
 Theorem code_offset_add_resources_ptr:
   emit_op ADD [op; Lit (n2w off)] sa = (r,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   eval_operand op s = SOME a /\ op_taint tn op = {} ==>
@@ -61,7 +61,7 @@ QED
 
 Theorem compile_lit_byte_offset_path_ptr:
   compile_lit_byte_offset op off sa = (r,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   eval_operand op s = SOME a /\ op_taint tn op = {} ==>
@@ -97,7 +97,7 @@ QED
 
 Theorem code_offset_add_covers_ptr:
   emit_op ADD [Var root; Lit (n2w off)] sa = (Var out,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var root s = SOME a /\ ptr_covers G tn root s capacity /\
@@ -134,7 +134,7 @@ QED
 
 Theorem compile_lit_byte_offset_covers_ptr:
   compile_lit_byte_offset (Var root) off sa = (r,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var root s = SOME a /\ ptr_covers G tn root s capacity /\

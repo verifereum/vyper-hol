@@ -203,6 +203,7 @@ Proof
      simp[]) >>
   `allocas_from lo ul` by (simp[allocas_from_def] >> metis_tac[allocas_from_def]) >>
   `eval_operand len ul = SOME nw` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ul` by simp[] >>
   drule_all (Q.INST [`dyn` |-> `T`] array_tail_scalar_uniform) >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `same_blocks sn sb /\

@@ -2346,6 +2346,13 @@ Resume return_selected_valued_frag_full_core[word_resources]:
       SOME (b,sz) ==> sz = 32)` by
     (rpt gen_tac >> strip_tac >>
      metis_tac[stmt_state_rel_alloca_site_bound]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
+    (qpat_assum `stmt_state_rel _ ctx func ce cx mid t` (fn related =>
+       mp_tac (MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp related) >>
+       mp_tac (MATCH_MP stateRelProjTheory.stmt_state_rel_fmp_room related)) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac) >>
   mp_tac (Q.INST [`ei` |-> `ce.ce_ret_enc_info`,
       `msz` |-> `ce.ce_max_return_size`,`iv` |-> `mut = View`,
       `st` |-> `sm`,`st'` |-> `sb`,`x` |-> `()`,

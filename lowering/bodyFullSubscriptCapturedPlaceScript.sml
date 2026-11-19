@@ -666,6 +666,7 @@ Proof
    (!x. Lit (n2w n) = Var x ==> not_fresh_at sn x) /\
    op_prov G' (Lit (n2w n)) = NONE /\ op_taint tn' (Lit (n2w n)) = {}` by
     simp[eval_operand_def, ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all array_tail_scalar_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choose_then `q` (qx_choose_then `Gq` (qx_choose_then `tnq` strip_assume_tac)))) >>
@@ -710,7 +711,9 @@ Proof
   `evaluate_type (get_tenv cx) (ArrayT et (Fixed n)) = SOME (ArrayTV etv (Fixed n))` by
     metis_tac[] >>
   `evaluate_type (get_tenv cx) et = SOME etv` by
-    fs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+    (qpat_assum `evaluate_type _ (ArrayT _ _) = SOME _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
   `esz = type_memory_size etv` by
     (qpat_assum `esz = type_memory_bytes ce et` SUBST1_TAC >>
      irule exprSimHypsTheory.expr_sim_inv_memory_size >>
