@@ -434,7 +434,6 @@ Proof
                (assume_tac o REWRITE_RULE [concretizePtrParamSupportTheory.ptr_static_support_def]) >>
              drule_all concretizePtrDallocaPersistentChannelsTheory.ptr_dalloca_store_selector_equal >> simp[]) >>
          (strip_tac >>
-          rewrite_tac[GSYM concretizePtrRequestCompletionProbeTheory.ptr_call_adopted_def] >>
           ` (EL q ht).po_inst = (EL i h).po_inst` by
             (qpat_assum `(EL q ht).po_inst = concretize_inst_with_positions _ _`
                (fn th => simp[th, concretize_positions_unchanged])) >>
@@ -446,8 +445,9 @@ Proof
           simp[] >> disch_then strip_assume_tac >>
           qpat_assum `ptr_static_support P _ before_row4`
             (assume_tac o REWRITE_RULE [concretizePtrParamSupportTheory.ptr_static_support_def]) >>
-          drule_all concretizePtrDallocaPersistentChannelsTheory.ptr_dalloca_call_adoption >>
-          simp[concretizePtrRequestCompletionProbeTheory.ptr_call_adopted_def])) >>
+          `MEM (EL i h).po_inst.inst_opcode [CALL;DELEGATECALL;CREATE;CREATE2]` by simp[] >>
+          drule_all concretizePtrDallocaPersistentChannelsTheory.ptr_dalloca_oracle_adoption >>
+          simp[])) >>
      strip_tac >>
      `(EL q ht).po_inst = (EL i h).po_inst` by
        (qpat_assum `(EL q ht).po_inst = concretize_inst_with_positions _ _`

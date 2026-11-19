@@ -1,7 +1,7 @@
 Theory concretizeLayoutDelegate
 Ancestors concretizeLayoutCutSafe concretizeLayoutDelegateBoundary
   concretizeLayoutExternalCall concretizeLayoutExternalRequests
-  venomCallOracleDefs extCallOracle
+  venomCallOracleDefs extCallOracle lowerDloadExternalEffects
   concretizeLayoutCleanRead concretizeLayoutSupplement concretizeLayoutReaderContext
   frameRelocationEnvironment frameRelocationAllocationSteps frameRelocationMemory
   venomExecSemantics venomState ptrDiscipline list venomMemProps
@@ -36,7 +36,13 @@ Theorem delegate_taint:
   post.vs_allocas = s.vs_allocas /\ post.vs_fmp = s.vs_fmp ==>
   step_taint inst s post tn =
     tn with <|t_mem := tn.t_mem DIFF range_bytes (step_writes inst s post);
-              t_var := tn.t_var |+ (v,{})|>
+              t_var := tn.t_var |+ (v,{});
+      t_stor := if (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
+     ~computed_precompile (LAST post.vs_requests) /\
+     post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) then {} else tn.t_stor;
+      t_trans := if (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
+     ~computed_precompile (LAST post.vs_requests) /\
+     post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) then {} else tn.t_trans|>
 Proof
   strip_tac >>
   `new_site_bytes s post = {}` by
@@ -102,7 +108,6 @@ Resume concretize_delegate_observation[supplement]:
     (record_request rq s.vs_requests) (record_request rqT t.vs_requests)` by
     (irule request_agree_record_request >> fs[concretize_supplement_def]) >>
   fs[concretize_supplement_def] >>
-  qpat_x_assum `s.vs_outcomes = t.vs_outcomes` SUBST_ALL_TAC >>
   Cases_on `t.vs_outcomes` >>
   gvs[consume_call_outcome_def, take_outcome_def, computed_precompile_def,
       Abbr `rq`, Abbr `rqT`, venom_call_request_def,
@@ -112,6 +117,7 @@ Resume concretize_delegate_observation[supplement]:
       imm_taint_def, adopt_reset_def, update_var_def,
       accounts_agree_except_def, transient_agree_except_def,
       storage_agree_except_def, word_agree_except_def,
+      record_request_changed, record_request_def, computed_precompile_def,
       Excl "consume_call_outcome_eq"]
 QED
 Resume concretize_delegate_observation[environment]:
@@ -238,6 +244,8 @@ Theorem concretize_delegate_taint_order:
     (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) = OK post /\
   exec_delegatecall inst t gas addr (offT:bytes32) sz (roT:bytes32) rs = OK post' /\
   post.vs_returndata = post'.vs_returndata /\
+  s.vs_call_ctx = t.vs_call_ctx /\ s.vs_outcomes = t.vs_outcomes /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n offT) (w2n sz) t /\
   relocation_taint_le R tn un /\
   (!a b. next a b /\ w2n ro <= a /\
      a < w2n ro + LENGTH (TAKE (w2n rs) post.vs_returndata) ==>
@@ -246,16 +254,45 @@ Theorem concretize_delegate_taint_order:
      a < w2n ro + LENGTH (TAKE (w2n rs) post.vs_returndata)) ==> R a b) ==>
   relocation_taint_le next (step_taint inst s post tn) (step_taint inst t post' un)
 Proof
-  strip_tac >> dxrule delegate_execution_fields >> strip_tac >>
+  strip_tac >>
+  `(~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
+     ~computed_precompile (LAST post.vs_requests) /\
+     post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
+    (~t.vs_call_ctx.cc_static /\ post'.vs_requests <> t.vs_requests /\
+     ~computed_precompile (LAST post'.vs_requests) /\
+     post'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)` by
+    (dxrule delegate_success_envelope >> strip_tac >>
+     dxrule delegate_success_envelope >> strip_tac >>
+     qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
+     qmatch_asmsub_abbrev_tac `consume_call_outcome rt _ _ t = _` >>
+     `rq.cr_kind = rt.cr_kind /\ rq.cr_value = rt.cr_value /\
+      rq.cr_target = rt.cr_target /\ rq.cr_data = rt.cr_data` by
+       simp[Abbr `rq`, Abbr `rt`, venom_call_request_def] >>
+     `s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static` by simp[] >>
+     drule_all ld_call_consume_adoption_test >>
+     simp[update_var_def, Excl "consume_call_outcome_eq"]) >>
+  dxrule delegate_execution_fields >> strip_tac >>
   dxrule delegate_execution_fields >> strip_tac >>
   `out' = out` by fs[] >> gvs[] >>
   `step_taint inst s post tn =
     tn with <|t_mem := tn.t_mem DIFF range_bytes (step_writes inst s post);
-              t_var := tn.t_var |+ (out,{})|>` by
+              t_var := tn.t_var |+ (out,{});
+      t_stor := if (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
+     ~computed_precompile (LAST post.vs_requests) /\
+     post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) then {} else tn.t_stor;
+      t_trans := if (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
+     ~computed_precompile (LAST post.vs_requests) /\
+     post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) then {} else tn.t_trans|>` by
     (irule delegate_taint >> simp[] >> metis_tac[]) >>
   `step_taint inst t post' un =
     un with <|t_mem := un.t_mem DIFF range_bytes (step_writes inst t post');
-              t_var := un.t_var |+ (out,{})|>` by
+              t_var := un.t_var |+ (out,{});
+      t_stor := if (~t.vs_call_ctx.cc_static /\ post'.vs_requests <> t.vs_requests /\
+     ~computed_precompile (LAST post'.vs_requests) /\
+     post'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success) then {} else un.t_stor;
+      t_trans := if (~t.vs_call_ctx.cc_static /\ post'.vs_requests <> t.vs_requests /\
+     ~computed_precompile (LAST post'.vs_requests) /\
+     post'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success) then {} else un.t_trans|>` by
     (irule delegate_taint >> simp[] >> metis_tac[]) >>
   `LENGTH (TAKE (w2n rs) post'.vs_returndata) =
     MIN (w2n rs) (LENGTH post'.vs_returndata)` by
@@ -272,8 +309,10 @@ Proof
       `~(w2n ro <= a /\ a < w2n ro + MIN (w2n rs) (LENGTH post'.vs_returndata))` by
         (strip_tac >> first_x_assum drule >> simp[] >> decide_tac) >>
       metis_tac[]) >>
-  simp[op_taint_def, FLOOKUP_UPDATE] >> rpt gen_tac >>
-  IF_CASES_TAC >> simp[] >> fs[op_taint_def]
+  conj_tac
+  >- (simp[op_taint_def, FLOOKUP_UPDATE] >> rpt gen_tac >>
+      IF_CASES_TAC >> simp[] >> fs[op_taint_def]) >>
+  IF_CASES_TAC >> simp[]
 QED
 
 Theorem delegate_base_envelope[local]:
@@ -427,6 +466,8 @@ Proof
   `post.vs_returndata = tpost.vs_returndata` by
     (fs[local_rel_def, concretize_local_obs_def, dead_result_rel_def] >>
      irule listTheory.LIST_EQ >> simp[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_outcomes = t.vs_outcomes` by
+    fs[relocation_env_def, concretize_supplement_def] >>
   irule concretize_delegate_taint_order >> simp[] >>
   goal_assum (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   fs[MEM] >> metis_tac[]
