@@ -396,6 +396,7 @@ Proof
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>
+     imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
      qexists_tac `[]` >> simp[]) >>
   `expr_sim_mem ctx func cenv cx ty e es` by
     metis_tac[body_expr_mem_ok_def] >>

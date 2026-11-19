@@ -126,5 +126,6 @@ Proof
   simp[exprSimHypsDefsTheory.expr_body_pre_def, tuple_abi_def, tuple_call_def,
        vyperTypeCallGraphTheory.int_calls_expr_def,
        supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.call_operands_effect_root_def,
        exprSimHypsDefsTheory.const_name_root_def]
 QED

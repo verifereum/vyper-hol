@@ -2178,7 +2178,10 @@ Proof
     fs[body_inv_def] >>
   drule_then assume_tac gasContextTheory.cx_tops_module >>
   `expr_body_pre cenv cx env e es` by
-    (irule bodyExprPreFactsTheory.stmt_expr_body_pre >>
+    (`supportedExprs$supported_expr tops e` by
+       gvs[supported_stmt_def, supported_assignment_def] >>
+     drule_then assume_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >>
+     irule bodyExprPreFactsTheory.stmt_expr_body_pre >>
      fs[bodyExprPreFactsTheory.stmt_exprs_ok_flat,
         supportedStmtTraverseTheory.body_stmt_safe_def,
         supportedStmtTraverseTheory.supported_stmt_expr_exists_def,

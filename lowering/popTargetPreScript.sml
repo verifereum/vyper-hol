@@ -24,7 +24,6 @@ Theorem target_indices_pre_of_body:
     alloc_limits_target cenv bt /\
     call_evaluation_safe cx (int_calls_target bt) /\
     ~supported_target_exists expr_evm_run_root bt /\
-    ~supported_target_exists call_operands_effect_root bt /\
     ~supported_target_exists (const_name_root cx) bt /\
     EVERY (\c. FST c = NONE /\
                ?tops. supported_program tops /\
@@ -59,8 +58,7 @@ Proof
   gvs[Once well_typed_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
       int_calls_expr_def, expr_has_evm_run_def, supported_expr_exists_def,
       expr_abi_decode_target_root_def, expr_evm_run_root_def,
-      call_operands_effect_root_def,
-        exprSimHypsDefsTheory.const_name_root_def] >>
+      exprSimHypsDefsTheory.const_name_root_def] >>
   irule target_indices_pre_of_body >> simp[] >> metis_tac[]
 QED
 

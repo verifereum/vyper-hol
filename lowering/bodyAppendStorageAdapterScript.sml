@@ -49,6 +49,7 @@ Proof
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supportedExprTraverseTheory.supported_expr_exists_def,
       int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>
+  imp_res_tac supported_expr_no_call_operand_effects >> simp[] >>
   rpt conj_tac
   >~ [`call_evaluation_safe`] >- (qexists_tac `[]` >> simp[]) >>
   metis_tac[]

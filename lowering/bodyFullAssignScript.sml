@@ -4391,7 +4391,7 @@ QED
 (* A storage-backed compiled result retains a source storage place.
    The actual source evaluation records its finite observed region even
    when the RHS has effects. *)
-Theorem body_assign_rhs_storage_live[local]:
+Theorem body_assign_rhs_storage_live:
   !tops ctx cenv cx env es e H es1 sa sb vv pv func s0 s.
     body_inv tops ctx cenv cx /\
     runtime_consistent env cx es /\ well_typed_expr env e /\
@@ -13405,6 +13405,8 @@ Proof
         EVERY_APPEND, DE_MORGAN_THM]) >>
     `~supported_target_exists (const_name_root cx) t` by
       metis_tac[body_inv_target_const_name_free, optionTheory.NOT_SOME_NONE, IS_SOME_EXISTS] >>
+    `~supported_target_exists call_operands_effect_root t` by
+      metis_tac[bodyStorageCasesTheory.supported_target_info_storage_syntax, IS_SOME_EXISTS] >>
     irule aug_place_target_indices_pre >>
     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, supported_assignment_exists_def,
         alloc_limits_stmt_def, int_calls_stmt_def, int_calls_atarget_def] >>

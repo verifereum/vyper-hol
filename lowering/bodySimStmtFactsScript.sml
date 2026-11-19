@@ -315,6 +315,7 @@ Proof
   drule_then strip_assume_tac body_inv_cx_tops >>
      irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+  imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
   qexists_tac `[]` >> simp[] >>
   metis_tac[call_evaluation_safe_append_right]
 QED
