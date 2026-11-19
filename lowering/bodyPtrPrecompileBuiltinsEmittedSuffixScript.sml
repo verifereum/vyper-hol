@@ -13,7 +13,7 @@ Theorem computed_emitted_suffix_checked:
   computed_precompile (venom_call_request s target 0w wi insz T) /\
   ptr_covers G tn src s (w2n insz) /\ ptr_covers G tn dst s (w2n outsz) /\
   (!i. w2n wi <= i /\ i < w2n wi + w2n insz ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
