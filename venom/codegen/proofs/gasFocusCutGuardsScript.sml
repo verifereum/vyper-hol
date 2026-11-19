@@ -1,5 +1,6 @@
 Theory gasFocusCutGuards
 Ancestors
+  gasFocusSourceProvider
   dftFinitePacket dftGasFromListTraceDefs
   o1ContractCfgNormJointCursors frameJointTrace frameJointTransition
   fnFramePrefixDriver fnFrameSymbolicPrefix codegenEntryRel
@@ -421,5 +422,18 @@ Theorem focus_cut_guard_or_stop:
       (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
       u.vs_initial_fmp = visit_state.vs_initial_fmp))))
 Proof
-  cheat
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
+  (fn (asl, goal) =>
+    let
+      val (input, _) = dest_imp goal
+      val available = strip_conj input
+      val supplier = CONV_RULE (DEPTH_CONV BETA_CONV)
+        (PURE_REWRITE_RULE [LET_THM] focus_source_cut_provider)
+      val (needed, _) = dest_imp (concl supplier)
+      val _ = if List.all (fn tm => List.exists (aconv tm) available)
+                    (strip_conj needed) then ()
+              else raise Fail "C1.9 and C1.10 need the same packet and cursor"
+    in
+      (strip_tac >> drule supplier >> cheat) (asl, goal)
+    end)
 QED

@@ -1,5 +1,6 @@
 Theory gasFocusUniformStop
 Ancestors
+  gasFocusJointProgress
   dftFinitePacket dftGasFromListTraceDefs
   o1ContractCfgNormJointCursors frameJointTrace frameJointTransition
   fnFramePrefixDriver fnFrameSymbolicPrefix codegenEntryRel
@@ -420,5 +421,37 @@ Theorem focus_uniform_frontier:
         eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent)) \/
     (inst9.inst_opcode <> INVOKE /\ ?err. step_inst 0 C9 inst9 s9 = Error err))
 Proof
-  cheat
+  (fn (asl, goal) =>
+    let
+      val (input, stopped) = dest_imp goal
+      val current = snd (strip_exists stopped)
+      val current = rhs (concl
+        (DEPTH_CONV BETA_CONV (rhs (concl (PURE_REWRITE_CONV [LET_THM] current)))))
+      val frontier = strip_conj input @ strip_conj current
+      val supplier = CONV_RULE (DEPTH_CONV BETA_CONV)
+        (PURE_REWRITE_RULE [LET_THM] focus_joint_progress)
+      val (needed, extended) = dest_imp (concl supplier)
+      fun packet facts =
+        valOf (List.find (fn tm =>
+          let val (head, _) = strip_comb tm
+          in is_const head andalso fst (dest_const head) = "dft_focus_packet_rel" end)
+          facts)
+      fun rooted_args tm =
+        let val (_, args) = strip_comb tm
+        in map (fn i => List.nth (args, i)) [0, 1, 2, 3, 4, 5, 13] end
+      val _ = if ListPair.allEq (uncurry aconv)
+                   (rooted_args (packet frontier),
+                    rooted_args (packet (strip_conj (snd (strip_exists extended)))))
+              then () else raise Fail "C1.11 changed the packet root or evaluator"
+      val enabled = List.filter
+        (fn tm => not (List.exists (aconv tm) frontier)) (strip_conj needed)
+      (* Bounded search calls progress at an enabled prefix. Its immediate
+         hypotheses include the active instruction, guard and readiness. *)
+      val _ = if length enabled = 6 then ()
+              else raise Fail ("Unexpected inputs to C1.11 at the C1.12 cursor: " ^
+                String.concatWith "; " (map term_to_string enabled))
+      val _ = drule supplier (enabled @ frontier @ asl, goal)
+    in
+      cheat (asl, goal)
+    end)
 QED

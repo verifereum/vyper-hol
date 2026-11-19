@@ -1,5 +1,6 @@
 Theory gasFocusConcretizeCutTaintWithin
 Ancestors
+  gasFocusConcretizeCutCoverage
   o1PassContract o1PassLift o1SafeUpto unitTransformDefs
   venomPassSchedule ptrDiscipline venomWf lowerDloadDefs stackPlanGen
   venomState words list
@@ -20,5 +21,6 @@ Theorem focus_concretize_cut_taint_within:
   (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\ dead_wf D ==>
   taint_within_upto D n C' vs
 Proof
+  strip_tac >> drule_all focus_concretize_cut_fields >>
   cheat
 QED

@@ -1,5 +1,7 @@
 Theory gasFocusPacketCoverage
 Ancestors
+  gasFocusUniformStop
+  gasFocusUniformStop
   dftFinitePacket dftGasFromListTraceDefs
   o1ContractCfgNormJointCursors frameJointTrace frameJointTransition
   fnFramePrefixDriver fnFrameSymbolicPrefix codegenEntryRel
@@ -434,5 +436,23 @@ Theorem focus_packet_coverage:
     LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
     ?rest. MAP project sites = markf (raw ++ [0w]) ++ rest)
 Proof
-  cheat
+  (fn (asl, goal) =>
+    let
+      val (input, _) = dest_imp (rhs (concl
+        (DEPTH_CONV BETA_CONV (rhs (concl (PURE_REWRITE_CONV [LET_THM] goal))))))
+      val fmp = valOf (List.find (fn tm => fst (dest_var tm) = "fmp")
+                       (free_vars (concl focus_uniform_frontier)))
+      val (_, fmp_type) = match_term fmp ``fmp:bytes32``
+      val supplier = INST_TYPE fmp_type focus_uniform_frontier
+      val (_, stopped) = dest_imp (concl supplier)
+      val retained = snd (strip_exists stopped)
+      val retained = rhs (concl
+        (DEPTH_CONV BETA_CONV (rhs (concl (PURE_REWRITE_CONV [LET_THM] retained)))))
+      val _ = if List.all (fn tm => List.exists (aconv tm) (strip_conj input))
+                   (strip_conj retained) then ()
+              else raise Fail "C1.13 must use the very C1.12 stopped packet"
+      val _ = drule supplier (strip_conj input @ asl, goal)
+    in
+      cheat (asl, goal)
+    end)
 QED

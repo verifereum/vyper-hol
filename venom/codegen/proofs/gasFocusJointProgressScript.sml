@@ -1,5 +1,6 @@
 Theory gasFocusJointProgress
 Ancestors
+  gasFocusCutGuards
   dftFinitePacket dftGasFromListTraceDefs
   o1ContractCfgNormJointCursors frameJointTrace frameJointTransition
   fnFramePrefixDriver fnFrameSymbolicPrefix codegenEntryRel
@@ -310,5 +311,26 @@ Theorem focus_joint_progress:
                 (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
                 u.vs_initial_fmp = visit_state.vs_initial_fmp))))
 Proof
-  cheat
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
+  (fn (asl, goal) =>
+    let
+      val (input, _) = dest_imp goal
+      val fmp = valOf (List.find (fn tm => fst (dest_var tm) = "fmp")
+                       (free_vars input))
+      val (_, fmp_type) = match_term fmp ``fmp:bytes32``
+      val frontier = strip_conj (inst fmp_type input)
+      val supplier = CONV_RULE (DEPTH_CONV BETA_CONV)
+        (PURE_REWRITE_RULE [LET_THM] focus_cut_guard_or_stop)
+      val (needed, _) = dest_imp (concl supplier)
+      val caller_inputs = List.filter
+        (fn tm => not (List.exists (aconv tm) frontier)) (strip_conj needed)
+      (* C1.9 provides the bounded family and the compatible filling before
+         this mark-independent edge theorem is applied. *)
+      val _ = if length caller_inputs = 2 then ()
+              else raise Fail ("Unexpected inputs to C1.10 at the C1.11 cursor: " ^
+                String.concatWith "; " (map term_to_string caller_inputs))
+      val _ = drule supplier (caller_inputs @ frontier @ asl, goal)
+    in
+      cheat (asl, goal)
+    end)
 QED

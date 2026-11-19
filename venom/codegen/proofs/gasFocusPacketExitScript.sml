@@ -1,5 +1,6 @@
 Theory gasFocusPacketExit
 Ancestors
+  gasFocusWalkInventoryReplay gasFocusReplayExit gasFocusPacketCoverage
   dftFinitePacket dftGasFromListTraceDefs
   o1ContractCfgNormJointCursors frameJointTrace frameJointTransition
   fnFramePrefixDriver fnFrameSymbolicPrefix codegenEntryRel
@@ -450,5 +451,66 @@ Theorem focus_packet_exit:
      code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
   o1_lowered_inv out.po_unit.cu_context vs0)
 Proof
-  cheat
+  (fn (asl, goal) =>
+    let
+      fun normalize tm =
+        rhs (concl (DEPTH_CONV BETA_CONV (rhs (concl
+          (PURE_REWRITE_CONV [LET_THM, o1_run_state_ok_def] tm)))))
+      val (pre, result) = dest_imp (normalize goal)
+      val (select_input, selection) = dest_imp
+        (normalize (concl focus_walk_stopped_selection))
+      val selected = strip_conj (snd (strip_exists selection))
+      val exit_body = strip_conj (snd (strip_exists result))
+      val (_, filling) = dest_forall (List.last exit_body)
+      val (compatible, all_masks) = dest_imp filling
+      val (late, exit_facts) = dest_imp (snd (dest_forall all_masks))
+      val replay = CONV_RULE (DEPTH_CONV BETA_CONV)
+        (PURE_REWRITE_RULE [LET_THM] focus_stopped_filling_replay)
+      val (replay_input, _) = dest_imp (concl replay)
+      (* Nonstaticity discharges H1's static-only source label premise. *)
+      val static_input = ``vs0.vs_call_ctx.cc_static ==>
+        !fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+          ~MEM (Label "runtime_begin") inst.inst_operands``
+      val available = static_input :: strip_conj pre
+      val before_replay = compatible :: available @ selected @ strip_conj late
+      val _ = if List.all (fn tm => List.exists (aconv tm) available)
+                    (strip_conj select_input) andalso
+                 List.all (fn tm => List.exists (aconv tm) selected)
+                    (List.take (exit_body, length exit_body - 1)) andalso
+                 List.all (fn tm => List.exists (aconv tm) before_replay)
+                    (strip_conj replay_input) then ()
+              else raise Fail "v3 Exit must replay the same selected packet and filling"
+      val _ = drule replay (before_replay, exit_facts)
+      val _ = irule focus_v3_exit_from_replay ([], exit_facts)
+    in
+      cheat (asl, goal)
+    end)
 QED
+
+(* Check both joins against the same existentially selected witness. *)
+val _ = let
+  fun normalize tm =
+    rhs (concl (DEPTH_CONV BETA_CONV (rhs (concl (PURE_REWRITE_CONV [LET_THM] tm)))))
+  val (roots, selection) = dest_imp (normalize (concl focus_walk_stopped_selection))
+  val selected = strip_conj (snd (strip_exists selection))
+  val coverage = CONV_RULE (DEPTH_CONV BETA_CONV)
+    (PURE_REWRITE_RULE [LET_THM] focus_packet_coverage)
+  val (needed, ordered) = dest_imp (concl coverage)
+  val facts = strip_conj roots @ List.take (selected, length selected - 1)
+  val _ = if List.all (fn tm => List.exists (aconv tm) facts) (strip_conj needed)
+              andalso aconv (List.last selected) ordered then ()
+          else raise Fail "C1.16 selection and coverage must use the same stopped packet"
+  val replay = CONV_RULE (DEPTH_CONV BETA_CONV)
+    (PURE_REWRITE_RULE [LET_THM] focus_stopped_filling_replay)
+  val (replay_input, replay_facts) = dest_imp (concl replay)
+  val (shared, late) =
+    List.partition (fn tm => List.exists (aconv tm) (strip_conj roots @ selected))
+      (strip_conj replay_input)
+  val _ = if length late = 5 andalso length shared = length (strip_conj roots @ selected)
+          then ()
+          else raise Fail "C1.16 replay must take the selected witness before the late hypotheses"
+  val _ = drule coverage (facts, ordered)
+  val _ = drule replay (shared @ late, replay_facts)
+  in
+    print "C1.16: coverage and filling replay use the same stopped packet\n"
+  end

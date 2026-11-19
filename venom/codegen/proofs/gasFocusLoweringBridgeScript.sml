@@ -1,5 +1,6 @@
 Theory gasFocusLoweringBridge
 Ancestors
+  gasFocusConcretizeCutFrameAccess gasFocusConcretizeCutTaintWithin
   o1PassContract o1PassLift o1SafeUpto unitTransformDefs
   venomPassSchedule ptrDiscipline venomWf lowerDloadDefs stackPlanGen
   venomState words list
@@ -40,5 +41,12 @@ Theorem focus_lowering_cut_bridge:
     TAKE n (gas_events_blocks fuel4 C4 fn4 s4) =
       TAKE n (gas_events_blocks fuel2 C2 fn2 s2)
 Proof
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
+  sg `taint_within_upto D n C3 root3`
+  >- (irule focus_concretize_cut_taint_within >> cheat) >>
+  sg `!stk PG G tn fn inst s.
+         frame_reachable root3 C3 stk PG G tn fn inst s /\ gas_cut n root3 s ==>
+         access_ok eom G fn inst s /\ taint_ok fn tn inst s`
+  >- (rpt gen_tac >> strip_tac >> irule focus_concretize_cut_frame_access >> cheat) >>
   cheat
 QED

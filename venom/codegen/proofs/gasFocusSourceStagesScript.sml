@@ -1,5 +1,6 @@
 Theory gasFocusSourceStages
 Ancestors
+  gasFocusLowerDloadCut gasFocusLoweringBridge
   dftFinitePacket dftGasFromListTraceDefs
   o1ContractCfgNormJointCursors frameJointTrace frameJointTransition
   fnFramePrefixDriver fnFrameSymbolicPrefix codegenEntryRel
@@ -64,5 +65,17 @@ Theorem focus_source_stages_cut:
     TAKE n (gas_events_blocks f7 (stage 7) fn7 R) =
       TAKE n (gas_events_blocks f unit.cu_context entryfn A)
 Proof
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
+  sg `ptr_discipline_upto lo
+        (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail))) (stage 2)
+        (vs0 with <|vs_gas_readings := gs ++ tail; vs_fmp := fmp; vs_initial_fmp := fmp|>)`
+  >- (irule (DISCH_ALL (CONJUNCT1 (UNDISCH lower_dload_stage_focus_safety))) >> cheat) >>
+  sg `mem_inv (\ctx fn inst u.
+          gas_cut (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail)))
+            (vs0 with vs_gas_readings := gs ++ tail) u ==>
+          lowered_mem_fact eom ctx fn inst u)
+        (stage 4) (vs0 with vs_gas_readings := gs ++ tail)`
+  >- (irule (DISCH_ALL (CONJUNCT1 (UNDISCH
+          (CONV_RULE (DEPTH_CONV BETA_CONV) (PURE_REWRITE_RULE [LET_THM] focus_lowering_cut_bridge))))) >> cheat) >>
   cheat
 QED

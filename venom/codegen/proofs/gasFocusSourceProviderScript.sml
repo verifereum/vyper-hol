@@ -1,5 +1,6 @@
 Theory gasFocusSourceProvider
 Ancestors
+  gasFocusSourceStages
   dftFinitePacket dftGasFromListTraceDefs
   o1ContractCfgNormJointCursors frameJointTrace frameJointTransition
   fnFramePrefixDriver fnFrameSymbolicPrefix codegenEntryRel
@@ -410,5 +411,13 @@ Theorem focus_source_cut_provider:
       TAKE n (gas_events_blocks f7 C7 root_sf R) =
         TAKE n (gas_events_blocks f unit.cu_context entryfn A))
 Proof
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
+  sg `mem_inv (\ctx fn inst u.
+         gas_cut (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail)))
+           (root_entry with vs_gas_readings := gs ++ tail) u ==>
+         lowered_mem_fact cpl.cp_max_static_eom ctx fn inst u)
+       (stage 7) (root_entry with vs_gas_readings := gs ++ tail)`
+  >- (irule (DISCH_ALL (CONJUNCT1 (UNDISCH
+          (CONV_RULE (DEPTH_CONV BETA_CONV) (PURE_REWRITE_RULE [LET_THM] focus_source_stages_cut))))) >> cheat) >>
   cheat
 QED
