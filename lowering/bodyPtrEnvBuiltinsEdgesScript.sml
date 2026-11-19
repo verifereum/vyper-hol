@@ -244,7 +244,8 @@ Proof
          update_var_def, written_taint_def] >>
      Cases_on `ops` >> simp[] >> Cases_on `t` >> simp[] >>
      Cases_on `t'` >> simp[] >> Cases_on `t` >> simp[]) >>
-  `opc <> CALL /\ opc <> ISTORE /\ opc <> SSTORE /\ opc <> TSTORE` by
+  `opc <> CALL /\ opc <> DELEGATECALL /\ opc <> CREATE /\ opc <> CREATE2 /\
+   opc <> ISTORE /\ opc <> SSTORE /\ opc <> TSTORE` by
     gvs[MEM] >>
   conj_tac
   >- (irule single_output_ghost_inv >>
