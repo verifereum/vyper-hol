@@ -96,12 +96,10 @@ Proof
 QED
 
 Theorem merge_rename_named_layout:
-  !p x y.
-  let q = MAP (rename_push_label x y) p in
-  let C = \r l j. ?off.
+  !p x y q. q = MAP (rename_push_label x y) p ==>
+  !C. C = (\r l j. ?off.
     FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
-    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j
-  in
+    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j) ==>
   ((?pre third tail. y <> x /\ p = pre ++ [AsmLabel x; AsmLabel y; third] ++ tail) \/
    (?pre tail. p = pre ++ [AsmLabel x; AsmPushLabel y; AsmOp "JUMP"] ++ tail)) /\
   asm_static_wf p ==>

@@ -126,12 +126,12 @@ QED
 Resume revert_spine_link_rows[restrict]:
   disch_then (fn prem =>
     strip_assume_tac prem >>
-    mp_tac (MATCH_MP (SIMP_RULE pure_ss [LET_THM] open_fragment_compose) prem)) >>
-  qabbrev_tac `redst = \z. if z IN X then link z else z` >>
-  qabbrev_tac `redir = \x y. x IN V DIFF X /\ ?z. R x z /\ y = redst z` >>
+    mp_tac (MATCH_MP
+      (SIMP_RULE (pure_ss ++ boolSimps.UNWIND_ss) [] open_fragment_compose) prem)) >>
+  qabbrev_tac `redir = \x y. x IN V DIFF X /\ ?z. R x z /\ y = (if z IN X then link z else z)` >>
   qabbrev_tac `wnodes = {x | x IN V DIFF X /\
-    (\u. ?n (path:num->num#num). path 0=e /\ path n=u /\
-      !s. s<n ==> redir (path s) (path(SUC s))) x}` >>
+    ?n (path:num->num#num). path 0=e /\ path n=x /\
+      !s. s<n ==> redir (path s) (path(SUC s))}` >>
   qabbrev_tac `rrank = \x:num#num. ord (FST x) * (B+1) + lr x` >>
   disch_then (fn th =>
     let val cs = CONJUNCTS th in
@@ -148,9 +148,8 @@ Resume revert_spine_link_rows[restrict]:
         REWRITE_RULE [markerTheory.Abbrev_def] i, PAIR_EQ])))) >>
   pop_assum (mk_asm "close_pair") >>
   qspecl_then [`V`,`X`,`e`,`R`,`link`,`iface`] mp_tac linked_reachable_arm_interfaces >>
-  simp_tac pure_ss [LET_THM] >>
+  simp_tac (pure_ss ++ boolSimps.UNWIND_ss) [] >>
   (* Fold the same redirected relation and reachable set used above. *)
-  qpat_assum `Abbrev (redst = _)` (rewrite_tac o single o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   qpat_assum `Abbrev (redir = _)` (rewrite_tac o single o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   qpat_assum `Abbrev (wnodes = _)` (rewrite_tac o single o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   (impl_tac >- (conj_tac
