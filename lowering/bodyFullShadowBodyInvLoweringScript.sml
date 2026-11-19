@@ -9,7 +9,7 @@ Ancestors
   ctorDeployLoweringCode ctorDeployLoweringDefs ctorDeployDefs ctorGeneratorShape
   supportedProgram supportedDecls constSubst venomInst venomWf list rich_list
   venomCompilerTypes sorting constSubstStmtsPreserve supportedNameRoot
-  vyperTypeContractStaticMaps e2eDeployDefs
+  vyperTypeContractStaticMaps e2eDeployDefs bodySim ctorDeployShape
 
 (* The generator run with no internal packages ends just before the suffix. *)
 Theorem compile_runtime_internal_suffix[local]:
@@ -363,4 +363,175 @@ Proof
     shadow_body_inv_from_internal_runs) >>
   fs[deploy_source_ok_def, install_immutable_reservation_def, Abbr `srcs`,
      PERM_order_deploy_internals]
+QED
+
+Theorem selected_real_internal_code_from_run[local]:
+  supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  PERM srcs (FST (SND (classify_functions tops))) /\
+  ips = MAP (set_internal_package_target target o
+    package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
+      (if is_ctor then imm_len tops else 0)) srcs /\
+  MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops /\
+  name = (if is_ctor then "__deploy" else "__entry") /\
+  compile_internal_fn_bodies ips start = ((),run_end) /\
+  extract_context_with_internals name ips run_end = SOME (raw,data) /\
+  raw.ctx_functions = ctx.ctx_functions /\ lowering_context_ok ctx /\
+  shape_state start /\ all_blocks start <> [] /\
+  (HD (all_blocks start)).bb_label = name /\
+  EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks start))) /\
+  lookup_function
+    (internal_fn_label (build_func_ids 0 tops fname) fname (MAP SND args)
+       is_ctor) ctx.ctx_functions = SOME callee ==>
+  ?label ce params has_rb nr' key trans view ctor ilen rt before old entry final.
+    set_internal_package_target target
+      (package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
+        (if is_ctor then imm_len tops else 0) (mut,nr,rr,fname,args,dflts,ret,ss)) =
+      (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,ss,rt) /\
+    label = internal_fn_label (build_func_ids 0 tops fname) fname
+      (MAP SND args) is_ctor /\
+    new_block label before = (old,entry) /\
+    compile_internal_function ce params has_rb nr' key trans view ctor ilen
+      ss rt entry = ((),final) /\
+    fn_has_code entry final callee /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
+    ctx_inst_ids_distinct ctx
+Proof
+  strip_tac >>
+  `subst_consts_fn (module_consts_env tops [])
+    (mut,nr,rr,fname,args,dflts,ret,ss) = (mut,nr,rr,fname,args,dflts,ret,ss)` by
+    (drule_all supported_program_declaration >>
+     simp[supported_declaration_body_def] >> strip_tac >>
+     irule subst_consts_supported_fn_unchanged >>
+     qexistsl [`tops`, `Internal`] >> simp[] >>
+     drule distinct_module_consts_env_names_constant >> strip_tac >>
+     rpt strip_tac >> first_x_assum irule >>
+     Cases_on `ALOOKUP (module_consts_env tops []) id` >>
+     gvs[] >> drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+     simp[MEM_MAP] >> qexists_tac `(id,x)` >> simp[]) >>
+  `MEM (mut,nr,rr,fname,args,dflts,ret,ss) srcs` by
+    (qpat_assum `PERM srcs _` (mp_tac o MATCH_MP PERM_MEM_EQ) >>
+     disch_then (qspec_then `(mut,nr,rr,fname,args,dflts,ret,ss)` SUBST1_TAC) >>
+     simp[MEM_classify_internal] >>
+     qexistsl [`dflts`, `ss`] >> simp[]) >>
+  `EVERY internal_fn_shape_ok ips /\
+   EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips) /\
+   ALL_DISTINCT (MAP FST (internal_fn_descriptors ips))` by
+    (mp_tac (Q.SPECL [`tops`, `target`, `T`, `K global_nonreentrant_slot`,
+       `is_ctor`, `if is_ctor then imm_len tops else 0`, `srcs`, `ips`]
+       deploy_internal_package_certificates) >> simp[]) >>
+  qabbrev_tac `pkg = set_internal_package_target target
+    (package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
+      (if is_ctor then imm_len tops else 0) (mut,nr,rr,fname,args,dflts,ret,ss))` >>
+  `MEM pkg ips` by
+    (simp[MEM_MAP] >> qexists_tac `(mut,nr,rr,fname,args,dflts,ret,ss)` >>
+     simp[Abbr `pkg`]) >>
+  qpat_x_assum `ips = MAP _ srcs` kall_tac >>
+  qpat_x_assum `MEM pkg ips` (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+  PairCases_on `pkg` >>
+  rename1 `Abbrev ((label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,compiled_ss,rt) = _)` >>
+  `set_internal_package_target target
+    (package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
+      (if is_ctor then imm_len tops else 0) (mut,nr,rr,fname,args,dflts,ret,ss)) =
+    (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,compiled_ss,rt)` by
+    (qpat_assum `Abbrev ((label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,
+        compiled_ss,rt) = _)`
+       (mp_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >> simp[]) >>
+  `label = internal_fn_label (build_func_ids 0 tops fname) fname
+     (MAP SND args) is_ctor /\ compiled_ss = ss` by
+    (qpat_assum `set_internal_package_target _ _ = _` mp_tac >>
+     simp_tac (srw_ss()) [package_internal_fn_def, LET_THM,
+       set_internal_package_target_def] >> metis_tac[]) >>
+  fs[] >>
+  qpat_assum `extract_context_with_internals _ (_ ++ [_] ++ _) _ = _`
+    (mp_then Any mp_tac extract_context_selected_internal_code) >>
+  disch_then (qspec_then `start` mp_tac) >>
+  impl_tac >-
+    (fs[lowering_context_ok_def, ctx_fn_names_def, fn_labels_def,
+        ctx_inst_ids_distinct_def, EVERY_MEM] >>
+     Cases_on `is_ctor` >> gvs[]) >>
+  strip_tac >>
+  `func = callee` by metis_tac[optionTheory.SOME_11] >>
+  qexistsl_tac [`before`, `old`, `st0`, `after`] >>
+  fs[lowering_context_ok_def]
+QED
+
+Theorem body_inv_selected_internal_code:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops /\
+  lookup_function
+    (internal_fn_label (build_func_ids 0 tops fname) fname (MAP SND args)
+       cx.in_deploy) ctx.ctx_functions = SOME callee ==>
+  ?label ce params has_rb nr' key trans view ctor ilen rt before old entry final.
+    set_internal_package_target cenv.ce_target
+      (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
+        (if cx.in_deploy then imm_len tops else 0)
+        (mut,nr,rr,fname,args,dflts,ret,ss)) =
+      (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,ss,rt) /\
+    label = internal_fn_label (build_func_ids 0 tops fname) fname
+      (MAP SND args) cx.in_deploy /\
+    new_block label before = (old,entry) /\
+    compile_internal_function ce params has_rb nr' key trans view ctor ilen
+      ss rt entry = ((),final) /\
+    fn_has_code entry final callee /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
+    ctx_inst_ids_distinct ctx
+Proof
+  strip_tac >>
+  qpat_x_assum `body_inv _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  Cases_on `cx.in_deploy` >> fs[]
+  >- (Cases_on `classify_functions tops` >>
+      rename1 `classify_functions tops = packages` >> PairCases_on `packages` >>
+      Cases_on `packages3` >> fs[] >>
+      rename1 `classify_functions tops = (exts,ints,fb,SOME cf)` >>
+      Cases_on `set_constructor_package_target rpolicy.rpol_target
+        (package_constructor tops T (K global_nonreentrant_slot) cf)` >>
+      rename1 `set_constructor_package_target _ _ = package` >>
+      PairCases_on `package` >>
+      rename1 `set_constructor_package_target _ _ =
+        (ctor_ce,ctor_args,pay,nr_ctor,key_ctor,trans,ctor_body,ctor_ret)` >>
+      qabbrev_tac `srcs = order_internals (deploy_internal_order (SOME cf) ints) ints` >>
+      qabbrev_tac `ips = MAP (set_internal_package_target rpolicy.rpol_target o
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) srcs` >>
+      `run_deploy_lowering T rpolicy rbc (imm_len tops) ctor_args 0
+         ips ctor_ce ctor_body pay nr_ctor key_ctor trans "__deploy" = SOME unit` by
+        (qpat_assum `lower_vyper_deploy_unit _ _ _ = _`
+           (mp_tac o REWRITE_RULE [lower_vyper_deploy_unit_def]) >>
+         simp[GSYM imm_len_def, Abbr `ips`, Abbr `srcs`] >>
+         rw[AllCaseEqs()]) >>
+      `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>
+      drule_all package_constructor_shape_ok >> strip_tac >>
+      drule_all deploy_internal_run >> strip_tac >>
+      mp_tac (Q.INST [`is_ctor` |-> `T`, `name` |-> `"__deploy"`,
+        `target` |-> `rpolicy.rpol_target`, `ctx` |-> `unit.cu_context`,
+        `srcs` |-> `srcs`] selected_real_internal_code_from_run) >>
+      simp[Abbr `ips`, Abbr `srcs`, PERM_order_deploy_internals] >>
+      fs[install_immutable_reservation_def]) >>
+  Cases_on `classify_functions tops` >>
+  rename1 `classify_functions tops = packages` >> PairCases_on `packages` >>
+  rename1 `classify_functions tops = (exts,ints,fb,ctor_src)` >>
+  `~EXISTS external_has_defaults exts` by
+    (mp_tac (Q.SPEC `tops` supported_program_no_external_defaults) >> simp[]) >>
+  qpat_assum `lower_vyper_runtime_unit _ _ = _`
+    (mp_tac o REWRITE_RULE [lower_vyper_runtime_unit_def]) >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_lowering sels packs ips fall rp 0 0 [] info "__entry"` >>
+  `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) sels` by
+    simp[Abbr `sels`, build_selectors_fn_labels] >>
+  `EVERY external_fn_shape_ok packs` by
+    (simp[Abbr `packs`, EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
+     irule package_external_fn_shape_ok >>
+     gs[supported_program_runtime_bodies_shape_ok]) >>
+  `fallback_shape_ok fall` by
+    (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`, `rp.rpol_target`]
+       mp_tac package_fallback_fn_shape_ok >>
+     gs[Abbr `fall`, supported_program_runtime_bodies_shape_ok]) >>
+  drule_all runtime_internal_run >> strip_tac >>
+  mp_tac (Q.INST [`is_ctor` |-> `F`, `name` |-> `"__entry"`,
+     `target` |-> `rp.rpol_target`, `ctx` |-> `unit.cu_context`,
+     `raw` |-> `unit.cu_context`,
+     `srcs` |-> `order_internals (runtime_internal_order tops ints) ints`]
+     selected_real_internal_code_from_run) >>
+  simp[Abbr `ips`, PERM_order_runtime_internals]
 QED
