@@ -287,7 +287,8 @@ Resume ec_arith_permitted_tail_full[abort]:
     precompile_suffix_abort_full_family) >>
   (impl_tac >- (conj_tac >- (Cases_on `bt = ECAdd` >>
      simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]) >>
-    rpt conj_tac >> TRY (REFL_TAC ORELSE first_assum ACCEPT_TAC) >>
+    rpt conj_tac >> TRY (REFL_TAC ORELSE first_assum ACCEPT_TAC) >>~
+    [`ctx_has_dalloca ctx ==> allocas_below_fmp u`] >- simp[] >>
     gen_tac >> strip_tac >>
     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _ /\ _`
       (drule_then strip_assume_tac) >>
