@@ -143,7 +143,7 @@ Proof
   `!i. LENGTH pre <= i /\ i < LENGTH pre + LENGTH pat ==> MEM (EL i p) pat` by (
     rpt strip_tac >> simp[EL_APPEND_EQN] >> irule EL_MEM >> decide_tac) >>
   conj_asm1_tac >- metis_tac[] >>
-  match_mp_tac (BETA_RULE (REWRITE_RULE[LET_THM] merge_iszero_synchronized_replay)) >>
+  match_mp_tac (BETA_RULE (CONV_RULE (DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) merge_iszero_synchronized_replay)) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- (rpt strip_tac >>
       `LENGTH pre <= i /\ i < LENGTH pre + LENGTH pat` by decide_tac >> metis_tac[])
@@ -151,7 +151,7 @@ Proof
       `i < LENGTH pre + LENGTH pat` by decide_tac >> metis_tac[])
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `q = pre ++ repl ++ tail` SUBST_ALL_TAC >>
-      irule (BETA_RULE (REWRITE_RULE[LET_THM] merge_iszero_outside_fetch_ok)) >>
+      irule (BETA_RULE (CONV_RULE (DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) merge_iszero_outside_fetch_ok)) >>
       `pat <> []` by (CCONTR_TAC >> gvs[]) >> simp[] >>
       metis_tac[asm_reachable_marker_def]) >>
   rpt strip_tac >> qexists_tac `LENGTH repl` >> metis_tac[]
