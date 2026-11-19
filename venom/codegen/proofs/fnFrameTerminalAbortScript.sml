@@ -20,7 +20,8 @@ Theorem abort_escape_output_allocator_probe:
     [SOPush (Lit 32w); SOSpill 0; SODup 16; SORestore 0; SOSwap 1]
     terminal_escape_ps).ps_alloc.sa_next_offset = 32
 Proof
-  rpt gen_tac >> EVAL_TAC >> simp[]
+  rpt gen_tac >> computeLib.RESTR_EVAL_TAC [``release_dead_spills``] >>
+  simp[release_dead_spills_next_offset]
 QED
 
 Theorem abort_assert_prefix_probe:
@@ -29,7 +30,7 @@ Theorem abort_assert_prefix_probe:
     (mk_inst 0 ASSERT [Lit 0w] []) [] ih nt lbl (init_plan_state 0)) =
   SOME [SOPush (Lit 0w); SOEmit "ISZERO"; SOPushLabel "revert"; SOEmit "JUMPI"]
 Proof
-  rpt gen_tac >> EVAL_TAC >> simp[]
+  rpt gen_tac >> computeLib.RESTR_EVAL_TAC [``release_dead_spills``] >> simp[]
 QED
 
 Theorem abort_assert_unreachable_prefix_probe:
@@ -41,7 +42,8 @@ Theorem abort_assert_unreachable_prefix_probe:
   SOME [SOPush (Lit 0w); SOPushLabel endlabel; SOEmit "JUMPI";
         SOEmit "INVALID"; SOLabel endlabel]
 Proof
-  rpt gen_tac >> qexists `"reachable_1"` >> EVAL_TAC >> simp[]
+  rpt gen_tac >> qexists `"reachable_1"` >>
+  computeLib.RESTR_EVAL_TAC [``release_dead_spills``] >> simp[]
 QED
 
 (* Consume the actual prefix simulation at its allocator boundary.  The

@@ -187,20 +187,11 @@ Proof
   Induct >> simp[]
 QED
 
-Theorem promise_release_fold[local]:
-  !items ps.
-  (FOLDL (\s (op,off). s with <|ps_spilled := s.ps_spilled \\ op;
-    ps_alloc := free_spill_slot off s.ps_alloc|>) ps items).ps_cleanup_promised =
-  ps.ps_cleanup_promised
-Proof
-  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[]
-QED
-
 Theorem promise_release[local]:
   !live ps. (release_dead_spills live ps).ps_cleanup_promised =
   ps.ps_cleanup_promised
 Proof
-  simp[release_dead_spills_def, LET_THM, promise_release_fold]
+  simp[release_dead_spills_def]
 QED
 
 Theorem promise_regular[local]:

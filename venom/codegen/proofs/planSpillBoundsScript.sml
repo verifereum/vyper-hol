@@ -205,6 +205,58 @@ Proof
   metis_tac[free_spill_slot_bounded]
 QED
 
+Theorem release_dead_spills_alloc_offsets:
+  !next ps.
+    ?offsets.
+      (release_dead_spills next ps).ps_alloc =
+        FOLDL (λal off. free_spill_slot off al) ps.ps_alloc offsets /\
+      ALL_DISTINCT offsets /\
+      !off. MEM off offsets <=>
+        ps.ps_alloc.sa_spill_base <= off /\
+        off < ps.ps_alloc.sa_next_offset /\
+        ?op. FLOOKUP ps.ps_spilled op = SOME off /\
+             ~(case op of Var v => MEM v next | _ => F)
+Proof
+  rpt gen_tac >> simp[release_dead_spills_def] >>
+  qabbrev_tac `live = (λop. case op of Var v => MEM v next | _ => F)` >>
+  qabbrev_tac `dead = DRESTRICT ps.ps_spilled (COMPL live)` >>
+  qexists_tac `if dead = FEMPTY then []
+    else FILTER (λoff. ~FEVERY (λkv. SND kv <> off) dead)
+      (GENLIST (λi. ps.ps_alloc.sa_spill_base + i)
+        (ps.ps_alloc.sa_next_offset - ps.ps_alloc.sa_spill_base))` >>
+  simp[] >> conj_tac
+  >- (IF_CASES_TAC >> simp[] >> irule FILTER_ALL_DISTINCT >>
+      simp[ALL_DISTINCT_GENLIST]) >>
+  gen_tac >>
+  `(!off. (?op. FLOOKUP dead op = SOME off) <=>
+      ?op. FLOOKUP ps.ps_spilled op = SOME off /\ op NOTIN live)` by
+    (gen_tac >> simp[Abbr `dead`, finite_mapTheory.FLOOKUP_DRESTRICT] >>
+     metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  `MEM off (GENLIST (λi. ps.ps_alloc.sa_spill_base + i)
+                  (ps.ps_alloc.sa_next_offset - ps.ps_alloc.sa_spill_base)) <=>
+    ps.ps_alloc.sa_spill_base <= off /\ off < ps.ps_alloc.sa_next_offset` by
+    (simp[MEM_GENLIST] >> eq_tac
+     >- (rpt strip_tac >> decide_tac) >>
+     strip_tac >> qexists_tac `off - ps.ps_alloc.sa_spill_base` >> decide_tac) >>
+  IF_CASES_TAC >> gvs[Abbr `live`, MEM_FILTER, FEVERY_ALL_FLOOKUP] >>
+  metis_tac[]
+QED
+
+Theorem release_dead_spills_plan_slots_bounded:
+  !base next ps.
+    plan_slots_bounded base ps ==>
+    plan_slots_bounded base (release_dead_spills next ps)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`next`,`ps`] strip_assume_tac
+    release_dead_spills_alloc_offsets >>
+  fs[plan_slots_bounded_def] >> conj_tac
+  >- (asm_rewrite_tac[] >> irule foldl_free_slots_bounded >>
+      simp[EVERY_MEM] >> metis_tac[]) >>
+  simp[release_dead_spills_def, FLOOKUP_DRESTRICT, foldl_free_next_offset] >>
+  metis_tac[optionTheory.NOT_NONE_SOME]
+QED
+
 Theorem foldl_alloc_slots_bounded:
   !items ops offs al base.
     alloc_slots_bounded base al /\

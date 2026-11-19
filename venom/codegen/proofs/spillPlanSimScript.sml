@@ -185,25 +185,11 @@ Theorem venom_asm_rel_release_dead_spills:
     venom_asm_rel lo (release_dead_spills next_liveness ps) vs as
 Proof
   rpt gen_tac >> strip_tac >> gvs[venom_asm_rel_def] >>
-  `!dead (ps0:plan_state).
-     (FOLDL (\ps' (op:operand, off:num).
-       ps' with <| ps_spilled := ps'.ps_spilled \\ op;
-                   ps_alloc := free_spill_slot off ps'.ps_alloc |>)
-       ps0 dead).ps_stack = ps0.ps_stack` by (
-    Induct >> simp[] >>
-    rpt gen_tac >> PairCases_on `h` >> simp[free_spill_slot_def]) >>
-  `!dead (ps0:plan_state) lo' vs' am.
-     plan_spill_rel lo' vs' ps0.ps_spilled am ==>
-     plan_spill_rel lo' vs'
-       (FOLDL (\ps' (op:operand, off:num).
-         ps' with <| ps_spilled := ps'.ps_spilled \\ op;
-                     ps_alloc := free_spill_slot off ps'.ps_alloc |>)
-         ps0 dead).ps_spilled am` by (
-    Induct >> simp[] >>
-    rpt strip_tac >> Cases_on `h` >> simp[] >>
-    first_x_assum match_mp_tac >>
-    simp[] >> irule plan_spill_rel_remove_entry >> first_assum ACCEPT_TAC) >>
-  conj_tac >- simp[release_dead_spills_def, LET_THM] >>
-  conj_tac >- (simp[release_dead_spills_def, LET_THM] >> first_x_assum match_mp_tac >> simp[]) >>
-  simp[memory_rel_def, release_dead_spills_spill_base, release_dead_spills_next_offset] >> metis_tac[memory_rel_def]
+  conj_tac >- simp[release_dead_spills_def] >>
+  conj_tac
+  >- (fs[release_dead_spills_def, plan_spill_rel_def, FLOOKUP_DRESTRICT] >>
+      metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  simp[memory_rel_def, release_dead_spills_spill_base,
+       release_dead_spills_next_offset] >>
+  metis_tac[memory_rel_def]
 QED
