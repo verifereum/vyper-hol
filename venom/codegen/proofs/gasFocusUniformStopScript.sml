@@ -175,7 +175,7 @@ Proof
   gvs[]
 QED
 
-Theorem focus_active_var_ready[local]:
+Theorem focus_active_var_ready:
   supply_norm_inv supply fn /\ supply_prefix_defined fn s /\
   active_inst fn inst s /\ inst.inst_opcode <> PHI /\
   MEM (Var x) inst.inst_operands ==>

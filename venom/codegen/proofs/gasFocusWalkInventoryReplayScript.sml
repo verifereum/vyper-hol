@@ -864,17 +864,20 @@ Proof
 QED
 
 Theorem focus_terminal_recorded_regions:
-  let tr = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry in
   C8.ctx_entry = SOME nm /\
   lookup_function nm C8.ctx_functions = SOME root_tf /\
   fn_entry_label root_tf = SOME lbl7 /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|> /\
-  j < LENGTH tr /\ EL j tr = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
-  obs = dftGasFromListTraceDefs$trace_gas (TAKE j tr) /\
+  j < LENGTH (dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry) /\
+    EL j (dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry) =
+    ((p,d,inst8.inst_id),fn8,inst8,s8) /\
+  obs = dftGasFromListTraceDefs$trace_gas (TAKE j (dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf
+    root_entry)) /\
   (!err. run_blocks N C8 root_tf root_entry <> Error err) ==>
   ?bt rest. lookup_block s8.vs_current_bb fn8.fn_blocks = SOME bt /\
     get_instruction bt s8.vs_inst_idx = SOME inst8 /\
-    DROP j tr = dftGasFromListTraceDefs$trace_block p d (N-d) C8 fn8 bt s8 ++ rest /\
+    DROP j (dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry) =
+      dftGasFromListTraceDefs$trace_block p d (N-d) C8 fn8 bt s8 ++ rest /\
     (!k w. dftGasFromListUnion$recorded C8 vs0 k w <=>
       MEM (k,w) obs \/
       MEM (k,w) (dftGasFromListTraceDefs$trace_gas
@@ -1203,13 +1206,13 @@ QED
 (* A nonreturning focus has no later continuation, but an INVOKE can
    still record GAS inside the focused step. *)
 Theorem focus_stopped_terminal_recordings:
-  let tr = trace_blocks [] 0 N C8 root_tf root_entry in
   C8.ctx_entry = SOME nm /\
   lookup_function nm C8.ctx_functions = SOME root_tf /\
   fn_entry_label root_tf = SOME lbl7 /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|> /\
-  j < LENGTH tr /\ EL j tr = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
-  obs = trace_gas (TAKE j tr) /\
+  j < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry) /\ EL j (trace_blocks [] 0 N C8 root_tf
+    root_entry) = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
+  obs = trace_gas (TAKE j (trace_blocks [] 0 N C8 root_tf root_entry)) /\
   step_inst (N-d) C8 inst8 s8 = r /\
   ((?u. r = Halt u) \/ (?ex u. r = Abort ex u)) ==>
   !k w. dftGasFromListUnion$recorded C8 vs0 k w <=>
@@ -1274,19 +1277,18 @@ Proof
 QED
 
 Theorem focus_bounded_source_recording_position:
-  let v = vs0 with vs_gas_readings := raw ++ [0w];
-      R = root_entry with vs_gas_readings := raw ++ [0w] in
   C.ctx_entry = SOME nm /\ lookup_function nm C.ctx_functions = SOME sf /\
   fn_entry_label sf = SOME lbl /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
   LENGTH B <= LENGTH raw /\
-  ((!F. N <= F ==> ?z. B = gas_events_blocks F C sf R ++ z) \/
-   (?F z. N <= F /\ (!err. run_blocks F C sf R <> Error err) /\
-          B = gas_events_blocks F C sf R ++ z)) ==>
-  !k w. dftGasFromListUnion$recorded C v k w <=>
-    ?F i z. N <= F /\ B = gas_events_blocks F C sf R ++ z /\
-      i < LENGTH (gas_events_blocks F C sf R) /\
-      FST (EL i (trace_gas (trace_blocks [] 0 F C sf R))) = k /\
+  ((!F. N <= F ==> ?z. B = gas_events_blocks F C sf (root_entry with vs_gas_readings := raw ++ [0w]) ++ z) \/
+   (?F z. N <= F /\ (!err. run_blocks F C sf (root_entry with vs_gas_readings := raw ++ [0w]) <> Error err) /\
+          B = gas_events_blocks F C sf (root_entry with vs_gas_readings := raw ++ [0w]) ++ z)) ==>
+  !k w. dftGasFromListUnion$recorded C (vs0 with vs_gas_readings := raw ++ [0w]) k w <=>
+    ?F i z. N <= F /\ B = gas_events_blocks F C sf (root_entry with vs_gas_readings := raw ++ [0w]) ++ z /\
+      i < LENGTH (gas_events_blocks F C sf (root_entry with vs_gas_readings := raw ++ [0w])) /\
+      FST (EL i (trace_gas (trace_blocks [] 0 F C sf (root_entry with vs_gas_readings := raw ++ [0w])))) =
+        k /\
       EL i raw = w
 Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
@@ -1714,11 +1716,6 @@ Theorem focus_native_closed_row_step:
   !N C7 C8 root_sf root_tf root_entry packet acts blocks calls ms_tab es_tab ks_tab
     rooted_eval p d q8 raw_slots sites unused a e sf tf inc entry order res nrest
     bb bt ps xs ys rho hin h0 be hbe count front rest ms ks depth fuel rowgs tail sp r.
-  let phi = phi_prefix_length bb.bb_instructions;
-      v = hin with vs_gas_readings := rowgs ++ tail;
-      bs = be with vs_gas_readings := rowgs ++ tail;
-      n = fuel - e in
-  let start = sp with vs_inst_idx := phi in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
@@ -1726,22 +1723,28 @@ Theorem focus_native_closed_row_step:
     SOME (bb,bt,ps,xs,ys,rho,hin,h0,SOME (be,hbe),count,front,T,SOME rest) /\
   FLOOKUP ms_tab (a,e) = SOME ms /\ FLOOKUP ks_tab (a,e) = SOME ks /\
   e = SUC depth /\ e <= N /\ N <= fuel /\
-  lookup_block v.vs_current_bb sf.fn_blocks = SOME bb /\
-  eval_phis v bb.bb_instructions = OK sp /\
+  lookup_block (hin with vs_gas_readings := rowgs ++ tail).vs_current_bb sf.fn_blocks = SOME bb /\
+  eval_phis (hin with vs_gas_readings := rowgs ++ tail) bb.bb_instructions = OK sp /\
   bb.bb_instructions = ps ++ xs /\ EVERY (\i. is_pseudo i.inst_opcode) ps /\
-  phi <= LENGTH ps /\ bs.vs_inst_idx = LENGTH ps /\
-  FOLDR (dftIndexedExec$dft_exec_cons n C7) OK (DROP phi ps) start = OK bs /\
+  (phi_prefix_length bb.bb_instructions) <= LENGTH ps /\ (be with vs_gas_readings := rowgs ++
+    tail).vs_inst_idx = LENGTH ps /\
+  FOLDR (dftIndexedExec$dft_exec_cons (fuel - e) C7) OK (DROP (phi_prefix_length bb.bb_instructions) ps)
+    (sp with vs_inst_idx := (phi_prefix_length bb.bb_instructions)) = OK (be with
+    vs_gas_readings := rowgs ++ tail) /\
   xs <> [] /\ is_terminator (LAST xs).inst_opcode /\
   LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (FLAT ms) rowgs /\
   ((?post. front = OK post) \/ (?ir post. front = IntRet ir post)) /\
-  FOLDR (dftIndexedExec$dft_exec_cons n C7) OK xs bs = r /\ terminates r ==>
-  exec_block n C7 bb start = r /\
+  FOLDR (dftIndexedExec$dft_exec_cons (fuel - e) C7) OK xs (be with vs_gas_readings := rowgs ++ tail) =
+    r /\ terminates r ==>
+  exec_block (fuel - e) C7 bb (sp with vs_inst_idx := (phi_prefix_length bb.bb_instructions)) = r /\
   dftGasToListReplay$residual_result tail front r /\
-  MAP FST (trace_gas (trace_block a e n C7 sf bb start)) = FLAT ks /\
-  MAP FST (trace_gas (trace_blocks a depth (SUC n) C7 sf v)) =
+  MAP FST (trace_gas (trace_block a e (fuel - e) C7 sf bb (sp with
+    vs_inst_idx := (phi_prefix_length bb.bb_instructions)))) = FLAT ks /\
+  MAP FST (trace_gas (trace_blocks a depth (SUC (fuel - e)) C7 sf (hin with
+    vs_gas_readings := rowgs ++ tail))) =
     FLAT ks ++ (case r of
       OK u => if u.vs_halted then [] else
-                MAP FST (trace_gas (trace_blocks a e n C7 sf u))
+                MAP FST (trace_gas (trace_blocks a e (fuel - e) C7 sf u))
     | _ => [])
 Proof
   rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
@@ -1805,13 +1808,6 @@ Theorem focus_native_failed_row_step:
     rooted_eval p d q8 raw_slots sites unused a e sf tf inc entry order res nrest
     bb bt ps xs ys rho hin h0 be hbe count front closed brest ms ks depth fuel
     k rowgs tail sp z r.
-  let phi = phi_prefix_length bb.bb_instructions;
-      v = hin with vs_gas_readings := rowgs ++ tail;
-      bs = be with vs_gas_readings := rowgs ++ tail;
-      n = fuel - e in
-  let start = sp with vs_inst_idx := phi in
-  let Tz = trace_block a e n C7 sf
-      (bb with bb_instructions := TAKE phi bb.bb_instructions ++ z) start in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
@@ -1819,19 +1815,28 @@ Theorem focus_native_failed_row_step:
     SOME (bb,bt,ps,xs,ys,rho,hin,h0,SOME (be,hbe),count,front,closed,brest) /\
   FLOOKUP ms_tab (a,e) = SOME ms /\ FLOOKUP ks_tab (a,e) = SOME ks /\
   e = SUC depth /\ e <= N /\ N <= fuel /\
-  lookup_block v.vs_current_bb sf.fn_blocks = SOME bb /\
-  eval_phis v bb.bb_instructions = OK sp /\
+  lookup_block (hin with vs_gas_readings := rowgs ++ tail).vs_current_bb sf.fn_blocks = SOME bb /\
+  eval_phis (hin with vs_gas_readings := rowgs ++ tail) bb.bb_instructions = OK sp /\
   bb.bb_instructions = ps ++ xs /\ EVERY (\i. is_pseudo i.inst_opcode) ps /\
-  phi <= LENGTH ps /\ bs.vs_inst_idx = LENGTH ps /\
-  FOLDR (dftIndexedExec$dft_exec_cons n C7) OK (DROP phi ps) start = OK bs /\
+  (phi_prefix_length bb.bb_instructions) <= LENGTH ps /\ (be with vs_gas_readings := rowgs ++
+    tail).vs_inst_idx = LENGTH ps /\
+  FOLDR (dftIndexedExec$dft_exec_cons (fuel - e) C7) OK (DROP (phi_prefix_length bb.bb_instructions) ps)
+    (sp with vs_inst_idx := (phi_prefix_length bb.bb_instructions)) = OK (be with
+    vs_gas_readings := rowgs ++ tail) /\
   k <= LENGTH xs /\ EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
   (!t. t < k /\ EVERY (\i. ~is_terminator i.inst_opcode) (TAKE t xs) /\
        (EL t xs).inst_opcode = INVOKE ==> MEM t (TAKE count rho)) /\
   LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (FLAT (TAKE k ms)) rowgs /\
-  z = DROP phi ps ++ TAKE k xs /\
-  FOLDR (dftIndexedExec$dft_exec_cons n C7) OK z start = r /\ (!u. r <> OK u) ==>
-  trace_blocks a depth (SUC n) C7 sf v = Tz /\
-  ?extra. FLAT (TAKE k ks) = MAP FST (trace_gas Tz) ++ extra
+  z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE k xs /\
+  FOLDR (dftIndexedExec$dft_exec_cons (fuel - e) C7) OK z (sp with
+    vs_inst_idx := (phi_prefix_length bb.bb_instructions)) = r /\ (!u. r <> OK u) ==>
+  trace_blocks a depth (SUC (fuel - e)) C7 sf (hin with vs_gas_readings := rowgs ++ tail) =
+    (trace_block a e (fuel - e) C7 sf (bb with bb_instructions := TAKE (phi_prefix_length
+    bb.bb_instructions) bb.bb_instructions ++ z) (sp with vs_inst_idx := (phi_prefix_length
+    bb.bb_instructions))) /\
+  ?extra. FLAT (TAKE k ks) = MAP FST (trace_gas (trace_block a e (fuel - e) C7 sf (bb with
+    bb_instructions := TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions ++ z) (sp with
+    vs_inst_idx := (phi_prefix_length bb.bb_instructions)))) ++ extra
 Proof
   rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
   qabbrev_tac `phi = phi_prefix_length bb.bb_instructions` >>
@@ -1919,23 +1924,22 @@ Finalise focus_native_failed_row_step
 
 Theorem focus_native_row_call_descent:
   !C7 sf v bb sp z caller c nm ops csf args cs a depth n.
-  let phi = phi_prefix_length bb.bb_instructions;
-      e = SUC depth in
-  let start = sp with vs_inst_idx := phi in
-  let Tz = trace_block a e n C7 sf
-    (bb with bb_instructions := TAKE phi bb.bb_instructions ++ z) start in
   lookup_block v.vs_current_bb sf.fn_blocks = SOME bb /\
   eval_phis v bb.bb_instructions = OK sp /\
-  TAKE (LENGTH z) (DROP phi bb.bb_instructions) = z /\
-  phi + LENGTH z <= LENGTH bb.bb_instructions /\
+  TAKE (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) = z /\
+  (phi_prefix_length bb.bb_instructions) + LENGTH z <= LENGTH bb.bb_instructions /\
   EVERY (\i. ~is_terminator i.inst_opcode) z /\
-  FOLDR (dftIndexedExec$dft_exec_cons n C7) OK z start = OK caller /\
+  FOLDR (dftIndexedExec$dft_exec_cons n C7) OK z (sp with vs_inst_idx := (phi_prefix_length
+    bb.bb_instructions)) = OK caller /\
   get_instruction bb caller.vs_inst_idx = SOME c /\
   c.inst_opcode = INVOKE /\ decode_invoke c = SOME (nm,ops) /\
   lookup_function nm C7.ctx_functions = SOME csf /\
   eval_operands ops caller = SOME args /\ setup_callee csf args caller = SOME cs ==>
   ?after. trace_gas (trace_blocks a depth (SUC n) C7 sf v) =
-    trace_gas Tz ++ trace_gas (trace_blocks ((e,c.inst_id)::a) e n C7 csf cs) ++ after
+    trace_gas (trace_block a (SUC depth) n C7 sf (bb with bb_instructions := TAKE (phi_prefix_length
+      bb.bb_instructions) bb.bb_instructions ++ z) (sp with vs_inst_idx := (phi_prefix_length
+      bb.bb_instructions))) ++ trace_gas (trace_blocks (((SUC depth),c.inst_id)::a) (SUC depth) n C7 csf
+      cs) ++ after
 Proof
   rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
   qabbrev_tac `phi = phi_prefix_length bb.bb_instructions` >>
@@ -2127,9 +2131,6 @@ Theorem focus_native_closed_row_eval[local]:
   !N C7 C8 root_sf root_tf root_entry packet acts blocks calls ms_tab es_tab ks_tab
     rooted_eval p d q8 raw_slots sites unused a e sf tf inc entry order res nrest
     bb bt ps xs ys row_order hin h0 body_entry ct post rest depth F gs tail prior ev v.
-  let phi = phi_prefix_length bb.bb_instructions in
-  let z = DROP phi bb.bb_instructions;
-      u = hin with vs_gas_readings := gs ++ tail in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
@@ -2138,14 +2139,16 @@ Theorem focus_native_closed_row_eval[local]:
   e = SUC depth /\ N <= F /\ ~post.vs_halted /\
   LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
     (FLAT (THE (FLOOKUP ms_tab (a,e)))) gs /\
-  (?sp. eval_phis u bb.bb_instructions = OK sp /\
-    FOLDR (dftIndexedExec$dft_exec_cons (F-e) C7) OK z
-      (sp with vs_inst_idx := phi) = OK v /\
+  (?sp. eval_phis (hin with vs_gas_readings := gs ++ tail) bb.bb_instructions = OK sp /\
+    FOLDR (dftIndexedExec$dft_exec_cons (F-e) C7) OK (DROP (phi_prefix_length bb.bb_instructions)
+      bb.bb_instructions)
+      (sp with vs_inst_idx := (phi_prefix_length bb.bb_instructions)) = OK v /\
     ev = prior ++ gas_events_block (F-e) C7 sf.fn_name
-      (bb with bb_instructions := TAKE phi bb.bb_instructions ++ z)
-      (sp with vs_inst_idx := phi)) ==>
+      (bb with bb_instructions := TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions ++ (DROP
+        (phi_prefix_length bb.bb_instructions) bb.bb_instructions))
+      (sp with vs_inst_idx := (phi_prefix_length bb.bb_instructions))) ==>
   v = post with vs_gas_readings := tail /\
-  ?G. trace_gas (trace_blocks a depth (F-depth) C7 sf u) =
+  ?G. trace_gas (trace_blocks a depth (F-depth) C7 sf (hin with vs_gas_readings := gs ++ tail)) =
       G ++ trace_gas (trace_blocks a e (F-e) C7 sf v) /\
     MAP FST G = FLAT (THE (FLOOKUP ks_tab (a,e))) /\
     LENGTH ev = LENGTH prior + LENGTH G
@@ -2340,31 +2343,30 @@ Theorem focus_native_open_child_step:
     bb bt ps xs ys sched hin h0 ben ct front closed brest ms ks
     q call_h b0 done child_entry csf ctf child_order child_res child_rest
     depth fuel rg tail ev caller.
-  let phi = phi_prefix_length bb.bb_instructions in
-  let z = DROP phi ps ++ TAKE q xs;
-      v = hin with vs_gas_readings := rg ++ tail;
-      c = EL q xs;
-      cv = child_entry with vs_gas_readings := tail in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
   FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,sched,hin,h0,ben,ct,front,closed,brest) /\
   FLOOKUP ms_tab (a,e) = SOME ms /\ FLOOKUP ks_tab (a,e) = SOME ks /\
-  FLOOKUP calls (a,e,c.inst_id) = SOME (q,call_h,b0,done,child_entry,NONE) /\
-  FLOOKUP acts ((e,c.inst_id)::a) =
+  FLOOKUP calls (a,e,(EL q xs).inst_id) = SOME (q,call_h,b0,done,child_entry,NONE) /\
+  FLOOKUP acts ((e,(EL q xs).inst_id)::a) =
     SOME (csf,ctf,e,child_entry,child_order,child_res,child_rest) /\
   e = SUC depth /\ N <= fuel /\ done = TAKE ct sched /\
   EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
   (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==> MEM r done) /\
   LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (FLAT (TAKE q ms)) rg /\
-  rooted_eval fuel C7 [(sf,[(bb,e,z)],NONE)] v = (ev,OK caller) ==>
-  c.inst_opcode = INVOKE /\
+  rooted_eval fuel C7 [(sf,[(bb,e,(DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs))],NONE)]
+    (hin with vs_gas_readings := rg ++ tail) = (ev,OK caller) ==>
+  (EL q xs).inst_opcode = INVOKE /\
   (?nm ops args.
-    decode_invoke c = SOME (nm,ops) /\ lookup_function nm C7.ctx_functions = SOME csf /\
-    eval_operands ops caller = SOME args /\ setup_callee csf args caller = SOME cv) /\
-  rooted_eval fuel C7 [(sf,[(bb,e,z)],SOME c)] v = (ev,OK cv) /\
-  ?G after. trace_gas (trace_blocks a depth (fuel-depth) C7 sf v) =
-     G ++ trace_gas (trace_blocks ((e,c.inst_id)::a) e (fuel-e) C7 csf cv) ++ after /\
+    decode_invoke (EL q xs) = SOME (nm,ops) /\ lookup_function nm C7.ctx_functions = SOME csf /\
+    eval_operands ops caller = SOME args /\ setup_callee csf args caller = SOME (child_entry with
+      vs_gas_readings := tail)) /\
+  rooted_eval fuel C7 [(sf,[(bb,e,(DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs))],SOME (EL
+    q xs))] (hin with vs_gas_readings := rg ++ tail) = (ev,OK (child_entry with vs_gas_readings := tail)) /\
+  ?G after. trace_gas (trace_blocks a depth (fuel-depth) C7 sf (hin with vs_gas_readings := rg ++ tail)) =
+     G ++ trace_gas (trace_blocks ((e,(EL q xs).inst_id)::a) e (fuel-e) C7 csf (child_entry with
+       vs_gas_readings := tail)) ++ after /\
     MAP FST G = FLAT (TAKE q ks) /\ LENGTH G = LENGTH ev
 Proof
   rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
@@ -2608,26 +2610,29 @@ Theorem focus_native_cut_failure_row:
     rooted_eval p d q8 raw_slots sites unused a e sf tf inc entry order res nrest
     bb bt ps xs ys sched hin h0 bodyrec ct front closed brest ms ks depth fuel
     z mr kr rowgs tail ev r.
-  let phi = phi_prefix_length bb.bb_instructions;
-      v = hin with vs_gas_readings := rowgs ++ tail in
-  let native_gas = trace_gas (trace_blocks a depth (fuel-depth) C7 sf v) in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
   FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,sched,hin,h0,bodyrec,ct,front,closed,brest) /\
   FLOOKUP ms_tab (a,e) = SOME ms /\ FLOOKUP ks_tab (a,e) = SOME ks /\
   e = SUC depth /\ e <= N /\ N <= fuel /\
-  ((e <> LAST order /\ z = DROP phi bb.bb_instructions /\ mr = FLAT ms /\ kr = FLAT ks) \/
+  ((e <> LAST order /\ z = DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions /\ mr =
+    FLAT ms /\ kr = FLAT ks) \/
    (?be hbe k. bodyrec = SOME (be,hbe) /\ k <= LENGTH xs /\
-      z = DROP phi ps ++ TAKE k xs /\ mr = FLAT (TAKE k ms) /\ kr = FLAT (TAKE k ks) /\
+      z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE k xs /\ mr = FLAT (TAKE k ms) /\ kr =
+        FLAT (TAKE k ks) /\
       EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
       (!t. t < k /\ (EL t xs).inst_opcode = INVOKE ==> MEM t (TAKE ct sched))) \/
    (bodyrec = NONE /\ mr = [] /\ kr = [] /\
-    z = DROP phi (TAKE (case q8 of JointConfig stk PG G tn fn inst st oms om hs h =>
+    z = DROP (phi_prefix_length bb.bb_instructions) (TAKE (case q8 of JointConfig stk PG G tn fn inst st
+      oms om hs h =>
       st.vs_inst_idx) ps))) /\
   LIST_REL (\slot w. slot = NONE \/ slot = SOME w) mr rowgs /\
-  rooted_eval fuel C7 [(sf,[(bb,e,z)],NONE)] v = (ev,r) /\ terminates r /\ (!u. r <> OK u) ==>
-  (?rest. kr = MAP FST native_gas ++ rest) /\ LENGTH native_gas = LENGTH ev
+  rooted_eval fuel C7 [(sf,[(bb,e,z)],NONE)] (hin with vs_gas_readings := rowgs ++ tail) = (ev,r) /\
+    terminates r /\ (!u. r <> OK u) ==>
+  (?rest. kr = MAP FST (trace_gas (trace_blocks a depth (fuel-depth) C7 sf (hin with
+    vs_gas_readings := rowgs ++ tail))) ++ rest) /\ LENGTH (trace_gas (trace_blocks a depth (fuel-depth)
+    C7 sf (hin with vs_gas_readings := rowgs ++ tail))) = LENGTH ev
 Proof
   rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
@@ -2833,10 +2838,10 @@ Theorem focus_native_rooted_append[local]:
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused ==>
   rooted_eval fuel C7 (left ++ right) v =
-    (let (ev,r) = rooted_eval fuel C7 left v in
-       case r of
-         OK u => (ev ++ FST (rooted_eval fuel C7 right u), SND (rooted_eval fuel C7 right u))
-       | other => (ev,other))
+    (case (SND (rooted_eval fuel C7 left v)) of
+         OK u => ((FST (rooted_eval fuel C7 left v)) ++ FST (rooted_eval fuel C7 right u), SND
+           (rooted_eval fuel C7 right u))
+       | other => ((FST (rooted_eval fuel C7 left v)),other))
 Proof
   strip_tac >> qhdtm_x_assum `dft_focus_packet_rel`
     (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
@@ -2856,11 +2861,11 @@ Theorem focus_native_rooted_rows_call_append[local]:
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused ==>
   rooted_eval fuel C7 [(sf,left ++ right,call)] v =
-    (let (ev,r) = rooted_eval fuel C7 [(sf,left,NONE)] v in
-       case r of
-         OK u => (ev ++ FST (rooted_eval fuel C7 [(sf,right,call)] u),
+    (case (SND (rooted_eval fuel C7 [(sf,left,NONE)] v)) of
+         OK u => ((FST (rooted_eval fuel C7 [(sf,left,NONE)] v)) ++ FST (rooted_eval fuel C7
+           [(sf,right,call)] u),
                   SND (rooted_eval fuel C7 [(sf,right,call)] u))
-       | other => (ev,other))
+       | other => ((FST (rooted_eval fuel C7 [(sf,left,NONE)] v)),other))
 Proof
   strip_tac >> qhdtm_x_assum `dft_focus_packet_rel`
     (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
@@ -2943,29 +2948,26 @@ Theorem focus_native_cut_live_level[local]:
     bb bt ps xs ys sched hin h0 bodyrec ct front closed brest ds later
     q h b0 done child_entry ret csf ctf child_order child_res child_rest
     fuel ws tail ev u.
-  let c = EL q xs in
-  let z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs;
-      v = entry with vs_gas_readings := ws ++ tail;
-      rows = MAP (\f. (FST (THE (FLOOKUP blocks (a,f))),f,
-        DROP (phi_prefix_length (FST (THE (FLOOKUP blocks (a,f)))).bb_instructions)
-          (FST (THE (FLOOKUP blocks (a,f)))).bb_instructions)) ds in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
   FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,sched,hin,h0,bodyrec,ct,front,closed,brest) /\
-  FLOOKUP calls (a,e,c.inst_id) = SOME (q,h,b0,done,child_entry,ret) /\
-  FLOOKUP acts ((e,c.inst_id)::a) = SOME (csf,ctf,e,child_entry,child_order,child_res,child_rest) /\
-  MEM ((e,c.inst_id)::a) (GENLIST (\i. DROP i p) (SUC (LENGTH p))) /\
+  FLOOKUP calls (a,e,(EL q xs).inst_id) = SOME (q,h,b0,done,child_entry,ret) /\
+  FLOOKUP acts ((e,(EL q xs).inst_id)::a) = SOME (csf,ctf,e,child_entry,child_order,child_res,child_rest) /\
+  MEM ((e,(EL q xs).inst_id)::a) (GENLIST (\i. DROP i p) (SUC (LENGTH p))) /\
   order = ds ++ e::later /\ N <= fuel /\
   EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
   (!i. i < q /\ (EL i xs).inst_opcode = INVOKE ==> MEM i done) /\
   LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
     (FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab (a,f)))) ds) ++
        FLAT (TAKE q (THE (FLOOKUP ms_tab (a,e))))) ws /\
-  rooted_eval fuel C7 [(sf,rows ++ [(bb,e,z)],SOME c)] v = (ev,OK u) ==>
+  rooted_eval fuel C7 [(sf,(MAP (\f. (FST (THE (FLOOKUP blocks (a,f))),f, DROP (phi_prefix_length (FST
+    (THE (FLOOKUP blocks (a,f)))).bb_instructions) (FST (THE (FLOOKUP blocks (a,f)))).bb_instructions))
+    ds) ++ [(bb,e,(DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs))],SOME (EL q xs))] (entry
+    with vs_gas_readings := ws ++ tail) = (ev,OK u) ==>
   u = child_entry with vs_gas_readings := tail /\
-  ?G after. trace_gas (trace_blocks a inc (fuel-inc) C7 sf v) =
-    G ++ trace_gas (trace_blocks ((e,c.inst_id)::a) e (fuel-e) C7 csf u) ++ after /\
+  ?G after. trace_gas (trace_blocks a inc (fuel-inc) C7 sf (entry with vs_gas_readings := ws ++ tail)) =
+    G ++ trace_gas (trace_blocks ((e,(EL q xs).inst_id)::a) e (fuel-e) C7 csf u) ++ after /\
     MAP FST G = FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab (a,f)))) ds) ++
       FLAT (TAKE q (THE (FLOOKUP ks_tab (a,e)))) /\ LENGTH G = LENGTH ev
 Proof
@@ -3063,35 +3065,37 @@ Theorem focus_native_cut_failed_after_rows[local]:
     rooted_eval p d q8 raw_slots sites unused a e sf tf inc entry order res nrest
     bb bt ps xs ys sched hin h0 bodyrec ct front closed brest ds later
     z mr kr gs tail fuel ev0 v0 ev r.
-  let phi = phi_prefix_length bb.bb_instructions in
-  let rows = MAP (\f.
-    (FST (THE (FLOOKUP blocks (a,f))),f,
-     DROP (phi_prefix_length (FST (THE (FLOOKUP blocks (a,f)))).bb_instructions)
-          (FST (THE (FLOOKUP blocks (a,f)))).bb_instructions)) ds;
-      v = entry with vs_gas_readings := gs ++ tail in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
   FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,sched,hin,h0,bodyrec,ct,front,closed,brest) /\
   order = ds ++ e::later /\ N <= fuel /\
-  ((later <> [] /\ z = DROP phi bb.bb_instructions /\
+  ((later <> [] /\ z = DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions /\
       mr = FLAT (THE (FLOOKUP ms_tab (a,e))) /\ kr = FLAT (THE (FLOOKUP ks_tab (a,e)))) \/
    (?be hbe k. bodyrec = SOME (be,hbe) /\ k <= LENGTH xs /\
-      z = DROP phi ps ++ TAKE k xs /\ mr = FLAT (TAKE k (THE (FLOOKUP ms_tab (a,e)))) /\
+      z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE k xs /\ mr =
+        FLAT (TAKE k (THE (FLOOKUP ms_tab (a,e)))) /\
       kr = FLAT (TAKE k (THE (FLOOKUP ks_tab (a,e)))) /\
       EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
       (!t. t < k /\ (EL t xs).inst_opcode = INVOKE ==> MEM t (TAKE ct sched))) \/
    (bodyrec = NONE /\ mr = [] /\ kr = [] /\
-    z = DROP phi (TAKE (case q8 of JointConfig stk PG G tn fn inst st oms om hs h =>
+    z = DROP (phi_prefix_length bb.bb_instructions) (TAKE (case q8 of JointConfig stk PG G tn fn inst st
+      oms om hs h =>
       st.vs_inst_idx) ps))) /\
   LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
     (FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab (a,f)))) ds) ++ mr) gs /\
-  rooted_eval fuel C7 [(sf,rows,NONE)] v = (ev0,OK v0) /\
-  rooted_eval fuel C7 [(sf,rows ++ [(bb,e,z)],NONE)] v = (ev,r) /\
+  rooted_eval fuel C7 [(sf,(MAP (\f. (FST (THE (FLOOKUP blocks (a,f))),f, DROP (phi_prefix_length (FST
+    (THE (FLOOKUP blocks (a,f)))).bb_instructions) (FST (THE (FLOOKUP blocks (a,f)))).bb_instructions))
+    ds),NONE)] (entry with vs_gas_readings := gs ++ tail) = (ev0,OK v0) /\
+  rooted_eval fuel C7 [(sf,(MAP (\f. (FST (THE (FLOOKUP blocks (a,f))),f, DROP (phi_prefix_length (FST
+    (THE (FLOOKUP blocks (a,f)))).bb_instructions) (FST (THE (FLOOKUP blocks (a,f)))).bb_instructions))
+    ds) ++ [(bb,e,z)],NONE)] (entry with vs_gas_readings := gs ++ tail) = (ev,r) /\
   terminates r /\ (!w. r <> OK w) ==>
-  LENGTH (trace_gas (trace_blocks a inc (fuel-inc) C7 sf v)) = LENGTH ev /\
+  LENGTH (trace_gas (trace_blocks a inc (fuel-inc) C7 sf (entry with vs_gas_readings := gs ++ tail))) =
+    LENGTH ev /\
   ?rest. FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab (a,f)))) ds) ++ kr =
-    MAP FST (trace_gas (trace_blocks a inc (fuel-inc) C7 sf v)) ++ rest
+    MAP FST (trace_gas (trace_blocks a inc (fuel-inc) C7 sf (entry with
+      vs_gas_readings := gs ++ tail))) ++ rest
 Proof
   rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
@@ -3202,32 +3206,32 @@ Theorem focus_native_failed_level[local]:
     rooted_eval p d q8 raw_slots sites unused a e sf tf inc entry order res nrest
     bb bt ps xs ys sched hin h0 bodyrec ct front closed brest ds later
     z mr kr gs tail fuel call ev r.
-  let phi = phi_prefix_length bb.bb_instructions in
-  let rows = MAP (\f.
-    (FST (THE (FLOOKUP blocks (a,f))),f,
-     DROP (phi_prefix_length (FST (THE (FLOOKUP blocks (a,f)))).bb_instructions)
-          (FST (THE (FLOOKUP blocks (a,f)))).bb_instructions)) ds;
-      v = entry with vs_gas_readings := gs ++ tail in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
   FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,sched,hin,h0,bodyrec,ct,front,closed,brest) /\
   order = ds ++ e::later /\ N <= fuel /\
   ((?be hbe k. bodyrec = SOME (be,hbe) /\ k <= LENGTH xs /\
-      z = DROP phi ps ++ TAKE k xs /\ mr = FLAT (TAKE k (THE (FLOOKUP ms_tab (a,e)))) /\
+      z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE k xs /\ mr =
+        FLAT (TAKE k (THE (FLOOKUP ms_tab (a,e)))) /\
       kr = FLAT (TAKE k (THE (FLOOKUP ks_tab (a,e)))) /\
       EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
       (!t. t < k /\ (EL t xs).inst_opcode = INVOKE ==> MEM t (TAKE ct sched))) \/
    (bodyrec = NONE /\ mr = [] /\ kr = [] /\
-    z = DROP phi (TAKE (case q8 of JointConfig stk PG G tn fn inst st oms om hs h =>
+    z = DROP (phi_prefix_length bb.bb_instructions) (TAKE (case q8 of JointConfig stk PG G tn fn inst st
+      oms om hs h =>
       st.vs_inst_idx) ps))) /\
   LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
     (FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab (a,f)))) ds) ++ mr) gs /\
-  rooted_eval fuel C7 [(sf,rows ++ [(bb,e,z)],call)] v = (ev,r) /\
+  rooted_eval fuel C7 [(sf,(MAP (\f. (FST (THE (FLOOKUP blocks (a,f))),f, DROP (phi_prefix_length (FST
+    (THE (FLOOKUP blocks (a,f)))).bb_instructions) (FST (THE (FLOOKUP blocks (a,f)))).bb_instructions))
+    ds) ++ [(bb,e,z)],call)] (entry with vs_gas_readings := gs ++ tail) = (ev,r) /\
   terminates r /\ (!w. r <> OK w) ==>
-  LENGTH (trace_gas (trace_blocks a inc (fuel-inc) C7 sf v)) = LENGTH ev /\
+  LENGTH (trace_gas (trace_blocks a inc (fuel-inc) C7 sf (entry with vs_gas_readings := gs ++ tail))) =
+    LENGTH ev /\
   ?rest. FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab (a,f)))) ds) ++ kr =
-    MAP FST (trace_gas (trace_blocks a inc (fuel-inc) C7 sf v)) ++ rest
+    MAP FST (trace_gas (trace_blocks a inc (fuel-inc) C7 sf (entry with
+      vs_gas_readings := gs ++ tail))) ++ rest
 Proof
   rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
@@ -3325,9 +3329,8 @@ Theorem focus_native_cut_spine[local]:
   LIST_REL compat (FLAT (MAP slots cuts)) ws /\
   (!v. eval [] v = ([],OK v)) /\
   (!lv lvs v. eval (lv::lvs) v =
-    (let (prior,res) = eval [lv] v in
-     case res of OK u => (prior ++ FST (eval lvs u), SND (eval lvs u))
-               | other => (prior,other))) /\
+    (case (SND (eval [lv] v)) of OK u => ((FST (eval [lv] v)) ++ FST (eval lvs u), SND (eval lvs u))
+               | other => ((FST (eval [lv] v)),other))) /\
   (!i gs rest prior res.
     i < LENGTH cuts /\ LIST_REL compat (slots (EL i cuts)) gs /\
     eval [EL i levels] (enter (EL i cuts) (gs ++ rest)) = (prior,res) /\
@@ -3656,25 +3659,6 @@ Proof
 QED
 
 Theorem focus_selected_guard_and_bound:
-  let C7 = stage 7; C8 = stage 8; C9 = stage 9 in
-  let a0 = entry_asm_state vs0 es0;
-      env = asm_data_env prog vs0.vs_code;
-      planner_base = vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
-                               vs_return_pc_token := 0w; vs_inst_idx := 0|>;
-      trace8 = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry
-  in
-  let V = TAKE j trace8;
-      q8 = JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8;
-      q9 = JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9;
-      Kroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e))))
-        (FST (SND (SND (SND (SND (THE (FLOOKUP acts []))))))));
-      filling = raw ++ [0w]
-  in
-  let R = root_entry with vs_gas_readings := filling;
-      n = MIN (LENGTH (markf filling)) (LENGTH filling);
-      A = vs0 with <|vs_gas_readings := filling; vs_fmp := fmp; vs_initial_fmp := fmp;
-                    vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>
-  in
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
@@ -3743,36 +3727,51 @@ Theorem focus_selected_guard_and_bound:
       EVERY (o1_fn_row k) (stage k).ctx_functions) /\
   0 < N /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|> /\
-  C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
-  lookup_function nm C7.ctx_functions = SOME root_sf /\
-  lookup_function nm C8.ctx_functions = SOME root_tf /\
+  (stage 7).ctx_entry = SOME nm /\ (stage 8).ctx_entry = SOME nm /\
+  lookup_function nm (stage 7).ctx_functions = SOME root_sf /\
+  lookup_function nm (stage 8).ctx_functions = SOME root_tf /\
   fn_entry_label root_sf = SOME lbl7 /\ fn_entry_label root_tf = SOME lbl7 /\
-  joint_initial vs0 C8 q80 /\ joint_initial vs0 C9 q90 /\
-  joint_trace vs0 C8 q80 evs8 qs8 q8 /\
-  joint_trace vs0 C9 q90 evs9 qs9 q9 /\
-  cfg_norm_joint_cursors C8 C9 (schedules,current,saved) q8 q9 /\
+  joint_initial vs0 (stage 8) q80 /\ joint_initial vs0 (stage 9) q90 /\
+  joint_trace vs0 (stage 8) q80 evs8 qs8 (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8) /\
+  joint_trace vs0 (stage 9) q90 evs9 qs9 (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
+  cfg_norm_joint_cursors (stage 8) (stage 9) (schedules,current,saved) (JointConfig stk8 PG8 G8 tn8 fn8
+    inst8 s8 oms8 om8 hs8 hist8) (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
   asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-    prog asm_fuel a0 = AsmOK ast /\
-  (fin = K SOME ==> normal_frame_plan rpolicy out.po_unit cpl prog planner_base es0 q9 ast) /\
+    prog asm_fuel (entry_asm_state vs0 es0) = AsmOK ast /\
+  (fin = K SOME ==> normal_frame_plan rpolicy out.po_unit cpl prog (vs0 with
+    <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp; vs_return_pc_token := 0w;
+    vs_inst_idx := 0|>) es0 (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ast) /\
   (fin = asm_opt_finalizer ==>
-    sym_steps prog env asm_fuel (sym_init a0) = SymOK ss /\
-    normal_frame_symbolic_plan env rpolicy out.po_unit cpl prog vs0 es0 q9 ast ss) /\
-  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
-    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
-  j = LENGTH evs8 /\ LENGTH evs8 <= LENGTH evs9 /\ LENGTH V = j /\
-  j < LENGTH trace8 /\ obs = dftGasFromListTraceDefs$trace_gas V /\
-  EL j trace8 = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
+    sym_steps prog (asm_data_env prog vs0.vs_code) asm_fuel (sym_init (entry_asm_state vs0 es0)) = SymOK ss /\
+    normal_frame_symbolic_plan (asm_data_env prog vs0.vs_code) rpolicy out.po_unit cpl prog vs0 es0
+      (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ast ss) /\
+  dft_focus_packet_rel N (stage 7) (stage 8) root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8
+      om8 hs8 hist8) raw_slots sites unused /\
+  j = LENGTH evs8 /\ LENGTH evs8 <= LENGTH evs9 /\ LENGTH (TAKE j (dftGasFromListTraceDefs$trace_blocks []
+    0 N (stage 8) root_tf root_entry)) = j /\
+  j < LENGTH (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8) root_tf root_entry) /\ obs =
+    dftGasFromListTraceDefs$trace_gas (TAKE j (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8)
+    root_tf root_entry)) /\
+  EL j (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8) root_tf root_entry) =
+    ((p,d,inst8.inst_id),fn8,inst8,s8) /\
   LENGTH raw_slots = LENGTH sites /\
   PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
   LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw /\
-  terminates (run_blocks fuel7 C7 root_sf R) /\
+  terminates (run_blocks fuel7 (stage 7) root_sf (root_entry with vs_gas_readings := (raw ++ [0w]))) /\
   (inv_memory_observation inst8.inst_opcode \/ is_fallible inst8 \/
    inst8.inst_opcode = INVOKE \/ is_terminator inst8.inst_opcode) ==>
-  (n <= LENGTH (gas_events_blocks fuel7 C7 root_sf R) /\
+  ((MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) <= LENGTH (gas_events_blocks fuel7 (stage
+    7) root_sf (root_entry with vs_gas_readings := (raw ++ [0w]))) /\
    ?f extra.
-      MAP project (gas_events_blocks f unit.cu_context entryfn A) = markf filling ++ extra /\
-      TAKE n (gas_events_blocks fuel7 C7 root_sf R) =
-        TAKE n (gas_events_blocks f unit.cu_context entryfn A)) /\
+      MAP project (gas_events_blocks f unit.cu_context entryfn (vs0 with
+        <|vs_gas_readings := (raw ++ [0w]); vs_fmp := fmp; vs_initial_fmp := fmp; vs_prev_bb := NONE;
+        vs_current_bb := lbl; vs_inst_idx := 0|>)) = markf (raw ++ [0w]) ++ extra /\
+      TAKE (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) (gas_events_blocks fuel7 (stage 7)
+        root_sf (root_entry with vs_gas_readings := (raw ++ [0w]))) =
+        TAKE (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) (gas_events_blocks f
+          unit.cu_context entryfn (vs0 with <|vs_gas_readings := (raw ++ [0w]); vs_fmp := fmp;
+          vs_initial_fmp := fmp; vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))) /\
   (?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
       body_entry count front closed brest.
       FLOOKUP acts p = SOME (sf,fn8,inc,entry,order,res,nrest) /\
@@ -3832,20 +3831,21 @@ Theorem focus_selected_guard_and_bound:
         Kcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
           FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab (ai,f)))) ds) ++
           FLAT (TAKE qi (THE (FLOOKUP ks_tab (ai,ei))))) cuts) /\
-        raw_slots = Mcut ++ mr /\ sites = Ecut ++ er /\ Kroot = Kcut ++ kr /\
+        raw_slots = Mcut ++ mr /\ sites = Ecut ++ er /\ (FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab
+          ([],e)))) (FST (SND (SND (SND (SND (THE (FLOOKUP acts []))))))))) = Kcut ++ kr /\
         LENGTH Mcut = LENGTH Ecut /\ LENGTH Mcut = LENGTH Kcut /\
         (!fuel gs tail.
           N <= fuel /\
           LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs ==>
-          (?extra. Ecut = FST (rooted_eval fuel C7 levels
+          (?extra. Ecut = FST (rooted_eval fuel (stage 7) levels
             (root_entry with vs_gas_readings := gs ++ tail)) ++ extra) /\
-          (case SND (rooted_eval fuel C7 levels (root_entry with vs_gas_readings := gs ++ tail)) of
+          (case SND (rooted_eval fuel (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail)) of
             OK u =>
-              FST (rooted_eval fuel C7 levels
+              FST (rooted_eval fuel (stage 7) levels
                 (root_entry with vs_gas_readings := gs ++ tail)) = Ecut /\
               u.vs_gas_readings = tail /\
               (?before after.
-                dftGasFromListTraceDefs$trace_blocks [] 0 fuel C7 root_sf
+                dftGasFromListTraceDefs$trace_blocks [] 0 fuel (stage 7) root_sf
                   (root_entry with vs_gas_readings := gs ++ tail) =
                   before ++ [((p,d,(EL (LENGTH z)
                     (DROP (phi_prefix_length bb.bb_instructions)
@@ -3853,7 +3853,7 @@ Theorem focus_selected_guard_and_bound:
                     EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
                       bb.bb_instructions),u)] ++ after /\
                 dftGasFromListTraceDefs$trace_gas before = ZIP (Kcut,gs)) /\
-              (!tail'. rooted_eval fuel C7 levels
+              (!tail'. rooted_eval fuel (stage 7) levels
                 (root_entry with vs_gas_readings := gs ++ tail') =
                   (Ecut,OK (u with vs_gas_readings := tail'))) /\
               (body_entry = NONE ==>
@@ -3864,11 +3864,11 @@ Theorem focus_selected_guard_and_bound:
                   eval_operand op u = eval_operand op s8) /\
                 u.vs_initial_fmp = s8.vs_initial_fmp)
           | stopped =>
-              run_blocks fuel C7 root_sf
+              run_blocks fuel (stage 7) root_sf
                 (root_entry with vs_gas_readings := gs ++ tail) = stopped /\
-              gas_events_blocks fuel C7 root_sf
+              gas_events_blocks fuel (stage 7) root_sf
                 (root_entry with vs_gas_readings := gs ++ tail) =
-                  FST (rooted_eval fuel C7 levels
+                  FST (rooted_eval fuel (stage 7) levels
                     (root_entry with vs_gas_readings := gs ++ tail)))) /\
         (!fuel gs tail k u.
           N <= fuel /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
@@ -3876,26 +3876,26 @@ Theorem focus_selected_guard_and_bound:
           mem_inv (\ctx src_fn src_inst src_state.
             gas_cut k (root_entry with vs_gas_readings := gs ++ tail) src_state ==>
               static_mem_ok cpl.cp_max_static_eom ctx src_fn src_inst src_state)
-            C7 (root_entry with vs_gas_readings := gs ++ tail) /\
-          rooted_eval fuel C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
+            (stage 7) (root_entry with vs_gas_readings := gs ++ tail) /\
+          rooted_eval fuel (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail) =
             (Ecut,OK u) ==>
-          static_mem_ok cpl.cp_max_static_eom C7 sf src_inst u /\
+          static_mem_ok cpl.cp_max_static_eom (stage 7) sf src_inst u /\
           (~in_revert_forward fn8 s8 ==> ~in_revert_forward sf u) /\
           (inv_memory_observation src_inst.inst_opcode ==>
             (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op s8) /\
             u.vs_initial_fmp = s8.vs_initial_fmp)) /\
-        (let gs = TAKE (LENGTH Mcut) raw;
-             tail = DROP (LENGTH Mcut) raw ++ [0w]
-         in
-         (!fuel u.
-           N <= fuel /\ LENGTH Mcut < n /\
-           rooted_eval fuel C7 levels R = (Ecut,OK u) ==>
-           raw_reachable R C7 sf src_inst u /\ gas_cut n R u /\
-           lowered_mem_fact cpl.cp_max_static_eom C7 sf src_inst u /\
-           u.vs_gas_readings = tail /\
+        ((!fuel u.
+           N <= fuel /\ LENGTH Mcut < (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) /\
+           rooted_eval fuel (stage 7) levels (root_entry with vs_gas_readings := (raw ++ [0w])) =
+             (Ecut,OK u) ==>
+           raw_reachable (root_entry with vs_gas_readings := (raw ++ [0w])) (stage 7) sf src_inst u /\
+             gas_cut (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) (root_entry with
+             vs_gas_readings := (raw ++ [0w])) u /\
+           lowered_mem_fact cpl.cp_max_static_eom (stage 7) sf src_inst u /\
+           u.vs_gas_readings = (DROP (LENGTH Mcut) raw ++ [0w]) /\
            (fin = asm_opt_finalizer ==>
              inst_dload_in_section src_inst u /\
-             code_end_offset_ok (\ctx fn i s. fn = sf /\ i = src_inst /\ s = u) C7) /\
+             code_end_offset_ok (\ctx fn i s. fn = sf /\ i = src_inst /\ s = u) (stage 7)) /\
            (~in_revert_forward fn8 s8 ==> ~in_revert_forward sf u) /\
            (inv_memory_observation inst8.inst_opcode ==>
              (!op. MEM op inst8.inst_operands ==> eval_operand op u = eval_operand op s8) /\
@@ -3910,15 +3910,18 @@ Theorem focus_selected_guard_and_bound:
               code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
               FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
               w2n (src - n2w off) < dimword (:256) DIV 2)) \/
-          n <= LENGTH Mcut \/
-          (LENGTH Mcut < n /\ in_revert_forward fn9 s9) \/
-          (LENGTH Mcut < n /\
+          (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) <= LENGTH Mcut \/
+          (LENGTH Mcut < (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) /\
+            in_revert_forward fn9 s9) \/
+          (LENGTH Mcut < (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) /\
            ?fuel events stopped.
-             N <= fuel /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
-             rooted_eval fuel C7 levels R = (events,stopped) /\
+             N <= fuel /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut (TAKE (LENGTH Mcut) raw) /\
+             rooted_eval fuel (stage 7) levels (root_entry with vs_gas_readings := (raw ++ [0w])) =
+               (events,stopped) /\
              (!u. stopped <> OK u) /\ (!err. stopped <> Error err) /\
-             run_blocks fuel C7 root_sf R = stopped /\
-             gas_events_blocks fuel C7 root_sf R = events /\
+             run_blocks fuel (stage 7) root_sf (root_entry with vs_gas_readings := (raw ++ [0w])) = stopped /\
+             gas_events_blocks fuel (stage 7) root_sf (root_entry with vs_gas_readings := (raw ++ [0w])) =
+               events /\
              (?extra. Ecut = events ++ extra)))))
 Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
@@ -4026,8 +4029,6 @@ QED
 (* A failed cut can execute fewer cells than Kcut describes. Its actual
    native GAS trace, rather than the entire cut, is the observed prefix. *)
 Theorem focus_failed_prefix_observed_agreement:
-  let R = root_entry with vs_gas_readings := raw ++ [0w] in
-  let G = trace_gas (trace_blocks [] 0 fuel C7 root_sf R) in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
@@ -4038,10 +4039,13 @@ Theorem focus_failed_prefix_observed_agreement:
   LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw /\
   Kroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e))))
     (FST (SND (SND (SND (SND (THE (FLOOKUP acts [])))))))) /\
-  Kroot = Kcut ++ kr /\ Kcut = MAP FST G ++ t /\
-  LENGTH Kcut <= LENGTH raw /\ terminates (run_blocks fuel C7 root_sf R) ==>
+  Kroot = Kcut ++ kr /\ Kcut = MAP FST (trace_gas (trace_blocks [] 0 fuel C7 root_sf (root_entry with
+    vs_gas_readings := raw ++ [0w]))) ++ t /\
+  LENGTH Kcut <= LENGTH raw /\ terminates (run_blocks fuel C7 root_sf (root_entry with
+    vs_gas_readings := raw ++ [0w])) ==>
   !k x. dftGasFromListUnion$recorded C7 (vs0 with vs_gas_readings := raw ++ [0w]) k x ==>
-    MEM (k,x) G /\ MEM k Kcut /\
+    MEM (k,x) (trace_gas (trace_blocks [] 0 fuel C7 root_sf (root_entry with
+      vs_gas_readings := raw ++ [0w]))) /\ MEM k Kcut /\
     (!y. MEM k (MAP FST obs) /\ dftGasFromListUnion$recorded C8 vs0 k y ==> x = y)
 Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
@@ -4089,10 +4093,6 @@ QED
 
 (* Specialize one choice of focus-cut witnesses to the fixed filling. *)
 Theorem focus_selected_cut_native_cases:
-  let gs = TAKE (LENGTH Mcut) raw;
-      tail = DROP (LENGTH Mcut) raw ++ [0w];
-      R = root_entry with vs_gas_readings := raw ++ [0w]
-  in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
     (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8)
@@ -4137,45 +4137,49 @@ Theorem focus_selected_cut_native_cases:
     FLAT (TAKE qi (THE (FLOOKUP ks_tab (ai,ei))))) cuts) /\
   src_inst = EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
   raw_slots = Mcut ++ mr /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw /\
-  N <= fuel /\ terminates (run_blocks fuel C7 root_sf R) /\
-  (!F gs tail.
-    N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs ==>
+  N <= fuel /\ terminates (run_blocks fuel C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w])) /\
+  (!F all_gs all_tail.
+    N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut all_gs ==>
     (?extra. Ecut = FST (rooted_eval F C7 levels
-      (root_entry with vs_gas_readings := gs ++ tail)) ++ extra) /\
-    (case SND (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)) of
+      (root_entry with vs_gas_readings := all_gs ++ all_tail)) ++ extra) /\
+    (case SND (rooted_eval F C7 levels (root_entry with vs_gas_readings := all_gs ++ all_tail)) of
       OK u =>
-        FST (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)) = Ecut /\
-        u.vs_gas_readings = tail /\
+        FST (rooted_eval F C7 levels (root_entry with vs_gas_readings := all_gs ++ all_tail)) = Ecut /\
+        u.vs_gas_readings = all_tail /\
         (?before after.
-          trace_blocks [] 0 F C7 root_sf (root_entry with vs_gas_readings := gs ++ tail) =
+          trace_blocks [] 0 F C7 root_sf (root_entry with vs_gas_readings := all_gs ++ all_tail) =
             before ++ [((p,d,src_inst.inst_id),sf,src_inst,u)] ++ after /\
-          trace_gas before = ZIP (Kcut,gs)) /\
-        (!tail'. rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail') =
+          trace_gas before = ZIP (Kcut,all_gs)) /\
+        (!tail'. rooted_eval F C7 levels (root_entry with vs_gas_readings := all_gs ++ tail') =
           (Ecut,OK (u with vs_gas_readings := tail'))) /\
         (body_entry = NONE ==> u with vs_gas_readings := s8.vs_gas_readings = s8) /\
         (IS_SOME body_entry /\ inv_memory_observation inst8.inst_opcode /\ EL q xs = inst8 ==>
           (!op. MEM op inst8.inst_operands ==> eval_operand op u = eval_operand op s8) /\
           u.vs_initial_fmp = s8.vs_initial_fmp)
     | stopped =>
-        run_blocks F C7 root_sf (root_entry with vs_gas_readings := gs ++ tail) = stopped /\
-        gas_events_blocks F C7 root_sf (root_entry with vs_gas_readings := gs ++ tail) =
-          FST (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)))) ==>
+        run_blocks F C7 root_sf (root_entry with vs_gas_readings := all_gs ++ all_tail) = stopped /\
+        gas_events_blocks F C7 root_sf (root_entry with vs_gas_readings := all_gs ++ all_tail) =
+          FST (rooted_eval F C7 levels (root_entry with vs_gas_readings := all_gs ++ all_tail)))) ==>
   (?u before after.
-    rooted_eval fuel C7 levels R = (Ecut,OK u) /\
-    trace_blocks [] 0 fuel C7 root_sf R =
+    rooted_eval fuel C7 levels (root_entry with vs_gas_readings := raw ++ [0w]) = (Ecut,OK u) /\
+    trace_blocks [] 0 fuel C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w]) =
       before ++ [((p,d,src_inst.inst_id),sf,src_inst,u)] ++ after /\
-    trace_gas before = ZIP (Kcut,gs) /\ u.vs_gas_readings = tail /\
-    (!tail'. rooted_eval fuel C7 levels (root_entry with vs_gas_readings := gs ++ tail') =
+    trace_gas before = ZIP (Kcut,(TAKE (LENGTH Mcut) raw)) /\ u.vs_gas_readings =
+      (DROP (LENGTH Mcut) raw ++ [0w]) /\
+    (!tail'. rooted_eval fuel C7 levels (root_entry with vs_gas_readings := (TAKE (LENGTH Mcut) raw) ++
+      tail') =
       (Ecut,OK (u with vs_gas_readings := tail'))) /\
     (body_entry = NONE ==> u with vs_gas_readings := s8.vs_gas_readings = s8) /\
     (IS_SOME body_entry /\ inv_memory_observation inst8.inst_opcode /\ EL q xs = inst8 ==>
       (!op. MEM op inst8.inst_operands ==> eval_operand op u = eval_operand op s8) /\
       u.vs_initial_fmp = s8.vs_initial_fmp)) \/
   (?ev r t extra.
-    rooted_eval fuel C7 levels R = (ev,r) /\ (!u. r <> OK u) /\
-    run_blocks fuel C7 root_sf R = r /\ gas_events_blocks fuel C7 root_sf R = ev /\
+    rooted_eval fuel C7 levels (root_entry with vs_gas_readings := raw ++ [0w]) = (ev,r) /\ (!u. r <> OK u) /\
+    run_blocks fuel C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w]) = r /\
+      gas_events_blocks fuel C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w]) = ev /\
     Ecut = ev ++ extra /\
-    Kcut = MAP FST (trace_gas (trace_blocks [] 0 fuel C7 root_sf R)) ++ t)
+    Kcut = MAP FST (trace_gas (trace_blocks [] 0 fuel C7 root_sf (root_entry with
+      vs_gas_readings := raw ++ [0w]))) ++ t)
 Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -4218,19 +4222,18 @@ QED
 (* A retained activation cannot descend from the as-yet unrecorded
    focus call. Thus the child cannot contribute a retained cut key. *)
 Theorem focus_terminal_retained_uncovered:
-  let tr8 = trace_blocks [] 0 N C8 root_tf root_entry;
-      H = if inst8.inst_opcode = INVOKE then
-            trace_gas (trace_step p d (N-d) C8 fn8 inst8 s8) else [] in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   o1_ctx_shape C8 /\
   lookup_function nm C8.ctx_functions = SOME root_tf /\
-  j < LENGTH tr8 /\ EL j tr8 = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
+  j < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry) /\ EL j (trace_blocks [] 0 N C8 root_tf
+    root_entry) = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
   Kroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e))))
     (FST (SND (SND (SND (SND (THE (FLOOKUP acts [])))))))) /\
   Kroot = Kcut ++ kr /\
   (!k x. MEM (k,x) g ==> MEM k Kcut) ==>
-  !k x y. MEM (k,x) g /\ (MEM (k,y) obs \/ MEM (k,y) H) /\
+  !k x y. MEM (k,x) g /\ (MEM (k,y) obs \/ MEM (k,y) (if inst8.inst_opcode =
+    INVOKE then trace_gas (trace_step p d (N-d) C8 fn8 inst8 s8) else [])) /\
     ~(MEM k Kcut /\ MEM k (MAP FST obs)) ==> x = y
 Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
@@ -4331,24 +4334,16 @@ QED
 (* Discharge only the pairs not already covered by the selected cut. At a
    successful cut the visit itself belongs to the source remainder. *)
 Theorem focus_terminal_native_pair_reduction:
-  let R = root_entry with vs_gas_readings := raw ++ [0w];
-      tr8 = trace_blocks [] 0 N C8 root_tf root_entry in
-  let tr7 = trace_blocks [] 0 fuel7 C7 root_sf R;
-      H = if inst8.inst_opcode = INVOKE then
-            trace_gas (trace_step p d (N-d) C8 fn8 inst8 s8) else [] in
-  let G = trace_gas tr7;
-      uncovered = \g. !k x y. MEM (k,x) g /\
-        (MEM (k,y) obs \/ MEM (k,y) H) /\
-        ~(MEM k Kcut /\ MEM k (MAP FST obs)) ==> x = y in
   o1_ctx_shape C7 /\ o1_ctx_shape C8 /\
   C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
   lookup_function nm C7.ctx_functions = SOME root_sf /\
   lookup_function nm C8.ctx_functions = SOME root_tf /\
   fn_entry_label root_sf = SOME lbl /\ fn_entry_label root_tf = SOME lbl /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
-  terminates (run_blocks fuel7 C7 root_sf R) /\
-  j < LENGTH tr8 /\ EL j tr8 = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
-  obs = trace_gas (TAKE j tr8) /\
+  terminates (run_blocks fuel7 C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w])) /\
+  j < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry) /\ EL j (trace_blocks [] 0 N C8 root_tf
+    root_entry) = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
+  obs = trace_gas (TAKE j (trace_blocks [] 0 N C8 root_tf root_entry)) /\
   cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
     (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8)
     (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
@@ -4358,10 +4353,20 @@ Theorem focus_terminal_native_pair_reduction:
        dftGasFromListUnion$recorded C7 (vs0 with vs_gas_readings := raw ++ [0w]) k x /\
        dftGasFromListUnion$recorded C8 vs0 k y ==> x = y) /\
     ((?before visit after.
-      tr7 = before ++ visit::after /\
+      (trace_blocks [] 0 fuel7 C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w])) =
+        before ++ visit::after /\
       trace_gas before = ZIP (Kcut,TAKE (LENGTH Kcut) raw) /\
-      uncovered (trace_gas before) /\ uncovered (trace_gas (visit::after))) \/
-     ((?t. Kcut = MAP FST G ++ t) /\ uncovered G))) \/ static_exit) ==>
+      (\g. !k x y. MEM (k,x) g /\ (MEM (k,y) obs \/ MEM (k,y) (if inst8.inst_opcode =
+        INVOKE then trace_gas (trace_step p d (N-d) C8 fn8 inst8 s8) else [])) /\ ~(MEM k Kcut /\
+        MEM k (MAP FST obs)) ==> x = y) (trace_gas before) /\ (\g. !k x y. MEM (k,x) g /\
+        (MEM (k,y) obs \/ MEM (k,y) (if inst8.inst_opcode = INVOKE then trace_gas (trace_step p d (N-d) C8
+        fn8 inst8 s8) else [])) /\ ~(MEM k Kcut /\ MEM k (MAP FST obs)) ==> x =
+        y) (trace_gas (visit::after))) \/
+     ((?t. Kcut = MAP FST (trace_gas (trace_blocks [] 0 fuel7 C7 root_sf (root_entry with
+       vs_gas_readings := raw ++ [0w]))) ++ t) /\ (\g. !k x y. MEM (k,x) g /\ (MEM (k,y) obs \/
+       MEM (k,y) (if inst8.inst_opcode = INVOKE then trace_gas (trace_step p d (N-d) C8 fn8 inst8 s8) else
+       [])) /\ ~(MEM k Kcut /\ MEM k (MAP FST obs)) ==> x = y) (trace_gas (trace_blocks [] 0 fuel7 C7
+       root_sf (root_entry with vs_gas_readings := raw ++ [0w])))))) \/ static_exit) ==>
   (?orc.
     (!fuel. gas_res_rel (run_context fuel C7
       (vs0 with vs_gas_readings := raw ++ [0w])) (ev_context orc fuel C7 vs0)) /\
@@ -4424,13 +4429,13 @@ QED
 (* Assemble the static alternative only once the fixed C7 entry abort and
    the guarded post-DFT contracts are available. *)
 Theorem focus_selected_static_exit_join:
-  let vi = vs0 with <|vs_gas_readings := raw ++ [0w];
-                      vs_fmp := fmp; vs_initial_fmp := fmp|> in
-  let v7 = vs0 with vs_gas_readings := raw ++ [0w] in
   vs0.vs_call_ctx.cc_static /\ dead_wf D /\
-  ctx_sim_fuel I D unit.cu_context C7 vi v7 /\
-  ctx_abort_rq D unit.cu_context C7 vi v7 /\
-  ctx_sim_fuel g D C7 C9 v7 vs0 /\ ctx_abort_rq D C7 C9 v7 vs0 /\
+  ctx_sim_fuel I D unit.cu_context C7 (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp;
+    vs_initial_fmp := fmp|>) (vs0 with vs_gas_readings := raw ++ [0w]) /\
+  ctx_abort_rq D unit.cu_context C7 (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp;
+    vs_initial_fmp := fmp|>) (vs0 with vs_gas_readings := raw ++ [0w]) /\
+  ctx_sim_fuel g D C7 C9 (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\ ctx_abort_rq D C7 C9 (vs0 with
+    vs_gas_readings := raw ++ [0w]) vs0 /\
   (fin = asm_opt_finalizer ==>
     code_end_offset_ok (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
       ~in_static_abort_prefix fn s) C9) /\
@@ -4438,13 +4443,17 @@ Theorem focus_selected_static_exit_join:
     mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
       lowered_mem_fact eom ctx fn inst s) C9 vs0) /\
   C9 = out.po_unit.cu_context /\
-  (?b u. run_context b C7 v7 = Abort ExHalt_abort u) /\
-  ((?b u. run_context b C7 v7 = Abort ExHalt_abort u) ==>
-    !fuel. terminates (run_context fuel unit.cu_context vi) ==>
-      ?u. run_context fuel unit.cu_context vi = Abort ExHalt_abort u) ==>
+  (?b u. run_context b C7 (vs0 with vs_gas_readings := raw ++ [0w]) = Abort ExHalt_abort u) /\
+  ((?b u. run_context b C7 (vs0 with vs_gas_readings := raw ++ [0w]) = Abort ExHalt_abort u) ==>
+    !fuel. terminates (run_context fuel unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w];
+      vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
+      ?u. run_context fuel unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp;
+        vs_initial_fmp := fmp|>) = Abort ExHalt_abort u) ==>
   vs0.vs_call_ctx.cc_static /\
-  ctx_sim D unit.cu_context out.po_unit.cu_context vi vs0 /\
-  ctx_abort_rq D unit.cu_context out.po_unit.cu_context vi vs0 /\
+  ctx_sim D unit.cu_context out.po_unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w];
+    vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+  ctx_abort_rq D unit.cu_context out.po_unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w];
+    vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
   (fin = asm_opt_finalizer ==>
     code_end_offset_ok (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
       ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
@@ -4452,8 +4461,10 @@ Theorem focus_selected_static_exit_join:
     mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
       lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
       out.po_unit.cu_context vs0) /\
-  (!fuel. terminates (run_context fuel unit.cu_context vi) ==>
-    ?u. run_context fuel unit.cu_context vi = Abort ExHalt_abort u)
+  (!fuel. terminates (run_context fuel unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w];
+    vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
+    ?u. run_context fuel unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp;
+      vs_initial_fmp := fmp|>) = Abort ExHalt_abort u)
 Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qmatch_goalsub_abbrev_tac `ctx_sim_fuel I D unit.cu_context C7 vi _` >>
@@ -4478,8 +4489,6 @@ QED
 
 (* On failure only the executed part of the cut supplies a native recording. *)
 Theorem focus_selected_cut_covered_agreement:
-  let R = root_entry with vs_gas_readings := raw ++ [0w] in
-  let tr7 = trace_blocks [] 0 fuel C7 root_sf R in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
@@ -4491,10 +4500,12 @@ Theorem focus_selected_cut_covered_agreement:
   Kroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e))))
     (FST (SND (SND (SND (SND (THE (FLOOKUP acts [])))))))) /\
   Kroot = Kcut ++ kr /\ raw_slots = Mcut ++ mr /\ LENGTH Mcut = LENGTH Kcut /\
-  terminates (run_blocks fuel C7 root_sf R) /\
-  ((?before after. tr7 = before ++ after /\
+  terminates (run_blocks fuel C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w])) /\
+  ((?before after. (trace_blocks [] 0 fuel C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w])) =
+    before ++ after /\
       trace_gas before = ZIP (Kcut,TAKE (LENGTH Mcut) raw)) \/
-   (?t. Kcut = MAP FST (trace_gas tr7) ++ t)) ==>
+   (?t. Kcut = MAP FST (trace_gas (trace_blocks [] 0 fuel C7 root_sf (root_entry with
+     vs_gas_readings := raw ++ [0w]))) ++ t)) ==>
   !k x y. MEM k Kcut /\ MEM k (MAP FST obs) /\
     dftGasFromListUnion$recorded C7 (vs0 with vs_gas_readings := raw ++ [0w]) k x /\
     dftGasFromListUnion$recorded C8 vs0 k y ==> x = y
@@ -4515,23 +4526,22 @@ QED
    including when that visit belongs to a callee. *)
 Theorem focus_native_gas_sites[local]:
   (!p d fuel ctx fn inst s.
-    let vs = ((p,d,inst.inst_id),fn,inst,s)::trace_step p d fuel ctx fn inst s in
     MAP (\(key,f,i,u). (f.fn_name,i.inst_id))
-      (FILTER (\(key,f,i,u). i.inst_opcode = GAS) vs) =
+      (FILTER (\(key,f,i,u). i.inst_opcode = GAS) (((p,d,inst.inst_id),fn,inst,s)::trace_step p d fuel ctx
+        fn inst s)) =
       gas_events_step fuel ctx fn.fn_name inst s /\
-    EVERY (\((a,e,id),f,i,u). id = i.inst_id) vs) /\
+    EVERY (\((a,e,id),f,i,u). id = i.inst_id) (((p,d,inst.inst_id),fn,inst,s)::trace_step p d fuel ctx fn
+      inst s)) /\
   (!p d fuel ctx fn bb s.
-    let vs = trace_block p d fuel ctx fn bb s in
     MAP (\(key,f,i,u). (f.fn_name,i.inst_id))
-      (FILTER (\(key,f,i,u). i.inst_opcode = GAS) vs) =
+      (FILTER (\(key,f,i,u). i.inst_opcode = GAS) (trace_block p d fuel ctx fn bb s)) =
       gas_events_block fuel ctx fn.fn_name bb s /\
-    EVERY (\((a,e,id),f,i,u). id = i.inst_id) vs) /\
+    EVERY (\((a,e,id),f,i,u). id = i.inst_id) (trace_block p d fuel ctx fn bb s)) /\
   (!p d fuel ctx fn s.
-    let vs = trace_blocks p d fuel ctx fn s in
     MAP (\(key,f,i,u). (f.fn_name,i.inst_id))
-      (FILTER (\(key,f,i,u). i.inst_opcode = GAS) vs) =
+      (FILTER (\(key,f,i,u). i.inst_opcode = GAS) (trace_blocks p d fuel ctx fn s)) =
       gas_events_blocks fuel ctx fn s /\
-    EVERY (\((a,e,id),f,i,u). id = i.inst_id) vs)
+    EVERY (\((a,e,id),f,i,u). id = i.inst_id) (trace_blocks p d fuel ctx fn s))
 Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   ho_match_mp_tac trace_defs_ind >> rpt conj_tac
@@ -4578,15 +4588,14 @@ Proof
 QED
 
 Theorem focus_terminal_suffix_gas_position:
-  let R = root_entry with vs_gas_readings := raw ++ [0w] in
-  let tr = trace_blocks [] 0 fuel C7 root_sf R;
-      sv = FILTER (\(key,fn,i,s). i.inst_opcode = GAS) suffix in
-  tr = before ++ suffix /\ LENGTH (trace_gas before) = LENGTH Ecut /\
-  Ecut ++ er = gas_events_blocks fuel C7 root_sf R ++ extra /\
+  (trace_blocks [] 0 fuel C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w])) =
+    before ++ suffix /\ LENGTH (trace_gas before) = LENGTH Ecut /\
+  Ecut ++ er = gas_events_blocks fuel C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w]) ++ extra /\
   LENGTH (Ecut ++ er) <= LENGTH raw ==>
   !h. h < LENGTH (trace_gas suffix) ==>
     ?a e id fn i s.
-      h < LENGTH sv /\ EL h sv = ((a,e,id),fn,i,s) /\ id = i.inst_id /\
+      h < LENGTH (FILTER (\(key,fn,i,s). i.inst_opcode = GAS) suffix) /\
+        EL h (FILTER (\(key,fn,i,s). i.inst_opcode = GAS) suffix) = ((a,e,id),fn,i,s) /\ id = i.inst_id /\
       h < LENGTH er /\ EL h er = (fn.fn_name,id) /\
       EL h (trace_gas suffix) = ((a,e,id),EL (LENGTH Ecut + h) raw)
 Proof
@@ -4666,8 +4675,9 @@ Theorem focus_cut_unwind_table[local]:
        EL k (row a e) =
          FLAT (MAP (\f. FLAT (row (FST (EL (SUC i) cuts)) f))
            (order (FST (EL (SUC i) cuts)))))) ==>
-  residual = FLAT (REVERSE (GENLIST (\i. let (a,ds,e,k,z) = EL i cuts in
-            FLAT (DROP (if SUC i = LENGTH cuts then k else SUC k) (row a e)))
+  residual = FLAT (REVERSE (GENLIST (\i. FLAT (DROP (if SUC i = LENGTH cuts then (FST (SND (SND (SND (EL i
+    cuts))))) else SUC (FST (SND (SND (SND (EL i cuts)))))) (row (FST (EL i cuts)) (FST (SND (SND (EL i
+    cuts)))))))
           (LENGTH cuts)))
 Proof
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
@@ -4758,19 +4768,21 @@ QED
 Finalise focus_cut_order_ends
 
 Theorem focus_cut_call_cells[local]:
-  let order = \a. FST (SND (SND (SND (SND (THE (FLOOKUP acts a)))))) in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   FLOOKUP calls (a,e,cid) = SOME (k,h,b0,done,child_entry,ret) ==>
   k < LENGTH (THE (FLOOKUP ms_tab (a,e))) /\
   EL k (THE (FLOOKUP ms_tab (a,e))) =
-    FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab ((e,cid)::a,f)))) (order ((e,cid)::a))) /\
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab ((e,cid)::a,f)))) ((\a. FST (SND (SND (SND (SND (THE (FLOOKUP
+      acts a))))))) ((e,cid)::a))) /\
   k < LENGTH (THE (FLOOKUP es_tab (a,e))) /\
   EL k (THE (FLOOKUP es_tab (a,e))) =
-    FLAT (MAP (\f. FLAT (THE (FLOOKUP es_tab ((e,cid)::a,f)))) (order ((e,cid)::a))) /\
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP es_tab ((e,cid)::a,f)))) ((\a. FST (SND (SND (SND (SND (THE (FLOOKUP
+      acts a))))))) ((e,cid)::a))) /\
   k < LENGTH (THE (FLOOKUP ks_tab (a,e))) /\
   EL k (THE (FLOOKUP ks_tab (a,e))) =
-    FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab ((e,cid)::a,f)))) (order ((e,cid)::a)))
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab ((e,cid)::a,f)))) ((\a. FST (SND (SND (SND (SND (THE (FLOOKUP
+      acts a))))))) ((e,cid)::a)))
 Proof
   rewrite_tac[LET_THM] >> BETA_TAC >>
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
@@ -4855,14 +4867,13 @@ QED
 Finalise focus_cut_unwind_geometry
 
 Theorem focus_selected_cut_residual_rows:
-  let order = \a. FST (SND (SND (SND (SND (THE (FLOOKUP acts a)))))) in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   MAP (\(a,ds,e,k,z). a) cuts = REVERSE (GENLIST (\i. DROP i p) (SUC (LENGTH p))) /\
   (!i a ds e k (z:instruction list). i < LENGTH cuts /\ EL i cuts = (a,ds,e,k,z) ==>
-    ?sf tf inc entry order res nrest later.
-      FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
-      order = ds ++ e::later /\
+    ?sf tf inc entry visit_order res nrest later.
+      FLOOKUP acts a = SOME (sf,tf,inc,entry,visit_order,res,nrest) /\
+      visit_order = ds ++ e::later /\
       (if SUC i = LENGTH cuts then a = p /\ e = d else
         ?cid h b0 done child_entry ret.
           EL (SUC i) (MAP (\(aj,djs,ej,qj,zj). aj) cuts) = (e,cid)::a /\
@@ -4873,19 +4884,20 @@ Theorem focus_selected_cut_residual_rows:
   sites = FLAT (MAP (\(a,ds,e,k,z).
     FLAT (MAP (\f. FLAT (THE (FLOOKUP es_tab (a,f)))) ds) ++
     FLAT (TAKE k (THE (FLOOKUP es_tab (a,e))))) cuts) ++ er /\
-  FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e)))) (order [])) =
+  FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e)))) ((\a. FST (SND (SND (SND (SND (THE (FLOOKUP acts
+    a))))))) [])) =
     FLAT (MAP (\(a,ds,e,k,z).
       FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab (a,f)))) ds) ++
       FLAT (TAKE k (THE (FLOOKUP ks_tab (a,e))))) cuts) ++ kr ==>
-  er = FLAT (REVERSE (GENLIST (\i. let (a,ds,e,k,z) = EL i cuts in
-    FLAT (DROP (if SUC i = LENGTH cuts then k else SUC k)
-      (THE (FLOOKUP es_tab (a,e))))) (LENGTH cuts))) /\
-  mr = FLAT (REVERSE (GENLIST (\i. let (a,ds,e,k,z) = EL i cuts in
-    FLAT (DROP (if SUC i = LENGTH cuts then k else SUC k)
-      (THE (FLOOKUP ms_tab (a,e))))) (LENGTH cuts))) /\
-  kr = FLAT (REVERSE (GENLIST (\i. let (a,ds,e,k,z) = EL i cuts in
-    FLAT (DROP (if SUC i = LENGTH cuts then k else SUC k)
-      (THE (FLOOKUP ks_tab (a,e))))) (LENGTH cuts)))
+  er = FLAT (REVERSE (GENLIST (\i. FLAT (DROP (if SUC i = LENGTH cuts then (FST (SND (SND (SND (EL i
+    cuts))))) else SUC (FST (SND (SND (SND (EL i cuts))))))
+      (THE (FLOOKUP es_tab ((FST (EL i cuts)),(FST (SND (SND (EL i cuts))))))))) (LENGTH cuts))) /\
+  mr = FLAT (REVERSE (GENLIST (\i. FLAT (DROP (if SUC i = LENGTH cuts then (FST (SND (SND (SND (EL i
+    cuts))))) else SUC (FST (SND (SND (SND (EL i cuts))))))
+      (THE (FLOOKUP ms_tab ((FST (EL i cuts)),(FST (SND (SND (EL i cuts))))))))) (LENGTH cuts))) /\
+  kr = FLAT (REVERSE (GENLIST (\i. FLAT (DROP (if SUC i = LENGTH cuts then (FST (SND (SND (SND (EL i
+    cuts))))) else SUC (FST (SND (SND (SND (EL i cuts))))))
+      (THE (FLOOKUP ks_tab ((FST (EL i cuts)),(FST (SND (SND (EL i cuts))))))))) (LENGTH cuts)))
 Proof
   rewrite_tac[LET_THM] >> BETA_TAC >>
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
@@ -4919,16 +4931,16 @@ Proof
 QED
 
 Theorem focus_packet_recorded_call_position:
-  let t = b0.vs_inst_idx - LENGTH ps in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   FLOOKUP calls (a,e,cid) = SOME (r,h,b0,done,ent,ret) /\
   FLOOKUP blocks (a,e) =
     SOME (bb,bt,ps,xs,ys,sched,in_state,h0,SOME (be,hbe),ct,front,closed,brest) ==>
-  t < LENGTH ys /\ r = EL t sched /\ EL t ys = EL r xs /\
+  (b0.vs_inst_idx - LENGTH ps) < LENGTH ys /\ r = EL (b0.vs_inst_idx - LENGTH ps) sched /\
+    EL (b0.vs_inst_idx - LENGTH ps) ys = EL r xs /\
   (EL r xs).inst_id = cid /\ (EL r xs).inst_opcode = INVOKE /\
-  (IS_SOME ret ==> t < ct /\ MEM r (TAKE ct sched)) /\
-  (ret = NONE ==> t = ct /\ ?j. j < LENGTH p /\ DROP j p = (e,cid)::a)
+  (IS_SOME ret ==> (b0.vs_inst_idx - LENGTH ps) < ct /\ MEM r (TAKE ct sched)) /\
+  (ret = NONE ==> (b0.vs_inst_idx - LENGTH ps) = ct /\ ?j. j < LENGTH p /\ DROP j p = (e,cid)::a)
 Proof
   rewrite_tac[LET_THM] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -5030,10 +5042,9 @@ Theorem focus_packet_invoke_predecessor_order:
     SOME (bb,bt,ps,xs,ys,sched,in_state,h0,body_entry,ct,front,closed,brest) /\
   t < c /\ c < LENGTH ys /\ r = EL t sched /\ k = EL c sched /\
   (EL r xs).inst_opcode = INVOKE /\
-  (let x = EL k xs; y = EL r xs in
-    x.inst_opcode = INVOKE \/ is_terminator x.inst_opcode \/
-    ~dftDefs$dft_abort_compatible x.inst_opcode y.inst_opcode \/
-    dftScheduleOrder$dft_must_order x y) ==>
+  ((EL k xs).inst_opcode = INVOKE \/ is_terminator (EL k xs).inst_opcode \/
+    ~dftDefs$dft_abort_compatible (EL k xs).inst_opcode (EL r xs).inst_opcode \/
+    dftScheduleOrder$dft_must_order (EL k xs) (EL r xs)) ==>
   r < k
 Proof
   rewrite_tac[LET_THM] >> BETA_TAC >>
@@ -5272,9 +5283,6 @@ Theorem focus_residual_row_gas_cells:
   !N C7 C8 root_sf root_tf root_entry j obs acts blocks calls ms_tab es_tab ks_tab
     rooted_eval p d q8 raw_slots sites unused a e sf tf inc entry order res nrest
     bb bt ps xs ys rho in_state h0 body_entry ct front closed brest b.
-  let g = if IS_SOME body_entry then FILTER (\i. i.inst_opcode = GAS) (DROP b xs)
-          else [] in
-  let keys = MAP (\i. (a,e,i.inst_id)) g in
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
@@ -5282,9 +5290,17 @@ Theorem focus_residual_row_gas_cells:
     SOME (bb,bt,ps,xs,ys,rho,in_state,h0,body_entry,ct,front,closed,brest) /\
   (!r. b <= r /\ r < LENGTH xs /\ (EL r xs).inst_opcode = INVOKE ==>
     FLOOKUP calls (a,e,(EL r xs).inst_id) = NONE) ==>
-  FLAT (DROP b (THE (FLOOKUP ks_tab (a,e)))) = keys /\
-  FLAT (DROP b (THE (FLOOKUP es_tab (a,e)))) = MAP (\i. (sf.fn_name,i.inst_id)) g /\
-  FLAT (DROP b (THE (FLOOKUP ms_tab (a,e)))) = MAP (ALOOKUP obs) keys
+  FLAT (DROP b (THE (FLOOKUP ks_tab (a,e)))) =
+    MAP (\i. (a,e,i.inst_id))
+      (if IS_SOME body_entry then FILTER (\i. i.inst_opcode = GAS) (DROP b xs)
+        else []) /\
+  FLAT (DROP b (THE (FLOOKUP es_tab (a,e)))) = MAP (\i. (sf.fn_name,i.inst_id))
+      (if IS_SOME body_entry then FILTER (\i. i.inst_opcode = GAS) (DROP b xs)
+        else []) /\
+  FLAT (DROP b (THE (FLOOKUP ms_tab (a,e)))) = MAP (ALOOKUP obs)
+      (MAP (\i. (a,e,i.inst_id))
+        (if IS_SOME body_entry then FILTER (\i. i.inst_opcode = GAS) (DROP b xs)
+        else []))
 Proof
   rpt gen_tac >> rewrite_tac[LET_THM, MAP_MAP_o, combinTheory.o_DEF] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -5412,36 +5428,6 @@ Proof
   disch_tac >> qexists_tac `N` >> first_assum ACCEPT_TAC
 QED
 
-Theorem focus_active_var_ready[local]:
-  supply_norm_inv supply fn /\ supply_prefix_defined fn s /\
-  active_inst fn inst s /\ inst.inst_opcode <> PHI /\
-  MEM (Var x) inst.inst_operands ==>
-  eval_operand (Var x) s <> NONE
-Proof
-  simp[eval_operand_def,lookup_var_def,FLOOKUP_DEF,active_inst_def] >>
-  strip_tac >>
-  `wf_function fn /\ def_dominates_uses fn` by
-    fs[supply_norm_inv_def,wf_ssa_def] >>
-  `MEM inst bb.bb_instructions` by metis_tac[EL_MEM] >>
-  `def_available_at fn bb (SOME inst) x` by
-    metis_tac[def_dominates_uses_def] >>
-  qpat_x_assum `def_available_at _ _ _ _` mp_tac >>
-  simp[def_available_at_def] >> strip_tac >>
-  Cases_on `def_bb = bb`
-  >- (gvs[] >>
-      `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
-        metis_tac[wf_function_def,venomFnInstsProofsTheory.fn_inst_ids_block_distinct] >>
-      `j = s.vs_inst_idx` by
-        (qpat_x_assum `ALL_DISTINCT _`
-           (mp_tac o SIMP_RULE (srw_ss()) [EL_ALL_DISTINCT_EL_EQ,EL_MAP]) >>
-         metis_tac[]) >>
-      gvs[supply_prefix_defined_def] >> first_x_assum irule >>
-      qexistsl [`bb`,`i`] >> simp[]) >>
-  `def_bb.bb_label <> s.vs_current_bb` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
-  fs[supply_prefix_defined_def,supply_entry_defined_def] >>
-  metis_tac[venomWfPropsTheory.strict_dom_vars_defined_def]
-QED
-
 Theorem focus_cursor_invoke_setup[local]:
   cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
     (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8)
@@ -5486,7 +5472,7 @@ Proof
      Cases_on `op` >> simp[eval_operand_def]
      >- (rename1 `MEM (Var x) ops` >>
          mp_tac (Q.INST [`fn` |-> `fn9`, `inst` |-> `inst9`, `s` |-> `s9`]
-           focus_active_var_ready) >>
+           gasFocusUniformStopTheory.focus_active_var_ready) >>
          impl_tac >- simp[] >>
          Cases_on `lookup_var x s9` >> simp[eval_operand_def]) >>
      rename1 `MEM (Label l) ops` >>
@@ -5697,12 +5683,12 @@ Theorem focus_residual_row_inventory[local]:
    (b = SUC k /\ ?cid h b0 done ent ret.
      MEM ((e,cid)::a) (GENLIST (\i. DROP i p) (SUC (LENGTH p))) /\
      FLOOKUP calls (a,e,cid) = SOME (k,h,b0,done,ent,ret))) ==>
-  let keys = FLAT (DROP b (THE (FLOOKUP ks_tab (a,e)))) in
-  let ids = MAP (\(a,e,id). id) keys in
-    MAP SND (FLAT (DROP b (THE (FLOOKUP es_tab (a,e))))) = ids /\
-    FLAT (DROP b (THE (FLOOKUP ms_tab (a,e)))) = MAP (ALOOKUP obs) keys /\
-    MEM sf C7.ctx_functions /\ ALL_DISTINCT ids /\
-    (!x. MEM x ids ==> MEM x (MAP (\i. i.inst_id) (fn_insts sf)))
+    MAP SND (FLAT (DROP b (THE (FLOOKUP es_tab (a,e))))) =
+      MAP (\(a,e,id). id) (FLAT (DROP b (THE (FLOOKUP ks_tab (a,e))))) /\
+    FLAT (DROP b (THE (FLOOKUP ms_tab (a,e)))) = MAP (ALOOKUP obs) (FLAT (DROP b (THE (FLOOKUP ks_tab (a,e))))) /\
+    MEM sf C7.ctx_functions /\ ALL_DISTINCT (MAP (\(a,e,id). id) (FLAT (DROP b (THE (FLOOKUP ks_tab (a,e)))))) /\
+    (!x. MEM x (MAP (\(a,e,id). id) (FLAT (DROP b (THE (FLOOKUP ks_tab (a,e)))))) ==>
+       MEM x (MAP (\i. i.inst_id) (fn_insts sf)))
 Proof
   rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -5843,12 +5829,18 @@ Proof
   (impl_tac >- (BETA_TAC >> asm_rewrite_tac[])) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `indices = REVERSE (COUNT_LIST (LENGTH cuts))` >>
-  qabbrev_tac `rowE = \i. let (a,ds,e,k,z) = EL i cuts in
-    FLAT (DROP (if SUC i = LENGTH cuts then k else SUC k) (THE (FLOOKUP es_tab (a,e))))` >>
-  qabbrev_tac `rowM = \i. let (a,ds,e,k,z) = EL i cuts in
-    FLAT (DROP (if SUC i = LENGTH cuts then k else SUC k) (THE (FLOOKUP ms_tab (a,e))))` >>
-  qabbrev_tac `rowK = \i. let (a,ds,e,k,z) = EL i cuts in
-    FLAT (DROP (if SUC i = LENGTH cuts then k else SUC k) (THE (FLOOKUP ks_tab (a,e))))` >>
+  qabbrev_tac `rowE = \i. FLAT
+    (DROP (if SUC i = LENGTH cuts then FST (SND (SND (SND (EL i cuts))))
+           else SUC (FST (SND (SND (SND (EL i cuts))))))
+      (THE (FLOOKUP es_tab (FST (EL i cuts), FST (SND (SND (EL i cuts)))))))` >>
+  qabbrev_tac `rowM = \i. FLAT
+    (DROP (if SUC i = LENGTH cuts then FST (SND (SND (SND (EL i cuts))))
+           else SUC (FST (SND (SND (SND (EL i cuts))))))
+      (THE (FLOOKUP ms_tab (FST (EL i cuts), FST (SND (SND (EL i cuts)))))))` >>
+  qabbrev_tac `rowK = \i. FLAT
+    (DROP (if SUC i = LENGTH cuts then FST (SND (SND (SND (EL i cuts))))
+           else SUC (FST (SND (SND (SND (EL i cuts))))))
+      (THE (FLOOKUP ks_tab (FST (EL i cuts), FST (SND (SND (EL i cuts)))))))` >>
   qabbrev_tac `owner = \i. let (a,ds,e,k,z) = EL i cuts in FST (THE (FLOOKUP acts a))` >>
   qabbrev_tac `idOf = \((a,e,id):gas_event). id` >>
   `er = FLAT (MAP rowE indices) /\ mr = FLAT (MAP rowM indices) /\
@@ -6478,243 +6470,6 @@ Proof
   simp[lowered_mem_fact_def, lowered_mem_ok_def]
 QED
 
-Theorem focus_old_code_end_var[local]:
-  !g x. code_end_var g x ==> !f.
-  (!j v. MEM j (fn_insts g) /\ MEM v j.inst_outputs /\
-    MEM v (fn_ir_vars f) /\
-    (j.inst_opcode = ADD \/ j.inst_opcode = ASSIGN) ==>
-    MEM j (fn_insts f)) ==>
-  MEM x (fn_ir_vars f) ==> code_end_var f x
-Proof
-  Induct_on `code_end_var` >> rpt strip_tac
-  >- metis_tac[code_end_var_rules] >>
-  rename1 `inst.inst_operands = [Var y]` >>
-  `MEM inst (fn_insts f)` by metis_tac[] >>
-  `MEM y (fn_ir_vars f)` by metis_tac[lowerDloadPtrStaticTheory.fn_ir_vars_operand, MEM] >>
-  metis_tac[code_end_var_rules]
-QED
-
-Theorem focus_split_old_definition[local]:
-  wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
-  MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
-  build_split_block_supply s pred target = (split,repls,t) /\
-  insert_split_supply s f pred target = (g,t) /\
-  MEM j (fn_insts g) /\ MEM x j.inst_outputs /\
-  MEM x (fn_ir_vars f) /\ (j.inst_opcode = ADD \/ j.inst_opcode = ASSIGN) ==>
-  MEM j (fn_insts f)
-Proof
-  rpt strip_tac >>
-  (drule_all insert_split_supply_inst_image >> strip_tac
-   >- (drule_all supply_split_outputs_distinct >>
-       gvs[cfgNormSupplyProofsTheory.cfg_block_decl_vars_def, MEM_FLAT, MEM_MAP,
-           EVERY_MEM, venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
-           venomFnScheduleRunnerTheory.list_subset_def] >> metis_tac[]) >>
-   rename1 `supply_inst_image _ _ _ _ old j` >>
-   drule supply_inst_image_metadata >> strip_tac >>
-   `j = old` by (irule supply_inst_image_unchanged >>
-     gvs[] >> simp[is_terminator_def] >> metis_tac[]) >> gvs[])
-QED
-
-
-Theorem hand_active_block[local]:
-  wf_function fn /\ active_inst fn inst s ==>
-  ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-       get_instruction bb s.vs_inst_idx = SOME inst
-Proof
-  simp[active_inst_def, get_instruction_def] >> strip_tac >>
-  qexists `bb` >> simp[] >>
-  irule venomExecProofsTheory.MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]
-QED
-
-Theorem hand_forward_suffix[local]:
-  wf_function fn /\ active_inst fn inst s /\ in_revert_forward fn s ==>
-  ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-       MEM inst.inst_opcode [RETURNDATACOPY; REVERT] /\
-       (LAST bb.bb_instructions).inst_opcode = REVERT /\
-       !k. s.vs_inst_idx <= k /\ k < LENGTH bb.bb_instructions ==>
-         (EL k bb.bb_instructions).inst_opcode <> INVOKE
-Proof
-  strip_tac >>
-  drule_all hand_active_block >> strip_tac >>
-  `bb_well_formed bb` by
-    (drule venomExecProofsTheory.lookup_block_MEM >> fs[wf_function_def, EVERY_MEM]) >>
-  `revert_forward_at bb s.vs_inst_idx` by fs[in_revert_forward_def] >>
-  qexists `bb` >> conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- (drule_all revert_forward_at_opcode >> simp[]) >>
-  qpat_x_assum `revert_forward_at bb _`
-    (strip_assume_tac o REWRITE_RULE [revert_forward_at_def]) >>
-  gvs[revert_forward_pair_def] >>
-  gvs[get_instruction_def, AllCaseEqs()] >>
-  `?r. r < LENGTH bb.bb_instructions /\
-    (EL r bb.bb_instructions).inst_opcode = REVERT /\
-    (!k. s.vs_inst_idx <= k /\ k < r ==>
-      (EL k bb.bb_instructions).inst_opcode <> INVOKE)` by
-    (qexists `if s.vs_inst_idx < j then j else s.vs_inst_idx` >>
-     Cases_on `s.vs_inst_idx < j` >> gvs[] >>
-     rpt strip_tac >>
-     `k < LENGTH bb.bb_instructions` by decide_tac >>
-     Cases_on `k = s.vs_inst_idx` >> gvs[] >>
-     `s.vs_inst_idx < k /\ k < j` by decide_tac >>
-     res_tac >> fs[]) >>
-  `r = PRE (LENGTH bb.bb_instructions)` by
-    (fs[bb_well_formed_def] >> first_x_assum irule >> simp[is_terminator_def]) >>
-  (conj_tac
-   >- (`bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
-       simp_tac (srw_ss()) [LAST_EL, ASSUME ``bb.bb_instructions <> []``] >>
-       qpat_assum `r = PRE _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
-       first_assum ACCEPT_TAC) >>
-   qx_gen_tac `k` >> strip_tac >>
-   Cases_on `k = r` >- fs[] >>
-   `k < r` by decide_tac >> metis_tac[])
-QED
-
-Theorem hand_remaining_no_invoke[local]:
-  PERM row_order (COUNT_LIST (LENGTH xs)) /\
-  LIST_REL (\q y. q < LENGTH xs /\ y.inst_id = (EL q xs).inst_id /\ from_block [EL q xs] y) row_order ys /\
-  (!k. row_count <= k /\ k < LENGTH ys ==> (EL k ys).inst_opcode <> INVOKE) ==>
-  !r. r < LENGTH xs /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE row_count row_order)
-Proof
-  strip_tac >> gen_tac >> strip_tac >>
-  `MEM r row_order` by metis_tac[sortingTheory.PERM_MEM_EQ, MEM_COUNT_LIST] >>
-  qpat_x_assum `MEM r row_order`
-    (qx_choose_then `k` strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
-  `LENGTH ys = LENGTH row_order /\ from_block [EL r xs] (EL k ys)` by
-    (qpat_assum `LIST_REL _ row_order ys` (mp_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
-     strip_tac >> conj_tac >- simp[] >>
-     first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
-  `(EL k ys).inst_opcode = INVOKE` by
-    (gvs[dftStructuralTheory.from_block_def, dftDefsTheory.is_flippable_def,
-         venomEffectsTheory.is_commutative_def, passSharedDefsTheory.is_comparator_def]) >>
-  `k < row_count` by (CCONTR_TAC >> fs[NOT_LESS] >> res_tac >> fs[]) >>
-  ONCE_REWRITE_TAC [MEM_EL] >>
-  qexists `k` >> simp[EL_TAKE, LENGTH_TAKE_EQ, MIN_DEF]
-QED
-
-Theorem hand_phi_before_body[local]:
-  !ps xs. EVERY (\i. ~is_pseudo i.inst_opcode) xs ==>
-    phi_prefix_length (ps ++ xs) <= LENGTH ps
-Proof
-  Induct >> simp[phi_prefix_length_def]
-  >- (Cases_on `xs` >> simp[phi_prefix_length_def] >>
-      rpt strip_tac >> `h.inst_opcode <> PHI` by metis_tac[is_pseudo_def] >> simp[]) >>
-  rpt strip_tac >> Cases_on `h.inst_opcode = PHI` >>
-  simp[phi_prefix_length_def]
-QED
-
-Theorem hand_last_row_source[local]:
-  bb_well_formed bb /\ bb.bb_instructions = ps ++ xs /\
-  xs <> [] /\ (LAST bb.bb_instructions).inst_opcode = REVERT /\
-  EVERY (\i. ~is_pseudo i.inst_opcode) xs ==>
-  0 < LENGTH xs /\
-  EVERY (\i. ~is_terminator i.inst_opcode) (TAKE (PRE (LENGTH xs)) xs) /\
-  (EL (LENGTH (DROP (phi_prefix_length bb.bb_instructions) ps ++
-                TAKE (PRE (LENGTH xs)) xs))
-       (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions)).inst_opcode = REVERT
-Proof
-  strip_tac >>
-  `0 < LENGTH xs` by (Cases_on `xs` >> gvs[]) >>
-  `!j. j < LENGTH xs /\ is_terminator (EL j xs).inst_opcode ==> j = PRE (LENGTH xs)` by
-    (qpat_assum `bb_well_formed bb`
-       (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [bb_well_formed_def]) >>
-     rpt strip_tac >>
-     qpat_assum `bb.bb_instructions = ps ++ xs`
-       (fn eq => qpat_assum `!i. i < LENGTH bb.bb_instructions /\ _ ==> _`
-         (mp_tac o PURE_REWRITE_RULE [eq] o Q.SPEC `LENGTH (ps:instruction list) + j`)) >>
-     `(EL (LENGTH ps + j) (ps ++ xs):instruction) = EL j xs` by
-       (simp_tac (srw_ss()) [EL_APPEND2]) >>
-     simp_tac (srw_ss()) [ASSUME ``j < LENGTH (xs:instruction list)``,
-       ASSUME ``is_terminator (EL j xs).inst_opcode``,
-       ASSUME ``(EL (LENGTH ps + j) (ps ++ xs):instruction) = EL j xs``] >>
-     decide_tac) >>
-  `phi_prefix_length bb.bb_instructions <= LENGTH ps` by
-    metis_tac[hand_phi_before_body] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (simp[EVERY_EL, LENGTH_TAKE, EL_TAKE] >>
-      rpt strip_tac >> res_tac >> decide_tac) >>
-  `(EL (PRE (LENGTH xs)) xs).inst_opcode = REVERT` by
-    (qpat_assum `bb.bb_instructions = ps ++ xs`
-       (fn eq => qpat_assum `(LAST bb.bb_instructions).inst_opcode = REVERT`
-          (mp_tac o PURE_REWRITE_RULE [eq])) >>
-     simp_tac (srw_ss()) [LAST_APPEND_NOT_NIL, LAST_EL,
-       ASSUME ``xs <> ([]:instruction list)``]) >>
-  qabbrev_tac `ph = phi_prefix_length bb.bb_instructions` >>
-  `DROP ph bb.bb_instructions = DROP ph ps ++ xs` by
-    (qpat_assum `bb.bb_instructions = ps ++ xs` SUBST1_TAC >>
-     simp_tac (srw_ss()) [DROP_APPEND1, ASSUME ``ph <= LENGTH (ps:instruction list)``]) >>
-  qpat_assum `DROP ph bb.bb_instructions = _` SUBST1_TAC >>
-  `LENGTH (TAKE (PRE (LENGTH xs)) xs) = PRE (LENGTH xs)` by
-    (irule LENGTH_TAKE >> decide_tac) >>
-  PURE_REWRITE_TAC [LENGTH_APPEND] >>
-  qpat_assum `LENGTH (TAKE _ xs) = _` SUBST1_TAC >>
-  qpat_assum `(EL (PRE (LENGTH xs)) xs).inst_opcode = REVERT` (fn th =>
-    PURE_REWRITE_TAC [GSYM th]) >>
-  AP_TERM_TAC >>
-  simp_tac (srw_ss()) [EL_APPEND2]
-QED
-
-Theorem hand_cfg_cursors_frame[local]:
-  !C rounds cursors. cfg_norm_cursors C rounds cursors ==>
-  execution_frame (SND (FST (HD cursors))) =
-  execution_frame (SND (FST (LAST cursors)))
-Proof
-  ho_match_mp_tac cfg_norm_cursors_ind >> simp[] >>
-  rpt strip_tac >> fs[supply_state_agree_def]
-QED
-
-Theorem hand_cfg_active[local]:
-  cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
-    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
-    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) ==>
-  s8.vs_gas_readings = s9.vs_gas_readings /\
-  s8.vs_labels = s9.vs_labels /\
-  active_inst fn9 inst9 s9
-Proof
-  Cases_on `current` >> simp[cfg_norm_joint_cursors_def] >> strip_tac >>
-  drule hand_cfg_cursors_frame >> simp[] >> strip_tac >>
-  qpat_assum `EVERY _ schedules`
-    (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
-  disch_then drule >> simp[] >>
-  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
-  drule cfg_norm_cursors_last >> simp[] >> metis_tac[]
-QED
-
-Theorem hand_cfg_cursor_shape[local]:
-  cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
-    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
-    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) ==>
-  MEM fn9 C9.ctx_functions /\ wf_function fn9 /\ wf_ssa fn9 /\
-  active_inst fn9 inst9 s9 /\ supply_prefix_defined fn9 s9
-Proof
-  Cases_on `current` >> simp[cfg_norm_joint_cursors_def] >> strip_tac >>
-  conj_tac
-  >- (qpat_assum `MAP (FST o SND) schedules = C9.ctx_functions` (SUBST1_TAC o SYM) >>
-      simp[MEM_MAP] >> goal_assum (drule_at Any) >> simp[]) >>
-  qpat_assum `EVERY _ schedules` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
-  disch_then drule >> simp[] >>
-  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
-  drule cfg_norm_cursors_last >> simp[supply_norm_inv_def] >> metis_tac[]
-QED
-
-Theorem hand_error_active_frame[local]:
-  (active_frame_plan rpolicy unit cpl prog fn s ast ra rest mem0 \/
-   ?entry pc_ret. entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0) /\
-  active_inst fn inst s /\ step_inst 0 unit.cu_context inst s = Error err ==>
-  ?ast'. active_frame_plan rpolicy unit cpl prog fn s ast' ra rest mem0
-Proof
-  strip_tac >- metis_tac[] >>
-  `s.vs_inst_idx <= LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by
-    (qpat_assum `entry_frame_plan _ _ _ _ _ _ _ _ _ _ _ _`
-       (mp_tac o PURE_REWRITE_RULE [fnFramePrefixEntryTheory.entry_frame_plan_def]) >>
-     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[]) >>
-  Cases_on `s.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions)`
-  >- (drule_all fnFramePrefixEntryTheory.entry_frame_plan_ready >> metis_tac[]) >>
-  `s.vs_inst_idx < LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by decide_tac >>
-  drule_all_then strip_assume_tac fnFramePrefixEntryTheory.entry_frame_active_param >>
-  drule_all fnFramePrefixEntryTheory.entry_frame_plan_next >>
-  disch_then (qspec_then `0` strip_assume_tac) >>
-  gvs[]
-QED
 
 Theorem focus_cfg_codecopy_cursor[local]:
   !C rounds cells. cfg_norm_cursors C rounds cells ==>
@@ -6754,11 +6509,11 @@ Resume focus_cfg_codecopy_cursor[body]:
   `ir_supply_inst_ok s /\ ir_supply_covers_fn s fn /\ wf_function fn` by
     fs[supply_norm_inv_def] >>
   `code_end_var fn x` by
-    (qpat_assum `code_end_var next_fn x` (mp_tac o MATCH_MP focus_old_code_end_var) >>
+    (qpat_assum `code_end_var next_fn x` (mp_tac o MATCH_MP o1CodeEndCfgNormTransportTheory.cfg_old_code_end_var) >>
      disch_then irule >> conj_tac >- (map_every qx_gen_tac [`old_i`,`old_v`] >>
        strip_tac >> MATCH_MP_TAC (Q.INST [`s` |-> `s`,`pred` |-> `pred`, `target` |-> `target`,
          `split` |-> `split`, `repls` |-> `repls`, `g` |-> `next_fn`,
-         `t` |-> `s1`, `x` |-> `old_v`] focus_split_old_definition) >>
+         `t` |-> `s1`, `x` |-> `old_v`] o1CodeEndCfgNormTransportTheory.cfg_split_old_definition) >>
        asm_rewrite_tac[]) >>
      first_assum ACCEPT_TAC) >>
   simp[] >>
@@ -6871,65 +6626,6 @@ Proof
 QED
 
 (* The fixed source and the selected target prefix share one oracle. *)
-Theorem focus_stopped_prefix_recording_oracle[local]:
-  o1_ctx_shape C7 /\ C7.ctx_entry = SOME nm /\
-  lookup_function nm C7.ctx_functions = SOME f7 /\ fn_entry_label f7 = SOME lbl /\
-  ALL_DISTINCT (MAP FST obs) /\
-  (!k w7 w8.
-    dftGasFromListUnion$recorded C7 (vs0 with vs_gas_readings := raw ++ [0w]) k w7 /\
-    MEM (k,w8) obs ==> w7 = w8) ==>
-  ?orc.
-    (!k w. MEM (k,w) obs ==> orc k = w) /\
-    (!fuel. gas_res_rel (run_context fuel C7
-      (vs0 with vs_gas_readings := raw ++ [0w])) (ev_context orc fuel C7 vs0)) /\
-    (!p d fn inst s. ev_reachable orc vs0 C7 p d fn inst s ==>
-      ?ws. raw_reachable (vs0 with vs_gas_readings := raw ++ [0w])
-        C7 fn inst (s with vs_gas_readings := ws))
-Proof
-  disch_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
-  `EVERY wf_function C7.ctx_functions` by
-    (qpat_assum `o1_ctx_shape C7` (mp_tac o cj 3 o PURE_REWRITE_RULE [o1_ctx_shape_def]) >>
-     simp[NoAsms, EVERY_MEM, o1_fn_shape_def] >> metis_tac[]) >>
-  qabbrev_tac `s7 = vs0 with vs_gas_readings := raw ++ [0w]` >>
-  qabbrev_tac `orc = \k. @w. dftGasFromListUnion$recorded C7 s7 k w \/ MEM (k,w) obs` >>
-  `!k w. dftGasFromListUnion$recorded C7 s7 k w \/ MEM (k,w) obs ==> orc k = w` by
-    (rpt gen_tac >> disch_tac >> simp_tac pure_ss [Abbr `orc`] >>
-     BETA_TAC >> SELECT_ELIM_TAC >> conj_tac >- metis_tac[] >>
-     metis_tac[focus_stopped_recorded_functional, alistTheory.ALOOKUP_ALL_DISTINCT_MEM, optionTheory.SOME_11]) >>
-  `!n. trace_agrees orc (dftGasFromListTraceDefs$trace_context n C7 s7)` by
-    (simp[trace_agrees_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
-     metis_tac[dftGasFromListUnionTheory.recorded_def]) >>
-  qexists_tac `orc` >> conj_tac >- metis_tac[] >>
-  qabbrev_tac `entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>` >>
-  `!n. trace_agrees orc (trace_blocks [] 0 n C7 f7
-         (entry with vs_gas_readings := raw ++ [0w]))` by
-    (qpat_assum `!n. trace_agrees orc (trace_context n C7 s7)` mp_tac >>
-     simp[NoAsms, trace_context_def, trace_function_def, Abbr `s7`, Abbr `entry`,
-       ASSUME ``C7.ctx_entry = SOME nm``,
-       ASSUME ``lookup_function nm C7.ctx_functions = SOME f7``,
-       ASSUME ``fn_entry_label f7 = SOME lbl``]) >>
-  `!n. agrees orc (raw ++ [0w])
-    (trace_events (dftGasToListTrace$trace_context orc n C7 vs0))` by
-    (gen_tac >>
-     qpat_assum `!n. trace_agrees orc (trace_blocks [] 0 n C7 f7 _)`
-       (qspec_then `n` (mp_tac o MATCH_MP
-         (cj 3 dftGasPrefixProviderTheory.native_trace_oracle_agreement))) >>
-     disch_then (qspec_then `vs0.vs_gas_readings` mp_tac) >>
-     simp[dftGasToListTraceTheory.trace_context_def,
-       dftGasToListTraceTheory.trace_function_def, Abbr `entry`]) >>
-  conj_tac
-  >- (gen_tac >>
-      metis_tac[dftGasToListReplayTheory.replay_context,
-        dftGasToListReplayTheory.residual_result_gas_rel]) >>
-  rpt gen_tac >> strip_tac >>
-  drule_all dftGasToListReachWitnessTheory.ev_reachable_trace_witness >>
-  disch_then (qx_choosel_then [`fuel`, `n`] ASSUME_TAC) >>
-  qexists_tac `DROP n (raw ++ [0w])` >>
-  simp_tac pure_ss [Abbr `s7`] >>
-  irule dftGasToListVisitReplayTheory.replay_context_visit >>
-  metis_tac[]
-QED
-
 (* A failed native cut shares the selected prefix's keyed oracle. *)
 Theorem focus_failed_cut_events[local]:
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
@@ -7265,7 +6961,7 @@ Theorem focus_cfg_stop_requests[local]:
   s8.vs_requests = s9.vs_requests
 Proof
   Cases_on `current` >> simp[cfg_norm_joint_cursors_def] >> strip_tac >>
-  drule hand_cfg_cursors_frame >> simp[] >>
+  drule gasFocusPacketCoverageTheory.cover_cfg_cursors_frame >> simp[] >>
   simp[execution_frame_def]
 QED
 
@@ -7286,7 +6982,7 @@ Theorem focus_cfg_static_abort_run[local]:
 Proof
   disch_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
   drule_then assume_tac focus_cfg_stop_requests >>
-  drule_then (ASSUME_TAC o cj 1) hand_cfg_cursor_shape >>
+  drule_then (ASSUME_TAC o cj 1) gasFocusPacketCoverageTheory.cover_cfg_cursor_shape >>
   `FLOOKUP s9.vs_labels =
     \l. OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)` by
     (drule raw_reachable_labels >>
@@ -8388,7 +8084,7 @@ QED
 
 Resume focus_stopped_filling_replay[step_error_cursor]:
   qpat_assum `cfg_norm_joint_cursors (stage 8) (stage 9) _ _ _`
-    (MAP_EVERY ASSUME_TAC o CONJUNCTS o MATCH_MP hand_cfg_cursor_shape) >>
+    (MAP_EVERY ASSUME_TAC o CONJUNCTS o MATCH_MP gasFocusPacketCoverageTheory.cover_cfg_cursor_shape) >>
   `?aa ra rst mem0. active_frame_plan rpolicy out.po_unit cpl prog fn9 s9 aa ra rst mem0` by
     (Cases_on `fin = K SOME`
      >- (qpat_assum `fin = K SOME ==> normal_frame_plan _ _ _ _ _ _ _ _`
@@ -8398,7 +8094,7 @@ Resume focus_stopped_filling_replay[step_error_cursor]:
          qpat_assum `stage 9 = out.po_unit.cu_context`
            (fn th => qpat_assum `step_inst 0 (stage 9) inst9 s9 = Error err`
              (assume_tac o REWRITE_RULE [th])) >>
-         drule_all hand_error_active_frame >>
+         drule_all gasFocusPacketCoverageTheory.cover_error_active_frame >>
          disch_then (qx_choose_then `aa` assume_tac) >>
          qexistsl [`aa`,`ra`,`rest`,`mem0`] >> first_assum ACCEPT_TAC) >>
      `fin = asm_opt_finalizer` by
@@ -8420,7 +8116,7 @@ Resume focus_stopped_filling_replay[step_error_cursor]:
          POP_ASSUM_LIST (K all_tac) >>
          PURE_REWRITE_TAC [fnFramePrefixTheory.active_frame_plan_def] >> metis_tac[]) >>
      mp_tac (Q.INST [`unit` |-> `out.po_unit`, `fn` |-> `fn9`,
-       `s` |-> `s9`, `inst` |-> `inst9`] hand_error_active_frame) >>
+       `s` |-> `s9`, `inst` |-> `inst9`] gasFocusPacketCoverageTheory.cover_error_active_frame) >>
      impl_tac
      >- (conj_tac
          >- (DISJ2_TAC >> qexistsl [`entry'`,`pc_ret`] >> first_assum ACCEPT_TAC) >>
@@ -8437,7 +8133,7 @@ Resume focus_stopped_filling_replay[step_error_cursor]:
     simp[NoAsms, ASSUME ``inst9.inst_opcode = CODECOPY``] >>
   drule_all_then assume_tac gasFocusPacketCoverageTheory.cover_cfg_joint_inst >>
   qpat_assum `cfg_norm_joint_cursors (stage 8) (stage 9) _ _ _`
-    (MAP_EVERY ASSUME_TAC o CONJUNCTS o MATCH_MP hand_cfg_active) >>
+    (MAP_EVERY ASSUME_TAC o CONJUNCTS o MATCH_MP gasFocusPacketCoverageTheory.cover_cfg_active) >>
   qpat_assum `inst8 = inst9` SUBST1_TAC >>
   qpat_assum `s8.vs_labels = s9.vs_labels` SUBST1_TAC >>
   qexistsl [`dst`,`sz`] >> asm_rewrite_tac[]
@@ -8656,7 +8352,7 @@ Resume focus_stopped_filling_replay[forwarding]:
      disch_then (MATCH_MP_TAC o cj 3) >> first_assum ACCEPT_TAC) >>
   `MEM inst9.inst_opcode [RETURNDATACOPY;REVERT]` by
     (mp_tac (Q.INST [`fn` |-> `fn9`, `inst` |-> `inst9`, `s` |-> `s9`]
-       hand_active_block) >>
+       gasFocusPacketCoverageTheory.cover_active_block) >>
      impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
      simp[NoAsms, ASSUME ``lookup_block s9.vs_current_bb fn9.fn_blocks = SOME gb``] >>
      disch_tac >>
@@ -8746,7 +8442,7 @@ Resume focus_stopped_filling_replay[forward_source_end]:
      >- (Cases_on `gb.bb_instructions` >> simp[])) >>
   `(LAST gb.bb_instructions).inst_opcode = REVERT` by
     (mp_tac (Q.INST [`fn` |-> `fn9`, `inst` |-> `inst9`, `s` |-> `s9`]
-       hand_forward_suffix) >>
+       gasFocusPacketCoverageTheory.cover_forward_suffix) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
      simp[NoAsms, ASSUME ``lookup_block s9.vs_current_bb fn9.fn_blocks = SOME gb``]) >>
   `(LAST bt.bb_instructions).inst_opcode = REVERT` by
@@ -8803,7 +8499,7 @@ Resume focus_stopped_filling_replay[forward_source_end]:
      simp[NoAsms, ASSUME ``(EL k ys).inst_opcode = INVOKE``]) >>
   `!r. r < LENGTH xs /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE count' rho')` by
     (mp_tac (Q.INST [`row_order` |-> `rho'`, `row_count` |-> `count'`,
-       `xs` |-> `xs`, `ys` |-> `ys`] hand_remaining_no_invoke) >>
+       `xs` |-> `xs`, `ys` |-> `ys`] gasFocusPacketCoverageTheory.cover_remaining_no_invoke) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
      DISCH_THEN ACCEPT_TAC) >>
   `dft_fn_rel sf fn8` by
@@ -8827,7 +8523,7 @@ Resume focus_stopped_filling_replay[forward_source_end]:
     (qpat_assum `LENGTH xs = LENGTH ys` mp_tac >>
      qpat_assum `count' < LENGTH ys` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> Cases_on `xs` >> Cases_on `ys` >> simp[]) >>
-  drule_all_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) hand_last_row_source >>
+  drule_all_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) gasFocusPacketCoverageTheory.cover_last_row_source >>
   suspend "forward_apply_end_cut"
 QED
 
@@ -9042,7 +8738,7 @@ Resume focus_stopped_filling_replay[memory_before_visit]:
      qpat_assum `~source_memory_reads_disjoint cpl inst9 s9 \/ _` mp_tac >>
      simp[NoAsms]) >>
   `inv_memory_observation inst9.inst_opcode` by
-    (drule_then (ASSUME_TAC o cj 1) hand_cfg_cursor_shape >>
+    (drule_then (ASSUME_TAC o cj 1) gasFocusPacketCoverageTheory.cover_cfg_cursor_shape >>
      `o1_fn_shape (stage 9) fn9` by
        (qpat_assum `o1_ctx_shape (stage 9)`
          (rev_drule o cj 3 o REWRITE_RULE [o1_ctx_shape_def, EVERY_MEM]) >>

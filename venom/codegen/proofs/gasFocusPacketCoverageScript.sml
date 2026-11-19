@@ -106,7 +106,7 @@ Proof
   simp[IS_PREFIX_APPEND]
 QED
 
-Triviality cover_cfg_cursors_frame:
+Theorem cover_cfg_cursors_frame:
   !C rounds cursors. cfg_norm_cursors C rounds cursors ==>
   execution_frame (SND (FST (HD cursors))) =
   execution_frame (SND (FST (LAST cursors)))
@@ -115,7 +115,7 @@ Proof
   rpt strip_tac >> fs[supply_state_agree_def]
 QED
 
-Triviality cover_cfg_active:
+Theorem cover_cfg_active:
   cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
     (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
     (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) ==>
@@ -248,7 +248,7 @@ Proof
   simp[NoAsms, APPEND_ASSOC]
 QED
 
-Triviality cover_active_block:
+Theorem cover_active_block:
   wf_function fn /\ active_inst fn inst s ==>
   ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
        get_instruction bb s.vs_inst_idx = SOME inst
@@ -1053,7 +1053,7 @@ Proof
   Cases_on `eval_operand dst s` >> simp[]
 QED
 
-Triviality cover_forward_suffix:
+Theorem cover_forward_suffix:
   wf_function fn /\ active_inst fn inst s /\ in_revert_forward fn s ==>
   ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
        MEM inst.inst_opcode [RETURNDATACOPY; REVERT] /\
@@ -1124,7 +1124,7 @@ Proof
   simp[venomWfPropsTheory.strict_dom_vars_defined_def] >> metis_tac[]
 QED
 
-Triviality cover_cfg_cursor_shape:
+Theorem cover_cfg_cursor_shape:
   cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
     (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
     (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) ==>
@@ -1318,7 +1318,7 @@ Proof
   fs[LENGTH_NIL]
 QED
 
-Triviality cover_remaining_no_invoke:
+Theorem cover_remaining_no_invoke:
   PERM row_order (COUNT_LIST (LENGTH xs)) /\
   LIST_REL (\q y. q < LENGTH xs /\ y.inst_id = (EL q xs).inst_id /\ from_block [EL q xs] y) row_order ys /\
   (!k. row_count <= k /\ k < LENGTH ys ==> (EL k ys).inst_opcode <> INVOKE) ==>
@@ -1350,7 +1350,7 @@ Proof
   simp[phi_prefix_length_def]
 QED
 
-Triviality cover_last_row_source:
+Theorem cover_last_row_source:
   bb_well_formed bb /\ bb.bb_instructions = ps ++ xs /\
   xs <> [] /\ (LAST bb.bb_instructions).inst_opcode = REVERT /\
   EVERY (\i. ~is_pseudo i.inst_opcode) xs ==>
@@ -1517,7 +1517,7 @@ Proof
 QED
 
 
-Triviality cover_error_active_frame:
+Theorem cover_error_active_frame:
   (active_frame_plan rpolicy unit cpl prog fn s ast ra rest mem0 \/
    ?entry pc_ret. entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0) /\
   active_inst fn inst s /\ step_inst 0 unit.cu_context inst s = Error err ==>
