@@ -76,9 +76,11 @@ Proof
        vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
        vyperTypeInvariantsTheory.value_result_typed_def] >> strip_tac >>
   `env.type_defs = get_tenv cx` by
-    fs[expr_body_pre_def, expr_sim_inv_def,
+    (qpat_assum `expr_sim_inv cenv cx env mid` mp_tac >>
+     pure_rewrite_tac[expr_sim_inv_def,
        vyperTypeInvariantsTheory.env_consistent_def,
        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
   gvs[]
 QED
 

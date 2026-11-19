@@ -40,6 +40,7 @@ Proof
             mk_inst (sm.cs_next_id+1) ISZERO [Var a] [b]]
             (u with vs_inst_idx := q) = OK (t with vs_inst_idx := q)` by
             simp[run_inst_seq_inst_idx, is_terminator_def, exec_result_map_def] >>
+          `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := q)` by simp[] >>
           drule_all iszero_pair_certificate >>
           disch_then (qspecl_then [`fn`,`PG`,`G`,`D`] strip_assume_tac) >> gvs[]) >>
       simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
