@@ -1,6 +1,7 @@
 (* Concrete compiler slices and indexed state packets for non-slot For. *)
 Theory bodyFullForArrayRound
 Ancestors gasContext[qualified,ignore_grammar] bodyFullShared[qualified,ignore_grammar] stmtSimProps[qualified,ignore_grammar]
+  bodyFullShadowBodyInv
   bodyFullForArrayElementPrepare bodyFullForArray
   stmtLowering compileEnv context exprLoweringProps emitHelper emitHelperProps
   loweringStateRelDefs loweringPosts stmtSimDefs exprSimHyps
@@ -410,7 +411,7 @@ Theorem for_nonslot_array_body_invoke[local]:
   storage_trace_domain cx st0 eb.storage_trace /\
   body_stmts_full_ok cx body /\ expr_sim_inv bc cx benv eb /\
   ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
-  body_inv tops ctx bc cx /\ supported_stmts tops bindings body /\
+  body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
   (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
     occurs_abi_decode_target target tops) /\
   type_stmts benv ret_ty body = SOME env' /\ stmts_exprs_ok bc body /\
@@ -2590,7 +2591,7 @@ Theorem for_nonslot_array_scoped_body_full:
     vv_location vv = SOME LocCode /\ post_value_type c e = ArrayT et bd) /\
   body_stmts_full_ok cx body /\ expr_sim_inv bc cx benv eb /\
   ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
-  body_inv tops ctx bc cx /\ supported_stmts tops bindings body /\
+  body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
   (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
     occurs_abi_decode_target target tops) /\
   type_stmts benv ret_ty body = SOME env' /\ stmts_exprs_ok bc body /\
@@ -3613,7 +3614,7 @@ Theorem for_nonslot_array_round_contracts:
     (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
-  body_inv tops ctx c cx /\ expr_body_pre c cx env e es0 /\
+  body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es0 /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\

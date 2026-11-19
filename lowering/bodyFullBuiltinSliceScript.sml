@@ -1,6 +1,7 @@
 (* Ordinary, self-code and external-code Slice share one full execution. *)
 Theory bodyFullBuiltinSlice
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullOfVV gasOutcomeFullCompose
   bodyFullBuiltinSliceCode bodyFullBuiltinSliceOrdinary
   exprSimHyps exprSimSource exprSimSliceExtcodeTyped
@@ -17,6 +18,7 @@ Theorem slice_builtin_sim_full:
               eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a (Slice n) args) es /\

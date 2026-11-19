@@ -1,6 +1,7 @@
 (* Allocation framing for non-slot For element preparation. *)
 Theory bodyFullForArray
 Ancestors
+  bodyFullShadowBodyInv
   whitelistForIterImmCopy whitelistForIterImmLoop stmtSimForArrayLoop
   bodyFullUnwrapCodeCtorRun bodyFullUnwrapCodeRuntimeRun fragGasOriginPtr
   ptrDiscipline allocationPtr context arithmetic pred_set
@@ -392,7 +393,7 @@ QED
    Keep the full vv post, including aggregate ownership and exceptional exits. *)
 Theorem for_array_expr_prefix_full:
   body_iterator_full_ok cx (Array e) /\
-  body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
+  body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es /\
   compile_expr c (expr_type e) e sa = (vv,sb) /\
   compile_expr c (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
@@ -1891,7 +1892,7 @@ QED
 (* Non-slot iterator evaluation and its actual conditional length slice. *)
 Theorem for_nonslot_array_prefix_full:
   body_iterator_full_ok cx (Array e) /\
-  body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
+  body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es /\
   well_typed_iterator env elem (Array e) /\ supported_iterator tops elem (Array e) n /\
   (!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)) /\

@@ -8,6 +8,7 @@
  *)
 Theory bodyFullAnnAssign
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullAnnAssignWord bodyFullAnnAssignWidened bodyFullAnnAssignMemoryPost
   bodyFullAnnAssignMemory bodyFullAnnAssignOther bodyFullShared exprSimAggregateLayout typedMemoryCopy
   bodyDeclCopyMemory vyperTypeInvariants allocLimits
@@ -114,6 +115,7 @@ Theorem body_annassign_word_full:
        (INL tyv,t) ==>
        body_expr_full_ok cx e) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
@@ -185,6 +187,7 @@ Theorem body_annassign_memory_full:
        (INL tyv,t) ==>
        body_expr_full_ok cx e) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
@@ -264,6 +267,7 @@ Theorem body_annassign_widened_full:
        (INL tyv,t) ==>
        body_expr_full_ok cx e) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
@@ -332,6 +336,7 @@ Theorem body_annassign_other_full:
        (INL tyv,t) ==>
        body_expr_full_ok cx e) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>

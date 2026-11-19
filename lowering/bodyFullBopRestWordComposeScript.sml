@@ -1,5 +1,6 @@
 Theory bodyFullBopRestWordCompose
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullBopRestWordLayout bodyFullBopRestWordEntry bodyFullBopRestWordPost
   bodyFullBopRestWordTail bodyFullPreds bodySimFull bodySim
   exprBopSimProps exprSimSource exprSimHypsDefs
@@ -14,6 +15,7 @@ Theorem compile_rest_word_membership_full:
   expr_type e2 = ArrayT (expr_type e1) bd /\
   (!a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\
   body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Builtin ann (Bop bop) [e1;e2]) es

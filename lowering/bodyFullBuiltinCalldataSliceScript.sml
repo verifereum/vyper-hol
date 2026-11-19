@@ -23,6 +23,7 @@ Theorem calldata_slice_vv_sim_full:
     (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
@@ -30,7 +31,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule_all calldata_slice_body_operand_full >>
-  disch_then (qspecl_then [`shadow_func`,`shadow_ctx`,`lo`,`func`,`d`,`PG`,`DF`]
+  disch_then (qspecl_then [`shadow_func`,`lo`,`func`,`d`,`PG`,`DF`]
     strip_assume_tac) >> gvs[] >>
   `post_value_type cenv e = expr_type e` by
     (irule post_value_type_word >> simp[is_word_type_def]) >>
@@ -463,6 +464,7 @@ Theorem calldata_slice_expr_sim_full:
     (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es

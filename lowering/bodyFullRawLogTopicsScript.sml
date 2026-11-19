@@ -1,6 +1,7 @@
 (* RawLog topics: join the checked suffix and pointwise contracts. *)
 Theory bodyFullRawLogTopics
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullRawLogTopicsPost bodyFullRawLogTopicsSuffix bodyFullPreds
   gasOutcomeFullCompose bodyRawLogArgPre exprSimSource exprSimHypsDefs
   vyperTypeSystem vyperContext vyperValue vyperInterpreter vyperState vyperAST list
@@ -26,6 +27,7 @@ Theorem raw_log_topics_full:
      gas_shadow_compiles (compile_multi_exprs compile_expr cenv xs)
        (compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr xs))) /\
   body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))

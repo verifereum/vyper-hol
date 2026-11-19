@@ -7,6 +7,7 @@
      target_subscript_sim_full -- base and index compose with a tail *)
 Theory bodyFullTargetSubscript
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullTargetDefs gasOutcomeFullCompose gasOutcomeFull bodyFullPreds
   bodySimFull bodyInvNoDalloca contextRawReachable ptrDiscipline unitMemInv
   targetPlaceSimCasesBase targetPlaceSim targetPlaceSimDefs
@@ -163,6 +164,7 @@ QED
 
 Theorem target_subscript_sim_full:
   body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   body_base_target_full_ok cx (SubscriptTarget bt e) /\
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

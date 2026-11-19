@@ -1,5 +1,6 @@
 Theory bodyFullTypeBuiltinExtract32
 Ancestors
+  bodyFullShadowBodyInv
   haltExitProj
   typeBuiltinPrereqs
   bodyInvNoDalloca bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
@@ -31,6 +32,7 @@ QED
 
 Theorem extract32_vv_full[local]:
   body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (TypeBuiltin ann Extract32 ret [src;off]) es /\
   body_exprs_full_ok cx [src;off] ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

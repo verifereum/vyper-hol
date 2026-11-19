@@ -1,6 +1,7 @@
 (* ABI arguments share one physical endpoint across all horizons. *)
 Theory bodyFullAbiEncodeArgs
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullAbiEncodeArgStep bodyFullAbiEncodeArgsCompose
   bodyFullPreds abiEncodeArgsSim abiEncodeArgsCase gasOutcomeFullCompose
   gasShadowCompile gasShadowCompileHelpers gasShadowState gasShadowCompileConvert
@@ -12,7 +13,8 @@ Ancestors
 Theorem abi_encode_args_full:
   !args cx tops ctx ce Inv env es sa ops sb shadow_sa shadow_sb shadow_ctx
     func shadow_func DF lo PG d st0 s0 G0 tn0.
-  body_exprs_full_ok cx args /\ body_inv tops ctx ce cx /\ Inv es /\
+  body_exprs_full_ok cx args /\ body_inv tops ctx ce cx /\
+  shadow_body_inv tops ctx shadow_ctx /\ Inv es /\
   (!q. Inv q ==> expr_sim_inv ce cx env q) /\
   (!q gs. Inv q ==> Inv (q with gas_obs := gs)) /\
   EVERY (\e. !q. Inv q ==> expr_body_pre ce cx env e q) args /\

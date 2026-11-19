@@ -14,6 +14,7 @@
  *)
 Theory bodyFullExprCore
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullToplevelValue bodyFullToplevelVV bodyInvNoDalloca
   bodyFullLiteralWord bodyFullLiteralBuffer bodyFullLiteralNonword
   bodyFullNameVV bodyFullNameNonword bodyFullNameWord exprSimOperators
@@ -181,6 +182,7 @@ Theorem bop_in_literal_word_sim_full:
      builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
      body_exprs_full_ok cx elems) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -300,6 +302,7 @@ Theorem bop_bytestring_eqne_sim_full:
     (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -647,6 +650,7 @@ Theorem bop_word_sim_full:
     word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -682,6 +686,7 @@ Theorem bop_bytes_eq_sim_full:
      ?m. expr_type e1 = BaseT (BytesT (Fixed m))) /\
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -1156,6 +1161,7 @@ Theorem bop_bytes_sim_full[local]:
     MEM bop [And;Or;XOr;ShL;ShR] /\
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -1212,6 +1218,7 @@ Theorem bop_rest_word_sim_full:
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es

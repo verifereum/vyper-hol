@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeExprConditional
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
   bodyFullAbiDecodeCallerFull bodyFullAbiDecodeCallerSetupOrigin
   bodyFullAbiDecodeCallerCutEndpoint bodyFullAbiDecodeCallerEntryOrigin
@@ -84,6 +85,7 @@ QED
 Theorem abi_decode_singleton_vv_full[local]:
   ^decode_guarded_producer /\ ^decode_cut_selector /\
   body_inv tops ctx ce cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
   body_exprs_full_ok cx [e] ==>
@@ -311,7 +313,8 @@ Proof
   >- (irule abi_decode_singleton_vv_full >>
       conj_tac >- asm "guarded" ACCEPT_TAC >>
       conj_tac >- asm "selector" ACCEPT_TAC >>
-      simp[] >> rpt conj_tac >> goal_assum (drule_at Any)) >>
+      qpat_assum `shadow_body_inv tops ctx shadow_ctx` (irule_at Any) >>
+      simp[] >> goal_assum (drule_at Any)) >>
   irule expr_sim_full_of_vv >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> drule_all exprSimHypsTheory.expr_body_pre_copy_ok >> simp[]) >>

@@ -1,5 +1,6 @@
 Theory bodyFullBuiltinEnvHashCompose
 Ancestors
+  bodyFullShadowBodyInv
  bodyFullPreds bodySimFull gasOutcomeFullCompose bodyFullGhostFrame bodyInvNoDalloca
  gasShadowCompileStmtHelpers gasShadowState exprSimSource exprSimHypsDefs
  exprSimWordBuiltins exprSimUnopComposeProps exprSimUnopProps exprUnopSimDefs exprSimWordArgs exprSimProps exprSimOperands
@@ -84,7 +85,8 @@ Theorem hash_builtin_value_from_suffixes:
  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
  (bt = BlockHash \/ bt = BlobHash) /\
  builtin_args_length_ok bt (LENGTH args) /\ body_exprs_full_ok cx args /\
- body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env (Builtin a bt args) es ==>
+ body_inv tops ctx cenv cx /\
+ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre cenv cx env (Builtin a bt args) es ==>
  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
    cenv cx ty (Builtin a bt args) es
 Proof

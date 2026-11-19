@@ -1,6 +1,7 @@
 (* Joint Neg simulation: its checked arithmetic suffix. *)
 Theory bodyFullBuiltinWordNeg
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullGhostFrame bodyFullShared bodyFullPreds bodySimFull
   gasOutcomeFullCompose gasOutcomeFullStmts fragGasSeqPtr fragGasEmitCtrl
   exprSimWordBuiltins exprSimUnopProps exprSimSource
@@ -693,6 +694,7 @@ Theorem word_neg_sim_full:
     bt = Neg /\
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a bt args) es /\

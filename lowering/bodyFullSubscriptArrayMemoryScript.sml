@@ -1,6 +1,7 @@
 (* Finite-horizon composition for a framed fixed memory array. *)
 Theory bodyFullSubscriptArrayMemory
 Ancestors exprBopSimProps[qualified,ignore_grammar] integer[qualified,ignore_grammar] arithmetic[qualified,ignore_grammar] bodyPtrBopHashFootprint[qualified,ignore_grammar] exprSimBopRestWordLoads[qualified,ignore_grammar] exprSimHypsDefs[qualified,ignore_grammar] vyperTypeInvariants[qualified,ignore_grammar] exprSimIfExpCompat[qualified,ignore_grammar]
+  bodyFullShadowBodyInv
   bodyFullSubscriptArrayMemoryFrame bodyFullSubscriptArrayCodeBounds
   bodyFullSubscriptArrayCodeOps bodyInvNoDalloca stateRelProj
   exprSimVVFrame exprSimIfExpWidenedAdapter assignBasePtrBoundary
@@ -102,7 +103,7 @@ QED
 Theorem subscript_array_framed_memory_full:
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et n.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
-    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\
+    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
     expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et (Fixed n) /\

@@ -2,6 +2,7 @@
 Theory bodyFullWordArgs
 Ancestors
   bodyFullPreds bodySimFull gasOutcomeFullCompose bodyFullIfExpReach
+  bodyFullShadowBodyInv
   exprSimPrecompiles exprSimWordArgs wordArgsPtr exprSimSource exprSimHyps
   exprLoweringProps gasShadowCompileStmtHelpers gasShadowState
   bodyPtrDefs loweringPosts vyperStorageTrace vyperStorageFootprint
@@ -16,7 +17,8 @@ Theorem lower_word_args_sim_full:
     (!e ee. MEM e todo /\ expr_sim_inv cenv cx env ee ==>
       expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)) /\
     body_exprs_full_ok cx todo /\
-    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
     lower_word_args cenv (\e. ty) todo sa = (xs,sm) /\
     lower_word_args cenv (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
       (xs,shadow_sm) /\

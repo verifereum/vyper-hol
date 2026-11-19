@@ -2,6 +2,7 @@
    for storage/transient For iteration. The element copy creates its own CFG. *)
 Theory bodyFullForStorage
 Ancestors exprSimSubscriptArrayLiveStorageSuffix[qualified,ignore_grammar] exprPtrStorageLoad[qualified,ignore_grammar] exprSimConcatResult[qualified,ignore_grammar] exprSimAggregatesAllocCounted[qualified,ignore_grammar] marker[qualified,ignore_grammar] bodySim[qualified,ignore_grammar]
+  bodyFullShadowBodyInv
   stmtLowering exprLowering compileEnv context stmtSimProps
   stmtSimForArrayParts stmtLoweringMono copyExecution emitHelper emitHelperProps
   slotCopyExecution loweringStateRelDefs words string numposrep
@@ -1497,7 +1498,7 @@ Theorem for_storage_body_invoke_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx RetQ tops bindings env id typ
       tyv v ei body env_b ret_ty bc bc1 sb0 sb1 shadow_sb0 shadow_sb1 st0 s G
       tn idx p lvo k dst len.
-    body_stmts_full_ok cx body /\ body_inv tops ctx bc cx /\
+    body_stmts_full_ok cx body /\ body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\
     supported_stmts tops bindings body /\
     (!target.
        supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
@@ -3736,7 +3737,7 @@ Theorem for_storage_array_body_cleanup_full:
       slot dst tyv typ bd vs len nb id env p idx lvo sd body si lctx ei v bc
       bc1 sb0 sb1 sj tops bindings ret_ty env_b k off a rs st0 s G tn exit incr
       shadow_sb0 shadow_sb1.
-    body_stmts_full_ok cx body /\ body_inv tops ctx bc cx /\
+    body_stmts_full_ok cx body /\ body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\
     supported_stmts tops bindings body /\
     (!target.
        supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
@@ -5118,7 +5119,7 @@ Theorem for_storage_array_round_full:
       (st0 :evaluation_state) (ok :unit + vyperState$exception -> bool)
       (exit :string) (incr :string) (shadow_sb0 :compile_state)
       (shadow_sb1 :compile_state).
-    body_inv tops ctx bc cx /\ supported_stmts tops bindings body /\
+    body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
     (!(target :type).
        supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
        occurs_abi_decode_target target tops) /\
@@ -6323,7 +6324,7 @@ Theorem compile_for_storage_array_frag_full:
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
          (INL tyv,t) ==>
        body_iterator_full_ok cx (Array (TopLevelName (ArrayT typ bd) nid))) /\
-    body_inv tops ctx cenv cx /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings
       (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n body) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)

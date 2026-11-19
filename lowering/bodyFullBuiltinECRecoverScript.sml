@@ -1,6 +1,7 @@
 (* ECRecover's joint value and stack judgments. *)
 Theory bodyFullBuiltinECRecover
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullExprGeneric bodyFullPreds bodySimFull bodyInvNoDalloca
   bodyFullBuiltinPrecompileRecoveryArgs bodyFullBuiltinPrecompileRecoveryBuffers
   bodyFullBuiltinPrecompileSuffixSuccess bodyFullBuiltinPrecompileSuffixAbort
@@ -27,6 +28,7 @@ Theorem ecrecover_expr_sim_full:
     (builtin_args_length_ok ECRecover (LENGTH args) ==>
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a ECRecover args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a ECRecover args) es
@@ -1314,6 +1316,7 @@ Theorem ecrecover_builtin_sim_full:
     (builtin_args_length_ok ECRecover (LENGTH args) ==>
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a ECRecover args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a ECRecover args) es /\

@@ -352,7 +352,7 @@ Proof
        COND_RATOR, raise_def] @ nh_base)
 QED
 
-Theorem eval_ext_call_nh[local]:
+Theorem eval_ext_call_nh:
   eval_ext_call cx static skip_check sg opts vs s =
     (INR HaltException, s') ==> F
 Proof

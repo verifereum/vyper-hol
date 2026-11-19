@@ -1,5 +1,6 @@
 Theory bodyFullSubscriptMapBase
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds exprSimSubscriptMap stateRelProj vyperPlaceResultTyping
   gasOutcomeFullCompose fragGasOriginPtr bodyPtrDefs wordArgsPtr
   exprSimMapDefs exprSimHypsDefs vyperTypeEnv vyperStoragePlaceProvenance
@@ -63,7 +64,7 @@ Proof
 QED
 
 Theorem body_expr_full_ok_map:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
+  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_map_pre cenv cx env e es ==>
   expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es
 Proof

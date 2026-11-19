@@ -20,6 +20,7 @@ Theorem make_tuple_vv_sim_full_conditional:
     (builtin_args_length_ok (MakeArray NONE n) (LENGTH args) ==>
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (MakeArray NONE n) args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (MakeArray NONE n) args) es
