@@ -7,6 +7,7 @@ Ancestors
   bodyPtrDefs loweringStateRelDefs venomState venomInst
   finite_map words pred_set list rich_list ASCIInumbers freshWrites
   ptrDiscipline fragGasCopyLoop venomExecSemantics loweringPosts venomMemDefs bodyMemoryDefs
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem mapping_scratch_runtime_restore:
   code = [mk_inst is MSTORE [Var p;bop] [];
@@ -29,7 +30,7 @@ Theorem mapping_slot_full_run:
   eval_operand bop s = SOME w0 /\ eval_operand key s = SOME w1 /\
   op_taint tn bop = {} /\ op_taint tn key = {} /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   stmt_state_rel (H0 : (bool # 'a word # type_value) list # num list)
@@ -66,7 +67,9 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_split, ci_mono_def] >>
   `64 < dimword (:256)` by simp[dimword_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all (INST_TYPE [beta |-> alpha] alloc_buffer_origin_ptr_path) >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`] strip_assume_tac) >>
   suspend "tail"
@@ -151,7 +154,10 @@ Resume mapping_slot_full_run[apply_tail]:
       [STRING #"%" (toString sa.cs_next_var)]).inst_opcode = ALLOCA /\
     FLOOKUP t.vs_allocas (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]).inst_id = SOME (w2n w,64)` by simp[mk_inst_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (`stmt_state_rel H0 ctx func cenv cx es t` by metis_tac[] >>
+     qpat_assum `stmt_state_rel H0 ctx func cenv cx es t`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all mapping_scratch_tail_full_run >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   rename1 `run_inst_seq code t = OK u` >>
