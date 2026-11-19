@@ -32,7 +32,7 @@ Proof
   rename1 `frame_inst_at s s op` >>
   rename1 `s.contexts = [(c1,rb1)]` >>
   `frame_inst_at es s op` by
-    (gvs[frame_inst_at_def] >>
+    (gvs[frame_inst_at_step] >>
      qexistsl_tac [`c1`,`rb1`,`[]`] >> simp[]) >>
   simp[frame_inst_raises_def] >>
   goal_assum $ drule_at Any >>

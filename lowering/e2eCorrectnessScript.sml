@@ -2585,7 +2585,8 @@ Proof
                `raw_reachable vs`, `vs`, `es`] mp_tac codegen_correct >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >> qexistsl_tac [`r`, `es'`] >> gvs[venom_frame_rel_def] >>
-  metis_tac[frameGasTheory.frame_raises_inst_raises]
+  metis_tac[SRULE [vfm_abort_def] (Q.INST [`exc` |-> `Reverted`]
+    frameGasTheory.frame_inst_raises_frame_raises)]
 QED
 
 (* The same under the final assembly optimizer, which excludes, for now,
@@ -2737,7 +2738,8 @@ Proof
     mp_tac codegen_reverts_asm_opt >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >> qexistsl_tac [`r`, `es'`] >> fs[] >>
-  metis_tac[frameGasTheory.frame_raises_inst_raises]
+  metis_tac[SRULE [vfm_abort_def] (Q.INST [`exc` |-> `Reverted`]
+    frameGasTheory.frame_inst_raises_frame_raises)]
 QED
 
 (* Both accepted finalizers. *)

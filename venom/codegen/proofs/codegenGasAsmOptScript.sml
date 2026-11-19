@@ -230,7 +230,7 @@ Proof
    g' <= frame_gas_left (add_frame_gas g' es)` by
     metis_tac[add_frame_gas_wf_state, wf_state_frame_gas_left] >>
   `LENGTH s.contexts = LENGTH (add_frame_gas g' es).contexts` by
-    fs[frame_inst_at_def] >>
+    fs[frame_inst_at_step] >>
   first_x_assum (qspecl_then [`g'`, `Inv`, `vs`, `es`, `s`, `op`, `s'`]
                    mp_tac) >>
   metis_tac[]
