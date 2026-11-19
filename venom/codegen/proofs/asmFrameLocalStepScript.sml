@@ -319,16 +319,17 @@ Proof
       simp[frame_outcome_def, call_requests_def, frame_last_def]) >>
   drule_all (SRULE [MEM] step_transplant_end) >> strip_tac >> gvs[] >>
   `LENGTH es'.contexts < LENGTH es.contexts` by
-    (qpat_x_assum `frame_outcome es _ _ _ _ _` mp_tac >>
-     simp[frame_outcome_def] >> Cases_on `rest` >> gvs[] >>
-     Cases_on `h` >> gvs[] >> strip_tac >> gvs[] >>
-     qpat_x_assum `MAP _ _ = MAP _ _`
-       (mp_tac o AP_TERM ``LENGTH : context list -> num``) >> simp[]) >>
+    (`2 <= LENGTH es.contexts` by (Cases_on `rest` >> gvs[]) >>
+     drule_all frame_outcome_nested_length >> simp[]) >>
   `run_call es = SOME (INL (),es')` by
-    (irule run_call_terminal_step >> simp[]) >>
+    (irule frame_outcome_nested_run >> Cases_on `rest` >> gvs[] >> metis_tac[]) >>
   `call_trace es = []` by (drule frame_obs_terminal >> simp[]) >>
-  drule_all frame_outcome_mid >> strip_tac >>
-  qexistsl_tac [`INL ()`,`es'`,`c.logs ++ lgs`] >>
+  mp_tac (Q.INST [`es0` |-> `es0`, `es` |-> `es`,
+    `c0` |-> `c0`, `c` |-> `c`, `rb` |-> `rb`, `rest` |-> `rest`,
+    `r` |-> `INL ()`, `es'` |-> `es'`, `exc` |-> `e`,
+    `out` |-> `c'.returnData`, `lgs` |-> `lgs`] frame_outcome_mid) >>
+  simp[] >> strip_tac >>
+  qexists_tac `c.logs ++ lgs` >>
   simp[call_requests_def, frame_last_def] >> gvs[]
 QED
 
@@ -372,10 +373,13 @@ Proof
   `frame_inst_raises es0 exc op` by
     (irule frameGasTheory.frame_inst_raises_mid >> qexists_tac `es` >>
      fs[asm_frame_rel_def] >> gvs[]) >>
+  `frame_raises es0 exc` by
+    (irule frameGasTheory.frame_inst_raises_frame_raises >>
+     simp[] >> metis_tac[]) >>
   Cases_on `t.contexts` >> gvs[] >> PairCases_on `h` >>
   drule (SRULE [MEM] frame_terminal_transplant) >>
   disch_then drule >> simp[vfm_abort_def] >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >>
+  goal_assum (drule_at Any) >> simp[frame_resource_starved_def] >>
   metis_tac[]
 QED
 

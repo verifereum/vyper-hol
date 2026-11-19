@@ -1,13 +1,11 @@
 (* TOP-LEVEL: frame_outcome, frame_resource_starved, creation_resource_starved,
  * frame_outcome_single_frame_run.
  *
- * Frame-level boundary for run_call.  The relations themselves use only
- * vfmExecution; vfmRunCall supplies the proof-only single-frame bridge.
- * Deriving frame_outcome from an arbitrary EVM run is a separate obligation.
+ * Frame-level observations and their settlement back into a caller.
  *)
 Theory frameOutcome
 Ancestors
-  vfmExecution vfmRunCall frameGas
+  vfmExecution vfmRunCall vfmRunFrame frameGas
 
 (* ===== Frame outcomes ===== *)
 
@@ -23,26 +21,77 @@ Definition frame_outcome_def:
             es'.contexts = [(ctxt', rb')] /\
             ctxt'.returnData = out /\
             (exc = NONE ==> ctxt'.logs = ctxt.logs ++ lgs)
-      | (parent, prb) :: rest' =>                 (* nested state *)
+      | _ :: _ =>                                (* nested state *)
           r = INL () /\
-          ?parent' prb' rest'' mr.
+          ?pre ctxt' rest' mr.
             ctxt.msgParams.outputTo = Memory mr /\
-            es'.contexts = (parent', prb') :: rest'' /\
-            MAP FST rest'' = MAP FST rest' /\
-            (rest' <> [] ==> prb' = prb) /\
-            parent'.returnData = out /\
-            parent'.stack = b2w (exc = NONE) :: parent.stack /\
-            parent'.pc = SUC parent.pc /\
-            parent'.logs =
-              parent.logs ++ (if exc = NONE then ctxt.logs ++ lgs else []) /\
-            parent'.memory =
-              buffer_write mr.offset (TAKE mr.size out) parent.memory /\
+            ~vfm_abort exc /\
+            run_frame es = SOME (INR exc,pre) /\
+            pre.contexts = (ctxt', rb) :: rest' /\
+            MAP FST rest' = MAP FST rest /\
+            FRONT rest' = FRONT rest /\
+            ctxt'.msgParams.outputTo = Memory mr /\
+            handle_exception exc pre = (r,es') /\
+            out = (if exc = NONE \/ exc = SOME Reverted
+                   then ctxt'.returnData else []) /\
+            (exc = NONE ==> ctxt'.logs = ctxt.logs ++ lgs) /\
             (exc <> NONE ==> es'.rollback = rb)
 End
 
-(* Our frame ran out of gas or stack.  In a nested frame frame_outcome
-   only tells failure from success, so the frame must also show an
-   instruction that raised exc. *)
+Theorem frame_outcome_nested_run:
+  wf_state es /\ 2 <= LENGTH es.contexts /\
+  frame_outcome es r es' exc out lgs ==>
+  run_call es = SOME (r,es')
+Proof
+  rw[frame_outcome_def] >> Cases_on `rest` >> gvs[] >>
+  drule_all run_frame_call >> simp[]
+QED
+
+(* A nested frame preserves the suspended contexts. CREATE can update
+   the saved account state of the bottom frame. *)
+Theorem frame_outcome_nested_caller:
+  es.contexts = (ctxt,rb) :: (parent,prb) :: rest /\
+  frame_outcome es r es' exc out lgs ==>
+  ?parent' prb' rest' mr.
+    ctxt.msgParams.outputTo = Memory mr /\
+    es'.contexts = (parent',prb') :: rest' /\
+    MAP FST rest' = MAP FST rest /\
+    (rest <> [] ==> prb' = prb) /\
+    parent'.returnData = out /\
+    parent'.stack = b2w (exc = NONE) :: parent.stack /\
+    parent'.pc = SUC parent.pc /\
+    parent'.logs = parent.logs ++ (if exc = NONE then ctxt.logs ++ lgs else []) /\
+    parent'.memory = buffer_write mr.offset (TAKE mr.size out) parent.memory
+Proof
+  strip_tac >> gvs[frame_outcome_def] >>
+  Cases_on `rest'` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+  `rest <> [] ==> h1 = prb` by
+    (Cases_on `rest` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+  Cases_on `exc = NONE` >> Cases_on `exc = SOME Reverted` >>
+  gvs[handle_exception_def, bind_def, ignore_bind_def,
+      get_gas_left_def, get_current_context_def, return_def,
+      consume_gas_def, set_return_data_def, set_current_context_def,
+      get_num_contexts_def, get_return_data_def, get_output_to_def,
+      reraise_def, assert_def, fail_def, inc_pc_def, push_stack_def,
+      write_memory_def, pop_and_incorporate_context_def, pop_context_def,
+      set_rollback_def, unuse_gas_def, update_gas_refund_def, push_logs_def,
+      AllCaseEqs()] >>
+  qpat_x_assum `_ = es'` (SUBST_ALL_TAC o SYM) >> simp[]
+QED
+
+Theorem frame_outcome_nested_length:
+  2 <= LENGTH es.contexts /\
+  frame_outcome es r es' exc out lgs ==>
+  SUC (LENGTH es'.contexts) = LENGTH es.contexts
+Proof
+  rw[frame_outcome_def] >> Cases_on `rest` >> gvs[] >>
+  `pre.contexts <> []` by simp[] >>
+  qpat_assum `MAP FST rest' = _`
+    (assume_tac o AP_TERM ``LENGTH : context list -> num``) >>
+  drule_all vfmRunCallTheory.handle_exception_inl_pops >> gvs[]
+QED
+
+(* Our frame ran out of gas or stack before settlement. *)
 Definition frame_resource_starved_def:
   frame_resource_starved es r es' <=>
     ?exc out lgs. (exc = OutOfGas \/ exc = StackOverflow) /\

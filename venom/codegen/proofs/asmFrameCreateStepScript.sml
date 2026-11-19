@@ -940,23 +940,33 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem asm_create_step_terminal:
+Theorem asm_create_inner_terminal[local]:
   s.contexts = (c,rb)::rest /\
   next_opcode c = SOME (if two then Create2 else Create) /\
   step_create two s = (INR e,u) ==>
-  step s = handle_step e u
+  step_inner s = (INR e,u)
 Proof
   strip_tac >>
   `FLOOKUP c.msgParams.parsed c.pc = SOME (if two then Create2 else Create)` by
     (qpat_x_assum `next_opcode c = _` mp_tac >>
      Cases_on `two` >> simp[next_opcode_def] >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]) >>
-  simp_tac (srw_ss()) [step_def, get_current_context_def, handle_def,
+  simp_tac (srw_ss()) [step_inner_def, get_current_context_def,
     bind_def, ignore_bind_def, return_def] >>
   qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
   simp_tac (srw_ss()) [] >>
   qpat_assum `FLOOKUP _ _ = _` (fn th => pure_rewrite_tac[th]) >>
   Cases_on `two` >>
   gvs[step_inst_def, bind_def, ignore_bind_def]
+QED
+
+Theorem asm_create_step_terminal:
+  s.contexts = (c,rb)::rest /\
+  next_opcode c = SOME (if two then Create2 else Create) /\
+  step_create two s = (INR e,u) ==>
+  step s = handle_step e u
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_create_inner_terminal >> simp[step_eq_handle_step_inner, handle_def]
 QED
 
 Theorem asm_frame_create_failure_starved:
@@ -999,8 +1009,8 @@ Proof
     (gvs[vfmSameFrameTheory.same_frame_rel_def] >>
      Cases_on `u.contexts` >> gvs[] >> PairCases_on `h` >>
      gvs[wf_context_def]) >>
-  `step s = handle_step (SOME OutOfGas) u` by
-    (irule asm_create_step_terminal >> metis_tac[]) >>
+  `step_inner s = (INR (SOME OutOfGas),u)` by
+    (irule asm_create_inner_terminal >> metis_tac[]) >>
   `!address. c.msgParams.outputTo <> Code address` by
     gvs[asm_evm_rel_def] >>
   `frame_inst_raises s OutOfGas (if IS_SOME salt_opt then Create2 else Create)` by
@@ -1015,8 +1025,10 @@ Proof
     (irule asm_step_fault_outcome >> simp[vfm_abort_def] >>
      qexistsl [`p`, `u`] >> simp[]) >>
   `frame_resource_starved s r t` by
-    (simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >>
-     metis_tac[]) >>
+    (`frame_raises s OutOfGas` by
+       (irule frameGasTheory.frame_inst_raises_frame_raises >>
+        simp[vfm_abort_def] >> metis_tac[]) >>
+     simp[frame_resource_starved_def] >> metis_tac[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[] >>
   qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
@@ -1044,8 +1056,8 @@ Proof
     (drule_at (Pat `asm_evm_rel _ _ _`) asm_frame_create_decode >>
      Cases_on `salt_opt` >> gvs[]) >>
   drule_all asm_create_static_failure_view >> strip_tac >>
-  `step s = handle_step (SOME ex) t` by
-    (irule asm_create_step_terminal >> metis_tac[]) >>
+  `step_inner s = (INR (SOME ex),t)` by
+    (irule asm_create_inner_terminal >> metis_tac[]) >>
   `(rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr))` by
     (Cases_on `rest` >> simp[] >> Cases_on `c.msgParams.outputTo` >>
      gvs[asm_evm_rel_def] >> fs[wf_state_def, outputTo_consistent_stack_def]) >>
