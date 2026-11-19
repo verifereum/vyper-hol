@@ -13,6 +13,8 @@ Ancestors
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullStructLit bodyFullPop
+  bodyFullSubscript[qualified,ignore_grammar]
+  bodyFullSubscriptUnframedArray[qualified,ignore_grammar]
   bodyFullTypeBuiltinEmpty bodyFullTypeBuiltinWords bodyFullTypeBuiltinConvert
   bodyFullTypeBuiltinExtract32 bodyFullTypeBuiltinAbiDecode bodyFullTypeBuiltinAbiEncode
   bodyFullRawCall bodyFullRawCallCalldata exprSimSource
@@ -1353,7 +1355,7 @@ Proof
   ACCEPT_TAC bodyFullStructLitTheory.structlit_expr_full_ok
 QED
 
-(* Admitted: the joint twin of body_subscript_case_ptr_at (bodyPtrExprCases). *)
+(* Dispatch the joint subscript cases using the same-endpoint unframed array proof. *)
 Theorem body_subscript_case_full:
   !cx v8 e1 e2.
     (!s'' res t s'3' res' t'.
@@ -1365,7 +1367,10 @@ Theorem body_subscript_case_full:
     body_expr_full_ok cx e1 ==>
     body_expr_full_ok cx (Subscript v8 e1 e2)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule bodyFullSubscriptTheory.subscript_expr_full_ok_from_place_base >>
+  simp[] >>
+  metis_tac[bodyFullSubscriptUnframedArrayTheory.subscript_unframed_array_vv_full]
 QED
 
 (* Join the TypeBuiltin constructor proofs. *)
