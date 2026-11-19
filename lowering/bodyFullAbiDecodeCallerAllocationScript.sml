@@ -280,9 +280,13 @@ Resume abi_decode_caller_allocation_joint[owned]:
     (drule allocationPtrTheory.alloca_step_operand_preserved >>
      disch_then (qspec_then `FST inputs` mp_tac) >> simp[]) >>
   `op_prov G1 (FST inputs) = NONE /\ op_taint tn1 (FST inputs) = {}` by
-    (Cases_on `FST inputs` >>
-     gvs[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def] >>
-     metis_tac[ptrDisciplineTheory.op_taint_def]) >>
+    (qpat_assum `op_prov Gh (FST inputs) = NONE` mp_tac >>
+     qpat_assum `op_taint tnh (FST inputs) = {}` mp_tac >>
+     qpat_assum `FST inputs <> Var out` mp_tac >>
+     qpat_assum `!x. x <> out ==> lookup_var x v = lookup_var x u /\ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `FST inputs` >>
+     simp[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def]) >>
   `op_taint tn1 (Var out) = {} /\ op_taint tn1 (Var input) = {}` by
     metis_tac[bodyPtrDefsTheory.ptr_covers_def] >>
   `FLOOKUP G1 out = SOME (d,outsz)` by
