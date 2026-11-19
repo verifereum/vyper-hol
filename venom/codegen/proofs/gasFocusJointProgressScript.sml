@@ -19,19 +19,6 @@ Ancestors
    C8 stutters keep all six tables. Moving C8 edges keep the same
    root and may extend the native trace fuel. Stuttering keeps N. *)
 Theorem focus_joint_progress:
-  let C7 = stage 7; C8 = stage 8; C9 = stage 9 in
-  let a0 = entry_asm_state vs0 es0;
-      env = asm_data_env prog vs0.vs_code;
-      planner_base = vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
-                               vs_return_pc_token := 0w; vs_inst_idx := 0|>;
-      trace8 = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry
-  in
-  let V = TAKE j trace8;
-      q8 = JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8;
-      q9 = JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9;
-      Kroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e))))
-        (FST (SND (SND (SND (SND (THE (FLOOKUP acts []))))))))
-  in
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
@@ -83,25 +70,34 @@ Theorem focus_joint_progress:
       EVERY (o1_fn_row k) (stage k).ctx_functions) /\
   0 < N /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|> /\
-  C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
-  lookup_function nm C7.ctx_functions = SOME root_sf /\
-  lookup_function nm C8.ctx_functions = SOME root_tf /\
+  (stage 7).ctx_entry = SOME nm /\ (stage 8).ctx_entry = SOME nm /\
+  lookup_function nm (stage 7).ctx_functions = SOME root_sf /\
+  lookup_function nm (stage 8).ctx_functions = SOME root_tf /\
   fn_entry_label root_sf = SOME lbl7 /\ fn_entry_label root_tf = SOME lbl7 /\
-  joint_initial vs0 C8 q80 /\ joint_initial vs0 C9 q90 /\
-  joint_trace vs0 C8 q80 evs8 qs8 q8 /\
-  joint_trace vs0 C9 q90 evs9 qs9 q9 /\
-  cfg_norm_joint_cursors C8 C9 (schedules,current,saved) q8 q9 /\
+  joint_initial vs0 (stage 8) q80 /\ joint_initial vs0 (stage 9) q90 /\
+  joint_trace vs0 (stage 8) q80 evs8 qs8 (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8) /\
+  joint_trace vs0 (stage 9) q90 evs9 qs9 (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
+  cfg_norm_joint_cursors (stage 8) (stage 9) (schedules,current,saved) (JointConfig stk8 PG8 G8 tn8 fn8
+    inst8 s8 oms8 om8 hs8 hist8) (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
   asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-    prog asm_fuel a0 = AsmOK ast /\
-  (fin = K SOME ==> normal_frame_plan rpolicy out.po_unit cpl prog planner_base es0 q9 ast) /\
+    prog asm_fuel (entry_asm_state vs0 es0) = AsmOK ast /\
+  (fin = K SOME ==> normal_frame_plan rpolicy out.po_unit cpl prog (vs0 with
+    <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp; vs_return_pc_token := 0w;
+    vs_inst_idx := 0|>) es0 (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ast) /\
   (fin = asm_opt_finalizer ==>
-    sym_steps prog env asm_fuel (sym_init a0) = SymOK ss /\
-    normal_frame_symbolic_plan env rpolicy out.po_unit cpl prog vs0 es0 q9 ast ss) /\
-  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
-    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
-  j = LENGTH evs8 /\ LENGTH evs8 <= LENGTH evs9 /\ LENGTH V = j /\
-  j < LENGTH trace8 /\ obs = dftGasFromListTraceDefs$trace_gas V /\
-  EL j trace8 = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
+    sym_steps prog (asm_data_env prog vs0.vs_code) asm_fuel (sym_init (entry_asm_state vs0 es0)) = SymOK ss /\
+    normal_frame_symbolic_plan (asm_data_env prog vs0.vs_code) rpolicy out.po_unit cpl prog vs0 es0
+      (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ast ss) /\
+  dft_focus_packet_rel N (stage 7) (stage 8) root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8
+      om8 hs8 hist8) raw_slots sites unused /\
+  j = LENGTH evs8 /\ LENGTH evs8 <= LENGTH evs9 /\ LENGTH (TAKE j (dftGasFromListTraceDefs$trace_blocks []
+    0 N (stage 8) root_tf root_entry)) = j /\
+  j < LENGTH (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8) root_tf root_entry) /\ obs =
+    dftGasFromListTraceDefs$trace_gas (TAKE j (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8)
+    root_tf root_entry)) /\
+  EL j (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8) root_tf root_entry) =
+    ((p,d,inst8.inst_id),fn8,inst8,s8) /\
   LENGTH raw_slots = LENGTH sites /\
   PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
   ~in_revert_forward fn9 s9 /\
@@ -118,44 +114,42 @@ Theorem focus_joint_progress:
   (inst9.inst_opcode = INVOKE ==>
     ?nm' ops callee args ent.
       decode_invoke inst9 = SOME (nm',ops) /\
-      lookup_function nm' C9.ctx_functions = SOME callee /\
+      lookup_function nm' (stage 9).ctx_functions = SOME callee /\
       eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent) /\
   (inst9.inst_opcode <> INVOKE ==>
-    (?u. step_inst 0 C9 inst9 s9 = OK u /\ ~u.vs_halted) \/
-    (stk9 <> [] /\ ?ir u. step_inst 0 C9 inst9 s9 = IntRet ir u)) ==>
+    (?u. step_inst 0 (stage 9) inst9 s9 = OK u /\ ~u.vs_halted) \/
+    (stk9 <> [] /\ ?ir u. step_inst 0 (stage 9) inst9 s9 = IntRet ir u)) ==>
   ?ev9 q9' n ast' ss' N'
     raw_slots' sites' unused' evs8' qs8' evs9' qs9' current' saved'
     asm_fuel' j' obs' acts' blocks' calls' ms_tab' es_tab' ks_tab' p' d'
     stk8' PG8' G8' tn8' fn8' inst8' s8' oms8' om8' hs8' hist8'
     stk9' PG9' G9' tn9' fn9' inst9' s9' oms9' om9' hs9' hist9'.
-  let trace8' = dftGasFromListTraceDefs$trace_blocks [] 0 N' C8 root_tf root_entry in
-  let next8 = JointConfig stk8' PG8' G8' tn8' fn8' inst8' s8' oms8' om8' hs8' hist8';
-      next9 = JointConfig stk9' PG9' G9' tn9' fn9' inst9' s9' oms9' om9' hs9' hist9';
-      Vnext = TAKE j' trace8';
-      Knext = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab' ([],e))))
-        (FST (SND (SND (SND (SND (THE (FLOOKUP acts' []))))))))
-  in
   0 < N' /\ N <= N' /\
-  q9' = next9 /\ joint_transition C9 q9 ev9 q9' /\
+  q9' = (JointConfig stk9' PG9' G9' tn9' fn9' inst9' s9' oms9' om9' hs9' hist9') /\
+    joint_transition (stage 9) (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ev9 q9' /\
   evs9' = evs9 ++ [ev9] /\ qs9' = qs9 ++ [q9'] /\
   asm_fuel' = asm_fuel + n /\
   asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n ast = AsmOK ast' /\
-  (fin = asm_opt_finalizer ==> sym_steps prog env n ss = SymOK ss') /\
+  (fin = asm_opt_finalizer ==> sym_steps prog (asm_data_env prog vs0.vs_code) n ss = SymOK ss') /\
   (0 < n \/
     (n = 0 /\ inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode /\
      stk9' = stk9 /\ fn9' = fn9 /\ s9'.vs_current_bb = s9.vs_current_bb /\
      s9'.vs_inst_idx = SUC s9.vs_inst_idx /\
      ?bb. lookup_block s9.vs_current_bb fn9.fn_blocks = SOME bb /\
        LENGTH bb.bb_instructions - s9'.vs_inst_idx < LENGTH bb.bb_instructions - s9.vs_inst_idx)) /\
-  ((N' = N /\ next8 = q8 /\ MEM inst9.inst_opcode [ASSIGN; JMP; JNZ] /\
+  ((N' = N /\ (JointConfig stk8' PG8' G8' tn8' fn8' inst8' s8' oms8' om8' hs8' hist8') =
+    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8) /\ MEM inst9.inst_opcode [ASSIGN; JMP;
+    JNZ] /\
     inst_mem_ranges inst9 s9 = [] /\ j' = j /\
     evs8' = evs8 /\ qs8' = qs8 /\
     acts' = acts /\ blocks' = blocks /\ calls' = calls /\
     ms_tab' = ms_tab /\ es_tab' = es_tab /\ ks_tab' = ks_tab /\
     p' = p /\ d' = d /\ obs' = obs /\
     raw_slots' = raw_slots /\ sites' = sites /\ unused' = unused) \/
-   (?ev8. joint_transition C8 q8 ev8 next8 /\
-     j' = SUC j /\ evs8' = evs8 ++ [ev8] /\ qs8' = qs8 ++ [next8] /\
+   (?ev8. joint_transition (stage 8) (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8) ev8
+     (JointConfig stk8' PG8' G8' tn8' fn8' inst8' s8' oms8' om8' hs8' hist8') /\
+     j' = SUC j /\ evs8' = evs8 ++ [ev8] /\ qs8' = qs8 ++ [(JointConfig stk8' PG8' G8' tn8' fn8' inst8'
+       s8' oms8' om8' hs8' hist8')] /\
      (inst8.inst_opcode = GAS ==>
        s8.vs_gas_readings <> [] /\
        ?k ready.
@@ -163,36 +157,51 @@ Theorem focus_joint_progress:
            prog k ast = AsmOK ready /\
          ready.as_pc < LENGTH prog /\ EL ready.as_pc prog = AsmOp "GAS" /\
          ready.as_gas_readings = s9.vs_gas_readings /\
-         (fin = asm_opt_finalizer ==> ?sr. sym_steps prog env k ss = SymOK sr)))) /\
+         (fin = asm_opt_finalizer ==> ?sr. sym_steps prog (asm_data_env prog vs0.vs_code) k ss =
+           SymOK sr)))) /\
   (!a e cid ix h b0 done_at_call child_entry ret.
     FLOOKUP calls (a,e,cid) = SOME (ix,h,b0,done_at_call,child_entry,ret) ==>
     ?ret'. FLOOKUP calls' (a,e,cid) = SOME (ix,h,b0,done_at_call,child_entry,ret') /\
            (IS_SOME ret ==> ret' = ret)) /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|> /\
-  C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
-  lookup_function nm C7.ctx_functions = SOME root_sf /\
-  lookup_function nm C8.ctx_functions = SOME root_tf /\
+  (stage 7).ctx_entry = SOME nm /\ (stage 8).ctx_entry = SOME nm /\
+  lookup_function nm (stage 7).ctx_functions = SOME root_sf /\
+  lookup_function nm (stage 8).ctx_functions = SOME root_tf /\
   fn_entry_label root_sf = SOME lbl7 /\ fn_entry_label root_tf = SOME lbl7 /\
-  joint_initial vs0 C8 q80 /\ joint_initial vs0 C9 q90 /\
-  joint_trace vs0 C8 q80 evs8' qs8' next8 /\
-  joint_trace vs0 C9 q90 evs9' qs9' next9 /\
-  cfg_norm_joint_cursors C8 C9 (schedules,current',saved') next8 next9 /\
+  joint_initial vs0 (stage 8) q80 /\ joint_initial vs0 (stage 9) q90 /\
+  joint_trace vs0 (stage 8) q80 evs8' qs8' (JointConfig stk8' PG8' G8' tn8' fn8' inst8' s8' oms8' om8'
+    hs8' hist8') /\
+  joint_trace vs0 (stage 9) q90 evs9' qs9' (JointConfig stk9' PG9' G9' tn9' fn9' inst9' s9' oms9' om9'
+    hs9' hist9') /\
+  cfg_norm_joint_cursors (stage 8) (stage 9) (schedules,current',saved') (JointConfig stk8' PG8' G8' tn8'
+    fn8' inst8' s8' oms8' om8' hs8' hist8') (JointConfig stk9' PG9' G9' tn9' fn9' inst9' s9' oms9' om9'
+    hs9' hist9') /\
   asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-    prog asm_fuel' a0 = AsmOK ast' /\
-  (fin = K SOME ==> normal_frame_plan rpolicy out.po_unit cpl prog planner_base es0 next9 ast') /\
+    prog asm_fuel' (entry_asm_state vs0 es0) = AsmOK ast' /\
+  (fin = K SOME ==> normal_frame_plan rpolicy out.po_unit cpl prog (vs0 with
+    <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp; vs_return_pc_token := 0w;
+    vs_inst_idx := 0|>) es0 (JointConfig stk9' PG9' G9' tn9' fn9' inst9' s9' oms9' om9' hs9' hist9') ast') /\
   (fin = asm_opt_finalizer ==>
-    sym_steps prog env asm_fuel' (sym_init a0) = SymOK ss' /\
-    normal_frame_symbolic_plan env rpolicy out.po_unit cpl prog vs0 es0 next9 ast' ss') /\
-  dft_focus_packet_rel N' C7 C8 root_sf root_tf root_entry (j',obs')
-    acts' blocks' calls' ms_tab' es_tab' ks_tab' rooted_eval p' d' next8 raw_slots' sites' unused' /\
-  j' = LENGTH evs8' /\ LENGTH evs8' <= LENGTH evs9' /\ LENGTH Vnext = j' /\
-  j' < LENGTH trace8' /\ obs' = dftGasFromListTraceDefs$trace_gas Vnext /\
-  EL j' trace8' = ((p',d',inst8'.inst_id),fn8',inst8',s8') /\
+    sym_steps prog (asm_data_env prog vs0.vs_code) asm_fuel' (sym_init (entry_asm_state vs0 es0)) =
+      SymOK ss' /\
+    normal_frame_symbolic_plan (asm_data_env prog vs0.vs_code) rpolicy out.po_unit cpl prog vs0 es0
+      (JointConfig stk9' PG9' G9' tn9' fn9' inst9' s9' oms9' om9' hs9' hist9') ast' ss') /\
+  dft_focus_packet_rel N' (stage 7) (stage 8) root_sf root_tf root_entry (j',obs')
+    acts' blocks' calls' ms_tab' es_tab' ks_tab' rooted_eval p' d' (JointConfig stk8' PG8' G8' tn8' fn8'
+      inst8' s8' oms8' om8' hs8' hist8') raw_slots' sites' unused' /\
+  j' = LENGTH evs8' /\ LENGTH evs8' <= LENGTH evs9' /\ LENGTH (TAKE j'
+    (dftGasFromListTraceDefs$trace_blocks [] 0 N' (stage 8) root_tf root_entry)) = j' /\
+  j' < LENGTH (dftGasFromListTraceDefs$trace_blocks [] 0 N' (stage 8) root_tf root_entry) /\ obs' =
+    dftGasFromListTraceDefs$trace_gas (TAKE j' (dftGasFromListTraceDefs$trace_blocks [] 0 N' (stage 8)
+    root_tf root_entry)) /\
+  EL j' (dftGasFromListTraceDefs$trace_blocks [] 0 N' (stage 8) root_tf root_entry) =
+    ((p',d',inst8'.inst_id),fn8',inst8',s8') /\
   LENGTH raw_slots' = LENGTH sites' /\
   PERM (MAP THE (FILTER IS_SOME raw_slots') ++ unused') (gas_readings es0) /\
   (!h. h < j' ==>
     ?a e tf inst visit_state stk PG G tn oms om hs hist.
-      EL h Vnext = ((a,e,inst.inst_id),tf,inst,visit_state) /\
+      EL h (TAKE j' (dftGasFromListTraceDefs$trace_blocks [] 0 N' (stage 8) root_tf root_entry)) =
+        ((a,e,inst.inst_id),tf,inst,visit_state) /\
       EL h (q80::qs8') = JointConfig stk PG G tn tf inst visit_state oms om hs hist /\
       ?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
         body_entry count front closed brest.
@@ -258,20 +267,21 @@ Theorem focus_joint_progress:
             Kcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
               FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab' (ai,f)))) ds) ++
               FLAT (TAKE qi (THE (FLOOKUP ks_tab' (ai,ei))))) cuts) /\
-            raw_slots' = Mcut ++ mr /\ sites' = Ecut ++ er /\ Knext = Kcut ++ kr /\
+            raw_slots' = Mcut ++ mr /\ sites' = Ecut ++ er /\ (FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab'
+              ([],e)))) (FST (SND (SND (SND (SND (THE (FLOOKUP acts' []))))))))) = Kcut ++ kr /\
             LENGTH Mcut = LENGTH Ecut /\ LENGTH Mcut = LENGTH Kcut /\
             (!F gs tail.
               N' <= F /\
               LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs ==>
-              (?extra. Ecut = FST (rooted_eval F C7 levels
+              (?extra. Ecut = FST (rooted_eval F (stage 7) levels
                 (root_entry with vs_gas_readings := gs ++ tail)) ++ extra) /\
-              (case SND (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)) of
+              (case SND (rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail)) of
                 OK u =>
-                  FST (rooted_eval F C7 levels
+                  FST (rooted_eval F (stage 7) levels
                     (root_entry with vs_gas_readings := gs ++ tail)) = Ecut /\
                   u.vs_gas_readings = tail /\
                   (?before after.
-                    dftGasFromListTraceDefs$trace_blocks [] 0 F C7 root_sf
+                    dftGasFromListTraceDefs$trace_blocks [] 0 F (stage 7) root_sf
                       (root_entry with vs_gas_readings := gs ++ tail) =
                       before ++ [((a,e,(EL (LENGTH z)
                         (DROP (phi_prefix_length bb.bb_instructions)
@@ -279,7 +289,7 @@ Theorem focus_joint_progress:
                         EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
                           bb.bb_instructions),u)] ++ after /\
                     dftGasFromListTraceDefs$trace_gas before = ZIP (Kcut,gs)) /\
-                  (!tail'. rooted_eval F C7 levels
+                  (!tail'. rooted_eval F (stage 7) levels
                     (root_entry with vs_gas_readings := gs ++ tail') =
                       (Ecut,OK (u with vs_gas_readings := tail'))) /\
                   (body_entry = NONE ==>
@@ -290,11 +300,11 @@ Theorem focus_joint_progress:
                       eval_operand op u = eval_operand op visit_state) /\
                     u.vs_initial_fmp = visit_state.vs_initial_fmp)
               | stopped =>
-                  run_blocks F C7 root_sf
+                  run_blocks F (stage 7) root_sf
                     (root_entry with vs_gas_readings := gs ++ tail) = stopped /\
-                  gas_events_blocks F C7 root_sf
+                  gas_events_blocks F (stage 7) root_sf
                     (root_entry with vs_gas_readings := gs ++ tail) =
-                      FST (rooted_eval F C7 levels
+                      FST (rooted_eval F (stage 7) levels
                         (root_entry with vs_gas_readings := gs ++ tail)))) /\
             (!F gs tail n u.
               N' <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
@@ -302,10 +312,10 @@ Theorem focus_joint_progress:
               mem_inv (\ctx src_fn src_inst src_state.
                 gas_cut n (root_entry with vs_gas_readings := gs ++ tail) src_state ==>
                   static_mem_ok cpl.cp_max_static_eom ctx src_fn src_inst src_state)
-                C7 (root_entry with vs_gas_readings := gs ++ tail) /\
-              rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
+                (stage 7) (root_entry with vs_gas_readings := gs ++ tail) /\
+              rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail) =
                 (Ecut,OK u) ==>
-              static_mem_ok cpl.cp_max_static_eom C7 sf src_inst u /\
+              static_mem_ok cpl.cp_max_static_eom (stage 7) sf src_inst u /\
               ~in_revert_forward sf u /\
               (inv_memory_observation src_inst.inst_opcode ==>
                 (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\

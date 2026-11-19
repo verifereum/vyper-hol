@@ -19,19 +19,6 @@ Ancestors
    The outcomes are continuation, beyond the marked cut, forwarding,
    or a non-error C7 prefix stop with its propagated root result and events. *)
 Theorem focus_cut_guard_or_stop:
-  let C7 = stage 7; C8 = stage 8; C9 = stage 9 in
-  let a0 = entry_asm_state vs0 es0;
-      env = asm_data_env prog vs0.vs_code;
-      planner_base = vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
-                               vs_return_pc_token := 0w; vs_inst_idx := 0|>;
-      trace8 = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry
-  in
-  let V = TAKE j trace8;
-      q8 = JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8;
-      q9 = JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9;
-      Kroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e))))
-        (FST (SND (SND (SND (SND (THE (FLOOKUP acts []))))))))
-  in
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
@@ -100,52 +87,60 @@ Theorem focus_cut_guard_or_stop:
       EVERY (o1_fn_row k) (stage k).ctx_functions) /\
   0 < N /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|> /\
-  C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
-  lookup_function nm C7.ctx_functions = SOME root_sf /\
-  lookup_function nm C8.ctx_functions = SOME root_tf /\
+  (stage 7).ctx_entry = SOME nm /\ (stage 8).ctx_entry = SOME nm /\
+  lookup_function nm (stage 7).ctx_functions = SOME root_sf /\
+  lookup_function nm (stage 8).ctx_functions = SOME root_tf /\
   fn_entry_label root_sf = SOME lbl7 /\ fn_entry_label root_tf = SOME lbl7 /\
-  joint_initial vs0 C8 q80 /\ joint_initial vs0 C9 q90 /\
-  joint_trace vs0 C8 q80 evs8 qs8 q8 /\
-  joint_trace vs0 C9 q90 evs9 qs9 q9 /\
-  cfg_norm_joint_cursors C8 C9 (schedules,current,saved) q8 q9 /\
+  joint_initial vs0 (stage 8) q80 /\ joint_initial vs0 (stage 9) q90 /\
+  joint_trace vs0 (stage 8) q80 evs8 qs8 (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8) /\
+  joint_trace vs0 (stage 9) q90 evs9 qs9 (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
+  cfg_norm_joint_cursors (stage 8) (stage 9) (schedules,current,saved) (JointConfig stk8 PG8 G8 tn8 fn8
+    inst8 s8 oms8 om8 hs8 hist8) (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
   asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-    prog asm_fuel a0 = AsmOK ast /\
-  (fin = K SOME ==> normal_frame_plan rpolicy out.po_unit cpl prog planner_base es0 q9 ast) /\
+    prog asm_fuel (entry_asm_state vs0 es0) = AsmOK ast /\
+  (fin = K SOME ==> normal_frame_plan rpolicy out.po_unit cpl prog (vs0 with
+    <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp; vs_return_pc_token := 0w;
+    vs_inst_idx := 0|>) es0 (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ast) /\
   (fin = asm_opt_finalizer ==>
-    sym_steps prog env asm_fuel (sym_init a0) = SymOK ss /\
-    normal_frame_symbolic_plan env rpolicy out.po_unit cpl prog vs0 es0 q9 ast ss) /\
-  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
-    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
-  j = LENGTH evs8 /\ LENGTH evs8 <= LENGTH evs9 /\ LENGTH V = j /\
-  j < LENGTH trace8 /\ obs = dftGasFromListTraceDefs$trace_gas V /\
-  EL j trace8 = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
+    sym_steps prog (asm_data_env prog vs0.vs_code) asm_fuel (sym_init (entry_asm_state vs0 es0)) = SymOK ss /\
+    normal_frame_symbolic_plan (asm_data_env prog vs0.vs_code) rpolicy out.po_unit cpl prog vs0 es0
+      (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ast ss) /\
+  dft_focus_packet_rel N (stage 7) (stage 8) root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8
+      om8 hs8 hist8) raw_slots sites unused /\
+  j = LENGTH evs8 /\ LENGTH evs8 <= LENGTH evs9 /\ LENGTH (TAKE j (dftGasFromListTraceDefs$trace_blocks []
+    0 N (stage 8) root_tf root_entry)) = j /\
+  j < LENGTH (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8) root_tf root_entry) /\ obs =
+    dftGasFromListTraceDefs$trace_gas (TAKE j (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8)
+    root_tf root_entry)) /\
+  EL j (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8) root_tf root_entry) =
+    ((p,d,inst8.inst_id),fn8,inst8,s8) /\
   LENGTH raw_slots = LENGTH sites /\
   PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
   LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
-  (let a = p; e = d; tf = fn8; inst = inst8; visit_state = s8 in
-    ?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
+  (?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
       body_entry count front closed brest.
-      FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
-      FLOOKUP blocks (a,e) =
+      FLOOKUP acts p = SOME (sf,fn8,inc,entry,order,res,nrest) /\
+      FLOOKUP blocks (p,d) =
         SOME (bb,bt,ps,xs,ys,rho,in_state,h0,body_entry,count,front,closed,brest) /\
-      get_instruction bt visit_state.vs_inst_idx = SOME inst /\
-      ((inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
-        inst.inst_opcode = INVOKE \/ is_terminator inst.inst_opcode) ==>
+      get_instruction bt s8.vs_inst_idx = SOME inst8 /\
+      ((inv_memory_observation inst8.inst_opcode \/ is_fallible inst8 \/
+        inst8.inst_opcode = INVOKE \/ is_terminator inst8.inst_opcode) ==>
       ?q z src_inst cuts levels Mcut Ecut Kcut mr er kr.
         src_inst = EL (LENGTH z)
           (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
-        ((IS_SOME body_entry /\ LENGTH ps <= visit_state.vs_inst_idx /\
-          visit_state.vs_inst_idx - LENGTH ps < LENGTH rho /\
-          q = EL (visit_state.vs_inst_idx - LENGTH ps) rho /\ q < LENGTH xs /\
+        ((IS_SOME body_entry /\ LENGTH ps <= s8.vs_inst_idx /\
+          s8.vs_inst_idx - LENGTH ps < LENGTH rho /\
+          q = EL (s8.vs_inst_idx - LENGTH ps) rho /\ q < LENGTH xs /\
           EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
           (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE count rho)) /\
-          EL q xs = inst /\
+          EL q xs = inst8 /\
           z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs) \/
-         (a = p /\ e = d /\ visit_state = s8 /\ body_entry = NONE /\
-          visit_state.vs_inst_idx < LENGTH ps /\ q = 0 /\
-          z = DROP (phi_prefix_length bb.bb_instructions) (TAKE visit_state.vs_inst_idx ps))) /\
+         (p = p /\ d = d /\ s8 = s8 /\ body_entry = NONE /\
+          s8.vs_inst_idx < LENGTH ps /\ q = 0 /\
+          z = DROP (phi_prefix_length bb.bb_instructions) (TAKE s8.vs_inst_idx ps))) /\
         MAP (\(ai,ds,ei,qi,zi). ai) cuts =
-          REVERSE (GENLIST (\i. DROP i a) (SUC (LENGTH a))) /\
+          REVERSE (GENLIST (\i. DROP i p) (SUC (LENGTH p))) /\
         LENGTH cuts = LENGTH levels /\
         (!i ai ds ei qi zi.
           i < LENGTH cuts /\ EL i cuts = (ai,ds,ei,qi,zi) ==>
@@ -156,7 +151,7 @@ Theorem focus_cut_guard_or_stop:
               SOME (bbi,bti,psi,xsi,ysi,rhoi,ini,hi,bei,counti,fronti,closedi,resti) /\
             orderi = ds ++ ei::later /\
             (if SUC i = LENGTH cuts then
-              ai = a /\ ei = e /\ qi = q /\ zi = z
+              ai = p /\ ei = d /\ qi = q /\ zi = z
             else
               ?cid h b0 done_at_call child_entry ret.
                 EL (SUC i) (MAP (\(aj,djs,ej,qj,zj). aj) cuts) = (ei,cid)::ai /\
@@ -185,43 +180,44 @@ Theorem focus_cut_guard_or_stop:
         Kcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
           FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab (ai,f)))) ds) ++
           FLAT (TAKE qi (THE (FLOOKUP ks_tab (ai,ei))))) cuts) /\
-        raw_slots = Mcut ++ mr /\ sites = Ecut ++ er /\ Kroot = Kcut ++ kr /\
+        raw_slots = Mcut ++ mr /\ sites = Ecut ++ er /\ (FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab
+          ([],e)))) (FST (SND (SND (SND (SND (THE (FLOOKUP acts []))))))))) = Kcut ++ kr /\
         LENGTH Mcut = LENGTH Ecut /\ LENGTH Mcut = LENGTH Kcut /\
         (!F gs tail.
           N <= F /\
           LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs ==>
-          (?extra. Ecut = FST (rooted_eval F C7 levels
+          (?extra. Ecut = FST (rooted_eval F (stage 7) levels
             (root_entry with vs_gas_readings := gs ++ tail)) ++ extra) /\
-          (case SND (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)) of
+          (case SND (rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail)) of
             OK u =>
-              FST (rooted_eval F C7 levels
+              FST (rooted_eval F (stage 7) levels
                 (root_entry with vs_gas_readings := gs ++ tail)) = Ecut /\
               u.vs_gas_readings = tail /\
               (?before after.
-                dftGasFromListTraceDefs$trace_blocks [] 0 F C7 root_sf
+                dftGasFromListTraceDefs$trace_blocks [] 0 F (stage 7) root_sf
                   (root_entry with vs_gas_readings := gs ++ tail) =
-                  before ++ [((a,e,(EL (LENGTH z)
+                  before ++ [((p,d,(EL (LENGTH z)
                     (DROP (phi_prefix_length bb.bb_instructions)
                       bb.bb_instructions)).inst_id),sf,
                     EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
                       bb.bb_instructions),u)] ++ after /\
                 dftGasFromListTraceDefs$trace_gas before = ZIP (Kcut,gs)) /\
-              (!tail'. rooted_eval F C7 levels
+              (!tail'. rooted_eval F (stage 7) levels
                 (root_entry with vs_gas_readings := gs ++ tail') =
                   (Ecut,OK (u with vs_gas_readings := tail'))) /\
               (body_entry = NONE ==>
-                u with vs_gas_readings := visit_state.vs_gas_readings = visit_state) /\
-              (a = p /\ e = d /\ IS_SOME body_entry /\
-               inv_memory_observation inst.inst_opcode /\ EL q xs = inst ==>
-                (!op. MEM op inst.inst_operands ==>
-                  eval_operand op u = eval_operand op visit_state) /\
-                u.vs_initial_fmp = visit_state.vs_initial_fmp)
+                u with vs_gas_readings := s8.vs_gas_readings = s8) /\
+              (p = p /\ d = d /\ IS_SOME body_entry /\
+               inv_memory_observation inst8.inst_opcode /\ EL q xs = inst8 ==>
+                (!op. MEM op inst8.inst_operands ==>
+                  eval_operand op u = eval_operand op s8) /\
+                u.vs_initial_fmp = s8.vs_initial_fmp)
           | stopped =>
-              run_blocks F C7 root_sf
+              run_blocks F (stage 7) root_sf
                 (root_entry with vs_gas_readings := gs ++ tail) = stopped /\
-              gas_events_blocks F C7 root_sf
+              gas_events_blocks F (stage 7) root_sf
                 (root_entry with vs_gas_readings := gs ++ tail) =
-                  FST (rooted_eval F C7 levels
+                  FST (rooted_eval F (stage 7) levels
                     (root_entry with vs_gas_readings := gs ++ tail)))) /\
         (!F gs tail n u.
           N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
@@ -229,45 +225,34 @@ Theorem focus_cut_guard_or_stop:
           mem_inv (\ctx src_fn src_inst src_state.
             gas_cut n (root_entry with vs_gas_readings := gs ++ tail) src_state ==>
               static_mem_ok cpl.cp_max_static_eom ctx src_fn src_inst src_state)
-            C7 (root_entry with vs_gas_readings := gs ++ tail) /\
-          rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
+            (stage 7) (root_entry with vs_gas_readings := gs ++ tail) /\
+          rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail) =
             (Ecut,OK u) ==>
-          static_mem_ok cpl.cp_max_static_eom C7 sf src_inst u /\
-          (~in_revert_forward tf visit_state ==> ~in_revert_forward sf u) /\
+          static_mem_ok cpl.cp_max_static_eom (stage 7) sf src_inst u /\
+          (~in_revert_forward fn8 s8 ==> ~in_revert_forward sf u) /\
           (inv_memory_observation src_inst.inst_opcode ==>
-            (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
-            u.vs_initial_fmp = visit_state.vs_initial_fmp)) /\
+            (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op s8) /\
+            u.vs_initial_fmp = s8.vs_initial_fmp)) /\
   (!raw F u.
     LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
 
-  let gs = TAKE (LENGTH Mcut) raw;
-      tail = DROP (LENGTH Mcut) raw ++ [0w];
-      filling = raw ++ [0w]
-  in
-  let R = root_entry with vs_gas_readings := gs ++ tail;
-      n = MIN (LENGTH (markf filling)) (LENGTH filling)
-  in
-
-    N <= F /\ LENGTH Mcut < n /\
-    rooted_eval F C7 levels R = (Ecut,OK u) ==>
-    raw_reachable R C7 sf src_inst u /\ gas_cut n R u /\
-    lowered_mem_fact cpl.cp_max_static_eom C7 sf src_inst u /\
-    u.vs_gas_readings = tail /\
+    N <= F /\ LENGTH Mcut < (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) /\
+    rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := (TAKE (LENGTH Mcut) raw) ++ (DROP
+      (LENGTH Mcut) raw ++ [0w])) = (Ecut,OK u) ==>
+    raw_reachable (root_entry with vs_gas_readings := (TAKE (LENGTH Mcut) raw) ++ (DROP (LENGTH Mcut) raw
+      ++ [0w])) (stage 7) sf src_inst u /\ gas_cut (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++
+      [0w]))) (root_entry with vs_gas_readings := (TAKE (LENGTH Mcut) raw) ++ (DROP (LENGTH Mcut) raw ++
+      [0w])) u /\
+    lowered_mem_fact cpl.cp_max_static_eom (stage 7) sf src_inst u /\
+    u.vs_gas_readings = (DROP (LENGTH Mcut) raw ++ [0w]) /\
     (fin = asm_opt_finalizer ==>
       inst_dload_in_section src_inst u /\
-      code_end_offset_ok (\ctx fn i s. fn = sf /\ i = src_inst /\ s = u) C7) /\
-    (~in_revert_forward tf visit_state ==> ~in_revert_forward sf u) /\
-    (inv_memory_observation inst.inst_opcode ==>
-      (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
-      u.vs_initial_fmp = visit_state.vs_initial_fmp)) /\
-  (let gs = TAKE (LENGTH Mcut) raw;
-       tail = DROP (LENGTH Mcut) raw ++ [0w];
-       filling = raw ++ [0w]
-   in
-   let R = root_entry with vs_gas_readings := gs ++ tail;
-       n = MIN (LENGTH (markf filling)) (LENGTH filling)
-   in
-     (~in_revert_forward fn9 s9 /\
+      code_end_offset_ok (\ctx fn i s. fn = sf /\ i = src_inst /\ s = u) (stage 7)) /\
+    (~in_revert_forward fn8 s8 ==> ~in_revert_forward sf u) /\
+    (inv_memory_observation inst8.inst_opcode ==>
+      (!op. MEM op inst8.inst_operands ==> eval_operand op u = eval_operand op s8) /\
+      u.vs_initial_fmp = s8.vs_initial_fmp)) /\
+  ((~in_revert_forward fn9 s9 /\
       (inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode ==>
        source_memory_reads_disjoint cpl inst9 s9 /\
        context_source_memory_writes_disjoint cpl inst9 s9) /\
@@ -277,19 +262,24 @@ Theorem focus_cut_guard_or_stop:
          code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
          FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
          w2n (src - n2w off) < dimword (:256) DIV 2)) \/
-     n <= LENGTH Mcut \/
-     (LENGTH Mcut < n /\ in_revert_forward fn9 s9) \/
-     (LENGTH Mcut < n /\
+     (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) <= LENGTH Mcut \/
+     (LENGTH Mcut < (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) /\
+       in_revert_forward fn9 s9) \/
+     (LENGTH Mcut < (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) /\
       ?F events stopped.
-        N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
-        rooted_eval F C7 levels R = (events,stopped) /\
+        N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut (TAKE (LENGTH Mcut) raw) /\
+        rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := (TAKE (LENGTH Mcut) raw) ++
+          (DROP (LENGTH Mcut) raw ++ [0w])) = (events,stopped) /\
         (!u. stopped <> OK u) /\ (!err. stopped <> Error err) /\
-        run_blocks F C7 root_sf R = stopped /\
-        gas_events_blocks F C7 root_sf R = events /\
+        run_blocks F (stage 7) root_sf (root_entry with vs_gas_readings := (TAKE (LENGTH Mcut) raw) ++
+          (DROP (LENGTH Mcut) raw ++ [0w])) = stopped /\
+        gas_events_blocks F (stage 7) root_sf (root_entry with vs_gas_readings := (TAKE (LENGTH Mcut) raw)
+          ++ (DROP (LENGTH Mcut) raw ++ [0w])) = events /\
         (?extra. Ecut = events ++ extra))))) /\
   (!h. h < j ==>
     ?a e tf inst visit_state stk PG G tn oms om hs hist.
-      EL h V = ((a,e,inst.inst_id),tf,inst,visit_state) /\
+      EL h (TAKE j (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8) root_tf root_entry)) =
+        ((a,e,inst.inst_id),tf,inst,visit_state) /\
       EL h (q80::qs8) = JointConfig stk PG G tn tf inst visit_state oms om hs hist /\
       ?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
         body_entry count front closed brest.
@@ -355,20 +345,21 @@ Theorem focus_cut_guard_or_stop:
             Kcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
               FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab (ai,f)))) ds) ++
               FLAT (TAKE qi (THE (FLOOKUP ks_tab (ai,ei))))) cuts) /\
-            raw_slots = Mcut ++ mr /\ sites = Ecut ++ er /\ Kroot = Kcut ++ kr /\
+            raw_slots = Mcut ++ mr /\ sites = Ecut ++ er /\ (FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab
+              ([],e)))) (FST (SND (SND (SND (SND (THE (FLOOKUP acts []))))))))) = Kcut ++ kr /\
             LENGTH Mcut = LENGTH Ecut /\ LENGTH Mcut = LENGTH Kcut /\
             (!F gs tail.
               N <= F /\
               LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs ==>
-              (?extra. Ecut = FST (rooted_eval F C7 levels
+              (?extra. Ecut = FST (rooted_eval F (stage 7) levels
                 (root_entry with vs_gas_readings := gs ++ tail)) ++ extra) /\
-              (case SND (rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail)) of
+              (case SND (rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail)) of
                 OK u =>
-                  FST (rooted_eval F C7 levels
+                  FST (rooted_eval F (stage 7) levels
                     (root_entry with vs_gas_readings := gs ++ tail)) = Ecut /\
                   u.vs_gas_readings = tail /\
                   (?before after.
-                    dftGasFromListTraceDefs$trace_blocks [] 0 F C7 root_sf
+                    dftGasFromListTraceDefs$trace_blocks [] 0 F (stage 7) root_sf
                       (root_entry with vs_gas_readings := gs ++ tail) =
                       before ++ [((a,e,(EL (LENGTH z)
                         (DROP (phi_prefix_length bb.bb_instructions)
@@ -376,7 +367,7 @@ Theorem focus_cut_guard_or_stop:
                         EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
                           bb.bb_instructions),u)] ++ after /\
                     dftGasFromListTraceDefs$trace_gas before = ZIP (Kcut,gs)) /\
-                  (!tail'. rooted_eval F C7 levels
+                  (!tail'. rooted_eval F (stage 7) levels
                     (root_entry with vs_gas_readings := gs ++ tail') =
                       (Ecut,OK (u with vs_gas_readings := tail'))) /\
                   (body_entry = NONE ==>
@@ -387,11 +378,11 @@ Theorem focus_cut_guard_or_stop:
                       eval_operand op u = eval_operand op visit_state) /\
                     u.vs_initial_fmp = visit_state.vs_initial_fmp)
               | stopped =>
-                  run_blocks F C7 root_sf
+                  run_blocks F (stage 7) root_sf
                     (root_entry with vs_gas_readings := gs ++ tail) = stopped /\
-                  gas_events_blocks F C7 root_sf
+                  gas_events_blocks F (stage 7) root_sf
                     (root_entry with vs_gas_readings := gs ++ tail) =
-                      FST (rooted_eval F C7 levels
+                      FST (rooted_eval F (stage 7) levels
                         (root_entry with vs_gas_readings := gs ++ tail)))) /\
             (!F gs tail n u.
               N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
@@ -399,10 +390,10 @@ Theorem focus_cut_guard_or_stop:
               mem_inv (\ctx src_fn src_inst src_state.
                 gas_cut n (root_entry with vs_gas_readings := gs ++ tail) src_state ==>
                   static_mem_ok cpl.cp_max_static_eom ctx src_fn src_inst src_state)
-                C7 (root_entry with vs_gas_readings := gs ++ tail) /\
-              rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
+                (stage 7) (root_entry with vs_gas_readings := gs ++ tail) /\
+              rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail) =
                 (Ecut,OK u) ==>
-              static_mem_ok cpl.cp_max_static_eom C7 sf src_inst u /\
+              static_mem_ok cpl.cp_max_static_eom (stage 7) sf src_inst u /\
               ~in_revert_forward sf u /\
               (inv_memory_observation src_inst.inst_opcode ==>
                 (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
@@ -410,22 +401,18 @@ Theorem focus_cut_guard_or_stop:
   (!raw F u.
     LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
 
-  let gs = TAKE (LENGTH Mcut) raw;
-      tail = DROP (LENGTH Mcut) raw ++ [0w];
-      filling = raw ++ [0w]
-  in
-  let R = root_entry with vs_gas_readings := gs ++ tail;
-      n = MIN (LENGTH (markf filling)) (LENGTH filling)
-  in
-
-    N <= F /\ LENGTH Mcut < n /\
-    rooted_eval F C7 levels R = (Ecut,OK u) ==>
-    raw_reachable R C7 sf src_inst u /\ gas_cut n R u /\
-    lowered_mem_fact cpl.cp_max_static_eom C7 sf src_inst u /\
-    u.vs_gas_readings = tail /\
+    N <= F /\ LENGTH Mcut < (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w]))) /\
+    rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := (TAKE (LENGTH Mcut) raw) ++ (DROP
+      (LENGTH Mcut) raw ++ [0w])) = (Ecut,OK u) ==>
+    raw_reachable (root_entry with vs_gas_readings := (TAKE (LENGTH Mcut) raw) ++ (DROP (LENGTH Mcut) raw
+      ++ [0w])) (stage 7) sf src_inst u /\ gas_cut (MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++
+      [0w]))) (root_entry with vs_gas_readings := (TAKE (LENGTH Mcut) raw) ++ (DROP (LENGTH Mcut) raw ++
+      [0w])) u /\
+    lowered_mem_fact cpl.cp_max_static_eom (stage 7) sf src_inst u /\
+    u.vs_gas_readings = (DROP (LENGTH Mcut) raw ++ [0w]) /\
     (fin = asm_opt_finalizer ==>
       inst_dload_in_section src_inst u /\
-      code_end_offset_ok (\ctx fn i s. fn = sf /\ i = src_inst /\ s = u) C7) /\
+      code_end_offset_ok (\ctx fn i s. fn = sf /\ i = src_inst /\ s = u) (stage 7)) /\
     (~in_revert_forward tf visit_state ==> ~in_revert_forward sf u) /\
     (inv_memory_observation inst.inst_opcode ==>
       (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\

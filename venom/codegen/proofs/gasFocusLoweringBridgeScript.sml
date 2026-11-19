@@ -12,9 +12,6 @@ Ancestors
    and root4 restores the assembly entry FMP. The room premise is the
    existing fmp_variant_room contract plus the stage EOM bound. *)
 Theorem focus_lowering_cut_bridge:
-  let s2 = root3 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>;
-      s4 = root4 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>
-  in
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C2 C3 /\
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
@@ -37,15 +34,19 @@ Theorem focus_lowering_cut_bridge:
   fmp_variant_room (SOME fmp) C4 root4 /\
   C2.ctx_entry = SOME nm /\ lookup_function nm C2.ctx_functions = SOME fn2 /\
   fn_entry_label fn2 = SOME lbl /\
-  n <= LENGTH (gas_events_blocks fuel2 C2 fn2 s2) ==>
+  n <= LENGTH (gas_events_blocks fuel2 C2 fn2 (root3 with <|vs_prev_bb := NONE; vs_current_bb := lbl;
+    vs_inst_idx := 0|>)) ==>
   mem_inv (\ctx fn inst u. gas_cut n root4 u ==> lowered_mem_fact eom ctx fn inst u)
     C4 root4 /\
   ?fn4 fuel4.
     C4.ctx_entry = SOME nm /\ lookup_function nm C4.ctx_functions = SOME fn4 /\
     fn_entry_label fn4 = SOME lbl /\
-    n <= LENGTH (gas_events_blocks fuel4 C4 fn4 s4) /\
-    TAKE n (gas_events_blocks fuel4 C4 fn4 s4) =
-      TAKE n (gas_events_blocks fuel2 C2 fn2 s2)
+    n <= LENGTH (gas_events_blocks fuel4 C4 fn4 (root4 with <|vs_prev_bb := NONE; vs_current_bb := lbl;
+      vs_inst_idx := 0|>)) /\
+    TAKE n (gas_events_blocks fuel4 C4 fn4 (root4 with <|vs_prev_bb := NONE; vs_current_bb := lbl;
+      vs_inst_idx := 0|>)) =
+      TAKE n (gas_events_blocks fuel2 C2 fn2 (root3 with <|vs_prev_bb := NONE; vs_current_bb := lbl;
+        vs_inst_idx := 0|>))
 Proof
   PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
   sg `taint_within_upto D n C3 root3`

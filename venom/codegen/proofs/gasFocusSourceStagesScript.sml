@@ -19,12 +19,6 @@ Ancestors
    extra instantiate the bounded H1 source family at that filling. The
    conclusion uses the actual C7 root, with the unchanged assembly FMP. *)
 Theorem focus_source_stages_cut:
-  let filling = gs ++ tail in
-  let n = MIN (LENGTH (markf filling)) (LENGTH filling);
-      R = root_entry with vs_gas_readings := gs ++ tail;
-      V = vs0 with <|vs_gas_readings := filling; vs_fmp := fmp; vs_initial_fmp := fmp|>
-  in
-  let A = V with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> in
   generate_context_plan out.po_unit.cu_context = SOME cpl /\
   codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
@@ -40,9 +34,11 @@ Theorem focus_source_stages_cut:
   unit_alloca_budget unit.cu_context +
     32 * ctx_dload_count unit.cu_context <= w2n fmp /\
   dead_wf D /\
-  o1_safe_upto D lo n unit.cu_context
-    V /\
-  MAP project (gas_events_blocks f unit.cu_context entryfn A) = markf filling ++ extra /\
+  o1_safe_upto D lo (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail))) unit.cu_context
+    (vs0 with <|vs_gas_readings := (gs ++ tail); vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+  MAP project (gas_events_blocks f unit.cu_context entryfn ((vs0 with <|vs_gas_readings := (gs ++ tail);
+    vs_fmp := fmp; vs_initial_fmp := fmp|>) with <|vs_prev_bb := NONE; vs_current_bb := lbl;
+    vs_inst_idx := 0|>)) = markf (gs ++ tail) ++ extra /\
   run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
     (init_ir_supply unit) = SOME (pre,t) /\
   pre.cu_context.ctx_entry = SOME nm /\
@@ -56,14 +52,19 @@ Theorem focus_source_stages_cut:
     (stage k) (stage (SUC k))) /\
   (!k. k <= 9 ==> o1_ctx_shape (stage k) /\
     EVERY (o1_fn_row k) (stage k).ctx_functions) ==>
-  mem_inv (\ctx fn inst u. gas_cut n R u ==> lowered_mem_fact cpl.cp_max_static_eom ctx fn inst u)
-    (stage 7) R /\
+  mem_inv (\ctx fn inst u. gas_cut (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail))) (root_entry
+    with vs_gas_readings := gs ++ tail) u ==> lowered_mem_fact cpl.cp_max_static_eom ctx fn inst u)
+    (stage 7) (root_entry with vs_gas_readings := gs ++ tail) /\
   ?fn7 f7.
     (stage 7).ctx_entry = SOME nm /\
     lookup_function nm (stage 7).ctx_functions = SOME fn7 /\ fn_entry_label fn7 = SOME lbl /\
-    n <= LENGTH (gas_events_blocks f7 (stage 7) fn7 R) /\
-    TAKE n (gas_events_blocks f7 (stage 7) fn7 R) =
-      TAKE n (gas_events_blocks f unit.cu_context entryfn A)
+    (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail))) <= LENGTH (gas_events_blocks f7 (stage 7)
+      fn7 (root_entry with vs_gas_readings := gs ++ tail)) /\
+    TAKE (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail))) (gas_events_blocks f7 (stage 7) fn7
+      (root_entry with vs_gas_readings := gs ++ tail)) =
+      TAKE (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail))) (gas_events_blocks f unit.cu_context
+        entryfn ((vs0 with <|vs_gas_readings := (gs ++ tail); vs_fmp := fmp; vs_initial_fmp := fmp|>) with
+        <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
 Proof
   PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
   sg `ptr_discipline_upto lo
