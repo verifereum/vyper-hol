@@ -27,7 +27,8 @@ Theorem scalar_op_fixed_ok[local]:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  Cases_on `tc` >> simp[] >> strip_tac
+  Cases_on `tc` >> simp[] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[]
   >- (drule_all convert_bool_fixed_certificate >> simp[])
   >- (drule convert_int_fixed_certificate >> simp[] >> metis_tac[])
   >- (drule convert_bytes_int_fixed_certificate >> simp[] >> metis_tac[])
@@ -58,7 +59,8 @@ Theorem scalar_op_fixed_abort[local]:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  Cases_on `tc` >> simp[] >> strip_tac
+  Cases_on `tc` >> simp[] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[]
   >- (drule convert_bool_code >> strip_tac >>
       gvs[run_inst_seq_def, AllCaseEqs()] >>
       metis_tac[bodyPtrSignedConvertScalarOpsTheory.scalar_iszero_no_abort])

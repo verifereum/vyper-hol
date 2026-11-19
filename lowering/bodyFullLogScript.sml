@@ -10,7 +10,7 @@
  *)
 Theory bodyFullLog
 Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
-  bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
+  bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
   bodyExprPreFacts allocLimits allocLimitsProps exprSimSource vyperTypeCallGraph
   bodyFullLogArgs bodyFullLogScalarTopics bodyFullLogSuffix
@@ -995,7 +995,8 @@ Theorem compile_log_frag_full:
   !cx id args DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     body_exprs_full_ok cx args /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (Log id args) /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Log id args) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Log id args) ==>
        occurs_abi_decode_target target tops) /\
@@ -1100,7 +1101,7 @@ Proof
          disch_then (qspecl_then
            [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,
             `cenv`,`env`,`expr_type e`,`ee`] mp_tac) >>
-         impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
      rpt gen_tac >> strip_tac >>
      qspecl_then [`cenv`,`cx`,`env`,`e`,`ee`,`INL v`,`ee1`]
        mp_tac exprSimSourceTheory.expr_body_pre_eval >>
@@ -1177,6 +1178,13 @@ Proof
       impl_tac >- (simp[Abbr `RR`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
       strip_tac >>
       qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ captureQ captureR` >>
+      qpat_x_assum `gas_outcome_full _ _ _ _ _ _ captureQ captureR`
+        (fn outcome =>
+          qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+            qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+              mp_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+                (LIST_CONJ [outcome,frame,sep]))))) >>
+      strip_tac >>
       rewrite_tac[log_eval_bind] >>
       irule gas_outcome_full_bind_all >> rpt conj_tac
       >~ [`gas_marked_exec _ _ _ _ _ _ _`]
@@ -1193,7 +1201,10 @@ Proof
           irule storage_trace_frame_ignore_bind >>
           simp[storage_trace_frame_check_not_static, storage_trace_frame_state_updates]) >>
       qexists_tac `\H res ee G tn t.
-        captureQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
+        (captureQ H res ee G tn t /\
+         (!bw capacity. d = SOME (bw, capacity) ==>
+            allocas_from (w2n bw + capacity) t)) /\
+        ~t.vs_halted /\ ee.gas_obs = []` >>
       reverse conj_tac
       >- (irule gas_outcome_full_post_source >>
           qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
@@ -2406,6 +2417,13 @@ qpat_assum `abi_encoder_window_pre ctx func s3 s4 dst.buf_operand src.buf_operan
     (qspecl_then [`inst`,`b`,`sz`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >> rpt conj_tac >> rpt strip_tac >> first_assum ACCEPT_TAC) >>
+`ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+  prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp` by
+  (qpat_assum `stmt_state_rel H ctx func cenv cx mid prepared` (fn related =>
+     mp_tac (MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp related) >>
+     mp_tac (MATCH_MP stateRelProjTheory.stmt_state_rel_fmp_room related)) >>
+   POP_ASSUM_LIST (K ALL_TAC) >>
+   simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac) >>
 mp_tac (Q.INST
  [`encoder_dst` |-> `dst.buf_operand`, `encoder_src` |-> `src.buf_operand`,
   `ei` |-> `type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT dtys)`,
@@ -4023,6 +4041,26 @@ Resume compile_log_frag_full[logged_finish_post]:
  (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
    ghost_inv_at (DF H) lo d cenv cx (done_es with gas_obs := []) Genc tnenc fin`
    (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+`!bw capacity. d = SOME (bw, capacity) ==>
+   allocas_from (w2n bw + capacity) t` by
+ (qpat_assum `!bw cap. d = SOME (bw,cap) ==> allocas_from (cap + w2n bw) t`
+   (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM])) >>
+`!bw capacity. d = SOME (bw, capacity) ==>
+   allocas_from (w2n bw + capacity) fin` by
+ (qpat_assum `!D. gas_origin_ptr_path _ (t,G1,tn1) [] (OK fin,Genc,tnenc)`
+   (qspec_then `DF post_H` (fn path =>
+     qpat_assum `return_buf_frame d cenv sm t` (fn frame =>
+       qpat_assum `!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) t` (fn floor =>
+         mp_tac (MATCH_MP return_buf_allocas_suffix (LIST_CONJ [path,frame,floor])))))) >>
+  simp[]) >>
+`return_buf_sep d cenv (done_es with gas_obs := []) fin` by
+ (irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`storage_trace_horizon es.storage_trace`,`ctx`,`cx`,`es`, `func`,`s0`,`sa`] >>
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC,
+    qpat_assum `MAP FDOM mid.scopes = MAP FDOM es.scopes`
+      (fn th => simp_tac (srw_ss()) [Abbr `done_es`,th]) >> NO_TAC]) >>
 qexists_tac `cenv` >>
 simp_tac bool_ss [stmtSimPropsTheory.cenv_top_ext_refl] >>
 rpt conj_tac >> first_assum ACCEPT_TAC
@@ -4591,6 +4629,22 @@ Resume compile_log_frag_full[empty_finish_post]:
  (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
    ghost_inv_at (DF H) lo d cenv cx (done_es with gas_obs := []) Gp tnp fin`
    (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+`!bw capacity. d = SOME (bw, capacity) ==>
+   allocas_from (w2n bw + capacity) fin` by
+ (qpat_assum `!D. gas_origin_ptr_path _ (t,G1,tn1) [] (OK fin,Gp,tnp)`
+   (qspec_then `DF post_H` (fn path =>
+     qpat_assum `return_buf_frame d cenv sm t` (fn frame =>
+       qpat_assum `!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) t` (fn floor =>
+         mp_tac (MATCH_MP return_buf_allocas_suffix (LIST_CONJ [path,frame,floor])))))) >>
+  simp[]) >>
+`return_buf_sep d cenv (done_es with gas_obs := []) fin` by
+ (irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`storage_trace_horizon es.storage_trace`,`ctx`,`cx`,`es`, `func`,`s0`,`sa`] >>
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC,
+    qpat_assum `MAP FDOM mid.scopes = MAP FDOM es.scopes`
+      (fn th => simp_tac (srw_ss()) [Abbr `done_es`,th]) >> NO_TAC]) >>
 qexists_tac `cenv` >>
 simp_tac bool_ss [stmtSimPropsTheory.cenv_top_ext_refl] >>
 rpt conj_tac >> first_assum ACCEPT_TAC
@@ -4604,6 +4658,7 @@ Theorem body_log_aggregate_full:
    shadow_func cenv env env' ret_ty lctx RetQ es.
     body_exprs_full_ok cx args /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_log tops id args /\
     supported_event_fields tops id = SOME fields /\
     ~EVERY supported_scalar_type (MAP (SND o FST) fields) /\

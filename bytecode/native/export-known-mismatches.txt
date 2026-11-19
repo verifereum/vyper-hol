@@ -22,6 +22,8 @@ f9a843aa1f17e882 none #1404  # functional/codegen/types/test_array_indexing::tes
 d2e914248b13e709 none #1404  # functional/codegen/types/test_array_indexing::test_negative_ix_access_to_large_arr
 dffdbff36e315665 none #1404  # functional/codegen/types/test_array_indexing::test_oob_access_to_large_arr
 14a0a48f6763bd15 bytes #1405  # functional/builtins/codegen/test_convert::test_convert_zero_bytes_to_bool
+5ff4f7421a2d984e bytes #543  # functional/builtins/codegen/test_unary::test_negation_decimal
+f1e5d0d7c01e5443 bytes #543  # functional/builtins/codegen/test_unary::test_negation_int128
 97fc2055043ca794 bytes #543  # functional/builtins/codegen/test_minmax::test_max_var_uint256_literal_int128
 fb0baad17c0fbd96 bytes #543  # functional/builtins/codegen/test_minmax::test_min_var_uint256_literal_int128
 f24543848c16b7b3 bytes #543  # functional/builtins/codegen/test_minmax::test_minmax

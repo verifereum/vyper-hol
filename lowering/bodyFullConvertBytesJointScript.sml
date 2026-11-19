@@ -1,5 +1,6 @@
 Theory bodyFullConvertBytesJoint
 Ancestors
+  bodyFullShadowBodyInv
   haltExitProj stateRelProj bodyInvNoDalloca
   bodyFullPreds bodySimFull bodyFullConvertChildRead bodyFullPathHistory
   bodyFullConvertCopyRun bodyFullConvertCopyPosts bodyFullConvertEndpointPosts
@@ -238,6 +239,7 @@ QED
 
 Theorem convert_bytes_vv_sim_full:
   body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
   body_expr_full_ok cx e /\ is_bytestring_type dst ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -321,7 +323,13 @@ Proof
   (impl_tac >- (simp[] >> metis_tac[])) >>
   disch_then (qspecl_then
     [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (* Use the carried reachability bound here when this caller is widened. *)
+  (impl_tac >-
+    (simp[] >> rpt strip_tac >>
+     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
+        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[])) >>
+  strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   `eval_expr cx (TypeBuiltin ann Convert ann [e]) =
     bind (bind (eval_expr cx e) (read_result cx))

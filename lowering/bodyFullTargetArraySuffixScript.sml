@@ -23,7 +23,8 @@ Definition array_tail_packet_def:
   lower_value compile_expr cenv (expr_type e) e sm = (iop, sn) /\
   compile_get_target_ptr compile_expr cenv (SubscriptTarget bt e) sa = (r, sb) /\
   fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t2) /\
+  local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -926,7 +927,7 @@ Theorem array_tail_scalar_uniform:
   (!x. len = Var x ==> not_fresh_at sa x) /\
   op_taint tn bop = {} /\ op_taint tn idx = {} /\ op_taint tn len = {} /\
   op_prov G idx = NONE /\ op_prov G len = NONE /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   same_blocks sa sc /\ same_blocks sc sb /\
   sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
   sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
@@ -982,8 +983,13 @@ Proof
    allocas_from lo sg` by
     (simp[Abbr `sg`, instIdxIndepTheory.eval_op_inst_idx, allocas_from_def] >>
      fs[allocas_from_def]) >>
-  drule_all array_elem_ptr_nonalias_uniform >>
-  disch_then (qspecl_then [`func`, `PG`] strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sg` by
+    (qpat_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
+     simp[Abbr `sg`, venom_state_component_equality, allocas_below_fmp_def] >>
+     strip_tac >> fs[allocas_below_fmp_def]) >>
+  mp_tac (Q.INST [`s` |-> `sg`, `sa` |-> `sc`, `G` |-> `H`,
+    `tn` |-> `tm`] (SPEC_ALL array_elem_ptr_nonalias_uniform)) >>
+  impl_tac >- simp[] >> strip_tac >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (sg,H,tm) []
       (OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts),H',tm')` by
     (gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
@@ -1045,7 +1051,6 @@ Theorem array_tail_packet_finite_source:
 Proof
   strip_tac >> drule array_tail_packet_initialized_source >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
-  `~ctx_has_dalloca ctx` by fs[array_tail_packet_def] >>
   `same_blocks sl sc /\
    sc.cs_current_insts = sl.cs_current_insts ++ emitted_insts sl sc /\
    EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
@@ -1076,6 +1081,16 @@ Proof
      gvs[same_blocks_def] >>
      simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC,
        venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (strip_tac >>
+     `allocas_below_fmp t2` by fs[array_tail_packet_def] >>
+     `t.vs_allocas = t2.vs_allocas /\
+      t.vs_initial_fmp = t2.vs_initial_fmp /\ t.vs_fmp = t2.vs_fmp` by
+       (qpat_assum `array_length_frame _ t2 _ _ t _ _`
+          (mp_tac o Q.AP_TERM `\u:venom_state. (u.vs_allocas,u.vs_initial_fmp,u.vs_fmp)` o CONJUNCT1 o
+           REWRITE_RULE [array_length_frame_def]) >>
+        simp[]) >>
+     fs[allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
   drule_all array_tail_scalar_uniform >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
   `eval_operand (FST rb) t2 = SOME b /\ eval_operand iop t2 = SOME iw /\

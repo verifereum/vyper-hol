@@ -3,7 +3,7 @@ Ancestors
   sourceUnitExecution
   callStepPtr wordArgsPtr exprSimSend fragGasSeqPtr fragGasPathPtr stmtAssertPtr
   ptrSafeRun ptrDiscipline venomExecSemantics venomExecProofs
-  venomInst venomInstProofs venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
+  venomInst venomInstProofs venomInstProofs1 venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
   venomCallOracleDefs venomMemProps ghostPcTransportPtr
   exprLoweringProps exprSimOperands exprSimWordArgs compileEnv loweringStateRelDefs localPtrsProps
   sendSourceFrame typedWordArgsSimPtr exprSimHypsDefs exprSimPrecompiles bodyPtrDefs fragExec
@@ -11,7 +11,7 @@ Ancestors
   typedWordArgsPostPtr exprStackPtr
 
 Theorem ptr_inst_ok_assert:
-  ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ op_taint tn op = {} /\
   eval_operand op s = SOME w ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id ASSERT [op] []) s
 Proof
@@ -40,7 +40,7 @@ Proof
 QED
 
 Theorem assert_ok_path_ptr:
-  ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ op_taint tn op = {} /\
   eval_operand op s = SOME w /\ w <> 0w /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSERT [op] []) ==>
@@ -63,7 +63,7 @@ Proof
 QED
 
 Theorem assert_fail_path_ptr:
-  ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ op_taint tn op = {} /\
   eval_operand op s = SOME 0w /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSERT [op] []) ==>
@@ -88,7 +88,7 @@ Theorem ptr_inst_ok_send_call:
   eval_operand gas s = SOME gw /\ eval_operand addr s = SOME aw /\
   eval_operand value s = SOME vw /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\
-  op_taint tn value = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn value = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   stor_taint_ok H cx tn s ==>
   ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn inst s
 Proof
@@ -247,7 +247,7 @@ QED
 Theorem call_assert_ok_path_ptr:
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; ao; az; ro; rz] /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   get_instruction bb (SUC s.vs_inst_idx) =
@@ -266,6 +266,15 @@ Proof
     metis_tac[step_preserves_halted, step_preserves_control_flow] >>
   `op_taint (step_taint inst s u tn) (Var out) = {}` by
     metis_tac[call_output_untainted] >>
+  `!k. ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := k)` by
+    (gen_tac >> strip_tac >>
+     `u.vs_allocas = s.vs_allocas` by
+       (irule venomMemPropsTheory.step_inst_base_preserves_allocas >>
+        qexists_tac `inst` >> simp[]) >>
+     `u.vs_fmp = s.vs_fmp /\ u.vs_initial_fmp = s.vs_initial_fmp` by
+       (drule_all step_inst_base_preserves_all >> simp[is_alloca_op_def]) >>
+     `allocas_below_fmp s` by metis_tac[] >>
+     fs[allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
   `gas_path_ptr D 0 ctx fn PG (step_prov PG G inst u)
     (step_taint inst s u tn) (u with vs_inst_idx := SUC s.vs_inst_idx) 0
     (step_prov PG G inst u) (step_taint inst s u tn)
@@ -281,7 +290,7 @@ QED
 Theorem call_assert_fail_path_ptr:
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; ao; az; ro; rz] /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   get_instruction bb (SUC s.vs_inst_idx) =
@@ -300,6 +309,15 @@ Proof
     metis_tac[step_preserves_halted, step_preserves_control_flow] >>
   `op_taint (step_taint inst s u tn) (Var out) = {}` by
     metis_tac[call_output_untainted] >>
+  `!k. ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := k)` by
+    (gen_tac >> strip_tac >>
+     `u.vs_allocas = s.vs_allocas` by
+       (irule venomMemPropsTheory.step_inst_base_preserves_allocas >>
+        qexists_tac `inst` >> simp[]) >>
+     `u.vs_fmp = s.vs_fmp /\ u.vs_initial_fmp = s.vs_initial_fmp` by
+       (drule_all step_inst_base_preserves_all >> simp[is_alloca_op_def]) >>
+     `allocas_below_fmp s` by metis_tac[] >>
+     fs[allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
   `gas_path_ptr D 0 ctx fn PG (step_prov PG G inst u)
     (step_taint inst s u tn) (u with vs_inst_idx := SUC s.vs_inst_idx) 0
     (step_prov PG G inst u) (step_taint inst s u tn)
@@ -373,7 +391,7 @@ Theorem send_read_checked_tail:
   outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
@@ -462,7 +480,7 @@ Theorem send_read_checked_tail_uniform[local]:
   outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
@@ -597,7 +615,7 @@ Theorem send_tail_path_ptr:
   wb_frame cenv es es1 sa s0 s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
@@ -761,7 +779,7 @@ Theorem send_tail_summary_ptr:
   wb_frame cenv es es1 sa s0 s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
@@ -988,6 +1006,13 @@ Resume send_expr_sim_ptr[tail_summary]:
   `expr_has_effect (Call NoneT (Send has_gas) (a::v::gs) dflt)` by simp[loweringPostsTheory.expr_has_effect_thm] >>
   `post_value_type cenv (Call NoneT (Send has_gas) (a::v::gs) dflt) =
    expr_type (Call NoneT (Send has_gas) (a::v::gs) dflt)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+       (drule_then strip_assume_tac) >>
+     strip_tac >>
+     fs[stmt_state_rel_def, fmp_room_def, allocas_below_fmp_def,
+        venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all (Q.INST [`e` |-> `Call NoneT (Send has_gas) (a::v::gs) dflt`]
     send_tail_summary_ptr) >>
   disch_then (qspec_then `PG` mp_tac) >>
@@ -1034,7 +1059,7 @@ Theorem ptr_inst_ok_send_call_at:
   eval_operand gas s = SOME gw /\ eval_operand addr s = SOME aw /\
   eval_operand value s = SOME vw /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\
-  op_taint tn value = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn value = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ stor_taint_ok_at D tn s ==>
   ptr_inst_ok D lo fuel ctx fn G tn inst s
 Proof

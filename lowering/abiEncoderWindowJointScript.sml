@@ -22,7 +22,8 @@ Theorem compile_abi_encode_to_buf_window_joint:
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
   alloca_inv s /\ alloca_room ctx func s /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (0 < cap ==>
     sb + cap <= s.vs_alloca_next /\
     venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH (contractABI$enc at av)) /\
@@ -70,7 +71,8 @@ Proof
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
   alloca_inv s /\ alloca_room ctx func s /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (0 < cap ==>
     sb + cap <= s.vs_alloca_next /\
     venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH (contractABI$enc at av)) /\
@@ -118,7 +120,8 @@ Proof
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
   alloca_inv s /\ alloca_room ctx func s /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (0 < cap ==>
     sb + cap <= s.vs_alloca_next /\
     venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH (contractABI$enc at av)) /\
@@ -177,12 +180,20 @@ Proof
           (fn ad => ACCEPT_TAC (CONV_RULE
             (DEPTH_CONV PairRules.PBETA_CONV) (MP th ad)))))
   >~ [`compile_abi_encode_to_buf dst src AbiPrimWord st = (out,en)`]
-  >- (irule (SIMP_RULE bool_ss [abi_encoder_admissible_def]
+  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+         (fn th => ACCEPT_TAC (DISCH (fst (dest_imp (concl th)))
+           (CONJUNCT1 (UNDISCH th)))) >>
+       irule (SIMP_RULE bool_ss [abi_encoder_admissible_def]
         compile_abi_encode_to_buf_word_window_joint) >>
        asm_rewrite_tac[] >>
        qexistsl_tac [`cap`, `dst`, `sb`, `src`] >> asm_rewrite_tac[])
   >~ [`compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,en)`]
-  >- (irule (SIMP_RULE bool_ss [abi_encoder_admissible_def]
+  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+         (fn th => ACCEPT_TAC (DISCH (fst (dest_imp (concl th)))
+           (CONJUNCT1 (UNDISCH th)))) >>
+       irule (SIMP_RULE bool_ss [abi_encoder_admissible_def]
         compile_abi_encode_to_buf_copy_window_joint) >>
        asm_rewrite_tac[] >>
        qexistsl_tac [`cap`, `dst`, `sb`, `src`, `sz`] >> asm_rewrite_tac[])
@@ -256,6 +267,10 @@ Proof
      qexists_tac `cap` >> asm_rewrite_tac[]) >>
   `ptr_covers G tn dp s (32+contractABI$ceil32 (LENGTH bs))` by metis_tac[] >>
   `not_fresh_at st sp /\ not_fresh_at st dp` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+      (fn th => ACCEPT_TAC (DISCH (fst (dest_imp (concl th)))
+        (CONJUNCT1 (UNDISCH th)))) >>
   `w2n (n2w sb : 256 word) = sb /\ w2n (n2w d : 256 word) = d` by
     simp[w2n_n2w, LESS_MOD] >>
   mp_tac (Q.INST [`dst` |-> `Var dp`, `src` |-> `Var sp`,

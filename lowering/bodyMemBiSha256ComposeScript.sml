@@ -131,7 +131,7 @@ Theorem sha256_typed_effectful_path_mem:
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  (do precompile_call_success Sha256; return (Value r) od) es1 = (res,es2) /\
+  (do precompile_call_success Sha256 [v]; return (Value r) od) es1 = (res,es2) /\
   builtin_result cx es1.accounts (BaseT (BytesT (Fixed 32)))
     Sha256 [expr_type e] [v] = INL r /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
@@ -191,7 +191,7 @@ Resume sha256_typed_effectful_path_mem[success]:
   simp[] >> strip_tac >> gvs[] >>
   `!H'. valid_horizon cx st0 H' es1.storage_trace ==>
      vv_post H' ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
-       es sa sb s0 (es1 with outcomes := SOME remaining) (Value r)
+       es sa sb s0 (SND (take_call_outcome NONE 2w (precompile_input Sha256 [v]) NONE es1)) (Value r)
        (StackValue (BaseT (BytesT (Fixed 32))) op) t` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H _ ==> _`
@@ -348,7 +348,7 @@ Theorem compile_typed_sha256_unary_vv_sim_mem:
     expr_vv_res_ok res /\
     (case builtin_result cx es1.accounts ann Sha256 [expr_type e] [v] of
        INR exc => (INR exc,es1)
-     | INL w => (do precompile_call_success Sha256; return (Value w) od) es1) =
+     | INL w => (do precompile_call_success Sha256 [v]; return (Value w) od) es1) =
        (res,es2) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
        expr_post H ctx func cenv cx e es sa sm s0 es1 v x s) /\
@@ -394,7 +394,7 @@ Proof
   simp[] >> strip_tac >>
   Cases_on `case builtin_result cx ee.accounts ann Sha256 [expr_type e] [v] of
               INR exc => (INR exc,ee)
-            | INL w => (do precompile_call_success Sha256;
+            | INL w => (do precompile_call_success Sha256 [v];
                            return (Value w) od) ee` >>
   rename1 `_ = (res, es2)` >>
   `res <> INR HaltException` by

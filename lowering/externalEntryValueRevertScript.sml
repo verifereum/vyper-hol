@@ -182,7 +182,7 @@ Theorem nonpayable_check_joint_reject:
   fn_has_code opened checked fn /\ opened.cs_current_insts = [] /\
   ~block_is_terminated opened /\ fresh_vars_wrt opened s /\
   ~s.vs_halted /\ s.vs_current_bb = opened.cs_current_bb /\
-  s.vs_inst_idx = 0 /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = 0 /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_call_ctx.cc_callvalue <> 0w ==>
   ?t G' tn'.
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
@@ -237,8 +237,10 @@ Proof
          simp[exit_result_def] >>
          conj_tac >- gvs[] >>
          simp[Abbr `ai`, gas_events_step_def, mk_inst_def,
-              mem_safe_step_def] >> disj2_tac >>
-         irule below_frontier_no_ranges >> simp[]) >>
+              mem_safe_step_non_invoke, memSafeRunTheory.inst_dload_in_section_def,
+              unitTransformDefsTheory.inst_mem_below_frontier_def,
+              codegenRelTheory.source_memory_write_ranges_def,
+              contextCodegenRelTheory.source_memory_read_ranges_def]) >>
      simp[gas_path_ptr_edge_def] >>
      qexistsl_tac [`0`, `ai`] >>
      simp[exit_result_def] >> conj_tac >- gvs[] >>
@@ -289,6 +291,7 @@ Theorem external_value_reject_target[local]:
                  vs_inst_idx := 0|>))
 Proof
   strip_tac >> drule_all external_value_reject_dispatch >> strip_tac >>
+  `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp tt` by simp[] >>
   drule_all nonpayable_check_joint_reject >>
   disch_then (qspecl_then [`tn`, `[]`, `G`] mp_tac) >> strip_tac >>
   qexistsl_tac [`func`, `t`, `G'`, `tn'`] >> simp[] >>

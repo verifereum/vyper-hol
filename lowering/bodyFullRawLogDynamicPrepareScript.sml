@@ -19,7 +19,7 @@ Theorem raw_log_dynamic_prepare_joint:
     not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
     not_fresh_at sm x) /\
-  ~ctx_has_dalloca ctx /\ ghost_inv_at D lo d cenv cx ee G tn s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ghost_inv_at D lo d cenv cx ee G tn s /\
   eval_operand data_op s = SOME (n2w b) /\
   mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
   b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\

@@ -243,5 +243,7 @@ Theorem mem_safe_step_outcomes_update:
   mem_safe_step fuel ctx inst (s with vs_outcomes := os) =
     mem_safe_step fuel ctx inst s
 Proof
-  simp[mem_safe_step_def, memory_checks_outcomes_update]
+  simp[mem_safe_step_non_invoke, memory_checks_outcomes_update,
+       inst_mem_below_frontiers_def, read_ranges_outcomes_update,
+       write_ranges_outcomes_update]
 QED

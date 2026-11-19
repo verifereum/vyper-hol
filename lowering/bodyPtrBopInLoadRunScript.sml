@@ -26,7 +26,7 @@ Theorem storage_load_uniform_clean:
   op_taint tn a = {} /\ eval_operand a s = SOME slot /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
             (s with vs_inst_idx := k) G' tn') /\
@@ -37,7 +37,9 @@ Theorem storage_load_uniform_clean:
          FLOOKUP G' x = FLOOKUP G x /\
          op_taint tn' (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >> drule_all emit_storage_load_uniform_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all emit_storage_load_uniform_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] mp_tac) >>
   strip_tac >> qexistsl_tac [`G'`, `tn'`] >> simp[] >>
   drule emitted_load_output_prov >>
@@ -75,7 +77,7 @@ Theorem storage_load_path_clean:
   op_taint tn a = {} /\ eval_operand a s = SOME slot /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx /\
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?G' tn'.
@@ -121,7 +123,7 @@ Theorem mload_uniform_clean:
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME w /\
   mem_word_taint tn.t_mem (w2n w) = {} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
             (s with vs_inst_idx := k) G' tn') /\
@@ -161,7 +163,7 @@ Theorem mload_path_clean:
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME w /\
   mem_word_taint tn.t_mem (w2n w) = {} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?G' tn'.
@@ -183,7 +185,7 @@ QED
 
 Theorem external_load_check:
   (opc = CALLDATALOAD \/ opc = DLOAD) /\ op_taint tn a = {} /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id opc [a] [out]) s = OK t /\
   t.vs_requests = s.vs_requests ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc [a] [out]) s
@@ -200,7 +202,7 @@ Theorem external_load_uniform_clean:
   run_inst_seq (emitted_insts st st') s = OK t /\
   op_taint tn a = {} /\ eval_operand a s = SOME w /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
             (s with vs_inst_idx := k) G' tn') /\

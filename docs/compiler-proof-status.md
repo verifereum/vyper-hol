@@ -16,6 +16,11 @@ Historical snapshots:
 
 Current integration boundary:
 
+- The public `vyper_call_correct` theorem takes a
+  [fixed storage region set](compiler-correctness-specification.md#fixed-storage-regions).
+  For dispatched calldata, the `calldata_result_rel H` branch preserves
+  `storage_ok H` in the resulting source state.
+
 - S2 (`lower_vyper_runtime_unit_source_unit_ok`) is proved for any
   contract `check_contract` accepts, under `raw_shape_free_program tops`.
   `raw_shape_free_program` excludes creation and every `raw_call` from

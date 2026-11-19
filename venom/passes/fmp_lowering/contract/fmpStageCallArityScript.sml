@@ -7,7 +7,8 @@
  * keep the user PARAM count.
  *
  * TOP-LEVEL:
- *   fmp_stage_invoke_arity  - LENGTH args = LENGTH (fn_user_param_insts callee)
+ *   fmp_stage_invoke_arity_static - user arity from the static walk view
+ *   fmp_stage_invoke_arity        - the same arity from the stage context
  *)
 Theory fmpStageCallArity
 Ancestors
@@ -73,7 +74,7 @@ Proof
 QED
 
 (* The five passes after FmpLowering keep the user PARAM count. *)
-Theorem o1_walk_suffix_user_param_count[local]:
+Theorem o1_walk_suffix_user_param_count:
   fn_steps_from (\m h. o1_fn_shape C h /\ o1_fn_row m h) rpolicy 4
     (DROP 4 o1_fn_passes) f g ==>
   LENGTH (fn_user_param_insts g) = LENGTH (fn_user_param_insts f)
@@ -87,20 +88,17 @@ Proof
   gvs[]
 QED
 
-Theorem fmp_stage_invoke_arity:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\ MEM fn C.ctx_functions /\
+Theorem fmp_stage_invoke_arity_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  lookup_function fn.fn_name C.ctx_functions = SOME fn /\
+  fn.fn_fmp_signature = NONE /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
   decode_invoke inst = SOME (nm,args) /\
   lookup_function nm C.ctx_functions = SOME callee ==>
   LENGTH args = LENGTH (fn_user_param_insts callee)
 Proof
   strip_tac >>
-  `ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
-     (o1_walk_view rpolicy 3) C C'` by gvs[fmp_stage_ctx_def] >>
-  `lookup_function fn.fn_name C.ctx_functions = SOME fn` by
-    (irule fmp_lookup_function_self >>
-     gvs[fmp_stage_ctx_def, o1_ctx_shape_def, ctx_wf_def,
-         ctx_distinct_fn_names_def, ctx_fn_names_def]) >>
   `?fn' observed s out.
      lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
      fn_pass_step rpolicy (CFP_Simple VP_FmpLowering) observed s fn out /\
@@ -111,7 +109,6 @@ Proof
      fn_pass_step rpolicy (CFP_Simple VP_FmpLowering) obs2 s2 callee out2 /\
      out2.fpo_function = callee'` by
     metis_tac[ctx_pass_stage_lookup] >>
-  `fn.fn_fmp_signature = NONE` by metis_tac[fmp_stage_actual_witness] >>
   `?g. lookup_function nm observed.cu_context.ctx_functions = SOME g /\
        LENGTH args = LENGTH (fn_user_param_insts g)` by
     (qpat_x_assum `fn_pass_step _ _ observed _ fn _`
@@ -129,4 +126,25 @@ Proof
   gvs[o1_walk_view_def, walk_view_def] >>
   first_x_assum drule_all >> strip_tac >> gvs[] >>
   drule o1_walk_suffix_user_param_count >> simp[]
+QED
+
+Theorem fmp_stage_invoke_arity:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\ MEM fn C.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  decode_invoke inst = SOME (nm,args) /\
+  lookup_function nm C.ctx_functions = SOME callee ==>
+  LENGTH args = LENGTH (fn_user_param_insts callee)
+Proof
+  strip_tac >>
+  `ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+     (o1_walk_view rpolicy 3) C C'` by gvs[fmp_stage_ctx_def] >>
+  `lookup_function fn.fn_name C.ctx_functions = SOME fn` by
+    (irule fmp_lookup_function_self >>
+     gvs[fmp_stage_ctx_def, o1_ctx_shape_def, ctx_wf_def,
+         ctx_distinct_fn_names_def, ctx_fn_names_def]) >>
+  `?fn'. lookup_function fn.fn_name C'.ctx_functions = SOME fn'` by
+    metis_tac[ctx_pass_stage_lookup] >>
+  `fn.fn_fmp_signature = NONE` by
+    (drule_all fmp_stage_actual_witness >> simp[]) >>
+  drule_all fmp_stage_invoke_arity_static >> simp[]
 QED

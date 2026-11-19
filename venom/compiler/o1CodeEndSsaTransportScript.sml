@@ -8,7 +8,7 @@ Ancestors
   makeSsaCurrentLockstep makeSsaCurrentWfSsa makeSsaCurrentTreeTrace makeSsaDefs
   codegenSymRel venomInst venomWf list pair pred_set
 
-Theorem code_end_ssa_runtime_owner[local]:
+Theorem code_end_ssa_runtime_owner:
   current_wf_phi_context supply f renamed supply' A H events /\
   make_ssa_input_ok f /\ fn_entry_label f = SOME entry /\
   (!x. code_end_var f x ==> ?d op. MEM d (fn_insts f) /\

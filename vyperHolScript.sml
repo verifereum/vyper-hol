@@ -9,7 +9,7 @@
  *)
 Theory vyperHol
 Ancestors
-  codegenStaticAbort
+  codegenStaticAbort staticAbortAsmOptHol
   runtimeLabelReadiness
   o1LabelReadiness
   runtimeLabelEntry
@@ -43,7 +43,8 @@ Ancestors
      codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
   codegenRequestPrefix callTraceFrame guardPushProjections
-  gasFocusPrefixDriver focusFrontierBudget
+  gasFocusParentProofs gasFocusStaticPrefixDriver
+  gasFocusConcretizeGhostCutHistory gasFocusConcretizeCutFrameSupport
   fnStaticAbortSim
   contextStaticAbortRel
   staticAbortMemDefs
@@ -77,9 +78,9 @@ Ancestors
   (* whitelist: retained raw-call and CREATE compiler shape proofs *)
   whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
-  batchCopyRobustPtr entryHaltPtr liveArrayTransportPtr normalizationAllocPtr
+  batchCopyRobustPtr liveArrayTransportPtr normalizationAllocPtr
   ptrSafetyTransport returnMetadataPtr staticTypeFitsPtr structChildPtr
-  typedCopyArrayExecutionPtr wordCopyRobustPtr
+  wordCopyRobustPtr
   (* end-to-end runtime correctness *)
   e2eCorrectness guardRequestAlignment
   (* sufficient gas, the companions to the call and deploy theorems *)

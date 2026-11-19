@@ -150,7 +150,7 @@ Theorem append_storage_guard_actual:
   w2n (if tr then tload slot s else sload slot s) < cap /\
   op_taint tn bop = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq (emitted_insts st0 st3) s = OK t /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st0 st3)
@@ -209,7 +209,7 @@ Theorem append_storage_guard_abort_actual:
   ~(w2n (if tr then tload slot s else sload slot s) < cap) /\
   op_taint tn bop = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq (emitted_insts st0 st3) s = Abort Revert_abort t /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st0 st3)
@@ -486,7 +486,7 @@ Theorem append_storage_suffix_actual:
   eval_operand vop s3 = SOME w /\ ~s3.vs_call_ctx.cc_static /\
   op_taint tn bop = {} /\ op_taint tn lop = {} /\ op_taint tn vop = {} /\
   (!x. bop = Var x \/ lop = Var x \/ vop = Var x ==> not_fresh_at st3 x) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s3) ==>
   ?t G9 tn9.
     run_inst_seq (emitted_insts st3 st9) s3 = OK t /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st3 st9)

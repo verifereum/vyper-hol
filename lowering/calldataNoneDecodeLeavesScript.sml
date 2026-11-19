@@ -127,6 +127,7 @@ Resume none_decode_leaf_paths[word]:
 QED
 
 Resume none_decode_leaf_paths[bytes]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all calldata_exact_bytes_joint_limit >>
   disch_then (qspec_then `PG` strip_assume_tac)
   >- (disj1_tac >> qexistsl [`z`,`H`,`u`] >> simp[]) >>
@@ -266,6 +267,7 @@ Resume none_decode_leaf_paths[bulk_abort]:
      disch_then (SUBST1_TAC o SYM) >> qexists_tac `[]` >>
      simp[GSYM listTheory.APPEND_ASSOC]) >>
   `fn_has_code st guard fn` by metis_tac[fn_has_code_split] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all calldata_count_guard_rejected_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`z`,`H`,`u`] >> asm_rewrite_tac[]

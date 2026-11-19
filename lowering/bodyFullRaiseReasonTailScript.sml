@@ -7,6 +7,8 @@ Ancestors
   bodyPtrDefs venomInst venomState list rich_list arithmetic
   exprLoweringProps fragExecMem opcodeClass bodyPtrPrecompileBuiltinsSeq
   finalAbortSeqPtr bodyPtrHashBuiltinsShaAlloc bodyPtrHashBuiltinsCursor
+  fragGasSeqPtrContext[qualified,ignore_grammar]
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 Libs
   BasicProvers
 
@@ -42,7 +44,7 @@ Theorem reason_tail_copy_origin_ptr_path:
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
   (!k. k < 5 ==> src <> "%" ++ toString (u+k) /\
     "%" ++ toString (v+2) <> "%" ++ toString (u+k)) /\
-  L+63 < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  L+63 < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (TAKE 6 (reason_tail j u v (Var src)))
     (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -247,7 +249,9 @@ Theorem reason_tail_suffix_primitive_checks:
   32+contractABI$ceil32 L <= M /\
   B+64+M <= r.vs_alloca_next /\ TP+M <= r.vs_alloca_next /\
   r.vs_alloca_next < dimword(:256) /\ L+63 < dimword(:256) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp r /\
+    (FLOOKUP r.vs_allocas (j+6) = NONE ==>
+      r.vs_alloca_next+32 <= w2n r.vs_initial_fmp)) /\
   (FLOOKUP r.vs_allocas (j+6) = NONE ==>
     r.vs_alloca_next+32 < dimword(:256)) /\
   (!a sz. FLOOKUP r.vs_allocas (j+6) = SOME (a,sz) ==>
@@ -345,7 +349,10 @@ Theorem reason_tail_origin_ptr_path:
   ptr_covers G tn ("%" ++ toString (v+1)) s (32+M) /\
   ptr_covers G tn ("%" ++ toString (v+2)) s M /\
   (!i. p <= i /\ i < p+32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    (FLOOKUP s.vs_allocas (j+6) = NONE ==>
+      s.vs_alloca_next+32 <= w2n s.vs_initial_fmp)) /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (reason_tail j u v (Var src)) (DROP s.vs_inst_idx bb.bb_instructions) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>
@@ -387,6 +394,7 @@ Resume reason_tail_origin_ptr_path[copy]:
   `mload (w2n (n2w p : bytes32)) s = n2w L /\
    (!i. w2n (n2w p : bytes32) <= i /\ i < w2n (n2w p : bytes32)+32 ==> i NOTIN tn.t_mem)` by
     metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
   drule_all reason_tail_copy_origin_ptr_path >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   suspend "suffix"
@@ -423,13 +431,30 @@ Resume reason_tail_origin_ptr_path[suffix]:
     (s6 with vs_inst_idx := s.vs_inst_idx+6) =
     OK (s29 with vs_inst_idx := s.vs_inst_idx+6)` by
     metis_tac[fragExecTheory.run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s6` by
+    (strip_tac >>
+     `allocas_below_fmp s` by metis_tac[] >>
+     qpat_assum `run_inst_seq (TAKE 6 _) s = OK s6`
+       (mp_then (Pos last) irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[reason_tail_def, mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+  `s6.vs_initial_fmp = s.vs_initial_fmp` by
+    (qpat_assum `run_inst_seq (TAKE 6 _) s = OK s6`
+       (ACCEPT_TAC o MATCH_MP run_inst_seq_initial_fmp)) >>
+  `ctx_has_dalloca ctx ==>
+    allocas_below_fmp (s6 with vs_inst_idx := s.vs_inst_idx+6) /\
+    (FLOOKUP (s6 with vs_inst_idx := s.vs_inst_idx+6).vs_allocas (j+6) = NONE ==>
+      (s6 with vs_inst_idx := s.vs_inst_idx+6).vs_alloca_next+32 <=
+        w2n (s6 with vs_inst_idx := s.vs_inst_idx+6).vs_initial_fmp)` by
+    (simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >> metis_tac[]) >>
   `?gf tf. !D. inst_seq_ptr D 0 ctx func PG Gf tnf
     (DROP 6 (reason_tail j u v (Var src)))
     (s6 with vs_inst_idx := s.vs_inst_idx+6) gf tf` by
     (irule reason_tail_suffix_primitive_checks >>
-     conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- simp[] >>
-     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- simp[] >>
+     conj_tac >- goal_assum (drule_at Any) >>
      conj_tac >- metis_tac[] >>
      conj_tac >- simp[] >>
      qexistsl_tac [`B`,`L`,`M`,`TP`] >>

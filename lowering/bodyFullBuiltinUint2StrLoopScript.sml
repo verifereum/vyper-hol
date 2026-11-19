@@ -36,7 +36,7 @@ Theorem u2s_loop_joint_given_cond:
     fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
     not_local_ptr cenv es.scopes q /\ n+32 <= sz /\ LENGTH (num_to_dec_string X) <= n /\ X < dimword(:256) /\
-    b+sz < dimword(:256) /\ lo <= b /\ ~ctx_has_dalloca ctx /\
+    b+sz < dimword(:256) /\ lo <= b /\
     u2s_digits a b n X x str s /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
       u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
@@ -83,6 +83,10 @@ Resume u2s_loop_joint_given_cond[final]:
   `str = num_to_dec_string X` by fs[u2s_digits_def] >>
   `FLOOKUP Gc (u2s_var a 1) = NONE /\ op_taint tnc (Var (u2s_var a 1)) = {}` by simp[] >>
   `!j. b+n+32-LENGTH str <= j /\ j < b+n+32 ==> j NOTIN tnc.t_mem` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp c` by
+    (`stmt_state_rel H0 ctx fn cenv cx es c` by
+       (fs[u2s_safe_def] >> metis_tac[]) >>
+     first_assum (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all (Q.INST [`s` |-> `c`] (SPEC_ALL u2s_final_joint_result)) >>
   disch_then (qspecl_then [`ty`, `explicit`, `PG`]
     (qx_choose_then `sf` (qx_choose_then `Gf`
@@ -97,6 +101,10 @@ Resume u2s_loop_joint_given_cond[body]:
   `lookup_var p c = SOME (n2w b)` by
     (fs[u2s_safe_def, venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   `!j. b+n+32-LENGTH str <= j /\ j < b+n+32 ==> j NOTIN tnc.t_mem` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp c` by
+    (`stmt_state_rel H0 ctx fn cenv cx es c` by
+       (fs[u2s_safe_def] >> metis_tac[]) >>
+     first_assum (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all (Q.INST [`s` |-> `c`] (SPEC_ALL u2s_body_joint_step)) >>
   disch_then (qspecl_then [`explicit`, `PG`]
     (qx_choose_then `sb` (qx_choose_then `Gb`

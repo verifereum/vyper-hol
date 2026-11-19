@@ -1,6 +1,7 @@
 Theory bodyFullRawLogCompose
 Ancestors
-  exprSimCallRawLog bodyInvNoDalloca
+  bodyFullShadowBodyInv
+  exprSimCallRawLog bodyInvNoDalloca contextRawReachable ptrDiscipline[qualified,ignore_grammar]
   bodyFullRawLogLayout bodyFullRawLogJoinPost bodyFullRawLogTopics
   bodyFullRawLogReadiness bodyFullRawLogFixed bodyFullRawLogDynamic
   bodyFullExprGeneric bodyFullPreds vyperTypeArgFits exprWordOperand
@@ -68,6 +69,7 @@ Theorem raw_log_expr_sim_full:
   (!ce xs. gas_shadow_compiles (compile_multi_exprs compile_expr ce xs)
     (compile_multi_exprs compile_expr ce (MAP gas_shadow_expr xs))) /\
   body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (Call ann RawLog args dflt) es ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann RawLog args dflt) es
@@ -209,6 +211,12 @@ Resume raw_log_expr_sim_full[continuation]:
 QED
 
 Resume raw_log_expr_sim_full[fixed_data]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+     !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by simp[] >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
+        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_assum `compile_call _ _ _ _ RawLog _ _ _ = _`
     (mp_then (Pat `compile_call _ _ _ _ RawLog _ _ _ = _`) mp_tac raw_log_fixed_data_full) >>
   disch_then (fn th => qpat_assum `compile_alloc_buffer 32 sm = _`
@@ -240,6 +248,10 @@ Resume raw_log_expr_sim_full[fixed_data]:
      >~ [`local_ptrs_reserved cenv sm`]
      >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
          fs[ci_mono_def])
+     >~ [`!fn inst t'. frag_reachable ctx func t fn inst t' ==> dalloca_no_wrap inst t'`]
+     >- (rpt strip_tac >> qpat_assum
+           `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s`
+           (qspecl_then [`fn`, `inst`, `t'`] MATCH_MP_TAC) >> first_assum ACCEPT_TAC)
      >~ [`!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x`]
      >- (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
          qexists_tac `sa` >> fs[ci_mono_def])
@@ -312,6 +324,11 @@ Resume raw_log_expr_sim_full[dynamic_data]:
       ghost_kept_at lo cenv mid sm G1 tn1 t G tn`,
     `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`] >>
   simp[Abbr `rawlog`] >> conj_tac >- suspend "dynamic_post" >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >>
+     metis_tac[]) >>
   simp[expr_type_def] >>
   qpat_assum `LENGTH vs <= (4:num)` (fn bnd =>
     irule (SRULE [bnd, expr_type_def, loweringPostsTheory.post_value_type_def]
@@ -325,6 +342,8 @@ Resume raw_log_expr_sim_full[dynamic_data]:
         raw_log_dynamic_data_full))) >>
   simp[loweringPostsTheory.post_value_type_bytestring,
     compileEnvTheory.is_bytestring_type_def] >> rpt conj_tac
+  >~ [`!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s`]
+  >- first_assum ACCEPT_TAC
   >~ [`!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x`]
   >- (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
       qexists_tac `sa` >> fs[ci_mono_def])

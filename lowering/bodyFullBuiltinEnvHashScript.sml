@@ -1,5 +1,6 @@
 Theory bodyFullBuiltinEnvHash
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullBuiltinEnvHashCompose bodyFullBuiltinEnvBlockHashSuffix
   bodyFullBuiltinEnvBlobHashSuffix
   bodyFullExprGeneric bodyFullPreds bodySimFull exprSimSource exprSimHypsDefs
@@ -42,6 +43,7 @@ Theorem hash_builtin_sim_full:
     (builtin_args_length_ok bt (LENGTH args) /\ bt = Len ==>
      body_expr_full_ok cx (HD args)) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es /\
@@ -53,8 +55,10 @@ Proof
     (Cases_on `bt = BlockHash` >> gvs[]) >>
   (conj_asm1_tac
    >- (mp_tac hash_builtin_value_from_suffixes >>
-       (impl_tac >- (conj_tac >- ACCEPT_TAC blockhash_full_suffix >>
-                     (rpt gen_tac >> MATCH_ACCEPT_TAC blobhash_full_suffix))) >>
+       (impl_tac >- (conj_tac >- (rpt gen_tac >> strip_tac >> irule blockhash_full_suffix >>
+                      simp[] >> qexists_tac `arg` >> simp[]) >>
+                     (rpt gen_tac >> strip_tac >> irule blobhash_full_suffix >>
+                      simp[] >> qexists_tac `arg` >> simp[]))) >>
        disch_then irule >> metis_tac[]) >>
    metis_tac[hash_builtin_full_vv])
 QED

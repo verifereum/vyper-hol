@@ -6,7 +6,7 @@
  * valid_vyper_call, compiled_event_info,
  * return_bytes, tx_return_bytes,
  * unspecified_behaviour_exempt, source_exempt, gas_readings_rel,
- * effects_agree, exception_outcome_rel, call_result_rel, logs_correspond.
+ * effects_agree, exception_outcome_rel, call_result_rel_guarded, logs_correspond.
  * Transaction boundary (Milestone 7 lifecycle): next_source_machine.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
@@ -823,19 +823,19 @@ QED
 Definition call_result_rel_at_def:
   call_result_rel_at gobs tops am tx es r es' <=>
     let os = MAP SND (call_trace es) in
-    let H = storage_trace_horizon (source_storage_trace am tx os gobs) in
+    let touched = storage_trace_horizon (source_storage_trace am tx os gobs) in
     let (res, am', rqs) = call_external (SOME os) gobs am tx in
     case res of
       INL v => ?out. tx_return_bytes tops tx v out /\
                      frame_outcome es r es' NONE out am'.logs /\
-                     effects_agree H tx (am', rqs) es es'
+                     effects_agree touched tx (am', rqs) es es'
     | INR HaltException => frame_outcome es r es' NONE [] am'.logs /\
-                           effects_agree H tx (am', rqs) es es'
+                           effects_agree touched tx (am', rqs) es es'
     | INR exc => exception_outcome_rel tops exc es r es'
 End
 
-Definition call_result_rel_def:
-  call_result_rel tops am tx es r es' <=>
+Definition call_result_rel_guarded_def:
+  call_result_rel_guarded tops am tx es r es' <=>
     let os = MAP SND (call_trace es) in
     gas_readings_rel (gas_readings es)
       (\gobs. call_storage_ok am tx os gobs ==>

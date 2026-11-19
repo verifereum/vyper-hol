@@ -375,9 +375,10 @@ val raw_deployment : term decoder =
   check (field "deployment_type" string)
         (fn s => s = "raw_bytecode" orelse s = "ir")
         "deployment_type not raw" $
-  JSONDecode.map (fn (((i,d,(s,m,a,g),(gl,bn,bf,v)),(h,bh)),(e,bc)) =>
+  JSONDecode.map (fn (((i,d,(s,m,a,g),(gl,bn,bf,v)),(h,bh)),(e,bc,n)) =>
     mk_record (raw_deployment_trace_ty, [
       ("deployer", s),
+      ("deployerNonce", from_term_option num_ty n),
       ("expectedAddress", a),
       ("expectedSuccess", e),
       ("value", v),
@@ -409,7 +410,7 @@ val raw_deployment : term decoder =
                       field "value" numtm)),
       tuple2 (field "env" $ field "block" $ field "block_hashes" blockHashes,
               field "env" $ field "tx" $ field "blob_hashes" blobHashes)),
-    tuple2 (field "deployment_succeeded" booltm,
+    tuple3 (field "deployment_succeeded" booltm,
             (* Raw exports sometimes report "" even when initcode deposits
                nonempty code; only nonempty exports are bytecode assertions. *)
             field "runtime_bytecode"
@@ -419,7 +420,9 @@ val raw_deployment : term decoder =
                 | SOME hex => from_term_option bytes_ty
                                 (SOME (flat_bytes_from_hex hex))
                 | NONE => mk_none bytes_ty) $
-               nullable string)))
+               nullable string),
+            (* Absent or null in exports that predate it. *)
+            fieldD "deployer_nonce" (nullable numtm) NONE))
 
 fun source_codes_json j =
   let

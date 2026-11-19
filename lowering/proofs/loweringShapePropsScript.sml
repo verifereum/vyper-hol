@@ -31,7 +31,7 @@
  *)
 Theory loweringShapeProps
 Ancestors
-  publicGetterProps
+  publicGetterProps exprLoweringEquations
   list rich_list loweringShapeDefs loweringShapeRules compileEnv loweringStateRelDefs context
   emitHelper exprLowering stmtLowering moduleLowering vyperCompiler
   compileVyper constSubst vyperGetter abiEncoder supportedProgram supportedNames
@@ -84,6 +84,12 @@ Theorem subst_consts_exprs_length[simp]:
   !es. LENGTH (subst_consts_exprs env es) = LENGTH es
 Proof
   Induct >> simp[subst_consts_expr_def]
+QED
+
+Theorem subst_consts_exprs_null[local]:
+  NULL (subst_consts_exprs env es) <=> NULL es
+Proof
+  Cases_on `es` >> simp[subst_consts_expr_def]
 QED
 
 Theorem subst_consts_expr_shape:
@@ -9318,27 +9324,6 @@ Proof
   simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def]
 QED
 
-Theorem compile_expr_body_builtin_default[local]:
-  ~(?at a bt b mt m. bi = AddMod /\ es = [Name at a; Name bt b; Name mt m]) /\
-  ~(?at a bt b mt m. bi = MulMod /\ es = [Name at a; Name bt b; Name mt m]) /\
-  ~(?at a bt b. bi = PowMod256 /\ es = [Name at a; Name bt b]) ==>
-  compile_expr_body cfn bfn tfn ce ty (Builtin ann bi es) = bfn ce ann ty bi es
-Proof
-  strip_tac >> Cases_on `es`
-  >- simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def] >>
-  rename1 `h::rest` >> Cases_on `h`
-  >> TRY (simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def] >> NO_TAC) >>
-  Cases_on `rest`
-  >- simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def] >>
-  rename1 `Name at a :: h :: rest` >> Cases_on `h`
-  >> TRY (simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def] >> NO_TAC) >>
-  Cases_on `rest`
-  >- (Cases_on `bi` >> gvs[FUN_EQ_THM, compile_expr_body_def, expr_type_def]) >>
-  rename1 `Name at a :: Name bt b :: h :: rest` >> Cases_on `h`
-  >> TRY (simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def] >> NO_TAC) >>
-  Cases_on `rest` >> Cases_on `bi` >> gvs[FUN_EQ_THM, compile_expr_body_def, expr_type_def]
-QED
-
 Theorem compile_expr_body_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -14412,15 +14397,12 @@ Theorem supported_program_no_external_defaults:
     ~EXISTS external_has_defaults (FST (classify_functions tops))
 Proof
   rw[NOT_EXISTS, EVERY_MEM, pairTheory.FORALL_PROD, external_has_defaults_def] >>
-  `module_consts_env tops [] = []` by
-    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
-     gvs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def] >>
-     metis_tac[]) >>
   drule classify_functions_external_source >> strip_tac >>
-  gvs[constSubstTheory.subst_consts_fn_empty]
+  gvs[subst_consts_fn_def, subst_consts_exprs_null]
   >- (drule_all supported_program_declaration >>
-      simp[supportedDeclsTheory.supported_function_header_contract]) >>
-  metis_tac[public_getter_defaults, NULL_EQ]
+      simp[supportedDeclsTheory.supported_function_header_contract,
+           subst_consts_expr_def]) >>
+  drule public_getter_defaults >> simp[subst_consts_expr_def]
 QED
 
 Theorem MEM_classify_internal:
@@ -14503,13 +14485,31 @@ QED
 
 
 
+Theorem supported_program_const_replacement_shape:
+  supported_program tops /\
+  ALOOKUP (module_consts_env tops []) id = SOME e ==>
+  ~supported_expr_exists expr_shape_root e
+Proof
+  strip_tac >> drule_all supported_program_const_replacement >>
+  metis_tac[cj 1 supported_pure_shape]
+QED
+
 Theorem supported_program_runtime_bodies_shape_ok:
   !tops. supported_program tops ==> runtime_bodies_shape_ok tops
 Proof
   rpt strip_tac >>
-  `module_consts_env tops [] = []` by
-    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
-     gvs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def] >>
+  `!id e. ALOOKUP (module_consts_env tops []) id = SOME e ==>
+      ~supported_expr_exists expr_shape_root e` by
+    metis_tac[supported_program_const_replacement_shape] >>
+  `!ss. ~supported_stmts_expr_exists expr_shape_root ss ==>
+      ~supported_stmts_expr_exists expr_shape_root
+        (subst_consts_stmts (module_consts_env tops []) ss)` by
+    metis_tac[cj 2 subst_consts_stmt_shape] >>
+  `!ds. EVERY (\e. ~supported_expr_exists expr_shape_root e) ds ==>
+      EVERY (\e. ~supported_expr_exists expr_shape_root e)
+        (subst_consts_exprs (module_consts_env tops []) ds)` by
+    (mp_tac (Q.SPEC `module_consts_env tops []` (cj 3 subst_consts_expr_shape)) >>
+     simp[supported_exprs_exists_every, NOT_EXISTS, combinTheory.o_DEF] >>
      metis_tac[]) >>
   `!vis mut nr rr name args dflts ret body.
      MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
@@ -14522,16 +14522,22 @@ Proof
      rw[EVERY_MEM, supported_default_expression_def] >>
      metis_tac[supported_expr_shape]) >>
   rw[runtime_bodies_shape_ok_def]
-  >- (drule classify_functions_external_source >> strip_tac >> gvs[] >>
+  >- (drule classify_functions_external_source >> strip_tac >>
+      gvs[subst_consts_fn_def] >>
       metis_tac[public_getter_body_shape, function_visibility_distinct])
-  >- (drule classify_functions_external_source >> strip_tac >> gvs[] >>
+  >- (drule classify_functions_external_source >> strip_tac >>
+      gvs[subst_consts_fn_def] >>
       metis_tac[public_getter_defaults, listTheory.EVERY_DEF,
                 function_visibility_distinct])
-  >- (gvs[MEM_classify_internal] >> metis_tac[function_visibility_distinct])
-  >- (gvs[MEM_classify_internal] >> metis_tac[function_visibility_distinct])
-  >- (drule classify_functions_fallback_mem >> strip_tac >> gvs[] >>
+  >- (gvs[MEM_classify_internal, subst_consts_fn_def] >>
+      metis_tac[function_visibility_distinct])
+  >- (gvs[MEM_classify_internal, subst_consts_fn_def] >>
+      metis_tac[function_visibility_distinct])
+  >- (drule classify_functions_fallback_mem >> strip_tac >>
+      gvs[subst_consts_fn_def] >>
       metis_tac[function_visibility_distinct]) >>
-  drule classify_functions_fallback_mem >> strip_tac >> gvs[] >>
+  drule classify_functions_fallback_mem >> strip_tac >>
+  gvs[subst_consts_fn_def] >>
   metis_tac[function_visibility_distinct]
 QED
 

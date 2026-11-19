@@ -5,7 +5,7 @@ Ancestors bodyPtrHashBuiltinsShaAllocPath bodyPtrHashBuiltinsShaEmit
   venomExecSemantics emitHelper context compileEnv loweringStateRelDefs exprLoweringProps
   emitHelperProps venomInst venomState loweringHalt exprSimHash
   fragExec instIdxIndep fragGasPathPtr words bodyPtrHashBuiltinsShaAllocInput
-  bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsGhostFrame bodyPtrDefs
+  bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsGhostFrame bodyPtrDefs ptrDiscipline
 
 Theorem hash_alloc_buffer_cursor_frame:
   compile_alloc_buffer m sa = (buf,sn) /\
@@ -75,7 +75,11 @@ Theorem hash_alloc_sha256_abort_from_input:
   op_taint tn1 len = {} /\
   (!i. w2n w <= i /\ i < w2n w+w2n n ==> i NOTIN tn1.t_mem) /\
   (!x. x=p \/ len=Var x \/ x=q ==> not_fresh_at sn x) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
@@ -87,11 +91,16 @@ Proof
   strip_tac >>
   drule_all hash_alloc_sha256_code_split >> strip_tac >>
   drule_all hash_alloc_buffer_cursor_frame >> strip_tac >>
+  `a.vs_accounts = s.vs_accounts /\ a.vs_transient = s.vs_transient /\
+   a.vs_call_ctx = s.vs_call_ctx` by metis_tac[alloc_buffer_fields] >>
+  `tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans` by
+    simp[step_taint_def, mk_inst_def, store_taint_def, adopt_reset_def] >>
   `isPREFIX (emitted_insts sa sn) (DROP s.vs_inst_idx bb.bb_instructions) /\
    isPREFIX (emitted_insts sn sb) (DROP (SUC s.vs_inst_idx) bb.bb_instructions)` by
     (`isPREFIX (emitted_insts sa sn ++ emitted_insts sn sb)
         (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
      drule hash_code_prefix_split >> simp[ADD1]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sn) s G1 tn1 /\
    gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
     (OK (a with vs_inst_idx := SUC s.vs_inst_idx))` by
@@ -156,7 +165,11 @@ Theorem hash_alloc_sha256_abort_path:
       aid < sa.cs_next_id /\ b <= w2n w /\ w2n w+w2n n <= b+k) \/
    (?name b k. local_region cenv es.scopes s name b k /\
       b <= w2n w /\ w2n w+w2n n <= b+k)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
@@ -172,8 +185,7 @@ Proof
   drule compile_alloc_buffer_parts >> strip_tac >>
   `!x. x=p \/ len=Var x \/ x=q ==> not_fresh_at sn x` by metis_tac[] >>
   `eval_operand (Var q) t = SOME v` by metis_tac[] >>
-  drule_all hash_alloc_sha256_abort_from_input >>
-  disch_then (qspec_then `D` mp_tac) >> simp[]
+  drule_all hash_alloc_sha256_abort_from_input >> simp[]
 QED
 
 Theorem hash_alloc_sha256_success_from_input:
@@ -191,7 +203,11 @@ Theorem hash_alloc_sha256_success_from_input:
   op_taint tn1 len = {} /\
   (!i. w2n w <= i /\ i < w2n w+w2n n ==> i NOTIN tn1.t_mem) /\
   (!x. x=p \/ len=Var x \/ x=q ==> not_fresh_at sn x) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   mem_bytes_at (w2n w) (w2n n) a.vs_memory = bs /\
@@ -213,11 +229,16 @@ Proof
   strip_tac >>
   drule_all hash_alloc_sha256_code_split >> strip_tac >>
   drule_all hash_alloc_buffer_cursor_frame >> strip_tac >>
+  `a.vs_accounts = s.vs_accounts /\ a.vs_transient = s.vs_transient /\
+   a.vs_call_ctx = s.vs_call_ctx` by metis_tac[alloc_buffer_fields] >>
+  `tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans` by
+    simp[step_taint_def, mk_inst_def, store_taint_def, adopt_reset_def] >>
   `isPREFIX (emitted_insts sa sn) (DROP s.vs_inst_idx bb.bb_instructions) /\
    isPREFIX (emitted_insts sn sb) (DROP (SUC s.vs_inst_idx) bb.bb_instructions)` by
     (`isPREFIX (emitted_insts sa sn ++ emitted_insts sn sb)
         (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
      drule hash_code_prefix_split >> simp[ADD1]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sn) s G1 tn1 /\
    gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
     (OK (a with vs_inst_idx := SUC s.vs_inst_idx))` by
@@ -290,7 +311,11 @@ Theorem hash_alloc_sha256_success_path:
       aid < sa.cs_next_id /\ b <= w2n w /\ w2n w+w2n n <= b+k) \/
    (?name b k. local_region cenv es.scopes s name b k /\
       b <= w2n w /\ w2n w+w2n n <= b+k)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   mem_bytes_at (w2n w) (w2n n) s.vs_memory = bs /\
@@ -315,7 +340,7 @@ Proof
   drule_all hash_alloc_buffer_cursor_frame >> strip_tac >>
   `mem_bytes_at (w2n w) (w2n n) t.vs_memory = bs` by metis_tac[] >>
   drule_all hash_alloc_sha256_success_from_input >>
-  disch_then (qspec_then `D` strip_assume_tac) >>
+  strip_tac >>
   `local_ptrs_reserved cenv sn` by
     (qpat_assum `local_ptrs_reserved cenv sa` mp_tac >>
      qpat_assum `!y. not_fresh_at sa y ==> not_fresh_at sn y` mp_tac >>

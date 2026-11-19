@@ -3,6 +3,7 @@
    emitted code, not an independently chosen target run. *)
 Theory bodyFullTargetArrayScalar
 Ancestors
+  exprPtrUnwrapScalarEdges[qualified,ignore_grammar]
   exprSimArrayIndex bodyFullUnwrapRun fragGasSeqPtr fragGasOriginPtr
   fragExecMem fragExec exprLoweringProps compileEnv venomState venomInst
   list rich_list venomExecSemantics venomExecProofs fragGasSeq
@@ -342,28 +343,6 @@ Proof
             array_bounds_check_writes_fresh]
 QED
 
-Theorem array_address_ptr_inst_ok[local]:
-  (opc = ADD \/ opc = MUL) /\
-  op_taint tn left = {} /\ op_taint tn right = {} /\
-  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-  ptr_inst_ok D lo fuel ctx func G tn (mk_inst id opc [left;right] [out]) s
-Proof
-  strip_tac >>
-  `scalar_shape (mk_inst id opc [left;right] [out])` by
-    simp[scalar_shape_def, scalar_binary_def, mk_inst_def] >>
-  `access_ok lo G func (mk_inst id opc [left;right] [out]) s /\
-   taint_ok func tn (mk_inst id opc [left;right] [out]) s` by
-    (gvs[] >> simp[access_ok_def, taint_ok_def, mk_inst_def,
-       source_memory_read_ranges_def, source_memory_write_ranges_def] >>
-     metis_tac[]) >>
-  drule scalar_shape_control >> strip_tac >>
-  drule scalar_step_shape >> strip_tac >>
-  simp[ptr_inst_ok_def, step_inst_non_invoke] >>
-  rpt strip_tac >> gvs[] >>
-  drule_all (cj 1 scalar_exec_result) >> strip_tac >>
-  gvs[update_var_def]
-QED
-
 Theorem array_address_taint_step[local]:
   (opc = ADD \/ opc = MUL) /\ op_taint tn left = {} /\ op_taint tn right = {} ==>
   op_taint (step_taint (mk_inst id opc [left;right] [out]) s u tn) (Var out) = {} /\
@@ -393,7 +372,7 @@ Theorem array_address_cons_ptr[local]:
 Proof
   strip_tac >>
   `ptr_inst_ok D lo 0 ctx func G tn (mk_inst id opc [left;right] [out]) s` by
-    (irule array_address_ptr_inst_ok >> simp[]) >>
+    (irule exprPtrUnwrapScalarEdgesTheory.ptr_inst_ok_copy_arith >> simp[]) >>
   Cases_on `step_inst_base (mk_inst id opc [left;right] [out]) s` >>
   simp[inst_seq_ptr_def] >> first_x_assum irule >>
   `scalar_shape (mk_inst id opc [left;right] [out])` by
@@ -590,7 +569,7 @@ Theorem array_elem_ptr_nonalias_uniform:
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   (!x. idx = Var x ==> not_fresh_at sa x) /\
   op_taint tn bop = {} /\ op_taint tn idx = {} /\
-  op_prov G idx = NONE /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  op_prov G idx = NONE /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
   ?t H tm. run_inst_seq (emitted_insts sa sb) s = OK t /\
     (!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s H tm) /\
@@ -683,7 +662,7 @@ Theorem array_bounds_check_nonalias_uniform:
   (!x. len = Var x ==> not_fresh_at sa x) /\
   op_prov G idx = NONE /\ op_prov G len = NONE /\
   op_taint tn idx = {} /\ op_taint tn len = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   fn_has_code sa sb func /\

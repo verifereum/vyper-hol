@@ -1,6 +1,7 @@
 (* RawLog topics: join the checked suffix and pointwise contracts. *)
 Theory bodyFullRawLogTopics
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullRawLogTopicsPost bodyFullRawLogTopicsSuffix bodyFullPreds
   gasOutcomeFullCompose bodyRawLogArgPre exprSimSource exprSimHypsDefs
   vyperTypeSystem vyperContext vyperValue vyperInterpreter vyperState vyperAST list
@@ -26,6 +27,7 @@ Theorem raw_log_topics_full:
      gas_shadow_compiles (compile_multi_exprs compile_expr cenv xs)
        (compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr xs))) /\
   body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
@@ -43,7 +45,9 @@ Theorem raw_log_topics_full:
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!fn inst st. frag_reachable ctx func s fn inst st ==> dalloca_no_wrap inst st) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\

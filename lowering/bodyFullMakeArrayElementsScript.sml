@@ -1,6 +1,7 @@
 (* Homogeneous elements reuse the joint full-H tuple traversal. *)
 Theory bodyFullMakeArrayElements
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullMakeArrayLoop exprSimAggregateEncoding rich_list list gasOutcomeFull
   exprSimDefs[qualified,ignore_grammar]
 
@@ -8,7 +9,8 @@ val _ = Parse.hide "base";
 
 Theorem make_array_elements_full:
   !args et tv header off ps sa sb shadow_sa shadow_sb es s G tn.
-    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env ebase /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env ebase /\
     csbase.cs_next_id <= aid /\ csbase.cs_next_id <= sa.cs_next_id /\
     csbase.cs_next_var <= sa.cs_next_var /\
     local_ptrs_reserved cenv csbase /\ local_ptrs_reserved cenv sa /\

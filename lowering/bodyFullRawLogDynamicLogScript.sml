@@ -22,22 +22,26 @@ Theorem raw_log_dynamic_log_joint:
   mem_bytes_at p (LENGTH bs) t.vs_memory = bs /\
   stmt_state_rel H ctx func cenv cx ee t /\
   storage_well_formed_on cx ee (FST H) /\
-  ghost_inv_at D lo d cenv cx ee G tn t /\ ~ctx_has_dalloca ctx ==>
-  let i = mk_inst id LOG
-    (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [];
-      ee' = ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs];
-      u = t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]
-  in
-    step_inst_base i t = OK u /\
-    inst_mem_below_frontier i t /\ inst_dload_in_section i t /\
-    ptr_inst_ok D lo 0 ctx func G tn i t /\
-    step_prov PG G i u = G /\ step_taint i t u tn = tn /\
-    (u with vs_logs := t.vs_logs) = t /\
-    stmt_state_rel H ctx func cenv cx ee' u /\
-    storage_well_formed_on cx ee' (FST H) /\
-    ghost_inv_at D lo d cenv cx ee' G tn u
+  ghost_inv_at D lo d cenv cx ee G tn t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) ==>
+  step_inst_base (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [])
+    t = OK (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) /\
+  inst_mem_below_frontier (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t /\
+  inst_dload_in_section (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t /\
+  ptr_inst_ok D lo 0 ctx func
+    G tn (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t /\
+  step_prov PG G (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op])
+    []) (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) = G /\
+  step_taint (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op])
+    []) t (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) tn = tn /\
+  ((t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) with vs_logs := t.vs_logs) = t /\
+  stmt_state_rel H ctx func cenv cx
+    (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) /\
+  storage_well_formed_on cx
+    (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (FST H) /\
+  ghost_inv_at D lo d cenv cx
+    (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) G tn (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs])
 Proof
-  strip_tac >> simp_tac bool_ss [LET_THM] >>
+  strip_tac >>
   `~t.vs_call_ctx.cc_static /\ t.vs_call_ctx.cc_address = cx.txn.target` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `step_inst_base (mk_inst id LOG

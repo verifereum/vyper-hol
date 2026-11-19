@@ -10,9 +10,10 @@
  *)
 Theory bodyFullAssertReason
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullAssertReasonSource bodyFullAssertReasonControl bodyFullShared
   bodyFullRaiseReason
-  bodyInvNoDalloca contextRawReachable unitMemInv unitTransformDefs ptrDiscipline
+  contextRawReachable unitMemInv unitTransformDefs ptrDiscipline
   decoderNavigationPtr gasOutcomeFull gasOutcomeFullCompose gasOutcomeFullStmts fragGasEmitCtrl gasExemptCert
   stmtSimReason stmtSimDefs stmtSimProps stmtSimIfProps exprSimDefs bodyMemoryDefs bodyPtrDefs bodyExprPreFacts exprSimSource
   valueEncoding allocaHistory vyperStorageTrace vyperStorageFootprint
@@ -26,7 +27,8 @@ Theorem compile_assert_reason_frag_full_from_raise:
   (!cx e DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (Raise (RaiseReason e)) /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Raise (RaiseReason e)) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Raise (RaiseReason e)) ==>
        occurs_abi_decode_target target tops) /\
@@ -46,7 +48,8 @@ Theorem compile_assert_reason_frag_full_from_raise:
    shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok cx se) /\
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (Assert e (AssertReason se)) /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Assert e (AssertReason se)) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assert e (AssertReason se)) ==>
        occurs_abi_decode_target target tops) /\
@@ -88,10 +91,15 @@ Proof
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `t1`, `op`, `s0`,
     `G0`, `tn0`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        mp_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
   strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ condQ condR` >>
   rewrite_tac[eval_assert_reason_bind] >>
-  irule gas_outcome_full_bind_all >> rpt conj_tac
+  irule gas_outcome_full_bind_all_path >> rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
       qexistsl_tac [`mid`, `t`, `v`] >> RULE_ASSUM_TAC BETA_RULE >>
@@ -128,7 +136,7 @@ Resume compile_assert_reason_frag_full_from_raise[selected]:
   qunabbrev_tac `condQ` >> RULE_ASSUM_TAC BETA_RULE >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
      mid.storage_trace` by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
@@ -165,7 +173,7 @@ Resume compile_assert_reason_frag_full_from_raise[true]:
   qexistsl_tac [`G1`, `mid`, `INL ()`, `jump_to sb.cs_current_bb t`, `tn1`] >>
   simp[return_def] >> qx_gen_tac `H` >> strip_tac >>
   conj_tac >- (first_x_assum (qspec_then `H` mp_tac) >> simp[]) >>
-  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ _`
     (qspec_then `H` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
@@ -190,8 +198,15 @@ Resume compile_assert_reason_frag_full_from_raise[true]:
        (mp_then Any mp_tac expr_post_alloca_frame) >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then ACCEPT_TAC) >>
+  `return_buf_sep d cenv (mid with gas_obs := []) (jump_to sb.cs_current_bb t)` by
+    (simp[return_buf_sep_jump, return_buf_sep_gas_obs] >>
+     irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+     conj_tac >- fs[] >>
+     qexistsl_tac [`H`, `ctx`, `cx`, `es`, `func`, `s0`, `sa`] >>
+     fs[expr_post_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   gvs[ghost_kept_at_def] >>
   drule_all assert_reason_true_post_full >> strip_tac >>
+  fs[return_buf_sep_gas_obs] >>
   rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC,
          irule alloca_frame_same_state >> qexists_tac `t` >>
@@ -201,7 +216,7 @@ Resume compile_assert_reason_frag_full_from_raise[true]:
 QED
 
 Resume compile_assert_reason_frag_full_from_raise[false]:
-  qpat_x_assum `!H. gas_origin_ptr_path _ _ _ _`
+  qpat_assum `!H. gas_origin_ptr_path _ _ _ _`
     (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                                   gas_outcome_full_zero_prefix)) >>
   drule_all assert_reason_false_source_ready >> strip_tac >>
@@ -224,11 +239,33 @@ Resume compile_assert_reason_frag_full_from_raise[false]:
 QED
 
 Resume compile_assert_reason_frag_full_from_raise[entry]:
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions`
+         (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi o CONJ inv))) >>
+  qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
+  `gas_origin_ptr_path (DF H0,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (s0,G0,tn0) marks (OK t,G1,tn1)` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
+       (qspec_then `H0` mp_tac) >> simp[Abbr `H0`]) >>
+  `gas_origin_ptr_path (DF H0,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (s0,G0,tn0) marks (OK (jump_to entry.cs_current_bb t),G1,tn1)` by
+    (qpat_assum `!H. gas_origin_ptr_path _ (t,G1,tn1) [] _`
+       (qspec_then `H0` assume_tac) >>
+     metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND_NIL]) >>
   `!fn inst s. frag_reachable ctx func (jump_to entry.cs_current_bb t) fn inst s ==>
       dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >> metis_tac[]) >>
+    (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK (jump_to _ t),G1,tn1)`
+       (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+       qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _`
+         (fn safe => ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+           (LIST_CONJ [path,no_phi,safe])))))) >>
+  qunabbrev_tac `H0` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (jump_to entry.cs_current_bb t)` by
+    (`allocas_below_fmp (jump_to entry.cs_current_bb t) <=> allocas_below_fmp t` by
+       simp[jump_to_def, allocas_below_fmp_def] >>
+     pop_assum (fn bound => PURE_ONCE_REWRITE_TAC [bound]) >> first_assum ACCEPT_TAC) >>
   `gas_admissible (eval_stmt cx (Raise (RaiseReason se))) (stmt_res_ok lctx)
      (mid with gas_obs := [])` by
     (irule assert_reason_raise_admissible >> metis_tac[]) >>
@@ -246,7 +283,7 @@ Resume compile_assert_reason_frag_full_from_raise[entry]:
      (jump_to entry.cs_current_bb t).vs_current_bb = entry.cs_current_bb /\
      (jump_to entry.cs_current_bb t).vs_inst_idx = LENGTH entry.cs_current_insts` by
     (gen_tac >> strip_tac >>
-     qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+     qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ _`
        (qspec_then `H` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      qpat_x_assum `INL _ = INL _`
@@ -254,6 +291,27 @@ Resume compile_assert_reason_frag_full_from_raise[entry]:
      match_mp_tac assert_reason_false_entry_full >>
      goal_assum (drule_at Any) >> simp[] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!tail. bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+      (INL (BoolV F), mid with gas_obs := tail)` by fs[] >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+     es.storage_trace` by
+    (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+       (irule storage_trace_frame_bind_all >>
+        simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+     qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule_all storage_trace_frame_prefix >> strip_tac >>
+     fs[] >> metis_tac[valid_horizon_append]) >>
+  `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
+  `return_buf_sep d cenv mid (jump_to entry.cs_current_bb t)` by
+    (simp[return_buf_sep_jump] >>
+     irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+     conj_tac >- fs[] >>
+     qexistsl_tac [`storage_trace_horizon mid.storage_trace`, `ctx`, `cx`,
+                   `es`, `func`, `s0`, `sa`] >>
+     fs[expr_post_def, locals_kept_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
   pop_assum SUBST_ALL_TAC >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _ /\ _ /\ local_ptrs_reserved _ _ /\ _`
@@ -278,7 +336,8 @@ Theorem compile_assert_reason_frag_full:
    shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok cx se) /\
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (Assert e (AssertReason se)) /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Assert e (AssertReason se)) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assert e (AssertReason se)) ==>
        occurs_abi_decode_target target tops) /\

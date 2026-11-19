@@ -15,7 +15,7 @@
  * compose; the remaining facts at s0 follow from the composed path.
  *
  * TOP-LEVEL:
- *   external_entry_joint
+ *   external_entry_subst_consts_joint
  *   runtime_entry_function_no_phi, entry_path_endpoint_facts
  *)
 Theory externalEntryJoint
@@ -28,7 +28,7 @@ Ancestors
   entryPtrSeamPrefix entryPtrSeamRegister externalEntryChecks entryStateRel
   sourceEntrySelection
   selectedBodyCode bodyMemAggregatePath fragGasPathFrameMem venomMemProofs
-  moduleLoweringProps vyperCompiler nonreentrantEntryPath externalReturnPackage
+  moduleLoweringProps vyperCompiler nonreentrantEntryPath externalReturnPackage entryDispatchProps
   vyperTypeContractGetter vyperTypeContractSoundness vyperTypeContractContext
 
 (* Helper: the runtime entry function, its label and its phi-free entry block. *)
@@ -46,14 +46,17 @@ Theorem runtime_entry_function_no_phi_nr:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   strip_tac >>
-  `supported_declaration_headers tops` by fs[supported_program_def] >>
-  drule_all external_lookup_raw_package_member >> strip_tac >>
+  drule_all lookup_function_external_raw_member >>
+  simp[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
+  strip_tac >>
   `?cenv pos_args min_cds is_payable nkey ut iv rt.
      set_external_package_target rpolicy.rpol_target
        (package_external_fn tops T (K global_nonreentrant_slot)
          (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,
-          name,args,([]:expr list),ret,fbody)) =
-     ("fn_" ++ name,cenv,pos_args,min_cds,is_payable,nr,nkey,ut,iv,fbody,rt)` by
+          name,args,([]:expr list),ret,
+          subst_consts_stmts (module_consts_env tops []) fbody)) =
+     ("fn_" ++ name,cenv,pos_args,min_cds,is_payable,nr,nkey,ut,iv,
+      subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
     simp[package_external_fn_def, set_external_package_target_def, LET_THM] >>
   pop_assum strip_assume_tac >>
   drule_all source_runtime_entry_checks_code >> strip_tac >>
@@ -299,6 +302,7 @@ Proof
   strip_tac >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
     not_fresh_at sa x` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
   drule_all (INST_TYPE [alpha |-> ``:256``]
     nonreentrant_entry_success_joint_with_view) >> strip_tac >>
   `es_lock.storage_trace = es0.storage_trace ++ [StorageLock nkey]` by
@@ -486,6 +490,7 @@ Proof
   drule_all guarded_body_code_from_registration >> simp[] >> strip_tac >>
   `global_nonreentrant_slot < dimword (:256)` by
     simp[global_nonreentrant_slot_def, wordsTheory.dimword_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
   drule_all (INST_TYPE [alpha |-> ``:256``]
     nonreentrant_entry_abort_joint_with_view) >>
   disch_then (qx_choosel_then [`a`,`s_abort`,`G_abort`,`tn_abort`]
@@ -599,100 +604,4 @@ Proof
   qpat_assum `!H. stmt_state_rel _ _ _ _ _ _ _ /\ ghost_inv _ _ _ _ _ _ _ _`
     (qspec_then `H` strip_assume_tac) >>
   simp[GSYM ghost_inv_cx_dead]
-QED
-
-Theorem external_entry_joint:
-  !tops rpolicy unit am tx ret vs mut args fbody env es0.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
-      (INL (), es0) ==>
-    ?lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' func
-     s0 G0 tn0.
-      set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops T (K global_nonreentrant_slot)
-           (mut, F, lookup_raw_return_or_F (NONE : num option)
-                       tx.function_name External tops,
-            tx.function_name, args, [], ret, fbody)) =
-        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
-         rt) /\
-      runtime_selected_body_start tops rpolicy
-        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody, rt) st /\
-      compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
-      compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((), st') /\
-      fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
-      unit.cu_context.ctx_entry = SOME "__entry" /\
-      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-      fn_entry_label func = SOME "__entry" /\
-      gas_path unit.cu_context func
-        (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                    vs_inst_idx := 0 |>) 0 (OK s0) /\
-      gas_path_mem unit.cu_context func
-        (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                    vs_inst_idx := 0 |>) 0 (OK s0) /\
-      alloca_history func s0 /\
-      return_buf_frame NONE cenv sa s0 /\
-      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-      s0.vs_gas_readings = vs.vs_gas_readings /\
-      s0.vs_code = vs.vs_code /\ s0.vs_labels = vs.vs_labels /\
-      (!fuel r. run_from fuel unit.cu_context func s0 = r /\
-                (!e. r <> Error e) ==>
-                ?fuel'. run_context fuel' unit.cu_context vs = r) /\
-      !st0 H.
-        valid_horizon
-          (initial_evaluation_context am.sources am.layouts tx NONE) st0 H
-          es0.storage_trace ==>
-        ((!fuel. ptr_safe_run
-            (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-            0 fuel unit.cu_context func [] G0 tn0 s0) ==>
-          !fuel. ptr_safe_blocks
-            (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-            0 fuel unit.cu_context func [] FEMPTY entry_taint
-            (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                        vs_inst_idx := 0 |>)) /\
-        ghost_inv_at
-          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-          0 NONE cenv
-          (initial_evaluation_context am.sources am.layouts tx NONE) es0
-          G0 tn0 s0 /\
-        stmt_state_rel H unit.cu_context func cenv
-          (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-        !explicit.
-          gas_origin_ptr_path
-            (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
-             0, explicit, unit.cu_context, func, [])
-            (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                        vs_inst_idx := 0 |>, FEMPTY, entry_taint)
-            [] (OK s0, G0, tn0)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `module_consts_env tops [] = []` by
-    (irule (Q.SPECL [`tops`,`tops`,`[]`]
-       supportedDeclsTheory.supported_headers_module_consts_env) >>
-     fs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def]) >>
-  drule_all external_entry_subst_consts_joint >>
-  simp[constSubstTheory.subst_consts_fn_empty,
-       constSubstTheory.subst_consts_stmt_empty] >>
-  disch_then (qx_choosel_then
-    [`lbl`,`cenv0`,`pos_args`,`min_cds`,`is_payable`,`nkey`,`ut'`,`iv`,`rt`,
-     `st`,`cenv`,`sa`,`st'`,`func`,`s0`,`G0`,`tn0`] strip_assume_tac) >>
-  qexistsl_tac
-    [`lbl`,`cenv0`,`pos_args`,`min_cds`,`is_payable`,`nkey`,`ut'`,`iv`,`rt`,
-     `st`,`cenv`,`sa`,`st'`,`func`,`s0`,`G0`,`tn0`] >>
-  simp[] >> conj_tac >-
-    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
-     simp[package_external_fn_def]) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
 QED

@@ -9,6 +9,7 @@
  *)
 Theory ctorDeployMemoryRunPtrEntry
 Ancestors
+  ctorDeployLoweringEntrySelection
   ctorDeployMemoryRunMemEntryTaskInitial
   ctorDeployLoweringEntryPrefix
   compileEnv
@@ -279,13 +280,11 @@ Proof
   drule_all deploy_ctor_entry_data_section >> strip_tac >>
   `constructor_args_encode tops tx initial.vs_data_section` by simp[Abbr `initial`] >>
   drule_all ctorDeployLoweringEntryInputsTheory.deploy_ctor_common_source_witness >> strip_tac >>
-  `supported_program tops` by fs[deploy_source_ok_def] >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supportedDeclsTheory.supported_headers_module_consts_env,
-              supportedProgramTheory.supported_program_def,
-              supportedDeclsTheory.supported_declaration_headers_def] >>
+  drule_all ctorDeployLoweringEntrySelectionTheory.deploy_supported_constructor_subst >>
+  strip_tac >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
-  simp[] >> strip_tac >> gvs[constSubstTheory.subst_consts_fn_empty] >>
+  simp[] >> strip_tac >>
+  gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
   drule_all lower_vyper_deploy_unit_ctor_named_init >> strip_tac >>
   PairCases_on `cf` >> gvs[ctor_named_init_def] >>
   `is_payable = (cf0 = Payable) /\ ret = NoneT` by

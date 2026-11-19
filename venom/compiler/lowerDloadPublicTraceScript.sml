@@ -1,6 +1,6 @@
 (* Evaluations recovered from the actual public-copy expansion trace. *)
 Theory lowerDloadPublicTrace
-Ancestors
+Ancestors lowerDloadMemoryWritePointEffect[qualified]
   lowerDloadExpansionExit lowerDloadSafetyAllocation lowerDloadSafetyKernel lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyUpdates
   lowerDloadSafetyWriteAssembly lowerDloadConfiguredOrigins lowerDloadOracleCallAssembly lowerDloadSafetyAssemblyPremises lowerDloadSafetyAllocBounds o1PassLift memSafeRun venomExecProps venomExecProofs contextRawReachable o1PassContract
   lowerDloadSafetyLocations venomFnScheduleRunner contextCodegenRel passSharedDefs lowerDloadSafetyRelation codegenRel lowerDloadDefs irSupply ptrDiscipline pointerConfinedDefs memLocDefs pred_set unitShapeDefs
@@ -108,11 +108,11 @@ Proof
      qexistsl_tac [`f.lf_fn`,`inst`,`f.lf_src`] >> simp[]) >>
   `op_prov f.lf_H op = NONE` by
     (Cases_on `op` >> simp[op_prov_def] >>
-     irule ld_vars_unselected >> qexistsl_tac [`A`,`P`] >> simp[] >>
+     irule lowerDloadMemoryWritePointEffectTheory.ld_vars_unselected >> qexistsl_tac [`A`,`P`] >> simp[] >>
      irule ld_dloadbytes_scalar_nonpointer >>
      goal_assum (drule_at Any) >> metis_tac[]) >>
   `~MEM inst.inst_opcode [ASSIGN;PHI;RET;RETFMP;DRET]` by simp[] >>
-  drule_all ld_write_address_observation >> simp[]
+  drule_all lowerDloadMemoryWritePointEffectTheory.ld_write_address_observation >> simp[]
 QED
 
 Theorem ld_dloadbytes_destinations:
@@ -139,7 +139,7 @@ Proof
     (irule ld_numeric_operand_untainted >>
      qexistsl_tac [`f.lf_fn`,`inst`,`f.lf_src`] >> simp[]) >>
   `~MEM inst.inst_opcode [ASSIGN;PHI;RET;RETFMP;DRET]` by simp[] >>
-  drule_all ld_write_address_observation >> strip_tac >>
+  drule_all lowerDloadMemoryWritePointEffectTheory.ld_write_address_observation >> strip_tac >>
   `MEM (w2n dw,w2n nw) (source_memory_write_ranges inst f.lf_src)` by
     simp[source_memory_write_ranges_def, sized_source_write_range_def,
          mem_write_ops_def] >>
@@ -396,11 +396,11 @@ Theorem ld_dloadbytes_source_operands:
 Proof
   strip_tac >>
   `?dw. eval_operand dest f.lf_src = SOME dw` by
-    (irule ld_write_operand_defined >> metis_tac[listTheory.MEM]) >>
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> metis_tac[listTheory.MEM]) >>
   `?ow0. eval_operand off f.lf_src = SOME ow0` by
-    (irule ld_write_operand_defined >> metis_tac[listTheory.MEM]) >>
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> metis_tac[listTheory.MEM]) >>
   `?nw0. eval_operand len f.lf_src = SOME nw0` by
-    (irule ld_write_operand_defined >> metis_tac[listTheory.MEM]) >>
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> metis_tac[listTheory.MEM]) >>
   `ow0 = ow` by (irule ld_dloadbytes_scalar_observation >> metis_tac[]) >>
   `nw0 = nw` by (irule ld_dloadbytes_scalar_observation >> metis_tac[]) >>
   metis_tac[]

@@ -76,7 +76,7 @@ Definition ptr_byte_frame_inv_def:
     (ctx_has_dalloca ctx ==> x < w2n s.vs_initial_fmp)
 End
 
-Theorem ptr_byte_frame_inv_inst_idx[local,simp]:
+Theorem ptr_byte_frame_inv_inst_idx:
   ptr_byte_frame_inv (ctx,x) G (s with vs_inst_idx := k) <=>
   ptr_byte_frame_inv (ctx,x) G s
 Proof
@@ -85,7 +85,7 @@ QED
 
 
 
-Theorem ptr_byte_frame_entry_prov[local]:
+Theorem ptr_byte_frame_entry_prov:
   (!v b sz. FLOOKUP G v = SOME (b,sz) ==> x < b \/ b + sz <= x) ==>
   !v b sz. FLOOKUP (entry_prov func s G) v = SOME (b,sz) ==>
     x < b \/ b + sz <= x
@@ -153,7 +153,7 @@ Proof
   metis_tac[step_inst_base_OK_byte_frame, step_inst_base_IntRet_byte_frame, ADD_COMM]
 QED
 
-Theorem exec_alloca_protected_byte_sites[local]:
+Theorem exec_alloca_protected_byte_sites:
   x < s.vs_alloca_next /\
   (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
     x < b \/ b + sz <= x) /\ exec_alloca inst s n = OK t ==>
@@ -220,7 +220,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem ptr_byte_frame_invoke_params[local]:
+Theorem ptr_byte_frame_invoke_params:
   (!v b sz. FLOOKUP G v = SOME (b,sz) ==> x < b \/ b + sz <= x) ==>
   !b sz. MEM (SOME (b,sz)) (MAP (op_prov G) ops) ==>
     x < b \/ b + sz <= x

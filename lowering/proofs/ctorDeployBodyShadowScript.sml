@@ -5,6 +5,7 @@
    TOP-LEVEL: deploy_ctor_body_shadow. *)
 Theory ctorDeployBodyShadow
 Ancestors
+  bodyFullShadowBodyInvLowering
   ctorDeployLoweringCode ctorDeployLoweringCodeShape ctorDeployLoweringDefs
   ctorDeployDefs
   gasShadowDeployRunner gasShadowShape gasShadowCompileStmt
@@ -115,6 +116,7 @@ Theorem deploy_ctor_body_shadow:
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) ==>
     ?shadow_ctx shadow_func shadow_sa shadow_sb.
+      shadow_body_inv tops dunit.cu_context shadow_ctx /\
       gas_shadow_context dunit.cu_context shadow_ctx /\
       gas_shadow_function func shadow_func /\
       MEM shadow_func shadow_ctx.ctx_functions /\
@@ -156,6 +158,11 @@ Proof
     0 (MAP gas_shadow_internal_package ifns) cenv0 (MAP gas_shadow_stmt body)
     pay nr nkey ut "__deploy"` >> simp[] >>
   rename1 `_ = SOME su` >> strip_tac >>
+  `shadow_body_inv tops dunit.cu_context su.cu_context` by
+    (qspecl_then [`tops`, `am`, `tx`, `rpolicy`, `runtime_bc`, `dunit`, `su`,
+       `exts`, `ints`, `fb`, `cf`, `cenv0`, `pos_args`, `pay`,
+       `nr`, `nkey`, `ut`, `body`, `ret`] mp_tac deploy_shadow_body_inv >>
+     fs[Abbr `ifns`]) >>
   `gas_shadow_context dunit.cu_context su.cu_context` by
     fs[gas_shadow_unit_def] >>
   qspecl_then [`rpolicy`, `runtime_bc`, `imm_len tops`, `pos_args`,

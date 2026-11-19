@@ -1,7 +1,7 @@
 (* Adapt the interpreter's internal-call induction hypotheses to the
  * supplied-argument, omitted-default, and callee-body stages. *)
 Theory bodyFullIntCall
-Ancestors
+Ancestors bodyFullShadowBodyInv
   bodyFullIntCallDefs bodyFullPreds bodyIntCallSeams bodySim
   vyperInterpreter vyperState vyperAST finite_map list
   bodyFullIntCallReturn compileVyper moduleLowering fragGasFocus
@@ -186,6 +186,7 @@ val args_input = Term `
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
@@ -260,56 +261,12 @@ val args_input = Term `
         (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
         (es0, s0, G0, tn0) Q R
 `;
-(* The paired compilation premise of the Callee stage. *)
-val shadow_callee_code = Term `
-  ?rpolicy unit label ce params has_rb nr' key trans view ctor ilen
-   compiled_ss rt before old entry final sf beforeS oldS entryS finalS.
-    (if cx.in_deploy then
-       ?rbc. lower_vyper_deploy_unit tops rpolicy rbc = SOME unit
-     else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
-    ctx = unit.cu_context /\
-    set_internal_package_target rpolicy.rpol_target
-      (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
-        (if cx.in_deploy then
-           compute_immutables_len
-             (get_struct_fields (make_struct_fields_map tops)) tops
-         else 0)
-        (mut,nr,rr,name,args,(dflts : expr list),ret,ss)) =
-      (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,
-       compiled_ss,rt) /\
-    compiled_ss = ss /\
-    new_block label before = (old,entry) /\
-    compile_internal_function ce params has_rb nr' key trans view ctor ilen
-      compiled_ss rt entry = ((),final) /\
-    fn_has_code entry final callee /\
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
-    ctx_inst_ids_distinct ctx /\
-    MEM sf shadow_ctx.ctx_functions /\
-    gas_shadow_function callee sf /\
-    new_block label beforeS = (oldS,entryS) /\
-    compile_internal_function ce params has_rb nr' key trans view ctor ilen
-      (MAP gas_shadow_stmt compiled_ss) rt entryS = ((),finalS) /\
-    gas_shadow_state entry entryS /\
-    gas_shadow_state final finalS /\
-    fn_has_code entryS finalS sf
-`;
-
-val internal_call_label = Term `
-  internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
-    (nsid_to_string (NONE,name))
-    (cenv.ce_func_param_types (nsid_to_string (NONE,name))) cenv.ce_is_ctor
-`;
-
-val shadow_callee_code_for_call = Term `
-  !callee. lookup_function ^internal_call_label ctx.ctx_functions = SOME callee ==>
-    ^shadow_callee_code
-`;
-
 val callee_input = Term `
   !DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
    G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
    rbs pvs dflts.
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
@@ -332,8 +289,7 @@ val callee_input = Term `
       lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
-      eval_operands arg_ops t = SOME argv /\
-      ^shadow_callee_code ==>
+      eval_operands arg_ops t = SOME argv ==>
       gas_outcome_full
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
          MAP (op_prov G) arg_ops)
@@ -390,22 +346,13 @@ Proof
   simp[gas_shadow_compiles_def] >> disch_then drule >> simp[]
 QED
 
-Theorem intcall_entry_selects_callee[local]:
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
-    sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
-  gas_invoke_entry (ctx,func) t callee entered ==>
-  lookup_function ^internal_call_label ctx.ctx_functions = SOME callee
-Proof
-  rw[intcall_entry_full_def, gas_invoke_entry_def] >> gvs[]
-QED
-
 (* Stage (b) gives stage (c)'s callee premise. *)
 Theorem intcall_callee_premise[local]:
   ^callee_input ==>
   !DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
    G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn nrc nrbs npvs dflts.
     body_inv tops ctx cenv cx /\
-    ^shadow_callee_code_for_call /\
+    shadow_body_inv tops ctx shadow_ctx /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
@@ -463,10 +410,6 @@ Proof
             (fn ih =>
               assume_tac (MATCH_MP intcall_entry_body_ih
                 (LIST_CONJ [inv, lookup, decl, entry, ih]))))))) >>
-  Q.SUBGOAL_THEN `^shadow_callee_code` ASSUME_TAC >-
-    (drule_all intcall_entry_selects_callee >>
-     qpat_assum `!callee. lookup_function _ _ = SOME callee ==> _`
-       (qspec_then `callee` mp_tac) >> simp[]) >>
   first_assum (fn callee_stage =>
     if aconv (concl callee_stage) callee_input then
   qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`tops`,`cenv`,`cx`,
@@ -488,7 +431,7 @@ Theorem intcall_sim_full:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
-    ^shadow_callee_code_for_call /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
@@ -581,7 +524,7 @@ Theorem intcall_vv_full:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
-    ^shadow_callee_code_for_call /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\

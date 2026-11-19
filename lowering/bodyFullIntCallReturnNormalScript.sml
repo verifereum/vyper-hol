@@ -1140,6 +1140,14 @@ Resume intcall_return_normal_owned[intret]:
          venomExecSemanticsTheory.merge_callee_state_def,
          ptrDisciplineTheory.allocas_below_fmp_def]) >>
      strip_tac >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp returned` by
+    (`allocas_below_fmp (returned with vs_inst_idx := SUC t.vs_inst_idx) <=>
+        allocas_below_fmp returned` by
+       simp[NoAsms, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     qpat_assum `allocas_below_fmp _ <=> allocas_below_fmp returned` (fn idx =>
+       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp
+           (returned with vs_inst_idx := SUC t.vs_inst_idx)`
+         (ACCEPT_TAC o PURE_REWRITE_RULE [idx]))) >>
   drule_at (Pat `ptr_covers _ _ _ _ _`)
     intCallResultFullTheory.store_multi_results_origin_ptr >>
   disch_then drule >>
@@ -1376,6 +1384,8 @@ Resume intcall_return_normal_owned[void_post]:
   `step_inst fuel ctx inst t = OK returned` by
     simp[Once venomExecSemanticsTheory.step_inst_def] >>
   drule_all intcall_return_stmt_state_rel >> strip_tac >>
+  qpat_assum `stmt_state_rel H' ctx func cenv cx _ returned`
+    (assume_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   `ctx_has_dalloca ctx ==>
      allocas_below_fmp (returned with vs_inst_idx := SUC t.vs_inst_idx)` by
     (qpat_assum `stmt_state_rel H' ctx func cenv cx _ returned`

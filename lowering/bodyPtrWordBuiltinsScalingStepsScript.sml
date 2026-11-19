@@ -9,7 +9,7 @@ Theorem word_scale_delta_inst_ok:
   MEM inst.inst_opcode [Div; OR] /\
   (!arg. MEM arg inst.inst_operands ==>
     op_taint tn arg = {} /\ op_prov G arg = NONE) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D lo 0 ctx fn G tn inst s
 Proof
   strip_tac >>
@@ -125,7 +125,7 @@ Theorem word_scale_inst_ok:
   MEM inst.inst_opcode [MUL; Div; EQ; ISZERO; OR; ASSERT] /\
   (!arg. MEM arg inst.inst_operands ==>
     op_taint tn arg = {} /\ op_prov G arg = NONE) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D lo 0 ctx fn G tn inst s
 Proof
   strip_tac >> Cases_on `MEM inst.inst_opcode [Div; OR]`

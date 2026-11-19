@@ -16,7 +16,8 @@
 Theory bodyFullCtrlCases
 Ancestors
   bodyFullPreds bodyFullExits bodyFullIf bodyFullExprStmt bodyFullStmtsCons
-  bodySimFull bodyExprPreFacts exprOpenMain exprSimSource bodyInvNoDalloca
+  bodyFullIfExpReach
+  bodySimFull bodyExprPreFacts exprOpenMain exprSimSource
   gasShadowCompileStmt gasShadowCompileStmtHelpers gasShadowCompileStmtBase
   gasShadowState gasShadow stmtSimProps loweringPosts stmtLoweringMono
   exprLoweringProps supportedStmts supportedExprs supportedStmtTraverse
@@ -32,28 +33,28 @@ Theorem break_stmt_full_ok:
   !cx. body_stmt_full_ok cx Break
 Proof
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def] >>
-  irule compile_loop_jump_frag_full >> simp[] >> metis_tac[body_inv_no_dalloca]
+  irule compile_loop_jump_frag_full >> simp[]
 QED
 
 Theorem continue_stmt_full_ok:
   !cx. body_stmt_full_ok cx Continue
 Proof
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def] >>
-  irule compile_loop_jump_frag_full >> simp[] >> metis_tac[body_inv_no_dalloca]
+  irule compile_loop_jump_frag_full >> simp[]
 QED
 
 Theorem raise_bare_stmt_full_ok:
   !cx. body_stmt_full_ok cx (Raise RaiseBare)
 Proof
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def, gas_shadow_raise_reason_def] >>
-  irule compile_raise_frag_full >> simp[] >> metis_tac[body_inv_no_dalloca]
+  irule compile_raise_frag_full >> simp[]
 QED
 
 Theorem raise_unreachable_stmt_full_ok:
   !cx. body_stmt_full_ok cx (Raise RaiseUnreachable)
 Proof
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def, gas_shadow_raise_reason_def] >>
-  irule compile_raise_frag_full >> simp[] >> metis_tac[body_inv_no_dalloca]
+  irule compile_raise_frag_full >> simp[]
 QED
 
 (* An assertion with no reason: the condition's joint simulation at
@@ -65,7 +66,6 @@ Theorem body_assert_bare_full[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def, gas_shadow_assert_reason_def] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `supported_expr tops e` by gvs[supported_stmt_def, supported_expr_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
@@ -179,7 +179,11 @@ Proof
      disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`,
        `shadow_ctx`, `func`, `shadow_func`, `cenv`, `env`, `BaseT BoolT`,
        `es`] mp_tac) >> simp[]) >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  `ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==>
+    !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (strip_tac >> qpat_assum `body_inv _ ctx _ cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (MATCH_MP body_inv_no_phi (CONJ inv member))))) >>
   irule compile_if_stmt_frag_full >>
   simp[stmts_env_cs_mono, gas_shadow_stmt_lower_value,
        if_branch_shadow_compiles] >>
@@ -226,7 +230,11 @@ Proof
   gvs[supported_stmt_def, type_stmt_def, AllCaseEqs(), int_calls_stmt_def,
       supported_stmt_expr_exists_def] >>
   rename1 `type_stmt env ret_ty s = SOME env1` >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  `ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==>
+    !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (strip_tac >> qpat_assum `body_inv _ ctx _ cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (MATCH_MP body_inv_no_phi (CONJ inv member))))) >>
   irule (REWRITE_RULE [MAP] stmt_frag_full_cons_env) >>
   reverse conj_tac
   >- (conj_tac >- first_assum ACCEPT_TAC >>

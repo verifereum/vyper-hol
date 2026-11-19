@@ -3975,7 +3975,7 @@ Proof
   metis_tac[fold_const_typing_aux]
 QED
 
-Theorem constant_subscript_base_exact[local]:
+Theorem constant_subscript_base_exact:
   constant_expr mods e ==> subscript_base_type_exact env e
 Proof
   Cases_on `e` >> simp[subscript_base_type_exact_def, constant_expr_def]
@@ -6163,10 +6163,8 @@ Proof
       irule const_computations_related_prefix >> reverse conj_tac
       >- (irule const_computations_related_prefix >> reverse conj_tac
           >- (irule const_computations_related_prefix >> reverse conj_tac
-              >- (irule const_computations_related_prefix >> reverse conj_tac
-                  >- (simp[const_computations_related_eq] >>
-                      irule const_subst_code_source >> metis_tac[]) >>
-                  rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
+              >- (simp[const_computations_related_eq] >>
+                  irule const_subst_code_source >> metis_tac[]) >>
               rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
           rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
       rpt strip_tac >> irule const_computations_related_refl >>

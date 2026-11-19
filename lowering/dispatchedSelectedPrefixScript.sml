@@ -21,8 +21,9 @@ Theorem dispatched_selected_registration_prefix_nr:
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    MEM (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
-      tx.function_name,args,([]:expr list),ret,fbody) (FST (classify_functions tops)) /\
+    MEM (subst_consts_fn (module_consts_env tops [])
+      (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+       tx.function_name,args,([]:expr list),ret,fbody)) (FST (classify_functions tops)) /\
     4 <= LENGTH vs.vs_call_ctx.cc_calldata /\
     FIND (\(n,ts). abi_method_id (type_env tops) n ts =
       cd_selector vs.vs_call_ctx.cc_calldata)
@@ -120,18 +121,7 @@ Proof
      subst_consts_stmts (module_consts_env tops []) fbody,pkg10)` by
     (rewrite_tac[GSYM entryDispatchPropsTheory.external_package_subst_consts] >> simp[]) >>
   fs[] >>
-  `module_consts_env tops [] = []` by
-    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
-     qexists_tac `tops` >>
-     fs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def]) >>
-  `MEM (subst_consts_fn (module_consts_env tops [])
-    (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
-     tx.function_name,args,([]:expr list),ret,fbody))
-    (FST (classify_functions tops))` by simp[constSubstTheory.subst_consts_fn_empty] >>
   drule_all classified_entry_prefix_structure >> strip_tac >>
-  qpat_assum `module_consts_env tops [] = []` (fn th =>
-    RULE_ASSUM_TAC (SRULE [th, constSubstTheory.subst_consts_stmt_empty,
-      constSubstTheory.subst_consts_fn_empty])) >>
   suspend "dispatch"
 QED
 
@@ -164,6 +154,9 @@ Resume dispatched_selected_registration_prefix_nr[dispatch]:
     fs[supported_program_def, supported_declaration_names_def,
        supported_selectors_distinct_def] >>
   `4 <= LENGTH vs.vs_call_ctx.cc_calldata` by decide_tac >>
+  qpat_assum `MEM (subst_consts_fn _ _) _`
+    (assume_tac o SIMP_RULE std_ss
+      [constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def]) >>
   drule_all default_raw_selected_target >> strip_tac >>
   `tt.vs_current_bb = opened.cs_current_bb /\
    tt.vs_call_ctx = vs.vs_call_ctx /\ fresh_vars_wrt opened tt` by
@@ -174,6 +167,10 @@ Resume dispatched_selected_registration_prefix_nr[dispatch]:
 QED
 
 Resume dispatched_selected_registration_prefix_nr[checks]:
+  qpat_assum `set_external_package_target _
+    (package_external_fn _ _ _ (subst_consts_fn _ _)) = _`
+    (assume_tac o SIMP_RULE std_ss
+      [constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def]) >>
   `pkg3 <= LENGTH vs.vs_call_ctx.cc_calldata` by
     (drule_all registration_reject_classified_package_inputs >> strip_tac >>
      gvs[]) >>
@@ -199,11 +196,7 @@ Resume dispatched_selected_registration_prefix_nr[checks]:
        (mp_tac o MATCH_MP entryPrefixPtrTheory.vars_pc_only_gas_readings) >> simp[Abbr `ss`]) >>
   qpat_x_assum `Abbrev (ss = _)` (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   qexistsl_tac [`st`, `cenv`, `sa`, `st'`, `u`, `G2`, `tn2`] >>
-  `module_consts_env tops [] = []` by
-    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
-     qexists_tac `tops` >>
-     fs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def]) >>
-  fs[entry_taint_def, stringTheory.STRCAT_EQNS, constSubstTheory.subst_consts_stmt_empty] >>
+  fs[entry_taint_def, stringTheory.STRCAT_EQNS] >>
   `cs_extends opened st` by
     (qspec_then `pkg3` (qspec_then `mut = Payable` mp_tac) compile_entry_checks_shape >>
      pure_rewrite_tac[shape_step_def] >>
@@ -292,14 +285,10 @@ Theorem dispatched_selected_registration_prefix:
             (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0 |>)
 Proof
   rpt gen_tac >> strip_tac >>
-  `module_consts_env tops [] = []` by
-    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
-     qexists_tac `tops` >>
-     fs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def]) >>
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all entryDispatchPropsTheory.lookup_function_external_raw_member >>
-  simp[constSubstTheory.subst_consts_fn_empty] >> strip_tac >>
+  strip_tac >>
   drule_all
     (Q.INST [`nr` |-> `F`] (SPEC_ALL dispatched_selected_registration_prefix_nr)) >>
-  simp[constSubstTheory.subst_consts_stmt_empty]
+  simp[]
 QED

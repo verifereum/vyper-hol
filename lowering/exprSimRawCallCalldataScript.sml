@@ -18,7 +18,7 @@
 
 Theory exprSimRawCallCalldata
 Ancestors
-  dallocaCalldata
+  dallocaCalldata rawCallOutbufCompile[qualified,ignore_grammar]
   ptrDiscipline exprSimHashBoundary
   exprSimSource exprSimHypsDefs exprSimDefs exprSimStack exprSimProps
   gasSummary gasSummaryCompose gasOutcome gasExemptCert
@@ -168,21 +168,6 @@ Theorem raw_call_static_value_abort:
 Proof
   simp[eval_raw_call_def, frame_call_value_def, type_check_def,
        check_def, assert_def, bind_def, ignore_bind_def, vyperStateTheory.return_def]
-QED
-
-Theorem calldata_outbuf_compile[local]:
-  !n sa valop ptrop sb.
-    compile_raw_call_outbuf n sa = ((valop,ptrop),sb) ==>
-    ?buf sm. compile_alloc_buffer
-      (if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32) sa = (buf,sm) /\
-      valop = buf.buf_operand /\
-      (if n = 0 then ptrop = valop /\ sb = sm
-       else emit_op ADD [valop; Lit 32w] sm = (ptrop,sb))
-Proof
-  rpt gen_tac >> Cases_on `n = 0` >>
-  simp[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  goal_assum (drule_at Any) >> simp[]
 QED
 
 (* TOP-LEVEL *)
@@ -906,9 +891,10 @@ Proof
   `exprSafeOperand$safe_operand sb valop` by
     (simp[exprSafeOperandTheory.safe_operand_def] >> conj_tac
      >- metis_tac[exprOperandVarTheory.compiler_raw_call_outbuf_var] >>
-     drule calldata_outbuf_compile >> strip_tac >>
+     drule rawCallOutbufCompileTheory.calldata_outbuf_compile >> strip_tac >>
      metis_tac[exprSafeOperandTheory.alloc_buffer_not_label]) >>
-  simp[] >> drule calldata_outbuf_compile >> strip_tac >> Cases_on `n = 0`
+  simp[] >> drule rawCallOutbufCompileTheory.calldata_outbuf_compile >>
+  strip_tac >> Cases_on `n = 0`
   >- gvs[] >>
   gvs[] >> metis_tac[exprSafeOperandTheory.emit_op_safe_operand]
 QED
@@ -1508,22 +1494,7 @@ Proof
   gvs[outcomes_accounts_typed_def, EVERY_MEM]
 QED
 
-
 (* ===== The counted composition ===== *)
-
-(* In oracle mode raw_call reads no gas observation. *)
-Theorem calldata_take_call_outcome_gas_obs[local]:
-  !target cd vo st g gas_cap.
-    take_call_outcome gas_cap target cd vo (st with gas_obs := g) =
-      (FST (take_call_outcome gas_cap target cd vo st),
-       SND (take_call_outcome gas_cap target cd vo st) with gas_obs := g) /\
-    (SND (take_call_outcome gas_cap target cd vo st)).gas_obs = st.gas_obs
-Proof
-  rpt gen_tac >> simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def] >>
-  Cases_on `st.outcomes` >> simp[LET_THM, UNCURRY] >>
-  rename1 `st.outcomes = SOME os` >> Cases_on `os` >>
-  simp[LET_THM, UNCURRY] >> rw[]
-QED
 
 Theorem calldata_adopt_call_outcome_gas_obs[local]:
   !rq oc st g.
@@ -1559,8 +1530,12 @@ Proof
   simp[eval_raw_call_def, update_pending_deletions_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, vyperStateTheory.return_def, raise_def] >>
   qmatch_goalsub_abbrev_tac `take_call_outcome gas_cap target data vo` >>
-  qspecl_then [`target`, `data`, `vo`, `st`, `g`, `gas_cap`] mp_tac
-    calldata_take_call_outcome_gas_obs >>
+  mp_tac (CONJ
+    (Q.INST [`calldata` |-> `data`, `value_opt` |-> `vo`, `readings` |-> `g`]
+       vyperCallOutcomePropsTheory.take_call_outcome_gas_obs)
+    (Q.INST [`calldata` |-> `data`, `value_opt` |-> `vo`]
+       (CONJUNCT2 (CONJUNCT2 (CONJUNCT2 (CONJUNCT2
+          vyperCallOutcomePropsTheory.take_call_outcome_preserved_fields)))))) >>
   Cases_on `take_call_outcome gas_cap target data vo st` >> rename1 `_ = (q, st1)` >>
   reverse (Cases_on `q`) >> simp[] >> strip_tac >>
   rename1 `INL rqoc` >> PairCases_on `rqoc` >> simp[] >>

@@ -177,6 +177,7 @@ Proof
   conj_tac
   >- (gen_tac >> irule inst_seq_ptr_lower_bound_transport >>
       simp[mk_inst_def] >> qexists_tac `0` >> simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_all iszero_pair_certificate >>
       disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >> gvs[mk_inst_def]) >>
   simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
@@ -336,6 +337,7 @@ Theorem pop_full_scalar_sequence[local]:
       op_taint tn' (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `!D. ?H tm. inst_seq_ptr D 0 ctx fn PG G tn code s H tm /\
     (!op. op IN B ==> op_prov H op = NONE /\ op_taint tm op = {}) /\
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
@@ -2739,7 +2741,7 @@ Proof
   `target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx env bt es` by
     (irule body_target_place_sim_full >> simp[] >>
-     qexists_tac `tops` >> first_assum ACCEPT_TAC) >>
+     qexists_tac `tops` >> simp[]) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty (Pop v10 bt) es` by
     (irule pop_vv_full_of_target >> metis_tac[]) >>

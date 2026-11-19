@@ -112,6 +112,7 @@ Proof
     (irule abi_decode_bytes_extent_capacity_bound >> qexists `s.vs_alloca_next` >> simp[]) >>
   `abi_decode_bytes_copy_size maxn < dimword (:256) /\
    ptr_covers H u p ready (abi_decode_bytes_copy_size maxn)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ready` by simp[] >>
   drule_all default_bytes_decode_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qabbrev_tac `out = t with vs_inst_idx := LENGTH decoded.cs_current_insts` >>

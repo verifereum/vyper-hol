@@ -162,11 +162,13 @@ With `holbuild` v0.12.0 or newer, MLton, and Python 3 on `PATH`:
 ```
 
 The demo builds `tests/.emit/run-test` and compares exact native/HOL encoded
-inputs and results for all five fixture cases and a passing stdin trace.
-The fixture has three passing cases and two intentional failures (an output
-mismatch and an unexpected revert).
+inputs and results for all nine fixture cases and a passing stdin trace.
+The fixture has five passing cases and four intentional failures (an output
+mismatch, an unexpected revert, a raw deployment whose recorded deployer nonce
+is below the replayed one, and a raw deployment whose address doesn't match
+its recorded deployer nonce).
 Before writing parity expectations, the kernel smoke requires both prepared
-and replayed case names to equal the five expected names in order. Missing,
+and replayed case names to equal the nine expected names in order. Missing,
 extra, duplicate, or reordered cases therefore fail rather than allowing an
 empty or incomplete comparison to pass.
 

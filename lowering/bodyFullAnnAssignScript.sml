@@ -8,8 +8,9 @@
  *)
 Theory bodyFullAnnAssign
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullAnnAssignWord bodyFullAnnAssignWidened bodyFullAnnAssignMemoryPost
-  bodyFullAnnAssignMemory bodyFullAnnAssignOther exprSimAggregateLayout typedMemoryCopy
+  bodyFullAnnAssignMemory bodyFullAnnAssignOther bodyFullShared exprSimAggregateLayout typedMemoryCopy
   bodyDeclCopyMemory vyperTypeInvariants allocLimits
   bodyInvNoDalloca loweringPosts
   vyperTypeCallGraph supportedExprTraverse
@@ -114,6 +115,7 @@ Theorem body_annassign_word_full:
        (INL tyv,t) ==>
        body_expr_full_ok cx e) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
@@ -163,7 +165,17 @@ Proof
      Cases_on `lookup_scopes id es.scopes` >> simp[] >>
      qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _`
        (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
-  drule_all annassign_word_full_execution >> simp[]
+  drule_all annassign_word_full_execution_sep >>
+  disch_then (qspec_then `RetQ` assume_tac) >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        mp_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
+  disch_then (fn th => irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+    irule_at Any th) >>
+  simp[] >> rpt strip_tac >>
+  qexists_tac `ce` >> simp[] >> metis_tac[]
 QED
 
 (* A memory local whose source is stored at its own layout. *)
@@ -175,6 +187,7 @@ Theorem body_annassign_memory_full:
        (INL tyv,t) ==>
        body_expr_full_ok cx e) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
@@ -254,6 +267,7 @@ Theorem body_annassign_widened_full:
        (INL tyv,t) ==>
        body_expr_full_ok cx e) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
@@ -322,6 +336,7 @@ Theorem body_annassign_other_full:
        (INL tyv,t) ==>
        body_expr_full_ok cx e) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>

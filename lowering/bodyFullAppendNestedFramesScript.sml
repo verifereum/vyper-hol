@@ -1,5 +1,6 @@
 Theory bodyFullAppendNestedFrames
 Ancestors
+  keyUpdateFold[qualified,ignore_grammar]
   appendStorageStageTransportPtr fragGasSeqPtrContext fragGasCopyLoop
   stmtReasonLitFragMemory exprLoweringProps venomInst venomState fragGasSeqPtr
   contextCodegenRel fragExecMem fragExec ptrSafeRun
@@ -8,18 +9,6 @@ Ancestors
   vyperStorageWritePreservation
   vyperLookupStorage vyperEncodeDecode loweringStateRelDefs ptrDiscipline
   vyperStorageFrame vyperStorage vyperValue words pred_set list arithmetic vfmState
-
-Theorem append_key_fold_cases[local]:
-  !f m (ks:num list) X q b.
-    (q,b) IN FOLDL (\Y j. key_update Y (f j) (m j)) X ks ==>
-    ((q,b) IN X /\ (!j. MEM j ks ==> q <> f j)) \/
-    (?j. MEM j ks /\ q = f j /\ b IN m j)
-Proof
-  rpt gen_tac >> qid_spec_tac `X` >> Induct_on `ks` >>
-  simp[] >> rpt gen_tac >> strip_tac >>
-  first_x_assum drule >>
-  simp[key_update_def, pairTheory.EXISTS_PROD] >> metis_tac[]
-QED
 
 Theorem append_child_dead_selected[local]:
   !H tr slot tv cap st j b i.
@@ -109,7 +98,7 @@ Proof
   qpat_x_assum `!raw h. _` (fn th => rewrite_tac[th]) >>
   rename1 `storage_dead H tr (apply_writes k writes st) (w2n q) b` >>
   qspecl_then [`\j. k+n2w j`, `\j. mem_word_taint M (off+32*j)`]
-    (drule o BETA_RULE) append_key_fold_cases >> strip_tac
+    (drule o BETA_RULE) keyUpdateFoldTheory.key_update_fold_cases >> strip_tac
   >- suspend "retained"
   >> suspend "written"
 QED
@@ -256,8 +245,10 @@ Theorem append_storage_guard_conditional_uniform:
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
-  `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
-  drule_all append_storage_guard_actual >>
+  `ctx_has_dalloca (ctx with ctx_functions := []) ==> allocas_below_fmp s`
+    by simp[ctx_has_dalloca_def] >>
+  drule_all (Q.INST [`ctx` |-> `ctx with ctx_functions := []`]
+    append_storage_guard_actual) >>
   disch_then (qspecl_then [`func`,`PG`,`G`,`ARB`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts st0 st3) s = OK t` >>
   rename1 `op_taint tf lop = {}` >>
@@ -312,8 +303,10 @@ Theorem append_storage_guard_abort_conditional_uniform:
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
-  `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
-  drule_all append_storage_guard_abort_actual >>
+  `ctx_has_dalloca (ctx with ctx_functions := []) ==> allocas_below_fmp s`
+    by simp[ctx_has_dalloca_def] >>
+  drule_all (Q.INST [`ctx` |-> `ctx with ctx_functions := []`]
+    append_storage_guard_abort_actual) >>
   disch_then (qspecl_then [`func`,`PG`,`G`,`ARB`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts st0 st3) s = Abort Revert_abort t` >>
   rename1 `op_taint tf lop = {}` >>

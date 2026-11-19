@@ -7,6 +7,7 @@ Ancestors bodyPtrDefs exprLowering exprLoweringProps exprSimAlloc
   exprSimLiteralBuffer rich_list fragExec typedCopyLoopHeaderPtr
   decoderGhostFramePtr ghostPcTransportPtr typedCopyPtr venomState finite_map
   instIdxIndep ptrDiscipline
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem assign_base_ptr_one_byte_lowering:
   !cenv ty sa.
@@ -58,7 +59,7 @@ Theorem assign_base_ptr_alloc_buffer_sequence:
     compile_alloc_buffer sz sa = (buf,sm) /\
     stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w G' tn'.
@@ -117,7 +118,7 @@ QED
 
 Theorem assign_base_ptr_one_byte_init_sequence:
   !ctx func PG G tn s p q a i j k D.
-    ~ctx_has_dalloca ctx /\ p <> q /\ lookup_var p s = SOME a /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ p <> q /\ lookup_var p s = SOME a /\
     ptr_covers G tn p s 64 /\ w2n a + 64 < dimword(:256) ==>
     ?t G' tn'.
       run_inst_seq
@@ -176,6 +177,12 @@ QED
 
 Resume assign_base_ptr_one_byte_init_sequence[checks]:
   gen_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `u`, allocas_below_fmp_def, mstore_def,
+          write_memory_with_expansion_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    simp[Abbr `v`, exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `~is_terminator h.inst_opcode /\ ~is_terminator ad.inst_opcode /\
    ~is_terminator st.inst_opcode` by
     simp[Abbr `h`, Abbr `ad`, Abbr `st`, mk_inst_def, is_terminator_def] >>
@@ -183,12 +190,13 @@ Resume assign_base_ptr_one_byte_init_sequence[checks]:
        Abbr `G1`, Abbr `tn1`, Abbr `G2`, Abbr `tn2`, Abbr `G3`, Abbr `tn3`] >>
   conj_tac >-
     (simp[Abbr `h`] >> irule ptr_inst_ok_mstore >>
-     simp[op_taint_def] >> fs[ptr_covers_def] >>
+     simp[op_taint_def, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >> fs[ptr_covers_def] >>
      qexistsl_tac [`a`, `b`, `sz'`] >> simp[] >> decide_tac) >>
   conj_tac >-
     (simp[Abbr `ad`] >> irule ptr_inst_ok_copy_len_binop >>
-     fs[ptr_covers_def, op_taint_def]) >>
-  simp[Abbr `st`] >> irule ptr_inst_ok_mstore >> simp[op_taint_def]
+     fs[ptr_covers_def, op_taint_def, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
+  simp[Abbr `st`] >> irule ptr_inst_ok_mstore >>
+  simp[op_taint_def, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]
 QED
 
 Resume assign_base_ptr_one_byte_init_sequence[root_frame]:
@@ -229,7 +237,7 @@ Theorem assign_base_ptr_alloc_buffer_counted_path:
     compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
     stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t w G' tn'.

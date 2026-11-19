@@ -5,7 +5,8 @@
 Theory bodyFullIf
 Ancestors
   bodyFullShared bodyFullPreds bodySimFull gasOutcomeFullStmts gasOutcomeFullCompose
-  gasOutcomeFull fragGasEmitCtrl fragGasOriginPtrExec fragGasOriginPtr
+  gasOutcomeFull bodyFullIfExpReach bodyFullHashKeccakFixed
+  fragGasEmitCtrl fragGasOriginPtrExec fragGasOriginPtr
   fragGasOrigin gasShadowState gasShadowUnit gasShadow bodyDeclMemoryCompose
   bodyPtrDefs bodyMemoryDefs stmtSimIfProps stmtSimProps
   stmtSimDefs exprSimDefs loweringPosts gasExemptCert gasSummary
@@ -417,7 +418,9 @@ QED
 Theorem compile_if_stmt_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty c ss1 ss2
    es.
-    ~ctx_has_dalloca ctx /\ expr_type c = BaseT BoolT /\
+    (ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==>
+      !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    expr_type c = BaseT BoolT /\
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx (BaseT BoolT) c es /\
     (!sa op sb. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
@@ -456,6 +459,10 @@ Theorem compile_if_stmt_frag_full:
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_full_def] >>
   rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> !bb. MEM bb func.fn_blocks ==>
+      phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_x_assum `ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==> _`
+       mp_tac >> simp[]) >>
   qpat_x_assum `stmt_env _ _ _ (If c _ _) _ = _`
     (strip_assume_tac o REWRITE_RULE [stmt_env_if]) >>
   qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
@@ -471,14 +478,38 @@ Proof
     (irule if_condition_admissible >> metis_tac[]) >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at sa x` by metis_tac[ret_pc_ok_def] >>
+  irule gas_outcome_full_initial_domain >>
+  conj_tac >- simp[evaluate_storage_trace_frame] >>
+  conj_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+     simp[]) >>
   (* the condition, on the If's own input block *)
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `sa`, `cond`, `shadow_sa`, `scond`, `op`,
     `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        mp_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
   strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ condQ condR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx c) (read_result cx)) (es,s0,G0,tn0)
+     (\H rr ee G tn u. condQ H rr ee G tn u /\
+       ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (s0,G0,tn0) cm (OK u,G,tn)) condR` by
+    (irule gas_outcome_full_post_path >>
+     qpat_assum `gas_outcome_full _ _ _ _ _ _ condQ condR` (irule_at Any) >>
+     rpt strip_tac >> simp[] >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ condQ condR` kall_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ pathQ condR` >>
   rewrite_tac[eval_stmt_if_forced] >>
   irule gas_outcome_full_bind_all >>
   rpt conj_tac
@@ -496,7 +527,7 @@ Proof
       simp[storage_trace_frame_state_updates] >>
       irule storage_trace_frame_finally >>
       simp[storage_trace_frame_pop_scope, evaluate_storage_trace_frame]) >>
-  qexists_tac `\H res ee G' tn' t. condQ H res ee G' tn' t /\ ~t.vs_halted /\
+  qexists_tac `\H res ee G' tn' t. pathQ H res ee G' tn' t /\ ~t.vs_halted /\
                  ee.gas_obs = []` >>
   conj_tac
   >~ [`storage_trace_domain _ _ _`]
@@ -506,13 +537,16 @@ Proof
   conj_tac >- simp[] >>
   simp[Abbr `condR`] >> rpt strip_tac >>
   Cases_on `res` >- fs[expr_exit_def] >>
-  fs[stmt_exit_ptr_def, expr_exit_INR_type, halt_exit_def]
+  fs[stmt_exit_ptr_def, expr_exit_INR_type, halt_exit_def] >>
+  rpt strip_tac >> fs[] >>
+  Cases_on `y` >> gvs[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]
 QED
 
 Resume compile_if_stmt_frag_full[selected]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
-  qunabbrev_tac `condQ` >> RULE_ASSUM_TAC BETA_RULE >>
+  qunabbrev_tac `pathQ` >> qunabbrev_tac `condQ` >> RULE_ASSUM_TAC BETA_RULE >>
   (* the condition's H-free facts, at the trace's own horizon *)
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
      mid.storage_trace` by fs[storage_trace_domain_def] >>
@@ -544,8 +578,9 @@ Resume compile_if_stmt_frag_full[selected]:
        (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                             emit_jnz_origin_ptr)) >>
      fs[]) >>
-  pop_assum (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
-                                 gas_outcome_full_zero_prefix)) >>
+  qpat_assum `!H. gas_origin_ptr_path _ (t,G1,tn1) [] _`
+    (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                                    gas_outcome_full_zero_prefix)) >>
   `bind (eval_expr cx c) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL (BoolV b), mid)` by
@@ -571,8 +606,7 @@ Resume compile_if_stmt_frag_full[selected]:
   (impl_tac >- simp[]) >> strip_tac >>
   qpat_x_assum `gas_outcome_full _ _ _ _ (ignore_bind _ _) _ _ _`
     (mp_then Any irule gas_outcome_full_zero_suffix_mono) >>
-  conj_tac
-  >~ [`gas_origin_ptr_path _ _ _ _`] >- suspend "finish" >>
+  reverse conj_tac >- suspend "finish" >>
   rpt gen_tac >> BETA_TAC >> strip_tac >> conj_tac
   >- (gen_tac >> first_x_assum (qspec_then `tail` mp_tac) >>
       `(ee with scopes := sc :: ee.scopes) with gas_obs := tail =
@@ -586,11 +620,37 @@ Resume compile_if_stmt_frag_full[selected]:
 QED
 
 Resume compile_if_stmt_frag_full[entry]:
+  `~ctx_has_dalloca ctx ==> !from fn inst s.
+     frag_reachable ctx func from fn inst s ==> dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> strip_tac >>
+     `ctx_has_dalloca ctx` by
+       (simp_tac bool_ss [ctx_has_dalloca_def, EXISTS_MEM] >>
+        qexists_tac `fn` >> conj_tac >- first_assum ACCEPT_TAC >>
+        qexists_tac `inst` >> simp[]) >> fs[]) >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+    (Cases_on `ctx_has_dalloca ctx`
+     >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by fs[] >>
+         qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t,G1,tn1)` (fn path =>
+         qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+         qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _`
+           (fn safe => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+             (LIST_CONJ [path,no_phi,safe])))))) >>
+     qpat_assum `~ctx_has_dalloca ctx ==> !from fn inst s. _` drule >>
+     disch_then (qspec_then `t` ACCEPT_TAC)) >>
   `!fn inst s.
      frag_reachable ctx func (jump_to (if b then tl else el) t) fn inst s ==>
      dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+    (Cases_on `ctx_has_dalloca ctx`
+     >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by fs[] >>
+         qpat_assum `!H. gas_origin_ptr_path _ (t,G1,tn1) [] _`
+           (qspec_then `storage_trace_horizon mid.storage_trace` (fn path =>
+         qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+         qpat_assum `!fn inst s. frag_reachable ctx func t fn inst s ==> _`
+           (fn safe => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+             (LIST_CONJ [path,no_phi,safe]))))))) >>
+     qpat_assum `~ctx_has_dalloca ctx ==> !from fn inst s. _` drule >>
+     disch_then (qspec_then `jump_to (if b then tl else el) t` ACCEPT_TAC)) >>
   `!H. valid_horizon cx st0 H
          (mid with scopes := FEMPTY :: mid.scopes).storage_trace ==>
        stmt_state_rel H ctx func cenv cx
@@ -624,8 +684,24 @@ Resume compile_if_stmt_frag_full[entry]:
     metis_tac[local_ptrs_reserved_next_var] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at entry x` by metis_tac[not_fresh_at_mono] >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `return_buf_sep d cenv mid t` by
+    (irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+     conj_tac >- fs[] >>
+     qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`, `cx`,
+                   `es`, `func`, `s0`, `sa`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (jump_to (if b then tl else el) t)` by
+    (strip_tac >> `allocas_below_fmp t` by
+       (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ t`
+          (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+        qpat_assum `stmt_state_rel _ _ _ _ _ mid t`
+          (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp) >> simp[]) >>
+     fs[allocas_below_fmp_def, jump_to_def] >> first_assum ACCEPT_TAC) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  simp[ret_pc_ok_jump_to, return_buf_frame_jump_to, block_is_terminated_def,
+  simp[return_buf_sep_jump, return_buf_sep_push,
+       ret_pc_ok_jump_to, return_buf_frame_jump_to, block_is_terminated_def,
        jump_to_def] >>
   fs[allocas_below_fmp_def]
 QED
@@ -792,6 +868,9 @@ Resume compile_if_stmt_frag_full[finish]:
        (mp_then Any mp_tac stmt_state_rel_pop_top_ext) >>
      disch_then (qspecl_then [`cenv`, `sc`, `ee.scopes`] mp_tac) >>
      simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx ee u`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   `ghost_inv_at (DF H) lo d cenv cx ee G tn u` by
     (qpat_assum `ghost_inv_at (DF H) lo d cb cx _ G tn u`
        (mp_then Any mp_tac ghost_inv_at_pop) >>
@@ -860,6 +939,8 @@ Resume compile_if_stmt_frag_full[finish]:
     (rpt gen_tac >> strip_tac >>
      `not_fresh_at entry x` by metis_tac[not_fresh_at_mono] >>
      fs[ghost_kept_at_def]) >>
+  `return_buf_sep d cenv ee u` by
+    (irule return_buf_sep_pop >> qexistsl_tac [`cb`, `sc`] >> fs[]) >>
   `return_buf_frame d cenv last u` by
     (`cb.ce_return_buf = cenv.ce_return_buf` by
        fs[cenv_top_ext_def, compile_env_component_equality] >>
@@ -887,13 +968,16 @@ Resume compile_if_stmt_frag_full[finish]:
          qexists_tac `u` >> simp[jump_to_def]) >>
       `alloca_frame cenv es sa s0 cenv ee (jump_to xl u)` by
         (irule alloca_frame_same_state >> qexists_tac `u` >> simp[jump_to_def]) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp (jump_to xl u)` by
+        (strip_tac >> `allocas_below_fmp u` by fs[] >>
+         fs[allocas_below_fmp_def, jump_to_def] >> first_assum ACCEPT_TAC) >>
       conj_tac >- simp[] >> qexists_tac `cenv` >>
       simp[stmt_lands_def, stmt_state_rel_jump_to, block_is_terminated_def,
-           return_buf_frame_jump_to, ghost_inv_at_jump, cenv_top_ext_refl,
+           return_buf_frame_jump_to, return_buf_sep_jump,
+           ghost_inv_at_jump, cenv_top_ext_refl,
            lookup_var_def] >>
-      simp[jump_to_def] >>
-      fs[storage_well_formed_on_def, get_storage_scopes, lookup_var_def] >>
-      first_assum ACCEPT_TAC) >>
+      fs[jump_to_def, storage_well_formed_on_def, get_storage_scopes, lookup_var_def] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `stmt_lands lctx sb res u` by
     (qpat_x_assum `stmt_lands _ _ _ _` mp_tac >> simp[stmt_lands_def]) >>
   asm_simp_tac std_ss [] >>

@@ -1,8 +1,9 @@
 Theory bodyFullBuiltinPrecompileSuffixSuccess
 Ancestors
   bodyFullBuiltinPrecompileSuffixPath bodyFullBuiltinPrecompileSuffixFrame
+  bodyFullHashKeccakFixed
   bodySimFull exprSimPrecompiles exprLoweringProps exprSimProps loweringPosts venomState
-  vyperStorageFootprint bodyPtrDefs finite_map list rich_list
+  vyperStorageFootprint vyperCallOutcomeProps bodyPtrDefs finite_map list rich_list
 
 Theorem precompile_suffix_success_full_family:
   ((addr = 1w /\ an = 128w /\ rn = 32w) \/
@@ -34,7 +35,7 @@ Theorem precompile_suffix_success_full_family:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (lo <> 0 ==> !x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sm x) /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [gi;ci;ai] (DROP s.vs_inst_idx bb.bb_instructions) /\
   (func.fn_name,id) NOTIN explicit /\
@@ -67,11 +68,15 @@ Theorem precompile_suffix_success_full_family:
     (!H. valid_horizon cx st0 H trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [F] (OK t,G',tn') /\
       ghost_inv_at (DF H) lo d cenv cx
-        (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
+        (SND (take_call_outcome NONE (w2w addr)
+          (read_memory (w2n wi) (w2n an) s) NONE es)) G' tn' t /\
       ghost_kept_at lo cenv es sf G tn s G' tn' /\
       stmt_state_rel H ctx func cenv cx
-        (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
-      wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t /\
+        (SND (take_call_outcome NONE (w2w addr)
+          (read_memory (w2n wi) (w2n an) s) NONE es)) t /\
+      wb_frame cenv es
+        (SND (take_call_outcome NONE (w2w addr)
+          (read_memory (w2n wi) (w2n an) s) NONE es)) sf s t /\
       ptr_covers G' tn' dst t (w2n rn) /\
       (!i. w2n wo <= i /\ i < w2n wo + w2n rn ==> i NOTIN tn'.t_mem) /\
       eval_operand (Var dst) t = SOME wo /\
@@ -85,6 +90,9 @@ Proof
   simp[NoAsms] >> gen_tac >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
     (drule_then strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [F]
      (OK (q with vs_inst_idx := s.vs_inst_idx + 3),G2,tn2)` by
     (irule precompile_suffix_origin_path >> metis_tac[]) >>
@@ -103,6 +111,14 @@ Proof
      in mp_tac (Q.INST [`fn` |-> `func`] (INST [dv |-> actualD] th)) end) >>
   (impl_tac >- (simp[wordsTheory.dimword_def] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `ghost_inv_at (DF H) lo d cenv cx
+     (SND (take_call_outcome NONE (w2w addr)
+       (read_memory (w2n wi) (w2n an) s) NONE es)) G2 tn2
+     (q with vs_inst_idx := s.vs_inst_idx + 3)` by
+    (qpat_x_assum `ghost_inv_at (DF H) lo d cenv cx
+       (es with outcomes := SOME _) G2 tn2 _` mp_tac >>
+     simp[NoAsms, ghost_inv_at_def, take_call_outcome_preserved_fields] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
   qpat_assum `stmt_state_rel H ctx func cenv cx es s`
     (fn ssr => let
        val horizon = hd (snd (strip_comb (concl ssr)));
@@ -114,7 +130,9 @@ Proof
        `op` |-> `Var dst`, `insz` |-> `an`, `outsz` |-> `rn`, `t` |-> `q`]
        (INST [inst tys hv |-> horizon] typed)) end) >>
   (impl_tac >- (simp[wordsTheory.dimword_def] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  `wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s
+  `wb_frame cenv es
+    (SND (take_call_outcome NONE (w2w addr)
+          (read_memory (w2n wi) (w2n an) s) NONE es)) sf s
       (q with vs_inst_idx := s.vs_inst_idx + 3)` by
     (qpat_assum `wb_frame cenv es _ sf s q` mp_tac >>
      simp[NoAsms, wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >>

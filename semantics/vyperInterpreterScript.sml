@@ -1268,8 +1268,9 @@ End
 
 (* sha256, ecrecover, ecadd and ecmul compile to an asserted STATICCALL of
    a computed precompile (2, 1, 6, 7), which the EVM can fail for lack of
-   gas. With the oracle, that call's success is the next outcome's, as in
-   take_outcome; the value is still computed. *)
+   gas. With the oracle, that call takes the next outcome as a request,
+   recorded like any other call; its success is the outcome's, as in
+   take_outcome, and the value is still computed. *)
 Definition precompile_builtin_def[simp]:
   precompile_builtin Sha256 = T ∧
   precompile_builtin ECRecover = T ∧
@@ -1279,20 +1280,56 @@ Definition precompile_builtin_def[simp]:
 End
 
 
+Definition precompile_address_def:
+  precompile_address Sha256 = (2w:address) ∧
+  precompile_address ECRecover = 1w ∧
+  precompile_address ECAdd = 6w ∧
+  precompile_address ECMul = 7w ∧
+  precompile_address _ = 0w
+End
+
+(* The precompile's input, as the lowering lays it out from the builtin's
+   arguments: sha256 hashes the bytes themselves; the others take 32-byte
+   big-endian words. *)
+Definition precompile_input_def:
+  precompile_input Sha256 [BytesV bs] = bs ∧
+  precompile_input Sha256 [StringV s] = string_to_bytes s ∧
+  precompile_input ECRecover [h; v; r; s] =
+    FLAT (MAP (λa. case ecrecover_arg_to_num a of
+                     SOME n => word_to_bytes (n2w n : bytes32) T
+                   | NONE => []) [h; v; r; s]) ∧
+  precompile_input ECAdd [p1; p2] =
+    (case (extract_ec_point p1, extract_ec_point p2) of
+       (SOME (x1, y1), SOME (x2, y2)) =>
+         FLAT (MAP (λn. word_to_bytes (n2w n : bytes32) T)
+                 [Num x1; Num y1; Num x2; Num y2])
+     | _ => []) ∧
+  precompile_input ECMul [p; IntV k] =
+    (case extract_ec_point p of
+       SOME (x, y) =>
+         FLAT (MAP (λn. word_to_bytes (n2w n : bytes32) T)
+                 [Num x; Num y; Num k])
+     | NONE => []) ∧
+  precompile_input _ _ = []
+End
+
 Definition precompile_call_success_def:
-  precompile_call_success bt st =
+  precompile_call_success bt vs st =
     if ¬precompile_builtin bt then return () st else
     case st.outcomes of
     | NONE => return () st
     | SOME [] => check F "precompile failed" st
-    | SOME (outcome::rest) =>
-        check (call_outcome_success outcome) "precompile failed"
-          (st with outcomes := SOME rest)
+    | SOME _ =>
+        (do
+           (rq, outcome) <- vyperCallOutcome$take_call_outcome NONE
+                              (precompile_address bt) (precompile_input bt vs) NONE;
+           check (call_outcome_success outcome) "precompile failed"
+         od) st
 End
 
 
 Theorem precompile_call_success_not_builtin[simp]:
-  ~precompile_builtin bt ==> precompile_call_success bt = return ()
+  ~precompile_builtin bt ==> precompile_call_success bt vs = return ()
 Proof
   simp[FUN_EQ_THM, precompile_call_success_def]
 QED
@@ -1663,7 +1700,7 @@ Definition evaluate_def:
       | NONE => eval_exprs cx es);
       acc <- get_accounts;
       v <- lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs;
-      precompile_call_success bt;
+      precompile_call_success bt vs;
       return v
     od;
     return $ Value v

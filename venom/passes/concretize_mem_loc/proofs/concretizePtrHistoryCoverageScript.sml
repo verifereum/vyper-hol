@@ -8,7 +8,7 @@ Ancestors
   venomState venomInst venomInstProps venomExecProofs stepWriteFootprintForward
   list finite_map arithmetic
 
-Theorem ptr_paired_history_forwarding_transport[local]:
+Theorem ptr_paired_history_forwarding_transport:
   EVERY fn_inst_wf C.ctx_functions /\
   ptr_paired_prefix R lp positions lo vs C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\

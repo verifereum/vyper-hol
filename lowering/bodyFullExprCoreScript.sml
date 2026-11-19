@@ -14,6 +14,7 @@
  *)
 Theory bodyFullExprCore
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullToplevelValue bodyFullToplevelVV bodyInvNoDalloca
   bodyFullLiteralWord bodyFullLiteralBuffer bodyFullLiteralNonword
   bodyFullNameVV bodyFullNameNonword bodyFullNameWord exprSimOperators
@@ -181,6 +182,7 @@ Theorem bop_in_literal_word_sim_full:
      builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
      body_exprs_full_ok cx elems) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -300,6 +302,7 @@ Theorem bop_bytestring_eqne_sim_full:
     (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -503,6 +506,7 @@ Proof
   `!z. h1 = Var z ==> not_fresh_at sh2 z` by
     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
   `allocas_from lo t'` by fs[ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by simp[] >>
   drule_all bop_bytestring_digest_operational >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] assume_tac) >>
   `(?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) =
@@ -647,6 +651,7 @@ Theorem bop_word_sim_full:
     word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -663,6 +668,7 @@ Proof
   qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
   irule (SRULE [LET_THM] bop_word_operands_full_cps_exit) >>
   simp[Abbr `R`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`cenv`, `d`, `env`, `s1`, `s2`, `sa`, `shadow_func`,
     `shadow_s1`, `shadow_s2`, `shadow_sa`, `tops`, `x`, `y`] >>
   simp[] >>
@@ -681,6 +687,7 @@ Theorem bop_bytes_eq_sim_full:
      ?m. expr_type e1 = BaseT (BytesT (Fixed m))) /\
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -1155,6 +1162,7 @@ Theorem bop_bytes_sim_full[local]:
     MEM bop [And;Or;XOr;ShL;ShR] /\
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -1211,6 +1219,7 @@ Theorem bop_rest_word_sim_full:
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es

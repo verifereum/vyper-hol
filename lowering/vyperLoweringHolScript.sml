@@ -21,6 +21,8 @@ Ancestors
   bodyMemStorageCopyStage
   dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
+  rawCallCalldataPeakMemory
+  runtimePeakMemoryBound
   loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
   loweringCallBudgetBounds
   moduleLoweringProps entryDispatchProps entryDecodeProps
@@ -92,11 +94,10 @@ Ancestors
   (* closed-world request-cut guard and producer *)
   e2eOutcomesProducer
   (* providers awaiting their consumers *)
-  bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
-  bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
   bodyPtrTypeBuiltinsBytesUintSemantics
   internalReturnMemoryMem bodyFullIntCallByteFrame
-  bodyFullIntCall
+  bodyFullIntCall bodyFullIntCallCallee[qualified,ignore_grammar]
+  bodyFullIntCallArgs[qualified,ignore_grammar] compileExprAllocaFresh
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa
   assignBasePtrStoragePath assignTuplePtrBytesCopy

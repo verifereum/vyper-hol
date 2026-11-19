@@ -305,9 +305,9 @@ QED
 
 Theorem outcomes_replace_precompile_call_success:
   ~precompile_builtin bt ==>
-  !s oc. precompile_call_success bt (s with outcomes := oc) =
-    (FST (precompile_call_success bt s),
-     SND (precompile_call_success bt s) with outcomes := oc)
+  !s oc. precompile_call_success bt vs (s with outcomes := oc) =
+    (FST (precompile_call_success bt vs s),
+     SND (precompile_call_success bt vs s) with outcomes := oc)
 Proof
   simp[return_def]
 QED

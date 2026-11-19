@@ -34,7 +34,7 @@ Theorem compile_bytestring_src_counted_frame:
    sb sc len_op data_op.
     compile_bytestring_src (Var src) sb = ((len_op,data_op),sc) /\
     not_fresh_at sb src /\ sa.cs_next_var <= sb.cs_next_var /\
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     (!j. j < LENGTH (emitted_insts sb sc) ==>
       get_instruction bb (s.vs_inst_idx+j) = SOME (EL j (emitted_insts sb sc))) /\
@@ -85,6 +85,7 @@ Proof
    (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> len /\ p <> data) /\
    (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> len /\ p <> data)` by
     metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bytestring_source_prefix_ghost_frame >>
   disch_then (qspecl_then [`D`,`PG`]
     (qx_choose_then `G'` (qx_choose_then `tn'` (qx_choose_then `t` strip_assume_tac)))) >>

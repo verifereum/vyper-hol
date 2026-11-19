@@ -18,6 +18,7 @@
  *)
 Theory bodyFullLogArgs
 Ancestors
+  bodyFullIfExpReach
   bodySimFull loweringPosts bodyPtrDefs wordArgsPtr stmtSimLogArgsRun stmtSimProps stmtSimLogArgs
   stmtSimLogArgsGrowth gasOutcomeFullCompose gasShadowState gasShadow
   logValueFramePtr logGhostFramePtr exprSimProps exprSimWordArgs
@@ -343,7 +344,10 @@ Theorem compile_log_eval_all_full_store_bound_halt:
       fn_has_code sa sb func /\
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
+        !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -420,15 +424,23 @@ Resume compile_log_eval_all_full_store_bound_halt[cons]:
      cenv cx (expr_type e) e es` by metis_tac[] >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (irule log_head_admissible >> qexists_tac `args` >> fs[GSYM log_args_res_ok_def, SF ETA_ss]) >>
-  `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by metis_tac[] >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `ssm`, `x`,
                            `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ _` >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ headR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+     (\H rr ee G tn u. headQ H rr ee G tn u /\
+       ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (s0,G0,tn0) cm (OK u,G,tn)) headR` by
+    (irule gas_outcome_full_post_path >>
+     qpat_assum `gas_outcome_full _ _ _ _ _ _ headQ headR` (irule_at Any) >>
+     rpt strip_tac >> simp[] >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ headQ headR` kall_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ pathQ headR` >>
   rewrite_tac[eval_exprs_cons_bind] >>
   irule gas_outcome_full_bind_all >>
   rpt conj_tac
@@ -443,17 +455,17 @@ Resume compile_log_eval_all_full_store_bound_halt[cons]:
   >~ [`storage_trace_frame _`]
   >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
       simp[evaluate_storage_trace_frame, storage_trace_frame_return]) >>
-  qexists `\H res ee G tn t. headQ H res ee G tn t /\ ~t.vs_halted /\
+  qexists `\H res ee G tn t. pathQ H res ee G tn t /\ ~t.vs_halted /\
                              ee.gas_obs = []` >>
   conj_tac
   >~ [`storage_trace_domain _ _ _`]
   >- suspend "tail" >>
   irule gas_outcome_full_post_source >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ headQ _` (irule_at Any) >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ pathQ headR` (irule_at Any) >>
   conj_tac >- simp[] >>
   (* The former weaker error projection closed with
      metis_tac[expr_exit_INR_type]; retain both error facts here. *)
-  rpt strip_tac >> Cases_on `res` >> fs[expr_exit_def] >>
+  rpt strip_tac >> Cases_on `res` >> fs[Abbr `headR`, expr_exit_def] >>
   conj_tac >- metis_tac[expr_exit_INR_type] >> gvs[halt_exit_def]
 QED
 
@@ -465,7 +477,23 @@ Resume compile_log_eval_all_full_store_bound_halt[tail]:
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
-  qunabbrev_tac `headQ` >> BETA_TAC >> strip_tac >>
+  qunabbrev_tac `pathQ` >> qunabbrev_tac `headQ` >> BETA_TAC >> strip_tac >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+    (Cases_on `ctx_has_dalloca ctx`
+     >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by fs[] >>
+         qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t,G1,tn1)` (fn path =>
+           qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+           qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
+             ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+               (LIST_CONJ [path,no_phi,safe])))))) >>
+     rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ t`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ mid t`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+
   qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
   disj1_tac >> qexists_tac `v` >> conj_tac >- simp[] >> BETA_TAC >>
   `mid with gas_obs := [] = mid` by
@@ -494,6 +522,8 @@ Resume compile_log_eval_all_full_store_bound_halt[tail]:
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
        valid_horizon cx st0 H es.storage_trace` by
     (rpt strip_tac >> drule_all valid_horizon_frame >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
   suspend "ih"
 QED
 
@@ -591,7 +621,10 @@ Theorem compile_log_eval_all_full_halt:
       fn_has_code sa sb func /\
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
+        !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -642,7 +675,7 @@ Proof
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qspecl_then [`args`, `es`, `sa`, `sb`, `shadow_sa`,
                            `shadow_sb`, `ops`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   drule gas_outcome_full_post_mono >> disch_then irule >>
   simp[log_full_post_def] >> rpt gen_tac >> strip_tac >>
   qexists_tac `vs` >> simp[] >>
@@ -679,7 +712,10 @@ Theorem compile_log_eval_all_full_store_bound:
       fn_has_code sa sb func /\
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
+        !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -734,7 +770,10 @@ Theorem compile_log_eval_all_full:
       fn_has_code sa sb func /\
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
+        !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>

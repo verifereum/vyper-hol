@@ -18,7 +18,7 @@ Theorem literal_typed_scalar_path:
   fresh_vars_wrt sm s /\
   op_prov G needle = NONE /\ op_taint tn needle = {} /\
   EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sm sb fn /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sm sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u t G' tn'.
@@ -37,7 +37,8 @@ Proof
   `LIST_REL (\x w. eval_operand x s = SOME w) xs (MAP (typed_val_to_w256 tv) vs)` by
     simp[LIST_REL_MAP2] >>
   drule_all literal_typed_encoding_MEM >> disch_tac >>
-  Cases_on `bop = In` >> gvs[]
+  Cases_on `bop = In` >> gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[]
   >- (drule_all literal_in_path >>
       disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
       gvs[eval_op_inst_idx] >> qexistsl_tac [`u`,`G'`,`tn'`] >> simp[]) >>
@@ -53,7 +54,7 @@ Theorem scalar_drop_fresh_path:
     (LENGTH i.inst_operands = 1 \/ LENGTH i.inst_operands = 2) /\
     LENGTH i.inst_outputs = 1) (emitted_insts sa sb) /\
   writes_fresh sa (emitted_insts sa sb) /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq (emitted_insts sa sb) (drop_fresh sa s) = OK u /\
@@ -75,11 +76,12 @@ Proof
   `!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
     (s with vs_inst_idx := k) G' tn'` by
     (gen_tac >> irule scalar_sequence_check_vars_ext >>
-     conj_tac >- simp[] >> conj_tac >- simp[] >>
+     conj_tac >- simp[] >>
      qexists_tac `drop_fresh sa s with vs_inst_idx := k` >>
-     conj_tac >- simp[run_inst_seq_inst_idx, exec_result_map_def] >>
-     conj_tac >- simp[vars_ext_def, drop_fresh_def, DRESTRICT_SUBMAP,
-                       venom_state_component_equality] >> simp[]) >>
+     simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+     conj_tac >- (fs[drop_fresh_def, ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
+     simp[vars_ext_def, drop_fresh_def, DRESTRICT_SUBMAP,
+          venom_state_component_equality]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
     ~is_ext_call_op i.inst_opcode) (emitted_insts sa sb)` by
     (gvs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
@@ -109,7 +111,7 @@ Theorem literal_typed_clean_run:
   EVERY (\x. !p. x = Var p ==> not_fresh_at sm p) (needle::xs) /\
   op_prov G needle = NONE /\ op_taint tn needle = {} /\
   EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G' tn'.
     run_inst_seq (emitted_insts sm sb) (drop_fresh sm s) = OK u /\
     eval_operand dst u = SOME (bool_to_word (if bop = In then MEM v vs else ~MEM v vs)) /\
@@ -129,7 +131,11 @@ Proof
   `LIST_REL (\x w. eval_operand x (drop_fresh sm s) = SOME w)
     xs (MAP (typed_val_to_w256 tv) vs)` by simp[LIST_REL_MAP2] >>
   drule_all literal_typed_encoding_MEM >> disch_tac >>
-  Cases_on `bop = In` >> gvs[]
+  Cases_on `bop = In` >> gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (drop_fresh sm s)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[drop_fresh_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     fs[ptrDisciplineTheory.allocas_below_fmp_def])
   >- (drule_all exprSimBopInLiteralWordTheory.literal_in_run >> strip_tac >>
       drule_all literal_in_uniform >>
       disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
@@ -151,7 +157,7 @@ Theorem literal_typed_scalar_path_arbitrary:
   EVERY (\x. !p. x = Var p ==> not_fresh_at sm p) (needle::xs) /\
   op_prov G needle = NONE /\ op_taint tn needle = {} /\
   EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sm sb fn /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sm sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u t G' tn'.

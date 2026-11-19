@@ -4,6 +4,7 @@ Ancestors wordLoadStorePtr bodyPtrHashBuiltinsShaCall bodyPtrHashBuiltinsKeccakB
   typedCopyPtr bodyPtrDefs fragGasSeqPtr ptrSafeRun ptrDiscipline
   venomExecSemantics venomInst venomState contextCodegenRel codegenRel
   words finite_map pred_set
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem hash_gas_step:
   !id out s.
@@ -20,7 +21,7 @@ QED
 
 Theorem hash_gas_inst_ok:
   !D ctx fn G tn id out s.
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id GAS [] [out]) s
 Proof
   rpt strip_tac >>
@@ -52,7 +53,7 @@ QED
 
 Theorem hash_assert_inst_ok:
   !D ctx fn G tn id op s.
-    ~ctx_has_dalloca ctx /\ op_taint tn op = {} ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ op_taint tn op = {} ==>
     ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id ASSERT [op] []) s
 Proof
   rpt strip_tac >>
@@ -84,7 +85,7 @@ Theorem hash_sha256_load_pair:
     op_taint tn (Var success) = {} /\
     eval_operand (Var q) s = SOME r /\ ptr_covers G tn q s 32 /\
     (!i. w2n r <= i /\ i < w2n r+32 ==> i NOTIN tn.t_mem) /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst ia ASSERT [Var success] []; mk_inst im MLOAD [Var q] [out]] s
       (DRESTRICT G (COMPL {out}))
@@ -98,6 +99,8 @@ Proof
   conj_tac >- (irule hash_assert_inst_ok >> simp[]) >>
   simp[hash_assert_ghost] >>
   qabbrev_tac `u = s with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    simp[Abbr `u`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
   `eval_operand (Var q) u = SOME r /\ ptr_covers G tn q u 32` by
     gvs[Abbr `u`, eval_operand_def, lookup_var_def, ptr_covers_def] >>
   `step_inst_base (mk_inst im MLOAD [Var q] [out]) u =
@@ -113,7 +116,7 @@ QED
 Theorem hash_sha256_assert_abort_check:
   !D ctx fn PG G tn s ia im success q out.
     lookup_var success s = SOME 0w /\
-    op_taint tn (Var success) = {} /\ ~ctx_has_dalloca ctx ==>
+    op_taint tn (Var success) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst ia ASSERT [Var success] []; mk_inst im MLOAD [Var q] [out]] s G tn
 Proof
@@ -131,7 +134,7 @@ Theorem hash_sha256_load_path:
     op_taint tn (Var success) = {} /\
     eval_operand (Var q) s = SOME r /\ ptr_covers G tn q s 32 /\
     (!i. w2n r <= i /\ i < w2n r+32 ==> i NOTIN tn.t_mem) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX [mk_inst ia ASSERT [Var success] []; mk_inst im MLOAD [Var q] [out]]
       (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -154,7 +157,7 @@ QED
 Theorem hash_sha256_assert_abort_path:
   !D ctx fn PG G tn s bb ia im success q out.
     lookup_var success s = SOME 0w /\
-    op_taint tn (Var success) = {} /\ ~ctx_has_dalloca ctx /\
+    op_taint tn (Var success) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst ia ASSERT [Var success] []) ==>
@@ -175,7 +178,7 @@ QED
 
 Theorem hash_gas_prefix_check:
   !D ctx fn PG G tn id gas code s G' tn'.
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     inst_seq_ptr D 0 ctx fn PG (DRESTRICT G (COMPL {gas}))
       (tn with t_var := tn.t_var |+ (gas,{})) code
       (update_var gas (HD (s.vs_gas_readings ++ [0w]))

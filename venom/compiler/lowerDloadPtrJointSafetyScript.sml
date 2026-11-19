@@ -94,7 +94,7 @@ Proof
   gvs[allocas_from_def] >> metis_tac[]
 QED
 
-Theorem dload_expanded_step_fmp[local]:
+Theorem dload_expanded_step_fmp:
   MEM i.inst_opcode [ADD; CODECOPY; MLOAD] /\
   step_inst fuel C i t = OK v ==>
   v.vs_fmp = t.vs_fmp /\ v.vs_initial_fmp = t.vs_initial_fmp /\
@@ -110,7 +110,7 @@ QED
 (* The expansion prefix keeps every alloca site below the initial free
    memory pointer: only its first instruction allocates, a 32-byte
    scratch site at the target frontier. *)
-Theorem dload_prefix_allocas_below_fmp[local]:
+Theorem dload_prefix_allocas_below_fmp:
   !n t H un.
     allocas_below_fmp t0 /\
     (!k. k < n ==> MEM (EL k xs).inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) /\
@@ -184,7 +184,7 @@ Proof
   drule_all dload_prefix_allocas_lower_bound >> simp[]
 QED
 
-Theorem dload_boundary_cached_scratch_bounds[local]:
+Theorem dload_boundary_cached_scratch_bounds:
   dload_boundary_core fl lo (r::rs) V Ws PG PH G H0 tn un0 s t0 cs ds /\
   id IN r.dr_scratch /\ FLOOKUP t0.vs_allocas id = SOME (bb,sz) ==>
   sz = 32 /\ bb + 32 < dimword (:256)

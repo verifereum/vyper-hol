@@ -323,8 +323,8 @@ Proof
      call_trace es0 = pb ++ call_trace esb` by
     (irule asm_frame_prefix_call_trace_tail >> metis_tac[]) >>
   gvs[asm_frame_rel_tail_def, asm_frame_rel_def] >>
-  qspecl_then [`\rq. ~computed_precompile rq`, `call_trace es0`, `pa`,
+  qspecl_then [`\rq. T`, `call_trace es0`, `pa`,
     `call_trace esa`, `pb`, `call_trace esb`, `s.vs_requests`,
     `s'.vs_requests`] mp_tac trace_request_pairing >>
-  simp[GSYM call_requests_def]
+  simp[listTheory.FILTER_T, GSYM call_requests_def]
 QED

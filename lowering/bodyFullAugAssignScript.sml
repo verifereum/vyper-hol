@@ -23,8 +23,68 @@ Ancestors stateFrame[qualified,ignore_grammar] bodyPtrDefs[qualified,ignore_gram
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
+  bodyFullShared vyperEvalExprPreservesScopesDom vyperScopePreservation
+  vyperStatePreservation vyperStorageFootprint vyperStorageTrace
 
 val _ = Parse.hide "body";
+
+Theorem augassign_scopes_dom[local]:
+  eval_stmt cx (AugAssign aty target bop e) es = (res,ee) ==>
+  MAP FDOM ee.scopes = MAP FDOM es.scopes
+Proof
+  simp[augassign_source_bind, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac eval_target_place_preserves_scopes_dom >>
+  imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
+  imp_res_tac eval_expr_preserves_scopes_dom >> imp_res_tac read_result_scopes >>
+  imp_res_tac lift_sum_state >> imp_res_tac write_place_scopes_dom >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem augassign_sep_outcome[local]:
+  return_buf_frame d cenv sa s0 /\ return_buf_sep d cenv es s0 /\
+  local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0) /\
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (eval_stmt cx (AugAssign aty target bop e)) (es,s0,G0,tn0)
+    (\H res ee G tn t.
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t = SOME w) /\
+      (return_buf_sep d cenv ee t ==> Q H res ee G tn t)) R ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (eval_stmt cx (AugAssign aty target bop e)) (es,s0,G0,tn0) Q R
+Proof
+  strip_tac >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        assume_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ (\H res ee G tn t. _ /\
+       (!bw cap. d = SOME (bw,cap) ==> allocas_from _ t)) R` (irule_at Any) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  `ee with gas_obs := [] = ee` by
+    (qpat_x_assum `ee.gas_obs = []` (fn th => simp[GSYM th])) >>
+  `eval_stmt cx (AugAssign aty target bop e) (es with gas_obs := xs) = (res,ee)` by
+    (qpat_assum `ee with gas_obs := [] = ee` (fn eq =>
+       qpat_assum `!tail. eval_stmt _ _ _ = _`
+         (qspec_then `[]` (ACCEPT_TAC o PURE_REWRITE_RULE [listTheory.APPEND_NIL,eq])))) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (mp_tac (Q.INST [`st` |-> `es with gas_obs := xs`,
+       `f` |-> `eval_stmt cx (AugAssign aty target bop e)`,
+       `res` |-> `res`, `st'` |-> `ee`, `H` |-> `H`,
+       `st0` |-> `st0`, `cx` |-> `cx`]
+       (INST_TYPE [alpha |-> oneSyntax.one_ty] valid_horizon_frame)) >>
+     simp[evaluate_storage_trace_frame]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule augassign_scopes_dom >> simp[]) >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
+  first_x_assum irule >>
+  irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+  conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+  qexistsl_tac [`H`,`ctx`,`cx`,`es`,`func`,`s0`,`sa`] >> simp[]
+QED
 
 (* A local. *)
 Theorem body_augassign_local_full:
@@ -36,6 +96,7 @@ Theorem body_augassign_local_full:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx (NameTarget id) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (NameTarget id) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (NameTarget id) bop e) ==>
@@ -67,6 +128,7 @@ Theorem body_augassign_toplevel_word_full:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx (TopLevelNameTarget nsid) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (TopLevelNameTarget nsid) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (TopLevelNameTarget nsid) bop e) ==>
@@ -99,6 +161,7 @@ Theorem body_augassign_attr_local_full:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx (AttributeTarget (NameTarget id) fld) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e) ==>
@@ -130,6 +193,7 @@ Theorem body_augassign_attr_storage_full:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx (AttributeTarget (TopLevelNameTarget nsid) fld) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e) ==>
@@ -162,6 +226,7 @@ Theorem body_augassign_other_full:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx t /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty t bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>
@@ -203,6 +268,7 @@ Theorem augassign_ordinary_full[local]:
        body_expr_full_ok cx e) /\
     body_base_target_full_ok cx t /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty t bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>
@@ -230,6 +296,8 @@ Proof
       cenv cx env t es` by
     (irule body_target_place_sim_full >> simp[] >> qexists_tac `tops` >> simp[]) >>
   simp[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  irule augassign_sep_outcome >>
+  qexistsl_tac [`cenv`,`d`,`sa`] >> simp[] >>
   drule (cj 1 aug_place_typing) >> strip_tac >>
   drule_all (cj 1 aug_place_typing_word) >> strip_tac >>
   `(!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x)` by
@@ -742,7 +810,8 @@ Resume augassign_ordinary_full[ordinary_storage_write]:
       asm "writeFrame" (qspec_then `H` mp_tac) >> simp[] >>
       disch_then (ACCEPT_TAC o cj 8)) >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >> simp[Abbr `stmtQ`] >> qexists_tac `cenv` >> simp[] >>
+  >- (rpt gen_tac >> strip_tac >> simp[Abbr `stmtQ`] >>
+      strip_tac >> qexists_tac `cenv` >> simp[] >>
       first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >> disch_tac >>
   qpat_assum `ctx_has_dalloca ctx ==> !u. _` mp_tac >> simp[]
@@ -808,7 +877,8 @@ Resume augassign_ordinary_full[ordinary_memory_write]:
   irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
   goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >>
   simp[] >> rpt gen_tac >> strip_tac >>
-  simp[Abbr `stmtQ`] >> qexists_tac `cenv` >> simp[] >>
+  simp[Abbr `stmtQ`] >>
+  strip_tac >> qexists_tac `cenv` >> simp[] >>
   first_assum ACCEPT_TAC
 QED
 
@@ -895,6 +965,8 @@ Resume body_augassign_other_full[immutable]:
   disch_then (qx_choosel_then [`ts`,`imms`,`ptv`,`cur`] STRIP_ASSUME_TAC) >>
   qpat_x_assum `aty = ity` SUBST_ALL_TAC >>
   simp[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  irule augassign_sep_outcome >>
+  qexistsl_tac [`cenv`,`d`,`sa`] >> simp[] >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
   >- (irule gasOutcomeFullComposeTheory.gas_outcome_full_bad_nil >> simp[] >>
       `gas_bad_storage_at cx st0
@@ -1284,7 +1356,8 @@ Resume body_augassign_other_full[immutable_writeback]:
   rpt (conj_tac >- FIRST [first_assum ACCEPT_TAC, asm "writeFrame" ACCEPT_TAC]) >>
   reverse conj_tac >- simp[NoAsms] >>
   BETA_TAC >> rpt gen_tac >> strip_tac >>
-  simp[Abbr `stmtQ`] >> qexists_tac `cenv` >> simp[] >>
+  simp[Abbr `stmtQ`] >>
+  strip_tac >> qexists_tac `cenv` >> simp[] >>
   first_assum ACCEPT_TAC
 QED
 

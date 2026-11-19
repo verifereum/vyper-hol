@@ -77,7 +77,11 @@ Theorem hash_sha256_bytes_abort_path:
       aid < sa.cs_next_id /\ a <= b+32 /\ b+32+n <= a+k) \/
    (?name a k. local_region cenv es.scopes s name a k /\
       a <= b+32 /\ b+32+n <= a+k)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
@@ -105,6 +109,7 @@ Proof
     (`isPREFIX (emitted_insts sa sm ++ emitted_insts sm sb)
         (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
      drule hash_code_prefix_split >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all hash_bytes_prepare_endpoint >>
   disch_then (qspecl_then [`D`, `PG`]
     (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS))) >>
@@ -139,8 +144,12 @@ Resume hash_sha256_bytes_abort_path[call]:
         w2n (n2w (b+32):bytes32)+w2n (n2w n:bytes32) <= lb+k))` assume_tac >-
     (qpat_x_assum `n = 0 \/ (?aid lb k. FLOOKUP a.vs_allocas aid = _ /\ aid < sm.cs_next_id /\ _) \/ _` mp_tac >>
      simp[] >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ADD_COMM]) >>
+  `tn1.t_stor SUBSET D.d_stor a.vs_call_ctx.cc_address
+      (a.vs_accounts a.vs_call_ctx.cc_address).storage /\
+   tn1.t_trans SUBSET D.d_trans a.vs_call_ctx.cc_address
+      (a.vs_transient a.vs_call_ctx.cc_address)` by gvs[] >>
   drule_all hash_alloc_sha256_abort_path >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
   suspend "compose"
 QED
 
@@ -197,7 +206,11 @@ Theorem hash_sha256_bytes_success_path:
       aid < sa.cs_next_id /\ a <= b+32 /\ b+32+n <= a+k) \/
    (?name a k. local_region cenv es.scopes s name a k /\
       a <= b+32 /\ b+32+n <= a+k)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+        (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+        (s.vs_transient s.vs_call_ctx.cc_address) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success /\
@@ -231,6 +244,7 @@ Proof
     (`isPREFIX (emitted_insts sa sm ++ emitted_insts sm sb)
         (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
      drule hash_code_prefix_split >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all hash_bytes_prepare_endpoint >>
   disch_then (qspecl_then [`D`, `PG`]
     (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS))) >>
@@ -259,8 +273,12 @@ Resume hash_sha256_bytes_success_path[call]:
         w2n (n2w (b+32):bytes32)+w2n (n2w n:bytes32) <= lb+k))` assume_tac >-
     (qpat_x_assum `n = 0 \/ (?aid lb k. FLOOKUP a.vs_allocas aid = _ /\ aid < sm.cs_next_id /\ _) \/ _` mp_tac >>
      simp[] >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ADD_COMM]) >>
+  `tn1.t_stor SUBSET D.d_stor a.vs_call_ctx.cc_address
+      (a.vs_accounts a.vs_call_ctx.cc_address).storage /\
+   tn1.t_trans SUBSET D.d_trans a.vs_call_ctx.cc_address
+      (a.vs_transient a.vs_call_ctx.cc_address)` by gvs[] >>
   drule_all hash_alloc_sha256_success_path >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
   suspend "compose"
 QED
 

@@ -412,7 +412,7 @@ Proof
   tautLib.TAUT_TAC
 QED
 
-Theorem ptr_ret_cursor_active[local]:
+Theorem ptr_ret_cursor_active:
   ptr_paired_cursor lp a at ==> active_inst a.po_fn a.po_inst a.po_state
 Proof
   simp[concretizePtrPairedFieldsTheory.ptr_paired_cursor_def] >> strip_tac >>
@@ -436,7 +436,7 @@ Proof
   conj_tac >- (pop_assum (fn th => once_rewrite_tac[th]) >> simp[]) >> simp[]
 QED
 
-Theorem ptr_ret_caller_cursor[local]:
+Theorem ptr_ret_caller_cursor:
   ptr_paired_cursor lp u ut /\ u.po_inst.inst_opcode = INVOKE /\
   ALL_DISTINCT (fn_labels ut.po_fn) /\
   (!i. MEM i (fn_insts u.po_fn) /\ i.inst_opcode = ALLOCA ==>

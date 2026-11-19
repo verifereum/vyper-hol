@@ -5,6 +5,7 @@ Ancestors
   bodyPtrDefs robustCopyTransportPtr exprLoweringProps
   venomInst venomState venomExecSemantics ptrDiscipline finite_map
   valueEncoding compileEnv loweringStateRelDefs
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem alloca_step_exterior_ghost_ptr:
   stmt_state_rel H ctx func cenv cx es s /\
@@ -97,7 +98,7 @@ Finalise alloca_separated_ghost_inv_ptr
 
 Theorem emit_alloca_zero_path_ptr:
   emit_inst ALLOCA [Lit (n2w n)] [out] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   stmt_state_rel H ctx func cenv cx es s /\
@@ -120,6 +121,8 @@ Theorem emit_alloca_zero_path_ptr:
       (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) s s1 tn) (Var p) =
       op_taint tn (Var p))
 Proof
+  strip_tac >>
+  drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >>
   strip_tac >> conj_tac
   >- (irule emit_inst_zero_path_ptr >> simp[is_terminator_def] >>
       irule ptr_inst_ok_alloca >> simp[]) >>

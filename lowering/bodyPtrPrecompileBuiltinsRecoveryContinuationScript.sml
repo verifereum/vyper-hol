@@ -3,6 +3,7 @@ Ancestors bodyPtrPrecompileBuiltinsSuffixPaths
           bodyPtrPrecompileBuiltinsSuffixGhost bodyPtrPrecompileBuiltinsLoad
           bodyPtrPrecompileBuiltinsCompilerStages exprSimPrecompiles
           exprLoweringProps exprSimHash context emitHelper compileEnv venomInst list
+          fragGasSeqPtrContext
           bodyPtrPrecompileBuiltinsSuffixReady bodyPtrPrecompileBuiltinsAppendLoad
 
 Theorem computed_load_suffix_parts:
@@ -42,7 +43,7 @@ Theorem computed_load_suffix_oracle_failure_path:
   computed_precompile (venom_call_request s target 0w wi insz T) /\
   ptr_covers G tn src s (w2n insz) /\ ptr_covers G tn dst s (w2n outsz) /\
   (!i. w2n wi <= i /\ i < w2n wi + w2n insz ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
@@ -92,7 +93,7 @@ Theorem computed_load_suffix_clean_path:
   ptr_covers G tn src s (w2n insz) /\ ptr_covers G tn dst s 32 /\
   (!i. w2n wi <= i /\ i < w2n wi + w2n insz ==> i NOTIN tn.t_mem) /\
   (!i. w2n wo <= i /\ i < w2n wo + 32 ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
@@ -135,6 +136,7 @@ Proof
     (gvs[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
   `ptr_covers G tn dst s (w2n (32w:256 word))` by simp[wordsTheory.dimword_def] >>
   `s.vs_outcomes <> []` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all computed_emitted_suffix_paths >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `?q. run_inst_seq (emitted_insts sm sl) s = OK q` by
@@ -162,6 +164,11 @@ Proof
   `isPREFIX (emitted_insts sm sl ++
      [mk_inst sl.cs_next_id MLOAD [Var dst] [STRING #"%" (toString sl.cs_next_var)]])
      (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+    (strip_tac >> irule run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sm sl`, `s`] >> simp[] >>
+     qpat_assum `_ sm = (Var dst,sl)` (mp_then Any mp_tac computed_suffix_shape) >>
+     strip_tac >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all appended_clean_mload_path >> strip_tac >>
   suspend "endpoints"
 QED

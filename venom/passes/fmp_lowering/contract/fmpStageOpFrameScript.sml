@@ -49,7 +49,7 @@ Proof
   disch_then irule >> simp[] >> metis_tac[]
 QED
 
-Theorem fmp_ordinary_not_reclaim[local]:
+Theorem fmp_ordinary_not_reclaim:
   ~is_terminator inst.inst_opcode /\
   ~MEM inst.inst_opcode [INVOKE; DALLOCA] ==>
   ~fmp_is_reclaim_point infos inst

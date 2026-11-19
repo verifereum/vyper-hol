@@ -25,7 +25,7 @@ QED
 
 Theorem mload_clean_seq_ptr:
   !D ctx fn PG G tn s id src out a.
-    ~ctx_has_dalloca ctx /\ ptr_covers G tn src s 32 /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ptr_covers G tn src s 32 /\
     lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?G' tn' t.
@@ -68,7 +68,7 @@ QED
 Theorem copy_len_binop_seq_ptr:
   !D ctx fn PG G tn s id opc left right out f a b.
     (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
     op_taint tn left = {} /\ op_taint tn right = {} ==>
     ?G' tn' t.
@@ -126,7 +126,7 @@ QED
 Theorem emit_mload_clean_normalized_ptr:
   emit_op MLOAD [Var src] sa = (Var out,sb) /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ ptr_covers G tn src s 32 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ptr_covers G tn src s 32 /\
   lookup_var src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
   ?G' tn' t.
@@ -163,7 +163,7 @@ Theorem emit_copy_len_binop_normalized_ptr:
   emit_op opc [left;right] sa = (Var out,sb) /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
   op_taint tn left = {} /\ op_taint tn right = {} ==>
   ?G' tn' t.

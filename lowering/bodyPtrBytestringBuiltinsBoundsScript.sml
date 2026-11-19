@@ -10,7 +10,7 @@ Ancestors
 Theorem slice_scalar_inst_check:
   MEM opc [ADD; LT; GT; OR; ISZERO; ASSERT] /\
   (!op. MEM op ops ==> op_taint tn op = {} /\ op_prov G op = NONE) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id opc ops outs) s = OK t /\
   t.vs_requests = s.vs_requests ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops outs) s
@@ -28,7 +28,7 @@ QED
 Theorem slice_scalar_counted_edge:
   MEM opc [ADD; LT; GT; OR; ISZERO; ASSERT] /\
   (!op. MEM op ops ==> op_taint tn op = {} /\ op_prov G op = NONE) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops outs) /\
   step_inst_base (mk_inst id opc ops outs) s = OK t /\
@@ -49,7 +49,7 @@ Proof
 QED
 
 Theorem slice_assert_abort_counted:
-  op_taint tn op = {} /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSERT [op] []) /\
   step_inst_base (mk_inst id ASSERT [op] []) s = Abort a t ==>
@@ -152,7 +152,7 @@ QED
 Theorem slice_scalar_seq_cons:
   MEM opc [ADD; LT; GT; OR; ISZERO] /\
   (!op. MEM op ops ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id opc ops [out]) s = OK (update_var out w s) /\
   inst_seq_ptr D 0 ctx fn PG (DRESTRICT G (COMPL {out}))
     (tn with t_var := tn.t_var |+ (out,{})) code
@@ -228,7 +228,7 @@ Proof
 QED
 
 Theorem slice_assert_seq:
-  op_taint tn op = {} /\ eval_operand op s = SOME w /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn op = {} /\ eval_operand op s = SOME w /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id ASSERT [op] []] s G tn
 Proof
   strip_tac >> Cases_on `w = 0w`
@@ -249,6 +249,13 @@ Proof
   simp[lookup_var_def]
 QED
 
+Theorem slice_bounds_scalar_allocas_below_fmp[local]:
+  (allocas_below_fmp (update_var out w s) <=> allocas_below_fmp s) /\
+  (allocas_below_fmp (s with vs_inst_idx := k) <=> allocas_below_fmp s)
+Proof
+  simp[update_var_def, allocas_below_fmp_def]
+QED
+
 Theorem compile_assert_slice_bounds_ghost_sequence:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\
   eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
@@ -256,7 +263,7 @@ Theorem compile_assert_slice_bounds_ghost_sequence:
   (!op. MEM op [a;n;limit] ==>
     op_prov G op = NONE /\ op_taint tn op = {} /\
     (!z. op = Var z ==> not_fresh_at sa z)) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   names = GENLIST (\j. STRING #"%" (toString (sa.cs_next_var + j))) 5 ==>
   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s
     (FOLDL (\g x. DRESTRICT g (COMPL {x})) G names)
@@ -278,10 +285,12 @@ Proof
   qpat_x_assum `emitted_insts _ _ = _` SUBST_ALL_TAC >>
   gvs[GENLIST_CONS, combinTheory.o_DEF, FOLDL, FUPDATE_LIST] >>
   irule slice_scalar_seq_cons >>
+  rewrite_tac [slice_bounds_scalar_allocas_below_fmp] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM] >> qexists_tac `wa + wn` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   irule slice_scalar_seq_cons >>
+  rewrite_tac [slice_bounds_scalar_allocas_below_fmp] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, scalar_prov_restrict,
        scalar_taint_update_other] >>
   simp[op_prov_def, FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE] >>
@@ -291,6 +300,7 @@ Proof
        GREATER_DEF] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   irule slice_scalar_seq_cons >>
+  rewrite_tac [slice_bounds_scalar_allocas_below_fmp] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, scalar_prov_restrict,
        scalar_taint_update_other] >>
   simp[op_prov_def, FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE] >>
@@ -304,6 +314,7 @@ QED
 
 Resume compile_assert_slice_bounds_ghost_sequence[last_three]:
   irule slice_scalar_seq_cons >>
+  rewrite_tac [slice_bounds_scalar_allocas_below_fmp] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, FLOOKUP_DRESTRICT,
        op_taint_def, FLOOKUP_UPDATE] >>
   qexists_tac `bool_to_word (w2n (wa + wn) < w2n wa) ||
@@ -312,6 +323,7 @@ Resume compile_assert_slice_bounds_ghost_sequence[last_three]:
        eval_op_inst_idx, eval_operand_def, slice_lookup_cursor, lookup_var_update_var] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   irule slice_scalar_seq_cons >>
+  rewrite_tac [slice_bounds_scalar_allocas_below_fmp] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, FLOOKUP_DRESTRICT,
        op_taint_def, FLOOKUP_UPDATE] >>
   qexists_tac `bool_to_word ((bool_to_word (w2n (wa + wn) < w2n wa) ||
@@ -321,6 +333,7 @@ Resume compile_assert_slice_bounds_ghost_sequence[last_three]:
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[pred_setTheory.INTER_ASSOC, FUPDATE_COMMUTES] >>
   irule slice_assert_seq >>
+  rewrite_tac [slice_bounds_scalar_allocas_below_fmp] >>
   simp[op_taint_def, FLOOKUP_UPDATE, eval_op_inst_idx, eval_operand_def,
        slice_lookup_cursor, lookup_var_update_var]
 QED
@@ -425,7 +438,7 @@ QED
 
 Theorem compile_assert_slice_bounds_reserved_counted_abort:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!op z. MEM op [a;n;limit] /\ op = Var z ==> not_fresh_at sa z) /\
   eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
@@ -556,7 +569,7 @@ QED
 
 Theorem compile_assert_slice_bounds_reserved_counted_ok:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!op z. MEM op [a;n;limit] /\ op = Var z ==> not_fresh_at sa z) /\
   eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
@@ -608,7 +621,7 @@ QED
 (* Fresh callers retain the legacy unrestricted successful-operand frame. *)
 Theorem compile_assert_slice_bounds_counted_ok:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   fresh_vars_wrt sa s /\
   eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
@@ -639,7 +652,7 @@ QED
 
 Theorem compile_assert_slice_bounds_counted_abort:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   fresh_vars_wrt sa s /\
   eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\

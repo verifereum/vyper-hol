@@ -210,9 +210,11 @@ Theorem fmp_mem_call_observe[local]:
   w1 = w2 /\ r1.vs_returndata = r2.vs_returndata /\
   ld_shared_agree D s.vs_call_ctx.cc_address
     (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_stor;
                t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_trans|>) r1 r2
 Proof
@@ -224,13 +226,6 @@ Proof
    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
    computed_precompile rq1 = computed_precompile rq2` by
     simp[venom_call_request_def, computed_precompile_def] >>
-  Cases_on `computed_precompile rq1`
-  >- (`computed_precompile rq2` by metis_tac[] >> `r1.vs_requests = s.vs_requests` by
-        (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
-         simp[consume_call_outcome_eq, record_request_def] >> strip_tac >>
-         gvs[Excl "consume_call_outcome_eq"]) >>
-      drule_all ld_consume_precompile_shared >> strip_tac >>
-      gvs[Excl "consume_call_outcome_eq"]) >>
   `LENGTH s.vs_requests < LENGTH (update_var out w1 r1).vs_requests` by
     (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
      simp[consume_call_outcome_eq, record_request_def, update_var_def] >>
@@ -368,9 +363,11 @@ Theorem fmp_mem_call_shared[local]:
   rq1 = (venom_call_request s addr value off sz static with <|cr_kind := kind; cr_gas := SOME (w2n (gas:bytes32))|>) /\
   ld_shared_agree D s.vs_call_ctx.cc_address
     (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_stor;
                t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_trans|>) r1 r2 ==>
   ld_shared_agree D s.vs_call_ctx.cc_address
@@ -383,6 +380,7 @@ Proof
      ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
   gvs[Excl "consume_call_outcome_eq"] >>
   Cases_on `~s.vs_call_ctx.cc_static /\ r1.vs_requests <> s.vs_requests /\
+            ~computed_precompile (LAST r1.vs_requests) /\
             r2.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
   gvs[word_agree_except_def] >> metis_tac[]
 QED
@@ -439,9 +437,11 @@ Proof
   `w1 = w2 /\ r1.vs_returndata = r2.vs_returndata /\
    ld_shared_agree D s.vs_call_ctx.cc_address
     (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_stor;
                t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST r1.vs_requests) /\
                     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
                   then {} else tn.t_trans|>) r1 r2` by
     (irule fmp_mem_call_observe >>
@@ -461,7 +461,13 @@ Proof
   qexists_tac `update_var out w2 r2` >>
   gvs[Excl "consume_call_outcome_eq"] >>
   `s.vs_halted = t.vs_halted` by fs[fmp_stage_rel_def] >>
-  FIRST [gvs[update_var_def, consume_call_outcome_eq, FLOOKUP_UPDATE]] >>
+  qpat_x_assum `consume_call_outcome _ _ _ s = _`
+    (SUBST1_TAC o SYM o PURE_REWRITE_RULE [consume_call_outcome_eq, pairTheory.SND] o
+     AP_TERM ``SND:bytes32 # venom_state -> venom_state``) >>
+  qpat_x_assum `consume_call_outcome _ _ _ t = _`
+    (SUBST1_TAC o SYM o PURE_REWRITE_RULE [consume_call_outcome_eq, pairTheory.SND] o
+     AP_TERM ``SND:bytes32 # venom_state -> venom_state``) >>
+  simp[update_var_def, FLOOKUP_UPDATE, Excl "consume_call_outcome_eq"] >>
   simp[step_prov_def, out_prov_def, set_prov_def, step_taint_def,
        op_taint_def, set_var_taint_def, fmp_value_rel_def, ld_value_agree_def,
        FLOOKUP_DRESTRICT, MEM] >>

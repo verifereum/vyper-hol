@@ -18,7 +18,7 @@ Proof
   simp[step_inst_def, Once step_inst_base_def, mk_inst_def,
        gas_count_step_def, mem_safe_step_def, inst_dload_in_section_def] >>
   conj_tac
-  >- (disj2_tac >> irule below_frontier_no_ranges >> simp[]) >>
+  >- (disj2_tac >> disj1_tac >> irule below_frontier_no_ranges >> simp[]) >>
   disj2_tac >> disj1_tac >>
   qexistsl [`jump_to lbl s`, `target`, `jump_to lbl s`] >>
   simp[Once step_inst_base_def, is_terminator_def, jump_to_def,
@@ -87,7 +87,7 @@ Proof
   simp[step_inst_def, Once step_inst_base_def, mk_inst_def,
        gas_count_step_def, mem_safe_step_def, inst_dload_in_section_def] >>
   conj_tac
-  >- (disj2_tac >> irule below_frontier_no_ranges >> simp[]) >>
+  >- (disj2_tac >> disj1_tac >> irule below_frontier_no_ranges >> simp[]) >>
   disj2_tac >> disj1_tac >>
   qexistsl [`jump_to lbl s`, `target`, `jump_to lbl s`] >>
   Cases_on `w = 0w` >>

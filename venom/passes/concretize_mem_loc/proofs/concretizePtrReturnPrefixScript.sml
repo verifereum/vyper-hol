@@ -7,7 +7,7 @@ Ancestors concretizePtrReturnProduction concretizePtrPairedPrefix
   concretizeStepStructure venomExecSemantics venomState venomInst venomWf
   ptrDiscipline finite_map list rich_list pred_set
 
-Theorem ptr_ret_prefix_control[local]:
+Theorem ptr_ret_prefix_control:
   ptr_chrono_step C a b /\ a.po_inst.inst_opcode = RET ==>
   b.po_fn = (HD a.po_stack).cf_fn /\ b.po_stack = TL a.po_stack /\
   b.po_state.vs_params = (HD a.po_stack).cf_state.vs_params

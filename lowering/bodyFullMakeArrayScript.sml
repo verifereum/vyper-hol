@@ -1,6 +1,7 @@
 (* Joint value and VV simulations for the two MakeArray layouts. *)
 Theory bodyFullMakeArray
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullMakeArrayResult bodyFullMakeTuple bodyFullMakeArrayArray
   bodyFullOfVV bodyFullPreds bodySimFull exprSimHyps exprSimSource
 
@@ -9,6 +10,7 @@ Theorem make_array_builtin_sim_full:
     (builtin_args_length_ok (MakeArray t n) (LENGTH args) ==>
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (MakeArray t n) args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (MakeArray t n) args) es /\

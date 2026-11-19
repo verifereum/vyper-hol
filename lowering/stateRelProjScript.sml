@@ -2,11 +2,20 @@
 Theory stateRelProj
 Ancestors
   loweringStateRelDefs exprLoweringProps vyperTypeSystem supportedStmts
+  venomInst venomState finite_map words
 
 Theorem state_rel_local_ptrs_rel:
   state_rel H func cenv cx vs ss ==> local_ptrs_rel func cenv vs.scopes ss
 Proof
   simp[state_rel_def]
+QED
+
+Theorem state_rel_scopes_nil_func:
+  state_rel H f1 cenv cx (vs with scopes := []) ss <=>
+  state_rel H f2 cenv cx (vs with scopes := []) ss
+Proof
+  simp[state_rel_def, local_ptrs_rel_def, local_region_def,
+       vyperStateTheory.lookup_scopes_def]
 QED
 
 Theorem stmt_state_rel_local_ptrs_alloca:
@@ -42,6 +51,15 @@ Proof
   simp[stmt_state_rel_def]
 QED
 
+Theorem stmt_state_rel_alloca_size:
+  stmt_state_rel H ctx func cenv cx vs s ==>
+  !i w b sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+    i.inst_operands = [Lit w] /\
+    FLOOKUP s.vs_allocas i.inst_id = SOME (b,sz) ==> sz = w2n w
+Proof
+  simp[stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem state_rel_call_ctx_rel:
   state_rel H func cenv cx vs ss ==>
   call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx
@@ -69,4 +87,28 @@ Theorem supported_stmt_raise_reason:
     supported_raise_reason tops (RaiseReason e)
 Proof
   simp[Once supported_stmt_def]
+QED
+
+Theorem stmt_state_rel_fmp_room:
+  stmt_state_rel H ctx func cenv cx vs ss ==> fmp_room ctx func ss
+Proof
+  simp[stmt_state_rel_def]
+QED
+
+Theorem stmt_state_rel_immutable_base_zero:
+  stmt_state_rel H ctx func cenv cx vs ss ==> immutable_base_zero cenv ss
+Proof
+  simp[stmt_state_rel_def]
+QED
+
+Theorem stmt_state_rel_intro:
+  state_rel H func cenv cx vs ss /\ alloca_inv ss /\ alloca_room ctx func ss /\
+  fmp_room ctx func ss /\ immutable_alloca_sep func cenv cx vs ss /\
+  immutable_base_zero cenv ss /\
+  (!inst n base sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_operands = [Lit n] /\
+    FLOOKUP ss.vs_allocas inst.inst_id = SOME (base,sz) ==> sz = w2n n) ==>
+  stmt_state_rel H ctx func cenv cx vs ss
+Proof
+  simp[stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC
 QED

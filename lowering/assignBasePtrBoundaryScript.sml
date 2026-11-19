@@ -20,7 +20,7 @@ QED
 (* A local word store needs no fixed-run lifting: its actual edge is counted. *)
 Theorem assign_word_store_edge_ptr:
   !D ctx fn PG G tn s bb id p v u.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id MSTORE [Var p; v] []) /\
@@ -32,6 +32,7 @@ Theorem assign_word_store_edge_ptr:
       (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
 Proof
   rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all ptr_inst_ok_mstore >>
   disch_then (qspecl_then [`D`, `fn`, `id`, `0`] assume_tac) >>
   drule_at (Pat `ptr_inst_ok _ _ _ _ _ _ _ _ _`) straight_line_ptr_edge >>

@@ -45,7 +45,10 @@ Proof
       ((write_memory_with_expansion (w2n r) (word_to_bytes (SHA_256_bytes bs) T)
         (update_var gv (HD (s.vs_gas_readings ++ [0w]))
           (s with vs_gas_readings := DROP 1 s.vs_gas_readings))) with
-        <|vs_returndata := word_to_bytes (SHA_256_bytes bs) T; vs_outcomes := rest|>)))` by
+        <|vs_returndata := word_to_bytes (SHA_256_bytes bs) T; vs_outcomes := rest;
+          vs_requests := s.vs_requests ++
+            [venom_call_request s 2w 0w w n T with
+               cr_gas := SOME (w2n (HD (s.vs_gas_readings ++ [0w])))]|>)))` by
     (irule sha256_tail_run >> simp[] >> metis_tac[]) >>
   `ghost_inv_at D lo d cenv cx es Gf tf t /\
    ghost_kept_at lo cenv es sa G tn s Gf tf` by suspend "frame" >>

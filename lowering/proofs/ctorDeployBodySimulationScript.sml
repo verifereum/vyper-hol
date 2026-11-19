@@ -1,6 +1,7 @@
 (* The full body induction instantiated for a checked constructor. *)
 Theory ctorDeployBodySimulation
 Ancestors
+  bodyFullShadowBodyInv
   ctorDeployLoweringFrame ctorDeployLoweringSourceOk
   ctorDeployMemoryRunPtrFrameRet ctorDeployLoweringDefs ctorReturnFrame
   bodySimFullMain bodyFullPreds bodySimFull bodyAbiDecodeTarget
@@ -22,6 +23,7 @@ Theorem deploy_ctor_body_frag_full:
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
+    shadow_body_inv tops dunit.cu_context shadow_ctx /\
     deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) ==>
     stmt_frag_full
       ((\H. deploy_dead H tops runtime_bc am tx), imm_len tops, NONE,

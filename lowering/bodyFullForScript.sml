@@ -9,8 +9,12 @@
  *)
 Theory bodyFullFor
 Ancestors
+  bodyFullShadowBodyInv
+  bodyFullForControl bodyFullForRounds stateRelProj haltExitProj
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
+  bodyFullForFrame bodyFullForHandlers bodyFullForRange bodyFullForStorage
+  bodyFullForArrayBranch
 
 val _ = Parse.hide "body";
 
@@ -29,7 +33,7 @@ Theorem compile_for_frag_full:
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
        body_iterator_full_ok cx it) /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ it n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ it n body) ==>
        occurs_abi_decode_target target tops) /\
@@ -46,5 +50,46 @@ Theorem compile_for_frag_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ it n body)))
       (eval_stmt cx (For id typ it n body)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> Cases_on `it`
+  >- suspend "array"
+  >- suspend "range"
 QED
+
+Resume compile_for_frag_full[range]:
+  rename1 `For id typ (Range a b) n body` >>
+  qspecl_then
+    [`cx`,`id`,`typ`,`a`,`b`,`n`,`body`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,
+     `ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,
+     `lctx`,`RetQ`,`es`] (MATCH_MP_TAC)
+    bodyFullForRangeTheory.compile_for_range_frag_full >>
+  conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC for_full_frame_compose) >>
+  conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC for_full_frame_pop) >>
+  conj_tac >- ACCEPT_TAC for_body_cleanup_full >>
+  conj_tac >- (simp[] >> MATCH_ACCEPT_TAC (SRULE [] for_full_exit_scopes_gas_obs)) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume compile_for_frag_full[array]:
+  rename1 `For id typ (Array e) n body` >>
+  Cases_on `?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
+                     supported_storage_value tops nid (ArrayT typ bd)`
+  >- (pop_assum strip_assume_tac >>
+      qpat_assum `e = TopLevelName (ArrayT typ bd) nid` SUBST_ALL_TAC >>
+      qspecl_then
+        [`cx`,`id`,`typ`,`bd`,`nid`,`n`,`body`,`DF`,`lo`,`d`,`PG`,`tops`,
+         `bindings`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,
+         `ret_ty`,`lctx`,`RetQ`,`es`] MATCH_MP_TAC
+        bodyFullForStorageTheory.compile_for_storage_array_frag_full >>
+      conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SPEC_ALL stmtSimDefsTheory.alloca_frame_trans)) >>
+      conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SPEC_ALL bodySimFullTheory.alloca_taint_kept_trans)) >>
+      conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SPEC_ALL bodyFullForControlTheory.halt_exit_scopes_gas_obs)) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qspecl_then
+    [`cx`,`id`,`typ`,`e`,`n`,`body`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,
+     `ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,
+     `lctx`,`RetQ`,`es`] MATCH_MP_TAC
+    bodyFullForArrayBranchTheory.compile_for_nonslot_array_frag_full >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise compile_for_frag_full

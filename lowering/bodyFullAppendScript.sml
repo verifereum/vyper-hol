@@ -8,6 +8,7 @@
  *)
 Theory bodyFullAppend
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullStoreSlotsPath bodyFullStoreSlotsStatic
   memoryPlaceStorePost
   stateRelProj bodyFullAppendLocalFrames bodyFullAppendNestedFrames
@@ -27,7 +28,8 @@ Ancestors
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyInvNoDalloca targetPlaceSimCases vyperExprNoControl vyperTypeCallGraph
-  vyperTypeCallStackSoundness
+  vyperTypeCallStackSoundness bodyFullShared vyperStorageTrace vyperStorageFootprint
+  vyperEvalExprPreservesScopesDom
 
 val _ = Parse.hide "body";
 
@@ -1582,6 +1584,7 @@ Resume append_nested_memory_cont_full[capacity]:
   `allocas_from lo t` by fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
   `ptr_covers G tn p t (32*(1+cap))` by simp[arithmeticTheory.ADD_COMM] >>
   `cap < dimword (:256) /\ w2n bp+32*(1+cap) <= dimword (:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all appendMemoryPtrTheory.append_memory_word_ptr >>
   disch_then (qspecl_then [`func`, `PG`, `DF (storage_trace_horizon mid.storage_trace)`]
     strip_assume_tac) >>
@@ -1746,6 +1749,7 @@ Resume append_nested_memory_cont_full[success]:
      simp[venomStateTheory.eval_operand_def, arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
   `allocas_from lo t` by fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
   `ptr_covers G tn p t (32*(1+cap))` by simp[arithmeticTheory.ADD_COMM] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all appendMemoryPtrTheory.append_memory_word_ptr >>
   disch_then (qspecl_then [`func`, `PG`, `DF (storage_trace_horizon mid.storage_trace)`]
     strip_assume_tac) >>
@@ -2192,6 +2196,7 @@ Proof
   strip_tac >>
   `(!x. bop = Var x ==> not_fresh_at sm x) /\
    w2n (if tr then tload slot t else sload slot t) < cap` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all appendStorageStageTransportPtrTheory.append_storage_guard_actual >>
   disch_then (qspecl_then [`func`, `PG`, `G`, `D`] strip_assume_tac) >>
   suspend "suffix"
@@ -2219,6 +2224,7 @@ Resume append_nested_storage_success_path[suffix]:
      rpt (pop_assum kall_tac) >>
      simp[stateFrameTheory.state_frame_def, venomStateTheory.venom_state_component_equality] >>
      metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by simp[] >>
   drule_all appendStorageStageTransportPtrTheory.append_storage_suffix_actual >>
   disch_then (qspecl_then [`func`, `PG`, `G'`, `D`] strip_assume_tac) >>
   suspend "compose"
@@ -2349,6 +2355,7 @@ Proof
   strip_tac >>
   `(!x. bop = Var x ==> not_fresh_at sm x) /\
    ~(w2n (if tr then tload slot t else sload slot t) < cap)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all appendStorageStageTransportPtrTheory.append_storage_guard_abort_actual >>
   disch_then (qspecl_then [`func`, `PG`, `G`,
     `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]
@@ -2940,6 +2947,126 @@ Proof
   rpt gen_tac >> strip_tac >> qexists_tac `cenv''` >> simp[]
 QED
 
+Theorem append_outcome_scopes[local]:
+  eval_stmt cx (Append bt e) es = (res,ee) ==>
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
+  res <> INR BreakException /\ res <> INR ContinueException
+Proof
+  pure_once_rewrite_tac[evaluate_def] >>
+  simp[bind_def, AllCaseEqs()] >> strip_tac >>
+  (conj_tac
+  >- (imp_res_tac eval_target_place_preserves_scopes_dom >>
+      imp_res_tac eval_expr_preserves_scopes_dom >>
+      imp_res_tac read_result_state >> imp_res_tac append_place_scopes_dom >>
+      gvs[] >> metis_tac[]) >>
+  gvs[] >> rpt strip_tac >> gvs[] >>
+  FIRST [
+    qpat_assum `append_place _ _ _ _ = (INR _,_)`
+      (mp_tac o MATCH_MP append_place_no_control),
+    qpat_assum `read_result _ _ _ = (INR _,_)`
+      (mp_tac o MATCH_MP read_result_no_control),
+    qpat_assum `eval_expr _ _ _ = (INR _,_)`
+      (mp_tac o MATCH_MP (cj 1 eval_expr_no_control)),
+    qpat_assum `eval_target_place _ _ _ = (INR _,_)`
+      (mp_tac o MATCH_MP eval_target_place_no_control)] >>
+  simp[no_control_exc_def])
+QED
+
+Theorem append_return_buf_sep[local]:
+  return_buf_frame d cenv sa s0 /\ return_buf_sep d cenv es s0 /\
+  local_ptrs_reserved cenv sa /\ cenv' = cenv /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0) /\
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (eval_stmt cx (Append bt e)) (es,s0,G0,tn0)
+    (\H res ee G tn t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv'' cx ee G tn t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa x ==>
+           FLOOKUP G x = FLOOKUP G0 x /\
+           op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame cenv es sa s0 cenv'' ee t /\
+      (!aid off sz i.
+         FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+         (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                    off + sz <= b \/ b + sz' <= off) /\
+         off <= i /\ i < off + sz /\ i IN tn.t_mem ==>
+         i IN tn0.t_mem)) R ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (eval_stmt cx (Append bt e)) (es,s0,G0,tn0)
+    (\H res ee G tn t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+      return_buf_sep d cenv'' ee t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv'' cx ee G tn t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa x ==>
+           FLOOKUP G x = FLOOKUP G0 x /\
+           op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame cenv es sa s0 cenv'' ee t /\
+      (!aid off sz i.
+         FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+         (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                    off + sz <= b \/ b + sz' <= off) /\
+         off <= i /\ i < off + sz /\ i IN tn.t_mem ==>
+         i IN tn0.t_mem)) R
+Proof
+  strip_tac >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        assume_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
+  irule gas_outcome_full_post_source >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ (\H res ee G tn t. _ /\
+       (!bw cap. d = SOME (bw,cap) ==> allocas_from _ t)) R` (irule_at Any) >>
+  simp[] >> rpt gen_tac >>
+  disch_then (map_every strip_assume_tac o CONJUNCTS) >>
+  `ee with gas_obs := [] = ee` by
+    (qpat_x_assum `ee.gas_obs = []` (fn th => simp[GSYM th])) >>
+  `eval_stmt cx (Append bt e) (es with gas_obs := xs) = (res,ee)` by
+    (qpat_assum `ee with gas_obs := [] = ee` (fn eq =>
+       qpat_assum `!tail. eval_stmt _ _ _ = _`
+         (qspec_then `[]` (ACCEPT_TAC o PURE_REWRITE_RULE [listTheory.APPEND_NIL,eq])))) >>
+  drule_then strip_assume_tac append_outcome_scopes >>
+  `res = INL ()` by
+    (qpat_assum `stmt_lands lctx sb res t`
+       (strip_assume_tac o REWRITE_RULE [stmt_lands_def]) >> gvs[]) >>
+  `cenv'' = cenv'` by fs[] >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (mp_tac (Q.INST [`st` |-> `es with gas_obs := xs`,
+       `f` |-> `eval_stmt cx (Append bt e)`,
+       `res` |-> `res`, `st'` |-> `ee`, `H` |-> `H`,
+       `st0` |-> `st0`, `cx` |-> `cx`]
+       (INST_TYPE [alpha |-> oneSyntax.one_ty] valid_horizon_frame)) >>
+     simp[evaluate_storage_trace_frame]) >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
+  qexists_tac `cenv''` >> asm_rewrite_tac[] >>
+  irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+  conj_tac >- fs[arithmeticTheory.ADD_COMM] >>
+  qexistsl_tac [`H`,`ctx`,`cx`,`es`,`func`,`s0`,`sa`] >> simp[]
+QED
+
 Theorem append_nested_suffix_frame_post[local]:
   alloca_frame cenv es sa s0 cenv mid t /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -3003,6 +3130,7 @@ Theorem append_nested_after_target_full[local]:
   supported_stmt (cx_tops cx) bindings (Append bt e) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   body_inv (cx_tops cx) ctx cenv cx /\
+  shadow_body_inv (cx_tops cx) ctx shadow_ctx /\
   supported_full_word_type (expr_type e) /\
   expr_body_pre cenv cx env e es /\ target_pre cenv cx env bt es /\
   body_expr_full_ok cx e /\
@@ -3585,6 +3713,13 @@ Theorem body_append_nested_full:
 Proof
   rpt strip_tac >> rw[body_stmt_full_ok_def] >>
   rw[stmt_frag_full_def] >>
+  `cenv' = cenv` by
+    (qpat_assum `stmt_env _ _ _ (Append _ e) sa = (cenv',sb)` (fn code =>
+       qpat_assum `fn_has_code sa sb func` (fn has_code =>
+         ACCEPT_TAC (CONJUNCT1 (MATCH_MP stmtSimAppendResolvedTheory.append_resolved_target_prefix
+           (CONJ code has_code)))))) >>
+  irule append_return_buf_sep >>
+  asm_simp_tac bool_ss [] >>
   `supported_full_word_type (expr_type e)` by
     (Cases_on `t` >> fs[supported_stmt_append_form]) >>
   `~(?nm. t = TopLevelNameTarget nm)` by metis_tac[] >>
@@ -3593,7 +3728,7 @@ Proof
   conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
   simp[] >> strip_tac >>
   drule_all body_target_place_sim_full >>
-  disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `shadow_ctx`, `func`,
+  disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `func`,
     `shadow_func`] assume_tac) >>
   drule_all stmtSimAppendResolvedTheory.append_resolved_target_prefix >>
   strip_tac >> gvs[] >>
@@ -3694,8 +3829,12 @@ Resume body_append_nested_full[target_success]:
   pure_rewrite_tac [ETA_THM] >>
   `~ctx_has_dalloca ctx` by metis_tac[bodyInvNoDallocaTheory.body_inv_no_dalloca] >>
   simp[] >>
-  qpat_assum `~ctx_has_dalloca ctx`
-    (fn th => irule (SRULE [th] append_nested_after_target_full)) >>
+  `shadow_body_inv (cx_tops cx) ctx shadow_ctx` by
+    (qsuff_tac `cx_tops cx = tops` >- simp[] >>
+     fs[body_inv_def, gasContextTheory.cx_tops_def]) >>
+  qpat_assum `~ctx_has_dalloca ctx` (fn no_dalloca =>
+    qpat_assum `shadow_body_inv (cx_tops cx) ctx shadow_ctx` (fn shadow =>
+      irule (SRULE [no_dalloca, shadow] append_nested_after_target_full))) >>
   goal_assum (drule_at Any) >>
   simp[] >>
   conj_tac >- fs[loweringPostsTheory.ret_pc_ok_def] >>
@@ -3758,19 +3897,19 @@ Proof
      `body_expr_full_ok cx e` by metis_tac[] >>
      rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >>
      disch_then (map_every assume_tac o CONJUNCTS) >> suspend "compose") >>
-  qpat_assum `supported_stmt _ _ _`
-    (strip_assume_tac o SRULE [supported_stmt_append_form])
-  >- metis_tac[bodyAppendStorageFactsTheory.supported_append_storage_decl] >>
-  drule bodyStorageMetadataTheory.supported_variable_decl_mem >> strip_tac >>
-  `supported_program tops` by fs[body_inv_def] >>
-  drule_all supportedProgramTheory.supported_program_declaration >> strip_tac >>
-  `mut = Storage \/ mut = Transient` by
-    (Cases_on `mut` >> Cases_on `vis` >>
-     fs[supportedDeclsTheory.supported_declaration_header_def]) >>
-  metis_tac[]
+  qpat_x_assum `supported_stmt _ _ _` mp_tac >>
+  simp[supported_stmt_append_form, supportedStmtsTheory.supported_append_target_def] >>
+  metis_tac[bodyAppendStorageFactsTheory.supported_append_storage_decl]
 QED
 
 Resume body_append_storage_full[compose]:
+  `cenv' = cenv` by
+    (qpat_assum `stmt_env _ _ _ (Append _ e) sa = (cenv',sb)` (fn code =>
+       qpat_assum `fn_has_code sa sb func` (fn has_code =>
+         ACCEPT_TAC (CONJUNCT1 (MATCH_MP stmtSimAppendResolvedTheory.append_resolved_target_prefix
+           (CONJ code has_code)))))) >>
+  irule append_return_buf_sep >>
+  asm_simp_tac bool_ss [] >>
   irule gas_outcome_full_initial_domain >>
   conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
   simp[] >> strip_tac >>

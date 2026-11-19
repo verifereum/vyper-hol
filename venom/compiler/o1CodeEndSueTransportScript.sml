@@ -73,7 +73,7 @@ Proof
   Cases_on `segment` >> gvs[] >> metis_tac[rich_listTheory.MEM_FRONT, MEM]
 QED
 
-Theorem sue_frame_codecopy_projection[local]:
+Theorem sue_frame_codecopy_projection:
   ir_supply_inst_ok supply /\ ir_supply_covers_fn supply fn /\
   sue_expand_function_supply supply fn = (fn',supply') /\
   sue_frame_align C C' fn fn' s0 inst' t /\ inst'.inst_opcode = CODECOPY ==>
@@ -121,7 +121,7 @@ Proof
   qpat_x_assum `!j. MEM j (fn_insts fn') ==> _` mp_tac >> simp[]
 QED
 
-Theorem sue_code_end_stage_pairs[local]:
+Theorem sue_code_end_stage_pairs:
   ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
   EVERY (o1_fn_row 6) C.ctx_functions ==>

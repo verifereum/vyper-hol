@@ -40,22 +40,17 @@
  *     380-386), a non-exempt error, and obs_pre (the trace before g's
  *     outcome) is a valid horizon.
  *
- * (B) Outcome index.  The k-th recorded request's outcome was claimed to be
- *     EL (recorded_outcomes_count obs_pre) vs.vs_outcomes, but take_outcome
- *     consumes an entry for computed precompiles too while record_request
- *     skips them; and the builtins ECRecover, ECAdd, ECMul and Sha256 take
- *     one through precompile_call_success (vyperInterpreterScript.sml:
- *     1336-1345) with no trace event at all, so no count over obs_pre is
- *     the index (an earlier draft counted every StorageOutcome; witness:
- *     `p: uint256[2] = ecadd([1, 2], [1, 2])` then
- *     `return extcall I(a).g()`, whose call reads entry 1 after zero
- *     StorageOutcomes).  Now: requests are indexed by
+ * (B) Outcome index.  Requests are indexed by
  *     recorded_outcomes_count obs_pre, and the outcome is read from the raw
  *     state s whose step issues request k, before its take_outcome: HD
  *     s.vs_outcomes, or failed_outcome rq when s.vs_outcomes = [].  The step
  *     is not an INVOKE, so no builtin runs between s and the take.
  *     Scope: GATED.  The four builtins are admitted
  *     (supportedExprFormsScript.sml:115-117) and take an oracle entry.
+ *     Since record_request keeps every request and the four builtins take
+ *     their entry through take_call_outcome, each oracle entry taken has its
+ *     StorageOutcome and its request, so recorded_outcomes_count counts every
+ *     StorageOutcome.
  *
  * (C) Closed world.  vyper_call_staging combines vyper_frame_staging, a
  *     dispatched_vyper_call and the call trace bound.  For a non-static
@@ -100,10 +95,10 @@
  *
  * Fitted to the current definitions:
  * - request_agree takes the call's target address; the arms pass
- *   tx.target, as call_result_rel does.  Its gas conjunct (a source gas cap
+ *   tx.target, as call_result_rel_guarded does.  Its gas conjunct (a source gas cap
  *   is the Venom request's) comes with it.  gas_readings_rel takes the
  *   predicate alone now, where it took a run and the outcome T; the link
- *   drops the T, as call_result_rel does.
+ *   drops the T, as call_result_rel_guarded does.
  * - The source call count bound is the length of the outcome list (vs, the
  *   S1 prefix) or of the call trace (es, staging and every re-entry), as
  *   the call tops state it.
@@ -134,7 +129,7 @@ Ancestors
 Definition recorded_outcomes_count_def:
   recorded_outcomes_count observations =
     LENGTH (FILTER (\observation. case observation of
-      StorageOutcome rq outcome => ~computed_precompile rq | _ => F)
+      StorageOutcome rq outcome => T | _ => F)
       observations)
 End
 
@@ -142,7 +137,8 @@ End
 
 (* s has made at most k external-call requests: the states up to and
    including the one making the request at index k.  Requests only grow,
-   and computed precompiles record none (record_request). *)
+   and every call records one, computed precompiles included
+   (record_request). *)
 Definition request_cut_def:
   request_cut (k:num) (s:venom_state) <=> LENGTH s.vs_requests <= k
 End
@@ -220,7 +216,7 @@ End
 (* The same marking supplies the unit certificate and request alignment.
    The shadow is chosen by the program, before am, tx, ret and vs.  At each
    outcome whose preceding trace obs_pre is a valid horizon for H and whose
-   request rq is recorded: the source's k-th request
+   request rq is not a computed precompile: the source's k-th request
    (k = recorded_outcomes_count obs_pre) is rq, the raw run is safe up to
    the request cut k, and the reachable raw state s whose step issues the
    raw k-th request makes one that agrees with rq, and the outcome is the

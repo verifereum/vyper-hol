@@ -25,7 +25,7 @@ QED
 
 Theorem code_offset_add_resources_ptr:
   emit_op ADD [op; Lit (n2w off)] sa = (r,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   eval_operand op s = SOME a /\ op_taint tn op = {} ==>
@@ -48,6 +48,7 @@ Proof
   `fn_has_code (sa with cs_next_var := sa.cs_next_var + 1) sb func` by
     gvs[fragExecTheory.fn_has_code_def, emitted_blocks_def] >>
   gvs[op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_at (Pat `emit_inst _ _ _ _ = _`) reason_copy_binop_resources_ptr >>
   simp[eval_operand_def, op_taint_def] >>
   disch_then (drule_all_then strip_assume_tac) >>
@@ -60,7 +61,7 @@ QED
 
 Theorem compile_lit_byte_offset_path_ptr:
   compile_lit_byte_offset op off sa = (r,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   eval_operand op s = SOME a /\ op_taint tn op = {} ==>
@@ -96,7 +97,7 @@ QED
 
 Theorem code_offset_add_covers_ptr:
   emit_op ADD [Var root; Lit (n2w off)] sa = (Var out,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var root s = SOME a /\ ptr_covers G tn root s capacity /\
@@ -121,6 +122,7 @@ Proof
     gvs[fn_has_code_def, emitted_blocks_def] >>
   `needed + off <= capacity /\ off + w2n a < dimword(:256)` by decide_tac >>
   gvs[op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_at (Pat `emit_inst _ _ _ _ = _`) reason_encoder_offset_path_ptr >>
   simp[eval_operand_def, op_taint_def, w2n_n2w, arithmeticTheory.LESS_MOD] >>
   disch_then (drule_all_then strip_assume_tac) >>
@@ -132,7 +134,7 @@ QED
 
 Theorem compile_lit_byte_offset_covers_ptr:
   compile_lit_byte_offset (Var root) off sa = (r,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var root s = SOME a /\ ptr_covers G tn root s capacity /\

@@ -283,11 +283,8 @@ Theorem normalize_external_return_limit:
   type_memory_bytes cenv ret < 2 ** 64
 Proof
   strip_tac >>
-  `module_consts_env tops [] = []` by
-    (irule supported_headers_module_consts_env >>
-     qexists_tac `tops` >>
-     gvs[supported_program_def, supported_declaration_headers_def]) >>
-  drule lookup_function_external_classified >> simp[] >> strip_tac >>
+  drule lookup_function_external_classified >>
+  simp[constSubstTheory.subst_consts_fn_def] >> strip_tac >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
   irule (SIMP_RULE (srw_ss()) [] normalize_function_return_limit) >> simp[] >>
   irule_at Any lower_vyper_runtime_unit_allocs_ok >> metis_tac[]

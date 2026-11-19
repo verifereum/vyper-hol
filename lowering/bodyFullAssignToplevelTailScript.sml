@@ -255,5 +255,7 @@ Proof
   disch_then (qspec_then `lctx` strip_assume_tac) >>
   disj1_tac >> pure_once_rewrite_tac[GSYM evaluation_state_fupdcanon] >>
   `(ef with gas_obs := []) = ef` by simp[evaluation_state_component_equality] >>
-  simp[stmt_post_storage_trace]
+  simp[stmt_post_storage_trace] >>
+  Cases_on `tr` >> fs[allocas_below_fmp_def, tstore_def, sstore_def] >>
+  first_assum ACCEPT_TAC
 QED

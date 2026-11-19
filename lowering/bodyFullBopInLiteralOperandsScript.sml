@@ -1,6 +1,8 @@
 (* Joint word operands of literal membership, with one endpoint for all horizons. *)
 Theory bodyFullBopInLiteralOperands
 Ancestors
+  bodyFullIfExpReach
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull exprSimBopInLiteralWord exprSimWordArgs
   gasOutcomeFullCompose gasOutcomeFull gasShadowCompileStmtHelpers
   bodyFullShared bodyMemoryDefs wordArgsPtr
@@ -18,6 +20,7 @@ Theorem bop_in_literal_operands_clean_full_halt:
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
     (!e. MEM e args ==> MEM e (e1::elems)) /\
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_sim_inv cenv cx env es /\
     lower_word_args cenv expr_type args sa = (xs,sb) /\
     gas_shadow_state sa shadow_sa /\
@@ -29,7 +32,9 @@ Theorem bop_in_literal_operands_clean_full_halt:
        lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
@@ -129,19 +134,27 @@ Proof
      simp[Once body_exprs_full_ok_def] >> strip_tac >>
      qpat_x_assum `body_expr_full_ok _ h` mp_tac >>
      simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `body_inv _ ctx _ cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (MATCH_MP body_inv_no_phi (CONJ inv member))))) >>
   qpat_x_assum `expr_sim_full _ _ _ _ h _` mp_tac >>
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `shadow_s1`,
                            `x`, `s0`, `G0`, `tn0`] mp_tac) >>
-  impl_tac
-  >- (asm_rewrite_tac[] >> rpt strip_tac >>
-      drule contextRawReachableTheory.frag_reachable_members >>
-      disch_then drule >> strip_tac >>
-      fs[unitTransformDefsTheory.dalloca_no_wrap_def,
-         ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
-      metis_tac[]) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
   disch_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ HeadPost _` >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ HeadPost headR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx h) (read_result cx)) (es,s0,G0,tn0)
+     (\H rr ee G tn u. HeadPost H rr ee G tn u /\
+       ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (s0,G0,tn0) cm (OK u,G,tn)) headR` by
+    (irule gas_outcome_full_post_path >>
+     qpat_assum `gas_outcome_full _ _ _ _ _ _ HeadPost headR` (irule_at Any) >>
+     rpt strip_tac >> simp[] >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ HeadPost headR` kall_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ pathQ headR` >>
   rewrite_tac[eval_exprs_cons_action] >>
   irule gas_outcome_full_bind_all >> BETA_TAC >>
   conj_tac >- (gen_tac >> irule storage_trace_frame_bind_all >>
@@ -150,13 +163,13 @@ Proof
   conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> metis_tac[]) >>
   conj_tac >- (irule storage_trace_frame_bind_all >>
     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
-  qexists_tac `\H res ee G tn u. HeadPost H res ee G tn u /\
+  qexists_tac `\H res ee G tn u. pathQ H res ee G tn u /\
        ~u.vs_halted /\ ee.gas_obs = []` >> reverse conj_tac
   >- (irule gas_outcome_full_post_source >>
       goal_assum (drule_at Any) >> BETA_TAC >>
       conj_tac >- simp[] >>
       rpt gen_tac >> strip_tac >> Cases_on `res` >>
-      gvs[exprSimDefsTheory.expr_exit_INL,
+      gvs[Abbr `headR`, exprSimDefsTheory.expr_exit_INL,
           stmtSimPropsTheory.expr_exit_INR_type,
           exprSimDefsTheory.halt_exit_def]) >>
   map_every qx_gen_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t1`] >>
@@ -166,9 +179,20 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >>
-  strip_tac >> qunabbrev_tac `HeadPost` >>
+  strip_tac >> qunabbrev_tac `pathQ` >> qunabbrev_tac `HeadPost` >>
   RULE_ASSUM_TAC BETA_RULE >>
-  qpat_x_assum `(?v. _) /\ _` strip_assume_tac >>
+  qpat_x_assum `((?v. _) /\ (?cm. gas_origin_ptr_path _ _ cm _)) /\ _` strip_assume_tac >>
+  `!fn inst s. frag_reachable ctx func t1 fn inst s ==> dalloca_no_wrap inst s` by
+    (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t1,G1,tn1)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+       qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
+         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+           (LIST_CONJ [path,no_phi,safe])))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ t1`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ mid t1`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   disj1_tac >> qexists_tac `v` >> asm_rewrite_tac[] >>
   qpat_x_assum `res = INL v` SUBST_ALL_TAC >>
   `bind (eval_expr cx h) (read_result cx)
@@ -322,6 +346,7 @@ Theorem bop_in_literal_operands_clean_full:
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
     (!e. MEM e args ==> MEM e (e1::elems)) /\
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_sim_inv cenv cx env es /\
     lower_word_args cenv expr_type args sa = (xs,sb) /\
     gas_shadow_state sa shadow_sa /\
@@ -333,7 +358,9 @@ Theorem bop_in_literal_operands_clean_full:
        lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
@@ -377,6 +404,7 @@ Theorem bop_in_literal_operands_full:
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
     (!e. MEM e args ==> MEM e (e1::elems)) /\
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_sim_inv cenv cx env es /\
     lower_word_args cenv expr_type args sa = (xs,sb) /\
     gas_shadow_state sa shadow_sa /\
@@ -388,7 +416,9 @@ Theorem bop_in_literal_operands_full:
        lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\

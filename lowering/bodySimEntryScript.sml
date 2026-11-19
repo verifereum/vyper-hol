@@ -203,7 +203,7 @@ Proof
   drule build_compile_env_bound >> simp[]
 QED
 
-Theorem materialize_internal_params_bound[local]:
+Theorem materialize_internal_params_bound:
   !caps cenv st cenv' st' n l.
     materialize_internal_params cenv caps st = (cenv', st') /\
     FLOOKUP cenv'.ce_vars n = SOME l ==>
@@ -251,32 +251,10 @@ Proof
   gvs[Abbr `ce`] >> drule build_compile_env_bound >> simp[]
 QED
 
-(* A supported program declares no constants, so every bare global of it
-   is an immutable. *)
-Theorem supported_bare_global_immutable:
-  !tops id.
-    supported_declaration_headers tops /\ is_bare_global_decl id tops ==>
-    ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) tops
-Proof
-  simp[supported_declaration_headers_def] >>
-  `!ts tops id.
-     EVERY (supported_declaration_header tops) ts /\
-     is_bare_global_decl id ts ==>
-     ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) ts`
-    suffices_by metis_tac[] >>
-  Induct >> simp[is_bare_global_decl_def] >> rpt strip_tac >>
-  Cases_on `h` >> gvs[is_bare_global_decl_def]
-  >~ [`VariableDecl dvis dmut dname dty dslot`]
-  >- (Cases_on `dmut` >> Cases_on `dvis` >> Cases_on `dslot` >>
-      Cases_on `dname = id` >>
-      gvs[is_bare_global_decl_def, supported_declaration_header_def] >>
-      metis_tac[]) >>
-  metis_tac[]
-QED
-
 Theorem bare_global_variable_decl:
   !ts id. is_bare_global_decl id ts ==>
-    ?vis mut ty slot. MEM (VariableDecl vis mut id ty slot) ts
+    ?vis mut ty slot. MEM (VariableDecl vis mut id ty slot) ts /\
+                      (mut = Immutable \/ ?e. mut = Constant e)
 Proof
   Induct >> simp[is_bare_global_decl_def] >> Cases >>
   simp[is_bare_global_decl_def] >>
@@ -387,8 +365,7 @@ Proof
   gvs[] >> decide_tac
 QED
 
-(* A bare global of a body's typing is an immutable of the main module,
-   at its declared type in ce_module_var_type. *)
+(* A bare global has its declared type in the compiler environment. *)
 Theorem body_inv_bare_global_type:
   !tops ctx cenv cx env es src id ty.
     body_inv tops ctx cenv cx /\ env_consistent env cx es /\
@@ -399,13 +376,13 @@ Proof
   drule_all env_consistent_bare_global_find_NONE >> strip_tac >>
   `src = NONE` by metis_tac[body_inv_def] >> gvs[] >>
   `ts = tops` by gvs[body_inv_def] >> gvs[] >>
-  `?dvis dty dslot. MEM (VariableDecl dvis Immutable id dty dslot) tops` by
-    metis_tac[supported_bare_global_immutable, supported_program_def,
-              body_inv_def] >>
+  drule bare_global_variable_decl >>
+  disch_then (qx_choosel_then [`dvis`, `dmut`, `dty`, `dslot`]
+    (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
   `bare_globals_complete env.bare_globals cx` by
     fs[env_consistent_def, env_context_consistent_def] >>
   `dty = ty` by
-    (fs[bare_globals_complete_def] >> res_tac >> gvs[]) >>
+    (fs[bare_globals_complete_def] >> metis_tac[SOME_11]) >>
   gvs[body_inv_def] >> metis_tac[build_maps_variable]
 QED
 

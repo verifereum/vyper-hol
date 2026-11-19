@@ -36,7 +36,7 @@ Theorem structlit_var_store_full_suffix:
        w2n dw + type_memory_size dtv <= w2n sw) /\
       ptr_covers G1 tn1 xs t (type_memory_size stv) /\
       ptr_covers G1 tn1 xd t (type_memory_size dtv) /\
-      allocas_from lo t /\ lo <= t.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+      allocas_from lo t /\ lo <= t.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       ~t.vs_halted /\ t.vs_current_bb = sa.cs_current_bb /\
       t.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -81,7 +81,7 @@ Theorem structlit_word_store_full_suffix:
       eval_operand src t = SOME (typed_val_to_w256 dtv v) /\ op_taint tn1 src = {} /\
       lookup_var xd t = SOME dw /\ w2n dw + 32 < dimword (:256) /\
       w2n dw + 32 <= t.vs_alloca_next /\ ptr_covers G1 tn1 xd t 32 /\
-      allocas_from lo t /\ lo <= t.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+      allocas_from lo t /\ lo <= t.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
       fn_has_code sa sb func /\
       ~t.vs_halted /\ t.vs_current_bb = sa.cs_current_bb /\
       t.vs_inst_idx = LENGTH sa.cs_current_insts /\

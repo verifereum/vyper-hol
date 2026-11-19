@@ -86,6 +86,7 @@ Proof
    ptr_covers G1 tn1 src u (w2n ((n2w n):256 word)) /\
    ptr_covers G1 tn1 dst u (w2n ((n2w n):256 word))` by
     suspend "coverage" >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all emit_mcopy_seq_ptr >>
   disch_then (qspecl_then [`fn`,`PG`,`D`]
     (qx_choose_then `tf` (qx_choose_then `t` strip_assume_tac))) >>

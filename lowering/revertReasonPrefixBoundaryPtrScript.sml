@@ -9,7 +9,7 @@ Theorem revert_reason_prefix_checked_path:
   stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts func) /\
-  64+ms < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  64+ms < dimword(:256) /\
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (revert_reason_prefix id v ms)

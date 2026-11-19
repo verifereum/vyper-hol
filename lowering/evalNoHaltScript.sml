@@ -145,7 +145,7 @@ QED
 
 Theorem call_ops_nh[local]:
   (next_gas_reading s = (INR HaltException, s') ==> F) /\
-  (precompile_call_success bt s = (INR HaltException, s') ==> F) /\
+  (precompile_call_success bt vs s = (INR HaltException, s') ==> F) /\
   (frame_call_value cx vo s = (INR HaltException, s') ==> F) /\
   (take_call_outcome gas_cap tg cd vo s = (INR HaltException, s') ==> F) /\
   (take_delegate_outcome gas_cap tg cd vo s = (INR HaltException, s') ==> F) /\
@@ -352,7 +352,7 @@ Proof
        COND_RATOR, raise_def] @ nh_base)
 QED
 
-Theorem eval_ext_call_nh[local]:
+Theorem eval_ext_call_nh:
   eval_ext_call cx static skip_check sg opts vs s =
     (INR HaltException, s') ==> F
 Proof

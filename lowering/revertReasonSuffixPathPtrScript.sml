@@ -8,6 +8,8 @@ Ancestors
   typedCopyPtr decoderGhostFramePtr typedCopyLoopHeaderPtr finite_map ptrDiscipline
   revertReasonLayout exprLoweringProps fragExec bodyPtrDefs revertReasonCopyPtr
   venomMemProps venomState venomInst venomExecSemantics words arithmetic list
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
+  fragGasSeqPtrContext[qualified,ignore_grammar]
 
 Theorem alloca_store_literal_taint_bound:
   n < dimword(:256) /\
@@ -85,7 +87,9 @@ Theorem revert_reason_size_cell_checks:
      s.vs_alloca_next+32 < dimword(:256)) /\
   (!a sz. FLOOKUP s.vs_allocas (id+5) = SOME (a,sz) ==>
      sz = 32 /\ a+32 < dimword(:256)) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    (FLOOKUP s.vs_allocas (id+5) = NONE ==>
+      s.vs_alloca_next + 32 <= w2n s.vs_initial_fmp)) /\
   step_inst_base (mk_inst (id+5) ALLOCA [Lit 32w]
      [STRING #"%" (toString ((v:num)+4))]) s = OK sa /\
   run_inst_seq (TAKE 2 (revert_reason_suffix id v b p q)) s = OK t ==>
@@ -93,6 +97,7 @@ Theorem revert_reason_size_cell_checks:
     inst_seq_ptr D 0 ctx fn PG G tn
       (TAKE 2 (revert_reason_suffix id v b p q)) s Gf tnf /\
     lookup_var (STRING #"%" (toString ((v:num)+4))) t = SOME c /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     ptr_covers Gf tnf (STRING #"%" (toString ((v:num)+4))) t 32 /\
     mload (w2n c) t = 32w /\
     (!i. w2n c <= i /\ i < w2n c+32 ==> i NOTIN tnf.t_mem) /\
@@ -138,6 +143,11 @@ Proof
   conj_asm1_tac
   >- fs[revert_reason_suffix_def, ADD_ASSOC] >>
   conj_tac >- fs[lookup_var_def, mstore_def] >>
+  conj_tac >-
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp sa` mp_tac >>
+     qpat_assum `t = mstore _ _ sa` SUBST1_TAC >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[allocas_below_fmp_def, mstore_def] >> metis_tac[]) >>
   conj_tac >- fs[ptr_covers_def, eval_operand_def, lookup_var_def] >>
   conj_tac >- simp[mload_mstore_same] >>
   conj_tac >- simp[] >> conj_tac
@@ -169,7 +179,8 @@ Theorem offset_add_clean_load_checks:
   ptr_covers G tn src s 32 /\ op_taint tn (Var off) = {} /\
   w2n P+n+C < dimword(:256) /\ n < dimword(:256) /\
   (!j. w2n Q <= j /\ j < w2n Q+32 ==> j NOTIN tn.t_mem) /\
-  src <> addr /\ bas <> addr /\ 0 < C /\ addr <> len /\ ~ctx_has_dalloca ctx /\
+  src <> addr /\ bas <> addr /\ 0 < C /\ addr <> len /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst id ADD [Var bas; Var off] [addr];
     mk_inst (id+1) MLOAD [Var src] [len]] s = OK t ==>
   ?Gf tnf.
@@ -219,6 +230,10 @@ Resume offset_add_clean_load_checks[load]:
   `step_inst_base j s1 = OK (update_var len (mload (w2n Q) s1) s1)` by
     (simp[Abbr `j`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_read1_def, eval_operand_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s1`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_mload >> simp[]) >>
   `t = update_var len (mload (w2n Q) s) (update_var addr (P+n2w n) s)` by
@@ -278,7 +293,9 @@ Theorem revert_reason_seven_checks:
     b <> STRING #"%" (toString ((v:num)+k)) /\
     p <> STRING #"%" (toString (v+k)) /\
     q <> STRING #"%" (toString (v+k))) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    (FLOOKUP s.vs_allocas (id+5) = NONE ==>
+      s.vs_alloca_next + 32 <= w2n s.vs_initial_fmp)) /\
   (FLOOKUP s.vs_allocas (id+5) = NONE ==>
      s.vs_alloca_next+32 < dimword(:256)) /\
   (!a sz. FLOOKUP s.vs_allocas (id+5) = SOME (a,sz) ==>
@@ -291,6 +308,7 @@ Theorem revert_reason_seven_checks:
   ?G7 tn7.
     inst_seq_ptr D 0 ctx fn PG G tn
       (TAKE 7 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s G7 tn7 /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     lookup_var b u = SOME B /\ lookup_var p u = SOME P /\ lookup_var q u = SOME Q /\
     ptr_covers G7 tn7 b u (64+ms) /\
     ptr_covers G7 tn7 p u (32+ms) /\ ptr_covers G7 tn7 q u ms /\
@@ -353,6 +371,22 @@ Resume revert_reason_seven_checks[aliases]:
   `ys = as3 ++ as2` by simp[NoAsms, Abbr `as3`, Abbr `as2`] >>
   `?s5. run_inst_seq as3 s2 = OK s5 /\ run_inst_seq as2 s5 = OK u` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s5` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`as3`, `s2`] >> simp[] >>
+     simp[NoAsms, Abbr `as3`, Abbr `ys`, revert_reason_suffix_def, mk_inst_def,
+       is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`as2`, `s5`] >> simp[] >>
+     simp[NoAsms, Abbr `as2`, Abbr `ys`, revert_reason_suffix_def, mk_inst_def,
+       is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2c` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2` mp_tac >>
+     simp[NoAsms, Abbr `s2c`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) as3` by
     simp[NoAsms, Abbr `as3`, Abbr `ys`, revert_reason_suffix_def,
       mk_inst_def, is_terminator_def] >>
@@ -426,6 +460,10 @@ Resume revert_reason_seven_checks[last_pair]:
   qabbrev_tac `len = STRING #"%" (toString (v+9))` >>
   qabbrev_tac `s5d = s5 with vs_inst_idx := s.vs_inst_idx+5` >>
   qabbrev_tac `ud = u with vs_inst_idx := s.vs_inst_idx+5` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s5d` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s5` mp_tac >>
+     simp[NoAsms, Abbr `s5d`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) as2` by
     simp[NoAsms, Abbr `as2`, Abbr `ys`, revert_reason_suffix_def,
       mk_inst_def, is_terminator_def] >>
@@ -525,7 +563,8 @@ Finalise revert_reason_seven_checks
 Theorem round_ceil32_mask_checks[local]:
   lookup_var lenvar s = SOME (n2w L) /\
   op_taint tn (Var lenvar) = {} /\ L+63 < dimword(:256) /\
-  lenvar <> msk /\ tmp <> msk /\ ~ctx_has_dalloca ctx ==>
+  lenvar <> msk /\ tmp <> msk /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf.
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id NOT [Lit 31w] [msk];
@@ -572,6 +611,10 @@ Proof
     simp[Abbr `t0`, Abbr `h`, copy_len_not_ghost_frame] >>
   `lookup_var lenvar s0 = SOME (n2w L)` by
     fs[Abbr `s0`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s0`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn g0 t0 i s0` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `step_inst_base i s0 = OK (update_var tmp (n2w L+31w) s0)` by
@@ -584,6 +627,10 @@ Proof
     simp[Abbr `t1`, Abbr `i`, copy_len_binop_ghost_frame] >>
   `lookup_var tmp s1 = SOME (n2w L+31w) /\ lookup_var msk s1 = SOME (~31w)` by
     fs[Abbr `s1`, Abbr `s0`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s0` mp_tac >>
+     simp[NoAsms, Abbr `s1`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `step_inst_base j s1 = OK (update_var out (n2w (contractABI$ceil32 L)) s1)` by
@@ -654,7 +701,9 @@ Theorem revert_reason_suffix_checks:
     b <> STRING #"%" (toString ((v:num)+k)) /\
     p <> STRING #"%" (toString (v+k)) /\
     q <> STRING #"%" (toString (v+k))) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    (FLOOKUP s.vs_allocas (id+5) = NONE ==>
+      s.vs_alloca_next + 32 <= w2n s.vs_initial_fmp)) /\
   (FLOOKUP s.vs_allocas (id+5) = NONE ==>
      s.vs_alloca_next+32 < dimword(:256)) /\
   (!a sz. FLOOKUP s.vs_allocas (id+5) = SOME (a,sz) ==>
@@ -700,6 +749,16 @@ Resume revert_reason_suffix_checks[round]:
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
   qabbrev_tac `s7c = s7 with vs_inst_idx := s.vs_inst_idx+7` >>
   qabbrev_tac `s9c = s9 with vs_inst_idx := s.vs_inst_idx+7` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s9` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`rs`, `s7`] >> simp[] >>
+     simp[NoAsms, Abbr `rs`, Abbr `ys`, revert_reason_suffix_def, mk_inst_def,
+       is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s7c` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s7` mp_tac >>
+     simp[NoAsms, Abbr `s7c`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) rs` by
     simp[NoAsms, Abbr `rs`, Abbr `ys`, revert_reason_suffix_def,
       mk_inst_def, is_terminator_def] >>
@@ -759,6 +818,16 @@ Resume revert_reason_suffix_checks[padding_entry]:
   `?s13. run_inst_seq pad s9 = OK s13 /\ run_inst_seq rest s13 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
   qabbrev_tac `s9d = s9 with vs_inst_idx := s.vs_inst_idx+9` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s13` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`pad`, `s9`] >> simp[] >>
+     simp[NoAsms, Abbr `pad`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def, mk_inst_def,
+       is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s9d` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s9` mp_tac >>
+     simp[NoAsms, Abbr `s9d`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) pad` by
     simp[NoAsms, Abbr `pad`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def,
       mk_inst_def, is_terminator_def] >>
@@ -851,6 +920,16 @@ Resume revert_reason_suffix_checks[second_round]:
   `?s15. run_inst_seq rs2 s13 = OK s15 /\ run_inst_seq rest2 s15 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
   qabbrev_tac `s13c = s13 with vs_inst_idx := s.vs_inst_idx+13` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s15` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`rs2`, `s13`] >> simp[] >>
+     simp[NoAsms, Abbr `rs2`, Abbr `rest`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def, mk_inst_def,
+       is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s13c` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s13` mp_tac >>
+     simp[NoAsms, Abbr `s13c`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) rs2` by
     simp[NoAsms, Abbr `rs2`, Abbr `rest`, Abbr `zs`, Abbr `ys`,
       revert_reason_suffix_def, mk_inst_def, is_terminator_def] >>
@@ -906,7 +985,8 @@ Resume revert_reason_suffix_checks[second_round_frames]:
        (qspec_then `x` mp_tac) >>
      impl_tac >- asm_rewrite_tac[] >> disch_then strip_assume_tac >>
      qpat_assum `!x. x <> msk2 /\ x <> tmp2 /\ x <> rnd2 ==> _` (qspec_then `x` mp_tac) >>
-     impl_tac >- metis_tac[] >>
+     impl_tac >-
+       (qpat_assum `!x. x = b \/ _ ==> x <> msk2 /\ _` (qspec_then `x` mp_tac) >> simp[]) >>
      simp[Abbr `s13c`, lookup_var_def] >> fs[lookup_var_def] >> metis_tac[]) >>
   qpat_x_assum `!x. x <> msk2 /\ x <> tmp2 /\ x <> rnd2 ==> _` kall_tac >>
   qpat_x_assum `!x. x = b \/ _ ==> x <> msk2 /\ _` kall_tac >>
@@ -920,6 +1000,16 @@ Resume revert_reason_suffix_checks[size_add]:
   `?s16. run_inst_seq sizeadd s15 = OK s16 /\ run_inst_seq rest3 s16 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
   qabbrev_tac `s15c = s15 with vs_inst_idx := s.vs_inst_idx+16` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s16` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`sizeadd`, `s15`] >> simp[] >>
+     simp[NoAsms, Abbr `sizeadd`, Abbr `rest2`, Abbr `rest`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def, mk_inst_def,
+       is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s15c` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s15` mp_tac >>
+     simp[NoAsms, Abbr `s15c`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) sizeadd` by
     simp[NoAsms, Abbr `sizeadd`, Abbr `rest2`, Abbr `rest`, Abbr `zs`, Abbr `ys`,
       revert_reason_suffix_def, mk_inst_def, is_terminator_def] >>
@@ -973,6 +1063,16 @@ Resume revert_reason_suffix_checks[offset_store]:
   `?s17. run_inst_seq offstore s16 = OK s17 /\ run_inst_seq rest4 s17 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
   qabbrev_tac `s16c = s16 with vs_inst_idx := s.vs_inst_idx+17` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s17` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`offstore`, `s16`] >> simp[] >>
+     simp[NoAsms, Abbr `offstore`, Abbr `rest3`, Abbr `rest2`, Abbr `rest`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def, mk_inst_def,
+       is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s16c` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s16` mp_tac >>
+     simp[NoAsms, Abbr `s16c`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) offstore` by
     simp[NoAsms, Abbr `offstore`, Abbr `rest3`, Abbr `rest2`, Abbr `rest`,
       Abbr `zs`, Abbr `ys`, revert_reason_suffix_def, mk_inst_def, is_terminator_def] >>
@@ -1038,6 +1138,16 @@ Resume revert_reason_suffix_checks[totvar_add]:
   `?s18. run_inst_seq totvaradd s17 = OK s18 /\ run_inst_seq rest5 s18 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
   qabbrev_tac `s17c = s17 with vs_inst_idx := s.vs_inst_idx+18` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s18` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`totvaradd`, `s17`] >> simp[] >>
+     simp[NoAsms, Abbr `totvaradd`, Abbr `rest4`, Abbr `rest3`, Abbr `rest2`, Abbr `rest`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def, mk_inst_def,
+       is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s17c` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s17` mp_tac >>
+     simp[NoAsms, Abbr `s17c`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) totvaradd` by
     simp[NoAsms, Abbr `totvaradd`, Abbr `rest4`, Abbr `rest3`, Abbr `rest2`,
       Abbr `rest`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def,
@@ -1095,6 +1205,16 @@ Resume revert_reason_suffix_checks[cell_run]:
   `?s20. run_inst_seq cellops s18 = OK s20 /\ run_inst_seq tailops s20 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
   qabbrev_tac `s18c = s18 with vs_inst_idx := s.vs_inst_idx+19` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s20` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`cellops`, `s18`] >> simp[] >>
+     simp[NoAsms, Abbr `cellops`, Abbr `rest5`, Abbr `rest4`, Abbr `rest3`, Abbr `rest2`, Abbr `rest`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def, mk_inst_def,
+       is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s18c` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s18` mp_tac >>
+     simp[NoAsms, Abbr `s18c`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) cellops` by
     simp[NoAsms, Abbr `cellops`, Abbr `rest5`, Abbr `rest4`, Abbr `rest3`,
       Abbr `rest2`, Abbr `rest`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def,
@@ -1119,7 +1239,7 @@ Resume revert_reason_suffix_checks[cell_run]:
      qpat_assum `op_taint tn18 (Var totvar) = {}` mp_tac >>
      qpat_assum `lookup_var _ s18 = SOME (n2w c)` mp_tac >>
      qpat_assum `ptr_covers g18 tn18 _ s18 32` mp_tac >>
-     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s18` mp_tac >>
      simp[NoAsms, Abbr `totvar`] >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[eval_operand_def, lookup_var_def] >> metis_tac[]) >>
@@ -1148,6 +1268,10 @@ QED
 
 Resume revert_reason_suffix_checks[tail_post]:
   qabbrev_tac `s20c = s20 with vs_inst_idx := s.vs_inst_idx+21` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s20c` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s20` mp_tac >>
+     simp[NoAsms, Abbr `s20c`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `?gf tf. inst_seq_ptr D 0 ctx fn PG g20 tn20
     (DROP 21 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s20c gf tf` by
     (simp[NoAsms, revert_reason_suffix_def] >>
@@ -1256,7 +1380,9 @@ Theorem revert_reason_suffix_path_ptr:
     b <> STRING #"%" (toString ((v:num)+k)) /\
     p <> STRING #"%" (toString (v+k)) /\
     q <> STRING #"%" (toString (v+k))) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    (FLOOKUP s.vs_allocas (id+5) = NONE ==>
+      s.vs_alloca_next + 32 <= w2n s.vs_initial_fmp)) /\
   (FLOOKUP s.vs_allocas (id+5) = NONE ==>
      s.vs_alloca_next+32 < dimword(:256)) /\
   (!a sz. FLOOKUP s.vs_allocas (id+5) = SOME (a,sz) ==>

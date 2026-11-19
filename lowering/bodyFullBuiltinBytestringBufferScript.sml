@@ -13,7 +13,7 @@ Theorem bytestring_data_offset_full_run:
   fn_has_code sa sb func /\ root <> data /\
   lookup_var root s = SOME b /\ ptr_covers G tn root s N /\
   32 <= N /\ w2n b + 32 < dimword (:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t G' tn'.

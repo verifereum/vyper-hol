@@ -14,7 +14,9 @@ Theorem compile_external_return_word_joint:
   compile_external_return (SOME op) T F ei msz F nkey ut iv st =
     (x,st') /\
   fn_has_code st st' func /\ (!y. op = Var y ==> not_fresh_at st y) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  allocas_from lo s /\
   alloca_inv s /\ alloca_room ctx func s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -63,10 +65,26 @@ Proof
      qunabbrev_tac `i` >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
      simp_tac (srw_ss()) [mk_inst_def] >>
      strip_tac >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (strip_tac >>
+     `i.inst_opcode = ALLOCA /\ i.inst_operands = [Lit (32w)]` by
+       simp[Abbr `i`, mk_inst_def] >>
+     `allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp`
+       by metis_tac[] >>
+     drule_all alloca_site_below_fmp >> simp[]) >>
   qabbrev_tac `s1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
   qabbrev_tac `v = mstore b w s1` >>
   qabbrev_tac `s2 = v with vs_inst_idx := SUC s1.vs_inst_idx` >>
   qabbrev_tac `ss = halt_state (set_returndata (word_to_bytes w T) s2)` >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s1) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp s2)` by
+    (`(allocas_below_fmp s1 <=> allocas_below_fmp u) /\
+      (allocas_below_fmp s2 <=> allocas_below_fmp u)` by
+       simp[Abbr `s2`, Abbr `v`, Abbr `s1`, mstore_def,
+            write_memory_with_expansion_def, allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   qabbrev_tac `G1 = step_prov PG G i u` >>
   qabbrev_tac `tn1 = step_taint i s u tn` >>
   qabbrev_tac `G2 = step_prov PG G1 j v` >>
@@ -269,7 +287,9 @@ Theorem compile_external_return_word_unlock_joint:
   compile_external_return (SOME op) T F ei msz nr nkey T iv st =
     (x,st') /\
   fn_has_code st st' func /\ (!y. op = Var y ==> not_fresh_at st y) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  allocas_from lo s /\
   alloca_inv s /\ alloca_room ctx func s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -317,6 +337,7 @@ Proof
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >> first_assum ACCEPT_TAC) >>
   pop_assum strip_assume_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
   mp_tac (Q.INST [`st'` |-> `st1`]
     (SPEC_ALL optional_transient_unlock_paths_joint)) >>
   impl_tac >- simp[] >> strip_tac >>
@@ -338,6 +359,19 @@ Proof
      qpat_assum `st1.cs_next_id = _` (fn th => PURE_REWRITE_TAC[th]) >>
      first_assum ACCEPT_TAC) >>
   `eval_operand op u = SOME w /\ op_taint tn' op = {}` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+    (`(allocas_below_fmp u /\
+       u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp) <=>
+      (allocas_below_fmp s /\
+       s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp)` by
+       (qpat_assum `u = _` (fn eq => PURE_ONCE_REWRITE_TAC [eq]) >>
+        rpt (pop_assum kall_tac) >>
+        Cases_on `nr /\ ~iv` >>
+        simp[tstore_def, allocas_below_fmp_def,
+             exprLoweringPropsTheory.pending_alloca_size_def]) >>
+     pop_assum (fn eq => PURE_REWRITE_TAC [eq]) >>
+     first_assum ACCEPT_TAC) >>
   mp_tac (Q.INST [`ut` |-> `T`, `st` |-> `st1`, `s` |-> `u`, `tn` |-> `tn'`]
     (SPEC_ALL compile_external_return_word_joint)) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>

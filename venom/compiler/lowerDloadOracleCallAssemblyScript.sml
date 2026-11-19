@@ -1,5 +1,5 @@
 Theory lowerDloadOracleCallAssembly
-Ancestors
+Ancestors lowerDloadMemoryWritePointEffect[qualified]
   lowerDloadSafetyAssemblyPremises lowerDloadSafetyAllocBounds venomWf
   lowerDloadExternalCallEffects lowerDloadSafetyWriteAssembly lowerDloadSafetyBytes
   lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyUpdates
@@ -20,7 +20,7 @@ Theorem ld_numeric_operand_observation:
 Proof
   strip_tac >>
   `?x. eval_operand op f.lf_src = SOME x` by
-    (irule ld_write_operand_defined >> metis_tac[]) >>
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> metis_tac[]) >>
   qexists_tac `x` >> simp[] >>
   `!v. op = Var v ==> ~retpc_var f.lf_fn v` by
     (gen_tac >> disch_tac >> irule ld_numeric_operand_nonopaque >> metis_tac[]) >>
@@ -325,9 +325,11 @@ Theorem ld_oracle_call_taint:
     t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss.vs_returndata)};
     t_stor := adopt_reset inst
       (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
        ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
     t_trans := adopt_reset inst
       (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ~computed_precompile (LAST ss.vs_requests) /\
        ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |>
 Proof
   strip_tac >>

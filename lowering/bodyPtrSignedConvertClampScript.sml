@@ -1,6 +1,6 @@
 Theory bodyPtrSignedConvertClamp
 Ancestors
-  instSeqPtrUniform
+  instSeqPtrUniform fragGasSeqPtrContext
   bodyPtrSignedConvertScalarOps bodyPtrSignedConvertBool bodyPtrSignedConvertIszero
   venomExecSemantics exprSendPtr fragGasSeqPtr bodyPtrSignedConvertScalarTransfer list
   instSeqComposePtr fragExec instIdxIndep exprLowering exprLoweringProps emitHelperProps
@@ -136,7 +136,7 @@ QED
 Theorem scalar_iszero_certificate:
   MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   op_prov G x = NONE /\ op_prov G y = NONE /\
-  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst id opc [x;y] [a];
                 mk_inst (id+1) ISZERO [Var a] [b]] s = OK t ==>
   inst_seq_ptr D 0 ctx fn PG G tn
@@ -171,7 +171,7 @@ Proof
      simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   conj_tac
   >- (irule iszero_ptr_inst_ok >> simp[allocas_from_def, op_taint_def, FLOOKUP_UPDATE] >>
-      goal_assum (drule_at Any)) >>
+      simp[allocas_below_fmp_def, update_var_def] >> fs[allocas_below_fmp_def]) >>
   simp[] >> drule iszero_ghost_update >> strip_tac >>
   gvs[DRESTRICT_DRESTRICT, eval_operand_def, lookup_var_def,
       update_var_def, FLOOKUP_UPDATE] >>
@@ -180,7 +180,7 @@ Proof
 QED
 
 Theorem clamp_assert_certificate:
-  ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ op_taint tn op = {} /\
   eval_operand op s = SOME w ==>
   inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id ASSERT [op] []] s G tn
 Proof
@@ -197,7 +197,7 @@ QED
 Theorem scalar_iszero_assert_certificate:
   MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   op_prov G x = NONE /\ op_prov G y = NONE /\
-  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst id opc [x;y] [a];
                 mk_inst (id+1) ISZERO [Var a] [b]] s = OK t ==>
   inst_seq_ptr D 0 ctx fn PG G tn
@@ -213,6 +213,19 @@ Proof
   reverse conj_tac
   >- (conj_tac >- first_assum ACCEPT_TAC >>
       irule scalar_iszero_certificate >> simp[] >> goal_assum (drule_at Any)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (strip_tac >> `allocas_below_fmp s` by fs[] >>
+     irule run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[mk_inst id opc [x;y] [a]; mk_inst (id+1) ISZERO [Var a] [b]]`, `s`] >>
+     rpt conj_tac
+     >~ [`allocas_below_fmp _`] >- first_assum ACCEPT_TAC
+     >~ [`run_inst_seq _ _ = OK _`] >- first_assum ACCEPT_TAC >>
+     gvs[MEM] >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+  `!k. allocas_below_fmp (t with vs_inst_idx := k) = allocas_below_fmp t` by
+    simp[allocas_below_fmp_def] >>
+  `!k. ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := k)` by
+    (gen_tac >> qpat_assum `!k. allocas_below_fmp _ = _`
+       (qspec_then `k` SUBST1_TAC) >> first_assum ACCEPT_TAC) >>
   gen_tac >> irule clamp_assert_certificate >>
   simp[op_taint_def, FLOOKUP_UPDATE] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
@@ -254,7 +267,7 @@ QED
 
 Theorem int_clamp_unsigned_fixed_certificate:
   compile_int_clamp F bits x sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -281,7 +294,7 @@ QED
 Theorem scalar_iszero_clean_frame_certificate:
   MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   op_prov G x = NONE /\ op_prov G y = NONE /\
-  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst id opc [x;y] [a];
                 mk_inst (id+1) ISZERO [Var a] [b]] s = OK t ==>
   ?H th.
@@ -299,8 +312,11 @@ Proof
   strip_tac >>
   qexistsl_tac [`DRESTRICT (DRESTRICT G (COMPL {a})) (COMPL {b})`,
     `tn with t_var := tn.t_var |+ (a,{}) |+ (b,{})`] >> conj_tac
-  >- (gen_tac >> irule scalar_iszero_certificate >> simp[] >>
-      qexists_tac `t with vs_inst_idx := k` >>
+  >- (gen_tac >>
+      `allocas_below_fmp (s with vs_inst_idx := k) = allocas_below_fmp s` by
+        simp[NoAsms, allocas_below_fmp_def] >>
+      irule scalar_iszero_certificate >>
+      simp[] >> qexists_tac `t with vs_inst_idx := k` >>
       `~is_terminator opc` by gvs[MEM, is_terminator_def] >>
       simp[run_inst_seq_inst_idx, GSYM mk_inst_def, is_terminator_def,
            exec_result_map_def]) >>
@@ -312,7 +328,7 @@ QED
 Theorem scalar_clean_frame_certificate:
   MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   op_prov G x = NONE /\ op_prov G y = NONE /\
-  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst id opc [x;y] [z]] s = OK t ==>
   ?H th.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id opc [x;y] [z]]
@@ -335,6 +351,8 @@ Proof
         (s with vs_inst_idx := k) = OK (t with vs_inst_idx := k)` by
         (`~is_terminator opc` by gvs[MEM, is_terminator_def] >>
          simp[step_inst_inst_idx_indep, GSYM mk_inst_def, exec_result_map_def]) >>
+      `allocas_below_fmp (s with vs_inst_idx := k) = allocas_below_fmp s` by
+        simp[NoAsms, allocas_below_fmp_def] >>
       simp[inst_seq_ptr_def] >> conj_tac
       >- (irule convert_scalar_ptr_inst_ok >> simp[] >> goal_assum (drule_at Any)) >>
       `step_prov PG G (mk_inst id opc [x;y] [z]) t =
@@ -354,7 +372,7 @@ Theorem checked_prefix_assert_certificate:
   EVERY (\i. ~is_terminator i.inst_opcode) xs /\
   run_inst_seq xs s = OK t /\
   (!k. inst_seq_ptr D 0 ctx fn PG G tn xs (s with vs_inst_idx := k) H th) /\
-  ~ctx_has_dalloca ctx /\ op_taint th op = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ op_taint th op = {} /\
   eval_operand op t = SOME w ==>
   inst_seq_ptr D 0 ctx fn PG G tn (xs ++ [mk_inst id ASSERT [op] []]) s H th
 Proof
@@ -362,7 +380,10 @@ Proof
   qexistsl_tac [`H`,`th`] >> reverse conj_tac
   >- (simp[] >>
       first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
-  gen_tac >> irule clamp_assert_certificate >>
+  gen_tac >>
+  `allocas_below_fmp (t with vs_inst_idx := k) = allocas_below_fmp t` by
+    simp[NoAsms, allocas_below_fmp_def] >>
+  irule clamp_assert_certificate >>
   simp[eval_operand_def, lookup_var_def] >>
   Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]
 QED
@@ -405,7 +426,7 @@ QED
 Theorem scalar_double_checked_prefix:
   MEM opc1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   MEM opc2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst id opc1 [x; Lit lo] [a];
                mk_inst (id+1) ISZERO [Var a] [b]] s = OK u /\
   run_inst_seq [mk_inst (id+2) opc2 [x; Lit hi] [c];
@@ -436,12 +457,30 @@ Proof
   `op_prov H1 x = NONE /\ op_taint tn1 x = {}` by metis_tac[] >>
   `op_prov H1 (Lit hi) = NONE /\ op_taint tn1 (Lit hi) = {}` by
     simp[op_prov_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (strip_tac >> `allocas_below_fmp s` by fs[] >>
+     irule run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[mk_inst id opc1 [x; Lit lo] [a]; mk_inst (id+1) ISZERO [Var a] [b]]`, `s`] >>
+     rpt conj_tac
+     >~ [`allocas_below_fmp _`] >- first_assum ACCEPT_TAC
+     >~ [`run_inst_seq _ _ = OK _`] >- first_assum ACCEPT_TAC >>
+     qpat_assum `MEM opc1 _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `opc1` >> simp[MEM, mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all (GEN_ALL (PURE_REWRITE_RULE [GSYM arithmeticTheory.ADD_ASSOC, EVAL ``2+1:num``]
     (Q.INST [`id` |-> `id+2`] (SPEC_ALL scalar_iszero_clean_frame_certificate)))) >>
   disch_then (qspecl_then [`fn`,`PG`,`D`]
     (qx_choose_then `H2` (qx_choose_then `tn2` strip_assume_tac))) >>
   `op_prov H2 (Var b) = NONE /\ op_taint tn2 (Var b) = {}` by metis_tac[] >>
   `MEM AND [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV]` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (strip_tac >> `allocas_below_fmp u` by fs[] >>
+     irule run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[mk_inst (id+2) opc2 [x; Lit hi] [c]; mk_inst (id+3) ISZERO [Var c] [d]]`, `u`] >>
+     rpt conj_tac
+     >~ [`allocas_below_fmp _`] >- first_assum ACCEPT_TAC
+     >~ [`run_inst_seq _ _ = OK _`] >- first_assum ACCEPT_TAC >>
+     qpat_assum `MEM opc2 _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `opc2` >> simp[MEM, mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all scalar_clean_frame_certificate >>
   disch_then (qspecl_then [`fn`,`PG`,`D`]
     (qx_choose_then `H3` (qx_choose_then `tn3` strip_assume_tac))) >>
@@ -465,7 +504,7 @@ QED
 Theorem scalar_double_check_uniform_certificate:
   MEM opc1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   MEM opc2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq
     [mk_inst id opc1 [x;Lit lower] [a]; mk_inst (id+1) ISZERO [Var a] [b];
      mk_inst (id+2) opc2 [x;Lit upper] [c]; mk_inst (id+3) ISZERO [Var c] [d];
@@ -503,28 +542,44 @@ Proof
   qexistsl [`w with vs_inst_idx := q`,`value`] >>
   simp[eval_operand_def, lookup_var_def] >>
   qpat_x_assum `_ \/ _` kall_tac >>
+  qpat_abbrev_tac `code = [_;_;_;_;_]` >>
+  `run_inst_seq code s = OK w` by
+    (simp[Abbr `code`] >>
+     qpat_assum `run_inst_seq [_;_] s = OK u` (mp_tac o MATCH_MP run_inst_seq_append) >>
+     disch_then (qspec_then
+       `[mk_inst (id+2) opc2 [x;Lit upper] [c];
+         mk_inst (id+3) ISZERO [Var c] [d];
+         mk_inst (id+4) AND [Var b;Var d] [e]]` mp_tac) >>
+     simp[] >> disch_then SUBST1_TAC >>
+     qpat_assum `run_inst_seq [_;_] u = OK v` (mp_tac o MATCH_MP run_inst_seq_append) >>
+     disch_then (qspec_then `[mk_inst (id+4) AND [Var b;Var d] [e]]` mp_tac) >>
+     simp[]) >>
+  `!opc. MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] ==>
+      opc <> INVOKE /\ ~is_terminator opc /\ ~is_alloca_op opc /\
+      opc <> SETFMP /\ opc <> DALLOCA` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> gen_tac >>
+     simp[MEM] >> rpt strip_tac >> gvs[is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp w` by
+    (strip_tac >> `allocas_below_fmp s` by fs[] >>
+     irule run_inst_seq_allocas_below_fmp >> qexistsl_tac [`code`, `s`] >>
+     rpt conj_tac
+     >~ [`allocas_below_fmp _`] >- first_assum ACCEPT_TAC
+     >~ [`run_inst_seq _ _ = OK _`] >- first_assum ACCEPT_TAC >>
+     qpat_assum `!opc. MEM opc _ ==> _` (qspec_then `opc1` mp_tac) >>
+     qpat_assum `!opc. MEM opc _ ==> _` (qspec_then `opc2` mp_tac) >>
+     simp[Abbr `code`, mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+  `allocas_below_fmp (w with vs_inst_idx := q) = allocas_below_fmp w` by
+    simp[NoAsms, allocas_below_fmp_def] >>
   conj_tac
-  >- (qpat_abbrev_tac `code = [_;_;_;_;_]` >>
-      `run_inst_seq code s = OK w` by
-        (simp[Abbr `code`] >>
-         qpat_assum `run_inst_seq [_;_] s = OK u` (mp_tac o MATCH_MP run_inst_seq_append) >>
-         disch_then (qspec_then
-           `[mk_inst (id+2) opc2 [x;Lit upper] [c];
-             mk_inst (id+3) ISZERO [Var c] [d];
-             mk_inst (id+4) AND [Var b;Var d] [e]]` mp_tac) >>
-         simp[] >> disch_then SUBST1_TAC >>
-         qpat_assum `run_inst_seq [_;_] u = OK v` (mp_tac o MATCH_MP run_inst_seq_append) >>
-         disch_then (qspec_then `[mk_inst (id+4) AND [Var b;Var d] [e]]` mp_tac) >>
-         simp[]) >>
-      simp[run_inst_seq_inst_idx, Abbr `code`, mk_inst_def,
-           is_terminator_def, exec_result_map_def]) >>
+  >- simp[run_inst_seq_inst_idx, Abbr `code`, mk_inst_def,
+          is_terminator_def, exec_result_map_def] >>
   fs[eval_operand_def, lookup_var_def]
 QED
 
 Theorem scalar_double_check_certificate:
   MEM opc1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   MEM opc2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq
     [mk_inst id opc1 [x; Lit lo] [a]; mk_inst (id+1) ISZERO [Var a] [b];
      mk_inst (id+2) opc2 [x; Lit hi] [c]; mk_inst (id+3) ISZERO [Var c] [d];
@@ -553,7 +608,7 @@ QED
 
 Theorem int_clamp_signed_fixed_certificate:
   compile_int_clamp T bits x sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -574,7 +629,7 @@ QED
 
 Theorem int_clamp_fixed_certificate:
   compile_int_clamp signed bits x sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -605,7 +660,7 @@ QED
 
 Theorem int_clamp_counted_certificate:
   compile_int_clamp signed bits x sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -629,7 +684,7 @@ QED
 
 Theorem int_clamp_abort_counted_certificate:
   compile_int_clamp signed bits x sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>

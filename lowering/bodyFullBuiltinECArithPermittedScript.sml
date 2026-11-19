@@ -11,6 +11,8 @@ Ancestors
   valueEncodingDefs bodyFullGhostFrame bodySimFull loweringPosts
   vyperAST list vyperStorageFootprint exprSimOperands context
   gasOutcomeFullCompose gasSummary wordArgsPtr exprSimMemDefs vyperStorageTrace
+  vyperCallOutcome vyperCallOutcomeProps
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 (* An aborting run with two normal prefix steps is an ASSERT failure. *)
 Theorem ec_assert_failure_bit[local]:
@@ -34,6 +36,9 @@ Theorem ec_permitted_source_result[local]:
     (case point_result of NONE => INR (RuntimeError
        (if bt = ECAdd then "ECAdd invalid point" else "ECMul invalid point"))
      | SOME xy => INL (mk_ec_result xy)) /\
+  precompile_result (precompile_address bt) (precompile_input bt [v1;v2]) =
+    SOME (OPTION_MAP (\(rx,ry). word_to_bytes (n2w rx:bytes32) T ++
+      word_to_bytes (n2w ry:bytes32) T) point_result) /\
   es.outcomes = SOME u.vs_outcomes /\
   u.vs_outcomes <> [] ==>
   case point_result of NONE =>
@@ -44,7 +49,7 @@ Theorem ec_permitted_source_result[local]:
     ec_source_tail cx a bt tys [v1;v2] es =
       (if (HD u.vs_outcomes).co_success then INL (Value (mk_ec_result xy))
        else INR (Error (RuntimeError "precompile failed")),
-       es with outcomes := SOME (DROP 1 u.vs_outcomes))
+       SND (take_call_outcome NONE (precompile_address bt) (precompile_input bt [v1;v2]) NONE es))
 Proof
   strip_tac >> Cases_on `point_result` >> Cases_on `u.vs_outcomes` >>
   gvs[ec_source_tail_cases, builtin_result_def, evaluate_builtin_def]
@@ -66,7 +71,7 @@ Theorem ec_permitted_suffix_run[local]:
       word_to_bytes (n2w ry:bytes32) T) point_result) /\
   ptr_covers Gu tnu src u (w2n an) /\ ptr_covers Gu tnu dst u (w2n (64w:256 word)) /\
   (!i. w2n wi <= i /\ i < w2n wi + w2n an ==> i NOTIN tnu.t_mem) /\
-  allocas_from lo u /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
   tnu.t_stor SUBSET D.d_stor u.vs_call_ctx.cc_address
     (u.vs_accounts u.vs_call_ctx.cc_address).storage /\
   tnu.t_trans SUBSET D.d_trans u.vs_call_ctx.cc_address
@@ -137,7 +142,7 @@ Theorem ec_arith_permitted_tail_full:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (lo <> 0 ==> !z. cenv.ce_imm_alloca = SOME (Var z) ==> not_fresh_at sm z) /\
-  ~u.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~u.vs_halted /\
   lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [gi;ci;ai] (DROP u.vs_inst_idx bb.bb_instructions) /\
   (func.fn_name,id) NOTIN gas_explicit_sites ctx shadow_ctx /\
@@ -152,6 +157,7 @@ Theorem ec_arith_permitted_tail_full:
   FLOOKUP u.vs_allocas out_alloc.cs_next_id = SOME (w2n wo,64) /\
   s2.cs_next_id <= out_alloc.cs_next_id /\
   MEM (mk_inst out_alloc.cs_next_id ALLOCA [Lit 64w] [dst]) (fn_insts func) /\
+  precompile_input bt [v1;v2] = read_memory (w2n wi) (w2n an) u /\
   precompile_result (venom_call_request u addr 0w wi an T).cr_target
     (venom_call_request u addr 0w wi an T).cr_data =
     SOME (OPTION_MAP (\(rx,ry). word_to_bytes (n2w rx:bytes32) T ++
@@ -241,10 +247,32 @@ Proof
     (assume_tac o REWRITE_RULE [storage_trace_domain_def]) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _ /\ _`
     (drule_then strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx es2 u`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   mp_tac (Q.INST [`D` |-> `DF (storage_trace_horizon es2.storage_trace)`]
     ec_permitted_suffix_run) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `sg` (qx_choose_then `sc` strip_assume_tac)) >>
+  `precompile_address bt = w2w addr` by
+    (qpat_assum `bt = ECAdd \/ bt = ECMul` DISJ_CASES_TAC >>
+     fs[precompile_address_def, wordsTheory.w2w_n2w, wordsTheory.dimword_def,
+       fcpLib.INDEX_CONV ``dimindex(:160)``]) >>
+  `precompile_result (precompile_address bt) (precompile_input bt [v1;v2]) =
+     SOME (OPTION_MAP (\(rx,ry). word_to_bytes (n2w rx:bytes32) T ++
+       word_to_bytes (n2w ry:bytes32) T) point_result)` by
+    (qpat_assum `precompile_address bt = w2w addr` (fn target =>
+       qpat_assum `precompile_input bt [v1;v2] = _` (fn payload =>
+         PURE_REWRITE_TAC [target,payload])) >>
+     qpat_assum `precompile_result (_ : call_request).cr_target _ = _`
+       (ACCEPT_TAC o SIMP_RULE (srw_ss()) [venom_call_request_def])) >>
+  qabbrev_tac `ee = SND (take_call_outcome NONE (w2w addr)
+    (read_memory (w2n wi) (w2n an) u) NONE es2)` >>
+  `storage_trace_domain cx st0 ee.storage_trace` by
+    (qpat_assum `storage_trace_domain cx st0 es2.storage_trace` mp_tac >>
+     simp[storage_trace_domain_def, Abbr `ee`]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace <=>
+       valid_horizon cx st0 H es2.storage_trace` by simp[Abbr `ee`] >>
   `gas_explicit [F] t2.vs_gas_readings = []` by
     (Cases_on `t2.vs_gas_readings` >> simp[gas_explicit_cons]) >>~
     [`run_inst_seq [gi;ci;ai] u = OK _`] >- suspend "success" >>
@@ -269,8 +297,11 @@ Resume ec_arith_permitted_tail_full[abort]:
     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `bad` (qx_choose_then `Gout`
     (qx_choose_then `tnout` strip_assume_tac))) >>
-  `?msg ee. ec_source_tail cx a bt [expr_type e1;expr_type e2] [v1;v2] es2 =
-      (INR (Error (RuntimeError msg)),ee) /\ ee.storage_trace = es2.storage_trace` by
+  `?msg source_end. ec_source_tail cx a bt [expr_type e1;expr_type e2] [v1;v2] es2 =
+      (INR (Error (RuntimeError msg)),source_end) /\
+      storage_trace_domain cx st0 source_end.storage_trace /\
+      (!H. valid_horizon cx st0 H source_end.storage_trace <=>
+           valid_horizon cx st0 H es2.storage_trace)` by
     (mp_tac (Q.INST [`tys` |-> `[expr_type e1;expr_type e2]`, `es` |-> `es2`]
        ec_permitted_source_result) >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
@@ -280,11 +311,10 @@ Resume ec_arith_permitted_tail_full[abort]:
        (qpat_assum `~?rx ry co rest. _` mp_tac >>
         qpat_assum `u.vs_outcomes = co::rest` mp_tac >>
         POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[pairTheory.PAIR]) >>
-     simp[] >> disch_tac >>
-     qexistsl [`"precompile failed"`, `es2 with outcomes := SOME rest`] >> simp[]) >>
+     simp[storage_trace_domain_def]) >>
   W (fn (_,goal) => mp_tac (Q.INST [`G'` |-> `Gout`, `tn'` |-> `tnout`,
     `marks` |-> `[F]`, `r` |-> `Abort Revert_abort bad`,
-    `res` |-> `INR (Error (RuntimeError msg))`, `ee` |-> `ee`]
+    `res` |-> `INR (Error (RuntimeError msg))`, `ee` |-> `source_end`]
     (PART_MATCH (snd o dest_imp) gas_outcome_full_intro goal))) >>
   (impl_tac >- (conj_tac
     >- (qpat_assum `gas_explicit [F] t2.vs_gas_readings = []`
@@ -293,7 +323,11 @@ Resume ec_arith_permitted_tail_full[abort]:
     conj_tac >- simp[] >>
     simp[NoAsms, exit_result_def, expr_exit_def, halt_exit_def] >>
     gen_tac >> strip_tac >>
-    `valid_horizon cx st0 H es2.storage_trace` by metis_tac[] >>
+    `valid_horizon cx st0 H es2.storage_trace` by
+      (qpat_assum `!H. valid_horizon cx st0 H source_end.storage_trace <=> _`
+        (qspec_then `H` (fn eq =>
+          qpat_assum `valid_horizon cx st0 H source_end.storage_trace`
+            (ACCEPT_TAC o EQ_MP eq)))) >>
     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _ /\ _`
       (drule_then strip_assume_tac) >>
     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [F] _`
@@ -333,7 +367,10 @@ Resume ec_arith_permitted_tail_full[success]:
     rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
   disch_then (qx_choose_then `ec_tail_end` (qx_choose_then `Gout`
     (qx_choose_then `tnout` strip_assume_tac))) >>
-  qabbrev_tac `ee = es2 with outcomes := SOME (DROP 1 u.vs_outcomes)` >>
+  qpat_assum `Abbrev (ee = _)`
+    (fn abb =>
+      RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] abb)]) >>
+      assume_tac abb) >>
   `ec_source_tail cx a bt [expr_type e1;expr_type e2] [v1;v2] es2 =
     (INL (Value (mk_ec_result (rx,ry))),ee)` by
     (mp_tac (Q.INST [`tys` |-> `[expr_type e1;expr_type e2]`, `es` |-> `es2`]
@@ -345,7 +382,7 @@ QED
 
 Resume ec_arith_permitted_tail_full[success_path]:
   markerLib.RESUME_TAC >>
-  `ee.storage_trace = es2.storage_trace /\ (ee with gas_obs := []) = ee` by
+  `(ee with gas_obs := []) = ee` by
     simp[Abbr `ee`, evaluation_state_component_equality] >>
   W (fn (_,goal) => mp_tac (Q.INST [`G'` |-> `Gout`, `tn'` |-> `tnout`,
     `marks` |-> `[F]`, `r` |-> `OK ec_tail_end`,
@@ -357,11 +394,18 @@ Resume ec_arith_permitted_tail_full[success_path]:
         drule_all ec_source_tail_gas_obs >> simp[NoAsms]) >>
     conj_tac >- simp[] >>
     gen_tac >> strip_tac >>
-    `valid_horizon cx st0 H es2.storage_trace` by metis_tac[] >>
+    `valid_horizon cx st0 H es2.storage_trace` by
+      (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace <=> _`
+        (qspec_then `H` (fn eq =>
+          qpat_assum `valid_horizon cx st0 H ee.storage_trace`
+            (ACCEPT_TAC o EQ_MP eq)))) >>
     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _ /\ _`
       (drule_then strip_assume_tac) >>
     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [F] _ /\ _`
       (drule_then strip_assume_tac) >>
+    `ctx_has_dalloca ctx ==> allocas_below_fmp ec_tail_end` by
+      (qpat_assum `stmt_state_rel H ctx func cenv cx _ ec_tail_end`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
     conj_tac >- (qpat_assum `gas_origin_ptr_path _ (t2,G2,tn2) [] _`
       (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
       simp[NoAsms] >> disch_then drule >> simp[NoAsms]) >>

@@ -62,6 +62,7 @@ Ancestors
   (* dead function traversal *)
   dftCorrectnessFinal
   dftGasMaskRequests dftGasPrefixProvider
+  dftFinitePacketHol
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
@@ -80,3 +81,4 @@ Ancestors
   (* symbolic assembly finalizers and their codegen correctness bridge *)
   asmOptNonemptyFinalizer codegenAsmOpt
   codegenAsmOptRevert
+  codegenGasAsmOpt

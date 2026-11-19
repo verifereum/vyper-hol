@@ -195,7 +195,7 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
-Theorem ptr_comparison_step[local]:
+Theorem ptr_comparison_step:
   (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/ inst.inst_opcode = GT) ==>
   step_inst fuel C inst s =
     exec_pure2 (\x y. bool_to_word

@@ -3,6 +3,7 @@ Ancestors
   wordLoadStorePtr bodyPtrBopHashStep bodyPtrBopScalarProbe typedCopyPtr fragGasSeqPtr
   ptrDiscipline venomInst finite_map codegenRel venomExecSemantics venomState
   valueEncodingProps ghostPcTransportPtr
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem bop_hash_add_provenance:
   FLOOKUP G p = SOME site ==>
@@ -138,7 +139,7 @@ Theorem bop_hash_mload_sha3_ok:
   (0 < n ==> ptr_covers G tn q s n) /\ op_taint tn (Var q) = {} /\
   (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) /\
   (!i. w2n v <= i /\ i < w2n v + n ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   u = update_var l (mload (w2n w) s) s /\
   G' = step_prov PG G (mk_inst id MLOAD [Var p] [l]) u /\
   tn' = step_taint (mk_inst id MLOAD [Var p] [l]) s u tn ==>
@@ -157,6 +158,9 @@ Proof
   `op_taint tn' (Var q) = {}` by
     gvs[step_taint_def, set_var_taint_def, op_taint_def,
         mk_inst_def, FLOOKUP_UPDATE] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := k)` by
+    gvs[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   irule ptr_inst_ok_sha3 >> simp[] >>
   qexistsl [`v`, `n2w n`] >>
   gvs[eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
@@ -181,7 +185,7 @@ Proof
 QED
 
 Theorem bop_hash_sequence_checks:
-  p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
+  p <> q /\ l <> q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var p s = SOME w /\ ptr_covers G tn p s 32 /\
   mload (w2n w) s = n2w n /\ n < dimword(:256) /\
   FLOOKUP G p = SOME (b,sz) /\
@@ -204,12 +208,17 @@ Proof
   strip_tac >>
   `uA = update_var q (w + 32w) s` by
     (irule bop_hash_add_state >> gvs[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sA` by
+    gvs[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `ptr_covers G1 tn1 p sA 32` by
     (gvs[] >> irule bop_hash_add_preserves_ptr_covers >> simp[]) >>
   conj_tac
   >- (gvs[] >> irule ptr_inst_ok_copy_len_binop >>
       gvs[bodyPtrDefsTheory.ptr_covers_def, op_taint_def]) >>
-  conj_tac >- (gvs[] >> irule ptr_inst_ok_mload >> simp[]) >>
+  conj_tac >- (gvs[] >> irule ptr_inst_ok_mload >>
+      simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+           exprPtrUnwrapFramesTheory.copy_allocas_update]) >>
   `lookup_var p sA = SOME w /\ lookup_var q sA = SOME (w + 32w)` by
     gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `tn1.t_mem = tn.t_mem` by
@@ -272,7 +281,7 @@ Proof
 QED
 
 Theorem bop_hash_sequence_checked:
-  p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
+  p <> q /\ l <> q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var p s = SOME w /\ ptr_covers G tn p s 32 /\
   mem_word_at (w2n w) s.vs_memory = n2w n /\ n < dimword(:256) /\
   FLOOKUP G p = SOME (b,sz) /\

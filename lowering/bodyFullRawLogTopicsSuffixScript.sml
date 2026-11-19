@@ -1,6 +1,8 @@
 (* Restartable suffix induction for RawLog topics. *)
 Theory bodyFullRawLogTopicsSuffix
 Ancestors
+  bodyFullIfExpReach
+  bodyFullShadowBodyInv
   bodyFullRawLogTopicsPost bodyFullPreds bodySimFull gasOutcomeFullCompose
   bodyRawLogArgPre exprSimSource exprSimProps exprLoweringProps
   gasShadowState loweringPosts bodyPtrDefs fragGasOriginPtr
@@ -84,6 +86,7 @@ Theorem raw_log_topics_suffix_full_under_compose:
        (compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr xs))) /\
   topics = pre ++ rest /\
   body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
@@ -99,7 +102,9 @@ Theorem raw_log_topics_suffix_full_under_compose:
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!fn inst st. frag_reachable ctx func s fn inst st ==> dalloca_no_wrap inst st) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\
@@ -205,16 +210,29 @@ Proof
      qpat_x_assum `body_expr_full_ok cx e`
        (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
      disch_then drule_all >> simp[]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `body_inv _ ctx _ cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (MATCH_MP body_inv_no_phi (CONJ inv member))))) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`op`,`s`,`G0`,`tn0`] mp_tac) >>
   impl_tac
   >- (simp[] >> conj_tac
       >- (irule expr_body_pre_gas_admissible >> goal_assum (drule_at Any)) >>
-      rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-      fs[ctx_has_dalloca_def, unitTransformDefsTheory.dalloca_no_wrap_def, EXISTS_MEM] >> metis_tac[]) >>
+      first_assum ACCEPT_TAC) >>
   strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ headR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s,G0,tn0)
+     (\H rr ee G tn u. headQ H rr ee G tn u /\
+       ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (s,G0,tn0) cm (OK u,G,tn)) headR` by
+    (irule gas_outcome_full_post_path >>
+     qpat_assum `gas_outcome_full _ _ _ _ _ _ headQ headR` (irule_at Any) >>
+     rpt strip_tac >> simp[] >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ headQ headR` kall_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ pathQ headR` >>
   rewrite_tac[eval_exprs_cons_action] >>
   irule gas_outcome_full_bind_all >>
   rpt conj_tac
@@ -231,7 +249,7 @@ Proof
   >- (gen_tac >> BETA_TAC >> irule vyperStorageTraceTheory.storage_trace_frame_bind >>
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
            vyperStorageTraceTheory.storage_trace_frame_return]) >>
-  qexists_tac `\H res ee G tn t. headQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
+  qexists_tac `\H res ee G tn t. pathQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
   conj_tac
   >~ [`storage_trace_domain _ _ _`]
   >- suspend "continue" >>
@@ -251,8 +269,20 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
+  qunabbrev_tac `pathQ` >> RULE_ASSUM_TAC BETA_RULE >> BETA_TAC >>
   qpat_assum `Abbrev (headQ = _)`
     (fn th => pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th]) >> BETA_TAC >> strip_tac >>
+  `!fn inst s. frag_reachable ctx func u fn inst s ==> dalloca_no_wrap inst s` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G0,tn0) _ (OK u,G1,tn1)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+       qpat_assum `!fn inst st. frag_reachable ctx func s fn inst st ==> _` (fn safe =>
+         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+           (LIST_CONJ [path,no_phi,safe])))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ u`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ mid u`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
   qexists_tac `v` >> simp[] >>
   `bind (eval_expr cx e) (read_result cx)
@@ -321,6 +351,7 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (qpat_x_assum `!pre topics DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ann n data dflt st0 sa sb shadow_sa shadow_sb ops es s G0 tn0. _` irule >>
      simp[] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac
      >- (qexistsl_tac [`shadow_func`,`shadow_sm`,`shadow_last`] >> simp[]) >>
      conj_tac >- (qexists_tac `tops` >> simp[]) >>
@@ -428,7 +459,7 @@ Resume raw_log_topics_suffix_full_under_compose[return_cons]:
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      drule_all vyperStorageFootprintTheory.valid_horizon_frame >> simp[]) >>
   qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _` drule >> strip_tac >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> headQ _ _ _ _ _ _ /\ _` drule >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> (headQ _ _ _ _ _ _ /\ _) /\ _` drule >>
   qpat_assum `Abbrev (headQ = _)`
     (fn th => pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
   BETA_TAC >> strip_tac >>

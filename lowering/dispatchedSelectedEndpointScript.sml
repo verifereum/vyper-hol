@@ -33,12 +33,13 @@ Theorem dispatched_selected_registration_joint:
       set_external_package_target rpolicy.rpol_target
         (package_external_fn tops T (K global_nonreentrant_slot)
           (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
-           tx.function_name,args,([] : expr list),ret,fbody)) =
-        (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt) /\
+           tx.function_name,args,([] : expr list),ret,
+             subst_consts_stmts (module_consts_env tops []) fbody)) =
+        (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,subst_consts_stmts (module_consts_env tops []) fbody,rt) /\
       runtime_selected_body_start tops rpolicy
-        (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt) st /\
+        (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,subst_consts_stmts (module_consts_env tops []) fbody,rt) st /\
       compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
-      compile_guarded_body cenv nr nkey ut' iv fbody rt sa = ((),st') /\
+      compile_guarded_body cenv nr nkey ut' iv (subst_consts_stmts (module_consts_env tops []) fbody) rt sa = ((),st') /\
       fn_has_code sa st' efn /\ fn_inst_ids_distinct efn /\
       local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
       unit.cu_context.ctx_entry = SOME "__entry" /\
@@ -161,6 +162,18 @@ Resume dispatched_selected_registration_joint[owners]:
 QED
 
 Resume dispatched_selected_registration_joint[relations]:
+  `set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops T (K global_nonreentrant_slot)
+      (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+       tx.function_name,args,([]:expr list),ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt)` by
+    (once_rewrite_tac
+       [SIMP_RULE std_ss
+          [constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def]
+          (Q.INST [`E` |-> `module_consts_env tops []`,
+                   `defaults` |-> `[]:expr list`]
+             entryDispatchPropsTheory.external_package_subst_consts)] >>
+     first_assum ACCEPT_TAC) >>
   drule_all_then MATCH_ACCEPT_TAC registration_actual_endpoint_relations_from_prefix
 QED
 
@@ -214,7 +227,8 @@ Theorem dispatched_entry_endpoint_selected:
       (initial_state am [env] with
          <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
       (INL (), es0) ==>
-    runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret fbody
+    runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret
+      (subst_consts_stmts (module_consts_env tops []) fbody)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all dispatchedSelectedFactsTheory.dispatched_selected_source_facts >> strip_tac >>

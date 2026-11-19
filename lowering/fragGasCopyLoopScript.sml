@@ -15,7 +15,7 @@ Ancestors
   bodyMemAssignTopCopyLoop fragGasPathPtr wordLoadStorePtr assignBasePtrWordStore codegenRel
   contextCodegenRel exprSimPtrTopLevelStorageCopy exprSimPtrTopLevelCopy exprSimStorageCopy
   bodyStorageCopyMemory bodyMemAssignTopCopyPaths
-  fragGasSeqPtrContext fragGasSeqPtr fragGasSeqAbort fragGasOriginPtr fragGasOrigin
+  fragGasSeqPtrContext fragGasSeqPtr fragGasSeqAbort fragGasOriginPtr fragGasOriginPtrLoop fragGasOrigin
   ptrSafetyTransport instMemFrontier fragExecMem fragExec memSafeRun
   gasEvents gasCount ptrSafeRun ptrDiscipline bodyPtrDefs typedCopyPtr
   decoderGhostFramePtr exprLoweringProps venomMemProps
@@ -205,21 +205,6 @@ Proof
   simp[gas_origin_ptr_path_rules]
 QED
 
-Theorem copy_jmp_origin_ptr:
-  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
-  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) ==>
-  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-    (OK (jump_to lbl s),G,tn)
-Proof
-  strip_tac >> irule copy_jump_origin_ptr >> simp[] >>
-  simp[mk_inst_def, step_inst_base_opcode_eqs, ptr_inst_ok_def, access_ok_def,
-       taint_ok_def, allocas_from_def, source_memory_write_ranges_def,
-       source_memory_read_ranges_def] >>
-  simp[GSYM mk_inst_def, step_inst_non_invoke, jump_to_def] >>
-  simp[step_inst_base_opcode_eqs, mk_inst_def, jump_to_def, op_taint_def]
-QED
-
 Theorem origin_ptr_path_then[local]:
   gas_origin_ptr_path cx st [] (OK mid,G1,tn1) /\
   gas_origin_ptr_path cx (mid,G1,tn1) [] (r,G2,tn2) ==>
@@ -331,7 +316,7 @@ Proof
   qabbrev_tac `t0 = u0 with vs_inst_idx := s.vs_inst_idx + LENGTH [i0]` >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t0,G1,tn1) []
      (OK (jump_to hdr t0),G1,tn1)` by
-    (irule copy_jmp_origin_ptr >>
+    (irule jmp_origin_ptr_path >>
      simp[Abbr `t0`, Abbr `u0`, update_var_def] >>
      gvs[allocas_from_def, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   qexistsl_tac [`jump_to hdr t0`, `G1`, `tn1`] >>
@@ -473,17 +458,13 @@ Proof
   qpat_x_assum `run_inst_seq _ s = OK r` mp_tac >>
   qmatch_goalsub_abbrev_tac `run_inst_seq code s` >> strip_tac >>
   RULE_ASSUM_TAC (REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
-  drule_all (Q.INST [`ctx` |-> `ctx with ctx_functions := []`]
-    (SPEC_ALL toplevel_copy_body_ptr)) >>
+  drule_all toplevel_copy_body_ptr >>
   disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
       ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
       i.inst_opcode <> DALLOCA) code` by
     (qpat_x_assum `code = _` SUBST1_TAC >>
      Cases_on `loc = LocStorage` >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
-  `inst_seq_ptr D 0 ctx func PG G tn code s Gf tnf` by
-    (irule inst_seq_ptr_restore_ctx >> simp[]) >>
   `(ctx_has_dalloca ctx ==> allocas_below_fmp r)` by
     metis_tac[run_inst_seq_allocas_below_fmp] >>
   `run_inst_seq_mem_ok code s` by
@@ -519,7 +500,7 @@ Proof
     (simp[Abbr `t`] >> gvs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,Gf,tnf) []
      (OK (jump_to hdr t),Gf,tnf)` by
-    (irule copy_jmp_origin_ptr >> simp[] >>
+    (irule jmp_origin_ptr_path >> simp[] >>
      qexists_tac `id+7` >> simp[get_instruction_def] >>
      qpat_x_assum `code = _` SUBST1_TAC >> simp[]) >>
   qexistsl_tac [`jump_to hdr t`, `Gf`, `tnf`] >>
@@ -1007,7 +988,7 @@ Proof
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
      (t0,step_prov PG G i0 u0,step_taint i0 s u0 tn) []
      (OK (jump_to hdr t0),step_prov PG G i0 u0,step_taint i0 s u0 tn)` by
-    (irule copy_jmp_origin_ptr >> simp[Abbr `t0`, Abbr `u0`, update_var_def] >>
+    (irule jmp_origin_ptr_path >> simp[Abbr `t0`, Abbr `u0`, update_var_def] >>
      gvs[allocas_from_def, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   metis_tac[origin_ptr_path_then]
 QED
@@ -1312,7 +1293,7 @@ Proof
        (qpat_assum `!j. j < 8 ==> _` (qspec_then `7` mp_tac) >> simp[]) >>
      `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t1,Gf,tnf) []
         (OK (jump_to hdr t1),Gf,tnf)` by
-       (irule copy_jmp_origin_ptr >> simp[] >> metis_tac[]) >>
+       (irule jmp_origin_ptr_path >> simp[] >> metis_tac[]) >>
      `!y. not_fresh_at sa y ==> FLOOKUP Gf y = FLOOKUP G y /\
                                 op_taint tnf (Var y) = op_taint tn (Var y)` by
        (rpt gen_tac >> strip_tac >>

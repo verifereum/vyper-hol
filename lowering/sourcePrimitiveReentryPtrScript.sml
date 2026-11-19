@@ -107,6 +107,7 @@ Resume source_primitive_decoder_reentry_ptr_origin[bytes]:
     (Cases_on `src` >> gvs[calldata_operand_live_not_fresh, abi_decoder_operand_live_def]) >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all bytestring_sentinel_reentry_sequence >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SRULE [GSYM abi_decode_bytes_copy_size_def]
     (Q.INST [`C` |-> `abi_decode_bytes_copy_size m`]
       calldata_bytestring_overwrite_endpoint_core_uniform_origin)) >>

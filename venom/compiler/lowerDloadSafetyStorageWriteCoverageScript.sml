@@ -1,5 +1,5 @@
 Theory lowerDloadSafetyStorageWriteCoverage
-Ancestors
+Ancestors lowerDloadMemoryWritePointEffect[qualified]
   lowerDloadSafetyStorageWriteEffects lowerDloadSafetyOrdinaryCoverage
   lowerDloadOracleCallAssembly lowerDloadSafetyWriteAssembly
   lowerDloadSafetyAssemblyPremises lowerDloadSafetyValues
@@ -55,10 +55,10 @@ Proof
      simp[exec_write2_def, eval_operands_def, AllCaseEqs()] >>
      rpt strip_tac >> gvs[]) >>
   `?src_key. eval_operand a f.lf_src = SOME src_key` by
-    (irule ld_write_operand_defined >> simp[] >> conj_tac
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> simp[] >> conj_tac
      >- (qexists_tac `inst` >> simp[]) >> metis_tac[]) >>
   `?x. eval_operand v f.lf_src = SOME x` by
-    (irule ld_write_operand_defined >> simp[] >> conj_tac
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> simp[] >> conj_tac
      >- (qexists_tac `inst` >> simp[]) >> metis_tac[]) >>
   `op_taint tn a = {}` by
     (spose_not_then assume_tac >>
@@ -73,9 +73,9 @@ Proof
   gvs[ld_word_agree_empty]
 QED
 
-Theorem ld_sync_storage_write_effect:
+Theorem ld_sync_storage_write_effect_at:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ taint_ok fn tn inst s /\
   MEM inst.inst_opcode [SSTORE;TSTORE] /\
   step_inst fuel C' inst t = OK ts ==>
   ?ss H'. step_inst fuel C inst s = OK ss /\
@@ -101,7 +101,6 @@ Proof
      metis_tac[]) >>
   `fn_ptr_ok P fn` by metis_tac[ld_sync_ptr_ok] >>
   `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
-  `taint_ok fn tn inst s` by metis_tac[ld_sync_taint_ok] >>
   `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
     metis_tac[ld_global_selected, MEM] >>
   `inst.inst_opcode <> INVOKE` by (fs[MEM] >> gvs[]) >>
@@ -122,6 +121,29 @@ Proof
    f with <|lf_src := ss; lf_tgt := ts;
       lf_tv := (step_taint inst f.lf_src ss tn).t_var|>` by
     simp[ld_frame_component_equality] >> simp[]
+QED
+
+Theorem ld_sync_storage_write_effect:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  MEM inst.inst_opcode [SSTORE;TSTORE] /\
+  step_inst fuel C' inst t = OK ts ==>
+  ?ss H'. step_inst fuel C inst s = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := ts; lf_H := H';
+      lf_tv := (step_taint inst s ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst s ss tn) ss ts /\
+    ld_nonghost (step_taint inst s ss tn) ss ts /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
+      inst ss = ld_erase A o_f H' /\
+    (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+    ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+    ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
+    ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+    ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb
+Proof
+  strip_tac >>
+  drule_all ld_sync_taint_ok >> strip_tac >>
+  drule_all ld_sync_storage_write_effect_at >> simp[]
 QED
 
 Theorem ld_sync_storage_write_coverage:
