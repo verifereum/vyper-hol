@@ -360,13 +360,6 @@ Proof
   gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem intcall_args_defaults_typing_weaken:
-  supported_pure_exprs tops ds /\ well_typed_exprs (defaults_env tenv) ds ==>
-  well_typed_exprs tenv ds
-Proof
-  metis_tac[intcall_args_defaults_typing_mutual]
-QED
-
 (* Nonlocal places cannot observe the caller's scope stack. *)
 Theorem intcall_args_read_place_scope_action[local]:
   (!id path. p <> MemoryPlace id path) ==>
@@ -529,14 +522,6 @@ Proof
   Cases_on `v` >> simp[return_def, lift_option_type_def, bind_def,
     ignore_bind_def, record_storage_event_def] >>
   Cases_on `evaluate_type (get_tenv cx) t'` >> simp[return_def, raise_def]
-QED
-
-Theorem intcall_args_extend_place_nonlocal:
-  (!id path. r <> PlaceR (MemoryPlace id path)) /\
-  extend_place cx r sb s = (INL r',t) ==>
-  (!id path. r' <> PlaceR (MemoryPlace id path))
-Proof
-  metis_tac[vyperLocalAccessFrameTheory.extend_place_memory_origin]
 QED
 
 Theorem intcall_args_select_result_scope_action:
@@ -970,24 +955,6 @@ Proof
   simp[bind_def, push_function_def, return_def]
 QED
 
-Theorem intcall_args_lock_push_failure:
-  lock_if_nr cx nr (is_view_mut mut) st = (INR err,failed) ==>
-  bind (lock_if_nr cx nr (is_view_mut mut))
-    (\u. bind (push_function (NONE,name) penv cx)
-      (\cxf. bind
-        (finally_unless_halt
-          (finally
-            (try (bind (eval_stmts cxf ss) (\u. return NoneV))
-                 handle_function)
-            (pop_function prev))
-          (unlock_if_nr cx nr (is_view_mut mut)))
-        (\rv. bind (lift_option_type (safe_cast rtv rv) "IntCall cast ret")
-                   (\crv. return (Value crv))))) st =
-  (INR err,failed)
-Proof
-  simp[bind_def]
-QED
-
 Theorem intcall_args_aggregate_physical_type:
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx tenv e esi /\
@@ -1168,14 +1135,6 @@ Proof
   simp[supportedExprTraverseTheory.supported_expr_exists_def] >> strip_tac >>
   `~is_extcode h` by metis_tac[supportedExprTraverseTheory.supported_expr_exists_root] >>
   simp[]
-QED
-
-Theorem intcall_args_pure_alloc_frame:
-  supported_pure_expr tops e /\ c'.ce_struct_fields = c.ce_struct_fields /\
-  c'.ce_modules = c.ce_modules ==>
-  (alloc_limits_expr c' e = alloc_limits_expr c e)
-Proof
-  metis_tac[intcall_args_pure_alloc_mutual]
 QED
 
 Theorem intcall_args_pure_allocs_frame:
