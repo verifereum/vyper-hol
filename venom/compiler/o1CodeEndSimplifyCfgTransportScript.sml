@@ -143,7 +143,7 @@ Proof
     simplify_unreachable_inst_subset]
 QED
 
-Theorem code_end_round_static[local]:
+Theorem code_end_round_static:
   wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ first_block_no_preds f /\
   scfg_phi_safe f /\ fn_defs_reach_uses f /\ EVERY label_positions_ok (fn_insts f) /\
   (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>

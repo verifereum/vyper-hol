@@ -33,7 +33,7 @@ Ancestors
 
 (* Exact observable agreement supplies the same input for every mask. *)
 
-Theorem storage_agree_except_mono[local]:
+Theorem storage_agree_except_mono:
   X SUBSET Y /\ storage_agree_except X st1 st2 ==>
   storage_agree_except Y st1 st2
 Proof

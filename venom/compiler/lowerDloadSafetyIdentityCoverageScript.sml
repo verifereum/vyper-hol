@@ -6,7 +6,7 @@ Ancestors
   ptrDiscipline venomWf memLocDefs pointerConfinedDefs venomExecSemantics
   venomState venomInst codegenRel unitShapeDefs finite_map pred_set list
 
-Theorem ld_identity_step[local]:
+Theorem ld_identity_step:
   MEM inst.inst_opcode [NOP;ASSERT;ASSERT_UNREACHABLE] /\
   eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\
   step_inst_base inst t = OK ts ==>
@@ -24,7 +24,7 @@ Proof
   gvs[AllCaseEqs()]
 QED
 
-Theorem ld_identity_ghosts[local]:
+Theorem ld_identity_ghosts:
   MEM inst.inst_opcode [NOP;ASSERT;ASSERT_UNREACHABLE] /\
   inst.inst_outputs = [] ==>
   step_taint inst s s tn = tn /\ step_prov PG G inst s = G

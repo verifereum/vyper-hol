@@ -64,7 +64,7 @@ Proof
   >>~- ([`step_inst _ _ _ _ = IntRet _ _`],
     metis_tac[step_inst_invoke_not_intret]) >>
   `first_block_no_phi b.po_fn /\ first_block_no_phi bt.po_fn` by metis_tac[] >>
-  imp_res_tac ptr_setup_no_phi_entry >> gvs[] >>
+  imp_res_tac concretizePtrPairedCallRestrictedTheory.ptr_setup_no_phi_entry_core >> gvs[] >>
   drule_all ptr_dalloca_runtime_call >> strip_tac >>
   simp[ptr_dalloca_ghost_vars_def, op_taint_def, entry_taint_def]
 QED
