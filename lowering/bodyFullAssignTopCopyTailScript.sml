@@ -1,6 +1,7 @@
 (* Joint storage continuations for aggregate Assign. *)
 Theory bodyFullAssignTopCopyTail
 Ancestors
+  keyUpdateFold[qualified,ignore_grammar]
   stmtSimAssignStorage augAssignFullStore augAssignFullStoreGhost
   bodyMemoryDefs bodySimFull gasOutcomeFull gasOutcomeFullCompose accountsRelProps stmtSimProps
   allocaHistory exprLoweringProps vyperTyping loweringPosts stmtSimDefs
@@ -139,17 +140,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem assign_slots_key_update_member[local]:
-  !(ks:num list) X (key:num -> bytes32) bytes k b.
-    (k,b) IN FOLDL (\Z j. key_update Z (key j) (bytes j)) X ks ==>
-    ((k,b) IN X /\ ~MEM k (MAP key ks)) \/
-    (?j. MEM j ks /\ key j = k /\ b IN bytes j)
-Proof
-  Induct >> simp[FOLDL] >> rpt gen_tac >> disch_tac >>
-  first_x_assum (qspecl_then [`key_update X (key h) (bytes h)`, `key`, `bytes`, `k`, `b`] mp_tac) >>
-  simp[key_update_def] >> metis_tac[]
-QED
-
 Theorem assign_slots_robust_byte_clean[local]:
   b < 32 /\
   (!mem. mem_agree_outside M s.vs_memory mem ==>
@@ -254,9 +244,8 @@ Proof
      simp_tac (srw_ss()) [wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD, ASSUME ``start+i < dimword (:256)``]) >>
   simp_tac (srw_ss()) [SUBSET_DEF, pairTheory.FORALL_PROD, cardinalTheory.IN_ELIM_PAIR_THM] >>
   qx_gen_tac `k` >> qx_gen_tac `b` >> disch_tac >>
-  mp_tac (Q.SPECL [`ks`,`X`,`\i. n2w (start+i):bytes32`,
-    `\i. mem_word_taint M (off+32*i)`,`k`,`b`] assign_slots_key_update_member) >>
-  BETA_TAC >> (impl_tac >- first_assum ACCEPT_TAC) >>
+  qspecl_then [`\i. n2w (start+i):bytes32`, `\i. mem_word_taint M (off+32*i)`]
+    (drule o BETA_RULE) keyUpdateFoldTheory.key_update_fold_cases >>
   disch_then (DISJ_CASES_THEN STRIP_ASSUME_TAC)
   >- suspend "unwritten" >> suspend "written"
 QED
@@ -275,9 +264,8 @@ Resume assign_slots_sparse_taint[inside]:
   `~MEM i (MAP FST writes)` by
     (strip_tac >> `MEM i ks` by metis_tac[] >>
      `n2w (start+i) = k` by metis_tac[wordsTheory.n2w_w2n] >>
-     qpat_x_assum `~MEM k (MAP _ _)` mp_tac >>
-     simp_tac (srw_ss()) [listTheory.MEM_MAP] >>
-     qexists_tac `i` >> asm_rewrite_tac[]) >>
+     qpat_x_assum `!j. MEM j ks ==> k <> _` (qspec_then `i` mp_tac) >>
+     simp[]) >>
   `b < 32 /\ dead_bytes st start tv (start+i) b` by
     (`dead_bytes st start tv (w2n k) b` by metis_tac[assign_slots_subregion_dead_iff] >>
      drule (cj 1 dead_bytes_range) >> simp[] >>
@@ -543,3 +531,81 @@ Resume body_assign_slots_full_frame_path[positive]:
 QED
 
 Finalise body_assign_slots_full_frame_path
+
+Theorem body_assign_slots_positive_endpoint_post:
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
+  ghost_inv_at D lo d cenv cx ee G tn s /\ dead_lo_ok H D lo cenv cx /\
+  MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\ storage_subregion root path delta tv /\
+  w2n k = w2n rootk + delta /\ 0 < type_slot_size tv /\
+  w2n k + type_slot_size tv <= dimword (:256) /\
+  well_formed_type_value tv /\ value_has_type tv v /\ encode_value tv v = SOME writes /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v off mem) /\
+  store_copy_normalize s t =
+    FOLDL (\q j. (if tr then tstore else sstore) (k+n2w j) (mload (off+32*j) s) q) s ks /\
+  (!j. MEM j ks <=> MEM j (MAP FST writes)) /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==>
+    lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tnf (Var x) = op_taint tn (Var x)) /\
+  t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+  t.vs_alloca_next = s.vs_alloca_next /\ t.vs_call_ctx = s.vs_call_ctx /\
+  tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+  (if tr then tnf.t_stor = tn.t_stor else tnf.t_trans = tn.t_trans) /\
+  (if tr then tnf.t_trans else tnf.t_stor) SUBSET
+    FOLDL (\X j. key_update X (k+n2w j) (mem_word_taint tn.t_mem (off+32*j)))
+      (if tr then tn.t_trans else tn.t_stor) ks ==>
+  stmt_state_rel H ctx func cenv cx
+    (set_storage cx ee tr (apply_writes k writes (get_storage cx ee tr))) t /\
+  ghost_inv_at D lo d cenv cx
+    (set_storage cx ee tr (apply_writes k writes (get_storage cx ee tr))) Gf tnf t
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >> simp[] >>
+  `val_in_memory tv v off s.vs_memory` by metis_tac[mem_agree_outside_def] >>
+  `k = n2w (w2n k):bytes32` by simp[] >>
+  qabbrev_tac `start = w2n k` >>
+  `!i. k + n2w i = n2w (start+i)` by
+    (gen_tac >> qpat_assum `k = n2w start` (fn th => simp[Once th,wordsTheory.word_add_n2w])) >>
+  qpat_x_assum `start = w2n rootk + delta` (mk_asm "start") >>
+  `store_copy_normalize s t =
+   FOLDL (\q j. (if tr then tstore else sstore) (n2w (start+j))
+                (mload (off+32*j) s) q) s ks` by
+    (qpat_assum `!i. k + n2w i = _` (fn th =>
+       qpat_assum `store_copy_normalize s t = _`
+          (ACCEPT_TAC o PURE_REWRITE_RULE [th]))) >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx ef t` >>
+  conj_asm1_tac
+  >- (simp[Abbr `ef`] >>
+      qpat_assum `k = n2w start` (fn th => pure_once_rewrite_tac [th]) >>
+      irule assign_slots_sparse_stmt_post >> asm_rewrite_tac[] >>
+      conj_tac >- (qexists `env` >> asm_rewrite_tac[]) >>
+      qexistsl [`delta`,`ks`,`off`,`path`,`root`,`rootk`,`s`,`sa`,`tv`,`v`] >>
+      asm "start" mp_tac >> asm_rewrite_tac[] >> metis_tac[]) >>
+  reverse (irule assign_slots_ghost_frame >> conj_tac)
+  >- (qexistsl [`G`,`ee`,`s`,`sa`,`tn`] >> asm_rewrite_tac[] >>
+      Cases_on `tr` >> simp[Abbr `ef`,set_storage_def]) >>
+  `s.vs_call_ctx.cc_address = cx.txn.target` by
+    (drule stmt_state_rel_state_rel >> disch_then (mp_tac o MATCH_MP state_rel_call_ctx_rel) >>
+     simp[call_ctx_rel_def]) >>
+  `t.vs_immutables = s.vs_immutables` by
+    (qpat_assum `store_copy_normalize s t = FOLDL _ _ _`
+       (mp_tac o BETA_RULE o AP_TERM ``\z:venom_state. z.vs_immutables``) >>
+     simp[NoAsms,store_copy_normalize_def,assign_slots_fold_immutables]) >>
+  `stor_taint_ok_at D tn s` by fs[ghost_inv_at_def] >>
+  irule assign_slots_post_stor_taint >> asm_rewrite_tac[] >>
+  qexistsl [`H`,`cenv`,`ctx`,`cx`,`ee`,`ef`,`func`,`lo`,`s`,`tn`,`tr`] >>
+  asm_rewrite_tac[] >> simp[Abbr `ef`,get_storage_after_set] >>
+  conj_tac >- (irule get_storage_after_set_other >> Cases_on `tr` >> simp[]) >>
+  disch_tac >> irule SUBSET_TRANS >>
+  qexists `FOLDL (\X j. key_update X (k+n2w j) (mem_word_taint tn.t_mem (off+32*j)))
+    (if tr then tn.t_trans else tn.t_stor) ks` >>
+  asm_rewrite_tac[] >>
+  qpat_assum `!i. k + n2w i = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `k = n2w start` (fn th => pure_once_rewrite_tac[th]) >>
+  irule assign_slots_sparse_taint >> asm_rewrite_tac[] >>
+  qexistsl [`delta`,`path`,`root`,`rootk`,`s`,`tv`,`v`] >>
+  asm "start" mp_tac >> asm_rewrite_tac[]
+QED
