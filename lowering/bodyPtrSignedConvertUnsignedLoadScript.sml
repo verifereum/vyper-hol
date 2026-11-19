@@ -83,7 +83,7 @@ QED
 
 Theorem unsigned_shift_ptr_inst_ok:
   op_prov G bits = NONE /\ op_prov G data = NONE /\
-  op_taint tn bits = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn bits = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id SHR [bits;data] [out]) s = OK u ==>
   ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id SHR [bits;data] [out]) s
 Proof

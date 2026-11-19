@@ -13,7 +13,7 @@ Theorem literal_capacity_header_chunks_ptr:
   compile_store_byte_chunks (Var p) bs 32 sh = ((),sb) /\
   not_fresh_at sh p /\ lookup_var p s = SOME (n2w b) /\
   FLOOKUP G p = SOME (b,cap) /\ 32+32*word_size (LENGTH bs) <= cap /\
-  op_taint tn (Var p) = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn (Var p) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   b+cap < dimword(:256) ==>
   ?t Gf tnf.
     run_inst_seq (mk_inst id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
@@ -40,6 +40,10 @@ Proof
   `lookup_var p uh = SOME (n2w b) /\ op_taint th (Var p) = {}` by
     (simp[Abbr `uh`, Abbr `u`, Abbr `th`, mstore_def, lookup_var_def, op_taint_def] >>
      fs[lookup_var_def, op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp uh` by
+    (simp[Abbr `uh`, Abbr `u`, allocas_below_fmp_def, mstore_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o SRULE [allocas_below_fmp_def])) >>
   `?t Gf tnf. run_inst_seq (emitted_insts sh sb) uh = OK t /\
     inst_seq_ptr D 0 ctx fn PG G th (emitted_insts sh sb) uh Gf tnf /\
     tnf.t_mem = th.t_mem DIFF {i | b+32 <= i /\ i < b+32+32*word_size (LENGTH bs)} /\
@@ -175,6 +179,7 @@ Resume literal_capacity_bytelike_ptr_run[payload]:
   `b+(32+32*word_size mx) < dimword(:256) /\
    32+32*word_size (LENGTH bs) <= 32+32*word_size mx /\
    b+32+32*word_size (LENGTH bs) < dimword(:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp uh` by simp[] >>
   drule_all literal_capacity_header_chunks_ptr >>
   disch_then (qspecl_then [`sm.cs_next_id`,`fn`,`PG`,`D`] strip_assume_tac) >>
   `EVERY (\i. ~is_terminator i.inst_opcode)

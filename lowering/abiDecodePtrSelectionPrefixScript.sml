@@ -85,6 +85,7 @@ Resume abi_decode_selection_prefix_ptr[load]:
     simp[Abbr `s1`, eval_operand_def] >>
   `~s1.vs_halted /\ s1.vs_current_bb = c1.cs_current_bb /\ op_taint tm1 head = {}` by
     (fs[same_blocks_def] >> metis_tac[IN_INSERT]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all abi_decode_ptr_relative_load >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG H1 tm1

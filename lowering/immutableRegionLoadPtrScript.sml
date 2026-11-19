@@ -11,7 +11,7 @@ Ancestors
 Theorem clean_add_checked_uniform:
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !k. inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id ADD [left;right] [out]] (s with vs_inst_idx := k)
     (step_prov PG G (mk_inst id ADD [left;right] [out])
@@ -24,7 +24,8 @@ Proof
    OK (update_var out (a+b) (s with vs_inst_idx := k))` by
     simp[storage_copy_add_step] >>
   simp[inst_seq_ptr_def, step_prov_def, out_prov_def] >> conj_tac
-  >- (irule append_scalar_inst_check >> simp[update_var_def] >> metis_tac[]) >>
+  >- (irule append_scalar_inst_check >> simp[update_var_def] >>
+      rpt strip_tac >> fs[allocas_below_fmp_def] >> metis_tac[]) >>
   sym_tac >> irule scalar_add_taint >> simp[update_var_def]
 QED
 
