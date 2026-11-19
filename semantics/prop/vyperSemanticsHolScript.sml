@@ -16,3 +16,4 @@ Ancestors
   vyperTypeDeploymentSoundness
   vyperDeployConstantsFold
   vyperRuntimeImmutables
+  vyperPinFoldProps
