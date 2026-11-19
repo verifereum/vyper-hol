@@ -28,7 +28,8 @@ Theorem scalar_op_fixed_ok[local]:
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
   Cases_on `tc` >> simp[] >> strip_tac
-  >- (drule_all convert_bool_fixed_certificate >> simp[])
+  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+      drule_all convert_bool_fixed_certificate >> simp[])
   >- (drule convert_int_fixed_certificate >> simp[] >> metis_tac[])
   >- (drule convert_bytes_int_fixed_certificate >> simp[] >> metis_tac[])
   >- (drule_all convert_int_bytes_fixed_certificate >> simp[])

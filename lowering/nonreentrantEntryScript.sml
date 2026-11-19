@@ -103,7 +103,7 @@ Proof
   gvs[fresh_vars_wrt_def] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem lock_opcodes_mem_ok[local]:
+Theorem lock_opcodes_mem_ok:
   !is s. EVERY (\i. MEM i.inst_opcode [TLOAD; EQ; ISZERO; ASSERT; TSTORE]) is ==>
     run_inst_seq_mem_ok is s
 Proof
