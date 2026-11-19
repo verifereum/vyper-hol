@@ -43,9 +43,10 @@ Theorem memory_convert_dispatch:
   ~is_word_type dst /\ lower_value cfn cenv (expr_type e) e sa = (x,s1) ==>
   compile_type_builtin_dispatch_body cfn cenv ann ty Convert dst [e] sa =
     if type_memory_bytes cenv (lowered_value_type cenv e) < type_memory_bytes cenv dst
-    then as_stack_val ann (compile_bytestring_widen_copy
+    then as_ptr_val ann LocMemory (compile_bytestring_widen_copy
       (type_memory_bytes cenv dst) x (type_memory_bytes cenv (lowered_value_type cenv e)) s1)
-    else as_stack_val ann (compile_type_convert x (mk_convert_op (expr_type e) dst) s1)
+    else as_ptr_val ann LocMemory
+      (compile_type_convert x (mk_convert_op (expr_type e) dst) s1)
 Proof
   strip_tac >> Cases_on `dst` >> fs[is_bytestring_type_def] >>
   simp[compile_type_builtin_dispatch_body_def]
