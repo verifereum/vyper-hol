@@ -15,6 +15,8 @@ Ancestors
   finite_map list rich_list words arithmetic
   o1CodeEndSourceCutTransport o1ComposeSupport o1PipelineCompose simplifyCfgDefs
   makeSsaDefs o1ContractSimplifyCfg
+  o1CodeEndCfgRounds o1CodeEndCfgCollapse simplifyCfgStaticInterface
+  simplifyCfgShapeCore simplifyCfgProof simplifyCfgSimTools
   gasFocusFmpCutEntryStatic gasFocusFmpStagePin o1LowerDloadSourceEntry
   fmpStageCoverInv fmpStageCoverMem fmpStageRel fmpLowerDefs fmpStepLayout
   fmpStepStructural fmpAnalysisProps fmpStageFmpStepsEntryLayout
@@ -2524,6 +2526,57 @@ Resume focus_concretize_cut_read[corridor]:
 QED
 
 Finalise focus_concretize_cut_read
+
+Theorem focus_opt_scfg_read_origin[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C Ct /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  V.vs_vars = FEMPTY /\ ~V.vs_halted /\ raw_reachable V Ct g j t /\
+  j.inst_opcode = CODECOPY ==>
+  ?f s. raw_reachable V C f j s /\ MEM f C.ctx_functions /\
+    g = simplify_cfg_fn f /\ scfg_payload s t
+Proof
+  strip_tac >>
+  `EVERY simplify_cfg_fn_ok C.ctx_functions` by
+    (fs[o1_ctx_shape_def, EVERY_MEM] >> rpt strip_tac >>
+     irule simplify_cfg_fn_ok_ssa >> metis_tac[o1_fn_shape_def]) >>
+  drule simplify_cfg_stage_functions >> strip_tac >>
+  `ctx_bisim C Ct` by metis_tac[simplify_cfg_stage_bisim] >>
+  `LIST_REL (\f g. g.fn_name = f.fn_name /\ fn_entry_label g = fn_entry_label f /\
+    frame_sim V.vs_labels C Ct f g /\ g = simplify_cfg_fn f /\ scfg_static f)
+    C.ctx_functions Ct.ctx_functions` by
+    (simp[LIST_REL_MAP2, LIST_REL_EL_EQN] >> rpt gen_tac >> strip_tac >> simp[EL_MAP] >>
+     `MEM (EL n C.ctx_functions) C.ctx_functions` by metis_tac[MEM_EL] >>
+     `o1_fn_shape C (EL n C.ctx_functions) /\ simplify_cfg_fn_ok (EL n C.ctx_functions)` by
+       fs[o1_ctx_shape_def, EVERY_MEM] >>
+     `fn_bisim (EL n C.ctx_functions) (simplify_cfg_fn (EL n C.ctx_functions))` by
+       (irule simplify_cfg_fn_correct >> fs[o1_fn_shape_def]) >>
+     fs[fn_bisim_def] >> conj_tac
+     >- (irule simplify_cfg_frame_sim >> fs[o1_fn_shape_def]) >>
+     fs[scfg_static_def, o1_fn_shape_def] >> metis_tac[fn_shape_ok_scfg_shape]) >>
+  `frame_origin V C Ct g j t` by
+    (irule frame_sim_raw_origins >> fs[ctx_pass_stage_def] >>
+     qpat_x_assum `LIST_REL (\fn fn'. ?observed s out. _) _ _` kall_tac >>
+     qpat_x_assum `LIST_REL _ _ _` mp_tac >>
+     qpat_x_assum `Ct.ctx_functions = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     simp[LIST_REL_EL_EQN] >> metis_tac[]) >>
+  qpat_x_assum `frame_origin _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[frame_origin_def] >>
+  disch_then (qx_choosel_then [`f`,`s0`] strip_assume_tac) >>
+  `g = simplify_cfg_fn f /\ scfg_static f` by
+    (drule list_rel_lookup_function >> simp[] >>
+     disch_then (qspec_then `nm` mp_tac) >> simp[optionTheory.OPTREL_def] >>
+     strip_tac >> gvs[]) >>
+  `frame_reach C g s0 j t` by metis_tac[frame_reach_ctx_bisim] >>
+  `?s. frame_reach C f s0 j s /\ scfg_payload s t` by
+    (irule o1_code_end_iter_reach_back >>
+     conj_tac >- metis_tac[scfg_collapse_frame_observation_joint] >>
+     simp[is_terminator_def] >> qexists_tac `LENGTH f.fn_blocks` >>
+     qpat_x_assum `g = simplify_cfg_fn f` SUBST_ALL_TAC >>
+     fs[simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def]) >>
+  qexistsl_tac [`f`,`s`] >> simp[] >>
+  metis_tac[frame_reach_raw_reachable, lookup_function_MEM]
+QED
 
 Theorem focus_history_native_fuel_prefix[local]:
   n <= m ==>
