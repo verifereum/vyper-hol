@@ -18,7 +18,7 @@ Theorem hash_staticcall_inst_ok:
         (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
     tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
         (s.vs_transient s.vs_call_ctx.cc_address) /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     step_inst_base (mk_inst id STATICCALL
       [gas;Lit 2w;Var p;len;Var q;Lit 32w] [out]) s = OK t ==>
     ptr_inst_ok D 0 0 ctx fn G tn
