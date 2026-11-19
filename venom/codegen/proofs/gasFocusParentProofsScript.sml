@@ -11,6 +11,7 @@ Ancestors
   gasFocusConcretizeInvokeRestrictions
   gasFocusConcretizeTaggedSupport
   gasFocusConcretizeTaggedTransfer
+  gasFocusCutGuards
   gasFocusGasPreEdge
   gasFocusInitialRowReplay
   gasFocusInitialSingletonCut
