@@ -337,7 +337,6 @@ Theorem e2e_deploy_gas_sufficient_asm_opt:
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
     ~program_reads_self_code tops /\
     supported_program tops /\ supported_program_deploy tops /\
-    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
@@ -348,12 +347,14 @@ Theorem e2e_deploy_gas_sufficient_asm_opt:
       (!gs. deploy_storage_ok tops am tx
               (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
       (!obs. ~deploy_gas_source_exempt tops
-         (load_contract NONE obs am tx [(NONE, tops)] []))
+         (load_contract (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+            obs am tx [(NONE, tops)] []))
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
         (r = INR (SOME OutOfGas) ==>
-         max_code_size < LENGTH runtime_bc + imm_len tops)
+         max_code_size < LENGTH runtime_bc + imm_len tops \/
+         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt strip_tac >>
   drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
@@ -677,15 +678,13 @@ QED
 
 (* TOP-LEVEL: one theorem over the accepted finalizers, with
    e2e_deploy_correctness's finalizer premises.  The RETURNDATACOPY escape is
-   for constructors that call out; with today's call-free constructors only
-   the code-size escape is taken. *)
+   for constructors that call out. *)
 Theorem e2e_deploy_gas_sufficient:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
     (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ supported_program_deploy tops /\
-    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
@@ -697,7 +696,8 @@ Theorem e2e_deploy_gas_sufficient:
         ((!gs. deploy_storage_ok tops am tx
                  (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
          (!obs. ~deploy_gas_source_exempt tops
-            (load_contract NONE obs am tx [(NONE, tops)] [])) /\
+            (load_contract (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+               obs am tx [(NONE, tops)] [])) /\
          LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
          r = INR (SOME OutOfGas) ==>
          max_code_size < LENGTH runtime_bc + imm_len tops \/
