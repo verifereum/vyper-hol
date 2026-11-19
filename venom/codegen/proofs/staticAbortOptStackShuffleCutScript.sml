@@ -115,12 +115,12 @@ QED
 (* Only the literal AsmOp arm of Rows needs to be opened here. *)
 val cut_op_check = ``
   \p cc pc h (tg:num->(string#num)option) arm legal dead name.
-    let next = \n. arm (\c:num. c = pc+1) n /\ legal (\c. c = pc+1) n in
-    let target = \c. ?l o' off. tg 0 = SOME(l,o') /\
+    !next. next = (\n. arm (\c:num. c = pc+1) n /\ legal (\c. c = pc+1) n) ==>
+    !target. target = (\c. ?l o' off. tg 0 = SOME(l,o') /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME c in
-    let untagged = \a. !k. k<a ==> tg k=NONE in
-    let stop = \a. a<=h /\ untagged a /\ dead in
+      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME c) ==>
+    !untagged. untagged = (\a. !k. k<a ==> tg k=NONE) ==>
+    !stop. stop = (\a. a<=h /\ untagged a /\ dead) ==>
     if name="INVALID" then stop 0
     else if name="REVERT" then stop 2
     else if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
@@ -140,19 +140,20 @@ val cut_op_check = ``
 val cut_op_flow = ``
   \p (height:(num#num)->num) (tag:(num#num)->num->(string#num)option)
     (boolean:(num#num)->num->bool) x y name.
-    let hi = height x; hj = height y in
-    let inherit = \(src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
+    !hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !inherit. inherit = (\(src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
       (!k l origin. tag y k = SOME(l,origin) ==> k < hj /\
           (fresh k = SOME(l,origin) \/ ?a. src k = SOME a /\ a < hi /\
                                             tag x a = SOME(l,origin))) /\
-      (!k. boolean y k ==> k < hj /\ (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a)) in
+      (!k. boolean y k ==> k < hj /\ (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
     case ALOOKUP dup_table name of
       SOME n => n < hi /\ hj = hi+1 /\
         inherit (\k. SOME(if k=0 then n else k-1)) (\k. NONE) (\k. F)
     | NONE => case ALOOKUP swap_table name of
         SOME n => 0<n /\ n<hi /\ hj=hi /\
           inherit (\k. SOME(if k=0 then n else if k=n then 0 else k)) (\k. NONE) (\k. F)
-      | NONE => let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+      | NONE => !a. a = asm_op_arity name ==> !m. m = hj + a - hi ==>
           a <= hi /\ hj = m+(hi-a) /\ ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
           inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
             (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one (AsmOp name) /\
@@ -379,7 +380,9 @@ Proof
 QED
 
 Theorem strict_shuffle_symbolic[local]:
-  let p = pre++pat++tail; q = pre++repl++tail; b = LENGTH pre in
+  !p. p = pre++pat++tail ==>
+  !q. q = pre++repl++tail ==>
+  !b. b = LENGTH pre ==>
   ^cut_families pat repl /\ asm_static_wf p /\ s.as_pc=0 /\
   sym_steps p env n (sym_init s) = SymOK ss /\
   e IN V /\ pc e=ss.sym_base.as_pc /\ b < pc e /\ pc e < b+LENGTH pat /\
@@ -392,7 +395,7 @@ Theorem strict_shuffle_symbolic[local]:
     u.sym_base.as_call_ctx=ss.sym_base.as_call_ctx /\ u.sym_base.as_requests=ss.sym_base.as_requests /\
     ^cut_just height tag boolean z u.sym_stack
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `LENGTH pre < ss.sym_base.as_pc /\ ss.sym_base.as_pc < LENGTH pre + LENGTH pat` by simp[] >>
   drule_all_then strip_assume_tac (BETA_RULE cut_family_stopped) >>
@@ -446,11 +449,12 @@ val cut_rows = ``
   \p cc (V:(num#num)->bool) (rank:(num#num)->num) pc height need tag boolean edge.
   (!x. x IN V ==> ^cut_slots p cc height need tag boolean x) /\
   (!x y. edge x y ==> x IN V /\ y IN V /\ rank y < rank x /\
-    let hi = height x; hj = height y in
-    let inherit = \(src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
+   (!hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !inherit. inherit = (\(src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
       (!k l o'. tag y k=SOME(l,o') ==> k<hj /\
         (fresh k=SOME(l,o') \/ ?a. src k=SOME a /\ a<hi /\ tag x a=SOME(l,o'))) /\
-      (!k. boolean y k ==> k<hj /\ (bnew k \/ ?a. src k=SOME a /\ a<hi /\ boolean x a)) in
+      (!k. boolean y k ==> k<hj /\ (bnew k \/ ?a. src k=SOME a /\ a<hi /\ boolean x a))) ==>
     case EL (pc x) p of
       AsmLabel l => hj=hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj=hi+1 /\ inherit (\k. if k=0 then NONE else SOME(k-1)) (\k. NONE)
@@ -462,25 +466,25 @@ val cut_rows = ``
     | AsmPushOfst l d => hj=hi+1 /\ inherit (\k. if k=0 then NONE else SOME(k-1))
         (\k. if k=0 /\ d=0 then SOME(l,pc x) else NONE) (\k. F)
     | AsmOp name => ^cut_op_flow p height tag boolean x y name
-    | _ => F) /\
+    | _ => F)) /\
   (!x. x IN V ==> pc x<LENGTH p /\
-    let h = height x in
-    let arm = \P n. ?y. edge x y /\ P (pc y) /\ height y=n in
-    let legal = \P n. !y. edge x y ==> P (pc y) /\ height y=n in
-    let next = \n. arm (\c. c=pc x+1) n /\ legal (\c. c=pc x+1) n in
+   (!h. h = height x ==>
+    !arm. arm = (\P n. ?y. edge x y /\ P (pc y) /\ height y=n) ==>
+    !legal. legal = (\P n. !y. edge x y ==> P (pc y) /\ height y=n) ==>
+    !next. next = (\n. arm (\c. c=pc x+1) n /\ legal (\c. c=pc x+1) n) ==>
     case EL (pc x) p of
       AsmLabel l => next h
     | AsmPush bs => next (h+1)
     | AsmPushLabel l => IS_SOME (FLOOKUP (SND (compute_label_offsets p)) l) /\ next (h+1)
     | AsmPushOfst l d => IS_SOME (FLOOKUP (SND (compute_label_offsets p)) l) /\ next (h+1)
     | AsmOp name => ^cut_op_check p cc (pc x) h (tag x) arm legal (!y. ~edge x y) name
-    | _ => F)``;
+    | _ => F))``;
 
 Theorem cut_rows_hop[local]:
   ^cut_rows p cc V rank pc height need tag boolean edge ==>
   ^cut_hop p V rank pc height tag boolean edge
 Proof
-  BETA_TAC >> rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC (REDEPTH_CONV (FIRST_CONV [BETA_CONV, HO_REWR_CONV UNWIND_FORALL_THM2])) >>
   disch_then (CONJUNCTS_THEN2 kall_tac
     (CONJUNCTS_THEN2 (mk_asm "edges") (mk_asm "dispatch"))) >>
   MATCH_MP_TAC (BETA_RULE (REWRITE_RULE[LET_THM] strict_shuffle_hop)) >>
@@ -536,9 +540,11 @@ QED
 (* The selected exit and the actual run do not depend on any destination
    table. Only the last Shape projection uses the destination's Slots. *)
 Theorem stack_shuffle_strict_endpoint:
-  let p = pre++pat++tail; q = pre++repl++tail; b = LENGTH pre in
-  let env = asm_data_env orig (assemble orig ++ data) in
-  let f = splice_pc b (LENGTH pat) (LENGTH repl) in
+  !p. p = pre++pat++tail ==>
+  !q. q = pre++repl++tail ==>
+  !b. b = LENGTH pre ==>
+  !env. env = asm_data_env orig (assemble orig ++ data) ==>
+  !f. f = splice_pc b (LENGTH pat) (LENGTH repl) ==>
   ^cut_families pat repl /\
   asm_static_wf orig /\ asm_static_wf p /\ asm_static_wf q /\
   FILTER is_data_inst p = FILTER is_data_inst orig /\
@@ -565,7 +571,7 @@ Theorem stack_shuffle_strict_endpoint:
     (^cut_slots q cc height need (^cut_translate f tag) boolean z ==>
      ^cut_shape q cc req (f o pc) height need (^cut_translate f tag) boolean z t')
 Proof
-  rpt (CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  CONV_TAC (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_then assume_tac cut_rows_hop >>
   rule_assum_tac BETA_RULE >> BETA_TAC >>
@@ -580,7 +586,7 @@ Proof
      u.sym_base.as_requests=ss.sym_base.as_requests /\
      ^cut_just height tag boolean z u.sym_stack` by (
     BETA_TAC >>
-    irule (BETA_RULE (CONV_RULE (REPEATC (REWR_CONV LET_THM THENC BETA_CONV)) strict_shuffle_symbolic)) >>
+    irule (BETA_RULE (CONV_RULE (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) strict_shuffle_symbolic)) >>
     asm_rewrite_tac[] >> qexists `n` >> asm_rewrite_tac[]) >>
   rule_assum_tac BETA_RULE >> unabbrev_all_tac >>
   drule_all_then (qx_choose_then `out` strip_assume_tac) stopped_symbolic_prefix_actual_code >>

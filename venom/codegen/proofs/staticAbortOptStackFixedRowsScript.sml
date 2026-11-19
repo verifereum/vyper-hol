@@ -20,16 +20,17 @@ val demand_copy = ``
 
 val rows_flow = ``
   \p pc height tag boolean (x:num#num) (y:num#num).
-  let hi = height x; hj = height y; ins = EL (pc x) p in
-  let inherit =
+  !hi. hi = height x ==>
+  !hj. hj = height y ==>
+  !ins. ins = EL (pc x) p ==>
+  !inherit. inherit = (
     \(src:num -> num option)
       (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-  in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
   case ins of
     AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
   | AsmPush bs =>
@@ -59,7 +60,8 @@ val rows_flow = ``
              inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                (\k. NONE) (\k. F)
          | NONE =>
-           let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+           !a. a = asm_op_arity name ==>
+           !m. m = hj + a - hi ==>
            a <= hi /\ hj = m+(hi-a) /\
            ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
            inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -72,7 +74,7 @@ val rows_flow = ``
 
 val rows_open = ``
   \p cc req (V:(num#num)->bool) (rank:(num#num)->num) pc height need tag boolean edge.
-  let S = \i (t:asm_state).
+  !S. S = (\i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -86,13 +88,12 @@ val rows_open = ``
          FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
-  let target = \x y.
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !target. target = (\x y.
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
       off < dimword(:256) /\
-      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-  in
+      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
     FINITE V /\ {} SUBSET V /\
     (!x. x IN V ==> ?t. S x t) /\
     (!x. x IN V DIFF {} ==> pc x < LENGTH p) /\
@@ -160,6 +161,7 @@ Triviality destination_row:
 Proof
   BETA_TAC >> strip_tac >>
   drule (BETA_RULE relocated_copy) >> disch_then (qspec_then `f` mp_tac) >>
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
   (* Reduce the case split before normalizing the quantifiers in inherit. *)
   ASM_REWRITE_TAC [LET_THM, asm_inst_case_def, destination_lookups,
                    optionTheory.option_case_def] >>
@@ -231,10 +233,10 @@ Proof
 QED
 
 Triviality literal_rows:
-  let n = LENGTH d in
-  let H = ^phase_height w n h hz;
-      U = ^phase_tag w n ti tz;
-      B = ^phase_bool w n bi bz in
+  !n. n = LENGTH d ==>
+  !H. H = ^phase_height w n h hz ==>
+  !U. U = ^phase_tag w n ti tz ==>
+  !B. B = ^phase_bool w n bi bz ==>
   ^literals w d /\ ^input_min w <= h /\ hz = ^output_height w h /\
   ^bounds h ti bi /\ ^demand_copy h hz ti tz bi bz (^slots_to_head w) ==>
   !i. i<n ==> ^row_demand (EL i d) (H i) (H (SUC i))
@@ -302,7 +304,7 @@ QED
 (* Specialize the integrated source-path theorem and keep just the annotations
    and path geometry needed to construct the destination phases. *)
 Triviality select_literal_path:
-  let m = LENGTH w in
+  !m. m = LENGTH w ==>
   p = pre++w++tail /\
   ^rows_open p cc req V rank pc height need tag boolean edge /\
   v IN V /\ pc v = LENGTH pre /\ ^literals w d ==>
@@ -369,19 +371,20 @@ Proof
 QED
 
 Theorem stack_fixed_replacement_rows:
-  let b = LENGTH pre; m = LENGTH w; n = LENGTH d in
-  let f = splice_pc b m n in
+  !b. b = LENGTH pre ==>
+  !m. m = LENGTH w ==>
+  !n. n = LENGTH d ==>
+  !f. f = splice_pc b m n ==>
   p = pre ++ w ++ tail /\ q = pre ++ d ++ tail /\
   ^rows_open p cc req V rank pc height need tag boolean edge /\
   v IN V /\ pc v = b /\ ^literals w d ==>
   ?path.
-    let z = path m in
-    let P = \x:num#num. b + FST x;
-        H = \x:num#num. ^phase_height w n (height v) (height z) (FST x);
-        U = \x:num#num. ^phase_tag w n (tag v) (tag z) (FST x);
-        B = \x:num#num. ^phase_bool w n (boolean v) (boolean z) (FST x);
-        R = \x:num#num. rank (path (if FST x = n then m else FST x)) in
-    let T = \x. ^relocate f (U x) in
+    !z. z = path m ==>
+    !P. P = (\x:num#num. b + FST x) ==>
+    !H. H = (\x:num#num. ^phase_height w n (height v) (height z) (FST x)) ==>
+    !B. B = (\x:num#num. ^phase_bool w n (boolean v) (boolean z) (FST x)) ==>
+    !R. R = (\x:num#num. rank (path (if FST x = n then m else FST x))) ==>
+    !T. T = (\x:num#num. ^relocate f (^phase_tag w n (tag v) (tag z) (FST x))) ==>
     path 0 = v /\ z IN V /\ pc z = b+m /\
     (!i. i<=m ==> path i IN V /\ pc (path i) = b+i) /\
     (!i. i<m ==> edge (path i) (path (SUC i)) /\

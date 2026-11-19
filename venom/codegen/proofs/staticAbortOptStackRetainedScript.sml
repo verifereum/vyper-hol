@@ -6,15 +6,15 @@ Ancestors
 (* A retained instruction keeps its incoming interface. Each outgoing port
    may keep fewer demands, but only at the very same output slots. *)
 Theorem stack_splice_retained_arms:
-  let Inherit = \hi hj (tx:num->(string#num)option) ty bx by
+  !Inherit. Inherit = (\hi hj (tx:num->(string#num)option) ty bx by
               (src:num->num option) (fresh:num->(string#num)option) bnew.
     (!k l o'. ty k = SOME(l,o') ==>
        k < hj /\ (fresh k = SOME(l,o') \/
          ?a. src k = SOME a /\ a < hi /\ tx a = SOME(l,o'))) /\
     (!k. by k ==> k < hj /\
-       (bnew k \/ ?a. src k = SOME a /\ a < hi /\ bx a)) in
-  let Flow = \p i ins hi hj tx ty bx by.
-    let inherit = Inherit hi hj tx ty bx by in
+       (bnew k \/ ?a. src k = SOME a /\ a < hi /\ bx a))) ==>
+  !Flow. Flow = (\p i ins hi hj tx ty bx by.
+    !inherit. inherit = Inherit hi hj tx ty bx by ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs =>
@@ -41,7 +41,8 @@ Theorem stack_splice_retained_arms:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-             let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+             !a. a = asm_op_arity name ==>
+             !m. m = hj + a - hi ==>
              a <= hi /\ hj = m+(hi-a) /\
              ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
              inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -50,24 +51,24 @@ Theorem stack_splice_retained_arms:
                    asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                      ins t = AsmOK u ==>
                    (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F in
-  let Canon = \p l j. ?off. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-                off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME j in
-  let Slots = \p cc height need tag boolean (x:num#num).
+    | _ => F) ==>
+  !Canon. Canon = (\p l j. ?off. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
+                off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME j) ==>
+  !Slots. Slots = (\p cc height need tag boolean (x:num#num).
     (need x ==> cc.cc_static) /\
     (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
     (!k l i. tag x k = SOME(l,i) ==>
       k < height x /\ i < LENGTH p /\
-      (EL i p = AsmPushLabel l \/ EL i p = AsmPushOfst l 0) /\ ?j. Canon p l j) in
-  let Role = \p cc pc height tag edge (x:num#num).
-    let h = height x in
-    let fall = \y. pc y = pc x + 1 in
-    let target = \y. ?l i. tag x 0 = SOME(l,i) /\ Canon p l (pc y) in
-    let arm = \A n. ?y. edge x y /\ A y /\ height y = n in
-    let legal = \A n. !y. edge x y ==> A y /\ height y = n in
-    let next = \n. arm fall n /\ legal fall n in
-    let untagged = \a. !k. k<a ==> tag x k=NONE in
-    let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
+      (EL i p = AsmPushLabel l \/ EL i p = AsmPushOfst l 0) /\ ?j. Canon p l j)) ==>
+  !Role. Role = (\p cc pc height tag edge (x:num#num).
+    !h. h = height x ==>
+    !fall. fall = (\y. pc y = pc x + 1) ==>
+    !target. target = (\y. ?l i. tag x 0 = SOME(l,i) /\ Canon p l (pc y)) ==>
+    !arm. arm = (\A n. ?y. edge x y /\ A y /\ height y = n) ==>
+    !legal. legal = (\A n. !y. edge x y ==> A y /\ height y = n) ==>
+    !next. next = (\n. arm fall n /\ legal fall n) ==>
+    !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+    !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
     case EL (pc x) p of
       AsmLabel l => next h
     | AsmPush bs => next (h+1)
@@ -92,13 +93,12 @@ Theorem stack_splice_retained_arms:
                  else
                     ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                         untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-    | _ => F in
+    | _ => F) ==>
   !p q cc f pc height rank need tag boolean edge x P H R N Tag Bool E c g.
-    let tr = \(l,i). (l,f i) in
-    let ins = EL (pc x) p in
+    !ins. ins = EL (pc x) p ==>
     P c = f (pc x) /\ P c < LENGTH q /\ EL (P c) q = ins /\
     H c = height x /\ R c = rank x /\ N c = need x /\ Bool c = boolean x /\
-    (!k. Tag c k = OPTION_MAP tr (tag x k)) /\
+    (!k. Tag c k = OPTION_MAP (\(l,i). (l,f i)) (tag x k)) /\
     (!z. E c z <=> ?y. edge x y /\ z = g y) /\
     (!y. edge x y ==>
       rank y < rank x /\ Flow p (pc x) ins (height x) (height y)
@@ -120,17 +120,18 @@ Theorem stack_splice_retained_arms:
     !z. E c z ==> R z < R c /\ Slots q cc H N Tag Bool z /\
                   Flow q (P c) (EL (P c) q) (H c) (H z) (Tag c) (Tag z) (Bool c) (Bool z)
 Proof
-  map_every (fn pat => qmatch_goalsub_abbrev_tac pat >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ Inherit`, `LET _ Flow`, `LET _ Canon`, `LET _ Slots`, `LET _ Role`] >>
+  map_every (fn name => qx_gen_tac name >>
+    disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
+    [`Inherit`, `Flow`, `Canon`, `Slots`, `Role`] >>
   `!p q i f ins hi hj tx ty bx by ty' by'.
       (!k l j. ty' k = SOME(l,j) ==> ?o'. ty k = SOME(l,o') /\ j = f o') /\
       (!k. by' k ==> by k) /\ Flow p i ins hi hj tx ty bx by ==>
       Flow q (f i) ins hi hj (\k. OPTION_MAP (\(l,j). (l,f j)) (tx k)) ty' bx by'`
     by suspend "flow" >>
-  rpt gen_tac >>
-  map_every (fn pat => qmatch_goalsub_abbrev_tac pat >>
-    CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV)) [`LET _ tr`, `LET _ ins`] >>
+  ntac 21 gen_tac >>
+  qx_gen_tac `ins` >>
+  disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
+  qabbrev_tac `tr = \(l:string,i:num). (l,f i)` >>
   strip_tac >>
   `!y z. H z = height y /\ (N z ==> cc.cc_static) /\ Slots p cc height need tag boolean y /\
          (!k l j. Tag z k = SOME(l,j) ==> ?i. tag y k = SOME(l,i) /\ j = f i) /\
@@ -151,7 +152,7 @@ Resume stack_splice_retained_arms[flow]:
     suspend "inherit" >>
   pop_assum (mk_asm "inherit") >>
   qpat_x_assum `Flow p i ins hi hj tx ty bx by` mp_tac >>
-  simp_tac bool_ss [Abbr `Flow`, LET_THM] >>
+  simp_tac bool_ss [Abbr `Flow`, UNWIND_FORALL_THM2] >>
   Cases_on `ins` >> simp_tac bool_ss [asm_inst_case_def] >>
   TRY (qmatch_goalsub_rename_tac `ALOOKUP dup_table name` >>
        Cases_on `ALOOKUP dup_table name` >> simp_tac bool_ss [option_case_def] >>
@@ -222,7 +223,7 @@ Resume stack_splice_retained_arms[role]:
   `EL (pc x) p = ins` by simp[Abbr `ins`] >>
   Cases_on `ins = AsmOp "JUMPI"` >- suspend "role_jumpi" >>
   qpat_x_assum `Role p cc pc height tag edge x` mp_tac >>
-  simp_tac bool_ss [Abbr `Role`, LET_THM] >>
+  simp_tac bool_ss [Abbr `Role`, UNWIND_FORALL_THM2] >>
   qpat_x_assum `!y. edge x y ==> rank y < rank x /\ _` kall_tac >>
   rpt (qpat_x_assum `!k. Tag c k = OPTION_MAP tr (tag x k)` kall_tac ORELSE
        qpat_x_assum `!l i. Canon p l i ==> Canon q l (f i)` kall_tac ORELSE
@@ -264,7 +265,7 @@ Resume stack_splice_retained_arms[role_jumpi]:
   qpat_x_assum `!z. E c z <=> _` kall_tac >>
   qpat_x_assum `!k. Tag c k = OPTION_MAP _ _` kall_tac >>
   qpat_x_assum `Role p cc pc height tag edge x` mp_tac >>
-  simp_tac bool_ss [Abbr `Role`, LET_THM] >>
+  simp_tac bool_ss [Abbr `Role`, UNWIND_FORALL_THM2] >>
   map_every (fn pat => qpat_assum pat (fn th => pure_rewrite_tac [th]))
     [`EL (pc x) p = ins`, `EL (P c) q = ins`, `ins = AsmOp "JUMPI"`,
      `H c = height x`, `!k. Tag c k = NONE <=> tag x k = NONE`] >>

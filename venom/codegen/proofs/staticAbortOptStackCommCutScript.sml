@@ -8,11 +8,11 @@ Ancestors
 (* The interior stop uses the shared head; the only executed source
    instruction between that head and the cut is SWAP1. *)
 Theorem commcut_replay_head[local]:
-  let p = pre ++ [AsmOp "SWAP1";a] ++ tail;
-      q = pre ++ [a] ++ tail; b = LENGTH pre in
+  !p. p = pre ++ [AsmOp "SWAP1";a] ++ tail ==>
+  !b. b = LENGTH pre ==>
   asm_static_wf p /\ asm_commutative_op a /\ s.as_pc=0 /\
   sym_steps p env n (sym_init s) = SymOK ss /\ ss.sym_base.as_pc=b+1 ==>
-  ?j u. sym_steps q env j (sym_init s)=SymOK u /\ u.sym_base.as_pc=b /\
+  ?j u. sym_steps (pre ++ [a] ++ tail) env j (sym_init s)=SymOK u /\ u.sym_base.as_pc=b /\
     u.sym_base.as_call_ctx=ss.sym_base.as_call_ctx /\
     u.sym_base.as_requests=ss.sym_base.as_requests /\
     LENGTH u.sym_stack=LENGTH ss.sym_stack /\ 2<=LENGTH u.sym_stack /\
@@ -49,9 +49,9 @@ Proof
 QED
 
 Theorem commcut_relocate_slot[local]:
-  let b = LENGTH pre; p = pre ++ [AsmOp "SWAP1";a] ++ tail;
-      q = pre ++ [a] ++ tail in
-  let f = splice_pc b 2 1 in
+  !p. p = pre ++ [AsmOp "SWAP1";a] ++ tail ==>
+  !q. q = pre ++ [a] ++ tail ==>
+  !f. f = splice_pc (LENGTH pre) 2 1 ==>
   asm_static_wf p /\ asm_commutative_op a /\ org < LENGTH p /\
   (EL org p=AsmPushLabel l \/ EL org p=AsmPushOfst l 0) /\
   FLOOKUP (SND (compute_label_offsets p)) l = SOME old /\
@@ -104,10 +104,11 @@ QED
 
 Theorem stack_comm_strict_endpoint_row:
 !pre a tail env s n ss cc req V rank pc height need tag boolean edge e.
-let p = pre ++ [AsmOp "SWAP1";a] ++ tail;
-    q = pre ++ [a] ++ tail; b = LENGTH pre in
-let Shape =
-  \p cc req pc height need tag boolean i (t:asm_state).
+!p. p = pre ++ [AsmOp "SWAP1";a] ++ tail ==>
+!q. q = pre ++ [a] ++ tail ==>
+!b. b = LENGTH pre ==>
+!Shape. Shape =
+  (\p cc req pc height need tag boolean i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -121,20 +122,20 @@ let Shape =
          FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-in
-let Flow =
-  \p pc height tag boolean (x:num#num) (y:num#num).
-  let hi = height x; hj = height y; ins = EL (pc x) p in
-  let inherit =
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+!Flow. Flow =
+  (\p pc height tag boolean (x:num#num) (y:num#num).
+  !hi. hi = height x ==>
+  !hj. hj = height y ==>
+  !ins. ins = EL (pc x) p ==>
+  !inherit. inherit = (
     \(src:num -> num option)
       (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-  in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
   case ins of
     AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
   | AsmPush bs =>
@@ -164,7 +165,8 @@ let Flow =
              inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                (\k. NONE) (\k. F)
          | NONE =>
-           let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+           !a. a = asm_op_arity name ==>
+           !m. m = hj + a - hi ==>
            a <= hi /\ hj = m+(hi-a) /\
            ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
            inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -173,19 +175,17 @@ let Flow =
                  asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                    ins t = AsmOK u ==>
                  (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-  | _ => F
-in
-let Open =
-  \p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
+  | _ => F) ==>
+!Open. Open =
+  (\p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
     (tag:(num#num)->num->(string#num)option)
     (boolean:(num#num)->num->bool) edge.
-  let LiveShape = Shape p cc req pc height need tag boolean in
-  let target = \x y.
+  !LiveShape. LiveShape = Shape p cc req pc height need tag boolean ==>
+  !target. target = (\x y.
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
       off < dimword(:256) /\
-      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-  in
+      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
     FINITE V /\ X SUBSET V /\
     (!x. x IN V ==> ?t. LiveShape x t) /\
     (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -203,24 +203,21 @@ let Open =
                     p 1 t = AsmFault u) /\ u.as_requests=req) \/
        (?y u. edge x y /\
           asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-            p 1 t = AsmOK u /\ LiveShape y u))
-in
-let J0 = \ss tag boolean (e:num#num).
+            p 1 t = AsmOK u /\ LiveShape y u))) ==>
+!J0. J0 = (\ss tag boolean (e:num#num).
   (!k l origin. tag e k=SOME(l,origin) ==>
      k<LENGTH ss.sym_stack /\ EL k ss.sym_stack=Lab l 0) /\
   (!k. boolean e k ==>
-     k<LENGTH ss.sym_stack /\ (EL k ss.sym_stack=Val 0w \/ EL k ss.sym_stack=Val 1w))
-in
-let Slots = \p height tag boolean (e:num#num).
+     k<LENGTH ss.sym_stack /\ (EL k ss.sym_stack=Val 0w \/ EL k ss.sym_stack=Val 1w))) ==>
+!Slots. Slots = (\p height tag boolean (e:num#num).
   (!k. boolean e k ==> k < height e /\ tag e k=NONE) /\
   (!k l origin. tag e k = SOME(l,origin) ==>
      k < height e /\ origin < LENGTH p /\
      (EL origin p = AsmPushLabel l \/ EL origin p = AsmPushOfst l 0) /\
      ?off dest. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-       off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest)
-in
-let f = splice_pc b 2 1 in
-let Tg = \x k. OPTION_MAP (\(l,org). (l,f org)) (tag x k) in
+       off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest)) ==>
+!f. f = splice_pc b 2 1 ==>
+!Tg. Tg = (\x k. OPTION_MAP (\(l,org). (l,f org)) (tag x k)) ==>
 asm_static_wf p /\ asm_commutative_op a /\ s.as_pc=0 /\
 sym_steps p env n (sym_init s)=SymOK ss /\ e IN V /\
 pc e=ss.sym_base.as_pc /\ pc e=b+1 /\
@@ -228,10 +225,10 @@ LENGTH ss.sym_stack=height e /\ ss.sym_base.as_call_ctx=cc /\ ss.sym_base.as_req
 Open p cc req V {} rank pc height need tag boolean edge /\
 J0 ss tag boolean e /\ Slots p height tag boolean e ==>
 ?j u z name.
-  let P = \x:num#num. b+FST x in
-  let H = \x:num#num. if FST x=0 then height e else height z in
-  let Tag = \x:num#num k. if FST x=0 then (if k<2 then NONE else Tg e k) else Tg z k in
-  let Bool = \x:num#num k. if FST x=0 then (2<=k /\ boolean e k) else boolean z k in
+  !P. P = (\x:num#num. b+FST x) ==>
+  !H. H = (\x:num#num. if FST x=0 then height e else height z) ==>
+  !Tag. Tag = (\x:num#num k. if FST x=0 then (if k<2 then NONE else Tg e k) else Tg z k) ==>
+  !Bool. Bool = (\x:num#num k. if FST x=0 then (2<=k /\ boolean e k) else boolean z k) ==>
   sym_steps q env j (sym_init s)=SymOK u /\ u.sym_base.as_pc=b /\
   u.sym_base.as_call_ctx=cc /\ u.sym_base.as_requests=req /\
   LENGTH u.sym_stack=height e /\ 2<=height e /\
@@ -245,10 +242,9 @@ J0 ss tag boolean e /\ Slots p height tag boolean e ==>
   (!e' t. asm_sym_rel q e' t u /\ t.as_call_ctx=cc /\ t.as_requests=req ==>
        Shape q cc req P H (\x. F) Tag Bool (0,0) t)
 Proof
-  rpt gen_tac >>
+  ntac 18 gen_tac >>
   map_every (fn name =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
+    CONV_TAC (BINDER_CONV (LAND_CONV (REWR_CONV (GSYM markerTheory.Abbrev_def)))) >>
     qx_gen_tac name >> disch_tac)
     [`p`,`q`,`b`,`Shape`,`Flow`,`Open`,`J0`,`Slots`,`f`,`Tg`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
