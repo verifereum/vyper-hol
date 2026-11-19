@@ -6961,7 +6961,7 @@ Theorem focus_cfg_stop_requests[local]:
   s8.vs_requests = s9.vs_requests
 Proof
   Cases_on `current` >> simp[cfg_norm_joint_cursors_def] >> strip_tac >>
-  drule gasFocusPacketCoverageTheory.cover_cfg_cursors_frame >> simp[] >>
+  drule o1ContractCfgNormCursorsTheory.cover_cfg_cursors_frame >> simp[] >>
   simp[execution_frame_def]
 QED
 

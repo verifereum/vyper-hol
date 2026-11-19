@@ -91,7 +91,7 @@ Ancestors
   extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
   abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
   (* closed-world request-cut guard and producer *)
-  e2eOutcomesProducer
+  e2eOutcomesProducer requestCutSelectedReplay
   (* providers awaiting their consumers *)
   bodyPtrTypeBuiltinsBytesUintSemantics
   internalReturnMemoryMem bodyFullIntCallByteFrame
