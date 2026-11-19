@@ -61,7 +61,7 @@ Ancestors
   venomPipelineRunnerProps venomPipelineData o1PreDftStaticMem
   (* dead function traversal *)
   dftCorrectnessFinal
-  dftGasMaskRequests dftGasPrefixProvider
+  dftGasPrefixProvider
   dftFinitePacketHol
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
