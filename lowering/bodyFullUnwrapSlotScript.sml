@@ -16,7 +16,7 @@ Ancestors
   assignTuplePtrAlloc bodyPtrBytestringBuiltinsAllocation bodyPtrMakeArrayExternalCaller
 
 (* A storage or transient aggregate is copied into a fresh buffer. *)
-Theorem unwrap_slot_copy_origin_ptr:
+Theorem unwrap_slot_copy_origin_ptr_no_dead:
   vv = LocatedValue t p /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   ~is_word_type t /\
@@ -62,6 +62,9 @@ Theorem unwrap_slot_copy_origin_ptr:
     read_result cx tv ee = (INL v, ee) /\
     vv_own cenv cx (post_value_type cenv e) sb sc ee (Value v)
       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z /\
+    gas_origin_ptr_path
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
+       lo, explicit, ctx, func, PG) (s,G,tn) [] (OK z,G',tn') /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
          (s, G, tn) [] (OK z, G', tn') /\
@@ -158,12 +161,12 @@ Proof
   suspend "finish"
 QED
 
-Resume unwrap_slot_copy_origin_ptr[loop_physical]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[loop_physical]:
   qpat_x_assum `(_ <> 1 ==> _)` (drule_then strip_assume_tac) >>
   gvs[toplevel_copy_inv_def, storage_copy_inv_def, copy_prefix_def,
       storage_copy_frame_def] >> metis_tac[]
 QED
-Resume unwrap_slot_copy_origin_ptr[single_physical]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[single_physical]:
   `type_memory_bytes cenv t = 32` by decide_tac >>
   `!x. not_fresh_at mid x ==> x <> STRING #"%" (toString mid.cs_next_var)` by
     (rpt strip_tac >> gvs[not_fresh_at_def]) >>
@@ -190,7 +193,7 @@ Resume unwrap_slot_copy_origin_ptr[single_physical]:
   simp[mstore_def, write_memory_with_expansion_def, update_var_def, lookup_var_def,
        FLOOKUP_UPDATE] >> metis_tac[]
 QED
-Resume unwrap_slot_copy_origin_ptr[finish]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[finish]:
   `(!j. j < type_slot_size rty ==>
       mem_word_at (w2n dstword+32*j) z.vs_memory =
       slot_copy_word (if p.ptr_location=LocStorage then SLOAD else TLOAD)
@@ -207,7 +210,7 @@ Resume unwrap_slot_copy_origin_ptr[finish]:
      >> suspend "loop_content") >>
   suspend "join"
 QED
-Resume unwrap_slot_copy_origin_ptr[loop_content]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[loop_content]:
   qpat_x_assum `(_ <> 1 ==> _)` (drule_then strip_assume_tac) >>
   drule toplevel_copy_inv_content >>
   disch_then (strip_assume_tac o REWRITE_RULE [storage_copy_inv_def, copy_prefix_def]) >>
@@ -221,7 +224,7 @@ Resume unwrap_slot_copy_origin_ptr[loop_content]:
   >- suspend "loop_outside"
   >> fs[toplevel_copy_inv_def]
 QED
-Resume unwrap_slot_copy_origin_ptr[loop_taint]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[loop_taint]:
   rpt strip_tac >> drule toplevel_copy_inv_memory_taint >>
   simp[toplevel_copy_taint_bound_def, toplevel_copy_region_def,
        toplevel_copy_translated_taint_def, pred_setTheory.SUBSET_DEF] >>
@@ -235,14 +238,14 @@ Resume unwrap_slot_copy_origin_ptr[loop_taint]:
   qpat_x_assum `(a+n2w i,r) IN _` mp_tac >>
   simp[key_taint_def, toplevel_copy_source_taint_def]
 QED
-Resume unwrap_slot_copy_origin_ptr[loop_outside]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[loop_outside]:
   rpt strip_tac >> drule toplevel_copy_inv_memory_taint >>
   simp[toplevel_copy_taint_bound_def, toplevel_copy_region_def,
        toplevel_copy_translated_taint_def, pred_setTheory.SUBSET_DEF] >>
   disch_then (qspec_then `q` mp_tac) >> simp[] >>
   strip_tac >> gvs[]
 QED
-Resume unwrap_slot_copy_origin_ptr[single_content]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[single_content]:
   `type_slot_size rty = 1 /\ type_memory_bytes cenv t = 32` by decide_tac >>
   qpat_x_assum `(_ = 1 ==> _)` (drule_then strip_assume_tac) >>
   rpt conj_tac
@@ -254,17 +257,17 @@ Resume unwrap_slot_copy_origin_ptr[single_content]:
   >- suspend "single_outside"
   >> asm_rewrite_tac[]
 QED
-Resume unwrap_slot_copy_origin_ptr[single_taint]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[single_taint]:
   rpt strip_tac >> `j = 0` by decide_tac >>
   qpat_x_assum `tnf.t_mem = _` (fn th => fs[th]) >>
   gvs[WORD_ADD_0, slot_loc_def]
 QED
-Resume unwrap_slot_copy_origin_ptr[single_outside]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[single_outside]:
   rpt strip_tac >>
   qpat_x_assum `tnf.t_mem = _` (fn th => fs[th]) >>
   gvs[key_taint_def] >> decide_tac
 QED
-Resume unwrap_slot_copy_origin_ptr[join]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[join]:
   `allocated.vs_accounts = s.vs_accounts /\
    allocated.vs_transient = s.vs_transient /\
    allocated.vs_call_ctx = s.vs_call_ctx /\
@@ -326,7 +329,7 @@ Resume unwrap_slot_copy_origin_ptr[join]:
     suspend "semantic" >>
   suspend "final_join"
 QED
-Resume unwrap_slot_copy_origin_ptr[semantic]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[semantic]:
   rpt strip_tac >>
   `vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s` by metis_tac[] >>
   `vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s` by
@@ -377,7 +380,7 @@ Resume unwrap_slot_copy_origin_ptr[semantic]:
   simp[exprSimPropsTheory.val_footprint_le] >>
   metis_tac[mem_agree_outside_def, ADD_COMM]
 QED
-Resume unwrap_slot_copy_origin_ptr[final_join]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[final_join]:
   `root = STRING #"%" (toString sb.cs_next_var)` by
     (drule exprPtrUnwrapAllocationTheory.unwrap_alloc_generated_code >> fs[]) >>
   `!x. not_fresh_at sb x ==> x <> root /\ not_fresh_at mid x` by
@@ -427,7 +430,7 @@ Resume unwrap_slot_copy_origin_ptr[final_join]:
     suspend "ghost_final" >>
   suspend "remaining"
 QED
-Resume unwrap_slot_copy_origin_ptr[ghost_final]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[ghost_final]:
   rpt strip_tac >>
   `ghost_inv_at (DF H) lo d cenv cx ee G tn s` by metis_tac[] >>
   `local_ptrs_rel func cenv ee.scopes s` by
@@ -498,7 +501,7 @@ Resume unwrap_slot_copy_origin_ptr[ghost_final]:
   conj_tac >- metis_tac[] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-Resume unwrap_slot_copy_origin_ptr[remaining]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[remaining]:
   `p.ptr_location <> LocMemory` by
     (qpat_assum `p.ptr_location = LocStorage \/ _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `p.ptr_location` >> simp[]) >>
@@ -541,6 +544,7 @@ Resume unwrap_slot_copy_origin_ptr[remaining]:
   qexistsl [`v`, `z`, `Gf`, `tnf`] >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >-
     (gen_tac >> disch_tac >>
      conj_tac >-
@@ -564,7 +568,7 @@ Resume unwrap_slot_copy_origin_ptr[remaining]:
   conj_tac >- suspend "writeback" >>
   suspend "kept_current"
 QED
-Resume unwrap_slot_copy_origin_ptr[memory_vv]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[memory_vv]:
   `FLOOKUP z.vs_allocas sb.cs_next_id = SOME (w2n dstword,type_memory_bytes cenv t)` by
     (drule copy_static_fields >> strip_tac >>
      qpat_assum `FLOOKUP u.vs_allocas _ = _` mp_tac >>
@@ -612,7 +616,7 @@ Resume unwrap_slot_copy_origin_ptr[memory_vv]:
   simp[] >> metis_tac[]
 
 QED
-Resume unwrap_slot_copy_origin_ptr[store_bound]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[store_bound]:
   `val_store_size rty v <= type_memory_bytes cenv t` by
     metis_tac[exprSimPropsTheory.val_store_size_le] >>
   qpat_assum `post_value_type cenv e = expr_type e` mp_tac >>
@@ -623,13 +627,13 @@ Resume unwrap_slot_copy_origin_ptr[store_bound]:
   POP_ASSUM_LIST (K ALL_TAC) >>
   simp[expr_store_bound_def] >> rpt strip_tac >> gvs[] >> decide_tac
 QED
-Resume unwrap_slot_copy_origin_ptr[ptr_value]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[ptr_value]:
   metis_tac[]
 QED
-Resume unwrap_slot_copy_origin_ptr[ptr_buffer]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[ptr_buffer]:
   metis_tac[]
 QED
-Resume unwrap_slot_copy_origin_ptr[lowered_bound]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[lowered_bound]:
   qpat_assum `lowered_value_type cenv e = expr_type e` mp_tac >>
   qpat_assum `post_value_type cenv e = expr_type e` mp_tac >>
   qpat_assum `evaluate_type _ _ = SOME rty` mp_tac >>
@@ -639,7 +643,7 @@ Resume unwrap_slot_copy_origin_ptr[lowered_bound]:
   qpat_assum `w2n dstword + type_memory_bytes cenv t <= z.vs_alloca_next` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[]
 QED
-Resume unwrap_slot_copy_origin_ptr[kept_original]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[kept_original]:
   `vv_post H0 ctx func cenv cx e es sa sb s0 ee tv (LocatedValue t p) s` by
     (qpat_assum `vv_post H0 _ _ _ _ _ _ _ sm _ _ _ _ _` mp_tac >>
      qpat_assum `p.ptr_location = LocStorage \/ _` mp_tac >>
@@ -676,7 +680,7 @@ Resume unwrap_slot_copy_origin_ptr[kept_original]:
       metis_tac[]) >>
   metis_tac[]
 QED
-Resume unwrap_slot_copy_origin_ptr[writeback]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[writeback]:
   drule copy_static_fields >> strip_tac >>
   irule unwrap_slot_copy_wb_frame >>
   conj_tac >- metis_tac[] >>
@@ -704,7 +708,7 @@ Resume unwrap_slot_copy_origin_ptr[writeback]:
       Cases_on `FLOOKUP s.vs_allocas sb.cs_next_id` >> gvs[FLOOKUP_UPDATE] >>
       Cases_on `sb.cs_next_id = aid` >> gvs[])
 QED
-Resume unwrap_slot_copy_origin_ptr[kept_current]:
+Resume unwrap_slot_copy_origin_ptr_no_dead[kept_current]:
   `lo <= w2n dstword` by
     (qpat_assum `allocas_from lo s` mp_tac >>
      qpat_assum `lo <= s.vs_alloca_next` mp_tac >>
@@ -737,4 +741,92 @@ Resume unwrap_slot_copy_origin_ptr[kept_current]:
   `~(w2n dstword <= i /\ i < w2n dstword+type_memory_bytes cenv t)` by decide_tac >>
   metis_tac[]
 QED
-Finalise unwrap_slot_copy_origin_ptr
+Finalise unwrap_slot_copy_origin_ptr_no_dead
+
+
+Theorem unwrap_slot_copy_origin_ptr:
+  vv = LocatedValue t p /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  ~is_word_type t /\
+  compile_expr cenv ty e sa = (vv,sm) /\
+  sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
+  unwrap_value cenv vv sb = (op,sc) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+    ~is_word_type (post_value_type cenv e) ==>
+    type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
+    type_memory_size rt < 2**64) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty /\
+  (!v. read_result cx tv ee = (INL v,ee) ==> value_has_type rty v) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
+     ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
+  vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv s /\
+  alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn s /\
+  (!t op0. vv = StackValue t op0 /\ ~is_word_type (post_value_type cenv e) ==>
+    ptr_buf_ok cenv e op0 G s) /\
+  (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
+    ptr_buf_ok cenv e p.ptr_operand G s) /\
+  (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+   ?val. read_result cx tv ee = (INL val, ee) /\
+         !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+                eval_operand (vv_operand vv) s = SOME w ==>
+                w2n w + type_memory_size rt <= lo /\
+                (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+                       val_in_memory rt val (w2n w) mem)) /\
+  ghost_kept_at lo cenv es sa Gi ti s0 G tn /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+  ?v z G' tn'.
+    read_result cx tv ee = (INL v, ee) /\
+    vv_own cenv cx (post_value_type cenv e) sb sc ee (Value v)
+      (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+         (s, G, tn) [] (OK z, G', tn') /\
+       expr_post H ctx func cenv cx e es sa sc s0 ee v op z /\
+       ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    expr_store_bound cx (post_value_type cenv e) v op z /\
+    z.vs_current_bb = sc.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sc.cs_current_insts /\
+    alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
+    s0.vs_alloca_next <= z.vs_alloca_next /\
+    ptr_val_ok cx (post_value_type cenv e) v op G' tn' z /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G' z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
+            eval_operand op z = SOME w ==>
+            type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) /\
+    ghost_kept_at lo cenv es sa Gi ti s0 G' tn' /\
+    (!x. not_fresh_at sb x ==>
+         lookup_var x z = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+         op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    wb_frame cenv ee ee sb s z /\
+    ghost_kept_at lo cenv ee sb G tn s G' tn'
+Proof
+  disch_then (mp_tac o MATCH_MP unwrap_slot_copy_origin_ptr_no_dead) >>
+  disch_then (qx_choose_then `v` (qx_choose_then `z`
+    (qx_choose_then `G'` (qx_choose_then `tn'`
+      (REPEAT_TCL CONJUNCTS_THEN assume_tac))))) >>
+  qexistsl [`v`, `z`, `G'`, `tn'`] >> simp[]
+QED

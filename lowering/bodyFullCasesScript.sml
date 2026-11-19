@@ -18,6 +18,8 @@ Ancestors
   bodyFullTypeBuiltinEmpty bodyFullTypeBuiltinWords bodyFullTypeBuiltinConvert
   bodyFullTypeBuiltinExtract32 bodyFullTypeBuiltinAbiDecode bodyFullTypeBuiltinAbiEncode
   bodyFullRawCall bodyFullRawCallCalldata exprSimSource
+  bodyFullExtCallBodyOfVV bodyFullExtCallRequestStage bodyFullExtCallReadyReturn
+  bodyFullExtCallReturn abiDecodeValidJoint abiDecodeRejectJoint gasOutcomeFull
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullBuiltinEnv
   bodyFullMakeArray
@@ -177,7 +179,7 @@ Proof
   qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> gvs[]
 QED
 
-(* Admitted: the joint twin of body_assign_tuple_case_ptr_at (bodyPtrAssignCases). *)
+(* Combine expression evaluation with assignment to a tuple target. *)
 Theorem body_assign_tuple_case_full:
   !cx gs e.
     (!s'' tv t s'3' v t'.
@@ -514,7 +516,7 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.expr_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_extcall_case_ptr_at (bodyPtrCallCases). *)
+(* Compose the counted request with its return and ABI decoder outcomes. *)
 Theorem body_extcall_case_full:
   !cx v14 is_static skip_check sig opts es v15.
     (!s'' target t nargs s'3' results t'.
@@ -530,7 +532,40 @@ Theorem body_extcall_case_full:
     body_expr_full_ok cx
       (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> PairCases_on `sig` >> fs[] >>
+  irule extcall_body_full_ok_of_vv >> rpt gen_tac >> strip_tac >>
+  drule_then assume_tac body_inv_no_dalloca >>
+  rewrite_tac [expr_vv_sim_full_def] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  MATCH_MP_TAC (Q.INST [`Q'` |-> `Q`,
+    `R` |-> `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`]
+    gas_outcome_full_post_mono) >>
+  BETA_TAC >> conj_tac
+  >- (ho_match_mp_tac (GEN_ALL (SIMP_RULE bool_ss [LET_THM] extcall_request_full)) >>
+      rpt (goal_assum (drule_at Any)) >>
+      rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE
+          (rpt gen_tac >> strip_tac >>
+           first_assum (irule o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM]) >>
+           metis_tac[]))) >>
+      rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      mp_tac extcall_return_full >>
+      (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_valid_allocated_joint)) >>
+      (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_malformed_allocated_joint)) >>
+      disch_then (fn th =>
+        mp_tac extcall_ready_return_outcome >>
+        (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SPEC_ALL th)))) >>
+      disch_then ho_match_mp_tac >>
+      `TAKE (LENGTH sig1) (vs ++ kws) = vs` by
+        (qpat_assum `LENGTH vs = LENGTH sig1` (SUBST1_TAC o SYM) >>
+         simp[TAKE_APPEND1,TAKE_LENGTH_ID]) >>
+      `DROP (LENGTH sig1) (vs ++ kws) = kws` by
+        (qpat_assum `LENGTH vs = LENGTH sig1` (SUBST1_TAC o SYM) >>
+         simp[DROP_APPEND]) >>
+      simp[LENGTH_APPEND] >>
+      qhdtm_assum `extcall_request_ready` (irule_at Any) >>
+      rpt (goal_assum (drule_at Any)) >>
+      fs[]) >>
+  simp[]
 QED
 
 (* The joint twin of body_for_case_ptr_at (bodyPtrCtrlCases),
