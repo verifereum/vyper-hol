@@ -8,8 +8,7 @@ Libs
 
 (* Keep the Vyper translations of helpers also used by contractABI. *)
 val () = List.app cv_rep_delete
-  ["contractABI.MAP_o_n2w_ORD_function_signatu_ho",
-   "contractABI.cv_dimword_thm",
+  ["contractABI.cv_dimword_thm",
    "contractABI.cv_rep_bool_bool_itself_datatype",
    "contractABI.cv_num_to_dec_string_thm"];
 
