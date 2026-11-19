@@ -14,7 +14,7 @@ Theorem linear_dispatch_fallback_revert_joint:
   fresh_vars_wrt st ss /\ ~ss.vs_halted /\
   ss.vs_current_bb = st.cs_current_bb /\
   ss.vs_inst_idx = LENGTH st.cs_current_insts /\
-  allocas_from lo ss /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo ss /\ (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
   linear_dispatch_target ss.vs_call_ctx.cc_calldata selectors fallback = fallback /\
   sa.cs_current_bb = fallback /\ sa.cs_current_insts = [] /\
   emit_inst REVERT [Lit 0w; Lit 0w] [] sa = ((),sb) /\
@@ -43,8 +43,9 @@ Proof
   drule_all compile_selector_dispatch_linear_ptr_endpoint >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   rename1 `vars_pc_only ss tt` >>
-  `allocas_from lo tt` by
-    (gvs[vars_pc_only_def, venom_state_component_equality, allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo tt /\ (ctx_has_dalloca ctx ==> allocas_below_fmp tt)` by
+    (gvs[vars_pc_only_def, venom_state_component_equality, allocas_from_def,
+         allocas_below_fmp_def] >> metis_tac[]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
      (tt,G',tn') [] (Abort Revert_abort (revert_state (set_returndata [] tt)),G',tn')` by
     (rpt gen_tac >> irule emit_abort_origin_ptr >> simp[] >>

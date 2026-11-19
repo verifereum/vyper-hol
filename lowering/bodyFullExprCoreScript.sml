@@ -663,6 +663,7 @@ Proof
   qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
   irule (SRULE [LET_THM] bop_word_operands_full_cps_exit) >>
   simp[Abbr `R`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`cenv`, `d`, `env`, `s1`, `s2`, `sa`, `shadow_func`,
     `shadow_s1`, `shadow_s2`, `shadow_sa`, `tops`, `x`, `y`] >>
   simp[] >>

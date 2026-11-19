@@ -11,7 +11,7 @@ Theorem ptr_inst_ok_hash:
   w2n off + w2n n <= b + sz /\
   op_taint tn (Var p) = {} /\ op_taint tn len = {} /\
   (!i. w2n off <= i /\ i < w2n off + w2n n ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id SHA3 [Var p; len] [out]) s
 Proof
   strip_tac >>

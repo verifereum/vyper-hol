@@ -18,7 +18,7 @@ Theorem toplevel_code_runtime_force_full:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv (TopLevelName ann nsid)) = SOME rt /\
     ~is_word_type (post_value_type cenv (TopLevelName ann nsid)) ==>
@@ -103,6 +103,9 @@ Proof
   `32*((type_memory_bytes cenv t+31) DIV 32) <= type_memory_bytes cenv t /\
    w2n a+32*((type_memory_bytes cenv t+31) DIV 32) <= LENGTH s.vs_data_section /\
    w2n a+32*((type_memory_bytes cenv t+31) DIV 32) < dimword(:256)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ _`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all toplevel_code_runtime_execution_full_at >>
   disch_then (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >>
   suspend "posts"

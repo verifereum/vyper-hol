@@ -57,6 +57,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `cenv.ce_is_ctor /\
     (case vv_location vv of NONE => LocMemory | SOME l => l) = LocCode`
-  >- (qpat_x_assum `_ /\ _` strip_assume_tac >> drule_all len_full_suffix_ctor >> simp[]) >>
+  >- (qpat_x_assum `_ /\ _` strip_assume_tac >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+      drule_all len_full_suffix_ctor >> simp[]) >>
   drule_all len_full_suffix_scalar >> simp[]
 QED

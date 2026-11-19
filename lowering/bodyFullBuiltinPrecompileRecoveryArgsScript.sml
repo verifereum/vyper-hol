@@ -19,7 +19,9 @@ Theorem ecrecover_args_suffix_full:
     MEM shadow_func shadow_ctx.ctx_functions /\
     fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
@@ -44,6 +46,7 @@ Theorem ecrecover_args_suffix_full:
 Proof
   rpt gen_tac >> strip_tac >>
   irule lower_word_args_sim_full >> simp[] >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
   >- (qexistsl_tac [`shadow_func`, `shadow_sa`, `shadow_sm`, `ty`] >> simp[])
   >- (qexists_tac `tops` >> simp[]) >>
   qexists_tac `env` >> simp[] >>

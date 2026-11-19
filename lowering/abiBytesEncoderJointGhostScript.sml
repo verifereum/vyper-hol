@@ -3,7 +3,7 @@ Ancestors
   abiBytestringCode abiEncoderRounding abiEncoderWindowBytes
   abiBytesEncoderPrefixGhost abiBytesEncoderCopyGhost abiBytesEncoderSuffixGhost
   instSeqComposePtr ghostPcTransportPtr exprLoweringProps loweringStateRelDefs
-  fragGasSeqPtr bodyPtrDefs ptrCoverage ptrSafetyTransport
+  fragGasSeqPtr fragGasSeqPtrContext bodyPtrDefs ptrCoverage ptrSafetyTransport
   ptrSafeRun ptrDiscipline venomInstProofs venomExecSemantics
   venomMemDefs venomState venomInst words list arithmetic finite_map
 
@@ -11,7 +11,7 @@ Theorem bytes_encoder_joint_ghosts:
   compile_abi_encode_to_buf (Var dst) (Var src) (AbiBytestring maxlen) st =
     (out,en) /\
   fn_has_code st en func /\ not_fresh_at st dst /\ not_fresh_at st src /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   eval_operand (Var src) s = SOME p /\
@@ -87,17 +87,28 @@ Proof
     (unabbrev_all_tac >> irule bytes_encoder_prefix_ghosts >>
      goal_assum (drule_at Any) >> simp[]) >>
   `allocas_from lo a` by metis_tac[allocas_from_def] >>
-  qunabbrev_tac `ins` >>
   `w2n p + 32 + LENGTH bs <= a.vs_alloca_next /\
    w2n q + 32 + contractABI$ceil32 (LENGTH bs) <= a.vs_alloca_next` by simp[] >>
   `!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==> i NOTIN tm.t_mem` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
+  qunabbrev_tac `ins` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by
+    (strip_tac >> irule run_inst_seq_allocas_below_fmp >>
+     qexistsl [`TAKE 4 (bytestring_encoder_insts st.cs_next_id N (Var dst) (Var src))`, `s`] >>
+     rpt conj_tac
+     >~ [`EVERY _ _`]
+     >- simp[bytestring_encoder_insts_def, mk_inst_def, is_terminator_def, is_alloca_op_def] >>
+     metis_tac[]) >>
   drule_all bytes_encoder_copy_ghosts >>
   disch_then (qspecl_then [`func`, `PG`] strip_assume_tac) >>
   rename1 `ptr_covers H2 tm2 dst b _` >>
   `allocas_from lo b` by metis_tac[allocas_from_def] >>
   `LENGTH bs + 32 < dimword (:256)` by decide_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp b` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp b` by
+    (strip_tac >> irule run_inst_seq_allocas_below_fmp >>
+     qexistsl [`TAKE 3 (DROP 4
+       (bytestring_encoder_insts st.cs_next_id N (Var dst) (Var src)))`, `a`] >>
+     simp[bytestring_encoder_insts_def, mk_inst_def, is_terminator_def,
+          is_alloca_op_def]) >>
   drule_all bytes_encoder_suffix_ghosts >>
   disch_then (qspecl_then [`func`, `PG`, `H2`] strip_assume_tac) >>
   rename1 `op_taint tm3 (Var (EL 8 N)) = {}` >>

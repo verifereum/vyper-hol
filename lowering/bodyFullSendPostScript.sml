@@ -68,6 +68,7 @@ Proof
     (rpt strip_tac >> res_tac >> fs[ghost_inv_at_def]) >>
   `allocas_from lo s` by
     (res_tac >> fs[ghost_inv_at_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all send_read_checked_tail_full_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`,`G`]
     (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 assume_tac strip_assume_tac) strip_assume_tac))

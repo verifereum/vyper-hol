@@ -108,6 +108,7 @@ Proof
    op_taint tn (Lit 0w) = {}` by
     simp[is_word_type_def, evaluate_type_def, value_has_type_def,
          eval_operand_def, typed_val_to_w256_def, val_to_w256_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all compile_store_memory_word_origin_ptr_path >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`t`, `Gf`, `tnf`] >>

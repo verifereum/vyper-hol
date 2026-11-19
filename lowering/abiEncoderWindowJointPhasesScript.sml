@@ -279,10 +279,8 @@ Proof
       qpat_assum `s.vs_inst_idx = _` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
       simp[venom_state_component_equality]) >>
-  conj_tac
-  >- (simp[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `p`] >>
-      rpt strip_tac >> irule fresh_var_distinct >> decide_tac) >>
-  metis_tac[allocas_from_def]
+  simp[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `p`] >>
+  rpt strip_tac >> irule fresh_var_distinct >> decide_tac
 QED
 
 Resume window_cursor_init_joint[allocation_alignment]:
@@ -501,6 +499,7 @@ Resume window_array_root_prefix_joint_strong[word_pre]:
     metis_tac[] >>
   `eval_operand (Var sp) u = SOME (n2w sb) /\
    eval_operand (Var dp) u = SOME (n2w d)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all window_word_joint_path_strong >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   suspend "word_endpoint"
@@ -931,7 +930,7 @@ Proof
          Cases_on `op = Lit (n2w asz)` >> gvs[op_taint_def]) >>
      simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
        exec_pure2_def, AllCaseEqs(), update_var_def] >>
-     conj_tac >- gvs[allocas_from_def] >> rpt strip_tac >> gvs[]) >>
+     rpt strip_tac >> gvs[]) >>
   `!D. ptr_inst_ok D lo 0 ctx func Gm tm si
       (v with vs_inst_idx := s.vs_inst_idx + 2)` by
     (gen_tac >> irule ptr_inst_ok_lower_bound_transport >>
@@ -1352,12 +1351,10 @@ Proof
        allocas_from_def, op_taint_def, step_inst_non_invoke] >>
      simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def,
        lookup_var_def, update_var_def, AllCaseEqs()] >>
-     conj_tac
-     >- (`op_taint tn (Var dst) = {}` by
-           metis_tac[bodyPtrDefsTheory.ptr_covers_def] >>
-         gen_tac >> Cases_on `op = Var dst` >> simp[] >>
-         Cases_on `FLOOKUP tn.t_var dst` >> fs[op_taint_def]) >>
-     metis_tac[allocas_from_def]) >>
+     `op_taint tn (Var dst) = {}` by
+       metis_tac[bodyPtrDefsTheory.ptr_covers_def] >>
+     gen_tac >> Cases_on `op = Var dst` >> simp[] >>
+     Cases_on `FLOOKUP tn.t_var dst` >> fs[op_taint_def]) >>
   `allocas_from lo u /\ allocas_from lo v` by
     (simp[allocas_from_def, update_var_def] >> metis_tac[allocas_from_def]) >>
   `!D k. ptr_inst_ok D lo 0 ctx func G1 tn1 i2
@@ -1381,7 +1378,6 @@ Proof
        lookup_var_def, update_var_def, AllCaseEqs()] >>
      conj_tac
      >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-     conj_tac >- metis_tac[allocas_from_def] >>
      rpt strip_tac >> gvs[]) >>
   `!k. step_inst_base i2 (u with vs_inst_idx := k) =
        OK (v with vs_inst_idx := k) /\
@@ -1684,8 +1680,7 @@ Proof
        allocas_from_def, step_inst_non_invoke] >>
      simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def,
        lookup_var_def, update_var_def, AllCaseEqs()] >>
-     conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-     metis_tac[allocas_from_def]) >>
+     rpt strip_tac >> gvs[] >> metis_tac[]) >>
   `!k. step_inst_base i2 (u with vs_inst_idx := k) =
        OK (v with vs_inst_idx := k) /\
        step_inst_base i3 (v with vs_inst_idx := k) =

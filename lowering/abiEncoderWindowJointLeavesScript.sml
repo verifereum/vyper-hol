@@ -1,5 +1,5 @@
 Theory abiEncoderWindowJointLeaves
-Ancestors fragExecPtr
+Ancestors fragExecPtr exprPtrCtorImmStore
   exprSimAbiEncodeExecFrame abiEncoderWindowLeaves abiEncoderWindow
   valueEncodingProofs exprLoweringProps abiEncoderExtendSim
   abiEncoderRegisteredEffect abiEncoderWrites abiEncoderInputFrame
@@ -19,7 +19,7 @@ Theorem window_word_joint_path_strong:
   (!i. sb <= i /\ i < sb + 32 ==> i NOTIN tn.t_mem) /\
   sb + 32 <= s.vs_alloca_next /\ d + 32 <= s.vs_alloca_next /\
   s.vs_alloca_next < dimword (:256) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -130,7 +130,7 @@ Proof
     (simp[inst_seq_ptr_def] >> conj_tac >-
       (irule ptr_inst_ok_lower_bound_transport >>
        conj_tac >- simp[] >> qexists_tac `0` >>
-       simp[Abbr `ld`, ptr_inst_ok_mload]) >>
+       simp[Abbr `ld`] >> irule ptr_inst_ok_mload_lo >> simp[allocas_from_def]) >>
      `allocas_from lo (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
        (simp[Abbr `s1`, update_var_def, allocas_from_def] >>
         metis_tac[allocas_from_def]) >>
@@ -138,7 +138,8 @@ Proof
       (irule ptr_inst_ok_lower_bound_transport >>
        conj_tac >- metis_tac[] >> qexists_tac `0` >> simp[] >>
        simp[Abbr `wr`] >>
-       irule fragExecPtrTheory.ptr_inst_ok_mstore >> simp[]) >>
+       irule fragExecPtrTheory.ptr_inst_ok_mstore >>
+       simp[Abbr `s1`, allocas_below_fmp_def, update_var_def] >> fs[allocas_below_fmp_def]) >>
      `step_inst_base wr (s1 with vs_inst_idx := SUC s.vs_inst_idx) =
         OK (s2 with vs_inst_idx := SUC s.vs_inst_idx)` by
        (simp[instIdxIndepTheory.step_inst_inst_idx_indep,
@@ -160,7 +161,7 @@ Theorem window_word_joint_path:
   (!i. sb <= i /\ i < sb + 32 ==> i NOTIN tn.t_mem) /\
   sb + 32 <= s.vs_alloca_next /\ d + 32 <= s.vs_alloca_next /\
   s.vs_alloca_next < dimword (:256) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -191,7 +192,7 @@ Theorem compile_abi_encode_to_buf_word_window_joint:
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
   alloca_inv s /\ alloca_room ctx func s /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (0 < cap ==>
     sb + cap <= s.vs_alloca_next /\
     venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH (contractABI$enc at av)) /\
@@ -300,7 +301,7 @@ Theorem compile_abi_encode_to_buf_copy_window_joint:
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
   alloca_inv s /\ alloca_room ctx func s /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (0 < cap ==>
     sb + cap <= s.vs_alloca_next /\
     venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH (contractABI$enc at av)) /\

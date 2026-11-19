@@ -80,7 +80,7 @@ Theorem unwrap_ensure_slot_single:
   compile_ensure_in_memory src loc nb 1 ctor imm sa = (op,sb) /\
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   nb < dimword (:256) /\ 32 <= nb /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -127,7 +127,12 @@ Proof
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   drule_all unwrap_single_layout >> strip_tac >>
   `32*1 <= nb` by simp[] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     fs[exprLoweringPropsTheory.stmt_state_rel_def,
+        exprLoweringPropsTheory.fmp_room_def, allocas_below_fmp_def,
+        venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all unwrap_alloc_loop_entry >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
   `root <> STRING #"%" (toString sm.cs_next_var)` by

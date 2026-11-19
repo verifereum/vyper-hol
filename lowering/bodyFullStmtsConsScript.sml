@@ -10,6 +10,7 @@
 Theory bodyFullStmtsCons
 Ancestors
   bodySimFull gasOutcomeFullCompose gasOutcomeFullStmts fragGasOriginPtr
+  bodyFullIfExpReach
   gasShadowState gasShadowCompileStmt gasShadowCompileStmtBase bodyFullShared
   stmtFragPtr stmtSimSeqEnv stmtSimProps stmtSimDefs
   loweringPosts bodyMemoryDefs bodyPtrDefs bodyExprPreFacts
@@ -36,7 +37,8 @@ Ancestors
 Theorem stmt_frag_full_cons_env:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty
    stmt ss es.
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==>
+      !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty stmt)
@@ -65,6 +67,10 @@ Proof
      irule gas_shadow_compiles_bind >>
      simp[gas_shadow_compile_stmt, gas_shadow_compiles_return]) >>
   simp[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> !bb. MEM bb func.fn_blocks ==>
+      phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_x_assum `ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==> _`
+       mp_tac >> simp[]) >>
   qpat_x_assum `stmts_env _ _ _ (stmt::ss) _ = _` mp_tac >>
   simp[stmts_env_cons, comp_bind_def] >> pairarg_tac >> simp[] >>
   strip_tac >> rename1 `stmt_env cenv lctx ty stmt sa = (c, sm)` >>
@@ -106,6 +112,16 @@ Proof
                            `G0`, `tn0`, `c`] mp_tac) >>
   simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ headR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (eval_stmt cx stmt) (es,s0,G0,tn0)
+     (\H res ee G tn t. headQ H res ee G tn t /\
+       ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (s0,G0,tn0) cm (OK t,G,tn)) headR` by
+    (irule gas_outcome_full_post_path >>
+     qpat_assum `gas_outcome_full _ _ _ _ _ _ headQ headR` (irule_at Any) >>
+     rpt strip_tac >> simp[] >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ headQ headR` kall_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ pathQ headR` >>
   simp[Once evaluate_def, ignore_bind_def] >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
   >~ [`gas_marked_exec`]
@@ -117,7 +133,7 @@ Proof
   >- simp[evaluate_storage_trace_frame]
   >~ [`storage_trace_frame _`]
   >- simp[evaluate_storage_trace_frame] >>
-  qexists_tac `\H res ee G tn t. headQ H res ee G tn t /\
+  qexists_tac `\H res ee G tn t. pathQ H res ee G tn t /\
                     ~t.vs_halted /\ ee.gas_obs = []` >>
   conj_tac >- suspend "continue" >>
   irule gas_outcome_full_post_source >>
@@ -127,13 +143,14 @@ Proof
   Cases_on `res` >> simp[halt_exit_def] >>
   qpat_x_assum `!tail. stmt_exit_ptr _ (_ with gas_obs := tail) _ _ _`
     (qspec_then `[]` mp_tac) >>
-  simp[stmt_exit_ptr_def, expr_exit_def] >> fs[halt_exit_def]
+  simp[stmt_exit_ptr_def, expr_exit_def] >> fs[halt_exit_def] >>
+  metis_tac[]
 QED
 
 Resume stmt_frag_full_cons_env[continue]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   BETA_TAC >> strip_tac >>
-  qunabbrev_tac `headQ` >> RULE_ASSUM_TAC BETA_RULE >>
+  qunabbrev_tac `pathQ` >> qunabbrev_tac `headQ` >> RULE_ASSUM_TAC BETA_RULE >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
      mid.storage_trace` by fs[storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
@@ -146,7 +163,7 @@ Resume stmt_frag_full_cons_env[continue]:
   rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `H` mp_tac) >> simp[] >>
-  disch_then (qx_choose_then `cfin` strip_assume_tac) >>
+  disch_then (CONJUNCTS_THEN2 (qx_choose_then `cfin` strip_assume_tac) (K all_tac)) >>
   qexists_tac `cfin` >> fs[stmt_lands_def] >>
   `return_buf_frame d cfin sb t` by
     (irule return_buf_frame_frame >>
@@ -156,8 +173,19 @@ QED
 
 Resume stmt_frag_full_cons_env[tail]:
   `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+    (Cases_on `ctx_has_dalloca ctx`
+     >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by fs[] >>
+         qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t,G1,tn1)` (fn path =>
+         qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+         qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _`
+           (fn safe => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+             (LIST_CONJ [path,no_phi,safe])))))) >>
+     rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> strip_tac >>
+     `ctx_has_dalloca ctx` by
+       (simp_tac bool_ss [ctx_has_dalloca_def, EXISTS_MEM] >>
+        qexists_tac `fn` >> conj_tac >- first_assum ACCEPT_TAC >>
+        qexists_tac `inst` >> simp[]) >> fs[]) >>
   `mid with gas_obs := [] = mid` by
     gvs[evaluation_state_component_equality] >>
   `eval_stmt cx stmt

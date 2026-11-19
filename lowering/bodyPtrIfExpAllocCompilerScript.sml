@@ -52,7 +52,7 @@ Theorem compile_alloc_buffer_counted:
   !D ctx fn PG G tn cenv cx es sb n buf sc s.
     stmt_state_rel H ctx fn cenv cx es s /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc fn /\
-    n < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    n < dimword (:256) /\ ~s.vs_halted /\
     s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?out u G1 tn1 t.
@@ -148,7 +148,7 @@ Theorem compile_alloc_buffer_vv_counted_frame:
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc fn /\
-    n < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    n < dimword (:256) /\ ~s.vs_halted /\
     s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?out G1 tn1 t.

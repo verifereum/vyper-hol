@@ -165,6 +165,7 @@ Proof
   `w2n sw + type_memory_size stv < dimword (:256) /\
    w2n dw + type_memory_size dtv < dimword (:256) /\
    w2n dw + type_memory_size dtv <= z.vs_alloca_next` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by simp[] >>
   drule compile_store_memory_origin_ptr_path >>
   disch_then (drule_at (Pat `sfields_tenv_consistent _ _`)) >>
   disch_then (drule_at (Pat `lookup_var src _ = _`)) >>
@@ -172,7 +173,7 @@ Proof
   disch_then (qspecl_then [`v`,`sw`,`stv`] mp_tac) >>
   disch_then (drule_at (Pat `allocas_from _ _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca _ ==> allocas_below_fmp _`)) >>
   disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
   (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
@@ -3852,13 +3853,14 @@ Proof
       `w2n aw + 32 < dimword (:256)` by
         (qpat_assum `w2n aw + MAX 32 _ < dimword (:256)` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >> simp[arithmeticTheory.MAX_DEF]) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp z` by simp[] >>
       qpat_assum `compile_store_memory cenv op (Var aq) dty (vv_type vv) cu = ((),cs)`
         (mp_then (Pat `compile_store_memory _ _ _ _ _ _ = _`) mp_tac
           logStoreDataOriginPtrTheory.compile_store_memory_word_origin_ptr_path) >>
       disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
       disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-      disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+      disch_then (drule_at (Pat `ctx_has_dalloca _ ==> allocas_below_fmp _`)) >>
       disch_then (drule_at (Pat `allocas_from _ _`)) >>
       disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
       `evaluate_type (get_tenv cx) dty = SOME rty` by
