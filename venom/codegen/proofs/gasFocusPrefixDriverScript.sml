@@ -5,10 +5,12 @@ Ancestors
   frameOutcome callTrace vfmExecution frameHistoryCfg frameOriginHistory
   frameJointTransition venomExecProps blockSimHelpers fnSimSpec
   asmOptimizer codegenEntrySim codegenSymRel dftDefs unitMemInv finite_map
-  list rich_list pred_set words arithmetic focusJointChainBound gasFocusBoundedFrontier
+  list rich_list pred_set words arithmetic
   contextRawReachable dftGasOracleDefs fcgDefs irSupply memSafeRun
   venomPassSchedule venomPipelineRunner staticAbortDefs
   gasFocusWalkInventoryReplay[qualified,ignore_grammar]
+  gasFocusReplayExit[qualified,ignore_grammar]
+  gasFocusPacketPipelineStages
 
 (* verifereum's calldata-bound frame_rel is in scope; the statements below
    use frame_rel as a variable. *)
@@ -62,131 +64,6 @@ val focus_producer_goal : term = ``
           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
         o1_lowered_inv out.po_unit.cu_context vs0
 ``;
-
-(* Unproved parent header, kept verbatim with focus_producer_goal. *)
-(* Generic finalizers and the unchanged identity boundary share one run. *)
-Theorem focus_producer_finalizer:
-  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
-  o1_run_state_ok vs0 /\ unit_shape_ok out.po_unit /\
-  generate_context_plan out.po_unit.cu_context = SOME cpl /\
-  codegen_assembly rpolicy out.po_unit = SOME prog /\
-  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
-  (fin = asm_opt_finalizer ==>
-     label_flow_ok unit.cu_context /\
-     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-                ~MEM (Label "code_end") inst.inst_operands) /\
-     EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
-                       ds.ds_items) unit.cu_data_segment /\
-     ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
-                 MEM inst (fn_insts fn) /\
-                 MEM (Label "runtime_begin") inst.inst_operands) ==>
-      EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) /\
-     LENGTH vs0.vs_data_section < dimword (:256) DIV 2) /\
-  vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
-  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
-  asm_frame_rel_tail [] prog' vs0.vs_data_section es0
-    (entry_asm_state vs0 es0 with
-      as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
-  unit.cu_context.ctx_entry = SOME nm /\
-  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
-  fn_entry_label entryfn = SOME lbl /\
-  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
-  unit_alloca_budget unit.cu_context +
-    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
-  (!gs. ?D f extra.
-    dead_wf D /\
-    (fin = asm_opt_finalizer ==>
-       !fn inst s.
-         raw_reachable (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>)
-           unit.cu_context fn inst s /\
-         gas_cut (MIN (LENGTH (markf gs)) (LENGTH gs))
-           (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) s ==>
-         inst_dload_in_section inst s) /\
-    o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
-      unit.cu_context (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
-    MAP project
-      (gas_events_blocks f unit.cu_context entryfn
-        (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp;
-                    vs_prev_bb := NONE;
-                    vs_current_bb := lbl; vs_inst_idx := 0|>)) =
-      markf gs ++ extra) /\
-  run_call es0 = SOME (result,final) /\
-  ~frame_resource_starved es0 result final ==>
-  ?raw_slots sites unused.
-    LENGTH raw_slots = LENGTH sites /\
-    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
-    !raw.
-      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
-      (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
-      !D.
-        (?fr. terminates (run_context fr unit.cu_context
-           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
-        dead_wf D /\
-        o1_pre_walk_inv D unit.cu_context
-          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
-        (fin = asm_opt_finalizer ==>
-           mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
-                     s.vs_code = vs0.vs_code /\ s.vs_data_section = vs0.vs_data_section)
-             unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
-        ctx_sim D unit.cu_context out.po_unit.cu_context
-          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
-        ctx_abort_rq D unit.cu_context out.po_unit.cu_context
-          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
-        (fin = asm_opt_finalizer ==>
-           code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
-        o1_lowered_inv out.po_unit.cu_context vs0
-Proof
-  cheat
-QED
-
-Theorem focus_producer:
-  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
-  o1_run_state_ok vs0 /\ unit_shape_ok out.po_unit /\
-  generate_context_plan out.po_unit.cu_context = SOME cpl /\
-  codegen_assembly rpolicy out.po_unit = SOME prog /\
-  initial_ctx_rel_tail [] cpl prog out.po_unit.cu_context vs0 es0 /\
-  unit.cu_context.ctx_entry = SOME nm /\
-  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
-  fn_entry_label entryfn = SOME lbl /\
-  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
-  unit_alloca_budget unit.cu_context +
-    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
-  (!gs. ?D f extra.
-    dead_wf D /\
-    o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
-      unit.cu_context (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
-    MAP project
-      (gas_events_blocks f unit.cu_context entryfn
-        (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp;
-                    vs_prev_bb := NONE;
-                    vs_current_bb := lbl; vs_inst_idx := 0|>)) =
-      markf gs ++ extra) /\
-  run_call es0 = SOME (result,final) /\
-  ~frame_resource_starved es0 result final ==>
-  ?raw_slots sites unused.
-    LENGTH raw_slots = LENGTH sites /\
-    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
-    !raw.
-      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
-      (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
-      !D.
-        (?fr. terminates (run_context fr unit.cu_context
-           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
-        dead_wf D /\
-        o1_pre_walk_inv D unit.cu_context
-          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) ==>
-        ctx_sim D unit.cu_context out.po_unit.cu_context
-          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
-        ctx_abort_rq D unit.cu_context out.po_unit.cu_context
-          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
-        o1_lowered_inv out.po_unit.cu_context vs0
-Proof
-  cheat
-QED
 
 (* The actual execution component of the simultaneous motive. The empty
    tail belongs to the initial relation; the current tail is explicit. *)
@@ -496,19 +373,6 @@ Proof
   qexists_tac `raw` >> simp[]
 QED
 
-(* A zero-assembly edge must spend rank; a positive edge can reset it.
-   Costs are indexed by occurrences in this actual joint chain. *)
-Theorem focus_joint_chain_length_bound:
-  !evs q qs r costs.
-    joint_chain ctx q evs qs r /\
-    EVERY (\u. rank u <= bound) (q::qs) /\
-    LIST_REL (\cost pair. 0 < cost \/ rank (SND pair) < rank (FST pair))
-      costs (ZIP (q::qs, qs)) ==>
-    LENGTH evs <= (bound + 1) * SUM costs + rank q
-Proof
-  ACCEPT_TAC focusJointChainBoundTheory.focus_joint_chain_length_bound
-QED
-
 Theorem focus_frame_chain_progress:
   (!q ev next ast.
     joint_config_reachable vs0 ctx q /\ frame_rel q ast /\ guard q /\
@@ -611,27 +475,6 @@ Proof
     (entry_asm_state vs0 es0) es0` by
     metis_tac[asm_frame_rel_entry_tail] >>
   simp[joint_trace_def, joint_chain_def, asm_steps_def]
-QED
-
-(* The concrete fold must supply the cost bound from its same EVM run.
-   This lemma only performs the finite frontier search over actual edges. *)
-Theorem focus_bounded_frontier_stops:
-  joint_initial vs0 ctx q0 /\ frontier q0 [] [] /\
-  (!q evs qs.
-    joint_trace vs0 ctx q0 evs qs q /\ frontier q evs qs /\
-    ~stop q evs qs ==>
-    ?ev next. joint_transition ctx q ev next /\
-      frontier next (evs ++ [ev]) (qs ++ [next])) /\
-  (!q evs qs.
-    joint_trace vs0 ctx q0 evs qs q /\ frontier q evs qs ==>
-    ?costs.
-      EVERY (\u. rank u <= bound) (q0::qs) /\
-      LIST_REL (\cost pair. 0 < cost \/ rank (SND pair) < rank (FST pair))
-        costs (ZIP (q0::qs, qs)) /\ SUM costs <= max_cost) ==>
-  ?q evs qs. joint_trace vs0 ctx q0 evs qs q /\
-    frontier q evs qs /\ stop q evs qs
-Proof
-  ACCEPT_TAC gasFocusBoundedFrontierTheory.focus_bounded_frontier_stops
 QED
 
 Theorem focus_finalizer_select_replay:
@@ -797,4 +640,234 @@ Proof
           witnesses selected (asl, goal)
       end
   end)
+QED
+
+(* Generic finalizers and the unchanged identity boundary share one run. *)
+Theorem focus_producer_finalizer:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  o1_run_state_ok vs0 /\ unit_shape_ok out.po_unit /\
+  generate_context_plan out.po_unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy out.po_unit = SOME prog /\
+  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+  (fin = asm_opt_finalizer ==>
+     label_flow_ok unit.cu_context /\
+     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+                ~MEM (Label "code_end") inst.inst_operands) /\
+     EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
+                       ds.ds_items) unit.cu_data_segment /\
+     ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
+                 MEM inst (fn_insts fn) /\
+                 MEM (Label "runtime_begin") inst.inst_operands) ==>
+      EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) /\
+     LENGTH vs0.vs_data_section < dimword (:256) DIV 2) /\
+  vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
+  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
+  asm_frame_rel_tail [] prog' vs0.vs_data_section es0
+    (entry_asm_state vs0 es0 with
+      as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
+  unit.cu_context.ctx_entry = SOME nm /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+  fn_entry_label entryfn = SOME lbl /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+  unit_alloca_budget unit.cu_context +
+    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+  (!gs. ?D f extra.
+    dead_wf D /\
+    (fin = asm_opt_finalizer ==>
+       !fn inst s.
+         raw_reachable (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>)
+           unit.cu_context fn inst s /\
+         gas_cut (MIN (LENGTH (markf gs)) (LENGTH gs))
+           (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) s ==>
+         inst_dload_in_section inst s) /\
+    o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
+      unit.cu_context (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+    MAP project
+      (gas_events_blocks f unit.cu_context entryfn
+        (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp;
+                    vs_prev_bb := NONE;
+                    vs_current_bb := lbl; vs_inst_idx := 0|>)) =
+      markf gs ++ extra) /\
+  run_call es0 = SOME (result,final) /\
+  ~frame_resource_starved es0 result final ==>
+  ?raw_slots sites unused.
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+    !raw.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
+      (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
+      !D.
+        (?fr. terminates (run_context fr unit.cu_context
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
+        dead_wf D /\
+        o1_pre_walk_inv D unit.cu_context
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+        (fin = asm_opt_finalizer ==>
+           mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                     s.vs_code = vs0.vs_code /\ s.vs_data_section = vs0.vs_data_section)
+             unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
+        ctx_sim D unit.cu_context out.po_unit.cu_context
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+        ctx_abort_rq D unit.cu_context out.po_unit.cu_context
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+        (fin = asm_opt_finalizer ==>
+           code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
+        o1_lowered_inv out.po_unit.cu_context vs0
+Proof
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all focus_packet_pipeline_stages >> strip_tac >>
+  `o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+   code_layout_valid vs0 /\ ~vs0.vs_call_ctx.cc_static` by fs[o1_run_state_ok_def] >>
+  `vs0.vs_call_ctx.cc_static ==>
+    !fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+      ~MEM (Label "runtime_begin") inst.inst_operands` by simp[] >>
+  (let
+    fun normalize th =
+      CONV_RULE (DEPTH_CONV BETA_CONV) (PURE_REWRITE_RULE [LET_THM] th)
+    fun premise facts tm =
+      case List.find (fn th => aconv (concl th) tm) facts of
+        SOME th => th
+      | NONE =>
+          if is_conj tm then
+            let val (left, right) = dest_conj tm in
+              CONJ (premise facts left) (premise facts right)
+            end
+          else if is_imp_only tm then
+            let
+              val (guard, body) = dest_imp tm
+              fun under_guard th =
+                if is_imp_only (concl th) andalso aconv (lhand (concl th)) guard
+                then CONJUNCTS (MP th (ASSUME guard))
+                else []
+            in
+              DISCH guard (premise (List.concat (map under_guard facts)) body)
+            end
+          else raise mk_HOL_ERR "focus_producer_finalizer" "premise"
+            (term_to_string tm)
+    fun apply_rule facts rule = MP rule (premise facts (lhand (concl rule)))
+    fun finish selected =
+      let val for_fillings = CONJUNCT2 (CONJUNCT2 selected)
+      in
+        assume_tac (CONJUNCT1 selected) >>
+        assume_tac (CONJUNCT1 (CONJUNCT2 selected)) >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        qx_gen_tac `raw` >> disch_tac >>
+        (fn (asl, goal) =>
+          let val at_raw = apply_rule (map ASSUME asl) (Q.SPEC `raw` for_fillings)
+          in
+            (conj_tac >- ACCEPT_TAC (CONJUNCT1 at_raw) >>
+             qx_gen_tac `D` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+             (fn (asl, goal) =>
+               let
+                 val facts = map ASSUME asl
+                 val replay = apply_rule facts (Q.SPEC `D` (CONJUNCT2 at_raw))
+                 fun exit_from_oracle th =
+                   ACCEPT_TAC (apply_rule (CONJUNCTS th @ facts)
+                     (normalize gasFocusReplayExitTheory.focus_v3_exit_from_replay))
+                 fun exclude_static th =
+                   let val is_static = CONJUNCT1 th in
+                     CONTR_TAC (MP (NOT_ELIM (premise facts
+                       (mk_neg (concl is_static)))) is_static)
+                   end
+               in
+                 DISJ_CASES_THEN2 (CHOOSE_THEN exit_from_oracle) exclude_static
+                   replay (asl, goal)
+               end)) (asl, goal)
+          end)
+      end
+  in
+    fn (asl, goal) =>
+      let
+        val selected = apply_rule (map ASSUME asl) (normalize focus_finalizer_select_replay)
+        val witnesses = fst (strip_exists (concl selected))
+      in
+        foldr (fn (w, next) => X_CHOOSE_THEN w next)
+          (fn th => map_every EXISTS_TAC witnesses >> finish th)
+          witnesses selected (asl, goal)
+      end
+  end)
+QED
+
+Theorem focus_producer:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  o1_run_state_ok vs0 /\ unit_shape_ok out.po_unit /\
+  generate_context_plan out.po_unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy out.po_unit = SOME prog /\
+  initial_ctx_rel_tail [] cpl prog out.po_unit.cu_context vs0 es0 /\
+  unit.cu_context.ctx_entry = SOME nm /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+  fn_entry_label entryfn = SOME lbl /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+  unit_alloca_budget unit.cu_context +
+    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+  (!gs. ?D f extra.
+    dead_wf D /\
+    o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
+      unit.cu_context (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+    MAP project
+      (gas_events_blocks f unit.cu_context entryfn
+        (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp;
+                    vs_prev_bb := NONE;
+                    vs_current_bb := lbl; vs_inst_idx := 0|>)) =
+      markf gs ++ extra) /\
+  run_call es0 = SOME (result,final) /\
+  ~frame_resource_starved es0 result final ==>
+  ?raw_slots sites unused.
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+    !raw.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
+      (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
+      !D.
+        (?fr. terminates (run_context fr unit.cu_context
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
+        dead_wf D /\
+        o1_pre_walk_inv D unit.cu_context
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) ==>
+        ctx_sim D unit.cu_context out.po_unit.cu_context
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+        ctx_abort_rq D unit.cu_context out.po_unit.cu_context
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+        o1_lowered_inv out.po_unit.cu_context vs0
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  fs[initial_ctx_rel_tail_nil] >>
+  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  drule codegen_assembly_nonempty >> strip_tac >>
+  Q.SUBGOAL_THEN `vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
+   (vs0.vs_call_ctx.cc_created_in_tx \/ account_already_created
+      (lookup_account (FST (HD es0.contexts)).msgParams.callee
+        es0.rollback.accounts))` (map_every assume_tac o CONJUNCTS)
+  >- (qpat_assum `initial_ctx_rel _ _ _ _ _`
+       (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS) o
+        REWRITE_RULE [initial_ctx_rel_def]) >>
+     conj_tac
+     >- (qpat_assum `es0.contexts = _` (fn cs =>
+           qpat_assum `initial_state_rel _ _ _ _ _ _`
+             (strip_assume_tac o SIMP_RULE (srw_ss()) [initial_state_rel_def, cs])) >>
+         metis_tac[]) >>
+     Cases_on `vs0.vs_call_ctx.cc_created_in_tx` >> simp[] >>
+     qpat_assum `_ /\ ~vs0.vs_call_ctx.cc_created_in_tx ==> _` mp_tac >>
+     simp[APPEND_eq_NIL]) >>
+  drule_all asm_frame_rel_entry >> strip_tac >>
+  `(entry_asm_state vs0 es0 with as_code := assemble prog ++ vs0.vs_data_section) =
+    entry_asm_state vs0 es0` by
+    (qpat_assum `vs0.vs_code = _` (PURE_REWRITE_TAC o single o GSYM) >>
+     simp[entry_asm_state_def]) >>
+  `asm_frame_rel_tail [] prog vs0.vs_data_section es0
+    (entry_asm_state vs0 es0 with as_code := assemble prog ++ vs0.vs_data_section) es0` by
+    simp[asm_frame_rel_tail_nil] >>
+  `K SOME <> asm_opt_finalizer` by
+    (disch_then (mp_tac o C AP_THM
+      ``rpolicy with rpol_final_assembly := FAP_Optimize``) >>
+     disch_then (mp_tac o C AP_THM ``[AsmOp "STOP"; AsmOp "POP"]``) >>
+     simp[asm_opt_finalizer_def, combinTheory.K_THM] >> EVAL_TAC) >>
+  mp_tac (Q.INST [`fin` |-> `K SOME`, `prog'` |-> `prog`] focus_producer_finalizer) >>
+  simp[accepted_finalizers_def, combinTheory.K_THM]
 QED
