@@ -414,7 +414,8 @@ Resume extcall_operand_materialized_full[post]:
   `sm.cs_next_id < mid.cs_next_id` by
     (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >>
      simp[loweringShapeRulesTheory.emit_op_eq] >> strip_tac >>
-     qpat_assum `_ = mid` (fn th => simp[SYM th])) >>
+     qpat_assum `_ = mid` (SUBST1_TAC o SYM) >>
+     SIMP_TAC (srw_ss()) []) >>
   `sm.cs_next_id < sb.cs_next_id` by (fs[ci_mono_def] >> decide_tac) >>
   `!n b sz. local_region cenv ee.scopes u n b sz ==>
       regions_disjoint (w2n dw) (type_memory_size ltv) b sz` by

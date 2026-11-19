@@ -10,6 +10,7 @@ Ancestors
   entryReachBodyFirstEmissionExprSupport entryReachBodyFirstEmissionExpr
   externalEntryShape gasShadowState gasShadowCompileConvert
   evalNoHalt exprSimDefs gasOutcomeFull
+  bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
 Libs
   pairLib
 
@@ -304,6 +305,16 @@ Proof
      rpt (qpat_x_assum `!_. _` kall_tac) >>
      metis_tac[compileEnvTheory.cs_extends_refl, compileEnvTheory.cs_extends_trans]) >>
   simp[exprSimExtCallCaseTheory.eval_extcall_stages, GSYM arithmeticTheory.ADD1] >>
+  `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z` by
+    (rpt strip_tac >> drule_all contextRawReachableTheory.frag_reachable_members >>
+     strip_tac >> fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
+     `inst.inst_opcode <> DALLOCA` by metis_tac[] >>
+     simp[unitTransformDefsTheory.dalloca_no_wrap_def]) >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  qexistsl [`Q`,`\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
   ho_match_mp_tac (GEN_ALL extcall_request_guarded_operand_prefix_address_owned) >>
   (* Supply the choices of the already observed real and shadow compiler cuts. *)
   qexistsl [`tops`,`tail`,`av`,`s1`,`shadow_s1`,`shadow_s2`,`shadow_sa`,
@@ -322,6 +333,8 @@ Proof
   conj_tac
   >- (rpt strip_tac >> first_x_assum irule >>
       metis_tac[rich_listTheory.MEM_TAKE, markerTheory.Abbrev_def]) >>
+  conj_tac
+  >- first_assum ACCEPT_TAC >>
   conj_tac
   >- (rpt gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
@@ -350,8 +363,6 @@ Proof
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s2 x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at s2 x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z` by
-    metis_tac[bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap] >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all >>
   simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
        vyperStorageTraceTheory.storage_trace_frame_ext_call] >>
@@ -681,6 +692,9 @@ Proof
          strip_tac >> simp[vyperTypeExtCallSoundnessTheory.ext_call_kwarg_not_mem]) >>
      simp[Abbr `source_gas`])) >>
   disch_then (mk_asm "packed") >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  qexistsl [`Q`,`\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`] >>
+  simp[] >>
   irule extcall_packed_exit_replay >>
   mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
     (Q.INST [`addr` |-> `ao`, `value` |-> `value_op`,

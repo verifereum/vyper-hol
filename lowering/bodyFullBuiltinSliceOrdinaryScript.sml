@@ -12,7 +12,7 @@ Ancestors
   loweringPosts exprSimWordArgs logTopicFramePtr stmtSimLogTopics abiEncodeOwnership
   exprSimHashBoundary exprSimConvertBytes valueEncodingProofs valueEncodingDefs
   compileEnv vyperValue supportedTypes vyperTypeSystem vyperTyping ptrDiscipline
-  bodyPtrBytestringBuiltinsAllocation bodyInvNoDalloca
+  bodyPtrBytestringBuiltinsAllocation
   exprSimSliceOrdinaryContext exprSimSliceOrdinaryFrame exprSimSliceOrdinaryEntry
   exprSimSliceOrdinaryContinue exprSimHypsDefs exprSimSource exprLowering
   gasShadowCompileBuiltinBytes gasShadowCompileContext
@@ -24,6 +24,27 @@ Ancestors
   exprSimSliceCapture exprOperandVar vyperTypeExprResult
   vyperTypeExprSoundness vyperTypeInvariants
   vyperInterpreter vyperAST list stateRelProj
+  bodyFullIfExpReach bodyFullHashKeccakFixed[qualified,ignore_grammar]
+
+fun slice_transport_no_wrap path root =
+  qpat_assum path (fn witness =>
+    qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
+      qpat_assum root
+        (ACCEPT_TAC o MATCH_MP gas_origin_ptr_path_dalloca_no_wrap o
+         CONJ witness o CONJ no_phi)))
+
+fun slice_endpoint_bound post horizon =
+  qpat_assum post (qspec_then horizon mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+    CONJUNCT1)
+
+fun slice_stmt_state_room related =
+  qpat_assum related (fn th =>
+    mp_tac (MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp th) >>
+    mp_tac (MATCH_MP stateRelProjTheory.stmt_state_rel_fmp_room th)) >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac
 
 Theorem slice_dynamic_capture_source_post_from_run:
   (!sa src len data sb func s p G tn capacity bs lo ctx explicit PG.
@@ -36,7 +57,7 @@ Theorem slice_dynamic_capture_source_post_from_run:
     (!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==> i NOTIN tn.t_mem) /\
     allocas_from lo s /\ lo <= s.vs_alloca_next /\
     w2n p + 32 <= s.vs_alloca_next /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?u G' tn'.
@@ -72,7 +93,7 @@ Theorem slice_dynamic_capture_source_post_from_run:
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u G' tn' src p bs.
@@ -108,6 +129,9 @@ Proof
    expr_val_rel cx (BaseT bt) v srcop s /\
    expr_val_at cenv cx (BaseT bt) sa sm es v srcop s` by
     gvs[expr_post_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `~is_word_type (BaseT bt) /\ supported_scalar_type (BaseT bt) /\
    is_bytestring_type (BaseT bt)` by
     gvs[supported_scalar_type_def, supported_word_type_def,
@@ -183,7 +207,7 @@ Theorem slice_builtin_none_vv_full_from_runs:
     (!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==> i NOTIN tn.t_mem) /\
     allocas_from lo s /\ lo <= s.vs_alloca_next /\
     w2n p + 32 <= s.vs_alloca_next /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?u G' tn'.
@@ -214,7 +238,9 @@ Theorem slice_builtin_none_vv_full_from_runs:
       ctx func cenv cx es s /\ alloca_history func s /\
     eval_operand src s = SOME w /\ op_taint tn src = {} /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+       s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?root p u t G' tn'.
@@ -252,7 +278,9 @@ Theorem slice_builtin_none_vv_full_from_runs:
     e args cx st0 es DF lo d explicit tops source PG.
     compile_slice_data limit (Var src) start cnt N sa = (out,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+    local_ptrs_reserved cenv sa /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
     eval_operand limit s = SOME (n2w (LENGTH bs)) /\
     lookup_var src s = SOME p /\ ptr_covers G tn src s (LENGTH bs) /\
     op_prov G limit = NONE /\ op_taint tn limit = {} /\
@@ -304,7 +332,8 @@ Theorem slice_builtin_none_vv_full_from_runs:
         ghost_inv_at (DF H) lo d cenv cx ee HG tm t /\
         ptr_vv_ok cx a (Value result) (LocatedValue a (mk_ptr out LocMemory)) ee HG tm t /\
         ptr_buf_ok cenv e out HG t /\ ghost_kept_at lo cenv es sa G tn s HG tm)
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)) ==>
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))) ==>
 
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es.
     (builtin_args_length_ok (Slice n) (LENGTH args) ==>
@@ -327,8 +356,6 @@ Proof
   asm "dynamic_run" (mp_then Any (mk_asm "dynamic_source_post")
     slice_dynamic_capture_source_post_from_run) >>
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by
-    (irule body_inv_no_dalloca >> goal_assum (drule_at Any)) >>
   `well_typed_expr env (Builtin a (Slice n) args)` by fs[expr_body_pre_def] >>
   drule slice_typed_args >>
   disch_then (qx_choosel_then [`src`,`start`,`len`]
@@ -363,6 +390,10 @@ Proof
     (qpat_assum `!bt xs. names_builtin bt xs ==> _`
       (qspec_then `Slice n` mp_tac) >> simp[]) >>
   qpat_x_assum `!bt xs. names_builtin bt xs ==> _` kall_tac >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (MATCH_MP body_inv_no_phi (CONJ inv member))))) >>
   reverse (Cases_on `is_bytestring_type (expr_type src)`)
   >- suspend "fixed_source" >>
   qpat_x_assum `compile_expr _ _ (Builtin _ _ _) _ = _` mp_tac >>
@@ -447,7 +478,7 @@ Proof
   `eval_exprs cx [] = return []` by simp[FUN_EQ_THM,eval_exprs_nil,vyperStateTheory.return_def] >>
   simp[vyperStateTheory.bind_return,vyperStateTheory.bind_assoc] >>
   once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >>
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   conj_tac >- (rpt gen_tac >> BETA_TAC >>
     rpt (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
       (reverse conj_tac >-
@@ -705,17 +736,29 @@ Proof
   `gas_admissible (bind (eval_expr cx start) (read_result cx)) expr_res_ok mid` by
     (irule exprSimSourceTheory.expr_body_pre_gas_admissible >>
      first_assum (irule_at Any)) >>
+  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+      gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
+    (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
+  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+    slice_transport_no_wrap `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
+      `!fn i z. frag_reachable ctx func s0 fn i z ==> _` >>
+  qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (t,G1,tn1) []
+      (OK capture_state,capture_G,capture_tn)`
+    (qspec_then `DF (storage_trace_horizon mid.storage_trace)` assume_tac) >>
+  `!fn inst u. frag_reachable ctx func capture_state fn inst u ==> dalloca_no_wrap inst u` by
+    slice_transport_no_wrap
+      `gas_origin_ptr_path _ (t,G1,tn1) [] (OK capture_state,capture_G,capture_tn)`
+      `!fn i z. frag_reachable ctx func t fn i z ==> _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp capture_state` by
+    slice_endpoint_bound
+      `!H. valid_horizon _ _ H mid.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx mid capture_state /\ _`
+      `storage_trace_horizon mid.storage_trace` >>
   qpat_x_assum `expr_sim_full _ _ _ _ start _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sc`,`sd`,`shadow_sc`,`shadow_sd`,
     `start_op`,`capture_state`,`capture_G`,`capture_tn`] mp_tac) >>
-  (impl_tac >- (simp[] >>
-    asm_x "dynamic_run" kall_tac >> asm_x "fixed_run" kall_tac >>
-    asm_x "tail_run" kall_tac >> asm_x "dynamic_source_post" kall_tac >>
-    qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-    qpat_assum `MEM func ctx.ctx_functions` mp_tac >>
-    POP_ASSUM_LIST (K ALL_TAC) >>
-    metis_tac[bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap])) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ _ (mid,capture_state,capture_G,capture_tn) start_post _` >>
   irule gas_outcome_full_zero_prefix >>
@@ -723,7 +766,7 @@ Proof
   simp[] >>
   BETA_TAC >>
   once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >>
-  (irule gas_outcome_full_bind_all >>
+  (irule gas_outcome_full_bind_all_path >>
   conj_tac >- (rpt gen_tac >> BETA_TAC >>
     rpt (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
       (reverse conj_tac >-
@@ -762,10 +805,14 @@ Proof
           gvs[exprSimDefsTheory.halt_exit_def]) >> simp[]) >>
   qx_genl_tac [`start_marks`,`start_res`,`start_mid`,`start_G`,`start_tn`,`start_state`] >>
   strip_tac >> RULE_ASSUM_TAC BETA_RULE >>
+  qpat_x_assum `!H. valid_horizon cx st0 H start_mid.storage_trace ==>
+      gas_origin_ptr_path _ (capture_state,capture_G,capture_tn) start_marks
+        (OK start_state,start_G,start_tn)`
+    (mk_asm "start_path") >>
   `valid_horizon cx st0 (storage_trace_horizon start_mid.storage_trace)
       start_mid.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H start_mid.storage_trace ==> _`
+  qpat_assum `!H. valid_horizon _ _ H start_mid.storage_trace ==> start_post _ _ _ _ _ _ /\ _`
     (qspec_then `storage_trace_horizon start_mid.storage_trace` mp_tac) >>
   (impl_tac >- simp[]) >>
   simp[Abbr `start_post`,NoAsms] >> strip_tac >>
@@ -826,15 +873,23 @@ Proof
   `gas_admissible (bind (eval_expr cx len) (read_result cx)) expr_res_ok start_mid` by
     (irule exprSimSourceTheory.expr_body_pre_gas_admissible >>
      first_assum (irule_at Any)) >>
+  asm_x "start_path"
+    (qspec_then `storage_trace_horizon start_mid.storage_trace` (drule_then assume_tac)) >>
+  `!fn inst u. frag_reachable ctx func start_state fn inst u ==> dalloca_no_wrap inst u` by
+    slice_transport_no_wrap
+      `gas_origin_ptr_path _ (capture_state,capture_G,capture_tn) start_marks
+        (OK start_state,start_G,start_tn)`
+      `!fn i z. frag_reachable ctx func capture_state fn i z ==> _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp start_state` by
+    slice_endpoint_bound
+      `!H. valid_horizon _ _ H start_mid.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx start_mid start_state /\ _`
+      `storage_trace_horizon start_mid.storage_trace` >>
   qpat_x_assum `expr_sim_full _ _ _ _ len _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sd`,`se`,`shadow_sd`,`shadow_se`,
     `len_op`,`start_state`,`start_G`,`start_tn`] mp_tac) >>
-  (impl_tac >- (simp[] >>
-    qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-    qpat_assum `MEM func ctx.ctx_functions` mp_tac >>
-    POP_ASSUM_LIST (K ALL_TAC) >>
-    metis_tac[bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap])) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ _ (start_mid,start_state,start_G,start_tn) length_post _` >>
   once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >>
@@ -1235,6 +1290,15 @@ Proof
      (qpat_assum `compile_slice_data _ _ _ _ _ se = (out,sb)` mp_tac >>
       qpat_assum `src_data = Var data_name` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+   `stmt_state_rel (storage_trace_horizon length_mid.storage_trace)
+      ctx func cenv cx length_mid length_state` by
+     (qpat_assum `!H. valid_horizon _ _ H length_mid.storage_trace ==>
+          stmt_state_rel H ctx func cenv cx length_mid length_state /\ _`
+        (qspec_then `storage_trace_horizon length_mid.storage_trace` mp_tac) >> simp[]) >>
+   `ctx_has_dalloca ctx ==> allocas_below_fmp length_state /\
+      length_state.vs_alloca_next + pending_alloca_size func length_state <=
+        w2n length_state.vs_initial_fmp` by
+     slice_stmt_state_room `stmt_state_rel _ ctx func cenv cx length_mid length_state` >>
    qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ tail_source _ _ _` >>
    `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (cx_tops cx) cx st0 tail_source (length_mid,length_state,length_G,length_tn)
@@ -1251,7 +1315,8 @@ Proof
         ptr_vv_ok cx a (Value slice_result) (LocatedValue a (mk_ptr out LocMemory)) ee HG tm t /\
         ptr_buf_ok cenv (Builtin a (Slice n) [src;start;len]) out HG t /\
         ghost_kept_at lo cenv length_mid se length_G length_tn length_state HG tm)
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)` by
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))` by
     (qpat_assum `a = BaseT _` SUBST_ALL_TAC >>
      asm "tail_run" irule >>
      qpat_assum `compile_slice_data src_len (Var data_name) _ _ _ se = (out,sb)`
@@ -1448,6 +1513,10 @@ Proof
         (qpat_assum `s0.vs_alloca_next <= captured.vs_alloca_next` mp_tac >>
          qpat_assum `capture_state = captured with vs_inst_idx := _` mp_tac >>
          POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >> decide_tac) >>
+   `ctx_has_dalloca ctx ==> allocas_below_fmp target` by
+     qpat_assum `vv_post H ctx func cenv cx _ es sa sb s0 length_mid _ _ target`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o REWRITE_RULE[loweringPostsTheory.vv_post_def]) >>
    qpat_assum `vv_post H ctx func cenv cx _ es sa sb s0 length_mid _ _ target`
      (assume_tac o REWRITE_RULE[contextTheory.mk_ptr_def]) >>
    qpat_assum `vv_store_bound cx _ _ length_mid _ _ target`
@@ -1460,6 +1529,7 @@ Proof
    qpat_assum `vv_store_bound cx _ _ length_mid _ _ target` mp_tac >>
    qpat_assum `ptr_vv_ok cx _ _ _ length_mid HG tm target` mp_tac >>
    qpat_assum `ptr_buf_ok cenv _ out HG target` mp_tac >>
+   qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp target` mp_tac >>
    qpat_assum `a = BaseT _` mp_tac >>
    qpat_assum `slice_result = _` mp_tac >>
    POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
@@ -1566,7 +1636,7 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
   `eval_exprs cx [] = return []` by simp[FUN_EQ_THM,eval_exprs_nil,vyperStateTheory.return_def] >>
   simp[vyperStateTheory.bind_return,vyperStateTheory.bind_assoc] >>
   once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >>
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   conj_tac >- (rpt gen_tac >> BETA_TAC >>
     rpt (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
       (reverse conj_tac >-
@@ -1664,6 +1734,9 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      ctx func cenv cx mid t` by fs[loweringPostsTheory.expr_post_def] >>
   `allocas_from lo t /\ lo <= t.vs_alloca_next` by
     fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+     t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
+    slice_stmt_state_room `stmt_state_rel _ ctx func cenv cx mid t` >>
   asm "fixed_run" drule_all >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`,`G1`] mp_tac) >>
   disch_then (qx_choosel_then [`data_name`,`src_ptr`,`allocated`,`captured`,
@@ -1876,15 +1949,29 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
   `gas_admissible (bind (eval_expr cx start) (read_result cx)) expr_res_ok mid` by
     (irule exprSimSourceTheory.expr_body_pre_gas_admissible >>
      first_assum (irule_at Any)) >>
+  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+      gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
+    (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
+  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+    slice_transport_no_wrap `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
+      `!fn i z. frag_reachable ctx func s0 fn i z ==> _` >>
+  qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (t,G1,tn1) []
+      (OK captured,capture_G,capture_tn)`
+    (qspec_then `DF (storage_trace_horizon mid.storage_trace)` assume_tac) >>
+  `!fn inst u. frag_reachable ctx func captured fn inst u ==> dalloca_no_wrap inst u` by
+    slice_transport_no_wrap
+      `gas_origin_ptr_path _ (t,G1,tn1) [] (OK captured,capture_G,capture_tn)`
+      `!fn i z. frag_reachable ctx func t fn i z ==> _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp captured` by
+    slice_endpoint_bound
+      `!H. valid_horizon _ _ H mid.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx mid captured /\ _`
+      `storage_trace_horizon mid.storage_trace` >>
   qpat_x_assum `expr_sim_full _ _ _ _ start _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sc`,`sd`,`shadow_sc`,`shadow_sd`,
     `start_op`,`captured`,`capture_G`,`capture_tn`] mp_tac) >>
-  (impl_tac >- (simp[] >>
-    qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-    qpat_assum `MEM func ctx.ctx_functions` mp_tac >>
-    POP_ASSUM_LIST (K ALL_TAC) >>
-    metis_tac[bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap])) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ _ (mid,captured,capture_G,capture_tn) start_post _` >>
   irule gas_outcome_full_zero_prefix >>
@@ -1892,7 +1979,7 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
   conj_tac >- (gen_tac >> first_assum (MATCH_ACCEPT_TAC o SPEC_ALL)) >>
   BETA_TAC >>
   once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >>
-  (irule gas_outcome_full_bind_all >>
+  (irule gas_outcome_full_bind_all_path >>
   conj_tac >- (rpt gen_tac >> BETA_TAC >>
     rpt (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
       (reverse conj_tac >-
@@ -1931,10 +2018,14 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
           gvs[exprSimDefsTheory.halt_exit_def]) >> simp[]) >>
   qx_genl_tac [`start_marks`,`start_res`,`start_mid`,`start_G`,`start_tn`,`start_state`] >>
   strip_tac >> RULE_ASSUM_TAC BETA_RULE >>
+  qpat_x_assum `!H. valid_horizon cx st0 H start_mid.storage_trace ==>
+      gas_origin_ptr_path _ (captured,capture_G,capture_tn) start_marks
+        (OK start_state,start_G,start_tn)`
+    (mk_asm "start_path") >>
   `valid_horizon cx st0 (storage_trace_horizon start_mid.storage_trace)
       start_mid.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H start_mid.storage_trace ==> _`
+  qpat_assum `!H. valid_horizon _ _ H start_mid.storage_trace ==> start_post _ _ _ _ _ _ /\ _`
     (qspec_then `storage_trace_horizon start_mid.storage_trace` mp_tac) >>
   (impl_tac >- simp[]) >>
   simp[Abbr `start_post`,NoAsms] >> strip_tac >>
@@ -1995,15 +2086,23 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
   `gas_admissible (bind (eval_expr cx len) (read_result cx)) expr_res_ok start_mid` by
     (irule exprSimSourceTheory.expr_body_pre_gas_admissible >>
      first_assum (irule_at Any)) >>
+  asm_x "start_path"
+    (qspec_then `storage_trace_horizon start_mid.storage_trace` (drule_then assume_tac)) >>
+  `!fn inst u. frag_reachable ctx func start_state fn inst u ==> dalloca_no_wrap inst u` by
+    slice_transport_no_wrap
+      `gas_origin_ptr_path _ (captured,capture_G,capture_tn) start_marks
+        (OK start_state,start_G,start_tn)`
+      `!fn i z. frag_reachable ctx func captured fn i z ==> _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp start_state` by
+    slice_endpoint_bound
+      `!H. valid_horizon _ _ H start_mid.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx start_mid start_state /\ _`
+      `storage_trace_horizon start_mid.storage_trace` >>
   qpat_x_assum `expr_sim_full _ _ _ _ len _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sd`,`se`,`shadow_sd`,`shadow_se`,
     `len_op`,`start_state`,`start_G`,`start_tn`] mp_tac) >>
-  (impl_tac >- (simp[] >>
-    qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-    qpat_assum `MEM func ctx.ctx_functions` mp_tac >>
-    POP_ASSUM_LIST (K ALL_TAC) >>
-    metis_tac[bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap])) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ _ (start_mid,start_state,start_G,start_tn) length_post _` >>
   once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >>
@@ -2313,6 +2412,15 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      (conj_tac >> rpt strip_tac >>
       irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
       fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+   `stmt_state_rel (storage_trace_horizon length_mid.storage_trace)
+      ctx func cenv cx length_mid length_state` by
+     (qpat_assum `!H. valid_horizon _ _ H length_mid.storage_trace ==>
+          stmt_state_rel H ctx func cenv cx length_mid length_state /\ _`
+        (qspec_then `storage_trace_horizon length_mid.storage_trace` mp_tac) >> simp[]) >>
+   `ctx_has_dalloca ctx ==> allocas_below_fmp length_state /\
+      length_state.vs_alloca_next + pending_alloca_size func length_state <=
+        w2n length_state.vs_initial_fmp` by
+     slice_stmt_state_room `stmt_state_rel _ ctx func cenv cx length_mid length_state` >>
    qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ tail_source _ _ _` >>
    `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (cx_tops cx) cx st0 tail_source (length_mid,length_state,length_G,length_tn)
@@ -2329,7 +2437,8 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
         ptr_vv_ok cx a (Value slice_result) (LocatedValue a (mk_ptr out LocMemory)) ee HG tm t /\
         ptr_buf_ok cenv (Builtin a (Slice n) [src;start;len]) out HG t /\
         ghost_kept_at lo cenv length_mid se length_G length_tn length_state HG tm)
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)` by
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))` by
      (qpat_assum `a = BaseT _` SUBST_ALL_TAC >>
       asm "tail_run" irule >>
       qpat_assum `compile_slice_data (Lit (n2w m)) (Var data_name) _ _ _ se = (out,sb)`
@@ -2535,6 +2644,10 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
           wordArgsPtrTheory.ghost_kept_at_wb_trans) >>
       (impl_tac >- simp[]) >> disch_then ACCEPT_TAC) >>
    `s0.vs_alloca_next <= target.vs_alloca_next` by decide_tac >>
+   `ctx_has_dalloca ctx ==> allocas_below_fmp target` by
+     qpat_assum `vv_post H ctx func cenv cx _ es sa sb s0 length_mid _ _ target`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o REWRITE_RULE[loweringPostsTheory.vv_post_def]) >>
    qpat_assum `vv_post H ctx func cenv cx _ es sa sb s0 length_mid _ _ target`
      (assume_tac o REWRITE_RULE[contextTheory.mk_ptr_def]) >>
    qpat_assum `vv_store_bound cx _ _ length_mid _ _ target`
@@ -2547,6 +2660,7 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
    qpat_assum `vv_store_bound cx _ _ length_mid _ _ target` mp_tac >>
    qpat_assum `ptr_vv_ok cx _ _ _ length_mid HG tm target` mp_tac >>
    qpat_assum `ptr_buf_ok cenv _ out HG target` mp_tac >>
+   qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp target` mp_tac >>
    qpat_assum `a = BaseT _` mp_tac >>
    POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
    gvs[contextTheory.mk_ptr_def,compileEnvTheory.is_bytestring_type_def]))

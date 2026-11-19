@@ -66,6 +66,7 @@ Theorem member_scalar_revert_observed:
     (!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (Abort Revert_abort u))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_decode_scalar_guard_abort_joint >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   reverse (drule_all bop_scalar_seq_abort_prefix >> strip_tac)

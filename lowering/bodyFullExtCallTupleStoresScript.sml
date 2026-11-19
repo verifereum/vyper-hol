@@ -263,6 +263,7 @@ Resume extcall_tuple_slot_run[write]:
   drule_all extcall_tuple_slot_write_input >>
   disch_tac >>
   qpat_x_assum `dst = Var p` SUBST_ALL_TAC >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by simp[] >>
   drule_all extcall_tuple_slot_write >>
   disch_then (qspecl_then [`explicit`,`PG`] (qx_choose_then `q`
     (qx_choose_then `Gf` (qx_choose_then `tf` (REPEAT_TCL CONJUNCTS_THEN assume_tac))))) >>

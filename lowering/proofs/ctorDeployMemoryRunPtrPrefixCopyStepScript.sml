@@ -33,7 +33,7 @@ Theorem prefix_dloadbytes_ptr_step:
   eval_operand lenop s = SOME k /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n d /\ w2n d + w2n k <= b+sz /\
   op_taint tn (Var dst) = {} /\ op_taint tn src = {} /\
-  op_taint tn lenop = {} /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn lenop = {} /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_safe_step D lo fuel ctx fn PG G tn
     (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s
 Proof

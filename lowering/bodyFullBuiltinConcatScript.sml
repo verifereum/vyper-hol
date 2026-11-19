@@ -130,6 +130,8 @@ Resume concat_sim_full[vv]:
   `allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by
     (qpat_assum `ghost_inv_at _ _ _ _ _ es G0 tn0 s0` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[bodyPtrDefsTheory.ghost_inv_at_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
+    s0.vs_alloca_next + pending_alloca_size func s0 <= w2n s0.vs_initial_fmp` by simp[] >>
   drule_all bodyFullBuiltinConcatFrameTheory.concat_prefix_full >>
   disch_then (qspecl_then [`tn0`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`G0`]
     (qx_choosel_then [`t4`,`G4`,`tn4`,`bv`,`dp`,`ov`,`B`,`ow`]

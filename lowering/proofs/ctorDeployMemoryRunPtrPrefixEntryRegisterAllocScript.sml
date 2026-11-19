@@ -1,6 +1,7 @@
 (* Shifted allocation at an explicit machine/ghost endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixEntryRegisterAlloc
 Ancestors
+  exprLoweringProps
   ctorDeployMemoryRunPtrPrefixRegisterAlloc ctorDeployLoweringEntryRegisterRun
   ctorDeployLoweringEntryAllocation actualAllocCredit actualAllocExec
   allocaFrontierBound allocaBudgetProps entryArgPtrs loweringHalt fragExec
@@ -44,6 +45,8 @@ Theorem prefix_entry_register_alloc_actual:
 Proof
  strip_tac >> drule_all ctorDeployLoweringEntryRegisterRunTheory.deploy_ctor_register_alloc_run >> strip_tac >>
  qexists `a` >> simp[] >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp` by simp[] >>
  reverse conj_tac >-
    (drule_all prefix_register_alloc_run_continuation >> simp[]) >>
  gvs[update_var_def] >>

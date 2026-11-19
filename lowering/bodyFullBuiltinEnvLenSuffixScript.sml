@@ -49,15 +49,16 @@ Theorem len_full_suffix:
           es sa sb s0 ee (IntV (&n)) op z /\
         expr_store_bound cx (BaseT (UintT 256)) (IntV (&n)) op z /\
         z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        alloca_history func z /\ s0.vs_alloca_next <= z.vs_alloca_next /\
+        alloca_history func z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+        s0.vs_alloca_next <= z.vs_alloca_next /\
         ghost_inv_at (DF H) lo d cenv cx ee G2 tn2 z /\
         ptr_val_ok cx (BaseT (UintT 256)) (IntV (&n)) op G2 tn2 z /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `cenv.ce_is_ctor /\
+  (Cases_on `cenv.ce_is_ctor /\
     (case vv_location vv of NONE => LocMemory | SOME l => l) = LocCode`
-  >- (qpat_x_assum `_ /\ _` strip_assume_tac >>
+  >| [qpat_x_assum `_ /\ _` strip_assume_tac >>
       `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
          ee.storage_trace` by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
       qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
@@ -67,6 +68,17 @@ Proof
       `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
         (first_assum (ACCEPT_TAC o MATCH_MP
           bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
-      drule_all len_full_suffix_ctor >> simp[]) >>
-  drule_all len_full_suffix_scalar >> simp[]
+      drule_all len_full_suffix_ctor,
+      drule_all len_full_suffix_scalar]) >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`n`,`z`,`G2`,`tn2`] >> asm_rewrite_tac[] >>
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    (qpat_assum `expr_post H ctx func cenv cx _ _ _ _ _ _ _ _ z`
+       (ACCEPT_TAC o MATCH_MP
+         bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+         CONJUNCT1 o REWRITE_RULE[loweringPostsTheory.expr_post_def])) >>
+  asm_rewrite_tac[]
 QED

@@ -13,6 +13,7 @@ Ancestors
   bodyPtrDefs loweringStateRelDefs compileEnv ptrDiscipline
   fragGasSeqPtr fragExecMem ptrSafetyTransport venomMemDefs
   venomState venomInst venomExecSemantics finite_map words list rich_list
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem raw_call_outbuf_joint:
   compile_raw_call_outbuf M sa = ((ov,op),sb) /\
@@ -21,7 +22,9 @@ Theorem raw_call_outbuf_joint:
   run_inst_seq (emitted_insts sa sb) s = OK u /\
   t7 = (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -132,17 +135,29 @@ Resume raw_call_outbuf_joint[positive]:
 QED
 
 Resume raw_call_outbuf_joint[positive_add]:
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es
+     (m with vs_inst_idx := LENGTH sm.cs_current_insts)` by
+    (qpat_assum `!H. stmt_state_rel H ctx func cenv cx es s ==> _`
+      (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp
+     (m with vs_inst_idx := LENGTH sm.cs_current_insts)` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx es
+        (m with vs_inst_idx := LENGTH sm.cs_current_insts)`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `lo <= m.vs_alloca_next` by decide_tac >>
   `!x. buf.buf_operand = Var x ==> not_fresh_at sm x` by simp[] >>
   `eval_operand buf.buf_operand (m with vs_inst_idx := LENGTH sm.cs_current_insts) = SOME (n2w b)` by
     simp[eval_operand_def, lookup_var_def] >>
-  drule_all (SRULE [] (Q.INST
-    [`sa` |-> `sm`,
+  mp_tac (Q.INST
+    [`sa` |-> `sm`, `ov` |-> `buf.buf_operand`,
      `s` |-> `m with vs_inst_idx := LENGTH sm.cs_current_insts`,
      `u` |-> `u with vs_inst_idx := LENGTH sm.cs_current_insts`,
-     `t` |-> `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
-      raw_call_outbuf_add_joint)) >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
+     `t` |-> `u with vs_inst_idx := LENGTH sb.cs_current_insts`,
+     `w` |-> `n2w b`, `n` |-> `buf.buf_size`,
+     `G` |-> `G1`, `tn` |-> `tn1`]
+      raw_call_outbuf_add_joint) >>
+  impl_tac >- simp[] >>
+  disch_then (strip_assume_tac o SRULE []) >>
   suspend "positive_pack"
 QED
 

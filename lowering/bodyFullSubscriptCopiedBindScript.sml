@@ -13,6 +13,9 @@ Ancestors
   exprLowering compileEnv vyperAST gasShadowState gasShadow
   bodyInvNoDalloca fragExec exprSimHyps gasExemptCert vyperStorageTrace
   vyperTyping[qualified,ignore_grammar]
+  bodyFullIfExpReach
+  contextRawReachable[qualified,ignore_grammar]
+  unitTransformDefs[qualified,ignore_grammar]
 
 Theorem compile_expr_copied_array_subscript[local]:
   compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
@@ -314,7 +317,6 @@ Theorem subscript_copied_bind_caller_frames:
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty (Subscript ann obj idx) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_then assume_tac body_inv_no_dalloca >>
   drule_all_then assume_tac expr_body_pre_array_subscript_base >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty obj es` by
     (fs[body_expr_full_ok_def] >> metis_tac[]) >>
@@ -340,7 +342,7 @@ Proof
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
   qpat_assum `subscript_reads_base _ _ _` (fn th =>
     pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_copied_bind th]) >>
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   `!res : eval_result + exception. !r.
      (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r) <=> expr_exit res r` by
     (Cases >> simp[]) >> simp[] >>
@@ -413,13 +415,30 @@ Resume subscript_copied_bind_caller_frames[base_success]:
   qpat_x_assum `expr_sim_full _ _ _ _ idx _` (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sc`,`si`,`shc`,`shi`,`iop`,`u`,`Gc`,`tnc`] mp_tac) >>
   (impl_tac >-
-    (simp[] >> rpt strip_tac >>
-     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-     `inst.inst_opcode <> DALLOCA` by
-       (strip_tac >> `ctx_has_dalloca ctx` by
-          (simp[NoAsms, ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
-           qexists `fn` >> simp[] >> qexists `inst` >> simp[]) >> simp[]) >>
-     simp[unitTransformDefsTheory.dalloca_no_wrap_def])) >> strip_tac >>
+    (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+       (qpat_assum `body_inv tops ctx ce cx` (fn inv =>
+          qpat_assum `MEM func ctx.ctx_functions`
+            (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi o CONJ inv))) >>
+     qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
+     `gas_origin_ptr_path (DF H0,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (s0,G0,tn0) marks (OK t,G1,tn1)` by
+       (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
+          (qspec_then `H0` mp_tac) >> simp[Abbr `H0`]) >>
+     `gas_origin_ptr_path (DF H0,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (t,G1,tn1) [] (OK u,Gc,tnc)` by
+       (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+            gas_origin_ptr_path _ (t,G1,tn1) [] _ /\ _`
+          (qspec_then `H0` mp_tac) >> simp[Abbr `H0`]) >>
+     `gas_origin_ptr_path (DF H0,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (s0,G0,tn0) marks (OK u,Gc,tnc)` by
+       metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, listTheory.APPEND_NIL] >>
+     `!fn i v. frag_reachable ctx func u fn i v ==> dalloca_no_wrap i v` by
+       (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK u,Gc,tnc)` (fn path =>
+        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
+        qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
+          (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+           CONJ path o CONJ no_phi)))) >>
+     simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qpat_x_assum `cvv = LocatedValue _ _` SUBST_ALL_TAC >>
   fs[contextTheory.vv_location_def, contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
   irule gas_outcome_full_bind >> rpt conj_tac

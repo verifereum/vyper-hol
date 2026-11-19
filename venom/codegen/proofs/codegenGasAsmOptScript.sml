@@ -84,7 +84,7 @@ Proof
                   `as`, `asm_data_env prog (assemble prog ++ x)`] mp_tac
        codegen_label_disciplined >>
      (impl_tac >- (rpt conj_tac >> fs[] >>
-                   metis_tac[asm_data_env_header_fdom,
+                   metis_tac[asmDataEnvTheory.asm_data_env_header_fdom,
                              asm_data_env_ok_asm_data_env])) >>
      simp[]) >>
   `asm_run_bounded (SND (compute_label_offsets prog))

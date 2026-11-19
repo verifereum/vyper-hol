@@ -72,6 +72,7 @@ Proof
    (!q. idx = Var q \/ Lit (n2w n) = Var q ==> not_fresh_at sa q) /\
    (!l. idx <> Label l /\ Lit (n2w n) <> Label l)` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all array_bounds_check_read_only_joint_ok_frame >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`G1`,`tn1`,`s1`] strip_assume_tac) >>
@@ -882,6 +883,7 @@ Resume subscript_array_framed_memory_full[rejected_selection]:
    (!q. iop = Var q \/ Lit (n2w n) = Var q ==> not_fresh_at st2 q) /\
    (!l. iop <> Label l /\ Lit (n2w n) <> Label l)` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all array_bounds_check_joint_oob_frame >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>

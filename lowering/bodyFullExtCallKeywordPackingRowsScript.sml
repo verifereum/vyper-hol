@@ -85,7 +85,7 @@ Theorem keyword_packing_row_endpoint[local]:
          vv_at cenv cx (lowered_value_type cenv e) si ss pos raw sv u /\
          ptr_vv_ok cx (lowered_value_type cenv e) raw sv pos Gp tp u /\
          vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) pos raw sv u) /\
-  vv_storage_live H cx sv pos u /\
+  vv_storage_live (H:(bool # bytes32 # type_value) list # num list) cx sv pos u /\
   (!tag op. sv = StackValue tag op /\ ~is_word_type (lowered_value_type cenv e) ==>
     ptr_buf_ok cenv e op Gp u) /\
   (!tag p. sv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>

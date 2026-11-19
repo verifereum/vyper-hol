@@ -1,7 +1,8 @@
 Theory requestCutOrdinaryAbort
 Ancestors
   fnFramePrefixDriver fnFramePrefix fnFrameDeepAbort
-  fnFrameSymbolicReady fnFrameSymbolicPrefix symFrameControl symBlockBody fnBlockBodySteps fnBlockBodyClasses
+  fnFrameSymbolicReady fnFrameSymbolicPrefix symFrameControl symBlockBody
+  symBodyStaticFacts[qualified,ignore_grammar] fnBlockBodySteps fnBlockBodyClasses
   fnBlockBody unitShapeDefs codegenSymRel asmSem dftGasRequestObservation
   blockSimHelpers opcodeClass codegenRel contextCodegenRel venomExecSemantics venomInst
   asmIR asmSymSem finalizerContract planExec finite_map words list
@@ -106,7 +107,7 @@ Proof
   drule body_plan_inv_equiv >> disch_then drule >> disch_then drule >> strip_tac >>
   qhdtm_assum `body_plan_inv` (strip_assume_tac o REWRITE_RULE [body_plan_inv_def]) >>
   `fn_shape_ok fn` by fs[unit_shape_ok_def, EVERY_MEM] >>
-  `MEM (AsmLabel "revert") prog` by metis_tac[placed_revert_sym_code_label] >>
+  `MEM (AsmLabel "revert") prog` by metis_tac[symBodyStaticFactsTheory.placed_revert_sym_code_label] >>
   `inst.inst_opcode = ASSERT ==>
     ?off pc. FLOOKUP (SND (compute_label_offsets prog)) "revert" = SOME off /\
       off < dimword (:256) /\ FLOOKUP (build_offset_to_pc prog) off = SOME pc /\

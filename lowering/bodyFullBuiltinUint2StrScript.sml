@@ -7,6 +7,7 @@ Ancestors
   bodyFullPreds bodySimFull bodyFullOfVV bodyFullAllocaFresh bodyInvNoDalloca
   bodyFullGhostFrame bodyFullUnwrapRun bodyFullShared bodyMemoryDefs
   bodyFullBuiltinUint2StrSuffix bodyFullBuiltinUint2StrRun
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   exprSimUint2Str bodyMemBiUint2StrBlocks bodyPtrBytestringBuiltinsUintArithmetic
   gasOutcomeFullCompose gasOutcomeFull fragGasOriginPtrLoop fragGasSeqPtr
   bodyPtrDefs exprSimHypsDefs exprSimSource exprLoweringProps exprLowering
@@ -33,7 +34,6 @@ Theorem uint2str_builtin_sim_full:
       cenv cx ty (Builtin ann (Uint2Str n) args) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Builtin ann (Uint2Str n) args) es` suffices_by
     (strip_tac >> simp[] >> irule expr_sim_full_of_vv >> simp[] >>
@@ -191,6 +191,14 @@ Resume uint2str_builtin_sim_full[suffix]:
       (at_horizon_named "H" uint2str_suffix_joint_full)))) >>
   impl_tac >- suspend "suffix_entry" >>
   disch_then (qx_choose_then `u` (qx_choose_then `HG` (qx_choose_then `tm` strip_assume_tac))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+        gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,HG,tm) /\ _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+     (impl_tac >- fs[storage_trace_domain_def]) >>
+     disch_then (mp_tac o PURE_REWRITE_RULE [vv_post_def] o CONJUNCT1 o CONJUNCT2) >>
+     disch_then
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o CONJUNCT1)) >>
   irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`HG`, `mid`, `INL (Value (StringV (num_to_dec_string X)))`, `u`, `tm`] >>
   simp[uint2str_source_result] >>

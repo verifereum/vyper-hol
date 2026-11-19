@@ -24,7 +24,7 @@ Theorem raw_call_header_joint:
     local_ptrs_reserved cenv s2 /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at s2 x) /\
     (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at s2 x) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     fn_has_code s2 s4 fn /\ fn_inst_ids_distinct fn /\
     s.vs_current_bb = s2.cs_current_bb /\
     s.vs_inst_idx = LENGTH s2.cs_current_insts /\

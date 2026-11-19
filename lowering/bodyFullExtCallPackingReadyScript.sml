@@ -274,6 +274,8 @@ Resume extcall_request_packing_ready[nonempty]:
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
   `LENGTH bs = 4` by simp[Abbr `bs`, selectorCompilerPropsTheory.function_selector_length] >>
   `32 <= n` by simp[Abbr `n`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by simp[] >>
   mp_tac (Q.INST [`sa` |-> `se`, `sc` |-> `sm`, `shared` |-> `ba`,
      `tuple` |-> `aa`, `has_args` |-> `T`, `es` |-> `ee`, `H0` |-> `HH`]
      extcall_request_buffer_setup) >>
@@ -642,6 +644,8 @@ Resume extcall_request_packing_ready[nonempty]:
   `value_has_type (TupleTV tvs) (ArrayV (TupleV argvs))` by
     simp[vyperTypingTheory.value_has_type_def] >>
   `32 + abi <= n` by (simp[NoAsms,Abbr `n`] >> IF_CASES_TAC >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q /\
+    q.vs_alloca_next + pending_alloca_size func q <= w2n q.vs_initial_fmp` by simp[] >>
   qabbrev_tac `bytes = contractABI$enc
     (Tuple (vyper_to_abi_types (get_tenv cx) arg_types)) (ListV avs)` >>
   mp_tac (Q.INST [`a` |-> `st`, `b` |-> `sadd`, `c` |-> `senc`, `d` |-> `sf`, `e` |-> `sp`,

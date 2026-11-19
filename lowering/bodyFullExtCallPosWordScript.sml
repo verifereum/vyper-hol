@@ -9,6 +9,9 @@ Ancestors
   aggregateEvaluatedLayout valueCopyBytes targetPureSourceFrame exprSimWordArgs
   exprSafeOperand bodyMemoryDefs vyperState vyperStorageFootprint exprReasonOperand
   exprSimSend[qualified,ignore_grammar]
+  list[qualified,ignore_grammar]
+  ptrDiscipline[qualified,ignore_grammar]
+  unitTransformDefs[qualified,ignore_grammar]
 
 (* Retagging a word pointer changes no instruction emitted by unwrap_value. *)
 Theorem word_snapshot_unwrap[local]:
@@ -47,7 +50,8 @@ Theorem extcall_request_snapshot_word_owned_full:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
@@ -88,6 +92,18 @@ Theorem extcall_request_snapshot_word_owned_full:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_read_result] >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func cenv cx es s0 /\ _`
+       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx es s0`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr _ _ _ _ = (vv,sm)` >>
   `is_word_type (vv_type (ext_call_arg_value (lowered_value_type cenv e) vv))` by
@@ -114,12 +130,6 @@ Proof
     (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
      simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
   drule forced_expr_admissible_raw >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
-  `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule frag_reachable_members >> disch_then drule >>
-     strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_vv_sim_full_def] >> disch_then drule_all >>
   strip_tac >> suspend "read"

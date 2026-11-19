@@ -211,6 +211,8 @@ Theorem selector_packing_run[local]:
     t.vs_code = s.vs_code /\ t.vs_labels = s.vs_labels /\ t.vs_requests = s.vs_requests
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all (Q.SPEC `F` (GEN ``has_args:bool`` extcall_request_buffer_setup) |> SIMP_RULE (srw_ss()) []) >>
   disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] (qx_choose_then `q`
     (qx_choose_then `w` (qx_choose_then `u` (qx_choose_then `Gu`
@@ -660,7 +662,8 @@ Proof
   `tv' = tv /\ dw = w'` by
     (qpat_x_assum `evaluate_type _ dt = SOME tv'` mp_tac >>
      qpat_x_assum `eval_operand def s = SOME dw` mp_tac >> simp[]) >>
-  pop_assum (CONJUNCTS_THEN SUBST_ALL_TAC) >> simp[] >>
+  qpat_x_assum `tv' = tv` SUBST_ALL_TAC >>
+  qpat_x_assum `dw = w'` SUBST_ALL_TAC >>
   drule_then assume_tac exprSimPropsTheory.val_footprint_le >>
   qpat_assum `regions_disjoint (w2n w) n _ _` mp_tac >>
   rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac

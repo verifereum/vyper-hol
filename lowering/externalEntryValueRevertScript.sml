@@ -351,7 +351,8 @@ Proof
   gvs[optionTheory.OPTREL_def] >>
   rename1 `gas_shadow_function fn shadow_fn` >>
   simp[source_unit_execution_correct_def] >> qexists_tac `[]` >>
-  simp[source_unit_execution_correct_at_def] >>
+  simp[source_unit_execution_correct_at_def,
+       source_unit_execution_correct_with_def] >>
   qexistsl_tac [`shadow_unit.cu_context`, `shadow_fn`] >>
   simp[] >>
   conj_tac >- metis_tac[venomInstTheory.lookup_function_MEM] >>

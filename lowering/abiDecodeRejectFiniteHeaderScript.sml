@@ -65,7 +65,7 @@ Theorem finite_header_load[local]:
   emit_op MLOAD [Var q] a = (out,b) /\ fn_has_code a b func /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\ allocas_from lo s /\
-  ~ctx_has_dalloca ctx /\ lookup_var q s = SOME w /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ lookup_var q s = SOME w /\
   ptr_covers G tn q s 32 /\ w2n w + 32 <= s.vs_alloca_next /\
   (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) ==>
   ?G' tn'.
@@ -95,7 +95,7 @@ Theorem finite_header_address[local]:
   emit_op ADD [Var source;pos] a = (out,b) /\ fn_has_code a b func /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\ allocas_from lo s /\
-  ~ctx_has_dalloca ctx /\ lookup_var source s = SOME (n2w B) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ lookup_var source s = SOME (n2w B) /\
   ptr_covers G tn source s L /\ eval_operand pos s = SOME (n2w p) /\
   op_taint tn pos = {} /\ op_prov G pos = NONE /\
   p + 32 <= L /\ B + L < dimword(:256) ==>
@@ -137,7 +137,7 @@ Theorem finite_header_branch[local]:
   emit_inst JNZ [done;Label exit_lbl;Label body_lbl] [] c = ((),d) /\ fn_has_code a d func /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\ allocas_from lo s /\
-  ~ctx_has_dalloca ctx /\ lookup_var ix s = SOME (n2w j) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ lookup_var ix s = SOME (n2w j) /\
   eval_operand cnt s = SOME (n2w n) /\ j < n /\ n < dimword(:256) /\
   op_taint tn (Var ix) = {} /\ op_prov G (Var ix) = NONE /\
   op_taint tn cnt = {} /\ op_prov G cnt = NONE ==>
@@ -174,7 +174,7 @@ Theorem malformed_finite_header_body_joint:
   compile_abi_decode_dyn_loop (Var dst) pos MLOAD (Var source) hi di asz msz
     (Var slotvar) initial_count ls = ((),en) /\ fn_has_code ls en func /\
   ~s.vs_halted /\ s.vs_current_bb = fresh_label_output "dec_dyn_hdr" ls.cs_next_label /\
-  s.vs_inst_idx = 0 /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = 0 /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   mem_bytes_at B L s.vs_memory = xs /\ p + 32 <= L /\
   B + L < dimword(:256) /\ B + L <= s.vs_alloca_next /\
@@ -268,6 +268,11 @@ Resume malformed_finite_header_body_joint[loads]:
      conj_tac >- simp[Abbr `s1`] >>
      simp[Abbr `s1`,update_var_def,allocas_from_def,NoAsms] >>
      qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE[allocas_from_def])) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (drule_then assume_tac) >>
+     simp[Abbr `s1`,allocas_below_fmp_def,update_var_def] >>
+     fs[allocas_below_fmp_def]) >>
   drule_all finite_header_address >>
   disch_then (qspec_then `PG` (strip_assume_tac o BETA_RULE o REWRITE_RULE[LET_THM])) >>
   rename1 `tn2.t_mem = tn1.t_mem` >>
@@ -296,6 +301,11 @@ Resume malformed_finite_header_body_joint[loads]:
    a3.cs_next_var = a2.cs_next_var + 1` by metis_tac[emitted_insts_emit_op] >>
   qpat_x_assum `emit_op MLOAD [Var slotvar] a = _` kall_tac >>
   `emit_op MLOAD [Var ax] a2 = (cnt,a3)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >> qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1`
+       (drule_then assume_tac) >>
+     simp[Abbr `s2`,allocas_below_fmp_def,update_var_def] >>
+     fs[allocas_below_fmp_def]) >>
   drule_all finite_header_load >> disch_then (qspec_then `PG` strip_assume_tac) >>
   rename1 `op_prov G3 cnt = NONE` >> rename1 `op_taint tn3 cnt = {}` >>
   qabbrev_tac `cv = STRING #"%" (toString a2.cs_next_var)` >>
@@ -319,6 +329,11 @@ Resume malformed_finite_header_body_joint[loads]:
     (qpat_assum `allocas_from lo s2` (mp_tac o REWRITE_RULE[allocas_from_def]) >>
      simp[Abbr `s3`,update_var_def,allocas_from_def]) >>
   `emit_op LT [Var ix;cnt] a3 = (lt,a4)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (strip_tac >> qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2`
+       (drule_then assume_tac) >>
+     simp[Abbr `s3`,allocas_below_fmp_def,update_var_def] >>
+     fs[allocas_below_fmp_def]) >>
   drule_all finite_header_branch >> disch_then (qspec_then `PG` strip_assume_tac) >>
   rename1 `tn4.t_mem = tn3.t_mem` >>
   rename1 `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)

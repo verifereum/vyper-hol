@@ -105,7 +105,9 @@ Resume external_entry_value_revert_dispatched_nr[installed_checks]:
 QED
 
 Resume external_entry_value_revert_dispatched_nr[joint_certificate]:
-  rewrite_tac[source_unit_execution_correct_def, source_unit_execution_correct_at_def] >>
+  rewrite_tac[source_unit_execution_correct_def,
+              source_unit_execution_correct_at_def,
+              source_unit_execution_correct_with_def] >>
   qexists_tac `[]` >>
   qexistsl_tac [`unit.cu_context`, `fn`, `fn`] >>
   asm_rewrite_tac[] >>

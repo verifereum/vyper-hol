@@ -210,7 +210,8 @@ Theorem call_gas_static_no_abort:
 Proof
   rpt strip_tac >>
   qpat_x_assum `source_unit_execution_correct_at _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def])
+    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def,
+                                      source_unit_execution_correct_with_def])
   >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> simp[])
   >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
         (qspec_then `[]` assume_tac) >> fs[] >>
@@ -374,7 +375,8 @@ Proof
     fs[gas_source_exempt_def] >>
   `?n. terminates (run_context n unit.cu_context vi)` by
     (qpat_assum `source_unit_execution_correct_at _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def])
+       (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def,
+                                         source_unit_execution_correct_with_def])
      >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >>
          fs[Abbr`obs`])
      >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
@@ -671,6 +673,7 @@ Theorem e2e_deploy_gas_sufficient_identity:
     ==>
     ?g. !g'.
       g <= g' /\
+      LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
       (!gs. deploy_storage_ok tops am tx
               (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
       (!obs. ~deploy_gas_source_exempt tops
