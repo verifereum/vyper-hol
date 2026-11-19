@@ -1,7 +1,7 @@
 (* BlockHash suffix: one endpoint and one ghost pair for all horizons. *)
 Theory bodyFullBuiltinEnvBlockHashSuffix
 Ancestors
-  stateRelProj
+  stateRelProj bodyFullHashKeccakFixed
   bodyFullGhostFrame fragGasEmitCtrl fragGasSeqPtr gasOutcomeFullCompose
   builtinProps builtinMisc builtinSimple exprSimUnopProps exprSimDefs
   exprSimHypsDefs exprSimSource exprSimProps exprLoweringProps compileEnv
@@ -24,7 +24,7 @@ Theorem blockhash_full_suffix:
  0 <= i /\ i < 2 ** 256 /\
  eval_operand arg s = SOME (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i)) /\
  op_taint tn arg = {} /\ op_prov G arg = NONE /\
- (!p. arg = Var p ==> not_fresh_at sa p) /\ ~ctx_has_dalloca ctx /\
+ (!p. arg = Var p ==> not_fresh_at sa p) /\
  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
  (!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -59,6 +59,8 @@ Proof
     mid.storage_trace` by fs[storage_trace_domain_def] >>
  `stmt_state_rel (storage_trace_horizon mid.storage_trace)
     ctx func cenv cx mid s` by metis_tac[] >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+   (drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
  `call_ctx_rel cx.txn s.vs_call_ctx s.vs_tx_ctx s.vs_block_ctx` by
    metis_tac[stmt_state_rel_state_rel, state_rel_call_ctx_rel] >>
  `tx_env_ok cx.txn` by fs[call_ctx_rel_def] >>
@@ -213,6 +215,18 @@ Proof
     ptr_inst_ok D lo 0 ctx func G2 tn2 j3 (u2 with vs_inst_idx := k) /\
     ptr_inst_ok D lo 0 ctx func G3 tn3 j4 (u3 with vs_inst_idx := k)` by
    (rpt gen_tac >> strip_tac >>
+    `!k. (allocas_below_fmp (u1 with vs_inst_idx := k) <=> allocas_below_fmp s) /\
+         (allocas_below_fmp (u2 with vs_inst_idx := k) <=> allocas_below_fmp s) /\
+         (allocas_below_fmp (u3 with vs_inst_idx := k) <=> allocas_below_fmp s)` by
+      simp[allocas_below_fmp_def, Abbr `u1`, Abbr `u2`, Abbr `u3`, update_var_def] >>
+    `!operand. (operand <> Var cur /\ operand <> Lit 256w) \/
+       op_taint tn1 operand = {}` by
+      (qx_gen_tac `operand` >> Cases_on `operand = Var cur` >> simp[] >>
+       Cases_on `operand = Lit 256w` >> simp[op_taint_def]) >>
+    `!operand. (operand <> arg /\ operand <> Var low) \/
+       op_taint tn2 operand = {}` by
+      (qx_gen_tac `operand` >> Cases_on `operand = arg` >> simp[] >>
+       Cases_on `operand = Var low` >> simp[]) >>
     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
       Abbr `j1`, Abbr `j2`, Abbr `j3`, Abbr `j4`, mk_inst_def,
       source_memory_write_ranges_def, contextCodegenRelTheory.source_memory_read_ranges_def,
@@ -220,14 +234,7 @@ Proof
       exec_result_map_def] >>
     simp[Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `u4`,
       update_var_def, allocas_from_def] >>
-    fs[allocas_from_def] >> conj_tac
-    >- (reverse conj_tac >- metis_tac[] >>
-        qx_gen_tac `operand` >> Cases_on `operand = Var cur` >> simp[] >>
-        Cases_on `operand = Lit 256w` >> simp[op_taint_def]) >>
-    conj_tac
-    >- (reverse conj_tac >- metis_tac[] >>
-        qx_gen_tac `operand` >> Cases_on `operand = arg` >> simp[] >>
-        Cases_on `operand = Var low` >> simp[]) >> metis_tac[]) >>
+    fs[allocas_from_def] >> metis_tac[]) >>
  `!D lo. allocas_from lo s ==>
     inst_seq_ptr D lo ctx func PG G tn [j1;j2;j3;j4] s G4 tn4` by
    (map_every qx_gen_tac [`D0`,`lo0`] >> strip_tac >>
@@ -282,6 +289,10 @@ Proof
   v4.vs_allocas = s.vs_allocas /\ v4.vs_alloca_next = s.vs_alloca_next` by
    simp[Abbr `v4`, Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`,
      eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE, ALL_DISTINCT] >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp v4` by
+   (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+    simp[allocas_below_fmp_def, Abbr `v4`, Abbr `u4`, Abbr `u3`, Abbr `u2`,
+      Abbr `u1`, update_var_def]) >>
  `!D lo. allocas_from lo s ==> ptr_inst_ok D lo 0 ctx func G4 tn4 j5 v4` by
    (rpt gen_tac >> strip_tac >>
     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, Abbr `j5`, mk_inst_def,
@@ -370,6 +381,9 @@ Proof
    (simp[access_ok_def, taint_ok_def, Abbr `j5`, mk_inst_def,
       source_memory_write_ranges_def, contextCodegenRelTheory.source_memory_read_ranges_def] >>
     metis_tac[]) >>
+ `!k. allocas_below_fmp (u4 with vs_inst_idx := k) <=> allocas_below_fmp s` by
+   simp[allocas_below_fmp_def, Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`,
+     update_var_def] >>
  `!D lo k. allocas_from lo s ==>
    ptr_inst_ok D lo 0 ctx func G4 tn4 j5 (u4 with vs_inst_idx := k) /\
    ptr_inst_ok D lo 0 ctx func G4 tn4 j6 (u4 with vs_inst_idx := k)` by
@@ -436,6 +450,10 @@ Proof
       out_prov_def, out_taint_def, op_taint_def, op_prov_def,
       set_var_taint_def, set_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
     Cases_on `eval_operand arg u4` >> simp[]) >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp v6` by
+   (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+    simp[allocas_below_fmp_def, Abbr `v6`, Abbr `u6`, Abbr `u4`, Abbr `u3`, Abbr `u2`,
+      Abbr `u1`, update_var_def]) >>
  `!D lo. allocas_from lo s ==> ptr_inst_ok D lo 0 ctx func G6 tn6 j7 v6` by
    (rpt gen_tac >> strip_tac >>
     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, Abbr `j7`, mk_inst_def,
@@ -522,6 +540,9 @@ Resume blockhash_full_suffix[success]:
    (qx_gen_tac `D1` >> qx_gen_tac `lo1` >> qx_gen_tac `k` >> strip_tac >>
     `allocas_from lo1 (v6 with vs_inst_idx := k) /\ allocas_from lo1 u8` by
       (qpat_x_assum `allocas_from lo1 s` mp_tac >> simp[allocas_from_def]) >>
+    `ctx_has_dalloca ctx ==> allocas_below_fmp (v6 with vs_inst_idx := k)` by
+      (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp v6` mp_tac >>
+       simp[allocas_below_fmp_def]) >>
     simp[ptr_inst_ok_def, step_inst_non_invoke, step_inst_inst_idx_indep,
       exec_result_map_def] >>
     simp[access_ok_def, taint_ok_def, Abbr `j8`, mk_inst_def,
