@@ -695,7 +695,7 @@ Proof
         (irule storage_well_formed_on_backends >> simp[]) >>
       qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
         (qspec_then `H` mp_tac) >>
-      simp[] >> strip_tac >> gvs[ghost_inv_at_def] >>
+      simp[] >> strip_tac >> gvs[ghost_inv_at_def, wb_frame_refl] >>
       first_assum ACCEPT_TAC) >>
   qmatch_asmsub_rename_tac `body_exprs_full_ok cx (e::xs)` >>
   qabbrev_tac `copy = exprs_can_mutate cenv (xs ++ kw_es)` >>
@@ -711,6 +711,11 @@ Proof
      simp[gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
   gvs[] >> rename1 `compile_expr cenv (expr_type e) e sa = (vv,si)` >>
+  `vv_type (ext_call_arg_value (lowered_value_type cenv e) vv) =
+        lowered_value_type cenv e` by
+    metis_tac[extcall_operand_snapshot_type] >>
+  `is_word_type (lowered_value_type cenv e) <=> is_word_type (expr_type e)` by
+    metis_tac[expr_body_pre_lowered_fits, arg_type_fits_word_type] >>
   qabbrev_tac `snap = compile_snapshot_vv cenv copy (ext_call_arg_value (lowered_value_type cenv e) vv)` >>
   `gas_shadow_compiles snap snap` by
     simp[Abbr `snap`, gasShadowCompileConvertTheory.gas_shadow_compiles_snapshot_vv] >>
@@ -877,9 +882,10 @@ Proof
             simp[] >> metis_tac[]) >>
          qexists_tac `raw` >> simp[] >>
          irule extcall_saved_physical_store_bound >> metis_tac[]) >>
-     `vv_type (ext_call_arg_value (lowered_value_type cenv e) vv) =
-          lowered_value_type cenv e` by
-       metis_tac[extcall_operand_snapshot_type] >>
+     `compile_materialize_vv cenv (lowered_value_type cenv e)
+         (ext_call_arg_value (lowered_value_type cenv e) vv) =
+       compile_materialize_vv cenv (lowered_value_type cenv e) vv` by
+       metis_tac[extcall_operand_materialize_retag] >>
      `?op. compile_materialize_vv cenv (lowered_value_type cenv e) vv si = (op,sm) /\
        compile_materialize_vv cenv (lowered_value_type cenv e) vv shadow_si = (op,shadow_sm) /\
        sv = LocatedValue (lowered_value_type cenv e) (mk_ptr op LocMemory)` by
@@ -1126,11 +1132,14 @@ Proof
          val_in_memory rt hv (w2n w) mem))` by
     (namedCases_on `sv` ["tag op", "tag p"] >>
      simp[vv_location_def, Excl "vv_storage_live_def"]
-     >- (simp[] >> irule extcall_request_saved_stack_endpoint >> simp[] >>
-         qexistsl_tac [`G1`,`func`,`lo`,`mid`,`sm`,`t`,`tn1`] >>
+     >- (simp[vv_storage_live_def] >> irule extcall_request_saved_stack_endpoint >>
          simp[ci_mono_refl, vv_operand_def] >>
-         disj2_tac >> disj2_tac >>
-         qexistsl_tac [`env`,`H`,`H`,`ctx`] >> simp[]) >>
+         qexistsl_tac [`G1`,`func`,`lo`,`mid`,`sm`,`t`,`tn1`] >>
+         Cases_on `is_word_type (lowered_value_type cenv e)` >> simp[] >>
+         `~copy` by
+           (CCONTR_TAC >> qpat_assum `copy /\ _ ==> _` mp_tac >>
+            simp[vv_location_def]) >>
+         disj2_tac >> qexistsl_tac [`env`,`H`,`H`,`ctx`] >> simp[]) >>
      `tag = lowered_value_type cenv e /\ ~is_word_type (lowered_value_type cenv e)` by
        (qpat_assum `(?tag' op0. LocatedValue tag p = StackValue tag' op0) \/ _`
           mp_tac >> simp[NoAsms] >> strip_tac >> simp[]) >>

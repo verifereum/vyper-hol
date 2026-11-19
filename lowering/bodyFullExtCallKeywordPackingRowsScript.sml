@@ -121,16 +121,17 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS)
   >- (simp[vv_storage_live_def] >> irule extcall_request_saved_stack_endpoint >>
       simp[ci_mono_refl] >> qexistsl_tac [`Gp`,`func`,`lo`,`pos`,`ss`,`u`,`tp`] >>
+      Cases_on `is_word_type (lowered_value_type cenv e)` >>
       simp[ci_mono_refl] >>
-      disj2_tac >> disj2_tac >>
-      qexistsl_tac [`env`,`H`,`H`,`ctx`] >> simp[]) >>
+      `~copy` by metis_tac[] >>
+      disj2_tac >> qexistsl_tac [`env`,`H`,`H`,`ctx`] >> simp[]) >>
   `tag = lowered_value_type cenv e /\ ~is_word_type (lowered_value_type cenv e)` by
     (qpat_assum `_ \/ _` mp_tac >> metis_tac[]) >>
   qpat_x_assum `tag = lowered_value_type cenv e` SUBST_ALL_TAC >>
   qpat_x_assum `_ \/ _` kall_tac >>
   Cases_on `p.ptr_location = LocMemory`
   >- (Cases_on `copy`
-      >- (qpat_assum `_ ==> ?x w tv. vv_operand _ = Var x /\ _` mp_tac >>
+      >- (qpat_assum `_ ==> ?x w tv. p.ptr_location = LocMemory /\ p.ptr_operand = Var x /\ _` mp_tac >>
           impl_tac >- simp[] >>
           disch_then (qx_choosel_then [`x`,`w`,`tv`] strip_assume_tac) >>
           `vv_type (ext_call_arg_value (lowered_value_type cenv e) vv) =
@@ -144,6 +145,7 @@ Proof
             (qpat_assum `?raw. read_result cx raw pos = (INL v,pos) /\ _`
                (qx_choose_then `raw0` strip_assume_tac) >>
              gvs[vv_holds_def, ptr_vv_ok_def, ptr_val_ok_def]) >>
+          `lookup_var x u = SOME w` by fs[venomStateTheory.eval_operand_def] >>
           `w2n w + type_memory_size tv <= u.vs_alloca_next` by
             (irule allocaSiteResourceTheory.alloca_site_registered_below >>
              qexists_tac `sm.cs_next_id` >> simp[]) >>

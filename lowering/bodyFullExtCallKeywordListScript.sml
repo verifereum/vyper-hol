@@ -266,7 +266,7 @@ Proof
         (irule storage_well_formed_on_backends >> simp[]) >>
       qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
         (qspec_then `H` mp_tac) >>
-      simp[] >> strip_tac >> gvs[ghost_inv_at_def] >>
+      simp[] >> strip_tac >> gvs[ghost_inv_at_def, wb_frame_refl] >>
       first_assum ACCEPT_TAC) >>
   suspend "cons"
 QED

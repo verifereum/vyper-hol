@@ -308,9 +308,8 @@ Proof
   reverse conj_tac
   >- (irule gas_outcome_full_post_source >>
       first_assum (irule_at Any) >> simp[Abbr `childR`] >>
-      rpt strip_tac >> Cases_on `res` >> gvs[expr_exit_def, halt_exit_def] >>
-      qpat_assum `expr_exit (INR _) r` mp_tac >>
-      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[expr_exit_INR_type]) >>
+      rpt strip_tac >> Cases_on `res` >>
+      gvs[expr_exit_def, halt_exit_def, expr_exit_INR_type]) >>
   suspend "read"
 QED
 
