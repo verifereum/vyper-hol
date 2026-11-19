@@ -14,6 +14,225 @@ Ancestors
   vfmExecution codegen asmIR
   finite_map list rich_list words arithmetic
 
+Theorem focus_row_visit_inverse[local]:
+  !xs be.
+    DROP be.vs_inst_idx bt.bb_instructions = xs /\
+    MEM ((a,e,i.inst_id),tf,i,t)
+      (trace_block a e fuel C tf bt be) ==>
+    ?pre rest. xs = pre ++ i::rest /\
+      t.vs_inst_idx = be.vs_inst_idx + LENGTH pre /\
+      EVERY (\x. ~is_terminator x.inst_opcode) pre /\
+      FOLDR (dft_exec_cons fuel C) OK pre be = OK t
+Proof
+  Induct
+  >- (rpt strip_tac >>
+      `LENGTH bt.bb_instructions <= be.vs_inst_idx` by
+        (gvs[GSYM LENGTH_NIL, LENGTH_DROP]) >>
+      fs[Once (cj 2 trace_defs), get_instruction_def]) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `DROP be.vs_inst_idx bt.bb_instructions = head::xs` >>
+  `be.vs_inst_idx < LENGTH bt.bb_instructions` by
+    (qpat_assum `DROP _ _.bb_instructions = _::_`
+       (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[NoAsms, LENGTH_DROP]) >>
+  `get_instruction bt be.vs_inst_idx = SOME head /\
+   DROP (SUC be.vs_inst_idx) bt.bb_instructions = xs` by
+    (drule DROP_BY_DROP_SUC >> simp[get_instruction_def]) >>
+  drule_then assume_tac trace_block_visit >>
+  qpat_x_assum `MEM _ (trace_block _ _ _ _ _ _ _)` mp_tac >>
+  asm_rewrite_tac[MEM, MEM_APPEND, pairTheory.PAIR_EQ] >> strip_tac
+  >- (gvs[] >> qexistsl [`[]`,`xs`] >> simp[])
+  >- (`MEM (a,e,i.inst_id) (MAP FST (trace_step a e fuel C tf head be))` by
+        (simp[MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+      metis_tac[dftGasFromListTraceNamesTheory.trace_step_not_root]) >>
+  Cases_on `step_inst fuel C head be` >> gvs[] >>
+  Cases_on `is_terminator head.inst_opcode` >> gvs[] >>
+  rename1 `step_inst fuel C head be = OK post` >>
+  qpat_x_assum `!s. DROP _ _ = _ /\ MEM _ _ ==> _`
+    (qspec_then `post with vs_inst_idx := SUC be.vs_inst_idx` mp_tac) >>
+  simp[] >> strip_tac >>
+  qexistsl [`head::pre`,`rest`] >> simp[dftIndexedExecTheory.dft_exec_cons_def]
+QED
+
+(* A child frame keeps its call site throughout the child's trace. Changing
+   the selected instruction ID does not move that frame to another site. *)
+Theorem focus_child_row_excludes[local]:
+  MEM ((p,d,id),fn,i,t) (trace_step P D fuel C f head s) /\
+  ~MEM head.inst_id (MAP (\x. x.inst_id) (DROP post.vs_inst_idx bb.bb_instructions)) ==>
+  !id' g j u. ~MEM ((p,d,id'),g,j,u) (trace_block P D fuel C f bb post)
+Proof
+  rpt strip_tac >>
+  drule (REWRITE_RULE [EVERY_MEM] (cj 1 dftGasFromListTraceNamesTheory.trace_regions)) >>
+  simp[] >> strip_tac >>
+  `block_region P D [head.inst_id] (p,d,id')` by
+    (irule dftGasFromListTraceNamesTheory.below_call_region >> simp[] >>
+     qexists `head.inst_id` >> simp[]) >>
+  drule dftGasFromListTraceNamesTheory.trace_block_region >> simp[] >> strip_tac >>
+  metis_tac[dftGasFromListTraceNamesTheory.block_regions_disjoint, MEM]
+QED
+
+Theorem focus_later_row_excludes[local]:
+  MEM ((p,d,id),fn,i,t) (trace_block P D fuel C f bb s) ==>
+  !id' g j u. ~MEM ((p,d,id'),g,j,u) (trace_blocks P D fuel C f post)
+Proof
+  rpt strip_tac >>
+  drule dftGasFromListTraceNamesTheory.trace_blocks_region >> simp[] >> strip_tac >>
+  `later_region P D (p,d,id)` by
+    fs[dftGasFromListTraceNamesTheory.later_region_def] >>
+  drule dftGasFromListTraceNamesTheory.trace_block_region >> simp[] >>
+  metis_tac[dftGasFromListTraceNamesTheory.block_later_disjoint]
+QED
+
+Theorem focus_row_continuations[local]:
+  (!P D fuel C f inst s. !h p d id fn i t.
+    EVERY (\g. EVERY (\b. ALL_DISTINCT (MAP (\x. x.inst_id) b.bb_instructions))
+                     g.fn_blocks) C.ctx_functions /\
+    h < LENGTH (trace_step P D fuel C f inst s) /\
+    EL h (trace_step P D fuel C f inst s) = ((p,d,id),fn,i,t) ==>
+    ?bt rest. lookup_block t.vs_current_bb fn.fn_blocks = SOME bt /\
+      get_instruction bt t.vs_inst_idx = SOME i /\ id = i.inst_id /\
+      d <= D + fuel /\
+      DROP h (trace_step P D fuel C f inst s) =
+        trace_block p d (D + fuel - d) C fn bt t ++ rest /\
+      (!id' g j u. ~MEM ((p,d,id'),g,j,u) rest)) /\
+  (!P D fuel C f bb s. !h p d id fn i t.
+    EVERY (\g. EVERY (\b. ALL_DISTINCT (MAP (\x. x.inst_id) b.bb_instructions))
+                     g.fn_blocks) C.ctx_functions /\
+    ALL_DISTINCT (MAP (\x. x.inst_id) bb.bb_instructions) /\
+    lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+    h < LENGTH (trace_block P D fuel C f bb s) /\
+    EL h (trace_block P D fuel C f bb s) = ((p,d,id),fn,i,t) ==>
+    ?bt rest. lookup_block t.vs_current_bb fn.fn_blocks = SOME bt /\
+      get_instruction bt t.vs_inst_idx = SOME i /\ id = i.inst_id /\
+      d <= D + fuel /\
+      DROP h (trace_block P D fuel C f bb s) =
+        trace_block p d (D + fuel - d) C fn bt t ++ rest /\
+      (!id' g j u. ~MEM ((p,d,id'),g,j,u) rest)) /\
+  (!P D fuel C f s. !h p d id fn i t.
+    EVERY (\g. EVERY (\b. ALL_DISTINCT (MAP (\x. x.inst_id) b.bb_instructions))
+                     g.fn_blocks) C.ctx_functions /\
+    EVERY (\b. ALL_DISTINCT (MAP (\x. x.inst_id) b.bb_instructions)) f.fn_blocks /\
+    h < LENGTH (trace_blocks P D fuel C f s) /\
+    EL h (trace_blocks P D fuel C f s) = ((p,d,id),fn,i,t) ==>
+    ?bt rest. lookup_block t.vs_current_bb fn.fn_blocks = SOME bt /\
+      get_instruction bt t.vs_inst_idx = SOME i /\ id = i.inst_id /\
+      d <= D + fuel /\
+      DROP h (trace_blocks P D fuel C f s) =
+        trace_block p d (D + fuel - d) C fn bt t ++ rest /\
+      (!id' g j u. ~MEM ((p,d,id'),g,j,u) rest))
+Proof
+  ho_match_mp_tac trace_defs_ind >> rpt conj_tac
+  >- suspend "step"
+  >- suspend "block"
+  >> suspend "blocks"
+QED
+
+Resume focus_row_continuations[step]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = INVOKE` >> gvs[cj 1 trace_defs] >>
+  Cases_on `decode_invoke inst` >> gvs[] >>
+  rename1 `decode_invoke inst = SOME pair` >> PairCases_on `pair` >>
+  Cases_on `lookup_function pair0 C.ctx_functions` >> gvs[] >>
+  rename1 `lookup_function _ _ = SOME callee` >>
+  Cases_on `eval_operands pair1 s` >> gvs[] >>
+  rename1 `eval_operands _ _ = SOME args` >>
+  Cases_on `setup_callee callee args s` >> gvs[] >>
+  first_x_assum irule >> simp[] >>
+  gvs[EVERY_MEM] >> metis_tac[venomInstTheory.lookup_function_MEM]
+QED
+
+Resume focus_row_continuations[block]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- (qpat_x_assum `h < _` mp_tac >> simp[Once (cj 2 trace_defs)]) >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME head` >>
+  drule_then assume_tac trace_block_visit >>
+  Cases_on `h`
+  >- (gvs[] >> qexists_tac `bb` >> qexists_tac `[]` >> simp[]) >>
+  rename1 `SUC k` >>
+  gvs[] >>
+  Cases_on `k < LENGTH (trace_step P D fuel C f head s)`
+  >- (gvs[EL_APPEND] >>
+      qpat_x_assum `!h p d id fn i t. _` drule_all >> strip_tac >>
+      qexists_tac `bt` >>
+      qmatch_goalsub_abbrev_tac `DROP k (ts ++ tail)` >>
+      qexists_tac `rest ++ tail` >>
+      simp[DROP_APPEND1, Abbr `ts`, APPEND_ASSOC, MEM_APPEND] >>
+      Cases_on `step_inst fuel C head s` >> gvs[Abbr `tail`] >>
+      rename1 `step_inst _ _ _ _ = OK post` >>
+      Cases_on `is_terminator head.inst_opcode` >> gvs[] >>
+      irule focus_child_row_excludes >>
+      `ALL_DISTINCT (MAP (\x. x.inst_id) (DROP s.vs_inst_idx bb.bb_instructions))` by
+        (rewrite_tac[MAP_DROP] >> irule ALL_DISTINCT_DROP >> simp[]) >>
+      qpat_assum `get_instruction bb s.vs_inst_idx = SOME head`
+        (mp_tac o MATCH_MP dftGasFromListTraceNamesTheory.remaining_ids_step) >>
+      strip_tac >> gvs[] >>
+      `MEM ((p,d,i.inst_id),fn,i,t) (trace_step P D fuel C f head s)` by
+        (simp[MEM_EL] >> qexists `k` >> simp[]) >>
+      goal_assum $ drule_at Any >> simp[]) >>
+  Cases_on `step_inst fuel C head s` >> gvs[] >>
+  rename1 `step_inst _ _ _ _ = OK post` >>
+  Cases_on `is_terminator head.inst_opcode` >> gvs[] >>
+  drule_all venomInstProofsTheory.step_preserves_control_flow >> strip_tac >>
+  gvs[EL_APPEND, DROP_APPEND2] >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Resume focus_row_continuations[blocks]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `fuel` >- gvs[] >>
+  rename1 `trace_blocks P D (SUC n) C f s` >>
+  Cases_on `lookup_block s.vs_current_bb f.fn_blocks`
+  >- (qpat_x_assum `h < _` mp_tac >> simp[Once (cj 3 trace_defs)]) >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  Cases_on `eval_phis s bb.bb_instructions` >> gvs[] >>
+  qpat_x_assum `h < _` mp_tac >>
+  once_rewrite_tac[cj 3 trace_defs] >> simp[] >> strip_tac >>
+  rename1 `eval_phis _ _ = OK sp` >>
+  drule_all trace_blocks_enter >> disch_then assume_tac >> gvs[] >>
+  `sp.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+  `ALL_DISTINCT (MAP (\x. x.inst_id) bb.bb_instructions)` by
+    (gvs[EVERY_MEM] >> metis_tac[venomExecProofsTheory.lookup_block_MEM]) >>
+  qmatch_asmsub_abbrev_tac `exec_block n C bb start` >>
+  Cases_on `h < LENGTH (trace_block P (SUC D) n C f bb start)`
+  >- (gvs[EL_APPEND, Abbr `start`] >>
+      qpat_x_assum `!h p d id fn i t. _` drule_all >> strip_tac >>
+      qexists_tac `bt` >>
+      qmatch_goalsub_abbrev_tac `DROP h (ts ++ tail)` >>
+      qexists_tac `rest ++ tail` >>
+      simp[DROP_APPEND1, Abbr `ts`, APPEND_ASSOC, ADD_CLAUSES, MEM_APPEND] >>
+      Cases_on `exec_block n C bb (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+      gvs[Abbr `tail`] >>
+      rename1 `exec_block _ _ _ _ = OK post` >>
+      Cases_on `post.vs_halted` >> gvs[] >>
+      metis_tac[focus_later_row_excludes, MEM_EL]) >>
+  Cases_on `exec_block n C bb start` >> gvs[] >>
+  rename1 `exec_block _ _ _ _ = OK post` >>
+  Cases_on `post.vs_halted` >> gvs[] >>
+  gvs[EL_APPEND, DROP_APPEND2, ADD_CLAUSES] >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Finalise focus_row_continuations[local]
+
+Theorem focus_row_continuation[local]:
+  !P D fuel C f s h p d id fn i t.
+    EVERY (\g. EVERY (\b. ALL_DISTINCT (MAP (\x. x.inst_id) b.bb_instructions))
+                     g.fn_blocks) C.ctx_functions /\
+    EVERY (\b. ALL_DISTINCT (MAP (\x. x.inst_id) b.bb_instructions)) f.fn_blocks /\
+    h < LENGTH (trace_blocks P D fuel C f s) /\
+    EL h (trace_blocks P D fuel C f s) = ((p,d,id),fn,i,t) ==>
+    ?bt rest. lookup_block t.vs_current_bb fn.fn_blocks = SOME bt /\
+      get_instruction bt t.vs_inst_idx = SOME i /\ id = i.inst_id /\
+      d <= D + fuel /\
+      DROP h (trace_blocks P D fuel C f s) =
+        trace_block p d (D + fuel - d) C fn bt t ++ rest /\
+      (!id' g j u. ~MEM ((p,d,id'),g,j,u) rest)
+Proof
+  ACCEPT_TAC (cj 3 focus_row_continuations)
+QED
+
 (* Scratch statement for elaboration and independent review.
    Use the actual stopped six tables and their C8 chronology. Split a
    compatible raw at Mcut, with the unread suffix and [0w] as tail.
