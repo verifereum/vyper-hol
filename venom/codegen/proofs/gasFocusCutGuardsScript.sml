@@ -405,6 +405,16 @@ Proof
   qexistsl [`z`,`q`] >> simp[]
 QED
 
+fun reuse_witnesses th (asl, goal) =
+  let
+    val vars = map (variant (free_varsl (goal::asl)))
+      (fst (strip_exists (concl th)))
+  in
+    (List.foldr (fn (v,t) => Thm_cont.X_CHOOSE_THEN v t)
+       (map_every assume_tac o CONJUNCTS) vars th >>
+     map_every EXISTS_TAC vars) (asl, goal)
+  end
+
 (* Scratch statement for elaboration and independent review.
    For the given compatible filling, use the H1 bounded family.
    The outcomes are continuation, beyond the marked cut, forwarding,
@@ -809,18 +819,57 @@ Theorem focus_cut_guard_or_stop:
       (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
       u.vs_initial_fmp = visit_state.vs_initial_fmp))))
 Proof
-  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
-  (fn (asl, goal) =>
-    let
-      val (input, _) = dest_imp goal
-      val available = strip_conj input
-      val supplier = CONV_RULE (DEPTH_CONV BETA_CONV)
-        (PURE_REWRITE_RULE [LET_THM] focus_source_cut_provider)
-      val (needed, _) = dest_imp (concl supplier)
-      val _ = if List.all (fn tm => List.exists (aconv tm) available)
-                    (strip_conj needed) then ()
-              else raise Fail "C1.9 and C1.10 need the same packet and cursor"
-    in
-      (strip_tac >> drule supplier >> cheat) (asl, goal)
-    end)
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac focus_source_cut_provider >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (CONJUNCTS_THEN2 (mk_asm "current")
+    (CONJUNCTS_THEN2 (mk_asm "history") (mk_asm "marks"))) >>
+  reverse conj_tac >- asm "history" ACCEPT_TAC >>
+  asm_x "current" reuse_witnesses >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (fn gate => first_x_assum (fn th => mp_tac (MATCH_MP th gate))) >>
+  disch_then reuse_witnesses >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  Cases_on `MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w])) <= LENGTH Mcut`
+  >- (disj2_tac >> disj1_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `~(MIN (LENGTH (markf (raw ++ [0w]))) (LENGTH (raw ++ [0w])) <= LENGTH Mcut)`
+    (assume_tac o REWRITE_RULE [NOT_LESS_EQUAL]) >>
+  Cases_on `in_revert_forward fn9 s9`
+  >- (disj2_tac >> disj2_tac >> disj1_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
+  disj1_tac >>
+  asm_x "marks" (qspec_then `raw` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then strip_assume_tac >>
+  irule focus_current_witness_guard >>
+  qpat_assum `cfg_norm_joint_cursors _ _ _ _ _` (irule_at Any) >>
+  qhdtm_assum `dft_focus_packet_rel` (irule_at Any) >>
+  qpat_assum `FLOOKUP acts p = SOME _` (irule_at Any) >>
+  qpat_assum `FLOOKUP blocks (p,d) = SOME _` (irule_at Any) >>
+  qpat_assum `_ <= LENGTH (gas_events_blocks f7 _ _ _)` (irule_at Any) >>
+  qexistsl [`z`,`vs0`,`src_inst`,`q`,`nm`,`mr`,`levels`,`lbl7`,`es0`,`Mcut`,`Ecut`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (qpat_assum `stage 9 = out.po_unit.cu_context` SUBST1_TAC >>
+      first_assum ACCEPT_TAC)
+  >- (map_every qx_gen_tac [`fuel`,`readings`,`tail`] >> disch_tac >>
+      qpat_assum `!F gs tail. N <= F /\ LIST_REL _ Mcut gs ==> _`
+        (qspecl_then [`fuel`,`readings`,`tail`] mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >>
+      Cases_on `SND (rooted_eval fuel (stage 7) levels
+        (root_entry with vs_gas_readings := readings ++ tail))` >>
+      simp[NoAsms] >> strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC)
+  >- (map_every qx_gen_tac [`fuel`,`u`] >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!raw F u. LIST_REL _ raw_slots raw ==> _`
+        (qspecl_then [`raw`,`fuel`,`u`] mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >>
+      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+      strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      strip_tac >> first_x_assum drule >> simp[])
+  >- (qpat_assum `!k. k <= 9 ==> o1_ctx_shape (stage k) /\ _`
+        (qspec_then `8` mp_tac) >>
+      simp[NoAsms,o1_ctx_shape_def])
+  >- (qpat_assum `(IS_SOME body_entry /\ _) \/ (p = p /\ _)`
+        (DISJ_CASES_THEN (map_every assume_tac o CONJUNCTS)) >| [
+      disj1_tac >> rpt conj_tac >> first_assum ACCEPT_TAC,
+      disj2_tac >> first_assum ACCEPT_TAC])
 QED
