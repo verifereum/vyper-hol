@@ -13,7 +13,7 @@ Theorem raw_log_fixed_alloc_full:
   expr_type data = BaseT (BytesT (Fixed 32)) /\
   compile_call compile_expr cenv ret_ty ty RawLog [topics;data] dflt call_sa = (vv,call_sb) /\
   compile_alloc_buffer 32 sm = (buf,sd) /\ fn_has_code sm sd func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
