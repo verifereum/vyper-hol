@@ -14,7 +14,7 @@ Ancestors
   o1PipelineCompose deployUnitProducers ctorDeployRawEntryFacts
   asmOptNonemptyFinalizer asmOptNonemptyWitness asmFrameRel deployFrameReplay
   callTrace unitTransformDefs gasMaskProjection gasEvents gasExplicitSites codegenSymRel
-  deploySymSrcUnit e2eDefs list venomState
+  deploySymSrcUnit e2eDefs list venomState gasFocusExportStub
 
 (* A successful compilation exposes the deployment unit's phases. *)
 Theorem compile_vyper_deploy_phases:
@@ -427,7 +427,11 @@ Theorem deploy_pipeline_gas_link:
                    vs_out) /\
               deploy_unit_execution_correct_at marks tops runtime_bc am (tx with code := vs_out.vs_code) dunit vs)
 Proof
-  cheat
+  mp_tac deploy_gas_link_from_focus >>
+  impl_tac
+  >- (rpt gen_tac >>
+      disch_then (ACCEPT_TAC o MATCH_MP focus_producer_finalizer)) >>
+  disch_then ACCEPT_TAC
 QED
 
 (* The -O none case of e2e_deploy_correctness: PLAN 5.11, D28, section 9.
