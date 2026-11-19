@@ -1879,35 +1879,6 @@ QED
 
 Finalise focus_concretize_cut_coverage_ptr_safe
 
-Theorem focus_concretize_cut_coverage:
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_initial_state_ok vs /\
-  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
-  o1_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
-  EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  EVERY fn_defs_reach_uses C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) ==>
-  ?R lp positions.
-    ptr_stage_placements C' positions /\
-    !ht at. ptr_chrono_history vs C' ht at ==> gas_cut n vs at.po_state ==>
-      (?h a done tokens registry births PT TG saved entries H calls ws.
-        ptr_paired_prefix R lp positions lo vs C C'
-          h a ht at done tokens registry births PT TG saved entries H calls ws /\
-        EVERY (\i. ~in_revert_forward (EL i h).po_fn (EL i h).po_state) done /\
-        a.po_inst.inst_opcode <> NOP /\
-        at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst) \/
-      (?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
-        revert_forward_pair bb i j /\
-        i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j)
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  fs[o1_safe_upto_def] >>
-  mp_tac focus_concretize_cut_coverage_ptr_safe >> simp[]
-QED
-
 (* Read/write ranges at the paired endpoint: unchanged scalars stay in
    their original region, and relocated ranges stay within their slot. *)
 Theorem ptr_cut_paired_range_bound[local]:

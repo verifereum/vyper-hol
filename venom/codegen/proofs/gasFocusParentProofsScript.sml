@@ -27,10 +27,8 @@ Ancestors
   gasFocusMakeSsaSuccessor
   gasFocusNativeRootReturn
   gasFocusPacketCardinality
-  gasFocusPacketExit
   gasFocusPacketKeys
   gasFocusPacketRows
-  gasFocusPacketSize
   gasFocusPrefixDriver
   gasFocusReturnedCaller
   gasFocusTerminalRow
