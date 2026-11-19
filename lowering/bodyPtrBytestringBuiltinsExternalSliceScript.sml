@@ -541,6 +541,7 @@ Proof
     (gen_tac >> disch_tac >> Cases_on `op = limit` >- gvs[] >>
      `op = start \/ op = len` by fs[] >>
      `?v. eval_operand op s = SOME v` by metis_tac[] >> fs[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all compile_assert_slice_bounds_reserved_counted_abort >> strip_tac >>
   qpat_x_assum `!PG D. _` (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0 G'' tn''
@@ -603,6 +604,7 @@ Proof
     (gen_tac >> disch_tac >> Cases_on `op = limit` >- gvs[] >>
      `op = start \/ op = len` by fs[] >>
      `?v. eval_operand op s = SOME v` by metis_tac[] >> fs[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all compile_assert_slice_bounds_reserved_counted_ok >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   qabbrev_tac `r = u with vs_inst_idx := LENGTH sd.cs_current_insts` >>
