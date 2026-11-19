@@ -34,7 +34,7 @@ Proof
      simp[sb_step_simulates_thm, sb_deeper_preserved_thm] >>
      metis_tac[]) >>
   `s.contexts <> [] /\ LENGTH s.contexts = LENGTH es.contexts` by
-    gvs[frame_inst_at_def] >>
+    gvs[frame_inst_at_step] >>
   PairCases_on `q` >>
   `code = (FST (HD s.contexts)).msgParams.code /\
    (FST (HD s.contexts)).jumpDest = NONE /\
@@ -65,10 +65,12 @@ Theorem bytecode_stack_check_no_overflow:
     ~frame_raises es StackOverflow
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[frame_raises_def] >> rpt strip_tac >>
+  `frame_raises es StackOverflow <=> ?op. frame_inst_raises es StackOverflow op`
+    by (irule frame_raises_inst_raises >> simp[]) >>
+  simp[frame_inst_raises_def] >> rpt strip_tac >>
   drule_all sb_checked_frame_safe >> strip_tac >>
   `LENGTH s.contexts = LENGTH es.contexts` by
-    gvs[frame_inst_at_def] >>
+    gvs[frame_inst_at_step] >>
   metis_tac[]
 QED
 

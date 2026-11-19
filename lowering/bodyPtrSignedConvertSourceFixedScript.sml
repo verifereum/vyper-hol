@@ -41,7 +41,7 @@ Theorem bytestring_source_uniform_checks:
   !D ctx fn PG G tn s src len dp i j a capacity t.
     ALL_DISTINCT [src;len;dp] /\ lookup_var src s = SOME a /\
     ptr_covers G tn src s capacity /\ 32 <= capacity /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     run_inst_seq [mk_inst i MLOAD [Var src] [len];
                   mk_inst j ADD [Var src;Lit 32w] [dp]] s = OK t ==>
     ?H th.
@@ -90,16 +90,17 @@ Proof
   simp[inst_seq_ptr_def, Abbr `G1`, Abbr `tn1`] >>
   conj_tac
   >- (irule ptr_inst_ok_mload >> simp[eval_operand_def] >>
-      fs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      fs[allocas_below_fmp_def, ptr_covers_def] >>
+      metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   irule ptr_inst_ok_copy_len_binop >>
-  simp[op_taint_def]
+  fs[op_taint_def, Abbr `u`, allocas_below_fmp_def, update_var_def] >> metis_tac[]
 QED
 
 Theorem bytestring_source_fixed_frame:
   !D ctx fn PG G tn s src len dp i j a capacity t.
     ALL_DISTINCT [src;len;dp] /\ lookup_var src s = SOME a /\
     ptr_covers G tn src s capacity /\ 32 <= capacity /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     (!x. w2n a <= x /\ x < w2n a + 32 ==> x NOTIN tn.t_mem) /\
     run_inst_seq [mk_inst i MLOAD [Var src] [len];
                   mk_inst j ADD [Var src;Lit 32w] [dp]] s = OK t ==>
@@ -156,7 +157,7 @@ Theorem compile_bytestring_src_fixed_frame:
     compile_bytestring_src (Var src) sa = ((len_op,dp_op),sm) /\
     not_fresh_at sa src /\ lookup_var src s = SOME a /\
     ptr_covers G tn src s capacity /\ 32 <= capacity /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     (!x. w2n a <= x /\ x < w2n a + 32 ==> x NOTIN tn.t_mem) /\
     run_inst_seq (emitted_insts sa sm) s = OK t ==>
     ?len dp H th.

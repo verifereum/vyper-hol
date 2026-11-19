@@ -39,15 +39,6 @@ Proof
   qexists_tac `k` >> fs[] >> qexists_tac `i` >> fs[]
 QED
 
-Theorem asm_data_env_header_fdom:
-  MEM (AsmDataHeader l) p ==> l IN FDOM (asm_data_env p code)
-Proof
-  strip_tac >>
-  simp[asm_data_env_def, finite_mapTheory.FDOM_DRESTRICT] >>
-  simp[compute_label_offsets_def, clo_step_eq] >>
-  irule clo_FDOM >> simp[]
-QED
-
 (* ===== Terminal observations ===== *)
 
 Theorem sym_obs_sym_init_fields[local]:
@@ -160,7 +151,7 @@ Proof
                   `asm_data_env prog (assemble prog ++ x)`] mp_tac
        codegen_label_disciplined >>
      (impl_tac >- (rpt conj_tac >> fs[] >>
-                   metis_tac[asm_data_env_header_fdom,
+                   metis_tac[asmDataEnvTheory.asm_data_env_header_fdom,
                              asm_data_env_ok_asm_data_env])) >>
      simp[]) >>
   `asm_static_wf prog'` by

@@ -122,8 +122,11 @@ Resume default_registration_word_head[decode]:
   `4 + (off-4) = off` by decide_tac >>
   `default_registration_entry_frame initial s` by
     fs[default_registration_invariant_def] >>
-  fs[default_registration_entry_frame_def,
-     vyperCalldataTheory.calldata_decode_args_def, AllCaseEqs()]
+  qpat_assum `default_registration_entry_frame initial s`
+    (assume_tac o cj 4 o REWRITE_RULE [default_registration_entry_frame_def]) >>
+  qpat_x_assum `calldata_decode_args initial.vs_call_ctx.cc_calldata [tv] _ = SOME [x]`
+    mp_tac >>
+  simp[vyperCalldataTheory.calldata_decode_args_def, AllCaseEqs()]
 QED
 
 Resume default_registration_word_head[allocation]:

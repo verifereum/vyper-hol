@@ -1,7 +1,7 @@
 (* Symbolic output metadata and postfix execution boundaries. *)
 Theory symPostfixSim
 Ancestors
-  fnFrameStepsRevertForward
+  fnFrameStepsRevertForward symPhiRenameFacts
   symInstKinds symShuffleSim regularPostfixSim fnPlanPrefix
   doSwapSim deepDupCallerSim planWf codegenEncodingWf rich_list
   stackPlanOps stackPlanGen stackModel planExec prefixExec prefixSim
@@ -116,30 +116,6 @@ Proof
   strip_tac >>
   `0 < LENGTH ps.ps_stack` by metis_tac[planAlignTheory.stack_get_depth_bound] >>
   gvs[popmany_plan_top_singleton] >> metis_tac[sym_pop_top_sim, arithmeticTheory.ADD_COMM]
-QED
-
-Theorem LIST_REL_relabel_left[local]:
-  LIST_REL R xs ys /\
-  (!sv. R (EL i xs) sv ==> R op sv) ==>
-  LIST_REL R (LUPDATE op i xs) ys
-Proof
-  simp[LIST_REL_EL_EQN, EL_LUPDATE] >> rpt strip_tac >>
-  IF_CASES_TAC >> metis_tac[]
-QED
-
-Theorem sym_kinds_ok_poke:
-  sym_kinds_ok cplan fn ret srest ps ss /\
-  (!sv. op_kind_ok fn ret (stack_peek d ps.ps_stack) sv ==>
-        op_kind_ok fn ret op sv) ==>
-  sym_kinds_ok cplan fn ret srest
-    (ps with ps_stack := stack_poke d op ps.ps_stack) ss
-Proof
-  simp[sym_kinds_ok_def] >> rpt strip_tac >>
-  qexists `top` >> simp[] >>
-  once_rewrite_tac[GSYM rich_listTheory.LIST_REL_REVERSE_EQ] >>
-  pure_rewrite_tac[REVERSE_REVERSE, stack_poke_def] >>
-  irule LIST_REL_relabel_left >>
-  simp[stack_peek_def, rich_listTheory.LIST_REL_REVERSE1]
 QED
 
 
@@ -294,23 +270,8 @@ Theorem sym_assign_rename_top:
   sym_kinds_ok cplan fn ret srest
     (ps with ps_stack := stack_poke 0 (Var x) ps.ps_stack) ss
 Proof
-  strip_tac >> irule sym_kinds_ok_poke >>
+  strip_tac >> irule symPhiRenameFactsTheory.sym_kinds_ok_poke >>
   simp[] >> metis_tac[assign_output_kind]
-QED
-
-Theorem phi_depth_operand:
-  stack_get_phi_depth (FILTER is_var_operand ops) stk = SOME d ==>
-  ?y. stack_peek d stk = Var y /\ MEM (Var y) ops
-Proof
-  strip_tac >>
-  `d < LENGTH stk` by
-    metis_tac[stack_get_phi_depth_def, planWfTheory.stack_find_bound, LENGTH_REVERSE] >>
-  `MEM (stack_peek d stk) (FILTER is_var_operand ops)` by
-    (gvs[stack_get_phi_depth_def, stack_peek_def] >>
-     drule genBlockSimTheory.stack_find_el >>
-     simp[EL_REVERSE, arithmeticTheory.PRE_SUB1]) >>
-  Cases_on `stack_peek d stk` >>
-  gvs[MEM_FILTER, stackPlanTypesTheory.is_var_operand_def]
 QED
 
 Theorem sym_phi_rename:
@@ -323,8 +284,8 @@ Theorem sym_phi_rename:
   sym_kinds_ok cplan fn ret srest
     (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) ss
 Proof
-  strip_tac >> drule phi_depth_operand >> strip_tac >>
-  irule sym_kinds_ok_poke >> simp[] >> metis_tac[phi_var_output_kind]
+  metis_tac[symPhiRenameFactsTheory.sym_phi_rename_own,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem temporary_spill_ranges_avoid_inventory:
@@ -394,26 +355,6 @@ QED
 (* Contract audit: marked well-formedness permits the duplicate-key scratch
    trace already excluded by do_dup17_duplicate_top_not_wf.  This concerns
    operand-keyed replay, not the physical symbolic machine. *)
-Theorem marked_scratch_dup_audit[local]:
-  !ps f lo.
-    ps = (init_plan_state 0 with
-      ps_stack := REPLICATE 18 dead_stack_marker) ==>
-    generated_plan_state_wf_marked 0 ps /\
-    ~prefix_spill_wf f lo (FST (do_dup 17 ps)) ps
-Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (gvs[generated_plan_state_wf_marked_def,
-          planSpillBoundsTheory.plan_slots_bounded_def,
-          planSpillBoundsTheory.alloc_slots_bounded_def,
-          spill_alloc_layout_wf_def, stackPlanTypesTheory.init_plan_state_def,
-          stackPlanTypesTheory.init_spill_alloc_def] >> EVAL_TAC) >>
-  `ps.ps_stack = REPLICATE 16 dead_stack_marker ++
-       [dead_stack_marker; dead_stack_marker]` by
-    (simp[] >> EVAL_TAC) >>
-  `17 < LENGTH ps.ps_stack` by simp[] >>
-  metis_tac[do_dup17_duplicate_top_not_wf, pairTheory.PAIR, APPEND_NIL]
-QED
-
 (* Physical scratch inventory: keys identify cells, not operand names. *)
 Definition scratch_mem_ok_def:
   scratch_mem_ok fn ret slots labs <=>
@@ -472,16 +413,6 @@ Proof
   simp[sym_mload_def, asm_next_def] >> metis_tac[]
 QED
 
-Theorem scratch_dead_marker_two_labels[local]:
-  a + 32 <= b ==>
-  scratch_mem_ok fn ret
-    (FEMPTY |+ (a,dead_stack_marker) |+ (b,dead_stack_marker))
-    (scratch_store_labels
-      (scratch_store_labels labs a (Lab l d)) b (Lab other delta))
-Proof
-  strip_tac >> irule scratch_duplicate_cells_probe >> simp[op_kind_ok_def]
-QED
-
 Theorem scratch_store_step_inventory:
   ss.sym_stack = Val off :: sv :: tail /\
   scratch_mem_ok fn ret slots ss.sym_mem_labels /\ op_kind_ok fn ret op sv /\
@@ -518,21 +449,6 @@ Theorem scratch_store_retains_inventory:
   scratch_mem_ok fn ret inventory (scratch_store_labels labs off sv)
 Proof
   simp[scratch_mem_ok_def] >> metis_tac[scratch_store_labels_preserves_saved]
-QED
-
-Theorem scratch_two_label_cells_readable[local]:
-  a + 32 <= b ==>
-  mem_label_at
-    (scratch_store_labels (scratch_store_labels labs a (Lab l d))
-      b (Lab other delta)) a = SOME (l,d) /\
-  mem_label_at
-    (scratch_store_labels (scratch_store_labels labs a (Lab l d))
-      b (Lab other delta)) b = SOME (other,delta)
-Proof
-  strip_tac >> rewrite_tac[GSYM mem_sval_at_def] >> conj_tac
-  >- (irule (iffRL scratch_store_labels_preserves_saved) >>
-      simp[scratch_store_labels_at]) >>
-  simp[scratch_store_labels_at]
 QED
 
 (* A scratch instruction consists of a numeric address push and one operation. *)

@@ -914,7 +914,7 @@ Proof
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac (K all_tac))) >>
   `source_unit_execution_correct_at marks tops ret am txp unit vs` by
-    (rewrite_tac[source_unit_execution_correct_at_with] >>
+    (rewrite_tac[source_unit_execution_correct_at_def] >>
      qexists_tac `shadow_ctx` >> first_assum ACCEPT_TAC) >>
   `!H:(bool # bytes32 # type_value) list # num list.
      dead_wf (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))` by

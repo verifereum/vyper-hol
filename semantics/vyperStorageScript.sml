@@ -9,7 +9,7 @@ Ancestors
   vyperValue vfmState vfmTypes vfmConstants
   vyperMisc arithmetic cv cv_rep
 Libs
-  cv_transLib wordsLib
+  cv_transLib wordsLib vyperCvLib
 
 (* Storage layout: maps (source_id, variable_name) to base slot numbers.
    source_id is NONE for main module, SOME n for imported module n.
@@ -310,29 +310,13 @@ val encode_value_pre_def =
 
 (* Keep recursive precondition schemas out of the ambient simplifier. Unfold
    only the goal, then clean up with cached logical/constructor rules and IHs. *)
-val storage_pre_rules = GSYM AND_IMP_INTRO ::
-  List.concat (map (fn ty => #rewrs (TypeBase.simpls_of ty))
-    [``:value``, ``:array_value``, ``:type_value``, ``:base_type``,
-     ``:bound``, ``:num``, ``:value option``, ``:value list``, ``:num # value``]);
+val storage_pre_rules = pre_constructor_rules
+  [``:value``, ``:array_value``, ``:type_value``, ``:base_type``,
+   ``:bound``, ``:num``, ``:value option``, ``:value list``, ``:num # value``];
 val storage_pre_ss = boolSimps.bool_ss ++ rewrites (LET_THM :: storage_pre_rules);
 val storage_pre_rewrites =
   Rewrite.add_rewrites Rewrite.bool_rewrites storage_pre_rules;
-val storage_pre_cleanup_conv =
-  let
-    val root = CHANGED_CONV (FIRST_CONV
-      [Rewrite.REWRITES_CONV storage_pre_rewrites, Unwind.UNWIND_FORALL_CONV])
-    (* Discard impossible constructor premises before visiting their bodies;
-       semantic expressions inside equalities remain opaque. *)
-    fun cleanup tm =
-      ((root THENC cleanup) ORELSEC
-       (if is_forall tm then
-          QUANT_CONV cleanup THENC TRY_CONV (root THENC cleanup)
-        else if is_imp tm orelse is_conj tm then
-          RATOR_CONV (RAND_CONV cleanup) THENC
-          ((root THENC cleanup) ORELSEC
-           (RAND_CONV cleanup THENC TRY_CONV (root THENC cleanup)))
-        else ALL_CONV)) tm
-  in cleanup end;
+val storage_pre_cleanup_conv = mk_pre_cleanup_conv storage_pre_rewrites;
 
 Theorem encode_value_pre[cv_pre]:
   (∀tv v. encode_value_pre tv v) ∧
@@ -509,6 +493,7 @@ val () = cv_trans hashmap_slot_def;
    sit in a word.  Only a dynamic bytes or string key is hashed first. *)
 Definition encode_hashmap_key_def:
    encode_hashmap_key _ (IntV i) = i2w i ∧
+   encode_hashmap_key _ (DecimalV i) = i2w i ∧
    encode_hashmap_key _ (FlagV n) = n2w n ∧
    encode_hashmap_key (BaseT AddressT) (BytesV bs) =
      word_of_bytes_be (PAD_LEFT 0w 32 bs) ∧

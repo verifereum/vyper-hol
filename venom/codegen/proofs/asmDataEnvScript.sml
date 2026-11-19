@@ -39,6 +39,15 @@ Definition asm_data_env_def:
 End
 
 (* TOP-LEVEL *)
+Theorem asm_data_env_header_fdom:
+  MEM (AsmDataHeader l) p ==> l IN FDOM (asm_data_env p code)
+Proof
+  strip_tac >>
+  simp[asm_data_env_def, finite_mapTheory.FDOM_DRESTRICT] >>
+  simp[compute_label_offsets_def, clo_step_eq] >>
+  irule clo_FDOM >> simp[]
+QED
+
 Theorem asm_data_env_ok_asm_data_env:
   asm_data_env_ok p (asm_data_env p code) code
 Proof

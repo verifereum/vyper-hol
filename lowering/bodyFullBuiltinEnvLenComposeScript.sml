@@ -58,7 +58,8 @@ Theorem len_full_compose:
         expr_store_bound cx (BaseT (UintT 256)) (IntV (&n)) op z /\
         z.vs_current_bb = sb.cs_current_bb /\
         z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        alloca_history func z /\ s0.vs_alloca_next <= z.vs_alloca_next /\
+        alloca_history func z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+        s0.vs_alloca_next <= z.vs_alloca_next /\
         ghost_inv_at (DF H) lo d cenv cx ee G2 tn2 z /\
         ptr_val_ok cx (BaseT (UintT 256)) (IntV (&n)) op G2 tn2 z /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2) ==>
@@ -94,7 +95,8 @@ Theorem len_full_compose:
         (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
            ptr_buf_ok cenv e p.ptr_operand G t) /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r) ==>
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)) ==>
     gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
       (bind (eval_expr cx (Builtin (BaseT (UintT 256)) Len [e])) (read_result cx))
       (es,s0,G0,tn0)
@@ -103,13 +105,15 @@ Theorem len_full_compose:
           es sa sb s0 ee v op t /\
         expr_store_bound cx (BaseT (UintT 256)) v op t /\
         t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+        alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+        s0.vs_alloca_next <= t.vs_alloca_next /\
         ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
         ptr_val_ok cx (post_value_type cenv (Builtin (BaseT (UintT 256)) Len [e])) v op G tn t /\
         (~is_word_type (post_value_type cenv (Builtin (BaseT (UintT 256)) Len [e])) ==>
           ptr_buf_ok cenv (Builtin (BaseT (UintT 256)) Len [e]) op G t) /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   disch_tac >> rpt gen_tac >> strip_tac >>
   `bind (eval_expr cx (Builtin (BaseT (UintT 256)) Len [e])) (read_result cx) =
@@ -168,7 +172,8 @@ Resume len_full_compose[continuation]:
          es sa sb s0 mid (IntV (&n)) op z /\
        expr_store_bound cx (BaseT (UintT 256)) (IntV (&n)) op z /\
        z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-       alloca_history func z /\ s0.vs_alloca_next <= z.vs_alloca_next /\
+       alloca_history func z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+        s0.vs_alloca_next <= z.vs_alloca_next /\
        ghost_inv_at (DF H) lo d cenv cx mid G2 tn2 z /\
        ptr_val_ok cx (BaseT (UintT 256)) (IntV (&n)) op G2 tn2 z /\
        ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2` by
