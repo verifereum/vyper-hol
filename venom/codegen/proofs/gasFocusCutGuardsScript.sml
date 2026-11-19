@@ -129,18 +129,17 @@ Theorem focus_cut_guard_or_stop:
       FLOOKUP blocks (a,e) =
         SOME (bb,bt,ps,xs,ys,rho,in_state,h0,body_entry,count,front,closed,brest) /\
       get_instruction bt visit_state.vs_inst_idx = SOME inst /\
+      ((inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
+        inst.inst_opcode = INVOKE \/ is_terminator inst.inst_opcode) ==>
       ?q z src_inst cuts levels Mcut Ecut Kcut mr er kr.
         src_inst = EL (LENGTH z)
           (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
         ((IS_SOME body_entry /\ LENGTH ps <= visit_state.vs_inst_idx /\
           visit_state.vs_inst_idx - LENGTH ps < LENGTH rho /\
           q = EL (visit_state.vs_inst_idx - LENGTH ps) rho /\ q < LENGTH xs /\
-          ((inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
-            inst.inst_opcode = INVOKE) ==>
-           EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
-           (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE count rho))) /\
-          (inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
-             inst.inst_opcode = INVOKE ==> EL q xs = inst) /\
+          EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+          (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE count rho)) /\
+          EL q xs = inst /\
           z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs) \/
          (a = p /\ e = d /\ visit_state = s8 /\ body_entry = NONE /\
           visit_state.vs_inst_idx < LENGTH ps /\ q = 0 /\
@@ -287,7 +286,7 @@ Theorem focus_cut_guard_or_stop:
         (!u. stopped <> OK u) /\ (!err. stopped <> Error err) /\
         run_blocks F C7 root_sf R = stopped /\
         gas_events_blocks F C7 root_sf R = events /\
-        (?extra. Ecut = events ++ extra)))) /\
+        (?extra. Ecut = events ++ extra))))) /\
   (!h. h < j ==>
     ?a e tf inst visit_state stk PG G tn oms om hs hist.
       EL h V = ((a,e,inst.inst_id),tf,inst,visit_state) /\
