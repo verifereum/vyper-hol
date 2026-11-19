@@ -41,8 +41,10 @@ Theorem send_tail_path_full[local]:
       ghost_inv_at (DF H) lo d cenv cx es' G' tn' z /\
       ghost_kept_at lo cenv es1 sm G tn s G' tn' /\
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history fn z /\ z.vs_alloca_next = s.vs_alloca_next) \/
-     (exit_result r /\ expr_exit res r /\ halt_exit H cx es' res r))
+      alloca_history fn z /\ z.vs_alloca_next = s.vs_alloca_next /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp z)) \/
+     (exit_result r /\ expr_exit res r /\ halt_exit H cx es' res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))
 Proof
   strip_tac >>
   reverse (Cases_on `?H0. valid_horizon cx st0 H0 es'.storage_trace`)
@@ -87,7 +89,7 @@ Resume send_tail_path_full[halt]:
     `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
   qpat_x_assum `res = _ \/ res = _` strip_assume_tac >>
   rpt strip_tac >> res_tac >>
-  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
+  gvs[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
        exprSimDefsTheory.halt_exit_def]
 QED
 
@@ -97,7 +99,7 @@ Resume send_tail_path_full[failed]:
     `Abort Revert_abort (revert_state
       (set_returndata [] (u with vs_inst_idx := SUC s.vs_inst_idx)))`] >>
   rpt strip_tac >> res_tac >>
-  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
+  gvs[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
        exprSimDefsTheory.halt_exit_def]
 QED
 
@@ -126,16 +128,24 @@ Resume send_tail_path_full[normal]:
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   `stmt_state_rel H ctx fn cenv cx es1 s` by metis_tac[] >>
   conj_tac >- simp[] >>
-  qexists_tac `u with vs_inst_idx := SUC (SUC s.vs_inst_idx)` >>
-  simp[] >> rpt conj_tac
-  >- (simp[Abbr `u`] >> irule send_tail_none_post >> simp[] >>
-      conj_tac >- (qexists_tac `sm` >> simp[]) >>
-      qexistsl_tac [`es1`,`s`] >> simp[])
-  >- (`ghost_inv_at (DF H) lo d cenv cx es' (step_prov PG G inst u)
-         (step_taint inst s u tn) u` by
-        (irule send_call_ghost_inv_at >> simp[] >>
-         fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-      simp[ghostPcTransportPtrTheory.ghost_inv_at_inst_idx])
+  qabbrev_tac `z = u with vs_inst_idx := SUC (SUC s.vs_inst_idx)` >>
+  `expr_post H ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w) z` by
+    (simp[Abbr `z`,Abbr `u`] >> irule send_tail_none_post >> simp[] >>
+     conj_tac >- (qexists_tac `sm` >> simp[]) >>
+     qexistsl_tac [`es1`,`s`] >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    (qpat_assum `expr_post H ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w) z`
+       (ACCEPT_TAC o MATCH_MP
+         bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+         CONJUNCT1 o REWRITE_RULE[expr_post_def])) >>
+  `ghost_inv_at (DF H) lo d cenv cx es' (step_prov PG G inst u)
+      (step_taint inst s u tn) z` by
+    (`ghost_inv_at (DF H) lo d cenv cx es' (step_prov PG G inst u)
+        (step_taint inst s u tn) u` by
+       (irule send_call_ghost_inv_at >> simp[] >>
+        fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     simp[Abbr `z`,ghostPcTransportPtrTheory.ghost_inv_at_inst_idx]) >>
+  qexists_tac `z` >> simp[] >> fs[Abbr `z`]
 QED
 
 Resume send_tail_path_full[history]:
@@ -192,8 +202,10 @@ Theorem send_tail_outcome_full:
       ghost_inv_at (DF H) lo d cenv cx ee G' tn' z /\
       ghost_kept_at lo cenv es1 sm G tn s G' tn' /\
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history fn z /\ z.vs_alloca_next = s.vs_alloca_next)
-    (\H res ee gt r. exprSimDefs$expr_exit res r /\ halt_exit H cx ee res r)
+      alloca_history fn z /\ z.vs_alloca_next = s.vs_alloca_next /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp z))
+    (\H res ee gt r. exprSimDefs$expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   strip_tac >>
   qabbrev_tac `src = do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);

@@ -339,6 +339,7 @@ Resume abi_decode_caller_guard_joint[reject]:
      simp[run_inst_seq_def]) >>
   qpat_x_assum `bop_scalar_seq R A (emitted_insts sb header_st) B` kall_tac >>
   qpat_x_assum `bop_scalar_seq R A prefix C` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all calldataClampPtrTheory.scalar_seq_abort_replay_ptr >>
   disch_then (qspecl_then [`fn`, `PG`,
     `<| d_stor := K (K {}); d_trans := K (K {});

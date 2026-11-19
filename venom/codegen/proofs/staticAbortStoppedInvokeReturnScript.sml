@@ -5,6 +5,7 @@ Ancestors
   contextStaticAbortRel fnStaticAbortBodyFacts fnBlockBodySteps
   contextCodegenRelProps venomExecProps unitShapeDefs list
   fnStaticAbortBoundary venomExecSemantics
+  symFrameInvokeSupport
 
 val _ = Parse.hide "cp";
 val _ = Parse.hide "base";
@@ -170,7 +171,7 @@ Proof
     simp[APPEND_ASSOC] >>
   `!b. context_spill_byte cpl b /\ ~closure_spill_byte ctx cpl callee.fn_name b ==>
     FLOOKUP ss'.sym_mem_labels b = FLOOKUP scas.sym_mem_labels b` by simp[] >>
-  drule_at (Pat `fresh_label _ _ = _`) sym_invoke_return_frame_from_callee >>
+  drule_at (Pat `fresh_label _ _ = _`) symFrameInvokeSupportTheory.sym_invoke_return_frame_from_callee >>
   disch_then drule_all >> strip_tac >>
   `fn_return_state_rel ctx cpl callee rvs mid as'` by
     (qpat_x_assum `fn_return_state_rel _ _ _ _ _ as'` mp_tac >>
@@ -184,7 +185,7 @@ Proof
     | SORestore off => off < dimword(:256) | _ => T) (pops ++ opts)` by
     simp[EVERY_APPEND] >>
   drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ called _ _`)
-    (sym_invoke_return_frame_numeric
+    (symFrameInvokeSupportTheory.sym_invoke_return_frame_numeric
       |> Q.INST [`final` |-> `release_dead_spills nl swapped`]
       |> PURE_REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]) >>
   disch_then drule_all >> strip_tac >>
@@ -195,7 +196,7 @@ Proof
       planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def] >>
      decide_tac) >>
   qpat_assum `sym_steps _ _ (_ + 3) _ = _`
-    (mp_then (Pat `sym_steps _ _ _ _ = _`) mp_tac sym_invoke_ok_compose) >>
+    (mp_then (Pat `sym_steps _ _ _ _ = _`) mp_tac symFrameInvokeSupportTheory.sym_invoke_ok_compose) >>
   disch_then drule_all >> strip_tac >>
   goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >>

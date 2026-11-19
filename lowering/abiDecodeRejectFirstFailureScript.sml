@@ -71,13 +71,14 @@ Theorem malformed_scalar_load_prefix[local]:
   eval_operand pos s = SOME (n2w p) /\
   op_prov G pos = NONE /\ op_taint tn pos = {} /\
   p+32 <= L /\ B+L < dimword(:256) /\ B+p+32 <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?loaded HG th.
     eval_operand value loaded = SOME (abi_decode_load MLOAD (n2w (B+p):bytes32) s) /\
     op_prov HG value = NONE /\ op_taint th value = {} /\
-    allocas_from lo loaded /\ ~loaded.vs_halted /\
+    allocas_from lo loaded /\ (ctx_has_dalloca ctx ==> allocas_below_fmp loaded) /\
+      ~loaded.vs_halted /\
     loaded.vs_current_bb = sb.cs_current_bb /\
     loaded.vs_inst_idx = LENGTH sb.cs_current_insts /\
     loaded.vs_accounts = s.vs_accounts /\ loaded.vs_transient = s.vs_transient /\
@@ -137,11 +138,20 @@ Proof
   rename1 `op_prov HG value = NONE` >> rename1 `op_taint th value = {}` >>
   `w2n (n2w (B+p):bytes32) + 32 <= mid.vs_alloca_next` by
     (simp[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp mid` by
+    (simp[Abbr `mid`, Abbr `raw`, update_var_def, allocas_below_fmp_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o SRULE[allocas_below_fmp_def])) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (mid,G1,tn1) [] (OK (rawload with vs_inst_idx := LENGTH sb.cs_current_insts),HG,th)` by
     (rpt gen_tac >>
      qpat_assum `!D lower explicit ctx' f. _ ==> gas_origin_ptr_path _ _ _ _`
        (qspecl_then [`D`, `lo`, `explicit`, `ctx`, `func`] mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==>
+    allocas_below_fmp (rawload with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (simp[update_var_def, allocas_below_fmp_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp mid`
+       (ACCEPT_TAC o SRULE[allocas_below_fmp_def])) >>
   qexistsl_tac [`rawload with vs_inst_idx := LENGTH sb.cs_current_insts`, `HG`, `th`] >>
   `mid.vs_memory = s.vs_memory` by simp[Abbr `mid`, Abbr `raw`, update_var_def] >>
   `allocas_from lo (rawload with vs_inst_idx := LENGTH sb.cs_current_insts)` by
@@ -225,7 +235,9 @@ Theorem malformed_scalar_prefix_abort[local]:
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (Abort Revert_abort u,G',tn'))
 Proof
-  strip_tac >> drule_all malformed_scalar_load_prefix >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all malformed_scalar_load_prefix >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `?stopped. run_inst_seq (emitted_insts sb sc) loaded = Abort Revert_abort stopped` by
     (irule abi_decoder_sequence_revert_reentry >>
@@ -455,7 +467,7 @@ QED
 Theorem malformed_guard_abort_joint[local]:
   bop_scalar_seq R A code B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq code s = Abort Revert_abort t ==>
@@ -504,7 +516,7 @@ QED
 Theorem malformed_guard_success_cut[local]:
   bop_scalar_seq R A (emitted_insts sa sb) B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   fn_has_code sa sb func /\ inst_extends sa sb /\ sb.cs_current_bb = sa.cs_current_bb /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq (emitted_insts sa sb) s = OK raw ==>
@@ -519,7 +531,6 @@ Theorem malformed_guard_success_cut[local]:
 Proof
   strip_tac >>
   drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_runtime_frame >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`func`, `PG`, `ARB:dead`] strip_assume_tac) >>
   drule abiDecodeScalarRunSafetyTheory.abi_decode_scalar_run_safe >> disch_then (qspec_then `s` strip_assume_tac) >>
@@ -582,6 +593,7 @@ Proof
       disch_then (qspecl_then [`p`,`ceiling`,`s`] mp_tac) >>
       (impl_tac >- (simp[] >> qexists `L` >> simp[])) >>
       strip_tac >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_all malformed_guard_success_cut >>
       disch_then (qspec_then `PG` strip_assume_tac) >>
       qexistsl_tac [`actual with vs_inst_idx := LENGTH sh.cs_current_insts`, `G'`, `tn'`] >>
@@ -607,7 +619,7 @@ Theorem malformed_bytes_head_cut[local]:
   p < dimword(:256) /\ L < dimword(:256) /\
   op_prov G pos = NONE /\ op_taint tn pos = {} /\
   op_prov G hi = NONE /\ op_taint tn hi = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   (?u G' tn'.
      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
@@ -704,7 +716,7 @@ Theorem malformed_count_compare_cut[local]:
   fn_has_code sa sb func /\ sb.cs_current_bb = sa.cs_current_bb /\
   eval_operand cnt s = SOME cv /\ abi_decoder_operand_live sa.cs_next_var cnt /\
   n < dimword(:256) /\ op_prov G cnt = NONE /\ op_taint tn cnt = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   if w2n cv <= n then
     ?u G' tn'.
@@ -818,6 +830,7 @@ Theorem malformed_bytes_compare_abort[local]:
 Proof
   strip_tac >> fs[EVERY_DEF] >>
   `op_prov G cnt = NONE /\ op_taint tn cnt = {}` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all malformed_count_compare_cut >> disch_then (qspec_then `PG` mp_tac) >>
   Cases_on `w2n cv <= n` >> simp[] >> strip_tac >>
   rename1 `r = s with <|vs_vars := r.vs_vars; vs_inst_idx := _|>` >>
@@ -959,6 +972,7 @@ Proof
    not_fresh_at st source` by
     fs[abi_malformed_entry_def, abi_decoder_operand_live_def,
        abi_decoder_older_vars_def, not_fresh_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all malformed_bytes_head_cut >> disch_then (qspec_then `PG` strip_assume_tac)
   >- metis_tac[] >>
   rename1 `r = s with <|vs_vars := r.vs_vars; vs_inst_idx := _|>` >>
@@ -979,6 +993,7 @@ Proof
      fs[abi_malformed_allocated_window_def] >>
      drule_all allocaSiteResourceTheory.alloca_site_registered_below >> decide_tac) >>
   `eval_operand pos r = SOME (n2w p) /\ op_prov G' pos = NONE /\ op_taint tn' pos = {}` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by simp[] >>
   drule_all malformed_scalar_load_prefix >> disch_then (qspec_then `PG` strip_assume_tac) >>
   `abi_decoder_operand_live sh.cs_next_var hi` by metis_tac[abi_decoder_operand_live_mono] >>
   `eval_operand hi r = SOME (n2w L) /\ op_prov G' hi = NONE /\ op_taint tn' hi = {}` by metis_tac[] >>
@@ -1006,7 +1021,8 @@ QED
 (* HOL notation for the independently closed success and rejection contracts. *)
 val table_inputs = #1 (boolSyntax.dest_imp (concl malformed_table_first_failure_joint));
 val (ordinary_success, table_tail) = boolSyntax.dest_conj table_inputs;
-val table_head = #1 (boolSyntax.dest_conj table_tail);
+val (table_head, table_after_head) = boolSyntax.dest_conj table_tail;
+val table_scalar_abort = #1 (boolSyntax.dest_conj table_after_head);
 val scalar_lift = #1 (boolSyntax.dest_conj
   (#1 (boolSyntax.dest_imp (concl malformed_indexed_guard_revert_joint))));
 
@@ -1084,6 +1100,10 @@ Proof
     (BETA_TAC >> rpt gen_tac >> MATCH_ACCEPT_TAC malformed_complex_head_guard_cut) >>
   `^scalar_lift` by
     (BETA_TAC >> rpt gen_tac >> MATCH_ACCEPT_TAC malformed_guard_abort_joint) >>
+  `^table_scalar_abort` by
+    (BETA_TAC >> rpt gen_tac >> strip_tac >>
+     irule malformed_guard_abort_joint >> simp[] >>
+     qexistsl_tac [`A`,`C`,`R`,`code`,`t`] >> simp[]) >>
   BETA_TAC >>
   MATCH_MP_TAC
     (BETA_RULE (Q.INST [`P` |-> `^coherent_reject`] calldata_coherent_induction)) >>
@@ -1139,6 +1159,7 @@ Proof
       `^scalar_load_cut` by (rpt gen_tac >> MATCH_ACCEPT_TAC malformed_scalar_load_prefix) >>
       `^count_compare_cut` by (rpt gen_tac >> MATCH_ACCEPT_TAC malformed_count_compare_cut) >>
       `^guard_abort_cut` by (rpt gen_tac >> MATCH_ACCEPT_TAC malformed_guard_abort_joint) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       mp_tac (Q.INST [`p` |-> `b`, `pos` |-> `b_op`]
         malformed_dynarray_prefix_or_bulk_joint) >>
       ntac 5 (impl_tac >- first_assum ACCEPT_TAC) >>

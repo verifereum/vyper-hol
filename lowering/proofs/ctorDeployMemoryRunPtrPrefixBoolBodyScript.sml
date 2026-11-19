@@ -29,7 +29,7 @@ QED
 Theorem prefix_bool_body_arith_ptr_step:
   (opc = ADD \/ opc = MUL) /\
   op_taint tn a = {} /\ op_taint tn b = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid opc [a;b] [x]) s
 Proof
   rpt strip_tac >> gvs[] >>
@@ -223,7 +223,7 @@ Theorem prefix_bool_body_arith_certificate:
   (opc = ADD \/ opc = MUL) /\
   eval_operand a s = SOME u /\ eval_operand b s = SOME v /\
   op_taint tn a = {} /\ op_taint tn b = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let inst = mk_inst iid opc [a;b] [x];
       w = if opc = ADD then u+v else u*v;
       t = update_var x w s;

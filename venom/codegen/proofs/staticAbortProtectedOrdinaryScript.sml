@@ -3,6 +3,7 @@ Theory staticAbortProtectedOrdinary
 Ancestors
   fnStaticAbortBodyFacts symBlockBody symFrameInst codegenSymRel
   fnBlockBodySteps fnStaticAbortBoundary unitShapeDefs
+  symBodyStaticFacts
 
 val _ = Parse.hide "cp";
 val _ = Parse.hide "base";
@@ -64,10 +65,10 @@ Proof
   `fn_shape_ok fn` by
     (gvs[unit_shape_ok_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
   `sym_data_label prog env "code_end"` by
-    metis_tac[codegen_sym_code_end_label] >>
+    metis_tac[symBodyStaticFactsTheory.codegen_sym_code_end_label] >>
   `(MEM (Label "runtime_begin") inst.inst_operands ==>
     sym_data_label prog env "runtime_begin")` by
-    metis_tac[codegen_sym_runtime_begin_label] >>
+    metis_tac[symBodyStaticFactsTheory.codegen_sym_runtime_begin_label] >>
   `!dst x sz w off. inst.inst_opcode = CODECOPY /\
     inst.inst_operands = [dst; Var x; sz] /\ code_end_var fn x /\
     eval_operand (Var x) vs = SOME w /\
