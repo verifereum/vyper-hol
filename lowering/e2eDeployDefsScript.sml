@@ -157,7 +157,7 @@ Definition deploy_state_rel_def:
   deploy_state_rel tops deploy_bc am tx es <=>
     ?ctxt rb args_bytes.
       es.contexts = [(ctxt, rb)] /\
-      wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es /\
+      wf_state es /\ balance_bounded (2 ** 256 - 1) es /\
       (?d. es.msdomain = Collect d) /\
       account_empty (lookup_account tx.target es.originalAccounts) /\
       ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
