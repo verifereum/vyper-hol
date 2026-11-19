@@ -2331,7 +2331,11 @@ Resume for_nonslot_array_element_prepare_full[memory_alloca_frame]:
      `lookup_scopes live es.scopes = SOME entLive` by
        (qpat_assum `lookup_scopes live empty.scopes = SOME entLive` mp_tac >>
         simp[NoAsms, Abbr `empty`, vyperStateTheory.lookup_scopes_def,FLOOKUP_EMPTY]) >>
-     `live <> id` by (strip_tac >> gvs[]) >>
+     `live <> id` by
+       (strip_tac >>
+        qpat_assum `lookup_scopes live es.scopes = SOME entLive` mp_tac >>
+        qpat_assum `live = id` SUBST1_TAC >>
+        qpat_assum `lookup_scopes id es.scopes = NONE` (fn th => simp[NoAsms, th])) >>
      `FLOOKUP c.ce_vars live = SOME (PtrVar (Var regLive) capLive)` by
        (qpat_assum `!name. name <> id ==> _` (qspec_then `live` mp_tac) >> simp[]) >>
      `not_fresh_at sa regLive` by

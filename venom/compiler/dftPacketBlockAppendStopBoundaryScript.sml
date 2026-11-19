@@ -1,5 +1,6 @@
 Theory dftPacketBlockAppendStopBoundary
 Ancestors
+  dftPacketInvokePrefixStop
   dftPacketRootedOperational dftPacketRootedPlainStop dftPacketOperationalPrefix
   venomExecSemantics venomInst venomState dftIndexedExec gasEvents list arithmetic
 
@@ -65,7 +66,10 @@ Proof
      simp[] >> conj_tac >- metis_tac[] >>
      conj_tac >- (gvs[] >> decide_tac) >>
      qexists_tac `J` >> simp[]) >>
-  drule dft_packet_plain_prefix_no_intret >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+    (TAKE k (DROP s1.vs_inst_idx bb1.bb_instructions))` by
+    fs[EVERY_CONJ] >>
+  drule dft_packet_nonterminator_prefix_no_intret >>
   disch_then (qspecl_then [`fuel-SUC d`,`C`,`s1`] mp_tac) >>
   simp[] >> strip_tac >>
   Cases_on `r` >> gvs[]

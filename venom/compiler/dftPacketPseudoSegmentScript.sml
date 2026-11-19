@@ -1,5 +1,6 @@
 Theory dftPacketPseudoSegment
 Ancestors
+  dftPacketInvokePrefixStop
   dftPacketEntryReplay dftPacketFreshRow dftPacketFillingBoundary
   dftPacketOperationalPrefix dftGasFromListTraceDefs dftGasFromListReadings
   dftIndexedExec gasEvents frameGasEvents venomExecSemantics
@@ -138,7 +139,7 @@ Resume dft_packet_pseudo_segment[boundary]:
   disch_then (qspecl_then [`tail`,`f`,`C7`] strip_assume_tac) >>
   conj_tac >- (simp[] >> metis_tac[]) >>
   reverse conj_tac
-  >- (rpt gen_tac >> simp[] >> irule dft_packet_plain_prefix_no_intret >> simp[]) >>
+  >- (rpt gen_tac >> simp[] >> irule dft_packet_nonterminator_prefix_no_intret >> fs[EVERY_CONJ]) >>
   suspend "boundary_success"
 QED
 

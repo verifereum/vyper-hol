@@ -1,5 +1,6 @@
 Theory dftPacketFreshChildStop
 Ancestors
+  dftPacketInvokePrefixStop
   dftPacketRootedOperational dftPacketOperationalPrefix
   dftIndexedExec gasEvents venomExecSemantics list rich_list arithmetic
 
@@ -39,8 +40,11 @@ Proof
   drule_all dft_packet_invoke_context >>
   disch_then (qspecl_then [`fuel-e`,`sf.fn_name`]
     (qx_choose_then `J` strip_assume_tac)) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+    (TAKE k (DROP (phi_prefix_length cb.bb_instructions) cb.bb_instructions))` by
+    fs[EVERY_CONJ] >>
   `!ir t. r <> IntRet ir t` by
-    (drule dft_packet_plain_prefix_no_intret >> metis_tac[]) >>
+    (drule dft_packet_nonterminator_prefix_no_intret >> metis_tac[]) >>
   `exec_block (fuel-SUC e) C cb
       (sp with vs_inst_idx := phi_prefix_length cb.bb_instructions) = r /\
    gas_events_block (fuel-SUC e) C callee.fn_name cb
@@ -52,8 +56,7 @@ Proof
     (qspecl_then [`(fuel:num)-SUC e`,`C`,`callee.fn_name`,`cb`,
        `sp with vs_inst_idx := phi_prefix_length cb.bb_instructions`,`k`]
        mp_tac dft_packet_block_prefix_operational >>
-     simp[] >> impl_tac
-     >- (fs[EVERY_MEM] >> metis_tac[]) >> metis_tac[]) >>
+     simp[] >> metis_tac[]) >>
   `run_blocks (fuel-e) C callee child_entry = r /\
    gas_events_blocks (fuel-e) C callee child_entry =
      gas_events_block (fuel-SUC e) C callee.fn_name cb

@@ -1789,10 +1789,16 @@ Proof
      conj_tac
      >- (qpat_x_assum `raw = t3 with vs_inst_idx := _`
            (mp_tac o AP_TERM ``\z. z.vs_allocas``) >>
-         simp[mstore_def, write_memory_with_expansion_def, update_var_def]) >>
+         qpat_assum `raw = mstore _ _ _` SUBST1_TAC >>
+         qpat_assum `v = update_var _ _ _` SUBST1_TAC >>
+         qpat_assum `u = mstore _ _ _` SUBST1_TAC >>
+         simp[NoAsms, mstore_def, write_memory_with_expansion_def, update_var_def]) >>
      qpat_x_assum `raw = t3 with vs_inst_idx := _`
        (mp_tac o AP_TERM ``\z. z.vs_alloca_next``) >>
-     simp[mstore_def, write_memory_with_expansion_def, update_var_def]) >>
+     qpat_assum `raw = mstore _ _ _` SUBST1_TAC >>
+     qpat_assum `v = update_var _ _ _` SUBST1_TAC >>
+     qpat_assum `u = mstore _ _ _` SUBST1_TAC >>
+     simp[NoAsms, mstore_def, write_memory_with_expansion_def, update_var_def]) >>
   `mem_word_at h t3.vs_memory = n2w off /\
    mem_word_at slot t3.vs_memory = n2w (off+n)` by
     (simp[mstore_mem_word_at_same] >>

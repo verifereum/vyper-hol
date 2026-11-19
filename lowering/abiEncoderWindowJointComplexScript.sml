@@ -4189,7 +4189,8 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
         simp_tac bool_ss [Abbr `ld`] >>
         qpat_assum `dyn_ptr=Var p` (fn th => pure_rewrite_tac [th]) >>
         irule wordLoadStorePtrTheory.ptr_inst_ok_mload >>
-        conj_tac >> first_assum ACCEPT_TAC) >>
+        conj_tac >- (qpat_assum `~ctx_has_dalloca ctx` mp_tac >> simp[NoAsms]) >>
+        first_assum ACCEPT_TAC) >>
      `inst_seq_ptr D lo ctx func PG Gv tv [ld] v Gload tt` by
        (`step_inst_base ld v=OK raw_load` by
           (qpat_assum `raw_load=update_var q (mload slot v) v`
