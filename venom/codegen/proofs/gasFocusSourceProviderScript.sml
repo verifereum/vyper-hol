@@ -1,6 +1,7 @@
 Theory gasFocusSourceProvider
 Ancestors venomInstProps[qualified,ignore_grammar] lowerDloadSourceInterface[qualified,ignore_grammar] lowerDloadSafetyKernel[qualified,ignore_grammar]
   gasFocusFmpCutFieldMemory[qualified,ignore_grammar]
+  gasFocusLowerDloadControlEntryExact[qualified,ignore_grammar]
   o1CodeEndFmpTransport[qualified,ignore_grammar]
   o1CodeEndSimplifyCfgTransport[qualified,ignore_grammar]
   o1CodeEndSsaTransport[qualified,ignore_grammar]
@@ -1633,7 +1634,7 @@ Proof
   `!k. MEM k C.ctx_functions ==>
     lookup_function k.fn_name C'.ctx_functions =
       SOME (FST (lower_dload_function_supply (Sigma k.fn_name) k))` by metis_tac[] >>
-  drule_all (BETA_RULE gasFocusLowerDloadControlEntryTheory.ld_focus_control_entry) >>
+  drule_all (BETA_RULE gasFocusLowerDloadControlEntryExactTheory.ld_focus_control_entry_exact) >>
   disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
   irule (BETA_RULE focus_opt_ld_head_row) >>
   goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>

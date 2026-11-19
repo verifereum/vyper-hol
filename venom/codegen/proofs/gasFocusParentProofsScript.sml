@@ -5,7 +5,6 @@ Ancestors
   dftGasPrefixProvider
   focusFrontierBudget
   gasFocusBlockEventPrefix
-  gasFocusBoundedFrontier
   gasFocusChronologicalCut
   gasFocusConcretizeEndpointCut
   gasFocusConcretizeHistoryFmp
@@ -16,7 +15,6 @@ Ancestors
   gasFocusGasPreEdge
   gasFocusInitialRowReplay
   gasFocusInitialSingletonCut
-  gasFocusLowerDloadControlEntry
   gasFocusLowerDloadCutGuards
   gasFocusLowerDloadInvokeSetup
   gasFocusLowerDloadOrdinarySafety
@@ -40,7 +38,6 @@ Ancestors
   o1MakeSsaCutMemory
   o1MakeSsaCutTaint
   o1MakeSsaPtrUpto
-  o1PostFmpCutMemory
   o1PruneFocusMemory
   o1PruneFocusUpto
   o1SimplifyCfgContextGasEvents
