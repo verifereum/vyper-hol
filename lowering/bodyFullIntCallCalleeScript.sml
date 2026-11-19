@@ -4,6 +4,7 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   runtimeSymSrcClassifiedSource[qualified,ignore_grammar]
   bodySimEntry[qualified,ignore_grammar] nonreentrantEntry[qualified,ignore_grammar]
   fragGasCopyLoop[qualified,ignore_grammar] opcodeClass[qualified,ignore_grammar]
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
   bodyFullGhostFrame[qualified,ignore_grammar] augAssignFullStoreGhost[qualified,ignore_grammar]
   ghostPcTransportPtr[qualified,ignore_grammar]
   bodyIntCallSeams fragGasFocus gasOutcomeFullCompose gasOutcomeFull gasStorage
@@ -782,7 +783,7 @@ Theorem intcall_callee_reserve[local]:
        (\ar. comp_return (SOME (SND ar).buf_operand))
    else comp_return NONE) sa = (imm,sb) /\
   fn_has_code sa sb func /\ fresh_vars_wrt sa s /\ ~s.vs_halted /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u G' tn'.
     u = s with <|vs_vars := u.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|> /\
@@ -818,8 +819,6 @@ Proof
         isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (qexists_tac `bb` >> asm_rewrite_tac []) >>
   pop_assum strip_assume_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
-    (qpat_assum `~ctx_has_dalloca ctx` (simp o single)) >>
   drule_all compile_internal_fixed_region_joint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts sa sb) s = OK v` >>
@@ -1435,7 +1434,7 @@ QED
 Theorem intcall_callee_scratch_joint[local]:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
   alloca_room ctx func s /\ sa.cs_next_id NOTIN FDOM s.vs_allocas /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   alloca_inv s /\ fn_inst_ids_distinct func /\
@@ -1656,7 +1655,7 @@ Theorem intcall_callee_lock_inst_ptr[local]:
   MEM op [TLOAD; EQ; ISZERO; ASSERT; TSTORE] /\
   (!a. MEM a args ==> op_taint tn a = {}) /\
   (op = EQ ==> !x y. args <> [Var x; Var y]) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D lo 0 ctx func G tn (mk_inst id op args outs) s
 Proof
   strip_tac >>
@@ -1680,7 +1679,7 @@ Proof
 QED
 
 Theorem intcall_callee_lock_ptr_seq[local]:
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ key_taint tn.t_trans (n2w key) = {} ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ key_taint tn.t_trans (n2w key) = {} ==>
   ?G' tn'. !D.
     inst_seq_ptr D lo ctx func PG G tn
       (transient_lock_code key view st) s G' tn'
@@ -1701,21 +1700,25 @@ Proof
        intcall_callee_lock_steps] >>
   conj_tac >- (irule intcall_callee_lock_inst_ptr >>
                simp[intcall_callee_lock_scratch_allocas, intcall_callee_lock_scratch_taint,
+                    exprPtrUnwrapFramesTheory.copy_allocas_update,
                     DISJ_IMP_THM, FORALL_AND_THM]) >>
   simp[Once fragGasSeqPtrTheory.inst_seq_ptr_def, RIGHT_EXISTS_AND_THM,
        intcall_callee_lock_steps] >>
   conj_tac >- (irule intcall_callee_lock_inst_ptr >>
                simp[intcall_callee_lock_scratch_allocas, intcall_callee_lock_scratch_taint,
+                    exprPtrUnwrapFramesTheory.copy_allocas_update,
                     DISJ_IMP_THM, FORALL_AND_THM]) >>
   simp[Once fragGasSeqPtrTheory.inst_seq_ptr_def, RIGHT_EXISTS_AND_THM] >>
   conj_tac >- (irule intcall_callee_lock_inst_ptr >>
                simp[intcall_callee_lock_scratch_allocas, intcall_callee_lock_scratch_taint,
+                    exprPtrUnwrapFramesTheory.copy_allocas_update,
                     DISJ_IMP_THM, FORALL_AND_THM]) >>
   Cases_on `tload (n2w key) s = 1w` >>
   simp[intcall_callee_lock_steps, venomExecSemanticsTheory.bool_to_word_def] >>
   Cases_on `view` >> simp[Once fragGasSeqPtrTheory.inst_seq_ptr_def, RIGHT_EXISTS_AND_THM] >>
   conj_tac >- (irule intcall_callee_lock_inst_ptr >>
                simp[intcall_callee_lock_scratch_allocas, intcall_callee_lock_scratch_taint,
+                    exprPtrUnwrapFramesTheory.copy_allocas_update,
                     DISJ_IMP_THM, FORALL_AND_THM]) >>
   CASE_TAC >> simp[fragGasSeqPtrTheory.inst_seq_ptr_def]
 QED
@@ -1938,7 +1941,7 @@ Theorem intcall_callee_lock_path[local]:
   sb.cs_current_bb = sa.cs_current_bb /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ key_taint tn.t_trans (n2w key) = {} ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ key_taint tn.t_trans (n2w key) = {} ==>
   ?G' tn'. (!D. inst_seq_ptr D lo ctx callee PG G tn (emitted_insts sa sb) s G' tn') /\
     (!u. run_inst_seq (emitted_insts sa sb) s = OK u ==>
          !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,callee,PG) (s,G,tn) []
@@ -3861,6 +3864,7 @@ Proof
      metis_tac[loweringStateRelDefsTheory.fresh_vars_wrt_def, ptrDisciplineTheory.allocas_from_def]) >>
   `cs_extends reserved final /\ fn_has_code capture reserved callee` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at_capture` by simp[] >>
   drule_all intcall_callee_reserve >>
   disch_then (qspecl_then [`tncap`, `MAP (op_prov G) arg_ops`, `Gcap`] strip_assume_tac) >>
   rename1 `at_reserve = at_capture with <|vs_vars := at_reserve.vs_vars; vs_inst_idx := _|>` >>
@@ -4256,6 +4260,7 @@ Proof
      simp[NoAsms, comp_return_def] >>
      disch_then (rewrite_tac o single o SYM) >> disj2_tac >>
      qexists_tac `type_memory_bytes ce ty` >> goal_assum (drule_at Any)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at_mat` by simp[] >>
   `?at_pro Gpro tnpro.
      alloca_inv at_pro /\
      (!i w b sz. MEM i (fn_insts callee) /\ i.inst_opcode = ALLOCA /\
@@ -4801,6 +4806,7 @@ Proof
   `fn_has_code prologue a callee` by
     (irule fn_has_code_mid >> conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`final`,`entry`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at_pro` by simp[] >>
   `nr ==> ?Gl tnl.
      (!D. inst_seq_ptr D lo ctx callee (MAP (op_prov G) arg_ops)
         Gpro tnpro (emitted_insts prologue a) at_pro Gl tnl) /\
