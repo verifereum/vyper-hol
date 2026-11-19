@@ -33,6 +33,7 @@ Proof
   >- (irule account_full_from_suffix >>
       conj_tac
       >- (rpt gen_tac >> strip_tac >>
+          `ctx_has_dalloca ctx' ==> allocas_below_fmp s` by simp[] >>
           drule_all account_suffix_full_run >>
           disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
           qexistsl_tac [`t`, `G'`, `tn'`] >> simp[]) >>

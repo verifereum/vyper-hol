@@ -24,7 +24,7 @@ Theorem account_suffix_full_run:
  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
  eval_operand x s = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\
- op_taint tn x = {} /\ op_prov G x = NONE /\ ~ctx_has_dalloca ctx /\
+ op_taint tn x = {} /\ op_prov G x = NONE /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
  (!H. valid_horizon cx st0 H ee.storage_trace ==>

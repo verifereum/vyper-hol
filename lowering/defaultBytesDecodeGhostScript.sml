@@ -18,7 +18,7 @@ Theorem default_bytes_decode_origin:
   abi_decode_bytes_copy_size maxn < dimword (:256) /\ maxn < dimword (:256) /\
   ptr_covers G tn p s (abi_decode_bytes_copy_size maxn) /\ op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?H u.
