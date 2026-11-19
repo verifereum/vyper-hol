@@ -283,26 +283,6 @@ Proof
   gvs[dftIndexedExecTheory.dft_exec_cons_def, ADD_CLAUSES]
 QED
 
-Theorem focus_native_visit_in_body[local]:
-  bt.bb_instructions = ps ++ ys /\ be.vs_inst_idx = LENGTH ps /\
-  m <= LENGTH ys /\
-  MEM ((a,e,i.inst_id),tf,i,t)
-    (trace_block a e fuel C tf
-      (bt with bb_instructions := TAKE (LENGTH ps + m) bt.bb_instructions) be) ==>
-  ?k. t.vs_inst_idx = LENGTH ps + k /\ k < m /\ i = EL k ys /\
-      get_instruction bt t.vs_inst_idx = SOME i /\
-      EVERY (\x. ~is_terminator x.inst_opcode) (TAKE k ys) /\
-      FOLDR (dftIndexedExec$dft_exec_cons fuel C) OK (TAKE k ys) be = OK t
-Proof
-  strip_tac >> drule focus_native_visit_row_prefix >> strip_tac >>
-  `TAKE (LENGTH ps + m) bt.bb_instructions = ps ++ TAKE m ys` by
-    simp[TAKE_APPEND, TAKE_LENGTH_TOO_LONG] >>
-  `k < m /\ i = EL k ys` by
-    gvs[get_instruction_def, EL_TAKE, EL_APPEND_EQN, LENGTH_TAKE] >>
-  qexists_tac `k` >>
-  gvs[get_instruction_def, EL_APPEND_EQN, DROP_APPEND, rich_listTheory.TAKE_TAKE_T]
-QED
-
 (* A live row ends at the indexed current instruction (or pending call). *)
 Theorem focus_live_body_slice[local]:
   bt.bb_instructions = ps ++ ys /\ be.vs_inst_idx = LENGTH ps /\
@@ -400,42 +380,6 @@ Proof
   `hbe <= LENGTH R` by decide_tac >>
   irule focus_live_body_slice >>
   rpt (first_assum (irule_at Any))
-QED
-
-(* The actual child trace follows the indexed INVOKE without a gap. *)
-Theorem focus_returned_child_native_slice[local]:
-  R = trace_blocks [] 0 N C tf0 entry /\
-  h + SUC (LENGTH (trace_blocks ((e,c.inst_id)::a) e (N-e) C ctf child)) <= j /\
-  j < LENGTH R /\ EL h R = ((a,e,c.inst_id),tf,c,b0) /\
-  lookup_block b0.vs_current_bb tf.fn_blocks = SOME bt /\
-  c.inst_opcode = INVOKE /\ decode_invoke c = SOME (nm,ops) /\
-  lookup_function nm C.ctx_functions = SOME ctf /\
-  eval_operands ops b0 = SOME args /\ setup_callee ctf args b0 = SOME child ==>
-  TAKE (LENGTH (trace_blocks ((e,c.inst_id)::a) e (N-e) C ctf child))
-    (DROP (SUC h) (TAKE j R)) = trace_blocks ((e,c.inst_id)::a) e (N-e) C ctf child /\
-  (!i. i < LENGTH (trace_blocks ((e,c.inst_id)::a) e (N-e) C ctf child) ==>
-    SUC h + i < j /\
-    EL (SUC h + i) R = EL i (trace_blocks ((e,c.inst_id)::a) e (N-e) C ctf child))
-Proof
-  strip_tac >>
-  `h < LENGTH R` by decide_tac >>
-  drule_all focus_native_anchor >> strip_tac >>
-  drule_all trace_step_invoke >> strip_tac >>
-  drule_then assume_tac trace_block_visit >>
-  qabbrev_tac `ts = trace_blocks ((e,c.inst_id)::a) e (N-e) C ctf child` >>
-  `?tail. DROP (SUC h) R = ts ++ tail` by
-    simp[rich_listTheory.DROP_SUC, listTheory.APPEND_ASSOC] >>
-  `LENGTH ts <= j - SUC h` by decide_tac >>
-  conj_asm1_tac
-  >- simp[listTheory.DROP_TAKE, rich_listTheory.TAKE_TAKE_T,
-          TAKE_APPEND, TAKE_LENGTH_TOO_LONG] >>
-  gen_tac >> strip_tac >>
-  `i + SUC h < j` by decide_tac >>
-  conj_tac >- decide_tac >>
-  qpat_x_assum `TAKE (LENGTH ts) _ = ts` (SUBST1_TAC o SYM) >>
-  `i < j - SUC h /\ i + SUC h < LENGTH R` by decide_tac >>
-  qpat_x_assum `R = trace_blocks _ _ _ _ _ _` kall_tac >>
-  simp[listTheory.DROP_TAKE, EL_TAKE, listTheory.EL_DROP, arithmeticTheory.ADD_COMM]
 QED
 
 (* A successful row replay and its scheduled prefix share an oracle. *)

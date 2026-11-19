@@ -487,53 +487,6 @@ Proof
   >- (disch_tac >> gvs[] >> metis_tac[focus_root_cursor_no_intret])
 QED
 
-(* Readiness at a reached GAS does not require a selectable packet cut. *)
-Theorem focus_cursor_gas_available[local]:
-  generate_context_plan u.cu_context = SOME cpl /\
-  codegen_assembly rp u = SOME prog /\ unit_shape_ok u /\
-  fin IN accepted_finalizers /\ fin rp prog = SOME prog' /\
-  (fin = asm_opt_finalizer ==>
-    codegen_ready u.cu_context /\ focus_s7_symbolic_context u prog) /\
-  vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
-  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
-  asm_frame_rel_tail [] prog' vs0.vs_data_section es0
-    (entry_asm_state vs0 es0 with as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
-  run_call es0 = SOME (result,final) /\ ~frame_resource_starved es0 result final /\
-  asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-    prog n (entry_asm_state vs0 es0) = AsmOK ast /\
-  (fin = K SOME ==> normal_frame_plan rp u cpl prog
-    (vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
-                vs_return_pc_token := 0w; vs_inst_idx := 0|>) es0
-    (JointConfig stk PG G tn fn inst s oms om hs h) ast) /\
-  (fin = asm_opt_finalizer ==>
-    sym_steps prog (asm_data_env prog vs0.vs_code) n
-      (sym_init (entry_asm_state vs0 es0)) = SymOK ss /\
-    normal_frame_symbolic_plan (asm_data_env prog vs0.vs_code) rp u cpl prog vs0 es0
-      (JointConfig stk PG G tn fn inst s oms om hs h) ast ss) /\
-  active_inst fn inst s /\ inst.inst_opcode = GAS ==>
-  s.vs_gas_readings <> []
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
-  pop_assum strip_assume_tac
-  >- (`prog' = prog` by fs[combinTheory.K_THM] >>
-      `(entry_asm_state vs0 es0 with as_code := assemble prog ++ vs0.vs_data_section) =
-       entry_asm_state vs0 es0` by simp[entry_asm_state_def] >>
-      `asm_frame_rel_tail [] prog vs0.vs_data_section es0 (entry_asm_state vs0 es0) es0`
-        by fs[] >>
-      `asm_frame_prog_ok prog` by metis_tac[codegen_assembly_frame_prog_ok] >>
-      `normal_frame_plan rp u cpl prog
-        (vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
-                    vs_return_pc_token := 0w; vs_inst_idx := 0|>) es0
-        (JointConfig stk PG G tn fn inst s oms om hs h) ast` by fs[] >>
-      drule_all focus_plain_frame_gas_available >> simp[]) >>
-  gvs[] >> drule_all focus_normal_frame_gas_available >>
-  disch_then (qx_choose_then `bound` assume_tac) >>
-  qpat_x_assum `!n ast ss stk PG G tn fn inst s oms om hs h. _`
-    (assume_tac o SRULE [ASSUME ``vs0.vs_code = assemble prog ++ vs0.vs_data_section``]) >>
-  first_x_assum drule_all >> simp[]
-QED
-
 Theorem focus_after_params[local]:
   !xs. LENGTH (get_params xs) < LENGTH xs ==>
     ~is_param_opcode (EL (LENGTH (get_params xs)) xs).inst_opcode
