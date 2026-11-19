@@ -2,6 +2,7 @@
 Theory bodyFullBuiltinConcat
 Ancestors exprSimDefs[qualified,ignore_grammar] stmtSimProps[qualified,ignore_grammar]
   bodyFullBuiltinConcatLoop bodyFullBuiltinConcatFrame bodyFullOfVV bodyInvNoDalloca
+  bodyFullHashKeccakFixed[qualified,ignore_grammar] bodyFullIfExpReach[qualified,ignore_grammar]
   bodyFullPreds bodySimFull gasOutcomeFullCompose gasOutcomeFullGuarded
   exprSimConcatResult exprSimConcatSource exprSimHyps exprSimSource
   exprSimHypsDefs exprLowering loweringPosts allocLimits vyperTypeInvariants
@@ -41,7 +42,6 @@ Proof
 QED
 
 Resume concat_sim_full[vv]:
-  `~ctx_has_dalloca ctx` by (drule body_inv_no_dalloca >> simp[]) >>
   `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
           expr_body_pre cenv cx env e st` by
     (rpt gen_tac >> strip_tac >>
@@ -131,7 +131,12 @@ Resume concat_sim_full[vv]:
     (qpat_assum `ghost_inv_at _ _ _ _ _ es G0 tn0 s0` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[bodyPtrDefsTheory.ghost_inv_at_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
-    s0.vs_alloca_next + pending_alloca_size func s0 <= w2n s0.vs_initial_fmp` by simp[] >>
+    s0.vs_alloca_next + pending_alloca_size func s0 <= w2n s0.vs_initial_fmp` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s0` mp_tac >>
+     qpat_assum `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[exprLoweringPropsTheory.stmt_state_rel_def, exprLoweringPropsTheory.fmp_room_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all bodyFullBuiltinConcatFrameTheory.concat_prefix_full >>
   disch_then (qspecl_then [`tn0`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`G0`]
     (qx_choosel_then [`t4`,`G4`,`tn4`,`bv`,`dp`,`ov`,`B`,`ow`]
@@ -288,6 +293,22 @@ Resume concat_sim_full[loop]:
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> simp[]) >>
   `!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at s4 z` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> simp[]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi (CONJ inv member))))) >>
+  `!fn inst z. frag_reachable ctx func t4 fn inst z ==> dalloca_no_wrap inst z` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK t4,G4,tn4)`
+       (qspec_then `DF (storage_trace_horizon es.storage_trace)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+       qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+           (LIST_CONJ [path,no_phi,safe]))))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t4` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> stmt_state_rel _ _ _ _ _ _ t4 /\ _`
+       (fn th => qpat_assum `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace`
+         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+          CONJUNCT1 o MATCH_MP th))) >>
   qunabbrev_tac `infos` >>
   mp_tac (Q.INST [`P` |-> `0`,`k` |-> `0`,`sa` |-> `s4`,`sb` |-> `s5`,
     `shadow_sa` |-> `shadow_s4`,`shadow_sb` |-> `shadow_s5`,
@@ -569,10 +590,12 @@ Resume concat_sim_full[representation]:
 QED
 
 Resume concat_sim_full[frames]:
+  qpat_assum `stmt_state_rel H ctx func cenv cx ee t6`
+    (fn th => simp[NoAsms, MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp th]) >>
   map_every (fn q => qpat_assum q (fn th => simp[NoAsms,th]))
     [`t6.vs_current_bb = sb.cs_current_bb`,
      `t6.vs_inst_idx = LENGTH sb.cs_current_insts`,
-     `alloca_history func t6`, `~ctx_has_dalloca ctx`,
+     `alloca_history func t6`,
      `s0.vs_alloca_next <= t6.vs_alloca_next`,
      `ghost_inv_at (DF H) lo d cenv cx ee G6 tn6 t6`,
      `ptr_buf_ok cenv (Builtin a (Concat n) args) (Var bv) G6 t6`] >>

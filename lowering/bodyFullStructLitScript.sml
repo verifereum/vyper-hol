@@ -119,7 +119,7 @@ QED
 Theorem structlit_alloc_init_full[local]:
   compile_alloc_buffer n sa = (ba,sm) /\ fn_has_code sa sm func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  n < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  n < dimword(:256) /\
   storage_trace_domain cx st0 es.storage_trace /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
@@ -168,7 +168,10 @@ Proof
     (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
        (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
      simp[bodyPtrDefsTheory.ghost_inv_at_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx es s0`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``] alloc_buffer_origin_ptr_path) >>
   disch_then (qspecl_then [`tn0`, `explicit`, `PG`, `G0`] strip_assume_tac) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>

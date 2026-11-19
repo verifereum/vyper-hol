@@ -216,6 +216,7 @@ Resume prefix_canonical_bytestring_paired_floor[package]:
   `b <= w2n (n2w d:bytes32) /\
    w2n (n2w d:bytes32) + abi_decode_bytes_copy_size n <= b+sz` by
     (simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_bytestring_success_ghost >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   `allocas_from lo actual /\ lo <= actual.vs_alloca_next` by

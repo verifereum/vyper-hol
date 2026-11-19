@@ -684,6 +684,7 @@ Resume subscript_array_framed_code_full[fixed_selection]:
      pure_rewrite_tac[loweringShapeRulesTheory.emit_op_eq, pairTheory.PAIR_EQ] >>
      strip_tac >> gvs[]) >> gvs[] >>
   `eval_operand iop ib = SOME (n2w (w2n iw))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ib` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     bodyFullSubscriptArrayCodeOpsTheory.scalar_mul_add_joint_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
@@ -802,6 +803,7 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
   `w2n w <= LENGTH it.vs_data_section` by
     (drule_all exprSimBopRestWordLoadSafetyTheory.rest_word_immutable_region_bound >>
      simp[] ) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame) >>
   disch_then (qspecl_then [`PG`, `Gi`] mp_tac) >>
@@ -872,6 +874,7 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
   fs[compileEnvTheory.word_scale_def] >>
   `!q. iop = Var q ==> not_fresh_at cs'' q` by metis_tac[] >>
   `eval_operand iop ib = SOME (n2w (w2n iw))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ib` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     bodyFullSubscriptArrayCodeOpsTheory.code_dynamic_address_joint_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
@@ -1065,6 +1068,7 @@ Resume subscript_array_framed_code_full[dynamic_rejection]:
     (fs[vv_holds_def] >> gvs[]) >>
   `w2n w <= LENGTH it.vs_data_section` by
     (drule_all exprSimBopRestWordLoadSafetyTheory.rest_word_immutable_region_bound >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame) >>
   disch_then (qspecl_then [`PG`, `Gi`] mp_tac) >>

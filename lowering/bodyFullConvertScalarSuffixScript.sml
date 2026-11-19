@@ -43,7 +43,8 @@ Theorem scalar_convert_origin_path:
     | _ => mk_convert_op src dst) sa = (out,sb) /\
   eval_operand x s = SOME (typed_val_to_w256 tv v) /\
   (!z. x = Var z ==> not_fresh_at sa z) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -68,7 +69,6 @@ Theorem scalar_convert_origin_path:
       !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (Abort err t,Gf,tnf)))
 Proof
   strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all scalar_convert_typed_run >> strip_tac >>
   conj_tac
   >- (rpt strip_tac >>

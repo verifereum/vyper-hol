@@ -8,7 +8,7 @@ Ancestors
   emitHelperProps exprLoweringProps codegenRel contextCodegenRel
 
 Theorem bytes_word_normalize_fixed_frame:
-  ALL_DISTINCT [len;dp;data;sub;bits;dst] /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [len;dp;data;sub;bits;dst] /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var len s = SOME (n2w n) /\ n <= 32 /\ lookup_var dp s = SOME a /\
   ptr_covers G tn dp s 32 /\ op_prov G (Var len) = NONE /\
   op_taint tn (Var len) = {} /\

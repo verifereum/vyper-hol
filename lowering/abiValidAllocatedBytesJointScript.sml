@@ -89,6 +89,7 @@ Proof
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
   `32 + contractABI$ceil32 n <= out_cap` by
     simp[Abbr `out_cap`, abiDecoderBytesTheory.abi_decode_bytes_copy_size_def, contractABITheory.ceil32_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp pruned` by simp[] >>
   drule_all abi_decode_valid_bytes_pruned_certificate >>
   disch_then (qspecl_then [`func`, `PG`] (qx_choose_then `Gf` (qx_choose_then `tf`
     (map_every assume_tac o CONJUNCTS)))) >>
