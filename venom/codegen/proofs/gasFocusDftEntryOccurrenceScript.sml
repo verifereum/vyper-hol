@@ -6,10 +6,9 @@ Ancestors
 
 (* The selected target block determines the native head, before any joint step. *)
 Theorem focus_dft_entry_occurrence:
-  let tf = dft_fn sf;
-      E = root_base with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>;
-      u = sp with vs_inst_idx := phi_prefix_length bt.bb_instructions
-  in
+  !tf. tf = dft_fn sf ==>
+  !E. E = root_base with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> ==>
+  !u. u = sp with vs_inst_idx := phi_prefix_length bt.bb_instructions ==>
     ctx_pass_stage rp (CFP_Simple VP_DFT) view C7 C8 /\
     o1_pre 7 C7 C8 /\ o1_ctx_shape C7 /\ o1_ctx_shape C8 /\
     EVERY wf_ssa C7.ctx_functions /\ C7.ctx_entry = SOME nm /\
@@ -17,10 +16,9 @@ Theorem focus_dft_entry_occurrence:
     lookup_block lbl tf.fn_blocks = SOME bt /\ bt.bb_label = lbl /\
     eval_phis E bt.bb_instructions = OK sp /\
     get_instruction bt u.vs_inst_idx = SOME inst /\ 0 < N ==>
-    let q = JointConfig [] [] FEMPTY entry_taint tf inst u [] FEMPTY []
-              [OriginInitial E; OriginObserve (OriginSnapshot tf [] FEMPTY FEMPTY inst u)];
-        T = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 tf E
-    in
+    !q. q = JointConfig [] [] FEMPTY entry_taint tf inst u [] FEMPTY []
+              [OriginInitial E; OriginObserve (OriginSnapshot tf [] FEMPTY FEMPTY inst u)] ==>
+    !T. T = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 tf E ==>
       C8.ctx_entry = SOME nm /\ lookup_function nm C8.ctx_functions = SOME tf /\
       fn_entry_label tf = SOME lbl /\ dft_fn_rel sf tf /\
       enters_block tf E u /\ active_inst tf inst u /\
@@ -31,6 +29,7 @@ Theorem focus_dft_entry_occurrence:
       TAKE 0 T = [] /\ LENGTH (TAKE 0 T) = 0 /\
       dftGasFromListTraceDefs$trace_gas (TAKE 0 T) = []
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
   drule_all dft_stage_fn_rel >> strip_tac >>
   `C8.ctx_entry = SOME nm` by simp[] >>
@@ -57,7 +56,7 @@ Proof
   `E = (root_base with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)` by
     simp[Abbr `E`] >>
   asm_rewrite_tac[] >>
-  drule_all focus_initial_native_root >>
+  drule_all (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV) focus_initial_native_root) >>
   pop_assum (fn th => pure_rewrite_tac[LET_THM, th]) >>
   BETA_TAC >> disch_then ACCEPT_TAC
 QED

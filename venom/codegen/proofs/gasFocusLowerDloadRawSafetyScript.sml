@@ -449,9 +449,10 @@ Resume ld_focus_actual_raw_safety[bytes]:
     (SPEC_ALL ld_focus_bytes_classified_write))) >>
   disch_then (REPEAT_TCL CHOOSE_THEN (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
   `lo <= vs.vs_alloca_next` by fs[o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
-  drule_all (REWRITE_RULE [LET_THM] (Q.INST [`p` |-> `t0.vs_inst_idx`]
-    (SPEC_ALL ld_focus_bytes_classified_next))) >>
-  disch_then (strip_assume_tac o BETA_RULE) >>
+  drule_all (REWRITE_RULE [] (Q.INST [`p` |-> `t0.vs_inst_idx`]
+    (CONV_RULE (RAND_CONV (REPEATC Unwind.UNWIND_FORALL_CONV))
+      ld_focus_bytes_classified_next))) >>
+  strip_tac >>
   `ss.vs_current_bb = s.vs_current_bb` by
     metis_tac[step_preserves_control_flow] >>
   qpat_x_assum `t = (update_var _ _ _ with vs_inst_idx := _)` kall_tac >>
@@ -534,7 +535,8 @@ QED
 
 Resume ld_focus_actual_raw_safety[singleton_scalar]:
   `t.vs_inst_idx = t.vs_inst_idx` by simp[] >>
-  drule_all (CONV_RULE (REWR_CONV LET_THM THENC BETA_CONV)
+  drule_all (CONV_RULE (TOP_DEPTH_CONV
+       (HO_REWR_CONV UNWIND_THM2 ORELSEC Unwind.UNWIND_FORALL_CONV))
     ld_focus_arithmetic_binding_point_next) >>
   disch_then pack_singleton
 QED

@@ -32,7 +32,8 @@ Proof
   strip_tac >>
   `?p j. revert_forward_pair bb p j /\ (s.vs_inst_idx = p \/ s.vs_inst_idx = j)` by
     (gvs[in_revert_forward_def, revert_forward_at_def] >> metis_tac[]) >>
-  drule_all focus_fmp_cut_forward_layout >> simp[] >> strip_tac >>
+  drule_all (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)
+    focus_fmp_cut_forward_layout) >> simp[] >> strip_tac >>
   `p <= j` by (fs[revert_forward_pair_def] >> decide_tac) >>
   `s.vs_inst_idx - p <= j-p /\ (s.vs_inst_idx-p) + p = s.vs_inst_idx` by decide_tac >>
   qpat_x_assum `!h. h <= j-p ==> _` (qspec_then `s.vs_inst_idx-p` mp_tac) >>

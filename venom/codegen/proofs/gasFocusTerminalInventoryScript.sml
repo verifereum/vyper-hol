@@ -56,17 +56,16 @@ Theorem focus_terminal_row_inventory:
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
                ~is_pseudo i.inst_opcode) zs /\
     is_terminator last.inst_opcode ==>
-    let sites = MAP (\i. (fn.fn_name,i.inst_id))
-                      (FILTER (\i. i.inst_opcode = GAS) zs);
-        slots = REPLICATE (LENGTH sites) NONE;
-        keys = MAP (\i. (a,e,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) zs)
-    in LENGTH slots = LENGTH sites /\ LENGTH keys = LENGTH sites /\
+    !sites. sites = MAP (\i. (fn.fn_name,i.inst_id))
+                      (FILTER (\i. i.inst_opcode = GAS) zs) ==>
+    !slots. slots = REPLICATE (LENGTH sites) NONE ==>
+    !keys. keys = MAP (\i. (a,e,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) zs) ==>
+    LENGTH slots = LENGTH sites /\ LENGTH keys = LENGTH sites /\
        FILTER IS_SOME slots = [] /\
        !gs tail.
          LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots gs ==>
-         let R = entry with vs_gas_readings := gs ++ tail;
-             B = sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|>
-         in
+         !R. R = entry with vs_gas_readings := gs ++ tail ==>
+         !B. B = sp with <|vs_inst_idx := LENGTH ps; vs_gas_readings := gs ++ tail|> ==>
          ((!q. FOLDR (dft_exec_cons fuel C) OK zs B = q /\
                (!u. q <> OK u) ==>
                run_blocks (SUC fuel) C fn R = q /\
@@ -78,6 +77,7 @@ Theorem focus_terminal_row_inventory:
                    (case r of OK u => Halt u | other => other) /\
                  gas_events_blocks (SUC fuel) C fn R = sites))
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   rpt gen_tac >> strip_tac >> simp[] >>
   `FILTER IS_SOME (REPLICATE
     (LENGTH (FILTER (\i. i.inst_opcode = GAS) zs)) (NONE:256 word option)) = []` by
@@ -103,7 +103,8 @@ Proof
   `exec_block fuel C bb B = dft_exec_suffix fuel C (zs ++ [last]) B` by
     (irule dft_exec_suffix_boundary >> simp[]) >>
   `B with vs_gas_readings := gs ++ tail = B` by simp[Abbr `B`] >>
-  drule_all focus_initial_unvisited_row_replay >>
+  drule_all (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)
+    focus_initial_unvisited_row_replay) >>
   disch_then (qspecl_then [`fuel`, `C`, `fn.fn_name`, `B`, `tail`] mp_tac) >>
   simp[] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_events_block fuel C fn.fn_name short B` >>

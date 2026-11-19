@@ -17,14 +17,13 @@ Theorem focus_fmp_cut_inserted_residual:
        fmp_inserted_op (EL i bb.bb_instructions).inst_opcode) ==>
   fmp_inserted_op ti.inst_opcode /\
   (!fuel z. step_inst fuel C4 ti t = OK z ==>
-    let v = z with vs_inst_idx := SUC t.vs_inst_idx in
-      v.vs_current_bb = u.vs_current_bb /\
-      v.vs_inst_idx <= u.vs_inst_idx /\
-      v.vs_gas_readings = t.vs_gas_readings /\
-      (!k. fmp_target_run k C4 name v (u.vs_inst_idx - v.vs_inst_idx) u) /\
-      (!i. v.vs_inst_idx <= i /\ i < u.vs_inst_idx ==>
-           i < LENGTH bb.bb_instructions /\
-           fmp_inserted_op (EL i bb.bb_instructions).inst_opcode))
+    (z with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb = u.vs_current_bb /\
+    (z with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx <= u.vs_inst_idx /\
+    (z with vs_inst_idx := SUC t.vs_inst_idx).vs_gas_readings = t.vs_gas_readings /\
+    (!k. fmp_target_run k C4 name (z with vs_inst_idx := SUC t.vs_inst_idx) (u.vs_inst_idx - (z with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx) u) /\
+    (!i. (z with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx <= i /\ i < u.vs_inst_idx ==>
+         i < LENGTH bb.bb_instructions /\
+         fmp_inserted_op (EL i bb.bb_instructions).inst_opcode))
 Proof
   strip_tac >> drule_all active_inst_block_lookup >> strip_tac >> fs[] >>
   conj_asm1_tac
@@ -56,10 +55,9 @@ Theorem focus_fmp_cut_tail_observation:
   ((t.vs_inst_idx = j /\ ti.inst_opcode = REVERT) \/
    (t.vs_inst_idx < j /\ ti.inst_opcode = ASSIGN)) /\
   (!fuel z. ~is_terminator ti.inst_opcode /\ step_inst fuel C4 ti t = OK z ==>
-    let v = z with vs_inst_idx := SUC t.vs_inst_idx in
-      lookup_block v.vs_current_bb fn'.fn_blocks = SOME bb /\
-      revert_forward_pair bb p j /\ p < v.vs_inst_idx /\ v.vs_inst_idx <= j /\
-      v.vs_gas_readings = t.vs_gas_readings)
+    lookup_block (z with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb fn'.fn_blocks = SOME bb /\
+    revert_forward_pair bb p j /\ p < (z with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx /\ (z with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx <= j /\
+    (z with vs_inst_idx := SUC t.vs_inst_idx).vs_gas_readings = t.vs_gas_readings)
 Proof
   strip_tac >>
   `get_instruction bb t.vs_inst_idx = SOME ti` by

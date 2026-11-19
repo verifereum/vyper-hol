@@ -39,14 +39,13 @@ Proof
 QED
 
 Theorem focus_dft_entry_row:
-  let tf = dft_fn sf in
   ctx_pass_stage rp (CFP_Simple VP_DFT) view C7 C8 /\
   o1_pre 7 C7 C8 /\ o1_ctx_shape C7 /\ o1_ctx_shape C8 /\
   EVERY wf_ssa C7.ctx_functions /\ C7.ctx_entry = SOME nm /\
   lookup_function nm C7.ctx_functions = SOME sf /\ fn_entry_label sf = SOME lbl ==>
   ?bb bt ps xs ys rho.
     lookup_block lbl sf.fn_blocks = SOME bb /\
-    lookup_block lbl tf.fn_blocks = SOME bt /\ bb.bb_label = lbl /\ bt.bb_label = lbl /\
+    lookup_block lbl (dft_fn sf).fn_blocks = SOME bt /\ bb.bb_label = lbl /\ bt.bb_label = lbl /\
     bb.bb_instructions = ps ++ xs /\ bt.bb_instructions = ps ++ ys /\
     EVERY (\i. is_pseudo i.inst_opcode) ps /\
     EVERY (\i. ~is_pseudo i.inst_opcode) xs /\

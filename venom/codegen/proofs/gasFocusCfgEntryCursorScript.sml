@@ -13,14 +13,15 @@ Theorem focus_cfg_entry_cursor:
     C8.ctx_entry = SOME nm /\ lookup_function nm C8.ctx_functions = SOME f8 /\
     fn_entry_label f8 = SOME lbl ==>
     ?f9 current.
-      let E = base with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> in
-      let i9 = HD (HD f9.fn_blocks).bb_instructions in
-      let q9 = JointConfig [] [] FEMPTY entry_taint f9 i9 E [] FEMPTY []
-        [OriginInitial E; OriginObserve (OriginSnapshot f9 [] FEMPTY FEMPTY i9 E)] in
+      ?E. E = base with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
+      ?i9. i9 = HD (HD f9.fn_blocks).bb_instructions /\
+      ?q9. q9 = JointConfig [] [] FEMPTY entry_taint f9 i9 E [] FEMPTY []
+        [OriginInitial E; OriginObserve (OriginSnapshot f9 [] FEMPTY FEMPTY i9 E)] /\
       C9.ctx_entry = SOME nm /\ lookup_function nm C9.ctx_functions = SOME f9 /\
       fn_entry_label f9 = SOME lbl /\ joint_initial base C9 q9 /\
       cfg_norm_joint_cursors C8 C9 (schedules,current,[]) q8 q9
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_THM2)) >>
   strip_tac >> drule_all cfg_norm_joint_cursors_initial >>
   disch_then (qx_choose_then `schedules` (mk_asm "cursor")) >>
   drule cfg_norm_stage_functions >> strip_tac >>

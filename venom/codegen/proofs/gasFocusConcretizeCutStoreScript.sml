@@ -69,12 +69,13 @@ Theorem ptr_focus_store_footprint[local]:
   MEM inst.inst_opcode [MSTORE; MSTORE8; ISTORE] /\
   inst.inst_operands = [d; v] /\
   eval_operand d s = SOME x /\ eval_operand v s = SOME y ==>
-  let len = if inst.inst_opcode = MSTORE8 then 1 else 32 in
+  !len. len = (if inst.inst_opcode = MSTORE8 then 1 else 32) ==>
     source_memory_write_ranges inst s = [(w2n x,len)] /\
     step_writes inst s post = [(w2n x,len)] /\
     mem_write_ops inst = SOME <|iao_ofst := d; iao_size := SOME (Lit (n2w len));
                                iao_max_size := SOME (Lit (n2w len))|>
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   simp[listTheory.MEM] >> strip_tac >>
   simp[source_memory_write_ranges_def, fixed_source_write_range_def,
        step_writes_def, mem_write_ops_def]
@@ -537,12 +538,14 @@ Resume ptr_focus_store_step[write]:
    mem_write_ops a.po_inst = SOME <|iao_ofst := d; iao_size := SOME (Lit (n2w len));
                                    iao_max_size := SOME (Lit (n2w len))|>` by
     (qpat_x_assum `eval_operand d at.po_state = _` kall_tac >>
-     drule_all ptr_focus_store_footprint >>
+     drule_all (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)
+       ptr_focus_store_footprint) >>
      disch_then (qspec_then `z.po_state` mp_tac) >> simp[Abbr `len`]) >>
   `step_writes at.po_inst at.po_state zt.po_state = [(w2n xt,len)]` by
     (qpat_x_assum `eval_operand d a.po_state = _` kall_tac >>
      qpat_x_assum `at.po_inst = a.po_inst` SUBST_ALL_TAC >>
-     drule_all ptr_focus_store_footprint >>
+     drule_all (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)
+       ptr_focus_store_footprint) >>
      disch_then (qspec_then `zt.po_state` mp_tac) >> simp[Abbr `len`]) >>
   `?reloc. (!k. k < len ==> reloc (w2n x + k) = w2n xt + k) /\
           ptr_paired_write_owner (dyn_floor C a.po_state) lo positions reloc

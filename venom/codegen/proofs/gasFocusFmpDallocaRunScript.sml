@@ -32,7 +32,7 @@ Theorem focus_fmp_dalloca_restored_run:
   ?op out sz plus31 mask aligned ai ni mi bi bb' tail t1.
     inst.inst_operands = [op] /\ inst.inst_outputs = [out] /\
     eval_operand op s = SOME sz /\ eval_operand op t = SOME sz /\
-    let z = ceil32 (w2n sz) in
+    ?z. z = ceil32 (w2n sz) /\
       s1 = update_var out s.vs_fmp (s with vs_fmp := n2w (w2n s.vs_fmp+z)) /\
       w2n s.vs_fmp+z < dimword (:256) /\ lo+z < dimword (:256) /\
       fmp_frontier_rel fmp0 raw0 (lo+z) s1.vs_fmp /\
@@ -53,6 +53,7 @@ Theorem focus_fmp_dalloca_restored_run:
         (fmp_stage_root infos ctx fn) s.vs_current_bb bb.bb_instructions
         (SUC s.vs_inst_idx)
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_THM2)) >>
   strip_tac >>
   `terminates (OK s1)` by simp[terminates_def] >>
   drule_all fmp_dalloca_source >> strip_tac >>

@@ -6,9 +6,8 @@ Ancestors
    The index in a retained call row selects the pre-vertex, not just a
    matching configuration somewhere in the trace. *)
 Theorem focus_retained_call_visit:
-  let T = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry;
-      V = TAKE j T
-  in
+  !T. T = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry ==>
+  !V. V = TAKE j T ==>
     dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
       acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
     joint_trace vs0 C8 q80 evs8 qs8 q8 /\ j = LENGTH evs8 /\
@@ -47,6 +46,7 @@ Theorem focus_retained_call_visit:
            h + SUC (LENGTH (dftGasFromListTraceDefs$trace_blocks ((e,cid)::a) e (N-e)
              C8 ctf child_entry)) <= j /\ MEM q (TAKE count rho))
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
   qhdtm_x_assum `dft_focus_packet_rel`
     (strip_assume_tac o PURE_REWRITE_RULE [dft_focus_packet_rel_def]) >>

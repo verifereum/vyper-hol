@@ -75,19 +75,19 @@ Theorem focus_exact_cost_ledger_bound:
     (entry_asm_state vs0 es0 with as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
   run_call es0 = SOME (result,final) /\ ~frame_resource_starved es0 result final ==>
   ?max_cost. !q0 evs qs q costs ats sts.
-    let C = u.cu_context in
-    let m = LENGTH evs in
-    let Q = q0::qs in
-    let A = entry_asm_state vs0 es0 :: ats in
-    let S = sym_init (entry_asm_state vs0 es0) :: sts in
-    let asteps = asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog in
-    let ssteps = sym_steps prog (asm_data_env prog vs0.vs_code) in
-    let rank = \v. case v of JointConfig stk PG G tn fn inst s oms om hs h =>
+    !C. C = u.cu_context ==>
+    !m. m = LENGTH evs ==>
+    !Q. Q = q0::qs ==>
+    !A. A = entry_asm_state vs0 es0 :: ats ==>
+    !S. S = sym_init (entry_asm_state vs0 es0) :: sts ==>
+    !asteps. asteps = asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog ==>
+    !ssteps. ssteps = sym_steps prog (asm_data_env prog vs0.vs_code) ==>
+    !rank. rank = (\v. case v of JointConfig stk PG G tn fn inst s oms om hs h =>
       case lookup_block s.vs_current_bb fn.fn_blocks of
         NONE => 0
-      | SOME bb => LENGTH bb.bb_instructions - s.vs_inst_idx in
-    let R = SUM (MAP (\func. SUM (MAP (\bb. LENGTH bb.bb_instructions) func.fn_blocks))
-                   C.ctx_functions) in
+      | SOME bb => LENGTH bb.bb_instructions - s.vs_inst_idx) ==>
+    !R. R = SUM (MAP (\func. SUM (MAP (\bb. LENGTH bb.bb_instructions) func.fn_blocks))
+                   C.ctx_functions) ==>
     joint_trace vs0 C q0 evs qs q /\
     LENGTH costs = m /\ LENGTH ats = m /\
     LIST_REL (\c pair. 0 < c \/ rank (SND pair) < rank (FST pair)) costs (ZIP (Q,qs)) /\
@@ -103,6 +103,7 @@ Theorem focus_exact_cost_ledger_bound:
     LIST_REL (\c pair. 0 < c \/ rank (SND pair) < rank (FST pair)) costs (ZIP (Q,qs)) /\
     SUM costs <= max_cost
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   strip_tac >> drule_all ledger_run_budget >>
   disch_then (qx_choose_then `B` assume_tac) >> qexists `B` >>
   rewrite_tac[LET_THM] >> BETA_TAC >> rpt gen_tac >> strip_tac >>

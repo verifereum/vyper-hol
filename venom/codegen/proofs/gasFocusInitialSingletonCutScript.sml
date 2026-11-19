@@ -16,11 +16,11 @@ Theorem focus_initial_singleton_cut:
   q < LENGTH xs /\
   EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
     (TAKE q xs) ==>
-  let z = TAKE q xs;
-      levels = [(sf,[(bb,1,z)],NONE)];
-      E = MAP (\i. (sf.fn_name,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) z);
-      K = MAP (\i. ([],1,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) z);
-      row_eval = (\F C owner (bb,e,z) s.
+  !z. z = TAKE q xs ==>
+  !levels. levels = [(sf,[(bb,1,z)],NONE)] ==>
+  !E. E = MAP (\i. (sf.fn_name,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) z) ==>
+  !K. K = MAP (\i. ([],1,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) z) ==>
+  !row_eval. row_eval = (\F C owner (bb,e,z) s.
         case eval_phis s bb.bb_instructions of
           OK sp =>
            (gas_events_block (F-e) C owner
@@ -29,13 +29,13 @@ Theorem focus_initial_singleton_cut:
              (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions),
             FOLDR (dft_exec_cons (F-e) C) OK z
              (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))
-        | other => ([],other));
-      plan_eval = (\F C owner plan entry.
+        | other => ([],other)) ==>
+  !plan_eval. plan_eval = (\F C owner plan entry.
         FOLDL (\(es,r) row.
           case r of
             OK s => (es ++ FST (row_eval F C owner row s), SND (row_eval F C owner row s))
-          | other => (es,other)) ([],OK entry) plan);
-      call_setup = (\C c s.
+          | other => (es,other)) ([],OK entry) plan) ==>
+  !call_setup. call_setup = (\C c s.
         case decode_invoke c of
           NONE => Error "invoke: bad operand format"
         | SOME (nm,ops) =>
@@ -47,8 +47,8 @@ Theorem focus_initial_singleton_cut:
             | SOME args =>
               case setup_callee callee args s of
                 NONE => Error "invoke: empty function"
-              | SOME cs => OK cs);
-      rooted_eval = (\F C levels entry.
+              | SOME cs => OK cs) ==>
+  !rooted_eval. rooted_eval = (\F C levels entry.
         FOLDL (\(prior,r) (sf,plan,call).
           case r of
             OK ent =>
@@ -57,8 +57,8 @@ Theorem focus_initial_singleton_cut:
                 OK caller =>
                   (case call of NONE => OK caller | SOME c => call_setup C c caller)
               | other => other)
-          | other => (prior,other)) ([],OK entry) levels);
-      plan_ok = (\F C sf a plan entry.
+          | other => (prior,other)) ([],OK entry) levels) ==>
+  !plan_ok. plan_ok = (\F C sf a plan entry.
         plan <> [] /\
         MAP (\(bb,e,z). e) plan = GENLIST (\r. a + SUC r) (LENGTH plan) /\
         (!r bb e z. r < LENGTH plan /\ EL r plan = (bb,e,z) ==>
@@ -77,8 +77,8 @@ Theorem focus_initial_singleton_cut:
           r < LENGTH plan /\ EL r plan = (bb,e,z) /\
           plan_eval F C sf.fn_name (TAKE r plan) entry = (es,OK s) ==>
           lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
-          (0 < r ==> ~s.vs_halted)));
-      levels_ok = (\F C levels paths incoming root_fn root_entry root_path root_depth.
+          (0 < r ==> ~s.vs_halted))) ==>
+  !levels_ok. levels_ok = (\F C levels paths incoming root_fn root_entry root_path root_depth.
         levels <> [] /\ LENGTH paths = LENGTH levels /\
         LENGTH incoming = LENGTH levels /\
         HD paths = root_path /\ HD incoming = root_depth /\
@@ -97,10 +97,10 @@ Theorem focus_initial_singleton_cut:
               lookup_function nm C.ctx_functions = SOME (FST (EL (SUC i) levels)) /\
               EL (SUC i) incoming = e /\
               EL (SUC i) paths = (e,c.inst_id)::EL i paths
-           else call = NONE)))
-  in !gs tail.
+           else call = NONE))) ==>
+  !gs tail.
     1 <= F /\ LENGTH gs = LENGTH E ==>
-    let R = entry with vs_gas_readings := gs ++ tail in
+    !R. R = entry with vs_gas_readings := gs ++ tail ==>
       levels_ok F C levels [[]] [0] sf R [] 0 /\
       (?extra. E = FST (rooted_eval F C levels R) ++ extra) /\
       (!ev u. rooted_eval F C levels R = (ev,OK u) ==>
@@ -116,13 +116,14 @@ Theorem focus_initial_singleton_cut:
         run_blocks F C sf R = r /\ gas_events_blocks F C sf R = ev)
 Proof
   rpt gen_tac >> strip_tac >>
-  simp_tac bool_ss [combinTheory.LET_FORALL_ELIM, combinTheory.S_DEF,
-    combinTheory.o_DEF, combinTheory.C_DEF] >> BETA_TAC >>
-  map_every (fn v => qx_gen_tac v >> disch_tac)
+  map_every (fn v => qx_gen_tac v >>
+    disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
     [`z`,`levels`,`E`,`keys`,`row_eval`,`plan_eval`,`call_setup`,
      `rooted_eval`,`plan_ok`,`levels_ok`] >>
   qx_gen_tac `gs` >> qx_gen_tac `tail` >> strip_tac >>
-  qx_gen_tac `R` >> disch_tac >> markerLib.REABBREV_TAC >>
+  qx_gen_tac `R` >>
+  disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
+  markerLib.REABBREV_TAC >>
   conj_tac >- suspend "levels" >>
   suspend "execution"
 QED

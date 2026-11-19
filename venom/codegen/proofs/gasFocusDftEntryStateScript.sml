@@ -6,7 +6,7 @@ Ancestors
 
 (* The selected row starts at the normalized entry, without executing pseudos. *)
 Theorem focus_dft_entry_state:
-  let E = root_base with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> in
+  !E. E = root_base with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> ==>
   code_layout_valid root_base /\ o1_ctx_shape C7 /\ o1_ctx_shape C8 /\
   MEM sf C7.ctx_functions /\ MEM tf C8.ctx_functions /\
   fn_entry_label sf = SOME lbl /\ fn_entry_label tf = SOME lbl /\
@@ -19,6 +19,7 @@ Theorem focus_dft_entry_state:
   ctx_labels_bound C7 E.vs_labels /\ ctx_labels_bound C8 E.vs_labels /\
   (phi_prefix_length bt.bb_instructions = LENGTH ps ==> dft_remaining_inv sf bb xs E)
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   simp[LET_THM] >> strip_tac >>
   qmatch_goalsub_abbrev_tac `eval_phis E _` >>
   `E.vs_current_bb = lbl /\ E.vs_labels = root_base.vs_labels` by simp[Abbr `E`] >>

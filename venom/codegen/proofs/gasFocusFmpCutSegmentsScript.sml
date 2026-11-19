@@ -199,11 +199,10 @@ Theorem focus_fmp_cut_dalloca_segment:
             mk_inst mi AND [Var plus31;Var mask] [aligned];
             mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] /\
     (!k'. fmp_target_run k' C' fn.fn_name t 4 t1) /\
-    let z = venomLayout$ceil32 (w2n sz) in
-      sm1 = (if z = 0 then sm else sm |+ ((w2n s.vs_fmp,z),(lo,inst.inst_id))) /\
-      fmp_stage_rel D C' sm1 fmp0 raw0 eom F stk PG
-        (step_prov PG G inst s1) (step_taint inst s s1 tn) fn
-        (s1 with vs_inst_idx := SUC s.vs_inst_idx) (lo+z) t1 ts
+    sm1 = (if (venomLayout$ceil32 (w2n sz)) = 0 then sm else sm |+ ((w2n s.vs_fmp,(venomLayout$ceil32 (w2n sz))),(lo,inst.inst_id))) /\
+    fmp_stage_rel D C' sm1 fmp0 raw0 eom F stk PG
+      (step_prov PG G inst s1) (step_taint inst s s1 tn) fn
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx) (lo+(venomLayout$ceil32 (w2n sz))) t1 ts
 Proof
   strip_tac >>
   drule_all frame_reachable_raw_certificate >> strip_tac >>
@@ -240,7 +239,8 @@ Proof
       then 1 else 0)` by
     (qpat_x_assum `t.vs_inst_idx = _` mp_tac >> simp[] >> decide_tac) >>
   `step_inst k C inst s = OK s1` by simp[] >>
-  drule_all focus_fmp_dalloca_restored_run >> rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  drule_all (CONV_RULE (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_THM2)) focus_fmp_dalloca_restored_run) >>
+  strip_tac >>
   `op = size_op /\ out' = out /\ sz' = sz` by gvs[] >>
   qpat_x_assum `op = size_op` SUBST_ALL_TAC >>
   qpat_x_assum `out' = out` SUBST_ALL_TAC >>

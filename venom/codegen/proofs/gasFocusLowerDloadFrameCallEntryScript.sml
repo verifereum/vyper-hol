@@ -178,12 +178,11 @@ Theorem ld_focus_frame_call_entry:
   eval_operands ops t = SOME argsT /\ setup_callee gcallee argsT t = SOME ct /\
   enters_block gcallee ct tp /\ active_inst gcallee ti tp /\ gas_cut n vs tp ==>
   ?callee cs i emitted fc.
-    let saved = <|cf_fn := fn; cf_inst := call; cf_state := s;
-                   cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>;
-        savedT = <|cf_fn := gn; cf_inst := call; cf_state := t;
-                    cf_params := PH; cf_prov := H; cf_tvar := un.t_var|>;
-        rs' = (<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>)::rs
-    in
+    ?saved. saved = <|cf_fn := fn; cf_inst := call; cf_state := s;
+                   cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|> /\
+    ?savedT. savedT = <|cf_fn := gn; cf_inst := call; cf_state := t;
+                    cf_params := PH; cf_prov := H; cf_tvar := un.t_var|> /\
+    ?rs'. rs' = (<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>)::rs /\
     tp = ct /\ fc.lf_supply = Sigma callee.fn_name /\
     gcallee = ld_image fc /\
     ld_sync lo P C vs (saved::stk) (MAP (op_prov G) ops) FEMPTY
@@ -229,6 +228,7 @@ Theorem ld_focus_frame_call_entry:
     EVERY (\g. g.lf_src.vs_gas_readings = g.lf_tgt.vs_gas_readings /\
       LENGTH cs.vs_gas_readings <= LENGTH g.lf_src.vs_gas_readings) (fc::f::fs)
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_THM2)) >>
   qabbrev_tac `Stable = ^ld_probe_stable` >> strip_tac >>
   drule_all_then strip_assume_tac ld_frame_invoke_singleton >>
   qpat_x_assum `h = 0` SUBST_ALL_TAC >>

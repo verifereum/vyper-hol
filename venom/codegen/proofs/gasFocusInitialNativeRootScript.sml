@@ -9,10 +9,9 @@ Theorem focus_initial_native_root:
   fn_entry_label fn = SOME lbl /\
   entry = (root_base with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) /\
   enters_block fn entry u /\ active_inst fn inst u /\ 0 < N ==>
-  let q = JointConfig [] [] FEMPTY entry_taint fn inst u [] FEMPTY []
-            [OriginInitial entry; OriginObserve (OriginSnapshot fn [] FEMPTY FEMPTY inst u)];
-      T = dftGasFromListTraceDefs$trace_blocks [] 0 N ctx fn entry
-  in
+  !q. q = JointConfig [] [] FEMPTY entry_taint fn inst u [] FEMPTY []
+            [OriginInitial entry; OriginObserve (OriginSnapshot fn [] FEMPTY FEMPTY inst u)] ==>
+  !T. T = dftGasFromListTraceDefs$trace_blocks [] 0 N ctx fn entry ==>
     joint_initial root_base ctx q /\ joint_trace root_base ctx q [] [] q /\
     dftGasFromListTraceDefs$trace_context N ctx root_base = T /\
     (?tail. T = (([],1,inst.inst_id),fn,inst,u)::tail) /\
@@ -20,6 +19,7 @@ Theorem focus_initial_native_root:
     TAKE 0 T = [] /\ LENGTH (TAKE 0 T) = 0 /\
     dftGasFromListTraceDefs$trace_gas (TAKE 0 T) = []
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV)) >>
   rpt strip_tac >> pure_rewrite_tac [LET_THM] >>
   `joint_initial root_base ctx
      (JointConfig [] [] FEMPTY entry_taint fn inst u [] FEMPTY []

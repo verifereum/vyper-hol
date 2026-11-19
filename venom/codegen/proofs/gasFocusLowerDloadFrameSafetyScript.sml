@@ -342,8 +342,8 @@ Proof
      qpat_x_assum `h = 0` SUBST_ALL_TAC >> first_assum ACCEPT_TAC) >>
   qpat_assum `Abbrev (Stable = _)`
     (fn th => drule_all (REWRITE_RULE[GSYM (REWRITE_RULE[markerTheory.Abbrev_def] th)]
-      ld_focus_frame_call_entry)) >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+      (CONV_RULE (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_THM2)) ld_focus_frame_call_entry))) >>
+  strip_tac >>
   qabbrev_tac `saved = <|cf_fn := fn; cf_inst := call; cf_state := s;
                         cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>` >>
   `0 < LENGTH emitted` by
@@ -562,7 +562,8 @@ Proof
      rename1 `k < LENGTH fs0' ==> _` >> strip_tac >>
      `k < LENGTH cs /\ k < LENGTH ds` by fs[] >>
      `(EL k cs).cf_state = (EL k fs0').lf_src` by
-       ((qpat_assum `!j. j < LENGTH (c::cs) ==> (let cc = _; h = EL j (fc0::fs0') in _)`
+       ((qpat_assum `!j. j < LENGTH (c::cs) ==>
+         (EL j (c::cs)).cf_fn = (EL j (fc0::fs0')).lf_fn /\ _`
           (qspec_then `SUC k` mp_tac) >>
         (impl_tac >- simp[]) >>
         disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) [EL]) >> simp[] >> (gvs[]))) >>
@@ -599,9 +600,10 @@ Proof
      qpat_x_assum `Abbrev (keep = _)`
        (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
      `B = DRESTRICT A (ld_slots A (fc0::fs0'))` by simp[Abbr `B`] >>
-     irule (BETA_RULE (PURE_REWRITE_RULE [LET_THM] ld_focus_local_pop_sync)) >>
-     qpat_assum `!j. j < LENGTH (c::cs) ==> (let cc = _; h = EL j (fc0::fs0') in _)`
-       (assume_tac o BETA_RULE o PURE_REWRITE_RULE [LET_THM]) >>
+     irule (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV) ld_focus_local_pop_sync) >>
+     qpat_assum `!j. j < LENGTH (c::cs) ==>
+         (EL j (c::cs)).cf_fn = (EL j (fc0::fs0')).lf_fn /\ _`
+       assume_tac >>
      qpat_assum `fc0.lf_fn = c.cf_fn` (assume_tac o SYM) >>
      qpat_assum `fc0.lf_src = c.cf_state` (assume_tac o SYM) >>
      qpat_assum `fc0.lf_tgt = d.cf_state` (assume_tac o SYM) >>
@@ -3319,7 +3321,9 @@ Resume ld_frame_actual_occurrence[dload]:
   qpat_x_assum `fs = fs0` (SUBST_ALL_TAC o SYM) >>
   mp_tac (Q.INST [`u` |-> `s'`, `j` |-> `ti'`, `pf` |-> `pfuel`,
                   `Ws` |-> `MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) stk`]
-    (BETA_RULE (PURE_REWRITE_RULE[LET_THM] ld_focus_private_frame_successor))) >>
+    (CONV_RULE (TOP_DEPTH_CONV
+       (HO_REWR_CONV UNWIND_THM2 ORELSEC Unwind.UNWIND_FORALL_CONV))
+       ld_focus_private_frame_successor)) >>
   (impl_tac >- simp[EVERY_DEF]) >>
   strip_tac >> disj1_tac >>
   qabbrev_tac `s1 = ss with vs_inst_idx := SUC s.vs_inst_idx` >>
@@ -3452,7 +3456,7 @@ Resume ld_frame_actual_occurrence[bytes_frame]:
   disch_then (REPEAT_TCL CHOOSE_THEN (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
   mp_tac (Q.INST [`u` |-> `s'`, `t1` |-> `t`, `z` |-> `z'`]
     (INST_TYPE [alpha |-> ``:256``]
-      (BETA_RULE (PURE_REWRITE_RULE[LET_THM] ld_focus_bytes_classified_next)))) >>
+      (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV) ld_focus_bytes_classified_next))) >>
   (impl_tac >- (rpt conj_tac >> FIRST_PROVE [first_assum ACCEPT_TAC, simp[]])) >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   qabbrev_tac `s1 = ss with vs_inst_idx := SUC s.vs_inst_idx` >>
@@ -3714,8 +3718,10 @@ Resume ld_frame_actual_occurrence[singleton_scalar]:
      MEM inst.inst_opcode [ASSIGN; RETPC_PARAM; PARAM]`` assume_tac
   >- (qpat_assum `MEM inst.inst_opcode (MUL::_)` mp_tac >>
       pure_rewrite_tac[listTheory.MEM] >> strip_tac >> simp[]) >>
-  drule_all_then (strip_assume_tac o BETA_RULE o PURE_REWRITE_RULE[LET_THM])
-    (CONV_RULE (REWR_CONV LET_THM THENC BETA_CONV) ld_focus_arithmetic_binding_point_next) >>
+  drule_all_then strip_assume_tac
+    (CONV_RULE (TOP_DEPTH_CONV
+       (HO_REWR_CONV UNWIND_THM2 ORELSEC Unwind.UNWIND_FORALL_CONV))
+       ld_focus_arithmetic_binding_point_next) >>
   Cases_on `inst.inst_opcode = ASSIGN`
   >- suspend "singleton_assign" >>
   Cases_on `inst.inst_opcode = PARAM \/ inst.inst_opcode = RETPC_PARAM`

@@ -45,9 +45,9 @@ Theorem cut_target_entry[local]:
     lookup_function name C4.ctx_functions = SOME fn' /\
     fn_entry_label fn' = SOME lbl /\ first_block_no_phi fn' /\
     lookup_block lbl fn'.fn_blocks = SOME bb /\
-    let s = (v with <|vs_fmp := fmp; vs_initial_fmp := fmp;
-                       vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>);
-        t = (v with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) in
+    ?s. s = (v with <|vs_fmp := fmp; vs_initial_fmp := fmp;
+                       vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) /\
+    ?t. t = (v with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) /\
       frame_reachable (v with <|vs_fmp := fmp; vs_initial_fmp := fmp|>)
         C3 [] [] FEMPTY entry_taint fn inst s /\ active_inst fn inst s /\ ~s.vs_halted /\
       fmp_stage_rel D C4 FEMPTY (w2n v.vs_initial_fmp) (w2n fmp) eom F
@@ -58,6 +58,7 @@ Theorem cut_target_entry[local]:
       (!i. i < p ==> i < LENGTH bb.bb_instructions /\
                        fmp_inserted_op (EL i bb.bb_instructions).inst_opcode)
 Proof
+  CONV_TAC (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_THM2)) >>
   strip_tac >> drule_all focus_fmp_selected_root_pin >> strip_tac >>
   `?ctx1 sp sp'. fmp_lower_function ctx1 sp fn = SOME (fn',sp')` by
     (fs[fmp_stage_lowered_def] >>
@@ -521,7 +522,9 @@ Resume cut_frame_coverage[next]:
                  simp[NoAsms, revert_forward_pair_def] >> strip_tac >>
                  `inst2 = si` by metis_tac[optionTheory.SOME_11] >> fs[is_terminator_def]) >>
               drule_all (SRULE [LET_THM] (Q.INST [`infos` |-> `infos`, `ctx` |-> `ctx`,
-                                `p` |-> `s.vs_inst_idx`] focus_fmp_cut_forward_layout)) >>
+                                `p` |-> `s.vs_inst_idx`]
+       (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)
+          focus_fmp_cut_forward_layout))) >>
               disch_then (qx_choose_then `target_fwd` strip_assume_tac) >>
               `s.vs_inst_idx < j` by metis_tac[revert_forward_pair_def] >>
               `lookup_block s'.vs_current_bb fn'.fn_blocks = SOME target_fwd` by metis_tac[] >>
