@@ -203,7 +203,7 @@ Proof
   drule build_compile_env_bound >> simp[]
 QED
 
-Theorem materialize_internal_params_bound[local]:
+Theorem materialize_internal_params_bound:
   !caps cenv st cenv' st' n l.
     materialize_internal_params cenv caps st = (cenv', st') /\
     FLOOKUP cenv'.ce_vars n = SOME l ==>
