@@ -206,7 +206,7 @@ Proof
        loweringPostsTheory.popped_kept_def]
 QED
 
-Theorem read_result_success_gas_iff[local]:
+Theorem read_result_success_gas_iff:
   read_result cx r (ee with gas_obs := gs) = (INL v,ee with gas_obs := gs) <=>
   read_result cx r ee = (INL v,ee)
 Proof
