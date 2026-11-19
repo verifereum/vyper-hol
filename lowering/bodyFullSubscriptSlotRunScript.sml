@@ -214,6 +214,7 @@ Proof
      simp[venom_state_component_equality, allocas_from_def] >>
      metis_tac[allocas_from_def]) >>
   `eval_operand len ul = SOME nw` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ul` by simp[] >>
   drule_all array_tail_scalar_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   qexistsl [`t`,`H`,`tm`] >> simp[] >>

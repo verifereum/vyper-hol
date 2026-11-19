@@ -41,7 +41,7 @@ Theorem bop_bytes_hash_compile_ptr:
   compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
   fn_has_code sc sd fn /\ s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es (BytesV bs) (Var p) s /\
   ptr_val_ok cx ty (BytesV bs) (Var p) G tn s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
@@ -60,7 +60,9 @@ Proof
   drule_all bop_hash_compile_emission >> strip_tac >>
   qpat_x_assum `emitted_insts _ _ = _` (fn th =>
     rule_assum_tac (PURE_REWRITE_RULE [th])) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule_all (GEN_ALL (REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]
     (Q.INST [`iA` |-> `mk_inst aId ADD [Var p; Lit 32w] [q]`,
              `iL` |-> `mk_inst lId MLOAD [Var p] [l]`,
@@ -74,7 +76,7 @@ Theorem bop_string_hash_compile_ptr:
   compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
   fn_has_code sc sd fn /\ s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es (StringV str) (Var p) s /\
   ptr_val_ok cx ty (StringV str) (Var p) G tn s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
@@ -92,7 +94,9 @@ Proof
   drule_all bop_hash_compile_emission >> strip_tac >>
   qpat_x_assum `emitted_insts _ _ = _` (fn th =>
     rule_assum_tac (PURE_REWRITE_RULE [th])) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule_all (GEN_ALL (REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]
     (Q.INST [`iA` |-> `mk_inst aId ADD [Var p; Lit 32w] [q]`,
              `iL` |-> `mk_inst lId MLOAD [Var p] [l]`,
@@ -106,7 +110,7 @@ Theorem bop_hash_compile_ptr:
   compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
   fn_has_code sc sd fn /\ s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es v (Var p) s /\
   ptr_val_ok cx ty v (Var p) G tn s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
