@@ -258,7 +258,6 @@ Resume walk_outer_mutual[builtin]:
   match_mp_tac walk_bind >> reverse conj_tac
   >- (gen_tac >> BETA_TAC >> machine_leaf >> simp[machine_frame_primitives]) >>
   IF_CASES_TAC >- suspend "builtin_len" >>
-  IF_CASES_TAC >- suspend "builtin_member" >>
   IF_CASES_TAC >- (machine_leaf >> simp[state_rel_frame_def, next_gas_reading_def] >> gen_tac >> Cases_on `st.gas_obs` >> simp[raise_def, return_def, machine_frame_def, bind_def]) >>
   match_mp_tac walk_bind >> reverse conj_tac
   >- (gen_tac >> BETA_TAC >> machine_leaf >>
@@ -281,13 +280,6 @@ Resume walk_outer_mutual[builtin]:
   simp[machine_frame_primitives, machine_frame_reads]
 QED
 
-Resume walk_outer_mutual[builtin_member]:
-  match_mp_tac walk_bind >> conj_tac >- metis_tac[] >>
-  gen_tac >> BETA_TAC >> machine_leaf >>
-  rpt (match_mp_tac machine_frame_bind >>
-    conj_tac >- simp[machine_frame_primitives] >> gen_tac >> BETA_TAC) >>
-  simp[machine_frame_primitives]
-QED
 Resume walk_outer_mutual[builtin_len]:
   match_mp_tac walk_bind >> conj_tac
   >- (Cases_on `es` >> gvs[vyperContextTheory.builtin_args_length_ok_def, type_check_def, assert_def, raise_def, return_def] >>

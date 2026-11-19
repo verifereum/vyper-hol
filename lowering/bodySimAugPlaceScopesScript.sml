@@ -79,7 +79,6 @@ Resume aug_place_pure_scopes_mutual[builtin]:
      rename1 `SOME p` >> PairCases_on `p` >>
      gvs[code_slice_source_SOME, supportedExprFormsTheory.supported_builtin_form_def]) >>
   Cases_on `blt = Len` >> Cases_on `blt = Env MsgGas` >>
-  Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, return_def, raise_def, COND_RATOR, lift_option_type_def,
       vfmTypesTheory.option_CASE_rator,

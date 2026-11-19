@@ -409,11 +409,6 @@ Resume evaluate_unwritten_local[builtin_ok]:
       imp_res_tac result_array_length_state >> gvs[] >>
       Cases_on `es` >> gvs[builtin_args_length_ok_def, accesses_expr_def] >>
       metis_tac[]) >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[]
-  >- (Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
-      simp[lift_option_type_def, type_check_def, assert_def, bind_def,
-           ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-      imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]) >>
   Cases_on `bt = Env MsgGas` >> simp[]
   >- (simp[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
       imp_res_tac next_gas_reading_state >> gvs[]) >>

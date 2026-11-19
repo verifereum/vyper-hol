@@ -181,7 +181,6 @@ Resume supported_pure_scopes_mutual[builtin]:
      rename1 `SOME p` >> PairCases_on `p` >>
      gvs[code_slice_source_SOME, supported_builtin_form_def]) >>
   Cases_on `blt = Env MsgGas` >>
-  Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
       ignore_bind_def, return_def, raise_def, COND_RATOR, lift_option_type_def,
       vfmTypesTheory.option_CASE_rator, AllCaseEqs(), get_accounts_def] >>
@@ -685,7 +684,7 @@ Resume eval_observation_frame_pred[Builtin]:
   qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
   rename1 `Builtin _ bt es` >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  Cases_on `bt = Len` >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+  Cases_on `bt = Len` >>
   Cases_on `bt = Env MsgGas` >> gvs[] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
        return_def, raise_def, type_check_def, assert_def] >>
@@ -900,7 +899,7 @@ QED
 Resume eval_name_projection_mutual[Builtin]:
   rename1 `Builtin _ bt es` >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  Cases_on `bt = Len` >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+  Cases_on `bt = Len` >>
   Cases_on `bt = Env MsgGas` >> gvs[] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
        return_def, raise_def, type_check_def, assert_def] >>

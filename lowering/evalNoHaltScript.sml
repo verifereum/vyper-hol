@@ -597,7 +597,6 @@ QED
 Resume eval_no_halt_every[Builtin]:
   rpt strip_tac >> pop_assum mp_tac >>
   Cases_on `bt = Len` >> Cases_on `bt = Env MsgGas` >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
   simp([Once evaluate_def, COND_RATOR] @ case_ss) >>
   gvs(syn_ss @ case_ss) >> rpt strip_tac >>
   gvs[builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>

@@ -170,7 +170,6 @@ Resume evaluate_no_self_code_update_aux[builtin]:
        return_def, raise_def] >>
   Cases_on `bt = Len` >-
     (Cases_on `es` >> gvs[builtin_args_length_ok_def, supported_exprs_exists_every]) >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >>
   Cases_on `bt = Env MsgGas` >> gvs[] >>
   Cases_on `code_slice_source bt es` >> gvs[] >>
   rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
