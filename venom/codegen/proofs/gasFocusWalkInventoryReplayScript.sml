@@ -23,7 +23,6 @@ Ancestors
   dftGasFromListUnion[qualified,ignore_grammar]
   requestCutPacketOracle[qualified,ignore_grammar]
   requestCutStaticFrontier[qualified,ignore_grammar]
-  requestCutStaticObservation[qualified,ignore_grammar]
   requestCutAbortBound[qualified,ignore_grammar]
   requestCutLabels[qualified,ignore_grammar]
   requestCutStaticCfgAbort[qualified,ignore_grammar]
