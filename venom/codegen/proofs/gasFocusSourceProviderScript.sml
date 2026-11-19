@@ -19,7 +19,7 @@ Ancestors
   fmpStageCoverInv fmpStageCoverMem fmpStageRel fmpLowerDefs fmpStepLayout
   fmpStepStructural fmpAnalysisProps fmpStageFmpStepsEntryLayout
   ctxLookupAgreeHelpers gasFocusFmpCutResidual concretizeLayoutCutSafe
-  lowerDloadSafetyAmbient o1LowerDloadPtrDiscipline lowerDloadPtrSupport
+  gasFocusLowerDloadCodecopyPoint lowerDloadSafetyRelation lowerDloadSafetyAmbient o1LowerDloadPtrDiscipline lowerDloadPtrSupport
   o1ContractSimplifyCfgSrcFrame simplifyCfgAvailability ptrStaticDiscipline
   allocaFrontierBound fmpStageControl fmpStageCallArity fmpStageCoverBackParam
   fmpStageCoverBackKeptOps fmpCoverInvokeIndex lowerDloadPtrRawReachable
@@ -30,7 +30,7 @@ Ancestors
   gasFocusFmpCutJumpEntry gasFocusFmpJumpPoint fmpStageRunnerFacts
   gasFocusFmpCutSourceCall gasFocusFmpCutInvokePush gasFocusFmpCutInvokeOutputs
   gasFocusFmpCutSourceReturn gasFocusFmpCutInvokePop
-  concretizePtrCoverageStaticMemReachability
+  concretizePtrCoverageStaticMemReachability frameAllocationOwnership
 
 (* Entry and source-point facts for the bounded FMP frame induction. *)
 Theorem focus_fmp_src_active[local]:
@@ -1232,6 +1232,138 @@ Proof
   gvs[o1_initial_state_ok_def] >>
   irule code_end_source_prefix_transport_upto >>
   metis_tac[init_ir_supply_inst_ok]
+QED
+
+(* A synchronized LowerDload expansion has the same unread gas list at
+   the selected COPY. Thus bounded source taint and section safety suffice. *)
+Theorem focus_opt_lower_row_bound[local]:
+  ld_sync lo P C V stk PG G tn fn si s t0 A (f::fs) fuel /\ o1_ctx_shape C /\
+  ir_supply_covers_fn f.lf_supply fn /\ fn' = ld_image f /\
+  (!g i. MEM g C.ctx_functions /\ MEM i (fn_insts g) ==>
+    ~MEM (Label "code_end") i.inst_operands) /\
+  mem_inv (\ctx g i u. (gas_cut n V u ==> inst_dload_in_section i u) /\
+    u.vs_code = V.vs_code /\ u.vs_data_section = V.vs_data_section) C V /\
+  o1_safe_upto D lo n C V /\ LENGTH V.vs_data_section < dimword (:256) DIV 2 /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\ ld_prefix C' fn' X p h t0 t /\
+  s.vs_gas_readings = t.vs_gas_readings /\ gas_cut n V t /\
+  (EL h X).inst_opcode = CODECOPY /\ (EL h X).inst_operands = [dst; Var x; sz] /\
+  code_end_var fn' x /\ eval_operand (Var x) t = SOME w /\
+  FLOOKUP t.vs_labels "code_end" = SOME bword ==>
+  w2n (w - bword) < dimword (:256) DIV 2
+Proof
+  strip_tac >>
+  drule_then strip_assume_tac ld_sync_source >>
+  `gas_cut n V s` by fs[gas_cut_def] >>
+  `taint_ok fn tn si s` by
+    (qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     metis_tac[]) >>
+  `MEM fn C.ctx_functions` by metis_tac[frameAllocationOwnershipTheory.frame_reachable_functions_member] >>
+  `inst_dload_in_section si s /\ s.vs_data_section = V.vs_data_section` by
+    (drule_all ld_sync_source_mem_inv >> simp[] >> metis_tac[]) >>
+  irule focus_lower_dload_codecopy_point >> simp[] >> metis_tac[]
+QED
+
+(* Shared term quotations for the bounded raw-row induction. The transition
+   interfaces keep lo, P, C, C', vs, Sigma and names fixed. *)
+val focus_opt_ld_stable = ``\lo P Sigma names fs f0 A0 A frames.
+  frames <> [] /\ TL frames = fs /\
+  (HD frames).lf_serial = f0.lf_serial /\ ld_global lo A frames /\
+  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) frames /\
+  EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+    j IN P f.lf_fn.fn_name) frames /\
+  (!j k. j < k /\ k < LENGTH frames ==>
+    list_precedes (EL j frames).lf_fn.fn_name
+                  (EL k frames).lf_fn.fn_name names) /\
+  (!g. MEM g fs ==> FRANGE g.lf_H SUBSET ld_slots A fs /\
+    (!a. MEM (SOME a) g.lf_Q ==> a IN ld_slots A fs)) /\
+  (!a. a IN FDOM A0 /\ a IN ld_slots A0 fs ==>
+    FLOOKUP A a = FLOOKUP A0 a)``;
+
+val focus_opt_ld_row = ``\lo P C C' vs Sigma names gn ti t
+                         stk PG G tn fn inst s t0 A f fs N X p h.
+  ld_sync lo P C vs stk PG G tn fn inst s t0 A (f::fs) N /\
+  ^focus_opt_ld_stable lo P Sigma names fs f A A (f::fs) /\
+  gn = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  t0.vs_inst_idx = p /\ ld_prefix C' gn X p h t0 t /\ h < LENGTH X /\
+  ti = EL h X /\ s.vs_gas_readings = t0.vs_gas_readings /\
+  t0.vs_gas_readings = t.vs_gas_readings /\
+  EVERY (\g. g.lf_src.vs_gas_readings = g.lf_tgt.vs_gas_readings /\
+    LENGTH s.vs_gas_readings <= LENGTH g.lf_src.vs_gas_readings) (f::fs)``;
+
+val focus_opt_ld_R = ``\lo P C C' vs Sigma names gn ti t.
+  ?stk PG G tn fn inst s t0 A f fs N X p h.
+    ^focus_opt_ld_row lo P C C' vs Sigma names gn ti t
+      stk PG G tn fn inst s t0 A f fs N X p h``;
+
+val focus_opt_ld_forward = ``\(C':venom_context) gn ti t.
+  ?bb i j. lookup_block t.vs_current_bb gn.fn_blocks = SOME bb /\
+    revert_forward_pair bb i j /\ i <= t.vs_inst_idx /\
+    t.vs_inst_idx <= j /\ get_instruction bb t.vs_inst_idx = SOME ti /\
+    t.vs_alloca_next < dimword (:256) /\
+    w2n t.vs_initial_fmp <= w2n t.vs_fmp /\
+    (ctx_has_dalloca C' ==> t.vs_alloca_next <= w2n t.vs_initial_fmp)``;
+
+val focus_opt_ld_W = ``\C' gn ti t. ^focus_opt_ld_forward C' gn ti t /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) gn.fn_blocks)``;
+
+val focus_opt_ld_effect = ``\lo P C vs A f tn PG G inst s t u fuel ss H'.
+  step_inst fuel C inst s = OK ss /\
+  ld_vars P A (f with <|lf_src := ss; lf_tgt := u; lf_H := H';
+    lf_tv := (step_taint inst s ss tn).t_var|>) /\
+  ld_memory lo A (step_taint inst s ss tn) ss u /\
+  ld_nonghost (step_taint inst s ss tn) ss u /\
+  ld_ghost_ok (dyn_floor C vs) A H' (step_prov PG G inst ss) /\
+  ld_dyn_agree (dyn_floor C vs) (step_taint inst s ss tn).t_mem ss.vs_memory u.vs_memory /\
+  (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+  ss.vs_allocas = s.vs_allocas /\ u.vs_allocas = t.vs_allocas /\
+  ss.vs_alloca_next = s.vs_alloca_next /\ u.vs_alloca_next = t.vs_alloca_next /\
+  ss.vs_current_bb = s.vs_current_bb /\ u.vs_current_bb = t.vs_current_bb``;
+
+val focus_opt_ld_advance = ``\lo P C C' vs Sigma names
+                             stk PG G tn fn s A f fs N X p Ar g gn q ss j.
+  ^focus_opt_ld_stable lo P Sigma names fs f A A (f::fs) /\
+  g.lf_serial = f.lf_serial /\ g.lf_fn = f.lf_fn /\
+  g.lf_supply = f.lf_supply /\ g.lf_Q = f.lf_Q /\
+  (!a. a IN FDOM A ==> FLOOKUP Ar a = FLOOKUP A a) /\ ld_global lo Ar (g::fs) /\
+  gn = ld_image f /\ gn = FST (lower_dload_function_supply f.lf_supply fn) /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  q.vs_current_bb = s.vs_current_bb /\ q.vs_inst_idx = p + LENGTH X /\
+  ss.vs_current_bb = s.vs_current_bb /\ active_inst gn j q /\
+  g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\ g.lf_tgt = q /\
+  ss.vs_gas_readings = q.vs_gas_readings /\
+  LENGTH ss.vs_gas_readings <= LENGTH s.vs_gas_readings /\
+  EVERY (\k. k.lf_src.vs_gas_readings = k.lf_tgt.vs_gas_readings /\
+    LENGTH s.vs_gas_readings <= LENGTH k.lf_src.vs_gas_readings) fs /\
+  (!ni. active_inst fn ni g.lf_src ==>
+    ld_sync lo P C vs stk PG G tn fn ni g.lf_src g.lf_tgt Ar (g::fs) N) ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j q``;
+
+val focus_opt_ld_advance_all = ``\lo P C C' vs Sigma names.
+  !stk PG G tn fn s A f fs N X p Ar g gn q ss j.
+    ^focus_opt_ld_advance lo P C C' vs Sigma names
+      stk PG G tn fn s A f fs N X p Ar g gn q ss j``;
+
+Theorem focus_opt_ld_head_row[local]:
+  ld_sync lo P C vs stk PG G tn fn next s1 q A1 (g::fs) N /\
+  ^focus_opt_ld_stable lo P Sigma names fs g A1 A1 (g::fs) /\
+  gn = ld_image g /\ ld_envelope g.lf_supply fn s1 s1.vs_inst_idx Y q.vs_inst_idx /\
+  0 < LENGTH Y /\ j = EL 0 Y /\ s1.vs_gas_readings = q.vs_gas_readings /\
+  EVERY (\k. k.lf_src.vs_gas_readings = k.lf_tgt.vs_gas_readings /\
+    LENGTH s1.vs_gas_readings <= LENGTH k.lf_src.vs_gas_readings) (g::fs) ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j q
+Proof
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `active_inst gn (EL 0 Y) q` by
+    (drule ld_sync_active >> simp[HD] >> strip_tac >>
+     drule ld_sync_control >> strip_tac >>
+     drule_at (Pat `ld_envelope _ _ _ _ _ _`)
+       lowerDloadReturnInteriorTheory.ld_envelope_target_at >>
+     disch_then (qspecl_then [`q`,`0`] mp_tac) >> simp[ld_image_def]) >>
+  qexistsl [`stk`,`PG`,`G`,`tn`,`fn`,`next`,`s1`,`q`,`A1`,`g`,`fs`,`N`,
+    `Y`,`q.vs_inst_idx`,`0`] >>
+  simp[lowerDloadSafetyKernelTheory.ld_prefix_zero] >> metis_tac[]
 QED
 
 Theorem focus_row_visit_inverse[local]:
