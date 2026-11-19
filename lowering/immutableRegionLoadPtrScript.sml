@@ -143,6 +143,7 @@ Proof
    op_taint tf (Var out) = {}` by
     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
         ptr_covers_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (update_var out (a+b) s)` by simp[] >>
   drule_all (SRULE [] (Q.INST [`ctor` |-> `T`, `op` |-> `Var out`]
     emit_immutable_load_checked)) >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
@@ -196,6 +197,7 @@ Proof
             (Cases_on `op` >>
              gvs[ptr_covers_def, op_prov_def, eval_operand_def]) >>
           gvs[] >>
+          `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
           drule_all (SRULE [] (Q.INST [`ctor` |-> `T`, `imm` |-> `NONE`,
             `op` |-> `Var p`] compile_imm_load_word_direct_checked)) >>
           disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
@@ -208,6 +210,7 @@ Proof
       disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
       metis_tac[wordsTheory.WORD_ADD_0]) >>
   gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SRULE [] (Q.INST [`ctor` |-> `F`]
     compile_imm_load_word_direct_checked)) >>
   disch_then (qspecl_then [`fn`,`PG`,`G`,`D`] strip_assume_tac) >>

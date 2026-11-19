@@ -81,6 +81,7 @@ Proof
    (!x. Lit (n2w n) = Var x ==> not_fresh_at sn x) /\
    op_prov G (Lit (n2w n)) = NONE /\ op_taint tn (Lit (n2w n)) = {}` by
     simp[eval_operand_def, op_prov_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all array_tail_scalar_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choosel_then [`q`,`Gq`,`tq`] strip_assume_tac)) >>

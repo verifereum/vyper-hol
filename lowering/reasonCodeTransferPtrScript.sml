@@ -64,6 +64,7 @@ Theorem code_word_read_path_ptr:
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >> drule_all code_offset_compiler_frame >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_at (Pat `compile_lit_byte_offset _ _ _ = _`)
     compile_lit_byte_offset_path_ptr >>
   disch_then (drule_all_then strip_assume_tac) >>
@@ -108,6 +109,7 @@ Theorem code_word_store_path_ptr:
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_at (Pat `compile_lit_byte_offset _ _ _ = _`)
     (Q.INST [`needed` |-> `32`] compile_lit_byte_offset_covers_ptr) >>
   disch_then (drule_all_then strip_assume_tac) >>

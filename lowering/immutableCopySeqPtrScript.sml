@@ -145,6 +145,7 @@ Proof
      gvs[copy_old_operand_def]) >>
   `copy_old_operand sm (Var q) /\ eval_operand (Var q) t = SOME (b + n2w off)` by
     simp[copy_old_operand_def, eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all emit_mstore_payload_checked_uniform >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm)` by

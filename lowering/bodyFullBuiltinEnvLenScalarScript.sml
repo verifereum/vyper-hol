@@ -104,7 +104,7 @@ Theorem len_full_suffix_scalar:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\ ~ctx_has_dalloca ctx /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e) /\
     evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME pvt /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
@@ -156,6 +156,9 @@ Proof
   `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by simp[] >>
   `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee t` by
     gvs[vv_post_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (first_assum (ACCEPT_TAC o MATCH_MP
+      bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all vv_holds_len_header_widens >> strip_tac >>
   `(case vv_location vv of NONE => LocMemory | SOME l => l) <> LocCalldata` by
     (Cases_on `vv` >> simp[contextTheory.vv_location_def] >>
