@@ -6,7 +6,7 @@ Ancestors bodyPtrBopInLoopControl bodyPtrBopInLiteralSuffix bodyPtrBopInLoopExit
   contextCodegenRel finite_map words stmtAppendStorageRunPtr
 
 Theorem membership_jnz_path:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id JNZ [op;Label lt;Label lf] []) /\
@@ -40,7 +40,7 @@ Proof
 QED
 
 Theorem membership_eq_branch_path:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id EQ [a;b] [dst]) /\
   get_instruction bb (SUC s.vs_inst_idx) =
@@ -98,7 +98,7 @@ QED
 Finalise membership_eq_branch_path
 
 Theorem membership_found_path:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [Lit 1w] [dst]) /\
   get_instruction bb (SUC s.vs_inst_idx) =

@@ -7,7 +7,7 @@ Ancestors
   o1PassContract unitShapeDefs venomExecSemantics venomExecProofs
   venomInst venomState venomWf contextCodegenRel list rich_list
 
-Theorem inv_paired_function_lookup[local]:
+Theorem inv_paired_function_lookup:
   !fs gs name.
   LIST_REL (\fn fn'. fn' = dft_fn fn) fs gs /\ LIST_REL dft_fn_rel fs gs ==>
   OPTREL (\fn fn'. fn' = dft_fn fn /\ dft_fn_rel fn fn')

@@ -13,7 +13,7 @@ Theorem unwrap_code_ensure_marked_read_ptr:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   compile_ensure_in_memory p.ptr_operand LocCode nb n F imm sm = (op,sb) /\
   p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
-  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   (!H. P H ==>
      vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
      ghost_inv H ret cenv cx ee G tn s) /\ P H0 /\

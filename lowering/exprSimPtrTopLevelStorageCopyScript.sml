@@ -2,9 +2,12 @@
 Theory exprSimPtrTopLevelStorageCopy
 Ancestors
   exprSimPtrProps fragGasSeqAbort fragGasSeqPtr codegenRel contextCodegenRel
+  exprLoweringProps[qualified,ignore_grammar]
   exprSimStorageCopy exprSimPtrTopLevelCopy typedCopyPtr decoderGhostFramePtr bodyPtrDefs
-  fragGasPathPtr ptrDiscipline ptrSafeRun gasCount venomExecSemantics venomState venomInst
+  fragGasPathPtr ghostPcTransportPtr ptrDiscipline ptrSafeRun gasCount venomExecSemantics venomState venomInst
   words finite_map pred_set list
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
+  fragGasSeqPtrContext[qualified,ignore_grammar]
 
 Theorem toplevel_counter_increment_ghost:
   FLOOKUP G cv = NONE /\ op_taint tn (Var cv) = {} ==>
@@ -141,6 +144,17 @@ Definition toplevel_copy_inv_def:
     tn.t_mem SUBSET toplevel_copy_taint_bound loc a b tn0 k
 End
 
+Theorem toplevel_copy_inv_below_fmp[local]:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s ==>
+  (allocas_below_fmp s <=> allocas_below_fmp s0)
+Proof
+  simp[Once toplevel_copy_inv_def, Once storage_copy_inv_def,
+       Once copy_prefix_def] >> strip_tac >>
+  qpat_assum `copy_static s = copy_static s0`
+    (mp_tac o Q.AP_TERM `allocas_below_fmp`) >>
+  simp[NoAsms, copy_static_def, allocas_below_fmp_def]
+QED
+
 Theorem toplevel_copy_inv_jump[simp]:
   toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn (jump_to lbl s) <=>
   toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s
@@ -206,7 +220,7 @@ QED
 
 Theorem toplevel_copy_init_path:
   MEM cv ds /\ dst <> cv /\ (!x. src = Var x ==> x <> cv) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   n < 2**256 /\ b + 32*n < 2**256 /\ b + 32*n <= s.vs_alloca_next /\
   lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
@@ -414,7 +428,7 @@ QED
 
 Theorem toplevel_copy_source_seq_ptr:
   op_taint tn src = {} /\ op_taint tn (Var cv) = {} /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   i = mk_inst id ADD [src; Var cv] [sv] /\
   j = mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv] /\
   (loc = LocStorage \/ loc = LocTransient) /\
@@ -430,6 +444,11 @@ Proof
     (gvs[] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>
   `op_taint tn1 (Var sv) = {}` by
     (gvs[] >> irule toplevel_copy_source_add_clean >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[i]`, `s`] >>
+     simp[exprLoweringPropsTheory.run_inst_seq_def] >>
+     fs[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G1 tn1 j u1` by
     (gvs[] >> irule toplevel_ptr_inst_ok_load >> simp[]) >>
   gvs[] >> simp[fragGasSeqPtrTheory.inst_seq_ptr_def]
@@ -506,7 +525,7 @@ Proof
 QED
 
 Theorem toplevel_copy_ptr_inst_ok_mul:
-  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn (Var cv) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
     (mk_inst id MUL [Var cv; Lit 32w] [mv]) s
 Proof
@@ -525,7 +544,7 @@ Proof
 QED
 
 Theorem toplevel_copy_destination_seq_ptr:
-  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn (Var cv) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   i = mk_inst id MUL [Var cv; Lit 32w] [mv] /\
   j = mk_inst (id+1) ADD [Var dst; Var mv] [dv] /\
   z = mk_inst (id+2) MSTORE [Var dv; Var vv] [] /\
@@ -548,6 +567,20 @@ Proof
   `op_taint tn1 (Var mv) = {}` by
     gvs[toplevel_counter_offset_ghost] >>
   `op_taint tn1 (Var dst) = {}` by gvs[ptr_covers_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u1` by
+    (strip_tac >>
+     `allocas_below_fmp u` by
+       (irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+        qexistsl_tac [`[i]`, `s`] >>
+        simp[exprLoweringPropsTheory.run_inst_seq_def, mk_inst_def,
+          is_terminator_def, is_alloca_op_def]) >>
+     simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v1` by
+    (qpat_assum `v1 = _` SUBST1_TAC >>
+     qpat_assum `v = _` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u1` mp_tac >>
+     simp[exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn G1 tn1 j u1` by
     (gvs[] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>
   `ptr_covers G2 tn2 dv v 32` by
@@ -559,12 +592,12 @@ Proof
      simp[] >> qexists_tac `n` >> gvs[] >> decide_tac) >>
   `ptr_covers G2 tn2 dv v1 32` by gvs[ptr_covers_def, lookup_var_def] >>
   `ptr_inst_ok D 0 0 ctx fn G2 tn2 z v1` by
-    (gvs[] >> irule toplevel_ptr_inst_ok_mstore >> simp[]) >>
+    (gvs[] >> irule wordLoadStorePtrTheory.ifexp_materialize_mstore_check >> simp[]) >>
   gvs[] >> simp[fragGasSeqPtrTheory.inst_seq_ptr_def]
 QED
 
 Theorem toplevel_copy_ptr_inst_ok_assign:
-  op_taint tn (Var nv) = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn (Var nv) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
     (mk_inst id ASSIGN [Var nv] [cv]) s
 Proof
@@ -581,7 +614,7 @@ Proof
 QED
 
 Theorem toplevel_copy_increment_seq_ptr:
-  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn (Var cv) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   i = mk_inst id ADD [Var cv; Lit 1w] [nv] /\
   j = mk_inst (id+1) ASSIGN [Var nv] [cv] /\
   step_inst_base i s = OK u /\
@@ -598,6 +631,14 @@ Proof
     (gvs[] >> simp[step_taint_def, set_var_taint_def, out_taint_def,
       op_taint_def, mk_inst_def, FLOOKUP_UPDATE] >>
      Cases_on `eval_operand (Var cv) s` >> gvs[op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u1` by
+    (strip_tac >>
+     `allocas_below_fmp u` by
+       (irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+        qexistsl_tac [`[i]`, `s`] >>
+        simp[exprLoweringPropsTheory.run_inst_seq_def, mk_inst_def,
+          is_terminator_def, is_alloca_op_def]) >>
+     simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn G1 tn1 j u1` by
     (gvs[] >> irule toplevel_copy_ptr_inst_ok_assign >> simp[]) >>
   gvs[] >> simp[fragGasSeqPtrTheory.inst_seq_ptr_def]
@@ -605,7 +646,7 @@ QED
 
 Theorem toplevel_copy_source_counted_ptr:
   op_taint tn src = {} /\ op_taint tn (Var cv) = {} /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   i = mk_inst id ADD [src; Var cv] [sv] /\
   j = mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv] /\
   (loc = LocStorage \/ loc = LocTransient) /\
@@ -632,7 +673,7 @@ QED
 
 
 Theorem toplevel_copy_body_safe:
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
   ~MEM dst [cv;sv;vv;mv;dv;nv] /\
@@ -674,6 +715,10 @@ Proof
       step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def,
       lookup_var_def, update_var_def, FLOOKUP_UPDATE, copy_runtime_word_def,
       sload_def, tload_def, contract_storage_def, contract_transient_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `u1`, Abbr `u`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn G1 tn1 j u1` by
     (simp[Abbr `j`] >> irule toplevel_ptr_inst_ok_load >>
      Cases_on `loc = LocStorage` >> simp[]) >>
@@ -705,6 +750,10 @@ Proof
     (simp[Abbr `l`, Abbr `w`, step_inst_base_opcode_eqs, mk_inst_def,
       exec_pure2_def, eval_operands_def] >>
      simp[NoAsms, eval_operand_def, word_mul_n2w]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u1` mp_tac >>
+     simp[NoAsms, Abbr `v1`, Abbr `v`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn G2 tn2 l v1` by
     (simp[Abbr `l`] >> irule toplevel_copy_ptr_inst_ok_mul >> simp[]) >>
   qabbrev_tac `G3 = step_prov PG G2 l w` >>
@@ -732,6 +781,10 @@ Proof
       exec_pure2_def, eval_operands_def] >>
   `ptr_covers G3 tn3 dst w1 (32*n)` by
     gvs[Abbr `w1`, ptr_covers_def, lookup_var_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp w1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp v1` mp_tac >>
+     simp[NoAsms, Abbr `w1`, Abbr `w`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn G3 tn3 p w1` by
     (simp[Abbr `p`] >> irule ptr_inst_ok_copy_len_binop >>
      gvs[ptr_covers_def]) >>
@@ -760,8 +813,12 @@ Proof
          eval_operands_def, exec_write2_def] >> REFL_TAC) >>
   `ptr_covers G4 tn4 dv x1 32` by
     gvs[Abbr `x1`, ptr_covers_def, lookup_var_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp x1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp w1` mp_tac >>
+     simp[NoAsms, Abbr `x1`, Abbr `x`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn G4 tn4 q x1` by
-    (simp[Abbr `q`] >> irule toplevel_ptr_inst_ok_mstore >> simp[]) >>
+    (simp[Abbr `q`] >> irule wordLoadStorePtrTheory.ifexp_materialize_mstore_check >> simp[]) >>
   qabbrev_tac `G5 = step_prov PG G4 q y` >>
   qabbrev_tac `tn5 = step_taint q x1 y tn4` >>
   `op_taint tn5 (Var cv) = {}` by
@@ -778,6 +835,12 @@ Proof
   `step_inst_base h y1 = OK z` by
     (simp[Abbr `h`, Abbr `z`, step_inst_base_opcode_eqs, mk_inst_def,
           exec_pure2_def, eval_operands_def] >> simp[NoAsms, eval_operand_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp y1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp x1` mp_tac >>
+     simp[NoAsms, Abbr `y1`, Abbr `y`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+       allocas_below_fmp_def, mstore_def, write_memory_with_expansion_def] >>
+     rpt strip_tac >> res_tac) >>
   `ptr_inst_ok D 0 0 ctx fn G5 tn5 h y1` by
     (simp[Abbr `h`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   qabbrev_tac `G6 = step_prov PG G5 h z` >>
@@ -794,6 +857,10 @@ Proof
     simp[Abbr `f`, Abbr `t`, Abbr `z1`, Abbr `z`, step_inst_base_opcode_eqs,
          mk_inst_def, exec_read1_def, eval_operand_def, lookup_var_def,
          update_var_def, FLOOKUP_UPDATE] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp y1` mp_tac >>
+     simp[NoAsms, Abbr `z1`, Abbr `z`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn G6 tn6 f z1` by
     (simp[Abbr `f`] >> irule toplevel_copy_ptr_inst_ok_assign >> simp[]) >>
   qabbrev_tac `G7 = step_prov PG G6 f t` >>
@@ -810,7 +877,7 @@ QED
 (* Ordinary endpoint observations used by the pointer-body assembly below. *)
 
 Theorem toplevel_copy_body_ordinary:
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
   ~MEM dst [cv;sv;vv;mv;dv;nv] /\
@@ -868,7 +935,7 @@ Proof
 QED
 
 Theorem toplevel_copy_body_content:
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
   ~MEM dst [cv;sv;vv;mv;dv;nv] /\
@@ -889,7 +956,7 @@ Proof
 QED
 
 Theorem toplevel_copy_body_source:
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
   ~MEM dst [cv;sv;vv;mv;dv;nv] /\
@@ -910,7 +977,7 @@ Proof
 QED
 
 Theorem toplevel_copy_body_destination:
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
   ~MEM dst [cv;sv;vv;mv;dv;nv] /\
@@ -931,7 +998,7 @@ Proof
 QED
 
 Theorem toplevel_copy_body_allocation_bound:
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
   ~MEM dst [cv;sv;vv;mv;dv;nv] /\
@@ -953,7 +1020,7 @@ QED
 
 Theorem toplevel_copy_backedge_path:
   toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label hdr] []) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK (jump_to hdr s)) /\
@@ -1000,7 +1067,7 @@ QED
 
 Theorem toplevel_copy_header_path:
   toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   cv <> tv /\ dst <> tv /\ (!x. src = Var x ==> x <> tv) /\ MEM tv ds /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id EQ [Var cv;Lit (n2w n)] [tv];
@@ -1049,6 +1116,10 @@ Proof
     OK (jump_to (if k=n then exit_lbl else body_lbl) t)` by
     (Cases_on `k=n` >>
      simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, bool_to_word_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `t`, Abbr `u`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn G1 tn1
     (mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []) t` by
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
@@ -1123,7 +1194,7 @@ Proof
 QED
 
 Theorem toplevel_copy_body_destination_covers:
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
   ~MEM dst [cv;sv;vv;mv;dv;nv] /\
@@ -1355,6 +1426,8 @@ Proof
       sload_def, tload_def, contract_storage_def, contract_transient_def]) >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[inst_seq_ptr_def] >> strip_tac >> gvs[] >>
+  `eval_operand (Var sv) u = SOME (a+c)` by
+    simp[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `eval_operand (Var sv) u1 = SOME (a+c)` by
     simp[Abbr `u1`, Abbr `u`, eval_operand_def, lookup_var_def,
          update_var_def, FLOOKUP_UPDATE] >>
@@ -1433,7 +1506,9 @@ Proof
              lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> gvs[lookup_var_def]) >>
      simp[] >> decide_tac) >>
   simp[Abbr `h`] >>
-  drule_all toplevel_copy_mstore_taint >> simp[]
+  drule_all toplevel_copy_mstore_taint >>
+  disch_then (qspec_then `step_taint j u v (step_taint i s u tn)` mp_tac) >>
+  fs[Abbr `v1`, Abbr `u1`, step_taint_inst_idx_left]
 QED
 
 Theorem toplevel_copy_source_prefix_run:
@@ -1573,7 +1648,7 @@ Proof
 QED
 
 Theorem toplevel_copy_body_ptr:
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
   ~MEM dst [cv;sv;vv;mv;dv;nv] /\
@@ -1770,7 +1845,7 @@ Proof
 QED
 
 Theorem toplevel_copy_body_counted:
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
   ~MEM dst [cv;sv;vv;mv;dv;nv] /\
@@ -1805,24 +1880,9 @@ Proof
   gvs[mk_inst_def]
 QED
 
-Theorem toplevel_copy_jmp_path:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) ==>
-  gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK (jump_to lbl s))
-Proof
-  strip_tac >> irule toplevel_copy_raw_jump_path >>
-  conj_tac >- simp[] >> qexistsl_tac [`bb`, `mk_inst id JMP [Label lbl] []`] >>
-  simp[mk_inst_def, step_inst_base_opcode_eqs, ptr_inst_ok_def, access_ok_def,
-       taint_ok_def, allocas_from_def, source_memory_write_ranges_def,
-       source_memory_read_ranges_def] >>
-  simp[GSYM mk_inst_def, step_inst_non_invoke, jump_to_def] >>
-  simp[step_inst_base_opcode_eqs, mk_inst_def, jump_to_def, op_taint_def]
-QED
-
 
 Theorem toplevel_copy_body_counted_literal:
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
   ~MEM dst [cv;sv;vv;mv;dv;nv] /\
@@ -1857,7 +1917,7 @@ Proof
 QED
 
 Theorem toplevel_copy_body_backedge:
-  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
   EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
   ~MEM dst [cv;sv;vv;mv;dv;nv] /\
@@ -1897,8 +1957,16 @@ Proof
   qabbrev_tac `u = r with vs_inst_idx := 7` >>
   `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = 7` by
     simp[Abbr `u`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (strip_tac >>
+     `allocas_below_fmp r` by
+       (qpat_assum `run_inst_seq _ s = OK r`
+          (mp_then (Pos last) irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp) >>
+        Cases_on `loc = LocStorage` >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+     simp[Abbr `u`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `gas_path_ptr D 0 ctx fn PG Gf tnf u 0 Gf tnf (OK (jump_to hdr u))` by
-    (irule toplevel_copy_jmp_path >> simp[] >>
+    (irule bodyPtrBopInLoopControlTheory.membership_jump_path >> simp[] >>
      qexists_tac `id+7` >> simp[get_instruction_def]) >>
   qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ s _ _ _ _` mp_tac >>
   simp[] >> strip_tac >>
@@ -1911,7 +1979,7 @@ QED
 
 Theorem toplevel_copy_init_header:
   MEM cv ds /\ dst <> cv /\ (!x. src = Var x ==> x <> cv) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   n < 2**256 /\ b + 32*n < 2**256 /\ b + 32*n <= s.vs_alloca_next /\
   lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
@@ -1939,8 +2007,10 @@ Proof
      `isPREFIX [mk_inst (id+1) JMP [Label hdr] []]
         (DROP (s.vs_inst_idx+1) bb.bb_instructions)` by simp[] >>
      drule instruction_prefix_cursor >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    metis_tac[toplevel_copy_inv_below_fmp] >>
   `gas_path_ptr D 0 ctx fn PG G1 tn1 t 0 G1 tn1 (OK (jump_to hdr t))` by
-    (irule toplevel_copy_jmp_path >> simp[] >> metis_tac[]) >>
+    (irule bodyPtrBopInLoopControlTheory.membership_jump_path >> simp[] >> metis_tac[]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s (0+0) G1 tn1 (OK (jump_to hdr t))` by
     (irule gas_path_ptr_then >> qexistsl_tac [`G1`, `t`, `tn1`] >> simp[]) >>
   qexistsl_tac [`jump_to hdr t`, `G1`, `tn1`] >>
@@ -1950,7 +2020,7 @@ QED
 Theorem toplevel_copy_compiled_path:
   compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) /\
   fn_has_code sa sb fn /\ (loc = LocStorage \/ loc = LocTransient) /\
-  ~ctx_has_dalloca ctx /\ not_fresh_at sa dst /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ not_fresh_at sa dst /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
@@ -2002,6 +2072,8 @@ Proof
        simp[Abbr `hdr_code`] >>
      `lookup_block q.vs_current_bb fn.fn_blocks =
         SOME <|bb_label := hdr; bb_instructions := hdr_code|>` by metis_tac[] >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+       metis_tac[toplevel_copy_inv_below_fmp] >>
      drule toplevel_copy_header_path >> disch_then drule_all >>
      disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
      metis_tac[]) >>
@@ -2032,6 +2104,8 @@ Proof
            mk_inst ((sa.cs_next_id+4)+6) ASSIGN [Var nv] [cv];
            mk_inst ((sa.cs_next_id+4)+7) JMP [Label hdr] []]|>` by
        (simp[Abbr `body_code`] >> metis_tac[]) >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+       metis_tac[toplevel_copy_inv_below_fmp] >>
      drule_at (Pat `lookup_block _ _ = SOME <|bb_label := _; bb_instructions := _|>`)
        toplevel_copy_body_backedge >>
      disch_then drule_all >>

@@ -35,7 +35,7 @@ Theorem hash_covered_payload_ok:
   eval_operand (Var p) s = SOME a /\ eval_operand len s = SOME n /\
   op_taint tn len = {} /\
   (!i. w2n a <= i /\ i < w2n a + w2n n ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id SHA3 [Var p; len] [out]) s
 Proof
   strip_tac >> irule ptr_inst_ok_hash >>
@@ -49,7 +49,7 @@ Theorem hash_after_payload_add_ok:
   w2n a + 32 < dimword(:256) /\
   lookup_var len s = SOME n /\ op_taint tn (Var len) = {} /\ len <> dst /\
   (!i. w2n a + 32 <= i /\ i < w2n a + 32 + w2n n ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn
     (step_prov PG G (mk_inst aid ADD [Var root; Lit 32w] [dst])
       (update_var dst (a + 32w) s))
@@ -96,7 +96,7 @@ Theorem memory_hash_instruction_checks:
   FLOOKUP G root = SOME (b,sz) /\
   b <= w2n a + 32 /\ w2n a + 32 + w2n n <= b + sz /\
   w2n a + 32 < dimword(:256) /\ mload (w2n a) s = n /\
-  root <> len /\ len <> dst /\ ~ctx_has_dalloca ctx /\
+  root <> len /\ len <> dst /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!i. w2n a <= i /\ i < w2n a + 32 + w2n n ==> i NOTIN tn.t_mem) /\
   u = update_var len n s /\
   G1 = step_prov PG G (mk_inst lid MLOAD [Var root] [len]) u /\
@@ -135,7 +135,7 @@ Theorem memory_hash_seq_checks:
   FLOOKUP G root = SOME (b,sz) /\
   b <= w2n a + 32 /\ w2n a + 32 + w2n n <= b + sz /\
   w2n a + 32 < dimword(:256) /\ mload (w2n a) s = n /\
-  root <> len /\ len <> dst /\ ~ctx_has_dalloca ctx /\
+  root <> len /\ len <> dst /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!i. w2n a <= i /\ i < w2n a + 32 + w2n n ==> i NOTIN tn.t_mem) /\
   u = update_var len n s /\ v = update_var dst (a + 32w) u /\
   G1 = step_prov PG G (mk_inst lid MLOAD [Var root] [len]) u /\
@@ -254,7 +254,7 @@ Theorem memory_hash_counted_path:
   FLOOKUP G root = SOME (b,sz) /\
   b <= w2n a + 32 /\ w2n a + 32 + w2n n <= b + sz /\
   w2n a + 32 < dimword(:256) /\ mload (w2n a) s = n /\
-  root <> len /\ len <> dst /\ ~ctx_has_dalloca ctx /\
+  root <> len /\ len <> dst /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!i. w2n a <= i /\ i < w2n a + 32 + w2n n ==> i NOTIN tn.t_mem) /\
   ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\

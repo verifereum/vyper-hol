@@ -15,7 +15,7 @@
  *)
 Theory bodyFullExits
 Ancestors
-  bodyFullShared bodyFullPreds bodySimFull gasOutcomeFullCompose
+  bodyFullShared bodyFullHashKeccakFixed bodyFullPreds bodySimFull gasOutcomeFullCompose
   gasOutcomeFull fragGasEmitCtrl fragGasOriginPtr fragGasOrigin
   gasShadowState gasShadow bodyPtrDefs bodyMemoryDefs
   stmtSimAssertProps stmtSimIfProps stmtSimProps stmtSimDefs exprSimDefs
@@ -35,7 +35,7 @@ val _ = Parse.hide "body";
 Theorem compile_raise_abort_path:
   (rk = RaiseBare \/ rk = RaiseUnreachable) /\
   stmt_env cenv lctx ty (Raise rk) sa = (cenv', sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
   ?t. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
@@ -65,7 +65,7 @@ Theorem compile_assert_cond_path:
   stmt_env cenv lctx ty (Assert e ak) sa = (cenv', sb) /\
   fn_has_code sa sb func /\
   lower_value compile_expr cenv (BaseT BoolT) e sa = (op, s1) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ allocas_from lo t /\
   eval_operand op t = SOME (if b then 1w else 0w) /\ op_taint tn op = {} /\
   t.vs_current_bb = s1.cs_current_bb /\
   t.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t.vs_halted ==>
@@ -103,7 +103,7 @@ Proof
      (Abort (if opc = REVERT then Revert_abort else ExHalt_abort) u, G, tn)` by
     (irule emit_abort_origin_ptr >>
      simp[jump_to_def, Abbr `opc`, Abbr `ops`] >>
-     fs[allocas_from_def, jump_to_def] >> metis_tac[]) >>
+     fs[allocas_from_def, jump_to_def, allocas_below_fmp_def] >> metis_tac[]) >>
   qexists_tac `u` >> fs[Abbr `opc`] >>
   metis_tac[gas_origin_ptr_path_append, APPEND_NIL])
 QED
@@ -112,14 +112,14 @@ QED
 
 Theorem compile_loop_jump_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty st es.
-    ~ctx_has_dalloca ctx /\ (st = Break \/ st = Continue) ==>
+    (st = Break \/ st = Continue) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty st) (stmt_env cenv lctx ty st)
       (eval_stmt cx st) es
 Proof
   rpt gen_tac >>
-  disch_then (CONJUNCTS_THEN2 assume_tac (DISJ_CASES_THEN SUBST_ALL_TAC)) >> (
+  disch_then (DISJ_CASES_THEN SUBST_ALL_TAC) >> (
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `lctx`
   >- (gvs[gas_admissible_def] >>
@@ -162,6 +162,8 @@ Proof
      metis_tac[storage_well_formed_on_backends]) >>
   `alloca_frame cenv es sa s0 cenv (es with gas_obs := []) (jump_to lbl s0)`
     by (irule alloca_frame_same >> simp[jump_to_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (jump_to lbl s0)` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
   qexists_tac `cenv` >>
   simp[stmt_lands_def, cenv_top_ext_refl, ghost_inv_at_jump_to,
        return_buf_frame_jump_to, return_buf_sep_jump, return_buf_sep_gas_obs] >>
@@ -172,14 +174,14 @@ QED
 
 Theorem compile_raise_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty rk es.
-    ~ctx_has_dalloca ctx /\ (rk = RaiseBare \/ rk = RaiseUnreachable) ==>
+    (rk = RaiseBare \/ rk = RaiseUnreachable) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Raise rk)) (stmt_env cenv lctx ty (Raise rk))
       (eval_stmt cx (Raise rk)) es
 Proof
   rpt gen_tac >>
-  disch_then (CONJUNCTS_THEN2 assume_tac (DISJ_CASES_THEN SUBST_ALL_TAC)) >> (
+  disch_then (DISJ_CASES_THEN SUBST_ALL_TAC) >> (
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ sa = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
@@ -252,7 +254,7 @@ QED
 
 Theorem compile_assert_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty e ak es.
-    ~ctx_has_dalloca ctx /\ (ak = AssertBare \/ ak = AssertUnreachable) /\
+    (ak = AssertBare \/ ak = AssertUnreachable) /\
     expr_type e = BaseT BoolT /\
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx (BaseT BoolT) e es ==>
@@ -263,8 +265,7 @@ Theorem compile_assert_frag_full:
       (eval_stmt cx (Assert e ak)) es
 Proof
   rpt gen_tac >>
-  disch_then (CONJUNCTS_THEN2 assume_tac
-    (CONJUNCTS_THEN2 assume_tac strip_assume_tac)) >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   qpat_assum `stmt_env _ _ _ (Assert e _) _ = _`
     (mp_then Any mp_tac compile_assert_parts) >>
@@ -334,7 +335,8 @@ Proof
   conj_tac >- simp[] >>
   simp[Abbr `condR`] >> rpt strip_tac >>
   Cases_on `res` >- fs[expr_exit_def] >>
-  fs[stmt_exit_ptr_def, expr_exit_INR_type, halt_exit_def]
+  fs[stmt_exit_ptr_def, expr_exit_INR_type, halt_exit_def] >>
+  Cases_on `r` >> gvs[expr_exit_def]
 QED
 
 Resume compile_assert_frag_full[selected]:
@@ -356,6 +358,8 @@ Resume compile_assert_frag_full[selected]:
      simp[valueEncodingTheory.val_to_w256_def]) >>
   `op_taint tn1 op = {} /\ allocas_from lo t` by
     metis_tac[ptr_val_ok_def, ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    metis_tac[expr_post_def, stmt_state_rel_allocas_below_fmp] >>
   (* the JNZ to the continuation or the failure block *)
   `!D. gas_origin_ptr_path
          (D, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
@@ -416,7 +420,10 @@ Resume compile_assert_frag_full[true]:
   qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any mp_tac assert_success_post_mem) >> simp[] >>
   disch_then (qspecl_then [`sb`, `lctx`, `d`] mp_tac) >> simp[] >>
-  strip_tac >> gvs[ghost_inv_at_jump, ghost_kept_at_def, return_buf_sep_gas_obs] >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (jump_to ok t)` by
+    metis_tac[stmt_state_rel_allocas_below_fmp, stmt_state_rel_jump_to, expr_post_def] >>
+  gvs[ghost_inv_at_jump, ghost_kept_at_def, return_buf_sep_gas_obs] >>
   rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC,
          irule alloca_frame_same_state >> qexists_tac `t` >>
@@ -445,8 +452,8 @@ Resume compile_assert_frag_full[false]:
           (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                                emit_abort_origin_ptr)) >>
         qpat_x_assum `ak = _ \/ _` strip_assume_tac >>
-        gvs[Abbr `opc`, Abbr `ops`, allocas_from_def, jump_to_def] >>
-        first_assum ACCEPT_TAC) >>
+        gvs[Abbr `opc`, Abbr `ops`, allocas_from_def, jump_to_def,
+            allocas_below_fmp_def] >> metis_tac[]) >>
      qpat_x_assum `!D. gas_origin_ptr_path _ _ _ _` (qspec_then `D` mp_tac) >>
      simp[] >> strip_tac >>
      drule gas_origin_ptr_path_append >> simp[] >>

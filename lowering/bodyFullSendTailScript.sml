@@ -4,13 +4,13 @@ Ancestors
   exprSendPtr bodyPtrPrecompileBuiltinsSuffix fragGasSeqPtr fragGasEmitCtrl
   fragGasOriginPtr fragGasOrigin gasEvents memSafeRun instMemFrontier
   gasCount ptrSafeRun ptrDiscipline bodyPtrDefs callStepPtr
-  venomExecSemantics venomExecProofs venomInst venomInstProofs venomState list
+  venomExecSemantics venomExecProofs venomInst venomInstProofs venomInstProofs1 venomState list
   unitTransformDefs memLocDefs fragExec contextCodegenRel codegenRel
 
 Theorem send_call_assert_path_full[local]:
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
@@ -31,6 +31,8 @@ Proof
     (drule_all step_preserves_control_flow >>
      drule step_preserves_halted >> simp[]) >>
   drule_all send_call_runtime_frame >> strip_tac >>
+  `u.vs_initial_fmp = s.vs_initial_fmp` by
+    (drule_all venomInstProofs1Theory.step_inst_base_preserves_all >> simp[is_alloca_op_def]) >>
   `op_taint (step_taint inst s u tn) (Var out) = {}` by
     metis_tac[call_output_untainted] >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
@@ -52,7 +54,7 @@ Proof
         else OK v` by (simp[mk_inst_def] >> drule step_assert_behavior >> simp[]) >>
      `ptr_inst_ok D lo 0 ctx fn G1 tn1 (mk_inst aid ASSERT [Var out] []) v` by
        (irule assert_ptr_inst_ok >>
-        gvs[Abbr `v`, Abbr `tn1`, allocas_from_def] >> metis_tac[]) >>
+        gvs[Abbr `v`, Abbr `tn1`, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
      Cases_on `w = 0w`
      >- (irule exit_inst_origin_ptr >>
          conj_tac >- simp[Abbr `r`, exit_result_def] >>
@@ -87,7 +89,7 @@ Theorem send_read_checked_tail_full[local]:
   outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
@@ -155,7 +157,7 @@ Theorem send_read_checked_tail_full_uniform:
   outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\

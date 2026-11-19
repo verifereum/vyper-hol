@@ -302,6 +302,7 @@ Proof
   strip_tac >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
     not_fresh_at sa x` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
   drule_all (INST_TYPE [alpha |-> ``:256``]
     nonreentrant_entry_success_joint_with_view) >> strip_tac >>
   `es_lock.storage_trace = es0.storage_trace ++ [StorageLock nkey]` by
@@ -489,6 +490,7 @@ Proof
   drule_all guarded_body_code_from_registration >> simp[] >> strip_tac >>
   `global_nonreentrant_slot < dimword (:256)` by
     simp[global_nonreentrant_slot_def, wordsTheory.dimword_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
   drule_all (INST_TYPE [alpha |-> ``:256``]
     nonreentrant_entry_abort_joint_with_view) >>
   disch_then (qx_choosel_then [`a`,`s_abort`,`G_abort`,`tn_abort`]

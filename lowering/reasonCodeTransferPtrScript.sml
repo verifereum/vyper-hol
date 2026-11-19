@@ -64,6 +64,7 @@ Theorem code_word_read_path_ptr:
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >> drule_all code_offset_compiler_frame >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_at (Pat `compile_lit_byte_offset _ _ _ = _`)
     compile_lit_byte_offset_path_ptr >>
   disch_then (drule_all_then strip_assume_tac) >>
@@ -108,6 +109,7 @@ Theorem code_word_store_path_ptr:
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_at (Pat `compile_lit_byte_offset _ _ _ = _`)
     (Q.INST [`needed` |-> `32`] compile_lit_byte_offset_covers_ptr) >>
   disch_then (drule_all_then strip_assume_tac) >>
@@ -116,7 +118,9 @@ Proof
   `eval_operand value s1 = SOME w /\ op_taint tn1 value = {}` by
     (Cases_on `value` >> gvs[eval_operand_def, op_taint_def,
       venom_state_component_equality]) >>
-  gvs[] >> drule_at (Pat `emit_void MSTORE _ _ = _`)
+  gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
+  drule_at (Pat `emit_void MSTORE _ _ = _`)
     reason_encoder_mstore_resources_ptr >>
   disch_then (drule_all_then strip_assume_tac) >>
   first_x_assum (qspecl_then [`PG`, `D`] strip_assume_tac) >>

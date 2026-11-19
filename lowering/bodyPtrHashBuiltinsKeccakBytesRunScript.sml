@@ -54,7 +54,7 @@ Theorem hash_keccak_bytes_triple:
     b+32 < dimword (:256) /\ n < dimword (:256) /\
     op_taint tn (Var x) = {} /\
     (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
-    mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx ==>
+    mem_word_at b s.vs_memory = n2w n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst il MLOAD [Var x] [l];
        mk_inst ia ADD [Var x;Lit 32w] [p];
@@ -85,6 +85,9 @@ Proof
 QED
 
 Resume hash_keccak_bytes_triple[add]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s1`, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `step_prov PG G (mk_inst il MLOAD [Var x] [l]) (update_var l (n2w n) s) = G1` by
     simp[Abbr `G1`, step_prov_def, set_prov_def, out_prov_def, mk_inst_def] >>
   rename1 `FLOOKUP G x = SOME (rootbase,cap)` >>
@@ -105,6 +108,9 @@ QED
 Resume hash_keccak_bytes_triple[sha]:
   simp[hash_add_ghost] >>
   qabbrev_tac `s2 = update_var p (n2w b+32w) s1 with vs_inst_idx := SUC s1.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[NoAsms, Abbr `s2`, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   qabbrev_tac `G2 = G1 |+ (p,(rootbase,cap))` >>
   qabbrev_tac `tn2 = tn1 with t_var := tn1.t_var |+ (p,{})` >>
   `eval_operand (Var p) s2 = SOME (n2w (b+32)) /\
@@ -148,7 +154,7 @@ Theorem hash_keccak_bytes_inst_seq:
     b+32 < dimword (:256) /\ n < dimword (:256) /\
     op_taint tn (Var x) = {} /\
     (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
-    mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx ==>
+    mem_word_at b s.vs_memory = n2w n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
       op_taint tn' op = {} /\ op_prov G' op = NONE /\
       tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
@@ -179,7 +185,7 @@ Theorem hash_keccak_bytes_counted:
     b+32 < dimword (:256) /\ n < dimword (:256) /\
     op_taint tn (Var x) = {} /\
     (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
-    mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx /\
+    mem_word_at b s.vs_memory = n2w n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
     run_inst_seq (emitted_insts sa sb) s = OK t ==>

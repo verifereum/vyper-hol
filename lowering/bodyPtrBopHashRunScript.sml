@@ -4,7 +4,7 @@ Ancestors
   instIdxIndep ghostPcTransportPtr venomInst venomState venomExecSemantics
 
 Theorem bop_hash_run_checked:
-  p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
+  p <> q /\ l <> q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var p s = SOME w /\ ptr_covers G tn p s 32 /\
   mem_word_at (w2n w) s.vs_memory = n2w n /\ n < dimword(:256) /\
   FLOOKUP G p = SOME (b,sz) /\
@@ -39,13 +39,14 @@ Proof
      ((uL with vs_inst_idx := SUC s.vs_inst_idx) with
        vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
      OK (t with vs_inst_idx := SUC (SUC s.vs_inst_idx))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SIMP_RULE (srw_ss()) [] (GEN_ALL bop_hash_sequence_checked)) >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem bop_hash_run_ptr:
-  p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
+  p <> q /\ l <> q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var p s = SOME w /\ ptr_covers G tn p s 32 /\
   mem_word_at (w2n w) s.vs_memory = n2w n /\ n < dimword(:256) /\
   FLOOKUP G p = SOME (b,sz) /\

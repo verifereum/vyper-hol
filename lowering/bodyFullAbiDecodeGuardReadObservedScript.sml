@@ -127,6 +127,7 @@ Theorem abi_decode_bytes_scalar_frame_joint:
        op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (bodyPtrBopScalarSeqTheory.bop_scalar_seq_run |>
     Q.INST [`D` |-> `<|d_stor := K (K {}); d_trans := K (K {});
       d_imm := K {}; d_ret := K {}|>`]) >>

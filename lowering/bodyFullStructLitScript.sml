@@ -19,24 +19,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem structlit_gas_edge_labels[local]:
-  gas_path_edge ctx fn s n (OK t) ==> t.vs_labels = s.vs_labels
-Proof
-  rw[fragGasPathTheory.gas_path_edge_def] >>
-  gvs[fragExecTheory.exit_result_def, venomStateTheory.jump_to_def] >>
-  metis_tac[venomExecProofsTheory.step_inst_preserves_labels_always,
-            venomExecPropsTheory.eval_phis_preserves_labels]
-QED
-
-Theorem structlit_gas_path_labels[local]:
-  !ctx fn s n r. gas_path ctx fn s n r ==>
-    !t. r = OK t ==> t.vs_labels = s.vs_labels
-Proof
-  ho_match_mp_tac fragGasPathTheory.gas_path_ind >>
-  rpt strip_tac >> gvs[fragExecTheory.exit_result_def] >>
-  metis_tac[structlit_gas_edge_labels]
-QED
-
 Theorem structlit_operand_frame[local]:
   t.vs_labels = s.vs_labels /\
   (!p. op = Var p ==> lookup_var p t = lookup_var p s) ==>
@@ -739,6 +721,7 @@ Proof
   drule_all emit_op_fetch_boundary >> strip_tac >> gvs[] >>
   `w2n (n2w addr : bytes32) + off < dimword(:256)` by
     (simp[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all (structlit_child_add_full |> Q.INST
     [`n` |-> `type_memory_size ftv`, `sm` |-> `sm`, `sn` |-> `sn`]) >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
@@ -750,7 +733,7 @@ Proof
      disch_then (mp_then Any mp_tac
        (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_projections)) >>
      disch_then (mp_then Any mp_tac fragGasPathPtrTheory.gas_path_ptr_erase) >>
-     disch_then (mp_then Any mp_tac structlit_gas_path_labels) >> simp[]) >>
+     disch_then (mp_then Any mp_tac fragGasPathTheory.gas_path_labels) >> simp[]) >>
   `eval_operand (vv_operand vv) t' = eval_operand (vv_operand vv) t` by
     (irule structlit_operand_frame >> simp[] >> metis_tac[]) >>
   `expr_body_pre ce cx env e es` by metis_tac[] >>

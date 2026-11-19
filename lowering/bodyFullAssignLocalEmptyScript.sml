@@ -268,12 +268,6 @@ Theorem body_assign_local_memory_empty_full:
     FLOOKUP env.var_types id = SOME ty /\
     ~is_word_type ty /\
     0 < type_memory_bytes cenv ty /\
-    (lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
-     has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-    (lowered_value_type cenv e = expr_type e \/
-     is_bytestring_type (expr_type e) \/
-     is_bytestring_type (lowered_value_type cenv e) \/
-     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
     has_length_word (expr_type e) /\ is_empty_value_expr e ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
@@ -422,7 +416,7 @@ Resume body_assign_local_memory_empty_full[ghost]:
   simp[Abbr `ee`, vyperStateTheory.evaluation_state_fupdcanon] >>
   qmatch_goalsub_abbrev_tac `es' with scopes := _` >>
   `ghost_inv_at (DF H) lo d cenv cx es' G0 tn0 s0` by
-    (fs[Abbr `es'`, ghost_inv_at_def] >> (metis_tac[Abbr `es'`, ghost_inv_at_def])) >>
+    (fs[Abbr `es'`, ghost_inv_at_def] >> metis_tac[ghost_inv_at_def]) >>
   `find_containing_scope id es'.scopes = SOME (pre,env'',entry,rest) /\
    local_ptrs_rel func cenv es'.scopes s0 /\
    local_region cenv es'.scopes s0 id (w2n w) sz` by simp[Abbr `es'`] >>

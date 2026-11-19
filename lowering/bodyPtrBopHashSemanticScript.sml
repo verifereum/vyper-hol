@@ -31,7 +31,7 @@ Proof
 QED
 
 Theorem bop_bytes_hash_run_ptr:
-  p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
+  p <> q /\ l <> q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es (BytesV bs) (Var p) s /\
   ptr_val_ok cx ty (BytesV bs) (Var p) G tn s /\
@@ -68,13 +68,14 @@ Proof
     (Cases_on `LENGTH bs = 0` >- simp[] >>
      `0 < LENGTH bs` by decide_tac >>
      drule_all bop_payload_offset_no_wrap >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_hash_run_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem bop_string_hash_run_ptr:
-  p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
+  p <> q /\ l <> q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es (StringV str) (Var p) s /\
   ptr_val_ok cx ty (StringV str) (Var p) G tn s /\
@@ -110,6 +111,7 @@ Proof
     (Cases_on `LENGTH str = 0` >- simp[] >>
      `0 < LENGTH str` by decide_tac >>
      drule_all bop_payload_offset_no_wrap >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_hash_run_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   goal_assum (drule_at Any) >> simp[]

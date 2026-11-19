@@ -28,7 +28,7 @@ Theorem toplevel_slot_loop_common_run:
   compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   nb < dimword (:256) /\ n < 2**256 /\ 32*n <= nb /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -62,6 +62,9 @@ Proof
   `EVERY (\(off,bs). off+LENGTH bs <= LENGTH s.vs_memory /\
     (off+LENGTH bs <= w2n (n2w (buffer_allocation_base s sa.cs_next_id):bytes32) \/
      w2n (n2w (buffer_allocation_base s sa.cs_next_id):bytes32)+32*n <= off)) []` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   mp_tac (Q.INST [`regions` |-> `[]`] (SPEC_ALL toplevel_slot_copy_entry_joint)) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `slot_copy_runtime_frame sm d 0 a h` by
@@ -143,7 +146,7 @@ Theorem toplevel_slot_loop_prepared_run:
   compile_expr cenv ty (TopLevelName ann nsid) sa = (LocatedValue t p,sm) /\
   sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
   unwrap_value cenv (LocatedValue t p) sb = (op,sc) /\
-  local_ptrs_reserved cenv sm /\ fn_has_code sb sc func /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sm /\ fn_has_code sb sc func /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv (TopLevelName ann nsid)) = SOME rt /\
     ~is_word_type (post_value_type cenv (TopLevelName ann nsid)) ==>
@@ -231,7 +234,7 @@ Theorem toplevel_slot_loop_copy_full:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv (TopLevelName ann nsid)) = SOME rt /\
     ~is_word_type (post_value_type cenv (TopLevelName ann nsid)) ==>

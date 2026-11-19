@@ -721,15 +721,27 @@ Resume slice_memory_tail_full[memory_frames]:
      qexistsl_tac [`s`,`sa`,`es.scopes`] >> simp[] >> metis_tac[]) >>
   `target.vs_memory = (mstore (w2n w) (n2w k)
       (write_memory_with_expansion (w2n w+32) copied s)).vs_memory` by
-    (qpat_assum `target = mstore _ _ _ with vs_inst_idx := _` mp_tac >>
-     qpat_assum `Abbrev (za = _)` (mp_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     qpat_assum `v.vs_memory = s.vs_memory` mp_tac >>
-     rpt (pop_assum kall_tac) >> rpt disch_tac >>
-     qpat_assum `target = _` SUBST1_TAC >>
-     pure_rewrite_tac[venomStateTheory.mstore_def,
-       venomStateTheory.write_memory_with_expansion_def,LET_THM] >>
-     BETA_TAC >> pure_rewrite_tac[venomStateTheory.venom_state_accfupds] >>
-     simp[venomStateTheory.update_var_def]) >>
+    (qpat_assum `target = mstore _ _ _ with vs_inst_idx := _` SUBST1_TAC >>
+     simp_tac bool_ss [venomStateTheory.venom_state_accfupds,combinTheory.K_THM] >>
+     `za.vs_memory = s.vs_memory` by
+       (qpat_assum `Abbrev (za = _)`
+          (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+        asm_rewrite_tac[venomStateTheory.update_var_def,
+          venomStateTheory.venom_state_accfupds]) >>
+     `(write_memory_with_expansion (w2n w+32) copied za).vs_memory =
+       (write_memory_with_expansion (w2n w+32) copied s).vs_memory` by
+       (qpat_assum `za.vs_memory = s.vs_memory`
+          (mp_tac o MATCH_MP (Q.SPECL [`za`,`s`,`w2n (w:bytes32)+32`,`copied`]
+             exprSimCalldataSliceTheory.write_memory_with_expansion_equal_memory)) >>
+        disch_then (mp_tac o AP_TERM ``(\v:venom_state. v.vs_memory)``) >>
+        simp_tac bool_ss [venomStateTheory.venom_state_accfupds,combinTheory.K_THM] >> disch_then ACCEPT_TAC) >>
+     qpat_assum `(write_memory_with_expansion _ _ za).vs_memory = _`
+       (mp_tac o MATCH_MP (Q.SPECL
+          [`write_memory_with_expansion (w2n w+32) copied za`,
+           `write_memory_with_expansion (w2n w+32) copied s`,`w2n (w:bytes32)`,`n2w k : bytes32`]
+          exprSimCalldataSliceTheory.mstore_equal_memory)) >>
+     disch_then (mp_tac o AP_TERM ``(\v:venom_state. v.vs_memory)``) >>
+     simp_tac bool_ss [venomStateTheory.venom_state_accfupds,combinTheory.K_THM] >> disch_then ACCEPT_TAC) >>
   `!off len. regions_disjoint off len (w2n w) N ==>
      mem_bytes_at off len target.vs_memory = mem_bytes_at off len s.vs_memory` by
     (rpt strip_tac >>

@@ -154,6 +154,7 @@ Resume concat_prefix_full[zero]:
       vs_alloca_next := _; vs_inst_idx := _|> = t2`
       (mp_tac o Q.AP_TERM `\z:venom_state. z.vs_halted`) >> simp[]) >>
   `emit_void MSTORE [Var oq; Lit 0w] s3 = (u,s4)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t3` by simp[] >>
   drule_all concat_offset_zero_full >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -435,6 +436,7 @@ Proof
   `fo = Var (STRING #"%" (toString sa.cs_next_var))` by simp[] >>
   qpat_x_assum `fo = _` SUBST_ALL_TAC >>
   qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all assignTuplePtrLocalBytesCopyTheory.mload_clean_seq_ptr >>
   disch_then (qspecl_then [`ARB`, `func`, `PG`, `sa.cs_next_id`, `out`] strip_assume_tac) >>
   rename1 `inst_seq_ptr ARB 0 ctx func PG G tn _ s Gf tnf` >>

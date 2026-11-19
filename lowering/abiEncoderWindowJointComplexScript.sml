@@ -31,7 +31,8 @@ Theorem compile_abi_encode_to_buf_complex_window_joint:
       (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
       fn_has_code st en func /\ fn_inst_ids_distinct func /\
       alloca_inv s /\ alloca_room ctx func s /\
-      ~ctx_has_dalloca ctx /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+        s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
       allocas_from lo s /\ lo <= s.vs_alloca_next /\
       (0 < cap ==>
         sb + cap <= s.vs_alloca_next /\
@@ -84,7 +85,8 @@ Theorem compile_abi_encode_to_buf_complex_window_joint:
     (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
     fn_has_code st en func /\ fn_inst_ids_distinct func /\
     alloca_inv s /\ alloca_room ctx func s /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
     allocas_from lo s /\ lo <= s.vs_alloca_next /\
     (0 < cap ==>
       sb + cap <= s.vs_alloca_next /\
@@ -253,6 +255,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_induction]:
     st.cs_next_var <= current.cs_next_var /\
     st.cs_next_id <= current.cs_next_id /\ end_st.cs_next_id <= en.cs_next_id /\
     alloca_inv u /\ alloca_room ctx func u /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u /\ u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp) /\
     allocas_from lo u /\ lo <= u.vs_alloca_next /\
     ~u.vs_halted /\ u.vs_current_bb = current.cs_current_bb /\
     u.vs_inst_idx = LENGTH current.cs_current_insts /\
@@ -463,13 +466,14 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_source_path]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[markerTheory.Abbrev_def, window_pure_seq_def, window_seq_def,
        run_inst_seq_def, AllCaseEqs()]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by metis_tac[] >>
   `!D. ptr_inst_ok D lo 0 ctx func Gu tu source_inst u` by
     (gen_tac >>
      irule (Q.INST [`lo0` |-> `0`] ptr_inst_ok_lower_bound_transport) >>
      simp_tac bool_ss [ZERO_LESS_EQ] >>
      conj_tac >- first_assum ACCEPT_TAC >>
      map_every (fn pat => qpat_assum pat mp_tac)
-       [`op_taint tu src = {}`, `~ctx_has_dalloca ctx`,
+       [`op_taint tu src = {}`, `ctx_has_dalloca ctx ==> allocas_below_fmp u`,
         `step_inst_base source_inst u = OK source_raw`,
         `source_raw = update_var _ _ u`, `Abbrev (source_inst = _)`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
@@ -550,6 +554,19 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_source_transport]:
      simp_tac bool_ss [Abbr `us`]) >>
   drule window_phase_resources >> strip_tac >>
   drule window_phase_control >> strip_tac >>
+  `abi_encode_exec_frame func u us` by
+    (simp_tac bool_ss [Abbr `us`, abi_encode_exec_frame_inst_idx] >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp us /\
+    us.vs_alloca_next + pending_alloca_size func us <= w2n us.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame func u us` (fn frame =>
+       qpat_assum `alloca_inv us` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u /\ u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` (fn bound =>
+           ACCEPT_TAC (MATCH_MP window_exec_frame_alloca_budget
+             (LIST_CONJ [frame,inv,bound])))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp us` by
+    qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp us /\ us.vs_alloca_next + pending_alloca_size func us <= w2n us.vs_initial_fmp`
+      (fn th => ACCEPT_TAC (DISCH (fst (dest_imp (concl th)))
+        (CONJUNCT1 (UNDISCH th)))) >>
   `eval_operand dst us = SOME (n2w d)` by
     (irule window_phase_operand >>
      goal_assum (drule_at Any) >> asm_rewrite_tac[] >> metis_tac[]) >>
@@ -739,7 +756,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_head_path]:
      simp_tac bool_ss [ZERO_LESS_EQ] >>
      conj_tac >- first_assum ACCEPT_TAC >>
      map_every (fn pat => qpat_assum pat mp_tac)
-       [`op_taint ts dst = {}`, `~ctx_has_dalloca ctx`,
+       [`op_taint ts dst = {}`, `ctx_has_dalloca ctx ==> allocas_below_fmp us`,
         `step_inst_base head_inst us = OK head_raw`,
         `head_raw = update_var _ _ us`, `Abbrev (head_inst = _)`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
@@ -821,6 +838,15 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_head_transport]:
      simp_tac bool_ss [Abbr `uh`]) >>
   drule window_phase_resources >> strip_tac >>
   drule window_phase_control >> strip_tac >>
+  `abi_encode_exec_frame func us uh` by
+    (simp_tac bool_ss [Abbr `uh`, abi_encode_exec_frame_inst_idx] >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp uh /\
+    uh.vs_alloca_next + pending_alloca_size func uh <= w2n uh.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame func us uh` (fn frame =>
+       qpat_assum `alloca_inv uh` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp us /\ us.vs_alloca_next + pending_alloca_size func us <= w2n us.vs_initial_fmp` (fn bound =>
+           ACCEPT_TAC (MATCH_MP window_exec_frame_alloca_budget
+             (LIST_CONJ [frame,inv,bound])))))) >>
   `eval_operand dst uh = SOME (n2w d)` by
     (irule window_phase_operand >>
      goal_assum (drule_at Any) >> asm_rewrite_tac[] >> metis_tac[]) >>
@@ -1476,10 +1502,6 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_cursor]:
        `s` |-> `u`, `t` |-> `us`, `u` |-> `uh`] window_phase_chain) >>
      (impl_tac >- (simp_tac bool_ss [SUBSET_REFL] >>
        rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>
-  `abi_encode_exec_frame func u us` by
-    (simp_tac bool_ss [Abbr `us`, abi_encode_exec_frame_inst_idx] >> first_assum ACCEPT_TAC) >>
-  `abi_encode_exec_frame func us uh` by
-    (simp_tac bool_ss [Abbr `uh`, abi_encode_exec_frame_inst_idx] >> first_assum ACCEPT_TAC) >>
   `abi_encode_exec_frame func u uh` by
     (mp_tac (Q.INST [`fn` |-> `func`, `s` |-> `u`, `t` |-> `us`, `u` |-> `uh`]
        abi_encode_exec_frame_trans) >>
@@ -1868,6 +1890,13 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_tail]:
     (qpat_assum `current.cs_next_var <= prepared.cs_next_var` mp_tac >>
      qpat_assum `prepared.cs_next_var <= ready.cs_next_var` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp child_actual /\
+    child_actual.vs_alloca_next + pending_alloca_size func child_actual <= w2n child_actual.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame func uh child_actual` (fn frame =>
+       qpat_assum `alloca_inv child_actual` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp uh /\ uh.vs_alloca_next + pending_alloca_size func uh <= w2n uh.vs_initial_fmp` (fn bound =>
+           ACCEPT_TAC (MATCH_MP window_exec_frame_alloca_budget
+             (LIST_CONJ [frame,inv,bound])))))) >>
   qpat_x_assum `!k current end_st result u Gu tu dp site slot. _`
     (qspecl_then [`SUC k`,`child_end`,`end_st`,`result`,
       `child_actual`,`Gc`,`tc`,`dp`,`site`,`slot`] mp_tac) >>
@@ -2066,6 +2095,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_assembly]:
   >- (map_every (fn pat => qpat_assum pat mp_tac)
        [`compile_abi_encode_complex_elems dst src infos 0 0 (Lit 0w) st = (ignored,en)`,
         `fn_has_code st en func`, `alloca_inv s`, `alloca_room ctx func s`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp`,
         `allocas_from lo s`, `lo <= s.vs_alloca_next`,
         `~s.vs_halted`, `s.vs_current_bb = st.cs_current_bb`,
         `s.vs_inst_idx = LENGTH st.cs_current_insts`,
@@ -2346,6 +2376,13 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_prefix]:
      qpat_assum `pending_alloca_size func dyn_actual=pending_alloca_size func us`
        (fn th => pure_rewrite_tac[th]) >>
      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp dyn_actual /\
+    dyn_actual.vs_alloca_next + pending_alloca_size func dyn_actual <= w2n dyn_actual.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame func us dyn_actual` (fn frame =>
+       qpat_assum `alloca_inv dyn_actual` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp us /\ us.vs_alloca_next + pending_alloca_size func us <= w2n us.vs_initial_fmp` (fn bound =>
+           ACCEPT_TAC (MATCH_MP window_exec_frame_alloca_budget
+             (LIST_CONJ [frame,inv,bound])))))) >>
   suspend "member_dynamic_call"
 QED
 
@@ -2890,6 +2927,17 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_prep
      qpat_assum `window_alloca_growth dyn_actual body_actual`
        (mp_tac o CONJUNCT1 o REWRITE_RULE [window_alloca_growth_def]) >>
      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp body_actual /\
+    body_actual.vs_alloca_next + pending_alloca_size func body_actual <= w2n body_actual.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame func dyn_actual body_actual` (fn frame =>
+       qpat_assum `alloca_inv body_actual` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp dyn_actual /\ dyn_actual.vs_alloca_next + pending_alloca_size func dyn_actual <= w2n dyn_actual.vs_initial_fmp` (fn bound =>
+           ACCEPT_TAC (MATCH_MP window_exec_frame_alloca_budget
+             (LIST_CONJ [frame,inv,bound])))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp body_actual` by
+    qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp body_actual /\ body_actual.vs_alloca_next + pending_alloca_size func body_actual <= w2n body_actual.vs_initial_fmp`
+      (fn th => ACCEPT_TAC (DISCH (fst (dest_imp (concl th)))
+        (CONJUNCT1 (UNDISCH th)))) >>
   mp_tac (Q.INST
     [`head` |-> `hp`,`dp` |-> `cursor_var`,
      `offset` |-> `FST (SND (ops : operand # operand # operand))`,`len` |-> `body_len`,
@@ -3258,9 +3306,6 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_phas
        `s` |-> `u`,`t` |-> `dyn_actual`,`u` |-> `child_actual`] window_phase_chain) >>
      (impl_tac >- (simp_tac (srw_ss()) [NoAsms,SUBSET_REFL] >>
        rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>
-  `abi_encode_exec_frame func u us` by
-    (simp_tac bool_ss [Abbr `us`,abi_encode_exec_frame_inst_idx] >>
-     first_assum ACCEPT_TAC) >>
   `abi_encode_exec_frame func u child_actual` by
     (irule abi_encode_exec_frame_trans >> qexists_tac `us` >>
      conj_tac >- first_assum ACCEPT_TAC >>
@@ -3589,6 +3634,13 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_tail]:
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
      asm_simp_tac (srw_ss()) [Abbr `source_offset`,Abbr `head_offset`,
        TAKE_SUC,TAKE1_DROP,abi_encoder_member_span_def,SUM_APPEND]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp child_actual /\
+    child_actual.vs_alloca_next + pending_alloca_size func child_actual <= w2n child_actual.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame func u child_actual` (fn frame =>
+       qpat_assum `alloca_inv child_actual` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u /\ u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` (fn bound =>
+           ACCEPT_TAC (MATCH_MP window_exec_frame_alloca_budget
+             (LIST_CONJ [frame,inv,bound])))))) >>
   `current.cs_next_id<=child_end.cs_next_id` by
     (qpat_assum `prepared.cs_next_id=current.cs_next_id+1` mp_tac >>
      qpat_assum `prepared.cs_next_id<=child_end.cs_next_id` mp_tac >>
@@ -3767,6 +3819,13 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
     (qpat_assum `window_phase ctx func st ready _ [] s u` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp_tac bool_ss [window_phase_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame func s u` (fn frame =>
+       qpat_assum `alloca_inv u` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` (fn bound =>
+           ACCEPT_TAC (MATCH_MP window_exec_frame_alloca_budget
+             (LIST_CONJ [frame,inv,bound])))))) >>
   `!id r. FLOOKUP s.vs_allocas id = SOME r ==>
     FLOOKUP u.vs_allocas id = SOME r` by
     (qpat_assum `abi_encoder_registered_effect _ _ s u` mp_tac >>
@@ -3953,6 +4012,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
         `st.cs_next_var <= ready.cs_next_var`,
         `st.cs_next_id <= ready.cs_next_id`, `middle.cs_next_id <= en.cs_next_id`,
         `alloca_inv u`, `alloca_room ctx func u`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp u /\ u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp`,
         `allocas_from lo u`, `lo <= u.vs_alloca_next`,
         `~u.vs_halted`, `u.vs_current_bb = ready.cs_current_bb`,
         `u.vs_inst_idx = LENGTH ready.cs_current_insts`,
@@ -4066,6 +4126,17 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
    v.vs_inst_idx=LENGTH middle.cs_current_insts` by
     (qpat_assum `window_phase ctx func ready middle sites _ u v` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp_tac bool_ss [window_phase_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v /\
+    v.vs_alloca_next + pending_alloca_size func v <= w2n v.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame func u v` (fn frame =>
+       qpat_assum `alloca_inv v` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u /\ u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` (fn bound =>
+           ACCEPT_TAC (MATCH_MP window_exec_frame_alloca_budget
+             (LIST_CONJ [frame,inv,bound])))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp v /\ v.vs_alloca_next + pending_alloca_size func v <= w2n v.vs_initial_fmp`
+      (fn th => ACCEPT_TAC (DISCH (fst (dest_imp (concl th)))
+        (CONJUNCT1 (UNDISCH th)))) >>
   `slot+32 <= v.vs_alloca_next` by
     (qpat_assum `slot+32 <= u.vs_alloca_next` mp_tac >>
      qpat_assum `window_alloca_growth u v`
@@ -4189,7 +4260,8 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
         simp_tac bool_ss [Abbr `ld`] >>
         qpat_assum `dyn_ptr=Var p` (fn th => pure_rewrite_tac [th]) >>
         irule wordLoadStorePtrTheory.ptr_inst_ok_mload >>
-        conj_tac >> first_assum ACCEPT_TAC) >>
+        conj_tac >- (first_assum ACCEPT_TAC) >>
+        first_assum ACCEPT_TAC) >>
      `inst_seq_ptr D lo ctx func PG Gv tv [ld] v Gload tt` by
        (`step_inst_base ld v=OK raw_load` by
           (qpat_assum `raw_load=update_var q (mload slot v) v`

@@ -513,6 +513,7 @@ Proof
       (assume_tac o REWRITE_RULE[th]) >>
     qpat_x_assum `setup_ops = (output_buf.buf_operand,data_ptr)`
       (assume_tac o REWRITE_RULE[th])) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp output_state` by simp[] >>
   drule_at (Pat `emit_op ADD _ _ = _`) abi_encode_setup_tail_origin >>
   disch_then (drule_at (Pat `abi_builtin_encode_method_id _ _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code output_allocated _ _`)) >>
@@ -1690,6 +1691,27 @@ Resume abi_encode_staged_tuple_full_tail[ready_finish]:
 QED
 
 Resume abi_encode_staged_tuple_full_tail[finish_apply]:
+  `N < dimword(:256)` by
+    (qpat_assum `p+N < dimword(:256)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `!x. not_fresh_at staged x ==> lookup_var x alloc_run = lookup_var x prepared` by
+    (rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at staged x ==> lookup_var x alloc_run = _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+  drule_all_then (MAP_EVERY assume_tac o CONJUNCTS)
+    bodyFullAbiEncodePureFrameTheory.abi_encode_tuple_setup_frames >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ready_run /\
+    ready_run.vs_alloca_next + pending_alloca_size func ready_run <= w2n ready_run.vs_initial_fmp` by
+    (qpat_assum `stmt_state_rel _ ctx func ce cx ee prepared`
+       (mp_tac o MATCH_MP stmt_state_rel_fmp_room) >>
+     qpat_assum `abi_encode_exec_frame func prepared ready_run` mp_tac >>
+     qpat_assum `alloca_inv ready_run` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[exprSimAbiEncodeExecFrameTheory.abi_encode_exec_frame_def,
+          exprSimAbiEncodeSemanticTheory.abi_encode_semantic_obs_fields,
+          exprLoweringPropsTheory.fmp_room_def, ptrDisciplineTheory.allocas_below_fmp_def,
+          venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   qpat_assum `compile_abi_encode_to_buf (Var dp) (Var src) ei ready = (len,body_end)`
     (mp_tac o Q.INST [`fin` |-> `final_st`,
       `site` |-> `staged.cs_next_id`, `sa` |-> `origin`,
@@ -2130,15 +2152,6 @@ Resume abi_encode_staged_tuple_full_tail[writeback_locals]:
 QED
 
 Resume abi_encode_staged_tuple_full_tail[result_state]:
-  `N < dimword(:256)` by
-    (qpat_assum `p+N < dimword(:256)` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
-  `!x. not_fresh_at staged x ==> lookup_var x alloc_run = lookup_var x prepared` by
-    (rpt strip_tac >>
-     qpat_assum `!x. not_fresh_at staged x ==> lookup_var x alloc_run = _ /\ _`
-       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
-  drule_all_then (MAP_EVERY assume_tac o CONJUNCTS)
-    bodyFullAbiEncodePureFrameTheory.abi_encode_tuple_setup_frames >>
   `abi_encode_exec_frame func prepared t` by
     (irule exprSimAbiEncodeExecFrameTheory.abi_encode_exec_frame_trans >>
      qexists `ready_run` >> conj_tac >> first_assum ACCEPT_TAC) >>

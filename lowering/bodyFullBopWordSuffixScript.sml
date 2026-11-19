@@ -196,6 +196,7 @@ Resume bop_suffix_full_halt[full_success]:
 QED
 
 Resume bop_suffix_full_halt[full_abort]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all bop_word_scalar_abort_joint >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
   irule gas_outcome_full_intro >>

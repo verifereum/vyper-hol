@@ -358,6 +358,7 @@ Proof
   Cases_on `step_inst_base (mk_inst ia ALLOCA [Lit 64w] [p]) s` >>
   simp[] >> strip_tac >> rename1 `step_inst_base _ s = OK s1` >>
   `64 < dimword (:256)` by simp[dimword_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all builtin_allocation_certificate >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `local_ptrs_rel fn cenv es.scopes s1` by fs[stmt_state_rel_def, state_rel_def] >>

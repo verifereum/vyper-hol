@@ -5,6 +5,7 @@ Ancestors wordLoadStorePtr bodyPtrEnvBuiltinsSelectorBuffer bodyPtrEnvBuiltinsAl
   ghostPcTransportPtr decoderGhostFramePtr loweringHalt fragExecPtr fragExec fragGasSeqPtr ptrDiscipline venomState
   venomExecSemantics venomInst compileEnv loweringStateRelDefs exprLoweringProps exprSimProps
   bodyPtrDefs localPtrsProps instIdxIndep finite_map pred_set list words
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 (* Allocation is size-parametric: selector buffers and fixed hash scratch use
    the same certificate, with their respective sizes 64 and 32. *)
@@ -12,7 +13,7 @@ Theorem builtin_allocation_certificate:
   stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct fn /\ n < dimword (:256) /\
   MEM (mk_inst ia ALLOCA [Lit (n2w n)] [p]) (fn_insts fn) /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\ ~not_fresh_at sa p /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ local_ptrs_reserved cenv sa /\ ~not_fresh_at sa p /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   step_inst_base (mk_inst ia ALLOCA [Lit (n2w n)] [p]) s = OK s1 ==>
@@ -70,7 +71,7 @@ Theorem selector_store_tail_certificate[local]:
   code = [mk_inst il MSTORE [Var p; Lit 4w] [];
           mk_inst ip ADD [Var p; Lit 32w] [q];
           mk_inst iw MSTORE [Var q; value] []] /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   local_ptrs_rel fn cenv es.scopes s /\ ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ ~not_fresh_at sa q /\ p <> q /\
@@ -139,6 +140,13 @@ Resume selector_store_tail_certificate[checks]:
     (gvs[ptr_covers_def, op_taint_def]) >>
   `~is_terminator (mk_inst il MSTORE [Var p; Lit 4w] []).inst_opcode` by
     simp[mk_inst_def, is_terminator_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s1`, allocas_below_fmp_def, mstore_def,
+          write_memory_with_expansion_def, write_memory_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[NoAsms, Abbr `s2`, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   simp[Once inst_seq_ptr_def, Abbr `tn1`, step_inst_inst_idx_indep,
        exec_result_map_def] >>
   simp[Once inst_seq_ptr_def] >> conj_tac
@@ -295,7 +303,7 @@ Theorem selector_suffix_certificate:
   stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct fn /\
   MEM (mk_inst ia ALLOCA [Lit 64w] [p]) (fn_insts fn) /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ local_ptrs_reserved cenv sa /\
   ~not_fresh_at sa p /\ ~not_fresh_at sa q /\ p <> q /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -319,6 +327,8 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `local_ptrs_rel fn cenv es.scopes s1` by
     fs[stmt_state_rel_def, state_rel_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
   `eval_operand value s1 = SOME w /\ op_taint tn1 value = {}` by
     suspend "value_frame" >>
   `?G' tn'. inst_seq_ptr D 0 ctx fn PG G1 tn1

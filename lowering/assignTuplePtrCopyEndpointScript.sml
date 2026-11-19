@@ -49,7 +49,7 @@ QED
 
 Theorem emit_allocated_mcopy_endpoint_ptr:
   emit_inst MCOPY [Var p; Var q; Lit (n2w n)] [] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var p s = SOME (n2w b) /\ lookup_var q s = SOME a /\
@@ -89,6 +89,9 @@ Proof
 QED
 
 Resume emit_allocated_mcopy_endpoint_ptr[endpoint]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule emit_mcopy_zero_path_ptr >>
   simp[eval_operand_def, op_taint_def] >>
   disch_then drule_all >>

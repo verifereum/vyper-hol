@@ -6,11 +6,12 @@ Ancestors
   exprSimLiteralBuffer exprLoweringProps venomState
   fragGasPathPtr fragGasSeqPtr typedCopyPtr bodyPtrAttributeAdd
   venomExecSemantics words ptrDiscipline
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem compile_alloc_buffer_counted_edge_covers:
   compile_alloc_buffer n sa = (buf,sb) /\ buf.buf_operand = Var out /\
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
-  n < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  n < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
@@ -53,7 +54,7 @@ Theorem compile_alloc_buffer_expr_counted:
   eval_operand op s = SOME w /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory tv v (w2n w) m) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?out u G1 tn1.
@@ -81,7 +82,7 @@ QED
 Theorem emit_pointer_offset_counted_covers:
   !root off delta sa out sb func ctx s a G tn total n D PG.
   emit_op ADD [Var root; delta] sa = (Var out,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   lookup_var root s = SOME a /\ ptr_covers G tn root s total /\
@@ -135,7 +136,7 @@ Theorem compile_alloc_buffer_counted:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
   stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ n < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?out u G1 tn1.
@@ -236,7 +237,7 @@ Theorem compile_slice_out_buf_counted:
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   32 <= n /\ n < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?buf sm r p u a G1 tn1 G2 tn2 t.
@@ -296,6 +297,11 @@ Resume compile_slice_out_buf_counted[offset]:
   `32 + (n - 32) <= n` by decide_tac >>
   `eval_operand (Lit 32w) uh = SOME (n2w 32) /\ op_taint tn1 (Lit 32w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp uh` by
+    (simp[Abbr `uh`, allocas_below_fmp_def] >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+       metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
+     fs[allocas_below_fmp_def]) >>
   drule_all emit_pointer_offset_counted_covers >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
   suspend "compose"

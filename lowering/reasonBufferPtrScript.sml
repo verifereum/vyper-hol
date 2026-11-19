@@ -7,7 +7,7 @@ Ancestors
 
 Theorem reason_buffer_alloca_path:
   !D ctx func PG G tn s id n out s1 bb cenv cx es.
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id ALLOCA [Lit (n2w n)] [out]) /\
@@ -24,7 +24,14 @@ Theorem reason_buffer_alloca_path:
       (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn)
       out s1 n
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
+  rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     fs[exprLoweringPropsTheory.stmt_state_rel_def, exprLoweringPropsTheory.fmp_room_def,
+        allocas_below_fmp_def, venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
+  conj_tac
   >- (`gas_path_ptr_edge D 0 ctx func PG G tn s
          (if (mk_inst id ALLOCA [Lit (n2w n)] [out]).inst_opcode = GAS then 1 else 0)
          (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1)
@@ -45,7 +52,7 @@ QED
 (* A clean selector/offset store is a zero-count encoder edge. *)
 Theorem reason_buffer_mstore_path:
   !D ctx func PG G tn s id dst value s1 bb.
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id MSTORE [Var dst; value] []) /\

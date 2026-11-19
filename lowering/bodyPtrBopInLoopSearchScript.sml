@@ -23,7 +23,7 @@ Proof
 QED
 
 Theorem membership_eq_branch_frame:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id EQ [a;b] [dst]) /\
   get_instruction bb (SUC s.vs_inst_idx) =
@@ -47,7 +47,9 @@ Theorem membership_eq_branch_frame:
       (jump_to (if aw = bw then lt else lf)
         (update_var dst (bool_to_word (aw = bw)) s))
 Proof
-  strip_tac >> drule_all membership_eq_branch_path >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all membership_eq_branch_path >>
   disch_then (qspecl_then [`PG`, `D`] mp_tac) >> strip_tac >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >> conj_tac
   >- (drule_all membership_frame_scalar_jump >> simp[]) >>
@@ -59,7 +61,7 @@ QED
 Theorem membership_condition_frame:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1) /\
   s.vs_inst_idx = 0 /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
@@ -98,7 +100,7 @@ Proof
 QED
 
 Theorem membership_found_frame:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME
     (mk_inst id ASSIGN [Lit 1w] ["%" ++ toString sa.cs_next_var]) /\
@@ -111,7 +113,9 @@ Theorem membership_found_frame:
     membership_loop_registers sa i 1w G' tn' t /\
     t = jump_to exit (update_var ("%" ++ toString sa.cs_next_var) 1w s)
 Proof
-  strip_tac >> drule_all membership_found_path >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all membership_found_path >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] mp_tac) >> strip_tac >>
   goal_assum (drule_at Any) >> simp[] >> conj_tac
   >- (drule membership_frame_scalar_jump >>
@@ -129,7 +133,7 @@ QED
 Theorem membership_increment_check:
   (opc = ADD \/ opc = ASSIGN) /\
   (!a. MEM a ops ==> op_taint tn a = {} /\ op_prov G a = NONE) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id opc ops [out]) s = OK (update_var out w s) ==>
   ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id opc ops [out]) s
 Proof
@@ -167,7 +171,7 @@ QED
 Theorem membership_increment_edge:
   (opc = ADD /\ ops = [a;Lit off] \/ opc = ASSIGN /\ ops = [a]) /\
   op_prov G a = NONE /\ op_taint tn a = {} /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) /\
   step_inst_base (mk_inst id opc ops [out]) s = OK (update_var out w s) ==>
@@ -201,7 +205,7 @@ Proof
 QED
 
 Theorem membership_increment_path:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id ADD [Var idx;Lit 1w] [tmp]) /\
@@ -259,7 +263,7 @@ QED
 Finalise membership_increment_path
 
 Theorem membership_increment_frame:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME
     (mk_inst id ADD [Var ("%" ++ toString (sa.cs_next_var+1));Lit 1w] [tmp]) /\
@@ -319,7 +323,7 @@ Proof
 QED
 
 Theorem membership_eq_branch_control:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id EQ [a;b] [dst]) /\
   get_instruction bb (SUC s.vs_inst_idx) =
@@ -345,7 +349,7 @@ QED
 Theorem membership_compared_control:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
   delta = (if 0 < skip then 1 else 0) /\
   width = (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) /\
@@ -383,7 +387,7 @@ QED
 Theorem membership_condition_control:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1) /\
   s.vs_inst_idx = 0 /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
@@ -406,7 +410,7 @@ QED
 Theorem membership_found_control:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_found" (sa.cs_next_label+3) /\
   s.vs_inst_idx = 0 /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
@@ -439,7 +443,7 @@ QED
 Theorem membership_increment_control:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_incr" (sa.cs_next_label+4) /\
   s.vs_inst_idx = 0 /\
   delta = (if 0 < skip then 1 else 0) /\
@@ -471,7 +475,7 @@ Proof
 QED
 
 Theorem membership_iszero_control:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ISZERO [arg] [dst]) /\
   eval_operand arg s = SOME a /\ op_prov G arg = NONE /\ op_taint tn arg = {} ==>
@@ -509,7 +513,7 @@ Proof
 QED
 
 Theorem membership_iszero_frame:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ISZERO [arg] [dst]) /\
   eval_operand arg s = SOME a /\ op_prov G arg = NONE /\ op_taint tn arg = {} /\
@@ -537,7 +541,7 @@ QED
 Theorem membership_notin_control:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE F sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = 0 /\
   delta = (if 0 < skip then 1 else 0) /\
   width = (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) /\
@@ -580,7 +584,7 @@ Theorem membership_compared_control_forward:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) ==>
   !fn ctx s G0 tn0 s0 G tn i r a w D PG.
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
   s.vs_inst_idx = 2+(if 0 < skip then 1 else 0)+
     (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) /\
@@ -615,7 +619,7 @@ Theorem membership_increment_control_forward:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) ==>
   !fn ctx s G0 tn0 s0 G tn i r D PG.
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_incr" (sa.cs_next_label+4) /\
   s.vs_inst_idx = 0 /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
@@ -635,7 +639,7 @@ QED
 Theorem membership_load_compare_control:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   membership_load_contract D ctx fn PG sa skip is_ctor imm loc ws G0 tn0 s0 /\
   (!x. needle = Var x ==> not_fresh_at sa x) /\
   eval_operand needle s0 = SOME w /\ op_prov G0 needle = NONE /\
@@ -657,6 +661,12 @@ Proof
   disch_then (qspecl_then [`i`, `G`, `tn`, `s`] mp_tac) >> simp[] >> strip_tac >>
   `eval_operand needle t = SOME w /\ op_prov G' needle = NONE /\
     op_taint tn' needle = {}` by metis_tac[membership_loop_frame_operand] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `membership_loop_frame _ _ _ s0 G' tn' t`
+        (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
+        (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   drule membership_compared_control_forward >>
   disch_then (drule_all o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss) []) >>
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >> strip_tac >>
@@ -668,7 +678,7 @@ Theorem membership_search_suffix:
   !i G tn s.
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   membership_load_contract D ctx fn PG sa skip is_ctor imm loc ws G0 tn0 s0 /\
   (!x. needle = Var x ==> not_fresh_at sa x) /\
   (!x. len = Var x ==> not_fresh_at sa x) /\
@@ -699,7 +709,19 @@ Proof
   `(n2w i:bytes32) <> n2w (LENGTH ws)` by
     (`i < dimword (:256)` by decide_tac >> simp[n2w_11]) >>
   gvs[] >> `i < LENGTH ws` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     qpat_assum `membership_loop_frame _ _ _ s0 _ _ t`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   drule_all membership_load_compare_control >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
+    (qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     qpat_assum `membership_loop_frame _ _ _ s0 _ _ t'`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   dxrule_all gas_path_ptr_then >> simp[] >> strip_tac >>
   `DROP i ws = EL i ws :: DROP (SUC i) ws` by
     metis_tac[rich_listTheory.DROP_CONS_EL] >>
@@ -719,6 +741,12 @@ QED
 Resume membership_search_suffix[incr]:
   drule membership_increment_control_forward >> disch_then drule_all >>
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t''` by
+    (qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     qpat_assum `membership_loop_frame _ _ _ s0 _ _ t''`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   qpat_x_assum `!y. _` (qspec_then `SUC i` mp_tac) >>
   simp[] >> disch_then drule_all >> strip_tac >>
   dxrule_all gas_path_ptr_then >> simp[] >> strip_tac >>
@@ -732,7 +760,7 @@ Finalise membership_search_suffix
 Theorem membership_search_initialized:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   membership_load_contract D ctx fn PG sa skip is_ctor imm loc ws G tn s /\
   (!x. needle = Var x ==> not_fresh_at sa x) /\
   (!x. len = Var x ==> not_fresh_at sa x) /\
@@ -747,8 +775,14 @@ Theorem membership_search_initialized:
     ~t.vs_halted /\ t.vs_inst_idx = 0 /\
     t.vs_current_bb = fresh_label_output "in_exit" (sa.cs_next_label+5)
 Proof
-  strip_tac >> drule_all membership_loop_contract_init >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all membership_loop_contract_init >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] mp_tac) >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `membership_loop_frame _ _ _ s _ _ t`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   mp_tac (GEN_ALL (Q.SPEC `0` membership_search_suffix)) >>
   disch_then (drule_all o SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss) []) >> strip_tac >>
   dxrule_all gas_path_ptr_then >> simp[] >> strip_tac >>
@@ -759,7 +793,7 @@ QED
 Theorem membership_finish_control:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i (bool_to_word b) G tn s /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_exit" (sa.cs_next_label+5) /\
@@ -791,7 +825,7 @@ QED
 Theorem membership_loop_conditional:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   membership_load_contract D ctx fn PG sa skip is_ctor imm loc ws G tn s /\
   (!x. needle = Var x ==> not_fresh_at sa x) /\
   (!x. len = Var x ==> not_fresh_at sa x) /\
@@ -807,6 +841,10 @@ Theorem membership_loop_conditional:
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >> drule_all membership_search_initialized >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `membership_loop_frame _ _ _ s _ _ t`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   drule_all membership_finish_control >>
   disch_then (qspecl_then [`PG`, `D`] mp_tac) >> strip_tac >>
   dxrule_all gas_path_ptr_then >> simp[] >> strip_tac >>

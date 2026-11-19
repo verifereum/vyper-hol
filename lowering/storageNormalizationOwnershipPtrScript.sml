@@ -155,7 +155,7 @@ QED
 
 Theorem normalization_alloca_checked_endpoint:
   !D ctx func PG G tn s id n out s1 bb cenv cx es.
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id ALLOCA [Lit (n2w n)] [out]) /\

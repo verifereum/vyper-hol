@@ -31,6 +31,7 @@ Proof
     (mp_tac raw_revert_value_full_from_tail >>
      (impl_tac >-
        (rpt gen_tac >> strip_tac >>
+        `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
         drule_all raw_revert_compiled_tail_joint >> simp[])) >>
      simp[])) >>
   simp[]

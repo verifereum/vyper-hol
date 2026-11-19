@@ -1,11 +1,11 @@
 Theory bodyPtrIfExpAllocStep
 Ancestors
-  fragGasSeqPtr fragExecPtr allocationPtr fragGasPathPtr bodyPtrDefs
+  fragGasSeqPtr fragExecPtr allocationPtr fragGasPathPtr bodyPtrDefs exprLoweringProps
   venomExecProofs venomInstProofs venomExecSemantics venomInst venomState ptrSafeRun ptrDiscipline
 
 Theorem alloca_counted_step:
   !D ctx fn PG G tn s bb id n out u.
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id ALLOCA [Lit (n2w n)] [out]) /\
@@ -35,7 +35,7 @@ QED
 
 Theorem alloca_counted_step_covers:
   !D ctx fn PG G tn s bb id n out u cenv cx es.
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id ALLOCA [Lit (n2w n)] [out]) /\
@@ -51,6 +51,12 @@ Theorem alloca_counted_step_covers:
       ptr_covers G1 tn1 out t n
 Proof
   rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     fs[exprLoweringPropsTheory.stmt_state_rel_def, exprLoweringPropsTheory.fmp_room_def,
+        allocas_below_fmp_def, venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all alloca_counted_step >> strip_tac >>
   drule_all alloca_step_ptr_covers >>
   disch_then (qspecl_then [`PG`, `G`, `tn`] assume_tac) >>

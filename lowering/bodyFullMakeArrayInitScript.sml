@@ -3,7 +3,7 @@ Theory bodyFullMakeArrayInit
 Ancestors
   bodyFullAllocaFresh bodyFullPreds bodyMemoryDefs exprSimProps
   abiBuiltinAllocation emitHelperProps exprLoweringProps vyperStorageFootprint
-  venomState venomMemDefs stateRelProj
+  venomState venomMemDefs stateRelProj bodyFullHashKeccakFixed
 
 Theorem make_array_init_full:
   expr_body_pre cenv cx env
@@ -12,7 +12,7 @@ Theorem make_array_init_full:
   storage_trace_domain cx st0 es.storage_trace /\
   compile_alloc_buffer cap sa = (ba,sm) /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
     storage_well_formed_on cx es (FST H) /\
@@ -72,7 +72,9 @@ Proof
   (impl_tac >- simp[]) >> strip_tac >>
   `allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by
     fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx es s0`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
     alloc_buffer_origin_ptr_path) >>
   disch_then (qspecl_then [`tn0`, `explicit`, `PG`, `G0`]

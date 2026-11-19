@@ -63,6 +63,7 @@ Proof
      Cases_on `cond_site` >> simp[] >>
      Cases_on `0 < skip` >>
      Cases_on `is_ctor /\ loc = LocCode /\ IS_SOME imm` >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all rest_word_membership_segment_compare_joint >> simp[]
 QED
 Theorem rest_word_membership_bounded_condition_joint:
@@ -130,6 +131,7 @@ Proof
    get_instruction bb 1 = SOME (mk_inst (sa.cs_next_id+13+delta+width+1) JMP
      [Label (fresh_label_output "in_exit" (sa.cs_next_label+5))] [])` by
     simp[get_instruction_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all rest_word_membership_segment_found_joint >> simp[]
 QED
 
@@ -174,6 +176,7 @@ Proof
      simp[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum (qspec_then `8+delta+width` mp_tac) >>
      first_x_assum (qspec_then `1` mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all rest_word_membership_segment_increment_joint >> simp[]
 QED
 
@@ -208,6 +211,7 @@ Proof
      first_x_assum (qspec_then `9+delta+width` mp_tac) >> simp[]) >>
   drule membership_bounded_loop_exit >> strip_tac >>
   `op = Var dst` by gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all rest_word_membership_segment_notin_joint >> simp[]
 QED
 

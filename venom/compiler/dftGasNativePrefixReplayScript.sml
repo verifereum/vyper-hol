@@ -1,8 +1,29 @@
 Theory dftGasNativePrefixReplay
 Ancestors
   dftGasFromListReplay dftGasFromListRestore dftGasFromListTraceDefs
-  dftGasInvPrefixRun dftIndexedExec gasEvents venomExecSemantics
+  dftGasInvPrefixRun dftPacketNativePrefixBoundary dftIndexedExec gasEvents venomExecSemantics
   venomInst venomState rich_list arithmetic
+
+Theorem native_prefix_trace_to_oracle[local]:
+  !n s u.
+    s.vs_inst_idx + n <= LENGTH bb.bb_instructions /\
+    inv_ev_trace orc p d fuel C
+      (TAKE n (DROP s.vs_inst_idx bb.bb_instructions)) s u ==>
+    inv_ev_prefix orc p d C bb n s u
+Proof
+  Induct >- simp[dftGasInvResidualTraceTheory.inv_ev_trace_def] >>
+  rpt gen_tac >> strip_tac >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by decide_tac >>
+  `TAKE (SUC n) (DROP s.vs_inst_idx bb.bb_instructions) =
+    EL s.vs_inst_idx bb.bb_instructions ::
+      TAKE n (DROP (SUC s.vs_inst_idx) bb.bb_instructions)` by
+    simp[Once DROP_CONS_EL] >>
+  gvs[dftGasInvResidualTraceTheory.inv_ev_trace_def] >>
+  simp[inv_ev_prefix_suc, get_instruction_def] >>
+  goal_assum (drule_at Any) >>
+  first_x_assum irule >> simp[] >>
+  qpat_assum `SUC n + s.vs_inst_idx <= _` mp_tac >> decide_tac
+QED
 
 (* Replay the completed prefix, excluding its next instruction and child.
    Step trace_replay and restore_rel_cases preserve the same native endpoint
@@ -25,41 +46,8 @@ Theorem native_prefix_oracle:
       (s with vs_gas_readings := rs)
       (u with vs_gas_readings := rs)
 Proof
-  Induct_on `q`
-  >- (simp[] >> rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >>
-  `s.vs_inst_idx < LENGTH bb.bb_instructions` by decide_tac >>
-  `TAKE (SUC q) (DROP s.vs_inst_idx bb.bb_instructions) =
-    EL s.vs_inst_idx bb.bb_instructions ::
-      TAKE q (DROP (SUC s.vs_inst_idx) bb.bb_instructions)` by
-    (simp[Once DROP_CONS_EL]) >>
-  gvs[] >>
-  Cases_on `step_inst fuel C (EL s.vs_inst_idx bb.bb_instructions) s` >>
-  gvs[dft_exec_cons_def] >>
-  rename1 `step_inst fuel C (EL s.vs_inst_idx bb.bb_instructions) s = OK t` >>
-  `get_instruction (bb with bb_instructions :=
-      TAKE (s.vs_inst_idx + SUC q) bb.bb_instructions) s.vs_inst_idx =
-    SOME (EL s.vs_inst_idx bb.bb_instructions)` by
-    (simp[get_instruction_def, EL_TAKE]) >>
-  drule trace_block_visit >>
-  disch_then (qspecl_then [`p`, `fuel`, `func`, `d`, `C`] assume_tac) >>
-  gvs[dftGasFromListReplayBoundaryTheory.trace_agrees_cons,
-      dftGasFromListReplayBoundaryTheory.trace_agrees_append] >>
-  `restore_rel rs
-    (step_inst fuel C (EL s.vs_inst_idx bb.bb_instructions) s)
-    (dftGasOracleDefs$ev_step orc p d fuel C
-      (EL s.vs_inst_idx bb.bb_instructions) (s with vs_gas_readings := rs))` by
-    (irule (cj 1 trace_replay) >>
-     qexists_tac `func` >>
-     simp[dftGasFromListReplayBoundaryTheory.trace_agrees_cons]) >>
-  gvs[restore_rel_cases] >>
-  simp[inv_ev_prefix_suc] >>
-  qexistsl_tac [`EL s.vs_inst_idx bb.bb_instructions`,
-    `t with vs_gas_readings := rs`, `fuel`] >>
-  simp[get_instruction_def] >>
-  first_x_assum (qspecl_then
-    [`fuel`, `C`, `func`, `bb`, `t with vs_inst_idx := SUC s.vs_inst_idx`]
-    mp_tac) >>
-  simp[ADD_CLAUSES] >>
-  disch_then irule >> gvs[ADD_CLAUSES]
+  drule_all dft_packet_native_prefix_trace >> strip_tac >>
+  irule native_prefix_trace_to_oracle >> simp[] >>
+  qexists_tac `fuel` >> simp[]
 QED

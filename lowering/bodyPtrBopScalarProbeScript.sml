@@ -10,7 +10,7 @@ Theorem bop_add_counted_edge:
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id ADD [left; right] [tmp]) /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id ADD [left; right] [tmp]) s = OK u ==>
   gas_path_ptr_edge D 0 ctx fn PG G tn s 0
     (step_prov PG G (mk_inst id ADD [left; right] [tmp]) u)

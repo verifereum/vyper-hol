@@ -6,7 +6,7 @@ Ancestors
 
 Theorem add_counted_path:
   !D ctx fn PG G tn s bb id left right out a b.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [left;right] [out]) /\
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
@@ -37,7 +37,7 @@ QED
 
 Theorem add_counted_ambient:
   !D ctx fn PG G tn s bb id left right out a b.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [left;right] [out]) /\
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
@@ -75,7 +75,7 @@ QED
 
 Theorem bytestring_source_prefix_counted:
   !D ctx fn PG G tn s bb id1 id2 src len data a capacity.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id1 MLOAD [Var src] [len]) /\
     get_instruction bb (SUC s.vs_inst_idx) =
@@ -104,10 +104,16 @@ Proof
   rpt gen_tac >> strip_tac >>
   `ptr_covers G tn src s 32` by
     (gvs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all mload_counted_clean_ambient >>
   disch_then (qspecl_then [`D`,`PG`]
     (qx_choose_then `G1` (qx_choose_then `tn1`
       (qx_choose_then `s1` strip_assume_tac)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (`allocas_below_fmp s1 <=> allocas_below_fmp s` by
+       (qpat_assum `s1 = update_var _ _ _ with vs_inst_idx := _` SUBST1_TAC >>
+        simp[allocas_below_fmp_def, update_var_def]) >>
+     simp[]) >>
   qpat_x_assum `s1 = update_var _ _ _ with vs_inst_idx := _` kall_tac >>
   `~s1.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
   `lookup_var src s1 = SOME a /\ op_taint tn1 (Var src) = {} /\

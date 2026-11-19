@@ -31,10 +31,12 @@ Proof
            (disch_then SUBST1_TAC >> simp[]) >> decide_tac) >>
       `32*((sz+31) DIV 32) <= sz` by simp[] >>
       `w2n w+sz < dimword (:256)` by decide_tac >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_all empty_zero_words_certificate >>
       disch_then (qspecl_then [`D`, `func`, `PG`] strip_assume_tac) >>
       qexistsl_tac [`t`, `H`, `th`] >> gvs[venom_state_component_equality]) >>
   gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all empty_zero_store_certificate >>
   disch_then (qspecl_then [`D`, `func`, `PG`, `sa.cs_next_id`] strip_assume_tac) >>
   qexistsl_tac [`mstore (w2n w) 0w s`, `G`, `tn'`] >>

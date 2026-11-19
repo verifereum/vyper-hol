@@ -16,7 +16,7 @@ Theorem emitted_allocation_transport:
   stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
         [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-  n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  n < dimword (:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?out G' tn'. buf.buf_operand = Var out /\ not_fresh_at sb out /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
@@ -32,7 +32,11 @@ Theorem emitted_allocation_transport:
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient
 Proof
-  strip_tac >> drule_all emitted_allocation_frames >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `stmt_state_rel H ctx fn cenv cx es s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+  drule_all emitted_allocation_frames >>
   disch_then (mp_tac o SPEC_ALL) >>
   disch_then (qx_choose_then `out` (qx_choose_then `Gf`
     (qx_choose_then `tnf` strip_assume_tac))) >>

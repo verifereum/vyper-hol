@@ -14,7 +14,7 @@ Theorem compile_alloc_buffer_vv_ordered_frame:
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc fn /\
-    n < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    n < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\ fn_inst_ids_distinct fn /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sb x) /\

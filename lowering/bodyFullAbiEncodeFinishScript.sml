@@ -11,7 +11,7 @@ Ancestors
 
 Theorem abi_encode_finish_add_origin[local]:
   emit_op ADD [left;Lit off] a = (dst,b) /\ fn_has_code a b func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\ allocas_from lo s /\
   eval_operand left s = SOME w /\ op_taint tn left = {} ==>
@@ -53,7 +53,7 @@ QED
 
 Theorem abi_encode_finish_store_origin[local]:
   emit_void MSTORE [Var root;value] a = ((),b) /\ fn_has_code a b func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts /\
   allocas_from lo s /\ lookup_var root s = SOME (n2w p) /\ p < dimword(:256) /\
   p+32 <= s.vs_alloca_next /\ ptr_covers G tn root s 32 /\
@@ -127,7 +127,7 @@ Finalise abi_encode_finish_store_origin
 
 Theorem abi_encode_finish_origin:
   abi_builtin_encode_finish (Var root) lenop k a = ((),b) /\
-  fn_has_code a b func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a b func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   allocas_from lo s /\ alloca_inv s /\
@@ -216,6 +216,12 @@ Resume abi_encode_finish_origin[positive_after_add]:
   `lookup_var root u = SOME (n2w p) /\ ptr_covers G1 tn1 root u 32` by
     (simp[ptr_covers_def] >> gvs[ptr_covers_def] >> metis_tac[]) >>
   `p+32 <= u.vs_alloca_next` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `u = (update_var _ _ s with vs_inst_idx := _)`
+       SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   drule_all abi_encode_finish_store_origin >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choose_then `t` (qx_choose_then `tn2` strip_assume_tac))) >>
@@ -254,7 +260,15 @@ Resume abi_encode_finish_origin[positive_operands]:
 QED
 
 Resume abi_encode_finish_origin[positive_covers]:
-  rpt strip_tac >> gvs[ptr_covers_def] >> metis_tac[]
+  rpt strip_tac >>
+  `x <> q` by metis_tac[] >>
+  qpat_assum `!p. p <> q ==> lookup_var p u = _ /\ _`
+    (qspec_then `x` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `ptr_covers G1 tn1 x u n` by fs[ptr_covers_def] >>
+  qpat_assum `!p n. ptr_covers G1 tn1 p u n ==> _`
+    (qspecl_then [`x`, `n`] MATCH_MP_TAC) >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume abi_encode_finish_origin[positive_ghost]:

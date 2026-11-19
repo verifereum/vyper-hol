@@ -15,7 +15,7 @@ Theorem raw_log_dynamic_tail_full:
   fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-  ~ctx_has_dalloca ctx /\ LENGTH ops < dimword (:256) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ LENGTH ops < dimword (:256) /\
   EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) (data_op::ops) /\
   sa.cs_next_var <= sm.cs_next_var /\
   expr_type data = BaseT (BytesT (Dynamic cap)) /\

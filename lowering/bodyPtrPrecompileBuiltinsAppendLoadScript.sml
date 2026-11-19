@@ -1,5 +1,6 @@
 Theory bodyPtrPrecompileBuiltinsAppendLoad
 Ancestors bodyPtrPrecompileBuiltinsLoad fragGasPathPtr ghostPcTransportPtr
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
           exprLoweringProps venomExecSemantics venomInstProofs venomState
           ptrDiscipline bodyPtrDefs venomInst list rich_list finite_map valueEncoding valueEncodingDefs
 
@@ -9,7 +10,7 @@ Theorem appended_clean_mload_path:
     (OK (q with vs_inst_idx := s.vs_inst_idx + k)) /\
   q.vs_current_bb = s.vs_current_bb /\ ~q.vs_halted /\
   eval_operand (Var dst) q = SOME wo /\
-  ptr_covers G1 tn1 dst q 32 /\ allocas_from lo q /\ ~ctx_has_dalloca ctx /\
+  ptr_covers G1 tn1 dst q 32 /\ allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q) /\
   (!i. w2n wo <= i /\ i < w2n wo + 32 ==> i NOTIN tn1.t_mem) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (xs ++ [mk_inst id MLOAD [Var dst] [y]])
@@ -54,6 +55,8 @@ Proof
      (DROP q1.vs_inst_idx bb.bb_instructions)` by gvs[Abbr `q1`, Abbr `i`] >>
   qpat_x_assum `step_inst_base i q1 = _` mp_tac >>
   simp[Abbr `i`] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q1` by
+    simp[Abbr `q1`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
   drule_all clean_mload_path >> disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   gvs[Abbr `q1`] >>
   `eval_operand (Var y) t = SOME (mem_word_at (w2n wo) q.vs_memory)` by
