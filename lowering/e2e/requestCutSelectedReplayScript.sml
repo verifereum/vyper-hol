@@ -1052,7 +1052,8 @@ QED
 
 Resume focus_finalizer_selected_request_replay[exit]:
   qx_gen_tac `D` >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  mp_tac focus_stopped_filling_replay >>
+  mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV)
+    (PURE_REWRITE_RULE [LET_THM] focus_stopped_filling_replay)) >>
   (impl_tac >- (rpt (first_assum ACCEPT_TAC ORELSE conj_tac))) >>
   disch_then (DISJ_CASES_THEN2
     (qx_choose_then `orc` (map_every assume_tac o CONJUNCTS))
