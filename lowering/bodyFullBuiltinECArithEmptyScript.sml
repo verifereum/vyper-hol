@@ -68,7 +68,8 @@ Proof
      rpt conj_tac >>
      TRY (REFL_TAC ORELSE first_assum ACCEPT_TAC) >>
      simp[NoAsms, wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
-     TRY (first_assum ACCEPT_TAC) >>
+     TRY (first_assum ACCEPT_TAC) >>~
+     [`ctx_has_dalloca ctx ==> allocas_below_fmp u`] >- simp[] >>
      gen_tac >> strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _ /\ _`
        (drule_then strip_assume_tac) >> simp[]) >>

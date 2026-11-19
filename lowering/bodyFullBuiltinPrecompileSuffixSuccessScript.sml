@@ -1,6 +1,7 @@
 Theory bodyFullBuiltinPrecompileSuffixSuccess
 Ancestors
   bodyFullBuiltinPrecompileSuffixPath bodyFullBuiltinPrecompileSuffixFrame
+  bodyFullHashKeccakFixed
   bodySimFull exprSimPrecompiles exprLoweringProps exprSimProps loweringPosts venomState
   vyperStorageFootprint vyperCallOutcomeProps bodyPtrDefs finite_map list rich_list
 
@@ -34,7 +35,7 @@ Theorem precompile_suffix_success_full_family:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (lo <> 0 ==> !x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sm x) /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [gi;ci;ai] (DROP s.vs_inst_idx bb.bb_instructions) /\
   (func.fn_name,id) NOTIN explicit /\
@@ -89,6 +90,9 @@ Proof
   simp[NoAsms] >> gen_tac >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
     (drule_then strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [F]
      (OK (q with vs_inst_idx := s.vs_inst_idx + 3),G2,tn2)` by
     (irule precompile_suffix_origin_path >> metis_tac[]) >>
