@@ -5,8 +5,7 @@ Ancestors
   ptrDiscipline contextCodegenRel venomWfProps venomInst allocaFrontierBound
   finite_map list pred_set
 
-(* All direct ancestors checked against the M0002 NEW HELPER GUARD.
-   Tagged support concerns domains only; no numerical erasure or safety. *)
+(* Tagged support concerns domains only; no numerical erasure or safety. *)
 Theorem ptr_focus_tagged_step_support:
   ptr_params_ok P fn PT /\ ptr_static_support P fn TG /\
   MEM inst (fn_insts fn) /\ fn_ptr_ok P fn /\ EVERY inst_wf (fn_insts fn) ==>

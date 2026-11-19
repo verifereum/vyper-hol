@@ -9,10 +9,6 @@ Ancestors
   venomExecSemantics venomExecProofs venomExecProps venomWf venomInst
   contextCodegenRel stateFrame list rich_list arithmetic makeSsaCurrentCleanupShape makeSsaCurrentLockstepShape simplifyCfgBypassRootedEntry frameGasEvents
 
-(* Every direct ancestor above was checked against the exact NEW HELPER
-   GUARD exclusion set in TO_focus_producer-lead-20261116T235445535981Z_m0071_t001;
-   none is excluded. *)
-
 Theorem current_invoke_events_pair[local]:
   inst.inst_opcode = INVOKE /\ inst_pair sg inst inst' /\
   state_rel sg st st' ==>
