@@ -1,9 +1,9 @@
 Theory vyperCheckContractFrontendLibTest
 Ancestors
   jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperTypeContract
-  jsonNominalSources
+  jsonNominalSources vyperStorage
 Libs
-  vyperCheckContractFrontendLib vyperConstEvalLib
+  vyperCheckContractFrontendLib vyperConstEvalLib cv_transLib
 
 (* Declare fixtures relative to this source file so holbuild stages them at
    the same relative path and includes their contents in the cache key. *)
@@ -487,6 +487,18 @@ val _ = check_fixture false "mutability.json";
 (* The operator forms Vyper accepts next to the ones the checker rejects. *)
 val _ = check_fixture false "operator_forms.json";
 val _ = check_fixture false "storage.json";
+val _ = check_fixture false "decimal_map_key.json";
+
+(* Pinned legacy and Venom bytecode write these slots for decimal_map_key.vy.
+   The map's layout slot is 0 and the keys are 1.5 and -1.25. *)
+Theorem decimal_map_key_matches_pinned_slots:
+  hashmap_slot 0w (encode_hashmap_key (BaseT DecimalT) (DecimalV 15000000000)) =
+    0xe57318393fbc3527c4c66c6d13a85c170b8dfa130f80dde3557bf02a721ce1b3w /\
+  hashmap_slot 0w (encode_hashmap_key (BaseT DecimalT) (DecimalV (-12500000000))) =
+    0x8814a88af2daef0f3a47b81774a1a2e18ae61f89ba56a319073b65ba9b14b6daw
+Proof
+  CONV_TAC cv_eval
+QED
 val _ = check_fixture false "imported_struct/main.json";
 val _ = check_fixture false "imported_flag/main.json";
 (* lib2 reads lib1's constant and main reads lib2's. *)
