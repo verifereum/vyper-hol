@@ -484,6 +484,8 @@ val _ = check_fixture true "address_bytes20.json";
 val _ = check_fixture false "address_bytes32.json";
 val _ = check_fixture true "address_bytes32.json";
 val _ = check_fixture false "mutability.json";
+val _ = check_fixture false "assert_view_reason.json";
+val _ = check_fixture false "raise_view_custom_error.json";
 (* The operator forms Vyper accepts next to the ones the checker rejects. *)
 val _ = check_fixture false "operator_forms.json";
 val _ = check_fixture false "storage.json";
@@ -540,6 +542,12 @@ fun check_fixture_rejected path =
    handle Fail message =>
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
+
+(* Both code generators at the pin reject mutating calls in revert reasons.
+   The nested calls check traversal through arguments as well as roots. *)
+val _ = app check_fixture_rejected
+  ["assert_mutating_reason.json", "raise_mutating_reason.json",
+   "assert_mutating_custom_error.json", "raise_mutating_custom_error.json"];
 
 (* A same-named internal function doesn't capture a bare builtin call: Vyper
    compiles these to the builtin (a console call, INVALID, a runtime shift),
