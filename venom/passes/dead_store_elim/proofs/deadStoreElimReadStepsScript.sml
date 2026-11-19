@@ -151,7 +151,7 @@ Theorem dse_load_step:
        else if inst.inst_opcode = SLOAD then sload else tload) inst s
 Proof
   simp[] >> strip_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, SF ETA_ss]
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, SF ETA_ss]
 QED
 
 Theorem dse_load_ok_shape:

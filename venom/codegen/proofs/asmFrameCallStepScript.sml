@@ -7744,7 +7744,7 @@ Proof
   `LENGTH v.contexts = SUC (LENGTH s.contexts)` by simp[] >>
   `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
               step x = (INL (), y)) s t` by
-    (irule run_call_enter_return_rtc >> metis_tac[]) >>
+    (irule (Q.INST [`es1` |-> `v`] run_call_enter_return_rtc) >> simp[]) >>
   drule_all asm_frame_call_enter_transport >> simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
   drule_all asm_call_prepared_request >> strip_tac >>
   drule_all asm_call_prepared_enter_take_outcome >> strip_tac >>
