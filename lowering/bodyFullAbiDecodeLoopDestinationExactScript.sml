@@ -250,7 +250,7 @@ Proof
   `?child. child_dst = Var child` by metis_tac[emit_op_facts] >>
   qpat_x_assum `child_dst = Var child` SUBST_ALL_TAC >>
   `j*msz+msz <= j*msz+msz` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by simp[] >>
   drule_all (abiDecodePtrBytesTailTheory.abi_decode_ptr_output_address |>
     Q.INST [`cap` |-> `j*msz+msz`, `q` |-> `j*msz`, `k` |-> `msz`,
       `D` |-> `ARB`, `PG` |-> `PG`]) >>

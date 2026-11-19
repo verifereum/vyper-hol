@@ -18,7 +18,7 @@ Theorem scalar_op_fixed_ok[local]:
    | ConvBytestringToDecimal _ _ _ _ => F | ConvBytestringToBytesM _ => F
    | ConvBytestringCast _ _ => F | _ => T) /\
   compile_type_convert x tc sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?H th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     op_prov H out = NONE /\ op_taint th out = {} /\
@@ -27,21 +27,20 @@ Theorem scalar_op_fixed_ok[local]:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  Cases_on `tc` >> simp[] >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[]
+  Cases_on `tc` >> simp[] >> strip_tac
   >- (drule_all convert_bool_fixed_certificate >> simp[])
-  >- (drule convert_int_fixed_certificate >> simp[] >> metis_tac[])
-  >- (drule convert_bytes_int_fixed_certificate >> simp[] >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_int_fixed_certificate) >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_bytes_int_fixed_certificate) >> metis_tac[])
   >- (drule_all convert_int_bytes_fixed_certificate >> simp[])
   >- (irule convert_decimal_fixed_certificate >> simp[] >> metis_tac[])
   >- (irule convert_decimal_fixed_certificate >> simp[] >> metis_tac[])
   >- (drule_all convert_bool_decimal_fixed_certificate >> metis_tac[])
-  >- (drule convert_address_fixed_certificate >> simp[] >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_address_fixed_certificate) >> metis_tac[])
   >- (gvs[convertScalarBytesRunTheory.scalar_bytes_address_eq] >>
-      drule convert_bytes_int_fixed_certificate >> simp[] >> metis_tac[])
-  >- (drule convert_flag_fixed_certificate >> simp[] >> metis_tac[])
-  >- (drule convert_bytes_decimal_fixed_certificate >> simp[] >> metis_tac[])
-  >- (drule convert_bytesm_fixed_certificate >> simp[] >> metis_tac[]) >>
+      drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_bytes_int_fixed_certificate) >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_flag_fixed_certificate) >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_bytes_decimal_fixed_certificate) >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_bytesm_fixed_certificate) >> metis_tac[]) >>
   gvs[compile_type_convert_def, comp_return_def, emitted_insts_refl] >>
   qexistsl [`G`,`tn`] >> simp[inst_seq_ptr_def]
 QED
@@ -51,7 +50,7 @@ Theorem scalar_op_fixed_abort[local]:
    | ConvBytestringToDecimal _ _ _ _ => F | ConvBytestringToBytesM _ => F
    | ConvBytestringCast _ _ => F | _ => T) /\
   compile_type_convert x tc sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = Abort err t ==>
   ?H th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
@@ -59,23 +58,22 @@ Theorem scalar_op_fixed_abort[local]:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  Cases_on `tc` >> simp[] >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[]
+  Cases_on `tc` >> simp[] >> strip_tac
   >- (drule convert_bool_code >> strip_tac >>
       gvs[run_inst_seq_def, AllCaseEqs()] >>
       metis_tac[bodyPtrSignedConvertScalarOpsTheory.scalar_iszero_no_abort])
-  >- (drule convert_int_fixed_certificate >> simp[] >> metis_tac[])
-  >- (drule convert_bytes_int_fixed_certificate >> simp[] >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_int_fixed_certificate) >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_bytes_int_fixed_certificate) >> metis_tac[])
   >- (drule_all convert_int_bytes_abort_fixed_certificate >> simp[])
   >- (irule convert_decimal_abort_fixed_certificate >> simp[] >> metis_tac[])
   >- (irule convert_decimal_abort_fixed_certificate >> simp[] >> metis_tac[])
   >- (metis_tac[convert_bool_decimal_no_abort])
-  >- (drule convert_address_fixed_certificate >> simp[] >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_address_fixed_certificate) >> metis_tac[])
   >- (gvs[convertScalarBytesRunTheory.scalar_bytes_address_eq] >>
-      drule convert_bytes_int_fixed_certificate >> simp[] >> metis_tac[])
-  >- (drule convert_flag_fixed_certificate >> simp[] >> metis_tac[])
-  >- (drule convert_bytes_decimal_fixed_certificate >> simp[] >> metis_tac[])
-  >- (drule convert_bytesm_fixed_certificate >> simp[] >> metis_tac[]) >>
+      drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_bytes_int_fixed_certificate) >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_flag_fixed_certificate) >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_bytes_decimal_fixed_certificate) >> metis_tac[])
+  >- (drule_all (SRULE [DISJ_IMP_THM, GSYM AND_IMP_INTRO] convert_bytesm_fixed_certificate) >> metis_tac[]) >>
   gvs[compile_type_convert_def, comp_return_def, emitted_insts_refl, run_inst_seq_def]
 QED
 
@@ -105,7 +103,7 @@ Theorem scalar_convert_uniform_ok[local]:
   compile_type_convert x (case dst of FlagT name =>
     ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
     | _ => mk_convert_op src dst) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?H th. (!D. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th) /\
     op_prov H out = NONE /\ op_taint th out = {} /\
@@ -129,7 +127,7 @@ Theorem scalar_convert_uniform_abort[local]:
   compile_type_convert x (case dst of FlagT name =>
     ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
     | _ => mk_convert_op src dst) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = Abort err t ==>
   ?H th. (!D. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th) /\
     (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
@@ -179,7 +177,7 @@ Theorem scalar_convert_run_origin:
   compile_type_convert x (case dst of FlagT name =>
     ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
     | _ => mk_convert_op src dst) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
