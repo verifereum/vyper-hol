@@ -681,3 +681,110 @@ Proof
           (CONV_RULE (DEPTH_CONV BETA_CONV) (PURE_REWRITE_RULE [LET_THM] focus_source_stages_cut))))) >> cheat) >>
   cheat
 QED
+
+Theorem focus_history_source_slice[local]:
+  !N C7 C8 root_sf root_tf root_entry j obs acts blocks calls ms_tab es_tab ks_tab
+    rooted_eval p d q8 raw_slots sites unused a e sf tf inc entry order res nrest
+    bb bt ps xs ys rho hin h0 be hbe count front closed brest ms ks
+    q z cuts levels Mcut F gs tail events u.
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
+  FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
+  FLOOKUP blocks (a,e) =
+    SOME (bb,bt,ps,xs,ys,rho,hin,h0,SOME (be,hbe),count,front,closed,brest) /\
+  FLOOKUP ms_tab (a,e) = SOME ms /\ FLOOKUP ks_tab (a,e) = SOME ks /\
+  q < LENGTH xs /\ z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+  (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE count rho)) /\
+  MAP (\(ai,ds,ei,qi,zi). ai) cuts =
+    REVERSE (GENLIST (\i. DROP i a) (SUC (LENGTH a))) /\
+  LENGTH cuts = LENGTH levels /\
+  (!i ai ds ei qi zi.
+    i < LENGTH cuts /\ EL i cuts = (ai,ds,ei,qi,zi) ==>
+    ?sfi tfi inci enti orderi resi nresti bbi bti psi xsi ysi rhoi
+      ini hi bei counti fronti closedi resti later.
+      FLOOKUP acts ai = SOME (sfi,tfi,inci,enti,orderi,resi,nresti) /\
+      FLOOKUP blocks (ai,ei) =
+        SOME (bbi,bti,psi,xsi,ysi,rhoi,ini,hi,bei,counti,fronti,closedi,resti) /\
+      orderi = ds ++ ei::later /\
+      (if SUC i = LENGTH cuts then
+        ai = a /\ ei = e /\ qi = q /\ zi = z
+       else
+        ?cid call_h b0 done_at_call child_entry ret.
+          EL (SUC i) (MAP (\(aj,djs,ej,qj,zj). aj) cuts) = (ei,cid)::ai /\
+          FLOOKUP calls (ai,ei,cid) = SOME (qi,call_h,b0,done_at_call,child_entry,ret) /\
+          qi < LENGTH xsi /\ (EL qi xsi).inst_id = cid /\
+          zi = DROP (phi_prefix_length bbi.bb_instructions) psi ++ TAKE qi xsi /\
+          EVERY (\x. ~is_terminator x.inst_opcode) (TAKE qi xsi) /\
+          (!r. r < qi /\ (EL r xsi).inst_opcode = INVOKE ==> MEM r done_at_call)) /\
+      EL i levels =
+        (sfi, MAP (\f. (FST (THE (FLOOKUP blocks (ai,f))),f,
+          DROP (phi_prefix_length (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)
+            (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)) ds ++
+          [(bbi,ei,zi)], if SUC i = LENGTH cuts then NONE else SOME (EL qi xsi))) /\
+  Mcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab (ai,f)))) ds) ++
+    FLAT (TAKE qi (THE (FLOOKUP ms_tab (ai,ei))))) cuts) /\
+  N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
+  rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
+    (events,OK u) ==>
+  ALL_DISTINCT (MAP FST obs) /\
+  ALL_DISTINCT (FLAT (TAKE q ks)) /\
+  LIST_REL (\key slot. slot = ALOOKUP obs key) (FLAT (TAKE q ks)) (FLAT (TAKE q ms)) /\
+  ?Mbefore gpre vals.
+    Mcut = Mbefore ++ FLAT (TAKE q ms) /\ gs = gpre ++ vals /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mbefore gpre /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (FLAT (TAKE q ms)) vals /\
+    FOLDR (dft_exec_cons (F-e) C7) OK (TAKE q xs)
+      (be with vs_gas_readings := vals ++ tail) = OK u /\
+    trace_gas (trace_block a e (F-e) C7 sf
+        (bb with bb_instructions := TAKE (LENGTH ps + q) bb.bb_instructions)
+        (be with vs_gas_readings := vals ++ tail)) = ZIP (FLAT (TAKE q ks),vals)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!q. LIST_REL (\key slot. slot = ALOOKUP obs key)
+        (FLAT (TAKE q ks)) (FLAT (TAKE q ms))` by
+    (drule_all dft_packet_retained_prefix_lookup >> simp[]) >>
+  `ALL_DISTINCT (MAP FST obs) /\ ALL_DISTINCT (FLAT ks)` by
+    (qhdtm_x_assum `dft_focus_packet_rel`
+       (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+     conj_tac >-
+       (qpat_assum `(j,obs) = _` mp_tac >>
+        qpat_assum `ALL_DISTINCT (MAP FST _)` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]) >>
+     qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+        FLOOKUP blocks (a,e) = _ /\ FLOOKUP ms_tab (a,e) = _ /\ FLOOKUP es_tab (a,e) = _ /\
+        FLOOKUP ks_tab (a,e) = _ ==> _` (mp_tac o cj 6) >>
+     `?ess. FLOOKUP es_tab (a,e) = SOME ess` by
+       (qpat_assum `FDOM blocks = FDOM es_tab` mp_tac >>
+        qpat_assum `FLOOKUP blocks (a,e) = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+        Cases_on `FLOOKUP es_tab (a,e)` >> gvs[FLOOKUP_DEF]) >>
+     disch_then (drule_all_then ACCEPT_TAC)) >>
+  `ALL_DISTINCT (FLAT (TAKE q ks))` by
+    (`ALL_DISTINCT (FLAT (TAKE q ks) ++ FLAT (DROP q ks))` by
+       (pure_rewrite_tac[GSYM FLAT_APPEND, TAKE_DROP] >> first_assum ACCEPT_TAC) >>
+     pop_assum (mp_tac o REWRITE_RULE [ALL_DISTINCT_APPEND]) >> simp[NoAsms]) >>
+  rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE metis_tac[])) >>
+  `FDOM ms_tab = FDOM ms_tab` by REFL_TAC >>
+  `!key old new. FLOOKUP ms_tab key = SOME old /\ FLOOKUP ms_tab key = SOME new ==>
+    LIST_REL (LIST_REL (\old new. old = NONE \/ old = new)) old new` by
+    (POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[LIST_REL_refl]) >>
+  drule dft_packet_cut_row_trace >>
+  disch_then (qspec_then `ms_tab` (drule_all_then strip_assume_tac)) >>
+  rename1 `gs = gpre ++ FLAT vals` >>
+  qpat_assum `FLOOKUP ms_tab (a,e) = SOME ms` (fn m =>
+    qpat_assum `FLOOKUP ks_tab (a,e) = SOME ks` (fn k =>
+      qpat_assum `FLOOKUP acts a = SOME _` (fn act =>
+        RULE_ASSUM_TAC (REWRITE_RULE [m,k,act,optionTheory.THE_DEF,pairTheory.FST])))) >>
+  `LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+     (FLAT (TAKE q ms)) (FLAT vals)` by
+    (qpat_assum `LIST_REL _ Mcut gs` mp_tac >>
+     qpat_assum `Mcut = Mbefore ++ _` (fn m =>
+       qpat_assum `gs = gpre ++ FLAT vals`
+         (fn g => rewrite_tac[m,g])) >>
+     qpat_assum `LIST_REL _ Mbefore gpre` (mp_tac o MATCH_MP LIST_REL_LENGTH) >>
+     rpt strip_tac >> drule_all LIST_REL_APPEND_IMP >> simp[]) >>
+  qexistsl [`Mbefore`,`gpre`,`FLAT vals`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
