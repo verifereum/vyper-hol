@@ -28,7 +28,8 @@ Theorem precompile_suffix_abort_full_family:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [gi;ci;ai] (DROP s.vs_inst_idx bb.bb_instructions) /\
-  (func.fn_name,id) NOTIN explicit /\ ~ctx_has_dalloca ctx /\
+  (func.fn_name,id) NOTIN explicit /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!H. valid_horizon cx st0 H trace ==>
     ptr_covers G tn src s (w2n an) /\
     ptr_covers G tn dst s (w2n rn) /\
@@ -152,7 +153,8 @@ Theorem precompile_suffix_call_abort_full_family:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [gi;ci] (DROP s.vs_inst_idx bb.bb_instructions) /\
-  (func.fn_name,id) NOTIN explicit /\ ~ctx_has_dalloca ctx /\
+  (func.fn_name,id) NOTIN explicit /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!H. valid_horizon cx st0 H trace ==>
     ptr_covers G tn src s (w2n an) /\
     ptr_covers G tn dst s (w2n rn) /\
