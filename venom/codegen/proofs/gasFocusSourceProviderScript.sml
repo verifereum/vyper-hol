@@ -13,6 +13,51 @@ Ancestors
   o1RequestContract unitTransformDefs ptrDiscipline passSimulationDefs
   vfmExecution codegen asmIR
   finite_map list rich_list words arithmetic
+  o1CodeEndSourceCutTransport o1ComposeSupport o1PipelineCompose simplifyCfgDefs
+  makeSsaDefs o1ContractSimplifyCfg
+
+Theorem focus_opt_c1_section[local]:
+  o1PipelineCorrect$o1_pipeline rp unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\
+  run_pipeline_stages rp o1_pipeline_spec.ps_pre_walk_stages unit
+    (init_ir_supply unit) = SOME (pre,t) /\
+  pre.cu_context.ctx_entry = SOME nm /\
+  ctx_pass_stage rp (CFP_Simple VP_MakeSSA) view
+    (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context C1 /\
+  EVERY make_ssa_input_ok
+    (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context.ctx_functions /\
+  unit.cu_context.ctx_entry = SOME nm /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+  fn_entry_label entryfn = SOME lbl /\
+  o1_initial_state_ok V /\
+  (!fn i s. raw_reachable V unit.cu_context fn i s /\ gas_cut n V s ==>
+             inst_dload_in_section i s) /\
+  (!fn i. MEM fn unit.cu_context.ctx_functions /\ MEM i (fn_insts fn) ==>
+           ~MEM (Label "code_end") i.inst_operands) ==>
+  mem_inv (\ctx fn i s. (gas_cut n V s ==> inst_dload_in_section i s) /\
+    s.vs_code = V.vs_code /\ s.vs_data_section = V.vs_data_section) C1 V /\
+  (!fn i. MEM fn C1.ctx_functions /\ MEM i (fn_insts fn) ==>
+           ~MEM (Label "code_end") i.inst_operands)
+Proof
+  strip_tac >> fs[o1PipelineCorrectTheory.o1_pipeline_def] >>
+  drule o1_driver_runs >> strip_tac >>
+  `o1_ctx_shape unit.cu_context` by metis_tac[o1_source_unit_ok_ctx_shape] >>
+  `EVERY (\fn. EVERY (\i. i.inst_opcode <> PHI) (fn_insts fn))
+    unit.cu_context.ctx_functions` by
+    (fs[o1_source_unit_ok_def, EVERY_MEM, raw_opcode_ok_def] >> metis_tac[]) >>
+  `EVERY simplify_cfg_fn_ok unit.cu_context.ctx_functions` by
+    (fs[EVERY_MEM, unit_defs_reach_uses_def, o1_ctx_shape_def] >>
+     rpt strip_tac >> irule simplify_cfg_fn_ok_no_phi >>
+     simp[EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
+  `mem_inv (\ctx fn i s. (gas_cut n V s ==> inst_dload_in_section i s) /\
+    s.vs_code = V.vs_code /\ s.vs_data_section = V.vs_data_section)
+    unit.cu_context V` by
+    (simp[mem_inv_raw_reachable] >> metis_tac[raw_reachable_code_data]) >>
+  gvs[o1_initial_state_ok_def] >>
+  irule code_end_source_prefix_transport_upto >>
+  metis_tac[init_ir_supply_inst_ok]
+QED
 
 Theorem focus_row_visit_inverse[local]:
   !xs be.
