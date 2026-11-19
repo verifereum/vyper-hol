@@ -100,6 +100,7 @@ Proof
     (`isPREFIX (emitted_insts sa sn ++ emitted_insts sn sb)
         (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
      drule hash_code_prefix_split >> simp[ADD1]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sn) s G1 tn1 /\
    gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
     (OK (a with vs_inst_idx := SUC s.vs_inst_idx))` by
@@ -237,6 +238,7 @@ Proof
     (`isPREFIX (emitted_insts sa sn ++ emitted_insts sn sb)
         (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
      drule hash_code_prefix_split >> simp[ADD1]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sn) s G1 tn1 /\
    gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
     (OK (a with vs_inst_idx := SUC s.vs_inst_idx))` by
