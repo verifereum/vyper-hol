@@ -11,7 +11,7 @@
  *)
 Theory makeSsaCurrentWfSsa
 Ancestors
-  livenessTransferProofs
+  livenessTransferProofs passSharedList
   makeSsaDefs makeSsaCurrentProps venomWf cfgWf venomInst irSupply
   unitShapeDefs o1PassContract makeSsaCurrentRenameTrace list
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentTreeTrace
@@ -665,21 +665,13 @@ Proof
   metis_tac[current_token_name_append_stable]
 QED
 
-Theorem current_wf_list_rel_flat[local]:
-  !xss yss. LIST_REL (LIST_REL R) xss yss ==>
-    LIST_REL R (FLAT xss) (FLAT yss)
-Proof
-  Induct >> Cases_on `yss` >> simp[] >> rpt strip_tac >>
-  irule LIST_REL_APPEND_suff >> simp[]
-QED
-
 Theorem current_wf_local_outputs_distinct:
   current_local_trace annss insts s rs H E insts' s' rs' H' E' /\
   current_annotations_ok V H (FLAT annss) /\ current_history_valid V H' ==>
   ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) insts'))
 Proof
   strip_tac >> drule_all current_wf_local_output_relation >> strip_tac >>
-  drule current_wf_list_rel_flat >> strip_tac >>
+  drule list_rel_flat >> strip_tac >>
   drule current_wf_named_outputs_distinct >>
   gvs[current_annotations_ok_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
   disch_then (qspec_then `V` mp_tac) >>
@@ -717,7 +709,7 @@ Theorem current_wf_events_output_relation:
 Proof
   Induct >> simp[] >> rpt strip_tac >>
   irule LIST_REL_APPEND_suff >> conj_tac
-  >- (irule current_wf_list_rel_flat >>
+  >- (irule list_rel_flat >>
       irule current_wf_event_output_relation >> metis_tac[]) >>
   first_x_assum irule >> simp[]
 QED

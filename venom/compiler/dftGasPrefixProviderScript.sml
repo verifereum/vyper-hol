@@ -1,6 +1,7 @@
 (* Uniform all-fillings prefix mask with entry-aligned oracle replay. *)
 Theory dftGasPrefixProvider
 Ancestors alist[qualified,ignore_grammar] dftHelpers[qualified,ignore_grammar]
+  dftPacketClosedRowNative dftPacketEntryReplay
   dftGasOracleKeyReplay dftGasToListReplay dftGasOracleDefs
   dftGasSimSwap dftGasSimLocalBoundary dftGasSimSchedule
   dftGasFromListRestore dftGasFromListReplay dftGasFromListReadings
@@ -367,45 +368,11 @@ Proof
   gvs[MEM_MAP] >> drule trace_blocks_region >> simp[]
 QED
 
-Theorem prefix_trace_block_suffix_cong[local]:
-  !xs s bb bb'.
-    DROP s.vs_inst_idx bb.bb_instructions = xs /\
-    DROP s.vs_inst_idx bb'.bb_instructions = xs ==>
-    dftGasFromListTraceDefs$trace_block p d fuel C fn bb s =
-    dftGasFromListTraceDefs$trace_block p d fuel C fn bb' s
-Proof
-  Induct >> rpt gen_tac >> strip_tac
-  >- (`LENGTH bb.bb_instructions <= s.vs_inst_idx /\
-       LENGTH bb'.bb_instructions <= s.vs_inst_idx` by
-        gvs[DROP_EQ_NIL] >>
-      simp[Once dftGasFromListTraceDefsTheory.trace_defs, get_instruction_def] >>
-      simp[Once dftGasFromListTraceDefsTheory.trace_defs, get_instruction_def]) >>
-  `s.vs_inst_idx < LENGTH bb.bb_instructions /\
-   s.vs_inst_idx < LENGTH bb'.bb_instructions` by
-    (qpat_x_assum `DROP _ bb.bb_instructions = _`
-       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
-     qpat_x_assum `DROP _ bb'.bb_instructions = _`
-       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
-     simp[LENGTH_DROP]) >>
-  `EL s.vs_inst_idx bb.bb_instructions = h /\
-   EL s.vs_inst_idx bb'.bb_instructions = h /\
-   DROP (SUC s.vs_inst_idx) bb.bb_instructions = xs /\
-   DROP (SUC s.vs_inst_idx) bb'.bb_instructions = xs` by
-    gvs[rich_listTheory.DROP_CONS_EL] >>
-  once_rewrite_tac[dftGasFromListTraceDefsTheory.trace_defs] >>
-  simp[get_instruction_def] >>
-  Cases_on `step_inst fuel C h s` >> simp[] >>
-  Cases_on `is_terminator h.inst_opcode` >> simp[] >>
-  first_x_assum irule >> simp[]
-QED
-
-Theorem native_pseudo_fold_readings[local]:
+Theorem native_pseudo_fold_preserves_readings[local]:
   !xs s t.
     EVERY (\i. is_pseudo i.inst_opcode) xs /\
     FOLDR (dft_exec_cons b C) OK xs s = OK t ==>
-    t.vs_gas_readings = s.vs_gas_readings /\
-    !n D W. FOLDR (dft_exec_cons n D) OK xs
-      (s with vs_gas_readings := W) = OK (t with vs_gas_readings := W)
+    t.vs_gas_readings = s.vs_gas_readings
 Proof
   Induct >> simp[] >> rpt gen_tac >> strip_tac >>
   `h.inst_opcode <> INVOKE /\ h.inst_opcode <> GAS /\
@@ -413,9 +380,7 @@ Proof
     (Cases_on `h.inst_opcode` >> gvs[is_pseudo_def, is_terminator_def]) >>
   gvs[dftIndexedExecTheory.dft_exec_cons_def, AllCaseEqs()] >>
   drule_all dftBlockSimTheory.step_inst_ok_non_gas_oracle >> strip_tac >>
-  first_x_assum drule >> simp[] >> strip_tac >>
-  simp[dftIndexedExecTheory.dft_exec_cons_def, step_inst_non_invoke] >>
-  metis_tac[step_inst_non_invoke, venom_state_component_equality]
+  first_x_assum drule >> simp[]
 QED
 
 Theorem native_pseudo_phase_readings:
@@ -434,14 +399,15 @@ Proof
   strip_tac >>
   `EVERY (\i. is_pseudo i.inst_opcode)
     (DROP (phi_prefix_length pre) pre)` by metis_tac[rich_listTheory.EVERY_DROP] >>
-  drule_all native_pseudo_fold_readings >> strip_tac >>
+  drule_all native_pseudo_fold_preserves_readings >> strip_tac >>
   qspecl_then [`pre`, `s`] mp_tac gas_eval_phis >>
   simp[gas_replay_at_def] >>
   disch_then (qspec_then `s.vs_gas_readings` mp_tac) >>
   simp[stateEquivTheory.lift_result_def] >> strip_tac >>
   simp[] >> rpt gen_tac >> conj_tac
   >- metis_tac[eval_phis_restore, restore_rel_cases] >>
-  (bossLib.gvs [])
+  drule_all dft_packet_pseudo_fold_gas >>
+  simp[venom_state_component_equality]
 QED
 
 Theorem native_from_block_observations[local]:
@@ -611,7 +577,7 @@ Proof
     (gen_tac >> conj_tac
      >- (irule venomExecProofsTheory.exec_block_same_suffix >> simp[DROP_APPEND]) >>
      conj_tac
-     >- (irule prefix_trace_block_suffix_cong >> simp[DROP_APPEND]) >>
+     >- (irule native_trace_block_suffix_cong >> simp[DROP_APPEND]) >>
      irule gas_events_block_suffix_cong >> simp[DROP_APPEND]) >>
   simp_tac pure_ss [GSYM APPEND_ASSOC, APPEND] >>
   qpat_x_assum `!xs. exec_block _ _ _ _ = _ /\ _`
@@ -4948,7 +4914,7 @@ Proof
   >- (gvs[] >> conj_tac
       >- (irule venomExecProofsTheory.exec_block_same_suffix >> simp[]) >>
       conj_tac
-      >- (AP_TERM_TAC >> irule prefix_trace_block_suffix_cong >> simp[]) >>
+      >- (AP_TERM_TAC >> irule native_trace_block_suffix_cong >> simp[]) >>
       irule gas_events_block_suffix_cong >> simp[]) >>
   `a.vs_inst_idx < LENGTH bb.bb_instructions /\
    get_instruction bb a.vs_inst_idx = SOME h` by
