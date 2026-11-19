@@ -34,7 +34,7 @@ QED
 
 (* Decorate a finite source abort once, initialize the selected driver at
    the actual scheduled function, and retain its request observation. *)
-Theorem layout_stage_request_finite_abort_headroom_static[local]:
+Theorem layout_stage_request_finite_abort_headroom_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\

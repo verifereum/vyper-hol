@@ -37,7 +37,7 @@ Theorem inv_wave_static_observation_classification[local]:
   s.vs_call_ctx.cc_static /\ ev_reachable orc s C' p d fn' inst t ==>
   lowered_mem_fact eom C' fn' inst t \/
   (?fn sS. MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
-    ev_reachable orc s C p d fn inst sS /\
+    ev_reachable orc s C p d fn inst sS /\ sS.vs_requests = t.vs_requests /\
     (in_static_abort_prefix fn sS ==> in_static_abort_prefix fn' t) /\
     (lowered_mem_fact eom C fn inst sS ==> lowered_mem_fact eom C' fn' inst t)) \/
   (in_static_abort_prefix fn' t /\
@@ -54,7 +54,7 @@ Proof
   Cases_on `inv_memory_observation inst.inst_opcode`
   >- (Cases_on `inst.inst_opcode = DRET`
       >- suspend "dret" >>
-      mp_tac (Q.INST [`initial` |-> `s`] inv_static_observation_source_completion) >>
+      mp_tac (Q.INST [`initial` |-> `s`] inv_static_observation_source_completion_oracle) >>
       impl_tac
       >- (conj_tac >- metis_tac[inv_remaining_trace_prefix_no_static_writes] >>
           conj_tac >- metis_tac[inv_static_ftrace_no_writes] >>
@@ -129,6 +129,31 @@ QED
 
 Finalise inv_wave_static_observation_classification[local]
 
+Theorem dft_ev_lowered_inv_wave_static_abort_under_requests:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
+  ctx_labels_bound C s.vs_labels /\ o1_initial_state_ok s /\
+  s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s /\
+  (!p d fn inst t. ev_reachable orc s C p d fn inst t /\ P t.vs_requests ==>
+     (in_static_abort_prefix fn t \/ lowered_mem_fact eom C fn inst t)) ==>
+  !p d fn inst t. ev_reachable orc s C' p d fn inst t /\ P t.vs_requests ==>
+    (in_static_abort_prefix fn t \/ lowered_mem_fact eom C' fn inst t)
+Proof
+  strip_tac >> Cases_on `s.vs_call_ctx.cc_static`
+  >- (rpt strip_tac >> drule_all inv_wave_static_observation_classification >>
+      metis_tac[]) >>
+  `!p d fn inst t. ev_reachable orc s C p d fn inst t /\ P t.vs_requests ==>
+     lowered_mem_fact eom C fn inst t` by
+    (rpt strip_tac >>
+     `~t.vs_call_ctx.cc_static` by metis_tac[inv_ev_reachable_nonstatic] >>
+     metis_tac[in_static_abort_prefix_def]) >>
+  mp_tac (Q.INST [`C:venom_context` |-> `C`, `C':venom_context` |-> `C'`,
+                  `s:venom_state` |-> `s`, `orc` |-> `orc`, `eom` |-> `eom`, `P` |-> `P`]
+                 dft_ev_lowered_inv_under_requests) >>
+  simp[o1_run_state_ok_def] >> metis_tac[]
+QED
+
 Theorem dft_ev_lowered_inv_wave_static_abort:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
@@ -140,18 +165,8 @@ Theorem dft_ev_lowered_inv_wave_static_abort:
   !p d fn inst t. ev_reachable orc s C' p d fn inst t ==>
     (in_static_abort_prefix fn t \/ lowered_mem_fact eom C' fn inst t)
 Proof
-  strip_tac >> Cases_on `s.vs_call_ctx.cc_static`
-  >- (rpt strip_tac >> drule_all inv_wave_static_observation_classification >>
-      metis_tac[]) >>
-  `!p d fn inst t. ev_reachable orc s C p d fn inst t ==>
-     lowered_mem_fact eom C fn inst t` by
-    (rpt strip_tac >>
-     `~t.vs_call_ctx.cc_static` by metis_tac[inv_ev_reachable_nonstatic] >>
-     metis_tac[in_static_abort_prefix_def]) >>
-  mp_tac (Q.INST [`C:venom_context` |-> `C`, `C':venom_context` |-> `C'`,
-                  `s:venom_state` |-> `s`, `orc` |-> `orc`, `eom` |-> `eom`]
-                 dft_ev_lowered_inv) >>
-  simp[o1_run_state_ok_def] >> metis_tac[]
+  mp_tac (Q.INST [`P` |-> `\xs:call_request list. T`] dft_ev_lowered_inv_wave_static_abort_under_requests) >>
+  simp[]
 QED
 
 Theorem dft_ev_lowered_mem_violation_source_write_available:
