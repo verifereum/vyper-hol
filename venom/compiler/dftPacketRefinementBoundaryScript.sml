@@ -1,6 +1,6 @@
 Theory dftPacketRefinementBoundary
 Ancestors
-  list rich_list option
+  list rich_list option passSharedList
 
 Theorem refined_row_compatible[local]:
   !old new gs.
@@ -9,15 +9,6 @@ Theorem refined_row_compatible[local]:
     LIST_REL (\slot w. slot = NONE \/ slot = SOME w) old gs
 Proof
   simp[LIST_REL_EL_EQN] >> metis_tac[]
-QED
-
-Theorem list_rel_flat[local]:
-  !R xss yss.
-    LIST_REL (LIST_REL R) xss yss ==>
-    LIST_REL R (FLAT xss) (FLAT yss)
-Proof
-  gen_tac >> Induct_on `xss` >> Cases_on `yss` >> simp[] >>
-  rpt strip_tac >> irule EVERY2_APPEND_suff >> simp[]
 QED
 
 Theorem dft_packet_refined_flat_compatible:

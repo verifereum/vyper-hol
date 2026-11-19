@@ -3,18 +3,6 @@ Ancestors
   dftNativePlanPrefix dftIndexedExec gasEvents
   venomExecSemantics venomInst venomState opcodeClass list rich_list arithmetic
 
-Theorem dft_packet_plain_prefix_no_intret:
-  !xs f C s.
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) xs ==>
-    !ir t. FOLDR (dft_exec_cons f C) OK xs s <> IntRet ir t
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  simp[dft_exec_cons_def] >>
-  `!ir t. step_inst f C h s <> IntRet ir t` by
-    (simp[step_inst_non_invoke] >> metis_tac[step_inst_base_no_intret]) >>
-  Cases_on `step_inst f C h s` >> simp[]
-QED
-
 Theorem dft_packet_plain_prefix_index[local]:
   !xs f C s t.
     EVERY (\i. ~is_terminator i.inst_opcode) xs /\
