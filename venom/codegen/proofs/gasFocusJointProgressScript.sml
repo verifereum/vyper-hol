@@ -2021,7 +2021,7 @@ Proof
   simp[TAKE_APPEND]
 QED
 
-Theorem focus_packet_visit_row[local]:
+Theorem focus_packet_visit_row:
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
     (JointConfig stk PG G tn fn inst st oms om hs hist) raw_slots sites unused /\
