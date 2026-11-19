@@ -10,7 +10,7 @@ Ancestors
   irSupply fcgPruning fcgDefs venomWf list rich_list finite_map words arithmetic
 
 (* Close the static pipeline at one raw filling and its stage-7/8 oracle. *)
-Theorem focus_static_replay_exit:
+Theorem focus_static_replay_exit_for:
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
   o1_source_unit_ok unit /\ unit_entry_no_params unit /\
   o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
@@ -18,7 +18,7 @@ Theorem focus_static_replay_exit:
   (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
      ~MEM (Label "runtime_begin") inst.inst_operands) /\
   generate_context_plan out.po_unit.cu_context = SOME cpl /\
-  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
+  vs0.vs_initial_fmp = n2w cpl.cp_initial_fmp /\
   w2n vs0.vs_initial_fmp <= w2n fmp /\
   (fin = asm_opt_finalizer ==>
      (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
@@ -88,8 +88,6 @@ Proof
     [`Abbrev (rds = _)`, `Abbrev (v7 = _)`, `vi = _`] >>
   `fmp_variant_room (SOME fmp) out.po_unit.cu_context vs0` by
     (simp[fmp_variant_room_def] >>
-     `vs0.vs_initial_fmp = n2w cpl.cp_initial_fmp` by
-       fs[codegen_asm_entry_rel_def] >>
      qspecl_then [`out.po_unit.cu_context`, `cpl`, `vs0`] mp_tac
        generate_context_plan_eom_room >> simp[]) >>
   `LENGTH o1_fn_passes = 9` by simp[o1_fn_passes_def] >>
@@ -178,11 +176,81 @@ Proof
     (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]))
     [`Abbrev (rds = _)`, `Abbrev (v7 = _)`, `Abbrev (vi = _)`] >>
   mp_tac (Q.INST [`orc` |-> `orc`, `stage` |-> `stage`, `pre` |-> `pre`, `t` |-> `t`]
-    focus_static_selected_code_end_exit) >>
+    focus_static_selected_code_end_exit_for) >>
   (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
     (disch_tac >>
      qpat_assum `fin = asm_opt_finalizer ==> (!fn inst. _ ==> ~MEM (Label "code_end") _) /\ _`
        (fn th => drule th >> strip_tac) >>
      rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[]))))) >>
   disch_then ACCEPT_TAC
+QED
+
+Theorem focus_static_replay_exit:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+  code_layout_valid vs0 /\
+  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+     ~MEM (Label "runtime_begin") inst.inst_operands) /\
+  generate_context_plan out.po_unit.cu_context = SOME cpl /\
+  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\
+  (fin = asm_opt_finalizer ==>
+     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+                ~MEM (Label "code_end") inst.inst_operands) /\
+     LENGTH vs0.vs_data_section < dimword (:256) DIV 2) /\
+  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
+    (init_ir_supply unit) = SOME (pre,t) /\
+  pre.cu_context.ctx_entry = SOME nm /\
+  stage 0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context /\
+  stage 9 = out.po_unit.cu_context /\
+  (!k. k < 9 ==> ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+    (stage k) (stage (SUC k))) /\
+  (!k. k <= 9 ==> o1_ctx_shape (stage k) /\
+    EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  (?fr. terminates (run_context fr unit.cu_context
+     (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
+  dead_wf D /\
+  o1_pre_walk_inv D unit.cu_context
+    (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+  (fin = asm_opt_finalizer ==>
+     mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+               s.vs_code = vs0.vs_code /\ s.vs_data_section = vs0.vs_data_section)
+       unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) /\
+  (!fuel. gas_res_rel (run_context fuel (stage 7)
+    (vs0 with vs_gas_readings := raw ++ [0w]))
+    (ev_context orc fuel (stage 7) vs0)) /\
+  (!fuel. gas_res_rel (run_context fuel (stage 8) vs0)
+    (ev_context orc fuel (stage 8) vs0)) /\
+  (!p d fn inst s. ev_reachable orc vs0 (stage 7) p d fn inst s ==>
+    ?ws. raw_reachable (vs0 with vs_gas_readings := raw ++ [0w])
+         (stage 7) fn inst (s with vs_gas_readings := ws)) /\
+  (!fn inst s. raw_reachable vs0 (stage 8) fn inst s ==>
+    ?p d. ev_reachable orc vs0 (stage 8) p d fn inst
+      (s with vs_gas_readings := vs0.vs_gas_readings)) ==>
+  ctx_sim D unit.cu_context out.po_unit.cu_context
+    (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+  ctx_abort_rq D unit.cu_context out.po_unit.cu_context
+    (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+  (fin = asm_opt_finalizer ==>
+     code_end_offset_ok
+       (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
+         ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
+  ((o1_lowered_inv out.po_unit.cu_context vs0 /\
+    (fin = asm_opt_finalizer ==>
+       code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)) \/
+   ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+      mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+                lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
+        out.po_unit.cu_context vs0) /\
+    !fuel. terminates (run_context fuel unit.cu_context
+              (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
+           ?u. run_context fuel unit.cu_context
+                 (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) =
+               Abort ExHalt_abort u))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `vs0.vs_initial_fmp = n2w cpl.cp_initial_fmp` by fs[codegen_asm_entry_rel_def] >>
+  MATCH_MP_TAC focus_static_replay_exit_for >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
