@@ -99,7 +99,7 @@ Theorem compile_encode_log_topic_scalar_seq_ptr:
   value_has_type tv v /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   compile_encode_log_topic x (is_bytestring_type ty) sm = (op,sb) /\
-  ptr_val_ok cx ty v x G tn s ==>
+  ptr_val_ok cx ty v x G tn s /\ ~ctx_has_dalloca ctx ==>
   ?t Gf tnf topic.
     run_inst_seq (emitted_insts sm sb) s = OK t /\
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sm sb) s Gf tnf /\
@@ -122,7 +122,7 @@ Theorem compile_encode_log_topic_scalar_seq_ptr_ghost:
   value_has_type tv v /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   compile_encode_log_topic x (is_bytestring_type ty) sm = (op,sb) /\
-  ptr_val_ok cx ty v x G tn s /\
+  ptr_val_ok cx ty v x G tn s /\ ~ctx_has_dalloca ctx /\
   ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sm /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
