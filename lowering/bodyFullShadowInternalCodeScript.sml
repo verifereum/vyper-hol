@@ -222,7 +222,7 @@ Proof
   gvs[internal_fn_descriptors_def, EL_APPEND_EQN]
 QED
 
-Theorem extract_context_selected_internal_code[local]:
+Theorem extract_context_selected_internal_code:
   extract_context_with_internals entry
     (xs ++ [(label,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret)] ++ ys)
     final = SOME (ctx,data) /\

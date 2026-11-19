@@ -411,28 +411,10 @@ Proof
   fs[gas_admissible_def] >> metis_tac[]
 QED
 
-Theorem aug_place_path_edge_labels:
-  gas_path_edge ctx func s n (OK t) ==> t.vs_labels = s.vs_labels
-Proof
-  rw[fragGasPathTheory.gas_path_edge_def] >>
-  gvs[fragExecTheory.exit_result_def, venomStateTheory.jump_to_def] >>
-  metis_tac[venomExecProofsTheory.step_inst_preserves_labels_always,
-            venomExecPropsTheory.eval_phis_preserves_labels]
-QED
-
-Theorem aug_place_path_labels:
-  !ctx func s n r. gas_path ctx func s n r ==>
-    !t. r = OK t ==> t.vs_labels = s.vs_labels
-Proof
-  ho_match_mp_tac fragGasPathTheory.gas_path_ind >>
-  rpt strip_tac >> gvs[fragExecTheory.exit_result_def] >>
-  metis_tac[aug_place_path_edge_labels]
-QED
-
 Theorem aug_place_marked_path_labels:
   gas_marked_path memory ctx func s n (OK t) ==> t.vs_labels = s.vs_labels
 Proof
-  metis_tac[fragGasModeTheory.gas_marked_path_exec, aug_place_path_labels]
+  metis_tac[fragGasModeTheory.gas_marked_path_exec, fragGasPathTheory.gas_path_labels]
 QED
 
 Theorem aug_place_saved_operand:
