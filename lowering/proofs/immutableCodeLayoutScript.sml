@@ -6,7 +6,8 @@ Ancestors
   e2eDefs e2eEntry e2eProducers lowerDloadDefs asmEncodeParse asmToBytecodeProofs
   asmWf asmSem asmIR symbolResolve finite_map list arithmetic
   stackPlanGen planExec codegen
-  rich_list codegenRel codegenEncodingWf
+  rich_list codegenRel codegenEncodingWf codegenAsmStaticWf
+  asmOptEncodingLayout asmOptimizer fnPlanPlaceRevertPostamble
 
 Theorem immutable_runtime_codegen_nonempty:
   codegen_assembly policy unit = SOME prog ==> assemble prog <> []
@@ -109,4 +110,47 @@ Proof
   rpt strip_tac >>
   drule_all codegen_assembly_asm_encoding_wf >> strip_tac >>
   metis_tac[generated_entry_immutable_code_layout]
+QED
+
+Theorem opt_entry_code_layout_valid_own:
+  !fin tops rpolicy prog prog' am tx es cplan unit.
+  fin IN accepted_finalizers /\
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  fin rpolicy prog = SOME prog' /\
+  call_state_rel tops (assemble prog') am tx es ==>
+  code_layout_valid (opt_entry_state_own prog prog' cplan es)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `fin = K SOME`
+  >- (gvs[combinTheory.K_THM, opt_entry_state_own_identity] >>
+      metis_tac[generated_entry_code_layout_shape]) >>
+  `fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  pop_assum SUBST_ALL_TAC >>
+  drule codegen_assembly_success_shape >> strip_tac >>
+  `?prefix. prog = prefix ++ [AsmDataHeader "code_end"]` by metis_tac[APPEND_ASSOC] >>
+  `~MEM (AsmLabel "code_end") prog` by
+    (drule codegen_assembly_symbols >> simp[] >> metis_tac[MEM_APPEND, MEM]) >>
+  `asm_encoding_wf prog /\ !lbl d. ~MEM (AsmPushOfst lbl d) prog` by
+    metis_tac[codegen_assembly_asm_encoding_wf, codegen_assembly_no_push_ofst] >>
+  drule_then (qspec_then `cplan` strip_assume_tac)
+    entry_venom_state_installed_section >>
+  `LENGTH (entry_venom_state prog' cplan es).vs_code <= 24576` by
+    (drule call_state_rel_code_length >> simp_tac bool_ss [entry_venom_state_frame_fields]) >>
+  `LENGTH (assemble prog') < 65536` by
+    (qpat_assum `(entry_venom_state _ _ _).vs_code = _` (fn eq =>
+       qpat_assum `LENGTH (entry_venom_state _ _ _).vs_code <= _`
+         (mp_tac o REWRITE_RULE [eq, LENGTH_APPEND])) >> decide_tac) >>
+  drule_all asm_opt_finalizer_end_offset >> strip_tac >>
+  `FLOOKUP (lo_reloc prog prog') "code_end" =
+    FLOOKUP (SND (compute_label_offsets prog')) "code_end"` by
+    (qpat_assum `~MEM (AsmLabel "code_end") prog` (fn absent =>
+       simp_tac (srw_ss()) [lo_reloc_def, FLOOKUP_FUNION, FLOOKUP_DRESTRICT, absent])) >>
+  mp_tac (Q.SPECL [`tops`, `prog'`, `am`, `tx`, `es`, `cplan`, `head`]
+    entry_venom_state_code_layout) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  Cases_on `FLOOKUP (SND (compute_label_offsets prog')) "code_end"` >>
+  qpat_assum `FLOOKUP (SND (compute_label_offsets prog')) "code_end" = _`
+    (fn lookup => qpat_assum `FLOOKUP (lo_reloc _ _) _ = _` (fn labels =>
+      simp_tac (srw_ss()) [code_layout_valid_def, opt_entry_state_own_def,
+        entry_venom_state_frame_fields, FLOOKUP_o_f, labels, lookup]))
 QED
