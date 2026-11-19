@@ -33,7 +33,127 @@ Ancestors
   concretizePtrCoverageStaticMemReachability frameAllocationOwnership
   fmpStepPredicateTransport fmpStepRewrite fmpStepRestrictionClosure fmpStepBridge
   concretizeAllocationFree o1MakeSsaStructuralShape o1ContractMakeSsaReplay
-  simplifyCfgInvariant o1ContractSue singleUseExpansionSupplySim callLayoutDefs gasFocusConcretizeEndpointCut gasFocusConcretizeHistoricalCut o1CodeEndConcretizeRead o1LabelFlowMiddleConcretize o1LabelFlowMiddleFmp concretizePtrChronologicalHistory concretizePtrPairedPrefix concretizePtrStructuralTranscript concretizePtrStructuralTrace concretizePtrSourceOwnership concretizePtrParamSupport concretizePtrRequestHistory concretizePtrOperationalOpcodes concretizePtrChronologicalDemand lowerDloadReachability lowerDloadRevertSuffix concretizeMemLocDefs venomExecProofs pred_set passSharedDefs concretizeStepStructure concretizePtrPairedFields unitLabelMapIdentity stepWriteFootprintBase
+  simplifyCfgInvariant o1ContractSue singleUseExpansionSupplySim callLayoutDefs gasFocusSourceC2Prefix gasFocusLowerDloadCut o1ContractLowerDloadStage lowerDloadMakeSsaInput lowerDloadSupplyProofs contextPlanLayoutProps codegenEntrySim gasFocusConcretizeEndpointCut gasFocusConcretizeHistoricalCut o1CodeEndConcretizeRead o1LabelFlowMiddleConcretize o1LabelFlowMiddleFmp concretizePtrChronologicalHistory concretizePtrPairedPrefix concretizePtrStructuralTranscript concretizePtrStructuralTrace concretizePtrSourceOwnership concretizePtrParamSupport concretizePtrRequestHistory concretizePtrOperationalOpcodes concretizePtrChronologicalDemand lowerDloadReachability lowerDloadRevertSuffix concretizeMemLocDefs venomExecProofs pred_set passSharedDefs concretizeStepStructure concretizePtrPairedFields unitLabelMapIdentity stepWriteFootprintBase
+
+(* LowerDload preserves the static portion of pointer safety. Its bounded
+   simulation supplies the dynamic portion at the same shifted root. *)
+Theorem focus_lower_dload_ptr_cut_inputs[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  dead_wf D /\ o1_ctx_shape C /\ o1_initial_state_ok V /\
+  V.vs_fmp = V.vs_initial_fmp /\ code_layout_valid V /\
+  callee_first names C.ctx_functions /\ o1_safe_upto D lo n C V /\
+  C'.ctx_entry = SOME nm /\ lookup_function nm C'.ctx_functions = SOME fn2 /\
+  fn_entry_label fn2 = SOME lbl ==>
+  o1_ptr_safe_upto D lo n C' V /\ alloca_frontier_upto n C' V /\
+  mem_inv (\ctx fn inst s. gas_cut n V s ==> dload_headroom_ok ctx fn inst s) C' V /\
+  (!fn inst s. raw_reachable V C' fn inst s /\ gas_cut n V s ==>
+    raw_mem_ok C' fn inst s /\ dload_offset_ok C' fn inst s) /\
+  callee_first names C'.ctx_functions
+Proof
+  strip_tac >> drule_all lower_dload_stage_focus_safety >> strip_tac >>
+  `o1_ptr_safe_upto D lo n C V` by fs[o1_safe_upto_def] >>
+  `C'.ctx_global_reserved = C.ctx_global_reserved` by fs[ctx_pass_stage_def] >>
+  `fmp_free_ctx C'` by metis_tac[o1_ptr_safe_upto_def, lower_dload_stage_fmp_free] >>
+  `EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions` by
+    (fs[EVERY_EL, o1_ptr_safe_upto_def, ctx_pass_stage_def, LIST_REL_EL_EQN] >>
+     rpt strip_tac >> rename1 `j < LENGTH C'.ctx_functions` >>
+     `j < LENGTH C.ctx_functions` by simp[] >>
+     qpat_x_assum `!i. i < LENGTH C.ctx_functions ==> ?observed s out. _`
+       (qspec_then `j` mp_tac) >>
+     impl_tac >- simp[] >> strip_tac >>
+     drule lower_dload_step_supply >> strip_tac >>
+     drule lower_dload_function_supply_metadata >> rw[]) >>
+  conj_tac
+  >- (fs[o1_ptr_safe_upto_def, fixed_region_reserved_def]) >>
+  simp[mem_inv_raw_reachable] >> metis_tac[lower_dload_stage_callee_first]
+QED
+
+Theorem focus_layout_cut_inputs:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+  code_layout_valid vs0 /\
+  unit.cu_context.ctx_entry = SOME nm /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+  fn_entry_label entryfn = SOME lbl /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+  unit_alloca_budget unit.cu_context +
+    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+  dead_wf D /\
+  V = vs0 with <|vs_gas_readings := L; vs_fmp := fmp; vs_initial_fmp := fmp|> /\
+  o1_safe_upto D lo n unit.cu_context V /\
+  n <= LENGTH (gas_events_blocks f unit.cu_context entryfn
+    (V with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)) /\
+  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
+    (init_ir_supply unit) = SOME (pre,t) /\
+  pre.cu_context.ctx_entry = SOME nm /\
+  run_callee_first rpolicy o1_fn_passes
+    (fcg_postorder (fcg_analyze pre.cu_context) nm)
+    (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)) t =
+    SOME (out.po_unit,t') /\
+  stage 0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context /\
+  stage 9 = out.po_unit.cu_context /\
+  (!k. k < 9 ==> ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+    (stage k) (stage (SUC k))) /\
+  (!k. k <= 9 ==> o1_ctx_shape (stage k) /\
+    EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  generate_context_plan out.po_unit.cu_context = SOME cpl /\
+  codegen_asm_entry_rel cpl prog vs0 ast ==>
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) (o1_walk_view rpolicy 2)
+    (stage 2) (stage 3) /\
+  o1_ctx_shape (stage 2) /\ o1_initial_state_ok V /\
+  V.vs_fmp = V.vs_initial_fmp /\ code_layout_valid V /\
+  o1_ptr_safe_upto D lo n (stage 2) V /\ alloca_frontier_upto n (stage 2) V /\
+  mem_inv (\ctx fn inst s. gas_cut n V s ==> dload_headroom_ok ctx fn inst s)
+    (stage 2) V /\
+  (!fn inst s. raw_reachable V (stage 2) fn inst s /\ gas_cut n V s ==>
+    raw_mem_ok (stage 2) fn inst s /\ dload_offset_ok (stage 2) fn inst s) /\
+  EVERY ssa_form (stage 2).ctx_functions /\ EVERY all_reachable (stage 2).ctx_functions /\
+  EVERY fn_defs_reach_uses (stage 2).ctx_functions /\ ctx_inst_ids_distinct (stage 2) /\
+  callee_first (fcg_postorder (fcg_analyze pre.cu_context) nm) (stage 2).ctx_functions /\
+  max_live_eom (stage 3) = SOME cpl.cp_max_static_eom /\
+  cpl.cp_max_static_eom <= w2n V.vs_initial_fmp
+Proof
+  strip_tac >>
+  `o1_initial_state_ok V /\ V.vs_fmp = V.vs_initial_fmp /\ code_layout_valid V` by
+    (qpat_assum `V = _` SUBST1_TAC >>
+     conj_tac >- fs[o1_initial_state_ok_def] >> simp[] >>
+     qpat_assum `code_layout_valid vs0` mp_tac >>
+     pure_rewrite_tac [code_layout_valid_def] >> simp[]) >>
+  `n <= LENGTH (gas_events_blocks f unit.cu_context entryfn
+    (vs0 with <|vs_gas_readings := L; vs_fmp := fmp; vs_initial_fmp := fmp;
+      vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))` by
+    (qpat_x_assum `n <= LENGTH (gas_events_blocks f _ _ _)` mp_tac >> simp[]) >>
+  `o1_safe_upto D lo n unit.cu_context
+      (vs0 with <|vs_gas_readings := L; vs_fmp := fmp; vs_initial_fmp := fmp|>)` by
+    (qpat_assum `V = _` (SUBST1_TAC o SYM) >> simp[]) >>
+  drule_all focus_source_c2_prefix >> strip_tac >>
+  `ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) (o1_walk_view rpolicy 1)
+     (stage 1) (stage 2) /\
+   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) (o1_walk_view rpolicy 2)
+     (stage 2) (stage 3)` by
+    (qpat_assum `!k. k < 9 ==> _` (fn th => mp_tac (Q.SPEC `1` th) >> mp_tac (Q.SPEC `2` th)) >>
+     simp[NoAsms, o1_fn_passes_def, arithmeticTheory.ADD1]) >>
+  `o1_ctx_shape (stage 1) /\ o1_ctx_shape (stage 2) /\
+   EVERY make_ssa_input_ok (stage 2).ctx_functions` by
+    (qpat_assum `!k. k <= 9 ==> _` (fn th => mp_tac (Q.SPEC `1` th) >> mp_tac (Q.SPEC `2` th)) >>
+     simp[NoAsms, o1_fn_row_def, EVERY_MEM]) >>
+  `o1_safe_upto D lo n (stage 1) V` by simp[] >>
+  drule_all focus_lower_dload_ptr_cut_inputs >> strip_tac >>
+  `max_live_eom (stage 9) = max_live_eom (stage 3)` by
+    (qsuff_tac `!k. k < LENGTH o1_fn_passes ==>
+       ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k) (stage k) (stage (SUC k))`
+     >- (disch_then (mp_tac o MATCH_MP o1_walk_stages_max_live_eom) >>
+          disch_then (qspec_then `6` mp_tac) >> simp[o1_fn_passes_def]) >>
+     fs[o1_fn_passes_def]) >>
+  `max_live_eom out.po_unit.cu_context = SOME cpl.cp_max_static_eom` by
+    metis_tac[generate_context_plan_spill_gap] >>
+  `n2w cpl.cp_initial_fmp = vs0.vs_initial_fmp` by fs[codegen_asm_entry_rel_def] >>
+  `cpl.cp_max_static_eom <= w2n vs0.vs_initial_fmp` by
+    metis_tac[generate_context_plan_eom_room] >>
+  fs[EVERY_MEM, o1_ctx_shape_def, make_ssa_input_ok_def] >> metis_tac[]
+QED
 
 (* Entry and source-point facts for the bounded FMP frame induction. *)
 Theorem focus_fmp_src_active[local]:
