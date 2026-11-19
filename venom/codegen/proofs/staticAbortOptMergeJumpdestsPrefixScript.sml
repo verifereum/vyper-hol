@@ -6,8 +6,8 @@ Ancestors
 (* Execute the incoming transfer; the two continuations have related popped
    tails.  In particular the JUMPI condition is the same concrete Val. *)
 Theorem redirect_taken_step[local]:
-  let q = MAP (rename_push_label x y) p in
-  let I = EL a.sym_base.as_pc p in
+  !q. q = MAP (rename_push_label x y) p ==>
+  !I. I = EL a.sym_base.as_pc p ==>
   INDEX_OF (AsmLabel x) p = SOME h /\ rn_rel x y a b /\
   a.sym_base.as_pc < LENGTH p /\
   a.sym_stack = Lab x 0 :: stk /\ b.sym_stack = Lab y 0 :: stk' /\
@@ -100,11 +100,11 @@ Proof
 QED
 
 Theorem merge_rename_protected_redirect_cut:
-  let q = MAP (rename_push_label x y) p in
-  let h = LENGTH pre in
-  let d = if next = AsmLabel y then 1 else 3 in
-  let at = \j t. sym_with_pc j t in
-  let I = EL a.sym_base.as_pc p in
+  !q. q = MAP (rename_push_label x y) p ==>
+  !h. h = LENGTH pre ==>
+  !d. d = (if next = AsmLabel y then 1 else 3) ==>
+  !at. at = sym_with_pc ==>
+  !I. I = EL a.sym_base.as_pc p ==>
   asm_static_wf p /\ p = pre ++ [AsmLabel x; next; third] ++ tail /\
   ((next = AsmLabel y /\ y <> x) \/
    (next = AsmPushLabel y /\ third = AsmOp "JUMP")) /\
@@ -132,7 +132,8 @@ Theorem merge_rename_protected_redirect_cut:
            sym_steps p env d t = SymOK (at j t) /\
            sym_steps p env (r-d) (at j t) = SymOK endst)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt (CHANGED_TAC (CONV_TAC Unwind.UNWIND_FORALL_CONV)) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `h = LENGTH pre` >>
   `asm_labels_unique p` by
     (qpat_assum `asm_static_wf p` (mp_tac o REWRITE_RULE [asm_static_wf_def]) >> simp[]) >>
@@ -150,7 +151,7 @@ Proof
        (!j. INDEX_OF (AsmLabel y) p = SOME j ==>
         ?b'. sym_steps (MAP (rename_push_label x y) p) env 1 b = SymOK b' /\
              b'.sym_base.as_pc = j /\ rn_rel x y (sym_with_pc j t) b')`
-    by (irule (SIMP_RULE (srw_ss()) [LET_THM] redirect_taken_step) >> gvs[]) >>
+    by (irule (SIMP_RULE (srw_ss()) [] redirect_taken_step) >> gvs[]) >>
   `sym_steps p env r t = SymOK endst` by (
     `SUC r = 1+r` by decide_tac >>
     qpat_assum `sym_steps p env (SUC r) a = _` mp_tac >>

@@ -6,18 +6,17 @@ Ancestors asmRunBounded[qualified,ignore_grammar] symShuffleSim[qualified,ignore
 
 (* Only a taken transfer whose two destination heads differ needs a bypass. *)
 Theorem merge_taken_or_sync[local]:
-  let q = MAP (rename_push_label x y) p in
-  let I = EL a.sym_base.as_pc p in
+  !I. I = EL a.sym_base.as_pc p ==>
   rn_rel x y a b /\ a.sym_base.as_pc < LENGTH p /\
   (I = AsmOp "JUMP" \/ I = AsmOp "JUMPI") /\
   sym_steps p env 1 a = SymOK t ==>
-  (?t'. sym_steps q env 1 b = SymOK t' /\ rn_rel x y t t') \/
+  (?t'. sym_steps (MAP (rename_push_label x y) p) env 1 b = SymOK t' /\ rn_rel x y t t') \/
   (?stk stk'. x <> y /\ a.sym_stack = Lab x 0 :: stk /\
               b.sym_stack = Lab y 0 :: stk' /\
     (I = AsmOp "JUMP" \/
      (I = AsmOp "JUMPI" /\ ?c rest. stk = Val c :: rest /\ c <> 0w)))
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC Unwind.UNWIND_FORALL_CONV >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `b.sym_base = a.sym_base /\ a.sym_base.as_stack = [] /\
    LIST_REL (sv_rel x y) a.sym_stack b.sym_stack` by fs[rn_rel_def] >>
@@ -61,22 +60,20 @@ QED
 (* Before recurring, either consume a nonempty source chunk and one
    destination step, or stop immediately before the short transfer. *)
 Theorem merge_replay_chunk[local]:
-  let q = MAP (rename_push_label x y) p in
-  let d = if next = AsmLabel y then 1 else 3 in
-  let I = EL a.sym_base.as_pc p in
+  !I. I = EL a.sym_base.as_pc p ==>
   asm_static_wf p /\ p = pre ++ [AsmLabel x; next; third] ++ tail /\
   ((next = AsmLabel y /\ y <> x) \/
    (next = AsmPushLabel y /\ third = AsmOp "JUMP")) /\
   rn_rel x y a b /\ sym_steps p env (SUC r) a = SymOK e ==>
   (?k u v. 0 < k /\ k <= SUC r /\
-     sym_steps p env k a = SymOK u /\ sym_steps q env 1 b = SymOK v /\
+     sym_steps p env k a = SymOK u /\ sym_steps (MAP (rename_push_label x y) p) env 1 b = SymOK v /\
      rn_rel x y u v /\ sym_steps p env (SUC r - k) u = SymOK e) \/
-  (?stk stk'. r < d /\ a.sym_base.as_pc < LENGTH p /\ x <> y /\
+  (?stk stk'. r < (if next = AsmLabel y then 1 else 3) /\ a.sym_base.as_pc < LENGTH p /\ x <> y /\
      a.sym_stack = Lab x 0 :: stk /\ b.sym_stack = Lab y 0 :: stk' /\
      (I = AsmOp "JUMP" \/
       (I = AsmOp "JUMPI" /\ ?c rest. stk = Val c :: rest /\ c <> 0w)))
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC Unwind.UNWIND_FORALL_CONV >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `p = _` (mk_asm "site") >>
   `a.sym_base.as_pc < LENGTH p` by
@@ -104,16 +101,16 @@ Proof
         (map_every assume_tac o CONJUNCTS))))
   >- (Cases_on `EL a.sym_base.as_pc p = AsmOp "JUMP" \/
                 EL a.sym_base.as_pc p = AsmOp "JUMPI"`
-      >- (irule (SIMP_RULE (srw_ss()) [LET_THM] merge_taken_or_sync) >> simp[]) >>
+      >- (irule (SIMP_RULE (srw_ss()) [] merge_taken_or_sync) >> simp[]) >>
       disj1_tac >>
-      irule (SIMP_RULE (srw_ss()) [LET_THM] merge_rename_nonjump_fetch_ok) >>
+      irule (SIMP_RULE (srw_ss()) [] merge_rename_nonjump_fetch_ok) >>
       metis_tac[])
   >- (disj1_tac >> qexistsl [`1`,`t`,`v`] >> simp[]) >>
   Cases_on `r < d`
   >- (disj2_tac >> qexistsl [`stk`,`stk'`] >> simp[Abbr `d`] >> metis_tac[]) >>
   `d <= r` by decide_tac >>
   asm "site" assume_tac >>
-  drule_all (SIMP_RULE (srw_ss()) [LET_THM] merge_rename_protected_redirect_cut) >>
+  drule_all (SIMP_RULE (srw_ss()) [] merge_rename_protected_redirect_cut) >>
   disch_then (qx_choose_then `mid` (map_every assume_tac o CONJUNCTS)) >>
   gns[] >>
   `?j. INDEX_OF (AsmLabel y) p = SOME j /\
@@ -133,17 +130,16 @@ Proof
 QED
 
 Theorem merge_rename_stopped_replay:
-  let q = MAP (rename_push_label x y) p in
-  let d = if next = AsmLabel y then 1 else 3 in
-  let P = \k s. sym_steps p env k s in
-  let Q = \k s. sym_steps q env k s in
+  !q. q = MAP (rename_push_label x y) p ==>
+  !P. P = (\k s. sym_steps p env k s) ==>
+  !Q. Q = (\k s. sym_steps q env k s) ==>
   asm_static_wf p /\ p = pre ++ [AsmLabel x;next;third] ++ tail /\
   ((next = AsmLabel y /\ y <> x) \/
    (next = AsmPushLabel y /\ third = AsmOp "JUMP")) /\
   rn_rel x y a b /\ P n a = SymOK e ==>
   (?m f. Q m b = SymOK f /\ rn_rel x y e f) \/
   (?i m r u v stk stk'.
-     n = i + SUC r /\ r < d /\
+     n = i + SUC r /\ r < (if next = AsmLabel y then 1 else 3) /\
      P i a = SymOK u /\ Q m b = SymOK v /\ rn_rel x y u v /\
      P (SUC r) u = SymOK e /\ u.sym_base.as_pc < LENGTH p /\ x <> y /\
      u.sym_stack = Lab x 0 :: stk /\ v.sym_stack = Lab y 0 :: stk' /\
@@ -151,14 +147,14 @@ Theorem merge_rename_stopped_replay:
       (EL u.sym_base.as_pc p = AsmOp "JUMPI" /\
        ?c rest. stk = Val c :: rest /\ c <> 0w)))
 Proof
-  rewrite_tac[LET_THM] >> rpt (CHANGED_TAC BETA_TAC) >>
+  ntac 3 (CONV_TAC Unwind.UNWIND_FORALL_CONV) >> BETA_TAC >>
   map_every qid_spec_tac [`e`,`b`,`a`] >> completeInduct_on `n` >>
   Cases_on `n`
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
       disj1_tac >> qexistsl [`0`,`b`] >> gns[sym_steps_def]) >>
   rename1 `SUC r` >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all (SIMP_RULE (srw_ss()) [LET_THM] merge_replay_chunk) >>
+  drule_all (SIMP_RULE (srw_ss()) [] merge_replay_chunk) >>
   disch_then (DISJ_CASES_THEN2
     (qx_choose_then `k` (qx_choose_then `u` (qx_choose_then `v`
       (map_every assume_tac o CONJUNCTS))))
