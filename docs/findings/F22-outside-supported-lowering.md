@@ -71,7 +71,7 @@ regressions. No named original fixture exercises these excluded mismatches.
 | ABI decode unwrap flag | source wrapper-sensitive decoding; lowering ignores flag | false flag, identical tuple target/result,≥2 members |
 | Indexed aggregate / bytes20 events | aggregate topics remain excluded; type-directed word topic encoding covers bytes20 | scalar fields, including bytes20 |
 | Mismatched event args | source checker does not establish declared argument agreement; lowering drops unmatched arguments | `supported_log`: declared exact types/count |
-| Bytes/String comparisons | source compares values; lower compares hashes | Eq/NotEq restricted W; no collision-freedom theorem assumed |
+| Bytes/String comparisons | source compares values; lower compares hashes | `supported_binop` excludes bytestring operands. Source typing checks the other operand types. |
 
 ## Current files, regression exports and reference evidence
 

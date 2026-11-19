@@ -121,10 +121,10 @@ Theorem supported_unary_modular_builtin_coverage:
   supported_builtin_form [] (BaseT (UintT 256)) Not [expr_test_uint] /\
   supported_builtin_form [] (BaseT (BytesT (Fixed 32))) Not
     [Name (BaseT (BytesT (Fixed 32))) "word"] /\
-  supported_builtin_form [] (BaseT (IntT 8)) Neg [expr_test_int] /\
+  supported_builtin_form [] (BaseT (IntT 8)) Neg
+    [Name (BaseT (IntT 8)) "small"] /\
   supported_builtin_form [] (BaseT DecimalT) Neg [expr_test_decimal] /\
   supported_builtin_form [] (BaseT (IntT 256)) Abs [expr_test_int] /\
-  supported_builtin_form [] (BaseT (IntT 8)) Abs [expr_test_int] /\
   supported_builtin_form [] (BaseT (UintT 256)) (AsWeiValue Ether) [expr_test_uint] /\
   ~supported_builtin_form [] (BaseT (UintT 256)) (AsWeiValue Wei) [expr_test_int] /\
   supported_builtin_form [] (BaseT (UintT 256)) AddMod
