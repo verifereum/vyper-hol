@@ -3,7 +3,7 @@
  * regions), vyper_call_correct_guarded (per-filling storage guard),
  * e2e_vyper_to_evm (admission-free generic §8.1 composition),
  * e2e_venom_pipeline, compile_vyper_runtime_bytecode (preserved proved APIs).
- * e2e_deploy_correctness (the §5.11 admission) is in e2eDeployCorrectness.
+ * e2e_deploy_correctness (§5.11) is in e2eDeployCorrectness.
  * Boundary/oracle/entry definitions live below this composition owner.
  * Deployment and gen_fn_simulation are OFF the call's logical dependency path;
  * definition-owner imports are not uses of their admitted correctness facts.
@@ -46,8 +46,6 @@ Ancestors
   fragGasOriginEvents fragGasOriginPtrSafeUpto o1SafeUpto acceptedContextPhi
   venomState venomLayout gasMaskProjection gasEvents gasExplicitSites
   oracleExecProps gasFocusStaticPrefixDriver words arithmetic sorting
-Libs
-  stepInstBaseLib
 
 
 (* =====================================================================
@@ -1501,8 +1499,9 @@ Resume call_certificate_raw_entry_boundary[exit]:
        (drule o CONJUNCT2 o REWRITE_RULE [mem_inv_raw_reachable]) >>
      simp[]) >>
   drule_at (Pat `gas_origin_path _ _ _ _ _ _ _`)
-    gas_origin_path_entry_events >> simp[] >> strip_tac >>
-  qexistsl_tac [`D`, `fuel'`, `[]`] >> simp[Abbr `D`] >>
+    gas_origin_path_entry_events >> simp[] >>
+  disch_then (qx_choose_then `efuel` strip_assume_tac) >>
+  qexistsl_tac [`D`, `efuel`, `[]`] >> simp[Abbr `D`] >>
   rpt strip_tac >> first_x_assum irule >> goal_assum (drule_at Any)
 QED
 
@@ -1615,7 +1614,7 @@ Proof
   simp[] >> metis_tac[lower_vyper_runtime_unit_no_runtime_begin]
 QED
 
-Theorem call_pipeline_gas_link_from_static_focus:
+Theorem call_pipeline_gas_link_from_static_focus[local]:
   (!rpolicy unit out vs0 cpl prog fin prog' es0 nm entryfn lbl fmp markf
     lo (project : (string # num) -> bool) result final.
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\

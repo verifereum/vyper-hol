@@ -143,7 +143,7 @@ Proof
   metis_tac[opt_deploy_codegen_asm_entry_rel, opt_deploy_asm_frame_rel]
 QED
 
-Theorem deploy_gas_link_from_focus:
+Theorem deploy_gas_link_from_focus[local]:
   (!rpolicy unit out vs0 cpl prog fin prog' es0 nm entryfn lbl fmp markf
     lo (project : (string # num) -> bool) result final.
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
