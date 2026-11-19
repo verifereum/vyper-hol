@@ -42,8 +42,18 @@ Deleting proof code to replace with cheat is NEVER acceptable.
 ## Project Structure
 
 ```
-venom/  # venom base definitions
-venom/passes/  # directory for each pass
+syntax/          # Vyper AST (vyperAST) and its ML syntax functions
+frontend/        # annotated JSON import and translation into the AST
+semantics/       # the definitional interpreter (vyperInterpreter) and its layers
+semantics/cv/    # CPS/small-step interpreter and cv translations
+semantics/type/  # static type system and the check_contract checker
+semantics/prop/  # properties of the semantics (type soundness, frames, ...)
+lowering/        # Vyper-to-Venom compiler (lowering/defs/) and its proofs
+venom/           # Venom IR: defs/, analysis/, passes/ (one directory per pass),
+                 # simulation/, proofs/, codegen/, compiler/
+bytecode/        # bytecode parity against the pinned Vyper compiler
+tests/           # semantics tests and the generated Vyper test-suite replays
+tools/, docs/    # scripts and documentation
 ```
 
 ### Design Principles
@@ -180,49 +190,22 @@ Before handing in proof work, check it for restated theorems with `python3 -I to
 
 ## Key Theories
 
-### venomSemTheory
-- `step_inst` - single instruction semantics
-- `run_block` - execute basic block (has termination proof)
-- `run_block_ind` - induction principle for run_block proofs
-- `eval_operand` - evaluate operand to value
-- `exec_result` - OK, Halt, Revert, Error
+Source semantics:
+- `vyperASTTheory` (`syntax/`): `expr`, `stmt`, `toplevel`
+- `vyperInterpreterTheory` (`semantics/`): `evaluate_def` (`eval_stmts`, `eval_expr`), `load_contract`, `call_external`
+- `vyperTypeSystemTheory`, `vyperTypeContractTheory` (`semantics/type/`): `well_typed_expr`, `check_contract`
+- `vyperTypeSoundnessTheory` (`semantics/prop/`); the `vyperSemanticsHol` rollup lists the semantics results
 
-### venomStateTheory
-- `venom_state` - record with vs_vars, vs_memory, vs_storage, etc.
-- `lookup_var`, `update_var` - variable operations
+Compiler:
+- `compileVyperTheory` (`lowering/defs/`): `compile_vyper`
+- `e2eCorrectnessTheory`, `e2eDeployCorrectnessTheory` (`lowering/`): `vyper_call_correct`, `e2e_deploy_correctness`
 
-### venomInstTheory
-- `instruction` - record with inst_id, inst_opcode, inst_operands, inst_output
-- `opcode` - PHI, ASSIGN, ADD, SUB, etc.
-- `is_terminator` - check if opcode is JMP, JNZ, STOP, REVERT
-
-### dfgDefsTheory (DFG Definitions)
-- `dfg` - type alias for `(string, instruction) fmap`
-- `build_dfg_fn` - build DFG from function
-- `well_formed_dfg` - DFG maps vars to instructions that produce them
-- `dfg_ids` - set of instruction IDs in DFG range
-- `phi_var_operands`, `assign_var_operand` - PHI/ASSIGN helpers
-
-### dfgOriginsTheory (Origin Computation)
-- `get_origins` - compute origin instructions through PHI/ASSIGN chains
-- `compute_origins` - wrapper with empty visited set
-- `phi_single_origin` - find single origin for PHI elimination
-- `phi_operands_direct` - well-formedness for single-origin PHIs
-- `phi_operands_direct_flookup` - key lemma for correctness
-
-### stateEquivTheory (State Equivalence Definitions)
-- `state_equiv` - states are equivalent (same vars, memory, storage, etc.)
-- `var_equiv` - variable-only equivalence
-- `result_equiv` - result equivalence (OK states equiv, Halt states equiv, etc.)
-- `state_equiv_refl/sym/trans` - equivalence relation properties
-- Helper theorems: `eval_operand_state_equiv`, `update_var_state_equiv`, etc.
-
-### execEquivTheory (Execution Equivalence)
-- `step_inst_state_equiv` - step_inst preserves state_equiv
-- `step_in_block_state_equiv` - step_in_block preserves state_equiv
-- `run_block_state_equiv` - run_block preserves state_equiv
-- `step_inst_result_equiv` - step_inst preserves result_equiv
-- `run_block_result_equiv` - run_block preserves result_equiv
+Venom:
+- `venomInstTheory` (`venom/defs/`): `instruction`, `opcode`, `is_terminator`
+- `venomStateTheory` (`venom/defs/`): `venom_state`, `lookup_var`, `update_var`, `eval_operand`
+- `venomExecSemanticsTheory` (`venom/defs/`): `step_inst_base`, `run_block`, `exec_result`
+- `dfgDefsTheory` (`venom/analysis/dfg/defs/`): `dfg_analysis`, `dfg_build_function`, `well_formed_dfg`
+- `stateEquivTheory` (`venom/simulation/defs/`): `state_equiv`, `result_equiv`; `execEquivProofsTheory` (`venom/proofs/`) lifts them through `step_inst` and `run_block` (`step_inst_result_equiv`, `run_block_result_equiv`)
 
 ## Debugging Tips
 

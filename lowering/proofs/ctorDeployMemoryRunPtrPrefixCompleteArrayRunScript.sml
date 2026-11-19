@@ -194,6 +194,7 @@ Proof
      `slot < dimword(:256)` by decide_tac >>
      `src <> Var iv` by simp[] >>
      metis_tac[ctor_checked_header_prefix_mem_ok]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all prefix_loop_header_operand_path >>
   disch_then (mp_tac o Q.INST [`D` |-> `Ddead`] o SPEC_ALL) >>
   strip_tac >>

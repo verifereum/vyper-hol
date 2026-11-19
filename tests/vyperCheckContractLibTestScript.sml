@@ -810,6 +810,17 @@ fun dec_const bop =
   [tdecl dec "X" (tbop dec bop (dlit "15000000000") (dlit "20000000000"))]
 val keccak_a =
   ``Builtin ^b32 Keccak256 [Literal (BaseT (StringT 1)) (StringL "a")]``
+val u256_pair = ``ArrayT ^u256 (Fixed 2)``
+val pair_lit =
+  ``Builtin ^u256_pair (MakeArray (SOME ^u256) (Fixed 2))
+      [^(const_lit 1); ^(const_lit 2)]``
+fun member_const bop n =
+  [tdecl ``BaseT BoolT`` "X" (tbop ``BaseT BoolT`` bop (const_lit n) pair_lit)]
+val () = List.app (assert_some o check_constants)
+  [member_const ``vyperAST$In`` 1,
+   member_const ``vyperAST$In`` 3,
+   member_const ``vyperAST$NotIn`` 1,
+   member_const ``vyperAST$NotIn`` 3]
 val () = List.app (assert_some o check_constants)
   [int_const ``vyperAST$Div`` 7 2,
    int_const ``vyperAST$Mod`` 7 3,

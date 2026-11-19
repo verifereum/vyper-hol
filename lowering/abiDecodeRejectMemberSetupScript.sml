@@ -39,7 +39,7 @@ QED
 (* Static navigation changes just the temporary and the physical PC. *)
 Theorem malformed_table_static_position[local]:
   compile_getelemptr_abi pos F ao MLOAD (Var source) hi sa = (out,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
@@ -78,7 +78,7 @@ QED
 
 Theorem malformed_table_destination_add[local]:
   emit_op ADD [Var output; Lit (n2w vo)] mid = (dst,en) /\
-  fn_has_code mid en func /\ ~ctx_has_dalloca ctx /\ ~r.vs_halted /\
+  fn_has_code mid en func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r) /\ ~r.vs_halted /\
   r.vs_current_bb = mid.cs_current_bb /\ r.vs_inst_idx = LENGTH mid.cs_current_insts /\
   lookup_var output r = SOME (n2w d) /\ ptr_covers G tn output r outsz /\
   vo + k <= outsz /\ d + vo < dimword (:256) /\ allocas_from lo r /\
@@ -173,7 +173,7 @@ Theorem malformed_table_member_setup_cut:
   abi_decode_member_setup (Var output) pos MLOAD (Var source) hi dyn ao vo st = (ops,en) /\
   abi_malformed_entry H ctx func cenv cx es st sites dstid live
     (Var source) hi pos (Var output) B L xs b d outsz s /\
-  fn_has_code st en func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code st en func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   abi_decode_ptr_window G tn s source (n2w B) L /\ ptr_covers G tn output s outsz /\
@@ -270,6 +270,11 @@ Proof
      simp[] >> irule decoderGhostFramePtrTheory.ptr_covers_frame >>
      qexistsl_tac [`G`,`s`,`tn`] >> simp[]) >>
   `d + vo < dimword (:256)` by decide_tac >>
+  `allocas_below_fmp r = allocas_below_fmp s` by
+    (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>`
+       (fn th => once_rewrite_tac[th]) >>
+     simp[NoAsms,allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by metis_tac[] >>
   drule_all malformed_table_destination_add >>
   disch_then (qspec_then `PG` (qx_choose_then `t` (qx_choose_then `H1`
     (qx_choose_then `u` (qx_choose_then `x` strip_assume_tac))))) >>

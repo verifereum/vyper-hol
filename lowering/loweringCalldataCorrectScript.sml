@@ -108,7 +108,7 @@ Proof
   disch_then (qspecl_then [`unit`, `am`, `vs`] mp_tac) >>
   simp[] >> strip_tac >>
   qexists_tac `marks` >>
-  metis_tac[source_unit_execution_correct_at_with]
+  metis_tac[source_unit_execution_correct_at_def]
 QED
 
 (* The dispatched-calldata unit theorem with a shadow context fixed by

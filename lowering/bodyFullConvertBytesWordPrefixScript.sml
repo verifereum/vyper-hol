@@ -38,6 +38,7 @@ Proof
          (update_var len (mload (w2n a) s) s) tn)`] >>
   simp[] >> gen_tac >>
   `32 <= (64:num)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bodyPtrSignedConvertSourceFixedTheory.bytestring_source_uniform_checks >>
   disch_then (qspecl_then [`D`, `fn`, `PG`] strip_assume_tac) >>
   gvs[]

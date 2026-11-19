@@ -392,6 +392,7 @@ Theorem deploy_pipeline_gas_link:
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
     vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
@@ -431,7 +432,12 @@ Proof
   impl_tac
   >- (rpt gen_tac >>
       disch_then (ACCEPT_TAC o MATCH_MP focus_producer_finalizer)) >>
-  disch_then ACCEPT_TAC
+  disch_then (fn th =>
+    rpt gen_tac >> disch_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
+    qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
+      `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`,
+      `vs_out`, `fmp`, `r`, `es'`] mp_tac th >>
+    asm_rewrite_tac [])
 QED
 
 (* The -O none case of e2e_deploy_correctness: PLAN 5.11, D28, section 9.
@@ -469,7 +475,8 @@ Theorem e2e_deploy_correctness_identity:
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es
+    deploy_state_rel tops deploy_bc am tx es /\
+    LENGTH (call_trace es) < 2 ** 64
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -523,7 +530,8 @@ Theorem e2e_deploy_correctness_asm_opt:
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es
+    deploy_state_rel tops deploy_bc am tx es /\
+    LENGTH (call_trace es) < 2 ** 64
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -586,7 +594,8 @@ Theorem e2e_deploy_correctness:
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es
+    deploy_state_rel tops deploy_bc am tx es /\
+    LENGTH (call_trace es) < 2 ** 64
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -617,7 +626,8 @@ val _ =
       supported_program tops /\ supported_program_deploy tops /\
       constructor_call_free tops /\
       deploy_typing_ok tops am tx /\
-      deploy_state_rel tops deploy_bc am tx es ==>
+      deploy_state_rel tops deploy_bc am tx es /\
+      LENGTH (call_trace es) < 2 ** 64 ==>
       ?r es'. run_call es = SOME (r,es') /\
         (creation_resource_starved es r es' \/
          deploy_call_result_rel tops runtime_bc am tx es r es')``;

@@ -176,7 +176,8 @@ Proof
    step_inst_base (mk_inst (iid+1) ADD [Var dst;Lit vo] [y]) s1 = OK s2` by
     (unabbrev_all_tac >> conj_tac >>
      irule (cj 1 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
-       prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+       prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss] >>
+     qexists_tac `ctx` >> simp[]) >>
   `t = s2` by gvs[run_inst_seq_def] >>
   `!D'. inst_seq_ptr D' lo ctx fn PG G tn
      [mk_inst iid ADD [src;off] [x];
@@ -301,7 +302,8 @@ Proof
   `step_inst_base (mk_inst iid ADD [src;Lit ao] [x]) s = OK s1` by
     (simp[Abbr `s1`] >>
      irule (cj 1 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
-       prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+       prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss] >>
+     qexists_tac `ctx` >> simp[]) >>
   `eval_operand (Var x) s1 = SOME (a+ao) /\
    op_taint q1 (Var x) = {} /\ allocas_from lo s1` by
     (simp[Abbr `s1`, Abbr `q1`, eval_operand_def, lookup_var_def, update_var_def,

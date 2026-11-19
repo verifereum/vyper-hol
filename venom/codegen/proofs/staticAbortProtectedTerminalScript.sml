@@ -3,6 +3,7 @@ Theory staticAbortProtectedTerminal
 Ancestors
   fnStaticAbortBodyFacts symBlockBody symFrameControl codegenSymRel
   fnBlockBodySteps fnStaticAbortBoundary unitShapeDefs
+  symBodyStaticFacts
 
 Theorem sym_abort_protected_halt_step:
   body_inv_abort rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
@@ -69,7 +70,7 @@ Proof
   `fn_shape_ok fn` by
     (gvs[unit_shape_ok_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
   `(inst.inst_opcode = ASSERT ==> MEM (AsmLabel "revert") prog)` by
-    metis_tac[placed_revert_sym_code_label] >>
+    metis_tac[symBodyStaticFactsTheory.placed_revert_sym_code_label] >>
   `(inst.inst_opcode = ASSERT ==> ?off pc.
     FLOOKUP lo "revert" = SOME off /\ off < dimword (:256) /\
     FLOOKUP o2pc off = SOME pc /\

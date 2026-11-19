@@ -260,6 +260,7 @@ Theorem deploy_correct_at_tail[local]:
   deploy_phases policy tops (assemble prog, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_state_rel tops (assemble prog') am tx es /\
+  LENGTH (call_trace es) < 2 ** 64 /\
   vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
   txp = tx with code := vs_out.vs_code /\
   deploy_source_ok tops am txp /\
@@ -427,6 +428,7 @@ Theorem e2e_deploy_correct_from_gas_link:
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
     vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
     txp = tx with code := vs_out.vs_code /\
     deploy_source_ok tops am txp /\

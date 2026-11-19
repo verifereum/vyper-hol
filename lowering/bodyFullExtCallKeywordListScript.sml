@@ -13,6 +13,7 @@ Ancestors
   entryReachBodyFirstEmissionExprSupport exprSimDefs
   bodyFullBuiltinWordPowCompose stmtLoweringMono freshWrites stateRelProj
   bodyPtrBopRepresentationFrame
+  bodyFullIfExpReach
 
 Theorem keyword_suffix_ci_mono[local]:
   !ks xs sa. ci_mono sa (SND (compile_ext_call_kwargs compile_expr cenv rt ks xs sa))
@@ -302,7 +303,7 @@ Resume extcall_request_keywords_owned_outcome[cons]:
   drule_all extcall_keyword_head_outcome >>
   disch_then (qspec_then `PG` assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ _` >>
-  rewrite_tac[eval_exprs_cons_action] >> irule gas_outcome_full_bind_all >>
+  rewrite_tac[eval_exprs_cons_action] >> irule gas_outcome_full_bind_all_path >>
   rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
@@ -332,6 +333,16 @@ Resume extcall_request_keywords_owned_outcome[tail]:
   qunabbrev_tac `headQ` >> RULE_ASSUM_TAC BETA_RULE >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     fs[storage_trace_domain_def] >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
+  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+    (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)` (fn path =>
+     qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
+     qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
+       (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+        CONJ path o CONJ no_phi)))) >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
@@ -359,8 +370,6 @@ Resume extcall_request_keywords_owned_outcome[tail]:
        simp[th, cj 1 ci_mono_compile_expr_sa])) >>
   `sa.cs_next_var <= sm.cs_next_var` by fs[ci_mono_def] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
-    (rpt strip_tac >> irule pow_compose_reachable_no_wrap >> metis_tac[]) >>
   qpat_x_assum `!ks' vo' go' dopt' sa' sb' shadow_sa' shadow_sb' es' s0' G0' tn0'.
                  _ ==> gas_outcome_full _ _ _ _ (eval_exprs cx xs) _ _ _`
     (qspecl_then [`ks`,`vot`,`got`,`dopt_t`,`sm`,`sb`,`shadow_sm`,`shadow_sb`,
