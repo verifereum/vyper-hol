@@ -813,7 +813,7 @@ Proof
   `run_frame es = SOME (INR e,u with contexts := (d,rb)::(h0,h1)::t)` by
     (irule frameGasTheory.run_frame_terminal_call >> simp[]) >>
   gvs[frame_outcome_def] >>
-  qexistsl_tac [`u with contexts := (d,rb)::(h0,h1)::t`,`d`,`m`] >>
+  qexistsl_tac [`u with contexts := (d,rb)::(h0,h1)::t`,`d`,`(h0,h1)::t`,`m`] >>
   simp[] >> Cases_on `e = NONE` >> gvs[]
 QED
 

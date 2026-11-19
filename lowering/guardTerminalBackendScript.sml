@@ -9,11 +9,8 @@ Theorem guard_nested_frame_outcome:
   ISL r /\ LENGTH e'.contexts + 1 = LENGTH e.contexts /\
   (exc <> NONE ==> e'.rollback = SND (HD e.contexts))
 Proof
-  rpt strip_tac >> fs[frame_outcome_def] >>
-  rename1 `e.contexts = (ctxt,rb)::rest` >>
-  Cases_on `rest` >> gvs[] >>
-  `pre.contexts <> []` by simp[] >>
-  drule_all vfmRunCallTheory.handle_exception_inl_pops >> simp[]
+  strip_tac >> drule_all frame_outcome_nested_length >> strip_tac >>
+  fs[frame_outcome_def] >> Cases_on `rest` >> gvs[]
 QED
 
 Theorem guard_processed_backend_well_formed[local]:

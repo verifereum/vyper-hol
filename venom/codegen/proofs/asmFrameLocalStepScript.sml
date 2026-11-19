@@ -319,11 +319,8 @@ Proof
       simp[frame_outcome_def, call_requests_def, frame_last_def]) >>
   drule_all (SRULE [MEM] step_transplant_end) >> strip_tac >> gvs[] >>
   `LENGTH es'.contexts < LENGTH es.contexts` by
-    (qpat_x_assum `frame_outcome es _ _ _ _ _` mp_tac >>
-     simp[frame_outcome_def] >> Cases_on `rest` >> gvs[] >>
-     strip_tac >>
-     `pre.contexts <> []` by simp[] >>
-     drule_all vfmRunCallTheory.handle_exception_inl_pops >> simp[]) >>
+    (`2 <= LENGTH es.contexts` by (Cases_on `rest` >> gvs[]) >>
+     drule_all frame_outcome_nested_length >> simp[]) >>
   `run_call es = SOME (INL (),es')` by
     (irule frame_outcome_nested_run >> Cases_on `rest` >> gvs[] >> metis_tac[]) >>
   `call_trace es = []` by (drule frame_obs_terminal >> simp[]) >>

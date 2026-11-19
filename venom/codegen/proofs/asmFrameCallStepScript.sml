@@ -1782,7 +1782,7 @@ Resume asm_step_fault_outcome[nested]:
     (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
   drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
   simp[frame_outcome_def, call_requests_def] >>
-  qexistsl_tac [`t`,`popped`,`mr`] >> simp[]
+  qexistsl_tac [`t`,`popped`,`(h0,h1)::t'`,`mr`] >> simp[]
 QED
 Finalise asm_step_fault_outcome
 

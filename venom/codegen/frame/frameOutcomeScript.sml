@@ -23,11 +23,13 @@ Definition frame_outcome_def:
             (exc = NONE ==> ctxt'.logs = ctxt.logs ++ lgs)
       | _ :: _ =>                                (* nested state *)
           r = INL () /\
-          ?pre ctxt' mr.
+          ?pre ctxt' rest' mr.
             ctxt.msgParams.outputTo = Memory mr /\
             ~vfm_abort exc /\
             run_frame es = SOME (INR exc,pre) /\
-            pre.contexts = (ctxt', rb) :: rest /\
+            pre.contexts = (ctxt', rb) :: rest' /\
+            MAP FST rest' = MAP FST rest /\
+            FRONT rest' = FRONT rest /\
             ctxt'.msgParams.outputTo = Memory mr /\
             handle_exception exc pre = (r,es') /\
             out = (if exc = NONE \/ exc = SOME Reverted
@@ -45,13 +47,16 @@ Proof
   drule_all run_frame_call >> simp[]
 QED
 
-(* Observations at the resumed caller of a nested memory-return frame. *)
+(* A nested frame preserves the suspended contexts. CREATE can update
+   the saved account state of the bottom frame. *)
 Theorem frame_outcome_nested_caller:
   es.contexts = (ctxt,rb) :: (parent,prb) :: rest /\
   frame_outcome es r es' exc out lgs ==>
-  ?parent' mr.
+  ?parent' prb' rest' mr.
     ctxt.msgParams.outputTo = Memory mr /\
-    es'.contexts = (parent',prb) :: rest /\
+    es'.contexts = (parent',prb') :: rest' /\
+    MAP FST rest' = MAP FST rest /\
+    (rest <> [] ==> prb' = prb) /\
     parent'.returnData = out /\
     parent'.stack = b2w (exc = NONE) :: parent.stack /\
     parent'.pc = SUC parent.pc /\
@@ -59,6 +64,9 @@ Theorem frame_outcome_nested_caller:
     parent'.memory = buffer_write mr.offset (TAKE mr.size out) parent.memory
 Proof
   strip_tac >> gvs[frame_outcome_def] >>
+  Cases_on `rest'` >> gvs[] >> PairCases_on `h` >> gvs[] >>
+  `rest <> [] ==> h1 = prb` by
+    (Cases_on `rest` >> gvs[] >> Cases_on `t` >> gvs[]) >>
   Cases_on `exc = NONE` >> Cases_on `exc = SOME Reverted` >>
   gvs[handle_exception_def, bind_def, ignore_bind_def,
       get_gas_left_def, get_current_context_def, return_def,
@@ -69,6 +77,18 @@ Proof
       set_rollback_def, unuse_gas_def, update_gas_refund_def, push_logs_def,
       AllCaseEqs()] >>
   qpat_x_assum `_ = es'` (SUBST_ALL_TAC o SYM) >> simp[]
+QED
+
+Theorem frame_outcome_nested_length:
+  2 <= LENGTH es.contexts /\
+  frame_outcome es r es' exc out lgs ==>
+  SUC (LENGTH es'.contexts) = LENGTH es.contexts
+Proof
+  rw[frame_outcome_def] >> Cases_on `rest` >> gvs[] >>
+  `pre.contexts <> []` by simp[] >>
+  qpat_assum `MAP FST rest' = _`
+    (assume_tac o AP_TERM ``LENGTH : context list -> num``) >>
+  drule_all vfmRunCallTheory.handle_exception_inl_pops >> gvs[]
 QED
 
 (* Our frame ran out of gas or stack before settlement. *)
