@@ -392,14 +392,21 @@ Proof
      qpat_assum `not_fresh_at sa x` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      fs[lookup_var_def,op_taint_def]) >>
+  `source_memory_write_ranges (mk_inst sc.cs_next_id opc ops []) v =
+    [(w2n (w+32w), n)]` by
+    (qpat_assum `((_ \/ _) /\ ops = _) \/ (opc = EXTCODECOPY /\ _)`
+       strip_assume_tac >>
+     qpat_x_assum `opc = _` SUBST_ALL_TAC >>
+     qpat_x_assum `ops = _` SUBST_ALL_TAC >>
+     simp[source_memory_write_ranges_def, sized_source_write_range_def,
+       mk_inst_def, eval_operand_def, w2n_n2w, arithmeticTheory.LESS_MOD]) >>
   `tm.t_mem = (tn2.t_mem DIFF
       {i | w2n (w+32w) <= i /\ i < w2n (w+32w)+n})
       DIFF {i | w2n w <= i /\ i < w2n w+32}` by
     (qpat_assum `tm.t_mem = _` mp_tac >>
-     Cases_on `opc = CALLDATACOPY` >> gvs[] >>
-     Cases_on `opc = CODECOPY` >>
-     simp[source_memory_write_ranges_def,sized_source_write_range_def,
-       range_bytes_def,mk_inst_def,eval_operand_def,w2n_n2w,EXTENSION]) >>
+     qpat_assum `source_memory_write_ranges _ v = _`
+       (fn th => PURE_REWRITE_TAC[th]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[range_bytes_def, EXTENSION]) >>
   `!i. w2n w <= i /\ i < w2n w+32+n ==> i NOTIN tm.t_mem` by
     (qpat_assum `tm.t_mem = (tn2.t_mem DIFF
         {i | w2n (w+32w) <= i /\ i < w2n (w+32w)+n}) DIFF _` mp_tac >>

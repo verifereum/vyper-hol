@@ -11,7 +11,7 @@ Theorem bytestring_out_buffer_full_run:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ 32 <= n /\ n < dimword (:256) /\
   stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r p w t G' tn'.
@@ -53,7 +53,7 @@ Proof
     let
       fun horizon tm = is_forall tm andalso
         fst (dest_var (fst (dest_forall tm))) = "H'"
-      val provider = alloc_buffer_origin_ptr_path
+      val provider = alloc_buffer_origin_ptr_path_with_raw_endpoint
       val post = fst (dest_forall (find_term horizon (concl provider)))
       val target = fst (dest_forall (find_term horizon w))
       val formal = first (fn v => fst (dest_var v) = "H") (free_vars (concl provider))
@@ -66,16 +66,43 @@ Proof
         in mp_tac (Q.INST [`sb` |-> `sm`]
           (INST [inst tys formal |-> actual] (INST_TYPE tys provider))) end) (asl,w)
     end) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   impl_tac >- simp[] >>
   disch_then (qx_choose_then `q` (qx_choose_then `w`
     (qx_choose_then `u` (qx_choose_then `G1`
-      (qx_choose_then `tn1` strip_assume_tac))))) >>
+      (qx_choose_then `tn1` (qx_choose_then `raw` strip_assume_tac)))))) >>
   `q = r` by gvs[] >> qpat_x_assum `q = r` SUBST_ALL_TAC >>
   `~u.vs_halted` by
     (qpat_assum `u with <| vs_vars := _; vs_allocas := _;
                            vs_alloca_next := _; vs_inst_idx := _ |> = s`
        (mp_tac o Q.AP_TERM `\st. st.vs_halted`) >> simp[]) >>
   `w2n w + 32 < dimword (:256)` by decide_tac >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
+          [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+    (irule exprSimAllocTheory.buffer_alloc_code >> metis_tac[]) >>
+  `stmt_state_rel H ctx func cenv cx es raw` by
+    (drule_all exprSimAllocTheory.literal_alloc_buffer_run >>
+     disch_then (qx_choosel_then [`raw'`, `w'`] strip_assume_tac) >>
+     `raw' = raw` by
+       (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK raw'` mp_tac >>
+        qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK raw` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[]) >>
+     qpat_assum `raw' = raw` (SUBST1_TAC o SYM) >>
+     first_assum ACCEPT_TAC) >>
+  `stmt_state_rel H ctx func cenv cx es u` by
+    simp[stmt_state_rel_inst_idx] >>
+  qpat_x_assum `u = raw with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK raw` kall_tac >>
+  qpat_x_assum `G1 = step_prov _ _ _ raw` kall_tac >>
+  qpat_x_assum `tn1 = step_taint _ _ raw _` kall_tac >>
+  qpat_x_assum `stmt_state_rel H ctx func cenv cx es raw` kall_tac >>
+  qpat_x_assum `FLOOKUP G1 r = SOME _` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    qpat_assum `stmt_state_rel H ctx func cenv cx es u`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   mp_tac (bytestring_data_offset_full_run |> Q.INST
     [`sa` |-> `sm`, `root` |-> `r`, `data` |-> `p`,
      `s` |-> `u`, `b` |-> `w`, `N` |-> `n`,

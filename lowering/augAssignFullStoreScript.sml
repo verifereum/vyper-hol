@@ -45,7 +45,7 @@ Proof
   `u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
    u.vs_requests = s.vs_requests` by
     (Cases_on `tr` >> simp[Abbr `u`, sstore_def, tstore_def]) >>
-  drule_all emit_storage_store_ptr_fmp >>
+  drule_all emit_storage_store_ptr >>
   disch_then (qspecl_then [`func`, `PG`, `G`, `D`] assume_tac) >>
   qpat_x_assum `emitted_insts sa sb = _` SUBST_ALL_TAC >>
   `inst_seq_ptr D lo ctx func PG G tn [inst] s G un` by

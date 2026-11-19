@@ -6,11 +6,14 @@ Ancestors
   ptrDiscipline finite_map words arithmetic exprSimAlloc localPtrsProps compileEnv loweringStateRelDefs instIdxIndep
   normalizationAllocPtr decoderGhostFramePtr loweringPosts
   robustCopyTransportPtr emitHelperProps valueEncodingProps
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
+  fragGasSeqPtrContext[qualified,ignore_grammar]
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem alloca_store_offset_alloca_checks:
   stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
-  32 <= n /\ n < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  32 <= n /\ n < dimword(:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
   ?Gf tnf.
     inst_seq_ptr D 0 ctx func PG G tn
@@ -20,6 +23,31 @@ Theorem alloca_store_offset_alloca_checks:
        mk_inst (id+3) ALLOCA [Lit sz] [q]] s Gf tnf
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  `exec_alloca (mk_inst id ALLOCA [Lit (n2w n)] [out]) s (n2w n:bytes32) = OK s1` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def] >> strip_tac >>
+     first_x_assum ACCEPT_TAC) >>
+  `alloca_inv s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ s`
+       (ACCEPT_TAC o cj 2 o MATCH_MP (iffLR stmt_state_rel_def))) >>
+  `fmp_room ctx func s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ s`
+       (ACCEPT_TAC o cj 4 o MATCH_MP (iffLR stmt_state_rel_def))) >>
+  `alloca_inv s1` by
+    (drule_at (Pat `exec_alloca _ _ _ = _`) alloca_inv_exec_alloca >> simp[]) >>
+  `fmp_room ctx func s1` by
+    (irule fmp_room_exec_alloca >> qexistsl_tac
+       [`mk_inst id ALLOCA [Lit (n2w n)] [out]`, `n2w n:bytes32`, `s`] >>
+     simp[mk_inst_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     qpat_x_assum `alloca_inv s1` (strip_assume_tac o REWRITE_RULE
+       [venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def]) >>
+     qpat_x_assum `fmp_room ctx func s1` (mp_tac o REWRITE_RULE [fmp_room_def]) >>
+     simp[allocas_below_fmp_def] >> rpt strip_tac >> res_tac >> decide_tac) >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j;k;l] _ _ _` >>
   `ptr_covers (step_prov PG G i s1)
       (step_taint i s s1 tn) out s1 n` by
@@ -33,7 +61,8 @@ Proof
   `ptr_inst_ok D 0 0 ctx func g1 t1 j
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_mstore >>
-     simp[op_taint_def, Abbr `g1`, Abbr `t1`]) >>
+     simp[op_taint_def, Abbr `g1`, Abbr `t1`,
+          exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `?a. lookup_var out s1 = SOME a /\ op_taint t1 (Var out) = {}` by
     gvs[ptr_covers_def, eval_operand_def] >>
   `step_inst_base j (s1 with vs_inst_idx := SUC s.vs_inst_idx) =
@@ -44,11 +73,21 @@ Proof
   `op_taint t2 (Var out) = {}` by
     (simp[Abbr `t2`, Abbr `j`, op_taint_def, mstore_ghost_frame,
           eval_operand_def] >> gvs[op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[NoAsms, Abbr `s2`, allocas_below_fmp_def, mstore_def,
+          write_memory_with_expansion_def] >> metis_tac[]) >>
   simp[Once inst_seq_ptr_def] >>
   `ptr_inst_ok D 0 0 ctx func g2 t2 k s2` by
     (simp[Abbr `k`] >> irule ptr_inst_ok_copy_len_binop >>
      simp[op_taint_def] >> gvs[op_taint_def]) >>
   Cases_on `step_inst_base k s2` >> simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp
+      (v with vs_inst_idx := SUC s2.vs_inst_idx)` by
+    (simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >> strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[k]`, `s2`] >> simp[run_inst_seq_def] >>
+     simp[Abbr `k`, mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   simp[inst_seq_ptr_def, Abbr `l`, ptr_inst_ok_alloca] >>
   Cases_on `step_inst_base (mk_inst (id+3) ALLOCA [Lit sz] [q])
     (v with vs_inst_idx := SUC s2.vs_inst_idx)` >> simp[]
@@ -59,7 +98,7 @@ Theorem revert_reason_prefix_path_ptr:
   stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts func) /\
-  64+ms < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  64+ms < dimword(:256) /\
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (revert_reason_prefix id v ms)

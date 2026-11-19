@@ -22,26 +22,6 @@ Proof
       range_bytes_def, taint_component_equality, DRESTRICT_UNIV]
 QED
 
-Theorem ptr_inst_ok_mstore_payload:
-  ptr_covers G tn p s 32 /\ ~ctx_has_dalloca ctx ==>
-  ptr_inst_ok D 0 fuel ctx fn G tn
-    (mk_inst id MSTORE [Var p; v] []) s
-Proof
-  rpt strip_tac >> gvs[ptr_covers_def] >>
-  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-       mk_inst_def, source_memory_write_ranges_def,
-       source_memory_read_ranges_def, fixed_source_write_range_def,
-       eval_operand_def] >>
-  conj_tac >-
-    (Cases_on `eval_operand v s` >> simp[] >>
-     rpt strip_tac >> gvs[] >> simp[mem_write_ops_def] >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> gvs[]) >>
-  simp[step_inst_non_invoke] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds, opcode_case_def, combinTheory.K_THM] >>
-  simp[exec_write2_def, eval_operand_def, AllCaseEqs(), mstore_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem immutable_load_payload_taint:
   eval_operand a s = SOME addr /\
   s'.vs_allocas = s.vs_allocas /\ s'.vs_fmp = s.vs_fmp ==>
@@ -69,7 +49,7 @@ Proof
 QED
 
 Theorem ptr_inst_ok_storage_load_payload:
-  op_taint tn a = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn a = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id (if tr then TLOAD else SLOAD) [a] [out]) s = OK s' /\
   s'.vs_requests = s.vs_requests ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
@@ -80,7 +60,7 @@ Proof
 QED
 
 Theorem ptr_inst_ok_immutable_load_payload:
-  op_taint tn a = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn a = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   access_ok 0 G fn (mk_inst id (if ctor then ILOAD else DLOAD) [a] [out]) s /\
   step_inst_base (mk_inst id (if ctor then ILOAD else DLOAD) [a] [out]) s = OK s' /\
   s'.vs_requests = s.vs_requests ==>

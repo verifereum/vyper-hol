@@ -337,6 +337,7 @@ Theorem pop_full_scalar_sequence[local]:
       op_taint tn' (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `!D. ?H tm. inst_seq_ptr D 0 ctx fn PG G tn code s H tm /\
     (!op. op IN B ==> op_prov H op = NONE /\ op_taint tm op = {}) /\
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\

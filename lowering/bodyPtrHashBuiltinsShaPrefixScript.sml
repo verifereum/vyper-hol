@@ -5,6 +5,7 @@ Ancestors wordLoadStorePtr bodyPtrHashBuiltinsKeccakBytesRun fragGasSeqPtr ptrDi
   typedCopyPtr typedCopyLoopHeaderPtr exprSimHash exprSimHashBoundary list bodyPtrDefs valueEncodingProps
   emitHelper emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps ASCIInumbers rich_list arithmetic
   bodyPtrHashBuiltinsGhostFrame exprSimProps
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem hash_bytes_prepare_inst_seq:
   !D ctx fn PG G tn s il ia x l p b base cap n.
@@ -13,7 +14,7 @@ Theorem hash_bytes_prepare_inst_seq:
   FLOOKUP G x = SOME (base,cap) /\ base <= b /\ b+32+n <= base+cap /\
   b+32 < dimword (:256) /\ op_taint tn (Var x) = {} /\
   (!i. b <= i /\ i < b+32 ==> i NOTIN tn.t_mem) /\
-  mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx ==>
+  mem_word_at b s.vs_memory = n2w n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst il MLOAD [Var x] [l];mk_inst ia ADD [Var x;Lit 32w] [p]] s
     (DRESTRICT G (COMPL {l}) |+ (p,(base,cap)))
@@ -38,6 +39,9 @@ Proof
 QED
 
 Resume hash_bytes_prepare_inst_seq[add]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    simp[Abbr `s1`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `step_prov PG G (mk_inst il MLOAD [Var x] [l]) (update_var l (n2w n) s) = G1` by
     simp[Abbr `G1`, step_prov_def, set_prov_def, out_prov_def, mk_inst_def] >>
   rename1 `FLOOKUP G x = SOME (rootbase,cap)` >>
@@ -85,7 +89,7 @@ Theorem hash_bytes_prepare_counted:
   FLOOKUP G x = SOME (base,cap) /\ base <= b /\ b+32+n <= base+cap /\
   b+32 < dimword (:256) /\ op_taint tn (Var x) = {} /\
   (!i. b <= i /\ i < b+32 ==> i NOTIN tn.t_mem) /\
-  mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx /\
+  mem_word_at b s.vs_memory = n2w n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq (emitted_insts sa sm) s = OK t ==>
@@ -122,7 +126,7 @@ Theorem hash_bytes_prepare_frame:
   FLOOKUP G x = SOME (base,cap) /\ base <= b /\ b+32+n <= base+cap /\
   b+32 < dimword (:256) /\ n < dimword (:256) /\ op_taint tn (Var x) = {} /\
   (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
-  mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx /\
+  mem_word_at b s.vs_memory = n2w n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) /\
   stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\

@@ -1,6 +1,7 @@
 (* Deterministic instruction ghosts shared by array setup consumers. *)
 Theory decoderSetupStepPtr
 Ancestors wordLoadStorePtr typedCopyPtr entryDispatchPtr ptrSafetyTransport decoderGhostFramePtr
+  exprPtrUnwrapScalarEdges[qualified,ignore_grammar]
   fragExecPtr bodyPtrDefs ptrSafeRun ptrDiscipline venomExecSemantics venomInst
   venomState compileEnv emitHelper emitHelperProps exprLoweringProps
   words finite_map pred_set list arithmetic codegenRel fragExec contextCodegenRel
@@ -87,7 +88,7 @@ Theorem setup_mload_continuation:
   emit_op MLOAD [Var q] sa = (Var x,sb) /\
   lookup_var q s = SOME a /\ ptr_covers G tn q s 32 /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   H = step_prov PG G (mk_inst sa.cs_next_id MLOAD [Var q] [x]) t /\
@@ -139,30 +140,12 @@ Proof
   Cases_on `eval_operand left s` >> gvs[op_taint_def]
 QED
 
-Theorem setup_scalar_binop_safe:
-  (opc = ADD \/ opc = MUL) /\
-  op_taint tn left = {} /\ op_taint tn right = {} /\
-  allocas_from lower s /\ ~ctx_has_dalloca ctx ==>
-  ptr_inst_ok D lower fuel ctx func G tn
-    (mk_inst id opc [left;right] [x]) s
-Proof
-  strip_tac >> gvs[] >>
-  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
-    source_memory_write_ranges_def, source_memory_read_ranges_def] >>
-  simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
-    combinTheory.K_THM, opcode_case_def] >>
-  simp[exec_pure2_def, AllCaseEqs(), update_var_def] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-
 Theorem setup_scalar_binop_continuation:
   (opc = ADD \/ opc = MUL) /\
   emit_op opc [left;right] sa = (Var x,sb) /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   H = step_prov PG G (mk_inst sa.cs_next_id opc [left;right] [x]) t /\
@@ -178,7 +161,7 @@ Proof
        exec_pure2_def, AllCaseEqs(), update_var_def]) >>
   `!fuel. ptr_inst_ok D lower fuel ctx func G tn
     (mk_inst sa.cs_next_id opc [left;right] [x]) s` by
-    (gen_tac >> irule setup_scalar_binop_safe >> simp[]) >>
+    (gen_tac >> irule exprPtrUnwrapScalarEdgesTheory.ptr_inst_ok_copy_arith >> simp[]) >>
   `opc <> INVOKE /\ ~is_terminator opc` by gvs[is_terminator_def] >>
   drule_all setup_emit_continuation >> simp[]
 QED

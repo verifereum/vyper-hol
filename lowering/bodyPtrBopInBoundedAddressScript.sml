@@ -55,7 +55,7 @@ QED
 Theorem membership_bounded_product_path[local]:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
@@ -77,6 +77,7 @@ Proof
   `eval_operand (Var ("%" ++ toString (sa.cs_next_var+1))) s = SOME (n2w i) /\
    op_taint tn (Var ("%" ++ toString (sa.cs_next_var+1))) = {}` by
     fs[membership_loop_registers_def, eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_at (Pat `get_instruction _ _ = _`) membership_address_binop_framed_path >>
   disch_then (drule_at (Pat `membership_loop_frame _ _ _ _ _ _ _`)) >>
   simp[eval_operand_def, op_taint_def] >>
@@ -91,7 +92,7 @@ QED
 Theorem membership_bounded_offset_path[local]:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
@@ -117,6 +118,7 @@ Proof
           ["%" ++ toString (sa.cs_next_var+6)])` by simp[] >>
       `~not_fresh_at sa ("%" ++ toString (sa.cs_next_var+6))` by
         simp[not_fresh_at_def] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_at (Pat `get_instruction _ _ = _`) membership_address_binop_framed_path >>
       disch_then (drule_at (Pat `membership_loop_frame _ _ _ _ _ _ _`)) >>
       simp[eval_operand_def, op_taint_def] >> disch_then drule_all >>
@@ -134,7 +136,7 @@ QED
 Theorem membership_bounded_address_path[local]:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
@@ -160,7 +162,9 @@ Proof
     simp[not_fresh_at_def] >>
   drule_at (Pat `get_instruction _ _ = _`) membership_address_binop_framed_path >>
   disch_then (drule_at (Pat `membership_loop_frame _ _ _ _ _ _ _`)) >>
-  gvs[eval_operand_def] >> disch_then drule_all >>
+  gvs[eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  disch_then drule_all >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   gvs[ADD1] >> goal_assum (drule_at Any) >>
   Cases_on `op_prov G arr` >>
@@ -171,7 +175,7 @@ QED
 Theorem membership_bounded_runtime_address_prefix:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
@@ -195,6 +199,12 @@ Proof
    p.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
    lookup_var ("%" ++ toString (sa.cs_next_var+5)) p = SOME (n2w (stride*i))` by
     simp[Abbr `p`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp p` by
+    (qpat_assum `membership_loop_frame _ _ _ s0 G1 tn1 p`
+        (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
+        (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   drule (SRULE [] (GEN_ALL membership_bounded_offset_path)) >>
   disch_then (drule_at (Pat `membership_loop_frame _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `membership_loop_registers _ _ _ _ _ _`)) >>
@@ -202,6 +212,12 @@ Proof
   disch_then (qspecl_then [`PG`, `D`]
     (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `q` strip_assume_tac)))) >>
   drule_all membership_loop_frame_operand >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+    (qpat_assum `membership_loop_frame _ _ _ s0 G2 tn2 q`
+        (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
+        (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   drule (SRULE [] (GEN_ALL membership_bounded_address_path)) >>
   disch_then (drule_at (Pat `membership_loop_frame _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `membership_loop_registers _ _ _ _ _ _`)) >>

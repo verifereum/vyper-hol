@@ -49,7 +49,7 @@ QED
 
 Theorem hash_fixed_input_sha3_ok:
   !D ctx fn G tn s id p out m fuel.
-    ptr_covers G tn p s 32 /\ m <= 32 /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn p s 32 /\ m <= 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     (!a i. lookup_var p s = SOME a /\ w2n a <= i /\ i < w2n a + 32 ==>
        i NOTIN tn.t_mem) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn

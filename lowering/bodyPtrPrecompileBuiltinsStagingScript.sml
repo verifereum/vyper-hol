@@ -9,7 +9,7 @@ Ancestors wordLoadStorePtr bodyPtrPrecompileBuiltinsFreshFrame bodyPtrPrecompile
 Theorem allocated_buffer_checked:
   stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
-  n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  n < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
   inst_seq_ptr D 0 ctx func PG G tn
     [mk_inst id ALLOCA [Lit (n2w n)] [out]] s
@@ -25,7 +25,7 @@ QED
 
 Theorem clean_word_store_checked:
   ptr_covers G tn dst s 32 /\ op_taint tn v = {} /\
-  ~ctx_has_dalloca ctx /\ lookup_var dst s = SOME a /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ lookup_var dst s = SOME a /\
   eval_operand v s = SOME w /\
   step_inst_base (mk_inst id MSTORE [Var dst; v] []) s = OK t ==>
   inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MSTORE [Var dst; v] []] s
@@ -66,7 +66,7 @@ QED
 Theorem point_offset_checked:
   ptr_covers G tn root s capacity /\ lookup_var root s = SOME a /\
   off + n <= capacity /\ w2n a + off < dimword (:256) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id ADD [Var root; Lit (n2w off)] [out]] s
     (step_prov PG G (mk_inst id ADD [Var root; Lit (n2w off)] [out])
@@ -85,7 +85,7 @@ QED
 Theorem clean_word_load_checked:
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MLOAD [Var src] [tmp]] s
     (step_prov PG G (mk_inst id MLOAD [Var src] [tmp])
       (update_var tmp (mload (w2n a) s) s))
@@ -107,7 +107,7 @@ Theorem emitted_allocation_checked:
   stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
         [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-  n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  n < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?out G' tn'. buf.buf_operand = Var out /\ not_fresh_at sb out /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
@@ -129,7 +129,7 @@ QED
 Theorem point_offset_trace:
   ptr_covers G tn root s capacity /\ lookup_var root s = SOME a /\
   off + n <= capacity /\ w2n a + off < dimword (:256) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq [mk_inst id ADD [Var root; Lit (n2w off)] [out]] s = OK t /\
     inst_seq_ptr D 0 ctx fn PG G tn
@@ -159,7 +159,7 @@ QED
 Theorem clean_word_load_trace:
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq [mk_inst id MLOAD [Var src] [tmp]] s = OK t /\
     inst_seq_ptr D 0 ctx fn PG G tn
@@ -193,7 +193,7 @@ QED
 
 Theorem clean_word_store_trace:
   ptr_covers G tn dst s 32 /\ op_taint tn v = {} /\
-  ~ctx_has_dalloca ctx /\ lookup_var dst s = SOME a /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ lookup_var dst s = SOME a /\
   eval_operand v s = SOME w ==>
   ?t tn'.
     run_inst_seq [mk_inst id MSTORE [Var dst; v] []] s = OK t /\
@@ -225,7 +225,7 @@ QED
 Theorem point_offset_checked_cursors:
   ptr_covers G tn root s capacity /\ lookup_var root s = SOME a /\
   off + n <= capacity /\ w2n a + off < dimword (:256) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !k. inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id ADD [Var root; Lit (n2w off)] [out]]
     (s with vs_inst_idx := k)
@@ -238,6 +238,9 @@ Proof
   `ptr_covers G tn root (s with vs_inst_idx := k) capacity` by simp[] >>
   `lookup_var root (s with vs_inst_idx := k) = SOME a` by
     gvs[lookup_var_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all point_offset_checked >>
   simp[staging_update_var_cursor]
 QED
@@ -245,7 +248,7 @@ QED
 Theorem clean_word_load_checked_cursors:
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !k. inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MLOAD [Var src] [tmp]]
     (s with vs_inst_idx := k)
     (step_prov PG G (mk_inst id MLOAD [Var src] [tmp])
@@ -257,6 +260,9 @@ Proof
   `ptr_covers G tn src (s with vs_inst_idx := k) 32` by simp[] >>
   `lookup_var src (s with vs_inst_idx := k) = SOME a` by
     gvs[lookup_var_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all clean_word_load_checked >>
   simp[staging_update_var_cursor, mload_def]
 QED
@@ -270,7 +276,7 @@ QED
 
 Theorem clean_word_store_checked_cursors:
   ptr_covers G tn dst s 32 /\ op_taint tn v = {} /\
-  ~ctx_has_dalloca ctx /\ lookup_var dst s = SOME a /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ lookup_var dst s = SOME a /\
   eval_operand v s = SOME w ==>
   !k. inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MSTORE [Var dst; v] []]
     (s with vs_inst_idx := k) G
@@ -287,6 +293,9 @@ Proof
   `lookup_var dst (s with vs_inst_idx := k) = SOME a` by
     gvs[lookup_var_def] >>
   `eval_operand v (s with vs_inst_idx := k) = SOME w` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all clean_word_store_checked >> simp[] >> strip_tac >>
   drule_all mstore_ghost_frame >>
   simp[staging_mstore_cursor] >> metis_tac[]
@@ -306,7 +315,7 @@ QED
 Theorem point_offset_trace_cursors:
   ptr_covers G tn root s capacity /\ lookup_var root s = SOME a /\
   off + n <= capacity /\ w2n a + off < dimword (:256) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq [mk_inst id ADD [Var root; Lit (n2w off)] [out]] s = OK t /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn
@@ -336,7 +345,7 @@ QED
 Theorem clean_word_load_trace_cursors:
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq [mk_inst id MLOAD [Var src] [tmp]] s = OK t /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MLOAD [Var src] [tmp]]
@@ -364,7 +373,7 @@ QED
 
 Theorem clean_word_store_trace_cursors:
   ptr_covers G tn dst s 32 /\ op_taint tn v = {} /\
-  ~ctx_has_dalloca ctx /\ lookup_var dst s = SOME a /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ lookup_var dst s = SOME a /\
   eval_operand v s = SOME w ==>
   ?t tn'.
     run_inst_seq [mk_inst id MSTORE [Var dst; v] []] s = OK t /\
@@ -387,7 +396,7 @@ QED
 Theorem allocated_buffer_checked_cursors:
   stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
-  n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  n < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
   !k. inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id ALLOCA [Lit (n2w n)] [out]] (s with vs_inst_idx := k)
@@ -401,6 +410,9 @@ Proof
       (s with vs_inst_idx := k) = OK (t with vs_inst_idx := k)` by
     simp[instIdxIndepTheory.step_inst_inst_idx_indep, mk_inst_def,
          is_terminator_def, instIdxIndepTheory.exec_result_map_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all allocated_buffer_checked >> simp[]
 QED
 
@@ -409,7 +421,7 @@ Theorem emitted_allocation_checked_cursors:
   stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
         [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-  n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  n < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?out G' tn'. buf.buf_operand = Var out /\ not_fresh_at sb out /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)

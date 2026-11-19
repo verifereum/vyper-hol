@@ -136,7 +136,7 @@ Theorem literal_header_chunks_ptr:
   compile_store_byte_chunks (Var p) bs 32 sh = ((),sb) /\
   not_fresh_at sh p /\ lookup_var p s = SOME (n2w b) /\
   FLOOKUP G p = SOME (b,32+32*word_size (LENGTH bs)) /\
-  op_taint tn (Var p) = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn (Var p) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   b + 32 + 32*word_size (LENGTH bs) < dimword (:256) ==>
   ?t G' tn'.
     run_inst_seq (mk_inst id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
@@ -171,6 +171,11 @@ Proof
   `lookup_var p uh = SOME (n2w b) /\ op_taint th (Var p) = {}` by
     (simp[Abbr `uh`, Abbr `th`, lookup_var_def, op_taint_def] >>
      fs[lookup_var_def, op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp uh` by
+    (`allocas_below_fmp uh <=> allocas_below_fmp s` by
+       simp[Abbr `uh`, Abbr `u`, allocas_below_fmp_def, mstore_def,
+            write_memory_with_expansion_def] >>
+     asm_rewrite_tac[]) >>
   `?t G' tn'. run_inst_seq (emitted_insts sh sb) uh = OK t /\
     inst_seq_ptr D 0 ctx fn PG G th (emitted_insts sh sb) uh G' tn' /\
     tn'.t_mem = th.t_mem DIFF
@@ -326,7 +331,7 @@ Theorem literal_bytelike_ptr_run:
   compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
   stmt_state_rel H ctx func cenv cx es s /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ 32+32*word_size (LENGTH bs) < dimword (:256) ==>
+  32+32*word_size (LENGTH bs) < dimword (:256) ==>
   ?u t b p sh G' tn'.
     buf.buf_operand = Var p /\ not_fresh_at sh p /\
     (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
@@ -370,6 +375,9 @@ Proof
      simp[run_inst_seq_def, mk_inst_def, is_terminator_def, AllCaseEqs()]) >>
   `MEM (mk_inst sa.cs_next_id ALLOCA
       [Lit (n2w (32+32*word_size (LENGTH bs)))] [p]) (fn_insts func)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule_all literal_ptr_alloca_ghost >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   suspend "payload"
@@ -387,6 +395,12 @@ Resume literal_bytelike_ptr_run[payload]:
    op_taint ta (Var p) = {}` by
     (simp[Abbr `uh`, Abbr `Ga`, Abbr `ta`, lookup_var_def, op_taint_def, FLOOKUP_UPDATE] >>
      metis_tac[lookup_var_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp uh` by
+    (`allocas_below_fmp uh <=> allocas_below_fmp u` by
+       simp[Abbr `uh`, allocas_below_fmp_def] >>
+     asm_rewrite_tac[] >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx es u`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `b+32+32*word_size (LENGTH bs) < dimword (:256)` by decide_tac >>
   `?t G' tn'.
     run_inst_seq (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
@@ -420,7 +434,7 @@ Resume literal_bytelike_ptr_run[assemble]:
       asm_simp_tac bool_ss [] >> simp[mk_inst_def, is_terminator_def]) >>
   conj_tac
   >- (PURE_ONCE_REWRITE_TAC[inst_seq_ptr_def] >>
-      asm_simp_tac bool_ss [] >> simp[literal_alloca_ptr_inst_ok]) >>
+      asm_simp_tac bool_ss [] >> simp[fragExecPtrTheory.ptr_inst_ok_alloca]) >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- (qpat_x_assum `v with <|vs_vars := _; vs_memory := _|> = u` mp_tac >> simp[]) >>

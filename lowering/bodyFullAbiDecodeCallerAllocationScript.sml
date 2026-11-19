@@ -144,6 +144,8 @@ Proof
   `local_ptrs_reserved ce header_st` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `st` >> simp[]) >>
   `stmt_state_rel H ctx fn ce cx es u` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
   drule_all bodyPtrBytestringBuiltinsBufferTheory.compile_alloc_buffer_counted >>
   disch_then (qspecl_then [`tnh`, `PG`, `Gh`, `ARB`] strip_assume_tac) >>
   rename1 `step_inst_base _ u = OK v` >>
@@ -312,8 +314,11 @@ Resume abi_decode_caller_allocation_joint[owned]:
   `abi_decoder_operand_live ready.cs_next_var (Var out) /\
    abi_decoder_operand_live ready.cs_next_var (Var input) /\
    abi_decoder_operand_live ready.cs_next_var (FST inputs)` by
-    (conj_tac >- (gvs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
-                     abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def]) >>
+    (conj_tac
+     >- (qpat_assum `not_fresh_at ready out` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+           abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def]) >>
      metis_tac[abiDecoderReentryTheory.abi_decoder_operand_live_mono]) >>
   `!x. not_fresh_at st x ==>
     lookup_var x v = lookup_var x s /\ FLOOKUP G1 x = FLOOKUP G x /\

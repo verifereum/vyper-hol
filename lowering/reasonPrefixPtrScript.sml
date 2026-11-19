@@ -6,6 +6,8 @@ Ancestors
   fragGasSeqPtr fragGasPathPtr fragExec emitHelperProps exprLoweringProps
   ptrSafeRun ptrDiscipline venomInst venomInstProofs venomState
   venomExecSemantics context emitHelper compileEnv loweringStateRelDefs allocationPtr fragExecPtr
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 (* The compiler equation supplies the instruction lookup; callers supply only
    the semantic step and check, never a hand-built control-flow edge. *)
@@ -42,7 +44,7 @@ QED
 
 Theorem reason_encoder_alloc_path_ptr:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
-  buf.buf_operand = Var out /\ ~ctx_has_dalloca ctx /\
+  buf.buf_operand = Var out /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
@@ -100,7 +102,7 @@ Theorem reason_encoder_prefix_path_ptr:
     emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
     emit_op ADD [buf.buf_operand; Lit 32w] c2 = (payload,c3) /\
     compile_alloc_buffer m c3 = (tuple,c4) /\ fn_has_code c3 c4 func /\
-    fn_has_code cc c4 func /\ ~ctx_has_dalloca ctx /\
+    fn_has_code cc c4 func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     s.vs_current_bb = cc.cs_current_bb /\
     s.vs_inst_idx = LENGTH cc.cs_current_insts /\ ~s.vs_halted /\
     local_ptrs_reserved cenv cc /\
@@ -275,8 +277,32 @@ Resume reason_encoder_prefix_path_ptr[lookup]:
 QED
 
 Resume reason_encoder_prefix_path_ptr[sequence]:
+  `expr_post H ctx func cenv cx e es sa sb s0 es' v op t` by
+    (mp_tac (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sb`,
+       `s0`, `es'`, `v`, `op`, `s`, `cc`, `c1`, `buf`, `n`, `tv`,
+       `ow`, `PG`, `G`, `tn`] reason_encoder_alloc_buffer_resources) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     strip_tac >>
+     `out' = out` by metis_tac[operand_11] >>
+     `t' = t` by metis_tac[exec_result_11] >> gvs[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ t`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o MATCH_MP (iffLR expr_post_def))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `u = mstore _ _ _` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def, mstore_def,
+          write_memory_with_expansion_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
+    (qpat_assum `r = update_var _ _ _` SUBST1_TAC >>
+     simp[exprPtrUnwrapFramesTheory.copy_allocas_update]) >>
   qpat_x_assum `Abbrev (code = _)` mp_tac >>
-  qpat_x_assum `~ctx_has_dalloca ctx` mp_tac >>
+  map_every (fn pat => qpat_x_assum pat mp_tac)
+    [`ctx_has_dalloca ctx ==> allocas_below_fmp s`,
+     `ctx_has_dalloca ctx ==> allocas_below_fmp t`,
+     `ctx_has_dalloca ctx ==> allocas_below_fmp u`,
+     `ctx_has_dalloca ctx ==> allocas_below_fmp r`] >>
   qpat_x_assum `ptr_covers G1 tn1 out t 32` mp_tac >>
   qpat_x_assum `op_taint tn2 (Var out) = {}` mp_tac >>
   qpat_x_assum `buf.buf_operand = Var out` mp_tac >>
@@ -293,15 +319,15 @@ Resume reason_encoder_prefix_path_ptr[sequence]:
   `!j. ptr_inst_ok D 0 0 ctx func G1 tn1
     (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] [])
     (t with vs_inst_idx := j)` by
-    (gen_tac >> irule ptr_inst_ok_mstore >> simp[op_taint_def]) >>
+    (gen_tac >> irule ptr_inst_ok_mstore >> simp[op_taint_def, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `!j. ptr_inst_ok D 0 0 ctx func G1 tn2
     (mk_inst c2.cs_next_id ADD [Var out; Lit 32w] [x])
     (u with vs_inst_idx := j)` by
-    (gen_tac >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+    (gen_tac >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   fs[mk_inst_def] >>
   simp[Abbr `code`, inst_seq_ptr_def, SRULE [mk_inst_def] ptr_inst_ok_alloca,
        step_inst_inst_idx_indep, mk_inst_def, is_terminator_def,
-       exec_result_map_def]
+       exec_result_map_def, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]
 QED
 
 Finalise reason_encoder_prefix_path_ptr

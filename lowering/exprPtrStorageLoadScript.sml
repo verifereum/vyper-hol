@@ -21,7 +21,7 @@ QED
 Theorem storage_load_step_ptr:
   eval_operand arg s = SOME a /\ op_taint tn arg = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) a = {} /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id (if tr then TLOAD else SLOAD) [arg] [out]) ==>
@@ -62,7 +62,7 @@ QED
 
 Theorem emit_storage_load_ptr_path:
   emit_op (if tr then TLOAD else SLOAD) [arg] sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   eval_operand arg s = SOME a /\ op_taint tn arg = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) a = {} /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\

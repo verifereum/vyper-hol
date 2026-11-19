@@ -52,7 +52,6 @@ Proof
   gvs[] >>
   (simp[typed_copy_origin_ptr_binop_ghost_frame] >>
    conj_tac >- (gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
-   conj_tac >- simp[update_var_def] >>
    rpt strip_tac >> `p <> out` by metis_tac[] >>
    simp[typed_copy_origin_ptr_binop_ghost_frame] >>
    simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE])
@@ -106,6 +105,9 @@ Proof
    q1.vs_inst_idx = LENGTH b.cs_current_insts` by
     simp[Abbr `q1`,eval_operand_def,lookup_var_def,update_var_def,
       finite_mapTheory.FLOOKUP_UPDATE] >>
+  `allocas_from lo q1` by
+    (qpat_assum `allocas_from lo s` mp_tac >>
+     simp[Abbr `q1`, allocas_from_def, update_var_def]) >>
   `(ctx_has_dalloca ctx ==> allocas_below_fmp q1)` by
     (simp[Abbr `q1`,allocas_below_fmp_def,update_var_def] >>
      metis_tac[allocas_below_fmp_def]) >>
@@ -128,6 +130,10 @@ Proof
     simp[Abbr `q2`,Abbr `q1`,update_var_def,eval_operand_def,
       lookup_var_def,finite_mapTheory.FLOOKUP_UPDATE,wordsTheory.word_mul_n2w,
       stmtSimStoreCopyTheory.store_copy_normalize_def,venom_state_component_equality] >>
+  `allocas_from lo q2` by
+    (PURE_REWRITE_TAC[allocas_from_def] >>
+     qpat_assum `q2.vs_allocas = s.vs_allocas` SUBST1_TAC >>
+     qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
   qexistsl [`out'`,`q2`,`G2`,`tn2`] >> simp[] >>
   conj_tac >- metis_tac[cs_extends_trans] >>
   qx_genl_tac [`root`,`capacity`,`n`] >> strip_tac >>

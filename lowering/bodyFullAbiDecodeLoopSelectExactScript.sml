@@ -533,6 +533,7 @@ Resume abi_decode_loop_select_joint_exact[reject]:
 QED
 
 Resume abi_decode_loop_select_joint_exact[success]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all (bodyPtrBopScalarSeqTheory.bop_scalar_seq_run |>
     Q.INST [`D` |-> `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]) >>
   disch_then (qspecl_then [`fn`,`PG`] strip_assume_tac) >>

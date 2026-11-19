@@ -316,6 +316,13 @@ Resume abi_encode_nonword_vv_full_from_packaging[finish_ready]:
       inst.inst_id IN frag_ids ready body_end /\ FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz)
       ==> sz = 32 /\ (0 < val_footprint tv v ==> venomMemDefs$regions_disjoint (src,val_footprint tv v) (b,sz)) /\
           venomMemDefs$regions_disjoint (p+32+LENGTH selector,LENGTH (enc ct rv)) (b,sz)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+    (qpat_assum `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func ce cx ee u` (fn related =>
+       mp_tac (MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp related) >>
+       mp_tac (MATCH_MP stateRelProjTheory.stmt_state_rel_fmp_room related)) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac) >>
   drule abi_encode_ready_finish_origin_split >>
   disch_then (fn th =>
     qpat_assum `abi_builtin_encode_finish _ len _ body_end = _`

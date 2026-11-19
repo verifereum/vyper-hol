@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem storage_copy_mstore_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id MSTORE [Var dst;value] []) /\
   lookup_var dst s = SOME addr /\ eval_operand value s = SOME w /\
@@ -50,7 +50,7 @@ Proof
      OK (mstore (w2n addr) w s)` by
     (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, venomExecSemanticsTheory.exec_write2_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MSTORE [Var dst;value] []) s` by
-    (irule payloadLoadStorePtrTheory.ptr_inst_ok_mstore_payload >> simp[]) >>
+    (irule wordLoadStorePtrTheory.ifexp_materialize_mstore_check >> simp[]) >>
   `step_prov PG G (mk_inst id MSTORE [Var dst;value] []) (mstore (w2n addr) w s) = G` by
     simp[step_prov_def, set_prov_def, mk_inst_def, DRESTRICT_UNIV] >>
   `gas_path_ptr_edge D 0 ctx fn PG G tn s 0 G
@@ -107,7 +107,7 @@ Proof
 QED
 
 Theorem storage_copy_counter_assign_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [Var nv] [cv]) /\
   lookup_var nv s = SOME w /\
@@ -140,7 +140,7 @@ QED
 
 Theorem storage_copy_arith_path_ptr:
   (opc = ADD /\ f = word_add \/ opc = MUL /\ f = word_mul) /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc [left;right] [out]) /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\

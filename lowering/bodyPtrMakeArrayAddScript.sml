@@ -6,7 +6,7 @@ Ancestors
 
 Theorem clean_binop_ptr_path:
   (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id opc [left;right] [out]) /\
@@ -45,7 +45,7 @@ QED
 Theorem emit_clean_binop_ptr_path:
   (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
   emit_op opc [left;right] sa = (Var out,sb) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst sa.cs_next_id opc [left;right] [out]) /\

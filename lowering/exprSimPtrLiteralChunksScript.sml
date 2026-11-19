@@ -5,10 +5,12 @@ Ancestors
   exprSimLiteralBuffer fragExecPtr bodyPtrDefs ptrDiscipline venomState
   venomExecSemantics venomInst words finite_map compileEnv loweringStateRelDefs fragExec instIdxIndep
   emitHelper context rich_list freshWrites ASCIInumbers vfmConstants integer
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
+  fragGasSeqPtrContext[qualified,ignore_grammar]
 
 Theorem literal_chunk_pair_ptr:
   lookup_var src s = SOME (n2w b) /\ FLOOKUP G src = SOME (base_addr,n) /\
-  op_taint tn (Var src) = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn (Var src) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   base_addr <= b /\ b + off + 32 <= base_addr + n /\
   b + off + 32 < dimword (:256) ==>
   inst_seq_ptr D 0 ctx fn PG G tn
@@ -26,6 +28,9 @@ Proof
   drule literal_add_ghost >> disch_then assume_tac >>
   simp[Once inst_seq_ptr_def, literal_add_ptr_inst_ok] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ _ u` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    simp[Abbr `u`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `lookup_var dst u = SOME (n2w (b+off))` by
     simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `ptr_covers (G |+ (dst,(base_addr,n)))
@@ -119,7 +124,7 @@ Theorem literal_chunks_ptr:
   compile_store_byte_chunks ptr bs off sa = ((),sb) /\ ptr = Var p /\
   not_fresh_at sa p /\ lookup_var p s = SOME (n2w b) /\
   FLOOKUP G p = SOME (base_addr,n) /\ op_taint tn (Var p) = {} /\
-  ~ctx_has_dalloca ctx /\ base_addr <= b /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ base_addr <= b /\
   b + off + 32 * word_size (LENGTH bs) <= base_addr + n /\
   b + off + 32 * word_size (LENGTH bs) < dimword (:256) ==>
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
@@ -203,6 +208,11 @@ Resume literal_chunks_ptr[head]:
   `b + (offset + (32 * word_size (SUC (LENGTH tl) - 32) + 32)) <= base_addr+n /\
    b + (offset + (32 * word_size (SUC (LENGTH tl) - 32) + 32)) < dimword (:256)` by
     decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (simp[Abbr `v`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
+     strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa post`, `s`] >> simp[] >>
+     simp[Abbr `head_code`, mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   first_x_assum drule_all >> strip_tac >>
   suspend "compose"
 QED

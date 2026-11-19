@@ -64,6 +64,7 @@ Proof
     (irule abi_decode_bytes_round_scalar >> simp[] >> metis_tac[]) >>
   `!op. op IN {cnt;Lit 31w} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
     (rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (bop_scalar_seq_run |> Q.INST [`D` |-> `<|d_stor := K (K {});
     d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]) >>
   disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>

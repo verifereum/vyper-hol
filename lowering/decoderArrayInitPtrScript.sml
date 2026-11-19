@@ -315,6 +315,9 @@ Resume calldata_count_guard_endpoint_ptr_origin_core_joint[guard_checks]:
     (imp_res_tac emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def]) >>
   asm "load_run" assume_tac >>
   asm "cmp_run" assume_tac >> asm "zero_run" assume_tac >>
+  `allocas_from lower s1 /\ allocas_from lower s2 /\ allocas_from lower s3` by
+    (rpt conj_tac >> PURE_REWRITE_TAC[allocas_from_def] >>
+     first_assum (ACCEPT_TAC o SIMP_RULE (srw_ss()) [allocas_from_def])) >>
   `!k. inst_seq_ptr D lower ctx' func PG H2 u2
     (emitted_insts c2 c3 ++ emitted_insts c3 sb) (s2 with vs_inst_idx := k) H3 u3` by
     (irule inst_seq_ptr_uniform_append >> reverse conj_tac >- simp[] >>
@@ -1232,6 +1235,9 @@ Resume actual_array_init_endpoint_ptr_origin_core[joint_origin]:
   `allocas_from lower (s1 with vs_inst_idx := s.vs_inst_idx + 4) /\
    allocas_from lower (s2 with vs_inst_idx := s.vs_inst_idx + 6)` by
     (gvs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lower s1 /\ allocas_from lower s2` by
+    (rpt conj_tac >> PURE_REWRITE_TAC[allocas_from_def] >>
+     first_assum (ACCEPT_TAC o SIMP_RULE (srw_ss()) [allocas_from_def])) >>
   `gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
     (OK (s1 with vs_inst_idx := s.vs_inst_idx + 4),H1,u1)` by
     (qpat_assum `!D lower explicit ctx' func.

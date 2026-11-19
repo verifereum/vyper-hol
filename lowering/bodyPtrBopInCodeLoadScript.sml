@@ -137,6 +137,7 @@ Theorem membership_code_array_element_prefix:
     FLOOKUP G' dst = NONE /\ op_taint tn' (Var dst) = {}
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule (SRULE [] (GEN_ALL membership_runtime_address_prefix)) >>
   simp[] >> disch_then drule_all >>
   disch_then (qspecl_then [`PG`, `D`]
@@ -192,6 +193,7 @@ Proof
     (qpat_assum `membership_loop_frame early G0 tn0 s0 Gh tnh sh`
        (mp_then Any mp_tac membership_loop_frame_operand) >>
      disch_then (qspec_then `arr_op` mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule (SRULE [] (GEN_ALL membership_runtime_address_prefix)) >>
   simp[] >> disch_then drule_all >>
   disch_then (qspecl_then [`PG`, `D`]

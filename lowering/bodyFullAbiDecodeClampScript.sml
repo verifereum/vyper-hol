@@ -89,6 +89,7 @@ Proof
       i.inst_opcode <> GAS) (emitted_insts sa sb)` by
     metis_tac[bop_scalar_seq_opcodes] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by metis_tac[abi_decode_scalar_seq_mem_ok] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_decode_clamp_runtime >> strip_tac
   >- (drule_all (bop_scalar_seq_run |> Q.INST [`D` |-> `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]) >>
       disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>

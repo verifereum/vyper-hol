@@ -13,7 +13,7 @@ QED
 
 Theorem convert_address_fixed_certificate:
   compile_type_convert x ConvToAddress sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -31,7 +31,7 @@ QED
 
 Theorem convert_flag_fixed_certificate:
   compile_type_convert x (ConvToFlag n) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -143,7 +143,7 @@ QED
 Theorem scalar_checked_pair_certificate:
   MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   op_prov G x = NONE /\ op_prov G y = NONE /\
-  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq [mk_inst id opc [x;y] [a];
     mk_inst (id+1) ISZERO [Var a] [b];
     mk_inst (id+2) ASSERT [Var b] []] s = OK t \/
@@ -177,7 +177,7 @@ QED
 
 Theorem convert_bytesm_fixed_certificate:
   compile_type_convert x (ConvBytesMToBytesM in_m out_m) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -253,7 +253,7 @@ QED
 
 Theorem convert_address_counted_certificate:
   compile_type_convert x ConvToAddress sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -272,7 +272,7 @@ QED
 
 Theorem convert_address_abort_counted_certificate:
   compile_type_convert x ConvToAddress sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -291,7 +291,7 @@ QED
 
 Theorem convert_flag_counted_certificate:
   compile_type_convert x (ConvToFlag n) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -315,7 +315,7 @@ QED
 
 Theorem convert_flag_abort_counted_certificate:
   compile_type_convert x (ConvToFlag n) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -338,7 +338,7 @@ QED
 
 Theorem convert_bytesm_counted_certificate:
   compile_type_convert x (ConvBytesMToBytesM in_m out_m) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -362,7 +362,7 @@ QED
 
 Theorem convert_bytesm_abort_counted_certificate:
   compile_type_convert x (ConvBytesMToBytesM in_m out_m) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -419,7 +419,7 @@ QED
 Theorem convert_int_signed_narrow_fixed_certificate:
   out_b < in_b /\
   compile_type_convert x (ConvIntToInt T in_b F out_b) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -476,7 +476,7 @@ QED
 Theorem convert_int_signed_wide_fixed_certificate:
   ~(out_b < in_b) /\
   compile_type_convert x (ConvIntToInt T in_b F out_b) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -500,7 +500,7 @@ QED
 
 Theorem convert_int_same_sign_fixed_certificate:
   compile_type_convert x (ConvIntToInt signed in_b signed out_b) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -520,7 +520,7 @@ QED
 
 Theorem convert_int_fixed_certificate:
   compile_type_convert x (ConvIntToInt in_s in_b out_s out_b) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -618,7 +618,7 @@ QED
 
 Theorem convert_int_counted_certificate:
   compile_type_convert x (ConvIntToInt in_s in_b out_s out_b) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -642,7 +642,7 @@ QED
 
 Theorem convert_int_abort_counted_certificate:
   compile_type_convert x (ConvIntToInt in_s in_b out_s out_b) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>

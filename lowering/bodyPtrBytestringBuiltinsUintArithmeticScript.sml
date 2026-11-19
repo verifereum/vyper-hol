@@ -8,7 +8,7 @@ Ancestors
    forward coverage.  The allocation base is therefore explicit below. *)
 Theorem pointer_sub_counted_edge:
   !D ctx func PG G tn s bb id root out a i delta.
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id SUB [Var root; delta] [out]) /\
@@ -142,41 +142,4 @@ Proof
   pop_assum SUBST1_TAC >>
   irule pointer_sub_covers >> simp[] >>
   qexists_tac `buf_size+n` >> simp[]
-QED
-
-(* Both callers use the same general result boundary. *)
-Theorem uint2str_zero_sub_covers[local]:
-  !PG G tn s id root out b n buf_size.
-    lookup_var root s = SOME (n2w (b+n)) /\
-    FLOOKUP G root = SOME (b,buf_size+n) /\ op_taint tn (Var root) = {} /\
-    1 <= n /\ b+(buf_size+n) < dimword(:256) ==>
-    ptr_covers
-      (step_prov PG G (mk_inst id SUB [Var root;Lit 1w] [out])
-        (update_var out (n2w (b+n-1)) s))
-      (step_taint (mk_inst id SUB [Var root;Lit 1w] [out]) s
-        (update_var out (n2w (b+n-1)) s) tn)
-      out ((update_var out (n2w (b+n-1)) s) with
-        vs_inst_idx := SUC s.vs_inst_idx) buf_size
-Proof
-  rpt strip_tac >> irule uint2str_sub_result_covers >>
-  simp[eval_operand_def, op_taint_def]
-QED
-
-Theorem uint2str_suffix_sub_covers[local]:
-  !PG G tn s id root out counter b n buf_size str.
-    lookup_var root s = SOME (n2w (b+n)) /\
-    lookup_var counter s = SOME (n2w (LENGTH (str:char list))) /\
-    FLOOKUP G root = SOME (b,buf_size+n) /\
-    op_taint tn (Var root) = {} /\ op_taint tn (Var counter) = {} /\
-    LENGTH str <= n /\ b+(buf_size+n) < dimword(:256) ==>
-    ptr_covers
-      (step_prov PG G (mk_inst id SUB [Var root;Var counter] [out])
-        (update_var out (n2w (b+n-LENGTH str)) s))
-      (step_taint (mk_inst id SUB [Var root;Var counter] [out]) s
-        (update_var out (n2w (b+n-LENGTH str)) s) tn)
-      out ((update_var out (n2w (b+n-LENGTH str)) s) with
-        vs_inst_idx := SUC s.vs_inst_idx) buf_size
-Proof
-  rpt strip_tac >> irule uint2str_sub_result_covers >>
-  simp[eval_operand_def]
 QED

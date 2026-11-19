@@ -3,7 +3,7 @@ Theory stmtAppendStorageSuffixPtr
 Ancestors stmtAppendStorageGuardPtr stmtAppendStorageRunPtr instSeqComposePtr
   exprLoweringProps emitHelperProps freshWrites stateFrame venomInst venomState
   ptrDiscipline finite_map list arithmetic compileEnv loweringStateRelDefs emittedSeqComposePtr
-  abiDecoderArrayInit
+  abiDecoderArrayInit fragGasSeqPtrContext
 
 Theorem emit_append_binary_uniform_ptr:
   !opc a b st rop st' s t tn ctx.
@@ -11,7 +11,7 @@ Theorem emit_append_binary_uniform_ptr:
   run_inst_seq (emitted_insts st st') s = OK t /\
   op_taint tn a = {} /\ op_taint tn b = {} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
-  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  t.vs_requests = s.vs_requests /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !D fn PG G. ?G' tn'.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
             (s with vs_inst_idx := k) G' tn') /\
@@ -36,7 +36,7 @@ Theorem append_storage_address_ptr:
   state_frame s4 = state_frame s3 /\ state_frame s5 = state_frame s4 /\
   state_frame s6 = state_frame s5 /\
   op_taint tn bop = {} /\ op_taint tn lop = {} /\
-  (!x. lop = Var x ==> not_fresh_at st3 x) /\ ~ctx_has_dalloca ctx ==>
+  (!x. lop = Var x ==> not_fresh_at st3 x) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s3) ==>
   ?G6 tn6.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st3 st6)
            (s3 with vs_inst_idx := k) G6 tn6) /\
@@ -55,6 +55,10 @@ Proof
    s5.vs_requests = s4.vs_requests /\
    s6.vs_allocas = s5.vs_allocas /\ s6.vs_fmp = s5.vs_fmp /\
    s6.vs_requests = s5.vs_requests` by metis_tac[state_frame_ptr_fields] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s4` by
+    (strip_tac >> metis_tac[append_state_frame_allocas]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s5` by
+    (strip_tac >> metis_tac[append_state_frame_allocas]) >>
   qpat_x_assum `state_frame s4 = _` kall_tac >>
   qpat_x_assum `state_frame s5 = _` kall_tac >>
   qpat_x_assum `state_frame s6 = _` kall_tac >>
@@ -127,7 +131,7 @@ Theorem append_storage_store_tail_ptr:
   eval_operand pop s6 = SOME addr /\ eval_operand bop s8 = SOME slot /\
   op_taint tn pop = {} /\ op_taint tn vop = {} /\
   op_taint tn lop = {} /\ op_taint tn bop = {} /\
-  (!x. bop = Var x ==> not_fresh_at st7 x) /\ ~ctx_has_dalloca ctx ==>
+  (!x. bop = Var x ==> not_fresh_at st7 x) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s6) ==>
   ?G9 tn9.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st6 st9)
            (s6 with vs_inst_idx := k) G9 tn9) /\
@@ -148,6 +152,16 @@ Proof
   `!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st6 st7)
           (s6 with vs_inst_idx := k) G tn7` by
     (simp[Abbr `tn7`] >> irule emit_storage_store_uniform_ptr >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s7` by
+    (strip_tac >> irule run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts st6 st7`, `s6`] >> simp[] >>
+     qpat_assum `emit_void _ _ st6 = _` (mp_then Any strip_assume_tac emitted_insts_emit_void) >>
+     Cases_on `tr` >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s8` by
+    (strip_tac >> irule run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts st7 st8`, `s7`] >> simp[] >>
+     qpat_assum `emit_op _ _ st7 = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   `op_taint tn7 lop = {} /\ op_taint tn7 bop = {} /\
    op_taint tn7 (Lit 1w) = {}` by
     (Cases_on `tr` >> gvs[Abbr `tn7`, op_taint_def]) >>
@@ -218,7 +232,7 @@ Theorem append_storage_suffix_ptr:
   eval_operand bop s8 = SOME slot /\
   op_taint tn bop = {} /\ op_taint tn lop = {} /\ op_taint tn vop = {} /\
   (!x. bop = Var x \/ lop = Var x \/ vop = Var x ==> not_fresh_at st3 x) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s3) ==>
   ?G9 tn9.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st3 st9)
            (s3 with vs_inst_idx := k) G9 tn9) /\
@@ -247,6 +261,8 @@ Proof
   `s8.vs_allocas = s7.vs_allocas /\ s8.vs_fmp = s7.vs_fmp /\
    s8.vs_requests = s7.vs_requests` by metis_tac[state_frame_ptr_fields] >>
   qpat_x_assum `state_frame s8 = _` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s6` by
+    (strip_tac >> metis_tac[append_state_frame_allocas]) >>
   drule_all append_storage_store_tail_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G6`, `D`] strip_assume_tac) >>
   suspend "compose"

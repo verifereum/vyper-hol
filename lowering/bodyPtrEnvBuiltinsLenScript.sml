@@ -82,7 +82,7 @@ QED
 
 Theorem ptr_inst_ok_nonmemory_load:
   MEM opc [SLOAD; TLOAD; DLOAD] /\ op_taint tn op = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc [op] [out]) s
 Proof
   strip_tac >> gvs[MEM] >>
@@ -273,7 +273,7 @@ QED
 
 Theorem length_load_instruction_properties:
   loc <> LocCalldata /\ op_taint tn src = {} /\
-  eval_operand src s = SOME w /\ ~ctx_has_dalloca ctx /\
+  eval_operand src s = SOME w /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (loc = LocMemory ==>
     (?p. src = Var p /\ ptr_covers G tn p s 32) /\
     (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem)) /\
@@ -352,7 +352,7 @@ Theorem ptr_vv_length_instruction_properties:
   (!v. read_result cx r es = (INL v,es) ==> value_has_type tv v) /\
   loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\
   loc <> LocCalldata /\ eval_operand (vv_operand vv) s = SOME w /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?opc.
     compile_builtin_len F imm (vv_operand vv) loc = emit_op opc [vv_operand vv] /\
     MEM opc [MLOAD; SLOAD; TLOAD; DLOAD] /\
