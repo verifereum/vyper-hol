@@ -18,7 +18,7 @@ QED
 
 
 Theorem prefix_prepare_callvalue_ptr:
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid CALLVALUE [] [x]) s
 Proof
   strip_tac >>
@@ -29,7 +29,7 @@ Proof
 QED
 
 Theorem prefix_prepare_zero_ptr:
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid ASSIGN [Lit 0w] [x]) s
 Proof
   strip_tac >>
@@ -78,7 +78,7 @@ QED
 
 Theorem prefix_prepare_callvalue_run:
   emit_op CALLVALUE [] st = (out,middle) /\ fn_has_code st middle fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   let x = STRING #"%" (toString st.cs_next_var);
       t = (update_var x s.vs_call_ctx.cc_callvalue s)
@@ -104,7 +104,7 @@ QED
 
 Theorem prefix_prepare_zero_run:
   emit_op ASSIGN [Lit 0w] st = (out,middle) /\ fn_has_code st middle fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   let x = STRING #"%" (toString st.cs_next_var);
       t = (update_var x 0w s) with vs_inst_idx := LENGTH middle.cs_current_insts
@@ -163,7 +163,7 @@ QED
 Theorem prefix_prepare_iszero_run:
   emit_op ISZERO [a] st = (out,middle) /\ fn_has_code st middle fn /\
   eval_operand a s = SOME 0w /\ op_taint tn a = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   let x = STRING #"%" (toString st.cs_next_var);
       t = (update_var x 1w s) with vs_inst_idx := LENGTH middle.cs_current_insts
@@ -192,7 +192,7 @@ QED
 Theorem prefix_prepare_assert_actual:
   emit_void ASSERT [a] st = ((),last) /\
   eval_operand a initial = SOME w /\ w <> 0w /\ op_taint tn a = {} /\
-  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   fresh_vars_wrt st initial /\ fn_has_code st last func /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>

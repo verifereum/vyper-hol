@@ -515,6 +515,7 @@ Resume abi_decode_loop_select_joint_exact[raw_suffix]:
 QED
 
 Resume abi_decode_loop_select_joint_exact[reject]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all abi_decode_scalar_guard_abort_joint >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `EVERY (\i. i.inst_opcode <> ASSERT_UNREACHABLE) (emitted_insts s2 sb)` by

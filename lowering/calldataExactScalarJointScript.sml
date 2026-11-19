@@ -20,7 +20,7 @@ Theorem exact_scalar_clamp_abort_joint:
   compile_abi_clamp_basetype value clamp sa = ((),sb) /\
   op_prov G value = NONE /\ op_taint tn value = {} /\
   (!x. x IN R ==> not_fresh_at sa x) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq (emitted_insts sa sb) s = Abort a t ==>

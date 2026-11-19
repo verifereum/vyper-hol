@@ -377,6 +377,7 @@ Proof
     (qpat_x_assum `?H. V H` strip_assume_tac >>
      qpat_x_assum `!H. V H ==> _` drule >>
      simp[bodyPtrDefsTheory.ghost_inv_at_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_decode_complex_header_run >> strip_tac
   >- (disj1_tac >> drule_all abi_decode_scalar_guard_abort_joint >>
       disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>

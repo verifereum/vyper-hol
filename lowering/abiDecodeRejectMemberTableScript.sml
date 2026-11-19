@@ -105,6 +105,7 @@ Proof
     disj2_tac >> simp[] >> goal_assum (drule_at Any) >>
     simp[venom_state_component_equality] >> (gvs[venom_state_component_equality, malformed_dynamic_member_offset_cut]))) >>
   rule_assum_tac BETA_RULE >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all malformed_table_member_setup_cut >>
   disch_then (DISJ_CASES_THEN2 (fn th => disj1_tac >> mp_tac th >> metis_tac[]) strip_assume_tac) >>
   disj2_tac >> goal_assum (drule_at Any) >>
