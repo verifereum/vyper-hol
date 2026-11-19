@@ -1,7 +1,7 @@
 Theory staticAbortOptStackFixedSource
 Ancestors
   asmSem asmIR asmSymSem asmOptimizer list rich_list pair arithmetic pred_set
-  finite_map words
+  finite_map words asmOpSim
 Libs
   BasicProvers
 
@@ -152,14 +152,6 @@ Proof
     (qspecl_then [`f k`,`l`,`origin`] mp_tac) >> simp[]
 QED
 
-Theorem fixed_fetch[local]:
-  t.as_pc < LENGTH p ==>
-  asm_steps lo opcs p 1 t = asm_step lo opcs (EL t.as_pc p) t
-Proof
-  rewrite_tac[numLib.num_CONV ``1:num``] >> strip_tac >> simp[asm_steps_def] >>
-  Cases_on `asm_step lo opcs (EL t.as_pc p) t` >> simp[asm_steps_def]
-QED
-
 Theorem fixed_source_next[local]:
   !shp. shp = (^fixed_shape p cc req pc height need tag boolean) ==>
   !runstep. runstep = asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p 1 ==>
@@ -187,7 +179,7 @@ Proof
                            (build_offset_to_pc p) (AsmOp name) t`
     by (qx_gen_tac `cur` >> strip_tac >>
         `cur.as_pc < LENGTH p /\ EL cur.as_pc p = AsmOp name` by metis_tac[] >>
-        simp[Abbr `runstep`, fixed_fetch]) >>
+        simp[Abbr `runstep`, asmOpSimTheory.asm_step_one]) >>
   `!t. shp x t ==> ((?u. runstep t = AsmOK u) \/ (?msg. runstep t = AsmError msg)) /\
           ((!u. runstep t = AsmOK u ==> m <= height x) /\
            (m <= height x ==> ?u. runstep t = AsmOK u)) /\
