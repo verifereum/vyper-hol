@@ -95,8 +95,8 @@ QED
 (* An arbitrary default state suffices: only these four fields enter the
    shape.  At a tagged slot the forward lookup uniquely fixes the word. *)
 Theorem decorated_shape_inhabited[local]:
-  !q cc req pc h need tag boolean.
-  let lo = SND (compute_label_offsets q) in
+  !q cc req pc h need tag boolean lo.
+  lo = SND (compute_label_offsets q) ==>
   (need ==> cc.cc_static) /\
   (!k. boolean k ==> k < h /\ tag k = NONE) /\
   (!k l orig. tag k = SOME(l,orig) ==>
@@ -116,8 +116,7 @@ Theorem decorated_shape_inhabited[local]:
               EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean k ==> k < h /\ (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
 Proof
-  rpt gen_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
-  qabbrev_tac `lo = SND (compute_label_offsets q)` >> strip_tac >>
+  rpt gen_tac >> disch_then kall_tac >> strip_tac >>
   qexists `(ARB:asm_state) with
     <|as_pc := pc; as_call_ctx := cc; as_requests := req;
       as_stack := GENLIST (\k. case tag k of NONE => 0w
@@ -134,20 +133,20 @@ QED
    to number A. R installs just the certified local arms. *)
 Theorem merge_rename_reachable_lift:
   !q cc req.
-  let Canon = \l j. ?off.
+  !Canon. Canon = (\l j. ?off.
     FLOOKUP (SND (compute_label_offsets q)) l = SOME off /\
-    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc q) off = SOME j in
-  let Target = \tag j. ?l orig. tag 0 = SOME(l,orig) /\ Canon l j in
-  let Slots = \h need tag boolean.
+    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc q) off = SOME j) ==>
+  !Target. Target = (\tag j. ?l orig. tag 0 = SOME(l,orig) /\ Canon l j) ==>
+  !Slots. Slots = (\h need tag boolean.
     (need ==> cc.cc_static) /\
     (!k. boolean k ==> k < h /\ tag k = NONE) /\
     (!k l orig. tag k = SOME(l,orig) ==>
       k < h /\ orig < LENGTH q /\
       (EL orig q = AsmPushLabel l \/ EL orig q = AsmPushOfst l 0) /\
-      ?j. Canon l j) in
-  let Row = \i h tag (arms:num -> num -> bool).
-    let fall = \j. j = i+1 in
-    let clear = \a. !k. k < a ==> tag k = NONE in
+      ?j. Canon l j)) ==>
+  !Row. Row = (\i h tag (arms:num -> num -> bool).
+    !fall. fall = (\j. j = i+1) ==>
+    !clear. clear = (\a. !k. k < a ==> tag k = NONE) ==>
     case EL i q of
       AsmLabel l => (!j hj. arms j hj <=> fall j /\ hj = h)
     | AsmPush bs => (!j hj. arms j hj <=> fall j /\ hj = h+1)
@@ -177,16 +176,16 @@ Theorem merge_rename_reachable_lift:
                  ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                    clear (asm_op_arity name) /\
                    (!j hj. arms j hj <=> fall j /\ hj = h-asm_op_arity name+m))
-    | _ => F in
-  let Flow = \i hi hj tx ty bx by'.
-    let ins = EL i q in
-    let inherit = \(src:num -> num option)
+    | _ => F) ==>
+  !Flow. Flow = (\i hi hj tx ty bx by'.
+    !ins. ins = EL i q ==>
+    !inherit. inherit = (\(src:num -> num option)
                   (fresh:num -> (string#num) option) (bnew:num -> bool).
       (!k l orig. ty k = SOME(l,orig) ==>
          k < hj /\ (fresh k = SOME(l,orig) \/
          ?a. src k = SOME a /\ a < hi /\ tx a = SOME(l,orig))) /\
       (!k. by' k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ bx a)) in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ bx a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs =>
@@ -211,7 +210,8 @@ Theorem merge_rename_reachable_lift:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + asm_op_arity name - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -220,12 +220,12 @@ Theorem merge_rename_reachable_lift:
                      asm_step (SND (compute_label_offsets q)) (build_offset_to_pc q)
                        ins t = AsmOK u ==>
                      (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F in
-  let Control = \i j tag.
+    | _ => F) ==>
+  !Control. Control = (\i j tag.
     if EL i q = AsmOp "JUMP" then Target tag j
     else if EL i q = AsmOp "JUMPI" then j = i+1 \/ Target tag j
-    else j = i+1 in
-  let Shape = \i h need tag boolean (t:asm_state).
+    else j = i+1) ==>
+  !Shape. Shape = (\i h need tag boolean (t:asm_state).
     t.as_pc = i /\ LENGTH t.as_stack = h /\ t.as_call_ctx = cc /\
     t.as_requests = req /\ (need ==> t.as_call_ctx.cc_static) /\
     (!k l orig. tag k = SOME(l,orig) ==>
@@ -235,7 +235,7 @@ Theorem merge_rename_reachable_lift:
       ?off j. FLOOKUP (SND (compute_label_offsets q)) l = SOME off /\
               off < dimword(:256) /\ FLOOKUP (build_offset_to_pc q) off = SOME j /\
               EL k t.as_stack = (n2w off:bytes32)) /\
-    (!k. boolean k ==> k < h /\ (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
+    (!k. boolean k ==> k < h /\ (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
   !V rank0 pc0 h0 need0 tag0 boolean0 (A:((num#num) # num option list) set)
     seed R.
     FINITE V /\ seed IN A /\
@@ -267,14 +267,12 @@ Theorem merge_rename_reachable_lift:
       boolean e = boolean0 (FST seed) /\ rank e = rank0 (FST seed)
 Proof
   ntac 3 gen_tac >>
-  map_every (fn name =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      RAND_CONV (REWRITE_CONV [combinTheory.S_DEF] THENC DEPTH_CONV BETA_CONV
-        THENC REWRITE_CONV [combinTheory.o_THM, combinTheory.C_THM]
-        THENC DEPTH_CONV BETA_CONV)) >> qx_gen_tac name >> disch_tac)
-    [`Canon`, `Target`, `Slots`, `Row`, `Flow`, `Control`, `Shape`] >>
+  ntac 7 (gen_tac >> disch_then
+    (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def)))) >>
   rpt gen_tac >> strip_tac >>
-  `FINITE A` by (irule bounded_occurrence_vectors >> metis_tac[]) >>
+  `FINITE A` by
+    (irule bounded_occurrence_vectors >> qexistsl [`V`, `h0`, `LENGTH q`] >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   qspecl_then [`A`, `seed`, `R`] mp_tac rooted_occurrences >>
   (impl_tac >- simp[]) >>
   disch_then (qx_choose_then `verts` (qx_choose_then `e` (qx_choose_then `dec`
@@ -296,7 +294,8 @@ Proof
       qunabbrev_tac `Slots` >> qunabbrev_tac `Canon` >>
       qunabbrev_tac `Shape` >> BETA_TAC >>
       POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
-      irule (BETA_RULE (REWRITE_RULE [LET_THM] decorated_shape_inhabited)) >>
+      irule (CONV_RULE (TOP_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)
+               decorated_shape_inhabited) >>
       rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, metis_tac[]]) >>
   rpt gen_tac >> strip_tac >>
   qpat_assum `!x y. E x y ==> _` (drule_then strip_assume_tac) >> simp[]

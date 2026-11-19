@@ -30,6 +30,10 @@ Proof
   qexistsl [`s2`,`1`] >> simp[static_abort_straight_def] >> decide_tac
 QED
 
+(* Instantiate the naming equalities before applying the existing row proof. *)
+val revert_row_names_conv = TOP_DEPTH_CONV
+  (FIRST_CONV [HO_REWR_CONV UNWIND_FORALL_THM2, BETA_CONV]);
+
 (* Keep both the positive opcode inventory and the exact row heights from the
    same administrative fragment. Its demands and static requirement are empty. *)
 Theorem revert_admin_row_heights[local]:
@@ -69,7 +73,8 @@ Theorem revert_admin_row_heights[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (MATCH_MP admin_prefix_open_fragment
-    (SIMP_RULE std_ss [LET_THM] generated_admin_micro_coverage)) >>
+    (SIMP_RULE std_ss []
+      (CONV_RULE revert_row_names_conv generated_admin_micro_coverage))) >>
   disch_then (qspecl_then [`p`,`b`,`fmp`,`ops`,`h`,`extra`,`0`,
                           `cc`,`req`] mp_tac) >>
   asm_simp_tac std_ss [] >>
@@ -139,8 +144,9 @@ QED
 Finalise revert_admin_row_heights
 
 Theorem generated_revert_cut_rows:
-  let lo' = SND(compute_label_offsets prog); otp = build_offset_to_pc prog in
-  let Shape = \pc height need tag boolean (x:num#num) (t:asm_state).
+  !lo'. lo' = SND(compute_label_offsets prog) ==>
+  !otp. otp = build_offset_to_pc prog ==>
+  !Shape. Shape = (\pc height need tag boolean (x:num#num) (t:asm_state).
     t.as_pc = pc x /\ LENGTH t.as_stack = height x /\
     t.as_call_ctx = cut.as_call_ctx /\ t.as_requests = cut.as_requests /\
     (need x ==> t.as_call_ctx.cc_static) /\
@@ -151,19 +157,21 @@ Theorem generated_revert_cut_rows:
        ?off dest. FLOOKUP lo' l = SOME off /\ off < dimword(:256) /\
          FLOOKUP otp off = SOME dest /\ EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean x k ==> k < height x /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
-  let target = \pc tag (x:num#num) (y:num#num).
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !target. target = (\pc tag (x:num#num) (y:num#num).
     ?l origin off. tag x 0 = SOME(l,origin) /\ FLOOKUP lo' l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP otp off = SOME(pc y) in
-  let Flow = \pc height tag boolean (x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) prog in
-    let inherit =
-      \(src:num -> num option) (fresh:num -> (string#num)option) (bnew:num -> bool).
+      off < dimword(:256) /\ FLOOKUP otp off = SOME(pc y)) ==>
+  !Flow. Flow = (\pc height tag boolean (x:num#num) (y:num#num).
+    !hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !ins. ins = EL (pc x) prog ==>
+    !inherit. inherit =
+      (\(src:num -> num option) (fresh:num -> (string#num)option) (bnew:num -> bool).
         (!k l origin. tag y k = SOME(l,origin) ==>
            k < hj /\ (fresh k = SOME(l,origin) \/
              ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
         (!k. boolean y k ==> k < hj /\
-           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a)) in
+           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\
@@ -185,75 +193,15 @@ Theorem generated_revert_cut_rows:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + asm_op_arity name - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
                  (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
                    !s v. LENGTH s.as_stack=hi /\ asm_step lo' otp ins s=AsmOK v ==>
                      (EL 0 v.as_stack=0w \/ EL 0 v.as_stack=1w)))
-    | _ => F in
-  let Rows = \A rank pc height need tag boolean edge.
-    (!x. x IN A ==>
-      (need x ==> cut.as_call_ctx.cc_static) /\
-      (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
-      (!k l origin. tag x k = SOME(l,origin) ==>
-         k < height x /\ origin < LENGTH prog /\
-         (EL origin prog = AsmPushLabel l \/ EL origin prog = AsmPushOfst l 0) /\
-         ?off dest. FLOOKUP lo' l = SOME off /\ off < dimword(:256) /\
-                    FLOOKUP otp off = SOME dest)) /\
-    (!x y. edge x y ==> x IN A /\ y IN A /\ rank y < (rank x:num) /\ Flow pc height tag boolean x y) /\
-    (!x. x IN A ==>
-      pc x < LENGTH prog /\
-      let h = height x in
-      let fall = \y. pc y = pc x+1 in
-      let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-      let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-      let next = \n. arm fall n /\ legal fall n in
-      let untagged = \a. !k. k<a ==> tag x k=NONE in
-      let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
-      case EL (pc x) prog of
-        AsmLabel l => next h
-      | AsmPush bs => next (h+1)
-      | AsmPushLabel l => IS_SOME (FLOOKUP lo' l) /\ next (h+1)
-      | AsmPushOfst l d => IS_SOME (FLOOKUP lo' l) /\ next (h+1)
-      | AsmOp name =>
-          if name="INVALID" then stop 0
-          else if name="REVERT" then stop 2
-          else if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
-               then cut.as_call_ctx.cc_static /\ stop (asm_op_arity name)
-          else
-            (case ALOOKUP dup_table name of
-               SOME n => n<h /\ next (h+1)
-             | NONE => case ALOOKUP swap_table name of
-                 SOME n => 0<n /\ n<h /\ next h
-               | NONE =>
-                   if name="JUMP" then
-                      1<=h /\ arm (target pc tag x) (h-1) /\ legal (target pc tag x) (h-1)
-                   else if name="JUMPI" then
-                      2<=h /\ tag x 1=NONE /\ arm fall (h-2) /\ arm (target pc tag x) (h-2) /\
-                      legal (\y. fall y \/ target pc tag x y) (h-2)
-                   else
-                      ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
-                          untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-      | _ => F) in
-  let Open = \A X rank pc height need tag boolean edge.
-    let S = Shape pc height need tag boolean in
-    FINITE A /\ X SUBSET A /\
-    (!x. x IN A ==> ?s. S x s) /\
-    (!x. x IN A DIFF X ==> pc x < LENGTH prog) /\
-    (!x y. edge x y ==> x IN A DIFF X /\ y IN A /\ rank y < (rank x:num) /\
-       Flow pc height tag boolean x y /\
-       (if EL (pc x) prog = AsmOp "JUMP" then target pc tag x y
-        else if EL (pc x) prog = AsmOp "JUMPI" then pc y = pc x+1 \/ target pc tag x y
-        else pc y = pc x+1)) /\
-    (!x s. x IN A DIFF X /\ S x s ==>
-       (?v. (asm_steps lo' otp prog 1 s = AsmRevert v \/
-             asm_steps lo' otp prog 1 s = AsmFault v) /\ v.as_requests=cut.as_requests) \/
-       (?y v. edge x y /\ asm_steps lo' otp prog 1 s = AsmOK v /\ S y v)) in
-  let Reach = \(R:(num#num)->(num#num)->bool) a x.
-    ?n (path:num->num#num).
-      path 0=a /\ path n=x /\ !k. k<n ==> R (path k) (path(SUC k)) in
+    | _ => F) ==>
   body_inv_abort rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 cvs cut Inv
@@ -265,12 +213,69 @@ Theorem generated_revert_cut_rows:
   asm_static_wf prog /\ (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
   in_revert_forward fn cvs ==>
   ?(V:(num#num)->bool) e rank pc height need tag boolean edge.
-    Open V {} rank pc height need tag boolean edge /\
-    e IN V /\ (!x. x IN V ==> Reach edge e x) /\
+    (!S. S = Shape pc height need tag boolean ==>
+      FINITE V /\ {} SUBSET V /\
+      (!x. x IN V ==> ?s. S x s) /\
+      (!x. x IN V DIFF {} ==> pc x < LENGTH prog) /\
+      (!x y. edge x y ==> x IN V DIFF {} /\ y IN V /\ rank y < (rank x:num) /\
+         Flow pc height tag boolean x y /\
+         (if EL (pc x) prog = AsmOp "JUMP" then target pc tag x y
+          else if EL (pc x) prog = AsmOp "JUMPI" then pc y = pc x+1 \/ target pc tag x y
+          else pc y = pc x+1)) /\
+      (!x s. x IN V DIFF {} /\ S x s ==>
+         (?v. (asm_steps lo' otp prog 1 s = AsmRevert v \/
+               asm_steps lo' otp prog 1 s = AsmFault v) /\ v.as_requests=cut.as_requests) \/
+         (?y v. edge x y /\ asm_steps lo' otp prog 1 s = AsmOK v /\ S y v))) /\
+    e IN V /\ (!x. x IN V ==>
+      ?n (path:num->num#num).
+        path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) /\
     Shape pc height need tag boolean e cut /\
-    (!j. tag e j=NONE /\ ~boolean e j) /\ Rows V rank pc height need tag boolean edge
+    (!j. tag e j=NONE /\ ~boolean e j) /\
+    ((!x. x IN V ==>
+       (need x ==> cut.as_call_ctx.cc_static) /\
+       (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
+       (!k l origin. tag x k = SOME(l,origin) ==>
+          k < height x /\ origin < LENGTH prog /\
+          (EL origin prog = AsmPushLabel l \/ EL origin prog = AsmPushOfst l 0) /\
+          ?off dest. FLOOKUP lo' l = SOME off /\ off < dimword(:256) /\
+                     FLOOKUP otp off = SOME dest)) /\
+     (!x y. edge x y ==> x IN V /\ y IN V /\ rank y < rank x /\ Flow pc height tag boolean x y) /\
+     (!x. x IN V ==>
+       pc x < LENGTH prog /\
+       (!h. h = height x ==>
+        !fall. fall = (\y. pc y = pc x+1) ==>
+        !arm. arm = (\P n. ?y. edge x y /\ P y /\ height y = n) ==>
+        !legal. legal = (\P n. !y. edge x y ==> P y /\ height y = n) ==>
+        !next. next = (\n. arm fall n /\ legal fall n) ==>
+        !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+        !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
+        case EL (pc x) prog of
+          AsmLabel l => next h
+        | AsmPush bs => next (h+1)
+        | AsmPushLabel l => IS_SOME (FLOOKUP lo' l) /\ next (h+1)
+        | AsmPushOfst l d => IS_SOME (FLOOKUP lo' l) /\ next (h+1)
+        | AsmOp name =>
+            if name="INVALID" then stop 0
+            else if name="REVERT" then stop 2
+            else if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
+                 then cut.as_call_ctx.cc_static /\ stop (asm_op_arity name)
+            else
+              (case ALOOKUP dup_table name of
+                 SOME n => n<h /\ next (h+1)
+               | NONE => case ALOOKUP swap_table name of
+                   SOME n => 0<n /\ n<h /\ next h
+                 | NONE =>
+                     if name="JUMP" then
+                        1<=h /\ arm (target pc tag x) (h-1) /\ legal (target pc tag x) (h-1)
+                     else if name="JUMPI" then
+                        2<=h /\ tag x 1=NONE /\ arm fall (h-2) /\ arm (target pc tag x) (h-2) /\
+                        legal (\y. fall y \/ target pc tag x y) (h-2)
+                     else
+                        ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
+                            untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
+        | _ => F)))
 Proof
-  SIMP_TAC bool_ss [LET_THM] >> strip_tac >>
+  CONV_TAC revert_row_names_conv >> SIMP_TAC bool_ss [] >> strip_tac >>
   `LENGTH cut.as_stack = LENGTH ps.ps_stack + LENGTH rest /\
    lo = SND(compute_label_offsets prog)` by
     (qhdtm_assum `body_inv_abort` (strip_assume_tac o REWRITE_RULE [body_inv_abort_def]) >>

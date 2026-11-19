@@ -4,13 +4,13 @@ Ancestors
   asmOptMergeJumpdests asmOptimizer asmSymSem asmSymOwnCode list rich_list
 
 Theorem merge_rename_nonjump_fetch_ok:
-  let q = MAP (rename_push_label x y) p;
-      i = a.sym_base.as_pc in
-  let inst = EL i p in
+  !i. i = a.sym_base.as_pc ==>
+  !inst. inst = EL i p ==>
     rn_rel x y a b /\ ~sym_data_label p env x /\ i < LENGTH p /\
     inst <> AsmOp "JUMP" /\ inst <> AsmOp "JUMPI" /\
     sym_steps p env 1 a = SymOK t ==>
-    ?t'. sym_steps q env 1 b = SymOK t' /\ rn_rel x y t t'
+    ?t'. sym_steps (MAP (rename_push_label x y) p) env 1 b = SymOK t' /\
+         rn_rel x y t t'
 Proof
   simp[] >> strip_tac >>
   qabbrev_tac `inst = EL a.sym_base.as_pc p` >>

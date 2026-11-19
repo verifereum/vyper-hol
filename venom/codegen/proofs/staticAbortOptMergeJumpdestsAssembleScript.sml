@@ -8,11 +8,12 @@ Ancestors
   asmToBytecodeProofs asmDataEnv staticAbortStraight rat words finite_map pred_set
   indexedLists list rich_list arithmetic alist option pair
 
-fun expand_lets th =
-  CONV_RULE (REDEPTH_CONV (BETA_CONV ORELSEC REWR_CONV LET_THM)) th
+val expand_names = TOP_DEPTH_CONV
+  (Unwind.UNWIND_FORALL_CONV ORELSEC BETA_CONV ORELSEC REWR_CONV LET_THM)
+fun expand_lets th = CONV_RULE expand_names th
 
-fun bind_lets names =
-  map_every (fn name => pairTools.LET_INTRO_TAC >> disch_then (mk_asm name)) names
+fun bind_names names =
+  map_every (fn name => gen_tac >> disch_then (mk_asm name)) names
 
 Theorem rename_synchronized_root[local]:
   rn_rel x y e f /\ asm_sym_rel p env cut e /\
@@ -46,15 +47,15 @@ QED
 (* Select a producer using the value in the actual stopped stack, not the
    old origin or the numeric offset.  The projection may drop a data label. *)
 Theorem rename_root_choices[local]:
-  let C = \l j. ?off. FLOOKUP (SND (compute_label_offsets q)) l = SOME off /\
-    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc q) off = SOME j in
-  let Prod = \i a. i < LENGTH q /\
-    (EL i q = AsmPushLabel a \/ EL i q = AsmPushOfst a 0) in
-  let G = \old choice. case old of NONE => choice = NONE
-    | SOME (l,o') => ?i a. choice = SOME i /\ Prod i a /\ (a = l \/ l = x /\ a = y) in
-  let E = \u. case u of NONE => NONE
+  !C. C = (\l j. ?off. FLOOKUP (SND (compute_label_offsets q)) l = SOME off /\
+    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc q) off = SOME j) ==>
+  !Prod. Prod = (\i a. i < LENGTH q /\
+    (EL i q = AsmPushLabel a \/ EL i q = AsmPushOfst a 0)) ==>
+  !G. G = (\old choice. case old of NONE => choice = NONE
+    | SOME (l,o') => ?i a. choice = SOME i /\ Prod i a /\ (a = l \/ l = x /\ a = y)) ==>
+  !E. E = (\u. case u of NONE => NONE
     | SOME i => if ?a j. Prod i a /\ C a j
-                then SOME((@a. Prod i a),i) else NONE in
+                then SOME((@a. Prod i a),i) else NONE) ==>
   sym_steps q env n (sym_init s) = SymOK f /\ LENGTH f.sym_stack = h /\
   (!k l o'. tag k = SOME(l,o') ==> k < LENGTH f.sym_stack /\
      ?a. EL k f.sym_stack = Lab a 0 /\ (a = l \/ (l = x /\ a = y))) ==>
@@ -62,7 +63,7 @@ Theorem rename_root_choices[local]:
     (!k a i. (if k < h then E (EL k D) else NONE) = SOME(a,i) ==>
       k < LENGTH f.sym_stack /\ EL k f.sym_stack = Lab a 0)
 Proof
-  bind_lets ["canon", "prod", "admit", "expose"] >>
+  bind_names ["canon", "prod", "admit", "expose"] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!k l o'. tag k = SOME(l,o') ==>
     ?i a. Prod i a /\ EL k f.sym_stack = Lab a 0 /\ (a = l \/ l = x /\ a = y)` by
@@ -98,7 +99,7 @@ Proof
 QED
 
 Theorem rename_protected_endpoint[local]:
-  let Shape = \p cc req pc height need tag boolean (i:num#num) (t:asm_state).
+  !Shape. Shape = (\p cc req pc height need tag boolean (i:num#num) (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -110,15 +111,17 @@ Theorem rename_protected_endpoint[local]:
        off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest /\
        EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
-  let Flow = \p pc height tag boolean (x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit = \(src:num -> num option) (fresh:num -> (string#num)option) (bnew:num -> bool).
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !Flow. Flow = (\p pc height tag boolean (x:num#num) (y:num#num).
+    !hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !ins. ins = EL (pc x) p ==>
+    !inherit. inherit = (\(src:num -> num option) (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a)) in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\
@@ -142,7 +145,8 @@ Theorem rename_protected_endpoint[local]:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + asm_op_arity name - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -151,13 +155,13 @@ Theorem rename_protected_endpoint[local]:
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins t = AsmOK u ==>
                      (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F in
-  let Open = \p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
+    | _ => F) ==>
+  !Open. Open = (\p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
     (tag:(num#num)->num->(string#num)option) (boolean:(num#num)->num->bool) edge.
-    let S = Shape p cc req pc height need tag boolean in
-    let target = \x y. ?l origin off. tag x 0 = SOME(l,origin) /\
+    !S. S = Shape p cc req pc height need tag boolean ==>
+    !target. target = (\x y. ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\ off < dimword(:256) /\
-      FLOOKUP (build_offset_to_pc p) off = SOME(pc y) in
+      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
     FINITE V /\ X SUBSET V /\
     (!x. x IN V ==> ?t. S x t) /\
     (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -174,8 +178,8 @@ Theorem rename_protected_endpoint[local]:
               asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
                     p 1 t = AsmFault u) /\ u.as_requests=req) \/
        (?y u. edge x y /\ asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-            p 1 t = AsmOK u /\ S y u)) in
-  let q = MAP (rename_push_label x y) p in
+            p 1 t = AsmOK u /\ S y u))) ==>
+  !q. q = MAP (rename_push_label x y) p ==>
   asm_static_wf p /\ p = pre ++ [AsmLabel x; next; third] ++ tail /\
   ((next = AsmLabel y /\ y <> x) \/ (next = AsmPushLabel y /\ third = AsmOp "JUMP")) /\
   sym_steps p env n (sym_init s) = SymOK e /\
@@ -192,7 +196,7 @@ Theorem rename_protected_endpoint[local]:
     (!k. boolean z k ==> k < LENGTH f.sym_stack /\
        (EL k f.sym_stack = Val 0w \/ EL k f.sym_stack = Val 1w))
 Proof
-  bind_lets ["shape", "flow", "open", "mapped"] >>
+  bind_names ["shape", "flow", "open", "mapped"] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   asm "shape" (fn sh =>
     qpat_assum `Shape p cc req pc height need tag boolean w cut`
@@ -249,8 +253,8 @@ QED
 Finalise rename_protected_endpoint
 
 Theorem rename_actual_root[local]:
-  let lo = SND (compute_label_offsets q) in
-  let otp = build_offset_to_pc q in
+  !lo. lo = SND (compute_label_offsets q) ==>
+  !otp. otp = build_offset_to_pc q ==>
   asm_sym_rel q env t f /\ t.as_pc = i /\ LENGTH t.as_stack = h /\
   t.as_call_ctx = cc /\ t.as_requests = req /\ (need ==> cc.cc_static) /\
   (!k l orig. tag k = SOME(l,orig) ==>
@@ -269,7 +273,7 @@ Theorem rename_actual_root[local]:
            EL k t.as_stack = (n2w off:bytes32)) /\
   (!k. boolean k ==> k < h /\ (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
 Proof
-  simp[LET_THM] >> strip_tac >> simp[] >>
+  CONV_TAC expand_names >> strip_tac >> simp[] >>
   qpat_x_assum `asm_sym_rel q env t f`
     (CONJUNCTS_THEN2 (CONJUNCTS_THEN2 assume_tac (mk_asm "slots") o
                      REWRITE_RULE[LIST_REL_EL_EQN]) kall_tac o REWRITE_RULE[asm_sym_rel_def]) >>
@@ -298,19 +302,19 @@ Proof
 QED
 
 Theorem rename_row_dispatch[local]:
-  let lo = SND (compute_label_offsets p) in
-  let otp = build_offset_to_pc p in
-  let Dest = \j. ?l (orig:num). tag 0 = SOME(l,orig) /\
-       ?off. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\ FLOOKUP otp off = SOME j in
-  let A = \j hj. ?v:num#num. R v /\ Pc v=j /\ H v=hj in
-  let fall = \j. j=i+1 in
-  let clear = \n. !k. k<n ==> tag k=NONE in
-  let arm = \P h. ?v. R v /\ P (Pc v) /\ H v=h in
-  let legal = \P h. !v. R v ==> P (Pc v) /\ H v=h in
-  let next = \h. arm fall h /\ legal fall h in
-  let stop = \n. n<=h /\ clear n /\ !v. ~R v in
-  let term = \name. MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"] in
-  (case EL i p of
+  !lo. lo = SND (compute_label_offsets p) ==>
+  !otp. otp = build_offset_to_pc p ==>
+  !Dest. Dest = (\j. ?l (orig:num). tag 0 = SOME(l,orig) /\
+       ?off. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\ FLOOKUP otp off = SOME j) ==>
+  !A. A = (\j hj. ?v:num#num. R v /\ Pc v=j /\ H v=hj) ==>
+  !fall. fall = (\j. j=i+1) ==>
+  !clear. clear = (\n. !k. k<n ==> tag k=NONE) ==>
+  !arm. arm = (\P h. ?v. R v /\ P (Pc v) /\ H v=h) ==>
+  !legal. legal = (\P h. !v. R v ==> P (Pc v) /\ H v=h) ==>
+  !next. next = (\h. arm fall h /\ legal fall h) ==>
+  !stop. stop = (\n. n<=h /\ clear n /\ !v. ~R v) ==>
+  !term. term = (\name. MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]) ==>
+  ((case EL i p of
     AsmLabel l => (!j hj. A j hj <=> fall j /\ hj=h)
   | AsmPush bs => (!j hj. A j hj <=> fall j /\ hj=h+1)
   | AsmPushLabel l => IS_SOME (FLOOKUP lo l) /\ (!j hj. A j hj <=> fall j /\ hj=h+1)
@@ -351,9 +355,9 @@ Theorem rename_row_dispatch[local]:
                   arm fall (h-2) /\ arm Dest (h-2) /\ legal (\j. fall j \/ Dest j) (h-2)
                 else ?m. static_abort_straight name m /\ asm_op_arity name<=h /\
                          clear (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-  | _ => F)
+  | _ => F))
 Proof
-  bind_lets [".lo",".otp","target","image",".fall",".clear",".arm",".legal",".next",".stop",".term"] >>
+  bind_names [".lo",".otp","target","image",".fall",".clear",".arm",".legal",".next",".stop",".term"] >>
   `!j k. Dest j /\ Dest k ==> j=k` by (simp[markerLib.L "target"] >> metis_tac[SOME_11, pairTheory.PAIR_EQ]) >>
   `!n. (!j hj. A j hj <=> fall j /\ hj=n) <=> next n` by
     (simp[markerLib.L "image", markerLib.L ".next", markerLib.L ".fall",
@@ -415,12 +419,12 @@ fun unfold_fact labels pat ttac = named_equations labels
   (fn eqs => qpat_assum pat (ttac o expand_lets o PURE_REWRITE_RULE eqs))
 
 Theorem merge_rename_covered_cut:
-  let C = \r l j. ?off. FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
-    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j in
-  let Target = \r tags j. ?l orig off. tags 0 = SOME(l,orig) /\
+  !C. C = (\r l j. ?off. FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
+    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j) ==>
+  !Target. Target = (\r tags j. ?l orig off. tags 0 = SOME(l,orig) /\
     FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
-    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j in
-  let Shape = \r cc req pc height need tag boolean (v:num#num) (t:asm_state).
+    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j) ==>
+  !Shape. Shape = (\r cc req pc height need tag boolean (v:num#num) (t:asm_state).
     t.as_pc = pc v /\ LENGTH t.as_stack = height v /\
     t.as_call_ctx = cc /\ t.as_requests = req /\ (need v ==> t.as_call_ctx.cc_static) /\
     (!k l orig. tag v k = SOME(l,orig) ==>
@@ -429,13 +433,15 @@ Theorem merge_rename_covered_cut:
        ?off j. FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
          off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j /\
          EL k t.as_stack = (n2w off:bytes32)) /\
-    (!k. boolean v k ==> k < height v /\ (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
-  let Flow = \r pc height tag boolean (a:num#num) (b:num#num).
-    let hi = height a; hj = height b; ins = EL (pc a) r in
-    let inherit = \(src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
+    (!k. boolean v k ==> k < height v /\ (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !Flow. Flow = (\r pc height tag boolean (a:num#num) (b:num#num).
+    !hi. hi = height a ==>
+    !hj. hj = height b ==>
+    !ins. ins = EL (pc a) r ==>
+    !inherit. inherit = (\(src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
       (!k l orig. tag b k = SOME(l,orig) ==>
         k<hj /\ (fresh k = SOME(l,orig) \/ ?j. src k = SOME j /\ j<hi /\ tag a j = SOME(l,orig))) /\
-      (!k. boolean b k ==> k<hj /\ (bnew k \/ ?j. src k = SOME j /\ j<hi /\ boolean a j)) in
+      (!k. boolean b k ==> k<hj /\ (bnew k \/ ?j. src k = SOME j /\ j<hi /\ boolean a j))) ==>
     case ins of
       AsmLabel l => hj=hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj=hi+1 /\
@@ -454,32 +460,34 @@ Theorem merge_rename_covered_cut:
          | NONE => case ALOOKUP swap_table name of
              SOME n => 0<n /\ n<hi /\ hj=hi /\
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k)) (\k. NONE) (\k. F)
-           | NONE => let n=asm_op_arity name; m=hj+asm_op_arity name-hi in
+           | NONE =>
+               !n. n = asm_op_arity name ==>
+               !m. m = hj+asm_op_arity name-hi ==>
                n<=hi /\ hj=m+(hi-n) /\ ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+n)) (\k. NONE)
                  (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
                     !t u. LENGTH t.as_stack=hi /\
                       asm_step (SND (compute_label_offsets r)) (build_offset_to_pc r) ins t = AsmOK u ==>
                       EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w))
-    | _ => F in
-  let EdgeOK = \r pc height tag boolean a b.
+    | _ => F) ==>
+  !EdgeOK. EdgeOK = (\r pc height tag boolean a b.
     Flow r pc height tag boolean a b /\
     (if EL (pc a) r = AsmOp "JUMP" then Target r (tag a) (pc b)
      else if EL (pc a) r = AsmOp "JUMPI" then pc b = pc a+1 \/ Target r (tag a) (pc b)
-     else pc b = pc a+1) in
-  let Slots = \r cc h need tag boolean.
+     else pc b = pc a+1)) ==>
+  !Slots. Slots = (\r cc h need tag boolean.
     (need ==> cc.cc_static) /\ (!k. boolean k ==> k<h /\ tag k=NONE) /\
     (!k l orig. tag k=SOME(l,orig) ==> k<h /\ orig<LENGTH r /\
       (EL orig r=AsmPushLabel l \/ EL orig r=AsmPushOfst l 0) /\
-      ?j. C r l j) in
-  let Dispatch = \r cc i h tag (pc:num#num->num) height R.
-    let fall = \v. pc v=i+1 in
-    let arm = \P n. ?v. R v /\ P v /\ height v=n in
-    let legal = \P n. !v. R v ==> P v /\ height v=n in
-    let next = \n. arm fall n /\ legal fall n in
-    let clear = \n. !k. k<n ==> tag k=NONE in
-    let stop = \n. n<=h /\ clear n /\ !v. ~R v in
-    let dst = \v. Target r tag (pc v) in
+      ?j. C r l j)) ==>
+  !Dispatch. Dispatch = (\r cc i h tag (pc:num#num->num) height R.
+    !fall. fall = (\v. pc v=i+1) ==>
+    !arm. arm = (\P n. ?v. R v /\ P v /\ height v=n) ==>
+    !legal. legal = (\P n. !v. R v ==> P v /\ height v=n) ==>
+    !next. next = (\n. arm fall n /\ legal fall n) ==>
+    !clear. clear = (\n. !k. k<n ==> tag k=NONE) ==>
+    !stop. stop = (\n. n<=h /\ clear n /\ !v. ~R v) ==>
+    !dst. dst = (\v. Target r tag (pc v)) ==>
     case EL i r of
       AsmLabel l => next h
     | AsmPush bs => next (h+1)
@@ -500,15 +508,15 @@ Theorem merge_rename_covered_cut:
                  arm fall (h-2) /\ arm dst (h-2) /\ legal (\v. fall v \/ dst v) (h-2)
                else ?m. static_abort_straight name m /\ asm_op_arity name<=h /\
                     clear (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-    | _ => F in
-  let Rows = \r cc V X (rank:num#num->num) pc height need tag boolean edge.
+    | _ => F) ==>
+  !Rows. Rows = (\r cc V X (rank:num#num->num) pc height need tag boolean edge.
     (!v. v IN V ==> Slots r cc (height v) (need v) (tag v) (boolean v)) /\
     (!a b. edge a b ==> a IN V DIFF X /\ b IN V /\ rank b<rank a /\
       Flow r pc height tag boolean a b) /\
     (!v. v IN V DIFF X ==> pc v<LENGTH r /\
-      Dispatch r cc (pc v) (height v) (tag v) pc height (edge v)) in
-  let Open = \r cc req V X (rank:num#num->num) pc height need tag boolean edge.
-    let S = Shape r cc req pc height need tag boolean in
+      Dispatch r cc (pc v) (height v) (tag v) pc height (edge v))) ==>
+  !Open. Open = (\r cc req V X (rank:num#num->num) pc height need tag boolean edge.
+    !S. S = Shape r cc req pc height need tag boolean ==>
     FINITE V /\ X SUBSET V /\ (!v. v IN V ==> ?t. S v t) /\
     (!v. v IN V DIFF X ==> pc v<LENGTH r) /\
     (!a b. edge a b ==> a IN V DIFF X /\ b IN V /\ rank b<rank a /\
@@ -517,14 +525,14 @@ Theorem merge_rename_covered_cut:
        (?u. (asm_steps (SND (compute_label_offsets r)) (build_offset_to_pc r) r 1 t = AsmRevert u \/
              asm_steps (SND (compute_label_offsets r)) (build_offset_to_pc r) r 1 t = AsmFault u) /\
              u.as_requests=req) \/
-       (?w u. edge v w /\ asm_steps (SND (compute_label_offsets r)) (build_offset_to_pc r) r 1 t = AsmOK u /\ S w u)) in
-  let Reach = \(edge:(num#num)->(num#num)->bool) v w.
-    ?n (path:num->num#num). path 0=v /\ path n=w /\ !k. k<n ==> edge (path k) (path (SUC k)) in
-  let Root = \f tag boolean.
+       (?w u. edge v w /\ asm_steps (SND (compute_label_offsets r)) (build_offset_to_pc r) r 1 t = AsmOK u /\ S w u))) ==>
+  !Reach. Reach = (\(edge:(num#num)->(num#num)->bool) v w.
+    ?n (path:num->num#num). path 0=v /\ path n=w /\ !k. k<n ==> edge (path k) (path (SUC k))) ==>
+  !Root. Root = (\f tag boolean.
     (!k l orig. tag k=SOME(l,orig) ==> k<LENGTH f.sym_stack /\ EL k f.sym_stack=Lab l 0) /\
-    (!k. boolean k ==> k<LENGTH f.sym_stack /\ (EL k f.sym_stack=Val 0w \/ EL k f.sym_stack=Val 1w)) in
-  let q = MAP (rename_push_label x y) p in
-  let env0 = asm_data_env p0 (assemble p0 ++ data) in
+    (!k. boolean k ==> k<LENGTH f.sym_stack /\ (EL k f.sym_stack=Val 0w \/ EL k f.sym_stack=Val 1w))) ==>
+  !q. q = MAP (rename_push_label x y) p ==>
+  !env0. env0 = asm_data_env p0 (assemble p0 ++ data) ==>
   asm_static_wf p0 /\ asm_static_wf p /\ FILTER is_data_inst p = FILTER is_data_inst p0 /\
   s.as_pc=0 /\ s.as_code=assemble p0 ++ data /\
   p = pre ++ [AsmLabel x; next; third] ++ tail /\
@@ -549,7 +557,7 @@ Theorem merge_rename_covered_cut:
     z IN W /\ (!v. v IN W ==> Reach R z v) /\
     Shape q cc req Pc H Nd Tg B z t /\ Root g (Tg z) (B z) /\ req <<= final_req
 Proof
-  bind_lets ["canon","tgt","shape","flow","edgeOK","slots","dispatch","rows","open",
+  bind_names ["canon","tgt","shape","flow","edgeOK","slots","dispatch","rows","open",
             "reach","root","mapped","env_init"] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `asm_static_wf q` by
@@ -595,8 +603,8 @@ Resume merge_rename_covered_cut[prefix]:
 QED
 
 Resume merge_rename_covered_cut[arms]:
-  `!l j. (C' p l j <=> INDEX_OF (AsmLabel l) p = SOME j) /\
-         (C' q l j <=> INDEX_OF (AsmLabel l) p = SOME j)` by
+  `!l j. (C p l j <=> INDEX_OF (AsmLabel l) p = SOME j) /\
+         (C q l j <=> INDEX_OF (AsmLabel l) p = SOME j)` by
     (qspecl_then [`p`,`x`,`y`] mp_tac (expand_lets merge_rename_named_layout) >>
      (impl_tac >-
        ((reverse conj_tac >- first_assum ACCEPT_TAC) >>
@@ -608,7 +616,7 @@ Resume merge_rename_covered_cut[arms]:
   qabbrev_tac `ImageRow = \r cc i h (ts:num->(string#num) option) (arms:num->num->bool).
     let fall = \j. j = i+1 in
     let clear = \a. !k. k<a ==> ts k=NONE in
-    let dest = \j. ?l orig. ts 0=SOME(l,orig) /\ C' r l j in
+    let dest = \j. ?l orig. ts 0=SOME(l,orig) /\ C r l j in
     case EL i r of
       AsmLabel l => (!j hj. arms j hj <=> fall j /\ hj=h)
     | AsmPush bs => (!j hj. arms j hj <=> fall j /\ hj=h+1)
@@ -634,7 +642,7 @@ Resume merge_rename_covered_cut[arms]:
                  clear (asm_op_arity name) /\
                  (!j hj. arms j hj <=> fall j /\ hj=h-asm_op_arity name+m))
     | _ => F` >>
-  `!r ts j. Target r ts j <=> ?l orig. ts 0=SOME(l,orig) /\ C' r l j` by
+  `!r ts j. Target r ts j <=> ?l orig. ts 0=SOME(l,orig) /\ C r l j` by
     (unfold_named ["tgt","canon"] >> POP_ASSUM_LIST (K ALL_TAC) >>
      rpt gen_tac >> eq_tac
      >- (disch_then (qx_choose_then `l` (qx_choose_then `o'`
@@ -652,13 +660,13 @@ Resume merge_rename_covered_cut[arms]:
      unfold_named ["dispatch"] >>
      qpat_assum `!r ts j. Target r ts j <=> _` (pure_rewrite_tac o single) >>
      unfold_named ["canon"] >>
-     CONV_TAC (REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV)) >>
+     CONV_TAC expand_names >>
      MATCH_ACCEPT_TAC (expand_lets rename_row_dispatch)) >>
   mp_tac (expand_lets (Q.INST [`nr` |-> `rank:num#num->num`]
     (Q.INST [`rank` |-> `\a:num#num. (&(nr a:num):rat)`] merge_rename_decorated_arms))) >>
   rewrite_tac [RAT_OF_NUM_LES] >>
   (impl_tac >-
-    (unfold_fact ["canon"] `!l j. (C' p l j <=> _) /\ _` assume_tac >>
+    (unfold_fact ["canon"] `!l j. (C p l j <=> _) /\ _` assume_tac >>
      unfold_fact ["open","edgeOK","shape","flow","tgt"]
        `Open p cc req V {} rank pc height need tag boolean edge`
        (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [DIFF_EMPTY, GSYM CONJ_ASSOC]) >>
@@ -680,7 +688,7 @@ Resume merge_rename_covered_cut[arms]:
              explicit six-variable Q.INST failed to parse. *)
           `Dispatch p cc (pc v) (height v) (tag v) pc height (edge v)` by
             (unfold_named ["dispatch","tgt"] >>
-             CONV_TAC (REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV)) >>
+             CONV_TAC expand_names >>
              first_assum ACCEPT_TAC) >>
           `ImageRow p cc (pc v) (height v) (tag v)
              (\j n. ?b. edge v b /\ pc b=j /\ height b=n)` by
@@ -703,7 +711,7 @@ Resume merge_rename_covered_cut[arms]:
   qabbrev_tac `ChoiceOK = \(old:(string#num) option) choice. case old of NONE => choice = NONE
     | SOME (l,o') => ?i a. choice = SOME i /\ Prod i a /\ (a = l \/ l = x /\ a = y)` >>
   qabbrev_tac `Expose = \u. case u of NONE => NONE
-    | SOME i => if ?a j. Prod i a /\ C' q a j
+    | SOME i => if ?a j. Prod i a /\ C q a j
                 then SOME((@a. Prod i a),i) else NONE` >>
   qabbrev_tac `Decor = {u:((num#num)#num option list) | FST u IN V /\
     LENGTH (SND u) = height (FST u) /\
@@ -757,7 +765,7 @@ Resume merge_rename_covered_cut[package]:
      conj_tac >- (qpat_assum `!a b. _ ==> nat_rank a < nat_rank b` irule >>
                   rpt conj_tac >> first_assum ACCEPT_TAC) >>
      unfold_named ["edgeOK","flow","tgt"] >>
-     CONV_TAC (REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV)) >>
+     CONV_TAC expand_names >>
      unfold_fact ["tgt","canon"] `!r ts j. Target r ts j <=> _` (fn dest_eq =>
        rewrite_tac [dest_eq, CONJ_ASSOC] >>
        asm "lifted_edge" (ACCEPT_TAC o REWRITE_RULE [CONJ_ASSOC]))) >>
@@ -774,7 +782,7 @@ Resume merge_rename_covered_cut[package]:
        (qpat_assum `Abbrev (ImageRow = _)`
           (pure_rewrite_tac o single o REWRITE_RULE [markerTheory.Abbrev_def]) >>
         unfold_named ["canon"] >>
-        CONV_TAC (REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV)) >>
+        CONV_TAC expand_names >>
         rewrite_tac [CONJ_ASSOC] >>
         first_assum (ACCEPT_TAC o REWRITE_RULE [CONJ_ASSOC])) >>
      qpat_assum `!r cc i h ts P H S. ImageRow r cc i h ts _ <=> _`
@@ -837,7 +845,7 @@ Resume merge_rename_covered_cut[package]:
             (drule_then (CONJUNCTS_THEN2 assume_tac (assume_tac o CONJUNCT2))) >>
           conj_tac >> first_assum ACCEPT_TAC) >>
       unfold_named ["reach"] >> rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
-  unfold_named ["open"] >> pure_rewrite_tac [LET_THM,DIFF_EMPTY] >> BETA_TAC >>
+  unfold_named ["open"] >> CONV_TAC expand_names >> pure_rewrite_tac [DIFF_EMPTY] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (unfold_named ["shape"] >> first_assum ACCEPT_TAC) >>
