@@ -14,7 +14,8 @@ Theorem bytestring_source_size_full_run:
   step_inst_base
     (mk_inst sa.cs_next_id opc ops [STRING #"%" (toString sa.cs_next_var)]) s =
     OK (update_var (STRING #"%" (toString sa.cs_next_var)) wl s) /\
-  allocas_from lo s /\ alloca_inv s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ alloca_inv s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?out t G' tn'.

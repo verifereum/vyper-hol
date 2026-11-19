@@ -63,6 +63,7 @@ Proof
    (!i. w2n pw <= i /\ i < w2n pw+32 ==> i NOTIN tn.t_mem)` by
     (conj_tac >- decide_tac >> rpt gen_tac >> strip_tac >>
      qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem` irule >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SRULE [] (Q.INST [`ps` |-> `0`, `ns` |-> `64`]
     (SPEC_ALL ec_point_word_transfer_origin_ptr_path))) >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
@@ -95,6 +96,7 @@ Proof
   `pd+32+32 <= nd /\
    (!i. w2n pw+32 <= i /\ i < w2n pw+32+32 ==> i NOTIN tu.t_mem)` by
     (conj_tac >- decide_tac >> simp[arithmeticTheory.ADD_ASSOC]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all (SRULE [] (Q.INST [`ps` |-> `32`, `ns` |-> `64`]
     (SPEC_ALL ec_point_word_transfer_origin_ptr_path))) >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
