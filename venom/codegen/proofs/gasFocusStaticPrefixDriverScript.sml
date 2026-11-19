@@ -98,5 +98,36 @@ Theorem focus_producer_finalizer_static:
                        (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) =
                      Abort ExHalt_abort u))
 Proof
-  NO_TAC
+  assume_tac (Q.GENL [`pre`, `t`, `t'`, `stage`] focus_finalizer_select_replay) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all focus_packet_pipeline_stages >> strip_tac >>
+  qpat_x_assum `!pre t t' stage. _`
+    (qspecl_then [`pre`, `t`, `t'`, `stage`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE (disch_tac >> first_assum ACCEPT_TAC)))) >>
+  disch_then (qx_choosel_then [`raw_slots`, `sites`, `unused`] strip_assume_tac) >>
+  map_every qexists_tac [`raw_slots`, `sites`, `unused`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> disch_tac >>
+  qpat_x_assum `!raw. LIST_REL _ _ raw ==> _` (qspec_then `raw` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `!D. _ ==> _ \/ _` (qspec_then `D` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (DISJ_CASES_THEN2
+    (qx_choose_then `orc` strip_assume_tac) (map_every assume_tac o CONJUNCTS))
+  >- (mp_tac (Q.INST [`rpolicy` |-> `rpolicy`, `pre` |-> `pre`, `t` |-> `t`,
+        `nm` |-> `nm`, `stage` |-> `stage`, `cpl` |-> `cpl`,
+        `prog` |-> `prog`, `es0` |-> `es0`, `orc` |-> `orc`] focus_static_replay_exit) >>
+      (impl_tac >- (rpt conj_tac >>
+        (first_assum ACCEPT_TAC ORELSE
+         (disch_tac >>
+          qpat_assum `fin = asm_opt_finalizer ==> label_flow_ok _ /\ _`
+            (fn th => drule th >> simp[]))))) >>
+      disch_then ACCEPT_TAC) >>
+  rpt conj_tac >>
+  (first_assum ACCEPT_TAC ORELSE (disj2_tac >> conj_tac >> first_assum ACCEPT_TAC))
 QED
