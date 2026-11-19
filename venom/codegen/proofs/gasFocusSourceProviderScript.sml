@@ -1278,6 +1278,8 @@ QED
 local
   val finish_data_row =
     irule (CONV_RULE (RAND_CONV (SCONV [])) (BETA_RULE focus_opt_ld_effect_row)) >>
+    qpat_assum `gn = ld_image f` (fn image =>
+      qpat_assum `active_inst gn j _` (assume_tac o REWRITE_RULE [image])) >>
     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
     goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
     goal_assum (drule_at (Pat `ld_vars _ _ (_ with <|lf_src := _;lf_tgt := _;lf_H := _;lf_tv := _|>)`)) >>
@@ -4284,6 +4286,7 @@ Proof
   `!q. LIST_REL (\key slot. slot = ALOOKUP obs key)
         (FLAT (TAKE q ks)) (FLAT (TAKE q ms))` by
     (drule_all dft_packet_retained_prefix_lookup >> simp[]) >>
+  qpat_assum `!q. LIST_REL _ (FLAT (TAKE q ks)) _` (qspec_then `q` assume_tac) >>
   `ALL_DISTINCT (MAP FST obs) /\ ALL_DISTINCT (FLAT ks)` by
     (qhdtm_x_assum `dft_focus_packet_rel`
        (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
