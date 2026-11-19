@@ -382,6 +382,164 @@ Proof
   Induct >> simp[FOLDL] >> Cases_on `tr` >> simp[tstore_def,sstore_def]
 QED
 
+(* The runtime copy may use a smaller source layout when both layouts have
+   identical live encodings. The storage relation uses the declared layout. *)
+Theorem body_assign_slots_full_layout_frame_path:
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !rt. evaluate_type (get_tenv cx) fty = SOME rt ==>
+                            sz = type_memory_size rt) fields) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
+  compile_store_slots cenv src dst ty tr sa = ((),sb) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  op_taint tn src = {} /\ op_taint tn dst = {} /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+         val_in_memory tv v (w2n sw) mem) /\
+  (type_memory_size tv <> 0 ==>
+     ?x. src = Var x /\ ptr_covers G tn x s (type_memory_size tv)) /\
+  w2n sw + type_memory_size tv < dimword (:256) /\
+  (type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
+  encode_value tv v = SOME writes /\
+  well_formed_type_value dtv /\ value_has_type dtv v /\
+  encode_value dtv v = SOME writes /\
+  type_slot_size tv <= type_slot_size dtv /\
+  w2n dw + type_slot_size dtv <= dimword (:256) /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+         val_in_memory dtv v (w2n sw) mem) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
+  lo <= s.vs_alloca_next /\ ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x) /\
+  sa.cs_next_var <= sb.cs_next_var /\ return_buf_frame d cenv sa s /\
+  alloca_history func s /\ alloca_inv s ==>
+  ?t ks Gf tnf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
+    (!i. MEM i ks <=> MEM i (MAP FST writes)) /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tnf (Var x) = op_taint tn (Var x)) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\ tnf.t_mem = tn.t_mem /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    return_buf_frame d cenv sb t /\ alloca_history func t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    (!H ee env rootk root path delta.
+       expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
+       dead_lo_ok H (DF H) lo cenv cx /\ ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
+       (0 < type_slot_size dtv ==>
+          MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
+          storage_locks_separated (FST H) (SND H) /\ storage_subregion root path delta dtv /\
+          w2n dw = w2n rootk + delta) ==>
+       ?ef. write_storage_slot cx tr dw dtv v ee = (INL (),ef) /\
+            stmt_state_rel H ctx func cenv cx ef t /\
+            ghost_inv_at (DF H) lo d cenv cx ef Gf tnf t)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  mp_tac (Q.INST [`tenv` |-> `get_tenv cx`] (SPEC_ALL compile_store_slots_origin_ptr_path)) >>
+  impl_tac >- (pure_asm_rewrite_tac[] >> simp[] >> decide_tac) >>
+  disch_then (qx_choose_then `t` (qx_choose_then `ks` (qx_choose_then `Gf`
+    (qx_choose_then `tnf` (REPEAT_TCL CONJUNCTS_THEN assume_tac))))) >>
+  qexistsl_tac [`t`,`ks`,`Gf`,`tnf`] >> asm_rewrite_tac[] >>
+  conj_tac >- (irule return_buf_frame_frame >> qexistsl_tac [`cenv`,`s`,`sa`] >> simp[]) >>
+  conj_tac >- (`gas_origin_ptr_path (ARB,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)` by simp[] >>
+               drule_all body_full_path_alloca_history >> simp[]) >>
+  conj_tac >- (drule store_slots_normalize_allocas_below_fmp >>
+               simp[store_slots_fold_allocas_below_fmp]) >>
+  map_every qx_gen_tac [`H`,`ee`,`env`,`rootk`,`root`,`path`,`delta`] >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `s.vs_call_ctx.cc_address = cx.txn.target /\ ~cx.txn.is_static` by
+    (drule stmt_state_rel_state_rel >> disch_then (mp_tac o MATCH_MP state_rel_call_ctx_rel) >>
+     simp[call_ctx_rel_def] >> metis_tac[]) >>
+  simp[write_storage_slot_eq] >>
+  Cases_on `type_slot_size dtv = 0`
+  >- suspend "zero" >> suspend "positive"
+QED
+
+Resume body_assign_slots_full_layout_frame_path[zero]:
+  `!i. MEM i (MAP FST writes) ==> i < type_slot_size dtv` by
+    metis_tac[cj 1 vyperEncodeDecodeTheory.encode_writes_bounded] >>
+  `writes = []` by
+    (Cases_on `writes` >> gvs[] >>
+     first_x_assum (qspec_then `FST h` mp_tac) >> simp[]) >>
+  `ks = []` by
+    (Cases_on `ks` >> gvs[] >> first_x_assum (qspec_then `h` mp_tac) >> simp[]) >>
+  gnvs[vyperStorageTheory.apply_writes_def, wordsTheory.n2w_w2n] >>
+  `set_storage cx ee tr (get_storage cx ee tr) = ee` by
+    (Cases_on `tr` >> simp[set_storage_def,get_storage_def,place_store_update_identity]) >>
+  qpat_assum `set_storage _ _ _ _ = ee` (fn th => pure_rewrite_tac [th]) >>
+  conj_tac
+  >- (irule place_store_normalized_stmt_state >> qexistsl_tac [`s`,`sa`] >>
+      asm_rewrite_tac[] >> metis_tac[]) >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_immutables = s.vs_immutables` by
+    (qpat_assum `store_copy_normalize s t = s`
+       (mp_tac o BETA_RULE o AP_TERM ``\z:venom_state. (z.vs_accounts,z.vs_transient,z.vs_immutables)``) >>
+     simp[NoAsms,store_copy_normalize_def]) >>
+  `stor_taint_ok_at (DF H) tnf t` by
+    (`stor_taint_ok_at (DF H) tn s` by fs[ghost_inv_at_def] >>
+     Cases_on `tr` >> gvs[stor_taint_ok_at_def] >> metis_tac[SUBSET_TRANS]) >>
+  irule assign_slots_ghost_frame >> asm_rewrite_tac[] >>
+  qexistsl_tac [`G`,`ee`,`s`,`sa`,`tn`] >> asm_rewrite_tac[]
+QED
+
+Resume body_assign_slots_full_layout_frame_path[positive]:
+  `0 < type_slot_size dtv` by decide_tac >>
+  qpat_x_assum `0 < type_slot_size dtv ==> _` mp_tac >>
+  asm_rewrite_tac[] >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `val_in_memory dtv v (w2n sw) s.vs_memory` by metis_tac[mem_agree_outside_def] >>
+  `dw = n2w (w2n dw):bytes32` by simp[] >>
+  qabbrev_tac `start = w2n dw` >>
+  `!i. dw + n2w i = n2w (start+i)` by
+    (gen_tac >> qpat_assum `dw = n2w start` (fn th => simp[Once th,wordsTheory.word_add_n2w])) >>
+  qpat_x_assum `start = w2n rootk + delta` (mk_asm "start") >>
+  `store_copy_normalize s t =
+   FOLDL (\q j. (if tr then tstore else sstore) (n2w (start+j))
+                 (mload (w2n sw + 32*j) s) q) s ks` by
+    (qpat_assum `!i. dw + n2w i = _` (fn th =>
+       qpat_assum `store_copy_normalize s t = _`
+          (ACCEPT_TAC o PURE_REWRITE_RULE [th]))) >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx ef t` >>
+  conj_asm1_tac
+  >- (simp[Abbr `ef`] >>
+      qpat_assum `dw = n2w start` (fn th => pure_once_rewrite_tac [th]) >>
+      irule assign_slots_sparse_stmt_post >> asm_rewrite_tac[] >>
+      conj_tac >- (qexists `env` >> asm_rewrite_tac[]) >>
+      qexistsl_tac [`delta`,`ks`,`w2n sw`,`path`,`root`,`rootk`,`s`,`sa`,`dtv`,`v`] >>
+      asm "start" mp_tac >> asm_rewrite_tac[] >> metis_tac[]) >>
+  reverse (irule assign_slots_ghost_frame >> conj_tac)
+  >- (qexistsl_tac [`G`,`ee`,`s`,`sa`,`tn`] >> asm_rewrite_tac[] >> simp[Abbr `ef`]) >>
+  `t.vs_immutables = s.vs_immutables` by
+    (qpat_assum `store_copy_normalize s t = FOLDL _ _ _`
+       (mp_tac o BETA_RULE o AP_TERM ``\z:venom_state. z.vs_immutables``) >>
+     simp[NoAsms,store_copy_normalize_def,assign_slots_fold_immutables]) >>
+  `stor_taint_ok_at (DF H) tn s` by fs[ghost_inv_at_def] >>
+  irule assign_slots_post_stor_taint >> asm_rewrite_tac[] >>
+  qexistsl_tac [`H`,`cenv`,`ctx`,`cx`,`ee`,`ef`,`func`,`lo`,`s`,`tn`,`tr`] >>
+  asm_rewrite_tac[] >>
+  simp[Abbr `ef`,get_storage_after_set] >>
+  conj_tac >- (irule get_storage_after_set_other >> Cases_on `tr` >> simp[]) >>
+  disch_tac >>
+  irule SUBSET_TRANS >>
+  qexists `FOLDL (\X j. key_update X (dw + n2w j) (mem_word_taint tn.t_mem (w2n sw + 32*j)))
+    (if tr then tn.t_trans else tn.t_stor) ks` >>
+  asm_rewrite_tac[] >>
+  qpat_assum `!i. dw + n2w i = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `dw = n2w start` (fn th => pure_once_rewrite_tac[th]) >>
+  irule assign_slots_sparse_taint >> asm_rewrite_tac[] >>
+  qexistsl_tac [`delta`,`path`,`root`,`rootk`,`s`,`dtv`,`v`] >>
+  asm "start" mp_tac >> asm_rewrite_tac[]
+QED
+
+Finalise body_assign_slots_full_layout_frame_path
+
 Theorem body_assign_slots_full_frame_path:
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
@@ -436,101 +594,11 @@ Theorem body_assign_slots_full_frame_path:
             ghost_inv_at (DF H) lo d cenv cx ef Gf tnf t)
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  mp_tac (Q.INST [`tenv` |-> `get_tenv cx`] (SPEC_ALL compile_store_slots_origin_ptr_path)) >>
-  impl_tac >- (pure_asm_rewrite_tac[] >> simp[]) >>
-  disch_then (qx_choose_then `t` (qx_choose_then `ks` (qx_choose_then `Gf`
-    (qx_choose_then `tnf` (REPEAT_TCL CONJUNCTS_THEN assume_tac))))) >>
-  qexistsl_tac [`t`,`ks`,`Gf`,`tnf`] >> asm_rewrite_tac[] >>
-  conj_tac >- (irule return_buf_frame_frame >> qexistsl_tac [`cenv`,`s`,`sa`] >> simp[]) >>
-  conj_tac >- (`gas_origin_ptr_path (ARB,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)` by simp[] >>
-               drule_all body_full_path_alloca_history >> simp[]) >>
-  conj_tac >- (drule store_slots_normalize_allocas_below_fmp >>
-               simp[store_slots_fold_allocas_below_fmp]) >>
-  map_every qx_gen_tac [`H`,`ee`,`env`,`rootk`,`root`,`path`,`delta`] >>
-  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  `s.vs_call_ctx.cc_address = cx.txn.target /\ ~cx.txn.is_static` by
-    (drule stmt_state_rel_state_rel >> disch_then (mp_tac o MATCH_MP state_rel_call_ctx_rel) >>
-     simp[call_ctx_rel_def] >> metis_tac[]) >>
-  simp[write_storage_slot_eq] >>
-  Cases_on `type_slot_size tv = 0`
-  >- suspend "zero" >> suspend "positive"
+  `well_formed_type_value tv` by
+    metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
+  mp_tac (Q.INST [`dtv` |-> `tv`] body_assign_slots_full_layout_frame_path) >>
+  simp[] >> disch_then match_mp_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-Resume body_assign_slots_full_frame_path[zero]:
-  `writes = []` by
-    ((Cases_on `writes` >> gvs[] >>
-     drule (cj 1 vyperEncodeDecodeTheory.encode_writes_bounded) >> simp[] >> (metis_tac[cj 1 vyperEncodeDecodeTheory.encode_writes_bounded]))) >>
-  `ks = []` by
-    (Cases_on `ks` >> gvs[] >> first_x_assum (qspec_then `h` mp_tac) >> simp[]) >>
-  gnvs[vyperStorageTheory.apply_writes_def, wordsTheory.n2w_w2n] >>
-  `set_storage cx ee tr (get_storage cx ee tr) = ee` by
-    (Cases_on `tr` >> simp[set_storage_def,get_storage_def,place_store_update_identity]) >>
-  qpat_assum `set_storage _ _ _ _ = ee` (fn th => pure_rewrite_tac [th]) >>
-  conj_tac
-  >- (irule place_store_normalized_stmt_state >> qexistsl_tac [`s`,`sa`] >>
-      asm_rewrite_tac[] >> metis_tac[]) >>
-  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-   t.vs_immutables = s.vs_immutables` by
-    (qpat_assum `store_copy_normalize s t = s`
-       (mp_tac o BETA_RULE o AP_TERM ``\z:venom_state. (z.vs_accounts,z.vs_transient,z.vs_immutables)``) >>
-     simp[NoAsms,store_copy_normalize_def]) >>
-  `stor_taint_ok_at (DF H) tnf t` by
-    (`stor_taint_ok_at (DF H) tn s` by fs[ghost_inv_at_def] >>
-     Cases_on `tr` >> gvs[stor_taint_ok_at_def] >> metis_tac[SUBSET_TRANS]) >>
-  irule assign_slots_ghost_frame >> asm_rewrite_tac[] >>
-  qexistsl_tac [`G`,`ee`,`s`,`sa`,`tn`] >> asm_rewrite_tac[]
-QED
-
-Resume body_assign_slots_full_frame_path[positive]:
-  `0 < type_slot_size tv` by decide_tac >>
-  qpat_x_assum `0 < type_slot_size tv ==> _` mp_tac >>
-  asm_rewrite_tac[] >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  `well_formed_type_value tv` by metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
-  `val_in_memory tv v (w2n sw) s.vs_memory` by metis_tac[mem_agree_outside_def] >>
-  `dw = n2w (w2n dw):bytes32` by simp[] >>
-  qabbrev_tac `start = w2n dw` >>
-  `!i. dw + n2w i = n2w (start+i)` by
-    (gen_tac >> qpat_assum `dw = n2w start` (fn th => simp[Once th,wordsTheory.word_add_n2w])) >>
-  qpat_x_assum `start = w2n rootk + delta` (mk_asm "start") >>
-  `store_copy_normalize s t =
-   FOLDL (\q j. (if tr then tstore else sstore) (n2w (start+j))
-                 (mload (w2n sw + 32*j) s) q) s ks` by
-    (qpat_assum `!i. dw + n2w i = _` (fn th =>
-       qpat_assum `store_copy_normalize s t = _`
-          (ACCEPT_TAC o PURE_REWRITE_RULE [th]))) >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx ef t` >>
-  conj_asm1_tac
-  >- (simp[Abbr `ef`] >>
-      qpat_assum `dw = n2w start` (fn th => pure_once_rewrite_tac [th]) >>
-      irule assign_slots_sparse_stmt_post >> asm_rewrite_tac[] >>
-      conj_tac >- (qexists `env` >> asm_rewrite_tac[]) >>
-      qexistsl_tac [`delta`,`ks`,`w2n sw`,`path`,`root`,`rootk`,`s`,`sa`,`tv`,`v`] >>
-      asm "start" mp_tac >> asm_rewrite_tac[] >> metis_tac[]) >>
-  reverse (irule assign_slots_ghost_frame >> conj_tac)
-  >- (qexistsl_tac [`G`,`ee`,`s`,`sa`,`tn`] >> asm_rewrite_tac[] >> simp[Abbr `ef`]) >>
-  `t.vs_immutables = s.vs_immutables` by
-    (qpat_assum `store_copy_normalize s t = FOLDL _ _ _`
-       (mp_tac o BETA_RULE o AP_TERM ``\z:venom_state. z.vs_immutables``) >>
-     simp[NoAsms,store_copy_normalize_def,assign_slots_fold_immutables]) >>
-  `stor_taint_ok_at (DF H) tn s` by fs[ghost_inv_at_def] >>
-  irule assign_slots_post_stor_taint >> asm_rewrite_tac[] >>
-  qexistsl_tac [`H`,`cenv`,`ctx`,`cx`,`ee`,`ef`,`func`,`lo`,`s`,`tn`,`tr`] >>
-  asm_rewrite_tac[] >>
-  simp[Abbr `ef`,get_storage_after_set] >>
-  conj_tac >- (irule get_storage_after_set_other >> Cases_on `tr` >> simp[]) >>
-  disch_tac >>
-  irule SUBSET_TRANS >>
-  qexists `FOLDL (\X j. key_update X (dw + n2w j) (mem_word_taint tn.t_mem (w2n sw + 32*j)))
-    (if tr then tn.t_trans else tn.t_stor) ks` >>
-  asm_rewrite_tac[] >>
-  qpat_assum `!i. dw + n2w i = _` (fn th => pure_rewrite_tac[th]) >>
-  qpat_assum `dw = n2w start` (fn th => pure_once_rewrite_tac[th]) >>
-  irule assign_slots_sparse_taint >> asm_rewrite_tac[] >>
-  qexistsl_tac [`delta`,`path`,`root`,`rootk`,`s`,`tv`,`v`] >>
-  asm "start" mp_tac >> asm_rewrite_tac[]
-QED
-
-Finalise body_assign_slots_full_frame_path
 
 Theorem body_assign_slots_positive_endpoint_post:
   expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
