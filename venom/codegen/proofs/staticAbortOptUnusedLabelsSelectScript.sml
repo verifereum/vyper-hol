@@ -262,10 +262,8 @@ Proof
      simp[Abbr `SourceRows`, UNWIND_FORALL_THM2, IgnAsm `p = _`] >>
      disch_then (qspec_then `u` mp_tac o last o CONJUNCTS) >>
      simp[IgnAsm `p = _`] >>
-     Cases_on `EL (pc u) p` >> simp[IgnAsm `p = _`] >>
-     TRY (strip_tac >> qpat_assum `!y. edge u y ==> _` mp_tac >>
-          POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[] >> NO_TAC) >>
-     rename1 `EL (pc u) p = AsmOp name` >>
+     Cases_on `EL (pc u) p` >> simp[IgnAsm `p = _`]
+     >- (rename1 `EL (pc u) p = AsmOp name` >>
      let
        val stop = strip_tac >> qexists `0` >> simp[] >> NO_TAC
        val next = strip_tac >> qpat_assum `!y. edge u y ==> _` mp_tac >>
@@ -281,6 +279,8 @@ Proof
            (Cases_on `name = "JUMP"` >> simp[] >>
             TRY (Cases_on `name = "JUMPI"` >> simp[]) >> next) >> next) >> next
      end) >>
+     strip_tac >> qpat_assum `!y. edge u y ==> _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `!u. u IN kept ==> ?H src fresh bnew.
        (src,fresh,bnew) = Descriptor u H /\ Input u H src fresh bnew` by
     (rpt gen_tac >> disch_tac >>

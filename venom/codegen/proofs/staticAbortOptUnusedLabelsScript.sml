@@ -377,6 +377,20 @@ Resume prune_unused_jumpdests_abort_certificate[pending]:
   qabbrev_tac `pcQ = r o pc` >>
   qabbrev_tac `KQ = {x | x IN V /\ pc x <> LENGTH pre}` >>
   qabbrev_tac `TQ = \x k. OPTION_MAP (\(n,j). (n,r j)) (tag x k)` >>
+  `!v. v IN V ==>
+     (need v ==> cc.cc_static) /\
+     (!k. boolean v k ==> k < height v /\ tag v k = NONE) /\
+     (!k n j. tag v k = SOME(n,j) ==>
+       k < height v /\ j < LENGTH p /\
+       (EL j p = AsmPushLabel n \/ EL j p = AsmPushOfst n 0) /\
+       ?w off. FLOOKUP (SND (compute_label_offsets p)) n = SOME off /\
+         off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME w)` by
+    (qx_gen_tac `v` >> disch_tac >>
+     qpat_assum `Rows p cc V rankN pc height need tag boolean edge` mp_tac >>
+     SIMP_TAC bool_ss [SimpLHS, LET_THM, UNWIND_FORALL_THM2, Abbr `Rows`, Abbr `Slots`] >>
+     disch_then (qspec_then `v` mp_tac o cj 1) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[]) >>
   mp_tac (CONV_RULE (LAND_CONV (SIMP_CONV bool_ss [RIGHT_EXISTS_AND_THM]))
     (SIMP_RULE bool_ss [LET_THM, UNWIND_FORALL_THM2, RAT_OF_NUM_LES]
     (Q.SPECL [`orig`,`p`,`pre`,`l`,`tail`,`data`,`s`,`j`,`u`,`t`,`cc`,`req`,
@@ -398,13 +412,6 @@ Resume prune_unused_jumpdests_abort_certificate[pending]:
           disch_then (FIRST o map ACCEPT_TAC o CONJUNCTS) >> NO_TAC) >>
      TRY (qpat_assum `!x. x IN V ==> Reach edge e x` mp_tac >>
           SIMP_TAC bool_ss [Abbr `Reach`] >> NO_TAC) >>
-     TRY (qx_gen_tac `v` >> disch_tac >>
-          qmatch_goalsub_rename_tac `need v ==> cc.cc_static` >>
-          qpat_assum `Rows p cc V rankN pc height need tag boolean edge` mp_tac >>
-          SIMP_TAC bool_ss [SimpLHS, LET_THM, UNWIND_FORALL_THM2, Abbr `Rows`, Abbr `Slots`] >>
-          disch_then (qspec_then `v` mp_tac o cj 1) >>
-          (impl_tac >- first_assum ACCEPT_TAC) >> POP_ASSUM_LIST (K ALL_TAC) >>
-          metis_tac[] >> NO_TAC) >>
      TRY (asm "layout" mp_tac >>
           simp[Abbr `r`, Abbr `q`, RIGHT_EXISTS_AND_THM, IgnAsm `p = _`] >> NO_TAC) >>
      qpat_assum `Open p cc req V rankN pc height need tag boolean edge` mp_tac >>

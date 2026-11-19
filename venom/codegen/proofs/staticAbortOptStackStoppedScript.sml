@@ -230,9 +230,12 @@ Resume stack_peephole_one_stopped_prefix[interior]:
   `c-b<=n /\ ?u. sym_steps p env (n-(c-b)) (sym_init s) = SymOK u /\
                  u.sym_base.as_pc=b /\ sym_steps p env (c-b) u = SymOK ss` by (
     irule protected_prefix_window_entry >>
-    `LENGTH pre + LENGTH pat <= LENGTH p` by simp[Abbr `p`] >>
-    simp[Abbr `b`, Abbr `c`] >> rpt strip_tac >> TRY decide_tac >>
-    `LENGTH pre <= j /\ j < LENGTH pre + LENGTH pat` by decide_tac >> metis_tac[]) >>
+    `b + LENGTH pat <= LENGTH p` by simp[Abbr `p`, Abbr `b`] >>
+    `!j. b < j /\ j <= c ==> j < LENGTH p /\ ~asm_reachable_marker (EL j p)` by
+      (gen_tac >> strip_tac >> conj_tac >- decide_tac >>
+       qpat_assum `!i. b <= i /\ _ ==> _` (qspec_then `j` irule) >>
+       decide_tac) >>
+    simp[Abbr `c`] >> decide_tac) >>
   `sym_with_pc (splice_pc b (LENGTH pat) (LENGTH repl) u.sym_base.as_pc) u = u`
     by simp[sym_with_pc_def, splice_pc_def, sym_state_component_equality,
             asm_state_component_equality] >>

@@ -667,12 +667,13 @@ Theorem stack_old_retained_edge[local]:
   u IN ^Kept b m pc V UNION ^Heads b pc V
 Proof
   rpt gen_tac >> stack_norm_tac >>
-  simp[] >> strip_tac >>
-  `pc u = pc v+1 \/ ?l. ^Canon p l (pc u)` by
+  simp[] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `pc u = pc v + 1`
+  >- decide_tac >>
+  `?l. ^Canon p l (pc u)` by
     (BETA_TAC >> qpat_x_assum `(if _ then _ else _)` mp_tac >>
      simp[AllCaseEqs()] >> metis_tac[]) >>
   pop_assum (strip_assume_tac o BETA_RULE) >>
-  TRY (qpat_assum `pc u = pc v+1` (K decide_tac)) >>
   qpat_assum `!l i. _ ==> i < b \/ b+m <= i` (qspecl_then [`l`,`pc u`] mp_tac) >>
   (impl_tac >- (qexists `off` >> simp[])) >> simp[]
 QED
@@ -1562,13 +1563,15 @@ Proof
       let val ps = stack_packet 11 th
       in map_every (fn i => assume_tac (BETA_RULE (List.nth (ps,i))))
            [2,3,5,6,7,8,9] >> mk_asm "exit-just" (BETA_RULE (List.nth (ps,10))) end))))))) >>
+  `0 < (m:num)` by
+    (simp[Abbr `m`] >> irule (BETA_RULE (cj 2 stack_window_rule_form)) >>
+     qexists `d` >> asm "shuffle-window" ACCEPT_TAC) >>
   qspecl_then [`orig`,`s`,`data`,`req_bound`,`p`,`q`,`cc`,`req`,`b`,`m`,`d`,`V`,
     `pc`,`height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,`H`,`R`,`G`,`B`,`exit`,`j`,`out`]
     (stack_apply_aliases [`Abbrev (f = _)`] (mp_tac o BETA_RULE))
     (CONV_RULE (stack_aliases 27 stack_alias_head) stack_attach_replayed_image) >>
   (impl_tac >-
     (rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
-     TRY (qpat_assum `b < pc e` mp_tac >> qpat_assum `pc e < b+m` mp_tac >> decide_tac) >>
      TRY (simp[IN_UNION] >> NO_TAC) >>
      asm "exit-just" (fn th =>
        map_every (assume_tac o CONV_RULE (REDEPTH_CONV BETA_CONV))
