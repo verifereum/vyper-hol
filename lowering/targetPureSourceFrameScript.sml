@@ -78,7 +78,6 @@ QED
 Resume effect_free_source_mutual[builtin]:
   rpt gen_tac >> strip_tac >>
   Cases_on `bt = Len` >- suspend "builtin_len" >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn` >- suspend "builtin_membership" >>
   Cases_on `bt = Env MsgGas` >- suspend "builtin_gas" >>
   suspend "builtin_ordinary"
 QED
@@ -104,15 +103,6 @@ Resume effect_free_source_mutual[builtin_len]:
   `~supported_expr_exists expr_effect_root (HD args)` by
     (Cases_on `args` >> gvs[vyperContextTheory.builtin_args_length_ok_def, supported_expr_exists_def]) >>
   gvs[type_check_def, assert_def, return_def] >>
-  rpt (qpat_x_assum `!a b c. _` (drule_then assume_tac)) >> metis_tac[]
-QED
-Resume effect_free_source_mutual[builtin_membership]:
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def,
-       type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
-  strip_tac >> gvs[type_check_def, assert_def, return_def] >>
-  imp_res_tac lift_option_type_state >> imp_res_tac lift_sum_state >> gvs[] >>
   rpt (qpat_x_assum `!a b c. _` (drule_then assume_tac)) >> metis_tac[]
 QED
 Resume effect_free_source_mutual[builtin_gas]:

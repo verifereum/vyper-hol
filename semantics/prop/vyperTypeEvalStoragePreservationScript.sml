@@ -2124,26 +2124,6 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
       qexists_tac `st` >> gvs[runtime_storage_consistent_def]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
   qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn`
-  >- (gvs[] >>
-      qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
-      simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
-        type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
-      Cases_on `eval_exprs cx es st` >>
-      rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-      qpat_x_assum `!s'' t. type_check _ _ _ = _ ==> _`
-        (qspecl_then [`st`, `st`] mp_tac) >>
-      (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >>
-      strip_tac >> first_x_assum drule_all >> strip_tac >>
-      Cases_on `args_res` >>
-      gvs[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def,
-          lift_option_type_def, vyperMiscTheory.option_CASE_rator,
-          vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
-      rpt strip_tac >> gvs[] >>
-      imp_res_tac precompile_call_success_state >> gvs[] >>
-      irule contract_storage_well_formed_backends_frame >>
-      qexists_tac `args_st` >> simp[])
-  >> qpat_assum `~(bt = Bop In \/ bt = Bop NotIn)` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
@@ -2155,10 +2135,9 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
     qpat_x_assum `option_CASE _ _ _ st = _` mp_tac >> qunabbrev_tac `SF` >>
     Cases_on `code_slice_source bt es`
     >- (simp_tac(srw_ss())[] >> strip_tac >>
-        qpat_x_assum `∀s'' x t. _ ∧ _ ∧ _ ∧ _ ∧ NONE = NONE ⇒ _`
+        qpat_x_assum `∀s'' x t. _ ∧ _ ∧ _ ∧ NONE = NONE ⇒ _`
           (qspecl_then [`st`, `()`, `st`] mp_tac) >>
-        (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
-                   simp[type_check_def, assert_def])) >>
+        (impl_tac >- simp[type_check_def, assert_def]) >>
         strip_tac >> first_x_assum drule_all >> simp[]) >>
     rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
     rename1 `code_slice_source bt es = SOME (code_ty,addr)` >>
@@ -2168,10 +2147,9 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
       lift_sum_def] >>
     Cases_on `eval_exprs cx (TL es) st` >>
     rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
-    qpat_x_assum `∀s'' x t v c a. _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ v = (c,a) ⇒ _`
+    qpat_x_assum `∀s'' x t v c a. _ ∧ _ ∧ _ ∧ _ ∧ v = (c,a) ⇒ _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
-    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
-                   simp[type_check_def, assert_def])) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >>
     strip_tac >> first_x_assum drule_all >> strip_tac >>
     reverse (Cases_on `tail_res`)
     >- (simp_tac(srw_ss())[] >> strip_tac >>
@@ -2191,8 +2169,7 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
     qpat_x_assum `∀s'' x t v c a s3 tv t'. _ ⇒ _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`,`st`,
                     `tail_vs`,`tail_st`] mp_tac) >>
-    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
-                   simp[type_check_def, assert_def])) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >>
     strip_tac >> first_x_assum drule_all >> strip_tac >>
     rpt (qpat_x_assum `!x. _` kall_tac) >>
     reverse (Cases_on `addr_res`) >> simp_tac(srw_ss())[]

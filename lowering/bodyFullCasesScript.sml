@@ -448,25 +448,21 @@ Theorem body_builtin_case_full:
   !cx ty bt es.
     (!s'' x t v code_ty addr tail_s tail_vs t'.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+       (INL x,t) /\ bt <> Len /\
        bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
        v = (code_ty,addr) /\
        eval_exprs cx (TL es) tail_s = (INL tail_vs,t') ==>
        body_exprs_full_ok cx [addr]) /\
     (!s'' x t v code_ty addr.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+       (INL x,t) /\ bt <> Len /\
        bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
        v = (code_ty,addr) ==>
        body_exprs_full_ok cx (TL es)) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+       (INL x,t) /\ bt <> Len /\
        bt <> Env MsgGas /\ code_slice_source bt es = NONE ==>
-       body_exprs_full_ok cx es) /\
-    (!s'' x t.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==>
        body_exprs_full_ok cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
@@ -484,8 +480,7 @@ Proof
           builtin_args_length_ok_def] >> metis_tac[]) >>
   `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len ==>
    body_exprs_full_ok cx es` by
-    (strip_tac >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-     metis_tac[type_check_def, assert_def]) >>
+    metis_tac[type_check_def, assert_def] >>
   Cases_on `bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i) \/ (?i. bt = Acc i) \/
              bt = BlockHash \/ bt = BlobHash \/ bt = MethodId`
   >- (irule env_builtin_expr_full_ok >> rpt conj_tac >> gvs[] >>

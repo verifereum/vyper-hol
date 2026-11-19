@@ -340,12 +340,6 @@ Proof
                       supported_exprs_exists_every]) >>
               simp[outcomes_replace_bind, outcomes_replace_result_array_length,
                    return_def]) >>
-          Cases_on `bt = Bop In \/ bt = Bop NotIn`
-          >- (gvs[] >>
-              (match_mp_tac outcomes_replace_bind >> conj_tac
-               >- metis_tac[] >>
-               simp[outcomes_replace_ignore_bind, outcomes_replace_bind,
-                    outcomes_replace_basic, outcomes_replace_lifts])) >>
           Cases_on `bt = Env MsgGas`
           >- gvs[outcomes_replace_next_gas_reading] >>
           gvs[] >> match_mp_tac outcomes_replace_bind >> conj_tac

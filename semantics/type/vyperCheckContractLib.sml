@@ -258,7 +258,6 @@ val checker_defs =
    vyperValueOperationTheory.array_elements_def,
    vyperValueOperationTheory.evaluate_attribute_def,
    vyperValueOperationTheory.evaluate_in_array_def,
-   vyperValueOperationTheory.evaluate_membership_def,
    vyperValueOperationTheory.evaluate_binop_def,
    vyperValueOperationTheory.binop_negate_def,
    vyperValueOperationTheory.signed_int_mod_def,
