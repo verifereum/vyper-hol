@@ -52,7 +52,8 @@ Ancestors
   gasFocusConcretizeCutStorage gasFocusConcretizeCutStore
   gasFocusConcretizeStaticFields gasFocusConcretizeHistoryFmp
   concretizePtrCurrentRangeTransport concretizePtrForwardingTransport
-  concretizePtrCoverageStaticMemReachability lowerDloadDynHeadroom
+  concretizePtrCoverageStaticMemReachability
+  ctxLookupAgree[qualified] lowerDloadDefs[qualified]
   frameRawProjection unitMemInv
   venomExecSemantics gasFocusConcretizeCutActualWrite
 
@@ -1260,7 +1261,7 @@ Proof
 QED
 
 (* Byte content at a read fetch does not depend on a successor step. *)
-Theorem focus_cut_paired_read_bytes:
+Theorem focus_cut_paired_read_bytes_ptr_safe:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -1268,7 +1269,7 @@ Theorem focus_cut_paired_read_bytes:
   o1_ctx_shape C /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
   o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
-  o1_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   max_live_eom C' = SOME eom /\ ptr_stage_placements C' positions /\
   (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
@@ -1284,7 +1285,6 @@ Theorem focus_cut_paired_read_bytes:
     read_byte (w2n y+j) at.po_state.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >> strip_tac >>
-  `o1_ptr_safe_upto D lo n C vs` by fs[o1_safe_upto_def] >>
   `ptr_discipline_upto lo n C vs /\ fixed_region_reserved lo C /\
     EVERY (\f. f.fn_eom = NONE) C.ctx_functions` by fs[o1_ptr_safe_upto_def] >>
   drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
@@ -1319,7 +1319,7 @@ Proof
   suspend "owned"
 QED
 
-Resume focus_cut_paired_read_bytes[owned]:
+Resume focus_cut_paired_read_bytes_ptr_safe[owned]:
   `ptr_observation_reachable vs C a` by simp[ptr_observation_reachable_def] >>
   `vs.vs_allocas = FEMPTY` by fs[o1_initial_state_ok_def] >>
   drule_all ptr_source_ownership_live_prov >> pure_rewrite_tac[MEM_EL] >>
@@ -1355,7 +1355,35 @@ Resume focus_cut_paired_read_bytes[owned]:
   >> (metis_tac[])
 QED
 
-Finalise focus_cut_paired_read_bytes
+Finalise focus_cut_paired_read_bytes_ptr_safe
+
+Theorem focus_cut_paired_read_bytes:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ EVERY all_reachable C.ctx_functions /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  o1_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ ptr_stage_placements C' positions /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  gas_cut n vs at.po_state /\ ~in_revert_forward a.po_fn a.po_state /\
+  mem_read_ops a.po_inst = SOME ops /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\
+  MEM (w2n x,len) (source_memory_read_ranges a.po_inst a.po_state) /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
+    (SOME x) (SOME y) ==>
+  !j. j < len /\ w2n x+j NOTIN a.po_taint.t_mem ==>
+    read_byte (w2n x+j) a.po_state.vs_memory =
+    read_byte (w2n y+j) at.po_state.vs_memory
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  fs[o1_safe_upto_def] >>
+  mp_tac focus_cut_paired_read_bytes_ptr_safe >> simp[]
+QED
 
 (* Positive read and write ranges at a kept fetch. The descriptor branch
    retains the actual evaluations and the current allocation owner. *)
@@ -1550,12 +1578,12 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem focus_concretize_cut_coverage:
+Theorem focus_concretize_cut_coverage_ptr_safe:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_initial_state_ok vs /\
   vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
-  o1_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
@@ -1575,7 +1603,6 @@ Theorem focus_concretize_cut_coverage:
         i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `o1_ptr_safe_upto D lo n C vs` by fs[o1_safe_upto_def] >>
   `ptr_discipline_upto lo n C vs` by fs[o1_ptr_safe_upto_def] >>
   drule_all concretize_cut_stage_pairing >> strip_tac >>
   `C.ctx_entry = C'.ctx_entry /\ vs.vs_vars = FEMPTY` by
@@ -1587,7 +1614,7 @@ Proof
   suspend "successor"
 QED
 
-Resume focus_concretize_cut_coverage[root]:
+Resume focus_concretize_cut_coverage_ptr_safe[root]:
   rpt gen_tac >> strip_tac >> disch_tac >> disj1_tac >>
   `ptr_chrono_history vs C'
      [ptr_observe [] [] FEMPTY entry_taint fn inst s1]
@@ -1606,7 +1633,7 @@ Resume focus_concretize_cut_coverage[root]:
     (irule_at Any) >> simp[]
 QED
 
-Resume focus_concretize_cut_coverage[successor]:
+Resume focus_concretize_cut_coverage_ptr_safe[successor]:
   rpt gen_tac >> strip_tac >> disch_tac >>
   rename1 `ptr_chrono_step C' at zt` >>
   `gas_cut n vs at.po_state` by
@@ -1694,7 +1721,7 @@ Resume focus_concretize_cut_coverage[successor]:
   suspend "ordinary"
 QED
 
-Resume focus_concretize_cut_coverage[ordinary]:
+Resume focus_concretize_cut_coverage_ptr_safe[ordinary]:
   SUBGOAL_THEN ``?Q. EVERY (fn_ptr_ok Q) C.ctx_functions`` assume_tac
   >- (qexists `P` >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [ASSIGN; PARAM; RETPC_PARAM]`
@@ -1732,7 +1759,7 @@ Resume focus_concretize_cut_coverage[ordinary]:
   suspend "memory"
 QED
 
-Resume focus_concretize_cut_coverage[memory]:
+Resume focus_concretize_cut_coverage_ptr_safe[memory]:
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     fs[EVERY_MEM, ptr_fn_inst_wf_flat] >>
   `ptr_source_ownership vs C h a tokens registry births PT TG saved` by
@@ -1792,7 +1819,7 @@ Resume focus_concretize_cut_coverage[memory]:
       (SOME x) (SOME y) /\ j < len /\ w2n x+j NOTIN a.po_taint.t_mem ==>
     read_byte (w2n x+j) a.po_state.vs_memory =
     read_byte (w2n y+j) at.po_state.vs_memory` by
-    (rpt gen_tac >> strip_tac >> drule_all focus_cut_paired_read_bytes >> simp[]) >>
+    (rpt gen_tac >> strip_tac >> drule_all focus_cut_paired_read_bytes_ptr_safe >> simp[]) >>
   Cases_on `MEM a.po_inst.inst_opcode [MLOAD; ILOAD]`
   >- (`opaque_use_ok a.po_fn` by (fs[EVERY_MEM] >> metis_tac[]) >>
       `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
@@ -1898,7 +1925,36 @@ Resume focus_concretize_cut_coverage[memory]:
   Cases_on `a.po_inst.inst_opcode` >> simp[MEM]
 QED
 
-Finalise focus_concretize_cut_coverage
+Finalise focus_concretize_cut_coverage_ptr_safe
+
+Theorem focus_concretize_cut_coverage:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  o1_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) ==>
+  ?R lp positions.
+    ptr_stage_placements C' positions /\
+    !ht at. ptr_chrono_history vs C' ht at ==> gas_cut n vs at.po_state ==>
+      (?h a done tokens registry births PT TG saved entries H calls ws.
+        ptr_paired_prefix R lp positions lo vs C C'
+          h a ht at done tokens registry births PT TG saved entries H calls ws /\
+        EVERY (\i. ~in_revert_forward (EL i h).po_fn (EL i h).po_state) done /\
+        a.po_inst.inst_opcode <> NOP /\
+        at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst) \/
+      (?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
+        revert_forward_pair bb i j /\
+        i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  fs[o1_safe_upto_def] >>
+  mp_tac focus_concretize_cut_coverage_ptr_safe >> simp[]
+QED
 
 (* Read/write ranges at the paired endpoint: unchanged scalars stay in
    their original region, and relocated ranges stay within their slot. *)
@@ -1964,12 +2020,15 @@ Proof
   `pa + sz <= eom` by metis_tac[] >> gvs[] >> decide_tac
 QED
 
-Theorem ptr_cut_paired_static_mem[local]:
+Theorem ptr_cut_paired_static_mem_cut_headroom[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_initial_state_ok vs /\
   vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
-  o1_safe_upto D lo n C vs /\ callee_first names C.ctx_functions /\
+  o1_ptr_safe_upto D lo n C vs /\
+  mem_inv (\ctx fn inst s. gas_cut n vs s ==> dload_headroom_ok ctx fn inst s) C vs /\
+  (!fn inst s. raw_reachable vs C fn inst s /\ gas_cut n vs s ==>
+    raw_mem_ok C fn inst s /\ dload_offset_ok C fn inst s) /\ callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   max_live_eom C' = SOME eom /\ ptr_stage_placements C' positions /\
   ptr_paired_prefix R lp positions lo vs C C'
@@ -1980,14 +2039,12 @@ Theorem ptr_cut_paired_static_mem[local]:
   static_mem_ok eom C' at.po_fn at.po_inst at.po_state
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `o1_ptr_safe_upto D lo n C vs /\ mem_inv dload_headroom_ok C vs` by
-    fs[o1_safe_upto_def] >>
   `ptr_discipline_upto lo n C vs /\ fixed_region_reserved lo C /\
    EVERY (\f. f.fn_eom = NONE) C.ctx_functions` by fs[o1_ptr_safe_upto_def] >>
   drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
   `raw_reachable vs C a.po_fn a.po_inst a.po_state` by
     (drule_all lowerDloadPtrRawReachableTheory.frame_reachable_raw >> simp[]) >>
-  `raw_mem_ok C a.po_fn a.po_inst a.po_state` by (fs[o1_safe_upto_def] >> metis_tac[]) >>
+  `raw_mem_ok C a.po_fn a.po_inst a.po_state` by metis_tac[] >>
   Q.SUBGOAL_THEN `?Q. EVERY (fn_ptr_ok Q) C.ctx_functions` assume_tac
   >- (qexists `P` >> simp[]) >>
   drule_all ptr_focus_paired_static_fields >> strip_tac >>
@@ -2005,7 +2062,7 @@ Proof
   suspend "kept_range"
 QED
 
-Resume ptr_cut_paired_static_mem[kept_range]:
+Resume ptr_cut_paired_static_mem_cut_headroom[kept_range]:
   `at.po_inst = a.po_inst` by metis_tac[concretize_positions_unchanged] >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
@@ -2037,7 +2094,18 @@ Resume ptr_cut_paired_static_mem[kept_range]:
   drule_all ptr_source_ownership_erases_upto >> strip_tac >>
   `lo <= eom` by (drule_all ptr_stage_fixed_region_bound >> simp[]) >>
   `a.po_state.vs_alloca_next + 32 * ctx_dload_count C <= dyn_floor C vs` by
-    (drule_all ld_raw_dyn_headroom >> simp[]) >>
+    (`dload_headroom_ok C a.po_fn a.po_inst a.po_state` by
+       (qpat_x_assum `mem_inv _ C vs` mp_tac >>
+        rewrite_tac[mem_inv_raw_reachable] >>
+        disch_then (mp_tac o CONJUNCT2) >>
+        disch_then (qspecl_then [`a.po_fn`, `a.po_inst`, `a.po_state`] mp_tac) >>
+        simp[]) >>
+     drule ctxLookupAgreeTheory.raw_reachable_initial_fmp >>
+     disch_then (fn initial_fmp =>
+       qpat_x_assum `dload_headroom_ok C _ _ _`
+         (mp_tac o REWRITE_RULE [lowerDloadDefsTheory.dload_headroom_ok_def,
+           GSYM ctx_has_dalloca_def, initial_fmp])) >>
+     Cases_on `ctx_has_dalloca C` >> simp[dyn_floor_def] >> decide_tac) >>
   `!aid pa sz. FLOOKUP positions (Allocation aid) = SOME (pa,sz) ==>
      pa + sz < dimword (:256) /\ pa + sz <= eom` by
     (rpt strip_tac >>
@@ -2052,7 +2120,28 @@ Resume ptr_cut_paired_static_mem[kept_range]:
   drule_all ptr_cut_paired_range_bound >> simp[arithmeticTheory.ADD_COMM]
 QED
 
-Finalise ptr_cut_paired_static_mem
+Finalise ptr_cut_paired_static_mem_cut_headroom
+
+Theorem ptr_cut_paired_static_mem[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  o1_safe_upto D lo n C vs /\ callee_first names C.ctx_functions /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ ptr_stage_placements C' positions /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  gas_cut n vs at.po_state ==>
+  static_mem_ok eom C' at.po_fn at.po_inst at.po_state
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  fs[o1_safe_upto_def] >>
+  `mem_inv (\ctx fn inst s. gas_cut n vs s ==> dload_headroom_ok ctx fn inst s) C vs` by fs[mem_inv_raw_reachable] >>
+  mp_tac ptr_cut_paired_static_mem_cut_headroom >> simp[]
+QED
 
 (* The final REVERT is exempt from the range check. The strict interior
    consists solely of ASSIGNs and hence has no memory ranges. *)
@@ -2083,6 +2172,116 @@ Proof
       in_revert_forward_def, revert_forward_at_def] >>
   disj1_tac >> qexists `i` >> simp[]
 QED
+
+Theorem focus_concretize_cut_fields_cut_headroom:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  o1_ptr_safe_upto D lo n C vs /\
+  mem_inv (\ctx fn inst s. gas_cut n vs s ==> dload_headroom_ok ctx fn inst s) C vs /\
+  (!fn inst s. raw_reachable vs C fn inst s /\ gas_cut n vs s ==>
+    raw_mem_ok C fn inst s /\ dload_offset_ok C fn inst s) /\
+  alloca_frontier_upto n C vs /\
+  EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) ==>
+  mem_inv (\ctx fn inst s. gas_cut n vs s ==> static_mem_ok eom ctx fn inst s) C' vs /\
+  ?R lp positions.
+    ptr_stage_placements C' positions /\
+    !ht at. ptr_chrono_history vs C' ht at /\ gas_cut n vs at.po_state ==>
+      w2n at.po_state.vs_initial_fmp <= w2n at.po_state.vs_fmp /\
+      dalloca_no_wrap at.po_inst at.po_state /\
+      ((?h a done tokens registry births PT TG saved entries H calls ws.
+        ptr_paired_prefix R lp positions lo vs C C'
+          h a ht at done tokens registry births PT TG saved entries H calls ws /\
+        EVERY (\i. ~in_revert_forward (EL i h).po_fn (EL i h).po_state) done /\
+        a.po_inst.inst_opcode <> NOP /\
+        at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+        frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+          a.po_fn a.po_inst a.po_state /\
+        gas_cut n vs a.po_state /\
+        access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
+        taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
+        allocas_from lo a.po_state /\
+        (ctx_has_dalloca C ==> allocas_below_fmp a.po_state)) \/
+       (?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
+        revert_forward_pair bb i j /\
+        i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all focus_concretize_cut_coverage_ptr_safe >> strip_tac >>
+  `ptr_discipline_upto lo n C vs` by fs[o1_ptr_safe_upto_def] >>
+  drule ptr_discipline_upto_fn_ptr_ok >> strip_tac >>
+  drule_all concretize_cut_stage_pairing >> strip_tac >>
+  suspend "historical"
+QED
+
+Resume focus_concretize_cut_fields_cut_headroom[historical]:
+  `!ht at. ptr_chrono_history vs C' ht at /\ gas_cut n vs at.po_state ==>
+     static_mem_ok eom C' at.po_fn at.po_inst at.po_state \/
+     ?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
+       revert_forward_pair bb i j /\
+       i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!ht at. ptr_chrono_history _ _ ht at ==> _`
+       (drule_then (drule_then strip_assume_tac))
+     >- (disj1_tac >> drule_all ptr_cut_paired_static_mem_cut_headroom >> simp[]) >>
+     disj2_tac >> metis_tac[]) >>
+  `!ht at. ptr_chrono_history vs C' ht at /\ gas_cut n vs at.po_state ==>
+     w2n at.po_state.vs_initial_fmp <= w2n at.po_state.vs_fmp` by
+    (rpt gen_tac >> strip_tac >>
+     drule ptr_focus_coverage_history_fmp >> disch_then irule >> simp[] >>
+     qexists `n` >> simp[] >> rpt gen_tac >> strip_tac >>
+     qpat_assum `!ht at. _ ==> static_mem_ok _ _ _ _ _ \/ _`
+       (drule_all_then strip_assume_tac)
+     >- (disj1_tac >> fs[static_mem_ok_def]) >> disj2_tac >> metis_tac[]) >>
+  `!ht at. ptr_chrono_history vs C' ht at /\ gas_cut n vs at.po_state ==>
+     static_mem_ok eom C' at.po_fn at.po_inst at.po_state` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!ht at. _ ==> _ <= _` (drule_all_then assume_tac) >>
+     qpat_assum `!ht at. _ ==> static_mem_ok _ _ _ _ _ \/ _`
+       (drule_all_then strip_assume_tac) >>
+     drule_all ptr_cut_window_static_mem >> simp[]) >>
+  conj_tac >- suspend "mem_inv" >>
+  suspend "point"
+QED
+
+Resume focus_concretize_cut_fields_cut_headroom[mem_inv]:
+  rewrite_tac[mem_inv_raw_reachable] >> conj_tac
+  >- (qpat_x_assum `mem_inv (\ctx fn inst s. gas_cut n vs s ==> dload_headroom_ok ctx fn inst s) C vs` mp_tac >>
+      rewrite_tac[mem_inv_raw_reachable] >> strip_tac >>
+      `C'.ctx_entry = C.ctx_entry` by fs[ctx_pass_stage_def] >>
+      simp[] >> drule_all o1PassLiftTheory.list_rel_lookup_function >>
+      disch_then (qspec_then `name` mp_tac) >> simp[] >>
+      Cases_on `lookup_function name C'.ctx_functions` >> simp[] >>
+      strip_tac >> fs[ptr_paired_code_def] >> metis_tac[]) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  drule ptr_raw_reachable_frame >> strip_tac >>
+  drule ptr_reachable_has_chrono_history >> strip_tac >>
+  qpat_assum `!ht at. _ ==> static_mem_ok _ _ _ _ _`
+    (drule_then mp_tac o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
+  simp[ptr_observe_def]
+QED
+
+Resume focus_concretize_cut_fields_cut_headroom[point]:
+  qexistsl [`R`, `lp`, `positions`] >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!ht at. _ ==> static_mem_ok _ _ _ _ _` (drule_all_then assume_tac) >>
+  `w2n at.po_state.vs_initial_fmp <= w2n at.po_state.vs_fmp /\
+   dalloca_no_wrap at.po_inst at.po_state` by fs[static_mem_ok_def] >> simp[] >>
+  qpat_assum `!ht at. ptr_chrono_history _ _ ht at ==> _`
+    (drule_then (drule_then strip_assume_tac))
+  >- (disj1_tac >>
+      drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
+      qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (irule_at Any) >> simp[]) >>
+  disj2_tac >> metis_tac[]
+QED
+
+Finalise focus_concretize_cut_fields_cut_headroom
 
 Theorem focus_concretize_cut_fields:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -2119,75 +2318,7 @@ Theorem focus_concretize_cut_fields:
         i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all focus_concretize_cut_coverage >> strip_tac >>
-  `o1_ptr_safe_upto D lo n C vs /\ mem_inv dload_headroom_ok C vs` by
-    fs[o1_safe_upto_def] >>
-  `ptr_discipline_upto lo n C vs` by fs[o1_ptr_safe_upto_def] >>
-  drule ptr_discipline_upto_fn_ptr_ok >> strip_tac >>
-  drule_all concretize_cut_stage_pairing >> strip_tac >>
-  suspend "historical"
+  fs[o1_safe_upto_def] >>
+  `mem_inv (\ctx fn inst s. gas_cut n vs s ==> dload_headroom_ok ctx fn inst s) C vs` by fs[mem_inv_raw_reachable] >>
+  mp_tac focus_concretize_cut_fields_cut_headroom >> simp[]
 QED
-
-Resume focus_concretize_cut_fields[historical]:
-  `!ht at. ptr_chrono_history vs C' ht at /\ gas_cut n vs at.po_state ==>
-     static_mem_ok eom C' at.po_fn at.po_inst at.po_state \/
-     ?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
-       revert_forward_pair bb i j /\
-       i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j` by
-    (rpt gen_tac >> strip_tac >>
-     qpat_assum `!ht at. ptr_chrono_history _ _ ht at ==> _`
-       (drule_then (drule_then strip_assume_tac))
-     >- (disj1_tac >> drule_all ptr_cut_paired_static_mem >> simp[]) >>
-     disj2_tac >> metis_tac[]) >>
-  `!ht at. ptr_chrono_history vs C' ht at /\ gas_cut n vs at.po_state ==>
-     w2n at.po_state.vs_initial_fmp <= w2n at.po_state.vs_fmp` by
-    (rpt gen_tac >> strip_tac >>
-     drule ptr_focus_coverage_history_fmp >> disch_then irule >> simp[] >>
-     qexists `n` >> simp[] >> rpt gen_tac >> strip_tac >>
-     qpat_assum `!ht at. _ ==> static_mem_ok _ _ _ _ _ \/ _`
-       (drule_all_then strip_assume_tac)
-     >- (disj1_tac >> fs[static_mem_ok_def]) >> disj2_tac >> metis_tac[]) >>
-  `!ht at. ptr_chrono_history vs C' ht at /\ gas_cut n vs at.po_state ==>
-     static_mem_ok eom C' at.po_fn at.po_inst at.po_state` by
-    (rpt gen_tac >> strip_tac >>
-     qpat_assum `!ht at. _ ==> _ <= _` (drule_all_then assume_tac) >>
-     qpat_assum `!ht at. _ ==> static_mem_ok _ _ _ _ _ \/ _`
-       (drule_all_then strip_assume_tac) >>
-     drule_all ptr_cut_window_static_mem >> simp[]) >>
-  conj_tac >- suspend "mem_inv" >>
-  suspend "point"
-QED
-
-Resume focus_concretize_cut_fields[mem_inv]:
-  rewrite_tac[mem_inv_raw_reachable] >> conj_tac
-  >- (qpat_x_assum `mem_inv dload_headroom_ok C vs` mp_tac >>
-      rewrite_tac[mem_inv_raw_reachable] >> strip_tac >>
-      `C'.ctx_entry = C.ctx_entry` by fs[ctx_pass_stage_def] >>
-      simp[] >> drule_all o1PassLiftTheory.list_rel_lookup_function >>
-      disch_then (qspec_then `name` mp_tac) >> simp[] >>
-      Cases_on `lookup_function name C'.ctx_functions` >> simp[] >>
-      strip_tac >> fs[ptr_paired_code_def] >> metis_tac[]) >>
-  simp[] >> rpt gen_tac >> strip_tac >>
-  drule ptr_raw_reachable_frame >> strip_tac >>
-  drule ptr_reachable_has_chrono_history >> strip_tac >>
-  qpat_assum `!ht at. _ ==> static_mem_ok _ _ _ _ _`
-    (drule_then mp_tac o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
-  simp[ptr_observe_def]
-QED
-
-Resume focus_concretize_cut_fields[point]:
-  qexistsl [`R`, `lp`, `positions`] >> simp[] >>
-  rpt gen_tac >> strip_tac >>
-  qpat_assum `!ht at. _ ==> static_mem_ok _ _ _ _ _` (drule_all_then assume_tac) >>
-  `w2n at.po_state.vs_initial_fmp <= w2n at.po_state.vs_fmp /\
-   dalloca_no_wrap at.po_inst at.po_state` by fs[static_mem_ok_def] >> simp[] >>
-  qpat_assum `!ht at. ptr_chrono_history _ _ ht at ==> _`
-    (drule_then (drule_then strip_assume_tac))
-  >- (disj1_tac >>
-      drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
-      qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-        (irule_at Any) >> simp[]) >>
-  disj2_tac >> metis_tac[]
-QED
-
-Finalise focus_concretize_cut_fields
