@@ -1601,6 +1601,121 @@ Proof
   simp[CONJ_ASSOC]
 QED
 
+(* A successful raw expansion step needs no successful suffix. *)
+Theorem focus_opt_ld_expansion_next[local]:
+  ^focus_opt_ld_row lo P C C' vs Sigma names gn ti t
+    stk PG G tn fn inst s t0 A f fs N X p h /\
+  o1_ctx_shape C /\ o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+  code_layout_valid vs /\ o1_safe_upto D lo n C vs /\ gas_cut n vs t /\
+  ir_supply_covers_fn f.lf_supply fn /\
+  ~is_terminator ti.inst_opcode /\ ti.inst_opcode <> INVOKE /\
+  step_inst fuel C' ti t = OK u /\
+  active_inst gn j (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+  (SUC h < LENGTH X \/
+   (SUC h = LENGTH X /\ ~in_revert_forward fn s /\
+    (inst.inst_opcode = DLOAD \/ inst.inst_opcode = DLOADBYTES) /\
+    ^focus_opt_ld_advance_all lo P C C' vs Sigma names)) ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j
+    (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `q = u with vs_inst_idx := SUC t.vs_inst_idx` >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+  drule ld_sync_source >> strip_tac >>
+  `gn = FST (lower_dload_function_supply f.lf_supply fn)` by
+    (drule ld_sync_active >> fs[ld_image_def]) >>
+  `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+    metis_tac[lowerDloadReturnInteriorTheory.ld_envelope_source_nonterminal] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) X` by
+    (drule_all lowerDloadEnvelopeControlTheory.ld_envelope_nonterminal >> simp[EVERY_MEM]) >>
+  `q.vs_current_bb = s.vs_current_bb` by
+    (simp[Abbr `q`] >> metis_tac[lowerDloadEnvelopeControlTheory.ld_prefix_control,
+       ld_sync_control, venomInstPropsTheory.step_preserves_control_flow]) >>
+  `t.vs_inst_idx = p + h` by metis_tac[lowerDloadSafetyKernelTheory.ld_prefix_position] >>
+  qpat_x_assum `SUC h < LENGTH X \/ _`
+    (DISJ_CASES_THEN2 assume_tac (map_every assume_tac o CONJUNCTS))
+  >- suspend "interior" >>
+  `gas_cut n vs s` by fs[gas_cut_def, Abbr `q`] >>
+  `inst_wf inst` by
+    (drule_all ld_sync_fn_shape >>
+     metis_tac[o1_fn_shape_components, fmpStepStructuralTheory.fn_inst_wf_fn_insts,
+               lowerDloadOracleCallAssemblyTheory.ld_active_inst_member, EVERY_MEM]) >>
+  `EVERY (\k. k.lf_src.vs_gas_readings = k.lf_tgt.vs_gas_readings /\
+    LENGTH s.vs_gas_readings <= LENGTH k.lf_src.vs_gas_readings) fs` by fs[] >>
+  `q.vs_inst_idx = p + LENGTH X` by simp[Abbr `q`, ADD1] >>
+  Cases_on `inst.inst_opcode = DLOAD`
+  >- suspend "scratch" >>
+  `inst.inst_opcode = DLOADBYTES` by metis_tac[] >>
+  suspend "bytes"
+QED
+
+Resume focus_opt_ld_expansion_next[interior]:
+  `active_inst gn (EL (SUC h) X) q` by
+    (qpat_assum `gn = FST _` SUBST1_TAC >>
+     irule lowerDloadReturnInteriorTheory.ld_envelope_target_at >>
+     simp[] >> qexistsl [`s.vs_inst_idx`,`p`,`s`] >> simp[Abbr `q`, ADD1]) >>
+  `ALL_DISTINCT (fn_labels gn)` by
+    (Cases_on `lower_dload_function_supply f.lf_supply fn` >>
+     drule o1ContractLowerDloadTheory.lower_dload_function_supply_labels >> fs[fn_labels_def]) >>
+  `j = EL (SUC h) X` by metis_tac[fmpStageBlockSimCodeTheory.active_inst_unique] >>
+  `step_inst 0 C' (EL h X) t = OK u` by metis_tac[step_inst_non_invoke] >>
+  `ld_prefix C' gn X p (SUC h) t0 q` by
+    (unabbrev_all_tac >> metis_tac[lowerDloadSafetyKernelTheory.ld_prefix_next]) >>
+  `q.vs_gas_readings = t0.vs_gas_readings` by
+    metis_tac[gasFocusLowerDloadCutGuardsTheory.ld_expansion_prefix_readings] >>
+  qexistsl [`stk`,`PG`,`G`,`tn`,`fn`,`inst`,`s`,`t0`,`A`,`f`,`fs`,`N`,`X`,`p`,`SUC h`] >>
+  simp[] >> metis_tac[]
+QED
+
+Resume focus_opt_ld_expansion_next[scratch]:
+  `?off out. inst.inst_operands = [off] /\ inst.inst_outputs = [out]` by
+    fs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  `ld_prefix C' (ld_image f) X p h t0 t /\
+   step_inst fuel C' (EL h X) t = OK u` by metis_tac[] >>
+  drule_all gasFocusLowerDloadScratchNextTheory.ld_focus_dload_scratch_next >>
+  disch_then (qx_choosel_then [`ss`,`v`,`g`,`c`] (map_every assume_tac o CONJUNCTS)) >>
+  `ss.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  qpat_assum `!stk PG G tn fn s A f fs N X p Ar g gn q ss j. _` irule >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`A`,`A`,`step_prov PG G inst ss`,`N`,`PG`,`X`,`f`,`fn`,`fs`,`g`,`p`,
+    `s`,`ss`,`stk`,`step_taint inst s ss tn`] >>
+  simp[Abbr `q`] >> metis_tac[]
+QED
+
+Resume focus_opt_ld_expansion_next[bytes]:
+  `?dest off len. inst.inst_operands = [dest;off;len]` by
+    fs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  `LENGTH X = 2` by
+    (drule_all lowerDloadPublicTraceTheory.ld_dloadbytes_envelope_temporary >>
+     strip_tac >> simp[]) >>
+  `h = 1` by decide_tac >>
+  `ld_prefix C' gn X p 1 t0 t /\ step_inst fuel C' (EL 1 X) t = OK u` by metis_tac[] >>
+  drule_all gasFocusLowerDloadBytesWriteTheory.ld_focus_bytes_classified_write >>
+  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+  `lo <= vs.vs_alloca_next /\ mem_inv dload_headroom_ok C vs` by
+    fs[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+  drule_all (REWRITE_RULE [LET_THM] gasFocusLowerDloadBytesNextTheory.ld_focus_bytes_classified_next) >>
+  disch_then (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
+  `ss.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  qpat_x_assum `t = (update_var _ _ _ with vs_inst_idx := _)` kall_tac >>
+  qpat_x_assum `ss = write_memory_with_expansion _ _ _` kall_tac >>
+  qpat_x_assum `u = write_memory_with_expansion _ _ _` kall_tac >>
+  qpat_x_assum `step_taint _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `step_prov _ _ _ _ = _` kall_tac >>
+  qabbrev_tac `g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+                            lf_tgt := q|>` >>
+  qpat_assum `!stk PG G tn fn s A f fs N X p Ar g gn q ss j. _` irule >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`A`,`A`,`step_prov PG G inst ss`,`N`,`PG`,`X`,`f`,`fn`,`fs`,`g`,`p`,
+    `s`,`ss`,`stk`,`step_taint inst s ss tn`] >>
+  simp[Abbr `g`, Abbr `q`] >> metis_tac[]
+QED
+
+Finalise focus_opt_ld_expansion_next[local]
+
 Theorem focus_row_visit_inverse[local]:
   !xs be.
     DROP be.vs_inst_idx bt.bb_instructions = xs /\
