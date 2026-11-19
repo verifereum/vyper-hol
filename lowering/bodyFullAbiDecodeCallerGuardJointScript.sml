@@ -192,6 +192,7 @@ QED
 
 Resume abi_decode_caller_guard_joint[success]:
   `?t. run_inst_seq (emitted_insts sb header_st) u = OK t` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all bop_word_scalar_success_joint >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>

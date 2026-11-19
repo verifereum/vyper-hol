@@ -698,8 +698,12 @@ Resume focus_cut_owned_writer_path[post_write]:
      Cases_on `j = qi-1` >- gvs[] >>
      `j < qi-1 /\ j < LENGTH done /\ qi-1 <= LENGTH done` by decide_tac >>
      `EL j done < EL (qi-1) done` by
-       (qpat_assum `!j k. j < k /\ k <= LENGTH done ==> _`
-          (qspecl_then [`j`,`qi-1`] mp_tac) >> gvs[EL_APPEND_EQN]) >>
+       (map_every (fn bound => qpat_assum bound mp_tac)
+          [`j < qi-1`, `qi-1 <= LENGTH done`, `j < LENGTH done`,
+           `qi-1 < LENGTH done`] >>
+        qpat_assum `!j k. j < k /\ k <= LENGTH done ==> _`
+          (qspecl_then [`j`,`qi-1`] mp_tac) >>
+        POP_ASSUM_LIST (K ALL_TAC) >> simp[EL_APPEND_EQN]) >>
      `EL (qi-1) done < i` by gvs[] >> decide_tac) >>
   `!j. SUC q <= j /\ j < qi ==>
     pa + (x-b) NOTIN range_bytes (step_writes (EL j ht).po_inst
@@ -805,7 +809,12 @@ Resume focus_cut_owned_writer_path[post_write]:
         ~ptr_ml_can_kill (Allocation aid) bp sizes (ptr_owner_view d (EL k h)).cf_inst` by
        (`!k. t <= k /\ k <= r ==> d <= LENGTH (EL k h).po_stack /\
             FLOOKUP (ptr_owner_view d (EL k h)).cf_state.vs_allocas aid = SOME (b,sz)` by
-          (rpt strip_tac >> `w <= k /\ k < LENGTH h` by decide_tac >> simp[]) >>
+          (rpt strip_tac >>
+           `w <= k /\ k < LENGTH h` by
+             (map_every (fn bound => qpat_assum bound mp_tac)
+                [`w < t`, `t <= k`, `k <= r`, `r < LENGTH h`] >>
+              POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+           simp[]) >>
         `!k. t <= k /\ k < r ==> ~in_revert_forward (EL k h).po_fn (EL k h).po_state /\
             x NOTIN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state (EL (SUC k) h).po_state)` by
           (gen_tac >> strip_tac >>

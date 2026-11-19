@@ -171,7 +171,7 @@ Theorem abi_decode_ptr_output_address:
   ptr_covers G tn dst s cap /\ lookup_var dst s = SOME b /\
   eval_operand pos s = SOME (n2w q) /\
   op_taint tn (Var dst) = {} /\ op_taint tn pos = {} /\
-  ~ctx_has_dalloca ctx /\ q+k <= cap /\ w2n b+cap < dimword(:256) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ q+k <= cap /\ w2n b+cap < dimword(:256) /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   run_inst_seq (emitted_insts sa sb) s = OK (((update_var out (b+n2w q) s) with vs_inst_idx := LENGTH
     sb.cs_current_insts) with vs_inst_idx := s.vs_inst_idx) /\
@@ -469,6 +469,7 @@ Resume abi_decode_bytes_runtime_tail_ptr[address]:
   qpat_x_assum `last_word = Var last` SUBST_ALL_TAC >>
   `w2n (n2w d:bytes32)+cap < dimword(:256)` by simp[] >>
   `32*((c+31) DIV 32)+32 <= cap` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sr` by simp[] >>
   drule_all (abi_decode_ptr_output_address |> Q.INST [`k` |-> `32`]) >>
   disch_then (qspecl_then [`func`, `PG`, `D`] mp_tac) >>
   simp[] >> strip_tac >>

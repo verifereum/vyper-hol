@@ -509,6 +509,7 @@ val () = cv_trans hashmap_slot_def;
    sit in a word.  Only a dynamic bytes or string key is hashed first. *)
 Definition encode_hashmap_key_def:
    encode_hashmap_key _ (IntV i) = i2w i ∧
+   encode_hashmap_key _ (DecimalV i) = i2w i ∧
    encode_hashmap_key _ (FlagV n) = n2w n ∧
    encode_hashmap_key (BaseT AddressT) (BytesV bs) =
      word_of_bytes_be (PAD_LEFT 0w 32 bs) ∧

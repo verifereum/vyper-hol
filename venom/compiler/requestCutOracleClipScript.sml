@@ -4,6 +4,7 @@ Ancestors
   frameRawProjection concretizePtrCoverageStaticMemReachability
   ptrDiscipline contextRawReachable contextCodegenRel opcodeClass ptrSafeRun
   instIdxIndep venomExecSemantics venomState venomInst list rich_list arithmetic
+  loweringBudgetFrameOracleTransport
 Libs
   BasicProvers
 
@@ -95,7 +96,7 @@ Proof
   strip_tac >> drule enters_block_oracle >> strip_tac >>
   fs[enters_block_def] >>
   qexists_tac `s_phi with vs_outcomes := TAKE (k - LENGTH s.vs_requests) s.vs_outcomes` >>
-  simp[eval_phis_outcome_update, exec_result_map_def]
+  simp[eval_phis_outcomes_update, dftCommutationTheory.map_result_state_def]
 QED
 
 Theorem setup_callee_outcome_clip[local]:
@@ -207,7 +208,8 @@ Proof
      `t with vs_outcomes := TAKE (k - LENGTH t.vs_requests) t.vs_outcomes`,
      `s' with vs_outcomes := TAKE (k - LENGTH s'.vs_requests) s'.vs_outcomes`, `inst'`,
      `fuel`] frame_reachable_ret) >>
-  simp[merge_callee_outcome_update, bind_outputs_outcome_update, adopt_return_outcome_update] >>
+  simp[merge_callee_outcomes_update, bind_outputs_outcome_update,
+       adopt_return_outcomes_update] >>
   fs[active_inst_def] >> metis_tac[]
 QED
 

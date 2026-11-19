@@ -2867,6 +2867,7 @@ Resume append_nested_storage_cont_framed[static]:
   `allocas_from lo t` by fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
   `w2n (if tr then tload slot t else sload slot t) < cap` by simp[] >>
   `t.vs_call_ctx.cc_static` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all appendStorageStaticPtrTheory.append_storage_word_static_origin_path >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   `!tail. append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v

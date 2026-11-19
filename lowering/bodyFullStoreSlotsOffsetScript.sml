@@ -102,6 +102,7 @@ Proof
      simp[op_taint_def, allocas_from_def] >> metis_tac[allocas_from_def]) >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
   gvs[copy_runtime_frame_def] >>
+  `s.vs_current_bb = sa.cs_current_bb` by metis_tac[] >>
   drule_all bop_suffix_placement >> strip_tac >>
   drule_all offset_add_joint >> strip_tac >>
   qmatch_asmsub_abbrev_tac `inst_seq_ptr ARB 0 ctx func PG G tn

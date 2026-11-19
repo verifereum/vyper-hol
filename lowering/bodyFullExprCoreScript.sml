@@ -272,6 +272,7 @@ Proof
     (qpat_assum `EVERY (\x. _ /\ (!l. x <> Label l)) _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[EVERY_MEM] >> metis_tac[]) >>
   simp[expr_type_def, post_value_type_def, is_word_type_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   irule (SRULE [is_word_type_def] bop_in_literal_continuation_full_exit) >>
   rpt conj_tac
   >- first_assum ACCEPT_TAC

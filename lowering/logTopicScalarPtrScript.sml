@@ -2,6 +2,7 @@
 Theory logTopicScalarPtr
 Ancestors
   logTopicFramePtr logTopicPtr stmtSimLogTopics fragGasSeqPtr ptrDiscipline
+  bodyFullHashKeccakFixed
   context compileEnv venomState words finite_map list rich_list
   emitHelper contextCodegenRel venomInst exprLoweringProps bodyPtrDefs valueEncoding valueEncodingDefs arithmetic
 
@@ -40,7 +41,7 @@ Theorem compile_encode_log_topic_event_seq_ptr:
   value_has_type tv v /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   compile_encode_log_topic x (is_bytestring_type ty) sm = (op,sb) /\
-  ptr_val_ok cx ty v x G tn s /\ ~ctx_has_dalloca ctx ==>
+  ptr_val_ok cx ty v x G tn s ==>
   ?t Gf tnf topic.
     run_inst_seq (emitted_insts sm sb) s = OK t /\
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sm sb) s Gf tnf /\
@@ -77,6 +78,8 @@ Resume compile_encode_log_topic_event_seq_ptr[bytes]:
   disch_then (drule_at Any) >>
   disch_then (drule_at Any) >>
   simp[ADD_COMM] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
   gvs[] >> first_x_assum drule_all >>
   disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
   `tnf.t_imm = tn.t_imm` by

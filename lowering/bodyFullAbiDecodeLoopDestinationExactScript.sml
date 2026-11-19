@@ -143,6 +143,7 @@ Proof
    op_taint tn (Lit 32w) = {} /\ 32+(j*msz+msz) <= 32+n*msz /\
    w2n (n2w d : 256 word)+(32+n*msz) < dimword(:256)` by
     (simp[eval_operand_def, op_taint_def, w2n_n2w] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (abiDecodePtrBytesTailTheory.abi_decode_ptr_output_address |>
     Q.INST [`cap` |-> `32+n*msz`, `q` |-> `32`, `k` |-> `j*msz+msz`,
       `D` |-> `ARB`, `PG` |-> `PG`]) >>
@@ -249,6 +250,7 @@ Proof
   `?child. child_dst = Var child` by metis_tac[emit_op_facts] >>
   qpat_x_assum `child_dst = Var child` SUBST_ALL_TAC >>
   `j*msz+msz <= j*msz+msz` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by simp[] >>
   drule_all (abiDecodePtrBytesTailTheory.abi_decode_ptr_output_address |>
     Q.INST [`cap` |-> `j*msz+msz`, `q` |-> `j*msz`, `k` |-> `msz`,
       `D` |-> `ARB`, `PG` |-> `PG`]) >>

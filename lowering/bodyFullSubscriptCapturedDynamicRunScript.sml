@@ -86,7 +86,7 @@ Theorem captured_dynamic_load_safety[local]:
   pbase <= w2n a /\ w2n a + 32 <= pbase + sz /\
   w2n a + 32 <= u.vs_alloca_next /\
   op_taint tn bop = {} /\ mem_word_taint tn.t_mem (w2n a) = {} /\
-  allocas_from lo u /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) ==>
   array_length_step_ok lo ctx fn MLOAD [bop] (mload (w2n a) u)
     sn out sl u G tn /\
   op_prov (step_prov PG G (mk_inst sn.cs_next_id MLOAD [bop] [out])
@@ -111,7 +111,7 @@ Theorem captured_dynamic_load[local]:
   pbase <= w2n a /\ w2n a + 32 <= pbase + sz /\
   w2n a + 32 <= u.vs_alloca_next /\
   op_taint tn bop = {} /\ mem_word_taint tn.t_mem (w2n a) = {} /\
-  allocas_from lo u /\ ~ctx_has_dalloca ctx /\ ~u.vs_halted /\
+  allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ ~u.vs_halted /\
   u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts ==>
   ?ul Gl tl.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u,G,tn) [] (OK ul,Gl,tl)) /\
@@ -170,7 +170,7 @@ Theorem captured_dynamic_scalar_run[local]:
   mem_word_taint tn.t_mem (w2n a) = {} /\
   (!x. bop = Var x ==> not_fresh_at sn x) /\
   (!x. iop = Var x ==> not_fresh_at sn x) /\
-  allocas_from lo u /\ ~ctx_has_dalloca ctx /\ ~u.vs_halted /\
+  allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ ~u.vs_halted /\
   u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts ==>
   ?q H tm.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u,G,tn) []
@@ -203,7 +203,13 @@ Proof
      simp[]) >>
   `allocas_from lo ul` by (simp[allocas_from_def] >> metis_tac[allocas_from_def]) >>
   `eval_operand len ul = SOME nw` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp ul` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ul` by
+    (qpat_assum `array_length_frame _ u _ _ ul _ _`
+       (strip_assume_tac o SRULE [] o Q.AP_TERM `\st. (st.vs_allocas, st.vs_initial_fmp, st.vs_fmp)` o
+        cj 1 o REWRITE_RULE [array_length_frame_def]) >>
+     strip_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` drule >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all (Q.INST [`dyn` |-> `T`] array_tail_scalar_uniform) >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `same_blocks sn sb /\
@@ -305,7 +311,7 @@ Theorem subscript_captured_dynamic_execution:
   mem_word_taint tn.t_mem (w2n a) = {} /\
   (!x. bop = Var x ==> not_fresh_at sn x) /\
   (!x. iop = Var x ==> not_fresh_at sn x) /\
-  allocas_from lo u /\ alloca_history fn u /\ ~ctx_has_dalloca ctx /\ ~u.vs_halted /\
+  allocas_from lo u /\ alloca_history fn u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ ~u.vs_halted /\
   u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts ==>
   ?q H tm.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u,G,tn) []

@@ -398,6 +398,7 @@ Proof
     (simp[ptrDisciplineTheory.allocas_from_def] >>
      qpat_x_assum `allocas_from lo s` mp_tac >>
      simp[ptrDisciplineTheory.allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all abi_decode_owned_relative_load_exact >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `emit_op ADD [Var input;src] sb = (addr,sc)` by

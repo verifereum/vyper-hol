@@ -467,6 +467,7 @@ Resume abi_decode_bytes_member_prefix_ptr[head_frame]:
     (drule_all fn_has_code_split >> simp[]) >>
   `fn_has_code c1 c3 func` by
     (drule_all fn_has_code_split >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all (abi_decode_ptr_relative_load |> Q.INST [`G` |-> `H`, `tn` |-> `tm`,
     `s` |-> `s1`, `D` |-> `D`, `PG` |-> `PG`]) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
