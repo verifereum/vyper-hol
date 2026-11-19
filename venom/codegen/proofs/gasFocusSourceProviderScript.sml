@@ -1,5 +1,5 @@
 Theory gasFocusSourceProvider
-Ancestors
+Ancestors lowerDloadSafetyKernel[qualified,ignore_grammar]
   gasFocusSourceStages
   dftFinitePacket dftGasFromListTraceDefs
   o1ContractCfgNormJointCursors frameJointTrace frameJointTransition
@@ -1364,6 +1364,219 @@ Proof
   qexistsl [`stk`,`PG`,`G`,`tn`,`fn`,`next`,`s1`,`q`,`A1`,`g`,`fs`,`N`,
     `Y`,`q.vs_inst_idx`,`0`] >>
   simp[lowerDloadSafetyKernelTheory.ld_prefix_zero] >> metis_tac[]
+QED
+
+(* ALLOCA changes the allocation map only on a cache miss. *)
+Theorem focus_opt_ld_alloca_cached[local]:
+  ^focus_opt_ld_advance_all lo P C C' vs Sigma names /\
+  ^focus_opt_ld_stable lo P Sigma names fs f A A (f::fs) /\
+  ld_sync lo P C vs stk PG G tn fn inst s t A (f::fs) N /\
+  o1_ctx_shape C /\ gn = ld_image f /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  MEM out (fn_ir_vars fn) /\ out IN fn_pv P fn /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (alloc_base,alloc_size) /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] t.vs_inst_idx /\
+  step_inst fuel C' inst t = OK u /\
+  active_inst gn j (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+  EVERY (\k. k.lf_src.vs_gas_readings = k.lf_tgt.vs_gas_readings /\
+    LENGTH s.vs_gas_readings <= LENGTH k.lf_src.vs_gas_readings) fs ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j
+    (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  disch_then (map_every (assume_tac o BETA_RULE) o CONJUNCTS) >>
+  `ld_global lo A (f::fs)` by metis_tac[] >>
+  `t.vs_inst_idx = t.vs_inst_idx` by simp[] >>
+  drule_all lowerDloadSafetyAllocationTheory.ld_cached_alloca_endpoint >> strip_tac >>
+  drule ld_sync_active >> simp[HD] >> strip_tac >>
+  drule ld_sync_control >> strip_tac >>
+  `u.vs_current_bb = s.vs_current_bb` by
+    (qpat_assum `step_inst fuel C' inst t = OK u` mp_tac >>
+     disch_then (mp_tac o MATCH_MP (cj 1 (REWRITE_RULE[GSYM AND_IMP_INTRO]
+       venomInstPropsTheory.step_preserves_control_flow))) >> simp[is_terminator_def]) >>
+  `ss.vs_current_bb = s.vs_current_bb /\ ss.vs_gas_readings = s.vs_gas_readings` by
+    (qpat_assum `step_inst 0 C inst s = OK ss` mp_tac >>
+     simp[lowerDloadSafetyAllocationTheory.ld_alloca_step, exec_alloca_def, update_var_def] >>
+     rpt strip_tac >> qpat_assum `_ = ss` (SUBST1_TAC o SYM) >> simp[]) >>
+  `ss.vs_gas_readings = u.vs_gas_readings` by
+    (qpat_assum `ld_nonghost _ ss u` mp_tac >> simp[NoAsms, lowerDloadSafetyKernelTheory.ld_nonghost_def]) >>
+  `g.lf_serial = f.lf_serial /\ g.lf_fn = f.lf_fn /\ g.lf_supply = f.lf_supply /\
+   g.lf_Q = f.lf_Q /\ g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
+   g.lf_tgt = (u with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (qpat_assum `g = _` SUBST1_TAC >> simp[NoAsms, ADD1]) >>
+  `gn = FST (lower_dload_function_supply f.lf_supply fn)` by simp[ld_image_def] >>
+  last_x_assum (qspecl_then
+    [`stk`,`PG`,`step_prov PG G inst ss`,`step_taint inst s ss tn`,`fn`,`s`,
+     `A`,`f`,`fs`,`N`,`[inst]`,`t.vs_inst_idx`,`A`,`g`,`gn`,
+     `u with vs_inst_idx := SUC t.vs_inst_idx`,`ss`,`j`] mp_tac) >>
+  (impl_tac >- (rpt (first_assum ACCEPT_TAC ORELSE conj_tac) >>
+    simp[NoAsms, GSYM ADD1] >>
+    rpt (first_assum ACCEPT_TAC ORELSE conj_tac) >>
+    qpat_assum `ss.vs_gas_readings = s.vs_gas_readings` (rewrite_tac o single) >> simp[NoAsms])) >>
+  simp[ld_image_def, CONJ_ASSOC]
+QED
+
+Theorem focus_opt_ld_alloca_fresh[local]:
+  ^focus_opt_ld_advance_all lo P C C' vs Sigma names /\
+  ^focus_opt_ld_stable lo P Sigma names fs f A A (f::fs) /\
+  ld_sync lo P C vs stk PG G tn fn inst s t A (f::fs) N /\
+  o1_ctx_shape C /\ lo <= vs.vs_alloca_next /\ gn = ld_image f /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  MEM out (fn_ir_vars fn) /\ out IN fn_pv P fn /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\ ir_supply_covers_fn f.lf_supply fn /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] t.vs_inst_idx /\
+  step_inst fuel C' inst t = OK u /\
+  s.vs_gas_readings = t.vs_gas_readings /\
+  active_inst gn j (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+  EVERY (\k. k.lf_src.vs_gas_readings = k.lf_tgt.vs_gas_readings /\
+    LENGTH s.vs_gas_readings <= LENGTH k.lf_src.vs_gas_readings) fs ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j
+    (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  disch_then (map_every (assume_tac o BETA_RULE) o CONJUNCTS) >>
+  `ld_global lo A (f::fs)` by metis_tac[] >>
+  drule ld_sync_source >> strip_tac >>
+  drule ld_sync_active >> simp[HD] >> strip_tac >>
+  drule ld_sync_control >> strip_tac >>
+  drule_all lowerDloadSafetyAllocationTheory.ld_sync_original_site_fresh >> strip_tac >>
+  mp_tac (Q.INST [`s` |-> `s`, `t` |-> `t`, `fuel` |-> `fuel`,
+    `ts` |-> `u`] lowerDloadSafetyAllocationTheory.ld_fresh_alloca_dispatch) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `sz` (qx_choose_then `ss` strip_assume_tac)) >>
+  `step_inst 0 C inst s = OK ss` by
+    (qpat_assum `step_inst fuel C inst s = OK ss` mp_tac >>
+     simp[lowerDloadSafetyAllocationTheory.ld_alloca_step]) >>
+  `ss.vs_current_bb = s.vs_current_bb /\ u.vs_current_bb = s.vs_current_bb /\
+   ss.vs_memory = s.vs_memory /\ u.vs_memory = t.vs_memory /\
+   ss.vs_gas_readings = s.vs_gas_readings /\ u.vs_gas_readings = t.vs_gas_readings` by
+    (qpat_assum `ss = update_var _ _ _` SUBST1_TAC >>
+     qpat_assum `u = update_var _ _ _` SUBST1_TAC >> simp[update_var_def]) >>
+  `gn = FST (lower_dload_function_supply f.lf_supply fn)` by simp[ld_image_def] >>
+  qabbrev_tac `sn = ss with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `q = u with vs_inst_idx := SUC t.vs_inst_idx` >>
+  `q.vs_current_bb = s.vs_current_bb /\ q.vs_inst_idx = t.vs_inst_idx + LENGTH [inst]` by
+    simp[Abbr `q`, ADD1] >>
+  `?i Y. active_inst fn i sn /\ ld_envelope f.lf_supply fn sn sn.vs_inst_idx Y q.vs_inst_idx` by
+    (`active_inst gn j q` by (simp[NoAsms, Abbr `q`] >> first_assum ACCEPT_TAC) >>
+     drule_at (Pat `ld_envelope _ _ _ _ _ _`)
+       lowerDloadSafetyLocationsTheory.ld_envelope_successor_head >>
+     disch_then (qspecl_then [`j`,`ss`,`q`,`gn`] mp_tac) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     qpat_assum `q.vs_inst_idx = _` SUBST1_TAC >>
+     simp[NoAsms, Abbr `sn`] >> metis_tac[NoAsms]) >>
+  `frame_reachable vs C stk PG (step_prov PG G inst ss) (step_taint inst s ss tn) fn i sn` by
+    (simp[Abbr `sn`] >> irule frame_reachable_next >> simp[is_terminator_def] >> metis_tac[]) >>
+  qabbrev_tac `Ar = A |+ ((f.lf_serial,inst.inst_id),(s.vs_alloca_next,t.vs_alloca_next,w2n sz))` >>
+  qabbrev_tac `H' = f.lf_H |+ (out,(f.lf_serial,inst.inst_id))` >>
+  qabbrev_tac `tn' = step_taint inst s ss tn` >>
+  qabbrev_tac `g = f with <|lf_src := sn; lf_tgt := q; lf_H := H'; lf_tv := tn'.t_var|>` >>
+  drule ld_sync_memory >> strip_tac >>
+  drule ld_sync_ghosts >> simp[HD] >> strip_tac >>
+  `FRANGE f.lf_H SUBSET FDOM A` by
+    (simp[pred_setTheory.SUBSET_DEF] >> metis_tac[ld_global_selected, MEM]) >>
+  `step_prov PG (ld_erase A o_f f.lf_H) inst ss = ld_erase Ar o_f H' /\
+   ld_vars P Ar (f with <|lf_src := ss; lf_tgt := u; lf_H := H'; lf_tv := tn'.t_var|>) /\
+   ld_memory lo Ar tn' ss u /\ ld_nonghost tn' ss u /\ FRANGE H' SUBSET FDOM Ar` by
+    (`Ar = A |+ ((f.lf_serial,inst.inst_id),(s.vs_alloca_next,t.vs_alloca_next,w2n sz))` by
+       simp[Abbr `Ar`] >>
+     qpat_assum `f.lf_src = s` (SUBST_ALL_TAC o SYM) >>
+     qpat_assum `f.lf_tgt = t` (SUBST_ALL_TAC o SYM) >>
+     qpat_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
+     drule_all lowerDloadSafetyAllocationTheory.ld_fresh_alloca_effect >>
+     disch_then (qspecl_then [`fuel`,`PG`,`C'`,`C`] strip_assume_tac) >>
+     qpat_assum `Abbrev (H' = _)` (SUBST1_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+     qpat_assum `Abbrev (tn' = _)` (SUBST1_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `ld_vars P Ar g /\ ld_memory lo Ar tn' sn q /\ ld_nonghost tn' sn q` by
+    (conj_tac
+     >- (qpat_assum `ld_vars P Ar _` mp_tac >>
+         simp[NoAsms, Abbr `g`, Abbr `sn`, Abbr `q`, ld_vars_def]) >>
+     conj_tac
+     >- (qpat_assum `ld_memory lo Ar tn' ss u` mp_tac >>
+         simp[NoAsms, Abbr `sn`, Abbr `q`, lowerDloadSafetyKernelTheory.ld_memory_def] >>
+         strip_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `ld_nonghost tn' ss u` mp_tac >>
+     simp[NoAsms, Abbr `sn`, Abbr `q`, lowerDloadSafetyKernelTheory.ld_nonghost_def] >>
+     strip_tac >> rpt conj_tac >> metis_tac[]) >>
+  `ld_ghost_ok (dyn_floor C vs) Ar H' (step_prov PG G inst ss)` by
+    (`~MEM inst.inst_opcode [PARAM; ADD; SUB; ASSIGN]` by simp[] >>
+     drule_all ld_ghost_ok_step_fixed >> simp[]) >>
+  `ld_dyn_agree (dyn_floor C vs) tn'.t_mem sn.vs_memory q.vs_memory` by
+    (simp[Abbr `sn`, Abbr `q`, Abbr `tn'`] >>
+     `source_memory_write_ranges inst s = []` by simp[codegenRelTheory.source_memory_write_ranges_def] >>
+     drule ld_sync_dyn_agree >> strip_tac >> drule_all ld_dyn_agree_unwritten >> simp[]) >>
+  `lo <= s.vs_alloca_next /\ lo <= t.vs_alloca_next` by
+    (`raw_reachable vs C fn inst s` by metis_tac[lowerDloadReachabilityTheory.ld_frame_reachable_raw] >>
+     drule lowerDloadFrontierTheory.ld_raw_reachable_frontier >> strip_tac >>
+     drule ld_sync_frontier >> decide_tac) >>
+  `Ar = A |+ ((f.lf_serial,inst.inst_id),(s.vs_alloca_next,t.vs_alloca_next,w2n sz)) /\
+   sn = ss with vs_inst_idx := SUC s.vs_inst_idx /\ q = u with vs_inst_idx := SUC t.vs_inst_idx /\
+   g = f with <|lf_src := sn; lf_tgt := q; lf_H := H'; lf_tv := tn'.t_var|>` by
+    simp[Abbr `Ar`, Abbr `sn`, Abbr `q`, Abbr `g`] >>
+  `ld_sync lo P C vs stk PG (step_prov PG G inst ss) tn' fn i sn q Ar (g::fs) N /\
+   ld_global lo Ar (g::fs)` by
+    (drule_all (SRULE [PULL_EXISTS] lowerDloadSafetyAllocationTheory.ld_sync_fresh_alloca_update) >>
+     qpat_assum `g = _` SUBST1_TAC >> qpat_assum `sn = _` SUBST1_TAC >>
+     qpat_assum `q = _` SUBST1_TAC >> qpat_assum `Ar = _` SUBST1_TAC >>
+     disch_then ACCEPT_TAC) >>
+  `g.lf_serial = f.lf_serial /\ g.lf_fn = f.lf_fn /\ g.lf_supply = f.lf_supply /\
+   g.lf_Q = f.lf_Q /\ g.lf_src = sn /\ g.lf_tgt = q` by
+    (qpat_assum `g = _` SUBST1_TAC >> simp[NoAsms]) >>
+  `!ni. active_inst fn ni g.lf_src ==>
+    ld_sync lo P C vs stk PG (step_prov PG G inst ss) tn' fn ni g.lf_src g.lf_tgt Ar (g::fs) N` by
+    (qpat_assum `g.lf_src = sn` SUBST1_TAC >> qpat_assum `g.lf_tgt = q` SUBST1_TAC >>
+     rpt strip_tac >>
+     `ni = i` by metis_tac[REWRITE_RULE[fn_labels_def] fmpStageBlockSimCodeTheory.active_inst_unique] >>
+     qpat_assum `ni = i` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `!a. a IN FDOM A ==> FLOOKUP Ar a = FLOOKUP A a` by
+    (qpat_assum `Ar = _` SUBST1_TAC >> simp[NoAsms, FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `ss.vs_gas_readings = q.vs_gas_readings` by
+    (qpat_assum `q = _` SUBST1_TAC >> simp[NoAsms] >> metis_tac[]) >>
+  `LENGTH ss.vs_gas_readings <= LENGTH s.vs_gas_readings` by
+    (qpat_assum `ss.vs_gas_readings = s.vs_gas_readings` (rewrite_tac o single) >> simp[NoAsms]) >>
+  `g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx)` by metis_tac[] >>
+  qpat_assum `q = _` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `!stk PG G tn fn s A f fs N X p Ar g gn q ss j. _`
+    (qspecl_then [`stk`,`PG`,`step_prov PG G inst ss`,`tn'`,`fn`,`s`,`A`,`f`,
+      `fs`,`N`,`[inst]`,`t.vs_inst_idx`,`Ar`,`g`,`gn`,`q`,`ss`,`j`] mp_tac) >>
+  (impl_tac >- (rpt (first_assum ACCEPT_TAC ORELSE conj_tac) >>
+    simp[NoAsms, GSYM ADD1] >>
+    rpt (first_assum ACCEPT_TAC ORELSE conj_tac))) >>
+  `q.vs_gas_readings = t.vs_gas_readings` by metis_tac[] >>
+  qpat_assum `gn = ld_image f` (fn image =>
+    qpat_assum `q.vs_gas_readings = t.vs_gas_readings` (fn gas =>
+      simp[NoAsms, image, gas, CONJ_ASSOC]))
+QED
+
+Theorem focus_opt_ld_alloca_next[local]:
+  ^focus_opt_ld_advance_all lo P C C' vs Sigma names /\
+  o1_ctx_shape C /\ lo <= vs.vs_alloca_next /\
+  ^focus_opt_ld_row lo P C C' vs Sigma names gn inst t
+    stk PG G tn fn inst s t A f fs N [inst] t.vs_inst_idx 0 /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  inst_wf inst /\ ir_supply_covers_fn f.lf_supply fn /\
+  inst.inst_opcode = ALLOCA /\ step_inst fuel C' inst t = OK u /\
+  active_inst gn j (u with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j
+    (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
+  qpat_assum `EVERY _ (f::fs)` (strip_assume_tac o REWRITE_RULE[EVERY_DEF]) >>
+  drule ld_sync_source >> strip_tac >>
+  `?out. inst.inst_outputs = [out]` by
+    fs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  drule allocaFrontierBoundTheory.active_inst_mem_fn_insts >> strip_tac >>
+  `MEM out (fn_ir_vars fn)` by
+    (irule lowerDloadSafetyUpdatesTheory.ld_inst_output_ir >> qexists `inst` >> simp[]) >>
+  `out IN fn_pv P fn` by
+    (mp_tac (Q.INST [`fn` |-> `fn`] o1LowerDloadClosureTheory.ptr_roots_subset_fn_pv) >>
+     simp[pred_setTheory.SUBSET_DEF, ptr_roots_def, pointerConfinedDefsTheory.alloca_roots_def] >>
+     disch_then irule >> disj1_tac >> disj1_tac >> qexists `inst` >> simp[inst_output_def]) >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >-
+    (drule_all (BETA_RULE focus_opt_ld_alloca_fresh) >> simp[CONJ_ASSOC]) >>
+  rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME allocation` >>
+  PairCases_on `allocation` >> drule_all (BETA_RULE focus_opt_ld_alloca_cached) >> simp[CONJ_ASSOC]
 QED
 
 Theorem focus_row_visit_inverse[local]:
