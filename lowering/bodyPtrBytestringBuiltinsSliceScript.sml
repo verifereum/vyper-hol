@@ -80,6 +80,7 @@ Proof
   `cs_extends s1 s4` by metis_tac[cs_extends_trans] >>
   `cs_extends s1 sb` by metis_tac[cs_extends_trans] >>
   `fn_has_code sa s1 fn` by metis_tac[fn_has_code_split] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SRULE [] compile_assert_slice_bounds_counted_abort) >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   simp[] >> qexistsl_tac [`G'`,`tn'`,`j`] >> gvs[]
@@ -230,6 +231,7 @@ Proof
   `fn_has_code sa sc fn /\ fn_has_code sc sb fn` by metis_tac[fn_has_code_split] >>
   `!op. MEM op [start;len;src_len] ==> op_prov G op = NONE /\ op_taint tn op = {}` by
     simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all compile_assert_slice_bounds_counted_ok >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   drule_all slice_bounds_allocation_frame >> strip_tac >>
