@@ -343,6 +343,7 @@ Theorem e2e_deploy_gas_sufficient_asm_opt:
     ==>
     ?g. !g'.
       g <= g' /\
+      LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
       (!gs. deploy_storage_ok tops am tx
               (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
       (!obs. ~deploy_gas_source_exempt tops
@@ -696,6 +697,7 @@ Theorem e2e_deploy_gas_sufficient:
                  (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
          (!obs. ~deploy_gas_source_exempt tops
             (load_contract NONE obs am tx [(NONE, tops)] [])) /\
+         LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
          r = INR (SOME OutOfGas) ==>
          max_code_size < LENGTH runtime_bc + imm_len tops \/
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
@@ -703,6 +705,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `?g. !g'.
      g <= g' /\
+     LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
      (!gs. deploy_storage_ok tops am tx
              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
      (!obs. ~deploy_gas_source_exempt tops

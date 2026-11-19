@@ -5,6 +5,7 @@ Ancestors
   fnStaticAbortBoundary symBlockBody contextStaticAbortRel
   venomExecSemantics venomExecProps venomInst unitShapeDefs
   asmSem asmSymSem asmSplice codegenSymRel rich_list list
+  symFrameInvokeSupport
 
 val _ = Parse.hide "cp";
 val _ = Parse.hide "base";
@@ -216,7 +217,7 @@ Resume stopped_body_invoke_case[halt]:
   disch_then (qspec_then `fn` (SUBST1_TAC o SRULE [])) >>
   Q.UNABBREV_TAC `R` >> BETA_TAC >> simp[NoAsms] >>
   (* Backward irule left existential prefix witnesses, not conjuncts. *)
-  drule_all symFrameInvokeTheory.sym_invoke_halt_compose >>
+  drule_all symFrameInvokeSupportTheory.sym_invoke_halt_compose >>
   disch_then ACCEPT_TAC
 QED
 Resume stopped_body_invoke_case[abort]:

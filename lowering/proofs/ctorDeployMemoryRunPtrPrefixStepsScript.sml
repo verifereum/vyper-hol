@@ -19,7 +19,7 @@ QED
 
 Theorem prefix_alloca_inst_ok:
   !aid size x s lo ctx fn G tn D fuel.
-    allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D lo fuel ctx fn G tn
       (mk_inst aid ALLOCA [Lit size] [x]) s
 Proof
@@ -52,7 +52,7 @@ QED
 
 Theorem prefix_alloca_ptr_step:
   !aid size x s lo ctx fn PG G tn D fuel.
-    allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_safe_step D lo fuel ctx fn PG G tn
       (mk_inst aid ALLOCA [Lit size] [x]) s
 Proof
@@ -292,7 +292,7 @@ Theorem prefix_mstore_ptr_step:
     eval_operand (Var dst) s = SOME a /\ eval_operand value s = SOME w /\
     FLOOKUP G dst = SOME (b,sz) /\ b <= w2n a /\ w2n a + 32 <= b + sz /\
     op_taint tn (Var dst) = {} /\ op_taint tn value = {} /\
-    allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_safe_step D lo fuel ctx fn PG G tn
       (mk_inst iid MSTORE [Var dst;value] []) s
 Proof

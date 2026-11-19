@@ -16,7 +16,7 @@ Theorem make_array_header_joint[local]:
   32 <= cap /\ base + cap <= s.vs_alloca_next /\
   ptr_covers G tn q s cap /\ allocas_from lo s /\
   fn_has_code sm sh func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t Gf tnf.
@@ -67,7 +67,7 @@ QED
 Theorem make_array_header_full:
   (if header then emit_void MSTORE [Var q; Lit (n2w len)] else return ()) sm = ((),sh) /\
   fn_has_code sm sh func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ storage_trace_domain cx st0 es.storage_trace /\
+  storage_trace_domain cx st0 es.storage_trace /\
   csbase.cs_next_id <= aid /\ local_ptrs_reserved cenv csbase /\
   local_ptrs_reserved cenv sm /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sm x) /\
@@ -144,6 +144,9 @@ Proof
   `allocas_from lo s /\ lo <= base` by
     (fs[bodyPtrDefsTheory.ghost_inv_at_def, ptrDisciplineTheory.allocas_from_def] >>
      metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all make_array_header_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`t`,`Gf`,`tnf`] >>

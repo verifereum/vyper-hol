@@ -7,6 +7,7 @@ Ancestors
   exprSimWordBuiltins exprSimSource exprSimHypsDefs exprLowering
   compileEnv exprLoweringProps vyperTyping vyperTypeSystem list finite_map
   gasShadowCompileStmtHelpers gasShadowState builtinMath fragExec wordArgsPtr
+  bodyFullIfExpReach
 
 val _ = Parse.hide "body";
 
@@ -215,6 +216,21 @@ Proof
         (irule gas_outcome_full_post_source >>
          qexistsl [`P1`, `E1`] >> simp[]) >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ P1 E1` kall_tac >>
+      `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+        metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+      qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ (es,s0,G0,tn0) firstQ firstR` >>
+      `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (cx_tops cx) cx st0 (bind (eval_expr cx e1) (read_result cx))
+         (es,s0,G0,tn0)
+         (\H res ee GG tt u. firstQ H res ee GG tt u /\
+            (!fn i v. frag_reachable ctx func u fn i v ==> dalloca_no_wrap i v))
+         firstR` by
+        (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
+         qpat_assum `gas_outcome_full _ _ _ _ _ _ firstQ firstR` (irule_at Any) >>
+         simp[] >> rpt strip_tac >>
+         drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+         disch_then ACCEPT_TAC) >>
+      qpat_x_assum `gas_outcome_full _ _ _ _ _ _ firstQ firstR` kall_tac >>
       unabbrev_all_tac >>
       simp[exprSimWordArgsTheory.eval_expr_builtin_action,
            vyperInterpreterTheory.precompile_builtin_def,
@@ -300,15 +316,14 @@ Proof
           irule bodyMemoryDefsTheory.return_buf_frame_frame >>
           qexistsl [`cenv`, `s0`, `sa`] >> simp[] >>
           metis_tac[cj 6 (iffLR loweringPostsTheory.expr_post_def)]) >>
-        conj_tac >- (rpt strip_tac >> irule pow_compose_reachable_no_wrap >>
-          markerLib.asm_x "suffix" kall_tac >> metis_tac[]) >>
+        conj_tac >- (rpt strip_tac >> first_x_assum (drule_then ACCEPT_TAC)) >>
         gen_tac >> strip_tac >>
-        qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _ /\ _`
+        qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> (expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _ /\ _) /\ _`
           (qspec_then `H` mp_tac) >>
         (impl_tac >- first_assum ACCEPT_TAC) >>
         disch_then (fn th => CONJ_TAC THENL
-          [ACCEPT_TAC (MATCH_MP (cj 1 (iffLR loweringPostsTheory.expr_post_def)) (CONJUNCT1 th)),
-           ACCEPT_TAC (MATCH_MP (cj 2 (iffLR loweringPostsTheory.expr_post_def)) (CONJUNCT1 th))]))) >>
+          [ACCEPT_TAC (MATCH_MP (cj 1 (iffLR loweringPostsTheory.expr_post_def)) (CONJUNCT1 (CONJUNCT1 th))),
+           ACCEPT_TAC (MATCH_MP (cj 2 (iffLR loweringPostsTheory.expr_post_def)) (CONJUNCT1 (CONJUNCT1 th)))]))) >>
       disch_tac >>
       qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ (mid,t,G1,tn1) P2 E2` >>
       `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -318,6 +333,19 @@ Proof
         (irule gas_outcome_full_post_source >>
          qexistsl [`P2`, `E2`] >> simp[]) >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ P2 E2` kall_tac >>
+      qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ (mid,t,G1,tn1) secondQ secondR` >>
+      `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (cx_tops cx) cx st0 (bind (eval_expr cx e2) (read_result cx))
+         (mid,t,G1,tn1)
+         (\H res ee GG tt u. secondQ H res ee GG tt u /\
+            (!fn i v. frag_reachable ctx func u fn i v ==> dalloca_no_wrap i v))
+         secondR` by
+        (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
+         qpat_assum `gas_outcome_full _ _ _ _ _ _ secondQ secondR` (irule_at Any) >>
+         simp[] >> rpt strip_tac >>
+         drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+         disch_then ACCEPT_TAC) >>
+      qpat_x_assum `gas_outcome_full _ _ _ _ _ _ secondQ secondR` kall_tac >>
       unabbrev_all_tac >>
       once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >>
       irule gas_outcome_full_bind_all >>
@@ -412,15 +440,14 @@ Proof
           irule bodyMemoryDefsTheory.return_buf_frame_frame >>
           qexistsl [`cenv`, `s0`, `sa`] >> simp[] >>
           metis_tac[cj 6 (iffLR loweringPostsTheory.expr_post_def)]) >>
-        conj_tac >- (rpt strip_tac >> irule pow_compose_reachable_no_wrap >>
-          markerLib.asm_x "suffix" kall_tac >> metis_tac[]) >>
+        conj_tac >- (rpt strip_tac >> first_x_assum (drule_then ACCEPT_TAC)) >>
         gen_tac >> strip_tac >>
-        qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==> expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _ /\ _`
+        qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==> (expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _ /\ _) /\ _`
           (qspec_then `H` mp_tac) >>
         (impl_tac >- first_assum ACCEPT_TAC) >>
         disch_then (fn th => CONJ_TAC THENL
-          [ACCEPT_TAC (MATCH_MP (cj 1 (iffLR loweringPostsTheory.expr_post_def)) (CONJUNCT1 th)),
-           ACCEPT_TAC (MATCH_MP (cj 2 (iffLR loweringPostsTheory.expr_post_def)) (CONJUNCT1 th))]))) >>
+          [ACCEPT_TAC (MATCH_MP (cj 1 (iffLR loweringPostsTheory.expr_post_def)) (CONJUNCT1 (CONJUNCT1 th))),
+           ACCEPT_TAC (MATCH_MP (cj 2 (iffLR loweringPostsTheory.expr_post_def)) (CONJUNCT1 (CONJUNCT1 th)))]))) >>
       disch_tac >>
       qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ (mid',t',G1',tn1') P3 E3` >>
       `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -726,7 +753,9 @@ Proof
             `s1`, `s2`, `s3`, `t`, `t'`, `t''`, `v`, `v'`, `v''`, `x`, `y`, `z`] >>
           simp[] >> rpt conj_tac >> metis_tac[])
       >~ [`allocas_below_fmp u`]
-      >- metis_tac[bodyInvNoDallocaTheory.body_inv_no_dalloca] >>
+      >- (qpat_assum `stmt_state_rel H ctx func cenv cx mid'' u`
+            (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+          simp[]) >>
       `wb_frame cenv es mid sa s0 t /\
        wb_frame cenv mid mid' s1 t t' /\
        wb_frame cenv mid' mid'' s2 t' t''` by

@@ -78,22 +78,6 @@ Proof
   Cases_on `evaluate_type tenv elem` >> simp[IS_SOME_COND]
 QED
 
-(* Row 25: map keys are never decimals or aggregates; bytesM keys other
-   than bytes32 (row 23) and flag keys (row 24) remain. *)
-Theorem well_formed_hashmap_key_supported:
-  well_formed_vtype tenv (HashMapT kt vt) ==>
-  supported_hashmap_key_type kt \/
-  (?m. kt = BaseT (BytesT (Fixed m)) /\ m <> 32) \/ (?id. kt = FlagT id)
-Proof
-  rw[well_formed_vtype_def] >> imp_res_tac well_formed_int_width >>
-  Cases_on `kt` >> gvs[hashmap_key_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  gvs[hashmap_key_type_def, supported_hashmap_key_type_def,
-      supported_integer_type_def, supported_string_type_def] >>
-  imp_res_tac well_formed_int_width >> simp[] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >> simp[supported_string_type_def]
-QED
-
 (* Row 28: unsigned and signed operand widths. *)
 Theorem well_formed_unsigned_signed:
   (well_formed_type tenv ty /\ is_uint_type ty ==> supported_unsigned_type ty) /\

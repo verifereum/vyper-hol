@@ -810,6 +810,7 @@ Proof
 QED
 
 Resume live_code_select_joint[in_range]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp h` by simp[] >>
   drule_all (INST_TYPE [Type.alpha |-> ``:256``] array_bounds_check_read_only_joint_ok_frame) >>
   disch_then (qspec_then `PG` (qx_choosel_then [`Gk`,`tnk`,`k`] strip_assume_tac)) >>
   `copy_old_operand sk idx /\ copy_old_operand sk arg` by
@@ -835,6 +836,7 @@ Resume live_code_select_joint[in_range]:
 QED
 
 Resume live_code_select_joint[out_of_range]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp h` by simp[] >>
   drule_all array_bounds_check_joint_oob_frame >>
   disch_then (qspec_then `PG` (qx_choosel_then [`Gq`,`tnq`,`q`] strip_assume_tac)) >>
   qexistsl [`Gq`,`tnq`,`q`] >> simp[] >>

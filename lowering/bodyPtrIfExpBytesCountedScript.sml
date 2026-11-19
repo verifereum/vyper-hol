@@ -506,7 +506,7 @@ Theorem clean_emitted_prefix_round:
        mk_inst (id+1) ADD [Var v1; Lit 31w] [v2];
        mk_inst (id+2) AND [Var v2; Var m] [v3];
        mk_inst (id+3) ADD [Var v3; Lit 32w] [v4]] /\
-    v1 <> m /\ m <> v2 /\ ~ctx_has_dalloca ctx /\
+    v1 <> m /\ m <> v2 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     (!p. not_fresh_at sa p ==> p <> m /\ p <> v2 /\ p <> v3 /\ p <> v4) ==>
     clean_emitted_prefix D ctx fn PG sa sb (Var v4)
       (((w + 31w) && ~31w) + 32w) s G tn
@@ -523,6 +523,14 @@ Proof
   qspecl_then [`t`, `id`, `v1`, `m`, `v2`, `v3`, `v4`, `w`]
     mp_tac copy_len_round_run >>
   impl_tac >- simp[] >> strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa s1)))` by
+    (disch_tac >> simp[allocas_below_fmp_def, NoAsms] >>
+     qpat_assum `(t with vs_vars := _) = s` (fn frame =>
+       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [allocas_below_fmp_def] o
+          ONCE_REWRITE_RULE [GSYM frame] o
+          (fn th => MATCH_MP th (ASSUME ``ctx_has_dalloca ctx``))))) >>
   qspecl_then [`D`, `ctx`, `fn`, `PG`, `G1`, `tn1`,
      `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa s1)`,
      `id`, `v1`, `m`, `v2`, `v3`, `v4`, `w`] mp_tac copy_len_round_seq_ptr >>
@@ -550,7 +558,7 @@ QED
 Theorem compile_bytestring_copy_len_clean_prefix:
   !D ctx fn PG G tn s sa sb src count a.
     compile_bytestring_copy_len (Var src) sa = (count,sb) /\
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     clean_emitted_prefix D ctx fn PG sa sb count
@@ -569,7 +577,7 @@ QED
 Theorem compile_bytestring_copy_len_seq_ptr:
   !D ctx fn PG G tn s sa sb src count a.
     compile_bytestring_copy_len (Var src) sa = (count,sb) /\
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
@@ -745,6 +753,7 @@ Proof
   `((mload (w2n a) s + 31w && i2w (-32)) + 32w) = n2w n` by
     (qspec_then `len` mp_tac exprSimBufferStoreTheory.buffer_round_size >>
      gvs[vfmConstantsTheory.word_size_def, not31_i2w]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `clean_emitted_prefix D ctx fn PG sa sm count_op (n2w n) s G tn` by
     (drule_all compile_bytestring_copy_len_clean_prefix >> simp[]) >>
   drule_all clean_emitted_prefix_mcopy >> strip_tac >>

@@ -1,7 +1,7 @@
 (* Nonempty external-call packing: the tuple is already staged in memory. *)
 Theory bodyFullExtCallEncodeTail
 Ancestors
-  abiEncoderWindowJoint abiEncoderSourceRobust abiEncoderSourceInvoke
+  abiEncoderWindowJoint abiEncoderWindowJointPhases abiEncoderSourceRobust abiEncoderSourceInvoke
   abiEncoderWindowContract abiEncoderRegisteredEffect abiEncoderCounters
   entryDecodeStructure reasonCopySourcePtr assignTuplePtrCopyLen
   exprSimAbiEncodeExecFrame exprSimAbiEncodeSemantic exprSimAbiEncodeStateTransport
@@ -18,7 +18,7 @@ Ancestors
 Theorem extcall_tail_add[local]:
   !k p. emit_op ADD [left; Lit (n2w k)] a = (out,b) /\ fn_has_code a b func /\
   eval_operand left s = SOME (n2w p) /\ op_taint tn left = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   !G PG. ?q t G' tn'. out = Var q /\ not_fresh_at b q /\
@@ -140,7 +140,9 @@ Theorem extcall_encoder_window[local]:
     i.inst_id IN frag_ids a b /\ i.inst_operands = [Lit w] /\
     FLOOKUP s.vs_allocas i.inst_id = SOME (r,sz) ==> sz = w2n w) /\
   alloca_inv s /\ alloca_room ctx fn s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   FLOOKUP s.vs_allocas shared = SOME (p,capacity) /\
@@ -202,8 +204,6 @@ Proof
      ?x. Var src = Var x /\ ptr_covers G tn x s cap) /\
    (0 < LENGTH (contractABI$enc at av) ==> ?x. Var dst = Var x /\
      ptr_covers G tn x s (LENGTH (contractABI$enc at av)))` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all compile_abi_encode_to_buf_window_joint >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `32 <= capacity` by decide_tac >>
@@ -241,7 +241,7 @@ QED
 (* A covered offset within the shared buffer, before or after encoding. *)
 Theorem extcall_tail_offset[local]:
   emit_op ADD [Var root;Lit (n2w k)] a = (dst,b) /\
-  fn_has_code a b fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code a b fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   lookup_var root s = SOME (n2w p) /\
@@ -301,7 +301,9 @@ Theorem extcall_packed_tuple_tail_local_sizes:
     i.inst_id IN frag_ids b c /\ i.inst_operands = [Lit w] /\
     FLOOKUP s.vs_allocas i.inst_id = SOME (r,sz) ==> sz = w2n w) /\
   alloca_inv s /\ alloca_room ctx fn s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   FLOOKUP s.vs_allocas shared = SOME (p,capacity) /\
@@ -350,6 +352,8 @@ Proof
   `p + capacity <= s.vs_alloca_next` by metis_tac[alloca_site_registered_below] >>
   `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
   `p+32 < dimword (:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` mp_tac >> simp[]) >>
   drule_all extcall_tail_offset >>
   disch_then (qspecl_then [`explicit`, `PG`]
     (qx_choose_then `dest` (qx_choose_then `s1`
@@ -378,6 +382,12 @@ Proof
    (!i. p+28 <= i /\ i < p+32 ==> i NOTIN tn1.t_mem) /\
    compile_abi_encode_to_buf (Var dest) (Var src) ei b = (alen,c)` by
     (asm_rewrite_tac[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1 /\
+    s1.vs_alloca_next + pending_alloca_size fn s1 <= w2n s1.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame fn s s1` (fn frame =>
+       qpat_assum `alloca_inv s1` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+           (ACCEPT_TAC o MATCH_MP window_exec_frame_alloca_budget o CONJ frame o CONJ inv)))) >>
   drule_all extcall_encoder_window >>
   disch_then (qspecl_then [`explicit`, `PG`]
     (qx_choose_then `s2` (qx_choose_then `G2` (qx_choose_then `tn2` strip_assume_tac)))) >>
@@ -408,6 +418,14 @@ Resume extcall_packed_tuple_tail_local_sizes[finish_adds]:
   `lookup_var root s2 = SOME (n2w p) /\ FLOOKUP G2 root = FLOOKUP G root /\
    op_taint tn2 (Var root) = op_taint tn (Var root)` by metis_tac[] >>
   `ptr_covers G2 tn2 root s2 capacity` by metis_tac[ptr_covers_lookup_frame] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2 /\
+    s2.vs_alloca_next + pending_alloca_size fn s2 <= w2n s2.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame fn s1 s2` (fn frame =>
+       qpat_assum `alloca_inv s2` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1 /\ _`
+           (ACCEPT_TAC o MATCH_MP window_exec_frame_alloca_budget o CONJ frame o CONJ inv)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2 /\ _` mp_tac >> simp[]) >>
   drule_all (Q.SPEC `4` extcall_tail_add) >>
   disch_then (qspecl_then [`G2`, `PG`]
     (qx_choose_then `y` (qx_choose_then `s3`
@@ -424,6 +442,15 @@ Resume extcall_packed_tuple_tail_local_sizes[finish_adds]:
   `32 + LENGTH bytes <= capacity` by metis_tac[] >>
   `28 + (4 + LENGTH bytes) <= capacity /\ p+28 < dimword (:256) /\
    4 + LENGTH bytes < dimword (:256)` by decide_tac >>
+  `alloca_inv s3` by metis_tac[alloca_inv_fields] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3 /\
+    s3.vs_alloca_next + pending_alloca_size fn s3 <= w2n s3.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame fn s2 s3` (fn frame =>
+       qpat_assum `alloca_inv s3` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2 /\ _`
+           (ACCEPT_TAC o MATCH_MP window_exec_frame_alloca_budget o CONJ frame o CONJ inv)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s3 /\ _` mp_tac >> simp[]) >>
   qpat_x_assum `emit_op ADD _ a = _` kall_tac >>
   drule_all extcall_tail_offset >>
   disch_then (qspecl_then [`explicit`, `PG`]
@@ -527,5 +554,7 @@ Proof
     i.inst_id IN frag_ids b c /\ i.inst_operands = [Lit w] /\
     FLOOKUP s.vs_allocas i.inst_id = SOME (r,sz) ==> sz = w2n w` by
     (rpt strip_tac >> drule_all abi_alloca_history_function_size >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all extcall_packed_tuple_tail_local_sizes >> simp[]
 QED

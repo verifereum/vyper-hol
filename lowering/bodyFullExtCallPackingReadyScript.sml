@@ -636,6 +636,8 @@ Resume extcall_request_packing_ready[nonempty]:
   `value_has_type (TupleTV tvs) (ArrayV (TupleV argvs))` by
     simp[vyperTypingTheory.value_has_type_def] >>
   `32 + abi <= n` by (simp[NoAsms,Abbr `n`] >> IF_CASES_TAC >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q /\
+    q.vs_alloca_next + pending_alloca_size func q <= w2n q.vs_initial_fmp` by simp[] >>
   qabbrev_tac `bytes = contractABI$enc
     (Tuple (vyper_to_abi_types (get_tenv cx) arg_types)) (ListV avs)` >>
   mp_tac (Q.INST [`a` |-> `st`, `b` |-> `sadd`, `c` |-> `senc`, `d` |-> `sf`, `e` |-> `sp`,

@@ -20,7 +20,8 @@ Theorem compile_store_bytestring_robust_seq_ptr:
   ((?bs. v = BytesV bs /\ len = LENGTH bs) \/
    (?str. v = StringV str /\ len = LENGTH str)) /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
-    val_in_memory stv v (w2n a) m) /\ ~ctx_has_dalloca ctx ==>
+    val_in_memory stv v (w2n a) m) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf sf.
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
