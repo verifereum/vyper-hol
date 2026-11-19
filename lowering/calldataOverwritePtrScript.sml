@@ -11,7 +11,7 @@ Theorem clean_mstore_overwrite_prefix_uniform_origin_joint:
   eval_operand (Var p) s = SOME dw /\ eval_operand v s = SOME w /\
   ptr_covers G tn p s 32 /\ op_taint tn v = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ allocas_from lo s /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t H u.
     (!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H u) /\
@@ -189,7 +189,9 @@ Theorem clean_mstore_overwrite_prefix_uniform_origin:
       !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
         (OK t,H,u))
 Proof
-  strip_tac >> drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`] >> simp[]
 QED
@@ -219,7 +221,9 @@ Theorem clean_mstore_overwrite_prefix_uniform_joint:
       !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
         (s,G,tn) [] (OK t,H,u))
 Proof
-  strip_tac >> drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`] >> simp[]
 QED
@@ -246,7 +250,9 @@ Theorem clean_mstore_overwrite_prefix_uniform_seq:
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
     (!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H u)
 Proof
-  strip_tac >> drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`] >> simp[]
 QED
@@ -275,7 +281,9 @@ Theorem clean_mstore_overwrite_trace_uniform:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`] >> simp[]
 QED
@@ -312,7 +320,7 @@ Theorem calldata_load_overwrite_prefix_uniform_origin_joint:
   eval_operand src s = SOME sw /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   op_taint tn src = {} /\ fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t H u.
@@ -504,7 +512,9 @@ Theorem calldata_load_overwrite_prefix_uniform_origin:
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
       (OK t,H,u))
 Proof
-  strip_tac >> drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`] >> simp[]
 QED
@@ -537,7 +547,9 @@ Theorem calldata_load_overwrite_prefix_uniform_joint:
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
       (s,G,tn) [] (OK t,H,u))
 Proof
-  strip_tac >> drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`] >> simp[]
 QED
@@ -568,7 +580,9 @@ Theorem calldata_load_overwrite_prefix_uniform_seq:
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
     (!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H u)
 Proof
-  strip_tac >> drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`] >> simp[]
 QED
@@ -600,7 +614,9 @@ Theorem calldata_load_overwrite_trace_uniform:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`] >> simp[]
 QED

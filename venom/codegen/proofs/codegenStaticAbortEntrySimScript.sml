@@ -142,8 +142,8 @@ QED
 
 Finalise gen_fn_abort_simulations
 
-Theorem codegen_entry_asm_sim_abort:
-  !fuel rpolicy unit cp prog Inv vs es a vs'.
+Theorem codegen_entry_asm_sim_abort_rel:
+  !fuel rpolicy unit cp prog Inv vs ast0 a vs'.
     generate_context_plan unit.cu_context = SOME cp /\
     codegen_assembly rpolicy unit = SOME prog /\
     unit_shape_ok unit /\
@@ -153,14 +153,14 @@ Theorem codegen_entry_asm_sim_abort:
       MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) /\
       inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
       IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
-    initial_ctx_rel cp prog unit.cu_context vs es /\
+    codegen_asm_entry_rel cp prog vs ast0 /\
     run_context fuel unit.cu_context vs = Abort a vs'
     ==>
     ?n ast.
       (asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-         prog n (entry_asm_state vs es) = AsmRevert ast \/
+         prog n ast0 = AsmRevert ast \/
        asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-         prog n (entry_asm_state vs es) = AsmFault ast) /\
+         prog n ast0 = AsmFault ast) /\
       ast.as_requests = vs'.vs_requests
 Proof
   rpt gen_tac >> strip_tac >>
@@ -190,10 +190,9 @@ Proof
           codegen_memory_obligations_def] >>
   mp_tac (Q.INST [`Inv` |-> `\c f i s. F`] codegen_invoke_targets_retpc) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
   `fn_entry_state_rel cp fe
      (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
-     (entry_asm_state vs es) 0w []`
+     ast0 0w []`
     by (irule codegen_asm_entry_fn_state_rel >> metis_tac[]) >>
   `asm_block_at prog 0 (execute_plan cp.cp_initial_fmp r.sr_plan)`
     by metis_tac[codegen_assembly_first_region] >>
@@ -202,10 +201,35 @@ Proof
   disch_then (qspecl_then [`rpolicy`, `unit`, `cp`, `prog`, `unit.cu_context`,
     `SND (compute_label_offsets prog)`, `build_offset_to_pc prog`, `0`, `r`, `fe`,
     `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>`,
-    `entry_asm_state vs es`, `Inv`, `0w`, `0`, `[]`] mp_tac) >>
+    `ast0`, `Inv`, `0w`, `0`, `[]`] mp_tac) >>
   impl_tac
-  >- (simp[entry_asm_state_def, fn_has_retpc_def] >>
-      fs[initial_ctx_rel_def] >>
+  >- (fs[codegen_asm_entry_rel_def, fn_has_retpc_def] >>
       gvs[GSYM fn_has_retpc_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >> metis_tac[]
+QED
+
+Theorem codegen_entry_asm_sim_abort:
+  !fuel rpolicy unit cp prog Inv vs es a vs'.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations_abort Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    (!fn inst l.
+      MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) /\
+      inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
+      IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
+    initial_ctx_rel cp prog unit.cu_context vs es /\
+    run_context fuel unit.cu_context vs = Abort a vs'
+    ==>
+    ?n ast.
+      (asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+         prog n (entry_asm_state vs es) = AsmRevert ast \/
+       asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+         prog n (entry_asm_state vs es) = AsmFault ast) /\
+      ast.as_requests = vs'.vs_requests
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  drule_all codegen_entry_asm_sim_abort_rel >> simp[]
 QED

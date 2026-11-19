@@ -92,14 +92,14 @@ Theorem emitted_ptr_scalar_offset_frag_ptr_origin_core[local]:
         op_taint tnf (Var q) = op_taint tn (Var q)) /\
       tnf.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG Gf tnf
           (sf with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -116,7 +116,7 @@ Proof
     simp[Abbr `tf`, Abbr `t`, step_taint_def, mk_inst_def, imm_taint_def,
       step_writes_def, update_var_def] >>
   `!D lower ctx' func.
-    fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     (!fuel. ptr_safe_run D lower fuel ctx' func PG gf tf
@@ -134,7 +134,7 @@ Proof
       (irule step_ADD >> simp[]) >>
     simp[Abbr `t`, is_terminator_def, update_var_def]) >>
   `!D lower explicit ctx' func.
-    fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -296,14 +296,14 @@ Theorem scalar_binop_frag_ptr_origin_core[local]:
         op_taint u (Var q) = op_taint tn (Var q)) /\
       u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (update_var out (f a b) s with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -315,7 +315,7 @@ Proof
   qabbrev_tac `HG = step_prov PG G (mk_inst id opc [left;right] [out]) t` >>
   qabbrev_tac `u = step_taint (mk_inst id opc [left;right] [out]) s t tn` >>
   `!D lower ctx' func.
-    fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
@@ -332,7 +332,7 @@ Proof
      gvs[Abbr `HG`, Abbr `u`, Abbr `t`, mk_inst_def, update_var_def,
        is_terminator_def]) >>
   `!D lower explicit ctx' func.
-    fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -539,7 +539,7 @@ Theorem calldata_load_frag_ptr_origin_core_joint_exact:
         op_taint u (Var q) = op_taint tn (Var q)) /\
       u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
@@ -547,7 +547,7 @@ Theorem calldata_load_frag_ptr_origin_core_joint_exact:
              vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -561,7 +561,7 @@ Proof
   qabbrev_tac `HG = step_prov PG G inst t` >>
   qabbrev_tac `u = step_taint inst s t tn` >>
   `!D lower explicit ctx' func.
-    fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -667,7 +667,7 @@ Theorem calldata_load_frag_ptr_origin_core_joint:
         op_taint u (Var q) = op_taint tn (Var q)) /\
       u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
@@ -675,7 +675,7 @@ Theorem calldata_load_frag_ptr_origin_core_joint:
              vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -705,7 +705,7 @@ Theorem calldata_load_frag_ptr_origin_core:
         op_taint u (Var q) = op_taint tn (Var q)) /\
       u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
@@ -713,7 +713,7 @@ Theorem calldata_load_frag_ptr_origin_core:
              vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -797,14 +797,14 @@ Theorem emit_scalar_binop_endpoint_ptr_origin_core_exact_frame:
         FLOOKUP HG q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -849,14 +849,14 @@ Theorem emit_scalar_binop_endpoint_ptr_origin_core:
         FLOOKUP HG q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -961,14 +961,14 @@ Theorem emit_calldata_load_endpoint_ptr_origin_core_joint_frame:
         FLOOKUP HG q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -1010,14 +1010,14 @@ Theorem emit_calldata_load_endpoint_ptr_origin_core_joint:
         FLOOKUP HG q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -1044,14 +1044,14 @@ Theorem emit_calldata_load_endpoint_ptr_origin_frame:
         FLOOKUP HG q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -1079,14 +1079,14 @@ Theorem emit_calldata_load_endpoint_ptr_origin_core:
         FLOOKUP HG q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -1390,14 +1390,14 @@ Theorem emit_ptr_offset_endpoint_ptr_origin_core_exact_frame:
         FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -1441,14 +1441,14 @@ Theorem emit_ptr_offset_endpoint_ptr_origin_core:
         FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -1657,14 +1657,14 @@ Theorem emit_mload_clean_endpoint_ptr_origin_core_exact_frame:
         FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ w2n a + 32 <= s.vs_alloca_next /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -1698,7 +1698,7 @@ Proof
      simp[Abbr `u`, Abbr `ins`, step_taint_def, mk_inst_def,
        set_var_taint_def, FLOOKUP_UPDATE]) >>
   `!D lower ctx' func.
-    fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
@@ -1709,7 +1709,7 @@ Proof
      goal_assum (drule_at Any) >> simp[Abbr `HG`, Abbr `u`, Abbr `ins`] >>
      goal_assum (drule_at Any) >> gvs[Abbr `x`]) >>
   `!D lower explicit ctx' func.
-    fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ w2n a + 32 <= s.vs_alloca_next /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -1766,14 +1766,14 @@ Theorem emit_mload_clean_endpoint_ptr_origin_core:
         FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ w2n a + 32 <= s.vs_alloca_next /\
         s.vs_current_bb = sa.cs_current_bb /\
         s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -1811,7 +1811,7 @@ Theorem emit_mload_clean_endpoint_ptr_core:
 Proof
   rpt strip_tac >> drule_all emit_mload_clean_endpoint_ptr_origin_core >>
   disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`HG`,`u`] >> simp[]
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
 QED
 
 Theorem emit_mload_clean_endpoint_ptr:

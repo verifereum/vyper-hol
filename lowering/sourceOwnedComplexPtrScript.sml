@@ -1,6 +1,6 @@
 (* Repeat-compatible navigation for the owned complex decoder fold. *)
 Theory sourceOwnedComplexPtr
-Ancestors sourceRecursiveComplexPtr
+Ancestors sourceRecursiveComplexPtr decoderOriginAllocationFrame
   canonicalMemberTraversalPtr
   venomExecSemantics venomState abiDecoderMemberSetup abiDecoderContract
   decoderMemberPrefixPtr abiDecoderDynamicLoopSetup fragExec abiDecoderFrame emitHelper venomInst
@@ -62,7 +62,7 @@ Theorem owned_member_navigation_record_ptr:
   ptr_covers G tn root s cap /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   vo + C <= cap /\ d + vo < dimword (:256) /\
   mid.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
-  fn_has_code sa mid fn /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa mid fn /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r H u q.
@@ -156,7 +156,7 @@ Theorem owned_member_navigation_ptr:
   ptr_covers G tn root s cap /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   vo + C <= cap /\ d + vo < dimword (:256) /\
   mid.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
-  fn_has_code sa mid fn /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa mid fn /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r H u q.
@@ -282,7 +282,8 @@ Theorem source_owned_complex_suffix_ptr:
       !bb. lookup_block en.cs_current_bb fn.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     en.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit r /\
-    allocas_from lo r /\ lo <= r.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo r /\ lo <= r.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r /\
+      r.vs_alloca_next + pending_alloca_size fn r <= w2n r.vs_initial_fmp) /\
     ~r.vs_halted /\ r.vs_current_bb = mid.cs_current_bb /\
     r.vs_inst_idx = LENGTH mid.cs_current_insts ==>
     ?t J v fp.
@@ -323,7 +324,10 @@ Theorem source_owned_complex_suffix_ptr:
       t.vs_requests = r.vs_requests /\
       t.vs_pending_deletions = r.vs_pending_deletions /\ t.vs_tx_ctx = r.vs_tx_ctx /\
       t.vs_block_ctx = r.vs_block_ctx /\ t.vs_fmp = r.vs_fmp /\
-      t.vs_gas_readings = r.vs_gas_readings) ==>
+      t.vs_gas_readings = r.vs_gas_readings /\
+      t.vs_initial_fmp = r.vs_initial_fmp /\
+      t.vs_alloca_next + pending_alloca_size fn t <=
+        r.vs_alloca_next + pending_alloca_size fn r) ==>
   !n k sa s G tn.
     LENGTH tys - k = n /\ k <= LENGTH tys /\
     LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
@@ -361,7 +365,8 @@ Theorem source_owned_complex_suffix_ptr:
       !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     sb.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     (!i. i < k ==> !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
       val_in_memory (EL i tvs) (EL i vs)
@@ -407,7 +412,10 @@ Theorem source_owned_complex_suffix_ptr:
       t.vs_requests = s.vs_requests /\
       t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
       t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
-      t.vs_gas_readings = s.vs_gas_readings
+      t.vs_gas_readings = s.vs_gas_readings /\
+      t.vs_initial_fmp = s.vs_initial_fmp /\
+      t.vs_alloca_next + pending_alloca_size fn t <=
+        s.vs_alloca_next + pending_alloca_size fn s
 Proof
   disch_then (mk_asm "child") >> Induct
   >- (asm_x "child" kall_tac >> rpt gen_tac >>
@@ -507,6 +515,9 @@ Resume source_owned_complex_suffix_ptr[step]:
        metis_tac[abi_decode_source_def]) >> simp[]) >>
   qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `dec_info_needs_offset _ = _` (fn th => pure_rewrite_tac[th]) >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+       mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   drule_all owned_member_navigation_record_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qpat_x_assum `r = s with <| vs_vars := _; vs_inst_idx := _ |>`
@@ -594,6 +605,12 @@ Resume source_owned_complex_suffix_ptr[step]:
      asm_rewrite_tac[]) >>
   `abi_decoder_operand_live mid.cs_next_var (Var q)` by
     (asm_x "child" kall_tac >> asm_x "ih" kall_tac >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r /\
+    r.vs_alloca_next + pending_alloca_size fn r <= w2n r.vs_initial_fmp` by
+    (asm "navigation_record" (fn eq => PURE_ONCE_REWRITE_TAC[eq]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` mp_tac >>
+     simp_tac (srw_ss()) [allocas_below_fmp_def, pending_alloca_size_def] >>
+     metis_tac[]) >>
   asm "child" (qspec_then `k` (drule_at (Pos (el 2)))) >>
   disch_then (qspecl_then [`r`,`H`,`u`,
     `d + SUM (MAP type_memory_size (TAKE k tvs))`,
@@ -722,6 +739,15 @@ Resume source_owned_complex_suffix_ptr[step]:
        [`k < LENGTH tys`, `LENGTH ats = LENGTH tys`, `LENGTH tvs = LENGTH tys`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
      simp[TAKE_SUC_BY_TAKE, MAP_SNOC, SUM_SNOC]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (r,H,u) _ (OK t,J,v)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_origin_ptr_path (ARB,lo,{},ctx,fn,PG) (r,H,u) [] (OK t,J,v)`,
+        `fn_inst_ids_distinct fn`, `t.vs_fmp = r.vs_fmp`, `alloca_inv t`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp r /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   asm "ih" (qspec_then `SUC k` mp_tac) >>
   disch_then (qspecl_then [`en`, `t`, `J`, `v`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> simp[Abbr `ats`])) >> strip_tac >>
@@ -829,6 +855,13 @@ Resume source_owned_complex_suffix_ptr[step]:
         `!D explicit. gas_origin_ptr_path _ (t,J,v) _ _`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+  `t'.vs_initial_fmp = s.vs_initial_fmp /\
+    t'.vs_alloca_next + pending_alloca_size fn t' <=
+      s.vs_alloca_next + pending_alloca_size fn s` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) _ (OK t',H',u')`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >>
+     simp_tac (srw_ss()) []) >>
   qexistsl_tac [`t'`, `H'`, `u'`, `fp ++ fp'`] >>
   conj_tac
   >- (irule abi_decode_sim_trans >> qexists_tac `t` >>
@@ -925,7 +958,8 @@ Theorem source_owned_complex_elems_ptr:
       !bb. lookup_block en.cs_current_bb fn.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     en.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit r /\
-    allocas_from lo r /\ lo <= r.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo r /\ lo <= r.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r /\
+      r.vs_alloca_next + pending_alloca_size fn r <= w2n r.vs_initial_fmp) /\
     ~r.vs_halted /\ r.vs_current_bb = mid.cs_current_bb /\
     r.vs_inst_idx = LENGTH mid.cs_current_insts ==>
     ?t J v fp.
@@ -966,7 +1000,10 @@ Theorem source_owned_complex_elems_ptr:
       t.vs_requests = r.vs_requests /\
       t.vs_pending_deletions = r.vs_pending_deletions /\ t.vs_tx_ctx = r.vs_tx_ctx /\
       t.vs_block_ctx = r.vs_block_ctx /\ t.vs_fmp = r.vs_fmp /\
-      t.vs_gas_readings = r.vs_gas_readings) ==>
+      t.vs_gas_readings = r.vs_gas_readings /\
+      t.vs_initial_fmp = r.vs_initial_fmp /\
+      t.vs_alloca_next + pending_alloca_size fn t <=
+        r.vs_alloca_next + pending_alloca_size fn r) ==>
   !sa s G tn.
     LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
     LIST_REL value_has_type tvs vs /\ vyper_to_abi_list env tys vs = SOME avs /\
@@ -1002,7 +1039,8 @@ Theorem source_owned_complex_elems_ptr:
       !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     sb.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t H u fp.
       abi_decode_sim ctx fn s t /\
@@ -1045,7 +1083,10 @@ Theorem source_owned_complex_elems_ptr:
       t.vs_requests = s.vs_requests /\
       t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
       t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
-      t.vs_gas_readings = s.vs_gas_readings
+      t.vs_gas_readings = s.vs_gas_readings /\
+      t.vs_initial_fmp = s.vs_initial_fmp /\
+      t.vs_alloca_next + pending_alloca_size fn t <=
+        s.vs_alloca_next + pending_alloca_size fn s
 Proof
   disch_then (assume_tac o MATCH_MP source_owned_complex_suffix_ptr) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>

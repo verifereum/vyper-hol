@@ -40,17 +40,13 @@ QED
 
 Theorem lower_dload_sync_section[local]:
   ld_sync lo P C vs stk PG G tn fn inst s t0 A (f::fs) N /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
-  mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
-    s.vs_code = v.vs_code /\ s.vs_data_section = v.vs_data_section) C vs ==>
-  inst_dload_in_section inst t0 /\ t0.vs_data_section = v.vs_data_section
+  o1_ctx_shape C /\ taint_ok fn tn inst s /\ inst_dload_in_section inst s ==>
+  inst_dload_in_section inst t0 /\ t0.vs_data_section = s.vs_data_section
 Proof
   strip_tac >>
-  drule_all ld_sync_source_mem_inv >> simp[] >> strip_tac >>
   drule ld_sync_active >> simp[] >> strip_tac >>
   drule_all ld_sync_fn_shape >> strip_tac >>
   drule o1_fn_shape_components >> strip_tac >>
-  `taint_ok fn tn inst s` by metis_tac[ld_sync_taint_ok] >>
   `s.vs_data_section = t0.vs_data_section /\ s.vs_labels = t0.vs_labels` by
     (drule ld_sync_memory >> simp[ld_nonghost_def]) >>
   `MEM inst (fn_insts fn) /\ fn_ptr_ok P fn` by
@@ -69,13 +65,11 @@ Proof
   metis_tac[]
 QED
 
-Theorem lower_dload_sync_codecopy_bound:
+Theorem lower_dload_sync_codecopy_bound_at:
   ld_sync lo P C vs stk PG G tn fn inst s t0 A (f::fs) N /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ taint_ok fn tn inst s /\
   ir_supply_covers_fn f.lf_supply fn /\
-  mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
-    s.vs_code = v.vs_code /\ s.vs_data_section = v.vs_data_section) C vs /\
-  LENGTH v.vs_data_section < dimword(:256) DIV 2 /\
+  inst_dload_in_section inst s /\ LENGTH s.vs_data_section < dimword(:256) DIV 2 /\
   ~MEM (Label "code_end") inst.inst_operands /\
   (inst.inst_opcode = DLOAD \/ inst.inst_opcode = DLOADBYTES) /\
   ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
@@ -98,4 +92,28 @@ Proof
     metis_tac[ld_inst_input_ir] >>
   `LENGTH t0.vs_data_section < dimword(:256) DIV 2` by metis_tac[] >>
   metis_tac[lower_dload_codecopy_delta]
+QED
+
+Theorem lower_dload_sync_codecopy_bound:
+  ld_sync lo P C vs stk PG G tn fn inst s t0 A (f::fs) N /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  ir_supply_covers_fn f.lf_supply fn /\
+  mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+    s.vs_code = v.vs_code /\ s.vs_data_section = v.vs_data_section) C vs /\
+  LENGTH v.vs_data_section < dimword(:256) DIV 2 /\
+  ~MEM (Label "code_end") inst.inst_operands /\
+  (inst.inst_opcode = DLOAD \/ inst.inst_opcode = DLOADBYTES) /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  ld_prefix C' fn' X p h t0 t /\
+  (EL h X).inst_opcode = CODECOPY /\
+  (EL h X).inst_operands = [dst; Var x; sz] /\
+  eval_operand (Var x) t = SOME w /\
+  FLOOKUP t.vs_labels "code_end" = SOME bword ==>
+  w2n (w-bword) < dimword(:256) DIV 2
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ld_sync_source_mem_inv >> simp[] >> strip_tac >>
+  `taint_ok fn tn inst s` by metis_tac[ld_sync_taint_ok] >>
+  `LENGTH s.vs_data_section < dimword(:256) DIV 2` by simp[] >>
+  drule_all lower_dload_sync_codecopy_bound_at >> simp[]
 QED

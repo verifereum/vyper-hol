@@ -170,14 +170,14 @@ jobs:
           runs="repos/$REPO/actions/workflows/holbuild.yml/runs"
           passed=false
           if [ "$GITHUB_EVENT_NAME" = push ]; then
-            count=$(gh api "$runs?head_sha=$GITHUB_SHA&event=merge_group&status=success" -q .total_count)
+            count=$(gh api "$runs?head_sha=$GITHUB_SHA&event=merge_group&per_page=100" -q '[.workflow_runs[] | select(.conclusion == "success")] | length')
             echo "successful merge-group runs: $count"
             [ "$count" -gt 0 ] && passed=true
           else
             # The group's merge commit has the PR head as its second parent.
             read -r tree head <<< "$(gh api "repos/$REPO/git/commits/$GITHUB_SHA" -q '[.tree.sha, .parents[1].sha] | join(" ")')"
             echo "group tree $tree, PR head $head"
-            for id in $(gh api "$runs?head_sha=$head&event=pull_request&status=success" -q '.workflow_runs[].id'); do
+            for id in $(gh api "$runs?head_sha=$head&event=pull_request&per_page=100" -q '.workflow_runs[] | select(.conclusion == "success") | .id'); do
               # A draft's run succeeds with every job skipped, so take only a
               # successful holbuild-success, whose step names the commit tested.
               tested=$(gh api "repos/$REPO/actions/runs/$id/jobs" -q '.jobs[] | select(.name == "holbuild-success" and .conclusion == "success") | .steps[].name | select(startswith("Check all jobs succeeded on ")) | ltrimstr("Check all jobs succeeded on ")')

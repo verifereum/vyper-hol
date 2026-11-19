@@ -102,6 +102,7 @@ Proof
   strip_tac >> qmatch_asmsub_abbrev_tac `OK raw` >>
   `w2n (n2w d : bytes32) = d` by simp[w2n_n2w, LESS_MOD] >>
   `w2n (n2w d : bytes32) + vo < dimword (:256)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by simp[] >>
   drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `x`
     (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac)))) >>

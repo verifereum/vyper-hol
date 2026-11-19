@@ -55,7 +55,7 @@ QED
 
 (* A terminal unoptimized run from s is matched by an optimized run from
    s with the optimized code. *)
-Theorem asm_opt_transfer[local]:
+Theorem asm_opt_transfer:
   asm_refines prog prog' /\
   label_disciplined (asm_data_env prog (assemble prog ++ x)) prog s /\
   s.as_pc = 0 /\ s.as_code = assemble prog ++ x /\

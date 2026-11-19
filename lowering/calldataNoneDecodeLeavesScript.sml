@@ -109,6 +109,7 @@ Resume none_decode_leaf_paths[word]:
   Cases_on `abi_clamp_ok cl (abi_decode_load CALLDATALOAD p initial)`
   >- (drule_all calldata_coherent_word_rejects >>
       disch_then (qspec_then `abi_decode_load CALLDATALOAD p initial` assume_tac) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
       drule_all calldata_word_accepted_resource_joint >>
       disch_then (qspec_then `PG` strip_assume_tac) >>
       disj2_tac >> qexistsl [`v`,`[]`,`H`,`u`] >>
@@ -188,6 +189,7 @@ Resume none_decode_leaf_paths[bulk_ok]:
   `not_fresh_at st child /\ (!x. src = Var x ==> not_fresh_at st x)` by
     (rpt conj_tac >> rpt strip_tac >> metis_tac[calldata_operand_live_not_fresh]) >>
   `abi_decode_load CALLDATALOAD p initial = n2w n` by simp[Abbr `n`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all (Q.INST [`maxn` |-> `maxn`] calldata_bulk_decoder_endpoint_ptr_uniform_origin) >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `?values. cd_decode_elems T initial.vs_call_ctx.cc_calldata etv

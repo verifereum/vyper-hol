@@ -1,6 +1,7 @@
 (* Positional registration on the fixed source calldata. *)
 Theory selectedAcceptedFold
 Ancestors
+  decoderOriginAllocationFrame
   selectedAcceptedInterfaces calldataRegistrationExec calldataSourceSize
   calldataSourceCorrespondence calldataRegistrationTerminalBindings
   defaultConcreteRegistrationCompiler fragGasPathFrameMem
@@ -68,7 +69,8 @@ Theorem selected_registration_head[local]:
   (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
   st1.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
-  unit_alloca_budget ctx < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
+  unit_alloca_budget ctx < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
   ?t H u.
     selected_registration_owners fn names tvs vals (SUC i) ce1 st1 t H u /\
     selected_registration_resources ctx fn site lo st1 t /\
@@ -196,7 +198,7 @@ Theorem selected_registration_suffix[local]:
   fn_inst_ids_distinct fn /\
   (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
-  unit_alloca_budget ctx < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
+  unit_alloca_budget ctx < dimword (:256) ==>
   !i ce ofs st s G tn.
     i <= LENGTH args /\ ce = ce0 with ce_vars := ce.ce_vars /\
     (!j. i <= j /\ j < LENGTH args ==> ?loc.
@@ -209,7 +211,9 @@ Theorem selected_registration_suffix[local]:
     4+ofs+SUM (MAP tv_abi_size (DROP i tvs)) < dimword (:256) /\
     last.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
     selected_registration_owners fn (MAP FST args) tvs vals i ce st s G tn /\
-    selected_registration_resources ctx fn site lo st s ==>
+    selected_registration_resources ctx fn site lo st s /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
     ?t H u.
       selected_registration_owners fn (MAP FST args) tvs vals (LENGTH args) cf last t H u /\
       selected_registration_resources ctx fn site lo last t /\
@@ -297,6 +301,22 @@ Proof
        (first_assum irule >> first_assum ACCEPT_TAC) >>
      pop_assum (pure_once_rewrite_tac o single) >>
      first_assum irule >> decide_tac) >>
+  `t.vs_fmp = s.vs_fmp` by
+    (qpat_assum `selected_registration_frame s tn t u`
+       (strip_assume_tac o REWRITE_RULE [selected_registration_frame_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `alloca_inv t` by
+    (qpat_assum `selected_registration_resources ctx fn site lo mid t`
+       (strip_assume_tac o REWRITE_RULE [selected_registration_resources_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,H,u)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`fn_inst_ids_distinct fn`,`t.vs_fmp = s.vs_fmp`,`alloca_inv t`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   qpat_x_assum `!y. LENGTH args - y < _ ==> _` (qspec_then `SUC i` mp_tac) >>
   (impl_tac >- decide_tac) >>
   disch_then (drule_at (Pat `compile_register_positional_args _ _ _ _ = _`)) >>
@@ -361,7 +381,8 @@ Theorem selected_registration_fold:
   4+SUM (MAP tv_abi_size tvs) < dimword (:256) /\
   last.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
   selected_registration_resources ctx fn site lo st s /\ alloca_history fn s /\
-  unit_alloca_budget ctx < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
+  unit_alloca_budget ctx < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
   ?t H u.
     local_ptrs_rel fn cf [envb] t /\
     selected_registration_owners fn (MAP FST args) tvs vals (LENGTH args) cf last t H u /\

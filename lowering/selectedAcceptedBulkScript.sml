@@ -1,6 +1,8 @@
 (* Accepted bulk decoding on the actual calldata, with its installed endpoint. *)
 Theory selectedAcceptedBulk
-Ancestors decoderNavigationPtr[qualified,ignore_grammar] exprSimPtrProps[qualified,ignore_grammar] entryDispatchPtr[qualified,ignore_grammar] fragGasOriginPtr[qualified,ignore_grammar] gasEvents[qualified,ignore_grammar] contextCodegenRel[qualified,ignore_grammar] ptrSafeRun[qualified,ignore_grammar] fragExec[qualified,ignore_grammar] venomInst[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar] memSafeRun[qualified,ignore_grammar]
+Ancestors
+  decoderOriginAllocationFrame
+  decoderNavigationPtr[qualified,ignore_grammar] exprSimPtrProps[qualified,ignore_grammar] entryDispatchPtr[qualified,ignore_grammar] fragGasOriginPtr[qualified,ignore_grammar] gasEvents[qualified,ignore_grammar] contextCodegenRel[qualified,ignore_grammar] ptrSafeRun[qualified,ignore_grammar] fragExec[qualified,ignore_grammar] venomInst[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar] memSafeRun[qualified,ignore_grammar]
   selectedAcceptedInterfaces calldataBulkSourceOutcome calldataBulkOperationalCertificate
   calldataStaticSourceExact calldataBulkSourceExact calldataReconstruction
   logStoreDataOriginPtr calldataBulkUniformPtr abiStaticAggregateProps vyperValue
@@ -209,7 +211,7 @@ Theorem bulk_origin_exact_frame[local]:
   ptr_covers G tn root s cap /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   32+n*mem_sz <= cap /\ d+32 < dimword (:256) /\ n*mem_sz < dimword (:256) /\
   run_inst_seq (emitted_insts st last) s = OK t /\ ~s.vs_halted /\
-  fn_has_code st last fn /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st last fn /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   d+32+n*mem_sz <= s.vs_alloca_next ==>
   ?H u.
@@ -265,6 +267,12 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Triviality pending_alloca_frame:
+  pending_alloca_size fn (s with vs_inst_idx := idx) = pending_alloca_size fn s
+Proof
+  simp[exprLoweringPropsTheory.pending_alloca_size_def]
+QED
+
 Theorem selected_bulk_accepts:
   type_to_abi_dec_info sf ce (ArrayT ety (Dynamic maxn)) =
     DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei ==>
@@ -304,6 +312,7 @@ Proof
   `abi_decode_load CALLDATALOAD p initial = n2w n` by asm_rewrite_tac[n2w_w2n] >>
   `d+32+n*mem_sz <= initial.vs_alloca_next` by
     (rewrite_tac[GSYM ADD_ASSOC] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all_then (qspec_then `PG` strip_assume_tac) bulk_origin_exact_frame >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abiDecoderBulkExecuteTheory.abi_decoder_bulk_allocation_shape >> strip_tac >>
@@ -315,6 +324,13 @@ Proof
         rewrite_tac[calldataSourceCorrespondenceTheory.calldata_decode_load_word]) >>
      qpat_x_assum `tv = _` SUBST_ALL_TAC >> qpat_x_assum `mem_sz = _` SUBST_ALL_TAC >>
      rpt strip_tac >> drule_all_then ACCEPT_TAC bulk_clean_value) >>
+  `t.vs_initial_fmp = initial.vs_initial_fmp /\
+   t.vs_alloca_next + pending_alloca_size fn t <=
+     initial.vs_alloca_next + pending_alloca_size fn initial` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (initial,G,tn) [] (OK _,H,u)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >>
+     simp[NoAsms, exprLoweringPropsTheory.pending_alloca_size_def]) >>
   qexistsl [`t with vs_inst_idx := LENGTH last.cs_current_insts`, `[]`,`H`,`u`] >>
   qpat_x_assum `abi_decode_load _ _ _ = n2w n` kall_tac >>
   qpat_x_assum `n = w2n (abi_decode_load _ _ _)` kall_tac >>
@@ -322,7 +338,7 @@ Proof
   (first_assum ACCEPT_TAC ORELSE
    (rewrite_tac [venomStateTheory.venom_state_accfupds, combinTheory.K_THM,
       instIdxIndepTheory.eval_op_inst_idx, MEM, LESS_EQ_REFL,
-      ghostPcTransportPtrTheory.ptr_covers_inst_idx] >>
+      ghostPcTransportPtrTheory.ptr_covers_inst_idx, pending_alloca_frame] >>
     TRY (first_assum ACCEPT_TAC))) >>
   TRY (qmatch_goalsub_rename_tac `(t with vs_inst_idx := idx)` >>
     FIRST [irule calldataFiniteTransportTheory.calldata_alloca_inv_fields,

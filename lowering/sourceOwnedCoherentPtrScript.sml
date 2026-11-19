@@ -45,7 +45,8 @@ Theorem source_owned_coherent_decoder_ptr:
       !bb. lookup_block end_st.cs_current_bb fn.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     end_st.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit r /\
-    allocas_from lower r /\ lower <= r.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lower r /\ lower <= r.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r /\
+      r.vs_alloca_next + pending_alloca_size fn r <= w2n r.vs_initial_fmp) /\
     ~r.vs_halted /\ r.vs_current_bb = middle.cs_current_bb /\
     r.vs_inst_idx = LENGTH middle.cs_current_insts ==>
     ?t H u fp.
@@ -87,7 +88,10 @@ Theorem source_owned_coherent_decoder_ptr:
       t.vs_requests = r.vs_requests /\
       t.vs_pending_deletions = r.vs_pending_deletions /\ t.vs_tx_ctx = r.vs_tx_ctx /\
       t.vs_block_ctx = r.vs_block_ctx /\ t.vs_fmp = r.vs_fmp /\
-      t.vs_gas_readings = r.vs_gas_readings
+      t.vs_gas_readings = r.vs_gas_readings /\
+      t.vs_initial_fmp = r.vs_initial_fmp /\
+      t.vs_alloca_next + pending_alloca_size fn t <=
+        r.vs_alloca_next + pending_alloca_size fn r
 Proof
   ho_match_mp_tac abi_decoder_coherent_strongind >> rpt conj_tac
   >- suspend "base"

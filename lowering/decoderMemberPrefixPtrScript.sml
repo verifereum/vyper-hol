@@ -5,7 +5,7 @@ Ancestors fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem memSafeRun 
   venomExecSemantics venomInst venomState compileEnv loweringStateRelDefs emitHelper fragExec
   words finite_map pred_set list arithmetic instIdxIndep
   emitHelperProps exprLoweringProps abiDecoderLoop ghostPcTransportPtr exprLowering abiEncoder decoderArraySetupPtr
-  abiDecoderMemberSetup abiDecoderReentryPointer abiDecoderReentry
+  abiDecoderMemberSetup abiDecoderReentryPointer abiDecoderReentry fragGasSeqPtrContext
 
 (* The calldata address step: base Lit 0w adds no instruction. *)
 val calldata_pos_addr = prove(
@@ -63,7 +63,7 @@ Theorem member_navigation_step_safe[local]:
   EVERY (\op. op_taint tn op = {}) ops /\
   step_inst fuel ctx (mk_inst id opc ops outs) s = OK t /\
   t.vs_requests = s.vs_requests /\
-  allocas_from lower s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_safe_step D lower fuel ctx func PG G tn (mk_inst id opc ops outs) s
 Proof
   strip_tac >> fs[MEM] >>
@@ -78,7 +78,7 @@ Theorem member_navigation_step_continuation:
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops outs) /\
   step_inst_base (mk_inst id opc ops outs) s = OK t /\
-  allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!fuel. ptr_safe_run D lower fuel ctx func PG
     (step_prov PG G (mk_inst id opc ops outs) t)
     (step_taint (mk_inst id opc ops outs) s t tn)
@@ -103,7 +103,7 @@ Theorem member_navigation_emit_continuation:
   MEM opc [ADD; CALLDATALOAD] /\ emit_op opc ops sa = (out,sb) /\
   EVERY (\op. op_taint tn op = {}) ops /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?x. out = Var x /\
@@ -144,7 +144,7 @@ Theorem member_navigation_emit_endpoint:
   MEM opc [ADD; CALLDATALOAD] /\ emit_op opc ops sa = (out,sb) /\
   EVERY (\op. op_taint tn op = {}) ops /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?x H u. out = Var x /\
@@ -214,7 +214,7 @@ Theorem member_navigation_emit_pointer:
   op_taint tn offset = {} /\ op_prov G offset = NONE /\
   off + n <= cap /\ w2n a + off < dimword(:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?x H u. out = Var x /\
@@ -274,7 +274,7 @@ Theorem member_navigation_emit_endpoint_uniform:
   MEM opc [ADD; CALLDATALOAD] /\ emit_op opc ops sa = (out,sb) /\
   EVERY (\op. op_taint tn op = {}) ops /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?x H u. out = Var x /\
@@ -309,7 +309,7 @@ Theorem member_navigation_emit_pointer_uniform:
   op_taint tn offset = {} /\ op_prov G offset = NONE /\
   off + n <= cap /\ w2n a + off < dimword(:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?x H u. out = Var x /\
@@ -365,6 +365,8 @@ Proof
     (fs[allocas_from_def] >> metis_tac[]) >>
   `(s with vs_inst_idx := LENGTH sa.cs_current_insts).vs_current_bb = sa.cs_current_bb /\
    (s with vs_inst_idx := LENGTH sa.cs_current_insts).vs_inst_idx = LENGTH sa.cs_current_insts` by simp[] >>
+  `ctx_has_dalloca ctx ==>
+   allocas_below_fmp (s with vs_inst_idx := LENGTH sa.cs_current_insts)` by simp[] >>
   drule_all member_navigation_emit_endpoint_uniform >>
   disch_then (qspecl_then [`PG`,`G`] (qx_choose_then `x` strip_assume_tac)) >>
   qexistsl_tac [`x`,`H`,`u`] >> gvs[lookup_var_def]
@@ -377,7 +379,7 @@ Theorem member_navigation_emit_pointer_pc_uniform_origin:
   op_taint tn offset = {} /\ op_prov G offset = NONE /\
   off + n <= cap /\ w2n a + off < dimword(:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb ==>
   ?x H u. out = Var x /\
     lookup_var x t = SOME (n2w (w2n a + off)) /\ ptr_covers H u x t n /\
@@ -420,7 +422,7 @@ Proof
     (qx_choose_then `HG` (qx_choose_then `u` (qx_choose_then `q` strip_assume_tac)))) >>
   qexistsl_tac [`q`,`HG`,`u`] >>
   gvs[ptr_covers_def,lookup_var_def] >> rpt strip_tac >>
-  first_x_assum irule >> simp[]
+  first_x_assum irule >> simp[allocas_below_fmp_def]
 QED
 
 Theorem member_navigation_emit_pointer_pc_uniform:
@@ -445,7 +447,9 @@ Theorem member_navigation_emit_pointer_pc_uniform:
      !fuel. ptr_safe_run D lower fuel ctx func PG G tn
       (s with vs_inst_idx := LENGTH sa.cs_current_insts))
 Proof
-  strip_tac >> drule_all member_navigation_emit_pointer_pc_uniform_origin >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`x`,`H`,`u`] >> simp[]
 QED
@@ -455,7 +459,7 @@ Theorem member_navigation_add_origin_pc[local]:
   op_taint tn left = {} /\ op_taint tn right = {} /\
   op_prov G left = NONE /\ op_prov G right = NONE /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb ==>
   ?x H u. out = Var x /\ op_taint u out = {} /\ op_prov H out = NONE /\
     t.vs_current_bb = s.vs_current_bb /\
@@ -503,7 +507,7 @@ Proof
      qpat_assum `!D lower ctx' func. _`
        (qspecl_then [`D`,`lower`,`ctx`,`func`] mp_tac) >>
      simp_tac (srw_ss()) [venom_state_accfupds, venom_state_fupdfupds] >>
-     (impl_tac >- (fs[allocas_from_def] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     (impl_tac >- (fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[])) >>
      disch_then irule >> first_assum ACCEPT_TAC) >>
   `~s.vs_halted ==> !D explicit.
     gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
@@ -513,7 +517,7 @@ Proof
      qpat_assum `!D lower explicit ctx' func. _`
        (qspecl_then [`D`,`lower`,`explicit`,`ctx`,`func`] mp_tac) >>
      simp_tac (srw_ss()) [venom_state_accfupds, venom_state_fupdfupds] >>
-     (impl_tac >- (fs[allocas_from_def] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     (impl_tac >- (fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[])) >>
      simp[]) >>
   qexistsl_tac [`STRING #"%" (toString sa.cs_next_var)`,`H`,`u`] >>
   gvs[lookup_var_def]
@@ -523,7 +527,7 @@ Theorem member_navigation_load_origin_pc[local]:
   emit_op CALLDATALOAD [src] sa = (out,sb) /\
   op_taint tn src = {} /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb ==>
   ?x H u. out = Var x /\ op_taint u out = {} /\ op_prov H out = NONE /\
     t.vs_current_bb = s.vs_current_bb /\
@@ -570,7 +574,7 @@ Proof
      qpat_assum `!D lower ctx' func. _`
        (qspecl_then [`D`,`lower`,`ctx`,`func`] mp_tac) >>
      simp_tac (srw_ss()) [venom_state_accfupds, venom_state_fupdfupds] >>
-     (impl_tac >- (fs[allocas_from_def] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     (impl_tac >- (fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[])) >>
      disch_then irule >> first_assum ACCEPT_TAC) >>
   `~s.vs_halted ==> !D explicit.
     gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
@@ -580,7 +584,7 @@ Proof
      qpat_assum `!D lower explicit ctx' func. _`
        (qspecl_then [`D`,`lower`,`explicit`,`ctx`,`func`] mp_tac) >>
      simp_tac (srw_ss()) [venom_state_accfupds, venom_state_fupdfupds] >>
-     (impl_tac >- (fs[allocas_from_def] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     (impl_tac >- (fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[])) >>
      simp[]) >>
   qexistsl_tac [`STRING #"%" (toString sa.cs_next_var)`,`H`,`u`] >>
   gvs[lookup_var_def]
@@ -596,7 +600,7 @@ Theorem member_navigation_source_origin:
   (!q. src = Var q ==> not_fresh_at sa q) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb ==>
   ?H u. op_taint u ep = {} /\ op_prov H ep = NONE /\
   t.vs_current_bb = s.vs_current_bb /\
@@ -670,6 +674,8 @@ Resume member_navigation_source_origin[dynamic]:
     (gvs[allocas_from_def] >> metis_tac[emit_op_same_blocks, same_blocks_def]) >>
   `MEM CALLDATALOAD [ADD; CALLDATALOAD] /\
    EVERY (\op. op_taint u1 op = {}) [head]` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> gvs[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all member_navigation_load_origin_pc >>
   disch_then (qspecl_then [`PG`,`H1`] strip_assume_tac) >>
   rename1 `op_taint u2 off = {}` >> rename1 `FLOOKUP H2 _ = FLOOKUP H1 _` >>
@@ -693,6 +699,8 @@ Resume member_navigation_source_origin[dynamic]:
   qpat_x_assum `emitted_insts sa cs' = _` kall_tac >>
   qpat_x_assum `emitted_insts c1 cs' = _` kall_tac >>
   `EVERY (\op. op_taint u2 op = {}) [src; off]` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >> gvs[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all member_navigation_add_origin_pc >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `t.vs_current_bb = s2.vs_current_bb` by
@@ -732,9 +740,29 @@ Theorem member_navigation_source_endpoint_uniform:
   (!D. (!fuel. ptr_safe_run D lower fuel ctx func PG H u (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
    !fuel. ptr_safe_run D lower fuel ctx func PG G tn (s with vs_inst_idx := LENGTH sa.cs_current_insts))
 Proof
-  rpt strip_tac >> drule_all member_navigation_source_origin >>
+  rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all member_navigation_source_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`H`,`u`] >> simp[]
+QED
+
+Theorem member_navigation_source_below_fmp[local]:
+  compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w) sa = (ep,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  allocas_below_fmp s ==>
+  allocas_below_fmp t
+Proof
+  strip_tac >> irule run_inst_seq_allocas_below_fmp >>
+  qexistsl_tac [`emitted_insts sa sb`,`s`] >> simp[] >>
+  qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `dyn` >>
+  simp_tac (srw_ss()) [compile_getelemptr_abi_def, calldata_pos_addr,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
+    emit_void_def, fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
+  strip_tac >> gvs[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  gvs[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def,
+      is_alloca_op_def]
 QED
 
 Theorem calldata_member_setup_endpoint_ptr_uniform_origin:
@@ -744,7 +772,7 @@ Theorem calldata_member_setup_endpoint_ptr_uniform_origin:
   ptr_covers G tn root s cap /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   vo + n <= cap /\ w2n a + vo < dimword(:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb ==>
   ?H u q. SND ops = Var q /\
   lookup_var q t = SOME (n2w (w2n a + vo)) /\ ptr_covers H u q t n /\
@@ -798,6 +826,10 @@ Proof
    op_taint u1 (Lit (n2w vo)) = {} /\ op_prov H1 (Lit (n2w vo)) = NONE` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
   `vo + n <= cap /\ w2n a + vo < dimword(:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp prepared` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` (drule_then assume_tac) >>
+     drule_all member_navigation_source_below_fmp >> simp[]) >>
   drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `!x. not_fresh_at sa x ==> not_fresh_at mid x` by
@@ -847,7 +879,9 @@ Theorem calldata_member_setup_endpoint_ptr_uniform:
   (!D. (!fuel. ptr_safe_run D lower fuel ctx func PG H u (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
    !fuel. ptr_safe_run D lower fuel ctx func PG G tn (s with vs_inst_idx := LENGTH sa.cs_current_insts))
 Proof
-  strip_tac >> drule_all calldata_member_setup_endpoint_ptr_uniform_origin >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_member_setup_endpoint_ptr_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`H`,`u`,`q`] >> simp[]
 QED

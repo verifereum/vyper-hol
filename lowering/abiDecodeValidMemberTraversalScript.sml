@@ -410,6 +410,7 @@ Proof
   `w2n (n2w B : bytes32) = B /\ w2n (n2w (B+h) : bytes32) = B+h` by
     (simp[w2n_n2w, LESS_MOD] >> decide_tac) >>
   `w2n (n2w B : bytes32) + h < dimword (:256)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r1` by simp[] >>
   drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `q`
     (qx_choose_then `G2` (qx_choose_then `tn2` strip_assume_tac)))) >>
@@ -673,6 +674,7 @@ Proof
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
   `w2n (n2w d : bytes32) + vo < dimword (:256)` by
     (`d < dimword (:256)` by decide_tac >> simp[w2n_n2w, LESS_MOD]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by simp[] >>
   drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `x`
     (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac)))) >>

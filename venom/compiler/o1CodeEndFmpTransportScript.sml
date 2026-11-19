@@ -1,5 +1,6 @@
 Theory o1CodeEndFmpTransport
 Ancestors
+  requestCutFmpOperand
   o1ContractFmpLowering ctxSealAgree codegenSymRel o1PassContract
   o1ScheduleDecomp o1LabelFlowMiddleFmp o1ComposeSupport unitMemInv
   unitTransformDefs venomPassSchedule venomPassDispatcher o1DretDesugarContract
@@ -30,6 +31,40 @@ Proof
   Cases_on `dst = Var x` >> gvs[AllCaseEqs()]
 QED
 
+(* A paired prefix supplies the pointer and taint facts at this visit. *)
+Theorem fmp_codecopy_source_equal_at:
+  wf_function fn /\ make_ssa_input_ok fn /\ opaque_use_ok fn /\
+  active_inst fn inst s /\ MEM inst (fn_insts fn) /\
+  FDOM G SUBSET fn_pv P fn /\ ptr_use_static_ok P (fn_pv P fn) inst /\
+  taint_ok fn tn inst s /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dst; Var x; sz] /\
+  eval_operand (Var x) s = SOME w ==>
+  eval_operand (Var x) t = SOME w /\ s.vs_labels = t.vs_labels /\
+  LENGTH s.vs_requests = LENGTH t.vs_requests
+Proof
+  strip_tac >>
+  `x NOTIN fn_pv P fn` by metis_tac[fmp_codecopy_source_nonpointer] >>
+  `op_prov G (Var x) = NONE` by
+    (gvs[op_prov_def, SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
+  `op_taint tn (Var x) = {}` by
+    (gvs[taint_ok_def] >> metis_tac[MEM]) >>
+  `~retpc_var fn x` by
+    (irule ordinary_operand_not_retpc >> simp[] >> qexists_tac `inst` >> simp[]) >>
+  `fmp_env_rel sm fn
+     (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+     G tn.t_var s t /\ s.vs_labels = t.vs_labels /\
+   ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
+    (fs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
+  `LENGTH s.vs_requests = LENGTH t.vs_requests` by
+    (fs[o1LowerDloadSharedTheory.ld_shared_agree_def] >> metis_tac[LIST_REL_LENGTH]) >>
+  `inst.inst_opcode <> PHI /\ MEM (Var x) inst.inst_operands /\
+   (!v. Var x = Var v ==> ~retpc_var fn v)` by simp[] >>
+  drule_all fmp_env_operand_at >>
+  simp[fmp_value_rel_def] >> strip_tac >>
+  metis_tac[ld_value_agree_clean]
+QED
+
 Theorem fmp_codecopy_source_equal[local]:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
@@ -41,23 +76,13 @@ Proof
   `FDOM G SUBSET fn_pv P fn` by metis_tac[fmp_stage_prov_support] >>
   `ptr_use_static_ok P (fn_pv P fn) inst` by
     (gvs[EVERY_MEM, fn_static_ptr_ok_def] >> metis_tac[]) >>
-  `x NOTIN fn_pv P fn` by metis_tac[fmp_codecopy_source_nonpointer] >>
-  `op_prov G (Var x) = NONE` by
-    (gvs[op_prov_def, SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
-  `op_taint tn (Var x) = {}` by
-    (gvs[taint_ok_def] >> metis_tac[MEM]) >>
-  `~retpc_var fn x` by
-    (irule ordinary_operand_not_retpc >> conj_tac
-     >- fs[o1_fn_shape_def, fn_shape_ok_def] >>
-     qexists_tac `inst` >> simp[]) >>
-  `inst.inst_opcode <> PHI /\ MEM (Var x) inst.inst_operands /\
-   (!v. Var x = Var v ==> ~retpc_var fn v)` by simp[] >>
+  `wf_function fn /\ opaque_use_ok fn` by
+    fs[o1_fn_shape_def, fn_shape_ok_def] >>
+  `inst.inst_opcode <> PHI /\ MEM (Var x) inst.inst_operands` by simp[] >>
   `?w. eval_operand (Var x) s = SOME w` by
     (drule_all fmp_stage_src_defined >>
      Cases_on `lookup_var x s` >> gvs[eval_operand_def]) >>
-  drule_all fmp_stage_operand >>
-  simp[fmp_value_rel_def] >> strip_tac >>
-  metis_tac[ld_value_agree_clean]
+  drule_all fmp_codecopy_source_equal_at >> simp[]
 QED
 
 (* At a CODECOPY the coverage cursor is past every inserted instruction. *)

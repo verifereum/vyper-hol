@@ -5,7 +5,7 @@ Ancestors fragGasOriginPtr calldataOverwritePtr calldataWordStepsPtr calldataCla
   venomInst list arithmetic words bodyPtrDefs decoderGhostFramePtr
   ptrDiscipline ptrSafeRun venomState venomExecSemantics entryDispatchPtr
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep ptrSafetyTransport
-  fragGasSeqPtr instSeqComposePtr
+  fragGasSeqPtr fragGasSeqPtrContext instSeqComposePtr
 
 (* The calldata address step: base Lit 0w adds no instruction. *)
 val calldata_pos_addr = prove(
@@ -224,7 +224,7 @@ Theorem calldata_word_overwrite_prefix_uniform_origin_joint:
   run_inst_seq (emitted_insts sa sb) s = OK actual /\
   ptr_covers G tn p s 32 /\ op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
@@ -294,6 +294,15 @@ Proof
     (qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
   `?mid. run_inst_seq (emitted_insts c1 c2) s1 = OK mid` by
     suspend "clamp_success" >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     `allocas_below_fmp (s1 with vs_inst_idx := s.vs_inst_idx)` by
+       (irule run_inst_seq_allocas_below_fmp >>
+        qexistsl_tac [`emitted_insts sa c1`,`s`] >>
+        drule emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def,
+          is_alloca_op_def]) >>
+     qpat_x_assum `allocas_below_fmp (s1 with vs_inst_idx := _)` mp_tac >>
+     simp_tac (srw_ss()) [allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all calldata_clamp_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   rename1 `s2 = mid with vs_inst_idx := _` >>
@@ -308,6 +317,25 @@ Proof
     (Cases_on `value` >> fs[op_taint_def] >> metis_tac[]) >>
   `allocas_from lo s2` by
     (qpat_x_assum `allocas_from lo s1` mp_tac >> simp[allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+       ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+       i.inst_opcode <> DALLOCA) (emitted_insts c1 c2)` by
+       (drule calldata_clamp_instructions >> strip_tac >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def] >>
+        Cases_on `signed` >>
+        gvs[MEM, is_terminator_def, is_alloca_op_def]) >>
+     `allocas_below_fmp s1` by
+       (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1`
+          (ACCEPT_TAC o UNDISCH)) >>
+     `allocas_below_fmp mid` by
+       (irule run_inst_seq_allocas_below_fmp >>
+        qexistsl_tac [`emitted_insts c1 c2`,`s1`] >>
+        rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `s2 = mid with vs_inst_idx := _` SUBST1_TAC >>
+     qpat_x_assum `allocas_below_fmp mid` mp_tac >>
+     simp_tac (srw_ss()) [allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `!x. not_fresh_at sa x ==> FLOOKUP H' x = FLOOKUP G x /\
@@ -442,7 +470,7 @@ Theorem calldata_word_overwrite_prefix_uniform_origin:
   run_inst_seq (emitted_insts sa sb) s = OK actual /\
   ptr_covers G tn p s 32 /\ op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
@@ -465,7 +493,8 @@ Theorem calldata_word_overwrite_prefix_uniform_origin:
       !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
         (OK s',G',tn'))
 Proof
-  strip_tac >> drule_all calldata_word_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  drule_all calldata_word_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED
@@ -499,7 +528,9 @@ Theorem calldata_word_overwrite_prefix_uniform_seq:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_word_overwrite_prefix_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_word_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED
@@ -532,7 +563,9 @@ Theorem calldata_word_overwrite_prefix_uniform:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_word_overwrite_prefix_uniform_origin >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_word_overwrite_prefix_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED
