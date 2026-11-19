@@ -852,7 +852,7 @@ QED
 Theorem scalar_seq_abort_replay_ptr:
   bop_scalar_seq R A code B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq code s = Abort a t ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq code s = Abort a t ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
@@ -861,7 +861,6 @@ Theorem scalar_seq_abort_replay_ptr:
 Proof
   strip_tac >> drule_all bop_scalar_seq_abort_prefix >> strip_tac >>
   qpat_x_assum `bop_scalar_seq R A code B` kall_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule bop_scalar_seq_assert_abort_checked >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then drule >> simp[] >>
@@ -882,7 +881,7 @@ Theorem abi_decode_clamp_abort_ptr:
   compile_abi_clamp_basetype value clamp sa = ((),sb) /\
   op_prov G value = NONE /\ op_taint tn value = {} /\
   (!x. x IN R ==> not_fresh_at sa x) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = Abort a t ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq (emitted_insts sa sb) s = Abort a t ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\

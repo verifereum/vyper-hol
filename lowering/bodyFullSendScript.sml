@@ -30,7 +30,6 @@ Theorem send_expr_sim_full:
       cenv cx ty (Call ann (Send has_gas) args dflt) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule send_pre_types >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
@@ -105,7 +104,20 @@ Resume send_expr_sim_full[arity]:
     `addr_op`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >>
     FIRST [first_assum ACCEPT_TAC, simp[]])) >> strip_tac >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx to_e) (read_result cx))
+     (es,s0,G0,tn0) (\H res ee GG tt z. childQ H res ee GG tt z /\
+       (!fn j v. frag_reachable ctx func z fn j v ==> dalloca_no_wrap j v))
+     childR` by
+    (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
+     qpat_assum `gas_outcome_full _ _ _ _ _ _ childQ childR` (irule_at Any) >>
+     simp[] >> rpt strip_tac >>
+     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+     disch_then ACCEPT_TAC) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ childQ childR` kall_tac >>
   asm_rewrite_tac[] >>
   once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
   once_rewrite_tac[vyperStateTheory.bind_assoc] >>
@@ -132,11 +144,12 @@ Resume send_expr_sim_full[arity]:
       irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
            vyperStorageTraceTheory.storage_trace_frame_return]) >>
-  qexists `\H res ee G tn t. childQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
+  qexists `\H res ee G tn t. childQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = [] /\
+      (!fn j v. frag_reachable ctx func t fn j v ==> dalloca_no_wrap j v)` >>
   conj_tac >~ [`storage_trace_domain _ _ _`] >- suspend "after_address" >>
   irule gas_outcome_full_post_source >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
-  conj_tac >- simp[] >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ childR` (irule_at Any) >>
+  conj_tac >- (simp[] >> rpt strip_tac >> first_assum (drule_then ACCEPT_TAC)) >>
   simp[Abbr `childR`] >> rpt strip_tac >>
   Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def])
 QED
@@ -194,11 +207,6 @@ Resume send_expr_sim_full[after_address]:
     `fn_has_code s1 amount_end func /\
      fn_has_code shadow_s1 shadow_amount_end shadow_func` by
       metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
-    `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
-      (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
-       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
-         ACCEPT_TAC (Q.SPEC `t`
-           (MATCH_MP pow_compose_reachable_no_wrap (CONJ inv member)))))) >>
     qpat_x_assum `expr_sim_full _ _ _ _ amount_e _` mp_tac >>
     rewrite_tac[expr_sim_full_def] >>
     disch_then (qspecl_then [`st0`, `s1`, `amount_end`, `shadow_s1`,
@@ -225,7 +233,22 @@ Resume send_expr_sim_full[after_address]:
          (qspec_then `H` mp_tac) >>
        metis_tac[loweringPostsTheory.expr_post_def])) >>
     strip_tac >>
+    `!fn j v. frag_reachable ctx func t fn j v ==> dalloca_no_wrap j v` by
+      (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> childQ _ _ _ _ _ _ /\ _`
+         (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then strip_assume_tac)) >>
+       first_assum ACCEPT_TAC) >>
     qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ amountQ amountR` >>
+    `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       (cx_tops cx) cx st0 (bind (eval_expr cx amount_e) (read_result cx))
+       (mid,t,G1,tn1) (\H res ee GG tt z. amountQ H res ee GG tt z /\
+         (!fn j v. frag_reachable ctx func z fn j v ==> dalloca_no_wrap j v))
+       amountR` by
+      (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
+       qpat_assum `gas_outcome_full _ _ _ _ _ _ amountQ amountR` (irule_at Any) >>
+       simp[] >> rpt strip_tac >>
+       drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+       disch_then ACCEPT_TAC) >>
+    qpat_x_assum `gas_outcome_full _ _ _ _ _ _ amountQ amountR` kall_tac >>
     once_rewrite_tac[vyperStateTheory.bind_assoc] >>
     simp[Once exprSimWordArgsTheory.eval_exprs_cons_action] >>
     once_rewrite_tac[vyperStateTheory.bind_assoc] >>
@@ -256,11 +279,12 @@ Resume send_expr_sim_full[after_address]:
         irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
         simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
              vyperStorageTraceTheory.storage_trace_frame_return]) >>
-    qexists `\H res ee G tn t. amountQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
+    qexists `\H res ee G tn t. amountQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = [] /\
+      (!fn j v. frag_reachable ctx func t fn j v ==> dalloca_no_wrap j v)` >>
     conj_tac >~ [`storage_trace_domain _ _ _`] >- suspend "after_amount" >>
     irule gas_outcome_full_post_source >>
-    qpat_assum `gas_outcome_full _ _ _ _ _ _ amountQ amountR` (irule_at Any) >>
-    conj_tac >- simp[] >>
+    qpat_assum `gas_outcome_full _ _ _ _ _ _ _ amountR` (irule_at Any) >>
+    conj_tac >- (simp[] >> rpt strip_tac >> first_assum (drule_then ACCEPT_TAC)) >>
     simp[Abbr `amountR`, Abbr `childR`] >> rpt strip_tac >>
     Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def])
 QED
@@ -451,11 +475,6 @@ Resume send_expr_sim_full[gas_child]:
     (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
      qpat_assum `return_buf_frame d cenv s1 t` (irule_at Any) >>
      fs[loweringPostsTheory.expr_post_def]) >>
-  `!fn inst s. frag_reachable ctx func t' fn inst s ==> dalloca_no_wrap inst s` by
-    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
-     qpat_assum `MEM func ctx.ctx_functions` (fn member =>
-       ACCEPT_TAC (Q.SPEC `t'`
-         (MATCH_MP pow_compose_reachable_no_wrap (CONJ inv member)))))) >>
   qpat_x_assum `expr_sim_full _ _ _ _ gas_e _` mp_tac >>
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`,`amount_end`,`sm`,`shadow_amount_end`,`sm'`,

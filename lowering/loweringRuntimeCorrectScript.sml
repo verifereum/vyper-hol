@@ -1163,7 +1163,8 @@ Proof
       disch_then (qx_choosel_then [`shadow_ctx`, `func`, `shadow_func`, `marks`]
         (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
       pure_rewrite_tac[source_unit_execution_correct_def,
-                       source_unit_execution_correct_at_def] >>
+                       source_unit_execution_correct_at_def,
+                       source_unit_execution_correct_with_def] >>
       qexists_tac `marks` >>
       qexistsl_tac [`shadow_ctx`, `func`, `shadow_func`] >> simp[]) >>
   irule external_entry_value_revert >> metis_tac[]
@@ -1208,7 +1209,8 @@ Proof
     lower_vyper_runtime_unit_correct >>
   impl_tac >- simp[] >>
   simp[source_unit_execution_correct_def,
-       source_unit_execution_correct_at_def] >>
+       source_unit_execution_correct_at_def,
+       source_unit_execution_correct_with_def] >>
   strip_tac
   >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> simp[])
   >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
@@ -1700,7 +1702,7 @@ Proof
       drule_all runtime_body_joint_from_start_with_readings >>
       disch_then (qx_choosel_then [`shadow_unit`,`marks`] strip_assume_tac) >>
       qexists_tac `marks` >>
-      metis_tac[source_unit_execution_correct_at_with]) >>
+      metis_tac[source_unit_execution_correct_at_def]) >>
   drule_all external_entry_value_revert >>
   rewrite_tac[source_unit_execution_correct_def] >>
   disch_then (qx_choose_then `marks` assume_tac) >>

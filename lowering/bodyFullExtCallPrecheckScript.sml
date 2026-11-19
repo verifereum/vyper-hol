@@ -31,7 +31,7 @@ Theorem precheck_codesize_edge[local]:
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id EXTCODESIZE [addr] [out]) /\
   eval_operand addr s = SOME aw /\ op_taint tn addr = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (update_var out (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)) s
       with vs_inst_idx := SUC s.vs_inst_idx),
@@ -65,7 +65,7 @@ Theorem precheck_assert_path[local]:
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSERT [op] []) /\
   eval_operand op s = SOME w /\ op_taint tn op = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (if w = 0w then Abort Revert_abort (revert_state (set_returndata [] s))
      else OK (s with vs_inst_idx := SUC s.vs_inst_idx),G,tn)
@@ -107,7 +107,7 @@ Theorem extcall_codesize_checked_path:
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   eval_operand addr s = SOME aw /\ op_taint tn addr = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (if (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code) : bytes32) = 0w
      then Abort Revert_abort (revert_state (set_returndata []
@@ -139,6 +139,10 @@ Proof
     (simp[Abbr `u`, Abbr `tm`, update_var_def, allocas_from_def,
           eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, op_taint_def, arithmeticTheory.ADD1] >>
      fs[allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (simp[Abbr `u`,update_var_def,allocas_below_fmp_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o SRULE[allocas_below_fmp_def])) >>
   gen_tac >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,G \\ out,tm) []
      (if w = 0w then Abort Revert_abort (revert_state (set_returndata [] u))
@@ -182,7 +186,7 @@ Theorem extcall_optional_precheck_path[local]:
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   eval_operand addr s = SOME aw /\ w2w aw = target /\ op_taint tn addr = {} /\
-  accounts_runtime_well_typed ee.accounts /\ ~ctx_has_dalloca ctx /\
+  accounts_runtime_well_typed ee.accounts /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
     stmt_state_rel H ctx func cenv cx ee s /\ allocas_from lo s) ==>
   !H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -206,6 +210,9 @@ Proof
   Cases_on `ret_type = NoneT /\ ~skip` >> simp[Excl "n2w_eq_0"]
   >- (fs[] >> rpt strip_tac >>
       `stmt_state_rel H ctx func cenv cx ee s /\ allocas_from lo s` by metis_tac[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+        (qpat_assum `stmt_state_rel H ctx func cenv cx ee s`
+          (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
       drule_all extcall_codesize_checked_path >>
       disch_then (qspecl_then [`explicit`,`PG`,`G`] mp_tac) >>
       rewrite_tac[LET_THM] >> BETA_TAC >>
@@ -318,7 +325,7 @@ Theorem extcall_precheck_to_call:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee s /\
-  op_taint tn addr = {} /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  op_taint tn addr = {} /\ allocas_from lo s /\
   lo <= s.vs_alloca_next /\ fn_inst_ids_distinct func /\ alloca_history func s /\
   ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stor_taint_ok_at (DF H) tn s) ==>

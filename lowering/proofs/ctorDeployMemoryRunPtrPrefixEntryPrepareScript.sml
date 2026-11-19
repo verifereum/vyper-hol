@@ -166,6 +166,7 @@ Proof
   simp[op_taint_def, op_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
     update_var_def] >>
   gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   FIRST [drule_all prefix_prepare_callvalue_run, drule_all prefix_prepare_zero_run,
          drule_all prefix_prepare_iszero_run] >>
   simp[update_var_def]
@@ -269,6 +270,7 @@ Proof
     (qx_choose_then `s2` (qx_choose_then `G2` (qx_choose_then `tn2` strip_assume_tac)))) >>
   `allocas_from lo s2` by (fs[allocas_from_def] >> metis_tac[]) >>
   `1w <> (0w:bytes32)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by simp[] >>
   drule_all prefix_prepare_assert_actual >>
   disch_then (qspecl_then [`PG`,`G2`,`D`] mp_tac) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>

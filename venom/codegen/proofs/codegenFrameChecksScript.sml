@@ -5,7 +5,7 @@ Theory codegenFrameChecks
 Ancestors
   codegenCorrectness frameOutcome frameGas callTrace observableOracle stateEquiv
   stateFrame venomState venomInst venomExecSemantics codegenRel contextCodegenRel
-  asmSem asmIR symbolResolve asmOracleRegression stackPlanTypes stackPlanGen
+  asmSem asmIR symbolResolve asmOracleRegression asmFrameCallStep stackPlanTypes stackPlanGen
   vfmExecution vfmExecutionProp vfmContext vfmState vfmConstants vfmOperation
   list finite_map words
 Libs
@@ -124,35 +124,6 @@ Theorem initial_ctx_rel_empty_rejected:
   ~initial_ctx_rel cp prog ctx vs (es with contexts := [])
 Proof
   simp[initial_ctx_rel_def]
-QED
-
-(* Nested success returns to the parent, with short-write splice and combined
-   logs. Failure restores the child's saved rollback and leaves parent logs.
-   The Revert witness requires an instruction raising Revert; neither witness
-   assumes run_call correctness. *)
-Theorem venom_frame_rel_nested_constructor_witnesses:
-  let child = ctxt with msgParams := ctxt.msgParams with outputTo := Memory mr;
-      start = es with contexts := [(child, rb); (parent, prb)];
-      ok = parent with <|
-        returnData := out; stack := 1w :: parent.stack; pc := SUC parent.pc;
-        logs := parent.logs ++ (child.logs ++ lgs);
-        memory := buffer_write mr.offset (TAKE mr.size out) parent.memory |>;
-      bad = parent with <|
-        returnData := out; stack := 0w :: parent.stack; pc := SUC parent.pc;
-        memory := buffer_write mr.offset (TAKE mr.size out) parent.memory |>;
-      vs' = vs with <| vs_returndata := out; vs_logs := lgs;
-        vs_accounts := es.rollback.accounts; vs_transient := es.rollback.tStorage;
-        vs_pending_deletions := es.rollback.toDelete;
-        vs_requests := call_requests start |>
-  in
-    venom_frame_rel start (INL ()) (es with contexts := [(ok, prb)]) (Halt vs') /\
-    (frame_inst_raises start Reverted Revert ==>
-     venom_frame_rel start (INL ())
-       (es with <| contexts := [(bad, prb)]; rollback := rb |>)
-       (Abort Revert_abort vs'))
-Proof
-  simp[LET_THM] >> conj_tac >>
-  simp[venom_frame_rel_def, frame_outcome_def, b2w_def]
 QED
 
 (* Concrete nonempty label map with a zero-sized trailing data header. *)
@@ -283,11 +254,18 @@ Proof
   rw[frame_inst_raises_def] >>
   qexistsl_tac [`frame_revert_probe_es`,
                `SND (step_inst Revert frame_revert_probe_es)`] >>
-  simp[frame_revert_probe_step, frame_inst_at_def,
+  simp[frame_revert_probe_step, frame_inst_at_step,
        frame_revert_probe_es_def, frame_revert_probe_encoding,
        make_asm_call_state_def, vfmContextTheory.initial_context_def,
        initial_msg_params_def,
        FLOOKUP_UPDATE]
+QED
+
+Theorem frame_revert_probe_run_frame:
+  frame_raises frame_revert_probe_es Reverted
+Proof
+  irule frame_inst_raises_frame_raises >> simp[vfm_abort_def] >>
+  qexists_tac `Revert` >> simp[frame_revert_probe_raises]
 QED
 
 Theorem venom_frame_rel_revert_nonvacuity:
@@ -299,4 +277,144 @@ Proof
        frame_outcome_def, frame_revert_probe_es_def,
        make_asm_call_state_def, vfmContextTheory.initial_context_def,
        init_venom_state_def]
+QED
+
+(* The caller has reserved the child's gas and has room for its result word. *)
+Definition nested_frame_probe_def:
+  nested_frame_probe reverting =
+    let es = make_asm_call_state asm_oracle_initial 0w 100 0 []
+      [if reverting then 0xfdw else 0xf3w] F in
+    let (c,rb) = HD es.contexts in
+      es with contexts :=
+        [(c with stack := [0w; 0w], rb); (c with gasUsed := 100, rb)]
+End
+
+Theorem frame_return_probe_encoding[local]:
+  parse_code 0 FEMPTY [0xf3w] = FEMPTY |+ (0, Return)
+Proof
+  simp[Once parse_code_def, parse_opcode_cond_thm, opcode_def, dimword_8] >>
+  simp[Once parse_code_def]
+QED
+
+Theorem nested_frame_probe_outcome:
+  !reverting. ?pre es'.
+    run_frame (nested_frame_probe reverting) =
+      SOME (INR (if reverting then SOME Reverted else NONE),pre) /\
+    LENGTH pre.contexts = 2 /\
+    frame_outcome (nested_frame_probe reverting) (INL ()) es'
+      (if reverting then SOME Reverted else NONE) [] [] /\
+    LENGTH es'.contexts = 1 /\
+    HD (FST (HD es'.contexts)).stack = b2w (~reverting)
+Proof
+  gen_tac >>
+  qabbrev_tac `start = nested_frame_probe reverting` >>
+  qabbrev_tac `exc = if reverting then SOME Reverted else NONE` >>
+  qabbrev_tac `c = initial_context 0w [if reverting then 0xfdw else 0xf3w] F
+    empty_return_destination
+    (make_sub_tx asm_oracle_initial.as_call_ctx.cc_address 0w 0 100 [])` >>
+  qabbrev_tac `rb = start.rollback` >>
+  qabbrev_tac `parent = c with gasUsed := 100` >>
+  `start.contexts = [(c with stack := [0w; 0w],rb); (parent,rb)]` by
+    simp[Abbr `start`, Abbr `c`, Abbr `parent`, Abbr `rb`,
+         nested_frame_probe_def, make_asm_call_state_def, LET_THM] >>
+  qabbrev_tac `pre = start with contexts := [(c,rb); (parent,rb)]` >>
+  `pre.contexts = [(c,rb); (parent,rb)]` by simp[Abbr `pre`] >>
+  `?mr. empty_return_destination = Memory mr` by
+    simp[empty_return_destination_def] >>
+  pop_assum strip_assume_tac >>
+  `c.msgParams.outputTo = Memory mr /\ c.returnData = [] /\
+   c.gasUsed = 0 /\ c.msgParams.gasLimit = 100 /\ c.logs = [] /\
+   c.stack = [] /\ c.pc = 0` by
+    simp[Abbr `c`, vfmContextTheory.initial_context_def, initial_msg_params_def,
+         make_sub_tx_def] >>
+  `run_frame start = SOME (INR exc,pre)` by
+    (irule run_frame_terminal_call >> simp[Abbr `exc`, vfm_abort_def] >>
+     Cases_on `reverting` >>
+     simp[Abbr `pre`, step_inner_def, get_current_context_def, bind_def, return_def] >>
+     simp[Abbr `c`, vfmContextTheory.initial_context_def, initial_msg_params_def,
+          frame_return_probe_encoding, frame_revert_probe_encoding, FLOOKUP_UPDATE] >>
+     simp[step_inst_def, step_return_def, pop_stack_def,
+          memory_expansion_info_def, memory_expansion_cost_def,
+          consume_gas_def, expand_memory_def, read_memory_def, set_return_data_def,
+          revert_def, finish_def, get_current_context_def, set_current_context_def,
+          bind_def, ignore_bind_def, return_def, assert_def, static_gas_def] >>
+     simp[vfmBufferTheory.buffer_take_to_list,
+          vfmContextTheory.execution_state_component_equality,
+          vfmContextTheory.initial_context_def, initial_msg_params_def,
+          frame_return_probe_encoding, frame_revert_probe_encoding]) >>
+  qabbrev_tac `settled = handle_exception exc pre` >>
+  `FST settled = INL () /\ LENGTH (SND settled).contexts = 1 /\
+   HD (FST (HD (SND settled).contexts)).stack = b2w (~reverting) /\
+   (SND settled).txParams = start.txParams /\
+   (reverting ==> (SND settled).rollback = rb)` by
+    (Cases_on `reverting` >>
+     simp[Abbr `settled`, Abbr `exc`, handle_exception_def,
+          get_num_contexts_def, get_return_data_def, get_output_to_def,
+          pop_and_incorporate_context_def, get_gas_left_def, pop_context_def,
+          unuse_gas_def, push_logs_def, update_gas_refund_def, set_rollback_def,
+          inc_pc_def, set_return_data_def, push_stack_def, write_memory_def,
+          get_current_context_def, set_current_context_def, bind_def,
+          ignore_bind_def, return_def, assert_def] >>
+     simp[Abbr `pre`, Abbr `parent`, stack_limit_def]) >>
+  `handle_exception exc pre = (INL (), SND settled)` by
+    (Cases_on `settled` >>
+     qpat_x_assum `Abbrev ((_,_) = _)`
+       (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >> gvs[]) >>
+  qexistsl_tac [`pre`, `SND settled`] >>
+  simp[frame_outcome_def] >>
+  Cases_on `reverting` >> gvs[Abbr `exc`, vfm_abort_def]
+QED
+
+(* A child can fail after an ordinary call pushes its frame, or during a
+   precompile call that pushes and settles it in the same step. In both
+   cases an ordinary continuation at the original depth stays in the run. *)
+Theorem frame_probe_child_failure_continues:
+  start.contexts <> [] /\
+  RTC (\a b. LENGTH a.contexts >= LENGTH start.contexts /\
+              step a = (INL (),b)) start current /\
+  LENGTH start.contexts <= LENGTH current.contexts /\
+  step_inner current = (INR (SOME exc),child_end) /\
+  LENGTH start.contexts < LENGTH child_end.contexts /\
+  handle_step (SOME exc) child_end = (INL (),next) /\
+  LENGTH next.contexts = LENGTH start.contexts ==>
+  run_frame start = run_frame next
+Proof
+  strip_tac >>
+  `step current = (INL (),next)` by
+    simp[step_eq_handle_step_inner, handle_def] >>
+  irule run_frame_prefix >> simp[] >>
+  `(\a b. LENGTH a.contexts >= LENGTH start.contexts /\
+          step a = (INL (),b))^* current next` by
+    (irule relationTheory.RTC_SINGLE >> simp[arithmeticTheory.GREATER_EQ]) >>
+  metis_tac[relationTheory.RTC_TRANS]
+QED
+
+(* The identity precompile runs out of gas in the child created by the
+   caller's instruction. The frame handler settles it and resumes the caller. *)
+Theorem frame_probe_identity_precompile_failure:
+  s.contexts = (child,rb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Memory mr /\
+  child.gasUsed = child.msgParams.gasLimit /\
+  LENGTH parent.stack < stack_limit ==>
+  dispatch_precompiles 4w s = (INR (SOME OutOfGas),s) /\
+  ?t. handle_step_frame (SUC (LENGTH rest)) (SOME OutOfGas) s = (INL (),t) /\
+      LENGTH t.contexts = SUC (LENGTH rest) /\
+      HD (FST (HD t.contexts)).stack = 0w /\ t.rollback = rb
+Proof
+  strip_tac >> conj_tac
+  >- simp[dispatch_precompiles_def, precompile_identity_def, get_call_data_def,
+          consume_gas_def, get_current_context_def, bind_def, ignore_bind_def,
+          return_def, assert_def, fail_def] >>
+  `handle_step_frame (SUC (LENGTH rest)) (SOME OutOfGas) s =
+   handle_step (SOME OutOfGas) s` by
+    simp[handle_step_frame_def, handle_step_def, vfm_abort_def,
+         get_num_contexts_def, bind_def, return_def] >>
+  `handle_step (SOME OutOfGas) s = handle_exception (SOME OutOfGas) s` by
+    (mp_tac (Q.INST [`e` |-> `SOME OutOfGas`, `t` |-> `s`,
+      `child` |-> `child`, `child_rb` |-> `rb`, `tail` |-> `(parent,prb)::rest`]
+      asm_handle_step_memory) >> simp[vfm_abort_def]) >>
+  mp_tac (Q.INST [`exc` |-> `OutOfGas`, `s` |-> `s`, `child` |-> `child`,
+    `child_rb` |-> `rb`, `parent` |-> `parent`, `parent_rb` |-> `prb`,
+    `rest` |-> `rest`, `r` |-> `mr`] asm_handle_exception_memory_exception) >>
+  simp[]
 QED

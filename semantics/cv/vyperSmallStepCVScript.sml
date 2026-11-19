@@ -108,7 +108,7 @@ Proof
 QED
 
 val apply_vals_pre_def = apply_vals_def
-  |> SRULE [liftk1, bind_def, ignore_bind_def, lift_option_def, lift_option_type_def, lift_option_type_def,
+  |> SRULE [liftk1, bind_def, ignore_bind_def, lift_option_def, lift_option_type_def,
              lift_sum_def, lift_sum_runtime_def, prod_CASE_rator, LET_RATOR,
              LET4_UNCURRY, LET5_UNCURRY, LET6_UNCURRY,
             UNCURRY, sum_CASE_rator, option_CASE_rator, COND_RATOR]

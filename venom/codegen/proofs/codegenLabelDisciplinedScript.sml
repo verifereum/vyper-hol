@@ -25,14 +25,27 @@
  *)
 Theory codegenLabelDisciplined
 Ancestors
-  codegenEntryFacts
+  codegenSymbolicTerminalOwn codegenEntryFacts codegenEntrySymbolicOwn
   symFnStep symFnSimSpec codegenAsmStaticWf codegenSymRel codegenEntrySim
-  codegenEntryRel asmSymBridge asmSymSem fnSimSpec frameRel
+  codegenEntryRel asmSymBridge asmSymSem asmSymOwnStep fnSimSpec frameRel
   contextCodegenRel codegenRel unitShapeDefs venomExecSemantics venomState
   venomInst fcgDefs fcgAnalysisProps fcgPostorder fnPlanPlaceDfsBlock
   venomExecProps venomRetProps rich_list stackPlanGen fragExec finalizerContract
 
 val _ = Parse.hide "cp";
+
+(* Entry states with labels interpreted by the supplied offset map. *)
+Definition codegen_asm_entry_rel_reloc_def:
+  codegen_asm_entry_rel_reloc lo cp prog vs as <=>
+    as.as_pc = 0 /\ as.as_stack = [] /\
+    ~vs.vs_halted /\
+    vs.vs_vars = FEMPTY /\ vs.vs_params = [] /\
+    n2w cp.cp_initial_fmp = vs.vs_initial_fmp /\
+    (!l. FLOOKUP vs.vs_labels l =
+         OPTION_MAP n2w (FLOOKUP lo l)) /\
+    context_memory_rel cp vs.vs_memory as.as_memory /\
+    shared_state_rel vs as
+End
 
 Theorem codegen_asm_entry_sym_init:
   !cp prog vs as env.
@@ -42,9 +55,8 @@ Theorem codegen_asm_entry_sym_init:
     (sym_init as).sym_mem_labels = FEMPTY
 Proof
   rpt gen_tac >> strip_tac >>
-  conj_tac >- (irule asm_sym_rel_init >>
-    gvs[codegen_asm_entry_rel_def, shared_state_rel_def]) >>
-  gvs[codegen_asm_entry_rel_def, sym_init_def]
+  gvs[codegen_asm_entry_rel_def, shared_state_rel_def] >>
+  simp[asm_sym_rel_init, sym_init_def]
 QED
 
 Theorem codegen_entry_layout:
@@ -56,10 +68,8 @@ Theorem codegen_entry_layout:
     ?r rs. cp.cp_regions = r :: rs /\
       asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp r.sr_plan)
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule generate_context_plan_regions_length >>
-  Cases_on `cp.cp_regions` >> gvs[codegen_asm_entry_rel_def] >>
-  metis_tac[codegen_assembly_first_region]
+  rpt gen_tac >> strip_tac >> gvs[codegen_asm_entry_rel_def] >>
+  metis_tac[codegen_entry_layout_fields]
 QED
 
 Theorem codegen_entry_blocks_sim:
@@ -134,29 +144,11 @@ Theorem codegen_entry_blocks_sym_sim:
         sym_terminal (sym_steps prog env n (sym_init as)))
 Proof
   rpt gen_tac >> strip_tac >>
-  `?r rs. cp.cp_regions = r :: rs /\
-    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp r.sr_plan)`
-    by metis_tac[codegen_entry_layout] >>
-  `fn_entry_state_rel cp fe
-    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) as 0w []`
-    by metis_tac[codegen_asm_entry_fn_state_rel] >>
-  `MEM fe.fn_name (fcg_analyze unit.cu_context).fcg_reachable`
-    by (irule codegen_entry_reachable >>
-        gvs[unit_shape_ok_def, entry_fn_first_def, codegen_context_obligations_def]) >>
-  mp_tac codegen_invoke_targets_retpc >> (impl_tac >- simp[]) >> strip_tac >>
-  `asm_sym_rel prog env as (sym_init as) /\
-    (sym_init as).sym_stack = [] /\ (sym_init as).sym_mem_labels = FEMPTY`
-    by metis_tac[codegen_asm_entry_sym_init] >>
-  qspec_then `fuel` mp_tac (cj 3 sym_fn_sims_all) >>
-  rewrite_tac[sym_fn_sim_at_def] >>
-  disch_then (mp_tac o Q.INST [`i` |-> `0`, `ctx` |-> `unit.cu_context`,
-    `lo` |-> `SND (compute_label_offsets prog)`, `o2pc` |-> `build_offset_to_pc prog`,
-    `ra` |-> `0w`, `pc_ret` |-> `0`, `rest` |-> `[]`, `fn` |-> `fe`,
-    `vs` |-> `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
-    `ret` |-> `""`, `srest` |-> `[]`, `ss` |-> `sym_init as`] o SPEC_ALL) >>
-  simp[fn_has_retpc_def] >>
-  impl_tac >- (gvs[codegen_asm_entry_rel_def, fn_has_retpc_def] >> metis_tac[]) >>
-  metis_tac[]
+  gvs[codegen_asm_entry_rel_def] >>
+  qspec_then `F` (MATCH_MP_TAC o SRULE [sym_steps_mode_def, sym_fn_sims_all_own])
+    codegen_entry_blocks_sym_sim_own_conditional >>
+  metis_tac[asm_data_env_lo_ok_canonical,
+            fnPlanPlaceRevertPostambleTheory.code_labels_agree_refl]
 QED
 
 Theorem codegen_entry_asm_sim_state:
@@ -197,6 +189,37 @@ Proof
   drule_all codegen_entry_blocks_sim >> disch_then (qspec_then `fuel` mp_tac) >> simp[]
 QED
 
+(* General symbolic simulation over agreeing code labels and fixed code bytes. *)
+Theorem codegen_label_disciplined_mode:
+  !allow_own lo own fuel rpolicy unit cp prog Inv vs as env.
+    code_labels_agree prog lo /\
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    codegen_asm_entry_rel_reloc lo cp prog vs as /\
+    (if allow_own then label_flow_own_ok unit.cu_context else label_flow_ok unit.cu_context) /\ code_end_offset_ok Inv unit.cu_context /\
+    sym_unit_static_ok unit /\
+    (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+    asm_data_env_lo_ok lo prog env own /\
+    vs.vs_code = own /\
+    ((?vs'. run_context fuel unit.cu_context vs = Halt vs') \/
+     (?a vs'. run_context fuel unit.cu_context vs = Abort a vs'))
+    ==>
+    if allow_own then label_disciplined_own env own prog as
+    else label_disciplined env prog as
+Proof
+  rpt gen_tac >> rewrite_tac[codegen_asm_entry_rel_reloc_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `sym_fn_sim_at_own allow_own fuel` by simp[sym_fn_sims_all_own] >>
+  `asm_static_wf prog`
+    by metis_tac[codegen_context_obligations_def, codegen_asm_static_wf] >>
+  drule_all codegen_entry_terminal_own_conditional >>
+  disch_then (qx_choose_then `n` assume_tac) >>
+  metis_tac[sym_steps_mode_terminal_disciplined]
+QED
+
 Theorem codegen_label_disciplined:
   !fuel rpolicy unit cp prog Inv vs as env.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -214,19 +237,11 @@ Theorem codegen_label_disciplined:
     ==>
     label_disciplined env prog as
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all codegen_entry_selection >> strip_tac >>
-  `lookup_function fe.fn_name unit.cu_context.ctx_functions = SOME fe`
-    by simp[lookup_function_def, listTheory.FIND_thm] >>
-  `run_context fuel unit.cu_context vs = run_blocks fuel unit.cu_context fe
-    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)`
-    by metis_tac[run_context_run_blocks] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `asm_static_wf prog`
     by metis_tac[codegen_context_obligations_def, codegen_asm_static_wf] >>
-  drule_all codegen_entry_blocks_sym_sim >>
-  disch_then (qspec_then `fuel` strip_assume_tac) >>
-  `?n. sym_terminal (sym_steps prog env n (sym_init as))` by metis_tac[] >>
-  irule sym_terminal_disciplined >> simp[] >>
-  qexists_tac `n` >>
-  drule sym_steps_terminal_run >> disch_then (qspec_then `0` mp_tac) >> simp[]
+  qspec_then `F` (MATCH_MP_TAC o SRULE [codegen_asm_entry_rel_reloc_def])
+    codegen_label_disciplined_mode >>
+  metis_tac[codegen_asm_entry_rel_def, asm_data_env_lo_ok_canonical,
+            fnPlanPlaceRevertPostambleTheory.code_labels_agree_refl]
 QED

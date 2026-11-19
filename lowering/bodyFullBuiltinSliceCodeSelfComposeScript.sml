@@ -14,6 +14,7 @@ Ancestors
   fragExec emitHelperProps bodyPtrBytestringBuiltinsSlice
   bodyPtrBytestringBuiltinsBuffer loweringPosts loweringStateRelDefs
   reasonCodeResourcesPtr bodyPtrAttributeFields exprLoweringProps stateRelProj
+  bodyFullIfExpReach
 
 Theorem slice_self_compilation_context[local]:
   lower_value compile_expr cenv ty start sa = (start_op,s1) /\
@@ -230,7 +231,7 @@ Proof
   disch_then drule >> simp[] >>
   disch_then drule_all >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ child_post _` >>
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   conj_tac >- (rpt gen_tac >> BETA_TAC >>
     rpt (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
          simp[vyperStorageTraceTheory.storage_trace_frame_state_reads,
@@ -259,6 +260,9 @@ Proof
   rpt gen_tac >> strip_tac >> RULE_ASSUM_TAC BETA_RULE >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+                    gas_origin_ptr_path _ _ marks (OK t,G1,tn1)`
+    (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> child_post _ _ _ _ _ _ /\ _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- simp[]) >>
@@ -328,10 +332,17 @@ Proof
      simp[]) >>
   `gas_admissible (bind (eval_expr cx len) (read_result cx)) expr_res_ok mid` by
     (drule exprSimSourceTheory.expr_body_pre_gas_admissible >> simp[]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi
+           (CONJ inv member))))) >>
   `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
-    (rpt strip_tac >>
-     drule_all bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap >>
-     simp[]) >>
+    (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
+         qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+            CONJ path o CONJ no_phi)))) >>
   qpat_x_assum `expr_sim_full _ _ _ _ len _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then drule >> simp[] >>

@@ -2,6 +2,7 @@ Theory requestCutLabels
 Ancestors
   codegenAsmStaticWf asmSymBridge asmToBytecodeProofs symBlockBody
   codegen symbolResolve asmIR stackPlanGen unitShapeDefs finite_map list
+  symBodyStaticFacts
 
 Theorem request_cut_compute_labels_bound:
   codegen_assembly rp unit = SOME prog /\ unit_shape_ok unit /\
@@ -24,7 +25,7 @@ Proof
      `EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment` by
        (qpat_assum `_ ==> EXISTS _ unit.cu_data_segment` irule >>
         qexistsl_tac [`fn`, `inst`] >> simp[]) >>
-     fs[EXISTS_MEM] >> drule data_segment_asm_header >> strip_tac >>
+     fs[EXISTS_MEM] >> drule symBodyStaticFactsTheory.data_segment_asm_header >> strip_tac >>
      gvs[codegen_assembly_def, AllCaseEqs(), MEM_APPEND]) >>
   `l IN FDOM (SND (compute_label_offsets prog))` by
     (simp[compute_label_offsets_def, clo_step_eq] >> irule clo_FDOM >> simp[]) >>

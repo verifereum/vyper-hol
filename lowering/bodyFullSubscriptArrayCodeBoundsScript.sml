@@ -41,7 +41,7 @@ QED
    On failure the cursor is selected by the executed prefix, not by lo. *)
 Theorem bounds_suffix_uniform[local]:
   array_bounds_check idx len sgn sa = ((),sb) /\ fn_has_code sa sb func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand idx s = SOME a /\ eval_operand len s = SOME b /\
   op_taint tn idx = {} /\ op_taint tn len = {} /\
@@ -71,7 +71,6 @@ Proof
    (!x. len = Var x ==> not_fresh_at sa x)` by metis_tac[] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
                 ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by fs[EVERY_CONJ] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (array_bounds_check_nonalias_uniform |> Q.INST [`lo` |-> `0`]) >>
   disch_then (qspecl_then [`{}`, `PG`]
     (qx_choosel_then [`t`, `j0`, `unused_G`, `unused_tn`] strip_assume_tac)) >>
@@ -123,7 +122,7 @@ QED
 
 Theorem array_bounds_check_read_only_joint_ok_frame:
   array_bounds_check idx len sgn sa = ((),sb) /\ fn_has_code sa sb func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand idx s = SOME a /\ eval_operand len s = SOME b /\
   idx_in_range sgn a b /\
@@ -166,7 +165,7 @@ QED
 
 Theorem array_bounds_check_joint_oob_frame:
   array_bounds_check idx len sgn sa = ((),sb) /\ fn_has_code sa sb func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand idx s = SOME a /\ eval_operand len s = SOME b /\
   ~idx_in_range sgn a b /\

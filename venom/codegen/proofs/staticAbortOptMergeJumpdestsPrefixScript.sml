@@ -2,6 +2,7 @@ Theory staticAbortOptMergeJumpdestsPrefix
 Ancestors
   asmOptMergeJumpdests codegenSymRel symInstPieces symShuffleSim
   asmSymPc asmSplice asmSymSem asmSem asmOptimizer asmWf list rich_list arithmetic
+  symInstPiecesFacts
 
 (* Execute the incoming transfer; the two continuations have related popped
    tails.  In particular the JUMPI condition is the same concrete Val. *)
@@ -141,7 +142,7 @@ Proof
    EL (h+2) p = third`
     by (qpat_assum `p = _` (fn th => simp[th, Abbr `h`, APPEND, EL_APPEND_EQN])) >>
   qpat_x_assum `p = _` kall_tac >>
-  `INDEX_OF (AsmLabel x) p = SOME h` by (irule asm_unique_label_index >> simp[]) >>
+  `INDEX_OF (AsmLabel x) p = SOME h` by (irule symInstPiecesFactsTheory.asm_unique_label_index >> simp[]) >>
   `?t. sym_steps p env 1 a = SymOK t /\ t.sym_base.as_pc = h /\
        t.sym_base.as_stack = [] /\
        t.sym_base.as_requests = a.sym_base.as_requests /\
@@ -162,7 +163,7 @@ Proof
     by fs[]
   >- (
     `INDEX_OF (AsmLabel y) p = SOME (h+1)`
-      by (irule asm_unique_label_index >> simp[]) >>
+      by (irule symInstPiecesFactsTheory.asm_unique_label_index >> simp[]) >>
     `sym_steps p env 1 t = SymOK (sym_with_pc (h+1) t)` by (
       `asm_block_at p t.sym_base.as_pc [AsmLabel x]` by simp[asm_block_at_def] >>
       drule_then (qspec_then `env` mp_tac) sym_steps_label >>

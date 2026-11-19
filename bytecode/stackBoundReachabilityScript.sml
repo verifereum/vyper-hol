@@ -57,7 +57,7 @@ Proof
   drule RTC_lifts_invariants >> strip_tac >>
   `P es` by (simp[Abbr `P`] >> metis_tac[]) >>
   qpat_x_assum `frame_inst_at es s op` mp_tac >>
-  simp[frame_inst_at_def] >> strip_tac >>
+  simp[frame_inst_at_step] >> strip_tac >>
   `P s` by metis_tac[] >>
   gvs[Abbr `P`, Abbr `R`, sb_decoded_def] >> metis_tac[]
 QED
