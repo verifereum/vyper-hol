@@ -26,6 +26,7 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   qpat_x_assum `emitted_insts _ _ = _` SUBST_ALL_TAC >>
   qpat_x_assum `out = _` SUBST_ALL_TAC >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all scalar_clean_frame_certificate >>
   disch_then (qspecl_then [`fn`,`PG`,`D`]
     (qx_choose_then `H` (qx_choose_then `th` strip_assume_tac))) >>
@@ -259,6 +260,8 @@ Proof
         (qpat_x_assum `run_inst_seq (emitted_insts mid sb) u = _ \/ _` strip_assume_tac >>
          simp[run_inst_seq_inst_idx, exec_result_map_def]) >>
       qpat_x_assum `run_inst_seq (emitted_insts mid sb) u = _ \/ _` kall_tac >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx)`
+        by simp[] >>
       FIRST [drule_all (cj 1 (PURE_REWRITE_RULE
         [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM] int_clamp_fixed_certificate)),
         drule_all (cj 2 (PURE_REWRITE_RULE
@@ -450,6 +453,8 @@ Proof
               Abbr `ys`, mk_inst_def, is_terminator_def]) >>
       qpat_x_assum `run_inst_seq ys u = _ \/ _` kall_tac >>
       qunabbrev_tac `ys` >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx)`
+        by simp[] >>
       FIRST [drule_all (cj 1 (PURE_REWRITE_RULE
         [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM] scalar_double_check_certificate)),
         drule_all (cj 2 (PURE_REWRITE_RULE
