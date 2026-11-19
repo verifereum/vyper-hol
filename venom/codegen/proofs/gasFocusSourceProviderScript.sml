@@ -1837,6 +1837,158 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* The synchronized frame accounts for the extra LowerDload allocation
+   slots within the source instruction's reserved headroom. *)
+Theorem focus_opt_ld_access_headroom[local]:
+  ld_sync lo P C vs stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\
+  mem_inv dload_headroom_ok C vs /\ lo <= vs.vs_alloca_next /\
+  raw_reachable vs C fn inst s ==>
+  lo <= dyn_floor C vs /\
+  (!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==>
+     b+sz <= dyn_floor C vs /\ c+sz <= dyn_floor C vs /\ c+sz < dimword(:256))
+Proof
+  strip_tac >>
+  drule_all lowerDloadDynHeadroomTheory.ld_raw_dyn_headroom >> strip_tac >>
+  drule lowerDloadFrontierTheory.ld_raw_reachable_frontier >> strip_tac >>
+  drule ld_sync_frontier >> strip_tac >>
+  `t.vs_alloca_next <= dyn_floor C vs` by decide_tac >>
+  `dload_headroom_ok C fn inst s` by
+    (drule_all ld_sync_source_mem_inv >> simp[]) >>
+  `t.vs_alloca_next < dimword(:256)` by
+    (drule_all ld_sync_target_headroom >> simp[]) >>
+  `lo <= dyn_floor C vs` by decide_tac >> simp[] >>
+  drule lowerDloadOracleCallAssemblyTheory.ld_sync_slots >> strip_tac >>
+  drule lowerDloadOracleCallAssemblyTheory.ld_sync_maps >> strip_tac >>
+  drule ld_sync_active >> simp[HD] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_all lowerDloadSafetyAllocBoundsTheory.ld_alloc_frontiers >>
+  simp[] >> decide_tac
+QED
+
+(* Point effects for the singleton access opcodes, using only safety up to
+   this point and the successful step that has already been taken. *)
+Theorem focus_opt_ld_access_effect[local]:
+  ld_sync lo P C vs stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ o1_safe_upto D lo n C vs /\
+  ~in_revert_forward fn s /\ ~is_terminator inst.inst_opcode /\
+  inst.inst_opcode <> INVOKE /\ s.vs_gas_readings = t.vs_gas_readings /\
+  gas_cut n vs t /\ step_inst fuel C' inst t = OK u /\
+  (MEM inst.inst_opcode [MLOAD;ILOAD;LT;GT;EQ] \/
+   MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY] \/
+   MEM inst.inst_opcode [CODECOPY;CALLDATACOPY;RETURNDATACOPY;EXTCODECOPY] \/
+   inst.inst_opcode = DALLOCA) ==>
+  ?ss H'. ^focus_opt_ld_effect lo P C vs A f tn PG G inst s t u fuel ss H' /\
+    ss.vs_prev_bb = s.vs_prev_bb /\ u.vs_prev_bb = t.vs_prev_bb
+Proof
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule ld_sync_source >> strip_tac >>
+  `gas_cut n vs s` by fs[gas_cut_def] >>
+  `raw_reachable vs C fn inst s` by
+    (drule_all lowerDloadReachabilityTheory.ld_frame_reachable_raw >> simp[]) >>
+  qpat_assum `o1_safe_upto _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE[o1_safe_upto_def, o1_ptr_safe_upto_def]) >>
+  drule_all concretizeLayoutCutSafeTheory.ptr_discipline_upto_at >> strip_tac >>
+  `lo <= vs.vs_alloca_next` by fs[ptr_discipline_upto_def] >>
+  drule_all focus_opt_ld_access_headroom >> strip_tac >>
+  qpat_x_assum `MEM inst.inst_opcode [MLOAD;ILOAD;LT;GT;EQ] \/ _` strip_assume_tac
+  >- (`MEM inst.inst_opcode [MLOAD;ILOAD] ==> ~in_revert_forward fn s` by simp[] >>
+      `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> b+sz <= dyn_floor C vs` by metis_tac[] >>
+      `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword(:256)` by metis_tac[] >>
+      drule_all lowerDloadClassifiedReadPointEffectTheory.ld_sync_classified_read_effect_at >>
+      disch_then (qx_choosel_then [`ss`,`H'`] (map_every assume_tac o CONJUNCTS)) >>
+      drule_all ld_sync_ghost_step >> strip_tac >>
+      `~is_alloca_op inst.inst_opcode /\ Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
+       source_memory_write_ranges inst s = []` by
+        (qpat_assum `MEM inst.inst_opcode [MLOAD;ILOAD;LT;GT;EQ]` mp_tac >>
+         pure_rewrite_tac[MEM] >> strip_tac >>
+         qpat_assum `inst.inst_opcode = _` (fn eq =>
+           simp[NoAsms, eq, is_alloca_op_def, venomEffectsTheory.write_effects_def,
+                venomEffectsTheory.empty_effects_def, codegenRelTheory.source_memory_write_ranges_def])) >>
+      drule_all ld_sync_dyn_agree_unwritten >> strip_tac >>
+      qexistsl [`ss`,`H'`] >> simp[])
+  >- (`fn_shape_ok fn /\ fn_inst_wf fn` by
+        (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+      `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
+      drule ld_sync_active >> simp[HD] >> strip_tac >>
+      drule_all lowerDloadMemoryWritePointEffectTheory.ld_sync_memory_write_effect_at >>
+      disch_then (qx_choose_then `ss` (map_every assume_tac o CONJUNCTS)) >>
+      `ld_ghost_ok (dyn_floor C vs) A f.lf_H (step_prov PG G inst ss)` by
+        (qpat_assum `step_prov PG G inst ss = G` (rewrite_tac o single) >>
+         drule ld_sync_ghosts >> simp[HD]) >>
+      qexistsl [`ss`,`f.lf_H`] >> simp[] >>
+      qpat_assum `ld_vars P A _` mp_tac >> simp[NoAsms, ld_vars_def])
+  >- (`!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==>
+          b+sz <= dyn_floor C vs /\ c+sz <= dyn_floor C vs` by metis_tac[] >>
+      `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword(:256)` by metis_tac[] >>
+      drule_all lowerDloadPublicCopyPointEffectTheory.ld_sync_public_copy_effect_at >>
+      disch_then (qx_choosel_then [`ss`,`H'`] (map_every assume_tac o CONJUNCTS)) >>
+      drule_all ld_sync_ghost_step >> strip_tac >>
+      qexistsl [`ss`,`H'`] >> simp[]) >>
+  `ctx_has_dalloca C` by
+    (simp[NoAsms, ctx_has_dalloca_def, EXISTS_MEM] >>
+     metis_tac[lowerDloadOracleCallAssemblyTheory.ld_active_inst_member,
+               frameAllocationOwnershipTheory.frame_reachable_functions_member]) >>
+  `w2n vs.vs_initial_fmp <= w2n s.vs_fmp` by
+    (drule ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp >> strip_tac >>
+     fs[allocas_below_fmp_def]) >>
+  drule_all lowerDloadOrdinaryEndpointTheory.ld_sync_dalloca_effect_at >>
+  simp[CONJ_ASSOC]
+QED
+
+Theorem focus_opt_ld_block_row[local]:
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn ti t /\
+  o1_ctx_shape C /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  callee_first names C.ctx_functions /\
+  (!f. MEM f C.ctx_functions ==>
+    ir_supply_covers_fn (Sigma f.fn_name) f /\
+    lookup_function f.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma f.fn_name) f))) /\
+  o1_safe_upto D lo n C vs /\ gas_cut n vs t /\
+  is_terminator ti.inst_opcode /\ step_inst fuel C' ti t = OK u /\
+  ~u.vs_halted /\ enters_block gn u tp /\ active_inst gn j tp ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j tp
+Proof
+  BETA_TAC >> disch_then (map_every strip_assume_tac o CONJUNCTS) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    (drule_all lowerDloadSafetyAmbientTheory.ld_sync_fn_shape >> strip_tac >>
+     drule o1_fn_shape_components >> simp[]) >>
+  drule ld_sync_source >> strip_tac >>
+  `inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES` by
+    (conj_tac >> strip_tac >>
+     `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+       simp[is_terminator_def] >>
+     drule_all lowerDloadEnvelopeControlTheory.ld_envelope_nonterminal >> strip_tac >>
+     fs[EVERY_EL] >> metis_tac[]) >>
+  drule_all lowerDloadSafetyLocationsTheory.ld_envelope_ordinary >> strip_tac >>
+  `h = 0` by fs[] >>
+  `t0 = t /\ ti = inst` by fs[lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
+  qpat_x_assum `t0 = t` SUBST_ALL_TAC >>
+  qpat_x_assum `ti = inst` SUBST_ALL_TAC >>
+  drule_all o1LowerDloadRunnerBoundaryTheory.ld_terminator_ok_branch >> strip_tac >>
+  `gas_cut n vs s` by fs[gas_cut_def] >>
+  `raw_reachable vs C fn inst s` by
+    (irule lowerDloadReachabilityTheory.ld_frame_reachable_raw >> metis_tac[]) >>
+  qpat_assum `o1_safe_upto _ _ _ _ _` (strip_assume_tac o REWRITE_RULE[o1_safe_upto_def]) >>
+  `raw_mem_ok C fn inst s /\ dload_offset_ok C fn inst s` by metis_tac[] >>
+  qpat_x_assum `o1_ptr_safe_upto _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE[o1_ptr_safe_upto_def, ptr_discipline_upto_def]) >>
+  `taint_ok fn tn inst s` by metis_tac[] >>
+  `gn = FST (lower_dload_function_supply (Sigma fn.fn_name) fn)` by
+    (drule ld_sync_head >> strip_tac >> fs[ld_image_def]) >>
+  `!k. MEM k C.ctx_functions ==> ir_supply_covers_fn (Sigma k.fn_name) k` by metis_tac[] >>
+  `!k. MEM k C.ctx_functions ==>
+    lookup_function k.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma k.fn_name) k))` by metis_tac[] >>
+  drule_all (BETA_RULE gasFocusLowerDloadControlEntryTheory.ld_focus_control_entry) >>
+  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+  irule (BETA_RULE focus_opt_ld_head_row) >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ld_envelope _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[lowerDloadSafetyKernelTheory.ld_prefix_bound]
+QED
+
 (* A successful raw expansion step needs no successful suffix. *)
 Theorem focus_opt_ld_expansion_next[local]:
   ^focus_opt_ld_row lo P C C' vs Sigma names gn ti t
