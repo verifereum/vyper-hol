@@ -7,7 +7,7 @@ Ancestors bodyPtrBopInLoopExit bodyPtrBopInLoopFrame fragGasSeqPtr fragGasPathPt
 (* One scalar literal write.  The destination need not have been clean:
    ASSIGN overwrites both its value and its ghost binding. *)
 Theorem membership_assign_literal_check:
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id ASSIGN [Lit w] [dst]) s
 Proof
   strip_tac >>
@@ -19,7 +19,7 @@ Proof
 QED
 
 Theorem membership_assign_literal_path:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id ASSIGN [Lit w] [dst]) ==>
@@ -61,7 +61,7 @@ Proof
 QED
 
 Theorem membership_jump_path:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK (jump_to lbl s))
@@ -82,7 +82,7 @@ QED
 
 (* The concrete entry spine is independent of allocation/name freshness. *)
 Theorem membership_entry_path:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions =
     [mk_inst id ASSIGN [Lit 0w] [idx];
@@ -103,6 +103,9 @@ Proof
   qmatch_asmsub_abbrev_tac `OK s1` >>
   `~s1.vs_halted /\ s1.vs_current_bb = s.vs_current_bb /\ s1.vs_inst_idx = 1` by
     simp[Abbr `s1`, update_var_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `s1`, update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
   `get_instruction bb s1.vs_inst_idx =
     SOME (mk_inst (id+1) ASSIGN [Lit 0w] [result])` by simp[get_instruction_def] >>
   `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
@@ -114,6 +117,9 @@ Proof
   qmatch_asmsub_abbrev_tac `OK s2` >>
   `~s2.vs_halted /\ s2.vs_current_bb = s.vs_current_bb /\ s2.vs_inst_idx = 2` by
     simp[Abbr `s2`, update_var_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[Abbr `s2`, update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
   `get_instruction bb s2.vs_inst_idx =
     SOME (mk_inst (id+2) JMP [Label cond] [])` by simp[get_instruction_def] >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G1 tn1 s1 0 G2 tn2 _` >>
@@ -126,7 +132,7 @@ Proof
 QED
 
 Theorem membership_init_spine:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME old_bb /\
   get_instruction old_bb s.vs_inst_idx = SOME (mk_inst id JMP [Label entry] []) /\
   lookup_block entry fn.fn_blocks = SOME entry_bb /\
@@ -146,13 +152,15 @@ Proof
     (DRESTRICT (DRESTRICT G (COMPL {idx})) (COMPL {result}))
     (tn with t_var := set_var_taint (set_var_taint tn.t_var [idx] {}) [result] {})
     (OK (jump_to cond (update_var result 0w (update_var idx 0w (jump_to entry s)))))` by
-    (irule membership_entry_path >> simp[jump_to_def] >>
-     qexists_tac `id+1` >> simp[arithmeticTheory.ADD_ASSOC]) >>
+    (irule membership_entry_path >> fs[jump_to_def, allocas_below_fmp_def] >>
+     conj_tac
+     >- (qexists_tac `id+1` >> simp[arithmeticTheory.ADD_ASSOC]) >>
+     metis_tac[]) >>
   drule_all gas_path_ptr_then >> simp[]
 QED
 
 Theorem membership_init_path_ptr:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   idx = "%" ++ toString (sa.cs_next_var+1) /\
   result = "%" ++ toString sa.cs_next_var /\
@@ -195,7 +203,7 @@ Proof
 QED
 
 Theorem membership_eq_check:
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   eval_operand a s = SOME aw /\ eval_operand b s = SOME bw /\
   op_taint tn a = {} /\ op_taint tn b = {} /\
   op_prov G a = NONE /\ op_prov G b = NONE ==>

@@ -9,7 +9,7 @@ Ancestors
 Theorem env_prevhash_seq_ghosts:
  compile_env_var PrevHash sa = (op,sb) /\
  run_inst_seq (emitted_insts sa sb) s = OK t /\
- local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+ local_ptrs_reserved cenv sa /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x)
  ==> ?G' tn'.
@@ -76,8 +76,8 @@ Proof
            source_memory_read_ranges_def, source_memory_write_ranges_def,
            step_inst_def, step_inst_base_opcode_eqs, exec_pure2_def,
            eval_operands_def, eval_operand_def, lookup_var_def,
-           FLOOKUP_UPDATE, op_taint_def, update_var_def, allocas_from_def] >>
-         fs[allocas_from_def] >> conj_tac
+           FLOOKUP_UPDATE, op_taint_def, update_var_def, allocas_from_def, allocas_below_fmp_def] >>
+         fs[allocas_from_def, allocas_below_fmp_def] >> conj_tac
          >- (gen_tac >> Cases_on `op` >> simp[] >> metis_tac[]) >>
          metis_tac[]) >>
      simp[mem_taint_def, new_site_bytes_def, step_writes_def,
@@ -95,8 +95,8 @@ Proof
            source_memory_read_ranges_def, source_memory_write_ranges_def,
            step_inst_def, step_inst_base_opcode_eqs, exec_read1_def,
            eval_operands_def, eval_operand_def, lookup_var_def,
-           FLOOKUP_UPDATE, op_taint_def, update_var_def, allocas_from_def] >>
-         fs[allocas_from_def]) >>
+           FLOOKUP_UPDATE, op_taint_def, update_var_def, allocas_from_def, allocas_below_fmp_def] >>
+         fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
      simp[inst_seq_ptr_def, mem_taint_def, new_site_bytes_def, step_writes_def,
        source_memory_write_ranges_def, written_taint_def, range_bytes_def,
        FLOOKUP_DEF, SF CONJ_ss] >> conj_tac

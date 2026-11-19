@@ -46,6 +46,7 @@ Proof
     n2w (w2n (abi_decode_load CALLDATALOAD sw s))` by simp[] >>
   `abi_decode_bytes_copy_size maxn = 32 + 32 * ((maxn+31) DIV 32)` by
     simp[abi_decode_bytes_copy_size_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all calldata_bytestring_overwrite_endpoint_core_uniform_sequence_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `s' = actual with vs_inst_idx := LENGTH sb.cs_current_insts` by

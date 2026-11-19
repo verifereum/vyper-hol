@@ -22,7 +22,7 @@ Libs
 Theorem ptr_inst_ok_abort_zero:
   !D fuel ctx fn G tn s id opc ops.
     ((opc = REVERT /\ ops = [Lit 0w; Lit 0w]) \/ (opc = INVALID /\ ops = [])) /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops []) s
 Proof
   rpt strip_tac >> gvs[]

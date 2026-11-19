@@ -24,7 +24,6 @@ val _ = Parse.hide "tops";
 Theorem lower_vyper_runtime_unit_ptr_taint:
   !tops rpolicy unit vs fn lbl D.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    ~ctx_has_dalloca unit.cu_context /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
     (!fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint

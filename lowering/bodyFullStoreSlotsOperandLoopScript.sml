@@ -319,7 +319,7 @@ Proof
      drule instruction_prefix_cursor >> simp[Abbr `t1`, ADD1]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t1,Gf,tnf) []
      (OK (jump_to hdr t1),Gf,tnf)` by
-    (irule copy_jmp_origin_ptr >>
+    (irule jmp_origin_ptr_path >>
      gvs[Abbr `t1`, allocas_from_def, allocas_below_fmp_def, Excl "isPREFIX"] >>
      metis_tac[]) >>
   qexists_tac `jump_to hdr t1` >>

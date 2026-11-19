@@ -14,7 +14,7 @@ Theorem raw_log_dynamic_prepare_safety:
   b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   (!i. b<=i /\ i<b+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
   b+32+LENGTH bs <= s.vs_alloca_next /\ allocas_from lo s /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   u = update_var l (n2w (LENGTH bs)) s /\
   v = update_var p (n2w (b+32)) u /\
   step_inst_base (mk_inst id MLOAD [Var src] [l]) s = OK u /\
@@ -93,11 +93,11 @@ Resume raw_log_dynamic_prepare_safety[add_ok]:
   fs[op_taint_def, allocas_from_def, eval_operand_def, lookup_var_def] >>
   simp[op_taint_def, FLOOKUP_UPDATE] >>
   simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def,
-    lookup_var_def, FLOOKUP_UPDATE, update_var_def] >>
+    lookup_var_def, FLOOKUP_UPDATE, update_var_def, allocas_below_fmp_def] >>
   conj_tac
   >- (gen_tac >> Cases_on `op = Var src` >> simp[] >>
       Cases_on `op = Lit 32w` >> simp[]) >>
-  metis_tac[]
+  fs[allocas_below_fmp_def] >> metis_tac[]
 QED
 
 Finalise raw_log_dynamic_prepare_safety

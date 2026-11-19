@@ -32,6 +32,7 @@ Theorem assign_word_store_edge_ptr:
       (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
 Proof
   rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all ptr_inst_ok_mstore >>
   disch_then (qspecl_then [`D`, `fn`, `id`, `0`] assume_tac) >>
   drule_at (Pat `ptr_inst_ok _ _ _ _ _ _ _ _ _`) straight_line_ptr_edge >>
