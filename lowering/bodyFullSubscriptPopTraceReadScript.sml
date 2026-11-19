@@ -23,15 +23,16 @@ Proof
   Induct >- simp[replace_popped_def] >>
   qx_gen_tac `head` >> PairCases_on `head` >> rpt gen_tac >> simp[] >>
   strip_tac >>
-  gvs[read_popped_def, replace_popped_def, AllCaseEqs()] >>
-  TRY (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  strip_tac >> gvs[IS_PREFIX_APPEND, DROP_LENGTH_APPEND] >>
-  `subscripts_type ptv l = SOME dt` by
-    metis_tac[vyperPlaceResultTypingTheory.subscripts_type_append] >>
-  `well_formed_type_value ptv` by metis_tac[subscripts_type_well_formed] >>
-  conj_tac
-  >- metis_tac[assign_subscripts_replace_type_metadata] >>
-  first_assum irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  gvs[read_popped_def, replace_popped_def, AllCaseEqs()]
+  >~ [`live _ ==> value_has_type _ _ /\ _`] >-
+   (strip_tac >> gvs[IS_PREFIX_APPEND, DROP_LENGTH_APPEND] >>
+    `subscripts_type ptv l = SOME dt` by
+      metis_tac[vyperPlaceResultTypingTheory.subscripts_type_append] >>
+    `well_formed_type_value ptv` by metis_tac[subscripts_type_well_formed] >>
+    conj_tac
+    >- metis_tac[assign_subscripts_replace_type_metadata] >>
+    first_assum irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem live_read_tracks[local]:
