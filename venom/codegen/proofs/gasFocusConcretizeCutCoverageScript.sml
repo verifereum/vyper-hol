@@ -168,7 +168,7 @@ QED
 
 (* Source observations already traversed by a paired prefix are still in
    the cut: the remaining readings can only decrease along the history. *)
-Theorem concretize_paired_history_safety[local]:
+Theorem concretize_paired_history_safety:
   ptr_paired_prefix R lp positions lo vs C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ptr_discipline_upto lo n C vs /\ gas_cut n vs at.po_state ==>
@@ -2122,7 +2122,7 @@ QED
 
 Finalise ptr_cut_paired_static_mem_cut_headroom
 
-Theorem ptr_cut_paired_static_mem[local]:
+Theorem ptr_cut_paired_static_mem:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_initial_state_ok vs /\
