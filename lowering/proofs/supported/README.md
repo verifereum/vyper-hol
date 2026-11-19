@@ -121,6 +121,7 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
   `supported_pure_fields tops fields`: structural recursion, with every AST
   constructor explicit. Calls/Pop are never P. Aggregate storage bases of
   Subscript/Attribute are specially checked places, not standalone P values.
+  Ternaries use the supported value types with tuple results excluded.
 - `supported_effect_expr tops e` (E): only root IntCall, ExtCall, Send, or Pop.
   All call arguments, including external target/value, must be P. Internal
   lookup requires Internal/NONE. ExtCall requires exact count, W arguments and

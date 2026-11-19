@@ -81,10 +81,7 @@ Theorem supported_pure_expression_rows:
      Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_uint; expr_test_uint];
      TypeBuiltin (BaseT (IntT 8)) Convert (BaseT (IntT 8)) [expr_test_uint];
      expr_test_decode;
-     FlagMember (FlagT (NONE,"Flags")) (NONE,"Flags") "A";
-     IfExp (TupleT [BaseT (UintT 256)]) (Name (BaseT BoolT) "c")
-       (Name (TupleT [BaseT (UintT 256)]) "left")
-       (Name (TupleT [BaseT (UintT 256)]) "right")]
+     FlagMember (FlagT (NONE,"Flags")) (NONE,"Flags") "A"]
 Proof
   EVAL_TAC
 QED
@@ -102,6 +99,9 @@ Theorem supported_storage_base_exclusions:
        (TopLevelName (StructT (NONE,"Pair")) (NONE,"record")) "missing";
      Attribute (BaseT (UintT 256))
        (TopLevelName (StructT (NONE,"Pair")) (SOME 0,"record")) "first";
+     IfExp (TupleT [BaseT (UintT 256)]) (Name (BaseT BoolT) "c")
+       (Name (TupleT [BaseT (UintT 256)]) "left")
+       (Name (TupleT [BaseT (UintT 256)]) "right");
      StructLit (StructT (NONE,"Pair")) (SOME 0,"Pair") []]
 Proof
   EVAL_TAC
