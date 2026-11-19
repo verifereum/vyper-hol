@@ -52,13 +52,15 @@ Proof
   Cases_on `tr` >>
   gvs[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def,
     exec_read1_def, exec_write2_def, eval_operand_def, update_var_def,
-    lookup_var_def, step_prov_def, set_prov_def, out_prov_def,
+    lookup_var_def, FLOOKUP_UPDATE] >>
+  FIRST [gvs[mk_inst_def, eval_operand_def, update_var_def, lookup_var_def,
+    step_prov_def, set_prov_def, out_prov_def,
     step_taint_def, set_var_taint_def, out_taint_def, op_taint_def,
     mem_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
     step_writes_def, source_memory_write_ranges_def, written_taint_def,
     range_bytes_def, new_site_bytes_def, FLOOKUP_UPDATE, SF CONJ_ss,
     sstore_def, tstore_def, FLOOKUP_DEF, DRESTRICT_UNIV,
-    SF ETA_ss] >> simp[taint_component_equality]
+    SF ETA_ss]] >> simp[taint_component_equality]
 QED
 
 Theorem dense_single_origin_ptr:

@@ -781,7 +781,7 @@ Proof
        sstore_def, arithmeticTheory.ADD1]
 QED
 
-Theorem allocas_below_fmp_return_unlock_state[local,simp]:
+Theorem allocas_below_fmp_return_unlock_state[simp]:
   !cenv s.
     allocas_below_fmp (return_unlock_state cenv s) = allocas_below_fmp s
 Proof
@@ -793,7 +793,7 @@ QED
 
 (* A literal guard store is a straight-line step: no memory, no pointer,
    no GAS mark, and no variable taint. *)
-Theorem return_unlock_origin_ptr:
+Theorem return_unlock_origin_ptr_taint:
   compile_return_unlock cenv sa = ((),su) /\ fn_has_code sa su func /\
   ~s.vs_halted /\
   ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
@@ -802,6 +802,10 @@ Theorem return_unlock_origin_ptr:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G' tn'. G' = G /\ tn'.t_var = tn.t_var /\ tn'.t_mem = tn.t_mem /\
+    (((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+       FST (SND (SND cenv.ce_nonreentrant))) ==>
+      tn'.t_stor = tn.t_stor /\ tn'.t_trans SUBSET tn.t_trans /\
+      tn'.t_imm = tn.t_imm) /\
     !D. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
           (OK (return_unlock_state cenv s), G', tn')
 Proof
@@ -826,11 +830,12 @@ Proof
     simp[Abbr `i`, step_prov_def, set_prov_def, mk_inst_def,
          finite_mapTheory.DRESTRICT_UNIV] >>
   qexists_tac `step_taint i s u tn` >>
-  conj_tac
+  rpt conj_tac
+  >~ [`(step_taint i s u tn).t_var = _`]
   >- (`i.inst_outputs = []` by simp[Abbr `i`, mk_inst_def] >>
       simp[step_taint_def, set_var_taint_def, pred_setTheory.COMPL_EMPTY,
-           finite_mapTheory.DRESTRICT_UNIV]) >>
-  conj_tac
+           finite_mapTheory.DRESTRICT_UNIV])
+  >~ [`(step_taint i s u tn).t_mem = _`]
   >- (`new_site_bytes s u = {}` by
         (simp[new_site_bytes_def, pred_setTheory.EXTENSION,
               finite_mapTheory.FLOOKUP_DEF] >>
@@ -841,31 +846,82 @@ Proof
              pred_setTheory.EXTENSION] >>
       `written_taint tn i s = {}` by
         simp[Abbr `i`, written_taint_def, mk_inst_def] >>
-      simp[step_taint_def, mem_taint_def]) >>
-  gen_tac >>
-  `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn) []
-     (OK (u with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)),
-      step_prov PG G i u, step_taint i s u tn)` by
-    (mp_tac (SPEC_ALL straight_line_origin_ptr_edge) >>
-     simp[Abbr `i`, mk_inst_def, is_terminator_def] >>
-     disch_then irule >>
-     simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
-          contextCodegenRelTheory.source_memory_read_ranges_def,
-          codegenRelTheory.source_memory_write_ranges_def,
-          ptr_inst_ok_def, access_ok_def, taint_ok_def, op_taint_def,
-          step_inst_non_invoke] >>
-     gvs[mk_inst_def] >> rw[] >> gvs[]) >>
-  qpat_x_assum `step_prov _ _ _ _ = G`
-    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
-           (SPEC_ALL (cj 2 gas_origin_ptr_path_rules)))) >>
-  qexistsl_tac [`G`, `u with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)`,
-                `step_taint i s u tn`] >>
-  simp[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[])
+      simp[step_taint_def, mem_taint_def])
+  >~ [`!D. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) _ _ _`]
+  >- (gen_tac >>
+      `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn) []
+         (OK (u with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)),
+          step_prov PG G i u, step_taint i s u tn)` by
+        (mp_tac (SPEC_ALL straight_line_origin_ptr_edge) >>
+         simp[Abbr `i`, mk_inst_def, is_terminator_def] >>
+         disch_then irule >>
+         simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
+              contextCodegenRelTheory.source_memory_read_ranges_def,
+              codegenRelTheory.source_memory_write_ranges_def,
+              ptr_inst_ok_def, access_ok_def, taint_ok_def, op_taint_def,
+              step_inst_non_invoke] >>
+         gvs[mk_inst_def] >> rw[] >> gvs[]) >>
+      qpat_x_assum `step_prov _ _ _ _ = G`
+        (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+      irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
+               (SPEC_ALL (cj 2 gas_origin_ptr_path_rules)))) >>
+      qexistsl_tac [`G`, `u with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)`,
+                    `step_taint i s u tn`] >>
+      simp[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
+  rw[Abbr `i`, mk_inst_def, step_taint_def, adopt_reset_def,
+     store_taint_def, imm_taint_def, eval_operand_def, op_taint_def,
+     key_update_def, pred_setTheory.SUBSET_DEF] >>
+  first_assum ACCEPT_TAC)
+QED
+
+Theorem return_unlock_origin_ptr:
+  compile_return_unlock cenv sa = ((),su) /\ fn_has_code sa su func /\
+  ~s.vs_halted /\
+  ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+    ~s.vs_call_ctx.cc_static) /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?G' tn'. G' = G /\ tn'.t_var = tn.t_var /\ tn'.t_mem = tn.t_mem /\
+    !D. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
+          (OK (return_unlock_state cenv s), G', tn')
+Proof
+  strip_tac >>
+  drule_all return_unlock_origin_ptr_taint >> simp[] >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexists_tac `tn'` >> simp[]
+QED
+
+Theorem return_unlock_exit_taint:
+  dead_lo_ok H D lo cenv cx /\
+  ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+    FST (SND (SND cenv.ce_nonreentrant))) /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans SUBSET tn.t_trans /\
+  tn'.t_imm = tn.t_imm /\ tn'.t_mem = tn.t_mem /\
+  ghost_inv_at D lo d cenv cx es G tn s ==>
+  stor_taint_ok_at D tn' (return_unlock_state cenv s) /\
+  (!i. i < lo /\ i IN tn'.t_mem ==>
+       imm_section_dead (cx_tops cx)
+         (mem_bytes_at 0 lo (return_unlock_state cenv s).vs_memory) i)
+Proof
+  strip_tac >> fs[ghost_inv_at_def] >>
+  simp[stor_taint_ok_at_def] >>
+  qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
+  Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
+  gvs[return_unlock_state_def, tstore_def, dead_lo_ok_def,
+      stor_taint_ok_at_def, combinTheory.APPLY_UPDATE_THM] >>
+  irule pred_setTheory.SUBSET_TRANS >>
+  qexists_tac `tn.t_trans` >> simp[] >>
+  Cases_on `s.vs_call_ctx.cc_address = cx.txn.target` >>
+  gvs[sourceUnitExecutionTheory.cx_dead_def, pred_setTheory.SUBSET_DEF] >>
+  rpt strip_tac >> rename1 `p IN tn.t_trans` >> PairCases_on `p` >> fs[] >>
+  irule storage_dead_update_zero >>
+  qpat_x_assum `!x. x IN tn.t_trans ==> _`
+    (qspec_then `(p0,p1)` mp_tac) >> simp[]
 QED
 
 (* RET of words already on hand, with untainted operands. *)
-Theorem emitted_ret_origin_ptr[local]:
+Theorem emitted_ret_origin_ptr:
   emit_inst RET (ops ++ [Var rpc]) [] sa = ((), sb) /\
   fn_has_code sa sb func /\ eval_operands ops s = SOME vals /\
   lookup_var rpc s = SOME pc /\
@@ -912,7 +968,7 @@ QED
 
 (* The release, then RET to the saved PC.  The ghost endpoint does not
    depend on the dead mask, so one witness serves every horizon. *)
-Theorem compile_return_none_int_origin_ptr:
+Theorem compile_return_none_int_origin_ptr_taint:
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
   compile_stmt cenv lctx ty (Return NONE) sa = ((), sb) /\
   fn_has_code sa sb func /\ ret_pc_ok cenv sa s /\
@@ -922,7 +978,12 @@ Theorem compile_return_none_int_origin_ptr:
   op_taint tn (Var rpc) = {} /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?G' tn'. !D.
+  ?G' tn'. tn'.t_mem = tn.t_mem /\
+    (((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+       FST (SND (SND cenv.ce_nonreentrant))) ==>
+      tn'.t_stor = tn.t_stor /\ tn'.t_trans SUBSET tn.t_trans /\
+      tn'.t_imm = tn.t_imm) /\
+    !D.
     gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
       (IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
          (return_unlock_state cenv s), G', tn')
@@ -938,9 +999,9 @@ Proof
   `cs_extends su sb` by metis_tac[cs_extends_emit_inst] >>
   `fn_has_code sa su func /\ fn_has_code su sb func` by
     metis_tac[fn_has_code_split] >>
-  mp_tac (SPEC_ALL return_unlock_origin_ptr) >>
+  mp_tac (SPEC_ALL return_unlock_origin_ptr_taint) >>
   impl_tac >- fs[] >> strip_tac >>
-  qexistsl_tac [`G'`, `tn'`] >> gen_tac >>
+  qexistsl_tac [`G'`, `tn'`] >> simp[] >> gen_tac >>
   `?pc. lookup_var rpc s = SOME pc` by metis_tac[ret_pc_ok_def] >>
   qabbrev_tac `s1 = return_unlock_state cenv s` >>
   `lookup_var rpc s1 = SOME pc /\ allocas_from lo s1 /\
@@ -961,7 +1022,41 @@ Proof
   metis_tac[gas_origin_ptr_path_append, APPEND_NIL]
 QED
 
-Theorem compile_return_none_int_frag_full:
+Theorem compile_return_none_int_origin_ptr:
+  cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+  compile_stmt cenv lctx ty (Return NONE) sa = ((), sb) /\
+  fn_has_code sa sb func /\ ret_pc_ok cenv sa s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+    ~s.vs_call_ctx.cc_static) /\ allocas_from lo s /\
+  op_taint tn (Var rpc) = {} /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?G' tn'. !D.
+    gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
+      (IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
+         (return_unlock_state cenv s), G', tn')
+Proof
+  strip_tac >>
+  mp_tac (SPEC_ALL compile_return_none_int_origin_ptr_taint) >> impl_tac >- simp[] >>
+  strip_tac >> qexistsl_tac [`G'`, `tn'`] >> simp[]
+QED
+
+Theorem stmt_frag_full_retq_weaken:
+  stmt_frag_full ps cx lctx RetQ cenv m shadow_m source es /\
+  (!H v ee gt r. RetQ H v ee gt r ==> RetQ' H v ee gt r) ==>
+  stmt_frag_full ps cx lctx RetQ' cenv m shadow_m source es
+Proof
+  PairCases_on `ps` >>
+  pure_rewrite_tac[stmt_frag_full_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  fs[stmt_exit_ptr_def] >> metis_tac[]
+QED
+
+Theorem compile_return_none_int_frag_full_taint:
   !DF lo d ctx shadow_ctx PG func shadow_func
    cx lctx cenv ty ret_tv es rpc slot_size.
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
@@ -971,7 +1066,13 @@ Theorem compile_return_none_int_frag_full:
     stmt_frag_full
       (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx
-      (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r)
+      (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r /\
+        !ir u. r = IntRet ir u /\
+          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+            FST (SND (SND cenv.ce_nonreentrant))) ==>
+          stor_taint_ok_at (DF H) (SND gt) u /\
+          (!i. i < lo /\ i IN (SND gt).t_mem ==>
+               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i))
       cenv
       (stmt_env cenv lctx ty (Return NONE))
       (stmt_env cenv lctx ty (Return NONE))
@@ -988,7 +1089,13 @@ Proof
                      (return_unlock_state cenv s0)` >>
   `?G' tn'. !H. valid_horizon cx st0 H es.storage_trace ==>
      gas_origin_ptr_path (DF H, lo, gas_explicit_sites ctx shadow_ctx, ctx,
-                          func, PG) (s0, G0, tn0) [] (r, G', tn')` by
+                          func, PG) (s0, G0, tn0) [] (r, G', tn') /\
+     (((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+         FST (SND (SND cenv.ce_nonreentrant))) ==>
+       stor_taint_ok_at (DF H) tn' (return_unlock_state cenv s0) /\
+       (!i. i < lo /\ i IN tn'.t_mem ==>
+            imm_section_dead (cx_tops cx)
+              (mem_bytes_at 0 lo (return_unlock_state cenv s0).vs_memory) i))` by
     (Cases_on `?H. valid_horizon cx st0 H es.storage_trace` >> gvs[] >>
      first_assum (drule_then strip_assume_tac) >>
      `(FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
@@ -996,11 +1103,24 @@ Proof
        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
      `allocas_from lo s0 /\ op_taint tn0 (Var rpc) = {}` by
        fs[ghost_inv_at_def] >>
-     drule_all compile_return_none_int_origin_ptr >>
+     drule_all compile_return_none_int_origin_ptr_taint >>
      disch_then (strip_assume_tac o
        Q.INST [`tn` |-> `tn0`, `G` |-> `G0`,
                `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] o SPEC_ALL) >>
-     metis_tac[]) >>
+     qexistsl_tac [`G'`, `tn'`] >> gen_tac >> disch_tac >> conj_tac
+     >- simp[Abbr `r`] >>
+     disch_tac >> rename1 `valid_horizon cx st0 Hret es.storage_trace` >>
+     `ghost_inv_at (DF Hret) lo d cenv cx es G0 tn0 s0` by
+       (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+          (qspec_then `Hret` mp_tac) >> simp[]) >>
+     Q.SUBGOAL_THEN `dead_lo_ok Hret (DF Hret) lo cenv cx /\
+       ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+         FST (SND (SND cenv.ce_nonreentrant))) /\
+       tn'.t_stor = tn0.t_stor /\ tn'.t_trans SUBSET tn0.t_trans /\
+       tn'.t_imm = tn0.t_imm /\ tn'.t_mem = tn0.t_mem /\
+       ghost_inv_at (DF Hret) lo d cenv cx es G0 tn0 s0`
+       (mp_tac o MATCH_MP (GEN_ALL return_unlock_exit_taint))
+     >- fs[] >> simp[]) >>
   irule (Q.INST [`res` |-> `INR (ReturnException NoneV)`, `ee` |-> `es`]
            gas_outcome_full_exit) >>
   rpt conj_tac >>
@@ -1021,7 +1141,48 @@ Proof
   simp[venom_state_component_equality]
 QED
 
-Theorem internal_frame_ret_none_full:
+Theorem compile_return_none_int_frag_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func
+   cx lctx cenv ty ret_tv es rpc slot_size.
+    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+    cenv.ce_returns_count = 0 /\
+    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+      ~cx.txn.is_static) ==>
+    stmt_frag_full
+      (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx
+      (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r)
+      cenv
+      (stmt_env cenv lctx ty (Return NONE))
+      (stmt_env cenv lctx ty (Return NONE))
+      (eval_stmt cx (Return NONE)) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule stmt_frag_full_retq_weaken >>
+  qexists_tac `\H v ee gt r. intret_q H func cenv cx ret_tv v ee r /\
+        !ir u. r = IntRet ir u /\
+          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+            FST (SND (SND cenv.ce_nonreentrant))) ==>
+          stor_taint_ok_at (DF H) (SND gt) u /\
+          (!i. i < lo /\ i IN (SND gt).t_mem ==>
+               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)` >>
+  conj_tac >- simp[] >>
+  irule compile_return_none_int_frag_full_taint >> simp[]
+QED
+
+Theorem frame_ret_ok_full_retq_weaken[local]:
+  frame_ret_ok_full ps cx RetQ cenv ty /\
+  (!H v ee gt r. RetQ H v ee gt r ==> RetQ' H v ee gt r) ==>
+  frame_ret_ok_full ps cx RetQ' cenv ty
+Proof
+  PairCases_on `ps` >> pure_rewrite_tac[frame_ret_ok_full_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  irule stmt_frag_full_retq_weaken >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem internal_frame_ret_none_full_taint:
   !DF lo d ctx shadow_ctx PG func shadow_func cx cenv ret_tv rpc slot_size.
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
     cenv.ce_returns_count = 0 /\
@@ -1029,7 +1190,13 @@ Theorem internal_frame_ret_none_full:
       ~cx.txn.is_static) ==>
     frame_ret_ok_full
       (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
-      (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r) cenv NoneT
+      (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r /\
+        !ir u. r = IntRet ir u /\
+          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+            FST (SND (SND cenv.ce_nonreentrant))) ==>
+          stor_taint_ok_at (DF H) (SND gt) u /\
+          (!i. i < lo /\ i IN (SND gt).t_mem ==>
+               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) cenv NoneT
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
@@ -1041,7 +1208,7 @@ Proof
   mp_tac (Q.SPECL
     [`DF`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`, `shadow_func`,
      `cx`, `lctx`, `cenv'`, `NoneT`, `ret_tv`, `es`, `rpc`, `slot_size`]
-    compile_return_none_int_frag_full) >>
+    compile_return_none_int_frag_full_taint) >>
   simp[] >>
   pure_rewrite_tac[stmt_frag_full_def] >> strip_tac >>
   rpt gen_tac >> strip_tac >>
@@ -1060,6 +1227,29 @@ Proof
         [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
         constructor_exit_state_rel) >> simp[]) >>
   first_assum ACCEPT_TAC
+QED
+
+Theorem internal_frame_ret_none_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func cx cenv ret_tv rpc slot_size.
+    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+    cenv.ce_returns_count = 0 /\
+    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+      ~cx.txn.is_static) ==>
+    frame_ret_ok_full
+      (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
+      (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r) cenv NoneT
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule frame_ret_ok_full_retq_weaken >>
+  qexists_tac `\H v ee gt r. intret_q H func cenv cx ret_tv v ee r /\
+        !ir u. r = IntRet ir u /\
+          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+            FST (SND (SND cenv.ce_nonreentrant))) ==>
+          stor_taint_ok_at (DF H) (SND gt) u /\
+          (!i. i < lo /\ i IN (SND gt).t_mem ==>
+               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)` >>
+  conj_tac >- simp[] >>
+  irule internal_frame_ret_none_full_taint >> simp[]
 QED
 
 (* A word return releases the guard and then RETs the value and the PC. *)
@@ -1148,7 +1338,7 @@ QED
 
 (* The release and RET after a word operand; one ghost endpoint for every
    dead mask. *)
-Theorem return_word_suffix_origin_ptr[local]:
+Theorem return_word_suffix_origin_ptr_taint[local]:
   compile_return_unlock cenv sm = ((),su) /\
   emit_inst RET [op; Var rpc] [] su = ((),sb) /\
   fn_has_code sm su func /\ fn_has_code su sb func /\
@@ -1160,15 +1350,20 @@ Theorem return_word_suffix_origin_ptr[local]:
   ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?G' tn'. !D.
+  ?G' tn'. tn'.t_mem = tn.t_mem /\
+    (((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+       FST (SND (SND cenv.ce_nonreentrant))) ==>
+      tn'.t_stor = tn.t_stor /\ tn'.t_trans SUBSET tn.t_trans /\
+      tn'.t_imm = tn.t_imm) /\
+    !D.
     gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
       (IntRet <| iret_values := [w]; iret_adopt_fmp := NONE |>
          (return_unlock_state cenv s), G', tn')
 Proof
   strip_tac >>
-  mp_tac (Q.INST [`sa` |-> `sm`] (SPEC_ALL return_unlock_origin_ptr)) >>
+  mp_tac (Q.INST [`sa` |-> `sm`] (SPEC_ALL return_unlock_origin_ptr_taint)) >>
   impl_tac >- fs[] >> strip_tac >>
-  qexistsl_tac [`G'`, `tn'`] >> gen_tac >>
+  qexistsl_tac [`G'`, `tn'`] >> simp[] >> gen_tac >>
   drule compile_return_unlock_shape >> strip_tac >>
   qabbrev_tac `s1 = return_unlock_state cenv s` >>
   `lookup_var rpc s1 = SOME pc /\ eval_operand op s1 = SOME w /\
@@ -1192,7 +1387,7 @@ Proof
 QED
 
 (* Scalar internal returns retain the expression's joint source prefix. *)
-Theorem compile_return_word_int_frag_full:
+Theorem compile_return_word_int_frag_full_taint:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx cenv ty tv es e env
    rpc slot_size.
    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
@@ -1210,7 +1405,13 @@ Theorem compile_return_word_int_frag_full:
             cenv cx ety e es)
    ==>
    stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx lctx
-     (\H v ee gt r. intret_q H func cenv cx tv v ee r) cenv
+     (\H v ee gt r. intret_q H func cenv cx tv v ee r /\
+       !ir u. r = IntRet ir u /\
+         ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+           FST (SND (SND cenv.ce_nonreentrant))) ==>
+         stor_taint_ok_at (DF H) (SND gt) u /\
+         (!i. i < lo /\ i IN (SND gt).t_mem ==>
+              imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) cenv
      (stmt_env cenv lctx ty (Return (SOME e)))
      (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
      (eval_stmt cx (Return (SOME e))) es
@@ -1297,7 +1498,7 @@ Proof
      ~t.vs_call_ctx.cc_static) /\ allocas_from lo t` by
     fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
        ghost_inv_at_def] >>
-  drule_all return_word_suffix_origin_ptr >>
+  drule_all return_word_suffix_origin_ptr_taint >>
   disch_then (strip_assume_tac o
     Q.INST [`tn` |-> `tn1`, `G` |-> `G1`,
             `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] o SPEC_ALL) >>
@@ -1310,9 +1511,24 @@ Proof
     `tn'`, `v`] >>
   qpat_assum `~t.vs_halted`
     (fn th => simp[th, exit_result_def, raise_def, halt_exit_def]) >>
-  rpt strip_tac >> simp[stmt_exit_ptr_def] >>
+  rpt strip_tac >> simp[stmt_exit_ptr_def] >> disj2_tac >>
+  reverse conj_tac
+  >- (strip_tac >>
+      `ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t` by
+        (qpat_assum `valid_horizon cx st0 H mid.storage_trace` (fn vh =>
+          qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+            (qspec_then `H` (strip_assume_tac o BETA_RULE o C MP vh))) >>
+         gvs[]) >>
+      Q.SUBGOAL_THEN `dead_lo_ok H (DF H) lo cenv cx /\
+        ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+          FST (SND (SND cenv.ce_nonreentrant))) /\
+        tn'.t_stor = tn1.t_stor /\ tn'.t_trans SUBSET tn1.t_trans /\
+        tn'.t_imm = tn1.t_imm /\ tn'.t_mem = tn1.t_mem /\
+        ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t`
+        (mp_tac o MATCH_MP (GEN_ALL return_unlock_exit_taint))
+      >- fs[] >> simp[]) >>
   simp[intret_q_def, result_rel_def] >>
-  TRY disj2_tac >> qexists_tac `t` >> simp[] >>
+  qexists_tac `t` >> simp[] >>
   `expr_post H ctx func cenv cx e es sa sm s0 mid v shadow_op t` by
     (qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
        drule >> simp[]) >>
@@ -1331,7 +1547,44 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem internal_frame_ret_word_full:
+Theorem compile_return_word_int_frag_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func cx lctx cenv ty tv es e env
+   rpc slot_size.
+   cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+   cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
+   ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+     ~cx.txn.is_static) /\
+   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+   expr_sim_inv cenv cx env es /\
+   stmt_exprs_ok cenv (Return (SOME e)) /\
+   IS_SOME (type_stmt env ty (Return (SOME e))) /\
+   call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
+   (!ety. expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+            cenv cx ety e es /\
+          expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+            cenv cx ety e es)
+   ==>
+   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx lctx
+     (\H v ee gt r. intret_q H func cenv cx tv v ee r) cenv
+     (stmt_env cenv lctx ty (Return (SOME e)))
+     (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+     (eval_stmt cx (Return (SOME e))) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule stmt_frag_full_retq_weaken >>
+  qexists_tac `\H v ee gt r. intret_q H func cenv cx tv v ee r /\
+       !ir u. r = IntRet ir u /\
+         ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+           FST (SND (SND cenv.ce_nonreentrant))) ==>
+         stor_taint_ok_at (DF H) (SND gt) u /\
+         (!i. i < lo /\ i IN (SND gt).t_mem ==>
+              imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)` >>
+  conj_tac >- simp[] >>
+  irule compile_return_word_int_frag_full_taint >> simp[] >>
+  qexists_tac `env` >> simp[]
+QED
+
+Theorem internal_frame_ret_word_full_taint:
   !DF lo d ctx shadow_ctx PG func shadow_func cx cenv ty tv rpc slot_size.
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
     cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
@@ -1340,7 +1593,13 @@ Theorem internal_frame_ret_word_full:
       ~cx.txn.is_static) ==>
     frame_ret_ok_full
       (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
-      (\H v ee gt r. intret_q H func cenv cx tv v ee r) cenv ty
+      (\H v ee gt r. intret_q H func cenv cx tv v ee r /\
+        !ir u. r = IntRet ir u /\
+          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+            FST (SND (SND cenv.ce_nonreentrant))) ==>
+          stor_taint_ok_at (DF H) (SND gt) u /\
+          (!i. i < lo /\ i IN (SND gt).t_mem ==>
+               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) cenv ty
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
@@ -1354,7 +1613,7 @@ Proof
   mp_tac (Q.SPECL
     [`DF`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`, `shadow_func`,
      `cx`, `lctx`, `cenv'`, `ty`, `tv`, `es`, `e`, `env`, `rpc`, `slot_size`]
-    compile_return_word_int_frag_full) >>
+    compile_return_word_int_frag_full_taint) >>
   simp[] >>
   pure_rewrite_tac[stmt_frag_full_def] >> strip_tac >>
   rpt gen_tac >> strip_tac >>
@@ -1373,4 +1632,28 @@ Proof
         [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
         constructor_exit_state_rel) >> simp[]) >>
   first_assum ACCEPT_TAC
+QED
+
+Theorem internal_frame_ret_word_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func cx cenv ty tv rpc slot_size.
+    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+    cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
+    is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+      ~cx.txn.is_static) ==>
+    frame_ret_ok_full
+      (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
+      (\H v ee gt r. intret_q H func cenv cx tv v ee r) cenv ty
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule frame_ret_ok_full_retq_weaken >>
+  qexists_tac `\H v ee gt r. intret_q H func cenv cx tv v ee r /\
+        !ir u. r = IntRet ir u /\
+          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+            FST (SND (SND cenv.ce_nonreentrant))) ==>
+          stor_taint_ok_at (DF H) (SND gt) u /\
+          (!i. i < lo /\ i IN (SND gt).t_mem ==>
+               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)` >>
+  conj_tac >- simp[] >>
+  irule internal_frame_ret_word_full_taint >> simp[]
 QED

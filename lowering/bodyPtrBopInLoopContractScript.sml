@@ -118,7 +118,9 @@ Theorem membership_loop_contract_init:
     t.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1) /\
     t.vs_inst_idx = 0
 Proof
-  strip_tac >> drule membership_compiled_loop_init >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule membership_compiled_loop_init >>
   simp[] >>
   disch_then drule_all >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] mp_tac) >>
