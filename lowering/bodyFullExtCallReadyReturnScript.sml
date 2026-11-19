@@ -14,6 +14,7 @@ Theorem extcall_ready_return_outcome:
     expr_body_pre cenv cx env
       (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
          args dflt) es /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     cap = abi_size_bound cenv.ce_struct_fields
             (if needs_external_call_wrap ret_type
              then TupleT [ret_type] else ret_type) /\
@@ -54,6 +55,11 @@ Theorem extcall_ready_return_outcome:
             not_fresh_at sa x) /\
     extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op buf_op
       cap target has_default default_op default_ty default_opt returnData ee t /\
+    (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+      ?w aid tv. eval_operand default_op t = SOME w /\
+        evaluate_type (get_tenv cx) default_ty = SOME tv /\
+        FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+        aid < sr.cs_next_id) /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        ghost_inv_at (DF H) lo d cenv cx ee G tn t) /\
@@ -173,6 +179,11 @@ Theorem extcall_ready_return_outcome:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee s /\
+  (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+    ?w aid tv. eval_operand default_op s = SOME w /\
+      evaluate_type (get_tenv cx) default_ty = SOME tv /\
+      FLOOKUP s.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+      aid < sp.cs_next_id) /\
   alloca_history func s /\ allocas_from lo s /\
   lo <= s.vs_alloca_next /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
@@ -195,6 +206,7 @@ Theorem extcall_ready_return_outcome:
           w2n w + type_memory_bytes cenv default_ty <= s.vs_alloca_next))) /\
   expr_body_pre cenv cx env
     (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts) args dflt) es /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
   cap = abi_size_bound cenv.ce_struct_fields
           (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type) /\
   (if ret_type = NoneT then comp_return (Lit 0w)

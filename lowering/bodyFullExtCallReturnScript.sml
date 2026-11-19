@@ -87,6 +87,7 @@ Theorem extcall_return_full:
     expr_body_pre cenv cx env
       (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
          args dflt) es /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     cap = abi_size_bound cenv.ce_struct_fields
             (if needs_external_call_wrap ret_type
              then TupleT [ret_type] else ret_type) /\
@@ -127,6 +128,11 @@ Theorem extcall_return_full:
             not_fresh_at sa x) /\
     extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op buf_op
       cap target has_default default_op default_ty default_opt returnData ee t /\
+    (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+      ?w aid tv. eval_operand default_op t = SOME w /\
+        evaluate_type (get_tenv cx) default_ty = SOME tv /\
+        FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+        aid < sr.cs_next_id) /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        ghost_inv_at (DF H) lo d cenv cx ee G tn t) /\
@@ -405,6 +411,7 @@ Resume extcall_return_full[has_horizon]:
          drule return_default_path_intervals >> strip_tac >>
          drule_all return_default_intervals_code >> strip_tac >>
          `LENGTH a.vs_returndata < dimword (:256)` by simp[] >>
+         `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
          drule_at (Pat `emit_op RETURNDATASIZE _ ar = _`)
            (INST_TYPE [alpha |-> ``:256``] return_default_shell_entry) >>
          disch_then (drule_all_then (qspecl_then [`tm`,`explicit`,`PG`,`J`]
@@ -466,6 +473,7 @@ Resume extcall_return_full[has_horizon]:
          simp[IgnAsm `result_op = buf.buf_operand`,allocas_from_def] >>
          conj_tac >- (disj2_tac >> qexistsl_tac [`xl`,`cj`,`old3`] >> simp[]) >>
          first_assum (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp p` by simp[] >>
       drule_at (Pat `compile_return_value_decode _ _ _ = _`)
         extcall_return_size_route >>
       disch_then (drule_all_then mp_tac) >>

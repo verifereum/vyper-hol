@@ -11,6 +11,8 @@ Ancestors
   bodyPtrBopRepresentationFrame bodyPtrBopHashFootprint
   actualAllocExec exprSimIfExpWidenedCounted bodyFullExtCallPrecheck
   bodyFullUnwrapSlotPost exprSimHash extcallReturnInterface
+  annassignRelayoutPost[qualified,ignore_grammar]
+  aggregateEvaluatedLayout[qualified,ignore_grammar]
 
 Theorem extcall_default_copy_ghost_local[local]:
   typed_copy_state_frame ds off n u z /\
@@ -174,6 +176,7 @@ Theorem extcall_return_full_default_value:
     expr_body_pre cenv cx env
       (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
          args dflt) es /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     cap = abi_size_bound cenv.ce_struct_fields
             (if needs_external_call_wrap ret_type
              then TupleT [ret_type] else ret_type) /\
@@ -214,6 +217,11 @@ Theorem extcall_return_full_default_value:
             not_fresh_at sa x) /\
     extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op buf_op
       cap target has_default default_op default_ty default_opt returnData ee t /\
+    (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+      ?w aid tv. eval_operand default_op t = SOME w /\
+        evaluate_type (get_tenv cx) default_ty = SOME tv /\
+        FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+        aid < sr.cs_next_id) /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        ghost_inv_at (DF H) lo d cenv cx ee G tn t) /\
@@ -336,6 +344,7 @@ Resume extcall_return_full_default_value[entry]:
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   rename1 `lookup_var q a = SOME dw` >>
   `LENGTH a.vs_returndata < dimword (:256)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
   drule_all (INST_TYPE [alpha |-> ``:256``]
     extcallReturnDefaultControlJointTheory.return_default_shell_entry) >>
   disch_then (qspecl_then [`tm`, `explicit`, `PG`, `J`]
@@ -457,7 +466,7 @@ Resume extcall_return_full_default_value[payload]:
 QED
 
 Resume extcall_return_full_default_value[word_store]:
-  `default_ty = ret_type` by metis_tac[eventTopicValuePropsTheory.bytestring_type_not_word] >>
+  `default_ty = ret_type` by metis_tac[compileEnvTheory.type_widens_to_word] >>
   `type_memory_size rtv = 32` by metis_tac[abiValueEncodingTheory.abi_word_type_size] >>
   `w = typed_val_to_w256 rtv dv` by metis_tac[exprBopSimPropsTheory.expr_val_rel_typed, optionTheory.SOME_11] >>
   `type_memory_bytes cenv ret_type = 32` by metis_tac[] >>
@@ -474,7 +483,8 @@ QED
 
 Resume extcall_return_full_default_value[nonword_store]:
   `~is_word_type default_ty` by
-    metis_tac[eventTopicValuePropsTheory.bytestring_type_not_word] >>
+    metis_tac[vyperTypeSystemTheory.type_widens_to_def,
+              aggregateEvaluatedLayoutTheory.arg_type_fits_word_type] >>
   qpat_x_assum `!dv'. SOME dv = SOME dv' /\ _ ==> _`
     (qspec_then `dv` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
   `ptr_mem_ok cx default_ty dv default_op Gu tu u` by
@@ -507,11 +517,14 @@ Resume extcall_return_full_default_value[nonword_store]:
    ptr_covers Gu tu q u (type_memory_size rtv) /\
    w2n dw + type_memory_size rtv <= u.vs_alloca_next` by gvs[] >>
   Cases_on `is_bytestring_type ret_type` >- suspend "bytes_store" >>
+  Cases_on `default_ty <> ret_type` >- suspend "widened_store" >>
   suspend "flat_store"
 QED
 
 Resume extcall_return_full_default_value[bytes_store]:
-  `is_bytestring_type default_ty` by metis_tac[] >>
+  `is_bytestring_type default_ty` by
+    metis_tac[vyperTypeSystemTheory.type_widens_to_def,
+              compileEnvTheory.arg_type_fits_bytestring_source] >>
   `type_memory_size tv <> 0` by
     (drule_all valueCopyBytesTheory.bytestring_type_value >> strip_tac >>
      gvs[valueEncodingTheory.type_memory_size_def, vfmConstantsTheory.word_size_def]) >>
@@ -537,6 +550,70 @@ Resume extcall_return_full_default_value[bytes_store]:
   qx_gen_tac `i` >> disch_tac >>
   `i < w2n dw \/ w2n dw + type_memory_size rtv <= i` by decide_tac >>
   qpat_assum `!i. i < w2n dw \/ _ ==> _` (qspec_then `i` mp_tac) >> simp[]
+QED
+
+Resume extcall_return_full_default_value[widened_store]:
+  `0 < type_memory_size tv` by
+    metis_tac[annassignRelayoutPostTheory.strict_widening_source_positive] >>
+  `type_memory_size tv <> 0` by decide_tac >>
+  qpat_x_assum `type_memory_size tv <> 0 ==> _`
+    (drule_then strip_assume_tac) >>
+  rename1 `default_op = Var src` >>
+  `loweringStateRelDefs$regions_disjoint
+     (w2n dw) (type_memory_size rtv) (w2n w) (type_memory_size tv)` by
+    (`IS_SOME (SOME dv)` by simp[] >>
+     qpat_assum `IS_SOME (SOME dv) /\ ~is_word_type default_ty ==> _`
+       (drule_all_then (qx_choosel_then [`sw`,`aid`,`stv`] strip_assume_tac)) >>
+     `sw = w` by
+       (qpat_assum `eval_operand default_op t = SOME sw` mp_tac >>
+        qpat_assum `eval_operand default_op t = SOME w`
+          (fn th => simp[NoAsms,th])) >>
+     `stv = tv` by
+       (qpat_assum `evaluate_type (get_tenv cx) default_ty = SOME stv` mp_tac >>
+        qpat_assum `evaluate_type (get_tenv cx) default_ty = SOME tv`
+          (fn th => simp[NoAsms,th])) >>
+     qpat_assum `!aid b len. aid < sr.cs_next_id /\ FLOOKUP t.vs_allocas aid = _ ==> _`
+       (qspecl_then [`aid`,`w2n w`,`type_memory_size tv`] mp_tac) >>
+     simp[]) >>
+  `!mem. mem_agree_outside tu.t_mem u.vs_memory mem ==>
+       val_in_memory tv dv (w2n w) mem` by
+    (rpt strip_tac >> drule_all bodyPtrBopHashFootprintTheory.ptr_mem_ok_robust >> simp[]) >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+   (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !rt. evaluate_type (get_tenv cx) fty = SOME rt ==>
+       sz = type_memory_size rt) fields)` by
+    (qhdtm_assum `expr_body_pre` mp_tac >>
+     simp[NoAsms,exprSimHypsDefsTheory.expr_body_pre_def,
+          exprSimHypsDefsTheory.expr_sim_inv_def] >>
+     strip_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `alloca_room ctx func u` by
+    (qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `h` assume_tac) >>
+     qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ _ u /\ _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `stmt_state_rel h _ _ _ _ _ u`
+       (mp_then Any ACCEPT_TAC stateRelProjTheory.stmt_state_rel_alloca_room)) >>
+  `u.vs_alloca_next < dimword (:256)` by
+    (qpat_assum `alloca_room ctx func u`
+       (ACCEPT_TAC o MATCH_MP exprLoweringPropsTheory.alloca_room_next_lt)) >>
+  `w2n w + type_memory_size tv < dimword (:256) /\
+   w2n dw + type_memory_size rtv < dimword (:256)` by decide_tac >>
+  qpat_assum `default_op = Var src` SUBST_ALL_TAC >>
+  `lookup_var src u = SOME w` by
+    (qpat_assum `eval_operand (Var src) u = SOME w`
+       (ACCEPT_TAC o REWRITE_RULE [eval_operand_def])) >>
+  mp_tac (Q.INST
+    [`xs` |-> `src`, `xd` |-> `q`, `dty` |-> `ret_type`, `sty` |-> `default_ty`,
+     `sa` |-> `ds`, `sb` |-> `de`, `stv` |-> `tv`, `dtv` |-> `rtv`,
+     `v` |-> `dv`, `tenv` |-> `get_tenv cx`, `s` |-> `u`,
+     `G` |-> `Gu`, `tn` |-> `tu`, `sw` |-> `w`]
+    logStoreDataOriginPtrTheory.compile_store_memory_origin_ptr_path) >>
+  (impl_tac >-
+     (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >>
+      qpat_assum `loweringStateRelDefs$regions_disjoint _ _ _ _` mp_tac >>
+      simp[NoAsms,loweringStateRelDefsTheory.regions_disjoint_def,DISJ_COMM])) >>
+  disch_then (qx_choosel_then [`p`,`Gp`,`tp`] strip_assume_tac) >>
+  qexistsl_tac [`p`,`Gp`,`tp`] >> simp[]
 QED
 
 Resume extcall_return_full_default_value[flat_store]:
