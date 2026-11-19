@@ -1,5 +1,6 @@
 Theory dftGasInvMemoryObservation
 Ancestors
+  dftGasInvObservationOracle
   dftGasInvPairedHistory dftGasInvPairedPrefix dftGasInvExtraction
   dftGasInvCrossingProbe dftGasInvReachAvailability dftGasInvOracleFrame
   dftGasInvPrefixReach dftGasInvPrefixRun dftGasInvFlexibleTrace
@@ -33,7 +34,7 @@ Proof
   metis_tac[inv_flipped_memory_impossible]
 QED
 
-Theorem inv_reachable_memory_observation:
+Theorem inv_reachable_memory_observation_oracle:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
@@ -46,7 +47,8 @@ Theorem inv_reachable_memory_observation:
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     sS.vs_current_bb = t.vs_current_bb /\
     (!op. MEM op inst.inst_operands ==> eval_operand op sS = eval_operand op t) /\
-    sS.vs_initial_fmp = t.vs_initial_fmp
+    sS.vs_initial_fmp = t.vs_initial_fmp /\
+    sS.vs_outcomes = t.vs_outcomes /\ sS.vs_requests = t.vs_requests
 Proof
   strip_tac >> drule inv_paired_history >> disch_then (qspec_then `C` mp_tac) >>
   simp[] >> strip_tac >>
@@ -83,18 +85,18 @@ Proof
   `?sS. inv_ev_prefix orc p d C bb (LENGTH srcpre) s0 sS /\
     sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
     (!op. MEM op inst.inst_operands ==> eval_operand op sS = eval_operand op t) /\
-    sS.vs_initial_fmp = t.vs_initial_fmp` by
-    (irule inv_lookup_scheduled_observation >> simp[] >>
+    sS.vs_initial_fmp = t.vs_initial_fmp /\
+    sS.vs_outcomes = t.vs_outcomes /\ sS.vs_requests = t.vs_requests` by
+    (irule inv_lookup_scheduled_observation_oracle >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >>
      qexistsl_tac [`bb'`, `fn'`, `s0.vs_current_bb`, `scheduled`, `inst`, `targetpost`] >>
      gvs[] >>
      rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
      pure_asm_rewrite_tac [GSYM APPEND_ASSOC, APPEND]) >>
   suspend "reachable"
-
 QED
 
-Resume inv_reachable_memory_observation[reachable]:
+Resume inv_reachable_memory_observation_oracle[reachable]:
   `sS.vs_current_bb = s0.vs_current_bb` by
     (qpat_x_assum `inv_ev_prefix _ _ _ C bb _ s0 sS` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
@@ -105,11 +107,29 @@ Resume inv_reachable_memory_observation[reachable]:
      strip_tac >> first_x_assum drule >> simp[]) >>
   `bb.bb_label = s0.vs_current_bb` by metis_tac[lookup_block_label] >>
   `get_instruction bb sS.vs_inst_idx = SOME inst` by
-    (simp[get_instruction_def, EL_APPEND_EQN]) >>
+    simp[get_instruction_def, EL_APPEND_EQN] >>
   `ev_reachable orc initial C p d fn inst sS` by
     (irule inv_ev_prefix_reachable >>
      qexistsl_tac [`bb`, `startinst`, `LENGTH srcpre`, `s0`] >> simp[]) >>
   qexistsl_tac [`fn`, `sS`, `bb`, `bb'`] >> simp[] >>
   metis_tac[lookup_block_label]
 QED
-Finalise inv_reachable_memory_observation
+Finalise inv_reachable_memory_observation_oracle
+
+Theorem inv_reachable_memory_observation:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
+  ctx_labels_bound C initial.vs_labels /\ o1_run_state_ok initial /\
+  ev_reachable orc initial C' p d fn' inst t /\
+  inv_memory_observation inst.inst_opcode ==>
+  ?fn sS bb bb'. MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+    ev_reachable orc initial C p d fn inst sS /\
+    lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    sS.vs_current_bb = t.vs_current_bb /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op sS = eval_operand op t) /\
+    sS.vs_initial_fmp = t.vs_initial_fmp
+Proof
+  strip_tac >> drule_all inv_reachable_memory_observation_oracle >> metis_tac[]
+QED
