@@ -2080,6 +2080,183 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* The raw callee constructor pushes a synchronized caller frame.  In
+   particular, no successful continuation of the callee is required. *)
+Theorem focus_opt_ld_callee_row[local]:
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn ti t /\
+  o1_ctx_shape C /\ o1_safe_upto D lo n C vs /\ gas_cut n vs t /\
+  callee_first names C.ctx_functions /\
+  (!g. MEM g C.ctx_functions ==>
+    lookup_function g.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma g.fn_name) g))) /\
+  ti.inst_opcode = INVOKE /\ decode_invoke ti = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME callee /\
+  eval_operands ops t = SOME args /\ setup_callee callee args t = SOME cs /\
+  enters_block callee cs tp /\ active_inst callee j tp ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names callee j tp
+Proof
+  BETA_TAC >> disch_then (map_every strip_assume_tac o CONJUNCTS) >>
+  rename1 `ld_sync lo P C vs stk PG G tn fn inst s t0 A (f::fs) N` >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+  drule ld_sync_source >> strip_tac >>
+  `inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES` by
+    (conj_tac >> strip_tac >>
+     `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+       simp[is_terminator_def] >>
+     drule_all lowerDloadEnvelopeControlTheory.ld_envelope_nonterminal >>
+     rewrite_tac[EVERY_EL] >> disch_then (qspec_then `h` mp_tac) >> gvs[]) >>
+  drule_all lowerDloadSafetyLocationsTheory.ld_envelope_ordinary >> strip_tac >>
+  `h = 0` by fs[] >>
+  `t0 = t /\ ti = inst` by fs[lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
+  map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
+    [`X = [inst]`, `h = 0`, `ti = inst`, `t0 = t`] >>
+  `taint_ok fn tn inst s` by
+    (`gas_cut n vs s` by fs[gas_cut_def] >>
+     fs[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >> metis_tac[]) >>
+  drule_all (BETA_RULE gasFocusLowerDloadCallEntryTheory.ld_focus_invoke_active_entry) >>
+  disch_then (qx_choosel_then [`calleeS`,`argsS`,`csS`,`saved`,`fc`,`PG1`,`tn1`,`ic`,`Y`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `tp = cs` SUBST_ALL_TAC >>
+  `callee = ld_image fc` by simp[ld_image_def] >>
+  `0 < LENGTH Y` by metis_tac[lowerDloadSafetyKernelTheory.ld_prefix_bound] >>
+  irule (BETA_RULE focus_opt_ld_head_row) >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ld_envelope _ _ _ _ _ _`)) >>
+  simp[] >> gen_tac >> disch_tac >>
+  qpat_assum `!g. MEM g (f::fs) ==> _` (qspec_then `g` mp_tac) >>
+  simp[MEM]
+QED
+
+(* External opcodes use just the successful step reaching the next cut. *)
+Theorem focus_opt_ld_external_effect[local]:
+  ^focus_opt_ld_row lo P C C' vs Sigma names gn ti t
+    stk PG G tn fn inst s t0 A f fs N [inst] p h /\
+  o1_ctx_shape C /\ o1_safe_upto D lo n C vs /\
+  MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2] /\
+  step_inst fuel C' ti t = OK u /\
+  gas_cut n vs (u with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ?ss H'. ^focus_opt_ld_effect lo P C vs A f tn PG G inst s t u fuel ss H'
+Proof
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `h = 0` by fs[] >> qpat_x_assum `h = 0` SUBST_ALL_TAC >>
+  qpat_x_assum `ld_prefix _ _ _ _ 0 _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [lowerDloadSafetyKernelTheory.ld_prefix_zero]) >>
+  `ti = inst` by fs[] >> qpat_x_assum `ti = inst` SUBST_ALL_TAC >>
+  qpat_x_assum `t = t0` (SUBST_ALL_TAC o SYM) >>
+  `gas_cut n vs u` by fs[gas_cut_def] >>
+  `gas_cut n vs t` by metis_tac[gasFocusLowerDloadCutGuardsTheory.ld_step_ok_cut_back] >>
+  `gas_cut n vs s` by fs[gas_cut_def] >>
+  drule ld_sync_source >> strip_tac >>
+  drule_all ld_sync_fn_shape >> strip_tac >>
+  drule o1_fn_shape_components >> strip_tac >>
+  `access_ok lo G fn inst s /\ taint_ok fn tn inst s /\ lo <= vs.vs_alloca_next /\
+   mem_inv dload_headroom_ok C vs` by
+    (fs[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >> metis_tac[]) >>
+  `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> RETURNDATACOPY /\
+   inst.inst_opcode <> REVERT` by fs[MEM] >>
+  `~in_revert_forward fn s` by
+    (`ALL_DISTINCT (fn_labels fn)` by simp[fn_labels_def] >>
+     drule_all lowerDloadPtrRawReachableTheory.active_inst_block_lookup >> strip_tac >>
+     gvs[in_revert_forward_def, revert_forward_at_def, revert_forward_pair_def] >>
+     metis_tac[]) >>
+  suspend "bounds"
+QED
+
+Resume focus_opt_ld_external_effect[bounds]:
+  drule_all ld_frame_raw_reachable >> strip_tac >>
+  drule lowerDloadFrontierTheory.ld_raw_reachable_frontier >> strip_tac >>
+  drule ctxLookupAgreeTheory.raw_reachable_initial_fmp >> strip_tac >>
+  drule ld_sync_frontier >> strip_tac >>
+  `dload_headroom_ok C fn inst s` by metis_tac[ld_sync_source_mem_inv] >>
+  `lo <= dyn_floor C vs /\ t.vs_alloca_next <= dyn_floor C vs /\
+   t.vs_alloca_next < dimword(:256)` by
+    (simp[dyn_floor_def] >> IF_CASES_TAC >>
+     gvs[dload_headroom_ok_def, ctx_has_dalloca_def] >> decide_tac) >>
+  `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
+    metis_tac[lowerDloadOracleCallAssemblyTheory.ld_sync_slots,
+              lowerDloadOracleCallAssemblyTheory.ld_sync_maps] >>
+  `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> lo <= b /\ lo <= c` by
+    metis_tac[lowerDloadSafetyAllocBoundsTheory.ld_alloc_bounds] >>
+  `!a k b c z b' c' sz. FLOOKUP A a = SOME (b,c,z) /\
+    FLOOKUP A k = SOME (b',c',sz) /\ a <> k /\ 0 < z /\ 0 < sz ==>
+    (b+z <= b' \/ b'+sz <= b) /\ (c+z <= c' \/ c'+sz <= c)` by
+    metis_tac[lowerDloadSafetyAllocBoundsTheory.ld_alloc_separate] >>
+  drule ld_sync_active >> simp[Excl "MEM"] >> strip_tac >>
+  `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==>
+      b+sz <= dyn_floor C vs /\ c+sz <= dyn_floor C vs /\ c+sz < dimword(:256)` by
+    (rpt strip_tac >> drule_all lowerDloadSafetyAllocBoundsTheory.ld_alloc_frontiers >>
+     simp[] >> decide_tac) >>
+  `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> b+sz <= dyn_floor C vs /\ c+sz <= dyn_floor C vs` by metis_tac[] >>
+  `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword(:256)` by metis_tac[] >>
+  `MEM inst (fn_insts fn)` by metis_tac[lowerDloadOracleCallAssemblyTheory.ld_active_inst_member] >>
+  `fn_ptr_ok P fn` by metis_tac[lowerDloadOracleCallAssemblyTheory.ld_sync_ptr_ok] >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
+  drule ld_sync_memory >> strip_tac >>
+  drule ld_sync_ghosts >> simp[Excl "MEM"] >> strip_tac >>
+  drule ld_sync_dyn_agree >> strip_tac >>
+  suspend "effect"
+QED
+
+Resume focus_opt_ld_external_effect[effect]:
+  `tn.t_var = f.lf_tv` by simp[] >>
+  `step_inst_base inst t = OK u` by fs[step_inst_non_invoke] >>
+  qpat_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
+  qpat_assum `f.lf_src = s` (SUBST_ALL_TAC o SYM) >>
+  qpat_assum `f.lf_tgt = t` (SUBST_ALL_TAC o SYM) >>
+  `?ss. step_inst_base inst f.lf_src = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := u;
+      lf_H := set_prov f.lf_H inst.inst_outputs NONE;
+      lf_tv := (step_taint inst f.lf_src ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst f.lf_src ss tn) ss u /\
+    ld_nonghost (step_taint inst f.lf_src ss tn) ss u /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H) inst ss =
+      ld_erase A o_f set_prov f.lf_H inst.inst_outputs NONE /\
+    ld_dyn_agree (dyn_floor C vs) (step_taint inst f.lf_src ss tn).t_mem
+      ss.vs_memory u.vs_memory /\
+    ss.vs_allocas = f.lf_src.vs_allocas /\ u.vs_allocas = f.lf_tgt.vs_allocas /\
+    ss.vs_alloca_next = f.lf_src.vs_alloca_next /\ u.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
+    ss.vs_current_bb = f.lf_src.vs_current_bb /\ u.vs_current_bb = f.lf_tgt.vs_current_bb` by
+    (Cases_on `MEM inst.inst_opcode [CALL;STATICCALL]`
+     >- (`inst_wf inst` by
+           (fs[fn_inst_wf_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+            metis_tac[]) >>
+         (Q.SUBGOAL_THEN
+           `?g a v ao az ro rz st.
+             (inst.inst_opcode = CALL /\ inst.inst_operands = [g;a;v;ao;az;ro;rz] /\
+               st = f.lf_tgt.vs_call_ctx.cc_static) \/
+             (inst.inst_opcode = STATICCALL /\ inst.inst_operands = [g;a;ao;az;ro;rz] /\ st = T)`
+           (REPEAT_TCL CHOOSE_THEN assume_tac)
+          >- (qpat_x_assum `inst_wf inst` mp_tac >>
+              qpat_assum `MEM inst.inst_opcode [CALL;STATICCALL]` mp_tac >>
+              pure_rewrite_tac[MEM] >> strip_tac >>
+              qpat_assum `inst.inst_opcode = _` (fn opcode =>
+                simp[NoAsms, opcode, inst_wf_def, LENGTH_EQ_NUM_compute]) >> metis_tac[])) >>
+         drule_all lowerDloadOracleCallAssemblyTheory.ld_oracle_call_step >> strip_tac >>
+         qexists `ss` >> simp[lowerDloadOracleCallAssemblyTheory.ld_oracle_call_provenance]) >>
+     Cases_on `inst.inst_opcode = DELEGATECALL`
+     >- (drule_all lowerDloadSafetyDelegateTheory.ld_delegate_step >> strip_tac >>
+         qexists `ss` >> simp[step_prov_def, out_prov_def,
+                              lowerDloadSafetyUpdatesTheory.ld_erase_set_prov]) >>
+     `MEM inst.inst_opcode [CREATE;CREATE2]` by fs[MEM] >>
+     drule_all lowerDloadSafetyCreateTheory.ld_create_step >>
+     disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
+     qexists `ss` >> simp[]) >>
+  qexistsl [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
+  simp[step_inst_non_invoke] >>
+  conj_tac >- (irule ld_sync_ghost_step >> metis_tac[]) >>
+  rpt strip_tac >>
+  drule (SRULE [pred_setTheory.SUBSET_DEF]
+    (Q.INST [`q` |-> `NONE`] lowerDloadSafetyUpdatesTheory.ld_set_prov_range)) >>
+  simp[] >> strip_tac >>
+  qpat_assum `FDOM A = _` (once_rewrite_tac o single o GSYM) >>
+  irule ld_global_selected >>
+  goal_assum (drule_at (Pat `ld_global _ _ _`)) >>
+  qexists `f` >> simp[]
+QED
+
+Finalise focus_opt_ld_external_effect[local]
+
 (* The residual singleton cases use the current cut only. *)
 Theorem focus_opt_ld_data_next[local]:
   ^focus_opt_ld_row lo P C C' vs Sigma names gn ti t
