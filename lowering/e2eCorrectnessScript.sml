@@ -45,7 +45,7 @@ Ancestors
   callCodeTrace callCodeStorage guardSourceAlignment vyperCallFiniteStorageSupport
   fragGasOriginEvents fragGasOriginPtrSafeUpto o1SafeUpto acceptedContextPhi
   venomState venomLayout gasMaskProjection gasEvents gasExplicitSites
-  oracleExecProps gasFocusExportStub words arithmetic sorting
+  oracleExecProps gasFocusStaticPrefixDriver words arithmetic sorting
 Libs
   stepInstBaseLib
 
@@ -1876,13 +1876,12 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-(* ADMISSION (argon, 2026-11-13; the call twin of deploy_pipeline_gas_link).
+(* The call twin of deploy_pipeline_gas_link.
    Where the frame is not starved, every filling of its gas readings that
    meets the source run's storage guards extends the marked readings of a raw
    entry state carrying the S4 facts and the selected-run certificate.  The
-   raw state, marks and tail are chosen inside each filling.  The only
-   admission on vyper_call_correct_identity's path. *)
-(* HELD ADMISSION: call-side gas synchronization; gas-link track owns removal. *)
+   raw state, marks and tail are chosen inside each filling.  Proved from the
+   static-inclusive gas focus producer. *)
 Theorem call_pipeline_gas_link:
   !fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
    am tx txp ret es vs0 fmp r es'.

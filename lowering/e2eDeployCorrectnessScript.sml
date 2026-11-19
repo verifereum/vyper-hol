@@ -14,7 +14,7 @@ Ancestors
   o1PipelineCompose deployUnitProducers ctorDeployRawEntryFacts
   asmOptNonemptyFinalizer asmOptNonemptyWitness asmFrameRel deployFrameReplay
   callTrace unitTransformDefs gasMaskProjection gasEvents gasExplicitSites codegenSymRel
-  deploySymSrcUnit e2eDefs list venomState gasFocusExportStub
+  deploySymSrcUnit e2eDefs list venomState gasFocusPrefixDriver
 
 (* A successful compilation exposes the deployment unit's phases. *)
 Theorem compile_vyper_deploy_phases:
@@ -379,11 +379,11 @@ Proof
   strip_tac >> asm_rewrite_tac[]
 QED
 
-(* ADMITTED: SEQ-1314 (the raw_slots mask and the sites-to-slots link).
+(* The raw_slots mask and the sites-to-slots link.
    Where the frame is not starved, every filling of its gas readings that
    meets the constructor run's storage guard extends the marked readings of
    a raw entry state carrying the S4 facts and the selected-run certificate.
-   The only admission on e2e_deploy_correctness_identity's path. *)
+   Proved from the gas focus producer. *)
 Theorem deploy_pipeline_gas_link:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs_out fmp r es'.
     fin IN accepted_finalizers /\
