@@ -3715,7 +3715,7 @@ Proof
   suspend "join"
 QED
 
-Resume body_assign_immutable_bytes_header_joint_fresh[local][ghosts]:
+Resume body_assign_immutable_bytes_header_joint_fresh[ghosts]:
   gvs[compile_bytestring_word_count_def, emit_op_def,
       comp_bind_def, comp_ignore_bind_def, comp_return_def,
       fresh_id_def, fresh_var_def, emit_def] >>
@@ -3814,7 +3814,7 @@ Resume body_assign_immutable_bytes_header_joint_fresh[local][ghosts]:
   metis_tac[]
 QED
 
-Resume body_assign_immutable_bytes_header_joint_fresh[local][memory]:
+Resume body_assign_immutable_bytes_header_joint_fresh[memory]:
   gvs[compile_bytestring_word_count_def, emit_op_def,
       comp_bind_def, comp_ignore_bind_def, comp_return_def,
       fresh_id_def, fresh_var_def, emit_def] >>
@@ -3826,7 +3826,7 @@ Resume body_assign_immutable_bytes_header_joint_fresh[local][memory]:
   rpt CASE_TAC >> simp[]
 QED
 
-Resume body_assign_immutable_bytes_header_joint_fresh[local][join]:
+Resume body_assign_immutable_bytes_header_joint_fresh[join]:
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (OK (t with vs_inst_idx := LENGTH sm.cs_current_insts),Gf,tnf)` by
     (irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
@@ -4973,13 +4973,13 @@ Proof
   suspend "entry"
 QED
 
-Resume body_assign_snapshot_memory_copy_joint[local][state]:
+Resume body_assign_snapshot_memory_copy_joint[state]:
   rpt strip_tac >> irule literal_copy_window_stmt_state_rel >>
   qexistsl_tac [`aid`,`b`,`type_memory_size tv`,`p`,`sk`,`sk`,`s`] >>
   simp[] >> metis_tac[typed_copy_state_frame_def,typed_copy_frame_def]
 QED
 
-Resume body_assign_snapshot_memory_copy_joint[local][ghost]:
+Resume body_assign_snapshot_memory_copy_joint[ghost]:
   rpt strip_tac >> irule body_full_memory_ghost_frame >> simp[] >>
   qexistsl_tac [`G`,`s`,`sk`,`tn`,`{i | b <= i /\ i < b+type_memory_size tv}`] >>
   simp[] >> rpt conj_tac
@@ -4990,12 +4990,12 @@ Resume body_assign_snapshot_memory_copy_joint[local][ghost]:
   metis_tac[arithmeticTheory.ADD_CLAUSES]
 QED
 
-Resume body_assign_snapshot_memory_copy_joint[local][history]:
+Resume body_assign_snapshot_memory_copy_joint[history]:
   `alloca_inv s` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   metis_tac[body_full_path_alloca_history]
 QED
 
-Resume body_assign_snapshot_memory_copy_joint[local][entry]:
+Resume body_assign_snapshot_memory_copy_joint[entry]:
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `!old off sz i. FLOOKUP s0.vs_allocas old = SOME (off,sz) /\
     old < se.cs_next_id /\ off <= i /\ i < off+sz ==>
@@ -5007,7 +5007,7 @@ Resume body_assign_snapshot_memory_copy_joint[local][entry]:
   conj_tac >- suspend "frame" >> metis_tac[]
 QED
 
-Resume body_assign_snapshot_memory_copy_joint[local][kept]:
+Resume body_assign_snapshot_memory_copy_joint[kept]:
   qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
   rewrite_tac[ghost_kept_at_def] >>
@@ -5024,7 +5024,7 @@ Resume body_assign_snapshot_memory_copy_joint[local][kept]:
   metis_tac[]
 QED
 
-Resume body_assign_snapshot_memory_copy_joint[local][frame]:
+Resume body_assign_snapshot_memory_copy_joint[frame]:
   qpat_x_assum `alloca_frame _ _ _ _ _ _ _`
     (assume_tac o REWRITE_RULE [alloca_frame_def]) >>
   rewrite_tac[alloca_frame_def] >> rpt gen_tac >>
@@ -5195,7 +5195,7 @@ Proof
   rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
 
-Resume body_assign_immutable_normalize_joint[local][separation]:
+Resume body_assign_immutable_normalize_joint[separation]:
   qpat_assum `expr_val_at _ _ _ _ _ _ _ _ _`
     (mp_tac o Q.SPEC `stv` o REWRITE_RULE [expr_val_at_def]) >>
   simp[eval_operand_def] >> strip_tac >>
@@ -5209,7 +5209,7 @@ Resume body_assign_immutable_normalize_joint[local][separation]:
      drule_all widening_source_memory_size_pos >> simp[]) >> simp[]
 QED
 
-Resume body_assign_immutable_normalize_joint[local][source]:
+Resume body_assign_immutable_normalize_joint[source]:
   markerLib.RESUME_TAC >>
   (rpt strip_tac >> irule robust_val_in_memory_exterior_frame >>
    (conj_tac >- metis_tac[]) >>
@@ -5218,7 +5218,7 @@ Resume body_assign_immutable_normalize_joint[local][source]:
    rpt strip_tac >> decide_tac)
 QED
 
-Resume body_assign_immutable_normalize_joint[local][frontier]:
+Resume body_assign_immutable_normalize_joint[frontier]:
   markerLib.RESUME_TAC >>
   (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
      (qspec_then `cx_dead H0 cx` mp_tac) >>
@@ -5234,7 +5234,7 @@ Resume body_assign_immutable_normalize_joint[local][frontier]:
      (qspecl_then [`sa.cs_next_id`,`b`,`type_memory_size dtv`] mp_tac) >> simp[])
 QED
 
-Resume body_assign_immutable_normalize_joint[local][join]:
+Resume body_assign_immutable_normalize_joint[join]:
   markerLib.RESUME_TAC >>
   (gen_tac >>
    qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
@@ -5242,7 +5242,7 @@ Resume body_assign_immutable_normalize_joint[local][join]:
    disch_then (qspecl_then [`u`,`G1`,`tn1`,`[]`,`OK t`,`Gf`,`tnf`] mp_tac) >> simp[])
 QED
 
-Resume body_assign_immutable_normalize_joint[local][history]:
+Resume body_assign_immutable_normalize_joint[history]:
   markerLib.RESUME_TAC >>
   (`alloca_inv s` by metis_tac[rest_word_state_alloca_inv] >>
    qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
@@ -5252,7 +5252,7 @@ Resume body_assign_immutable_normalize_joint[local][history]:
    drule_all rest_word_marked_allocation_posts >> simp[])
 QED
 
-Resume body_assign_immutable_normalize_joint[local][frame]:
+Resume body_assign_immutable_normalize_joint[frame]:
   markerLib.RESUME_TAC >>
   (`!j k. j+k <= b \/ b+type_memory_size dtv <= j ==>
      mem_bytes_at j k t.vs_memory = mem_bytes_at j k u.vs_memory` by
@@ -5269,7 +5269,7 @@ Resume body_assign_immutable_normalize_joint[local][frame]:
    `local_region cenv es.scopes s name off' sz'` by metis_tac[] >> metis_tac[])
 QED
 
-Resume body_assign_immutable_normalize_joint[local][taint]:
+Resume body_assign_immutable_normalize_joint[taint]:
   markerLib.RESUME_TAC >>
   (qx_genl_tac [`aid`,`off`,`sz`,`i`] >> strip_tac >>
    `regions_disjoint b (type_memory_size dtv) off sz` by metis_tac[] >>
@@ -5278,7 +5278,7 @@ Resume body_assign_immutable_normalize_joint[local][taint]:
    `i IN tn1.t_mem` by metis_tac[] >> metis_tac[])
 QED
 
-Resume body_assign_immutable_normalize_joint[local][state]:
+Resume body_assign_immutable_normalize_joint[state]:
   markerLib.RESUME_TAC >>
   (rpt strip_tac >>
    `copy_static t = copy_static u` by
@@ -5299,7 +5299,7 @@ Resume body_assign_immutable_normalize_joint[local][state]:
      (qspecl_then [`name`,`a`,`len`] mp_tac) >> simp[])
 QED
 
-Resume body_assign_immutable_normalize_joint[local][ghost]:
+Resume body_assign_immutable_normalize_joint[ghost]:
   markerLib.RESUME_TAC >>
   (rpt strip_tac >>
    `ghost_inv_at D lo d cenv cx es G1 tn1 u` by metis_tac[] >>
@@ -5340,7 +5340,7 @@ Resume body_assign_immutable_normalize_joint[local][ghost]:
    metis_tac[])
 QED
 
-Resume body_assign_immutable_normalize_joint[local][kept]:
+Resume body_assign_immutable_normalize_joint[kept]:
   markerLib.RESUME_TAC >>
   (rewrite_tac[ghost_kept_at_def] >> rpt conj_tac
    >- metis_tac[]
@@ -5680,7 +5680,7 @@ Proof
   >> gvs[allocas_from_def] >> metis_tac[]
 QED
 
-Resume body_assign_empty_immutable_ghost[local][locals]:
+Resume body_assign_empty_immutable_ghost[locals]:
   rpt gen_tac >> strip_tac >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
   conj_tac >- metis_tac[] >>
@@ -5706,21 +5706,21 @@ Resume body_assign_empty_immutable_ghost[local][locals]:
   gvs[] >> metis_tac[]
 QED
 
-Resume body_assign_empty_immutable_ghost[local][return]:
+Resume body_assign_empty_immutable_ghost[return]:
   Cases_on `d` >> fs[return_buf_ptr_def] >>
   rename1 `return_buf_ptr (SOME bc)` >> PairCases_on `bc` >>
   fs[return_buf_ptr_def] >> metis_tac[]
 QED
 
-Resume body_assign_empty_immutable_ghost[local][storage]:
+Resume body_assign_empty_immutable_ghost[storage]:
   fs[stor_taint_ok_at_def, dead_lo_ok_def]
 QED
 
-Resume body_assign_empty_immutable_ghost[local][prefix]:
+Resume body_assign_empty_immutable_ghost[prefix]:
   gvs[SUBSET_DEF] >> metis_tac[]
 QED
 
-Resume body_assign_empty_immutable_ghost[local][base]:
+Resume body_assign_empty_immutable_ghost[base]:
   metis_tac[local_ptrs_reserved_def]
 QED
 
@@ -6012,7 +6012,7 @@ Proof
   suspend "frame"
 QED
 
-Resume body_assign_immutable_bytes_loop_header_actual[local][jump]:
+Resume body_assign_immutable_bytes_loop_header_actual[jump]:
   `isPREFIX [i0; mk_inst (ih+1) JNZ [Var test;Label exit;Label loop_body] []]
       (DROP 0 bbH.bb_instructions)` by (rewrite_tac[DROP_0] >> first_assum ACCEPT_TAC) >>
   `get_instruction bbH t0.vs_inst_idx =
@@ -6046,7 +6046,7 @@ Resume body_assign_immutable_bytes_loop_header_actual[local][jump]:
   simp[] >> simp[Abbr `t0`, Abbr `u0`, update_var_def, mk_inst_def, allocas_from_def]
 QED
 
-Resume body_assign_immutable_bytes_loop_header_actual[local][frame]:
+Resume body_assign_immutable_bytes_loop_header_actual[frame]:
   `cv <> test` by ((qpat_assum `ALL_DISTINCT ((cv::test::_) ++ _)` mp_tac >> simp[] >> (gvs[]))) >>
   `!x. not_fresh_at sm x ==> x <> test` by
     (qpat_assum `!x. MEM x (_ ++ _) ==> _` (qspec_then `test` mp_tac) >> simp[]) >>
@@ -6500,13 +6500,13 @@ Proof
     (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o REWRITE_RULE [ghost_kept_at_def]))
 QED
 
-Resume body_assign_immutable_bytes_restore[local][extent]:
+Resume body_assign_immutable_bytes_restore[extent]:
   markerLib.RESUME_TAC >> (
   drule_all immutable_assign_bytestring_extent >> strip_tac >>
   drule_all placeStoreStorageTheory.place_store_bytestring_representation >> strip_tac >>
   gvs[loweringPostsTheory.val_footprint_def, value_has_type_def])
 QED
-Resume body_assign_immutable_bytes_restore[local][physical]:
+Resume body_assign_immutable_bytes_restore[physical]:
   markerLib.RESUME_TAC >> (
   `((immutable_transfers T T (n2w a) (n2w off) n 0 s) with
       <|vs_memory := s.vs_memory; vs_immutables := s.vs_immutables|>) = s` by
@@ -6515,7 +6515,7 @@ Resume body_assign_immutable_bytes_restore[local][physical]:
     vs_prev_bb := _; vs_inst_idx := _|>) = _` mp_tac >>
   fs[venom_state_component_equality])
 QED
-Resume body_assign_immutable_bytes_restore[local][representation]:
+Resume body_assign_immutable_bytes_restore[representation]:
   markerLib.RESUME_TAC >> (
   `val_footprint stv v = 32+len /\ value_has_type dtv v` by
     (drule_all placeStoreStorageTheory.place_store_bytestring_representation >>
@@ -6529,7 +6529,7 @@ Resume body_assign_immutable_bytes_restore[local][representation]:
   qexistsl [`dty`,`s.vs_memory`,`32+len`,`a`,`stv`,`sty`,`get_tenv cx`] >>
   gvs[])
 QED
-Resume body_assign_immutable_bytes_restore[local][section]:
+Resume body_assign_immutable_bytes_restore[section]:
   markerLib.RESUME_TAC >> (
   `(?cap. dtv = BaseTV (BytesT (Dynamic cap))) \/
    (?cap. dtv = BaseTV (StringT cap))` by metis_tac[bytestring_type_value] >> (
@@ -6567,7 +6567,7 @@ Resume body_assign_immutable_bytes_restore[local][section]:
   simp_tac std_ss [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
   disch_then SUBST1_TAC >> asm_rewrite_tac[]))
 QED
-Resume body_assign_immutable_bytes_restore[local][family]:
+Resume body_assign_immutable_bytes_restore[family]:
   markerLib.RESUME_TAC >> (
   qx_gen_tac `H` >> strip_tac >>
   `stmt_state_rel H ctx func ce cx es s /\
@@ -6610,7 +6610,7 @@ Resume body_assign_immutable_bytes_restore[local][family]:
   conj_tac >- metis_tac[allocas_from_def] >>
   metis_tac[])
 QED
-Resume body_assign_immutable_bytes_restore[local][local_ghost]:
+Resume body_assign_immutable_bytes_restore[local_ghost]:
   markerLib.RESUME_TAC >> (
   qx_gen_tac `name` >> qx_gen_tac `entry` >> qx_gen_tac `p` >> qx_gen_tac `sz` >>
   qpat_assum `es'.scopes = es.scopes` (fn th => rewrite_tac[th]) >> strip_tac >>
@@ -6643,7 +6643,7 @@ Resume body_assign_immutable_bytes_restore[local][local_ghost]:
        val_in_memory entry.type entry.value (w2n w) m` by metis_tac[] >>
   drule_all robust_val_in_memory_window_transport >> simp[])
 QED
-Resume body_assign_immutable_bytes_restore[local][kept]:
+Resume body_assign_immutable_bytes_restore[kept]:
   markerLib.RESUME_TAC >> (
   qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
@@ -6666,7 +6666,7 @@ Resume body_assign_immutable_bytes_restore[local][kept]:
     (qspecl_then [`name`,`b0`,`sz0`,`i`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[])
 QED
-Resume body_assign_immutable_bytes_restore[local][frame]:
+Resume body_assign_immutable_bytes_restore[frame]:
   markerLib.RESUME_TAC >> (
   qpat_x_assum `alloca_frame _ _ _ _ _ _ _`
     (assume_tac o REWRITE_RULE [alloca_frame_def]) >>
@@ -6855,7 +6855,7 @@ Proof
   `off + len <= s.vs_alloca_next` by metis_tac[] >> decide_tac
 QED
 
-Resume body_assign_snapshot_memory_alloc_joint[local][horizon]:
+Resume body_assign_snapshot_memory_alloc_joint[horizon]:
   gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
     (qspec_then `H` (fn th => first_assum (strip_assume_tac o MATCH_MP th))) >>
@@ -6871,7 +6871,7 @@ Resume body_assign_snapshot_memory_alloc_joint[local][horizon]:
   >> (metis_tac[])
 QED
 
-Resume body_assign_snapshot_memory_alloc_joint[local][entry_kept]:
+Resume body_assign_snapshot_memory_alloc_joint[entry_kept]:
   irule alloc_buffer_ghost_kept_at >>
   qexistsl_tac [`G`,`w2n w + type_memory_bytes ce (lowered_value_type ce e)`,`s`,`tn`] >>
   simp[] >> conj_tac
@@ -6886,14 +6886,14 @@ Resume body_assign_snapshot_memory_alloc_joint[local][entry_kept]:
     (qspecl_then [`aid`,`off`,`sz`] mp_tac) >> simp[] >> decide_tac
 QED
 
-Resume body_assign_snapshot_memory_alloc_joint[local][rhs_kept]:
+Resume body_assign_snapshot_memory_alloc_joint[rhs_kept]:
   irule alloc_buffer_ghost_kept_at >>
   qexistsl_tac [`G`,`w2n w + type_memory_bytes ce (lowered_value_type ce e)`,`s`,`tn`] >>
   simp[ghost_kept_at_def]
   >> (metis_tac[])
 QED
 
-Resume body_assign_snapshot_memory_alloc_joint[local][pointer]:
+Resume body_assign_snapshot_memory_alloc_joint[pointer]:
   `vv_at ce cx (post_value_type ce e) sa sm ee pv vv0 s` by fs[vv_post_def] >>
   `~is_word_type (post_value_type ce e) /\
    (?ptv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv /\ val_wf ptv v)` by
@@ -6917,17 +6917,17 @@ Resume body_assign_snapshot_memory_alloc_joint[local][pointer]:
   irule ptr_vv_ok_nonmemory_frame >> simp[] >> qexistsl_tac [`G`,`s`,`tn`] >> simp[]
 QED
 
-Resume body_assign_snapshot_memory_alloc_joint[local][stack_buffer]:
+Resume body_assign_snapshot_memory_alloc_joint[stack_buffer]:
   rpt strip_tac >> fs[contextTheory.vv_operand_def] >>
   irule ptr_buf_ok_frame >> qexistsl_tac [`G`,`s`] >> simp[]
 QED
 
-Resume body_assign_snapshot_memory_alloc_joint[local][located_buffer]:
+Resume body_assign_snapshot_memory_alloc_joint[located_buffer]:
   rpt strip_tac >> fs[contextTheory.vv_operand_def] >>
   irule ptr_buf_ok_frame >> qexistsl_tac [`G`,`s`] >> simp[]
 QED
 
-Resume body_assign_snapshot_memory_alloc_joint[local][constructor]:
+Resume body_assign_snapshot_memory_alloc_joint[constructor]:
   disch_then (fn guard =>
     qpat_x_assum `ce.ce_is_ctor /\ vv_location vv0 = SOME LocCode ==> _`
       (strip_assume_tac o C MATCH_MP guard)) >>
@@ -7274,14 +7274,14 @@ Proof
   suspend "entry"
 QED
 
-Resume body_assign_snapshot_copy_endpoint_frame[local][state]:
+Resume body_assign_snapshot_copy_endpoint_frame[state]:
   rpt strip_tac >> irule literal_copy_window_stmt_state_rel >>
   qexistsl_tac [`aid`,`b`,`type_memory_size tv`,`p`,`sk`,`sk`,`s`] >>
   simp[] >> fs[typed_copy_state_frame_def,typed_copy_frame_def] >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume body_assign_snapshot_copy_endpoint_frame[local][ghost]:
+Resume body_assign_snapshot_copy_endpoint_frame[ghost]:
   rpt strip_tac >> irule body_full_memory_ghost_frame >> simp[] >>
   qexistsl_tac [`G`,`s`,`sk`,`tn`,`{i | b <= i /\ i < b+type_memory_size tv}`] >>
   simp[] >> rpt conj_tac
@@ -7291,12 +7291,12 @@ Resume body_assign_snapshot_copy_endpoint_frame[local][ghost]:
   metis_tac[arithmeticTheory.ADD_CLAUSES]
 QED
 
-Resume body_assign_snapshot_copy_endpoint_frame[local][history]:
+Resume body_assign_snapshot_copy_endpoint_frame[history]:
   `alloca_inv s` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   metis_tac[body_full_path_alloca_history]
 QED
 
-Resume body_assign_snapshot_copy_endpoint_frame[local][entry]:
+Resume body_assign_snapshot_copy_endpoint_frame[entry]:
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `!old off sz i. FLOOKUP s0.vs_allocas old = SOME (off,sz) /\
     old < se.cs_next_id /\ off <= i /\ i < off+sz ==>
@@ -7308,7 +7308,7 @@ Resume body_assign_snapshot_copy_endpoint_frame[local][entry]:
   conj_tac >- suspend "frame" >> metis_tac[]
 QED
 
-Resume body_assign_snapshot_copy_endpoint_frame[local][kept]:
+Resume body_assign_snapshot_copy_endpoint_frame[kept]:
   qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
   rewrite_tac[ghost_kept_at_def] >>
@@ -7322,7 +7322,7 @@ Resume body_assign_snapshot_copy_endpoint_frame[local][kept]:
   metis_tac[]
 QED
 
-Resume body_assign_snapshot_copy_endpoint_frame[local][frame]:
+Resume body_assign_snapshot_copy_endpoint_frame[frame]:
   qpat_x_assum `alloca_frame _ _ _ _ _ _ _`
     (assume_tac o REWRITE_RULE [alloca_frame_def]) >>
   rewrite_tac[alloca_frame_def] >> rpt gen_tac >>
@@ -7411,34 +7411,34 @@ Proof
   suspend "frame"
 QED
 
-Resume body_assign_snapshot_bytes_copy_endpoint[local][extent]:
+Resume body_assign_snapshot_bytes_copy_endpoint[extent]:
   drule_all valueCopyBytesTheory.bytestring_type_value >> strip_tac >>
   Cases_on `v` >> gvs[value_has_type_def,type_memory_size_def] >>
   irule exprSimPropsTheory.word_size_monotone >> simp[]
 QED
 
-Resume body_assign_snapshot_bytes_copy_endpoint[local][prefix]:
+Resume body_assign_snapshot_bytes_copy_endpoint[prefix]:
   qpat_x_assum `fn_has_code sk sb func` mp_tac >> simp[fn_has_code_def] >>
   strip_tac >> goal_assum drule >>
   gvs[rich_listTheory.IS_PREFIX_APPEND] >>
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,DROP_LENGTH_APPEND] >> simp[]
 QED
 
-Resume body_assign_snapshot_bytes_copy_endpoint[local][raw]:
+Resume body_assign_snapshot_bytes_copy_endpoint[raw]:
   `32 + 32 * word_size len < dimword(:256)` by gvs[Abbr `n`] >>
   drule_all buffer_store_bytestring_run >> strip_tac >> gvs[]
 QED
 
-Resume body_assign_snapshot_bytes_copy_endpoint[local][robust]:
+Resume body_assign_snapshot_bytes_copy_endpoint[robust]:
   rpt strip_tac >> irule bytestring_copy_robust_destination >> metis_tac[]
 QED
 
-Resume body_assign_snapshot_bytes_copy_endpoint[local][fields]:
+Resume body_assign_snapshot_bytes_copy_endpoint[fields]:
   qpat_x_assum `(sf with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
   simp[venom_state_component_equality]
 QED
 
-Resume body_assign_snapshot_bytes_copy_endpoint[local][frame]:
+Resume body_assign_snapshot_bytes_copy_endpoint[frame]:
   irule typed_copy_state_frame_subinterval >>
   qexistsl_tac [`w2n dw`,`n`] >> simp[] >>
   simp[typed_copy_state_frame_def,blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
@@ -7611,7 +7611,7 @@ Proof
   Cases_on `cx.txn.is_static` >- suspend "static" >> suspend "normal"
 QED
 
-Resume body_assign_other_direct_slots_write_full[local][static]:
+Resume body_assign_other_direct_slots_write_full[static]:
   `type_slot_size tv <> 0` by decide_tac >>
   mp_tac (Q.INST [`s` |-> `z`,`sa` |-> `su`,`src` |-> `op`,
     `ty` |-> `dty`,`dw` |-> `k`,`G` |-> `Gz`,`tn` |-> `tnz`,
@@ -7627,7 +7627,7 @@ Resume body_assign_other_direct_slots_write_full[local][static]:
        exprSimDefsTheory.expr_exit_def,halt_exit_not_halt]
 QED
 
-Resume body_assign_other_direct_slots_write_full[local][normal]:
+Resume body_assign_other_direct_slots_write_full[normal]:
   mp_tac (Q.INST [`s` |-> `z`,`sa` |-> `su`,`src` |-> `op`,
     `ty` |-> `dty`,`dw` |-> `k`,`G` |-> `Gz`,`tn` |-> `tnz`,
     `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
@@ -7796,7 +7796,7 @@ Proof
   Cases_on `cx.txn.is_static` >- suspend "static" >> suspend "normal"
 QED
 
-Resume body_assign_other_bytes_slots_write_full[local][static]:
+Resume body_assign_other_bytes_slots_write_full[static]:
   `type_slot_size stv <> 0` by decide_tac >>
   mp_tac (Q.INST [`s` |-> `z`,`sa` |-> `su`,`src` |-> `op`,
     `ty` |-> `sty`,`tv` |-> `stv`,`dw` |-> `k`,`G` |-> `Gz`,`tn` |-> `tnz`,
@@ -7812,7 +7812,7 @@ Resume body_assign_other_bytes_slots_write_full[local][static]:
        exprSimDefsTheory.expr_exit_def,halt_exit_not_halt]
 QED
 
-Resume body_assign_other_bytes_slots_write_full[local][normal]:
+Resume body_assign_other_bytes_slots_write_full[normal]:
   mp_tac (Q.INST [`s` |-> `z`,`sa` |-> `su`,`src` |-> `op`,
     `tv` |-> `stv`,`dw` |-> `k`,`G` |-> `Gz`,`tn` |-> `tnz`,
     `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
@@ -7823,7 +7823,7 @@ Resume body_assign_other_bytes_slots_write_full[local][normal]:
   suspend "landing"
 QED
 
-Resume body_assign_other_bytes_slots_write_full[local][landing]:
+Resume body_assign_other_bytes_slots_write_full[landing]:
   `!x. not_fresh_at su x ==> lookup_var x u = lookup_var x z` by
     (rpt strip_tac >> qpat_assum `!x. not_fresh_at su x ==> _ /\ _`
        (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
@@ -7867,7 +7867,7 @@ Resume body_assign_other_bytes_slots_write_full[local][landing]:
   suspend "posts"
 QED
 
-Resume body_assign_other_bytes_slots_write_full[local][posts]:
+Resume body_assign_other_bytes_slots_write_full[posts]:
   gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
     (drule_then strip_assume_tac) >>
@@ -8047,7 +8047,7 @@ Proof
     (ACCEPT_TAC o cj 2 o REWRITE_RULE [ghost_kept_at_def])
 QED
 
-Resume body_assign_empty_place_joint[local][restore]:
+Resume body_assign_empty_place_joint[restore]:
   qx_gen_tac `H` >> strip_tac >>
   Cases_on `loc` >> gvs[] >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==>
@@ -8061,7 +8061,7 @@ Resume body_assign_empty_place_joint[local][restore]:
   >> suspend "immutable"
 QED
 
-Resume body_assign_empty_place_joint[local][memory]:
+Resume body_assign_empty_place_joint[memory]:
   qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx ff u` >>
   `32 <= type_memory_size dtv` by
     (qpat_assum `evaluate_type _ _ = _` (mp_then Any mp_tac place_store_empty_representation) >>
@@ -8107,7 +8107,7 @@ Resume body_assign_empty_place_joint[local][memory]:
    (ee with scopes := sc).tStorage = ee.tStorage` by simp[] >>
   metis_tac[storage_well_formed_on_backends]
 QED
-Resume body_assign_empty_place_joint[local][backend]:
+Resume body_assign_empty_place_joint[backend]:
   markerLib.RESUME_TAC >>
   Cases_on `p` >> gvs[place_ptr_rel_def, slot_loc_def, AllCaseEqs()] >>
   drule_then assume_tac write_storage_place_scopes >>
@@ -8120,7 +8120,7 @@ Resume body_assign_empty_place_joint[local][backend]:
   suspend "backend_ghost"
 QED
 
-Resume body_assign_empty_place_joint[local][backend_wf]:
+Resume body_assign_empty_place_joint[backend_wf]:
   markerLib.RESUME_TAC >>
   `regions_consistent (FST H)` by fs[valid_horizon_def] >>
   `well_formed_type_value dtv` by metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
@@ -8129,7 +8129,7 @@ Resume body_assign_empty_place_joint[local][backend_wf]:
   drule_all body_assign_observed_storage_write_wf >> simp[]
 QED
 
-Resume body_assign_empty_place_joint[local][backend_ghost]:
+Resume body_assign_empty_place_joint[backend_ghost]:
   markerLib.RESUME_TAC >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
     (drule stateRelProjTheory.stmt_state_rel_state_rel >> strip_tac >>
@@ -8138,7 +8138,7 @@ Resume body_assign_empty_place_joint[local][backend_ghost]:
   qpat_assum `dead_lo_ok H _ _ _ _` (mp_then Any mp_tac body_assign_empty_backend_ghost) >>
   metis_tac[]
 QED
-Resume body_assign_empty_place_joint[local][immutable]:
+Resume body_assign_empty_place_joint[immutable]:
   `ff.scopes = ee.scopes /\ ff.accounts = ee.accounts /\ ff.tStorage = ee.tStorage` by
     (drule write_immutable_place_frame >> strip_tac >> simp[]) >>
   `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by simp[] >>
@@ -8459,7 +8459,7 @@ Proof
   suspend "write"
 QED
 
-Resume body_assign_other_empty_target_full[local][write]:
+Resume body_assign_other_empty_target_full[write]:
   qx_genl_tac [`marks`,`p`,`mid`,`G1`,`tn1`,`u`] >> simp[] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
     by fs[storage_trace_domain_def] >>
@@ -8574,7 +8574,7 @@ Resume body_assign_other_empty_target_full[local][write]:
   suspend "normal"
 QED
 
-Resume body_assign_other_empty_target_full[local][static]:
+Resume body_assign_other_empty_target_full[static]:
   Cases_on `p` >> gvs[place_ptr_rel_def] >>
   rename1 `StoragePlace tr slot dtv` >>
   `emit_void (if tr then TSTORE else SSTORE) [dst; Lit 0w] st = ((),sb)` by
@@ -8593,7 +8593,7 @@ Resume body_assign_other_empty_target_full[local][static]:
   simp[stmt_exit_ptr_def, expr_exit_def, halt_exit_not_halt]
 QED
 
-Resume body_assign_other_empty_target_full[local][normal]:
+Resume body_assign_other_empty_target_full[normal]:
   `ff.storage_trace = mid.storage_trace` by
     (drule write_place_storage_trace >> simp[]) >>
   `ff with gas_obs := [] = ff` by
@@ -8629,7 +8629,7 @@ Resume body_assign_other_empty_target_full[local][normal]:
   suspend "normal_tail"
 QED
 
-Resume body_assign_other_empty_target_full[local][memory_header]:
+Resume body_assign_other_empty_target_full[memory_header]:
   disch_then SUBST_ALL_TAC >>
   `32 <= type_memory_size dtv` by
     (`mem_word_at 0 (REPLICATE 32 (0w:word8)) = 0w` by
@@ -8652,7 +8652,7 @@ Resume body_assign_other_empty_target_full[local][memory_header]:
   suspend "memory_coverage"
 QED
 
-Resume body_assign_other_empty_target_full[local][memory_coverage]:
+Resume body_assign_other_empty_target_full[memory_coverage]:
   qpat_x_assum `place_ptr_rel _ _ u (PlaceR p) _ _ _` mp_tac >>
   namedCases_on `p` ["tr slot tv", "id path", "src name0 path0"] >> simp[place_ptr_rel_def]
   >- (Cases_on `tr` >> simp[slot_loc_def])
@@ -8694,7 +8694,7 @@ Resume body_assign_other_empty_target_full[local][memory_coverage]:
   metis_tac[]
 QED
 
-Resume body_assign_other_empty_target_full[local][normal_tail]:
+Resume body_assign_other_empty_target_full[normal_tail]:
   `((loc = LocStorage \/ loc = LocTransient) ==> ~cx.txn.is_static)` by
     (Cases_on `loc` >> gvs[]) >>
   mp_tac (Q.INST [`sa` |-> `st`, `sa0` |-> `sa`, `s` |-> `u`,
@@ -12726,7 +12726,7 @@ Proof
   >> suspend "kept"
 QED
 
-Resume body_assign_immutable_direct_joint[local][horizon]:
+Resume body_assign_immutable_direct_joint[horizon]:
   gen_tac >> disch_tac >>
   conj_tac >- (qpat_assum `!D. gas_origin_ptr_path _ _ _ _` MATCH_ACCEPT_TAC) >>
   conj_tac >- (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q`
@@ -12752,13 +12752,13 @@ Resume body_assign_immutable_direct_joint[local][horizon]:
   >> suspend "immghost"
 QED
 
-Resume body_assign_immutable_direct_joint[local][return]:
+Resume body_assign_immutable_direct_joint[return]:
   irule bodyMemoryDefsTheory.return_buf_frame_frame >>
   qexistsl [`ce`,`s`,`su`] >>
   simp[IgnAsm `off = _`] >> metis_tac[]
 QED
 
-Resume body_assign_immutable_direct_joint[local][history]:
+Resume body_assign_immutable_direct_joint[history]:
   drule_all stmtReasonLitFragMemoryTheory.fn_has_code_code >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts su sb)` by
     (simp[NoAsms, EVERY_MEM] >> gen_tac >> disch_tac >>
@@ -12780,12 +12780,12 @@ Resume body_assign_immutable_direct_joint[local][history]:
   qpat_assum `q.vs_inst_idx = s.vs_inst_idx + _` (fn h => simp[NoAsms, GSYM h])
 QED
 
-Resume body_assign_immutable_direct_joint[local][fmp]:
+Resume body_assign_immutable_direct_joint[fmp]:
   drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >>
   simp[]
 QED
 
-Resume body_assign_immutable_direct_joint[local][kept]:
+Resume body_assign_immutable_direct_joint[kept]:
   simp[NoAsms, ghost_kept_at_def] >> rpt conj_tac
   >- (gen_tac >> disch_tac >>
       qpat_assum `!x. not_fresh_at su x ==> lookup_var x q = _ /\ _`
@@ -12800,7 +12800,7 @@ Resume body_assign_immutable_direct_joint[local][kept]:
     (drule_all_then ACCEPT_TAC)
 QED
 
-Resume body_assign_immutable_direct_joint[local][locals]:
+Resume body_assign_immutable_direct_joint[locals]:
   rpt gen_tac >> strip_tac >>
   `not_fresh_at su p` by
     (qpat_assum `local_ptrs_reserved ce su` mp_tac >>
@@ -12828,7 +12828,7 @@ Resume body_assign_immutable_direct_joint[local][locals]:
   drule_all bodyPtrBytestringBuiltinsWindowGhostTheory.robust_val_in_memory_window_transport >> simp[]
 QED
 
-Resume body_assign_immutable_direct_joint[local][bufghost]:
+Resume body_assign_immutable_direct_joint[bufghost]:
   Cases_on `d` >- fs[return_buf_ptr_def] >>
   rename1 `return_buf_ptr (SOME bc)` >> PairCases_on `bc` >>
   qpat_assum `return_buf_frame _ ce su s` (strip_assume_tac o REWRITE_RULE[return_buf_frame_def]) >>
@@ -12844,7 +12844,7 @@ Resume body_assign_immutable_direct_joint[local][bufghost]:
   simp[return_buf_ptr_def]
 QED
 
-Resume body_assign_immutable_direct_joint[local][pcghost]:
+Resume body_assign_immutable_direct_joint[pcghost]:
   rpt gen_tac >> disch_tac >>
   `not_fresh_at su x` by
     (qpat_assum `!x sz. ce.ce_return_pc = _ ==> not_fresh_at su x` (drule_then ACCEPT_TAC)) >>
@@ -12854,7 +12854,7 @@ Resume body_assign_immutable_direct_joint[local][pcghost]:
     (drule_then ACCEPT_TAC)
 QED
 
-Resume body_assign_immutable_direct_joint[local][storg]:
+Resume body_assign_immutable_direct_joint[storg]:
   qpat_assum `ts.t_stor = tn.t_stor` (fn h =>
     qpat_assum `ts.t_trans = tn.t_trans` (fn h' =>
       qpat_assum `q.vs_accounts = s.vs_accounts` (fn ha =>
@@ -12868,7 +12868,7 @@ Resume body_assign_immutable_direct_joint[local][storg]:
   simp[NoAsms]
 QED
 
-Resume body_assign_immutable_direct_joint[local][immghost]:
+Resume body_assign_immutable_direct_joint[immghost]:
   rpt gen_tac >> strip_tac >>
   `not_fresh_at su x` by metis_tac[] >>
   qpat_assum `!x. not_fresh_at su x ==> lookup_var x q = _ /\ _`
@@ -13473,7 +13473,7 @@ Proof
   suspend "landing"
 QED
 
-Resume body_assign_other_immutable_word_write_full[local][landing]:
+Resume body_assign_other_immutable_word_write_full[landing]:
   qpat_x_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
   drule_all_then strip_assume_tac body_assign_immutable_word_layout >>
   drule_all_then strip_assume_tac immutable_assign_source_lookup >>
@@ -13526,7 +13526,7 @@ Resume body_assign_other_immutable_word_write_full[local][landing]:
   suspend "write_outcome"
 QED
 
-Resume body_assign_other_immutable_word_write_full[local][write_outcome]:
+Resume body_assign_other_immutable_word_write_full[write_outcome]:
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x z = SOME w` by
     (qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ z` mp_tac >>
      simp_tac bool_ss [expr_post_def] >> strip_tac >> simp[]) >>
@@ -13571,7 +13571,7 @@ Resume body_assign_other_immutable_word_write_full[local][write_outcome]:
   suspend "entry_post"
 QED
 
-Resume body_assign_other_immutable_word_write_full[local][entry_post]:
+Resume body_assign_other_immutable_word_write_full[entry_post]:
   `valid_horizon cx st0 H es.storage_trace` by
     (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
        simp[storage_trace_frame_bind_all,cj 5 evaluate_storage_trace_frame,
@@ -13978,7 +13978,7 @@ Proof
   simp[]
 QED
 
-Resume body_assign_other_saved_target_bind[local][normal]:
+Resume body_assign_other_saved_target_bind[normal]:
   qx_genl_tac [`marks`,`p`,`ee`,`Gu`,`tnu`,`u`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `gs = gas_explicit marks s.vs_gas_readings` >>
@@ -14969,7 +14969,7 @@ Proof
   >> suspend "normalize"
 QED
 
-Resume body_assign_immutable_memory_joint[local][direct]:
+Resume body_assign_immutable_memory_joint[direct]:
   `itv = stv` by fs[] >>
   `a < dimword (:256)` by decide_tac >>
   `off + type_memory_size itv < dimword (:256)` by decide_tac >>
@@ -15027,7 +15027,7 @@ Resume body_assign_immutable_memory_joint[local][direct]:
   simp[]
 QED
 
-Resume body_assign_immutable_memory_joint[local][bytes]:
+Resume body_assign_immutable_memory_joint[bytes]:
   qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
   `valid_horizon cx st0 H0 ee.storage_trace` by simp[Abbr `H0`] >>
   `stmt_state_rel H0 ctx func ce cx ee s /\ ghost_inv_at (DF H0) lo d ce cx ee G tn s` by simp[] >>
@@ -15130,7 +15130,7 @@ Resume body_assign_immutable_memory_joint[local][bytes]:
   metis_tac[storage_well_formed_on_backends]
 QED
 
-Resume body_assign_immutable_memory_joint[local][normalize]:
+Resume body_assign_immutable_memory_joint[normalize]:
   `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb` by
     metis_tac[ci_mono_compile_alloc_buffer, cj 1 ci_mono_typed_memory_family,
               cj 1 ci_mono_stmt_helpers, pairTheory.SND] >>
@@ -15750,7 +15750,7 @@ Proof
   suspend "slots_input"
 QED
 
-Resume body_assign_other_snapshot_equal_slots_write_full[local][slots_input]:
+Resume body_assign_other_snapshot_equal_slots_write_full[slots_input]:
   `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
   qpat_assum `expr_sim_inv cenv cx env ee`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [expr_sim_inv_def]) >>
@@ -15900,7 +15900,7 @@ Proof
   suspend "source"
 QED
 
-Resume body_assign_other_saved_normalized_slots_write_full[local][source]:
+Resume body_assign_other_saved_normalized_slots_write_full[source]:
   `bind (eval_expr cx e) (read_result cx) (es with gas_obs := prefix) =
      (INL v,mid with gas_obs := [])` by
     (qpat_assum `!tail. eval_expr _ _ _ = _`
@@ -15948,7 +15948,7 @@ Resume body_assign_other_saved_normalized_slots_write_full[local][source]:
   suspend "normalize"
 QED
 
-Resume body_assign_other_saved_normalized_slots_write_full[local][normalize]:
+Resume body_assign_other_saved_normalized_slots_write_full[normalize]:
   `ci_mono sa sm` by metis_tac[compile_expr_ci_mono,SND] >>
   `ci_mono sm sb` by metis_tac[ci_mono_compile_get_target_ptr,SND] >>
   `ci_mono sb sc` by metis_tac[ci_mono_unwrap_value,SND] >>
@@ -16004,7 +16004,7 @@ Resume body_assign_other_saved_normalized_slots_write_full[local][normalize]:
   suspend "slots"
 QED
 
-Resume body_assign_other_saved_normalized_slots_write_full[local][slots]:
+Resume body_assign_other_saved_normalized_slots_write_full[slots]:
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
   qabbrev_tac `start = mid with gas_obs := gas_explicit marks s.vs_gas_readings` >>
   `eval_target_place cx bt start = (INL (StoragePlace tr k dtv),ee)` by
@@ -16054,7 +16054,7 @@ Resume body_assign_other_saved_normalized_slots_write_full[local][slots]:
   suspend "frame"
 QED
 
-Resume body_assign_other_saved_normalized_slots_write_full[local][frame]:
+Resume body_assign_other_saved_normalized_slots_write_full[frame]:
   `sc.cs_next_var <= sn.cs_next_var /\ sa.cs_next_var <= sn.cs_next_var /\
    sa.cs_next_id <= sc.cs_next_id` by fs[ci_mono_def] >>
   `return_buf_frame d cenv sn q` by
@@ -16086,7 +16086,7 @@ Resume body_assign_other_saved_normalized_slots_write_full[local][frame]:
   suspend "compose"
 QED
 
-Resume body_assign_other_saved_normalized_slots_write_full[local][compose]:
+Resume body_assign_other_saved_normalized_slots_write_full[compose]:
   irule gasOutcomeFullGuardedTheory.gas_outcome_full_zero_prefix_guarded >>
   simp[storage_trace_frame_write_place] >>
   qexistsl [`Gq`,`q`,`tq`] >>
@@ -16220,7 +16220,7 @@ Proof
   suspend "normalize"
 QED
 
-Resume body_assign_other_snapshot_normalized_slots_write_full[local][normalize]:
+Resume body_assign_other_snapshot_normalized_slots_write_full[normalize]:
   markerLib.RESUME_TAC >>
   qabbrev_tac `sty = lowered_value_type cenv e` >>
   `compile_assign_value cenv (FST r) (slot_loc tr) (Var xd) (is_word_type ty)
@@ -16277,7 +16277,7 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[local][normalize]:
   suspend "slots"
 QED
 
-Resume body_assign_other_snapshot_normalized_slots_write_full[local][slots]:
+Resume body_assign_other_snapshot_normalized_slots_write_full[slots]:
   markerLib.RESUME_TAC >>
   `!l. FST r <> Label l` by
     drule_all_then ACCEPT_TAC targetSubscriptSplitTheory.target_subscript_typed_base_not_label >>
@@ -16294,7 +16294,7 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[local][slots]:
   suspend "frames"
 QED
 
-Resume body_assign_other_snapshot_normalized_slots_write_full[local][frames]:
+Resume body_assign_other_snapshot_normalized_slots_write_full[frames]:
   markerLib.RESUME_TAC >>
   `sa.cs_next_var <= sc.cs_next_var /\ s0.vs_alloca_next <= q.vs_alloca_next` by decide_tac >>
   `local_ptrs_reserved cenv sc` by
@@ -16323,7 +16323,7 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[local][frames]:
   suspend "execute_slots"
 QED
 
-Resume body_assign_other_snapshot_normalized_slots_write_full[local][old_taint]:
+Resume body_assign_other_snapshot_normalized_slots_write_full[old_taint]:
   markerLib.RESUME_TAC >> rpt strip_tac >>
   rename1 `FLOOKUP s0.vs_allocas j = SOME (off,sz)` >>
   `FLOOKUP z.vs_allocas j = SOME (off,sz)` by simp[] >>
@@ -16341,7 +16341,7 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[local][old_taint]:
   impl_tac >- first_assum ACCEPT_TAC >> simp[]
 QED
 
-Resume body_assign_other_snapshot_normalized_slots_write_full[local][execute_slots]:
+Resume body_assign_other_snapshot_normalized_slots_write_full[execute_slots]:
   markerLib.RESUME_TAC >>
   `env.type_defs = get_tenv cx` by fs[env_consistent_def, env_context_consistent_def] >>
   `0 < type_slot_size dtv` by
@@ -16373,7 +16373,7 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[local][execute_slo
   first_assum ACCEPT_TAC
 QED
 
-Resume body_assign_other_snapshot_normalized_slots_write_full[local][horizon]:
+Resume body_assign_other_snapshot_normalized_slots_write_full[horizon]:
   markerLib.RESUME_TAC >> gen_tac >> disch_tac >>
   `storage_place_observed H (StoragePlace tr k dtv)` by
     (irule stmtSimAugAssignPlaceStorageTheory.aug_place_target_observed >>
@@ -16513,7 +16513,7 @@ Proof
   suspend "physical"
 QED
 
-Resume body_assign_other_saved_equal_slots_write_full[local][physical]:
+Resume body_assign_other_saved_equal_slots_write_full[physical]:
   `~is_word_type (post_value_type cenv e)` by
     metis_tac[immutable_rhs_post_physical_classify,is_bytestring_word_type] >>
   `?sw. eval_operand op z = SOME sw` by
@@ -16531,7 +16531,7 @@ Resume body_assign_other_saved_equal_slots_write_full[local][physical]:
   suspend "slots_input"
 QED
 
-Resume body_assign_other_saved_equal_slots_write_full[local][slots_input]:
+Resume body_assign_other_saved_equal_slots_write_full[slots_input]:
   `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
   qpat_assum `expr_sim_inv cenv cx env ee`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [expr_sim_inv_def]) >>
@@ -16554,7 +16554,7 @@ Resume body_assign_other_saved_equal_slots_write_full[local][slots_input]:
   suspend "freshness"
 QED
 
-Resume body_assign_other_saved_equal_slots_write_full[local][freshness]:
+Resume body_assign_other_saved_equal_slots_write_full[freshness]:
   `ci_mono sa sm` by metis_tac[compile_expr_ci_mono,SND] >>
   `ci_mono sm sb` by metis_tac[ci_mono_compile_get_target_ptr,SND] >>
   `ci_mono sb sc` by metis_tac[ci_mono_unwrap_value,SND] >>
@@ -16575,7 +16575,7 @@ Resume body_assign_other_saved_equal_slots_write_full[local][freshness]:
   suspend "outcome"
 QED
 
-Resume body_assign_other_saved_equal_slots_write_full[local][outcome]:
+Resume body_assign_other_saved_equal_slots_write_full[outcome]:
   `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
     (drule_then (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp)
       exprSimWordArgsTheory.expr_post_state >> simp[]) >>
@@ -17235,7 +17235,7 @@ Proof
   suspend "staged_suffix"
 QED
 
-Resume body_assign_other_saved_staged_memory_write_full[local][staged_suffix]:
+Resume body_assign_other_saved_staged_memory_write_full[staged_suffix]:
   qpat_x_assum `op = Var xs` SUBST_ALL_TAC >>
   `target_ptr_ok cenv (PlaceR (MemoryPlace id path))
      (Var xd,SOME LocMemory,SOME (ValPT ty)) Gz tnz z` by metis_tac[] >>
@@ -17255,7 +17255,7 @@ Resume body_assign_other_saved_staged_memory_write_full[local][staged_suffix]:
   suspend "staged_landing"
 QED
 
-Resume body_assign_other_saved_staged_memory_write_full[local][staged_landing]:
+Resume body_assign_other_saved_staged_memory_write_full[staged_landing]:
   `~block_is_terminated sf` by
     (`0 < type_memory_bytes cenv (lowered_value_type cenv e)` by simp[] >>
      qpat_x_assum `type_memory_bytes cenv (lowered_value_type cenv e) = _` kall_tac >>
@@ -17524,7 +17524,7 @@ Proof
   suspend "destination"
 QED
 
-Resume body_assign_other_saved_unstaged_memory_write_full[local][destination]:
+Resume body_assign_other_saved_unstaged_memory_write_full[destination]:
   `ci_mono sa sm` by
     (qspecl_then [`cenv`,`expr_type e`,`e`,`sa`] mp_tac
       (cj 1 ci_mono_compile_expr_sa) >> simp[]) >>
@@ -17667,7 +17667,7 @@ Resume body_assign_other_saved_unstaged_memory_write_full[local][destination]:
   suspend "direct_memory"
 QED
 
-Resume body_assign_other_saved_unstaged_memory_write_full[local][land_write]:
+Resume body_assign_other_saved_unstaged_memory_write_full[land_write]:
   disch_then (qx_choosel_then [`t`,`Gf`,`tf`] (map_every assume_tac o CONJUNCTS)) >>
   `!tail. write_place cx (MemoryPlace id path) v (ee with gas_obs := tail) =
       (INL (),ff with gas_obs := tail)` by
@@ -17732,7 +17732,7 @@ Resume body_assign_other_saved_unstaged_memory_write_full[local][land_write]:
   simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> simp[]
 QED
 
-Resume body_assign_other_saved_unstaged_memory_write_full[local][bytes_write]:
+Resume body_assign_other_saved_unstaged_memory_write_full[bytes_write]:
   `compile_store_bytestring op (FST r) sc = ((),sf)` by
     ((qpat_assum `compile_assign_value cenv _ LocMemory op F _ _ _ _ sc = _` mp_tac >>
      simp[compile_assign_value_def,compile_store_memory_def] >> (gvs[compile_assign_value_def, compile_store_memory_def]))) >>
@@ -17806,7 +17806,7 @@ Resume body_assign_other_saved_unstaged_memory_write_full[local][bytes_write]:
   qexistsl [`t`,`Gf`,`tf`] >> simp[]
 QED
 
-Resume body_assign_other_saved_unstaged_memory_write_full[local][effect_land]:
+Resume body_assign_other_saved_unstaged_memory_write_full[effect_land]:
   disch_then (qx_choosel_then [`t`,`Gf`,`tf`] (map_every assume_tac o CONJUNCTS)) >>
   drule_then strip_assume_tac typed_copy_effect_endpoint >>
   `t.vs_alloca_next = z.vs_alloca_next /\ t.vs_allocas = z.vs_allocas /\
@@ -17852,7 +17852,7 @@ Resume body_assign_other_saved_unstaged_memory_write_full[local][effect_land]:
   drule_all_then strip_assume_tac body_assign_memory_place_store_post >> simp[]
 QED
 
-Resume body_assign_other_saved_unstaged_memory_write_full[local][direct_memory]:
+Resume body_assign_other_saved_unstaged_memory_write_full[direct_memory]:
   `compile_copy_memory (FST r) op (type_memory_bytes cenv ty) sc = ((),sf)` by
     (qpat_assum `compile_assign_value _ _ LocMemory _ F _ _ _ _ _ = _`
        (mp_tac o REWRITE_RULE [compile_assign_value_def]) >>
@@ -17889,7 +17889,7 @@ Resume body_assign_other_saved_unstaged_memory_write_full[local][direct_memory]:
   `val_footprint dtv v <= type_memory_size dtv` by simp[exprSimPropsTheory.val_footprint_le] >>
   suspend "direct_positive"
 QED
-Resume body_assign_other_saved_unstaged_memory_write_full[local][direct_positive]:
+Resume body_assign_other_saved_unstaged_memory_write_full[direct_positive]:
   `0 < type_memory_bytes cenv (lowered_value_type cenv e)` by decide_tac >>
   `op_taint tnz op = {}` by fs[ptr_val_ok_def] >>
   `?xs. op = Var xs /\ ptr_covers Gz tnz xs z (type_memory_size stv)` by
@@ -17971,7 +17971,7 @@ Resume body_assign_other_saved_unstaged_memory_write_full[local][direct_positive
   qexistsl [`t`,`Gf`,`tf`] >> simp[]
 QED
 
-Resume body_assign_other_saved_unstaged_memory_write_full[local][typed_memory]:
+Resume body_assign_other_saved_unstaged_memory_write_full[typed_memory]:
   `~is_bytestring_type (lowered_value_type cenv e)` by
     metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring] >>
   `post_value_type cenv e = lowered_value_type cenv e` by
@@ -18017,7 +18017,7 @@ Resume body_assign_other_saved_unstaged_memory_write_full[local][typed_memory]:
   suspend "typed_separation"
 QED
 
-Resume body_assign_other_saved_unstaged_memory_write_full[local][typed_separation]:
+Resume body_assign_other_saved_unstaged_memory_write_full[typed_separation]:
   `lowered_value_type cenv e <> ty` by (CCONTR_TAC >> fs[]) >>
   `w2n sw + type_memory_size stv <= w2n dw \/
     w2n dw + type_memory_size dtv <= w2n sw` by
@@ -18238,7 +18238,7 @@ Proof
   suspend "saved_write"
 QED
 
-Resume body_assign_other_nonempty_target_full[local][saved_write]:
+Resume body_assign_other_nonempty_target_full[saved_write]:
   map_every qx_gen_tac [`target_marks`,`p`,`ee`,`Gu`,`tnu`,`u`,`z`,`Gz`,`tnz`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -18294,7 +18294,7 @@ Resume body_assign_other_nonempty_target_full[local][saved_write]:
   suspend "saved_nonword"
 QED
 
-Resume body_assign_other_nonempty_target_full[local][snapshot_write]:
+Resume body_assign_other_nonempty_target_full[snapshot_write]:
   map_every qx_gen_tac [`target_marks`,`p`,`ee`,`z`,`Gz`,`tnz`,`u`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -18439,27 +18439,27 @@ fun residual_memory_word g =
   rpt gen_tac >> strip_tac >> qexists `cenv` >> simp[] >>
   first_assum ACCEPT_TAC)) g;
 
-Resume body_assign_other_nonempty_target_full[local][storage_word]:
+Resume body_assign_other_nonempty_target_full[storage_word]:
   residual_storage_word >>
   (conj_tac >- (residual_word_entry_frame >> gvs[])) >>
   residual_storage_word_posts
 QED
 
-Resume body_assign_other_nonempty_target_full[local][memory_word]:
+Resume body_assign_other_nonempty_target_full[memory_word]:
   residual_memory_word
 QED
 
-Resume body_assign_other_nonempty_target_full[local][saved_storage_word]:
+Resume body_assign_other_nonempty_target_full[saved_storage_word]:
   residual_storage_word >>
   (conj_tac >- (residual_word_entry_frame >> gvs[])) >>
   residual_storage_word_posts
 QED
 
-Resume body_assign_other_nonempty_target_full[local][saved_memory_word]:
+Resume body_assign_other_nonempty_target_full[saved_memory_word]:
   residual_memory_word
 QED
 
-Resume body_assign_other_nonempty_target_full[local][snapshot_nonword]:
+Resume body_assign_other_nonempty_target_full[snapshot_nonword]:
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
   `eval_target_place cx t (mid with gas_obs := target_gas) = (INL p,ee)` by
     (qpat_assum `!tail. eval_target_place _ _ (_ with gas_obs := _ ++ tail) = _`
@@ -18473,7 +18473,7 @@ Resume body_assign_other_nonempty_target_full[local][snapshot_nonword]:
   suspend "snapshot_memory"
 QED
 
-Resume body_assign_other_nonempty_target_full[local][snapshot_memory]:
+Resume body_assign_other_nonempty_target_full[snapshot_memory]:
   `~is_word_type (lowered_value_type cenv e)` by
     (qpat_assum `type_widens_to (get_tenv cx) (lowered_value_type cenv e) ty` mp_tac >>
      qpat_assum `~is_word_type ty` mp_tac >> POP_ASSUM_LIST kall_tac >>
@@ -18529,7 +18529,7 @@ Resume body_assign_other_nonempty_target_full[local][snapshot_memory]:
   drule_all_then ACCEPT_TAC exprOpenTerminalsTheory.unwrap_value_open
 QED
 
-Resume body_assign_other_nonempty_target_full[local][snapshot_slots]:
+Resume body_assign_other_nonempty_target_full[snapshot_slots]:
   `~is_word_type (lowered_value_type cenv e)` by
     (qpat_assum `type_widens_to (get_tenv cx) (lowered_value_type cenv e) ty` mp_tac >>
      qpat_assum `~is_word_type ty` mp_tac >> POP_ASSUM_LIST kall_tac >>
@@ -18572,7 +18572,7 @@ Resume body_assign_other_nonempty_target_full[local][snapshot_slots]:
   gvs[Abbr `target_gas`] >> metis_tac[]
 QED
 
-Resume body_assign_other_nonempty_target_full[local][saved_nonword]:
+Resume body_assign_other_nonempty_target_full[saved_nonword]:
   `~is_word_type (lowered_value_type cenv e)` by
     (qpat_assum `type_widens_to (get_tenv cx) (lowered_value_type cenv e) ty` mp_tac >>
      qpat_assum `~is_word_type ty` mp_tac >> POP_ASSUM_LIST kall_tac >>
@@ -18584,7 +18584,7 @@ Resume body_assign_other_nonempty_target_full[local][saved_nonword]:
     mp_tac >> simp[place_ptr_rel_def]
 QED
 
-Resume body_assign_other_nonempty_target_full[local][saved_memory]:
+Resume body_assign_other_nonempty_target_full[saved_memory]:
   `?entry w. lookup_scopes id ee.scopes = SOME entry /\
      evaluate_subscripts entry.type entry.value path = INL w` by
     (qpat_assum `!i p. MemoryPlace id path = MemoryPlace i p ==> _`
@@ -18611,7 +18611,7 @@ Resume body_assign_other_nonempty_target_full[local][saved_memory]:
   >> gvs[]
 QED
 
-Resume body_assign_other_nonempty_target_full[local][saved_slots]:
+Resume body_assign_other_nonempty_target_full[saved_slots]:
   `w = k /\ loc = slot_loc trans /\ evaluate_type (get_tenv cx) ty = SOME dtv` by
     (qpat_assum `place_ptr_rel _ _ z (PlaceR (StoragePlace _ _ _)) _ _ _`
        mp_tac >>
@@ -18669,7 +18669,7 @@ Resume body_assign_other_nonempty_target_full[local][saved_slots]:
   qpat_assum `compile_assign_value _ _ loc op _ _ _ _ _ su = _` mp_tac >> gvs[]
 QED
 
-Resume body_assign_other_nonempty_target_full[local][snapshot_bytes_slots]:
+Resume body_assign_other_nonempty_target_full[snapshot_bytes_slots]:
   rename1 `write_place cx (StoragePlace trans k dtv) v` >>
   qpat_x_assum `tu' = dtv` SUBST_ALL_TAC >>
   `compile_store_slots cenv op (FST r) ty trans su = ((),sb)` by
@@ -18719,7 +18719,7 @@ Resume body_assign_other_nonempty_target_full[local][snapshot_bytes_slots]:
   qexists `xd` >> simp[]
 QED
 
-Resume body_assign_other_nonempty_target_full[local][saved_bytes_slots]:
+Resume body_assign_other_nonempty_target_full[saved_bytes_slots]:
   qpat_x_assum `is_bytestring_type ty /\ is_bytestring_type (lowered_value_type cenv e)`
     strip_assume_tac >>
   `tu' = dtv` by metis_tac[SOME_11] >>
