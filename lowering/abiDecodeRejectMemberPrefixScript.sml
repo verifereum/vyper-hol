@@ -78,9 +78,13 @@ val setup_cut = ``!ty ao vo st mid child en ops s G tn.
 
 val head_sum = ``\ts. SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) ts))``;
 val dest_sum = ``\ts. SUM (MAP (type_memory_bytes ce) ts)``;
-val good_view = ``\ty ao. let q = (^source_pos) ty ao; a = vyper_to_abi_type env ty in
-  q <= L /\ (is_dynamic a \/ q + static_length a <= L) /\
-  vyper_decode_valid_enc a (DROP q xs) /\ (?v. abi_to_vyper env ty (dec a (DROP q xs)) = SOME v)``;
+val good_view = ``\ty ao.
+  (^source_pos) ty ao <= L /\
+  (is_dynamic (vyper_to_abi_type env ty) \/
+   (^source_pos) ty ao + static_length (vyper_to_abi_type env ty) <= L) /\
+  vyper_decode_valid_enc (vyper_to_abi_type env ty) (DROP ((^source_pos) ty ao) xs) /\
+  (?v. abi_to_vyper env ty
+         (dec (vyper_to_abi_type env ty) (DROP ((^source_pos) ty ao) xs)) = SOME v)``;
 
 Theorem malformed_table_prefix_reject_joint:
   fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\ (^valid_child) /\ (^setup_cut) ==>

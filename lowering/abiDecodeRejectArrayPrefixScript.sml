@@ -24,28 +24,36 @@ val head_prefix = ``\e ts j. SUM (MAP abi_member_head_size (MAP (vyper_to_abi_ty
 val member_position = ``\ce (f:string |-> (string # type # num) list) b ao t. b +
   (if dec_info_needs_offset (type_to_abi_dec_info f ce t)
    then abi_head_word (DROP (b+ao) xs) else ao)``;
-val member_meta = ``\ce e f par v0 ts j. let t = EL j ts in
-  abi_decode_bytes_widths e t /\
-  (?u. abi_decoder_coherent ce e f t u /\ type_memory_size u = type_memory_bytes ce t) /\
-  abi_size_bound f t < dimword (:256) /\
-  v0 + SUM (MAP (type_memory_bytes ce) (TAKE j ts)) + type_memory_bytes ce t <=
+val member_meta = ``\ce e f par v0 ts j.
+  abi_decode_bytes_widths e (EL j ts) /\
+  (?u. abi_decoder_coherent ce e f (EL j ts) u /\
+       type_memory_size u = type_memory_bytes ce (EL j ts)) /\
+  abi_size_bound f (EL j ts) < dimword (:256) /\
+  v0 + SUM (MAP (type_memory_bytes ce) (TAKE j ts)) + type_memory_bytes ce (EL j ts) <=
     type_memory_bytes ce par``;
 val member_good = ``\ce e f b ao t.
-  let a = vyper_to_abi_type e t;
-      q = (^member_position) ce f b ao t;
-      raw = abi_decode_member_bytes (vyper_to_abi_type e t) (DROP b xs) (DROP (b+ao) xs)
-  in (b+ao+abi_member_head_size a <= LENGTH xs /\ (^abi_ok) e t raw) /\ q <= LENGTH xs /\
-     (is_dynamic a \/ q + static_length a <= LENGTH xs) /\
-     vyper_decode_valid_enc a (DROP q xs) /\ dec a raw = dec a (DROP q xs) /\
-     (?v. abi_to_vyper e t (dec a (DROP q xs)) = SOME v)``;
+  (b + ao + abi_member_head_size (vyper_to_abi_type e t) <= LENGTH xs /\
+   (^abi_ok) e t
+     (abi_decode_member_bytes (vyper_to_abi_type e t) (DROP b xs) (DROP (b+ao) xs))) /\
+  (^member_position) ce f b ao t <= LENGTH xs /\
+  (is_dynamic (vyper_to_abi_type e t) \/
+   (^member_position) ce f b ao t + static_length (vyper_to_abi_type e t) <= LENGTH xs) /\
+  vyper_decode_valid_enc (vyper_to_abi_type e t) (DROP ((^member_position) ce f b ao t) xs) /\
+  dec (vyper_to_abi_type e t)
+    (abi_decode_member_bytes (vyper_to_abi_type e t) (DROP b xs) (DROP (b+ao) xs)) =
+  dec (vyper_to_abi_type e t) (DROP ((^member_position) ce f b ao t) xs) /\
+  (?v. abi_to_vyper e t
+         (dec (vyper_to_abi_type e t) (DROP ((^member_position) ce f b ao t) xs)) = SOME v)``;
 val member_bad = ``\ce e f b ao t.
-  let a = vyper_to_abi_type e t;
-      end_h = b + ao + abi_member_head_size (vyper_to_abi_type e t);
-      q = (^member_position) ce f b ao t;
-      raw = abi_decode_member_bytes (vyper_to_abi_type e t) (DROP b xs) (DROP (b+ao) xs)
-  in LENGTH xs < end_h \/
-     (end_h <= LENGTH xs /\ ~(^abi_ok) e t raw /\ ~(^abi_ok) e t ((^abi_view) a q) /\
-      (dimword (:256) <= q \/ (LENGTH xs < q /\ q < dimword (:256)) \/ q <= LENGTH xs))``;
+  LENGTH xs < b + ao + abi_member_head_size (vyper_to_abi_type e t) \/
+  (b + ao + abi_member_head_size (vyper_to_abi_type e t) <= LENGTH xs /\
+   ~(^abi_ok) e t
+     (abi_decode_member_bytes (vyper_to_abi_type e t) (DROP b xs) (DROP (b+ao) xs)) /\
+   ~(^abi_ok) e t ((^abi_view) (vyper_to_abi_type e t) ((^member_position) ce f b ao t)) /\
+   (dimword (:256) <= (^member_position) ce f b ao t \/
+    (LENGTH xs < (^member_position) ce f b ao t /\
+     (^member_position) ce f b ao t < dimword (:256)) \/
+    (^member_position) ce f b ao t <= LENGTH xs))``;
 val member_scan = ``\ce e f par b v0 ts.
   LENGTH ts < dimword (:256) /\ ?i. i < LENGTH ts /\
   (!j. j < i ==> (^member_meta) ce e f par v0 ts j /\

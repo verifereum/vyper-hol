@@ -16,9 +16,9 @@ val members_ok = ``\e ts b ao.
   abi_vyper_admissible_list e ts
     (abi_decode_members (MAP (vyper_to_abi_type e) ts) (DROP b xs) (DROP (b+ao) xs))``;
 val head_prefix = ``\e ts j. SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type e) (TAKE j ts)))``;
-val slot_ok = ``\e b ao t. let a = vyper_to_abi_type e t; hds = DROP (b+ao) xs in
-  b+ao+abi_member_head_size a <= LENGTH xs /\
-  (^abi_ok) e t (abi_decode_member_bytes a (DROP b xs) hds)``;
+val slot_ok = ``\e b ao t.
+  b+ao+abi_member_head_size (vyper_to_abi_type e t) <= LENGTH xs /\
+  (^abi_ok) e t (abi_decode_member_bytes (vyper_to_abi_type e t) (DROP b xs) (DROP (b+ao) xs))``;
 
 Theorem member_raw_prefix_reconstruct[local]:
   !ts ao. (!j. j < LENGTH ts ==>
@@ -44,28 +44,34 @@ QED
 val member_position = ``\ce (f:string |-> (string # type # num) list) b ao t. b +
   (if dec_info_needs_offset (type_to_abi_dec_info f ce t)
    then abi_head_word (DROP (b+ao) xs) else ao)``;
-val member_meta = ``\ce e f par v0 ts j. let t = EL j ts in
-  abi_decode_bytes_widths e t /\
-  (?u. abi_decoder_coherent ce e f t u /\ type_memory_size u = type_memory_bytes ce t) /\
-  abi_size_bound f t < dimword (:256) /\
-  v0 + SUM (MAP (type_memory_bytes ce) (TAKE j ts)) + type_memory_bytes ce t <=
+val member_meta = ``\ce e f par v0 ts j.
+  abi_decode_bytes_widths e (EL j ts) /\
+  (?u. abi_decoder_coherent ce e f (EL j ts) u /\
+       type_memory_size u = type_memory_bytes ce (EL j ts)) /\
+  abi_size_bound f (EL j ts) < dimword (:256) /\
+  v0 + SUM (MAP (type_memory_bytes ce) (TAKE j ts)) + type_memory_bytes ce (EL j ts) <=
     type_memory_bytes ce par``;
 val member_good = ``\ce e f b ao t.
-  let a = vyper_to_abi_type e t;
-      q = (^member_position) ce f b ao t;
-      raw = abi_decode_member_bytes (vyper_to_abi_type e t) (DROP b xs) (DROP (b+ao) xs)
-  in (^slot_ok) e b ao t /\ q <= LENGTH xs /\
-     (is_dynamic a \/ q + static_length a <= LENGTH xs) /\
-     vyper_decode_valid_enc a (DROP q xs) /\ dec a raw = dec a (DROP q xs) /\
-     (?v. abi_to_vyper e t (dec a (DROP q xs)) = SOME v)``;
+  (^slot_ok) e b ao t /\
+  (^member_position) ce f b ao t <= LENGTH xs /\
+  (is_dynamic (vyper_to_abi_type e t) \/
+   (^member_position) ce f b ao t + static_length (vyper_to_abi_type e t) <= LENGTH xs) /\
+  vyper_decode_valid_enc (vyper_to_abi_type e t) (DROP ((^member_position) ce f b ao t) xs) /\
+  dec (vyper_to_abi_type e t)
+    (abi_decode_member_bytes (vyper_to_abi_type e t) (DROP b xs) (DROP (b+ao) xs)) =
+  dec (vyper_to_abi_type e t) (DROP ((^member_position) ce f b ao t) xs) /\
+  (?v. abi_to_vyper e t
+         (dec (vyper_to_abi_type e t) (DROP ((^member_position) ce f b ao t) xs)) = SOME v)``;
 val member_bad = ``\ce e f b ao t.
-  let a = vyper_to_abi_type e t;
-      end_h = b + ao + abi_member_head_size (vyper_to_abi_type e t);
-      q = (^member_position) ce f b ao t;
-      raw = abi_decode_member_bytes (vyper_to_abi_type e t) (DROP b xs) (DROP (b+ao) xs)
-  in LENGTH xs < end_h \/
-     (end_h <= LENGTH xs /\ ~(^abi_ok) e t raw /\ ~(^abi_ok) e t ((^abi_view) a q) /\
-      (dimword (:256) <= q \/ (LENGTH xs < q /\ q < dimword (:256)) \/ q <= LENGTH xs))``;
+  LENGTH xs < b + ao + abi_member_head_size (vyper_to_abi_type e t) \/
+  (b + ao + abi_member_head_size (vyper_to_abi_type e t) <= LENGTH xs /\
+   ~(^abi_ok) e t
+     (abi_decode_member_bytes (vyper_to_abi_type e t) (DROP b xs) (DROP (b+ao) xs)) /\
+   ~(^abi_ok) e t ((^abi_view) (vyper_to_abi_type e t) ((^member_position) ce f b ao t)) /\
+   (dimword (:256) <= (^member_position) ce f b ao t \/
+    (LENGTH xs < (^member_position) ce f b ao t /\
+     (^member_position) ce f b ao t < dimword (:256)) \/
+    (^member_position) ce f b ao t <= LENGTH xs))``;
 val member_scan = ``\ce e f par b v0 ts.
   LENGTH ts < dimword (:256) /\ ?i. i < LENGTH ts /\
   (!j. j < i ==> (^member_meta) ce e f par v0 ts j /\
@@ -292,8 +298,8 @@ Proof
      gvs[abi_decoder_header_def, type_memory_size_def, type_memory_size_fields_zip]) >>
   qexists_tac `args` >> asm_rewrite_tac[] >> MATCH_MP_TAC malformed_members_table >>
   asm_simp_tac bool_ss [LENGTH_MAP] >> conj_tac
-  >- (rpt strip_tac >> simp_tac bool_ss [LET_THM] >>
-      MATCH_MP_TAC (SIMP_RULE bool_ss [LET_THM] source_list_member_metadata) >>
+  >- (rpt gen_tac >> disch_tac >>
+      MATCH_MP_TAC (BETA_RULE source_list_member_metadata) >>
       fs[abi_decode_bytes_widths_def, EVERY_MAP, combinTheory.o_DEF]) >>
   pure_once_rewrite_tac [GSYM DE_MORGAN_THM] >>
   disch_then (strip_assume_tac o REWRITE_RULE [ADD_CLAUSES]) >>
@@ -351,12 +357,13 @@ Proof
 QED
 
 val dynamic_scan = ``\ce e f t cap p.
-  let dn = dec_number (Uint 256) (TAKE 32 (DROP p xs));
-      n = abi_head_word (DROP p xs)
-  in LENGTH xs < p+32 \/
-     (p+32 <= LENGTH xs /\ is_num_value dn /\ n < dimword (:256) /\
-      (cap < n \/ (n <= cap /\
-       (^member_scan) ce e f (ArrayT t (Dynamic cap)) (p+32) 32 (REPLICATE n t))))``;
+  LENGTH xs < p+32 \/
+  (p+32 <= LENGTH xs /\ is_num_value (dec_number (Uint 256) (TAKE 32 (DROP p xs))) /\
+   abi_head_word (DROP p xs) < dimword (:256) /\
+   (cap < abi_head_word (DROP p xs) \/
+    (abi_head_word (DROP p xs) <= cap /\
+     (^member_scan) ce e f (ArrayT t (Dynamic cap)) (p+32) 32
+       (REPLICATE (abi_head_word (DROP p xs)) t))))``;
 
 Theorem malformed_source_dynamic_scan[local]:
   abi_decoder_coherent ce env sf (ArrayT t (Dynamic cap)) tv /\
