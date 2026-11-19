@@ -70,8 +70,7 @@ Definition supported_declaration_body_def:
        supported_function_body tops vis args body /\
        (* omitted defaults are compiled into each caller's body *)
        EVERY (supported_default_expression tops) defaults /\
-       supported_pure_exprs tops defaults /\
-       supported_return_layouts ret body) /\
+       supported_pure_exprs tops defaults) /\
   supported_declaration_body tops (VariableDecl vis mut name ty slot) = T /\
   supported_declaration_body tops (HashMapDecl vis trans name kt vt slot) = T /\
   supported_declaration_body tops (StructDecl name fields) = T /\
@@ -104,8 +103,7 @@ Definition supported_deploy_declaration_def:
     case top of
       FunctionDecl Deploy mut nr rr name args defaults ret stmts =>
         EVERY (supported_value_type tops o SND) args /\
-        supported_function_body tops Deploy args stmts /\
-        supported_return_layouts ret stmts
+        supported_function_body tops Deploy args stmts
     | _ => T
 End
 
