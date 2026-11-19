@@ -6342,6 +6342,53 @@ Proof
   metis_tac[focus_layout_read_bytes]
 QED
 
+Theorem focus_opt_layout_cut_bound[local]:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+  code_layout_valid vs0 /\
+  unit.cu_context.ctx_entry = SOME nm /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+  fn_entry_label entryfn = SOME lbl /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+  unit_alloca_budget unit.cu_context +
+    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+  dead_wf D /\
+  V = vs0 with <|vs_gas_readings := L; vs_fmp := fmp; vs_initial_fmp := fmp|> /\
+  o1_safe_upto D lo n unit.cu_context V /\
+  n <= LENGTH (gas_events_blocks f unit.cu_context entryfn
+    (V with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)) /\
+  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
+    (init_ir_supply unit) = SOME (pre,t) /\
+  pre.cu_context.ctx_entry = SOME nm /\
+  run_callee_first rpolicy o1_fn_passes
+    (fcg_postorder (fcg_analyze pre.cu_context) nm)
+    (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)) t =
+    SOME (out.po_unit,t') /\
+  stage 0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context /\
+  stage 9 = out.po_unit.cu_context /\
+  (!k. k < 9 ==> ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+    (stage k) (stage (SUC k))) /\
+  (!k. k <= 9 ==> o1_ctx_shape (stage k) /\
+    EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  generate_context_plan out.po_unit.cu_context = SOME cpl /\
+  codegen_asm_entry_rel cpl prog vs0 ast /\
+  code_end_offset_ok (\ctx fn i s. raw_reachable V ctx fn i s /\ gas_cut n V s) (stage 2) ==>
+  code_end_offset_ok (\ctx fn i s. raw_reachable V ctx fn i s /\ gas_cut n V s) (stage 3)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all focus_layout_cut_inputs >> strip_tac >>
+  `o1_ctx_shape (stage 3)` by
+    (qpat_assum `!k. k <= 9 ==> _` (qspec_then `3` mp_tac) >> simp[]) >>
+  `ctx_has_dalloca (stage 2) ==> cpl.cp_max_static_eom <= w2n V.vs_initial_fmp` by simp[] >>
+  drule_all focus_layout_cut_rows >> disch_tac >>
+  simp[NoAsms, code_end_offset_ok_def] >> rpt gen_tac >> strip_tac >>
+  drule_all focus_concretize_cut_read >> strip_tac >>
+  qpat_x_assum `code_end_offset_ok _ (stage 2)` mp_tac >>
+  simp[NoAsms, code_end_offset_ok_def] >> metis_tac[]
+QED
+
 Theorem focus_source_cut_provider:
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
