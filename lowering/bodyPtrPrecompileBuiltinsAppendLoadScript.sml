@@ -54,6 +54,7 @@ Proof
      (DROP q1.vs_inst_idx bb.bb_instructions)` by gvs[Abbr `q1`, Abbr `i`] >>
   qpat_x_assum `step_inst_base i q1 = _` mp_tac >>
   simp[Abbr `i`] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q1` by simp[] >>
   drule_all clean_mload_path >> disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   gvs[Abbr `q1`] >>
   `eval_operand (Var y) t = SOME (mem_word_at (w2n wo) q.vs_memory)` by

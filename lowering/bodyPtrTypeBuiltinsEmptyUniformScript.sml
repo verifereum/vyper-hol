@@ -85,6 +85,7 @@ Theorem empty_zero_pair_uniform_certificate:
       tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
 Proof
   rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all empty_zero_pair_certificate >>
   disch_then (qspecl_then [`D`, `func`, `PG`, `id`] strip_assume_tac) >>
   drule_all empty_zero_pair_cursor_frame >> strip_tac >>

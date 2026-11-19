@@ -27,6 +27,7 @@ Proof
      simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
           fresh_id_def, emit_def, emitted_insts_def, DROP_APPEND1] >>
      strip_tac >> gvs[DROP_APPEND1]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all clean_word_store_trace_cursors >>
   disch_then (qspec_then `sa.cs_next_id` mp_tac) >>
   disch_then (mp_tac o SPEC_ALL) >>

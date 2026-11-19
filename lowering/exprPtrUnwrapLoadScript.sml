@@ -97,6 +97,7 @@ Proof
   drule_all unwrap_memory_word_input >> strip_tac >>
   `emit_op MLOAD [Var src] sm = (op,sb)` by
     gvs[unwrap_value_def, compile_ptr_load_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emit_mload_ptr_path >>
   disch_then (qspecl_then [`<| d_stor := K (K {}); d_trans := K (K {});
     d_imm := K {}; d_ret := K {} |>`, `PG`] strip_assume_tac) >>

@@ -126,12 +126,14 @@ Theorem copy_len_round_tail_ptr:
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sc)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `emit_op AND _ sa = _`
     (mp_then Any mp_tac emit_copy_len_binop_normalized_ptr) >>
   simp[eval_operand_def] >> disch_then drule_all >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG G tn _ s G1 tn1` >>
   rename1 `lookup_var middle t1 = SOME _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by simp[] >>
   qpat_assum `emit_op ADD _ sb = _`
     (mp_then Any mp_tac emit_copy_len_binop_normalized_ptr) >>
   `!tn. op_taint tn (Lit 32w) = {}` by simp[op_taint_def] >>
@@ -185,6 +187,7 @@ Theorem copy_len_arith_ptr:
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sd)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `emit_op ADD _ sa = _`
     (mp_then Any mp_tac emit_copy_len_binop_normalized_ptr) >>
   `!tn. op_taint tn (Lit 31w) = {}` by simp[op_taint_def] >>
@@ -244,6 +247,7 @@ Theorem copy_len_not_arith_ptr:
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa se)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `eval_operand (Lit 31w) s = SOME 31w /\ op_taint tn (Lit 31w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   drule_all emit_copy_len_not_normalized_ptr >>
@@ -305,7 +309,9 @@ Theorem copy_len_load_arith_ptr:
     sf.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sf /\
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sf)
 Proof
-  strip_tac >> drule_all emit_mload_clean_normalized_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all emit_mload_clean_normalized_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG G tn _ s G1 tn1` >>
   rename1 `lookup_var first t1 = SOME _` >>

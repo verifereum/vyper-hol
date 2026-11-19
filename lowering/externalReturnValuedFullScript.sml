@@ -583,7 +583,18 @@ Resume return_selected_valued_frag_full_core[buffered_post]:
        [`func` |-> `func`, `ce` |-> `ce`, `nkey` |-> `nkey`,
         `t` |-> `t`] valued_return_result_unlock) >> simp[]) >>
   pop_assum strip_assume_tac >>
-  qexists_tac `us` >> gvs[]
+  qexists_tac `us` >> conj_tac
+  >- (qpat_assum `nr /\ mut <> View ==> _` mp_tac >>
+      qpat_assum `unlock_if_nr cx nr (is_view_mut mut) _ = (INL (),us)` mp_tac >>
+      qpat_assum `cx.txn.target = tx.target` (fn target =>
+        qpat_assum `nkey = nkey_map tx.function_name` (fn key =>
+          simp[NoAsms, unlock_if_nr_def, vyperInterpreterTheory.is_view_mut_def,
+               target, key])) >>
+      Cases_on `nr` >> Cases_on `mut` >> simp[]) >>
+  qpat_assum `INL v = INL v'` (fn value =>
+    qpat_assum `external_call_result_rel H tops ret tx (INL v,_,_) (Halt buffered_ss)`
+      (mp_tac o REWRITE_RULE [value])) >>
+  simp[NoAsms]
 QED
 
 Resume return_selected_valued_frag_full_core[buffered_normalize]:

@@ -1,8 +1,10 @@
 (* Instruction-level probes for the top-level copy interface. *)
 Theory exprSimPtrTopLevelCopy
 Ancestors
+  wordLoadStorePtr[qualified,ignore_grammar]
   decoderGhostFramePtr fragGasSeqPtr typedCopyPtr ptrDiscipline bodyPtrDefs contextCodegenRel contextCodegenRelProps codegenRel memLocDefs ptrSafeRun words
   venomExecSemantics venomInst venomState finite_map pred_set list
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem toplevel_storage_load_taint:
   eval_operand src s = SOME a ==>
@@ -55,32 +57,9 @@ QED
 
 (* Unlike the existing clean-store boundary, storage copying permits a
    tainted value.  Only its destination address must be clean. *)
-Theorem toplevel_ptr_inst_ok_mstore:
-  !G tn p s ctx D fuel fn id v.
-  ptr_covers G tn p s 32 /\ ~ctx_has_dalloca ctx ==>
-  ptr_inst_ok D 0 fuel ctx fn G tn
-    (mk_inst id MSTORE [Var p; v] []) s
-Proof
-  rpt strip_tac >> gvs[ptr_covers_def] >>
-  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-       mk_inst_def, source_memory_write_ranges_def,
-       source_memory_read_ranges_def, fixed_source_write_range_def,
-       eval_operand_def] >>
-  conj_tac >-
-    (Cases_on `eval_operand v s` >> simp[] >>
-     rpt strip_tac >> gvs[] >> simp[mem_write_ops_def] >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
-                   combinTheory.K_THM, opcode_case_def] >>
-  simp[exec_write2_def, eval_operand_def, AllCaseEqs(), mstore_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem toplevel_ptr_inst_ok_load:
   (opc = SLOAD \/ opc = TLOAD \/ opc = DLOAD) /\
-  op_taint tn src = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn src = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc [src] [tmp]) s
 Proof
   rpt strip_tac >> gvs[] >>
@@ -96,7 +75,7 @@ QED
 
 Theorem toplevel_load_store_checks:
   (opc = SLOAD \/ opc = TLOAD \/ opc = DLOAD) /\
-  op_taint tn src = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn src = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ptr_covers G tn dst s 32 /\ tmp <> dst ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc [src] [tmp]) s /\
   ptr_inst_ok D 0 fuel ctx fn
@@ -104,8 +83,11 @@ Theorem toplevel_load_store_checks:
     (step_taint (mk_inst id opc [src] [tmp]) s (update_var tmp w s) tn)
     (mk_inst (id+1) MSTORE [Var dst; Var tmp] []) (update_var tmp w s)
 Proof
-  metis_tac[toplevel_ptr_inst_ok_load, toplevel_ptr_inst_ok_mstore,
-            toplevel_load_preserves_destination]
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  conj_tac >- metis_tac[toplevel_ptr_inst_ok_load] >>
+  irule wordLoadStorePtrTheory.ifexp_materialize_mstore_check >>
+  simp[exprPtrUnwrapFramesTheory.copy_allocas_update] >>
+  metis_tac[toplevel_load_preserves_destination]
 QED
 
 (* A checked two-instruction sequence, with the actual index-adjusted
@@ -113,7 +95,7 @@ QED
 Theorem toplevel_load_store_seq_ptr:
   !opc tn src ctx G dst s tmp i j u w PG G1 tn1 u1 t Gf tnf D fn.
   (opc = SLOAD \/ opc = TLOAD \/ opc = DLOAD) /\
-  op_taint tn src = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn src = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ptr_covers G tn dst s 32 /\ tmp <> dst /\
   i = mk_inst id opc [src] [tmp] /\
   j = mk_inst (id+1) MSTORE [Var dst; Var tmp] [] /\
@@ -131,15 +113,18 @@ Proof
     gvs[ptr_covers_def, lookup_var_def] >>
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     metis_tac[toplevel_ptr_inst_ok_load] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u1` by
+    simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `ptr_inst_ok D 0 0 ctx fn G1 tn1 j u1` by
-    metis_tac[toplevel_ptr_inst_ok_mstore] >>
+    metis_tac[wordLoadStorePtrTheory.ifexp_materialize_mstore_check] >>
   gvs[] >> simp[inst_seq_ptr_def]
 QED
 
 Theorem toplevel_load_store_counted_ptr:
   !opc tn src ctx G dst s tmp i j u w PG G1 tn1 u1 t Gf tnf D fn bb r.
   (opc = SLOAD \/ opc = TLOAD \/ opc = DLOAD) /\
-  op_taint tn src = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn src = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ptr_covers G tn dst s 32 /\ tmp <> dst /\
   i = mk_inst id opc [src] [tmp] /\
   j = mk_inst (id+1) MSTORE [Var dst; Var tmp] [] /\

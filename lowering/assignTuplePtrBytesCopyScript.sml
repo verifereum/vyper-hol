@@ -29,6 +29,7 @@ Theorem emit_mcopy_normalized_ptr:
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `lookup_var src s = SOME a`
     (mp_then (Pat `lookup_var src s = SOME a`) mp_tac mcopy_operand_seq_ptr) >>
   disch_then drule_all >>

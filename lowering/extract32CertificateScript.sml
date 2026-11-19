@@ -137,6 +137,7 @@ Proof
   `lookup_var addr s1 = SOME (a+b)` by simp[Abbr `s1`, lookup_var_update_var] >>
   `!i. w2n (a+b) <= i /\ i < w2n (a+b)+32 ==> i NOTIN tn1.t_mem` by
     simp[Abbr `tn1`, w2n_add_2] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all assign_base_bytes_mload_seq >>
   disch_then (qspecl_then [`D`,`fn`,`PG`,`id+1`,`out`] strip_assume_tac) >>
   qexistsl_tac [`G'`,`tn'`,`u`] >> simp[] >>

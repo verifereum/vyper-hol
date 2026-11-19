@@ -23,10 +23,8 @@ Proof
      (s with vs_inst_idx := k) =
    OK (update_var out (a+b) (s with vs_inst_idx := k))` by
     simp[storage_copy_add_step] >>
-  simp[inst_seq_ptr_def] >> conj_tac
+  simp[inst_seq_ptr_def, step_prov_def, out_prov_def] >> conj_tac
   >- (irule append_scalar_inst_check >> simp[update_var_def] >> metis_tac[]) >>
-  conj_tac
-  >- simp[step_prov_def, out_prov_def] >>
   sym_tac >> irule scalar_add_taint >> simp[update_var_def]
 QED
 

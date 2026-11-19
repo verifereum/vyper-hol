@@ -24,7 +24,9 @@ Theorem point_word_read_trace:
       lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
       op_taint tn' (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >> drule_all point_offset_trace_cursors >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all point_offset_trace_cursors >>
   disch_then (qspec_then `src` mp_tac) >>
   disch_then (qspec_then `id` mp_tac) >>
   disch_then (mp_tac o SPEC_ALL) >>
@@ -32,6 +34,7 @@ Proof
     (qx_choose_then `tn1` strip_assume_tac))) >>
   `!i. w2n (a + n2w off) <= i /\ i < w2n (a + n2w off) + 32 ==>
       i NOTIN tn1.t_mem` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all clean_word_load_trace_cursors >>
   disch_then (qspec_then `tmp` mp_tac) >>
   disch_then (qspec_then `id+1` mp_tac) >>
@@ -78,7 +81,9 @@ Theorem offset_word_store_trace:
       lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
       op_taint tn' (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >> drule_all point_offset_trace_cursors >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all point_offset_trace_cursors >>
   disch_then (qspec_then `dst` mp_tac) >>
   disch_then (qspec_then `id` mp_tac) >>
   disch_then (mp_tac o SPEC_ALL) >>
@@ -91,6 +96,7 @@ Proof
      strip_tac >> gvs[]) >>
   `eval_operand v s1 = SOME w /\ op_taint tn1 v = {}` by
     (Cases_on `v` >> gvs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all clean_word_store_trace_cursors >>
   disch_then (qspec_then `id+1` mp_tac) >>
   disch_then (mp_tac o SPEC_ALL) >>

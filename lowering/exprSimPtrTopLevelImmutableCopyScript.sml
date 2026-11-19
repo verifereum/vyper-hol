@@ -328,7 +328,7 @@ Proof
       `~is_terminator (mk_inst sa.cs_next_id MSTORE [Var dst;value] []).inst_opcode` by
         simp[mk_inst_def, is_terminator_def] >>
       simp[step_inst_inst_idx_indep, exec_result_map_def] >>
-      gen_tac >> irule toplevel_ptr_inst_ok_mstore >> simp[]) >>
+      gen_tac >> irule wordLoadStorePtrTheory.ifexp_materialize_mstore_check >> simp[]) >>
   simp[immutable_copy_ghost_frame_def, op_taint_def]
 QED
 

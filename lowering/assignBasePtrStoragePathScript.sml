@@ -212,6 +212,7 @@ Theorem assign_base_storage_load_counted:
          FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
 Proof
   rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all mload_counted_path >>
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
   `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>

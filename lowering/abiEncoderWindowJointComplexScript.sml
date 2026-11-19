@@ -2261,6 +2261,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_prefix]:
      qpat_assum `dp=Var cursor_var` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp_tac bool_ss [markerTheory.Abbrev_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp us` by simp[] >>
   mp_tac (Q.INST
     [`dst` |-> `dst_var`,`dp` |-> `cursor_var`,
      `ho` |-> `head_offset`,`off` |-> `tail_offset`,`bound` |-> `encoded_size`,
@@ -2890,6 +2891,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_prep
      qpat_assum `window_alloca_growth dyn_actual body_actual`
        (mp_tac o CONJUNCT1 o REWRITE_RULE [window_alloca_growth_def]) >>
      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp body_actual` by simp[] >>
   mp_tac (Q.INST
     [`head` |-> `hp`,`dp` |-> `cursor_var`,
      `offset` |-> `FST (SND (ops : operand # operand # operand))`,`len` |-> `body_len`,

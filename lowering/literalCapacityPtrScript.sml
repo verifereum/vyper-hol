@@ -202,7 +202,7 @@ Resume literal_capacity_bytelike_ptr_run[assemble]:
       asm_simp_tac bool_ss [] >> simp[mk_inst_def, is_terminator_def]) >>
   conj_tac
   >- (PURE_ONCE_REWRITE_TAC[inst_seq_ptr_def] >>
-      asm_simp_tac bool_ss [] >> simp[literal_alloca_ptr_inst_ok]) >>
+      asm_simp_tac bool_ss [] >> simp[fragExecPtrTheory.ptr_inst_ok_alloca]) >>
   conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
   conj_tac >- (qpat_x_assum `v with <|vs_vars := _; vs_memory := _|> = u` mp_tac >> simp[]) >>
   conj_tac >- metis_tac[ADD_ASSOC, ADD_COMM] >>

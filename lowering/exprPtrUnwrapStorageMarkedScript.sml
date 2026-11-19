@@ -4,10 +4,11 @@ Ancestors
   exprPtrUnwrapStorageRead exprPtrUnwrapStorageLayout exprPtrUnwrapTypedSize
   exprPtrUnwrapStorageSource bodyPtrDefs loweringPosts exprSimProps
   exprSimFieldLayout exprSimUnwrap compileEnv context words arithmetic valueEncodingProps
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem unwrap_storage_marked_read_ptr:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
-  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   (!H. P H ==>
      vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
      ghost_inv H ret cenv cx ee G tn s) /\ P H0 /\
@@ -44,6 +45,10 @@ Proof
     metis_tac[post_value_type_lowered] >>
   `vv_post H0 ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s` by
     metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o MATCH_MP (iffLR vv_post_def))) >>
   `t = expr_type e` by
     (qpat_x_assum `!H. P H ==> _` kall_tac >>
      qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>

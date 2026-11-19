@@ -41,6 +41,7 @@ Proof
   strip_tac >> rpt gen_tac >>
   `ptr_covers G tn src s 32` by
     (fs[ptr_covers_def] >> metis_tac[arithmeticTheory.LE_ADD]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emit_mload_ptr_path >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   qexistsl_tac [`out`,`G'`,`tn'`] >> gvs[] >>

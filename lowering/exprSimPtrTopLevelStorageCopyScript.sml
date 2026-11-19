@@ -3,7 +3,7 @@ Theory exprSimPtrTopLevelStorageCopy
 Ancestors
   exprSimPtrProps fragGasSeqAbort fragGasSeqPtr codegenRel contextCodegenRel
   exprSimStorageCopy exprSimPtrTopLevelCopy typedCopyPtr decoderGhostFramePtr bodyPtrDefs
-  fragGasPathPtr ptrDiscipline ptrSafeRun gasCount venomExecSemantics venomState venomInst
+  fragGasPathPtr ghostPcTransportPtr ptrDiscipline ptrSafeRun gasCount venomExecSemantics venomState venomInst
   words finite_map pred_set list
 
 Theorem toplevel_counter_increment_ghost:
@@ -559,7 +559,7 @@ Proof
      simp[] >> qexists_tac `n` >> gvs[] >> decide_tac) >>
   `ptr_covers G2 tn2 dv v1 32` by gvs[ptr_covers_def, lookup_var_def] >>
   `ptr_inst_ok D 0 0 ctx fn G2 tn2 z v1` by
-    (gvs[] >> irule toplevel_ptr_inst_ok_mstore >> simp[]) >>
+    (gvs[] >> irule wordLoadStorePtrTheory.ifexp_materialize_mstore_check >> simp[]) >>
   gvs[] >> simp[fragGasSeqPtrTheory.inst_seq_ptr_def]
 QED
 
@@ -761,7 +761,7 @@ Proof
   `ptr_covers G4 tn4 dv x1 32` by
     gvs[Abbr `x1`, ptr_covers_def, lookup_var_def] >>
   `ptr_inst_ok D 0 0 ctx fn G4 tn4 q x1` by
-    (simp[Abbr `q`] >> irule toplevel_ptr_inst_ok_mstore >> simp[]) >>
+    (simp[Abbr `q`] >> irule wordLoadStorePtrTheory.ifexp_materialize_mstore_check >> simp[]) >>
   qabbrev_tac `G5 = step_prov PG G4 q y` >>
   qabbrev_tac `tn5 = step_taint q x1 y tn4` >>
   `op_taint tn5 (Var cv) = {}` by
@@ -1355,6 +1355,8 @@ Proof
       sload_def, tload_def, contract_storage_def, contract_transient_def]) >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[inst_seq_ptr_def] >> strip_tac >> gvs[] >>
+  `eval_operand (Var sv) u = SOME (a+c)` by
+    simp[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `eval_operand (Var sv) u1 = SOME (a+c)` by
     simp[Abbr `u1`, Abbr `u`, eval_operand_def, lookup_var_def,
          update_var_def, FLOOKUP_UPDATE] >>
@@ -1433,7 +1435,9 @@ Proof
              lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> gvs[lookup_var_def]) >>
      simp[] >> decide_tac) >>
   simp[Abbr `h`] >>
-  drule_all toplevel_copy_mstore_taint >> simp[]
+  drule_all toplevel_copy_mstore_taint >>
+  disch_then (qspec_then `step_taint j u v (step_taint i s u tn)` mp_tac) >>
+  fs[Abbr `v1`, Abbr `u1`, step_taint_inst_idx_left]
 QED
 
 Theorem toplevel_copy_source_prefix_run:

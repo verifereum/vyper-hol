@@ -766,6 +766,7 @@ Theorem reason_encoder_size_slot_init_ptr:
     (!p k. ptr_covers G1 tn1 p t k ==> ptr_covers G1 tnf p sf k)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1
     (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
     (drule_all reason_encoder_alloc_path_ptr >> simp[]) >>

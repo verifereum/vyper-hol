@@ -85,7 +85,9 @@ Theorem emitted_allocation_frames:
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient
 Proof
-  strip_tac >> drule_all emitted_allocation_checked_cursors >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all emitted_allocation_checked_cursors >>
   disch_then (mp_tac o SPEC_ALL) >>
   disch_then (qx_choose_then `out` (qx_choose_then `Gf`
     (qx_choose_then `tnf` strip_assume_tac))) >>

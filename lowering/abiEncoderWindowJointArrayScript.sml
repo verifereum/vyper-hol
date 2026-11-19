@@ -2835,7 +2835,8 @@ Proof
            qpat_assum `op_taint childtn (Var a0) = {}` mp_tac >>
            qpat_assum `alloca_inv child_s` mp_tac >>
            qpat_assum `alloca_room ctx func child_s` mp_tac >>
-           qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+           `ctx_has_dalloca ctx ==> allocas_below_fmp child_s` by simp[] >>
+           qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp child_s` mp_tac >>
            qpat_assum `allocas_from lo child_s` mp_tac >>
            qpat_assum `lo <= child_s.vs_alloca_next` mp_tac >>
            qpat_assum `Abbrev (bbb = _)` mp_tac >>
@@ -4168,7 +4169,8 @@ Proof
         qpat_assum `regions_disjoint (d+32+k*asz,32) (bd,32)` mp_tac >>
         qpat_assum `alloca_inv child_s` mp_tac >>
         qpat_assum `alloca_room ctx func child_s` mp_tac >>
-        qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+        `ctx_has_dalloca ctx ==> allocas_below_fmp child_s` by simp[] >>
+        qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp child_s` mp_tac >>
         qpat_assum `allocas_from lo child_s` mp_tac >>
         qpat_assum `lo <= child_s.vs_alloca_next` mp_tac >>
         qpat_assum `~child_s.vs_halted` mp_tac >>
@@ -4600,7 +4602,8 @@ Proof
            qpat_assum `op_taint bodytn (Var a0) = {}` mp_tac >>
            qpat_assum `alloca_inv body_s` mp_tac >>
            qpat_assum `alloca_room ctx func body_s` mp_tac >>
-           qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+           `ctx_has_dalloca ctx ==> allocas_below_fmp body_s` by simp[] >>
+           qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp body_s` mp_tac >>
            qpat_assum `allocas_from lo body_s` mp_tac >>
            qpat_assum `lo <= body_s.vs_alloca_next` mp_tac >>
            qpat_assum `Abbrev (bbb = _)` mp_tac >>
