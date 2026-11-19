@@ -12,7 +12,7 @@ Ancestors
 Theorem immutable_load_checked_uniform:
   eval_operand op s = SOME a /\ op_taint tn op = {} /\
   (ctor ==> ?p. op = Var p /\ ptr_covers G tn p s 32) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !k. inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id (if ctor then ILOAD else DLOAD) [op] [out]]
     (s with vs_inst_idx := k)
@@ -20,7 +20,10 @@ Theorem immutable_load_checked_uniform:
     (tn with t_var := tn.t_var |+
       (out,if ctor then mem_word_taint tn.t_mem (w2n a) else {}))
 Proof
-  rpt strip_tac >> irule immutable_load_checked >> simp[] >>
+  rpt strip_tac >>
+  `(allocas_below_fmp (s with vs_inst_idx := k) <=> allocas_below_fmp s)` by
+    simp[allocas_below_fmp_def] >>
+  irule immutable_load_checked >> simp[] >>
   Cases_on `ctor`
   >- (gvs[] >>
       irule (SRULE [] (Q.INST [`ctor` |-> `T`] immutable_load_access)) >>
@@ -33,7 +36,7 @@ Theorem emit_immutable_load_checked:
   emit_op (if ctor then ILOAD else DLOAD) [op] sa = (r,sb) /\
   eval_operand op s = SOME a /\ op_taint tn op = {} /\
   (ctor ==> ?p. op = Var p /\ ptr_covers G tn p s 32) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?out tf.
     r = Var out /\
     copy_runtime_frame sa s sb
@@ -66,7 +69,7 @@ Theorem compile_imm_load_word_direct_checked:
   (ctor ==> imm = NONE) /\
   eval_operand op s = SOME a /\ op_taint tn op = {} /\
   (ctor ==> ?p. op = Var p /\ ptr_covers G tn p s 32) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?out tf.
     r = Var out /\
     copy_runtime_frame sa s sb
@@ -93,7 +96,7 @@ Theorem emit_mstore_payload_checked_uniform:
   emit_void MSTORE [Var p;v] sa = ((),sb) /\
   copy_old_operand sa (Var p) /\ copy_old_operand sa v /\
   eval_operand (Var p) s = SOME addr /\ eval_operand v s = SOME value /\
-  ptr_covers G tn p s 32 /\ ~ctx_has_dalloca ctx ==>
+  ptr_covers G tn p s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   copy_runtime_frame sa s sb (mstore (w2n addr) value s) /\
   (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
     (s with vs_inst_idx := k) G
@@ -108,6 +111,8 @@ Proof
       (s with vs_inst_idx := k) =
     OK (mstore (w2n addr) value (s with vs_inst_idx := k))` by
     simp[storage_copy_store_step] >>
+  `(allocas_below_fmp (s with vs_inst_idx := k) <=> allocas_below_fmp s)` by
+    simp[allocas_below_fmp_def] >>
   simp[inst_seq_ptr_def] >> conj_tac
   >- (irule wordLoadStorePtrTheory.ifexp_materialize_mstore_check >> simp[]) >>
   `mstore (w2n addr) value (s with vs_inst_idx := k) =

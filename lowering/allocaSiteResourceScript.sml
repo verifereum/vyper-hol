@@ -2,7 +2,7 @@
 Theory allocaSiteResource
 Ancestors
   exprLoweringProps localPtrsProps venomExecSemantics venomMemDefs venomState
-  venomInst finite_map words arithmetic
+  venomInst finite_map words arithmetic ptrDiscipline
 
 Theorem alloca_site_fresh:
   alloca_room ctx func s /\ alloca_inv s /\
@@ -170,4 +170,25 @@ Theorem alloca_site32_reentry:
 Proof
   strip_tac >> drule_all alloca_site_reuse >>
   disch_then (qspec_then `32w` strip_assume_tac) >> simp[]
+QED
+
+Theorem alloca_site_below_fmp:
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_operands = [Lit n] /\ exec_alloca inst s n = OK t /\
+  alloca_inv t /\ allocas_below_fmp s /\
+  s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp ==>
+  allocas_below_fmp t
+Proof
+  strip_tac >>
+  `t.vs_alloca_next + pending_alloca_size func t <=
+   s.vs_alloca_next + pending_alloca_size func s` by
+    (drule_all exec_alloca_static_charge >> simp[]) >>
+  `t.vs_initial_fmp = s.vs_initial_fmp /\ t.vs_fmp = s.vs_fmp` by
+    (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+     simp[exec_alloca_def, AllCaseEqs(), LET_THM] >> rw[] >> simp[update_var_def]) >>
+  qpat_x_assum `allocas_below_fmp s`
+    (strip_assume_tac o REWRITE_RULE [allocas_below_fmp_def]) >>
+  qpat_x_assum `alloca_inv t`
+    (strip_assume_tac o REWRITE_RULE [alloca_inv_def, alloca_next_valid_def]) >>
+  simp[allocas_below_fmp_def] >> rpt strip_tac >> res_tac >> decide_tac
 QED

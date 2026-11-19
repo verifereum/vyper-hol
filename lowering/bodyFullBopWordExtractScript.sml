@@ -19,7 +19,7 @@ Theorem bop_word_suffix_extract:
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_has_code sa sb func /\
   fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   gas_admissible (bind (eval_expr cx (Builtin ann (Bop bop) [e1;e2])) (read_result cx))
@@ -195,7 +195,7 @@ Theorem bop_bytes_suffix_extract:
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_has_code sa sb func /\
   fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   gas_admissible (bind (eval_expr cx (Builtin ann (Bop bop) [e1;e2])) (read_result cx))
