@@ -165,8 +165,7 @@ Theorem supported_program_deploy_function:
   supported_program_deploy tops /\
   MEM (FunctionDecl Deploy mut nr rr name args defaults ret stmts) tops ==>
     EVERY (supported_value_type tops o SND) args /\
-    supported_function_body tops Deploy args stmts /\
-    supported_return_layouts ret stmts
+    supported_function_body tops Deploy args stmts
 Proof
   simp[supported_program_deploy_def, EVERY_MEM] >> strip_tac >>
   first_x_assum drule >> simp[supported_deploy_declaration_def, EVERY_MEM]

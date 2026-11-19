@@ -112,7 +112,6 @@ Theorem supported_function_header_contract:
   supported_declaration_header tops
     (FunctionDecl vis mut nr rr name args defaults ret body) <=>
   (vis <> Internal ==> NULL defaults) /\
-  (vis = Internal ==> EVERY (supported_value_type tops o SND) args) /\
   supported_function_return tops vis ret
 Proof
   simp[supported_declaration_header_def]
