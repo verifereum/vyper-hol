@@ -298,5 +298,21 @@ Theorem codegen_gas_sufficient_asm_opt_own:
         ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all codegen_gas_surplus_asm_opt_own >>
+  disch_then (qspecl_then [`fuel`, `M`, `0`] strip_assume_tac) >>
+  qexists_tac `g` >> rpt strip_tac >>
+  Cases_on `run_call (add_frame_gas g' es)` >- fs[run_call_eq_tr] >>
+  rename1 `run_call _ = SOME res` >> PairCases_on `res` >>
+  qexistsl_tac [`res0`, `res1`] >> simp[] >>
+  rpt strip_tac >> gvs[frame_inst_raises_def] >>
+  CCONTR_TAC >>
+  `wf_state (add_frame_gas g' es) /\
+   g' <= frame_gas_left (add_frame_gas g' es)` by
+    metis_tac[add_frame_gas_wf_state, wf_state_frame_gas_left] >>
+  `LENGTH s.contexts = LENGTH (add_frame_gas g' es).contexts` by
+    fs[frame_inst_at_def] >>
+  first_x_assum (qspecl_then [`g'`, `Inv`, `vs`, `es`, `s`, `op`, `s'`]
+                   mp_tac) >>
+  metis_tac[]
 QED
