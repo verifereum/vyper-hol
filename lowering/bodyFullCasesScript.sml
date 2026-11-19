@@ -177,7 +177,7 @@ Proof
   qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> gvs[]
 QED
 
-(* Admitted: the joint twin of body_assign_tuple_case_ptr_at (bodyPtrAssignCases). *)
+(* Combine expression evaluation with assignment to a tuple target. *)
 Theorem body_assign_tuple_case_full:
   !cx gs e.
     (!s'' tv t s'3' v t'.
