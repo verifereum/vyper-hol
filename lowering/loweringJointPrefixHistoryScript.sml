@@ -4,7 +4,7 @@ Ancestors
   loweringOriginHistory loweringBudgetRunHistory loweringTerminalHistory
   loweringCallBudgetHistory fragGasOriginPtr fragGasFocus fragExec
   typedCopyArrayPtr
-  entryReachBodyFmp vyperLoweringCorrect vyperCompiler
+  vyperLoweringCorrect vyperCompiler
   ptrSafeRun ptrDiscipline memSafeRun gasEvents
   contextCodegenRel contextCodegenRelProps venomExecSemantics venomExecProofs
   venomInstProofs venomInst venomState finite_map list arithmetic
@@ -43,7 +43,6 @@ Theorem lower_vyper_runtime_unit_recorder_shape:
 Proof
   rpt gen_tac >> strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
-  `~ctx_has_dalloca unit.cu_context` by metis_tac[entry_runtime_no_dalloca] >>
   rpt gen_tac >> strip_tac >>
   rename1 `MEM func unit.cu_context.ctx_functions` >> conj_tac
   >- fs[lowering_context_ok_def, EVERY_MEM] >>
@@ -51,8 +50,7 @@ Proof
   qsuff_tac `EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts func)`
   >- (rewrite_tac[fn_insts_def, EVERY_fn_insts_blocks] >>
       simp[EVERY_MEM] >> metis_tac[]) >>
-  fs[lowering_context_ok_def, ptr_ok_check_def, ctx_has_dalloca_def,
-     EVERY_MEM, EXISTS_MEM] >> metis_tac[]
+  fs[lowering_context_ok_def, ptr_ok_check_def, EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem lower_vyper_runtime_unit_focus_certificate:
