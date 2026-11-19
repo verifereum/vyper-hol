@@ -69,7 +69,7 @@ Theorem raw_revert_tail_pointer_checks:
   w2n p + 32 < dimword(:256) /\ n < dimword(:256) /\
   mload (w2n p) t = n2w n /\ op_taint tn (Var src) = {} /\
   (!i. w2n p <= i /\ i < w2n p + 32 ==> i NOTIN tn.t_mem) /\
-  allocas_from lo t /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   i1 = mk_inst id MLOAD [Var src] [len] /\
   i2 = mk_inst (id+1) ADD [Var src; Lit 32w] [start] /\
   i3 = mk_inst (id+2) REVERT [Var start; Var len] [] /\
@@ -99,7 +99,7 @@ Proof
       asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors,
         instruction_accfupds, opcode_case_def, combinTheory.K_THM] >>
       gvs[exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
-        FLOOKUP_UPDATE, op_taint_def, allocas_from_def] >>
+        FLOOKUP_UPDATE, op_taint_def, allocas_from_def, allocas_below_fmp_def] >>
       rpt strip_tac >> gvs[] >>
       Cases_on `op = Var src` >> gvs[] >>
       Cases_on `op = Lit 32w` >> gvs[] >> metis_tac[])
@@ -114,11 +114,15 @@ Proof
       asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors,
         instruction_accfupds, opcode_case_def, combinTheory.K_THM] >>
       simp[FLOOKUP_DRESTRICT, eval_operand_def, lookup_var_def,
-        FLOOKUP_UPDATE, allocas_from_def] >>
+        FLOOKUP_UPDATE, allocas_from_def, allocas_below_fmp_def] >>
       conj_tac
       >- (rpt strip_tac >> `w2n (p + 32w) = w2n p + 32` by
             simp[wordsTheory.w2n_add_2] >> simp[] >> decide_tac) >>
-      reverse conj_tac >- metis_tac[allocas_from_def] >>
+      reverse conj_tac
+      >- (qpat_x_assum `allocas_from lo t` mp_tac >>
+          qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+          simp[allocas_from_def, allocas_below_fmp_def, IMP_CONJ_THM] >>
+          tautLib.TAUT_TAC) >>
       simp[step_taint_def, op_taint_def, set_var_taint_def,
         out_taint_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
       rpt strip_tac >> Cases_on `op = Var start` >> gvs[] >>
@@ -183,7 +187,7 @@ Theorem raw_revert_tail_joint:
   w2n p + 32 + n <= t.vs_alloca_next /\
   mload (w2n p) t = n2w n /\ op_taint tn (Var src) = {} /\
   (!j. w2n p <= j /\ j < w2n p + 32 ==> j NOTIN tn.t_mem) /\
-  allocas_from lo t /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\ ~t.vs_halted /\
   get_instruction bb t.vs_inst_idx = SOME i1 /\
   get_instruction bb (SUC t.vs_inst_idx) = SOME i2 /\

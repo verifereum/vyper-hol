@@ -177,6 +177,7 @@ Proof
   conj_tac
   >- (gen_tac >> irule inst_seq_ptr_lower_bound_transport >>
       simp[mk_inst_def] >> qexists_tac `0` >> simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_all iszero_pair_certificate >>
       disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >> gvs[mk_inst_def]) >>
   simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>

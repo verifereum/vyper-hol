@@ -26,7 +26,7 @@ Proof
 QED
 
 Theorem iszero_pair_certificate:
-  op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst id ISZERO [x] [a];
                 mk_inst (id+1) ISZERO [Var a] [b]] s = OK t ==>
   ?H th.
@@ -57,7 +57,7 @@ Proof
      gvs[eval_operand_def, lookup_var_def, update_var_def]) >>
   conj_tac
   >- (irule iszero_ptr_inst_ok >> simp[allocas_from_def, op_taint_def, FLOOKUP_UPDATE] >>
-      goal_assum (drule_at Any)) >>
+      fs[allocas_below_fmp_def, update_var_def] >> strip_tac >> fs[]) >>
   simp[] >>
   drule iszero_ghost_update >> strip_tac >> simp[] >>
   qpat_assum `step_inst_base (mk_inst id _ _ _) _ = _`
@@ -67,7 +67,7 @@ QED
 
 Theorem convert_bool_fixed_certificate:
   compile_type_convert x ConvToBool sa = (out,sb) /\
-  op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?H th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     op_prov H out = NONE /\ op_taint th out = {} /\
@@ -111,7 +111,7 @@ QED
 
 Theorem convert_bool_counted_certificate:
   compile_type_convert x ConvToBool sa = (out,sb) /\
-  op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
