@@ -15,7 +15,13 @@ Ancestors lowerDloadSafetyKernel[qualified,ignore_grammar]
   finite_map list rich_list words arithmetic
   o1CodeEndSourceCutTransport o1ComposeSupport o1PipelineCompose simplifyCfgDefs
   makeSsaDefs o1ContractSimplifyCfg
-  o1CodeEndCfgRounds o1CodeEndCfgCollapse simplifyCfgStaticInterface simplifyCfgShapeCore simplifyCfgProof simplifyCfgSimTools gasFocusFmpCutEntryStatic gasFocusFmpStagePin o1LowerDloadSourceEntry
+  o1LabelFlowLateSimplify o1LabelFlowSimplifyPreservation o1LabelFlowSimplifyChain
+  o1LabelFlowSimplifyJump o1LabelFlowRetention simplifyCfgInvariant simplifyCfgFixupShape
+  simplifyCfgWfssa simplifyCfgRoundSemantics simplifyCfgStaticInterface
+  simplifyCfgShapeCore simplifyCfgPhiRepair o1ContractCfgNorm simplifyCfgControl
+  simplifyCfgShape simplifyCfgBypassDataflow venomWfProps
+  o1CodeEndCfgRounds o1CodeEndCfgCollapse simplifyCfgProof simplifyCfgSimTools
+  gasFocusFmpCutEntryStatic gasFocusFmpStagePin o1LowerDloadSourceEntry
   fmpStageCoverInv fmpStageCoverMem fmpStageRel fmpLowerDefs fmpStepLayout
   fmpStepStructural fmpAnalysisProps fmpStageFmpStepsEntryLayout
   ctxLookupAgreeHelpers gasFocusFmpCutResidual concretizeLayoutCutSafe
@@ -36,17 +42,28 @@ Ancestors lowerDloadSafetyKernel[qualified,ignore_grammar]
   lowerDloadSafetyImmutableWriteEffects lowerDloadSafetyWriteAssembly
   lowerDloadSafetyTaintWidth lowerDloadSafetyAllocBounds lowerDloadDynHeadroom
   lowerDloadFrontier lowerDloadSafetyUpdates lowerDloadSafetyValues
-  memLocDefs pointerConfinedDefs venomEffects gasCount lowerDloadSafetyKernel
-  lowerDloadOracleCallAssembly
-  fmpStepPredicateTransport fmpStepRewrite fmpStepRestrictionClosure fmpStepBridge concretizeAllocationFree o1MakeSsaStructuralShape o1ContractMakeSsaReplay simplifyCfgInvariant o1ContractSue singleUseExpansionSupplySim callLayoutDefs gasFocusSourceC2Prefix gasFocusLowerDloadCut o1ContractLowerDloadStage lowerDloadMakeSsaInput lowerDloadSupplyProofs contextPlanLayoutProps codegenEntrySim gasFocusConcretizeEndpointCut gasFocusConcretizeHistoricalCut
+  memLocDefs pointerConfinedDefs venomEffects gasCount lowerDloadOracleCallAssembly
+  fmpStepPredicateTransport fmpStepRewrite fmpStepRestrictionClosure fmpStepBridge
+  concretizeAllocationFree o1MakeSsaStructuralShape o1ContractMakeSsaReplay
+  simplifyCfgInvariant o1ContractSue singleUseExpansionSupplySim callLayoutDefs
+  fmpStageCoverMemAssemble fmpStageOpBase fmpStepRewriteOrigin o1LabelFlowMiddle
+  o1CodeEndLowerLifetime o1CodeEndConcretizeLifetime fmpStepOpaque fmpLowerProps
+  fmpStageControlWalk fmpLowerIndexedProps frameViewFacts o1LowerDloadRelocationKernel
+  fmpStepSupply fmpStepRetpcShape venomFnInstsProofs venomFnScheduleRunner
+  venomFnScheduleRunnerProps
+  gasFocusSourceC2Prefix gasFocusLowerDloadCut o1ContractLowerDloadStage lowerDloadMakeSsaInput lowerDloadSupplyProofs contextPlanLayoutProps codegenEntrySim gasFocusConcretizeEndpointCut gasFocusConcretizeHistoricalCut
   o1CodeEndConcretizeRead o1LabelFlowMiddleConcretize o1LabelFlowMiddleFmp
   concretizePtrChronologicalHistory concretizePtrPairedPrefix
   concretizePtrStructuralTranscript concretizePtrStructuralTrace concretizePtrSourceOwnership
   concretizePtrParamSupport concretizePtrRequestHistory
   concretizePtrOperationalOpcodes concretizePtrChronologicalDemand
-  lowerDloadReachability fmpStageCoverMemAssemble fmpStageOpBase fmpStepRewriteOrigin o1LabelFlowMiddle o1CodeEndLowerLifetime o1CodeEndConcretizeLifetime fmpStepOpaque fmpLowerProps fmpStageControlWalk fmpLowerIndexedProps lowerDloadRevertSuffix frameViewFacts o1LowerDloadRelocationKernel concretizeMemLocDefs
+  lowerDloadReachability lowerDloadRevertSuffix concretizeMemLocDefs
   venomExecProofs pred_set passSharedDefs concretizeStepStructure
-  concretizePtrPairedFields unitLabelMapIdentity stepWriteFootprintBase fmpStepSupply fmpStepRetpcShape venomFnInstsProofs venomFnScheduleRunner venomFnScheduleRunnerProps
+  o1FrameLockstep o1ContractMakeSsa o1CodeEndSsaProtectedCleanup
+  o1CodeEndSsaTraceOwnership o1CodeEndSsaRead o1LabelFlowMiddleSsa
+  o1MakeSsaOwnership o1MakeSsaVisitTrace makeSsaCurrentLockstep
+  makeSsaCurrentWfSsa makeSsaCurrentTreeTrace pair stateFrame
+  concretizePtrPairedFields unitLabelMapIdentity stepWriteFootprintBase
   concretizePtrStagePairedBridge concretizePtrStagePlacements concretizePtrImportOrigins
   concretizeStageShape venomPassDispatcher concretizePtrOpaqueRetpc
 
@@ -156,6 +173,173 @@ Proof
       qpat_x_assum `!i. _ ==> _ /\ _` (drule_then strip_assume_tac) >>
       fs[fn_labels_def] >> metis_tac[concretize_positions_labels, fn_labels_def, EL_MEM]) >>
   simp[ptr_paired_code_def, Abbr `R`] >> metis_tac[]
+QED
+
+(* The SSA read certificate retains the actual source owner and its gas suffix. *)
+Theorem focus_opt_ssa_runtime_owner[local]:
+  current_wf_phi_context supply f renamed supply' A H events /\
+  make_ssa_input_ok f /\ fn_entry_label f = SOME entry /\
+  (!x. code_end_var f x ==> ?d op. MEM d (fn_insts f) /\
+    d.inst_opcode = ADD /\ d.inst_operands = [op; Label "code_end"] /\
+    d.inst_outputs = [x] /\
+    (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
+    (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
+      MEM (Var x) j.inst_operands ==>
+      j.inst_opcode = CODECOPY /\
+      (?dst sz. j.inst_operands = [dst; Var x; sz] /\
+        dst <> Var x /\ sz <> Var x) /\
+      ?a b. bb.bb_instructions = a ++ [d;j] ++ b)) /\
+  g = f with fn_blocks :=
+    simplify_current_phis_if (blocks_have_leading_phi f.fn_blocks) renamed /\
+  code_end_var g n /\ MEM (token,v,n) H ==>
+  code_end_var f v
+Proof
+  strip_tac >>
+  qpat_x_assum `current_wf_phi_context _ _ _ _ _ _ _` mp_tac >>
+  simp[current_wf_phi_context_def, current_wf_precleanup_certificate_def] >>
+  strip_tac >> gvs[] >>
+  drule (cj 1 current_tree_trace_projection) >> strip_tac >>
+  qabbrev_tac `ve = SND (visit_blocks [] si
+    (init_current_rename_state (compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl f.fn_blocks) (current_dom_postorder f))))))
+    ins (current_succ_map f) (current_dom_tree f))` >>
+  `visit_blocks [] si
+    (init_current_rename_state (compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl f.fn_blocks) (current_dom_postorder f))))))
+    ins (current_succ_map f) (current_dom_tree f) = ((ctrs,supply',renamed),ve)` by
+    (simp[Abbr `ve`] >> metis_tac[visit_erasure, PAIR, FST]) >>
+  drule_all prepared_actual_tree >> strip_tac >>
+  drule_all prepared_visit_common_owner >>
+  disch_then (qx_choose_then `Hf` strip_assume_tac) >>
+  `EVERY (\e. LIST_REL (\i j. LIST_REL (\v n. (n,v) IN Hf)
+      i.inst_outputs j.inst_outputs) e.sve_before e.sve_after) ve` by
+    (simp[EVERY_MEM] >> metis_tac[]) >>
+  `(n,v) IN Hf` by
+    (drule_all code_end_actual_trace_owner_alignment >> simp[]) >>
+  `?x. (n,x) IN Hf /\ code_end_var f x` by
+    (irule (cj 1 code_end_ssa_protected_facts) >>
+     goal_assum $ drule_at Any >> simp[] >> metis_tac[]) >>
+  `x = v` by metis_tac[current_name_owner_unique] >> gvs[]
+QED
+
+Theorem focus_opt_ssa_read_reflect[local]:
+  current_wf_phi_context supply f renamed supply' A H events /\
+  make_ssa_input_ok f /\ fn_entry_label f = SOME entry /\
+  (!x. code_end_var f x ==> ?d op. MEM d (fn_insts f) /\
+    d.inst_opcode = ADD /\ d.inst_operands = [op; Label "code_end"] /\
+    d.inst_outputs = [x] /\
+    (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
+    (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
+      MEM (Var x) j.inst_operands ==>
+      j.inst_opcode = CODECOPY /\
+      (?dst sz. j.inst_operands = [dst; Var x; sz] /\
+        dst <> Var x /\ sz <> Var x) /\
+      ?a b. bb.bb_instructions = a ++ [d;j] ++ b)) /\
+  g = f with fn_blocks :=
+    simplify_current_phis_if (blocks_have_leading_phi f.fn_blocks) renamed /\
+  ctx_bisim C C' /\
+  current_lockstep_rel f g A renamed H events p (i,s) sg (j,t) /\
+  j.inst_opcode = CODECOPY /\ j.inst_operands = [dst; Var n; sz] /\
+  code_end_var g n /\ eval_operand (Var n) t = SOME w ==>
+  ?a v b. i.inst_opcode = CODECOPY /\ i.inst_operands = [a; Var v; b] /\
+    code_end_var f v /\ eval_operand (Var v) s = SOME w /\
+    t.vs_labels = s.vs_labels /\ t.vs_gas_readings = s.vs_gas_readings
+Proof
+  strip_tac >>
+  `?eb. entry_block f = SOME eb` by
+    fs[fn_entry_label_def, AllCaseEqs()] >>
+  drule_all code_end_ssa_paired_read >> strip_tac >>
+  drule_all focus_opt_ssa_runtime_owner >> strip_tac >>
+  `t.vs_gas_readings = s.vs_gas_readings` by
+    (drule_all current_lockstep_rel_boundary >>
+     simp[o1FrameLockstepTheory.state_rel_def] >> strip_tac >>
+     irule execution_frame_projection >> simp[execution_frame_def]) >>
+  metis_tac[]
+QED
+
+Theorem focus_opt_ssa_certified_context[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+  o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
+  EVERY (\f. !x. code_end_var f x ==> ?d op. MEM d (fn_insts f) /\
+    d.inst_opcode = ADD /\ d.inst_operands = [op; Label "code_end"] /\
+    d.inst_outputs = [x] /\
+    (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
+    (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
+      MEM (Var x) j.inst_operands ==>
+      j.inst_opcode = CODECOPY /\
+      (?dst sz. j.inst_operands = [dst; Var x; sz] /\
+        dst <> Var x /\ sz <> Var x) /\
+      ?a b. bb.bb_instructions = a ++ [d;j] ++ b)) C.ctx_functions ==>
+  code_end_certified_ctx
+    (\f g pos R. !p i s sg j t dst n sz w.
+      R p (i,s) sg (j,t) /\ j.inst_opcode = CODECOPY /\
+      j.inst_operands = [dst; Var n; sz] /\ code_end_var g n /\
+      eval_operand (Var n) t = SOME w ==>
+      ?a v b. i.inst_opcode = CODECOPY /\ i.inst_operands = [a; Var v; b] /\
+        code_end_var f v /\ eval_operand (Var v) s = SOME w /\
+        t.vs_labels = s.vs_labels /\ t.vs_gas_readings = s.vs_gas_readings) L C C'
+Proof
+  strip_tac >>
+  `ctx_bisim C C'` by metis_tac[make_ssa_stage_bisim] >>
+  drule make_ssa_stage_functions >> strip_tac >>
+  simp[code_end_certified_ctx_def] >>
+  rewrite_tac[LIST_REL_EL_EQN] >> conj_tac
+  >- metis_tac[LIST_REL_LENGTH] >>
+  gen_tac >> strip_tac >>
+  drule_all make_ssa_stage_el >> strip_tac >>
+  qabbrev_tac `f = EL n C.ctx_functions` >>
+  qabbrev_tac `g = EL n C'.ctx_functions` >>
+  `MEM f C.ctx_functions` by simp[Abbr `f`, EL_MEM] >>
+  rename1 `make_ssa_current_fn supply f = (g,supply')` >>
+  `?eb. entry_block f = SOME eb` by
+    (Cases_on `f.fn_blocks` >>
+     fs[wf_function_def, fn_has_entry_def, entry_block_def]) >>
+  drule_all make_ssa_lockstep_phi_context >>
+  disch_then (qx_choosel_then [`renamed`,`A`,`H`,`events`] strip_assume_tac) >>
+  BETA_TAC >> conj_tac
+  >- gvs[] >>
+  conj_tac
+  >- metis_tac[o1MakeSsaCfgTheory.make_ssa_current_fn_entry_label] >>
+  qexistsl [`make_ssa_pos f g`,
+    `current_lockstep_rel f g A renamed H events`] >>
+  simp[] >> conj_tac
+  >- (irule current_lockstep_sim >> metis_tac[]) >>
+  rpt strip_tac >> irule focus_opt_ssa_read_reflect >>
+  goal_assum $ drule_at Any >> simp[] >>
+  fs[EVERY_MEM, fn_entry_label_def] >> metis_tac[MEM_EL]
+QED
+
+Theorem focus_opt_ssa_cut_bound[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+  o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  EVERY (\f. !x. code_end_var f x ==> ?d op. MEM d (fn_insts f) /\
+    d.inst_opcode = ADD /\ d.inst_operands = [op; Label "code_end"] /\
+    d.inst_outputs = [x] /\
+    (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
+    (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
+      MEM (Var x) j.inst_operands ==>
+      j.inst_opcode = CODECOPY /\
+      (?dst sz. j.inst_operands = [dst; Var x; sz] /\
+        dst <> Var x /\ sz <> Var x) /\
+      ?a b. bb.bb_instructions = a ++ [d;j] ++ b)) C.ctx_functions /\
+  code_end_offset_ok (\ctx fn i s. raw_reachable vs ctx fn i s /\ gas_cut k vs s) C ==>
+  code_end_offset_ok (\ctx fn i s. raw_reachable vs ctx fn i s /\ gas_cut k vs s) C'
+Proof
+  strip_tac >> drule_all focus_opt_ssa_certified_context >>
+  disch_then (qspec_then `vs.vs_labels` assume_tac) >>
+  simp[code_end_offset_ok_def] >> rpt strip_tac >>
+  drule ptr_raw_reachable_frame >> strip_tac >>
+  drule_all code_end_frame_reachable_certified >>
+  disch_then (qx_choosel_then
+    [`source_stack`,`source_ghost`,`source_token`,`source_fn`,`source_inst`,
+     `source_state`,`source_pos`,`target_ghost`,`positions`,`relation`]
+    strip_assume_tac) >>
+  `raw_reachable vs C source_fn source_inst source_state` by
+    metis_tac[lowerDloadPtrRawReachableTheory.frame_reachable_raw] >>
+  fs[] >> first_x_assum drule_all >> strip_tac >>
+  `gas_cut k vs source_state` by gvs[gas_cut_def] >>
+  fs[code_end_offset_ok_def] >> metis_tac[]
 QED
 
 (* LowerDload preserves the static portion of pointer safety. Its bounded
@@ -2184,6 +2368,183 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* The raw callee constructor pushes a synchronized caller frame.  In
+   particular, no successful continuation of the callee is required. *)
+Theorem focus_opt_ld_callee_row[local]:
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn ti t /\
+  o1_ctx_shape C /\ o1_safe_upto D lo n C vs /\ gas_cut n vs t /\
+  callee_first names C.ctx_functions /\
+  (!g. MEM g C.ctx_functions ==>
+    lookup_function g.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma g.fn_name) g))) /\
+  ti.inst_opcode = INVOKE /\ decode_invoke ti = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME callee /\
+  eval_operands ops t = SOME args /\ setup_callee callee args t = SOME cs /\
+  enters_block callee cs tp /\ active_inst callee j tp ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names callee j tp
+Proof
+  BETA_TAC >> disch_then (map_every strip_assume_tac o CONJUNCTS) >>
+  rename1 `ld_sync lo P C vs stk PG G tn fn inst s t0 A (f::fs) N` >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+  drule ld_sync_source >> strip_tac >>
+  `inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES` by
+    (conj_tac >> strip_tac >>
+     `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+       simp[is_terminator_def] >>
+     drule_all lowerDloadEnvelopeControlTheory.ld_envelope_nonterminal >>
+     rewrite_tac[EVERY_EL] >> disch_then (qspec_then `h` mp_tac) >> gvs[]) >>
+  drule_all lowerDloadSafetyLocationsTheory.ld_envelope_ordinary >> strip_tac >>
+  `h = 0` by fs[] >>
+  `t0 = t /\ ti = inst` by fs[lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
+  map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
+    [`X = [inst]`, `h = 0`, `ti = inst`, `t0 = t`] >>
+  `taint_ok fn tn inst s` by
+    (`gas_cut n vs s` by fs[gas_cut_def] >>
+     fs[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >> metis_tac[]) >>
+  drule_all (BETA_RULE gasFocusLowerDloadCallEntryTheory.ld_focus_invoke_active_entry) >>
+  disch_then (qx_choosel_then [`calleeS`,`argsS`,`csS`,`saved`,`fc`,`PG1`,`tn1`,`ic`,`Y`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `tp = cs` SUBST_ALL_TAC >>
+  `callee = ld_image fc` by simp[ld_image_def] >>
+  `0 < LENGTH Y` by metis_tac[lowerDloadSafetyKernelTheory.ld_prefix_bound] >>
+  irule (BETA_RULE focus_opt_ld_head_row) >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ld_envelope _ _ _ _ _ _`)) >>
+  simp[] >> gen_tac >> disch_tac >>
+  qpat_assum `!g. MEM g (f::fs) ==> _` (qspec_then `g` mp_tac) >>
+  simp[MEM]
+QED
+
+(* External opcodes use just the successful step reaching the next cut. *)
+Theorem focus_opt_ld_external_effect[local]:
+  ^focus_opt_ld_row lo P C C' vs Sigma names gn ti t
+    stk PG G tn fn inst s t0 A f fs N [inst] p h /\
+  o1_ctx_shape C /\ o1_safe_upto D lo n C vs /\
+  MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2] /\
+  step_inst fuel C' ti t = OK u /\
+  gas_cut n vs (u with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ?ss H'. ^focus_opt_ld_effect lo P C vs A f tn PG G inst s t u fuel ss H'
+Proof
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `h = 0` by fs[] >> qpat_x_assum `h = 0` SUBST_ALL_TAC >>
+  qpat_x_assum `ld_prefix _ _ _ _ 0 _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [lowerDloadSafetyKernelTheory.ld_prefix_zero]) >>
+  `ti = inst` by fs[] >> qpat_x_assum `ti = inst` SUBST_ALL_TAC >>
+  qpat_x_assum `t = t0` (SUBST_ALL_TAC o SYM) >>
+  `gas_cut n vs u` by fs[gas_cut_def] >>
+  `gas_cut n vs t` by metis_tac[gasFocusLowerDloadCutGuardsTheory.ld_step_ok_cut_back] >>
+  `gas_cut n vs s` by fs[gas_cut_def] >>
+  drule ld_sync_source >> strip_tac >>
+  drule_all ld_sync_fn_shape >> strip_tac >>
+  drule o1_fn_shape_components >> strip_tac >>
+  `access_ok lo G fn inst s /\ taint_ok fn tn inst s /\ lo <= vs.vs_alloca_next /\
+   mem_inv dload_headroom_ok C vs` by
+    (fs[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >> metis_tac[]) >>
+  `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> RETURNDATACOPY /\
+   inst.inst_opcode <> REVERT` by fs[MEM] >>
+  `~in_revert_forward fn s` by
+    (`ALL_DISTINCT (fn_labels fn)` by simp[fn_labels_def] >>
+     drule_all lowerDloadPtrRawReachableTheory.active_inst_block_lookup >> strip_tac >>
+     gvs[in_revert_forward_def, revert_forward_at_def, revert_forward_pair_def] >>
+     metis_tac[]) >>
+  suspend "bounds"
+QED
+
+Resume focus_opt_ld_external_effect[bounds]:
+  drule_all ld_frame_raw_reachable >> strip_tac >>
+  drule lowerDloadFrontierTheory.ld_raw_reachable_frontier >> strip_tac >>
+  drule ctxLookupAgreeTheory.raw_reachable_initial_fmp >> strip_tac >>
+  drule ld_sync_frontier >> strip_tac >>
+  `dload_headroom_ok C fn inst s` by metis_tac[ld_sync_source_mem_inv] >>
+  `lo <= dyn_floor C vs /\ t.vs_alloca_next <= dyn_floor C vs /\
+   t.vs_alloca_next < dimword(:256)` by
+    (simp[dyn_floor_def] >> IF_CASES_TAC >>
+     gvs[dload_headroom_ok_def, ctx_has_dalloca_def] >> decide_tac) >>
+  `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
+    metis_tac[lowerDloadOracleCallAssemblyTheory.ld_sync_slots,
+              lowerDloadOracleCallAssemblyTheory.ld_sync_maps] >>
+  `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> lo <= b /\ lo <= c` by
+    metis_tac[lowerDloadSafetyAllocBoundsTheory.ld_alloc_bounds] >>
+  `!a k b c z b' c' sz. FLOOKUP A a = SOME (b,c,z) /\
+    FLOOKUP A k = SOME (b',c',sz) /\ a <> k /\ 0 < z /\ 0 < sz ==>
+    (b+z <= b' \/ b'+sz <= b) /\ (c+z <= c' \/ c'+sz <= c)` by
+    metis_tac[lowerDloadSafetyAllocBoundsTheory.ld_alloc_separate] >>
+  drule ld_sync_active >> simp[Excl "MEM"] >> strip_tac >>
+  `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==>
+      b+sz <= dyn_floor C vs /\ c+sz <= dyn_floor C vs /\ c+sz < dimword(:256)` by
+    (rpt strip_tac >> drule_all lowerDloadSafetyAllocBoundsTheory.ld_alloc_frontiers >>
+     simp[] >> decide_tac) >>
+  `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> b+sz <= dyn_floor C vs /\ c+sz <= dyn_floor C vs` by metis_tac[] >>
+  `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword(:256)` by metis_tac[] >>
+  `MEM inst (fn_insts fn)` by metis_tac[lowerDloadOracleCallAssemblyTheory.ld_active_inst_member] >>
+  `fn_ptr_ok P fn` by metis_tac[lowerDloadOracleCallAssemblyTheory.ld_sync_ptr_ok] >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
+  drule ld_sync_memory >> strip_tac >>
+  drule ld_sync_ghosts >> simp[Excl "MEM"] >> strip_tac >>
+  drule ld_sync_dyn_agree >> strip_tac >>
+  suspend "effect"
+QED
+
+Resume focus_opt_ld_external_effect[effect]:
+  `tn.t_var = f.lf_tv` by simp[] >>
+  `step_inst_base inst t = OK u` by fs[step_inst_non_invoke] >>
+  qpat_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
+  qpat_assum `f.lf_src = s` (SUBST_ALL_TAC o SYM) >>
+  qpat_assum `f.lf_tgt = t` (SUBST_ALL_TAC o SYM) >>
+  `?ss. step_inst_base inst f.lf_src = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := u;
+      lf_H := set_prov f.lf_H inst.inst_outputs NONE;
+      lf_tv := (step_taint inst f.lf_src ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst f.lf_src ss tn) ss u /\
+    ld_nonghost (step_taint inst f.lf_src ss tn) ss u /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H) inst ss =
+      ld_erase A o_f set_prov f.lf_H inst.inst_outputs NONE /\
+    ld_dyn_agree (dyn_floor C vs) (step_taint inst f.lf_src ss tn).t_mem
+      ss.vs_memory u.vs_memory /\
+    ss.vs_allocas = f.lf_src.vs_allocas /\ u.vs_allocas = f.lf_tgt.vs_allocas /\
+    ss.vs_alloca_next = f.lf_src.vs_alloca_next /\ u.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
+    ss.vs_current_bb = f.lf_src.vs_current_bb /\ u.vs_current_bb = f.lf_tgt.vs_current_bb` by
+    (Cases_on `MEM inst.inst_opcode [CALL;STATICCALL]`
+     >- (`inst_wf inst` by
+           (fs[fn_inst_wf_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+            metis_tac[]) >>
+         (Q.SUBGOAL_THEN
+           `?g a v ao az ro rz st.
+             (inst.inst_opcode = CALL /\ inst.inst_operands = [g;a;v;ao;az;ro;rz] /\
+               st = f.lf_tgt.vs_call_ctx.cc_static) \/
+             (inst.inst_opcode = STATICCALL /\ inst.inst_operands = [g;a;ao;az;ro;rz] /\ st = T)`
+           (REPEAT_TCL CHOOSE_THEN assume_tac)
+          >- (qpat_x_assum `inst_wf inst` mp_tac >>
+              qpat_assum `MEM inst.inst_opcode [CALL;STATICCALL]` mp_tac >>
+              pure_rewrite_tac[MEM] >> strip_tac >>
+              qpat_assum `inst.inst_opcode = _` (fn opcode =>
+                simp[NoAsms, opcode, inst_wf_def, LENGTH_EQ_NUM_compute]) >> metis_tac[])) >>
+         drule_all lowerDloadOracleCallAssemblyTheory.ld_oracle_call_step >> strip_tac >>
+         qexists `ss` >> simp[lowerDloadOracleCallAssemblyTheory.ld_oracle_call_provenance]) >>
+     Cases_on `inst.inst_opcode = DELEGATECALL`
+     >- (drule_all lowerDloadSafetyDelegateTheory.ld_delegate_step >> strip_tac >>
+         qexists `ss` >> simp[step_prov_def, out_prov_def,
+                              lowerDloadSafetyUpdatesTheory.ld_erase_set_prov]) >>
+     `MEM inst.inst_opcode [CREATE;CREATE2]` by fs[MEM] >>
+     drule_all lowerDloadSafetyCreateTheory.ld_create_step >>
+     disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
+     qexists `ss` >> simp[]) >>
+  qexistsl [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
+  simp[step_inst_non_invoke] >>
+  conj_tac >- (irule ld_sync_ghost_step >> metis_tac[]) >>
+  rpt strip_tac >>
+  drule (SRULE [pred_setTheory.SUBSET_DEF]
+    (Q.INST [`q` |-> `NONE`] lowerDloadSafetyUpdatesTheory.ld_set_prov_range)) >>
+  simp[] >> strip_tac >>
+  qpat_assum `FDOM A = _` (once_rewrite_tac o single o GSYM) >>
+  irule ld_global_selected >>
+  goal_assum (drule_at (Pat `ld_global _ _ _`)) >>
+  qexists `f` >> simp[]
+QED
+
+Finalise focus_opt_ld_external_effect[local]
+
 (* The residual singleton cases use the current cut only. *)
 Theorem focus_opt_ld_data_next[local]:
   ^focus_opt_ld_row lo P C C' vs Sigma names gn ti t
@@ -2202,7 +2563,7 @@ Proof
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `h = 0` by fs[] >> qpat_x_assum `h = 0` SUBST_ALL_TAC >>
   qpat_x_assum `ld_prefix _ _ _ _ 0 _ _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [ld_prefix_zero]) >>
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [lowerDloadSafetyKernelTheory.ld_prefix_zero]) >>
   `ti = inst` by fs[] >> qpat_x_assum `ti = inst` SUBST_ALL_TAC >>
   qpat_x_assum `t = t0` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `t.vs_inst_idx = p` (SUBST_ALL_TAC o SYM) >>
@@ -4390,6 +4751,198 @@ QED
    compatible raw at Mcut, with the unread suffix and [0w] as tail.
    The bounded lowered-memory conclusion is separate from the original
    conditional static-memory clause. *)
+(* SimplifyCFG reflects code-end variables.  Keep the restricted uses
+   in the induction so that a later cleanup cannot turn a protected
+   PHI operand into a new copy provenance. *)
+Theorem focus_opt_scfg_cleanup_uses[local]:
+  wf_function f /\
+  (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) ==>
+  (!x i. code_end_var (fix_all_phis (remove_unreachable_blocks f)) x /\
+    MEM i (fn_insts (fix_all_phis (remove_unreachable_blocks f))) /\
+    MEM (Var x) i.inst_operands ==> i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
+  (!x. code_end_var (fix_all_phis (remove_unreachable_blocks f)) x ==> code_end_var f x)
+Proof
+  strip_tac >> qabbrev_tac `g = remove_unreachable_blocks f` >>
+  `!i. MEM i (fn_insts g) ==> MEM i (fn_insts f)` by
+    simp[Abbr `g`, simplify_unreachable_inst_subset] >>
+  `!x. code_end_var g x ==> code_end_var f x` by
+    metis_tac[code_end_var_instruction_subset] >>
+  `!i x. MEM i (fn_insts g) /\ i.inst_opcode = PHI /\ code_end_var g x ==>
+    ~MEM (Var x) i.inst_operands` by
+    (rpt strip_tac >> `PHI <> ASSIGN /\ PHI <> CODECOPY` by simp[] >> metis_tac[]) >>
+  `!x. code_end_var (fix_all_phis g) x ==> code_end_var g x` by
+    metis_tac[simplify_fix_phis_code_end_backward_no_phi] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt strip_tac >> drule scfg_fix_all_phis_inst_mem >> strip_tac >> gvs[] >>
+  `code_end_var g x` by metis_tac[] >>
+  `fix_phi_inst actual_preds inst = inst` by
+    (irule fix_phi_inst_code_end_identity >> qexistsl [`g`,`x`] >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem focus_opt_scfg_chain_uses[local]:
+  wf_function f /\ fn_inst_wf f /\ MEM a f.fn_blocks /\ MEM b f.fn_blocks /\
+  can_merge_blocks f a b /\
+  (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
+  g = (f with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label f.fn_blocks))
+    (bb_succs (merge_blocks a b))) ==>
+  !x i. code_end_var g x /\ MEM i (fn_insts g) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY
+Proof
+  rpt strip_tac >>
+  `code_end_var f x` by metis_tac[chain_code_end_backward] >>
+  Cases_on `i.inst_opcode = PHI`
+  >- (`?j. MEM j (fn_insts f) /\ j.inst_opcode = PHI /\ MEM (Var x) j.inst_operands` by
+        (irule chain_phi_var_source >> metis_tac[]) >>
+      first_x_assum drule_all >> simp[]) >>
+  metis_tac[chain_nonphi_source]
+QED
+
+Theorem focus_opt_scfg_jump_uses[local]:
+  lookup_block a.bb_label f.fn_blocks = SOME a /\
+  do_merge_jump f a b lm = SOME (g,lm') /\
+  (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) ==>
+  !x i. code_end_var g x /\ MEM i (fn_insts g) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY
+Proof
+  strip_tac >>
+  `EVERY (\i. !x. MEM (Var x) i.inst_operands /\ code_end_var f x ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) (fn_insts g)` suffices_by
+    (simp[EVERY_MEM] >> metis_tac[jump_code_end_backward]) >>
+  irule do_merge_jump_every >> conj_tac
+  >- (simp[] >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      `MEM (Var x) i.inst_operands` by metis_tac[update_phi_bypass_var_subset] >>
+      `i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY` by metis_tac[] >>
+      gvs[update_phi_bypass_def]) >>
+  conj_tac
+  >- (simp[] >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      `MEM (Var x) i.inst_operands` by
+        metis_tac[canon_jnz_inst_var_subset, subst_label_inst_use_source] >>
+      `i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY` by metis_tac[] >>
+      gvs[is_terminator_def]) >>
+  qexistsl [`a`, `b`, `f`, `lm`, `lm'`] >> gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem focus_opt_scfg_collapse_uses[local]:
+  !f lm vis lbl.
+  wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ first_block_no_preds f /\
+  scfg_phi_safe f /\ fn_defs_reach_uses f /\
+  EVERY label_positions_ok (fn_insts f) /\ all_reachable f /\
+  (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
+  (!x. code_end_var f x ==> code_end_var original x) ==>
+  wf_ssa (FST (collapse_dfs f lm vis lbl)) /\
+  wf_function (FST (collapse_dfs f lm vis lbl)) /\
+  fn_inst_wf (FST (collapse_dfs f lm vis lbl)) /\
+  first_block_no_preds (FST (collapse_dfs f lm vis lbl)) /\
+  scfg_phi_safe (FST (collapse_dfs f lm vis lbl)) /\
+  fn_defs_reach_uses (FST (collapse_dfs f lm vis lbl)) /\
+  EVERY label_positions_ok (fn_insts (FST (collapse_dfs f lm vis lbl))) /\
+  all_reachable (FST (collapse_dfs f lm vis lbl)) /\
+  (!x i. code_end_var (FST (collapse_dfs f lm vis lbl)) x /\
+    MEM i (fn_insts (FST (collapse_dfs f lm vis lbl))) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
+  (!x. code_end_var (FST (collapse_dfs f lm vis lbl)) x ==> code_end_var original x)
+Proof
+  ho_match_mp_tac collapse_dfs_preserves_predicate >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_all do_merge_jump_ssa_invariant >> strip_tac >> simp[] >>
+      conj_tac >- (rpt strip_tac >> irule focus_opt_scfg_jump_uses >> metis_tac[]) >>
+      metis_tac[jump_code_end_backward]) >>
+  rpt gen_tac >> strip_tac >>
+  `a.bb_label = lbl /\ b.bb_label = next /\ MEM a f.fn_blocks /\ MEM b f.fn_blocks` by
+    metis_tac[lookup_block_member_label] >>
+  qmatch_goalsub_abbrev_tac `wf_ssa merged` >>
+  `merged = f with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label f.fn_blocks))
+    (bb_succs (merge_blocks a b))` by simp[Abbr `merged`] >>
+  drule_all chain_merge_ssa_invariant >> strip_tac >>
+  ntac 8 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt strip_tac >> irule focus_opt_scfg_chain_uses >> metis_tac[]) >>
+  metis_tac[chain_code_end_backward]
+QED
+
+Theorem focus_opt_scfg_round_uses[local]:
+  wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ first_block_no_preds f /\
+  scfg_phi_safe f /\ fn_defs_reach_uses f /\ EVERY label_positions_ok (fn_insts f) /\
+  (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) ==>
+  (!x i. code_end_var (FST (simplify_cfg_round_with_labels f)) x /\
+    MEM i (fn_insts (FST (simplify_cfg_round_with_labels f))) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
+  (!x. code_end_var (FST (simplify_cfg_round_with_labels f)) x ==> code_end_var f x)
+Proof
+  strip_tac >> Cases_on `fn_entry_label f`
+  >- (simp[simplify_cfg_round_with_labels_def] >> metis_tac[]) >>
+  rename1 `fn_entry_label f = SOME entry_lbl` >>
+  drule_all simplify_cfg_round_entry_ssa_invariant >> strip_tac >>
+  drule_all focus_opt_scfg_cleanup_uses >> strip_tac >>
+  qabbrev_tac `start = fix_all_phis (remove_unreachable_blocks f)` >>
+  Cases_on `collapse_dfs start [] [] entry_lbl` >>
+  rename1 `collapse_dfs start [] [] entry_lbl = (collapsed_fn,collapse_tail)` >>
+  PairCases_on `collapse_tail` >>
+  rename1 `collapse_dfs start [] [] entry_lbl = (collapsed_fn,label_map,new_visited)` >>
+  qspecl_then [`start`, `[]`, `[]`, `entry_lbl`] mp_tac
+    (Q.INST [`original` |-> `f`] focus_opt_scfg_collapse_uses) >> simp[] >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  `subst_block_labels_fn label_map collapsed_fn = collapsed_fn` by
+    (drule_at (Pat `collapse_dfs _ _ _ _ = _`) collapse_dfs_subst_identity >> simp[]) >>
+  `(!x i. code_end_var (fix_all_phis (remove_unreachable_blocks collapsed_fn)) x /\
+    MEM i (fn_insts (fix_all_phis (remove_unreachable_blocks collapsed_fn))) /\
+    MEM (Var x) i.inst_operands ==> i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
+    (!x. code_end_var (fix_all_phis (remove_unreachable_blocks collapsed_fn)) x ==>
+         code_end_var collapsed_fn x)` by
+    (irule focus_opt_scfg_cleanup_uses >> conj_tac >> first_assum ACCEPT_TAC) >>
+  fs[Abbr `start`] >> simp[simplify_cfg_round_with_labels_def] >> metis_tac[]
+QED
+
+Theorem focus_opt_scfg_iter_uses[local]:
+  !fuel f.
+  scfg_static f /\ wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ first_block_no_preds f /\
+  scfg_phi_safe f /\ fn_defs_reach_uses f /\ EVERY label_positions_ok (fn_insts f) /\
+  (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) ==>
+  !x. code_end_var (FST (simplify_cfg_iter_with_labels fuel f)) x ==> code_end_var f x
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `P = \f. wf_ssa f /\ wf_function f /\ fn_inst_wf f /\
+    first_block_no_preds f /\ scfg_phi_safe f /\ fn_defs_reach_uses f /\
+    EVERY label_positions_ok (fn_insts f) /\
+    (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+      i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY)` >>
+  `P f` by (simp[Abbr `P`] >> metis_tac[]) >>
+  mp_tac (Q.INST [`R` |-> `\a b. P a ==>
+    P b /\ (!x. code_end_var b x ==> code_end_var a x)`]
+    scfg_iter_relation) >> BETA_TAC >> impl_tac
+  >- (conj_tac >- simp[] >> conj_tac
+      >- (rpt gen_tac >> rpt strip_tac >> metis_tac[]) >>
+      gen_tac >> strip_tac >> simp[Abbr `P`] >> strip_tac >>
+      drule_all simplify_cfg_round_ssa_invariant >> strip_tac >>
+      drule_all focus_opt_scfg_round_uses >> simp[] >> metis_tac[]) >>
+  disch_then (qspecl_then [`fuel`,`f`] mp_tac) >> simp[]
+QED
+
+Theorem focus_opt_scfg_var_back[local]:
+  o1_fn_shape C f /\ wf_ssa f /\
+  (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
+  code_end_var (simplify_cfg_fn f) x ==> code_end_var f x
+Proof
+  strip_tac >>
+  `EVERY label_positions_ok (fn_insts f)` by metis_tac[o1_fn_shape_label_positions_ok] >>
+  `scfg_phi_safe f` by
+    (irule wf_ssa_phi_safe >> fs[o1_fn_shape_def, first_block_no_phi_def]) >>
+  `simplify_cfg_fn_ok f` by
+    (irule simplify_cfg_fn_ok_ssa >> fs[o1_fn_shape_def]) >>
+  fs[o1_fn_shape_def, scfg_static_def, simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def] >>
+  metis_tac[focus_opt_scfg_iter_uses, wf_ssa_defs_reach_uses, fn_shape_ok_scfg_shape, scfg_static_def]
+QED
+
 Theorem focus_source_cut_provider:
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
