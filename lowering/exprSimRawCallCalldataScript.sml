@@ -18,7 +18,7 @@
 
 Theory exprSimRawCallCalldata
 Ancestors
-  dallocaCalldata
+  dallocaCalldata rawCallOutbufCompile[qualified,ignore_grammar]
   ptrDiscipline exprSimHashBoundary
   exprSimSource exprSimHypsDefs exprSimDefs exprSimStack exprSimProps
   gasSummary gasSummaryCompose gasOutcome gasExemptCert
@@ -168,21 +168,6 @@ Theorem raw_call_static_value_abort:
 Proof
   simp[eval_raw_call_def, frame_call_value_def, type_check_def,
        check_def, assert_def, bind_def, ignore_bind_def, vyperStateTheory.return_def]
-QED
-
-Theorem calldata_outbuf_compile[local]:
-  !n sa valop ptrop sb.
-    compile_raw_call_outbuf n sa = ((valop,ptrop),sb) ==>
-    ?buf sm. compile_alloc_buffer
-      (if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32) sa = (buf,sm) /\
-      valop = buf.buf_operand /\
-      (if n = 0 then ptrop = valop /\ sb = sm
-       else emit_op ADD [valop; Lit 32w] sm = (ptrop,sb))
-Proof
-  rpt gen_tac >> Cases_on `n = 0` >>
-  simp[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  goal_assum (drule_at Any) >> simp[]
 QED
 
 (* TOP-LEVEL *)
@@ -906,9 +891,10 @@ Proof
   `exprSafeOperand$safe_operand sb valop` by
     (simp[exprSafeOperandTheory.safe_operand_def] >> conj_tac
      >- metis_tac[exprOperandVarTheory.compiler_raw_call_outbuf_var] >>
-     drule calldata_outbuf_compile >> strip_tac >>
+     drule rawCallOutbufCompileTheory.calldata_outbuf_compile >> strip_tac >>
      metis_tac[exprSafeOperandTheory.alloc_buffer_not_label]) >>
-  simp[] >> drule calldata_outbuf_compile >> strip_tac >> Cases_on `n = 0`
+  simp[] >> drule rawCallOutbufCompileTheory.calldata_outbuf_compile >>
+  strip_tac >> Cases_on `n = 0`
   >- gvs[] >>
   gvs[] >> metis_tac[exprSafeOperandTheory.emit_op_safe_operand]
 QED

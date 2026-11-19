@@ -81,7 +81,7 @@ QED
 Theorem default_bytes_guard_uniform_sequence:
   compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) sa = ((),sb) /\
   eval_operand src s = SOME w /\ 4 <= w2n w /\
-  op_prov G src = NONE /\ op_taint tn src = {} /\ ~ctx_has_dalloca ctx ==>
+  op_prov G src = NONE /\ op_taint tn src = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?H u.
     (!D. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H u) /\
     op_prov H src = NONE /\ op_taint u src = {} /\
@@ -99,6 +99,7 @@ Proof
   `!op. op IN {src;Lit 4w} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
     (rpt strip_tac >> gvs[] >> simp[op_prov_def, op_taint_def]) >>
   drule_all default_bytes_guard_exec >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
   qexistsl [`G'`,`tn'`] >> simp[] >>
@@ -159,7 +160,7 @@ Theorem default_bytes_guard_prelude:
   eval_operand src s = SOME w /\ 4 <= w2n w /\
   abi_decoder_operand_live sa.cs_next_var src /\
   op_prov G src = NONE /\ op_taint tn src = {} /\
-  fn_has_code sa sb fn /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   alloca_history fn s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

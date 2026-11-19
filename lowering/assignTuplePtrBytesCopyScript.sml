@@ -3,14 +3,15 @@
 Theory assignTuplePtrBytesCopy
 Ancestors
   assignTuplePtrCopyLen assignTuplePtrLocalFixedCopy
-  typedCopyPtr fragGasSeqPtr bodyPtrDefs ptrDiscipline
+  typedCopyPtr fragGasSeqPtr fragGasSeqPtrContext logBytesCodePtr
+  bodyPtrDefs ptrDiscipline
   context compileEnv emitHelper emitHelperProps exprLoweringProps
   exprSimBufferStore vfmConstants fragExec
   venomState venomExecSemantics venomInst finite_map list arithmetic words
 
 Theorem emit_mcopy_normalized_ptr:
   emit_void MCOPY [Var dst; Var src; count_op] sa = ((),sb) /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   eval_operand count_op s = SOME n /\ op_taint tn count_op = {} /\
   ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn src s (w2n n) ==>
@@ -29,6 +30,7 @@ Theorem emit_mcopy_normalized_ptr:
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `lookup_var src s = SOME a`
     (mp_then (Pat `lookup_var src s = SOME a`) mp_tac mcopy_operand_seq_ptr) >>
   disch_then drule_all >>
@@ -48,7 +50,7 @@ QED
 
 Theorem emit_mcopy_frames_normalized_ptr:
   emit_void MCOPY [Var dst; Var src; count_op] sa = ((),sb) /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   eval_operand count_op s = SOME (n2w n) /\ n < dimword (:256) /\
   op_taint tn count_op = {} /\
@@ -95,7 +97,7 @@ QED
 Theorem compile_store_bytestring_normalized_ptr:
   compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
   not_fresh_at sa src /\ not_fresh_at sa dst /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   n = 32 + 32 * ((len + 31) DIV 32) /\
   len + 31 < dimword (:256) /\ n < dimword (:256) /\
@@ -128,6 +130,7 @@ Proof
   rename1 `compile_bytestring_copy_len (Var src) sa = (count_op,sc)` >>
   `ptr_covers G tn src s 32` by
     (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all compile_bytestring_copy_len_normalized_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG G tn _ s G1 tn1` >>
@@ -143,6 +146,16 @@ Proof
          qexistsl_tac [`G`, `s`, `tn`] >> simp[]) >>
      irule ptr_covers_lookup_frame >>
      qexistsl_tac [`G`, `s`, `tn`] >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     drule compile_bytestring_copy_len_code >>
+     simp[EVERY_MEM, DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
+     `allocas_below_fmp (s1 with vs_inst_idx := s.vs_inst_idx)` by
+       (irule run_inst_seq_allocas_below_fmp >>
+        qexistsl_tac [`emitted_insts sa sc`, `s`] >>
+        simp[EVERY_MEM, is_terminator_def, is_alloca_op_def] >>
+        rpt strip_tac >> res_tac >> gvs[is_terminator_def, is_alloca_op_def]) >>
+     fs[allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
   drule_all emit_mcopy_frames_normalized_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG G1 tn1 _ s1 G1 tn2` >>
@@ -162,7 +175,7 @@ QED
 Theorem compile_store_bytestring_run_frames_ptr:
   compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
   not_fresh_at sa src /\ not_fresh_at sa dst /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   n = 32 + 32 * ((len + 31) DIV 32) /\
   len + 31 < dimword (:256) /\ n < dimword (:256) /\

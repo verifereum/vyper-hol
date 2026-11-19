@@ -2,6 +2,7 @@
 Theory bodyFullConvertCopyRun
 Ancestors
   bodyFullAllocaFresh typedCopyPtr exprSimConvertBytes allocaFootprint
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   ghostPcTransportPtr fragGasOriginPtrLoop
   exprSimAlloc fragExecMem instMemFrontier ptrSafetyTransport fragGasSeqPtr
   bodyFullUnwrapRun allocationPtr fragExecPtr fragGasOriginPtr
@@ -12,7 +13,7 @@ Ancestors
 (* The copy edge uses one concrete taint update, independent of the horizon. *)
 Theorem copy_mcopy_path[local]:
   emit_void MCOPY [Var dst; Var src; Lit (n2w k)] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ k < dimword(:256) /\
   lookup_var dst s = SOME b /\ lookup_var src s = SOME a /\
@@ -53,7 +54,7 @@ Theorem convert_widen_copy_origin_ptr_path:
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ not_fresh_at sm src /\ lookup_var src s = SOME a /\
+  not_fresh_at sm src /\ lookup_var src s = SOME a /\
   ptr_covers G tn src s k /\ w2n a+k <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -107,7 +108,8 @@ Proof
   strip_tac >> drule_all convert_widen_copy_code >> strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  qpat_assum `stmt_state_rel _ _ _ _ _ _ s`
+    (assume_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule_all bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_with_raw_endpoint >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`]
     (qx_choosel_then [`dst`, `w'`, `z`, `Ga`, `tna`, `r`] strip_assume_tac)) >>
@@ -135,6 +137,11 @@ Proof
      metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_LESS_TRANS]) >>
   `w2n w'+k <= z.vs_alloca_next` by
     gvs[] >>
+  `stmt_state_rel H ctx func cenv cx es z` by
+    (qpat_assum `z = t with vs_inst_idx := _` SUBST1_TAC >>
+     simp[stmt_state_rel_inst_idx]) >>
+  qpat_assum `stmt_state_rel _ _ _ _ _ _ z`
+    (assume_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule_all copy_mcopy_path >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `emit_op ALLOCA [Lit (n2w d)] sm = (buf.buf_operand,mid)` by

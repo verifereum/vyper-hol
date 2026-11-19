@@ -50,7 +50,7 @@ QED
 Theorem rest_word_membership_ctor_prefix_checked:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load T imm LocCode) bound_opt is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!x. arr = Var x ==> not_fresh_at sa x) /\
   (!ib x. imm = SOME ib /\ ib = Var x ==> not_fresh_at sa x) /\
   q = (case bound_opt of NONE => 0 | SOME cap => 2) /\
@@ -258,6 +258,9 @@ Resume rest_word_membership_ctor_prefix_checked[offset_stage]:
      qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
   `!op'. MEM op' [Lit (n2w skip); Var p] ==> op_taint tm op' = {}` by
     (gen_tac >> simp[] >> strip_tac >> gvs[op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sc` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `sc`, Abbr `sm`, update_var_def, allocas_below_fmp_def]) >>
   `ptr_inst_ok D lo 0 ctx fn gm tm skipins sc` by
     (simp[Abbr `skipins`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
       mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
@@ -329,6 +332,12 @@ Resume rest_word_membership_ctor_prefix_checked[address_stage]:
     (Cases_on `0 < skip` >>
      simp[Abbr `so`, Abbr `sk`, update_var_def, allocas_from_def] >>
      fs[allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp so` by
+    (qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
+       (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     qpat_assum `membership_loop_frame _ _ _ s0 go to so`
+       (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   `ptr_inst_ok D lo 0 ctx fn go to addins so` by
     (simp[Abbr `addins`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
       mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
@@ -397,6 +406,9 @@ Resume rest_word_membership_ctor_prefix_checked[immutable_stage]:
   `allocas_from lo sx` by
     (simp[Abbr `sx`, Abbr `ss`, update_var_def, allocas_from_def] >>
      fs[allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sx` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp so` mp_tac >>
+     simp[Abbr `sx`, Abbr `ss`, update_var_def, allocas_below_fmp_def]) >>
   `ptr_inst_ok D lo 0 ctx fn ga ta immins sx` by
     (simp[Abbr `immins`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
       mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
@@ -485,6 +497,12 @@ Resume rest_word_membership_ctor_prefix_checked[load_stage]:
     (Cases_on `IS_SOME imm` >>
      simp[Abbr `sl`, Abbr `si`, update_var_def, allocas_from_def] >>
      fs[allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sl` by
+    (qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
+       (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     qpat_assum `membership_loop_frame _ _ _ s0 gl tl sl`
+       (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   `ptr_inst_ok D lo 0 ctx fn gl tl loadins sl` by
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
       Abbr `loadins`, mk_inst_def, source_memory_read_ranges_def,
@@ -602,7 +620,7 @@ Finalise rest_word_membership_ctor_prefix_checked
 Theorem rest_word_membership_ctor_load_joint_indexed:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load T imm LocCode) bound_opt is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!x. arr = Var x ==> not_fresh_at sa x) /\
   (!ib x. imm = SOME ib /\ ib = Var x ==> not_fresh_at sa x) /\
   q = (case bound_opt of NONE => 0 | SOME cap => 2) /\
@@ -675,6 +693,10 @@ Proof
   `!j. j < LENGTH ws ==> w2n (addr j)+32 <= lo /\
     mem_word_taint (T0 H).t_mem (w2n (addr j)) = {} /\
     mload (w2n (addr j)) s0 = EL j ws` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
+       (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   drule_all rest_word_membership_ctor_prefix_checked >>
   disch_then (qspecl_then [`PG`, `DF H`] strip_assume_tac) >>
   qexistsl_tac [`g`, `tn`] >> simp[] >>
@@ -697,7 +719,7 @@ QED
 Theorem rest_word_membership_ctor_load_joint_const:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load T imm LocCode) bound_opt is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!x. arr = Var x ==> not_fresh_at sa x) /\
   (!ib x. imm = SOME ib /\ ib = Var x ==> not_fresh_at sa x) /\
   q = (case bound_opt of NONE => 0 | SOME cap => 2) /\
@@ -781,6 +803,10 @@ Proof
   `!j. j < LENGTH ws ==> w2n (addr j)+32 <= lo /\
     mem_word_taint T0.t_mem (w2n (addr j)) = {} /\
     mload (w2n (addr j)) s0 = EL j ws` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
+       (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
+     metis_tac[]) >>
   drule_all rest_word_membership_ctor_prefix_checked >>
   disch_then (qspecl_then [`PG`, `DF H`] strip_assume_tac) >>
   simp[] >>

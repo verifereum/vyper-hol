@@ -1,6 +1,7 @@
 (* Literal-folding offsets checked on the same endpoint as the ordinary run. *)
 Theory immutableOffsetPtr
 Ancestors
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
   exprSimCopy context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   stmtAppendStorageRunPtr fragGasSeqPtr ptrDiscipline venomExecSemantics
   venomInst venomState finite_map words list bodyPtrDefs ghostPcTransportPtr
@@ -17,7 +18,7 @@ QED
 
 Theorem immutable_offset_add_checked[local]:
   eval_operand op s = SOME a /\ op_taint tn op = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id ADD [op; Lit (n2w off)] [out]] s
     (step_prov PG G (mk_inst id ADD [op; Lit (n2w off)] [out])
@@ -37,7 +38,7 @@ QED
 
 Theorem immutable_offset_add_uniform[local]:
   eval_operand op s = SOME a /\ op_taint tn op = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !k. inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id ADD [op; Lit (n2w off)] [out]] (s with vs_inst_idx := k)
     (step_prov PG G (mk_inst id ADD [op; Lit (n2w off)] [out])
@@ -47,7 +48,7 @@ Proof
   rpt strip_tac >>
   mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`]
     immutable_offset_add_checked) >>
-  simp[step_prov_def, out_prov_def]
+  simp[step_prov_def, out_prov_def, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]
 QED
 
 Theorem immutable_offset_add_provenance[local]:
@@ -64,7 +65,7 @@ QED
 Theorem compile_lit_byte_offset_checked:
   compile_lit_byte_offset op off sa = (r,sb) /\
   copy_old_operand sa op /\ eval_operand op s = SOME a /\
-  op_taint tn op = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t Gf tf.
     copy_runtime_frame sa s sb t /\
     eval_operand r t = SOME (a + n2w off) /\
@@ -105,7 +106,7 @@ Theorem compile_lit_byte_offset_covered:
   compile_lit_byte_offset (Var p) off sa = (r,sb) /\
   not_fresh_at sa p /\ lookup_var p s = SOME a /\
   ptr_covers G tn p s total /\ off < total /\ off + n <= total /\
-  w2n a + off < dimword(:256) /\ ~ctx_has_dalloca ctx ==>
+  w2n a + off < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?q t Gf tf.
     r = Var q /\ copy_runtime_frame sa s sb t /\
     lookup_var q t = SOME (a + n2w off) /\

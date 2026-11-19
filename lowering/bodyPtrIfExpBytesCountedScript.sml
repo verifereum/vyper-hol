@@ -56,7 +56,7 @@ Theorem copy_len_binop_seq_ptr:
     (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
     op_taint tn left = {} /\ op_taint tn right = {} /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?Gf tnf.
       inst_seq_ptr D 0 ctx fn PG G tn
         [mk_inst id opc [left;right] [tmp]] s Gf tnf /\
@@ -78,7 +78,7 @@ QED
 
 Theorem mload_clean_seq_ptr:
   !D ctx fn PG G tn s id src tmp a.
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf.
@@ -113,7 +113,7 @@ Theorem emit_copy_len_binop_seq_ptr:
     emit_op opc [left;right] sa = (Var out,sb) /\
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
     op_taint tn left = {} /\ op_taint tn right = {} /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?Gf tnf sf.
       inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
       run_inst_seq (emitted_insts sa sb) s = OK sf /\
@@ -173,7 +173,7 @@ QED
 Theorem emit_mload_clean_seq_ptr:
   !D ctx fn PG G tn s sa sb src out a.
     emit_op MLOAD [Var src] sa = (Var out,sb) /\
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
@@ -257,7 +257,7 @@ End
 Theorem clean_emitted_prefix_mload:
   !D ctx fn PG G tn s sa sb src out a.
     emit_op MLOAD [Var src] sa = (Var out,sb) /\
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     clean_emitted_prefix D ctx fn PG sa sb (Var out)
@@ -298,6 +298,8 @@ Proof
   `eval_operand operand (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sm)) = SOME w /\
    eval_operand (Lit k) (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sm)) = SOME k /\
    op_taint tn1 (Lit k) = {}` by simp[op_taint_def, eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp
+       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sm))` by simp[] >>
   drule_all emit_copy_len_binop_seq_ptr >>
   disch_then (qspecl_then [`D`, `fn`, `PG`, `G1`]
     (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `u` strip_assume_tac)))) >>
@@ -394,7 +396,7 @@ QED
 Theorem copy_len_round_seq_ptr:
   !D ctx fn PG G tn x id v1 m v2 v3 v4 w.
     lookup_var v1 x = SOME w /\ op_taint tn (Var v1) = {} /\
-    v1 <> m /\ m <> v2 /\ ~ctx_has_dalloca ctx ==>
+    v1 <> m /\ m <> v2 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp x) ==>
     ?Gf tnf.
       inst_seq_ptr D 0 ctx fn PG G tn
         [mk_inst id NOT [Lit 31w] [m];
@@ -431,6 +433,12 @@ Proof
   disch_then (qx_choosel_then [`G1`, `tn1`, `t1`] strip_assume_tac) >>
   qpat_x_assum `run_inst_seq _ _ = _` kall_tac >>
   qpat_x_assum `t1 = _` kall_tac >>
+  `allocas_below_fmp y1 <=> allocas_below_fmp x` by
+    simp[Abbr `y1`, allocas_below_fmp_def, update_var_def] >>
+  `allocas_below_fmp y2 <=> allocas_below_fmp x` by
+    simp[Abbr `y2`, allocas_below_fmp_def, update_var_def] >>
+  `allocas_below_fmp y3 <=> allocas_below_fmp x` by
+    simp[Abbr `y3`, allocas_below_fmp_def, update_var_def] >>
   qspecl_then [`D`, `ctx`, `fn`, `PG`, `G1`, `tn1`, `y1`, `id+1`, `ADD`,
                `Var v1`, `Lit 31w`, `v2`, `word_add`, `w`, `31w`]
     mp_tac copy_len_binop_seq_ptr >>
@@ -588,7 +596,7 @@ Theorem mcopy_operand_seq_ptr:
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
     eval_operand count_op s = SOME n /\ op_taint tn count_op = {} /\
     ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn src s (w2n n) /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id MCOPY [Var dst;Var src;count_op] []] s G
       (step_taint (mk_inst id MCOPY [Var dst;Var src;count_op] []) s
@@ -609,7 +617,7 @@ Theorem emit_mcopy_operand_seq_ptr:
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
     eval_operand count_op s = SOME n /\ op_taint tn count_op = {} /\
     ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn src s (w2n n) /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?tnf.
       inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G tnf /\
       run_inst_seq (emitted_insts sa sb) s =
@@ -680,6 +688,7 @@ Proof
     (gvs[bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[]) >>
   `ptr_covers G1 tn1 src t (w2n (n2w n : bytes32)) /\
    ptr_covers G1 tn1 dst t (w2n (n2w n : bytes32))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all emit_mcopy_operand_seq_ptr >>
   disch_then (qspecl_then [`D`, `fn`, `PG`] (qx_choose_then `tn2` strip_assume_tac)) >>
   `emitted_insts sm sb = [mk_inst sm.cs_next_id MCOPY [Var dst;Var src;count_op] []]` by

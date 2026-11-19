@@ -8,7 +8,7 @@ Theorem ptr_inst_ok_calldatacopy_operand:
   !D ctx fn G tn s id dst src count n fuel.
     eval_operand count s = SOME n /\ op_taint tn count = {} /\
     op_taint tn src = {} /\ ptr_covers G tn dst s (w2n n) /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn
       (mk_inst id CALLDATACOPY [Var dst; src; count] []) s
 Proof

@@ -77,7 +77,7 @@ Theorem empty_zero_words_certificate:
     compile_zero_words (Var p) n sa = ((),sb) /\
     not_fresh_at sa p /\ lookup_var p s = SOME w /\
     ptr_covers G tn p s sz /\ 32*n <= sz /\
-    w2n w+sz < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
+    w2n w+sz < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?t H th. run_inst_seq (emitted_insts sa sb) s = OK t /\
       inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H th /\
       lookup_var p t = SOME w /\ ptr_covers H th p t sz /\
@@ -105,6 +105,13 @@ Proof
      gvs[not_fresh_at_def, Abbr `out`, ASCIInumbersTheory.toString_11] >> decide_tac) >>
   `p <> out` by metis_tac[] >>
   `32*n+32 <= sz` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (strip_tac >>
+     `allocas_below_fmp s` by simp[] >>
+     qpat_assum `t with <|vs_vars := _; vs_memory := _|> = s`
+       (fn th => qpat_assum `allocas_below_fmp s`
+         (mp_tac o ONCE_REWRITE_RULE [GSYM th])) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all empty_zero_pair_uniform_certificate >>
   disch_then (qspecl_then [`D`, `func`, `PG`, `sm.cs_next_id`] strip_assume_tac) >>
   qabbrev_tac `u = update_var out (w+n2w (32*n)) t` >>

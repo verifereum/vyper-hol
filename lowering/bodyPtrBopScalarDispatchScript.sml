@@ -73,7 +73,7 @@ Theorem bop_scalar_binop_success_path:
   (!z. z IN R ==> not_fresh_at st z) /\
   op_prov G x = NONE /\ op_taint tn x = {} /\
   op_prov G y = NONE /\ op_taint tn y = {} /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts st st') s = OK t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq (emitted_insts st st') s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G' tn' /\
@@ -101,7 +101,7 @@ Theorem bop_scalar_binop_abort_path:
   (!z. z IN R ==> not_fresh_at st z) /\
   op_prov G x = NONE /\ op_taint tn x = {} /\
   op_prov G y = NONE /\ op_taint tn y = {} /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts st st') s = Abort a t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq (emitted_insts st st') s = Abort a t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?G' tn' n j. gas_path_ptr D 0 ctx fn PG G tn s n G' tn'

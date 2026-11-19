@@ -22,7 +22,7 @@ Theorem unwrap_ensure_slot_execution:
   compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   nb < dimword (:256) /\ 32*n <= nb /\ n < 2**256 /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\

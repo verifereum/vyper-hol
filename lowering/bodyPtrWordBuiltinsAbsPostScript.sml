@@ -3,7 +3,7 @@ Theory bodyPtrWordBuiltinsAbsPost
 Ancestors bodyPtrWordBuiltinsAbsSequence bodyPtrWordBuiltinsAbsSuffix
   bodyPtrWordBuiltinsScalarSequence bodyPtrWordBuiltinsIntervalGhost
   exprLoweringProps builtinSimple compileEnv loweringStateRelDefs venomInst list pred_set
-  bodyPtrDefs ptrDiscipline ptrSafeRun finite_map codegenRel fragGasSeqPtr
+  bodyPtrDefs ptrDiscipline ptrSafeRun finite_map codegenRel fragGasSeqPtr fragGasSeqPtrContext
 
 Theorem word_abs_emitted_shape:
   compile_builtin_abs v sa = (op,sb) ==>
@@ -46,7 +46,7 @@ Theorem word_abs_sequence_invariant:
   (!i x p sz. MEM i xs /\ MEM x i.inst_outputs /\
     cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!i x p. MEM i xs /\ MEM x i.inst_outputs /\ not_fresh_at sa p ==> p <> x) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!x. x IN A ==> FLOOKUP G x = NONE /\ op_taint tn (Var x) = {}) /\
   allocas_from lo s /\ ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv e0 sa G0 tn0 s0 G tn ==>
@@ -57,14 +57,20 @@ Theorem word_abs_sequence_invariant:
       allocas_from lo t /\ ghost_inv H d cenv cx es HG th t /\
       ghost_kept cenv e0 sa G0 tn0 s0 HG th)
 Proof
-  strip_tac >> irule (word_scalar_sequence |> Q.INST
+  strip_tac >> mp_tac (word_scalar_sequence |> Q.INST
     [`P` |-> `\B HG th u.
       (!x. x IN B ==> FLOOKUP HG x = NONE /\ op_taint th (Var x) = {}) /\
-      allocas_from lo u /\ ghost_inv H d cenv cx es HG th u /\
-      ghost_kept cenv e0 sa G0 tn0 s0 HG th`] |> BETA_RULE) >> simp[] >>
-  conj_tac >- simp[word_abs_allocas_index, word_interval_ghost_inv_index] >>
-  reverse conj_tac
-  >- (rpt strip_tac >> irule word_abs_scalar_inst_ok >>
+      allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+      ghost_inv H d cenv cx es HG th u /\
+      ghost_kept cenv e0 sa G0 tn0 s0 HG th`] |> BETA_RULE
+    |> Q.SPECL [`xs`, `A`, `G`, `tn`, `s`]) >>
+  (impl_tac >- (simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      gvs[word_abs_allocas_index, word_interval_ghost_inv_index,
+          allocas_below_fmp_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule word_abs_scalar_inst_ok >>
       gvs[EVERY_MEM] >>
       rpt strip_tac >> Cases_on `arg` >> gvs[op_prov_def, op_taint_def] >>
       metis_tac[]) >>
@@ -74,8 +80,18 @@ Proof
       qexists_tac `B` >> simp[] >> metis_tac[]) >>
   conj_tac >- (irule word_abs_step_allocas >>
     qexistsl_tac [`i`, `u`] >> simp[MEM] >> metis_tac[]) >>
+  conj_tac
+  >- (strip_tac >>
+      irule run_inst_seq_allocas_below_fmp >>
+      qexistsl [`[i]`, `u`] >>
+      simp[run_inst_seq_def] >>
+      `MEM i.inst_opcode [SUB; SLT; EQ; AND; ISZERO; ASSERT; XOR; MUL]` by
+        metis_tac[MEM] >>
+      Cases_on `i.inst_opcode` >>
+      fs[MEM, venomInstTheory.is_alloca_op_def, venomInstTheory.is_terminator_def]) >>
   conj_tac >- (irule word_abs_step_ghost_inv >> simp[MEM] >> metis_tac[]) >>
-  irule word_abs_step_ghost_kept >> simp[MEM] >> metis_tac[]
+  irule word_abs_step_ghost_kept >> simp[MEM] >> metis_tac[])) >>
+  metis_tac[]
 QED
 
 Theorem word_abs_outputs_fresh:
@@ -91,7 +107,7 @@ QED
 Theorem word_abs_emitted_checked:
   compile_builtin_abs v sa = (op,sb) /\
   op_prov G v = NONE /\ op_taint tn v = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
@@ -128,7 +144,7 @@ Theorem word_abs_counted_normal_post:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   op_prov G v = NONE /\ op_taint tn v = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
@@ -153,7 +169,7 @@ Theorem word_abs_counted_abort:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   run_inst_seq (emitted_insts sa sb) s = Abort a t /\
   op_prov G v = NONE /\ op_taint tn v = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\

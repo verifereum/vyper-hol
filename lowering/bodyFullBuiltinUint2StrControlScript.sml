@@ -12,7 +12,7 @@ Theorem u2s_compare_joint_transition:
   not_fresh_at a p /\ local_ptrs_reserved cenv a /\
   (!r len. cenv.ce_return_buf = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
   (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
-  ~ctx_has_dalloca ctx /\ 2 <= k /\ x < dimword(:256) /\
+  2 <= k /\ x < dimword(:256) /\
   lookup_var (u2s_var a 0) s = SOME (n2w x) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
@@ -79,6 +79,10 @@ Resume u2s_compare_joint_transition[invariants]:
 QED
 
 Resume u2s_compare_joint_transition[path]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (`stmt_state_rel H0 ctx fn cenv cx es s` by
+       (fs[u2s_safe_def] >> metis_tac[]) >>
+     first_assum (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `FLOOKUP G (u2s_var a 0) = NONE /\ op_taint tn (Var (u2s_var a 0)) = {}` by simp[] >>
   `run_inst_seq [u2s_inst a iid EQ [Var (u2s_var a 0); Lit 0w] [u2s_var a k]] s = OK u` by
     (simp[Abbr `u`] >> irule u2s_eq_run >> simp[]) >>
@@ -114,7 +118,7 @@ Resume u2s_compare_joint_transition[path]:
      simp[Abbr `u`, Abbr `tn1`, u2s_inst_def, mk_inst_def,
        get_instruction_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
        eval_operand_def, op_taint_def, allocas_from_def, bool_to_word_def] >>
-     fs[allocas_from_def]) >>
+     fs[allocas_from_def, ptrDisciplineTheory.allocas_below_fmp_def]) >>
   rpt strip_tac >> metis_tac[gas_origin_ptr_path_trans]
 QED
 
@@ -125,7 +129,7 @@ Theorem u2s_cond_joint_transition:
   not_fresh_at a p /\ local_ptrs_reserved cenv a /\
   (!r len. cenv.ce_return_buf = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
   (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
-  ~ctx_has_dalloca ctx /\ x < dimword(:256) /\
+  x < dimword(:256) /\
   lookup_var (u2s_var a 0) s = SOME (n2w x) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
@@ -167,7 +171,7 @@ Theorem u2s_check_joint_transition:
   not_fresh_at a p /\ local_ptrs_reserved cenv a /\
   (!r len. cenv.ce_return_buf = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
   (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
-  ~ctx_has_dalloca ctx /\ x < dimword(:256) /\
+  x < dimword(:256) /\
   lookup_var (u2s_var a 0) s = SOME (n2w x) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
@@ -209,7 +213,6 @@ Theorem u2s_setup_joint_transition:
   not_fresh_at a p /\ local_ptrs_reserved cenv a /\
   (!r len. cenv.ce_return_buf = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
   (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
-  ~ctx_has_dalloca ctx /\
   eval_operand op s = SOME (n2w X) /\ op_prov G op = NONE /\ op_taint tn op = {} /\
   (!k. op <> Var (u2s_var a k)) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -276,6 +279,10 @@ Resume u2s_setup_joint_transition[invariants]:
 QED
 
 Resume u2s_setup_joint_transition[path]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (`stmt_state_rel H0 ctx fn cenv cx es s` by
+       (fs[u2s_safe_def] >> metis_tac[]) >>
+     first_assum (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `run_inst_seq (TAKE 3 (u2s_setup a op (Var p))) s = OK u` by
     (simp[Abbr `u`] >> irule u2s_setup_run >> simp[eval_operand_def]) >>
   `!D. inst_seq_ptr D lo ctx fn PG G tn (TAKE 3 (u2s_setup a op (Var p))) s G1 tn1` by
@@ -291,8 +298,9 @@ Resume u2s_setup_joint_transition[path]:
      irule u2s_pointer_assign_seq_cons >>
      simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
        u2s_var_injective, allocas_from_def, update_var_def] >>
-     fs[op_taint_def, allocas_from_def] >>
+     fs[op_taint_def, allocas_from_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
      conj_tac >- metis_tac[] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
      qexists_tac `n2w b` >>
      simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
        lookup_var_def, FLOOKUP_UPDATE, inst_seq_ptr_def, update_var_def] >>
@@ -320,7 +328,7 @@ Resume u2s_setup_joint_transition[path]:
      pop_assum SUBST1_TAC >> irule jmp_origin_ptr_path >>
      simp[Abbr `u`, update_var_def, get_instruction_def, EL_APPEND_EQN,
        u2s_setup_def, u2s_inst_def, allocas_from_def] >>
-     fs[allocas_from_def] >> metis_tac[]) >>
+     fs[allocas_from_def, ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
   rpt strip_tac >> metis_tac[gas_origin_ptr_path_trans]
 QED
 

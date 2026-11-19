@@ -11,7 +11,7 @@ Ancestors
 
 Theorem setup_literal_store_origin[local]:
   emit_void MSTORE [Var dst;Lit w] a = ((),b) /\ fn_has_code a b func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts /\
   lookup_var dst s = SOME (n2w p) /\ p < dimword(:256) /\
   ptr_covers G tn dst s 32 /\ allocas_from lo s /\
@@ -93,7 +93,7 @@ Theorem abi_encode_setup_tail_origin:
   write_len = (case mid of NONE => 0 | SOME w => 32) /\
   emit_op ADD [Var root;Lit (n2w (32+k))] a = (data,address_st) /\
   abi_builtin_encode_method_id mid (Var root) address_st = ((),ready) /\
-  fn_has_code a ready func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a ready func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   allocas_from lo s /\ alloca_inv s /\
@@ -245,6 +245,9 @@ Resume abi_encode_setup_tail_origin[some]:
     (gvs[Abbr `s1`, update_var_def, allocas_from_def] >> metis_tac[]) >>
   `32+32 <= 32 * word_size (maxlen+4)+32` by
     simp[vfmConstantsTheory.word_size_def, X_LT_DIV] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `s1`, update_var_def, allocas_below_fmp_def]) >>
   drule_at (Pat `emit_op ADD [Var root;Lit 32w] address_st = _`)
     (Q.INST [`off` |-> `32`] (SPEC_ALL abi_encode_owned_offset_origin)) >>
   disch_then (drule_at (Pat `ptr_covers G' tn' root s1 _`)) >>
@@ -262,6 +265,9 @@ Resume abi_encode_setup_tail_origin[some]:
      conj_tac >- metis_tac[] >>
      mp_tac (Q.SPEC `maxlen+4` le_word_size_mul) >>
      Cases_on `word_size (maxlen+4)` >> simp[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[Abbr `s2`, update_var_def, allocas_below_fmp_def]) >>
   qpat_x_assum `midop = Var mp` SUBST_ALL_TAC >>
   drule_at (Pat `emit_void MSTORE _ _ = _`) setup_literal_store_origin >>
   disch_then (drule_at (Pat `fn_has_code store_st ready _`)) >>
@@ -338,13 +344,12 @@ Resume abi_encode_setup_tail_origin[some_root_value]:
 QED
 
 Resume abi_encode_setup_tail_origin[some_fresh]:
-  qpat_x_assum `emit_op ADD _ address_st = _` mp_tac >>
-  qpat_x_assum `emit_void MSTORE _ store_st = _` mp_tac >>
-  simp[emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, comp_bind_def,
-    comp_ignore_bind_def, comp_return_def, emit_def] >>
-  rpt strip_tac >> gvs[] >>
-  gvs[loweringStateRelDefsTheory.not_fresh_at_def] >>
-  metis_tac[LESS_EQ_TRANS, LESS_EQ_SUC_REFL]
+  qpat_assum `emit_op ADD _ address_st = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+  qpat_assum `emit_void MSTORE _ store_st = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >>
+  irule freshWritesTheory.not_fresh_at_mono >>
+  qexists_tac `address_st` >> simp[]
 QED
 
 Resume abi_encode_setup_tail_origin[some_frame]:

@@ -170,7 +170,7 @@ Theorem toplevel_code_runtime_posts_full:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  fn_has_code sb sc func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sb sc func /\ fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!x. vv_operand (LocatedValue t p) = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv (TopLevelName ann nsid)) = SOME rt /\
     ~is_word_type (post_value_type cenv (TopLevelName ann nsid)) ==>

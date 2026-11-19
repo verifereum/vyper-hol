@@ -3,12 +3,13 @@ Ancestors
   allocationPtr fragExecPtr fragGasSeqPtr ghostPcTransportPtr
   bodyPtrDefs ptrSafeRun venomInst venomState exprLoweringProps
   typedCopyPtr finite_map words venomExecSemantics ptrDiscipline
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem alloca_counted_edge_covers:
   !D ctx func cenv cx es s id n out u PG G tn bb.
     stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
-    n < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    n < dimword (:256) /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id ALLOCA [Lit (n2w n)] [out]) /\
@@ -22,7 +23,11 @@ Theorem alloca_counted_edge_covers:
       (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn)
       out (u with vs_inst_idx := SUC s.vs_inst_idx) n
 Proof
-  rpt strip_tac
+  rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  conj_tac
   >- (drule_at (Pat `step_inst_base _ _ = _`) straight_line_ptr_edge >>
       simp[ptr_inst_ok_alloca, mk_inst_def, is_terminator_def] >>
       disch_then irule >> simp[GSYM mk_inst_def, ptr_inst_ok_alloca]) >>
@@ -31,7 +36,7 @@ QED
 
 Theorem pointer_offset_counted_edge:
   !D ctx func PG G tn s bb id root out a off delta.
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id ADD [Var root; delta] [out]) /\

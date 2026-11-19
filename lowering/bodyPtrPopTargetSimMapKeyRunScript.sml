@@ -6,6 +6,7 @@ Ancestors bodyPtrHashBuiltinsKeccakBytesRun exprSimMapKey exprLowering
   ghostPcTransportPtr instIdxIndep ptrDiscipline venomState venomInst
   venomExecSemantics words finite_map pred_set contextCodegenRel valueEncodingProps
   bodyPtrHashBuiltinsKeccak exprSimHash
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem map_key_emission:
   !x sa op sb.
@@ -56,7 +57,7 @@ Theorem map_key_triple:
     b+32 < dimword (:256) /\ n < dimword (:256) /\
     op_taint tn (Var x) = {} /\
     (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
-    mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx ==>
+    mem_word_at b s.vs_memory = n2w n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst ia ADD [Var x;Lit 32w] [p];
        mk_inst il MLOAD [Var x] [l];
@@ -83,6 +84,9 @@ Proof
 QED
 
 Resume map_key_triple[load]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    simp[Abbr `s1`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   rename1 `FLOOKUP G x = SOME (rootbase,cap)` >>
   `eval_operand (Var x) s1 = SOME (n2w b) /\
    FLOOKUP G1 x = SOME (rootbase,cap) /\ op_taint tn1 (Var x) = {} /\
@@ -112,6 +116,9 @@ Resume map_key_triple[load]:
 QED
 
 Resume map_key_triple[sha]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    simp[Abbr `s2`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `eval_operand (Var p) s2 = SOME (n2w (b+32)) /\
    eval_operand (Var l) s2 = SOME (n2w n) /\
    FLOOKUP G2 p = SOME (rootbase,cap) /\
@@ -143,7 +150,7 @@ Theorem map_key_inst_seq:
     b+32 < dimword (:256) /\ n < dimword (:256) /\
     op_taint tn (Var x) = {} /\
     (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
-    mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx ==>
+    mem_word_at b s.vs_memory = n2w n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
       op_taint tn' op = {} /\ op_prov G' op = NONE /\
       tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
@@ -174,7 +181,7 @@ Theorem map_key_counted:
     b+32 < dimword (:256) /\ n < dimword (:256) /\
     op_taint tn (Var x) = {} /\
     (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
-    mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx /\
+    mem_word_at b s.vs_memory = n2w n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
     run_inst_seq (emitted_insts sa sb) s = OK t ==>

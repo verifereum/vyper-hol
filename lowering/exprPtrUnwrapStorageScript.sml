@@ -5,6 +5,7 @@ Ancestors
   exprLoweringProps bodyPtrDefs loweringPosts exprLowering context compileEnv
   gasSummaryComposePtr gasSummary exprSimMemorySource vyperState venomState
   finite_map freshWrites exprSimPtrProps ptrSafetyTransport
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem vv_post_storage_source:
   vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
@@ -79,7 +80,7 @@ Theorem unwrap_storage_word_marked_read_ptr_horizons:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   p.ptr_location = slot_loc tr /\ is_word_type t /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
-  fn_has_code sm sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sm sb func /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!H. P H ==>
@@ -108,6 +109,10 @@ Proof
   drule_all unwrap_storage_word_input >> strip_tac >>
   `emit_op (if tr then TLOAD else SLOAD) [p.ptr_operand] sm = (op,sb)` by
     (Cases_on `tr` >> gvs[slot_loc_def, unwrap_value_def, compile_ptr_load_def]) >>
+  `stmt_state_rel H0 ctx func cenv cx ee s` by fs[vv_post_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all emit_storage_load_ptr_path >>
   disch_then (qspecl_then [`PG`, `G`, `<| d_stor := K (K {}); d_trans := K (K {});
     d_imm := K {}; d_ret := K {} |>`] strip_assume_tac) >>
@@ -139,7 +144,7 @@ Theorem unwrap_storage_word_marked_read_ptr:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   p.ptr_location = slot_loc tr /\ is_word_type t /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
-  fn_has_code sm sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sm sb func /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\

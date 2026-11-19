@@ -80,6 +80,7 @@ Proof
   `cs_extends s1 s4` by metis_tac[cs_extends_trans] >>
   `cs_extends s1 sb` by metis_tac[cs_extends_trans] >>
   `fn_has_code sa s1 fn` by metis_tac[fn_has_code_split] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SRULE [] compile_assert_slice_bounds_counted_abort) >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   simp[] >> qexistsl_tac [`G'`,`tn'`,`j`] >> gvs[]
@@ -230,6 +231,7 @@ Proof
   `fn_has_code sa sc fn /\ fn_has_code sc sb fn` by metis_tac[fn_has_code_split] >>
   `!op. MEM op [start;len;src_len] ==> op_prov G op = NONE /\ op_taint tn op = {}` by
     simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all compile_assert_slice_bounds_counted_ok >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   drule_all slice_bounds_allocation_frame >> strip_tac >>
@@ -240,6 +242,7 @@ Proof
     (qpat_assum `u = _` (mp_tac o Q.AP_TERM `\t. t.vs_halted`) >> simp[]) >>
   `~ub.vs_halted /\ ub.vs_current_bb = sc.cs_current_bb /\
    ub.vs_inst_idx = LENGTH sc.cs_current_insts` by simp[Abbr `ub`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ub` by simp[] >>
   drule_all compile_slice_out_buf_counted >>
   disch_then (qspecl_then [`tnb`,`PG`,`Gb`,`D`] strip_assume_tac) >>
   suspend "source_offset"
@@ -279,6 +282,7 @@ Resume compile_slice_data_counted_normal[source_offset]:
   `eval_operand start t = SOME (n2w (w2n wa)) /\ op_taint tn2 start = {}` by simp[] >>
   qpat_x_assum `copy = Var q` SUBST_ALL_TAC >>
   qpat_x_assum `emit_op ADD [Var r; Lit 32w] _ = _` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all (PURE_REWRITE_RULE [wordsTheory.n2w_w2n]
     (Q.SPECL [`src`,`w2n wa`] emit_pointer_offset_counted_covers)) >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
@@ -368,6 +372,7 @@ Resume compile_slice_data_counted_normal[store_apply]:
           eval_operand_def, lookup_var_def]) >> simp[]) >>
   `op_taint tn'' len = {}` by
     (Cases_on `len` >> fs[op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by simp[] >>
   drule_all emit_scratch_word_counted >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   suspend "compose_final"

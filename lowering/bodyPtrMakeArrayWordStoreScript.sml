@@ -81,7 +81,7 @@ QED
 
 (* Counted-path endpoint used by aggregate prefix extension. *)
 Theorem make_array_word_store_endpoint:
-  ptr_covers G tn dst s 32 /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ptr_covers G tn dst s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id MSTORE [Var dst; value] []) /\

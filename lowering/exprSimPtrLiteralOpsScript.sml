@@ -76,7 +76,7 @@ Proof
 QED
 
 Theorem literal_add_ptr_inst_ok:
-  op_taint tn (Var src) = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn (Var src) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
     (mk_inst id ADD [Var src; Lit off] [dst]) s
 Proof
@@ -91,19 +91,11 @@ Proof
 QED
 
 Theorem literal_mstore_ptr_inst_ok:
-  ptr_covers G tn dst s 32 /\ ~ctx_has_dalloca ctx ==>
+  ptr_covers G tn dst s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
     (mk_inst id MSTORE [Var dst; Lit w] []) s
 Proof
   strip_tac >> irule ptr_inst_ok_mstore >> simp[op_taint_def]
-QED
-
-Theorem literal_alloca_ptr_inst_ok:
-  ~ctx_has_dalloca ctx ==>
-  ptr_inst_ok D 0 fuel ctx fn G tn
-    (mk_inst id ALLOCA [Lit n] [dst]) s
-Proof
-  simp[ptr_inst_ok_alloca]
 QED
 
 Theorem literal_add_ptr_covers:

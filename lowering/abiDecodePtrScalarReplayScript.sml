@@ -20,7 +20,9 @@ Theorem scalar_seq_success_replay_ptr:
     (!x. x IN R ==> lookup_var x u = lookup_var x s /\
       FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
 Proof
-  strip_tac >> drule_all bop_scalar_seq_run >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\

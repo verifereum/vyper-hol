@@ -19,7 +19,7 @@ Theorem raw_log_fixed_log_inst_ok:
   EVERY (\op. op_taint tn op = {}) topics /\
   op_taint tn pop = {} /\
   (!i. w2n off <= i /\ i < w2n off + 32 ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   stor_taint_ok_at D tn s /\
   step_inst_base
     (mk_inst id LOG (Lit (n2w (LENGTH topics)) :: REVERSE topics ++ [Lit 32w;pop]) []) s = OK t ==>
@@ -44,22 +44,18 @@ Theorem raw_log_fixed_store_step:
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;Var p]) [] s1 = ((),sb) /\
   eval_operand (Var p) s = SOME w /\ eval_operand data_op s = SOME word /\
   ptr_covers G tn p s 32 /\ op_taint tn data_op = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
-  let i = mk_inst id MSTORE [Var p;data_op] [];
-      t = mstore (w2n w) word s;
-      tf = step_taint i s t tn
-  in
-    step_inst_base i s = OK t /\ ptr_inst_ok D lo 0 ctx func G tn i s /\
-    step_prov PG G i t = G /\
-    tf.t_var = tn.t_var /\ tf.t_stor = tn.t_stor /\
-    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
-    tf.t_mem = tn.t_mem DIFF {j | w2n w <= j /\ j < w2n w + 32} /\
-    ptr_covers G tf p t 32 /\
-    EVERY (\op. op_taint tf op = {}) ops = EVERY (\op. op_taint tn op = {}) ops /\
-    (!j. w2n w <= j /\ j < w2n w+32 ==> j NOTIN tf.t_mem) /\
-    allocas_from lo t /\ stor_taint_ok_at D tn s = stor_taint_ok_at D tf t
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  step_inst_base (mk_inst id MSTORE [Var p;data_op] []) s = OK (mstore (w2n w) word s) /\ ptr_inst_ok D lo 0 ctx func G tn (mk_inst id MSTORE [Var p;data_op] []) s /\
+  step_prov PG G (mk_inst id MSTORE [Var p;data_op] []) (mstore (w2n w) word s) = G /\
+  (step_taint (mk_inst id MSTORE [Var p;data_op] []) s (mstore (w2n w) word s) tn).t_var = tn.t_var /\ (step_taint (mk_inst id MSTORE [Var p;data_op] []) s (mstore (w2n w) word s) tn).t_stor = tn.t_stor /\
+  (step_taint (mk_inst id MSTORE [Var p;data_op] []) s (mstore (w2n w) word s) tn).t_trans = tn.t_trans /\ (step_taint (mk_inst id MSTORE [Var p;data_op] []) s (mstore (w2n w) word s) tn).t_imm = tn.t_imm /\
+  (step_taint (mk_inst id MSTORE [Var p;data_op] []) s (mstore (w2n w) word s) tn).t_mem = tn.t_mem DIFF {j | w2n w <= j /\ j < w2n w + 32} /\
+  ptr_covers G (step_taint (mk_inst id MSTORE [Var p;data_op] []) s (mstore (w2n w) word s) tn) p (mstore (w2n w) word s) 32 /\
+  EVERY (\op. op_taint (step_taint (mk_inst id MSTORE [Var p;data_op] []) s (mstore (w2n w) word s) tn) op = {}) ops = EVERY (\op. op_taint tn op = {}) ops /\
+  (!j. w2n w <= j /\ j < w2n w+32 ==> j NOTIN (step_taint (mk_inst id MSTORE [Var p;data_op] []) s (mstore (w2n w) word s) tn).t_mem) /\
+  allocas_from lo (mstore (w2n w) word s) /\ stor_taint_ok_at D tn s = stor_taint_ok_at D (step_taint (mk_inst id MSTORE [Var p;data_op] []) s (mstore (w2n w) word s) tn) (mstore (w2n w) word s)
 Proof
-  strip_tac >> simp_tac bool_ss [LET_THM] >>
+  strip_tac >>
   `lookup_var p s = SOME w` by gvs[eval_operand_def] >>
   drule_all mstore_ghost_frame >>
   disch_then (qspecl_then [`PG`,`G`,`id`] strip_assume_tac) >>
@@ -150,7 +146,7 @@ Theorem raw_log_fixed_tail_path:
     emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [] s1 = ((),sb) /\
     compile_alloc_buffer 32 alloc_sa = (buf,data_sa) /\ fn_has_code alloc_sa data_sa func /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
+    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     LENGTH ops < dimword (:256) /\ sa.cs_next_id <= alloc_sa.cs_next_id /\
     sa.cs_next_var <= sm.cs_next_var /\
     EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) (buf.buf_operand::data_op::ops) /\
@@ -180,14 +176,19 @@ Theorem raw_log_fixed_tail_path:
       u = ((mstore (w2n w) word s) with
         <|vs_logs := s.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs];
           vs_inst_idx := LENGTH sb.cs_current_insts|>) /\
-      (let i = mk_inst sm.cs_next_id MSTORE [buf.buf_operand;data_op] [];
-           j = mk_inst s1.cs_next_id LOG
-             (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [];
-           t = mstore (w2n w) word s;
-           t1 = t with vs_inst_idx := SUC s.vs_inst_idx;
-           v = t1 with vs_logs := s.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]
-       in G2 = step_prov PG (step_prov PG G i t) j v /\
-          tn2 = step_taint j t1 v (step_taint i s t tn)) /\
+      G2 = step_prov PG
+        (step_prov PG G (mk_inst sm.cs_next_id MSTORE [buf.buf_operand;data_op] []) (mstore (w2n w) word s))
+        (mk_inst s1.cs_next_id LOG
+          (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [])
+        (((mstore (w2n w) word s) with vs_inst_idx := SUC s.vs_inst_idx) with vs_logs :=
+          s.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) /\
+      tn2 = step_taint
+        (mk_inst s1.cs_next_id LOG
+          (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [])
+        ((mstore (w2n w) word s) with vs_inst_idx := SUC s.vs_inst_idx)
+        (((mstore (w2n w) word s) with vs_inst_idx := SUC s.vs_inst_idx) with vs_logs :=
+          s.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs])
+        (step_taint (mk_inst sm.cs_next_id MSTORE [buf.buf_operand;data_op] []) s (mstore (w2n w) word s) tn) /\
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G2,tn2) /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv_at (DF H) lo d cenv cx
@@ -268,7 +269,7 @@ Proof
     (simp[Abbr `j`] >> irule (SRULE [] raw_log_fixed_log_inst_ok) >>
      simp[Abbr `t1`, allocas_from_def, stor_taint_ok_at_def] >>
      gvs[ptr_covers_def, eval_operand_def, allocas_from_def,
-         stor_taint_ok_at_def] >> metis_tac[]) >>
+         stor_taint_ok_at_def, Abbr `t`, mstore_def, allocas_below_fmp_def] >> metis_tac[]) >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (v with vs_inst_idx := LENGTH sb.cs_current_insts),
       step_prov PG (step_prov PG G i t) j v, step_taint j t1 v tf) /\
@@ -321,7 +322,7 @@ Theorem raw_log_fixed_static_tail_path:
     emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [] s1 = ((),sb) /\
     compile_alloc_buffer 32 alloc_sa = (buf,data_sa) /\ fn_has_code alloc_sa data_sa func /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
+    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     LENGTH ops < dimword (:256) /\ sa.cs_next_id <= alloc_sa.cs_next_id /\
     sa.cs_next_var <= sm.cs_next_var /\
     EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) (buf.buf_operand::data_op::ops) /\
@@ -415,7 +416,7 @@ Proof
      gvs[ptr_covers_def, op_taint_def, eval_operand_def] >> metis_tac[]) >>
   `ptr_inst_ok (DF H) lo 0 ctx func G tf j t1` by
     (simp[ptr_inst_ok_def, Abbr `j`, mk_inst_def, step_inst_non_invoke] >>
-     gvs[Abbr `t1`, allocas_from_def] >> metis_tac[]) >>
+     gvs[Abbr `t1`, Abbr `t`, mstore_def, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   `sb.cs_current_bb = sm.cs_current_bb /\
    sb.cs_current_insts = sm.cs_current_insts ++ [i;j]` by
     (gvs[emit_void_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,

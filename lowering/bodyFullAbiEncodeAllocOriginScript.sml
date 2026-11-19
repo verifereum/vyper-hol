@@ -65,7 +65,7 @@ Theorem abi_encode_alloc_origin_exact:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   n < dimword (:256) /\
   stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q w t G' tn'.
@@ -129,6 +129,11 @@ Proof
     (simp[run_inst_seq_mem_ok_last] >> conj_tac
      >- (irule below_frontier_no_ranges >> simp[Abbr `ins`, mk_inst_def]) >>
      simp[Abbr `ins`, mk_inst_def, memSafeRunTheory.inst_dload_in_section_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     fs[stmt_state_rel_def, fmp_room_def, allocas_below_fmp_def,
+        venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   `!D. inst_seq_ptr D lo ctx func PG G tn [ins] s
          (step_prov PG G ins t) (step_taint ins s t tn)` by
     (gen_tac >> simp[inst_seq_ptr_def] >>

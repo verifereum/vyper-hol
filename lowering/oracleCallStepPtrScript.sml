@@ -63,7 +63,7 @@ Theorem call_ptr_safe_step:
    (inst.inst_opcode = STATICCALL /\
     inst.inst_operands = [gas; addr; ao; az; ro; rz])) /\
   access_ok 0 G fn inst s /\ taint_ok fn tn inst s /\
-  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok H cx tn s ==>
+  allocas_from 0 s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ stor_taint_ok H cx tn s ==>
   ptr_safe_step (cx_dead H cx) 0 fuel ctx fn PG G tn inst s
 Proof
   strip_tac >> simp[Once ptr_safe_step_def, ptr_inst_ok_def] >>
@@ -100,7 +100,7 @@ Theorem call_gas_path_ptr_edge:
    (inst.inst_opcode = STATICCALL /\
     inst.inst_operands = [gas; addr; ao; az; ro; rz])) /\
   access_ok 0 G fn inst s /\ taint_ok fn tn inst s /\
-  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok H cx tn s /\
+  allocas_from 0 s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ stor_taint_ok H cx tn s /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   step_inst_base inst s = OK u ==>

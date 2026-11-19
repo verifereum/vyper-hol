@@ -94,7 +94,7 @@ Proof
     `func`,`shadow_func`,`cenv`,`env`,`cx`,`ty`,`BaseT AddressT`,`args`,
     `[]`,`es`,`es`,`st0`,`sa`,`sf`,`shadow_sa`,`shadow_sf`,
     `[h;v;r;sig]`,`s0`,`G0`,`tn0`] ecrecover_args_suffix_full) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _
     (eval_exprs cx args) _ argsQ argsR` >>
   qpat_assum `LENGTH args = 4`

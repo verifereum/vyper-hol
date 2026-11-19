@@ -30,7 +30,7 @@ Theorem assign_base_storage_word_counted:
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id (if tr then TSTORE else SSTORE) [addr; value] []) /\
     op_taint tn addr = {} /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_call_ctx.cc_static /\
     eval_operand addr s = SOME k /\ eval_operand value s = SOME w /\
     u = ((if tr then tstore k w s else sstore k w s)
       with vs_inst_idx := SUC s.vs_inst_idx) /\
@@ -67,7 +67,7 @@ Theorem assign_base_copy_binop_counted:
       SOME (mk_inst id opc [left;right] [tmp]) /\
     (opc = MUL \/ opc = ADD \/ opc = AND) /\
     op_taint tn left = {} /\ op_taint tn right = {} /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     step_inst_base (mk_inst id opc [left;right] [tmp]) s =
       OK (update_var tmp w s) ==>
     gas_path_ptr D 0 ctx fn PG G tn s 0
@@ -96,7 +96,7 @@ Theorem assign_base_storage_offset_counted:
       SOME (mk_inst id MUL [Var ctr;Lit 32w] [mv]) /\
     ptr_covers G tn root s total /\ lookup_var root s = SOME a /\
     lookup_var ctr s = SOME (n2w i) /\ op_taint tn (Var ctr) = {} /\
-    root <> mv /\ ctr <> mv /\ ~ctx_has_dalloca ctx ==>
+    root <> mv /\ ctr <> mv /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       lookup_var root u = SOME a /\ lookup_var ctr u = SOME (n2w i) /\
@@ -146,7 +146,7 @@ Theorem assign_base_storage_address_counted:
     ptr_covers G tn root s total /\ lookup_var root s = SOME a /\
     eval_operand offset s = SOME (n2w off) /\ op_taint tn offset = {} /\
     off < total /\ off + 32 <= total /\
-    w2n a + off < dimword (:256) /\ root <> tmp /\ ~ctx_has_dalloca ctx ==>
+    w2n a + off < dimword (:256) /\ root <> tmp /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       lookup_var tmp u = SOME (a + n2w off) /\ ptr_covers Gf tf tmp u 32 /\
@@ -195,7 +195,7 @@ Theorem assign_base_storage_load_counted:
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id MLOAD [Var src] [tmp]) /\
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
-    src <> tmp /\ ~ctx_has_dalloca ctx ==>
+    src <> tmp /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       lookup_var tmp u = SOME (mload (w2n a) s) /\
@@ -212,6 +212,7 @@ Theorem assign_base_storage_load_counted:
          FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
 Proof
   rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all mload_counted_path >>
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
   `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>
@@ -223,6 +224,13 @@ Proof
     `(update_var tmp (mload (w2n a) s) s) with vs_inst_idx := SUC s.vs_inst_idx`] >>
   gvs[bodyPtrDefsTheory.ptr_covers_def, execution_frame_def, update_var_def, lookup_var_def,
       op_taint_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
+QED
+
+Theorem assign_base_exec_frame_allocas_below_fmp[local]:
+  execution_frame t = execution_frame s ==>
+  (allocas_below_fmp t <=> allocas_below_fmp s)
+Proof
+  simp[execution_frame_def, venom_state_component_equality, allocas_below_fmp_def]
 QED
 
 Theorem assign_base_storage_source_prefix:
@@ -238,7 +246,7 @@ Theorem assign_base_storage_source_prefix:
     lookup_var ctr s = SOME (n2w i) /\ op_taint tn (Var ctr) = {} /\
     ALL_DISTINCT [ctr;mv;sv;vv] /\ ~MEM root [mv;sv;vv] /\
     i < k /\ 32*k <= total /\ w2n a + 32*(k-1) < dimword (:256) /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       lookup_var ctr u = SOME (n2w i) /\
@@ -268,6 +276,8 @@ Proof
    get_instruction bb s1.vs_inst_idx =
      SOME (mk_inst (id+1) ADD [Var root;Var mv] [sv]) /\
    eval_operand (Var mv) s1 = SOME (n2w (32*i))` by simp[eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> metis_tac[assign_base_exec_frame_allocas_below_fmp]) >>
   drule_all assign_base_storage_address_counted >>
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
   disch_then (qx_choose_then `g2` (qx_choose_then `t2`
@@ -275,6 +285,8 @@ Proof
   `lookup_block s2.vs_current_bb fn.fn_blocks = SOME bb /\
    get_instruction bb s2.vs_inst_idx =
      SOME (mk_inst (id+2) MLOAD [Var sv] [vv])` by simp[ADD1] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >> metis_tac[assign_base_exec_frame_allocas_below_fmp]) >>
   drule_all assign_base_storage_load_counted >>
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
   disch_then (qx_choose_then `g3` (qx_choose_then `t3`
@@ -295,7 +307,7 @@ Theorem assign_base_storage_write_counted:
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id (if tr then TSTORE else SSTORE) [addr;value] []) /\
     eval_operand addr s = SOME k /\ eval_operand value s = SOME w /\
-    op_taint tn addr = {} /\ ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static ==>
+    op_taint tn addr = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_call_ctx.cc_static ==>
     gas_path_ptr D 0 ctx fn PG G tn s 0 G
       (if tr then tn with t_trans := key_update tn.t_trans k (op_taint tn value)
        else tn with t_stor := key_update tn.t_stor k (op_taint tn value))
@@ -326,7 +338,7 @@ Theorem assign_base_storage_add_counted:
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id ADD [left;right] [out]) /\
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
-    op_taint tn left = {} /\ op_taint tn right = {} /\ ~ctx_has_dalloca ctx ==>
+    op_taint tn left = {} /\ op_taint tn right = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       u = (update_var out (a+b) s) with vs_inst_idx := SUC s.vs_inst_idx /\
@@ -367,7 +379,7 @@ Theorem assign_base_storage_destination_prefix:
     eval_operand dst s = SOME k /\ lookup_var ctr s = SOME (n2w i) /\
     lookup_var vv s = SOME w /\ op_taint tn dst = {} /\
     op_taint tn (Var ctr) = {} /\ dv <> ctr /\ dv <> vv /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_call_ctx.cc_static ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       u.vs_memory = s.vs_memory /\ tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\
@@ -395,6 +407,9 @@ Proof
    eval_operand (Var dv) s1 = SOME (k+n2w i) /\
    eval_operand (Var vv) s1 = SOME w /\ ~s1.vs_call_ctx.cc_static` by
     gvs[execution_frame_def, update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `s1 = update_var _ _ _ with vs_inst_idx := _` SUBST1_TAC >>
+     fs[update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all assign_base_storage_write_counted >>
   disch_then (qspecl_then [`g1`, `D`, `PG`] mp_tac) >> strip_tac >>
   qexistsl_tac [`g1`,
@@ -415,7 +430,7 @@ Theorem assign_base_storage_assign_counted:
     ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [Var src] [out]) /\
     lookup_var src s = SOME w /\ FLOOKUP G src = NONE /\
-    op_taint tn (Var src) = {} /\ ~ctx_has_dalloca ctx ==>
+    op_taint tn (Var src) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     gas_path_ptr D 0 ctx fn PG G tn s 0 (DRESTRICT G (COMPL {out}))
       (tn with t_var := tn.t_var |+ (out,{}))
       (OK ((update_var out w s) with vs_inst_idx := SUC s.vs_inst_idx))
@@ -455,7 +470,7 @@ Theorem assign_base_storage_increment_prefix:
     get_instruction bb (SUC s.vs_inst_idx) =
       SOME (mk_inst (id+1) ASSIGN [Var nv] [ctr]) /\
     lookup_var ctr s = SOME (n2w i) /\ FLOOKUP G ctr = NONE /\
-    op_taint tn (Var ctr) = {} /\ ctr <> nv /\ ~ctx_has_dalloca ctx ==>
+    op_taint tn (Var ctr) = {} /\ ctr <> nv /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       lookup_var ctr u = SOME (n2w (SUC i)) /\ FLOOKUP Gf ctr = NONE /\
@@ -481,6 +496,9 @@ Proof
    get_instruction bb s1.vs_inst_idx = SOME (mk_inst (id+1) ASSIGN [Var nv] [ctr]) /\
    lookup_var nv s1 = SOME (n2w i+1w) /\ FLOOKUP g1 nv = NONE` by
     gvs[execution_frame_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE, first_prov_def, op_prov_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `s1 = update_var _ _ _ with vs_inst_idx := _` SUBST1_TAC >>
+     fs[update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all assign_base_storage_assign_counted >>
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >> strip_tac >>
   qexistsl_tac [`DRESTRICT g1 (COMPL {ctr})`, `t1 with t_var := t1.t_var |+ (ctr,{})`,
@@ -496,7 +514,7 @@ Theorem assign_base_storage_jump_counted:
   !s fn bb id lbl tn G ctx D PG.
     ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK (jump_to lbl s))
 Proof
   rpt gen_tac >> strip_tac >>
@@ -520,7 +538,7 @@ Theorem assign_base_storage_test_counted:
     ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) /\
     (opc = LT /\ (?v k. ops = [Var v;Lit k]) \/ opc = ISZERO) /\
-    (!op. MEM op ops ==> op_taint tn op = {}) /\ ~ctx_has_dalloca ctx /\
+    (!op. MEM op ops ==> op_taint tn op = {}) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     step_inst_base (mk_inst id opc ops [out]) s = OK (update_var out w s) ==>
     gas_path_ptr D 0 ctx fn PG G tn s 0 (DRESTRICT G (COMPL {out}))
       (tn with t_var := tn.t_var |+ (out,{}))
@@ -550,7 +568,7 @@ Theorem assign_base_storage_header_prefix:
     get_instruction bb (SUC s.vs_inst_idx) =
       SOME (mk_inst (id+1) ISZERO [Var lt] [done]) /\
     lookup_var ctr s = SOME (n2w i) /\ i <= n /\ n < dimword (:256) /\
-    op_taint tn (Var ctr) = {} /\ ALL_DISTINCT [ctr;lt;done] /\ ~ctx_has_dalloca ctx ==>
+    op_taint tn (Var ctr) = {} /\ ALL_DISTINCT [ctr;lt;done] /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       lookup_var done u = SOME (bool_to_word (~(i<n))) /\
@@ -604,7 +622,7 @@ Theorem assign_base_storage_branch_counted:
     ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id JNZ [op;Label yes;Label no] []) /\
     eval_operand op s = SOME (if b then 1w else 0w) /\
-    op_taint tn op = {} /\ ~ctx_has_dalloca ctx ==>
+    op_taint tn op = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK (jump_to (if b then yes else no) s))
 Proof
   rpt gen_tac >> strip_tac >>
@@ -639,7 +657,7 @@ Theorem assign_base_storage_header_counted:
     get_instruction bb (s.vs_inst_idx+2) =
       SOME (mk_inst (id+2) JNZ [Var done;Label exit;Label bodylbl] []) /\
     lookup_var ctr s = SOME (n2w i) /\ i <= n /\ n < dimword (:256) /\
-    op_taint tn (Var ctr) = {} /\ ALL_DISTINCT [ctr;lt;done] /\ ~ctx_has_dalloca ctx ==>
+    op_taint tn (Var ctr) = {} /\ ALL_DISTINCT [ctr;lt;done] /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       u.vs_current_bb = (if i<n then bodylbl else exit) /\ u.vs_inst_idx = 0 /\ ~u.vs_halted /\
@@ -660,6 +678,8 @@ Proof
       SOME (mk_inst (id+2) JNZ [Var done;Label exit;Label bodylbl] []) /\
    eval_operand (Var done) s1 = SOME (if ~(i<n) then 1w else 0w)` by
     (simp[eval_operand_def] >> Cases_on `i<n` >> simp[bool_to_word_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> metis_tac[assign_base_exec_frame_allocas_below_fmp]) >>
   drule_all assign_base_storage_branch_counted >>
   disch_then (qspecl_then [`g1`, `D`, `PG`] mp_tac) >> strip_tac >>
   qexistsl_tac [`g1`, `t1`, `jump_to (if ~(i<n) then exit else bodylbl) s1`] >>
@@ -681,7 +701,7 @@ Theorem assign_base_storage_copy_prefix:
     lookup_var ctr s = SOME (n2w i) /\ FLOOKUP G ctr = NONE /\ op_taint tn (Var ctr) = {} /\
     ALL_DISTINCT [root;ctr;mv;sv;vv;dv] /\
     i<n /\ 32*n <= total /\ w2n a+32*(n-1) < dimword (:256) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_call_ctx.cc_static ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       u.vs_memory = s.vs_memory /\ tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\
@@ -714,6 +734,8 @@ Proof
    eval_operand (Lit k) s1 = SOME k /\ op_taint t1 (Lit k) = {} /\
    op_taint t1 (Var ctr) = {} /\ ~s1.vs_call_ctx.cc_static` by
     gvs[ALL_DISTINCT, eval_operand_def, op_taint_def, ADD1] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> metis_tac[assign_base_exec_frame_allocas_below_fmp]) >>
   drule_all assign_base_storage_destination_prefix >>
   disch_then (qspecl_then [`g1`, `D`, `PG`] mp_tac) >>
   disch_then (qx_choose_then `g2` (qx_choose_then `t2`
@@ -740,7 +762,7 @@ Theorem assign_base_storage_body_counted:
     lookup_var ctr s = SOME (n2w i) /\ FLOOKUP G ctr = NONE /\ op_taint tn (Var ctr) = {} /\
     ALL_DISTINCT [root;ctr;mv;sv;vv;dv;nv] /\
     i<n /\ 32*n <= total /\ w2n a+32*(n-1) < dimword (:256) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_call_ctx.cc_static ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       lookup_var ctr u = SOME (n2w (SUC i)) /\ FLOOKUP Gf ctr = NONE /\
@@ -773,12 +795,30 @@ Proof
    get_instruction bb (SUC s1.vs_inst_idx) = SOME (mk_inst ((id+5)+1) ASSIGN [Var nv] [ctr]) /\
    lookup_var ctr s1 = SOME (n2w i) /\ FLOOKUP g1 ctr = NONE /\ op_taint t1 (Var ctr) = {}` by
     gvs[ALL_DISTINCT, ADD1] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     `allocas_below_fmp (if tr then tstore (k+n2w i)
+          (mload (w2n (a+n2w (32*i))) s) s
+        else sstore (k+n2w i) (mload (w2n (a+n2w (32*i))) s) s) <=>
+      allocas_below_fmp s` by
+       (Cases_on `tr` >> rpt (pop_assum kall_tac) >>
+        simp[tstore_def, sstore_def, allocas_below_fmp_def]) >>
+     metis_tac[assign_base_exec_frame_allocas_below_fmp]) >>
   drule_all assign_base_storage_increment_prefix >>
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
   disch_then (qx_choose_then `g2` (qx_choose_then `t2`
     (qx_choose_then `s2` strip_assume_tac))) >>
   `lookup_block s2.vs_current_bb fn.fn_blocks = SOME bb /\
    get_instruction bb s2.vs_inst_idx = SOME (mk_inst (id+7) JMP [Label hdr] [])` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >>
+     `allocas_below_fmp (if tr then tstore (k+n2w i)
+          (mload (w2n (a+n2w (32*i))) s) s
+        else sstore (k+n2w i) (mload (w2n (a+n2w (32*i))) s) s) <=>
+      allocas_below_fmp s` by
+       (Cases_on `tr` >> rpt (pop_assum kall_tac) >>
+        simp[tstore_def, sstore_def, allocas_below_fmp_def]) >>
+     metis_tac[assign_base_exec_frame_allocas_below_fmp]) >>
   drule_all assign_base_storage_jump_counted >>
   disch_then (qspecl_then [`t2`, `g2`, `D`, `PG`] mp_tac) >> strip_tac >>
   qexistsl_tac [`g2`, `t2`, `jump_to hdr s2`] >> conj_tac >-
@@ -797,7 +837,7 @@ Theorem assign_base_storage_copy_header:
     get_instruction bb (SUC s.vs_inst_idx) =
       SOME (mk_inst (id+1) JNZ [Var done;Label exit;Label bodylbl] []) /\
     lookup_var ctr s = SOME (n2w i) /\ i <= n /\ n < dimword (:256) /\
-    op_taint tn (Var ctr) = {} /\ ctr <> done /\ ~ctx_has_dalloca ctx ==>
+    op_taint tn (Var ctr) = {} /\ ctr <> done /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?Gf tf u.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       u.vs_current_bb = (if i=n then exit else bodylbl) /\ u.vs_inst_idx = 0 /\ ~u.vs_halted /\
@@ -824,6 +864,10 @@ Proof
    op_taint t1 (Var done) = {}` by
     (simp[Abbr `s1`, Abbr `t1`, execution_frame_def, update_var_def, eval_operand_def, lookup_var_def,
       FLOOKUP_UPDATE, op_taint_def] >> Cases_on `i=n` >> simp[bool_to_word_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `s1`, update_var_def, allocas_below_fmp_def] >>
+     fs[allocas_below_fmp_def]) >>
   drule_all assign_base_storage_branch_counted >>
   disch_then (qspecl_then [`g1`, `D`, `PG`] mp_tac) >> strip_tac >>
   qexistsl_tac [`g1`, `t1`, `jump_to (if i=n then exit else bodylbl) s1`] >>

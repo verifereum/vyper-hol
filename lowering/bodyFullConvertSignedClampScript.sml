@@ -131,7 +131,6 @@ Proof
       (s with vs_inst_idx := q) H th` by
     (rpt gen_tac >> irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_from_alloca_next >>
      simp[allocas_from_def] >>
-     conj_tac >- (fs[EVERY_MEM, allocas_from_def] >> metis_tac[]) >>
      qexists `0` >> simp[] >> metis_tac[]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (irule run_inst_seq_mem_ok_every >>

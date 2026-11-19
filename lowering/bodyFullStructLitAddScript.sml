@@ -10,7 +10,7 @@ Ancestors
 Theorem structlit_child_add_full:
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var out,sn) /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   lookup_var root s = SOME a /\ op_taint tn (Var root) = {} /\

@@ -5,9 +5,13 @@ Ancestors
   venomExecSemantics venomState venomInst ptrDiscipline bodyPtrDefs
   emitHelper compileEnv fragExec finite_map words list fragExecPtr fragGasPathPtr
 
+val scratch_frame_below_fmp_rule =
+  MATCH_MP (REWRITE_RULE [venom_state_fupdcanon] reason_scratch_frame_below_fmp) o
+  REWRITE_RULE [venom_state_fupdcanon];
+
 Theorem reason_encoder_mstore_path_ptr:
   emit_void MSTORE [Var dst;value] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
@@ -29,7 +33,7 @@ QED
 
 Theorem reason_encoder_mstore_resources_ptr:
   emit_void MSTORE [Var dst;value] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
@@ -89,7 +93,7 @@ Theorem reason_encoder_store_load_ptr:
   emit_void MSTORE [Var dst;value] sa = ((),sm) /\
   emit_inst MLOAD [Var dst] [out] sm = ((),sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
@@ -111,6 +115,14 @@ Proof
     (qx_choose_then `s1` strip_assume_tac))) >>
   `lookup_var dst s1 = SOME a /\ ptr_covers G tn1 dst s1 32` by
     metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s1 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s1 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   drule_all reason_copy_mload_resources_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
@@ -123,7 +135,7 @@ QED
    required clean; provenance comes from the first ADD operand. *)
 Theorem reason_encoder_offset_path_ptr:
   emit_inst ADD [Var root;offset] [out] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var root s = SOME a /\ eval_operand offset s = SOME d /\
@@ -189,7 +201,7 @@ Theorem reason_encoder_load_offset_ptr:
   emit_inst MLOAD [Var slot] [off] sa = ((),sm) /\
   emit_inst ADD [Var root;Var off] [out] sm = ((),sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var slot s = SOME addr /\ ptr_covers G tn slot s 32 /\
@@ -209,12 +221,22 @@ Theorem reason_encoder_load_offset_ptr:
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
     (off <> out ==> lookup_var off sf = SOME d /\ op_taint tnf (Var off) = {})
 Proof
-  strip_tac >> drule_all reason_copy_mload_resources_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all reason_copy_mload_resources_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `lookup_var root s1 = SOME a /\ ptr_covers G1 tn1 root s1 capacity` by
     (gvs[ptr_covers_def, op_taint_def] >> metis_tac[]) >>
   `eval_operand (Var off) s1 = SOME d` by simp[eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s1 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s1 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   drule_all reason_encoder_offset_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
@@ -231,7 +253,7 @@ Theorem reason_encoder_pointer_setup_ptr:
   emit_inst ADD [Var payload;Var off] [tail] c3 = ((),sb) /\
   fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
   fn_has_code c2 c3 func /\ fn_has_code c3 sb func /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var tuple s = SOME a /\ ptr_covers G tn tuple s tuple_capacity /\
@@ -267,6 +289,14 @@ Proof
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `lookup_var payload s1 = SOME b /\ ptr_covers G1 tn1 payload s1 capacity` by
     (gvs[ptr_covers_def, op_taint_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s1 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s1 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   drule_all (SRULE [eval_operand_def, op_taint_def, w2n_lt]
     (Q.INST [`offset` |-> `Lit 0w`, `d` |-> `0w`, `k` |-> `capacity`]
       reason_encoder_offset_path_ptr)) >>
@@ -280,6 +310,14 @@ Proof
   `payload <> off /\ 32 + (capacity - 32) <= capacity` by
     (conj_tac >- metis_tac[] >> decide_tac) >>
   `w2n (32w : bytes32) = 32` by simp[w2n_n2w, dimword_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s2 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s1`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s2 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s1`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   qpat_assum `w2n (32w : bytes32) = 32` (fn th =>
     drule_all (SRULE [th] (Q.INST
       [`d` |-> `32w`, `k` |-> `capacity - 32`] reason_encoder_load_offset_ptr))) >>
@@ -310,7 +348,7 @@ Theorem reason_encoder_tail_zero_ptr:
   emit_void MSTORE [Var last;Lit 0w] c4 = ((),sb) /\
   fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
   fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\
-  fn_has_code c4 sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code c4 sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s 32 /\
@@ -335,17 +373,35 @@ Theorem reason_encoder_tail_zero_ptr:
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >> drule_all reason_load_round_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all reason_load_round_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `lookup_var tail s1 = SOME b /\ ptr_covers G1 tn1 tail s1 capacity /\
    eval_operand (Var rounded) s1 = SOME ((n + 31w) && i2w (-32))` by
     (gvs[ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s1 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s1 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   drule_all reason_encoder_offset_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
   `eval_operand (Lit 0w) s2 = SOME 0w /\ op_taint tn2 (Lit 0w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s2 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s1`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s2 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s1`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   drule_all reason_encoder_mstore_resources_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `tn3`
     (qx_choose_then `s3` strip_assume_tac))) >>
@@ -368,7 +424,7 @@ Finalise reason_encoder_tail_zero_ptr
    Unlike the robust-string tuple interface, this permits an exact byte cnt. *)
 Theorem reason_encoder_mcopy_resources_ptr:
   emit_void MCOPY [Var dst;Var src;cnt_op] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   eval_operand (Var dst) s = SOME b /\ eval_operand (Var src) s = SOME a /\
@@ -401,7 +457,8 @@ Proof
      irule (SRULE [arithmeticTheory.ADD_COMM] (cj 5 mcopy_operand_ghost_frame)) >> simp[]) >>
   qexistsl_tac [`tnf`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
   conj_tac
-  >- (drule_all reason_mcopy_path_ptr >>
+  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+      drule_all reason_mcopy_path_ptr >>
       disch_then (qspecl_then [`PG`, `D`] mp_tac) >>
       gvs[Abbr `t`, Abbr `tnf`]) >>
   `sb.cs_current_bb = sa.cs_current_bb /\
@@ -417,7 +474,7 @@ Theorem reason_encoder_exact_copy_ptr:
   emit_inst ADD [Lit 32w;Var len] [cnt] sa = ((),c1) /\
   emit_void MCOPY [Var dst;Var src;Var cnt] c1 = ((),sb) /\
   fn_has_code sa c1 func /\ fn_has_code c1 sb func /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var len s = SOME n /\ op_taint tn (Var len) = {} /\
@@ -443,6 +500,7 @@ Proof
   `eval_operand (Var len) s = SOME n /\
    eval_operand (Lit 32w) s = SOME 32w /\
    op_taint tn (Lit 32w) = {}` by simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
     reason_copy_binop_resources_ptr)) >>
   disch_then (qspecl_then [`PG`, `G`, `D`] (qx_choose_then `G1`
@@ -452,6 +510,14 @@ Proof
    ptr_covers G1 tn1 dst s1 (w2n (32w + n)) /\
    ptr_covers G1 tn1 src s1 (w2n (32w + n))` by
     (gvs[ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s1 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s1 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   drule_all reason_encoder_mcopy_resources_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `tn2`
     (qx_choose_then `s2` strip_assume_tac))) >>
@@ -466,7 +532,7 @@ Theorem reason_encoder_item_length_ptr:
   emit_inst AND [Var tmp;Var mask] [rounded] c1 = ((),c2) /\
   emit_inst ADD [Var rounded;Lit 32w] [item] c2 = ((),sb) /\
   fn_has_code sa c0 func /\ fn_has_code c0 c1 func /\ fn_has_code c1 c2 func /\
-  fn_has_code c2 sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code c2 sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var len s = SOME n /\ op_taint tn (Var len) = {} /\
@@ -483,12 +549,22 @@ Theorem reason_encoder_item_length_ptr:
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >> drule_all reason_round_mask_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all reason_round_mask_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `eval_operand (Var rounded) s1 = SOME ((n + 31w) && i2w (-32)) /\
    eval_operand (Lit 32w) s1 = SOME 32w /\
    op_taint tn1 (Lit 32w) = {}` by simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s1 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s1 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
     reason_copy_binop_resources_ptr)) >>
   disch_then (qspecl_then [`PG`, `G1`, `D`] (qx_choose_then `G2`
@@ -508,7 +584,7 @@ Theorem reason_encoder_finish_size_ptr:
   emit_inst MLOAD [Var slot] [encoded] c3 = ((),sb) /\
   fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
   fn_has_code c2 c3 func /\ fn_has_code c3 sb func /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var head s = SOME h /\ ptr_covers G tn head s 32 /\
@@ -537,6 +613,14 @@ Proof
   `eval_operand (Var off) s1 = SOME d /\ op_taint tn1 (Var off) = {} /\
    eval_operand (Var item) s1 = SOME z /\ op_taint tn1 (Var item) = {}` by
     (simp[eval_operand_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s1 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s1 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
     reason_copy_binop_resources_ptr)) >>
   disch_then (qspecl_then [`PG`, `G`, `D`] (qx_choose_then `G2`
@@ -544,6 +628,14 @@ Proof
   `lookup_var slot s2 = SOME a /\ ptr_covers G2 tn2 slot s2 32 /\
    eval_operand (Var size_out) s2 = SOME (d + z)` by
     (gvs[ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >>
+     FIRST
+       [qpat_assum `(s2 with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s1`
+          (mp_tac o scratch_frame_below_fmp_rule),
+        qpat_assum `(s2 with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s1`
+          (mp_tac o scratch_frame_below_fmp_rule)] >>
+     simp[]) >>
   drule_all reason_encoder_store_load_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G3`
     (qx_choose_then `tn3` (qx_choose_then `s3` strip_assume_tac)))) >>
@@ -602,6 +694,7 @@ Proof
    tail <> last /\ tail <> cnt /\
    src <> len /\ src <> tmp /\ src <> rounded /\ src <> last /\ src <> cnt` by
     (fs[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all reason_encoder_tail_zero_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
@@ -609,6 +702,7 @@ Proof
    ptr_covers G1 tn1 src s1 (w2n (32w + n)) /\
    ptr_covers G1 tn1 tail s1 (w2n (32w + n))` by
     (gvs[ptr_covers_def] >> rpt strip_tac >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all reason_encoder_exact_copy_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
@@ -649,13 +743,16 @@ Theorem reason_encoder_size_suffix_ptr:
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >> drule_all reason_encoder_item_length_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all reason_encoder_item_length_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `lookup_var head s1 = SOME h /\ ptr_covers G1 tn1 head s1 32 /\
    lookup_var slot s1 = SOME a /\ ptr_covers G1 tn1 slot s1 32 /\
    lookup_var off s1 = SOME d /\ op_taint tn1 (Var off) = {}` by
     (gvs[ptr_covers_def] >> fs[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all reason_encoder_finish_size_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
@@ -766,6 +863,7 @@ Theorem reason_encoder_size_slot_init_ptr:
     (!p k. ptr_covers G1 tn1 p t k ==> ptr_covers G1 tnf p sf k)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1
     (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
     (drule_all reason_encoder_alloc_path_ptr >> simp[]) >>
@@ -787,6 +885,7 @@ Proof
    eval_operand (Lit 32w) s1 = SOME 32w /\ op_taint tn1 (Lit 32w) = {}` by
     gvs[Abbr `s1`, lookup_var_def, eval_operand_def, op_taint_def,
         ptr_covers_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all reason_encoder_mstore_resources_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `tn2`
     (qx_choose_then `s2` strip_assume_tac))) >>
@@ -863,7 +962,9 @@ Theorem reason_encoder_payload_ptr:
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >> drule_all reason_encoder_pointer_setup_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all reason_encoder_pointer_setup_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `lookup_var slot s1 = SOME addr /\ ptr_covers G1 tn1 slot s1 32 /\

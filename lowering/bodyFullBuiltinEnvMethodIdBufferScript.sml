@@ -300,7 +300,7 @@ Resume method_id_output_buffer_full_run[pointer_sequence]:
       ~is_terminator (mk_inst sd.cs_next_id MSTORE [Var r; value] []).inst_opcode` by
        simp[mk_inst_def, is_terminator_def] >>
      pure_once_rewrite_tac [inst_seq_ptr_def] >>
-     asm_simp_tac bool_ss [literal_alloca_ptr_inst_ok, exec_result_case_def] >>
+     asm_simp_tac bool_ss [fragExecPtrTheory.ptr_inst_ok_alloca, exec_result_case_def] >>
      pure_once_rewrite_tac [inst_seq_ptr_def] >>
      conj_tac
      >- (irule literal_mstore_ptr_inst_ok >>

@@ -926,7 +926,7 @@ Theorem array_tail_scalar_uniform:
   (!x. len = Var x ==> not_fresh_at sa x) /\
   op_taint tn bop = {} /\ op_taint tn idx = {} /\ op_taint tn len = {} /\
   op_prov G idx = NONE /\ op_prov G len = NONE /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   same_blocks sa sc /\ same_blocks sc sb /\
   sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
   sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
@@ -982,8 +982,13 @@ Proof
    allocas_from lo sg` by
     (simp[Abbr `sg`, instIdxIndepTheory.eval_op_inst_idx, allocas_from_def] >>
      fs[allocas_from_def]) >>
-  drule_all array_elem_ptr_nonalias_uniform >>
-  disch_then (qspecl_then [`func`, `PG`] strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sg` by
+    (qpat_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
+     simp[Abbr `sg`, venom_state_component_equality, allocas_below_fmp_def] >>
+     strip_tac >> fs[allocas_below_fmp_def]) >>
+  mp_tac (Q.INST [`s` |-> `sg`, `sa` |-> `sc`, `G` |-> `H`,
+    `tn` |-> `tm`] (SPEC_ALL array_elem_ptr_nonalias_uniform)) >>
+  impl_tac >- simp[] >> strip_tac >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (sg,H,tm) []
       (OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts),H',tm')` by
     (gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
@@ -1076,6 +1081,7 @@ Proof
      gvs[same_blocks_def] >>
      simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC,
        venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all array_tail_scalar_uniform >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
   `eval_operand (FST rb) t2 = SOME b /\ eval_operand iop t2 = SOME iw /\

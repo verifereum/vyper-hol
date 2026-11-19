@@ -55,6 +55,7 @@ Resume append_storage_word_static_origin_path[pointer]:
   qpat_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`
     (mp_tac o REWRITE_RULE [compile_dynarray_append_word_parts]) >> strip_tac >>
   `!x. bop = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all append_storage_guard_actual >>
   disch_then (qspecl_then [`func`, `PG`, `G`, `D`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts sa s3) s = OK t3` >>
@@ -77,6 +78,7 @@ Resume append_storage_word_static_origin_path[pointer]:
     (Cases_on `bop` >> Cases_on `vop` >> gvs[op_taint_def]) >>
   `!x. bop = Var x ==> not_fresh_at s3 x` by metis_tac[] >>
   drule_all append_storage_address_stages_actual >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t3` by simp[] >>
   drule_all append_storage_address_ptr >>
   disch_then (qspecl_then [`func`, `PG`, `G3`, `D`] strip_assume_tac) >>
   suspend "store"

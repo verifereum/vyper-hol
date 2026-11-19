@@ -7,7 +7,7 @@ Ancestors wordLoadStorePtr typedCopyPtr fragGasSeqPtr fragGasPathPtr bodyPtrDefs
 (* The toolkit's fixed lower bound is zero. MLOAD itself does not inspect
    allocation lower bounds; the global allocation check is supplied explicitly. *)
 Theorem mload_check_at[local]:
-  ptr_covers G tn x s 32 /\ ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  ptr_covers G tn x s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
   ptr_inst_ok D lo fuel ctx fn G tn (mk_inst id MLOAD [Var x] [y]) s
 Proof
   strip_tac >> gvs[ptr_covers_def] >>
@@ -24,7 +24,7 @@ QED
 Theorem clean_mload_path:
  !D lo ctx fn PG G tn s t x y id bb.
  step_inst_base (mk_inst id MLOAD [Var x] [y]) s = OK t /\
- ptr_covers G tn x s 32 /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+ ptr_covers G tn x s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
  (!w. lookup_var x s = SOME w ==>
     !i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) /\
  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\

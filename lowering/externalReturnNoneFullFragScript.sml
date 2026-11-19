@@ -18,7 +18,6 @@ Ancestors
 Theorem return_selected_none_frag_full:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\
-  ~ctx_has_dalloca ctx /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
@@ -105,6 +104,11 @@ Proof
          step_inst_non_invoke, step_inst_base_opcode_eqs] >>
       simp[step_taint_def, halt_state_def, adopt_reset_def, store_taint_def,
            imm_taint_def, ret_taint_def]) >>
+  `ctx_has_dalloca ctx ==>
+   allocas_below_fmp (halt_state (s0 with vs_returndata := []))` by
+    (strip_tac >>
+     `allocas_below_fmp s0` by metis_tac[] >>
+     fs[allocas_below_fmp_def, halt_state_def] >> metis_tac[]) >>
   simp[exit_result_def, stmt_exit_ptr_def, exprSimDefsTheory.halt_exit_def] >>
   first_x_assum (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
   simp[safe_cast_def, external_call_result_rel_def, halt_state_def] >>

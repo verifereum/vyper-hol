@@ -9,6 +9,7 @@ Ancestors
   loweringPosts bodyPtrDefs loweringShapeDefs
   vyperInterpreter vyperState vyperValue vyperEvent venomState
   words list rich_list arithmetic
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem raw_log_dynamic_data_full:
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -22,7 +23,9 @@ Theorem raw_log_dynamic_data_full:
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx data) (read_result cx)) expr_res_ok es /\
@@ -81,9 +84,6 @@ Theorem raw_log_dynamic_data_full:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
-  `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
@@ -182,6 +182,14 @@ Resume raw_log_dynamic_data_full[selected]:
        (qspec_then `H` mp_tac) >>
      qpat_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> eval_operands _ _ = _ /\ _`
        (qspec_then `H` mp_tac) >> simp[compileEnvTheory.is_word_type_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+       expr_post H ctx func cenv cx data es sa sm s0 mid (BytesV bs) data_op t /\ _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o MATCH_MP (iffLR expr_post_def) o CONJUNCT1)) >>
   Cases_on `cx.txn.is_static`
   >- (`?u G2 tn2. !H. valid_horizon cx st0 H mid.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -231,7 +239,7 @@ Resume raw_log_dynamic_data_full[selected]:
   qpat_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
     (qspec_then `H` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  disj1_tac >> conj_tac
+  conj_tac
   >- (qpat_x_assum `expr_post H _ _ _ _ (Call _ RawLog _ _) _ _ _ _ _ _ _ _` mp_tac >>
       qpat_x_assum `expr_type (Call _ RawLog _ _) = NoneT` mp_tac >>
       rpt (pop_assum kall_tac) >>

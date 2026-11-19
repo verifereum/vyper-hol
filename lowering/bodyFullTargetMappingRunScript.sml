@@ -70,6 +70,7 @@ Proof
          rpt strip_tac >> gvs[] >>
          irule compiler_ci_mono_not_fresh >> qexists_tac `sn` >> simp[]) >>
      metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all mapping_key_prefix_full_run >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   suspend "slot"

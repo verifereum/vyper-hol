@@ -38,7 +38,7 @@ QED
 
 Theorem emit_mload_zero_path_ptr:
   emit_inst MLOAD [Var src] [tmp] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\

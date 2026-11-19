@@ -12,7 +12,7 @@ Theorem unwrap_ensure_slot_loop:
   compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
   nb < dimword (:256) /\ 32*n <= nb /\ n < 2**256 /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -59,7 +59,12 @@ Proof
   drule_all ensure_slot_memory_loop_code >> strip_tac >>
   drule_all unwrap_alloc_site_bound >> strip_tac >>
   `buffer_allocation_base s sa.cs_next_id < dimword (:256)` by decide_tac >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     fs[exprLoweringPropsTheory.stmt_state_rel_def,
+        exprLoweringPropsTheory.fmp_room_def, allocas_below_fmp_def,
+        venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all unwrap_alloc_loop_entry >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
   `compile_slot_to_memory src (Var root) n loc sm = (lab,sb)` by metis_tac[] >>

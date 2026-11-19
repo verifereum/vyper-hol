@@ -21,7 +21,9 @@ Theorem abi_encode_ready_finish_origin_split:
   (!x. src = Var x ==> not_fresh_at st x) /\ not_fresh_at st dp /\
   ptr_covers G tn dp s dstcap /\
   fn_inst_ids_distinct func /\ alloca_inv s /\ alloca_room ctx func s /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (0 < cap ==> sb + cap <= s.vs_alloca_next /\
     venomMemDefs$regions_disjoint (sb,cap)
       (p+32+LENGTH selector,LENGTH (enc at av)) /\
@@ -127,6 +129,13 @@ Proof
   `ptr_covers Gu tnu root u 32` by metis_tac[ptr_covers_mono] >>
   `p+32 <= u.vs_alloca_next` by
     (irule window_alloca_growth_frontier >> goal_assum (drule_at Any) >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `abi_encode_exec_frame func s u` (fn frame =>
+       qpat_assum `alloca_inv u` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` (fn bound =>
+           mp_tac (MATCH_MP abiEncoderWindowJointPhasesTheory.window_exec_frame_alloca_budget
+             (LIST_CONJ [frame,inv,bound]))))) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   drule_all abi_encode_finish_origin >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choose_then `t` (qx_choose_then `Gf` (qx_choose_then `tnf` strip_assume_tac)))) >>
@@ -330,7 +339,9 @@ Theorem abi_encode_ready_finish_origin:
   (!x. src = Var x ==> not_fresh_at st x) /\ not_fresh_at st dp /\
   ptr_covers G tn dp s dstcap /\
   fn_inst_ids_distinct func /\ alloca_inv s /\ alloca_room ctx func s /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (0 < cap ==> sb + cap <= s.vs_alloca_next /\
     venomMemDefs$regions_disjoint (sb,cap)
       (p+32+LENGTH selector,LENGTH (enc at av)) /\

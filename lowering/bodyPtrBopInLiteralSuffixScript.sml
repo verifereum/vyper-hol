@@ -6,6 +6,7 @@ Ancestors exprSimBopInLiteralWord
   list finite_map words ghostPcTransportPtr instIdxIndep instSeqComposePtr
   bodyPtrBopInLiteralRun fragExec exprLoweringProps exprLowering
   exprSimWordBuiltins freshWrites arithmetic rich_list
+  fragGasSeqPtrContext[qualified,ignore_grammar]
 
 (* The literal suffix uses only these non-memory scalar instructions.
    The concrete successful execution is kept explicit so this boundary works
@@ -13,7 +14,7 @@ Ancestors exprSimBopInLiteralWord
 Theorem membership_scalar_check:
   MEM opc [EQ; OR; AND; ISZERO; GT] /\
   (!op. MEM op ops ==> op_taint tn op = {} /\ op_prov G op = NONE) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id opc ops [out]) s = OK s' /\
   s'.vs_requests = s.vs_requests ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops [out]) s
@@ -57,7 +58,7 @@ Theorem membership_scalar_path:
   (LENGTH ops = 1 \/ LENGTH ops = 2) /\
   emit_op opc ops sa = (dst,sb) /\ fn_has_code sa sb fn /\
   (!op. MEM op ops ==> op_taint tn op = {} /\ op_prov G op = NONE) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!out. step_inst_base (mk_inst sa.cs_next_id opc ops [out]) s =
@@ -131,7 +132,7 @@ Theorem membership_scalar_uniform:
   (LENGTH ops = 1 \/ LENGTH ops = 2) /\
   emit_op opc ops sa = (dst,sb) /\
   (!op. MEM op ops ==> op_taint tn op = {} /\ op_prov G op = NONE) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst sa.cs_next_id opc ops
     [STRING #"%" (toString sa.cs_next_var)]) s =
     OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s) ==>
@@ -186,7 +187,7 @@ Theorem membership_scalar_uniform_run:
   (LENGTH ops = 1 \/ LENGTH ops = 2) /\
   emit_op opc ops sa = (dst,sb) /\
   (!op. MEM op ops ==> op_taint tn op = {} /\ op_prov G op = NONE) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?G' tn'.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
            (s with vs_inst_idx := k) G' tn') /\
@@ -299,7 +300,7 @@ Theorem membership_op_uniform[local]:
     emit_op opc ops sa = (dst,sb) /\ MEM opc [EQ; OR; AND; ISZERO; GT] /\
     (LENGTH ops = 1 \/ LENGTH ops = 2) /\
     EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) ops /\
-    ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
     ?G' tn'.
       (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
              (s with vs_inst_idx := k) G' tn') /\
@@ -423,7 +424,7 @@ Theorem literal_eqs_uniform[local]:
     eval_operand needle s = SOME w /\ fresh_vars_wrt sa s /\
     op_prov G needle = NONE /\ op_taint tn needle = {} /\
     EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn'.
       (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
              (s with vs_inst_idx := k) G' tn') /\
@@ -444,6 +445,10 @@ Proof
   mp_tac (Q.SPECL [`needle`, `h`, `w`, `hv`, `sa`, `c`, `s1`, `s`]
     emit_op_EQ_correct) >> simp[] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa s1) s = OK ss1` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ss1` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa s1`, `s`] >> simp[] >> qpat_assum `emit_op EQ _ sa = _` (mp_tac o MATCH_MP emitted_insts_emit_op) >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `EQ`, `[needle; h]`, `sa`, `c`,
     `s1`, `s`, `ss1`, `G`, `tn`] membership_op_uniform) >>
   (impl_tac >- simp[]) >>
@@ -484,7 +489,7 @@ Theorem literal_or_uniform[local]:
     (?a. eval_operand acc s = SOME a) /\ fresh_vars_wrt sa s /\
     op_prov G acc = NONE /\ op_taint tn acc = {} /\
     EVERY (\c. op_prov G c = NONE /\ op_taint tn c = {}) cs /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn'.
       (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
              (s with vs_inst_idx := k) G' tn') /\
@@ -504,6 +509,10 @@ Proof
   mp_tac (Q.SPECL [`acc`, `h`, `a`, `hv`, `sa`, `r`, `s1`, `s`]
     emit_op_OR_correct) >> simp[] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa s1) s = OK ss1` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ss1` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa s1`, `s`] >> simp[] >> qpat_assum `emit_op OR _ sa = _` (mp_tac o MATCH_MP emitted_insts_emit_op) >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `OR`, `[acc; h]`, `sa`, `r`,
     `s1`, `s`, `ss1`, `G`, `tn`] membership_op_uniform) >>
   (impl_tac >- simp[]) >>
@@ -534,7 +543,7 @@ Theorem literal_and_uniform[local]:
     (?a. eval_operand acc s = SOME a) /\ fresh_vars_wrt sa s /\
     op_prov G acc = NONE /\ op_taint tn acc = {} /\
     EVERY (\c. op_prov G c = NONE /\ op_taint tn c = {}) cs /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn'.
       (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
              (s with vs_inst_idx := k) G' tn') /\
@@ -555,11 +564,19 @@ Proof
   mp_tac (Q.SPECL [`h`, `hv`, `sa`, `z`, `s1`, `s`]
     emit_op_ISZERO_correct) >> simp[] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa s1) s = OK ss1` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ss1` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa s1`, `s`] >> simp[] >> qpat_assum `emit_op ISZERO _ sa = _` (mp_tac o MATCH_MP emitted_insts_emit_op) >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   `eval_operand acc ss1 = SOME a` by
     (qpat_x_assum `!op w. eval_operand op s = SOME w ==> _` drule >> simp[]) >>
   mp_tac (Q.SPECL [`acc`, `z`, `a`, `bool_to_word ((hv:256 word) = 0w)`, `s1`, `r`,
     `s2`, `ss1`] emit_op_AND_correct) >> simp[] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts s1 s2) ss1 = OK ss2` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ss2` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts s1 s2`, `ss1`] >> simp[] >> qpat_assum `emit_op AND _ s1 = _` (mp_tac o MATCH_MP emitted_insts_emit_op) >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `ISZERO`, `[h]`, `sa`, `z`,
     `s1`, `s`, `ss1`, `G`, `tn`] membership_op_uniform) >>
   (impl_tac >- simp[]) >>
@@ -608,7 +625,7 @@ Theorem literal_in_uniform:
     eval_operand needle s = SOME w /\ fresh_vars_wrt sa s /\
     op_prov G needle = NONE /\ op_taint tn needle = {} /\
     EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn'.
       (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
              (s with vs_inst_idx := k) G' tn') /\
@@ -629,6 +646,11 @@ Proof
   rename1 `fold_membership_or c rest sm = (dst,sb)` >>
   drule_all literal_eqs_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK tt` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp tt` by
+    (strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa sm`, `s`] >> simp[] >>
+     drule literal_eqs_shape >> simp[EVERY_MEM] >>
+     rpt strip_tac >> res_tac >> gvs[is_terminator_def, is_alloca_op_def]) >>
   `EVERY (\x. ?v. eval_operand x tt = SOME v) (c::rest)` by
     (irule membership_defined_from_bool_rel >> first_assum (irule_at Any)) >>
   mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `rest`, `c`, `sm`, `dst`, `sb`,
@@ -667,7 +689,7 @@ Theorem membership_neq_uniform:
   run_inst_seq (emitted_insts sa sm) s = OK s1 /\
   run_inst_seq (emitted_insts sm sb) s1 = OK s2 /\
   op_prov G needle = NONE /\ op_taint tn needle = {} /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx ==>
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
       (s with vs_inst_idx := k) G' tn') /\
@@ -687,6 +709,11 @@ Proof
     (irule membership_scalar_uniform_run >> goal_assum (drule_at Any) >>
      conj_tac >- (goal_assum (drule_at Any)) >>
      goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >> gvs[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa sm`, `s`] >> simp[] >>
+     qpat_assum `emit_op EQ _ sa = _` (mp_tac o MATCH_MP emitted_insts_emit_op) >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   `?G2 tn2.
     (!k. inst_seq_ptr D 0 ctx fn PG G1 tn1 (emitted_insts sm sb)
       (s1 with vs_inst_idx := k) G2 tn2) /\
@@ -723,7 +750,7 @@ Theorem literal_notin_uniform:
     eval_operand needle s = SOME w /\ fresh_vars_wrt sa s /\
     op_prov G needle = NONE /\ op_taint tn needle = {} /\
     EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn'.
       (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
              (s with vs_inst_idx := k) G' tn') /\
@@ -746,6 +773,11 @@ Proof
   rename1 `fold_membership_and z rest s1 = (dst,sb)` >>
   drule_all literal_eqs_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK tt` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp tt` by
+    (strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa sm`, `s`] >> simp[] >>
+     drule literal_eqs_shape >> simp[EVERY_MEM] >>
+     rpt strip_tac >> res_tac >> gvs[is_terminator_def, is_alloca_op_def]) >>
   `EVERY (\x. ?v. eval_operand x tt = SOME v) (c::rest)` by
     (irule membership_defined_from_bool_rel >> first_assum (irule_at Any)) >>
   qpat_x_assum `EVERY _ (c::rest)` (strip_assume_tac o SRULE []) >>
@@ -753,6 +785,10 @@ Proof
   mp_tac (Q.SPECL [`c`, `cv`, `sm`, `z`, `s1`, `tt`]
     emit_op_ISZERO_correct) >> simp[] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sm s1) tt = OK ss1` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ss1` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sm s1`, `tt`] >> simp[] >> qpat_assum `emit_op ISZERO _ sm = _` (mp_tac o MATCH_MP emitted_insts_emit_op) >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `ISZERO`, `[c]`, `sm`, `z`,
     `s1`, `tt`, `ss1`, `G1`, `tn1`] membership_op_uniform) >>
   (impl_tac >- simp[]) >>
@@ -823,7 +859,7 @@ Theorem literal_in_path:
   eval_operand needle s = SOME w /\ fresh_vars_wrt sa s /\
   op_prov G needle = NONE /\ op_taint tn needle = {} /\
   EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u t G' tn'.
@@ -854,7 +890,7 @@ Theorem literal_notin_path:
   eval_operand needle s = SOME w /\ fresh_vars_wrt sa s /\
   op_prov G needle = NONE /\ op_taint tn needle = {} /\
   EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u t G' tn'.

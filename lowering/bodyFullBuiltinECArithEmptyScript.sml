@@ -22,7 +22,7 @@ Theorem ec_arith_empty_tail_full:
   eval_operand (Var src) u = SOME wi /\ eval_operand (Var dst) u = SOME wo /\
   w2n wi + w2n an <= u.vs_alloca_next /\
   w2n wo + 64 <= u.vs_alloca_next /\
-  ~u.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~u.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
   lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (gi::ci::rest) (DROP u.vs_inst_idx bb.bb_instructions) /\
   (func.fn_name,id) NOTIN explicit /\
