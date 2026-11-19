@@ -77,6 +77,7 @@ Proof
   `eval_operand (Var ("%" ++ toString (sa.cs_next_var+1))) s = SOME (n2w i) /\
    op_taint tn (Var ("%" ++ toString (sa.cs_next_var+1))) = {}` by
     fs[membership_loop_registers_def, eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_at (Pat `get_instruction _ _ = _`) membership_address_binop_framed_path >>
   disch_then (drule_at (Pat `membership_loop_frame _ _ _ _ _ _ _`)) >>
   simp[eval_operand_def, op_taint_def] >>
@@ -117,6 +118,7 @@ Proof
           ["%" ++ toString (sa.cs_next_var+6)])` by simp[] >>
       `~not_fresh_at sa ("%" ++ toString (sa.cs_next_var+6))` by
         simp[not_fresh_at_def] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_at (Pat `get_instruction _ _ = _`) membership_address_binop_framed_path >>
       disch_then (drule_at (Pat `membership_loop_frame _ _ _ _ _ _ _`)) >>
       simp[eval_operand_def, op_taint_def] >> disch_then drule_all >>
@@ -160,7 +162,9 @@ Proof
     simp[not_fresh_at_def] >>
   drule_at (Pat `get_instruction _ _ = _`) membership_address_binop_framed_path >>
   disch_then (drule_at (Pat `membership_loop_frame _ _ _ _ _ _ _`)) >>
-  gvs[eval_operand_def] >> disch_then drule_all >>
+  gvs[eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  disch_then drule_all >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   gvs[ADD1] >> goal_assum (drule_at Any) >>
   Cases_on `op_prov G arr` >>

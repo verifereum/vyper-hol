@@ -532,6 +532,7 @@ Proof
   `!x. pop = Var x \/ vop = Var x \/ lop = Var x \/ bop = Var x ==>
        not_fresh_at st6 x` by metis_tac[not_fresh_at_mono] >>
   drule_all append_storage_store_tail_stages_actual >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by simp[] >>
   drule_all append_storage_suffix_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >>
   suspend "compose"

@@ -16,7 +16,7 @@ Theorem calldata_count_guard_rejected_origin:
     abi_decoder_operand_live sa.cs_next_var src /\
     op_taint tn src = {} /\ op_prov G src = NONE /\
     maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD p s) /\
-    allocas_from lower s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?z H u. run_inst_seq (emitted_insts sa sb) s =
               Abort Revert_abort (z with vs_inst_idx := s.vs_inst_idx) /\

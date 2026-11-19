@@ -67,7 +67,7 @@ Theorem abi_encode_tuple_allocate_origin:
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce a /\
   sz < dimword(:256) /\
   stmt_state_rel H ctx func ce cx es s /\ alloca_history func s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   LENGTH ops = LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\

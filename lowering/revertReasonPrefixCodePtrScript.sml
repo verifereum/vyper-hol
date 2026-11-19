@@ -59,7 +59,7 @@ Theorem revert_reason_prefix_at_compile_endpoint_core_ptr[local]:
   stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   (!k. k < 3 ==> not_local_ptr cenv es.scopes
     (STRING #"%" (toString (sa.cs_next_var+k)))) /\
-  64+ms < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  64+ms < dimword(:256) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t Gf tnf.
@@ -194,7 +194,7 @@ Theorem revert_reason_prefix_at_compile_endpoint_ptr:
   stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   (!k. k < 3 ==> not_local_ptr cenv es.scopes
     (STRING #"%" (toString (sa.cs_next_var+k)))) /\
-  64+ms < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  64+ms < dimword(:256) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t Gf tnf B P Q.

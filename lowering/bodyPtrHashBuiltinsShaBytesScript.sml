@@ -109,6 +109,7 @@ Proof
     (`isPREFIX (emitted_insts sa sm ++ emitted_insts sm sb)
         (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
      drule hash_code_prefix_split >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all hash_bytes_prepare_endpoint >>
   disch_then (qspecl_then [`D`, `PG`]
     (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS))) >>
@@ -243,6 +244,7 @@ Proof
     (`isPREFIX (emitted_insts sa sm ++ emitted_insts sm sb)
         (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
      drule hash_code_prefix_split >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all hash_bytes_prepare_endpoint >>
   disch_then (qspecl_then [`D`, `PG`]
     (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS))) >>

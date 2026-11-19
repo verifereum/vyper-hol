@@ -47,6 +47,7 @@ Proof
   `MEM GT [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
    op_prov G' (Lit (n2w n)) = NONE /\ op_taint tn' (Lit (n2w n)) = {}` by
     simp[op_prov_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   FIRST [
     drule_all (cj 1 (SRULE [LEFT_AND_OVER_OR, DISJ_IMP_THM, GSYM arithmeticTheory.ADD_ASSOC]
       (Q.INST [`opc` |-> `GT`, `id` |-> `id+1`] scalar_checked_pair_uniform_certificate))),

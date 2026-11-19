@@ -4,7 +4,7 @@ Ancestors
   instIdxIndep ghostPcTransportPtr venomInst venomState venomExecSemantics
 
 Theorem bop_hash_run_checked:
-  p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
+  p <> q /\ l <> q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var p s = SOME w /\ ptr_covers G tn p s 32 /\
   mem_word_at (w2n w) s.vs_memory = n2w n /\ n < dimword(:256) /\
   FLOOKUP G p = SOME (b,sz) /\
@@ -46,7 +46,7 @@ Proof
 QED
 
 Theorem bop_hash_run_ptr:
-  p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
+  p <> q /\ l <> q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var p s = SOME w /\ ptr_covers G tn p s 32 /\
   mem_word_at (w2n w) s.vs_memory = n2w n /\ n < dimword(:256) /\
   FLOOKUP G p = SOME (b,sz) /\

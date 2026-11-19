@@ -314,8 +314,11 @@ Resume abi_decode_caller_allocation_joint[owned]:
   `abi_decoder_operand_live ready.cs_next_var (Var out) /\
    abi_decoder_operand_live ready.cs_next_var (Var input) /\
    abi_decoder_operand_live ready.cs_next_var (FST inputs)` by
-    (conj_tac >- (gvs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
-                     abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def]) >>
+    (conj_tac
+     >- (qpat_assum `not_fresh_at ready out` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+           abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def]) >>
      metis_tac[abiDecoderReentryTheory.abi_decoder_operand_live_mono]) >>
   `!x. not_fresh_at st x ==>
     lookup_var x v = lookup_var x s /\ FLOOKUP G1 x = FLOOKUP G x /\
