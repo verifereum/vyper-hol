@@ -1,7 +1,7 @@
 Theory gasFocusPlainFrameInitialStatic
 Ancestors
   gasFocusPlainEntry fnFramePrefixDriver fnFramePrefixEntry fnFramePrefixStack
-  codegenEntrySim codegenEntryRel codegenRel frameRel asmFrameRel asmSem
+  codegenEntrySim codegenEntryFacts codegenEntryRel codegenRel frameRel asmFrameRel asmSem
   fnEntryParams fnPlanPlaceDfsBlock contextCodegenRel unitShapeDefs stackPlanGen
   frameJointTransition unitTransformDefs lowerDloadDefs
   venomExecSemantics venomState venomInst list finite_map words
