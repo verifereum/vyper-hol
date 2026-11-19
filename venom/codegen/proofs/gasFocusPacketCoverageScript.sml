@@ -1186,7 +1186,7 @@ Proof
   simp[decode_invoke_def, setup_callee_def, NULL_EQ]
 QED
 
-Triviality cover_cfg_joint_blocks:
+Theorem cover_cfg_joint_blocks:
   cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
     (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
     (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) /\
@@ -1244,7 +1244,7 @@ Proof
   simp[]
 QED
 
-Triviality cover_cfg_joint_inst:
+Theorem cover_cfg_joint_inst:
   cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
     (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
     (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) /\
@@ -1537,7 +1537,7 @@ Proof
   gvs[]
 QED
 
-Triviality cover_error_active_shape:
+Theorem cover_error_active_shape:
   active_frame_plan rpolicy unit cpl prog fn s ast ra rest mem0 /\
   active_inst fn inst s /\ code_layout_valid vs0 /\
   codegen_asm_entry_rel cpl prog vs0 entry_asm ==>
@@ -1815,7 +1815,7 @@ Proof
   fs[EVERY_MEM] >> metis_tac[stackPlanTypesTheory.is_label_operand_def]
 QED
 
-Triviality cover_noninvoke_runtime_error:
+Theorem cover_noninvoke_runtime_error:
   o1_ctx_shape C /\ MEM fn C.ctx_functions /\ wf_ssa fn /\
   supply_prefix_defined fn s /\ active_inst fn inst s /\
   inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI /\
