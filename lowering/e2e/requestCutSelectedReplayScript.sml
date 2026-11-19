@@ -613,6 +613,9 @@ Resume focus_finalizer_selected_request_replay[earlier_native_stop]:
      qpat_assum `visit_state <> s8` mp_tac >>
      qpat_assum `visit_state = s8` (fn eq => simp_tac bool_ss [eq])) >>
   mp_tac (Q.INST [`C7` |-> `stage 7`, `C8` |-> `stage 8`, `R` |-> `trace8`,
+    `stk` |-> `stk8`, `PG` |-> `PG8`, `G` |-> `G8`, `tn` |-> `tn8`,
+    `fn` |-> `fn8`, `inst` |-> `inst8`, `st` |-> `s8`, `oms` |-> `oms8`,
+    `om` |-> `om8`, `hs` |-> `hs8`, `hist` |-> `hist8`,
     `h` |-> `(align:num -> num) (cross:num)`, `i` |-> `i8`, `tf` |-> `f8`, `t` |-> `t8`]
     focus_packet_visit_row) >>
   (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[Abbr `trace8`]))) >>
