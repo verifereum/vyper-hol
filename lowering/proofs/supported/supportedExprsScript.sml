@@ -13,12 +13,9 @@ Definition supported_pure_expr_def:
   supported_pure_expr tops (TopLevelName ty id) =
     (supported_storage_value tops id ty \/
      supported_immutable_type tops id = SOME ty) /\
-  supported_pure_expr tops (FlagMember ty id member) = F /\
-  (* A non-word ternary is a PHI of two memory pointers (#561: a14-01,
-     a10-04).  Tuple ternaries have no parity witness. *)
+  supported_pure_expr tops (FlagMember ty id member) = T /\
   supported_pure_expr tops (IfExp ty c a b) =
-    (supported_value_type tops ty /\ ~supported_tuple_type ty /\
-     supported_pure_expr tops c /\
+    (supported_pure_expr tops c /\
      supported_pure_expr tops a /\ supported_pure_expr tops b) /\
   supported_pure_expr tops (StructLit ty id fields) =
     (supported_main_nsid id /\ supported_struct_elements tops ty fields /\

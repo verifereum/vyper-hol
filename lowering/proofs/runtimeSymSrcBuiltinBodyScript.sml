@@ -4,6 +4,9 @@ Ancestors
   runtimeSymSrcInterfaces exprCallBounds list supportedExprTraverse exprLowering
   supportedExprs supportedExprForms context compileEnv venomInst vyperAST
   memoryValueDefs typedCopyDomain builtinMisc builtinBytes builtinSimple
+  runtimeSymSrcBuiltinMisc runtimeSymSrcBuiltinByteSimple
+  runtimeSymSrcBuiltinHash runtimeSymSrcBuiltinData
+  builtinHashing stackPlanTypes
 
 Theorem runtime_sym_builtin_child:
   (!e ty. expr_size e < list_size expr_size args ==>
@@ -69,17 +72,42 @@ QED
 
 Theorem runtime_sym_binop_guards[local]:
   supported_binop bop ty rhs bl el ==>
-  bop <> In /\ bop <> NotIn /\
+  ~((bop = In \/ bop = NotIn) /\ is_ArrayT rhs) /\
   ~(is_bytestring_type ty /\ (bop = Eq \/ bop = NotEq))
 Proof
-  Cases_on `bop` >> simp[supported_binop_def] >>
-  Cases_on `ty` >> simp[supported_word_type_def, is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[supported_word_type_def, is_bytestring_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[supported_word_type_def, is_bytestring_type_def]
+  Cases_on `bop` >> simp[supported_binop_def]
 QED
 
+val runtime_sym_unary_args_tac =
+  qpat_x_assum `supported_expr _ _` (mp_tac o
+    SRULE [runtime_sym_builtin_domain, supported_builtin_form_def]) >>
+  namedCases_on `args` ["", "a rest"] >> simp[] >>
+  Cases_on `rest` >> simp[] >> strip_tac;
+
+fun runtime_sym_result_tac value_def wrap =
+  qmatch_goalsub_abbrev_tac wrap >>
+  Cases_on `output` >> simp[NoAsms, value_def] >>
+  disch_then (CONJUNCTS_THEN2 (SUBST_ALL_TAC o SYM) (SUBST_ALL_TAC o SYM)) >>
+  qpat_x_assum `Abbrev _` (assume_tac o SYM o SRULE [markerTheory.Abbrev_def]);
+
+val runtime_sym_stack_result_tac =
+  runtime_sym_result_tac as_stack_val_def `as_stack_val _ output`;
+
+fun runtime_sym_finish_unary_tac result_tac leaf =
+  result_tac >>
+  qpat_assum `!e t s op s'. _ /\ _ /\ lower_value _ _ _ _ _ = _ ==> _`
+    (drule_at_then (Pat `lower_value _ _ _ _ _ = _`) mp_tac) >>
+  simp[] >> strip_tac >> drule_all leaf >> simp[runtime_sym_value_def,mk_ptr_def];
+
+fun runtime_sym_unary_stack_tac leaf =
+  pairarg_tac >> simp[] >>
+  runtime_sym_finish_unary_tac runtime_sym_stack_result_tac leaf;
+
+fun runtime_sym_round_tac leaf =
+  runtime_sym_unary_args_tac >>
+  qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, compile_builtin_dispatch_body_def] >>
+  runtime_sym_unary_stack_tac leaf;
 
 Theorem runtime_sym_builtin_body:
   runtime_sym_generator_contracts tops /\
@@ -109,13 +137,18 @@ Proof
   >~ [`AddMod`] >- suspend "addmod"
   >~ [`MulMod`] >- suspend "mulmod"
   >~ [`PowMod256`] >- suspend "powmod"
+  >~ [`Sha256`] >- suspend "sha"
   >~ [`BlockHash`] >- suspend "blockhash"
   >~ [`BlobHash`] >- suspend "blobhash"
   >~ [`ECRecover`] >- suspend "ecrecover"
   >~ [`ECAdd`] >- suspend "ecadd"
   >~ [`ECMul`] >- suspend "ecmul"
   >~ [`Uint2Str n`] >- suspend "uint2str"
+  >~ [`CalldataLen`] >- suspend "calldatalen"
+  >~ [`Len`] >- suspend "len"
+  >~ [`MethodId`] >- suspend "method_id"
   >~ [`CalldataSlice n`] >- suspend "calldataslice"
+  >~ [`Ceil`] >- suspend "ceil"
   >> gvs[supported_expr_def, supported_pure_expr_def,
          supported_effect_expr_def, supported_builtin_form_def]
 QED
@@ -571,5 +604,60 @@ Resume runtime_sym_builtin_body[calldataslice]:
   qpat_assum `!start len n s op s'. _`
     (drule_at_then (Pat `compile_slice_calldata _ _ _ _ = _`) mp_tac) >>
   simp[runtime_sym_value_def, mk_ptr_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+Resume runtime_sym_builtin_body[method_id]:
+  runtime_sym_unary_args_tac >>
+  drule runtime_sym_generators_expr_primitive >>
+  disch_then (assume_tac o cj 1 o SRULE [runtime_sym_expr_primitive_clauses_def]) >>
+  qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, compile_builtin_dispatch_body_def] >>
+  Cases_on `method_id_literal a` >> simp[NoAsms] >>
+  Cases_on `lower_value cfn ce (expr_type a) a s` >>
+  Cases_on `rt = BaseT (BytesT (Fixed 4))` >> simp[] >>
+  TRY (runtime_sym_finish_unary_tac runtime_sym_stack_result_tac
+    runtime_sym_method_id_runtime) >>
+  TRY (runtime_sym_finish_unary_tac
+    (runtime_sym_result_tac as_ptr_val_def `as_ptr_val _ LocMemory output`)
+    runtime_sym_method_id_runtime) >>
+  disch_tac >>
+  qpat_assum `!ty lit s v s'. EVERY runtime_sym_inst (state_insts s) /\
+       compile_literal_vv ty lit s = (v,s') ==> _`
+    (drule_at_then (Pat `compile_literal_vv _ _ _ = _`) mp_tac) >>
+  simp[]
+QED
+
+Resume runtime_sym_builtin_body[len]:
+  runtime_sym_unary_args_tac >>
+  drule runtime_sym_builtin_callback >> simp[] >> strip_tac >>
+  `!op. ce.ce_imm_alloca = SOME op ==> ~is_label_operand op` by
+    fs[runtime_sym_env_def] >>
+  qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, compile_builtin_dispatch_body_def] >>
+  pairarg_tac >> simp[] >> runtime_sym_stack_result_tac >>
+  qpat_assum `!t s v s'. _ /\ cfn _ _ _ _ = _ ==> _`
+    (drule_at_then (Pat `cfn _ _ _ _ = _`) mp_tac) >>
+  simp[] >> strip_tac >>
+  imp_res_tac runtime_sym_value_operand >>
+  drule_all runtime_sym_builtin_len >> simp[runtime_sym_value_def]
+QED
+
+Resume runtime_sym_builtin_body[calldatalen]:
+  qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, compile_builtin_dispatch_body_def] >>
+  runtime_sym_stack_result_tac >>
+  drule_all runtime_sym_builtin_calldatasize >> simp[runtime_sym_value_def]
+QED
+Resume runtime_sym_builtin_body[ceil]:
+  runtime_sym_round_tac runtime_sym_ceil
+QED
+Resume runtime_sym_builtin_body[sha]:
+  runtime_sym_unary_args_tac >>
+  qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, compile_builtin_dispatch_body_def] >>
+  IF_CASES_TAC >> simp[NoAsms] >>
+  rpt (CASE_TAC >> simp[NoAsms]) >>
+  FIRST [runtime_sym_unary_stack_tac runtime_sym_sha256_bytes,
+         runtime_sym_unary_stack_tac runtime_sym_sha256_bytesm,
+         runtime_sym_unary_stack_tac runtime_sym_sha256_word]
 QED
 Finalise runtime_sym_builtin_body

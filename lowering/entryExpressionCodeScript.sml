@@ -178,7 +178,8 @@ Resume entry_code_supported_union[literal]:
 QED
 
 Resume entry_code_supported_union[flag]:
-  gvs[supported_pure_expr_def, supported_effect_expr_def]
+  simp[entry_preserves_code_def, compile_expr_body_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Resume entry_code_supported_union[top]:
@@ -226,9 +227,9 @@ Resume entry_code_supported_union[builtin]:
        expr_builtin_dispatch_bound, Once compile_expr_raw_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   pure_rewrite_tac[GSYM entry_preserves_code_def] >>
-  irule (Q.INST [`tops` |-> `tops`] entry_code_builtin_dispatch_body) >>
+  irule entry_code_builtin_dispatch_body >>
   gvs[supported_pure_expr_def, supported_effect_expr_def] >>
-  reverse conj_tac >- metis_tac[] >> rpt strip_tac >>
+  reverse conj_tac >- (qexists_tac `tops` >> simp[]) >> rpt strip_tac >>
   irule entry_code_expr_callback >> strip_tac >>
   first_x_assum irule >>
   conj_tac
@@ -244,7 +245,7 @@ Resume entry_code_supported_union[type]:
   pure_rewrite_tac[GSYM entry_preserves_code_def] >>
   irule entry_code_type_builtin_dispatch_body >>
   gvs[supported_pure_expr_def, supported_effect_expr_def, vyperASTTheory.expr_type_def] >>
-  reverse conj_tac >- metis_tac[] >> rpt strip_tac >>
+  reverse conj_tac >- (qexists_tac `tops` >> simp[]) >> rpt strip_tac >>
   irule entry_code_expr_callback >> strip_tac >>
   first_x_assum irule >> conj_tac
   >- (drule expr_list_member_bound >> simp[vyperASTTheory.expr_size_def]) >>

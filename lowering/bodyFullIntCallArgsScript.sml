@@ -600,6 +600,9 @@ Proof
   >- simp[cj 1 well_typed_expr_def, defaults_env_def]
   >- simp[cj 33 evaluate_def, return_def]
   >- suspend "global"
+  >- (PairCases_on `id` >>
+      simp[cj 31 evaluate_def, lookup_flag_mem_def] >> rpt strip_tac >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]))
   >- suspend "ifexp"
   >- suspend "structlit"
   >- suspend "subscript"

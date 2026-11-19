@@ -165,7 +165,7 @@ Proof
     rpt gen_tac >> BETA_TAC) >> simp[entry_code_return]
 QED
 
-Theorem entry_code_select[local]:
+Theorem entry_code_select:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_select cond_op then_op else_op)
 Proof

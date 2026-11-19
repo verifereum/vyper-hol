@@ -39,41 +39,14 @@ End
 Definition supported_binop_def:
   supported_binop op ty rhs_ty literal_base nonnegative_exponent <=>
     case op of
-      Add => supported_numeric_type ty
-    | Sub => supported_numeric_type ty
-    | Mul => supported_numeric_type ty
-    | Div => supported_numeric_type ty
-    | Mod => supported_numeric_type ty
-    | Exp => supported_integer_type ty /\
+      Exp => supported_integer_type ty /\
         (literal_base \/ nonnegative_exponent)
-    | UnsafeAdd => supported_integer_type ty
-    | UnsafeSub => supported_integer_type ty
-    | UnsafeMul => supported_integer_type ty
-    | UnsafeDiv => supported_integer_type ty
-    | And => supported_integer_type ty \/ ty = BaseT BoolT \/
-        (?m. m <= 32 /\ ty = BaseT (BytesT (Fixed m)) /\ rhs_ty = ty)
-    | Or => supported_integer_type ty \/ ty = BaseT BoolT \/
-        (?m. m <= 32 /\ ty = BaseT (BytesT (Fixed m)) /\ rhs_ty = ty)
-    | XOr => supported_integer_type ty \/ ty = BaseT BoolT \/
-        (?m. m <= 32 /\ ty = BaseT (BytesT (Fixed m)) /\ rhs_ty = ty)
-    | ShR => (supported_integer_type ty /\ supported_unsigned_type rhs_ty) \/
-        (ty = BaseT (BytesT (Fixed 32)) /\
-         (supported_integer_type rhs_ty \/ rhs_ty = ty))
-    | ShL => ((ty = BaseT (UintT 256) \/ ty = BaseT (IntT 256)) /\
-              supported_unsigned_type rhs_ty) \/
-        (ty = BaseT (BytesT (Fixed 32)) /\
-         (supported_integer_type rhs_ty \/ rhs_ty = ty))
-    | Eq => supported_word_type ty
-    | NotEq => supported_word_type ty
-    | Lt => supported_numeric_type ty
-    | LtE => supported_numeric_type ty
-    | Gt => supported_numeric_type ty
-    | GtE => supported_numeric_type ty
-    | Min => supported_numeric_type ty
-    | Max => supported_numeric_type ty
+    | Eq => ~is_bytestring_type ty
+    | NotEq => ~is_bytestring_type ty
     | ExpMod => F
-    | In => F
-    | NotIn => F
+    | In => ~is_ArrayT rhs_ty
+    | NotIn => ~is_ArrayT rhs_ty
+    | _ => T
 End
 
 
@@ -108,25 +81,30 @@ Definition supported_builtin_form_def:
       (Bop op, [a; b]) =>
         supported_binop op (expr_type a) (expr_type b)
           (supported_integer_literal a) (supported_nonnegative_literal b)
-    | (Not, [a]) => ty = BaseT BoolT \/ ty = BaseT (UintT 256)
-    | (Neg, [a]) => supported_signed_type ty \/ ty = BaseT DecimalT
-    | (Abs, [a]) => ty = BaseT (IntT 256)
+    | (Not, [a]) => T
+    | (Neg, [a]) => T
+    | (Abs, [a]) => T
     | (AsWeiValue d, [a]) => supported_unsigned_type (expr_type a)
-    | (AddMod, [a; b; c]) => EVERY (supported_unsigned_type o expr_type) es
-    | (MulMod, [a; b; c]) => EVERY (supported_unsigned_type o expr_type) es
-    | (PowMod256, [a; b]) => EVERY (supported_unsigned_type o expr_type) es
+    | (AddMod, [a; b; c]) => T
+    | (MulMod, [a; b; c]) => T
+    | (PowMod256, [a; b]) => T
     | (Env item, []) => T
     | (Acc item, [a]) => item <> Code
+    | (MethodId, [a]) => T
+    | (Sha256, [a]) => T
     | (BlockHash, [a]) => T
     | (BlobHash, [a]) => T
     | (ECRecover, [a; b; c; d]) => T
     | (ECAdd, [a; b]) => T
     | (ECMul, [a; b]) => T
-    | (MakeArray NONE (Fixed n), args) => supported_literal_elements tops ty args
+    | (MakeArray NONE (Fixed n), args) => T
     | (MakeArray (SOME elem) bnd, args) =>
-        ty = ArrayT elem bnd /\ supported_literal_elements tops ty args
+        ty = ArrayT elem bnd /\ supported_place_type tops ty
     | (Uint2Str n, [a]) => supported_unsigned_type (expr_type a)
+    | (Len, [a]) => T
+    | (CalldataLen, []) => T
     | (CalldataSlice n, [a]) => T
+    | (Ceil, [a]) => T
     | _ => F
 End
 
@@ -138,6 +116,7 @@ Definition supported_type_builtin_form_def:
     | (MinValue, []) => ty = target /\ supported_numeric_type ty
     | (Epsilon, []) => ty = target /\ ty = BaseT DecimalT
     | (Convert, [a]) => ty = target /\ valid_conversion (expr_type a) ty
+    | (Extract32, [a; b]) => ty = target
     | (AbiEncode F (SOME mid), [a]) => LENGTH mid = 4 /\
         (case target of TupleT [t] => supported_tuple_type t | _ => F)
     | (AbiDecode F, [a]) => ty = target /\ supported_tuple_type ty /\
@@ -269,12 +248,14 @@ Proof
        supported_string_type_def]
 QED
 
+Theorem supported_binop_no_array_membership:
+  supported_binop op ty rhs lb ne ==> ~((op = In \/ op = NotIn) /\ is_ArrayT rhs)
+Proof
+  Cases_on `op` >> simp[supported_binop_def]
+QED
+
 Theorem supported_shift_contract:
-  (supported_binop ShL ty rhs lb ne <=>
-    ((ty = BaseT (UintT 256) \/ ty = BaseT (IntT 256)) /\
-      supported_unsigned_type rhs) \/
-    (ty = BaseT (BytesT (Fixed 32)) /\
-      (supported_integer_type rhs \/ rhs = ty))) /\
+  supported_binop ShL ty rhs lb ne /\
   (supported_binop Exp ty rhs lb ne <=>
     supported_integer_type ty /\ (lb \/ ne))
 Proof

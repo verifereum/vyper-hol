@@ -99,6 +99,22 @@ Proof
   gvs[finally_def, pop_scope_def, ignore_bind_def, bind_def, return_def, raise_def]
 QED
 
+Theorem singleton_expr_scopes[local]:
+  (!r s'. eval_exprs cx [e] s = (r,s') ==> s'.scopes = s.scopes) /\
+  eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes
+Proof
+  strip_tac >>
+  `?r'. eval_exprs cx [e] s = (r',s')` by
+    (Cases_on `r`
+     >- (rename1 `eval_expr cx e s = (INL tv,s')` >>
+         simp[evaluate_def, bind_def, return_def] >>
+         Cases_on `read_result cx tv s'` >>
+         drule read_result_state >> strip_tac >> gvs[] >>
+         rename1 `read_result cx tv s' = (rr,s')` >> Cases_on `rr` >> simp[]) >>
+     simp[evaluate_def, bind_def]) >>
+  metis_tac[]
+QED
+
 Theorem supported_pure_scopes_mutual:
   (!tops e. supported_pure_expr tops e ==>
     !cx es res es'. eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes) /\
@@ -122,6 +138,8 @@ Proof
       rename1 `eval_expr cx (TopLevelName ty nsid) es = _` >>
       PairCases_on `nsid` >> gvs[Once evaluate_def] >>
       drule lookup_global_scopes >> simp[])
+  >>~- ([`eval_expr _ (FlagMember _ _ _) _ = _`],
+      gvs[Once evaluate_def] >> drule lookup_flag_mem_scopes >> simp[])
   >>~- ([`eval_expr _ (IfExp _ _ _ _) _ = _`], suspend "ifexp")
   >>~- ([`eval_expr _ (StructLit _ _ _) _ = _`], suspend "struct")
   >~ [`eval_expr _ (Subscript _ _ _) _ = _`] >- suspend "subscript1"
@@ -174,12 +192,21 @@ Resume supported_pure_scopes_mutual[attribute2]:
 QED
 
 Resume supported_pure_scopes_mutual[builtin]:
-  `blt <> Len` by
-    (Cases_on `blt = Len` >> gvs[supported_builtin_form_def, AllCaseEqs()]) >>
   `code_slice_source blt exprs = NONE` by
     (Cases_on `code_slice_source blt exprs` >> simp[] >>
      rename1 `SOME p` >> PairCases_on `p` >>
      gvs[code_slice_source_SOME, supported_builtin_form_def]) >>
+  Cases_on `blt = Len`
+  >- (`?e. exprs = [e]` by
+       (Cases_on `exprs` >> gvs[supported_builtin_form_def] >>
+        Cases_on `t` >> gvs[supported_builtin_form_def]) >>
+      gvs[] >> qpat_x_assum `eval_expr _ (Builtin _ Len _) _ = _` mp_tac >>
+      simp[NoAsms, Once evaluate_def, type_check_def, assert_def, bind_def,
+           ignore_bind_def, return_def, raise_def, AllCaseEqs(),
+           vyperContextTheory.builtin_args_length_ok_def] >>
+      rpt strip_tac >> imp_res_tac result_array_length_state >> gvs[] >>
+      drule_at (Pat `eval_expr _ e _ = _`) singleton_expr_scopes >>
+      disch_then irule >> metis_tac[]) >>
   Cases_on `blt = Env MsgGas` >>
   Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,

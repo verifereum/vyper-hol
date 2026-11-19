@@ -4,7 +4,27 @@ Ancestors
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission exprCallBounds
   supportedExprTraverse supportedExprForms supportedExprs exprLowering
   context compileEnv venomInst memoryValueDefs typedCopyDomain list memLocDefs
-  builtinMisc builtinBytes builtinSimple
+  builtinMisc builtinBytes builtinSimple emitHelper loweringShapeDefs
+  runtimeSymSrcBuiltinByteSimple runtimeSymSrcBuiltinData runtimeSymSrcBinops
+
+Theorem runtime_sym_extract32_clamp[local]:
+  ~is_label_operand v /\ EVERY runtime_sym_inst (state_insts s) /\
+  compile_clamp_basetype v ty s = (op,s') ==>
+  EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op
+Proof
+  Cases_on `ty` >> simp[compile_clamp_basetype_def, comp_return_def] >>
+  TRY (rename1 `compile_clamp_basetype v (BaseT bt) s` >>
+       Cases_on `bt` >> simp[compile_clamp_basetype_def, comp_return_def]) >>
+  TRY (rename1 `compile_clamp_basetype v (BaseT (BytesT bs)) s` >>
+       Cases_on `bs` >> simp[compile_clamp_basetype_def, comp_return_def]) >>
+  rpt IF_CASES_TAC >>
+  simp[comp_return_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  TRY (drule_all runtime_sym_clamp_and_return >> simp[] >> NO_TAC) >>
+  ntac 2 (rev_dxrule runtime_sym_emit_op_result >>
+          simp[is_label_operand_def] >> strip_tac) >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[]
+QED
 
 Theorem runtime_sym_type_builtin_body:
   runtime_sym_generator_contracts tops /\
@@ -24,7 +44,7 @@ Proof
   Cases_on `tb`
   >~ [`Convert`] >- suspend "convert"
   >~ [`Empty`] >- suspend "empty"
-  >~ [`Extract32`] >- gvs[runtime_sym_type_builtin_domain, runtime_sym_extract32_rejected]
+  >~ [`Extract32`] >- suspend "extract32"
   >~ [`AbiEncode ensure mid`] >- suspend "encode"
   >~ [`AbiDecode unwrap`] >- suspend "decode"
   >> gvs[compile_type_builtin_dispatch_body_def, AllCaseEqs(),
@@ -42,6 +62,39 @@ Resume runtime_sym_type_builtin_body[empty]:
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   simp[runtime_sym_value_def, base_ptr_def]
+QED
+
+Resume runtime_sym_type_builtin_body[extract32]:
+  `?a b. args = [a;b]` by
+    (namedCases_on `args` ["", "a rest"] >>
+     gvs[runtime_sym_type_builtin_domain, supported_type_builtin_form_def] >>
+     namedCases_on `rest` ["", "b others"] >> gvs[] >>
+     Cases_on `others` >> gvs[]) >>
+  gvs[] >>
+  `!e t s op s'. (e = a \/ e = b) /\ EVERY runtime_sym_inst (state_insts s) /\
+     lower_value cfn ce t e s = (op,s') ==>
+     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op` by
+    (rpt gen_tac >> strip_tac >> drule runtime_sym_generators_lower_value >>
+     simp[runtime_sym_lower_value_clause_def] >> strip_tac >> first_x_assum irule >>
+     gvs[supported_expr_def, supported_exprs_exists_every] >> metis_tac[]) >>
+  qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, compile_type_builtin_dispatch_body_def] >>
+  rpt (pairarg_tac >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `as_stack_val _ output` >>
+  Cases_on `output` >> simp[NoAsms, as_stack_val_def] >>
+  disch_then (CONJUNCTS_THEN2 (SUBST_ALL_TAC o SYM) (SUBST_ALL_TAC o SYM)) >>
+  qpat_x_assum `Abbrev _` (assume_tac o SYM o SRULE [markerTheory.Abbrev_def]) >>
+  `EVERY runtime_sym_inst (state_insts st1) /\ ~is_label_operand src_mem` by
+    (qpat_assum `!e t s op s'. _ /\ _ /\ lower_value _ _ _ _ _ = _ ==> _`
+       (qspecl_then [`a`,`expr_type a`,`s`,`src_mem`,`st1`] mp_tac) >>
+     simp[]) >>
+  drule_all runtime_sym_bytestring_src >> strip_tac >>
+  `EVERY runtime_sym_inst (state_insts st3) /\ ~is_label_operand off_op` by
+    (qpat_assum `!e t s op s'. _ /\ _ /\ lower_value _ _ _ _ _ = _ ==> _`
+       (qspecl_then [`b`,`ty`,`st2`,`off_op`,`st3`] mp_tac) >>
+     simp[]) >>
+  drule_all runtime_sym_extract32_load >> strip_tac >>
+  drule_all runtime_sym_extract32_clamp >> simp[runtime_sym_value_def]
 QED
 
 Resume runtime_sym_type_builtin_body[convert]:

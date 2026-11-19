@@ -474,6 +474,9 @@ Proof
   >- (`pure_expr (TopLevelName ty id)` by simp[pure_expr_def] >>
       drule_all eval_expr_preserves_state >>
       disch_then (fn th => once_rewrite_tac [th]) >> simp[])
+  >~ [`eval_expr cx (FlagMember _ _ _) s = (r,s')`]
+  >- (gvs[Once evaluate_def] >>
+      drule vyperStatePreservationTheory.lookup_flag_mem_state >> simp[])
   >~ [`eval_expr cx (IfExp ty e e' e'') s = (r,s')`]
   >- (gvs[evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
      imp_res_tac read_result_state >> imp_res_tac vyperStatePreservationTheory.conditional_result_state >>

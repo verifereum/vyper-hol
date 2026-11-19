@@ -13,10 +13,7 @@
    concat [6]: Concat (currently rejected by supported_builtin_form).
    call/acc [7]: Call and Acc. Call children are precisely args and default.
 
-   supported_builtin_form currently rejects Slice, Keccak256, Sha256, Len,
-   Ceil, Floor, Concat and MethodId; supported_type_builtin_form rejects
-   Extract32. Bop In/NotIn are rejected by supported_binop. We still expose
-   aggregate signatures independently of those whitelist decisions. *)
+   The aggregate signatures include forms outside the current whitelist. *)
 Theory runtimeSymSrcGeneratorContracts
 Ancestors
   runtimeSymSrcInterfaces exprCallBounds list supportedExprForms supportedExprs
@@ -522,33 +519,6 @@ Theorem runtime_sym_generators_abi:
   runtime_sym_generator_contracts tops ==> runtime_sym_abi_clauses tops
 Proof
   simp[runtime_sym_generator_contracts_def]
-QED
-
-(* Whitelist boundaries, rather than impossible inhabited dead-branch probes. *)
-Theorem runtime_sym_builtin_rejected:
-  ~supported_builtin_form tops ty (Slice n) es /\
-  ~supported_builtin_form tops ty Keccak256 es /\
-  ~supported_builtin_form tops ty Sha256 es /\
-  ~supported_builtin_form tops ty Len es /\
-  ~supported_builtin_form tops ty Ceil es /\
-  ~supported_builtin_form tops ty Floor es /\
-  ~supported_builtin_form tops ty (Concat n) es /\
-  ~supported_builtin_form tops ty MethodId es
-Proof
-  simp[supported_builtin_form_def]
-QED
-
-Theorem runtime_sym_extract32_rejected:
-  ~supported_type_builtin_form tops ty Extract32 target es
-Proof
-  Cases_on `es` >- simp[supported_type_builtin_form_def]
-  >> Cases_on `t` >> simp[supported_type_builtin_form_def]
-QED
-
-Theorem runtime_sym_membership_rejected:
-  ~supported_binop In ty rhs lb ne /\ ~supported_binop NotIn ty rhs lb ne
-Proof
-  simp[supported_binop_def]
 QED
 
 Theorem runtime_sym_make_array_children:
