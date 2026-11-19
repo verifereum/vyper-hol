@@ -45,7 +45,7 @@ Proof
   metis_tac[well_formed_integer_type, is_numeric_type_def]
 QED
 
-(* Row 3: bytesM has M <= 32; bytes0 (row 2) and bytes20 (row 4) remain. *)
+(* For fixed bytes up to width 32, only bytes0 is outside supported_word_type. *)
 Theorem well_formed_fixed_bytes_word:
   well_formed_type tenv (BaseT (BytesT (Fixed n))) ==>
   supported_word_type (BaseT (BytesT (Fixed n))) \/ n = 0 \/ n = 20
@@ -54,7 +54,7 @@ Proof
      IS_SOME_COND] >> decide_tac
 QED
 
-(* A well-formed base type is a whitelisted scalar, bytes0 or bytes20. *)
+(* A well-formed base type is a supported scalar or bytes0. *)
 Theorem well_formed_base_scalar:
   well_formed_type tenv (BaseT bt) ==>
   supported_scalar_type (BaseT bt) \/
