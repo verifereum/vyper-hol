@@ -32,6 +32,7 @@ Ancestors
   vyperStorageFootprint fragGasPathMem fragExecMem fragGasOrigin fragGasMode
   fragExec memSafeRun venomExecProofs unitShapeDefs
   staticAbortDefs codegenStaticAbort o1PipelineMemoryLoweredAbort runtimeLabelEntry
+  staticAbortAsmOptHol
   runtimeSymSrcUnit codegenAsmOpt codegenAsmOptRevert codegenEntryRel asmFrameRel
   o1CodeEndOffset o1PipelineCompose o1StaticPipelineCorrect
   staticShadowDefs staticShadowRun staticShadowO1State runtimeLabelReadiness
