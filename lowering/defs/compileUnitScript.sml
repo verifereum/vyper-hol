@@ -1004,22 +1004,35 @@ Proof
   simp[build_func_ids_mods_def]
 QED
 
-(* Scaffolding: proof to come (constant substitution at one module,
-   constSubstMods' subst_consts_fn_mods_singleton). *)
 Theorem classify_functions_unit_singleton:
   classify_functions_unit [(NONE, tops)] [] =
   case classify_functions tops of
     (exts, ints, fb, ctor) =>
       (MAP (λf. (NONE, f)) exts, MAP (λf. (NONE, f)) ints, fb, ctor, [])
 Proof
-  cheat
+  Cases_on `FOLDR classify_function ([], [], NONE, NONE) tops` >>
+  PairCases_on `r` >>
+  rename1 `FOLDR classify_function ([], [], NONE, NONE) tops =
+           (exts, ints, fb, ctor)` >>
+  Cases_on `fb` >> Cases_on `ctor` >>
+  simp[classify_functions_unit_def, classify_functions_def, main_module_def,
+       alistTheory.ALOOKUP_def, unit_internal_fns_def, imported_ctors_def,
+       exported_fns_def, consts_env_mods_singleton,
+       subst_consts_fn_mods_singleton, MAP_MAP_o, combinTheory.o_DEF]
 QED
 
-(* Scaffolding: proof to come (follows from classify_functions_unit_singleton). *)
 Theorem build_func_defaults_mods_singleton:
   build_func_defaults_mods [(NONE, tops)] = build_func_defaults tops
 Proof
-  cheat
+  Cases_on `FOLDR classify_function ([], [], NONE, NONE) tops` >>
+  PairCases_on `r` >>
+  simp[build_func_defaults_mods_def, build_func_defaults_def,
+       classify_functions_def, unit_internal_fns_def,
+       consts_env_mods_singleton, subst_consts_fn_mods_singleton,
+       nsid_to_string_def, MAP_MAP_o, combinTheory.o_DEF] >>
+  irule MAP_CONG >> simp[] >>
+  rpt strip_tac >> PairCases_on `x` >>
+  simp[fn_decl_name_def, subst_consts_fn_def]
 QED
 
 Theorem build_compile_env_unit_singleton:
@@ -1098,45 +1111,97 @@ Proof
        type_env_def, FUNION_FEMPTY_2]
 QED
 
-(* Scaffolding: proof to come. *)
+Theorem filter_unit_internal_names_singleton[local]:
+  ∀P. FILTER (λ(src, f). P (nsid_to_string (src, fn_decl_name f)))
+    (MAP (λf. (NONE, f)) ints) =
+  MAP (λf. (NONE, f))
+    (FILTER (λ(mut, nr, rr, fname, fargs, dflts, ret, body). P fname) ints)
+Proof
+  simp[rich_listTheory.FILTER_MAP, combinTheory.o_DEF, nsid_to_string_def] >>
+  gen_tac >> AP_TERM_TAC >>
+  simp[rich_listTheory.FILTER_EQ, FORALL_PROD, fn_decl_name_def]
+QED
+
 Theorem order_internals_unit_singleton:
   order_internals_unit names (MAP (λf. (NONE, f)) ints) =
   MAP (λf. (NONE, f)) (order_internals names ints)
 Proof
-  cheat
+  simp[order_internals_unit_def, order_internals_def,
+       MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF,
+       BETA_RULE (Q.SPEC `λfname. fname = n` filter_unit_internal_names_singleton),
+       BETA_RULE (Q.SPEC `λfname. ¬MEM fname names`
+                    filter_unit_internal_names_singleton)]
 QED
 
-(* Scaffolding: proof to come. *)
+Theorem internal_callees_unit_singleton[local]:
+  internal_callees_unit (MAP (λf. (NONE, f)) ints) g =
+  internal_callees ints g
+Proof
+  simp[internal_callees_unit_def, internal_callees_def,
+       BETA_RULE (Q.SPEC `λfname. fname = g` filter_unit_internal_names_singleton),
+       MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss]
+QED
+
+Theorem reach_internals_unit_singleton[local]:
+  ∀n seen gs.
+    reach_internals_unit (MAP (λf. (NONE, f)) ints) n seen gs =
+    reach_internals ints n seen gs
+Proof
+  Induct >>
+  simp[reach_internals_unit_def, reach_internals_def,
+       internal_callees_unit_singleton]
+QED
+
 Theorem runtime_internal_order_unit_singleton:
   runtime_internal_order_unit [] tops (MAP (λf. (NONE, f)) ints) =
   runtime_internal_order tops ints
 Proof
-  cheat
+  simp[runtime_internal_order_unit_def, runtime_internal_order_def,
+       reach_internals_unit_singleton]
 QED
 
-(* Scaffolding: proof to come. *)
 Theorem deploy_internal_order_unit_singleton:
   deploy_internal_order_unit ctor (MAP (λf. (NONE, f)) ints) =
   deploy_internal_order ctor ints
 Proof
-  cheat
+  simp[deploy_internal_order_unit_def, deploy_internal_order_def,
+       reach_internals_unit_singleton]
 QED
 
-(* Scaffolding: proof to come (classify_functions_unit_singleton and the
-   packaging and ordering singletons above). *)
 Theorem lower_vyper_runtime_unit_mods_singleton:
   lower_vyper_runtime_unit_mods [(NONE, tops)] [] rpolicy =
   lower_vyper_runtime_unit tops rpolicy
 Proof
-  cheat
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rename1 `classify_functions tops = (exts, ints, fb, ctor)` >>
+  Cases_on `fb` >>
+  simp[lower_vyper_runtime_unit_mods_def, lower_vyper_runtime_unit_def,
+       classify_functions_unit_singleton, main_module_def, alistTheory.ALOOKUP_def,
+       type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2,
+       rich_listTheory.FILTER_MAP, MAP_MAP_o, combinTheory.o_DEF, EVERY_MAP, EXISTS_MAP,
+       runtime_internal_order_unit_singleton, order_internals_unit_singleton,
+       package_external_fn_unit_singleton, package_internal_fn_unit_singleton,
+       package_fallback_fn_unit_singleton, package_external_group_unit_singleton,
+       compute_immutables_len_unit_singleton, make_struct_fields_map_mods_singleton,
+       fn_allocs_ok_unit_singleton, consts_env_mods_singleton, EVERY_APPEND] >>
+  simp[UNCURRY, SF ETA_ss]
 QED
 
-(* Scaffolding: proof to come. *)
 Theorem lower_vyper_deploy_unit_mods_singleton:
   lower_vyper_deploy_unit_mods [(NONE, tops)] [] rpolicy bytes =
   lower_vyper_deploy_unit tops rpolicy bytes
 Proof
-  cheat
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rename1 `classify_functions tops = (exts, ints, fb, ctor)` >>
+  Cases_on `ctor` >>
+  simp[lower_vyper_deploy_unit_mods_def, lower_vyper_deploy_unit_def,
+       classify_functions_unit_singleton, make_struct_fields_map_mods_singleton,
+       compute_immutables_len_unit_singleton, consts_env_mods_singleton,
+       deploy_internal_order_unit_singleton, order_internals_unit_singleton,
+       MAP_MAP_o, combinTheory.o_DEF, EXISTS_APPEND, EXISTS_MAP,
+       fn_allocs_ok_unit_singleton,
+       package_internal_fn_unit_singleton, package_constructor_unit_singleton] >>
+  simp[UNCURRY, SF ETA_ss]
 QED
 
 Theorem compile_vyper_with_mods_singleton:
