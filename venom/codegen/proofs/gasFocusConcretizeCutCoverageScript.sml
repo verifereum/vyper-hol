@@ -825,7 +825,10 @@ Resume focus_cut_owned_writer_path[post_write]:
         conj_tac
         >- (qexistsl [`r`,`w`] >> simp[]) >>
         qexistsl [`C`,`endpoint`,`vs`] >> simp[]) >>
-     `0 < sz /\ 0 < sb /\ pa <= pa+(x-b) /\ pa+(x-b) < pa+sz` by decide_tac >>
+     `0 < sz /\ 0 < sb /\ pa <= pa+(x-b) /\ pa+(x-b) < pa+sz` by
+       (map_every (fn bound => qpat_assum bound mp_tac)
+          [`b <= x`, `x < b + sz`, `pb <= pa + (x-b)`, `pa + (x-b) < pb + sb`] >>
+        POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
      `ptr_observation_reachable vs C (EL t h)` by simp[] >>
      `lookup_function fn.fn_name C'.ctx_functions = SOME out.fpo_function` by simp[] >>
      `fn = (ptr_owner_view d (EL t h)).cf_fn` by simp[Abbr `fn`] >>
