@@ -57,6 +57,7 @@ Proof
   strip_tac >>
   `op_taint tn (Lit (n2w off)) = {}` by simp[op_taint_def] >>
   `eval_operand (Lit (n2w off)) s = SOME (n2w off)` by simp[eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (attribute_emit_binop_path_ptr |> SPEC_ALL
     |> Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`] |> SRULE []) >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>

@@ -55,6 +55,7 @@ Proof
     metis_tac[state_frame_ptr_fields] >>
   qpat_x_assum `state_frame s1 = _` kall_tac >>
   qpat_x_assum `state_frame s2 = _` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emit_storage_load_uniform_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >>
   `?v. lop = Var v` by metis_tac[emitted_insts_emit_op] >>

@@ -29,7 +29,9 @@ Theorem mload_counted_ghost_frame:
     t = (update_var out (mload (w2n a) s) s) with
       vs_inst_idx := SUC s.vs_inst_idx
 Proof
-  strip_tac >> drule_all mload_counted_clean_ambient >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all mload_counted_clean_ambient >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   qexistsl_tac [`G'`,`tn'`,`t`] >> simp[] >> conj_tac
   >- (irule ghost_inv_fresh_frame >>

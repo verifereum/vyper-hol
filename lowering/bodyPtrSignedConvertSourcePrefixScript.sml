@@ -104,6 +104,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `ptr_covers G tn src s 32` by
     (gvs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all mload_counted_clean_ambient >>
   disch_then (qspecl_then [`D`,`PG`]
     (qx_choose_then `G1` (qx_choose_then `tn1`

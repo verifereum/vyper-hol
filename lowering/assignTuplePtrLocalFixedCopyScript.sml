@@ -9,7 +9,7 @@ Ancestors
 
 Theorem mcopy_operand_seq_ptr:
   !D ctx fn PG G tn s id dst src count_op a b n.
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
     eval_operand count_op s = SOME n /\ op_taint tn count_op = {} /\
     ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn src s (w2n n) ==>
@@ -69,7 +69,7 @@ Theorem compile_fixed_copy_sequence_ptr:
   compile_store_memory cenv (Var src) (Var dst) ty ty sa = ((),sb) /\
   ~is_word_type ty /\ ~is_bytestring_type ty /\
   n = type_memory_bytes cenv ty /\ n < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   ptr_covers G tn src s n /\ ptr_covers G tn dst s n ==>
   ?tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G tn' /\
@@ -100,7 +100,7 @@ Theorem compile_fixed_copy_frames_ptr:
   compile_store_memory cenv (Var src) (Var dst) ty ty sa = ((),sb) /\
   ~is_word_type ty /\ ~is_bytestring_type ty /\
   n = type_memory_bytes cenv ty /\ n < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
   run_inst_seq (emitted_insts sa sb) s = OK u ==>

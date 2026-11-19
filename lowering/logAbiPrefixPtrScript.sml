@@ -31,6 +31,7 @@ Proof
   gvs[] >>
   `eval_operand (Lit 31w) s = SOME 31w /\ op_taint tn (Lit 31w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
     emit_copy_len_binop_seq_ptr)) >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`]
@@ -41,6 +42,7 @@ Proof
      SOME 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w /\
    op_taint tn1 (Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w) = {}` by
     gvs[Abbr `u`, eval_operand_def, lookup_var_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `AND`, `f` |-> `word_and`]
     emit_copy_len_binop_seq_ptr)) >>
   disch_then (qspecl_then [`fn`, `PG`, `G1`, `D`]
@@ -344,6 +346,7 @@ Proof
      (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w && (31w+w)) /\
    eval_operand (Lit 32w) u = SOME 32w /\ op_taint tm (Lit 32w) = {}` by
     (Cases_on `rounded` >> gvs[Abbr `u`, eval_operand_def, lookup_var_def, op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
     emit_copy_len_binop_seq_ptr)) >>
   disch_then (qspecl_then [`fn`, `PG`, `H`, `D`]
@@ -392,6 +395,7 @@ Proof
   `?lv pv. len = Var lv /\ lastptr = Var pv` by suspend "outputs" >>
   gvs[] >> rename1 `emit_op ADD [Var dst;rounded] sc = (Var pv,sb)` >>
   qmatch_asmsub_abbrev_tac `ptr_covers G tn dst s (w2n rw + 32)` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emit_mload_clean_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`]
     (qx_choose_then `H1` (qx_choose_then `tm1` (qx_choose_then `t1` strip_assume_tac)))) >>
@@ -406,6 +410,7 @@ Proof
    lookup_var dst u2 = SOME b /\ eval_operand rounded u2 = SOME (n2w (w2n rw))` by
     suspend "add_inputs" >>
   `w2n b + w2n rw < dimword(:256)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u2` by simp[] >>
   drule_all emit_addr_add_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`]
     (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `t3` strip_assume_tac)))) >>

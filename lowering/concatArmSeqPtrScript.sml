@@ -45,6 +45,7 @@ Proof
     (simp[not_fresh_at_def, Abbr `r0`, Abbr `r1`, Abbr `r2`] >>
      rpt strip_tac >> metis_tac[arithmeticTheory.LESS_EQ_REFL,
        arithmeticTheory.LESS_EQ_ADD]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all assignTuplePtrLocalBytesCopyTheory.mload_clean_seq_ptr >>
   disch_then (qspecl_then [`D`,`func`,`PG`,`sx.cs_next_id`,`r0`] strip_assume_tac) >>
   suspend "offset"
@@ -244,6 +245,7 @@ Proof
     (gvs[bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_ADD, arithmeticTheory.LESS_EQ_TRANS]) >>
   `!i. w2n sw <= i /\ i < w2n sw+32 ==> i NOTIN tn.t_mem` by
     (rpt strip_tac >> qpat_x_assum `!i. w2n sw <= i /\ i < w2n sw+32+N ==> _` drule >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all assignTuplePtrLocalBytesCopyTheory.mload_clean_seq_ptr >>
   disch_then (qspecl_then [`D`,`func`,`PG`,`sx.cs_next_id`,`r0`] strip_assume_tac) >>
   suspend "source_offset"
@@ -274,6 +276,7 @@ Resume concat_bytes_seq_ptr[offset_load]:
   `lookup_var oq s1 = SOME ow` by
     (gvs[Abbr `s1`, Abbr `s0`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `!i. w2n ow <= i /\ i < w2n ow+32 ==> i NOTIN tnf.t_mem` by gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all assignTuplePtrLocalBytesCopyTheory.mload_clean_seq_ptr >>
   disch_then (qspecl_then [`D`,`func`,`PG`,`sx.cs_next_id+2`,`r2`] strip_assume_tac) >>
   suspend "dest_offset"

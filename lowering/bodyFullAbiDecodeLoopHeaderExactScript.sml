@@ -73,6 +73,7 @@ Theorem abi_decode_loop_counter_load_exact:
        op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (assign_base_bytes_mload_seq |> Q.SPECL
     [`<|d_stor := K (K {}); d_trans := K (K {});
                 d_imm := K {}; d_ret := K {}|>`, `ctx`, `fn`, `PG`]) >>

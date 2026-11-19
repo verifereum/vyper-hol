@@ -120,7 +120,7 @@ QED
 
 Theorem emit_mload_ptr_path:
   emit_op MLOAD [Var src] sa = (op,sb) /\ fn_has_code sa sb fn /\
-  ~ctx_has_dalloca ctx /\ ptr_covers G tn src s 32 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ptr_covers G tn src s 32 /\
   lookup_var src s = SOME a /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\

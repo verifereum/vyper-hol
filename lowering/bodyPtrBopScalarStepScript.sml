@@ -27,7 +27,7 @@ Theorem bop_scalar_ptr_inst_ok:
            SHL; SHR; SAR; SIGNEXTEND; BYTE; ASSIGN] /\
   EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
   step_inst_base (mk_inst id opc ops [tmp]) s = OK u /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops [tmp]) s
 Proof
   strip_tac >>
@@ -132,7 +132,7 @@ Theorem bop_scalar_ptr_edge:
            LT; GT; SLT; SGT; EQ; ISZERO; AND; OR; XOR; NOT;
            SHL; SHR; SAR; SIGNEXTEND; BYTE; ASSIGN] /\
   EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [tmp]) /\
   step_inst_base (mk_inst id opc ops [tmp]) s = OK u ==>

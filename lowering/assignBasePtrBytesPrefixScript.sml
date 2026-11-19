@@ -4,6 +4,7 @@ Ancestors wordLoadStorePtr context compileEnv loweringStateRelDefs emitHelper em
   venomInst words list rich_list typedCopyPtr fragGasSeqPtr instSeqComposePtr
   venomExecSemantics venomInstProofs venomState ptrDiscipline ptrSafeRun
   finite_map fragExec ghostPcTransportPtr instIdxIndep exprSimBufferStore
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem assign_base_bytes_prefix_code:
   !src out sa sb.
@@ -34,7 +35,7 @@ QED
 
 Theorem assign_base_bytes_mload_seq:
   !D ctx fn PG G tn s id src out a.
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?G' tn' u.
@@ -70,7 +71,8 @@ Proof
           OK (update_var out (mload (w2n a) s) s with vs_inst_idx := k)` by
        (simp[step_inst_inst_idx_indep, mk_inst_def, is_terminator_def,
              exec_result_map_def] >> fs[mk_inst_def]) >>
-     simp[] >> irule ptr_inst_ok_mload >> simp[]) >>
+     simp[] >> irule ptr_inst_ok_mload >>
+     simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   simp[op_prov_def, step_prov_def, set_prov_def, out_prov_def,
        mk_inst_def, FLOOKUP_DRESTRICT] >>
   rpt strip_tac >>
@@ -84,7 +86,7 @@ Theorem assign_base_bytes_binop_seq:
     eval_operands [left;right] s = SOME [a;b] /\
     op_taint tn left = {} /\ op_taint tn right = {} /\
     op_prov G left = NONE /\ op_prov G right = NONE /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn' u.
       (!k. inst_seq_ptr D 0 ctx fn PG G tn
         [mk_inst id opc [left;right] [out]] (s with vs_inst_idx := k) G' tn') /\
@@ -120,7 +122,8 @@ Proof
     (simp[Abbr `u`] >> irule copy_len_binop_ghost_frame >> metis_tac[]) >>
   `!k. ptr_inst_ok D 0 0 ctx fn G tn
      (mk_inst id opc [left;right] [out]) (s with vs_inst_idx := k)` by
-    (gen_tac >> irule ptr_inst_ok_copy_len_binop >> simp[] >> metis_tac[]) >>
+    (gen_tac >> irule ptr_inst_ok_copy_len_binop >>
+     simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >> metis_tac[]) >>
   `!k. step_inst_base (mk_inst id opc [left;right] [out])
      (s with vs_inst_idx := k) = OK (u with vs_inst_idx := k)` by
     (gen_tac >> gvs[] >>
@@ -136,7 +139,7 @@ QED
 Theorem assign_base_bytes_not_seq:
   !D ctx fn PG G tn s id x out a.
     eval_operand x s = SOME a /\ op_taint tn x = {} /\
-    op_prov G x = NONE /\ ~ctx_has_dalloca ctx ==>
+    op_prov G x = NONE /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn' u.
       (!k. inst_seq_ptr D 0 ctx fn PG G tn
         [mk_inst id NOT [x] [out]] (s with vs_inst_idx := k) G' tn') /\
@@ -166,7 +169,8 @@ Proof
     (simp[Abbr `u`] >> irule copy_len_not_ghost_frame) >>
   `!k. ptr_inst_ok D 0 0 ctx fn G tn
      (mk_inst id NOT [x] [out]) (s with vs_inst_idx := k)` by
-    (gen_tac >> irule ptr_inst_ok_copy_len_not >> simp[]) >>
+    (gen_tac >> irule ptr_inst_ok_copy_len_not >>
+     simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `!k. step_inst_base (mk_inst id NOT [x] [out])
      (s with vs_inst_idx := k) = OK (u with vs_inst_idx := k)` by
     (gen_tac >>
@@ -181,7 +185,7 @@ QED
 Theorem assign_base_bytes_not_cons:
   !D ctx fn PG G tn s id x out a code Q.
     eval_operand x s = SOME a /\ op_taint tn x = {} /\
-    op_prov G x = NONE /\ ~ctx_has_dalloca ctx /\
+    op_prov G x = NONE /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     (!G1 tn1.
       op_taint tn1 (Var out) = {} /\ op_prov G1 (Var out) = NONE /\
       tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\
@@ -218,7 +222,7 @@ Theorem assign_base_bytes_binop_cons:
     eval_operands [left;right] s = SOME [a;b] /\
     op_taint tn left = {} /\ op_taint tn right = {} /\
     op_prov G left = NONE /\ op_prov G right = NONE /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     (!G1 tn1.
       op_taint tn1 (Var out) = {} /\ op_prov G1 (Var out) = NONE /\
       tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\
@@ -253,7 +257,7 @@ QED
 
 Theorem assign_base_bytes_mload_cons:
   !D ctx fn PG G tn s id src out a code Q.
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
     (!G1 tn1.
@@ -286,7 +290,7 @@ QED
 
 Theorem assign_base_bytes_prefix_checked:
   !D ctx fn PG G tn s id src x m y z r a.
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_var src s = SOME a /\ ALL_DISTINCT [x;m;y;z;r] /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?G' tn'.
@@ -309,18 +313,21 @@ Proof
   ho_match_mp_tac assign_base_bytes_mload_cons >> simp[] >>
   rpt strip_tac >>
   ho_match_mp_tac assign_base_bytes_not_cons >>
-  simp[eval_operand_lit, op_prov_def] >>
+  simp[eval_operand_lit, op_prov_def, exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   rpt strip_tac >>
   ho_match_mp_tac assign_base_bytes_binop_cons >>
   gs[eval_operands_def, eval_operand_update_var, eval_operand_lit,
-     eval_operand_def, lookup_var_update_var, op_prov_def] >>
+     eval_operand_def, lookup_var_update_var, op_prov_def,
+     exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   rpt strip_tac >>
   ho_match_mp_tac assign_base_bytes_binop_cons >>
   gs[eval_operands_def, eval_operand_update_var, eval_operand_lit,
-     eval_operand_def, lookup_var_update_var, op_prov_def] >>
+     eval_operand_def, lookup_var_update_var, op_prov_def,
+     exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   rpt strip_tac >>
   ho_match_mp_tac assign_base_bytes_binop_cons >>
-  simp[eval_operands_def, eval_operand_update_var, eval_operand_lit] >>
+  simp[eval_operands_def, eval_operand_update_var, eval_operand_lit,
+       exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   rpt strip_tac >>
   simp[inst_seq_ptr_def] >> fs[op_prov_def]
 QED
@@ -328,7 +335,7 @@ QED
 Theorem assign_base_bytes_prefix_counted:
   !D ctx fn PG G tn s sa sb src out a len bb.
     compile_bytestring_copy_len (Var src) sa = (out,sb) /\
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_var src s = SOME a /\ mload (w2n a) s = n2w len /\
     32 + 32 * word_size len < dimword (:256) /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\

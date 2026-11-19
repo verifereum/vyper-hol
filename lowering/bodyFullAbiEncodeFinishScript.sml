@@ -254,7 +254,15 @@ Resume abi_encode_finish_origin[positive_operands]:
 QED
 
 Resume abi_encode_finish_origin[positive_covers]:
-  rpt strip_tac >> gvs[ptr_covers_def] >> metis_tac[]
+  rpt strip_tac >>
+  `x <> q` by metis_tac[] >>
+  qpat_assum `!p. p <> q ==> lookup_var p u = _ /\ _`
+    (qspec_then `x` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `ptr_covers G1 tn1 x u n` by fs[ptr_covers_def] >>
+  qpat_assum `!p n. ptr_covers G1 tn1 p u n ==> _`
+    (qspecl_then [`x`, `n`] MATCH_MP_TAC) >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume abi_encode_finish_origin[positive_ghost]:

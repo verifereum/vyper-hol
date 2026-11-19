@@ -304,6 +304,7 @@ Resume abi_decode_bytes_store_copy_ptr[prepare_copy]:
   `?sizev. sz = Var sizev` by
     (drule emitted_insts_emit_op >> strip_tac >> simp[]) >>
   qpat_x_assum `sz = Var sizev` SUBST_ALL_TAC >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by simp[] >>
   drule_all (emit_copy_len_binop_normalized_ptr
     |> Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`] |> SRULE []) >>
   disch_then (qspecl_then [`func`, `PG`, `G`, `D`] strip_assume_tac) >>

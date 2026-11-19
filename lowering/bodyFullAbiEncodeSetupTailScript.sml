@@ -338,13 +338,12 @@ Resume abi_encode_setup_tail_origin[some_root_value]:
 QED
 
 Resume abi_encode_setup_tail_origin[some_fresh]:
-  qpat_x_assum `emit_op ADD _ address_st = _` mp_tac >>
-  qpat_x_assum `emit_void MSTORE _ store_st = _` mp_tac >>
-  simp[emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, comp_bind_def,
-    comp_ignore_bind_def, comp_return_def, emit_def] >>
-  rpt strip_tac >> gvs[] >>
-  gvs[loweringStateRelDefsTheory.not_fresh_at_def] >>
-  metis_tac[LESS_EQ_TRANS, LESS_EQ_SUC_REFL]
+  qpat_assum `emit_op ADD _ address_st = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+  qpat_assum `emit_void MSTORE _ store_st = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >>
+  irule freshWritesTheory.not_fresh_at_mono >>
+  qexists_tac `address_st` >> simp[]
 QED
 
 Resume abi_encode_setup_tail_origin[some_frame]:

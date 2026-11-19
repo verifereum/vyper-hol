@@ -37,7 +37,9 @@ Theorem storage_load_uniform_clean:
          FLOOKUP G' x = FLOOKUP G x /\
          op_taint tn' (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >> drule_all emit_storage_load_uniform_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all emit_storage_load_uniform_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] mp_tac) >>
   strip_tac >> qexistsl_tac [`G'`, `tn'`] >> simp[] >>
   drule emitted_load_output_prov >>
