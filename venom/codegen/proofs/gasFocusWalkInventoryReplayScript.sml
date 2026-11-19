@@ -17,7 +17,8 @@ Ancestors
    The H1 hypotheses through the stage family apply to both joins. The stopped
    packet supplies the endpoint and indexed historical cuts. A pseudo-instruction
    endpoint uses the replayed pseudo prefix and zero body rows. The literal
-   evaluator Error at the matched C9 instruction is read as failed readiness.
+   readiness failures use C9 non-INVOKE evaluator Error, unsuccessful
+   INVOKE setup, or the empty readings at a moving GAS.
    Terminal evidence names the last C8 instruction and its root result. *)
 Theorem focus_walk_stopped_selection:
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
@@ -96,14 +97,18 @@ Theorem focus_walk_stopped_selection:
         env = asm_data_env prog vs0.vs_code;
         planner_base = vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
                                  vs_return_pc_token := 0w; vs_inst_idx := 0|>;
-        T = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry
+        trace8 = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry
     in
-    let V = TAKE j T;
+    let V = TAKE j trace8;
         q8 = JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8;
         q9 = JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9;
         Kroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e))))
           (FST (SND (SND (SND (SND (THE (FLOOKUP acts []))))))))
     in
+    let rank = \q. case q of JointConfig stk PG G tn fn inst s oms om hs h =>
+           case lookup_block s.vs_current_bb fn.fn_blocks of
+             NONE => 0
+           | SOME bb => LENGTH bb.bb_instructions - s.vs_inst_idx in
     0 < N /\
     root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|> /\
     C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
@@ -123,10 +128,55 @@ Theorem focus_walk_stopped_selection:
     dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
       acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
     j = LENGTH evs8 /\ LENGTH evs8 <= LENGTH evs9 /\ LENGTH V = j /\
-    j < LENGTH T /\ obs = dftGasFromListTraceDefs$trace_gas V /\
-    EL j T = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
+    j < LENGTH trace8 /\ obs = dftGasFromListTraceDefs$trace_gas V /\
+    EL j trace8 = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
     LENGTH raw_slots = LENGTH sites /\
     PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+    (?align old_cursors old_asm old_sym costs.
+      LENGTH costs = LENGTH evs9 /\ LENGTH old_asm = LENGTH evs9 /\
+      (fin = asm_opt_finalizer ==> LENGTH old_sym = LENGTH evs9) /\
+      align 0 = 0 /\ align (LENGTH evs9) = j /\
+      asm_fuel = SUM costs /\ ast = EL (LENGTH evs9) (a0::old_asm) /\
+      (fin = asm_opt_finalizer ==> ss = EL (LENGTH evs9) (sym_init a0::old_sym)) /\
+      LIST_REL (\cost edge. 0 < cost \/ rank (SND edge) < rank (FST edge))
+        costs (ZIP (TAKE (LENGTH evs9) (q90::qs9),qs9)) /\
+      (!k. k < LENGTH evs9 ==>
+        let v9 = EL k (q90::qs9);
+            v8 = EL (align k) (q80::qs8);
+            ak = EL k (a0::old_asm)
+        in
+        align k <= j /\
+        (align (SUC k) = align k \/ align (SUC k) = SUC (align k)) /\
+        align (SUC k) <= j /\
+        cfg_norm_joint_cursors C8 C9 (old_cursors k) v8 v9 /\
+        asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+          prog (EL k costs) ak = AsmOK (EL (SUC k) (a0::old_asm)) /\
+        (fin = asm_opt_finalizer ==>
+          sym_steps prog env (EL k costs) (EL k (sym_init a0::old_sym)) =
+            SymOK (EL (SUC k) (sym_init a0::old_sym))) /\
+        (case (v8,v9) of
+          (JointConfig frames8 p8 g8 t8 f8 i8 u8 o8 m8 sh8 oh8,
+           JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) =>
+            (~in_revert_forward fn9 s9 /\
+    (inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode ==>
+      source_memory_reads_disjoint cpl inst9 s9 /\
+      context_source_memory_writes_disjoint cpl inst9 s9) /\
+    (fin = asm_opt_finalizer ==>
+      !dst x sz src off.
+        inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
+        code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
+        FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
+        w2n (src - n2w off) < dimword (:256) DIV 2)) /\ (active_inst fn9 inst9 s9 /\
+    (inst9.inst_opcode = INVOKE ==>
+      ?nm' ops callee args ent.
+        decode_invoke inst9 = SOME (nm',ops) /\
+        lookup_function nm' C9.ctx_functions = SOME callee /\
+        eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent) /\
+    (inst9.inst_opcode <> INVOKE ==>
+      (?u. step_inst 0 C9 inst9 s9 = OK u /\ ~u.vs_halted) \/
+      (stk9 <> [] /\ ?ir u. step_inst 0 C9 inst9 s9 = IntRet ir u))) /\
+            (align (SUC k) = SUC (align k) /\ i8.inst_opcode = GAS ==>
+              u8.vs_gas_readings <> [])))) /\
     (let a = p; e = d; tf = fn8; inst = inst8; visit_state = s8 in
       ?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
         body_entry count front closed brest.
@@ -244,7 +294,7 @@ Theorem focus_walk_stopped_selection:
               u.vs_initial_fmp = visit_state.vs_initial_fmp))) /\
     (!h. h < j ==>
       ?a e tf inst visit_state stk PG G tn oms om hs hist.
-        EL h V = ((a,e,inst.inst_id),tf,inst,visit_state) /\
+        EL h (TAKE j trace8) = ((a,e,inst.inst_id),tf,inst,visit_state) /\
         EL h (q80::qs8) = JointConfig stk PG G tn tf inst visit_state oms om hs hist /\
         ?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
           body_entry count front closed brest.
@@ -382,7 +432,12 @@ Theorem focus_walk_stopped_selection:
           FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off /\
           ~(w2n (src - n2w off) < dimword (:256) DIV 2)) \/
       (inst8.inst_opcode = GAS /\ inst9.inst_opcode = GAS /\ s8.vs_gas_readings = []) \/
-      (?err. step_inst (N-d) C9 inst9 s9 = Error err)) /\
+      (inst9.inst_opcode = INVOKE /\
+       ~(?callee_name ops callee args ent.
+          decode_invoke inst9 = SOME (callee_name,ops) /\
+          lookup_function callee_name C9.ctx_functions = SOME callee /\
+          eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent)) \/
+      (inst9.inst_opcode <> INVOKE /\ ?err. step_inst 0 C9 inst9 s9 = Error err)) /\
     (!raw.
       LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
       ?rest. MAP project sites = markf (raw ++ [0w]) ++ rest)
@@ -463,14 +518,18 @@ Theorem focus_stopped_filling_replay:
       env = asm_data_env prog vs0.vs_code;
       planner_base = vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
                                vs_return_pc_token := 0w; vs_inst_idx := 0|>;
-      T = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry
+      trace8 = dftGasFromListTraceDefs$trace_blocks [] 0 N C8 root_tf root_entry
   in
-  let V = TAKE j T;
+  let V = TAKE j trace8;
       q8 = JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8;
       q9 = JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9;
       Kroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e))))
         (FST (SND (SND (SND (SND (THE (FLOOKUP acts []))))))))
   in
+  let rank = \q. case q of JointConfig stk PG G tn fn inst s oms om hs h =>
+         case lookup_block s.vs_current_bb fn.fn_blocks of
+           NONE => 0
+         | SOME bb => LENGTH bb.bb_instructions - s.vs_inst_idx in
   0 < N /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|> /\
   C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
@@ -490,10 +549,55 @@ Theorem focus_stopped_filling_replay:
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
   j = LENGTH evs8 /\ LENGTH evs8 <= LENGTH evs9 /\ LENGTH V = j /\
-  j < LENGTH T /\ obs = dftGasFromListTraceDefs$trace_gas V /\
-  EL j T = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
+  j < LENGTH trace8 /\ obs = dftGasFromListTraceDefs$trace_gas V /\
+  EL j trace8 = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
   LENGTH raw_slots = LENGTH sites /\
   PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+  (?align old_cursors old_asm old_sym costs.
+    LENGTH costs = LENGTH evs9 /\ LENGTH old_asm = LENGTH evs9 /\
+    (fin = asm_opt_finalizer ==> LENGTH old_sym = LENGTH evs9) /\
+    align 0 = 0 /\ align (LENGTH evs9) = j /\
+    asm_fuel = SUM costs /\ ast = EL (LENGTH evs9) (a0::old_asm) /\
+    (fin = asm_opt_finalizer ==> ss = EL (LENGTH evs9) (sym_init a0::old_sym)) /\
+    LIST_REL (\cost edge. 0 < cost \/ rank (SND edge) < rank (FST edge))
+      costs (ZIP (TAKE (LENGTH evs9) (q90::qs9),qs9)) /\
+    (!k. k < LENGTH evs9 ==>
+      let v9 = EL k (q90::qs9);
+          v8 = EL (align k) (q80::qs8);
+          ak = EL k (a0::old_asm)
+      in
+      align k <= j /\
+      (align (SUC k) = align k \/ align (SUC k) = SUC (align k)) /\
+      align (SUC k) <= j /\
+      cfg_norm_joint_cursors C8 C9 (old_cursors k) v8 v9 /\
+      asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+        prog (EL k costs) ak = AsmOK (EL (SUC k) (a0::old_asm)) /\
+      (fin = asm_opt_finalizer ==>
+        sym_steps prog env (EL k costs) (EL k (sym_init a0::old_sym)) =
+          SymOK (EL (SUC k) (sym_init a0::old_sym))) /\
+      (case (v8,v9) of
+        (JointConfig frames8 p8 g8 t8 f8 i8 u8 o8 m8 sh8 oh8,
+         JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) =>
+          (~in_revert_forward fn9 s9 /\
+  (inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode ==>
+    source_memory_reads_disjoint cpl inst9 s9 /\
+    context_source_memory_writes_disjoint cpl inst9 s9) /\
+  (fin = asm_opt_finalizer ==>
+    !dst x sz src off.
+      inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
+      code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
+      FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
+      w2n (src - n2w off) < dimword (:256) DIV 2)) /\ (active_inst fn9 inst9 s9 /\
+  (inst9.inst_opcode = INVOKE ==>
+    ?nm' ops callee args ent.
+      decode_invoke inst9 = SOME (nm',ops) /\
+      lookup_function nm' C9.ctx_functions = SOME callee /\
+      eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent) /\
+  (inst9.inst_opcode <> INVOKE ==>
+    (?u. step_inst 0 C9 inst9 s9 = OK u /\ ~u.vs_halted) \/
+    (stk9 <> [] /\ ?ir u. step_inst 0 C9 inst9 s9 = IntRet ir u))) /\
+          (align (SUC k) = SUC (align k) /\ i8.inst_opcode = GAS ==>
+            u8.vs_gas_readings <> [])))) /\
   (let a = p; e = d; tf = fn8; inst = inst8; visit_state = s8 in
     ?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
       body_entry count front closed brest.
@@ -611,7 +715,7 @@ Theorem focus_stopped_filling_replay:
             u.vs_initial_fmp = visit_state.vs_initial_fmp))) /\
   (!h. h < j ==>
     ?a e tf inst visit_state stk PG G tn oms om hs hist.
-      EL h V = ((a,e,inst.inst_id),tf,inst,visit_state) /\
+      EL h (TAKE j trace8) = ((a,e,inst.inst_id),tf,inst,visit_state) /\
       EL h (q80::qs8) = JointConfig stk PG G tn tf inst visit_state oms om hs hist /\
       ?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
         body_entry count front closed brest.
@@ -749,7 +853,12 @@ Theorem focus_stopped_filling_replay:
         FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off /\
         ~(w2n (src - n2w off) < dimword (:256) DIV 2)) \/
     (inst8.inst_opcode = GAS /\ inst9.inst_opcode = GAS /\ s8.vs_gas_readings = []) \/
-    (?err. step_inst (N-d) C9 inst9 s9 = Error err)) /\
+    (inst9.inst_opcode = INVOKE /\
+     ~(?callee_name ops callee args ent.
+        decode_invoke inst9 = SOME (callee_name,ops) /\
+        lookup_function callee_name C9.ctx_functions = SOME callee /\
+        eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent)) \/
+    (inst9.inst_opcode <> INVOKE /\ ?err. step_inst 0 C9 inst9 s9 = Error err)) /\
   (!raw.
     LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
     ?rest. MAP project sites = markf (raw ++ [0w]) ++ rest)) /\
