@@ -1455,6 +1455,53 @@ Proof
   pop_assum (mp_tac o BETA_RULE) >> simp[CONJ_ASSOC]
 QED
 
+(* These suppliers advance the actual next fetch, including a GAS read
+   whose remaining oracle may be shorter than the current row's. *)
+Theorem focus_opt_ld_simple_next[local]:
+  ^focus_opt_ld_row lo P C C' vs Sigma names gn ti t
+    stk PG G tn fn inst s t0 A f fs N [inst] p h /\
+  ALL_DISTINCT (fn_labels gn) /\
+  o1_ctx_shape C /\ o1_safe_upto D lo n C vs /\
+  (MEM inst.inst_opcode
+     [CALLER;ADDRESS;CALLVALUE;GAS;ORIGIN;GASPRICE;CHAINID;COINBASE;
+      TIMESTAMP;NUMBER;PREVRANDAO;GASLIMIT;BASEFEE;BLOBBASEFEE;
+      CALLDATASIZE;RETURNDATASIZE;CODESIZE] \/
+   (MEM inst.inst_opcode
+      [MUL;Div;Mod;SDIV;SMOD;Exp;ADDMOD;MULMOD;SLT;SGT;ISZERO;AND;OR;XOR;
+       NOT;SIGNEXTEND;BYTE;OFFSET;ADD;SUB;SHL;SHR;SAR] \/
+    MEM inst.inst_opcode [ASSIGN;RETPC_PARAM;PARAM]) \/
+   MEM inst.inst_opcode [LOG;SSTORE;TSTORE]) /\
+  step_inst fuel C' ti t = OK u /\
+  active_inst gn j (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+  gas_cut n vs (u with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j
+    (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `h = 0` by fs[] >> qpat_x_assum `h = 0` SUBST_ALL_TAC >>
+  qpat_x_assum `ld_prefix _ _ _ _ 0 _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [lowerDloadSafetyKernelTheory.ld_prefix_zero]) >>
+  `ti = inst` by fs[] >>
+  qpat_x_assum `ti = inst` SUBST_ALL_TAC >>
+  qpat_x_assum `t = t0` (SUBST_ALL_TAC o SYM) >>
+  `?bb. lookup_block t.vs_current_bb (ld_image f).fn_blocks = SOME bb /\
+        get_instruction bb t.vs_inst_idx = SOME inst` by
+    (irule lowerDloadPtrRawReachableTheory.active_inst_block_lookup >> metis_tac[]) >>
+  `active_inst (ld_image f) j (u with vs_inst_idx := SUC t.vs_inst_idx)` by metis_tac[] >>
+  qpat_x_assum `_ \/ _ \/ _` mp_tac >>
+  disch_then (DISJ_CASES_THEN2 assume_tac (DISJ_CASES_THEN assume_tac)) >>
+  MAP_FIRST (drule_all o BETA_RULE o REWRITE_RULE [LET_THM])
+    [gasFocusLowerDloadEnvironmentPointTheory.ld_focus_environment_point_next,
+     gasFocusLowerDloadArithmeticBindingPointTheory.ld_focus_arithmetic_binding_point_next,
+     gasFocusLowerDloadLogStorePointTheory.ld_focus_log_store_point_next] >>
+  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+  `gn = ld_image g` by (qpat_assum `g = _` (rewrite_tac o single) >> simp[ld_image_def]) >>
+  irule (BETA_RULE focus_opt_ld_head_row) >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ld_envelope _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem focus_row_visit_inverse[local]:
   !xs be.
     DROP be.vs_inst_idx bt.bb_instructions = xs /\
