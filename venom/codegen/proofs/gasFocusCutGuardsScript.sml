@@ -16,8 +16,8 @@ Ancestors
 
 (* Scratch statement for elaboration and independent review.
    For the given compatible filling, use the H1 bounded family.
-   The stopped evaluation is a non-error, non-OK C7 rooted result
-   propagated to the root with its actual events. *)
+   The outcomes are continuation, beyond the marked cut, forwarding,
+   or a non-error C7 prefix stop with its propagated root result and events. *)
 Theorem focus_cut_guard_or_stop:
   let C7 = stage 7; C8 = stage 8; C9 = stage 9 in
   let a0 = entry_asm_state vs0 es0;
@@ -135,9 +135,10 @@ Theorem focus_cut_guard_or_stop:
         ((IS_SOME body_entry /\ LENGTH ps <= visit_state.vs_inst_idx /\
           visit_state.vs_inst_idx - LENGTH ps < LENGTH rho /\
           q = EL (visit_state.vs_inst_idx - LENGTH ps) rho /\ q < LENGTH xs /\
-          (a <> p \/ e <> d \/ visit_state <> s8 \/
-            (EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
-             (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE count rho)))) /\
+          ((inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
+            inst.inst_opcode = INVOKE) ==>
+           EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+           (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE count rho))) /\
           (inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
              inst.inst_opcode = INVOKE ==> EL q xs = inst) /\
           z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs) \/
@@ -233,7 +234,7 @@ Theorem focus_cut_guard_or_stop:
           rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
             (Ecut,OK u) ==>
           static_mem_ok cpl.cp_max_static_eom C7 sf src_inst u /\
-          ~in_revert_forward sf u /\
+          (~in_revert_forward tf visit_state ==> ~in_revert_forward sf u) /\
           (inv_memory_observation src_inst.inst_opcode ==>
             (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
             u.vs_initial_fmp = visit_state.vs_initial_fmp)) /\
@@ -253,34 +254,40 @@ Theorem focus_cut_guard_or_stop:
     raw_reachable R C7 sf src_inst u /\ gas_cut n R u /\
     lowered_mem_fact cpl.cp_max_static_eom C7 sf src_inst u /\
     u.vs_gas_readings = tail /\
+    (fin = asm_opt_finalizer ==>
+      inst_dload_in_section src_inst u /\
+      code_end_offset_ok (\ctx fn i s. fn = sf /\ i = src_inst /\ s = u) C7) /\
     (~in_revert_forward tf visit_state ==> ~in_revert_forward sf u) /\
     (inv_memory_observation inst.inst_opcode ==>
       (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
       u.vs_initial_fmp = visit_state.vs_initial_fmp)) /\
-  ((~in_revert_forward fn9 s9 /\
-  (inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode ==>
-    source_memory_reads_disjoint cpl inst9 s9 /\
-    context_source_memory_writes_disjoint cpl inst9 s9) /\
-  (fin = asm_opt_finalizer ==>
-    !dst x sz src off.
-      inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
-      code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
-      FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
-      w2n (src - n2w off) < dimword (:256) DIV 2)) \/
-    let gs = TAKE (LENGTH Mcut) raw;
-      tail = DROP (LENGTH Mcut) raw ++ [0w];
-      filling = raw ++ [0w]
-  in
-  let R = root_entry with vs_gas_readings := gs ++ tail;
-      n = MIN (LENGTH (markf filling)) (LENGTH filling)
-  in
-    ?F events stopped.
-      N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
-      rooted_eval F C7 levels R = (events,stopped) /\
-      (!u. stopped <> OK u) /\ (!err. stopped <> Error err) /\
-      run_blocks F C7 root_sf R = stopped /\
-      gas_events_blocks F C7 root_sf R = events /\
-      (?extra. Ecut = events ++ extra))) /\
+  (let gs = TAKE (LENGTH Mcut) raw;
+       tail = DROP (LENGTH Mcut) raw ++ [0w];
+       filling = raw ++ [0w]
+   in
+   let R = root_entry with vs_gas_readings := gs ++ tail;
+       n = MIN (LENGTH (markf filling)) (LENGTH filling)
+   in
+     (~in_revert_forward fn9 s9 /\
+      (inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode ==>
+       source_memory_reads_disjoint cpl inst9 s9 /\
+       context_source_memory_writes_disjoint cpl inst9 s9) /\
+      (fin = asm_opt_finalizer ==>
+       !dst x sz src off.
+         inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
+         code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
+         FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
+         w2n (src - n2w off) < dimword (:256) DIV 2)) \/
+     n <= LENGTH Mcut \/
+     (LENGTH Mcut < n /\ in_revert_forward fn9 s9) \/
+     (LENGTH Mcut < n /\
+      ?F events stopped.
+        N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
+        rooted_eval F C7 levels R = (events,stopped) /\
+        (!u. stopped <> OK u) /\ (!err. stopped <> Error err) /\
+        run_blocks F C7 root_sf R = stopped /\
+        gas_events_blocks F C7 root_sf R = events /\
+        (?extra. Ecut = events ++ extra)))) /\
   (!h. h < j ==>
     ?a e tf inst visit_state stk PG G tn oms om hs hist.
       EL h V = ((a,e,inst.inst_id),tf,inst,visit_state) /\
@@ -417,6 +424,9 @@ Theorem focus_cut_guard_or_stop:
     raw_reachable R C7 sf src_inst u /\ gas_cut n R u /\
     lowered_mem_fact cpl.cp_max_static_eom C7 sf src_inst u /\
     u.vs_gas_readings = tail /\
+    (fin = asm_opt_finalizer ==>
+      inst_dload_in_section src_inst u /\
+      code_end_offset_ok (\ctx fn i s. fn = sf /\ i = src_inst /\ s = u) C7) /\
     (~in_revert_forward tf visit_state ==> ~in_revert_forward sf u) /\
     (inv_memory_observation inst.inst_opcode ==>
       (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\

@@ -282,7 +282,7 @@ Theorem focus_packet_coverage:
           rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
             (Ecut,OK u) ==>
           static_mem_ok cpl.cp_max_static_eom C7 sf src_inst u /\
-          ~in_revert_forward sf u /\
+          (~in_revert_forward tf visit_state ==> ~in_revert_forward sf u) /\
           (inv_memory_observation src_inst.inst_opcode ==>
             (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
             u.vs_initial_fmp = visit_state.vs_initial_fmp))) /\

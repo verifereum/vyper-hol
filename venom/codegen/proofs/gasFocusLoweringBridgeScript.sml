@@ -1,10 +1,11 @@
 Theory gasFocusLoweringBridge
 Ancestors
+  unitMemInv contextRawReachable
   gasFocusConcretizeCutFrameAccess gasFocusConcretizeCutTaintWithin
   o1PassContract o1PassLift o1SafeUpto unitTransformDefs
   venomPassSchedule ptrDiscipline venomWf lowerDloadDefs stackPlanGen
   venomState words list
-  gasEvents unitMemInv venomInst
+  gasEvents venomInst
 
 (* Scratch statement for elaboration and independent review.
    root3 is the shared pre-FMP root at C2 and C3, with the chosen FMP,
@@ -18,12 +19,17 @@ Theorem focus_lowering_cut_bridge:
     (o1_walk_view rpolicy 2) C2 C3 /\
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
     (o1_walk_view rpolicy 3) C3 C4 /\
-  o1_ctx_shape C2 /\
+  o1_ctx_shape C2 /\ o1_ctx_shape C3 /\ o1_ctx_shape C4 /\ o1_pre 3 C3 C4 /\
   o1_initial_state_ok root4 /\ root4.vs_fmp = root4.vs_initial_fmp /\
   code_layout_valid root4 /\
   w2n root4.vs_initial_fmp <= w2n fmp /\
   root3 = root4 with <|vs_fmp := fmp; vs_initial_fmp := fmp|> /\
-  dead_wf D /\ o1_safe_upto D lo n C2 root3 /\ alloca_frontier_upto n C2 root3 /\
+  dead_wf D /\
+  o1_ptr_safe_upto D lo n C2 root3 /\
+  mem_inv (\ctx fn inst s. gas_cut n root3 s ==> dload_headroom_ok ctx fn inst s) C2 root3 /\
+  (!fn inst s. raw_reachable root3 C2 fn inst s /\ gas_cut n root3 s ==>
+    raw_mem_ok C2 fn inst s /\ dload_offset_ok C2 fn inst s) /\
+  alloca_frontier_upto n C2 root3 /\
   EVERY ssa_form C2.ctx_functions /\ EVERY all_reachable C2.ctx_functions /\
   EVERY fn_defs_reach_uses C2.ctx_functions /\ ctx_inst_ids_distinct C2 /\
   callee_first names C2.ctx_functions /\
@@ -43,10 +49,12 @@ Theorem focus_lowering_cut_bridge:
 Proof
   PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
   sg `taint_within_upto D n C3 root3`
-  >- (irule focus_concretize_cut_taint_within >> cheat) >>
+  >- (irule (Q.INST [`C` |-> `C2`, `lo` |-> `lo`]
+        focus_concretize_cut_taint_within) >> cheat) >>
   sg `!stk PG G tn fn inst s.
          frame_reachable root3 C3 stk PG G tn fn inst s /\ gas_cut n root3 s ==>
          access_ok eom G fn inst s /\ taint_ok fn tn inst s`
-  >- (rpt gen_tac >> strip_tac >> irule focus_concretize_cut_frame_access >> cheat) >>
+  >- (rpt gen_tac >> strip_tac >> irule (Q.INST [`C` |-> `C2`, `lo` |-> `lo`]
+        focus_concretize_cut_frame_access) >> cheat) >>
   cheat
 QED

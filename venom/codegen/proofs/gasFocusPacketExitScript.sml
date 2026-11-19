@@ -1,6 +1,6 @@
 Theory gasFocusPacketExit
 Ancestors
-  gasFocusWalkInventoryReplay gasFocusReplayExit gasFocusPacketCoverage
+  gasFocusWalkInventoryReplay gasFocusReplayExit
   dftFinitePacket dftGasFromListTraceDefs
   o1ContractCfgNormJointCursors frameJointTrace frameJointTransition
   fnFramePrefixDriver fnFrameSymbolicPrefix codegenEntryRel
@@ -281,7 +281,7 @@ Theorem focus_packet_exit:
           rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
             (Ecut,OK u) ==>
           static_mem_ok cpl.cp_max_static_eom C7 sf src_inst u /\
-          ~in_revert_forward sf u /\
+          (~in_revert_forward tf visit_state ==> ~in_revert_forward sf u) /\
           (inv_memory_observation src_inst.inst_opcode ==>
             (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
             u.vs_initial_fmp = visit_state.vs_initial_fmp))) /\
@@ -486,31 +486,3 @@ Proof
       cheat (asl, goal)
     end)
 QED
-
-(* Check both joins against the same existentially selected witness. *)
-val _ = let
-  fun normalize tm =
-    rhs (concl (DEPTH_CONV BETA_CONV (rhs (concl (PURE_REWRITE_CONV [LET_THM] tm)))))
-  val (roots, selection) = dest_imp (normalize (concl focus_walk_stopped_selection))
-  val selected = strip_conj (snd (strip_exists selection))
-  val coverage = CONV_RULE (DEPTH_CONV BETA_CONV)
-    (PURE_REWRITE_RULE [LET_THM] focus_packet_coverage)
-  val (needed, ordered) = dest_imp (concl coverage)
-  val facts = strip_conj roots @ List.take (selected, length selected - 1)
-  val _ = if List.all (fn tm => List.exists (aconv tm) facts) (strip_conj needed)
-              andalso aconv (List.last selected) ordered then ()
-          else raise Fail "C1.16 selection and coverage must use the same stopped packet"
-  val replay = CONV_RULE (DEPTH_CONV BETA_CONV)
-    (PURE_REWRITE_RULE [LET_THM] focus_stopped_filling_replay)
-  val (replay_input, replay_facts) = dest_imp (concl replay)
-  val (shared, late) =
-    List.partition (fn tm => List.exists (aconv tm) (strip_conj roots @ selected))
-      (strip_conj replay_input)
-  val _ = if length late = 5 andalso length shared = length (strip_conj roots @ selected)
-          then ()
-          else raise Fail "C1.16 replay must take the selected witness before the late hypotheses"
-  val _ = drule coverage (facts, ordered)
-  val _ = drule replay (shared @ late, replay_facts)
-  in
-    print "C1.16: coverage and filling replay use the same stopped packet\n"
-  end

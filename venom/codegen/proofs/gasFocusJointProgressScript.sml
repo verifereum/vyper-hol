@@ -1,6 +1,5 @@
 Theory gasFocusJointProgress
 Ancestors
-  gasFocusCutGuards
   dftFinitePacket dftGasFromListTraceDefs
   o1ContractCfgNormJointCursors frameJointTrace frameJointTransition
   fnFramePrefixDriver fnFrameSymbolicPrefix codegenEntryRel
@@ -18,7 +17,7 @@ Ancestors
    The literal continuing cases are decoded INVOKE setup, a nonhalting
    ordinary or block evaluator result, or a return with a saved caller.
    C8 stutters keep all six tables. Moving C8 edges keep the same
-   root and extend at the same native trace fuel. *)
+   root and may extend the native trace fuel. Stuttering keeps N. *)
 Theorem focus_joint_progress:
   let C7 = stage 7; C8 = stage 8; C9 = stage 9 in
   let a0 = entry_asm_state vs0 es0;
@@ -124,17 +123,19 @@ Theorem focus_joint_progress:
   (inst9.inst_opcode <> INVOKE ==>
     (?u. step_inst 0 C9 inst9 s9 = OK u /\ ~u.vs_halted) \/
     (stk9 <> [] /\ ?ir u. step_inst 0 C9 inst9 s9 = IntRet ir u)) ==>
-  ?ev9 q9' n ast' ss'
+  ?ev9 q9' n ast' ss' N'
     raw_slots' sites' unused' evs8' qs8' evs9' qs9' current' saved'
     asm_fuel' j' obs' acts' blocks' calls' ms_tab' es_tab' ks_tab' p' d'
     stk8' PG8' G8' tn8' fn8' inst8' s8' oms8' om8' hs8' hist8'
     stk9' PG9' G9' tn9' fn9' inst9' s9' oms9' om9' hs9' hist9'.
+  let trace8' = dftGasFromListTraceDefs$trace_blocks [] 0 N' C8 root_tf root_entry in
   let next8 = JointConfig stk8' PG8' G8' tn8' fn8' inst8' s8' oms8' om8' hs8' hist8';
       next9 = JointConfig stk9' PG9' G9' tn9' fn9' inst9' s9' oms9' om9' hs9' hist9';
-      Vnext = TAKE j' trace8;
+      Vnext = TAKE j' trace8';
       Knext = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab' ([],e))))
         (FST (SND (SND (SND (SND (THE (FLOOKUP acts' []))))))))
   in
+  0 < N' /\ N <= N' /\
   q9' = next9 /\ joint_transition C9 q9 ev9 q9' /\
   evs9' = evs9 ++ [ev9] /\ qs9' = qs9 ++ [q9'] /\
   asm_fuel' = asm_fuel + n /\
@@ -146,7 +147,7 @@ Theorem focus_joint_progress:
      s9'.vs_inst_idx = SUC s9.vs_inst_idx /\
      ?bb. lookup_block s9.vs_current_bb fn9.fn_blocks = SOME bb /\
        LENGTH bb.bb_instructions - s9'.vs_inst_idx < LENGTH bb.bb_instructions - s9.vs_inst_idx)) /\
-  ((next8 = q8 /\ MEM inst9.inst_opcode [ASSIGN; JMP; JNZ] /\
+  ((N' = N /\ next8 = q8 /\ MEM inst9.inst_opcode [ASSIGN; JMP; JNZ] /\
     inst_mem_ranges inst9 s9 = [] /\ j' = j /\
     evs8' = evs8 /\ qs8' = qs8 /\
     acts' = acts /\ blocks' = blocks /\ calls' = calls /\
@@ -167,7 +168,6 @@ Theorem focus_joint_progress:
     FLOOKUP calls (a,e,cid) = SOME (ix,h,b0,done_at_call,child_entry,ret) ==>
     ?ret'. FLOOKUP calls' (a,e,cid) = SOME (ix,h,b0,done_at_call,child_entry,ret') /\
            (IS_SOME ret ==> ret' = ret)) /\
-  0 < N /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|> /\
   C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
   lookup_function nm C7.ctx_functions = SOME root_sf /\
@@ -183,11 +183,11 @@ Theorem focus_joint_progress:
   (fin = asm_opt_finalizer ==>
     sym_steps prog env asm_fuel' (sym_init a0) = SymOK ss' /\
     normal_frame_symbolic_plan env rpolicy out.po_unit cpl prog vs0 es0 next9 ast' ss') /\
-  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j',obs')
+  dft_focus_packet_rel N' C7 C8 root_sf root_tf root_entry (j',obs')
     acts' blocks' calls' ms_tab' es_tab' ks_tab' rooted_eval p' d' next8 raw_slots' sites' unused' /\
   j' = LENGTH evs8' /\ LENGTH evs8' <= LENGTH evs9' /\ LENGTH Vnext = j' /\
-  j' < LENGTH trace8 /\ obs' = dftGasFromListTraceDefs$trace_gas Vnext /\
-  EL j' trace8 = ((p',d',inst8'.inst_id),fn8',inst8',s8') /\
+  j' < LENGTH trace8' /\ obs' = dftGasFromListTraceDefs$trace_gas Vnext /\
+  EL j' trace8' = ((p',d',inst8'.inst_id),fn8',inst8',s8') /\
   LENGTH raw_slots' = LENGTH sites' /\
   PERM (MAP THE (FILTER IS_SOME raw_slots') ++ unused') (gas_readings es0) /\
   (!h. h < j' ==>
@@ -261,7 +261,7 @@ Theorem focus_joint_progress:
             raw_slots' = Mcut ++ mr /\ sites' = Ecut ++ er /\ Knext = Kcut ++ kr /\
             LENGTH Mcut = LENGTH Ecut /\ LENGTH Mcut = LENGTH Kcut /\
             (!F gs tail.
-              N <= F /\
+              N' <= F /\
               LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs ==>
               (?extra. Ecut = FST (rooted_eval F C7 levels
                 (root_entry with vs_gas_readings := gs ++ tail)) ++ extra) /\
@@ -297,7 +297,7 @@ Theorem focus_joint_progress:
                       FST (rooted_eval F C7 levels
                         (root_entry with vs_gas_readings := gs ++ tail)))) /\
             (!F gs tail n u.
-              N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
+              N' <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
               LENGTH Mcut < n /\
               mem_inv (\ctx src_fn src_inst src_state.
                 gas_cut n (root_entry with vs_gas_readings := gs ++ tail) src_state ==>
@@ -311,26 +311,6 @@ Theorem focus_joint_progress:
                 (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
                 u.vs_initial_fmp = visit_state.vs_initial_fmp))))
 Proof
-  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
-  (fn (asl, goal) =>
-    let
-      val (input, _) = dest_imp goal
-      val fmp = valOf (List.find (fn tm => fst (dest_var tm) = "fmp")
-                       (free_vars input))
-      val (_, fmp_type) = match_term fmp ``fmp:bytes32``
-      val frontier = strip_conj (inst fmp_type input)
-      val supplier = CONV_RULE (DEPTH_CONV BETA_CONV)
-        (PURE_REWRITE_RULE [LET_THM] focus_cut_guard_or_stop)
-      val (needed, _) = dest_imp (concl supplier)
-      val caller_inputs = List.filter
-        (fn tm => not (List.exists (aconv tm) frontier)) (strip_conj needed)
-      (* C1.9 provides the bounded family and the compatible filling before
-         this mark-independent edge theorem is applied. *)
-      val _ = if length caller_inputs = 2 then ()
-              else raise Fail ("Unexpected inputs to C1.10 at the C1.11 cursor: " ^
-                String.concatWith "; " (map term_to_string caller_inputs))
-      val _ = drule supplier (caller_inputs @ frontier @ asl, goal)
-    in
-      cheat (asl, goal)
-    end)
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
+  drule dft_focus_packet_step >> cheat
 QED

@@ -72,10 +72,23 @@ Proof
   >- (irule (DISCH_ALL (CONJUNCT1 (UNDISCH lower_dload_stage_focus_safety))) >> cheat) >>
   sg `mem_inv (\ctx fn inst u.
           gas_cut (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail)))
+            (vs0 with <|vs_gas_readings := gs ++ tail; vs_fmp := fmp; vs_initial_fmp := fmp|>) u ==>
+          dload_headroom_ok ctx fn inst u)
+        (stage 2) (vs0 with <|vs_gas_readings := gs ++ tail; vs_fmp := fmp; vs_initial_fmp := fmp|>)`
+  >- (PURE_REWRITE_TAC [mem_inv_raw_reachable] >> BETA_TAC >> conj_tac
+      >- cheat >>
+      rpt strip_tac >>
+      irule (DISCH_ALL (CONJUNCT2 (CONJUNCT2 (UNDISCH (SPEC_ALL
+        (CONJUNCT2 (CONJUNCT2 (CONJUNCT2 (UNDISCH lower_dload_stage_focus_safety))))))))) >>
+      cheat) >>
+  sg `mem_inv (\ctx fn inst u.
+          gas_cut (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail)))
             (vs0 with vs_gas_readings := gs ++ tail) u ==>
           lowered_mem_fact eom ctx fn inst u)
         (stage 4) (vs0 with vs_gas_readings := gs ++ tail)`
   >- (irule (DISCH_ALL (CONJUNCT1 (UNDISCH
-          (CONV_RULE (DEPTH_CONV BETA_CONV) (PURE_REWRITE_RULE [LET_THM] focus_lowering_cut_bridge))))) >> cheat) >>
+          (CONV_RULE (DEPTH_CONV BETA_CONV) (PURE_REWRITE_RULE [LET_THM]
+            (Q.INST [`C2` |-> `stage 2`, `C3` |-> `stage 3`, `C4` |-> `stage 4`]
+              focus_lowering_cut_bridge)))))) >> cheat) >>
   cheat
 QED
