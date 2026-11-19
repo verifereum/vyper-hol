@@ -24,11 +24,14 @@ The repository is organised into the following directories:
 - **`frontend/`** — JSON import and translation into the core AST
 - **`semantics/`** — Vyper semantics, organised across several theories covering values and types, value-level operations, storage encoding, ABI encoding, evaluation context and builtins, interpreter state and monad, and the definitional interpreter itself
   - **`semantics/cv/`** — A CPS/small-step version of the interpreter, proved equivalent to it, that makes the semantics executable with `cv_eval`
-  - **`semantics/prop/`** — Properties of the semantics (scope preservation, state preservation, etc.)
+  - **`semantics/type/`** — The static type system (`vyperTypeSystem`) and the contract checker (`check_contract` in `vyperTypeContract`), with its kernel-checked evaluator `vyperCheckContractLib`
+  - **`semantics/prop/`** — Properties of the semantics (type soundness, scope and state preservation, frames, etc.)
+    - **`semantics/prop/abi/`** — Typing of source values against the ABI
 - **`tests/`** — Test infrastructure and generated test scripts from the Vyper test suite
 - **`lowering/`** — Vyper-to-Venom IR compiler definition and correctness proofs
 - **`venom/`** — Venom IR semantics and compiler pass proofs
   - **`venom/passes/`** — Individual compiler passes
+- **`bytecode/`** — Bytecode parity checks of the compiler definition against the pinned Vyper compiler
 
 We describe the main contents and notable features below.
 
@@ -38,7 +41,7 @@ The abstract syntax tree (AST) for Vyper is defined in `vyperAST`. The main data
 
 We syntactically restrict the targets for assignment statements/expressions, using the `assignment_target` type which can be seen as a restriction of the expression syntax to only variables (`x`), subscripting (`x[3]`), and attribute selection (`x.y`) with arbitrary nesting. This in particular also applies to the `append` and `pop` builtin functions on arrays, which are stateful (mutating) operations that we treat as assignments.
 
-Interface declarations (`InterfaceDecl`) are included in the AST, with interface function signatures parsed from JSON and stored in the interpreter's type environment. This enables resolution of external calls to interface-typed targets. Full type-checking of interfaces remains future work (see [#47](https://github.com/verifereum/vyper-hol/issues/47)). Module imports and exports are handled by the JSON frontend/translation layer, and expressions carry `source_id` information to identify which module they belong to.
+Interface declarations (`InterfaceDecl`) are included in the AST, with interface function signatures parsed from JSON and stored in the interpreter's type environment. This enables resolution of external calls to interface-typed targets. Module imports and exports are handled by the JSON frontend/translation layer, and expressions carry `source_id` information to identify which module they belong to.
 
 ### Semantics (`semantics/`)
 
@@ -53,7 +56,7 @@ The semantics is organised into layers:
 - **Evaluation context** — the non-stateful environment for the interpreter, containing the transaction information, source code of existing contracts, and semantics for builtins that depend on this context (e.g., `msg.sender`, `block.number`, `ecrecover`).
 - **Interpreter state** — the stateful machinery for the interpreter, including a state-exception monad, the mutable state (EVM accounts, variable scopes, immutables, logs, transient storage), and operations for reading/writing storage, variables, and globals. Assignment to nested targets (e.g., `x[3].n = 9`) is also handled at this level.
 - **Interpreter** — the main definitional interpreter (`evaluate_def`), function lookup and calling conventions, the termination proof, and the top-level entry-points.
-- **Type checking** — partial type-checking definitions (`vyperTypeCheck`), including `satisfies_type`, `well_typed_expr`, and related predicates.
+- **Type checking** — the static type system (`vyperTypeSystem`, including `well_typed_expr`) and the contract checker (`check_contract` in `vyperTypeContract`), in `semantics/type/`.
 
 The logical contract type checker can be evaluated on closed direct inputs, compiler JSON, or deployment traces using a reusable kernel-checked SML API. See the [contract checker evaluator guide](docs/check-contract-evaluator.md) for its trust model, interfaces, examples, and fixture-generation procedure.
 
@@ -109,7 +112,7 @@ the execution replay harness and are not counted as runtime passes.
 
 ## Current Limitations
 
-The formal semantics covers the core Vyper language including external calls (`staticcall`, `extcall`), reentrancy protection (`@nonreentrant`), `raw_call`, contract creation builtins, transient storage, and module imports. The main limitation is the **front-end**: there is no formal parser (we operate on abstract syntax exported as JSON, [#46](https://github.com/verifereum/vyper-hol/issues/46)) and type-checking is partial ([#47](https://github.com/verifereum/vyper-hol/issues/47)). A small number of minor features remain unimplemented, including `print` and gas modelling for `msg.gas`/`msg.mana` and external call gas limits ([#98](https://github.com/verifereum/vyper-hol/issues/98)).
+The formal semantics covers the core Vyper language including external calls (`staticcall`, `extcall`), reentrancy protection (`@nonreentrant`), `raw_call`, contract creation builtins, transient storage, and module imports. The main limitation is the **front-end**: there is no formal parser (we operate on abstract syntax exported as JSON, [#46](https://github.com/verifereum/vyper-hol/issues/46)). A small number of minor features remain unimplemented, including `print`. `msg.gas`/`msg.mana` read values from a gas-reading oracle rather than a gas model ([#98](https://github.com/verifereum/vyper-hol/issues/98)).
 
 ## Outcomes and Next Steps
 
@@ -129,9 +132,9 @@ This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.o
 
 The project is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies, including the compatible [Verifereum](https://github.com/verifereum/verifereum) revision. Vyper functional tests are generated from the upstream commit pinned in [`VYPER_PIN`](VYPER_PIN). The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
-CI pins `holbuild-ref: v0.13.34` in `.github/actions/setup-holbuild-project/action.yml`, shared by its build and test jobs. Update that input to upgrade CI; `minimum_version` in `holproject.toml` is the compatibility floor.
+CI pins `holbuild-ref: v0.14.77` in `.github/actions/setup-holbuild-project/action.yml`, shared by its build and test jobs. Update that input to upgrade CI; `minimum_version` in `holproject.toml` is the compatibility floor.
 
-For a local build, install `holbuild` v0.12.0 or newer (`minimum_version` in `holproject.toml`) and run:
+For a local build, install `holbuild` v0.14.59 or newer (`minimum_version` in `holproject.toml`) and run:
 
 ```bash
 holbuild buildhol
@@ -155,7 +158,7 @@ holbuild -j1 build --force=theory --skip-checkpoints --no-cache jsonFrontendCVBe
 ### Native JSON semantics runner
 
 The EmitML runner executes CV-translated Vyper semantics on exported JSON traces.
-With `holbuild` v0.12.0 or newer, MLton, and Python 3 on `PATH`:
+With `holbuild` v0.14.59 or newer, MLton, and Python 3 on `PATH`:
 
 ```bash
 ./tools/demo_run_test.sh
