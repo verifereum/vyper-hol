@@ -13,6 +13,187 @@ Ancestors
   o1RequestContract unitTransformDefs ptrDiscipline passSimulationDefs
   vfmExecution codegen asmIR
   finite_map list rich_list words arithmetic
+  o1ContractCfgNormCursors o1ContractCfgNorm cfgNormSupplySim
+  o1LabelFlowLateCfgNorm o1LabelFlowLateDft lowerDloadPtrStatic codegenEntrySim
+
+Theorem focus_split_old_code_end[local]:
+  !g x. code_end_var g x ==>
+    !f s pred target split repls t.
+      wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
+      MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
+      build_split_block_supply s pred target = (split,repls,t) /\
+      insert_split_supply s f pred target = (g,t) /\
+      MEM x (fn_ir_vars f) ==> code_end_var f x
+Proof
+  Induct_on `code_end_var` >> rpt strip_tac >>
+  `inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode` by
+    simp[is_terminator_def] >>
+  drule_all o1LabelFlowLateCfgNormTheory.cfg_split_ordinary_origin >>
+  simp[] >> rpt strip_tac
+  >- metis_tac[code_end_var_rules]
+  >- (rename1 `inst.inst_operands = [Var y]` >>
+      `MEM y (fn_ir_vars f)` by
+        metis_tac[lowerDloadPtrStaticTheory.fn_ir_vars_operand, MEM] >>
+      metis_tac[code_end_var_rules]) >>
+  gvs[] >> metis_tac[cfgNormSupplySimTheory.supply_split_replacement_not_old]
+QED
+
+Theorem focus_cfg_cursor_code_end[local]:
+  !C rs cs. cfg_norm_cursors C rs cs ==>
+    (FST (FST (LAST cs))).inst_opcode = CODECOPY ==>
+    FST (FST (HD cs)) = FST (FST (LAST cs)) /\
+    !x. MEM (Var x) (FST (FST (LAST cs))).inst_operands /\
+        code_end_var (FST (SND (LAST rs))) x ==>
+      code_end_var (FST (SND (HD rs))) x /\
+      eval_operand (Var x) (SND (FST (HD cs))) =
+      eval_operand (Var x) (SND (FST (LAST cs)))
+Proof
+  ho_match_mp_tac cfg_norm_cursors_ind >> rpt conj_tac
+  >- (pure_rewrite_tac [HD,LAST_CONS,pairTheory.FST,pairTheory.SND,NOT_CONS_NIL] >> simp[]) >>
+  pure_rewrite_tac [HD,LAST_CONS,pairTheory.FST,pairTheory.SND,NOT_CONS_NIL] >>
+  rpt gen_tac >> strip_tac >> disch_tac
+  >- (rename1 `supply_state_agree fn a v` >>
+      `next.inst_opcode = CODECOPY` by metis_tac[] >>
+      `MEM inst (fn_insts fn)` by
+        metis_tac[EL_MEM, fn_insts_def, MEM_fn_insts_blocks] >>
+      `next = inst` by
+        (`inst.inst_opcode = CODECOPY` by
+           metis_tac[cfgNormSupplySimTheory.supply_block_image_index] >>
+         `label_positions_ok inst` by metis_tac[EVERY_MEM] >>
+         gvs[] >> irule o1ContractCfgNormTheory.supply_block_image_index_unchanged >>
+         simp[]) >>
+      conj_tac >- metis_tac[] >>
+      qx_gen_tac `x` >> strip_tac >>
+      `MEM (Var x) inst.inst_operands /\ code_end_var next_fn x` by metis_tac[] >>
+      `MEM x (fn_ir_vars fn)` by metis_tac[lowerDloadPtrStaticTheory.fn_ir_vars_operand] >>
+      `wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s`
+        by fs[cfgNormSupplySimTheory.supply_norm_inv_def] >>
+      conj_tac >- metis_tac[focus_split_old_code_end] >>
+      `eval_operand (Var x) a = eval_operand (Var x) v` by
+        (irule cfgNormSupplySimTheory.supply_eval_operand_agree >>
+         qexists_tac `fn` >> simp[]) >>
+      metis_tac[]) >>
+  rename1 `supply_state_agree fn a v` >>
+  `next.inst_opcode = CODECOPY` by metis_tac[] >>
+  `ir_supply_inst_ok s /\ ir_supply_covers_fn s fn`
+    by fs[cfgNormSupplySimTheory.supply_norm_inv_def] >>
+  drule_all cfgNormSupplySimTheory.supply_split_index_shape >> gvs[]
+QED
+
+Theorem focus_joint_cursor_code_end[local]:
+  cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
+    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
+    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) /\
+  inst9.inst_opcode = CODECOPY ==>
+  inst8 = inst9 /\
+  !x. MEM (Var x) inst9.inst_operands /\ code_end_var fn9 x ==>
+      code_end_var fn8 x /\ eval_operand (Var x) s8 = eval_operand (Var x) s9
+Proof
+  PairCases_on `current` >>
+  simp[cfg_norm_joint_cursors_def] >> strip_tac >>
+  qpat_x_assum `EVERY _ schedules` mp_tac >>
+  simp[EVERY_MEM] >>
+  disch_then (qspec_then `(fn8,fn9,current0)` mp_tac) >>
+  simp[] >> strip_tac >>
+  drule focus_cfg_cursor_code_end >> simp[]
+QED
+
+Theorem focus_dft_code_end_origin[local]:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
+  FLOOKUP acts p = SOME (sf,fn,inc,entry,order,res,nrest) /\
+  FLOOKUP blocks (p,d) =
+    SOME (bb,bt,ps,xs,ys,row_order,in_state,h0,body_entry,done,front,closed,brest) /\
+  inst.inst_opcode = CODECOPY ==>
+  IS_SOME body_entry /\
+  (!x. code_end_var fn x ==> code_end_var sf x) /\
+  (!q z. q < LENGTH xs /\ z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs ==>
+    EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) = EL q xs)
+Proof
+  strip_tac >> conj_tac
+  >- (`~is_pseudo inst.inst_opcode` by simp[is_pseudo_def] >>
+      drule_all dft_packet_return_data >> strip_tac >> gvs[]) >>
+  qhdtm_x_assum `dft_focus_packet_rel`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  map_every (fn pat => qpat_x_assum pat mp_tac)
+    [`FLOOKUP acts p = SOME (sf,fn,inc,entry,order,res,nrest)`,
+     `FLOOKUP blocks (p,d) = SOME (bb,bt,ps,xs,ys,row_order,in_state,h0,body_entry,done,front,closed,brest)`,
+     `o1_ctx_shape C7`,
+     `!a sf tf inc entry order res nrest.
+       FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==>
+       MEM sf C7.ctx_functions /\ tf = dft_fn sf /\ _`,
+     `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+       FLOOKUP blocks (a,e) = _ ==> _`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >> conj_tac
+  >- (qpat_x_assum `!a sf tf inc entry order res nrest.
+          FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==>
+          MEM sf C7.ctx_functions /\ tf = dft_fn sf /\ _` drule >>
+      strip_tac >>
+      `o1_fn_shape C7 sf` by metis_tac[o1_ctx_shape_def, EVERY_MEM] >>
+      `EVERY label_positions_ok (fn_insts sf)` by
+        metis_tac[o1ContractCfgNormTheory.o1_fn_shape_label_positions_ok] >>
+      metis_tac[o1LabelFlowLateDftTheory.dft_code_end_var_reflect]) >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest. _`
+    drule >> strip_tac >> rpt strip_tac >>
+  drule_all dft_packet_cut_instruction >> simp[]
+QED
+
+Theorem focus_current_point_code_end[local]:
+  cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
+    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8)
+    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8)
+    raw_slots sites unused /\
+  FLOOKUP acts p = SOME (sf,fn8,inc,entry,order,res,nrest) /\
+  FLOOKUP blocks (p,d) =
+    SOME (bb,bt,ps,xs,ys,row_order,in_state,h0,body_entry,done,front,closed,brest) /\
+  src_inst = EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
+  (IS_SOME body_entry ==>
+    q < LENGTH xs /\ EL q xs = inst8 /\
+    z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs) /\
+  (IS_SOME body_entry /\ inv_memory_observation inst8.inst_opcode ==>
+    !op. MEM op inst8.inst_operands ==> eval_operand op u = eval_operand op s8) /\
+  raw_reachable (root_entry with vs_gas_readings := readings) C7 sf src_inst u /\
+  code_end_offset_ok (\ctx fn i s. fn = sf /\ i = src_inst /\ s = u) C7 /\
+  root_entry.vs_labels = vs0.vs_labels /\
+  codegen_asm_entry_rel cpl prog vs0 ast0 ==>
+  !dst x sz src off.
+    inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
+    code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
+    FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
+    w2n (src - n2w off) < dimword (:256) DIV 2
+Proof
+  rpt strip_tac >>
+  drule_all focus_joint_cursor_code_end >> strip_tac >>
+  `code_end_var fn8 x /\ eval_operand (Var x) s8 = SOME src` by
+    (qpat_x_assum `!x. MEM (Var x) _ /\ code_end_var fn9 x ==> _`
+       (qspec_then `x` mp_tac) >> simp[]) >>
+  `inst8.inst_opcode = CODECOPY` by simp[] >>
+  drule_all focus_dft_code_end_origin >> strip_tac >>
+  `code_end_var sf x` by simp[] >>
+  `src_inst = inst8` by
+    (`q < LENGTH xs /\ EL q xs = inst8 /\
+      z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs` by simp[] >>
+     qpat_x_assum `!q z. _ ==> EL _ _ = EL q xs` (qspecl_then [`q`,`z`] mp_tac) >>
+     simp[]) >>
+  `inv_memory_observation inst8.inst_opcode` by
+    simp[dftGasInvCrossingProbeTheory.inv_memory_observation_def] >>
+  `eval_operand (Var x) u = SOME src` by
+    (qpat_x_assum `IS_SOME body_entry /\ inv_memory_observation _ ==> _` mp_tac >>
+     simp[] >> disch_then (qspec_then `Var x` mp_tac) >> simp[]) >>
+  `u.vs_labels = vs0.vs_labels` by
+    (drule raw_reachable_labels >> simp[]) >>
+  `FLOOKUP u.vs_labels "code_end" = SOME (n2w off)` by
+    (qpat_x_assum `codegen_asm_entry_rel _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [codegenEntrySimTheory.codegen_asm_entry_rel_def]) >>
+     simp[]) >>
+  qpat_x_assum `code_end_offset_ok _ _` mp_tac >>
+  simp[code_end_offset_ok_def] >>
+  disch_then (qspecl_then [`dst`,`x`,`sz`,`src`,`n2w off`] mp_tac) >> simp[]
+QED
 
 (* Scratch statement for elaboration and independent review.
    For the given compatible filling, use the H1 bounded family.
