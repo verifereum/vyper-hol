@@ -1502,6 +1502,54 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* The raw callee constructor pushes a synchronized caller frame.  In
+   particular, no successful continuation of the callee is required. *)
+Theorem focus_opt_ld_callee_row[local]:
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn ti t /\
+  o1_ctx_shape C /\ o1_safe_upto D lo n C vs /\ gas_cut n vs t /\
+  callee_first names C.ctx_functions /\
+  (!g. MEM g C.ctx_functions ==>
+    lookup_function g.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma g.fn_name) g))) /\
+  ti.inst_opcode = INVOKE /\ decode_invoke ti = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME callee /\
+  eval_operands ops t = SOME args /\ setup_callee callee args t = SOME cs /\
+  enters_block callee cs tp /\ active_inst callee j tp ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names callee j tp
+Proof
+  BETA_TAC >> disch_then (map_every strip_assume_tac o CONJUNCTS) >>
+  rename1 `ld_sync lo P C vs stk PG G tn fn inst s t0 A (f::fs) N` >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+  drule ld_sync_source >> strip_tac >>
+  `inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES` by
+    (conj_tac >> strip_tac >>
+     `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+       simp[is_terminator_def] >>
+     drule_all lowerDloadEnvelopeControlTheory.ld_envelope_nonterminal >>
+     rewrite_tac[EVERY_EL] >> disch_then (qspec_then `h` mp_tac) >> gvs[]) >>
+  drule_all lowerDloadSafetyLocationsTheory.ld_envelope_ordinary >> strip_tac >>
+  `h = 0` by fs[] >>
+  `t0 = t /\ ti = inst` by fs[lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
+  map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
+    [`X = [inst]`, `h = 0`, `ti = inst`, `t0 = t`] >>
+  `taint_ok fn tn inst s` by
+    (`gas_cut n vs s` by fs[gas_cut_def] >>
+     fs[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >> metis_tac[]) >>
+  drule_all (BETA_RULE gasFocusLowerDloadCallEntryTheory.ld_focus_invoke_active_entry) >>
+  disch_then (qx_choosel_then [`calleeS`,`argsS`,`csS`,`saved`,`fc`,`PG1`,`tn1`,`ic`,`Y`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `tp = cs` SUBST_ALL_TAC >>
+  `callee = ld_image fc` by simp[ld_image_def] >>
+  `0 < LENGTH Y` by metis_tac[lowerDloadSafetyKernelTheory.ld_prefix_bound] >>
+  irule (BETA_RULE focus_opt_ld_head_row) >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ld_envelope _ _ _ _ _ _`)) >>
+  simp[] >> gen_tac >> disch_tac >>
+  qpat_assum `!g. MEM g (f::fs) ==> _` (qspec_then `g` mp_tac) >>
+  simp[MEM]
+QED
+
 Theorem focus_row_visit_inverse[local]:
   !xs be.
     DROP be.vs_inst_idx bt.bb_instructions = xs /\
