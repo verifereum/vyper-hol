@@ -5,7 +5,7 @@ Ancestors exprSimPtrLiteralBuffer exprSimPtrLiteralPayload exprSimLiteralBuffer
   vfmConstants venomInst list pair exprSimPtrLiteralChunks exprSimPtrLiteralOps
   fragExecPtr fragGasSeqPtr venomExecSemantics venomState ptrDiscipline words
   finite_map pred_set allocationPtr instIdxIndep fragExec bodyPtrDefs exprSimHash
-  literalCapacityPtr
+  literalCapacityPtr bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem reason_literal_compiler_parts:
   compile_bytelike_literal bs ml sa = (buf,sb) ==>
@@ -67,7 +67,7 @@ Theorem reason_literal_buffer_ptr_run:
   compile_bytelike_literal bs ml sa = (buf,sb) /\ LENGTH bs <= ml /\
   stmt_state_rel H ctx func cenv cx es s /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ 32+32*word_size ml < dimword (:256) ==>
+  32+32*word_size ml < dimword (:256) ==>
   ?u t b p sh G' tn' dirty.
     buf.buf_operand = Var p /\ not_fresh_at sh p /\
     (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
@@ -133,6 +133,11 @@ Resume reason_literal_buffer_ptr_run[payload]:
     (simp[Abbr `uh`, Abbr `Ga`, Abbr `ta`, lookup_var_def, op_taint_def, FLOOKUP_UPDATE] >>
      metis_tac[lookup_var_def]) >>
   `b+32+32*word_size (LENGTH bs) < dimword (:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp uh` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es u`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[Abbr `uh`, allocas_below_fmp_def, NoAsms] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   `?t G' tn'.
     run_inst_seq (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
       emitted_insts sh sb) uh = OK t /\
@@ -164,6 +169,9 @@ Resume reason_literal_buffer_ptr_run[payload]:
 QED
 
 Resume reason_literal_buffer_ptr_run[assemble]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   qexistsl_tac [`u`, `v`, `b`, `sh`, `G'`, `tn'`, `dirty`] >>
   simp[] >>
   conj_tac

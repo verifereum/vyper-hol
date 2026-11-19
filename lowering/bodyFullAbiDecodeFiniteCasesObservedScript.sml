@@ -628,6 +628,7 @@ Proof
     (qpat_assum `last = Var padvar` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
   `w2n (n2w d : 256 word) + type_memory_size tv < dimword (:256)` by
     simp[w2n_n2w,arithmeticTheory.LESS_MOD] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z3` by simp[] >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all ((PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       bodyFullAbiDecodeArrayBulkWindowTheory.abi_decode_bulk_window_add_joint) |>
