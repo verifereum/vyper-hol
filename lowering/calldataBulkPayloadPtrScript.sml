@@ -441,9 +441,8 @@ Proof
        (s2 with vs_inst_idx := LENGTH c2.cs_current_insts)) /\
    (ctx_has_dalloca ctx ==> allocas_below_fmp
        (s3 with vs_inst_idx := LENGTH c3.cs_current_insts))` by
-    (Cases_on `ctx_has_dalloca ctx` >> fs[] >>
-     qpat_assum `allocas_below_fmp s` mp_tac >>
-     simp[allocas_below_fmp_def]) >>
+    (Cases_on `ctx_has_dalloca ctx` >> fs[allocas_below_fmp_def] >>
+     first_assum ACCEPT_TAC) >>
   `alloca_inv s ==> alloca_inv t` by
     (strip_tac >> irule localPtrsPropsTheory.alloca_inv_fields >>
      qexists_tac `s` >> simp[]) >>
@@ -457,6 +456,22 @@ Proof
      gvs[ptr_covers_def, lookup_var_def, w2n_n2w] >> metis_tac[]) >>
   conj_tac >- metis_tac[] >>
   conj_tac >- (fs[lookup_var_def] >> metis_tac[]) >>
+  conj_tac >-
+    (gen_tac >> disch_tac >>
+     `!fuel. ptr_safe_run D lower fuel ctx func PG H3 u3
+          (s3 with vs_inst_idx := LENGTH c3.cs_current_insts)` by
+       (qpat_assum `!D lower ctx func. _ ==> !fuel. ptr_safe_run _ _ _ _ _ _ H3 u3 _`
+          (qspecl_then [`D`,`lower`,`ctx`,`func`] mp_tac) >> simp[]) >>
+     `!fuel. ptr_safe_run D lower fuel ctx func PG H2 u2
+          (s2 with vs_inst_idx := LENGTH c2.cs_current_insts)` by
+       (qpat_assum `!D lower ctx' func. _ ==> !fuel. ptr_safe_run _ _ _ _ _ _ H2 u2 _`
+          (qspecl_then [`D`,`lower`,`ctx`,`func`] mp_tac) >> simp[]) >>
+     `!fuel. ptr_safe_run D lower fuel ctx func PG H1 u1
+          (s1 with vs_inst_idx := LENGTH c1.cs_current_insts)` by
+       (qpat_assum `!D lower ctx' func. _ ==> !fuel. ptr_safe_run _ _ _ _ _ _ H1 u1 _`
+          (qspecl_then [`D`,`lower`,`ctx`,`func`] mp_tac) >> simp[]) >>
+     qpat_assum `!D lower ctx' func. _ ==> !fuel. ptr_safe_run _ _ _ _ _ _ G tn s`
+       (qspecl_then [`D`,`lower`,`ctx`,`func`] mp_tac) >> simp[]) >>
   rpt strip_tac >> simp[] >>
   `gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
      (OK (s1 with vs_inst_idx := LENGTH c1.cs_current_insts),H1,u1)` by metis_tac[] >>

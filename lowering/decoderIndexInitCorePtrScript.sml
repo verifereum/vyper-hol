@@ -4,8 +4,20 @@ Ancestors decoderNavigationPtr fragGasOriginPtr instMemFrontier memSafeRun ghost
   abiDecoderIndexInit abiDecoderAllocation allocationPtr typedCopyPtr fragExecPtr
   bodyPtrDefs ptrDiscipline ptrSafeRun compileEnv context emitHelper emitHelperProps
   loweringHalt localPtrsProps exprLoweringProps venomExecSemantics venomMemProps venomState venomInst finite_map
-  allocaSiteResource compileAllocaProvenance
+  compileAllocaProvenance
   words list rich_list arithmetic pred_set instIdxIndep codegenRel contextCodegenRel
+
+Theorem exec_alloca_preserves_fmp_bound[local]:
+  exec_alloca inst s n = OK t /\ allocas_below_fmp s /\
+  t.vs_alloca_next <= w2n s.vs_initial_fmp ==> allocas_below_fmp t
+Proof
+  strip_tac >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  simp[exec_alloca_def, AllCaseEqs(), LET_THM] >>
+  strip_tac >> gvs[update_var_def, allocas_below_fmp_def] >>
+  rpt strip_tac >> fs[FLOOKUP_UPDATE] >>
+  Cases_on `aid = inst.inst_id` >> gvs[] >> res_tac
+QED
 
 Theorem index_alloca_room[local]:
   emit_op ALLOCA [Lit 32w] sa = (q,allocation_st) /\

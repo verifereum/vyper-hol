@@ -246,6 +246,7 @@ Proof
   `op_prov G1 head = NONE /\ op_taint tn1 head = {}` by simp[] >>
   `b + ao + 32 <= L /\ w2n (n2w B : bytes32) + (b+ao) < dimword (:256)` by
     (simp[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r1` by simp[] >>
   drule_all (Q.INST [`n` |-> `32`] (SPEC_ALL member_navigation_emit_pointer_pc_uniform_origin)) >>
   disch_then (qspec_then `PG` (qx_choose_then `addr_reg` (qx_choose_then `G2`
     (qx_choose_then `tn2` strip_assume_tac)))) >>

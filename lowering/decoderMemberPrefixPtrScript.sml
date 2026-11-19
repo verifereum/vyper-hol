@@ -5,7 +5,7 @@ Ancestors fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem memSafeRun 
   venomExecSemantics venomInst venomState compileEnv loweringStateRelDefs emitHelper fragExec
   words finite_map pred_set list arithmetic instIdxIndep
   emitHelperProps exprLoweringProps abiDecoderLoop ghostPcTransportPtr exprLowering abiEncoder decoderArraySetupPtr
-  abiDecoderMemberSetup abiDecoderReentryPointer abiDecoderReentry
+  abiDecoderMemberSetup abiDecoderReentryPointer abiDecoderReentry fragGasSeqPtrContext
 
 (* The calldata address step: base Lit 0w adds no instruction. *)
 val calldata_pos_addr = prove(
@@ -747,6 +747,24 @@ Proof
   qexistsl_tac [`H`,`u`] >> simp[]
 QED
 
+Theorem member_navigation_source_below_fmp[local]:
+  compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w) sa = (ep,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  allocas_below_fmp s ==>
+  allocas_below_fmp t
+Proof
+  strip_tac >> irule run_inst_seq_allocas_below_fmp >>
+  qexistsl_tac [`emitted_insts sa sb`,`s`] >> simp[] >>
+  qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `dyn` >>
+  simp_tac (srw_ss()) [compile_getelemptr_abi_def, calldata_pos_addr,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
+    emit_void_def, fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
+  strip_tac >> gvs[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  gvs[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def,
+      is_alloca_op_def]
+QED
+
 Theorem calldata_member_setup_endpoint_ptr_uniform_origin:
   abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo sa = (ops,sb) /\
   lookup_var root s = SOME a /\ not_fresh_at sa root /\
@@ -808,7 +826,10 @@ Proof
    op_taint u1 (Lit (n2w vo)) = {} /\ op_prov H1 (Lit (n2w vo)) = NONE` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
   `vo + n <= cap /\ w2n a + vo < dimword(:256)` by decide_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp prepared` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp prepared` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` (drule_then assume_tac) >>
+     drule_all member_navigation_source_below_fmp >> simp[]) >>
   drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `!x. not_fresh_at sa x ==> not_fresh_at mid x` by

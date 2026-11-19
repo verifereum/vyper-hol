@@ -1034,22 +1034,36 @@ Resume source_owned_nonbulk_array_ptr[invoke_loop]:
        (drule abi_decode_array_loop_init_reentry_code >>
         simp[abi_decode_source_opcode_def]) >>
      drule_all decoderWorldFramePtrTheory.decoder_run_world_frame >> strip_tac >>
-     simp[]) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`Abbrev (init = _)`, `t.vs_fmp = s.vs_fmp`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[markerTheory.Abbrev_def]) >>
   `alloca_inv init` by
-    (qpat_assum `alloca_inv h` mp_tac >>
-     qpat_assum `Abbrev (h = _)` (fn th => rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
-     simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def, jump_to_def]) >>
+    (qpat_assum `Abbrev (h = _)` (fn eq =>
+       qpat_assum `alloca_inv h`
+         (mp_tac o REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] eq])) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+       jump_to_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp init /\
       init.vs_alloca_next + pending_alloca_size fn init <= w2n init.vs_initial_fmp` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] _`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
-     drule_all decoder_origin_path_room >> simp[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp init` by metis_tac[] >>
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) (s,G,tn) [] _`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_origin_ptr_path (ARB,_,{},ctx,fn,PG) (s,G,tn) [] (OK init,H,u)`,
+        `fn_inst_ids_distinct fn`, `init.vs_fmp = s.vs_fmp`, `alloca_inv init`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp init` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp init /\ _`
+       mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp h /\
       h.vs_alloca_next + pending_alloca_size fn h <= w2n h.vs_initial_fmp` by
-    (qpat_assum `Abbrev (h = _)` (fn th => rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
+    (qpat_assum `Abbrev (h = _)`
+       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
      qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp init /\ _` mp_tac >>
-     simp[allocas_below_fmp_def, pending_alloca_size_def, jump_to_def]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[allocas_below_fmp_def, pending_alloca_size_def, jump_to_def] >>
+     metis_tac[]) >>
   mp_tac (Q.INST [`body_st` |-> `st0`, `end_st` |-> `st1`,
     `hdr` |-> `FST (labels : string # string # string)`,
     `body_lbl` |-> `FST (SND (labels : string # string # string))`,
@@ -1573,9 +1587,10 @@ Resume source_owned_nonbulk_array_ptr[constructor_packaging]:
   `t'.vs_initial_fmp = s.vs_initial_fmp /\
       t'.vs_alloca_next + pending_alloca_size fn t' <=
         s.vs_alloca_next + pending_alloca_size fn s` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t',H',u')`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
-     drule_all decoder_origin_path_allocation_frame >> simp[]) >>
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) (s,G,tn) [] (OK t',H',u')`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >>
+     simp_tac (srw_ss()) []) >>
   (qexistsl [`t'`,`H'`,`u'`,`(p,32)::fp`] >>
    rpt conj_tac >> first_assum ACCEPT_TAC)
 QED

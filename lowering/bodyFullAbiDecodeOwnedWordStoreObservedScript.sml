@@ -35,6 +35,7 @@ Theorem abi_decode_word_store_observed[local]:
          val_in_memory tv v (w2n dw) mem)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   drule emitted_insts_emit_void >> strip_tac >>

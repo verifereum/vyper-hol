@@ -1290,14 +1290,17 @@ Resume calldata_array_element_setup_endpoint_ptr_origin_core_exact_frame[dynamic
   `r4.vs_initial_fmp = r3.vs_initial_fmp /\ r4.vs_fmp = r3.vs_fmp` by
     (`EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts c3 c4)` by
        (qpat_assum `compile_abi_decode_dyn_elem_ptr _ _ _ _ _ _ _ = _` mp_tac >>
-        simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+        simp_tac (srw_ss()) [compile_abi_decode_dyn_elem_ptr_def, calldata_pos_addr,
           comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
           emit_void_def, emit_def, fresh_id_def, fresh_var_def, emitted_insts_def] >>
         strip_tac >> gvs[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
         gvs[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
      qpat_assum `run_inst_seq (emitted_insts c3 c4) r3 = OK r4`
-       (fn th => assume_tac (MATCH_MP run_inst_seq_initial_fmp th)) >>
-     drule decoder_run_world_frame >> disch_then drule >> metis_tac[]) >>
+       (fn run =>
+         conj_tac >- ACCEPT_TAC (MATCH_MP run_inst_seq_initial_fmp run) >>
+         qpat_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts c3 c4)`
+           (fn ops => ACCEPT_TAC
+             (cj 9 (MATCH_MP (SPEC_ALL decoder_run_world_frame) (CONJ ops run)))))) >>
   qexistsl_tac [`HG`,`u`] >> simp[]
 QED
 

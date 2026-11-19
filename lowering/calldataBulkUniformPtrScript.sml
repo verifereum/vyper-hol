@@ -231,7 +231,8 @@ Proof
    (ctx_has_dalloca ctx ==> allocas_below_fmp
        (s2 with vs_inst_idx := LENGTH c2.cs_current_insts))` by
     (drule_all calldata_array_header_fmp_frame >> strip_tac >>
-     fs[allocas_below_fmp_def]) >>
+     Cases_on `ctx_has_dalloca ctx` >> fs[allocas_below_fmp_def] >>
+     first_assum ACCEPT_TAC) >>
   `eval_operand cnt s2 = SOME (n2w n)` by
     (qpat_x_assum `s1 = s with vs_vars := _` SUBST_ALL_TAC >>
      fs[abi_decode_load_def, abi_decode_source_def]) >>
@@ -276,6 +277,27 @@ Proof
      gvs[]) >>
   simp[] >>
   conj_tac >- (rpt strip_tac >> fs[lookup_var_def] >> metis_tac[]) >>
+  conj_tac >-
+    (rpt strip_tac >>
+     `!fuel. ptr_safe_run D lower fuel ctx func PG H2 u2
+       (s2 with vs_inst_idx := LENGTH c2.cs_current_insts)` by
+       (qpat_assum `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx func PG H2 u2 _`
+          (qspec_then `D` mp_tac) >> simp[]) >>
+     `!fuel. ptr_safe_run D lower fuel ctx func PG H1 u1
+       (s1 with vs_inst_idx := LENGTH c1.cs_current_insts)` by
+       (qpat_assum `!D lower ctx' func.
+          _ ==> !fuel. ptr_safe_run D lower fuel ctx' func PG H1 u1 _`
+          (qspecl_then [`D`,`lower`,`ctx`,`func`] mp_tac) >>
+        simp[allocas_below_fmp_def] >>
+        map_every (fn pat => qpat_assum pat mp_tac)
+          [`ctx_has_dalloca ctx ==> allocas_below_fmp
+             (s1 with vs_inst_idx := LENGTH c1.cs_current_insts)`,
+           `s1 = s with vs_vars := _`] >>
+        POP_ASSUM_LIST (K ALL_TAC) >> simp[allocas_below_fmp_def] >>
+        metis_tac[]) >>
+     qpat_assum `!D lower ctx' func.
+        _ ==> !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s`
+        (qspecl_then [`D`,`lower`,`ctx`,`func`] mp_tac) >> simp[]) >>
   rpt strip_tac >>
   `gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
     (OK (s1 with vs_inst_idx := LENGTH c1.cs_current_insts),H1,u1)` by
@@ -284,7 +306,9 @@ Proof
   `gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
     (s1 with vs_inst_idx := LENGTH c1.cs_current_insts,H1,u1) []
     (OK (s2 with vs_inst_idx := LENGTH c2.cs_current_insts),H2,u2)` by
-      (first_assum irule >> simp[] >> decide_tac) >>
+      (first_assum irule >> simp[allocas_below_fmp_def] >>
+       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+         (ACCEPT_TAC o REWRITE_RULE [allocas_below_fmp_def])) >>
   `gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
     (s2 with vs_inst_idx := LENGTH c2.cs_current_insts,H2,u2) []
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H3,u3)` by

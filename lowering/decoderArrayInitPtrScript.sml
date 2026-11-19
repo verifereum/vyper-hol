@@ -1300,8 +1300,9 @@ Resume actual_array_init_endpoint_ptr_origin_core[joint_continuation]:
      s2.vs_alloca_next +
        pending_alloca_size func (s2 with vs_inst_idx := s.vs_inst_idx + 6) <=
        w2n s2.vs_initial_fmp)` by
-    (qpat_assum `ctx_has_dalloca ctx' ==> allocas_below_fmp s /\ _` mp_tac >>
-     simp[allocas_below_fmp_def, pending_alloca_size_def]) >>
+    (Cases_on `ctx_has_dalloca ctx'` >>
+     fs[allocas_below_fmp_def, pending_alloca_size_def] >>
+     first_assum ACCEPT_TAC) >>
   gvs[]
 QED
 
@@ -1323,15 +1324,14 @@ Resume actual_array_init_endpoint_ptr_origin_core[joint_origin]:
   `allocas_from lower s1 /\ allocas_from lower s2` by
     (rpt conj_tac >> PURE_REWRITE_TAC[allocas_from_def] >>
      first_assum (ACCEPT_TAC o SIMP_RULE (srw_ss()) [allocas_from_def])) >>
-  `(ctx_has_dalloca ctx' ==> allocas_below_fmp
-       (s1 with vs_inst_idx := s.vs_inst_idx + 4)) /\
-   (ctx_has_dalloca ctx' ==> allocas_below_fmp
-       (s2 with vs_inst_idx := s.vs_inst_idx + 6) /\
+  `(ctx_has_dalloca ctx' ==> allocas_below_fmp s1) /\
+   (ctx_has_dalloca ctx' ==> allocas_below_fmp s2 /\
      s2.vs_alloca_next +
-       pending_alloca_size func (s2 with vs_inst_idx := s.vs_inst_idx + 6) <=
+       pending_alloca_size func s2 <=
        w2n s2.vs_initial_fmp)` by
-    (qpat_assum `ctx_has_dalloca ctx' ==> allocas_below_fmp s /\ _` mp_tac >>
-     simp[allocas_below_fmp_def, pending_alloca_size_def]) >>
+    (Cases_on `ctx_has_dalloca ctx'` >>
+     fs[allocas_below_fmp_def, pending_alloca_size_def] >>
+     first_assum ACCEPT_TAC) >>
   `gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
     (OK (s1 with vs_inst_idx := s.vs_inst_idx + 4),H1,u1)` by
     (qpat_assum `!D lower explicit ctx' func.
@@ -1351,7 +1351,12 @@ Resume actual_array_init_endpoint_ptr_origin_core[joint_origin]:
     (qpat_assum `!D lower explicit ctx' func.
        _ ==> gas_origin_ptr_path _ (_ with vs_inst_idx := _,H2,u2) [] _`
        (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
-     impl_tac >- simp[] >> strip_tac >> gvs[]) >>
+     impl_tac >-
+       (simp[pending_alloca_size_def] >>
+        qpat_assum `ctx_has_dalloca ctx' ==> allocas_below_fmp s /\ _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[pending_alloca_size_def]) >>
+     strip_tac >> gvs[]) >>
   map_every (fn pat => qpat_assum pat mp_tac)
     [`gas_origin_ptr_path _ (s,G,tn) [] _`,
      `gas_origin_ptr_path _ (_ with vs_inst_idx := _,H1,u1) [] _`,

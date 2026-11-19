@@ -233,7 +233,9 @@ Proof
          gvs[]) >>
       `abi_decode_load CALLDATALOAD (n2w cdsbase : bytes32) s = n2w j /\
         j < dimword (:256)` by metis_tac[LESS_EQ_LESS_TRANS] >>
-      `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by metis_tac[] >>
+      `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+       mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
       `j <= j /\ LENGTH xs < dimword (:256)` by decide_tac >>
       `slot + 32 <= s.vs_alloca_next` by
         (qpat_assum `alloca_inv s` mp_tac >>
@@ -320,9 +322,10 @@ Proof
       `t.vs_initial_fmp = s.vs_initial_fmp /\
               t.vs_alloca_next + pending_alloca_size fn t <=
                 s.vs_alloca_next + pending_alloca_size fn s` by
-        (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,H,u)`
-           (qspecl_then [`0`,`{}`] assume_tac) >>
-         drule_all decoder_origin_path_allocation_frame >> simp[]) >>
+        (map_every (fn pat => qpat_assum pat mp_tac)
+           [`t.vs_initial_fmp = s.vs_initial_fmp`,
+            `t.vs_alloca_next = s.vs_alloca_next`, `t.vs_allocas = s.vs_allocas`] >>
+         POP_ASSUM_LIST (K ALL_TAC) >> simp[pending_alloca_size_def]) >>
       qpat_x_assum `t = jump_to _ _` kall_tac >>
       qexistsl_tac [`t`,`H`,`u`,`[]`] >>
       pure_asm_rewrite_tac [] >>
@@ -385,7 +388,9 @@ Proof
       [`lookup_block hdr fn.fn_blocks = SOME hdr_bb`,
        `lookup_block hdr fn.fn_blocks = SOME _`, `s.vs_current_bb = hdr`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[]) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by metis_tac[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+       mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `slot + 32 <= s.vs_alloca_next` by
     (qpat_assum `alloca_inv s` mp_tac >>
      qpat_assum `FLOOKUP s.vs_allocas index_id = _` mp_tac >>
@@ -556,10 +561,11 @@ Proof
      qpat_assum `allocas_from lower s` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[allocas_from_def] >> metis_tac[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
-    (qpat_assum `t = jump_to _ _` (fn th => rewrite_tac [th]) >>
-     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` mp_tac >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`t = jump_to _ _`, `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
      simp[allocas_below_fmp_def, jump_to_def, abi_decode_header_state_def,
-       update_var_def]) >>
+       update_var_def] >> metis_tac[]) >>
   `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
       (t,H,u) [] (OK r,HG,u')` by
     (simp_tac bool_ss [Abbr `r`] >>
@@ -810,19 +816,34 @@ Proof
   `r.vs_fmp = s.vs_fmp` by
     (`EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
         (emitted_insts body_st middle)` by
-       metis_tac[decoder_calldata_array_setup_opcodes] >>
-     drule_all decoder_run_world_frame >> strip_tac >>
+       (irule decoder_calldata_array_setup_opcodes >>
+        goal_assum (drule_at Any)) >>
+     qpat_assum `EVERY _ (emitted_insts body_st middle)` (fn ops =>
+       qpat_assum `run_inst_seq (emitted_insts body_st middle) t = OK t'`
+         (fn run => mp_tac (cj 9 (MATCH_MP (SPEC_ALL decoder_run_world_frame)
+           (CONJ ops run))))) >>
      qpat_assum `t = jump_to _ _` mp_tac >>
-     simp[Abbr `r`, jump_to_def, abi_decode_header_state_def, update_var_def]) >>
+     qpat_assum `Abbrev (r = _)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[markerTheory.Abbrev_def, jump_to_def, abi_decode_header_state_def,
+       update_var_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r /\
         r.vs_alloca_next + pending_alloca_size fn r <= w2n r.vs_initial_fmp` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,H,u)`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
-     qpat_assum `!D explicit. gas_origin_ptr_path _ (t,H,u) [] (OK r,HG,u')`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
-     `gas_origin_ptr_path (0,lower,{},ctx,fn,PG) (s,G,tn) [] (OK r,HG,u')` by
-       metis_tac[gas_origin_ptr_path_append, APPEND_NIL] >>
-     drule_all decoder_origin_path_room >> simp[]) >>
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,H,u)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     qpat_assum `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG) (t,H,u) [] (OK r,HG,u')`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     `gas_origin_ptr_path (ARB,lower,{},ctx,fn,PG) (s,G,tn) [] (OK r,HG,u')` by
+       (map_every (fn pat => qpat_assum pat mp_tac)
+          [`gas_origin_ptr_path (ARB,lower,{},ctx,fn,PG) (s,G,tn) [] (OK t,H,u)`,
+           `gas_origin_ptr_path (ARB,lower,{},ctx,fn,PG) (t,H,u) [] (OK r,HG,u')`] >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_origin_ptr_path (ARB,lower,{},ctx,fn,PG) (s,G,tn) [] (OK r,HG,u')`,
+        `fn_inst_ids_distinct fn`, `r.vs_fmp = s.vs_fmp`, `alloca_inv r`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   `end_st.cs_next_var <= limit.cs_next_var` by decide_tac >>
   qpat_assum `!i r G tn child childsrc e srcpos. _`
     (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
@@ -1050,10 +1071,16 @@ Proof
      rpt (pop_assum kall_tac) >> simp[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp child_end /\
         child_end.vs_alloca_next + pending_alloca_size fn child_end <= w2n child_end.vs_initial_fmp` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ (r,HG,u') [] (OK child_end,childG,childtn)`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
-     drule_all decoder_origin_path_room >> simp[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp child_end` by metis_tac[] >>
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG) (r,HG,u') [] (OK child_end,childG,childtn)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_origin_ptr_path (ARB,lower,{},ctx,fn,PG) (r,HG,u') [] (OK child_end,childG,childtn)`,
+        `fn_inst_ids_distinct fn`, `child_end.vs_fmp = r.vs_fmp`, `alloca_inv child_end`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp r /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp child_end` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp child_end /\ _`
+       mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `DISJOINT ({}:num set) childtn.t_mem` by simp[] >>
   `slot + 32 <= child_end.vs_alloca_next` by
     (qpat_assum `alloca_inv child_end` mp_tac >>
@@ -1343,11 +1370,16 @@ Proof
   `ctx_has_dalloca ctx ==> allocas_below_fmp backstate /\
         backstate.vs_alloca_next + pending_alloca_size fn backstate <= w2n backstate.vs_initial_fmp` by
     (`backstate.vs_fmp = child_end.vs_fmp` by
-       (qpat_assum `backstate = _` (fn th => rewrite_tac [th]) >>
+       (qpat_assum `backstate = _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
         simp[jump_to_def, mstore_def, write_memory_with_expansion_def, update_var_def]) >>
-     qpat_assum `!D explicit. gas_origin_ptr_path _ (child_end,childG,childtn) [] (OK backstate,backG,backtn)`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
-     drule_all decoder_origin_path_room >> simp[]) >>
+     qpat_assum `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG) (child_end,childG,childtn) [] (OK backstate,backG,backtn)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_origin_ptr_path (ARB,lower,{},ctx,fn,PG) (child_end,childG,childtn) [] (OK backstate,backG,backtn)`,
+        `fn_inst_ids_distinct fn`, `backstate.vs_fmp = child_end.vs_fmp`, `alloca_inv backstate`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp child_end /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   qpat_x_assum `!j s G tn. _` (qspecl_then [`SUC j`, `backstate`, `backG`, `backtn`] mp_tac) >>
   (impl_tac
    >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
@@ -1542,9 +1574,10 @@ Proof
   `final.vs_initial_fmp = s.vs_initial_fmp /\
           final.vs_alloca_next + pending_alloca_size fn final <=
             s.vs_alloca_next + pending_alloca_size fn s` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK final,finalG,finaltn)`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
-     drule_all decoder_origin_path_allocation_frame >> simp[]) >>
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG) (s,G,tn) [] (OK final,finalG,finaltn)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >>
+     simp_tac (srw_ss()) []) >>
   qexistsl_tac [`final`, `finalG`, `finaltn`, `childfp ++ finalfp`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED

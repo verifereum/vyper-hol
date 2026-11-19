@@ -180,9 +180,10 @@ Proof
   `t.vs_initial_fmp = r.vs_initial_fmp /\
    t.vs_alloca_next + pending_alloca_size fn t <=
      r.vs_alloca_next + pending_alloca_size fn r` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ _ [] (OK t,H,u)`
-       (qspecl_then [`0`,`{}`] mp_tac) >>
-     strip_tac >> drule_all decoder_origin_path_allocation_frame >> simp[]) >>
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) _ [] (OK t,H,u)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     strip_tac >> drule_all decoder_origin_path_allocation_frame >>
+     simp_tac (srw_ss()) []) >>
   qexistsl [`t`,`H`,`u`] >>
   pure_asm_rewrite_tac [] >>
   simp_tac bool_ss [] >>
@@ -355,7 +356,9 @@ Proof
      conj_tac >- metis_tac[calldata_operand_live_not_fresh] >>
      rpt strip_tac >> metis_tac[calldata_operand_live_not_fresh]) >>
   `e+32+LENGTH vs * type_memory_size etv <= r.vs_alloca_next` by decide_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp r /\ _`
+       mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   drule_all calldata_bulk_decoder_endpoint_ptr_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qpat_x_assum `_ ==> !D explicit. gas_origin_ptr_path _ _ _ _`
@@ -408,11 +411,12 @@ Proof
        abiDecoderContractTheory.abi_decode_frame_def] >>
      metis_tac[abiDecoderContractTheory.abi_decode_frame_def]) >>
   `t.vs_initial_fmp = r.vs_initial_fmp /\
-   t.vs_alloca_next + pending_alloca_size fn t <=
+   t.vs_alloca_next + pending_alloca_size fn (t with vs_inst_idx := LENGTH end_st.cs_current_insts) <=
      r.vs_alloca_next + pending_alloca_size fn r` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ _ [] (OK (t with vs_inst_idx := LENGTH end_st.cs_current_insts),H,u)`
-       (qspecl_then [`0`,`{}`] mp_tac) >>
-     strip_tac >> drule_all decoder_origin_path_allocation_frame >> simp[]) >>
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) _ [] (OK (t with vs_inst_idx := LENGTH end_st.cs_current_insts),H,u)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     strip_tac >> drule_all decoder_origin_path_allocation_frame >>
+     simp_tac (srw_ss()) []) >>
   qpat_x_assum `tv = _` SUBST_ALL_TAC >>
   qpat_x_assum `v = _` SUBST_ALL_TAC >>
   qexistsl [`t with vs_inst_idx := LENGTH end_st.cs_current_insts`,`H`,`u`] >>

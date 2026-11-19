@@ -515,7 +515,9 @@ Resume source_owned_complex_suffix_ptr[step]:
        metis_tac[abi_decode_source_def]) >> simp[]) >>
   qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `dec_info_needs_offset _ = _` (fn th => pure_rewrite_tac[th]) >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+       mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   drule_all owned_member_navigation_record_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qpat_x_assum `r = s with <| vs_vars := _; vs_inst_idx := _ |>`
@@ -605,7 +607,7 @@ Resume source_owned_complex_suffix_ptr[step]:
     (asm_x "child" kall_tac >> asm_x "ih" kall_tac >> metis_tac[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r /\
     r.vs_alloca_next + pending_alloca_size fn r <= w2n r.vs_initial_fmp` by
-    (asm "navigation_record" (fn eq => rewrite_tac[eq]) >>
+    (asm "navigation_record" (fn eq => PURE_ONCE_REWRITE_TAC[eq]) >>
      qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` mp_tac >>
      simp_tac (srw_ss()) [allocas_below_fmp_def, pending_alloca_size_def] >>
      metis_tac[]) >>
@@ -739,9 +741,13 @@ Resume source_owned_complex_suffix_ptr[step]:
      simp[TAKE_SUC_BY_TAKE, MAP_SNOC, SUM_SNOC]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
     t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ (r,H,u) _ (OK t,J,v)`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
-     drule_all decoder_origin_path_room >> simp[]) >>
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (r,H,u) _ (OK t,J,v)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_origin_ptr_path (ARB,lo,{},ctx,fn,PG) (r,H,u) [] (OK t,J,v)`,
+        `fn_inst_ids_distinct fn`, `t.vs_fmp = r.vs_fmp`, `alloca_inv t`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp r /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   asm "ih" (qspec_then `SUC k` mp_tac) >>
   disch_then (qspecl_then [`en`, `t`, `J`, `v`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> simp[Abbr `ats`])) >> strip_tac >>
@@ -852,9 +858,10 @@ Resume source_owned_complex_suffix_ptr[step]:
   `t'.vs_initial_fmp = s.vs_initial_fmp /\
     t'.vs_alloca_next + pending_alloca_size fn t' <=
       s.vs_alloca_next + pending_alloca_size fn s` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ (OK t',H',u')`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
-     drule_all decoder_origin_path_allocation_frame >> simp[]) >>
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) _ (OK t',H',u')`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >>
+     simp_tac (srw_ss()) []) >>
   qexistsl_tac [`t'`, `H'`, `u'`, `fp ++ fp'`] >>
   conj_tac
   >- (irule abi_decode_sim_trans >> qexists_tac `t` >>

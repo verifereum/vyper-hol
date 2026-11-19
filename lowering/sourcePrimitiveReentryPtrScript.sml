@@ -172,7 +172,7 @@ Theorem source_primitive_decoder_reentry_ptr:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all source_primitive_decoder_reentry_ptr_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>

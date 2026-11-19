@@ -1240,7 +1240,9 @@ Proof
      disch_then (qspecl_then [`tn`, `tv0`, `v0`, `p0`] mp_tac) >> simp[]) >>
   `allocated.vs_current_bb = a.cs_current_bb` by simp[] >>
   `~allocated.vs_halted` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+       mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp allocated` by
     (strip_tac >>
      qabbrev_tac `ins = mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [q]` >>
@@ -1504,8 +1506,8 @@ Resume registration_argument_prepare_guarded_joint[guard]:
     (rpt strip_tac >> gvs[calldataDynOwnedTheory.calldata_operand_live_not_fresh]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
     (strip_tac >>
-     qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,H,u)`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
+     qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) (s,G,tn) [] (OK t,H,u)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
      qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
        (drule_then strip_assume_tac) >>
      drule_all decoder_origin_path_allocas_below_fmp >> simp[]) >>
@@ -2058,9 +2060,13 @@ Proof
     (type_to_abi_dec_info sf ce ty) first = ((),last)` by metis_tac[] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp ready /\
     ready.vs_alloca_next + pending_alloca_size fn ready <= w2n ready.vs_initial_fmp` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK ready,H,u)`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
-     drule_all decoder_origin_path_room >> simp[]) >>
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) (s,G,tn) [] (OK ready,H,u)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_origin_ptr_path (ARB,_,{},ctx,fn,PG) (s,G,tn) [] (OK ready,H,u)`,
+        `fn_inst_ids_distinct fn`, `ready.vs_fmp = s.vs_fmp`, `alloca_inv ready`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   drule sourceOwnedCoherentPtrTheory.source_owned_coherent_decoder_ptr >>
   disch_then (drule_at (Pat `compile_abi_decode_to_buf`)) >>
   disch_then (drule_at (Pat `ptr_covers`)) >>
@@ -2088,9 +2094,10 @@ Proof
   `t.vs_initial_fmp = s.vs_initial_fmp /\
     t.vs_alloca_next + pending_alloca_size fn t <=
       s.vs_alloca_next + pending_alloca_size fn s` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,H',u')`
-       (qspecl_then [`0`,`{}`] assume_tac) >>
-     drule_all decoder_origin_path_allocation_frame >> simp[]) >>
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) (s,G,tn) [] (OK t,H',u')`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >>
+     simp_tac (srw_ss()) []) >>
   qexistsl_tac [`t`, `H'`, `u'`, `q`, `p`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   `CALLDATALOAD <> ALLOCA` by simp[] >>
@@ -2475,7 +2482,9 @@ Proof
   `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
     s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
   drule_all registration_aggregate_singleton_joint >>
-  simp[]
+  disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`H`,`u`,`q`,`p`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem registration_singleton_ptr_resources:
