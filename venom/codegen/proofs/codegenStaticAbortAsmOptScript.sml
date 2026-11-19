@@ -53,28 +53,51 @@ Theorem codegen_entry_asm_sim_abort_asm_opt:
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`prog`, `s`, `vs.vs_data_section`, `vs'.vs_requests`, `prog'`]
-    (mp_tac o CONV_RULE outer_lets) mixed_certificate_exception >>
+    (mp_tac o CONV_RULE (outer_lets THENC
+       SIMP_CONV (bool_ss ++ boolSimps.UNWIND_ss) [])) mixed_certificate_exception >>
   (impl_tac >- (
+    CONV_TAC (UNBETA_CONV ``prog':asm_inst list``) >>
     qmatch_abbrev_tac `M_R prog'` >>
     `!p q ch. M_R p /\ optimize_round p = SOME (q,ch) ==> M_R q` by
       (match_mp_tac (Q.INST [`P` |-> `M_R:asm_inst list -> bool`]
          optimize_round_preserves_predicate) >>
        qpat_x_assum `Abbrev (M_R = _)` (rewrite_tac o single o
          REWRITE_RULE [markerTheory.Abbrev_def]) >>
-       CONV_TAC certificate_nf >>
-       map_every (fn th => conj_tac >- MATCH_ACCEPT_TAC (CONV_RULE certificate_nf th))
-         [prune_unreachable_abort_certificate, merge_iszero_abort_certificate,
-          merge_jumpdests_abort_certificate, prune_inefficient_jumps_abort_certificate,
-          optimize_inefficient_jumps_abort_certificate, prune_unused_jumpdests_abort_certificate] >>
-       MATCH_ACCEPT_TAC (CONV_RULE certificate_nf stack_peephole_abort_certificate)) >>
+       CONV_TAC (certificate_nf THENC SIMP_CONV bool_ss []) >>
+       conj_tac >- MATCH_ACCEPT_TAC (CONV_RULE
+         (SIMP_CONV (bool_ss ++ boolSimps.UNWIND_ss) [] THENC
+          certificate_nf THENC SIMP_CONV bool_ss []) prune_unreachable_abort_certificate) >>
+       conj_tac >- MATCH_ACCEPT_TAC (CONV_RULE
+         (SIMP_CONV (bool_ss ++ boolSimps.UNWIND_ss) [] THENC
+          certificate_nf THENC SIMP_CONV bool_ss []) merge_iszero_abort_certificate) >>
+       conj_tac >- MATCH_ACCEPT_TAC (CONV_RULE
+         (SIMP_CONV (bool_ss ++ boolSimps.UNWIND_ss) [] THENC
+          certificate_nf THENC SIMP_CONV bool_ss []) merge_jumpdests_abort_certificate) >>
+       conj_tac >- MATCH_ACCEPT_TAC (CONV_RULE
+         (SIMP_CONV (bool_ss ++ boolSimps.UNWIND_ss) [] THENC
+          certificate_nf THENC SIMP_CONV bool_ss []) prune_inefficient_jumps_abort_certificate) >>
+       conj_tac >- MATCH_ACCEPT_TAC (CONV_RULE
+         (SIMP_CONV (bool_ss ++ boolSimps.UNWIND_ss) [] THENC
+          certificate_nf THENC SIMP_CONV bool_ss []) optimize_inefficient_jumps_abort_certificate) >>
+       conj_tac >- MATCH_ACCEPT_TAC (CONV_RULE
+         (SIMP_CONV (bool_ss ++ boolSimps.UNWIND_ss) [] THENC
+          certificate_nf THENC SIMP_CONV bool_ss []) prune_unused_jumpdests_abort_certificate) >>
+       MATCH_ACCEPT_TAC (CONV_RULE
+         (SIMP_CONV (bool_ss ++ boolSimps.UNWIND_ss) [] THENC
+          certificate_nf THENC SIMP_CONV bool_ss []) stack_peephole_abort_certificate)) >>
     drule asm_opt_finalizer_preserves_predicate >>
     disch_then (qspecl_then [`rpolicy`, `prog`, `prog'`] mp_tac) >>
     (impl_tac >- (
       reverse conj_tac >- first_assum ACCEPT_TAC >>
       qpat_x_assum `Abbrev (M_R = _)` (rewrite_tac o single o
         REWRITE_RULE [markerTheory.Abbrev_def]) >>
-      CONV_TAC certificate_nf >>
-      drule_all_then (ACCEPT_TAC o CONV_RULE certificate_nf) codegen_entry_abort_mixed_seed)) >>
+      CONV_TAC (certificate_nf THENC SIMP_CONV bool_ss []) >>
+      qspecl_then [`fuel`, `rpolicy`, `unit`, `cp`, `prog`, `Inv`, `vs`, `s`, `a`, `vs'`]
+        (mp_tac o CONV_RULE (RAND_CONV
+          (SIMP_CONV (bool_ss ++ boolSimps.UNWIND_ss) [] THENC
+           certificate_nf THENC SIMP_CONV bool_ss []))) codegen_entry_abort_mixed_seed >>
+      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+      disch_then ACCEPT_TAC)) >>
     disch_then ACCEPT_TAC)) >>
   disch_then ACCEPT_TAC
 QED
