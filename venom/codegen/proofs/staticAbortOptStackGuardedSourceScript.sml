@@ -109,7 +109,7 @@ QED
 (* Replaying a selected edge only needs its demanded slots.  The witness
    at y supplies the static requirement, which is independent of the stack. *)
 Theorem guarded_shape_replay[local]:
-  let Shape = \p cc req pc height need tag boolean i (t:asm_state).
+  !LiveShape. LiveShape = (\i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -123,8 +123,7 @@ Theorem guarded_shape_replay[local]:
          FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
-  let LiveShape = Shape p cc req pc height need tag boolean in
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
   LiveShape x t /\ (need y ==> cc.cc_static) /\
   u.as_pc = pc y /\ LENGTH u.as_stack = height y /\
   u.as_call_ctx = t.as_call_ctx /\ u.as_requests = t.as_requests /\
@@ -186,8 +185,8 @@ QED
 
 Theorem stack_guarded_source_demand_paths:
 !p cc req V rank pc height need tag boolean edge v pre w tail a.
-let Shape =
-  \p cc req pc height need tag boolean i (t:asm_state).
+!Shape. Shape =
+  (\p cc req pc height need tag boolean i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -201,20 +200,20 @@ let Shape =
          FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-in
-let Flow =
-  \p pc height tag boolean (x:num#num) (y:num#num).
-  let hi = height x; hj = height y; ins = EL (pc x) p in
-  let inherit =
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+!Flow. Flow =
+  (\p pc height tag boolean (x:num#num) (y:num#num).
+  !hi. hi = height x ==>
+  !hj. hj = height y ==>
+  !ins. ins = EL (pc x) p ==>
+  !inherit. inherit = (
     \(src:num -> num option)
       (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-  in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
   case ins of
     AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
   | AsmPush bs =>
@@ -244,7 +243,8 @@ let Flow =
              inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                (\k. NONE) (\k. F)
          | NONE =>
-           let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+           !a. a = asm_op_arity name ==>
+           !m. m = hj + a - hi ==>
            a <= hi /\ hj = m+(hi-a) /\
            ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
            inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -253,21 +253,19 @@ let Flow =
                  asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                    ins t = AsmOK u ==>
                  (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-  | _ => F
-in
-let LiveShape = Shape p cc req pc height need tag boolean in
-let Step = \t. asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p 1 t in
-let Open =
-  \p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
+  | _ => F) ==>
+!LiveShape. LiveShape = Shape p cc req pc height need tag boolean ==>
+!Step. Step = (\t. asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p) p 1 t) ==>
+!Open. Open =
+  (\p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
     (tag:(num#num)->num->(string#num)option)
     (boolean:(num#num)->num->bool) edge.
-  let LiveShape = Shape p cc req pc height need tag boolean in
-  let target = \x y.
+  !LiveShape. LiveShape = Shape p cc req pc height need tag boolean ==>
+  !target. target = (\x y.
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
       off < dimword(:256) /\
-      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-  in
+      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
     FINITE V /\ X SUBSET V /\
     (!x. x IN V ==> ?t. LiveShape x t) /\
     (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -285,34 +283,32 @@ let Open =
                     p 1 t = AsmFault u) /\ u.as_requests=req) \/
        (?y u. edge x y /\
           asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-            p 1 t = AsmOK u /\ LiveShape y u))
-in
-let b = LENGTH pre in
-let h = height v in
-let Visit = \path.
+            p 1 t = AsmOK u /\ LiveShape y u))) ==>
+!b. b = LENGTH pre ==>
+!h. h = height v ==>
+!Visit. Visit = (\path.
   path 0=v /\ (!i. i<=LENGTH w ==> path i IN V /\ pc(path i)=b+i) /\
   (!i. i<LENGTH w ==> edge (path i) (path(SUC i)) /\ rank(path(SUC i)) < rank(path i)) /\
   (!t. LiveShape v t ==> ?run. run 0=t /\ !i. i<LENGTH w ==>
-      Step (run i)=AsmOK(run(SUC i)) /\ LiveShape (path(SUC i)) (run(SUC i))) in
-let Pull = \x z k j.
+      Step (run i)=AsmOK(run(SUC i)) /\ LiveShape (path(SUC i)) (run(SUC i)))) ==>
+!Pull. Pull = (\x z k j.
   (!l org. tag z k=SOME(l,org) ==> k<height z /\ j<height x /\ tag x j=SOME(l,org)) /\
-  (boolean z k ==> k<height z /\ j<height x /\ boolean x j) in
+  (boolean z k ==> k<height z /\ j<height x /\ boolean x j)) ==>
 asm_static_wf p /\ Open p cc req V {} rank pc height need tag boolean edge /\
 v IN V /\ pc v=b ==>
  (asm_swap_op a /\ w=[a;a] /\ p=pre++w++tail ==>
-    ?name n path. let z=path(LENGTH w) in
+    ?name n path. !z. z = path (LENGTH w) ==>
       a=AsmOp name /\ ALOOKUP swap_table name=SOME n /\ 0<n /\ n<=16 /\ n<h /\
       Visit path /\ height z=h /\ !k. Pull v z k k) /\
  (asm_commutative_op a /\ w=[AsmOp "SWAP1";a] /\ p=pre++w++tail ==>
-    ?name path. let z=path(LENGTH w) in
+    ?name path. !z. z = path (LENGTH w) ==>
       a=AsmOp name /\ MEM name ["ADD";"MUL";"EQ";"AND";"OR";"XOR"] /\
       2<=h /\ Visit path /\ height z+1=h /\ tag z 0=NONE /\
       (boolean z 0 ==> name="EQ") /\ !k. 0<k ==> Pull v z k (k+1))
 Proof
-  rpt gen_tac >>
+  ntac 16 gen_tac >>
   map_every (fn q =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
+    CONV_TAC (BINDER_CONV (LAND_CONV (REWR_CONV (GSYM markerTheory.Abbrev_def)))) >>
     qx_gen_tac q >> disch_tac) [`Shape`,`Flow`,`LiveShape`,`Step`,`Open`,`b`,`h`,`Visit`,`Pull`] >>
   strip_tac >>
   qpat_assum `Abbrev (LiveShape = _)` (fn shth =>
@@ -324,7 +320,8 @@ Proof
         qpat_assum `Abbrev (Open = _)` (fn openth =>
           qpat_x_assum `Open p cc req V {} rank pc height need tag boolean edge`
             (strip_assume_tac o SRULE[] o PURE_REWRITE_RULE[foldshape, foldstep] o
-             BETA_RULE o PURE_REWRITE_RULE[PURE_REWRITE_RULE[markerTheory.Abbrev_def] openth, LET_THM])) >>
+             CONV_RULE (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2)) o
+             BETA_RULE o PURE_REWRITE_RULE[PURE_REWRITE_RULE[markerTheory.Abbrev_def] openth])) >>
         qpat_x_assum `Abbrev (Visit = _)` (assume_tac o PURE_REWRITE_RULE[foldshape, foldstep] o BETA_RULE)
       end)) >>
   `!x y. edge x y /\ EL (pc x) p <> AsmOp "JUMP" /\

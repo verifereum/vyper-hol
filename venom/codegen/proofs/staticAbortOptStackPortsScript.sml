@@ -8,8 +8,9 @@ Ancestors
 (* Throughout this script these quotations are syntax, not new constants. *)
 val flow_at = ``
   \ins (opins:string->asm_inst) p pc height tag boolean (x:num#num) (y:num#num).
-  let hi = height x; hj = height y in
-  let inherit =
+  !hi. hi = height x ==>
+  !hj. hj = height y ==>
+  !inherit. inherit = (
     \(src:num -> num option)
       (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
@@ -17,7 +18,7 @@ val flow_at = ``
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
          (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-  in
+  ) ==>
   case ins of
     AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
   | AsmPush bs =>
@@ -47,7 +48,8 @@ val flow_at = ``
              inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                (\k. NONE) (\k. F)
          | NONE =>
-           let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+           !a. a = asm_op_arity name ==>
+           !m. m = hj + a - hi ==>
            a <= hi /\ hj = m+(hi-a) /\
            ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
            inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -62,7 +64,7 @@ Triviality flow_presentations:
   !ins. ^flow_at ins (\name. ins) p pc height tag boolean x y =
         ^flow_at ins AsmOp p pc height tag boolean x y
 Proof
-  Cases >> SIMP_TAC bool_ss [LET_THM, asm_inst_case_def]
+  Cases >> SIMP_TAC bool_ss [LET_THM, UNWIND_FORALL_THM2, asm_inst_case_def]
 QED
 
 val flow = ``\p pc height tag boolean x y.
@@ -81,7 +83,7 @@ val target = ``\p pc (tag:num#num->num->(string#num)option) (x:num#num) (y:num#n
 
 val closed_open_with = ``
   \F p cc req (V:(num#num)->bool) (rank:(num#num)->num) pc height need tag boolean edge.
-  let S = \i (t:asm_state).
+  !S. S = (\i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -95,7 +97,7 @@ val closed_open_with = ``
          FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
     FINITE V /\ {} SUBSET V /\
     (!x. x IN V ==> ?t. S x t) /\
     (!x. x IN V DIFF {} ==> pc x < LENGTH p) /\
@@ -122,7 +124,7 @@ Triviality open_presentations:
   ^fixed_closed_open p cc req V rank pc height need tag boolean edge =
   ^closed_open p cc req V rank pc height need tag boolean edge
 Proof
-  SIMP_TAC bool_ss [LET_THM, GSYM (SIMP_RULE bool_ss [LET_THM] flow_presentations)]
+  SIMP_TAC bool_ss [LET_THM, UNWIND_FORALL_THM2, GSYM (SIMP_RULE bool_ss [LET_THM, UNWIND_FORALL_THM2] flow_presentations)]
 QED
 
 val producer = ``\p l origin.
@@ -136,20 +138,20 @@ val slots = ``\p cc (h:num) need (g:num->(string#num)option) B.
 
 val rows = ``
   \p cc (V:(num#num)->bool) X (rank:num#num->num) pc height need tag boolean edge.
-    let lo = SND(compute_label_offsets p) in
+    !lo. lo = SND(compute_label_offsets p) ==>
     (!x. x IN V ==> ^slots p cc (height x) (need x) (tag x) (boolean x)) /\
     (!x y. edge x y ==>
        x IN V DIFF X /\ y IN V /\ rank y < rank x /\
        ^flow p pc height tag boolean x y) /\
     (!x. x IN V DIFF X ==>
        pc x < LENGTH p /\
-       let h = height x in
-       let fall = \y. pc y = pc x + 1 in
-       let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-       let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-       let next = \n. arm fall n /\ legal fall n in
-       let untagged = \a. !k. k<a ==> tag x k=NONE in
-       let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
+       (!h. h = height x ==>
+       !fall. fall = (\y. pc y = pc x + 1) ==>
+       !arm. arm = (\P n. ?y. edge x y /\ P y /\ height y = n) ==>
+       !legal. legal = (\P n. !y. edge x y ==> P y /\ height y = n) ==>
+       !next. next = (\n. arm fall n /\ legal fall n) ==>
+       !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+       !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
        case EL (pc x) p of
          AsmLabel l => next h
        | AsmPush bs => next (h+1)
@@ -174,7 +176,7 @@ val rows = ``
                          legal (\y. fall y \/ ^target p pc tag x y) (h-2)
                        else ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                                 untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-       | _ => F)``;
+       | _ => F))``;
 
 val layout = ``\p q f.
   (!l org. org<LENGTH p /\ ^producer p l org ==>
@@ -225,7 +227,8 @@ val same_demands = ``\(height:num#num->num) (g:(num#num)->num->(string#num)optio
   (!k l org. g z k=SOME(l,org) ==> g v k=SOME(l,org)) /\
   (!k. B z k ==> B v k)``;
 
-val port_norm = SIMP_RULE bool_ss [LET_THM];
+val port_norm = SIMP_RULE bool_ss [LET_THM, UNWIND_FORALL_THM2];
+val port_unwind = CONV_RULE (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2));
 val fixed_paths = REWRITE_RULE [port_norm open_presentations]
   (port_norm stack_fixed_source_demand_paths);
 
@@ -235,7 +238,7 @@ Triviality erase_fixed_port:
   ?z. ^exit_packet V pc rank (LENGTH pre) 3 v z /\
       ^same_demands height tag boolean v z
 Proof
-  SIMP_TAC bool_ss [LET_THM] >>
+  SIMP_TAC bool_ss [LET_THM, UNWIND_FORALL_THM2] >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "open") strip_assume_tac) >>
   (* The former in-window edge adapter failed before constructor reduction:
      mp_tac (cj 2 (port_norm stack_fixed_source_demand_paths)) >>
@@ -277,12 +280,12 @@ Triviality erase_guarded_port:
   ?z. ^exit_packet V pc rank (LENGTH pre) 2 v z /\
       ^same_demands height tag boolean v z
 Proof
-  SIMP_TAC bool_ss [LET_THM] >>
+  SIMP_TAC bool_ss [LET_THM, UNWIND_FORALL_THM2] >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "open") strip_assume_tac) >>
   asm "open" assume_tac >>
   (* The original drule_all on the flattened guarded antecedent did not match. *)
   mp_tac (cj 1 (port_norm
-      (Q.INST [`w` |-> `[a;a]`] (SPEC_ALL stack_guarded_source_demand_paths)))) >>
+      (Q.INST [`w` |-> `[a;a]`] (SPEC_ALL (port_unwind stack_guarded_source_demand_paths))))) >>
   impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
   SIMP_TAC bool_ss [LENGTH, DECIDE ``SUC (SUC 0) = 2``] >>
   impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
@@ -334,10 +337,10 @@ QED
 val positive_port = ``
   \q cc (b:num) (f:num->num) d (height:(num#num)->num) need
      (rank:(num#num)->num) tag boolean (v:num#num) (z:num#num).
-  let n = LENGTH d in
+  !n. n = LENGTH d ==>
   ?(H:(num#num)->num) (R:(num#num)->num)
    (G:(num#num)->num->(string#num)option) (B:(num#num)->num->bool).
-    let P = \x:num#num. b+FST x in
+    !P. P = (\x:num#num. b+FST x) ==>
     H (0,0) = height v /\ H (n,0) = height z /\
     R (0,0) = rank v /\ R (n,0) = rank z /\
     (!k l org. G (0,0) k = SOME(l,org) ==> ^relocate f (tag v) k = SOME(l,org)) /\
@@ -404,8 +407,9 @@ QED
 (* The fixed producer's witness tables are used unchanged; the only added
    guarantees are layout bounds, Slots and the consumer-facing guard. *)
 Theorem fixed_positive_port[local]:
-  let b = LENGTH pre; m = LENGTH w; n = LENGTH d in
-  let f = splice_pc b m n in
+  !b. b = LENGTH pre ==>
+  !m. m = LENGTH w ==>
+  !f. f = splice_pc b m (LENGTH d) ==>
   p=pre++w++tail /\ q=pre++d++tail /\ ^fixed_positive w d /\
   ^layout p q f /\ ^rows p cc V {} rank pc height need tag boolean edge /\
   ^closed_open p cc req V rank pc height need tag boolean edge /\
@@ -413,7 +417,7 @@ Theorem fixed_positive_port[local]:
   ?z. ^exit_packet V pc rank b m v z /\
       ^positive_port q cc b f d height need rank tag boolean v z
 Proof
-  SIMP_TAC bool_ss [LET_THM] >>
+  SIMP_TAC bool_ss [LET_THM, UNWIND_FORALL_THM2] >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 (mk_asm "literal")
       (CONJUNCTS_THEN2 (mk_asm "layout") (CONJUNCTS_THEN2 (mk_asm "rows")
@@ -445,7 +449,7 @@ Proof
 QED
 
 Resume fixed_positive_port[fixed_package]:
-  SIMP_TAC bool_ss [LET_THM] >>
+  SIMP_TAC bool_ss [LET_THM, UNWIND_FORALL_THM2] >>
   `0 <> LENGTH d` by (asm "literal" strip_assume_tac >> simp[]) >>
   ntac 4 (conj_tac >- simp[]) >>
   conj_tac >-
@@ -518,8 +522,8 @@ Finalise fixed_positive_port
 
 
 Triviality comm_positive_port:
-  let b = LENGTH pre in
-  let f = splice_pc b 2 1 in
+  !b. b = LENGTH pre ==>
+  !f. f = splice_pc b 2 1 ==>
   asm_static_wf p /\ asm_commutative_op a /\
   p=pre++[AsmOp "SWAP1";a]++tail /\ q=pre++[a]++tail /\
   ^layout p q f /\ ^rows p cc V {} rank pc height need tag boolean edge /\
@@ -528,13 +532,13 @@ Triviality comm_positive_port:
   ?z. ^exit_packet V pc rank b 2 v z /\
       ^positive_port q cc b f [a] height need rank tag boolean v z
 Proof
-  SIMP_TAC bool_ss [LET_THM,LENGTH,GSYM ONE] >>
+  SIMP_TAC bool_ss [LET_THM, UNWIND_FORALL_THM2,LENGTH,GSYM ONE] >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
       (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 (mk_asm "layout")
         (CONJUNCTS_THEN2 (mk_asm "rows")
           (CONJUNCTS_THEN2 (mk_asm "open") strip_assume_tac))))))) >>
-  mp_tac (SIMP_RULE bool_ss [LET_THM,FST] (SPEC_ALL stack_comm_replacement_row)) >>
+  mp_tac (SIMP_RULE bool_ss [LET_THM, UNWIND_FORALL_THM2,FST] (SPEC_ALL (port_unwind stack_comm_replacement_row))) >>
   impl_tac >-
     (asm "open" assume_tac >> rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
   asm_x "open" kall_tac >>
@@ -557,7 +561,7 @@ Proof
                          else ^relocate f (tag (path 2))`,
             `\x:num#num. if FST x=0 then ^mask_bool 2 (boolean v)
                          else boolean (path 2)`] >>
-  SIMP_TAC bool_ss [LET_THM,FST,EVAL ``(1:num) = 0``] >>
+  SIMP_TAC bool_ss [LET_THM, UNWIND_FORALL_THM2,FST,EVAL ``(1:num) = 0``] >>
   conj_tac >- simp[] >>
   conj_tac >- suspend "comm_slots" >> suspend "comm_fall"
 QED
@@ -604,8 +608,10 @@ Finalise comm_positive_port
 
 (* One exit is shared by the phase packet and the selected source path. *)
 Theorem stack_whole_visit_port:
-  let b = LENGTH pre; m = LENGTH w; n = LENGTH d in
-  let f = splice_pc b m n in
+  !b. b = LENGTH pre ==>
+  !m. m = LENGTH w ==>
+  !n. n = LENGTH d ==>
+  !f. f = splice_pc b m n ==>
   asm_static_wf p /\ p=pre++w++tail /\ q=pre++d++tail /\
   ((d=[] /\ (w=^erase_fixed \/ ^guarded_erase w)) \/
    ^fixed_positive w d \/ ^guarded_positive w d) /\
@@ -616,7 +622,7 @@ Theorem stack_whole_visit_port:
       (if n=0 then ^same_demands height tag boolean v z
        else ^positive_port q cc b f d height need rank tag boolean v z)
 Proof
-  SIMP_TAC bool_ss [LET_THM] >>
+  SIMP_TAC bool_ss [LET_THM, UNWIND_FORALL_THM2] >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
       (CONJUNCTS_THEN2 (mk_asm "window") (CONJUNCTS_THEN2 assume_tac
@@ -662,7 +668,7 @@ Resume stack_whole_visit_port[comm]:
   qpat_x_assum `d=[a]` SUBST_ALL_TAC >>
   RULE_ASSUM_TAC (SIMP_RULE bool_ss [LENGTH, GSYM ONE, DECIDE ``SUC 1 = 2``]) >>
   SIMP_TAC bool_ss [LENGTH, GSYM ONE, DECIDE ``SUC 1 = 2``, EVAL ``(1:num) = 0``] >>
-  mp_tac (SIMP_RULE bool_ss [LET_THM,LENGTH,GSYM ONE] comm_positive_port) >>
+  mp_tac (SIMP_RULE bool_ss [LET_THM, UNWIND_FORALL_THM2,LENGTH,GSYM ONE] comm_positive_port) >>
   (impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
   disch_then ACCEPT_TAC
 QED
