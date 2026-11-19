@@ -67,7 +67,7 @@ Proof
   gvs[ptr_observe_def]
 QED
 
-Theorem ptr_revert_interval_step[local]:
+Theorem ptr_revert_interval_step:
   ptr_chrono_step ctx a b /\ ALL_DISTINCT (fn_labels a.po_fn) /\
   lookup_block a.po_state.vs_current_bb a.po_fn.fn_blocks = SOME bb /\
   revert_forward_pair bb p q /\

@@ -74,38 +74,3 @@ Resume focus_visit_site_projection[blocks]:
 QED
 
 Finalise focus_visit_site_projection
-
-(* The two fuels are extended independently to a common fuel. The suffix can
-   be discarded from the site list only if the split trace is non-Error. *)
-Theorem focus_rooted_visit_site_comparison:
-  !p d low fuel high C fn s pre post.
-    trace_blocks p d low C fn s = pre ++ post /\ low <= high /\ fuel <= high ==>
-    ?later extra.
-      trace_blocks p d high C fn s = pre ++ post ++ later /\
-      gas_events_blocks high C fn s =
-        MAP (\(e,fn,i,s). (fn.fn_name,i.inst_id))
-          (FILTER (\(e,fn,i,s). i.inst_opcode = GAS) pre) ++
-        MAP (\(e,fn,i,s). (fn.fn_name,i.inst_id))
-          (FILTER (\(e,fn,i,s). i.inst_opcode = GAS) post) ++
-        MAP (\(e,fn,i,s). (fn.fn_name,i.inst_id))
-          (FILTER (\(e,fn,i,s). i.inst_opcode = GAS) later) /\
-      gas_events_blocks high C fn s = gas_events_blocks fuel C fn s ++ extra /\
-      ((!err. run_blocks low C fn s <> Error err) ==>
-       gas_events_blocks high C fn s =
-         MAP (\(e,fn,i,s). (fn.fn_name,i.inst_id))
-           (FILTER (\(e,fn,i,s). i.inst_opcode = GAS) pre) ++
-         MAP (\(e,fn,i,s). (fn.fn_name,i.inst_id))
-           (FILTER (\(e,fn,i,s). i.inst_opcode = GAS) post))
-Proof
-  rpt strip_tac >>
-  `?later. trace_blocks p d high C fn s = pre ++ post ++ later` by
-    metis_tac[cj 3 trace_prefix, APPEND_ASSOC] >>
-  `?extra. gas_events_blocks high C fn s = gas_events_blocks fuel C fn s ++ extra` by
-    metis_tac[cj 3 gas_events_fuel_extension] >>
-  qexistsl [`later`, `extra`] >> simp[] >> conj_tac
-  >- metis_tac[cj 3 focus_visit_site_projection, FILTER_APPEND_DISTRIB, MAP_APPEND] >>
-  strip_tac >>
-  `gas_events_blocks high C fn s = gas_events_blocks low C fn s` by
-    metis_tac[cj 3 gas_events_fuel_extension] >>
-  metis_tac[cj 3 focus_visit_site_projection, FILTER_APPEND_DISTRIB, MAP_APPEND]
-QED

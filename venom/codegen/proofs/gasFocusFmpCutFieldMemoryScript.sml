@@ -151,7 +151,7 @@ val cut_fields = ``
     (?P. fn_static_ptr_ok P fn /\ ptr_use_static_ok P (fn_pv P fn) inst /\
          FDOM G SUBSET fn_pv P fn)``;
 
-Theorem cut_source_points[local]:
+Theorem cut_source_points:
   o1_ctx_shape C3 /\ EVERY (o1_fn_row 3) C3.ctx_functions /\
   fmp_free_ctx C3 /\ root3.vs_vars = FEMPTY /\ ~root3.vs_halted /\
   frame_reachable root3 C3 stk PG G tn fn inst s /\ active_inst fn inst s /\
@@ -240,7 +240,7 @@ QED
 
 (* The induction stays on the observed C4 history. Each earlier source
    frame in its motive is independently reached from root3. *)
-Theorem cut_frame_coverage[local]:
+Theorem cut_frame_coverage:
   ctx_pass_stage rp (CFP_Simple VP_FmpLowering) (o1_walk_view rp 3) C3 C4 /\
   o1_pre 3 C3 C4 /\ o1_ctx_shape C3 /\ o1_ctx_shape C4 /\
   EVERY (o1_fn_row 3) C3.ctx_functions /\ EVERY ssa_form C3.ctx_functions /\
