@@ -50,6 +50,7 @@ Ancestors
   staticAbortMemDefs
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
      place typing *)
+  abiEncoderObserverCode
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
   placeTypingE2EProps
   (* lowering: entry decoding, allocation frames and registration, constructor
@@ -64,23 +65,20 @@ Ancestors
      statement reason theories *)
   bodyMemArrayLayout bodyMemTupleLayout bodyMemBiMethodIdEndpoint
   bodyMemEcArithAssemble bodyMemEcArithSafe bodyMemRawCallFinish
-  stmtReasonKindsMemory stmtSimAugAssignPlaceStorage
+  bodyMemAssignTopCopySuffix stmtSimAugAssignPlaceStorage
   stmtSimIfCounted stmtSimRaise stmtSimSeqMem
   (* assignment-to-place pieces the deleted stmtSimAssignPlace imported *)
   immutableAssignMetadata immutableAssignRepresentation immutableAssignStore
   immutableDeployAssignRestore immutableAssignCode immutableAssignEmpty
   immutableAssignCompose immutableAssignOpen
   assignPlacePureFacts assignPlacePureCode assignPlaceEmpty
-  assignPlaceEmptyCompose assignPlaceContinuation assignPlaceCallerFacts
-  assignPlaceGasCompose assignPlaceStoreReady
-  assignEffectfulIndexNonempty assignEffectfulIndexUnifiedStore
-  assignEffectfulIndexEmptyCase assignEffectfulIndexNonmutating
+  assignPlaceEmptyCompose
+  assignPlaceGasCompose assignPlaceBytesStore
   (* whitelist: retained raw-call and CREATE compiler shape proofs *)
   whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
-  batchCopyRobustPtr liveArrayTransportPtr normalizationAllocPtr
-  ptrSafetyTransport returnMetadataPtr staticTypeFitsPtr structChildPtr
-  wordCopyRobustPtr
+  normalizationAllocPtr
+  ptrSafetyTransport staticTypeFitsPtr
   (* end-to-end runtime correctness *)
   e2eCorrectness guardRequestAlignment
   (* sufficient gas, the companions to the call and deploy theorems *)
@@ -88,8 +86,7 @@ Ancestors
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
   (* body induction: custom-error raise and assert pieces *)
-  bodyCustomErrorRaise bodyCustomErrorAssert stmtSimCustomErrorPath
-  bodyCustomErrorMemRaise bodyCustomErrorMemAssert stmtSimCustomErrorMemPath
+  stmtSimCustomErrorRevert
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
   codegenLabelDisciplined
   codegenSymOwnRel

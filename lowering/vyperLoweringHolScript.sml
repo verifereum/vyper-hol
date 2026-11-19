@@ -8,7 +8,7 @@ Ancestors
   calldataExactScalarAccepted calldataExactScalarRejected calldataNoneFallbackJoint
   calldataNoneMetadata calldataRegistrationRawAddress
   calldataRegistrationTerminalBindings calldataValidHeaderLocalFrontier dispatchedArgsBind
-  dispatchedSelectedFacts dispatchedSelectedPrefix dispatchedSelectedRelations
+  dispatchedSelectedFacts dispatchedSelectedPrefix
   dispatchedValueEntry dispatchedValueFallback dispatchedValuePrefix
   dispatchedValueSelection dispatchedValueSource fallbackEntryEndpoint
   loweringCalldataCorrect registrationGuardRejectOrigin
@@ -18,7 +18,6 @@ Ancestors
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
-  bodyMemStorageCopyStage
   dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
   rawCallCalldataPeakMemory
@@ -36,7 +35,7 @@ Ancestors
   varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
-  exprSimBuiltins exprSimExtCallCase bodyIntCallSeams bodySimFullMain bodyFullStructLit externalReturnValuedFull ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimSeq stmtSimExpr
+  exprSimBuiltins exprSimExtCallCase bodyIntCallSeams bodySimFullMain bodyFullStructLit externalReturnValuedFull ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimExpr
   stmtSimBreak stmtSimContinue stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
@@ -47,8 +46,8 @@ Ancestors
   stmtSimAssignAttrStorage stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
-  externalEntryProps constructorGuardProps
-  nonreentrantEntryEquiv internalReturnLockProps
+  constructorGuardProps
+  nonreentrantEntryEquiv
   transientLockFrameProps
   selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
@@ -60,14 +59,14 @@ Ancestors
   loweringShapeDefs
   loweringShapeProps
   ctorShapeProps ctorUnitShape
-  intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
+  intCallStep extCallOracleStep intCallLookup intCallCallee intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   bodyFullShadowBodyInvLowering
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
   allocaFrontierWitness
   vyperLoweringCorrect
-  rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
+  rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem
   loweringMemCorrect
   asmSymBridge
   asmDataEnv
@@ -87,9 +86,8 @@ Ancestors
   asmSpliceWithin
   (* reached here instead of as holproject.toml roots *)
   targetPtrFacts bodyFullTarget
-  extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
   extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
-  abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
+  abiEncoderWindowJointPhases logTopicsRunPtr
   (* closed-world request-cut guard and producer *)
   e2eOutcomesProducer requestCutSelectedReplay
   (* providers awaiting their consumers *)
