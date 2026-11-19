@@ -47,6 +47,7 @@ Proof
     (fs[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `out`] >>
      first_x_assum (qspec_then `sc.cs_next_var` mp_tac) >> simp[]) >>
   qpat_x_assum `data_operand = Var out` SUBST_ALL_TAC >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bytestring_data_offset_full_run >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `not_local_ptr cenv es.scopes out` by

@@ -132,6 +132,7 @@ Resume storage_copy_loop_path_ptr[body]:
     (fs[ALL_DISTINCT] >> metis_tac[]) >>
   `32*k+32 <= span /\ w2n b+32*k < dimword(:256)` by decide_tac >>
   `lookup_block hs.vs_current_bb fn.fn_blocks = SOME bbb` by fs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp hs` by simp[] >>
   drule_all (PURE_REWRITE_RULE [APPEND, LENGTH, ADD_CLAUSES] (Q.INST [`pre` |-> `[]`,
     `post` |-> `[mk_inst (id+7) JMP [Label hdr] []]`] storage_copy_body_path_ptr)) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -151,6 +152,7 @@ Resume storage_copy_loop_path_ptr[advance]:
   `lookup_block bs.vs_current_bb fn.fn_blocks = SOME bbb /\
    get_instruction bbb bs.vs_inst_idx = SOME (mk_inst (id+7) JMP [Label hdr] [])`
      by fs[get_instruction_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp bs` by simp[] >>
   drule_all storage_copy_backedge_path_ptr >>
   disch_then (qspec_then `src` strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `OK (jump_to hdr bs)` >>

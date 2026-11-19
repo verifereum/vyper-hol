@@ -25,7 +25,7 @@ Theorem storage_copy_load_path_ptr:
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id (if tr then TLOAD else SLOAD) [a] [out]) /\
   eval_operand a s = SOME slot /\ op_taint tn a = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT G (COMPL {out}))
     (tn with t_var := tn.t_var |+
@@ -100,7 +100,7 @@ Theorem storage_copy_store_path_ptr:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id MSTORE [Var p;v] []) /\
   eval_operand (Var p) s = SOME addr /\ eval_operand v s = SOME value /\
-  ptr_covers G tn p s 32 /\ ~ctx_has_dalloca ctx ==>
+  ptr_covers G tn p s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0 G
     (tn with t_mem :=
       (tn.t_mem DIFF {i | w2n addr <= i /\ i < w2n addr + 32}) UNION
@@ -142,7 +142,7 @@ Theorem storage_copy_add_path_ptr:
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [left;right] [out]) /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (step_prov PG G (mk_inst id ADD [left;right] [out]) (update_var out (a+b) s))
     (tn with t_var := tn.t_var |+ (out,{}))
@@ -183,7 +183,7 @@ Theorem storage_copy_mul_path_ptr:
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id MUL [left;right] [out]) /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT G (COMPL {out})) (tn with t_var := tn.t_var |+ (out,{}))
     (OK (update_var out (a*b) s with vs_inst_idx := SUC s.vs_inst_idx))
@@ -217,7 +217,7 @@ Theorem storage_copy_source_path_ptr:
   s.vs_inst_idx = LENGTH pre /\
   eval_operand src s = SOME a /\ lookup_var cv s = SOME (n2w k) /\
   op_taint tn src = {} /\ op_taint tn (Var cv) = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT
       (step_prov PG G (mk_inst id ADD [src;Var cv] [sv])
@@ -261,7 +261,7 @@ Theorem storage_copy_address_path_ptr:
   lookup_var root s = SOME a /\ eval_operand offset s = SOME (n2w off) /\
   ptr_covers G tn root s span /\ op_taint tn offset = {} /\
   off < span /\ off+width <= span /\ w2n a+off < dimword(:256) /\
-  root <> out /\ ~ctx_has_dalloca ctx ==>
+  root <> out /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (step_prov PG G (mk_inst id ADD [Var root;offset] [out])
       (update_var out (a+n2w off) s))
@@ -294,7 +294,7 @@ Theorem storage_copy_increment_path_ptr:
      mk_inst (id+1) ASSIGN [Var nv] [cv]] ++ post /\
   s.vs_inst_idx = LENGTH pre /\
   lookup_var cv s = SOME (n2w k) /\ FLOOKUP G cv = NONE /\
-  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn (Var cv) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT (DRESTRICT G (COMPL {nv})) (COMPL {cv}))
     (tn with t_var := (tn.t_var |+ (nv,{})) |+ (cv,{}))
@@ -336,7 +336,7 @@ Theorem storage_copy_address_store_path_ptr:
   eval_operand offset s = SOME (n2w off) /\ lookup_var vv s = SOME value /\
   ptr_covers G tn root s span /\ op_taint tn offset = {} /\
   off < span /\ off+32 <= span /\ w2n a+off < dimword(:256) /\
-  root <> out /\ vv <> out /\ ~ctx_has_dalloca ctx ==>
+  root <> out /\ vv <> out /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G1 tn1 t1.
     G1 = step_prov PG G (mk_inst id ADD [Var root;offset] [out])
       (update_var out (a+n2w off) s) /\
@@ -434,7 +434,7 @@ Theorem storage_copy_source_chunk_ptr:
   s.vs_inst_idx = LENGTH pre /\
   eval_operand src s = SOME a /\ lookup_var cv s = SOME (n2w k) /\
   op_taint tn src = {} /\ op_taint tn (Var cv) = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn' t u.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     run_inst_seq
@@ -489,7 +489,7 @@ Theorem storage_copy_store_chunk_ptr:
   eval_operand offset s = SOME (n2w off) /\ lookup_var vv s = SOME value /\
   ptr_covers G tn root s span /\ op_taint tn offset = {} /\
   off < span /\ off+32 <= span /\ w2n a+off < dimword(:256) /\
-  root <> out /\ vv <> out /\ ~ctx_has_dalloca ctx ==>
+  root <> out /\ vv <> out /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn' t u.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     run_inst_seq [mk_inst id ADD [Var root;offset] [out];
@@ -533,7 +533,7 @@ Theorem storage_copy_scale_chunk_ptr:
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id MUL [Var cv;Lit 32w] [mv]) /\
   lookup_var cv s = SOME (n2w k) /\ op_taint tn (Var cv) = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn' t u.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     run_inst_seq [mk_inst id MUL [Var cv;Lit 32w] [mv]] s = OK u /\
@@ -573,7 +573,7 @@ Theorem storage_copy_increment_chunk_ptr:
      mk_inst (id+1) ASSIGN [Var nv] [cv]] ++ post /\
   s.vs_inst_idx = LENGTH pre /\
   lookup_var cv s = SOME (n2w k) /\ FLOOKUP G cv = NONE /\
-  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn (Var cv) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn' t u.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     run_inst_seq [mk_inst id ADD [Var cv;Lit 1w] [nv];
@@ -625,6 +625,15 @@ Proof
   gvs[instIdxIndepTheory.exec_result_map_def, run_inst_seq_append] >> metis_tac[]
 QED
 
+Theorem storage_copy_static_allocas_below_fmp[local]:
+  copy_static t = copy_static s ==>
+  (allocas_below_fmp t <=> allocas_below_fmp s)
+Proof
+  `!u. allocas_below_fmp (copy_static u) <=> allocas_below_fmp u` by
+    simp[copy_static_def, allocas_below_fmp_def] >>
+  disch_then (mp_tac o Q.AP_TERM `allocas_below_fmp`) >> simp[]
+QED
+
 Theorem storage_copy_destination_chunk_ptr:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -636,7 +645,7 @@ Theorem storage_copy_destination_chunk_ptr:
   lookup_var cv s = SOME (n2w k) /\ lookup_var vv s = SOME value /\
   ptr_covers G tn root s span /\ op_taint tn (Var cv) = {} /\
   32*k+32 <= span /\ w2n a+32*k < dimword(:256) /\
-  ALL_DISTINCT [root;cv;vv;mv;dv] /\ ~ctx_has_dalloca ctx ==>
+  ALL_DISTINCT [root;cv;vv;mv;dv] /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn' t u.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     run_inst_seq
@@ -665,6 +674,8 @@ Proof
    lookup_var vv t1 = SOME value /\ ptr_covers G1 tn1 root t1 span` by
     (drule copy_static_fields >> strip_tac >>
      gvs[ALL_DISTINCT, ptr_covers_def, lookup_var_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
+    metis_tac[storage_copy_static_allocas_below_fmp] >>
   `?G2 tn2 t2 u2.
     gas_path_ptr D 0 ctx fn PG G1 tn1 t1 0 G2 tn2 (OK t2) /\
     run_inst_seq [mk_inst (id+1) ADD [Var root;Var mv] [dv];
@@ -723,7 +734,7 @@ Theorem storage_copy_body_path_ptr:
   w2n b+32*k < dimword(:256) /\
   ALL_DISTINCT [root;cv;sv;vv;mv;dv;nv] /\
   (!x. MEM x [cv;sv;vv;mv;dv;nv] ==> src <> Var x) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn' t u.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     run_inst_seq
@@ -787,6 +798,8 @@ Resume storage_copy_body_path_ptr[destination]:
    ptr_covers G1 tn1 root t1 span` by
     (drule copy_static_fields >> strip_tac >>
      gvs[ALL_DISTINCT, ptr_covers_def, lookup_var_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
+    metis_tac[storage_copy_static_allocas_below_fmp] >>
   irule storage_copy_destination_chunk_ptr >>
   fs[ALL_DISTINCT] >> simp[] >>
   conj_tac >-
@@ -805,6 +818,8 @@ Resume storage_copy_body_path_ptr[increment_and_assemble]:
      qpat_assum `copy_static t1 = copy_static s`
        (mp_then Any strip_assume_tac copy_static_fields) >>
      fs[ALL_DISTINCT] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t2` by
+    metis_tac[storage_copy_static_allocas_below_fmp] >>
   `?G3 tn3 t3 u3.
     gas_path_ptr D 0 ctx fn PG G2 tn2 t2 0 G3 tn3 (OK t3) /\
     run_inst_seq [mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
@@ -934,7 +949,7 @@ Theorem storage_copy_backedge_path_ptr:
   gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
   ~t.vs_halted /\ lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME (mk_inst id JMP [Label hdr] []) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   copy_prefix loc a b n sbase k t /\ ptr_covers G' tn' root t span ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK (jump_to hdr t)) /\
   copy_prefix loc a b n sbase k (jump_to hdr t) /\

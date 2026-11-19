@@ -147,7 +147,8 @@ Resume method_id_runtime_full_suffix[cut]:
       ghost_inv_at (DF H) lo d cenv cx mid Gh tnh hashed /\
       ghost_kept_at lo cenv mid sm G tn s Gh tnh)` by
     (Cases_on `is_bytestring_type (expr_type e)`
-     >- (drule_all method_id_hash_dynamic_full_run >>
+     >- (`ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+         drule_all method_id_hash_dynamic_full_run >>
          disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
          qexistsl [`u`, `Gh`, `tnh`, `bs`] >> simp[] >>
          conj_tac >- (rpt strip_tac >> Cases_on `entry` >> metis_tac[]) >>

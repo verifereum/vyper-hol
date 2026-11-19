@@ -35,10 +35,12 @@ Theorem bop_in_literal_clean_uniform:
       op_taint tn' (Var p) = op_taint tn (Var p))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all literal_typed_clean_run >>
   disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
   qexistsl_tac [`u`,`G'`,`tn'`] >> simp[] >>
   map_every qx_gen_tac [`D`,`k`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all literal_typed_clean_run >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   `G' = G'' /\ tn' = tn''` by

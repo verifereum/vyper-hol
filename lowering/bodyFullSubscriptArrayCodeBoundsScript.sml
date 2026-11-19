@@ -71,6 +71,7 @@ Proof
    (!x. len = Var x ==> not_fresh_at sa x)` by metis_tac[] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
                 ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by fs[EVERY_CONJ] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (array_bounds_check_nonalias_uniform |> Q.INST [`lo` |-> `0`]) >>
   disch_then (qspecl_then [`{}`, `PG`]
     (qx_choosel_then [`t`, `j0`, `unused_G`, `unused_tn`] strip_assume_tac)) >>

@@ -110,6 +110,7 @@ Proof
      goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
      simp[] >> metis_tac[]) >>
   `!z. z IN {z | not_fresh_at sa z} ==> not_fresh_at sa z` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_binop_success_path >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >>

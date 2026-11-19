@@ -116,7 +116,9 @@ Proof
   `eval_operand value s1 = SOME w /\ op_taint tn1 value = {}` by
     (Cases_on `value` >> gvs[eval_operand_def, op_taint_def,
       venom_state_component_equality]) >>
-  gvs[] >> drule_at (Pat `emit_void MSTORE _ _ = _`)
+  gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
+  drule_at (Pat `emit_void MSTORE _ _ = _`)
     reason_encoder_mstore_resources_ptr >>
   disch_then (drule_all_then strip_assume_tac) >>
   first_x_assum (qspecl_then [`PG`, `D`] strip_assume_tac) >>
