@@ -4,7 +4,6 @@ Ancestors
   gasFocusMakeSsaSuccessor gasFocusMakeSsaFinite gasFocusMakeSsaContext
   o1ContractMakeSsaSrc o1PassLift o1PassContract list
 
-(* Every direct ancestor is outside the NEW HELPER GUARD exclusion set. *)
 Theorem make_ssa_stage_gas_events_upto:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
