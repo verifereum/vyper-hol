@@ -16,7 +16,7 @@ Theorem bop_bytestring_digest_operational:
   op_taint tn h1 = {} /\ op_taint tn h2 = {} /\
   (!x. h1 = Var x ==> not_fresh_at sa x) /\
   (!x. h2 = Var x ==> not_fresh_at sa x) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?raw t Gf tnf.
@@ -52,7 +52,6 @@ Proof
      simp[bop_scalar_seq_def, mk_inst_def, not_fresh_at_def,
           ASCIInumbersTheory.toString_inj]) >>
   `!a. a IN {h1;h2} ==> op_prov G a = NONE /\ op_taint tn a = {}` by (rw[] >> simp[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (fn th => assume_tac th >>
     qspecl_then [`func`, `PG`, `ARB`] strip_assume_tac th) >>
