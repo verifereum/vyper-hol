@@ -21,7 +21,7 @@ Theorem len_full_compose:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\ ~ctx_has_dalloca ctx /\
     type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e) /\
     evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME pvt /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
@@ -72,7 +72,7 @@ Theorem len_full_compose:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\ ~ctx_has_dalloca ctx /\
     gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
       (eval_expr cx e) (es,s0,G0,tn0)
       (\H res ee G tn t. ?tv. res = INL tv /\

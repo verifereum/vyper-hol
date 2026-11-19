@@ -33,7 +33,7 @@ Theorem compile_copy_memory_origin_ptr_path:
   (n = 0 \/ w2n dw + n <= s.vs_alloca_next) /\
   (w2n sw + n <= w2n dw \/ w2n dw + n <= w2n sw) /\
   ptr_covers G tn xs s n /\ ptr_covers G tn xd s n /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -257,7 +257,7 @@ Theorem compile_store_memory_origin_ptr_path:
    w2n dw + type_memory_size dtv <= w2n sw) /\
   ptr_covers G tn xs s (type_memory_size stv) /\
   ptr_covers G tn xd s (type_memory_size dtv) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -337,7 +337,7 @@ Theorem compile_store_memory_word_origin_ptr_path:
   eval_operand src s = SOME (typed_val_to_w256 dtv v) /\ op_taint tn src = {} /\
   lookup_var xd s = SOME dw /\ w2n dw + 32 < dimword (:256) /\
   w2n dw + 32 <= s.vs_alloca_next /\ ptr_covers G tn xd s 32 /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
   fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

@@ -86,6 +86,7 @@ Proof
          `key`,`ut`,`iv`,`rt`,`opened`,`checked`,`ce'`,`last`,`fn`,`p`,`G`,`tn`]
         strip_assume_tac) >>
       `fn = func` by fs[] >> qpat_x_assum `fn = func` SUBST_ALL_TAC >>
+      `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp p` by simp[] >>
       qexistsl [`tvs`,`mincd`,`pay`,`opened`,`checked`,`p`,`G`,`tn`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
       >- simp[] >> suspend "registration")

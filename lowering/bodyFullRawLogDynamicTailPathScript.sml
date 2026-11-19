@@ -39,7 +39,7 @@ Theorem raw_log_dynamic_tail_path:
   fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ LENGTH ops < dimword (:256) /\
+  LENGTH ops < dimword (:256) /\
   EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) (data_op::ops) /\
   sa.cs_next_var <= sm.cs_next_var /\
   expr_type data = BaseT (BytesT (Dynamic cap)) /\
@@ -83,6 +83,11 @@ Proof
   >- (pop_assum (qx_choose_then `H0` assume_tac) >>
       qpat_assum `!H. valid_horizon _ _ _ _ ==> _`
         (qspec_then `H0` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+        (qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+         qpat_assum `stmt_state_rel H0 _ _ _ _ _ s`
+           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
       drule_all hash_dynamic_post_view >> strip_tac >>
       `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
         SOME (BaseTV (BytesT (Dynamic cap)))` by metis_tac[] >>
@@ -172,7 +177,7 @@ Theorem raw_log_dynamic_static_tail_path:
   fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ LENGTH ops < dimword (:256) /\
+  LENGTH ops < dimword (:256) /\
   EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) (data_op::ops) /\
   sa.cs_next_var <= sm.cs_next_var /\
   expr_type data = BaseT (BytesT (Dynamic cap)) /\
@@ -202,6 +207,11 @@ Proof
   >- (pop_assum (qx_choose_then `H0` assume_tac) >>
       qpat_assum `!H. valid_horizon _ _ _ _ ==> _`
         (qspec_then `H0` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+        (qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+         qpat_assum `stmt_state_rel H0 _ _ _ _ _ s`
+           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
       drule_all hash_dynamic_post_view >> strip_tac >>
       `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
         SOME (BaseTV (BytesT (Dynamic cap)))` by metis_tac[] >>

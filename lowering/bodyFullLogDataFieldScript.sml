@@ -109,7 +109,7 @@ Theorem log_field_store_origin_ptr_path:
   b <= w2n dw /\ w2n dw + type_memory_size dtv <= b + cap /\
   b + cap < dimword (:256) /\ b + cap <= s.vs_alloca_next /\
   ptr_covers G tn xd s (type_memory_size dtv) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -170,7 +170,7 @@ Theorem log_data_field_origin_ptr_path:
   not_fresh_at sa xb /\ lookup_var xb s = SOME bw /\
   ptr_covers G tn xb s cap /\ off + type_memory_size dtv <= cap /\
   w2n bw + cap < dimword (:256) /\ w2n bw + cap <= s.vs_alloca_next /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -224,9 +224,6 @@ Resume log_data_field_origin_ptr_path[add]:
 QED
 
 Resume log_data_field_origin_ptr_path[store]:
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
-    (gvs[typed_copy_state_frame_def, venom_state_component_equality,
-         allocas_below_fmp_def] >> metis_tac[]) >>
   mp_tac (Q.INST [`sa` |-> `s1`, `G` |-> `G1`, `tn` |-> `tn1`, `s` |-> `t1`,
     `xd` |-> `p`, `dw` |-> `n2w (w2n (bw:bytes32) + off)`,
     `b` |-> `w2n (bw:bytes32)`]
@@ -282,7 +279,7 @@ Theorem compile_log_store_data_origin_ptr_path:
   not_fresh_at sa xb /\ lookup_var xb s = SOME bw /\
   ptr_covers G tn xb s cap /\ off + type_memory_size_list dtvs <= cap /\
   w2n bw + cap < dimword (:256) /\ w2n bw + cap <= s.vs_alloca_next /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -356,9 +353,6 @@ Resume compile_log_store_data_origin_ptr_path[field]:
 QED
 
 Resume compile_log_store_data_origin_ptr_path[rest]:
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
-    (gvs[typed_copy_state_frame_def, venom_state_component_equality,
-         allocas_below_fmp_def] >> metis_tac[]) >>
   qpat_x_assum `type_memory_bytes cenv dty = _` (fn eq =>
     RULE_ASSUM_TAC (REWRITE_RULE [eq]) >> assume_tac eq) >>
   first_x_assum (qspecl_then [`dtys`, `dtvs`, `vs`, `off + type_memory_size dtv`,
