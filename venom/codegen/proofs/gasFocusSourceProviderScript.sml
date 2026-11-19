@@ -31,6 +31,15 @@ Ancestors lowerDloadSafetyKernel[qualified,ignore_grammar]
   gasFocusFmpCutSourceCall gasFocusFmpCutInvokePush gasFocusFmpCutInvokeOutputs
   gasFocusFmpCutSourceReturn gasFocusFmpCutInvokePop
   concretizePtrCoverageStaticMemReachability frameAllocationOwnership
+  gasFocusConcretizeEndpointCut gasFocusConcretizeHistoricalCut
+  o1CodeEndConcretizeRead o1LabelFlowMiddleConcretize o1LabelFlowMiddleFmp
+  concretizePtrChronologicalHistory concretizePtrPairedPrefix
+  concretizePtrStructuralTranscript concretizePtrStructuralTrace concretizePtrSourceOwnership
+  concretizePtrParamSupport concretizePtrRequestHistory
+  concretizePtrOperationalOpcodes concretizePtrChronologicalDemand
+  lowerDloadReachability lowerDloadRevertSuffix concretizeMemLocDefs
+  venomExecProofs pred_set passSharedDefs concretizeStepStructure
+  concretizePtrPairedFields unitLabelMapIdentity stepWriteFootprintBase
 
 (* Entry and source-point facts for the bounded FMP frame induction. *)
 Theorem focus_fmp_src_active[local]:
@@ -2163,6 +2172,93 @@ Proof
     simp[rich_listTheory.take_drop_partition] >>
   simp[Abbr `target`, EVERY_MEM, dftGasFromListReadingsTheory.trace_gas_append, MEM_APPEND]
 QED
+
+(* Reflect the selected scalar read after the paired history has been supplied. *)
+Theorem focus_concretize_cut_read[local]:
+  o1_ctx_shape C /\ o1_ctx_shape Ct /\ o1_ptr_safe_upto D lo n C V /\
+  (?R lp positions.
+    ptr_stage_placements Ct positions /\
+    !ht at. ptr_chrono_history V Ct ht at ==> gas_cut n V at.po_state ==>
+      (?h a done tokens registry births PT TG saved entries H calls ws.
+        ptr_paired_prefix R lp positions lo V C Ct
+          h a ht at done tokens registry births PT TG saved entries H calls ws /\
+        EVERY (\i. ~in_revert_forward (EL i h).po_fn (EL i h).po_state) done /\
+        a.po_inst.inst_opcode <> NOP /\
+        at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst) \/
+      (?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
+        revert_forward_pair bb i j /\
+        i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j)) /\
+  raw_reachable V Ct ft j t /\ gas_cut n V t /\
+  j.inst_opcode = CODECOPY /\ j.inst_operands = [dst; Var x; sz] /\
+  code_end_var ft x /\ eval_operand (Var x) t = SOME w ==>
+  ?f i s. raw_reachable V C f i s /\ gas_cut n V s /\
+    i.inst_opcode = CODECOPY /\ i.inst_operands = [dst; Var x; sz] /\
+    code_end_var f x /\ eval_operand (Var x) s = SOME w /\
+    s.vs_labels = t.vs_labels
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ptr_discipline_upto lo n C V` by fs[o1_ptr_safe_upto_def] >>
+  drule ptr_raw_reachable_frame >> strip_tac >>
+  drule ptr_reachable_has_chrono_history >> strip_tac >>
+  qpat_x_assum `!ht at. ptr_chrono_history _ _ ht at ==> _` drule >>
+  (impl_tac >- simp[ptr_observe_def]) >> strip_tac
+  >- suspend "paired" >>
+  suspend "corridor"
+QED
+
+Resume focus_concretize_cut_read[paired]:
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  `gas_cut n V (ptr_observe stk PG G tn ft j t).po_state` by simp[ptr_observe_def] >>
+  drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `MEM a.po_fn C.ctx_functions` by metis_tac[ptr_frame_context_membership] >>
+  `MEM a.po_inst (fn_insts a.po_fn)` by metis_tac[ptr_frame_operand_instructions] >>
+  `fn_shape_ok a.po_fn` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
+  `a.po_inst.inst_opcode <> ALLOCA` by
+    (strip_tac >> gvs[concretize_inst_with_positions_def, AllCaseEqs(),
+                     mk_nop_inst_def, mk_assign_inst_def, ptr_observe_def]) >>
+  `j = a.po_inst` by fs[ptr_observe_def, concretize_positions_unchanged] >>
+  `ptr_mixed_vars births positions TG a.po_taint a.po_fn ft
+     a.po_state t /\ a.po_state.vs_labels = t.vs_labels` by
+    (fs[ptr_paired_sample_def, ptr_observe_def] >> metis_tac[ptr_history_content_labels]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+     metis_tac[]) >>
+  drule_all ptr_source_ownership_erases_upto >> strip_tac >>
+  drule ptr_discipline_upto_fn_ptr_ok >> strip_tac >>
+  drule_all ptr_frame_current_static >> strip_tac >>
+  `FDOM a.po_prov SUBSET fn_pv P a.po_fn` by
+    (fs[ptr_static_support_def, SUBSET_DEF, FLOOKUP_DEF] >>
+     metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  `opaque_use_ok a.po_fn /\ fn_ptr_ok P a.po_fn` by fs[fn_shape_ok_def, EVERY_MEM] >>
+  `eval_operand (Var x) a.po_state = eval_operand (Var x) t` by
+    (irule code_end_concretize_read_value >> metis_tac[]) >>
+  `code_end_var (concretize_function_with_positions (lp a.po_fn) a.po_fn) x` by
+    (fs[ptr_paired_code_def, ptr_observe_def] >> metis_tac[code_end_var_same_blocks]) >>
+  `code_end_var a.po_fn x` by metis_tac[concretize_code_end_backward] >>
+  qexistsl [`a.po_fn`, `a.po_inst`, `a.po_state`] >> simp[] >>
+  metis_tac[ld_frame_reachable_raw]
+QED
+
+Resume focus_concretize_cut_read[corridor]:
+  fs[ptr_observe_def] >>
+  drule raw_reachable_active >>
+  rewrite_tac[active_inst_def] >>
+  disch_then (qx_choose_then `active_bb` strip_assume_tac) >>
+  `MEM ft Ct.ctx_functions` by metis_tac[ptr_frame_context_membership] >>
+  `ALL_DISTINCT (fn_labels ft)` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
+  `lookup_block t.vs_current_bb ft.fn_blocks = SOME active_bb` by
+    (irule MEM_lookup_block >> fs[fn_labels_def]) >>
+  `active_bb = bb` by metis_tac[optionTheory.SOME_11] >>
+  `get_instruction bb t.vs_inst_idx = SOME j` by fs[get_instruction_def] >>
+  drule_all ld_revert_pair_suffix_opcode >> simp[]
+QED
+
+Finalise focus_concretize_cut_read
 
 (* Scratch statement for elaboration and independent review.
    Use the actual stopped six tables and their C8 chronology. Split a
