@@ -198,21 +198,46 @@ Proof
   conj_asm1_tac >-
     (qhdtm_x_assum `gas_outcome_full`
        (strip_assume_tac o SIMP_RULE bool_ss [gas_outcome_full_def])
-     >- (apply_intcall_return_rule intcall_return_noncompleted >>
+     >- (rename1 `gas_origin_ptr_focus (DF focus_horizon,_,_,_,_,_) _
+                    focus_marks (focus_leaf,focus_pg,focus_g,focus_tn,focus_finish)` >>
+         apply_intcall_return_rule intcall_return_noncompleted >>
          intcall_return_premises >>
-         qexists_tac `marks` >> disj1_tac >> simp[] >>
-         qexistsl_tac [`H'`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >> simp[])
-     >- (apply_intcall_return_rule intcall_return_normal_owned >>
+         qexists_tac `focus_marks` >> disj1_tac >> simp[] >>
+         qexistsl_tac
+           [`focus_horizon`,`focus_leaf`,`focus_pg`,`focus_g`,`focus_tn`,`focus_finish`] >>
+         simp[])
+     >- (rename1 `!tail. intcall_callee_src cx name mut nr ss
+                           (es1 with gas_obs :=
+                             gas_explicit return_marks entered.vs_gas_readings ++ tail) =
+                         (return_res,return_source with gas_obs := tail)` >>
+         rename1 `!h. valid_horizon cx st0 h return_source.storage_trace ==>
+                        gas_origin_ptr_path
+                          (DF h,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+                           MAP (op_prov G) arg_ops)
+                          (entered,FEMPTY,tn with t_var := FEMPTY)
+                          return_marks (return_r,return_g,return_tn) /\
+                        exit_result return_r /\
+                        intcall_callee_exit_full (DF,lo) h func cenv cx mut nr rtv
+                          result_count
+                          (if result_count = 0 /\ 0 < buf_size then SOME (HD argv) else NONE)
+                          sa.cs_next_id sm.cs_next_id t tn return_res
+                          (return_source with gas_obs := []) (return_g,return_tn) return_r` >>
+         apply_intcall_return_rule intcall_return_normal_owned >>
          intcall_return_premises >>
-         qexistsl_tac [`marks`,`res`,`ee`,`r`,`G'`,`tn'`] >> simp[] >>
-         rpt strip_tac >>
-         qpat_assum `!h. valid_horizon cx st0 h ee.storage_trace ==>
+         qexistsl_tac
+           [`return_marks`,`return_res`,`return_source`,`return_r`,`return_g`,`return_tn`] >>
+         simp[] >> rpt strip_tac >>
+         qpat_assum `!h. valid_horizon cx st0 h return_source.storage_trace ==>
                            gas_origin_ptr_path _ _ _ _ /\ _`
            (drule_then (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2))) >>
+     rename1 `gas_exempt_cert _ _ _ _ _ _ (exempt_error,exempt_source) _` >>
+     rename1 `gas_origin_ptr_focus (DF focus_horizon,_,_,_,_,_) _
+                focus_marks (focus_leaf,focus_pg,focus_g,focus_tn,focus_finish)` >>
      apply_intcall_return_rule intcall_return_noncompleted >>
-     intcall_return_premises >> qexists_tac `marks` >> disj2_tac >>
-     qexistsl_tac [`err`,`ee`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >>
-     simp[] >> qexists_tac `H'` >> simp[]) >>
+     intcall_return_premises >> qexists_tac `focus_marks` >> disj2_tac >>
+     qexistsl_tac
+       [`exempt_error`,`exempt_source`,`focus_leaf`,`focus_pg`,`focus_g`,`focus_tn`,`focus_finish`] >>
+     simp[] >> qexists_tac `focus_horizon` >> simp[]) >>
   match_mp_tac intcall_return_unwrap >>
   qexistsl_tac
     [`tops`, `tenv`, `ty`, `args`, `ret`, `rr`, `penv`,
