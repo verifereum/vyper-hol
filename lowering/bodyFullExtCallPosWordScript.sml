@@ -89,7 +89,8 @@ Theorem extcall_request_snapshot_word_owned_full:
       (~expr_has_effect e ==>
         (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
         (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)))
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   strip_tac >>
   irule gas_outcome_full_initial_domain >>

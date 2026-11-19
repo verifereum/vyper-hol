@@ -677,7 +677,8 @@ Theorem extcall_request_positional_packing_outcome:
       expr_sim_inv cenv cx env ee /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b))
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   map_every qid_spec_tac [`tn0`, `G0`, `s0`, `es`, `shadow_sa`, `sa`, `svs`] >>
   Induct_on `xs` >> rpt gen_tac >> strip_tac
@@ -844,7 +845,8 @@ Proof
       wb_frame cenv es ee sa s0 t /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b))
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)` by
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))` by
     (qunabbrev_tac `snap` >>
      Cases_on `is_word_type (expr_type e)`
      >- (`compile_snapshot_vv cenv F (ext_call_arg_value (lowered_value_type cenv e) vv)
