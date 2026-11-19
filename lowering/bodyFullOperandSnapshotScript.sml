@@ -7,7 +7,7 @@ Ancestors
 (* A materialized operand is in its own allocation, so later writes to
    live locals, including Pop's length update, leave it intact. *)
 Theorem compile_snapshot_vv_materialized_frame:
-  compile_snapshot_vv cenv T vv sa = (saved,sm) /\
+  compile_snapshot_vv cenv copy vv sa = (saved,sm) /\
   ~is_word_type (vv_type vv) /\ vv_operand saved = Var p /\
   evaluate_type (get_tenv cx) (vv_type vv) = SOME tv /\ val_wf tv v /\
   ptr_val_ok cx (vv_type vv) v (Var p) G tn s /\
@@ -17,16 +17,18 @@ Theorem compile_snapshot_vv_materialized_frame:
   (!n b len. local_region cenv es.scopes s n b len ==>
      w2n w + sz <= b \/ b + len <= w2n w) /\
   wb_frame cenv es ee cut s t /\ ghost_kept_at lo cenv es cut G tn s G' tn' ==>
-  compile_materialize_vv cenv (vv_type vv) vv sa = (Var p,sm) /\
-  saved = LocatedValue (vv_type vv) (mk_ptr (Var p) LocMemory) /\
+  (copy ==>
+   compile_materialize_vv cenv (vv_type vv) vv sa = (Var p,sm) /\
+   saved = LocatedValue (vv_type vv) (mk_ptr (Var p) LocMemory)) /\
   lookup_var p t = SOME w /\ FLOOKUP t.vs_allocas aid = SOME (w2n w,sz) /\
   mem_bytes_at (w2n w) sz t.vs_memory = mem_bytes_at (w2n w) sz s.vs_memory /\
   FLOOKUP G' p = FLOOKUP G p /\ ptr_val_ok cx (vv_type vv) v (Var p) G' tn' t
 Proof
   strip_tac >>
-  `compile_materialize_vv cenv (vv_type vv) vv sa = (Var p,sm) /\
+  `copy ==>
+   compile_materialize_vv cenv (vv_type vv) vv sa = (Var p,sm) /\
    saved = LocatedValue (vv_type vv) (mk_ptr (Var p) LocMemory)` by
-    (qpat_x_assum `compile_snapshot_vv _ _ _ _ = _` mp_tac >>
+    (strip_tac >> qpat_x_assum `compile_snapshot_vv _ _ _ _ = _` mp_tac >>
      Cases_on `compile_materialize_vv cenv (vv_type vv) vv sa` >>
      simp[compile_snapshot_vv_def, comp_bind_def, comp_return_def] >>
      strip_tac >> gvs[vv_operand_def, mk_ptr_def]) >>

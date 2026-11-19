@@ -85,8 +85,7 @@ Theorem extcall_slot_identity_unwrap[local]:
   read_result cx raw ee = (INL v,ee) /\
   vv_holds ce cx ty raw saved ee s /\
   ptr_vv_ok cx ty raw saved ee G tn s /\
-  (~is_word_type ty ==> ~is_word_type et) /\
-  vv_store_bound cx et ty ee raw saved s /\
+  vv_store_bound cx ty ty ee raw saved s /\
   evaluate_type (get_tenv cx) ty = SOME rt /\ val_wf rt v ==>
   src = vv_operand saved /\ sb = sa /\
   expr_val_rel cx ty v src s /\ ptr_val_ok cx ty v src G tn s /\
@@ -311,7 +310,7 @@ Theorem extcall_slot_unwrap[local]:
   storage_trace_domain cx st0 ee.storage_trace /\
   read_result cx raw ee = (INL v,ee) /\ vv_holds ce cx ty raw saved ee t /\
   ptr_vv_ok cx ty raw saved ee G tn t /\
-  vv_store_bound cx (expr_type e) ty ee raw saved t /\
+  vv_store_bound cx ty ty ee raw saved t /\
   ((case saved of
      StackValue tag op0 => ~is_word_type ty
    | LocatedValue tag p => p.ptr_location = LocMemory) ==>
@@ -401,7 +400,7 @@ Theorem extcall_saved_slot_prepare_all_dead:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
-  compile_snapshot_vv ce F (ext_call_arg_value ty vv) sm = (saved,ss) /\
+  compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
   ((?tag op0. saved = StackValue tag op0) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location <> LocMemory /\
@@ -419,7 +418,7 @@ Theorem extcall_saved_slot_prepare_all_dead:
   storage_trace_domain cx st0 ee.storage_trace /\
   read_result cx raw ee = (INL v,ee) /\ vv_holds ce cx ty raw saved ee s /\
   ptr_vv_ok cx ty raw saved ee G tn s /\
-  vv_store_bound cx (expr_type e) ty ee raw saved s /\
+  vv_store_bound cx ty ty ee raw saved s /\
   ((case saved of
      StackValue tag op0 => ~is_word_type ty
    | LocatedValue tag p => p.ptr_location = LocMemory) ==>
@@ -470,7 +469,7 @@ Proof
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `ss` >> simp[] >>
      irule extcall_saved_operand_not_fresh >>
-     qexistsl [`ce`,`e`,`expr_type e`,`saved`,`si`,`sm`,`ty`,`vv`] >> simp[]) >>
+     qexistsl [`ce`,`copy`,`e`,`expr_type e`,`saved`,`si`,`sm`,`ty`,`vv`] >> simp[]) >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[storage_trace_domain_def] >>
   `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx fn ce cx ee s` by
@@ -585,7 +584,7 @@ Theorem extcall_saved_slot_prepare:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
-  compile_snapshot_vv ce F (ext_call_arg_value ty vv) sm = (saved,ss) /\
+  compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
   ((?tag op0. saved = StackValue tag op0) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location <> LocMemory /\
@@ -603,7 +602,7 @@ Theorem extcall_saved_slot_prepare:
   storage_trace_domain cx st0 ee.storage_trace /\
   read_result cx raw ee = (INL v,ee) /\ vv_holds ce cx ty raw saved ee s /\
   ptr_vv_ok cx ty raw saved ee G tn s /\
-  vv_store_bound cx (expr_type e) ty ee raw saved s /\
+  vv_store_bound cx ty ty ee raw saved s /\
   ((case saved of
      StackValue tag op0 => ~is_word_type ty
    | LocatedValue tag p => p.ptr_location = LocMemory) ==>

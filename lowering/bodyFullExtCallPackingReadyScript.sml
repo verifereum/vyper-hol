@@ -59,7 +59,7 @@ Theorem extcall_request_packing_ready:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env ee /\
   return_buf_frame d cenv se s /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!i. i < LENGTH xs ==>
-    ?e sv v raw si sm ss vv tv param_tv.
+    ?e sv v raw si sm ss vv tv param_tv copy.
       e = EL i xs /\ sv = EL i vals /\ v = EL i argvs /\
       arg_type_fits (lowered_value_type cenv e) (EL i arg_types) /\
       evaluate_type (get_tenv cx) (EL i arg_types) = SOME param_tv /\
@@ -69,7 +69,7 @@ Theorem extcall_request_packing_ready:
       type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size tv /\
       type_memory_size tv < 2**64 /\ value_has_type tv v /\
       compile_expr cenv (expr_type e) e si = (vv,sm) /\
-      compile_snapshot_vv cenv F
+      compile_snapshot_vv cenv copy
         (ext_call_arg_value (lowered_value_type cenv e) vv) sm = (sv,ss) /\
       ((?tag op0. sv = StackValue tag op0) \/
        (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
@@ -88,7 +88,7 @@ Theorem extcall_request_packing_ready:
       vv_holds cenv cx (lowered_value_type cenv e) raw sv ee s /\
       vv_at cenv cx (lowered_value_type cenv e) si ss ee raw sv s /\
       ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G tn s /\
-      vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw sv s /\
+      vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv s /\
       (!H. valid_horizon cx st0 H ee.storage_trace ==> vv_storage_live H cx sv ee s) /\
       ((case sv of StackValue tag op0 => ~is_word_type (lowered_value_type cenv e)
         | LocatedValue tag p => p.ptr_location = LocMemory) ==>
@@ -151,6 +151,11 @@ Theorem extcall_request_packing_ready:
     extcall_request_ready st0 ctx func cenv cx rt es sa s0 sp stat
       addr value gas ba.buf_operand off len cap target value_opt calldata
       hasdef def dt dopt ee t /\
+    (IS_SOME dopt /\ ~is_word_type dt ==>
+      ?w aid tv. eval_operand def t = SOME w /\
+        evaluate_type (get_tenv cx) dt = SOME tv /\
+        FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+        aid < sp.cs_next_id) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,Gf,tf)) /\
     alloca_history func t /\ allocas_from lo t /\
@@ -405,7 +410,8 @@ Resume extcall_request_packing_ready[nonempty]:
       disch_then (qx_choose_then `e` (qx_choose_then `sv` (qx_choose_then `v`
         (qx_choose_then `raw` (qx_choose_then `si` (qx_choose_then `smi`
         (qx_choose_then `ss` (qx_choose_then `vv` (qx_choose_then `tv`
-        (qx_choose_then `ptv` (REPEAT_TCL CONJUNCTS_THEN assume_tac))))))))))) >>
+        (qx_choose_then `ptv` (qx_choose_then `copy`
+          (REPEAT_TCL CONJUNCTS_THEN assume_tac)))))))))))) >>
       `EL i tys = lowered_value_type cenv e` by
         (qpat_assum `EL i tys = _` SUBST1_TAC >>
          qpat_assum `e = EL i xs` (SUBST1_TAC o SYM) >> REFL_TAC) >>
@@ -443,7 +449,7 @@ Resume extcall_request_packing_ready[nonempty]:
           conj_tac >- (drule_then ACCEPT_TAC targetPurePostTransportTheory.target_saved_operand_exists) >>
           qpat_assum `!H. valid_horizon _ _ H _ ==> vv_storage_live H _ sv _ s`
             (drule_then ACCEPT_TAC)) >>
-      qexistsl [`e`,`si`,`vv`,`smi`,`ss`,`raw`] >>
+      qexistsl [`e`,`si`,`vv`,`smi`,`ss`,`raw`,`copy`] >>
       rpt (conj_tac >- FIRST_PROVE [first_assum ACCEPT_TAC, REFL_TAC, decide_tac]) >>
       `(vv_location sv = SOME LocMemory ==> ~is_word_type (lowered_value_type cenv e)) /\
        (!tag p. sv = LocatedValue tag p ==> tag = lowered_value_type cenv e)` by
@@ -1309,6 +1315,20 @@ Resume extcall_request_packing_ready[nonempty]:
      first_assum ACCEPT_TAC) >>
   qpat_x_assum `EVERY (\p. op_taint tf p = {}) _`
     (strip_assume_tac o BETA_RULE o REWRITE_RULE [listTheory.EVERY_DEF]) >>
+  `IS_SOME dopt /\ ~is_word_type dt ==>
+    ?w aid tv. eval_operand def t = SOME w /\
+      evaluate_type (get_tenv cx) dt = SOME tv /\
+      FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+      aid < sp.cs_next_id` by
+    (strip_tac >>
+     `?dv. dopt = SOME dv` by metis_tac[optionTheory.IS_SOME_EXISTS] >>
+     pop_assum (qx_choose_then `dv` assume_tac) >>
+     qpat_assum `!dv. dopt = SOME dv /\ ~is_word_type dt ==> ptr_mem_ok cx dt dv def G tn s /\ _ /\ ?w aid tv. _`
+       (drule_all_then (qx_choosel_then [`w`,`aid`,`tv`] strip_assume_tac) o cj 3) >>
+     qexistsl_tac [`w`,`aid`,`tv`] >> simp[] >>
+     `aid < sp.cs_next_id` by decide_tac >>
+     qpat_assum `wb_frame cenv ee ee se s t`
+       (mp_tac o cj 2 o REWRITE_RULE [wb_frame_def]) >> simp[]) >>
   qexistsl [`bs ++ bytes`,`t`,`Gf`,`tf`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- (first_assum (ACCEPT_TAC o REWRITE_RULE [optionTheory.OPTION_BIND_EQUALS_OPTION]))

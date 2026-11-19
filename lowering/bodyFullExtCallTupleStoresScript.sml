@@ -73,7 +73,7 @@ QED
    unwrap cut. The runtime coverage of src does not imply freshness. *)
 Theorem extcall_tuple_slot_source_fresh[local]:
   compile_expr ce et e si = (vv,sm) /\ local_ptrs_reserved ce si /\
-  compile_snapshot_vv ce F (ext_call_arg_value ty vv) sm = (saved,ss) /\
+  compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
   ss.cs_next_var <= ca.cs_next_var /\
   emit_op ADD [Var root; Lit (n2w off)] ca = (dst,su) /\
   unwrap_value ce saved su = (src,cw) ==>
@@ -168,7 +168,7 @@ Theorem extcall_tuple_slot_run[local]:
   s.vs_current_bb = ca.cs_current_bb /\ s.vs_inst_idx = LENGTH ca.cs_current_insts /\
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
-  compile_snapshot_vv ce F (ext_call_arg_value ty vv) sm = (saved,ss) /\
+  compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
   ((?tag op0. saved = StackValue tag op0) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location <> LocMemory /\
@@ -184,7 +184,7 @@ Theorem extcall_tuple_slot_run[local]:
   type_memory_size tv < 2**64 /\ value_has_type tv v /\
   storage_trace_domain cx st0 ee.storage_trace /\
   read_result cx raw ee = (INL v,ee) /\ vv_holds ce cx ty raw saved ee s /\
-  ptr_vv_ok cx ty raw saved ee G tn s /\ vv_store_bound cx (expr_type e) ty ee raw saved s /\
+  ptr_vv_ok cx ty raw saved ee G tn s /\ vv_store_bound cx ty ty ee raw saved s /\
   ((case saved of StackValue tag op0 => ~is_word_type ty
     | LocatedValue tag p => p.ptr_location = LocMemory) ==>
     ptr_buf_ok ce e (vv_operand saved) G s) /\
@@ -686,7 +686,7 @@ QED
 Theorem extcall_tuple_saved_entry:
   vv_holds ce cx ty raw saved ee s /\ vv_at ce cx ty origin end_st ee raw saved s /\
   ptr_vv_ok cx ty raw saved ee G tn s /\
-  vv_store_bound cx (expr_type e) ty ee raw saved s /\
+  vv_store_bound cx ty ty ee raw saved s /\
   read_result cx raw ee = (INL v,ee) /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   (vv_location saved = SOME LocMemory ==> ~is_word_type ty) /\
   ((case saved of StackValue tag op0 => ~is_word_type ty
@@ -703,7 +703,7 @@ Theorem extcall_tuple_saved_entry:
   (!tag p. saved = LocatedValue tag p ==> tag = ty) ==>
   vv_holds ce cx ty raw saved ee q /\ vv_at ce cx ty origin end_st ee raw saved q /\
   ptr_vv_ok cx ty raw saved ee Gq tq q /\
-  vv_store_bound cx (expr_type e) ty ee raw saved q /\
+  vv_store_bound cx ty ty ee raw saved q /\
   ((case saved of StackValue tag op0 => ~is_word_type ty
       | LocatedValue tag p => p.ptr_location = LocMemory) ==>
        ptr_buf_ok ce e (vv_operand saved) Gq q)
@@ -972,9 +972,9 @@ Theorem extcall_store_values_joint_all_dead:
       type_memory_size (EL i tvs) < 2**64 /\ value_has_type (EL i tvs) (EL i vs) /\
       (!l. vv_operand (EL i svs) <> Label l) /\
       (!H. valid_horizon cx st0 H ee.storage_trace ==> vv_storage_live H cx (EL i svs) ee s) /\
-      ?e si vv sm ss raw.
+      ?e si vv sm ss raw copy.
         (EL i tys) = lowered_value_type ce e /\ compile_expr ce (expr_type e) e si = (vv,sm) /\
-        compile_snapshot_vv ce F (ext_call_arg_value (EL i tys) vv) sm = ((EL i svs),ss) /\
+        compile_snapshot_vv ce copy (ext_call_arg_value (EL i tys) vv) sm = ((EL i svs),ss) /\
         ((?tag op0. (EL i svs) = StackValue tag op0) \/
          (?p. (EL i svs) = LocatedValue (EL i tys) p /\
          ~is_word_type (EL i tys) /\
@@ -992,7 +992,7 @@ Theorem extcall_store_values_joint_all_dead:
         read_result cx raw ee = (INL (EL i vs),ee) /\ vv_holds ce cx (EL i tys) raw (EL i svs) ee s /\
         vv_at ce cx (EL i tys) si ss ee raw (EL i svs) s /\
         ptr_vv_ok cx (EL i tys) raw (EL i svs) ee G tn s /\
-        vv_store_bound cx (expr_type e) (EL i tys) ee raw (EL i svs) s /\
+        vv_store_bound cx (EL i tys) (EL i tys) ee raw (EL i svs) s /\
         ((case (EL i svs) of StackValue tag op0 => ~is_word_type (EL i tys)
           | LocatedValue tag p => p.ptr_location = LocMemory) ==>
          ptr_buf_ok ce e (vv_operand (EL i svs)) G s)) ==>
@@ -1036,7 +1036,7 @@ Resume extcall_store_values_joint_all_dead[head]:
   disch_then (REPEAT_TCL CONJUNCTS_THEN (fn th =>
     let val choose = qx_choose_then `e` (qx_choose_then `si` (qx_choose_then `vv`
           (qx_choose_then `sm` (qx_choose_then `ss` (qx_choose_then `raw`
-            (REPEAT_TCL CONJUNCTS_THEN assume_tac))))))
+          (qx_choose_then `copy` (REPEAT_TCL CONJUNCTS_THEN assume_tac)))))))
     in choose th ORELSE assume_tac th end)) >>
   drule_all extcall_tuple_cons_cuts >>
   disch_then (qx_choose_then `dst` (qx_choose_then `su` (qx_choose_then `src`
@@ -1107,7 +1107,7 @@ Resume extcall_store_values_joint_all_dead[tail_input]:
   disch_then (REPEAT_TCL CONJUNCTS_THEN (fn th =>
     let val choose = qx_choose_then `ei` (qx_choose_then `sii` (qx_choose_then `vvi`
           (qx_choose_then `smi` (qx_choose_then `ssi` (qx_choose_then `ri`
-            (REPEAT_TCL CONJUNCTS_THEN assume_tac))))))
+          (qx_choose_then `copy'` (REPEAT_TCL CONJUNCTS_THEN assume_tac)))))))
     in choose th ORELSE assume_tac th end)) >>
   `!x. vv_operand saved = Var x ==> not_fresh_at ssi x` by
     (gen_tac >> disch_tac >>
@@ -1140,7 +1140,7 @@ Resume extcall_store_values_joint_all_dead[tail_input]:
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[vv_location_def]) >>
   `vv_holds ce cx tyi ri saved ee m /\ vv_at ce cx tyi sii ssi ee ri saved m /\
    ptr_vv_ok cx tyi ri saved ee Gm tm m /\
-   vv_store_bound cx (expr_type ei) tyi ee ri saved m /\
+   vv_store_bound cx tyi tyi ee ri saved m /\
    ((case saved of StackValue tag op0 => ~is_word_type tyi
        | LocatedValue tag p => p.ptr_location = LocMemory) ==>
         ptr_buf_ok ce ei (vv_operand saved) Gm m)` by
@@ -1152,7 +1152,7 @@ Resume extcall_store_values_joint_all_dead[tail_input]:
      conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl [`DF H0`,`G`,`H0`,`ctx`,`cut`,`d`,`fn`,`lo`,`s`,`tn`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qexistsl [`ei`,`sii`,`vvi`,`smi`,`ssi`,`ri`] >>
+  qexistsl [`ei`,`sii`,`vvi`,`smi`,`ssi`,`ri`,`copy'`] >>
   simp[] >> decide_tac
 QED
 
@@ -1247,9 +1247,9 @@ Theorem extcall_store_values_joint:
       type_memory_size (EL i tvs) < 2**64 /\ value_has_type (EL i tvs) (EL i vs) /\
       (!l. vv_operand (EL i svs) <> Label l) /\
       (!H. valid_horizon cx st0 H ee.storage_trace ==> vv_storage_live H cx (EL i svs) ee s) /\
-      ?e si vv sm ss raw.
+      ?e si vv sm ss raw copy.
         (EL i tys) = lowered_value_type ce e /\ compile_expr ce (expr_type e) e si = (vv,sm) /\
-        compile_snapshot_vv ce F (ext_call_arg_value (EL i tys) vv) sm = ((EL i svs),ss) /\
+        compile_snapshot_vv ce copy (ext_call_arg_value (EL i tys) vv) sm = ((EL i svs),ss) /\
         ((?tag op0. (EL i svs) = StackValue tag op0) \/
          (?p. (EL i svs) = LocatedValue (EL i tys) p /\
          ~is_word_type (EL i tys) /\
@@ -1267,7 +1267,7 @@ Theorem extcall_store_values_joint:
         read_result cx raw ee = (INL (EL i vs),ee) /\ vv_holds ce cx (EL i tys) raw (EL i svs) ee s /\
         vv_at ce cx (EL i tys) si ss ee raw (EL i svs) s /\
         ptr_vv_ok cx (EL i tys) raw (EL i svs) ee G tn s /\
-        vv_store_bound cx (expr_type e) (EL i tys) ee raw (EL i svs) s /\
+        vv_store_bound cx (EL i tys) (EL i tys) ee raw (EL i svs) s /\
         ((case (EL i svs) of StackValue tag op0 => ~is_word_type (EL i tys)
           | LocatedValue tag p => p.ptr_location = LocMemory) ==>
          ptr_buf_ok ce e (vv_operand (EL i svs)) G s)) ==>

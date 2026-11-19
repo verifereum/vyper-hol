@@ -96,14 +96,15 @@ Proof
   disch_then (qspecl_then [`explicit`,`PG`] ACCEPT_TAC)
 QED
 
-Theorem extcall_kwarg_default_owned_lookup_full:
+Theorem extcall_operand_materialized_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
-  ~is_word_type rt /\ ~is_word_type (expr_type e) /\
-  compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
-  compile_ext_call_kwarg compile_expr cenv rt EKDefault (gas_shadow_expr e)
-    shadow_sa = ((op,dt),shadow_sb) /\
+  expr_body_pre cenv cx env e es /\
+  ~is_word_type (expr_type e) /\ dt = lowered_value_type cenv e /\
+  compile_expr cenv (expr_type e) e sa = (vv,sm) /\
+  compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
+  compile_materialize_vv cenv dt vv sm = (op,sb) /\
+  compile_materialize_vv cenv dt vv shadow_sm = (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -141,28 +142,23 @@ Theorem extcall_kwarg_default_owned_lookup_full:
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
         lookup_var x t = SOME w) /\
-      return_buf_frame d cenv sb t /\ pure_frame cenv func es sa s0 t /\
-      (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
-      (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
+      return_buf_frame d cenv sb t /\ wb_frame cenv es ee sa s0 t /\
+      (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
+      (~expr_has_effect e ==>
+        (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
+        (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)) /\
+      (?x. op = Var x) /\
       (?w aid tv. eval_operand op t = SOME w /\
          evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tv /\
          val_wf tv v /\
          FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
-         aid < sb.cs_next_id /\
+         aid = sm.cs_next_id /\ aid < sb.cs_next_id /\
          (!n b sz. local_region cenv ee.scopes t n b sz ==>
             regions_disjoint (w2n w) (type_memory_size tv) b sz)))
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `dt = lowered_value_type cenv e /\ ?vv sm.
-    compile_expr cenv (expr_type e) e sa = (vv,sm) /\
-    compile_materialize_vv cenv dt vv sm = (op,sb)` by
-    ((Cases_on `compile_expr cenv (expr_type e) e sa` >>
-     rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
-     Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv sm` >>
-     qpat_x_assum `compile_ext_call_kwarg _ _ _ _ e _ = _` mp_tac >>
-     simp[compile_ext_call_kwarg_def, comp_bind_def, comp_return_def] >> (metis_tac[compile_ext_call_kwarg_def, comp_bind_def, comp_return_def]))) >>
   gvs[] >>
   Cases_on `compile_alloc_buffer (type_memory_bytes cenv (lowered_value_type cenv e)) sm` >>
   rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
@@ -170,18 +166,12 @@ Proof
   rename1 `unwrap_value cenv vv mid = (src,sc)` >>
   Cases_on `compile_store_memory cenv src buf.buf_operand
     (lowered_value_type cenv e) (lowered_value_type cenv e) sc` >>
-  gvs[compile_materialize_vv_def, comp_bind_def, comp_ignore_bind_def,
-      comp_return_def, pairTheory.pair_case_thm] >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
-  rename1 `compile_expr _ _ (gas_shadow_expr e) shadow_sa = (sv,shadow_sm)` >>
-  `sv = vv /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`e`,`T`]
-       (cj 1 gas_shadow_compile_expr)) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
-  gvs[] >>
+  qpat_x_assum `compile_materialize_vv _ _ _ sm = _` mp_tac >>
+  simp[compile_materialize_vv_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def] >>
+  strip_tac >> gvs[] >>
   rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
-  rename1 `gas_shadow_state sb shadow_sb` >>
+  rename1 `compile_store_memory _ _ _ _ _ sc = ((),sb)` >>
   `ci_mono sa sm` by
     (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`e`,`sa`]
       (cj 1 ci_mono_compile_expr_sa)) >> simp[]) >>
@@ -203,13 +193,12 @@ Proof
   suspend "child"
 QED
 
-Resume extcall_kwarg_default_owned_lookup_full[child]:
-  `compile_materialize_vv cenv (lowered_value_type cenv e) vv shadow_sm =
-     (buf.buf_operand,shadow_sb)` by
-    (qpat_x_assum `compile_ext_call_kwarg _ _ _ _ (gas_shadow_expr e) _ = _` mp_tac >>
-     simp[compile_ext_call_kwarg_def, comp_bind_def, comp_return_def] >>
-     Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv shadow_sm` >>
-     simp[]) >>
+Resume extcall_operand_materialized_full[child]:
+  `gas_shadow_state sm shadow_sm` by
+    (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`e`,`T`]
+       (cj 1 gasShadowCompileTheory.gas_shadow_compile_expr)) >>
+     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
   `ci_mono shadow_sa shadow_sm` by
     (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`gas_shadow_expr e`,`shadow_sa`]
        (cj 1 ci_mono_compile_expr_sa)) >> simp[gasShadowTheory.gas_shadow_expr_type]) >>
@@ -233,7 +222,7 @@ Resume extcall_kwarg_default_owned_lookup_full[child]:
   suspend "bind"
 QED
 
-Resume extcall_kwarg_default_owned_lookup_full[bind]:
+Resume extcall_operand_materialized_full[bind]:
   irule gas_outcome_full_bind_all >>
   rpt conj_tac
   >~ [`storage_trace_frame (eval_expr _ _)`]
@@ -256,7 +245,7 @@ Resume extcall_kwarg_default_owned_lookup_full[bind]:
   suspend "read"
 QED
 
-Resume extcall_kwarg_default_owned_lookup_full[read]:
+Resume extcall_operand_materialized_full[read]:
   qx_genl_tac [`marks`,`res`,`ee`,`G1`,`tn1`,`s`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
@@ -284,7 +273,7 @@ Resume extcall_kwarg_default_owned_lookup_full[read]:
   metis_tac[exprSimUnwrapTheory.vv_post_failed_read]
 QED
 
-Resume extcall_kwarg_default_owned_lookup_full[typing]:
+Resume extcall_operand_materialized_full[typing]:
   `expr_body_pre cenv cx env e
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
   `bind (eval_expr cx e) (read_result cx)
@@ -298,19 +287,17 @@ Resume extcall_kwarg_default_owned_lookup_full[typing]:
   drule_all (REWRITE_RULE [ETA_AX] memory_rhs_read_post_typed) >>
   simp[vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
   disch_then (qx_choose_then `ptv` strip_assume_tac) >>
-  `post_value_type cenv e = expr_type e` by
-    (irule post_value_type_not_int_call >> rpt strip_tac >>
-     Cases_on `e = Call ty (IntCall fid) args drv` >> gvs[expr_has_effect_thm]) >>
-  `~is_word_type (post_value_type cenv e)` by simp[] >>
+  `arg_type_fits (lowered_value_type cenv e) (expr_type e)` by
+    metis_tac[expr_body_pre_lowered_fits] >>
+  `~is_word_type (post_value_type cenv e)` by
+    metis_tac[exprSimIfExpWidenedPhysicalTypeTheory.post_value_type_nonword] >>
   `type_memory_bytes cenv (post_value_type cenv e) = type_memory_size ptv /\
    type_memory_size ptv < 2 ** 64` by
     (drule body_post_type_allocation_bound >> disch_then (qspec_then `ptv` mp_tac) >> simp[]) >>
-  `arg_type_fits (lowered_value_type cenv e) (expr_type e)` by
-    metis_tac[expr_body_pre_lowered_fits] >>
   suspend "prefix"
 QED
 
-Resume extcall_kwarg_default_owned_lookup_full[prefix]:
+Resume extcall_operand_materialized_full[prefix]:
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
@@ -365,7 +352,7 @@ Resume extcall_kwarg_default_owned_lookup_full[prefix]:
   suspend "store"
 QED
 
-Resume extcall_kwarg_default_owned_lookup_full[store]:
+Resume extcall_operand_materialized_full[store]:
   `~is_word_type (lowered_value_type cenv e)` by
     metis_tac[arg_type_fits_word_type] >>
   `compile_store_memory cenv src (Var dst) (lowered_value_type cenv e)
@@ -401,7 +388,7 @@ Resume extcall_kwarg_default_owned_lookup_full[store]:
   simp[] >> suspend "post"
 QED
 
-Resume extcall_kwarg_default_owned_lookup_full[post]:
+Resume extcall_operand_materialized_full[post]:
   qpat_assum `expr_post H ctx func cenv cx e es sa sc s0 ee v src z`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [expr_post_def]) >>
   qpat_assum `typed_copy_state_frame sc _ _ z u`
@@ -426,7 +413,8 @@ Resume extcall_kwarg_default_owned_lookup_full[post]:
      simp[ptr_covers_def,ptr_buf_ok_def,eval_operand_def]) >>
   `sm.cs_next_id < mid.cs_next_id` by
     (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >>
-     simp[loweringShapeRulesTheory.emit_op_eq] >> strip_tac >> gvs[]) >>
+     simp[loweringShapeRulesTheory.emit_op_eq] >> strip_tac >>
+     qpat_assum `_ = mid` (fn th => simp[SYM th])) >>
   `sm.cs_next_id < sb.cs_next_id` by (fs[ci_mono_def] >> decide_tac) >>
   `!n b sz. local_region cenv ee.scopes u n b sz ==>
       regions_disjoint (w2n dw) (type_memory_size ltv) b sz` by
@@ -445,7 +433,7 @@ Resume extcall_kwarg_default_owned_lookup_full[post]:
        drule >> simp[]) >>
   Q_TAC (C SUBGOAL_THEN ASSUME_TAC)
     `?aid. FLOOKUP z.vs_allocas aid = SOME (w2n dw,type_memory_size ltv) /\
-       aid < sb.cs_next_id /\
+       aid = sm.cs_next_id /\ aid < sb.cs_next_id /\
        (!n b sz. local_region cenv ee.scopes u n b sz ==>
           regions_disjoint (w2n dw) (type_memory_size ltv) b sz)`
   >- (qexists_tac `sm.cs_next_id` >> simp[] >> first_assum ACCEPT_TAC) >>
@@ -454,7 +442,7 @@ Resume extcall_kwarg_default_owned_lookup_full[post]:
   suspend "frames"
 QED
 
-Resume extcall_kwarg_default_owned_lookup_full[frames]:
+Resume extcall_operand_materialized_full[frames]:
   conj_tac
   >- (irule place_typed_copy_alloca_state_frame >>
       qpat_assum `typed_copy_state_frame sc _ _ z u` (irule_at Any) >>
@@ -475,7 +463,7 @@ Resume extcall_kwarg_default_owned_lookup_full[frames]:
   simp[] >> suspend "exterior"
 QED
 
-Resume extcall_kwarg_default_owned_lookup_full[exterior]:
+Resume extcall_operand_materialized_full[exterior]:
   conj_tac >- fs[] >>
   `lo <= w2n dw` by
     (qpat_assum `allocas_from lo z` (mp_tac o REWRITE_RULE [ptrDisciplineTheory.allocas_from_def]) >>
@@ -524,7 +512,7 @@ Resume extcall_kwarg_default_owned_lookup_full[exterior]:
   suspend "ghost"
 QED
 
-Resume extcall_kwarg_default_owned_lookup_full[ghost]:
+Resume extcall_operand_materialized_full[ghost]:
   `!name b sz. local_region cenv es.scopes s0 name b sz ==>
      b+sz <= w2n dw \/ w2n dw + type_memory_size ltv <= b` by
     (rpt gen_tac >> strip_tac >>
@@ -552,30 +540,140 @@ Resume extcall_kwarg_default_owned_lookup_full[ghost]:
   simp[] >> suspend "purity"
 QED
 
-Resume extcall_kwarg_default_owned_lookup_full[purity]:
+Resume extcall_operand_materialized_full[purity]:
+  `wb_frame cenv es ee sa s0 z` by
+    (qpat_assum `expr_post H ctx func cenv cx e es sa sc s0 ee v src z`
+       (ACCEPT_TAC o MATCH_MP exprSimWordArgsTheory.expr_post_frame)) >>
+  `allocas_non_overlapping z` by
+    (qpat_assum `alloca_inv z`
+       (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [venomMemDefsTheory.alloca_inv_def])) >>
   conj_tac
-  >- (irule exprSimPropsTheory.pure_frame_buffer_tail >>
-      qexistsl_tac [`w2n dw`,`type_memory_size ltv`,
-        `mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_size ltv))] [dst]`,`z`] >>
+  >- (irule materialize_fresh_store_frame >>
+      qpat_assum `FLOOKUP z.vs_allocas sm.cs_next_id = SOME (_,type_memory_size ltv)`
+        (irule_at Any) >>
+      simp[] >> rpt conj_tac
+      >- (rpt strip_tac >>
+          qpat_assum `!name b sz. local_region cenv es.scopes s0 name b sz ==> _`
+            (drule_then mp_tac) >> simp[DISJ_COMM, arithmeticTheory.ADD_COMM])
+      >- (rpt strip_tac >>
+          qpat_assum `!x. not_fresh_at sc x ==> _ /\ _ /\ _`
+            (qspec_then `x` mp_tac) >> simp[]) >>
+      rpt strip_tac >>
+      qpat_assum `!a n. _ ==> mem_bytes_at a n u.vs_memory = _`
+        (qspecl_then [`off`,`len`] mp_tac) >> simp[arithmeticTheory.ADD_COMM]) >>
+  conj_tac
+  >- (strip_tac >>
+      MATCH_MP_TAC (Q.SPECL [`cenv`,`func`,`es`,`sa`,`s0`,`z`,`u`,
+        `mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_size ltv))] [dst]`,
+        `w2n (dw:bytes32)`,`type_memory_size ltv`] exprSimPropsTheory.pure_frame_buffer_tail) >>
       qpat_assum `MEM (mk_inst sm.cs_next_id ALLOCA _ _) _`
         (assume_tac o REWRITE_RULE [venomInstTheory.mk_inst_def]) >>
       simp[venomInstTheory.mk_inst_def] >>
-      reverse conj_tac
-      >- (qx_genl_tac [`off`,`len`] >> disch_tac >>
-          qpat_assum `!a n. _ ==> mem_bytes_at a n u.vs_memory = _`
-            (qspecl_then [`off`,`len`] mp_tac) >>
-          impl_tac
-          >- (qpat_assum `regions_disjoint off len _ _`
-                (mp_tac o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def]) >>
-              decide_tac) >>
-          disch_then ACCEPT_TAC) >>
-      qpat_assum `!name b sz. local_region cenv es.scopes s0 name b sz ==>
-        regions_disjoint (w2n dw) (type_memory_size ltv) b sz` ACCEPT_TAC) >>
-  qpat_assum `eval_expr cx e (es with gas_obs := _) = (INL tv,ee)`
-    (mp_then Any mp_tac effect_free_source_projection) >> simp[]
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      rpt strip_tac >>
+      qpat_assum `!a n. _ ==> mem_bytes_at a n u.vs_memory = _`
+        (qspecl_then [`off`,`len`] mp_tac) >>
+      qpat_assum `regions_disjoint off len _ _`
+        (mp_tac o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def]) >>
+      simp[arithmeticTheory.ADD_COMM]) >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_assum `eval_expr cx e (es with gas_obs := _) = (INL tv,ee)`
+        (mp_then Any mp_tac effect_free_source_projection) >> simp[]) >>
+  first_assum ACCEPT_TAC
 QED
 
-Finalise extcall_kwarg_default_owned_lookup_full
+Finalise extcall_operand_materialized_full
+
+Theorem extcall_kwarg_default_owned_lookup_full:
+  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
+  expr_body_pre cenv cx env e es /\
+  ~is_word_type rt /\ ~is_word_type (expr_type e) /\
+  compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
+  compile_ext_call_kwarg compile_expr cenv rt EKDefault (gas_shadow_expr e)
+    shadow_sa = ((op,dt),shadow_sb) /\
+  gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
+  MEM shadow_func shadow_ctx.ctx_functions /\
+  fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome_full
+    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+    (\H res ee G tn t. ?v. res = INL v /\ dt = lowered_value_type cenv e /\
+      stmt_state_rel H ctx func cenv cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
+      ptr_val_ok cx dt v op G tn t /\ ptr_mem_ok cx dt v op G tn t /\
+      ptr_buf_ok cenv e op G t /\
+      (!w. eval_operand op t = SOME w /\ type_memory_bytes cenv dt <> 0 ==>
+        w2n w + type_memory_bytes cenv dt <= t.vs_alloca_next) /\
+      (!x. op = Var x ==> not_fresh_at sb x) /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+        lookup_var x t = SOME w) /\
+      return_buf_frame d cenv sb t /\ wb_frame cenv es ee sa s0 t /\
+      (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
+      (~expr_has_effect e ==>
+        (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
+        (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)) /\
+      (?w aid tv. eval_operand op t = SOME w /\
+         evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tv /\
+         val_wf tv v /\
+         FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+         aid < sb.cs_next_id /\
+         (!n b sz. local_region cenv ee.scopes t n b sz ==>
+            regions_disjoint (w2n w) (type_memory_size tv) b sz)))
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
+Proof
+  strip_tac >>
+  Cases_on `compile_expr cenv (expr_type e) e sa` >>
+  rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
+  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  rename1 `compile_expr _ _ (gas_shadow_expr e) shadow_sa = (sv,shadow_sm)` >>
+  `sv = vv` by
+    (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`e`,`T`]
+       (cj 1 gas_shadow_compile_expr)) >>
+     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+  Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv sm` >>
+  Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv shadow_sm` >>
+  gvs[compile_ext_call_kwarg_def, comp_bind_def, comp_return_def] >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  irule_at Any (Q.INST [`sa` |-> `sa`, `sm` |-> `sm`,
+      `shadow_sa` |-> `shadow_sa`, `shadow_sm` |-> `shadow_sm`]
+    extcall_operand_materialized_full) >>
+  qpat_assum `compile_materialize_vv _ _ _ sm = _` (irule_at Any) >>
+  qpat_assum `compile_materialize_vv _ _ _ shadow_sm = _` (irule_at Any) >>
+  qpat_assum `body_inv _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `gas_shadow_function _ _` (irule_at Any) >>
+  qpat_assum `return_buf_frame _ _ sa s0` (irule_at Any) >>
+  simp[] >> qexists_tac `shadow_sa` >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >> qexists_tac `v` >> simp[] >>
+  qexists_tac `sm.cs_next_id` >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
 
 (* Project away allocation ownership for callers that only save the operand. *)
 Theorem extcall_kwarg_default_lookup_full:
@@ -629,9 +727,10 @@ Theorem extcall_kwarg_default_lookup_full:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  disch_then (mp_tac o MATCH_MP extcall_kwarg_default_owned_lookup_full) >>
-  disch_tac >> irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-  goal_assum (drule_at Any) >> BETA_TAC >>
+  strip_tac >> drule_all extcall_kwarg_default_owned_lookup_full >>
+  disch_then (qspec_then `PG` assume_tac) >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  pop_assum (irule_at Any) >> BETA_TAC >>
   conj_tac >- (rpt gen_tac >> strip_tac >> qexists `v` >> simp[]) >> simp[]
 QED
 
@@ -685,8 +784,8 @@ Theorem extcall_kwarg_default_full:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  disch_then (mp_tac o MATCH_MP extcall_kwarg_default_lookup_full) >>
-  disch_tac >> irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-  goal_assum (drule_at Any) >> BETA_TAC >>
+  disch_then (assume_tac o MATCH_MP extcall_kwarg_default_lookup_full) >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  pop_assum (irule_at Any) >> BETA_TAC >>
   conj_tac >- (rpt gen_tac >> strip_tac >> qexists `v` >> simp[]) >> simp[]
 QED

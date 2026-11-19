@@ -62,13 +62,11 @@ Theorem request_stage_source_boundary[local]:
   expr_type (HD args) = BaseT AddressT /\
   arg_types_fit (MAP expr_type (TAKE (LENGTH ats) (TL args))) ats /\
   MAP expr_type (DROP (1 + LENGTH ats) args) = MAP (ext_call_kw_type rt) opts /\
-  EVERY (\e. ~expr_has_effect e) (DROP 1 args) /\
   (!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st)
 Proof
   rw[exprSimHypsDefsTheory.expr_body_pre_def,
-     cj 13 vyperTypeSystemTheory.well_typed_expr_def]
-  >- metis_tac[supportedExprTraverseTheory.call_operands_effect_extcall_tail] >>
+     cj 13 vyperTypeSystemTheory.well_typed_expr_def] >>
   gvs[exprSimHypsDefsTheory.byte_widths_expr_def, allocLimitsTheory.alloc_limits_expr_def,
       vyperTypeCallGraphTheory.int_calls_expr_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
@@ -217,6 +215,11 @@ Theorem extcall_request_full:
       addr value gas buf off len
       (abi_size_bound cenv.ce_struct_fields (if needs_external_call_wrap rt then TupleT [rt] else rt))
       target value_opt calldata hasdef def dt (ext_call_kwarg EKDefault opts kws) ee t /\
+    (IS_SOME (ext_call_kwarg EKDefault opts kws) /\ ~is_word_type dt ==>
+      ?w aid tv. eval_operand def t = SOME w /\
+        evaluate_type (get_tenv cx) dt = SOME tv /\
+        FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+        aid < sp.cs_next_id) /\
     alloca_history func t /\ allocas_from lo t /\ lo <= t.vs_alloca_next /\
     s0.vs_alloca_next <= t.vs_alloca_next /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==> ghost_inv_at (DF H) lo d cenv cx ee G tn t) /\
@@ -320,9 +323,6 @@ Proof
   >- (rpt strip_tac >> first_x_assum irule >>
       metis_tac[rich_listTheory.MEM_TAKE, markerTheory.Abbrev_def]) >>
   conj_tac
-  >- (simp[Abbr `xs`, Abbr `kw_es`] >>
-      pure_asm_rewrite_tac[GSYM listTheory.EVERY_APPEND, listTheory.TAKE_DROP]) >>
-  conj_tac
   >- (rpt gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
            vyperStorageTraceTheory.storage_trace_frame_ext_call]) >>
@@ -332,12 +332,6 @@ Proof
   `!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e st` by
     (simp[Abbr `xs`] >> metis_tac[rich_listTheory.MEM_TAKE]) >>
-  `expr_sim_inv cenv cx env ee` by
-    (`EVERY (\e. !st. expr_sim_inv cenv cx env st ==>
-                     expr_body_pre cenv cx env e st) xs` by
-        (simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
-     `expr_sim_inv cenv cx env (mid with gas_obs := obs2)` by simp[] >>
-     drule_all (cj 1 abiEncodeArgsTypingTheory.abi_encode_args_success_typed) >> simp[]) >>
   `!e st. MEM e kw_es /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e st` by
     (simp[Abbr `kw_es`] >> metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
@@ -375,7 +369,6 @@ Proof
   qpat_assum `compile_ext_call_kwargs _ _ rt opts kw_es s2 = _` (irule_at Any) >>
   qexistsl [`tops`,`shadow_s3`,`shadow_s2`,`shadow_func`,`env`,`d`] >>
   asm_rewrite_tac[] >> simp[] >>
-  conj_tac >- (simp[Abbr `kw_es`] >> irule rich_listTheory.EVERY_DROP >> simp[]) >>
   conj_tac >- (rpt gen_tac >> Cases_on `res` >>
     simp[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_def, expr_exit_def]) >>
   qx_genl_tac [`kw_marks`,`kw_res`,`ke`,`G3`,`tn3`,`z`] >> strip_tac >>
@@ -401,11 +394,6 @@ Proof
   `!H. valid_horizon cx st0 H ke.storage_trace ==>
        valid_horizon cx st0 H ee.storage_trace` by
     metis_tac[gasOutcomeFullTheory.valid_horizon_append] >>
-  `ke with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
-   ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>` by
-    (qpat_assum `ee with <|outcomes := NONE; requests := []; gas_obs := []; storage_trace := []|> = _` mp_tac >>
-     qpat_assum `ke with <|outcomes := NONE; requests := []; gas_obs := []; storage_trace := []|> = _` mp_tac >>
-     simp[vyperStateTheory.evaluation_state_component_equality] >> metis_tac[]) >>
   `!H. valid_horizon cx st0 H ke.storage_trace ==>
        stmt_state_rel H ctx func cenv cx ke z /\
        storage_well_formed_on cx ke (FST H) /\
@@ -508,9 +496,9 @@ Proof
     drule >> simp[]) >>
   `!x. not_fresh_at s2 x ==> not_fresh_at s3 x` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `pure_frame cenv func ee s2 u zg` by
-    (irule (iffRL loweringPostsTheory.pure_frame_state_cong) >> simp[] >>
-     qexists `z` >> simp[]) >>
+  `wb_frame cenv ee ke s2 u zg` by
+    (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
+     qexistsl_tac [`s3`,`z`] >> simp[]) >>
   `ghost_kept_at lo cenv ee s2 G2 tn2 u Gg tng` by
     (pure_rewrite_tac[bodyPtrDefsTheory.ghost_kept_at_def] >>
      qpat_assum `tng.t_mem = tn3.t_mem` (fn th => pure_rewrite_tac[th]) >>
@@ -535,7 +523,22 @@ Proof
     (gen_tac >> disch_tac >> conj_tac >- simp[] >>
      qpat_assum `!H. valid_horizon _ _ H ke.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
        drule >> simp[]) >>
+  `~exprs_can_mutate cenv kw_es ==>
+     ke.scopes = ee.scopes /\ ke.immutables = ee.immutables /\
+     (!tr. get_storage cx ke tr = get_storage cx ee tr)` by
+    (strip_tac >>
+     `EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+        (int_calls_exprs kw_es)` by
+       (simp[bodyStorageCasesTheory.body_exprs_main_calls_every, listTheory.EVERY_MEM] >>
+        rpt strip_tac >>
+        `expr_body_pre cenv cx env e ee` by metis_tac[] >>
+        fs[exprSimHypsDefsTheory.expr_body_pre_def, bodySimTheory.body_inv_def,
+           listTheory.EVERY_MEM] >> metis_tac[]) >>
+     drule_all targetPureWalkSourceTheory.nonmutating_exprs_source_frame >>
+     simp[vyperMachineFrameTheory.machine_frame_def] >> strip_tac >>
+     gen_tac >> Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
   mp_tac (Q.INST [`sa` |-> `s1`, `sb` |-> `s2`, `se` |-> `s5`, `svs` |-> `av`,
+           `kw_es` |-> `kw_es`, `env` |-> `env`,
            `pos` |-> `ee`, `ee` |-> `ke`, `t` |-> `zg`, `Gp` |-> `G2`,
            `tp` |-> `tn2`, `G` |-> `Gg`, `tn` |-> `tng`]
     extcall_keyword_packing_rows) >>
@@ -639,8 +642,6 @@ Proof
     (qspec_then `pack_h` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `EVERY (\e. ~expr_has_effect e) kw_es` by
-    (simp[Abbr `kw_es`] >> irule rich_listTheory.EVERY_DROP >> simp[]) >>
   `LENGTH vs = LENGTH ats` by
     (qpat_assum `eval_exprs cx xs _ = (INL vs,ee)`
        (mp_tac o MATCH_MP vyperInterpreterTheory.eval_exprs_length) >>
@@ -673,12 +674,6 @@ Proof
      >- (rpt strip_tac >> qpat_assum
            `!K. valid_horizon _ _ K ke.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
            drule >> simp[])
-     >~ [`ee.scopes = mid.scopes`]
-     >- (qpat_assum `ee with <|outcomes := NONE; requests := []; gas_obs := []; storage_trace := []|> = _`
-           (mp_tac o AP_TERM ``evaluation_state_scopes``) >> simp[])
-     >~ [`ke.scopes = ee.scopes`]
-     >- (qpat_assum `ke with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> = _`
-           (mp_tac o AP_TERM ``evaluation_state_scopes``) >> simp[])
      >~ [`rt = NoneT ==> _`]
      >- (qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _`
            (mp_tac o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def,
