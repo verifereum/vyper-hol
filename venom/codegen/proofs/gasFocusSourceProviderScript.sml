@@ -1366,6 +1366,142 @@ Proof
   simp[lowerDloadSafetyKernelTheory.ld_prefix_zero] >> metis_tac[]
 QED
 
+Theorem focus_opt_ld_advance_row[local]:
+  ^focus_opt_ld_advance lo P C C' vs Sigma names
+    stk PG G tn fn s A f fs N X p Ar g gn q ss j
+Proof
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `^focus_opt_ld_stable lo P Sigma names fs g Ar Ar (g::fs)` by
+    (drule_all (BETA_RULE lowerDloadReturnStableTheory.ld_stable_head_extend) >>
+     simp[] >> strip_tac >> metis_tac[]) >>
+  drule_all lowerDloadSafetyLocationsTheory.ld_envelope_successor_head >>
+  strip_tac >>
+  `active_inst fn next g.lf_src` by simp[] >>
+  `ld_sync lo P C vs stk PG G tn fn next g.lf_src q Ar (g::fs) N` by
+    (qpat_assum `!ni. active_inst fn ni g.lf_src ==> _`
+       (qspec_then `next` mp_tac) >> gvs[]) >>
+  `EVERY (\k. k.lf_src.vs_gas_readings = k.lf_tgt.vs_gas_readings /\
+    LENGTH g.lf_src.vs_gas_readings <= LENGTH k.lf_src.vs_gas_readings) (g::fs)` by
+    (simp[] >> fs[EVERY_MEM] >> metis_tac[LESS_EQ_TRANS]) >>
+  `ld_envelope g.lf_supply fn g.lf_src g.lf_src.vs_inst_idx Y q.vs_inst_idx` by gvs[] >>
+  irule (BETA_RULE focus_opt_ld_head_row) >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ld_envelope _ _ _ _ _ _`)) >>
+  gvs[ld_image_def] >> metis_tac[]
+QED
+
+(* The ordinary effect keeps the allocation map and takes only the given
+   step. An active target successor supplies the next source location. *)
+Theorem focus_opt_ld_effect_row[local]:
+  ld_sync lo P C vs stk PG G tn fn inst s t A (f::fs) N /\
+  ^focus_opt_ld_stable lo P Sigma names fs f A A (f::fs) /\
+  o1_ctx_shape C /\ ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  gn = ld_image f /\ gn = FST (lower_dload_function_supply f.lf_supply fn) /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] t.vs_inst_idx /\
+  step_inst fuel C' inst t = OK u /\
+  active_inst gn j (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+  ^focus_opt_ld_effect lo P C vs A f tn PG G inst s t u fuel ss H' /\
+  ss.vs_prev_bb = s.vs_prev_bb /\ u.vs_prev_bb = t.vs_prev_bb /\
+  s.vs_gas_readings = t.vs_gas_readings /\
+  EVERY (\a. a.lf_src.vs_gas_readings = a.lf_tgt.vs_gas_readings /\
+    LENGTH s.vs_gas_readings <= LENGTH a.lf_src.vs_gas_readings) fs ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j
+    (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `q = u with vs_inst_idx := SUC t.vs_inst_idx` >>
+  qabbrev_tac `s1 = ss with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `g = f with <|lf_src := s1; lf_tgt := q; lf_H := H';
+    lf_tv := (step_taint inst s ss tn).t_var|>` >>
+  drule ld_sync_active >> simp[HD] >> strip_tac >>
+  drule ld_sync_control >> strip_tac >>
+  `q.vs_current_bb = s.vs_current_bb /\
+   q.vs_inst_idx = t.vs_inst_idx + LENGTH [inst]` by simp[Abbr `q`, ADD1] >>
+  `?next Y. active_inst fn next s1 /\
+    ld_envelope f.lf_supply fn s1 (SUC s.vs_inst_idx) Y (SUC t.vs_inst_idx)` by
+    (drule_at (Pat `ld_envelope _ _ _ _ _ _`)
+       lowerDloadSafetyLocationsTheory.ld_envelope_successor_head >>
+     disch_then (qspecl_then [`j`,`ss`,`q`,`gn`] mp_tac) >>
+     simp[Abbr `s1`, ADD1, Excl "EL"] >> metis_tac[]) >>
+  `ld_vars P A g` by
+    (qabbrev_tac `g0 = f with <|lf_src := ss; lf_tgt := u; lf_H := H';
+        lf_tv := (step_taint inst s ss tn).t_var|>` >>
+     `g = g0 with <|lf_src := g0.lf_src with vs_inst_idx := SUC s.vs_inst_idx;
+                    lf_tgt := g0.lf_tgt with vs_inst_idx := SUC t.vs_inst_idx|>` by
+       simp[Abbr `g`, Abbr `g0`, Abbr `s1`, Abbr `q`] >>
+     simp[lowerDloadSafetyAdvanceTheory.ld_vars_inst_indices]) >>
+  `ld_sync lo P C vs stk PG (step_prov PG G inst ss) (step_taint inst s ss tn)
+     fn next s1 q A (g::fs) N /\ ld_global lo A (g::fs)` by
+    (drule lowerDloadSafetyAdvanceTheory.ld_sync_ordinary_advance >>
+     metis_tac[markerTheory.Abbrev_def]) >>
+  `ss.vs_gas_readings = q.vs_gas_readings` by fs[lowerDloadSafetyKernelTheory.ld_nonghost_def, Abbr `q`] >>
+  `LENGTH ss.vs_gas_readings <= LENGTH s.vs_gas_readings` by
+    (qspecl_then [`fuel`,`C`,`inst`,`s`] mp_tac
+       (CONJUNCT1 gasCountTheory.gas_count_suffix) >>
+     simp[gasCountTheory.gas_count_suffix_def, LENGTH_DROP]) >>
+  `!ni. active_inst fn ni g.lf_src ==>
+    ld_sync lo P C vs stk PG (step_prov PG G inst ss) (step_taint inst s ss tn)
+      fn ni g.lf_src g.lf_tgt A (g::fs) N` by
+    (simp[Abbr `g`] >> rpt strip_tac >>
+     `ni = next` by metis_tac[REWRITE_RULE[venomInstTheory.fn_labels_def]
+       fmpStageBlockSimCodeTheory.active_inst_unique] >> simp[]) >>
+  `^focus_opt_ld_R lo P C C' vs Sigma names gn j q` by
+    (BETA_TAC >> irule (BETA_RULE focus_opt_ld_advance_row) >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexistsl [`A`,`A`,`step_prov PG G inst ss`,`N`,`PG`,`[inst]`,
+               `f`,`fn`,`fs`,`g`,`t.vs_inst_idx`,`s`,`ss`,`stk`,`step_taint inst s ss tn`] >>
+     simp[Abbr `g`, Abbr `s1`] >> metis_tac[]) >>
+  pop_assum (mp_tac o BETA_RULE) >> simp[CONJ_ASSOC]
+QED
+
+(* These suppliers advance the actual next fetch, including a GAS read
+   whose remaining oracle may be shorter than the current row's. *)
+Theorem focus_opt_ld_simple_next[local]:
+  ^focus_opt_ld_row lo P C C' vs Sigma names gn ti t
+    stk PG G tn fn inst s t0 A f fs N [inst] p h /\
+  ALL_DISTINCT (fn_labels gn) /\
+  o1_ctx_shape C /\ o1_safe_upto D lo n C vs /\
+  (MEM inst.inst_opcode
+     [CALLER;ADDRESS;CALLVALUE;GAS;ORIGIN;GASPRICE;CHAINID;COINBASE;
+      TIMESTAMP;NUMBER;PREVRANDAO;GASLIMIT;BASEFEE;BLOBBASEFEE;
+      CALLDATASIZE;RETURNDATASIZE;CODESIZE] \/
+   (MEM inst.inst_opcode
+      [MUL;Div;Mod;SDIV;SMOD;Exp;ADDMOD;MULMOD;SLT;SGT;ISZERO;AND;OR;XOR;
+       NOT;SIGNEXTEND;BYTE;OFFSET;ADD;SUB;SHL;SHR;SAR] \/
+    MEM inst.inst_opcode [ASSIGN;RETPC_PARAM;PARAM]) \/
+   MEM inst.inst_opcode [LOG;SSTORE;TSTORE]) /\
+  step_inst fuel C' ti t = OK u /\
+  active_inst gn j (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+  gas_cut n vs (u with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j
+    (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `h = 0` by fs[] >> qpat_x_assum `h = 0` SUBST_ALL_TAC >>
+  qpat_x_assum `ld_prefix _ _ _ _ 0 _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [lowerDloadSafetyKernelTheory.ld_prefix_zero]) >>
+  `ti = inst` by fs[] >>
+  qpat_x_assum `ti = inst` SUBST_ALL_TAC >>
+  qpat_x_assum `t = t0` (SUBST_ALL_TAC o SYM) >>
+  `?bb. lookup_block t.vs_current_bb (ld_image f).fn_blocks = SOME bb /\
+        get_instruction bb t.vs_inst_idx = SOME inst` by
+    (irule lowerDloadPtrRawReachableTheory.active_inst_block_lookup >> metis_tac[]) >>
+  `active_inst (ld_image f) j (u with vs_inst_idx := SUC t.vs_inst_idx)` by metis_tac[] >>
+  qpat_x_assum `_ \/ _ \/ _` mp_tac >>
+  disch_then (DISJ_CASES_THEN2 assume_tac (DISJ_CASES_THEN assume_tac)) >>
+  MAP_FIRST (drule_all o BETA_RULE o REWRITE_RULE [LET_THM])
+    [gasFocusLowerDloadEnvironmentPointTheory.ld_focus_environment_point_next,
+     gasFocusLowerDloadArithmeticBindingPointTheory.ld_focus_arithmetic_binding_point_next,
+     gasFocusLowerDloadLogStorePointTheory.ld_focus_log_store_point_next] >>
+  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+  `gn = ld_image g` by (qpat_assum `g = _` (rewrite_tac o single) >> simp[ld_image_def]) >>
+  irule (BETA_RULE focus_opt_ld_head_row) >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ld_envelope _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem focus_row_visit_inverse[local]:
   !xs be.
     DROP be.vs_inst_idx bt.bb_instructions = xs /\
