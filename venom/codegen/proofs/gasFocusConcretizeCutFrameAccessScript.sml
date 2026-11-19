@@ -59,14 +59,14 @@ Proof
   simp[access_ok_def, taint_ok_def, about_to_revert_def] >> metis_tac[]
 QED
 
-Theorem focus_concretize_paired_frame_access[local]:
+Theorem focus_concretize_paired_frame_access_ptr_safe:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_initial_state_ok vs /\
   vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
-  o1_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
@@ -86,8 +86,7 @@ Theorem focus_concretize_paired_frame_access[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ fixed_region_reserved lo C /\
-   ptr_discipline_upto lo n C vs` by
-    fs[o1SafeUptoTheory.o1_safe_upto_def,o1SafeUptoTheory.o1_ptr_safe_upto_def] >>
+   ptr_discipline_upto lo n C vs` by fs[o1SafeUptoTheory.o1_ptr_safe_upto_def] >>
   drule concretizePtrChronologicalDemandTheory.ptr_frame_operand_instructions >> strip_tac >>
   drule frame_reachable_functions_member >> strip_tac >>
   `inst_wf a.po_inst /\ wf_function a.po_fn /\ fn_shape_ok a.po_fn /\
@@ -105,7 +104,7 @@ Proof
       fs[mk_assign_inst_def, mk_nop_inst_def, access_ok_def, taint_ok_def,
          source_memory_read_ranges_def, source_memory_write_ranges_def, op_taint_def]) >>
   `at.po_inst = a.po_inst` by simp[concretize_positions_unchanged] >>
-  drule_all focus_concretize_cut_ghost_endpoint >>
+  drule_all focus_concretize_cut_ghost_endpoint_ptr_safe >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `ptr_dalloca_ghost_sample _ _ _ _ _ a at`
     (strip_assume_tac o SIMP_RULE (srw_ss())
@@ -140,7 +139,7 @@ Proof
   suspend "taint"
 QED
 
-Resume focus_concretize_paired_frame_access[access]:
+Resume focus_concretize_paired_frame_access_ptr_safe[access]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   `lo <= eom` by
     (drule_all concretizePtrStageBoundsTheory.ptr_stage_fixed_region_bound >> simp[]) >>
@@ -227,7 +226,7 @@ Resume focus_concretize_paired_frame_access[access]:
   asm_rewrite_tac[] >> simp[]
 QED
 
-Resume focus_concretize_paired_frame_access[taint]:
+Resume focus_concretize_paired_frame_access_ptr_safe[taint]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   Cases_on `a.po_inst.inst_opcode = RETURNDATACOPY \/ a.po_inst.inst_opcode = REVERT`
   >- (`!op. MEM op a.po_inst.inst_operands ==> op_taint a.po_taint op = {}` by
@@ -296,9 +295,13 @@ Resume focus_concretize_paired_frame_access[taint]:
   gvs[]
 QED
 
-Finalise focus_concretize_paired_frame_access
+Finalise focus_concretize_paired_frame_access_ptr_safe[local]
 
-Theorem focus_concretize_cut_frame_access:
+(* Preserve the previous export: its [local] attribute on the suspended
+   declaration was ignored, so the old Finalise exported this name. *)
+Theorem focus_concretize_paired_frame_access:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_initial_state_ok vs /\
@@ -307,15 +310,45 @@ Theorem focus_concretize_cut_frame_access:
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ ptr_stage_placements C' positions /\
   (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
-  o1_ctx_shape C' ==>
-  !stk PG G tn fn inst s.
-    frame_reachable vs C' stk PG G tn fn inst s /\ gas_cut n vs s ==>
-    access_ok eom G fn inst s /\ taint_ok fn tn inst s
+  gas_cut n vs at.po_state /\
+  EVERY (\i. ~in_revert_forward (EL i h).po_fn (EL i h).po_state) done /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+    a.po_fn a.po_inst a.po_state /\
+  gas_cut n vs a.po_state /\
+  access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
+  taint_ok a.po_fn a.po_taint a.po_inst a.po_state ==>
+  access_ok eom at.po_prov at.po_fn at.po_inst at.po_state /\
+  taint_ok at.po_fn at.po_taint at.po_inst at.po_state
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all focus_concretize_cut_fields >> strip_tac >>
+  fs[o1SafeUptoTheory.o1_safe_upto_def] >>
+  drule_all focus_concretize_paired_frame_access_ptr_safe >> simp[]
+QED
+
+Theorem focus_concretize_cut_frame_access:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  o1_ptr_safe_upto D lo n C vs /\
+  mem_inv (\ctx fn inst s. gas_cut n vs s ==> dload_headroom_ok ctx fn inst s) C vs /\
+  (!fn inst s. raw_reachable vs C fn inst s /\ gas_cut n vs s ==>
+    raw_mem_ok C fn inst s /\ dload_offset_ok C fn inst s) /\
+  alloca_frontier_upto n C vs /\
+  EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) ==>
+  !stk PG G tn fn inst s. frame_reachable vs C' stk PG G tn fn inst s /\
+    gas_cut n vs s ==> access_ok eom G fn inst s /\ taint_ok fn tn inst s
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all focus_concretize_cut_fields_cut_headroom >> strip_tac >>
   `EVERY wf_function C'.ctx_functions /\
    EVERY (\fn. EVERY inst_wf (fn_insts fn)) C'.ctx_functions` by
     (fs[o1PassContractTheory.o1_ctx_shape_def,o1PassContractTheory.o1_fn_shape_def,
@@ -332,7 +365,7 @@ Proof
        (qspecl_then [`ht`,`at`] mp_tac) >> (impl_tac >- simp[]) >> strip_tac
      >- (disj1_tac >> drule_at
            (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-           focus_concretize_paired_frame_access >>
+           focus_concretize_paired_frame_access_ptr_safe >>
          metis_tac[]) >>
      disj2_tac >> metis_tac[]) >>
   `!ht at. ptr_chrono_history vs C' ht at /\ gas_cut n vs at.po_state /\
