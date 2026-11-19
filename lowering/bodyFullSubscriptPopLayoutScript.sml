@@ -330,7 +330,8 @@ Proof
   >- (Cases_on `tv` >> simp[value_has_type_def, type_memory_size_def] >>
       rename1 `ArrayTV etv bd` >> Cases_on `bd` >>
       simp[value_has_type_def, default_value_well_typed, type_memory_size_def] >>
-      rpt strip_tac >> gvs[] >> TRY (metis_tac[] >> NO_TAC) >>
+      rpt strip_tac >> gvs[]
+      >- metis_tac[] >>
       `type_memory_size etv + k * type_memory_size etv <= n * type_memory_size etv`
         by (ONCE_REWRITE_TAC [ADD_COMM] >>
             irule dynCopyMemoryTheory.array_copy_slot_bound >> first_assum ACCEPT_TAC) >>
@@ -340,8 +341,8 @@ Proof
   >- (Cases_on `ts` >> simp[value_has_type_def] >> PairCases_on `h` >>
       simp[value_has_type_def, type_memory_size_def] >> rpt strip_tac >> gvs[] >> decide_tac)
   >- (simp[value_has_type_def, MULT] >> rpt strip_tac >> gvs[] >> decide_tac)
-  >- (simp[value_has_type_def] >> rpt strip_tac >> gvs[] >>
-      TRY (metis_tac[] >> NO_TAC) >>
+  >- (simp[value_has_type_def] >> rpt strip_tac >> gvs[]
+      >~ [`_ <= _ (* g *)`] >- metis_tac[] >>
       `type_memory_size tv + k * type_memory_size tv <= n * type_memory_size tv`
         by (ONCE_REWRITE_TAC [ADD_COMM] >>
             irule dynCopyMemoryTheory.array_copy_slot_bound >> first_assum ACCEPT_TAC) >> decide_tac)

@@ -45,7 +45,7 @@ Proof
   `val_footprint (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) <> 0` by
     (mp_tac (Q.SPECL [`tv`,`cap`,`vs`] typedCopyLayoutPtrTheory.dynarray_length_footprint_contained) >> decide_tac) >>
   simp[] >> strip_tac >> disj1_tac >> qexistsl [`aid`,`b`,`sz`] >>
-  simp[] >> rpt conj_tac >> (decide_tac ORELSE metis_tac[])
+  simp[] >> rpt conj_tac >> metis_tac[]
 QED
 
 (* Success fields shared by an owned Value and an extended place, once
@@ -73,8 +73,7 @@ Proof
   >- (simp[vv_holds_def, mk_ptr_def] >> metis_tac[val_in_memory_word_type]) >>
   Cases_on `dst` >> gvs[op_prov_def] >>
   simp[ptr_vv_ok_def, ptr_mem_ok_def, ptr_buf_ok_def, mk_ptr_def,
-       vv_store_bound_def, lowered_value_type_def, expr_type_def] >>
-  rpt conj_tac >> rpt strip_tac >> (decide_tac ORELSE metis_tac[])
+       vv_store_bound_def, lowered_value_type_def, expr_type_def]
 QED
 
 (* The tail does not write the original variables, memory, or frame.
@@ -408,7 +407,7 @@ Proof
      disj2_tac >> disj1_tac >> qexistsl [`id`,`w2n row_word`,`ssz`] >>
      simp[Abbr `child`, local_region_def, local_val_at_def, local_place_at_def,
           local_path_at_def] >>
-     rpt conj_tac >> (decide_tac ORELSE metis_tac[])) >>
+     rpt conj_tac >> metis_tac[]) >>
   `w = row_word + n2w k` by
     (qpat_assum `w2n w = w2n row_word + k` (mp_tac o Q.AP_TERM `n2w : num -> 256 word`) >>
      rewrite_tac[GSYM word_add_n2w, n2w_w2n]) >>
