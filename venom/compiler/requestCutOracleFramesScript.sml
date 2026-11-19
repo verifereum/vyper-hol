@@ -144,6 +144,7 @@ Proof
     `PG`, `G`, `tn`, `fn`, `i`, `s with vs_outcomes := s.vs_outcomes ++ tail`,
     `ret`, `t with vs_outcomes := t.vs_outcomes ++ tail`,
     `s' with vs_outcomes := s'.vs_outcomes ++ tail`, `inst'`, `fuel`] frame_reachable_ret) >>
-  simp[merge_callee_outcome_update, bind_outputs_outcome_update, adopt_return_outcome_update] >>
+  simp[merge_callee_outcomes_update, bind_outputs_outcome_update,
+       adopt_return_outcomes_update] >>
   fs[active_inst_def] >> metis_tac[]
 QED

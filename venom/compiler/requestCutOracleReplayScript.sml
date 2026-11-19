@@ -194,39 +194,11 @@ Proof
   gvs[exec_ext_call_def, exec_delegatecall_def, exec_create_def, AllCaseEqs()]
 QED
 
-Theorem eval_phis_outcome_update:
-  !insts s os. eval_phis (s with vs_outcomes := os) insts =
-    exec_result_map (\t. t with vs_outcomes := os) (eval_phis s insts)
-Proof
-  Induct >> rpt gen_tac >> simp[eval_phis_def, exec_result_map_def] >>
-  Cases_on `h.inst_opcode = PHI` >> simp[exec_result_map_def] >>
-  `eval_one_phi (s with vs_outcomes := os) h = eval_one_phi s h` by
-    simp[eval_one_phi_def] >>
-  gvs[] >> Cases_on `eval_one_phi s h` >> gvs[exec_result_map_def] >>
-  PairCases_on `x` >> simp[] >>
-  first_x_assum (qspecl_then [`s`, `os`] assume_tac) >>
-  gvs[] >> Cases_on `eval_phis s insts` >> simp[exec_result_map_def, update_var_def]
-QED
-
 Theorem setup_callee_outcome_update:
   setup_callee fn args (s with vs_outcomes := os) =
     OPTION_MAP (\t. t with vs_outcomes := os) (setup_callee fn args s)
 Proof
   simp[setup_callee_def] >> IF_CASES_TAC >> simp[]
-QED
-
-Theorem merge_callee_outcome_update:
-  merge_callee_state (s with vs_outcomes := os) (t with vs_outcomes := ot) =
-    merge_callee_state s t with vs_outcomes := ot
-Proof
-  simp[merge_callee_state_def]
-QED
-
-Theorem adopt_return_outcome_update:
-  adopt_return_fmp ir (s with vs_outcomes := os) =
-    adopt_return_fmp ir s with vs_outcomes := os
-Proof
-  Cases_on `ir.iret_adopt_fmp` >> simp[adopt_return_fmp_def]
 QED
 
 Theorem bind_outputs_outcome_update:
