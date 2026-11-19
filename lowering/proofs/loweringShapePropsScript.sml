@@ -4517,7 +4517,16 @@ Theorem compile_as_wei_value_int_shape[local]:
 Proof
   strip_tac >> simp[builtinMiscTheory.compile_as_wei_value_int_def] >>
   Cases_on `scale = 1` >> simp[]
-  >- (irule shape_step_return >> simp[]) >>
+  >- (Cases_on `signed` >> simp[]
+      >- (qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+          `shape_stable P` by
+            (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+             mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+          shape_scalar_emit_bind_tac `P` `negative_op` (simp[Abbr `P`]) >>
+          shape_scalar_emit_bind_tac `P` `ok_op` all_tac >>
+          shape_scalar_assert_tac `P` >>
+          irule shape_step_return >> simp[Abbr `P`]) >>
+      irule shape_step_return >> simp[]) >>
   qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
   `shape_stable P` by
     (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
