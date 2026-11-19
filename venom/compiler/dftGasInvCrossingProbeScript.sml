@@ -2,7 +2,7 @@ Theory dftGasInvCrossingProbe
 Ancestors
   dftRunRel dftScheduleOrder venomEffects venomInst dftGasInvCallBoundary
   unitShapeDefs unitMemInv venomWf dftGasOracleDefs venomExecSemantics
-  contextCodegenRel codegenRel list
+  contextCodegenRel codegenRel venomExecProofs venomState list pred_set
 
 (* Syntactic cases, not the state-dependent nonempty-range predicate. *)
 Definition inv_memory_observation_def:
@@ -138,7 +138,7 @@ Theorem inv_static_class_no_abort:
 Proof
   simp[] >> rpt strip_tac >>
   gvs[step_inst_non_invoke] >>
-  gvs[step_inst_base_opcode_eqs, AllCaseEqs(), exec_write2_def]
+  gvs[Once step_inst_base_def, AllCaseEqs(), exec_write2_def]
 QED
 
 Theorem inv_oracle_static_class_total:
