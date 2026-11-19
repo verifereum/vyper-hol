@@ -29,7 +29,7 @@ Ancestors
    therefore needs no selected filling's storage guard. *)
 Theorem deploy_unit_exit_arm_runs:
   !tops runtime_bc am tx unit vs func sites marks src obs r.
-    lowering_context_ok unit.cu_context /\ ~ctx_has_dalloca unit.cu_context /\
+    lowering_context_ok unit.cu_context /\
     unit.cu_context.ctx_entry = SOME "__deploy" /\
     lookup_function "__deploy" unit.cu_context.ctx_functions = SOME func /\
     fn_entry_label func = SOME "__deploy" /\
@@ -101,7 +101,7 @@ QED
 Theorem deploy_unit_exit_safe_runs:
   !marks tops runtime_bc am tx unit vs tail.
     deploy_unit_execution_correct_at marks tops runtime_bc am tx unit vs /\
-    lowering_context_ok unit.cu_context /\ ~ctx_has_dalloca unit.cu_context /\
+    lowering_context_ok unit.cu_context /\
     deploy_storage_ok tops am tx vs.vs_outcomes
       (gas_explicit marks vs.vs_gas_readings ++ tail) /\
     ~deploy_source_exempt tops
