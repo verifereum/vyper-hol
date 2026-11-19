@@ -1,7 +1,9 @@
 (* The two readonly header instructions share one actual execution. *)
 Theory bodyFullRawCallHeader
 Ancestors
-  bodyFullRawCallHeaderSteps bodyFullRawCallHeaderView bodyFullGhostFrame
+  bodyFullRawCallHeaderView bodyFullGhostFrame
+  bodyPtrHashBuiltinsShaPrefix[qualified,ignore_grammar]
+  fragGasCopyLoop[qualified,ignore_grammar]
   exprSimHash exprSimHashBoundary exprSimProps exprLoweringProps
   fragGasSeqPtr bodyBinopFragMemory
   bodyMemoryDefs bodyPtrDefs loweringPosts ghostPcTransportPtr ptrSafetyTransport
@@ -149,11 +151,21 @@ Resume raw_call_header_joint[path]:
      qexists_tac `l'` >>
      PURE_REWRITE_TAC[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
      simp[]) >>
+  `!i. b <= i /\ i < b+32 ==> i NOTIN tn.t_mem` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem` irule >> decide_tac) >>
   gen_tac >>
-  `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts s2 s4) s G4 tn4` by
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts s2 s4) s G4 tn4` by
     (simp[Abbr `G4`, Abbr `tn4`] >>
-     irule raw_call_header_steps_checked >> simp[] >>
-     qexistsl_tac [`b`, `LENGTH bs`] >> simp[] >> decide_tac) >>
+     irule bodyPtrHashBuiltinsShaPrefixTheory.hash_bytes_prepare_inst_seq >>
+     simp[] >> qexistsl_tac [`b`, `LENGTH bs`] >> simp[] >> decide_tac) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> ALLOCA)
+      (emitted_insts s2 s4)` by simp[mk_inst_def] >>
+  `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts s2 s4) s G4 tn4` by
+    (irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `0` >> conj_tac >- simp[] >> first_assum ACCEPT_TAC) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       (emitted_insts s2 s4) /\
    FILTER (\i. i.inst_opcode = GAS) (emitted_insts s2 s4) = []` by
