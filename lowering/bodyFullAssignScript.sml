@@ -1827,7 +1827,7 @@ Theorem body_assign_topcopy_frontend[local]:
   supported_variable_decl tops (src,id) = SOME (Private, mut, ty, SOME ast_slot) /\
   (mut = Storage \/ mut = Transient) /\
   (!elem n. ty <> ArrayT elem (Dynamic n)) /\ expr_type e = ty ==>
-  expr_body_pre cenv cx env e es /\ lowered_value_type cenv e = expr_type e /\
+  expr_body_pre cenv cx env e es /\
   ~is_bytestring_type ty /\ ~has_length_word ty
 Proof
   strip_tac >>
@@ -1845,8 +1845,7 @@ Proof
     metis_tac[supported_stmt_body_safe] >>
   `expr_body_pre cenv cx env e es` by metis_tac[topcopy_rhs_pre] >>
   simp[] >>
-  metis_tac[topcopy_rhs_lowered_type, topcopy_not_bytestring,
-            topcopy_no_length_word]
+  metis_tac[topcopy_not_bytestring, topcopy_no_length_word]
 QED
 
 Theorem body_assign_topcopy_slots_code[local]:
@@ -1896,6 +1895,7 @@ Theorem body_assign_toplevel_copy_entry[local]:
   (mut = Storage \/ mut = Transient) /\ ~is_word_type ty /\
   (!elem n. ty <> ArrayT elem (Dynamic n)) /\
   0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+  lowered_value_type cenv e = expr_type e /\
   stmt_state_rel H ctx func cenv cx es s0 /\
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
     sa = (ce,sb) /\
@@ -1905,7 +1905,7 @@ Theorem body_assign_toplevel_copy_entry[local]:
   gas_shadow_state sa shadow_sa /\ fn_has_code sa sb func /\
   fn_has_code shadow_sa shadow_sb shadow_func ==>
   ce = cenv /\ expr_body_pre cenv cx env e es /\
-  lowered_value_type cenv e = expr_type e /\ ~is_bytestring_type ty /\
+  ~is_bytestring_type ty /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
   ?id tr id_str slot tv op sm shadow_sm.
     nsid = (NONE,id) /\ get_module_code cx NONE = SOME tops /\
@@ -1953,91 +1953,6 @@ Proof
   drule_then assume_tac expr_body_pre_gas_admissible >>
   simp[storage_var_info_def] >>
   qexistsl_tac [`op`,`sm`,`shadow_sm`] >> simp[]
-QED
-
-(* A static aggregate storage or transient variable. *)
-Theorem body_assign_toplevel_copy_full:
-  !cx nsid mut ty slot e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t' s'3' v t''.
-       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
-       body_base_target_full_ok cx (TopLevelNameTarget nsid)) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' /\
-    stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    ~supported_scalar_target tops nsid /\
-    supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
-    (mut = Storage \/ mut = Transient) /\
-    ~is_word_type ty /\
-    (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-    0 < type_memory_bytes cenv ty /\
-    expr_type e = ty ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)))
-      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
-Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
-  irule gas_outcome_full_initial_domain >>
-  conj_tac >- simp[evaluate_storage_trace_frame] >>
-  simp[] >> strip_tac >>
-  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace`
-    by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
-    (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  drule_all body_assign_toplevel_copy_entry >> strip_tac >> gnvs[] >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
-  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
-    metis_tac[ret_pc_ok_def] >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_sim_full_def] >>
-  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,
-    `op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q1 _` >>
-  irule body_assign_toplevel_word_full_source >>
-  conj_tac >- (qexists `lctx` >> simp[]) >> qexists `Q1` >>
-  reverse conj_tac >-
-    (irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >>
-     simp[] >> rpt gen_tac >> POP_ASSUM_LIST (K all_tac) >> strip_tac >>
-     Cases_on `res` >> fs[expr_exit_def] >> Cases_on `y` >> Cases_on `r` >>
-     gvs[stmt_exit_ptr_def,expr_exit_def,halt_exit_INR_type] >>
-     rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
-  rpt gen_tac >> strip_tac >>
-  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
-    by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-  simp[Abbr `Q1`, NoAsms] >> (impl_tac >- first_assum ACCEPT_TAC) >>
-  strip_tac >> gnvs[post_value_type_lowered] >>
-  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
-  `!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x` by
-    metis_tac[local_ptrs_reserved_imm_base] >>
-  irule body_assign_toplevel_copy_after_rhs_frame >>
-  qpat_assum `find_var_decl_by_name _ _ = _` (irule_at Any) >>
-  qpat_assum `lookup_var_slot_from_layout _ _ _ _ = _` (irule_at Any) >>
-  qpat_assum `compile_store_slots _ _ _ _ _ _ = _` (irule_at Any) >>
-  qpat_assum `lower_value compile_expr _ _ e sa = _` (irule_at Any) >>
-  qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
-  qexistsl [`v`,`tv`,`tn1`,`t`,`mid`,`marks`,`G1`] >>
-  simp[SF CONJ_ss] >>
-  qpat_x_assum `expr_sim_inv cenv cx env es` mp_tac >>
-  simp[expr_sim_inv_def] >> strip_tac >> simp[]
 QED
 
 (* A word field of a memory struct local. *)
@@ -8191,7 +8106,8 @@ Theorem body_assign_other_empty_target_full[local]:
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-        0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+        lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\
         FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -8562,7 +8478,8 @@ Theorem body_assign_other_empty_immutable_full[local]:
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-        0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+        lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\
         FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -8961,7 +8878,8 @@ Theorem body_assign_other_immutable_frontier_bind[local]:
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-        0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+        lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\
         FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -13044,7 +12962,8 @@ Theorem body_assign_other_immutable_word_write_full[local]:
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-        0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+        lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\
         FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -14062,7 +13981,8 @@ Theorem body_assign_other_value_rhs_bind[local]:
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-        0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+        lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\
         FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -15035,7 +14955,8 @@ Theorem body_assign_other_immutable_nonword_write_full[local]:
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-        0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+        lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\
         FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -17833,7 +17754,8 @@ Theorem body_assign_other_nonempty_target_full[local]:
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-        0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+        lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\
         FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -18565,7 +18487,8 @@ Theorem body_assign_other_full:
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-        0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+        lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\
         FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -18612,4 +18535,93 @@ Proof
     shadow_sa = (op,shadow_su)` (irule_at Any) >>
   qexistsl [`su`, `shadow_sb`, `shadow_func`, `marks`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+(* A static aggregate storage or transient variable. *)
+Theorem body_assign_toplevel_copy_full:
+  !cx nsid mut ty slot e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok cx (TopLevelNameTarget nsid)) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~supported_scalar_target tops nsid /\
+    supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\
+    ~is_word_type ty /\
+    (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+    0 < type_memory_bytes cenv ty /\
+    expr_type e = ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)))
+      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
+  >- (`struct_args_unique tops` by fs[body_inv_def] >>
+      irule body_assign_other_full >> simp[] >>
+      qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> gvs[]) >>
+  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  conj_tac >- simp[evaluate_storage_trace_frame] >>
+  simp[] >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace`
+    by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  drule_all body_assign_toplevel_copy_entry >> strip_tac >> gnvs[] >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
+    metis_tac[ret_pc_ok_def] >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,
+    `op`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q1 _` >>
+  irule body_assign_toplevel_word_full_source >>
+  conj_tac >- (qexists `lctx` >> simp[]) >> qexists `Q1` >>
+  reverse conj_tac >-
+    (irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >>
+     simp[] >> rpt gen_tac >> POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     Cases_on `res` >> fs[expr_exit_def] >> Cases_on `y` >> Cases_on `r` >>
+     gvs[stmt_exit_ptr_def,expr_exit_def,halt_exit_INR_type] >>
+     rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
+    by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  simp[Abbr `Q1`, NoAsms] >> (impl_tac >- first_assum ACCEPT_TAC) >>
+  strip_tac >> gnvs[post_value_type_lowered] >>
+  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+  `!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x` by
+    metis_tac[local_ptrs_reserved_imm_base] >>
+  irule body_assign_toplevel_copy_after_rhs_frame >>
+  qpat_assum `find_var_decl_by_name _ _ = _` (irule_at Any) >>
+  qpat_assum `lookup_var_slot_from_layout _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_store_slots _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `lower_value compile_expr _ _ e sa = _` (irule_at Any) >>
+  qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
+  qexistsl [`v`,`tv`,`tn1`,`t`,`mid`,`marks`,`G1`] >>
+  simp[SF CONJ_ss] >>
+  qpat_x_assum `expr_sim_inv cenv cx env es` mp_tac >>
+  simp[expr_sim_inv_def] >> strip_tac >> simp[]
 QED

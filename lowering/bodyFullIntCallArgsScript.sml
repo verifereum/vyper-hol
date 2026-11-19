@@ -31,6 +31,7 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   unitTransformDefs[qualified,ignore_grammar] memSafeRun[qualified,ignore_grammar]
   fragGasOriginPtrInvoke bodyFullShadowBodyInvLowering[qualified,ignore_grammar]
   intCallMaterializeFull bodyFullAllocGeneric[qualified,ignore_grammar]
+  internalReturnMemoryInputs[qualified,ignore_grammar]
   abiBufferAllocationCode[qualified,ignore_grammar]
   bodyPtrPrecompileBuiltinsAllocationFrame[qualified,ignore_grammar]
 
@@ -1704,7 +1705,6 @@ Theorem intcall_args_stage_full_p2_with_path[local]:
     EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
     body_exprs_full_ok cx es /\
     LENGTH flags = LENGTH es /\ LENGTH dtys = LENGTH es /\
-    EVERY (supported_value_type tops) dtys /\
     EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) dtys /\
     LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es) dtys /\
     (!j. j < LENGTH es /\ EL j flags ==> is_word_type (EL j dtys)) /\
@@ -3607,9 +3607,6 @@ Proof
          conj_tac >-
            (qpat_assum `ptr_covers aG atn aq at _` mp_tac >>
             POP_ASSUM_LIST (K all_tac) >> simp[bodyPtrDefsTheory.ptr_covers_def]) >>
-         conj_tac >-
-           (qpat_assum `EVERY (supported_value_type tops) (dty::dtys1)` mp_tac >>
-            POP_ASSUM_LIST (K all_tac) >> simp[]) >>
          conj_tac >-
            (qpat_assum `EVERY (\ty. type_memory_bytes cenv ty < _) (dty::dtys1)` mp_tac >>
             POP_ASSUM_LIST (K all_tac) >> simp[]) >>
@@ -6485,7 +6482,7 @@ Proof
 QED
 
 Theorem args_return_buffer_geometry[local]:
-  supported_return_type tops ret /\
+  (ret <> NoneT ==> 0 < type_memory_size tv) /\
   get_module_code cx NONE = SOME tops /\
   expr_sim_inv ce cx env es /\
   ce.ce_struct_fields = make_struct_fields_map tops /\
@@ -6502,32 +6499,6 @@ Proof
     type_memory_size tv` by
     (drule_all expr_sim_inv_memory_size >>
      simp[GSYM structFieldsPropsTheory.type_mem_bytes_type_memory_bytes]) >>
-  `ret <> NoneT ==> assignable_type (get_tenv cx) ret` by
-    (strip_tac >>
-     `well_formed_type (get_tenv cx) ret` by simp[well_formed_type_def] >>
-     qpat_x_assum `supported_return_type tops ret` mp_tac >>
-     simp[supportedTypesTheory.supported_return_type_def,
-          supportedTypesTheory.supported_value_type_def] >> strip_tac
-     >- metis_tac[retAbiPlanPropsTheory.supported_scalar_type_assignable] >>
-     Cases_on `ret` >> gvs[]
-     >~ [`TupleT types`]
-     >- (simp[assignable_type_def] >>
-         gvs[vyperValueTheory.evaluate_type_def, vyperValueTheory.evaluate_types_OPT_MMAP,
-             AllCaseEqs(),
-             well_formed_type_def, NULL_EQ] >>
-         `EVERY IS_SOME (MAP (evaluate_type (get_tenv cx)) types)` by
-           (simp[GSYM IS_SOME_OPT_MMAP] >>
-            Cases_on `OPT_MMAP (evaluate_type (get_tenv cx)) types` >> gvs[]) >>
-         gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
-         irule retAbiPlanPropsTheory.supported_scalar_type_assignable >> gvs[well_formed_type_def])
-     >~ [`ArrayT elem bd`]
-     >- (Cases_on `bd` >> gvs[assignable_type_def, retAbiPlanPropsTheory.supported_word_type_assignable]) >>
-     rename1 `supported_struct_fields tops id` >>
-     Cases_on `supported_struct_fields tops id` >> gvs[] >>
-     drule_all retAbiPlanPropsTheory.supported_struct_fields_get_tenv >> strip_tac >>
-     gvs[assignable_type_def, EVERY_MEM, retAbiPlanPropsTheory.supported_word_type_assignable, NULL_EQ]) >>
-  `ret <> NoneT ==> 0 < type_memory_size tv` by
-    metis_tac[assignable_type_slot_size_pos, CONJUNCT1 valueEncodingPropsTheory.type_memory_size_pos] >>
   Cases_on `ret = NoneT` >> gvs[compute_func_info_def, returns_stack_count_def] >>
   Cases_on `nrc = 0` >> gvs[] >> Cases_on `ret` >> gvs[]
 QED
@@ -7422,16 +7393,11 @@ Proof
      goal_assum (drule_at Any)) >>
   `LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es)
        (TAKE (LENGTH es) (MAP SND args)) /\
-   EVERY (supported_value_type tops o SND) args /\
-   EVERY (supported_default_expression tops) dflts /\
-   supported_return_type tops ret` by
-    ((drule_all bodyIntCallSourceTheory.body_intcall_source_selection >>
-     qpat_assum `lookup_callable_function _ name tops = SOME _`
-       (fn th => SIMP_TAC (srw_ss()) [th]) >>
-     strip_tac >> pure_asm_rewrite_tac[] >> (metis_tac[bodyIntCallSourceTheory.body_intcall_source_selection]))) >>
-  `EVERY (supported_value_type tops) (MAP SND args)` by
-    (simp[EVERY_MAP, combinTheory.o_DEF] >>
-     metis_tac[EVERY_MAP, combinTheory.o_DEF]) >>
+   EVERY (supported_default_expression tops) dflts` by
+    (drule_all bodyIntCallSourceTheory.body_intcall_source_selection >>
+     qpat_assum `lookup_callable_function _ name tops = SOME _` (fn lookup =>
+       qpat_assum `tenv.type_defs = get_tenv cx`
+         (fn defs => simp[NoAsms, lookup, defs]))) >>
   `EVERY (\t. type_memory_bytes cenv t < 2 ** 64) (MAP SND args)` by
     (irule intcall_args_parameter_allocation_bounds_defaults >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
@@ -8201,8 +8167,6 @@ Proof
   >~ [`EVERY (\ty. type_memory_bytes (cenv_without_defaults cenv name) ty < _) (DROP _ _)`]
   >- (qpat_assum `type_memory_bytes (cenv_without_defaults cenv name) = _`
         SUBST1_TAC >> irule rich_listTheory.EVERY_DROP >> first_assum ACCEPT_TAC)
-  >~ [`EVERY (supported_value_type tops) (DROP _ _)`]
-  >- (irule rich_listTheory.EVERY_DROP >> first_assum ACCEPT_TAC)
   >~ [`!H. dead_lo_ok H (DF H) lo (cenv_without_defaults cenv name) cxd`]
   >- (qpat_assum `cx_tops cxd = cx_tops cx` mp_tac >>
       qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx` mp_tac >>
@@ -8241,6 +8205,22 @@ Proof
      simp[NoAsms,exprSimDefsTheory.expr_vv_res_ok_def]) >>
   rename1 `bind_arguments (get_tenv cx) args (xs ++ dvs) = SOME penv` >>
   rename1 `evaluate_type (get_tenv cx) ret = SOME rtv` >>
+  `env_context_consistent tenv cx` by
+    (qpat_assum `env_consistent tenv cx ee`
+       (ACCEPT_TAC o cj 1 o REWRITE_RULE [vyperTypeInvariantsTheory.env_consistent_def])) >>
+  `context_function_live cx (NONE,name)` by
+    (qpat_assum `env_context_consistent tenv cx` mp_tac >>
+     qpat_assum `IS_SOME (FLOOKUP tenv.fn_sigs (NONE,name))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[vyperTypeInvariantsTheory.env_context_consistent_def,
+          vyperTypeInvariantsTheory.fn_sigs_live_def, optionTheory.IS_SOME_EXISTS] >>
+     metis_tac[]) >>
+  `ret <> NoneT ==> 0 < type_memory_size rtv` by
+    (disch_tac >>
+     mp_tac (Q.INST [`env` |-> `tenv`, `src` |-> `NONE`, `tv` |-> `rtv`]
+       internalReturnMemoryInputsTheory.callable_return_memory_size_pos) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[NoAsms]) >>
   `?H. valid_horizon cx st0 H ed.storage_trace` by
     (qpat_assum `storage_trace_domain cxd st0 ed.storage_trace` mp_tac >>
      qpat_assum `!src tr. storage_trace_domain cxd src tr = _`
