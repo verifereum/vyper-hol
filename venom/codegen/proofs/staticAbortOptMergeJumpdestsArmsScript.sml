@@ -4,6 +4,16 @@ Ancestors
   staticAbortStraight asmOptimizer asmSem asmSplice asmSymBridge asmSymSem
   words finite_map pred_set indexedLists rich_list list arithmetic
 
+val arm_names_conv =
+  TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV ORELSEC BETA_CONV)
+
+(* Specialize a naming telescope at aliases already in the proof context. *)
+fun arm_use_names names =
+  map_every (fn s => asm s (fn eq =>
+    disch_then (fn th =>
+      let val eq = REWRITE_RULE [markerTheory.label_def] eq
+      in mp_tac (MP (SPEC (lhs (concl eq)) th) eq) end))) names
+
 (* An inherited demand has precisely the same choice as its input slot.
    Exposure can erase a choice, but never changes the chosen producer. *)
 Theorem rename_arm_choose_vector[local]:
@@ -34,10 +44,10 @@ QED
 (* Only a changed taken operand uses the bypass. A fallthrough does not
    become a taken edge merely because its PC agrees with one. *)
 Theorem rename_arm_taken_geometry[local]:
-  let q = MAP (rename_push_label x y) p in
-  let C = \r l j.
+  !q. q = MAP (rename_push_label x y) p ==>
+  !C. C = (\r l j.
     ?off. FLOOKUP (SND(compute_label_offsets r)) l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j in
+      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j) ==>
   asm_static_wf p /\ p = pre ++ [AsmLabel x;next;third] ++ tail /\
   (!l j. (C p l j <=> INDEX_OF (AsmLabel l) p = SOME j) /\
          (C q l j <=> INDEX_OF (AsmLabel l) p = SOME j)) /\
@@ -50,8 +60,8 @@ Theorem rename_arm_taken_geometry[local]:
       (!k. tag z k <> NONE ==> tag z k = tag w k) /\
       (!k. boolean z k ==> boolean w k)
 Proof
-  pairTools.LET_INTRO_TAC >> disch_then (mk_asm "program") >>
-  pairTools.LET_INTRO_TAC >> disch_then (mk_asm "canonical") >>
+  qx_gen_tac `q` >> disch_then (mk_asm "program") >>
+  qx_gen_tac `C'` >> disch_then (mk_asm "canonical") >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 (mk_asm "site")
      (CONJUNCTS_THEN2 (mk_asm "layout")
@@ -74,7 +84,7 @@ Proof
 QED
 
 Theorem rename_arm_reference_fetch[local]:
-  let q = MAP (rename_push_label x y) p in
+  !q. q = MAP (rename_push_label x y) p ==>
   p = pre ++ [AsmLabel x;next;third] ++ tail /\
   ((next = AsmLabel y /\ y <> x) \/
    (next = AsmPushLabel y /\ third = AsmOp "JUMP")) /\
@@ -82,7 +92,7 @@ Theorem rename_arm_reference_fetch[local]:
   (!l. (EL i q = AsmPushLabel l \/ (?d. EL i q = AsmPushOfst l d)) ==>
        ?off. FLOOKUP (SND(compute_label_offsets q)) l = SOME off)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC Unwind.UNWIND_FORALL_CONV >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "site")
     (CONJUNCTS_THEN2 (mk_asm "guard") STRIP_ASSUME_TAC)) >>
   `!s. EL i p = AsmPushLabel s \/ (?d. EL i p = AsmPushOfst s d) ==>
@@ -90,7 +100,7 @@ Proof
        (if EL i p = AsmPushLabel x then y else s) = SOME off` by
     (rpt gen_tac >> disch_tac >>
      qspecl_then [`p`,`pre`,`x`,`y`,`next`,`third`,`tail`,`i`,`s`] mp_tac
-       merge_rename_reference_step >> rewrite_tac[LET_THM] >> BETA_TAC >>
+       merge_rename_reference_step >> CONV_TAC arm_names_conv >>
      impl_tac >- (asm "site" assume_tac >> asm "guard" assume_tac >> metis_tac[]) >>
      metis_tac[]) >>
   `EL i (MAP (rename_push_label x y) p) = rename_push_label x y (EL i p)` by simp[EL_MAP] >>
@@ -149,14 +159,14 @@ QED
 (* Transfer along one instruction, possibly restricting its output demands
    to those of the endpoint of a covered bypass. *)
 Theorem rename_arm_flow[local]:
-  let I = \hi hj (tag:num->(string#num)option) tag' b b'
+  !I. I = (\hi hj (tag:num->(string#num)option) tag' b b'
       (src:num->num option) (fresh:num->(string#num)option) bnew.
       (!k l o'. tag' k = SOME(l,o') ==>
          k < hj /\ (fresh k = SOME(l,o') \/
             ?a. src k = SOME a /\ a < hi /\ tag a = SOME(l,o'))) /\
-      (!k. b' k ==> k < hj /\ (bnew k \/ ?a. src k = SOME a /\ a < hi /\ b a)) in
-  let Flow = \r i ins hi hj (tag:num->(string#num)option) tag' b b'.
-    let inherit = I hi hj tag tag' b b' in
+      (!k. b' k ==> k < hj /\ (bnew k \/ ?a. src k = SOME a /\ a < hi /\ b a))) ==>
+  !Flow. Flow = (\r i ins hi hj (tag:num->(string#num)option) tag' b b'.
+    !inherit. inherit = I hi hj tag tag' b b' ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\ inherit (\k. if k=0 then NONE else SOME(k-1))
@@ -175,15 +185,16 @@ Theorem rename_arm_flow[local]:
              SOME n => 0<n /\ n<hi /\ hj=hi /\
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k)) (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\ ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
                  (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
                    !t u. LENGTH t.as_stack=hi /\
                      asm_step (SND(compute_label_offsets r)) (build_offset_to_pc r)
                        ins t = AsmOK u ==> (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F in
-  let P = \h (D:num option list) k. if k<h then E (EL k D) else NONE in
+    | _ => F) ==>
+  !P. P = (\h (D:num option list) k. if k<h then E (EL k D) else NONE) ==>
   G NONE NONE /\ E NONE = NONE /\ LENGTH D = hi /\
   (!k. k < hi ==> G (tag k) (EL k D)) /\
   (!l. ins = AsmPushLabel l ==>
@@ -196,9 +207,9 @@ Theorem rename_arm_flow[local]:
   ?Dz. LENGTH Dz = hj /\ (!k. k < hj ==> G (tagz k) (EL k Dz)) /\
        Flow q i (rename_push_label x y ins) hi hj (P hi D) (P hj Dz) b bz
 Proof
-  pairTools.LET_INTRO_TAC >> disch_then (mk_asm "inherit") >>
-  pairTools.LET_INTRO_TAC >> disch_then (mk_asm "flow") >>
-  pairTools.LET_INTRO_TAC >> disch_then (mk_asm "project") >>
+  qx_gen_tac `I'` >> disch_then (mk_asm "inherit") >>
+  gen_tac >> disch_then (mk_asm "flow" o CONV_RULE arm_names_conv) >>
+  gen_tac >> disch_then (mk_asm "project") >>
   strip_tac >>
   `!src f f' bn bn'.
      I' hi hj tag tagw b bw src f bn /\
@@ -329,16 +340,16 @@ QED
 (* A decoration stores an occurrence even when its word is not a code
    address. Only the projected tag asks for a code destination. *)
 Theorem rename_arm_choices[local]:
-  let q = MAP (rename_push_label x y) p in
-  let C = \r l j. ?off. FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
-     off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j in
-  let Prod = \i a. i < LENGTH q /\
-      (EL i q = AsmPushLabel a \/ EL i q = AsmPushOfst a 0) in
-  let G = \old choice. case old of NONE => choice = NONE
-    | SOME (l,o') => ?i a. choice = SOME i /\ Prod i a /\ (a = l \/ l = x /\ a = y) in
-  let E = \u. case u of NONE => NONE
+  !q. q = MAP (rename_push_label x y) p ==>
+  !C. C = (\r l j. ?off. FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
+     off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j) ==>
+  !Prod. Prod = (\i a. i < LENGTH q /\
+      (EL i q = AsmPushLabel a \/ EL i q = AsmPushOfst a 0)) ==>
+  !G. G = (\old choice. case old of NONE => choice = NONE
+    | SOME (l,o') => ?i a. choice = SOME i /\ Prod i a /\ (a = l \/ l = x /\ a = y)) ==>
+  !E. E = (\u. case u of NONE => NONE
     | SOME i => if ?a j. Prod i a /\ C q a j
-                then SOME((@a. Prod i a),i) else NONE in
+                then SOME((@a. Prod i a),i) else NONE) ==>
   G NONE NONE /\ E NONE = NONE /\
   (!u. G NONE u ==> u = NONE) /\
   (!old i. G old (SOME i) ==> i < LENGTH q) /\
@@ -352,8 +363,10 @@ Theorem rename_arm_choices[local]:
   (!i l. i < LENGTH p /\ EL i p = AsmPushOfst l 0 ==>
      G (SOME(l,i)) (SOME i) /\ (E (SOME i) = NONE \/ E (SOME i) = SOME(l,i)))
 Proof
-  map_every (fn s => pairTools.LET_INTRO_TAC >> disch_then (mk_asm s))
-    ["program", "canonical", "prod", "choose", "expose"] >>
+  qx_gen_tac `q` >> disch_then (mk_asm "program") >>
+  qx_gen_tac `C'` >> disch_then (mk_asm "canonical") >>
+  map_every (fn s => gen_tac >> disch_then (mk_asm s))
+    ["prod", "choose", "expose"] >>
   `!i a b. Prod i a /\ Prod i b ==> a = b` by
     (simp[markerLib.L "prod"] >> metis_tac[asmIRTheory.asm_inst_11,asmIRTheory.asm_inst_distinct]) >>
   `!i a. Prod i a ==> (@b. Prod i b) = a` by
@@ -393,31 +406,31 @@ Proof
 QED
 
 Theorem merge_rename_decorated_arms:
-  let q = MAP (rename_push_label x y) p in
-  let C = \r l j. ?off. FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
-     off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j in
-  let Prod = \i a. i < LENGTH q /\
-      (EL i q = AsmPushLabel a \/ EL i q = AsmPushOfst a 0) in
-  let G = \old choice. case old of NONE => choice = NONE
-    | SOME (l,o') => ?i a. choice = SOME i /\ Prod i a /\ (a = l \/ l = x /\ a = y) in
-  let E = \u. case u of NONE => NONE
+  !q. q = MAP (rename_push_label x y) p ==>
+  !C. C = (\r l j. ?off. FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
+     off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j) ==>
+  !Prod. Prod = (\i a. i < LENGTH q /\
+      (EL i q = AsmPushLabel a \/ EL i q = AsmPushOfst a 0)) ==>
+  !G. G = (\old choice. case old of NONE => choice = NONE
+    | SOME (l,o') => ?i a. choice = SOME i /\ Prod i a /\ (a = l \/ l = x /\ a = y)) ==>
+  !E. E = (\u. case u of NONE => NONE
     | SOME i => if ?a j. Prod i a /\ C q a j
-                then SOME((@a. Prod i a),i) else NONE in
-  let A = {u:((num#num)#num option list) | FST u IN V /\
+                then SOME((@a. Prod i a),i) else NONE) ==>
+  !A. A = {u:((num#num)#num option list) | FST u IN V /\
      LENGTH (SND u) = height (FST u) /\
-     !k. k < height (FST u) ==> G (tag (FST u) k) (EL k (SND u))} in
-  let proj = \u k. if k < height (FST u) then E (EL k (SND u)) else NONE in
-  let Target = \r tag j. ?l o'. tag 0 = SOME(l,o') /\ C r l j in
-  let Slots = \r h need tag boolean.
+     !k. k < height (FST u) ==> G (tag (FST u) k) (EL k (SND u))} ==>
+  !proj. proj = (\u k. if k < height (FST u) then E (EL k (SND u)) else NONE) ==>
+  !Target. Target = (\r tag j. ?l o'. tag 0 = SOME(l,o') /\ C r l j) ==>
+  !Slots. Slots = (\r h need tag boolean.
     (need ==> cc.cc_static) /\
     (!k. boolean k ==> k < h /\ tag k = NONE) /\
     (!k l orig. tag k = SOME(l,orig) ==>
       k < h /\ orig < LENGTH r /\
       (EL orig r = AsmPushLabel l \/ EL orig r = AsmPushOfst l 0) /\
-      ?j. C r l j) in
-  let Row = \r i h tag (arms:num->num->bool).
-    let fall = \j. j = i+1 in
-    let clear = \a. !k. k < a ==> tag k = NONE in
+      ?j. C r l j)) ==>
+  !Row. Row = (\r i h tag (arms:num->num->bool).
+    !fall. fall = (\j. j = i+1) ==>
+    !clear. clear = (\a. !k. k < a ==> tag k = NONE) ==>
     case EL i r of
       AsmLabel l => (!j hj. arms j hj <=> fall j /\ hj = h)
     | AsmPush bs => (!j hj. arms j hj <=> fall j /\ hj = h+1)
@@ -447,15 +460,15 @@ Theorem merge_rename_decorated_arms:
                  ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                    clear (asm_op_arity name) /\
                    (!j hj. arms j hj <=> fall j /\ hj = h-asm_op_arity name+m))
-    | _ => F in
-  let Flow = \r i ins hi hj tx ty bx by'.
-    let inherit = \(src:num -> num option)
+    | _ => F) ==>
+  !Flow. Flow = (\r i ins hi hj tx ty bx by'.
+    !inherit. inherit = (\(src:num -> num option)
                   (fresh:num -> (string#num) option) (bnew:num -> bool).
       (!k l orig. ty k = SOME(l,orig) ==>
          k < hj /\ (fresh k = SOME(l,orig) \/
          ?a. src k = SOME a /\ a < hi /\ tx a = SOME(l,orig))) /\
       (!k. by' k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ bx a)) in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ bx a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs =>
@@ -479,7 +492,8 @@ Theorem merge_rename_decorated_arms:
              SOME n => 0 < n /\ n < hi /\ hj = hi /\
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k)) (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -488,12 +502,12 @@ Theorem merge_rename_decorated_arms:
                      asm_step (SND (compute_label_offsets r)) (build_offset_to_pc r)
                        ins t = AsmOK u ==>
                      (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F in
-  let Control = \r i j tag.
+    | _ => F) ==>
+  !Control. Control = (\r i j tag.
     if EL i r = AsmOp "JUMP" then Target r tag j
     else if EL i r = AsmOp "JUMPI" then j = i+1 \/ Target r tag j
-    else j = i+1 in
-  let Shape = \v (t:asm_state).
+    else j = i+1) ==>
+  !Shape. Shape = (\v (t:asm_state).
     t.as_pc = pc v /\ LENGTH t.as_stack = height v /\ t.as_call_ctx = cc /\
     t.as_requests = req /\ (need v ==> t.as_call_ctx.cc_static) /\
     (!k l orig. tag v k = SOME(l,orig) ==>
@@ -503,8 +517,7 @@ Theorem merge_rename_decorated_arms:
       ?off j. FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
               off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME j /\
               EL k t.as_stack = (n2w off:bytes32)) /\
-    (!k. boolean v k ==> k < height v /\ (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
-  let Arms = \v j hj. ?w. edge v w /\ pc w = j /\ height w = hj in
+    (!k. boolean v k ==> k < height v /\ (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
   asm_static_wf p /\ p = pre ++ [AsmLabel x;next;third] ++ tail /\
   ((next = AsmLabel y /\ y <> x) \/ (next = AsmPushLabel y /\ third = AsmOp "JUMP")) /\
   (!l j. (C p l j <=> INDEX_OF (AsmLabel l) p = SOME j) /\
@@ -512,7 +525,8 @@ Theorem merge_rename_decorated_arms:
   FINITE V /\
   (!v. v IN V ==> pc v < LENGTH p /\ (?t. Shape v t) /\
       Slots p (height v) (need v) (tag v) (boolean v) /\
-      Row p (pc v) (height v) (tag v) (Arms v)) /\
+      Row p (pc v) (height v) (tag v)
+        (\j hj. ?w. edge v w /\ pc w = j /\ height w = hj)) /\
   (!v w. edge v w ==> v IN V /\ w IN V /\ rank w < rank v /\
       Flow p (pc v) (EL (pc v) p) (height v) (height w) (tag v) (tag w)
         (boolean v) (boolean w) /\ Control p (pc v) (pc w) (tag v)) /\
@@ -536,9 +550,14 @@ Theorem merge_rename_decorated_arms:
         (proj u) (proj v) (boolean (FST u)) (boolean (FST v)) /\
       Control q (pc (FST u)) (pc (FST v)) (proj u))
 Proof
-  map_every (fn s => pairTools.LET_INTRO_TAC >> disch_then (mk_asm s))
-    ["program", "canonical", "prod", "choose", "expose", "admissible", "project",
-     "target", "slots", "row", "flow", "control", "shape", "arms"] >>
+  qx_gen_tac `q` >> disch_then (mk_asm "program") >>
+  qx_gen_tac `C'` >> disch_then (mk_asm "canonical") >>
+  map_every (fn s => gen_tac >> disch_then (mk_asm s))
+    ["prod", "choose", "expose", "admissible", "project", "target", "slots"] >>
+  map_every (fn s => gen_tac >> disch_then (mk_asm s o CONV_RULE arm_names_conv))
+    ["row", "flow"] >>
+  map_every (fn s => gen_tac >> disch_then (mk_asm s)) ["control", "shape"] >>
+  qabbrev_tac `Arms = \v (j:num) (hj:num). ?w. edge v w /\ pc w = j /\ height w = hj` >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "wf")
     (CONJUNCTS_THEN2 (mk_asm "site")
     (CONJUNCTS_THEN2 (mk_asm "guard")
@@ -546,11 +565,8 @@ Proof
     (CONJUNCTS_THEN2 (mk_asm "finite")
     (CONJUNCTS_THEN2 (mk_asm "vertices")
     (CONJUNCTS_THEN2 (mk_asm "edges") (mk_asm "progress")))))))) >>
-  mp_tac rename_arm_choices >> rewrite_tac[LET_THM] >> BETA_TAC >>
-  (* A labelled rewrite is for simp; fold the unlabelled equalities by
-     conversion, innermost bindings first. *)
-  map_every (fn s => asm s (fn th => CONV_TAC (DEPTH_CONV (REWR_CONV (SYM th)))))
-    ["program", "canonical", "prod", "choose", "expose"] >>
+  mp_tac rename_arm_choices >>
+  arm_use_names ["program", "canonical", "prod", "choose", "expose"] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!u. u IN A <=> FST u IN V /\ LENGTH (SND u) = height (FST u) /\
     !k. k < height (FST u) ==> G (tag (FST u) k) (EL k (SND u))` by
@@ -641,7 +657,7 @@ Proof
          (!k. boolean z k ==> boolean v k)` by
     (qx_gen_tac `v` >> strip_tac >>
      mp_tac (Q.INST [`rank:num#num -> num` |-> `N:num#num -> num`]
-       (SPEC_ALL merge_rename_root_bypass)) >> rewrite_tac[LET_THM] >> BETA_TAC >>
+       (SPEC_ALL (CONV_RULE arm_names_conv merge_rename_root_bypass))) >>
      (* Earlier reverse folding missed the fully beta-reduced Shape;
         specializing the live source facts and expanding those is enough.
         In particular, do not substitute the site decomposition for p. *)
@@ -700,12 +716,11 @@ Proof
        (drule_then (qx_choose_then `i` (qx_choose_then `a`
           (map_every assume_tac o CONJUNCTS)))) >>
      mp_tac (Q.INST [`rank:num#num -> num` |-> `N:num#num -> num`]
-       (SPEC_ALL (INST_TYPE
+       (INST_TYPE
          [``:'a`` |-> ``:num``, ``:'b`` |-> ``:num``,
           ``:'c`` |-> ``:string#num``, ``:'d`` |-> ``:num``]
-         rename_arm_taken_geometry))) >> rewrite_tac[LET_THM] >> BETA_TAC >>
-     map_every (fn s => asm s (fn th => CONV_TAC (DEPTH_CONV (REWR_CONV (SYM th)))))
-       ["program","canonical"] >>
+         rename_arm_taken_geometry)) >>
+     arm_use_names ["program","canonical"] >>
      (impl_tac >-
        (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
         MAP_FIRST (fn s => asm s ACCEPT_TAC) ["wf","site","layout","bypass"])) >>
@@ -745,11 +760,12 @@ Proof
           asm "flow" (fn f => PURE_REWRITE_TAC [f,LET_THM] >> CONV_TAC canon >>
             qpat_assum `Flow p _ _ _ _ _ _ _ _`
               (assume_tac o CONV_RULE canon o REWRITE_RULE [f,LET_THM])) >>
-          match_mp_tac (rename_arm_flow |> REWRITE_RULE [LET_THM] |> CONV_RULE canon |> GEN_ALL)
+          match_mp_tac (rename_arm_flow |> CONV_RULE arm_names_conv |> GEN_ALL)
         end >>
         qexistsl [`tag w`,`tag (FST u)`,`p`,`boolean w`] >>
         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-        rpt gen_tac >> disch_tac >> first_assum (irule_at Any) >> simp[]) >>
+        FIRST [rpt gen_tac >> disch_tac >> first_assum (irule_at Any) >> simp[] >> NO_TAC,
+               gvs[]]) >>
      qexists `(z,Dz)` >> simp[]) >>
   pop_assum (mk_asm "lift") >>
   `!u. u IN A ==>
@@ -768,8 +784,7 @@ Proof
       IS_SOME (FLOOKUP (SND(compute_label_offsets q)) l)` by
     (gen_tac >> disch_tac >> asm "destslots" (drule_then strip_assume_tac) >>
      mp_tac (Q.INST [`i` |-> `(pc:num#num -> num) (FST (u:(num#num)#num option list))`] rename_arm_reference_fetch) >>
-     rewrite_tac[LET_THM] >> BETA_TAC >>
-     asm "program" (fn th => CONV_TAC (DEPTH_CONV (REWR_CONV (SYM th)))) >>
+     arm_use_names ["program"] >>
      (impl_tac >-
        (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
         MAP_FIRST (fn s => asm s ACCEPT_TAC) ["site","guard","wf"])) >>
@@ -828,7 +843,7 @@ Proof
     simp[Abbr `R`] >>
   pop_assum (mk_asm "edge_elim") >>
   `!v j hj. Arms v j hj <=> ?w. edge v w /\ pc w = j /\ height w = hj` by
-    simp[markerLib.L "arms"] >>
+    simp[Abbr `Arms`] >>
   pop_assum (mk_asm "source_arm") >>
   `!u j hj. u IN A ==>
      (DArms u j hj <=>
@@ -840,10 +855,13 @@ Proof
          asm "edge_elim" (drule_then (qx_choose_then `w`
            (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
              (DISJ_CASES_THEN (map_every assume_tac o CONJUNCTS))))))
-         >- (disj1_tac >> simp[markerLib.L "source_arm"] >> qexists `w` >> simp[]) >>
+         >- (disj1_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+             conj_tac >- simp[SF SFY_ss] >>
+             simp[NoAsms, markerLib.L "source_arm"] >> qexists `w` >> simp[]) >>
          disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-         conj_tac >- metis_tac[] >> qexists `pc w` >> simp[markerLib.L "source_arm"] >>
-         qexists `w` >> simp[]) >>
+         conj_tac >- metis_tac[] >> qexists `pc w` >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         simp[NoAsms, markerLib.L "source_arm"] >> qexists `w` >> simp[]) >>
      disch_then (DISJ_CASES_THEN (map_every assume_tac o CONJUNCTS))
      >- (asm "source_arm" (drule_then (qx_choose_then `w` strip_assume_tac) o iffLR) >>
          `DArms u (pc w) (height w)` suffices_by metis_tac[] >>
@@ -880,7 +898,8 @@ Proof
   pop_assum (mk_asm "row_target") >>
   `ALOOKUP dup_table "JUMP" = NONE /\ ALOOKUP swap_table "JUMP" = NONE /\
    ALOOKUP dup_table "JUMPI" = NONE /\ ALOOKUP swap_table "JUMPI" = NONE` by EVAL_TAC >>
-  qpat_x_assum `Row p _ _ _ _` mp_tac >>
+  asm "source_arm" (fn th => qpat_x_assum `Row p _ _ _ _`
+    (mp_tac o SIMP_RULE (bool_ss ++ ETA_ss) [GSYM th])) >>
   namedCases_on `EL (pc (FST u)) p` ["name","bs","l","l d","l","l","bs","l"] >>
   simp[markerLib.L "row",rename_push_label_def]
   >- (disch_then (DISJ_CASES_THEN2

@@ -4,9 +4,13 @@ Ancestors
   spillWordBounds asmToBytecodeProofs symbolResolve words list arithmetic
   pred_set finite_map
 
+(* Open the naming equations only when exposing the underlying predicates. *)
+val expand_bypass_names =
+  TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV ORELSEC BETA_CONV)
+
 Theorem merge_rename_root_bypass:
-let Shape =
-  \p cc req pc height need tag boolean i (t:asm_state).
+!Shape. Shape =
+  (\p cc req pc height need tag boolean i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -20,20 +24,20 @@ let Shape =
          FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-in
-let Flow =
-  \p pc height tag boolean (x:num#num) (y:num#num).
-  let hi = height x; hj = height y; ins = EL (pc x) p in
-  let inherit =
-    \(src:num -> num option)
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+!Flow. Flow =
+  (\p pc height tag boolean (x:num#num) (y:num#num).
+  !hi. hi = height x ==>
+  !hj. hj = height y ==>
+  !ins. ins = EL (pc x) p ==>
+  !inherit. inherit =
+    (\(src:num -> num option)
       (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-  in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
   case ins of
     AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
   | AsmPush bs =>
@@ -63,7 +67,8 @@ let Flow =
              inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                (\k. NONE) (\k. F)
          | NONE =>
-           let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+           !a. a = asm_op_arity name ==>
+           !m. m = hj + asm_op_arity name - hi ==>
            a <= hi /\ hj = m+(hi-a) /\
            ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
            inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -72,19 +77,17 @@ let Flow =
                  asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                    ins t = AsmOK u ==>
                  (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-  | _ => F
-in
-let Open =
-  \p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
+  | _ => F) ==>
+!Open. Open =
+  (\p cc req (V:(num#num)->bool) X (rank:(num#num)->num) pc height need
     (tag:(num#num)->num->(string#num)option)
     (boolean:(num#num)->num->bool) edge.
-  let S = Shape p cc req pc height need tag boolean in
-  let target = \x y.
+  !S. S = Shape p cc req pc height need tag boolean ==>
+  !target. target = (\x y.
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
       off < dimword(:256) /\
-      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-  in
+      FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
     FINITE V /\ X SUBSET V /\
     (!x. x IN V ==> ?t. S x t) /\
     (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -102,34 +105,31 @@ let Open =
                     p 1 t = AsmFault u) /\ u.as_requests=req) \/
        (?y u. edge x y /\
           asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-            p 1 t = AsmOK u /\ S y u))
-in
-let Reach = \(edge:(num#num)->(num#num)->bool) e x.
+            p 1 t = AsmOK u /\ S y u))) ==>
+!Reach. Reach = (\(edge:(num#num)->(num#num)->bool) e x.
   ?n (path:num->num#num).
-    path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))
-in
-let S = Shape p cc req pc height need tag boolean in
-let L = SND(compute_label_offsets p); B = build_offset_to_pc p in
+    path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) ==>
+!S'. S' = Shape p cc req pc height need tag boolean ==>
+!L. L = SND(compute_label_offsets p) ==>
+!B. B = build_offset_to_pc p ==>
 asm_static_wf p /\ p = pre ++ [AsmLabel x;next;third] ++ tail /\
 ((next = AsmLabel y /\ y <> x) \/
  (next = AsmPushLabel y /\ third = AsmOp "JUMP")) /\
 Open p cc req V {} rank pc height need tag boolean edge /\
 v IN V /\ pc v = LENGTH pre ==>
-let d = if next = AsmLabel y then 1 else 3 in
 ?z off. z IN V /\ Reach edge v z /\ rank z < rank v /\
   height z = height v /\ FLOOKUP L y = SOME off /\ off < dimword(:256) /\
   FLOOKUP B off = SOME(pc z) /\
   (!k l o'. tag z k = SOME(l,o') ==> tag v k = SOME(l,o')) /\
   (!k. boolean z k ==> boolean v k) /\
-  (!t. S v t ==> asm_steps L B p d t = AsmOK(t with as_pc := pc z) /\
-                  S z (t with as_pc := pc z)) /\
-  (let W = {a | a IN V /\ Reach edge z a}; E = (\a b. a IN W /\ edge a b) in
+  (!t. S' v t ==> asm_steps L B p (if next = AsmLabel y then 1 else 3) t =
+                  AsmOK(t with as_pc := pc z) /\ S' z (t with as_pc := pc z)) /\
+  (!W. W = {a | a IN V /\ Reach edge z a} ==>
+   !E. E = (\a b. a IN W /\ edge a b) ==>
     z IN W /\ Open p cc req W {} rank pc height need tag boolean E /\
     (!a. a IN W ==> Reach E z a))
 Proof
-  rpt gen_tac >>
-  rpt (pairTools.LET_INTRO_TAC >>
-       disch_then (strip_assume_tac o REWRITE_RULE [pairTheory.PAIR_EQ])) >>
+  ntac 7 (gen_tac >> disch_then assume_tac) >>
   disch_tac >>
   pop_assum (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac
@@ -142,13 +142,13 @@ Proof
   qpat_x_assum `L = SND (compute_label_offsets p)` (mk_asm "offsetmap") >>
   qpat_x_assum `B = build_offset_to_pc p` (mk_asm "pcmap") >>
   qpat_x_assum `p = pre ++ [AsmLabel x;next;third] ++ tail` (mk_asm "program") >>
-  pairTools.LET_INTRO_TAC >> disch_then (mk_asm "stepcount") >>
+  qabbrev_tac `d:num = if next = AsmLabel y then 1 else 3` >>
+  qpat_x_assum `Abbrev (d = _)`
+    (mk_asm "stepcount" o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   qpat_x_assum `Open p cc req V {} rank pc height need tag boolean edge`
-    (fn th => asm "open" (fn opth => asm "foldS" (fn sf =>
-      asm "offsetmap" (fn lf => asm "pcmap" (fn bf =>
-        assume_tac (SIMP_RULE (srw_ss()) [EMPTY_SUBSET,DIFF_EMPTY]
-          (SUBS [SYM sf,SYM lf,SYM bf]
-            (REWRITE_RULE [opth,LET_THM] th)))))))) >>
+    (fn th => asm "open" (fn opth =>
+      assume_tac (SIMP_RULE (srw_ss()) [EMPTY_SUBSET,DIFF_EMPTY]
+        (CONV_RULE expand_bypass_names (REWRITE_RULE [opth] th))))) >>
   pop_assum (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 (mk_asm "inhabited")
       (CONJUNCTS_THEN2 (mk_asm "bounds")
@@ -186,7 +186,7 @@ Resume merge_rename_root_bypass[extract]:
   asm "edges" (qspecl_then [`v`,`v1`] mp_tac) >> simp[] >>
   disch_then strip_assume_tac >>
   qpat_x_assum `Flow p pc height tag boolean v v1` mp_tac >>
-  asm "flow" (fn th => simp[th, LET_THM]) >> strip_tac >>
+  asm "flow" (fn th => rewrite_tac[th] >> CONV_TAC expand_bypass_names >> simp[]) >> strip_tac >>
   asm "site" (DISJ_CASES_THEN strip_assume_tac)
   >- suspend "adjacent" >>
   suspend "stub"
@@ -232,7 +232,7 @@ Resume merge_rename_root_bypass[stub]:
   disch_then (qx_choose_then `v2` strip_assume_tac) >>
   asm "edges" (qspecl_then [`v1`,`v2`] mp_tac) >> simp[] >> disch_then strip_assume_tac >>
   qpat_x_assum `Flow p pc height tag boolean v1 v2` mp_tac >>
-  asm "flow" (fn th => simp[th, LET_THM]) >> strip_tac >>
+  asm "flow" (fn th => rewrite_tac[th] >> CONV_TAC expand_bypass_names >> simp[]) >> strip_tac >>
   `pc v2 = pc v + 2` by decide_tac >>
   `EL (pc v2) p = AsmOp "JUMP" /\ pc v2 < LENGTH p` by
     (asm "program" (fn th => asm "rootpc" (fn pt =>
@@ -267,7 +267,7 @@ Resume merge_rename_root_bypass[stub]:
   `ALOOKUP dup_table "JUMP" = NONE /\ ALOOKUP swap_table "JUMP" = NONE /\
    asm_op_arity "JUMP" = 1` by EVAL_TAC >>
   qpat_x_assum `Flow p pc height tag boolean v2 z` mp_tac >>
-  asm "flow" (fn th => simp[th, LET_THM]) >> strip_tac >>
+  asm "flow" (fn th => rewrite_tac[th] >> CONV_TAC expand_bypass_names >> simp[]) >> strip_tac >>
   `height z = height v` by decide_tac >>
   `!k l o'. tag z k = SOME(l,o') ==> tag v k = SOME(l,o')` by
     (map_every qx_gen_tac [`j`,`lab`,`org`] >> strip_tac >>
@@ -330,7 +330,7 @@ Resume merge_rename_root_bypass[uniform]:
 QED
 
 Resume merge_rename_root_bypass[restrict]:
-  rewrite_tac[LET_THM] >>
+  CONV_TAC expand_bypass_names >>
   conj_tac
   >- (asm "reach" (fn th => simp[th]) >> qexistsl [`0`, `\j. z`] >> simp[]) >>
   qabbrev_tac `live = equiv_class (Reach edge) V z` >>
@@ -356,7 +356,9 @@ Resume merge_rename_root_bypass[restrict]:
 QED
 
 Resume merge_rename_root_bypass[restricted_open]:
-  asm "open" (fn th => SIMP_TAC bool_ss [th, LET_THM, EMPTY_SUBSET, DIFF_EMPTY]) >>
+  asm "open" (fn th => rewrite_tac[th]) >>
+  CONV_TAC expand_bypass_names >>
+  SIMP_TAC bool_ss [EMPTY_SUBSET, DIFF_EMPTY] >>
   conj_tac
   >- (irule SUBSET_FINITE_I >> qexists_tac `V` >> simp[SUBSET_DEF]) >>
   `!a. a IN live ==> a IN V` by

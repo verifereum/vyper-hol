@@ -11,12 +11,12 @@ Ancestors
 (* The two tests are the only erased PCs. In particular the fall from
    immediately before the window enters the relocated push. *)
 Triviality branch_relinked_fall:
-  let keep = \k:num. k < b \/ b+2 <= k in
-  let f = \k:num. if k < b then k else k-2 in
+  !keep. keep = (\k:num. k < b \/ b+2 <= k) ==>
+  !f. f = (\k:num. if k < b then k else k-2) ==>
   keep i /\ (if keep (i+1) then j=i+1 else j=b+2) ==>
   f j = f i+1
 Proof
-  simp[LET_THM] >>
+  CONV_TAC (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) >> BETA_TAC >>
   disch_then (CONJUNCTS_THEN2 assume_tac (mk_asm "next")) >>
   Cases_on `i < b`
   >- (Cases_on `i+1 < b`
@@ -55,7 +55,18 @@ QED
 
 (* The workers spell out the same lexical packet in different orders.
    Normalize only the selected bindings, using exact matching for the join. *)
-val branch_norm = REDEPTH_CONV (BETA_CONV ORELSEC REWR_CONV LET_THM)
+val branch_unwind = HO_REWR_CONV UNWIND_FORALL_THM2
+fun branch_unwind_group tm =
+  case strip_forall tm of
+    (v::_::_, body) =>
+      if is_imp body andalso is_eq (lhand body) andalso aconv (lhs (lhand body)) v
+      then CHANGED_CONV Unwind.UNWIND_FORALL_CONV tm else NO_CONV tm
+  | _ => NO_CONV tm
+val branch_norm = REDEPTH_CONV
+  (BETA_CONV ORELSEC branch_unwind ORELSEC branch_unwind_group)
+
+fun branch_intro name = qx_gen_tac name >> disch_then (assume_tac o
+  CONV_RULE (RAND_CONV branch_norm THENC REWR_CONV (GSYM markerTheory.Abbrev_def)))
 
 fun branch_with names ttac = ASSUM_LIST (fn asms =>
   let
@@ -77,7 +88,7 @@ fun branch_worker names th prove_inputs =
   mp_tac (CONV_RULE branch_norm th) >> (impl_tac >- prove_inputs) >>
   disch_then ACCEPT_TAC
 
-(* Keep each worker's shared outer LET bound to the table's live term. *)
+(* Instantiate ordinary arguments first, then discharge lexical equalities. *)
 fun branch_shared args binds worker use = ASSUM_LIST (fn asms =>
   goal_term (fn goal =>
     let
@@ -86,33 +97,28 @@ fun branch_shared args binds worker use = ASSUM_LIST (fn asms =>
         case List.find (fn tm => dest_var tm = (name,ty)) vars of
           SOME tm => tm
         | NONE => raise Fail ("no live " ^ name ^ " : " ^ type_to_string ty)
-      fun arg (name,binder) th = SPEC (live name (type_of binder)) th
-      val bs = fst (strip_forall (concl worker))
-      val specialized = List.foldl (fn (input,th) => arg input th) worker
-                          (ListPair.zipEq (args,bs))
-      val telescope = REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-        TOP_DEPTH_CONV (FIRST_CONV [BETA_CONV, REWR_CONV combinTheory.S_DEF,
-          REWR_CONV combinTheory.o_THM, REWR_CONV combinTheory.C_DEF])
-      fun bind (NONE,th) = CONV_RULE (REWR_CONV LET_THM THENC BETA_CONV) th
+      fun arg (name,th) =
+        SPEC (live name (type_of (fst (dest_forall (concl th))))) th
+      fun bind (NONE,th) = CONV_RULE branch_unwind th
         | bind (SOME name,th) =
             let
-              val all = CONV_RULE telescope th
-              val (x,_) = dest_forall (concl all)
-              val step = SPEC (live name (type_of x)) all
+              val step = CONV_RULE (LAND_CONV branch_norm) (arg (name,th))
               val eq = fst (dest_imp (concl step))
+              val marked = REWR_CONV markerTheory.Abbrev_def THENC branch_norm
+              val facts = List.mapPartial (fn a =>
+                SOME (CONV_RULE marked a) handle HOL_ERR _ => NONE) asms
             in
-              case List.find (fn a => aconv (concl a) eq) asms of
+              case List.find (fn a => aconv (concl a) eq) facts of
                 SOME a => MP step a
-              | NONE => raise Fail ("unmatched shared binding: " ^ term_to_string eq)
+              | NONE => raise Fail ("unmatched shared binding: " ^ name)
             end
-    in use (List.foldl bind specialized binds) end))
+    in use (List.foldl bind (List.foldl arg worker args) binds) end))
 
 Theorem merge_iszero_jumpi_cut_table:
-  let b = LENGTH pre in
-  let c = ss.sym_base.as_pc in
-  let B = \w:bytes32. (b2w (w=0w):bytes32) in
-  let Shape =
-    \p cc req pc height need tag boolean i (s:asm_state).
+  !b. b = LENGTH pre ==>
+  !c. c = ss.sym_base.as_pc ==>
+  !Shape. Shape =
+    (\p cc req pc height need tag boolean i (s:asm_state).
       s.as_pc = pc i /\ LENGTH s.as_stack = height i /\
       s.as_call_ctx = cc /\ s.as_requests = req /\
       (need i ==> s.as_call_ctx.cc_static) /\
@@ -124,16 +130,16 @@ Theorem merge_iszero_jumpi_cut_table:
            off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest /\
            EL k s.as_stack = (n2w off:bytes32)) /\
       (!k. boolean i k ==> k < height i /\
-         (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w)) in
-  let Flow =
-    \p pc height tag boolean (x:num#num) (y:num#num).
-      let hi = height x; hj = height y; ins = EL (pc x) p in
-      let inherit = \(src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
+         (EL k s.as_stack = 0w \/ EL k s.as_stack = 1w))) ==>
+  !Flow. Flow =
+    (\p pc height tag boolean (x:num#num) (y:num#num).
+      !hi. hi = height x ==> !hj. hj = height y ==> !ins. ins = EL (pc x) p ==>
+      !inherit. inherit = (\(src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
         (!k l origin. tag y k = SOME(l,origin) ==>
            k < hj /\ (fresh k = SOME(l,origin) \/
            ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
         (!k. boolean y k ==> k < hj /\
-           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a)) in
+           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
       case ins of
         AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
       | AsmPush bs => hj = hi+1 /\
@@ -154,7 +160,7 @@ Theorem merge_iszero_jumpi_cut_table:
            | NONE => case ALOOKUP swap_table name of
                SOME n => 0 < n /\ n < hi /\ hj = hi /\
                  inherit (\k. SOME(if k=0 then n else if k=n then 0 else k)) (\k. NONE) (\k. F)
-             | NONE => let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+             | NONE => !a. a = asm_op_arity name ==> !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -162,18 +168,18 @@ Theorem merge_iszero_jumpi_cut_table:
                    !s u. LENGTH s.as_stack=hi /\
                      asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
                        ins s = AsmOK u ==> (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-      | _ => F in
-  let Target = \p pc tag (x:num#num) (y:num#num).
+      | _ => F) ==>
+  !Target. Target = (\p pc tag (x:num#num) (y:num#num).
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\ off < dimword(:256) /\
-      FLOOKUP (build_offset_to_pc p) off = SOME (pc y) in
-  let Structure = \p (V:(num#num)->bool) (rank:(num#num)->num) pc height tag boolean edge.
+      FLOOKUP (build_offset_to_pc p) off = SOME (pc y)) ==>
+  !Structure. Structure = (\p (V:(num#num)->bool) (rank:(num#num)->num) pc height tag boolean edge.
     !x y. edge x y ==> x IN V /\ y IN V /\ rank y < rank x /\
       Flow p pc height tag boolean x y /\
       (if EL (pc x) p = AsmOp "JUMP" then Target p pc tag x y
        else if EL (pc x) p = AsmOp "JUMPI" then pc y=pc x+1 \/ Target p pc tag x y
-       else pc y=pc x+1) in
-  let Open = \p cc req (V:(num#num)->bool) rank pc height need tag boolean edge.
+       else pc y=pc x+1)) ==>
+  !Open. Open = (\p cc req (V:(num#num)->bool) rank pc height need tag boolean edge.
     FINITE V /\ (!x. x IN V ==> ?s. Shape p cc req pc height need tag boolean x s) /\
     (!x. x IN V ==> pc x < LENGTH p) /\
     Structure p V rank pc height tag boolean edge /\
@@ -183,8 +189,8 @@ Theorem merge_iszero_jumpi_cut_table:
             u.as_requests=req) \/
       (?y u. edge x y /\
         asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p 1 s = AsmOK u /\
-        Shape p cc req pc height need tag boolean y u)) in
-  let Slots = \p (cc:call_context) (V:(num#num)->bool) height need tag boolean.
+        Shape p cc req pc height need tag boolean y u))) ==>
+  !Slots. Slots = (\p (cc:call_context) (V:(num#num)->bool) height need tag boolean.
     !x. x IN V ==>
       (need x ==> cc.cc_static) /\
       (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
@@ -192,17 +198,17 @@ Theorem merge_iszero_jumpi_cut_table:
         k < height x /\ origin < LENGTH p /\
         (EL origin p = AsmPushLabel l \/ EL origin p = AsmPushOfst l 0) /\
         ?off dest. FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
-          off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest) in
-  let Rows = \p (cc:call_context) (V:(num#num)->bool) pc height tag edge.
+          off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest)) ==>
+  !Rows. Rows = (\p (cc:call_context) (V:(num#num)->bool) pc height tag edge.
     !x. x IN V ==>
       pc x < LENGTH p /\
-      let h = height x; ins = EL (pc x) p in
-      let fall = ?y. edge x y /\ pc y=pc x+1 in
-      let taken = ?y. edge x y /\ Target p pc tag x y in
-      let out = \h'. !y. edge x y ==> height y=h' in
-      let consumed = \n. !k. k<n ==> tag x k=NONE in
-      let terminal = !y. ~edge x y in
-      case ins of
+      !h. h = height x ==>
+      !fall. fall = (?y. edge x y /\ pc y=pc x+1) ==>
+      !taken. taken = (?y. edge x y /\ Target p pc tag x y) ==>
+      !out. out = (\h'. !y. edge x y ==> height y=h') ==>
+      !consumed. consumed = (\n. !k. k<n ==> tag x k=NONE) ==>
+      !terminal. terminal = (!y. ~edge x y) ==>
+      case EL (pc x) p of
         AsmLabel l => fall /\ out h
       | AsmPush bs => fall /\ out (h+1)
       | AsmPushLabel l => IS_SOME (FLOOKUP (SND (compute_label_offsets p)) l) /\ fall /\ out (h+1)
@@ -221,14 +227,12 @@ Theorem merge_iszero_jumpi_cut_table:
                  (name="JUMPI" /\ 2<=h /\ tag x 1=NONE /\ fall /\ taken /\ out (h-2)) \/
                  (?m. static_abort_straight name m /\ asm_op_arity name<=h /\
                       consumed (asm_op_arity name) /\ fall /\ out (h-asm_op_arity name+m)))
-      | _ => F in
-  let Reach = \(edge:(num#num)->(num#num)->bool) e x.
-    ?n (path:num->num#num). path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k)) in
-  let Just = \ss tag boolean (e:num#num).
+      | _ => F) ==>
+  !Just. Just = (\ss tag boolean (e:num#num).
     (!k l origin. tag e k = SOME(l,origin) ==>
        k < LENGTH ss.sym_stack /\ EL k ss.sym_stack=Lab l 0) /\
     (!k. boolean e k ==> k < LENGTH ss.sym_stack /\
-       (EL k ss.sym_stack=Val 0w \/ EL k ss.sym_stack=Val 1w)) in
+       (EL k ss.sym_stack=Val 0w \/ EL k ss.sym_stack=Val 1w))) ==>
   p = pre ++ [AsmOp "ISZERO";AsmOp "ISZERO";AsmPushLabel l;AsmOp "JUMPI"] ++ tail /\
   q = pre ++ [AsmPushLabel l;AsmOp "JUMPI"] ++ tail /\
   asm_static_wf p /\ asm_sym_rel p (asm_data_env p (assemble p ++ data)) a ss /\
@@ -236,14 +240,15 @@ Theorem merge_iszero_jumpi_cut_table:
      Open p a.as_call_ctx a.as_requests V rank pc height need tag boolean edge /\
      Rows p a.as_call_ctx V pc height tag edge /\
      Slots p a.as_call_ctx V height need tag boolean /\
-     e IN V /\ (!x. x IN V ==> Reach edge e x) /\
+     e IN V /\ (!x. x IN V ==>
+       ?n (path:num->num#num). path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) /\
      Shape p a.as_call_ctx a.as_requests pc height need tag boolean e a /\ Just ss tag boolean e) /\
   asm_sym_rel q (asm_data_env q (assemble q ++ data)) t u /\
   t.as_call_ctx=a.as_call_ctx /\ t.as_requests=a.as_requests /\
   (if b<c /\ c<b+4 then
      u.sym_base.as_pc=b /\ ?w stk. u.sym_stack=Val w::stk /\
        ss.sym_stack=(if c-b=3 then [Lab l 0] else []) ++
-         (Val (FUNPOW B (MIN (c-b) 2) w)::stk)
+         (Val (FUNPOW (\w:bytes32. (b2w (w=0w):bytes32)) (MIN (c-b) 2) w)::stk)
    else u=sym_with_pc (splice_pc b 4 2 c) ss) ==>
   ?V e rank pc height need tag boolean edge.
     FINITE V /\ e IN V /\ Rows q t.as_call_ctx V pc height tag edge /\
@@ -251,11 +256,7 @@ Theorem merge_iszero_jumpi_cut_table:
     Slots q t.as_call_ctx V height need tag boolean /\
     Shape q t.as_call_ctx t.as_requests pc height need tag boolean e t /\ Just u tag boolean e
 Proof
-  map_every (fn nm =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
-    qx_gen_tac nm >> disch_tac)
-    [`b`,`c`,`B`,`Shape`,`Flow`,`Target`,`Structure`,`Open`,`Slots`,`Rows`,`Reach`,`Just`] >>
+  map_every branch_intro [`b`,`c`,`Shape`,`Flow`,`Target`,`Structure`,`Open`,`Slots`,`Rows`,`Just`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `?V e rank pc height need tag boolean edge. _`
     (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
@@ -327,10 +328,7 @@ Proof
   qexistsl_tac [`verts_q`,`root_q`,`rank_q`,`pc_q`,`height_q`,`need_q`,`tag_q`,`bool_q`,`edge_q`] >>
   conj_tac >- suspend "finite" >>
   conj_tac >- suspend "root_member" >>
-  qpat_assum `q = _` (fn code =>
-    qpat_assum `t.as_call_ctx = a.as_call_ctx` (fn ctx =>
-      qpat_assum `t.as_requests = a.as_requests` (fn req =>
-        rpt conj_tac >> first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [code,ctx,req]))))
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume merge_iszero_jumpi_cut_table[selector]:
@@ -339,24 +337,15 @@ Resume merge_iszero_jumpi_cut_table[selector]:
      mp_tac (Q.SPECL [`pre`,`l`,`tail`,`b`,`p`,`i`] branch_test_suffix) >>
      simp[Abbr `b`]) >>
   simp[NoAsms, Abbr `keep`] >>
-  (let
-     val expand = REDEPTH_CONV (BETA_CONV ORELSEC REWR_CONV LET_THM)
-     val selector = SPEC_ALL merge_iszero_branch_selector |> CONV_RULE expand |>
-       ONCE_REWRITE_RULE [GSYM AND_IMP_INTRO]
-   in
-     qpat_assum `Abbrev (Shape = _)` (fn sh =>
-       qpat_assum `Abbrev (Flow = _)` (fn fl =>
-         qpat_assum `Abbrev (Target = _)` (fn tg =>
-           qpat_assum `Abbrev (Structure = _)` (fn st =>
-             qpat_assum `Abbrev (Open = _)` (fn opn =>
-               qpat_assum `Open p _ _ V rank pc height need tag boolean edge`
-                 (fn source =>
-                   let val facts = map (REWRITE_RULE[markerTheory.Abbrev_def])
-                                     [opn,st,tg,fl,sh]
-                   in mp_tac (MATCH_MP selector
-                     (CONV_RULE expand (PURE_REWRITE_RULE facts source))) end))))))
-   end) >>
-  disch_then (drule_then ACCEPT_TAC)
+  mp_tac (CONV_RULE branch_norm (Q.SPECL
+    [`p`,`a.as_call_ctx`,`a.as_requests`,`V`,`rank`,`pc`,`height`,`need`,
+     `tag`,`boolean`,`edge`,`b`] merge_iszero_branch_selector)) >>
+  (impl_tac >-
+    (reverse conj_tac >- first_assum ACCEPT_TAC >>
+     branch_with ["Open","Structure","Target","Flow","Shape"] (fn cv =>
+       rewrite_tac[boolTheory.OR_CLAUSES] >>
+       first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [boolTheory.OR_CLAUSES] o CONV_RULE cv)))) >>
+  disch_then ACCEPT_TAC
 QED
 
 (* Earlier contraction route (E0474), kept as failure evidence.
@@ -400,9 +389,8 @@ QED
 
 Resume merge_iszero_jumpi_cut_table[jumpi]:
   qx_gen_tac `x` >> strip_tac >>
-  qpat_assum `Rows p _ V pc height tag edge` (mp_tac o BETA_RULE o
-      REWRITE_RULE [LET_THM]) >>
-  simp[NoAsms, Abbr `Rows`, LET_THM] >>
+  qpat_assum `Rows p _ V pc height tag edge` mp_tac >>
+  simp[NoAsms, Abbr `Rows`] >>
   disch_then (qspec_then `x` (drule_then (mp_tac o CONJUNCT2))) >>
   simp[EVAL ``ALOOKUP dup_table "JUMPI"``, EVAL ``ALOOKUP swap_table "JUMPI"``,
        static_abort_straight_def]
@@ -432,10 +420,8 @@ QED
 
 Resume merge_iszero_jumpi_cut_table[path_last]:
   qx_gen_tac `x` >> strip_tac >>
-  qpat_assum `!x. x IN V ==> Reach edge e x`
-    (drule_then mp_tac) >>
-  simp[NoAsms, Abbr `Reach`] >>
-  disch_then (mp_tac o MATCH_MP branch_path_last) >> simp[]
+  qpat_assum `!x. x IN V ==> ?n path. path 0=e /\ path n=x /\ _`
+    (drule_then (mp_tac o MATCH_MP branch_path_last)) >> simp[]
 QED
 
 Resume merge_iszero_jumpi_cut_table[fall]:
@@ -477,10 +463,10 @@ Resume merge_iszero_jumpi_cut_table[control]:
      gvs[] >> metis_tac[DECIDE ``0 < 1:num``]) >>
   `!x. ctag x (0:rat) = tag x (0:num)` by simp[Abbr `ctag`] >>
   qpat_assum `!x. ctag x (0:rat) = tag x (0:num)` (fn top_slot =>
-    branch_with ["Target","Control","tag_q"] (fn cv =>
+    branch_with ["Target","Control","tag_q","edge_q"] (fn cv =>
       branch_shared ["V","e","rank","pc","height","ctag","cbool","edge","next","v"]
         [SOME "b",SOME "c",SOME "keep",SOME "f",SOME "fresh",SOME "verts_q",
-         SOME "pc_q",SOME "rank_q",NONE,NONE,SOME "edge_q",NONE,NONE]
+         SOME "pc_q",SOME "rank_q",NONE,NONE,NONE,NONE]
         merge_iszero_branch_control (fn th => mp_tac (CONV_RULE branch_norm th)) >>
       (impl_tac >-
         (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
@@ -522,11 +508,11 @@ Resume merge_iszero_jumpi_cut_table[rows]:
      conj_tac >> first_assum ACCEPT_TAC) >>
   qabbrev_tac `drank = \x. rat_of_num (rank x)` >>
   qabbrev_tac `dbool = \(x:num#num) (k:rat). F` >>
-  branch_with ["Rows"] (fn cv =>
+  branch_with ["verts_q","height_q","edge_q"] (fn cv =>
     branch_shared ["p","q","pre","l","tail","ss","a","t","V","e","drank","pc","height",
                    "tag","dbool","edge","next","v"]
-      [SOME "b",SOME "c",SOME "Target",NONE,NONE,SOME "keep",SOME "f",SOME "fresh",
-       SOME "verts_q",SOME "pc_q",SOME "height_q",NONE,SOME "tag_q",SOME "edge_q"]
+      [SOME "b",SOME "c",SOME "Target",SOME "Rows",SOME "keep",SOME "f",SOME "fresh",
+       SOME "pc_q",NONE,SOME "tag_q"]
       merge_iszero_branch_dispatch (mp_tac o CONV_RULE branch_norm) >>
     (impl_tac >- (rpt conj_tac >> FIRST
        [first_assum ACCEPT_TAC, first_assum (ACCEPT_TAC o CONV_RULE cv),
@@ -572,17 +558,16 @@ Resume merge_iszero_jumpi_cut_table[structure]:
      qpat_assum `!x z. x IN V /\ keep (pc x) /\ edge x z ==> _ /\ _ /\ _`
        (drule_all_then (map_every assume_tac o CONJUNCTS)) >> (simp[])) >>
   `!x y. edge_q x y ==> Flow q pc_q height_q tag_q bool_q x y` by
-    (let val unlet = CONV_RULE (REWR_CONV LET_THM THENC BETA_CONV) in
-      branch_with ["Flow","edge_q","fresh"] (fn cv =>
-        branch_shared ["p","q","pre","tail","l","V","e","c","rank","pc","height",
-                       "tag","boolean","edge","next","v"]
-          [SOME "b",SOME "keep",SOME "f",NONE,SOME "pc_q",SOME "height_q",
-           SOME "tag_q",SOME "bool_q",NONE]
-          (unlet (unlet merge_iszero_branch_flow)) (mp_tac o CONV_RULE branch_norm) >>
-        (impl_tac >- (rpt conj_tac >> FIRST
-          [first_assum ACCEPT_TAC, first_assum (ACCEPT_TAC o CONV_RULE cv)])) >>
-        CONV_TAC cv >> disch_then ACCEPT_TAC)
-     end) >>
+    (branch_with ["edge_q","fresh","pc_q","height_q","tag_q","bool_q"] (fn cv =>
+       branch_shared [] [NONE,SOME "Flow"] merge_iszero_branch_flow
+         (fn flow =>
+           branch_shared ["p","q","pre","tail","l","V","e","c","rank","pc","height",
+                          "tag","boolean","edge","next","v"]
+             [SOME "b",SOME "keep",SOME "f",NONE] flow
+             (mp_tac o CONV_RULE branch_norm)) >>
+       (impl_tac >- (rpt conj_tac >> FIRST
+         [first_assum ACCEPT_TAC, first_assum (ACCEPT_TAC o CONV_RULE cv)])) >>
+       CONV_TAC cv >> disch_then ACCEPT_TAC)) >>
   simp[NoAsms, Abbr `Structure`] >> rpt gen_tac >> disch_tac >>
   qpat_assum `!x y. edge_q x y ==> x IN verts_q /\ _`
     (drule_then (map_every assume_tac o CONJUNCTS)) >>
@@ -597,29 +582,30 @@ Resume merge_iszero_jumpi_cut_table[slots]:
     (simp[NoAsms, Abbr `slot_bool`, Abbr `bool_q`, FUN_EQ_THM] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >>
      IF_CASES_TAC >> simp[AC CONJ_ASSOC CONJ_COMM]) >>
-  branch_with ["Slots"] (fn cv =>
-    branch_shared ["pre","tail","p","q","l","ss","t","V","e","pc","height","need",
-                   "tag","boolean","v"]
-      [SOME "b",SOME "keep",SOME "f",NONE,NONE,NONE,SOME "height_q",
-       SOME "need_q",SOME "tag_q",SOME "slot_bool",NONE,NONE]
-      merge_iszero_branch_slots (mp_tac o CONV_RULE branch_norm) >>
-    (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
-      (qpat_assum `t.as_call_ctx = a.as_call_ctx` SUBST1_TAC >>
-       first_assum (ACCEPT_TAC o CONV_RULE cv))))) >>
-    qpat_assum `slot_bool = bool_q` (fn eq =>
-      branch_with ["Slots","verts_q","fresh","c"] (fn dst =>
-        CONV_TAC dst >> disch_then (ACCEPT_TAC o PURE_REWRITE_RULE [eq]))))
+  branch_shared ["pre","tail","p","q","l","ss","t","V","e","pc","height","need",
+                 "tag","boolean","v"]
+    [SOME "b",NONE,SOME "Slots"]
+    merge_iszero_branch_slots (mp_tac o CONV_RULE branch_norm) >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
+    (qpat_assum `t.as_call_ctx = a.as_call_ctx` SUBST1_TAC >> first_assum ACCEPT_TAC)))) >>
+  qpat_assum `slot_bool = bool_q` (fn eq =>
+    once_rewrite_tac[GSYM eq] >>
+    branch_with ["verts_q","fresh","c","keep","height_q","need_q","tag_q","f","slot_bool"]
+      (fn dst => CONV_TAC dst) >>
+    disch_then ACCEPT_TAC)
 QED
 
 Resume merge_iszero_jumpi_cut_table[root_shape]:
-  branch_shared []
-    [SOME "b",SOME "c",SOME "B",SOME "Shape",SOME "Just",SOME "Slots",
-     SOME "keep",SOME "f",SOME "fresh",NONE,SOME "verts_q",SOME "root_q",
-     SOME "pc_q",SOME "height_q",SOME "need_q",SOME "tag_q",SOME "bool_q"]
-    (INST_TYPE [alpha |-> ``:asm_inst``] merge_iszero_branch_actual_root)
-    (mp_tac o CONV_RULE branch_norm) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then ACCEPT_TAC
+  branch_with ["verts_q","pc_q"] (fn cv =>
+    branch_shared []
+      [SOME "b",SOME "c",SOME "Shape",SOME "Just",SOME "Slots",
+       SOME "keep",SOME "f",SOME "fresh",NONE,SOME "root_q",
+       SOME "height_q",SOME "need_q",SOME "tag_q",SOME "bool_q"]
+      (INST_TYPE [alpha |-> ``:asm_inst``] merge_iszero_branch_actual_root)
+      (mp_tac o CONV_RULE branch_norm) >>
+    (impl_tac >- (rpt conj_tac >>
+      (first_assum ACCEPT_TAC ORELSE first_assum (ACCEPT_TAC o CONV_RULE cv)))) >>
+    CONV_TAC cv >> disch_then ACCEPT_TAC)
 QED
 
 Finalise merge_iszero_jumpi_cut_table
