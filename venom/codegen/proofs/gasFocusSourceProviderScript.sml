@@ -2525,6 +2525,13 @@ QED
 
 Finalise focus_concretize_cut_read
 
+Theorem focus_history_native_fuel_prefix[local]:
+  n <= m ==>
+  ?rest. trace_blocks a e m C fn ent = trace_blocks a e n C fn ent ++ rest
+Proof
+  simp[dftGasFromListTracePrefixTheory.trace_prefix]
+QED
+
 (* Scratch statement for elaboration and independent review.
    Use the actual stopped six tables and their C8 chronology. Split a
    compatible raw at Mcut, with the unread suffix and [0w] as tail.
