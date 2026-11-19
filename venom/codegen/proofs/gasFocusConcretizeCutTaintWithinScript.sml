@@ -31,7 +31,11 @@ Theorem focus_concretize_cut_taint_within:
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_ctx_shape C' /\ o1_initial_state_ok vs /\
   vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
-  o1_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  o1_ptr_safe_upto D lo n C vs /\
+  mem_inv (\ctx fn inst s. gas_cut n vs s ==> dload_headroom_ok ctx fn inst s) C vs /\
+  (!fn inst s. raw_reachable vs C fn inst s /\ gas_cut n vs s ==>
+    raw_mem_ok C fn inst s /\ dload_offset_ok C fn inst s) /\
+  alloca_frontier_upto n C vs /\
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
@@ -40,10 +44,10 @@ Theorem focus_concretize_cut_taint_within:
   taint_within_upto D n C' vs
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all focus_concretize_cut_fields >> strip_tac >>
+  drule_all focus_concretize_cut_fields_cut_headroom >> strip_tac >>
   `taint_within_upto D n C vs /\ ptr_discipline_upto lo n C vs /\
    fixed_region_reserved lo C /\ EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions` by
-     fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
+     fs[o1_ptr_safe_upto_def] >>
   rewrite_tac[taint_within_upto_def] >> conj_tac >>
   map_every qx_gen_tac [`stk`,`PG`,`G`,`tn`,`fn`,`inst`,`s`,`fuel`,`post`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -59,7 +63,7 @@ Proof
     (drule_all_then strip_assume_tac))
    >- (fs[Abbr `at`, ptr_observe_def] >> drule_all ptr_cut_window_taint_steps >>
        metis_tac[prim_recTheory.LESS_REFL])) >>
-  drule_all focus_concretize_cut_ghost_endpoint >> strip_tac >>
+  drule_all focus_concretize_cut_ghost_endpoint_ptr_safe >> strip_tac >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
@@ -129,7 +133,7 @@ Resume focus_concretize_cut_taint_within[request]:
     ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) /\
     j < len /\ w2n x + j NOTIN a.po_taint.t_mem ==>
     read_byte (w2n x+j) a.po_state.vs_memory = read_byte (w2n y+j) at.po_state.vs_memory` by
-    (rpt gen_tac >> strip_tac >> drule_all focus_cut_paired_read_bytes >> simp[]) >>
+    (rpt gen_tac >> strip_tac >> drule_all focus_cut_paired_read_bytes_ptr_safe >> simp[]) >>
   drule_all focus_cut_paired_request_observation >>
   qpat_x_assum `at.po_inst = concretize_inst_with_positions _ _` kall_tac >>
   simp[Abbr `at`, ptr_observe_def]
@@ -188,7 +192,7 @@ Resume focus_concretize_cut_taint_within[halt]:
       eval_operand ops.iao_ofst at.po_state = SOME y /\
       ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y)` by simp[] >>
      reverse conj_tac
-     >- (gen_tac >> strip_tac >> drule_all focus_cut_paired_read_bytes >> simp[]) >>
+     >- (gen_tac >> strip_tac >> drule_all focus_cut_paired_read_bytes_ptr_safe >> simp[]) >>
      strip_tac >>
      drule concretizePtrOwnershipErasureTheory.ptr_owner_op_projection >>
      disch_then (qspec_then `addr` strip_assume_tac) >>
