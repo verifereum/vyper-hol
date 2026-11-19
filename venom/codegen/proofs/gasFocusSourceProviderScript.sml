@@ -16,6 +16,42 @@ Ancestors
   o1CodeEndSourceCutTransport o1ComposeSupport o1PipelineCompose simplifyCfgDefs
   makeSsaDefs o1ContractSimplifyCfg
 
+Theorem focus_opt_lower_inst_no_dload[local]:
+  lower_dload_inst_supply s i = (xs,t) /\ inst_wf i ==>
+  EVERY (\j. j.inst_opcode <> DLOAD /\ j.inst_opcode <> DLOADBYTES) xs
+Proof
+  strip_tac >> Cases_on `i.inst_opcode = DLOAD`
+  >- (fs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+      gvs[lower_dload_inst_supply_def, AllCaseEqs()]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (fs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+      gvs[lower_dload_inst_supply_def, AllCaseEqs()]) >>
+  gvs[lower_dload_inst_supply_def]
+QED
+
+(* Neither source DLOAD opcode survives expansion in a well-formed stage. *)
+Theorem focus_opt_lower_no_dload[local]:
+  ctx_pass_stage rp (CFP_Simple VP_LowerDload) view C C' /\
+  o1_ctx_shape C /\ MEM g C'.ctx_functions /\ MEM j (fn_insts g) ==>
+  j.inst_opcode <> DLOAD /\ j.inst_opcode <> DLOADBYTES
+Proof
+  strip_tac >>
+  `?f s t. MEM f C.ctx_functions /\ lower_dload_function_supply s f = (g,t)` by
+    (qpat_x_assum `MEM j (fn_insts g)` kall_tac >>
+     fs[ctx_pass_stage_def, LIST_REL_EL_EQN] >>
+     qpat_x_assum `MEM g C'.ctx_functions` mp_tac >> simp[MEM_EL] >>
+     strip_tac >> first_x_assum (qspec_then `n` mp_tac) >>
+     impl_tac >- fs[] >> strip_tac >>
+     gvs[fn_pass_step_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_all o1ContractLowerDloadTheory.lower_dload_function_supply_member >>
+  strip_tac >>
+  `inst_wf i` by
+    (fs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def, fn_inst_wf_def,
+        fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
+  drule_all focus_opt_lower_inst_no_dload >> simp[EVERY_MEM] >>
+  disch_then drule >> simp[]
+QED
+
 Theorem focus_opt_c1_section[local]:
   o1PipelineCorrect$o1_pipeline rp unit = SOME out /\
   o1_source_unit_ok unit /\ unit_entry_no_params unit /\
