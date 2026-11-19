@@ -446,7 +446,51 @@ Theorem focus_walk_stopped_selection:
       LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
       ?rest. MAP project sites = markf (raw ++ [0w]) ++ rest)
 Proof
-  strip_tac >> drule focus_uniform_frontier >> cheat
+  let
+    val reduce_lets = PURE_REWRITE_CONV [LET_THM] THENC DEPTH_CONV BETA_CONV
+    fun prove_conj facts goal =
+      if is_conj goal then
+        CONJ (prove_conj facts (lhand goal)) (prove_conj facts (rand goal))
+      else
+        Lib.first (fn th => aconv (concl th) goal) facts
+    val fmp = Lib.first (fn tm => fst (dest_var tm) = "fmp")
+      (free_vars (concl focus_uniform_frontier))
+    val (_, fmp_type) = match_term fmp ``fmp:bytes32``
+    val frontier = INST_TYPE fmp_type focus_uniform_frontier
+    val coverage = CONV_RULE reduce_lets focus_packet_coverage
+  in
+    CONV_TAC reduce_lets >>
+    DISCH_THEN (fn roots =>
+      let
+        val root_facts = CONJUNCTS roots
+        val packet = MP frontier (prove_conj root_facts (lhand (concl frontier)))
+        val (variables, _) = strip_exists (concl packet)
+        val witnesses = map (genvar o type_of) variables
+        val coverage = INST (ListPair.mapEq (op |->) (variables, witnesses)) coverage
+      in
+        foldr (fn (w, choose) => X_CHOOSE_THEN w choose) (fn selected =>
+          let
+            val selected_facts = CONJUNCTS (CONV_RULE reduce_lets selected)
+            val facts = root_facts @ selected_facts
+            val stop = List.last selected_facts
+            val coverage_input = lhand (concl coverage)
+            val coverage_stop = List.last (strip_conj coverage_input)
+            val (terminal, _) = dest_disj (concl stop)
+            val steps = map (genvar o type_of) (fst (strip_exists terminal))
+            val weaken_terminal = foldr (fn (w, choose) => X_CHOOSE_THEN w choose)
+              (fn terminal_facts => DISJ1_TAC >> MAP_EVERY EXISTS_TAC steps >>
+                (fn (asl, goal) =>
+                  ACCEPT_TAC (prove_conj (CONJUNCTS terminal_facts) goal) (asl, goal))) steps
+            val weaken_stop = prove (mk_imp (concl stop, coverage_stop),
+              DISCH_THEN (DISJ_CASES_THEN2 weaken_terminal
+                (fn other => DISJ2_TAC >> ACCEPT_TAC other)))
+            val covered = MP coverage (prove_conj (MP weaken_stop stop :: facts) coverage_input)
+          in
+            MAP_EVERY EXISTS_TAC witnesses >>
+            (fn (asl, goal) => ACCEPT_TAC (prove_conj (covered :: facts) goal) (asl, goal))
+          end) witnesses packet
+      end)
+  end
 QED
 
 (* The construction consumes the same selected witness, before raw and D. *)
