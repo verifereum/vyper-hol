@@ -1440,3 +1440,34 @@ Definition annotate_sources_slots_def:
     (src_id, annotate_slots layout NONE tops) ::
     annotate_sources_slots layout rest
 End
+
+(* Annotate one module's toplevels from layouts keyed by (source id, name):
+   a storage or transient variable gets its slot, an immutable its offset in
+   the immutable section (code_layout). *)
+Definition annotate_slots_mods_def:
+  annotate_slots_mods slots imms src ([] : toplevel list) = ([] : toplevel list) ∧
+  annotate_slots_mods slots imms src (VariableDecl vis mut name ty _ :: rest) =
+    VariableDecl vis mut name ty
+      (if mut = Immutable then ALOOKUP imms (src, name)
+       else ALOOKUP slots (src, name)) ::
+    annotate_slots_mods slots imms src rest ∧
+  annotate_slots_mods slots imms src
+      (HashMapDecl vis is_trans name kt vt _ :: rest) =
+    HashMapDecl vis is_trans name kt vt (ALOOKUP slots (src, name)) ::
+    annotate_slots_mods slots imms src rest ∧
+  annotate_slots_mods slots imms src (top :: rest) =
+    top :: annotate_slots_mods slots imms src rest
+End
+
+(* Annotate every module of a linked unit.  The layout nests an initialized
+   module's entries under its alias path; layout_import_map (from
+   translate_annotated_ast) maps that path to the module's source id.  A
+   module only `uses:`-ed has no entries, so its variables get none. *)
+Definition annotate_sources_slots_mods_def:
+  annotate_sources_slots_mods (layout : json_storage_layout) lmap sources =
+    let (st, tr) = extract_storage_layout lmap layout in
+    let imms = transform_storage_layout lmap
+                 (MAP (λ(key, info). (key, info.offset)) layout.code) in
+    MAP (λ(src, tops). (src, annotate_slots_mods (st ++ tr) imms src tops))
+      sources
+End
