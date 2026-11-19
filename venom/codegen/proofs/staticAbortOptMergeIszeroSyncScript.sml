@@ -84,9 +84,7 @@ Resume merge_iszero_synchronized_replay[window]:
      sym_steps p env (mid.sym_base.as_pc-b) entry = SymOK mid` by (
     irule protected_prefix_window_entry >>
     `b+m <= LENGTH p` by simp[Abbr `b`, Abbr `m`] >>
-    simp[] >> rpt strip_tac >>
-    TRY decide_tac >>
-    `j < b+m` by decide_tac >> metis_tac[]) >>
+    simp[] >> rpt strip_tac >> decide_tac) >>
   `m = (mid.sym_base.as_pc-b)+1` by decide_tac >>
   `sym_steps p env m entry = SymOK ss` by (
     qpat_assum `m = _` (once_rewrite_tac o single) >> simp[sym_steps_add]) >>

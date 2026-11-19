@@ -75,16 +75,21 @@ Triviality branch_dispatch_views:
 Proof
   ntac 7 gen_tac >> CONV_TAC branch_norm >> simp[Excl "MEM"] >>
   Cases_on `EL (pc x) p` >> simp[Excl "MEM"] >>
-  TRY (metis_tac[] >> NO_TAC) >>
-  rename1 `EL (pc x) p = AsmOp name` >>
+  TRY (rename1 `EL (pc x) p = AsmOp name` >> suspend "opcode") >>
+  metis_tac[]
+QED
+
+Resume branch_dispatch_views[opcode]:
   map_every (fn opn => Cases_on [QUOTE "name = ", QUOTE opn] >-
     (simp[asmSemTheory.dup_table_def,asmSemTheory.swap_table_def,static_abort_straight_def] >> metis_tac[]))
     ["\"INVALID\"","\"REVERT\"","\"SSTORE\"","\"TSTORE\"","\"LOG0\"","\"LOG1\"",
      "\"LOG2\"","\"LOG3\"","\"LOG4\"","\"JUMP\"","\"JUMPI\""] >>
-  Cases_on `ALOOKUP dup_table name` >> simp[] >>
-  TRY (metis_tac[] >> NO_TAC) >>
+  reverse (Cases_on `ALOOKUP dup_table name`)
+  >- (simp[] >> metis_tac[]) >>
   Cases_on `ALOOKUP swap_table name` >> simp[] >> metis_tac[]
 QED
+
+Finalise branch_dispatch_views
 
 fun branch_dispatch_tac prog cc =
   mp_tac (CONV_RULE branch_norm

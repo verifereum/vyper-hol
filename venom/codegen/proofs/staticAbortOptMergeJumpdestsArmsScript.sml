@@ -105,7 +105,7 @@ Proof
      metis_tac[]) >>
   `EL i (MAP (rename_push_label x y) p) = rename_push_label x y (EL i p)` by simp[EL_MAP] >>
   pop_assum SUBST1_TAC >> Cases_on `EL i p` >> simp[rename_push_label_def] >>
-  TRY (Cases_on `s = x` >> fs[] >> metis_tac[] >> NO_TAC) >> metis_tac[]
+  Cases_on `s = x` >> fs[] >> metis_tac[]
 QED
 
 (* Literal pushes and non-branch operations do not depend on the maps.

@@ -78,11 +78,13 @@ Proof
 QED
 
 Resume stack_peephole_one_layout[window]:
-  `!a. asm_swap_op a \/ asm_commutative_op a ==> ?name. a = AsmOp name` by
-    (Cases >> simp[asm_swap_op_def, asm_commutative_op_def]) >>
+  `(!a. asm_swap_op a ==> ?name. a = AsmOp name) /\
+   (!a. asm_commutative_op a ==> ?name. a = AsmOp name)` by
+    (conj_tac >> Cases >> simp[asm_swap_op_def, asm_commutative_op_def]) >>
+  pop_assum strip_assume_tac >>
   asm_x "rule" strip_assume_tac >>
-  TRY (rename1 `asm_swap_op a` >> `?name. a = AsmOp name` by metis_tac[]) >>
-  TRY (rename1 `asm_commutative_op a` >> `?name. a = AsmOp name` by metis_tac[]) >>
+  TRY (qpat_assum `!a. asm_swap_op a ==> _` (drule_then strip_assume_tac)) >>
+  TRY (qpat_assum `!a. asm_commutative_op a ==> _` (drule_then strip_assume_tac)) >>
   gvs[asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
       symbolResolveTheory.asm_inst_size_def, dup2_opcode, DISJ_IMP_THM, FORALL_AND_THM]
 QED

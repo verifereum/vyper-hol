@@ -1192,7 +1192,7 @@ Resume prune_jump_cut_rows[rooted]:
      match_mp_tac (INST_TYPE [alpha |-> ``:num``] prune_jump_deleted_origin_producer) >>
      qexistsl [`R`,`tag`,`b`,`z`,`u`,`m`,`path`,`eq`,`j`,
        `s with as_code := assemble q ++ data`,`v`,`k`] >>
-     rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])) >>
+     asm_rewrite_tac[] >> metis_tac[]) >>
   qabbrev_tac `pick = \l. @i. i < LENGTH q /\ (EL i q = AsmPushLabel l \/ EL i q = AsmPushOfst l 0)` >>
   `!l. (?u k. u IN A /\ tag u k = SOME (l,b)) ==>
        pick l < LENGTH q /\ (EL (pick l) q = AsmPushLabel l \/ EL (pick l) q = AsmPushOfst l 0)` by

@@ -87,10 +87,11 @@ Proof
       `len (FST x) <= B` by metis_tac[] >> decide_tac)
   >- simp[SUBSET_DEF, Abbr `V`, Abbr `X`]
   >- first_assum ACCEPT_TAC
-  >- (simp[Abbr `V`, Abbr `lr`] >> rpt strip_tac >>
-      TRY (`len (FST x) <= B` by metis_tac[] >> decide_tac) >>
-      qexists `(ARB:asm_state) with <| as_pc := pc x; as_stack := REPLICATE (height x) 0w;
-        as_call_ctx := cc; as_requests := req |>` >> simp[Abbr `Sh`])
+  >- (simp[Abbr `V`, Abbr `lr`] >> rpt strip_tac
+      >> TRY (qexists `(ARB:asm_state) with <|
+           as_pc := pc x; as_stack := REPLICATE (height x) 0w;
+           as_call_ctx := cc; as_requests := req |>` >> simp[Abbr `Sh`] >> NO_TAC) >>
+      `len (FST x) <= B` by metis_tac[] >> decide_tac)
   >- suspend "good"
   >- suspend "target"
   >- suspend "local_edge" >>

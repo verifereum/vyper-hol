@@ -128,8 +128,10 @@ Resume merge_iszero_one_canonical_layout[target]:
   `j = dest` by (drule_all asm_static_wf_code_label >> strip_tac >> gvs[]) >>
   qpat_x_assum `j = dest` SUBST_ALL_TAC >>
   `EL dest p = AsmLabel l` by metis_tac[INDEX_OF_eq_SOME] >>
-  `INDEX_OF (AsmLabel l) q = SOME (if dest < z then dest else dest-2) /\
-   (dest < z \/ z+2 <= dest)` by (
+  SUBGOAL_THEN
+    ``INDEX_OF (AsmLabel l) q = SOME (if dest < z then dest else dest-2) /\
+      (dest < z \/ z+2 <= dest)``
+    (CONJUNCTS_THEN2 assume_tac assume_tac) >- (
     mp_tac (Q.INST [`pat` |-> `[AsmOp "ISZERO"; AsmOp "ISZERO"]`,
                     `repl` |-> `[]:asm_inst list`, `l` |-> `l`,
                     `pfx` |-> `left`, `sfx` |-> `right`] splice_index_of_label) >>
@@ -154,7 +156,7 @@ Resume merge_iszero_one_canonical_layout[target]:
   (impl_tac >- decide_tac) >> strip_tac >>
   `EL (if dest < z then dest else dest-2) q = AsmLabel l` by (
     qpat_assum `EL _ q = EL dest p` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qexists_tac `off` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qpat_assum `!k:num. k < 65536 ==> _` irule >> first_assum ACCEPT_TAC
 QED

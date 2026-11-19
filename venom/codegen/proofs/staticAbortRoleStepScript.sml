@@ -414,8 +414,10 @@ Resume pending_role_step[op]:
         `asm_next (t with as_stack := EL n t.as_stack :: t.as_stack)` role_step_dup >>
       transfer_role `\k. SOME(if k=0 then (n:num) else k-1)` `\k. NONE` `\k. F` >>
       simp[asm_next_def] >>
-      rpt conj_tac >> TRY (metis_tac[]) >>
-      rpt strip_tac >> Cases_on `k` >> simp[]) >>
+      rpt conj_tac
+      >~ [`EL _ (_::_)`]
+      >- (rpt strip_tac >> Cases_on `k` >> simp[]) >>
+      metis_tac[]) >>
   reverse (Cases_on `ALOOKUP swap_table name`) >- swap_role >>
   reduce_normal_role >> reverse branch_arms >- straight_role >>
   (asm_x "jumpi" (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac

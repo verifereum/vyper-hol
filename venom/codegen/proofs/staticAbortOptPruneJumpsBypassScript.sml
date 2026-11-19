@@ -282,7 +282,7 @@ Resume prune_jump_site_bypass[path]:
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_then strip_assume_tac >>
   qexists_tac `z` >>
   qpat_assum `pc v = b+1` (fn hv => simp[NoAsms, Abbr `d`, hv, ADD_COMM]) >>
-  rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[ADD_COMM])
+  asm_rewrite_tac[] >> metis_tac[ADD_COMM]
 QED
 
 Resume prune_jump_site_bypass[shape]:

@@ -703,7 +703,7 @@ Resume conditional_jump_whole_visit_rows[rank_flow]:
          (qpat_assum `!k a. OPTION_MAP _ (tag z0 k) = SOME a \/ _ ==> _` irule >>
           simp[Excl "OPTION_MAP_EQ_SOME"]) >>
        qpat_assum `!k a. OPTION_MAP _ (raw k) = SOME a ==> _` (drule_then assume_tac) >>
-       rpt (conj_tac >- decide_tac) >> (first_assum ACCEPT_TAC ORELSE decide_tac)) >>
+       asm_rewrite_tac[] >> decide_tac) >>
    gen_tac >> disch_tac >>
    qpat_assum `!k. boolean z0 k \/ boolean z1 k ==> _` (qspec_then `k` mp_tac) >>
    (impl_tac >- simp[]) >> strip_tac >> decide_tac)

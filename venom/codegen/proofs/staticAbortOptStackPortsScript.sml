@@ -312,12 +312,6 @@ val fall_guard = ``\ins hi hj (G:num->(string#num)option).
        | NONE => ?r. static_abort_straight name r /\ asm_op_arity name<=hi /\
            (!k. k<asm_op_arity name ==> G k=NONE) /\ hj=hi-asm_op_arity name+r)``;
 
-val fixed_guard = ``\ins hi hj (G:num->(string#num)option) (B:num->bool).
-    (?j name. ins=AsmOp name /\ ALOOKUP dup_table name=SOME j /\ j<hi /\ hj=hi+1) \/
-    (?j name. ins=AsmOp name /\ ALOOKUP swap_table name=SOME j /\ 0<j /\ j<hi /\ hj=hi) \/
-    (ins=AsmOp "POP" /\ static_abort_straight "POP" 0 /\ asm_op_arity "POP"=1 /\
-     1<=hi /\ hj=hi-1 /\ G 0=NONE /\ ~B 0)``;
-
 Triviality port_lookups:
   ALOOKUP dup_table "DUP1" = SOME 0 /\ ALOOKUP swap_table "DUP1" = NONE /\
   ALOOKUP dup_table "DUP2" = SOME 1 /\ ALOOKUP swap_table "DUP2" = NONE /\
@@ -325,13 +319,6 @@ Triviality port_lookups:
   ALOOKUP dup_table "POP" = NONE /\ ALOOKUP swap_table "POP" = NONE
 Proof
   EVAL_TAC
-QED
-
-Triviality fixed_fall_guard:
-  MEM ins [AsmOp "DUP1";AsmOp "DUP2";AsmOp "SWAP1";AsmOp "POP"] /\
-  ^fixed_guard ins hi hj G B ==> ^fall_guard ins hi hj G
-Proof
-  simp[MEM] >> rpt strip_tac >> gvs[port_lookups] >> qexists `0` >> simp[]
 QED
 
 val positive_port = ``
