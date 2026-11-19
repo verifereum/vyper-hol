@@ -516,7 +516,7 @@ Proof
 QED
 
 (* Dropping the outputs keeps the ghost relation. *)
-Theorem ld_ghost_ok_drestrict[local]:
+Theorem ld_ghost_ok_drestrict:
   ld_ghost_ok fl A H G ==>
   ld_ghost_ok fl A (DRESTRICT H keep) (DRESTRICT G keep)
 Proof

@@ -1,6 +1,6 @@
 (* Correlated source and actual target-frame indices at a bounded cut. *)
 Theory gasFocusLowerDloadFrameSafety
-Ancestors rich_list[qualified,ignore_grammar] pair[qualified,ignore_grammar]
+Ancestors lowerDloadSafetyImmutableWriteCoverage[qualified] lowerDloadPtrJointAlloc[qualified] rich_list[qualified,ignore_grammar] pair[qualified,ignore_grammar]
   gasFocusLowerDloadActualEntry gasFocusLowerDloadActualInterior
   gasFocusLowerDloadFrameCallEntry gasFocusLowerDloadIndexedTerminalSafety
   gasFocusLowerDloadFrameRequestRow gasFocusLowerDloadFrameHaltRow
@@ -1872,33 +1872,6 @@ Proof
   rw[] >> gvs[] >> decide_tac
 QED
 
-Theorem ld_frame_alloca_step_shape[local]:
-  i.inst_opcode = ALLOCA /\ step_inst fuel C i t = OK t1 ==>
-  ?amount out. i.inst_operands = [Lit amount] /\ i.inst_outputs = [out] /\
-    exec_alloca i t amount = OK t1
-Proof
-  strip_tac >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
-  simp[exec_alloca_def, AllCaseEqs()] >> strip_tac >> gvs[] >> metis_tac[]
-QED
-
-Theorem ld_frame_alloca_step_fields[local]:
-  i.inst_opcode = ALLOCA /\ i.inst_operands = [Lit amount] /\
-  i.inst_outputs = [out] ==>
-  ?s1. step_inst fuel C i s = OK s1 /\ exec_alloca i s amount = OK s1 /\
-    s1.vs_current_bb = s.vs_current_bb /\ s1.vs_prev_bb = s.vs_prev_bb /\
-    s1.vs_inst_idx = s.vs_inst_idx
-Proof
-  strip_tac >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
-  Cases_on `FLOOKUP s.vs_allocas i.inst_id` >>
-  simp[exec_alloca_def, update_var_def] >>
-  rename1 `FLOOKUP s.vs_allocas i.inst_id = SOME site` >>
-  PairCases_on `site` >> simp[exec_alloca_def, update_var_def]
-QED
-
 Theorem ld_frame_alloca_next[local]:
   frame_reachable vs C cs PG G tn f i s /\
   dload_control_match q f g s t i [i] 0 /\
@@ -1932,11 +1905,11 @@ Proof
      simp[dload_control_match_def, active_inst_def, fn_insts_def,
           o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
   `i.inst_id NOTIN r.dr_scratch` by (simp[] >> metis_tac[]) >>
-  drule_all ld_frame_alloca_step_shape >> strip_tac >>
+  drule_all lowerDloadPtrJointAllocTheory.dload_alloca_step_shape >> strip_tac >>
   `?s1. step_inst fuel C i s = OK s1 /\ exec_alloca i s amount = OK s1 /\
     s1.vs_current_bb = s.vs_current_bb /\ s1.vs_prev_bb = s.vs_prev_bb /\
     s1.vs_inst_idx = s.vs_inst_idx` by
-    (irule ld_frame_alloca_step_fields >> simp[]) >>
+    (irule lowerDloadPtrJointAllocTheory.dload_alloca_step_fields >> simp[]) >>
   `t1.vs_current_bb = t.vs_current_bb /\ t1.vs_prev_bb = t.vs_prev_bb /\
     t1.vs_inst_idx = t.vs_inst_idx` by
     (gvs[exec_alloca_def, update_var_def, AllCaseEqs()]) >>
@@ -2025,7 +1998,7 @@ Proof
      simp[dload_control_match_def, active_inst_def, fn_insts_def,
           o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
   `i.inst_id NOTIN r.dr_scratch` by (simp[] >> metis_tac[]) >>
-  drule_all ld_frame_alloca_step_shape >> strip_tac >>
+  drule_all lowerDloadPtrJointAllocTheory.dload_alloca_step_shape >> strip_tac >>
   `exec_alloca i s amount = OK s1` by
     (qpat_x_assum `step_inst fuel C i s = OK s1` mp_tac >>
      simp[step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
@@ -2041,97 +2014,6 @@ Proof
   conj_tac
   >- (irule dload_boundary_core_index_update >> metis_tac[]) >>
   metis_tac[]
-QED
-
-Theorem dload_boundary_cached_scratch_bounds[local]:
-  dload_boundary_core fl lo (r::rs) V Ws PG PH G H0 tn un0 s t0 cs ds /\
-  id IN r.dr_scratch /\ FLOOKUP t0.vs_allocas id = SOME (bb,sz) ==>
-  sz = 32 /\ bb + 32 < dimword (:256)
-Proof
-  strip_tac >>
-  drule dload_boundary_layout >> strip_tac >>
-  drule dload_boundary_tables >>
-  simp[dload_table_stack_def] >> strip_tac >>
-  `r.dr_target = t0.vs_allocas` by
-    (qpat_x_assum `!k. k < SUC (LENGTH rs) ==> _`
-      (qspec_then `0` mp_tac) >> simp[]) >>
-  `sz = 32 /\ lo <= bb /\ bb+32 <= t0.vs_alloca_next /\ bb < dimword (:256)` by
-    (irule dload_scratch_site_bounds >>
-     qexistsl_tac [`id`,`r::rs`,`0`,`s.vs_alloca_next`] >> simp[]) >>
-  fs[dload_live_layout_def]
-QED
-
-Theorem dload_expanded_step_fmp[local]:
-  MEM i.inst_opcode [ADD; CODECOPY; MLOAD] /\
-  step_inst fuel C i t = OK v ==>
-  v.vs_fmp = t.vs_fmp /\ v.vs_initial_fmp = t.vs_initial_fmp /\
-  v.vs_allocas = t.vs_allocas
-Proof
-  simp[] >> strip_tac >>
-  `i.inst_opcode <> INVOKE /\ allocation_free_opcode i.inst_opcode` by
-    gvs[allocation_free_opcode_def] >>
-  metis_tac[allocation_free_step_fmp_ok, allocation_free_step_allocas,
-            step_inst_initial_fmp]
-QED
-
-(* The expansion prefix keeps every alloca site below the initial free
-   memory pointer: only its first instruction allocates, a 32-byte
-   scratch site at the target frontier. *)
-Theorem dload_prefix_allocas_below_fmp[local]:
-  !n t H un.
-    allocas_below_fmp t0 /\
-    (!k. k < n ==> MEM (EL k xs).inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) /\
-    (!k. k < n /\ (EL k xs).inst_opcode = ALLOCA ==>
-       k = 0 /\ (EL 0 xs).inst_operands = [Lit 32w] /\
-       (FLOOKUP t0.vs_allocas (EL 0 xs).inst_id = NONE ==>
-          t0.vs_alloca_next + 32 <= w2n t0.vs_initial_fmp)) /\
-    dload_prefix_match fuel C PH xs n t0 H0 un0 t H un ==>
-    allocas_below_fmp t
-Proof
-  Induct_on `n` >- simp[dload_prefix_match_def] >>
-  rpt gen_tac >> strip_tac >>
-  drule dload_prefix_successor >> strip_tac >>
-  `allocas_below_fmp u` by
-    (first_x_assum (qspecl_then [`u`,`J`,`vn`] mp_tac) >>
-     impl_tac >- (
-       conj_tac >- first_assum ACCEPT_TAC >>
-       conj_tac
-       >- (rpt strip_tac >>
-           qpat_x_assum `!k. k < SUC n ==> _` (qspec_then `k` mp_tac) >>
-           gvs[]) >>
-       conj_tac
-       >- (rpt strip_tac >>
-           qpat_x_assum `!k. k < SUC n /\ _ ==> _` (qspec_then `k` mp_tac) >>
-           gvs[]) >>
-       first_assum ACCEPT_TAC) >>
-     simp[]) >>
-  Cases_on `(EL n xs).inst_opcode = ALLOCA`
-  >- (`n = 0 /\ (EL 0 xs).inst_operands = [Lit 32w] /\
-       (FLOOKUP t0.vs_allocas (EL 0 xs).inst_id = NONE ==>
-          t0.vs_alloca_next + 32 <= w2n t0.vs_initial_fmp)` by
-        (qpat_x_assum `!k. k < SUC n /\ _ ==> _` (qspec_then `n` mp_tac) >>
-         simp[]) >>
-      gvs[dload_prefix_match_def] >>
-      `w2n (32w:bytes32) = 32` by
-        (`dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
-         pop_assum (fn th => simp[NoAsms, th, wordsTheory.dimword_def])) >>
-      qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-      simp[step_inst_non_invoke, step_inst_base_def, exec_alloca_def,
-           AllCaseEqs()] >>
-      rpt strip_tac >>
-      gvs[allocas_below_fmp_def, update_var_def, FLOOKUP_UPDATE] >>
-      rw[] >> gvs[] >> metis_tac[]) >>
-  `MEM (EL n xs).inst_opcode [ADD; CODECOPY; MLOAD]` by
-    (qpat_x_assum `!k. k < SUC n ==> _` (qspec_then `n` mp_tac) >> simp[]) >>
-  drule_all dload_expanded_step_fmp >> strip_tac >>
-  qpat_x_assum `!t H un. _` kall_tac >>
-  qpat_x_assum `allocas_below_fmp u` mp_tac >>
-  qpat_x_assum `t = _` SUBST1_TAC >>
-  simp[allocas_below_fmp_def] >>
-  qpat_x_assum `v.vs_fmp = _` SUBST1_TAC >>
-  qpat_x_assum `v.vs_initial_fmp = _` SUBST1_TAC >>
-  qpat_x_assum `v.vs_allocas = _` SUBST1_TAC >> simp[] >>
-  strip_tac >> first_assum ACCEPT_TAC
 QED
 
 val ld_frame_dload_later_header = ``
@@ -2224,7 +2106,7 @@ Resume ld_frame_dload_later_rows[cached]:
     (qpat_x_assum `!k. k < LENGTH (r::rs) ==> _` (qspec_then `0` mp_tac) >>
      simp[] >> strip_tac >> simp[] >>
      fs[FLOOKUP_DEF]) >>
-  drule_all dload_boundary_cached_scratch_bounds >> simp[]
+  drule_all lowerDloadPtrJointSafetyTheory.dload_boundary_cached_scratch_bounds >> simp[]
 QED
 
 Resume ld_frame_dload_later_rows[clean]:
@@ -2584,7 +2466,7 @@ Resume ld_frame_normal_ptr_rows[below_fmp]:
          `k = 0 \/ k = 1` by decide_tac >> gvs[]) >>
      strip_tac >> gvs[]) >>
   qpat_assum `dload_prefix_match pfuel C' PH emitted n t0 H0 un0 t H un`
-    (mp_then (Pat `dload_prefix_match`) mp_tac dload_prefix_allocas_below_fmp) >>
+    (mp_then (Pat `dload_prefix_match`) mp_tac lowerDloadPtrJointSafetyTheory.dload_prefix_allocas_below_fmp) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[] >>
   rpt strip_tac >>
   qpat_x_assum `!k. k < n /\ _ ==> k = 0 /\ _` drule_all >>
@@ -2740,16 +2622,6 @@ Resume ld_frame_normal_ptr_rows[early_clean]:
 QED
 
 Finalise ld_frame_normal_ptr_rows
-
-Theorem ld_frame_istore_unselected[local]:
-  ld_vars P A f /\ fn_ptr_ok P f.lf_fn /\
-  MEM inst (fn_insts f.lf_fn) /\ inst.inst_opcode = ISTORE /\
-  MEM op inst.inst_operands ==> op_prov f.lf_H op = NONE
-Proof
-  strip_tac >> Cases_on `op` >> simp[op_prov_def] >>
-  irule lowerDloadMemoryWritePointEffectTheory.ld_vars_unselected >> simp[] >>
-  fs[fn_ptr_ok_def] >> metis_tac[]
-QED
 
 (* These tactics share the packing proof across distinct instruction arms.
    Separate enclosing resumes keep each arm at its own retained state. *)
@@ -4621,7 +4493,7 @@ Resume ld_frame_actual_occurrence[singleton_istore]:
   rename1 `inst.inst_operands = [addr; value]` >>
   `op_prov f.lf_H addr = NONE /\ op_prov f.lf_H value = NONE` by
     (conj_tac >>
-     (irule ld_frame_istore_unselected >> conj_tac
+     (irule lowerDloadSafetyImmutableWriteCoverageTheory.ld_istore_operand_unselected >> conj_tac
       >- (qexists_tac `inst` >> simp[])
       >> qexistsl [`A`,`P`] >> simp[])) >>
   `word_agree_except (op_taint tn value) x y` by
@@ -4803,7 +4675,7 @@ Resume ld_frame_actual_occurrence[singleton_alloca]:
   disch_then (qx_choose_then `ss` (qx_choose_then `r1`
     (qx_choose_then `i` (qx_choose_then `E` strip_assume_tac)))) >>
   qpat_assum `step_inst fuel C' inst f.lf_tgt = OK s'`
-    (mp_then (Pat `step_inst`) mp_tac ld_frame_alloca_step_shape) >>
+    (mp_then (Pat `step_inst`) mp_tac lowerDloadPtrJointAllocTheory.dload_alloca_step_shape) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (qx_choose_then `sz` (qx_choose_then `out` strip_assume_tac)) >>
   `exec_alloca inst f.lf_src sz = OK ss` by

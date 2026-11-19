@@ -46,14 +46,6 @@ Proof
   qpat_x_assum `ld_maps B f` mp_tac >> simp[ld_maps_def] >> metis_tac[]
 QED
 
-Theorem ld_focus_pop_ghost[local]:
-  ld_ghost_ok fl A H G ==>
-  ld_ghost_ok fl A (DRESTRICT H keep) (DRESTRICT G keep)
-Proof
-  rw[ld_ghost_ok_def, FLOOKUP_DRESTRICT] >>
-  gvs[AllCaseEqs()] >> metis_tac[]
-QED
-
 Theorem ld_focus_local_pop_sync:
   !fl. fl = dyn_floor C vs ==>
   !outs. outs = c.cf_inst.inst_outputs ==>
@@ -135,7 +127,7 @@ Resume ld_focus_local_pop_sync[assemble]:
    g.lf_H = DRESTRICT f.lf_H keep` by simp[Abbr `g`, Abbr `tn1`] >>
   `ld_ghost_ok (dyn_floor C vs) B g.lf_H (DRESTRICT c.cf_prov keep) /\
    ld_params_ok (dyn_floor C vs) B g.lf_Q c.cf_params` by
-    simp[ld_focus_pop_ghost] >>
+    simp[lowerDloadReturnInvokePopTheory.ld_ghost_ok_drestrict] >>
   `ld_envelope g.lf_supply g.lf_fn g.lf_src g.lf_src.vs_inst_idx Y g.lf_tgt.vs_inst_idx` by
     (simp[Abbr `g`] >> metis_tac[]) >>
   `!j. j < LENGTH (g::fs) ==>

@@ -9,7 +9,7 @@ Ancestors lowerDloadMemoryWritePointEffect[qualified]
   codegenRel contextCodegenRel venomWf ptrDiscipline pointerConfinedDefs
   memLocDefs venomInst venomExecSemantics venomState finite_map list pred_set
 
-Theorem ld_istore_operand_unselected[local]:
+Theorem ld_istore_operand_unselected:
   ld_vars P A f /\ fn_ptr_ok P f.lf_fn /\
   MEM inst (fn_insts f.lf_fn) /\ inst.inst_opcode = ISTORE /\
   MEM op inst.inst_operands ==> op_prov f.lf_H op = NONE

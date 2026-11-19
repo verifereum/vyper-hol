@@ -1,6 +1,6 @@
 (* Local data effects at a successful singleton LowerDload fetch. *)
 Theory gasFocusLowerDloadResidualDataEffect
-Ancestors
+Ancestors lowerDloadSafetyIdentityCoverage[qualified] lowerDloadSafetyImmutableWriteCoverage[qualified]
   o1SafeUpto gasCount concretizeLayoutCutSafe lowerDloadFrontier ctxLookupAgree
   lowerDloadSafetyHashLog lowerDloadSafetyImmutableWriteEffects
   lowerDloadMemoryWritePointEffect lowerDloadSafetyWriteAssembly
@@ -15,51 +15,6 @@ Ancestors
   rich_list arithmetic
 Libs
   lowerDloadReturnPackageLib
-
-Theorem residual_identity_step[local]:
-  MEM inst.inst_opcode [NOP;ASSERT;ASSERT_UNREACHABLE] /\
-  eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\
-  step_inst_base inst t = OK ts ==>
-  ts = t /\ step_inst_base inst s = OK s
-Proof
-  strip_tac >> fs[MEM] >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  asm_rewrite_tac[opcode_case_def] >>
-  simp[Once step_inst_base_def] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  rename1 `h::rest` >> Cases_on `rest` >> simp[] >>
-  gvs[eval_operands_def, AllCaseEqs()] >>
-  simp[Once step_inst_base_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Theorem residual_identity_ghosts[local]:
-  MEM inst.inst_opcode [NOP;ASSERT;ASSERT_UNREACHABLE] /\
-  inst.inst_outputs = [] ==>
-  step_taint inst s s tn = tn /\ step_prov PG G inst s = G
-Proof
-  strip_tac >>
-  gvs[MEM] >>
-  simp[step_prov_def, set_prov_def, step_taint_def, mem_taint_def,
-       written_taint_def, new_site_bytes_def, step_writes_def,
-       source_memory_write_ranges_def, range_bytes_def, set_var_taint_def,
-       store_taint_def, adopt_reset_def, imm_taint_def,
-       taint_component_equality, FLOOKUP_DEF, DRESTRICT_UNIV, SF CONJ_ss] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
-  Cases_on `t` >> simp[] >> SET_TAC[]
-QED
-
-Theorem residual_istore_operand_unselected[local]:
-  ld_vars P A f /\ fn_ptr_ok P f.lf_fn /\
-  MEM inst (fn_insts f.lf_fn) /\ inst.inst_opcode = ISTORE /\
-  MEM op inst.inst_operands ==> op_prov f.lf_H op = NONE
-Proof
-  strip_tac >> Cases_on `op` >> simp[op_prov_def] >>
-  irule ld_vars_unselected >> simp[] >>
-  fs[fn_ptr_ok_def] >> metis_tac[]
-QED
 
 Theorem ld_focus_residual_data_effect:
   o1_ctx_shape C /\ pre_fmp_ops fn /\ o1_safe_upto D lo n C vs /\
@@ -192,9 +147,9 @@ Resume ld_focus_residual_data_effect[identity]:
     (qpat_x_assum `eval_operands _ f.lf_src = _` mp_tac >> simp[]) >>
   `step_inst_base inst t = OK u` by
     (qpat_x_assum `step_inst fuel C' inst t = _` mp_tac >> simp[step_inst_non_invoke]) >>
-  drule_all residual_identity_step >> strip_tac >>
+  drule_all lowerDloadSafetyIdentityCoverageTheory.ld_identity_step >> strip_tac >>
   `step_taint inst s s tn = tn /\ step_prov PG G inst s = G` by
-    metis_tac[residual_identity_ghosts] >>
+    metis_tac[lowerDloadSafetyIdentityCoverageTheory.ld_identity_ghosts] >>
   qexistsl [`s`,`f.lf_H`] >> simp[step_inst_non_invoke] >>
   `f with <|lf_src := s; lf_tgt := t; lf_H := f.lf_H; lf_tv := tn.t_var|> = f` by
     simp[ld_frame_component_equality] >> simp[]
@@ -211,7 +166,7 @@ Resume ld_focus_residual_data_effect[istore]:
   rename1 `inst.inst_operands = [addr; value]` >>
   `op_prov f.lf_H addr = NONE /\ op_prov f.lf_H value = NONE` by
     (conj_tac >>
-     (irule residual_istore_operand_unselected >> conj_tac
+     (irule lowerDloadSafetyImmutableWriteCoverageTheory.ld_istore_operand_unselected >> conj_tac
       >- (qexists_tac `inst` >> simp[])
       >> qexistsl [`A`,`P`] >> simp[])) >>
   `word_agree_except (op_taint tn value) x y` by
