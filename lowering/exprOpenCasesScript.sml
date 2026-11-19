@@ -145,15 +145,20 @@ Proof
   drule emit_op_nonterminator_open >> simp[is_terminator_def]
 QED
 
+val raw_call_open_tac =
+  simp[compile_call_def] >>
+  rpt (pairarg_tac >> simp[]) >> IF_CASES_TAC >>
+  strip_tac >> gvs[] >> drule compile_raw_call_finish_open >> simp[];
+
 Theorem compile_raw_call_open:
   !cfn cenv rty ty flags addr data args default sa vv sb.
     ~flags.rcf_is_delegate /\
     compile_call cfn cenv rty ty (RawCallTarget flags) (addr::data::args)
       default sa = (vv,sb) ==> ~block_is_terminated sb
 Proof
-  rpt gen_tac >> simp[compile_call_def] >>
-  rpt (pairarg_tac >> simp[]) >> IF_CASES_TAC >>
-  strip_tac >> gvs[] >> drule compile_raw_call_finish_open >> simp[]
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >>
+  raw_call_open_tac
 QED
 
 Theorem compile_raw_call_calldata_open:
@@ -162,9 +167,9 @@ Theorem compile_raw_call_calldata_open:
     compile_call cfn cenv rty ty (RawCallCalldataTarget flags) (addr::args)
       default sa = (vv,sb) ==> ~block_is_terminated sb
 Proof
-  rpt gen_tac >> simp[compile_call_def] >>
-  rpt (pairarg_tac >> simp[]) >> IF_CASES_TAC >>
-  strip_tac >> gvs[] >> drule compile_raw_call_finish_open >> simp[]
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >>
+  raw_call_open_tac
 QED
 
 Theorem compile_raw_log_open:
@@ -201,10 +206,10 @@ Proof
   >~ [`RawCallTarget flags`]
     >- (fs[well_typed_expr_def] >> Cases_on `args` >> gvs[] >>
         rename1 `addr::rest` >> Cases_on `rest` >> gvs[] >>
-        drule_all compile_raw_call_open >> simp[])
+        qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >> raw_call_open_tac)
   >~ [`RawCallCalldataTarget flags`]
     >- (fs[well_typed_expr_def] >> Cases_on `args` >> gvs[] >>
-        drule_all compile_raw_call_calldata_open >> simp[])
+        qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >> raw_call_open_tac)
   >~ [`RawLog`]
     >- (fs[well_typed_expr_def, LENGTH_EQ_NUM_compute] >>
         gvs[] >> drule compile_raw_log_open >> simp[]) >>

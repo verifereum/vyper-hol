@@ -7,10 +7,11 @@ Ancestors
 
 Theorem raw_call_revert_suffix_full_exit:
   compile_raw_call_finish to_op dp dl gas_op val_op
-    (if stat then StaticCall else RegularCall) n T ov op sa = (result,sb) /\
-  emit_op (if stat then STATICCALL else CALL)
-    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w n)]
-     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+    call_ty n T ov op sa = (result,sb) /\
+  (case call_ty of
+    RegularCall => emit_op CALL [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]
+  | StaticCall => emit_op STATICCALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]
+  | DelegateCall => emit_op DELEGATECALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
   eval_operand ok s = SOME 0w /\ op_taint tn ok = {} /\ op_prov G ok = NONE /\
   fn_has_code sc sb func /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
@@ -32,7 +33,7 @@ Proof
   strip_tac >> drule raw_call_finish_revert_compile >> strip_tac >>
   rename1 `fresh_label "call_failed" call_end = (fl,sl)` >>
   rename1 `emit_inst JNZ [status;Label good;Label bad] [] sj = ((),sn)` >>
-  `call_end = sc /\ status = ok` by (Cases_on `stat` >> gvs[]) >>
+  `call_end = sc /\ status = ok` by (Cases_on `call_ty` >> gvs[]) >>
   gvs[] >>
   `fn_has_code sj sn func /\ fn_has_code s5 s9 func /\
    sj.cs_current_bb = call_end.cs_current_bb /\
