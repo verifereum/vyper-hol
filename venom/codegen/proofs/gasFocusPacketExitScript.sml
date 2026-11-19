@@ -452,38 +452,89 @@ Theorem focus_packet_exit:
      code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
   o1_lowered_inv out.po_unit.cu_context vs0)
 Proof
-  (fn (asl, goal) =>
-    let
-      fun normalize tm =
-        rhs (concl (QCONV (PURE_REWRITE_CONV [LET_THM, o1_run_state_ok_def] THENC
-                           DEPTH_CONV BETA_CONV) tm))
-      val (pre, result) = dest_imp (normalize goal)
-      val (select_input, selection) = dest_imp
-        (normalize (concl focus_walk_stopped_selection))
-      val selected = strip_conj (snd (strip_exists selection))
-      val exit_body = strip_conj (snd (strip_exists result))
-      val (_, filling) = dest_forall (List.last exit_body)
-      val (compatible, all_masks) = dest_imp filling
-      val (late, exit_facts) = dest_imp (snd (dest_forall all_masks))
-      val replay = CONV_RULE (DEPTH_CONV BETA_CONV)
-        (PURE_REWRITE_RULE [LET_THM] focus_stopped_filling_replay)
-      val (replay_input, _) = dest_imp (concl replay)
-      (* Nonstaticity discharges H1's static-only source label premise. *)
-      val static_input = ``vs0.vs_call_ctx.cc_static ==>
-        !fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-          ~MEM (Label "runtime_begin") inst.inst_operands``
-      val available = static_input :: strip_conj pre
-      val before_replay = compatible :: available @ selected @ strip_conj late
-      val _ = if List.all (fn tm => List.exists (aconv tm) available)
-                    (strip_conj select_input) andalso
-                 List.all (fn tm => List.exists (aconv tm) selected)
-                    (List.take (exit_body, length exit_body - 1)) andalso
-                 List.all (fn tm => List.exists (aconv tm) before_replay)
-                    (strip_conj replay_input) then ()
-              else raise Fail "v3 Exit must replay the same selected packet and filling"
-      val _ = drule replay (before_replay, exit_facts)
-      val _ = irule focus_v3_exit_from_replay ([], exit_facts)
-    in
-      cheat (asl, goal)
-    end)
+  PURE_REWRITE_TAC [LET_THM, o1_run_state_ok_def] >> BETA_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `vs0.vs_call_ctx.cc_static ==>
+    !fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+      ~MEM (Label "runtime_begin") inst.inst_operands` by simp[] >>
+  (let
+    fun normalize th =
+      CONV_RULE (DEPTH_CONV BETA_CONV)
+        (PURE_REWRITE_RULE [LET_THM, o1_run_state_ok_def] th)
+    fun premise facts tm =
+      case List.find (fn th => aconv (concl th) tm) facts of
+        SOME th => th
+      | NONE =>
+          if is_conj tm then
+            let val (l, r) = dest_conj tm in
+              CONJ (premise facts l) (premise facts r)
+            end
+          else if is_imp_only tm then
+            let
+              val (guard, body) = dest_imp tm
+              fun under_guard th =
+                if is_imp_only (concl th) andalso aconv (lhand (concl th)) guard
+                then CONJUNCTS (MP th (ASSUME guard))
+                else []
+            in
+              DISCH guard (premise (List.concat (map under_guard facts)) body)
+            end
+          else raise mk_HOL_ERR "focus_packet_exit" "premise" (term_to_string tm)
+    fun apply_rule facts rule =
+      MP rule (premise facts (lhand (concl rule)))
+    fun finish selected =
+      gen_tac >> disch_tac >> gen_tac >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      (fn (asl, goal) =>
+        let
+          val facts = map ASSUME asl @ selected
+          val replay = apply_rule facts (normalize focus_stopped_filling_replay)
+          fun exit_from_oracle th =
+            ACCEPT_TAC (apply_rule (CONJUNCTS th @ facts)
+              (normalize focus_v3_exit_from_replay))
+          fun exclude_static th =
+            let val is_static = CONJUNCT1 th in
+              CONTR_TAC (MP (NOT_ELIM (premise facts
+                (mk_neg (concl is_static)))) is_static)
+            end
+        in
+          DISJ_CASES_THEN2 (CHOOSE_THEN exit_from_oracle) exclude_static
+            replay (asl, goal)
+        end)
+  in
+    fn (asl, goal) =>
+      let
+        val selected = apply_rule (map ASSUME asl)
+          (normalize focus_walk_stopped_selection)
+        val witnesses = fst (strip_exists (concl selected))
+        fun use_selection th =
+          let
+            val facts = CONJUNCTS th
+            val stop = List.nth (facts, length facts - 2)
+            val (terminal, other_stops) = dest_disj (concl stop)
+            val terminal_witnesses = fst (strip_exists terminal)
+            fun use_terminal th =
+              foldr (fn (w, next) => X_CHOOSE_THEN w next)
+                (fn body => DISJ1_TAC >> map_every EXISTS_TAC terminal_witnesses >>
+                   map_every assume_tac (CONJUNCTS body) >>
+                   rpt conj_tac >> first_assum ACCEPT_TAC)
+                terminal_witnesses th
+            fun use_fact (asl, goal) =
+              case List.find (fn th => aconv (concl th) goal) facts of
+                SOME fact => ACCEPT_TAC fact (asl, goal)
+              | NONE =>
+                  if is_forall goal then finish facts (asl, goal)
+                  else if is_disj goal andalso aconv (snd (dest_disj goal)) other_stops
+                  then DISJ_CASES_THEN2 use_terminal (fn th => DISJ2_TAC >> ACCEPT_TAC th)
+                         stop (asl, goal)
+                  else raise mk_HOL_ERR "focus_packet_exit" "selection"
+                    (term_to_string goal)
+          in
+            map_every EXISTS_TAC witnesses >> rpt conj_tac >> use_fact
+          end
+      in
+        foldr (fn (w, next) => X_CHOOSE_THEN w next) use_selection
+          witnesses selected (asl, goal)
+      end
+  end)
 QED

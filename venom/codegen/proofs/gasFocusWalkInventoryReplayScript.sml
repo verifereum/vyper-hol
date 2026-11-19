@@ -419,6 +419,7 @@ Theorem focus_walk_stopped_selection:
         r8 = (case r of OK u => Halt u | other => other) /\
         ((?u. r = OK u /\ u.vs_halted) \/ (?u. r = Halt u) \/
          (?ex u. r = Abort ex u)) /\
+        inst8.inst_opcode <> INVOKE /\
         run_blocks N (stage 8) root_tf root_entry = r8 /\
         (!F gs tail. N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
             raw_slots gs ==>
@@ -841,6 +842,7 @@ Theorem focus_stopped_filling_replay:
       r8 = (case r of OK u => Halt u | other => other) /\
       ((?u. r = OK u /\ u.vs_halted) \/ (?u. r = Halt u) \/
        (?ex u. r = Abort ex u)) /\
+      inst8.inst_opcode <> INVOKE /\
       run_blocks N (stage 8) root_tf root_entry = r8 /\
       (!F gs tail. N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
           raw_slots gs ==>
@@ -919,7 +921,16 @@ val _ = let
   val coverage = CONV_RULE (DEPTH_CONV BETA_CONV)
     (PURE_REWRITE_RULE [LET_THM] focus_packet_coverage)
   val (needed, ordered) = dest_imp (concl coverage)
-  val facts = strip_conj roots @ List.take (selected, length selected - 1)
+  val frontier = List.take (selected, length selected - 1)
+  val (terminal, other_stops) = dest_disj (List.last frontier)
+  val (witnesses, body) = strip_exists terminal
+  val (invoke_guard, terminal_facts) =
+    List.partition (aconv ``inst8.inst_opcode <> INVOKE``) (strip_conj body)
+  val _ = if length invoke_guard = 1 then ()
+          else raise Fail "C1.16 terminal INVOKE guard"
+  val coverage_stop = mk_disj
+    (list_mk_exists (witnesses, list_mk_conj terminal_facts), other_stops)
+  val facts = coverage_stop :: strip_conj roots @ frontier
   val _ = if List.all (fn tm => List.exists (aconv tm) facts) (strip_conj needed)
               andalso aconv (List.last selected) ordered then ()
           else raise Fail "C1.16 selection and coverage must use the same stopped packet"
