@@ -20,7 +20,7 @@ Proof
   simp[venom_state_component_equality] >> metis_tac[]
 QED
 
-Theorem reason_scratch_frame_below_fmp[local]:
+Theorem reason_scratch_frame_below_fmp:
   (t with <|vs_vars := vs; vs_memory := mem; vs_inst_idx := k|>) = s ==>
   (allocas_below_fmp t <=> allocas_below_fmp s)
 Proof

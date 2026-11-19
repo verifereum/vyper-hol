@@ -31,7 +31,7 @@ Proof
 QED
 
 Theorem bop_bytes_hash_run_ptr:
-  p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
+  p <> q /\ l <> q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es (BytesV bs) (Var p) s /\
   ptr_val_ok cx ty (BytesV bs) (Var p) G tn s /\
@@ -75,7 +75,7 @@ Proof
 QED
 
 Theorem bop_string_hash_run_ptr:
-  p <> q /\ l <> q /\ ~ctx_has_dalloca ctx /\
+  p <> q /\ l <> q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es (StringV str) (Var p) s /\
   ptr_val_ok cx ty (StringV str) (Var p) G tn s /\

@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem storage_copy_mstore_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id MSTORE [Var dst;value] []) /\
   lookup_var dst s = SOME addr /\ eval_operand value s = SOME w /\
@@ -107,7 +107,7 @@ Proof
 QED
 
 Theorem storage_copy_counter_assign_path_ptr:
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [Var nv] [cv]) /\
   lookup_var nv s = SOME w /\
@@ -140,7 +140,7 @@ QED
 
 Theorem storage_copy_arith_path_ptr:
   (opc = ADD /\ f = word_add \/ opc = MUL /\ f = word_mul) /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc [left;right] [out]) /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\

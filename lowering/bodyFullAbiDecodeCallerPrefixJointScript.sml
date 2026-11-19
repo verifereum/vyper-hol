@@ -90,6 +90,7 @@ Proof
      first_x_assum irule >> simp[] >> decide_tac) >>
   qpat_x_assum `data = Var data_var` SUBST_ALL_TAC >>
   qpat_x_assum `len = Var lv` SUBST_ALL_TAC >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.SPECL [`ARB`, `ctx`, `fn`, `PG`] emit_mload_clean_seq_ptr) >>
   disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts st sa) s = OK raw_load` >>

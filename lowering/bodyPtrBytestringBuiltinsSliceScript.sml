@@ -370,6 +370,7 @@ Resume compile_slice_data_counted_normal[store_apply]:
           eval_operand_def, lookup_var_def]) >> simp[]) >>
   `op_taint tn'' len = {}` by
     (Cases_on `len` >> fs[op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by simp[] >>
   drule_all emit_scratch_word_counted >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   suspend "compose_final"

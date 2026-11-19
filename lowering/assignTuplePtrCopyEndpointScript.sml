@@ -49,7 +49,7 @@ QED
 
 Theorem emit_allocated_mcopy_endpoint_ptr:
   emit_inst MCOPY [Var p; Var q; Lit (n2w n)] [] sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   lookup_var p s = SOME (n2w b) /\ lookup_var q s = SOME a /\
