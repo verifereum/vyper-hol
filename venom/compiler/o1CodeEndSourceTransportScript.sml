@@ -76,7 +76,7 @@ Proof
   gvs[LIST_REL_CONS2] >> first_x_assum irule >> metis_tac[]
 QED
 
-Theorem code_end_simplify_cfg_no_label[local]:
+Theorem code_end_simplify_cfg_no_label:
   ctx_pass_stage rp (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\
   (!f i. MEM f C.ctx_functions /\ MEM i (fn_insts f) ==>
@@ -102,7 +102,7 @@ Proof
      fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]
 QED
 
-Theorem code_end_make_ssa_no_label[local]:
+Theorem code_end_make_ssa_no_label:
   ctx_pass_stage rp (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
   (!f i. MEM f C.ctx_functions /\ MEM i (fn_insts f) ==>

@@ -1,7 +1,7 @@
 Theory fmpStageFmpStepsDallocaSaved
 Ancestors fmpStageRel fmpStageReclaimSound o1LowerDloadRelocationKernel finite_map list
 
-Theorem fmp_dalloca_value_extend[local]:
+Theorem fmp_dalloca_value_extend:
   (!k v. FLOOKUP sm k = SOME v ==> FLOOKUP sm' k = SOME v) /\
   fmp_value_rel sm h m x y ==> fmp_value_rel sm' h m x y
 Proof
@@ -57,7 +57,7 @@ Proof
   Cases_on `(b',z') = (b,z)` >> gvs[] >> metis_tac[]
 QED
 
-Theorem fmp_dalloca_saved_extend[local]:
+Theorem fmp_dalloca_saved_extend:
   !stk ts.
   fmp_saved_rel C' sm fmp0 raw0 stk ts /\
   EVERY (\f. w2n f.cf_state.vs_fmp <= b) stk /\

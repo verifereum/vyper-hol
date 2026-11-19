@@ -24,7 +24,7 @@ Proof
   simp[EL_APPEND_EQN, rich_listTheory.TAKE_APPEND2, DROP_DROP_T, ADD_COMM]
 QED
 
-Theorem trace_visit_readings[local]:
+Theorem trace_visit_readings:
   (!p d fuel ctx fn inst s.
     !n. n < LENGTH (((p,d,inst.inst_id),fn,inst,s)::
                      trace_step p d fuel ctx fn inst s) ==>

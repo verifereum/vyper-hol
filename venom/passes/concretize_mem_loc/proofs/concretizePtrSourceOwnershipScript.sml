@@ -288,7 +288,8 @@ QED
    lies above the dynamic floor. *)
 Theorem ptr_reachable_step_premises[local]:
   frame_reachable vs0 C stk PG G tn fn inst s /\
-  ptr_discipline lo C vs0 /\ EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  (ctx_has_dalloca C ==> allocas_below_fmp s) /\
   ptr_ledger_erases dyn births TG G ==>
   (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN ==>
     !u1 u2. MEM (Var u1) inst.inst_operands /\ MEM (Var u2) inst.inst_operands /\
@@ -296,8 +297,6 @@ Theorem ptr_reachable_step_premises[local]:
   (inst.inst_opcode = DALLOCA ==> dyn_floor C vs0 <= w2n s.vs_fmp)
 Proof
   strip_tac >>
-  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
   drule_all concretizePtrParamSupportTheory.ptr_frame_current_static >> strip_tac >>
   `active_inst fn inst s` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -329,7 +328,7 @@ Proof
       gvs[] >> rpt strip_tac >> gvs[]) >>
   strip_tac >>
   `ctx_has_dalloca C` by (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
-  `allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `allocas_below_fmp s` by metis_tac[] >>
   `s.vs_initial_fmp = vs0.vs_initial_fmp` by
     metis_tac[ptrDisciplineEmptyTaintTheory.frame_reachable_initial_fmp] >>
   fs[dyn_floor_def, allocas_below_fmp_def] >> rfs[]
@@ -339,7 +338,9 @@ Theorem ptr_source_ownership_erasure_invariant[local]:
   !vs0 C h a tokens registry births PT TG saved.
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved ==>
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  (ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
+  (EVERY (fn_ptr_ok P) C.ctx_functions /\
+    EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
+    EVERY (\obs. ctx_has_dalloca C ==> allocas_below_fmp obs.po_state) h ==>
     ptr_params_erases (dyn_floor C vs0) births PT a.po_params /\
     ptr_ledger_erases (dyn_floor C vs0) births TG a.po_prov /\
     ptr_saved_erases (dyn_floor C vs0) births saved a.po_stack)
@@ -373,9 +374,14 @@ Proof
        metis_tac[ptr_source_ownership_caches] >>
      drule_all ptr_source_birth_caches_active_lookup >>
      simp[ptr_activation_tokens_def]) >>
-  strip_tac >>
-  qpat_x_assum `ptr_discipline _ _ _ /\ EVERY _ _ ==> _` mp_tac >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  simp[EVERY_APPEND] >> strip_tac >>
+  qpat_x_assum `EVERY (fn_ptr_ok _) _ /\ _ ==> _` mp_tac >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `MEM a h` by
+    metis_tac[ptr_source_birth_caches_activations, ptr_source_activations_sound,
+      ptr_chrono_history_end, rich_listTheory.MEM_LAST_NOT_NIL] >>
+  `ctx_has_dalloca C ==> allocas_below_fmp a.po_state` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
   `ptr_params_erases (dyn_floor C vs0) births' PT a.po_params /\
    ptr_ledger_erases (dyn_floor C vs0) births' TG a.po_prov /\
    ptr_saved_erases (dyn_floor C vs0) births' saved a.po_stack` by
@@ -388,12 +394,46 @@ Proof
   simp[]
 QED
 
+(* Erasing the activation tags only needs the allocation bound along the
+   recorded history, not a safety invariant for the whole execution. *)
+Theorem ptr_source_ownership_history_erases:
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  EVERY (\obs. ctx_has_dalloca C ==> allocas_below_fmp obs.po_state) h ==>
+  ptr_params_erases (dyn_floor C vs) births PT a.po_params /\
+  ptr_ledger_erases (dyn_floor C vs) births TG a.po_prov /\
+  ptr_saved_erases (dyn_floor C vs) births saved a.po_stack
+Proof
+  metis_tac[ptr_source_ownership_erasure_invariant]
+QED
+
+Theorem ptr_source_ownership_discipline_erases[local]:
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  ptr_discipline lo C vs /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
+  ptr_params_erases (dyn_floor C vs) births PT a.po_params /\
+  ptr_ledger_erases (dyn_floor C vs) births TG a.po_prov /\
+  ptr_saved_erases (dyn_floor C vs) births saved a.po_stack
+Proof
+  strip_tac >>
+  drule ptr_source_ownership_caches >> strip_tac >>
+  drule ptr_source_birth_caches_activations >> strip_tac >>
+  drule ptr_source_activations_sound >> strip_tac >>
+  `EVERY (ptr_observation_reachable vs C) h` by
+    metis_tac[ptr_chrono_history_reachable] >>
+  fs[ptr_discipline_def] >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\obs. ctx_has_dalloca C ==> allocas_below_fmp obs.po_state) h` by
+    (fs[EVERY_MEM, ptr_observation_reachable_def] >> metis_tac[]) >>
+  metis_tac[ptr_source_ownership_history_erases]
+QED
+
 Theorem ptr_source_ownership_params_erases:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
   ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
   ptr_params_erases (dyn_floor C vs0) births PT a.po_params
 Proof
-  metis_tac[ptr_source_ownership_erasure_invariant]
+  metis_tac[ptr_source_ownership_discipline_erases]
 QED
 
 Theorem ptr_source_ownership_prov_erases:
@@ -401,7 +441,7 @@ Theorem ptr_source_ownership_prov_erases:
   ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
   ptr_ledger_erases (dyn_floor C vs0) births TG a.po_prov
 Proof
-  metis_tac[ptr_source_ownership_erasure_invariant]
+  metis_tac[ptr_source_ownership_discipline_erases]
 QED
 
 Theorem ptr_source_ownership_saved_erases:
@@ -409,7 +449,7 @@ Theorem ptr_source_ownership_saved_erases:
   ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
   ptr_saved_erases (dyn_floor C vs0) births saved a.po_stack
 Proof
-  metis_tac[ptr_source_ownership_erasure_invariant]
+  metis_tac[ptr_source_ownership_discipline_erases]
 QED
 
 Theorem ptr_source_ownership_saved_params:

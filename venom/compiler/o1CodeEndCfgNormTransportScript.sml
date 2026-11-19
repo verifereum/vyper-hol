@@ -5,7 +5,7 @@ Ancestors
   lowerDloadPtrStatic o1PassContract o1PassLift list venomInst venomFnScheduleRunner
   contextCodegenRel venomExecProofs venomState venomFnInstsProofs staticAbortDefs
 
-Theorem cfg_old_code_end_var[local]:
+Theorem cfg_old_code_end_var:
   !g x. code_end_var g x ==> !f.
   (!j v. MEM j (fn_insts g) /\ MEM v j.inst_outputs /\
     MEM v (fn_ir_vars f) /\
@@ -21,7 +21,7 @@ Proof
   metis_tac[code_end_var_rules]
 QED
 
-Theorem cfg_split_old_definition[local]:
+Theorem cfg_split_old_definition:
   wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
   MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
   build_split_block_supply s pred target = (split,repls,t) /\

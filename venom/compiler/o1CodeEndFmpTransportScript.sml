@@ -193,7 +193,7 @@ QED
 
 (* Expose the common block-lowering and root-installation decomposition
    before applying instruction-specific restrictions. *)
-Theorem fmp_stage_lowered_inst_origin[local]:
+Theorem fmp_stage_lowered_inst_origin:
   fmp_stage_lowered infos ctx runner f g /\ MEM j (fn_insts g) ==>
   MEM j (fn_insts_blocks f.fn_blocks) \/
   ?sp s1 info users oldpc suffix root newpc s2 plan blocks s3.
@@ -232,7 +232,7 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem fmp_lowered_protected_origin[local]:
+Theorem fmp_lowered_protected_origin:
   fmp_stage_lowered infos ctx runner f g /\
   pre_fmp_ops f /\ MEM d (fn_insts f) /\ MEM x d.inst_outputs /\ d.inst_opcode = ADD /\
   (!i. MEM i (fn_insts f) /\ MEM x i.inst_outputs ==> i = d) /\
@@ -292,7 +292,7 @@ Proof
    metis_tac[MEM, fmp_optional_outputs_origin])
 QED
 
-Theorem fmp_code_end_adjacent[local]:
+Theorem fmp_code_end_adjacent:
   fmp_stage_lowered infos ctx runner f g /\
   (fn_is_context_entry ctx f ==> entry_fn_no_params f) /\
   lookup_block lbl f.fn_blocks = SOME bb /\
@@ -387,7 +387,7 @@ Proof
    drule_all code_end_var_def_inst >> simp[])
 QED
 
-Theorem fmp_code_end_var_backward[local]:
+Theorem fmp_code_end_var_backward:
   !g x. code_end_var g x ==> !infos ctx runner f.
     fmp_stage_lowered infos ctx runner f g /\ pre_fmp_ops f /\ ssa_form f ==>
     code_end_var f x
