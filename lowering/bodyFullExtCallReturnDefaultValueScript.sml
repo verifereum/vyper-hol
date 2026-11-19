@@ -754,13 +754,17 @@ Resume extcall_return_full_default_value[default_success]:
      simp[]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) [] (OK z,Gc,tc)` by
     (gen_tac >>
-     qpat_assum `!D. gas_origin_ptr_path _ (p,Gp,tp) [] (OK checked,Gc,tc)`
-       (qspec_then `D` assume_tac) >>
      `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (checked,Gc,tc) [] (OK z,Gc,tc)` by
        simp[Abbr `z`] >>
+     `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (p,Gp,tp) [] (OK z,Gc,tc)` by
+       (qpat_assum `!D. gas_origin_ptr_path _ (p,Gp,tp) [] (OK checked,Gc,tc)`
+          (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+        disch_then (qspecl_then [`checked`,`Gc`,`tc`,`[]`,`OK z`,`Gc`,`tc`] mp_tac) >>
+        simp[]) >>
      qpat_assum `!D. gas_origin_ptr_path _ (t,G,tn) [] (OK p,Gp,tp)`
-       (qspec_then `D` assume_tac) >>
-     metis_tac[gas_origin_ptr_path_append, listTheory.APPEND]) >>
+       (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+     disch_then (qspecl_then [`p`,`Gp`,`tp`,`[]`,`OK z`,`Gc`,`tc`] mp_tac) >>
+     simp[]) >>
   `!x. not_fresh_at ds x ==>
      lookup_var x z = lookup_var x u /\ FLOOKUP Gc x = FLOOKUP Gu x /\
      op_taint tc (Var x) = op_taint tu (Var x)` by

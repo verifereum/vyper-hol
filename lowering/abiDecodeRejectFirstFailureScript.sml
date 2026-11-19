@@ -144,12 +144,13 @@ Proof
        (qspecl_then [`D`, `lo`, `explicit`, `ctx`, `func`] mp_tac) >> simp[]) >>
   qexistsl_tac [`rawload with vs_inst_idx := LENGTH sb.cs_current_insts`, `HG`, `th`] >>
   `mid.vs_memory = s.vs_memory` by simp[Abbr `mid`, Abbr `raw`, update_var_def] >>
+  `allocas_from lo (rawload with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (simp[allocas_from_def] >>
+     qpat_assum `allocas_from lo mid` (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
   conj_tac
   >- simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
            abi_decode_load_def, mload_def, update_var_def] >>
   simp[] >>
-  conj_tac
-  >- (qpat_x_assum `allocas_from lo mid` mp_tac >> simp[allocas_from_def, update_var_def]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK (rawload with vs_inst_idx := LENGTH sb.cs_current_insts),HG,th)` by
     (rpt gen_tac >>
