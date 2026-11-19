@@ -11280,9 +11280,11 @@ Proof
   mp_tac (SPEC_ALL dft_focus_packet_step_retained) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (CONJUNCTS_THEN2
-    (REPEAT_TCL CHOOSE_THEN (MAP_EVERY assume_tac o CONJUNCTS)) assume_tac) >>
+    (qx_choosel_then [`fuel'`,`obs'`,`acts'`,`blocks'`,`calls'`,`ms_tab'`,`es_tab'`,
+       `ks_tab'`,`p'`,`d'`,`raw_slots'`,`sites'`,`unused'`]
+       (MAP_EVERY assume_tac o CONJUNCTS)) assume_tac) >>
   conj_tac
-  >- (qexistsl_tac [`N'`,`(SUC (FST packet),obs')`,`acts'`,`blocks'`,`calls'`,
+  >- (qexistsl_tac [`fuel'`,`(SUC (FST packet),obs')`,`acts'`,`blocks'`,`calls'`,
         `ms_tab'`,`es_tab'`,`ks_tab'`,`p'`,`d'`,`raw_slots'`,`sites'`,`unused'`] >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   first_assum ACCEPT_TAC
