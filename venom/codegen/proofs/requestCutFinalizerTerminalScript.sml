@@ -40,24 +40,3 @@ Proof
   `s with as_code := assemble prog ++ data = s` by simp[asm_state_component_equality] >>
   gvs[asm_frame_rel_tail_nil] >> metis_tac[asm_frame_run_terminal_outcomes, asm_frame_run_requests]
 QED
-
-Theorem asm_finalizer_terminal_outcomes:
-  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
-  asm_frame_prog_ok prog' /\
-  s.as_pc = 0 /\ s.as_code = assemble prog ++ data /\
-  (fin = asm_opt_finalizer ==>
-    label_disciplined (asm_data_env prog (assemble prog ++ data)) prog s) /\
-  asm_frame_rel_tail [] prog' data es
-    (s with as_code := assemble prog' ++ data) es /\
-  run_call es = SOME (r,final) /\ ~frame_resource_starved es r final /\
-  (asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-     prog n s = AsmHalt a \/
-   asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-     prog n s = AsmRevert a \/
-   asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-     prog n s = AsmFault a) ==>
-  a.as_outcomes = []
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all asm_finalizer_terminal_oracle >> simp[]
-QED

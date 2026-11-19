@@ -1,6 +1,6 @@
 Theory requestCutReplaySuffix
 Ancestors
-  dftWaveStaticMemoryInv dftContractGas requestCutCfgObservation
+  dftWaveStaticMemoryInv dftContractGas
   o1DftStageSsa o1CodeEndDftTransport o1CodeEndCfgNormTransport o1ContractCfgNorm
   o1PassContract unitMemInv unitTransformDefs dftGasOracleDefs
   stateFrame staticAbortDefs o1ScheduleDecompHelpers venomState venomWf venomInst list
@@ -80,44 +80,6 @@ QED
 
 (* The pointwise guard needed to continue the actual assembly frontier.
    Static abort and revert forwarding have their own terminal routes. *)
-Theorem request_cut_pointwise_guard:
-  generate_context_plan ctx = SOME cpl /\
-  vs0.vs_initial_fmp = n2w cpl.cp_initial_fmp /\
-  (!l. FLOOKUP vs0.vs_labels l =
-       OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
-  max_live_eom ctx = SOME eom /\
-  mem_inv (\ctx fn inst s. LENGTH s.vs_requests <= k /\ ~in_static_abort_prefix fn s ==>
-    lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s) ctx vs0 /\
-  (guarded ==> code_end_offset_ok (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
-    LENGTH s.vs_requests <= k /\ ~in_static_abort_prefix fn s) ctx) /\
-  raw_reachable vs0 ctx fn inst s /\ LENGTH s.vs_requests <= k /\
-  ~in_static_abort_prefix fn s /\ ~in_revert_forward fn s ==>
-  source_memory_reads_disjoint cpl inst s /\
-  context_source_memory_writes_disjoint cpl inst s /\
-  (guarded ==> focus_s7_symbolic_guard prog cpl fn inst s)
-Proof
-  strip_tac >> drule generate_context_plan_spill_gap >> strip_tac >>
-  `w2n s.vs_initial_fmp = cpl.cp_initial_fmp` by
-    (`s.vs_initial_fmp = vs0.vs_initial_fmp` by metis_tac[raw_reachable_initial_fmp] >>
-     gvs[w2n_n2w, LESS_MOD]) >>
-  `lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s` by
-    (qpat_x_assum `mem_inv _ _ _` mp_tac >>
-     simp[mem_inv_raw_reachable] >> strip_tac >>
-     qpat_x_assum `!f i u. raw_reachable vs0 ctx f i u ==> _`
-       (qspecl_then [`fn`, `inst`, `s`] mp_tac) >> simp[]) >>
-  `source_memory_reads_disjoint cpl inst s /\
-   context_source_memory_writes_disjoint cpl inst s` by
-    (conj_tac >> FIRST [irule lowered_reads_disjoint, irule lowered_writes_disjoint] >>
-     qexistsl_tac [`ctx`, `eom`, `cpl.cp_initial_fmp`, `fn`] >> gvs[]) >>
-  simp[focus_s7_symbolic_guard_def] >> rpt strip_tac >>
-  `FLOOKUP s.vs_labels "code_end" = SOME (n2w off)` by
-    (drule raw_reachable_labels >> disch_then SUBST1_TAC >> simp[]) >>
-  qpat_x_assum `guarded ==> code_end_offset_ok _ _` mp_tac >>
-  simp[code_end_offset_ok_def] >>
-  disch_then (qspecl_then [`fn`, `inst`, `s`, `dst`, `x`, `sz`, `src`, `n2w off`] mp_tac) >>
-  simp[]
-QED
-
 Theorem cfg_norm_cursor_execution_frame[local]:
   !C rounds cells. cfg_norm_cursors C rounds cells ==>
     execution_frame (SND (FST (HD cells))) =

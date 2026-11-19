@@ -1,6 +1,6 @@
 Theory requestCutStaticTerminal
 Ancestors
-  requestCutAbortBound requestCutTerminalPrefix requestCutStaticEntry
+  requestCutAbortBound requestCutTerminalPrefix codegenStaticAbortEntrySim
   staticAbortAsmOptCorrect staticAbortFrameException contextStaticAbortRel
   asmFrameRel asmOptimizer codegenEntrySim codegenEntryRel
   codegenSymRel contextCodegenRel o1PassContract

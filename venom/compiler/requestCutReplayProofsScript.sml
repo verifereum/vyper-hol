@@ -135,56 +135,6 @@ Proof
     `u with vs_inst_idx := SUC s.vs_inst_idx`, `t`] >> simp[]
 QED
 
-Theorem concretize_paired_codecopy_reflect_at_request_cut:
-  o1_ctx_shape C /\ ptr_discipline_rq_upto lo k C vs /\
-  ptr_paired_prefix R lp positions lo vs C Ct h a ht
-    (ptr_observe stk PG G tn ft j t) done tokens registry births PT TG saved entries H calls ws /\
-  a.po_inst.inst_opcode <> NOP /\
-  j = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
-  j.inst_opcode = CODECOPY /\ j.inst_operands = [dst; Var x; sz] /\
-  code_end_var ft x /\ eval_operand (Var x) t = SOME w /\ request_cut k t ==>
-  raw_reachable vs C a.po_fn a.po_inst a.po_state /\ a.po_inst = j /\
-  code_end_var a.po_fn x /\ eval_operand (Var x) a.po_state = SOME w /\
-  a.po_state.vs_labels = t.vs_labels /\ request_cut k a.po_state
-Proof
-  strip_tac >> drule ptr_paired_prefix_endpoint >> strip_tac >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_ownership >> strip_tac >>
-  drule ptr_gap_ownership_history >> strip_tac >>
-  drule ptr_chrono_history_reachable >> strip_tac >>
-  drule ptr_chrono_history_requests_le >> strip_tac >>
-  `LENGTH a.po_state.vs_requests = LENGTH t.vs_requests` by
-    (fs[ptr_paired_sample_def, ptr_observe_def] >>
-     metis_tac[ptr_history_content_def, ptr_request_history_length]) >>
-  `EVERY (\b. request_cut k b.po_state) h` by
-    (fs[EVERY_MEM, request_cut_def] >> metis_tac[LESS_EQ_TRANS]) >>
-  `EVERY wf_function C.ctx_functions` by
-    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
-  `EVERY (\b. b.po_inst.inst_opcode = DALLOCA ==> allocas_below_fmp b.po_state) h` by
-    (fs[EVERY_MEM, ptr_observation_reachable_def, ptr_discipline_rq_upto_def] >>
-     qx_gen_tac `b` >> rpt strip_tac >>
-     `frame_reachable vs C b.po_stack b.po_params b.po_prov b.po_taint
-        b.po_fn b.po_inst b.po_state` by metis_tac[] >>
-     `raw_reachable vs C b.po_fn b.po_inst b.po_state` by
-       (irule frame_reachable_raw >> simp[EVERY_MEM] >> metis_tac[]) >>
-     `active_inst b.po_fn b.po_inst b.po_state` by metis_tac[raw_reachable_active] >>
-     `ctx_has_dalloca C` by metis_tac[frame_reachable_dalloca] >>
-     metis_tac[]) >>
-  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
-    (fs[ptr_discipline_rq_upto_def, EVERY_MEM] >> metis_tac[]) >>
-  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
-    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
-     metis_tac[]) >>
-  drule_all ptr_source_ownership_prov_erases_on_history >> strip_tac >>
-  `!stk PG G tn fn inst s.
-    frame_reachable vs C stk PG G tn fn inst s /\
-    LENGTH s.vs_requests = LENGTH t.vs_requests ==> taint_ok fn tn inst s` by
-    (fs[ptr_discipline_rq_upto_def, request_cut_def] >> metis_tac[]) >>
-  drule_all concretize_paired_codecopy_reflect >>
-  fs[request_cut_def]
-QED
-
 (* Use the stopped trace itself. Any proper pre-cut terminal still has an
    outcome, because the same initial oracle serves the raw recording step. *)
 Theorem request_cut_stopped_trace_crossed:
@@ -219,36 +169,6 @@ Proof
   simp[]
 QED
 
-Theorem request_cut_retained_demand:
-  (!rq rqs. record_request rq rqs = rqs ++ [rq]) /\
-  raw_variant fmp vs vs0 /\ EVERY wf_function C.ctx_functions /\
-  EVERY wf_function ctx.ctx_functions /\
-  raw_reachable vs C fn inst s /\ inst.inst_opcode <> INVOKE /\
-  LENGTH s.vs_requests = k /\ step_inst fuel C inst s = OK u /\
-  k < LENGTH u.vs_requests /\
-  joint_trace vs0 ctx q0 es qs
-    (JointConfig stk PG G tn endfn endinst t oms om hs h) /\
-  (request_cut k t ==> t.vs_outcomes = []) /\
-  (k < LENGTH t.vs_requests ==>
-    LIST_REL (request_agree_except D)
-      (TAKE (SUC k) u.vs_requests) (TAKE (SUC k) t.vs_requests)) ==>
-  (?fn' inst' s' fuel' u'.
-    raw_reachable vs0 ctx fn' inst' s' /\ inst'.inst_opcode <> INVOKE /\
-    LENGTH s'.vs_requests = k /\ step_inst fuel' ctx inst' s' = OK u' /\
-    k < LENGTH u'.vs_requests /\
-    request_agree_except D (EL k u.vs_requests) (EL k u'.vs_requests) /\
-    s'.vs_outcomes = s.vs_outcomes) /\
-  ctx_rq_upto D k C ctx vs vs0
-Proof
-  strip_tac >>
-  drule_all request_cut_stopped_trace_crossed >> strip_tac >>
-  `LIST_REL (request_agree_except D)
-    (TAKE (SUC k) u.vs_requests) (TAKE (SUC k) t.vs_requests)` by metis_tac[] >>
-  drule_all request_cut_paired_endpoints >> strip_tac >> simp[] >>
-  qexistsl_tac [`fn'`, `inst'`, `s'`, `fuel'`, `u'`] >> simp[] >>
-  metis_tac[recorded_index_same_outcomes]
-QED
-
 Theorem paired_history_supplement[local]:
   ptr_history_content tn s t ==>
   concretize_supplement D tn (s with vs_requests := t.vs_requests) t
@@ -269,48 +189,6 @@ Proof
   >- (gen_tac >> Cases_on `a = t.vs_call_ctx.cc_address` >>
       fs[storage_agree_except_def, word_agree_except_def]) >>
   fs[FLOOKUP_DEF] >> metis_tac[]
-QED
-
-(* The retained history identifies the request's unchanged fields. Its
-   snapshots use the source taint at the actual emitting instruction. *)
-Theorem request_cut_concretize_observation:
-  ptr_history_content tn s t /\ ptr_history_content un u v /\
-  taint_within_rq_upto D k C vs /\
-  frame_reachable vs C stk PG G tn fn inst s /\
-  active_inst fn inst s /\ LENGTH s.vs_requests = k /\
-  inst.inst_opcode <> INVOKE /\ j.inst_opcode <> INVOKE /\
-  step_inst fuel C inst s = OK u /\ step_inst fuel' C' j t = OK v /\
-  k < LENGTH u.vs_requests /\ k < LENGTH v.vs_requests ==>
-  request_agree_except D (EL k u.vs_requests) (EL k v.vs_requests)
-Proof
-  strip_tac >>
-  `concretize_supplement D tn (s with vs_requests := t.vs_requests) t` by
-    metis_tac[paired_history_supplement] >>
-  `LENGTH t.vs_requests = k` by
-    metis_tac[ptr_history_content_def, ptr_request_history_length] >>
-  `LENGTH s.vs_requests < LENGTH u.vs_requests /\
-   LENGTH t.vs_requests < LENGTH v.vs_requests` by simp[] >>
-  `request_cut k s` by simp[request_cut_def] >>
-  qpat_assum `taint_within_rq_upto D k C vs`
-    (assume_tac o cj 1 o REWRITE_RULE [taint_within_rq_upto_def]) >>
-  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
-      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
-   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
-      (s.vs_transient s.vs_call_ctx.cc_address)` by metis_tac[] >>
-  mp_tac (Q.INST [`inst` |-> `inst`, `fuel` |-> `fuel`,
-    `ctx` |-> `C`, `s` |-> `s`, `post` |-> `u`] recording_step_appends_one) >>
-  simp[] >> disch_then (qx_choose_then `rq` strip_assume_tac) >>
-  mp_tac (Q.INST [`inst` |-> `j`, `fuel` |-> `fuel'`,
-    `ctx` |-> `C'`, `s` |-> `t`, `post` |-> `v`] recording_step_appends_one) >>
-  simp[] >> disch_then (qx_choose_then `rq'` strip_assume_tac) >>
-  `ptr_request_shell rq rq'` by
-    (qpat_x_assum `ptr_history_content un u v` mp_tac >>
-     simp[ptr_history_content_def, ptr_request_history_def, LIST_REL_APPEND_EQ]) >>
-  `request_agree_except D rq rq'` by
-    (mp_tac (Q.INST [`D` |-> `D`, `tn` |-> `tn`, `rq` |-> `rq`, `rq'` |-> `rq'`,
-        `s` |-> `s with vs_requests := t.vs_requests`, `t` |-> `t`]
-       concretize_request_observation) >> fs[ptr_request_shell_def]) >>
-  simp[EL_APPEND2]
 QED
 
 Theorem sue_frame_recording_step[local]:
@@ -406,27 +284,6 @@ Proof
   Cases_on `a = s.vs_call_ctx.cc_address` >> fs[] >> metis_tac[]
 QED
 
-Theorem request_cut_relocated_snapshot:
-  dload_shared_store tn un s t /\
-  taint_within_rq_upto D k C vs /\
-  frame_reachable vs C stk PG G tn fn inst s /\
-  active_inst fn inst s /\ request_cut k s /\ inst.inst_opcode <> INVOKE /\
-  step_inst fuel C inst s = OK u /\ LENGTH s.vs_requests < LENGTH u.vs_requests /\
-  rq.cr_accounts = s.vs_accounts /\ rq'.cr_accounts = t.vs_accounts /\
-  rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
-  ptr_request_shell rq rq' ==>
-  request_agree_except D rq rq'
-Proof
-  strip_tac >>
-  qpat_assum `taint_within_rq_upto D k C vs`
-    (assume_tac o cj 1 o REWRITE_RULE [taint_within_rq_upto_def]) >>
-  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
-      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
-   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
-      (s.vs_transient s.vs_call_ctx.cc_address)` by metis_tac[] >>
-  irule relocated_snapshot_agrees >> simp[] >> qexistsl_tac [`s`,`t`,`tn`,`un`] >> simp[]
-QED
-
 Theorem fmp_stage_rel_shared_store:
   fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts ==>
   dload_shared_store tn tn s t
@@ -435,13 +292,6 @@ Proof
        storage_agree_except_def, key_taint_def, word_agree_except_def] >>
   rpt strip_tac >>
   fs[FLOOKUP_DEF] >> metis_tac[]
-QED
-
-Theorem ld_nonghost_shared_store:
-  ld_nonghost tn s t ==> dload_shared_store tn tn s t
-Proof
-  simp[ld_nonghost_def, dload_shared_store_def, key_taint_def,
-       word_agree_except_def] >> metis_tac[]
 QED
 
 Theorem ld_clipped_normal_shared_store:
@@ -538,30 +388,6 @@ Proof
     metis_tac[recording_step_appends_one] >>
   fs[EL_APPEND2,LAST_APPEND] >>
   irule relocated_snapshot_agrees >> simp[] >> qexistsl_tac [`s`,`t`,`tn`,`un`] >> simp[]
-QED
-
-Theorem request_cut_relocated_observation:
-  dload_shared_store tn un s t /\
-  taint_within_rq_upto D k C vs /\
-  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
-  LENGTH s.vs_requests = k /\ LENGTH t.vs_requests = k /\
-  inst.inst_opcode <> INVOKE /\ inst'.inst_opcode <> INVOKE /\
-  step_inst fuel C inst s = OK u /\ step_inst fuel' C' inst' t = OK v /\
-  k < LENGTH u.vs_requests /\ k < LENGTH v.vs_requests /\
-  ptr_request_shell (LAST u.vs_requests) (LAST v.vs_requests) ==>
-  request_agree_except D (EL k u.vs_requests) (EL k v.vs_requests)
-Proof
-  strip_tac >>
-  `request_cut k s /\ LENGTH s.vs_requests < LENGTH u.vs_requests` by
-    simp[request_cut_def] >>
-  qpat_assum `taint_within_rq_upto D k C vs`
-    (assume_tac o cj 1 o REWRITE_RULE [taint_within_rq_upto_def]) >>
-  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
-      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
-   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
-      (s.vs_transient s.vs_call_ctx.cc_address)` by metis_tac[] >>
-  irule relocated_request_agrees >> simp[] >>
-  qexistsl_tac [`C`,`C'`,`fuel`,`fuel'`,`inst`,`inst'`,`s`,`t`,`tn`,`un`] >> simp[]
 QED
 
 Theorem request_cut_compose_history:

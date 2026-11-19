@@ -39,21 +39,3 @@ Proof
   >- (drule_all lowered_reads_disjoint >> simp[]) >>
   drule_all lowered_writes_disjoint >> simp[]
 QED
-
-Theorem request_cut_abort_memory_guard:
-  inst_shape_ok inst /\ inst.inst_opcode <> INVOKE /\ ~in_revert_forward fn9 t /\
-  step_inst fuel C9 inst t = Abort ab post /\
-  (!r. MEM r cpl.cp_regions ==> eom <= r.sr_spill_base /\
-    r.sr_spill_end <= w2n t.vs_initial_fmp) /\
-  mem_inv (\ctx fn i s. LENGTH s.vs_requests <= k ==> lowered_mem_fact eom ctx fn i s) C7 v7 /\
-  (inv_memory_observation inst.inst_opcode ==>
-    ?fn u. raw_reachable v7 C7 fn inst u /\ LENGTH u.vs_requests <= k /\
-      ~in_revert_forward fn u /\ u.vs_initial_fmp = t.vs_initial_fmp /\
-      (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op t)) ==>
-  source_memory_reads_disjoint cpl inst t /\ context_source_memory_writes_disjoint cpl inst t
-Proof
-  strip_tac >>
-  `inst.inst_opcode <> DRET` by
-    (drule step_inst_abort_opcodes >> rpt strip_tac >> gvs[]) >>
-  drule_all_then ACCEPT_TAC request_cut_paired_memory_guard
-QED

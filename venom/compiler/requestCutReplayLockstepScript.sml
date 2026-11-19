@@ -7,22 +7,6 @@ Ancestors
   venomState finite_map list o1ContractMakeSsaPtrOk o1ContractMakeSsaPtrRows
   o1ContractMakeSsaPtrPos lowerDloadRequestObservation
 
-Theorem lockstep_ctx_rq_upto:
-  lockstep_ctx Q vs.vs_labels C C' /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
-  EVERY wf_function C.ctx_functions ==>
-  ctx_rq_upto D k C C' vs vs
-Proof
-  simp[ctx_rq_upto_def] >> rpt strip_tac >>
-  drule ptr_raw_reachable_frame >> strip_tac >>
-  drule_all frame_reachable_lockstep >> strip_tac >>
-  drule_all lockstep_rel >> strip_tac >>
-  `t'.vs_requests = s.vs_requests` by
-    (fs[state_rel_def] >> metis_tac[execution_frame_fields]) >>
-  `raw_reachable vs C fn inst s` by
-    metis_tac[frameRawProjectionTheory.frame_reachable_raw] >>
-  qexistsl_tac [`fn`, `inst`, `s`] >> fs[request_agree_except_refl]
-QED
-
 Theorem lockstep_cut_halt[local]:
   frame_reachable vs C' stk' PG G' tn' fn' inst' s' /\ request_cut k s' /\
   inst'.inst_opcode <> INVOKE /\ step_inst fuel C' inst' s' = Halt h' /\
@@ -100,57 +84,6 @@ Proof
   `fn_bisim (EL n C.ctx_functions) (EL n C'.ctx_functions)` by metis_tac[] >>
   fs[fn_bisim_def] >>
   irule make_ssa_current_fn_frame_lockstep >> fs[o1_fn_shape_def] >> metis_tac[]
-QED
-
-Theorem make_ssa_stage_ptr_discipline_rq_upto:
-  ctx_pass_stage rp (CFP_Simple VP_MakeSSA) view C C' /\
-  o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
-  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ ptr_discipline_rq_upto lo k C vs ==>
-  ptr_discipline_rq_upto lo k C' vs
-Proof
-  strip_tac >> drule_all make_ssa_stage_lockstep >>
-  disch_then (qspec_then `vs.vs_labels` assume_tac) >>
-  `LIST_REL (\f g. make_ssa_input_ok f /\ o1_fn_shape C f /\
-      ?su su'. ir_supply_covers_fn su f /\ ir_supply_inst_ok su /\
-        make_ssa_current_fn su f = (g,su')) C.ctx_functions C'.ctx_functions` by
-    (fs[lockstep_ctx_def, LIST_REL_EL_EQN] >>
-     gen_tac >> strip_tac >> first_x_assum drule >> simp[] >> metis_tac[]) >>
-  `(ctx_has_dalloca C' ==> ctx_has_dalloca C)` by
-    (fs[ctx_has_dalloca_def, EXISTS_MEM, MEM_EL, LIST_REL_EL_EQN] >>
-     strip_tac >> rename1 `n < LENGTH C'.ctx_functions` >>
-     qpat_x_assum `!m. m < LENGTH C.ctx_functions ==> _` (qspec_then `n` mp_tac) >>
-     simp[] >> strip_tac >> fs[o1_fn_shape_def] >>
-     `EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts (EL n C.ctx_functions))` by
-       (irule make_ssa_current_fn_dalloca >> simp[] >>
-        qexistsl_tac [`EL n C'.ctx_functions`, `su`, `su'`] >>
-        simp[EXISTS_MEM, MEM_EL] >> metis_tac[]) >>
-     gvs[EXISTS_MEM] >> metis_tac[MEM_EL]) >>
-  qpat_x_assum `ptr_discipline_rq_upto lo k C vs` mp_tac >>
-  rewrite_tac[ptr_discipline_rq_upto_def] >> strip_tac >>
-  simp[ptr_discipline_rq_upto_def] >> conj_tac
-  >- (qexists_tac `P` >> fs[EVERY_EL, LIST_REL_EL_EQN] >> rpt strip_tac >>
-      `n < LENGTH C.ctx_functions` by simp[] >>
-      ntac 2 (first_x_assum drule >> strip_tac) >>
-      fs[o1_fn_shape_def] >> drule_all make_ssa_current_fn_ptr_ok >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `frame_reachable vs C' stk' PG G' tn' fn' inst' s'` >>
-  drule_all frame_reachable_lockstep >> strip_tac >>
-  rename1 `frame_reachable vs C stk PG G tn fn inst s` >>
-  fs[] >> drule_all lockstep_rel >> strip_tac >>
-  `s'.vs_requests = s.vs_requests /\ s'.vs_allocas = s.vs_allocas /\
-   s'.vs_fmp = s.vs_fmp /\ s'.vs_initial_fmp = s.vs_initial_fmp` by
-    (fs[state_rel_def] >> drule execution_frame_fields >> simp[]) >>
-  `request_cut k s` by fs[request_cut_def] >>
-  `access_ok lo G fn inst s /\ taint_ok fn tn inst s /\ allocas_from lo s /\
-   (ctx_has_dalloca C ==> allocas_below_fmp s)` by metis_tac[] >>
-  `p /\ in_revert_forward fn s ==> in_revert_forward fn' s'` by
-    (Cases_on `p` >> fs[o1_fn_shape_def] >> drule_all make_ssa_lockstep_revert >> simp[]) >>
-  `p /\ about_to_revert fn inst s ==> about_to_revert fn' inst' s'` by
-    (Cases_on `p` >> fs[o1_fn_shape_def] >> drule_all make_ssa_lockstep_revert >> simp[]) >>
-  `~p /\ inst'.inst_opcode = NOP ==> inst'.inst_operands = []` by
-    (strip_tac >> gvs[]) >>
-  drule_all lockstep_ptr_rows >> simp[] >>
-  fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
 QED
 
 (* Both SSA passes preserve the recorded snapshot at a matched visit. *)

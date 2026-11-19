@@ -197,7 +197,7 @@ Proof
   rpt strip_tac >> gvs[MEM] >> metis_tac[]
 QED
 
-Theorem ld_normal_external_input_correspondence:
+Theorem ld_normal_external_inputs_defined:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
   ptr_discipline lo CS vs0 /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\ opaque_use_ok fn /\
@@ -214,7 +214,7 @@ Theorem ld_normal_external_input_correspondence:
   ~in_revert_forward fn s /\
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f /\
-  step_inst fuel CT i t = OK t' ==>
+  (!op. MEM op i.inst_operands ==> ?w. eval_operand op t = SOME w) ==>
   (!op. MEM op scalars ==> eval_operand op s = eval_operand op t) /\
   (!op. MEM op i.inst_operands ==> ?x y.
     eval_operand op s = SOME x /\ eval_operand op t = SOME y) /\
@@ -237,12 +237,12 @@ Proof
         asm_rewrite_tac[]) >> metis_tac[]) >>
   `!op. MEM op i.inst_operands ==> ?x y.
     eval_operand op s = SOME x /\ eval_operand op t = SOME y` by
-    (rpt strip_tac >> drule_all ld_external_target_operands_defined >>
-     strip_tac >>
-     qpat_x_assum `!op. MEM op i.inst_operands ==> (eval_operand op s = NONE <=> _)`
-       (qspec_then `op` mp_tac) >>
-     asm_rewrite_tac[] >>
-     Cases_on `eval_operand op s` >> simp[] >> metis_tac[]) >>
+    (rpt strip_tac >>
+     qpat_assum `!op. MEM op i.inst_operands ==> ?w. eval_operand op t = SOME w`
+       (qspec_then `op` (drule_then strip_assume_tac)) >>
+     qpat_assum `!op. MEM op i.inst_operands ==> (eval_operand op s = NONE <=> _)`
+       (qspec_then `op` (drule_then assume_tac)) >>
+     Cases_on `eval_operand op s` >> fs[]) >>
   simp[] >>
   `?p q n. eval_operand off s = SOME p /\ eval_operand off t = SOME q /\
     eval_operand sz s = SOME n /\ eval_operand sz t = SOME n` by
@@ -277,4 +277,39 @@ Proof
   simp[mem_read_ops_def, source_memory_read_ranges_def,
        memory_range_of_operands_def, MEM] >>
   metis_tac[]
+QED
+
+Theorem ld_normal_external_input_correspondence:
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
+  ptr_discipline lo CS vs0 /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\ opaque_use_ok fn /\
+  U = {v | v IN V /\ ~retpc_var fn v} /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  ((i.inst_opcode = CALL /\
+      i.inst_operands = [g;a;v;off;sz;ro;rs] /\ scalars = [g;a;v;sz;rs]) \/
+   (MEM i.inst_opcode [STATICCALL;DELEGATECALL] /\
+      i.inst_operands = [g;a;off;sz;ro;rs] /\ scalars = [g;a;sz;rs]) \/
+   (i.inst_opcode = CREATE /\
+      i.inst_operands = [v;off;sz] /\ scalars = [v;sz]) \/
+   (i.inst_opcode = CREATE2 /\
+      i.inst_operands = [v;off;sz;salt] /\ scalars = [v;sz;salt])) /\
+  ~in_revert_forward fn s /\
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  step_inst fuel CT i t = OK t' ==>
+  (!op. MEM op scalars ==> eval_operand op s = eval_operand op t) /\
+  (!op. MEM op i.inst_operands ==> ?x y.
+    eval_operand op s = SOME x /\ eval_operand op t = SOME y) /\
+  ?p q n. eval_operand off s = SOME p /\ eval_operand off t = SOME q /\
+    eval_operand sz s = SOME n /\ eval_operand sz t = SOME n /\
+    read_memory (w2n p) (w2n n) s = read_memory (w2n q) (w2n n) t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2]` by
+    gvs[MEM] >>
+  qpat_assum `step_inst fuel CT i t = OK t'` (fn step =>
+    qpat_assum `MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2]`
+      (fn opcode => assume_tac
+         (MATCH_MP ld_external_target_operands_defined (CONJ opcode step)))) >>
+  drule_all ld_normal_external_inputs_defined >> simp[]
 QED

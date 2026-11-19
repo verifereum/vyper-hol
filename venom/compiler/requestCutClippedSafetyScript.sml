@@ -1,5 +1,6 @@
 Theory requestCutClippedSafety
 Ancestors
+  loweringBudgetFrameOracleTransport
   requestCutOracleFrames requestCutOracleReplay e2eRequestCutDefs jointRequestCut
   concretizePtrCoverageStaticMemReachability frameRawProjection
   contextRawReachable contextCodegenRel unitMemInv unitTransformDefs
@@ -8,6 +9,9 @@ Ancestors
   venomState venomInst list rich_list arithmetic
 Libs
   BasicProvers stepInstBaseLib
+
+val _ = export_rewrites
+  ["loweringBudgetFrameOracleTransport.read_ranges_outcomes_update"]
 
 Theorem frame_reachable_clipped_oracle[local]:
   (!rq rqs. record_request rq rqs = rqs ++ [rq]) /\
@@ -41,15 +45,6 @@ Proof
   strip_tac >> drule ptr_raw_reachable_frame >> strip_tac >>
   drule_all frame_reachable_clipped_oracle >>
   metis_tac[frame_reachable_raw]
-QED
-
-Theorem read_ranges_outcome_update[simp]:
-  source_memory_read_ranges i (s with vs_outcomes := os) = source_memory_read_ranges i s
-Proof
-  Cases_on `i.inst_opcode` >>
-  simp[source_memory_read_ranges_def, memory_range_of_operands_def,
-       dret_memory_read_ranges_def] >>
-  rpt (PURE_TOP_CASE_TAC >> simp[])
 QED
 
 Theorem request_cut_safety_outcome_update[local]:

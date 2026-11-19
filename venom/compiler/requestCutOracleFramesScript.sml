@@ -8,7 +8,8 @@ Libs
 
 val _ = export_rewrites
   ["loweringBudgetFrameOracleTransport.active_inst_outcomes_update",
-   "loweringBudgetFrameOracleTransport.write_ranges_outcomes_update"]
+   "loweringBudgetFrameOracleTransport.write_ranges_outcomes_update",
+   "loweringBudgetFrameOracleTransport.step_prov_outcomes_update"]
 
 Theorem noninvoke_ok_oracle_length[local]:
   (!rq rqs. record_request rq rqs = rqs ++ [rq]) /\
@@ -58,12 +59,6 @@ Theorem setup_callee_outcome_suffix[local]:
 Proof
   strip_tac >> simp[setup_callee_outcome_update] >>
   drule calleeTransportTheory.setup_callee_oracle >> simp[]
-QED
-
-Theorem step_prov_outcome_update[simp]:
-  step_prov PG G i (s with vs_outcomes := os) = step_prov PG G i s
-Proof
-  simp[step_prov_def, out_prov_def, lookup_var_def]
 QED
 
 Theorem entry_ghost_outcome_update[simp]:
