@@ -12,6 +12,7 @@ Ancestors
   vyperAST list vyperStorageFootprint exprSimOperands context
   gasOutcomeFullCompose gasSummary wordArgsPtr exprSimMemDefs vyperStorageTrace
   vyperCallOutcome vyperCallOutcomeProps
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 (* An aborting run with two normal prefix steps is an ASSERT failure. *)
 Theorem ec_assert_failure_bit[local]:
@@ -70,7 +71,7 @@ Theorem ec_permitted_suffix_run[local]:
       word_to_bytes (n2w ry:bytes32) T) point_result) /\
   ptr_covers Gu tnu src u (w2n an) /\ ptr_covers Gu tnu dst u (w2n (64w:256 word)) /\
   (!i. w2n wi <= i /\ i < w2n wi + w2n an ==> i NOTIN tnu.t_mem) /\
-  allocas_from lo u /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
   tnu.t_stor SUBSET D.d_stor u.vs_call_ctx.cc_address
     (u.vs_accounts u.vs_call_ctx.cc_address).storage /\
   tnu.t_trans SUBSET D.d_trans u.vs_call_ctx.cc_address
@@ -93,7 +94,6 @@ Proof
     (`isPREFIX (emitted_insts sm sb) (DROP u.vs_inst_idx bb.bb_instructions)` by
        (qpat_assum `emitted_insts sm sb = _` (pure_rewrite_tac o single) >>
         first_assum ACCEPT_TAC) >>
-     `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
      drule_all computed_emitted_suffix_paths >>
      disch_then (qspec_then `PG` (strip_assume_tac o SRULE [])) >>
      gvs[] >> metis_tac[]) >>
@@ -142,7 +142,7 @@ Theorem ec_arith_permitted_tail_full:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (lo <> 0 ==> !z. cenv.ce_imm_alloca = SOME (Var z) ==> not_fresh_at sm z) /\
-  ~u.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~u.vs_halted /\
   lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [gi;ci;ai] (DROP u.vs_inst_idx bb.bb_instructions) /\
   (func.fn_name,id) NOTIN gas_explicit_sites ctx shadow_ctx /\
@@ -247,6 +247,9 @@ Proof
     (assume_tac o REWRITE_RULE [storage_trace_domain_def]) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _ /\ _`
     (drule_then strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx es2 u`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   mp_tac (Q.INST [`D` |-> `DF (storage_trace_horizon es2.storage_trace)`]
     ec_permitted_suffix_run) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
@@ -287,8 +290,7 @@ Resume ec_arith_permitted_tail_full[abort]:
     precompile_suffix_abort_full_family) >>
   (impl_tac >- (conj_tac >- (Cases_on `bt = ECAdd` >>
      simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]) >>
-    rpt conj_tac >> TRY (REFL_TAC ORELSE first_assum ACCEPT_TAC) >>~
-    [`ctx_has_dalloca ctx ==> allocas_below_fmp u`] >- simp[] >>
+    rpt conj_tac >> TRY (REFL_TAC ORELSE first_assum ACCEPT_TAC) >>
     gen_tac >> strip_tac >>
     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _ /\ _`
       (drule_then strip_assume_tac) >>
@@ -401,6 +403,9 @@ Resume ec_arith_permitted_tail_full[success_path]:
       (drule_then strip_assume_tac) >>
     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [F] _ /\ _`
       (drule_then strip_assume_tac) >>
+    `ctx_has_dalloca ctx ==> allocas_below_fmp ec_tail_end` by
+      (qpat_assum `stmt_state_rel H ctx func cenv cx _ ec_tail_end`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
     conj_tac >- (qpat_assum `gas_origin_ptr_path _ (t2,G2,tn2) [] _`
       (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
       simp[NoAsms] >> disch_then drule >> simp[NoAsms]) >>
