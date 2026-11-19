@@ -1,6 +1,6 @@
 Theory requestCutLowerDloadVisit
 Ancestors
-  loweringBudgetFrameOracleTransport lowerDloadExternalInputs
+  loweringBudgetFrameOracleTransport
   requestCutReplayProofs requestCutOracleReplay e2eRequestCutDefs
   lowerDloadExternalInputs lowerDloadNormalData lowerDloadCoverageInvariant
   lowerDloadSharedState lowerDloadResidualNonmemory lowerDloadRequestObservation

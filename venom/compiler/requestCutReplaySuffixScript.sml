@@ -78,8 +78,6 @@ Proof
   simp[]
 QED
 
-(* The pointwise guard needed to continue the actual assembly frontier.
-   Static abort and revert forwarding have their own terminal routes. *)
 Theorem cfg_norm_cursor_execution_frame[local]:
   !C rounds cells. cfg_norm_cursors C rounds cells ==>
     execution_frame (SND (FST (HD cells))) =
