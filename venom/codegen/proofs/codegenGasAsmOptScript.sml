@@ -23,6 +23,7 @@ Ancestors
   venomRunBounded venomRetProps codegenAsmStaticWf codegenLabelDisciplined codegenEntryRel
   codegenCorrectness asmFrameRel asmRunBounded asmSymSem passSimulationDefs
   vfmDecreasesGas frameGas frameStep
+  codegenSymOwnRel fnPlanPlaceRevertPostamble
 
 (* The optimized program's run from the entry assembly state is bounded,
    uniformly in the entry state. *)
@@ -234,4 +235,68 @@ Proof
   first_x_assum (qspecl_then [`g'`, `Inv`, `vs`, `es`, `s`, `op`, `s'`]
                    mp_tac) >>
   metis_tac[]
+QED
+
+(* Statement freeze for sign-off. *)
+Theorem codegen_gas_surplus_asm_opt_own:
+  !rpolicy unit cplan prog prog' fuel M D.
+    generate_context_plan unit.cu_context = SOME cplan /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    asm_opt_finalizer rpolicy prog = SOME prog' /\
+    unit_shape_ok unit
+    ==>
+    ?g. !g' Inv vs es s op r s'.
+      g <= g' /\ wf_state (add_frame_gas g' es) /\
+      g' <= frame_gas_left (add_frame_gas g' es) /\
+      codegen_context_obligations Inv unit.cu_context cplan /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      label_flow_own_ok unit.cu_context /\ code_end_offset_ok Inv unit.cu_context /\
+      sym_unit_static_ok unit /\
+      vs.vs_code = assemble prog' ++ vs.vs_data_section /\
+      codegen_asm_entry_rel_reloc (lo_reloc prog prog') cplan prog vs
+        (entry_asm_state vs (add_frame_gas g' es)) /\
+      asm_frame_rel prog' vs.vs_data_section (add_frame_gas g' es)
+        (entry_asm_state vs (add_frame_gas g' es))
+        (add_frame_gas g' es) /\
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
+      frame_inst_at (add_frame_gas g' es) s op /\
+      (!t. frame_inst_at (add_frame_gas g' es) t ReturnDataCopy ==>
+           ~RTC (\a b. LENGTH a.contexts >= LENGTH s.contexts /\
+                       step a = (INL (), b)) t s) /\
+      step_inst op s = (r, s') /\ LENGTH s'.contexts = LENGTH s.contexts
+      ==>
+      r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
+Proof
+  cheat
+QED
+
+Theorem codegen_gas_sufficient_asm_opt_own:
+  !rpolicy unit cplan prog prog' fuel M.
+    generate_context_plan unit.cu_context = SOME cplan /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    asm_opt_finalizer rpolicy prog = SOME prog' /\
+    unit_shape_ok unit
+    ==>
+    ?g. !g' Inv vs es.
+      g <= g' /\ wf_state es /\
+      codegen_context_obligations Inv unit.cu_context cplan /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      label_flow_own_ok unit.cu_context /\ code_end_offset_ok Inv unit.cu_context /\
+      sym_unit_static_ok unit /\
+      vs.vs_code = assemble prog' ++ vs.vs_data_section /\
+      codegen_asm_entry_rel_reloc (lo_reloc prog prog') cplan prog vs
+        (entry_asm_state vs (add_frame_gas g' es)) /\
+      asm_frame_rel prog' vs.vs_data_section (add_frame_gas g' es)
+        (entry_asm_state vs (add_frame_gas g' es))
+        (add_frame_gas g' es) /\
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs
+      ==>
+      ?r es'.
+        run_call (add_frame_gas g' es) = SOME (r, es') /\
+        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+Proof
+  cheat
 QED
