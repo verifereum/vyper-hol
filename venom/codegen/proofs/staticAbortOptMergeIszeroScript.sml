@@ -10,8 +10,12 @@ Ancestors
 
 val iszero_protected_terminal = staticAbortOptMergeJumpdestsTheory.merge_protected_terminal
 
+val iszero_norm = TOP_DEPTH_CONV (FIRST_CONV
+  [HO_REWR_CONV UNWIND_FORALL_THM2, REWR_CONV LET_THM, BETA_CONV])
+val iszero_beta = TOP_DEPTH_CONV BETA_CONV
+
 Theorem merge_iszero_actual_synchronized_cut[local]:
-  let r = splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl) in
+  !r. r = splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl) ==>
   p = pre ++ pat ++ tail /\ q = pre ++ repl ++ tail /\
   ((?x. asm_returns_zero_or_one x /\
         pat = [x; AsmOp "ISZERO"; AsmOp "ISZERO"] /\ repl = [x]) \/
@@ -33,12 +37,12 @@ Theorem merge_iszero_actual_synchronized_cut[local]:
     t.as_pc = r ss.sym_base.as_pc /\ LENGTH t.as_stack = LENGTH ss.sym_stack /\
     t.as_call_ctx = ss.sym_base.as_call_ctx /\ t.as_requests = ss.sym_base.as_requests
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC iszero_norm >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all (BETA_RULE (REWRITE_RULE [LET_THM] merge_iszero_one_canonical_layout)) >>
+  drule_all (CONV_RULE iszero_norm merge_iszero_one_canonical_layout) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `s.as_pc = 0` (mk_asm "entry_pc") >>
-  drule_all (BETA_RULE (REWRITE_RULE [LET_THM] merge_iszero_one_stopped_prefix)) >>
+  drule_all (CONV_RULE iszero_norm merge_iszero_one_stopped_prefix) >>
   qpat_assum `~(LENGTH pre < _ /\ _)`
     (fn th => simp[NoAsms, th]) >> strip_tac >>
   asm_x "entry_pc" assume_tac >>
@@ -56,18 +60,19 @@ QED
 (* Both cut replays use the current program's entry bytes. The entry used
    by the walk may still carry the original program's bytes. *)
 Theorem merge_iszero_site_endpoint[local]:
-  let ep = asm_data_env p (assemble p ++ data) in
-  let eq = asm_data_env q (assemble q ++ data) in
-  let c = ss.sym_base.as_pc; b = LENGTH pre in
-  let m = LENGTH pat; d = c-b in
-  let B = \w:bytes32. (b2w (w=0w):bytes32) in
+  !eq. eq = asm_data_env q (assemble q ++ data) ==>
+  !c. c = ss.sym_base.as_pc ==>
+  !b. b = LENGTH pre ==>
+  !m. m = LENGTH pat ==>
+  !d. d = c-b ==>
+  !B. B = (\w:bytes32. (b2w (w=0w):bytes32)) ==>
   p = pre ++ pat ++ tail /\ q = pre ++ repl ++ tail /\
   ((?x. asm_returns_zero_or_one x /\
         pat = [x; AsmOp "ISZERO"; AsmOp "ISZERO"] /\ repl = [x]) \/
    (?l. pat = [AsmOp "ISZERO"; AsmOp "ISZERO"; AsmPushLabel l; AsmOp "JUMPI"] /\
         repl = [AsmPushLabel l; AsmOp "JUMPI"])) /\
   s.as_pc = 0 /\ asm_static_wf p /\
-  sym_steps p ep n (sym_init s) = SymOK ss ==>
+  sym_steps p (asm_data_env p (assemble p ++ data)) n (sym_init s) = SymOK ss ==>
   asm_static_wf q /\ FILTER is_data_inst q = FILTER is_data_inst p /\
   ?j t u.
     asm_steps (SND (compute_label_offsets q)) (build_offset_to_pc q) q j
@@ -86,9 +91,9 @@ Theorem merge_iszero_site_endpoint[local]:
           ss.sym_stack=(if d=3 then [Lab l 0] else []) ++ (Val (FUNPOW B (MIN d 2) w)::stk)
      else u=sym_with_pc (splice_pc b m (LENGTH repl) c) ss)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC iszero_norm >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all (cj 2 (BETA_RULE (REWRITE_RULE [LET_THM] merge_iszero_one_canonical_layout))) >>
+  drule_all (cj 2 (CONV_RULE iszero_norm merge_iszero_one_canonical_layout)) >>
   disch_then assume_tac >>
   qabbrev_tac `sp = s with as_code := assemble p ++ data` >>
   `sp.as_pc = 0 /\ sp.as_code = assemble p ++ data /\ sym_init sp = sym_init s /\
@@ -106,7 +111,7 @@ fun exact_components g =
 
 Resume merge_iszero_site_endpoint[interior]:
   pop_assum (map_every assume_tac o CONJUNCTS) >>
-  mp_tac (Q.INST [`s` |-> `sp`] (BETA_RULE (REWRITE_RULE [LET_THM] merge_iszero_actual_interior_cut))) >>
+  mp_tac (Q.INST [`s` |-> `sp`] (CONV_RULE iszero_norm merge_iszero_actual_interior_cut)) >>
   (impl_tac >- exact_components) >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (qx_choose_then `j` (qx_choose_then `u` (qx_choose_then `t`
@@ -116,7 +121,7 @@ Resume merge_iszero_site_endpoint[interior]:
 QED
 
 Resume merge_iszero_site_endpoint[synchronized]:
-  mp_tac (Q.INST [`s` |-> `sp`] (BETA_RULE (REWRITE_RULE [LET_THM] merge_iszero_actual_synchronized_cut))) >>
+  mp_tac (Q.INST [`s` |-> `sp`] (CONV_RULE iszero_norm merge_iszero_actual_synchronized_cut)) >>
   (impl_tac >- exact_components) >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (qx_choose_then `j` (qx_choose_then `t` (map_every assume_tac o CONJUNCTS)))) >>
@@ -127,9 +132,10 @@ QED
 
 Finalise merge_iszero_site_endpoint
 
-val iszero_norm = REDEPTH_CONV (BETA_CONV ORELSEC REWR_CONV LET_THM)
-fun iszero_bind names =
-  map_every (fn k => pairTools.LET_INTRO_TAC >> disch_then (mk_asm k)) names
+fun iszero_bind bindings =
+  map_every (fn (v,k) => qx_gen_tac v >> disch_then (mk_asm k)) bindings
+fun iszero_abbrev name q =
+  qabbrev_tac q >> pop_assum (mk_asm name o REWRITE_RULE [markerTheory.Abbrev_def])
 fun iszero_equations [] k = k []
   | iszero_equations (name::names) k =
       asm name (fn th => iszero_equations names (fn eqs => k (th::eqs)))
@@ -138,21 +144,21 @@ fun iszero_open names =
 fun iszero_fact names pat ttac = iszero_equations names
   (fn eqs => qpat_assum pat (ttac o CONV_RULE iszero_norm o PURE_REWRITE_RULE eqs))
 
-(* Open the worker's LETs against the same equations, leaving Cert folded. *)
-fun iszero_rows_rule [] th k = k (CONV_RULE iszero_norm th)
-  | iszero_rows_rule (name::names) th k =
-      asm name (fn eq =>
-        let val rule = CONV_RULE
-              (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-               SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) th
-        in iszero_rows_rule names
-             (MATCH_MP rule (ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def] eq)) k end)
+(* Match the worker's naming premises to the local equations, leaving
+   Cert folded. Control and Slots are inlined in the caller. *)
+fun iszero_rows_rule [] th k = k (CONV_RULE iszero_beta th)
+  | iszero_rows_rule (NONE::names) th k = iszero_rows_rule names
+      (CONV_RULE (HO_REWR_CONV UNWIND_FORALL_THM2) th) k
+  | iszero_rows_rule (SOME name::names) th k =
+      asm name (fn eq => iszero_rows_rule names
+        (MP (CONV_RULE (LAND_CONV iszero_beta) (SPEC (lhs (concl eq)) th)) eq) k)
 
 fun iszero_site_facts k =
   qpat_assum `pat = _` (fn hp => qpat_assum `repl = _` (fn hq => k [hp,hq]))
 
 fun iszero_apply_rows worker =
-  iszero_rows_rule ["shape","flow","target","control","open","reach","slots","rows","root","cert"]
+  iszero_rows_rule [SOME "shape",SOME "flow",SOME "target",NONE,SOME "open",
+                    SOME "reach",NONE,SOME "rows",SOME "root",SOME "cert"]
     worker (fn rule => iszero_site_facts (fn site =>
       qpat_assum `p = pre ++ pat ++ tail` (fn hp =>
       qpat_assum `q = pre ++ repl ++ tail` (fn hq =>
@@ -175,7 +181,7 @@ fun iszero_apply_rows worker =
 
 Theorem merge_iszero_abort_certificate:
   !orig (s:asm_state) data req_bound.
-  let Shape = \p cc req pc height need tag boolean i (t:asm_state).
+  !Shape. Shape = (\p cc req pc height need tag boolean i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -187,16 +193,18 @@ Theorem merge_iszero_abort_certificate:
          off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w)) in
-  let Flow = \p pc height tag boolean (x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit = \(src:num -> num option)
+         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !Flow. Flow = (\p pc height tag boolean (x:num#num) (y:num#num).
+    !hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !ins. ins = EL (pc x) p ==>
+    !inherit. inherit = (\(src:num -> num option)
          (fresh:num -> (string#num)option) (bnew:num -> bool).
       (!k l origin. tag y k = SOME(l,origin) ==>
          k < hj /\ (fresh k = SOME(l,origin) \/
          ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
       (!k. boolean y k ==> k < hj /\
-         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a)) in
+         (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\
@@ -220,7 +228,8 @@ Theorem merge_iszero_abort_certificate:
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
            | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -229,26 +238,24 @@ Theorem merge_iszero_abort_certificate:
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins t = AsmOK u ==>
                      (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F in
-  let Target = \p pc tag (x:num#num) (y:num#num).
+    | _ => F) ==>
+  !Target. Target = (\p pc tag (x:num#num) (y:num#num).
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc y) in
-  let Control = \p pc tag x y.
-    if EL (pc x) p = AsmOp "JUMP" then Target p pc tag x y
-    else if EL (pc x) p = AsmOp "JUMPI"
-         then pc y = pc x+1 \/ Target p pc tag x y
-    else pc y = pc x+1 in
-  let Open = \p cc req (V:(num#num)->bool) X rank pc height need
+      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
+  !Open. Open = (\p cc req (V:(num#num)->bool) X rank pc height need
         (tag:(num#num)->num->(string#num)option)
         (boolean:(num#num)->num->bool) edge.
-    let S = Shape p cc req pc height need tag boolean in
+    !S. S = Shape p cc req pc height need tag boolean ==>
     FINITE V /\ X SUBSET V /\
     (!x. x IN V ==> ?t. S x t) /\
     (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
     (!x y. edge x y ==>
        x IN V DIFF X /\ y IN V /\ rank y < rank x /\
-       Flow p pc height tag boolean x y /\ Control p pc tag x y) /\
+       Flow p pc height tag boolean x y /\
+       (if EL (pc x) p = AsmOp "JUMP" then Target p pc tag x y
+        else if EL (pc x) p = AsmOp "JUMPI" then pc y = pc x+1 \/ Target p pc tag x y
+        else pc y = pc x+1)) /\
     (!x t. x IN V DIFF X /\ S x t ==>
        (?u. (asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
                     p 1 t = AsmRevert u \/
@@ -256,33 +263,32 @@ Theorem merge_iszero_abort_certificate:
                     p 1 t = AsmFault u) /\ u.as_requests=req) \/
        (?y u. edge x y /\
           asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-            p 1 t = AsmOK u /\ S y u)) in
-  let Reach = \(edge:(num#num)->(num#num)->bool) e x.
+            p 1 t = AsmOK u /\ S y u))) ==>
+  !Reach. Reach = (\(edge:(num#num)->(num#num)->bool) e x.
     ?n (path:num->num#num).
-      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k)) in
-  let Slots = \p cc height need tag boolean (x:num#num).
-    (need x ==> cc.cc_static) /\
-    (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
-    (!k l origin. tag x k = SOME(l,origin) ==>
-       k < height x /\ origin < LENGTH p /\
-       (EL origin p = AsmPushLabel l \/ EL origin p = AsmPushOfst l 0) /\
-       ?off dest. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-         off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest) in
-  let Rows = \p cc (V:(num#num)->bool) X (rank:num#num->num) pc height need tag boolean edge.
-    let lo = SND(compute_label_offsets p) in
-    (!x. x IN V ==> Slots p cc height need tag boolean x) /\
+      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) ==>
+  !Rows. Rows = (\p cc (V:(num#num)->bool) X (rank:num#num->num) pc height need tag boolean edge.
+    !lo. lo = SND(compute_label_offsets p) ==>
+    (!x. x IN V ==>
+      (need x ==> cc.cc_static) /\
+      (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
+      (!k l origin. tag x k = SOME(l,origin) ==>
+         k < height x /\ origin < LENGTH p /\
+         (EL origin p = AsmPushLabel l \/ EL origin p = AsmPushOfst l 0) /\
+         ?off dest. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
+           off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest)) /\
     (!x y. edge x y ==>
        x IN V DIFF X /\ y IN V /\ rank y < rank x /\
        Flow p pc height tag boolean x y) /\
     (!x. x IN V DIFF X ==>
        pc x < LENGTH p /\
-       let h = height x in
-       let fall = \y. pc y = pc x + 1 in
-       let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-       let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-       let next = \n. arm fall n /\ legal fall n in
-       let untagged = \a. !k. k<a ==> tag x k=NONE in
-       let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
+       !h. h = height x ==>
+       !fall. fall = (\y. pc y = pc x + 1) ==>
+       !arm. arm = (\P n. ?y. edge x y /\ P y /\ height y = n) ==>
+       !legal. legal = (\P n. !y. edge x y ==> P y /\ height y = n) ==>
+       !next. next = (\n. arm fall n /\ legal fall n) ==>
+       !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+       !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
        case EL (pc x) p of
          AsmLabel l => next h
        | AsmPush bs => next (h+1)
@@ -307,30 +313,19 @@ Theorem merge_iszero_abort_certificate:
                          legal (\y. fall y \/ Target p pc tag x y) (h-2)
                        else ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
                                 untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-       | _ => F) in
-  let Root = \p ss a pc height need tag boolean e.
-    Shape p a.as_call_ctx a.as_requests pc height need tag boolean e a /\
-    (!k l origin. tag e k=SOME(l,origin) ==>
-       k<LENGTH ss.sym_stack /\ EL k ss.sym_stack=Lab l 0) /\
-    (!k. boolean e k ==> k<LENGTH ss.sym_stack /\
-       (EL k ss.sym_stack=Val 0w \/ EL k ss.sym_stack=Val 1w)) in
-  let Cert = \p ss a. ?V e rank pc height need tag boolean edge.
-    Rows p a.as_call_ctx V {} rank pc height need tag boolean edge /\
-    Open p a.as_call_ctx a.as_requests V {} rank pc height need tag boolean edge /\
-    e IN V /\ (!x. x IN V ==> Reach edge e x) /\
-    Root p ss a pc height need tag boolean e in
-  let cert_bytes = \p. assemble p ++ data in
-  let env0 = asm_data_env orig (cert_bytes orig) in
-  let cert_run = \p n. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
-                    p n (s with as_code := cert_bytes p) in
-  let Base = \p. s.as_pc = 0 /\ s.as_code = cert_bytes orig /\
-                 asm_static_wf orig /\ asm_static_wf p /\
-                 FILTER is_data_inst p = FILTER is_data_inst orig in
-  let Terminal = \p. ?n out.
+       | _ => F)) ==>
+  !cert_bytes. cert_bytes = (\p. assemble p ++ data) ==>
+  !env0. env0 = asm_data_env orig (cert_bytes orig) ==>
+  !cert_run. cert_run = (\p n. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
+                    p n (s with as_code := cert_bytes p)) ==>
+  !Base. Base = (\p. s.as_pc = 0 /\ s.as_code = cert_bytes orig /\
+                     asm_static_wf orig /\ asm_static_wf p /\
+                     FILTER is_data_inst p = FILTER is_data_inst orig) ==>
+  !Terminal. Terminal = (\p. ?n out.
     (cert_run p n = AsmRevert out \/ cert_run p n = AsmFault out) /\
     sym_terminal (sym_steps p env0 n (sym_init s)) /\
-    out.as_requests <<= req_bound in
-  let Cut = \p.
+    out.as_requests <<= req_bound) ==>
+  !Cut. Cut = (\p.
     ?j t u cc req (V:(num#num)->bool) e (rank:(num#num)->num)
       pc height need tag boolean edge.
       cert_run p j = AsmOK t /\
@@ -346,13 +341,27 @@ Theorem merge_iszero_abort_certificate:
       (!k l origin. tag e k = SOME(l,origin) ==>
          k < LENGTH u.sym_stack /\ EL k u.sym_stack = Lab l 0) /\
       (!k. boolean e k ==>
-         k < LENGTH u.sym_stack /\ (EL k u.sym_stack = Val 0w \/ EL k u.sym_stack = Val 1w)) in
-  let M_R = \p. Base p /\ (Terminal p \/ Cut p) in
-    !p. M_R p ==> M_R (FST (merge_iszero p))
+         k < LENGTH u.sym_stack /\ (EL k u.sym_stack = Val 0w \/ EL k u.sym_stack = Val 1w))) ==>
+  !p. Base p /\ (Terminal p \/ Cut p) ==>
+    Base (FST (merge_iszero p)) /\
+    (Terminal (FST (merge_iszero p)) \/ Cut (FST (merge_iszero p)))
 Proof
-  rpt gen_tac >>
-  iszero_bind ["shape","flow","target","control","open","reach","slots","rows","root","cert",
-               "bytes","env","run","base","terminal","cut","mixed"] >>
+  ntac 4 gen_tac >>
+  iszero_bind [(`Shape`,"shape"),(`Flow`,"flow"),(`Target`,"target"),
+               (`Open`,"open"),(`Reach`,"reach"),(`Rows`,"rows"),
+               (`cert_bytes`,"bytes"),(`env0`,"env"),(`cert_run`,"run"),
+               (`Base`,"base"),(`Terminal`,"terminal"),(`Cut`,"cut")] >>
+  iszero_abbrev "root" `Root = \p ss a pc height need tag boolean e.
+    Shape p a.as_call_ctx a.as_requests pc height need tag boolean e a /\
+    (!k l origin. tag e k=SOME(l,origin) ==>
+       k<LENGTH ss.sym_stack /\ EL k ss.sym_stack=Lab l 0) /\
+    (!k. boolean e k ==> k<LENGTH ss.sym_stack /\
+       (EL k ss.sym_stack=Val 0w \/ EL k ss.sym_stack=Val 1w))` >>
+  iszero_abbrev "cert" `Cert = \p ss a. ?V e rank pc height need tag boolean edge.
+    Rows p a.as_call_ctx V {} rank pc height need tag boolean edge /\
+    Open p a.as_call_ctx a.as_requests V {} rank pc height need tag boolean edge /\
+    e IN V /\ (!x. x IN V ==> Reach edge e x) /\
+    Root p ss a pc height need tag boolean e` >>
   `!p. Cut p <=> ?j t u. cert_run p j = AsmOK t /\
     sym_steps p env0 j (sym_init s) = SymOK u /\
     asm_sym_rel p (asm_data_env p (cert_bytes p)) t u /\
@@ -366,7 +375,7 @@ Proof
      (?l. pat = [AsmOp "ISZERO"; AsmOp "ISZERO"; AsmPushLabel l; AsmOp "JUMPI"] /\
           repl = [AsmPushLabel l; AsmOp "JUMPI"])) /\
     Base p /\ Cut p ==> Base q /\ Cut q` by suspend "pending_site" >>
-  iszero_open ["mixed"] >> gen_tac >>
+  gen_tac >>
   disch_then (CONJUNCTS_THEN2 assume_tac DISJ_CASES_TAC)
   >- suspend "terminal_arm" >>
   `Base (FST (merge_iszero p)) /\ Cut (FST (merge_iszero p))` suffices_by
