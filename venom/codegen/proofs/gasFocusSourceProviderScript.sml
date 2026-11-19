@@ -1502,6 +1502,59 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem focus_opt_ld_block_row[local]:
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn ti t /\
+  o1_ctx_shape C /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  callee_first names C.ctx_functions /\
+  (!f. MEM f C.ctx_functions ==>
+    ir_supply_covers_fn (Sigma f.fn_name) f /\
+    lookup_function f.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma f.fn_name) f))) /\
+  o1_safe_upto D lo n C vs /\ gas_cut n vs t /\
+  is_terminator ti.inst_opcode /\ step_inst fuel C' ti t = OK u /\
+  ~u.vs_halted /\ enters_block gn u tp /\ active_inst gn j tp ==>
+  ^focus_opt_ld_R lo P C C' vs Sigma names gn j tp
+Proof
+  BETA_TAC >> disch_then (map_every strip_assume_tac o CONJUNCTS) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    (drule_all lowerDloadSafetyAmbientTheory.ld_sync_fn_shape >> strip_tac >>
+     drule o1_fn_shape_components >> simp[]) >>
+  drule ld_sync_source >> strip_tac >>
+  `inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES` by
+    (conj_tac >> strip_tac >>
+     `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+       simp[is_terminator_def] >>
+     drule_all lowerDloadEnvelopeControlTheory.ld_envelope_nonterminal >> strip_tac >>
+     fs[EVERY_EL] >> metis_tac[]) >>
+  drule_all lowerDloadSafetyLocationsTheory.ld_envelope_ordinary >> strip_tac >>
+  `h = 0` by fs[] >>
+  `t0 = t /\ ti = inst` by fs[lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
+  qpat_x_assum `t0 = t` SUBST_ALL_TAC >>
+  qpat_x_assum `ti = inst` SUBST_ALL_TAC >>
+  drule_all o1LowerDloadRunnerBoundaryTheory.ld_terminator_ok_branch >> strip_tac >>
+  `gas_cut n vs s` by fs[gas_cut_def] >>
+  `raw_reachable vs C fn inst s` by
+    (irule lowerDloadReachabilityTheory.ld_frame_reachable_raw >> metis_tac[]) >>
+  qpat_assum `o1_safe_upto _ _ _ _ _` (strip_assume_tac o REWRITE_RULE[o1_safe_upto_def]) >>
+  `raw_mem_ok C fn inst s /\ dload_offset_ok C fn inst s` by metis_tac[] >>
+  qpat_x_assum `o1_ptr_safe_upto _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE[o1_ptr_safe_upto_def, ptr_discipline_upto_def]) >>
+  `taint_ok fn tn inst s` by metis_tac[] >>
+  `gn = FST (lower_dload_function_supply (Sigma fn.fn_name) fn)` by
+    (drule ld_sync_head >> strip_tac >> fs[ld_image_def]) >>
+  `!k. MEM k C.ctx_functions ==> ir_supply_covers_fn (Sigma k.fn_name) k` by metis_tac[] >>
+  `!k. MEM k C.ctx_functions ==>
+    lookup_function k.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma k.fn_name) k))` by metis_tac[] >>
+  drule_all (BETA_RULE gasFocusLowerDloadControlEntryTheory.ld_focus_control_entry) >>
+  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+  irule (BETA_RULE focus_opt_ld_head_row) >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ld_envelope _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[lowerDloadSafetyKernelTheory.ld_prefix_bound]
+QED
+
 Theorem focus_row_visit_inverse[local]:
   !xs be.
     DROP be.vs_inst_idx bt.bb_instructions = xs /\
