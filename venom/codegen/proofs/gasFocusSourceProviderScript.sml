@@ -31,6 +31,9 @@ Ancestors
   gasFocusFmpCutSourceCall gasFocusFmpCutInvokePush gasFocusFmpCutInvokeOutputs
   gasFocusFmpCutSourceReturn gasFocusFmpCutInvokePop
   concretizePtrCoverageStaticMemReachability frameAllocationOwnership
+  fmpStepPredicateTransport fmpStepRewrite fmpStepRestrictionClosure fmpStepBridge
+  concretizeAllocationFree o1MakeSsaStructuralShape o1ContractMakeSsaReplay
+  simplifyCfgInvariant o1ContractSue singleUseExpansionSupplySim callLayoutDefs
 
 (* Entry and source-point facts for the bounded FMP frame induction. *)
 Theorem focus_fmp_src_active[local]:
@@ -1949,6 +1952,108 @@ Proof
   `TAKE j R = TAKE h R ++ TAKE (j-h) (DROP h R)` by
     simp[rich_listTheory.take_drop_partition] >>
   simp[Abbr `target`, EVERY_MEM, dftGasFromListReadingsTheory.trace_gas_append, MEM_APPEND]
+QED
+
+Theorem focus_fmp_inst_no_dload[local]:
+  i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES /\
+  fmp_lower_inst infos ctx runner s i = SOME (out,t) ==>
+  EVERY (\j. j.inst_opcode <> DLOAD /\ j.inst_opcode <> DLOADBYTES) out
+Proof
+  rpt strip_tac >> gvs[fmp_lower_inst_def, AllCaseEqs(), mk_inst_def]
+QED
+
+Theorem focus_fmp_function_no_dload[local]:
+  fmp_lower_function ctx s f = SOME (g,t) /\
+  EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) (fn_insts f) ==>
+  EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) (fn_insts g)
+Proof
+  strip_tac >> drule fmpStepPredicateTransportTheory.fmp_lower_function_every >>
+  disch_then (qspec_then `\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES` mp_tac) >>
+  simp[] >> impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >>
+          `i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES` by
+            fs[EVERY_MEM] >>
+          drule_all focus_fmp_inst_no_dload >> simp[]) >>
+      conj_tac
+      >- (rpt strip_tac >>
+          drule_at (Pat `fmp_emit_restores _ _ _ = _`) fmpStepRewriteTheory.fmp_emit_restores_every >>
+          disch_then irule >> simp[mk_inst_def]) >>
+      rpt strip_tac >>
+      gvs[fmp_make_root_layout_def, AllCaseEqs(), mk_inst_def,
+          set_param_index_def, OPTION_TO_LIST_def] >>
+      drule fmpStepRestrictionClosureTheory.split_fmp_entry_retpc_restrictions >>
+      rw[EVERY_MEM] >> gvs[OPTION_TO_LIST_def]) >>
+  simp[]
+QED
+
+(* Each of these rows preserves exclusion of the already lowered opcodes. *)
+Theorem focus_step_no_dload[local]:
+  (pass = CFP_Simple VP_ConcretizeMemLoc \/ pass = CFP_Simple VP_FmpLowering \/
+   pass = CFP_Simple VP_MakeSSA \/ pass = CFP_Simple VP_SimplifyCFG \/
+   pass = CFP_Simple VP_SingleUseExpansion) /\
+  fn_pass_step rp pass observed s f out /\
+  EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) (fn_insts f) ==>
+  EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+    (fn_insts out.fpo_function)
+Proof
+  disch_then (CONJUNCTS_THEN2 STRIP_ASSUME_TAC STRIP_ASSUME_TAC) >> gvs[]
+  >- (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)
+        (Q.INST [`P` |-> `\op. op <> DLOAD /\ op <> DLOADBYTES`]
+          concretize_fn_pass_opcode_property) >> fs[EVERY_MEM])
+  >- (drule fmp_fn_pass_step_result >> strip_tac >>
+      drule_all focus_fmp_function_no_dload >> simp[])
+  >- (drule make_ssa_pass_step_replay >> strip_tac >>
+      drule_at (Pat `make_ssa_current_fn _ _ = _`)
+        (Q.INST [`P` |-> `\op. op <> DLOAD /\ op <> DLOADBYTES`]
+          make_ssa_current_fn_opcode_property) >> simp[])
+  >- (drule simplify_cfg_pass_step_function >> disch_then SUBST1_TAC >>
+      simp[simplify_cfg_fn_def] >>
+      mp_tac (Q.INST [`R` |-> `\op. op <> DLOAD /\ op <> DLOADBYTES`]
+        simplify_cfg_fn_with_labels_opcodes) >> simp[]) >>
+  drule sue_pass_step_replay >> strip_tac >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  drule_all sue_expand_function_supply_label_projection >>
+  strip_tac >> fs[] >> metis_tac[]
+QED
+
+Theorem focus_raw_reachable_members[local]:
+  !V C f i u. raw_reachable V C f i u ==>
+    MEM f C.ctx_functions /\ MEM i (fn_insts f)
+Proof
+  ho_match_mp_tac raw_reachable_ind >>
+  rpt strip_tac >> metis_tac[lookup_function_MEM, active_inst_mem_fn_insts]
+QED
+
+Theorem focus_opt_c7_section_from_image[local]:
+  (!k. k < 9 ==> ctx_pass_stage rp (EL k o1_fn_passes) (o1_walk_view rp k)
+      (stage k) (stage (SUC k))) /\
+  (!g j. MEM g (stage 2).ctx_functions /\ MEM j (fn_insts g) ==>
+    j.inst_opcode <> DLOAD /\ j.inst_opcode <> DLOADBYTES) /\
+  raw_reachable V (stage 7) sf i u ==>
+  inst_dload_in_section i u
+Proof
+  strip_tac >>
+  `!k. 2 <= k /\ k <= 7 ==>
+    EVERY (\f. EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+      (fn_insts f)) (stage k).ctx_functions` by
+    (Induct >- simp[] >> strip_tac >>
+     Cases_on `k < 2`
+     >- (`SUC k = 2` by decide_tac >> gvs[EVERY_MEM] >> metis_tac[]) >>
+     `ctx_pass_stage rp (EL k o1_fn_passes) (o1_walk_view rp k)
+          (stage k) (stage (SUC k))` by (first_x_assum irule >> decide_tac) >>
+     `2 <= k /\ k <= 7` by decide_tac >>
+     drule_at (Pat `ctx_pass_stage _ _ _ _ _`)
+       (Q.INST [`P` |-> `\f. EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+                               (fn_insts f)`] ctx_pass_stage_every) >>
+     disch_then irule >> simp[] >> rpt strip_tac >>
+     drule_at (Pat `fn_pass_step _ _ _ _ _ _`) focus_step_no_dload >> simp[] >>
+     `k = 2 \/ k = 3 \/ k = 4 \/ k = 5 \/ k = 6` by decide_tac >>
+     pop_assum strip_assume_tac >> simp[o1_fn_passes_def]) >>
+  drule focus_raw_reachable_members >> strip_tac >>
+  irule inst_dload_in_section_other >>
+  qpat_x_assum `!k. 2 <= k /\ k <= 7 ==> _` (qspec_then `7` mp_tac) >>
+  simp[EVERY_MEM] >> metis_tac[]
 QED
 
 (* Scratch statement for elaboration and independent review.
