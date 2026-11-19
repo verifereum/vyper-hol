@@ -198,7 +198,7 @@ QED
 
 (* The writer and the reflecting copy input are both strictly before i.
    The demand itself may be at the not-yet-departed target endpoint. *)
-Theorem focus_cut_frontier_demanded_reflection:
+Theorem focus_cut_frontier_demanded_reflection_ptr_safe:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   i < LENGTH h /\ q <= LENGTH done /\
@@ -211,7 +211,7 @@ Theorem focus_cut_frontier_demanded_reflection:
   o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
   code_layout_valid vs /\ EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   alloca_frontier_upto n C vs /\ fixed_region_reserved lo C /\
-  o1_safe_upto D lo n C vs /\ gas_cut n vs at.po_state /\
+  o1_ptr_safe_upto D lo n C vs /\ gas_cut n vs at.po_state /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
   max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
@@ -244,7 +244,7 @@ Theorem focus_cut_frontier_demanded_reflection:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> disch_tac >>
   spose_not_then assume_tac >>
-  `ptr_discipline_upto lo n C vs` by fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
+  `ptr_discipline_upto lo n C vs` by fs[o1_ptr_safe_upto_def] >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_target >> strip_tac >>
@@ -264,7 +264,7 @@ Proof
       qpat_x_assum `taint_empty _`
         (assume_tac o CONJUNCT1 o REWRITE_RULE [taint_empty_def]) >>
       fs[]) >>
-  drule_all focus_concretize_ghost_cut_points >>
+  drule_all focus_concretize_ghost_cut_points_ptr_safe >>
   disch_then (fn th =>
     assume_tac (cj 2 th) >> qspec_then `i` mp_tac (cj 2 th)) >>
   (impl_tac >- simp[]) >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -425,4 +425,55 @@ Proof
      conj_tac >- decide_tac >>
      qexistsl [`C'`, `fuel`, `(EL j ht).po_inst`] >> simp[]) >>
   fs[]
+QED
+
+Theorem focus_cut_frontier_demanded_reflection:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  i < LENGTH h /\ q <= LENGTH done /\
+  (q = 0 \/ EL (q-1) done < i) /\ i <= EL q (done ++ [LENGTH h-1]) /\
+  EL i H = (tsi,ri,bi,PTi,TGi,si,ei) /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ EVERY all_reachable C.ctx_functions /\
+  EVERY ssa_form C.ctx_functions /\
+  o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+  code_layout_valid vs /\ EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  alloca_frontier_upto n C vs /\ fixed_region_reserved lo C /\
+  o1_safe_upto D lo n C vs /\ gas_cut n vs at.po_state /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP TGi v = SOME (token,aid) /\
+  FLOOKUP (EL i h).po_prov v = SOME (b,sz) /\
+  FLOOKUP bi (token,aid) = SOME (b,sz) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\ k < sz /\
+  ~in_revert_forward (EL i h).po_fn (EL i h).po_state /\
+  (EL i h).po_inst.inst_opcode <> ASSIGN /\
+  MEM (Var v) (EL i h).po_inst.inst_operands /\
+  (inst_read_op (EL i h).po_inst = SOME (Var v) \/ (EL i h).po_inst.inst_opcode = INVOKE) /\
+  (!j r op. j < i /\ r < LENGTH done /\ EL r done = j ==>
+    op_taint (EL r ht).po_taint op SUBSET op_taint (EL j h).po_taint op) /\
+  (!j r a. j < i /\ r < LENGTH done /\ EL r done = j /\ a < lo ==>
+    a IN (EL r ht).po_taint.t_mem ==> a IN (EL j h).po_taint.t_mem) /\
+  (!j r a. j < i /\ r < LENGTH done /\ EL r done = j /\ dyn_floor C vs <= a ==>
+    a IN (EL r ht).po_taint.t_mem ==> a IN (EL j h).po_taint.t_mem) /\
+  (!j r u tok id base size pos ix ts rw bw PTw TGw sw ew.
+    j < i /\ r < LENGTH done /\ EL r done = j /\
+    ~in_revert_forward (EL j h).po_fn (EL j h).po_state /\
+    (EL j h).po_inst.inst_opcode <> ASSIGN /\
+    MEM (Var u) (EL j h).po_inst.inst_operands /\
+    (inst_read_op (EL j h).po_inst = SOME (Var u) \/ (EL j h).po_inst.inst_opcode = INVOKE) /\
+    EL j H = (ts,rw,bw,PTw,TGw,sw,ew) /\ FLOOKUP TGw u = SOME (tok,id) /\
+    FLOOKUP (EL j h).po_prov u = SOME (base,size) /\
+    FLOOKUP bw (tok,id) = SOME (base,size) /\
+    FLOOKUP positions (Allocation id) = SOME (pos,size) /\ ix < size ==>
+    pos+ix IN (EL r ht).po_taint.t_mem ==> base+ix IN (EL j h).po_taint.t_mem) ==>
+  pa+k IN (EL q ht).po_taint.t_mem ==> b+k IN (EL i h).po_taint.t_mem
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `o1_ptr_safe_upto D lo n C vs` by fs[o1_safe_upto_def] >>
+  mp_tac focus_cut_frontier_demanded_reflection_ptr_safe >> impl_tac
+  >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED

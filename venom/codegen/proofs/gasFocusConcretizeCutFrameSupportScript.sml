@@ -66,10 +66,10 @@ Proof
   simp[FDOM_DRESTRICT] >> gvs[SUBSET_DEF] >> metis_tac[]
 QED
 
-Theorem focus_concretize_cut_frame_support:
+Theorem focus_concretize_cut_frame_support_ptr_safe:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_safe_upto D lo n C vs /\ o1_initial_state_ok vs /\
+  o1_ptr_safe_upto D lo n C vs /\ o1_initial_state_ok vs /\
   o1_ctx_shape C' /\ EVERY (o1_fn_row 3) C'.ctx_functions /\
   mem_inv (\ctx fn inst s. gas_cut n vs s ==> static_mem_ok eom ctx fn inst s)
     C' vs /\
@@ -80,7 +80,7 @@ Theorem focus_concretize_cut_frame_support:
 Proof
   strip_tac >>
   `?P. EVERY (fn_static_ptr_ok P) C.ctx_functions` by
-    (gvs[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def,
+    (gvs[o1_ptr_safe_upto_def, ptr_discipline_upto_def,
          EVERY_MEM] >> metis_tac[fn_ptr_ok_static]) >>
   drule_all concretize_stage_static_ptr_ok >> strip_tac >>
   `MEM fn C'.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
@@ -108,4 +108,21 @@ Proof
      simp[mem_inv_raw_reachable] >> metis_tac[]) >>
   simp[allocas_from_def, allocas_below_fmp_def] >>
   metis_tac[static_mem_ok_def]
+QED
+
+Theorem focus_concretize_cut_frame_support:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_safe_upto D lo n C vs /\ o1_initial_state_ok vs /\
+  o1_ctx_shape C' /\ EVERY (o1_fn_row 3) C'.ctx_functions /\
+  mem_inv (\ctx fn inst s. gas_cut n vs s ==> static_mem_ok eom ctx fn inst s)
+    C' vs /\
+  frame_reachable vs C' stk PG G tn fn inst s /\ gas_cut n vs s ==>
+  (?P. fn_static_ptr_ok P fn /\ ptr_use_static_ok P (fn_pv P fn) inst /\
+       FDOM G SUBSET fn_pv P fn) /\
+  allocas_from eom s /\ (ctx_has_dalloca C' ==> allocas_below_fmp s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  fs[o1_safe_upto_def] >>
+  mp_tac focus_concretize_cut_frame_support_ptr_safe >> simp[]
 QED
