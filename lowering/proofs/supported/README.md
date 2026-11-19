@@ -11,7 +11,7 @@ evaluator change, or a correctness theorem.
 
 - `supported_int_width`: 8, 16, …, 256; `supported_integer_type`.
 - `supported_word_type`: those integers, bool, decimal, address, and fixed bytes
-  1–32 **excluding bytes20**.
+  of widths 1–32.
 - `supported_full_word_type`: uint256, int256, bytes32 only.
 - `supported_string_type`: String[n], Bytes[n] (dynamic bytes).
 - `supported_scalar_type`: word or string; `supported_tuple_type`: nonempty,
@@ -92,8 +92,9 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
 ### `supportedExprFormsTheory`
 
 - `supported_binop op operand_type rhs_type literal_base nonnegative_exponent`
-  is the exact operator table. Comparison restrictions use the **operand** type,
-  not their bool result. AugAssign reuses it with literal_base=F.
+  checks the retained restrictions on exponentiation, bytestring equality and
+  membership, and rejects `ExpMod`. Equality checks use the operand type.
+  AugAssign supplies `literal_base=F`.
 - `supported_unsigned_type`, `supported_signed_type`,
   `supported_numeric_type`, `supported_integer_literal`,
   `supported_nonnegative_literal`; widths reuse the foundation limits.
@@ -101,8 +102,9 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
   `valid_conversion src dst` relation directly; there is no separate conversion
   whitelist.
 - `supported_builtin_form tops ty builtin args` and
-  `supported_type_builtin_form ty builtin target args` encode exact forms and
+  `supported_type_builtin_form tops ty builtin target args` encode forms and
   arities, including the ABI flags/method-id/single-argument restrictions.
+  Array `MakeArray` checks its declared result type and supported place layout.
 - `supported_storage_scalar tops id ty`, `supported_storage_array tops id`,
   `supported_storage_dynamic_array tops id`, `supported_subscript_base tops id`,
   `supported_storage_fields tops id`, `supported_storage_field_read tops id field`.
@@ -165,14 +167,15 @@ Proof paths: `supportedExprFormPropsScript.sml` (F below) and
 
 | PLAN §5.6 row/exclusion | Permanent coverage theorem(s) |
 |---|---|
-| Name, Literal, TopLevelName, IfExp, StructLit, tuple construction, Subscript, Attribute | X `supported_pure_expression_rows`, `supported_storage_base_exclusions`, `supported_bad_storage_declarations_excluded` |
-| Every Bop constructor, integer/decimal/word restrictions | F `supported_arithmetic_operator_coverage`, `supported_bitwise_comparison_operator_coverage`, `supported_power_shift_counterexamples` |
+| Name, Literal, TopLevelName, FlagMember, IfExp, StructLit, tuple construction, Subscript, Attribute | X `supported_pure_expression_rows`, `supported_storage_base_exclusions`, `supported_bad_storage_declarations_excluded` |
+| Arithmetic, bitwise operators, comparisons, flag and array membership, power and shifts | F `supported_arithmetic_operator_coverage`, `supported_bitwise_comparison_operator_coverage`, `supported_power_shift_counterexamples` |
 | Not, Neg, Abs, AsWeiValue, AddMod, MulMod, PowMod256 | F `supported_unary_modular_builtin_coverage` |
-| Every Env/Acc item; BlockHash, BlobHash, ECRecover, ECAdd, ECMul | F `supported_environment_crypto_builtin_coverage` |
-| Empty, MaxValue, MinValue, Epsilon, Extract32 exclusion | F `supported_type_builtin_coverage` |
+| Every Env/Acc item, BlockHash, BlobHash, ECRecover, ECAdd, ECMul, Len, CalldataLen, Sha256, Ceil and MethodId | F `supported_environment_crypto_builtin_coverage` |
+| Empty, MaxValue, MinValue, Epsilon and two-argument Extract32 | F `supported_type_builtin_coverage` |
 | Checker conversion domain and accepted/rejected width boundaries | F `supported_convert_checker_domain`, `conversion_width_boundary_acceptance`, `conversion_width_boundary_rejection` |
 | ABI encode/decode exact flags, method-id size, tuple depth/length, arity | F `supported_abi_forms_coverage` |
-| Uint2Str (unsigned argument), CalldataSlice; Len, hashes, Concat, Slice, typed/dynamic MakeArray, Ceil, Floor, MethodId and wrong arities excluded | F `supported_builtin_exclusion_coverage` |
+| Uint2Str (unsigned argument), CalldataSlice and tuple MakeArray. Exclusions include Keccak256, Concat, ordinary Slice, Floor and malformed arities. | F `supported_builtin_exclusion_coverage` |
+| Fixed and dynamic array MakeArray, value-type restriction on Empty | F `supported_memory_construction_forms` |
 | IntCall, Send, storage dynamic Pop; namespace/visibility/base exclusions | X `supported_internal_send_pop_rows` |
 | ExtCall counts, keyword operands, pure vs effectful defaults, value/NoneT returns, nonword args | X `supported_external_expression_row`, `supported_external_nonword_arguments_rejected` |
 | ExtCall admission does not depend on declarations of the same name | X `supported_external_declaration_independent` |
