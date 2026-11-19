@@ -1,5 +1,6 @@
 Theory dftPacketRootedPlainStop
 Ancestors
+  dftPacketInvokePrefixStop
   dftPacketOperationalPrefix dftIndexedExec gasEvents
   venomExecSemantics venomInst venomState opcodeClass list arithmetic
 
@@ -31,7 +32,7 @@ Proof
   drule_all dft_packet_block_prefix_operational >>
   disch_then (qspecl_then [`F'-e`,`C`,`sf.fn_name`] mp_tac) >>
   simp[] >> strip_tac >>
-  drule dft_packet_plain_prefix_no_intret >>
+  drule dft_packet_nonterminator_prefix_no_intret >>
   disch_then (qspecl_then [`F'-e`,`C`,`u`] mp_tac) >>
   simp[] >> strip_tac >>
   Cases_on `r` >> gvs[]
