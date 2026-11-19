@@ -16,7 +16,7 @@ val _ = Parse.hide "base";
 (* A and R below are statement-local lambdas, not new HOL constants.
    A retains the complete provenance of a cut, including callee cuts. *)
 Theorem stopped_block_body_from_lower_fuel:
-  let A = \rpolicy unit cpl prog ctx lo o2pc Inv env ast ss vs'.
+  !A. A = (\rpolicy unit cpl prog ctx lo o2pc Inv env ast ss vs'.
     (?n out. (asm_steps lo o2pc prog n ast = AsmRevert out \/
               asm_steps lo o2pc prog n ast = AsmFault out) /\
        sym_terminal (sym_steps prog env n ss) /\ out.as_requests <<= vs'.vs_requests) \/
@@ -31,9 +31,8 @@ Theorem stopped_block_body_from_lower_fuel:
          raC pcretC restC memC /\
        sym_frame_inv prog env ctx cpl fnC retC srestC labsC psC cut sc /\
        (in_static_abort_prefix fnC cvsC \/ in_revert_forward fnC cvsC) /\
-       cut.as_requests = vs'.vs_requests)
-  in
-  let R = \rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest srest labs0 ast ss res.
+       cut.as_requests = vs'.vs_requests)) ==>
+  !R. R = (\rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest srest labs0 ast ss res.
     (!vs'. res = Halt vs' ==>
        ?n out. asm_steps lo o2pc prog n ast = AsmHalt out /\
          venom_asm_terminal_rel vs' out /\ sym_terminal (sym_steps prog env n ss)) /\
@@ -49,8 +48,7 @@ Theorem stopped_block_body_from_lower_fuel:
          ss'.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
          (!b. context_spill_byte cpl b /\ ~closure_spill_byte ctx cpl fn.fn_name b ==>
            FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b) /\
-         (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cpl b))
-  in
+         (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cpl b))) ==>
   (!rpolicy unit cpl prog ctx lo o2pc i r fn vs ast Inv ra pc_ret rest
     env ret srest ss.
     ctx = unit.cu_context /\
@@ -164,18 +162,12 @@ Theorem stopped_block_body_from_lower_fuel:
     R rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest srest labs0 ast ss
       (block_rest fuel ctx fn bb vs)
 Proof
-  qmatch_goalsub_abbrev_tac `LET _ A` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  qmatch_goalsub_abbrev_tac `LET _ R` >>
-  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
-  mp_tac stopped_abort_observation_prefix >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >> disch_then (mk_asm "AP") >>
-  mp_tac stopped_result_observation_prefix >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >> disch_then (mk_asm "RP") >>
+  gen_tac >> disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  gen_tac >> disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  qspec_then `A` mp_tac stopped_abort_observation_prefix >>
+  (impl_tac >- simp[Abbr `A`]) >> disch_then (mk_asm "AP") >>
+  qspec_then `R` mp_tac stopped_result_observation_prefix >>
+  (impl_tac >- simp[Abbr `R`, Abbr `A`]) >> disch_then (mk_asm "RP") >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "E") (mk_asm "F")) >>
   rpt gen_tac >>
   map_every qid_spec_tac
@@ -195,11 +187,7 @@ QED
 
 Resume stopped_block_body_from_lower_fuel[cut]:
   mp_tac stopped_body_cut_observation >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
-  disch_then drule_all >> simp[]
+  disch_then drule_all >> simp[Abbr `R`, Abbr `A`]
 QED
 
 Resume stopped_block_body_from_lower_fuel[protected]:
@@ -220,12 +208,11 @@ Resume stopped_block_body_from_lower_fuel[protected]:
 QED
 
 Resume stopped_block_body_from_lower_fuel[invoke]:
-  mp_tac (Q.INST [`m` |-> `LENGTH bb.bb_instructions - k`]
+  qspec_then `A` mp_tac (Q.INST [`m` |-> `LENGTH bb.bb_instructions - k`]
     stopped_body_invoke_case) >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
+  (impl_tac >- simp[Abbr `A`]) >>
+  disch_then (qspec_then `R` mp_tac) >>
+  (impl_tac >- simp[Abbr `R`]) >>
   impl_tac >- (rpt conj_tac >- (asm "AP" ACCEPT_TAC)
               >- (asm "RP" ACCEPT_TAC)
               >- (asm "E" ACCEPT_TAC) >>
@@ -239,11 +226,10 @@ Resume stopped_block_body_from_lower_fuel[invoke]:
 QED
 
 Resume stopped_block_body_from_lower_fuel[terminator]:
-  mp_tac stopped_body_terminator_case >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
+  qspec_then `A` mp_tac stopped_body_terminator_case >>
+  (impl_tac >- simp[Abbr `A`]) >>
+  disch_then (qspec_then `R` mp_tac) >>
+  (impl_tac >- simp[Abbr `R`]) >>
   (impl_tac >-
     (conj_tac >-
       (conj_tac >-
@@ -256,12 +242,11 @@ Resume stopped_block_body_from_lower_fuel[terminator]:
 QED
 
 Resume stopped_block_body_from_lower_fuel[sequential]:
-  mp_tac (Q.INST [`inst` |-> `EL k bb.bb_instructions`]
+  qspec_then `A` mp_tac (Q.INST [`inst` |-> `EL k bb.bb_instructions`]
     stopped_body_sequential_case) >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
-  CONV_TAC (LAND_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
-  markerLib.REABBREV_TAC >>
+  (impl_tac >- simp[Abbr `A`]) >>
+  disch_then (qspec_then `R` mp_tac) >>
+  (impl_tac >- simp[Abbr `R`]) >>
   disch_then (drule_at (Pat `body_inv_abort`)) >>
   disch_then (drule_at (Pat `sym_frame_inv`)) >>
   simp[] >>

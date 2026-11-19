@@ -6,22 +6,20 @@ Ancestors
 Theorem linked_reachable_arm_interfaces:
   ! (V:(num#num)->bool) X e (R:(num#num)->(num#num)->bool) link
     (I:(num#num)->'a).
-  let A = V DIFF X in
-  let dest = \z. if z IN X then link z else z in
-  let E = \x y. x IN A /\ ?z. R x z /\ y = dest z in
-  let reachable = \x.
-    ?n (path:num->num#num). path 0 = e /\ path n = x /\
-      (!k. k < n ==> E (path k) (path(SUC k))) in
-  let W = {x | x IN A /\ reachable x} in
+  !A. A = V DIFF X ==>
+  !E. E = (\x y. x IN A /\ ?z. R x z /\ y = (if z IN X then link z else z)) ==>
+  !W. W = {x | x IN A /\ ?n (path:num->num#num). path 0 = e /\ path n = x /\
+      (!k. k < n ==> E (path k) (path (SUC k)))} ==>
   (!x z. R x z ==> x IN A /\ z IN V) /\
   (!z. z IN X ==> link z IN A /\ I (link z) = I z) ==>
   !x v. x IN W ==>
     ((?z. R x z /\ I z = v) <=> (?y. y IN W /\ E x y /\ I y = v))
 Proof
-  ntac 5 gen_tac >> qx_gen_tac `iface` >> simp_tac pure_ss [LET_THM] >>
-  qabbrev_tac `A = V DIFF X` >>
+  ntac 5 gen_tac >> qx_gen_tac `iface` >>
+  gen_tac >> disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  gen_tac >> disch_then (mp_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
   qabbrev_tac `dest = \z. if z IN X then link z else z` >>
-  qabbrev_tac `E = \x y. x IN A /\ ?z. R x z /\ y = dest z` >>
+  disch_tac >> gen_tac >> disch_then SUBST1_TAC >>
   qabbrev_tac `reach = \x. ?n (path:num->num#num).
     path 0 = e /\ path n = x /\ !k. k < n ==> E (path k) (path(SUC k))` >>
   strip_tac >>

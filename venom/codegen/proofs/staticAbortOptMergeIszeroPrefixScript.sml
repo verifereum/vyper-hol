@@ -5,8 +5,9 @@ Ancestors
   codegenSymRel asmSplice asmSymPc asmSymSem asmOptimizer asmSem arithmetic list
 
 Theorem merge_iszero_one_stopped_prefix:
-  let b = LENGTH pre; m = LENGTH pat; c = ss.sym_base.as_pc in
-  let r = splice_pc b m (LENGTH repl) in
+  !b. b = LENGTH pre ==>
+  !m. m = LENGTH pat ==>
+  !c. c = ss.sym_base.as_pc ==>
   p = pre ++ pat ++ tail /\ q = pre ++ repl ++ tail /\
   ((?x. asm_returns_zero_or_one x /\
         pat = [x; AsmOp "ISZERO"; AsmOp "ISZERO"] /\ repl = [x]) \/
@@ -25,9 +26,10 @@ Theorem merge_iszero_one_stopped_prefix:
           (w=0w \/ w=1w) /\ sym_steps q env (j+1) (sym_init s) = SymOK v /\
           sym_steps p env (n-h-1) v = SymOK ss)
      else h=n /\ u=ss /\
-          sym_steps q env j (sym_init s) = SymOK (sym_with_pc (r c) ss))
+          sym_steps q env j (sym_init s) =
+            SymOK (sym_with_pc (splice_pc b m (LENGTH repl) c) ss))
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
+  CONV_TAC (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!i. LENGTH pre <= i /\ i < LENGTH pre + LENGTH pat ==>
        i < LENGTH p /\ ~asm_reachable_marker (EL i p) /\
@@ -63,7 +65,8 @@ Proof
 QED
 
 Resume merge_iszero_one_stopped_prefix[replay]:
-  mp_tac (BETA_RULE (REWRITE_RULE [LET_THM] merge_iszero_synchronized_replay)) >>
+  mp_tac (CONV_RULE (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2))
+            merge_iszero_synchronized_replay) >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
       >- (qpat_assum `(?x. asm_returns_zero_or_one x /\ _) \/ _` strip_assume_tac >> simp[])
@@ -74,7 +77,8 @@ Resume merge_iszero_one_stopped_prefix[replay]:
       >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
           qpat_x_assum `p = pre ++ pat ++ tail` SUBST_ALL_TAC >>
           qpat_x_assum `q = pre ++ repl ++ tail` SUBST_ALL_TAC >>
-          irule (BETA_RULE (REWRITE_RULE [LET_THM] merge_iszero_outside_fetch_ok)) >>
+          irule (CONV_RULE (TOP_DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2))
+                   merge_iszero_outside_fetch_ok) >>
           simp[] >>
           qpat_x_assum `(?x. asm_returns_zero_or_one x /\ _) \/ _` strip_assume_tac >>
           simp[] >> qpat_x_assum `asm_returns_zero_or_one x` mp_tac >>

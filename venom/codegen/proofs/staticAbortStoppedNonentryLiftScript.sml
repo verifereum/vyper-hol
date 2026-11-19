@@ -7,12 +7,12 @@ Ancestors
 val _ = Parse.hide "cp";
 val _ = Parse.hide "base";
 
-(* The let-bound observation is just notation, shared by the body hypothesis
-   and the nonentry conclusion. In particular its return clause is the full
-   nonentry clause, not the weaker function-entry return relation. *)
+(* The observation R is shared by the body hypothesis and the nonentry
+   conclusion. Its return clause is the full nonentry clause, not the
+   weaker function-entry return relation. *)
 Theorem stopped_nonentry_lift:
-  !fuel.
-  let R = (\rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest
+  !fuel R.
+  R = (\rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest
               srest labs0 ast ss res.
     (!vs'. res = Halt vs' ==>
       ?n out. asm_steps lo o2pc prog n ast = AsmHalt out /\
@@ -44,8 +44,7 @@ Theorem stopped_nonentry_lift:
         sout.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
         (!b. context_spill_byte cpl b /\ ~closure_spill_byte ctx cpl fn.fn_name b ==>
           FLOOKUP sout.sym_mem_labels b = FLOOKUP labs0 b) /\
-        (!b. b IN FDOM sout.sym_mem_labels ==> context_spill_byte cpl b)))
-  in
+        (!b. b IN FDOM sout.sym_mem_labels ==> context_spill_byte cpl b))) ==>
   (!rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth
     spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
     ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast Inv ra pc_ret rest
@@ -111,8 +110,9 @@ Theorem stopped_nonentry_lift:
     R rpolicy unit cpl prog ctx lo o2pc Inv env fn mem0 pc_ret rest srest labs0
       ast ss (run_blocks (SUC fuel) ctx fn vs)
 Proof
-  gen_tac >> qmatch_goalsub_abbrev_tac `LET _ R` >>
-  rewrite_tac[LET_THM] >> BETA_TAC >> disch_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >>
+  disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  disch_tac >> rpt gen_tac >> strip_tac >>
   qspecl_then [`vs`, `bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs
   >- suspend "phis_ok"
   >> simp[Abbr `R`, run_blocks_unfold, run_block_def]
