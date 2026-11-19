@@ -59,14 +59,14 @@ Ancestors lowerDloadSafetyKernel[qualified,ignore_grammar]
   concretizePtrOperationalOpcodes concretizePtrChronologicalDemand
   lowerDloadReachability lowerDloadRevertSuffix concretizeMemLocDefs
   venomExecProofs pred_set passSharedDefs concretizeStepStructure
-  o1FrameLockstep o1ContractMakeSsa o1CodeEndSsaProtectedCleanup
+  concretizePtrStagePlacements o1FrameLockstep o1ContractMakeSsa o1CodeEndSsaProtectedCleanup
   o1CodeEndSsaTraceOwnership o1CodeEndSsaRead o1LabelFlowMiddleSsa
   o1MakeSsaOwnership o1MakeSsaVisitTrace makeSsaCurrentLockstep
   makeSsaCurrentWfSsa makeSsaCurrentTreeTrace pair stateFrame
   concretizePtrPairedFields unitLabelMapIdentity stepWriteFootprintBase
   concretizePtrObservationInterface concretizePtrComparisonTransport
-  concretizePtrPrefixLedger concretizePtrValueTransport
-  concretizePtrHistoricalWriteExclusion concretizePtrPlacementBounds
+  concretizePtrRevertHistory concretizePtrActualWrites concretizePtrActualByteFrame concretizePtrEventEmbedding concretizePtrPrefixLedger concretizePtrBytes codegenRel concretizePtrValueTransport
+  gasFocusConcretizeCutActualWrite concretizePtrHistoricalWriteExclusion concretizePtrPlacementBounds o1LabelFlowSueNegative o1LabelFlowLateSue singleUseExpansionSupplyProofs singleUseExpansionDefs lowerDloadSourceInterface
 
 (* The SSA read certificate retains the actual source owner and its gas suffix. *)
 Theorem focus_opt_ssa_runtime_owner[local]:
@@ -3606,6 +3606,353 @@ Proof
   qpat_assum `ptr_lookup_transport _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `access_ok _ _ _ _ _` (irule_at Any) >>
   qpat_assum `ptr_ledger_erases _ _ _ _` (irule_at Any) >> simp[] >> metis_tac[]
+QED
+
+(* Project the aligned SUE instruction before transferring the gas cut. *)
+Theorem focus_sue_project_fresh_assign[local]:
+  a.inst_outputs = [v] /\ ~MEM v (fn_ir_vars f) /\
+  ((a.inst_opcode = ASSIGN /\ ?w. a.inst_outputs = [w] /\
+      MAP (\op. case op of Var x => project x | other => other)
+        a.inst_operands = [project w]) \/
+   (?i. MEM i (fn_insts f) /\ a.inst_opcode = i.inst_opcode /\
+     a.inst_outputs = i.inst_outputs /\
+     (!w. MEM w i.inst_outputs ==> project w = Var w) /\
+     MAP (\op. case op of Var x => project x | other => other)
+       a.inst_operands = i.inst_operands)) ==>
+  MAP (\op. case op of Var x => project x | other => other)
+    a.inst_operands = [project v]
+Proof
+  strip_tac >> gvs[] >> metis_tac[ld_original_output_support, MEM]
+QED
+
+Theorem focus_sue_project_segment[local]:
+  sue_expand_inst_supply dfg si i = (segment,sj) /\
+  (!v. MEM (Var v) i.inst_operands ==> project v = Var v) /\
+  (!a v. MEM a (BUTLAST segment) /\ a.inst_outputs = [v] ==>
+    MAP (\op. case op of Var x => project x | other => other)
+      a.inst_operands = [project v]) ==>
+  MAP (\op. case op of Var x => project x | other => other)
+    (LAST segment).inst_operands = i.inst_operands
+Proof
+  strip_tac >> drule sue_expand_inst_supply_precise_provenance >> strip_tac >>
+  `LENGTH i.inst_operands = LENGTH (LAST segment).inst_operands` by
+    metis_tac[LIST_REL_LENGTH] >>
+  simp[LIST_EQ_REWRITE, EL_MAP] >> rpt strip_tac >>
+  rename1 `x < LENGTH (LAST segment).inst_operands` >>
+  qpat_x_assum `LIST_REL _ _ _` mp_tac >>
+  simp[LIST_REL_EL_EQN] >> strip_tac >>
+  first_x_assum (qspec_then `x` mp_tac) >> simp[] >>
+  `MEM (EL x i.inst_operands) i.inst_operands` by metis_tac[MEM_EL] >>
+  Cases_on `EL x i.inst_operands` >> simp[] >> rpt strip_tac >> gvs[] >>
+  first_x_assum (drule_at (Pat `MEM _ (FRONT _)`)) >> simp[] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem focus_sue_segment_project_ready[local]:
+  ir_supply_inst_ok si /\ set (fn_ir_vars f) SUBSET set si.irs_used_vars /\
+  sue_expand_inst_supply dfg si i = (segment,sj) /\
+  (!v. MEM (Var v) i.inst_operands ==> MEM v (fn_ir_vars f)) /\
+  (!v. MEM v (fn_ir_vars f) ==> project v = Var v) /\
+  (!a. MEM a segment ==> MEM a (fn_insts g)) /\
+  (!a. MEM a (fn_insts g) ==>
+    (a.inst_opcode = ASSIGN /\ ?w. a.inst_outputs = [w] /\
+      MAP (\op. case op of Var x => project x | other => other)
+        a.inst_operands = [project w]) \/
+    (?k. MEM k (fn_insts f) /\ a.inst_opcode = k.inst_opcode /\
+      a.inst_outputs = k.inst_outputs /\
+      (!w. MEM w k.inst_outputs ==> project w = Var w) /\
+      MAP (\op. case op of Var x => project x | other => other)
+        a.inst_operands = k.inst_operands)) ==>
+  MAP (\op. case op of Var x => project x | other => other)
+    (LAST segment).inst_operands = i.inst_operands
+Proof
+  strip_tac >> irule focus_sue_project_segment >>
+  reverse conj_tac >- metis_tac[] >> rpt strip_tac >>
+  irule focus_sue_project_fresh_assign >> conj_tac >- simp[] >>
+  qexists_tac `f` >> conj_tac
+  >- (drule_all sue_expand_inst_supply_segment >> strip_tac >>
+      gvs[rich_listTheory.FRONT_APPEND_NOT_NIL, EVERY_MEM,
+          MEM_FLAT, MEM_MAP, pred_setTheory.SUBSET_DEF] >> metis_tac[MEM]) >>
+  first_x_assum irule >> first_x_assum irule >>
+  Cases_on `segment` >> gvs[] >> metis_tac[rich_listTheory.MEM_FRONT, MEM]
+QED
+
+Theorem focus_sue_frame_codecopy_projection[local]:
+  ir_supply_inst_ok supply /\ ir_supply_covers_fn supply fn /\
+  sue_expand_function_supply supply fn = (fn',supply') /\
+  sue_frame_align C C' fn fn' s0 inst' t /\ inst'.inst_opcode = CODECOPY ==>
+  ?inst u project.
+    frame_reach C fn s0 inst u /\ inst.inst_opcode = CODECOPY /\
+    MAP (\op. case op of Var x => project x | other => other)
+      inst'.inst_operands = inst.inst_operands /\
+    LIST_REL (\op newop. eval_operand newop t = eval_operand op u)
+      inst.inst_operands inst'.inst_operands /\
+    execution_frame u = execution_frame t /\
+    (!v. code_end_var fn' v ==> ?x. project v = Var x /\ code_end_var fn x)
+Proof
+  strip_tac >> drule_all sue_expand_function_supply_projection_identity >>
+  disch_then (qx_choose_then `project` strip_assume_tac) >>
+  qpat_x_assum `sue_frame_align _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[sue_frame_align_def] >>
+  disch_then (qx_choosel_then [`bb`,`bb_prime`,`bs`,`be`,`segs`,`i`,`j`,`u`,`b`] strip_assume_tac) >> gvs[] >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+  `MEM (bb with bb_instructions := FLAT segs) fn'.fn_blocks` by
+    metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+  `!v. MEM (Var v) (EL u.vs_inst_idx bb.bb_instructions).inst_operands ==>
+    MEM v (fn_ir_vars fn)` by
+    metis_tac[sue_original_operand_covered, MEM_EL] >>
+  drule_all sue_segments_supply_index_ready >>
+  disch_then (qx_choosel_then [`si`,`sj`] strip_assume_tac) >>
+  `EL j (EL u.vs_inst_idx segs) = LAST (EL u.vs_inst_idx segs) /\
+   (EL j (EL u.vs_inst_idx segs)).inst_opcode = (EL u.vs_inst_idx bb.bb_instructions).inst_opcode /\
+   LIST_REL (\op newop. eval_operand newop t = eval_operand op u)
+     (EL u.vs_inst_idx bb.bb_instructions).inst_operands (EL j (EL u.vs_inst_idx segs)).inst_operands /\
+   sue_state_rel (set (fn_ir_vars fn)) u t` by
+    (drule_all sue_segment_operand_eval >> strip_tac >> gvs[]) >>
+  `MAP (\op. case op of Var x => project x | other => other)
+    (LAST (EL u.vs_inst_idx segs)).inst_operands = (EL u.vs_inst_idx bb.bb_instructions).inst_operands` by
+    (irule focus_sue_segment_project_ready >>
+     qexistsl [`dfg_build_function fn`, `fn`, `fn'`, `si`, `sj`] >> simp[] >>
+     conj_tac
+     >- (rpt strip_tac >> simp[fn_insts_def] >> irule mem_fn_insts_blocks >>
+         qexists_tac `bb with bb_instructions := FLAT segs` >> simp[MEM_FLAT] >>
+         qexists_tac `EL u.vs_inst_idx segs` >> simp[] >>
+         drule sue_segments_supply_length >> metis_tac[MEM_EL]) >>
+     gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >> metis_tac[]) >>
+  qexistsl [`EL u.vs_inst_idx bb.bb_instructions`, `u`, `project`] >>
+  gvs[sue_state_rel_def] >> rpt strip_tac >>
+  drule sue_projection_code_end_var >> disch_then irule >>
+  qpat_x_assum `!j. MEM j (fn_insts fn') ==> _` mp_tac >> simp[]
+QED
+
+Theorem focus_sue_code_end_stage_pairs[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY (o1_fn_row 6) C.ctx_functions ==>
+  LIST_REL (\f g. g.fn_name = f.fn_name /\ fn_entry_label g = fn_entry_label f /\
+    frame_sim L C C' f g /\
+    wf_ssa f /\ fn_inst_wf f /\ wf_function f /\
+    EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts f) /\
+    ?si sj. ir_supply_inst_ok si /\ ir_supply_covers_fn si f /\
+      sue_expand_function_supply si f = (g,sj)) C.ctx_functions C'.ctx_functions
+Proof
+  strip_tac >> `ctx_bisim C C'` by metis_tac[sue_stage_bisim] >>
+  drule sue_stage_functions >> strip_tac >>
+  gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+  rename1 `n < LENGTH C'.ctx_functions` >> first_x_assum drule >> strip_tac >>
+  drule sue_expand_function_supply_identity >> strip_tac >> simp[] >>
+  `wf_ssa (EL n C.ctx_functions) /\ fn_inst_wf (EL n C.ctx_functions) /\
+   wf_function (EL n C.ctx_functions) /\
+   EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts (EL n C.ctx_functions))` by
+    (gvs[o1_ctx_shape_def, o1_fn_shape_def, o1_fn_row_def, EVERY_EL] >> metis_tac[]) >>
+  simp[] >- (irule sue_expand_function_supply_frame_sim >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem focus_opt_sue_cut_bound[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY (o1_fn_row 6) C.ctx_functions /\ V.vs_vars = FEMPTY /\ ~V.vs_halted /\
+  code_end_offset_ok (\ctx fn i s. raw_reachable V ctx fn i s /\ gas_cut n V s) C ==>
+  code_end_offset_ok (\ctx fn i s. raw_reachable V ctx fn i s /\ gas_cut n V s) C'
+Proof
+  strip_tac >>
+  `ctx_bisim C C'` by metis_tac[sue_stage_bisim] >>
+  drule_all focus_sue_code_end_stage_pairs >>
+  disch_then (qspec_then `V.vs_labels` assume_tac) >>
+  simp[code_end_offset_ok_def] >> rpt gen_tac >> strip_tac >>
+  rename1 `raw_reachable V C' fn inst vs'` >>
+  `frame_origin V C C' fn inst vs'` by
+    (irule frame_sim_raw_origins >> simp[] >>
+     fs[ctx_pass_stage_def] >>
+     irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `frame_origin _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[frame_origin_def] >>
+  disch_then (qx_choosel_then [`source_fn`, `source_entry`] strip_assume_tac) >>
+  rename1 `lookup_function source_name C.ctx_functions = SOME source_fn` >>
+  drule list_rel_lookup_function >> simp[] >>
+  disch_then (qspec_then `source_name` mp_tac) >> simp[optionTheory.OPTREL_def] >>
+  strip_tac >>
+  `sue_frame_align C C' source_fn fn source_entry inst vs'` by
+    (irule sue_frame_reach_align >> metis_tac[]) >>
+  drule_all focus_sue_frame_codecopy_projection >>
+  disch_then (qx_choosel_then [`source_inst`, `source_state`, `project`] strip_assume_tac) >>
+  `?y. project x = Var y /\ code_end_var source_fn y` by metis_tac[] >>
+  `?d z. source_inst.inst_operands = [d; Var y; z]` by
+    (qpat_x_assum `MAP _ _ = _` mp_tac >> simp[] >> metis_tac[]) >>
+  `eval_operand (Var y) source_state = SOME w` by
+    (gvs[LIST_REL_EL_EQN] >> first_x_assum (qspec_then `1` mp_tac) >> simp[]) >>
+  `raw_reachable V C source_fn source_inst source_state` by metis_tac[frame_reach_raw_reachable] >>
+  `source_state.vs_labels = vs'.vs_labels /\
+   source_state.vs_gas_readings = vs'.vs_gas_readings` by
+    (qpat_x_assum `execution_frame _ = _` mp_tac >> simp[stateFrameTheory.execution_frame_def]) >>
+  `gas_cut n V source_state` by fs[gas_cut_def] >>
+  qpat_x_assum `code_end_offset_ok _ _` mp_tac >>
+  simp[code_end_offset_ok_def] >> metis_tac[]
+QED
+
+(* Recover a fixed byte via the last actual source write, not a possible write range. *)
+Theorem focus_layout_fixed_recovery[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+  code_layout_valid vs /\ EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  alloca_frontier_upto n C vs /\ fixed_region_reserved lo C /\
+  ptr_discipline_upto lo n C vs /\ gas_cut n vs at.po_state /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  (x < lo \/ dyn_floor C vs <= x) /\ x NOTIN endpoint.po_taint.t_mem /\
+  ~in_revert_forward endpoint.po_fn endpoint.po_state /\
+  endpoint.po_inst.inst_opcode <> ASSIGN ==>
+  read_byte x endpoint.po_state.vs_memory = read_byte x at.po_state.vs_memory
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_paired_endpoint_cut_safety >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  drule ptr_structural_trace_target >> strip_tac >>
+  drule ptr_structural_trace_embedding >> strip_tac >>
+  drule_all ptr_chrono_ordinary_non_revert >> strip_tac >>
+  `LENGTH ht = SUC (LENGTH done)` by fs[ptr_event_embedding_def] >>
+  `!q. q < LENGTH done ==> SUC (EL q done) < LENGTH h /\
+    ~in_revert_forward (EL (EL q done) h).po_fn
+      (EL (EL q done) h).po_state` by
+    (rpt strip_tac >>
+     qpat_assum `ptr_event_embedding _ _ _` mp_tac >>
+     pure_rewrite_tac[ptr_event_embedding_def] >> strip_tac >>
+     `EL q done < LENGTH h - 1` by
+       (first_x_assum (qspecl_then [`q`,`LENGTH done`] mp_tac) >>
+        simp[EL_APPEND_EQN]) >>
+     fs[EVERY_EL] >>
+     `EL q done < LENGTH h` by decide_tac >> metis_tac[]) >>
+  `!q. q < LENGTH done /\
+    x NOTIN range_bytes (step_writes (EL (EL q done) h).po_inst
+      (EL (EL q done) h).po_state (EL (SUC (EL q done)) h).po_state) ==>
+    x NOTIN range_bytes (step_writes (EL q ht).po_inst
+      (EL q ht).po_state (EL (SUC q) ht).po_state)` by
+    (rpt strip_tac >> drule_all ptr_paired_fixed_actual_write_reflection_upto >>
+     metis_tac[]) >>
+  drule_all ptr_chrono_last_actual_or_none >> strip_tac
+  >- (`read_byte x endpoint.po_state.vs_memory = read_byte x vs.vs_memory` by
+        (irule ptr_chrono_history_no_actual_write_byte >> simp[] >> metis_tac[]) >>
+      `read_byte x at.po_state.vs_memory = read_byte x vs.vs_memory` by
+        (irule ptr_chrono_history_no_actual_write_byte >>
+         qexistsl [`C'`,`ht`] >> simp[] >>
+         rpt strip_tac >> `k < LENGTH done` by decide_tac >> metis_tac[]) >>
+      metis_tac[]) >>
+  suspend "writer"
+QED
+
+Resume focus_layout_fixed_recovery[writer]:
+  drule ptr_structural_trace_actual_writer_retained >>
+  disch_then (qspecl_then [`w`,`x`] mp_tac) >> simp[] >> strip_tac >>
+  `(EL w h).po_inst.inst_opcode <> DRET` by
+    (`w < LENGTH h` by decide_tac >>
+     `ptr_observation_reachable vs C (EL w h)` by
+       (qpat_assum `ptr_chrono_history vs C h endpoint`
+          (mp_then Any mp_tac ptr_chrono_history_reachable) >> simp[EVERY_EL]) >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_operand_instructions >> strip_tac >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     drule ptr_discipline_upto_fn_ptr_ok >> strip_tac >>
+     fs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
+  `~is_terminator (EL w h).po_inst.inst_opcode /\
+   (EL w h).po_inst.inst_opcode <> INVOKE` by
+    (qpat_assum `(EL w h).po_inst.inst_opcode <> DRET` mp_tac >>
+     Cases_on `(EL w h).po_inst.inst_opcode` >>
+     simp[is_terminator_def] >>
+     qpat_x_assum `x IN range_bytes _` mp_tac >>
+     qpat_assum `(EL w h).po_inst.inst_opcode = _`
+       (fn th => simp_tac (srw_ss())
+         [th,step_writes_def,source_memory_write_ranges_def,range_bytes_def]) >>
+     qpat_x_assum `DRET <> DRET` mp_tac >> simp[]) >>
+  `read_byte x (EL (SUC w) h).po_state.vs_memory =
+   read_byte x (EL (SUC q) ht).po_state.vs_memory` by
+    (qpat_x_assum `EL q done = w` (SUBST_ALL_TAC o SYM) >>
+     drule_all ptr_cut_paired_write_ledger_identity >>
+     simp[ptr_ledger_write_pair_def, ptr_bytes_agree_def] >> strip_tac >>
+     qpat_x_assum `!i. _ ==> read_byte i _ = _` (qspec_then `x` mp_tac) >> simp[]) >>
+  suspend "frame"
+QED
+
+Resume focus_layout_fixed_recovery[frame]:
+  `!j. q < j /\ j < LENGTH done ==> w < EL j done` by
+    (qpat_assum `ptr_event_embedding _ _ _` mp_tac >>
+     pure_rewrite_tac[ptr_event_embedding_def] >> strip_tac >>
+     rpt strip_tac >> first_x_assum (qspecl_then [`q`,`j`] mp_tac) >>
+     simp[EL_APPEND_EQN]) >>
+  `!j. SUC q <= j /\ j < LENGTH ht-1 ==>
+    x NOTIN range_bytes (step_writes (EL j ht).po_inst
+      (EL j ht).po_state (EL (SUC j) ht).po_state)` by
+    (rpt gen_tac >> strip_tac >>
+     `j < LENGTH done /\ w < EL j done` by
+       (conj_tac >- decide_tac >> first_x_assum irule >> decide_tac) >>
+     metis_tac[]) >>
+  `EL (LENGTH h-1) h = endpoint /\ LENGTH h-1 < LENGTH h` by
+    (qpat_assum `ptr_chrono_history vs C h endpoint`
+       (mp_tac o MATCH_MP ptr_chrono_history_end) >>
+     strip_tac >> Cases_on `h` >> gvs[LAST_EL]) >>
+  `EL (LENGTH ht-1) ht = at /\ LENGTH ht-1 < LENGTH ht` by
+    (qpat_assum `ptr_chrono_history vs C' ht at`
+       (mp_tac o MATCH_MP ptr_chrono_history_end) >>
+     strip_tac >> Cases_on `ht` >> gvs[LAST_EL]) >>
+  `read_byte x endpoint.po_state.vs_memory =
+    read_byte x (EL (SUC w) h).po_state.vs_memory` by
+    (`read_byte x (EL (LENGTH h-1) h).po_state.vs_memory =
+      read_byte x (EL (SUC w) h).po_state.vs_memory` suffices_by simp[] >>
+     irule ptr_chrono_history_actual_interval_byte_frame >>
+     conj_tac >- (rpt strip_tac >>
+       qpat_x_assum `!n. w < n /\ SUC n < LENGTH h ==> _`
+         (qspec_then `k` mp_tac) >> simp[] >> decide_tac) >>
+     simp[] >> metis_tac[]) >>
+  `read_byte x at.po_state.vs_memory =
+    read_byte x (EL (SUC q) ht).po_state.vs_memory` by
+    (`read_byte x (EL (LENGTH ht-1) ht).po_state.vs_memory =
+      read_byte x (EL (SUC q) ht).po_state.vs_memory` suffices_by simp[] >>
+     irule ptr_chrono_history_actual_interval_byte_frame >>
+     conj_tac >- simp[] >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Finalise focus_layout_fixed_recovery[local]
+
+Theorem focus_layout_fixed_read[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ EVERY all_reachable C.ctx_functions /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ ptr_stage_placements C' positions /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  gas_cut n vs at.po_state /\ ~in_revert_forward a.po_fn a.po_state /\
+  mem_read_ops a.po_inst = SOME ops /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\
+  MEM (w2n x,len) (source_memory_read_ranges a.po_inst a.po_state) /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
+    (SOME x) (SOME y) /\
+  (x = y /\ (w2n x+len <= lo \/ dyn_floor C vs <= w2n x) /\
+   op_prov TG ops.iao_ofst = NONE) ==>
+  !j. j < len /\ w2n x+j NOTIN a.po_taint.t_mem ==>
+    read_byte (w2n x+j) a.po_state.vs_memory =
+    read_byte (w2n y+j) at.po_state.vs_memory
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> gen_tac >> strip_tac >>
+  `ptr_discipline_upto lo n C vs /\ fixed_region_reserved lo C /\
+    EVERY (\f. f.fn_eom = NONE) C.ctx_functions` by fs[o1_ptr_safe_upto_def] >>
+  `a.po_inst.inst_opcode <> ASSIGN` by gvs[mem_read_ops_def, AllCaseEqs()] >>
+  `w2n x+j < lo \/ dyn_floor C vs <= w2n x+j` by
+    (qpat_assum `w2n x + len <= lo \/ _` strip_assume_tac >> decide_tac) >>
+  qpat_x_assum `x = y` (SUBST_ALL_TAC o SYM) >>
+  drule focus_layout_fixed_recovery >> disch_then irule >> simp[] >>
+  rpt conj_tac >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem focus_opt_scfg_read_origin[local]:
