@@ -1,6 +1,7 @@
 (* The actual child, ADD, unwrap and store continuation of MakeArray. *)
 Theory bodyFullMakeArrayStore
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullMakeArrayInputs wideningZeroLayout exprSimAggregateChildren
   bodyFullPreds bodyFullUnwrap gasOutcomeFullCompose bodyFullUnwrapRun
   logStoreDataOriginPtr typedCopyOriginPtr wordArgsPtr
@@ -19,7 +20,8 @@ val _ = Parse.hide "base";
 
 Theorem make_array_slot_full:
     (
-        body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env ebase /\
+        body_inv tops ctx cenv cx /\
+        shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env ebase /\
         csbase.cs_next_id <= aid /\ csbase.cs_next_id <= sa.cs_next_id /\
         csbase.cs_next_var <= sa.cs_next_var /\
         local_ptrs_reserved cenv csbase /\ local_ptrs_reserved cenv sa /\

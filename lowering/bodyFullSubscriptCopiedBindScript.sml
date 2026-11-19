@@ -1,6 +1,7 @@
 (* The copied array arm: read/snapshot before evaluating the index. *)
 Theory bodyFullSubscriptCopiedBind
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullSubscriptCapturedPlace
   gasOutcomeFullCompose gasOutcomeFullGuarded gasShadowCompile
   gasShadowCompileConvert gasShadowCompileStmtHelpers
@@ -186,7 +187,7 @@ Theorem subscript_copied_bind_caller_frames:
   !frames cx ann obj idx DF lo d PG tops ctx shadow_ctx func shadow_func ce env ty es et bd.
     (!s raw mid saved. eval_expr cx obj s = (INL raw,mid) /\
        read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok cx idx) /\
-    body_expr_full_ok cx obj /\ body_inv tops ctx ce cx /\
+    body_expr_full_ok cx obj /\ body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
     subscript_reads_base cx obj idx /\ copies_subscript_base ce obj idx /\
     expr_body_pre ce cx env (Subscript ann obj idx) es /\
     expr_type obj = ArrayT et bd /\ place_type ce obj = ValPT (ArrayT et bd) /\
@@ -571,7 +572,7 @@ Theorem subscript_copied_bind_full:
   !cx ann obj idx DF lo d PG tops ctx shadow_ctx func shadow_func ce env ty es et bd.
     (!s raw mid saved. eval_expr cx obj s = (INL raw,mid) /\
        read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok cx idx) /\
-    body_expr_full_ok cx obj /\ body_inv tops ctx ce cx /\
+    body_expr_full_ok cx obj /\ body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
     subscript_reads_base cx obj idx /\ copies_subscript_base ce obj idx /\
     expr_body_pre ce cx env (Subscript ann obj idx) es /\
     expr_type obj = ArrayT et bd /\ place_type ce obj = ValPT (ArrayT et bd) /\

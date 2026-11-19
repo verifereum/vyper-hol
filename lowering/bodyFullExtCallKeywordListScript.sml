@@ -1,5 +1,6 @@
 Theory bodyFullExtCallKeywordList
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullExtCallKeywords bodyFullExtCallDefaultKeyword bodyFullExtCallPosTransport
   vyperTypeSystem forPtrAllocationFrame fragGasOriginPtr gasOutcomeFull
   targetPureSourceFrame exprOperandVar exprSimSource exprLoweringProps
@@ -58,6 +59,7 @@ QED
 (* The scalar and materialized cases agree on the frame for the suffix. *)
 Theorem extcall_keyword_head_outcome[local]:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   expr_type e = ext_call_kw_type rt k /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,dt),sb) /\
@@ -162,6 +164,7 @@ QED
    a later duplicate still contributes its gas marks and frame. *)
 Theorem extcall_request_keywords_owned_outcome:
   body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_sim_inv cenv cx env es /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st) /\
@@ -513,6 +516,7 @@ Finalise extcall_request_keywords_owned_outcome
 (* Forget the exact row for consumers that only need the original post. *)
 Theorem extcall_request_keywords_outcome:
   body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_sim_inv cenv cx env es /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st) /\

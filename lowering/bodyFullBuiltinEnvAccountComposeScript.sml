@@ -1,6 +1,7 @@
 (* Child outcome composition for account accessors. *)
 Theory bodyFullBuiltinEnvAccountCompose
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull exprSimAccounts exprSimSource exprSimHypsDefs
   gasOutcomeFullCompose gasOutcomeFull gasExemptCert bodyFullGhostFrame exprSimMemoryStack
   exprSimWordArgs exprLowering exprLoweringProps builtinSimple bodyInvNoDalloca
@@ -58,6 +59,7 @@ Theorem account_full_from_suffix:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty item e es.
     item <> Code /\ expr_type e = BaseT AddressT /\
     body_exprs_full_ok cx [e] /\ body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env
       (Builtin (account_item_type item) (Acc item) [e]) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty

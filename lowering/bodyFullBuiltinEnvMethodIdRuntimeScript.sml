@@ -264,6 +264,7 @@ Theorem method_id_runtime_sim_full_from_suffix:
         ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn')) ==>
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann e es.
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
     body_expr_full_ok cx e /\ method_id_literal e = NONE ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

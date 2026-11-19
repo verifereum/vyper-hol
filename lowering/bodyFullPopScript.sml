@@ -2741,7 +2741,7 @@ Proof
   `target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx env bt es` by
     (irule body_target_place_sim_full >> simp[] >>
-     qexists_tac `tops` >> first_assum ACCEPT_TAC) >>
+     qexists_tac `tops` >> simp[]) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty (Pop v10 bt) es` by
     (irule pop_vv_full_of_target >> metis_tac[]) >>

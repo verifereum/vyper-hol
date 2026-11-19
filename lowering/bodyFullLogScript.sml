@@ -995,7 +995,8 @@ Theorem compile_log_frag_full:
   !cx id args DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     body_exprs_full_ok cx args /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (Log id args) /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Log id args) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Log id args) ==>
        occurs_abi_decode_target target tops) /\
@@ -1100,7 +1101,7 @@ Proof
          disch_then (qspecl_then
            [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,
             `cenv`,`env`,`expr_type e`,`ee`] mp_tac) >>
-         impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
      rpt gen_tac >> strip_tac >>
      qspecl_then [`cenv`,`cx`,`env`,`e`,`ee`,`INL v`,`ee1`]
        mp_tac exprSimSourceTheory.expr_body_pre_eval >>
@@ -4657,6 +4658,7 @@ Theorem body_log_aggregate_full:
    shadow_func cenv env env' ret_ty lctx RetQ es.
     body_exprs_full_ok cx args /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_log tops id args /\
     supported_event_fields tops id = SOME fields /\
     ~EVERY supported_scalar_type (MAP (SND o FST) fields) /\

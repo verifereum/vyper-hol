@@ -1,6 +1,7 @@
 (* The full RHS keeps the captured AugAssign operands at its one endpoint. *)
 Theory augAssignFullRhsSaved
 Ancestors
+  bodyFullShadowBodyInv
   augAssignFullSaved bodyFullPreds stmtSimAugAssignPlaceMemory
   stmtSimProps haltExitProj bodyPtrDefs exprSimDefs bodySimFull
   gasOutcomeFull fragGasOriginPtr fragGasOrigin loweringPosts
@@ -32,7 +33,8 @@ Theorem augassign_rhs_saved_outcome:
   eval_target_place cx target es0 = (INL p,st) /\
   read_place cx p sr = (INL cur,tr) /\
   place_type_value cx p sty = (INL ptv,tty) /\
-  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
+  body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre cenv cx env e es /\
   lower_value compile_expr cenv ty e sa = (op,sb) /\
   lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
     (op,shadow_sb) /\

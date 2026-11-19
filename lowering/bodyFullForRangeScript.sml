@@ -1,6 +1,7 @@
 (* Static and compiler boundaries for the full Range body case. *)
 Theory bodyFullForRange
 Ancestors exprSimWordArgs[qualified,ignore_grammar] vyperLookup[qualified,ignore_grammar] vyperTypeEnvPreservation[qualified,ignore_grammar] vyperPlaceResultTyping[qualified,ignore_grammar]
+  bodyFullShadowBodyInv
   bodyFullPreds bodyFullForFacts bodySimDeclCases bodySim bodyExprPreFacts
   stmtSimForParts stmtSimForRange exprLoweringProps freshWrites
   loweringStateRelDefs loweringPosts stmtLowering compileEnv
@@ -5084,6 +5085,7 @@ Theorem range_full_round:
              (string |-> num # num) # taint -> exec_result -> bool)
       (tyv :type_value) (sa :compile_state) (sb :compile_state)
       (shadow_sa :compile_state) (shadow_sb :compile_state).
+    shadow_body_inv tops ctx shadow_ctx /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (For id typ (Range e1 e2) bound body) /\
     (!(target :type).
@@ -5427,7 +5429,8 @@ Proof
            EVERY (map assume_tac (Lib.butlast clauses)) >>
            mk_asm "enter_cons" (List.last clauses)
          end)
-       (MATCH_MP (BETA_RULE (PURE_ONCE_REWRITE_RULE [LET_THM] entry)) pre))) >>
+       (MATCH_MP (BETA_RULE (PURE_ONCE_REWRITE_RULE [LET_THM] entry))
+          (CONJUNCT2 pre)))) >>
   qexistsl_tac
     [`st`, `bc`, `body_cenv`, `body_env'`, `sb0`, `sb1`, `shadow_sb0`, `shadow_sb1`,
      `p`, `sz`, `ainst`, `cv`, `ev`, `dv`, `nv`, `entry_lbl`, `cond_lbl`, `exit_lbl`,
@@ -6375,7 +6378,7 @@ Theorem compile_for_range_frag_full:
     tenv = get_tenv cx /\
     lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
       (INL tyv,t) ==> body_iterator_full_ok cx (Range e1 e2)) /\
-  body_inv tops ctx cenv cx /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   supported_stmt tops bindings (For id typ (Range e1 e2) n body) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id typ (Range e1 e2) n body) ==>
@@ -6563,7 +6566,7 @@ Resume compile_for_range_frag_full[checked]:
     (mp_tac o CONJUNCT1 o PURE_ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
   disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
       `func`,`shadow_func`,`cenv`,`env`,`typ`,`es`] mp_tac) >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (mp_tac o CONJUNCT1 o BETA_RULE) >>
   pure_once_rewrite_tac [bodySimFullTheory.expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`,`sa`,`s1`,`shadow_sa`,`shadow_s1`,
@@ -6674,7 +6677,7 @@ Resume compile_for_range_frag_full[first_success]:
     (mp_tac o CONJUNCT1 o PURE_ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
   disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
       `func`,`shadow_func`,`cenv`,`env`,`typ`,`mid1`] mp_tac) >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (mp_tac o CONJUNCT1 o BETA_RULE) >>
   pure_once_rewrite_tac [bodySimFullTheory.expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`,`s1`,`st`,`shadow_s1`,`shadow_st`,

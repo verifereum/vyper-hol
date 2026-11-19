@@ -2,6 +2,7 @@
 Theory bodyFullBopInLiteralOperands
 Ancestors
   bodyFullIfExpReach
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull exprSimBopInLiteralWord exprSimWordArgs
   gasOutcomeFullCompose gasOutcomeFull gasShadowCompileStmtHelpers
   bodyFullShared bodyMemoryDefs wordArgsPtr
@@ -19,6 +20,7 @@ Theorem bop_in_literal_operands_clean_full_halt:
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
     (!e. MEM e args ==> MEM e (e1::elems)) /\
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_sim_inv cenv cx env es /\
     lower_word_args cenv expr_type args sa = (xs,sb) /\
     gas_shadow_state sa shadow_sa /\
@@ -344,6 +346,7 @@ Theorem bop_in_literal_operands_clean_full:
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
     (!e. MEM e args ==> MEM e (e1::elems)) /\
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_sim_inv cenv cx env es /\
     lower_word_args cenv expr_type args sa = (xs,sb) /\
     gas_shadow_state sa shadow_sa /\
@@ -401,6 +404,7 @@ Theorem bop_in_literal_operands_full:
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
     (!e. MEM e args ==> MEM e (e1::elems)) /\
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_sim_inv cenv cx env es /\
     lower_word_args cenv expr_type args sa = (xs,sb) /\
     gas_shadow_state sa shadow_sa /\

@@ -1,6 +1,7 @@
 (* Self-code Slice composition over explicit joint runtime interfaces. *)
 Theory bodyFullBuiltinSliceCodeSelfCompose
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullOfVV gasOutcomeFullCompose
   exprSimSliceExtcodeTyped bodyFullUnwrapRun exprSimProps exprSimWordArgs exprSimHash
   exprSimSliceExtcodeEntry bodyInvNoDalloca bodyFullBuiltinWordPowCompose
@@ -116,7 +117,8 @@ Theorem slice_builtin_self_vv_full_from_tail:
     expr_body_pre cenv cx env
       (Builtin a (Slice n) [Builtin ct (Acc Code) [addr];start;len]) es /\
     expr_sim_inv cenv cx env ee /\ (e = start \/ e = len \/ e = addr) /\
-    body_expr_full_ok cx e /\ body_inv tops ctx cenv cx ==>
+    body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx  ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e ee /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e ee) ==>
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es code_ty addr.
@@ -128,6 +130,7 @@ Theorem slice_builtin_self_vv_full_from_tail:
            (!s tail_vs t. eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = SOME (code_ty,addr) /\
     is_self_code (Builtin code_ty (Acc Code) [addr]) ==>

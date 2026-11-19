@@ -14,6 +14,7 @@
  *)
 Theory bodyFullTarget
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullTargetRoots bodyFullTargetAttribute bodyFullTargetSubscript
   bodyFullTargetArray bodyFullTargetMapping bodyFullTargetDefs bodyFullPreds
   bodySimFull gasOutcomeFullCompose gasOutcomeFull fragGasOriginPtr
@@ -46,6 +47,7 @@ QED
 Theorem body_target_sim_full:
   !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es.
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     body_base_target_full_ok cx bt /\
     target_pre cenv cx env bt es ==>
     target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -77,6 +79,7 @@ QED
 Theorem body_target_place_sim_full:
   !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es.
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     body_base_target_full_ok cx bt /\
     target_pre cenv cx env bt es ==>
     target_place_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -84,7 +87,7 @@ Theorem body_target_place_sim_full:
 Proof
   rpt strip_tac >>
   drule_all body_target_sim_full >>
-  disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `shadow_ctx`, `func`,
+  disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `func`,
                            `shadow_func`] assume_tac) >>
   `eval_target_place cx bt = bind (eval_base_place cx bt) get_place` by
     (simp[Once evaluate_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC) >>

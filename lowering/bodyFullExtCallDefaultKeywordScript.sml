@@ -1,6 +1,7 @@
 (* Join the nonword default's store to the child VV endpoint. *)
 Theory bodyFullExtCallDefaultKeyword
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullExtCallDefaultPrefix bodyFullExtCallDefaultBytesStore
   bodyFullExtCallDefaultCopy bodyFullPreds bodySimFull gasOutcomeFullCompose
   stateRelProj bodyFullStructLitFrames bodyFullPathHistory
@@ -97,6 +98,7 @@ QED
 
 Theorem extcall_kwarg_default_owned_lookup_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
@@ -577,6 +579,7 @@ Finalise extcall_kwarg_default_owned_lookup_full
 (* Project away allocation ownership for callers that only save the operand. *)
 Theorem extcall_kwarg_default_lookup_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
@@ -634,6 +637,7 @@ QED
 (* Keep the outcome interface for callers that do not save operands. *)
 Theorem extcall_kwarg_default_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\

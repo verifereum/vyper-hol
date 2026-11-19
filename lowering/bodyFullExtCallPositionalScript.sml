@@ -1,5 +1,6 @@
 Theory bodyFullExtCallPositional
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullExtCallTargetOutcome bodyFullExtCallPosList
   gasOutcomeFullCompose gasExemptCert vyperStorageTrace vyperStorageFootprint
   exprSimSource exprSafeOperand exprSimWordArgs exprLoweringProps stmtSimProps
@@ -65,6 +66,7 @@ QED
 Theorem extcall_request_positional_prefix:
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok cx [addr] /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env addr es /\
   (!st target mid. eval_exprs cx [addr] st = (INL target,mid) ==>
      body_exprs_full_ok cx xs) /\

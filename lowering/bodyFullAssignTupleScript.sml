@@ -8,6 +8,7 @@
  *)
 Theory bodyFullAssignTuple
 Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
+  bodyFullShadowBodyInv
   placeMemoryCopyEffect[qualified,ignore_grammar] immSectionDead compileVyper bodyStorageMetadata ctorDeployDeadSectionFrame ctorDeployDeadSection pred_set immutableCopyExecution immutableDeployOperandTransfer fragGasSeqPtr stmtReasonLitFragMemory immutableWordExecution fragExecMem memSafeRun venomExecSemantics exprSimCopy venomInst unitTransformDefs codegenRel contextCodegenRel bodyPtrBopInRepresentation immutableAssignCompose immutableDeployAssignBytes immutableDeployAssignAdmissible valueEncodingProps venomMemProps vyperTypeValues typedCopyOriginPtr placeStoreDynPrepare bodyMemBopRestWordPath allocaSiteResource exprSimPtrLiteralBuffer exprSimAlloc exprOperandVar fragGasMode fragGasOrigin[qualified,ignore_grammar]
   words[qualified,ignore_grammar] bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
@@ -2121,6 +2122,7 @@ Theorem body_assign_tuple_targets_full:
        body_tuple_target_full_ok cx (TupleTarget gs) v) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
@@ -2950,6 +2952,7 @@ Theorem body_assign_tuple_locals_full:
        body_tuple_target_full_ok cx (TupleTarget (MAP (BaseTarget o NameTarget) ids)) v) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) ==>
@@ -6256,6 +6259,7 @@ Theorem body_assign_tuple_other_full:
        body_tuple_target_full_ok cx (TupleTarget gs) v) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
@@ -7237,7 +7241,7 @@ Proof
     `bodyFullTargetDefs$target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
        cenv cx env bt src` by
       (irule bodyFullTargetTheory.body_target_place_sim_full >> simp[] >>
-       qexists_tac `tops` >> first_assum ACCEPT_TAC)) >>>
+       qexists_tac `tops` >> conj_tac >> first_assum ACCEPT_TAC)) >>>
   HEADGOAL (
     qpat_x_assum `bodyFullTargetDefs$target_place_sim_full _ _ _ _ _ _`
       (mp_tac o REWRITE_RULE [bodyFullTargetDefsTheory.target_place_sim_full_def]) >>
@@ -10799,6 +10803,7 @@ Theorem body_assign_tuple_widened_full:
        body_tuple_target_full_ok cx (TupleTarget gs) v) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>

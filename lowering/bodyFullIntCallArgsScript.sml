@@ -6,7 +6,7 @@
  *   intcall_args_full
  *)
 Theory bodyFullIntCallArgs
-Ancestors vyperCallOutcome[qualified,ignore_grammar] fragGasPath compileVyper[qualified,ignore_grammar] pair[qualified,ignore_grammar] vyperStorageBackend[qualified,ignore_grammar] vyperStorageFootprint[qualified,ignore_grammar] freshWrites[qualified,ignore_grammar] bodyFullAllocaFresh[qualified,ignore_grammar] bodyIntCallSource[qualified,ignore_grammar] bodySim[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] supportedNames[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
+Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragGasPath compileVyper[qualified,ignore_grammar] pair[qualified,ignore_grammar] vyperStorageBackend[qualified,ignore_grammar] vyperStorageFootprint[qualified,ignore_grammar] freshWrites[qualified,ignore_grammar] bodyFullAllocaFresh[qualified,ignore_grammar] bodyIntCallSource[qualified,ignore_grammar] bodySim[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] supportedNames[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
   compileExprAllocaFresh[qualified,ignore_grammar]
   compilerInstructionSuffix[qualified,ignore_grammar]
   abiEncoderProps[qualified,ignore_grammar]
@@ -1699,6 +1699,7 @@ Theorem intcall_args_stage_full_p2_with_path[local]:
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_sim_inv cenv cx tenv esi /\
     EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
     body_exprs_full_ok cx es /\
@@ -2001,7 +2002,7 @@ Proof
          qpat_x_assum `body_expr_full_ok cx e`
            (mp_tac o CONJUNCT1 o
              ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-         disch_then drule >> disch_then drule >> simp[]) >>
+         disch_then drule >> disch_then drule >> disch_then drule >> simp[]) >>
       qpat_x_assum `expr_sim_full _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
       disch_then (qspec_then `st0` mp_tac) >>
@@ -2534,7 +2535,7 @@ Proof
      qpat_x_assum `body_expr_full_ok cx e`
        (mp_tac o CONJUNCT1 o
          ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then drule >> disch_then drule >> simp[]) >>
+     disch_then drule >> disch_then drule >> disch_then drule >> simp[]) >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspec_then `st0` mp_tac) >>
@@ -4574,6 +4575,7 @@ Theorem intcall_args_stage_full_p2:
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_sim_inv cenv cx tenv esi /\
     EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
     body_exprs_full_ok cx es /\
@@ -4744,6 +4746,7 @@ Theorem intcall_args_stage_full:
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_sim_inv cenv cx tenv esi /\
     EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
     body_exprs_full_ok cx es /\
@@ -7095,6 +7098,7 @@ Theorem intcall_args_full:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\

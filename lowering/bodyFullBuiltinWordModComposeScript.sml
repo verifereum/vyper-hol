@@ -1,6 +1,7 @@
 (* Three-child full composition, conditional on the modular suffix interface. *)
 Theory bodyFullBuiltinWordModCompose
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullShared gasOutcomeFullCompose
   bodyFullBuiltinWordModPost bodyFullGhostFrame bodyFullBuiltinWordPowCompose
   exprSimWordBuiltins exprSimSource exprSimHypsDefs exprLowering
@@ -76,6 +77,7 @@ Theorem modular_sim_full_from_suffix:
     (bt = AddMod \/ bt = MulMod) /\
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es /\
@@ -109,6 +111,7 @@ Proof
         (qpat_assum `body_expr_full_ok cx e1` mp_tac >>
          qpat_assum `body_inv _ _ _ _` mp_tac >>
          qpat_assum `expr_body_pre cenv cx env e1 es` mp_tac >>
+         qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
          rpt (pop_assum kall_tac) >>
          simp[body_expr_full_ok_def] >> metis_tac[]) >>
       `!e. MEM e [e1;e2;e3] ==> expr_body_pre cenv cx env e es` by
@@ -278,6 +281,7 @@ Proof
         (qpat_assum `body_expr_full_ok cx e2` mp_tac >>
          qpat_assum `body_inv _ _ _ _` mp_tac >>
          qpat_assum `expr_body_pre cenv cx env e2 mid` mp_tac >>
+         qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
          rpt (pop_assum kall_tac) >>
          simp[body_expr_full_ok_def] >> metis_tac[]) >>
       qpat_x_assum `expr_sim_full _ _ _ _ e2 mid`
@@ -379,6 +383,7 @@ Proof
         (qpat_assum `body_expr_full_ok cx e3` mp_tac >>
          qpat_assum `body_inv _ _ _ _` mp_tac >>
          qpat_assum `expr_body_pre cenv cx env e3 mid'` mp_tac >>
+         qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
          rpt (pop_assum kall_tac) >>
          simp[body_expr_full_ok_def] >> metis_tac[]) >>
       `s1.cs_next_var <= s2.cs_next_var` by

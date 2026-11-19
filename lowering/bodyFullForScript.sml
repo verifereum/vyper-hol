@@ -9,6 +9,7 @@
  *)
 Theory bodyFullFor
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullForControl bodyFullForRounds stateRelProj haltExitProj
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
@@ -32,7 +33,7 @@ Theorem compile_for_frag_full:
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
        body_iterator_full_ok cx it) /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ it n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ it n body) ==>
        occurs_abi_decode_target target tops) /\

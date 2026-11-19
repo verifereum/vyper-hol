@@ -30,6 +30,7 @@
 
 Theory loweringRuntimeCorrect
 Ancestors
+  bodyFullShadowBodyInvLowering
   sourceUnitExecution e2eDefs compileVyper vyperInterpreter vyperState
   vyperStorageFootprint gasShadowUnit vyperTypeSelectedEntrySoundness
   externalEntryValueRevert unitExecutionCompose externalEntryJoint entryDispatchProps
@@ -483,9 +484,19 @@ val runtime_body_shadow_tac =
   `ctx_inst_ids_distinct unit.cu_context` by
     (drule_all caller_runtime_entry_integrity >> simp[]);
 
+val runtime_shadow_body_inv_tac =
+  qpat_assum `source_typing_ok tops am tx` (fn typing =>
+    qpat_assum `supported_program tops` (fn supported =>
+      qpat_assum `lower_vyper_runtime_unit tops rpolicy = SOME unit` (fn lowered =>
+        qpat_assum `runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit`
+          (fn shadow => assume_tac (MATCH_MP runtime_shadow_body_inv
+            (LIST_CONJ [MATCH_MP source_typing_ok_vtype_keys_distinct typing,
+                        supported, lowered, shadow]))))));
+
 val runtime_body_outcome_tac =
   `struct_args_unique tops` by
     (fs[source_typing_ok_def] >> metis_tac[checked_contract_struct_args_unique]) >>
+  runtime_shadow_body_inv_tac >>
   drule_at (Pat `frame_ret_ok_full _ _ _ _ _`) body_stmts_sim_full >>
   disch_then (qspecl_then [`tops`, `bindings`, `env_t`, `env'`, `NoLoop`,
                            `compiled_body`, `es0`] mp_tac) >>
@@ -1458,6 +1469,7 @@ Proof
   qpat_assum `send_call_value _ _ _ = (INL (),es0)` (fn send =>
     qpat_assum `lock_if_nr _ T _ es0 = (INL (),es_lock)` (fn lock =>
       assume_tac (MATCH_MP runtime_locked_well_formed_on (CONJ send lock)))) >>
+  runtime_shadow_body_inv_tac >>
   drule_at (Pat `frame_ret_ok_full _ _ _ _ _`) body_stmts_sim_full >>
   disch_then (qspecl_then [`tops`, `bindings`, `env_t`, `env'`, `NoLoop`,
                            `compiled_body`, `es_lock`] mp_tac) >>

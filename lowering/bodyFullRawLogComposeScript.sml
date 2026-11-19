@@ -1,5 +1,6 @@
 Theory bodyFullRawLogCompose
 Ancestors
+  bodyFullShadowBodyInv
   exprSimCallRawLog bodyInvNoDalloca contextRawReachable ptrDiscipline[qualified,ignore_grammar]
   bodyFullRawLogLayout bodyFullRawLogJoinPost bodyFullRawLogTopics
   bodyFullRawLogReadiness bodyFullRawLogFixed bodyFullRawLogDynamic
@@ -68,6 +69,7 @@ Theorem raw_log_expr_sim_full:
   (!ce xs. gas_shadow_compiles (compile_multi_exprs compile_expr ce xs)
     (compile_multi_exprs compile_expr ce (MAP gas_shadow_expr xs))) /\
   body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (Call ann RawLog args dflt) es ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann RawLog args dflt) es

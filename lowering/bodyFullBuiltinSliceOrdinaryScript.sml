@@ -1,6 +1,7 @@
 (* Full source/capture/start/length composition for ordinary Slice. *)
 Theory bodyFullBuiltinSliceOrdinary
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullBuiltinSliceDynamicCapture bodyFullBuiltinSliceFixedCapture
   bodyFullBuiltinSliceMemoryTail
   bodyFullPreds bodySimFull bodyFullOfVV gasOutcomeFullCompose gasOutcomeFullStmts
@@ -315,6 +316,7 @@ Theorem slice_builtin_none_vv_full_from_runs:
               eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = NONE ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -2563,6 +2565,7 @@ Theorem slice_builtin_none_vv_full:
               eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = NONE ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

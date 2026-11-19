@@ -10,6 +10,7 @@
  *)
 Theory bodyFullAssertReason
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullAssertReasonSource bodyFullAssertReasonControl bodyFullShared
   bodyFullRaiseReason
   bodyInvNoDalloca contextRawReachable unitMemInv unitTransformDefs ptrDiscipline
@@ -26,7 +27,8 @@ Theorem compile_assert_reason_frag_full_from_raise:
   (!cx e DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (Raise (RaiseReason e)) /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Raise (RaiseReason e)) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Raise (RaiseReason e)) ==>
        occurs_abi_decode_target target tops) /\
@@ -46,7 +48,8 @@ Theorem compile_assert_reason_frag_full_from_raise:
    shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok cx se) /\
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (Assert e (AssertReason se)) /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Assert e (AssertReason se)) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assert e (AssertReason se)) ==>
        occurs_abi_decode_target target tops) /\
@@ -311,7 +314,8 @@ Theorem compile_assert_reason_frag_full:
    shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok cx se) /\
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (Assert e (AssertReason se)) /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Assert e (AssertReason se)) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assert e (AssertReason se)) ==>
        occurs_abi_decode_target target tops) /\

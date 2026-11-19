@@ -2,6 +2,7 @@
    at successive cuts of one joint path. *)
 Theory bodyFullMakeArrayArray
 Ancestors
+  bodyFullShadowBodyInv
   bodyFullMakeArrayResultDefs bodyFullMakeArrayInit bodyFullMakeArrayHeader
   bodyFullMakeArrayElements exprOperandVar gasShadowState gasShadow
   exprSimCopy exprSimAggregateLoops exprSimDefs[qualified,ignore_grammar]
@@ -20,6 +21,7 @@ Theorem make_array_vv_sim_full_conditional:
     (builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH args) ==>
        body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     expr_body_pre cenv cx env (Builtin ann (MakeArray (SOME et) n) args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (MakeArray (SOME et) n) args) es

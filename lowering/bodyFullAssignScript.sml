@@ -12,6 +12,7 @@ Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
   assignPlaceProvenance[qualified,ignore_grammar]
   exprSimLayoutTransport[qualified,ignore_grammar]
   exprSimIfExpWidenedAggregate[qualified,ignore_grammar]
+  bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
@@ -455,6 +456,7 @@ Theorem body_assign_local_word_full:
        body_base_target_full_ok cx (NameTarget id)) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (NameTarget id)) e) ==>
@@ -734,6 +736,7 @@ Theorem body_assign_local_widened_full:
        body_base_target_full_ok cx (NameTarget id)) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (NameTarget id)) e) ==>
@@ -1519,6 +1522,7 @@ Theorem body_assign_toplevel_word_full:
        body_base_target_full_ok cx (TopLevelNameTarget nsid)) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
@@ -1959,6 +1963,7 @@ Theorem body_assign_toplevel_copy_full:
        body_base_target_full_ok cx (TopLevelNameTarget nsid)) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
@@ -2044,6 +2049,7 @@ Theorem body_assign_attr_storage_full:
        body_base_target_full_ok cx (AttributeTarget (TopLevelNameTarget nsid) fld)) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) e) ==>
@@ -2639,6 +2645,7 @@ Theorem body_assign_attr_local_full:
        body_base_target_full_ok cx (AttributeTarget (NameTarget id) fld)) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) ==>
@@ -3056,6 +3063,7 @@ Theorem body_assign_local_memory_nonempty_full[local]:
        body_base_target_full_ok cx (NameTarget id)) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (NameTarget id)) e) ==>
@@ -3293,7 +3301,13 @@ Resume body_assign_local_memory_nonempty_full[rhs_resources]:
      simp[ci_mono_def]) >>
   `local_ptrs_reserved cenv sB` by metis_tac[local_ptrs_reserved_next_var] >>
   `not_fresh_at sB p /\ not_fresh_at sB xs` by
-    metis_tac[local_ptrs_reserved_def,compile_lower_value_var] >>
+    (conj_tac
+     >- (qpat_assum `local_ptrs_reserved cenv sB`
+           (mp_tac o CONJUNCT1 o CONJUNCT2 o
+            REWRITE_RULE [local_ptrs_reserved_def]) >>
+         disch_then (qspecl_then [`id`,`id`,`p`,`sz`,`sz`] mp_tac) >>
+         simp[]) >>
+     drule_all compile_lower_value_var >> simp[]) >>
   `w2n (sw:bytes32) + type_memory_size stv <= u.vs_alloca_next` by
     (qpat_assum `~is_word_type (post_value_type cenv e) ==> !rt w. _`
        (qspecl_then [`stv`,`sw:bytes32`] mp_tac o UNDISCH) >>
@@ -3613,6 +3627,7 @@ Theorem body_assign_local_memory_full:
        body_base_target_full_ok cx (NameTarget id)) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (NameTarget id)) e) ==>
@@ -8149,7 +8164,7 @@ Theorem body_assign_other_empty_target_full[local]:
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok cx t) /\
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     struct_args_unique tops /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -8236,7 +8251,7 @@ Proof
   `gas_admissible (eval_target_place cx t) target_place_res_ok es` by
      metis_tac[assignPlaceEmptyComposeTheory.assign_place_empty_target_admissible] >>
   drule_all bodyFullTargetTheory.body_target_place_sim_full >>
-  disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`shadow_ctx`,`func`,`shadow_func`]
+  disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`func`,`shadow_func`]
     (mp_tac o REWRITE_RULE [target_place_sim_full_def])) >>
   disch_then (qspecl_then [`st0`,`dty`,`sa`,`st`,`shadow_sa`,`shadow_sp`,`tr`,`s0`,`G0`,`tn0`] mp_tac) >>
   (impl_tac >- (simp[] >> fs[ret_pc_ok_def] >> first_assum ACCEPT_TAC)) >>
@@ -8919,7 +8934,7 @@ Theorem body_assign_other_immutable_frontier_bind[local]:
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok cx t) /\
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     struct_args_unique tops /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -9130,7 +9145,14 @@ Proof
       rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def] >> strip_tac >>
       conj_tac >- (simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]) >>
       conj_tac >- metis_tac[halt_exit_INR_type] >>
-      rpt strip_tac >> gvs[] >> fs[expr_exit_def]) >>
+      rpt strip_tac
+      >- (qpat_assum `ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u`
+            (fn frame => qpat_assum `ctx_has_dalloca ctx` (fn active =>
+               qpat_assum `r = Halt _`
+                 (ACCEPT_TAC o MATCH_MP (SPEC_ALL (MP frame active)))))) >>
+      qpat_assum `r = IntRet _ _` (fn ret =>
+        qpat_assum `expr_exit _ r` (mp_tac o REWRITE_RULE [ret])) >>
+      simp[expr_exit_def]) >>
   rpt strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[storage_trace_domain_def] >>
@@ -13513,7 +13535,7 @@ QED
 (* Run the target before unwrapping the original, unsnapshotted RHS.
    The only open outcome is the actual destination write. *)
 Theorem body_assign_other_saved_target_bind[local]:
-  body_inv tops ctx cenv cx /\ struct_args_unique tops /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
   supported_stmt tops bindings (Assign (BaseTarget bt) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Assign (BaseTarget bt) e) ==> occurs_abi_decode_target target tops) /\
@@ -14012,7 +14034,7 @@ Theorem body_assign_other_value_rhs_bind[local]:
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok cx t) /\
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     struct_args_unique tops /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -17783,7 +17805,7 @@ Theorem body_assign_other_nonempty_target_full[local]:
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok cx t) /\
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     struct_args_unique tops /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -18497,7 +18519,9 @@ Resume body_assign_other_nonempty_target_full[saved_bytes_slots]:
   conj_tac
   >- (rpt strip_tac >>
       qpat_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN tn0.t_mem`
-        irule >> metis_tac[]) >>
+        irule >> conj_tac
+      >- (qexistsl_tac [`aid`,`off`,`sz`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      first_assum ACCEPT_TAC) >>
   conj_tac >- (qexists `env` >> simp[]) >>
   qexistsl [`FST r`,`ty`,`op`,`stv`,`lowered_value_type cenv e`,`su`,`sw`] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM] >>
@@ -18513,7 +18537,7 @@ Theorem body_assign_other_full:
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok cx t) /\
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     struct_args_unique tops /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
