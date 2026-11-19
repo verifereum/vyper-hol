@@ -60,7 +60,7 @@ Theorem calldata_word_accepted_resource_joint:
   ptr_covers G tn child initial 32 /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   fresh_vars_wrt limit initial /\ allocas_from lower initial /\
-  lower <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  lower <= initial.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   abi_clamp_ok cl (abi_decode_load CALLDATALOAD p initial) ==>

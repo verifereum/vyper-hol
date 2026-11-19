@@ -4,7 +4,34 @@ Ancestors decoderNavigationPtr fragGasOriginPtr instMemFrontier memSafeRun ghost
   abiDecoderIndexInit abiDecoderAllocation allocationPtr typedCopyPtr fragExecPtr
   bodyPtrDefs ptrDiscipline ptrSafeRun compileEnv context emitHelper emitHelperProps
   loweringHalt localPtrsProps exprLoweringProps venomExecSemantics venomMemProps venomState venomInst finite_map
+  allocaSiteResource compileAllocaProvenance
   words list rich_list arithmetic pred_set instIdxIndep codegenRel contextCodegenRel
+
+Theorem index_alloca_room[local]:
+  emit_op ALLOCA [Lit 32w] sa = (q,allocation_st) /\
+  fn_has_code sa allocation_st func /\
+  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString sa.cs_next_var)]) s = OK v /\
+  allocas_below_fmp s /\
+  s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp ==>
+  allocas_below_fmp v
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  qabbrev_tac `alloc = mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString sa.cs_next_var)]` >>
+  `MEM alloc (fn_insts func)` by
+    (irule fn_has_code_current_member >>
+     qexistsl_tac [`sa`,`allocation_st`] >> gvs[Abbr `alloc`]) >>
+  `exec_alloca alloc s (32w:bytes32) = OK v` by
+    (qpat_x_assum `step_inst_base _ s = OK v` mp_tac >>
+     simp[Abbr `alloc`, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
+  `v.vs_alloca_next + pending_alloca_size func v <=
+   s.vs_alloca_next + pending_alloca_size func s` by
+    (irule exec_alloca_static_charge >>
+     qexistsl_tac [`alloc`,`32w:bytes32`] >> simp[Abbr `alloc`, mk_inst_def]) >>
+  irule (INST_TYPE [alpha |-> ``:256``] exec_alloca_preserves_fmp_bound) >>
+  qexistsl_tac [`alloc`,`32w:bytes32`,`s`] >> simp[] >> decide_tac
+QED
 
 Theorem abi_decode_index_init_endpoint_exact_ptr_origin_core:
   abi_decode_index_init sa = (ip,sb) /\
@@ -12,7 +39,9 @@ Theorem abi_decode_index_init_endpoint_exact_ptr_origin_core:
   sa.cs_next_id IN abi_decoder_ids first last /\ ~s.vs_halted /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?HG u q p. (!D lower explicit ctx' func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code sa sb func /\ allocas_from lower s /\
+      (ctx_has_dalloca ctx' ==> allocas_below_fmp s /\
+        s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
       ~s.vs_halted /\ lower <= s.vs_alloca_next /\
       s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -30,7 +59,8 @@ Theorem abi_decode_index_init_endpoint_exact_ptr_origin_core:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s /\
+        s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
@@ -119,6 +149,12 @@ Proof
      disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >> simp[]) >>
   `allocation_st.cs_current_bb = sa.cs_current_bb` by
     metis_tac[emit_op_same_blocks, same_blocks_def] >>
+  `ctx_has_dalloca ctx' ==> allocas_below_fmp v1` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx' ==> _` (drule_then strip_assume_tac) >>
+     `allocas_below_fmp v` by (drule_all index_alloca_room >> simp[]) >>
+     qpat_assum `allocas_below_fmp v` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `v1`, allocas_below_fmp_def] >> metis_tac[]) >>
   `!fuel. ptr_safe_run D lower fuel ctx' func PG HG u v1` suffices_by
     (strip_tac >>
      qpat_x_assum `!D lower ctx' func. _`
@@ -163,6 +199,12 @@ Resume abi_decode_index_init_endpoint_exact_ptr_origin_core[index_origin]:
   `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) s = OK v` by
     gvs[run_inst_seq_def, AllCaseEqs()] >>
+  `ctx_has_dalloca ctx' ==> allocas_below_fmp v1` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx' ==> _` (drule_then strip_assume_tac) >>
+     `allocas_below_fmp v` by (drule_all index_alloca_room >> simp[]) >>
+     qpat_assum `allocas_below_fmp v` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `v1`, allocas_below_fmp_def] >> metis_tac[]) >>
   `allocas_from lower v1` by
     (simp[Abbr `v1`, allocas_from_def] >>
      `allocas_from lower v` suffices_by simp[allocas_from_def] >>
@@ -247,7 +289,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all abi_decode_index_init_endpoint_exact_ptr_origin_core >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
-  qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
+  qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[] >> metis_tac[]
 QED
 
 Theorem abi_decode_index_init_endpoint_exact_joint_core:

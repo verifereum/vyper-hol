@@ -39,7 +39,9 @@ Theorem calldata_bulk_payload_endpoint_ptr_uniform_joint:
         gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
           (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
 Proof
-  strip_tac >> drule_all calldata_bulk_payload_endpoint_ptr_uniform_origin_joint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_bulk_payload_endpoint_ptr_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`H`,`u`] >> simp[]
 QED
@@ -70,7 +72,9 @@ Theorem calldata_bulk_payload_endpoint_ptr_uniform:
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
      !fuel. ptr_safe_run D lower fuel ctx func PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_bulk_payload_endpoint_ptr_uniform_origin >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_bulk_payload_endpoint_ptr_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`H`,`u`] >> simp[]
 QED
@@ -162,7 +166,7 @@ Theorem calldata_bulk_decoder_endpoint_ptr_uniform_origin:
   ptr_covers G tn root s capacity /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   32+n*mem_sz <= capacity /\ d+32 < dimword (:256) /\ n*mem_sz < dimword (:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?H u.
     ptr_covers H u root t capacity /\ u.t_mem SUBSET tn.t_mem /\
@@ -222,6 +226,12 @@ Proof
    (!x. src = Var x ==> not_fresh_at c2 x)` by
     (qpat_assum `!x. not_fresh_at c1 x ==> _`
       (qspec_then `root` mp_tac) >> fs[lookup_var_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp
+       (s1 with vs_inst_idx := LENGTH c1.cs_current_insts)) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp
+       (s2 with vs_inst_idx := LENGTH c2.cs_current_insts))` by
+    (drule_all calldata_array_header_fmp_frame >> strip_tac >>
+     fs[allocas_below_fmp_def]) >>
   `eval_operand cnt s2 = SOME (n2w n)` by
     (qpat_x_assum `s1 = s with vs_vars := _` SUBST_ALL_TAC >>
      fs[abi_decode_load_def, abi_decode_source_def]) >>
@@ -306,7 +316,9 @@ Theorem calldata_bulk_decoder_endpoint_ptr_uniform:
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
      !fuel. ptr_safe_run D lower fuel ctx func PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_bulk_decoder_endpoint_ptr_uniform_origin >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_bulk_decoder_endpoint_ptr_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`H`,`u`] >> simp[]
 QED

@@ -77,6 +77,7 @@ Proof
     (qpat_assum `abi_decoder_operand_live _ src` mp_tac >>
      Cases_on `src` >> simp_tac (srw_ss()) [abi_decoder_operand_live_def,
       abi_decoder_older_vars_def, loweringStateRelDefsTheory.not_fresh_at_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   rename1 `eval_operand value loaded = SOME _` >>

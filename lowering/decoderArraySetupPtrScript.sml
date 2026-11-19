@@ -4,7 +4,7 @@ Ancestors decoderNavigationPtr fragGasOriginPtr abiDecoderLoopSetup abiDecoderIn
   abiDecoderDynamic abiEncoder compileEnv loweringStateRelDefs emitHelper emitHelperProps fragExecPtr
   fragExec words venomState venomExecSemantics ptrDiscipline bodyPtrDefs
   finite_map pred_set arithmetic list instIdxIndep calldataDynOwned venomInst
-  exprLoweringProps codegenRel abiDecoderReentry
+  exprLoweringProps codegenRel abiDecoderReentry decoderWorldFramePtr
 
 (* The calldata address step: base Lit 0w adds no instruction. *)
 val calldata_pos_addr = prove(
@@ -32,6 +32,38 @@ Theorem run_inst_seq_append_aligned:
 Proof
   strip_tac >> drule run_inst_seq_append_ok >> strip_tac >>
   qexists_tac `m` >> simp[run_inst_seq_inst_idx, exec_result_map_def]
+QED
+
+Theorem decoder_setup_emit_fmp_frame[local]:
+  emit_op opc ops st = (out,ready) /\
+  (opc = ADD \/ opc = MUL \/ opc = MLOAD \/ opc = CALLDATALOAD) /\
+  run_inst_seq (emitted_insts st ready) s = OK t ==>
+  t.vs_initial_fmp = s.vs_initial_fmp /\ t.vs_fmp = s.vs_fmp
+Proof
+  strip_tac >> drule run_inst_seq_initial_fmp >> simp[] >> strip_tac >>
+  irule (cj 9 (SPEC_ALL decoder_run_world_frame)) >>
+  goal_assum (drule_at Any) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  gvs[mk_inst_def, abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]
+QED
+
+Theorem decoder_setup_scaled_fmp_frame[local]:
+  emit_op ADD [src; Lit 32w] st = (data,c1) /\
+  emit_op MUL [idx; Lit (n2w stride)] c1 = (off,c2) /\
+  emit_op ADD [data;off] c2 = (out,ready) /\
+  run_inst_seq (emitted_insts st ready) s = OK t ==>
+  t.vs_initial_fmp = s.vs_initial_fmp /\ t.vs_fmp = s.vs_fmp
+Proof
+  strip_tac >>
+  `inst_extends st c1 /\ inst_extends c1 c2 /\ inst_extends c2 ready` by
+    metis_tac[inst_extends_emit_op] >>
+  `emitted_insts st ready =
+    emitted_insts st c1 ++ emitted_insts c1 c2 ++ emitted_insts c2 ready` by
+    (imp_res_tac inst_extends_trans >>
+     fs[inst_extends_def] >> metis_tac[emitted_insts_append, APPEND_ASSOC]) >>
+  fs[] >> dxrule run_inst_seq_append_ok >> strip_tac >>
+  dxrule run_inst_seq_append_ok >> strip_tac >>
+  metis_tac[decoder_setup_emit_fmp_frame]
 QED
 
 Theorem old_operand_ghost_frame:
@@ -154,14 +186,14 @@ Theorem indexed_destination_endpoint_ptr_origin_core_exact_frame:
         FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = st.cs_current_bb /\
         s.vs_inst_idx = LENGTH st.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
         s.vs_inst_idx = LENGTH st.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -257,8 +289,11 @@ Proof
   `s1.vs_current_bb = s.vs_current_bb /\ s2.vs_current_bb = s1.vs_current_bb` by
    (conj_tac >> irule (cj 2 emit_op_run_control_frame) >>
     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `s1.vs_initial_fmp = s.vs_initial_fmp /\ s1.vs_fmp = s.vs_fmp /\
+   s2.vs_initial_fmp = s1.vs_initial_fmp /\ s2.vs_fmp = s1.vs_fmp` by
+    (imp_res_tac decoder_setup_emit_fmp_frame >> metis_tac[]) >>
   `!D lower ctx' func.
-    fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
@@ -274,16 +309,16 @@ Proof
       (s2 with vs_inst_idx := LENGTH c2.cs_current_insts)` by
      (qpat_x_assum `!D lower ctx' func. fn_has_code c2 ready func /\ _ ==> _`
         (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >>
-      gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+      gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     `!fuel. ptr_safe_run D lower fuel ctx' func PG H1 u1
       (s1 with vs_inst_idx := LENGTH c1.cs_current_insts)` by
      (qpat_x_assum `!D lower ctx' func. fn_has_code c1 c2 func /\ _ ==> _`
         (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >>
-      gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+      gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     qpat_x_assum `!D lower ctx' func. fn_has_code st c1 func /\ _ ==> _`
       (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >> simp[]) >>
   `!D lower explicit ctx' func.
-    fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts ==>
     gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -305,13 +340,13 @@ Proof
       (OK (s2 with vs_inst_idx := LENGTH c2.cs_current_insts),H2,u2)` by
       (qpat_x_assum `!D lower explicit ctx' func. fn_has_code c1 c2 func /\ _ ==> _`
          (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
-       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+       gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     `gas_origin_ptr_path (D,lower,explicit,ctx',func,PG)
       (s2 with vs_inst_idx := LENGTH c2.cs_current_insts,H2,u2) []
       (OK (t with vs_inst_idx := LENGTH ready.cs_current_insts),HG,u)` by
       (qpat_x_assum `!D lower explicit ctx' func. fn_has_code c2 ready func /\ _ ==> _`
          (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
-       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+       gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
   qexistsl_tac [`HG`,`u`] >> simp[ADD_COMM] >>
   conj_tac >-
@@ -346,14 +381,14 @@ Theorem indexed_destination_endpoint_ptr_origin_core:
         FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
-        fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         s.vs_current_bb = st.cs_current_bb /\
         s.vs_inst_idx = LENGTH st.cs_current_insts /\
         (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
       (!D lower explicit ctx' func.
-        fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
         ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
         s.vs_inst_idx = LENGTH st.cs_current_insts ==>
         gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -395,7 +430,7 @@ Theorem indexed_destination_endpoint_ptr_core:
 Proof
   rpt strip_tac >> drule_all indexed_destination_endpoint_ptr_origin_core >>
   disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`HG`,`u`,`child`] >> simp[]
+  qexistsl_tac [`HG`,`u`,`child`] >> simp[] >> metis_tac[]
 QED
 
 Theorem indexed_destination_endpoint_ptr:
@@ -447,14 +482,14 @@ Theorem calldata_dynamic_element_source_endpoint_ptr_origin_core_exact_frame:
     t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
     t.vs_current_bb = s.vs_current_bb /\
     (!D lower ctx' func.
-      fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
     (!D lower explicit ctx' func.
-      fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts ==>
       gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -525,8 +560,10 @@ Proof
      gvs[run_inst_seq_def] >>
      gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
      simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `m.vs_initial_fmp = s.vs_initial_fmp /\ m.vs_fmp = s.vs_fmp` by
+    metis_tac[decoder_setup_emit_fmp_frame] >>
   `!D lower ctx' func.
-    fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
@@ -541,11 +578,11 @@ Proof
       (m with vs_inst_idx := LENGTH mid.cs_current_insts)` by
      (qpat_x_assum `!D lower ctx' func. fn_has_code mid ready func /\ _ ==> _`
         (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >>
-      gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+      gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     qpat_x_assum `!D lower ctx' func. fn_has_code st mid func /\ _ ==> _`
       (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >> simp[]) >>
   `!D lower explicit ctx' func.
-    fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts ==>
     gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -566,7 +603,7 @@ Proof
       (OK (t with vs_inst_idx := LENGTH ready.cs_current_insts),HG,u)` by
       (qpat_x_assum `!D lower explicit ctx' func. fn_has_code mid ready func /\ _ ==> _`
          (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
-       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+       gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
   qexistsl_tac [`HG`,`u`] >> simp[] >>
   irule frag_exec_ptr_seq >>
@@ -598,14 +635,14 @@ Theorem calldata_dynamic_element_source_endpoint_ptr_origin_core:
     t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
     t.vs_current_bb = s.vs_current_bb /\
     (!D lower ctx' func.
-      fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
     (!D lower explicit ctx' func.
-      fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts ==>
       gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -650,7 +687,7 @@ Theorem calldata_dynamic_element_source_endpoint_ptr_core:
 Proof
   rpt strip_tac >> drule_all calldata_dynamic_element_source_endpoint_ptr_origin_core >>
   disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`HG`,`u`] >> simp[]
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
 QED
 
 Theorem calldata_dynamic_element_source_endpoint_ptr:
@@ -709,14 +746,14 @@ Theorem clean_scaled_source_prefix_endpoint_ptr_origin_core_exact_frame:
     t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
     t.vs_current_bb = s.vs_current_bb /\
     (!D lower ctx' func.
-      fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
     (!D lower explicit ctx' func.
-      fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts ==>
       gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -841,8 +878,11 @@ Proof
   `s1.vs_current_bb = s.vs_current_bb /\ s2.vs_current_bb = s1.vs_current_bb` by
    (conj_tac >> irule (cj 2 emit_op_run_control_frame) >>
     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `s1.vs_initial_fmp = s.vs_initial_fmp /\ s1.vs_fmp = s.vs_fmp /\
+   s2.vs_initial_fmp = s1.vs_initial_fmp /\ s2.vs_fmp = s1.vs_fmp` by
+    (imp_res_tac decoder_setup_emit_fmp_frame >> metis_tac[]) >>
   `!D lower ctx' func.
-    fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
@@ -858,16 +898,16 @@ Proof
       (s2 with vs_inst_idx := LENGTH c2.cs_current_insts)` by
      (qpat_x_assum `!D lower ctx' func. fn_has_code c2 ready func /\ _ ==> _`
         (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >>
-      gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+      gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     `!fuel. ptr_safe_run D lower fuel ctx' func PG H1 u1
       (s1 with vs_inst_idx := LENGTH c1.cs_current_insts)` by
      (qpat_x_assum `!D lower ctx' func. fn_has_code c1 c2 func /\ _ ==> _`
         (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >>
-      gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+      gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     qpat_x_assum `!D lower ctx' func. fn_has_code st c1 func /\ _ ==> _`
       (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >> simp[]) >>
   `!D lower explicit ctx' func.
-    fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts ==>
     gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -889,13 +929,13 @@ Proof
       (OK (s2 with vs_inst_idx := LENGTH c2.cs_current_insts),H2,u2)` by
       (qpat_x_assum `!D lower explicit ctx' func. fn_has_code c1 c2 func /\ _ ==> _`
          (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
-       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+       gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     `gas_origin_ptr_path (D,lower,explicit,ctx',func,PG)
       (s2 with vs_inst_idx := LENGTH c2.cs_current_insts,H2,u2) []
       (OK (t with vs_inst_idx := LENGTH ready.cs_current_insts),HG,u)` by
       (qpat_x_assum `!D lower explicit ctx' func. fn_has_code c2 ready func /\ _ ==> _`
          (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
-       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+       gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
   qexistsl_tac [`HG`,`u`] >> simp[] >>
   irule frag_exec_ptr_seq >>
@@ -934,14 +974,14 @@ Theorem clean_scaled_source_prefix_endpoint_ptr_origin_core:
     t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
     t.vs_current_bb = s.vs_current_bb /\
     (!D lower ctx' func.
-      fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
     (!D lower explicit ctx' func.
-      fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts ==>
       gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -991,7 +1031,7 @@ Theorem clean_scaled_source_prefix_endpoint_ptr_core:
 Proof
   rpt strip_tac >> drule_all clean_scaled_source_prefix_endpoint_ptr_origin_core >>
   disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`HG`,`u`] >> simp[]
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
 QED
 
 Theorem clean_scaled_source_prefix_endpoint_ptr:
@@ -1057,14 +1097,14 @@ Theorem calldata_array_element_setup_endpoint_ptr_origin_core_exact_frame:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     t.vs_allocas = initial.vs_allocas /\ u.t_imm = tn.t_imm /\
     (!D lower ctx' func.
-      fn_has_code st ready func /\ allocas_from lower initial /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower initial /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp initial) /\
       initial.vs_current_bb = st.cs_current_bb /\
       initial.vs_inst_idx = LENGTH st.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn initial) /\
     (!D lower explicit ctx' func.
-      fn_has_code st ready func /\ allocas_from lower initial /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower initial /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp initial) /\
       ~initial.vs_halted /\ slot + 32 <= initial.vs_alloca_next /\
       initial.vs_current_bb = st.cs_current_bb /\
       initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -1125,6 +1165,10 @@ Resume calldata_array_element_setup_endpoint_ptr_origin_core_exact_frame[load_an
   rename1 `op_taint u0 idx = {}` >> rename1 `op_prov H0 idx = NONE` >>
   `r0.vs_labels = initial.vs_labels /\ r0.vs_current_bb = initial.vs_current_bb` by
     (irule emit_op_run_control_frame >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `r0.vs_initial_fmp = initial.vs_initial_fmp /\ r0.vs_fmp = initial.vs_fmp` by
+    metis_tac[decoder_setup_emit_fmp_frame] >>
+  `r3.vs_initial_fmp = r0.vs_initial_fmp /\ r3.vs_fmp = r0.vs_fmp` by
+    metis_tac[decoder_setup_scaled_fmp_frame] >>
   `eval_operand idx r0 = SOME (n2w j)` by
     (qpat_assum `emit_op MLOAD _ st = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
      gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
@@ -1194,16 +1238,17 @@ Resume calldata_array_element_setup_endpoint_ptr_origin_core_exact_frame[optiona
     u4.t_mem = u3.t_mem /\ u4.t_stor = u3.t_stor /\ u4.t_trans = u3.t_trans /\
     (!x. not_fresh_at c3 x ==> lookup_var x r4 = lookup_var x r3 /\
       FLOOKUP H4 x = FLOOKUP H3 x /\ op_taint u4 (Var x) = op_taint u3 (Var x)) /\
+    r4.vs_initial_fmp = r3.vs_initial_fmp /\ r4.vs_fmp = r3.vs_fmp /\
     r4.vs_allocas = r3.vs_allocas /\ u4.t_imm = u3.t_imm /\
     r4.vs_current_bb = r3.vs_current_bb /\
     (!D lower ctx' func.
-      fn_has_code c3 c4 func /\ allocas_from lower s3 /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code c3 c4 func /\ allocas_from lower s3 /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s3) /\
       s3.vs_current_bb = c3.cs_current_bb /\ s3.vs_inst_idx = LENGTH c3.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG H4 u4
         (r4 with vs_inst_idx := LENGTH c4.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG H3 u3 s3) /\
     (!D lower explicit ctx' func.
-      fn_has_code c3 c4 func /\ allocas_from lower s3 /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code c3 c4 func /\ allocas_from lower s3 /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s3) /\
       ~s3.vs_halted /\ s3.vs_current_bb = c3.cs_current_bb /\
       s3.vs_inst_idx = LENGTH c3.cs_current_insts ==>
       gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s3,H3,u3) []
@@ -1242,6 +1287,17 @@ Resume calldata_array_element_setup_endpoint_ptr_origin_core_exact_frame[dynamic
   drule_all calldata_dynamic_element_source_endpoint_ptr_origin_core_exact_frame >>
   disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   fs[Abbr `s3`, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
+  `r4.vs_initial_fmp = r3.vs_initial_fmp /\ r4.vs_fmp = r3.vs_fmp` by
+    (`EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts c3 c4)` by
+       (qpat_assum `compile_abi_decode_dyn_elem_ptr _ _ _ _ _ _ _ = _` mp_tac >>
+        simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
+          emit_void_def, emit_def, fresh_id_def, fresh_var_def, emitted_insts_def] >>
+        strip_tac >> gvs[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+        gvs[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
+     qpat_assum `run_inst_seq (emitted_insts c3 c4) r3 = OK r4`
+       (fn th => assume_tac (MATCH_MP run_inst_seq_initial_fmp th)) >>
+     drule decoder_run_world_frame >> disch_then drule >> metis_tac[]) >>
   qexistsl_tac [`HG`,`u`] >> simp[]
 QED
 
@@ -1261,7 +1317,7 @@ Resume calldata_array_element_setup_endpoint_ptr_origin_core_exact_frame[compose
   `op_taint u child_src = {} /\ op_prov HG child_src = NONE` by
     (Cases_on `child_src` >> fs[op_taint_def, op_prov_def] >> metis_tac[]) >>
   `!D lower ctx' func.
-    fn_has_code st ready func /\ allocas_from lower initial /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code st ready func /\ allocas_from lower initial /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp initial) /\
     initial.vs_current_bb = st.cs_current_bb /\
     initial.vs_inst_idx = LENGTH st.cs_current_insts /\
     (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
@@ -1283,21 +1339,21 @@ Resume calldata_array_element_setup_endpoint_ptr_origin_core_exact_frame[compose
       (r4 with vs_inst_idx := LENGTH c4.cs_current_insts)` by
      (qpat_x_assum `!D lower ctx' func. fn_has_code c4 ready func /\ _ ==> _`
         (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >>
-      gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+      gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     `!fuel. ptr_safe_run D lower fuel ctx' func PG H3 u3
       (r3 with vs_inst_idx := LENGTH c3.cs_current_insts)` by
      (qpat_x_assum `!D lower ctx' func. fn_has_code c3 c4 func /\ _ ==> _`
         (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >>
-      gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+      gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     `!fuel. ptr_safe_run D lower fuel ctx' func PG H0 u0
       (r0 with vs_inst_idx := LENGTH c0.cs_current_insts)` by
      (qpat_x_assum `!D lower ctx' func. fn_has_code c0 c3 func /\ _ ==> _`
         (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >>
-      gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+      gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     qpat_x_assum `!D lower ctx' func. fn_has_code st c0 func /\ _ ==> _`
       (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >> simp[]) >>
   `!D lower explicit ctx' func.
-    fn_has_code st ready func /\ allocas_from lower initial /\ ~ctx_has_dalloca ctx' /\
+    fn_has_code st ready func /\ allocas_from lower initial /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp initial) /\
     ~initial.vs_halted /\ slot + 32 <= initial.vs_alloca_next /\
     initial.vs_current_bb = st.cs_current_bb /\
     initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -1326,7 +1382,7 @@ Resume calldata_array_element_setup_endpoint_ptr_origin_core_exact_frame[compose
       (OK (r3 with vs_inst_idx := LENGTH c3.cs_current_insts),H3,u3)` by
       (qpat_x_assum `!D lower explicit ctx' func. fn_has_code c0 c3 func /\ _ ==> _`
          (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
-       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+       gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     `~r3.vs_halted` by
       (qpat_assum `gas_origin_ptr_path _ _ [] (OK (r3 with vs_inst_idx := _),_,_)`
         (mp_tac o MATCH_MP (cj 2 gas_origin_ptr_path_projections)) >>
@@ -1336,7 +1392,7 @@ Resume calldata_array_element_setup_endpoint_ptr_origin_core_exact_frame[compose
       (OK (r4 with vs_inst_idx := LENGTH c4.cs_current_insts),H4,u4)` by
       (qpat_x_assum `!D lower explicit ctx' func. fn_has_code c3 c4 func /\ _ ==> _`
          (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
-       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+       gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     `~r4.vs_halted` by
       (qpat_assum `gas_origin_ptr_path _ _ [] (OK (r4 with vs_inst_idx := _),_,_)`
         (mp_tac o MATCH_MP (cj 2 gas_origin_ptr_path_projections)) >>
@@ -1346,7 +1402,7 @@ Resume calldata_array_element_setup_endpoint_ptr_origin_core_exact_frame[compose
       (OK (t with vs_inst_idx := LENGTH ready.cs_current_insts),HG,u)` by
       (qpat_x_assum `!D lower explicit ctx' func. fn_has_code c4 ready func /\ _ ==> _`
          (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
-       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
+       gvs[allocas_from_def, same_blocks_def, allocas_below_fmp_def] >> metis_tac[]) >>
     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
   qexistsl_tac [`HG`,`u`] >> simp[] >>
   irule frag_exec_ptr_seq >>
@@ -1389,14 +1445,14 @@ Theorem calldata_array_element_setup_endpoint_ptr_origin_core:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     t.vs_allocas = initial.vs_allocas /\ u.t_imm = tn.t_imm /\
     (!D lower ctx' func.
-      fn_has_code st ready func /\ allocas_from lower initial /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower initial /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp initial) /\
       initial.vs_current_bb = st.cs_current_bb /\
       initial.vs_inst_idx = LENGTH st.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn initial) /\
     (!D lower explicit ctx' func.
-      fn_has_code st ready func /\ allocas_from lower initial /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st ready func /\ allocas_from lower initial /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp initial) /\
       ~initial.vs_halted /\ slot + 32 <= initial.vs_alloca_next /\
       initial.vs_current_bb = st.cs_current_bb /\
       initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -1449,7 +1505,7 @@ Theorem calldata_array_element_setup_endpoint_ptr_core:
 Proof
   rpt strip_tac >> drule_all calldata_array_element_setup_endpoint_ptr_origin_core >>
   disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`HG`,`u`,`child`] >> simp[]
+  qexistsl_tac [`HG`,`u`,`child`] >> simp[] >> metis_tac[]
 QED
 
 Theorem calldata_array_element_setup_endpoint_ptr:

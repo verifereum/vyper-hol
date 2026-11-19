@@ -124,6 +124,7 @@ Proof
   `not_fresh_at st root /\ (!q. src = Var q ==> not_fresh_at st q)` by
     (Cases_on `src` >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all calldata_member_setup_joint_modular >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `r.vs_call_ctx = s.vs_call_ctx` by

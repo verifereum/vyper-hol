@@ -67,21 +67,21 @@ Theorem emit_calldatacopy_endpoint_ptr_origin_joint:
       op_taint u (Var x) = op_taint tn (Var x)) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     (!D lower ctx func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
       s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx func PG H u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn s) /\
     (!D lower explicit ctx func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
       ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       w2n dw + w2n nw <= s.vs_alloca_next ==>
       gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
         (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u)) /\
     (!lower ctx func. fn_has_code sa sb func /\ allocas_from lower s /\
-      ~ctx_has_dalloca ctx /\ s.vs_current_bb = sa.cs_current_bb /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
       alloca_inv s /\ w2n dw + w2n nw <= s.vs_alloca_next ==>
       alloca_inv t)
@@ -161,14 +161,14 @@ Theorem emit_calldatacopy_endpoint_ptr_origin:
       op_taint u (Var x) = op_taint tn (Var x)) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     (!D lower ctx func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
       s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx func PG H u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn s) /\
     (!D lower explicit ctx func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
       ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       w2n dw + w2n nw <= s.vs_alloca_next ==>
@@ -254,7 +254,7 @@ Theorem calldata_bulk_payload_endpoint_ptr_uniform_origin_joint:
   32 + n * mem_sz <= capacity /\ d + 32 < dimword (:256) /\
   n * mem_sz < dimword (:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?H u.
@@ -309,6 +309,9 @@ Proof
    s2.vs_alloca_next = s1.vs_alloca_next /\ s3.vs_alloca_next = s2.vs_alloca_next /\
    s1.vs_allocas = s.vs_allocas /\ s2.vs_allocas = s1.vs_allocas /\
    s3.vs_allocas = s2.vs_allocas /\
+   s1.vs_fmp = s.vs_fmp /\ s2.vs_fmp = s1.vs_fmp /\ s3.vs_fmp = s2.vs_fmp /\
+   s1.vs_initial_fmp = s.vs_initial_fmp /\
+   s2.vs_initial_fmp = s1.vs_initial_fmp /\ s3.vs_initial_fmp = s2.vs_initial_fmp /\
    s1.vs_halted = s.vs_halted /\ s2.vs_halted = s.vs_halted /\
    s3.vs_halted = s.vs_halted` by
     (imp_res_tac emitted_insts_emit_op >>
@@ -432,6 +435,15 @@ Proof
    allocas_from lower (s2 with vs_inst_idx := LENGTH c2.cs_current_insts) /\
    allocas_from lower (s3 with vs_inst_idx := LENGTH c3.cs_current_insts)` by
     (fs[allocas_from_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp
+       (s1 with vs_inst_idx := LENGTH c1.cs_current_insts)) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp
+       (s2 with vs_inst_idx := LENGTH c2.cs_current_insts)) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp
+       (s3 with vs_inst_idx := LENGTH c3.cs_current_insts))` by
+    (Cases_on `ctx_has_dalloca ctx` >> fs[] >>
+     qpat_assum `allocas_below_fmp s` mp_tac >>
+     simp[allocas_below_fmp_def]) >>
   `alloca_inv s ==> alloca_inv t` by
     (strip_tac >> irule localPtrsPropsTheory.alloca_inv_fields >>
      qexists_tac `s` >> simp[]) >>
@@ -473,7 +485,7 @@ Theorem calldata_bulk_payload_endpoint_ptr_uniform_origin:
   32 + n * mem_sz <= capacity /\ d + 32 < dimword (:256) /\
   n * mem_sz < dimword (:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?H u.
@@ -521,7 +533,9 @@ Theorem calldata_bulk_payload_endpoint_ptr:
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
      !fuel. ptr_safe_run D lower fuel ctx func PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_bulk_payload_endpoint_ptr_uniform_origin >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_bulk_payload_endpoint_ptr_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`H`,`u`] >> simp[]
 QED
