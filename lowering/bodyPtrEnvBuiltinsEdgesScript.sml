@@ -200,7 +200,8 @@ Theorem single_output_ghost_inv:
   (step_taint (mk_inst id opc ops [out]) s t tn).t_mem = tn.t_mem /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient /\
-  opc <> CALL /\ opc <> SSTORE /\ opc <> TSTORE /\ opc <> ISTORE ==>
+  opc <> CALL /\ opc <> DELEGATECALL /\ opc <> CREATE /\ opc <> CREATE2 /\
+  opc <> SSTORE /\ opc <> TSTORE /\ opc <> ISTORE ==>
   ghost_inv H d cenv cx es (step_prov PG G (mk_inst id opc ops [out]) t)
     (step_taint (mk_inst id opc ops [out]) s t tn) t
 Proof
