@@ -81,6 +81,15 @@ Proof
   ho_match_mp_tac cfg_norm_cursors_ind >> simp[] >> metis_tac[]
 QED
 
+Theorem cover_cfg_cursors_frame:
+  !C rounds cursors. cfg_norm_cursors C rounds cursors ==>
+  execution_frame (SND (FST (HD cursors))) =
+  execution_frame (SND (FST (LAST cursors)))
+Proof
+  ho_match_mp_tac cfg_norm_cursors_ind >> simp[] >>
+  rpt strip_tac >> fs[supply_state_agree_def]
+QED
+
 Theorem cfg_norm_cursors_admin_opcode:
   !C rs cs. cfg_norm_cursors C rs cs /\
     MEM (FST (FST (HD cs))).inst_opcode [ASSIGN; JMP; JNZ] ==>

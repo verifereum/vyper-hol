@@ -2,6 +2,7 @@
    equation over the calldata in the current call context. *)
 Theory selectedAcceptedArrayLoop
 Ancestors
+  decoderOriginAllocationFrame
   selectedAcceptedArrayStep
   selectedAcceptedInterfaces decoderLoopHeaderCorePtr decoderGhostFramePtr
   calldataMemberResourceFrame calldataSourceCorrespondence
@@ -42,7 +43,7 @@ Theorem selected_array_exit_edge[local]:
   DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem /\
   eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\
   abi_decode_load CALLDATALOAD (n2w sb:bytes32) s = n2w cnt /\
-  cnt < dimword (:256) /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  cnt < dimword (:256) /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block body_lbl fn.fn_blocks = SOME body_bb /\
   phi_prefix_length body_bb.bb_instructions = 0 /\
   lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
@@ -113,7 +114,8 @@ Theorem selected_array_header_to_exit:
   eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   abi_decode_load CALLDATALOAD (n2w sb:bytes32) s = n2w cnt /\
   j + remaining = cnt /\ cnt < dimword (:256) /\ allocas_from lower s /\
-  lower <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  lower <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   lookup_block st.cs_current_bb fn.fn_blocks = SOME body_bb /\
   phi_prefix_length body_bb.bb_instructions = 0 /\ st.cs_current_insts = [] /\
   lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
@@ -183,6 +185,7 @@ Proof
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
       `j = cnt` by decide_tac >>
       `pending = []` by fs[Once cd_decode_def] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       mp_tac (Q.INST [`body_lbl` |-> `st.cs_current_bb`]
         (SPEC_ALL selected_array_exit_edge)) >>
       (impl_tac >- simp[]) >> strip_tac >>
@@ -209,6 +212,14 @@ Proof
   `!mem. mem_agree_outside tt.t_mem t.vs_memory mem ==> mem_word_at d mem = n2w cnt` by
     (rpt strip_tac >> irule selected_array_count_frame >>
      qexistsl_tac [`tn.t_mem`,`tt.t_mem`,`j*type_memory_size tv`,`t.vs_memory`,`s.vs_memory`] >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,Gmid,tt)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`fn_inst_ids_distinct fn`,`t.vs_fmp = s.vs_fmp`,`alloca_inv t`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   asm_x "ih" (qspecl_then [`t`,`Gmid`,`tt`,`SUC j`,`xs ++ [x]`,`rest`] mp_tac) >>
   (impl_tac >- (simp[] >> gvs[])) >>
   disch_then (qx_choose_then `out` (qx_choose_then `Gout`

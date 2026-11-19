@@ -112,7 +112,7 @@ Theorem external_value_reject_dispatch[local]:
   ?func opened checked min_cds tt G tn.
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
     fn_entry_label func = SOME "__entry" /\
-    ~ctx_has_dalloca unit.cu_context /\
+    (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp tt) /\
     compile_entry_checks min_cds F opened = ((),checked) /\
     fn_has_code opened checked func /\ opened.cs_current_insts = [] /\
     ~block_is_terminated opened /\ fresh_vars_wrt opened tt /\
@@ -291,7 +291,6 @@ Theorem external_value_reject_target[local]:
                  vs_inst_idx := 0|>))
 Proof
   strip_tac >> drule_all external_value_reject_dispatch >> strip_tac >>
-  `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp tt` by simp[] >>
   drule_all nonpayable_check_joint_reject >>
   disch_then (qspecl_then [`tn`, `[]`, `G`] mp_tac) >> strip_tac >>
   qexistsl_tac [`func`, `t`, `G'`, `tn'`] >> simp[] >>

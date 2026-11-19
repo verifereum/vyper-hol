@@ -1,6 +1,7 @@
 (* Accepted decoding of installed complex members on the real calldata. *)
 Theory selectedAcceptedMembers
 Ancestors
+  decoderOriginAllocationFrame
   selectedAcceptedInterfaces calldataExactMemberValues calldataMembersRawSubregion
   decoderMemberJointModular calldataEmptyArrayChild calldataSourceCorrespondence
   abiDecoderOffset abiDecoderDynamic abiDecoderMemberCons abiDecoderMemberCode abiDecoderComplexExecute
@@ -98,7 +99,7 @@ Theorem selected_member_setup_accepts[local]:
   ptr_covers G tn root s extent /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   vo + type_memory_size tv <= extent /\ d + extent < dimword (:256) /\
   mid.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
-  fn_has_code st mid fn /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st mid fn /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?r H u q p'.
@@ -124,7 +125,6 @@ Proof
   `not_fresh_at st root /\ (!q. src = Var q ==> not_fresh_at st q)` by
     (Cases_on `src` >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all calldata_member_setup_joint_modular >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `r.vs_call_ctx = s.vs_call_ctx` by
@@ -281,7 +281,8 @@ Theorem selected_member_run[local]:
   FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
   (oid < st.cs_next_id \/ en.cs_next_id <= oid) /\
   base_addr <= d /\ d + extent <= base_addr + cap /\
-  fresh_vars_wrt limit s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fresh_vars_wrt limit s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?v scratch J z.
@@ -298,6 +299,7 @@ Theorem selected_member_run[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `mid.cs_next_var <= limit.cs_next_var` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all selected_member_setup_accepts >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `r.vs_allocas = s.vs_allocas /\ r.vs_alloca_next = s.vs_alloca_next /\ ~r.vs_halted` by
@@ -319,6 +321,17 @@ Proof
    d+vo+type_memory_size tv < dimword (:256)` by decide_tac >>
   `!fp. abi_decode_footprint_frame fp s r` by
     (drule_all selected_setup_frame >> simp[]) >>
+  `r.vs_fmp = s.vs_fmp` by
+    (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>`
+       (fn th => pure_once_rewrite_tac [th]) >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp r /\
+    r.vs_alloca_next + pending_alloca_size fn r <= w2n r.vs_initial_fmp)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK r,H,u)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`fn_inst_ids_distinct fn`,`r.vs_fmp = s.vs_fmp`,`alloca_inv r`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   qpat_x_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>` kall_tac >>
   `eval_operand (Var q) r = SOME (n2w (d+vo)) /\ abi_decoder_operand_live mid.cs_next_var (Var q)` by
     metis_tac[] >>
@@ -504,7 +517,8 @@ Theorem selected_member_list_run[local]:
     FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
     (oid < st.cs_next_id \/ last.cs_next_id <= oid) /\
     base_addr <= d /\ d + extent <= base_addr + cap /\
-    fresh_vars_wrt limit s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    fresh_vars_wrt limit s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts ==>
     ?v scratch J z.
@@ -576,6 +590,18 @@ Proof
     (simp[abiDecoderMemberInfosTheory.abi_decoder_member_infos_def] >> metis_tac[]) >>
   `cd_decode_list F t.vs_call_ctx.cc_calldata tvs (w2n p) (ao + tv_abi_size tv) = SOME ys /\
    eval_operand (Var root) t = SOME (n2w d) /\ eval_operand src t = SOME p` by simp[] >>
+  `t.vs_fmp = s.vs_fmp` by
+    (qpat_assum `selected_member_frame st en (s,G,tn) (t,H,u)`
+       (strip_assume_tac o REWRITE_RULE [selected_member_frame_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,H,u)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`fn_inst_ids_distinct fn`,`t.vs_fmp = s.vs_fmp`,`alloca_inv t`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   last_x_assum (qspecl_then [`tvs`,`ys`,`ao + tv_abi_size tv`,`vo + type_memory_size tv`,
     `en`,`last`,`limit`,`ctx`,`fn`,`site`,`lo`,`PG`,`root`,`src`,`t`,`H`,`u`,`p`,`d`,`extent`,
     `oid`,`base_addr`,`cap`] mp_tac) >>
@@ -666,6 +692,12 @@ Proof
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE[selected_member_frame_def]) >>
   qpat_x_assum `selected_member_replays st last fn v`
     (assume_tac o REWRITE_RULE[selected_member_replays_def]) >>
+  `v.vs_initial_fmp = initial.vs_initial_fmp /\
+   v.vs_alloca_next + pending_alloca_size fn v <=
+     initial.vs_alloca_next + pending_alloca_size fn initial` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (initial,G,tn) [] (OK v,H,u)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >> simp[NoAsms]) >>
   qexistsl [`v`,`sc`,`H`,`u`] >>
   rpt conj_tac >>
   (first_assum ACCEPT_TAC ORELSE

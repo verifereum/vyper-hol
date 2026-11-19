@@ -1,6 +1,7 @@
 (* Assemble one positional slot using its actual calldata decoder. *)
 Theory selectedAcceptedSingleton
 Ancestors
+  decoderOriginAllocationFrame
   selectedAcceptedInterfaces entryPtrSeamRegister dispatchedDecoderTrace
   abiDecoderAppend abiDecoderCounters abiDecoderCode calldataRegistrationExec
   actualAllocExec venomInstIdsProps emitHelperProps exprSimProps
@@ -35,8 +36,6 @@ Proof
     metis_tac[venomInstIdsPropsTheory.fn_inst_ids_distinct_all_distinct] >>
   `dyn ==> abi_decode_load CALLDATALOAD (n2w (4+ofs) : bytes32) s = n2w delta /\
     4+delta < dimword (:256)` by simp[] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
   drule_all registration_argument_prepare_guarded_joint >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   rename1 `lookup_var q ready = SOME (n2w p)` >>
@@ -69,6 +68,14 @@ Proof
     metis_tac[] >>
   `compile_abi_decode_to_buf (Var q) src CALLDATALOAD (Lit 0w) (Lit 0w)
      (type_to_abi_dec_info sf ce ty) first = ((),last)` by metis_tac[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp ready /\
+    ready.vs_alloca_next + pending_alloca_size fn ready <= w2n ready.vs_initial_fmp)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK ready,H,u)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`fn_inst_ids_distinct fn`,`ready.vs_fmp = s.vs_fmp`,`alloca_inv ready`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   qpat_x_assum `selected_decoder_accepts ce env sf ty tv`
     (mp_tac o REWRITE_RULE [selected_decoder_accepts_def]) >>
   disch_then (qspecl_then [`first`, `last`, `last`, `ctx`, `fn`, `site`, `src`, `q`,
@@ -84,6 +91,12 @@ Proof
     (s,G,tn) [] (OK t,Ht,ut)` by
     (rpt gen_tac >> irule dispatched_decoder_joint_then >>
      qexistsl_tac [`H`, `ready`, `u`] >> simp[]) >>
+  `t.vs_initial_fmp = s.vs_initial_fmp /\
+   t.vs_alloca_next + pending_alloca_size fn t <=
+     s.vs_alloca_next + pending_alloca_size fn s` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,Ht,ut)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >> simp[NoAsms]) >>
   `ready.vs_code = s.vs_code` by
     (`gas_path_mem ctx fn s 0 (OK ready)` by
        metis_tac[selected_zero_path_mem] >>

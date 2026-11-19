@@ -19,14 +19,14 @@ Ancestors
    o1_ctx_shape C gives inst_shape_ok for every instruction (no DJMP or
    OFFSET); a memory access crosses only instructions that step OK
    (dftGasInvCrossingProbe's inv_crossed_predecessor_total). *)
-Theorem dft_ev_lowered_inv:
+Theorem dft_ev_lowered_inv_under_requests:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
   ctx_labels_bound C s.vs_labels /\ o1_run_state_ok s /\
-  (!p d fn inst t. ev_reachable orc s C p d fn inst t ==>
+  (!p d fn inst t. ev_reachable orc s C p d fn inst t /\ P t.vs_requests ==>
      lowered_mem_fact eom C fn inst t) ==>
-  !p d fn inst t. ev_reachable orc s C' p d fn inst t ==>
+  !p d fn inst t. ev_reachable orc s C' p d fn inst t /\ P t.vs_requests ==>
     lowered_mem_fact eom C' fn inst t
 Proof
   rpt strip_tac >> rename1 `ev_reachable orc s C' p d fn' inst t` >>
@@ -34,7 +34,8 @@ Proof
     (qpat_x_assum `ev_reachable orc s C' p d fn' inst t` mp_tac >>
      rewrite_tac[Once ev_reachable_cases] >> metis_tac[]) >>
   Cases_on `inv_memory_observation inst.inst_opcode`
-  >- (drule_all inv_reachable_memory_ranges >> strip_tac >>
+  >- (drule_all inv_reachable_memory_ranges_oracle >> strip_tac >>
+      `P sS.vs_requests` by gvs[] >>
       `lowered_mem_fact eom C fn inst sS` by metis_tac[] >>
       `active_inst fn inst sS` by
         (qpat_x_assum `ev_reachable orc s C p d fn inst sS` mp_tac >>
@@ -49,4 +50,18 @@ Proof
   `inst_shape_ok inst` by (irule inv_target_active_shape >> metis_tac[]) >>
   `inst_mem_ranges inst t = []` by metis_tac[inv_memory_observation_covers_ranges] >>
   simp[lowered_mem_fact_def, lowered_mem_ok_def]
+QED
+
+Theorem dft_ev_lowered_inv:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
+  ctx_labels_bound C s.vs_labels /\ o1_run_state_ok s /\
+  (!p d fn inst t. ev_reachable orc s C p d fn inst t ==>
+     lowered_mem_fact eom C fn inst t) ==>
+  !p d fn inst t. ev_reachable orc s C' p d fn inst t ==>
+    lowered_mem_fact eom C' fn inst t
+Proof
+  mp_tac (Q.INST [`P` |-> `\xs:call_request list. T`] dft_ev_lowered_inv_under_requests) >>
+  simp[]
 QED

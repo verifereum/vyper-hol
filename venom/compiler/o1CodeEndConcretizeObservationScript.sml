@@ -16,6 +16,76 @@ Ancestors
   concretizePtrPairedFields lowerDloadReachability
   concretizePtrStagePairedBridge concretizePtrHistoryCoverage
   concretizePtrCoverageStaticMemReachability concretizePtrChronologicalHistory
+  concretizePtrPrefixLedger
+
+(* Use the paired visit's request count to obtain the source taint fact. *)
+Theorem concretize_paired_codecopy_reflect:
+  o1_ctx_shape C /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  ptr_paired_prefix R lp positions lo vs C Ct h a ht
+    (ptr_observe stk PG G tn ft j t) done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  j = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  j.inst_opcode = CODECOPY /\ j.inst_operands = [dst; Var x; sz] /\
+  code_end_var ft x /\ eval_operand (Var x) t = SOME w /\
+  ptr_ledger_erases (dyn_floor C vs) births TG a.po_prov /\
+  (!stk PG G tn fn inst s.
+    frame_reachable vs C stk PG G tn fn inst s /\
+    LENGTH s.vs_requests = LENGTH t.vs_requests ==> taint_ok fn tn inst s) ==>
+  raw_reachable vs C a.po_fn a.po_inst a.po_state /\ a.po_inst = j /\
+  code_end_var a.po_fn x /\ eval_operand (Var x) a.po_state = SOME w /\
+  a.po_state.vs_labels = t.vs_labels /\
+  LENGTH a.po_state.vs_requests = LENGTH t.vs_requests
+Proof
+  strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+     a.po_fn a.po_inst a.po_state` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+  `MEM a.po_fn C.ctx_functions` by metis_tac[ptr_frame_context_membership] >>
+  `active_inst a.po_fn a.po_inst a.po_state` by
+    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frame_reachable_cases] >> metis_tac[]) >>
+  `MEM a.po_inst (fn_insts a.po_fn)` by
+    (fs[active_inst_def, fn_insts_MEM] >> metis_tac[lookup_block_MEM, MEM_EL]) >>
+  `fn_shape_ok a.po_fn` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
+  `a.po_inst.inst_opcode <> ALLOCA` by
+    (strip_tac >> gvs[concretize_inst_with_positions_def, AllCaseEqs(),
+                     mk_nop_inst_def, mk_assign_inst_def, ptr_observe_def]) >>
+  `j = a.po_inst` by
+    (fs[ptr_observe_def] >> metis_tac[concretize_positions_unchanged]) >>
+  `ptr_mixed_vars births positions TG a.po_taint a.po_fn ft a.po_state t /\
+   ptr_history_content a.po_taint a.po_state t` by
+    fs[ptr_paired_sample_def, ptr_observe_def] >>
+  `a.po_state.vs_labels = t.vs_labels /\
+   LENGTH a.po_state.vs_requests = LENGTH t.vs_requests` by
+    metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels,
+              concretizePtrRequestHistoryTheory.ptr_history_content_def,
+              concretizePtrRequestHistoryTheory.ptr_request_history_length] >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+     metis_tac[]) >>
+  `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by metis_tac[] >>
+  `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
+  drule_all ptr_frame_current_static >> strip_tac >>
+  `FDOM a.po_prov SUBSET fn_pv P a.po_fn` by
+    (fs[ptr_static_support_def, SUBSET_DEF, FLOOKUP_DEF] >>
+     metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  `opaque_use_ok a.po_fn` by fs[fn_shape_ok_def] >>
+  `eval_operand (Var x) a.po_state = eval_operand (Var x) t` by
+    (irule code_end_concretize_read_value >>
+     metis_tac[]) >>
+  `code_end_var (concretize_function_with_positions (lp a.po_fn) a.po_fn) x` by
+    (fs[ptr_paired_code_def, ptr_observe_def] >>
+     metis_tac[code_end_var_same_blocks]) >>
+  `code_end_var a.po_fn x` by metis_tac[concretize_code_end_backward] >>
+  simp[] >>
+  metis_tac[ld_frame_reachable_raw]
+QED
 
 Theorem concretize_codecopy_reflect_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -71,68 +141,27 @@ QED
 
 Resume concretize_codecopy_reflect_static[paired]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
-  rename1 `ptr_paired_prefix R lp positions lo vs C Ct source_history a _ _ done tokens registry births PT TG saved entries H calls ws` >>
-  drule ptr_paired_prefix_endpoint >> strip_tac >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_ownership >> strip_tac >>
-  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
-     a.po_fn a.po_inst a.po_state` by
-    (drule ptr_gap_ownership_history >> strip_tac >>
-     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by metis_tac[ptr_frame_context_membership] >>
-  `active_inst a.po_fn a.po_inst a.po_state` by
-    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[Once frame_reachable_cases] >> metis_tac[]) >>
-  `MEM a.po_inst (fn_insts a.po_fn)` by
-    (fs[active_inst_def, fn_insts_MEM] >> metis_tac[lookup_block_MEM, MEM_EL]) >>
-  `fn_shape_ok a.po_fn` by
-    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
-  `a.po_inst.inst_opcode <> ALLOCA` by
-    (strip_tac >> gvs[concretize_inst_with_positions_def, AllCaseEqs(),
-                     mk_nop_inst_def, mk_assign_inst_def, ptr_observe_def]) >>
-  `j = a.po_inst` by
-    (fs[ptr_observe_def] >> metis_tac[concretize_positions_unchanged]) >>
-  `ptr_mixed_vars births positions TG a.po_taint a.po_fn ft
-     a.po_state t /\ a.po_state.vs_labels = t.vs_labels` by
-    (fs[ptr_paired_sample_def, ptr_observe_def] >>
-     metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
-  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
-    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
-     metis_tac[]) >>
-  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
-  suspend "scalar"
-QED
-
-Resume concretize_codecopy_reflect_static[scalar]:
-  markerLib.RESUME_TAC >> rpt disch_tac >>
-  `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
   qpat_assum `ptr_discipline _ _ _` mp_tac >>
   pure_rewrite_tac[ptr_discipline_def] >>
   disch_then (qx_choose_then `P` strip_assume_tac o CONJUNCT2) >>
   `EVERY (fn_ptr_ok P) C.ctx_functions` by fs[EVERY_MEM] >>
-  `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
-  drule_all ptr_frame_current_static >> strip_tac >>
-  `FDOM a.po_prov SUBSET fn_pv P a.po_fn` by
-    (fs[ptr_static_support_def, SUBSET_DEF, FLOOKUP_DEF] >>
-     metis_tac[optionTheory.NOT_NONE_SOME]) >>
-  `opaque_use_ok a.po_fn` by fs[fn_shape_ok_def] >>
-  `eval_operand (Var x) a.po_state = eval_operand (Var x) t` by
-    (irule code_end_concretize_read_value >>
+  `!stk PG G tn fn inst s.
+    frame_reachable vs C stk PG G tn fn inst s /\
+    LENGTH s.vs_requests = LENGTH t.vs_requests ==> taint_ok fn tn inst s` by metis_tac[] >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
      metis_tac[]) >>
-  suspend "provenance"
-QED
-
-Resume concretize_codecopy_reflect_static[provenance]:
-  markerLib.RESUME_TAC >> rpt disch_tac >>
-  `code_end_var (concretize_function_with_positions (lp a.po_fn) a.po_fn) x` by
-    (fs[ptr_paired_code_def, ptr_observe_def] >>
-     metis_tac[code_end_var_same_blocks]) >>
-  `code_end_var a.po_fn x` by metis_tac[concretize_code_end_backward] >>
+  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
+  `j = concretize_inst_with_positions (lp a.po_fn) a.po_inst` by
+    (qpat_x_assum `(ptr_observe _ _ _ _ _ _ _).po_inst = _` mp_tac >>
+     simp[ptr_observe_def]) >>
+  drule_all concretize_paired_codecopy_reflect >> strip_tac >>
   qexistsl [`a.po_fn`, `a.po_inst`, `a.po_state`] >>
-  simp[] >>
-  metis_tac[ld_frame_reachable_raw]
+  qpat_x_assum `a.po_inst = j` SUBST_ALL_TAC >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume concretize_codecopy_reflect_static[corridor]:

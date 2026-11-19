@@ -75,13 +75,17 @@ Theorem code_end_ssa_read_reflect[local]:
   code_end_var g n /\ eval_operand (Var n) t = SOME w ==>
   ?a v b. i.inst_opcode = CODECOPY /\ i.inst_operands = [a; Var v; b] /\
     code_end_var f v /\ eval_operand (Var v) s = SOME w /\
-    t.vs_labels = s.vs_labels
+    t.vs_labels = s.vs_labels /\ s.vs_requests = t.vs_requests
 Proof
   strip_tac >>
   `?eb. entry_block f = SOME eb` by
     fs[fn_entry_label_def, AllCaseEqs()] >>
   drule_all code_end_ssa_paired_read >> strip_tac >>
   drule_all code_end_ssa_runtime_owner >> strip_tac >>
+  `execution_frame t = execution_frame s` by
+    (fs[current_lockstep_rel_def, makeSsaCurrentCutInvTheory.current_cut_inv_def,
+        o1FrameLockstepTheory.state_rel_def]) >>
+  drule execution_frame_fields >> strip_tac >>
   metis_tac[]
 QED
 
@@ -105,7 +109,7 @@ Theorem code_end_ssa_certified_context[local]:
       eval_operand (Var n) t = SOME w ==>
       ?a v b. i.inst_opcode = CODECOPY /\ i.inst_operands = [a; Var v; b] /\
         code_end_var f v /\ eval_operand (Var v) s = SOME w /\
-        t.vs_labels = s.vs_labels) L C C'
+        t.vs_labels = s.vs_labels /\ s.vs_requests = t.vs_requests) L C C'
 Proof
   strip_tac >>
   `ctx_bisim C C'` by metis_tac[make_ssa_stage_bisim] >>
@@ -137,6 +141,41 @@ Proof
   fs[EVERY_MEM, fn_entry_label_def] >> metis_tac[MEM_EL]
 QED
 
+Theorem code_end_ssa_stage_bound_under_requests:
+  ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+  o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  EVERY (\f. !x. code_end_var f x ==> ?d op. MEM d (fn_insts f) /\
+    d.inst_opcode = ADD /\ d.inst_operands = [op; Label "code_end"] /\
+    d.inst_outputs = [x] /\
+    (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
+    (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
+      MEM (Var x) j.inst_operands ==>
+      j.inst_opcode = CODECOPY /\
+      (?dst sz. j.inst_operands = [dst; Var x; sz] /\
+        dst <> Var x /\ sz <> Var x) /\
+      ?a b. bb.bb_instructions = a ++ [d;j] ++ b)) C.ctx_functions /\
+  code_end_offset_ok (\ctx fn inst s. raw_reachable vs ctx fn inst s /\ P s.vs_requests) C ==>
+  code_end_offset_ok (\ctx fn inst s. raw_reachable vs ctx fn inst s /\ P s.vs_requests) C'
+Proof
+  strip_tac >> drule_all code_end_ssa_certified_context >>
+  disch_then (qspec_then `vs.vs_labels` assume_tac) >>
+  simp[code_end_offset_ok_def] >> rpt strip_tac >>
+  drule ptr_raw_reachable_frame >> strip_tac >>
+  drule_all code_end_frame_reachable_certified >>
+  disch_then (qx_choosel_then
+    [`source_stack`,`source_ghost`,`source_token`,`source_fn`,`source_inst`,
+     `source_state`,`source_pos`,`target_ghost`,`positions`,`relation`]
+    strip_assume_tac) >>
+  `raw_reachable vs C source_fn source_inst source_state` by
+    (irule frame_reachable_raw >> reverse conj_tac
+     >- (goal_assum $ drule_at Any) >>
+     fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM]) >>
+  fs[] >> first_x_assum drule_all >> strip_tac >>
+  `P source_state.vs_requests` by metis_tac[] >>
+  fs[code_end_offset_ok_def] >> metis_tac[]
+QED
+
 Theorem code_end_ssa_stage_bound:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
@@ -154,21 +193,10 @@ Theorem code_end_ssa_stage_bound:
   code_end_offset_ok (raw_reachable vs) C ==>
   code_end_offset_ok (raw_reachable vs) C'
 Proof
-  strip_tac >> drule_all code_end_ssa_certified_context >>
-  disch_then (qspec_then `vs.vs_labels` assume_tac) >>
-  simp[code_end_offset_ok_def] >> rpt strip_tac >>
-  drule ptr_raw_reachable_frame >> strip_tac >>
-  drule_all code_end_frame_reachable_certified >>
-  disch_then (qx_choosel_then
-    [`source_stack`,`source_ghost`,`source_token`,`source_fn`,`source_inst`,
-     `source_state`,`source_pos`,`target_ghost`,`positions`,`relation`]
-    strip_assume_tac) >>
-  `raw_reachable vs C source_fn source_inst source_state` by
-    (irule frame_reachable_raw >> reverse conj_tac
-     >- (goal_assum $ drule_at Any) >>
-     fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM]) >>
-  fs[] >> first_x_assum drule_all >> strip_tac >>
-  fs[code_end_offset_ok_def] >> metis_tac[]
+  `(\ctx fn inst s. raw_reachable vs ctx fn inst s) = raw_reachable vs` by
+    simp_tac bool_ss [FUN_EQ_THM] >>
+  mp_tac (Q.INST [`P` |-> `\_. T`] code_end_ssa_stage_bound_under_requests) >>
+  asm_simp_tac bool_ss []
 QED
 
 Theorem make_ssa_code_end_run_contract:

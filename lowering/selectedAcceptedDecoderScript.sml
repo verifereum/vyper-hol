@@ -2,6 +2,7 @@
    the same concrete header and ghost state. *)
 Theory selectedAcceptedDecoder
 Ancestors
+  decoderOriginAllocationFrame
   selectedAcceptedInduction selectedAcceptedArrayPrepare selectedAcceptedArrayLoop
   selectedAcceptedInterfaces calldataMemberResourceFrame calldataDynOwned
   abiDecoderCoherence abiDecoderReentry abiDecoderFrame entryDecoderStateFrame
@@ -78,6 +79,16 @@ Proof
   `n < dimword (:256) /\ live <= st0.cs_next_var /\
    middle.cs_next_var <= limit.cs_next_var /\ st1.cs_next_var <= limit.cs_next_var /\
    st1.cs_next_var < limit.cs_next_var /\ st.cs_next_id <= middle.cs_next_id` by decide_tac >>
+  `h.vs_fmp = s.vs_fmp` by
+    (qpat_assum `entry_decoder_obs s h` (ACCEPT_TAC o MATCH_MP entry_decoder_obs_fmp)) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp h /\
+    h.vs_alloca_next + pending_alloca_size fn h <= w2n h.vs_initial_fmp)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK h,Gh,th)`
+       (qspecl_then [`ARB`,`{}`] mp_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`fn_inst_ids_distinct fn`,`h.vs_fmp = s.vs_fmp`,`alloca_inv h`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   mp_tac (SIMP_RULE bool_ss [ADD_CLAUSES, LENGTH, EVERY_DEF, APPEND,
       prim_recTheory.NOT_LESS_0, n2w_w2n]
     (Q.INST [`j` |-> `0`, `xs` |-> `[]`, `sb` |-> `w2n (p:bytes32)`,
@@ -169,6 +180,12 @@ Proof
   qpat_x_assum `calldata_member_resource_frame _ _ _ _ _ _ st.cs_next_var _ _ s v _`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE
        [calldata_member_resource_frame_def, calldata_member_own_def, calldata_member_wit_def]) >>
+  `v.vs_initial_fmp = s.vs_initial_fmp /\
+   v.vs_alloca_next + pending_alloca_size fn v <=
+     s.vs_alloca_next + pending_alloca_size fn s` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK v,Hv,tvn)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >> simp[NoAsms]) >>
   qexistsl_tac [`v`,`(slot,32)::sc`,`Hv`,`tvn`] >>
   asm_rewrite_tac[LENGTH]
 QED
