@@ -75,7 +75,9 @@ Theorem calldata_bytestring_decoder_typed_robust_uniform:
     (!mem. mem_agree_outside tn'.t_mem s'.vs_memory mem ==>
       val_in_memory tv v (w2n dw) mem)
 Proof
-  strip_tac >> drule_all calldata_bytestring_decoder_prefix_framed_uniform >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all calldata_bytestring_decoder_prefix_framed_uniform >>
   disch_then (qspec_then `PG`
     (qx_choose_then `s'` (qx_choose_then `G'`
       (qx_choose_then `tn'` strip_assume_tac)))) >>

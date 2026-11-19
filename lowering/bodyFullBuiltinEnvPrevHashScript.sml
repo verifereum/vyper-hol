@@ -38,6 +38,7 @@ Proof
      (run_inst_seq (emitted_insts sa sb) s0)` by
     (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >> fs[EVERY_MEM]) >>
   gvs[vars_ext_result_def] >> rename1 `vars_ext tt t` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
   drule_all env_prevhash_seq_ghosts >>
   disch_then (qspecl_then [`tn0`, `func`, `es`, `d`, `cx`, `PG`, `G0`] strip_assume_tac) >>
   `(?bb rest. lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\

@@ -13,7 +13,7 @@ Theorem installed_dispatch_value_reject_ptr:
   fresh_vars_wrt st ss /\ ~ss.vs_halted /\
   ss.vs_current_bb = st.cs_current_bb /\
   ss.vs_inst_idx = 0 /\ st.cs_current_insts = [] /\
-  allocas_from lo ss /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo ss /\ (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
   ss.vs_call_ctx.cc_callvalue <> 0w /\
   compile_entry_checks min_cds F opened = ((),checked) /\
   fn_has_code opened checked fn /\ ~block_is_terminated opened /\
@@ -151,7 +151,7 @@ Theorem installed_dispatch_value_reject_origin:
   fresh_vars_wrt st ss /\ ~ss.vs_halted /\
   ss.vs_current_bb = st.cs_current_bb /\
   ss.vs_inst_idx = 0 /\ st.cs_current_insts = [] /\
-  allocas_from lo ss /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo ss /\ (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
   ss.vs_call_ctx.cc_callvalue <> 0w /\
   compile_entry_checks min_cds F opened = ((),checked) /\
   fn_has_code opened checked fn /\ ~block_is_terminated opened /\

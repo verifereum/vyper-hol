@@ -168,8 +168,9 @@ Proof
                wordsTheory.WORD_ADD_COMM]) >>
   drule_all ld_owned_vars_update >>
   disch_then (qspec_then `out` mp_tac) >>
-  simp[ld_step_prov_def, ld_out_prov_def, step_taint_def, out_taint_def,
-       ld_owned_vars_def, op_taint_def, Abbr `sx`, Abbr `tx`]
+  simp[ld_step_prov_def, ld_out_prov_def] >>
+  simp[step_taint_def, out_taint_def] >>
+  simp[ld_owned_vars_def, op_taint_def, Abbr `sx`, Abbr `tx`]
 QED
 
 Theorem ld_owned_offset_backward:

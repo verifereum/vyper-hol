@@ -93,12 +93,10 @@ Ancestors
   (* closed-world request-cut guard and producer *)
   e2eOutcomesProducer
   (* providers awaiting their consumers *)
-  bodyFullTypeBuiltinConvert bodyFullTypeBuiltinExtract32
-  bodyFullTypeBuiltinWords bodyFullTypeBuiltinEmpty
-  bodyFullTypeBuiltinAbiEncode
   bodyPtrTypeBuiltinsBytesUintSemantics
   internalReturnMemoryMem bodyFullIntCallByteFrame
-  bodyFullIntCall compileExprAllocaFresh
+  bodyFullIntCall bodyFullIntCallCallee[qualified,ignore_grammar]
+  bodyFullIntCallArgs[qualified,ignore_grammar] compileExprAllocaFresh
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa
   assignBasePtrStoragePath assignTuplePtrBytesCopy

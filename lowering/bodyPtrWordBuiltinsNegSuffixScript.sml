@@ -63,7 +63,7 @@ QED
 Theorem word_neg_inst_ok:
   MEM opc [SGT; SUB; ASSERT] /\
   (!arg. MEM arg args ==> op_taint tn arg = {}) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id opc args outs) s
 Proof
   strip_tac >>
@@ -74,7 +74,7 @@ QED
 
 Theorem word_neg_checked_sequence:
   eval_operand v s = SOME w /\ op_taint tn v = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'. inst_seq_ptr D lo ctx fn PG G tn
     [mk_inst id SGT [v; Lit bound] [x];
      mk_inst (id + 1) ASSERT [Var x] [];
@@ -92,6 +92,8 @@ Proof
     (simp[Abbr `tn1`] >> irule word_arithmetic_output_clean >> simp[mk_inst_def]) >>
   `allocas_from lo s1` by
     (gvs[Abbr `s1`, allocas_from_def, update_var_def] >> metis_tac[]) >>
+  `allocas_below_fmp s1 <=> allocas_below_fmp s` by
+    simp[Abbr `s1`, allocas_below_fmp_def, update_var_def] >>
   `ptr_inst_ok D lo 0 ctx fn G1 tn1 (mk_inst (id + 1) ASSERT [Var x] []) s1` by
     (irule word_neg_inst_ok >> simp[]) >>
   `eval_operand (Var x) s1 = SOME (bool_to_word (w > bound))` by
@@ -111,8 +113,11 @@ Proof
   `op_taint tn2 v = op_taint tn1 v` by
     (Cases_on `v` >> simp[Abbr `tn2`, op_taint_def, step_taint_def,
        mk_inst_def, set_var_taint_def, DRESTRICT_UNIV] >> gvs[op_taint_def]) >>
+  `allocas_below_fmp s2 <=> allocas_below_fmp s` by
+    simp[Abbr `s2`, Abbr `s1`, allocas_below_fmp_def, update_var_def] >>
   `ptr_inst_ok D lo 0 ctx fn G2 tn2 (mk_inst (id + 2) SUB [Lit 0w; v] [y]) s2` by
-    (irule word_neg_inst_ok >> simp[Abbr `s2`, allocas_from_def] >>
+    (irule word_neg_inst_ok >> simp[] >>
+     simp[Abbr `s2`, allocas_from_def] >>
      rpt strip_tac >> gvs[] >> simp[op_taint_def] >>
      gvs[allocas_from_def] >> metis_tac[]) >>
   simp[Once inst_seq_ptr_def] >>
@@ -122,7 +127,7 @@ QED
 
 Theorem word_neg_emitted_checked:
   compile_neg v ty sa = (op,sb) /\ eval_operand v s = SOME w /\
-  op_taint tn v = {} /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn v = {} /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn'
 Proof
   strip_tac >> drule word_neg_emitted_insts >> strip_tac >>
@@ -144,7 +149,7 @@ QED
 Theorem word_neg_counted_normal:
   compile_neg v ty sa = (op,sb) /\ fresh_vars_wrt sa s /\
   eval_operand v s = SOME w /\ op_taint tn v = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   w2i (FST (type_bounds ty)) < w2i w ==>
@@ -164,7 +169,7 @@ QED
 Theorem word_neg_counted_abort:
   compile_neg v ty sa = (op,sb) /\ fresh_vars_wrt sa s /\
   eval_operand v s = SOME w /\ op_taint tn v = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(w2i (FST (type_bounds ty)) < w2i w) ==>
