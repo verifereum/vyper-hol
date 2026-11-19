@@ -23,7 +23,7 @@ Theorem bop_in_literal_clean_uniform:
   EVERY (\x. !p. x = Var p ==> not_fresh_at sm p) (needle::xs) /\
   op_prov G needle = NONE /\ op_taint tn needle = {} /\
   EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G' tn'.
     run_inst_seq (emitted_insts sm sb) (drop_fresh sm s) = OK u /\
     eval_operand dst u = SOME (bool_to_word (if bop = In then MEM v vs else ~MEM v vs)) /\
@@ -35,10 +35,12 @@ Theorem bop_in_literal_clean_uniform:
       op_taint tn' (Var p) = op_taint tn (Var p))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all literal_typed_clean_run >>
   disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
   qexistsl_tac [`u`,`G'`,`tn'`] >> simp[] >>
   map_every qx_gen_tac [`D`,`k`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all literal_typed_clean_run >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   `G' = G'' /\ tn' = tn''` by
@@ -57,7 +59,7 @@ Theorem bop_in_literal_actual_uniform:
   EVERY (\x. !p. x = Var p ==> not_fresh_at sm p) (needle::xs) /\
   op_prov G needle = NONE /\ op_taint tn needle = {} /\
   EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G' tn'.
     run_inst_seq (emitted_insts sm sb) s = OK u /\
     eval_operand dst u = SOME (bool_to_word (if bop = In then MEM v vs else ~MEM v vs)) /\
@@ -81,6 +83,10 @@ Proof
   `inst_seq_ptr ARB 0 ctx fn PG G tn (emitted_insts sm sb)
      (drop_fresh sm s) G' tn'` by
     (qpat_x_assum `!D k. _` (qspecl_then [`ARB`,`(drop_fresh sm s).vs_inst_idx`] mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (drop_fresh sm s)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[drop_fresh_def, ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all scalar_inst_seq_ptr_vars_ext >> strip_tac >>
   qexistsl_tac [`u1`,`G'`,`tn'`] >> simp[] >>
   `eval_operand dst u1 = SOME (bool_to_word (if bop = In then MEM v vs else ~MEM v vs))` by
@@ -279,6 +285,7 @@ Theorem bop_in_literal_continuation_full_exit:
     R
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_in_literal_actual_uniform >>
   disch_then (qspecl_then [`func`,`PG`] strip_assume_tac) >>
   `sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\

@@ -84,7 +84,7 @@ QED
 Theorem word_scale_sequence_checked:
   compile_as_wei_value_int v m F sa = (op,sb) /\ m <> 1 /\
   op_prov G v = NONE /\ op_taint tn v = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
@@ -101,38 +101,56 @@ Proof
   drule word_scale_emitted_dependency >> strip_tac >>
   drule word_scale_outputs_fresh >>
   disch_then (qspec_then `sc` mp_tac) >> strip_tac >>
-  irule (word_scalar_sequence |> Q.INST
+  mp_tac (word_scalar_sequence |> Q.INST
     [`P` |-> `\B HG th u.
       (!x. x IN B ==> FLOOKUP HG x = NONE /\ op_taint th (Var x) = {}) /\
-      allocas_from lo u /\ ghost_inv H d cenv cx es HG th u /\
-      ghost_kept cenv e0 sc G0 tn0 s0 HG th`] |> BETA_RULE) >>
-  simp[] >>
-  conj_tac >- simp[word_abs_allocas_index, word_interval_ghost_inv_index] >>
+      allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+      ghost_inv H d cenv cx es HG th u /\
+      ghost_kept cenv e0 sc G0 tn0 s0 HG th`] |> BETA_RULE
+    |> Q.SPECL [`emitted_insts sa sb`, `{z | v = Var z}`, `G`, `tn`, `s`]) >>
+  (impl_tac >- (simp[] >>
+  conj_tac >- fs[EVERY_MEM] >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >> fs[EVERY_MEM] >>
-      `MEM i.inst_opcode [MUL; Div; EQ; ISZERO; OR; ASSERT]` by metis_tac[MEM] >>
-      `(i.inst_opcode = ASSERT ==> ?v. i.inst_operands = [v] /\ i.inst_outputs = []) /\
-       (i.inst_opcode <> ASSERT ==> ?x. i.inst_outputs = [x])` by metis_tac[] >>
-      conj_tac
-      >- (gen_tac >> disch_tac >> irule word_scale_scalar_transfer >>
-          reverse conj_tac >- metis_tac[MEM] >>
-          qexists_tac `B` >> simp[] >> metis_tac[MEM]) >>
-      conj_tac >- (irule word_scale_step_allocas >>
-        qexistsl_tac [`i`, `u`] >> simp[] >> metis_tac[]) >>
-      conj_tac >- (irule word_scale_step_ghost_inv >> simp[] >>
-        fs[local_ptrs_reserved_def] >> metis_tac[MEM]) >>
-      irule word_scale_step_ghost_kept >> simp[] >> metis_tac[MEM]) >>
+  >- (rpt strip_tac >>
+      gvs[word_abs_allocas_index, word_interval_ghost_inv_index,
+        allocas_below_fmp_def, op_prov_def] >> metis_tac[]) >>
   conj_tac
-  >- (rpt strip_tac >> irule word_scale_inst_ok >> gvs[EVERY_MEM] >>
-      rpt strip_tac >> Cases_on `arg` >> gvs[op_prov_def, op_taint_def] >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> gvs[op_prov_def]) >>
-  fs[EVERY_MEM]
+  >- (rpt gen_tac >> strip_tac >>
+      fs[word_abs_allocas_index, word_interval_ghost_inv_index,
+         allocas_below_fmp_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule word_scale_inst_ok >>
+      gvs[EVERY_MEM] >>
+      rpt strip_tac >> Cases_on `arg` >> gvs[op_prov_def, op_taint_def] >>
+      metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> fs[EVERY_MEM] >>
+  `MEM i.inst_opcode [MUL; Div; EQ; ISZERO; OR; ASSERT]` by metis_tac[MEM] >>
+  `(i.inst_opcode = ASSERT ==> ?v. i.inst_operands = [v] /\ i.inst_outputs = []) /\
+   (i.inst_opcode <> ASSERT ==> ?x. i.inst_outputs = [x])` by metis_tac[] >>
+  conj_tac
+  >- (gen_tac >> disch_tac >> irule word_scale_scalar_transfer >>
+      reverse conj_tac >- metis_tac[MEM] >>
+      qexists_tac `B` >> simp[] >> metis_tac[MEM]) >>
+  conj_tac >- (irule word_scale_step_allocas >>
+    qexistsl_tac [`i`, `u`] >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (strip_tac >>
+      irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+      qexistsl [`[i]`, `u`] >>
+      simp[run_inst_seq_def] >>
+      qpat_x_assum `MEM i.inst_opcode [MUL; Div; EQ; ISZERO; OR; ASSERT]`
+        (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC o SIMP_RULE bool_ss [MEM]) >>
+      simp[is_alloca_op_def, is_terminator_def]) >>
+  conj_tac >- (irule word_scale_step_ghost_inv >> simp[] >>
+    fs[local_ptrs_reserved_def] >> metis_tac[MEM]) >>
+  irule word_scale_step_ghost_kept >> simp[] >> metis_tac[MEM])) >>
+  metis_tac[]
 QED
 
 Theorem word_scale_emitted_checked:
   compile_as_wei_value_int v m F sa = (op,sb) /\
   op_prov G v = NONE /\ op_taint tn v = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
@@ -186,7 +204,7 @@ Theorem word_scale_counted_normal_post:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   op_prov G v = NONE /\ op_taint tn v = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
@@ -216,7 +234,7 @@ Theorem word_scale_counted_abort:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   run_inst_seq (emitted_insts sa sb) s = Abort a t /\
   op_prov G v = NONE /\ op_taint tn v = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\

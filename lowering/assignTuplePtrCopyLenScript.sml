@@ -5,6 +5,8 @@ Ancestors
   assignTuplePtrLocalBytesCopy bodyPtrDefs emitHelperProps exprLoweringProps
   emitHelper compileEnv context venomState venomExecSemantics venomInst
   ptrDiscipline finite_map list arithmetic words freshWrites
+  fragGasSeqPtrContext[qualified,ignore_grammar]
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem ptr_covers_lookup_frame:
   ptr_covers G tn p s n /\
@@ -45,7 +47,7 @@ QED
 
 Theorem copy_len_not_seq_ptr:
   !D ctx fn PG G tn s id x out a.
-    ~ctx_has_dalloca ctx /\ eval_operand x s = SOME a /\ op_taint tn x = {} ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ eval_operand x s = SOME a /\ op_taint tn x = {} ==>
     ?G' tn' t.
       run_inst_seq [mk_inst id NOT [x] [out]] s = OK t /\
       inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id NOT [x] [out]] s G' tn' /\
@@ -73,7 +75,7 @@ QED
 
 Theorem emit_copy_len_not_normalized_ptr:
   emit_op NOT [x] sa = (Var out,sb) /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   eval_operand x s = SOME a /\ op_taint tn x = {} ==>
   ?G' tn' t.
     run_inst_seq (emitted_insts sa sb) s =
@@ -106,7 +108,7 @@ QED
 Theorem copy_len_round_tail_ptr:
   emit_op AND [input; mask] sa = (Var middle,sb) /\
   emit_op ADD [Var middle; Lit 32w] sb = (Var out,sc) /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   eval_operand input s = SOME a /\ op_taint tn input = {} /\
   eval_operand mask s = SOME m /\ op_taint tn mask = {} ==>
   ?Gf tnf t.
@@ -126,12 +128,22 @@ Theorem copy_len_round_tail_ptr:
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sc)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `emit_op AND _ sa = _`
     (mp_then Any mp_tac emit_copy_len_binop_normalized_ptr) >>
   simp[eval_operand_def] >> disch_then drule_all >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG G tn _ s G1 tn1` >>
   rename1 `lookup_var middle t1 = SOME _` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
+    (strip_tac >>
+     `allocas_below_fmp (t1 with vs_inst_idx := s.vs_inst_idx)` by
+       (irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+        qexistsl_tac [`emitted_insts sa sb`, `s`] >> simp[] >>
+        qpat_assum `emit_op AND _ sa = _` (mp_tac o MATCH_MP emitted_insts_emit_op) >>
+        simp[mk_inst_def, is_terminator_def,
+          is_alloca_op_def]) >>
+     fs[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   qpat_assum `emit_op ADD _ sb = _`
     (mp_then Any mp_tac emit_copy_len_binop_normalized_ptr) >>
   `!tn. op_taint tn (Lit 32w) = {}` by simp[op_taint_def] >>
@@ -164,7 +176,7 @@ Theorem copy_len_arith_ptr:
   emit_op ADD [input; Lit 31w] sa = (Var first,sb) /\
   emit_op AND [Var first; Var vm] sb = (Var middle,sc) /\
   emit_op ADD [Var middle; Lit 32w] sc = (Var out,sd) /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   eval_operand input s = SOME a /\ op_taint tn input = {} /\
   not_fresh_at sa vm /\ lookup_var vm s = SOME m /\
   op_taint tn (Var vm) = {} ==>
@@ -185,6 +197,7 @@ Theorem copy_len_arith_ptr:
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sd)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `emit_op ADD _ sa = _`
     (mp_then Any mp_tac emit_copy_len_binop_normalized_ptr) >>
   `!tn. op_taint tn (Lit 31w) = {}` by simp[op_taint_def] >>
@@ -196,6 +209,14 @@ Proof
   `eval_operand (Var vm) t1 = SOME m /\ op_taint tn1 (Var vm) = {}` by
     (qpat_assum `!p. not_fresh_at sa p ==> _` (qspec_then `vm` mp_tac) >>
      simp[eval_operand_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
+    (strip_tac >>
+     qsuff_tac `allocas_below_fmp (t1 with vs_inst_idx := LENGTH sa.cs_current_insts)`
+     >- simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa sb`, `s`] >> simp[] >>
+     qpat_assum `emit_op ADD _ sa = _` (mp_tac o MATCH_MP emitted_insts_emit_op) >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all copy_len_round_tail_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G1`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG G1 tn1 _ t1 G2 tn2` >>
@@ -224,7 +245,7 @@ Theorem copy_len_not_arith_ptr:
   emit_op ADD [Var first; Lit 31w] sb = (Var second,sc) /\
   emit_op AND [Var second; Var vm] sc = (Var middle,sd) /\
   emit_op ADD [Var middle; Lit 32w] sd = (Var out,se) /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   not_fresh_at sa first /\ lookup_var first s = SOME a /\
   op_taint tn (Var first) = {} ==>
   ?Gf tnf t.
@@ -244,6 +265,7 @@ Theorem copy_len_not_arith_ptr:
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa se)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `eval_operand (Lit 31w) s = SOME 31w /\ op_taint tn (Lit 31w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   drule_all emit_copy_len_not_normalized_ptr >>
@@ -257,6 +279,13 @@ Proof
   `eval_operand (Var first) t1 = SOME a /\ op_taint tn1 (Var first) = {}` by
     (qpat_assum `!p. not_fresh_at sa p ==> _` (qspec_then `first` mp_tac) >>
      simp[eval_operand_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
+    (strip_tac >> qsuff_tac `allocas_below_fmp (t1 with vs_inst_idx := s.vs_inst_idx)`
+     >- simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa sb`, `s`] >> simp[] >>
+     qpat_assum `emit_op NOT _ sa = _` (mp_tac o MATCH_MP emitted_insts_emit_op) >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all copy_len_arith_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G1`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG G1 tn1 _ t1 G2 tn2` >>
@@ -286,7 +315,7 @@ Theorem copy_len_load_arith_ptr:
   emit_op ADD [Var first; Lit 31w] sc = (Var second,sd) /\
   emit_op AND [Var second; Var vm] sd = (Var middle,se) /\
   emit_op ADD [Var middle; Lit 32w] se = (Var out,sf) /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
   ?Gf tnf t.
@@ -305,7 +334,9 @@ Theorem copy_len_load_arith_ptr:
     sf.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sf /\
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sf)
 Proof
-  strip_tac >> drule_all emit_mload_clean_normalized_ptr >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all emit_mload_clean_normalized_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG G tn _ s G1 tn1` >>
   rename1 `lookup_var first t1 = SOME _` >>
@@ -313,6 +344,13 @@ Proof
     (qpat_assum `emit_op MLOAD _ sa = _`
        (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
      gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
+    (strip_tac >> qsuff_tac `allocas_below_fmp (t1 with vs_inst_idx := s.vs_inst_idx)`
+     >- simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa sb`, `s`] >> simp[] >>
+     qpat_assum `emit_op MLOAD _ sa = _` (mp_tac o MATCH_MP emitted_insts_emit_op) >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all copy_len_not_arith_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G1`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG G1 tn1 _ t1 G2 tn2` >>
@@ -338,7 +376,7 @@ QED
 
 Theorem compile_bytestring_copy_len_normalized_ptr:
   compile_bytestring_copy_len (Var src) sa = (count_op,sb) /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
   ?Gf tnf t.

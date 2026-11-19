@@ -66,7 +66,7 @@ Theorem concat_bytes_arm_full_run:
   not_fresh_at sa sp /\ not_fresh_at sa dp /\ not_fresh_at sa oq /\
   ptr_covers G tn sp s (32+LENGTH bs) /\
   ptr_covers G tn dp s (bsz-32) /\ ptr_covers G tn oq s 32 /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!i. srcbase <= i /\ i < srcbase+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
   (!i. ob <= i /\ i < ob+32 ==> i NOTIN tn.t_mem) /\
   mload srcbase s = n2w (LENGTH bs) /\ mload ob s = n2w k /\

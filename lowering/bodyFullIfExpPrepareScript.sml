@@ -1300,32 +1300,6 @@ Proof
   simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
-(* Keep the condition's actual path available to its selected continuation. *)
-Theorem ifexp_outcome_post_path[local]:
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
-    (es,s,G,tn) Q R /\
-  (!marks H res ee G' tn' t.
-    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
-      (s,G,tn) marks (OK t,G',tn') /\ Q H res ee G' tn' t ==>
-    Q' H res ee G' tn' t) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
-    (es,s,G,tn) Q' R
-Proof
-  strip_tac >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
-    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
-  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks`
-  >- (disj1_tac >> metis_tac[])
-  >- (disj2_tac >> disj1_tac >>
-      qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >>
-      rpt conj_tac >- fs[] >- fs[] >>
-      rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
-      >- (disj1_tac >> first_x_assum irule >> simp[] >>
-          qexists_tac `marks` >> simp[]) >>
-      disj2_tac >> simp[]) >>
-  disj2_tac >> disj2_tac >> metis_tac[]
-QED
-
 Theorem ifexp_vv_full_root_uniform:
   expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
   (!e sa sm av op sb es1 u G1 tn1 st0.
@@ -1464,7 +1438,7 @@ Proof
        ?cm. gas_origin_ptr_path
          (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
          (s0,G0,tn0) cm (OK z,G,tn)) condR` by
-    (irule ifexp_outcome_post_path >>
+    (irule gas_outcome_full_post_path >>
      qpat_assum `gas_outcome_full _ _ _ _ _ _ condQ0 condR` (irule_at Any) >>
      qx_genl_tac [`cm`,`H`,`cr`,`ces`,`CG`,`Ctn`,`cz`] >> strip_tac >>
      simp[] >> qexists_tac `cm` >> simp[]) >>

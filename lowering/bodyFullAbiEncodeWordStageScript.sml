@@ -12,7 +12,7 @@ Theorem abi_encode_word_stage_origin:
   compile_alloc_buffer 32 sm = (buf,sn) /\
   emit_void MSTORE [buf.buf_operand;op] sn = ((),sh) /\
   fn_has_code sm sh func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce sm /\
+  local_ptrs_reserved ce sm /\
   local_ptrs_reserved ce origin /\ cs_extends origin sm /\
   origin.cs_next_var <= sm.cs_next_var /\ origin.cs_next_id <= sm.cs_next_id /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
@@ -69,6 +69,10 @@ Proof
     (qpat_assum `t with <|vs_vars := _; vs_allocas := _;
       vs_alloca_next := _; vs_inst_idx := _|> = s`
       (SUBST1_TAC o SYM) >> simp[]) >>
+  `stmt_state_rel H0 ctx func ce cx ee t` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    qpat_assum `stmt_state_rel H0 ctx func ce cx ee t`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   rename1 `lookup_var q t = SOME a` >>
   `eval_operand op t = SOME w /\ op_taint tn' op = {}` by
     (Cases_on `op` >> gvs[eval_operand_def, op_taint_def] >> metis_tac[]) >>

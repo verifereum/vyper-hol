@@ -27,7 +27,9 @@ Theorem cast_fixed_certificate[local]:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  strip_tac >> drule_all assign_base_bytes_mload_seq >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all assign_base_bytes_mload_seq >>
   disch_then (qspecl_then [`D`,`fn`,`PG`,`id`,`len`] strip_assume_tac) >>
   `eval_operand (Var len) u = SOME (n2w L)` by
     simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
@@ -45,6 +47,7 @@ Proof
   `MEM GT [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
    op_prov G' (Lit (n2w n)) = NONE /\ op_taint tn' (Lit (n2w n)) = {}` by
     simp[op_prov_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   FIRST [
     drule_all (cj 1 (SRULE [LEFT_AND_OVER_OR, DISJ_IMP_THM, GSYM arithmeticTheory.ADD_ASSOC]
       (Q.INST [`opc` |-> `GT`, `id` |-> `id+1`] scalar_checked_pair_uniform_certificate))),

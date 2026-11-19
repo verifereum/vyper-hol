@@ -206,31 +206,6 @@ Proof
        vyperTypeSystemTheory.arg_type_fits_def] >> rpt strip_tac >> gvs[]
 QED
 
-(* Checked edge cases for the normalization-contract audit. These are
-   compatibility/representation probes, not counterexamples to a frame. *)
-Theorem audit_return_copy_bounds[local]:
-  ~arg_type_fits (ArrayT (BaseT BoolT) (Fixed 0))
-                (ArrayT (BaseT BoolT) (Fixed 1)) /\
-  arg_type_fits (ArrayT (BaseT BoolT) (Dynamic 0))
-                (ArrayT (BaseT BoolT) (Dynamic 1)) /\
-  arg_type_fits (TupleT []) (TupleT []) /\
-  ~arg_type_fits (TupleT []) (TupleT [BaseT BoolT])
-Proof
-  EVAL_TAC
-QED
-
-Theorem audit_string_padding_unconstrained[local]:
-  val_in_memory (BaseTV (StringT 1)) (StringV "a") 0
-    (REPLICATE 31 0w ++ [1w; 97w; 0w]) /\
-  val_in_memory (BaseTV (StringT 1)) (StringV "a") 0
-    (REPLICATE 31 0w ++ [1w; 97w; 255w]) /\
-  mem_bytes_at 33 1 (REPLICATE 31 0w ++ [1w; 97w; 0w]) <>
-  mem_bytes_at 33 1 (REPLICATE 31 0w ++ [1w; 97w; 255w])
-Proof
-  EVAL_TAC >> simp[wordsTheory.dimword_def,
-                    fcpLib.INDEX_CONV ``dimindex(:8)``]
-QED
-
 (* Positive reads derive nonwrap from the semantic frontier, not from the
    possibly oversized incoming provenance site. *)
 Theorem expr_val_at_ptr_offset_read_covers:
@@ -322,7 +297,7 @@ Theorem ptr_inst_ok_copy_len_binop:
   !D ctx fn G tn s id opc left right tmp fuel.
     (opc = ADD \/ opc = AND) /\
     op_taint tn left = {} /\ op_taint tn right = {} /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn
       (mk_inst id opc [left;right] [tmp]) s
 Proof
@@ -401,7 +376,7 @@ QED
    like the binops above. *)
 Theorem ptr_inst_ok_copy_len_not:
   !D ctx fn G tn s id x tmp fuel.
-    op_taint tn x = {} /\ ~ctx_has_dalloca ctx ==>
+    op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id NOT [x] [tmp]) s
 Proof
   rpt strip_tac >>

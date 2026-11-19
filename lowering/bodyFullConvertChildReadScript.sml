@@ -22,7 +22,9 @@ Theorem expr_sim_full_of_vv_post_buffer_exit:
     gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
     MEM shadow_func shadow_ctx.ctx_functions /\ fn_has_code sa sb func /\
     fn_has_code shadow_sa shadow_sb shadow_func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+    local_ptrs_reserved cenv sa /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -55,11 +57,7 @@ Proof
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qspecl_then
     [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >-
-    (simp[] >> rpt strip_tac >>
-     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[])) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
   irule gas_outcome_full_post_mono >>
   goal_assum (drule_at Any) >> simp[] >>

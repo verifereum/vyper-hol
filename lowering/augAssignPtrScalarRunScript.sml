@@ -97,7 +97,7 @@ Theorem scalar_code_inst_seq_ptr:
   !code A G tn s.
     scalar_code A code /\
     (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?H tm. inst_seq_ptr D 0 ctx fn PG G tn code s H tm
 Proof
   rpt strip_tac >> irule scalar_code_inst_seq_ptr_lo >>

@@ -39,6 +39,7 @@ Theorem abi_decode_scalar_success_frame:
       abi_decode_ptr_window H tm (u with vs_inst_idx := j) x b h)
 Proof
   strip_tac >> drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   `!x. x IN R ==> lookup_var x (u with vs_inst_idx := j) = lookup_var x s /\

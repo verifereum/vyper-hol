@@ -6,7 +6,7 @@ Ancestors
 Theorem pop_scalar_binary_step:
   (opc = SUB /\ z = x-y \/ opc = ADD /\ z = x+y \/ opc = MUL /\ z = x*y) /\
   eval_operand a s = SOME x /\ eval_operand b s = SOME y /\
-  op_taint tn a = {} /\ op_taint tn b = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn a = {} /\ op_taint tn b = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   step_inst_base (mk_inst id opc [a;b] [out]) s = OK (update_var out z s) /\
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc [a;b] [out]) s
 Proof
@@ -45,7 +45,7 @@ Theorem pop_scalar_binary_transfer:
   (opc = SUB /\ z = x-y \/ opc = ADD /\ z = x+y \/ opc = MUL /\ z = x*y) /\
   eval_operand a s = SOME x /\ eval_operand b s = SOME y /\
   op_prov G a = NONE /\ op_prov G b = NONE /\
-  op_taint tn a = {} /\ op_taint tn b = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn a = {} /\ op_taint tn b = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'.
     inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id opc [a;b] [out]] s G' tn' /\
     op_prov G' (Var out) = NONE /\ op_taint tn' (Var out) = {} /\

@@ -67,7 +67,7 @@ Theorem unwrap_memory_word_marked_read_ptr_horizons:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   p.ptr_location = LocMemory /\ is_word_type t /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
-  fn_has_code sm sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sm sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!H. P H ==>
@@ -97,6 +97,7 @@ Proof
   drule_all unwrap_memory_word_input >> strip_tac >>
   `emit_op MLOAD [Var src] sm = (op,sb)` by
     gvs[unwrap_value_def, compile_ptr_load_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emit_mload_ptr_path >>
   disch_then (qspecl_then [`<| d_stor := K (K {}); d_trans := K (K {});
     d_imm := K {}; d_ret := K {} |>`, `PG`] strip_assume_tac) >>
@@ -132,7 +133,7 @@ Theorem unwrap_memory_word_marked_read_ptr:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   p.ptr_location = LocMemory /\ is_word_type t /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
-  fn_has_code sm sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sm sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\

@@ -19,7 +19,7 @@ Theorem rest_word_membership_segment_compare_joint:
   (!z. not_fresh_at sa z ==> z <> dst) /\
   dst <> "%" ++ toString (sa.cs_next_var+1) /\
   dst <> "%" ++ toString sa.cs_next_var /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
   eval_operand lhs s = SOME x /\ eval_operand rhs s = SOME y /\
@@ -126,7 +126,7 @@ Resume rest_word_membership_segment_compare_joint[jump_checks]:
        Abbr `j`, source_memory_write_ranges_def,
        source_memory_read_ranges_def, mk_inst_def] >>
   simp[GSYM mk_inst_def, jump_to_def] >>
-  reverse conj_tac >- simp[Abbr `v`, update_var_def] >>
+  reverse conj_tac >- (fs[Abbr `v`, update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
   qx_gen_tac `z` >> Cases_on `z` >>
   simp[op_taint_def, FLOOKUP_UPDATE] >> metis_tac[]
 QED
@@ -168,7 +168,7 @@ Theorem rest_word_membership_compare_segment_joint:
     (sa.cs_next_label + (if cond_site then 5 else 3)) /\
   no = fresh_label_output (if cond_site then "in_body" else "in_incr")
     (sa.cs_next_label + (if cond_site then 2 else 4)) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
   eval_operand lhs s = SOME x /\ eval_operand rhs s = SOME y /\
@@ -210,7 +210,7 @@ QED
 Theorem rest_word_membership_condition_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1) /\
   s.vs_inst_idx = 0 /\ membership_loop_registers sa i r G tn s /\
@@ -250,7 +250,7 @@ Theorem rest_word_membership_segment_found_joint:
   get_instruction bb 0 = SOME ins /\
   get_instruction bb 1 = SOME (mk_inst (fid+1) JMP
     [Label (fresh_label_output "in_exit" (sa.cs_next_label+5))] []) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_found" (sa.cs_next_label+3) /\
   s.vs_inst_idx = 0 /\
@@ -325,7 +325,7 @@ Resume rest_word_membership_segment_found_joint[found_jump]:
     (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
           Abbr `j`, source_memory_write_ranges_def,
           source_memory_read_ranges_def, mk_inst_def, op_taint_def] >>
-     simp[GSYM mk_inst_def, jump_to_def, Abbr `v`, update_var_def]) >>
+     fs[GSYM mk_inst_def, jump_to_def, Abbr `v`, update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
   `gas_events_step 0 ctx fn.fn_name j v = [] /\
    gas_count_step 0 ctx j v = 0 /\ mem_safe_step 0 ctx j v /\
    is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE` by
@@ -366,7 +366,7 @@ Finalise rest_word_membership_segment_found_joint
 Theorem rest_word_membership_found_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_found" (sa.cs_next_label+3) /\
   s.vs_inst_idx = 0 /\
@@ -401,7 +401,7 @@ Theorem rest_word_membership_segment_notin_joint:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb 0 = SOME ins /\ op = Var dst /\
   (!z. not_fresh_at sa z ==> z <> dst) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = 0 /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
@@ -485,7 +485,7 @@ Finalise rest_word_membership_segment_notin_joint
 Theorem rest_word_membership_notin_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE F sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = 0 /\
   delta = (if 0 < skip then 1 else 0) /\
   width = (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) /\
@@ -527,7 +527,7 @@ Theorem rest_word_membership_segment_increment_joint:
   dst <> idx /\ dst <> "%" ++ toString sa.cs_next_var /\
   idx <> "%" ++ toString sa.cs_next_var /\
   (!z. not_fresh_at sa z ==> z <> dst /\ z <> idx) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_incr" (sa.cs_next_label+4) /\
   s.vs_inst_idx = 0 /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
@@ -650,7 +650,7 @@ Resume rest_word_membership_segment_increment_joint[assign_edge]:
      gvs[ptr_inst_ok_def, access_ok_def, taint_ok_def,
          source_memory_write_ranges_def, source_memory_read_ranges_def,
          mk_inst_def, op_prov_def, op_taint_def, update_var_def,
-         FLOOKUP_UPDATE, FLOOKUP_DEF, allocas_from_def] >> first_assum ACCEPT_TAC) >>
+         FLOOKUP_UPDATE, FLOOKUP_DEF, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   `lookup_block (t with vs_inst_idx := 1).vs_current_bb fn.fn_blocks = SOME bb /\
    get_instruction bb (t with vs_inst_idx := 1).vs_inst_idx = SOME b /\
    ~(t with vs_inst_idx := 1).vs_halted /\
@@ -679,7 +679,7 @@ Resume rest_word_membership_segment_increment_joint[jump]:
     (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
           Abbr `j`, source_memory_write_ranges_def,
           source_memory_read_ranges_def, mk_inst_def, op_taint_def] >>
-     simp[GSYM mk_inst_def, jump_to_def, Abbr `z`, update_var_def]) >>
+     fs[GSYM mk_inst_def, jump_to_def, Abbr `z`, update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
   `gas_events_step 0 ctx fn.fn_name j z = [] /\
    gas_count_step 0 ctx j z = 0 /\ mem_safe_step 0 ctx j z /\
    is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE` by
@@ -726,7 +726,7 @@ Finalise rest_word_membership_segment_increment_joint
 Theorem rest_word_membership_increment_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_incr" (sa.cs_next_label+4) /\
   s.vs_inst_idx = 0 /\
@@ -777,7 +777,7 @@ Theorem rest_word_membership_segment_init_prefix_joint:
   lookup_block e.vs_current_bb fn.fn_blocks = SOME entry_bb /\
   isPREFIX [mk_inst (sa.cs_next_id+1) ASSIGN [Lit 0w] [idx];
             mk_inst (sa.cs_next_id+2) ASSIGN [Lit 0w] [result]] entry_bb.bb_instructions /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   idx = "%" ++ toString (sa.cs_next_var+1) /\
@@ -875,7 +875,7 @@ Resume rest_word_membership_segment_init_prefix_joint[init_seq_ptr]:
        mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
        op_taint_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
        eval_operand_def, Abbr `v`, update_var_def, jump_to_def, allocas_from_def] >>
-  gvs[allocas_from_def]
+  gvs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
 QED
 
 Resume rest_word_membership_segment_init_prefix_joint[init_first_ghost]:
@@ -905,7 +905,7 @@ Finalise rest_word_membership_segment_init_prefix_joint
 Theorem rest_word_membership_init_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   idx = "%" ++ toString (sa.cs_next_var+1) /\
@@ -954,8 +954,10 @@ Proof
      pop_assum SUBST1_TAC >>
      irule fragGasOriginPtrLoopTheory.jmp_origin_ptr_path >>
      simp[update_var_def, jump_to_def, allocas_from_def] >>
-     qexistsl_tac [`entry_bb`,`sa.cs_next_id+3`] >>
-     gvs[update_var_def, jump_to_def, get_instruction_def]) >>
+     conj_tac >-
+       (qexistsl_tac [`entry_bb`,`sa.cs_next_id+3`] >>
+        gvs[update_var_def, jump_to_def, get_instruction_def]) >>
+     fs[allocas_below_fmp_def] >> metis_tac[]) >>
   conj_tac >- metis_tac[gas_origin_ptr_path_append, APPEND] >>
   fs[membership_loop_frame_def, membership_loop_registers_def,
      jump_to_def, update_var_def, allocas_from_def, lookup_var_def] >>

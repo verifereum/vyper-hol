@@ -13,9 +13,11 @@ Ancestors
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullStructLit bodyFullPop
+  bodyFullSubscript[qualified,ignore_grammar]
+  bodyFullSubscriptUnframedArray[qualified,ignore_grammar]
   bodyFullTypeBuiltinEmpty bodyFullTypeBuiltinWords bodyFullTypeBuiltinConvert
   bodyFullTypeBuiltinExtract32 bodyFullTypeBuiltinAbiDecode bodyFullTypeBuiltinAbiEncode
-  bodyFullRawCallCalldata
+  bodyFullRawCall bodyFullRawCallCalldata exprSimSource
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullBuiltinEnv
   bodyFullMakeArray
@@ -703,13 +705,33 @@ Proof
   ACCEPT_TAC bodyFullRawCallCalldataTheory.raw_call_calldata_expr_full_ok
 QED
 
-(* Admitted: the joint twin of body_raw_call_case_ptr_at (bodyPtrCallCases). *)
+(* RawCall composes counted operands, the call and the return-data suffix. *)
 Theorem body_raw_call_case_full:
   !cx ty flags es v18.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
-  cheat
+  map_every qx_gen_tac [`cx`,`ann`,`flags`,`args`,`dflt`] >>
+  disch_tac >> simp[Once body_expr_full_ok_def] >>
+  map_every qx_gen_tac
+    [`DF`,`lo`,`dframe`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,
+     `cenv`,`env`,`ty`,`es`] >> strip_tac >>
+  reverse conj_asm2_tac
+  >- (qpat_assum `body_exprs_full_ok cx args` (fn args_ok =>
+      qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+      qpat_assum `expr_body_pre cenv cx env _ es` (fn pre =>
+        MATCH_ACCEPT_TAC (MATCH_MP bodyFullRawCallTheory.raw_call_expr_vv_full
+          (LIST_CONJ [args_ok,inv,pre])))))) >>
+  irule bodyFullOfVVTheory.expr_sim_full_of_vv >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
+  drule expr_body_pre_type_evaluates >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  qexists `x` >> simp[] >> rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt)
+     (es with gas_obs := gs)` by simp[] >>
+  drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
+  strip_tac >> gvs[] >> metis_tac[]
 QED
 
 (* RawLog composes its topic and data children at one joint midpoint. *)
@@ -1333,7 +1355,7 @@ Proof
   ACCEPT_TAC bodyFullStructLitTheory.structlit_expr_full_ok
 QED
 
-(* Admitted: the joint twin of body_subscript_case_ptr_at (bodyPtrExprCases). *)
+(* Dispatch the joint subscript cases using the same-endpoint unframed array proof. *)
 Theorem body_subscript_case_full:
   !cx v8 e1 e2.
     (!s'' res t s'3' res' t'.
@@ -1345,7 +1367,11 @@ Theorem body_subscript_case_full:
     body_expr_full_ok cx e1 ==>
     body_expr_full_ok cx (Subscript v8 e1 e2)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule bodyFullSubscriptTheory.subscript_expr_full_ok_from_place_base >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qspecl_then [`cx`, `v8`, `e1`, `e2`] ACCEPT_TAC
+    bodyFullSubscriptUnframedArrayTheory.subscript_unframed_array_vv_full
 QED
 
 (* Join the TypeBuiltin constructor proofs. *)

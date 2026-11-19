@@ -8,7 +8,7 @@ Ancestors
 
 Theorem code_load_step_ptr:
   eval_operand arg s = SOME a /\ op_taint tn arg = {} /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id DLOAD [arg] [out]) ==>
   ?G' tn'.
@@ -65,7 +65,7 @@ QED
 
 Theorem emit_code_load_ptr_path:
   emit_op DLOAD [arg] sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   eval_operand arg s = SOME a /\ op_taint tn arg = {} /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

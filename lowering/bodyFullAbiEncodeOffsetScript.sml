@@ -11,7 +11,7 @@ Ancestors
 Theorem abi_encode_owned_offset_origin:
   !a b dst root off s base G tn total n lo explicit ctx func PG.
     emit_op ADD [Var root;Lit (n2w off)] a = (dst,b) /\
-    fn_has_code a b func /\ ~ctx_has_dalloca ctx /\
+    fn_has_code a b func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
     s.vs_inst_idx = LENGTH a.cs_current_insts /\ allocas_from lo s /\
     lookup_var root s = SOME base /\ ptr_covers G tn root s total /\

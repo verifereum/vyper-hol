@@ -38,7 +38,7 @@ Theorem none_entry_reject_from_selected:
         fn_has_code opened checked func /\ fresh_vars_wrt opened p /\
         ~p.vs_halted /\ p.vs_current_bb = opened.cs_current_bb /\
         p.vs_inst_idx = LENGTH opened.cs_current_insts /\
-        allocas_from 0 p /\ ~ctx_has_dalloca unit.cu_context /\
+        allocas_from 0 p /\ (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp p) /\
         m < dimword (:256) /\ LENGTH p.vs_call_ctx.cc_calldata < dimword (:256) /\
         (!t H u.
           (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,func,[])

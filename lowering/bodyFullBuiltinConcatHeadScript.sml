@@ -30,7 +30,7 @@ Theorem concat_head_bytes_uniform:
   not_fresh_at sa sp /\ not_fresh_at sa dp /\ not_fresh_at sa oq /\
   ptr_covers G tn sp s (32+LENGTH bs) /\
   ptr_covers G tn dp s (bsz-32) /\ ptr_covers G tn oq s 32 /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!i. srcbase <= i /\ i < srcbase+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
   (!i. ob <= i /\ i < ob+32 ==> i NOTIN tn.t_mem) /\
   mload srcbase s = n2w (LENGTH bs) /\ mload ob s = n2w k /\
@@ -81,6 +81,7 @@ Theorem concat_head_bytes_uniform:
       mem_bytes_at p n u.vs_memory = mem_bytes_at p n s.vs_memory)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all concat_bytes_arm_full_run >>
   disch_then (qspecl_then [`explicit`,`PG`,
     `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]
@@ -107,7 +108,7 @@ Theorem concat_head_fixed_uniform:
   not_fresh_at sa dp /\ not_fresh_at sa oq /\
   (!z. x = Var z ==> not_fresh_at sa z) /\
   ptr_covers G tn dp s (bsz-32) /\ ptr_covers G tn oq s 32 /\
-  op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!i. ob <= i /\ i < ob+32 ==> i NOTIN tn.t_mem) /\
   mload ob s = n2w k /\ LENGTH bs = m /\ m <= 32 /\ 32+k+32 <= bsz /\
   B+bsz < dimword (:256) /\ ob+64 < dimword (:256) /\
@@ -153,6 +154,7 @@ Theorem concat_head_fixed_uniform:
       mem_bytes_at p n u.vs_memory = mem_bytes_at p n s.vs_memory)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all concat_fixed_arm_full_run >>
   disch_then (qspecl_then [`explicit`,`PG`,
     `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]
@@ -198,7 +200,7 @@ Theorem concat_head_arm_full:
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     storage_trace_domain cx st0 es.storage_trace /\
     storage_trace_domain cx st0 ee.storage_trace /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     return_buf_frame d cenv sa s /\ alloca_history func s /\
     (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
     (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
@@ -362,6 +364,9 @@ Proof
      disch_then irule >> simp[] >> metis_tac[]) >>
   `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee t` by
     fs[expr_post_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    qpat_assum `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee t`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   qpat_assum `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee t`
     (strip_assume_tac o MATCH_MP stmt_state_rel_local_ptrs_alloca) >>
   `t.vs_alloca_next < dimword (:256)` by

@@ -14,7 +14,7 @@ Theorem len_full_suffix:
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\ ~ctx_has_dalloca ctx /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e) /\
     evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME pvt /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
@@ -57,6 +57,16 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `cenv.ce_is_ctor /\
     (case vv_location vv of NONE => LocMemory | SOME l => l) = LocCode`
-  >- (qpat_x_assum `_ /\ _` strip_assume_tac >> drule_all len_full_suffix_ctor >> simp[]) >>
+  >- (qpat_x_assum `_ /\ _` strip_assume_tac >>
+      `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
+         ee.storage_trace` by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
+        (drule_then strip_assume_tac) >>
+      `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee t` by
+        fs[loweringPostsTheory.vv_post_def] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+        (first_assum (ACCEPT_TAC o MATCH_MP
+          bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+      drule_all len_full_suffix_ctor >> simp[]) >>
   drule_all len_full_suffix_scalar >> simp[]
 QED

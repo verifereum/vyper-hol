@@ -32,7 +32,7 @@ QED
 Theorem optional_transient_unlock_paths_joint:
   (if nr then compile_nonreentrant_unlock nkey T iv else comp_return ()) st =
     ((),st') /\ fn_has_code st st' func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   (nr /\ ~iv ==> ~s.vs_call_ctx.cc_static /\ allocas_from lo s) /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -193,7 +193,7 @@ Theorem optional_transient_unlock_stop_joint_at:
     ((),su) /\
   emit_inst STOP [] [] su = ((),sb) /\
   fn_has_code st su func /\ fn_has_code su sb func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ allocas_from lo s /\
   (nr /\ ~iv ==> ~s.vs_call_ctx.cc_static) /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -253,8 +253,8 @@ Proof
         step_inst_base_opcode_eqs, step_taint_def, ret_taint_def,
         store_taint_def, imm_taint_def, adopt_reset_def, halt_state_def,
         allocas_from_def] >>
-     Cases_on `nr /\ ~iv` >> gvs[tstore_def] >>
-     first_assum ACCEPT_TAC) >>
+     Cases_on `nr /\ ~iv` >> gvs[tstore_def, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   metis_tac[gas_origin_ptr_path_append, APPEND_NIL]
 QED
 
@@ -263,7 +263,7 @@ Theorem optional_transient_unlock_stop_joint:
     ((),su) /\
   emit_inst STOP [] [] su = ((),sb) /\
   fn_has_code st su func /\ fn_has_code su sb func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ allocas_from lo s /\
   (nr /\ ~iv ==> ~s.vs_call_ctx.cc_static) /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>

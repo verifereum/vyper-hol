@@ -13,7 +13,7 @@ Theorem hash_bytes_prepare_endpoint:
   FLOOKUP G x = SOME (base,cap) /\ base <= b /\ b+32+n <= base+cap /\
   b+32 < dimword (:256) /\ n < dimword (:256) /\ op_taint tn (Var x) = {} /\
   (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
-  mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx /\
+  mem_word_at b s.vs_memory = n2w n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) /\
   stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
@@ -55,6 +55,7 @@ Theorem hash_bytes_prepare_endpoint:
   a.vs_call_ctx = s.vs_call_ctx /\ tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all hash_bytes_prepare_frame >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
   `local_ptrs_reserved cenv sm` by

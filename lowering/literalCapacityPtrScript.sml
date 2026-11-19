@@ -50,9 +50,8 @@ Proof
      qexistsl [`b`,`cap`,`p`] >> simp[] >> decide_tac) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sh sb)` by
     (irule (cj 5 literal_chunks_ptr) >> simp[] >>
-     conj_tac >- metis_tac[] >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any) >> simp[] >> qexistsl [`bs`,`32`] >> simp[] >> decide_tac) >>
+     qexistsl_tac [`G`,`b`,`b`,`bs`,`ctx`,`cap`,`32`,`p`,`uh`,`th`] >>
+     simp[] >> decide_tac) >>
   Cases_on `run_inst_seq (emitted_insts sh sb) u` >>
   fs[Abbr `uh`, run_inst_seq_inst_idx, exec_result_map_def] >>
   qexistsl [`v`,`Gf`,`tnf`] >>
@@ -202,7 +201,7 @@ Resume literal_capacity_bytelike_ptr_run[assemble]:
       asm_simp_tac bool_ss [] >> simp[mk_inst_def, is_terminator_def]) >>
   conj_tac
   >- (PURE_ONCE_REWRITE_TAC[inst_seq_ptr_def] >>
-      asm_simp_tac bool_ss [] >> simp[literal_alloca_ptr_inst_ok]) >>
+      asm_simp_tac bool_ss [] >> simp[fragExecPtrTheory.ptr_inst_ok_alloca]) >>
   conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
   conj_tac >- (qpat_x_assum `v with <|vs_vars := _; vs_memory := _|> = u` mp_tac >> simp[]) >>
   conj_tac >- metis_tac[ADD_ASSOC, ADD_COMM] >>

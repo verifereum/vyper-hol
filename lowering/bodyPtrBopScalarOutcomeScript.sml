@@ -88,7 +88,7 @@ Theorem bop_scalar_binop_success_ghost_path:
   compile_binop bop x y ty bl el sa = (op,sb) /\
   op_prov G x = NONE /\ op_taint tn x = {} /\
   op_prov G y = NONE /\ op_taint tn y = {} /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
@@ -110,6 +110,7 @@ Proof
      goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
      simp[] >> metis_tac[]) >>
   `!z. z IN {z | not_fresh_at sa z} ==> not_fresh_at sa z` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_binop_success_path >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >>
@@ -125,7 +126,7 @@ Theorem bop_scalar_suffix_outcome_ptr:
   compile_binop bop x y ty bl el sa = (op,sb) /\
   op_prov G x = NONE /\ op_taint tn x = {} /\
   op_prov G y = NONE /\ op_taint tn y = {} /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>

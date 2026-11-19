@@ -17,7 +17,7 @@ Theorem append_memory_success_prefix[local]:
   lookup_var p s = SOME bp /\ ptr_covers G tn p s (32*(1+cap)) /\
   (!i. w2n bp <= i /\ i < w2n bp+32 ==> i NOTIN tn.t_mem) /\
   cap < dimword (:256) /\ L = w2n (mload (w2n bp) s) /\ L < cap /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?H tm t.
     run_inst_seq [mk_inst id MLOAD [Var p] [lv];
       mk_inst (id+1) LT [Var lv; Lit (n2w cap)] [ov];
@@ -72,6 +72,12 @@ Proof
 QED
 
 Resume append_memory_success_prefix[assertinsts]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `s1`, update_var_def, allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[Abbr `s2`, update_var_def, allocas_below_fmp_def]) >>
   `!k. ptr_inst_ok D lo 0 ctx fn G tn load (s with vs_inst_idx := k)` by
     (gen_tac >> simp[Abbr `load`] >> irule ptr_inst_ok_mload_lo >>
      simp[allocas_from_def]) >>
@@ -90,7 +96,8 @@ Resume append_memory_success_prefix[assertinsts]:
      qexists_tac `0` >>
      simp[Abbr `s2`, Abbr `s1`, allocas_from_def, update_var_def] >>
      simp[Abbr `assertinst`] >> irule bop_assert_ptr_inst_ok >>
-     simp[op_taint_def, FLOOKUP_UPDATE]) >>
+     simp[op_taint_def, FLOOKUP_UPDATE] >>
+     fs[allocas_below_fmp_def] >> metis_tac[]) >>
   `~is_terminator load.inst_opcode /\ ~is_terminator test.inst_opcode /\
    ~is_terminator assertinst.inst_opcode` by
     simp[Abbr `load`, Abbr `test`, Abbr `assertinst`, mk_inst_def, is_terminator_def] >>
@@ -132,7 +139,7 @@ Theorem append_memory_success_tail[local]:
   eval_operand vop s = SOME w /\ op_taint tn vop = {} /\
   ptr_covers G tn p s (32*(1+cap)) /\ L < cap /\
   w2n bp+32*(1+cap) <= dimword (:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?H tm t.
     run_inst_seq [mk_inst id ADD [Var p;Lit 32w] [dv];
       mk_inst (id+1) MUL [Var lv;Lit 32w] [offv];
@@ -227,6 +234,9 @@ Proof
           FLOOKUP_UPDATE] >> pure_rewrite_tac[GSYM word_mul_n2w] >> simp[WORD_MULT_COMM]) >>
   `op_taint tn2 (Var offv) = {}` by simp[op_taint_def, FLOOKUP_UPDATE] >>
   `allocas_from lo s2` by simp[Abbr `s2`, allocas_from_def, update_var_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[Abbr `s2`, update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
   `ptr_covers G2 tn2 dv s2 (32*cap)` by
     (gvs[ptr_covers_def, Abbr `s2`, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
          FLOOKUP_DRESTRICT, op_prov_def, op_taint_def] >>
@@ -296,6 +306,10 @@ Proof
          update_var_def, mstore_def, FLOOKUP_UPDATE, op_taint_def,
          allocas_from_def] >> gvs[ALL_DISTINCT] >>
      metis_tac[lookup_var_def, allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s5` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s3` mp_tac >>
+     simp[Abbr `s5`, update_var_def, mstore_def,
+          write_memory_with_expansion_def, allocas_below_fmp_def]) >>
   mp_tac (copy_store_segment |> SPEC_ALL |> Q.INST
     [`G` |-> `G5`, `tn` |-> `tn5`, `root` |-> `p`, `s` |-> `s5`,
      `addr` |-> `bp`, `v` |-> `Var nv`, `value` |-> `n2w L+1w`,

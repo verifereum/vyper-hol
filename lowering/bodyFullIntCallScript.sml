@@ -396,7 +396,23 @@ Theorem intcall_entry_selects_callee[local]:
   gas_invoke_entry (ctx,func) t callee entered ==>
   lookup_function ^internal_call_label ctx.ctx_functions = SOME callee
 Proof
-  rw[intcall_entry_full_def, gas_invoke_entry_def] >> gvs[]
+  DISCH_THEN (CONJUNCTS_THEN2
+    (strip_assume_tac o PURE_REWRITE_RULE [intcall_entry_full_def])
+    (strip_assume_tac o PURE_REWRITE_RULE [gas_invoke_entry_def])) >>
+  qpat_x_assum `lookup_block t.vs_current_bb func.fn_blocks = SOME _`
+    (fn block =>
+       qpat_x_assum `lookup_block t.vs_current_bb func.fn_blocks = SOME _`
+         (SUBST_ALL_TAC o REWRITE_RULE [block, optionTheory.SOME_11])) >>
+  qpat_x_assum `get_instruction _ t.vs_inst_idx = SOME _`
+    (fn instruction =>
+       qpat_x_assum `get_instruction _ t.vs_inst_idx = SOME _`
+         (SUBST_ALL_TAC o REWRITE_RULE [instruction, optionTheory.SOME_11])) >>
+  qpat_x_assum `_ = ^internal_call_label` SUBST_ALL_TAC >>
+  qpat_x_assum `decode_invoke _ = SOME (^internal_call_label,_)` mp_tac >>
+  qpat_x_assum `decode_invoke _ = SOME (_,_)` mp_tac >>
+  qpat_x_assum `lookup_function _ ctx.ctx_functions = SOME callee` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ]
 QED
 
 (* Stage (b) gives stage (c)'s callee premise. *)

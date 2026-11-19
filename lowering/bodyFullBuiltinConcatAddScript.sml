@@ -10,7 +10,7 @@ Ancestors
 Theorem concat_data_add_fresh_full:
   emit_op ADD [Var bv; Lit 32w] sc = (data_operand,sc') /\
   fn_has_code sc sc' func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sc /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sc /\
   stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\
   alloca_history func s /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
@@ -47,6 +47,9 @@ Proof
     (fs[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `out`] >>
      first_x_assum (qspec_then `sc.cs_next_var` mp_tac) >> simp[]) >>
   qpat_x_assum `data_operand = Var out` SUBST_ALL_TAC >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `stmt_state_rel H0 ctx func cenv cx es s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule_all bytestring_data_offset_full_run >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `not_local_ptr cenv es.scopes out` by

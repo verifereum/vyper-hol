@@ -6,6 +6,7 @@ Ancestors
   exprSendPtr exprSimSend bodyPtrDefs exprLoweringProps loweringPosts
   loweringStateRelDefs localPtrsProps compileEnv venomMemProofs ghostPcTransportPtr
   venomExecProofs venomExecSemantics venomState venomInst list
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem send_tail_path_full[local]:
   expr_has_effect e /\
@@ -20,7 +21,7 @@ Theorem send_tail_path_full[local]:
   wb_frame cenv es es1 sa s0 s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
@@ -68,6 +69,12 @@ Proof
     (rpt strip_tac >> res_tac >> fs[ghost_inv_at_def]) >>
   `allocas_from lo s` by
     (res_tac >> fs[ghost_inv_at_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `!H. valid_horizon _ _ H es'.storage_trace ==>
+      stmt_state_rel H ctx fn cenv cx es1 s /\ stor_taint_ok_at (DF H) tn s`
+       (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o CONJUNCT1)) >>
   drule_all send_read_checked_tail_full_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`,`G`]
     (DISJ_CASES_THEN2 (CONJUNCTS_THEN2 assume_tac strip_assume_tac) strip_assume_tac))
@@ -166,7 +173,7 @@ Theorem send_tail_outcome_full:
   wb_frame cenv es es1 sa s0 s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\

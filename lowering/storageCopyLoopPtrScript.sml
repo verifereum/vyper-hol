@@ -57,7 +57,7 @@ Theorem storage_copy_loop_path_ptr:
   w2n b+32*n < dimword(:256) /\ n < dimword(:256) /\
   ALL_DISTINCT [root;tv;cv;sv;vv;mv;dv;nv] /\
   (!x. MEM x [tv;cv;sv;vv;mv;dv;nv] ==> src <> Var x) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   copy_prefix (if tr then LocTransient else LocStorage) a (w2n b) n sbase k s /\
   (!i h. i < k /\ h < 32 ==>
      (w2n b+32*i+h IN tn.t_mem <=>
@@ -130,6 +130,12 @@ Resume storage_copy_loop_path_ptr[body]:
     (fs[ALL_DISTINCT] >> metis_tac[]) >>
   `32*k+32 <= span /\ w2n b+32*k < dimword(:256)` by decide_tac >>
   `lookup_block hs.vs_current_bb fn.fn_blocks = SOME bbb` by fs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp hs` by
+    (`allocas_below_fmp hs <=> allocas_below_fmp s` by
+       simp[Abbr `hs`, jump_to_def, update_var_def, allocas_below_fmp_def] >>
+     qpat_assum `allocas_below_fmp hs <=> allocas_below_fmp s`
+       (fn bound => PURE_ONCE_REWRITE_TAC [bound]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all (PURE_REWRITE_RULE [APPEND, LENGTH, ADD_CLAUSES] (Q.INST [`pre` |-> `[]`,
     `post` |-> `[mk_inst (id+7) JMP [Label hdr] []]`] storage_copy_body_path_ptr)) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -149,12 +155,27 @@ Resume storage_copy_loop_path_ptr[advance]:
   `lookup_block bs.vs_current_bb fn.fn_blocks = SOME bbb /\
    get_instruction bbb bs.vs_inst_idx = SOME (mk_inst (id+7) JMP [Label hdr] [])`
      by fs[get_instruction_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp bs` by
+    (`allocas_below_fmp bs <=> allocas_below_fmp hs` by
+       (qpat_assum `copy_static bs = copy_static hs`
+          (mp_tac o Q.AP_TERM `allocas_below_fmp`) >>
+        rpt (pop_assum kall_tac) >>
+        simp[copy_static_def, allocas_below_fmp_def]) >>
+     qpat_assum `allocas_below_fmp bs <=> allocas_below_fmp hs`
+       (fn bound => PURE_ONCE_REWRITE_TAC [bound]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all storage_copy_backedge_path_ptr >>
   disch_then (qspec_then `src` strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `OK (jump_to hdr bs)` >>
   suspend "recur"
 QED
 Resume storage_copy_loop_path_ptr[recur]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (jump_to hdr bs)` by
+    (`allocas_below_fmp (jump_to hdr bs) <=> allocas_below_fmp bs` by
+       simp[jump_to_def, allocas_below_fmp_def] >>
+     qpat_assum `allocas_below_fmp (jump_to hdr bs) <=> allocas_below_fmp bs`
+       (fn bound => PURE_ONCE_REWRITE_TAC [bound]) >>
+     first_assum ACCEPT_TAC) >>
   qpat_x_assum `!k s G tn. _` (qspecl_then
     [`k+1`, `jump_to hdr bs`, `Gb`, `tb`] mp_tac) >>
   (impl_tac >-
@@ -216,7 +237,7 @@ Theorem storage_copy_entry_loop_path_ptr:
   w2n b+32*n < dimword(:256) /\ n < dimword(:256) /\
   ALL_DISTINCT [root;tv;cv;sv;vv;mv;dv;nv] /\
   (!x. MEM x [tv;cv;sv;vv;mv;dv;nv] ==> src <> Var x) /\
-  ~ctx_has_dalloca ctx /\ alloca_inv s /\ alloca_room ctx fn s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ alloca_inv s /\ alloca_room ctx fn s /\
   (!i w p sz. MEM i (fn_insts fn) /\ i.inst_opcode = ALLOCA /\
     i.inst_operands = [Lit w] /\
     FLOOKUP s.vs_allocas i.inst_id = SOME (p,sz) ==> sz = w2n w) ==>
@@ -251,6 +272,12 @@ Proof
   suspend "initialize"
 QED
 Resume storage_copy_entry_loop_path_ptr[initialize]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (jump_to hdr (update_var cv 0w s))` by
+    (`allocas_below_fmp (jump_to hdr (update_var cv 0w s)) <=> allocas_below_fmp s` by
+       simp[jump_to_def, update_var_def, allocas_below_fmp_def] >>
+     qpat_assum `allocas_below_fmp (jump_to hdr (update_var cv 0w s)) <=> allocas_below_fmp s`
+       (fn bound => PURE_ONCE_REWRITE_TAC [bound]) >>
+     first_assum ACCEPT_TAC) >>
   qspecl_then [`n`, `0`, `jump_to hdr (update_var cv 0w s)`,
     `DRESTRICT G (COMPL {cv})`, `tn with t_var := tn.t_var |+ (cv,{})`]
     mp_tac (Q.INST [`sbase` |-> `s`, `M0` |-> `tn.t_mem`] storage_copy_loop_path_ptr) >>

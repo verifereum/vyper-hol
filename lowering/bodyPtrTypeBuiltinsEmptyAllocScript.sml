@@ -12,7 +12,7 @@ Theorem empty_alloc_checked_run:
   !D ctx func PG G tn sa sb buf sz s t.
     compile_alloc_buffer sz sa = (buf,sb) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?p. buf.buf_operand = Var p /\
       inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s
         (step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) t)
@@ -32,7 +32,7 @@ Theorem empty_alloc_checked_coverage:
     stmt_state_rel (H : (bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
-    sz < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
+    sz < dimword (:256) ==>
     ?p G' tn'. buf.buf_operand = Var p /\
       inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
       ptr_covers G' tn' p t sz /\
@@ -41,6 +41,11 @@ Theorem empty_alloc_checked_coverage:
       (stor_taint_ok H cx tn s ==> stor_taint_ok H cx tn' t)
 Proof
   rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     fs[stmt_state_rel_def, fmp_room_def, allocas_below_fmp_def,
+        venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all empty_alloc_checked_run >> strip_tac >>
   drule compile_alloc_buffer_insts >> strip_tac >> gvs[] >>
   qexistsl_tac [`step_prov PG G
@@ -236,7 +241,7 @@ Theorem empty_alloc_buffer_certificate:
     stmt_state_rel (H : (bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
-    n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+    n < dimword (:256) /\
     ghost_inv H d cenv cx es G tn s ==>
     ?p G' tn'. buf.buf_operand = Var p /\
       inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
@@ -245,6 +250,12 @@ Theorem empty_alloc_buffer_certificate:
       ghost_kept cenv es sa G tn s G' tn'
 Proof
   rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     fs[exprLoweringPropsTheory.stmt_state_rel_def, exprLoweringPropsTheory.fmp_room_def,
+        allocas_below_fmp_def, venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule compile_alloc_buffer_parts >> strip_tac >>
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by

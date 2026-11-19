@@ -10,7 +10,7 @@ Ancestors
   robustCopyTransportPtr loweringStateRelDefs valueEncodingDefs exprSimProps
 
 Theorem ifexp_materialize_mstore_check:
-  ptr_covers G tn p s 32 /\ ~ctx_has_dalloca ctx ==>
+  ptr_covers G tn p s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
     (mk_inst id MSTORE [Var p; v] []) s
 Proof
@@ -58,8 +58,8 @@ Proof
        imm_taint_def]
 QED
 
-Theorem ifexp_copy_store_phase:
-  ~ctx_has_dalloca ctx /\ ptr_covers G tn addr s 32 /\
+Theorem mstore_seq_ptr:
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ptr_covers G tn addr s 32 /\
   eval_operand (Var addr) s = SOME d /\ eval_operand value s = SOME w ==>
   ?t tn'.
     run_inst_seq [mk_inst id MSTORE [Var addr;value] []] s = OK t /\
@@ -84,6 +84,23 @@ Proof
   conj_tac >- simp[ifexp_materialize_mstore_taint] >>
   simp[ifexp_materialize_mstore_ghost]
 QED
+
+Theorem ifexp_copy_store_phase:
+  ~ctx_has_dalloca ctx /\ ptr_covers G tn addr s 32 /\
+  eval_operand (Var addr) s = SOME d /\ eval_operand value s = SOME w ==>
+  ?t tn'.
+    run_inst_seq [mk_inst id MSTORE [Var addr;value] []] s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MSTORE [Var addr;value] []]
+      s G tn' /\
+    t = mstore (w2n d) w s /\
+    tn'.t_mem = (tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + 32}) UNION
+      {w2n d + k | k IN op_taint tn value} /\
+    tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >> irule mstore_seq_ptr >> simp[]
+QED
+
 Theorem mstore_local_robust:
   !fn cenv scopes s name entry p sz a w tv tn tn'.
     local_ptrs_rel fn cenv scopes s /\
@@ -171,7 +188,7 @@ QED
 
 Theorem ptr_inst_ok_mload:
   !D ctx fn G tn s id src tmp fuel.
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx ==>
+    ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn
       (mk_inst id MLOAD [Var src] [tmp]) s
 Proof
@@ -232,7 +249,7 @@ Theorem mload_then_mstore_ok:
     ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32 /\
     lookup_var src s = SOME a /\ tmp <> dst /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn
       (mk_inst id MLOAD [Var src] [tmp]) s /\
     ptr_inst_ok D 0 fuel ctx fn
@@ -245,6 +262,9 @@ Theorem mload_then_mstore_ok:
 Proof
   rpt strip_tac
   >- (irule ptr_inst_ok_mload >> simp[]) >>
+  `allocas_below_fmp (update_var tmp (mload (w2n a) s) s) =
+    allocas_below_fmp s` by
+    simp[NoAsms, allocas_below_fmp_def, update_var_def] >>
   irule ptr_inst_ok_mstore >> simp[] >> conj_tac
   >- (irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def] >> metis_tac[]) >>
   irule mload_preserves_ptr_covers >> simp[]

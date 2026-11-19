@@ -5,6 +5,7 @@ Ancestors
   venomExecSemantics venomInst venomState fragExec
   ctorDeployMemoryRunMemEntryFirstEmission compilerFirstEmission
   exprLoweringProps exprLowering compileEnv
+  fragGasPath gasOutcomeFull bodySim list
 Libs
   monadsyntax
 
@@ -152,4 +153,125 @@ Proof
   drule ifexp_ptr_path_reachable >>
   disch_then (qspec_then `jump_to lbl z` mp_tac) >>
   simp[jump_to_def] >> metis_tac[]
+QED
+
+Theorem gas_path_edge_reach:
+  gas_path_edge ctx fn s n (OK t) /\
+  (!bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+  (!i. active_inst fn i s ==> frag_reachable ctx fn0 s0 fn i s) /\
+  active_inst fn j t ==>
+  frag_reachable ctx fn0 s0 fn j t
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_path_edge _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_path_edge_def]) >>
+  `active_inst fn inst s` by metis_tac[contextCodegenRelPropsTheory.lookup_instruction_active] >>
+  `frag_reachable ctx fn0 s0 fn inst s` by metis_tac[] >>
+  gvs[exit_result_def]
+  >- metis_tac[cj 2 contextRawReachableTheory.frag_reachable_rules]
+  >- (`enters_block fn t'
+         (entered with vs_inst_idx := phi_prefix_length target.bb_instructions)` by
+        (simp[contextCodegenRelTheory.enters_block_def] >> metis_tac[]) >>
+      metis_tac[cj 3 contextRawReachableTheory.frag_reachable_rules])
+  >- (`?bb. lookup_block lbl fn.fn_blocks = SOME bb` by
+        (qpat_assum `active_inst fn j (jump_to lbl s)` mp_tac >>
+         simp[NoAsms,contextCodegenRelTheory.active_inst_def,venomStateTheory.jump_to_def] >>
+         strip_tac >>
+         `!bbs label. (?b. MEM b bbs /\ b.bb_label = label) ==>
+           ?bb. lookup_block label bbs = SOME bb` by
+           (Induct >> simp[lookup_block_def, listTheory.FIND_thm] >>
+            rpt strip_tac >> gvs[] >>
+            Cases_on `label = h.bb_label` >> gvs[] >>
+            metis_tac[lookup_block_def]) >>
+         first_x_assum irule >> qexists_tac `bb'` >> simp[]) >>
+      rename1 `lookup_block lbl fn.fn_blocks = SOME target` >>
+      `phi_prefix_length target.bb_instructions = 0` by
+        metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+      `enters_block fn (jump_to lbl s) (jump_to lbl s)` by
+        (simp[contextCodegenRelTheory.enters_block_def,venomStateTheory.jump_to_def,eval_phis_no_phi] >> metis_tac[]) >>
+      `~(jump_to lbl s).vs_halted` by simp[venomStateTheory.jump_to_def] >>
+      metis_tac[cj 3 contextRawReachableTheory.frag_reachable_rules])
+  >> Cases_on `step_inst fuel ctx inst s` >> gvs[exit_result_def]
+QED
+
+Theorem gas_path_reach:
+  !ctx fn s n r.
+    gas_path ctx fn s n r ==>
+    !fn0 s0 t.
+      r = OK t /\
+      (!bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+      (!i. active_inst fn i s ==> frag_reachable ctx fn0 s0 fn i s) ==>
+      !j. active_inst fn j t ==> frag_reachable ctx fn0 s0 fn j t
+Proof
+  ho_match_mp_tac gas_path_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> gvs[exit_result_def] >>
+  metis_tac[gas_path_edge_reach]
+QED
+
+Theorem gas_origin_ptr_path_erase:
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) marks (OK t,G1,tn1)
+  ==> gas_path ctx fn s (LENGTH marks) (OK t)
+Proof
+  strip_tac >>
+  drule fragGasOriginPtrTheory.gas_origin_ptr_path_projections >> strip_tac >>
+  drule fragGasOriginTheory.gas_origin_path_erase >>
+  metis_tac[fragGasModeTheory.gas_marked_path_exec]
+QED
+
+Theorem body_inv_no_phi:
+  body_inv tops ctx cenv cx /\ MEM fn ctx.ctx_functions ==>
+  !bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >>
+  `lowering_context_ok ctx` by
+    (qpat_assum `body_inv _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rw[bodySimTheory.body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[] >>
+     metis_tac[vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry,
+               deployUnitProducersTheory.lower_vyper_deploy_unit_context_ok]) >>
+  rpt strip_tac >> irule venomExecProofsTheory.no_phis_phi_prefix_length_zero >>
+  fs[vyperCompilerTheory.lowering_context_ok_def,vyperCompilerTheory.ptr_ok_check_def,EVERY_MEM] >>
+  metis_tac[venomFnInstsProofsTheory.MEM_fn_insts]
+QED
+
+Theorem gas_origin_ptr_path_dalloca_no_wrap:
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s0,G0,tn0) marks (OK s1,G1,tn1) /\
+  (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) ==>
+  !fn inst s. frag_reachable ctx func s1 fn inst s ==> dalloca_no_wrap inst s
+Proof
+  strip_tac >> drule gas_origin_ptr_path_erase >> strip_tac >>
+  `!i. active_inst func i s1 ==> frag_reachable ctx func s0 func i s1` by
+    (drule gas_path_reach >>
+     disch_then (qspecl_then [`func`,`s0`,`s1`] mp_tac) >>
+     simp[frag_reachable_start]) >>
+  metis_tac[frag_reachable_trans]
+QED
+
+(* Keep the actual path available to a continuation. *)
+Theorem gas_outcome_full_post_path:
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
+    (es,s,G,tn) Q R /\
+  (!marks H res ee G' tn' t.
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s,G,tn) marks (OK t,G',tn') /\ Q H res ee G' tn' t ==>
+    Q' H res ee G' tn' t) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
+    (es,s,G,tn) Q' R
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
+  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks`
+  >- (disj1_tac >> metis_tac[])
+  >- (disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >>
+      rpt conj_tac >- fs[] >- fs[] >>
+      rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
+      >- (disj1_tac >> first_x_assum irule >> simp[] >>
+          qexists_tac `marks` >> simp[]) >>
+      disj2_tac >> simp[]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
 QED

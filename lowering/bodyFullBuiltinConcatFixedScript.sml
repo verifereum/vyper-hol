@@ -61,7 +61,7 @@ Theorem concat_fixed_arm_full_run:
   not_fresh_at sa dp /\ not_fresh_at sa oq /\
   (!z. x = Var z ==> not_fresh_at sa z) /\
   ptr_covers G tn dp s (bsz-32) /\ ptr_covers G tn oq s 32 /\
-  op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!i. ob <= i /\ i < ob+32 ==> i NOTIN tn.t_mem) /\
   mload ob s = n2w k /\ LENGTH bs = m /\ m <= 32 /\ 32+k+32 <= bsz /\
   B+bsz < dimword (:256) /\ ob+64 < dimword (:256) /\

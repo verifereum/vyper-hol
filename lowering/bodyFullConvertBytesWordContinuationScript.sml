@@ -5,13 +5,14 @@ Ancestors
   ptrDiscipline instIdxIndep fragGasSeqPtr emitHelperProps ASCIInumbers
   fragExec compileEnv exprLowering exprLoweringProps venomState venomInst
   venomExecSemantics finite_map words arithmetic list
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem bytes_word_continuation_uniform:
   (compile_type_convert word ConvToBool sm = (out,sb) \/
    (?b. compile_int_clamp F b word sm = (out,sb)) \/
    (out = word /\ sb = sm) \/ emit_op SHL [bits;word] sm = (out,sb)) /\
   op_prov G word = NONE /\ op_taint tn word = {} /\
-  op_prov G bits = NONE /\ op_taint tn bits = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G bits = NONE /\ op_taint tn bits = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
   (run_inst_seq (emitted_insts sm sb) u = OK t \/
    run_inst_seq (emitted_insts sm sb) u = Abort err t) ==>
   ?H th.
@@ -40,7 +41,8 @@ Proof
             mk_inst (sm.cs_next_id+1) ISZERO [Var a] [b]]
             (u with vs_inst_idx := q) = OK (t with vs_inst_idx := q)` by
             simp[run_inst_seq_inst_idx, is_terminator_def, exec_result_map_def] >>
-          `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := q)` by simp[] >>
+          `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := q)` by
+            simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
           drule_all iszero_pair_certificate >>
           disch_then (qspecl_then [`fn`,`PG`,`G`,`D`] strip_assume_tac) >> gvs[]) >>
       simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>

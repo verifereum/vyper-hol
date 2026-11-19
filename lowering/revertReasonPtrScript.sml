@@ -8,7 +8,7 @@ Ancestors
 Theorem ptr_inst_ok_revert:
   ptr_covers G tn p s (w2n n) /\
   eval_operand len s = SOME n /\ op_taint tn len = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !fuel. ptr_inst_ok D 0 fuel ctx fn G tn
     (mk_inst id REVERT [Var p; len] []) s
 Proof

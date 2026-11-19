@@ -14,10 +14,65 @@ Ancestors
   allocationPtr wordLoadStorePtr fragExecPtr fragGasSeqPtr ptrSafetyTransport
   fragGasOriginPtr exprSimAbiEncodeFramedArrayControl abiDecoderExecution
   decoderGhostFramePtr
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
   exprLoweringProps fragExec venomInstProofs
+  exprSimAbiEncodeSemantic[qualified,ignore_grammar]
+  localPtrsProps[qualified,ignore_grammar]
   ptrDiscipline ptrCoverage ghostPcTransportPtr emitHelperProps emitHelper compileEnv
   venomExecSemantics venomState venomMemDefs venomInst finite_map
   valueEncodingProps words list rich_list arithmetic pred_set
+
+Theorem window_exec_frame_alloca_budget:
+  abi_encode_exec_frame func s t /\ alloca_inv t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp)
+Proof
+  strip_tac >> strip_tac >>
+  qpat_x_assum `abi_encode_exec_frame func s t`
+    (strip_assume_tac o REWRITE_RULE
+      [abi_encode_exec_frame_def, exprSimAbiEncodeSemanticTheory.abi_encode_semantic_obs_fields]) >>
+  `allocas_below_fmp s /\
+   s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by metis_tac[] >>
+  qpat_x_assum `allocas_below_fmp s`
+    (strip_assume_tac o REWRITE_RULE [allocas_below_fmp_def]) >>
+  qpat_x_assum `alloca_inv t`
+    (strip_assume_tac o REWRITE_RULE [alloca_inv_def, alloca_next_valid_def]) >>
+  simp[allocas_below_fmp_def] >> rpt strip_tac >> res_tac >> decide_tac
+QED
+
+Theorem window_alloca32_below_fmp[local]:
+  alloca_inv s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  MEM (mk_inst id ALLOCA [Lit 32w] [p]) (fn_insts func) /\
+  step_inst_base (mk_inst id ALLOCA [Lit 32w] [p]) s = OK t ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t)
+Proof
+  strip_tac >> strip_tac >>
+  `exec_alloca (mk_inst id ALLOCA [Lit 32w] [p]) s (32w:bytes32) = OK t` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
+  `alloca_inv t` by
+    (drule_at (Pat `exec_alloca _ _ _ = _`) localPtrsPropsTheory.alloca_inv_exec_alloca >>
+     simp[]) >>
+  `t.vs_alloca_next + pending_alloca_size func t <=
+   s.vs_alloca_next + pending_alloca_size func s` by
+    (irule exec_alloca_static_charge >>
+     qexistsl_tac [`mk_inst id ALLOCA [Lit 32w] [p]`, `32w:bytes32`] >>
+     simp[mk_inst_def]) >>
+  `t.vs_initial_fmp = s.vs_initial_fmp /\ t.vs_fmp = s.vs_fmp` by
+    (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+     simp[exec_alloca_def, AllCaseEqs(), LET_THM] >> rw[] >> simp[update_var_def]) >>
+  `allocas_below_fmp s /\
+   s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by metis_tac[] >>
+  qpat_x_assum `allocas_below_fmp s`
+    (strip_assume_tac o REWRITE_RULE [allocas_below_fmp_def]) >>
+  qpat_x_assum `alloca_inv t`
+    (strip_assume_tac o REWRITE_RULE [alloca_inv_def, alloca_next_valid_def]) >>
+  simp[allocas_below_fmp_def] >> rpt strip_tac >> res_tac >> decide_tac
+QED
 
 Theorem window_cursor_init_joint:
   emit_op ALLOCA [Lit 32w] st = (cursor,mid) /\
@@ -29,7 +84,8 @@ Theorem window_cursor_init_joint:
   eval_operand value_op s = SOME w /\
   op_taint tn value_op = {} /\
   (!x. value_op = Var x ==> not_fresh_at st x) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -38,6 +94,7 @@ Theorem window_cursor_init_joint:
       OK (t with vs_inst_idx := s.vs_inst_idx) /\
     window_phase ctx func st en {st.cs_next_id} [] s t /\
     abi_encode_exec_frame func s t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     cursor = Var p /\ not_fresh_at en p /\
     eval_operand cursor t = SOME (n2w b) /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
@@ -81,6 +138,13 @@ Proof
     (qpat_x_assum `run_inst_seq _ _ = OK raw` mp_tac >>
      pure_asm_rewrite_tac[run_inst_seq_def] >>
      simp_tac (srw_ss()) [AllCaseEqs()] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (strip_tac >> drule_all window_alloca32_below_fmp >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp raw` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[mk_inst mid.cs_next_id MSTORE [cursor;value_op] []]`, `u`] >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def, run_inst_seq_def]) >>
   `raw.vs_halted = s.vs_halted /\
    raw.vs_current_bb = s.vs_current_bb /\
    raw.vs_inst_idx = s.vs_inst_idx` by
@@ -184,10 +248,11 @@ Proof
      simp_tac (srw_ss()) [Abbr `si`] >> irule ptr_inst_ok_mstore >>
      qpat_assum `ptr_covers Ga ta p u 32` mp_tac >>
      qpat_assum `op_taint ta value_op = {}` mp_tac >>
-     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
      qpat_assum `Ga = G |+ _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def, lookup_var_def]) >>
+     simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def, lookup_var_def,
+          exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `run_inst_seq_mem_ok [ai;si] s` by
     (`inst_mem_below_frontier ai s` by
        (irule instMemFrontierTheory.below_frontier_no_ranges >>
@@ -279,10 +344,9 @@ Proof
       qpat_assum `s.vs_inst_idx = _` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
       simp[venom_state_component_equality]) >>
-  conj_tac
-  >- (simp[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `p`] >>
-      rpt strip_tac >> irule fresh_var_distinct >> decide_tac) >>
-  metis_tac[allocas_from_def]
+  simp[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `p`,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
+  rpt strip_tac >> irule fresh_var_distinct >> decide_tac
 QED
 
 Resume window_cursor_init_joint[allocation_alignment]:
@@ -367,7 +431,8 @@ Theorem window_array_root_prefix_joint_strong:
   (?p. src = Var p /\ ptr_covers G tn p s 32) /\
   (?p. dst = Var p /\ ptr_covers G tn p s 32) /\
   (!i. sb <= i /\ i < sb + 32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -381,6 +446,7 @@ Theorem window_array_root_prefix_joint_strong:
     window_array_cursor T en pp st.cs_next_id b 0 sb cap d
       (LENGTH (enc (Array NONE ty) (ListV avs))) t /\
     abi_encode_exec_frame func s t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     pp = Var p /\ ptr_covers G' tn' p t 32 /\
     eval_operand count_op t = SOME (n2w (LENGTH avs)) /\
     (!x. count_op = Var x ==> not_fresh_at en x) /\
@@ -501,6 +567,7 @@ Resume window_array_root_prefix_joint_strong[word_pre]:
     metis_tac[] >>
   `eval_operand (Var sp) u = SOME (n2w sb) /\
    eval_operand (Var dp) u = SOME (n2w d)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all window_word_joint_path_strong >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   suspend "word_endpoint"
@@ -571,6 +638,15 @@ Resume window_array_root_prefix_joint_strong[observations]:
        simp_tac (srw_ss()) [abi_encode_exec_frame_def, pending_alloca_size_def,
          update_var_def, exprSimAbiEncodeSemanticTheory.abi_encode_semantic_obs_def] >> simp[]) >>
   `abi_encode_exec_frame func s t` by metis_tac[abi_encode_exec_frame_trans] >>
+  `alloca_inv t` by metis_tac[window_phase_resources] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+   t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame func s t` (fn frame =>
+     qpat_assum `alloca_inv t` (fn inv =>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` (fn budget =>
+     ACCEPT_TAC (MATCH_MP window_exec_frame_alloca_budget
+       (LIST_CONJ [frame, inv, budget])))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by metis_tac[] >>
   suspend "finish"
 QED
 
@@ -681,7 +757,8 @@ Theorem window_array_root_prefix_joint:
   (?p. src = Var p /\ ptr_covers G tn p s 32) /\
   (?p. dst = Var p /\ ptr_covers G tn p s 32) /\
   (!i. sb <= i /\ i < sb + 32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -695,6 +772,7 @@ Theorem window_array_root_prefix_joint:
     window_array_cursor T en pp st.cs_next_id b 0 sb cap d
       (LENGTH (enc (Array NONE ty) (ListV avs))) t /\
     abi_encode_exec_frame func s t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     pp = Var p /\ ptr_covers G' tn' p t 32 /\
     eval_operand count_op t = SOME (n2w (LENGTH avs)) /\
     (!x. count_op = Var x ==> not_fresh_at en x) /\
@@ -727,7 +805,8 @@ Theorem window_array_root_tail_init_joint:
   eval_operand count_op s = SOME (n2w (LENGTH avs)) /\
   op_taint tn count_op = {} /\
   (!x. count_op = Var x ==> not_fresh_at st x) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -742,6 +821,7 @@ Theorem window_array_root_tail_init_joint:
       (LENGTH avs * abi_member_head_size ty) sb cap d
       (LENGTH (contractABI$enc (Array NONE ty) (ListV avs))) t /\
     abi_encode_exec_frame func s t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     dp = Var p /\
     ptr_covers G' tn' p t 32 /\
     allocas_from lo t /\ lo <= t.vs_alloca_next /\
@@ -829,6 +909,24 @@ Proof
      qpat_assum `v.vs_alloca_next = _` mp_tac >>
      qpat_assum `p <> q` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
      rpt strip_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  `MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w] [p]) (fn_insts func)` by
+    metis_tac[markerTheory.Abbrev_def] >>
+  `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit 32w] [p]) s = OK u` by
+    metis_tac[markerTheory.Abbrev_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (strip_tac >> drule_all window_alloca32_below_fmp >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (qpat_assum `v = update_var q _ u` (fn th => once_rewrite_tac[th]) >>
+     simp[exprPtrUnwrapFramesTheory.copy_allocas_update]) >>
+  `alloca_inv t` by metis_tac[window_phase_resources] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+   t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
+    (qpat_assum `abi_encode_exec_frame func s t` (fn frame =>
+     qpat_assum `alloca_inv t` (fn inv =>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` (fn budget =>
+     ACCEPT_TAC (MATCH_MP window_exec_frame_alloca_budget
+       (LIST_CONJ [frame, inv, budget])))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by metis_tac[] >>
   `u.vs_alloca_next < dimword (:256)` by
     metis_tac[window_phase_resources, alloca_room_next_lt] >>
   qabbrev_tac `Ga = step_prov PG G ai u` >>
@@ -920,18 +1018,20 @@ Proof
   `!D. ptr_inst_ok D lo 0 ctx func Ga ta mi
       (u with vs_inst_idx := SUC s.vs_inst_idx)` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-       [`op_taint ta count_op = {}`, `~ctx_has_dalloca ctx`,
+       [`op_taint ta count_op = {}`, `ctx_has_dalloca ctx ==> allocas_below_fmp u`,
         `allocas_from lo u`, `Abbrev (mi = _)`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      simp[Abbr `mi`, ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
-       allocas_from_def, mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
+       allocas_from_def, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+       exprPtrUnwrapFramesTheory.copy_allocas_update,
+       mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
        contextCodegenRelTheory.source_memory_read_ranges_def] >>
      conj_tac
      >- (gen_tac >> Cases_on `op = count_op` >> gvs[] >>
          Cases_on `op = Lit (n2w asz)` >> gvs[op_taint_def]) >>
      simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
        exec_pure2_def, AllCaseEqs(), update_var_def] >>
-     conj_tac >- gvs[allocas_from_def] >> rpt strip_tac >> gvs[]) >>
+     rpt strip_tac >> gvs[]) >>
   `!D. ptr_inst_ok D lo 0 ctx func Gm tm si
       (v with vs_inst_idx := s.vs_inst_idx + 2)` by
     (gen_tac >> irule ptr_inst_ok_lower_bound_transport >>
@@ -941,9 +1041,10 @@ Proof
      simp_tac (srw_ss()) [Abbr `si`] >> irule ptr_inst_ok_mstore >>
      map_every (fn pat => qpat_assum pat mp_tac)
        [`ptr_covers Gm tm p v 32`, `op_taint tm (Var q) = {}`,
-        `~ctx_has_dalloca ctx`] >>
+        `ctx_has_dalloca ctx ==> allocas_below_fmp v`] >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def, lookup_var_def]) >>
+     simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def, lookup_var_def,
+          exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `run_inst_seq_mem_ok [ai;mi;si] s` by
     (`inst_mem_below_frontier ai s /\ inst_mem_below_frontier mi u` by
        (conj_tac >> irule instMemFrontierTheory.below_frontier_no_ranges >>
@@ -1138,7 +1239,7 @@ Theorem window_child_prefix_joint:
   mem_word_at slot s.vs_memory = n2w off /\
   (!i. slot <= i /\ i < slot + 32 ==> i NOTIN tn.t_mem) /\
   alloca_inv s /\ alloca_room ctx func s /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -1342,6 +1443,10 @@ Proof
      simp[w2n_n2w, LESS_MOD, update_var_def, eval_operand_def,
           lookup_var_def, FLOOKUP_UPDATE] >>
      fs[lookup_var_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    simp[exprPtrUnwrapFramesTheory.copy_allocas_update] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    simp[exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `!D k. ptr_inst_ok D lo 0 ctx func G tn i1
      (s with vs_inst_idx := k)` by
     (rpt gen_tac >>
@@ -1349,15 +1454,14 @@ Proof
        Abbr `i1`, mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
        codegenRelTheory.fixed_source_write_range_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
-       allocas_from_def, op_taint_def, step_inst_non_invoke] >>
+       allocas_from_def, op_taint_def, step_inst_non_invoke,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
      simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def,
        lookup_var_def, update_var_def, AllCaseEqs()] >>
-     conj_tac
-     >- (`op_taint tn (Var dst) = {}` by
-           metis_tac[bodyPtrDefsTheory.ptr_covers_def] >>
-         gen_tac >> Cases_on `op = Var dst` >> simp[] >>
-         Cases_on `FLOOKUP tn.t_var dst` >> fs[op_taint_def]) >>
-     metis_tac[allocas_from_def]) >>
+     `op_taint tn (Var dst) = {}` by
+       metis_tac[bodyPtrDefsTheory.ptr_covers_def] >>
+     gen_tac >> Cases_on `op = Var dst` >> simp[] >>
+     Cases_on `FLOOKUP tn.t_var dst` >> fs[op_taint_def]) >>
   `allocas_from lo u /\ allocas_from lo v` by
     (simp[allocas_from_def, update_var_def] >> metis_tac[allocas_from_def]) >>
   `!D k. ptr_inst_ok D lo 0 ctx func G1 tn1 i2
@@ -1365,7 +1469,7 @@ Proof
     (rpt gen_tac >>
      `ptr_inst_ok D 0 0 ctx func G1 tn1 i2 (u with vs_inst_idx := k)` by
        (simp[NoAsms, Abbr `i2`] >> irule ptr_inst_ok_mload >>
-        simp[NoAsms] >> metis_tac[]) >>
+        simp[NoAsms, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >> metis_tac[]) >>
      `allocas_from lo (u with vs_inst_idx := k)` by
        (simp[NoAsms, allocas_from_def] >> metis_tac[allocas_from_def]) >>
      metis_tac[ptr_inst_ok_lower_bound_transport, ZERO_LESS_EQ]) >>
@@ -1376,12 +1480,11 @@ Proof
        Abbr `i3`, mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
        codegenRelTheory.fixed_source_write_range_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
-       allocas_from_def, step_inst_non_invoke] >>
+       allocas_from_def, step_inst_non_invoke, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
      simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def,
        lookup_var_def, update_var_def, AllCaseEqs()] >>
      conj_tac
      >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-     conj_tac >- metis_tac[allocas_from_def] >>
      rpt strip_tac >> gvs[]) >>
   `!k. step_inst_base i2 (u with vs_inst_idx := k) =
        OK (v with vs_inst_idx := k) /\
@@ -1501,7 +1604,7 @@ Theorem window_child_suffix_joint:
   slot + 32 <= s.vs_alloca_next /\
   venomMemDefs$regions_disjoint (h,32) (slot,32) /\
   alloca_inv s /\ alloca_room ctx func s /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -1654,12 +1757,22 @@ Proof
      simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def,
        FLOOKUP_UPDATE, mstore_def, write_memory_with_expansion_def,
        update_var_def, lookup_var_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `u = mstore _ _ _` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def, mstore_def,
+          write_memory_with_expansion_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (qpat_assum `v = update_var _ _ u` SUBST1_TAC >>
+     pure_rewrite_tac[exprPtrUnwrapFramesTheory.copy_allocas_update] >>
+     first_assum ACCEPT_TAC) >>
   `!D k. ptr_inst_ok D lo 0 ctx func G tn i1
     (s with vs_inst_idx := k)` by
     (rpt gen_tac >>
      `ptr_inst_ok D 0 0 ctx func G tn i1 (s with vs_inst_idx := k)` by
        (simp[NoAsms, Abbr `i1`] >> irule ptr_inst_ok_mstore >>
-        simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def] >>
+        simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def,
+          exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
         metis_tac[bodyPtrDefsTheory.ptr_covers_def]) >>
      `allocas_from lo (s with vs_inst_idx := k)` by
        (simp[NoAsms, allocas_from_def] >> metis_tac[allocas_from_def]) >>
@@ -1669,7 +1782,8 @@ Proof
     (rpt gen_tac >>
      `ptr_inst_ok D 0 0 ctx func G2 tn2 i3 (v with vs_inst_idx := k)` by
        (simp[NoAsms, Abbr `i3`] >> irule ptr_inst_ok_mstore >>
-        simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def] >>
+        simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def,
+          exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
         metis_tac[bodyPtrDefsTheory.ptr_covers_def]) >>
      `allocas_from lo (v with vs_inst_idx := k)` by
        (simp[NoAsms, allocas_from_def] >> metis_tac[allocas_from_def]) >>
@@ -1681,11 +1795,10 @@ Proof
        Abbr `i2`, mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
        codegenRelTheory.fixed_source_write_range_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
-       allocas_from_def, step_inst_non_invoke] >>
+       allocas_from_def, step_inst_non_invoke, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
      simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def,
        lookup_var_def, update_var_def, AllCaseEqs()] >>
-     conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-     metis_tac[allocas_from_def]) >>
+     rpt strip_tac >> gvs[] >> metis_tac[]) >>
   `!k. step_inst_base i2 (u with vs_inst_idx := k) =
        OK (v with vs_inst_idx := k) /\
        step_inst_base i3 (v with vs_inst_idx := k) =
@@ -1794,10 +1907,16 @@ Proof
      conj_tac
      >- (qpat_x_assum `raw = t3 with vs_inst_idx := _`
            (mp_tac o AP_TERM ``\z. z.vs_allocas``) >>
-         simp[mstore_def, write_memory_with_expansion_def, update_var_def]) >>
+         qpat_assum `raw = mstore _ _ _` SUBST1_TAC >>
+         qpat_assum `v = update_var _ _ _` SUBST1_TAC >>
+         qpat_assum `u = mstore _ _ _` SUBST1_TAC >>
+         simp[NoAsms, mstore_def, write_memory_with_expansion_def, update_var_def]) >>
      qpat_x_assum `raw = t3 with vs_inst_idx := _`
        (mp_tac o AP_TERM ``\z. z.vs_alloca_next``) >>
-     simp[mstore_def, write_memory_with_expansion_def, update_var_def]) >>
+     qpat_assum `raw = mstore _ _ _` SUBST1_TAC >>
+     qpat_assum `v = update_var _ _ _` SUBST1_TAC >>
+     qpat_assum `u = mstore _ _ _` SUBST1_TAC >>
+     simp[NoAsms, mstore_def, write_memory_with_expansion_def, update_var_def]) >>
   `mem_word_at h t3.vs_memory = n2w off /\
    mem_word_at slot t3.vs_memory = n2w (off+n)` by
     (simp[mstore_mem_word_at_same] >>
@@ -1838,7 +1957,7 @@ Theorem window_array_backedge_joint:
   ip <> nv /\ ptr_covers G tn ip s 32 /\
   slot+32 <= s.vs_alloca_next /\
   op_prov G (Var iv) = NONE /\ op_taint tn (Var iv) = {} /\
-  alloca_inv s /\ alloca_room ctx func s /\ ~ctx_has_dalloca ctx /\
+  alloca_inv s /\ alloca_room ctx func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   t = jump_to hdr (mstore slot (n2w (SUC k))
     (update_var nv (n2w (SUC k)) s)) ==>
@@ -1948,12 +2067,14 @@ Proof
      asm_simp_tac (srw_ss()) [Abbr `bg2`, Abbr `bt2`, Abbr `bsi`,
        Abbr `br2`, step_taint_nonmemory_frame, mk_inst_def] >>
      fs[mk_inst_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp br1` by
+    simp[Abbr `br1`, exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `!D j. ptr_inst_ok D lo 0 ctx func G tn bai
     (s with vs_inst_idx := j)` by
     (rpt gen_tac >>
      qpat_assum `op_taint tn (Var iv) = {}` mp_tac >>
      qpat_assum `allocas_from lo s` mp_tac >>
-     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
      qpat_assum `step_inst_base bai s = OK br1` mp_tac >>
      qpat_assum `Abbrev (bai = _)` mp_tac >>
      qpat_assum `Abbrev (br1 = _)` mp_tac >>
@@ -1973,7 +2094,8 @@ Proof
           (fn th => simp_tac (srw_ss()) [SIMP_RULE (srw_ss()) [Abbr `bai`, mk_inst_def] th])) >>
      simp[ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
        Abbr `bai`, mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
-       contextCodegenRelTheory.source_memory_read_ranges_def] >>
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
      conj_tac >- (gen_tac >> Cases_on `op = Var iv` >> fs[] >>
        Cases_on `op = Lit 1w` >> fs[op_taint_def]) >>
      fs[allocas_from_def, Abbr `br1`, update_var_def] >> first_assum ACCEPT_TAC) >>
@@ -1984,7 +2106,7 @@ Proof
      qpat_assum `op_taint bt1 (Var nv) = {}` mp_tac >>
 
      qpat_assum `allocas_from lo s` mp_tac >>
-     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp br1` mp_tac >>
      qpat_assum `Abbrev (br1 = _)` mp_tac >>
      qpat_assum `Abbrev (bsi = _)` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
@@ -1997,7 +2119,8 @@ Proof
         first_assum ACCEPT_TAC) >>
      qexists_tac `0` >> simp[] >>
 
-     simp[Abbr `bsi`, ptr_inst_ok_mstore]) >>
+     simp[Abbr `bsi`, ptr_inst_ok_mstore,
+          exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `run_inst_seq_mem_ok [bai;bsi] s` by
     (qpat_assum `step_inst_base bai s = OK br1` mp_tac >>
      qpat_assum `step_inst_base bsi br1 = OK br2` mp_tac >>
@@ -2091,9 +2214,13 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      fs[Abbr `bji`, Abbr `back_s`, Abbr `back_prefix`,
        step_inst_base_opcode_eqs, mk_inst_def, jump_to_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp back_prefix` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp br1` mp_tac >>
+     simp[NoAsms, Abbr `back_prefix`, Abbr `br2`, allocas_below_fmp_def,
+          mstore_def, write_memory_with_expansion_def] >> metis_tac[]) >>
   `!D. ptr_inst_ok D lo 0 ctx func bg2 bt2 bji back_prefix` by
     (gen_tac >> qpat_assum `allocas_from lo back_prefix` mp_tac >>
-     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp back_prefix` mp_tac >>
      qpat_assum `Abbrev (bji = _)` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      simp[ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,

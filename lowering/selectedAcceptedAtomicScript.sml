@@ -69,6 +69,7 @@ Theorem selected_bytes_accepts[local]:
 Proof
   rewrite_tac[selected_decoder_accepts_def] >>
   strip_tac >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all calldata_exact_bytes_joint_limit >>
   disch_then (qspec_then `PG` mp_tac) >>
   qpat_assum `cd_decode F _ _ _ = SOME x` (fn th => simp[NoAsms, th]) >>

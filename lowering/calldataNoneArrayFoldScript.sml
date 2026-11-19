@@ -280,6 +280,7 @@ Proof
      simp[rich_listTheory.IS_PREFIX_APPEND] >>
      metis_tac[inst_extends_trans,inst_extends_def]) >>
   `fn_has_code st gs fn` by metis_tac[fragExecTheory.fn_has_code_split] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all calldata_count_guard_rejected_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`z`,`H`,`u`] >> asm_rewrite_tac[]

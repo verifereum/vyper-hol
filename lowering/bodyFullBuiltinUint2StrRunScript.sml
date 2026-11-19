@@ -70,6 +70,7 @@ QED
 Resume u2s_setup_exit_joint[zero]:
   gvs[] >>
   `1 <= n` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sc` by simp[] >>
   drule_all (Q.INST [`s` |-> `sc`] (SPEC_ALL u2s_zero_joint_result)) >>
   disch_then (qspecl_then [`ty`, `explicit`, `PG`]
     (qx_choose_then `sf` (qx_choose_then `Gf`

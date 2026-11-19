@@ -13,7 +13,7 @@ Theorem toplevel_code_ctor_execution_full:
   compile_imm_copy_to_memory T imm src buf.buf_operand n 0 mid = ((),sb) /\
   fn_has_code sm mid func /\ fn_has_code mid sb func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword(:256) /\ 32*n <= nb /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sm x) /\
@@ -94,6 +94,13 @@ Resume toplevel_code_ctor_execution_full[copy]:
      asm_rewrite_tac[] >> strip_tac >> simp[]) >>
   `compile_imm_copy_to_memory T imm src (Var root) n 0 mid = ((),sb)` by
     (qpat_x_assum `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _` mp_tac >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (mp_tac (Q.INST [`out` |-> `root`] unwrap_alloc_below_fmp) >>
+     impl_tac >- simp[] >> strip_tac >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by
+    (qpat_x_assum `a = _` SUBST1_TAC >>
+     qpat_x_assum `u = _` SUBST_ALL_TAC >>
+     fs[allocas_below_fmp_def, update_var_def] >> strip_tac >> fs[]) >>
   `w2n p+0+32*n <= lo /\ 0+32*n <= nb /\
    w2n p+0+32*n <= a.vs_alloca_next /\ w2n d+0+32*n <= a.vs_alloca_next /\
    (ctx_has_dalloca ctx ==> allocas_below_fmp a)` by gvs[] >>
