@@ -23,7 +23,7 @@ Ancestors
   concretizePtrTaintContent ptrDiscipline venomState venomCallOracleDefs
   concretizePtrOpaqueRetpc concretizePtrSharedFields extCallOracle venomExecSemantics list words pred_set arithmetic
 
-Theorem ptr_create_family_current_stores[local]:
+Theorem ptr_create_family_current_stores:
   ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
   s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
 Proof
@@ -870,7 +870,7 @@ Proof
 QED
 
 
-Theorem ptr_create_family_delegate_written_byte[local]:
+Theorem ptr_create_family_delegate_written_byte:
   exec_delegatecall inst s gas addr ao az ro rz = OK t /\
   j < MIN (w2n rz) (LENGTH t.vs_returndata) ==>
   read_byte (w2n ro + j) t.vs_memory = EL j t.vs_returndata

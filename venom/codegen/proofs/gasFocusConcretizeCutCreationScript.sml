@@ -1,5 +1,5 @@
 Theory gasFocusConcretizeCutCreation
-Ancestors
+Ancestors concretizePtrCreateFamily[qualified]
   concretizePtrOrdinaryNext concretizePtrRequestHistory
   concretizePtrOpaqueRetpc concretizePtrSharedFields concretizePtrValueTransport
   lowerDloadPtrCreate lowerDloadSafetyCreate o1LowerDloadRangeTransport
@@ -53,30 +53,6 @@ Proof
   gvs[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]
 QED
 
-Theorem focus_create_stores[local]:
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
-  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
-Proof
-  strip_tac >> drule ptr_history_content_call_ctx >> strip_tac >>
-  `contract_storage s = contract_storage t /\
-   contract_transient s = contract_transient t` by
-    (fs[ptr_history_content_def, ptr_taint_content_def] >>
-     fs[storage_agree_except_def, key_taint_def, contract_storage_def,
-        contract_transient_def, word_agree_except_bits,
-        FUN_EQ_THM, fcpTheory.CART_EQ]) >>
-  fs[ptr_history_content_def, ptr_taint_content_def,
-     contract_storage_def, contract_transient_def,
-     vfmStateTheory.lookup_account_def] >>
-  conj_tac
-  >- (simp[FUN_EQ_THM] >> qx_gen_tac `addr` >>
-      `(s.vs_accounts addr).storage = (t.vs_accounts addr).storage` by
-        (Cases_on `addr = s.vs_call_ctx.cc_address` >> gvs[]) >>
-      qpat_x_assum `!a. _ with storage := _ = _`
-        (qspec_then `addr` mp_tac) >>
-      simp[vfmStateTheory.account_state_component_equality]) >>
-  simp[FUN_EQ_THM] >> metis_tac[]
-QED
-
 Theorem focus_create_execute[local]:
   ptr_mixed_vars births positions TG tn f g s t /\
   ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
@@ -89,7 +65,7 @@ Theorem focus_create_execute[local]:
     ptr_mixed_vars births positions (step_prov PT TG i u)
       (step_taint i s u tn) f g u z
 Proof
-  strip_tac >> drule_all focus_create_stores >> strip_tac >>
+  strip_tac >> drule_all concretizePtrCreateFamilyTheory.ptr_create_family_current_stores >> strip_tac >>
   `venom_create_request s value off sz salt = venom_create_request t value off' sz salt`
     by (irule venom_create_request_eq_from_slice >> simp[]) >>
   `s.vs_outcomes = t.vs_outcomes` by

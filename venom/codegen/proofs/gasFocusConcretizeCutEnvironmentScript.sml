@@ -1,5 +1,5 @@
 Theory gasFocusConcretizeCutEnvironment
-Ancestors
+Ancestors concretizePtrUnaryEnvironmentReadProducer[qualified]
   marker[qualified,ignore_grammar]
   gasFocusConcretizeEndpointCut gasFocusConcretizeTaggedSupport
   concretizePtrEnvironmentReadProducer concretizePtrRequestHistory
@@ -41,54 +41,6 @@ Proof
       fs[ptr_static_support_def] >> metis_tac[]) >>
   qpat_x_assum `taint_ok _ _ _ _` mp_tac >> fs[MEM] >>
   simp[taint_ok_def] >> metis_tac[]
-QED
-
-Theorem focus_nullary_environment_execution[local]:
-  ptr_history_content tn s t /\
-  MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
-    COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
-    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE; SELFBALANCE] /\
-  inst.inst_outputs = [out] /\ step_inst fuel Ct inst t = OK t' ==>
-  ?v. step_inst 0 C inst s = OK (update_var out v s) /\ t' = update_var out v t
-Proof
-  strip_tac >>
-  drule ptr_history_content_call_ctx >> strip_tac >>
-  drule ptr_history_content_tx_ctx >> strip_tac >>
-  drule ptr_history_content_block_ctx >> strip_tac >>
-  drule ptr_history_content_returndata >> strip_tac >>
-  drule ptr_history_content_code >> strip_tac >>
-  drule ptr_environment_account_observations >> strip_tac >>
-  fs[MEM] >>
-  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
-  simp[step_inst_non_invoke] >>
-  PURE_REWRITE_TAC[step_inst_base_def] >> ASM_REWRITE_TAC[] >>
-  simp[exec_read0_def] >> strip_tac >> gvs[] >>
-  qmatch_goalsub_abbrev_tac `update_var out value s` >>
-  qexists `value` >> simp[Abbr `value`, vfmStateTheory.lookup_account_def]
-QED
-
-Theorem focus_unary_environment_execution[local]:
-  ptr_history_content tn s t /\
-  MEM inst.inst_opcode [BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE;
-    EXTCODEHASH; CALLDATALOAD; DLOAD] /\
-  eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\
-  inst.inst_outputs = [out] /\ step_inst fuel Ct inst t = OK t' ==>
-  ?v. step_inst 0 C inst s = OK (update_var out v s) /\ t' = update_var out v t
-Proof
-  strip_tac >>
-  drule ptr_history_content_block_ctx >> strip_tac >>
-  drule ptr_history_content_tx_ctx >> strip_tac >>
-  drule ptr_history_content_call_ctx >> strip_tac >>
-  drule ptr_history_content_data_section >> strip_tac >>
-  drule ptr_environment_account_observations >> strip_tac >>
-  fs[MEM] >>
-  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
-  simp[step_inst_non_invoke] >> PURE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[] >> simp[Once opcode_case_def] >>
-  simp[exec_read1_def, AllCaseEqs()] >> strip_tac >>
-  gvs[eval_operands_def, AllCaseEqs(), vfmStateTheory.lookup_account_def] >>
-  qmatch_goalsub_abbrev_tac `update_var out value s` >>
-  qexists `value` >> simp[Abbr `value`, vfmStateTheory.account_empty_def]
 QED
 
 Theorem focus_environment_update[local]:
@@ -188,11 +140,11 @@ Resume ptr_focus_environment_step[execute]:
       `eval_operands a.po_inst.inst_operands a.po_state =
        eval_operands a.po_inst.inst_operands at.po_state` by
         (drule_all ptr_mixed_scalar_operands_equal >> simp[]) >>
-      drule_all focus_unary_environment_execution >> simp[]) >>
+      drule_all concretizePtrUnaryEnvironmentReadProducerTheory.ptr_unary_environment_execution >> simp[]) >>
   `MEM a.po_inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE; CALLDATASIZE;
     RETURNDATASIZE; BLOBBASEFEE; CODESIZE; SELFBALANCE]` by fs[MEM] >>
-  drule_all focus_nullary_environment_execution >> simp[]
+  drule_all concretizePtrEnvironmentReadProducerTheory.ptr_environment_read_execution >> simp[]
 QED
 
 Resume ptr_focus_environment_step[attach]:

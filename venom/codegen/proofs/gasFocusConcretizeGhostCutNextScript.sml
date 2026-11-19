@@ -1,5 +1,5 @@
 Theory gasFocusConcretizeGhostCutNext
-Ancestors
+Ancestors concretizePtrDallocaScalarReads[qualified]
   concretizePtrDallocaRuntimeHistory concretizePtrDallocaEndpointDemands
   concretizePtrDallocaGhostInterface concretizePtrStructuralTranscript
   concretizePtrPairedPrefix concretizePtrRequestHistory
@@ -35,24 +35,6 @@ Proof
   gvs[taint_ok_def, MEM]
 QED
 
-Theorem cut_iload_bound[local]:
-  inst.inst_opcode = ILOAD /\ inst.inst_operands = [op] /\
-  eval_operand op s = SOME x /\ op_prov G op = NONE /\
-  access_ok lo G fn inst s /\ ~in_revert_forward fn s ==>
-  w2n x + 32 <= lo
-Proof
-  strip_tac >> spose_not_then assume_tac >>
-  `MEM (w2n x,32) (source_memory_read_ranges inst s)` by
-    simp[source_memory_read_ranges_def, eval_operands_def] >>
-  `?ops v b sz. mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
-    FLOOKUP G v = SOME (b,sz) /\ b <= w2n x /\ w2n x+32 <= b+sz` by
-    (fs[access_ok_def] >>
-     qpat_x_assum `!off len. MEM (off,len) (source_memory_read_ranges inst s) /\ _ ==> _`
-       (qspecl_then [`w2n x`,`32`] mp_tac) >> simp[] >>
-     `lo < 32+w2n x` by decide_tac >> simp[ADD_COMM]) >>
-  gvs[mem_read_ops_def, op_prov_def]
-QED
-
 Theorem cut_unary_mask_demands[local]:
   fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\ FDOM G SUBSET fn_pv P fn /\
@@ -78,7 +60,7 @@ Proof
       `eval_operand a s = eval_operand a t` by
         (irule ptr_mixed_scalar_eval >> metis_tac[]) >>
       qexists `wt` >> fs[MEM] >> simp[]
-      >- (`w2n wt + 32 <= lo` by (irule cut_iload_bound >> metis_tac[]) >>
+      >- (`w2n wt + 32 <= lo` by (irule concretizePtrDallocaScalarReadsTheory.ptr_dalloca_scalar_iload_bound >> metis_tac[]) >>
           simp[mem_word_taint_def, SUBSET_DEF] >> rpt strip_tac >>
           qpat_assum `!i. i < lo ==> _` irule >> simp[]) >>
       fs[key_taint_def,SUBSET_DEF] >> metis_tac[]) >>

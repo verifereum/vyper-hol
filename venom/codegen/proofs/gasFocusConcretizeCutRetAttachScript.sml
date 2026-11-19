@@ -1,26 +1,10 @@
 Theory gasFocusConcretizeCutRetAttach
-Ancestors concretizePtrPairedPrefix concretizePtrPairedFields
+Ancestors concretizePtrReturnPrefix[qualified] concretizePtrPairedPrefix concretizePtrPairedFields
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
   concretizePtrSourceOwnership concretizePtrHistoricalPlacement
   concretizePtrChronologicalHistory concretizePtrEventEmbedding
   concretizePtrAllocationTransport venomExecSemantics venomState venomInst
   venomInstProofs1 finite_map list rich_list pred_set
-
-Theorem ptr_focus_ret_control[local]:
-  ptr_chrono_step C a b /\ a.po_inst.inst_opcode = RET ==>
-  b.po_fn = (HD a.po_stack).cf_fn /\ b.po_stack = TL a.po_stack /\
-  b.po_state.vs_params = (HD a.po_stack).cf_state.vs_params
-Proof
-  simp[Once ptr_chrono_step_cases, ptr_observe_def] >>
-  rpt strip_tac >> gvs[is_terminator_def] >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[Once step_inst_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  qspec_then `(\s. s.vs_params)` mp_tac bind_outputs_preserves >>
-  simp[update_var_def] >> disch_then drule >>
-  Cases_on `ret.iret_adopt_fmp` >>
-  simp[adopt_return_fmp_def, merge_callee_state_def]
-QED
 
 Theorem ptr_focus_ret_attach:
   ptr_paired_prefix R lp positions lo vs C C'
@@ -49,10 +33,10 @@ Proof
   strip_tac >> drule ptr_tagged_chrono_step_projection >> strip_tac >>
   `b.po_fn = (HD a.po_stack).cf_fn /\ b.po_stack = TL a.po_stack /\
    b.po_state.vs_params = (HD a.po_stack).cf_state.vs_params` by
-    metis_tac[ptr_focus_ret_control] >>
+    metis_tac[concretizePtrReturnPrefixTheory.ptr_ret_prefix_control] >>
   `zt.po_fn = (HD at.po_stack).cf_fn /\ zt.po_stack = TL at.po_stack /\
    zt.po_state.vs_params = (HD at.po_stack).cf_state.vs_params` by
-    metis_tac[ptr_focus_ret_control] >>
+    metis_tac[concretizePtrReturnPrefixTheory.ptr_ret_prefix_control] >>
   qpat_x_assum `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     mp_tac >> pure_rewrite_tac[ptr_paired_prefix_def] >> strip_tac >>
   pure_rewrite_tac[ptr_paired_prefix_def] >>

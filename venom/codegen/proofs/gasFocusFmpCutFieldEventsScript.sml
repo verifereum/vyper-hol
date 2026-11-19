@@ -1,6 +1,6 @@
 (* Source event prefixes end at a GAS fetch, not at a GAS successor. *)
 Theory gasFocusFmpCutFieldEvents
-Ancestors frameDecoratedPrefix frameFinitePrefix frameFiniteJointDecoration
+Ancestors concretizeLayoutStageSimulation[qualified] frameDecoratedPrefix frameFinitePrefix frameFiniteJointDecoration
   frameJointTransition frameJointTrace frameJointRevert concretizeLayoutCutSafe o1SafeUpto
   frameSelectedDecoration frameDecoratedEndpoints frameOriginHistory frameOriginReachable
   o1ContractSimplifyCfgSrcFrame
@@ -16,15 +16,6 @@ Ancestors frameDecoratedPrefix frameFinitePrefix frameFiniteJointDecoration
   gasFocusFmpJumpPoint gasFocusFmpRetPoint gasFocusFmpCutJumpEntry gasFocusFmpGasPair
   gasFocusFmpCutEntryStatic gasFocusFmpStagePin fmpStepStructural unitTransformDefs words
   venomExecSemantics venomInst venomState list rich_list arithmetic finite_map
-
-Theorem fmp_cut_event_segment_chain[local]:
-  !w q qe. joint_segment C q w qe ==>
-    joint_chain C q (MAP FST w) (MAP SND w) qe
-Proof
-  Induct >> simp[joint_segment_def, joint_chain_def] >>
-  rpt gen_tac >> PairCases_on `h` >>
-  simp[joint_segment_def, joint_chain_def] >> metis_tac[]
-QED
 
 Theorem fmp_cut_event_source_path[local]:
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
@@ -56,7 +47,7 @@ Proof
      disch_then (qspecl_then [`q0`, `0`, `p`] mp_tac) >> simp[]) >>
   `joint_trace vs C q0 (MAP FST w) (MAP SND w) qe` by
     (simp[joint_trace_def] >>
-     irule fmp_cut_event_segment_chain >> metis_tac[cj 2 decorated_prefix_segment]) >>
+     irule concretizeLayoutStageSimulationTheory.layout_segment_chain >> metis_tac[cj 2 decorated_prefix_segment]) >>
   qexistsl [`p`, `i`, `q0`, `w`, `qe`] >>
   simp[] >>
   drule (cj 2 decorated_prefix_end) >>

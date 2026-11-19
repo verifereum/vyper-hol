@@ -1,5 +1,5 @@
 Theory gasFocusConcretizeCutAssertion
-Ancestors
+Ancestors concretizePtrAssertionProducer[qualified]
   gasFocusConcretizeEndpointCut gasFocusConcretizeTaggedSupport
   concretizePtrParamSupport concretizePtrRequestHistory concretizePtrReturnTransport
   concretizePtrValueTransport concretizePtrOpaqueRetpc concretizePtrOrdinaryNext
@@ -12,19 +12,6 @@ Ancestors
   venomWf cfgWf unitShapeDefs contextCodegenRel codegenRel frameViewFacts
   ptrDiscipline pointerConfinedDefs venomExecSemantics memLocDefs venomState venomInst
   finite_map list pred_set
-
-Theorem focus_assertion_execution[local]:
-  MEM inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE] /\
-  eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\
-  step_inst fuel Ct inst t = OK t' ==>
-  step_inst 0 C inst s = OK s /\ t' = t
-Proof
-  strip_tac >> fs[MEM] >>
-  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
-  simp[step_inst_non_invoke] >> pure_rewrite_tac[step_inst_base_def] >>
-  asm_rewrite_tac[] >> simp[Once opcode_case_def] >> simp[AllCaseEqs()] >>
-  strip_tac >> gvs[eval_operands_def, AllCaseEqs()] >> metis_tac[]
-QED
 
 Theorem focus_assertion_operand_discipline[local]:
   fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
@@ -114,7 +101,7 @@ Proof
     drule step_inst_base_intret_opcodes >> asm_x "assertion" assume_tac >> fs[MEM]) >>
   asm "assertion" assume_tac >>
   `step_inst 0 C a.po_inst a.po_state = OK a.po_state /\ s' = at.po_state` by
-    (drule_all focus_assertion_execution >> simp[]) >>
+    (drule_all concretizePtrAssertionProducerTheory.ptr_assertion_execution >> simp[]) >>
   qpat_x_assum `MEM a.po_inst.inst_opcode _` kall_tac >>
   suspend "attach"
 QED

@@ -1,33 +1,13 @@
 (* Pointwise RET constructor for the bounded FMP simulation.  No whole-run
    stage context is assumed; the bounded caller supplies the current facts. *)
 Theory gasFocusFmpRetPoint
-Ancestors fmpStageRetStep[qualified]
+Ancestors fmpStageOpBase[qualified] fmpStageRetStep[qualified]
   fmpStageRel fmpStageControl fmpLowerDefs fmpLowerProps
   o1LowerDloadOpaque o1LowerDloadGhost ptrStaticDiscipline
   pointerConfinedDefs memLocDefs pred_set finite_map list rich_list
   livenessProofs cfgHelpers fmpWfDefs contextCodegenRel
   venomExecSemantics venomState venomInst venomWf passSharedProps
   runInstsProps analysisSimDefs o1PassContract ptrDiscipline
-
-Theorem ret_point_operand_live[local]:
-  wf_function fn /\ make_ssa_input_ok fn /\ active_inst fn inst s /\
-  MEM (Var v) inst.inst_operands ==>
-  MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
-Proof
-  strip_tac >>
-  `fn_reachable fn s.vs_current_bb` by
-    (gvs[make_ssa_input_ok_def, cfgWfTheory.all_reachable_def, active_inst_def] >>
-     metis_tac[]) >>
-  `MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
-  gvs[active_inst_def] >>
-  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
-    (irule venomExecProofsTheory.MEM_lookup_block >>
-     gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
-  drule live_vars_at_uses >> simp[] >>
-  disch_then irule >> goal_assum (drule_at Any) >>
-  simp[operand_var_in_inst_uses]
-QED
 
 Theorem ret_point_front_equal[local]:
   wf_function fn /\ make_ssa_input_ok fn /\ opaque_use_ok fn /\
@@ -55,7 +35,7 @@ Proof
   rename1 `lookup_var v s = SOME x` >>
   `MEM v (live_vars_at (liveness_analyze fn)
              s.vs_current_bb s.vs_inst_idx)` by
-    metis_tac[ret_point_operand_live] >>
+    metis_tac[fmpStageOpBaseTheory.stage_operand_live] >>
   qpat_x_assum `fmp_env_rel _ _ _ _ _ _ _` mp_tac >>
   simp[fmp_env_rel_def, lookup_var_def] >>
   disch_then (qspec_then `v` mp_tac) >>

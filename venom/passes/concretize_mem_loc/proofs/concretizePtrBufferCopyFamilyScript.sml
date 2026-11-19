@@ -117,7 +117,7 @@ Proof
   fs[MEM] >> simp[step_inst_non_invoke]
 QED
 
-Theorem ptr_buffer_copy_post_memory[local]:
+Theorem ptr_buffer_copy_post_memory:
   MEM inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] /\
   step_inst fuel C inst s = OK s' ==>
   s' = s with vs_memory := s'.vs_memory
@@ -148,7 +148,7 @@ Proof
   fs[MEM] >> simp[step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def]
 QED
 
-Theorem ptr_buffer_copy_write_pair[local]:
+Theorem ptr_buffer_copy_write_pair:
   ptr_chrono_step C a z /\ ptr_chrono_step Ct at zt /\
   MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] /\
   at.po_inst = a.po_inst /\ a.po_inst.inst_operands = [dop;sop;nop] /\

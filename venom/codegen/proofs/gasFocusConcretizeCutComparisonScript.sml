@@ -1,5 +1,5 @@
 Theory gasFocusConcretizeCutComparison
-Ancestors marker[qualified,ignore_grammar]
+Ancestors concretizePtrComparisonStep[qualified] marker[qualified,ignore_grammar]
   concretizePtrComparisonTransport concretizePtrValueTransport
   concretizePtrOrdinaryNext concretizePtrPairedPrefix concretizePtrPairedFields
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
@@ -239,17 +239,6 @@ Proof
   gvs[eval_operands_def]
 QED
 
-Theorem ptr_comparison_step_semantics[local]:
-  (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/ inst.inst_opcode = GT) ==>
-  step_inst fuel C inst s =
-    exec_pure2 (\x y. bool_to_word
-      (if inst.inst_opcode = EQ then x = y
-       else if inst.inst_opcode = LT then w2n x < w2n y
-       else w2n x > w2n y)) inst s
-Proof
-  strip_tac >> simp[Once step_inst_def] >> simp[step_inst_base_def]
-QED
-
 Theorem ptr_comparison_execution_upto[local]:
   ptr_chrono_history vs C h a /\ gas_cut n vs a.po_state /\
   ptr_discipline_upto lo n C vs /\
@@ -278,7 +267,7 @@ Proof
   `a.po_inst.inst_opcode = EQ \/ a.po_inst.inst_opcode = LT \/ a.po_inst.inst_opcode = GT` by
     fs[MEM] >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
-  simp[ptr_comparison_step_semantics, exec_pure2_def, AllCaseEqs()] >> strip_tac >>
+  simp[concretizePtrComparisonStepTheory.ptr_comparison_step, exec_pure2_def, AllCaseEqs()] >> strip_tac >>
   drule_all ptr_mixed_vars_eval_presence >> strip_tac >>
   `?sx sy. eval_operand op1 a.po_state = SOME sx /\
            eval_operand op2 a.po_state = SOME sy` by

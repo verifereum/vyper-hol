@@ -1,5 +1,5 @@
 Theory gasFocusConcretizeCutGas
-Ancestors
+Ancestors concretizePtrEnvironmentReadProducer[qualified]
   gasFocusConcretizeEndpointCut dftBlockSim
   concretizePtrOpaqueRetpc concretizePtrValueTransport concretizePtrOrdinaryNext
   concretizeStepStructure concretizePtrOperationalOpcodes concretizePtrPairedPrefix
@@ -29,16 +29,6 @@ Proof
        step_taint_def, out_taint_def, set_var_taint_def, op_taint_def,
        FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, ptr_value_transport_refl] >>
   rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def]
-QED
-
-Theorem focus_gas_history_content[local]:
-  ptr_history_content tn s t ==>
-  ptr_history_content tn (s with vs_gas_readings := readings)
-    (t with vs_gas_readings := readings)
-Proof
-  simp[ptr_history_content_def, ptr_taint_content_def,
-       ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def,
-       contract_storage_def, contract_transient_def] >> strip_tac >> gvs[]
 QED
 
 Theorem ptr_focus_gas_step:
@@ -129,7 +119,7 @@ Resume ptr_focus_gas_step[attach]:
       >- (fs[ptr_paired_sample_def] >> irule ptr_history_content_masks >>
           qexists_tac `a.po_taint` >>
           simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
-          simp[Abbr `post`] >> irule focus_gas_history_content >> simp[])) >>
+          simp[Abbr `post`] >> irule concretizePtrEnvironmentReadProducerTheory.ptr_history_content_common_gas_readings >> simp[])) >>
      gvs[step_prov_def, out_prov_def] >>
      irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
      simp[Abbr `post`, update_var_def]) >>

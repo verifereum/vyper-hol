@@ -1,5 +1,5 @@
 Theory gasFocusConcretizeCutHashLog
-Ancestors
+Ancestors concretizePtrHashLogFamily[qualified]
   gasFocusConcretizeTaggedSupport concretizePtrCurrentRangeTransport
   concretizePtrOrdinaryNext concretizePtrOpaqueRetpc concretizePtrRequestHistory
   concretizePtrTaintContent concretizePtrSharedFields concretizePtrValueTransport
@@ -23,32 +23,6 @@ Proof
   rpt strip_tac >> fs[MEM] >> gvs[taint_ok_def] >>
   qpat_x_assum `!off' len i. _`
     (qspecl_then [`off`,`n`,`off+j`] mp_tac) >> simp[]
-QED
-
-Theorem focus_log_scalar_vars[local]:
-  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
-  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc::rest /\
-  REVERSE rest = addr::szop::topics ==>
-  !v. MEM (Var v) (szop::topics) ==> v NOTIN fn_pv P fn
-Proof
-  strip_tac >>
-  `mem_write_ops inst = NONE /\
-   mem_read_ops inst = SOME <|iao_ofst := addr; iao_size := SOME szop;
-                             iao_max_size := SOME szop|>` by
-    (simp[mem_write_ops_def, mem_read_ops_def] >> Cases_on `topics` >> simp[]) >>
-  gen_tac >> strip_tac >> spose_not_then assume_tac >>
-  `ptr_use_ok P (fn_pv P fn) inst` by (fs[fn_ptr_ok_def] >> metis_tac[]) >>
-  `MEM (Var v) rest` by metis_tac[MEM_REVERSE, MEM] >>
-  `FILTER ($= (Var v)) inst.inst_operands = [Var v] /\ addr = Var v` by
-    (qpat_x_assum `ptr_use_ok P _ inst` mp_tac >>
-     simp[ptr_use_ok_def, is_pointer_preserving_op_def] >>
-     disch_then (qspec_then `v` mp_tac) >> simp[]) >>
-  `REVERSE inst.inst_operands = Var v::szop::topics ++ [Lit tc]` by
-    simp[REVERSE_APPEND] >>
-  `FILTER ($= (Var v)) (REVERSE inst.inst_operands) = [Var v]` by simp[FILTER_REVERSE] >>
-  qpat_x_assum `FILTER _ (REVERSE inst.inst_operands) = _` mp_tac >>
-  simp[FILTER_APPEND_DISTRIB] >> Cases_on `szop = Var v` >> simp[] >>
-  fs[MEM, FILTER_EQ_NIL, EXISTS_MEM]
 QED
 
 Theorem focus_hash_log_scalar_eval[local]:
@@ -139,56 +113,6 @@ Proof
   simp[update_var_def]
 QED
 
-Theorem focus_log_execution[local]:
-  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc::rest /\
-  REVERSE rest = addr::szop::topicops /\ LENGTH rest = w2n tc+2 /\
-  s.vs_call_ctx = t.vs_call_ctx /\
-  eval_operand addr s = SOME x /\ eval_operand addr t = SOME y /\
-  eval_operand szop s = SOME n /\ eval_operand szop t = SOME n /\
-  eval_operands topicops s = SOME vals /\ eval_operands topicops t = SOME vals /\
-  TAKE (w2n n) (DROP (w2n x) s.vs_memory ++ REPLICATE (w2n n) 0w) =
-  TAKE (w2n n) (DROP (w2n y) t.vs_memory ++ REPLICATE (w2n n) 0w) /\
-  step_inst fuel Ct inst t = OK t' ==>
-  ?ev. step_inst 0 C inst s = OK (s with vs_logs := s.vs_logs ++ [ev]) /\
-       t' = t with vs_logs := t.vs_logs ++ [ev]
-Proof
-  strip_tac >>
-  `IS_SOME (eval_operands inst.inst_operands t)` by
-    (simp[eval_operands_IS_SOME_EVERY, eval_operand_def] >>
-     `EVERY (\op. IS_SOME (eval_operand op t)) topicops` by
-       metis_tac[eval_operands_IS_SOME_EVERY, optionTheory.IS_SOME_DEF] >>
-     rewrite_tac[EVERY_MEM] >> qx_gen_tac `op` >> strip_tac >> BETA_TAC >>
-     `MEM op (addr::szop::topicops)` by metis_tac[MEM_REVERSE] >>
-     fs[MEM, EVERY_MEM] >> metis_tac[optionTheory.IS_SOME_DEF]) >>
-  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def] >> strip_tac >>
-  gvs[AllCaseEqs()] >>
-  simp[step_inst_non_invoke, step_inst_base_def] >> metis_tac[]
-QED
-
-Theorem focus_log_successor[local]:
-  ptr_mixed_vars births positions TG tn f g s t /\ ptr_history_content tn s t /\
-  inst.inst_opcode = LOG /\ inst.inst_outputs = [] ==>
-  ptr_mixed_vars births positions
-    (step_prov PT TG inst (s with vs_logs := s.vs_logs ++ [ev]))
-    (step_taint inst s (s with vs_logs := s.vs_logs ++ [ev]) tn)
-    f g (s with vs_logs := s.vs_logs ++ [ev])
-        (t with vs_logs := t.vs_logs ++ [ev]) /\
-  ptr_history_content (step_taint inst s (s with vs_logs := s.vs_logs ++ [ev]) tn)
-    (s with vs_logs := s.vs_logs ++ [ev])
-    (t with vs_logs := t.vs_logs ++ [ev])
-Proof
-  strip_tac >> conj_tac
-  >- (simp[step_prov_def, set_prov_def] >>
-      irule ptr_mixed_vars_fields >> qexistsl_tac [`s`,`t`,`tn`] >>
-      simp[step_taint_def, set_var_taint_def, DRESTRICT_UNIV]) >>
-  irule ptr_history_content_masks >> qexists `tn` >>
-  simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
-  gvs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-      ptr_core_shared_def, ptr_shared_fields_def, contract_storage_def,
-      contract_transient_def]
-QED
-
 Theorem focus_hash_log_execution:
   inst_wf inst /\ MEM inst.inst_opcode [SHA3; LOG] /\
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\ opaque_use_ok fn /\
@@ -271,7 +195,7 @@ Resume focus_hash_log_execution[log]:
    (!op. MEM op (szop::topics) ==> MEM op inst.inst_operands)` by
     (simp[] >> metis_tac[MEM_REVERSE, MEM]) >>
   `!v. MEM (Var v) (szop::topics) ==> v NOTIN fn_pv P fn` by
-    metis_tac[focus_log_scalar_vars] >>
+    metis_tac[concretizePtrHashLogFamilyTheory.ptr_log_scalar_vars] >>
   `EVERY (\op. eval_operand op s = eval_operand op t) (szop::topics)` by
     (rewrite_tac[EVERY_MEM] >> gen_tac >> strip_tac >> BETA_TAC >>
      irule focus_hash_log_scalar_eval >> rpt (goal_assum (drule_at Any)) >> metis_tac[]) >>
@@ -294,10 +218,10 @@ Resume focus_hash_log_execution[log]:
   `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[ptr_history_content_call_ctx] >>
   `?ev. step_inst 0 C inst s = OK (s with vs_logs := s.vs_logs ++ [ev]) /\
        postt = t with vs_logs := t.vs_logs ++ [ev]` by
-    (irule focus_log_execution >> rpt (goal_assum (drule_at Any)) >>
+    (irule concretizePtrHashLogFamilyTheory.ptr_log_execution >> rpt (goal_assum (drule_at Any)) >>
      simp[] >> metis_tac[]) >>
   qexists `s with vs_logs := s.vs_logs ++ [ev]` >>
-  drule_all focus_log_successor >> gvs[]
+  drule_all concretizePtrHashLogFamilyTheory.ptr_log_successor_relations >> gvs[]
 QED
 
 Finalise focus_hash_log_execution[local]

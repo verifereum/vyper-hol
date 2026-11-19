@@ -1,5 +1,5 @@
 Theory gasFocusConcretizeCutDelegate
-Ancestors
+Ancestors concretizePtrCreateFamily[qualified]
   concretizePtrDallocaWriterGeometry lowerDloadSafetyDelegate
   concretizePtrRequestHistory concretizeLayoutDelegate
   concretizePtrOpaqueRetpc concretizePtrValueTransport
@@ -195,19 +195,6 @@ Proof
   strip_tac >> simp[step_inst_non_invoke] >>
   PURE_REWRITE_TAC[step_inst_base_def] >> ASM_REWRITE_TAC[] >>
   PURE_REWRITE_TAC[opcode_case_def] >> simp[]
-QED
-
-Theorem ptr_focus_delegate_written_byte[local]:
-  exec_delegatecall inst s gas addr ao az ro rz = OK t /\
-  j < MIN (w2n rz) (LENGTH t.vs_returndata) ==>
-  read_byte (w2n ro + j) t.vs_memory = EL j t.vs_returndata
-Proof
-  strip_tac >>
-  qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >>
-  gvs[update_var_def] >>
-  simp[read_byte_write_memory_with_expansion, LENGTH_TAKE_EQ, EL_TAKE,
-       MIN_DEF] >> gvs[MIN_DEF]
 QED
 
 (* Both executions are already fixed when extending the structural trace. *)
@@ -569,9 +556,9 @@ Resume ptr_focus_delegate_step[write]:
                  read_byte (w2n q+j) zt.po_state.vs_memory` by
     (rpt strip_tac >>
      qpat_assum `exec_delegatecall _ a.po_state _ _ _ _ _ _ = OK u`
-       (mp_then (Pos hd) (qspec_then `j` mp_tac) ptr_focus_delegate_written_byte) >>
+       (mp_then (Pos hd) (qspec_then `j` mp_tac) concretizePtrCreateFamilyTheory.ptr_create_family_delegate_written_byte) >>
      qpat_assum `exec_delegatecall _ at.po_state _ _ _ _ _ _ = OK post`
-       (mp_then (Pos hd) (qspec_then `j` mp_tac) ptr_focus_delegate_written_byte) >>
+       (mp_then (Pos hd) (qspec_then `j` mp_tac) concretizePtrCreateFamilyTheory.ptr_create_family_delegate_written_byte) >>
      gvs[Abbr `k`, ADD_COMM]) >>
   qexistsl [`z`,`TG'`] >>
   irule ptr_focus_delegate_attach >>

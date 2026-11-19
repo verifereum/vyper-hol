@@ -114,7 +114,7 @@ Proof
   simp[EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem stage_operand_live[local]:
+Theorem stage_operand_live:
   wf_function fn /\ make_ssa_input_ok fn /\ active_inst fn inst s /\
   MEM (Var v) inst.inst_operands ==>
   MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)

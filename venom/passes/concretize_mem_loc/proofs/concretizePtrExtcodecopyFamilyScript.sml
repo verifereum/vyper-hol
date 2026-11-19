@@ -19,7 +19,7 @@ Ancestors
   codegenRel contextCodegenRel unitLabelMapIdentity
   venomExecSemantics venomExecProofs venomState venomInst finite_map list words arithmetic
 
-Theorem ptr_extcodecopy_account_code[local]:
+Theorem ptr_extcodecopy_account_code:
   ptr_history_content tn s t ==>
   (lookup_account addr s.vs_accounts).code =
   (lookup_account addr t.vs_accounts).code
@@ -31,7 +31,7 @@ Proof
   disch_then (mp_tac o AP_TERM ``\a:account_state. a.code``) >> simp[]
 QED
 
-Theorem ptr_extcodecopy_success[local]:
+Theorem ptr_extcodecopy_success:
   inst.inst_opcode = EXTCODECOPY /\
   inst.inst_operands = [a;d;r;n] ==>
   (step_inst fuel C inst s = OK post <=>

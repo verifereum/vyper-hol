@@ -1,5 +1,5 @@
 Theory gasFocusConcretizeCutExtcodecopy
-Ancestors
+Ancestors concretizePtrExtcodecopyFamily[qualified]
   gasFocusConcretizeTaggedSupport concretizePtrPrefixWriteAttach
   concretizePtrRequestHistory concretizePtrReturnTransport
   concretizePtrValueTransport concretizePtrOrdinaryNext concretizePtrOpaqueRetpc
@@ -14,34 +14,6 @@ Ancestors
   concretizePtrComparisonTransport concretizePtrPrefixLedger concretizePtrBytes
   concretizePtrActivationChronology concretizeStepStructure concretizePtrSourceOwnership
   cfgWf venomWf codegenRel contextCodegenRel unitLabelMapIdentity option arithmetic
-
-Theorem ptr_focus_extcodecopy_account_code[local]:
-  ptr_history_content tn s t ==>
-  (lookup_account addr s.vs_accounts).code =
-  (lookup_account addr t.vs_accounts).code
-Proof
-  strip_tac >> drule ptr_history_content_current >> strip_tac >>
-  drule ptr_taint_content_account >>
-  simp[vfmStateTheory.lookup_account_def] >>
-  disch_then (qspec_then `addr` mp_tac) >>
-  disch_then (mp_tac o AP_TERM ``\a:account_state. a.code``) >> simp[]
-QED
-
-Theorem ptr_focus_extcodecopy_success[local]:
-  inst.inst_opcode = EXTCODECOPY /\
-  inst.inst_operands = [a;d;r;n] ==>
-  (step_inst fuel C inst s = OK post <=>
-   ?addr dst src sz.
-     eval_operand a s = SOME addr /\ eval_operand d s = SOME dst /\
-     eval_operand r s = SOME src /\ eval_operand n s = SOME sz /\
-     post = write_memory_with_expansion (w2n dst)
-       (TAKE (w2n sz) (DROP (w2n src)
-         (lookup_account (w2w addr) s.vs_accounts).code ++
-         REPLICATE (w2n sz) 0w)) s)
-Proof
-  strip_tac >> simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
-  metis_tac[]
-QED
 
 Theorem ptr_focus_extcodecopy_execute[local]:
   inst.inst_opcode = EXTCODECOPY /\ inst.inst_operands = [a;d;r;n] /\
@@ -67,7 +39,7 @@ Proof
   `eval_operands [a;r;n] s = eval_operands [a;r;n] t` by
     (irule ptr_mixed_scalar_operands_equal >> simp[] >>
      fs[EVERY_MEM] >> metis_tac[]) >>
-  drule_all ptr_focus_extcodecopy_success >> strip_tac >>
+  drule_all concretizePtrExtcodecopyFamilyTheory.ptr_extcodecopy_success >> strip_tac >>
   qpat_x_assum `step_inst fuel Ct inst t = OK postt` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   `ptr_lookup_transport births positions (op_prov TG d) (op_taint tn d)
@@ -80,7 +52,7 @@ Proof
   simp[LENGTH_TAKE] >>
   `!addr. (lookup_account addr s.vs_accounts).code =
           (lookup_account addr t.vs_accounts).code` by
-    metis_tac[ptr_focus_extcodecopy_account_code] >>
+    metis_tac[concretizePtrExtcodecopyFamilyTheory.ptr_extcodecopy_account_code] >>
   simp[] >> rpt strip_tac >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule ptr_payload_write_content >> simp[LENGTH_TAKE]

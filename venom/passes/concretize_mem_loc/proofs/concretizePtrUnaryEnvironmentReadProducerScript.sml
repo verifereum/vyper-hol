@@ -41,7 +41,7 @@ Proof
   simp[taint_ok_def] >> metis_tac[]
 QED
 
-Theorem ptr_unary_environment_execution[local]:
+Theorem ptr_unary_environment_execution:
   ptr_history_content tn s t /\
   MEM inst.inst_opcode [BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE; EXTCODEHASH; CALLDATALOAD; DLOAD] /\
   eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\

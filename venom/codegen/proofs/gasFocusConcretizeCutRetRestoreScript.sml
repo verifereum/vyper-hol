@@ -1,5 +1,5 @@
 Theory gasFocusConcretizeCutRetRestore
-Ancestors
+Ancestors concretizePtrReturnProduction[qualified]
   concretizePtrPairedPrefix concretizePtrPairedFields
   concretizePtrReturnTransport concretizePtrOpaqueRetpc
   concretizePtrChronologicalHistory concretizePtrStructuralTranscript
@@ -55,17 +55,6 @@ Proof
   qexists `r` >> simp[] >> metis_tac[]
 QED
 
-Theorem focus_ret_cursor_active[local]:
-  ptr_paired_cursor lp a at ==> active_inst a.po_fn a.po_inst a.po_state
-Proof
-  simp[ptr_paired_cursor_def] >> strip_tac >>
-  drule concretizePtrLedgerAlignmentTheory.ptr_ledger_alignment_cursor >> strip_tac >>
-  `EL at.po_state.vs_inst_idx indices < LENGTH bb.bb_instructions` by
-    (first_x_assum (qspec_then `at.po_state.vs_inst_idx` mp_tac) >> simp[]) >>
-  `bb.bb_label = a.po_state.vs_current_bb` by metis_tac[lookup_block_label] >>
-  simp[active_inst_def] >> qexists `bb` >> simp[] >> decide_tac
-QED
-
 Theorem focus_ret_target_resume[local]:
   at.po_inst.inst_opcode = RET /\
   at.po_stack <> [] /\
@@ -93,53 +82,6 @@ Proof
   strip_tac >>
   drule (Q.ISPEC `(\u. (u.vs_current_bb,u.vs_prev_bb))` bind_outputs_preserves
     |> SIMP_RULE (srw_ss()) [update_var_def]) >> simp[]
-QED
-
-Theorem focus_ret_caller_cursor[local]:
-  ptr_paired_cursor lp u ut /\ u.po_inst.inst_opcode = INVOKE /\
-  ALL_DISTINCT (fn_labels ut.po_fn) /\
-  (!i. MEM i (fn_insts u.po_fn) /\ i.inst_opcode = ALLOCA ==>
-    ?p. FLOOKUP (lp u.po_fn) (Allocation i.inst_id) = SOME p) /\
-  b.po_fn = u.po_fn /\ bt.po_fn = ut.po_fn /\
-  b.po_state.vs_current_bb = u.po_state.vs_current_bb /\
-  bt.po_state.vs_current_bb = ut.po_state.vs_current_bb /\
-  b.po_state.vs_prev_bb = u.po_state.vs_prev_bb /\
-  bt.po_state.vs_prev_bb = ut.po_state.vs_prev_bb /\
-  b.po_state.vs_inst_idx = SUC u.po_state.vs_inst_idx /\
-  bt.po_state.vs_inst_idx = SUC ut.po_state.vs_inst_idx /\
-  active_inst bt.po_fn bt.po_inst bt.po_state ==>
-  ?i. active_inst b.po_fn i b.po_state /\
-      ptr_paired_cursor lp (b with po_inst := i) bt
-Proof
-  simp[ptr_paired_cursor_def] >> strip_tac >>
-  `u.po_state.vs_inst_idx = EL ut.po_state.vs_inst_idx indices` by
-    (first_x_assum (qspec_then `u.po_state.vs_inst_idx` mp_tac) >>
-     gvs[] >> decide_tac) >>
-  `SUC ut.po_state.vs_inst_idx < LENGTH indices /\
-   bt.po_inst = EL (SUC ut.po_state.vs_inst_idx) bbt.bb_instructions` by
-    (qpat_x_assum `active_inst _ _ _` mp_tac >>
-     simp[active_inst_def] >> strip_tac >>
-     `lookup_block ut.po_state.vs_current_bb ut.po_fn.fn_blocks = SOME bb'` by
-       (irule MEM_lookup_block >> gvs[fn_labels_def]) >>
-     gvs[] >> drule concretizePtrLedgerAlignmentTheory.ptr_ledger_alignment_cursor >> simp[]) >>
-  `SUC u.po_state.vs_inst_idx <= EL (SUC ut.po_state.vs_inst_idx) indices /\
-   EL (SUC ut.po_state.vs_inst_idx) indices < LENGTH bb.bb_instructions` by
-    (drule concretizePtrLedgerAlignmentTheory.ptr_ledger_alignment_cursor >> strip_tac >>
-     `EL ut.po_state.vs_inst_idx indices < EL (SUC ut.po_state.vs_inst_idx) indices` by
-       (irule concretizePtrLedgerAlignmentTheory.ptr_ledger_alignment_order >>
-        simp[] >> rpt (goal_assum (drule_at Any))) >>
-     first_x_assum (qspec_then `SUC ut.po_state.vs_inst_idx` mp_tac) >>
-     simp[] >> decide_tac) >>
-  qexists `EL (SUC u.po_state.vs_inst_idx) bb.bb_instructions` >>
-  conj_tac
-  >- (simp[active_inst_def] >> qexists `bb` >> simp[] >>
-      `bb.bb_label = u.po_state.vs_current_bb` by metis_tac[lookup_block_label] >>
-      simp[] >> decide_tac) >>
-  simp[] >> qexistsl [`bb`, `indices`] >>
-  `lookup_block ut.po_state.vs_current_bb u.po_fn.fn_blocks = SOME bb` by metis_tac[] >>
-  simp[] >>
-  rpt strip_tac >> irule concretizePtrDeletedGapsTheory.ptr_ledger_source_gap >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >> decide_tac
 QED
 
 Theorem focus_ret_observation_stack[local]:
@@ -244,7 +186,7 @@ Proof
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   `active_inst a.po_fn a.po_inst a.po_state /\
    active_inst (EL (EL r done) h).po_fn (EL (EL r done) h).po_inst
-     (EL (EL r done) h).po_state` by metis_tac[focus_ret_cursor_active] >>
+     (EL (EL r done) h).po_state` by metis_tac[concretizePtrReturnProductionTheory.ptr_ret_cursor_active] >>
   qabbrev_tac `outs = (HD a.po_stack).cf_inst.inst_outputs` >>
   suspend "cursor"
 QED
@@ -267,7 +209,7 @@ Resume ptr_focus_ret_restore[cursor]:
     (sr with vs_inst_idx := SUC (HD a.po_stack).cf_state.vs_inst_idx)` >>
   `?i. active_inst b0.po_fn i b0.po_state /\
        ptr_paired_cursor lp (b0 with po_inst := i) zt` by
-    (irule focus_ret_caller_cursor >> conj_tac >- simp[] >>
+    (irule concretizePtrReturnProductionTheory.ptr_ret_caller_cursor >> conj_tac >- simp[] >>
      qexistsl [`EL (EL r done) h`, `EL r ht`] >>
      gvs[Abbr `b0`, ptr_observe_def, ptr_paired_frame_def]) >>
   qabbrev_tac `b = b0 with po_inst := i` >>

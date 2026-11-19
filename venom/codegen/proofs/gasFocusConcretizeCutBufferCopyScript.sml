@@ -1,5 +1,5 @@
 Theory gasFocusConcretizeCutBufferCopy
-Ancestors
+Ancestors concretizePtrBufferCopyFamily[qualified]
   gasFocusConcretizeTaggedSupport concretizePtrParamSupport
   concretizePtrBufferCopyContent concretizePtrOrdinaryNext
   concretizePtrPairedPrefix concretizePtrPairedFields concretizePtrPrefixWriteAttach
@@ -66,20 +66,6 @@ Proof
      drule_all ptr_returndatacopy_content >> strip_tac >> gvs[] >>
      goal_assum (drule_at Any) >> simp[ADD_COMM]) >>
   gvs[] >> qexists `s'` >> simp[step_inst_non_invoke]
-QED
-
-Theorem focus_buffer_copy_post_memory[local]:
-  MEM inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] /\
-  step_inst fuel C inst s = OK s' ==>
-  s' = s with vs_memory := s'.vs_memory
-Proof
-  strip_tac >>
-  `inst.inst_opcode <> INVOKE` by fs[MEM] >>
-  `step_inst_base inst s = OK s'` by metis_tac[step_inst_non_invoke] >>
-  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  fs[MEM] >> pure_rewrite_tac[step_inst_base_def] >>
-  asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >>
-  simp[AllCaseEqs()] >> strip_tac >> gvs[write_memory_with_expansion_def]
 QED
 
 Theorem focus_buffer_copy_history_content[local]:
@@ -158,31 +144,6 @@ Proof
   simp[] >> decide_tac
 QED
 
-Theorem focus_buffer_copy_write_pair[local]:
-  ptr_chrono_step C a z /\ ptr_chrono_step Ct at zt /\
-  MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] /\
-  at.po_inst = a.po_inst /\ a.po_inst.inst_operands = [dop;sop;nop] /\
-  eval_operand dop a.po_state = SOME d /\ eval_operand dop at.po_state = SOME dt /\
-  eval_operand sop a.po_state = SOME r /\ eval_operand sop at.po_state = SOME r /\
-  eval_operand nop a.po_state = SOME n /\ eval_operand nop at.po_state = SOME n /\
-  (!i. i < w2n n ==> read_byte (w2n d+i) z.po_state.vs_memory =
-    read_byte (w2n dt+i) zt.po_state.vs_memory) ==>
-  ptr_ledger_write_pair C Ct (\x. w2n dt + (x - w2n d)) a z at zt
-Proof
-  strip_tac >>
-  `!x. x IN range_bytes (step_writes a.po_inst a.po_state z.po_state) <=>
-    w2n d <= x /\ x < w2n d + w2n n` by
-    (gen_tac >> irule ptr_copy_footprint_interval >> simp[] >> fs[MEM] >> metis_tac[]) >>
-  `!x. x IN range_bytes (step_writes at.po_inst at.po_state zt.po_state) <=>
-    w2n dt <= x /\ x < w2n dt + w2n n` by
-    (gen_tac >> irule ptr_copy_footprint_interval >> simp[] >> fs[MEM] >> metis_tac[]) >>
-  `~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE` by
-    (fs[MEM] >> simp[is_terminator_def]) >>
-  simp[ptr_ledger_write_pair_def, ptr_bytes_agree_def] >> rpt strip_tac >>
-  `x - w2n d < w2n n` by decide_tac >>
-  qpat_x_assum `!i. i < w2n n ==> _` (qspec_then `x - w2n d` mp_tac) >> simp[]
-QED
-
 Theorem focus_buffer_copy_write_event[local]:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   dyn_floor C a.po_state = dyn_floor C vs /\
@@ -218,7 +179,7 @@ Proof
     (simp[EXTENSION] >> gen_tac >> irule ptr_copy_footprint_interval >>
      simp[] >> fs[MEM] >> metis_tac[]) >>
   `ptr_ledger_write_pair C Ct (\x. w2n dt + (x-w2n d)) a z at zt` by
-    (irule focus_buffer_copy_write_pair >>
+    (irule concretizePtrBufferCopyFamilyTheory.ptr_buffer_copy_write_pair >>
      qpat_assum `a.po_inst.inst_operands = [dop;sop;nop]` (irule_at Any) >>
      simp[] >> metis_tac[ADD_COMM]) >>
   `ptr_paired_write_owner (dyn_floor C a.po_state) lo positions (\x. w2n dt + (x-w2n d))
@@ -349,12 +310,12 @@ Resume ptr_focus_buffer_copy_step[source]:
   `s''.vs_current_bb = a.po_state.vs_current_bb /\ s''.vs_prev_bb = a.po_state.vs_prev_bb /\
    s''.vs_allocas = a.po_state.vs_allocas /\ s''.vs_params = a.po_state.vs_params` by
     (qpat_assum `step_inst 0 C _ _ = OK _`
-       (mp_then Any mp_tac focus_buffer_copy_post_memory) >>
+       (mp_then Any mp_tac concretizePtrBufferCopyFamilyTheory.ptr_buffer_copy_post_memory) >>
      simp[] >> disch_then SUBST1_TAC >> simp[]) >>
   `s'.vs_current_bb = at.po_state.vs_current_bb /\ s'.vs_prev_bb = at.po_state.vs_prev_bb /\
    s'.vs_params = at.po_state.vs_params` by
     (qpat_assum `step_inst fuel C' _ _ = OK _`
-       (mp_then Any mp_tac focus_buffer_copy_post_memory) >>
+       (mp_then Any mp_tac concretizePtrBufferCopyFamilyTheory.ptr_buffer_copy_post_memory) >>
      simp[] >> disch_then SUBST1_TAC >> simp[]) >>
   `?i. active_inst a.po_fn i (s'' with vs_inst_idx := SUC a.po_state.vs_inst_idx)` by
     (irule ptr_ordinary_next_active >> metis_tac[]) >>
@@ -369,7 +330,7 @@ Resume ptr_focus_buffer_copy_step[attach]:
   markerLib.RESUME_TAC >>
   `s'' = a.po_state with vs_memory := s''.vs_memory /\
    s' = at.po_state with vs_memory := s'.vs_memory` by
-    (conj_tac >> irule focus_buffer_copy_post_memory >> simp[] >> metis_tac[]) >>
+    (conj_tac >> irule concretizePtrBufferCopyFamilyTheory.ptr_buffer_copy_post_memory >> simp[] >> metis_tac[]) >>
   `ptr_paired_sample positions z zt (tokens,registry,births,PT,TG,saved,entries)` by
     (simp[IgnAsm `s'' = _`, IgnAsm `s' = _`, ptr_paired_sample_def,
           Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>

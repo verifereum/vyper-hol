@@ -481,7 +481,7 @@ Proof
   rpt strip_tac >> irule (cj 3 layout_selected_empty_induction) >> metis_tac[]
 QED
 
-Theorem layout_segment_chain[local]:
+Theorem layout_segment_chain:
   !w q qe. joint_segment C q w qe ==>
     joint_chain C q (MAP FST w) (MAP SND w) qe
 Proof
