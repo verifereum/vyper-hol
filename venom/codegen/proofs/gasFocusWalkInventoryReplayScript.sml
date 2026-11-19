@@ -16,6 +16,7 @@ Ancestors
   o1ContractCfgNormCursors cfgNormSupplySim stateFrame
   gasFocusPlainGasPreEdge codegenAsmProgOk
   gasFocusGasPreEdge[qualified,ignore_grammar]
+  gasFocusWalkStaticLabels[qualified,ignore_grammar]
   gasFocusOptLabelFlow[qualified,ignore_grammar]
   gasFocusOptStaticAssembly[qualified,ignore_grammar]
   venomPipelineDriverProps[qualified,ignore_grammar]

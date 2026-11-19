@@ -1278,7 +1278,7 @@ QED
 local
   val finish_data_row =
     irule (CONV_RULE (RAND_CONV (SCONV [])) (BETA_RULE focus_opt_ld_effect_row)) >>
-    rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE metis_tac[])) >>
+    rpt (conj_tac >- first_assum ACCEPT_TAC) >>
     goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
     goal_assum (drule_at (Pat `ld_vars _ _ (_ with <|lf_src := _;lf_tgt := _;lf_H := _;lf_tv := _|>)`)) >>
     qexists_tac `fuel` >>
@@ -4304,7 +4304,7 @@ Proof
     (`ALL_DISTINCT (FLAT (TAKE q ks) ++ FLAT (DROP q ks))` by
        (pure_rewrite_tac[GSYM FLAT_APPEND, TAKE_DROP] >> first_assum ACCEPT_TAC) >>
      pop_assum (mp_tac o REWRITE_RULE [ALL_DISTINCT_APPEND]) >> simp[NoAsms]) >>
-  rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE metis_tac[])) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   `FDOM ms_tab = FDOM ms_tab` by REFL_TAC >>
   `!key old new. FLOOKUP ms_tab key = SOME old /\ FLOOKUP ms_tab key = SOME new ==>
     LIST_REL (LIST_REL (\old new. old = NONE \/ old = new)) old new` by
@@ -4666,7 +4666,7 @@ Proof
      qpat_assum `o1_ptr_safe_upto _ _ _ _ _` (irule_at Any) >>
      qpat_assum `callee_first _ (stage 2).ctx_functions` (irule_at Any) >>
      qpat_assum `frame_reachable V _ _ _ _ _ _ _ _` (irule_at Any) >>
-     rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `taint_within_upto D n (stage 3) V` by
     (irule focus_concretize_cut_taint_within >>
      qpat_assum `ctx_pass_stage _ (CFP_Simple VP_ConcretizeMemLoc) _ _ _` (irule_at Any) >>
