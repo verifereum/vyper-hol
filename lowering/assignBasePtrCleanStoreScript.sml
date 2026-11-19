@@ -50,6 +50,7 @@ Proof
   `step_inst_base (mk_inst id MSTORE [Var dst; value] []) s =
      OK (mstore (w2n a) w s)` by
     (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all assign_base_mstore_edge_ptr >>
   disch_then (qspecl_then [`D`, `PG`] assume_tac) >>
   gvs[] >> conj_tac

@@ -7,7 +7,7 @@ Ancestors
 
 Theorem hash_alloca_counted_path:
   !D ctx fn PG G tn s bb id m q t.
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id ALLOCA [Lit (n2w m)] [q]]
     (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -39,7 +39,7 @@ Theorem hash_literal_alloc_counted_path:
   !D ctx fn PG G tn s bb sa sm buf m t q.
   compile_alloc_buffer m sa = (buf,sm) /\
   run_inst_seq (emitted_insts sa sm) s = OK t /\ buf.buf_operand = Var q /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s

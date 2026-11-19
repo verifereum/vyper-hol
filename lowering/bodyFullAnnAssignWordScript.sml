@@ -92,6 +92,7 @@ Proof
   strip_tac >>
   `compile_store_memory ce op (Var p) typ typ b = ((),sf)` by
     simp[contextTheory.compile_store_memory_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all compile_store_memory_word_origin_ptr_path >>
   disch_then (qspecl_then [`explicit`, `PG`] mp_tac) >> strip_tac >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>

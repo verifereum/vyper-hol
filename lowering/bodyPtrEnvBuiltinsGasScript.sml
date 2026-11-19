@@ -125,7 +125,7 @@ QED
 
 Theorem gas_builtin_counted_post:
   compile_env_var MsgGas sa = (op,sb) /\ fn_has_code sa sb fn /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -161,7 +161,6 @@ Proof
     OK (update_var (STRING #"%" (toString sa.cs_next_var)) w
       (s with vs_gas_readings := DROP 1 s.vs_gas_readings))` by
     metis_tac[gas_builtin_base_step] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule emit_scalar_builtin_counted_suffix >> simp[MEM] >>
   disch_then drule_all >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] assume_tac) >>
@@ -217,7 +216,8 @@ Proof
     stmt_state_rel H ctx fn cenv cx es s0 /\
     storage_well_formed_on cx es (FST H)` by metis_tac[] >>
   Cases_on `?H. valid_horizon cx st0 H es.storage_trace`
-  >- (drule_all gas_builtin_counted_post >>
+  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
+      drule_all gas_builtin_counted_post >>
       disch_then (qspecl_then [`PG`, `\H. cx_dead H cx`] strip_assume_tac) >>
       simp[gas_outcome_ptr_def] >> qexists_tac `[T]` >>
       disj2_tac >> disj1_tac >>
