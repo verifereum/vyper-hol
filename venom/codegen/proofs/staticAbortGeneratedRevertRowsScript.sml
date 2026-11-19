@@ -3,7 +3,7 @@ Theory staticAbortGeneratedRevertRows
 Ancestors
   staticAbortAdminRows staticAbortGeneratedAdminMicro staticAbortOpenAdminFlow
   staticAbortGeneratedRevertSpine staticAbortGeneratedRevertProbe fnStaticAbortBoundary
-  staticAbortRevertOccurrences staticAbortRevertRowsLink staticAbortStraight
+  staticAbortRevertOccurrences staticAbortRevertRowsLink staticAbortStraight codegenSymRel
   asmOpSim stackOpAsmSim stackOpSim asmIR asmSem asmOptimizer planExec
   option rich_list list arithmetic pred_set finite_map words pair
 

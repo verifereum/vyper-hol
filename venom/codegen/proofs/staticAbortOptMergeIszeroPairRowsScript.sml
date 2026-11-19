@@ -2,7 +2,7 @@ Theory staticAbortOptMergeIszeroPairRows
 Ancestors
   staticAbortRoleStep staticAbortStraight staticAbortOptMergeIszeroLive
   staticAbortOptMergeIszeroLayout staticAbortOptMergeIszeroBranchPackage
-  asmSplice asmSymBridge asmSymSem asmOptimizer
+  asmSplice asmSymBridge asmSymSem asmOptimizer asmDataEnv
   asmSem asmIR stackOpSim pred_set relation list rich_list alist words arithmetic
 
 Theorem pair_producer_shape[local]:
