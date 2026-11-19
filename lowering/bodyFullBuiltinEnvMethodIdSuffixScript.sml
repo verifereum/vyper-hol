@@ -152,6 +152,7 @@ Resume method_id_runtime_full_suffix[cut]:
          qexistsl [`u`, `Gh`, `tnh`, `bs`] >> simp[] >>
          conj_tac >- (rpt strip_tac >> Cases_on `entry` >> metis_tac[]) >>
          metis_tac[]) >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
      drule_all method_id_hash_fixed_full_run >>
      disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
      qexistsl [`u`, `Gh`, `tnh`, `bs`] >> simp[] >>

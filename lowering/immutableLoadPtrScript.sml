@@ -21,7 +21,7 @@ QED
 
 Theorem immutable_load_checked:
   eval_operand op s = SOME a /\ op_taint tn op = {} /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   access_ok 0 G fn (mk_inst id (if ctor then ILOAD else DLOAD) [op] [out]) s ==>
   inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id (if ctor then ILOAD else DLOAD) [op] [out]] s

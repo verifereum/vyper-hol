@@ -92,6 +92,7 @@ Proof
     (asm_rewrite_tac[] >>
      qpat_assum `emitted_insts _ _ = _` (fn th =>
        rule_assum_tac (PURE_REWRITE_RULE [th])) >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
      drule_all (GEN_ALL (REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]
       (Q.INST [`iA` |-> `mk_inst aId ADD [Var p; Lit 32w] [q]`,
                `iL` |-> `mk_inst lId MLOAD [Var p] [l]`,

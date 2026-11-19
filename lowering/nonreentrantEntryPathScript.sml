@@ -128,7 +128,7 @@ Theorem nonreentrant_lock_paths:
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ tload (n2w nkey) s <> 1w /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ tload (n2w nkey) s <> 1w /\
   (~iv ==> ~s.vs_call_ctx.cc_static) /\
   (!b. ~((n2w nkey,b) IN tn.t_trans)) ==>
   ?u G' tn'.
@@ -292,7 +292,7 @@ Theorem nonreentrant_entry_success_joint_with_view:
   lock_if_nr cx T (is_view_mut mut) es_reg = (INL (), es_lock) /\
   compile_nonreentrant_lock nkey T (mut = View) sa = ((), body_sa) /\
   fn_has_code sa body_sa func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ ~s_reg.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s_reg) /\ ~s_reg.vs_halted /\
   ~block_is_terminated sa /\
   s_reg.vs_current_bb = sa.cs_current_bb /\
   s_reg.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -443,7 +443,7 @@ Theorem nonreentrant_entry_success_joint:
   lock_if_nr cx T (is_view_mut mut) es_reg = (INL (), es_lock) /\
   compile_nonreentrant_lock nkey T (mut = View) sa = ((), body_sa) /\
   fn_has_code sa body_sa func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ ~s_reg.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s_reg) /\ ~s_reg.vs_halted /\
   ~block_is_terminated sa /\
   s_reg.vs_current_bb = sa.cs_current_bb /\
   s_reg.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -492,7 +492,7 @@ Theorem nonreentrant_entry_abort_joint_with_view:
   lock_if_nr cx T (is_view_mut mut) es_reg = (INR exc, es_abort) /\
   compile_nonreentrant_lock nkey T (mut = View) sa = ((), body_sa) /\
   fn_has_code sa body_sa func /\
-  ~ctx_has_dalloca ctx /\ ~s_reg.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s_reg) /\ ~s_reg.vs_halted /\
   s_reg.vs_current_bb = sa.cs_current_bb /\
   s_reg.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!H : (bool # 'a word # type_value) list # num list.
@@ -629,7 +629,7 @@ Theorem nonreentrant_entry_abort_joint:
   lock_if_nr cx T (is_view_mut mut) es_reg = (INR exc, es_abort) /\
   compile_nonreentrant_lock nkey T (mut = View) sa = ((), body_sa) /\
   fn_has_code sa body_sa func /\
-  ~ctx_has_dalloca ctx /\ ~s_reg.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s_reg) /\ ~s_reg.vs_halted /\
   s_reg.vs_current_bb = sa.cs_current_bb /\
   s_reg.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!H : (bool # 'a word # type_value) list # num list.

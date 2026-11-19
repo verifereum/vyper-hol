@@ -86,7 +86,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem append_state_frame_allocas[local]:
+Theorem append_state_frame_allocas:
   state_frame t = state_frame s ==>
   (allocas_below_fmp t <=> allocas_below_fmp s)
 Proof

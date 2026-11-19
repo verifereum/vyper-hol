@@ -1,7 +1,7 @@
 Theory bodyPtrPrecompileBuiltinsPrefixes
 Ancestors bodyPtrPrecompileBuiltinsTransfer bodyPtrPrecompileBuiltinsFreshFrame
           bodyPtrPrecompileBuiltinsObservations
-          freshWrites builtinMisc context emitHelper exprLoweringProps
+          freshWrites builtinMisc context emitHelper exprLoweringProps fragGasSeqPtrContext
           fragExec venomExecSemantics venomState venomInst ptrDiscipline bodyPtrDefs
           finite_map list rich_list compileEnv loweringStateRelDefs
 
@@ -30,7 +30,7 @@ Theorem emitted_offset_word_store_checked:
   ptr_covers G tn bufroot s capacity /\ lookup_var bufroot s = SOME a /\
   off + 32 <= capacity /\ w2n a + off < dimword (:256) /\
   eval_operand v s = SOME w /\ op_taint tn v = {} /\
-  (!p. v = Var p ==> not_fresh_at sa p) /\ ~ctx_has_dalloca ctx ==>
+  (!p. v = Var p ==> not_fresh_at sa p) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
@@ -69,7 +69,7 @@ Theorem emitted_point_pair_checked:
   off + 64 <= capacity /\ w2n a + 64 < dimword (:256) /\
   w2n b + off + 64 < dimword (:256) /\
   (!i. w2n a <= i /\ i < w2n a + 64 ==> i NOTIN tn.t_mem) /\
-  not_fresh_at sa root /\ not_fresh_at sa bufroot /\ ~ctx_has_dalloca ctx ==>
+  not_fresh_at sa root /\ not_fresh_at sa bufroot /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq (emitted_insts sa sb ++ emitted_insts sb sc) s = OK t /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn
@@ -127,10 +127,14 @@ Resume emitted_point_pair_checked[second]:
     (simp[] >> rpt gen_tac >> strip_tac >>
      gvs[pred_setTheory.IN_DIFF, pred_setTheory.IN_GSPEC] >>
      qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem` irule >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> irule run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa sb`, `s`] >> simp[] >>
+     qpat_assum `_ sa = ((),sb)` (mp_then Any mp_tac point_word_transfer_code) >>
+     strip_tac >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   qpat_x_assum `_ sa = ((),sb)` kall_tac >>
   qpat_x_assum `ptr_covers G tn root s 64` kall_tac >>
   qpat_x_assum `ptr_covers G tn bufroot s capacity` kall_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all emitted_point_word_transfer_checked >>
   disch_then (mp_tac o SPEC_ALL) >>
   disch_then (qx_choose_then `s2` (qx_choose_then `G2`
@@ -186,7 +190,7 @@ Theorem ecmul_input_staging_checked:
   (!i. w2n a <= i /\ i < w2n a + 64 ==> i NOTIN tn.t_mem) /\
   eval_operand scalar s = SOME w /\ op_taint tn scalar = {} /\
   (!l. scalar <> Label l) /\ (!p. scalar = Var p ==> not_fresh_at sa p) /\
-  not_fresh_at sa root /\ not_fresh_at sa bufroot /\ ~ctx_has_dalloca ctx ==>
+  not_fresh_at sa root /\ not_fresh_at sa bufroot /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq (emitted_insts sa sb ++ emitted_insts sb sc ++
       emitted_insts sc sd) s = OK t /\
@@ -230,6 +234,12 @@ Resume ecmul_input_staging_checked[scalar]:
    op_taint tn1 scalar = {} /\
    (!p. scalar = Var p ==> not_fresh_at sc p)` by
     (Cases_on `scalar` >> gvs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> irule run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa sb ++ emitted_insts sb sc`, `s`] >> simp[] >>
+     qpat_assum `_ sa = ((),sb)` (mp_then Any strip_assume_tac point_word_transfer_code) >>
+     qpat_assum `_ sb = ((),sc)` (mp_then Any strip_assume_tac point_word_transfer_code) >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   qpat_x_assum `_ sa = ((),sb)` kall_tac >>
   qpat_x_assum `_ sb = ((),sc)` kall_tac >>
   qpat_x_assum `ptr_covers G tn root s 64` kall_tac >>
@@ -296,7 +306,7 @@ Theorem ecadd_input_staging_checked:
   (!i. w2n a1 <= i /\ i < w2n a1 + 64 ==> i NOTIN tn.t_mem) /\
   (!i. w2n a2 <= i /\ i < w2n a2 + 64 ==> i NOTIN tn.t_mem) /\
   not_fresh_at sa root1 /\ not_fresh_at sa root2 /\
-  not_fresh_at sa bufroot /\ ~ctx_has_dalloca ctx ==>
+  not_fresh_at sa bufroot /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq (emitted_insts sa sb ++ emitted_insts sb sc ++
       emitted_insts sc sd ++ emitted_insts sd se) s = OK t /\
@@ -342,6 +352,12 @@ Resume ecadd_input_staging_checked[second]:
   `not_fresh_at sc root2 /\ not_fresh_at sc bufroot /\ 128 <= 128 /\
    (!i. w2n a2 <= i /\ i < w2n a2 + 64 ==> i NOTIN tn1.t_mem)` by
     (simp[pred_setTheory.IN_DIFF, pred_setTheory.IN_GSPEC]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> irule run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa sb ++ emitted_insts sb sc`, `s`] >> simp[] >>
+     qpat_assum `_ sa = ((),sb)` (mp_then Any strip_assume_tac point_word_transfer_code) >>
+     qpat_assum `_ sb = ((),sc)` (mp_then Any strip_assume_tac point_word_transfer_code) >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   qpat_x_assum `_ sa = ((),sb)` kall_tac >>
   qpat_x_assum `_ sb = ((),sc)` kall_tac >>
   rpt (qpat_x_assum `ptr_covers G tn _ s _` kall_tac) >>

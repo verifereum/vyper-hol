@@ -513,6 +513,7 @@ Proof
       (assume_tac o REWRITE_RULE[th]) >>
     qpat_x_assum `setup_ops = (output_buf.buf_operand,data_ptr)`
       (assume_tac o REWRITE_RULE[th])) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp output_state` by simp[] >>
   drule_at (Pat `emit_op ADD _ _ = _`) abi_encode_setup_tail_origin >>
   disch_then (drule_at (Pat `abi_builtin_encode_method_id _ _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code output_allocated _ _`)) >>

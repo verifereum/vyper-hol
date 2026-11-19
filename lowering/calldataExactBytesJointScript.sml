@@ -202,6 +202,7 @@ Resume calldata_exact_bytes_joint_limit[rejected]:
      pop_assum SUBST1_TAC >>
      rpt (pop_assum kall_tac) >>
      simp[cd_decode_def, GSYM calldata_decode_load_word]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all calldata_bytes_rejected_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   disj1_tac >> simp[] >> qexistsl [`z`,`H`,`u`] >> simp[] >>

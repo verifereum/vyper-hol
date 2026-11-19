@@ -89,6 +89,7 @@ Resume storage_copy_loop_path_ptr[done]:
     (DRESTRICT G (COMPL {tv})) (tn with t_var := tn.t_var |+ (tv,{}))
     (OK (jump_to exit_lbl (update_var tv (bool_to_word T) s)))` by
     (`k <= k /\ k < dimword(:256)` by decide_tac >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
      drule_all copy_loop_header_path_ptr >> simp[]) >>
   `root <> tv /\ src <> Var tv` by fs[ALL_DISTINCT] >>
   drule_all (SRULE [] (Q.GENL [`t`, `G'`, `tn'`] storage_copy_header_frame)) >>
@@ -102,6 +103,7 @@ QED
 Resume storage_copy_loop_path_ptr[step]:
   `k < n /\ k <= n` by decide_tac >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME hbb` by fs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all copy_loop_header_path_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -241,6 +243,7 @@ Theorem storage_copy_entry_loop_path_ptr:
        FLOOKUP t.vs_allocas i.inst_id = SOME (p,sz) ==> sz = w2n w))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all copy_loop_entry_path_ptr >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] assume_tac) >>
   `root <> cv /\ src <> Var cv` by fs[ALL_DISTINCT] >>
