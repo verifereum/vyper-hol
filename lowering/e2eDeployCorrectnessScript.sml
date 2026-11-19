@@ -526,7 +526,49 @@ Theorem e2e_deploy_correctness_asm_opt:
       (creation_resource_starved es r es' \/
        deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `?rpolicy dunit dout prog prog' cplan.
+     deploy_phases policy tops (assemble prog,runtime_bc)
+       (rpolicy,dunit,dout,prog,cplan) /\
+     asm_opt_finalizer rpolicy prog = SOME prog' /\ deploy_bc = assemble prog'` by
+    (qpat_assum `compile_vyper asm_opt_finalizer policy tops = SOME _`
+       (strip_assume_tac o MATCH_MP compile_vyper_with_success_phases o
+        REWRITE_RULE [compile_vyper_def]) >>
+     gvs[finalize_codegen_def, AllCaseEqs()] >>
+     qpat_assum `codegen_assembly rpolicy deploy_out.po_unit = SOME _`
+       (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
+     rename1 `generate_context_plan deploy_out.po_unit.cu_context = SOME cplan` >>
+     rename1 `asm_opt_finalizer rpolicy prog = SOME prog'` >>
+     qexistsl_tac [`rpolicy`, `deploy_unit`, `deploy_out`, `prog`, `prog'`, `cplan`] >>
+     asm_simp_tac bool_ss [deploy_phases_def, o1PipelineCorrectTheory.o1_pipeline_def]) >>
+  `asm_opt_finalizer IN accepted_finalizers` by simp[accepted_finalizers_def] >>
+  drule_all compile_vyper_runtime_not_ef >> strip_tac >>
+  qspec_then `es` strip_assume_tac run_call_total >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >>
+  Cases_on `creation_resource_starved es r es'` >> simp[] >>
+  `deploy_state_rel tops (assemble prog') am tx es` by fs[] >>
+  `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
+  drule_all deploy_source_ok_opt_code >> strip_tac >>
+  drule deploy_raw_fmp_exists >>
+  disch_then (qspecl_then [`prog'`, `es`] strip_assume_tac) >>
+  qspecl_then [`asm_opt_finalizer`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
+    `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `fmp`] mp_tac
+    deploy_unit_execution_correct_raw_fmp >>
+  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
+  qabbrev_tac `vs_out = opt_deploy_entry_state prog prog' cplan tops es` >>
+  qspecl_then [`asm_opt_finalizer`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
+    `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `vs_out`, `fmp`,
+    `r`, `es'`] mp_tac deploy_pipeline_gas_link >>
+  impl_tac >- (asm_simp_tac bool_ss [Abbr `vs_out`] >>
+                qexists_tac `shadow_ctx` >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  qspecl_then [`asm_opt_finalizer`, `policy`, `tops`, `deploy_bc`, `runtime_bc`,
+    `rpolicy`, `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`,
+    `tx with code := vs_out.vs_code`, `es`, `vs_out`, `fmp`, `r`, `es'`] mp_tac
+    e2e_deploy_correct_from_gas_link >>
+  impl_tac >- (asm_simp_tac bool_ss [Abbr `vs_out`] >>
+                qpat_assum `~(?t. runtime_bc = _::t)` mp_tac >> simp[]) >>
+  asm_simp_tac bool_ss [deploy_call_result_rel_code_update]
 QED
 
 (* TOP-LEVEL: one theorem over the accepted finalizers (Python's -O none and
