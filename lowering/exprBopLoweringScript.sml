@@ -63,6 +63,12 @@ Proof
   Cases_on `p` >> simp[as_stack_val_def]
 QED
 
+Theorem as_ptr_val_pair:
+  !ty loc p. as_ptr_val ty loc p = (LocatedValue ty (mk_ptr (FST p) loc), SND p)
+Proof
+  Cases_on `p` >> simp[as_ptr_val_def]
+QED
+
 Theorem lower_value_bop:
   !cenv ty ann bop e1 e2 sa op sb.
     lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) sa =

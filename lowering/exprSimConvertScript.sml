@@ -937,15 +937,16 @@ QED
 
 Theorem compile_convert_stack:
   !cenv ty ann t args sa.
+    ~is_bytestring_type t ==>
     ?t' op sb. compile_expr cenv ty (TypeBuiltin ann Convert t args) sa =
                (StackValue t' op, sb)
 Proof
-  rpt gen_tac >>
+  rpt gen_tac >> strip_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def] >>
   simp[Once (CONJUNCT2 (CONJUNCT2 compile_expr_raw_def)),
        compile_type_builtin_dispatch_body_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `t` >> simp[as_stack_val_pair] >> rw[]
+  Cases_on `t` >> gvs[as_stack_val_pair] >> rw[]
 QED
 
 Theorem straight_fresh_convert_pair:
@@ -977,7 +978,7 @@ Proof
     gvs[int_convert_pair_def, word_value_type_def, is_word_type_def,
         is_numeric_type_def, is_bool_type_def, is_int_type_def] >>
   irule expr_vv_sim_stack >> rpt conj_tac
-  >- simp[compile_convert_stack]
+  >- metis_tac[compile_convert_stack, is_word_type_not_bytestring]
   >- metis_tac[eval_expr_type_builtin_value] >>
   irule compile_convert_frag_sim_word >> rpt conj_tac
   >~ [`lower_value _ _ _ _ _ = _`]

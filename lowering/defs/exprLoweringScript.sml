@@ -3653,9 +3653,12 @@ Definition compile_type_builtin_dispatch_body_def:
           else if is_bytestring_type src_ty ∧ is_bytestring_type ret_ty ∧
              type_memory_bytes cenv (lowered_value_type cenv e1) <
              type_memory_bytes cenv ret_ty
-          then as_stack_val vv_ty (compile_bytestring_widen_copy
+          then as_ptr_val vv_ty LocMemory (compile_bytestring_widen_copy
                  (type_memory_bytes cenv ret_ty) v
                  (type_memory_bytes cenv (lowered_value_type cenv e1)) st1)
+          else if is_bytestring_type src_ty ∧ is_bytestring_type ret_ty
+          then as_ptr_val vv_ty LocMemory
+                 (compile_type_convert v (mk_convert_op src_ty ret_ty) st1)
           else
           case ret_ty of
             FlagT flag_nsid =>

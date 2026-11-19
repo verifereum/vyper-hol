@@ -269,8 +269,11 @@ Proof
   pairarg_tac >> simp[] >> IF_CASES_TAC
   >- (rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]) >>
   IF_CASES_TAC
-  >- (simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  >- (simp[oneline as_ptr_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
       drule compile_bytestring_widen_copy_open >> simp[]) >>
+  IF_CASES_TAC
+  >- (simp[oneline as_ptr_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+      drule_all compile_type_convert_open >> simp[]) >>
   Cases_on `rty` >>
   simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   drule_all compile_type_convert_open >> simp[]

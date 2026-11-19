@@ -8653,9 +8653,13 @@ Resume compile_type_builtin_dispatch_body_shape[convert]:
             type_memory_bytes cenv (lowered_value_type cenv (HD args)) <
             type_memory_bytes cenv ret_ty` >>
   pop_assum (fn th => REWRITE_TAC [th])
-  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule shape_step_as_stack_val >>
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule shape_step_as_memory_val >>
       shape_under_tac compile_bytestring_widen_copy_shape `\st. T` >>
       simp[shape_stable_def]) >>
+  Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_bytestring_type ret_ty` >>
+  pop_assum (fn th => REWRITE_TAC [th])
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule shape_step_as_memory_val >>
+      shape_under_tac compile_type_convert_shape `\st. T` >> simp[shape_stable_def]) >>
   Cases_on `ret_ty` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_as_stack_val >>
   shape_under_tac compile_type_convert_shape `\st. T` >> simp[shape_stable_def]

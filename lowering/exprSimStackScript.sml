@@ -1,7 +1,7 @@
 (* Stack results retain the raw-expression counted judgment. *)
 Theory exprSimStack
 Ancestors
-  exprSimDefs loweringPosts gasOutcome gasContext gasSummary gasSummaryCompose
+  exprSimDefs exprSimMemDefs loweringPosts gasOutcome gasContext gasSummary gasSummaryCompose
   gasExemptCert fragExec exprLowering emitHelper compileEnv vyperInterpreter vyperState
 
 Theorem eval_expr_force_value:
@@ -106,5 +106,51 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[eval_expr_force_admissible] >>
   gvs[expr_sim_def] >> first_x_assum irule >> simp[]
+QED
+
+Theorem vv_post_stack_as_memory:
+  ~is_word_type (post_value_type cenv e) /\
+  vv_post H ctx func cenv cx e es sa sb s0 ee (Value v) (StackValue t op) s ==>
+  vv_post H ctx func cenv cx e es sa sb s0 ee (Value v)
+    (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) s
+Proof
+  strip_tac >>
+  gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, contextTheory.mk_ptr_def,
+      read_result_def, return_def, expr_val_rel_def, expr_val_at_def,
+      expr_val_own_def, local_place_at_def] >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem expr_vv_sim_memory_value:
+  !ctx func cenv cx ty e es.
+    expr_sim ctx func cenv cx ty e es /\
+    ~is_word_type (post_value_type cenv e) /\
+    (!sa. ?op sb. compile_expr cenv ty e sa =
+      (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory),sb)) /\
+    (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
+    expr_vv_sim ctx func cenv cx ty e es
+Proof
+  rw[expr_vv_sim_def] >>
+  first_x_assum (qspec_then `sa` strip_assume_tac) >> gvs[] >>
+  `lower_value compile_expr cenv ty e sa = (op,sb)` by
+    simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def,
+         contextTheory.mk_ptr_def] >>
+  irule gas_outcome_post_mono >>
+  qexists_tac `\H res ee u. ?tv. res = INL tv /\
+    vv_post H ctx func cenv cx e es sa sb s0 ee tv
+      (StackValue (post_value_type cenv e) op) u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts` >>
+  reverse conj_tac
+  >- (irule expr_stack_outcome >> conj_tac >- first_assum ACCEPT_TAC >>
+      `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+        metis_tac[eval_expr_force_admissible] >>
+      gvs[expr_sim_def] >> first_x_assum irule >> simp[]) >>
+  BETA_TAC >> rpt strip_tac >>
+  `?v. tv = Value v` by
+    (Cases_on `tv` >>
+     gvs[vv_post_def, vv_holds_def, vv_at_def, read_result_def, raise_def] >>
+     metis_tac[]) >>
+  gvs[] >> metis_tac[vv_post_stack_as_memory]
 QED
 

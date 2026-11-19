@@ -19,6 +19,7 @@ Proof
   qabbrev_tac `e1 = Call a (IntCall fid) args drv` >>
   `expr_type e1 = a` by simp[Abbr `e1`, vyperASTTheory.expr_type_def] >>
   simp[exprSimDefsTheory.expr_sim_def] >> rpt gen_tac >> strip_tac >>
+  `~is_word_type t` by metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
   drule_all lower_value_convert_bytestring >> strip_tac >>
   drule (cj 2 exprLoweringPropsTheory.compile_expr_grows) >> strip_tac >>
   `is_bytestring_type (expr_type e1)` by metis_tac[valid_conversion_to_bytestring] >>
