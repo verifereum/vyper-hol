@@ -6270,6 +6270,78 @@ Proof
   metis_tac[focus_opt_scfg_iter_uses, wf_ssa_defs_reach_uses, fn_shape_ok_scfg_shape, scfg_static_def]
 QED
 
+Theorem focus_layout_read_bytes[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ EVERY all_reachable C.ctx_functions /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ ptr_stage_placements C' positions /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  gas_cut n vs at.po_state /\ ~in_revert_forward a.po_fn a.po_state /\
+  mem_read_ops a.po_inst = SOME ops /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\
+  MEM (w2n x,len) (source_memory_read_ranges a.po_inst a.po_state) /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
+    (SOME x) (SOME y) ==>
+  !j. j < len /\ w2n x+j NOTIN a.po_taint.t_mem ==>
+    read_byte (w2n x+j) a.po_state.vs_memory =
+    read_byte (w2n y+j) at.po_state.vs_memory
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> gen_tac >> strip_tac >>
+  `0 < len` by decide_tac >>
+  drule_all focus_layout_read_cases >>
+  disch_then (DISJ_CASES_THEN assume_tac)
+  >- metis_tac[focus_layout_fixed_read] >>
+  metis_tac[focus_layout_owned_read]
+QED
+
+Theorem focus_layout_cut_rows[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_initial_state_ok vs /\
+  vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs /\
+  o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
+  EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) ==>
+  ?R lp positions.
+    ptr_stage_placements C' positions /\
+    !ht at. ptr_chrono_history vs C' ht at ==> gas_cut n vs at.po_state ==>
+      (?h a done tokens registry births PT TG saved entries H calls ws.
+        ptr_paired_prefix R lp positions lo vs C C'
+          h a ht at done tokens registry births PT TG saved entries H calls ws /\
+        EVERY (\i. ~in_revert_forward (EL i h).po_fn (EL i h).po_state) done /\
+        a.po_inst.inst_opcode <> NOP /\
+        at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst) \/
+      (?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
+        revert_forward_pair bb i j /\
+        i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all focus_layout_stage_pairing >> simp[] >>
+  disch_then (qx_choose_then `R` (qx_choose_then `lp`
+    (qx_choose_then `positions` (map_every assume_tac o CONJUNCTS)))) >>
+  qexistsl [`R`,`lp`,`positions`] >> asm_rewrite_tac[] >>
+  rpt gen_tac >> ntac 2 disch_tac >> irule focus_layout_history_rows >>
+  qpat_assum `ctx_pass_stage _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `o1_ptr_safe_upto _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `callee_first _ _` (irule_at Any) >>
+  qpat_assum `max_live_eom _ = SOME _` (irule_at Any) >> asm_rewrite_tac[] >>
+  conj_tac
+  >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      drule_all focus_layout_range_geometry >> simp[]) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  metis_tac[focus_layout_read_bytes]
+QED
+
 Theorem focus_source_cut_provider:
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
