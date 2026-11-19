@@ -2546,3 +2546,87 @@ Proof
     qpat_x_assum `_ = EL 1 (DROP h _)` (mp_tac o REWRITE_RULE[th])) >>
   simp[ADD1] >> metis_tac[]
 QED
+
+(* A return in the current activation cannot occur within its child trace. *)
+Theorem focus_history_native_row_return[local]:
+  !xs s.
+    DROP s.vs_inst_idx bb.bb_instructions = xs /\
+    MEM ((a,d,id),fn,i,t) (trace_block a d fuel C fn bb s) /\
+    i.inst_opcode <> INVOKE /\ step_inst fuel C i t = IntRet ir out ==>
+    LAST (trace_block a d fuel C fn bb s) = ((a,d,id),fn,i,t) /\
+    exec_block fuel C bb s = IntRet ir out
+Proof
+  Induct
+  >- (rpt strip_tac >>
+      `LENGTH bb.bb_instructions <= s.vs_inst_idx` by
+        gvs[GSYM LENGTH_NIL, LENGTH_DROP] >>
+      fs[Once (cj 2 trace_defs), get_instruction_def]) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `DROP s.vs_inst_idx bb.bb_instructions = head::xs` >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (qpat_assum `DROP _ _.bb_instructions = _::_`
+       (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[NoAsms, LENGTH_DROP]) >>
+  `get_instruction bb s.vs_inst_idx = SOME head /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = xs` by
+    (drule DROP_BY_DROP_SUC >> simp[get_instruction_def]) >>
+  drule_then assume_tac trace_block_visit >>
+  drule_then assume_tac fnBlockBodyHelpersTheory.exec_block_step >>
+  qpat_x_assum `MEM _ (trace_block _ _ _ _ _ _ _)` mp_tac >>
+  asm_rewrite_tac[MEM, MEM_APPEND, pairTheory.PAIR_EQ] >> strip_tac
+  >- gvs[trace_step_noninvoke]
+  >- (`MEM (a,d,id) (MAP FST (trace_step a d fuel C fn head s))` by
+        (simp[MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+      metis_tac[dftGasFromListTraceNamesTheory.trace_step_not_root]) >>
+  Cases_on `step_inst fuel C head s` >> gvs[] >>
+  Cases_on `is_terminator head.inst_opcode` >> gvs[] >>
+  rename1 `step_inst fuel C head s = OK post` >>
+  qpat_x_assum `!s'. DROP _ _ = _ /\ MEM _ _ ==> _`
+    (qspec_then `post with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> strip_tac >>
+  `trace_block a d fuel C fn bb (post with vs_inst_idx := SUC s.vs_inst_idx) <> []` by
+    metis_tac[MEM] >>
+  simp[LAST_CONS_cond, LAST_APPEND_NOT_NIL]
+QED
+
+Theorem focus_history_native_return_endpoint[local]:
+  !f a D C fn ent d id i t ir out.
+    MEM ((a,d,id),fn,i,t) (trace_blocks a D f C fn ent) /\
+    i.inst_opcode <> INVOKE /\ step_inst (D+f-d) C i t = IntRet ir out ==>
+    LAST (trace_blocks a D f C fn ent) = ((a,d,id),fn,i,t) /\
+    run_blocks f C fn ent = IntRet ir out
+Proof
+  Induct >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `lookup_block ent.vs_current_bb fn.fn_blocks`
+  >- fs[Once (cj 3 trace_defs)] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  Cases_on `eval_phis ent bb.bb_instructions` >>
+  TRY (qpat_x_assum `MEM _ (trace_blocks _ _ _ _ _ _)` mp_tac >>
+       simp[Once (cj 3 trace_defs)] >> NO_TAC) >>
+  drule_all_then assume_tac trace_blocks_enter >>
+  drule_all_then assume_tac frameGasEventsTheory.run_blocks_at >>
+  rename1 `trace_blocks a D (SUC f) C fn ent` >>
+  rename1 `eval_phis _ _ = OK sp` >>
+  qabbrev_tac `u = sp with vs_inst_idx := phi_prefix_length bb.bb_instructions` >>
+  qpat_x_assum `MEM _ (trace_blocks _ _ _ _ _ _)` mp_tac >>
+  asm_rewrite_tac[MEM_APPEND] >> strip_tac
+  >- (`d = SUC D` by
+        (drule_then mp_tac dftGasFromListTraceNamesTheory.trace_block_region >>
+         simp[dftGasFromListTraceNamesTheory.block_region_def] >>
+         metis_tac[dftGasFromListTraceNamesTheory.frame_not_below_self,
+                   dftGasFromListTraceNamesTheory.frame_below_def]) >>
+      `D + SUC f - d = f` by decide_tac >>
+      gvs[] >>
+      `LAST (trace_block a (SUC D) f C fn bb u) = ((a,SUC D,id),fn,i,t) /\
+       exec_block f C bb u = IntRet ir out` by
+        metis_tac[focus_history_native_row_return] >> simp[]) >>
+  Cases_on `exec_block f C bb u` >> gvs[] >>
+  rename1 `exec_block f C bb u = OK post` >>
+  Cases_on `post.vs_halted` >> gvs[] >>
+  `step_inst (SUC D + f - d) C i t = IntRet ir out` by
+    (`SUC D + f - d = D + SUC f - d` by decide_tac >> simp[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  `trace_blocks a (SUC D) f C fn post <> []` by metis_tac[MEM] >>
+  simp[LAST_APPEND_NOT_NIL]
+QED
