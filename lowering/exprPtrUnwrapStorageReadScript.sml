@@ -10,7 +10,7 @@ Ancestors
 
 Theorem unwrap_storage_ensure_marked_read_ptr:
   compile_ensure_in_memory p.ptr_operand (slot_loc tr) nb n ctor imm sm = (op,sb) /\
-  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!H. P H ==>
      vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
      ghost_inv H ret cenv cx ee G tn s) /\ P H0 /\
