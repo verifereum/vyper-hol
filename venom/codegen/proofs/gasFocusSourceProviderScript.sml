@@ -2461,3 +2461,49 @@ Proof
   qexistsl [`Mbefore`,`gpre`,`FLAT vals`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+Theorem focus_history_observation_agreement[local]:
+  !C7 C8 sf tf bb bt ps xs ys be q inst k later (fuel:num) N e vals tail u t obs keys slots a.
+  LIST_REL dft_fn_rel C7.ctx_functions C8.ctx_functions /\
+  dft_fn_rel sf tf /\ MEM bb sf.fn_blocks /\
+  lookup_block bb.bb_label sf.fn_blocks = SOME bb /\
+  lookup_block bb.bb_label tf.fn_blocks = SOME bt /\
+  bb.bb_instructions = ps ++ xs /\ bt.bb_instructions = ps ++ ys /\
+  EVERY (\i. is_pseudo i.inst_opcode) ps /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) xs /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  dft_remaining_inv sf bb xs be /\ be.vs_inst_idx = LENGTH ps /\
+  q < LENGTH xs /\ EL q xs = inst /\ inv_memory_observation inst.inst_opcode /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+  ys = TAKE k ys ++ inst::later /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k ys) /\
+  FOLDR (dft_exec_cons (fuel-e) C7) OK (TAKE q xs)
+    (be with vs_gas_readings := vals ++ tail) = OK u /\
+  FOLDR (dft_exec_cons (N-e) C8) OK (TAKE k ys) be = OK t /\
+  ALL_DISTINCT (MAP FST obs) /\ ALL_DISTINCT keys /\
+  LIST_REL (\key slot. slot = ALOOKUP obs key) keys slots /\
+  LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots vals /\
+  trace_gas (trace_block a e (fuel-e) C7 sf
+    (bb with bb_instructions := TAKE (LENGTH ps + q) bb.bb_instructions)
+    (be with vs_gas_readings := vals ++ tail)) = ZIP (keys,vals) /\
+  EVERY (\kw. MEM kw obs)
+    (trace_gas (trace_block a e (N-e) C8 tf
+      (bt with bb_instructions := TAKE (LENGTH ps + LENGTH (TAKE k ys)) bt.bb_instructions) be)) ==>
+  (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op t) /\
+  u.vs_initial_fmp = t.vs_initial_fmp
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH (TAKE q xs) = q` by simp[LENGTH_TAKE] >>
+  `xs = TAKE q xs ++ inst::DROP (SUC q) xs` by
+    metis_tac[TAKE_DROP, DROP_CONS_EL] >>
+  drule_all dftPacketCommonOracleTheory.dft_packet_common_oracle >> strip_tac >>
+  irule dftPacketObservationSuccessTheory.dft_packet_native_observation_success >>
+  rpt (first_assum (irule_at Any)) >>
+  qexistsl [`inst`, `DROP (SUC q) xs`, `later`] >>
+  qpat_assum `xs = TAKE q xs ++ _` (fn sx =>
+    qpat_assum `ys = TAKE k ys ++ _` (fn sy =>
+      pure_rewrite_tac [GSYM sx, GSYM sy])) >>
+  simp[] >>
+  qpat_x_assum `trace_agrees _ (trace_block _ _ (fuel-e) _ _ _ _)` mp_tac >>
+  simp[AC ADD_ASSOC ADD_COMM]
+QED
