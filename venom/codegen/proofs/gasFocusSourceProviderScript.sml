@@ -14,7 +14,8 @@ Ancestors
   vfmExecution codegen asmIR
   finite_map list rich_list words arithmetic
   o1CodeEndSourceCutTransport o1ComposeSupport o1PipelineCompose simplifyCfgDefs
-  makeSsaDefs o1ContractSimplifyCfg
+  makeSsaDefs o1ContractSimplifyCfg gasFocusLowerDloadCodecopyPoint
+  lowerDloadSafetyRelation lowerDloadSafetyAmbient frameAllocationOwnership
 
 Theorem focus_opt_c1_section[local]:
   o1PipelineCorrect$o1_pipeline rp unit = SOME out /\
@@ -57,6 +58,36 @@ Proof
   gvs[o1_initial_state_ok_def] >>
   irule code_end_source_prefix_transport_upto >>
   metis_tac[init_ir_supply_inst_ok]
+QED
+
+(* A synchronized LowerDload expansion has the same unread gas list at
+   the selected COPY. Thus bounded source taint and section safety suffice. *)
+Theorem focus_opt_lower_row_bound[local]:
+  ld_sync lo P C V stk PG G tn fn si s t0 A (f::fs) fuel /\ o1_ctx_shape C /\
+  ir_supply_covers_fn f.lf_supply fn /\ fn' = ld_image f /\
+  (!g i. MEM g C.ctx_functions /\ MEM i (fn_insts g) ==>
+    ~MEM (Label "code_end") i.inst_operands) /\
+  mem_inv (\ctx g i u. (gas_cut n V u ==> inst_dload_in_section i u) /\
+    u.vs_code = V.vs_code /\ u.vs_data_section = V.vs_data_section) C V /\
+  o1_safe_upto D lo n C V /\ LENGTH V.vs_data_section < dimword (:256) DIV 2 /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\ ld_prefix C' fn' X p h t0 t /\
+  s.vs_gas_readings = t.vs_gas_readings /\ gas_cut n V t /\
+  (EL h X).inst_opcode = CODECOPY /\ (EL h X).inst_operands = [dst; Var x; sz] /\
+  code_end_var fn' x /\ eval_operand (Var x) t = SOME w /\
+  FLOOKUP t.vs_labels "code_end" = SOME bword ==>
+  w2n (w - bword) < dimword (:256) DIV 2
+Proof
+  strip_tac >>
+  drule_then strip_assume_tac ld_sync_source >>
+  `gas_cut n V s` by fs[gas_cut_def] >>
+  `taint_ok fn tn si s` by
+    (qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     metis_tac[]) >>
+  `MEM fn C.ctx_functions` by metis_tac[frameAllocationOwnershipTheory.frame_reachable_functions_member] >>
+  `inst_dload_in_section si s /\ s.vs_data_section = V.vs_data_section` by
+    (drule_all ld_sync_source_mem_inv >> simp[] >> metis_tac[]) >>
+  irule focus_lower_dload_codecopy_point >> simp[] >> metis_tac[]
 QED
 
 Theorem focus_row_visit_inverse[local]:
