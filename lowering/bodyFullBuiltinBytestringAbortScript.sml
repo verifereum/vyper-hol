@@ -15,7 +15,7 @@ Theorem bytestring_slice_bounds_prefix_check[local]:
   (!op. MEM op [a;n;limit] ==>
     op_prov G op = NONE /\ op_taint tn op = {} /\
     (!z. op = Var z ==> not_fresh_at sa z)) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   names = GENLIST (\j. STRING #"%" (toString (sa.cs_next_var+j))) 5 ==>
   inst_seq_ptr D 0 ctx func PG G tn
     (TAKE 5 (emitted_insts sa sb)) s
@@ -34,6 +34,8 @@ Proof
     n <> Var (STRING #"%" (toString j)) /\
     limit <> Var (STRING #"%" (toString j))` by
     (gvs[not_fresh_at_def] >> metis_tac[]) >>
+  `!x w t k. allocas_below_fmp ((update_var x w t) with vs_inst_idx := k) <=>
+      allocas_below_fmp t` by simp[allocas_below_fmp_def, update_var_def] >>
   drule compile_assert_slice_bounds_layout >> strip_tac >>
   qpat_x_assum `emitted_insts _ _ = _` SUBST_ALL_TAC >>
   gvs[GENLIST_CONS, combinTheory.o_DEF, FOLDL, FUPDATE_LIST] >>
@@ -87,7 +89,7 @@ Theorem bytestring_slice_bounds_full_abort:
     op_prov G op = NONE /\ op_taint tn op = {} /\
     (!z. op = Var z ==> not_fresh_at sa z)) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq (emitted_insts sa sb) s = Abort ab u ==>
@@ -159,6 +161,10 @@ Proof
      simp[allocas_from_def] >>
      qpat_assum `allocas_from lo s`
        (ACCEPT_TAC o REWRITE_RULE[allocas_from_def])) >>
+  `allocas_below_fmp v <=> allocas_below_fmp s` by
+    (simp[Abbr `v`] >>
+     qpat_assum `p = s with vs_vars := p.vs_vars` SUBST1_TAC >>
+     simp[allocas_below_fmp_def]) >>
   `lookup_block v.vs_current_bb func.fn_blocks = SOME bb /\
    get_instruction bb v.vs_inst_idx = SOME (EL 5 (emitted_insts sa sb))` by
      (drule_all fn_has_code_same_block >> strip_tac >>

@@ -29,7 +29,7 @@ Theorem nonpayable_check_ptr_safe:
       mk_inst j0 CALLVALUE [] [v0] :: mk_inst j1 ISZERO [Var v0] [v1] ::
       mk_inst j2 ASSERT [Var v1] [] :: rest /\
     s.vs_call_ctx.cc_callvalue <> 0w /\ s.vs_allocas = FEMPTY /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     !fuel. ptr_safe_blocks D lo fuel ctx fn [] FEMPTY entry_taint s
 Proof
   rpt gen_tac >> strip_tac >> Cases >- simp[Once ptr_safe_blocks_def] >>
@@ -42,6 +42,10 @@ Proof
   drule_all ptr_safe_blocks_block >> disch_then (fn th => rewrite_tac [th]) >>
   qpat_assum `phi_prefix_length _ = 0` (fn th => rewrite_tac [th]) >>
   qabbrev_tac `t0 = s with vs_inst_idx := 0` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t0` by
+    fs[Abbr `t0`, allocas_below_fmp_def] >>
+  `!x w t k. allocas_below_fmp ((update_var x w t) with vs_inst_idx := k) <=>
+      allocas_below_fmp t` by simp[allocas_below_fmp_def, update_var_def] >>
   `i0.inst_opcode = CALLVALUE /\ i0.inst_operands = [] /\
    i0.inst_outputs = [v0] /\
    i1.inst_opcode = ISZERO /\ i1.inst_operands = [Var v0] /\
@@ -71,6 +75,8 @@ Proof
          out_taint_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   (* the ISZERO *)
   qabbrev_tac `t1' = t1 with vs_inst_idx := SUC t0.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1'` by
+    simp[Abbr `t1'`, Abbr `t1`] >>
   `lookup_var v0 t1' = SOME s.vs_call_ctx.cc_callvalue /\
    t1'.vs_allocas = FEMPTY /\ t1'.vs_inst_idx = 1 /\
    t1'.vs_call_ctx = s.vs_call_ctx` by
@@ -97,6 +103,8 @@ Proof
          out_taint_def, eval_operand_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   (* the ASSERT *)
   qabbrev_tac `t2' = t2 with vs_inst_idx := SUC t1'.vs_inst_idx` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t2'` by
+    simp[Abbr `t2'`, Abbr `t2`] >>
   `lookup_var v1 t2' = SOME 0w /\ t2'.vs_allocas = FEMPTY /\
    t2'.vs_inst_idx = 2` by
     simp[Abbr `t2'`, Abbr `t2`, update_var_def, lookup_var_def,
@@ -149,8 +157,11 @@ Proof
        (mp_tac o Q.AP_TERM `\x. x.vs_allocas`) >>
      simp[deploy_entry_state_def, entry_venom_state_def,
           init_venom_state_def]) >>
-  `~ctx_has_dalloca dunit.cu_context` by
-    (drule_all deploy_unit_shape_ok >> simp[]) >>
+  `allocas_below_fmp s0` by
+    (qpat_assum `gas_variant vs _` (mp_tac o REWRITE_RULE [gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\st. allocas_below_fmp st`) >>
+     simp[Abbr `s0`, allocas_below_fmp_def, deploy_entry_state_def,
+          entry_venom_state_def, init_venom_state_def]) >>
   `?bb rest j0 j1 j2 v0 v1.
      lookup_block "__deploy" fn.fn_blocks = SOME bb /\
      bb.bb_instructions =

@@ -1395,6 +1395,7 @@ Proof
         op_prov G op = NONE /\ op_taint tn op = {}` by
     (simp[] >> rpt strip_tac >> gvs[op_prov_def,op_taint_def] >> metis_tac[]) >>
   drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_runtime_frame >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bodyFullBopWordSuccessTheory.bop_word_scalar_success_joint >>
   disch_then (qspecl_then [`ARB`,`PG`] (qx_choosel_then [`H`,`u`] strip_assume_tac)) >>
   qexistsl [`H`,`u`] >> simp[] >> conj_tac

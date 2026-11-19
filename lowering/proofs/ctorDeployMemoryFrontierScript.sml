@@ -293,7 +293,6 @@ Theorem lowered_unit_ptr_taint:
     lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
     lookup_function name ctx.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\ lo <= vs.vs_alloca_next /\
-    ~ctx_has_dalloca ctx /\
     (!fuel. ptr_safe_blocks D lo fuel ctx fn [] FEMPTY entry_taint
               (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                           vs_inst_idx := 0 |>))

@@ -158,6 +158,7 @@ Theorem abi_decode_owned_relative_load:
        op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bodyFullAbiDecodeRelativeLoadExactTheory.abi_decode_owned_relative_load_exact >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qpat_x_assum `t = _ with vs_inst_idx := _` kall_tac >>

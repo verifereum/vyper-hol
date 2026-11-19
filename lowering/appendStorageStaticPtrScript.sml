@@ -19,7 +19,7 @@ Theorem append_storage_word_static_origin_path:
   s.vs_call_ctx.cc_static /\
   op_taint tn bop = {} /\ op_taint tn vop = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -55,7 +55,6 @@ Resume append_storage_word_static_origin_path[pointer]:
   qpat_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`
     (mp_tac o REWRITE_RULE [compile_dynarray_append_word_parts]) >> strip_tac >>
   `!x. bop = Var x ==> not_fresh_at sa x` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all append_storage_guard_actual >>
   disch_then (qspecl_then [`func`, `PG`, `G`, `D`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts sa s3) s = OK t3` >>
@@ -78,7 +77,12 @@ Resume append_storage_word_static_origin_path[pointer]:
     (Cases_on `bop` >> Cases_on `vop` >> gvs[op_taint_def]) >>
   `!x. bop = Var x ==> not_fresh_at s3 x` by metis_tac[] >>
   drule_all append_storage_address_stages_actual >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t3` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t3` by
+    (qpat_assum `state_frame t3 = state_frame s`
+       (strip_assume_tac o SRULE [state_frame_def] o Q.AP_TERM `\st. (st.vs_allocas,st.vs_initial_fmp,st.vs_fmp)`) >>
+     strip_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` drule >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all append_storage_address_ptr >>
   disch_then (qspecl_then [`func`, `PG`, `G3`, `D`] strip_assume_tac) >>
   suspend "store"
@@ -98,6 +102,12 @@ Resume append_storage_word_static_origin_path[store]:
     (`eval_operand vop t6 = eval_operand vop t3` by
        (irule writes_fresh_old_operand >> metis_tac[]) >> simp[]) >>
   `state_frame t6 = state_frame s` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t6` by
+    (qpat_assum `state_frame t6 = state_frame s`
+       (strip_assume_tac o SRULE [state_frame_def] o Q.AP_TERM `\st. (st.vs_allocas,st.vs_initial_fmp,st.vs_fmp)`) >>
+     strip_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` drule >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   `t6.vs_call_ctx.cc_static` by gvs[state_frame_def] >>
   `op_taint tn6 vop = {}` by
     (`op_taint tn6 vop = op_taint tn3 vop` by
@@ -116,7 +126,8 @@ Resume append_storage_word_static_origin_path[store]:
      simp[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def,
        ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        source_memory_write_ranges_def, source_memory_read_ranges_def,
-       step_inst_non_invoke, eval_operands_def] >> metis_tac[]) >>
+       step_inst_non_invoke, eval_operands_def, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   suspend "compose"
 QED
 

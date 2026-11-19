@@ -55,7 +55,7 @@ Theorem slot_length_step[local]:
   emit_op (if tr then TLOAD else SLOAD) [bop] sa = (Var out,sb) /\
   eval_operand bop s = SOME slot /\ op_taint tn bop = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   array_length_step_ok lo ctx fn (if tr then TLOAD else SLOAD) [bop]
     (if tr then tload slot s else sload slot s) sa out sb s G tn
 Proof
@@ -71,7 +71,7 @@ Theorem slot_length_stage[local]:
    else comp_return (Lit (n2w cnt))) sa = (len,sl) /\
   fn_has_code sa sl fn /\ eval_operand bop s = SOME slot /\ op_taint tn bop = {} /\
   (dyn ==> key_taint (if tr then tn.t_trans else tn.t_stor) slot = {}) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t G' tn'.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G',tn')) /\
@@ -184,7 +184,7 @@ Theorem subscript_slot_array_execution:
   (dyn ==> key_taint (if tr then tn.t_trans else tn.t_stor) slot = {}) /\
   (!x. bop = Var x ==> not_fresh_at sn x) /\
   (!x. iop = Var x ==> not_fresh_at sn x) /\
-  allocas_from lo u /\ alloca_history fn u /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo u /\ alloca_history fn u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
   ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
   u.vs_inst_idx = LENGTH sn.cs_current_insts ==>
   ?q H tm.
@@ -214,7 +214,13 @@ Proof
      simp[venom_state_component_equality, allocas_from_def] >>
      metis_tac[allocas_from_def]) >>
   `eval_operand len ul = SOME nw` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp ul` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ul` by
+    (qpat_assum `array_length_frame _ u _ _ ul _ _`
+       (strip_assume_tac o SRULE [] o Q.AP_TERM `\st. (st.vs_allocas, st.vs_initial_fmp, st.vs_fmp)` o
+        cj 1 o REWRITE_RULE [array_length_frame_def]) >>
+     strip_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` drule >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all array_tail_scalar_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   qexistsl [`t`,`H`,`tm`] >> simp[] >>

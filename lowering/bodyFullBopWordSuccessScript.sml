@@ -6,7 +6,7 @@ Ancestors
 Theorem bop_word_scalar_success_joint:
   bop_scalar_seq R A code B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq code s = OK t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq code s = OK t /\
   ~s.vs_halted /\ allocas_from lo s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -20,7 +20,6 @@ Theorem bop_word_scalar_success_joint:
                        FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
 Proof
   strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.INST [`D` |-> `D0`] bop_scalar_seq_run) >>
   disch_then (qspecl_then [`fn`, `PG`, `D0`] strip_assume_tac) >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >> gen_tac >>

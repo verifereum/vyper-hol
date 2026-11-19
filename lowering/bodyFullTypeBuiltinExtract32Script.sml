@@ -167,6 +167,7 @@ Resume extract32_vv_full[source_continuation]:
     ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1` by
     (rpt strip_tac >> fs[compileEnvTheory.is_word_type_def] >> metis_tac[]) >>
   `evaluate_type (get_tenv cx) (expr_type src) = SOME (BaseTV (BytesT (Dynamic m)))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.INST
     [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `PG` |-> `PG`]
     extract32_prepare_full) >>
