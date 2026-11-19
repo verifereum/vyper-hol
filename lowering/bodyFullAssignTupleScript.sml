@@ -7,8 +7,8 @@
  * TOP-LEVEL: the body_*_full sub-shape theorems below.
  *)
 Theory bodyFullAssignTuple
-Ancestors words[qualified,ignore_grammar]
-  bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
+Ancestors placeMemoryCopyEffect[qualified,ignore_grammar] immSectionDead compileVyper bodyStorageMetadata ctorDeployDeadSectionFrame ctorDeployDeadSection pred_set immutableCopyExecution immutableDeployOperandTransfer fragGasSeqPtr stmtReasonLitFragMemory immutableWordExecution fragExecMem memSafeRun venomExecSemantics exprSimCopy venomInst unitTransformDefs codegenRel contextCodegenRel bodyPtrBopInRepresentation immutableAssignCompose immutableDeployAssignBytes immutableDeployAssignAdmissible valueEncodingProps venomMemProps vyperTypeValues typedCopyOriginPtr placeStoreDynPrepare bodyMemBopRestWordPath allocaSiteResource exprSimPtrLiteralBuffer exprSimAlloc exprOperandVar fragGasMode fragGasOrigin[qualified,ignore_grammar]
+  words[qualified,ignore_grammar] bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyFullLocalCopy robustCopyTransportPtr exprSimProps typedMemoryCopy
@@ -19,10 +19,15 @@ Ancestors words[qualified,ignore_grammar]
   assignTuplePtrLoadStep tupleTypedLoad bodyFullGhostFrame valueEncodingProofs
   augAssignFullStore assignTuplePtrStorage stmtSimAssignStorage vfmState exprLoweringProps
   tupleTargetStoreRun bodyFullMemoryStore stateRelProj wordLoadStorePtr memoryPlaceStorePost
-  haltExitProj immutableRepSensitivity
-  immutableBytestringRuntime[qualified,ignore_grammar]
-  assignTuplePtrStoreWord stmtSimDeclStore vyperTypeArgFits instMemFrontier
-  tupleTargetStoreProps vyperLookup stmtSimAssignStorageFacts stmtSimDefs exprSimDefs fragGasOriginPtr loweringSlice exprSimBufferStore[qualified,ignore_grammar] immutableDeployAssignFacts[qualified,ignore_grammar] bodyImmutableAugAssignStore[qualified,ignore_grammar] immutableDeployAssignStateFrame[qualified,ignore_grammar] exprSimLiteralBuffer[qualified,ignore_grammar] exprSimAbiEncodeStateTransport[qualified,ignore_grammar] exprSimAggregateLoops[qualified,ignore_grammar] vyperTypeContract[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] exprSimHyps structFieldsProps immutableRelation gasContext immSectionDead compileVyper bodyStorageMetadata ctorDeployDeadSectionFrame ctorDeployDeadSection pred_set immutableCopyExecution immutableDeployOperandTransfer fragGasSeqPtr stmtReasonLitFragMemory immutableWordExecution fragExecMem memSafeRun venomExecSemantics exprSimCopy venomInst unitTransformDefs codegenRel contextCodegenRel bodyPtrBopInRepresentation immutableAssignCompose immutableDeployAssignBytes immutableDeployAssignAdmissible valueEncodingProps venomMemProps vyperTypeValues typedCopyOriginPtr placeStoreDynPrepare bodyMemBopRestWordPath allocaSiteResource exprSimPtrLiteralBuffer exprSimAlloc exprOperandVar fragGasMode vyperStorageFootprint[qualified,ignore_grammar] stmtSimAppendStorageCompose[qualified,ignore_grammar] bodyFullMemoryStage[qualified,ignore_grammar]
+  haltExitProj immutableRepSensitivity immutableBytestringRuntime[qualified,ignore_grammar] assignTuplePtrStoreWord stmtSimDeclStore vyperTypeArgFits instMemFrontier
+  tupleTargetStoreProps vyperLookup stmtSimAssignStorageFacts stmtSimDefs exprSimDefs fragGasOriginPtr loweringSlice
+  bodyExprPreFacts supportedNameRoot exprSimBufferStore[qualified,ignore_grammar] immutableDeployAssignFacts[qualified,ignore_grammar] bodyImmutableAugAssignStore[qualified,ignore_grammar] immutableDeployAssignStateFrame[qualified,ignore_grammar] exprSimLiteralBuffer[qualified,ignore_grammar] exprSimAbiEncodeStateTransport[qualified,ignore_grammar] exprSimAggregateLoops[qualified,ignore_grammar] vyperTypeContract[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] exprSimHyps structFieldsProps immutableRelation gasContext allocLimitsProps supportedStmtTraverse
+  vyperTypeCallGraph vyperTypeCallStackSoundness gasShadowCompileStmtHelpers
+  gasShadowState exprSimUnwrap stmtLoweringMono exprSimSource
+  bodyPtrBopTypedSource[qualified,ignore_grammar]
+  vyperStorageFootprint[qualified,ignore_grammar] stmtSimAppendStorageCompose[qualified,ignore_grammar] bodyFullMemoryStage[qualified,ignore_grammar]
+  immutableAssignOpen[qualified,ignore_grammar] bodyFullPathHistory[qualified,ignore_grammar]
+  bodyFullAssignTopCopyTail[qualified,ignore_grammar] tuplePlaceValueStorageFrame[qualified,ignore_grammar]
 
 val _ = Parse.hide "body";
 
@@ -2843,49 +2848,6 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-(* Any other target list. *)
-Theorem body_assign_tuple_other_full:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' tv t s'3' v t'.
-       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (TupleTarget gs) e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
-    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    lowered_value_type cenv e = expr_type e /\
-    ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
-            EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) /\
-    ~EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
-                        FLOOKUP env.var_types id = SOME ty /\
-                        0 < type_memory_bytes cenv ty) \/
-               (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
-                       supported_scalar_target tops nsid) \/
-               (?nsid fld fty.
-                  g = BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld) /\
-                  supported_storage_field_write tops nsid fld /\
-                  type_place_target env
-                    (AttributeTarget (TopLevelNameTarget nsid) fld) =
-                    SOME (Type fty) /\ is_word_type fty)) gs ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
-      (eval_stmt cx (Assign (TupleTarget gs) e)) es
-Proof
-  cheat
-QED
-
 Triviality tuple_immutable_exact_slot_size:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env st ==>
   !ty tv. evaluate_type (type_env tops) ty = SOME tv ==>
@@ -5648,8 +5610,13 @@ Resume tuple_runtime_loop_suffix[recur]:
   `lookup_var src u = SOME a /\ ptr_covers Gu tu src u capacity` by
     (qpat_assum `!p. _ ==> lookup_var p u = lookup_var p s /\ _`
        (qspec_then `src` mp_tac) >>
-     fs[Excl "isPREFIX"] >>
-     fs[ptr_covers_def, Excl "isPREFIX"] >> gvs[Excl "isPREFIX"]) >>
+     (impl_tac >-
+       qpat_assum `ALL_DISTINCT (src::_)`
+         (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [listTheory.ALL_DISTINCT])) >>
+     strip_tac >>
+     conj_tac >- simp[] >>
+     irule assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame >>
+     qexistsl_tac [`G`,`s`,`tn`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_assum `!i s G tn. _ ==> ?t Gf tf. _`
     (qspecl_then [`SUC i`,`u`,`Gu`,`tu`] mp_tac) >>
   (impl_tac >-
@@ -6497,3 +6464,4550 @@ Resume body_assign_tuple_immutable_head_joint[normalized_post]:
 QED
 
 Finalise body_assign_tuple_immutable_head_joint
+
+Theorem tuple_flat_targets_success_scopes[local]:
+  !ats vals src fin.
+    EVERY (\g. ?bt. g = BaseTarget bt) ats /\
+    assign_tuple_target_list cx ats vals src = (INL (),fin) ==>
+    MAP FDOM fin.scopes = MAP FDOM src.scopes
+Proof
+  Induct_on `ats` >> Cases_on `vals`
+  >- simp[Once evaluate_def,return_def]
+  >- simp[Once evaluate_def,raise_def]
+  >- simp[Once evaluate_def,raise_def] >>
+  simp[Once assign_tuple_target_list_cons] >>
+  rpt strip_tac >> Cases_on `r` >> gvs[] >>
+  qpat_x_assum `assign_tuple_targets cx (BaseTarget _) _ _ = _` mp_tac >>
+  simp[Once evaluate_def,bind_def,AllCaseEqs()] >> strip_tac >>
+  imp_res_tac vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom >>
+  imp_res_tac vyperScopePreservationTheory.write_place_scopes_dom >>
+  metis_tac[]
+QED
+
+(* Any other target list. *)
+Theorem body_assign_tuple_other_full:
+  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    lowered_value_type cenv e = expr_type e /\
+    ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
+            EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) /\
+    ~EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
+                        FLOOKUP env.var_types id = SOME ty /\
+                        0 < type_memory_bytes cenv ty) \/
+               (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+                       supported_scalar_target tops nsid) \/
+               (?nsid fld fty.
+                  g = BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld) /\
+                  supported_storage_field_write tops nsid fld /\
+                  type_place_target env
+                    (AttributeTarget (TopLevelNameTarget nsid) fld) =
+                    SOME (Type fty) /\ is_word_type fty)) gs ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule tuple_targets_typing >> strip_tac >>
+  `supported_assignment tops bindings (TupleTarget gs) e` by
+    gvs[supported_stmt_assigntuple] >>
+  `supported_expr tops e /\
+   EVERY (\g. case g of BaseTarget bt => supported_target tops bindings bt
+                      | TupleTarget ts => F) gs` by
+    (qpat_assum `supported_assignment tops bindings (TupleTarget gs) e` mp_tac >>
+     simp[NoAsms, Once supported_assignment_def]) >>
+  `cenv.ce_target CapMcopy` by metis_tac[bodySimStmtFactsTheory.body_inv_mcopy] >>
+  `(EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy)` by simp[] >>
+  rw[stmt_frag_full_def] >>
+  drule_all tupleAssignPartsTheory.assign_tuple_targets_code_parts >>
+  strip_tac >>
+  `!D sa' sb' s' G' tn' t' Gf tf dst n.
+     gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       (s',G',tn') [] (OK t',Gf,tf) /\
+     typed_copy_state_frame sa' dst n s' t' /\
+     ~t'.vs_halted /\ t'.vs_current_bb = sb'.cs_current_bb /\
+     t'.vs_inst_idx = LENGTH sb'.cs_current_insts ==>
+     typed_copy_effect ctx func sa' sb' s' t' dst n` by
+    (rpt strip_tac >> drule gas_origin_ptr_path_projections >> strip_tac >>
+     drule fragGasOriginTheory.gas_origin_path_erase >> strip_tac >>
+     drule fragGasModeTheory.gas_marked_path_exec >> strip_tac >>
+     gvs[placeMemoryCopyEffectTheory.typed_copy_effect_def,
+         fragGasModeTheory.gas_marked_path_def, typed_copy_state_frame_def,
+         typed_copy_frame_def, venom_state_component_equality] >> gvs[]) >>
+  `expr_body_pre cenv cx env e es` by
+    (drule_then strip_assume_tac supported_expr_body_calls >>
+     `~supported_expr_exists (const_name_root cx) e` by
+       (irule supported_expr_no_name_root >>
+        metis_tac[body_inv_const_name_root]) >>
+     `supported_program tops /\ get_module_code cx NONE = SOME tops /\
+      (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+        is_dynamic (vyper_to_abi_type (type_env tops) target))` by
+       gvs[body_inv_def] >>
+     `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
+     irule stmt_expr_body_pre_alloc >>
+     simp[] >> conj_tac
+     >- gvs[supported_stmt_expr_exists_def] >>
+     conj_tac >- gvs[stmt_exprs_ok_def,supported_stmt_expr_exists_def] >>
+     conj_tac >- gvs[stmt_exprs_ok_def,allocLimitsTheory.alloc_limits_stmt_def] >>
+     qexists_tac `[]` >> simp[] >>
+     qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
+     simp[int_calls_stmt_def] >>
+     metis_tac[call_evaluation_safe_append_right]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e) e es` by
+    (qpat_x_assum `body_expr_full_ok _ _` mp_tac >>
+     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+  `lower_value compile_expr cenv (expr_type e) e sa = (op,su)` by
+    simp[lower_value_def,comp_bind_def] >>
+  Cases_on `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  rename1 `lower_value _ _ _ (gas_shadow_expr e) _ = (shadow_op,shadow_su)` >>
+  `shadow_op = op /\ gas_shadow_state su shadow_su` by
+    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
+       gas_shadow_stmt_lower_value) >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+  gvs[] >>
+  `cs_extends sa su` by metis_tac[cs_extends_trans] >>
+  `cs_extends su sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa su func` by metis_tac[fn_has_code_split] >>
+  qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
+  simp[NoAsms,gas_shadow_stmt_def,gas_shadow_assignment_def,stmt_env_def,
+       declare_stmt_local_def,Once compile_stmt_def,
+       comp_bind_def,comp_ignore_bind_def,comp_return_def] >>
+  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  rename1 `compile_expr _ _ (gas_shadow_expr e) _ = (shadow_vv,shadow_sc)` >>
+  Cases_on `unwrap_value cenv shadow_vv shadow_sc` >>
+  rename1 `unwrap_value _ shadow_vv _ = (op',su')` >>
+  simp[] >> strip_tac >>
+  `op' = op /\ su' = shadow_su` by
+    gvs[lower_value_def,comp_bind_def] >>
+  gvs[] >>
+  Cases_on `compile_tuple_unpack cenv (lowered_value_type cenv e)
+    (is_memory_view e /\ vv_location shadow_vv = SOME LocMemory)
+    (MAP gas_shadow_assignment gs) op shadow_su` >>
+  gvs[] >>
+  rename1 `compile_tuple_unpack _ _ _ (MAP gas_shadow_assignment gs) _ _ = ((),shadow_sb)` >>
+  `cs_extends shadow_su shadow_sb` by
+    metis_tac[cj 4 ci_mono_return_helpers,ci_mono_def,pairTheory.SND] >>
+  `cs_extends shadow_sa shadow_su` by
+    metis_tac[cj 2 compile_expr_grows] >>
+  `fn_has_code shadow_sa shadow_su shadow_func` by
+    metis_tac[fn_has_code_split] >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at sa x` by fs[ret_pc_ok_def] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[expr_body_pre_gas_admissible] >>>
+  HEADGOAL (sg `?shadow_ss. gas_shadow_state ss shadow_ss /\
+    compile_tuple_store_all cenv tys (MAP gas_shadow_assignment gs) elems shadow_ss =
+      ((),shadow_sb) /\ fn_has_code shadow_ss shadow_sb shadow_func`) >>>
+  HEADGOAL (
+    `expr_type (gas_shadow_expr e) = TupleT tys /\
+     lowered_value_type cenv (gas_shadow_expr e) = expr_type (gas_shadow_expr e)` by
+      simp[gasShadowCompilePureTheory.gas_shadow_lowered_value_type]) >>>
+  HEADGOAL (
+    qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
+      (assume_tac o PURE_REWRITE_RULE [gas_shadow_stmt_def,gas_shadow_assignment_def]) >>
+    mp_tac (Q.SPECL [`cenv`,`lctx`,`ret_ty`,`MAP gas_shadow_assignment gs`,
+      `gas_shadow_expr e`,`tys`,`shadow_sa`,`shadow_sb`,`cenv`,`shadow_func`]
+      tupleAssignPartsTheory.assign_tuple_targets_code_parts) >>
+    (impl_tac >- simp[]) >>
+    simp[NoAsms] >>
+    disch_then (qx_choosel_then [`svv`,`ssc`,`sop`,`ssu`,`sstaged`,`ssl`,`selems`,`sss`]
+      (map_every assume_tac o CONJUNCTS))) >>>
+  HEADGOAL (
+    `svv = shadow_vv /\ ssc = shadow_sc` by
+      (qpat_assum `compile_expr cenv _ (gas_shadow_expr e) shadow_sa = (shadow_vv,shadow_sc)` mp_tac >>
+       qpat_assum `compile_expr cenv _ (gas_shadow_expr e) shadow_sa = (svv,ssc)`
+         (fn eq => simp[NoAsms,eq]))) >>>
+  HEADGOAL (
+    `shadow_vv = vv` by
+      (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `TupleT tys`, `e` |-> `e`]
+         gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr) >>
+       rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
+       disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[])) >>>
+  HEADGOAL (
+    `sop = op /\ ssu = shadow_su` by
+      (qpat_assum `svv = shadow_vv` (fn vv_eq =>
+       qpat_assum `ssc = shadow_sc` (fn sc_eq =>
+       qpat_assum `unwrap_value cenv shadow_vv shadow_sc = (op,shadow_su)` (fn code =>
+       qpat_assum `unwrap_value cenv svv ssc = (sop,ssu)` mp_tac >>
+       simp[NoAsms,vv_eq,sc_eq,code]))))) >>>
+  HEADGOAL (
+    qpat_assum `svv = shadow_vv` (fn v1 =>
+    qpat_assum `shadow_vv = vv` (fn v2 =>
+    qpat_assum `sop = op` (fn ptr =>
+    qpat_assum `ssu = shadow_su` (fn st =>
+      RULE_ASSUM_TAC (PURE_REWRITE_RULE [v1,v2,ptr,st])))))) >>>
+  HEADGOAL (
+    qpat_assum `(if _ then _ else _) su = (staged,sl)` (fn stage =>
+      let val f = rator (lhs (concl stage)) in
+        Q.SUBGOAL_THEN `gas_shadow_compiles ^f ^f` assume_tac
+      end)
+    >- (IF_CASES_TAC >> simp[comp_ignore_bind_def,
+           gasShadowStateTheory.gas_shadow_compiles_bind,
+           gasShadowStateTheory.gas_shadow_compiles_return,
+           gasShadowCompileContextTheory.gas_shadow_compiles_alloc_buffer,
+           gasShadowStateTheory.gas_shadow_compiles_emit_void])) >>>
+  HEADGOAL (
+    `sstaged = staged /\ gas_shadow_state sl ssl` by
+      (qpat_assum `gas_shadow_compiles _ _`
+         (qspecl_then [`su`,`shadow_su`] mp_tac o
+          REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >> simp[])) >>>
+  HEADGOAL (
+    `selems = elems /\ gas_shadow_state ss sss` by
+      (mp_tac (Q.SPECL [`tys`,`staged`,`0`]
+         (Q.INST [`cenv` |-> `cenv`] gasShadowCompileStmtOpsTheory.gas_shadow_compiles_tuple_load_all)) >>
+       rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
+       disch_then (qspecl_then [`sl`,`ssl`] mp_tac) >>
+       qpat_assum `sstaged = staged` (fn op_eq =>
+       qpat_assum `compile_tuple_load_all cenv sstaged tys 0 ssl = (selems,sss)` (fn shadow =>
+       qpat_assum `compile_tuple_load_all cenv staged tys 0 sl = (elems,ss)` (fn real =>
+       qpat_assum `gas_shadow_state sl ssl` (fn rel =>
+         simp[NoAsms,PURE_REWRITE_RULE [op_eq] shadow,real,rel])))))) >>>
+  HEADGOAL (
+    qexists_tac `sss` >>
+    qpat_assum `selems = elems` (fn elems =>
+      qpat_assum `compile_tuple_store_all cenv tys (MAP gas_shadow_assignment gs) selems sss = _`
+        (assume_tac o PURE_REWRITE_RULE [elems])) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_x_assum `expr_sim_full _ _ _ _ _ _`
+      (drule_all_then strip_assume_tac o REWRITE_RULE [expr_sim_full_def]) >>
+    qpat_x_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e) (read_result cx)) _ _ _`
+      (strip_assume_tac o REWRITE_RULE [gasOutcomeFullTheory.gas_outcome_full_def])) >>>
+  ROTATE_LT 1 >>>
+  HEADGOAL (Cases_on `r` >> fs[fragExecTheory.exit_result_def]) >>>
+  HEADGOAL (
+    `post_value_type cenv e = TupleT tys` by
+      metis_tac[loweringPostsTheory.post_value_type_lowered] >>
+    `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
+       ee.storage_trace` by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+      (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    rename1 `res = INL source_v`) >>>
+  HEADGOAL (
+    qpat_assum `!tail. _ = (res,ee with gas_obs := tail)`
+      (qspec_then `[]` assume_tac) >>
+    drule_at (Pat `bind _ _ _ = _`)
+      (REWRITE_RULE [ETA_THM] bodySimStmtFactsTheory.expr_body_pre_eval) >>
+    disch_then (qspecl_then [`cenv`,`env`] mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac) >>>
+  HEADGOAL (`?obs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) =
+       (INL source_v,ee with gas_obs := [])` by
+       (qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
+        qpat_x_assum `!tail. _ = (res,ee with gas_obs := tail)` kall_tac >> gvs[])) >>>
+  HEADGOAL (drule bodyPtrBopTypedSourceTheory.bop_typed_source_witness >>
+    disch_then (qspecl_then [`source_v`,`ee with gas_obs := []`] mp_tac) >>
+    (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+    qpat_assum `expr_type e = TupleT tys` SUBST_ALL_TAC >>
+    drule vyperTypeValuesTheory.evaluate_type_TupleT_cases >> strip_tac >>
+    `?vs. source_v = ArrayV (TupleV vs) /\ values_have_types tvs vs` by
+      (Cases_on `source_v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+       rename1 `value_has_type (TupleTV tvs) (ArrayV av)` >>
+       Cases_on `av` >> gvs[vyperTypingTheory.value_has_type_def]) >>
+    gvs[]) >>>
+  HEADGOAL (
+    `LIST_REL (\ty tv. type_memory_bytes cenv ty = type_memory_size tv) tys tvs` by
+      (fs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+       irule exprSimHypsTheory.expr_sim_inv_memory_size >> metis_tac[]) >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+      (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+    (impl_tac >- simp[]) >>
+    disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def])) >>>
+  HEADGOAL (
+    qpat_assum `post_value_type cenv e = TupleT tys`
+      (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+    qpat_assum `expr_val_rel _ _ _ _ _`
+      (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >>
+    `val_wf (TupleTV tvs) (ArrayV (TupleV vs))` by
+      (qpat_assum `expr_val_at _ _ _ _ _ _ _ _ _`
+         (mp_tac o Q.SPEC `TupleTV tvs` o REWRITE_RULE [expr_val_at_def]) >>
+       simp[is_word_type_def]) >>
+    `!mem. mem_agree_outside tn'.t_mem v.vs_memory mem ==>
+       val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n w) mem` by
+      (qpat_assum `ptr_val_ok _ _ _ _ _ _ _`
+         (strip_assume_tac o SIMP_RULE (srw_ss()) [ptr_val_ok_def,is_word_type_def]) >>
+       qpat_assum `ptr_mem_ok _ _ _ _ _ _ _`
+         (mp_tac o Q.SPECL [`TupleTV tvs`,`w`] o REWRITE_RULE [ptr_mem_ok_def]) >>
+       simp[])) >>>
+  HEADGOAL (
+    `LENGTH tys = LENGTH tvs` by metis_tac[LIST_REL_LENGTH] >>
+    `SUM (MAP (type_memory_bytes cenv) tys) = type_memory_size_list tvs` by
+      (drule tupleTypedLoadTheory.tuple_prefix_sizes >>
+       disch_then (qspec_then `LENGTH tys` mp_tac) >>
+       simp[valueEncodingProofsTheory.type_memory_size_list_sum])) >>>
+  HEADGOAL (
+    Q.SUBGOAL_THEN `type_memory_size_list tvs = 0 \/
+      (?aid b sz. FLOOKUP v.vs_allocas aid = SOME (b,sz) /\ aid < su.cs_next_id /\
+        b <= w2n w /\ w2n w + type_memory_size_list tvs <= b + sz /\
+        (!n lb lsz. local_region cenv ee.scopes v n lb lsz ==>
+          b + sz <= lb \/ lb + lsz <= b)) \/
+      (?n b sz. local_region cenv ee.scopes v n b sz /\ b <= w2n w /\
+        w2n w + type_memory_size_list tvs <= b + sz /\
+        local_path_at cenv cx n (w2n w - b) (TupleTV tvs))` (mk_asm "rhs_window")) >>>
+  HEADGOAL (
+    qpat_assum `expr_val_at _ _ _ _ _ _ _ _ _`
+      (qspec_then `TupleTV tvs` mp_tac o PURE_REWRITE_RULE [expr_val_at_def]) >>
+    simp[is_word_type_def,val_footprint_def,valueEncodingTheory.type_memory_size_def,
+      local_val_at_def] >>
+    POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>>
+  HEADGOAL (sg `!todo tys1 tvs1 vs1 ops1 k p cur shadow_cur src u Gu tu.
+    LIST_REL (\g ty. well_typed_atarget env g ty) todo tys1 /\
+    LENGTH ops1 = LENGTH tys1 /\
+    LIST_REL (\ty tv. evaluate_type (get_tenv cx) ty = SOME tv) tys1 tvs1 /\
+    values_have_types tvs1 vs1 /\ tys1 = DROP k tys /\
+    tvs1 = DROP k tvs /\ vs1 = DROP k vs /\
+    EVERY (assignable_type (get_tenv cx)) tys1 /\
+    EVERY (\g. case g of BaseTarget bt =>
+      supported_target tops bindings bt /\ target_indices_pre cenv cx env bt
+      | TupleTarget ts => F) todo /\
+    body_tuple_targets_full_ok cx todo vs1 /\
+    expr_sim_inv cenv cx env src /\ src with gas_obs := [] = src /\
+    gas_admissible (assign_tuple_target_list cx todo vs1) (stmt_res_ok lctx) src /\
+    call_evaluation_safe cx (int_calls_atargets todo) /\
+    compile_tuple_store_all cenv tys1 todo ops1 cur = ((),sb) /\
+    compile_tuple_store_all cenv tys1 (MAP gas_shadow_assignment todo) ops1 shadow_cur =
+      ((),shadow_sb) /\ gas_shadow_state cur shadow_cur /\
+    fn_has_code cur sb func /\ fn_has_code shadow_cur shadow_sb shadow_func /\
+    sa.cs_next_id <= cur.cs_next_id /\ sa.cs_next_var <= cur.cs_next_var /\
+    local_ptrs_reserved cenv cur /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at cur x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at cur x) /\
+    ~block_is_terminated cur /\ ~u.vs_halted /\
+    u.vs_current_bb = cur.cs_current_bb /\ u.vs_inst_idx = LENGTH cur.cs_current_insts /\
+    return_buf_frame d cenv cur u /\ alloca_history func u /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z) /\
+    storage_trace_domain cx st0 src.storage_trace /\
+    (!H. valid_horizon cx st0 H src.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx src u /\ storage_well_formed_on cx src (FST H) /\
+      ghost_inv_at (DF H) lo d cenv cx src Gu tu u) /\
+    lo <= p /\ p + type_memory_size_list tvs <= u.vs_alloca_next /\
+    (type_memory_size_list tvs = 0 \/
+     (?aid b sz. FLOOKUP u.vs_allocas aid = SOME (b,sz) /\ aid < cur.cs_next_id /\
+       b <= p /\ p + type_memory_size_list tvs <= b + sz /\
+       (!n a len. local_region cenv src.scopes u n a len ==>
+         b + sz <= a \/ a + len <= b)) \/
+     (?n b sz. local_region cenv src.scopes u n b sz /\ b <= p /\
+       p + type_memory_size_list tvs <= b + sz /\
+       local_path_at cenv cx n (p-b) (TupleTV tvs))) /\
+    (!mem. mem_agree_outside tu.t_mem u.vs_memory mem ==>
+      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem) /\
+    (!i. i < LENGTH tys1 ==>
+      ?x. EL i ops1 = Var x /\ not_fresh_at cur x /\ op_taint tu (Var x) = {} /\
+          if is_word_type (EL i tys1) then
+            lookup_var x u = SOME (typed_val_to_w256 (EL i tvs1) (EL i vs1)) /\
+            op_prov Gu (Var x) = NONE
+          else lookup_var x u =
+                 SOME (n2w (p + SUM (MAP type_memory_size (TAKE (k+i) tvs)))) /\
+               ptr_covers Gu tu x u (type_memory_size (EL i tvs1))) /\
+    s0.vs_alloca_next <= u.vs_alloca_next /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP Gu x = FLOOKUP G0 x /\ op_taint tu (Var x) = op_taint tn0 (Var x)) /\
+    alloca_frame cenv es sa s0 cenv src u /\
+    (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+      (!n b sz'. local_region cenv es.scopes s0 n b sz' ==> off + sz <= b \/ b + sz' <= off) /\
+      off <= i /\ i < off + sz /\ i IN tu.t_mem ==> i IN tn0.t_mem) ==>
+    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+      (assign_tuple_target_list cx todo vs1) (src,u,Gu,tu)
+      (\H res ee G tn t. ?cenv''.
+        stmt_lands lctx sb res t /\ ~t.vs_halted /\
+        (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+        cenv_top_ext cenv cenv'' ee.scopes /\ stmt_state_rel H ctx func cenv'' cx ee t /\
+        storage_well_formed_on cx ee (FST H) /\ return_buf_frame d cenv'' sb t /\
+        alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+        s0.vs_alloca_next <= t.vs_alloca_next /\ ghost_inv_at (DF H) lo d cenv'' cx ee G tn t /\
+        (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+        (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+        (!x. not_fresh_at sa x ==>
+          FLOOKUP G x = FLOOKUP G0 x /\ op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+        alloca_frame cenv es sa s0 cenv'' ee t /\
+        (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+          (!n b sz'. local_region cenv es.scopes s0 n b sz' ==> off + sz <= b \/ b + sz' <= off) /\
+          off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem))
+      (\H res ee gt r. (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+        halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s \/ (?ir. r = IntRet ir s) ==> allocas_below_fmp s))`) >>>
+  HEADGOAL (Induct_on `todo`) >>>
+  HEADGOAL (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+    qpat_x_assum `type_memory_size_list tvs = 0 \/ _` kall_tac >>
+    qpat_x_assum `tys1 = DROP k tys` kall_tac >>
+    qpat_x_assum `tvs1 = DROP k tvs` kall_tac >>
+    qpat_x_assum `vs1 = DROP k vs` kall_tac) >>>
+  HEADGOAL (gvs[vyperTypeDefaultsTheory.values_have_types_LIST_REL,
+    compile_tuple_store_all_def,comp_return_def]) >>>
+  HEADGOAL (irule gasOutcomeFullComposeTheory.gas_outcome_full_pure) >>>
+  HEADGOAL (reverse conj_tac >- simp[]) >>>
+  HEADGOAL (qexistsl [`Gu`,`src`,`INL ()`,`u`,`tu`]) >>>
+  HEADGOAL (conj_tac >- simp[Once evaluate_def,return_def]) >>>
+  HEADGOAL (rpt strip_tac >- simp[gas_origin_ptr_path_rules]) >>>
+  HEADGOAL (BETA_TAC >> qexists `cenv` >>
+    simp[loweringPostsTheory.stmt_lands_def,stmtSimPropsTheory.cenv_top_ext_refl] >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_x_assum `!tys1 tvs1 vs1 ops1 k p cur shadow_cur src u Gu tu.
+      _ ==> gas_outcome_full _ _ _ _ (assign_tuple_target_list _ todo vs1) _ _ _`
+      (mk_asm "suffix_ih") >>
+    rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    Cases_on `h` >> qpat_x_assum `EVERY _ (_ :: todo)` mp_tac >>
+    simp[NoAsms] >> strip_tac) >>>
+  HEADGOAL (
+    Cases_on `tys1` >>
+    qpat_x_assum `LIST_REL (\g ty. well_typed_atarget env g ty) (_ :: todo) _` mp_tac >>
+    simp[NoAsms,listTheory.LIST_REL_def] >> strip_tac) >>>
+  HEADGOAL (
+    Cases_on `tvs1` >> qpat_x_assum `LIST_REL (\ty tv. evaluate_type _ ty = SOME tv) (_ :: _) _` mp_tac >>
+    simp[NoAsms,listTheory.LIST_REL_def] >> strip_tac) >>>
+  HEADGOAL (
+    Cases_on `vs1` >> qpat_x_assum `values_have_types (_ :: _) _` mp_tac >>
+    simp[NoAsms,vyperTypeDefaultsTheory.values_have_types_LIST_REL,listTheory.LIST_REL_def] >> strip_tac) >>>
+  HEADGOAL (
+    Cases_on `ops1` >> qpat_x_assum `LENGTH _ = LENGTH (_ :: _)` mp_tac >>
+    simp[NoAsms] >> strip_tac) >>>
+  HEADGOAL (
+    rename1 `compile_tuple_store_all cenv (sty::tys_tail) (BaseTarget bt::todo) (op0::ops_tail) cur = ((),sb)` >>
+    rename1 `LIST_REL value_has_type tvs_tail vs_tail` >>
+    rename1 `value_has_type stv vi`) >>>
+  HEADGOAL (
+    qpat_assum `sty :: tys_tail = DROP k tys`
+      (mp_then Any strip_assume_tac fragExecTheory.DROP_EQ_CONS o SYM)) >>>
+  HEADGOAL (
+    qpat_x_assum `call_evaluation_safe cx (int_calls_atargets (_ :: todo))`
+      (mp_tac o REWRITE_RULE [int_calls_atarget_def]) >>
+    disch_then (fn th =>
+      mp_then Any assume_tac call_evaluation_safe_append_left th >>
+      mp_then Any assume_tac call_evaluation_safe_append_right th)) >>>
+  HEADGOAL (
+    qpat_assum `compile_tuple_store_all cenv (sty::_) (BaseTarget bt::todo) _ cur = _`
+      (mp_then Any (qx_choose_then `sm` strip_assume_tac) tuple_store_base_cons)) >>>
+  HEADGOAL (
+    qpat_x_assum `compile_tuple_store_all _ _ (MAP gas_shadow_assignment (_ :: todo)) _ _ = _`
+      (assume_tac o PURE_REWRITE_RULE [listTheory.MAP,gasShadowTheory.gas_shadow_assignment_def]) >>
+    qpat_assum `compile_tuple_store_all _ (sty::_) (BaseTarget _ :: MAP gas_shadow_assignment todo) _ shadow_cur = _`
+      (mp_then Any (qx_choose_then `shadow_sm` strip_assume_tac) tuple_store_base_cons)) >>>
+  HEADGOAL (
+    `gas_shadow_state sm shadow_sm` by
+      (qspecl_then [`[sty]`,`[BaseTarget bt]`,`[op0]`] mp_tac
+         (Q.INST [`cenv` |-> `cenv`] gasShadowCompileStmtHelpersTheory.gas_shadow_compile_tuple_store_all) >>
+       rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
+       disch_then (qspecl_then [`cur`,`shadow_cur`] mp_tac) >>
+       simp[gasShadowTheory.gas_shadow_assignment_def])) >>>
+  HEADGOAL (
+    qpat_assum `compile_tuple_store_all cenv [_] [_] [_] cur = ((),sm)`
+      (mp_then Any strip_assume_tac tupleAssignPartsTheory.tuple_target_stores_growth) >>
+    qpat_assum `compile_tuple_store_all cenv tys_tail todo ops_tail sm = ((),sb)`
+      (mp_then Any strip_assume_tac tupleAssignPartsTheory.tuple_target_stores_growth) >>
+    `fn_has_code cur sm func /\ fn_has_code sm sb func` by
+      (irule fn_has_code_split >> simp[])) >>>
+  HEADGOAL (
+    qpat_assum `compile_tuple_store_all cenv [_] [_] [_] shadow_cur = ((),shadow_sm)`
+      (mp_then Any strip_assume_tac tupleAssignPartsTheory.tuple_target_stores_growth) >>
+    qpat_assum `compile_tuple_store_all cenv tys_tail (MAP gas_shadow_assignment todo) ops_tail shadow_sm = ((),shadow_sb)`
+      (mp_then Any strip_assume_tac tupleAssignPartsTheory.tuple_target_stores_growth) >>
+    `fn_has_code shadow_cur shadow_sm shadow_func /\ fn_has_code shadow_sm shadow_sb shadow_func` by
+      (irule fn_has_code_split >> simp[])) >>>
+  HEADGOAL (
+    qpat_assum `!i. i < LENGTH (sty::tys_tail) ==> ?x. _ /\ not_fresh_at cur x /\ _`
+      (qspec_then `0` (strip_assume_tac o SRULE [])) >>
+    rename1 `op0 = Var xmem` >>
+    qpat_assum `body_tuple_targets_full_ok cx (BaseTarget bt::todo) (vi::vs_tail)`
+      (strip_assume_tac o REWRITE_RULE [body_tuple_target_full_ok_def])) >>>
+  HEADGOAL (Cases_on `immutable_root cx bt`) >>>
+  HEADGOAL (sg `?ns id. bt = TopLevelNameTarget (ns,id) /\
+                         IS_SOME (supported_immutable_type tops (ns,id))`) >>>
+  HEADGOAL (
+    `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+      (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,body_inv_def]) >>
+    map_every (fn pat => qpat_assum pat mp_tac)
+      [`ALL_DISTINCT (FLAT _)`, `body_inv tops ctx cenv cx`,
+       `immutable_root cx bt`, `supported_target tops bindings bt`] >>
+    POP_ASSUM_LIST kall_tac >>
+    namedCases_on `bt` ["name", "nsid", "b key", "b fld"] >>
+    simp[supportedStmtsTheory.supported_target_def]) >>>
+  HEADGOAL (simp[targetPlaceSimTheory.immutable_root_def,targetPlaceSimTheory.target_root_def]) >>>
+  HEADGOAL (PairCases_on `nsid` >> simp[] >> rpt strip_tac >>
+    metis_tac[augAssignFullTargetRoutesTheory.augassign_scalar_target_route]) >>>
+  HEADGOAL (Cases_on `b` >> simp[] >> rpt strip_tac >>
+    metis_tac[bodyAugPlaceTargetTheory.aug_place_legacy_subscript_info,
+      bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable, optionTheory.IS_SOME_EXISTS]) >>>
+  HEADGOAL (Cases_on `b` >> simp[] >> rpt strip_tac >>
+    metis_tac[bodyAugPlaceTargetTheory.aug_place_legacy_field_info,
+      bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable, optionTheory.IS_SOME_EXISTS]) >>>
+  HEADGOAL (
+    qpat_x_assum `bt = TopLevelNameTarget _` SUBST_ALL_TAC >>
+    qpat_x_assum `IS_SOME (supported_immutable_type tops (ns,id))`
+      (qx_choose_then `dty` assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS])) >>>
+  HEADGOAL (
+    `type_place_target env (TopLevelNameTarget (ns,id)) = SOME (Type sty)` by
+      (qpat_assum `well_typed_atarget env _ sty` mp_tac >>
+       simp[NoAsms,well_typed_atarget_def,well_typed_target_def]) >>
+    `supported_variable_decl tops (ns,id) = SOME (Private,Immutable,dty,NONE)` by
+      (qpat_assum `supported_immutable_type _ _ = SOME _` mp_tac >>
+       simp[NoAsms,supportedDeclsTheory.supported_immutable_type_def,AllCaseEqs()] >>
+       strip_tac >> gvs[])) >>>
+  HEADGOAL (
+    drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem >>
+    `get_module_code cx NONE = SOME tops` by
+      (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,body_inv_def]) >>
+    `env_context_consistent env cx` by
+      (qpat_assum `expr_sim_inv cenv cx env src` mp_tac >>
+       simp[NoAsms,expr_sim_inv_def,vyperTypeInvariantsTheory.env_consistent_def]) >>
+    qpat_assum `env_context_consistent env cx`
+      (strip_assume_tac o REWRITE_RULE [vyperTypeInvariantsTheory.env_context_consistent_def])) >>>
+  HEADGOAL (
+    `FLOOKUP env.bare_globals (ns,id) = SOME dty` by
+      (qpat_assum `bare_globals_complete _ _`
+        (mp_tac o REWRITE_RULE [vyperTypeInvariantsTheory.bare_globals_complete_def]) >>
+       disch_then (qspecl_then [`ns`,`tops`,`Private`,`Immutable`,`id`,`dty`,`NONE`] mp_tac) >>
+       simp[]) >>
+    `FLOOKUP env.bare_global_assignable (ns,id) = SOME sty` by
+      (qpat_assum `type_place_target env _ = SOME (Type sty)` mp_tac >>
+       simp[NoAsms,vyperTypeEnvTheory.type_place_target_TopLevelNameTarget] >> simp[])) >>>
+  HEADGOAL (
+    `cx.in_deploy /\ dty = sty` by
+      (qpat_assum `bare_global_assignable_complete _ _`
+        (mp_tac o REWRITE_RULE [vyperTypeInvariantsTheory.bare_global_assignable_complete_def]) >>
+       Cases_on `cx.in_deploy` >> simp[]
+       >- (disch_then (qspecl_then [`ns`,`tops`,`Private`,`id`,`dty`,`NONE`] mp_tac) >>
+           simp[] >> metis_tac[]) >>
+       strip_tac >> gvs[])) >>>
+  HEADGOAL (qpat_x_assum `dty = sty` SUBST_ALL_TAC) >>>
+  HEADGOAL (
+    `~cx_const_name cx (ns,id)` by
+      (strip_tac >> drule_all bodySimTheory.body_inv_const_name_decl >> strip_tac >> gvs[]) >>
+    `assignable_type (get_tenv cx) sty` by
+      (qpat_assum `EVERY (assignable_type _) (sty::_)` mp_tac >> simp[NoAsms])) >>>
+  HEADGOAL (
+    `~block_is_terminated sm` by
+      (drule_all immutableDeployAssignFactsTheory.immutable_assign_target_layout >>
+       disch_then (qspec_then `compile_expr` strip_assume_tac) >>
+       rename1 `compile_get_target_ptr _ _ _ = return (Lit (n2w off),_,_)` >>
+       `compile_assign_value cenv (Lit (n2w off)) LocCode op0 (is_word_type sty)
+          NONE sty sty (type_memory_bytes cenv sty) cur = ((),sm)` suffices_by
+          (disch_then (mp_then Any ACCEPT_TAC immutableAssignOpenTheory.immutable_assign_loccode_open)) >>
+       qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] cur = ((),sm)` mp_tac >>
+       qpat_x_assum `compile_tuple_store_all _ (_::_) (_::_) (_::_) cur = _` kall_tac >>
+       Cases_on `is_word_type sty` >>
+       simp[compile_tuple_store_all_def,comp_ignore_bind_def,comp_return_def,
+         immutableCopyExecutionTheory.immutable_comp_bind_cases,
+         compile_assign_value_def,compile_store_at_loc_def])) >>>
+  HEADGOAL (
+    qpat_assum `!H. valid_horizon cx st0 H src.storage_trace ==> _`
+      (qspec_then `storage_trace_horizon src.storage_trace` mp_tac) >>
+    (impl_tac >- simp[GSYM vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+    strip_tac) >>>
+  HEADGOAL (
+    `allocas_from lo u /\ lo <= u.vs_alloca_next` by
+      (qpat_assum `ghost_inv_at _ _ _ _ _ src Gu tu u`
+        (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >> simp[]) >>
+    `u.vs_alloca_next < dimword (:256)` by
+      (qpat_assum `stmt_state_rel _ ctx func cenv cx src u`
+        (mp_then Any assume_tac stateRelProjTheory.stmt_state_rel_alloca_room) >>
+       drule_then ACCEPT_TAC alloca_room_next_lt)) >>>
+  HEADGOAL (
+    qpat_assum `CONS stv tvs_tail = DROP k tvs`
+      (strip_assume_tac o MATCH_MP fragExecTheory.DROP_EQ_CONS o SYM) >>
+    qpat_assum `CONS vi vs_tail = DROP k vs`
+      (strip_assume_tac o MATCH_MP fragExecTheory.DROP_EQ_CONS o SYM)) >>>
+  HEADGOAL (
+    `SUM (MAP type_memory_size (TAKE k tvs)) + type_memory_size stv <=
+       type_memory_size_list tvs` by
+      (qpat_assum `EL k tvs = stv` (SUBST1_TAC o SYM) >>
+       pure_rewrite_tac [valueEncodingProofsTheory.type_memory_size_list_sum] >>
+       irule abiEncoderInputTheory.abi_encoder_prefix_sum_bound >> simp[]) >>
+    `p + SUM (MAP type_memory_size (TAKE k tvs)) < dimword (:256)` by decide_tac) >>>
+  HEADGOAL (
+    qpat_assum `values_have_types tvs vs`
+      (assume_tac o MATCH_MP vyperTypingTheory.values_have_types_length) >>
+    sg `!mem. mem_agree_outside tu.t_mem u.vs_memory mem ==>
+       val_in_memory stv vi (p + SUM (MAP type_memory_size (TAKE k tvs))) mem`) >>>
+  HEADGOAL (qx_gen_tac `mm` >> disch_tac) >>>
+  HEADGOAL (
+    `tuple_in_memory vs tvs p mm` by
+      (rewrite_tac [GSYM valueEncodingPropsTheory.val_in_memory_tuple] >>
+       qpat_assum `!m. mem_agree_outside tu.t_mem u.vs_memory m ==> _`
+         irule >> simp[])) >>>
+  HEADGOAL (
+    map_every (fn pat => qpat_assum pat (SUBST1_TAC o SYM))
+      [`EL k tvs = stv`, `EL k vs = vi`]) >>>
+  HEADGOAL (irule tupleMemoryLayoutTheory.tuple_in_memory_element >> simp[]) >>>
+  HEADGOAL (
+    drule_at (Pat `compile_tuple_store_all _ [_] [_] [_] cur = ((),sm)`)
+      (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+        body_assign_tuple_immutable_head_joint)) >>>
+  HEADGOAL (disch_then (drule_at (Pat `stmt_state_rel _ ctx func cenv cx src u`))) >>>
+  HEADGOAL (disch_then (drule_at (Pat `ghost_inv_at _ lo d cenv cx src Gu tu u`))) >>>
+  HEADGOAL (disch_then (drule_at (Pat `fn_has_code cur sm func`))) >>>
+  HEADGOAL (disch_then (qspecl_then [`vi`, `tops`, `stv`, `p`, `lctx`,
+      `type_memory_size_list tvs`, `gas_explicit_sites ctx shadow_ctx`,
+      `env`, `sty`, `PG`] mp_tac)) >>>
+  HEADGOAL (impl_tac) >>>
+  HEADGOAL (simp[]) >>>
+  HEADGOAL (
+    qpat_x_assum `if is_word_type sty then lookup_var xmem u = _ /\ _ else _`
+      mp_tac >> ASM_CASES_TAC ``is_word_type sty`` >>
+    simp[exprSimCopyTheory.copy_old_operand_def,eval_operand_def]) >>>
+  HEADGOAL (
+    disch_then (qx_choose_then `fin` (qx_choose_then `dtv`
+      (qx_choose_then `imm_off` (qx_choose_then `q`
+        (qx_choose_then `Gq` (qx_choose_then `tq` strip_assume_tac))))))) >>>
+  HEADGOAL (
+    `fin with gas_obs := [] = fin` by
+      (qpat_assum `src with gas_obs := [] = src`
+         (mp_tac o ONCE_REWRITE_RULE [vyperStateTheory.evaluation_state_component_equality]) >>
+       simp[vyperStateTheory.evaluation_state_component_equality]) >>
+    `assign_tuple_targets cx (BaseTarget (TopLevelNameTarget (ns,id))) vi src = (INL (),fin)` by
+      (qpat_assum `!tail. assign_tuple_targets cx (BaseTarget (TopLevelNameTarget (ns,id))) vi
+          (src with gas_obs := tail) = _`
+         (qspec_then `[]` mp_tac) >>
+       qpat_assum `src with gas_obs := [] = src` (fn th => rewrite_tac[th]) >>
+       qpat_assum `fin with gas_obs := [] = fin` (fn th => rewrite_tac[th])) >>
+    `body_tuple_targets_full_ok cx todo vs_tail` by
+      (first_x_assum irule >> qexistsl_tac [`src`,`()`,`fin`] >> simp[]) >>
+    asm "suffix_ih" (qspecl_then
+      [`tys_tail`,`tvs_tail`,`vs_tail`,`ops_tail`,`SUC k`,`p`,`sm`,`shadow_sm`,`fin`,`q`,`Gq`,`tq`] mp_tac) >>
+    impl_tac) >>>
+  HEADGOAL (
+    `cur.cs_next_id <= sm.cs_next_id` by
+      (qspecl_then [`cenv`,`[sty]`,`[BaseTarget (TopLevelNameTarget (ns,id))]`,`[op0]`,`cur`] mp_tac
+        (cj 5 stmtLoweringMonoTheory.ci_mono_list_helpers) >> simp[ci_mono_def]) >>
+    `sa.cs_next_id <= sm.cs_next_id` by decide_tac >>
+    `sa.cs_next_var <= sm.cs_next_var` by
+      (irule arithmeticTheory.LESS_EQ_TRANS >> qexists `cur.cs_next_var` >> simp[])) >>>
+  HEADGOAL (
+    `local_ptrs_reserved cenv sm` by
+      (irule local_ptrs_reserved_next_var >> qexists `cur` >> simp[])) >>>
+  HEADGOAL (
+    `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
+      (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists `cur` >> conj_tac >- first_assum ACCEPT_TAC >>
+       qpat_assum `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at cur x`
+         (drule_then ACCEPT_TAC))) >>>
+  HEADGOAL (
+    `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
+      (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists `cur` >> conj_tac >- first_assum ACCEPT_TAC >>
+       qpat_assum `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at cur x`
+         (drule_then ACCEPT_TAC))) >>>
+  HEADGOAL (
+    `return_buf_frame d cenv sm q` by
+      (irule bodyMemoryDefsTheory.return_buf_frame_frame >> qexistsl_tac [`cenv`,`u`,`cur`] >>
+       simp[] >> rpt strip_tac >>
+       qpat_assum `!x. not_fresh_at cur x ==> lookup_var x q = lookup_var x u /\ _`
+         drule >> simp[])) >>>
+  HEADGOAL (
+    qpat_assum `stmt_state_rel _ ctx func cenv cx src u`
+      (assume_tac o MATCH_MP bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv) >>
+    qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (u,Gu,tu) [] (OK q,Gq,tq)`
+      (qspec_then `DF (storage_trace_horizon src.storage_trace)` assume_tac) >>
+    `alloca_history func q` by
+      (qpat_assum `gas_origin_ptr_path _ (u,Gu,tu) [] (OK q,Gq,tq)`
+        (mp_then Any irule bodyFullPathHistoryTheory.body_full_path_alloca_history) >> simp[])) >>>
+  HEADGOAL (sg `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_no_wrap inst z`) >>>
+  HEADGOAL (
+    qpat_assum `body_inv tops ctx cenv cx`
+      (mp_then Any mp_tac bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap)) >>>
+  HEADGOAL (
+    disch_then (qspecl_then [`func`,`q`] assume_tac) >> rpt strip_tac >>
+    rename1 `frag_reachable ctx func q rf ri rz` >>
+    qpat_assum `!fn inst u. MEM func ctx.ctx_functions /\ frag_reachable ctx func q fn inst u ==> _`
+      (qspecl_then [`rf`,`ri`,`rz`] mp_tac) >>
+    impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+    disch_then ACCEPT_TAC) >>>
+  HEADGOAL (sg `!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==>
+       val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem`) >>>
+  HEADGOAL (rpt strip_tac >>
+    irule robustCopyTransportPtrTheory.robust_val_in_memory_copy_transport >>
+    simp[exprSimPropsTheory.val_footprint_le] >>
+    qexistsl_tac [`u.vs_memory`,`q.vs_memory`,`type_memory_size_list tvs`,
+                  `p`,`tu.t_mem`,`tq.t_mem`] >>
+    simp[valueEncodingTheory.type_memory_size_def]) >>>
+  HEADGOAL (
+    qpat_assum `val_wf (TupleTV tvs) (ArrayV (TupleV vs))`
+      (mp_tac o MATCH_MP exprSimPropsTheory.val_footprint_le) >>
+    simp[valueEncodingTheory.type_memory_size_def]) >>>
+  HEADGOAL (simp[vyperTypeDefaultsTheory.values_have_types_LIST_REL]) >>>
+  HEADGOAL (
+    qpat_assum `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_no_wrap inst z`
+      (fn th => rewrite_tac[th])) >>>
+  HEADGOAL (sg `!i. i < LENGTH tys_tail ==>
+      ?x. EL i ops_tail = Var x /\ not_fresh_at sm x /\ op_taint tq (Var x) = {} /\
+          if is_word_type (EL i tys_tail) then
+            lookup_var x q = SOME (typed_val_to_w256 (EL i tvs_tail) (EL i vs_tail)) /\
+            op_prov Gq (Var x) = NONE
+          else lookup_var x q =
+                 SOME (n2w (p + SUM (MAP type_memory_size (TAKE (SUC k+i) tvs)))) /\
+               ptr_covers Gq tq x q (type_memory_size (EL i tvs_tail))`) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    qpat_assum `!i. i < LENGTH (sty::tys_tail) ==> ?x. _ /\ not_fresh_at cur x /\ _`
+      (qspec_then `SUC i` mp_tac) >>
+    (impl_tac >- (simp[NoAsms] >> first_assum ACCEPT_TAC)) >>
+    disch_then (qx_choose_then `xp` strip_assume_tac o SRULE [listTheory.EL])) >>>
+  HEADGOAL (
+    `not_fresh_at sm xp` by
+      (irule freshWritesTheory.not_fresh_at_mono >> qexists `cur` >> simp[]) >>
+    qpat_assum `!x. not_fresh_at cur x ==> lookup_var x q = _ /\ _`
+      (qspec_then `xp` mp_tac) >> (impl_tac >- simp[]) >> strip_tac) >>>
+  HEADGOAL (
+    `k + SUC i = SUC k + i` by decide_tac >>
+    qexists `xp` >>
+    (conj_tac >- first_assum ACCEPT_TAC) >>
+    (conj_tac >- first_assum ACCEPT_TAC) >>
+    (conj_tac >- asm_rewrite_tac[])) >>>
+  HEADGOAL (Cases_on `is_word_type (EL i tys_tail)`) >>>
+  HEADGOAL (
+    qpat_x_assum `if is_word_type (EL i tys_tail) then _ else _` mp_tac >>
+    simp[ptrDisciplineTheory.op_prov_def]) >>>
+  HEADGOAL (
+    qpat_x_assum `if is_word_type (EL i tys_tail) then _ else _` mp_tac >>
+    asm_rewrite_tac[] >> strip_tac >>
+    asm_rewrite_tac[] >>
+    qpat_assum `!x cap. not_fresh_at cur x /\ ptr_covers Gu tu x u cap ==> _`
+      irule >> asm_rewrite_tac[]) >>>
+  HEADGOAL (sg `!aid b cap i. FLOOKUP s0.vs_allocas aid = SOME (b,cap) /\
+      aid < sa.cs_next_id /\
+      (!n c len. local_region cenv es.scopes s0 n c len ==> b + cap <= c \/ c + len <= b) /\
+      b <= i /\ i < b + cap /\ i IN tq.t_mem ==> i IN tn0.t_mem`) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    `FLOOKUP u.vs_allocas aid = SOME (b,cap)` by
+      (qpat_assum `!a entry. FLOOKUP s0.vs_allocas a = SOME entry ==> _` irule >> simp[]) >>
+    qpat_assum `!a off sz j. FLOOKUP s0.vs_allocas a = SOME (off,sz) /\
+        a < sa.cs_next_id /\
+        (!n c L. local_region cenv es.scopes s0 n c L ==> off + sz <= c \/ c + L <= off) /\
+        off <= j /\ j < off + sz /\ j IN tu.t_mem ==> j IN tn0.t_mem`
+      (qspecl_then [`aid`,`b`,`cap`,`i`] irule) >>
+    (conj_tac >- (qexistsl_tac [`aid`,`b`,`cap`] >> asm_rewrite_tac[]))) >>>
+  HEADGOAL (
+    `aid < cur.cs_next_id` by decide_tac >>
+    qpat_assum `!a b sz j. a < cur.cs_next_id /\ FLOOKUP u.vs_allocas a = SOME (b,sz) /\
+      b <= j /\ j < b+sz /\ j IN tq.t_mem ==> j IN tu.t_mem`
+      (qspecl_then [`aid`,`b`,`cap`,`i`] mp_tac) >> simp[]) >>>
+  HEADGOAL (
+    `EVERY (assignable_type (get_tenv cx)) tys_tail` by
+      (qpat_assum `EVERY (assignable_type _) (sty::_)` mp_tac >> simp[NoAsms]) >>
+    `assign_tuple_target_list cx (BaseTarget (TopLevelNameTarget (ns,id))::todo) (vi::vs_tail) =
+     bind (assign_tuple_targets cx (BaseTarget (TopLevelNameTarget (ns,id))) vi)
+       (\u. assign_tuple_target_list cx todo vs_tail)` by
+      simp[Once evaluate_def,ignore_bind_def] >>
+    `gas_admissible (assign_tuple_target_list cx todo vs_tail) (stmt_res_ok lctx) fin` by
+      (qpat_assum `gas_admissible (assign_tuple_target_list _ (_::_) _) _ src`
+         mp_tac >>
+       qpat_assum `assign_tuple_target_list _ (_::_) _ = bind _ _`
+         (fn th => rewrite_tac[th]) >> disch_tac >>
+       drule stmtSimForRoundsTheory.gas_admissible_bind_tail >>
+       disch_then (qspecl_then [`[]`,`()`,`fin`] mp_tac) >> simp[])) >>>
+  HEADGOAL (sg `!H. valid_horizon cx st0 H fin.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx fin q /\ storage_well_formed_on cx fin (FST H) /\
+        ghost_inv_at (DF H) lo d cenv cx fin Gq tq q`) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >>
+    qpat_assum `fin.storage_trace = src.storage_trace` (fn th => rewrite_tac[th]) >> disch_tac >>
+    qpat_assum `!H. valid_horizon cx st0 H src.storage_trace ==> _`
+      (drule_then strip_assume_tac) >>
+    qpat_assum `!H. _ ==> stmt_post H ctx func cx lctx cenv cenv cur sm src u (INL ()) fin q`
+      (qspec_then `H` mp_tac) >>
+    impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    disch_then (strip_assume_tac o REWRITE_RULE [stmt_post_def, boolTheory.TRUTH])) >>>
+  HEADGOAL (qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC) >>>
+  HEADGOAL conj_tac >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL conj_tac >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `!H D. _ ==> ghost_inv_at D lo d cenv cx fin Gq tq q`
+      (qspecl_then [`H`,`DF H`] irule)) >>>
+  HEADGOAL (
+    conj_tac >- (qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx`
+      (qspec_then `H` ACCEPT_TAC)) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!n b sz. local_region cenv fin.scopes q n b sz <=>
+                              local_region cenv src.scopes u n b sz`) >>>
+  HEADGOAL (
+    `!x v. not_fresh_at cur x /\ lookup_var x u = SOME v ==> lookup_var x q = SOME v` by
+      (rpt strip_tac >>
+       qpat_assum `!x. not_fresh_at cur x ==> lookup_var x q = lookup_var x u /\ _`
+         drule >> simp[]) >>
+    `MAP FDOM src.scopes = MAP FDOM fin.scopes` by simp[] >>
+    map_every (fn pat => qpat_assum pat mp_tac)
+      [`stmt_state_rel _ ctx func cenv cx src u`,
+       `!x v. not_fresh_at cur x /\ lookup_var x u = SOME v ==> lookup_var x q = SOME v`,
+       `MAP FDOM src.scopes = MAP FDOM fin.scopes`, `local_ptrs_reserved cenv cur`] >>
+    POP_ASSUM_LIST kall_tac >>
+    metis_tac[tuplePlaceStepTheory.tuple_place_endpoint_local_regions_some]) >>>
+  HEADGOAL (Q.SUBGOAL_THEN `type_memory_size_list tvs = 0 \/
+      (?aid b sz. FLOOKUP q.vs_allocas aid = SOME (b,sz) /\ aid < sm.cs_next_id /\
+        b <= p /\ p + type_memory_size_list tvs <= b + sz /\
+        (!n a len. local_region cenv fin.scopes q n a len ==> b + sz <= a \/ a + len <= b)) \/
+      (?n b sz. local_region cenv fin.scopes q n b sz /\ b <= p /\
+        p + type_memory_size_list tvs <= b + sz /\ local_path_at cenv cx n (p-b) (TupleTV tvs))`
+    (mk_asm "immutable_container")) >>>
+  HEADGOAL (
+    qpat_assum `!n b sz. local_region cenv fin.scopes q n b sz <=> _`
+      (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `type_memory_size_list tvs = 0 \/ _` DISJ_CASES_TAC
+    >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+    disj2_tac >>
+    qpat_assum `(?aid b sz. FLOOKUP u.vs_allocas aid = SOME (b,sz) /\ _) \/ _`
+      DISJ_CASES_TAC) >>>
+  HEADGOAL (
+    disj1_tac >>
+    qpat_x_assum `?aid b sz. FLOOKUP u.vs_allocas aid = SOME (b,sz) /\ _`
+      (qx_choose_then `rid` (qx_choose_then `rb` (qx_choose_then `rsz` strip_assume_tac))) >>
+    qexistsl_tac [`rid`,`rb`,`rsz`] >> conj_tac) >>>
+  HEADGOAL (
+    qpat_assum `!aid entry. FLOOKUP u.vs_allocas aid = SOME entry ==>
+                              FLOOKUP q.vs_allocas aid = SOME entry`
+      (qspecl_then [`rid`,`(rb,rsz)`] irule)) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (conj_tac >- decide_tac >> asm_rewrite_tac[]) >>>
+  HEADGOAL (disj2_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `fin.scopes = src.scopes` (fn sc =>
+      asm "immutable_container" (fn th => rewrite_tac[th, REWRITE_RULE [sc] th]))) >>>
+  HEADGOAL (
+    `alloca_frame cenv es sa s0 cenv fin q` by
+      (irule stmtSimDefsTheory.alloca_frame_trans >>
+       qexistsl_tac [`cenv`,`src`,`u`,`cur`] >> asm_rewrite_tac[])) >>>
+  HEADGOAL (
+    `runtime_place_typed cx src (ImmutablePlace ns id []) stv` by
+      (`?mods old. ALOOKUP src.immutables cx.txn.target = SOME mods /\
+         FLOOKUP (get_source_immutables ns mods) id = SOME (stv,old)` by
+         (irule immutableDeployAssignSourceFrameTheory.immutable_assign_source_lookup >>
+          qexistsl_tac [`cenv`,`env`,`sty`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       rewrite_tac[vyperPlaceTypingTheory.runtime_place_typed_immutable] >>
+       (conj_tac >-
+         (irule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >>
+          qexistsl_tac [`get_tenv cx`,`sty`] >> first_assum ACCEPT_TAC)) >>
+       qexistsl_tac [`get_source_immutables ns mods`,`stv`,`old`] >>
+       simp[vyperStateTheory.get_immutables_def,
+         vyperStateTheory.get_address_immutables_def,bind_def,lift_option_type_def,
+         return_def,vyperStateTheory.subscripts_type_def])) >>>
+  HEADGOAL (sg `expr_sim_inv cenv cx env fin`) >>>
+  HEADGOAL (
+    qpat_assum `expr_sim_inv cenv cx env src`
+      (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def])) >>>
+  HEADGOAL (sg `state_well_typed fin`) >>>
+  HEADGOAL (
+    qpat_assum `write_place cx (ImmutablePlace ns id []) vi src = (INL (),fin)`
+      (mp_then Any irule vyperPlaceTypingTheory.write_immutable_place_preserves_state_well_typed)) >>>
+  HEADGOAL (conj_tac >- asm_rewrite_tac[]) >>>
+  HEADGOAL (qexists_tac `stv` >>
+    (conj_tac >- asm_rewrite_tac[]) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `env_consistent env cx fin`) >>>
+  HEADGOAL (
+    qpat_assum `write_place cx (ImmutablePlace ns id []) vi src = (INL (),fin)`
+      (mp_then Any irule vyperPlaceWriteSoundnessTheory.write_immutable_place_preserves_env_consistent)) >>>
+  HEADGOAL (asm_rewrite_tac[]) >>>
+  HEADGOAL (
+    qpat_assum `write_place cx (ImmutablePlace ns id []) vi src = (INL (),fin)`
+      (mp_then Any strip_assume_tac vyperPlaceFramesTheory.write_immutable_place_frame) >>
+    simp[expr_sim_inv_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    `!x. not_fresh_at sa x ==> not_fresh_at cur x` by
+      (gen_tac >> disch_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `sa` >> asm_rewrite_tac[]) >>
+    `!i:num. i + SUC k = SUC k + i` by decide_tac >>
+    qpat_assum `!i:num. i + SUC k = SUC k + i` (fn th => rewrite_tac[th]) >>
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (
+    qpat_assum `fin.storage_trace = src.storage_trace` (fn tr =>
+      qpat_assum `!H. valid_horizon cx st0 H fin.storage_trace ==> _`
+        (fn th => rewrite_tac[th, REWRITE_RULE [tr] th]))) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at cur x`
+      drule >> disch_tac >>
+    qpat_assum `!x. not_fresh_at cur x ==> lookup_var x q = _ /\ _`
+      drule >> strip_tac >>
+    qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w`
+      (qspecl_then [`x`,`w`] mp_tac) >> simp[]) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >>
+    qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at cur x`
+      drule >> disch_tac >>
+    qpat_assum `!x. not_fresh_at cur x ==> lookup_var x q = _ /\ _`
+      drule >> strip_tac >>
+    qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP Gu x = _ /\ _`
+      drule >> simp[]) >>>
+  HEADGOAL (
+    disch_tac >>
+    `assign_tuple_target_list cx (BaseTarget (TopLevelNameTarget (ns,id))::todo) (vi::vs_tail) =
+       bind (assign_tuple_targets cx (BaseTarget (TopLevelNameTarget (ns,id))) vi)
+         (\u. assign_tuple_target_list cx todo vs_tail)` by
+      simp[Once evaluate_def,ignore_bind_def] >>
+    qpat_assum `assign_tuple_target_list _ (_::_) _ = bind _ _`
+      (fn th => rewrite_tac[th]) >>
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_bind >> BETA_TAC >>
+    rpt conj_tac
+    >~ [`storage_trace_frame (assign_tuple_targets _ _ _)`]
+    >- simp[cj 9 vyperStorageTraceTheory.evaluate_storage_trace_frame]
+    >~ [`storage_trace_frame (assign_tuple_target_list _ _ _)`]
+    >- simp[cj 10 vyperStorageTraceTheory.evaluate_storage_trace_frame]
+    >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]) >>>
+  HEADGOAL (
+    map_every qx_gen_tac [`left_marks`,`unit_res`,`src_after`,`vm_after`] >>
+    rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_unit >>
+    qexistsl_tac [`src_after`,`vm_after`,`unit_res`] >> BETA_TAC >> asm_rewrite_tac[]) >>>
+  HEADGOAL (
+    rpt strip_tac >> drule gasExemptCertTheory.gas_exempt_cert_execution >>
+    disch_then (qspec_then `[]` mp_tac o CONJUNCT1) >>
+    rewrite_tac[ignore_bind_def,bind_def,return_def] >>
+    qpat_assum `!tail. assign_tuple_targets cx (BaseTarget (TopLevelNameTarget (ns,id))) vi
+        (src with gas_obs := tail) = _` (fn th => rewrite_tac[th]) >> simp[]) >>>
+  HEADGOAL (
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
+    reverse conj_tac >- first_assum ACCEPT_TAC >>
+    qexistsl_tac [`Gq`,`fin`,`INL ()`,`q`,`tq`] >>
+    BETA_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
+    gen_tac >> disch_tac >> conj_tac >- simp[] >>
+    qexists_tac `()` >>
+    qpat_assum `fin with gas_obs := [] = fin` (fn th => rewrite_tac[th]) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    `target_pre cenv cx env bt src` by simp[targetPlaceSimTheory.target_pre_def] >>
+    `well_typed_target env bt sty` by
+      (qpat_assum `well_typed_atarget env (BaseTarget bt) sty` mp_tac >>
+       simp[NoAsms,well_typed_atarget_def])) >>>
+  HEADGOAL (
+    `type_place_target env bt = SOME (Type sty)` by
+      (qpat_assum `well_typed_target env bt sty` mp_tac >> simp[NoAsms,well_typed_target_def])) >>>
+  HEADGOAL (
+    `?target_r target_cs. compile_get_target_ptr compile_expr cenv bt cur = (target_r,target_cs)` by
+      (Cases_on `compile_get_target_ptr compile_expr cenv bt cur` >> simp[])) >>>
+  HEADGOAL (
+    `compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur =
+       (target_r,SND (compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur)) /\
+     gas_shadow_state target_cs
+       (SND (compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur))` by
+      (mp_tac (Q.INST [`cenv` |-> `cenv`, `bt` |-> `bt`]
+         gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_get_target_ptr) >>
+       simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
+       disch_then (qspecl_then [`cur`,`shadow_cur`] mp_tac) >> simp[] >>
+       Cases_on `compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur` >>
+       simp[]) >>
+    qmatch_asmsub_abbrev_tac `gas_shadow_state target_cs shadow_target_cs`) >>>
+  HEADGOAL (
+    qabbrev_tac `dest_loc = (case FST (SND target_r) of SOME l => l | NONE => LocMemory)` >>
+    qabbrev_tac `dest_ty = (case SND (SND target_r) of SOME (ValPT t) => t | _ => sty)` >>
+    qabbrev_tac `head_store =
+      if is_word_type sty then
+        if is_word_type dest_ty then
+          compile_store_at_loc cenv.ce_imm_alloca (FST target_r) op0 (FST (SND target_r))
+        else emit_void INVALID []
+      else compile_assign_value cenv (FST target_r) dest_loc op0 (is_word_type dest_ty)
+               NONE dest_ty sty (type_memory_bytes cenv dest_ty)`) >>>
+  HEADGOAL (
+    sg `head_store target_cs = ((),sm) /\ head_store shadow_target_cs = ((),shadow_sm)`) >>>
+  HEADGOAL (conj_tac) >>>
+  HEADGOAL (
+    qpat_assum `compile_get_target_ptr _ _ bt cur = _` (fn target_eq =>
+      qpat_assum `compile_tuple_store_all _ [_] [BaseTarget bt] [_] cur = _`
+        (mp_tac o SIMP_RULE (srw_ss()) [compile_tuple_store_all_def,target_eq,
+          comp_bind_def,comp_ignore_bind_def,comp_return_def])) >>
+    simp[NoAsms,Abbr `head_store`,Abbr `dest_loc`,Abbr `dest_ty`]) >>>
+  HEADGOAL (POP_ASSUM_LIST kall_tac >> pairarg_tac >> gvs[]) >>>
+  HEADGOAL (
+    qpat_assum `compile_get_target_ptr _ _ (gas_shadow_target bt) shadow_cur = _` (fn target_eq =>
+      qpat_assum `compile_tuple_store_all _ [_] [BaseTarget (gas_shadow_target bt)] [_] shadow_cur = _`
+        (mp_tac o SIMP_RULE (srw_ss()) [compile_tuple_store_all_def,target_eq,
+          comp_bind_def,comp_ignore_bind_def,comp_return_def])) >>
+    simp[NoAsms,Abbr `head_store`,Abbr `dest_loc`,Abbr `dest_ty`]) >>>
+  HEADGOAL (POP_ASSUM_LIST kall_tac >> pairarg_tac >> gvs[]) >>>
+  HEADGOAL (
+    `ci_mono cur target_cs /\ ci_mono shadow_cur shadow_target_cs` by
+      (conj_tac
+       >- (qspec_then `cur` mp_tac
+            (Q.SPECL [`bt`,`cenv`] ci_mono_compile_get_target_ptr) >> simp[]) >>
+       qspec_then `shadow_cur` mp_tac
+         (Q.SPECL [`gas_shadow_target bt`,`cenv`] ci_mono_compile_get_target_ptr) >> simp[])) >>>
+  HEADGOAL (
+    `!c. ci_mono c (SND (head_store c))` by
+      (simp[Abbr `head_store`] >> gen_tac >> rpt IF_CASES_TAC >>
+       simp[cj 1 ci_mono_stmt_helpers, cj 2 ci_mono_stmt_helpers, ci_mono_emit_void])) >>>
+  HEADGOAL (
+    sg `ci_mono target_cs sm /\ ci_mono shadow_target_cs shadow_sm`) >>>
+  HEADGOAL (
+    pop_assum (fn th =>
+      map_every (fn c => qspec_then c mp_tac th) [`target_cs`,`shadow_target_cs`])) >>>
+  HEADGOAL (simp[]) >>>
+  HEADGOAL (
+    map_every (fn pat => qpat_assum pat
+      (strip_assume_tac o REWRITE_RULE [ci_mono_def]))
+      [`ci_mono cur target_cs`, `ci_mono target_cs sm`,
+       `ci_mono shadow_cur shadow_target_cs`, `ci_mono shadow_target_cs shadow_sm`] >>
+    `fn_has_code cur target_cs func /\ fn_has_code target_cs sm func` by
+      (irule fn_has_code_split >> asm_rewrite_tac[])) >>>
+  HEADGOAL (
+    `fn_has_code shadow_cur shadow_target_cs shadow_func /\
+     fn_has_code shadow_target_cs shadow_sm shadow_func` by
+      (irule fn_has_code_split >> asm_rewrite_tac[])) >>>
+  HEADGOAL (sg `gas_admissible (eval_target_place cx bt) target_place_res_ok src`) >>>
+  HEADGOAL (irule tuplePlaceTargetGasTheory.tuple_place_target_gas_admissible) >>>
+  HEADGOAL (conj_tac >- first_assum ACCEPT_TAC >>
+    qexistsl_tac [`cenv`,`env`,`sty`] >> asm_rewrite_tac[]) >>>
+  HEADGOAL (
+    `bodyFullTargetDefs$target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+       cenv cx env bt src` by
+      (irule bodyFullTargetTheory.body_target_place_sim_full >> simp[] >>
+       qexists_tac `tops` >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (
+    qpat_x_assum `bodyFullTargetDefs$target_place_sim_full _ _ _ _ _ _`
+      (mp_tac o REWRITE_RULE [bodyFullTargetDefsTheory.target_place_sim_full_def]) >>
+    disch_then (qspecl_then [`st0`,`sty`,`cur`,`target_cs`,`shadow_cur`,
+      `shadow_target_cs`,`target_r`,`u`,`Gu`,`tu`] mp_tac)) >>>
+  HEADGOAL ((impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac) >>>
+  HEADGOAL (
+    qmatch_asmsub_abbrev_tac
+      `gas_outcome_full _ _ _ _ (eval_target_place cx bt) _ targetQ targetR` >>
+    qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ suffixQ suffixR` >>
+    `assign_tuple_target_list cx (BaseTarget bt::todo) (vi::vs_tail) =
+       bind (eval_target_place cx bt) (\p. bind (write_place cx p vi)
+         (\u. assign_tuple_target_list cx todo vs_tail))` by
+      simp[Once evaluate_def, Once evaluate_def,ignore_bind_def,bind_assoc] >>
+    qpat_assum `assign_tuple_target_list _ (_::_) _ = bind _ _`
+      (fn th => rewrite_tac[th]) >>
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all >> BETA_TAC) >>>
+  HEADGOAL (conj_tac
+    >- (gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+        simp[NoAsms,vyperStorageTraceTheory.storage_trace_frame_write_place,
+             cj 10 vyperStorageTraceTheory.evaluate_storage_trace_frame])) >>>
+  HEADGOAL (conj_tac
+    >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_place >>
+        goal_assum (drule_at Any) >> simp[])) >>>
+  HEADGOAL (conj_tac
+    >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_place >> simp[])) >>>
+  HEADGOAL (conj_tac >- simp[NoAsms,cj 8 vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>>
+  HEADGOAL (
+    qexists_tac `\H res mid G tnt v. targetQ H res mid G tnt v /\
+      mid.gas_obs = [] /\ ~v.vs_halted` >> BETA_TAC >> reverse conj_tac) >>>
+  HEADGOAL (irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
+    qpat_assum `gas_outcome_full _ _ _ _ _ _ targetQ targetR` (irule_at Any) >>
+    simp[NoAsms,Abbr `targetR`,Abbr `suffixR`]) >>>
+  HEADGOAL (rpt gen_tac >> strip_tac >> Cases_on `res`
+    >- (qpat_x_assum `expr_exit _ _` mp_tac >> simp[NoAsms,exprSimDefsTheory.expr_exit_def])) >>>
+  HEADGOAL (qexists_tac `y` >> simp[NoAsms]) >>>
+  HEADGOAL (qpat_assum `expr_exit _ r` (mk_asm "target_abort_exit")) >>>
+  HEADGOAL (qpat_assum `halt_exit H cx ee' _ r` (mk_asm "target_abort_halt")) >>>
+  HEADGOAL (
+    asm "target_abort_exit" (fn exit => asm "target_abort_halt" (fn halt =>
+      let
+        val rule = REWRITE_RULE [GSYM boolTheory.AND_IMP_INTRO]
+          augAssignFullRhsSavedTheory.augassign_expr_exit_to_stmt_exit
+        val fmp_rule = MATCH_MP (MATCH_MP rule exit) halt
+      in
+        first_assum (mp_tac o MATCH_MP fmp_rule)
+      end))) >>>
+  HEADGOAL (disch_then ACCEPT_TAC) >>>
+  HEADGOAL (
+    map_every qx_gen_tac [`target_marks`,`target_res`,`mid`,`Gmid`,`tmid`,`m`] >>
+    rpt strip_tac >>
+    `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+      fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    qpat_assum `Abbrev (targetQ = _)` (fn th =>
+      CONV_TAC (LAND_CONV (REWRITE_CONV [REWRITE_RULE [markerTheory.Abbrev_def] th]))) >>
+    BETA_TAC >>
+    disch_then (CONJUNCTS_THEN2
+      (qx_choose_then `place` (CONJUNCTS_THEN2 SUBST_ALL_TAC STRIP_ASSUME_TAC))
+      STRIP_ASSUME_TAC) >>
+    disj1_tac >> qexists_tac `place` >> simp[]) >>>
+  HEADGOAL (
+    qpat_assum `!tail. eval_target_place cx bt _ = _`
+      (qspec_then `[]` mp_tac) >>
+    simp[NoAsms] >>
+    `mid with gas_obs := [] = mid` by fs[evaluation_state_component_equality] >>
+    qpat_assum `mid with gas_obs := [] = mid` (fn th => rewrite_tac[th]) >>
+    strip_tac) >>>
+  HEADGOAL (
+    `target_pre cenv cx env bt
+       (src with gas_obs := gas_explicit target_marks u.vs_gas_readings)` by
+      simp[targetSubscriptSplitTheory.target_subscript_pre_gas_obs] >>
+    drule_all tuplePlaceSourceHeadTheory.tuple_place_source_target_endpoint >>
+    strip_tac) >>>
+  HEADGOAL (
+    `eval_base_place cx bt (src with gas_obs := gas_explicit target_marks u.vs_gas_readings) =
+      (INL (PlaceR place),mid)` by
+      (qpat_assum `eval_target_place cx bt _ = (INL place,mid)` mp_tac >>
+       simp[NoAsms,bodyPtrPopTargetFragTransportTheory.eval_target_place_as_bind,bind_def] >>
+       Cases_on `eval_base_place cx bt (src with gas_obs := gas_explicit target_marks u.vs_gas_readings)` >>
+       rename1 `eval_base_place _ _ _ = (res,st)` >> Cases_on `res` >>
+       simp[NoAsms] >> rename1 `get_place pv st = _ ==> _` >>
+       Cases_on `pv` >> simp[NoAsms,get_place_def,return_def,raise_def])) >>>
+  HEADGOAL (
+    `EVERY (supported_expr tops) (target_indices bt)` by
+      (simp[NoAsms,EVERY_MEM] >> rpt strip_tac >>
+       drule_all entryStatementTargetSupportTheory.supported_target_index >> simp[]) >>
+    drule_all tuplePlaceBorrowTheory.tuple_place_supported_target_scopes >>
+    simp[NoAsms] >> disch_tac) >>>
+  HEADGOAL (
+    qpat_assum `target_post _ ctx func cenv cx src cur target_cs u mid _ _ _ m`
+      (strip_assume_tac o REWRITE_RULE [target_post_def]) >>
+    qpat_assum `ghost_kept_at lo cenv src cur Gu tu u Gmid tmid`
+      (strip_assume_tac o REWRITE_RULE [bodyPtrDefsTheory.ghost_kept_at_def])) >>>
+  HEADGOAL (
+    `valid_horizon cx st0 (storage_trace_horizon src.storage_trace) src.storage_trace` by
+      (qpat_assum `storage_trace_domain cx st0 src.storage_trace` mp_tac >>
+       simp[NoAsms,vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+    qpat_assum `!H. valid_horizon cx st0 H src.storage_trace ==> _`
+      (drule_then strip_assume_tac)) >>>
+  HEADGOAL (
+    `!n b sz. local_region cenv mid.scopes m n b sz <=> local_region cenv src.scopes u n b sz` by
+      (`MAP FDOM src.scopes = MAP FDOM mid.scopes` by asm_rewrite_tac[] >>
+       map_every (fn pat => qpat_assum pat mp_tac)
+         [`stmt_state_rel _ ctx func cenv cx src u`,
+          `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> lookup_var x m = SOME w`,
+          `MAP FDOM src.scopes = MAP FDOM mid.scopes`, `local_ptrs_reserved cenv cur`] >>
+       POP_ASSUM_LIST kall_tac >>
+       metis_tac[tuplePlaceStepTheory.tuple_place_endpoint_local_regions_some])) >>>
+  HEADGOAL (sg `!b sz. b <= p /\ p + type_memory_size_list tvs <= b + sz /\
+              mem_bytes_at b sz m.vs_memory = mem_bytes_at b sz u.vs_memory /\
+              (!i. b <= i /\ i < b + sz /\ i IN tmid.t_mem ==> i IN tu.t_mem) ==>
+            mem_bytes_at p (type_memory_size_list tvs) m.vs_memory =
+              mem_bytes_at p (type_memory_size_list tvs) u.vs_memory /\
+            (!i. p <= i /\ i < p + type_memory_size_list tvs /\ i IN tmid.t_mem ==>
+                 i IN tu.t_mem)`) >>>
+  HEADGOAL (POP_ASSUM_LIST kall_tac >> rpt gen_tac >> strip_tac >> conj_tac) >>>
+  HEADGOAL (irule abiDecodeStaticPropsTheory.mem_bytes_at_bytewise >> rpt strip_tac >>
+    irule representationCleanPtrTheory.mem_bytes_at_eq_byte >>
+    qpat_assum `mem_bytes_at b sz _ = mem_bytes_at b sz _` (irule_at Any) >>
+    decide_tac) >>>
+  HEADGOAL (rpt strip_tac >> first_x_assum irule >> simp[] >> decide_tac) >>>
+  HEADGOAL (sg `mem_bytes_at p (type_memory_size_list tvs) m.vs_memory =
+       mem_bytes_at p (type_memory_size_list tvs) u.vs_memory /\
+     (!i. p <= i /\ i < p + type_memory_size_list tvs /\ i IN tmid.t_mem ==>
+          i IN tu.t_mem)`) >>>
+  HEADGOAL (qpat_x_assum `type_memory_size_list tvs = 0 \/ _` strip_assume_tac) >>>
+  HEADGOAL (
+    qpat_x_assum `type_memory_size_list tvs = 0` SUBST1_TAC >>
+    simp[NoAsms,valueEncodingDefsTheory.mem_bytes_at_def] >> decide_tac) >>>
+  HEADGOAL (
+    qpat_assum `!b sz. b <= p /\ _ ==> _` (qspecl_then [`b`,`sz`] MATCH_MP_TAC) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >> conj_tac) >>>
+  HEADGOAL (
+    qpat_assum `!aid off sz. _ ==> mem_bytes_at off sz m.vs_memory = _`
+      (qspecl_then [`aid`,`b`,`sz`] MATCH_MP_TAC) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    qpat_assum `!aid off sz i. FLOOKUP u.vs_allocas aid = _ /\ _ ==> i IN tu.t_mem`
+      (qspecl_then [`aid`,`b`,`sz`,`i`] MATCH_MP_TAC) >> rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `!b sz. b <= p /\ _ ==> _` (qspecl_then [`b`,`sz`] MATCH_MP_TAC) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >> conj_tac) >>>
+  HEADGOAL (
+    `lookup_scopes n mid.scopes = lookup_scopes n src.scopes` by
+      (qpat_assum `mid.scopes = src.scopes` SUBST1_TAC >> REFL_TAC) >>
+    drule_all tuplePlaceSnapshotTheory.tuple_place_target_unchanged_local >> disch_then ACCEPT_TAC) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    qpat_assum `!n b sz i. local_region _ _ _ _ _ _ /\ _ ==> i IN tu.t_mem`
+      (qspecl_then [`n`,`b`,`sz`,`i`] MATCH_MP_TAC) >> rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+       val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem`) >>>
+  HEADGOAL (
+    qspecl_then [`TupleTV tvs`,`ArrayV (TupleV vs)`,`p`,`p`,
+      `type_memory_size_list tvs`,`tu.t_mem`,`tmid.t_mem`,`u.vs_memory`,`m.vs_memory`]
+      MATCH_MP_TAC robustCopyTransportPtrTheory.robust_val_in_memory_decreasing_taint_transport) >>>
+  HEADGOAL (
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- (irule (REWRITE_RULE [valueEncodingTheory.type_memory_size_def]
+      (Q.ISPEC `TupleTV tvs` exprSimPropsTheory.val_footprint_le)) >> first_assum ACCEPT_TAC) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    reverse conj_tac >- first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    qpat_assum `!i. p <= i /\ i < p + type_memory_size_list tvs /\ _ ==> i IN tu.t_mem`
+      (qspec_then `p+i` MATCH_MP_TAC) >>
+    conj_tac >- decide_tac >> conj_tac >- decide_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (Q.SUBGOAL_THEN `type_memory_size_list tvs = 0 \/
+       (?aid b sz. FLOOKUP m.vs_allocas aid = SOME (b,sz) /\ aid < target_cs.cs_next_id /\
+                   b <= p /\ p + type_memory_size_list tvs <= b + sz /\
+                   (!n a len. local_region cenv mid.scopes m n a len ==>
+                              b + sz <= a \/ a + len <= b)) \/
+       (?n b sz. local_region cenv mid.scopes m n b sz /\ b <= p /\
+                 p + type_memory_size_list tvs <= b + sz /\
+                 local_path_at cenv cx n (p-b) (TupleTV tvs))` ASSUME_TAC) >>>
+  HEADGOAL (qpat_x_assum `type_memory_size_list tvs = 0 \/
+      (?aid b sz. FLOOKUP u.vs_allocas aid = SOME (b,sz) /\ _) \/ _`
+    strip_assume_tac) >>>
+  HEADGOAL (disj1_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (disj2_tac >> disj1_tac >> qexistsl_tac [`aid`,`b`,`sz`] >>
+    conj_tac >- (first_assum irule >> first_assum ACCEPT_TAC) >>
+    conj_tac >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+      qexists_tac `cur.cs_next_id` >> conj_tac >> first_assum ACCEPT_TAC) >>
+    conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
+    qpat_assum `!n b sz. local_region cenv mid.scopes m n b sz <=> _`
+      (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (disj2_tac >> disj2_tac >> qexistsl_tac [`n`,`b`,`sz`] >>
+    qpat_assum `!n b sz. local_region cenv mid.scopes m n b sz <=> _`
+      (fn th => rewrite_tac[th]) >> rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!x cap. not_fresh_at cur x /\ ptr_covers Gu tu x u cap ==>
+       ptr_covers Gmid tmid x m cap`) >>>
+  HEADGOAL (
+    rpt strip_tac >> irule assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame >>
+    qpat_assum `ptr_covers Gu tu x u cap` (irule_at Any) >>
+    qpat_assum `!x. not_fresh_at cur x ==> FLOOKUP Gmid x = _ /\ _`
+      (qspec_then `x` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+    qpat_assum `ptr_covers Gu tu x u cap`
+      (strip_assume_tac o REWRITE_RULE [ptr_covers_def]) >>
+    qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> _`
+      (drule_all_then assume_tac) >> asm_rewrite_tac[]) >>>
+  HEADGOAL (sg `!i. i < LENGTH (sty::tys_tail) ==>
+       ?x. EL i (op0::ops_tail) = Var x /\ not_fresh_at target_cs x /\
+           op_taint tmid (Var x) = {} /\
+           if is_word_type (EL i (sty::tys_tail)) then
+             lookup_var x m = SOME (typed_val_to_w256 (EL i (stv::tvs_tail)) (EL i (vi::vs_tail))) /\
+             op_prov Gmid (Var x) = NONE
+           else lookup_var x m = SOME (n2w (p + SUM (MAP type_memory_size (TAKE (k+i) tvs)))) /\
+                ptr_covers Gmid tmid x m (type_memory_size (EL i (stv::tvs_tail)))`) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    qpat_assum `!i. i < LENGTH (sty::tys_tail) ==> ?x. _ /\ not_fresh_at cur x /\ _`
+      (drule_then (qx_choose_then `xp` strip_assume_tac)) >>
+    `not_fresh_at target_cs xp` by
+      (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `cur` >>
+       conj_tac >> first_assum ACCEPT_TAC) >>
+    qpat_assum `!x. not_fresh_at cur x ==> FLOOKUP Gmid x = _ /\ _`
+      (qspec_then `xp` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+    qexists_tac `xp` >> conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- asm_rewrite_tac[]) >>>
+  HEADGOAL (Cases_on `is_word_type (EL i (sty::tys_tail))`) >>>
+  HEADGOAL (
+    qpat_x_assum `if is_word_type (EL i (sty::tys_tail)) then _ else _` mp_tac >>
+    asm_rewrite_tac[] >> strip_tac >>
+    qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> _`
+      (drule_all_then assume_tac) >>
+    qpat_x_assum `op_prov Gu (Var xp) = NONE`
+      (assume_tac o SRULE [ptrDisciplineTheory.op_prov_def]) >>
+    simp[ptrDisciplineTheory.op_prov_def]) >>>
+  HEADGOAL (
+    qpat_x_assum `if is_word_type (EL i (sty::tys_tail)) then _ else _` mp_tac >>
+    asm_rewrite_tac[] >> strip_tac >>
+    qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> _`
+      (drule_all_then assume_tac) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qpat_assum `!x cap. not_fresh_at cur x /\ ptr_covers Gu tu x u cap ==> _` irule >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    map_every (fn q => qpat_assum q
+      (strip_assume_tac o MATCH_MP fragExecTheory.DROP_EQ_CONS o SYM))
+      [`sty::tys_tail = DROP k tys`, `stv::tvs_tail = DROP k tvs`,
+       `vi::vs_tail = DROP k vs`] >>
+    `writable_place_result cx mid (PlaceR place)` by
+      simp[vyperTargetPlaceWriteTheory.writable_place_result_def]) >>>
+  HEADGOAL (Q.SUBGOAL_THEN `FST (SND target_r) = SOME LocMemory ==>
+    type_memory_size_list tvs = 0 \/
+    p + type_memory_size_list tvs <= w2n w' \/
+    w2n w' + type_memory_size stv <= p` ASSUME_TAC) >>>
+  HEADGOAL (disch_tac >>
+    qpat_x_assum `type_memory_size_list tvs = 0 \/
+      (?aid b sz. FLOOKUP m.vs_allocas aid = SOME (b,sz) /\ _) \/ _`
+      strip_assume_tac) >>>
+  HEADGOAL (disj1_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `?id path. place = MemoryPlace id path`) >>>
+  HEADGOAL (
+    qpat_assum `place_ptr_rel cenv cx m (PlaceR place) _ _ _` mp_tac >>
+    qpat_assum `FST (SND target_r) = SOME LocMemory` mp_tac >>
+    Cases_on `place` >> simp[NoAsms,place_ptr_rel_def,slot_loc_def]) >>>
+  HEADGOAL (
+    rename1 `place_ptr_rel _ _ _ (PlaceR (StoragePlace tr slot tv)) _ _ _` >>
+    Cases_on `tr` >> simp[NoAsms]) >>>
+  HEADGOAL (
+    qpat_assum `!id path. place = MemoryPlace id path ==> _`
+      (qspecl_then [`id`,`path`] mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac) >>>
+  HEADGOAL (
+    qpat_assum `place = MemoryPlace id path` (fn pl =>
+      qpat_assum `FST (SND target_r) = SOME LocMemory` (fn loc =>
+        qpat_assum `place_ptr_rel cenv cx m (PlaceR place) w' _ (Type sty)`
+          (assume_tac o REWRITE_RULE [pl,loc])))) >>>
+  HEADGOAL (
+    qpat_assum `expr_sim_inv cenv cx env mid` (fn inv =>
+      qpat_assum `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid m` (fn rel =>
+        qpat_assum `lookup_scopes id mid.scopes = SOME _` (fn lookup =>
+          qpat_assum `place_ptr_rel cenv cx m (PlaceR (MemoryPlace id path)) w' (SOME LocMemory) (Type sty)`
+            (strip_assume_tac o
+              (fn ptr => MATCH_MP tuplePlaceReachableTheory.tuple_place_memory_coordinates
+                (LIST_CONJ [inv,rel,lookup,ptr]))))))) >>>
+  HEADGOAL (
+    `tv = stv` by metis_tac[optionTheory.SOME_11] >>
+    qpat_assum `!n a len. local_region cenv mid.scopes m n a len ==> _`
+      (drule_then mp_tac) >>
+    qpat_assum `b <= p` mp_tac >>
+    qpat_assum `p + type_memory_size_list tvs <= b + sz` mp_tac >>
+    qpat_assum `off + type_memory_size tv <= _` mp_tac >>
+    qpat_assum `w2n w' = _` mp_tac >>
+    qpat_assum `tv = stv` (fn th => rewrite_tac[th]) >> decide_tac) >>>
+  HEADGOAL (
+    `p-b + type_memory_size (TupleTV tvs) <= sz` by
+      (qpat_assum `b <= p` mp_tac >>
+       qpat_assum `p + type_memory_size_list tvs <= b + sz` mp_tac >>
+       simp[NoAsms,valueEncodingTheory.type_memory_size_def] >> decide_tac)) >>>
+  HEADGOAL (
+    `place_ptr_rel cenv cx m (PlaceR place) w' (SOME LocMemory) (Type (EL k tys))` by
+      (qpat_assum `FST (SND target_r) = SOME LocMemory` (fn loc =>
+         qpat_assum `place_ptr_rel cenv cx m (PlaceR place) w' _ (Type sty)`
+           (mp_tac o REWRITE_RULE [loc])) >>
+       qpat_assum `EL k tys = sty` (fn ty => simp[NoAsms,ty]))) >>>
+  HEADGOAL (Q.SUBGOAL_THEN `b + (p-b) + type_memory_size (TupleTV tvs) <= w2n w' \/
+                  w2n w' + type_memory_size (EL k tvs) <= b + (p-b)` ASSUME_TAC) >>>
+  HEADGOAL (irule (INST_TYPE [alpha |-> ``:256``]
+    tuplePlacePointerReadyTheory.tuple_place_writable_borrow_destination_apart)) >>>
+  HEADGOAL (
+    qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`cenv`,`ctx`,`cx`,`mid`,
+                 `env`,`func`,`n`,`place`,`m`,`sz`,`tys`] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    `b + (p-b) = p` by (qpat_assum `b <= p` mp_tac >> decide_tac) >>
+    disj2_tac >>
+    qpat_assum `b + (p-b) = p` (fn base =>
+      qpat_assum `EL k tvs = stv` (fn ty =>
+        qpat_assum `b + (p-b) + _ <= _ \/ _`
+          (ACCEPT_TAC o REWRITE_RULE [base,ty,valueEncodingTheory.type_memory_size_def])))) >>>
+  HEADGOAL (
+    `dest_ty = sty` by
+      (qpat_assum `SND (SND target_r) = SOME (value_type_place (Type sty))`
+         (fn th => simp[NoAsms,Abbr `dest_ty`,th,value_type_place_def])) >>
+    qpat_x_assum `dest_ty = sty` SUBST_ALL_TAC) >>>
+  HEADGOAL (
+    qpat_assum `!i. i < LENGTH (sty::tys_tail) ==> ?x. _ /\ not_fresh_at target_cs x /\ _`
+      (qspec_then `0` mp_tac) >>
+    simp[NoAsms] >> disch_then (qx_choose_then `xs` strip_assume_tac)) >>>
+  HEADGOAL (
+    Cases_on `write_place cx place vi mid` >>
+    rename1 `write_place cx place vi mid = (write_res,fin)` >>
+    `fin.gas_obs = []` by
+      (drule tuplePlaceSourceGasTheory.tuple_place_write_preserves_gas_obs >> simp[]) >>
+    `!tail. write_place cx place vi (mid with gas_obs := tail) =
+      (write_res,fin with gas_obs := tail)` by
+      (drule tuplePlaceSourceGasTheory.tuple_place_write_gas_obs >> simp[])) >>>
+  HEADGOAL (
+    qpat_assum `write_place cx place vi mid = _`
+      (mp_then (Pat `f st = _`) mp_tac vyperStorageTraceTheory.storage_trace_frame_prefix) >>
+    simp[NoAsms,vyperStorageTraceTheory.storage_trace_frame_write_place] >> strip_tac) >>>
+  HEADGOAL (
+    sg `!H. valid_horizon cx st0 H fin.storage_trace ==>
+             valid_horizon cx st0 H mid.storage_trace`) >>>
+  HEADGOAL (
+    qpat_assum `fin.storage_trace = mid.storage_trace ++ _` SUBST1_TAC >>
+    gen_tac >> strip_tac >>
+    drule_then ACCEPT_TAC gasOutcomeFullTheory.valid_horizon_append) >>>
+  HEADGOAL (
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_bind >> BETA_TAC >>
+    simp[NoAsms,vyperStorageTraceTheory.storage_trace_frame_write_place,
+         cj 10 vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>>
+  HEADGOAL (conj_tac >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_unit >>
+    goal_assum (drule_at Any) >> simp[])) >>>
+  HEADGOAL (conj_tac >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_unit >> simp[])) >>>
+  HEADGOAL (Cases_on `write_res`) >>>
+  HEADGOAL (rename1 `write_place cx place vi mid = (INL unit_value,fin)`) >>>
+  HEADGOAL (Cases_on `unit_value`) >>>
+  HEADGOAL (irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >> BETA_TAC >>
+    reverse conj_tac >- first_assum ACCEPT_TAC) >>>
+  HEADGOAL (qrefinel [`_`,`fin`,`INL ()`,`_`,`_`] >>
+    qpat_assum `!tail. write_place cx place vi (mid with gas_obs := tail) = _`
+      (fn eq => simp[NoAsms,eq]) >>
+    qpat_assum `fin.gas_obs = []`
+      (fn obs => simp[NoAsms,GSYM obs])) >>>
+  HEADGOAL (Cases_on `FST (SND target_r) = SOME LocMemory`) >>>
+  HEADGOAL (
+    `?id path. place = MemoryPlace id path` by
+      (qpat_assum `place_ptr_rel cenv cx m (PlaceR place) _ _ _` mp_tac >>
+       qpat_assum `FST (SND target_r) = SOME LocMemory` mp_tac >>
+       Cases_on `place` >> simp[NoAsms,place_ptr_rel_def,slot_loc_def] >>
+       rename1 `place_ptr_rel _ _ _ (PlaceR (StoragePlace tr slot tv)) _ _ _` >>
+       Cases_on `tr` >> simp[NoAsms])) >>>
+  HEADGOAL (
+    qpat_assum `!id path. place = MemoryPlace id path ==> _`
+      (qspecl_then [`id`,`path`] mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+    qpat_assum `place = MemoryPlace id path` (fn pl =>
+      qpat_assum `FST (SND target_r) = SOME LocMemory` (fn loc =>
+        qpat_assum `place_ptr_rel cenv cx m (PlaceR place) w' _ (Type sty)`
+          (assume_tac o REWRITE_RULE [pl,loc]))) >>
+    drule_all tuplePlaceReachableTheory.tuple_place_memory_coordinates >> strip_tac) >>>
+  HEADGOAL (
+    rename1 `local_region cenv mid.scopes m id db dcap` >>
+    qpat_assum `local_region cenv mid.scopes m id db dcap`
+      (strip_assume_tac o REWRITE_RULE [local_region_def]) >>
+    `ptr_covers Gmid tmid p' m dcap` by
+      (qpat_assum `ghost_inv_at _ _ _ _ _ mid Gmid tmid m`
+         (mp_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+       disch_then (drule_all_then strip_assume_tac o CONJUNCT1) >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (`dest_loc = LocMemory` by simp[Abbr `dest_loc`]) >>>
+  HEADGOAL (sg `op_prov Gmid (FST target_r) = FLOOKUP Gmid p'`) >>>
+  HEADGOAL (
+    qpat_assum `bodyFullTargetDefs$target_ptr_ok cenv (PlaceR place) target_r Gmid tmid m`
+      (mp_tac o cj 2 o REWRITE_RULE [bodyFullTargetDefsTheory.target_ptr_ok_def]) >>
+    disch_then (qspecl_then [`id`,`path`,`p'`,`dcap`] mp_tac) >> simp[]) >>>
+  HEADGOAL (sg `?xd. FST target_r = Var xd`) >>>
+  HEADGOAL (
+    `FLOOKUP Gmid p' <> NONE` by
+      (qpat_assum `ptr_covers Gmid tmid p' m dcap` mp_tac >>
+       simp[NoAsms,ptr_covers_def] >> strip_tac >> simp[]) >>
+    qpat_assum `op_prov Gmid (FST target_r) = FLOOKUP Gmid p'` mp_tac >>
+    qpat_assum `FLOOKUP Gmid p' <> NONE` mp_tac >>
+    Cases_on `FST target_r` >> simp[NoAsms,ptrDisciplineTheory.op_prov_def]) >>>
+  HEADGOAL (sg `not_fresh_at target_cs xd`) >>>
+  HEADGOAL (
+    qpat_assum `!x. FST target_r = Var x ==> not_fresh_at target_cs x`
+      (qspec_then `xd` irule) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `lookup_var xd m = SOME w'`) >>>
+  HEADGOAL (
+    qpat_assum `eval_operand (FST target_r) m = SOME w'` mp_tac >>
+    qpat_assum `FST target_r = Var xd` (fn eq =>
+      simp[NoAsms,eq,venomStateTheory.eval_operand_def])) >>>
+  HEADGOAL (sg `db + dcap <= m.vs_alloca_next`) >>>
+  HEADGOAL (
+    irule (INST_TYPE [alpha |-> ``:256``] bodyMemoryDefsTheory.body_local_region_frontier) >>
+    goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+    qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`ctx`,`cx`,`func`] >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    rename1 `w2n w' = db + off` >>
+    rename1 `off + type_memory_size dest_tv <= dcap` >>
+    `dest_tv = stv` by
+      (qpat_assum `evaluate_type (get_tenv cx) sty = SOME dest_tv` mp_tac >>
+       qpat_assum `evaluate_type (get_tenv cx) sty = SOME stv`
+         (fn eq => simp[NoAsms,eq,EQ_SYM_EQ])) >>
+    qpat_x_assum `dest_tv = stv` SUBST_ALL_TAC >>
+    `w2n w' + type_memory_size stv <= m.vs_alloca_next` by
+      (map_every (fn pat => qpat_assum pat mp_tac)
+        [`w2n w' = db + off`,`db + dcap <= m.vs_alloca_next`,
+         `off + type_memory_size stv <= dcap`] >> decide_tac)) >>>
+  HEADGOAL (sg `op_taint tmid (Var xd) = {}`) >>>
+  HEADGOAL (
+    qpat_assum `bodyFullTargetDefs$target_ptr_ok cenv (PlaceR place) target_r Gmid tmid m`
+      (mp_tac o cj 1 o REWRITE_RULE [bodyFullTargetDefsTheory.target_ptr_ok_def]) >>
+    qpat_assum `FST target_r = Var xd` (fn eq => simp[NoAsms,eq])) >>>
+  HEADGOAL (sg `FLOOKUP Gmid xd = FLOOKUP Gmid p'`) >>>
+  HEADGOAL (
+    qpat_assum `op_prov Gmid (FST target_r) = FLOOKUP Gmid p'` mp_tac >>
+    qpat_assum `FST target_r = Var xd` (fn eq =>
+      simp[NoAsms,eq,ptrDisciplineTheory.op_prov_def])) >>>
+  HEADGOAL (sg `ptr_covers Gmid tmid xd m (type_memory_size stv)`) >>>
+  HEADGOAL (
+    rename1 `lookup_var p' m = SOME base_word` >>
+    qpat_assum `ptr_covers Gmid tmid p' m dcap`
+      (mp_tac o REWRITE_RULE [ptr_covers_def]) >>
+    qpat_assum `lookup_var p' m = SOME base_word` (fn eq => simp[NoAsms,eq]) >>
+    strip_tac >> rename1 `FLOOKUP Gmid p' = SOME (site,site_cap)`) >>>
+  HEADGOAL (
+    rewrite_tac[ptr_covers_def] >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexistsl [`w'`,`site`,`site_cap`] >>
+    asm_rewrite_tac[]) >>>
+  HEADGOAL (
+    map_every (fn pat => qpat_assum pat mp_tac)
+      [`site <= w2n base_word`,`dcap + w2n base_word <= site + site_cap`,
+       `off + type_memory_size stv <= dcap`] >>
+    decide_tac) >>>
+  HEADGOAL (
+    `allocas_from lo m /\ lo <= m.vs_alloca_next` by
+      (qpat_assum `ghost_inv_at _ lo d cenv cx mid Gmid tmid m`
+        (fn th => let val post = REWRITE_RULE [ghost_inv_at_def] th
+                  in ACCEPT_TAC (CONJ (cj 7 post) (cj 8 post)) end))) >>>
+  HEADGOAL (
+    `SUM (MAP type_memory_size (TAKE k tvs)) + type_memory_size stv <=
+     type_memory_size_list tvs` by
+      (drule tupleMemoryLayoutTheory.tuple_element_interval >>
+       simp[valueEncodingProofsTheory.type_memory_size_list_sum])) >>>
+  HEADGOAL (sg `?q Gq tq.
+    (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (m,Gmid,tmid) [] (OK q,Gq,tq)) /\
+    val_in_memory stv vi (w2n w') q.vs_memory /\
+    (!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==>
+      val_in_memory stv vi (w2n w') mem) /\
+    typed_copy_state_frame target_cs (w2n w') (type_memory_size stv) m q /\
+    ~q.vs_halted /\ q.vs_current_bb = sm.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~block_is_terminated sm /\
+    tq.t_stor = tmid.t_stor /\ tq.t_trans = tmid.t_trans /\ tq.t_imm = tmid.t_imm /\
+    (!j. ~(w2n w' <= j /\ j < w2n w' + type_memory_size stv) ==>
+      (j IN tq.t_mem <=> j IN tmid.t_mem)) /\
+    (!x. not_fresh_at target_cs x ==>
+      lookup_var x q = lookup_var x m /\ FLOOKUP Gq x = FLOOKUP Gmid x /\
+      op_taint tq (Var x) = op_taint tmid (Var x))`) >>>
+  HEADGOAL (reverse (Cases_on `is_word_type sty`)) >>>
+  HEADGOAL (
+    `compile_store_memory cenv (Var xs) (FST target_r) sty sty target_cs = ((),sm)` by
+      (qpat_x_assum `head_store target_cs = _` mp_tac >>
+       simp[Abbr `head_store`,compile_assign_value_def])) >>>
+  HEADGOAL (
+    `LENGTH vs = LENGTH tvs` by
+      (irule vyperTypingTheory.values_have_types_length >> simp[]) >>
+    `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+             tuple_in_memory vs tvs p mem` by
+      (qpat_assum `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+                         val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem`
+         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [Once valueEncodingDefsTheory.val_in_memory_def])) >>
+    `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+             val_in_memory stv vi (p + SUM (MAP type_memory_size (TAKE k tvs))) mem` by
+      (qspecl_then [`vs`,`tvs`,`p`,`m.vs_memory`,`tmid`,`k`] mp_tac
+         typedCopyLayoutPtrTheory.tuple_in_memory_robust_element >> simp[])) >>>
+  HEADGOAL (
+    `m.vs_alloca_next < dimword (:256)` by
+      (qpat_assum `stmt_state_rel _ _ _ _ _ mid m`
+         (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_alloca_room) >>
+       disch_then (ACCEPT_TAC o MATCH_MP alloca_room_next_lt)) >>
+    qabbrev_tac `addr = p + SUM (MAP type_memory_size (TAKE k tvs))` >>
+    `addr + type_memory_size stv <= m.vs_alloca_next` by
+      (qpat_assum `p + type_memory_size_list tvs <= u.vs_alloca_next` mp_tac >>
+       qpat_assum `u.vs_alloca_next <= m.vs_alloca_next` mp_tac >>
+       qpat_assum `SUM (MAP type_memory_size (TAKE k tvs)) + _ <= _` mp_tac >>
+       simp[NoAsms,Abbr `addr`] >> decide_tac) >>
+    `addr < dimword (:256)` by
+      (qpat_assum `addr + _ <= m.vs_alloca_next` mp_tac >>
+       qpat_assum `m.vs_alloca_next < dimword (:256)` mp_tac >> decide_tac) >>
+    `w2n (n2w addr : 256 word) = addr` by
+      simp[wordsTheory.w2n_n2w,arithmeticTheory.LESS_MOD]) >>>
+  HEADGOAL (sg `compile_store_memory cenv (Var xs) (Var xd) sty sty target_cs = ((),sm)`) >>>
+  HEADGOAL (
+    qpat_assum `FST target_r = Var xd` (fn eq =>
+      qpat_assum `compile_store_memory _ _ (FST target_r) _ _ target_cs = _`
+        (mp_tac o REWRITE_RULE [eq])) >>
+    simp[NoAsms]) >>>
+  HEADGOAL (
+    qpat_assum `if is_word_type sty then _ else _` mp_tac >>
+    qpat_assum `~is_word_type sty` (fn ty => simp[NoAsms,ty]) >>
+    strip_tac) >>>
+  HEADGOAL (Q.SUBGOAL_THEN `addr + type_memory_size stv <= w2n w' \/
+                   w2n w' + type_memory_size stv <= addr` ASSUME_TAC) >>>
+  HEADGOAL (
+    qpat_assum `FST (SND target_r) = SOME LocMemory ==> _`
+      (drule_then mp_tac) >>
+    qpat_assum `SUM (MAP type_memory_size (TAKE k tvs)) + _ <= _` mp_tac >>
+    simp[NoAsms,Abbr `addr`] >> decide_tac) >>>
+  HEADGOAL (
+    qpat_assum `body_inv tops ctx cenv cx`
+      (mp_then Any mp_tac immutableDeployAssignRangesTheory.immutable_assign_copy_metadata) >>
+    disch_then drule >> strip_tac) >>>
+  HEADGOAL (
+    `type_memory_bytes cenv sty = type_memory_size stv` by
+      (qpat_assum `evaluate_type (get_tenv cx) sty = SOME stv`
+         (mp_then Any mp_tac exprSimHypsTheory.expr_sim_inv_memory_size) >>
+       disch_then drule >> simp[]) >>
+    `val_wf stv vi` by
+      (irule (cj 1 valueEncodingTypingTheory.value_has_type_val_wf) >>
+       first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (
+    `addr + type_memory_size stv < dimword (:256) /\
+      w2n w' + type_memory_size stv < dimword (:256)` by
+      (map_every (fn pat => qpat_assum pat mp_tac)
+        [`addr + type_memory_size stv <= m.vs_alloca_next`,
+         `w2n w' + type_memory_size stv <= m.vs_alloca_next`,
+         `m.vs_alloca_next < dimword (:256)`] >> decide_tac)) >>>
+  HEADGOAL (sg `~block_is_terminated sm`) >>>
+  HEADGOAL (
+    qpat_assum `compile_store_memory cenv (Var xs) (Var xd) sty sty target_cs = ((),sm)`
+      (mp_then Any irule exprOpenCopiesTheory.compile_store_memory_open) >>
+    simp[] >>
+    qpat_assum `compile_get_target_ptr compile_expr cenv bt cur = (target_r,target_cs)`
+      (mp_then Any irule placeRelayoutOpenTheory.compile_get_target_ptr_endpoint_open) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    mp_tac (Q.INST
+      [`cenv` |-> `cenv`,`xs` |-> `xs`,`xd` |-> `xd`,
+       `dty` |-> `sty`,`sty` |-> `sty`,`dtv` |-> `stv`,`stv` |-> `stv`,
+       `sa` |-> `target_cs`,`sb` |-> `sm`,`tenv` |-> `get_tenv cx`,`v` |-> `vi`,
+       `s` |-> `m`,`sw` |-> `n2w addr : 256 word`,`dw` |-> `w' : 256 word`,
+       `G` |-> `Gmid`,`tn` |-> `tmid`,`lo` |-> `lo`,
+       `ctx` |-> `ctx`,`func` |-> `func`,`PG` |-> `PG`,
+       `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+      bodyFullMemoryStoreTheory.body_full_memory_store_path) >>
+    impl_tac) >>>
+  HEADGOAL (
+    simp[type_widens_to_refl] >>
+    qpat_assum `!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==> _`
+      mp_tac >> simp[NoAsms]) >>>
+  HEADGOAL (
+    disch_then (qx_choose_then `copy_end` (qx_choose_then `copy_prov`
+      (qx_choose_then `copy_taint` strip_assume_tac))) >>
+    qexistsl_tac [`copy_end`,`copy_prov`,`copy_taint`] >>
+    simp[arithmeticTheory.ADD_COMM]) >>>
+  HEADGOAL (sg `emit_void MSTORE [Var xd;Var xs] target_cs = ((),sm)`) >>>
+  HEADGOAL (
+    qpat_assum `Abbrev (head_store = _)` (fn head =>
+      qpat_assum `is_word_type sty` (fn word =>
+        qpat_assum `FST (SND target_r) = SOME LocMemory` (fn loc =>
+          qpat_assum `FST target_r = Var xd` (fn dst =>
+            qpat_assum `op0 = Var xs` (fn src =>
+              qpat_assum `head_store target_cs = ((),sm)`
+                (mp_tac o REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] head,
+                  word,loc,dst,src,compile_store_at_loc_def])))))) >>
+    simp[NoAsms]) >>>
+  HEADGOAL (sg `~block_is_terminated sm`) >>>
+  HEADGOAL (
+    qpat_assum `emit_void MSTORE [Var xd;Var xs] target_cs = ((),sm)`
+      (mp_tac o MATCH_MP exprOpenPrimitivesTheory.emit_void_terminated) >>
+    simp[NoAsms,venomInstTheory.is_terminator_def]) >>>
+  HEADGOAL (
+    qpat_assum `if is_word_type sty then _ else _` mp_tac >>
+    qpat_assum `is_word_type sty` (fn th => simp[NoAsms,th]) >>
+    strip_tac) >>>
+  HEADGOAL (
+    `store_lays_out stv stv vi` by
+      (match_mp_tac (Q.SPECL [`get_tenv cx`,`sty`,`stv`,`vi`]
+        stmtSimDeclStoreTheory.store_lays_out_typed) >>
+       rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    `type_memory_size stv = 32` by
+      (qpat_assum `store_lays_out stv stv vi`
+        (ACCEPT_TAC o cj 2 o REWRITE_RULE [store_lays_out_def]))) >>>
+  HEADGOAL (
+    drule emitted_insts_emit_void >> strip_tac >>
+    `sm.cs_current_bb = target_cs.cs_current_bb` by
+      (qpat_assum `emit_void MSTORE [Var xd;Var xs] target_cs = ((),sm)`
+        (mp_tac o MATCH_MP emit_void_same_blocks) >> simp[NoAsms,same_blocks_def]) >>
+    drule_all fn_has_code_same_block >> strip_tac >>
+    `get_instruction bb m.vs_inst_idx =
+      SOME (mk_inst target_cs.cs_next_id MSTORE [Var xd;Var xs] [])` by
+      (first_x_assum (qspec_then `0` mp_tac) >> simp[])) >>>
+  HEADGOAL (
+    qabbrev_tac `written = mstore (w2n (w':256 word)) (typed_val_to_w256 stv vi) m` >>
+    qabbrev_tac `store_ins = mk_inst target_cs.cs_next_id MSTORE [Var xd;Var xs] []` >>
+    qabbrev_tac `word_store_ghost = step_taint store_ins m written tmid`) >>>
+  HEADGOAL (sg `step_prov PG Gmid store_ins written = Gmid /\
+     word_store_ghost.t_var = tmid.t_var /\
+     word_store_ghost.t_stor = tmid.t_stor /\
+     word_store_ghost.t_trans = tmid.t_trans /\
+     word_store_ghost.t_mem = tmid.t_mem DIFF {i | w2n (w':256 word) <= i /\ i < w2n w' + 32}`) >>>
+  HEADGOAL (
+    mp_tac (Q.SPECL [`PG`,`Gmid`,`tmid`,`m`,`target_cs.cs_next_id`,
+      `xd`,`Var xs`,`w' : 256 word`,`typed_val_to_w256 stv vi`]
+      wordLoadStorePtrTheory.mstore_ghost_frame) >>
+    impl_tac >- (rewrite_tac[eval_operand_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    simp[Abbr `word_store_ghost`,Abbr `store_ins`,Abbr `written`]) >>>
+  HEADGOAL (
+    qexistsl_tac [`written with vs_inst_idx := SUC m.vs_inst_idx`,`Gmid`,`word_store_ghost`] >>
+    conj_tac) >>>
+  HEADGOAL (qx_gen_tac `store_dead`) >>>
+  HEADGOAL (sg `step_inst_base store_ins m = OK written`) >>>
+  HEADGOAL (
+    mp_tac (Q.SPECL [`Var xd`,`Var xs`,`w' : 256 word`,
+      `typed_val_to_w256 stv vi`,`target_cs.cs_next_id`,`m`]
+      emitHelperPropsTheory.step_MSTORE) >>
+    impl_tac >- (rewrite_tac[eval_operand_def] >> conj_tac >> first_assum ACCEPT_TAC) >>
+    simp[Abbr `store_ins`,Abbr `written`]) >>>
+  HEADGOAL (sg `store_ins.inst_opcode <> GAS /\ store_ins.inst_opcode <> INVOKE /\
+    ~is_terminator store_ins.inst_opcode /\ inst_dload_in_section store_ins m`) >>>
+  HEADGOAL (
+    simp[Abbr `store_ins`,mk_inst_def,is_terminator_def,inst_dload_in_section_def]) >>>
+  HEADGOAL (sg `inst_mem_below_frontier store_ins m`) >>>
+  HEADGOAL (simp[Abbr `store_ins`,below_frontier_MSTORE,eval_operand_def]) >>>
+  HEADGOAL (sg `ptr_inst_ok store_dead lo 0 ctx func Gmid tmid store_ins m`) >>>
+  HEADGOAL (
+    qpat_assum `Abbrev (store_ins = _)`
+      (fn inst => PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] inst]) >>
+    match_mp_tac (Q.INST
+      [`D` |-> `store_dead`,`lo` |-> `lo`,`fuel` |-> `0`,`ctx` |-> `ctx`,
+       `fn` |-> `func`,`G` |-> `Gmid`,`tn` |-> `tmid`,`s` |-> `m`,
+       `id` |-> `target_cs.cs_next_id`,`p` |-> `xd`,`v` |-> `Var xs`]
+      exprPtrUnwrapCopyEdgesTheory.ptr_inst_ok_mstore_tainted) >>
+    conj_tac
+    >- (qpat_assum `type_memory_size stv = 32` (fn size =>
+          qpat_assum `ptr_covers Gmid tmid xd m (type_memory_size stv)`
+            (ACCEPT_TAC o REWRITE_RULE [size]))) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `lookup_block m.vs_current_bb func.fn_blocks = SOME bb`) >>>
+  HEADGOAL (
+    qpat_assum `m.vs_current_bb = target_cs.cs_current_bb` (fn pc => PURE_REWRITE_TAC[pc]) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `gas_origin_ptr_edge (store_dead,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (m,Gmid,tmid) [] (OK (written with vs_inst_idx := SUC m.vs_inst_idx),Gmid,word_store_ghost)`) >>>
+  HEADGOAL (
+    mp_tac (Q.INST [`D` |-> `store_dead`,`lo` |-> `lo`,
+      `explicit` |-> `gas_explicit_sites ctx shadow_ctx`,`ctx` |-> `ctx`,
+      `func` |-> `func`,`PG` |-> `PG`,`s` |-> `m`,`bb` |-> `bb`,
+      `G` |-> `Gmid`,`tn` |-> `tmid`,`i` |-> `store_ins`,`u` |-> `written`]
+      fragGasSeqPtrTheory.straight_line_origin_ptr_edge) >>
+    impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, asm_rewrite_tac[]]) >>
+    qpat_assum `Abbrev (word_store_ghost = _)` (fn ghost =>
+      pure_rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] ghost)]) >>
+    asm_rewrite_tac[]) >>>
+  HEADGOAL (
+    `~written.vs_halted` by simp[Abbr `written`,mstore_def] >>
+    qpat_assum `gas_origin_ptr_edge _ _ [] (OK _,Gmid,word_store_ghost)`
+      (mp_then Any mp_tac (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules)) >>
+    disch_then (qspec_then `[]` (irule o SRULE [])) >>
+    irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >> simp[]) >>>
+  HEADGOAL conj_tac >>>
+  HEADGOAL (
+    qpat_assum `store_lays_out stv stv vi`
+      (mp_tac o Q.SPECL [`w2n (w':256 word)`,`m`] o cj 4 o REWRITE_RULE [store_lays_out_def]) >>
+    simp[Abbr `written`]) >>>
+  HEADGOAL conj_tac >>>
+  HEADGOAL (
+    mp_tac (Q.INST [`etv` |-> `stv`,`dtv` |-> `stv`,`v` |-> `vi`,
+      `off` |-> `w2n (w':256 word)`,`dirty` |-> `tmid.t_mem`,`s` |-> `m`]
+      assignTuplePtrStoreWordTheory.store_lays_out_robust_ptr) >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    simp[Abbr `written`]) >>>
+  HEADGOAL (sg `word_store_ghost.t_imm = tmid.t_imm`) >>>
+  HEADGOAL (
+    qpat_assum `Abbrev (word_store_ghost = _)`
+      (fn eq => PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] eq]) >>
+    irule (cj 3 decoderGhostFramePtrTheory.step_taint_nonmemory_frame) >>
+    simp[Abbr `store_ins`,mk_inst_def]) >>>
+  HEADGOAL conj_tac >>>
+  HEADGOAL (simp[Abbr `written`,typed_copy_mstore_state_frame]) >>>
+  HEADGOAL (conj_tac >- simp[Abbr `written`,mstore_def]) >>>
+  HEADGOAL (conj_tac >- simp[Abbr `written`,mstore_def,write_memory_with_expansion_def]) >>>
+  HEADGOAL (conj_tac >- simp[]) >>>
+  HEADGOAL (conj_tac >- first_assum ACCEPT_TAC) >>>
+  HEADGOAL (conj_tac >- first_assum ACCEPT_TAC) >>>
+  HEADGOAL (conj_tac >- first_assum ACCEPT_TAC) >>>
+  HEADGOAL (conj_tac >- first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    conj_tac
+    >- simp[pred_setTheory.IN_DIFF,arithmeticTheory.ADD_COMM]) >>>
+  HEADGOAL (
+    simp[Abbr `written`,mstore_def,write_memory_with_expansion_def,lookup_var_def,op_taint_def]) >>>
+  HEADGOAL (sg `typed_copy_effect ctx func target_cs sm m q
+    (w2n w') (type_memory_size stv)`) >>>
+  HEADGOAL (
+    qpat_assum `!D. gas_origin_ptr_path _ (m,Gmid,tmid) [] (OK q,Gq,tq)`
+      (qspec_then `DF (storage_trace_horizon mid.storage_trace)` assume_tac)) >>>
+  HEADGOAL (
+    qpat_assum `!D sa' sb' s' G' tn' t' Gf tf dst n. _ ==> typed_copy_effect ctx func sa' sb' s' t' dst n`
+      (qspecl_then [`DF (storage_trace_horizon mid.storage_trace)`,`target_cs`,`sm`,`m`,
+        `Gmid`,`tmid`,`q`,`Gq`,`tq`,`w2n w'`,`type_memory_size stv`] MATCH_MP_TAC)) >>>
+  HEADGOAL (asm_rewrite_tac[]) >>>
+  HEADGOAL (sg `assignable_type (get_tenv cx) sty`) >>>
+  HEADGOAL (
+    qpat_assum `EVERY (assignable_type (get_tenv cx)) (sty::tys_tail)` mp_tac >>
+    simp[NoAsms]) >>>
+  HEADGOAL (Q.SUBGOAL_THEN `0 < type_memory_size stv` ASSUME_TAC) >>>
+  HEADGOAL (
+    MATCH_MP_TAC (Q.SPEC `stv` (cj 1 valueEncodingPropsTheory.type_memory_size_pos)) >>
+    MATCH_MP_TAC (Q.SPECL [`get_tenv cx`,`sty`,`stv`]
+      vyperTypeSystemTheory.assignable_type_slot_size_pos) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `0 < dcap`) >>>
+  HEADGOAL (
+    map_every (fn pat => qpat_assum pat mp_tac)
+      [`0 < type_memory_size stv`,`off + type_memory_size stv <= dcap`] >>
+    decide_tac) >>>
+  HEADGOAL (sg `lo <= w2n w'`) >>>
+  HEADGOAL (
+    `lo <= db` suffices_by decide_tac >>
+    qpat_assum `local_region cenv mid.scopes m id db dcap`
+      (mp_then Any irule (INST_TYPE [alpha |-> ``:256``]
+        bodyFullMemoryFramesTheory.body_full_local_region_lower_bound)) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexistsl [`DF (storage_trace_horizon mid.storage_trace)`,
+      `storage_trace_horizon mid.storage_trace`,`ctx`,`cx`,`env`,`mid`,`func`,`tops`] >>
+    simp[]) >>>
+  HEADGOAL (sg `local_ptrs_reserved cenv target_cs /\
+    (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at target_cs x) /\
+    (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at target_cs x)`) >>>
+  HEADGOAL (conj_tac) >>>
+  HEADGOAL (
+    match_mp_tac (Q.SPECL [`cenv`,`cur`,`target_cs`] local_ptrs_reserved_next_var) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (conj_tac) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    match_mp_tac (Q.SPECL [`cur`,`target_cs`,`x`] freshWritesTheory.not_fresh_at_mono) >>
+    reverse conj_tac >- first_assum ACCEPT_TAC >>
+    qpat_assum `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at cur x`
+      (qspecl_then [`x`,`cap`] (fn th => match_mp_tac th)) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    match_mp_tac (Q.SPECL [`cur`,`target_cs`,`x`] freshWritesTheory.not_fresh_at_mono) >>
+    reverse conj_tac >- first_assum ACCEPT_TAC >>
+    qpat_assum `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at cur x`
+      (qspecl_then [`x`,`cap`] (fn th => match_mp_tac th)) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!n path' entry' ty. place = MemoryPlace n path' /\
+    lookup_scopes n mid.scopes = SOME entry' /\ cenv.ce_var_type n = SOME ty ==>
+    evaluate_type (get_tenv cx) ty = SOME entry'.type`) >>>
+  HEADGOAL (
+    rpt strip_tac >> irule bodySimAugPlaceLoadTheory.aug_place_entry_type_agrees >>
+    qexistsl [`cenv`,`env`,`n`,`mid`,`mid`] >> simp[]) >>>
+  HEADGOAL (sg `fin.storage_trace = mid.storage_trace /\
+    MAP FDOM fin.scopes = MAP FDOM mid.scopes /\ expr_sim_inv cenv cx env fin`) >>>
+  HEADGOAL (
+    qpat_assum `write_place cx place vi mid = (INL (),fin)`
+      (fn th => assume_tac (MATCH_MP tuplePlaceStepTheory.write_place_storage_trace th) >>
+                assume_tac (MATCH_MP vyperScopePreservationTheory.write_place_scopes_dom th)) >>
+    simp[EQ_SYM_EQ] >> irule tuplePlaceSourceTheory.tuple_place_write_inv >>
+    qexistsl [`place`,`INL ()`,`mid`,`stv`,`vi`] >> simp[]) >>>
+  HEADGOAL (sg `!H. valid_horizon cx st0 H fin.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx fin q /\
+    storage_well_formed_on cx fin (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx fin Gq tq q /\
+    alloca_frame cenv mid target_cs m cenv fin q /\
+    (!aid off sz i. FLOOKUP m.vs_allocas aid = SOME (off,sz) /\
+      aid < target_cs.cs_next_id /\
+      (!n b cap. local_region cenv mid.scopes m n b cap ==> off+sz <= b \/ b+cap <= off) /\
+      off <= i /\ i < off+sz /\ i IN tq.t_mem ==> i IN tmid.t_mem)`) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> disch_tac >>
+    qpat_assum `!K. valid_horizon cx st0 K fin.storage_trace ==>
+                    valid_horizon cx st0 K mid.storage_trace`
+      (drule_then assume_tac) >>
+    qpat_assum `!K. valid_horizon cx st0 K mid.storage_trace ==>
+      targetQ K (INL place) mid Gmid tmid m /\ _` (qspec_then `H` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    qpat_assum `Abbrev (targetQ = _)` (fn th =>
+      CONV_TAC (LAND_CONV (REWRITE_CONV [REWRITE_RULE [markerTheory.Abbrev_def] th]))) >>
+    BETA_TAC >> simp[NoAsms] >> strip_tac) >>>
+  HEADGOAL (
+    qpat_assum `target_post H ctx func cenv cx src cur target_cs u mid (PlaceR place) (Type sty) target_r m`
+      (strip_assume_tac o REWRITE_RULE [target_post_def]) >>
+    qpat_assum `place = MemoryPlace id path` (fn eq =>
+      qpat_assum `write_place cx place vi mid = (INL (),fin)`
+        (mp_then Any (qx_choose_then `scopes_after` assume_tac)
+          vyperPlaceFramesTheory.write_memory_place_frame o REWRITE_RULE [eq]))) >>>
+  HEADGOAL (sg `storage_well_formed_on cx fin (FST H)`) >>>
+  HEADGOAL (
+    irule (iffRL vyperStorageFootprintTheory.storage_well_formed_on_backends) >>
+    qexists_tac `mid` >>
+    qpat_assum `fin = mid with scopes := scopes_after`
+      (fn eq => simp[eq])) >>>
+  HEADGOAL (
+    qpat_assum `FST (SND target_r) = SOME LocMemory` (fn loc =>
+      qpat_assum `place_ptr_rel cenv cx m (PlaceR place) w' (FST (SND target_r)) (Type sty)`
+        (assume_tac o REWRITE_RULE [loc]))) >>>
+  HEADGOAL (
+    mp_tac (Q.INST
+      [`H` |-> `H`,`ctx` |-> `ctx`,`func` |-> `func`,`cenv` |-> `cenv`,
+       `cx` |-> `cx`,`env` |-> `env`,`lo` |-> `lo`,`d` |-> `d`,
+       `sa` |-> `target_cs`,`sb` |-> `sm`,`s` |-> `m`,`t` |-> `q`,
+       `dw` |-> `w'`,`dty` |-> `sty`,`dtv` |-> `stv`,`ee` |-> `mid`,
+       `ff` |-> `fin`,`p` |-> `place`,`v` |-> `vi`,
+       `G` |-> `Gmid`,`tn` |-> `tmid`,`Gf` |-> `Gq`,`tf` |-> `tq`,
+       `D` |-> `DF H`]
+      (INST_TYPE [alpha |-> ``:256``]
+        memoryPlaceStorePostTheory.body_assign_memory_place_store_post)) >> impl_tac) >>>
+  HEADGOAL (asm_rewrite_tac[] >> rpt conj_tac) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    qpat_assum `!x. not_fresh_at target_cs x ==>
+       lookup_var x q = lookup_var x m /\ _` (drule_then strip_assume_tac) >> simp[]) >>>
+  HEADGOAL (strip_tac >> asm_rewrite_tac[]) >>>
+  HEADGOAL (sg `q.vs_allocas = m.vs_allocas /\ q.vs_alloca_next = m.vs_alloca_next`) >>>
+  HEADGOAL (
+    qpat_assum `typed_copy_state_frame target_cs _ _ m q` mp_tac >>
+    simp[NoAsms,typed_copy_state_frame_def,venom_state_component_equality]) >>>
+  HEADGOAL (sg `ctx_has_dalloca ctx ==> allocas_below_fmp q`) >>>
+  HEADGOAL (
+    qpat_assum `typed_copy_state_frame target_cs _ _ m q`
+      (mp_tac o MATCH_MP typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp) >>
+    strip_tac >> asm_rewrite_tac[]) >>>
+  HEADGOAL (sg `!x. not_fresh_at cur x ==> not_fresh_at target_cs x`) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+    qexists `cur` >> simp[ci_mono_def]) >>>
+  HEADGOAL (sg `!x. not_fresh_at sa x ==> not_fresh_at cur x`) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+    qexists `sa` >> simp[]) >>>
+  HEADGOAL (sg `!x w. not_fresh_at target_cs x /\ lookup_var x m = SOME w ==>
+                    lookup_var x q = SOME w`) >>>
+  HEADGOAL (
+    map_every qx_gen_tac [`vx`,`vw`] >> strip_tac >>
+    qpat_assum `!x. not_fresh_at target_cs x ==> lookup_var x q = lookup_var x m /\ _`
+      (qspec_then `vx` mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    disch_then (fn th => pure_rewrite_tac[CONJUNCT1 th]) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==>
+                    lookup_var x q = SOME w`) >>>
+  HEADGOAL (
+    map_every qx_gen_tac [`vx`,`vw`] >> strip_tac >>
+    qpat_assum `!x w. not_fresh_at target_cs x /\ lookup_var x m = SOME w ==> _`
+      (qspecl_then [`vx`,`vw`] match_mp_tac) >> conj_tac) >>>
+  HEADGOAL (
+    qpat_assum `!x. not_fresh_at cur x ==> not_fresh_at target_cs x`
+      (qspec_then `vx` match_mp_tac) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==>
+                       lookup_var x m = SOME w`
+      (qspecl_then [`vx`,`vw`] match_mp_tac) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!n b sz. local_region cenv fin.scopes q n b sz <=>
+                          local_region cenv mid.scopes m n b sz`) >>>
+  HEADGOAL (
+    `MAP FDOM mid.scopes = MAP FDOM fin.scopes` by (irule EQ_SYM >> first_assum ACCEPT_TAC) >>
+    map_every (fn pat => qpat_assum pat mp_tac)
+      [`stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid m`,
+       `!x w. not_fresh_at target_cs x /\ lookup_var x m = SOME w ==> lookup_var x q = SOME w`,
+       `MAP FDOM mid.scopes = MAP FDOM fin.scopes`,`local_ptrs_reserved cenv target_cs`] >>
+    POP_ASSUM_LIST kall_tac >>
+    metis_tac[tuplePlaceStepTheory.tuple_place_endpoint_local_regions_some]) >>>
+  HEADGOAL (sg `return_buf_frame d cenv sm q`) >>>
+  HEADGOAL (
+    irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+    qexistsl [`cenv`,`u`,`cur`] >> simp[] >> decide_tac) >>>
+  HEADGOAL (sg `alloca_history func q`) >>>
+  HEADGOAL (
+    qpat_assum `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid m`
+      (assume_tac o MATCH_MP bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv) >>
+    irule bodyFullPathHistoryTheory.body_full_path_alloca_history >>
+    qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (m,Gmid,tmid) [] (OK q,Gq,tq)`
+      (qspec_then `DF (storage_trace_horizon mid.storage_trace)` (irule_at Any)) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_no_wrap inst z`) >>>
+  HEADGOAL (
+    qpat_assum `body_inv tops ctx cenv cx`
+      (mp_then Any mp_tac bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap) >>
+    disch_then (qspecl_then [`func`,`q`] assume_tac) >> rpt strip_tac >>
+    rename1 `frag_reachable ctx func q rf ri rz` >>
+    qpat_assum `!fn inst u. MEM func ctx.ctx_functions /\ frag_reachable ctx func q fn inst u ==> _`
+      (qspecl_then [`rf`,`ri`,`rz`] mp_tac) >>
+    impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+    disch_then ACCEPT_TAC) >>>
+  HEADGOAL (sg `gas_admissible (bind (write_place cx place vi)
+      (\u. assign_tuple_target_list cx todo vs_tail)) (stmt_res_ok lctx) mid`) >>>
+  HEADGOAL (
+    qpat_assum `mid with gas_obs := [] = mid` (fn eq => ONCE_REWRITE_TAC [GSYM eq]) >>
+    qpat_assum `assign_tuple_target_list cx (BaseTarget bt::todo) (vi::vs_tail) = _`
+      (fn eq => qpat_assum `gas_admissible (assign_tuple_target_list cx
+             (BaseTarget bt::todo) (vi::vs_tail)) _ src`
+        (assume_tac o REWRITE_RULE [eq])) >>
+    qpat_assum `gas_admissible (bind (eval_target_place cx bt) _) (stmt_res_ok lctx) src`
+      (fn adm =>
+        qpat_assum `!tail. eval_target_place cx bt
+          (src with gas_obs := gas_explicit target_marks u.vs_gas_readings ++ tail) =
+          (INL place,mid with gas_obs := tail)`
+          (fn step => ACCEPT_TAC (BETA_RULE (MATCH_MP
+            stmtSimForRoundsTheory.gas_admissible_bind_tail (CONJ adm step)))))) >>>
+  HEADGOAL (sg `fin with gas_obs := [] = fin`) >>>
+  HEADGOAL (
+    qpat_assum `fin.gas_obs = []` mp_tac >>
+    simp[vyperStateTheory.evaluation_state_component_equality]) >>>
+  HEADGOAL (sg `gas_admissible (assign_tuple_target_list cx todo vs_tail) (stmt_res_ok lctx) fin`) >>>
+  HEADGOAL (
+    qpat_assum `fin with gas_obs := [] = fin` (fn eq => ONCE_REWRITE_TAC [GSYM eq]) >>
+    qpat_assum `gas_admissible (bind (write_place cx place vi) _) (stmt_res_ok lctx) mid`
+      (fn adm =>
+        qpat_assum `!tail. write_place cx place vi (mid with gas_obs := tail) =
+          (INL (),fin with gas_obs := tail)`
+          (fn step => ACCEPT_TAC (BETA_RULE (MATCH_MP
+            (REWRITE_RULE [listTheory.APPEND] (Q.INST [`xs` |-> `[]`]
+              stmtSimForRoundsTheory.gas_admissible_bind_tail)) (CONJ adm step)))))) >>>
+  HEADGOAL (sg `assign_tuple_targets cx (BaseTarget bt) vi
+      (src with gas_obs := gas_explicit target_marks u.vs_gas_readings) = (INL (),fin)`) >>>
+  HEADGOAL (
+    qpat_assum `eval_target_place cx bt (src with gas_obs := _) = (INL place,mid)` (fn target =>
+      qpat_assum `write_place cx place vi mid = (INL (),fin)` (fn write =>
+        simp[NoAsms,cj 56 vyperInterpreterTheory.evaluate_def,bind_def,target,write]))) >>>
+  HEADGOAL (sg `body_tuple_targets_full_ok cx todo vs_tail`) >>>
+  HEADGOAL (
+    qpat_assum `(?(s:evaluation_state) x t.
+      assign_tuple_targets cx (BaseTarget bt) vi s = (INL x,t)) ==>
+      body_tuple_targets_full_ok cx todo vs_tail` match_mp_tac >>
+    qexistsl [`src with gas_obs := gas_explicit target_marks u.vs_gas_readings`,`()`,`fin`] >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `storage_trace_domain cx st0 fin.storage_trace`) >>>
+  HEADGOAL (asm_rewrite_tac[]) >>>
+  HEADGOAL (Q.SUBGOAL_THEN `p + type_memory_size_list tvs <= w2n w' \/
+    w2n w' + type_memory_size stv <= p` ASSUME_TAC) >>>
+  HEADGOAL (
+    qpat_assum `0 < type_memory_size stv` mp_tac >>
+    qpat_assum `FST (SND target_r) = SOME LocMemory ==> _` (drule_then mp_tac) >>
+    qpat_assum `SUM (MAP type_memory_size (TAKE k tvs)) + _ <= _` mp_tac >>
+    decide_tac) >>>
+  HEADGOAL (sg `!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==>
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem`) >>>
+  HEADGOAL (
+    match_mp_tac (Q.SPECL [`tmid.t_mem`,`tq.t_mem`,`m.vs_memory`,`q.vs_memory`,
+      `{i | w2n (w':256 word) <= i /\ i < w2n w' + type_memory_size stv}`,
+      `TupleTV tvs`,`ArrayV (TupleV vs)`,`p`]
+      robustCopyTransportPtrTheory.robust_val_in_memory_exterior_frame) >>
+    rpt conj_tac) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    simp[NoAsms, pred_setTheory.GSPECIFICATION] >>
+    qpat_assum `val_wf (TupleTV tvs) (ArrayV (TupleV vs))`
+      (mp_tac o MATCH_MP exprSimPropsTheory.val_footprint_le) >>
+    simp[NoAsms,valueEncodingTheory.type_memory_size_def] >>
+    qpat_assum `p + type_memory_size_list tvs <= _ \/ _` mp_tac >> decide_tac) >>>
+  HEADGOAL (
+    simp[NoAsms, pred_setTheory.GSPECIFICATION] >> rpt strip_tac >>
+    irule placeMemoryCopyEffectTheory.typed_copy_effect_bytes >>
+    qpat_assum `typed_copy_effect ctx func target_cs sm m q _ _` (irule_at Any) >>
+    decide_tac) >>>
+  HEADGOAL (
+    qpat_assum `!j. ~(w2n (w':256 word) <= j /\ j < w2n w' + type_memory_size stv) ==>
+      (j IN tq.t_mem <=> j IN tmid.t_mem)` mp_tac >>
+    simp[NoAsms, pred_setTheory.GSPECIFICATION]) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (Q.SUBGOAL_THEN `type_memory_size_list tvs = 0 \/
+      (?aid b sz. FLOOKUP q.vs_allocas aid = SOME (b,sz) /\ aid < sm.cs_next_id /\
+        b <= p /\ p + type_memory_size_list tvs <= b + sz /\
+        (!n a len. local_region cenv fin.scopes q n a len ==> b + sz <= a \/ a + len <= b)) \/
+      (?n b sz. local_region cenv fin.scopes q n b sz /\ b <= p /\
+        p + type_memory_size_list tvs <= b + sz /\ local_path_at cenv cx n (p-b) (TupleTV tvs))` ASSUME_TAC) >>>
+  HEADGOAL (
+    qpat_assum `!n b sz. local_region cenv fin.scopes q n b sz <=> _`
+      (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `q.vs_allocas = m.vs_allocas` (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `type_memory_size_list tvs = 0 \/
+      (?aid b sz. FLOOKUP m.vs_allocas aid = SOME (b,sz) /\ _) \/ _`
+      DISJ_CASES_TAC >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+    disj2_tac >>
+    qpat_assum `(?aid b sz. FLOOKUP m.vs_allocas aid = SOME (b,sz) /\ _) \/ _`
+      DISJ_CASES_TAC
+    THENL [disj1_tac, disj2_tac >> first_assum ACCEPT_TAC]) >>>
+  HEADGOAL (
+    qpat_x_assum `?aid b sz. FLOOKUP m.vs_allocas aid = SOME (b,sz) /\ _`
+      (qx_choosel_then [`rid`,`rb`,`rsize`] strip_assume_tac) >>
+    qexistsl [`rid`,`rb`,`rsize`] >> asm_rewrite_tac[] >> decide_tac) >>>
+  HEADGOAL (sg `!i. i < LENGTH tys_tail ==>
+      ?x. EL i ops_tail = Var x /\ not_fresh_at sm x /\ op_taint tq (Var x) = {} /\
+          if is_word_type (EL i tys_tail) then
+            lookup_var x q = SOME (typed_val_to_w256 (EL i tvs_tail) (EL i vs_tail)) /\
+            op_prov Gq (Var x) = NONE
+          else lookup_var x q =
+                 SOME (n2w (p + SUM (MAP type_memory_size (TAKE (SUC k+i) tvs)))) /\
+               ptr_covers Gq tq x q (type_memory_size (EL i tvs_tail))`) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    qpat_assum `!i. i < LENGTH (sty::tys_tail) ==> ?x. _ /\ not_fresh_at target_cs x /\ _`
+      (qspec_then `SUC i` mp_tac) >>
+    (impl_tac >- (simp[NoAsms] >> first_assum ACCEPT_TAC)) >>
+    disch_then (qx_choose_then `xp` strip_assume_tac o SRULE [listTheory.EL])) >>>
+  HEADGOAL (
+    `not_fresh_at sm xp` by
+      (irule freshWritesTheory.not_fresh_at_mono >> qexists `target_cs` >> simp[]) >>
+    qpat_assum `!x. not_fresh_at target_cs x ==> lookup_var x q = _ /\ _`
+      (qspec_then `xp` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac) >>>
+  HEADGOAL (
+    `k + SUC i = SUC k + i` by decide_tac >>
+    qexists `xp` >>
+    (conj_tac >- first_assum ACCEPT_TAC) >>
+    (conj_tac >- first_assum ACCEPT_TAC) >>
+    (conj_tac >- asm_rewrite_tac[])) >>>
+  HEADGOAL (Cases_on `is_word_type (EL i tys_tail)`) >>>
+  HEADGOAL (
+    qpat_x_assum `if is_word_type (EL i tys_tail) then _ else _` mp_tac >>
+    simp[ptrDisciplineTheory.op_prov_def]) >>>
+  HEADGOAL (
+    qpat_x_assum `if is_word_type (EL i tys_tail) then _ else _` mp_tac >>
+    asm_rewrite_tac[] >> strip_tac >>
+    asm_rewrite_tac[] >>
+    irule assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame >>
+    qexistsl [`Gmid`,`m`,`tmid`] >> asm_rewrite_tac[]) >>>
+  HEADGOAL (sg `alloca_frame cenv src cur u cenv mid m`) >>>
+  HEADGOAL (
+    match_mp_tac (Q.INST
+      [`H` |-> `storage_trace_horizon src.storage_trace`,`ctx` |-> `ctx`,
+       `cx` |-> `cx`,`func` |-> `func`]
+      (INST_TYPE [alpha |-> ``:256``] stmtSimDefsTheory.alloca_frame_of_mem_frame)) >>
+    rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC,
+      qpat_assum `mid.scopes = src.scopes` (fn eq => simp[NoAsms,eq])]) >>>
+  HEADGOAL (
+    qpat_assum `!H. valid_horizon cx st0 H fin.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx fin q /\ _`
+      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+    impl_tac >- asm_rewrite_tac[] >>
+    disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (sg `alloca_frame cenv es sa s0 cenv mid m`) >>>
+  HEADGOAL (
+    irule stmtSimDefsTheory.alloca_frame_trans >>
+    qexistsl [`cenv`,`src`,`u`,`cur`] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP m.vs_allocas aid = SOME b`) >>>
+  HEADGOAL (
+    map_every qx_gen_tac [`i`,`entry0`] >> disch_tac >>
+    qpat_assum `!aid b. FLOOKUP u.vs_allocas aid = SOME b ==> FLOOKUP m.vs_allocas aid = SOME b`
+      (qspecl_then [`i`,`entry0`] match_mp_tac) >>
+    qpat_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b`
+      (qspecl_then [`i`,`entry0`] match_mp_tac) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `alloca_frame cenv es sa s0 cenv fin q`) >>>
+  HEADGOAL (
+    irule stmtSimDefsTheory.alloca_frame_trans >>
+    qexistsl [`cenv`,`mid`,`m`,`target_cs`] >>
+    rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE decide_tac)) >>>
+  HEADGOAL (
+    `sa.cs_next_id <= sm.cs_next_id /\ sa.cs_next_var <= sm.cs_next_var` by
+      (map_every (fn pat => qpat_assum pat mp_tac)
+        [`sa.cs_next_id <= cur.cs_next_id`, `cur.cs_next_id <= target_cs.cs_next_id`,
+         `target_cs.cs_next_id <= sm.cs_next_id`, `sa.cs_next_var <= cur.cs_next_var`,
+         `cur.cs_next_var <= sm.cs_next_var`] >> decide_tac) >>
+    `p + type_memory_size_list tvs <= q.vs_alloca_next /\
+     s0.vs_alloca_next <= q.vs_alloca_next` by
+      (map_every (fn pat => qpat_assum pat mp_tac)
+        [`q.vs_alloca_next = m.vs_alloca_next`, `u.vs_alloca_next <= m.vs_alloca_next`,
+         `p + type_memory_size_list tvs <= u.vs_alloca_next`,
+         `s0.vs_alloca_next <= u.vs_alloca_next`] >> decide_tac)) >>>
+  HEADGOAL (
+    `local_ptrs_reserved cenv sm` by
+      (match_mp_tac (Q.SPECL [`cenv`,`target_cs`,`sm`] local_ptrs_reserved_next_var) >>
+       conj_tac >> first_assum ACCEPT_TAC) >>
+    `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sm x` by
+      (rpt strip_tac >>
+       match_mp_tac (Q.SPECL [`target_cs`,`sm`,`x`] freshWritesTheory.not_fresh_at_mono) >>
+       reverse conj_tac >- first_assum ACCEPT_TAC >>
+       qpat_assum `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at target_cs x`
+         (qspecl_then [`x`,`cap`] match_mp_tac) >> first_assum ACCEPT_TAC) >>
+    `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sm x` by
+      (rpt strip_tac >>
+       match_mp_tac (Q.SPECL [`target_cs`,`sm`,`x`] freshWritesTheory.not_fresh_at_mono) >>
+       reverse conj_tac >- first_assum ACCEPT_TAC >>
+       qpat_assum `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at target_cs x`
+         (qspecl_then [`x`,`cap`] match_mp_tac) >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (sg `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x q = SOME w`) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> lookup_var x q = SOME w`
+      (qspecl_then [`x`,`w`] match_mp_tac) >>
+    conj_tac
+    >- (qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at cur x` match_mp_tac >>
+        first_assum ACCEPT_TAC) >>
+    qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w`
+      (qspecl_then [`x`,`w`] match_mp_tac) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!x. not_fresh_at sa x ==>
+    FLOOKUP Gq x = FLOOKUP G0 x /\ op_taint tq (Var x) = op_taint tn0 (Var x)`) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >>
+    qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at cur x` (drule_then assume_tac) >>
+    qpat_assum `!x. not_fresh_at cur x ==> not_fresh_at target_cs x` (drule_then assume_tac) >>
+    qpat_assum `!x. not_fresh_at target_cs x ==> lookup_var x q = _ /\ _`
+      (drule_then strip_assume_tac) >>
+    qpat_assum `!x. not_fresh_at cur x ==> FLOOKUP Gmid x = _ /\ _`
+      (drule_then strip_assume_tac) >>
+    qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP Gu x = _ /\ _`
+      (drule_then strip_assume_tac) >>
+    asm_rewrite_tac[]) >>>
+  HEADGOAL (sg `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+    (!n b cap. local_region cenv es.scopes s0 n b cap ==> off+sz <= b \/ b+cap <= off) /\
+    off <= i /\ i < off+sz /\ i IN tq.t_mem ==> i IN tn0.t_mem`) >>>
+  HEADGOAL (
+    map_every qx_gen_tac [`old_id`,`old_base`,`old_size`,`byte`] >>
+    disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    qpat_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN tn0.t_mem`
+      (qspecl_then [`old_id`,`old_base`,`old_size`,`byte`] match_mp_tac) >>
+    rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC, ALL_TAC]) >>>
+  HEADGOAL (
+    `FLOOKUP u.vs_allocas old_id = SOME (old_base,old_size)` by
+      (qpat_assum `!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==> FLOOKUP u.vs_allocas aid = SOME entry`
+         match_mp_tac >> first_assum ACCEPT_TAC) >>
+    `FLOOKUP m.vs_allocas old_id = SOME (old_base,old_size)` by
+      (qpat_assum `!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==> FLOOKUP m.vs_allocas aid = SOME entry`
+         match_mp_tac >> first_assum ACCEPT_TAC) >>
+    `old_id < cur.cs_next_id /\ old_id < target_cs.cs_next_id` by
+      (map_every (fn pat => qpat_assum pat mp_tac)
+        [`old_id < sa.cs_next_id`,`sa.cs_next_id <= cur.cs_next_id`,
+         `cur.cs_next_id <= target_cs.cs_next_id`] >> decide_tac) >>
+    qpat_assum `alloca_frame cenv es sa s0 cenv src u`
+      (mp_tac o Q.SPECL [`old_id`,`old_base`,`old_size`] o REWRITE_RULE [stmtSimDefsTheory.alloca_frame_def]) >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+    disch_then (assume_tac o CONJUNCT2) >>
+    qpat_assum `alloca_frame cenv es sa s0 cenv mid m`
+      (mp_tac o Q.SPECL [`old_id`,`old_base`,`old_size`] o REWRITE_RULE [stmtSimDefsTheory.alloca_frame_def]) >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+    disch_then (assume_tac o CONJUNCT2)) >>>
+  HEADGOAL (
+    qpat_assum `!aid off sz i. FLOOKUP u.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN tu.t_mem`
+      (qspecl_then [`old_id`,`old_base`,`old_size`,`byte`] match_mp_tac) >>
+    rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC, ALL_TAC]) >>>
+  HEADGOAL (
+    qpat_assum `!aid off sz i. FLOOKUP m.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN tmid.t_mem`
+      (qspecl_then [`old_id`,`old_base`,`old_size`,`byte`] match_mp_tac) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    `!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==> FLOOKUP q.vs_allocas aid = SOME entry` by
+      (qpat_assum `q.vs_allocas = m.vs_allocas` (fn eq => rewrite_tac[eq]) >>
+       first_assum ACCEPT_TAC) >>
+    `EVERY (assignable_type (get_tenv cx)) tys_tail` by
+      (qpat_assum `EVERY (assignable_type _) (sty::_)` mp_tac >> simp[NoAsms]) >>
+    `values_have_types tvs_tail vs_tail` by simp[vyperTypeDefaultsTheory.values_have_types_LIST_REL]) >>>
+  HEADGOAL (sg `!H. valid_horizon cx st0 H fin.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx fin q /\ storage_well_formed_on cx fin (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx fin Gq tq q`) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >>
+    qpat_assum `!H. valid_horizon cx st0 H fin.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx fin q /\ _ /\ _ /\ alloca_frame cenv mid target_cs m cenv fin q /\ _`
+      (drule_then strip_assume_tac) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qexistsl_tac [`Gq`,`q`,`tq`] >>
+    gen_tac >> disch_tac >> conj_tac
+    >- (qpat_assum `!D. gas_origin_ptr_path _ (m,Gmid,tmid) [] (OK q,Gq,tq)`
+         (qspec_then `DF H` ACCEPT_TAC)) >>
+    asm "suffix_ih" (qspecl_then
+      [`tys_tail`,`tvs_tail`,`vs_tail`,`ops_tail`,`SUC k`,`p`,`sm`,`shadow_sm`,`fin`,`q`,`Gq`,`tq`]
+      match_mp_tac) >>
+    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, first_assum (ACCEPT_TAC o SYM)]) >>>
+  HEADGOAL (
+    sg `?tr slot tv. place = StoragePlace tr slot tv`) >>>
+  HEADGOAL (
+    qpat_assum `place_ptr_rel cenv cx m (PlaceR place) w' _ (Type sty)` mp_tac >>
+    qpat_assum `FST (SND target_r) <> SOME LocMemory` mp_tac >>
+    Cases_on `place` >> simp[NoAsms,place_ptr_rel_def]) >>>
+  HEADGOAL (
+    sg `w' = slot /\ FST (SND target_r) = SOME (slot_loc tr) /\ tv = stv`) >>>
+  HEADGOAL (
+    qpat_assum `place = StoragePlace tr slot tv` (fn eq =>
+      qpat_assum `place_ptr_rel cenv cx m (PlaceR place) w' _ (Type sty)`
+        (mp_tac o REWRITE_RULE [eq,place_ptr_rel_def])) >>
+    qpat_assum `evaluate_type (get_tenv cx) sty = SOME stv`
+      (fn eq => simp[NoAsms,eq,EQ_SYM_EQ])) >>>
+  HEADGOAL (
+    `dest_loc = slot_loc tr` by simp[Abbr `dest_loc`] >>
+    `write_storage_slot cx tr slot stv vi mid = (INL (),fin)` by
+      (qpat_assum `write_place cx place vi mid = (INL (),fin)` mp_tac >>
+       qpat_assum `place = StoragePlace tr slot tv` (fn eq =>
+         qpat_assum `tv = stv` (fn ty => simp[NoAsms,eq,ty,write_place_def]))) >>
+    `fin.storage_trace = mid.storage_trace` by
+      (drule tuplePlaceStepTheory.write_place_storage_trace >> simp[]) >>
+    `op_taint tmid (FST target_r) = {}` by
+      (qpat_assum `bodyFullTargetDefs$target_ptr_ok cenv (PlaceR place) target_r Gmid tmid m`
+        (ACCEPT_TAC o cj 1 o REWRITE_RULE [bodyFullTargetDefsTheory.target_ptr_ok_def]))) >>>
+  HEADGOAL (sg `local_ptrs_reserved cenv target_cs /\
+    (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at target_cs x) /\
+    (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at target_cs x)`) >>>
+  HEADGOAL (conj_tac) >>>
+  HEADGOAL (
+    match_mp_tac (Q.SPECL [`cenv`,`cur`,`target_cs`] local_ptrs_reserved_next_var) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (conj_tac) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    match_mp_tac (Q.SPECL [`cur`,`target_cs`,`x`] freshWritesTheory.not_fresh_at_mono) >>
+    reverse conj_tac >- first_assum ACCEPT_TAC >>
+    qpat_assum `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at cur x`
+      (qspecl_then [`x`,`cap`] (fn th => match_mp_tac th)) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    match_mp_tac (Q.SPECL [`cur`,`target_cs`,`x`] freshWritesTheory.not_fresh_at_mono) >>
+    reverse conj_tac >- first_assum ACCEPT_TAC >>
+    qpat_assum `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at cur x`
+      (qspecl_then [`x`,`cap`] (fn th => match_mp_tac th)) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `gas_admissible (bind (write_place cx place vi)
+      (\u. assign_tuple_target_list cx todo vs_tail)) (stmt_res_ok lctx) mid`) >>>
+  HEADGOAL (
+    qpat_assum `mid with gas_obs := [] = mid` (fn eq => ONCE_REWRITE_TAC [GSYM eq]) >>
+    qpat_assum `assign_tuple_target_list cx (BaseTarget bt::todo) (vi::vs_tail) = _`
+      (fn eq => qpat_assum `gas_admissible (assign_tuple_target_list cx
+             (BaseTarget bt::todo) (vi::vs_tail)) _ src`
+        (assume_tac o REWRITE_RULE [eq])) >>
+    qpat_assum `gas_admissible (bind (eval_target_place cx bt) _) (stmt_res_ok lctx) src`
+      (fn adm =>
+        qpat_assum `!tail. eval_target_place cx bt
+          (src with gas_obs := gas_explicit target_marks u.vs_gas_readings ++ tail) =
+          (INL place,mid with gas_obs := tail)`
+          (fn step => ACCEPT_TAC (BETA_RULE (MATCH_MP
+            stmtSimForRoundsTheory.gas_admissible_bind_tail (CONJ adm step)))))) >>>
+  HEADGOAL (sg `fin with gas_obs := [] = fin`) >>>
+  HEADGOAL (
+    qpat_assum `fin.gas_obs = []` mp_tac >>
+    simp[vyperStateTheory.evaluation_state_component_equality]) >>>
+  HEADGOAL (sg `gas_admissible (assign_tuple_target_list cx todo vs_tail) (stmt_res_ok lctx) fin`) >>>
+  HEADGOAL (
+    qpat_assum `fin with gas_obs := [] = fin` (fn eq => ONCE_REWRITE_TAC [GSYM eq]) >>
+    qpat_assum `gas_admissible (bind (write_place cx place vi) _) (stmt_res_ok lctx) mid`
+      (fn adm =>
+        qpat_assum `!tail. write_place cx place vi (mid with gas_obs := tail) =
+          (INL (),fin with gas_obs := tail)`
+          (fn step => ACCEPT_TAC (BETA_RULE (MATCH_MP
+            (REWRITE_RULE [listTheory.APPEND] (Q.INST [`xs` |-> `[]`]
+              stmtSimForRoundsTheory.gas_admissible_bind_tail)) (CONJ adm step)))))) >>>
+  HEADGOAL (sg `assign_tuple_targets cx (BaseTarget bt) vi
+      (src with gas_obs := gas_explicit target_marks u.vs_gas_readings) = (INL (),fin)`) >>>
+  HEADGOAL (
+    qpat_assum `eval_target_place cx bt (src with gas_obs := _) = (INL place,mid)` (fn target =>
+      qpat_assum `write_place cx place vi mid = (INL (),fin)` (fn write =>
+        simp[NoAsms,cj 56 vyperInterpreterTheory.evaluate_def,bind_def,target,write]))) >>>
+  HEADGOAL (sg `body_tuple_targets_full_ok cx todo vs_tail`) >>>
+  HEADGOAL (
+    qpat_assum `(?(s:evaluation_state) x t.
+      assign_tuple_targets cx (BaseTarget bt) vi s = (INL x,t)) ==>
+      body_tuple_targets_full_ok cx todo vs_tail` match_mp_tac >>
+    qexistsl [`src with gas_obs := gas_explicit target_marks u.vs_gas_readings`,`()`,`fin`] >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (Q.SUBGOAL_THEN `?q Gq tq.
+    (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (m,Gmid,tmid) [] (OK q,Gq,tq)) /\
+    (!H. valid_horizon cx st0 H fin.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx fin q /\ storage_well_formed_on cx fin (FST H) /\
+      ghost_inv_at (DF H) lo d cenv cx fin Gq tq q) /\
+    (!x. not_fresh_at target_cs x ==>
+      lookup_var x q = lookup_var x m /\ FLOOKUP Gq x = FLOOKUP Gmid x /\
+      op_taint tq (Var x) = op_taint tmid (Var x)) /\
+    fin.scopes = mid.scopes /\
+    q.vs_memory = m.vs_memory /\ q.vs_allocas = m.vs_allocas /\
+    q.vs_alloca_next = m.vs_alloca_next /\ tq.t_mem = tmid.t_mem /\
+    ~block_is_terminated sm /\ ~q.vs_halted /\
+    q.vs_current_bb = sm.cs_current_bb /\ q.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    return_buf_frame d cenv sm q /\ alloca_history func q /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp q)`
+    (qx_choosel_then [`q`,`Gq`,`tq`] (map_every assume_tac o CONJUNCTS))) >>>
+  HEADGOAL (Cases_on `is_word_type sty`) >>>
+  HEADGOAL (
+    sg `compile_store_at_loc cenv.ce_imm_alloca (FST target_r) op0
+      (SOME (slot_loc tr)) target_cs = ((),sm)`) >>>
+  HEADGOAL (
+    qpat_assum `head_store target_cs = ((),sm)` mp_tac >>
+    qpat_assum `FST (SND target_r) = SOME (slot_loc tr)` (fn loc =>
+      qpat_assum `is_word_type sty` (fn word =>
+        simp[NoAsms,Abbr `head_store`,loc,word]))) >>>
+  HEADGOAL (
+    `encode_value stv vi = SOME [(0,typed_val_to_w256 stv vi)]` by
+      (mp_tac (Q.SPECL [`get_tenv cx`,`sty`,`stv`,`vi`]
+         stmtSimAssignStorageFactsTheory.encode_value_word_typed) >>
+       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+       disch_then ACCEPT_TAC)) >>>
+  HEADGOAL (sg `~cx.txn.is_static`) >>>
+  HEADGOAL (
+    qpat_assum `write_storage_slot cx tr slot stv vi mid = (INL (),fin)`
+      (fn write => POP_ASSUM_LIST (K all_tac) >> mp_tac write) >>
+    pure_rewrite_tac[vyperStorageBackendTheory.write_storage_slot_eq] >>
+    Cases_on `cx.txn.is_static` >> simp[]) >>>
+  HEADGOAL (
+    qpat_assum `write_storage_slot cx tr slot stv vi mid = (INL (),fin)`
+      (assume_tac o MATCH_MP vyperScopePreservationTheory.write_storage_slot_scopes)) >>>
+  HEADGOAL (
+    `type_slot_size stv = 1` by
+      (mp_tac (Q.SPECL [`get_tenv cx`,`sty`,`stv`]
+         exprSimUnwrapTheory.word_type_slot_size) >>
+       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+       disch_then ACCEPT_TAC) >>
+    `eval_operand op0 m = SOME (typed_val_to_w256 stv vi)` by
+      (qpat_assum `if is_word_type sty then _ else _` mp_tac >>
+       qpat_assum `op0 = Var xs` (fn eq =>
+         qpat_assum `is_word_type sty` (fn word =>
+           simp[NoAsms,eq,word,eval_operand_def]))) >>
+    `op_taint tmid op0 = {}` by simp[] >>
+    `eval_operand (FST target_r) m = SOME slot` by simp[]) >>>
+  HEADGOAL (
+    `~m.vs_call_ctx.cc_static` by
+      (qpat_assum `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid m`
+        (mp_tac o MATCH_MP stateRelProjTheory.state_rel_call_ctx_rel o
+          MATCH_MP stateRelProjTheory.stmt_state_rel_state_rel) >>
+       simp[call_ctx_rel_def]) >>
+    `allocas_from lo m /\ lo <= m.vs_alloca_next` by
+      (qpat_assum `ghost_inv_at _ lo d cenv cx mid Gmid tmid m` mp_tac >>
+       simp[NoAsms,ghost_inv_at_def] >> strip_tac >> simp[])) >>>
+  HEADGOAL (sg `!H. valid_horizon cx st0 H fin.storage_trace ==>
+    !word mem. storage_dead H tr (update_storage slot word mem) = storage_dead H tr mem`) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >>
+    `valid_horizon cx st0 H mid.storage_trace` by
+      (qpat_assum `!H. valid_horizon cx st0 H fin.storage_trace ==> _` irule >>
+       first_assum ACCEPT_TAC) >>
+    qpat_assum `eval_target_place cx bt _ = (INL place,mid)` (fn run =>
+      qpat_assum `place = StoragePlace tr slot tv` (fn eq =>
+        qpat_assum `tv = stv` (fn ty =>
+          qpat_assum `valid_horizon cx st0 H mid.storage_trace` (fn horizon =>
+            qpat_assum `type_slot_size stv = 1` (fn size =>
+              ACCEPT_TAC (MATCH_MP
+                stmtSimAugAssignPlaceStorageTheory.aug_place_target_storage_dead_stable
+                (LIST_CONJ [REWRITE_RULE [eq,ty] run,horizon,size])))))))) >>>
+  HEADGOAL (
+    mp_tac (Q.INST
+      [`dst` |-> `FST (target_r : operand # data_location option # place_ty option)`,
+       `value` |-> `op0`, `sa` |-> `target_cs`,
+       `sb` |-> `sm`, `s` |-> `m`, `tn` |-> `tmid`, `tv` |-> `stv`,
+       `w` |-> `typed_val_to_w256 stv vi`, `v` |-> `vi`, `es` |-> `mid`,
+       `es'` |-> `fin`, `explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
+       `G` |-> `Gmid`]
+       (REWRITE_RULE [GSYM slot_loc_def]
+         (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+           body_assign_tuple_storage_head_path))) >>
+    impl_tac) >>>
+  HEADGOAL (rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    disch_then (qx_choose_then `q` (qx_choose_then `tq` (fn endpoint =>
+      let
+        val state_rule = cj 4 endpoint
+        val ghost_rule = cj 5 endpoint
+      in
+        strip_assume_tac endpoint >>
+        mk_asm "storage_word_state" state_rule >>
+        mk_asm "storage_word_ghost" ghost_rule
+      end)))) >>>
+  HEADGOAL (sg `!H. valid_horizon cx st0 H fin.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx fin q /\
+    storage_well_formed_on cx fin (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx fin Gmid tq q`) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> disch_tac >>
+    qpat_assum `!K. valid_horizon cx st0 K fin.storage_trace ==>
+                    valid_horizon cx st0 K mid.storage_trace`
+      (drule_then assume_tac) >>
+    qpat_assum `!K. valid_horizon cx st0 K mid.storage_trace ==>
+      targetQ K (INL place) mid Gmid tmid m /\ _` (qspec_then `H` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    qpat_assum `Abbrev (targetQ = _)` (fn th =>
+      CONV_TAC (LAND_CONV (REWRITE_CONV [REWRITE_RULE [markerTheory.Abbrev_def] th]))) >>
+    BETA_TAC >> simp[NoAsms] >> strip_tac) >>>
+  HEADGOAL (
+    qpat_assum `target_post H ctx func cenv cx src cur target_cs u mid (PlaceR place) (Type sty) target_r m`
+      (strip_assume_tac o REWRITE_RULE [target_post_def]) >>
+    qpat_assum `!K. valid_horizon cx st0 K fin.storage_trace ==>
+      !word mem. storage_dead K tr (update_storage slot word mem) = storage_dead K tr mem`
+      (qspec_then `H` (fn guard =>
+        qpat_assum `valid_horizon cx st0 H fin.storage_trace`
+          (assume_tac o MATCH_MP guard))) >>
+    qpat_assum `!K. dead_lo_ok K (DF K) lo cenv cx`
+      (qspec_then `H` assume_tac)) >>>
+  HEADGOAL (conj_tac) >>>
+  HEADGOAL (asm "storage_word_state" match_mp_tac) >>>
+  HEADGOAL (conj_tac) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (reverse conj_tac) >>>
+  HEADGOAL (
+    asm "storage_word_ghost" (fn store =>
+      qpat_assum `dead_lo_ok H (DF H) lo cenv cx` (fn lo_ok =>
+        qpat_assum `ghost_inv_at (DF H) lo d cenv cx mid Gmid tmid m` (fn ghost =>
+          qpat_assum `!word mem. storage_dead H tr (update_storage slot word mem) = storage_dead H tr mem`
+            (fn dead => ACCEPT_TAC (MATCH_MP store (LIST_CONJ [lo_ok,ghost,dead]))))))) >>>
+  HEADGOAL (
+    qpat_assum `evaluate_type (get_tenv cx) sty = SOME stv`
+      (assume_tac o MATCH_MP vyperTypeValuesTheory.evaluate_type_well_formed_type_value) >>
+    sg `!tr slot leaf. place = StoragePlace tr slot leaf ==>
+      well_formed_type_value leaf /\ value_has_type leaf vi`) >>>
+  HEADGOAL (
+    qpat_assum `place = StoragePlace tr slot tv` (fn eq =>
+      qpat_assum `tv = stv` (fn ty => simp[NoAsms,eq,ty])) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `eval_base_place cx bt _ = (INL (PlaceR place),mid)` (fn run =>
+      qpat_assum `valid_horizon cx st0 H mid.storage_trace` (fn horizon =>
+        qpat_assum `storage_well_formed_on cx mid (FST H)` (fn wf =>
+          qpat_assum `!tr slot leaf. place = StoragePlace tr slot leaf ==> _` (fn fits =>
+            qpat_assum `write_place cx place vi mid = (INL (),fin)` (fn write =>
+              ACCEPT_TAC (MATCH_MP tuplePlaceStepTheory.tuple_place_write_storage_wf
+                (LIST_CONJ [run,horizon,wf,fits,write])))))))) >>>
+  HEADGOAL (sg `alloca_history func q`) >>>
+  HEADGOAL (
+    qpat_assum `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid m`
+      (assume_tac o MATCH_MP bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv) >>
+    irule bodyFullPathHistoryTheory.body_full_path_alloca_history >>
+    qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (m,Gmid,tmid) [] (OK q,Gmid,tq)`
+      (qspec_then `DF (storage_trace_horizon mid.storage_trace)` (irule_at Any)) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `~block_is_terminated sm`) >>>
+  HEADGOAL (
+    qpat_assum `compile_store_at_loc cenv.ce_imm_alloca (FST target_r) op0
+      (SOME (slot_loc tr)) target_cs = ((),sm)` mp_tac >>
+    Cases_on `tr` >>
+    simp[NoAsms,slot_loc_def,compile_store_at_loc_def] >>
+    disch_then (mp_tac o MATCH_MP exprOpenPrimitivesTheory.emit_void_terminated) >>
+    simp[NoAsms,is_terminator_def]) >>>
+  HEADGOAL (sg `q.vs_initial_fmp = m.vs_initial_fmp`) >>>
+  HEADGOAL (
+    qpat_assum `q = (_ with vs_inst_idx := _)` mp_tac >>
+    Cases_on `tr` >> simp[NoAsms,tstore_def,sstore_def] >>
+    disch_then (fn eq => rewrite_tac[eq,tstore_def,sstore_def])) >>>
+  HEADGOAL (sg `ctx_has_dalloca ctx ==> allocas_below_fmp q`) >>>
+  HEADGOAL (
+    qpat_assum `q.vs_initial_fmp = m.vs_initial_fmp` (fn initial =>
+      qpat_assum `q.vs_fmp = m.vs_fmp` (fn fmp =>
+        qpat_assum `q.vs_allocas = m.vs_allocas` (fn allocas =>
+          pure_rewrite_tac[allocas_below_fmp_def,initial,fmp,allocas]))) >>
+    qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp m`
+      (ACCEPT_TAC o PURE_REWRITE_RULE [allocas_below_fmp_def])) >>>
+  HEADGOAL (sg `return_buf_frame d cenv sm q`) >>>
+  HEADGOAL (
+    irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+    qexistsl [`cenv`,`u`,`cur`] >> simp[] >> decide_tac) >>>
+  HEADGOAL (qexistsl_tac [`q`,`Gmid`,`tq`] >>
+    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+      gen_tac >> disch_tac >>
+      qpat_assum `!x. lookup_var x q = lookup_var x m /\ _`
+        (qspec_then `x` strip_assume_tac) >> asm_rewrite_tac[]]) >>>
+  HEADGOAL (
+    sg `compile_assign_value cenv (FST target_r) (slot_loc tr) op0 F
+      NONE sty sty (type_memory_bytes cenv sty) target_cs = ((),sm)`) >>>
+  HEADGOAL (
+    qpat_assum `head_store target_cs = ((),sm)` mp_tac >>
+    qpat_assum `dest_loc = slot_loc tr` (fn loc =>
+      qpat_assum `~is_word_type sty` (fn word =>
+        simp[NoAsms,Abbr `head_store`,loc,word]))) >>>
+  HEADGOAL (
+    sg `compile_store_slots cenv op0 (FST target_r) sty tr target_cs = ((),sm)`) >>>
+  HEADGOAL (
+    qpat_assum `compile_assign_value cenv (FST target_r) (slot_loc tr) op0 F
+      NONE sty sty (type_memory_bytes cenv sty) target_cs = ((),sm)` mp_tac >>
+    Cases_on `tr` >>
+    simp[NoAsms,slot_loc_def,compile_assign_value_def,comp_bind_def,comp_return_def]) >>>
+  HEADGOAL (
+    `LENGTH vs = LENGTH tvs` by
+      (irule vyperTypingTheory.values_have_types_length >> simp[]) >>
+    `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+             tuple_in_memory vs tvs p mem` by
+      (qpat_assum `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+                         val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem`
+         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [Once valueEncodingDefsTheory.val_in_memory_def])) >>
+    `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+             val_in_memory stv vi (p + SUM (MAP type_memory_size (TAKE k tvs))) mem` by
+      (qspecl_then [`vs`,`tvs`,`p`,`m.vs_memory`,`tmid`,`k`] mp_tac
+         typedCopyLayoutPtrTheory.tuple_in_memory_robust_element >> simp[])) >>>
+  HEADGOAL (
+    `SUM (MAP type_memory_size (TAKE k tvs)) + type_memory_size stv <=
+     type_memory_size_list tvs` by
+      (drule tupleMemoryLayoutTheory.tuple_element_interval >>
+       simp[valueEncodingProofsTheory.type_memory_size_list_sum])) >>>
+  HEADGOAL (
+    `m.vs_alloca_next < dimword (:256)` by
+      (qpat_assum `stmt_state_rel _ _ _ _ _ mid m`
+         (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_alloca_room) >>
+       disch_then (ACCEPT_TAC o MATCH_MP alloca_room_next_lt)) >>
+    qabbrev_tac `addr = p + SUM (MAP type_memory_size (TAKE k tvs))` >>
+    `addr + type_memory_size stv <= m.vs_alloca_next` by
+      (qpat_assum `p + type_memory_size_list tvs <= u.vs_alloca_next` mp_tac >>
+       qpat_assum `u.vs_alloca_next <= m.vs_alloca_next` mp_tac >>
+       qpat_assum `SUM (MAP type_memory_size (TAKE k tvs)) + _ <= _` mp_tac >>
+       simp[NoAsms,Abbr `addr`] >> decide_tac) >>
+    `addr < dimword (:256)` by
+      (qpat_assum `addr + _ <= m.vs_alloca_next` mp_tac >>
+       qpat_assum `m.vs_alloca_next < dimword (:256)` mp_tac >> decide_tac) >>
+    `w2n (n2w addr : 256 word) = addr` by
+      simp[wordsTheory.w2n_n2w,arithmeticTheory.LESS_MOD]) >>>
+  HEADGOAL (
+    qpat_assum `body_inv tops ctx cenv cx`
+      (mp_then Any mp_tac immutableDeployAssignRangesTheory.immutable_assign_copy_metadata) >>
+    qpat_assum `expr_sim_inv cenv cx env mid` (fn inv =>
+      disch_then (strip_assume_tac o (fn rule => MATCH_MP rule inv)))) >>>
+  HEADGOAL (
+    qpat_assum `if is_word_type sty then _ else _` (fn cases =>
+      qpat_assum `~is_word_type sty` (fn word =>
+        strip_assume_tac (REWRITE_RULE [word] cases)))) >>>
+  HEADGOAL (
+    sg `eval_operand op0 m = SOME (n2w addr) /\ op_taint tmid op0 = {} /\
+        ptr_covers Gmid tmid xs m (type_memory_size stv)`) >>>
+  HEADGOAL (
+    qpat_assum `op0 = Var xs` (fn op_eq => rewrite_tac[op_eq,eval_operand_def]) >>
+    conj_tac >- (simp[NoAsms,Abbr `addr`] >> first_assum ACCEPT_TAC) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!x. op0 = Var x \/ FST target_r = Var x ==> not_fresh_at target_cs x`) >>>
+  HEADGOAL (
+    gen_tac >> disch_then DISJ_CASES_TAC
+    >- (qpat_assum `op0 = Var xs` (fn eq => fs[eq])) >>
+    qpat_assum `!x. FST target_r = Var x ==> not_fresh_at target_cs x` irule >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `~cx.txn.is_static`) >>>
+  HEADGOAL (
+    qpat_assum `write_storage_slot cx tr slot stv vi mid = (INL (),fin)`
+      (fn write => POP_ASSUM_LIST (K all_tac) >> mp_tac write) >>
+    pure_rewrite_tac[vyperStorageBackendTheory.write_storage_slot_eq] >>
+    Cases_on `cx.txn.is_static` >> simp[]) >>>
+  HEADGOAL (sg `?writes. encode_value stv vi = SOME writes`) >>>
+  HEADGOAL (
+    qpat_assum `~cx.txn.is_static` (fn normal =>
+      qpat_assum `write_storage_slot cx tr slot stv vi mid = (INL (),fin)`
+        (mp_tac o REWRITE_RULE [vyperStorageBackendTheory.write_storage_slot_eq,normal])) >>
+    Cases_on `encode_value stv vi` >> simp[]) >>>
+  HEADGOAL (
+    qpat_assum `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid m`
+      (assume_tac o CONJUNCT2 o MATCH_MP stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
+    sg `~m.vs_call_ctx.cc_static /\ allocas_from lo m /\ lo <= m.vs_alloca_next`) >>>
+  HEADGOAL (conj_tac) >>>
+  HEADGOAL (
+    qpat_assum `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid m`
+      (fn state =>
+        let
+          val relation = MATCH_MP stateRelProjTheory.state_rel_call_ctx_rel
+            (MATCH_MP stateRelProjTheory.stmt_state_rel_state_rel state)
+          val static = cj 5 (REWRITE_RULE [call_ctx_rel_def] relation)
+        in
+          rewrite_tac[static]
+        end) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `ghost_inv_at _ lo d cenv cx mid Gmid tmid m`
+      (fn th => let val post = REWRITE_RULE [ghost_inv_at_def] th
+                in ACCEPT_TAC (CONJ (cj 7 post) (cj 8 post)) end)) >>>
+  HEADGOAL (sg `return_buf_frame d cenv target_cs m`) >>>
+  HEADGOAL (
+    irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+    qexistsl [`cenv`,`u`,`cur`] >> simp[]) >>>
+  HEADGOAL (sg `!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at target_cs x`) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >>
+    qpat_assum `local_ptrs_reserved cenv target_cs` (fn reserved =>
+      qpat_assum `cenv.ce_imm_alloca = SOME (Var x)` (fn base =>
+        ACCEPT_TAC (MATCH_MP local_ptrs_reserved_imm_base (CONJ reserved base))))) >>>
+  HEADGOAL (sg `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    storage_place_observed H (StoragePlace tr slot stv) /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H)`) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >>
+    qpat_assum `eval_base_place cx bt _ = (INL (PlaceR place),mid)` (fn reached =>
+      qpat_assum `valid_horizon cx st0 H mid.storage_trace` (fn horizon =>
+        qpat_assum `place = StoragePlace tr slot tv` (fn place_eq =>
+          qpat_assum `tv = stv` (fn ty =>
+            ACCEPT_TAC (REWRITE_RULE [place_eq,ty]
+              (MATCH_MP tuplePlacePointerReadyTheory.tuple_place_pointer_storage_facts
+                (CONJ reached horizon)))))))) >>>
+  HEADGOAL (sg `!H. valid_horizon cx st0 H mid.storage_trace ==> 0 < type_slot_size stv ==>
+    ?rootk root path delta. MEM (tr,rootk,root) (FST H) /\
+      storage_subregion root path delta stv /\ w2n slot = w2n rootk + delta`) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> strip_tac >>
+    qpat_assum `!K. valid_horizon cx st0 K mid.storage_trace ==>
+      storage_place_observed K (StoragePlace tr slot stv) /\ _`
+      (drule_then strip_assume_tac) >>
+    disch_tac >>
+    qpat_assum `storage_place_observed H (StoragePlace tr slot stv)` (fn observed =>
+      qpat_assum `expr_sim_inv cenv cx env mid` (fn inv =>
+        qpat_assum `regions_consistent (FST H)` (fn regions =>
+          qpat_assum `0 < type_slot_size stv` (fn size =>
+            ACCEPT_TAC (MATCH_MP tuplePlaceValueStorageFrameTheory.tuple_place_storage_leaf_horizon
+              (LIST_CONJ [observed,inv,regions,size]))))))) >>>
+  HEADGOAL (sg `w2n slot + type_slot_size stv <= dimword (:256)`) >>>
+  HEADGOAL (Cases_on `type_slot_size stv = 0`) >>>
+  HEADGOAL (
+    asm_rewrite_tac[arithmeticTheory.ADD_0] >>
+    irule arithmeticTheory.LESS_IMP_LESS_OR_EQ >> simp[wordsTheory.w2n_lt]) >>>
+  HEADGOAL (
+    `0 < type_slot_size stv` by
+      (qpat_assum `type_slot_size stv <> 0` mp_tac >> decide_tac) >>
+    qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> 0 < type_slot_size stv ==>
+      ?rootk root path delta. _`
+      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    disch_then (qx_choosel_then [`rk`,`root_ty`,`piece`,`delta`] strip_assume_tac)) >>>
+  HEADGOAL (
+    qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+      storage_place_observed H (StoragePlace tr slot stv) /\ _`
+      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac) >>>
+  HEADGOAL (
+    qpat_assum `expr_sim_inv cenv cx env mid` (fn inv =>
+      qpat_assum `MEM (tr,rk,root_ty) (FST (storage_trace_horizon mid.storage_trace))` (fn root =>
+        qpat_assum `regions_consistent (FST (storage_trace_horizon mid.storage_trace))` (fn consistent =>
+          qpat_assum `storage_subregion root_ty piece delta stv` (fn region =>
+            qpat_assum `0 < type_slot_size stv` (fn size =>
+              mp_tac (MATCH_MP placeStoreStorageTheory.place_store_storage_leaf_bounds
+                (LIST_CONJ [inv,root,consistent,region,size]))))))) >>
+    qpat_assum `w2n slot = w2n rk + delta` (fn eq => simp[NoAsms,eq])) >>>
+  HEADGOAL (sg `eval_operand (FST target_r) m = SOME slot`) >>>
+  HEADGOAL (fs[]) >>>
+  HEADGOAL (sg `type_memory_size stv <> 0 ==>
+    ?x. op0 = Var x /\ ptr_covers Gmid tmid x m (type_memory_size stv)`) >>>
+  HEADGOAL (disch_tac >> qexists_tac `xs` >> conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (Q.SUBGOAL_THEN
+    `type_memory_size stv = 0 \/ w2n (n2w addr:256 word) + type_memory_size stv <= m.vs_alloca_next`
+    ASSUME_TAC) >>>
+  HEADGOAL (
+    disj2_tac >>
+    qpat_assum `w2n (n2w addr:256 word) = addr` (fn eq => pure_rewrite_tac[eq]) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `w2n (n2w addr:256 word) + type_memory_size stv < dimword (:256)`) >>>
+  HEADGOAL (
+    qpat_assum `w2n (n2w addr:256 word) = addr` (fn eq => pure_rewrite_tac[eq]) >>
+    map_every (fn pat => qpat_assum pat mp_tac)
+      [`addr + type_memory_size stv <= m.vs_alloca_next`, `m.vs_alloca_next < dimword (:256)`] >>
+    decide_tac) >>>
+  HEADGOAL (sg `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+    val_in_memory stv vi (w2n (n2w addr:256 word)) mem`) >>>
+  HEADGOAL (
+    qpat_assum `w2n (n2w addr:256 word) = addr` (fn eq => pure_rewrite_tac[eq]) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    mp_tac (Q.INST [
+      `ty` |-> `sty`, `tv` |-> `stv`, `v` |-> `vi`, `tr` |-> `tr`,
+      `src` |-> `op0`, `dst` |-> `FST (target_r : operand # data_location option # place_ty option)`,
+      `sw` |-> `n2w addr : 256 word`, `dw` |-> `slot : 256 word`,
+      `sa` |-> `target_cs`, `sb` |-> `sm`, `s` |-> `m`,
+      `G` |-> `Gmid`, `tn` |-> `tmid`, `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+      (SPEC_ALL bodyFullAssignTopCopyTailTheory.body_assign_slots_full_frame_path)) >>
+    impl_tac) >>>
+  HEADGOAL (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, ALL_TAC]) >>>
+  HEADGOAL (
+    disch_then (qx_choosel_then [`q`,`written_slots`,`Gq`,`tq`] (fn endpoint =>
+      let val facts = CONJUNCTS endpoint
+      in
+        map_every assume_tac (List.take (facts,length facts - 1)) >>
+        mk_asm "storage_aggregate_post" (List.last facts)
+      end))) >>>
+  HEADGOAL (
+    qpat_assum `write_storage_slot cx tr slot stv vi mid = (INL (),fin)`
+      (assume_tac o MATCH_MP vyperScopePreservationTheory.write_storage_slot_scopes) >>
+    qpat_assum `evaluate_type (get_tenv cx) sty = SOME stv`
+      (assume_tac o MATCH_MP vyperTypeValuesTheory.evaluate_type_well_formed_type_value) >>
+    sg `!tr slot leaf. place = StoragePlace tr slot leaf ==>
+      well_formed_type_value leaf /\ value_has_type leaf vi`) >>>
+  HEADGOAL (
+    qpat_assum `place = StoragePlace tr slot tv` (fn eq =>
+      qpat_assum `tv = stv` (fn ty => simp[NoAsms,eq,ty])) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!H. valid_horizon cx st0 H fin.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx fin q /\
+    storage_well_formed_on cx fin (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx fin Gq tq q`) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> disch_tac >>
+    qpat_assum `fin.storage_trace = mid.storage_trace` (fn trace =>
+      qpat_assum `valid_horizon cx st0 H fin.storage_trace`
+        (assume_tac o REWRITE_RULE [trace])) >>
+    qpat_assum `!K. valid_horizon cx st0 K mid.storage_trace ==>
+      targetQ K (INL place) mid Gmid tmid m /\ _` (qspec_then `H` mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    qpat_assum `Abbrev (targetQ = _)` (fn eq =>
+      CONV_TAC (LAND_CONV (REWRITE_CONV [REWRITE_RULE [markerTheory.Abbrev_def] eq]))) >>
+    BETA_TAC >> simp[NoAsms] >> strip_tac) >>>
+  HEADGOAL (
+    qpat_assum `target_post H ctx func cenv cx src cur target_cs u mid (PlaceR place) (Type sty) target_r m`
+      (strip_assume_tac o REWRITE_RULE [target_post_def]) >>
+    qpat_assum `!K. dead_lo_ok K (DF K) lo cenv cx` (qspec_then `H` assume_tac) >>
+    qpat_assum `!K. valid_horizon cx st0 K mid.storage_trace ==>
+      storage_place_observed K (StoragePlace tr slot stv) /\ _`
+      (drule_then strip_assume_tac)) >>>
+  HEADGOAL (Q.SUBGOAL_THEN
+    `?rk rt region_path off. 0 < type_slot_size stv ==>
+        MEM (tr,rk,rt) (FST H) /\ regions_consistent (FST H) /\
+        storage_locks_separated (FST H) (SND H) /\ storage_subregion rt region_path off stv /\
+        w2n slot = w2n rk + off`
+    (qx_choosel_then [`rk`,`rt`,`region_path`,`off`] assume_tac)) >>>
+  HEADGOAL (Cases_on `0 < type_slot_size stv`) >>>
+  HEADGOAL (
+    qpat_assum `!K. valid_horizon cx st0 K mid.storage_trace ==> 0 < type_slot_size stv ==>
+      ?rootk root path delta. _` (qspec_then `H` mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    disch_then (qx_choosel_then [`rootk`,`root`,`path`,`delta`] strip_assume_tac) >>
+    qexistsl_tac [`rootk`,`root`,`path`,`delta`] >> asm_rewrite_tac[]) >>>
+  HEADGOAL (qexistsl_tac [`ARB`,`ARB`,`ARB`,`0`] >> asm_rewrite_tac[]) >>>
+  HEADGOAL (
+    asm "storage_aggregate_post" (qspecl_then [`H`,`mid`,`env`,`rk`,`rt`,`region_path`,`off`] mp_tac) >>
+    impl_tac) >>>
+  HEADGOAL (rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    disch_then (qx_choose_then `ef` strip_assume_tac) >>
+    sg `ef = fin`) >>>
+  HEADGOAL (
+    qpat_assum `write_storage_slot cx tr slot stv vi mid = (INL (),ef)` mp_tac >>
+    qpat_assum `write_storage_slot cx tr slot stv vi mid = (INL (),fin)` (fn eq => simp[NoAsms,eq])) >>>
+  HEADGOAL (
+    qpat_x_assum `ef = fin` SUBST_ALL_TAC >>
+    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, ALL_TAC]) >>>
+  HEADGOAL (
+    qpat_assum `eval_base_place cx bt _ = (INL (PlaceR place),mid)` (fn run =>
+      qpat_assum `valid_horizon cx st0 H mid.storage_trace` (fn horizon =>
+        qpat_assum `storage_well_formed_on cx mid (FST H)` (fn wf =>
+          qpat_assum `!tr slot leaf. place = StoragePlace tr slot leaf ==> _` (fn fits =>
+            qpat_assum `write_place cx place vi mid = (INL (),fin)` (fn write =>
+              ACCEPT_TAC (MATCH_MP tuplePlaceStepTheory.tuple_place_write_storage_wf
+                (LIST_CONJ [run,horizon,wf,fits,write])))))))) >>>
+  HEADGOAL (sg `~block_is_terminated sm`) >>>
+  HEADGOAL (
+    qpat_assum `compile_store_slots cenv op0 (FST target_r) sty tr target_cs = ((),sm)` (fn compile =>
+      qpat_assum `acyclic_struct_metadata cenv.ce_struct_fields` (fn metadata =>
+        ACCEPT_TAC (MATCH_MP (cj 1 stmtSimAssignStorageSparseTheory.store_slots_open)
+          (CONJ compile metadata))))) >>>
+  HEADGOAL (qexistsl_tac [`q`,`Gq`,`tq`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    sg `expr_sim_inv cenv cx env fin /\ fin with gas_obs := [] = fin /\
+        storage_trace_domain cx st0 fin.storage_trace`) >>>
+  HEADGOAL (
+    rpt conj_tac
+    >- (irule tuplePlaceSourceTheory.tuple_place_write_inv >>
+        qexistsl_tac [`place`,`INL ()`,`mid`,`stv`,`vi`] >>
+        rpt conj_tac >> first_assum ACCEPT_TAC)
+    >- (qpat_assum `fin.gas_obs = []` (fn obs =>
+          simp[NoAsms,GSYM obs])) >>
+    qpat_assum `fin.storage_trace = mid.storage_trace`
+      (fn eq => pure_rewrite_tac[eq]) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    sg `!x. not_fresh_at sa x ==> not_fresh_at cur x`) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+    qexists `sa` >> simp[]) >>>
+  HEADGOAL (sg `!x. not_fresh_at cur x ==> not_fresh_at target_cs x`) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+    qexists_tac `cur` >> simp[]) >>>
+  HEADGOAL (sg `!n b sz. local_region cenv fin.scopes q n b sz <=>
+                          local_region cenv mid.scopes m n b sz`) >>>
+  HEADGOAL (
+    qpat_assum `fin.scopes = mid.scopes` (fn eq => pure_rewrite_tac[eq]) >>
+    map_every qx_gen_tac [`n`,`b`,`sz`] >>
+    match_mp_tac (Q.SPECL [`cenv`,`target_cs`,`m`,`q`,`mid.scopes`,`n`,`b`,`sz`]
+      exprSimCopyTheory.copy_buffer_local_region_frame) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    rpt strip_tac >>
+    qpat_assum `!x. not_fresh_at target_cs x ==> lookup_var x q = lookup_var x m /\ _`
+      (drule_then (ACCEPT_TAC o CONJUNCT1))) >>>
+  HEADGOAL (sg `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==>
+                       lookup_var x q = SOME w`) >>>
+  HEADGOAL (
+    map_every qx_gen_tac [`vx`,`vw`] >> strip_tac >>
+    qpat_assum `!x. not_fresh_at cur x ==> not_fresh_at target_cs x`
+      (drule_then assume_tac) >>
+    qpat_assum `!x. not_fresh_at target_cs x ==> lookup_var x q = lookup_var x m /\ _`
+      (drule_then (fn th => pure_rewrite_tac[CONJUNCT1 th])) >>
+    qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==>
+                       lookup_var x m = SOME w`
+      (qspecl_then [`vx`,`vw`] match_mp_tac) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_no_wrap inst z`) >>>
+  HEADGOAL (
+    qpat_assum `body_inv tops ctx cenv cx`
+      (mp_then Any mp_tac bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap) >>
+    disch_then (qspecl_then [`func`,`q`] assume_tac) >> rpt strip_tac >>
+    rename1 `frag_reachable ctx func q rf ri rz` >>
+    qpat_assum `!fn inst u. MEM func ctx.ctx_functions /\ frag_reachable ctx func q fn inst u ==> _`
+      (qspecl_then [`rf`,`ri`,`rz`] mp_tac) >>
+    impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+    disch_then ACCEPT_TAC) >>>
+  HEADGOAL (sg `!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==>
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem`) >>>
+  HEADGOAL (
+    qpat_assum `tq.t_mem = tmid.t_mem` (fn taint =>
+      qpat_assum `q.vs_memory = m.vs_memory` (fn mem =>
+        pure_rewrite_tac[taint,mem])) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (Q.SUBGOAL_THEN `type_memory_size_list tvs = 0 \/
+      (?aid b sz. FLOOKUP q.vs_allocas aid = SOME (b,sz) /\ aid < sm.cs_next_id /\
+        b <= p /\ p + type_memory_size_list tvs <= b + sz /\
+        (!n a len. local_region cenv fin.scopes q n a len ==> b + sz <= a \/ a + len <= b)) \/
+      (?n b sz. local_region cenv fin.scopes q n b sz /\ b <= p /\
+        p + type_memory_size_list tvs <= b + sz /\ local_path_at cenv cx n (p-b) (TupleTV tvs))` ASSUME_TAC) >>>
+  HEADGOAL (
+    qpat_assum `!n b sz. local_region cenv fin.scopes q n b sz <=> _`
+      (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `q.vs_allocas = m.vs_allocas` (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `type_memory_size_list tvs = 0 \/
+      (?aid b sz. FLOOKUP m.vs_allocas aid = SOME (b,sz) /\ _) \/ _`
+      DISJ_CASES_TAC >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+    disj2_tac >>
+    qpat_assum `(?aid b sz. FLOOKUP m.vs_allocas aid = SOME (b,sz) /\ _) \/ _`
+      DISJ_CASES_TAC
+    THENL [disj1_tac, disj2_tac >> first_assum ACCEPT_TAC]) >>>
+  HEADGOAL (
+    qpat_x_assum `?aid b sz. FLOOKUP m.vs_allocas aid = SOME (b,sz) /\ _`
+      (qx_choosel_then [`rid`,`rb`,`rsize`] strip_assume_tac) >>
+    qexistsl [`rid`,`rb`,`rsize`] >> asm_rewrite_tac[] >> decide_tac) >>>
+  HEADGOAL (sg `!i. i < LENGTH tys_tail ==>
+      ?x. EL i ops_tail = Var x /\ not_fresh_at sm x /\ op_taint tq (Var x) = {} /\
+          if is_word_type (EL i tys_tail) then
+            lookup_var x q = SOME (typed_val_to_w256 (EL i tvs_tail) (EL i vs_tail)) /\
+            op_prov Gq (Var x) = NONE
+          else lookup_var x q =
+                 SOME (n2w (p + SUM (MAP type_memory_size (TAKE (SUC k+i) tvs)))) /\
+               ptr_covers Gq tq x q (type_memory_size (EL i tvs_tail))`) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    qpat_assum `!i. i < LENGTH (sty::tys_tail) ==> ?x. _ /\ not_fresh_at target_cs x /\ _`
+      (qspec_then `SUC i` mp_tac) >>
+    (impl_tac >- (simp[NoAsms] >> first_assum ACCEPT_TAC)) >>
+    disch_then (qx_choose_then `xp` strip_assume_tac o SRULE [listTheory.EL])) >>>
+  HEADGOAL (
+    `not_fresh_at sm xp` by
+      (irule freshWritesTheory.not_fresh_at_mono >> qexists `target_cs` >> simp[]) >>
+    qpat_assum `!x. not_fresh_at target_cs x ==> lookup_var x q = lookup_var x m /\ _`
+      (qspec_then `xp` mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac) >>>
+  HEADGOAL (
+    `k + SUC i = SUC k + i` by decide_tac >>
+    qexists `xp` >>
+    (conj_tac >- first_assum ACCEPT_TAC) >>
+    (conj_tac >- first_assum ACCEPT_TAC) >>
+    (conj_tac >- asm_rewrite_tac[])) >>>
+  HEADGOAL (Cases_on `is_word_type (EL i tys_tail)`) >>>
+  HEADGOAL (
+    qpat_x_assum `if is_word_type (EL i tys_tail) then _ else _` (fn values =>
+      qpat_assum `is_word_type (EL i tys_tail)` (fn ty => rewrite_tac[ty] >> mp_tac (REWRITE_RULE [ty] values))) >>
+    strip_tac >> conj_tac) >>>
+  HEADGOAL (
+    qpat_assum `lookup_var xp q = lookup_var xp m` (fn eq => pure_rewrite_tac[eq]) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `op_prov Gmid (Var xp) = NONE` mp_tac >>
+    qpat_assum `FLOOKUP (Gq:(string,num # num) fmap) xp = FLOOKUP Gmid xp`
+      (fn provenance => simp[NoAsms,ptrDisciplineTheory.op_prov_def,provenance])) >>>
+  HEADGOAL (
+    qpat_x_assum `if is_word_type (EL i tys_tail) then _ else _` (fn values =>
+      qpat_assum `~is_word_type (EL i tys_tail)` (fn ty =>
+        rewrite_tac[ty] >> mp_tac (REWRITE_RULE [ty] values))) >>
+    strip_tac >> conj_tac) >>>
+  HEADGOAL (
+    qpat_assum `lookup_var xp q = lookup_var xp m` (fn eq => pure_rewrite_tac[eq]) >>
+    qpat_assum `lookup_var xp m = SOME _` (fn value =>
+      qpat_assum `k + SUC i = SUC k + i` (fn eq =>
+        MATCH_ACCEPT_TAC (REWRITE_RULE [eq] value)))) >>>
+  HEADGOAL (
+    qpat_assum `ptr_covers Gmid tmid xp m _` (fn ptr =>
+      qpat_assum `lookup_var xp q = lookup_var xp m` (fn lookup =>
+        qpat_assum `op_taint tq (Var xp) = op_taint tmid (Var xp)` (fn taint =>
+          qpat_assum `FLOOKUP Gq xp = FLOOKUP Gmid xp` (fn provenance =>
+            MATCH_ACCEPT_TAC (MATCH_MP assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame
+              (LIST_CONJ [ptr,lookup,provenance,taint]))))))) >>>
+  HEADGOAL (sg `alloca_frame cenv src cur u cenv mid m`) >>>
+  HEADGOAL (
+    match_mp_tac (Q.INST
+      [`H` |-> `storage_trace_horizon src.storage_trace`,`ctx` |-> `ctx`,
+       `cx` |-> `cx`,`func` |-> `func`]
+      (INST_TYPE [alpha |-> ``:256``] stmtSimDefsTheory.alloca_frame_of_mem_frame)) >>
+    rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC,
+      qpat_assum `mid.scopes = src.scopes` (fn eq => simp[NoAsms,eq])]) >>>
+  HEADGOAL (sg `alloca_frame cenv es sa s0 cenv mid m`) >>>
+  HEADGOAL (
+    irule stmtSimDefsTheory.alloca_frame_trans >>
+    qexistsl [`cenv`,`src`,`u`,`cur`] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP m.vs_allocas aid = SOME b`) >>>
+  HEADGOAL (
+    map_every qx_gen_tac [`i`,`entry0`] >> disch_tac >>
+    qpat_assum `!aid b. FLOOKUP u.vs_allocas aid = SOME b ==> FLOOKUP m.vs_allocas aid = SOME b`
+      (qspecl_then [`i`,`entry0`] match_mp_tac) >>
+    qpat_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b`
+      (qspecl_then [`i`,`entry0`] match_mp_tac) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `alloca_frame cenv es sa s0 cenv fin q`) >>>
+  HEADGOAL (
+    qpat_assum `!n b sz. local_region cenv fin.scopes q n b sz <=> _` (fn regions =>
+      qpat_assum `q.vs_memory = m.vs_memory` (fn memory =>
+        pure_rewrite_tac[stmtSimDefsTheory.alloca_frame_def,regions,memory])) >>
+    qpat_assum `alloca_frame cenv es sa s0 cenv mid m`
+      (ACCEPT_TAC o PURE_REWRITE_RULE [stmtSimDefsTheory.alloca_frame_def])) >>>
+  HEADGOAL (
+    `sa.cs_next_id <= sm.cs_next_id /\ sa.cs_next_var <= sm.cs_next_var` by
+      (map_every (fn pat => qpat_assum pat mp_tac)
+        [`sa.cs_next_id <= cur.cs_next_id`, `cur.cs_next_id <= target_cs.cs_next_id`,
+         `target_cs.cs_next_id <= sm.cs_next_id`, `sa.cs_next_var <= cur.cs_next_var`,
+         `cur.cs_next_var <= sm.cs_next_var`] >> decide_tac) >>
+    `p + type_memory_size_list tvs <= q.vs_alloca_next /\
+     s0.vs_alloca_next <= q.vs_alloca_next` by
+      (map_every (fn pat => qpat_assum pat mp_tac)
+        [`q.vs_alloca_next = m.vs_alloca_next`, `u.vs_alloca_next <= m.vs_alloca_next`,
+         `p + type_memory_size_list tvs <= u.vs_alloca_next`,
+         `s0.vs_alloca_next <= u.vs_alloca_next`] >> decide_tac)) >>>
+  HEADGOAL (
+    `local_ptrs_reserved cenv sm` by
+      (match_mp_tac (Q.SPECL [`cenv`,`target_cs`,`sm`] local_ptrs_reserved_next_var) >>
+       conj_tac >> first_assum ACCEPT_TAC) >>
+    `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sm x` by
+      (rpt strip_tac >>
+       match_mp_tac (Q.SPECL [`target_cs`,`sm`,`x`] freshWritesTheory.not_fresh_at_mono) >>
+       reverse conj_tac >- first_assum ACCEPT_TAC >>
+       qpat_assum `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at target_cs x`
+         (qspecl_then [`x`,`cap`] match_mp_tac) >> first_assum ACCEPT_TAC) >>
+    `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sm x` by
+      (rpt strip_tac >>
+       match_mp_tac (Q.SPECL [`target_cs`,`sm`,`x`] freshWritesTheory.not_fresh_at_mono) >>
+       reverse conj_tac >- first_assum ACCEPT_TAC >>
+       qpat_assum `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at target_cs x`
+         (qspecl_then [`x`,`cap`] match_mp_tac) >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (sg `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x q = SOME w`) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> lookup_var x q = SOME w`
+      (qspecl_then [`x`,`w`] match_mp_tac) >>
+    conj_tac
+    >- (qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at cur x` match_mp_tac >>
+        first_assum ACCEPT_TAC) >>
+    qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w`
+      (qspecl_then [`x`,`w`] match_mp_tac) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!x. not_fresh_at sa x ==>
+    FLOOKUP Gq x = FLOOKUP G0 x /\ op_taint tq (Var x) = op_taint tn0 (Var x)`) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >>
+    qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at cur x` (drule_then assume_tac) >>
+    qpat_assum `!x. not_fresh_at cur x ==> not_fresh_at target_cs x`
+      (drule_then assume_tac) >>
+    qpat_assum `!x. not_fresh_at target_cs x ==> lookup_var x q = lookup_var x m /\ _`
+      (qspec_then `x` mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+    qpat_assum `!x. not_fresh_at cur x ==> FLOOKUP Gmid x = _ /\ _`
+      (drule_then strip_assume_tac) >>
+    qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP Gu x = _ /\ _`
+      (drule_then strip_assume_tac) >>
+    asm_rewrite_tac[]) >>>
+  HEADGOAL (sg `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+    (!n b cap. local_region cenv es.scopes s0 n b cap ==> off+sz <= b \/ b+cap <= off) /\
+    off <= i /\ i < off+sz /\ i IN tq.t_mem ==> i IN tn0.t_mem`) >>>
+  HEADGOAL (
+    map_every qx_gen_tac [`old_id`,`old_base`,`old_size`,`byte`] >>
+    disch_then (map_every assume_tac o CONJUNCTS) >>
+    `byte IN tmid.t_mem` by (qpat_assum `tq.t_mem = tmid.t_mem` (fn eq => pure_rewrite_tac[GSYM eq]) >>
+      first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (
+    qpat_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN tn0.t_mem`
+      (qspecl_then [`old_id`,`old_base`,`old_size`,`byte`] match_mp_tac) >>
+    rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC, ALL_TAC]) >>>
+  HEADGOAL (
+    `FLOOKUP u.vs_allocas old_id = SOME (old_base,old_size)` by
+      (qpat_assum `!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==> FLOOKUP u.vs_allocas aid = SOME entry`
+         match_mp_tac >> first_assum ACCEPT_TAC) >>
+    `FLOOKUP m.vs_allocas old_id = SOME (old_base,old_size)` by
+      (qpat_assum `!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==> FLOOKUP m.vs_allocas aid = SOME entry`
+         match_mp_tac >> first_assum ACCEPT_TAC) >>
+    `old_id < cur.cs_next_id /\ old_id < target_cs.cs_next_id` by
+      (map_every (fn pat => qpat_assum pat mp_tac)
+        [`old_id < sa.cs_next_id`,`sa.cs_next_id <= cur.cs_next_id`,
+         `cur.cs_next_id <= target_cs.cs_next_id`] >> decide_tac) >>
+    qpat_assum `alloca_frame cenv es sa s0 cenv src u`
+      (mp_tac o Q.SPECL [`old_id`,`old_base`,`old_size`] o REWRITE_RULE [stmtSimDefsTheory.alloca_frame_def]) >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+    disch_then (assume_tac o CONJUNCT2) >>
+    qpat_assum `alloca_frame cenv es sa s0 cenv mid m`
+      (mp_tac o Q.SPECL [`old_id`,`old_base`,`old_size`] o REWRITE_RULE [stmtSimDefsTheory.alloca_frame_def]) >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+    disch_then (assume_tac o CONJUNCT2)) >>>
+  HEADGOAL (
+    qpat_assum `!aid off sz i. FLOOKUP u.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN tu.t_mem`
+      (qspecl_then [`old_id`,`old_base`,`old_size`,`byte`] match_mp_tac) >>
+    rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC, ALL_TAC]) >>>
+  HEADGOAL (
+    `!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==> FLOOKUP q.vs_allocas aid = SOME entry` by
+      (qpat_assum `q.vs_allocas = m.vs_allocas` (fn eq => rewrite_tac[eq]) >>
+       first_assum ACCEPT_TAC) >>
+    `EVERY (assignable_type (get_tenv cx)) tys_tail` by
+      (qpat_assum `EVERY (assignable_type _) (sty::_)` mp_tac >> simp[NoAsms]) >>
+    `values_have_types tvs_tail vs_tail` by simp[vyperTypeDefaultsTheory.values_have_types_LIST_REL]) >>>
+  HEADGOAL (
+    qexistsl_tac [`Gq`,`q`,`tq`] >>
+    gen_tac >> disch_tac >> conj_tac
+    >- (qpat_assum `!D. gas_origin_ptr_path _ (m,Gmid,tmid) [] (OK q,Gq,tq)`
+         (qspec_then `DF H` ACCEPT_TAC)) >>
+    asm "suffix_ih" (qspecl_then
+      [`tys_tail`,`tvs_tail`,`vs_tail`,`ops_tail`,`SUC k`,`p`,`sm`,`shadow_sm`,`fin`,`q`,`Gq`,`tq`]
+      match_mp_tac) >>
+    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, first_assum (ACCEPT_TAC o SYM)]) >>>
+
+  HEADGOAL (
+    mp_tac (Q.INST [`ty` |-> `sty`, `tv` |-> `stv`, `v` |-> `vi`,
+      `p` |-> `place`, `es` |-> `src with gas_obs := gas_explicit target_marks u.vs_gas_readings`,
+      `ee` |-> `mid`, `ff` |-> `fin`, `res` |-> `INR y : unit + exception`,
+      `H` |-> `storage_trace_horizon mid.storage_trace`, `s` |-> `m`]
+      (INST_TYPE [alpha |-> ``:256``] tuplePlaceWriteOutcomeTheory.tuple_place_source_write_outcome)) >>
+    impl_tac) >>>
+  HEADGOAL (rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    simp[NoAsms] >>
+    disch_then (qx_choosel_then [`tr`,`slot`,`tv`] strip_assume_tac)) >>>
+  HEADGOAL (sg `w' = slot /\ FST (SND target_r) = SOME (slot_loc tr) /\ tv = stv`) >>>
+  HEADGOAL (
+    qpat_assum `place = StoragePlace tr slot tv` (fn eq =>
+      qpat_assum `place_ptr_rel cenv cx m (PlaceR place) w' _ (Type sty)`
+        (mp_tac o REWRITE_RULE [eq,place_ptr_rel_def])) >>
+    qpat_assum `evaluate_type (get_tenv cx) sty = SOME stv`
+      (fn eq => simp[NoAsms,eq,EQ_SYM_EQ])) >>>
+  HEADGOAL (
+    qpat_assum `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid m`
+      (fn state =>
+        let
+          val relation = MATCH_MP stateRelProjTheory.state_rel_call_ctx_rel
+            (MATCH_MP stateRelProjTheory.stmt_state_rel_state_rel state)
+          val static = cj 5 (REWRITE_RULE [call_ctx_rel_def] relation)
+        in
+          assume_tac static
+        end) >>
+    sg `m.vs_call_ctx.cc_static /\ allocas_from lo m /\ lo <= m.vs_alloca_next`) >>>
+  HEADGOAL (conj_tac >- asm_rewrite_tac[]) >>>
+  HEADGOAL (
+    qpat_assum `ghost_inv_at _ lo d cenv cx mid Gmid tmid m`
+      (fn th => let val post = REWRITE_RULE [ghost_inv_at_def] th
+                in ACCEPT_TAC (CONJ (cj 7 post) (cj 8 post)) end)) >>>
+  HEADGOAL (`dest_loc = slot_loc tr` by simp[Abbr `dest_loc`]) >>>
+  HEADGOAL (sg `0 < type_slot_size stv`) >>>
+  HEADGOAL (
+    match_mp_tac (Q.SPECL [`get_tenv cx`,`sty`,`stv`]
+      vyperTypeSystemTheory.assignable_type_slot_size_pos) >>
+    conj_tac
+    >- (qpat_assum `EVERY (assignable_type (get_tenv cx)) (sty::_)` mp_tac >> simp[NoAsms]) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `eval_operand (FST target_r) m = SOME slot /\ op_taint tmid (FST target_r) = {}`) >>>
+  HEADGOAL (
+    conj_tac >- fs[] >>
+    qpat_assum `bodyFullTargetDefs$target_ptr_ok cenv (PlaceR place) target_r Gmid tmid m`
+      (ACCEPT_TAC o cj 1 o REWRITE_RULE [bodyFullTargetDefsTheory.target_ptr_ok_def])) >>>
+  HEADGOAL (Q.SUBGOAL_THEN `?abort_state Gabort tabort.
+    !D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (m,Gmid,tmid) [] (Abort ExHalt_abort (halt_state (set_returndata [] abort_state)), Gabort, tabort)`
+    (qx_choosel_then [`abort_state`,`Gabort`,`tabort`] assume_tac)) >>>
+  HEADGOAL (Cases_on `is_word_type sty`) >>>
+  HEADGOAL (sg `compile_store_at_loc cenv.ce_imm_alloca (FST target_r) op0
+    (SOME (slot_loc tr)) target_cs = ((),sm)`) >>>
+  HEADGOAL (
+    qpat_assum `head_store target_cs = ((),sm)` mp_tac >>
+    qpat_assum `FST (SND target_r) = SOME (slot_loc tr)` (fn loc =>
+      qpat_assum `is_word_type sty` (fn word =>
+        simp[NoAsms,Abbr `head_store`,loc,word]))) >>>
+  HEADGOAL (sg `emit_void (if tr then TSTORE else SSTORE) [FST target_r;op0] target_cs = ((),sm)`) >>>
+  HEADGOAL (
+    qpat_assum `compile_store_at_loc cenv.ce_imm_alloca (FST target_r) op0
+      (SOME (slot_loc tr)) target_cs = ((),sm)` mp_tac >>
+    Cases_on `tr` >> simp[NoAsms,slot_loc_def,compile_store_at_loc_def]) >>>
+  HEADGOAL (sg `eval_operand op0 m = SOME (typed_val_to_w256 stv vi) /\ op_taint tmid op0 = {}`) >>>
+  HEADGOAL (
+    qpat_assum `if is_word_type sty then _ else _` mp_tac >>
+    qpat_assum `op0 = Var xs` (fn operand =>
+      qpat_assum `is_word_type sty` (fn word =>
+        simp[NoAsms,operand,word,eval_operand_def])) >> simp[]) >>>
+  HEADGOAL (
+    qexistsl_tac [`m`,`Gmid`,`tmid`] >> gen_tac >>
+    match_mp_tac (Q.INST [
+      `dst` |-> `FST (target_r : operand # data_location option # place_ty option)`,
+      `value` |-> `op0`, `addr` |-> `slot : 256 word`, `w` |-> `typed_val_to_w256 stv vi`,
+      `sa` |-> `target_cs`, `sb` |-> `sm`, `tr` |-> `tr`]
+      augAssignFullStoreTheory.storage_emit_static_origin_ptr) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    sg `compile_assign_value cenv (FST target_r) (slot_loc tr) op0 F
+      NONE sty sty (type_memory_bytes cenv sty) target_cs = ((),sm)`) >>>
+  HEADGOAL (
+    qpat_assum `head_store target_cs = ((),sm)` mp_tac >>
+    qpat_assum `dest_loc = slot_loc tr` (fn loc =>
+      qpat_assum `~is_word_type sty` (fn word =>
+        simp[NoAsms,Abbr `head_store`,loc,word]))) >>>
+  HEADGOAL (
+    sg `compile_store_slots cenv op0 (FST target_r) sty tr target_cs = ((),sm)`) >>>
+  HEADGOAL (
+    qpat_assum `compile_assign_value cenv (FST target_r) (slot_loc tr) op0 F
+      NONE sty sty (type_memory_bytes cenv sty) target_cs = ((),sm)` mp_tac >>
+    Cases_on `tr` >>
+    simp[NoAsms,slot_loc_def,compile_assign_value_def,comp_bind_def,comp_return_def]) >>>
+  HEADGOAL (
+    `LENGTH vs = LENGTH tvs` by
+      (irule vyperTypingTheory.values_have_types_length >> simp[]) >>
+    `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+             tuple_in_memory vs tvs p mem` by
+      (qpat_assum `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+                         val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem`
+         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [Once valueEncodingDefsTheory.val_in_memory_def])) >>
+    `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+             val_in_memory stv vi (p + SUM (MAP type_memory_size (TAKE k tvs))) mem` by
+      (qspecl_then [`vs`,`tvs`,`p`,`m.vs_memory`,`tmid`,`k`] mp_tac
+         typedCopyLayoutPtrTheory.tuple_in_memory_robust_element >> simp[])) >>>
+  HEADGOAL (
+    `SUM (MAP type_memory_size (TAKE k tvs)) + type_memory_size stv <=
+     type_memory_size_list tvs` by
+      (drule tupleMemoryLayoutTheory.tuple_element_interval >>
+       simp[valueEncodingProofsTheory.type_memory_size_list_sum])) >>>
+  HEADGOAL (
+    `m.vs_alloca_next < dimword (:256)` by
+      (qpat_assum `stmt_state_rel _ _ _ _ _ mid m`
+         (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_alloca_room) >>
+       disch_then (ACCEPT_TAC o MATCH_MP alloca_room_next_lt)) >>
+    qabbrev_tac `addr = p + SUM (MAP type_memory_size (TAKE k tvs))` >>
+    `addr + type_memory_size stv <= m.vs_alloca_next` by
+      (qpat_assum `p + type_memory_size_list tvs <= u.vs_alloca_next` mp_tac >>
+       qpat_assum `u.vs_alloca_next <= m.vs_alloca_next` mp_tac >>
+       qpat_assum `SUM (MAP type_memory_size (TAKE k tvs)) + _ <= _` mp_tac >>
+       simp[NoAsms,Abbr `addr`] >> decide_tac) >>
+    `addr < dimword (:256)` by
+      (qpat_assum `addr + _ <= m.vs_alloca_next` mp_tac >>
+       qpat_assum `m.vs_alloca_next < dimword (:256)` mp_tac >> decide_tac) >>
+    `w2n (n2w addr : 256 word) = addr` by
+      simp[wordsTheory.w2n_n2w,arithmeticTheory.LESS_MOD]) >>>
+  HEADGOAL (
+    qpat_assum `body_inv tops ctx cenv cx`
+      (mp_then Any mp_tac immutableDeployAssignRangesTheory.immutable_assign_copy_metadata) >>
+    qpat_assum `expr_sim_inv cenv cx env mid` (fn inv =>
+      disch_then (strip_assume_tac o (fn rule => MATCH_MP rule inv)))) >>>
+  HEADGOAL (
+    qpat_assum `if is_word_type sty then _ else _` (fn cases =>
+      qpat_assum `~is_word_type sty` (fn word =>
+        strip_assume_tac (REWRITE_RULE [word] cases)))) >>>
+  HEADGOAL (
+    sg `eval_operand op0 m = SOME (n2w addr) /\ op_taint tmid op0 = {} /\
+        ptr_covers Gmid tmid xs m (type_memory_size stv)`) >>>
+  HEADGOAL (
+    qpat_assum `op0 = Var xs` (fn op_eq => rewrite_tac[op_eq,eval_operand_def]) >>
+    conj_tac >- (simp[NoAsms,Abbr `addr`] >> first_assum ACCEPT_TAC) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!x. op0 = Var x \/ FST target_r = Var x ==> not_fresh_at target_cs x`) >>>
+  HEADGOAL (
+    gen_tac >> disch_then DISJ_CASES_TAC
+    >- (qpat_assum `op0 = Var xs` (fn eq => fs[eq])) >>
+    qpat_assum `!x. FST target_r = Var x ==> not_fresh_at target_cs x` irule >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    storage_place_observed H (StoragePlace tr slot stv) /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H)`) >>>
+  HEADGOAL (
+    gen_tac >> disch_tac >>
+    qpat_assum `eval_base_place cx bt _ = (INL (PlaceR place),mid)` (fn reached =>
+      qpat_assum `valid_horizon cx st0 H mid.storage_trace` (fn horizon =>
+        qpat_assum `place = StoragePlace tr slot tv` (fn place_eq =>
+          qpat_assum `tv = stv` (fn ty =>
+            ACCEPT_TAC (REWRITE_RULE [place_eq,ty]
+              (MATCH_MP tuplePlacePointerReadyTheory.tuple_place_pointer_storage_facts
+                (CONJ reached horizon)))))))) >>>
+  HEADGOAL (sg `!H. valid_horizon cx st0 H mid.storage_trace ==> 0 < type_slot_size stv ==>
+    ?rootk root path delta. MEM (tr,rootk,root) (FST H) /\
+      storage_subregion root path delta stv /\ w2n slot = w2n rootk + delta`) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> strip_tac >>
+    qpat_assum `!K. valid_horizon cx st0 K mid.storage_trace ==>
+      storage_place_observed K (StoragePlace tr slot stv) /\ _`
+      (drule_then strip_assume_tac) >>
+    disch_tac >>
+    qpat_assum `storage_place_observed H (StoragePlace tr slot stv)` (fn observed =>
+      qpat_assum `expr_sim_inv cenv cx env mid` (fn inv =>
+        qpat_assum `regions_consistent (FST H)` (fn regions =>
+          qpat_assum `0 < type_slot_size stv` (fn size =>
+            ACCEPT_TAC (MATCH_MP tuplePlaceValueStorageFrameTheory.tuple_place_storage_leaf_horizon
+              (LIST_CONJ [observed,inv,regions,size]))))))) >>>
+  HEADGOAL (sg `w2n slot + type_slot_size stv <= dimword (:256)`) >>>
+  HEADGOAL (
+    qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> 0 < type_slot_size stv ==>
+      ?rootk root path delta. _`
+      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    disch_then (qx_choosel_then [`rk`,`root_ty`,`piece`,`delta`] strip_assume_tac)) >>>
+  HEADGOAL (
+    qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+      storage_place_observed H (StoragePlace tr slot stv) /\ _`
+      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac) >>>
+  HEADGOAL (
+    qpat_assum `expr_sim_inv cenv cx env mid` (fn inv =>
+      qpat_assum `MEM (tr,rk,root_ty) (FST (storage_trace_horizon mid.storage_trace))` (fn root =>
+        qpat_assum `regions_consistent (FST (storage_trace_horizon mid.storage_trace))` (fn consistent =>
+          qpat_assum `storage_subregion root_ty piece delta stv` (fn region =>
+            qpat_assum `0 < type_slot_size stv` (fn size =>
+              mp_tac (MATCH_MP placeStoreStorageTheory.place_store_storage_leaf_bounds
+                (LIST_CONJ [inv,root,consistent,region,size]))))))) >>
+    qpat_assum `w2n slot = w2n rk + delta` (fn eq => simp[NoAsms,eq])) >>>
+  HEADGOAL (sg `eval_operand (FST target_r) m = SOME slot`) >>>
+  HEADGOAL (fs[]) >>>
+  HEADGOAL (sg `type_memory_size stv <> 0 ==>
+    ?x. op0 = Var x /\ ptr_covers Gmid tmid x m (type_memory_size stv)`) >>>
+  HEADGOAL (disch_tac >> qexists_tac `xs` >> conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (Q.SUBGOAL_THEN
+    `type_memory_size stv = 0 \/ w2n (n2w addr:256 word) + type_memory_size stv <= m.vs_alloca_next`
+    ASSUME_TAC) >>>
+  HEADGOAL (
+    disj2_tac >>
+    qpat_assum `w2n (n2w addr:256 word) = addr` (fn eq => pure_rewrite_tac[eq]) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `w2n (n2w addr:256 word) + type_memory_size stv < dimword (:256)`) >>>
+  HEADGOAL (
+    qpat_assum `w2n (n2w addr:256 word) = addr` (fn eq => pure_rewrite_tac[eq]) >>
+    map_every (fn pat => qpat_assum pat mp_tac)
+      [`addr + type_memory_size stv <= m.vs_alloca_next`, `m.vs_alloca_next < dimword (:256)`] >>
+    decide_tac) >>>
+  HEADGOAL (sg `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+    val_in_memory stv vi (w2n (n2w addr:256 word)) mem`) >>>
+  HEADGOAL (
+    qpat_assum `w2n (n2w addr:256 word) = addr` (fn eq => pure_rewrite_tac[eq]) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `value_has_type stv vi`
+      (qx_choose_then `writes` assume_tac o
+       REWRITE_RULE [optionTheory.IS_SOME_EXISTS] o
+       MATCH_MP (cj 1 vyperTypingTheory.value_has_type_equiv))) >>>
+  HEADGOAL (
+    mp_tac (Q.SPECL [`cenv`,`get_tenv cx`,`sty`,`stv`,`vi`,`op0`,
+      `FST (target_r : operand # data_location option # place_ty option)`,`tr`,
+      `target_cs`,`sm`,`m`,`n2w addr : 256 word`,`slot : 256 word`,
+      `tmid`,`Gmid`,`writes`,`func`,`ctx`,`lo`,`gas_explicit_sites ctx shadow_ctx`,`PG`]
+      bodyFullStoreSlotsStaticTheory.compile_store_slots_static_origin_ptr_path) >>
+    impl_tac) >>>
+  HEADGOAL (rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    disch_then (qx_choosel_then [`q`,`Gq`,`tq`] (map_every assume_tac o CONJUNCTS)) >>
+    qexistsl_tac [`q`,`Gq`,`tq`] >> qx_gen_tac `D` >>
+    `type_slot_size stv <> 0` by
+      (qpat_assum `0 < type_slot_size stv` mp_tac >> decide_tac) >>
+    qpat_assum `type_slot_size stv <> 0` (fn size =>
+      qpat_assum `!D. gas_origin_ptr_path _ (m,Gmid,tmid) [] ((if _ then _ else _),Gq,tq)`
+        (qspec_then `D` (ACCEPT_TAC o SIMP_RULE (srw_ss()) [size])))) >>>
+  HEADGOAL (
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >> BETA_TAC >>
+    reverse conj_tac >- first_assum ACCEPT_TAC >>
+    qexistsl_tac [`Gabort`,`fin`,`Abort ExHalt_abort (halt_state (set_returndata [] abort_state))`,
+      `INR y`,`tabort`]) >>>
+  HEADGOAL (conj_tac >- first_assum ACCEPT_TAC) >>>
+  HEADGOAL (simp[NoAsms,exit_result_def]) >>>
+  HEADGOAL (gen_tac >> disch_tac >> conj_tac) >>>
+  HEADGOAL (
+    qpat_assum `!D. gas_origin_ptr_path _ (m,Gmid,tmid) [] (Abort _ _,Gabort,tabort)`
+      (qspec_then `DF H` ACCEPT_TAC)) >>>
+  HEADGOAL (
+    simp[Abbr `suffixR`,stmt_exit_ptr_def,halt_exit_def,expr_exit_def]) >>>
+  HEADGOAL (
+    `LENGTH gs = LENGTH tys` by metis_tac[LIST_REL_LENGTH] >>
+    `env.type_defs = get_tenv cx` by
+      (irule exprSimAbiDecodeEntryTypingTheory.abi_decode_inv_type_env >>
+       qexistsl_tac [`cenv`,`es`] >> simp[]) >>
+    `EVERY (assignable_type (get_tenv cx)) tys` by
+      (qpat_assum `env.type_defs = get_tenv cx` (fn types =>
+       qpat_assum `assignable_type env.type_defs (TupleT tys)`
+         (ACCEPT_TAC o cj 3 o PURE_REWRITE_RULE [types,Once assignable_type_def])))) >>>
+  HEADGOAL (
+  `!ats g. alloc_limits_assignments cenv ats /\ MEM g ats ==>
+      alloc_limits_assignment cenv g` by
+    (Induct >> simp[NoAsms,allocLimitsTheory.alloc_limits_assignment_def] >> metis_tac[]) ) >>>
+  HEADGOAL (
+  `!ats g. call_evaluation_safe cx (int_calls_atargets ats) /\ MEM g ats ==>
+      call_evaluation_safe cx (int_calls_atarget g)` by
+    (Induct >> simp[NoAsms,int_calls_atarget_def] >>
+     metis_tac[call_evaluation_safe_append_left,call_evaluation_safe_append_right]) ) >>>
+  HEADGOAL (
+    sg `!i. i < LENGTH gs ==> ?head.
+      EL i gs = BaseTarget head /\ supported_target tops bindings head /\
+      well_typed_target env head (EL i tys) /\
+      call_evaluation_safe cx (int_calls_target head) /\
+      target_indices_pre cenv cx env head`) >>>
+  HEADGOAL (qx_gen_tac `i` >> strip_tac >>
+     `MEM (EL i gs) gs` by simp[listTheory.EL_MEM] >>
+     `?head. EL i gs = BaseTarget head /\ supported_target tops bindings head` by
+       (qpat_assum `EVERY (\g. case g of BaseTarget bt => supported_target tops bindings bt | TupleTarget ts => F) gs`
+          (qspec_then `EL i gs` mp_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
+        BETA_TAC >> impl_tac >- first_assum ACCEPT_TAC >>
+        Cases_on `EL i gs` >> simp[])) >>>
+  HEADGOAL (
+     `type_place_target env head = SOME (Type (EL i tys))` by
+       (qpat_assum `LIST_REL (\g ty. well_typed_atarget env g ty) _ _`
+         (mp_tac o REWRITE_RULE [listTheory.LIST_REL_EL_EQN]) >>
+        strip_tac >> first_x_assum (qspec_then `i` mp_tac) >>
+        simp[tuple_target_base_type]) ) >>>
+  HEADGOAL (
+
+     `MEM (BaseTarget head) gs` by metis_tac[] >>
+     `call_evaluation_safe cx (int_calls_target head)` by
+       (`call_evaluation_safe cx (int_calls_atargets gs)` by
+          (qpat_assum `call_evaluation_safe cx (int_calls_stmt _)` mp_tac >>
+           simp[NoAsms,int_calls_stmt_def,int_calls_atarget_def] >>
+           metis_tac[call_evaluation_safe_append_left]) >>
+        qpat_assum `!ats g. call_evaluation_safe _ _ /\ MEM _ _ ==> _`
+          (qspecl_then [`gs`,`BaseTarget head`] mp_tac) >>
+        simp[int_calls_atarget_def]) ) >>>
+  HEADGOAL (
+     `!ats p g. MEM g ats /\ supported_assignment_exists p g ==>
+       supported_assignments_exists p ats` by
+       (POP_ASSUM_LIST (K all_tac) >> Induct >>
+        simp[NoAsms,supported_assignment_exists_def] >> metis_tac[])) >>>
+  HEADGOAL (
+     `!p. supported_target_exists p head ==>
+       supported_stmt_expr_exists p (Assign (TupleTarget gs) e)` by
+       (gen_tac >> strip_tac >>
+        simp[NoAsms,supported_stmt_expr_exists_def,supported_assignment_exists_def] >>
+        disj1_tac >>
+        qpat_assum `!ats p g. MEM g ats /\ supported_assignment_exists p g ==> _`
+          (qspecl_then [`gs`,`p`,`BaseTarget head`] match_mp_tac) >>
+        simp[supported_assignment_exists_def])) >>>
+  HEADGOAL (
+
+     `alloc_limits_target cenv head` by
+       (`alloc_limits_assignments cenv gs` by
+          fs[stmt_exprs_ok_def,allocLimitsTheory.alloc_limits_stmt_def,
+             allocLimitsTheory.alloc_limits_assignment_def] >>
+        qpat_assum `!ats g. alloc_limits_assignments _ _ /\ MEM _ _ ==> _`
+          (qspecl_then [`gs`,`BaseTarget head`] mp_tac) >>
+        simp[allocLimitsTheory.alloc_limits_assignment_def]) ) >>>
+  HEADGOAL (
+
+     qexists_tac `head` >> asm_simp_tac bool_ss [well_typed_target_def] >>
+     `supported_program tops /\ get_module_code cx NONE = SOME tops /\
+       (!a. is_dynamic (vyper_to_abi_type (get_tenv cx) a) ==>
+            is_dynamic (vyper_to_abi_type (type_env tops) a))` by fs[body_inv_def] >>
+     `cx_tops cx = tops` by metis_tac[cx_tops_module] ) >>>
+  HEADGOAL (
+     `~supported_target_exists (const_name_root cx) head` by
+       (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+        qpat_assum `supported_stmt tops bindings (Assign (TupleTarget gs) e)`
+          (fn supported =>
+           assume_tac (MATCH_MP
+             (MATCH_MP (cj 1 supported_stmts_no_name_root) supported)
+             (MATCH_MP body_inv_const_name_root inv)))) >>
+        qpat_assum `!p. supported_target_exists p head ==> _`
+          (qspec_then `const_name_root cx` mp_tac) >>
+        simp[])) >>>
+  HEADGOAL (
+     `~supported_target_exists (\x. ~is_extcode x /\ ~byte_widths_expr x) head` by
+       (qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o REWRITE_RULE [stmt_exprs_ok_def]) >>
+        metis_tac[]) >>
+     drule_then strip_assume_tac bodyStorageCasesTheory.supported_target_storage_syntax >>
+     irule popTargetPreTheory.target_indices_pre_of_body >>
+     simp[]) >>>
+  HEADGOAL (
+     `~supported_target_exists is_extcode head` by
+       metis_tac[ctorDeployLoweringFrameSupportTheory.deploy_frame_supported_target_no_extcode] >>
+     qpat_assum `supported_target tops bindings head` mp_tac >>
+     qpat_assum `~supported_target_exists (\x. ~is_extcode x /\ _) head` mp_tac >>
+     qpat_assum `~supported_target_exists is_extcode head` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `head` >> gvs[byte_widths_expr_def,supported_target_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,AllCaseEqs()] >>
+     rpt strip_tac
+     >~ [`byte_widths_expr x`]
+     >- (rename1 `byte_widths_expr x` >>
+         `~is_extcode x` by metis_tac[supportedExprTraverseTheory.supported_expr_exists_root] >>
+         spose_not_then assume_tac >>
+         qpat_x_assum `~supported_expr_exists (\y. ~is_extcode y /\ _) x`
+           (irule o NOT_ELIM) >>
+         irule supportedExprTraverseTheory.supported_expr_exists_root >> simp[]) >>
+     rename1 `byte_widths_target b` >> Cases_on `b` >> gvs[byte_widths_expr_def]) >>>
+  HEADGOAL (
+    `EVERY (\g. case g of BaseTarget bt => supported_target tops bindings bt /\
+            target_indices_pre cenv cx env bt | TupleTarget ts => F) gs` by
+      (rewrite_tac[EVERY_EL] >> qx_gen_tac `i` >> strip_tac >>
+       qpat_assum `!i. i < LENGTH gs ==> ?head. _`
+         (qspec_then `i` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
+       disch_then (qx_choose_then `head` strip_assume_tac) >> simp[])) >>>
+  HEADGOAL (
+    `call_evaluation_safe cx (int_calls_atargets gs)` by
+      (qpat_assum `call_evaluation_safe cx (int_calls_stmt _)` mp_tac >>
+       simp[NoAsms,int_calls_stmt_def,int_calls_atarget_def] >>
+       metis_tac[call_evaluation_safe_append_left]) >>
+    `expr_sim_inv cenv cx env (ee with gas_obs := [])` by
+      simp[exprSimHypsDefsTheory.expr_sim_inv_gas_obs]) >>>
+  HEADGOAL (
+    `?tv er. eval_expr cx e (es with gas_obs := obs) = (INL tv,er) /\
+       read_result cx tv er = (INL (ArrayV (TupleV vs)),ee with gas_obs := [])` by
+      (qpat_assum `bind (eval_expr cx e) (read_result cx) _ = (INL (ArrayV (TupleV vs)),_)`
+         (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split) >> simp[]) >>
+    `body_tuple_targets_full_ok cx gs vs` by
+      (qpat_assum `!s tv t s' v t'. _ ==> body_tuple_target_full_ok _ _ _`
+         (qspecl_then [`es with gas_obs := obs`,`tv`,`er`,`er`,`ArrayV (TupleV vs)`,
+             `ee with gas_obs := []`] mp_tac) >> simp[body_tuple_target_full_ok_def])) >>>
+  HEADGOAL (
+    `assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs)) =
+       assign_tuple_target_list cx gs vs` by simp[Once evaluate_def] >>
+    `gas_admissible (assign_tuple_target_list cx gs vs) (stmt_res_ok lctx)
+       (ee with gas_obs := [])` by
+      (qpat_assum `gas_admissible (eval_stmt cx (Assign (TupleTarget gs) e)) _ es`
+        (fn adm => qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
+         (fn step => mp_tac (MATCH_MP stmtSimForRoundsTheory.gas_admissible_bind_tail
+            (CONJ (REWRITE_RULE [stmtSimAssignTupleTheory.eval_assign_tuple_action] adm) step))))
+       >> simp[])) >>>
+  HEADGOAL (
+    Cases_on `is_memory_view e /\ vv_location vv = SOME LocMemory /\
+      EXISTS (\t. ~is_word_type t) tys /\
+      0 < SUM (MAP (type_memory_bytes cenv) tys)`) >>>
+  HEADGOAL (
+    qpat_assum `ptr_val_ok _ _ _ _ _ _ _`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [ptr_val_ok_def,is_word_type_def]) >>
+    qpat_assum `ptr_mem_ok _ _ _ _ _ _ _`
+      (mp_tac o Q.SPECL [`TupleTV tvs`,`w`] o REWRITE_RULE [ptr_mem_ok_def]) >>
+    simp[is_word_type_def,val_footprint_def,valueEncodingTheory.type_memory_size_def] >> strip_tac >>
+    qpat_assum `expr_store_bound _ _ _ _ _`
+      (mp_tac o Q.SPECL [`TupleTV tvs`,`w`] o REWRITE_RULE [exprSimMemDefsTheory.expr_store_bound_def]) >>
+    simp[is_word_type_def,val_store_size_def,valueEncodingTheory.type_memory_size_def] >> strip_tac >>
+    qpat_assum `op = Var x` SUBST_ALL_TAC) >>>
+  HEADGOAL (
+    `lookup_var x v = SOME w` by
+      (qpat_assum `eval_operand (Var x) v = SOME w`
+         (ACCEPT_TAC o REWRITE_RULE [eval_operand_def])) >>
+    `ptr_covers G' tn' x v (type_memory_size_list tvs)` by
+      (rewrite_tac[ptr_covers_def] >>
+       conj_tac >- first_assum ACCEPT_TAC >>
+       qexistsl_tac [`w`,`b`,`sz`] >> rpt conj_tac >>
+       FIRST [first_assum ACCEPT_TAC,
+         qpat_assum `w2n w + val_store_size (TupleTV tvs) _ <= b + sz` mp_tac >>
+         simp[NoAsms,val_store_size_def,valueEncodingTheory.type_memory_size_def,ADD_COMM]]) >>
+    `v.vs_alloca_next < dimword (:256)` by
+      (qpat_assum `stmt_state_rel _ _ _ _ _ _ v`
+         (ACCEPT_TAC o MATCH_MP alloca_room_next_lt o
+          MATCH_MP stateRelProjTheory.stmt_state_rel_alloca_room))) >>>
+  HEADGOAL (
+    `w2n w + type_memory_size_list tvs < dimword (:256) /\
+     type_memory_size_list tvs < dimword (:256)` by
+      (qpat_assum `type_memory_size_list tvs + w2n w <= v.vs_alloca_next` mp_tac >>
+       qpat_assum `v.vs_alloca_next < dimword (:256)` mp_tac >> decide_tac)) >>>
+  HEADGOAL (
+    `allocas_from lo v /\ lo <= v.vs_alloca_next` by
+      (qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ v`
+         (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >> simp[]) >>
+    `local_ptrs_reserved cenv su` by
+      (match_mp_tac (Q.SPECL [`cenv`,`sa`,`su`] local_ptrs_reserved_next_var) >>
+       conj_tac >> first_assum ACCEPT_TAC) >>
+    `not_fresh_at su x` by
+      (qpat_assum `lower_value compile_expr cenv (TupleT tys) e sa = (Var x,su)` (fn code =>
+         qpat_assum `local_ptrs_reserved cenv sa` (fn reserved =>
+           qspec_then `x` mp_tac
+             (MATCH_MP exprOperandVarTheory.compile_lower_value_var (CONJ code reserved)))) >>
+       simp[NoAsms])) >>>
+  HEADGOAL (
+    `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at su x` by
+      (rpt gen_tac >> disch_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `sa` >> simp[]) >>
+    `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at su x` by
+      (rpt gen_tac >> disch_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `sa` >> simp[])) >>>
+  HEADGOAL (
+    `~v.vs_halted` by
+      (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK v,G',tn')`
+         (ACCEPT_TAC o MATCH_MP fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted o
+          CONJUNCT2 o MATCH_MP gas_origin_ptr_path_projections)) >>
+    qpat_x_assum `(if _ then _ else _) su = (staged,sl)` mp_tac >>
+    simp[comp_bind_def,comp_return_def] >>
+    Cases_on `compile_alloc_buffer (type_memory_size_list tvs) su` >>
+    rename1 `compile_alloc_buffer _ su = (stage_buf,stage_mid)` >>
+    Cases_on `emit_void MCOPY [stage_buf.buf_operand; Var x;
+      Lit (n2w (type_memory_size_list tvs))] stage_mid` >>
+    simp[comp_bind_def,comp_ignore_bind_def,comp_return_def] >> strip_tac) >>>
+  HEADGOAL (Cases_on `q` >> gvs[] >>
+    rename1 `compile_tuple_load_all _ _ _ _ sl = _` >>
+    `0 < type_memory_size_list tvs` by metis_tac[]) >>>
+  HEADGOAL (
+    `compile_copy_memory stage_buf.buf_operand (Var x) (type_memory_size_list tvs)
+       stage_mid = ((),sl)` by
+      (Cases_on `type_memory_size_list tvs` >> gvs[compile_copy_memory_def]) >>
+    `cs_extends su stage_mid /\ cs_extends stage_mid sl` by
+      metis_tac[ci_mono_compile_alloc_buffer,ci_mono_compile_copy_memory,ci_mono_def,pairTheory.SND] >>
+    `fn_has_code su stage_mid func /\ fn_has_code stage_mid sl func` by
+      metis_tac[fn_has_code_split]) >>>
+  HEADGOAL (
+    `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx
+       (ee with gas_obs := []) v` by
+      simp[exprLoweringPropsTheory.stmt_state_rel_start_gas_obs] >>
+    drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)
+      (INST_TYPE [beta |-> ``:256``] bodyFullMemoryStageTheory.body_full_memory_stage_frame_path) >>
+    disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+    disch_then (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
+    disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+    disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
+    disch_then (drule_at (Pat `compile_copy_memory _ _ _ _ = _`)) >>
+    disch_then (drule_at (Pat `lookup_var _ _ = SOME _`))) >>>
+  HEADGOAL (disch_then (qspec_then `lo` mp_tac) >>
+    disch_then (qspec_then `gas_explicit_sites ctx shadow_ctx` mp_tac) >>
+    disch_then (qspec_then `PG` mp_tac)) >>>
+  HEADGOAL ((impl_tac >- simp[is_word_type_def,valueEncodingTheory.type_memory_size_def]) >>
+    strip_tac) >>>
+  HEADGOAL (
+    `local_ptrs_reserved cenv sl` by metis_tac[local_ptrs_reserved_next_var] >>
+    `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sl x` by
+      metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+    `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sl x` by
+      metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+    qpat_assum `stage_buf.buf_operand = Var root` SUBST_ALL_TAC >>
+    drule_at (Pat `compile_tuple_load_all _ _ _ _ _ = _`)
+      (INST_TYPE [alpha |-> ``:256``] body_assign_tuple_load_all_path)) >>>
+  HEADGOAL (disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`))) >>>
+  HEADGOAL (disch_then (drule_at (Pat `lookup_var _ _ = _`))) >>>
+  HEADGOAL (disch_then (drule_at (Pat `values_have_types _ _`))) >>>
+  HEADGOAL (disch_then (qspec_then `lo` mp_tac) >>
+    disch_then (qspec_then `func` mp_tac) >>
+    disch_then (qspec_then `gas_explicit_sites ctx shadow_ctx` mp_tac) >>
+    disch_then (qspec_then `ee with gas_obs := []` mp_tac) >>
+    disch_then (qspec_then `cx` mp_tac) >>
+    disch_then (qspec_then `ctx` mp_tac) >>
+    disch_then (qspec_then `PG` mp_tac)) >>>
+  HEADGOAL (
+    `b' < dimword (:256)` by decide_tac >>
+    (impl_tac >- (simp[wordsTheory.w2n_n2w] >>
+      metis_tac[valueEncodingPropsTheory.val_in_memory_tuple])) >> strip_tac) >>>
+  HEADGOAL (
+    `w2n (n2w b' :256 word) = b'` by
+      simp[wordsTheory.w2n_n2w,arithmeticTheory.LESS_MOD] >>
+    `!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (v,G',tn') [] (OK t',Gf',tf')` by
+      (gen_tac >>
+       qpat_assum `!D. gas_origin_ptr_path _ (v,G',tn') [] (OK t,Gf,tf)`
+         (qspec_then `D` assume_tac) >>
+       qpat_assum `!D. gas_origin_ptr_path _ (t,Gf,tf) [] (OK t',Gf',tf')`
+         (qspec_then `D` (fn load =>
+            qpat_assum `gas_origin_ptr_path _ (v,G',tn') [] (OK t,Gf,tf)`
+              (fn stage => ACCEPT_TAC
+                (MATCH_MP fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans
+                  (CONJ stage load))))))) >>>
+  HEADGOAL (
+    `!n a cap. local_region cenv (ee with gas_obs := []).scopes t' n a cap <=>
+      local_region cenv (ee with gas_obs := []).scopes t n a cap` by
+      (rpt gen_tac >> irule exprSimCopyTheory.copy_buffer_local_region_frame >>
+       qexists_tac `sl` >> simp[]) >>
+    `!mem. mem_agree_outside tf'.t_mem t'.vs_memory mem ==>
+      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) b' mem` by
+      (qpat_assum `!mem. _ ==> tuple_in_memory vs tvs (w2n (n2w b') + 0) mem` mp_tac >>
+       simp[Once valueEncodingDefsTheory.val_in_memory_def]) >>
+    `b' + type_memory_size_list tvs <= t'.vs_alloca_next` by simp[]) >>>
+  HEADGOAL (
+    `stage_mid.cs_next_id = su.cs_next_id + 1` by
+      (qpat_assum `compile_alloc_buffer _ su = (_,stage_mid)`
+         (ACCEPT_TAC o cj 3 o MATCH_MP loweringHaltTheory.compile_alloc_buffer_parts)) >>
+    `ci_mono stage_mid sl` by
+      (qpat_assum `compile_copy_memory _ _ _ stage_mid = ((),sl)` (fn code =>
+         ACCEPT_TAC (REWRITE_RULE [code,pairTheory.SND]
+           (SPECL (snd (strip_comb (lhs (concl code)))) ci_mono_compile_copy_memory)))) >>
+    `ci_mono sl ss` by
+      (qpat_assum `compile_tuple_load_all _ _ _ _ sl = (elems,ss)` (fn code =>
+         ACCEPT_TAC (REWRITE_RULE [code,pairTheory.SND] (Q.SPECL [`cenv`,`Var root`,
+           `tys`,`0`,`sl`] (cj 4 stmtLoweringMonoTheory.ci_mono_list_helpers))))) >>
+    `su.cs_next_id < ss.cs_next_id` by
+      (qpat_assum `ci_mono stage_mid sl` mp_tac >>
+       qpat_assum `ci_mono sl ss` mp_tac >> simp[NoAsms,ci_mono_def] >>
+       qpat_assum `stage_mid.cs_next_id = su.cs_next_id + 1` mp_tac >> decide_tac)) >>>
+  HEADGOAL (
+    `sa.cs_next_id <= su.cs_next_id` by
+      (qpat_assum `lower_value compile_expr _ _ e sa = (_,su)`
+        (ACCEPT_TAC o cj 3 o MATCH_MP (cj 2 compile_expr_grows))) >>
+    `sa.cs_next_id <= ss.cs_next_id` by decide_tac >>
+    `!x. not_fresh_at sa x ==> not_fresh_at su x /\ not_fresh_at sl x` by
+      (gen_tac >> disch_tac >> conj_tac >>
+       irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
+       simp[] >> decide_tac)) >>>
+  HEADGOAL (
+    `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at ss x` by
+      (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sl` >> simp[]) >>
+    `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at ss x` by
+      (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sl` >> simp[]) >>
+    `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t' = SOME w` by
+      (rpt strip_tac >> simp[]) >>
+    `!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==> FLOOKUP t'.vs_allocas aid = SOME ent` by
+      (rpt strip_tac >> simp[])) >>>
+  HEADGOAL (
+    qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn'`
+      (strip_assume_tac o PURE_REWRITE_RULE [ghost_kept_at_def]) >>
+    `!x. not_fresh_at sa x ==> FLOOKUP Gf' x = FLOOKUP G0 x /\
+                                op_taint tf' (Var x) = op_taint tn0 (Var x)` by
+      (rpt strip_tac >> simp[])) >>>
+  HEADGOAL (
+    `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx
+       (ee with gas_obs := []) t` by
+      (qpat_assum `!H. stmt_state_rel H ctx func cenv cx _ v ==> stmt_state_rel H _ _ _ _ _ t`
+         (qspec_then `storage_trace_horizon ee.storage_trace` MATCH_MP_TAC) >>
+       first_assum ACCEPT_TAC) >>
+    `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx
+       (ee with gas_obs := []) t'` by
+      (qpat_assum `!H. stmt_state_rel H ctx func cenv cx _ t ==> stmt_state_rel H _ _ _ _ _ t'`
+         (qspec_then `storage_trace_horizon ee.storage_trace` MATCH_MP_TAC) >>
+       first_assum ACCEPT_TAC) >>
+    `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
+      (qpat_assum `stmt_state_rel _ ctx func cenv cx _ t'`
+        (ACCEPT_TAC o MATCH_MP (SPEC_ALL bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)))) >>>
+  HEADGOAL (
+    `alloca_inv v` by
+      (qpat_assum `stmt_state_rel _ ctx func cenv cx ee v`
+         (ACCEPT_TAC o MATCH_MP bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv)) >>
+    `gas_marked_path T ctx func v 0 (OK t')` by
+      (qpat_assum `!D. gas_origin_ptr_path _ (v,G',tn') [] (OK t',Gf',tf')`
+         (qspec_then `DF (storage_trace_horizon ee.storage_trace)`
+            (mp_tac o MATCH_MP fragGasOriginTheory.gas_origin_path_erase o
+             CONJUNCT1 o MATCH_MP gas_origin_ptr_path_projections)) >> simp[]) >>
+    `alloca_history func t' /\ v.vs_alloca_next <= t'.vs_alloca_next` by
+      (drule_all bodyMemBopRestWordPathTheory.rest_word_marked_allocation_posts >> simp[]) >>
+    `s0.vs_alloca_next <= t'.vs_alloca_next` by decide_tac) >>>
+  HEADGOAL (
+    `return_buf_frame d cenv ss t'` by
+      (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+       qexistsl_tac [`cenv`,`s0`,`sa`] >> simp[] >> decide_tac)) >>>
+  HEADGOAL (
+    `!fn inst z. frag_reachable ctx func t' fn inst z ==> dalloca_no_wrap inst z` by
+      (qpat_assum `body_inv tops ctx cenv cx`
+        (mp_then Any mp_tac bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap) >>
+       disch_then (qspecl_then [`func`,`t'`] assume_tac) >> rpt strip_tac >>
+       rename1 `frag_reachable ctx func t' rf ri rz` >>
+       qpat_assum `!fn inst u. MEM func ctx.ctx_functions /\ frag_reachable ctx func t' fn inst u ==> _`
+         (qspecl_then [`rf`,`ri`,`rz`] mp_tac) >>
+       impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC)) >>>
+  HEADGOAL (
+    `~block_is_terminated stage_mid` by
+      (qpat_assum `compile_alloc_buffer _ su = (_,stage_mid)`
+         (ACCEPT_TAC o MATCH_MP (SPEC_ALL exprOpenPrimitivesTheory.compile_alloc_buffer_open))) >>
+    `~block_is_terminated sl` by
+      (irule exprOpenCopiesTheory.compile_copy_memory_open >>
+       qpat_assum `compile_copy_memory _ _ _ stage_mid = ((),sl)` (irule_at Any) >> simp[]) >>
+    `gas_marked_path F ctx func t 0 (OK t')` by
+      (qpat_assum `!D. gas_origin_ptr_path _ (t,Gf,tf) [] (OK t',Gf',tf')`
+         (qspec_then `DF (storage_trace_horizon ee.storage_trace)`
+           (mp_tac o MATCH_MP fragGasModeTheory.gas_marked_path_exec o
+            MATCH_MP fragGasOriginTheory.gas_origin_path_erase o
+            CONJUNCT1 o MATCH_MP gas_origin_ptr_path_projections)) >>
+       simp[fragGasModeTheory.gas_marked_path_def]) >>
+    `~block_is_terminated ss` by
+      (irule assignPlaceEndpointTheory.endpoint_path_open >>
+       qpat_assum `gas_marked_path F ctx func t 0 (OK t')` (irule_at Any) >>
+       qpat_assum `cs_extends sl ss` (irule_at Any) >> simp[])) >>>
+  HEADGOAL (
+    `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+      (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+       simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
+            vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+    `!H. valid_horizon cx st0 H ee.storage_trace ==> valid_horizon cx st0 H es.storage_trace` by
+      (gen_tac >> disch_tac >>
+       `valid_horizon cx st0 H (es with gas_obs := obs).storage_trace` suffices_by simp[] >>
+       irule (INST_TYPE [alpha |-> ``:value``] vyperStorageFootprintTheory.valid_horizon_frame) >>
+       qexistsl_tac [`bind (eval_expr cx e) (read_result cx)`,
+         `INL (ArrayV (TupleV vs))`, `ee with gas_obs := []`] >> simp[])) >>>
+  HEADGOAL (
+    `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) es.storage_trace` by simp[] >>
+    qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+      (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac) >>>
+  HEADGOAL (
+    `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` by simp[]) >>>
+  HEADGOAL (
+    `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) v` by
+      (qpat_assum `stmt_state_rel _ ctx func cenv cx es s0` (fn rel =>
+       qpat_assum `local_ptrs_reserved cenv sa` (fn reserved =>
+       qpat_assum `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` (fn scopes =>
+       qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x v = SOME w` (fn regs =>
+       qpat_assum `!aid off sz. _ ==> mem_bytes_at off sz v.vs_memory = _` (fn mem =>
+         ACCEPT_TAC (MATCH_MP stmtSimDefsTheory.alloca_frame_of_mem_frame
+            (LIST_CONJ [rel,reserved,scopes,regs,mem]))))))))) >>>
+  HEADGOAL (
+    `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) t` by
+      (irule stmtSimDefsTheory.alloca_frame_trans >>
+       qexistsl_tac [`cenv`,`ee with gas_obs := []`,`v`,`su`] >>
+       rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    sg `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) t'`) >>>
+  HEADGOAL (rewrite_tac[alloca_frame_def] >>
+    map_every qx_gen_tac [`old_id`,`old_off`,`old_size`] >>
+    disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    qpat_assum `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) t`
+      (qspecl_then [`old_id`,`old_off`,`old_size`] mp_tac o REWRITE_RULE [alloca_frame_def]) >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+    disch_then (fn frame =>
+      qpat_assum `t'.vs_memory = t.vs_memory` (fn mem =>
+        qpat_assum `!n a cap. local_region cenv _ t' n a cap <=> local_region cenv _ t n a cap`
+          (fn regs => ACCEPT_TAC (PURE_REWRITE_RULE [GSYM mem, GSYM regs] frame))))) >>>
+  HEADGOAL (
+    sg `!old_id old_off old_size i. FLOOKUP s0.vs_allocas old_id = SOME (old_off,old_size) /\ old_id < sa.cs_next_id /\
+       (!n b len. local_region cenv es.scopes s0 n b len ==> old_off+old_size <= b \/ b+len <= old_off) /\
+       old_off <= i /\ i < old_off+old_size /\ i IN tf'.t_mem ==> i IN tn0.t_mem`) >>>
+  HEADGOAL (map_every qx_gen_tac [`old_id`,`old_off`,`old_size`,`i`] >>
+    disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+       `!n b len. local_region cenv (ee with gas_obs := []).scopes v n b len ==>
+         old_off+old_size <= b \/ b+len <= old_off` by
+         (qpat_assum `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) v`
+            (qspecl_then [`old_id`,`old_off`,`old_size`] mp_tac o REWRITE_RULE [alloca_frame_def]) >>
+          (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+          disch_then (ACCEPT_TAC o CONJUNCT2))) >>>
+  HEADGOAL (
+       `FLOOKUP v.vs_allocas old_id = SOME (old_off,old_size)` by simp[] >>
+       `old_id < su.cs_next_id` by decide_tac >>
+       `i IN tf.t_mem` by
+         (qpat_assum `tf'.t_mem = tf.t_mem` (fn eq => PURE_REWRITE_TAC [GSYM eq]) >>
+          first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (
+       `i IN tn'.t_mem` by
+         (qpat_assum `!old_id old_off old_size i. FLOOKUP v.vs_allocas old_id = SOME (old_off,old_size) /\ _ ==> i IN tn'.t_mem`
+            (qspecl_then [`old_id`,`old_off`,`old_size`,`i`] mp_tac) >>
+          (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+          disch_then ACCEPT_TAC)) >>>
+  HEADGOAL (qpat_assum `!old_id old_off old_size i. FLOOKUP s0.vs_allocas old_id = SOME (old_off,old_size) /\ _ ==> i IN tn0.t_mem`
+         (qspecl_then [`old_id`,`old_off`,`old_size`,`i`] mp_tac) >>
+       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>>
+  HEADGOAL (
+    sg `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t' /\
+       storage_well_formed_on cx (ee with gas_obs := []) (FST H) /\
+       ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) Gf' tf' t'`) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+      (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (CONJUNCTS_THEN2 (K ALL_TAC) (CONJUNCTS_THEN2
+      (fn post => map_every (fn i => assume_tac (cj i (REWRITE_RULE [expr_post_def] post))) [1,2])
+      assume_tac)) >> rpt conj_tac) >>>
+  HEADGOAL (
+    qpat_assum `!H. stmt_state_rel H ctx func cenv cx _ t ==> _ t'`
+      (qspec_then `H` MATCH_MP_TAC) >>
+    qpat_assum `!H. stmt_state_rel H ctx func cenv cx _ v ==> _ t`
+      (qspec_then `H` MATCH_MP_TAC) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `!D d. ghost_inv_at D lo d cenv cx _ Gf tf t ==> _ t'`
+      (qspecl_then [`DF H`,`d`] MATCH_MP_TAC) >>
+    qpat_assum `!D d. ghost_inv_at D lo d cenv cx _ G' tn' v ==> _ t`
+      (qspecl_then [`DF H`,`d`] MATCH_MP_TAC) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    `sa.cs_next_var <= ss.cs_next_var` by decide_tac >>
+    `FLOOKUP t'.vs_allocas su.cs_next_id = SOME (b',type_memory_size_list tvs)` by simp[] >>
+    `!n a len. local_region cenv (ee with gas_obs := []).scopes t' n a len ==>
+       b' + type_memory_size_list tvs <= a \/ a + len <= b'` by
+      (qpat_assum `!n a len. local_region cenv _ t n a len ==> regions_disjoint _ _ _ _` mp_tac >>
+       simp[regions_disjoint_def])) >>>
+  HEADGOAL (
+    qpat_assum `!todo ops1 k p cur shadow_cur src u Gu tu. _ ==> _`
+      (qspecl_then [`gs`,`elems`,`0`,`b'`,`ss`,`shadow_ss`,`ee with gas_obs := []`,
+        `t'`,`Gf'`,`tf'`] mp_tac) >>
+    simp[NoAsms] >> impl_tac) >>>
+  HEADGOAL (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ t' /\ _`
+      (qspec_then `H` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (ACCEPT_TAC o REWRITE_RULE [exprLoweringPropsTheory.stmt_state_rel_start_gas_obs]
+      o CONJUNCT1)) >>>
+  HEADGOAL (
+    disj1_tac >>
+    qexistsl_tac [`su.cs_next_id`,`b'`,`type_memory_size_list tvs`] >>
+    simp[] >>
+    qpat_assum `!n a len. local_region cenv (ee with gas_obs := []).scopes t' n a len ==> _`
+      (ACCEPT_TAC o SIMP_RULE (srw_ss()) [])) >>>
+  HEADGOAL (
+    qpat_assum `LENGTH tys = LENGTH tvs` (fn len =>
+    qpat_assum `w2n (n2w b':256 word) = b'` (fn addr =>
+    qpat_assum `!i. i < LENGTH tys ==> ?x. EL i elems = Var x /\ _`
+      (ACCEPT_TAC o SIMP_RULE (srw_ss()) [len,addr])))) >>>
+  HEADGOAL (
+    qpat_assum `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) t'` mp_tac >>
+    simp[NoAsms,alloca_frame_def]) >>>
+  HEADGOAL strip_tac >>>
+  HEADGOAL (
+    `gas_origin_ptr_path (DF (storage_trace_horizon ee.storage_trace),lo,
+        gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (s0,G0,tn0) marks (OK t',Gf',tf')` by
+      (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+         (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+       (impl_tac >- first_assum ACCEPT_TAC) >>
+       disch_then (mp_tac o MATCH_MP gas_origin_ptr_path_append o CONJUNCT1) >>
+       disch_then (qspecl_then [`v`,`G'`,`tn'`,`[]`,`OK t'`,`Gf'`,`tf'`] mp_tac) >>
+       simp[])) >>>
+  HEADGOAL (
+    `!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) t'` by
+      (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t',Gf',tf')` (fn path =>
+       qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+       qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+         ACCEPT_TAC (MATCH_MP bodyFullSharedTheory.return_buf_allocas_path
+           (LIST_CONJ [path,frame,sep]))))))) >>>
+  HEADGOAL (sg `EVERY (\g. ?bt. g = BaseTarget bt) gs`) >>>
+  HEADGOAL (
+    rewrite_tac[EVERY_MEM] >> BETA_TAC >> qx_gen_tac `g` >> disch_tac >>
+    qpat_assum `EVERY (\h. case h of BaseTarget _ => _ | TupleTarget _ => F) gs`
+      (qspec_then `g` mp_tac o BETA_RULE o PURE_REWRITE_RULE [EVERY_MEM]) >>
+    Cases_on `g` >> simp[]) >>>
+  HEADGOAL (
+    qpat_assum `gas_outcome_full _ _ _ _ (assign_tuple_target_list cx gs vs)
+      (ee with gas_obs := [],t',Gf',tf') _ _` (fn outcome =>
+      qpat_assum `return_buf_frame d cenv ss t'` (fn frame =>
+        qpat_assum `!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) t'`
+          (fn floor => assume_tac (BETA_RULE (MATCH_MP
+            bodyFullSharedTheory.gas_outcome_full_return_buf_allocas_from
+            (LIST_CONJ [outcome,frame,floor]))))))) >>>
+  HEADGOAL (qmatch_goalsub_abbrev_tac `gas_outcome_full cfg _ _ _ _ _ Q R` >>
+    sg `gas_outcome_full cfg (cx_tops cx) cx st0 (assign_tuple_target_list cx gs vs)
+      (ee with gas_obs := [],t',Gf',tf') Q R`) >>>
+  HEADGOAL (
+    simp[Abbr `cfg`] >>
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
+    qpat_assum `gas_outcome_full _ _ _ _ (assign_tuple_target_list cx gs vs)
+      (_,t',Gf',tf') (\H res ee G tn t. _ /\ _) _` (irule_at Any) >>
+    BETA_TAC >> reverse conj_tac >- simp[Abbr `R`] >>
+    map_every qx_gen_tac [`H`,`res`,`fin`,`Gend`,`tn_end`,`s_end`] >>
+    disch_then (map_every strip_assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    `fin with gas_obs := [] = fin` by
+      simp[vyperStateTheory.evaluation_state_component_equality] >>
+    qpat_assum `fin with gas_obs := [] = fin` (fn normalized =>
+      qpat_assum `!tail. assign_tuple_target_list cx gs vs _ = _`
+        (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [normalized])))) >>>
+  HEADGOAL (sg `res = INL ()`) >>>
+  HEADGOAL (Cases_on `res` >- simp[]) >>>
+  HEADGOAL (
+    rename1 `INR exc = INL ()` >>
+    qpat_assum `assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs)) = _`
+      (fn eq =>
+        qpat_assum `assign_tuple_target_list cx gs vs _ = (INR exc,fin)`
+          (assume_tac o MATCH_MP vyperExprNoControlTheory.assign_tuple_targets_no_control o
+           PURE_REWRITE_RULE [GSYM eq])) >>
+    qpat_assum `stmt_lands lctx sb (INR exc) s_end` mp_tac >>
+    qpat_assum `no_control_exc exc` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    Cases_on `exc` >>
+    simp[stmt_lands_def,vyperExprNoControlTheory.no_control_exc_def]) >>>
+  HEADGOAL (`cenv'' = cenv` by simp[]) >>>
+  HEADGOAL (sg `MAP FDOM fin.scopes = MAP FDOM es.scopes`) >>>
+  HEADGOAL (
+    qpat_assum `EVERY (\g. ?bt. g = BaseTarget bt) gs` (fn flat =>
+      qpat_assum `assign_tuple_target_list cx gs vs _ = (res,fin)` (fn eval =>
+      qpat_assum `res = INL ()` (fn normal =>
+      qpat_assum `MAP FDOM es.scopes = MAP FDOM ee.scopes` (fn initial =>
+        ACCEPT_TAC (TRANS
+          (SIMP_RULE (srw_ss()) [] (MATCH_MP tuple_flat_targets_success_scopes
+            (CONJ flat (PURE_REWRITE_RULE [normal] eval))))
+          (SYM initial))))))) >>>
+  HEADGOAL (sg `return_buf_sep d cenv fin s_end`) >>>
+  HEADGOAL (
+    irule (INST_TYPE [alpha |-> ``:256``] bodyFullSharedTheory.return_buf_sep_locals_kept) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexistsl_tac [`storage_trace_horizon ee.storage_trace`,`ctx`,`cx`,`es`,`func`,`s0`,`sa`] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_x_assum `cenv'' = cenv` SUBST_ALL_TAC >>
+    qpat_assum `Abbrev (Q = _)`
+      (fn eq => PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] eq]) >>
+    BETA_TAC >> qexists_tac `cenv` >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    sg `gas_outcome_full cfg (cx_tops cx) cx st0 (assign_tuple_target_list cx gs vs)
+      (ee with gas_obs := [],v,G',tn') Q R`) >>>
+  HEADGOAL (
+    qpat_assum `Abbrev (cfg = _)` (fn abbrev =>
+      let val cfg_eq = REWRITE_RULE [markerTheory.Abbrev_def] abbrev in
+        PURE_REWRITE_TAC [cfg_eq] >>
+        irule gasOutcomeFullStmtsTheory.gas_outcome_full_zero_prefix >>
+        qexistsl_tac [`Gf'`,`t'`,`tf'`] >>
+        conj_tac
+        >- (qx_gen_tac `H` >>
+            qpat_assum `!D. gas_origin_ptr_path _ (v,G',tn') [] (OK t',Gf',tf')`
+              (qspec_then `DF H` ACCEPT_TAC)) >>
+        qpat_assum `gas_outcome_full cfg _ _ _ (assign_tuple_target_list cx gs vs)
+          (_,t',Gf',tf') Q R` (ACCEPT_TAC o PURE_REWRITE_RULE [cfg_eq])
+      end)) >>>
+  HEADGOAL (
+    qpat_assum `Abbrev (cfg = _)`
+      (fn eq => PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] eq]) >>
+    pure_rewrite_tac[stmtSimAssignTupleTheory.eval_assign_tuple_action] >>
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_bind >> BETA_TAC >> rpt conj_tac) >>>
+  HEADGOAL (simp[cj 9 vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    rename1 `gas_marked_exec _ _ _ _ _ (INL source_v) source_mid (OK source_end)` >>
+    irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
+    qexistsl_tac [`source_mid`,`source_end`,`source_v`] >>
+    BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `storage_trace_frame (bind (eval_expr cx e) (read_result cx))`
+      ACCEPT_TAC) >>>
+  HEADGOAL (
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_intro >>
+    qexistsl_tac [`G'`,`ee`,`marks`,`OK v`,`INL (ArrayV (TupleV vs))`,`tn'`] >>
+    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, ALL_TAC]) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> strip_tac >> BETA_TAC >>
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+      (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (assume_tac o CONJUNCT1) >>
+    qpat_assum `Abbrev (cfg = _)` (fn abbrev =>
+      qpat_assum `gas_outcome_full cfg _ _ _ (assign_tuple_target_list cx gs vs) (_,v,G',tn') Q R`
+        (assume_tac o PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] abbrev])) >>
+    qpat_assum `assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs)) = _`
+      (fn source_eq => simp[NoAsms,source_eq]) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (qpat_x_assum `(if _ then _ else _) su = (staged,sl)` mp_tac >>
+    simp[comp_return_def] >> strip_tac >> gvs[]) >>>
+  HEADGOAL (
+    `0 < type_memory_size_list tvs` by
+      (`0 < type_slot_size (TupleTV tvs)` by metis_tac[assignable_type_slot_size_pos] >>
+       drule (cj 1 valueEncodingPropsTheory.type_memory_size_pos) >>
+       simp[valueEncodingTheory.type_memory_size_def])) >>>
+  HEADGOAL (
+    qpat_assum `ptr_val_ok _ _ _ _ _ _ _`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [ptr_val_ok_def,is_word_type_def]) >>
+    qpat_assum `ptr_mem_ok _ _ _ _ _ _ _`
+      (mp_tac o Q.SPECL [`TupleTV tvs`,`w`] o REWRITE_RULE [ptr_mem_ok_def]) >>
+    simp[is_word_type_def,val_footprint_def,valueEncodingTheory.type_memory_size_def] >> strip_tac >>
+    qpat_assum `expr_store_bound _ _ _ _ _`
+      (mp_tac o Q.SPECL [`TupleTV tvs`,`w`] o REWRITE_RULE [exprSimMemDefsTheory.expr_store_bound_def]) >>
+    simp[is_word_type_def,val_store_size_def,valueEncodingTheory.type_memory_size_def] >> strip_tac >>
+    qpat_assum `op = Var x` SUBST_ALL_TAC) >>>
+  HEADGOAL (
+    `lookup_var x v = SOME w` by fs[eval_operand_def] >>
+    `ptr_covers G' tn' x v (type_memory_size_list tvs)` by
+      (rewrite_tac[ptr_covers_def] >>
+       conj_tac >- first_assum ACCEPT_TAC >>
+       qexistsl_tac [`w`,`b`,`sz`] >> rpt conj_tac >>
+       FIRST [first_assum ACCEPT_TAC,
+         qpat_assum `w2n w + val_store_size (TupleTV tvs) _ <= b + sz` mp_tac >>
+         simp[NoAsms,val_store_size_def,valueEncodingTheory.type_memory_size_def,ADD_COMM]]) >>
+    `v.vs_alloca_next < dimword (:256)` by
+      (qpat_assum `stmt_state_rel _ _ _ _ _ _ v`
+         (ACCEPT_TAC o MATCH_MP alloca_room_next_lt o
+          MATCH_MP stateRelProjTheory.stmt_state_rel_alloca_room))) >>>
+  HEADGOAL (
+    `w2n w + type_memory_size_list tvs <= v.vs_alloca_next /\
+     w2n w + type_memory_size_list tvs < dimword (:256)` by
+      (qpat_assum `type_memory_size_list tvs + w2n w <= v.vs_alloca_next` mp_tac >>
+       qpat_assum `v.vs_alloca_next < dimword (:256)` mp_tac >> decide_tac)) >>>
+  HEADGOAL (
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+      (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    `allocas_from lo v` by
+      (qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ v`
+         (ACCEPT_TAC o cj 7 o REWRITE_RULE [ghost_inv_at_def])) >>
+    `local_ptrs_reserved cenv sl` by
+      (match_mp_tac (Q.SPECL [`cenv`,`sa`,`sl`] local_ptrs_reserved_next_var) >>
+       conj_tac >> first_assum ACCEPT_TAC) >>
+    `not_fresh_at sl x` by
+      (qpat_assum `lower_value compile_expr cenv (TupleT tys) e sa = (Var x,sl)` (fn code =>
+         qpat_assum `local_ptrs_reserved cenv sa` (fn reserved =>
+           qspec_then `x` mp_tac
+             (MATCH_MP exprOperandVarTheory.compile_lower_value_var (CONJ code reserved)))) >>
+       simp[NoAsms]) >>
+    `~v.vs_halted` by
+      (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK v,G',tn')`
+         (ACCEPT_TAC o MATCH_MP fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted o
+          CONJUNCT2 o MATCH_MP gas_origin_ptr_path_projections))) >>>
+  HEADGOAL (
+    `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sl x` by
+      (rpt gen_tac >> disch_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `sa` >> simp[]) >>
+    `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sl x` by
+      (rpt gen_tac >> disch_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `sa` >> simp[])) >>>
+  HEADGOAL (
+    `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx
+       (ee with gas_obs := []) v` by
+      simp[exprLoweringPropsTheory.stmt_state_rel_start_gas_obs] >>
+    `dead_lo_ok (storage_trace_horizon ee.storage_trace)
+       (DF (storage_trace_horizon ee.storage_trace)) lo cenv cx` by simp[] >>
+    sg `lo <= w2n w`) >>>
+  HEADGOAL (
+    irule (INST_TYPE [alpha |-> ``:256``] tuple_immutable_rhs_floor) >>
+    qexistsl [`DF (storage_trace_horizon ee.storage_trace)`,
+      `storage_trace_horizon ee.storage_trace`, `cenv`, `ctx`, `cx`, `env`,
+      `ee with gas_obs := []`, `func`, `Var x`, `v`, `sa`, `sl`, `tops`,
+      `tvs`, `TupleT tys`, `ArrayV (TupleV vs)`] >>
+    simp[is_word_type_def,val_footprint_def,valueEncodingTheory.type_memory_size_def]) >>>
+  HEADGOAL (
+    drule_at (Pat `compile_tuple_load_all _ _ _ _ _ = _`)
+      (INST_TYPE [alpha |-> ``:256``] body_assign_tuple_load_all_path) >>
+    disch_then (drule_at (Pat `ptr_covers G' tn' x v _`)) >>
+    disch_then (drule_at (Pat `lookup_var x v = SOME w`)) >>
+    disch_then (drule_at (Pat `values_have_types _ _`)) >>
+    disch_then (qspec_then `lo` mp_tac) >>
+    disch_then (qspec_then `func` mp_tac) >>
+    disch_then (qspec_then `gas_explicit_sites ctx shadow_ctx` mp_tac) >>
+    disch_then (qspec_then `ee with gas_obs := []` mp_tac) >>
+    disch_then (qspec_then `cx` mp_tac) >>
+    disch_then (qspec_then `ctx` mp_tac) >>
+    disch_then (qspec_then `PG` mp_tac)) >>>
+  HEADGOAL ((impl_tac >- (simp[] >> metis_tac[valueEncodingPropsTheory.val_in_memory_tuple])) >>
+    disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
+      (qx_choosel_then [`t'`,`Gf'`,`tf'`] (map_every assume_tac o CONJUNCTS))))) >>>
+  HEADGOAL (
+    `ci_mono sl ss` by
+      (qpat_assum `compile_tuple_load_all cenv (Var x) tys 0 sl = (elems,ss)` (fn code =>
+         ACCEPT_TAC (REWRITE_RULE [code,pairTheory.SND] (Q.SPECL [`cenv`,`Var x`,
+           `tys`,`0`,`sl`] (cj 4 stmtLoweringMonoTheory.ci_mono_list_helpers))))) >>
+    `sa.cs_next_id <= sl.cs_next_id` by
+      (qpat_assum `lower_value compile_expr _ _ e sa = (_,sl)`
+        (ACCEPT_TAC o cj 3 o MATCH_MP (cj 2 compile_expr_grows))) >>
+    `sl.cs_next_id <= ss.cs_next_id` by fs[ci_mono_def] >>
+    `sa.cs_next_id <= ss.cs_next_id /\ sa.cs_next_var <= ss.cs_next_var` by decide_tac) >>>
+  HEADGOAL (
+    `!x. not_fresh_at sa x ==> not_fresh_at sl x` by
+      (gen_tac >> disch_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `sa` >> simp[]) >>
+    `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at ss x` by
+      (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sl` >> simp[]) >>
+    `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at ss x` by
+      (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sl` >> simp[]) >>
+    `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t' = SOME w` by
+      (rpt strip_tac >> simp[]) >>
+    `!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==> FLOOKUP t'.vs_allocas aid = SOME ent` by
+      (rpt strip_tac >> simp[])) >>>
+  HEADGOAL (
+    qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn'`
+      (strip_assume_tac o PURE_REWRITE_RULE [ghost_kept_at_def]) >>
+    `!x. not_fresh_at sa x ==> FLOOKUP Gf' x = FLOOKUP G0 x /\
+                                op_taint tf' (Var x) = op_taint tn0 (Var x)` by
+      (rpt strip_tac >> simp[])) >>>
+  HEADGOAL (
+    `!n a cap. local_region cenv (ee with gas_obs := []).scopes t' n a cap <=>
+      local_region cenv (ee with gas_obs := []).scopes v n a cap` by
+      (rpt gen_tac >> irule exprSimCopyTheory.copy_buffer_local_region_frame >>
+       qexists_tac `sl` >> simp[]) >>
+    `!mem. mem_agree_outside tf'.t_mem t'.vs_memory mem ==>
+      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n w) mem` by
+      (qpat_assum `!mem. _ ==> tuple_in_memory vs tvs (w2n w + 0) mem` mp_tac >>
+       simp[Once valueEncodingDefsTheory.val_in_memory_def]) >>
+    `w2n w + type_memory_size_list tvs <= t'.vs_alloca_next` by simp[]) >>>
+  HEADGOAL (
+    Q.SUBGOAL_THEN `type_memory_size_list tvs = 0 \/
+       (?aid b sz. FLOOKUP t'.vs_allocas aid = SOME (b,sz) /\ aid < ss.cs_next_id /\
+         b <= w2n w /\ w2n w + type_memory_size_list tvs <= b + sz /\
+         (!n a len. local_region cenv (ee with gas_obs := []).scopes t' n a len ==>
+           b+sz <= a \/ a+len <= b)) \/
+       (?n b sz. local_region cenv (ee with gas_obs := []).scopes t' n b sz /\
+         b <= w2n w /\ w2n w + type_memory_size_list tvs <= b + sz /\
+         local_path_at cenv cx n (w2n w-b) (TupleTV tvs))` assume_tac) >>>
+  HEADGOAL (
+    qpat_assum `!n a cap. local_region cenv _ t' n a cap <=> local_region cenv _ v n a cap`
+      (fn regions =>
+       qpat_assum `t'.vs_allocas = v.vs_allocas` (fn allocas =>
+         PURE_REWRITE_TAC [regions,allocas])) >>
+    simp[NoAsms] >>
+    asm "rhs_window" (DISJ_CASES_THEN2 assume_tac
+      (DISJ_CASES_THEN2
+        (qx_choosel_then [`root_aid`,`root_b`,`root_sz`]
+          (map_every assume_tac o CONJUNCTS))
+        (qx_choosel_then [`root_n`,`root_b`,`root_sz`]
+          (map_every assume_tac o CONJUNCTS))))
+  ) >>>
+  HEADGOAL (disj1_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    disj2_tac >> disj1_tac >> qexistsl_tac [`root_aid`,`root_b`,`root_sz`] >>
+    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,ALL_TAC]) >>>
+  HEADGOAL (
+    qpat_assum `root_aid < sl.cs_next_id` (fn below =>
+      qpat_assum `sl.cs_next_id <= ss.cs_next_id` (fn forward =>
+        ACCEPT_TAC (MATCH_MP LESS_LESS_EQ_TRANS (CONJ below forward))))) >>>
+  HEADGOAL (
+    qpat_assum `w2n w + type_memory_size_list tvs <= root_b + root_sz`
+      (ACCEPT_TAC o PURE_REWRITE_RULE
+          [Q.SPECL [`w2n w`,`type_memory_size_list tvs`] ADD_COMM])) >>>
+  HEADGOAL (
+    disj2_tac >> disj2_tac >> qexistsl_tac [`root_n`,`root_b`,`root_sz`] >>
+    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+      qpat_assum `w2n w + type_memory_size_list tvs <= root_b + root_sz`
+        (ACCEPT_TAC o PURE_REWRITE_RULE
+          [Q.SPECL [`w2n w`,`type_memory_size_list tvs`] ADD_COMM])]) >>>
+  HEADGOAL (
+    `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx
+       (ee with gas_obs := []) t'` by
+      (qpat_assum `!H. stmt_state_rel H ctx func cenv cx _ v ==> _ t'`
+        (qspec_then `storage_trace_horizon ee.storage_trace` MATCH_MP_TAC) >>
+       first_assum ACCEPT_TAC) >>
+    `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
+      (qpat_assum `stmt_state_rel _ ctx func cenv cx _ t'`
+        (ACCEPT_TAC o MATCH_MP (SPEC_ALL bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)))) >>>
+  HEADGOAL (
+    `alloca_inv v` by
+      (qpat_assum `stmt_state_rel _ ctx func cenv cx ee v`
+         (ACCEPT_TAC o MATCH_MP bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv)) >>
+    `gas_marked_path T ctx func v 0 (OK t')` by
+      (qpat_assum `!D. gas_origin_ptr_path _ (v,G',tn') [] (OK t',Gf',tf')`
+         (qspec_then `DF (storage_trace_horizon ee.storage_trace)`
+            (mp_tac o MATCH_MP fragGasOriginTheory.gas_origin_path_erase o
+             CONJUNCT1 o MATCH_MP gas_origin_ptr_path_projections)) >> simp[]) >>
+    `alloca_history func t' /\ v.vs_alloca_next <= t'.vs_alloca_next` by
+      (drule_all bodyMemBopRestWordPathTheory.rest_word_marked_allocation_posts >> simp[]) >>
+    `s0.vs_alloca_next <= t'.vs_alloca_next` by decide_tac) >>>
+  HEADGOAL (
+    `return_buf_frame d cenv ss t'` by
+      (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+       qexistsl_tac [`cenv`,`s0`,`sa`] >> simp[] >> decide_tac)) >>>
+  HEADGOAL (
+    `!fn inst z. frag_reachable ctx func t' fn inst z ==> dalloca_no_wrap inst z` by
+      (qpat_assum `body_inv tops ctx cenv cx`
+        (mp_then Any mp_tac bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap) >>
+       disch_then (qspecl_then [`func`,`t'`] assume_tac) >> rpt strip_tac >>
+       rename1 `frag_reachable ctx func t' rf ri rz` >>
+       qpat_assum `!fn inst u. MEM func ctx.ctx_functions /\ frag_reachable ctx func t' fn inst u ==> _`
+         (qspecl_then [`rf`,`ri`,`rz`] mp_tac) >>
+       impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC)) >>>
+  HEADGOAL (
+    `gas_marked_path F ctx func s0 (LENGTH marks) (OK v)` by
+      (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK v,G',tn')`
+        (mp_tac o MATCH_MP fragGasModeTheory.gas_marked_path_exec o
+         MATCH_MP fragGasOriginTheory.gas_origin_path_erase o
+         CONJUNCT1 o MATCH_MP gas_origin_ptr_path_projections) >>
+       simp[fragGasModeTheory.gas_marked_path_def]) >>
+    `~block_is_terminated sl` by
+      (irule assignPlaceEndpointTheory.endpoint_path_open >>
+       qpat_assum `gas_marked_path F ctx func s0 (LENGTH marks) (OK v)`
+         (irule_at Any) >>
+       qpat_assum `cs_extends sa sl` (irule_at Any) >>
+       rpt conj_tac >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (
+    `gas_marked_path F ctx func v 0 (OK t')` by
+      (qpat_assum `!D. gas_origin_ptr_path _ (v,G',tn') [] (OK t',Gf',tf')`
+         (qspec_then `DF (storage_trace_horizon ee.storage_trace)`
+           (mp_tac o MATCH_MP fragGasModeTheory.gas_marked_path_exec o
+            MATCH_MP fragGasOriginTheory.gas_origin_path_erase o
+            CONJUNCT1 o MATCH_MP gas_origin_ptr_path_projections)) >>
+       simp[fragGasModeTheory.gas_marked_path_def]) >>
+    `~block_is_terminated ss` by
+      (irule assignPlaceEndpointTheory.endpoint_path_open >>
+       qpat_assum `gas_marked_path F ctx func v 0 (OK t')` (irule_at Any) >>
+       qpat_assum `cs_extends sl ss` (irule_at Any) >> simp[])) >>>
+  HEADGOAL (
+    `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+      (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+       simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
+            vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+    `!H. valid_horizon cx st0 H ee.storage_trace ==> valid_horizon cx st0 H es.storage_trace` by
+      (gen_tac >> disch_tac >>
+       `valid_horizon cx st0 H (es with gas_obs := obs).storage_trace` suffices_by simp[] >>
+       irule (INST_TYPE [alpha |-> ``:value``] vyperStorageFootprintTheory.valid_horizon_frame) >>
+       qexistsl_tac [`bind (eval_expr cx e) (read_result cx)`,
+         `INL (ArrayV (TupleV vs))`, `ee with gas_obs := []`] >> simp[])) >>>
+  HEADGOAL (
+    `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) es.storage_trace` by simp[] >>
+    qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+      (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac) >>>
+  HEADGOAL (
+    `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` by simp[]) >>>
+  HEADGOAL (
+    `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) v` by
+      (qpat_assum `stmt_state_rel _ ctx func cenv cx es s0` (fn rel =>
+       qpat_assum `local_ptrs_reserved cenv sa` (fn reserved =>
+       qpat_assum `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` (fn scopes =>
+       qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x v = SOME w` (fn regs =>
+       qpat_assum `!aid off sz. _ ==> mem_bytes_at off sz v.vs_memory = _` (fn mem =>
+         ACCEPT_TAC (MATCH_MP stmtSimDefsTheory.alloca_frame_of_mem_frame
+            (LIST_CONJ [rel,reserved,scopes,regs,mem]))))))))) >>>
+  HEADGOAL (
+    sg `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) t'`) >>>
+  HEADGOAL (rewrite_tac[alloca_frame_def] >>
+    map_every qx_gen_tac [`old_id`,`old_off`,`old_size`] >>
+    disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    qpat_assum `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) v`
+      (qspecl_then [`old_id`,`old_off`,`old_size`] mp_tac o REWRITE_RULE [alloca_frame_def]) >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+    disch_then (fn frame =>
+      qpat_assum `t'.vs_memory = v.vs_memory` (fn mem =>
+        qpat_assum `!n a cap. local_region cenv _ t' n a cap <=> local_region cenv _ v n a cap`
+          (fn regs => ACCEPT_TAC (PURE_REWRITE_RULE [GSYM mem, GSYM regs] frame))))) >>>
+  HEADGOAL (
+    sg `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+       (!n b len. local_region cenv es.scopes s0 n b len ==> off+sz <= b \/ b+len <= off) /\
+       off <= i /\ i < off+sz /\ i IN tf'.t_mem ==> i IN tn0.t_mem`) >>>
+  HEADGOAL (
+    qpat_assum `tf'.t_mem = tn'.t_mem` (fn mem => PURE_REWRITE_TAC [mem]) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    sg `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t' /\
+       storage_well_formed_on cx (ee with gas_obs := []) (FST H) /\
+       ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) Gf' tf' t'`) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+      (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (CONJUNCTS_THEN2 (K ALL_TAC) (CONJUNCTS_THEN2
+      (fn post => map_every (fn i => assume_tac (cj i (REWRITE_RULE [expr_post_def] post))) [1,2])
+      assume_tac)) >> rpt conj_tac) >>>
+  HEADGOAL (
+    qpat_assum `!H. stmt_state_rel H ctx func cenv cx _ v ==> _ t'`
+      (qspec_then `H` MATCH_MP_TAC) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `!D d. ghost_inv_at D lo d cenv cx _ G' tn' v ==> _ t'`
+      (qspecl_then [`DF H`,`d`] MATCH_MP_TAC) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `!todo ops1 k p cur shadow_cur src u Gu tu. _ ==> _`
+      (qspecl_then [`gs`,`elems`,`0`,`w2n w`,`ss`,`shadow_ss`,`ee with gas_obs := []`,
+        `t'`,`Gf'`,`tf'`] mp_tac) >>
+    simp[NoAsms] >> impl_tac) >>>
+  HEADGOAL (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC, ALL_TAC]) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ t' /\ _`
+      (qspec_then `H` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (map_every assume_tac o CONJUNCTS) >>
+    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+      qpat_assum `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t'`
+        (ACCEPT_TAC o REWRITE_RULE [exprLoweringPropsTheory.stmt_state_rel_start_gas_obs])]) >>>
+  HEADGOAL (
+    qpat_assum `type_memory_size_list tvs = 0 \/
+      (?aid b sz. FLOOKUP t'.vs_allocas aid = SOME (b,sz) /\ _) \/ _`
+      (fn window => mp_tac window >>
+        simp[NoAsms,Q.SPECL [`w2n (w:256 word)`,`type_memory_size_list tvs`] ADD_COMM])) >>>
+  HEADGOAL (
+    qpat_assum `LENGTH tys = LENGTH tvs` (fn len =>
+    qpat_assum `!i. i < LENGTH tys ==> ?x. EL i elems = Var x /\ _`
+      (ACCEPT_TAC o PURE_REWRITE_RULE
+        [len,ADD_CLAUSES,Q.SPECL
+          [`w2n (w:256 word)`,`SUM (MAP type_memory_size (TAKE i tvs))`] ADD_COMM]))) >>>
+  HEADGOAL (
+    qpat_assum `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) t'` mp_tac >>
+    simp[NoAsms,alloca_frame_def]) >>>
+  HEADGOAL strip_tac >>>
+  HEADGOAL (
+    `gas_origin_ptr_path (DF (storage_trace_horizon ee.storage_trace),lo,
+        gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (s0,G0,tn0) marks (OK t',Gf',tf')` by
+      (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+         (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+       (impl_tac >- first_assum ACCEPT_TAC) >>
+       disch_then (mp_tac o MATCH_MP gas_origin_ptr_path_append o CONJUNCT1) >>
+       disch_then (qspecl_then [`v`,`G'`,`tn'`,`[]`,`OK t'`,`Gf'`,`tf'`] mp_tac) >>
+       simp[])) >>>
+  HEADGOAL (
+    `!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) t'` by
+      (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t',Gf',tf')` (fn path =>
+       qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+       qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+         ACCEPT_TAC (MATCH_MP bodyFullSharedTheory.return_buf_allocas_path
+           (LIST_CONJ [path,frame,sep]))))))) >>>
+  HEADGOAL (sg `EVERY (\g. ?bt. g = BaseTarget bt) gs`) >>>
+  HEADGOAL (
+    rewrite_tac[EVERY_MEM] >> BETA_TAC >> qx_gen_tac `g` >> disch_tac >>
+    qpat_assum `EVERY (\h. case h of BaseTarget _ => _ | TupleTarget _ => F) gs`
+      (qspec_then `g` mp_tac o BETA_RULE o PURE_REWRITE_RULE [EVERY_MEM]) >>
+    Cases_on `g` >> simp[]) >>>
+  HEADGOAL (
+    qpat_assum `gas_outcome_full _ _ _ _ (assign_tuple_target_list cx gs vs)
+      (ee with gas_obs := [],t',Gf',tf') _ _` (fn outcome =>
+      qpat_assum `return_buf_frame d cenv ss t'` (fn frame =>
+        qpat_assum `!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) t'`
+          (fn floor => assume_tac (BETA_RULE (MATCH_MP
+            bodyFullSharedTheory.gas_outcome_full_return_buf_allocas_from
+            (LIST_CONJ [outcome,frame,floor]))))))) >>>
+  HEADGOAL (qmatch_goalsub_abbrev_tac `gas_outcome_full cfg _ _ _ _ _ Q R` >>
+    sg `gas_outcome_full cfg (cx_tops cx) cx st0 (assign_tuple_target_list cx gs vs)
+      (ee with gas_obs := [],t',Gf',tf') Q R`) >>>
+  HEADGOAL (
+    simp[Abbr `cfg`] >>
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
+    qpat_assum `gas_outcome_full _ _ _ _ (assign_tuple_target_list cx gs vs)
+      (_,t',Gf',tf') (\H res ee G tn t. _ /\ _) _` (irule_at Any) >>
+    BETA_TAC >> reverse conj_tac >- simp[Abbr `R`] >>
+    map_every qx_gen_tac [`H`,`res`,`fin`,`Gend`,`tn_end`,`s_end`] >>
+    disch_then (map_every strip_assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    `fin with gas_obs := [] = fin` by
+      simp[vyperStateTheory.evaluation_state_component_equality] >>
+    qpat_assum `fin with gas_obs := [] = fin` (fn normalized =>
+      qpat_assum `!tail. assign_tuple_target_list cx gs vs _ = _`
+        (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [normalized])))) >>>
+  HEADGOAL (sg `res = INL ()`) >>>
+  HEADGOAL (Cases_on `res` >- simp[]) >>>
+  HEADGOAL (
+    rename1 `INR exc = INL ()` >>
+    qpat_assum `assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs)) = _`
+      (fn eq =>
+        qpat_assum `assign_tuple_target_list cx gs vs _ = (INR exc,fin)`
+          (assume_tac o MATCH_MP vyperExprNoControlTheory.assign_tuple_targets_no_control o
+           PURE_REWRITE_RULE [GSYM eq])) >>
+    qpat_assum `stmt_lands lctx sb (INR exc) s_end` mp_tac >>
+    qpat_assum `no_control_exc exc` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    Cases_on `exc` >>
+    simp[stmt_lands_def,vyperExprNoControlTheory.no_control_exc_def]) >>>
+  HEADGOAL (`cenv'' = cenv` by simp[]) >>>
+  HEADGOAL (sg `MAP FDOM fin.scopes = MAP FDOM es.scopes`) >>>
+  HEADGOAL (
+    qpat_assum `EVERY (\g. ?bt. g = BaseTarget bt) gs` (fn flat =>
+      qpat_assum `assign_tuple_target_list cx gs vs _ = (res,fin)` (fn eval =>
+      qpat_assum `res = INL ()` (fn normal =>
+      qpat_assum `MAP FDOM es.scopes = MAP FDOM ee.scopes` (fn initial =>
+        ACCEPT_TAC (TRANS
+          (SIMP_RULE (srw_ss()) [] (MATCH_MP tuple_flat_targets_success_scopes
+            (CONJ flat (PURE_REWRITE_RULE [normal] eval))))
+          (SYM initial))))))) >>>
+  HEADGOAL (sg `return_buf_sep d cenv fin s_end`) >>>
+  HEADGOAL (
+    irule (INST_TYPE [alpha |-> ``:256``] bodyFullSharedTheory.return_buf_sep_locals_kept) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexistsl_tac [`storage_trace_horizon ee.storage_trace`,`ctx`,`cx`,`es`,`func`,`s0`,`sa`] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_x_assum `cenv'' = cenv` SUBST_ALL_TAC >>
+    qpat_assum `Abbrev (Q = _)`
+      (fn eq => PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] eq]) >>
+    BETA_TAC >> qexists_tac `cenv` >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    sg `gas_outcome_full cfg (cx_tops cx) cx st0 (assign_tuple_target_list cx gs vs)
+      (ee with gas_obs := [],v,G',tn') Q R`) >>>
+  HEADGOAL (
+    qpat_assum `Abbrev (cfg = _)` (fn abbrev =>
+      let val cfg_eq = REWRITE_RULE [markerTheory.Abbrev_def] abbrev in
+        PURE_REWRITE_TAC [cfg_eq] >>
+        irule gasOutcomeFullStmtsTheory.gas_outcome_full_zero_prefix >>
+        qexistsl_tac [`Gf'`,`t'`,`tf'`] >>
+        conj_tac
+        >- (qx_gen_tac `H` >>
+            qpat_assum `!D. gas_origin_ptr_path _ (v,G',tn') [] (OK t',Gf',tf')`
+              (qspec_then `DF H` ACCEPT_TAC)) >>
+        qpat_assum `gas_outcome_full cfg _ _ _ (assign_tuple_target_list cx gs vs)
+          (_,t',Gf',tf') Q R` (ACCEPT_TAC o PURE_REWRITE_RULE [cfg_eq])
+      end)) >>>
+  HEADGOAL (
+    qpat_assum `Abbrev (cfg = _)`
+      (fn eq => PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] eq]) >>
+    pure_rewrite_tac[stmtSimAssignTupleTheory.eval_assign_tuple_action] >>
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_bind >> BETA_TAC >> rpt conj_tac) >>>
+  HEADGOAL (simp[cj 9 vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>>
+  HEADGOAL (
+    rpt strip_tac >>
+    rename1 `gas_marked_exec _ _ _ _ _ (INL source_v) source_mid (OK source_end)` >>
+    irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
+    qexistsl_tac [`source_mid`,`source_end`,`source_v`] >>
+    BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `storage_trace_frame (bind (eval_expr cx e) (read_result cx))`
+      ACCEPT_TAC) >>>
+  HEADGOAL (
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_intro >>
+    qexistsl_tac [`G'`,`ee`,`marks`,`OK v`,`INL (ArrayV (TupleV vs))`,`tn'`] >>
+    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, ALL_TAC]) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> strip_tac >> BETA_TAC >>
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+      (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (assume_tac o CONJUNCT1) >>
+    qpat_assum `Abbrev (cfg = _)` (fn abbrev =>
+      qpat_assum `gas_outcome_full cfg _ _ _ (assign_tuple_target_list cx gs vs) (_,v,G',tn') Q R`
+        (assume_tac o PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] abbrev])) >>
+    qpat_assum `assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs)) = _`
+      (fn source_eq => simp[NoAsms,source_eq]) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qmatch_asmsub_abbrev_tac
+      `gas_origin_ptr_path (_,lo,_,ctx,func,PG) (s0,G0,tn0) marks (r_exit,G',tn')` >>
+    `exit_result r_exit` by simp[Abbr `r_exit`,fragExecTheory.exit_result_def] >>
+    `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+      fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+         gas_origin_ptr_path _ _ _ (r_exit,_,_) /\ _`
+      (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (assume_tac o CONJUNCT1 o CONJUNCT2)) >>>
+  HEADGOAL (sg `?exc. (res:value + exception) = INR exc`) >>>
+  HEADGOAL (
+    qpat_assum `expr_exit res r_exit` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_INL]) >>>
+  HEADGOAL (
+    qpat_x_assum `res = INR exc` SUBST_ALL_TAC >>
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_intro >>
+    qexistsl_tac [`G'`,`ee`,`marks`,`r_exit`,`INR exc`,`tn'`] >>
+    rpt conj_tac) >>>
+  HEADGOAL (
+    qx_gen_tac `tail` >>
+    rewrite_tac[stmtSimAssignTupleTheory.eval_assign_tuple_action] >>
+    qpat_assum `!tail. _ = (INR exc,ee with gas_obs := tail)`
+      (qspec_then `tail` (fn rhs => simp[NoAsms,Once bind_def,rhs]))) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+         gas_origin_ptr_path _ _ _ (r_exit,_,_) /\ _` (qspec_then `H` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (BETA_TAC >> conj_tac) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (disj2_tac >> conj_tac) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (rpt conj_tac) >>>
+  HEADGOAL (
+    gen_tac >> simp[stmt_exit_ptr_def,
+      GSYM (INST_TYPE [alpha |-> ``:value``, beta |-> ``:unit``]
+        stmtSimPropsTheory.expr_exit_INR_type)]) >>>
+  HEADGOAL (
+    irule (iffLR (INST_TYPE [alpha |-> ``:value``, beta |-> ``:unit``]
+      haltExitProjTheory.halt_exit_INR_type)) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `Abbrev (r_exit = _)` (fn abbrev =>
+      simp[NoAsms,REWRITE_RULE [markerTheory.Abbrev_def] abbrev])) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qmatch_asmsub_abbrev_tac
+      `gas_origin_ptr_path (_,lo,_,ctx,func,PG) (s0,G0,tn0) marks (r_exit,G',tn')` >>
+    `exit_result r_exit` by simp[Abbr `r_exit`,fragExecTheory.exit_result_def] >>
+    `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+      fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+         gas_origin_ptr_path _ _ _ (r_exit,_,_) /\ _`
+      (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (assume_tac o CONJUNCT1 o CONJUNCT2)) >>>
+  HEADGOAL (sg `?exc. (res:value + exception) = INR exc`) >>>
+  HEADGOAL (
+    qpat_assum `expr_exit res r_exit` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_INL]) >>>
+  HEADGOAL (
+    qpat_x_assum `res = INR exc` SUBST_ALL_TAC >>
+    irule gasOutcomeFullComposeTheory.gas_outcome_full_intro >>
+    qexistsl_tac [`G'`,`ee`,`marks`,`r_exit`,`INR exc`,`tn'`] >>
+    rpt conj_tac) >>>
+  HEADGOAL (
+    qx_gen_tac `tail` >>
+    rewrite_tac[stmtSimAssignTupleTheory.eval_assign_tuple_action] >>
+    qpat_assum `!tail. _ = (INR exc,ee with gas_obs := tail)`
+      (qspec_then `tail` (fn rhs => simp[NoAsms,Once bind_def,rhs]))) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >> strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+         gas_origin_ptr_path _ _ _ (r_exit,_,_) /\ _` (qspec_then `H` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (BETA_TAC >> conj_tac) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (disj2_tac >> conj_tac) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (rpt conj_tac) >>>
+  HEADGOAL (
+    gen_tac >> simp[stmt_exit_ptr_def,
+      GSYM (INST_TYPE [alpha |-> ``:value``, beta |-> ``:unit``]
+        stmtSimPropsTheory.expr_exit_INR_type)]) >>>
+  HEADGOAL (
+    irule (iffLR (INST_TYPE [alpha |-> ``:value``, beta |-> ``:unit``]
+      haltExitProjTheory.halt_exit_INR_type)) >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `Abbrev (r_exit = _)` (fn abbrev =>
+      simp[NoAsms,REWRITE_RULE [markerTheory.Abbrev_def] abbrev])) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `F`) >>>
+  HEADGOAL (
+    `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+      fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+       gas_origin_ptr_path _ _ _ (IntRet _ _,_,_) /\ _`
+      (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (mp_tac o CONJUNCT1 o CONJUNCT2) >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_INL] >>
+    rename1 `expr_exit (INR exc) (IntRet _ _)` >>
+    Cases_on `exc` >> simp[exprSimDefsTheory.expr_exit_def] >>
+    rename1 `expr_exit (INR (Error err)) (IntRet _ _)` >>
+    Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def]) >>>
+  HEADGOAL (
+    `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+      fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    qpat_assum `!H. ~valid_horizon cx st0 H ee.storage_trace`
+      (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+    simp[]) >>>
+  HEADGOAL (
+    rename1 `gas_origin_ptr_focus _ _ _ (leaf,leaf_pg,leaf_g,leaf_tn,finish_state)` >>
+    rewrite_tac[gasOutcomeFullTheory.gas_outcome_full_def] >>
+    qexists_tac `marks` >> disj2_tac >> disj2_tac >>
+    qexistsl_tac [`err`,`ee`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish_state`] >>
+    conj_tac
+    >- (pure_rewrite_tac[stmtSimAssignTupleTheory.eval_assign_tuple_action] >>
+        PURE_ONCE_REWRITE_TAC [ignore_bind_def] >>
+        PURE_ONCE_REWRITE_TAC [bind_assoc] >>
+        irule gasExemptCertTheory.gas_exempt_cert_error_value >>
+        first_assum ACCEPT_TAC) >>
+    qexists_tac `H` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    rename1 `gas_origin_ptr_focus _ _ _ (leaf,leaf_pg,leaf_g,leaf_tn,finish_state)` >>
+    rewrite_tac[gasOutcomeFullTheory.gas_outcome_full_def] >>
+    qexists_tac `marks` >> disj1_tac >> conj_tac) >>>
+  HEADGOAL (
+    pure_rewrite_tac[stmtSimAssignTupleTheory.eval_assign_tuple_action] >>
+    irule gasStorageTheory.gas_bad_storage_at_bind_left >> conj_tac
+    >~ [`!v. storage_trace_frame (assign_tuple_targets _ _ v)`]
+    >- simp[NoAsms, cj 9 vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+    qpat_assum `gas_bad_storage_at _ _ _ _ _ _` ACCEPT_TAC) >>>
+  HEADGOAL (
+    CONV_TAC (RENAME_VARS_CONV
+      ["horizon_witness", "leaf_witness", "pg_witness", "ghost_witness",
+       "taint_witness", "state_witness"]) >>
+    qexistsl_tac [`H`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish_state`] >>
+    conj_tac) >>>
+  HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (first_assum ACCEPT_TAC)
+QED
