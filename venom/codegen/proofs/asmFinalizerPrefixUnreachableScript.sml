@@ -58,24 +58,18 @@ Proof
   simp[]
 QED
 
-Theorem prune_unreachable_prefix_transport_under[local]:
-  ^single_site /\ ^transitive ==>
+Theorem prune_unreachable_prefix_walk:
+  !tr. (!p. tr p p) /\
+  (!p q r. tr p q /\ tr q r ==> tr p r) /\
+  (!pre t x post. asm_terminal_op t /\ ~asm_reachable_marker x /\
+    asm_static_wf (pre ++ [t;x] ++ post) ==>
+    tr (pre ++ [t;x] ++ post) (pre ++ [t] ++ post)) ==>
   !sfx d pfx.
     (d ==> ?pre t. pfx = pre ++ [t] /\ asm_terminal_op t) /\
     asm_static_wf (pfx ++ sfx) ==>
-    ^transport (pfx ++ sfx) (pfx ++ FST (prune_unreachable_walk d sfx))
+    tr (pfx ++ sfx) (pfx ++ FST (prune_unreachable_walk d sfx))
 Proof
-  qabbrev_tac `tr = ^transport` >> strip_tac >>
-  `!p. tr p p` by
-    (unabbrev_all_tac >> BETA_TAC >> gen_tac >> qexists_tac `1` >>
-     conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
-     conj_tac >- (qexistsl_tac [`n`, `a`] >> simp[]) >>
-     rpt strip_tac >> qexistsl_tac [`n`, `a`] >> simp[]) >>
-  `!pre t x post. asm_terminal_op t /\ ~asm_reachable_marker x /\
-    asm_static_wf (pre ++ [t;x] ++ post) ==>
-    tr (pre ++ [t;x] ++ post) (pre ++ [t] ++ post)` by
-    (unabbrev_all_tac >> match_mp_tac terminal_site_prefix_conditional >>
-     first_assum ACCEPT_TAC) >>
+  gen_tac >> strip_tac >>
   Induct >- simp[prune_unreachable_walk_def] >>
   rpt gen_tac >> strip_tac >> simp[prune_unreachable_walk_fst] >>
   IF_CASES_TAC
@@ -97,6 +91,29 @@ Proof
   first_x_assum (qspecl_then [`asm_terminal_op h`, `pfx ++ [h]`] mp_tac) >>
   simp[rich_listTheory.APPEND_ASSOC_CONS] >>
   disch_then irule >> strip_tac >> qexistsl_tac [`pfx`, `h`] >> simp[]
+QED
+
+Theorem prune_unreachable_prefix_transport_under[local]:
+  ^single_site /\ ^transitive ==>
+  !sfx d pfx.
+    (d ==> ?pre t. pfx = pre ++ [t] /\ asm_terminal_op t) /\
+    asm_static_wf (pfx ++ sfx) ==>
+    ^transport (pfx ++ sfx) (pfx ++ FST (prune_unreachable_walk d sfx))
+Proof
+  qabbrev_tac `tr = ^transport` >> strip_tac >>
+  `!p. tr p p` by
+    (unabbrev_all_tac >> BETA_TAC >> gen_tac >> qexists_tac `1` >>
+     conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
+     conj_tac >- (qexistsl_tac [`n`, `a`] >> simp[]) >>
+     rpt strip_tac >> qexistsl_tac [`n`, `a`] >> simp[]) >>
+  `!pre t x post. asm_terminal_op t /\ ~asm_reachable_marker x /\
+    asm_static_wf (pre ++ [t;x] ++ post) ==>
+    tr (pre ++ [t;x] ++ post) (pre ++ [t] ++ post)` by
+    (unabbrev_all_tac >> match_mp_tac terminal_site_prefix_conditional >>
+     first_assum ACCEPT_TAC) >>
+  mp_tac (Q.SPEC `tr` prune_unreachable_prefix_walk) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[]
 QED
 
 Theorem prune_unreachable_prefix_transport_conditional:

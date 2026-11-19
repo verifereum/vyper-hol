@@ -115,6 +115,85 @@ Proof
   simp[sym_steps_def]
 QED
 
+(* A bounded straight-line window can jump on its final instruction. *)
+Theorem sym_steps_own_agree_on_window:
+  !n start ss.
+    start + n <= LENGTH p /\ ss.sym_base.as_pc = start /\
+    (!i. i < n ==>
+      EL (start+i) p <> AsmOp "CODESIZE" /\ EL (start+i) p <> AsmOp "CODECOPY" /\
+      (SUC i < n ==> EL (start+i) p <> AsmOp "JUMP" /\
+                     EL (start+i) p <> AsmOp "JUMPI")) ==>
+    sym_steps_own p env own n ss = sym_steps p env n ss
+Proof
+  Induct >- simp[sym_steps_own_def, sym_steps_def] >>
+  rpt gen_tac >> strip_tac >>
+  `start < LENGTH p` by decide_tac >>
+  qpat_assum `!i. i < SUC n ==> _`
+    (qspec_then `0` (fn th => strip_assume_tac
+      (REWRITE_RULE [arithmeticTheory.ADD_0, arithmeticTheory.LESS_MONO_EQ]
+        (MATCH_MP th (DECIDE ``0 < SUC n``))))) >>
+  `sym_step_own p env own (EL start p) ss = sym_step p env (EL start p) ss`
+    by simp[sym_step_own_eq] >>
+  simp_tac (srw_ss()) [sym_steps_own_def, sym_steps_def] >>
+  asm_rewrite_tac[] >>
+  Cases_on `sym_step p env (EL start p) ss` >> simp[] >>
+  rename1 `sym_step p env (EL start p) ss = SymOK mid` >>
+  Cases_on `n = 0` >- simp[sym_steps_own_def, sym_steps_def] >>
+  `mid.sym_base.as_pc = start + 1` by
+    (drule_at (Pos last) sym_step_pc_next >> simp[]) >>
+  qpat_assum `!start ss. _` (qspecl_then [`start+1`, `mid`] mp_tac) >>
+  (impl_tac >- (simp[] >> gen_tac >> disch_tac >>
+    qpat_assum `!i. i < SUC n ==> _`
+      (qspec_then `SUC i` (fn th => mp_tac
+        (MATCH_MP th (MATCH_MP (DECIDE ``i:num < n ==> SUC i < SUC n``)
+          (ASSUME ``i:num < n``))))) >>
+    pure_rewrite_tac[arithmeticTheory.LESS_MONO_EQ,
+      DECIDE ``start + SUC i = i + (start + 1)``] >> simp[])) >>
+  simp[]
+QED
+
+Theorem sym_steps_own_agree_on_chunk:
+  ss.sym_base.as_pc = LENGTH pre /\ n <= LENGTH chunk /\
+  EVERY (\inst. inst <> AsmOp "CODESIZE" /\ inst <> AsmOp "CODECOPY") chunk /\
+  EVERY (\inst. inst <> AsmOp "JUMP" /\ inst <> AsmOp "JUMPI")
+    (TAKE (LENGTH chunk - 1) chunk) ==>
+  sym_steps_own (pre ++ chunk ++ post) env own n ss =
+  sym_steps (pre ++ chunk ++ post) env n ss
+Proof
+  strip_tac >> irule sym_steps_own_agree_on_window >>
+  qexists_tac `LENGTH pre` >> simp[] >>
+  gen_tac >> disch_tac >>
+  `i < LENGTH chunk` by decide_tac >>
+  `EL (i + LENGTH pre) (pre ++ chunk ++ post) = EL i chunk` by
+    simp[listTheory.EL_APPEND_EQN] >>
+  pop_assum SUBST1_TAC >>
+  qpat_assum `EVERY _ chunk` (mp_tac o REWRITE_RULE [listTheory.EVERY_EL]) >>
+  disch_then (qspec_then `i` mp_tac) >> simp[] >>
+  rpt strip_tac >>
+  `i < LENGTH chunk - 1` by decide_tac >>
+  qpat_x_assum `EVERY _ (TAKE _ _)` (mp_tac o REWRITE_RULE [listTheory.EVERY_EL]) >>
+  disch_then (qspec_then `i` mp_tac) >>
+  simp[listTheory.LENGTH_TAKE_EQ, listTheory.EL_TAKE]
+QED
+
+Theorem bounded_window_transfer_own:
+  (!i. i <= D ==> sym_steps_own p env own i s = sym_steps p env i s) /\
+  (!j. j <= E ==> sym_steps_own q env own j s = sym_steps q env j s) /\
+  (?d. 0 < d /\ d <= D /\
+    (!i a. i < d /\ sym_steps p env i s = SymOK a ==> checkpoint i a) /\
+    (!a. sym_steps p env d s = SymOK a ==>
+      ?e. e <= E /\ sym_steps q env e s = SymOK (shift a) /\ complete a e)) ==>
+  ?d. 0 < d /\ d <= D /\
+    (!i a. i < d /\ sym_steps_own p env own i s = SymOK a ==> checkpoint i a) /\
+    (!a. sym_steps_own p env own d s = SymOK a ==>
+      ?e. sym_steps_own q env own e s = SymOK (shift a) /\ complete a e)
+Proof
+  strip_tac >> qexists_tac `d` >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `i <= D` by decide_tac >> metis_tac[]) >>
+  rpt strip_tac >> metis_tac[]
+QED
+
 Theorem sym_steps_own_preserves_splice_invariant[local]:
   !n u a. u.sym_base.as_stack = [] /\
     sym_state_labels_in (asm_label_refs p) u /\
