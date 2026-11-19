@@ -160,9 +160,91 @@ End
 
 (* ===== At one module: constSubst's definitions ===== *)
 
-(* Scaffolding: proof to come (mutual induction over the syntax).  Holds as
-   constSubst substitutes only main-module references (NONE, id), and the
-   environment here has only such keys. *)
+Theorem alookup_main_consts[local]:
+  ALOOKUP (MAP (λ(id,v). ((NONE,id),v)) env) (ns,id) =
+  case ns of NONE => ALOOKUP env id | SOME _ => NONE
+Proof
+  Cases_on `ns` >> Induct_on `env` >> simp[ALOOKUP_def] >>
+  Cases_on `h` >> simp[ALOOKUP_def]
+QED
+
+Theorem subst_consts_expr_mods_singleton[local]:
+  (∀env e. subst_consts_expr_mods (MAP (λ(id,v). ((NONE,id),v)) env) e =
+           subst_consts_expr env e) ∧
+  (∀env t. subst_consts_btarget_mods (MAP (λ(id,v). ((NONE,id),v)) env) t =
+           subst_consts_btarget env t) ∧
+  (∀env es. subst_consts_exprs_mods (MAP (λ(id,v). ((NONE,id),v)) env) es =
+            subst_consts_exprs env es) ∧
+  (∀env opt. subst_consts_opt_mods (MAP (λ(id,v). ((NONE,id),v)) env) opt =
+             subst_consts_opt env opt) ∧
+  (∀env fs. subst_consts_fields_mods (MAP (λ(id,v). ((NONE,id),v)) env) fs =
+            subst_consts_fields env fs)
+Proof
+  ho_match_mp_tac subst_consts_expr_ind >>
+  simp[subst_consts_expr_mods_def, subst_consts_expr_def, alookup_main_consts] >>
+  rpt gen_tac >> Cases_on `ns` >> simp[]
+QED
+
+Theorem subst_consts_target_mods_singleton[local]:
+  (∀env t. subst_consts_target_mods (MAP (λ(id,v). ((NONE,id),v)) env) t =
+           subst_consts_target env t) ∧
+  (∀env ts. subst_consts_targets_mods (MAP (λ(id,v). ((NONE,id),v)) env) ts =
+            subst_consts_targets env ts)
+Proof
+  ho_match_mp_tac subst_consts_target_ind >>
+  simp[subst_consts_target_mods_def, subst_consts_target_def,
+       subst_consts_expr_mods_singleton]
+QED
+
+Theorem subst_consts_iter_mods_singleton[local]:
+  subst_consts_iter_mods (MAP (λ(id,v). ((NONE,id),v)) env) it =
+  subst_consts_iter env it
+Proof
+  Cases_on `it` >>
+  simp[subst_consts_iter_mods_def, subst_consts_iter_def,
+       subst_consts_expr_mods_singleton]
+QED
+
+Theorem subst_consts_error_mods_singleton[local]:
+  subst_consts_error_mods (MAP (λ(id,v). ((NONE,id),v)) env) err =
+  subst_consts_error env err
+Proof
+  Cases_on `err` >>
+  simp[subst_consts_error_mods_def, subst_consts_error_def,
+       subst_consts_expr_mods_singleton]
+QED
+
+Theorem subst_consts_areason_mods_singleton[local]:
+  subst_consts_areason_mods (MAP (λ(id,v). ((NONE,id),v)) env) r =
+  subst_consts_areason env r
+Proof
+  Cases_on `r` >>
+  simp[subst_consts_areason_mods_def, subst_consts_areason_def,
+       subst_consts_expr_mods_singleton, subst_consts_error_mods_singleton]
+QED
+
+Theorem subst_consts_rreason_mods_singleton[local]:
+  subst_consts_rreason_mods (MAP (λ(id,v). ((NONE,id),v)) env) r =
+  subst_consts_rreason env r
+Proof
+  Cases_on `r` >>
+  simp[subst_consts_rreason_mods_def, subst_consts_rreason_def,
+       subst_consts_expr_mods_singleton, subst_consts_error_mods_singleton]
+QED
+
+Theorem subst_consts_stmt_mods_singleton[local]:
+  (∀env s. subst_consts_stmt_mods (MAP (λ(id,v). ((NONE,id),v)) env) s =
+           subst_consts_stmt env s) ∧
+  (∀env ss. subst_consts_stmts_mods (MAP (λ(id,v). ((NONE,id),v)) env) ss =
+            subst_consts_stmts env ss)
+Proof
+  ho_match_mp_tac subst_consts_stmt_ind >>
+  simp[subst_consts_stmt_mods_def, subst_consts_stmt_def,
+       subst_consts_expr_mods_singleton, subst_consts_target_mods_singleton,
+       subst_consts_iter_mods_singleton, subst_consts_areason_mods_singleton,
+       subst_consts_rreason_mods_singleton]
+QED
+
 Theorem subst_consts_mods_singleton:
   (∀e. subst_consts_expr_mods (MAP (λ(id,v). ((NONE,id),v)) env) e =
        subst_consts_expr env e) ∧
@@ -171,7 +253,7 @@ Theorem subst_consts_mods_singleton:
   (∀ss. subst_consts_stmts_mods (MAP (λ(id,v). ((NONE,id),v)) env) ss =
         subst_consts_stmts env ss)
 Proof
-  cheat
+  simp[subst_consts_expr_mods_singleton, subst_consts_stmt_mods_singleton]
 QED
 
 Theorem module_consts_env_mods_singleton:
