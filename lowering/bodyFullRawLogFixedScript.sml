@@ -22,7 +22,10 @@ Theorem raw_log_fixed_data_full:
     fn_has_code sa sd func /\ fn_has_code sd sm func /\
     fn_has_code shadow_sa shadow_sd shadow_func /\ fn_has_code shadow_sd shadow_sm shadow_func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!fn inst t. frag_reachable ctx func s0 fn inst t ==> dalloca_no_wrap inst t) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
+      !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     gas_admissible (bind (eval_expr cx data) (read_result cx)) expr_res_ok es /\
@@ -85,16 +88,6 @@ Proof
   (impl_tac >- (rpt gen_tac >>
     MATCH_ACCEPT_TAC bodyFullRawLogFixedTailPathTheory.raw_log_fixed_static_tail_path)) >>
   disch_tac >> rpt gen_tac >> strip_tac >>
-  `!fn inst t. frag_reachable ctx func s0 fn inst t ==> dalloca_no_wrap inst t` by
-    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> strip_tac >>
-     `ctx_has_dalloca ctx` by
-       (simp_tac bool_ss [ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
-        qexists_tac `fn` >> conj_tac >- first_assum ACCEPT_TAC >>
-        qexists_tac `inst` >> simp[]) >> fs[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
-     !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-    simp[] >>
   qpat_x_assum `!DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm.
       _` (qspecl_then [`DF`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`,
         `shadow_func`, `cenv`, `cx`, `data`, `es`, `sd`, `data_op`, `sm`,

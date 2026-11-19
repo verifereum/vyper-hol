@@ -3,12 +3,13 @@ Ancestors bodyPtrPrecompileBuiltinsStaging bodyPtrPrecompileBuiltinsSeq
           venomExecSemantics venomState venomInst ptrDiscipline bodyPtrDefs
           exprLoweringProps fragExec finite_map list emitHelper compileEnv loweringStateRelDefs
           context contextCodegenRelProps rich_list
+  fragGasSeqPtrContext[qualified,ignore_grammar]
 
 Theorem point_word_read_trace:
   ptr_covers G tn root s capacity /\ lookup_var root s = SOME a /\
   off + 32 <= capacity /\ w2n a + off < dimword (:256) /\
   (!i. w2n (a + n2w off) <= i /\ i < w2n (a + n2w off) + 32 ==>
-    i NOTIN tn.t_mem) /\ ~ctx_has_dalloca ctx ==>
+    i NOTIN tn.t_mem) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq [mk_inst id ADD [Var root; Lit (n2w off)] [src];
       mk_inst (id+1) MLOAD [Var src] [tmp]] s = OK t /\
@@ -34,7 +35,10 @@ Proof
     (qx_choose_then `tn1` strip_assume_tac))) >>
   `!i. w2n (a + n2w off) <= i /\ i < w2n (a + n2w off) + 32 ==>
       i NOTIN tn1.t_mem` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[mk_inst id ADD [Var root; Lit (n2w off)] [src]]`, `s`] >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all clean_word_load_trace_cursors >>
   disch_then (qspec_then `tmp` mp_tac) >>
   disch_then (qspec_then `id+1` mp_tac) >>
@@ -65,7 +69,7 @@ Theorem offset_word_store_trace:
   ptr_covers G tn bufroot s capacity /\ lookup_var bufroot s = SOME a /\
   off + 32 <= capacity /\ w2n a + off < dimword (:256) /\
   eval_operand v s = SOME w /\ op_taint tn v = {} /\
-  (!p. v = Var p ==> p <> dst) /\ ~ctx_has_dalloca ctx ==>
+  (!p. v = Var p ==> p <> dst) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq [mk_inst id ADD [Var bufroot; Lit (n2w off)] [dst];
       mk_inst (id+1) MSTORE [Var dst; v] []] s = OK t /\
@@ -96,7 +100,10 @@ Proof
      strip_tac >> gvs[]) >>
   `eval_operand v s1 = SOME w /\ op_taint tn1 v = {}` by
     (Cases_on `v` >> gvs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[mk_inst id ADD [Var bufroot; Lit (n2w off)] [dst]]`, `s`] >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all clean_word_store_trace_cursors >>
   disch_then (qspec_then `id+1` mp_tac) >>
   disch_then (mp_tac o SPEC_ALL) >>
@@ -132,7 +139,7 @@ Theorem point_word_transfer_trace:
   (!i. w2n (a + n2w off) <= i /\ i < w2n (a + n2w off) + 32 ==>
     i NOTIN tn.t_mem) /\
   bufroot <> src /\ bufroot <> tmp /\ tmp <> dst /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq [mk_inst id ADD [Var root; Lit (n2w off)] [src];
       mk_inst (id+1) MLOAD [Var src] [tmp];
@@ -164,6 +171,11 @@ Proof
   `eval_operand (Var tmp) s1 = SOME (mload (w2n (a + n2w off)) s)` by
     simp[eval_operand_def] >>
   `!p. Var tmp = Var p ==> p <> dst` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[mk_inst id ADD [Var root;Lit (n2w off)] [src];
+       mk_inst (id+1) MLOAD [Var src] [tmp]]`, `s`] >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all offset_word_store_trace >>
   disch_then (qspec_then `id+2` mp_tac) >>
   disch_then (mp_tac o SPEC_ALL) >>
@@ -226,7 +238,7 @@ Theorem emitted_point_word_transfer_checked:
   dstoff + 32 <= bufsize /\ w2n b + dstoff < dimword (:256) /\
   (!i. w2n (a + n2w off) <= i /\ i < w2n (a + n2w off) + 32 ==>
     i NOTIN tn.t_mem) /\
-  not_fresh_at sa root /\ not_fresh_at sa bufroot /\ ~ctx_has_dalloca ctx ==>
+  not_fresh_at sa root /\ not_fresh_at sa bufroot /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
@@ -263,7 +275,7 @@ Theorem emitted_point_word_transfer_keeps_covers:
   dstoff + 32 <= bufsize /\ w2n b + dstoff < dimword (:256) /\
   (!i. w2n (a + n2w off) <= i /\ i < w2n (a + n2w off) + 32 ==>
     i NOTIN tn.t_mem) /\
-  not_fresh_at sa root /\ not_fresh_at sa bufroot /\ ~ctx_has_dalloca ctx ==>
+  not_fresh_at sa root /\ not_fresh_at sa bufroot /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)

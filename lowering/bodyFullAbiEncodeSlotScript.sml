@@ -80,6 +80,7 @@ Proof
   `cs_extends a mid /\ cs_extends mid b` by suspend "extends" >>
   `fn_has_code a mid func /\ fn_has_code mid b func` by
     metis_tac[fn_has_code_split] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_encode_owned_offset_origin >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   rename1 `lookup_var q addressed = SOME (n2w (w2n bw+off))` >>

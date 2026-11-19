@@ -7,24 +7,60 @@ Ancestors
   venomMemProps fragExec fragGasPathPtr gasCount ptrSafeRun typedCopyLoopHeaderPtr
   abiEncoderRounding revertReasonPrefixFramePtr list
   venomInst venomExecSemantics venomState ptrDiscipline words arithmetic finite_map
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
+  fragGasSeqPtrContext[qualified,ignore_grammar]
+
+Theorem alloca_literal_below_fmp[local]:
+  (!b sz. FLOOKUP s.vs_allocas id = SOME (b,sz) ==> sz = n) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    (FLOOKUP s.vs_allocas id = NONE ==>
+      s.vs_alloca_next + n <= w2n s.vs_initial_fmp)) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
+  ctx_has_dalloca ctx ==> allocas_below_fmp s1
+Proof
+  strip_tac >>
+  `allocas_below_fmp s` by metis_tac[] >>
+  Cases_on `FLOOKUP s.vs_allocas id`
+  >- (`s.vs_alloca_next + n <= w2n s.vs_initial_fmp` by metis_tac[] >>
+      `n < dimword (:256)` by
+        (mp_tac (Q.ISPEC `s.vs_initial_fmp:bytes32` w2n_lt) >> decide_tac) >>
+      mp_tac (Q.SPECL [`id`, `n`, `out`, `s`]
+        loweringHaltTheory.step_alloca_fresh) >>
+      simp[] >> strip_tac >>
+      gvs[allocas_below_fmp_def, update_var_def, FLOOKUP_UPDATE, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> res_tac) >>
+  PairCases_on `x` >>
+  `x1 = n` by metis_tac[] >>
+  mp_tac (Q.SPECL [`id`, `n`, `out`, `s`, `x0`]
+    allocationPtrTheory.reused_alloca_step) >>
+  gvs[] >> strip_tac >>
+  gvs[allocas_below_fmp_def, update_var_def]
+QED
 
 Theorem alloca_store_literal_checks:
   (FLOOKUP s.vs_allocas id = NONE ==>
      s.vs_alloca_next+n < dimword(:256)) /\
   (!b sz. FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
      sz = n /\ b+n < dimword(:256)) /\
-  32 <= n /\ ~ctx_has_dalloca ctx /\
+  32 <= n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    (FLOOKUP s.vs_allocas id = NONE ==>
+      s.vs_alloca_next + n <= w2n s.vs_initial_fmp)) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
   ?Gf tnf a.
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id ALLOCA [Lit (n2w n)] [out];
        mk_inst (id+1) MSTORE [Var out; Lit value] []] s Gf tnf /\
     lookup_var out s1 = SOME a /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s1) /\
     ptr_covers Gf tnf out
       ((mstore (w2n a) value s1) with vs_inst_idx := SUC (SUC s.vs_inst_idx)) 32 /\
     (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tnf.t_mem)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> irule alloca_literal_below_fmp >>
+     qexistsl_tac [`ctx`, `id`, `n`, `out`, `s`] >> simp[] >> metis_tac[]) >>
   `ptr_covers
      (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1)
      (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn)
@@ -40,7 +76,9 @@ Proof
   `ptr_inst_ok D 0 0 ctx fn g1 t1
      (mk_inst (id+1) MSTORE [Var out; Lit value] []) s2` by
     (irule ptr_inst_ok_mstore >>
-     simp[op_taint_def, Abbr `g1`, Abbr `t1`, Abbr `s2`]) >>
+     simp[op_taint_def, Abbr `g1`, Abbr `t1`, Abbr `s2`] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[allocas_below_fmp_def]) >>
   `?a. lookup_var out s1 = SOME a` by fs[ptr_covers_def, eval_operand_def] >>
   `lookup_var out s2 = SOME a` by fs[Abbr `s2`, lookup_var_def] >>
   `step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) s2 =
@@ -68,7 +106,9 @@ Theorem alloca_store_literal_path_ptr:
      s.vs_alloca_next+n < dimword(:256)) /\
   (!b sz. FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
      sz = n /\ b+n < dimword(:256)) /\
-  32 <= n /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  32 <= n /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    (FLOOKUP s.vs_allocas id = NONE ==>
+      s.vs_alloca_next + n <= w2n s.vs_initial_fmp)) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id ALLOCA [Lit (n2w n)] [out];
             mk_inst (id+1) MSTORE [Var out; Lit value] []]
@@ -81,6 +121,9 @@ Theorem alloca_store_literal_path_ptr:
       ((mstore (w2n a) value s1) with vs_inst_idx := s.vs_inst_idx+2) 32 /\
     lookup_var out ((mstore (w2n a) value s1) with
        vs_inst_idx := s.vs_inst_idx+2) = SOME a /\
+    (ctx_has_dalloca ctx ==>
+      allocas_below_fmp ((mstore (w2n a) value s1) with
+        vs_inst_idx := s.vs_inst_idx+2)) /\
     mload (w2n a) ((mstore (w2n a) value s1) with
        vs_inst_idx := s.vs_inst_idx+2) = value /\
     (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tnf.t_mem)
@@ -110,6 +153,13 @@ Proof
       vs_inst_idx := s.vs_inst_idx+2) = SOME a` by
     (qpat_x_assum `lookup_var out s1 = _` mp_tac >>
      simp[lookup_var_def, mstore_def]) >>
+  `ctx_has_dalloca ctx ==>
+    allocas_below_fmp ((mstore (w2n a) value s1) with
+      vs_inst_idx := s.vs_inst_idx+2)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[allocas_below_fmp_def, mstore_def, write_memory_with_expansion_def] >>
+     metis_tac[]) >>
   qexistsl_tac [`Gf`, `tnf`, `a`] >> fs[ptr_covers_def, arithmeticTheory.ADD1]
 QED
 
@@ -132,7 +182,7 @@ QED
 
 Theorem add_zero_checks:
   ptr_covers G tn src s n /\ lookup_var src s = SOME a /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf.
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id ADD [Var src; Lit 0w] [dst]] s Gf tnf /\
@@ -161,7 +211,7 @@ QED
 Theorem mload_clean_cell_checks:
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf.
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id MLOAD [Var src] [dst]] s Gf tnf /\
@@ -213,7 +263,7 @@ Theorem alias_pair_load_checks:
   ptr_covers G tn cell s 32 /\
   (!i. w2n A <= i /\ i < w2n A+32 ==> i NOTIN tn.t_mem) /\
   p <> aq /\ cell <> aq /\ cell <> ap /\
-  aq <> ap /\ aq <> dst /\ ap <> dst /\ ~ctx_has_dalloca ctx /\
+  aq <> ap /\ aq <> dst /\ ap <> dst /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq
     [mk_inst id ADD [Var q; Lit 0w] [aq];
      mk_inst (id+1) ADD [Var p; Lit 0w] [ap];
@@ -263,6 +313,10 @@ Proof
 QED
 
 Resume alias_pair_load_checks[second]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s1`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `step_inst_base j s1 = OK (update_var ap P s1)` by
@@ -279,6 +333,10 @@ Resume alias_pair_load_checks[second]:
   `lookup_var cell s2 = SOME A` by
     fs[Abbr `s2`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `!i. w2n A <= i /\ i < w2n A+32 ==> i NOTIN t2.t_mem` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[NoAsms, Abbr `s2`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn g2 t2 k s2` by
     (simp[Abbr `k`] >> irule ptr_inst_ok_mload >> simp[]) >>
   `step_inst_base k s2 = OK (update_var dst (mload (w2n A) s2) s2)` by
@@ -359,7 +417,7 @@ Finalise alias_pair_load_checks
 Theorem mstore_clean_checks:
   ptr_covers G tn dst s 32 /\ lookup_var dst s = SOME a /\
   eval_operand value s = SOME w /\ op_taint tn value = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf.
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id MSTORE [Var dst;value] []] s Gf tnf /\
@@ -410,7 +468,7 @@ Theorem revert_operand_path_ptr:
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id REVERT [Var p;len] []) /\
   ptr_covers G tn p s (w2n n) /\
   eval_operand len s = SOME n /\ op_taint tn len = {} /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id REVERT [Var p;len] []) s = Abort a t ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (Abort a t)
 Proof
@@ -431,7 +489,7 @@ Theorem revert_abi_tail_checks:
   28 < capbytes /\ 28+(k+4) <= capbytes /\
   w2n a+28 < dimword(:256) /\ k+4 < dimword(:256) /\
   buf <> retptr /\ szvar <> retptr /\ retptr <> retlen /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id ADD [Var buf;Lit 28w] [retptr];
      mk_inst (id+1) ADD [Lit 4w;Var szvar] [retlen];
@@ -460,6 +518,10 @@ Proof
 QED
 
 Resume revert_abi_tail_checks[length]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s1`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `step_inst_base j s1 = OK (update_var retlen (n2w (k+4)) s1)` by
@@ -475,6 +537,10 @@ Resume revert_abi_tail_checks[length]:
     simp[Abbr `t2`, Abbr `j`, cj 1 copy_len_binop_ghost_frame] >>
   `lookup_var retlen s2 = SOME (n2w (k+4))` by
     simp[Abbr `s2`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[NoAsms, Abbr `s2`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn g2 t2 l s2` by
     (simp[Abbr `l`] >> irule ptr_inst_ok_revert >>
      simp[eval_operand_def, w2n_n2w, LESS_MOD]) >>
@@ -493,7 +559,7 @@ Theorem zero_pad_copy_checks:
   R < capbytes /\ R+32 <= capbytes /\ 32+L <= capbytes /\
   w2n a+R < dimword(:256) /\ 32+L < dimword(:256) /\
   dst <> endvar /\ src <> endvar /\ lenvar <> endvar /\
-  dst <> countvar /\ src <> countvar /\ ~ctx_has_dalloca ctx ==>
+  dst <> countvar /\ src <> countvar /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id ADD [Var dst;Var rounded] [endvar];
      mk_inst (id+1) MSTORE [Var endvar;Lit 0w] [];
@@ -556,6 +622,10 @@ Resume zero_pad_copy_checks[checks]:
 QED
 
 Resume zero_pad_copy_checks[store]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s1`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_mstore >> simp[op_taint_def]) >>
   `step_inst_base j s1 = OK (mstore (w2n (a+n2w R)) 0w s1)` by
@@ -584,6 +654,10 @@ QED
 Resume zero_pad_copy_checks[copy]:
   qpat_x_assum `!x C. _` kall_tac >>
   qpat_x_assum `!x C. _` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[NoAsms, Abbr `s2`, allocas_below_fmp_def, mstore_def] >>
+     rpt strip_tac >> res_tac) >>
   `ptr_inst_ok D 0 0 ctx fn g2 t2 k s2` by
     (simp[Abbr `k`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `step_inst_base k s2 = OK (update_var countvar (n2w (32+L)) s2)` by
@@ -604,6 +678,10 @@ Resume zero_pad_copy_checks[copy]:
     simp[Abbr `t3`, Abbr `k`, cj 1 copy_len_binop_ghost_frame] >>
   `lookup_var countvar s3 = SOME (n2w (32+L))` by
     simp[Abbr `s3`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2` mp_tac >>
+     simp[NoAsms, Abbr `s3`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn g3 t3 l s3` by
     (simp[Abbr `l`] >> irule ptr_inst_ok_mcopy_operand >>
      simp[eval_operand_def, w2n_n2w, LESS_MOD] >> fs[ADD_COMM]) >>
@@ -615,7 +693,7 @@ Finalise zero_pad_copy_checks
 Theorem round_ceil32_checks:
   lookup_var lenvar s = SOME (n2w L) /\
   op_taint tn (Var lenvar) = {} /\ L+63 < dimword(:256) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf.
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id ADD [Var lenvar;Lit 31w] [tmp];
@@ -648,6 +726,10 @@ Proof
     simp[Abbr `t1`, Abbr `i`, copy_len_binop_ghost_frame] >>
   `lookup_var tmp s1 = SOME (n2w L+31w)` by
     simp[Abbr `s1`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s1`, exprPtrUnwrapFramesTheory.copy_allocas_update,
+       exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `(n2w L:bytes32)+31w &&
@@ -701,7 +783,7 @@ Finalise round_ceil32_checks
 Theorem store_load_clean_checks:
   ptr_covers G tn cell s 32 /\ lookup_var cell s = SOME a /\
   eval_operand value s = SOME w /\ op_taint tn value = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf.
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id MSTORE [Var cell;value] [];
@@ -733,6 +815,10 @@ Proof
   `t1.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32}` by
     (simp[Abbr `t1`, Abbr `i`] >> irule (cj 5 mstore_ghost_frame) >> simp[]) >>
   `!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN t1.t_mem` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s1`, allocas_below_fmp_def, mstore_def] >>
+     rpt strip_tac >> res_tac) >>
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_mload >> simp[]) >>
   `step_inst_base j s1 = OK (update_var dst (mload (w2n a) s1) s1)` by
@@ -794,7 +880,7 @@ Finalise store_load_clean_checks
 Theorem clean_add_checks:
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id ADD [left;right] [out]] s Gf tnf /\
     op_taint tnf (Var out) = {} /\

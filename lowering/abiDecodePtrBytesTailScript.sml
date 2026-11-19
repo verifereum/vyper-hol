@@ -115,6 +115,7 @@ Proof
     (irule abi_decode_bytes_round_scalar >> simp[] >> metis_tac[]) >>
   `!op. op IN {cnt;Lit 31w} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
     (simp[] >> rpt strip_tac >> gvs[op_prov_def,op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>

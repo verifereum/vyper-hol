@@ -37,7 +37,7 @@ Theorem attribute_add_path_post_ptr:
   compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
-  fn_has_code sm sn func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sm sn func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\

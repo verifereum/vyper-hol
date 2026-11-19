@@ -1741,6 +1741,13 @@ Resume return_selected_valued_frag_full_core[buffered_generic_call]:
      qpat_assum `unlocked.vs_alloca_next<=ra.vs_alloca_next` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
   `~ra.vs_halted` by asm_rewrite_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ra /\
+    ra.vs_alloca_next + pending_alloca_size func ra <= w2n ra.vs_initial_fmp` by
+    (qpat_assum `stmt_state_rel _ ctx func ce cx prepared_es ra` (fn related =>
+       mp_tac (MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp related) >>
+       mp_tac (MATCH_MP stateRelProjTheory.stmt_state_rel_fmp_room related)) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac) >>
   mp_tac (Q.INST
     [`window_dst` |-> `retbuf.buf_operand`,`window_src` |-> `(src:operand)`,
      `ei` |-> `ce.ce_ret_enc_info`,`st` |-> `renc_st`,

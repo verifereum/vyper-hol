@@ -26,21 +26,6 @@ Proof
   simp[compile_var_array_membership_def, vv_location_def, vv_operand_def, mk_ptr_def]
 QED
 
-(* Labels can evaluate: the frame preserves them because label bindings are
-   not mutable loop registers. This is not a non-Label side condition. *)
-Theorem membership_base_label_evaluates[local]:
-  eval_operand (Label lbl) (s with vs_labels := s.vs_labels |+ (lbl,bw)) = SOME bw
-Proof
-  simp[eval_operand_def, FLOOKUP_UPDATE]
-QED
-
-Theorem membership_base_literal_evaluates[local]:
-  eval_operand (Lit bw) s = SOME bw /\ op_taint tn (Lit bw) = {} /\
-  op_prov G (Lit bw) = NONE
-Proof
-  simp[eval_operand_def, op_taint_def, op_prov_def]
-QED
-
 Theorem membership_evaluated_array_footprint_positive:
   evaluate_type tenv (ArrayT et bd) = SOME (ArrayTV tv bd) ==>
   0 < val_footprint (ArrayTV tv bd) (ArrayV av)
@@ -71,7 +56,7 @@ QED
    Literals and labels are not converted to synthetic target registers. *)
 Theorem membership_slot_header_operand_step:
   eval_operand arr_op s = SOME bw /\ op_taint tn arr_op = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   step_inst_base (mk_inst id (if tr then TLOAD else SLOAD) [arr_op] [out]) s =
     OK (update_var out (if tr then tload bw s else sload bw s) s) /\
   ptr_inst_ok D 0 fuel ctx fn G tn
@@ -88,7 +73,7 @@ QED
 
 Theorem membership_code_header_operand_step:
   eval_operand arr_op s = SOME bw /\ op_taint tn arr_op = {} /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   value = word_of_bytes T (0w:bytes32)
     (TAKE 32 (DROP (w2n bw) s.vs_data_section ++ REPLICATE 32 0w)) ==>
   step_inst_base (mk_inst id DLOAD [arr_op] [out]) s = OK (update_var out value s) /\

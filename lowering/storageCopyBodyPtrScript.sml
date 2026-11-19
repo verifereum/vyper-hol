@@ -111,7 +111,7 @@ Proof
   `step_inst_base (mk_inst id MSTORE [Var p;v] []) s =
     OK (mstore (w2n addr) value s)` by simp[storage_copy_store_step] >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MSTORE [Var p;v] []) s` by
-    simp[ptr_inst_ok_mstore_payload] >>
+    simp[wordLoadStorePtrTheory.ifexp_materialize_mstore_check] >>
   `~is_terminator (mk_inst id MSTORE [Var p;v] []).inst_opcode /\
    (mk_inst id MSTORE [Var p;v] []).inst_opcode <> INVOKE` by
     simp[mk_inst_def, is_terminator_def] >>

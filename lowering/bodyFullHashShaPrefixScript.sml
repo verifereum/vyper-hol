@@ -50,6 +50,7 @@ Proof
     (rpt gen_tac >> strip_tac >>
      qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem` irule >> decide_tac) >>
   `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
+  `ctx_has_dalloca (ctx with ctx_functions := []) ==> allocas_below_fmp s` by simp[] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
     metis_tac[stmt_state_rel_allocas_below_fmp] >>
   drule_all (Q.SPECL [`D`, `ctx with ctx_functions := []`]

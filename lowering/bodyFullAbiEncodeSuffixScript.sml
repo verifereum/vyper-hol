@@ -122,7 +122,9 @@ Theorem abi_encode_suffix_full:
   ptr_covers G tn dp s dstcap /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
   alloca_inv s /\ alloca_room ctx func s /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (0 < cap ==> sb + cap <= s.vs_alloca_next /\
     regions_disjoint (sb,cap) (d,LENGTH (enc at av)) /\
     ?p. src = Var p /\ ptr_covers G tn p s cap) /\

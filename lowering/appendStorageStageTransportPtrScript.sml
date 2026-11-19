@@ -169,6 +169,7 @@ Proof
   `run_inst_seq (emitted_insts st2 st3) s2 = OK s2` by
     (irule emit_append_assert_actual >> qexists_tac `valid` >> simp[]) >>
   `state_frame s2 = state_frame s2` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all append_storage_guard_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >>
   imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
@@ -226,6 +227,7 @@ Proof
      Abort Revert_abort (revert_state (set_returndata [] s2))` by
     (irule append_storage_assert_abort_stage >>
      qexistsl_tac [`F`, `valid`] >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all append_storage_guard_abort_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >>
   imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>

@@ -89,6 +89,9 @@ Proof
 QED
 
 Resume emit_allocated_mcopy_endpoint_ptr[endpoint]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule emit_mcopy_zero_path_ptr >>
   simp[eval_operand_def, op_taint_def] >>
   disch_then drule_all >>

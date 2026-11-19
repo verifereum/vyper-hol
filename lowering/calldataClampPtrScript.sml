@@ -846,6 +846,7 @@ Theorem scalar_seq_abort_replay_ptr:
 Proof
   strip_tac >> drule_all bop_scalar_seq_abort_prefix >> strip_tac >>
   qpat_x_assum `bop_scalar_seq R A code B` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule bop_scalar_seq_assert_abort_checked >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then drule >> simp[] >>

@@ -48,6 +48,7 @@ Proof
   `fn_has_code (sa with cs_next_var := sa.cs_next_var + 1) sb func` by
     gvs[fragExecTheory.fn_has_code_def, emitted_blocks_def] >>
   gvs[op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_at (Pat `emit_inst _ _ _ _ = _`) reason_copy_binop_resources_ptr >>
   simp[eval_operand_def, op_taint_def] >>
   disch_then (drule_all_then strip_assume_tac) >>

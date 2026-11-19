@@ -50,9 +50,8 @@ Proof
      qexistsl [`b`,`cap`,`p`] >> simp[] >> decide_tac) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sh sb)` by
     (irule (cj 5 literal_chunks_ptr) >> simp[] >>
-     conj_tac >- metis_tac[] >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any) >> simp[] >> qexistsl [`bs`,`32`] >> simp[] >> decide_tac) >>
+     qexistsl_tac [`G`,`b`,`b`,`bs`,`ctx`,`cap`,`32`,`p`,`uh`,`th`] >>
+     simp[] >> decide_tac) >>
   Cases_on `run_inst_seq (emitted_insts sh sb) u` >>
   fs[Abbr `uh`, run_inst_seq_inst_idx, exec_result_map_def] >>
   qexistsl [`v`,`Gf`,`tnf`] >>

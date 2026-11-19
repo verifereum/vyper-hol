@@ -5,11 +5,12 @@ Ancestors
   bodyPtrTypeBuiltinsEmptyZero typedCopyPtr fragGasSeqPtr ghostPcTransportPtr
   bodyPtrDefs fragExecPtr
   ptrDiscipline ptrSafeRun venomExecSemantics venomState venomInst finite_map words emitHelperProps
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem empty_zero_pair_cursor_frame:
   !D ctx func PG G tn s id p out w off sz H th.
     lookup_var p s = SOME w /\ ptr_covers G tn p s sz /\ p <> out /\
-    off+32 <= sz /\ w2n w+sz < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+    off+32 <= sz /\ w2n w+sz < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     inst_seq_ptr D 0 ctx func PG G tn
       [mk_inst id ADD [Var p; Lit (n2w off)] [out];
        mk_inst (id+1) MSTORE [Var out; Lit 0w] []] s H th ==>
@@ -45,6 +46,9 @@ QED
 
 Resume empty_zero_pair_cursor_frame[cursor]:
   gen_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    simp[Abbr `u`, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+         exprPtrUnwrapFramesTheory.copy_allocas_update] >>
   `step_inst_base (mk_inst id ADD [Var p; Lit (n2w off)] [out])
       (s with vs_inst_idx := k) = OK (u with vs_inst_idx := k)` by
     (`step_inst_base (mk_inst id ADD [Var p; Lit (n2w off)] [out])
@@ -54,8 +58,9 @@ Resume empty_zero_pair_cursor_frame[cursor]:
      gvs[Abbr `u`, update_var_def]) >>
   simp[] >>
   conj_tac >- (irule ptr_inst_ok_copy_len_binop >>
-    gvs[ptr_covers_def, op_taint_def]) >>
-  irule ptr_inst_ok_mstore >> simp[op_taint_def] >>
+    gvs[ptr_covers_def, op_taint_def, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx]) >>
+  irule ptr_inst_ok_mstore >>
+  simp[op_taint_def, exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >>
   `ptr_covers (step_prov PG G (mk_inst id ADD [Var p; Lit (n2w off)] [out]) u)
       (step_taint (mk_inst id ADD [Var p; Lit (n2w off)] [out]) s u tn)
       out u 32` by
@@ -68,7 +73,7 @@ Finalise empty_zero_pair_cursor_frame
 Theorem empty_zero_pair_uniform_certificate:
   !D ctx func PG G tn s id p out w off sz.
     lookup_var p s = SOME w /\ ptr_covers G tn p s sz /\ p <> out /\
-    off+32 <= sz /\ w2n w+sz < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
+    off+32 <= sz /\ w2n w+sz < dimword (:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn
       [mk_inst id ADD [Var p; Lit (n2w off)] [out];
        mk_inst (id+1) MSTORE [Var out; Lit 0w] []] s G' tn' /\

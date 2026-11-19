@@ -5,12 +5,13 @@ Ancestors bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsKeccakFixed
   ghostPcTransportPtr instIdxIndep exprSimHash ptrDiscipline venomState
   venomExecSemantics venomInst words finite_map builtinHashing emitHelperProps
   compileEnv emitHelper loweringHalt rich_list context exprLoweringProps
+  stateRelProj[qualified,ignore_grammar] localPtrsProps[qualified,ignore_grammar]
 
 Theorem hash_store_sha3_seq_ptr:
   !D ctx fn PG G tn s sid hid p value out a v m.
     ptr_covers G tn p s 32 /\ lookup_var p s = SOME a /\
     eval_operand value s = SOME v /\ op_taint tn value = {} /\
-    m <= 32 /\ ~ctx_has_dalloca ctx ==>
+    m <= 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst sid MSTORE [Var p;value] [];
        mk_inst hid SHA3 [Var p;Lit (n2w m)] [out]] s G' tn'
@@ -30,9 +31,14 @@ Proof
 QED
 
 Resume hash_store_sha3_seq_ptr[check]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (`allocas_below_fmp s1 <=> allocas_below_fmp s` by
+       simp[Abbr `s1`, allocas_below_fmp_def, mstore_def] >>
+     simp[]) >>
   irule hash_fixed_input_sha3_ok >>
-  simp[Abbr `G1`, Abbr `tn1`, Abbr `s1`] >>
-  rpt strip_tac >> gvs[lookup_var_def, mstore_def]
+  simp[Abbr `G1`, Abbr `tn1`] >>
+  conj_tac >- gvs[Abbr `s1`, lookup_var_def, mstore_def] >>
+  rpt strip_tac >> gvs[Abbr `s1`, lookup_var_def]
 QED
 
 Finalise hash_store_sha3_seq_ptr
@@ -44,7 +50,7 @@ Theorem hash_alloc_store_sha3_seq_ptr:
     step_inst_base (mk_inst aid ALLOCA [Lit 32w] [p]) s = OK t /\
     eval_operand value t = SOME v /\
     op_taint (step_taint (mk_inst aid ALLOCA [Lit 32w] [p]) s t tn) value = {} /\
-    m <= 32 /\ ~ctx_has_dalloca ctx ==>
+    m <= 32 ==>
     ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst aid ALLOCA [Lit 32w] [p];
        mk_inst sid MSTORE [Var p;value] [];
@@ -57,7 +63,39 @@ Proof
   `ptr_covers (step_prov PG G (mk_inst aid ALLOCA [Lit 32w] [p]) t)
     (step_taint (mk_inst aid ALLOCA [Lit 32w] [p]) s t tn) p t 32` by
     (irule alloca_step_ptr_covers >> simp[] >> metis_tac[]) >>
+  `alloca_inv s` by
+    (drule stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >> simp[]) >>
+  `fmp_room ctx fn s` by
+    (drule stateRelProjTheory.stmt_state_rel_fmp_room >> simp[]) >>
+  `exec_alloca (mk_inst aid ALLOCA [Lit 32w] [p]) s (32w:bytes32) = OK t` by
+    (qpat_assum `step_inst_base _ _ = _`
+       (mp_tac o SIMP_RULE (srw_ss()) [step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
+     simp[mk_inst_def]) >>
+  `alloca_inv t` by
+    (drule_at (Pat `exec_alloca _ _ _ = _`) localPtrsPropsTheory.alloca_inv_exec_alloca >>
+     simp[]) >>
+  `fmp_room ctx fn t` by
+    (irule fmp_room_exec_alloca >>
+     qexistsl_tac [`mk_inst aid ALLOCA [Lit 32w] [p]`, `32w:bytes32`, `s`] >>
+     simp[mk_inst_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (strip_tac >>
+     qpat_x_assum `alloca_inv t` (strip_assume_tac o REWRITE_RULE
+       [venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def]) >>
+     qpat_x_assum `fmp_room ctx fn t` (mp_tac o REWRITE_RULE [fmp_room_def]) >>
+     simp[allocas_below_fmp_def] >> rpt strip_tac >> res_tac >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     qpat_x_assum `alloca_inv s` (strip_assume_tac o REWRITE_RULE
+       [venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def]) >>
+     qpat_x_assum `fmp_room ctx fn s` (mp_tac o REWRITE_RULE [fmp_room_def]) >>
+     simp[allocas_below_fmp_def] >> rpt strip_tac >> res_tac >> decide_tac) >>
   `?a. lookup_var p t = SOME a` by gvs[ptr_covers_def] >>
+  `!j. ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := j)` by
+    (gen_tac >>
+     `allocas_below_fmp (t with vs_inst_idx := j) <=> allocas_below_fmp t` by
+       simp[allocas_below_fmp_def] >>
+     simp[]) >>
   simp[Once inst_seq_ptr_def, ptr_inst_ok_alloca] >>
   irule hash_store_sha3_seq_ptr >>
   gvs[lookup_var_def]
@@ -91,7 +129,7 @@ Theorem hash_alloc_store_sha3_counted:
     step_inst_base (mk_inst aid ALLOCA [Lit 32w] [p]) s = OK t /\
     eval_operand value t = SOME v /\
     op_taint (step_taint (mk_inst aid ALLOCA [Lit 32w] [p]) s t tn) value = {} /\
-    m <= 32 /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    m <= 32 /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX [mk_inst aid ALLOCA [Lit 32w] [p];
        mk_inst sid MSTORE [Var p;value] [];

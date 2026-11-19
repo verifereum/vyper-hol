@@ -5,12 +5,14 @@ Ancestors
   convertScalarBytesRun arithmeticProps instSeqComposePtr instIdxIndep fragExec
   compileEnv loweringStateRelDefs ptrDiscipline finite_map venomState venomInst list
   venomExecSemantics emitHelperProps ASCIInumbers rich_list
+  fragGasSeqPtrContext[qualified,ignore_grammar]
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
 
 Theorem scalar_emit_fixed_certificate:
   MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   emit_op opc [x;y] sa = (out,sb) /\
   op_prov G x = NONE /\ op_prov G y = NONE /\
-  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?H th.
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
@@ -80,7 +82,7 @@ Theorem scalar_emit_counted_certificate:
   MEM opc [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   emit_op opc [x;y] sa = (out,sb) /\
   op_prov G x = NONE /\ op_prov G y = NONE /\
-  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -105,7 +107,7 @@ QED
 
 Theorem convert_bool_decimal_fixed_certificate:
   compile_type_convert x (ConvBoolToDecimal divisor) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?H th.
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
@@ -144,7 +146,7 @@ QED
 
 Theorem convert_bool_decimal_counted_certificate:
   compile_type_convert x (ConvBoolToDecimal divisor) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -222,7 +224,7 @@ QED
 
 Theorem convert_bytes_int_fixed_certificate:
   compile_type_convert x (ConvBytesToInt m signed bits) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -260,8 +262,10 @@ Proof
         (qpat_x_assum `run_inst_seq (emitted_insts mid sb) u = _ \/ _` strip_assume_tac >>
          simp[run_inst_seq_inst_idx, exec_result_map_def]) >>
       qpat_x_assum `run_inst_seq (emitted_insts mid sb) u = _ \/ _` kall_tac >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx)`
-        by simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+        (simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >> strip_tac >>
+         irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+         qexistsl_tac [`emitted_insts sa mid`, `s`] >> simp[] >> drule emitted_insts_emit_op >> Cases_on `signed` >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
       FIRST [drule_all (cj 1 (PURE_REWRITE_RULE
         [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM] int_clamp_fixed_certificate)),
         drule_all (cj 2 (PURE_REWRITE_RULE
@@ -329,7 +333,7 @@ QED
 
 Theorem convert_bytes_int_counted_certificate:
   compile_type_convert x (ConvBytesToInt m signed bits) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -353,7 +357,7 @@ QED
 
 Theorem convert_bytes_int_abort_counted_certificate:
   compile_type_convert x (ConvBytesToInt m signed bits) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -414,7 +418,7 @@ QED
 
 Theorem convert_bytes_decimal_fixed_certificate:
   compile_type_convert x (ConvBytesMToDecimal m divisor lo hi) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (run_inst_seq (emitted_insts sa sb) s = OK t \/
    run_inst_seq (emitted_insts sa sb) s = Abort err t) ==>
   ?H th.
@@ -453,8 +457,10 @@ Proof
               Abbr `ys`, mk_inst_def, is_terminator_def]) >>
       qpat_x_assum `run_inst_seq ys u = _ \/ _` kall_tac >>
       qunabbrev_tac `ys` >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx)`
-        by simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+        (simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx] >> strip_tac >>
+         irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+         qexistsl_tac [`emitted_insts sa mid`, `s`] >> simp[] >> drule emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
       FIRST [drule_all (cj 1 (PURE_REWRITE_RULE
         [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM] scalar_double_check_certificate)),
         drule_all (cj 2 (PURE_REWRITE_RULE
@@ -522,7 +528,7 @@ QED
 
 Theorem convert_bytes_decimal_counted_certificate:
   compile_type_convert x (ConvBytesMToDecimal m divisor lo hi) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
@@ -546,7 +552,7 @@ QED
 
 Theorem convert_bytes_decimal_abort_counted_certificate:
   compile_type_convert x (ConvBytesMToDecimal m divisor lo hi) sa = (out,sb) /\
-  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>

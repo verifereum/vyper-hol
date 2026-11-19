@@ -458,17 +458,13 @@ Proof
   qpat_x_assum `run_inst_seq _ s = OK r` mp_tac >>
   qmatch_goalsub_abbrev_tac `run_inst_seq code s` >> strip_tac >>
   RULE_ASSUM_TAC (REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
-  drule_all (Q.INST [`ctx` |-> `ctx with ctx_functions := []`]
-    (SPEC_ALL toplevel_copy_body_ptr)) >>
+  drule_all toplevel_copy_body_ptr >>
   disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
       ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
       i.inst_opcode <> DALLOCA) code` by
     (qpat_x_assum `code = _` SUBST1_TAC >>
      Cases_on `loc = LocStorage` >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
-  `inst_seq_ptr D 0 ctx func PG G tn code s Gf tnf` by
-    (irule inst_seq_ptr_restore_ctx >> simp[]) >>
   `(ctx_has_dalloca ctx ==> allocas_below_fmp r)` by
     metis_tac[run_inst_seq_allocas_below_fmp] >>
   `run_inst_seq_mem_ok code s` by

@@ -144,6 +144,8 @@ Proof
   `local_ptrs_reserved ce header_st` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `st` >> simp[]) >>
   `stmt_state_rel H ctx fn ce cx es u` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
   drule_all bodyPtrBytestringBuiltinsBufferTheory.compile_alloc_buffer_counted >>
   disch_then (qspecl_then [`tnh`, `PG`, `Gh`, `ARB`] strip_assume_tac) >>
   rename1 `step_inst_base _ u = OK v` >>

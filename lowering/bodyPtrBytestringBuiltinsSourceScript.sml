@@ -114,6 +114,7 @@ Proof
   `32 + L <= 32 + L` by simp[] >>
   `eval_operand (Lit 32w) u = SOME (n2w 32) /\ op_taint tn' (Lit 32w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all emit_pointer_offset_counted_covers >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   suspend "compose"

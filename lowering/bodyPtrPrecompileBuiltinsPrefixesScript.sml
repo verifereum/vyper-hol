@@ -46,6 +46,7 @@ Proof
   strip_tac >> drule offset_store_code >>
   disch_then (qx_choose_then `dst` strip_assume_tac) >>
   `!p. v = Var p ==> p <> dst` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all offset_word_store_trace >>
   disch_then (qspec_then `sa.cs_next_id` mp_tac) >>
   disch_then (mp_tac o SPEC_ALL) >>
@@ -100,6 +101,7 @@ Proof
       i NOTIN tn.t_mem)` by
     (simp[wordsTheory.WORD_ADD_0] >> rpt gen_tac >> strip_tac >>
      qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem` irule >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emitted_point_word_transfer_checked >>
   disch_then (mp_tac o SPEC_ALL) >>
   disch_then (qx_choose_then `s1` (qx_choose_then `G1`
@@ -128,6 +130,7 @@ Resume emitted_point_pair_checked[second]:
   qpat_x_assum `_ sa = ((),sb)` kall_tac >>
   qpat_x_assum `ptr_covers G tn root s 64` kall_tac >>
   qpat_x_assum `ptr_covers G tn bufroot s capacity` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all emitted_point_word_transfer_checked >>
   disch_then (mp_tac o SPEC_ALL) >>
   disch_then (qx_choose_then `s2` (qx_choose_then `G2`

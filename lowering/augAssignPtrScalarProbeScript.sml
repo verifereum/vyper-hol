@@ -1,8 +1,9 @@
 (* Bounded scalar instruction/sequence interface probe. *)
 Theory augAssignPtrScalarProbe
 Ancestors augAssignPtrInterfaces bodyPtrDefs typedCopyPtr fragGasSeqPtr
-  ptrDiscipline ptrSafeRun venomInst venomState venomExecSemantics
+  ptrDiscipline ptrSafeRun venomInst venomState venomExecSemantics exprLoweringProps
   finite_map pred_set codegenRel contextCodegenRel
+  fragGasSeqPtrContext[qualified,ignore_grammar]
 
 Theorem add_sub_clean_metadata:
   (opc = ADD \/ opc = SUB) /\ op_prov G x = NONE /\ op_prov G y = NONE ==>
@@ -21,7 +22,7 @@ Proof
 QED
 
 Theorem add_assert_sequence_ptr:
-  ~ctx_has_dalloca ctx /\ op_prov G x = NONE /\ op_prov G y = NONE /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ op_prov G x = NONE /\ op_prov G y = NONE /\
   op_taint tn x = {} /\ op_taint tn y = {} ==>
   ?H tm. inst_seq_ptr D 0 ctx fn PG G tn
     [mk_inst id ADD [x;y] [z]; mk_inst aid ASSERT [Var z] []] s H tm
@@ -33,13 +34,19 @@ Proof
   simp[inst_seq_ptr_def] >>
   `op_taint (step_taint (mk_inst id ADD [x;y] [z]) s v tn) (Var z) = {}` by
     metis_tac[add_sub_clean_metadata] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (`allocas_below_fmp (v with vs_inst_idx := SUC s.vs_inst_idx) <=>
+       allocas_below_fmp v` by simp[allocas_below_fmp_def] >>
+     asm_rewrite_tac[] >> strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`[mk_inst id ADD [x;y] [z]]`, `s`] >> simp[run_inst_seq_def, mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   simp[ptr_inst_ok_assert] >>
   Cases_on `step_inst_base (mk_inst aid ASSERT [Var z] [])
     (v with vs_inst_idx := SUC s.vs_inst_idx)` >> simp[]
 QED
 
 Theorem add_assert_success_path_ptr:
-  ~ctx_has_dalloca ctx /\ op_prov G x = NONE /\ op_prov G y = NONE /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ op_prov G x = NONE /\ op_prov G y = NONE /\
   op_taint tn x = {} /\ op_taint tn y = {} /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id ADD [x;y] [z]; mk_inst aid ASSERT [Var z] []]
@@ -59,7 +66,7 @@ Proof
 QED
 
 Theorem add_assert_abort_path_ptr:
-  ~ctx_has_dalloca ctx /\ op_prov G x = NONE /\ op_prov G y = NONE /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ op_prov G x = NONE /\ op_prov G y = NONE /\
   op_taint tn x = {} /\ op_taint tn y = {} /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id ADD [x;y] [z]; mk_inst aid ASSERT [Var z] []]
@@ -97,7 +104,7 @@ QED
 
 Theorem add_sub_ptr_inst_ok:
   (opc = ADD \/ opc = SUB) /\ op_prov G x = NONE /\ op_prov G y = NONE /\
-  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn x = {} /\ op_taint tn y = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc [x;y] [z]) s
 Proof
   strip_tac >> gvs[]

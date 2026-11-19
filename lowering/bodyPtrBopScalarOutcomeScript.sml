@@ -233,6 +233,7 @@ Resume bop_scalar_suffix_outcome_ptr[abort]:
   drule_all run_inst_seq_origin_ptr_abort_lift >>
   disch_then (qspecl_then [`{}`, `ctx`, `PG`]
     (qx_choose_then `j` assume_tac)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule bop_scalar_seq_assert_abort_checked >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then drule >>

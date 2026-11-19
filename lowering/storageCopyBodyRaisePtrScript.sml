@@ -50,7 +50,7 @@ Proof
      OK (mstore (w2n addr) w s)` by
     (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, venomExecSemanticsTheory.exec_write2_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MSTORE [Var dst;value] []) s` by
-    (irule payloadLoadStorePtrTheory.ptr_inst_ok_mstore_payload >> simp[]) >>
+    (irule wordLoadStorePtrTheory.ifexp_materialize_mstore_check >> simp[]) >>
   `step_prov PG G (mk_inst id MSTORE [Var dst;value] []) (mstore (w2n addr) w s) = G` by
     simp[step_prov_def, set_prov_def, mk_inst_def, DRESTRICT_UNIV] >>
   `gas_path_ptr_edge D 0 ctx fn PG G tn s 0 G
