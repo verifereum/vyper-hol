@@ -901,7 +901,12 @@ Proof
      qpat_x_assum `cs_extends load_end select_end` mp_tac >>
      qpat_x_assum `cs_extends start load_end` mp_tac >>
      MATCH_ACCEPT_TAC member_prefix_observed_then) >>
-  `tnz.t_mem = tn.t_mem /\ z.vs_allocas = s.vs_allocas` by fs[] >>
+  `tnz.t_mem = tn.t_mem /\ z.vs_allocas = s.vs_allocas` by
+    (MAP_EVERY (fn pat => qpat_assum pat (fn th => PURE_REWRITE_TAC[th]))
+       [`tnz.t_mem = tnl.t_mem`, `tnl.t_mem = tnf.t_mem`, `tnf.t_mem = tn.t_mem`,
+        `z.vs_allocas = t.vs_allocas`, `t.vs_allocas = u.vs_allocas`,
+        `u.vs_allocas = s.vs_allocas`] >>
+     REWRITE_TAC[]) >>
   `~(?clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp)` by
     (qpat_x_assum `dec_info_needs_offset (type_to_abi_dec_info sf ce ty)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
@@ -1009,7 +1014,12 @@ Proof
      metis_tac[externalEntryShapeTheory.compile_abi_decode_labels, pairTheory.SND]) >>
   `fn_has_code start select_end fn /\ fn_has_code select_end head_start fn /\
    fn_has_code head_start tail_start fn` by
-    metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans] >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`fn_has_code start finish' fn`, `cs_extends start select_end`,
+        `cs_extends select_end head_start`, `cs_extends head_start tail_start`,
+        `cs_extends tail_start finish'`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans]) >>
   qpat_x_assum `(^bounded_member_entry) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   disch_then (fn th => assume_tac th >> mp_tac th) >>
   disch_then (mp_then (Pos hd) mp_tac abi_decode_member_select_joint_observed) >>
