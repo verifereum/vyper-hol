@@ -3646,10 +3646,8 @@ Proof
         simp[ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
           Abbr `ti2`, mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
           contextCodegenRelTheory.source_memory_read_ranges_def] >>
-        conj_tac
-        >- (gen_tac >> Cases_on `op = Var a4` >> fs[] >>
-            Cases_on `op = offset` >> fs[]) >>
-        fs[allocas_from_def, update_var_def] >> first_assum ACCEPT_TAC) >>
+        gen_tac >> Cases_on `op = Var a4` >> fs[] >>
+        Cases_on `op = offset` >> fs[]) >>
      `!D. inst_seq_ptr D lo ctx func PG ag7 at7 [ti1;ti2] addr_s tg2 tt2` by
        (gen_tac >>
         qpat_assum `!D j. ptr_inst_ok D lo 0 ctx func ag7 at7 ti1 _` mp_tac >>
@@ -5852,10 +5850,8 @@ Proof
      simp[ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
        Abbr `ex2`, mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
        contextCodegenRelTheory.source_memory_read_ranges_def, op_taint_def] >>
-     conj_tac
-     >- (gen_tac >> Cases_on `op = exit_len` >> fs[op_taint_def] >>
-         Cases_on `op = Lit (n2w asz)` >> fs[op_taint_def]) >>
-     fs[allocas_from_def, update_var_def] >> first_assum ACCEPT_TAC) >>
+     gen_tac >> Cases_on `op = exit_len` >> fs[op_taint_def] >>
+     Cases_on `op = Lit (n2w asz)` >> fs[op_taint_def]) >>
   `!D j. ptr_inst_ok D lo 0 ctx func eg2 et2 ex3
     (exit_mid with vs_inst_idx := j)` by
     (rpt gen_tac >>
@@ -5874,10 +5870,8 @@ Proof
      simp[ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
        Abbr `ex3`, mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
        contextCodegenRelTheory.source_memory_read_ranges_def, op_taint_def] >>
-     conj_tac
-     >- (gen_tac >> Cases_on `op = exit_payload` >> fs[op_taint_def] >>
-         Cases_on `op = Lit 32w` >> fs[op_taint_def]) >>
-     fs[allocas_from_def, update_var_def] >> first_assum ACCEPT_TAC) >>
+     gen_tac >> Cases_on `op = exit_payload` >> fs[op_taint_def] >>
+     Cases_on `op = Lit 32w` >> fs[op_taint_def]) >>
   `run_inst_seq_mem_ok [ex1;ex2;ex3] exit_s` by
     (qpat_assum `step_inst_base ex1 exit_s = OK exit_load` mp_tac >>
      qpat_assum `step_inst_base ex2 exit_load = OK exit_mid` mp_tac >>
