@@ -137,7 +137,7 @@ Proof
 QED
 
 (* Conditional child contract, generalized over its actual entry. *)
-val C = ``\ty tv.
+val decode_child_run = ``\ty tv.
  !v ctx func cenv cx es st en source hi pos output B L xs p d dstid live ceiling s H0.
  abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
    st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s ==>
@@ -168,7 +168,7 @@ val C = ``\ty tv.
 
 (* The induction keeps the whole destination allocation and the source
    window live, even when the completed member interval is empty. *)
-val M = ``\tys tvs.
+val decode_members_run = ``\tys tvs.
  !vs ctx func cenv cx es st en source hi pos output B L xs p d outsz ao vo dstid live ceiling s H0.
  abi_valid_allocated_members_entry H0 ce env sf tys tvs vs ctx func cenv cx es
    st en (Var source) hi pos (Var output) B L xs p d outsz ao vo dstid live ceiling s ==>
@@ -199,7 +199,7 @@ val M = ``\tys tvs.
  alloca_history func u /\ allocas_from lo u /\ lo <= u.vs_alloca_next``;
 
 Theorem decoder_joint_members_nil[local]:
-  (^M) [] []
+  (^decode_members_run) [] []
 Proof
   BETA_TAC >>
   simp_tac bool_ss [abi_valid_allocated_members_entry_def,
@@ -920,7 +920,7 @@ Proof
 QED
 
 Theorem decoder_joint_members_cons[local]:
-  (^C) ty tv /\ (^M) tys tvs ==> (^M) (ty::tys) (tv::tvs)
+  (^decode_child_run) ty tv /\ (^decode_members_run) tys tvs ==> (^decode_members_run) (ty::tys) (tv::tvs)
 Proof
   BETA_TAC >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "child") (mk_asm "tail")) >>
@@ -1053,7 +1053,7 @@ Proof
 QED
 
 Theorem decoder_joint_members_fold[local]:
-  LIST_REL (^C) tys tvs ==> (^M) tys tvs
+  LIST_REL (^decode_child_run) tys tvs ==> (^decode_members_run) tys tvs
 Proof
   BETA_TAC >> qid_spec_tac `tvs` >> Induct_on `tys` >-
     (simp_tac bool_ss [LIST_REL_NIL] >>
@@ -1148,7 +1148,7 @@ Proof
 QED
 
 Theorem decoder_joint_complex_members[local]:
-  (^M) tys tvs /\
+  (^decode_members_run) tys tvs /\
   compile_abi_decode_to_buf (Var output) pos MLOAD (Var source) hi
     (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),en) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
@@ -1239,7 +1239,7 @@ QED
 
 Theorem abi_valid_allocated_joint_tuple:
   LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
-  LIST_REL (^C) tys tvs ==> (^C) (TupleT tys) (TupleTV tvs)
+  LIST_REL (^decode_child_run) tys tvs ==> (^decode_child_run) (TupleT tys) (TupleTV tvs)
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac
     (mk_asm "members" o MATCH_MP decoder_joint_members_fold)) >>
@@ -1276,11 +1276,11 @@ Proof
 QED
 
 Theorem abi_valid_allocated_joint_fixed_array:
-  abi_decoder_coherent ce env sf ty tv /\ (^C) ty tv ==>
-  (^C) (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
+  abi_decoder_coherent ce env sf ty tv /\ (^decode_child_run) ty tv ==>
+  (^decode_child_run) (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac (mk_asm "child")) >>
-  `LIST_REL (^C) (REPLICATE n ty) (REPLICATE n tv)` by
+  `LIST_REL (^decode_child_run) (REPLICATE n ty) (REPLICATE n tv)` by
     (simp[LIST_REL_REPLICATE_same] >> strip_tac >>
      asm "child" (ACCEPT_TAC o SIMP_RULE (srw_ss()) [] o BETA_RULE)) >>
   asm_x "child" kall_tac >>
@@ -1343,11 +1343,11 @@ Theorem abi_valid_allocated_joint_struct:
   MAP (\(name,ty,sz). (name,ty)) fields = args /\
   LIST_REL (abi_decoder_coherent ce (env \\ nsid) (sf \\ nsid_to_string nsid))
     (MAP SND args) tvs /\
-  LIST_REL (^(C |> subst [``env:nsid |-> type_args`` |-> ``(env:nsid |-> type_args) \\ nsid``,
+  LIST_REL (^(decode_child_run |> subst [``env:nsid |-> type_args`` |-> ``(env:nsid |-> type_args) \\ nsid``,
     ``sf:string |-> (string # vyperAST$type # num) list`` |->
       ``(sf:string |-> (string # vyperAST$type # num) list) \\ nsid_to_string nsid``]))
     (MAP SND args) tvs ==>
-  (^C) (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
+  (^decode_child_run) (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
