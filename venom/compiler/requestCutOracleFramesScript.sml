@@ -2,14 +2,13 @@ Theory requestCutOracleFrames
 Ancestors
   requestCutOracleReplay jointRequestCut ptrDiscipline contextCodegenRel codegenRel
   instIdxIndep opcodeClass venomExecSemantics venomState venomInst list
+  loweringBudgetFrameOracleTransport
 Libs
   BasicProvers
 
-Theorem active_inst_outcome_update[simp]:
-  active_inst f i (s with vs_outcomes := os) <=> active_inst f i s
-Proof
-  simp[active_inst_def]
-QED
+val _ = export_rewrites
+  ["loweringBudgetFrameOracleTransport.active_inst_outcomes_update",
+   "loweringBudgetFrameOracleTransport.write_ranges_outcomes_update"]
 
 Theorem noninvoke_ok_oracle_length[local]:
   (!rq rqs. record_request rq rqs = rqs ++ [rq]) /\
@@ -72,15 +71,6 @@ Theorem entry_ghost_outcome_update[simp]:
   entry_taint_vars f (s with vs_outcomes := os) tn = entry_taint_vars f s tn
 Proof
   simp[entry_prov_def, entry_taint_vars_def]
-QED
-
-Theorem write_ranges_outcome_update[simp]:
-  source_memory_write_ranges i (s with vs_outcomes := os) = source_memory_write_ranges i s
-Proof
-  Cases_on `i.inst_opcode` >>
-  simp[source_memory_write_ranges_def, fixed_source_write_range_def,
-       sized_source_write_range_def] >>
-  rpt (PURE_TOP_CASE_TAC >> simp[])
 QED
 
 Theorem step_taint_outcome_suffix:

@@ -1,6 +1,6 @@
 Theory asmFrameTerminalOutcomes
 Ancestors
-  asmFrameRun asmFrameRel asmSem asmWf symbolResolve frameStep frameObsStep
+  asmFrameRun asmFrameLocalStep asmFrameRel asmSem asmWf symbolResolve frameStep frameObsStep
   callTrace vfmExecution extCallOracle list
 
 Theorem asm_frame_terminal_no_unread_outcomes:
@@ -65,16 +65,6 @@ Proof
       asm_step_memory_def, asm_step_control_def, asm_step_copy_def,
       asm_step_extcall_def, AllCaseEqs()] >>
   irule asm_primitives_terminal_outcomes >> simp[MEM] >> metis_tac[]
-QED
-
-Theorem asm_context_not_terminal[local]:
-  asm_step_context name a <> SOME (AsmHalt b) /\
-  asm_step_context name a <> SOME (AsmRevert b) /\
-  asm_step_context name a <> SOME (AsmFault b)
-Proof
-  rw[asm_step_context_def] >>
-  gvs[asm_push_val_def, asm_next_def, asm_state_unop_def, asm_gas_def,
-      AllCaseEqs()]
 QED
 
 Theorem asm_op_terminal_outcomes[local]:

@@ -1,6 +1,6 @@
 Theory requestCutLowerDloadVisit
 Ancestors
-  requestCutDloadOperands
+  requestCutDloadOperands loweringBudgetFrameOracleTransport
   requestCutReplayProofs requestCutOracleReplay e2eRequestCutDefs
   lowerDloadExternalInputs lowerDloadNormalData lowerDloadCoverageInvariant
   lowerDloadSharedState lowerDloadResidualNonmemory lowerDloadRequestObservation
@@ -52,7 +52,7 @@ Proof
      metis_tac[]) >>
   `!op. MEM op i.inst_operands ==> ?w.
      eval_operand op (t with vs_outcomes := []) = SOME w` by
-    (simp_tac bool_ss [outcome_suffix_eval_operand] >>
+    (simp_tac bool_ss [operand_outcomes_update] >>
      qpat_assum `step_inst fuel CT i t = OK t'` (fn step =>
        qpat_assum `MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2]`
          (fn opcode => ACCEPT_TAC

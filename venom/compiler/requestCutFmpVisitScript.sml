@@ -43,7 +43,7 @@ Proof
   `s.vs_labels = t.vs_labels /\ s.vs_call_ctx = t.vs_call_ctx` by
     fs[fmp_stage_rel_def,fmp_frame_rel_def] >>
   `i.inst_opcode <> PHI /\ active_inst fn i (s with vs_outcomes := [])` by
-    fs[MEM,active_inst_outcome_update] >>
+    fs[MEM,loweringBudgetFrameOracleTransportTheory.active_inst_outcomes_update] >>
   `!op. MEM op i.inst_operands ==> ?w. eval_operand op s = SOME w` by
     (qpat_assum `step_inst fuel CT i t = OK t'` (fn step =>
        qpat_assum `MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2]`

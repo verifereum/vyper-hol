@@ -1,21 +1,13 @@
 Theory requestCutOracleReplay
 Ancestors
   instIdxIndep venomCallOracleDefs venomExecSemantics venomState venomInst
-  list option pair extCallOracle
+  list option pair extCallOracle loweringBudgetFrameOracleTransport
 Libs
   BasicProvers
 
-Theorem outcome_suffix_eval_operand[simp]:
-  eval_operand op (s with vs_outcomes := os) = eval_operand op s
-Proof
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
-QED
-
-Theorem outcome_suffix_eval_operands[simp]:
-  !ops. eval_operands ops (s with vs_outcomes := os) = eval_operands ops s
-Proof
-  Induct >> simp[eval_operands_def]
-QED
+val _ = export_rewrites
+  ["loweringBudgetFrameOracleTransport.operand_outcomes_update",
+   "loweringBudgetFrameOracleTransport.eval_operands_outcomes_update"]
 
 val outcome_record_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
   [venom_state_accfupds, venom_state_fupdcanon,
@@ -23,7 +15,7 @@ val outcome_record_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
    combinTheory.K_THM, combinTheory.o_DEF, LET_THM,
    exec_result_map_def, update_var_def, APPEND,
    list_case_def, option_case_def, pair_case_thm, operand_case_def,
-   outcome_suffix_eval_operand, outcome_suffix_eval_operands];
+   operand_outcomes_update, eval_operands_outcomes_update];
 
 val outcome_envelope_ss = outcome_record_ss ++ rewrites
   [exec_pure1_def, exec_pure2_def, exec_pure3_def,
