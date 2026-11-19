@@ -2,21 +2,6 @@ Theory dftPacketBlockPathInsertion
 Ancestors option[qualified,ignore_grammar]
   dftPacketExistingPathInsertion dftPacketKeyMap list rich_list finite_map arithmetic pred_set
 
-Theorem block_aggregate_length[local]:
-  !ds a (m:('a # num,'m list list) fmap) (es:('a # num,'e list list) fmap).
-  (!f. MEM f ds ==> ?ms ss.
-    FLOOKUP m (a,f) = SOME ms /\ FLOOKUP es (a,f) = SOME ss /\
-    LIST_REL (\x y. LENGTH x = LENGTH y) ms ss) ==>
-  LENGTH (FLAT (MAP (\f. FLAT (THE (FLOOKUP m (a,f)))) ds)) =
-  LENGTH (FLAT (MAP (\f. FLAT (THE (FLOOKUP es (a,f)))) ds))
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  `?ms ss. FLOOKUP m (a,h) = SOME ms /\ FLOOKUP es (a,h) = SOME ss /\
-    LIST_REL (\x y. LENGTH x = LENGTH y) ms ss` by metis_tac[] >>
-  drule dft_key_map_flat_length >> strip_tac >> simp[] >>
-  first_x_assum irule >> metis_tac[]
-QED
-
 Theorem block_sequence_alignment[local]:
   !p:((num # num) list). !inds orders seed cm ce
     (m:(((num # num) list # num),'m list list) fmap)
@@ -61,7 +46,7 @@ Proof
       (EL i orders))) =
    LENGTH (FLAT (MAP (\f. FLAT (THE (FLOOKUP (EL i ets) (DROP i p,f))))
       (EL i orders)))` by
-    (irule block_aggregate_length >> rpt strip_tac >>
+    (irule insertion_aggregate_lengths >> rpt strip_tac >>
      `((DROP i p,f)) IN FDOM m UNION {(p,seed)}` by metis_tac[] >>
      gvs[flookup_thm] >> metis_tac[]) >>
   `EL (SUC i) mts = EL i mts |+

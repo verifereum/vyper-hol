@@ -73,6 +73,30 @@ Proof
   gvs[EL,HD]
 QED
 
+(* Extending a cut adds the fresh row prefix when the old selections agree. *)
+Theorem dft_packet_extend_selected_cut_rows:
+  FLOOKUP new_tab (path,depth) = SOME row /\
+  (!i a ds e k z. i < LENGTH cuts /\ EL i cuts = (a,ds,e,k,z) ==>
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP new_tab (a,f)))) ds) ++
+      FLAT (TAKE k (THE (FLOOKUP new_tab (a,e)))) =
+    FLAT (MAP (\f. FLAT (THE (FLOOKUP old_tab (a,f)))) ds) ++
+      FLAT (TAKE k (THE (FLOOKUP old_tab (a,e))))) ==>
+  FLAT (MAP (\(a,ds,e,k,z). FLAT (MAP
+    (\f. FLAT (THE (FLOOKUP old_tab (a,f)))) ds) ++
+      FLAT (TAKE k (THE (FLOOKUP old_tab (a,e))))) cuts) ++
+    FLAT (TAKE cut_count row) =
+  FLAT (MAP (\(a,ds,e,k,z). FLAT (MAP
+    (\f. FLAT (THE (FLOOKUP new_tab (a,f)))) ds) ++
+      FLAT (TAKE k (THE (FLOOKUP new_tab (a,e)))))
+    (cuts ++ [(path,[],depth,cut_count,code)]))
+Proof
+  strip_tac >> simp[MAP_APPEND,FLAT_APPEND,APPEND_11] >>
+  AP_TERM_TAC >>
+  irule LIST_EQ >> simp[NoAsms,EL_MAP] >> qx_gen_tac `i` >> strip_tac >>
+  Cases_on `EL i cuts` >> rename1 `EL i cuts = (a,fields)` >>
+  PairCases_on `fields` >> simp[] >> metis_tac[]
+QED
+
 (* Historical cuts frame only their selected nonterminal edge.  In particular,
    no call record is framed at the terminal cut, where a new call may be added.
    Mutable activation results and row cursors are allowed to change. *)

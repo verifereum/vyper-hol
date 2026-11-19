@@ -91,7 +91,7 @@ Proof
   simp[MAP_APPEND,FLAT_APPEND,APPEND_ASSOC]
 QED
 
-Theorem insertion_parent_split[local]:
+Theorem insertion_parent_split:
   !p:((num # num) list). !d i inds orders ds later rows
     (tab:(((num # num) list # num),'v list list) fmap) out.
     i < LENGTH p /\

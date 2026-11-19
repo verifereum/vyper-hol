@@ -3033,19 +3033,6 @@ Resume native_cut_invoke_extension[child_and_merge]:
 QED
 Finalise native_cut_invoke_extension
 
-Theorem native_cut_fold_continuation[local]:
-  !xs s k.
-  EVERY (\i. ~is_terminator i.inst_opcode) xs ==>
-  FOLDR (dft_exec_cons n C) k xs s =
-    case FOLDR (dft_exec_cons n C) OK xs s of OK u => k u | other => other
-Proof
-  Induct >- simp[] >>
-  rpt gen_tac >> simp_tac bool_ss [EVERY_DEF, FOLDR] >> strip_tac >>
-  simp_tac bool_ss [dftIndexedExecTheory.dft_exec_cons_def] >>
-  Cases_on `step_inst n C h s` >>
-  qpat_x_assum `!s k. _` (qspecl_then [`v with vs_inst_idx := SUC s.vs_inst_idx`, `k`] mp_tac) >> simp[]
-QED
-
 Theorem native_successful_cut_inventory:
   !body key_rows site_rows certs.
   LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
@@ -3116,7 +3103,7 @@ Proof
      step_inst n C i u = OK r /\ q = r with vs_inst_idx := SUC u.vs_inst_idx` by
     (qpat_x_assum `FOLDR _ _ _ _ = OK q` mp_tac >>
      simp[rich_listTheory.FOLDR_APPEND] >>
-     asm_simp_tac bool_ss [Once native_cut_fold_continuation] >>
+     asm_simp_tac bool_ss [Once dftRunRelTheory.dft_exec_prefix_continue] >>
      Cases_on `FOLDR (dft_exec_cons n C) OK A (s with vs_gas_readings := g ++ tail)` >>
      simp[dftIndexedExecTheory.dft_exec_cons_def] >>
      Cases_on `step_inst n C i v` >> simp[]) >>

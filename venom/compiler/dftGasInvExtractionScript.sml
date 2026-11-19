@@ -423,7 +423,7 @@ Proof
   disch_then (qspec_then `bi` mp_tac) >> simp[]
 QED
 
-Theorem inv_lookup_scheduled_observation:
+Theorem inv_lookup_scheduled_observation_normalize:
   dft_fn_rel fn fn' /\ MEM bb fn.fn_blocks /\
   lookup_block name fn.fn_blocks = SOME bb /\
   lookup_block name fn'.fn_blocks = SOME bb' /\
@@ -434,13 +434,14 @@ Theorem inv_lookup_scheduled_observation:
   bb'.bb_instructions = pseudos ++ (scheduled ++ targetobs::targetpost) /\
   targetobs.inst_id = obs.inst_id /\
   dft_remaining_inv fn bb (srcpre ++ obs::srcpost) s0 /\
-  s0.vs_inst_idx = LENGTH pseudos /\ ~s0.vs_call_ctx.cc_static /\
-  inv_ev_ftrace orc p d ctx scheduled s0 sT /\
-  inv_memory_observation obs.inst_opcode ==>
-  ?sS. inv_ev_prefix orc p d ctx bb (LENGTH srcpre) s0 sS /\
-    sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
-    (!op. MEM op obs.inst_operands ==> eval_operand op sS = eval_operand op sT) /\
-    sS.vs_initial_fmp = sT.vs_initial_fmp
+  s0.vs_inst_idx = LENGTH pseudos /\
+  inv_ev_ftrace orc p d ctx scheduled s0 sT ==>
+  ?originals later.
+    inv_ev_ftrace orc p d ctx originals s0 sT /\
+    PERM (originals ++ obs::later) (srcpre ++ obs::srcpost) /\
+    ALL_DISTINCT (srcpre ++ obs::srcpost) /\
+    MAP (\i. i.inst_id) bb'.bb_instructions =
+      MAP (\i. i.inst_id) pseudos ++ MAP (\i. i.inst_id) (originals ++ obs::later)
 Proof
   strip_tac >>
   `FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions = pseudos /\
@@ -474,10 +475,33 @@ Proof
   `MAP (\i. i.inst_id) bb'.bb_instructions =
     MAP (\i. i.inst_id) pseudos ++ MAP (\i. i.inst_id) (originals ++ obs::later)` by
     (asm_rewrite_tac[MAP_APPEND, MAP] >> metis_tac[APPEND_ASSOC, APPEND]) >>
-  qpat_x_assum `!x y. _` kall_tac >>
-  qpat_x_assum `!x y. _` kall_tac >>
+  qexistsl [`originals`, `later`] >> simp[]
+QED
+
+Theorem inv_lookup_scheduled_observation:
+  dft_fn_rel fn fn' /\ MEM bb fn.fn_blocks /\
+  lookup_block name fn.fn_blocks = SOME bb /\
+  lookup_block name fn'.fn_blocks = SOME bb' /\
+  bb.bb_instructions = pseudos ++ (srcpre ++ obs::srcpost) /\
+  EVERY (\i. is_pseudo i.inst_opcode) pseudos /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) (srcpre ++ obs::srcpost) /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  bb'.bb_instructions = pseudos ++ (scheduled ++ targetobs::targetpost) /\
+  targetobs.inst_id = obs.inst_id /\
+  dft_remaining_inv fn bb (srcpre ++ obs::srcpost) s0 /\
+  s0.vs_inst_idx = LENGTH pseudos /\ ~s0.vs_call_ctx.cc_static /\
+  inv_ev_ftrace orc p d ctx scheduled s0 sT /\
+  inv_memory_observation obs.inst_opcode ==>
+  ?sS. inv_ev_prefix orc p d ctx bb (LENGTH srcpre) s0 sS /\
+    sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
+    (!op. MEM op obs.inst_operands ==> eval_operand op sS = eval_operand op sT) /\
+    sS.vs_initial_fmp = sT.vs_initial_fmp
+Proof
+  strip_tac >>
+  drule_all inv_lookup_scheduled_observation_normalize >> strip_tac >>
+  rename1 `inv_ev_ftrace orc p d ctx originals s0 sT` >>
   irule inv_lookup_normalized_observation >>
   simp[] >> qexists_tac `bb'` >> qexists_tac `originals` >>
   goal_assum (drule_at Any) >> simp[MAP_APPEND] >>
-  metis_tac[]
+  qexistsl [`fn`, `fn'`, `name`] >> fs[EVERY_APPEND]
 QED

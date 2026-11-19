@@ -48,64 +48,6 @@ Proof
   simp[APPEND_ASSOC]
 QED
 
-Theorem call_path_frame[local]:
-  !b:((num # num) list). !seed i f
-    (tab:(((num # num) list # num),'v list list) fmap) out.
-    i < LENGTH b /\ f <> FST (EL i b) /\
-    (!a e. (a,e) <> (b,seed) /\
-      (!r. r < LENGTH b ==> (a,e) <> (DROP (SUC r) b,FST (EL r b))) ==>
-      FLOOKUP out (a,e) = FLOOKUP tab (a,e)) ==>
-    FLOOKUP out (DROP (SUC i) b,f) = FLOOKUP tab (DROP (SUC i) b,f)
-Proof
-  rpt gen_tac >> strip_tac >> first_x_assum irule >>
-  reverse conj_tac
-  >- (strip_tac >>
-      `LENGTH (DROP (SUC i) b) = LENGTH b` by metis_tac[pairTheory.PAIR_EQ] >>
-      gvs[]) >>
-  rpt strip_tac >>
-  `LENGTH (DROP (SUC i) b) = LENGTH (DROP (SUC r) b)` by
-    metis_tac[pairTheory.PAIR_EQ] >>
-  `i = r` by (gvs[] >> decide_tac) >> gvs[]
-QED
-
-Theorem call_path_row_split[local]:
-  !b:((num # num) list). !seed i inds orders ds later rows
-    (tab:(((num # num) list # num),'v list list) fmap) out.
-    i < LENGTH b /\
-    EL (SUC i) orders = ds ++ FST (EL i b)::later /\
-    ALL_DISTINCT (EL (SUC i) orders) /\
-    FLOOKUP tab (DROP (SUC i) b,FST (EL i b)) = SOME rows /\
-    EL i inds < LENGTH rows /\
-    FLOOKUP out (DROP (SUC i) b,FST (EL i b)) =
-      SOME (LUPDATE (FLAT (MAP (\f. FLAT (THE (FLOOKUP out (DROP i b,f))))
-        (EL i orders))) (EL i inds) rows) /\
-    (!a e. (a,e) <> (b,seed) /\
-      (!r. r < LENGTH b ==> (a,e) <> (DROP (SUC r) b,FST (EL r b))) ==>
-      FLOOKUP out (a,e) = FLOOKUP tab (a,e)) ==>
-    FLAT (MAP (\f. FLAT (THE (FLOOKUP tab (DROP (SUC i) b,f))))
-      (EL (SUC i) orders)) =
-      (FLAT (MAP (\f. FLAT (THE (FLOOKUP tab (DROP (SUC i) b,f)))) ds) ++
-        FLAT (TAKE (EL i inds) rows)) ++ EL (EL i inds) rows ++
-      (FLAT (DROP (SUC (EL i inds)) rows) ++
-        FLAT (MAP (\f. FLAT (THE (FLOOKUP tab (DROP (SUC i) b,f)))) later)) /\
-    FLAT (MAP (\f. FLAT (THE (FLOOKUP out (DROP (SUC i) b,f))))
-      (EL (SUC i) orders)) =
-      (FLAT (MAP (\f. FLAT (THE (FLOOKUP tab (DROP (SUC i) b,f)))) ds) ++
-        FLAT (TAKE (EL i inds) rows)) ++
-      FLAT (MAP (\f. FLAT (THE (FLOOKUP out (DROP i b,f)))) (EL i orders)) ++
-      (FLAT (DROP (SUC (EL i inds)) rows) ++
-        FLAT (MAP (\f. FLAT (THE (FLOOKUP tab (DROP (SUC i) b,f)))) later))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `~MEM (FST (EL i b)) ds /\ ~MEM (FST (EL i b)) later` by
-    gvs[ALL_DISTINCT_APPEND] >>
-  qpat_x_assum `EL (SUC i) orders = _` SUBST1_TAC >>
-  irule insertion_row_split >> simp[] >>
-  rpt strip_tac >> irule call_path_frame >> simp[] >>
-  (reverse conj_tac >- metis_tac[] >>
-   qexists_tac `seed` >> metis_tac[pairTheory.PAIR_EQ])
-QED
-
 Theorem dft_packet_call_path_insertion_at_level:
   !b:((num # num) list). !inds orders seed
     (m:(((num # num) list # num),bytes32 option list list) fmap) m'
@@ -191,29 +133,29 @@ Proof
      conj_tac
      >- (simp[NoAsms,Abbr `ma`] >>
          qpat_assum `EL (EL i inds) ms = _` (fn th => once_rewrite_tac[GSYM th]) >>
-         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 1 call_path_row_split)) >>
-         simp[] >> qexistsl [`m'`,`seed`] >> simp[] >> metis_tac[]) >>
+         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 1 insertion_parent_split)) >>
+         simp[] >> qexistsl [`seed`,`m'`] >> simp[] >> metis_tac[]) >>
      conj_tac
      >- (simp[NoAsms,Abbr `mb`] >>
-         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 2 call_path_row_split)) >>
+         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 2 insertion_parent_split)) >>
          simp[] >> qexists_tac `seed` >> metis_tac[pairTheory.PAIR_EQ]) >>
      conj_tac
      >- (simp[NoAsms,Abbr `sa`] >>
          qpat_assum `EL (EL i inds) ss = _` (fn th => once_rewrite_tac[GSYM th]) >>
-         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 1 call_path_row_split)) >>
+         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 1 insertion_parent_split)) >>
          metis_tac[]) >>
      conj_tac
      >- (simp[NoAsms,Abbr `sb`] >>
-         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 2 call_path_row_split)) >>
+         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 2 insertion_parent_split)) >>
          simp[] >> qexists_tac `seed` >> metis_tac[pairTheory.PAIR_EQ]) >>
      conj_tac
      >- (simp[NoAsms,Abbr `ka`] >>
          qpat_assum `EL (EL i inds) ks = _` (fn th => once_rewrite_tac[GSYM th]) >>
-         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 1 call_path_row_split)) >>
+         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 1 insertion_parent_split)) >>
          metis_tac[]) >>
      conj_tac
      >- (simp[NoAsms,Abbr `kb`] >>
-         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 2 call_path_row_split)) >>
+         irule (PURE_REWRITE_RULE [APPEND_ASSOC] (cj 2 insertion_parent_split)) >>
          simp[] >> qexists_tac `seed` >> metis_tac[pairTheory.PAIR_EQ]) >>
      `LIST_REL (\x y. LENGTH x = LENGTH y) ms ss /\
       LIST_REL (\x y. LENGTH x = LENGTH y) ms ks` by metis_tac[optionTheory.SOME_11] >>
