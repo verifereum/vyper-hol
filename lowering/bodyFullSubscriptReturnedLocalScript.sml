@@ -141,8 +141,10 @@ Proof
          qpat_x_assum `eval_target_place _ _ _ = _` mp_tac] >>
   simp[NoAsms, Once evaluate_def, bind_def, ignore_bind_def,
        return_def, raise_def, get_scopes_def, type_check_def, assert_def, AllCaseEqs(),
-       lookup_global_not_memory] >> strip_tac >> gvs[] >>
-  TRY (drule_all_then strip_assume_tac original_local_root >> metis_tac[]) >>
+       lookup_global_not_memory] >> strip_tac >> gvs[]
+  >>~- ([`?initial v. lookup_scopes _ _.scopes = SOME initial /\
+                      evaluate_subscripts initial.type initial.value [] = INL v`],
+        drule_all_then ACCEPT_TAC original_local_root) >>
   TRY (drule lookup_flag_mem_to_lookup_flag_member_some >>
        PairCases_on `nsid` >> simp[lookup_flag_member_def, AllCaseEqs()] >> NO_TAC) >>
   TRY (drule_then strip_assume_tac eval_send_success_value >> gvs[] >> NO_TAC) >>
@@ -242,10 +244,10 @@ Resume subscript_returned_local_live_from_extension[Subscript]:
   gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >>
   imp_res_tac vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left >>
   imp_res_tac vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right >>
-  Q_TAC (fn tm => SUBGOAL_THEN tm (CONJUNCTS_THEN2 assume_tac assume_tac))
-    `(well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
-     well_typed_expr env e'` >>
-  TRY (irule constSubstCorrectTheory.frame_subscript_typing >> metis_tac[] >> NO_TAC) >>
+  (Q_TAC (fn tm => SUBGOAL_THEN tm (CONJUNCTS_THEN2 assume_tac assume_tac))
+     `(well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
+      well_typed_expr env e'` >-
+   (irule constSubstCorrectTheory.frame_subscript_typing >> metis_tac[])) >>
   qpat_assum `!env' ss tt ii pp. _ ==> _` (drule_all_then assume_tac) >>
   rename1 `eval_expr cx e' sm = (INL idx,sf)` >>
   `state_well_typed sm /\ env_consistent env cx sm /\ accounts_well_typed sm.accounts` by
