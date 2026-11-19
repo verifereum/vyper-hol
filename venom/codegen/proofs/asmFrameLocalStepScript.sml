@@ -1018,7 +1018,7 @@ Proof
   irule asm_primitives_terminal_gas_readings >> simp[MEM] >> metis_tac[]
 QED
 
-Theorem asm_context_not_terminal[local]:
+Theorem asm_context_not_terminal:
   asm_step_context name a <> SOME (AsmHalt b) /\
   asm_step_context name a <> SOME (AsmRevert b) /\
   asm_step_context name a <> SOME (AsmFault b)

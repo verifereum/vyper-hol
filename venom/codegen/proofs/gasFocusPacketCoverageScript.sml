@@ -107,15 +107,6 @@ Proof
   simp[IS_PREFIX_APPEND]
 QED
 
-Theorem cover_cfg_cursors_frame:
-  !C rounds cursors. cfg_norm_cursors C rounds cursors ==>
-  execution_frame (SND (FST (HD cursors))) =
-  execution_frame (SND (FST (LAST cursors)))
-Proof
-  ho_match_mp_tac cfg_norm_cursors_ind >> simp[] >>
-  rpt strip_tac >> fs[supply_state_agree_def]
-QED
-
 Theorem cover_cfg_active:
   cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
     (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
