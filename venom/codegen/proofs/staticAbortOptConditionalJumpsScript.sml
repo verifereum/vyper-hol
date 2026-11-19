@@ -11,7 +11,8 @@ Ancestors
   asmDataEnv asmOptimizer asmIR symbolResolve staticAbortStraight
   finite_map pred_set words list alist arithmetic
 
-val lets_conv = REDEPTH_CONV (BETA_CONV ORELSEC REWR_CONV LET_THM);
+val lets_conv = REDEPTH_CONV
+  (FIRST_CONV [HO_REWR_CONV UNWIND_FORALL_THM2, BETA_CONV, REWR_CONV LET_THM]);
 val protected_terminal = staticAbortOptMergeJumpdestsTheory.merge_protected_terminal;
 
 fun source_dispatch v pc_at fetch rules =
@@ -28,7 +29,7 @@ fun fold_abbrevs pats = map_every (fn pat =>
 
 Theorem optimize_inefficient_jumps_abort_certificate:
   !orig s data req_bound.
-  let Shape = \p cc req pc height need tag boolean i (t:asm_state).
+  !Shape. Shape = (\p cc req pc height need tag boolean i (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
     (need i ==> t.as_call_ctx.cc_static) /\
@@ -42,24 +43,21 @@ Theorem optimize_inefficient_jumps_abort_certificate:
          FLOOKUP (build_offset_to_pc p) off = SOME dest /\
          EL k t.as_stack = (n2w off:bytes32)) /\
     (!k. boolean i k ==> k < height i /\
-       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-  in
-  let target = \p pc tag (x:num#num) (y:num#num).
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !target. target = (\p pc tag (x:num#num) (y:num#num).
     ?l origin off. tag x 0 = SOME(l,origin) /\
       FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
-      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc y)
-  in
-  let Flow = \p pc height tag boolean (x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit =
-      \(src:num -> num option)
+      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
+  !Flow. Flow = (\p pc height tag boolean (x:num#num) (y:num#num).
+    !hi. hi = height x ==> !hj. hj = height y ==> !ins. ins = EL (pc x) p ==>
+    !inherit. inherit =
+      (\(src:num -> num option)
         (fresh:num -> (string#num)option) (bnew:num -> bool).
         (!k l origin. tag y k = SOME(l,origin) ==>
            k < hj /\ (fresh k = SOME(l,origin) \/
              ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
         (!k. boolean y k ==> k < hj /\
-           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))
-    in
+           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\
@@ -82,8 +80,7 @@ Theorem optimize_inefficient_jumps_abort_certificate:
              SOME n => 0 < n /\ n < hi /\ hj = hi /\
                inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                  (\k. NONE) (\k. F)
-           | NONE =>
-               let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+           | NONE => !a. a = asm_op_arity name ==> !m. m = hj + a - hi ==>
                a <= hi /\ hj = m+(hi-a) /\
                ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -92,11 +89,9 @@ Theorem optimize_inefficient_jumps_abort_certificate:
                      asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                        ins t=AsmOK u ==>
                      (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
-    | _ => F
-  in
-  let Rows = \p cc V rank pc height need tag boolean edge.
-    let lo = SND (compute_label_offsets p) in
-    let otp = build_offset_to_pc p in
+    | _ => F) ==>
+  !Rows. Rows = (\p cc V rank pc height need tag boolean edge.
+    !lo. lo = SND (compute_label_offsets p) ==>
     (!x. x IN V ==>
       (need x ==> cc.cc_static) /\
       (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
@@ -104,47 +99,46 @@ Theorem optimize_inefficient_jumps_abort_certificate:
          k < height x /\ origin < LENGTH p /\
          (EL origin p = AsmPushLabel l \/ EL origin p = AsmPushOfst l 0) /\
          ?off dest. FLOOKUP lo l = SOME off /\ off < dimword(:256) /\
-                    FLOOKUP otp off = SOME dest)) /\
+                    FLOOKUP (build_offset_to_pc p) off = SOME dest)) /\
     (!x y. edge x y ==> x IN V /\ y IN V /\ rank y < rank x /\ Flow p pc height tag boolean x y) /\
     (!x. x IN V ==>
       pc x < LENGTH p /\
-      let h = height x in
-      let fall = \y. pc y = pc x+1 in
-      let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-      let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-      let next = \n. arm fall n /\ legal fall n in
-      let untagged = \a. !k. k<a ==> tag x k=NONE in
-      let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
-      case EL (pc x) p of
-        AsmLabel l => next h
-      | AsmPush bs => next (h+1)
-      | AsmPushLabel l => IS_SOME (FLOOKUP lo l) /\ next (h+1)
-      | AsmPushOfst l d => IS_SOME (FLOOKUP lo l) /\ next (h+1)
-      | AsmOp name =>
-          if name="INVALID" then stop 0
-          else if name="REVERT" then stop 2
-          else if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
-               then cc.cc_static /\ stop (asm_op_arity name)
-          else
-            (case ALOOKUP dup_table name of
-               SOME n => n<h /\ next (h+1)
-             | NONE => case ALOOKUP swap_table name of
-                 SOME n => 0<n /\ n<h /\ next h
-               | NONE =>
-                   if name="JUMP" then
-                      1<=h /\ arm (target p pc tag x) (h-1) /\ legal (target p pc tag x) (h-1)
-                   else if name="JUMPI" then
-                      2<=h /\ tag x 1=NONE /\ arm fall (h-2) /\ arm (target p pc tag x) (h-2) /\
-                      legal (\y. fall y \/ target p pc tag x y) (h-2)
-                   else
-                      ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
-                          untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-      | _ => F)
-  in
-  let Open = \p cc req (V:(num#num)->bool) X rank pc height need
+      (!h. h = height x ==>
+       !fall. fall = (\y. pc y = pc x+1) ==>
+       !arm. arm = (\P n. ?y. edge x y /\ P y /\ height y = n) ==>
+       !legal. legal = (\P n. !y. edge x y ==> P y /\ height y = n) ==>
+       !next. next = (\n. arm fall n /\ legal fall n) ==>
+       !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+       !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
+       case EL (pc x) p of
+         AsmLabel l => next h
+       | AsmPush bs => next (h+1)
+       | AsmPushLabel l => IS_SOME (FLOOKUP lo l) /\ next (h+1)
+       | AsmPushOfst l d => IS_SOME (FLOOKUP lo l) /\ next (h+1)
+       | AsmOp name =>
+           if name="INVALID" then stop 0
+           else if name="REVERT" then stop 2
+           else if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
+                then cc.cc_static /\ stop (asm_op_arity name)
+           else
+             (case ALOOKUP dup_table name of
+                SOME n => n<h /\ next (h+1)
+              | NONE => case ALOOKUP swap_table name of
+                  SOME n => 0<n /\ n<h /\ next h
+                | NONE =>
+                    if name="JUMP" then
+                       1<=h /\ arm (target p pc tag x) (h-1) /\ legal (target p pc tag x) (h-1)
+                    else if name="JUMPI" then
+                       2<=h /\ tag x 1=NONE /\ arm fall (h-2) /\ arm (target p pc tag x) (h-2) /\
+                       legal (\y. fall y \/ target p pc tag x y) (h-2)
+                    else
+                       ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
+                           untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
+       | _ => F))) ==>
+  !Open. Open = (\p cc req (V:(num#num)->bool) X rank pc height need
     (tag:(num#num)->num->(string#num)option)
     (boolean:(num#num)->num->bool) edge.
-    let S = Shape p cc req pc height need tag boolean in
+    !S. S = Shape p cc req pc height need tag boolean ==>
     FINITE V /\ X SUBSET V /\
     (!x. x IN V ==> ?t. S x t) /\
     (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
@@ -161,18 +155,15 @@ Theorem optimize_inefficient_jumps_abort_certificate:
                     p 1 t = AsmFault u) /\ u.as_requests=req) \/
        (?y u. edge x y /\
           asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-            p 1 t = AsmOK u /\ S y u))
-  in
-  let Reach = \(edge:(num#num)->(num#num)->bool) e x.
+            p 1 t = AsmOK u /\ S y u))) ==>
+  !Reach. Reach = (\(edge:(num#num)->(num#num)->bool) e x.
     ?n (path:num->num#num).
-      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))
-  in
-  let bytes = \p. assemble p ++ data in
-  let env0 = asm_data_env orig (bytes orig) in
-  let M_R = \p.
-    let envp = asm_data_env p (bytes p) in
-    let start = s with as_code := bytes p in
-    let run = asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p in
+      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) ==>
+  !bytes. bytes = (\p. assemble p ++ data) ==>
+  !env0. env0 = asm_data_env orig (bytes orig) ==>
+  !M_R. M_R = (\p.
+    !start. start = (s with as_code := bytes p) ==>
+    !run. run = asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p ==>
     s.as_pc = 0 /\ s.as_code = bytes orig /\
     asm_static_wf orig /\ asm_static_wf p /\
     FILTER is_data_inst p = FILTER is_data_inst orig /\
@@ -184,7 +175,7 @@ Theorem optimize_inefficient_jumps_abort_certificate:
          pc height need tag boolean edge.
         run j start = AsmOK t /\
         sym_steps p env0 j (sym_init s) = SymOK u /\
-        asm_sym_rel p envp t u /\
+        asm_sym_rel p (asm_data_env p (bytes p)) t u /\
         t.as_pc = u.sym_base.as_pc /\ LENGTH t.as_stack = LENGTH u.sym_stack /\
         t.as_call_ctx = u.sym_base.as_call_ctx /\ t.as_requests = u.sym_base.as_requests /\
         t.as_call_ctx = cc /\ t.as_requests = req /\ req <<= req_bound /\
@@ -195,11 +186,10 @@ Theorem optimize_inefficient_jumps_abort_certificate:
         (!k l origin. tag e k = SOME(l,origin) ==>
            k < LENGTH u.sym_stack /\ EL k u.sym_stack = Lab l 0) /\
         (!k. boolean e k ==>
-           k < LENGTH u.sym_stack /\ (EL k u.sym_stack = Val 0w \/ EL k u.sym_stack = Val 1w))))
-  in
+           k < LENGTH u.sym_stack /\ (EL k u.sym_stack = Val 0w \/ EL k u.sym_stack = Val 1w))))) ==>
   !p. M_R p ==> M_R (FST (optimize_inefficient_jumps p))
 Proof
-  rpt gen_tac >> rpt (pairTools.LET_INTRO_TAC >> disch_then assume_tac) >>
+  ntac 4 gen_tac >> ntac 9 (gen_tac >> disch_tac) >>
   match_mp_tac (Q.INST [`P` |-> `M_R`] conditional_jumps_walk_preserves_contextual) >>
   rpt gen_tac >> disch_then (CONJUNCTS_THEN2 mp_tac assume_tac) >>
   Cases_on `a` >> Cases_on `e` >> simp[NoAsms, asm_jumpi_over_jump_def] >>
@@ -525,7 +515,7 @@ fun phase_receipt h =
      `Abbrev (Target = _)`, `Abbrev (Producer = _)`, `Abbrev (C = _)`] >>
   CONV_TAC lets_conv >>
   mp_tac (Q.INST [`H` |-> h, `z0` |-> `a0:num#num`, `z1` |-> `a1:num#num`]
-    (INST_TYPE [alpha |-> ``:num#num``, beta |-> ``:asm_inst``]
+    (INST_TYPE [alpha |-> ``:asm_inst``, beta |-> ``:num#num``]
       (normalize_port_receipt conditional_jump_phase_receipt))) >>
   fold_abbrevs [`Abbrev (b = _)`, `Abbrev (r = _)`] >>
   (impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC)) >>
@@ -583,6 +573,8 @@ Resume optimize_inefficient_jumps_abort_certificate[strict]:
   qexistsl [`a0`,`a1`] >>
   qpat_assum `initial` (fn th => simp_tac bool_ss [Abbr `Visit`, Abbr `H`, th]) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- simp[Abbr `keep`]
+  >- simp[Abbr `keep`]
   >- (simp_tac bool_ss [Abbr `C`] >> first_assum ACCEPT_TAC) >>
   phase_receipt `(height:num#num->num) e - 1`
 QED
@@ -674,7 +666,16 @@ Resume optimize_inefficient_jumps_abort_certificate[table]:
         qpat_assum `Flow = _` (pure_rewrite_tac o single) >> CONV_TAC lets_conv >>
         POP_ASSUM_LIST (K ALL_TAC) >>
         pure_rewrite_tac [COND_RATOR, pairTheory.FST, REFL_CLAUSE, AND_CLAUSES,
-                          COND_CLAUSES, IMP_CLAUSES]) >>
+                          COND_CLAUSES, IMP_CLAUSES] >>
+        disch_then (mk_asm "expanded_visits") >> qx_gen_tac `u` >> disch_tac >>
+        asm "expanded_visits" (qspec_then `u` (drule_then strip_packet)) >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+        qx_gen_tac `visit_rho` >> ntac 4 gen_tac >>
+        disch_then (map_every SUBST1_TAC o CONJUNCTS) >>
+        CONV_TAC lets_conv >>
+        pure_rewrite_tac [COND_RATOR, pairTheory.FST, REFL_CLAUSE, AND_CLAUSES,
+                          COND_CLAUSES, IMP_CLAUSES] >>
+        first_assum (qspec_then `visit_rho` ACCEPT_TAC)) >>
     asm "kept" (mp_tac o cj 3) >>
     simp_tac bool_ss [combinTheory.o_THM, COND_RATOR] >> disch_then ACCEPT_TAC)) >>
   disch_then (qx_choose_then `family` (qx_choose_then `A` (qx_choose_then `root`
