@@ -2480,6 +2480,7 @@ Theorem focus_same_inventory_terminal_stop[local]:
     r8 = (case r of OK v => Halt v | other => other) /\
     ((?v. r = OK v /\ v.vs_halted) \/ (?v. r = Halt v) \/
      (?ex v. r = Abort ex v)) /\
+    inst.inst_opcode <> INVOKE /\
     run_blocks N C8 root_tf root_entry = r8 /\
     (!fuel gs tail. N <= fuel /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
         raw_slots gs ==>
@@ -2492,6 +2493,7 @@ Proof
   conj_tac >- REFL_TAC >>
   conj_tac >- (Cases_on `r` >> gvs[]) >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qunabbrev_tac `r` >>
   drule focus_current_row_cut >>
   (impl_tac >-
@@ -3204,6 +3206,7 @@ Theorem focus_uniform_frontier:
       r8 = (case r of OK u => Halt u | other => other) /\
       ((?u. r = OK u /\ u.vs_halted) \/ (?u. r = Halt u) \/
        (?ex u. r = Abort ex u)) /\
+      inst8.inst_opcode <> INVOKE /\
       run_blocks N (stage 8) root_tf root_entry = r8 /\
       (!F gs tail. N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
           raw_slots gs ==>
