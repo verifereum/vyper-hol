@@ -434,11 +434,26 @@ Proof
     (qpat_assum `ci_mono s2 s3` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
      qpat_assum `ci_mono s3 s4` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
      rpt strip_tac >> metis_tac[loweringShapeDefsTheory.not_fresh_at_mono,arithmeticTheory.LESS_EQ_TRANS]) >>
+  `!fn inst u. frag_reachable ctx func t4 fn inst u ==> dalloca_no_wrap inst u` by
+    (rpt strip_tac >>
+     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
+     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     qpat_assum `MEM fn ctx.ctx_functions` mp_tac >>
+     qpat_assum `MEM inst (fn_insts fn)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
+          unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   mp_tac (Q.SPECL [`kws`,`DF`,`lo`,`dframe`,`ctx`,`shadow_ctx`,`PG`,`tops`,
      `func`,`shadow_func`,`cenv`,`env`,`cx`,`BaseT (UintT 256)`,
      `esD`,`st0`,`s4`,`s5`,`h4`,`h5`,`xs`,`t4`,`G4`,`tn4`]
      lower_word_args_sim_full) >>
-  (impl_tac >- (simp[combinTheory.K_DEF] >> metis_tac[])) >> strip_tac >>
+  (impl_tac >-
+    (qpat_assum `lower_word_args cenv (K _) kws s4 = _`
+       (assume_tac o SIMP_RULE std_ss [combinTheory.K_DEF]) >>
+     qpat_assum `lower_word_args cenv (K _) (MAP gas_shadow_expr kws) h4 = _`
+       (assume_tac o SIMP_RULE std_ss [combinTheory.K_DEF]) >>
+     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
+  strip_tac >>
   qabbrev_tac `PK = (\H (rr : value list + vyperState$exception) mid G tn t.
     (?vs. rr = INL vs /\
       typed_args_post H ctx func cenv cx esD s4 t4 mid kws xs vs t /\
