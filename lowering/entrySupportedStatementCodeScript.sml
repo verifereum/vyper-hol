@@ -74,9 +74,9 @@ Proof
   simp[] >>
   rpt (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_return, entry_code_emit_op, entry_code_binop,
-            entry_code_lower_value] >>
+            entry_code_lower_value, entry_code_ptr_load] >>
     rpt gen_tac >> BETA_TAC) >>
-  simp[entry_code_emit_void]
+  simp[entry_code_emit_void, entry_code_ptr_store]
 QED
 
 Theorem entry_code_if_stmt[local]:

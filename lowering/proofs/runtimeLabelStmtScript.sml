@@ -322,13 +322,17 @@ Resume compile_stmts_no_runtime_begin[augassign]:
   gen_tac >> strip_tac >> rpt (irule rb_bind_return >> BETA_TAC) >>
   gvs[] >> Cases_on `FST (SND x)` >> simp[rb_emit_void] >>
   rpt (irule rb_bind_return >> BETA_TAC) >>
-  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-  reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
-  gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_binop] >>
-  simp[rb_emit_void]
+  `case env.ce_imm_alloca of NONE => T | SOME region => rb_operand_ok region` by
+    fs[rb_env_ok_def] >>
+  IF_CASES_TAC >> gvs[] >>
+  (FIRST [irule rb_bind_ptr_load, irule rb_bind_emit_op] >>
+   BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
+   gen_tac >> strip_tac >>
+   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- simp[rb_compile_binop] >>
+   simp[rb_emit_void, rb_compile_ptr_store])
 QED
 
 Resume compile_stmts_no_runtime_begin[assert_bare]:

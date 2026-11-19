@@ -132,11 +132,13 @@ Proof
        >- simp[gas_shadow_stmt_get_target_ptr, gas_shadow_compiles_return] >> gen_tac) >>
   Cases_on `dst_loc_opt` >> simp[gas_shadow_compiles_emit_void] >>
   rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_return] >> gen_tac) >>
+       >- rw[gas_shadow_compiles_return, gas_shadow_compiles_ptr_load,
+             gas_shadow_compiles_emit_op] >> gen_tac) >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
   >- simp[gas_shadow_stmt_lower_value] >> gen_tac >>
   ho_match_mp_tac gas_shadow_compiles_bind >>
-  simp[gas_shadow_compiles_binop, gas_shadow_compiles_emit_void]
+  rw[gas_shadow_compiles_binop, gas_shadow_compiles_ptr_store,
+     gas_shadow_compiles_emit_void]
 QED
 
 Theorem gas_shadow_stmt_break:
