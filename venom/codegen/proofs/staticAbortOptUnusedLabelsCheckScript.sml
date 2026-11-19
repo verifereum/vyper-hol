@@ -5,24 +5,23 @@ Ancestors
 
 Theorem unused_label_one_selected_check:
   !pre l tail cc (V:(num#num)->bool) pc height tag edge H z.
-  let p = pre ++ [AsmLabel l] ++ tail in
-  let d = LENGTH pre in
-  let q = pre ++ tail in
-  let r = splice_pc d 1 0 in
-  let P = OPTION_MAP (\(n,j). (n,r j)) in
-  let T = \u k. P (tag u k) in
-  let pcQ = r o pc in
-  let K = {u | u IN V /\ pc u <> d} in
-  let C = \s n w. ?off. FLOOKUP (SND (compute_label_offsets s)) n = SOME off /\
-                        off < dimword(:256) /\ FLOOKUP (build_offset_to_pc s) off = SOME w in
-  let target = \s m tags u y. ?n j. tags u 0 = SOME(n,j) /\ C s n (m y) in
-  let fall = \m u y. m y = m u + 1 in
-  let arm = \R u P n. ?y. R u y /\ P y /\ height y = n in
-  let legal = \R u P n. !y. R u y ==> P y /\ height y = n in
-  let next = \R m u n. arm R u (fall m u) n /\ legal R u (fall m u) n in
-  let untagged = \tags u a. !k. k < a ==> tags u k = NONE in
-  let stop = \R tags u a. a <= height u /\ untagged tags u a /\ !y. ~R u y in
-  let Check = \s cc m h tags R u.
+  !p. p = pre ++ [AsmLabel l] ++ tail ==>
+  !d. d = LENGTH pre ==>
+  !q. q = pre ++ tail ==>
+  !r. r = splice_pc d 1 0 ==>
+  !tagsQ. tagsQ = (\u k. OPTION_MAP (\(n,j). (n,r j)) (tag u k)) ==>
+  !pcQ. pcQ = r o pc ==>
+  !keep. keep = {u | u IN V /\ pc u <> d} ==>
+  !canon. canon = (\s n w. ?off. FLOOKUP (SND (compute_label_offsets s)) n = SOME off /\
+                        off < dimword(:256) /\ FLOOKUP (build_offset_to_pc s) off = SOME w) ==>
+  !target. target = (\s m tags u y. ?n j. tags u 0 = SOME(n,j) /\ canon s n (m y)) ==>
+  !fall. fall = (\m u y. m y = m u + 1) ==>
+  !arm. arm = (\R u P n. ?y. R u y /\ P y /\ height y = n) ==>
+  !legal. legal = (\R u P n. !y. R u y ==> P y /\ height y = n) ==>
+  !next. next = (\R m u n. arm R u (fall m u) n /\ legal R u (fall m u) n) ==>
+  !untagged. untagged = (\tags u a. !k. k < a ==> tags u k = NONE) ==>
+  !stop. stop = (\R tags u a. a <= height u /\ untagged tags u a /\ !y. ~R u y) ==>
+  !Check. Check = (\s cc m h tags R u.
     case EL (m u) s of
       AsmLabel n => next R m u (h u)
     | AsmPush bs => next R m u (h u + 1)
@@ -52,34 +51,31 @@ Theorem unused_label_one_selected_check:
                    ?n. static_abort_straight name n /\ asm_op_arity name <= h u /\
                         untagged tags u (asm_op_arity name) /\
                         next R m u (h u - asm_op_arity name + n))
-    | _ => F
-  in
-  let Legal = \u a. edge u (SND a) /\
+    | _ => F) ==>
+  !Legal. Legal = (\u a. edge u (SND a) /\
     (if FST a then
        (EL (pc u) p = AsmOp "JUMP" \/ EL (pc u) p = AsmOp "JUMPI") /\
        target p pc tag u (SND a)
-     else EL (pc u) p <> AsmOp "JUMP" /\ fall pc u (SND a)) in
-  let E = \u w. u IN K /\ ?a. Legal u a /\ w = z u a in
+     else EL (pc u) p <> AsmOp "JUMP" /\ fall pc u (SND a))) ==>
   asm_static_wf q /\
   (!u. u IN V ==> Check p cc pc height tag edge u) /\
-  (!u. u IN K ==> pcQ u < LENGTH q /\ EL (pcQ u) q = EL (pc u) p) /\
-  (!u a. u IN K /\ Legal u a ==> height (SND a) = H u) /\
-  (!u a. u IN K /\ Legal u a ==>
+  (!u. u IN keep ==> pcQ u < LENGTH q /\ EL (pcQ u) q = EL (pc u) p) /\
+  (!u a. u IN keep /\ Legal u a ==> height (SND a) = H u) /\
+  (!u a. u IN keep /\ Legal u a ==>
      height (z u a) = H u /\
      (~FST a ==> r (pc (z u a)) = r (pc u) + 1) /\
-     (FST a ==> z u a = SND a /\ ?n j. tag u 0 = SOME(n,j) /\ T u 0 = SOME(n,r j) /\
+     (FST a ==> z u a = SND a /\ ?n j. tag u 0 = SOME(n,j) /\ tagsQ u 0 = SOME(n,r j) /\
           EL (pc (z u a)) p = AsmLabel n /\ EL (r (pc (z u a))) q = AsmLabel n /\
-          C q n (r (pc (z u a))))) ==>
-  !u. u IN K ==> pcQ u < LENGTH q /\ Check q cc pcQ height T E u
+          canon q n (r (pc (z u a))))) ==>
+  !u. u IN keep ==> pcQ u < LENGTH q /\
+    Check q cc pcQ height tagsQ (\u w. u IN keep /\ ?a. Legal u a /\ w = z u a) u
 Proof
-  rpt gen_tac >>
-  map_every (fn name =>
-    CONV_TAC (REWR_CONV combinTheory.LET_FORALL_ELIM THENC
-      SIMP_CONV bool_ss [combinTheory.S_DEF, combinTheory.o_THM, combinTheory.C_DEF]) >>
-    qx_gen_tac name >> disch_tac)
-    [`p`,`d`,`q`,`r`,`P`,`tagsQ`,`pcQ`,`keep`,`canon`,`target`,`fall`,`arm`,`legal`,
-     `next`,`untagged`,`stop`,
-     `Check`,`Legal`,`E`] >>
+  map_every qx_gen_tac [`pre`,`l`,`tail`,`cc`,`V`,`pc`,`height`,`tag`,`edge`,`H`,`z`] >>
+  map_every (fn name => qx_gen_tac name >>
+    disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
+    [`p`,`d`,`q`,`r`,`tagsQ`,`pcQ`,`keep`,`canon`,`target`,`fall`,`arm`,`legal`,
+     `next`,`untagged`,`stop`,`Check`,`Legal`] >>
+  qabbrev_tac `E = \u w. u IN keep /\ ?a. Legal u a /\ w = z u a` >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "wf")
     (CONJUNCTS_THEN2 (mk_asm "source")
     (CONJUNCTS_THEN2 (mk_asm "fetch")
@@ -173,11 +169,11 @@ Resume unused_label_one_selected_check[straight]:
 QED
 
 Resume unused_label_one_selected_check[untagged]:
-  simp[Abbr `untagged`, Abbr `tagsQ`, Abbr `P`]
+  simp[Abbr `untagged`, Abbr `tagsQ`]
 QED
 
 Resume unused_label_one_selected_check[none]:
-  simp[Abbr `tagsQ`, Abbr `P`, optionTheory.OPTION_MAP_EQ_NONE]
+  simp[Abbr `tagsQ`, optionTheory.OPTION_MAP_EQ_NONE]
 QED
 
 Resume unused_label_one_selected_check[terminal]:

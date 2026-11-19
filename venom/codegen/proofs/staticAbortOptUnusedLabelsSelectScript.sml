@@ -6,8 +6,7 @@ Ancestors arithmetic[qualified,ignore_grammar]
 
 Theorem unused_label_one_selected_control:
   !p pre l tail cc req V e (rank:(num#num)->rat) pc height need tag boolean edge.
-  let Shape =
-    \p cc req pc height need tag boolean i (t:asm_state).
+  !S. S = (\i (t:asm_state).
       t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
       t.as_call_ctx = cc /\ t.as_requests = req /\
       (need i ==> t.as_call_ctx.cc_static) /\
@@ -21,50 +20,20 @@ Theorem unused_label_one_selected_control:
            FLOOKUP (build_offset_to_pc p) off = SOME dest /\
            EL k t.as_stack = (n2w off:bytes32)) /\
       (!k. boolean i k ==> k < height i /\
-         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
-  in
-  let I = \u src bnew tg fr w.
+         (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !I. I = (\u src bnew tg fr w.
     (!k n j. tg w k = SOME(n,j) ==> k < height w /\
        (fr k = SOME(n,j) \/ ?h. src k = SOME h /\ h < height u /\ tg u h = SOME(n,j))) /\
     (!k. boolean w k ==> k < height w /\
-       (bnew k \/ ?h. src k = SOME h /\ h < height u /\ boolean u h))
-  in
-  let Descriptor = \u H.
-    let hi = height u; ins = EL (pc u) p in
-    case ins of
-      AsmLabel l => ((\k. SOME k), (\k. NONE), (\k. F))
-    | AsmPush bs =>
-        ((\k. if k=0 then NONE else SOME(k-1)), (\k. NONE),
-         (\k. k=0 /\ !t v.
-            asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
-              (AsmPush bs) t = AsmOK v ==>
-            (EL 0 v.as_stack = 0w \/ EL 0 v.as_stack = 1w)))
-    | AsmPushLabel l =>
-        ((\k. if k=0 then NONE else SOME(k-1)),
-         (\k. if k=0 then SOME(l,pc u) else NONE), (\k. F))
-    | AsmPushOfst l d =>
-        ((\k. if k=0 then NONE else SOME(k-1)),
-         (\k. if k=0 /\ d=0 then SOME(l,pc u) else NONE), (\k. F))
-    | AsmOp name =>
-        (case ALOOKUP dup_table name of
-           SOME n => ((\k. SOME(if k=0 then n else k-1)), (\k. NONE), (\k. F))
-         | NONE =>
-           case ALOOKUP swap_table name of
-             SOME n => ((\k. SOME(if k=0 then n else if k=n then 0 else k)),
-                        (\k. NONE), (\k. F))
-           | NONE =>
-               let a = asm_op_arity name; m = H + asm_op_arity name - hi in
-               ((\k. if k<m then NONE else SOME(k-m+a)), (\k. NONE),
-                (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
-                 !t v. LENGTH t.as_stack=hi /\
-                   asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
-                     ins t = AsmOK v ==>
-                   (EL 0 v.as_stack=0w \/ EL 0 v.as_stack=1w))))
-    | _ => ((\k. NONE), (\k. NONE), (\k. F))
-  in
-  let Flow = \(x:num#num) (y:num#num).
-    let hi = height x; hj = height y; ins = EL (pc x) p in
-    let inherit = \src fr bn. I x src bn tag fr y in
+       (bnew k \/ ?h. src k = SOME h /\ h < height u /\ boolean u h))) ==>
+  !ins_at. ins_at = (\u. EL (pc u) p) ==>
+  !arity. arity = asm_op_arity ==>
+  !growth. growth = (\u H name. H + arity name - height u) ==>
+  !Flow. Flow = (\(x:num#num) (y:num#num).
+    !hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !ins. ins = ins_at x ==>
+    !inherit. inherit = (\src fr bn. I x src bn tag fr y) ==>
     case ins of
       AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
     | AsmPush bs => hj = hi+1 /\
@@ -89,7 +58,8 @@ Theorem unused_label_one_selected_control:
                  inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
                    (\k. NONE) (\k. F)
              | NONE =>
-                 let a = asm_op_arity name; m = hj + asm_op_arity name - hi in
+                 !a. a = arity name ==>
+                 !m. m = hj + a - hi ==>
                  a <= hi /\ hj = m+(hi-a) /\
                  ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
                  inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
@@ -98,39 +68,40 @@ Theorem unused_label_one_selected_control:
                       asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
                         ins t = AsmOK v ==>
                       (EL 0 v.as_stack=0w \/ EL 0 v.as_stack=1w)))
-    | _ => F
-  in
-  let C = \s n w. ?off. FLOOKUP (SND (compute_label_offsets s)) n = SOME off /\
-                     off < dimword(:256) /\ FLOOKUP (build_offset_to_pc s) off = SOME w in
-  let target = \s pc tg x y. ?n j. tg x 0 = SOME(n,j) /\ C s n (pc y) in
-  let Control = \s pc tg x y.
+    | _ => F) ==>
+  !C. C = (\s n w. ?off. FLOOKUP (SND (compute_label_offsets s)) n = SOME off /\
+                     off < dimword(:256) /\ FLOOKUP (build_offset_to_pc s) off = SOME w) ==>
+  !target. target = (\s pc tg x y. ?n j. tg x 0 = SOME(n,j) /\ C s n (pc y)) ==>
+  !Control. Control = (\s pc tg x y.
     if EL (pc x) s = AsmOp "JUMP" then target s pc tg x y
     else if EL (pc x) s = AsmOp "JUMPI" then pc y = pc x+1 \/ target s pc tg x y
-    else pc y = pc x+1
-  in
-  let Open = \(V:(num#num)->bool) X.
-    let S = Shape p cc req pc height need tag boolean in
-      FINITE V /\ X SUBSET V /\
-      (!x. x IN V ==> ?t. S x t) /\
-      (!x. x IN V DIFF X ==> pc x < LENGTH p) /\
-      (!x y. edge x y ==>
-         x IN V DIFF X /\ y IN V /\ rank y < rank x /\
-         Flow x y /\ Control p pc tag x y) /\
-      (!x t. x IN V DIFF X /\ S x t ==>
-         (?u. (asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-                      p 1 t = AsmRevert u \/
-                asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-                      p 1 t = AsmFault u) /\ u.as_requests=req) \/
-         (?y u. edge x y /\
-            asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
-              p 1 t = AsmOK u /\ S y u))
-  in
-  let Reach = \(edge:(num#num)->(num#num)->bool) e x.
-    ?n (path:num->num#num).
-      path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))
-  in
-  let Rows = \V edge.
-    (!x. x IN V ==>
+    else pc y = pc x+1) ==>
+  !d. d = LENGTH pre ==>
+  !q. q = pre++tail ==>
+  !r. r = splice_pc d 1 0 ==>
+  !P. P = OPTION_MAP (\(n,j). (n,r j)) ==>
+  !T. T = (\x k. P (tag x k)) ==>
+  !pcQ. pcQ = r o pc ==>
+  !K. K = {u | u IN V /\ pc u<>d} ==>
+  !Legal. Legal = (\u (a:bool#(num#num)).
+    edge u (SND a) /\
+    if FST a then (ins_at u = AsmOp "JUMP" \/ ins_at u = AsmOp "JUMPI") /\
+                  target p pc tag u (SND a)
+    else ins_at u <> AsmOp "JUMP" /\ pc(SND a)=pc u+1) ==>
+  p=pre++[AsmLabel l]++tail /\ asm_static_wf p /\ ~MEM l (asm_label_refs p) /\
+  (FINITE V /\
+   (!x. x IN V ==> ?t. S x t) /\
+   (!x. x IN V ==> pc x < LENGTH p) /\
+   (!x y. edge x y ==> x IN V /\ y IN V /\ rank y < rank x /\ Flow x y /\ Control p pc tag x y) /\
+   (!x t. x IN V /\ S x t ==>
+     (?u. (asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
+                    p 1 t = AsmRevert u \/
+           asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
+                    p 1 t = AsmFault u) /\ u.as_requests=req) \/
+     (?y u. edge x y /\
+        asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
+          p 1 t = AsmOK u /\ S y u))) /\
+  ((!x. x IN V ==>
       (need x ==> cc.cc_static) /\
       (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
       (!k l origin. tag x k = SOME(l,origin) ==>
@@ -141,96 +112,114 @@ Theorem unused_label_one_selected_control:
     (!x y. edge x y ==> x IN V /\ y IN V /\ rank y < rank x /\ Flow x y) /\
     (!x. x IN V ==>
       pc x < LENGTH p /\
-      let h = height x in
-      let fall = \y. pc y = pc x+1 in
-      let arm = \P n. ?y. edge x y /\ P y /\ height y = n in
-      let legal = \P n. !y. edge x y ==> P y /\ height y = n in
-      let next = \n. arm fall n /\ legal fall n in
-      let untagged = \a. !k. k<a ==> tag x k=NONE in
-      let stop = \a. a<=h /\ untagged a /\ !y. ~edge x y in
-      case EL (pc x) p of
-        AsmLabel l => next h
-      | AsmPush bs => next (h+1)
-      | AsmPushLabel l => IS_SOME (FLOOKUP (SND(compute_label_offsets p)) l) /\ next (h+1)
-      | AsmPushOfst l d => IS_SOME (FLOOKUP (SND(compute_label_offsets p)) l) /\ next (h+1)
-      | AsmOp name =>
-          if name="INVALID" then stop 0
-          else if name="REVERT" then stop 2
-          else if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
-               then cc.cc_static /\ stop (asm_op_arity name)
-          else
-            (case ALOOKUP dup_table name of
-               SOME n => n<h /\ next (h+1)
-             | NONE => case ALOOKUP swap_table name of
-                 SOME n => 0<n /\ n<h /\ next h
-               | NONE =>
-                   if name="JUMP" then
-                      1<=h /\ arm (target p pc tag x) (h-1) /\ legal (target p pc tag x) (h-1)
-                   else if name="JUMPI" then
-                      2<=h /\ tag x 1=NONE /\ arm fall (h-2) /\ arm (target p pc tag x) (h-2) /\
-                      legal (\y. fall y \/ target p pc tag x y) (h-2)
-                   else
-                      ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
-                          untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
-      | _ => F)
-  in
-  let d = LENGTH pre in
-  let q = pre++tail in
-  let r = splice_pc d 1 0 in
-  let P = OPTION_MAP (\(n,j). (n,r j)) in
-  let T = \x k. P (tag x k) in
-  let pcQ = r o pc in
-  let K = {u | u IN V /\ pc u<>d} in
-  let Legal = \u (a:bool#(num#num)).
-    edge u (SND a) /\
-    if FST a then (EL (pc u) p = AsmOp "JUMP" \/ EL (pc u) p = AsmOp "JUMPI") /\
-                  target p pc tag u (SND a)
-    else EL (pc u) p <> AsmOp "JUMP" /\ pc(SND a)=pc u+1
-  in
-  let E = \z u w. u IN K /\ ?a. Legal u a /\ w=z u a in
-  let Input = \u H src fresh bnew.
-    !a. Legal u a ==> edge u (SND a) /\ height(SND a)=H /\ I u src bnew tag fresh (SND a) /\
-      (if FST a then ?n j. tag u 0 = SOME(n,j) /\ C p n (pc(SND a))
-       else pc(SND a)=pc u+1)
-  in
-  let Output = \u H src fresh bnew z.
-    !a. Legal u a ==>
-      z a IN V /\ pc(z a) <> d /\ rank(z a) < rank u /\ height(z a) = H /\
-      I u src bnew T (P o fresh) (z a) /\
-      (if pc(SND a) = d then
-         ~FST a /\ edge (SND a) (z a) /\ pc(z a) = d+1 /\ height(z a) = height(SND a) /\
-         (!k n j. tag (z a) k = SOME(n,j) ==> tag (SND a) k = SOME(n,j)) /\
-         (!k. boolean (z a) k ==> boolean (SND a) k)
-       else z a = SND a) /\
-      (~FST a ==> r(pc(z a)) = r(pc u)+1) /\
-      (FST a ==> z a = SND a /\ ?n j. tag u 0 = SOME(n,j) /\ T u 0 = SOME(n,r j) /\
-          EL (pc(z a)) p = AsmLabel n /\ EL (r(pc(z a))) q = AsmLabel n /\
-          C q n (r(pc(z a))))
-  in
-  let Layout =
-    !x k n j. x IN V /\ tag x k = SOME(n,j) ==>
-      j <> d /\ j < LENGTH p /\ r j < LENGTH q /\ EL (r j) q = EL j p /\
-      T x k = SOME(n,r j) /\
-      !w. C p n w ==> w <> d /\ INDEX_OF (AsmLabel n) p = SOME w /\
-        INDEX_OF (AsmLabel n) q = SOME(r w) /\ C q n (r w)
-  in
-  p=pre++[AsmLabel l]++tail /\ asm_static_wf p /\
-  ~MEM l (asm_label_refs p) /\ Open V {} /\ Rows V edge /\
-  e IN V /\ (!x. x IN V ==> Reach edge e x) ==>
+      (!h. h = height x ==>
+       !fall. fall = (\y. pc y = pc x+1) ==>
+       !arm. arm = (\P n. ?y. edge x y /\ P y /\ height y = n) ==>
+       !legal. legal = (\P n. !y. edge x y ==> P y /\ height y = n) ==>
+       !next. next = (\n. arm fall n /\ legal fall n) ==>
+       !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+       !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
+       case ins_at x of
+         AsmLabel l => next h
+       | AsmPush bs => next (h+1)
+       | AsmPushLabel l => IS_SOME (FLOOKUP (SND(compute_label_offsets p)) l) /\ next (h+1)
+       | AsmPushOfst l d => IS_SOME (FLOOKUP (SND(compute_label_offsets p)) l) /\ next (h+1)
+       | AsmOp name =>
+           if name="INVALID" then stop 0
+           else if name="REVERT" then stop 2
+           else if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
+                then cc.cc_static /\ stop (arity name)
+           else
+             (case ALOOKUP dup_table name of
+                SOME n => n<h /\ next (h+1)
+              | NONE => case ALOOKUP swap_table name of
+                  SOME n => 0<n /\ n<h /\ next h
+                | NONE =>
+                    if name="JUMP" then
+                       1<=h /\ arm (target p pc tag x) (h-1) /\ legal (target p pc tag x) (h-1)
+                    else if name="JUMPI" then
+                       2<=h /\ tag x 1=NONE /\ arm fall (h-2) /\ arm (target p pc tag x) (h-2) /\
+                       legal (\y. fall y \/ target p pc tag x y) (h-2)
+                    else
+                       ?m. static_abort_straight name m /\ arity name <= h /\
+                           untagged (arity name) /\ next (h-arity name+m))
+       | _ => F))) /\
+  e IN V /\ (!x. x IN V ==> ?n (path:num->num#num).
+    path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) ==>
   asm_static_wf q /\ (!u. u IN K ==> pcQ u < LENGTH q /\ EL (pcQ u) q = EL (pc u) p) /\
-  Layout /\
+  (!x k n j. x IN V /\ tag x k = SOME(n,j) ==>
+    j <> d /\ j < LENGTH p /\ r j < LENGTH q /\ EL (r j) q = EL j p /\
+    T x k = SOME(n,r j) /\
+    !w. C p n w ==> w <> d /\ INDEX_OF (AsmLabel n) p = SOME w /\
+      INDEX_OF (AsmLabel n) q = SOME(r w) /\ C q n (r w)) /\
   ?z. (!u. u IN K ==> ?H src fresh bnew.
-        (src,fresh,bnew) = Descriptor u H /\ Input u H src fresh bnew /\
-        Output u H src fresh bnew (z u)) /\
-      !u w. E z u w ==> u IN K /\ w IN K /\ rank w < rank u /\ Control q pcQ T u w
+        (src,fresh,bnew) =
+          (case ins_at u of
+             AsmLabel l => ((\k. SOME k), (\k. NONE), (\k. F))
+           | AsmPush bs =>
+               ((\k. if k=0 then NONE else SOME(k-1)), (\k. NONE),
+                (\k. k=0 /\ !t v.
+                   asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
+                     (AsmPush bs) t = AsmOK v ==>
+                   (EL 0 v.as_stack = 0w \/ EL 0 v.as_stack = 1w)))
+           | AsmPushLabel l =>
+               ((\k. if k=0 then NONE else SOME(k-1)),
+                (\k. if k=0 then SOME(l,pc u) else NONE), (\k. F))
+           | AsmPushOfst l d =>
+               ((\k. if k=0 then NONE else SOME(k-1)),
+                (\k. if k=0 /\ d=0 then SOME(l,pc u) else NONE), (\k. F))
+           | AsmOp name =>
+               (case ALOOKUP dup_table name of
+                  SOME n => ((\k. SOME(if k=0 then n else k-1)), (\k. NONE), (\k. F))
+                | NONE =>
+                  case ALOOKUP swap_table name of
+                    SOME n => ((\k. SOME(if k=0 then n else if k=n then 0 else k)),
+                               (\k. NONE), (\k. F))
+                  | NONE =>
+                      ((\k. if k<growth u H name then NONE else SOME(k-growth u H name+arity name)),
+                       (\k. NONE),
+                       (\k. k=0 /\ growth u H name=1 /\ asm_returns_zero_or_one (ins_at u) /\
+                        !t v. LENGTH t.as_stack=height u /\
+                          asm_step (SND(compute_label_offsets p)) (build_offset_to_pc p)
+                            (ins_at u) t = AsmOK v ==>
+                          (EL 0 v.as_stack=0w \/ EL 0 v.as_stack=1w))))
+           | _ => ((\k. NONE), (\k. NONE), (\k. F))) /\
+        (!a. Legal u a ==> edge u (SND a) /\ height(SND a)=H /\ I u src bnew tag fresh (SND a) /\
+          (if FST a then ?n j. tag u 0 = SOME(n,j) /\ C p n (pc(SND a))
+           else pc(SND a)=pc u+1)) /\
+        (!a. Legal u a ==>
+          z u a IN V /\ pc(z u a) <> d /\ rank(z u a) < rank u /\ height(z u a) = H /\
+          I u src bnew T (P o fresh) (z u a) /\
+          (if pc(SND a) = d then
+             ~FST a /\ edge (SND a) (z u a) /\ pc(z u a) = d+1 /\ height(z u a) = height(SND a) /\
+             (!k n j. tag (z u a) k = SOME(n,j) ==> tag (SND a) k = SOME(n,j)) /\
+             (!k. boolean (z u a) k ==> boolean (SND a) k)
+           else z u a = SND a) /\
+          (~FST a ==> r(pc(z u a)) = r(pc u)+1) /\
+          (FST a ==> z u a = SND a /\ ?n j. tag u 0 = SOME(n,j) /\ T u 0 = SOME(n,r j) /\
+              EL (pc(z u a)) p = AsmLabel n /\ EL (r(pc(z u a))) q = AsmLabel n /\
+              C q n (r(pc(z u a)))))) /\
+      !u w. (u IN K /\ ?a. Legal u a /\ w=z u a) ==>
+        u IN K /\ w IN K /\ rank w < rank u /\ Control q pcQ T u w
 Proof
-  rpt gen_tac >>
-  map_every (fn name => qmatch_goalsub_abbrev_tac name >>
-      CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV))
-    [`LET _ Shape`,`LET _ inherits`,`LET _ Descriptor`,`LET _ Flow`,`LET _ canon`,
-     `LET _ target`,`LET _ Control`,`LET _ Open`,`LET _ Reach`,`LET _ Rows`,
-     `LET _ d`,`LET _ q`,`LET _ r`,`LET _ P`,`LET _ tags`,`LET _ pcQ`,`LET _ kept`,
-     `LET _ Legal`,`LET _ sel_edge`,`LET _ Input`,`LET _ Output`,`LET _ Layout`] >>
+  map_every qx_gen_tac [`p`,`pre`,`l`,`tail`,`cc`,`req`,`V`,`e`,`rank`,`pc`,
+    `height`,`need`,`tag`,`boolean`,`edge`] >>
+  map_every (fn name => qx_gen_tac name >>
+    disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
+    [`Realizes`,`inherits`,`ins_at`,`arity`,`growth`,`Flow`,`canon`,`target`,`Control`,
+     `d`,`q`,`r`,`P`,`tags`,`pcQ`,`kept`,`Legal`] >>
+  map_every Q.UNABBREV_TAC [`growth`,`ins_at`,`arity`] >>
+  (* Recover proof-local names for the propositions used by the selection argument. *)
+  Q.HO_MATCH_ABBREV_TAC
+    `p=pre++[AsmLabel l]++tail /\ asm_static_wf p /\ ~MEM l (asm_label_refs p) /\
+     SourceOpen /\ SourceRows /\ e IN V /\ SourceReach ==>
+     asm_static_wf q /\ (!u. u IN kept ==> pcQ u < LENGTH q /\ EL (pcQ u) q = EL (pc u) p) /\
+     Layout /\
+     ?z. (!u. u IN kept ==> ?H src fresh bnew.
+           (src,fresh,bnew) = Descriptor u H /\ Input u H src fresh bnew /\
+           Output u H src fresh bnew (z u)) /\
+         !u w. (u IN kept /\ ?a. Legal u a /\ w=z u a) ==>
+           u IN kept /\ w IN kept /\ rank w < rank u /\ Control q pcQ tags u w` >>
   strip_tac >>
   `!u. u IN kept <=> u IN V /\ pc u <> d` by simp[Abbr `kept`] >>
   `asm_label_refs q = asm_label_refs p` by
@@ -250,8 +239,8 @@ Proof
         simp[Abbr `q`, IgnAsm `asm_label_refs _ = asm_label_refs _`] >> (gvs[])))) >>
      simp[Abbr `q`]) >>
   `!u. u IN V ==> pc u < LENGTH p` by
-    (qpat_x_assum `Rows V edge` mp_tac >>
-     simp[Abbr `Rows`, IgnAsm `p = _`] >>
+    (qpat_x_assum `SourceRows` mp_tac >>
+     simp[Abbr `SourceRows`, UNWIND_FORALL_THM2, IgnAsm `p = _`] >>
      disch_then (mp_tac o last o CONJUNCTS) >>
      simp[FORALL_AND_THM]) >>
   `!u. u IN kept ==> pcQ u < LENGTH q /\ EL (pcQ u) q = EL (pc u) p` by
@@ -263,18 +252,19 @@ Proof
                       (INST_TYPE [alpha |-> ``:asm_inst``] splice_fetch)) >>
      gvs[Abbr `pcQ`, Abbr `q`, Abbr `r`, Abbr `d`]) >>
   `!u y. edge u y ==> Flow u y` by
-    (qpat_x_assum `Rows V edge` mp_tac >>
-     simp[Abbr `Rows`, IgnAsm `p = _`] >>
+    (qpat_x_assum `SourceRows` mp_tac >>
+     simp[Abbr `SourceRows`, UNWIND_FORALL_THM2, IgnAsm `p = _`] >>
      disch_then (mp_tac o hd o tl o CONJUNCTS) >>
      simp[FORALL_AND_THM]) >>
   `!u. u IN V ==> ?H. !y. edge u y ==> height y = H` by
     (rpt gen_tac >> disch_tac >>
-     qpat_x_assum `Rows V edge` mp_tac >>
-     simp[Abbr `Rows`, IgnAsm `p = _`] >>
+     qpat_x_assum `SourceRows` mp_tac >>
+     simp[Abbr `SourceRows`, UNWIND_FORALL_THM2, IgnAsm `p = _`] >>
      disch_then (qspec_then `u` mp_tac o last o CONJUNCTS) >>
      simp[IgnAsm `p = _`] >>
      Cases_on `EL (pc u) p` >> simp[IgnAsm `p = _`] >>
-     TRY (strip_tac >> goal_assum (drule_at Any) >> NO_TAC) >>
+     TRY (strip_tac >> qpat_assum `!y. edge u y ==> _` mp_tac >>
+          POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[] >> NO_TAC) >>
      rename1 `EL (pc u) p = AsmOp name` >>
      let
        val stop = strip_tac >> qexists `0` >> simp[] >> NO_TAC
@@ -312,7 +302,7 @@ Proof
      qpat_x_assum `Descriptor u H = _` mp_tac >>
      qpat_x_assum `Flow u (SND a)` mp_tac >>
      qpat_x_assum `!u y. edge u y ==> Flow u y` kall_tac >>
-     simp[Abbr `Descriptor`, Abbr `Flow`, IgnAsm `p = _`] >>
+     simp[Abbr `Descriptor`, Abbr `Flow`, UNWIND_FORALL_THM2, IgnAsm `p = _`] >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      Cases_on `EL (pc u) p` >> simp[] >>
      TRY (rename1 `EL (pc u) p = AsmOp name` >>
@@ -332,14 +322,14 @@ Proof
                   `u`,`src`,`fresh`,`bnew`,`H`,`Legal u`,
                   `FST:bool#(num#num)->bool`, `SND:bool#(num#num)->num#num`]
        mp_tac unused_label_one_retained_arms >>
-     CONV_TAC (LAND_CONV (REPEATC (REWR_CONV LET_THM THENC BETA_CONV))) >>
+     CONV_TAC (LAND_CONV (DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2))) >>
      (impl_tac >-
-       (qpat_x_assum `Open V {}` mp_tac >>
+       (qpat_x_assum `SourceOpen` mp_tac >>
         qpat_x_assum `Input u H src fresh bnew` mp_tac >>
-        qpat_x_assum `!x. x IN V ==> Reach edge e x` mp_tac >>
+        qpat_x_assum `SourceReach` mp_tac >>
         qpat_x_assum `pc u <> d` mp_tac >>
-        simp[NoAsms, Abbr `Open`, Abbr `Shape`, Abbr `Flow`, Abbr `inherits`,
-             Abbr `Control`, Abbr `target`, Abbr `canon`, Abbr `Reach`,
+        simp[NoAsms, Abbr `SourceOpen`, Abbr `Realizes`, Abbr `Flow`, Abbr `inherits`, UNWIND_FORALL_THM2,
+             Abbr `Control`, Abbr `target`, Abbr `canon`, Abbr `SourceReach`,
              Abbr `Input`, Abbr `d`, GSYM RIGHT_EXISTS_AND_THM] >>
         rpt (first_assum ACCEPT_TAC ORELSE strip_tac) >>
         qpat_assum `!x y. edge x y ==> x IN V /\ y IN V /\ _`
@@ -358,12 +348,12 @@ Proof
        qspecl_then [`p`,`pre`,`l`,`tail`,`cc`,`req`,`V`,`e`,`rank`,`pc`,
                     `height`,`need`,`tag`,`boolean`,`edge`]
          mp_tac unused_label_source_contraction >>
-       CONV_TAC (LAND_CONV (REPEATC (REWR_CONV LET_THM THENC BETA_CONV))) >>
+       CONV_TAC (LAND_CONV (DEPTH_CONV (HO_REWR_CONV UNWIND_FORALL_THM2))) >>
        (impl_tac >-
-          (qpat_assum `Open V {}` mp_tac >>
-           qpat_assum `!x. x IN V ==> Reach edge e x` mp_tac >>
-           simp[NoAsms, Abbr `Open`, Abbr `Shape`, Abbr `Flow`, Abbr `inherits`,
-                Abbr `Control`, Abbr `target`, Abbr `canon`, Abbr `Reach`,
+          (qpat_assum `SourceOpen` mp_tac >>
+           qpat_assum `SourceReach` mp_tac >>
+           simp[NoAsms, Abbr `SourceOpen`, Abbr `Realizes`, Abbr `Flow`, Abbr `inherits`, UNWIND_FORALL_THM2,
+                Abbr `Control`, Abbr `target`, Abbr `canon`, Abbr `SourceReach`,
                 GSYM RIGHT_EXISTS_AND_THM] >>
            rpt (first_assum ACCEPT_TAC ORELSE strip_tac) >>
            qpat_assum `!x y. edge x y ==> x IN V /\ y IN V /\ _`
@@ -390,7 +380,7 @@ Proof
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   qexists `selected` >> (conj_tac >- first_assum ACCEPT_TAC) >>
   qx_gen_tac `x0` >> qx_gen_tac `w0` >>
-  simp[NoAsms, Abbr `sel_edge`] >>
+  simp[NoAsms] >>
   disch_then (CONJUNCTS_THEN2 assume_tac (qx_choose_then `arm` strip_assume_tac)) >>
   qpat_assum `!u. u IN kept ==> ?H src fresh bnew. _ /\ _ /\ Output _ _ _ _ _ _`
     (qspec_then `x0` mp_tac) >>

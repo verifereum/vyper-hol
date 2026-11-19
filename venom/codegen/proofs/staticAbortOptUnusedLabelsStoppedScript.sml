@@ -4,16 +4,14 @@ Ancestors
   asmOptimizer asmSem arithmetic list
 
 Theorem unused_label_one_stopped_prefix:
-  let p = pre ++ [AsmLabel l] ++ tail;
-      q = pre ++ tail;
-      b = LENGTH pre in
-  let r = splice_pc b 1 0 in
+  !p. p = pre ++ [AsmLabel l] ++ tail ==>
   ~MEM l (asm_label_refs p) /\ s.as_pc = 0 /\
   sym_steps p env n (sym_init s) = SymOK ss ==>
-  ?j. sym_steps q env j (sym_init s) = SymOK (sym_with_pc (r ss.sym_base.as_pc) ss)
+  ?j. sym_steps (pre ++ tail) env j (sym_init s) =
+      SymOK (sym_with_pc (splice_pc (LENGTH pre) 1 0 ss.sym_base.as_pc) ss)
 Proof
-  rewrite_tac[LET_THM] >> BETA_TAC >>
-  qabbrev_tac `p = pre ++ [AsmLabel l] ++ tail` >>
+  qx_gen_tac `p` >>
+  disch_then (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
   qabbrev_tac `q = pre ++ tail` >>
   qabbrev_tac `r = splice_pc (LENGTH (pre:asm_inst list)) 1 0` >>
   qid_spec_tac `ss` >> Induct_on `n`
