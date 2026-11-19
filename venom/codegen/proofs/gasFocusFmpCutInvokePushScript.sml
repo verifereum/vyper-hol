@@ -14,18 +14,7 @@ Ancestors fmpStageCallArity[qualified]
   o1ContractSimplifyCfgParams o1ContractSue o1ContractSueStep o1DftStep
   o1ContractCfgNorm o1ContractCfgNormStep
   finite_map list words arithmetic
-
-Theorem collect_selected_invoke[local]:
-  !insts targets ivk nm ops.
-    fmp_collect_invokes insts = SOME targets /\ MEM ivk insts /\
-    ivk.inst_opcode = INVOKE /\ decode_invoke ivk = SOME (nm,ops) ==>
-    MEM nm targets
-Proof
-  Induct >> simp[fmp_collect_invokes_def] >> rpt strip_tac >>
-  gvs[AllCaseEqs()] >>
-  gvs[fmp_invoke_target_def, decode_invoke_def, AllCaseEqs()] >>
-  metis_tac[]
-QED
+  fmpStageFmpStepsCallMatch[qualified,ignore_grammar]
 
 Theorem selected_invoke_resolves[local]:
   fmp_stage_lowered infos ctx runner fn fn' /\ fn.fn_fmp_signature = NONE /\
@@ -60,7 +49,7 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   `MEM nm targets` by
     (gvs[fmp_function_targets_def, AllCaseEqs()] >>
-     metis_tac[collect_selected_invoke]) >>
+     metis_tac[fmpStageFmpStepsCallMatchTheory.call_collect_member]) >>
   drule fmp_join_target_info_needs_iff >> strip_tac >>
   `info.fi_needs_fmp` by metis_tac[] >>
   drule_all fmp_stage_root_exists >> strip_tac >> simp[]

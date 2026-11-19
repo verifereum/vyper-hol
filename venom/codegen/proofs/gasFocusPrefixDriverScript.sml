@@ -16,9 +16,7 @@ Ancestors
    use frame_rel as a variable. *)
 val _ = hide "frame_rel";
 
-(* Proof goals only. These ML values register no HOL definitions or theorems.
-   The packet, CFG cursor and frame-plan conjuncts will be joined here once
-   their main-based owner theories are available. *)
+(* These ML values hold the proof goals. *)
 
 val focus_producer_goal : term = ``
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\

@@ -20,7 +20,7 @@ Ancestors
   unitLabelMapIdentity contextCodegenRel codegenRel frameViewFacts
   pointerConfinedDefs unitShapeDefs memLocDefs venomState venomInst pred_set
 
-Theorem ptr_mixed_affine_execution_back[local]:
+Theorem ptr_mixed_affine_execution_back:
   ptr_mixed_vars births positions TG tn f g s t /\
   s.vs_labels = t.vs_labels /\
   ptr_nonopaque_operand f x /\ ptr_nonopaque_operand f y /\
