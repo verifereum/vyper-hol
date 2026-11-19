@@ -255,6 +255,7 @@ QED
 Theorem deploy_correct_at_tail[local]:
   fin IN accepted_finalizers /\
   fin rpolicy prog = SOME prog' /\
+  (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
   compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
   deploy_phases policy tops (assemble prog, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
@@ -422,6 +423,7 @@ Theorem e2e_deploy_correct_from_gas_link:
    am tx txp es vs_out fmp r es'.
     fin IN accepted_finalizers /\
     fin rpolicy prog = SOME prog' /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
