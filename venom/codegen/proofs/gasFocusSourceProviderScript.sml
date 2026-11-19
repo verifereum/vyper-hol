@@ -61,6 +61,7 @@ Ancestors lowerDloadSafetyKernel[qualified,ignore_grammar]
   venomExecProofs pred_set passSharedDefs concretizeStepStructure
   gasFocusConcretizeCutActualWrite concretizePtrHistoricalWriteExclusion concretizePtrRevertHistory concretizePtrActualWrites concretizePtrActualByteFrame concretizePtrEventEmbedding concretizePtrPrefixLedger concretizePtrBytes codegenRel concretizePtrValueTransport concretizePtrStagePlacements o1FrameLockstep o1ContractMakeSsa o1CodeEndSsaProtectedCleanup
   o1CodeEndSsaTraceOwnership o1CodeEndSsaRead o1LabelFlowMiddleSsa
+  o1CodeEndSsaProtectedUses
   o1MakeSsaOwnership o1MakeSsaVisitTrace makeSsaCurrentLockstep
   makeSsaCurrentWfSsa makeSsaCurrentTreeTrace pair stateFrame
   concretizePtrPairedFields unitLabelMapIdentity stepWriteFootprintBase
@@ -6082,6 +6083,76 @@ Proof
   qexistsl [`stage 3`, `rpolicy`, `o1_walk_view rpolicy 3`] >>
   qpat_assum `!k. k <= 9 ==> _` (qspec_then `3` mp_tac) >>
   gvs[EVERY_MEM]
+QED
+
+(* The three late passes retain the same root and gas-cut threshold. *)
+Theorem focus_opt_late_cut_bound[local]:
+  (!k. k < 9 ==> ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+    (stage k) (stage (SUC k))) /\
+  (!k. k <= 9 ==> o1_ctx_shape (stage k) /\ EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  (!f i. MEM f (stage 1).ctx_functions /\ MEM i (fn_insts f) ==>
+    ~MEM (Label "code_end") i.inst_operands) /\
+  o1_initial_state_ok vs0 /\
+  code_end_offset_ok (\ctx fn i s.
+    raw_reachable (vs0 with vs_gas_readings := gs) ctx fn i s /\
+    gas_cut n (vs0 with vs_gas_readings := gs) s) (stage 4) ==>
+  code_end_offset_ok (\ctx fn i s.
+    raw_reachable (vs0 with vs_gas_readings := gs) ctx fn i s /\
+    gas_cut n (vs0 with vs_gas_readings := gs) s) (stage 7)
+Proof
+  strip_tac >> drule_all focus_opt_c4_protected_lifetime >> strip_tac >>
+  qabbrev_tac `V = vs0 with vs_gas_readings := gs` >>
+  `V.vs_vars = FEMPTY /\ ~V.vs_halted` by fs[Abbr `V`, o1_initial_state_ok_def] >>
+  `ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) (o1_walk_view rpolicy 4)
+     (stage 4) (stage 5) /\
+   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) (o1_walk_view rpolicy 5)
+     (stage 5) (stage 6) /\
+   ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) (o1_walk_view rpolicy 6)
+     (stage 6) (stage 7)` by
+    (qpat_assum `!k. k < 9 ==> _` (fn th =>
+       map_every (fn q => qspec_then q mp_tac th) [`4`,`5`,`6`]) >>
+     simp[NoAsms, venomPassScheduleTheory.o1_fn_passes_def, arithmeticTheory.ADD1] >>
+     metis_tac[]) >>
+  `o1_ctx_shape (stage 4) /\ o1_ctx_shape (stage 5) /\ o1_ctx_shape (stage 6) /\
+   EVERY make_ssa_input_ok (stage 4).ctx_functions /\
+   EVERY wf_ssa (stage 5).ctx_functions /\ EVERY wf_ssa (stage 6).ctx_functions /\
+   EVERY (o1_fn_row 6) (stage 6).ctx_functions` by
+    (qpat_assum `!k. k <= 9 ==> _` (fn th =>
+       map_every (fn q => qspec_then q mp_tac th) [`4`,`5`,`6`]) >>
+     simp[NoAsms, EVERY_MEM, o1_fn_row_def] >> metis_tac[]) >>
+  `EVERY (\f. !x. code_end_var f x ==> ?d op. MEM d (fn_insts f) /\
+     d.inst_opcode = ADD /\ d.inst_operands = [op; Label "code_end"] /\
+     d.inst_outputs = [x] /\
+     (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
+     (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
+       MEM (Var x) j.inst_operands ==>
+       j.inst_opcode = CODECOPY /\
+       (?dst sz. j.inst_operands = [dst; Var x; sz] /\
+         dst <> Var x /\ sz <> Var x) /\
+       ?a b. bb.bb_instructions = a ++ [d;j] ++ b)) (stage 4).ctx_functions` by
+    (qpat_assum `EVERY middle_code_end_lifetime _` mp_tac >>
+     pure_rewrite_tac[EVERY_MEM, middle_code_end_lifetime_def,
+                      GSYM listTheory.APPEND_ASSOC, APPEND] >> simp[]) >>
+  drule_all make_ssa_stage_protected_uses >> strip_tac >>
+  `code_end_offset_ok (\ctx fn i s. raw_reachable V ctx fn i s /\ gas_cut n V s)
+    (stage 5)` by (drule_all focus_opt_ssa_cut_bound >> simp[]) >>
+  `code_end_offset_ok (\ctx fn i s. raw_reachable V ctx fn i s /\ gas_cut n V s)
+    (stage 6)` by
+    (simp[code_end_offset_ok_def] >> rpt gen_tac >> strip_tac >>
+     drule_all focus_opt_scfg_read_origin >> strip_tac >>
+     rename1 `scfg_payload src tgt` >>
+     `o1_fn_shape (stage 5) f /\ wf_ssa f /\
+      (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+        i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY)` by
+       (fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[]) >>
+     `code_end_var f x` by metis_tac[focus_opt_scfg_var_back] >>
+     `src.vs_labels = tgt.vs_labels /\ src.vs_gas_readings = tgt.vs_gas_readings` by
+       (drule scfg_payload_frame >> simp[stateFrameTheory.execution_frame_def]) >>
+     `gas_cut n V src` by fs[gas_cut_def] >>
+     `eval_operand (Var x) src = SOME w` by metis_tac[scfg_payload_operand] >>
+     qpat_x_assum `code_end_offset_ok _ (stage 5)` mp_tac >>
+     simp[code_end_offset_ok_def] >> metis_tac[]) >>
+  drule_all focus_opt_sue_cut_bound >> simp[]
 QED
 
 Theorem focus_history_observation_agreement[local]:
