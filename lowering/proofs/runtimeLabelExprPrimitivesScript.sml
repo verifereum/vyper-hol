@@ -6,14 +6,14 @@ Ancestors
   emitHelper venomInst list builtinSimple builtinSystem builtinMath builtinHashing
   builtinStrings builtinMisc builtinAbi builtinCreate exprLowering exprCallbackContracts
 
-Theorem rb_compile_extcodesize_check_for:
+Theorem rb_compile_extcodesize_check_for[local]:
   (rb_operand_ok_for source_checks) addr ==> (rb_step_for source_checks) (K T) (compile_extcodesize_check addr)
 Proof
   strip_tac >> pure_rewrite_tac[compile_extcodesize_check_def] >>
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_void_for]
 QED
 
-Theorem rb_compile_return_value_decode_for:
+Theorem rb_compile_return_value_decode_for[local]:
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_return_value_decode min_size max_size)
 Proof
   pure_rewrite_tac[compile_return_value_decode_def] >>
@@ -25,7 +25,7 @@ Proof
 QED
 
 (* Decoder antecedent: conjunct 1 of runtimeLabelABI$rb_abi_decode_for. *)
-Theorem rb_compile_default_return_path_for:
+Theorem rb_compile_default_return_path_for[local]:
   (!dst src opc bop hi info.
      (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) bop /\
      (rb_operand_ok_for source_checks) hi /\
@@ -58,7 +58,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_new_block_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_multi_vvs_for:
+Theorem rb_compile_multi_vvs_for[local]:
   !es. (!e. MEM e es ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce (expr_type e) e)) ==>
   (rb_step_for source_checks) (EVERY (rb_value_ok_for source_checks)) (compile_multi_vvs cfn ce es)
 Proof
@@ -243,7 +243,7 @@ Proof
   simp[compile_tuple_subscript_def, rb_emit_op_for]
 QED
 
-Theorem rb_compile_store_byte_chunks_for:
+Theorem rb_compile_store_byte_chunks_for[local]:
   !p bs off. (rb_operand_ok_for source_checks) p ==>
   (rb_step_for source_checks) (K T) (compile_store_byte_chunks p bs off)
 Proof
@@ -307,7 +307,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_op_for]
 QED
 
-Theorem rb_load_bytestring_as_word_for:
+Theorem rb_load_bytestring_as_word_for[local]:
   (rb_operand_ok_for source_checks) v /\
   (opc = CODECOPY ==> ~SND source_checks) ==>
   (rb_step_for source_checks) (\p. (rb_operand_ok_for source_checks) (FST p) /\ (rb_operand_ok_for source_checks) (SND p))
@@ -329,7 +329,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_step_return_for]
 QED
 
-Theorem rb_compile_int_clamp_for:
+Theorem rb_compile_int_clamp_for[local]:
   (rb_operand_ok_for source_checks) v ==> (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_int_clamp signed bits v)
 Proof
   strip_tac >> Cases_on `signed` >>
@@ -366,7 +366,7 @@ Proof
 QED
 
 
-Theorem rb_compile_store_words_for:
+Theorem rb_compile_store_words_for[local]:
   !vs buf off. EVERY (rb_operand_ok_for source_checks) vs /\ (rb_operand_ok_for source_checks) buf ==>
   (rb_step_for source_checks) (K T) (compile_store_words buf vs off)
 Proof

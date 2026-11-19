@@ -6,7 +6,7 @@ Ancestors
   emitHelper venomInst list builtinSimple builtinSystem builtinMath builtinHashing
   builtinStrings builtinMisc builtinAbi builtinCreate exprLowering exprCallbackContracts
 
-Theorem rb_compile_clamp_for:
+Theorem rb_compile_clamp_for[local]:
   (rb_operand_ok_for source_checks) v ==> (rb_step_for source_checks) (K T) (compile_clamp v ty)
 Proof
   strip_tac >> pure_rewrite_tac[compile_clamp_def, LET_THM] >>
@@ -20,7 +20,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_void_for]
 QED
 
-Theorem rb_clamp_and_return_for:
+Theorem rb_clamp_and_return_for[local]:
   (rb_operand_ok_for source_checks) v ==> (rb_step_for source_checks) (rb_operand_ok_for source_checks) (clamp_and_return v ty)
 Proof
   strip_tac >> pure_rewrite_tac[clamp_and_return_def] >>
@@ -46,7 +46,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_safe_add_for:
+Theorem rb_compile_safe_add_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_safe_add x y ty)
 Proof
@@ -63,7 +63,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_safe_sub_for:
+Theorem rb_compile_safe_sub_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_safe_sub x y ty)
 Proof
@@ -80,7 +80,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_mul_overflow_check_for:
+Theorem rb_compile_mul_overflow_check_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y /\ (rb_operand_ok_for source_checks) res ==>
   (rb_step_for source_checks) (K T) (compile_mul_overflow_check x y res signed bits)
 Proof
@@ -100,7 +100,7 @@ Proof
   simp[rb_emit_void_for]
 QED
 
-Theorem rb_compile_safe_mul_for:
+Theorem rb_compile_safe_mul_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_safe_mul x y ty)
 Proof
@@ -116,7 +116,7 @@ Proof
   simp[rb_clamp_and_return_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_safe_div_for:
+Theorem rb_compile_safe_div_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_safe_div x y ty)
 Proof
@@ -136,7 +136,7 @@ Proof
   Cases_on `type_bits ty < 256` >> simp[rb_clamp_and_return_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_safe_decimal_div_for:
+Theorem rb_compile_safe_decimal_div_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_safe_decimal_div x y divisor ty)
 Proof
@@ -148,7 +148,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_clamp_and_return_for]
 QED
 
-Theorem rb_compile_safe_mod_for:
+Theorem rb_compile_safe_mod_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_safe_mod x y ty)
 Proof
@@ -159,7 +159,7 @@ Proof
   Cases_on `is_signed_type ty` >> simp[rb_emit_op_for]
 QED
 
-Theorem rb_compile_safe_pow_for:
+Theorem rb_compile_safe_pow_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_safe_pow x y ty bl el)
 Proof
@@ -197,14 +197,14 @@ QED
 
 Finalise rb_compile_safe_pow_for
 
-Theorem rb_wrap_truncate_for:
+Theorem rb_wrap_truncate_for[local]:
   (rb_operand_ok_for source_checks) v ==> (rb_step_for source_checks) (rb_operand_ok_for source_checks) (wrap_truncate v ty)
 Proof
   strip_tac >> Cases_on `type_bits ty < 256` >> Cases_on `is_signed_type ty` >>
   simp[wrap_truncate_def, rb_emit_op_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_compare_for:
+Theorem rb_compile_compare_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_compare op x y ty)
 Proof
@@ -251,7 +251,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_op_for]
 QED
 
-Theorem rb_emit_membership_eqs_for:
+Theorem rb_emit_membership_eqs_for[local]:
   !elems needle. EVERY (rb_operand_ok_for source_checks) elems /\ (rb_operand_ok_for source_checks) needle ==>
   (rb_step_for source_checks) (EVERY (rb_operand_ok_for source_checks)) (emit_membership_eqs needle elems)
 Proof
@@ -262,7 +262,7 @@ Proof
   simp[rb_step_return_for]
 QED
 
-Theorem rb_fold_membership_or_for:
+Theorem rb_fold_membership_or_for[local]:
   !cs acc. EVERY (rb_operand_ok_for source_checks) cs /\ (rb_operand_ok_for source_checks) acc ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (fold_membership_or acc cs)
 Proof
@@ -270,7 +270,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[]
 QED
 
-Theorem rb_fold_membership_and_for:
+Theorem rb_fold_membership_and_for[local]:
   !cs acc. EVERY (rb_operand_ok_for source_checks) cs /\ (rb_operand_ok_for source_checks) acc ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (fold_membership_and acc cs)
 Proof
@@ -327,7 +327,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_op_for]
 QED
 
-Theorem rb_compile_array_membership_loop_for:
+Theorem rb_compile_array_membership_loop_for[local]:
   (rb_operand_ok_for source_checks) needle /\ (rb_operand_ok_for source_checks) arr /\ (rb_operand_ok_for source_checks) len /\
   (!p. (rb_operand_ok_for source_checks) p ==> (rb_step_for source_checks) (rb_operand_ok_for source_checks) (loader p)) ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks)

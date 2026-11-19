@@ -4,7 +4,7 @@ Ancestors
   runtimeLabelPrimitives runtimeLabelValues runtimeLabelInvariant abiEncoder emitHelper compileEnv
   context venomInst list
 
-Theorem rb_compile_abi_int_clamp_for:
+Theorem rb_compile_abi_int_clamp_for[local]:
   (rb_operand_ok_for source_checks) op ==> (rb_step_for source_checks) (K T) (compile_abi_int_clamp op bits signed)
 Proof
   strip_tac >> Cases_on `signed` >>
@@ -13,7 +13,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_void_for]
 QED
 
-Theorem rb_compile_abi_bytes_clamp_for:
+Theorem rb_compile_abi_bytes_clamp_for[local]:
   (rb_operand_ok_for source_checks) op ==> (rb_step_for source_checks) (K T) (compile_abi_bytes_clamp op m)
 Proof
   strip_tac >> pure_rewrite_tac[compile_abi_bytes_clamp_def, LET_THM] >>
@@ -33,7 +33,7 @@ Proof
   simp[rb_emit_void_for]
 QED
 
-Theorem rb_compile_abi_zero_pad_for:
+Theorem rb_compile_abi_zero_pad_for[local]:
   (rb_operand_ok_for source_checks) p /\ (rb_operand_ok_for source_checks) len /\ (rb_operand_ok_for source_checks) cnt ==>
   (rb_step_for source_checks) (K T) (compile_abi_zero_pad p len cnt)
 Proof
@@ -43,13 +43,13 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_void_for]
 QED
 
-Theorem rb_compile_get_element_ptr_for:
+Theorem rb_compile_get_element_ptr_for[local]:
   (rb_operand_ok_for source_checks) p ==> (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_get_element_ptr p n)
 Proof
   simp[compile_get_element_ptr_def, rb_emit_op_for]
 QED
 
-Theorem rb_compile_get_dynarray_elem_ptr_for:
+Theorem rb_compile_get_dynarray_elem_ptr_for[local]:
   (rb_operand_ok_for source_checks) p /\ (rb_operand_ok_for source_checks) idx ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_get_dynarray_elem_ptr p idx n)
 Proof
@@ -58,7 +58,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_op_for]
 QED
 
-Theorem rb_compile_abi_encode_static_for:
+Theorem rb_compile_abi_encode_static_for[local]:
   (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) src ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_abi_encode_static dst src)
 Proof
@@ -67,7 +67,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_abi_decode_static_for:
+Theorem rb_compile_abi_decode_static_for[local]:
   (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) dst /\
   source_codecopy_arity_ok source_checks opc [src] /\
   (!op. (rb_operand_ok_for source_checks) op ==> (rb_step_for source_checks) (K T) (clamp op)) ==>
@@ -78,7 +78,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for]
 QED
 
-Theorem rb_compile_abi_encode_static_info_for:
+Theorem rb_compile_abi_encode_static_info_for[local]:
   (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) src ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_abi_encode_static_info dst src info)
 Proof
@@ -88,7 +88,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_abi_dec_addr_for:
+Theorem rb_compile_abi_dec_addr_for[local]:
   (rb_operand_ok_for source_checks) bop /\ (rb_operand_ok_for source_checks) pos ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_abi_dec_addr bop pos)
 Proof
@@ -96,7 +96,7 @@ Proof
   simp[compile_abi_dec_addr_def, rb_step_return_for, rb_emit_op_for]
 QED
 
-Theorem rb_compile_abi_decode_range_check_for:
+Theorem rb_compile_abi_decode_range_check_for[local]:
   !sop eop hi. (rb_operand_ok_for source_checks) sop /\ (rb_operand_ok_for source_checks) eop /\ (rb_operand_ok_for source_checks) hi ==>
   (rb_step_for source_checks) (K T) (compile_abi_decode_range_check sop eop hi)
 Proof
@@ -108,7 +108,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_void_for]
 QED
 
-Theorem rb_bind_abi_dec_addr_for:
+Theorem rb_bind_abi_dec_addr_for[local]:
   (rb_operand_ok_for source_checks) bop /\ (rb_operand_ok_for source_checks) pos /\
   (!op. (rb_operand_ok_for source_checks) op ==> (rb_step_for source_checks) Q (f op)) ==>
   (rb_step_for source_checks) Q (comp_bind (compile_abi_dec_addr bop pos) f)
@@ -117,7 +117,7 @@ Proof
   simp[rb_compile_abi_dec_addr_for]
 QED
 
-Theorem rb_compile_getelemptr_abi_for:
+Theorem rb_compile_getelemptr_abi_for[local]:
   (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) bop /\ (rb_operand_ok_for source_checks) hi /\
   (opc = CODECOPY ==> ~SND source_checks) ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_getelemptr_abi src dyn off opc bop hi)
@@ -134,7 +134,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_void_for]
 QED
 
-Theorem rb_compile_abi_decode_dyn_elem_ptr_for:
+Theorem rb_compile_abi_decode_dyn_elem_ptr_for[local]:
   (rb_operand_ok_for source_checks) bop /\ (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) data_op /\
   (rb_operand_ok_for source_checks) hi /\
   (opc = CODECOPY ==> ~SND source_checks) ==>
@@ -161,7 +161,7 @@ Proof
   simp[rb_compile_alloc_buffer_for]
 QED
 
-Theorem rb_compile_abi_encode_dyn_static_loop_for:
+Theorem rb_compile_abi_encode_dyn_static_loop_for[local]:
   (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) len ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks)
     (compile_abi_encode_dyn_static_loop dst src info asz msz len)

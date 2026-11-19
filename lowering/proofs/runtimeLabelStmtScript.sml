@@ -5,14 +5,14 @@ Ancestors
   runtimeLabelStmtIO runtimeLabelPrimitives runtimeLabelInvariant runtimeLabelValues runtimeLabelBuiltins runtimeLabelABI
   stmtLowering exprLowering compileEnv context emitHelper venomInst list
 
-Theorem rb_compile_mcopy_guard_for:
+Theorem rb_compile_mcopy_guard_for[local]:
   (rb_step_for source_checks) (K T) action ==> (rb_step_for source_checks) (K T) (compile_mcopy_guard ce action)
 Proof
   simp[compile_mcopy_guard_def] >> strip_tac >>
   Cases_on `ce.ce_target CapMcopy` >> simp[rb_emit_inst_for]
 QED
 
-Theorem rb_compile_revert_with_reason_for:
+Theorem rb_compile_revert_with_reason_for[local]:
   (rb_env_ok_for source_checks) ce /\ (rb_value_ok_for source_checks) msg ==>
   (rb_step_for source_checks) (K T) (compile_revert_with_reason ce msg ty n)
 Proof
@@ -46,7 +46,7 @@ Proof
   simp[rb_emit_inst_for]
 QED
 
-Theorem rb_compile_custom_error_store_args_for:
+Theorem rb_compile_custom_error_store_args_for[local]:
   !es tys dst off. (rb_expr_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce /\ (rb_operand_ok_for source_checks) dst ==>
   (rb_step_for source_checks) (K T) (compile_custom_error_store_args ce es tys dst off)
 Proof
@@ -63,7 +63,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem rb_compile_revert_with_custom_error_for:
+Theorem rb_compile_revert_with_custom_error_for[local]:
   (rb_expr_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce ==>
   (rb_step_for source_checks) (K T) (compile_revert_with_custom_error ce err)
 Proof
@@ -92,7 +92,7 @@ Proof
   simp[rb_emit_inst_for]
 QED
 
-Theorem rb_compile_reason_message_for:
+Theorem rb_compile_reason_message_for[local]:
   !ce e. (rb_expr_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce ==>
   (rb_step_for source_checks) (rb_value_ok_for source_checks) (compile_reason_message ce e)
 Proof
@@ -104,7 +104,7 @@ Proof
   gvs[rb_expr_contract_for_def]
 QED
 
-Theorem rb_compile_range_bound_checks_for:
+Theorem rb_compile_range_bound_checks_for[local]:
   (rb_operand_ok_for source_checks) start /\ (rb_operand_ok_for source_checks) stop /\ (rb_operand_ok_for source_checks) rounds ==>
   (rb_step_for source_checks) (K T) (compile_range_bound_checks start stop rounds bound signed)
 Proof
@@ -119,7 +119,7 @@ Proof
   simp[rb_emit_void_for]
 QED
 
-Theorem rb_compile_iter_elem_copy_for:
+Theorem rb_compile_iter_elem_copy_for[local]:
   (rb_env_ok_for source_checks) ce /\ (rb_operand_ok_for source_checks) elem /\ (rb_operand_ok_for source_checks) item ==>
   (rb_step_for source_checks) (K T) (compile_iter_elem_copy ce elem item n loc slots tty ety)
 Proof
@@ -139,7 +139,7 @@ Proof
   simp[rb_compile_store_memory_for]
 QED
 
-Theorem rb_compile_assign_value_for:
+Theorem rb_compile_assign_value_for[local]:
   (rb_env_ok_for source_checks) ce /\ (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) src ==>
   (rb_step_for source_checks) (K T) (compile_assign_value ce dst loc src prim sloc dty sty n)
 Proof
@@ -170,7 +170,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_compile_imm_store_word_for])
 QED
 
-Theorem rb_compile_tuple_load_all_for:
+Theorem rb_compile_tuple_load_all_for[local]:
   !tys offset. (rb_operand_ok_for source_checks) src ==>
   (rb_step_for source_checks) (EVERY (rb_operand_ok_for source_checks)) (compile_tuple_load_all ce src tys offset)
 Proof
@@ -182,7 +182,7 @@ Proof
   reverse conj_tac >- simp[] >> simp[rb_step_return_for]
 QED
 
-Theorem rb_compile_store_at_loc_for:
+Theorem rb_compile_store_at_loc_for[local]:
   (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) v /\
   (case imm of NONE => T | SOME op => (rb_operand_ok_for source_checks) op) ==>
   (rb_step_for source_checks) (K T) (compile_store_at_loc imm dst v loc)
@@ -192,7 +192,7 @@ Proof
   simp[compile_store_at_loc_def, rb_emit_void_for, rb_compile_imm_store_word_for]
 QED
 
-Theorem rb_compile_tuple_store_all_for:
+Theorem rb_compile_tuple_store_all_for[local]:
   !ce tys targets vals. (rb_expr_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce /\ EVERY (rb_operand_ok_for source_checks) vals ==>
   (rb_step_for source_checks) (K T) (compile_tuple_store_all ce tys targets vals)
 Proof
@@ -212,7 +212,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> gvs[rb_emit_void_for]
 QED
 
-Theorem rb_compile_tuple_unpack_for:
+Theorem rb_compile_tuple_unpack_for[local]:
   (rb_expr_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce /\ (rb_operand_ok_for source_checks) src ==>
   (rb_step_for source_checks) (K T) (compile_tuple_unpack ce ty stage targets src)
 Proof
@@ -231,7 +231,7 @@ Proof
   simp[rb_compile_tuple_load_all_for, rb_compile_tuple_store_all_for]
 QED
 
-Theorem rb_emit_jmp_if_not_terminated_for:
+Theorem rb_emit_jmp_if_not_terminated_for[local]:
   (rb_operand_ok_for source_checks) (Label l) ==> (rb_step_for source_checks) (K T) (emit_jmp_if_not_terminated l)
 Proof
   strip_tac >> rewrite_tac[emit_jmp_if_not_terminated_def] >>

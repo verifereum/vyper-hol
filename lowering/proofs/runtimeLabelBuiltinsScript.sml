@@ -76,7 +76,7 @@ Proof
    simp[rb_compile_addmod_for, rb_compile_mulmod_for])
 QED
 
-Theorem rb_compile_call_raw_revert_for:
+Theorem rb_compile_call_raw_revert_for[local]:
   (rb_env_ok_for source_checks) ce /\
   (!e ty. MEM e args ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce ty e)) ==>
   (rb_step_for source_checks) (rb_value_ok_for source_checks) (compile_call cfn ce ret_ty ty RawRevert args default_ret)
@@ -115,7 +115,7 @@ Resume rb_compile_call_raw_revert_for[valid]:
 QED
 Finalise rb_compile_call_raw_revert_for
 
-Theorem rb_fresh_vars_for:
+Theorem rb_fresh_vars_for[local]:
   !n. (rb_step_for source_checks) (K T) (fresh_vars n)
 Proof
   Induct >> simp[fresh_vars_def, rb_step_return_for] >>
@@ -125,7 +125,7 @@ Proof
   simp[rb_step_return_for]
 QED
 
-Theorem rb_emit_multi_op_for:
+Theorem rb_emit_multi_op_for[local]:
   EVERY (rb_operand_ok_for source_checks) ops /\ source_codecopy_arity_ok source_checks opc ops ==>
   (rb_step_for source_checks) (EVERY (rb_operand_ok_for source_checks)) (emit_multi_op opc ops n)
 Proof
@@ -136,7 +136,7 @@ Proof
   simp[rb_step_return_for, EVERY_MAP]
 QED
 
-Theorem rb_compile_call_internal_for:
+Theorem rb_compile_call_internal_for[local]:
   (rb_env_ok_for source_checks) ce /\
   (!e. MEM e (omitted_defaults ce (nsid_to_string id) (LENGTH args)) ==>
     (rb_step_for source_checks) (rb_value_ok_for source_checks)
@@ -215,7 +215,7 @@ Resume rb_compile_call_internal_for[multi]:
 QED
 Finalise rb_compile_call_internal_for
 
-Theorem rb_compile_call_selfdestruct_for:
+Theorem rb_compile_call_selfdestruct_for[local]:
   (rb_env_ok_for source_checks) ce /\
   (!e ty. MEM e args ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce ty e)) ==>
   (rb_step_for source_checks) (rb_value_ok_for source_checks) (compile_call cfn ce ret_ty ty SelfDestructTarget args default_ret)
@@ -254,7 +254,7 @@ Resume rb_compile_call_selfdestruct_for[valid]:
 QED
 Finalise rb_compile_call_selfdestruct_for
 
-Theorem rb_compile_call_send_for:
+Theorem rb_compile_call_send_for[local]:
   (rb_env_ok_for source_checks) ce /\
   (!e ty. MEM e args ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce ty e)) ==>
   (rb_step_for source_checks) (rb_value_ok_for source_checks) (compile_call cfn ce ret_ty ty (Send has_gas) args default_ret)
@@ -320,7 +320,7 @@ Resume rb_compile_call_send_for[gas]:
 QED
 Finalise rb_compile_call_send_for
 
-Theorem rb_compile_call_create_for:
+Theorem rb_compile_call_create_for[local]:
   (!dst src info. (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) src ==>
      (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_abi_encode_to_buf dst src info)) /\
   (rb_env_ok_for source_checks) ce /\
@@ -334,7 +334,7 @@ Proof
   irule rb_compile_create_call_for >> simp[]
 QED
 
-Theorem rb_compile_call_raw_log_for:
+Theorem rb_compile_call_raw_log_for[local]:
   (rb_env_ok_for source_checks) ce /\
   (!e ty. MEM e args ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce ty e)) /\
   (!topics e. MEM topics args /\ MEM e (raw_log_topic_exprs topics) ==>
@@ -419,7 +419,7 @@ Resume rb_compile_call_raw_log_for[dynamic]:
 QED
 Finalise rb_compile_call_raw_log_for
 
-Theorem rb_compile_call_raw_calldata_for:
+Theorem rb_compile_call_raw_calldata_for[local]:
   (rb_env_ok_for source_checks) ce /\
   (!e ty. MEM e args ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce ty e)) ==>
   (rb_step_for source_checks) (rb_value_ok_for source_checks)
@@ -487,7 +487,7 @@ Resume rb_compile_call_raw_calldata_for[finish]:
 QED
 Finalise rb_compile_call_raw_calldata_for
 
-Theorem rb_compile_call_raw_for:
+Theorem rb_compile_call_raw_for[local]:
   (rb_env_ok_for source_checks) ce /\
   (!e ty. MEM e args ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce ty e)) ==>
   (rb_step_for source_checks) (rb_value_ok_for source_checks)
@@ -565,7 +565,7 @@ Resume rb_compile_call_raw_for[gas]:
 QED
 Finalise rb_compile_call_raw_for
 
-Theorem rb_compile_call_external_for:
+Theorem rb_compile_call_external_for[local]:
   (!dst src info. (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) src ==>
      (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_abi_encode_to_buf dst src info)) /\
   (!dst src opc bop hi info.

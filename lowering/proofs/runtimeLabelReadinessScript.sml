@@ -13,7 +13,7 @@ Proof
        entry_code_pred_def, EVERY_FLAT, EVERY_MAP] >> metis_tac[]
 QED
 
-Theorem rb_extract_context_for:
+Theorem rb_extract_context_for[local]:
   (rb_state_ok_for source_checks) st /\
   extract_context_with_internals entry internals st = SOME (ctx,data) /\
   MEM fn ctx.ctx_functions ==>
@@ -134,7 +134,7 @@ Proof
        rb_build_compile_env_ctor, rb_operand_ok_for_def]
 QED
 
-Theorem rb_package_internal_for:
+Theorem rb_package_internal_for[local]:
   !tops trans keys f target.
     (rb_internal_package_ok_for source_checks)
       (set_internal_package_target target (package_internal_fn tops trans keys F 0 f))

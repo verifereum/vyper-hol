@@ -4,7 +4,7 @@ Ancestors
   runtimeLabelPrimitives runtimeLabelInvariant context compileEnv emitHelper
   loweringShapeDefs venomInst list finite_map stmtLowering
 
-Theorem rb_compile_word_copy_loop_base_for:
+Theorem rb_compile_word_copy_loop_base_for[local]:
   (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) count_op /\
   (case imm of NONE => T | SOME region => (rb_operand_ok_for source_checks) region) ==>
   (rb_step_for source_checks) (K T)
@@ -35,21 +35,21 @@ Proof
   simp[rb_new_block_for]
 QED
 
-Theorem rb_compile_word_copy_loop_op_for:
+Theorem rb_compile_word_copy_loop_op_for[local]:
   (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) count_op ==>
   (rb_step_for source_checks) (K T) (compile_word_copy_loop_op src dst count_op loadloc storeloc ctor)
 Proof
   simp[compile_word_copy_loop_op_def, rb_compile_word_copy_loop_base_for]
 QED
 
-Theorem rb_compile_word_copy_loop_for:
+Theorem rb_compile_word_copy_loop_for[local]:
   (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) dst ==>
   (rb_step_for source_checks) (K T) (compile_word_copy_loop src dst n loadloc storeloc ctor)
 Proof
   simp[compile_word_copy_loop_def, rb_compile_word_copy_loop_op_for]
 QED
 
-Theorem rb_compile_bytestring_word_count_for:
+Theorem rb_compile_bytestring_word_count_for[local]:
   (rb_operand_ok_for source_checks) src ==> (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_bytestring_word_count src)
 Proof
   strip_tac >> rewrite_tac[compile_bytestring_word_count_def] >>
@@ -58,7 +58,7 @@ Proof
   irule rb_bind_emit_op_for >> simp[rb_emit_op_for]
 QED
 
-Theorem rb_compile_lit_byte_offset_for:
+Theorem rb_compile_lit_byte_offset_for[local]:
   (rb_operand_ok_for source_checks) op ==> (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_lit_byte_offset op off)
 Proof
   strip_tac >> Cases_on `off = 0` >> simp[compile_lit_byte_offset_def, rb_step_return_for] >>
@@ -106,31 +106,31 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem rb_compile_storage_to_memory_for:
+Theorem rb_compile_storage_to_memory_for[local]:
   (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) dst ==>
   (rb_step_for source_checks) (K T) (compile_storage_to_memory src dst n)
 Proof simp[compile_storage_to_memory_def, rb_compile_word_copy_loop_for]
 QED
 
-Theorem rb_compile_memory_to_storage_for:
+Theorem rb_compile_memory_to_storage_for[local]:
   (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) dst ==>
   (rb_step_for source_checks) (K T) (compile_memory_to_storage src dst n)
 Proof simp[compile_memory_to_storage_def, rb_compile_word_copy_loop_for]
 QED
 
-Theorem rb_compile_transient_to_memory_for:
+Theorem rb_compile_transient_to_memory_for[local]:
   (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) dst ==>
   (rb_step_for source_checks) (K T) (compile_transient_to_memory src dst n)
 Proof simp[compile_transient_to_memory_def, rb_compile_word_copy_loop_for]
 QED
 
-Theorem rb_compile_memory_to_transient_for:
+Theorem rb_compile_memory_to_transient_for[local]:
   (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) dst ==>
   (rb_step_for source_checks) (K T) (compile_memory_to_transient src dst n)
 Proof simp[compile_memory_to_transient_def, rb_compile_word_copy_loop_for]
 QED
 
-Theorem rb_compile_code_to_memory_for:
+Theorem rb_compile_code_to_memory_for[local]:
   (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) dst ==>
   (rb_step_for source_checks) (K T) (compile_code_to_memory src dst n)
 Proof
@@ -139,7 +139,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_compile_word_copy_loop_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_load_storage_for:
+Theorem rb_compile_load_storage_for[local]:
   (rb_operand_ok_for source_checks) slot ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_load_storage slot prim n alloc)
 Proof
@@ -155,7 +155,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_compile_storage_to_memory_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_load_transient_for:
+Theorem rb_compile_load_transient_for[local]:
   (rb_operand_ok_for source_checks) slot ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_load_transient slot prim n alloc)
 Proof
@@ -171,7 +171,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_compile_transient_to_memory_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_load_immutable_for:
+Theorem rb_compile_load_immutable_for[local]:
   (rb_operand_ok_for source_checks) off ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_load_immutable off prim n alloc ctor)
 Proof
@@ -185,7 +185,7 @@ Proof
   simp[rb_compile_code_to_memory_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_ensure_in_memory_for:
+Theorem rb_compile_ensure_in_memory_for[local]:
   (rb_operand_ok_for source_checks) ptr_op /\
   (case imm of NONE => T | SOME region => (rb_operand_ok_for source_checks) region) ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks)
@@ -228,13 +228,13 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_with_byte_offset_for:
+Theorem rb_compile_with_byte_offset_for[local]:
   (rb_operand_ok_for source_checks) op ==> (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_with_byte_offset op off)
 Proof
   Cases_on `off = 0` >> simp[compile_with_byte_offset_def, rb_step_return_for, rb_emit_op_for]
 QED
 
-Theorem rb_compile_bytestring_copy_len_for:
+Theorem rb_compile_bytestring_copy_len_for[local]:
   (rb_operand_ok_for source_checks) src ==> (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_bytestring_copy_len src)
 Proof
   strip_tac >> rewrite_tac[compile_bytestring_copy_len_def] >>
@@ -259,7 +259,7 @@ Proof
   simp[compile_copy_memory_dynamic_def, rb_emit_void_for]
 QED
 
-Theorem rb_compile_load_calldata_for:
+Theorem rb_compile_load_calldata_for[local]:
   (rb_operand_ok_for source_checks) off ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_load_calldata off prim n alloc)
 Proof
@@ -294,7 +294,7 @@ Proof
   simp[compile_slot_to_memory_def, rb_compile_word_copy_loop_for]
 QED
 
-Theorem rb_compile_store_immutable_for:
+Theorem rb_compile_store_immutable_for[local]:
   (rb_operand_ok_for source_checks) src /\
   (case imm of NONE => T | SOME region => (rb_operand_ok_for source_checks) region) ==>
   (rb_step_for source_checks) (K T) (compile_store_immutable imm src off n)
@@ -302,13 +302,13 @@ Proof
   simp[compile_store_immutable_def, rb_compile_imm_store_words_for]
 QED
 
-Theorem rb_compile_bytes_data_ptr_for:
+Theorem rb_compile_bytes_data_ptr_for[local]:
   (rb_operand_ok_for source_checks) op ==> (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_bytes_data_ptr op loc)
 Proof
   simp[compile_bytes_data_ptr_def, rb_emit_op_for]
 QED
 
-Theorem rb_compile_bytestring_length_for:
+Theorem rb_compile_bytestring_length_for[local]:
   (rb_operand_ok_for source_checks) op /\
   (case imm of NONE => T | SOME region => (rb_operand_ok_for source_checks) region) ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_bytestring_length ctor imm op loc)
@@ -333,7 +333,7 @@ Proof
   simp[compile_nonreentrant_unlock_def, rb_emit_void_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_zero_memory_loop_for:
+Theorem rb_compile_zero_memory_loop_for[local]:
   !ptr_op i words. (rb_operand_ok_for source_checks) ptr_op ==>
   (rb_step_for source_checks) (K T) (compile_zero_memory_loop ptr_op i words)
 Proof
@@ -348,7 +348,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem rb_compile_zero_memory_for:
+Theorem rb_compile_zero_memory_for[local]:
   (rb_operand_ok_for source_checks) ptr_op ==> (rb_step_for source_checks) (K T) (compile_zero_memory ptr_op n)
 Proof
   Cases_on `n` >> simp[compile_zero_memory_def, rb_step_return_for,

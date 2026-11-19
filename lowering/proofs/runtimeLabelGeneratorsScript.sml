@@ -5,7 +5,7 @@ Ancestors
   moduleLowering stmtLowering compileEnv context emitHelper venomInst list
   loweringShapeDefs alist
 
-Theorem rb_compile_selector_checks_for:
+Theorem rb_compile_selector_checks_for[local]:
   !sels. (rb_operand_ok_for source_checks) mid /\
     EVERY (\(sel,lbl). (rb_operand_ok_for source_checks) (Label lbl)) sels ==>
     (rb_step_for source_checks) (K T) (compile_selector_checks mid sels)
@@ -22,7 +22,7 @@ Proof
   first_x_assum irule >> gvs[]
 QED
 
-Theorem rb_compile_selector_dispatch_linear_for:
+Theorem rb_compile_selector_dispatch_linear_for[local]:
   EVERY (\(sel,lbl). (rb_operand_ok_for source_checks) (Label lbl)) sels /\
   (rb_operand_ok_for source_checks) (Label fallback) ==>
   (rb_step_for source_checks) (K T) (compile_selector_dispatch_linear sels fallback)
@@ -36,7 +36,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_compile_selector_checks_for, rb_emit_inst_for]
 QED
 
-Theorem rb_compile_sparse_bucket_search_for:
+Theorem rb_compile_sparse_bucket_search_for[local]:
   !sels. (rb_operand_ok_for source_checks) mid /\ (rb_operand_ok_for source_checks) (Label fallback) /\
     EVERY (\(sel,lbl,tz). (rb_operand_ok_for source_checks) (Label lbl)) sels ==>
     (rb_step_for source_checks) (K T) (compile_sparse_bucket_search mid sels fallback)
@@ -59,7 +59,7 @@ Proof
   first_x_assum irule >> gvs[]
 QED
 
-Theorem rb_alloc_bucket_labels_for:
+Theorem rb_alloc_bucket_labels_for[local]:
   !n. (rb_step_for source_checks) (EVERY (\l. (rb_operand_ok_for source_checks) (Label l))) (alloc_bucket_labels n)
 Proof
   completeInduct_on `n` >> Cases_on `n` >>
@@ -70,7 +70,7 @@ Proof
   gen_tac >> strip_tac >> irule rb_step_return_for >> gvs[]
 QED
 
-Theorem rb_group_into_buckets_for:
+Theorem rb_group_into_buckets_for[local]:
   !sels n. EVERY (\(sel,lbl,tz). (rb_operand_ok_for source_checks) (Label lbl)) sels ==>
   EVERY (\b. EVERY (\(sel,lbl,tz). (rb_operand_ok_for source_checks) (Label lbl)) (SND b))
     (group_into_buckets sels n)
@@ -84,7 +84,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem rb_create_bucket_blocks_for:
+Theorem rb_create_bucket_blocks_for[local]:
   !mid lbls buckets fallback.
     (rb_operand_ok_for source_checks) mid /\ (rb_operand_ok_for source_checks) (Label fallback) /\
     EVERY (\b. EVERY (\(sel,lbl,tz). (rb_operand_ok_for source_checks) (Label lbl)) (SND b)) buckets ==>
@@ -97,14 +97,14 @@ Proof
   first_x_assum irule >> gvs[]
 QED
 
-Theorem rb_emit_data_section_for:
+Theorem rb_emit_data_section_for[local]:
   (rb_step_for source_checks) (K T) (emit_data_section label)
 Proof
   simp[rb_step_for_def, rb_state_ok_for_def, emit_data_section_def,
        state_insts_def, all_blocks_def]
 QED
 
-Theorem rb_emit_data_item_for:
+Theorem rb_emit_data_item_for[local]:
   (rb_step_for source_checks) (K T) (emit_data_item item)
 Proof
   rw[rb_step_for_def, rb_state_ok_for_def, emit_data_item_def,
@@ -112,7 +112,7 @@ Proof
   Cases_on `st.cs_data_sections` >> gvs[]
 QED
 
-Theorem rb_data_label_fold_for:
+Theorem rb_data_label_fold_for[local]:
   !labels. (rb_step_for source_checks) (K T)
     (FOLDL (\m lbl. comp_ignore_bind m (emit_data_item (DataLabel lbl)))
       (comp_return ()) labels)
@@ -121,7 +121,7 @@ Proof
   gen_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_data_item_for]
 QED
 
-Theorem rb_sparse_target_list_for:
+Theorem rb_sparse_target_list_for[local]:
   EVERY (\l. (rb_operand_ok_for source_checks) (Label l)) labels /\
   (rb_operand_ok_for source_checks) (Label fallback) ==>
   EVERY (\l. (rb_operand_ok_for source_checks) (Label l))
@@ -137,7 +137,7 @@ Proof
   first_x_assum irule >> fs[]
 QED
 
-Theorem rb_compile_selector_dispatch_sparse_for:
+Theorem rb_compile_selector_dispatch_sparse_for[local]:
   EVERY (\(sel,lbl,tz). (rb_operand_ok_for source_checks) (Label lbl)) sels /\
   (rb_operand_ok_for source_checks) (Label fallback) ==>
   (rb_step_for source_checks) (K T) (compile_selector_dispatch_sparse sels bucket_count fallback)
@@ -170,7 +170,7 @@ Proof
   irule rb_create_bucket_blocks_for >> simp[rb_group_into_buckets_for]
 QED
 
-Theorem rb_compile_abi_arg_ptr_guard_for:
+Theorem rb_compile_abi_arg_ptr_guard_for[local]:
   (rb_operand_ok_for source_checks) src /\ (rb_operand_ok_for source_checks) parent ==>
   (rb_step_for source_checks) (K T) (compile_abi_arg_ptr_guard opc src parent)
 Proof
@@ -180,7 +180,7 @@ Proof
   simp[rb_emit_void_for]
 QED
 
-Theorem rb_var_location_decode_operand_for:
+Theorem rb_var_location_decode_operand_for[local]:
   (rb_location_ok_for source_checks) loc /\ var_location_decode_operand loc = SOME dst ==>
   (rb_operand_ok_for source_checks) dst
 Proof
@@ -188,7 +188,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem rb_compile_entry_checks_for:
+Theorem rb_compile_entry_checks_for[local]:
   (rb_step_for source_checks) (K T) (compile_entry_checks min_cds payable)
 Proof
   rewrite_tac[compile_entry_checks_def] >>
@@ -201,7 +201,7 @@ Proof
   simp[rb_emit_void_for]
 QED
 
-Theorem rb_compile_guarded_body_for:
+Theorem rb_compile_guarded_body_for[local]:
   (rb_stmt_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce ==>
   (rb_step_for source_checks) (K T) (compile_guarded_body ce nr key trans view stmts ret)
 Proof
@@ -218,7 +218,7 @@ Proof
   Cases_on `ret` >> simp[rb_emit_inst_for]
 QED
 
-Theorem rb_compile_fallback_body_for:
+Theorem rb_compile_fallback_body_for[local]:
   (rb_stmt_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce ==>
   (rb_step_for source_checks) (K T) (compile_fallback_body ce payable nr key trans view stmts ret)
 Proof
@@ -230,7 +230,7 @@ Proof
   simp[rb_compile_guarded_body_for]
 QED
 
-Theorem rb_compile_internal_param_decls_for:
+Theorem rb_compile_internal_param_decls_for[local]:
   !params idx. (rb_step_for source_checks) (\r. EVERY (\(name,stk,op). (rb_operand_ok_for source_checks) op) (FST r))
     (compile_internal_param_decls params idx)
 Proof
@@ -243,7 +243,7 @@ Proof
   gen_tac >> strip_tac >> irule rb_step_return_for >> gvs[]
 QED
 
-Theorem rb_materialize_internal_params_for:
+Theorem rb_materialize_internal_params_for[local]:
   !params ce. (rb_env_ok_for source_checks) ce /\
     EVERY (\(name,stk,op). (rb_operand_ok_for source_checks) op) params ==>
     (rb_step_for source_checks) (rb_env_ok_for source_checks) (materialize_internal_params ce params)
@@ -260,7 +260,7 @@ Proof
   first_x_assum irule >> gvs[rb_env_bind_local_for, rb_location_ok_for_def]
 QED
 
-Theorem rb_compile_create_kwarg_allocas_for:
+Theorem rb_compile_create_kwarg_allocas_for[local]:
   !specs. (rb_step_for source_checks) (EVERY (\(name,ptr,ty,e). (rb_operand_ok_for source_checks) ptr))
     (compile_create_kwarg_allocas ce specs)
 Proof
@@ -273,7 +273,7 @@ Proof
   irule rb_step_return_for >> gvs[rb_buffer_ok_for_def]
 QED
 
-Theorem rb_compile_register_kwarg_vars_for:
+Theorem rb_compile_register_kwarg_vars_for[local]:
   !kwvars ce. (rb_env_ok_for source_checks) ce /\
     EVERY (\(name,ptr,ty,e). (rb_operand_ok_for source_checks) ptr) kwvars ==>
     (rb_env_ok_for source_checks) (compile_register_kwarg_vars ce kwvars)
@@ -322,7 +322,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem rb_compile_register_positional_args_for:
+Theorem rb_compile_register_positional_args_for[local]:
   !args ce offset. (rb_env_ok_for source_checks) ce ==>
     (rb_step_for source_checks) (rb_env_ok_for source_checks) (compile_register_positional_args ce args offset)
 Proof
@@ -341,7 +341,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem rb_compile_init_kwargs_for:
+Theorem rb_compile_init_kwargs_for[local]:
   !kwvars ce offset num hi. (rb_expr_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce /\
     EVERY (\(name,ptr,ty,e). (rb_operand_ok_for source_checks) ptr) kwvars ==>
     (rb_step_for source_checks) (K T) (compile_init_kwargs ce kwvars offset num hi)
@@ -367,7 +367,7 @@ Proof
   first_x_assum irule >> gvs[]
 QED
 
-Theorem rb_compile_entry_point_kwargs_for:
+Theorem rb_compile_entry_point_kwargs_for[local]:
   (rb_expr_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce /\
   EVERY (\(name,ptr,ty,e). (rb_operand_ok_for source_checks) ptr) kwvars /\
   (rb_operand_ok_for source_checks) (Label common) ==>
@@ -377,7 +377,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_compile_init_kwargs_for, rb_emit_inst_for]
 QED
 
-Theorem rb_compile_external_function_body_for:
+Theorem rb_compile_external_function_body_for[local]:
   (rb_stmt_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce ==>
   (rb_step_for source_checks) (K T) (compile_external_function_body ce args nr key trans view stmts ret)
 Proof
@@ -386,7 +386,7 @@ Proof
   simp[rb_compile_register_positional_args_for, rb_compile_guarded_body_for]
 QED
 
-Theorem rb_compile_common_function_body_for:
+Theorem rb_compile_common_function_body_for[local]:
   (rb_stmt_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce /\
   EVERY (\(name,ptr,ty,e). (rb_operand_ok_for source_checks) ptr) kwvars ==>
   (rb_step_for source_checks) (K T) (compile_common_function_body ce args kwvars nr key trans view stmts ret)
@@ -397,7 +397,7 @@ Proof
        rb_compile_register_kwarg_vars_for]
 QED
 
-Theorem rb_compile_external_fn_bodies_for:
+Theorem rb_compile_external_fn_bodies_for[local]:
   !packages. (rb_stmt_contract_for source_checks) /\
     EVERY (\(lbl,ce,args,min_cds,pay,nr,key,trans,view,stmts,ret). (rb_env_ok_for source_checks) ce)
       packages ==> (rb_step_for source_checks) (K T) (compile_external_fn_bodies packages)
@@ -411,7 +411,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem rb_compile_group_entries_for:
+Theorem rb_compile_group_entries_for[local]:
   !entries. (rb_expr_contract_for source_checks) /\ (rb_env_ok_for source_checks) common.ec_env /\
     (rb_operand_ok_for source_checks) method_id /\ (rb_operand_ok_for source_checks) (Label common.ec_common_label) /\
     EVERY (\(sel,lbl,min_cds,k). (rb_operand_ok_for source_checks) (Label lbl)) entries /\
@@ -431,7 +431,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem rb_compile_internal_function_for:
+Theorem rb_compile_internal_function_for[local]:
   (rb_stmt_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce ==>
   (rb_step_for source_checks) (K T) (compile_internal_function ce params has_buf nr key trans view
     ctor imm_len stmts ret)
@@ -499,7 +499,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem rb_fold_ignore_for:
+Theorem rb_fold_ignore_for[local]:
   (!x. (rb_step_for source_checks) (K T) (action x)) ==>
   !xs. (rb_step_for source_checks) (K T)
     (FOLDL (\m x. comp_ignore_bind m (action x)) (comp_return ()) xs)
@@ -509,7 +509,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[]
 QED
 
-Theorem rb_emit_dense_data_sections_for:
+Theorem rb_emit_dense_data_sections_for[local]:
   !buckets. (rb_step_for source_checks) (K T) (emit_dense_data_sections buckets width info)
 Proof
   Induct >> simp[emit_dense_data_sections_def, rb_step_return_for] >>
@@ -526,7 +526,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_data_item_for]
 QED
 
-Theorem rb_compile_selector_dispatch_dense_for:
+Theorem rb_compile_selector_dispatch_dense_for[local]:
   EVERY (\l. (rb_operand_ok_for source_checks) (Label l)) labels /\
   (rb_operand_ok_for source_checks) (Label fallback) ==>
   (rb_step_for source_checks) (K T)
@@ -603,14 +603,14 @@ Definition rb_job_ok_for_def:
      EVERY (\(name,ptr,ty,e). (rb_operand_ok_for source_checks) ptr) kwvars)
 End
 
-Theorem rb_job_ok_legacy:
+Theorem rb_job_ok_legacy[local]:
   rb_job_ok_for ({"runtime_begin"}, F) = rb_job_ok
 Proof
   rw[FUN_EQ_THM] >>
   Cases_on `x` >> TRY (PairCases_on `p`) >> simp[rb_job_ok_for_def, rb_job_ok_def, rb_env_ok_legacy, rb_external_package_ok_legacy, rb_operand_ok_legacy]
 QED
 
-Theorem rb_compile_external_groups_for:
+Theorem rb_compile_external_groups_for[local]:
   !groups. (rb_expr_contract_for source_checks) /\ (rb_operand_ok_for source_checks) mid /\ EVERY (rb_group_ok_for source_checks) groups ==>
     (rb_step_for source_checks) (EVERY (rb_job_ok_for source_checks)) (compile_external_groups mid groups)
 Proof
@@ -632,7 +632,7 @@ Proof
   gen_tac >> strip_tac >> simp[rb_step_return_for, rb_job_ok_for_def]
 QED
 
-Theorem rb_compile_external_jobs_for:
+Theorem rb_compile_external_jobs_for[local]:
   !jobs. (rb_stmt_contract_for source_checks) /\ EVERY (rb_job_ok_for source_checks) jobs ==>
     (rb_step_for source_checks) (K T) (compile_external_jobs jobs)
 Proof
@@ -648,7 +648,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem rb_compile_group_dispatch_linear_for:
+Theorem rb_compile_group_dispatch_linear_for[local]:
   (rb_expr_contract_for source_checks) /\ EVERY (rb_group_ok_for source_checks) groups /\
   (rb_operand_ok_for source_checks) (Label fallback) ==>
   (rb_step_for source_checks) (EVERY (rb_job_ok_for source_checks)) (compile_group_dispatch_linear groups fallback)

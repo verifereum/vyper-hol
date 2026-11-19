@@ -6,7 +6,7 @@ Ancestors
   emitHelper venomInst list builtinSimple builtinSystem builtinMath builtinHashing
   builtinStrings builtinMisc builtinAbi builtinCreate exprLowering exprCallbackContracts
 
-Theorem rb_compile_assert_slice_bounds_for:
+Theorem rb_compile_assert_slice_bounds_for[local]:
   (rb_operand_ok_for source_checks) sop /\ (rb_operand_ok_for source_checks) len /\ (rb_operand_ok_for source_checks) src_len ==>
   (rb_step_for source_checks) (K T) (compile_assert_slice_bounds sop len src_len)
 Proof
@@ -28,7 +28,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_step_return_for]
 QED
 
-Theorem rb_compile_slice_out_buf_for:
+Theorem rb_compile_slice_out_buf_for[local]:
   !n. (rb_step_for source_checks) (\p. (rb_operand_ok_for source_checks) (FST p) /\ (rb_operand_ok_for source_checks) (SND p))
     (compile_slice_out_buf n)
 Proof
@@ -134,13 +134,13 @@ Proof
   simp[compile_builtin_calldatasize_def, rb_emit_op_for]
 QED
 
-Theorem rb_compile_builtin_empty_prim_for:
+Theorem rb_compile_builtin_empty_prim_for[local]:
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) compile_builtin_empty_prim
 Proof
   simp[compile_builtin_empty_prim_def, rb_step_return_for]
 QED
 
-Theorem rb_compile_zero_words_for:
+Theorem rb_compile_zero_words_for[local]:
   !n base_op. (rb_operand_ok_for source_checks) base_op ==>
   (rb_step_for source_checks) (K T) (compile_zero_words base_op n)
 Proof
@@ -163,7 +163,7 @@ Proof
   gvs[rb_buffer_ok_for_def, rb_emit_void_for, rb_compile_zero_words_for]
 QED
 
-Theorem rb_compile_builtin_min_for:
+Theorem rb_compile_builtin_min_for[local]:
   (rb_operand_ok_for source_checks) a /\ (rb_operand_ok_for source_checks) b ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_builtin_min a b unsigned)
 Proof
@@ -172,7 +172,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_compile_select_for]
 QED
 
-Theorem rb_compile_builtin_max_for:
+Theorem rb_compile_builtin_max_for[local]:
   (rb_operand_ok_for source_checks) a /\ (rb_operand_ok_for source_checks) b ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_builtin_max a b unsigned)
 Proof
@@ -221,7 +221,7 @@ Proof
   simp[rb_buffer_ok_for_def, rb_step_return_for]
 QED
 
-Theorem rb_compile_send_for:
+Theorem rb_compile_send_for[local]:
   (rb_operand_ok_for source_checks) to_op /\ (rb_operand_ok_for source_checks) value_op /\ (rb_operand_ok_for source_checks) gas_op ==>
   (rb_step_for source_checks) (K T) (compile_send to_op value_op gas_op)
 Proof
@@ -297,7 +297,7 @@ QED
 
 Finalise rb_compile_raw_call_finish_for
 
-Theorem rb_compile_unsafe_binop_for:
+Theorem rb_compile_unsafe_binop_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y /\
   source_codecopy_arity_ok source_checks opc [x;y] ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_unsafe_binop opc x y bits signed)
@@ -308,25 +308,25 @@ Proof
   simp[LET_THM, rb_emit_op_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_unsafe_add_for:
+Theorem rb_compile_unsafe_add_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_unsafe_add x y bits signed)
 Proof simp[compile_unsafe_add_def, rb_compile_unsafe_binop_for]
 QED
 
-Theorem rb_compile_unsafe_sub_for:
+Theorem rb_compile_unsafe_sub_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_unsafe_sub x y bits signed)
 Proof simp[compile_unsafe_sub_def, rb_compile_unsafe_binop_for]
 QED
 
-Theorem rb_compile_unsafe_mul_for:
+Theorem rb_compile_unsafe_mul_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_unsafe_mul x y bits signed)
 Proof simp[compile_unsafe_mul_def, rb_compile_unsafe_binop_for]
 QED
 
-Theorem rb_compile_unsafe_div_for:
+Theorem rb_compile_unsafe_div_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_unsafe_div x y bits signed)
 Proof simp[compile_unsafe_div_def, rb_compile_unsafe_binop_for]
@@ -354,7 +354,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for, rb_emit_op_for]
 QED
 
-Theorem rb_compile_shift_for:
+Theorem rb_compile_shift_for[local]:
   (rb_operand_ok_for source_checks) v /\ (rb_operand_ok_for source_checks) bits_op ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_shift v bits_op signed)
 Proof
@@ -397,7 +397,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for, rb_emit_op_for]
 QED
 
-Theorem rb_compile_method_id_hash_for:
+Theorem rb_compile_method_id_hash_for[local]:
   (rb_operand_ok_for source_checks) v ==> (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_method_id_hash ty v)
 Proof
   Cases_on `ty` >> simp[compile_method_id_hash_def, rb_compile_keccak256_bytes_for] >>

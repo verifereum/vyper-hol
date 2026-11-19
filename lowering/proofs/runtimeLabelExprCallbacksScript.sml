@@ -58,7 +58,7 @@ Proof
   BETA_TAC >> simp[rb_unwrap_value_for]
 QED
 
-Theorem rb_lower_value_with_loc_for:
+Theorem rb_lower_value_with_loc_for[local]:
   (rb_env_ok_for source_checks) ce /\ (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce ty e) ==>
   (rb_step_for source_checks) ((rb_operand_ok_for source_checks) o FST) (lower_value_with_loc cfn ce ty e)
 Proof
@@ -111,7 +111,7 @@ Proof
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
-Theorem rb_compile_make_array_elems_for:
+Theorem rb_compile_make_array_elems_for[local]:
   !es buf idx. (rb_env_ok_for source_checks) ce /\ (rb_operand_ok_for source_checks) buf /\
   (!e. MEM e es ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce (expr_type e) e)) ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks)
@@ -305,7 +305,7 @@ Proof
   Induct >> Cases_on `ys` >> simp[listTheory.ZIP_def]
 QED
 
-Theorem rb_ext_call_arg_value_for:
+Theorem rb_ext_call_arg_value_for[local]:
   !vv. (rb_value_ok_for source_checks) vv ==> (rb_value_ok_for source_checks) (ext_call_arg_value ty vv)
 Proof
   Cases >> simp[ext_call_arg_value_def, rb_value_ok_for_def]
@@ -328,7 +328,7 @@ Proof
   simp[rb_step_return_for]
 QED
 
-Theorem rb_compile_ext_call_kwarg_for:
+Theorem rb_compile_ext_call_kwarg_for[local]:
   (rb_env_ok_for source_checks) ce /\ (!ty. (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce ty e)) ==>
   (rb_step_for source_checks) ((rb_operand_ok_for source_checks) o FST) (compile_ext_call_kwarg cfn ce rty k e)
 Proof
@@ -365,7 +365,7 @@ Proof
   rpt IF_CASES_TAC >> simp[rb_step_return_for]
 QED
 
-Theorem rb_compile_create_salt_for:
+Theorem rb_compile_create_salt_for[local]:
   !salt. (rb_env_ok_for source_checks) ce /\
   (!e. salt = SOME e ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce (expr_type e) e)) ==>
   (rb_step_for source_checks) (OPTION_ALL (rb_operand_ok_for source_checks)) (compile_create_salt cfn ce salt)
@@ -375,7 +375,7 @@ Proof
   simp[rb_lower_value_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_create_ctor_args_for:
+Theorem rb_compile_create_ctor_args_for[local]:
   !args. (rb_env_ok_for source_checks) ce /\
   (!e. MEM e args ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce (expr_type e) e)) ==>
   (rb_step_for source_checks) (EVERY (rb_value_ok_for source_checks)) (compile_create_ctor_args cfn ce args)
@@ -390,7 +390,7 @@ Proof
   simp[rb_step_return_for]
 QED
 
-Theorem rb_compile_create_ctor_tuple_for:
+Theorem rb_compile_create_ctor_tuple_for[local]:
   (rb_env_ok_for source_checks) ce /\
   (!e. MEM e args ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce (expr_type e) e)) ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_create_ctor_tuple cfn ce args)
@@ -405,7 +405,7 @@ Proof
 QED
 
 (* Encoder antecedent: conjunct 2 of runtimeLabelABI$rb_abi_encode_for. *)
-Theorem rb_compile_create_blueprint_args_for:
+Theorem rb_compile_create_blueprint_args_for[local]:
   (!dst src info. (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) src ==>
      (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_abi_encode_to_buf dst src info)) /\
   (rb_env_ok_for source_checks) ce /\
@@ -438,7 +438,7 @@ Proof
   simp[rb_step_return_for]
 QED
 
-Theorem rb_compile_create_snapshot_for:
+Theorem rb_compile_create_snapshot_for[local]:
   (rb_env_ok_for source_checks) ce /\ (rb_value_ok_for source_checks) vv ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_create_snapshot ce vv ty)
 Proof
@@ -464,7 +464,7 @@ Proof
   simp[rb_value_operand_for, rb_compile_copy_memory_dynamic_for]
 QED
 
-Theorem rb_compile_raw_create_for:
+Theorem rb_compile_raw_create_for[local]:
   (!dst src info. (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) src ==>
      (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_abi_encode_to_buf dst src info)) /\
   (rb_env_ok_for source_checks) ce /\ (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce (expr_type be) be) /\
@@ -502,7 +502,7 @@ Proof
   Cases >> simp[rb_compile_create_dispatch_for]
 QED
 
-Theorem rb_compile_extcall_store_args_for:
+Theorem rb_compile_extcall_store_args_for[local]:
   !es tys buf off. (rb_env_ok_for source_checks) ce /\ (rb_operand_ok_for source_checks) buf /\
     (!e ty. MEM e es ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce ty e)) ==>
     (rb_step_for source_checks) (K T) (compile_extcall_store_args cfn ce es tys buf off)

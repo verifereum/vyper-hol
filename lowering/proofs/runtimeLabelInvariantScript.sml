@@ -103,7 +103,7 @@ Definition rb_ptr_ok_for_def:
     (case p.ptr_buf of NONE => T | SOME b => (rb_buffer_ok_for source_checks) b)
 End
 
-Theorem rb_ptr_ok_legacy:
+Theorem rb_ptr_ok_legacy[local]:
   rb_ptr_ok_for ({"runtime_begin"}, F) = rb_ptr_ok
 Proof
   rw[FUN_EQ_THM] >>
@@ -191,7 +191,7 @@ Definition rb_loop_ok_for_def:
     ((rb_operand_ok_for source_checks) (Label exit) /\ (rb_operand_ok_for source_checks) (Label incr))
 End
 
-Theorem rb_loop_ok_legacy:
+Theorem rb_loop_ok_legacy[local]:
   rb_loop_ok_for ({"runtime_begin"}, F) = rb_loop_ok
 Proof
   rw[FUN_EQ_THM] >>
@@ -210,7 +210,7 @@ Definition rb_expr_callback_for_def:
       (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn env ty e)
 End
 
-Theorem rb_expr_callback_legacy:
+Theorem rb_expr_callback_legacy[local]:
   rb_expr_callback_for ({"runtime_begin"}, F) = rb_expr_callback
 Proof
   rw[FUN_EQ_THM] >>
@@ -231,7 +231,7 @@ Definition rb_builtin_callback_for_def:
       (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn env ret_ty ty bi args)
 End
 
-Theorem rb_builtin_callback_legacy:
+Theorem rb_builtin_callback_legacy[local]:
   rb_builtin_callback_for ({"runtime_begin"}, F) = rb_builtin_callback
 Proof
   rw[FUN_EQ_THM] >>
@@ -252,7 +252,7 @@ Definition rb_type_callback_for_def:
       (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn env vv_ty ty tb ret_ty args)
 End
 
-Theorem rb_type_callback_legacy:
+Theorem rb_type_callback_legacy[local]:
   rb_type_callback_for ({"runtime_begin"}, F) = rb_type_callback
 Proof
   rw[FUN_EQ_THM] >>
@@ -334,7 +334,7 @@ Proof
   simp[rb_operand_ok_for_def]
 QED
 
-Theorem rb_emit_for:
+Theorem rb_emit_for[local]:
   source_inst_ok source_checks inst ==> (rb_step_for source_checks) (K T) (emit inst)
 Proof
   simp[rb_step_for_def, rb_state_ok_for_def, emit_def,
@@ -362,7 +362,7 @@ Proof
        state_insts_def, all_blocks_def]
 QED
 
-Theorem rb_fresh_id_for:
+Theorem rb_fresh_id_for[local]:
   (rb_step_for source_checks) (K T) fresh_id
 Proof
   simp[rb_step_for_def, rb_state_ok_for_def, fresh_id_def,
@@ -434,7 +434,7 @@ Definition rb_internal_package_ok_for_def:
       (rb_env_ok_for source_checks) env /\ ~env.ce_is_ctor /\ ~ctor /\ (rb_operand_ok_for source_checks) (Label lbl)
 End
 
-Theorem rb_internal_package_ok_legacy:
+Theorem rb_internal_package_ok_legacy[local]:
   rb_internal_package_ok_for ({"runtime_begin"}, F) = rb_internal_package_ok
 Proof
   rw[FUN_EQ_THM] >>
@@ -453,7 +453,7 @@ Definition rb_fallback_ok_for_def:
     ((rb_env_ok_for source_checks) env /\ ~env.ce_is_ctor)
 End
 
-Theorem rb_fallback_ok_legacy:
+Theorem rb_fallback_ok_legacy[local]:
   rb_fallback_ok_for ({"runtime_begin"}, F) = rb_fallback_ok
 Proof
   rw[FUN_EQ_THM] >>
@@ -556,7 +556,7 @@ Proof
   irule rb_step_bind_for >> qexists_tac `P` >> simp[]
 QED
 
-Theorem rb_invalid_expr_call_for:
+Theorem rb_invalid_expr_call_for[local]:
   (rb_step_for source_checks) (rb_value_ok_for source_checks) (invalid_expr_call ty)
 Proof
   simp[rb_step_for_def, rb_state_ok_for_def, source_inst_ok_def, invalid_expr_call_def,

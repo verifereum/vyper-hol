@@ -93,7 +93,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for, rb_emit_op_for]
 QED
 
-Theorem rb_compile_ecadd_for:
+Theorem rb_compile_ecadd_for[local]:
   (rb_operand_ok_for source_checks) x1 /\ (rb_operand_ok_for source_checks) y1 /\ (rb_operand_ok_for source_checks) x2 /\ (rb_operand_ok_for source_checks) y2 ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_ecadd x1 y1 x2 y2)
 Proof
@@ -118,7 +118,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_ecmul_for:
+Theorem rb_compile_ecmul_for[local]:
   (rb_operand_ok_for source_checks) x /\ (rb_operand_ok_for source_checks) y /\ (rb_operand_ok_for source_checks) scalar ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_ecmul x y scalar)
 Proof
@@ -327,7 +327,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_step_return_for]
 QED
 
-Theorem rb_compile_check_create_result_for:
+Theorem rb_compile_check_create_result_for[local]:
   (rb_operand_ok_for source_checks) result ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_check_create_result result revert_on_failure)
 Proof
@@ -375,7 +375,7 @@ Proof
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_void_for, rb_step_return_for]
 QED
 
-Theorem rb_compile_create_proxy_for:
+Theorem rb_compile_create_proxy_for[local]:
   (rb_operand_ok_for source_checks) target /\ (rb_operand_ok_for source_checks) value_op /\
   (case salt_opt of NONE => T | SOME salt => (rb_operand_ok_for source_checks) salt) ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_create_proxy target value_op salt_opt revert_on_failure)
@@ -445,7 +445,7 @@ Proof
   simp[rb_compile_check_create_result_for]
 QED
 
-Theorem rb_compile_create_blueprint_for:
+Theorem rb_compile_create_blueprint_for[local]:
   (rb_operand_ok_for source_checks) target /\ (rb_operand_ok_for source_checks) value_op /\
   (case salt_opt of NONE => T | SOME salt => (rb_operand_ok_for source_checks) salt) /\
   (rb_operand_ok_for source_checks) offset /\

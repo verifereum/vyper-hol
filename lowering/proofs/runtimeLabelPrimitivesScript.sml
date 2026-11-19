@@ -115,7 +115,7 @@ Proof
   simp[rb_compile_ptr_load_for]
 QED
 
-Theorem rb_bind_cond_for:
+Theorem rb_bind_cond_for[local]:
   (p ==> (rb_step_for source_checks) Q (comp_bind a f)) /\
   (~p ==> (rb_step_for source_checks) Q (comp_bind b f)) ==>
   (rb_step_for source_checks) Q (comp_bind (if p then a else b) f)

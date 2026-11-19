@@ -5,7 +5,7 @@ Ancestors
   runtimeLabelBuiltinCore runtimeLabelBuiltinSystem runtimeLabelBuiltinArithmetic runtimeLabelBuiltins runtimeLabelABI runtimeLabelInvariant runtimeLabelValues
   exprLowering exprCallBounds
 
-Theorem rb_as_ptr_val_for:
+Theorem rb_as_ptr_val_for[local]:
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) m ==>
   (rb_step_for source_checks) (rb_value_ok_for source_checks) (\st. as_ptr_val ty loc (m st))
 Proof
@@ -14,7 +14,7 @@ Proof
   simp[as_ptr_val_def, rb_value_ok_for_def, rb_mk_ptr_for]
 QED
 
-Theorem rb_compile_type_builtin_dispatch_body_for:
+Theorem rb_compile_type_builtin_dispatch_body_for[local]:
   (rb_env_ok_for source_checks) ce /\
   (!env ty e. (rb_env_ok_for source_checks) env ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn env ty e)) ==>
   (rb_step_for source_checks) (rb_value_ok_for source_checks)
@@ -150,7 +150,7 @@ Resume rb_compile_type_builtin_dispatch_body_for[encode_tuple]:
 QED
 Finalise rb_compile_type_builtin_dispatch_body_for
 
-Theorem rb_compile_builtin_dispatch_body_for:
+Theorem rb_compile_builtin_dispatch_body_for[local]:
   (rb_env_ok_for source_checks) ce /\
   (!env ty e. (rb_env_ok_for source_checks) env ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn env ty e)) ==>
   (rb_step_for source_checks) (rb_value_ok_for source_checks)
@@ -494,7 +494,7 @@ Resume rb_compile_builtin_dispatch_body_for[hashing]:
 QED
 Finalise rb_compile_builtin_dispatch_body_for
 
-Theorem rb_compile_expr_body_for:
+Theorem rb_compile_expr_body_for[local]:
   (rb_env_ok_for source_checks) ce /\
   (!env ty e. (rb_env_ok_for source_checks) env ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn env ty e)) /\
   (!env ret_ty ty bi args. (rb_env_ok_for source_checks) env ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (bfn env ret_ty ty bi args)) /\
@@ -605,7 +605,7 @@ QED
 
 Finalise rb_compile_expr_body_for
 
-Theorem rb_compile_expr_raw_for:
+Theorem rb_compile_expr_raw_for[local]:
   (!ce ty e st. (rb_env_ok_for source_checks) ce /\ (rb_state_ok_for source_checks) st ==>
     (rb_state_ok_for source_checks) (SND (compile_expr ce ty e st)) /\
     (rb_value_ok_for source_checks) (FST (compile_expr ce ty e st))) /\

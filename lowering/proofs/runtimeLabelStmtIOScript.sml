@@ -5,7 +5,7 @@ Ancestors
   runtimeLabelPrimitives runtimeLabelInvariant runtimeLabelValues runtimeLabelBuiltins runtimeLabelABI
   stmtLowering exprLowering compileEnv context emitHelper venomInst list
 
-Theorem rb_compile_log_save_arg_for:
+Theorem rb_compile_log_save_arg_for[local]:
   (rb_env_ok_for source_checks) ce /\ (rb_operand_ok_for source_checks) op ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_log_save_arg ce src_ty op es)
 Proof
@@ -68,7 +68,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem rb_compile_load_tuple_elements_for:
+Theorem rb_compile_load_tuple_elements_for[local]:
   !tys off. (rb_operand_ok_for source_checks) base_op ==>
   (rb_step_for source_checks) (EVERY (rb_operand_ok_for source_checks)) (compile_load_tuple_elements ce base_op tys off)
 Proof
@@ -80,7 +80,7 @@ Proof
   reverse conj_tac >- simp[] >> simp[rb_step_return_for]
 QED
 
-Theorem rb_compile_internal_return_for:
+Theorem rb_compile_internal_return_for[local]:
   (rb_env_ok_for source_checks) ce /\ (rb_operand_ok_for source_checks) pc /\
   (case rv of NONE => T | SOME v => (rb_operand_ok_for source_checks) v) /\
   (case buf of NONE => T | SOME b => (rb_operand_ok_for source_checks) b) ==>
