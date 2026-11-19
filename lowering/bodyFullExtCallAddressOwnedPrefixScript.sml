@@ -1,9 +1,66 @@
 Theory bodyFullExtCallAddressOwnedPrefix
 Ancestors
   bodyFullExtCallPositional bodyFullExtCallTargetOutcome bodyFullExtCallPosList
-  gasOutcomeFullCompose gasExemptCert vyperStorageTrace vyperStorageFootprint
+  gasOutcomeFull gasOutcomeFullCompose gasExemptCert vyperStorageTrace vyperStorageFootprint
+  exprSimDefs
   exprSimSource exprSafeOperand exprSimWordArgs exprLoweringProps stmtSimProps
   bodySimFull compileEnv loweringPosts vyperInterpreter wordArgsPtr
+  evalNoHalt supportedExprTraverse vyperTypeCallGraph list
+
+Theorem extcall_positional_no_halt[local]:
+  EVERY (\e. ~expr_has_effect e) xs /\
+  (!e. MEM e xs ==> expr_body_pre cenv cx env e mid) ==>
+  !st st'. eval_exprs cx xs st <> (INR HaltException, st')
+Proof
+  strip_tac >> rpt gen_tac >> irule (cj 2 eval_no_halt) >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `supported_exprs_exists _ _` mp_tac >>
+      rewrite_tac[supported_exprs_exists_every, EXISTS_MEM] >>
+      disch_then (qx_choose_then `e` strip_assume_tac) >>
+      `expr_body_pre cenv cx env e mid` by metis_tac[] >>
+      `~supported_expr_exists expr_effect_root e` by
+        fs[EVERY_MEM, expr_has_effect_def] >>
+      fs[exprSimHypsDefsTheory.expr_body_pre_def, expr_has_evm_run_def,
+         expr_halt_root_split, supported_expr_exists_disj] >>
+      qpat_x_assum `~supported_expr_exists expr_effect_root e` irule >>
+      irule (cj 1 supported_expr_exists_mono) >>
+      goal_assum (drule_at Any) >> rpt strip_tac >> gvs[expr_effect_root_def]) >>
+  `EVERY (\c. FST c = NONE /\ ?ts. supported_program ts /\
+       get_module_code cx NONE = SOME ts /\
+       IS_SOME (supported_function_decl ts c Internal)) (int_calls_exprs xs)` by
+    (fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     qpat_x_assum `!e. MEM e xs ==> _` mp_tac >>
+     Induct_on `xs` >> simp[int_calls_expr_def, EVERY_APPEND] >>
+     metis_tac[]) >>
+  Cases_on `int_calls_exprs xs` >> simp[] >>
+  fs[EVERY_MEM] >> metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem extcall_positional_exit_replay[local]:
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (eval_exprs cx xs) (mid,t,G,tn) Q (\H res ee gt r. expr_exit res r) /\
+  (!st st'. eval_exprs cx xs st <> (INR HaltException, st')) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (eval_exprs cx xs) (mid,t,G,tn) Q
+    (\H res ee gt r. ?exc. res = INR exc /\
+       expr_exit (INR exc : value list + exception) r /\
+       halt_exit H cx ee (INR exc : value list + exception) r)
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
+  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks`
+  >- (disj1_tac >> metis_tac[])
+  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >>
+      rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+      `res <> INR HaltException` by
+        (qpat_assum `!tail. eval_exprs cx xs _ = _` (qspec_then `[]` mp_tac) >>
+         simp[] >> metis_tac[]) >>
+      rpt strip_tac >> res_tac >> simp[] >>
+      Cases_on `res` >> fs[halt_exit_def, expr_exit_def]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
+QED
 
 (* At each bind, expose that the producer's cut has consumed its observations. *)
 val operand_bind_tac =
@@ -128,24 +185,26 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
             (!mem. mem_agree_outside tn2.t_mem u.vs_memory mem ==>
               val_in_memory rt v (w2n w) mem))) (ZIP (xs,svs)) vs) ==>
     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (k [v] vs) (ee,u,G2,tn2) Q (\H res ee gt r. expr_exit res r)) ==>
+      (cx_tops cx) cx st0 (k [v] vs) (ee,u,G2,tn2) Q (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)) ==>
   gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (cx_tops cx) cx st0
     (bind (eval_exprs cx [addr]) (\target. bind (eval_exprs cx xs) (k target)))
-    (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)
+    (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >> gvs[] >>
   qabbrev_tac `xs = TAKE (LENGTH arg_types) tail` >>
   qabbrev_tac `kws = DROP (LENGTH arg_types) tail` >>
   operand_bind_tac >>
-  irule_at Any extcall_request_head_outcome >>
+  irule_at Any extcall_request_head_halt_outcome >>
   (* The singleton supplier calls its two output compiler states sb/shadow_sb. *)
   qrefinel [`_`,`shadow_sm`,`shadow_sa`,`_`,`sm`,`sa`] >>
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   conj_tac
-  >- (Cases_on `res` >> simp[] >> metis_tac[expr_exit_INR_type]) >>
+  >- (rpt gen_tac >> Cases_on `res` >> simp[] >>
+      metis_tac[expr_exit_INR_type, halt_exit_def]) >>
   conj_tac
-  >- (rpt gen_tac >> Cases_on `res` >> simp[] >> metis_tac[expr_exit_INR_type]) >>
+  >- (rpt gen_tac >> Cases_on `res` >> simp[halt_exit_def] >>
+      metis_tac[expr_exit_INR_type, expr_exit_def]) >>
   qx_genl_tac [`marks1`,`target_values`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     fs[storage_trace_domain_def] >>
@@ -159,6 +218,9 @@ Proof
        (mp_tac o REWRITE_RULE [listTheory.APPEND_NIL] o Q.SPEC `[]`) >>
      pure_asm_rewrite_tac[] >> simp[]) >>
   `body_exprs_full_ok cx xs` by metis_tac[] >>
+  `!st st'. eval_exprs cx xs st <> (INR HaltException, st')` by
+    (irule extcall_positional_no_halt >> fs[EVERY_APPEND] >>
+     qexistsl [`cenv`,`env`,`mid`] >> simp[]) >>
   `is_word_type (expr_type addr)` by simp[is_word_type_def] >>
   drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
@@ -173,13 +235,14 @@ Proof
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ ghost_inv_at _ _ _ _ _ mid _ _ _`
        (drule_then strip_assume_tac) >> fs[expr_post_def]) >>
   operand_bind_tac >>
+  irule_at Any extcall_positional_exit_replay >>
   irule_at Any extcall_request_positional_packing_outcome >>
   qpat_assum `compile_ext_call_args _ _ _ _ xs sm = _` (irule_at Any) >>
   qpat_assum `compile_ext_call_args _ _ _ _ (MAP _ xs) shadow_sm = _` (irule_at Any) >>
   qexistsl [`tops`,`shadow_func`,`env`,`d`] >>
   asm_rewrite_tac[] >> simp[] >>
   conj_tac
-  >- (rpt gen_tac >> Cases_on `res` >> simp[] >> metis_tac[expr_exit_INR_type]) >>
+  >- (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_INR_type, halt_exit_def]) >>
   qx_genl_tac [`marks2`,`pos_values`,`ee`,`G2`,`tn2`,`u`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[storage_trace_domain_def] >>

@@ -8,6 +8,7 @@ Ancestors
   gasShadowCompileHelpers gasShadowCompileStmtHelpers
   entryReachBodyFirstEmissionExprSupport entryReachBodyFirstEmissionExpr
   externalEntryShape gasShadowState gasShadowCompileConvert
+  evalNoHalt exprSimDefs gasOutcomeFull
 Libs
   pairLib
 
@@ -104,6 +105,28 @@ Proof
       simp[gas_shadow_expr_can_mutate, gas_shadow_compiles_snapshot_vv]) >>
   gen_tac >> BETA_TAC >> irule gas_shadow_compiles_bind >>
   simp[gas_shadow_compiles_return]
+QED
+
+(* The packed source action no longer evaluates the operands. Its recorded
+   replay suffices to exclude Halt, without changing the endpoint or path. *)
+Theorem extcall_packed_exit_replay[local]:
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (eval_ext_call cx stat skip sig opts vs) (ke,zg,Gg,tng) Q
+    (\H res ee gt r. expr_exit res r) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (eval_ext_call cx stat skip sig opts vs) (ke,zg,Gg,tng) Q
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+Proof
+  disch_then (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
+  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks`
+  >- (disj1_tac >> metis_tac[])
+  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >>
+      rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+      `res <> INR HaltException` by
+        (qpat_assum `!tail. eval_ext_call cx _ _ _ _ _ _ = _`
+           (qspec_then `[]` mp_tac) >> simp[] >> metis_tac[eval_ext_call_nh]) >>
+      rpt strip_tac >> res_tac >> fs[halt_exit_def]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
 (* The continuation starts before the optional code check, with the physical
@@ -217,7 +240,7 @@ Theorem extcall_request_full:
       (ee,t,G,tn) Q (\H res ee gt r. expr_exit res r)) ==>
   gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (cx_tops cx) cx st0 (eval_expr cx (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dr))
-    (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)
+    (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   simp[LET_THM] >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule request_stage_source_boundary >> strip_tac >>
@@ -351,8 +374,8 @@ Proof
   qexistsl [`tops`,`shadow_s3`,`shadow_s2`,`shadow_func`,`env`,`d`] >>
   asm_rewrite_tac[] >> simp[] >>
   conj_tac >- (simp[Abbr `kw_es`] >> irule rich_listTheory.EVERY_DROP >> simp[]) >>
-  conj_tac >- (rpt gen_tac >> Cases_on `res` >> simp[] >>
-    metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  conj_tac >- (rpt gen_tac >> Cases_on `res` >>
+    simp[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_def, expr_exit_def]) >>
   qx_genl_tac [`kw_marks`,`kw_res`,`ke`,`G3`,`tn3`,`z`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ke.storage_trace) ke.storage_trace` by
     (qpat_assum `storage_trace_domain _ _ ke.storage_trace`
@@ -661,6 +684,7 @@ Proof
          strip_tac >> simp[vyperTypeExtCallSoundnessTheory.ext_call_kwarg_not_mem]) >>
      simp[Abbr `source_gas`])) >>
   disch_then (mk_asm "packed") >>
+  irule extcall_packed_exit_replay >>
   mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
     (Q.INST [`addr` |-> `ao`, `value` |-> `value_op`,
       `buf` |-> `ba.buf_operand`, `hasdef` |-> `has_def`,
