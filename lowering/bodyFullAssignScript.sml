@@ -3303,7 +3303,9 @@ Resume body_assign_local_memory_nonempty_full[rhs_resources]:
   `w2n (sw:bytes32) + type_memory_size stv <= u.vs_alloca_next` by
     (qpat_assum `~is_word_type (post_value_type cenv e) ==> !rt w. _`
        (qspecl_then [`stv`,`sw:bytes32`] mp_tac o UNDISCH) >>
-     asm_rewrite_tac[] >> gvs[]) >>
+     asm_rewrite_tac[] >>
+     qpat_assum `0 < type_memory_size stv` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
   `u.vs_alloca_next < dimword (:256)` by
     (drule stmt_state_rel_alloca_room >>
      disch_then (ACCEPT_TAC o MATCH_MP alloca_room_next_lt)) >>

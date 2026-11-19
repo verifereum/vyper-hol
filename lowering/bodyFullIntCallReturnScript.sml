@@ -14,6 +14,27 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* Keep the compiler and callee parameters fixed while matching the result. *)
+fun apply_intcall_return_rule rule =
+  let
+    val return_args =
+      [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,`shadow_func`,`tops`,
+       `cenv`,`cx`,`tenv`,`ty`,`ann`,`name`,`es`,`dflt`,`es0`,`st0`,`sa`,
+       `sm`,`shadow_sa`,`shadow_sm`,`vv`,`s0`,`G0`,`tn0`,`mut`,`nr`,`args`,
+       `ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,`t`,`G`,`tn`,
+       `result_count`,`buf_size`,`param_vars`,`callee`,`entered`,`bb`,
+       `inst`,`lbl`,`arg_ops`,`argv`,`dflts`]
+    val shadow_expr = ``gasShadow$gas_shadow_expr``
+    val shadow_var = mk_var ("gas_shadow_expr", type_of shadow_expr)
+  in
+    match_mp_tac (INST [shadow_var |-> shadow_expr] (Q.SPECL return_args rule))
+  end;
+
+val intcall_return_premises =
+  simp[] >>
+  conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+  conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC);
+
 (* (c) Return and unlock restore, at (DF H, lo).  From an
    intcall_entry_full state t at the INVOKE, with every callee run the
    INVOKE can enter ending as stage (b) gives it: the INVOKE, the results'
@@ -176,10 +197,22 @@ Proof
   strip_tac >>
   conj_asm1_tac >-
     (qhdtm_x_assum `gas_outcome_full`
-       (strip_assume_tac o PURE_REWRITE_RULE [gas_outcome_full_def]) >-
-       (strip_tac >> irule intcall_return_noncompleted >> simp[] >> metis_tac[]) >-
-       (strip_tac >> irule intcall_return_normal_owned >> simp[] >> metis_tac[]) >>
-     strip_tac >> irule intcall_return_noncompleted >> simp[] >> metis_tac[]) >>
+       (strip_assume_tac o SIMP_RULE bool_ss [gas_outcome_full_def])
+     >- (apply_intcall_return_rule intcall_return_noncompleted >>
+         intcall_return_premises >>
+         qexists_tac `marks` >> disj1_tac >> simp[] >>
+         qexistsl_tac [`H'`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >> simp[])
+     >- (apply_intcall_return_rule intcall_return_normal_owned >>
+         intcall_return_premises >>
+         qexistsl_tac [`marks`,`res`,`ee`,`r`,`G'`,`tn'`] >> simp[] >>
+         rpt strip_tac >>
+         qpat_assum `!h. valid_horizon cx st0 h ee.storage_trace ==>
+                           gas_origin_ptr_path _ _ _ _ /\ _`
+           (drule_then (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2))) >>
+     apply_intcall_return_rule intcall_return_noncompleted >>
+     intcall_return_premises >> qexists_tac `marks` >> disj2_tac >>
+     qexistsl_tac [`err`,`ee`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >>
+     simp[] >> qexists_tac `H'` >> simp[]) >>
   match_mp_tac intcall_return_unwrap >>
   qexistsl_tac
     [`tops`, `tenv`, `ty`, `args`, `ret`, `rr`, `penv`,
