@@ -139,7 +139,7 @@ Proof
   simp[dft_block_rel_def] >> strip_tac >> gvs[MAP_APPEND, PERM_APPEND_IFF]
 QED
 
-Theorem inv_lookup_body_replay[local]:
+Theorem inv_lookup_body_replay:
   dft_fn_rel fn fn' /\
   lookup_block name fn.fn_blocks = SOME bb /\
   lookup_block name fn'.fn_blocks = SOME bb' /\

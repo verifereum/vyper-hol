@@ -1,6 +1,6 @@
 Theory dftPacketFreshCutGeometry
 Ancestors
-  dftPacketNumericCutExtension list rich_list arithmetic
+  dftPacketCutExtension list rich_list arithmetic
 
 Theorem dft_packet_call_fresh_cut_geometry:
   !(F:num) C rooted_eval plan_ok levels_ok pre sf plan incoming root_fn entry
@@ -61,7 +61,7 @@ Proof
   qpat_x_assum `cuts' = _` SUBST_ALL_TAC >>
   qpat_x_assum `b = _` SUBST_ALL_TAC >>
   simp[NoAsms,MAP_APPEND] >>
-  irule dft_packet_levels_call_extend_num >>
+  irule dft_packet_levels_call_extend >>
   conj_tac
   >- (qexistsl_tac [`plan_ok`,`rooted_eval`] >> asm_rewrite_tac[]) >>
   asm_rewrite_tac[] >>
