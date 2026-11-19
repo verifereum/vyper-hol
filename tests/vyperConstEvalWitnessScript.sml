@@ -39,6 +39,24 @@ val () = holbuild_extra_deps [
 
 val fixture_dir = "../tests/fixtures/check_contract/";
 
+fun json_field key (JSON.OBJECT fields) =
+      Option.map #2 (List.find (fn (name, _) => name = key) fields)
+  | json_field _ _ = NONE;
+fun json_string key node =
+  case json_field key node of SOME (JSON.STRING value) => value | _ => "";
+fun first_body node =
+  case json_field "body" node of SOME (JSON.ARRAY (head::_)) => head
+  | _ => raise Fail "expected a nonempty module or function body";
+fun returned_json name = let
+  val json = JSONDecode.decodeFile JSONDecode.raw (fixture_dir ^ name)
+in valOf (json_field "value" (first_body (first_body (valOf (json_field "ast" json))))) end;
+
+fun offset_json name = let
+  val keywords = case json_field "keywords" (returned_json name) of
+    SOME (JSON.ARRAY keywords) => keywords | _ => raise Fail "blueprint keywords"
+  val keyword = valOf (List.find (fn kw => json_string "arg" kw = "code_offset") keywords)
+in valOf (json_field "value" keyword) end;
+
 fun remove_folded (JSON.OBJECT fields) = JSON.OBJECT
       (List.map (fn (key,v) => (key,remove_folded v))
         (List.filter (fn (key,_) => key <> "folded_value" andalso key <> "_folded_value") fields))
@@ -101,6 +119,8 @@ val residual = ``Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
      [Literal (BaseT (UintT 256)) (IntL 1);
       Literal (BaseT (UintT 256)) (IntL 2)];
    Name (BaseT (UintT 256)) "x"]``;
+val translated_residual = ``Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+  [Literal (BaseT (UintT 256)) (IntL 3); Name (BaseT (UintT 256)) "x"]``;
 val residual_json = ``JE_Call
   (JE_Name "unsafe_add" NONE JMissingSource (JT_Integer 256 F))
   [JE_BinOp (JE_Int 1 (JT_Integer 256 F)) JBop_Add
@@ -129,19 +149,27 @@ val projection_residual = EVAL ``
         (JT_Tuple [JT_Integer 256 F])) ^residual_json (JT_Integer 256 F)) =
     Subscript (BaseT (UintT 256))
       (Builtin (TupleT [BaseT (UintT 256)]) (MakeArray NONE (Fixed 1))
-        [Literal (BaseT (UintT 256)) (IntL 1)]) ^residual /\
+        [Literal (BaseT (UintT 256)) (IntL 1)]) ^translated_residual /\
   translate_iter ^residual_ctx (BaseT (UintT 256))
     (JIter_Range [^residual_json; ^residual_json] NONE) =
-    Range ^residual ^residual``;
+    Range ^translated_residual ^translated_residual``;
 val () = if aconv (rhs (concl projection_residual)) ``T`` then ()
          else raise Fail "runtime consumer changed a nonliteral residual";
 Theorem runtime_consumers_original_residual = EQT_ELIM projection_residual;
 
 (* The pin widens each literal's annotation to the list element type;
    decoding must retain that bound rather than derive it from the payload. *)
-val widened_subscript = translate "constant_widened_subscript.json";
-val () = contains "selected literal retains the inferred element bound"
-  ``Literal (BaseT (BytesT (Dynamic 2))) (BytesL [97w])`` widened_subscript;
+val widened_subscript_fixture = "constant_widened_subscript.json";
+val selected_arg = case json_field "args" (offset_json widened_subscript_fixture) of
+    SOME (JSON.ARRAY [arg]) => JSONDecode.decode jsonASTLib.json_expr arg
+  | _ => raise Fail "expected one len argument";
+val selected_value = EVAL ``translate_expr ^residual_ctx ^selected_arg``;
+val () = if aconv (rhs (concl selected_value))
+    ``Literal (BaseT (BytesT (Dynamic 2))) (BytesL [97w])`` then ()
+  else raise Fail "selected literal lost the inferred element bound";
+val widened_subscript = translate widened_subscript_fixture;
+val () = contains "length of selected literal"
+  ``Literal (BaseT (UintT 256)) (IntL 1)`` widened_subscript;
 Theorem constant_widened_subscript_translation = widened_subscript;
 
 (* Runtime-safe evaluation has different values and coverage from the pin's
@@ -441,22 +469,8 @@ Theorem constant_origin_import_translation = imported_origins;
 Theorem constant_origin_import_contract_checked =
   checked "constant_origin_import/main.json";
 
-fun json_field key (JSON.OBJECT fields) =
-      Option.map #2 (List.find (fn (name, _) => name = key) fields)
-  | json_field _ _ = NONE;
-fun json_string key node =
-  case json_field key node of SOME (JSON.STRING value) => value | _ => "";
-fun first_body node =
-  case json_field "body" node of SOME (JSON.ARRAY (head::_)) => head
-  | _ => raise Fail "expected a nonempty module or function body";
 fun check_offset_runtime name = let
-  val json = JSONDecode.decodeFile JSONDecode.raw (fixture_dir ^ name)
-  val call = valOf (json_field "value"
-    (first_body (first_body (valOf (json_field "ast" json)))))
-  val keywords = case json_field "keywords" call of
-    SOME (JSON.ARRAY keywords) => keywords | _ => raise Fail "blueprint keywords"
-  val keyword = valOf (List.find (fn kw => json_string "arg" kw = "code_offset") keywords)
-  val node = JSONDecode.decode jsonASTLib.json_expr (valOf (json_field "value" keyword))
+  val node = JSONDecode.decode jsonASTLib.json_expr (offset_json name)
   val th = EVAL ``is_int_literal (origin_fold_value (translate_expr ^residual_ctx ^node))``
   val () = if aconv (rhs (concl th)) ``F`` then ()
            else raise Fail (name ^ ": source-refused selector acquired a literal marker")
@@ -467,11 +481,7 @@ Theorem mixed_bytes_offset_remains_runtime =
 Theorem mixed_high_offset_remains_runtime =
   check_offset_runtime "constant_mixed_high_offset.json";
 
-fun returned_source name = let
-  val json = JSONDecode.decodeFile JSONDecode.raw (fixture_dir ^ name)
-  val value = valOf (json_field "value"
-    (first_body (first_body (valOf (json_field "ast" json)))))
-in JSONDecode.decode jsonASTLib.json_expr value end;
+fun returned_source name = JSONDecode.decode jsonASTLib.json_expr (returned_json name);
 fun check_refused_fold name = let
   val node = returned_source name
   val th = EVAL ``origin_fold_value (translate_expr ^residual_ctx ^node)``
@@ -488,6 +498,19 @@ Theorem mixed_bytes_equality_remains_runtime =
   check_refused_fold "constant_mixed_bytes_equality.json";
 Theorem hex_bitwise_remains_runtime = check_refused_fold "constant_hexand.json";
 Theorem hex_inversion_remains_runtime = check_refused_fold "constant_hexinvert.json";
+
+val shifted_bytes = ``Builtin (BaseT (BytesT (Fixed 32))) (Bop ShL)
+  [Literal (BaseT (BytesT (Fixed 32))) (BytesL (REPLICATE 32 1w));
+   Literal (BaseT (UintT 256)) (IntL 1)]``;
+
+Theorem keccak_of_bytes_shift_remains_runtime:
+  make_builtin_call (BaseT (BytesT (Fixed 32))) "keccak256"
+    [^shifted_bytes] [] (JT_BytesM 32) =
+  Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [^shifted_bytes]
+Proof
+  EVAL_TAC
+QED
+
 val same_class_hex = returned_source "constant_hexeq.json";
 val same_class_hex_value = EVAL ``translate_expr ^residual_ctx ^same_class_hex``;
 val () = if aconv (rhs (concl same_class_hex_value))

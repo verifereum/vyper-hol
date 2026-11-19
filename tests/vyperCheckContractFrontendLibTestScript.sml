@@ -716,8 +716,8 @@ val _ =
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
 
-(* Ordinary slices, like calldata slices, fold a constant length to a literal
-   for their result capacity. A constant start remains a runtime expression. *)
+(* An ordinary slice keeps the Slice node and folds its closed start and
+   length operands. The length determines the result capacity. *)
 val slice_uint_json =
   "{\"typeclass\":\"integer\",\"bits\":256,\"is_signed\":false}";
 val slice_sum_json =
@@ -744,11 +744,9 @@ val () = if aconv (rhs (concl (bossLib.EVAL
     ``translate_expr (module_expr_ctx [] (0:int) NONE [] [] [] []) ^expected_ordinary_slice``)))
   ``Builtin (BaseT (BytesT (Dynamic 2))) (Slice 2)
       [Name (BaseT (BytesT (Dynamic 10))) "b";
-       Builtin (BaseT (UintT 256)) (Bop Add)
-         [Literal (BaseT (UintT 256)) (IntL 1);
-          Literal (BaseT (UintT 256)) (IntL 1)];
+       Literal (BaseT (UintT 256)) (IntL 2);
        Literal (BaseT (UintT 256)) (IntL 2)]``
-  then () else raise Fail "ordinary slice did not fold its length";
+  then () else raise Fail "ordinary slice did not preserve its folded operands";
 
 (* Issue 565: the public getter flag follows the pragma, except for explicit
    reentrant, constant and immutable declarations (g37/g38/g39 controls). *)
@@ -771,8 +769,7 @@ Proof
   simp[jsonToVyperTopLevelTheory.translate_toplevel_def]
 QED
 
-(* Without bound=, range endpoints are folded to literals; with it, they stay
-   the translated expressions. *)
+(* Closed range endpoints fold with or without an explicit bound. *)
 Theorem range_static_folded_endpoints:
   !ctx.
     translate_iter ctx (BaseT (IntT 8))
@@ -788,9 +785,7 @@ Theorem range_static_folded_endpoints:
             (JE_Int 2 (JT_Integer 8 T)) (JT_Integer 8 T);
           JE_Int 127 (JT_Integer 8 T)]
          (SOME (JE_Int 1 (JT_Integer 256 F)))) =
-    Range (Builtin (BaseT (IntT 8)) (Bop Add)
-             [Literal (BaseT (IntT 8)) (IntL (-5));
-              Literal (BaseT (IntT 8)) (IntL 2)])
+    Range (Literal (BaseT (IntT 8)) (IntL (-3)))
           (Literal (BaseT (IntT 8)) (IntL 127))
 Proof
   gen_tac >> CONV_TAC EVAL
