@@ -76,7 +76,7 @@ QED
 Theorem toplevel_slot_alloc_origin_ptr:
   compile_expr cenv ty (TopLevelName ann nsid) si = (LocatedValue vt p,sm) /\
   compile_alloc_buffer nb sa = (buf,sb) /\ fn_has_code sa sb func /\
-  nb < dimword (:256) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  nb < dimword (:256) /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?out u.
@@ -158,7 +158,7 @@ Proof
   qabbrev_tac `D0 = <|d_stor := K (K {}); d_trans := K (K {});
     d_imm := K {}; d_ret := K {}|>` >>
   mp_tac (Q.INST [`D` |-> `D0`, `sb` |-> `mid`] toplevel_slot_alloc_origin_ptr) >>
-  (impl_tac >- metis_tac[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `gas_origin_ptr_path (D0,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK a,G0,tn0)` by
     (gvs[] >> metis_tac[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>

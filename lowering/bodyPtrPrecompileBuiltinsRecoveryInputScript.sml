@@ -93,6 +93,7 @@ Proof
    (!p. v = Var p ==> not_fresh_at sb p)` by
     (Cases_on `v` >> gvs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
   `w2n b + off < dimword(:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all emitted_offset_word_store_checked >>
   disch_then (mp_tac o SPEC_ALL) >>
   disch_then (qx_choose_then `s2` (qx_choose_then `G2`

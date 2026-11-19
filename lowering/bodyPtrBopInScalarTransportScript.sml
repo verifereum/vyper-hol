@@ -42,7 +42,7 @@ QED
 
 Theorem scalar_ptr_check_vars_ext:
   MEM opc [EQ; OR; AND; ISZERO] /\ vars_ext s s1 /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id opc ops [out]) s1 = OK u1 /\
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops [out]) s ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops [out]) s1
@@ -52,6 +52,10 @@ Proof
   gvs[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
       mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def] >>
   simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (update_var out w s1)` by
+    (strip_tac >> `allocas_below_fmp s` by simp[] >>
+     fs[update_var_def, vars_ext_def, venom_state_component_equality,
+        allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
   gvs[update_var_def, vars_ext_def] >>
   rpt strip_tac >>
   first_x_assum drule >> simp[] >> strip_tac >>
@@ -68,7 +72,7 @@ QED
 Theorem scalar_instruction_transport:
   MEM i.inst_opcode [EQ; OR; AND; ISZERO] /\
   (LENGTH i.inst_operands = 1 \/ LENGTH i.inst_operands = 2) /\
-  LENGTH i.inst_outputs = 1 /\ vars_ext s s1 /\ ~ctx_has_dalloca ctx /\
+  LENGTH i.inst_outputs = 1 /\ vars_ext s s1 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base i s = OK u /\ step_inst_base i s1 = OK u1 /\
   ptr_inst_ok D 0 0 ctx fn G tn i s ==>
   ptr_inst_ok D 0 0 ctx fn G tn i s1 /\
@@ -104,7 +108,7 @@ Theorem scalar_sequence_check_vars_ext:
   EVERY (\i. MEM i.inst_opcode [EQ; OR; AND; ISZERO] /\
     (LENGTH i.inst_operands = 1 \/ LENGTH i.inst_operands = 2) /\
     LENGTH i.inst_outputs = 1) code /\
-  ~ctx_has_dalloca ctx /\ vars_ext s s1 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ vars_ext s s1 /\
   (?u. run_inst_seq code s = OK u) /\
   inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' ==>
   inst_seq_ptr D 0 ctx fn PG G tn code s1 G' tn'
@@ -137,6 +141,13 @@ Proof
     (irule successful_seq_idx >> metis_tac[]) >>
   `s.vs_inst_idx = s1.vs_inst_idx` by metis_tac[vars_ext_idx] >>
   RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >> simp[] >>
+  `?w. v = update_var (HD h.inst_outputs) w s` by
+    (Cases_on `h` >> gvs[LENGTH_EQ_NUM_compute, instruction_mk_inst] >>
+     irule scalar_success_update >> simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==>
+    allocas_below_fmp (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (strip_tac >> `allocas_below_fmp s` by simp[] >>
+     gvs[update_var_def, allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
   first_x_assum irule >> asm_rewrite_tac[] >>
   qexists_tac `v with vs_inst_idx := SUC s.vs_inst_idx` >>
   simp[] >> metis_tac[vars_ext_idx]
@@ -146,7 +157,7 @@ Theorem scalar_inst_seq_ptr_vars_ext:
   EVERY (\i. MEM i.inst_opcode [EQ; OR; AND; ISZERO] /\
     (LENGTH i.inst_operands = 1 \/ LENGTH i.inst_operands = 2) /\
     LENGTH i.inst_outputs = 1) code /\
-  ~ctx_has_dalloca ctx /\ vars_ext s s1 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ vars_ext s s1 /\
   run_inst_seq code s = OK u /\
   inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' ==>
   ?u1. run_inst_seq code s1 = OK u1 /\ vars_ext u u1 /\

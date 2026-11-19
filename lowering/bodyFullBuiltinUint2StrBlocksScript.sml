@@ -66,7 +66,7 @@ QED
 Theorem u2s_clean_scalar_seq_cons:
   MEM opc [Mod; Div; EQ; ADD] /\
   (!op. MEM op ops ==> op_taint tn op = {} /\ op_prov G op = NONE) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   step_inst_base (mk_inst id opc ops [out]) s = OK (update_var out w s) /\
   inst_seq_ptr D lo ctx fn PG (DRESTRICT G (COMPL {out}))
     (tn with t_var := tn.t_var |+ (out,{})) ys
@@ -93,7 +93,7 @@ QED
 
 Theorem u2s_clean_assign_seq_cons:
   op_prov G op = NONE /\ op_taint tn op = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   step_inst_base (mk_inst id ASSIGN [op] [out]) s = OK (update_var out w s) /\
   inst_seq_ptr D lo ctx fn PG (DRESTRICT G (COMPL {out}))
     (tn with t_var := tn.t_var |+ (out,{})) ys
@@ -114,9 +114,21 @@ Proof
 QED
 
 (* allocas_from is supplied by ghost_inv_at at the loop boundary. *)
+Theorem u2s_allocas_below_fmp_updates[local]:
+  (allocas_below_fmp (update_var x w s) <=> allocas_below_fmp s) /\
+  (allocas_below_fmp (s with vs_inst_idx := k) <=> allocas_below_fmp s) /\
+  (allocas_below_fmp (mstore addr v s) <=> allocas_below_fmp s) /\
+  (allocas_below_fmp (s with <|vs_vars := vars; vs_inst_idx := k|>) <=>
+     allocas_below_fmp s) /\
+  (allocas_below_fmp (s with <|vs_memory := mem; vs_vars := vars; vs_inst_idx := k|>) <=>
+     allocas_below_fmp s)
+Proof
+  simp[update_var_def, mstore_def, write_memory_with_expansion_def, allocas_below_fmp_def]
+QED
+
 Theorem u2s_body_pointer_sequence:
   not_fresh_at a p /\ n+32 <= sz /\ b+sz < dimword(:256) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   0 < x /\ i < n /\ x < dimword(:256) /\
   lookup_var (u2s_var a 0) s = SOME (n2w x) /\
   lookup_var (u2s_var a 1) s = SOME (n2w i) /\
@@ -155,6 +167,12 @@ Proof
   qabbrev_tac `G4 = step_prov PG G3 subi u4` >>
   qabbrev_tac `tn4 = step_taint subi s3 u4 tn3` >>
   qabbrev_tac `s4 = u4 with vs_inst_idx := 4` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    simp[Abbr `s2`, u2s_allocas_below_fmp_updates] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    simp[Abbr `s3`, u2s_allocas_below_fmp_updates] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s4` by
+    simp[Abbr `s4`, Abbr `u4`, u2s_allocas_below_fmp_updates] >>
   qabbrev_tac `tn5 = tn4 with t_mem := tn4.t_mem DIFF {j | b+n-i <= j /\ j < b+n-i+32}` >>
   qexistsl_tac
     [`DRESTRICT G4 (COMPL {u2s_var a 0; u2s_var a 1; u2s_var a 9; u2s_var a 10})`,
@@ -185,7 +203,8 @@ Resume u2s_body_pointer_sequence[sequence]:
   irule u2s_clean_scalar_seq_cons >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, op_taint_def,
        FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, allocas_from_def, update_var_def] >>
-  conj_tac >- fs[allocas_from_def] >>
+  conj_tac >- (fs[allocas_below_fmp_def] >> metis_tac[]) >>
+  conj_tac >- (fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   qexists_tac `48w + safe_mod (n2w x) 10w` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
@@ -212,6 +231,7 @@ Resume u2s_body_pointer_sequence[sequence]:
   >- (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
            source_memory_write_ranges_def, source_memory_read_ranges_def] >>
       simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def] >>
+      TRY (conj_tac >- first_assum ACCEPT_TAC) >>
       rpt gen_tac >> Cases_on `op` >> simp[op_taint_def] >>
       fs[op_taint_def] >> metis_tac[]) >>
   `s2.vs_inst_idx = 2` by simp[Abbr `s2`, update_var_def] >>
@@ -242,6 +262,7 @@ Resume u2s_body_pointer_sequence[middle]:
       simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
            eval_operand_def, update_var_def] >>
       simp[Abbr `u4`, update_var_def] >>
+      TRY (conj_tac >- first_assum ACCEPT_TAC) >>
       rpt gen_tac >> Cases_on `op` >> simp[op_taint_def] >>
       fs[op_taint_def] >> metis_tac[]) >>
   `s3.vs_inst_idx = 3` by simp[Abbr `s3`] >>
@@ -302,6 +323,8 @@ Resume u2s_body_pointer_sequence[tail]:
           pointer_sub_ghost_frame, op_taint_def] >>
      simp[Abbr `G3`, Abbr `G2`, Abbr `tn3`, Abbr `tn2`,
           FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s5` by
+    simp[Abbr `s5`, u2s_allocas_below_fmp_updates] >>
   `lookup_var (u2s_var a 0) s5 = SOME (n2w x) /\
    lookup_var (u2s_var a 1) s5 = SOME (n2w i) /\ allocas_from lo s5` by
     (simp[Abbr `s5`, Abbr `s4`, Abbr `u4`, Abbr `s3`, Abbr `s2`,
@@ -311,21 +334,26 @@ Resume u2s_body_pointer_sequence[tail]:
   fs[op_taint_def] >>
   simp[Abbr `cs`] >>
   irule u2s_clean_scalar_seq_cons >>
+  rewrite_tac [u2s_allocas_below_fmp_updates] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, op_taint_def] >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   simp[GSYM mk_inst_def] >>
   qexists_tac `safe_div (n2w x) 10w` >> simp[] >>
   irule u2s_clean_assign_seq_cons >>
+  rewrite_tac [u2s_allocas_below_fmp_updates] >>
   simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
        allocas_from_def, update_var_def] >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
        lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   simp[GSYM mk_inst_def] >>
+  simp[u2s_allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `safe_div (n2w x) 10w` >> simp[] >>
   irule u2s_clean_scalar_seq_cons >>
+  rewrite_tac [u2s_allocas_below_fmp_updates] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, op_taint_def,
        FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, allocas_from_def] >>
+  simp[u2s_allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `1w + n2w i` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
@@ -333,8 +361,10 @@ Resume u2s_body_pointer_sequence[tail]:
   simp[GSYM mk_inst_def] >>
   conj_tac >- (fs[lookup_var_def] >> simp[WORD_ADD_COMM]) >>
   irule u2s_clean_assign_seq_cons >>
+  rewrite_tac [u2s_allocas_below_fmp_updates] >>
   simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
        allocas_from_def, update_var_def] >>
+  simp[u2s_allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `1w + n2w i` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
@@ -353,7 +383,7 @@ Theorem u2s_body_joint_step:
   fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
   not_local_ptr cenv es.scopes q /\ n+32 <= sz /\
-  b+sz < dimword(:256) /\ lo <= b /\ ~ctx_has_dalloca ctx /\
+  b+sz < dimword(:256) /\ lo <= b /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   u2s_digits a b n X x str s /\
   (!H. valid_horizon cx st0 H es.storage_trace ==> u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
        ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
@@ -430,6 +460,12 @@ Proof
     (fs[allocas_from_def, u2s_safe_def, u2s_frame_def] >>
      ntac 2 (qpat_x_assum `_ = sr` (mp_tac o Q.AP_TERM `\z. z.vs_allocas`)) >>
      simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := 9)` by
+    (`u2s_safe H0 ctx fn cenv cx es a (Var p) b sz inst sr t` by metis_tac[] >>
+     `stmt_state_rel H0 ctx fn cenv cx es t` by fs[u2s_safe_def] >>
+     qpat_assum `stmt_state_rel H0 ctx fn cenv cx es t`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     rewrite_tac [u2s_allocas_below_fmp_updates]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
        (t with vs_inst_idx := 9,G',tn') []
        (OK (jump_to (u2s_label a 1) t),G',tn')` by
@@ -477,7 +513,7 @@ QED
 Theorem u2s_pointer_arith_seq_cons:
   MEM opc [ADD; SUB] /\ op_prov G (Var p) = SOME region /\
   op_prov G delta = NONE /\ op_taint tn (Var p) = {} /\ op_taint tn delta = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   step_inst_base (mk_inst id opc [Var p;delta] [out]) s = OK (update_var out w s) /\
   inst_seq_ptr D lo ctx fn PG (G |+ (out,region))
     (tn with t_var := tn.t_var |+ (out,{})) ys
@@ -508,7 +544,7 @@ QED
 
 Theorem u2s_pointer_assign_seq_cons:
   op_prov G op = SOME region /\ op_taint tn op = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   step_inst_base (mk_inst id ASSIGN [op] [out]) s = OK (update_var out w s) /\
   inst_seq_ptr D lo ctx fn PG (G |+ (out,region))
     (tn with t_var := tn.t_var |+ (out,{})) ys
@@ -539,7 +575,7 @@ QED
 Theorem u2s_clean_mstore_seq_cons:
   lookup_var p s = SOME addr /\ eval_operand value s = SOME w /\
   op_taint tn value = {} /\ ptr_covers G tn p s 32 /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   inst_seq_ptr D lo ctx fn PG G
     (tn with t_mem := tn.t_mem DIFF {j | w2n addr <= j /\ j < w2n addr+32}) ys
     (mstore (w2n addr) w s with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
@@ -561,7 +597,7 @@ QED
 
 Theorem u2s_zero_pointer_sequence:
   not_fresh_at a p /\ 1 <= n /\ n+32 <= sz /\ b+sz < dimword(:256) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   lookup_var p s = SOME (n2w b) /\ FLOOKUP G p = SOME (b,sz) /\
   op_taint tn (Var p) = {} /\ s.vs_inst_idx = 0 ==>
   ?G' tn'.
@@ -601,11 +637,13 @@ Resume u2s_zero_pointer_sequence[sequence]:
   simp[op_taint_def, op_prov_def, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE, eval_operand_def, allocas_from_def, w2n_n2w,
        ptr_covers_def] >>
+  simp[u2s_allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   irule u2s_pointer_arith_seq_cons >>
   fs[op_taint_def] >>
   simp[op_prov_def, op_taint_def, FLOOKUP_UPDATE, allocas_from_def,
        mstore_def, write_memory_with_expansion_def] >>
+  simp[u2s_allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `n2w (b+n)` >>
   fs[lookup_var_def] >>
@@ -615,6 +653,7 @@ Resume u2s_zero_pointer_sequence[sequence]:
   irule u2s_pointer_arith_seq_cons >>
   simp[op_prov_def, op_taint_def, FLOOKUP_UPDATE, allocas_from_def,
        update_var_def] >>
+  simp[u2s_allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `n2w (b+n-1)` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def,
@@ -624,11 +663,13 @@ Resume u2s_zero_pointer_sequence[sequence]:
   simp[op_taint_def, op_prov_def, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE, eval_operand_def, allocas_from_def, w2n_n2w,
        ptr_covers_def] >>
+  simp[u2s_allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qmatch_goalsub_abbrev_tac `mstore z w (s with <|vs_memory := mem; vs_vars := _; vs_inst_idx := _|>)` >>
   irule u2s_pointer_assign_seq_cons >>
   simp[op_prov_def, op_taint_def, FLOOKUP_UPDATE, allocas_from_def,
        mstore_def, write_memory_with_expansion_def] >>
+  simp[u2s_allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `n2w (b+n-1)` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
@@ -646,7 +687,7 @@ Theorem u2s_zero_joint_result:
   fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
   not_local_ptr cenv es.scopes q /\ 1 <= n /\ n+32 <= sz /\
-  b+sz < dimword(:256) /\ lo <= b /\ ~ctx_has_dalloca ctx /\
+  b+sz < dimword(:256) /\ lo <= b /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
        u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
        ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
@@ -704,6 +745,12 @@ Proof
     (fs[allocas_from_def, u2s_safe_def, u2s_frame_def] >>
      ntac 2 (qpat_x_assum `_ = sr` (mp_tac o Q.AP_TERM `\z. z.vs_allocas`)) >>
      simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := 6)` by
+    (`u2s_safe H0 ctx fn cenv cx es a (Var p) b sz inst sr t` by metis_tac[] >>
+     `stmt_state_rel H0 ctx fn cenv cx es t` by fs[u2s_safe_def] >>
+     qpat_assum `stmt_state_rel H0 ctx fn cenv cx es t`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     rewrite_tac [u2s_allocas_below_fmp_updates]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
        (t with vs_inst_idx := 6,G',tn') []
        (OK (jump_to (u2s_label a 5) t),G',tn')` by
@@ -747,7 +794,7 @@ Finalise u2s_zero_joint_result
 
 Theorem u2s_final_pointer_sequence:
   not_fresh_at a p /\ i <= n /\ n+32 <= sz /\ b+sz < dimword(:256) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   lookup_var p s = SOME (n2w b) /\ FLOOKUP G p = SOME (b,sz) /\
   lookup_var (u2s_var a 1) s = SOME (n2w i) /\
   FLOOKUP G (u2s_var a 1) = NONE /\ op_taint tn (Var (u2s_var a 1)) = {} /\
@@ -785,6 +832,7 @@ Resume u2s_final_pointer_sequence[sequence]:
   irule u2s_pointer_arith_seq_cons >>
   fs[op_taint_def, lookup_var_def] >>
   simp[op_prov_def, op_taint_def, FLOOKUP_UPDATE, allocas_from_def, update_var_def] >>
+  simp[u2s_allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `n2w (b+n-i)` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def,
@@ -793,10 +841,12 @@ Resume u2s_final_pointer_sequence[sequence]:
   irule u2s_clean_mstore_seq_cons >>
   simp[op_taint_def, op_prov_def, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE, eval_operand_def, allocas_from_def, w2n_n2w, ptr_covers_def] >>
+  simp[u2s_allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   irule u2s_pointer_assign_seq_cons >>
   simp[op_prov_def, op_taint_def, FLOOKUP_UPDATE, allocas_from_def,
        mstore_def, write_memory_with_expansion_def] >>
+  simp[u2s_allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `n2w (b+n-i)` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
@@ -813,7 +863,7 @@ Theorem u2s_final_joint_result:
   fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
   not_local_ptr cenv es.scopes q /\ n+32 <= sz /\
-  b+sz < dimword(:256) /\ lo <= b /\ ~ctx_has_dalloca ctx /\
+  b+sz < dimword(:256) /\ lo <= b /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   u2s_digits a b n X 0 str s /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
        u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
@@ -877,6 +927,12 @@ Proof
     (fs[allocas_from_def, u2s_safe_def, u2s_frame_def] >>
      ntac 2 (qpat_x_assum `_ = sr` (mp_tac o Q.AP_TERM `\z. z.vs_allocas`)) >>
      simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := 4)` by
+    (`u2s_safe H0 ctx fn cenv cx es a (Var p) b sz inst sr t` by metis_tac[] >>
+     `stmt_state_rel H0 ctx fn cenv cx es t` by fs[u2s_safe_def] >>
+     qpat_assum `stmt_state_rel H0 ctx fn cenv cx es t`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     rewrite_tac [u2s_allocas_below_fmp_updates]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
        (t with vs_inst_idx := 4,G',tn') []
        (OK (jump_to (u2s_label a 5) t),G',tn')` by

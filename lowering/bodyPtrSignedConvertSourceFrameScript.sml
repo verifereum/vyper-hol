@@ -47,7 +47,7 @@ QED
 Theorem bytestring_source_prefix_ghost_frame:
   !D ctx fn PG G tn s bb id1 id2 src len data a capacity
    d cenv cx es es0 sa G0 tn0 s0.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id1 MLOAD [Var src] [len]) /\
     get_instruction bb (SUC s.vs_inst_idx) =

@@ -19,7 +19,7 @@ Theorem calldata_bytes_rejected_origin:
   maxn < dimword(:256) /\
   maxn < w2n (abi_decode_load CALLDATALOAD p initial) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
-  allocas_from lower initial /\ ~ctx_has_dalloca ctx /\
+  allocas_from lower initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?z H u.

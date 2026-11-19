@@ -62,6 +62,7 @@ Proof
     fs[abi_decode_ptr_window_def] >>
   `ptr_covers G tn src s k` by
     (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emit_mcopy_frames_normalized_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`tn'`, `t`] >> simp[] >>

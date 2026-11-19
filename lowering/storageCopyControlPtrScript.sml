@@ -12,7 +12,7 @@ Theorem copy_loop_jump_path_ptr:
   get_instruction bb s.vs_inst_idx = SOME inst /\
   (inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ) /\
   (!op. MEM op inst.inst_operands ==> op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base inst s = OK (jump_to lbl s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK (jump_to lbl s))
 Proof
@@ -58,7 +58,7 @@ Proof
 QED
 
 Theorem copy_loop_eq_check:
-  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn (Var cv) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id EQ [Var cv; Lit n] [tv]) s = OK t /\
   t.vs_requests = s.vs_requests ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id EQ [Var cv; Lit n] [tv]) s
@@ -78,7 +78,7 @@ Theorem copy_loop_eq_path_ptr:
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id EQ [Var cv; Lit (n2w n)] [tv]) /\
   lookup_var cv s = SOME (n2w k) /\ k <= n /\ n < dimword(:256) /\
-  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn (Var cv) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT G (COMPL {tv})) (tn with t_var := tn.t_var |+ (tv,{}))
     (OK ((update_var tv (bool_to_word (k = n)) s)
@@ -107,7 +107,7 @@ Theorem copy_loop_branch_path_ptr:
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst id JNZ [Var tv; Label exit_lbl; Label body_lbl] []) /\
   lookup_var tv s = SOME (bool_to_word done) /\
-  op_taint tn (Var tv) = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn (Var tv) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0 G tn
     (OK (jump_to (if done then exit_lbl else body_lbl) s))
 Proof
@@ -125,7 +125,7 @@ Theorem copy_loop_header_path_ptr:
     [mk_inst id EQ [Var cv; Lit (n2w n)] [tv];
      mk_inst (id+1) JNZ [Var tv; Label exit_lbl; Label body_lbl] []] /\
   lookup_var cv s = SOME (n2w k) /\ k <= n /\ n < dimword(:256) /\
-  op_taint tn (Var cv) = {} /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn (Var cv) = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT G (COMPL {tv})) (tn with t_var := tn.t_var |+ (tv,{}))
     (OK (jump_to (if k = n then exit_lbl else body_lbl)
@@ -178,7 +178,7 @@ Proof
 QED
 
 Theorem copy_loop_scalar_assign_check:
-  op_taint tn a = {} /\ ~ctx_has_dalloca ctx /\ eval_operand a s = SOME w ==>
+  op_taint tn a = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ eval_operand a s = SOME w ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id ASSIGN [a] [cv]) s
 Proof
   strip_tac >>
@@ -196,7 +196,7 @@ Theorem copy_loop_scalar_assign_path_ptr:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [a] [cv]) /\
   eval_operand a s = SOME w /\ op_prov G a = NONE /\ op_taint tn a = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT G (COMPL {cv})) (tn with t_var := tn.t_var |+ (cv,{}))
     (OK (update_var cv w s with vs_inst_idx := SUC s.vs_inst_idx))
@@ -247,7 +247,7 @@ Theorem copy_loop_entry_path_ptr:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions = pre ++
     [mk_inst id ASSIGN [Lit 0w] [cv]; mk_inst (id+1) JMP [Label hdr] []] /\
-  s.vs_inst_idx = LENGTH pre /\ ~ctx_has_dalloca ctx ==>
+  s.vs_inst_idx = LENGTH pre /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT G (COMPL {cv})) (tn with t_var := tn.t_var |+ (cv,{}))
     (OK (jump_to hdr (update_var cv 0w s)))

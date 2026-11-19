@@ -85,6 +85,7 @@ Proof
    (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> len /\ p <> data) /\
    (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> len /\ p <> data)` by
     metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bytestring_source_prefix_ghost_frame >>
   disch_then (qspecl_then [`D`,`PG`]
     (qx_choose_then `G'` (qx_choose_then `tn'` (qx_choose_then `t` strip_assume_tac)))) >>

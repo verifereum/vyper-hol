@@ -47,7 +47,9 @@ Theorem membership_eq_branch_frame:
       (jump_to (if aw = bw then lt else lf)
         (update_var dst (bool_to_word (aw = bw)) s))
 Proof
-  strip_tac >> drule_all membership_eq_branch_path >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all membership_eq_branch_path >>
   disch_then (qspecl_then [`PG`, `D`] mp_tac) >> strip_tac >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >> conj_tac
   >- (drule_all membership_frame_scalar_jump >> simp[]) >>
@@ -111,7 +113,9 @@ Theorem membership_found_frame:
     membership_loop_registers sa i 1w G' tn' t /\
     t = jump_to exit (update_var ("%" ++ toString sa.cs_next_var) 1w s)
 Proof
-  strip_tac >> drule_all membership_found_path >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all membership_found_path >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] mp_tac) >> strip_tac >>
   goal_assum (drule_at Any) >> simp[] >> conj_tac
   >- (drule membership_frame_scalar_jump >>

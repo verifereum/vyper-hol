@@ -2547,6 +2547,7 @@ Resume return_selected_valued_frag_full_core[raw_unlock]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
        loweringStateRelDefsTheory.call_ctx_rel_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   mp_tac (Q.INST [`iv` |-> `mut = View`,`st` |-> `sm`,`st'` |-> `su`,
       `s` |-> `t`,`G` |-> `G1`,`tn` |-> `tn1`]
     (SPEC_ALL optional_transient_unlock_paths_joint)) >>
