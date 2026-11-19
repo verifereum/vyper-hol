@@ -248,8 +248,10 @@ Proof
        supported_string_type_def]
 QED
 
-Theorem supported_binop_no_array_membership:
-  supported_binop op ty rhs lb ne ==> ~((op = In \/ op = NotIn) /\ is_ArrayT rhs)
+Theorem supported_binop_dispatch_guards:
+  supported_binop op ty rhs lb ne ==>
+  ~((op = In \/ op = NotIn) /\ is_ArrayT rhs) /\
+  ~(is_bytestring_type ty /\ (op = Eq \/ op = NotEq))
 Proof
   Cases_on `op` >> simp[supported_binop_def]
 QED

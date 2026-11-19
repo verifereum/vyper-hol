@@ -136,7 +136,7 @@ Proof
   Cases_on `bi` >> simp[supported_builtin_form_def] >> rpt strip_tac
   >~ [`compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _`]
   >- (irule entry_code_dispatch_array >> simp[] >> metis_tac[]) >>
-  imp_res_tac supported_binop_no_array_membership >>
+  imp_res_tac supported_binop_dispatch_guards >>
   rw[entry_preserves_code_def, compile_builtin_dispatch_body_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>

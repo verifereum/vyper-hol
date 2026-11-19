@@ -189,6 +189,10 @@ Theorem supported_memory_construction_forms:
     (MakeArray (SOME (BaseT (UintT 256))) (Dynamic 3)) [expr_test_uint] /\
   supported_builtin_form [] (ArrayT (BaseT (UintT 256)) (Fixed 1))
     (MakeArray (SOME (BaseT (UintT 256))) (Fixed 1)) [expr_test_uint] /\
+  supported_builtin_form []
+    (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 2)) (Fixed 1))
+    (MakeArray (SOME (ArrayT (BaseT (UintT 256)) (Dynamic 2))) (Fixed 1))
+    [Name (ArrayT (BaseT (UintT 256)) (Dynamic 1)) "short"] /\
   supported_type_builtin_form [] (BaseT (StringT 10)) Empty (BaseT (StringT 10)) [] /\
   ~supported_type_builtin_form [] (TupleT [TupleT [BaseT (UintT 8)]]) Empty
     (TupleT [TupleT [BaseT (UintT 8)]]) [] /\

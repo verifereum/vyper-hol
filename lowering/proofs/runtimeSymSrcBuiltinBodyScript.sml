@@ -70,14 +70,6 @@ Proof
   disch_then (drule_at_then (Pat `cfn _ _ _ _ = _`) mp_tac) >> simp[]
 QED
 
-Theorem runtime_sym_binop_guards[local]:
-  supported_binop bop ty rhs bl el ==>
-  ~((bop = In \/ bop = NotIn) /\ is_ArrayT rhs) /\
-  ~(is_bytestring_type ty /\ (bop = Eq \/ bop = NotEq))
-Proof
-  Cases_on `bop` >> simp[supported_binop_def]
-QED
-
 val runtime_sym_unary_args_tac =
   qpat_x_assum `supported_expr _ _` (mp_tac o
     SRULE [runtime_sym_builtin_domain, supported_builtin_form_def]) >>
@@ -160,7 +152,7 @@ Resume runtime_sym_builtin_body[bop]:
      (supported_integer_literal a) (supported_nonnegative_literal b)` by
     gvs[supported_expr_def, supported_pure_expr_def,
         supported_effect_expr_def, supported_builtin_form_def] >>
-  drule runtime_sym_binop_guards >> strip_tac >>
+  drule supported_binop_dispatch_guards >> strip_tac >>
   drule runtime_sym_generators_expr_primitive >>
   disch_then (assume_tac o cj 3 o SRULE [runtime_sym_expr_primitive_clauses_def]) >>
   qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
