@@ -98,3 +98,11 @@ Proof
   simp[context_plan_ops_def, execute_plan_append, APPEND_ASSOC] >>
   simp[revert_postamble_def, execute_plan_def, exec_stack_op_def]
 QED
+
+Definition lo_reloc_def:
+  lo_reloc prog prog' =
+    FUNION (DRESTRICT (SND (compute_label_offsets prog))
+                      {l | MEM (AsmLabel l) prog})
+           (DRESTRICT (SND (compute_label_offsets prog'))
+                      {l | ~MEM (AsmLabel l) prog})
+End
