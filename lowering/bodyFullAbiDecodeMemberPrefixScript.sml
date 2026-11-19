@@ -160,6 +160,7 @@ Proof
   `sb.cs_current_bb = sa.cs_current_bb /\
    sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id` by
     (drule emit_op_facts >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (BETA_RULE bodyFullAbiDecodeFiniteGuardEffectTheory.abi_decode_scalar_guard_success_joint_effect) >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `(!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (OK u)) /\
@@ -281,6 +282,7 @@ Proof
       disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
       qexistsl_tac [`u`, `Gf`, `tnf`] >> asm_rewrite_tac[]) >>
   disj2_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (BETA_RULE bodyFullAbiDecodeFiniteGuardEffectTheory.abi_decode_scalar_guard_success_joint_effect) >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `(!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (OK u)) /\

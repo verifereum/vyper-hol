@@ -44,7 +44,8 @@ Theorem ecrecover_args_suffix_full:
         ghost_inv_at (DF H) lo d cenv cx mid G tn t /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
         EVERY (\x. op_taint tn x = {}) xs)
-      (\H rr mid gt r. wb_args_exit rr r /\ halt_exit H cx mid rr r)
+      (\H rr mid gt r. wb_args_exit rr r /\ halt_exit H cx mid rr r /\
+        (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   rpt gen_tac >> strip_tac >>
   irule lower_word_args_sim_full >> simp[] >> rpt conj_tac

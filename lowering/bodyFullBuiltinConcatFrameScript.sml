@@ -4,6 +4,7 @@ Ancestors
   bodyFullBuiltinConcatAdd bodyFullBuiltinConcatZero loweringShapeDefs fragGasOriginPtrLoop
   assignTuplePtrLocalBytesCopy
   bodyFullAllocaFresh bodyFullGhostFrame bodyFullUnwrapRun
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyPtrBytestringBuiltinsWindowGhost exprSimConcatResult
   wordArgsPtr fragGasSeqPtr fragExec instSeqPtrLo
   loweringHalt emitHelperProps exprLoweringProps venomMemProps finite_map pred_set
@@ -18,7 +19,9 @@ Theorem concat_prefix_full:
   emit_void MSTORE [ob.buf_operand; Lit 0w] s3 = (u,s4) /\
   fn_has_code sa s4 func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ 32 <= bsz /\ bsz < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\
   alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   return_buf_frame d cenv sa s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -117,7 +120,9 @@ Resume concat_prefix_full[allocated]:
     (qpat_assum `t2 with <|vs_vars := _; vs_inst_idx := _|> = t1`
       (mp_tac o Q.AP_TERM `\z:venom_state. z.vs_alloca_next`) >> simp[]) >>
   `64 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t2` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t2` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx es t2`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all (Q.INST [`n` |-> `64`] (INST_TYPE
     [``:'a`` |-> ``:256``, ``:'b`` |-> ``:256``]
     alloc_buffer_origin_ptr_path)) >>
@@ -154,7 +159,9 @@ Resume concat_prefix_full[zero]:
       vs_alloca_next := _; vs_inst_idx := _|> = t2`
       (mp_tac o Q.AP_TERM `\z:venom_state. z.vs_halted`) >> simp[]) >>
   `emit_void MSTORE [Var oq; Lit 0w] s3 = (u,s4)` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t3` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t3` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx es t3`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all concat_offset_zero_full >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -391,7 +398,7 @@ Theorem concat_suffix_full:
   emit_op MLOAD [Var ov] sa = (fo,sm) /\
   emit_void MSTORE [Var bv;fo] sm = (u,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
   not_fresh_at sa ov /\ not_fresh_at sa bv /\
   lookup_var ov s = SOME ow /\ lookup_var bv s = SOME (n2w B) /\
   ptr_covers G tn ov s 32 /\ ptr_covers G tn bv s bsz /\
@@ -436,7 +443,9 @@ Proof
   `fo = Var (STRING #"%" (toString sa.cs_next_var))` by simp[] >>
   qpat_x_assum `fo = _` SUBST_ALL_TAC >>
   qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all assignTuplePtrLocalBytesCopyTheory.mload_clean_seq_ptr >>
   disch_then (qspecl_then [`ARB`, `func`, `PG`, `sa.cs_next_id`, `out`] strip_assume_tac) >>
   rename1 `inst_seq_ptr ARB 0 ctx func PG G tn _ s Gf tnf` >>
@@ -465,13 +474,19 @@ Proof
       bodyPtrDefsTheory.ptr_covers_def, venomStateTheory.update_var_def,
       finite_mapTheory.FLOOKUP_UPDATE] >>
      gvs[venomStateTheory.lookup_var_def]) >>
-  drule_all wordLoadStorePtrTheory.ifexp_copy_store_phase >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ss` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     qpat_assum `sf = update_var _ _ s`
+       (fn eq => simp[NoAsms,Abbr `ss`,eq,ptrDisciplineTheory.allocas_below_fmp_def,
+                      venomStateTheory.update_var_def]) >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  drule_all wordLoadStorePtrTheory.mstore_seq_ptr >>
   disch_then (qspecl_then [`sa.cs_next_id+1`, `func`, `PG`, `ARB`] strip_assume_tac) >>
   `B < dimword (:256)` by decide_tac >>
   `w2n (n2w B : bytes32) = B` by simp[] >>
   `!D. inst_seq_ptr D 0 ctx func PG Gf tnf
       [mk_inst (sa.cs_next_id+1) MSTORE [Var bv;Var out] []] ss Gf tn'` by
-    (gen_tac >> drule_all wordLoadStorePtrTheory.ifexp_copy_store_phase >>
+    (gen_tac >> drule_all wordLoadStorePtrTheory.mstore_seq_ptr >>
      disch_then (qspecl_then [`sa.cs_next_id+1`, `func`, `PG`, `D`] strip_assume_tac) >>
      gvs[inst_seq_ptr_def]) >>
   `!D. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s Gf tn'` by

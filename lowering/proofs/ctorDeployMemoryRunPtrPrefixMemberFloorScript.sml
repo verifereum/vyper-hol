@@ -18,7 +18,7 @@ Theorem prefix_member_setup_pair_floor:
   abi_decoder_operand_live st.cs_next_var (Var dst) /\
   middle.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lo <= s.vs_alloca_next /\
   run_inst_seq (emitted_insts st middle) s = OK t /\
   fn_has_code st middle fn /\ s.vs_current_bb = st.cs_current_bb /\

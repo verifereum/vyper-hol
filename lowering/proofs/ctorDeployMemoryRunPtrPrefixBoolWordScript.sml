@@ -305,7 +305,7 @@ QED
 
 Theorem prefix_boolword_dload_continuation:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst iid DLOAD [src] [x]) ==>
   let i = mk_inst iid DLOAD [src] [x];
       w = word_of_bytes T (0w:bytes32)
@@ -334,7 +334,7 @@ Theorem prefix_boolword_mstore_continuation:
   eval_operand (Var dst) s = SOME a /\ eval_operand value s = SOME w /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n a /\ w2n a + 32 <= b+sz /\
   op_taint tn (Var dst) = {} /\ op_taint tn value = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst iid MSTORE [Var dst;value] []) ==>
   let i = mk_inst iid MSTORE [Var dst;value] [];
       t = mstore (w2n a) w s
@@ -562,7 +562,9 @@ Proof
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   qpat_assum `Abbrev (w = _)` (assume_tac o GSYM o SRULE [markerTheory.Abbrev_def]) >>
   qpat_assum `Abbrev (l = _)` (assume_tac o GSYM o SRULE [markerTheory.Abbrev_def]) >>
-  strip_tac >> drule_all prefix_boolword_dload_continuation >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all prefix_boolword_dload_continuation >>
   simp[LET_THM, arithmeticTheory.ADD1] >> disch_then irule >>
   qabbrev_tac `q0 = step_taint (mk_inst iid DLOAD [src] [x]) s l tn` >>
   qabbrev_tac `l1 = l with vs_inst_idx := s.vs_inst_idx+1` >>
@@ -606,6 +608,7 @@ Proof
      gvs[Abbr `t`, Abbr `r`, Abbr `l`, update_var_def,
          eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, allocas_from_def] >>
      metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t4` by simp[] >>
   drule_all prefix_boolword_mstore_continuation >>
   simp[LET_THM] >> disch_then irule >>
   simp[Abbr `t4`, instIdxIndepTheory.update_var_idx, instIdxIndepTheory.mstore_idx, Abbr `u`, arithmeticTheory.ADD1]

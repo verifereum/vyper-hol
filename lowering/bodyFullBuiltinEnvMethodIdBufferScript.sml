@@ -3,6 +3,7 @@ Theory bodyFullBuiltinEnvMethodIdBuffer
 Ancestors bodyMemoryDefs[qualified,ignore_grammar]
   exprSimHash bodyFullLiteralBuffer bodyFullGhostFrame bodyFullUnwrapSlotPost
   exprSimPtrLiteralBuffer exprSimLiteralBuffer exprSimPtrLiteralOps
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   allocationPtr wordLoadStorePtr ptrSafetyTransport ptrDiscipline bodyPtrDefs
   fragGasSeqPtr instSeqPtrLo ghostPcTransportPtr exprLoweringProps vyperStorageFootprint
   builtinHashing context emitHelper exprSimProps loweringPosts
@@ -76,7 +77,9 @@ Theorem method_id_output_buffer_full_run:
   local_ptrs_reserved cenv sa /\ storage_trace_domain cx st0 es.storage_trace /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s) /\
-  op_taint tn value = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn value = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   ~s.vs_halted /\ alloca_history func s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -287,6 +290,16 @@ Resume method_id_output_buffer_full_run[clean_taint]:
 QED
 
 Resume method_id_output_buffer_full_run[pointer_sequence]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `stmt_state_rel (storage_trace_horizon _) ctx func cenv cx es u`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  `!k. (ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := k)) /\
+       (ctx_has_dalloca ctx ==> allocas_below_fmp (uh with vs_inst_idx := k)) /\
+       (ctx_has_dalloca ctx ==> allocas_below_fmp (ud with vs_inst_idx := k))` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+     simp[NoAsms, Abbr `ud`, Abbr `uh`, mstore_def, update_var_def, allocas_below_fmp_def] >>
+     tautLib.TAUT_TAC) >>
   `!D. inst_seq_ptr D 0 ctx func PG G tn
       [mk_inst sa.cs_next_id ALLOCA [Lit 64w] [q];
        mk_inst sm.cs_next_id MSTORE [Var q; Lit 4w] [];

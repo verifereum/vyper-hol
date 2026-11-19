@@ -67,7 +67,9 @@ Theorem abi_decode_scalar_guard_success_joint:
        lookup_var x u = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
        op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >> mp_tac abi_decode_scalar_guard_success_joint_effect >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  mp_tac abi_decode_scalar_guard_success_joint_effect >>
   (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choose_then `u` (qx_choose_then `Gf`
     (qx_choose_then `tnf` strip_assume_tac))) >>

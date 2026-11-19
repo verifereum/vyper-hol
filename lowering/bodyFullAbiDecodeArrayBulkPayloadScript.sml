@@ -254,6 +254,7 @@ Proof
     op_prov G op = NONE /\ op_taint tn op = {}` by
     (simp[] >> rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
   `allocas_from lo s` by metis_tac[ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (Q.INST [
     `A` |-> `cnt INSERT src INSERT {op | ?w. op = Lit w}`,
     `B` |-> `data INSERT copy_sz INSERT cnt INSERT src INSERT {op | ?w. op = Lit w}`]
