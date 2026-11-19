@@ -371,7 +371,7 @@ QED
 Theorem intcall_args_read_place_scope_action[local]:
   (!id path. p <> MemoryPlace id path) ==>
   !cx s scopes. read_place cx p (s with scopes := scopes) =
-    (let (res,t) = read_place cx p s in (res,t with scopes := scopes))
+    (FST (read_place cx p s),SND (read_place cx p s) with scopes := scopes)
 Proof
   Cases_on `p` >> simp[read_place_def]
   >- simp[vyperLookupStorageScopesTheory.read_storage_slot_scopes,
@@ -915,10 +915,10 @@ Resume intcall_args_defaults_scope_mutual_from_actions[place_rest]:
 QED
 Finalise intcall_args_defaults_scope_mutual_from_actions
 
-Theorem intcall_args_defaults_scope_action:
+Theorem intcall_args_defaults_scope_action[local]:
   supported_pure_exprs tops ds /\ well_typed_exprs (defaults_env tenv) ds ==>
   !cx s scopes. eval_exprs cx ds (s with scopes := scopes) =
-    (let (res,t) = eval_exprs cx ds s in (res,t with scopes := scopes))
+    (FST (eval_exprs cx ds s),SND (eval_exprs cx ds s) with scopes := scopes)
 Proof
   strip_tac >> mp_tac (cj 2 intcall_args_defaults_scope_mutual_from_actions) >>
   simp[intcall_args_conditional_result_scope_action,
@@ -931,8 +931,7 @@ Proof
     metis_tac[intcall_args_select_result_nonlocal])) >>
   disch_then (qspecl_then [`tops`,`ds`] mp_tac) >> simp[] >> strip_tac >>
   qpat_x_assum `!tenv. well_typed_exprs _ _ ==> _`
-    (drule_all_then assume_tac) >>
-  rpt gen_tac >> pairarg_tac >> gvs[]
+    (drule_all_then ACCEPT_TAC)
 QED
 
 (* Lock acquisition precedes push_function.  Only its successful endpoint
@@ -1545,41 +1544,6 @@ Proof
        (qspecl_then [`aid`, `off`, `sz`, `i`] mp_tac) >>
      simp[] >> disch_then irule >> rpt strip_tac >> metis_tac[]) >>
   metis_tac[]
-QED
-
-Theorem intcall_args_parameter_allocation_bounds[local]:
-  body_inv tops ctx cenv cx /\
-  MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops ==>
-  EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) (MAP SND args)
-Proof
-  rpt strip_tac >>
-  `MEM (subst_consts_fn (module_consts_env tops [])
-      (mut,nr,rr,name,args,[],ret,ss))
-      (FST (SND (classify_functions tops)))` by
-    (simp[constSubstTheory.subst_consts_fn_def,
-          loweringShapePropsTheory.MEM_classify_internal] >>
-     qexistsl_tac [`[]`,`ss`] >> simp[]) >>
-  qpat_x_assum `body_inv _ _ _ _` mp_tac >>
-  simp[bodySimTheory.body_inv_def] >> strip_tac >>
-  Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,rest)` >>
-  PairCases_on `rest` >>
-  `fn_allocs_ok tops (subst_consts_fn (module_consts_env tops [])
-      (mut,nr,rr,name,args,[],ret,ss))` by
-    (Cases_on `cx.in_deploy`
-     >- (gvs[] >> irule compileVyperTheory.lower_vyper_deploy_unit_allocs_ok >>
-         metis_tac[]) >>
-     gvs[] >> irule compileVyperTheory.lower_vyper_runtime_unit_allocs_ok >>
-     metis_tac[]) >>
-  qpat_x_assum `fn_allocs_ok _ _` mp_tac >>
-  simp[constSubstTheory.subst_consts_fn_def, compileVyperTheory.fn_allocs_ok_def] >>
-  strip_tac >>
-  `type_memory_bytes
-     (build_compile_env tops Internal mut name args ret
-       (subst_consts_stmts (module_consts_env tops []) ss) F) =
-     type_memory_bytes cenv` by
-    (irule compileEnvTheory.type_memory_bytes_frame >>
-     simp[compileVyperTheory.build_compile_env_ce_struct_fields]) >>
-  gvs[EVERY_MAP, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
 QED
 
 Theorem intcall_args_read_result_prefix[local]:

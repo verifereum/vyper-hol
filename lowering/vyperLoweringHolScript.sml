@@ -95,7 +95,8 @@ Ancestors
   (* providers awaiting their consumers *)
   bodyPtrTypeBuiltinsBytesUintSemantics
   internalReturnMemoryMem bodyFullIntCallByteFrame
-  bodyFullIntCall bodyFullIntCallCallee[qualified,ignore_grammar] compileExprAllocaFresh
+  bodyFullIntCall bodyFullIntCallCallee[qualified,ignore_grammar]
+  bodyFullIntCallArgs[qualified,ignore_grammar] compileExprAllocaFresh
   sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
   o1LabelFlowOwnSecondSsa
   assignBasePtrStoragePath assignTuplePtrBytesCopy
