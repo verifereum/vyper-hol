@@ -298,8 +298,9 @@ Libs
 
 (* expr_sim_pre without int_calls_expr e = []: the body simulation's
    (bodySim), where an operand may call an internal function.  Each of its
-   calls is to a supported internal function (supported_function_decl) of
-   the main module, a supported program, as supported_expr's are. *)
+   calls is to a supported internal function of the main module
+   (supported_function_decl, which supported_expr checks too), and the main
+   module is a supported program. *)
 
 (* A call-free expression is described at its annotation. *)
 Theorem post_value_type_no_calls[simp]:
