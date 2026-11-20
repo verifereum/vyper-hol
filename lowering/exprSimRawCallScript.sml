@@ -1087,6 +1087,8 @@ Proof
   simp[raw_call_finish_view_def, jump_to_def]
 QED
 
+(* raw_call_success_run without fresh_vars_wrt: s may hold temporaries of
+   any age, and operands not fresh at sa keep their values. *)
 Theorem raw_call_success_run_aged:
   (do len <- emit_op RETURNDATASIZE [];
       cmp <- emit_op LT [len;Lit (n2w cap)];
