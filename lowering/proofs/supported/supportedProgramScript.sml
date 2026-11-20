@@ -7,26 +7,6 @@ Ancestors
   supportedStmts supportedStmtTraverse supportedExprTraverse supportedNames
   supportedDecls supportedTypes supportedExprs constSubst vyperAST list alist
 
-(* Return lowering copies using the declared return layout. Equal nested
-   aggregate layouts are admitted; differing aggregate subtype layouts still
-   require the independent #560 repair. *)
-Definition supported_return_layout_def:
-  supported_return_layout ret (Return (SOME e)) =
-    supported_copy_types ret (expr_type e) /\
-  supported_return_layout ret (If c yes no) =
-    (supported_return_layouts ret yes /\ supported_return_layouts ret no) /\
-  supported_return_layout ret (For name ty iter n loop_body) =
-    supported_return_layouts ret loop_body /\
-  supported_return_layout ret stmt = T /\
-  supported_return_layouts ret [] = T /\
-  supported_return_layouts ret (s::ss) =
-    (supported_return_layout ret s /\ supported_return_layouts ret ss)
-Termination
-  WF_REL_TAC `measure (\x. case x of
-    INL (_,s) => stmt_size s | INR (_,ss) => list_size stmt_size ss)` >>
-  simp[stmt_size_def, list_size_def]
-End
-
 Definition supported_function_body_def:
   supported_function_body tops vis args body <=>
     let locals = supported_stmts_bindings T body;
