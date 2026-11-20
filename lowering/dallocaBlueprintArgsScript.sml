@@ -4,7 +4,7 @@ Ancestors
   emitHelper emitHelperProps compileEnv loweringStateRelDefs loweringPosts
   createMemoryInterface valueEncodingProps vyperTyping vyperValue exprBopSimProps
   vyperTypeExtCallSoundness vyperTypeSystem exprSimHyps
-  exprSimAbiEncodeArgsPhysicalCapacity abiEncodeValuesPhases
+  exprSimAbiEncodeArgsPhysicalCapacity
   venomExecSemantics venomInst venomState list rich_list words finite_map
 
 Theorem create_blueprint_check_operand:
@@ -69,24 +69,6 @@ Proof
   rename1 `BaseT bt` >> Cases_on `bt` >> simp[arg_type_fits_def] >>
   rename1 `BytesT bd` >> Cases_on `bd` >>
   simp[arg_type_fits_def, bytelike_type_bound_def, vyperASTTheory.bound_length_def]
-QED
-
-(* RawCreate writes the ABI suffix at the runtime end of the copied
-   initcode. Both windows are inside the same registered allocation. *)
-Theorem raw_create_initcode_prefix_frame:
-  window_phase ctx func st en ids [(b+len,n)] s t /\ alloca_inv s /\
-  FLOOKUP s.vs_allocas owner = SOME (b,cap) /\ owner NOTIN ids /\
-  len + n <= cap ==>
-  FLOOKUP t.vs_allocas owner = SOME (b,cap) /\
-  mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory
-Proof
-  strip_tac >>
-  mp_tac (Q.INST [`q` |-> `b`, `n` |-> `len`, `sz` |-> `cap`,
-    `outs` |-> `[(b+len,n)]`, `tn'` |-> `tn`]
-    abi_encode_values_registered_window) >>
-  impl_tac
-  >- (asm_simp_tac (srw_ss()) [venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  simp[]
 QED
 
 Theorem create_blueprint_raw_args_prefix:
