@@ -6,6 +6,14 @@ Ancestors
 
 Overload asm_refines_both = ``asm_refines RINTER asm_refines_within``
 
+Theorem sym_run_within_for_sym_step:
+  !k ss. sym_run_within P Q p env k ss <=>
+    sym_run_within_for (sym_step p env) P Q p k ss
+Proof
+  Induct >> simp[sym_run_within_def, sym_run_within_for_def] >>
+  gen_tac >> Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> simp[]
+QED
+
 Theorem sym_run_within_mono:
   ∀k k' ss.
     sym_run_within P Q p env k ss ∧ k ≤ k' ⇒ sym_run_within P Q p env k' ss
