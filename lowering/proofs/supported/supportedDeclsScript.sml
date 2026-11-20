@@ -20,13 +20,16 @@ Definition supported_declaration_header_def:
   supported_declaration_header tops top <=>
     case top of
       FunctionDecl vis mut nr rr name args defaults ret body =>
-        (vis <> Internal ==> NULL defaults) /\
+        (* SCRATCH SEQ-8389: External defaults widened; the checker rejects
+           constructor defaults *)
+        (vis = Deploy ==> NULL defaults) /\
         supported_function_return tops vis ret
     | VariableDecl vis Storage name ty (SOME slot) =>
         supported_storage_type tops ty
     | VariableDecl vis Transient name ty (SOME slot) =>
         supported_storage_type tops ty
-    | VariableDecl Private Immutable name ty NONE =>
+    | VariableDecl vis Immutable name ty NONE =>
+        (* SCRATCH SEQ-8389: immutables of any visibility *)
         supported_value_type tops ty
     | VariableDecl vis (Constant e) name ty slot => T
     | HashMapDecl vis transient name kt vt (SOME slot) =>
@@ -78,7 +81,8 @@ End
 Definition supported_immutable_type_def:
   supported_immutable_type tops id =
     case supported_variable_decl tops id of
-      SOME (Private, Immutable, ty, NONE) =>
+      SOME (vis, Immutable, ty, NONE) =>
+        (* SCRATCH SEQ-8389: immutables of any visibility *)
         if supported_value_type tops ty then SOME ty else NONE
     | _ => NONE
 End

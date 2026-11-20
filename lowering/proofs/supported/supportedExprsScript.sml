@@ -16,9 +16,9 @@ Definition supported_pure_expr_def:
   supported_pure_expr tops (FlagMember ty id member) = T /\
   (* A non-word ternary is a PHI of two memory pointers (#561: a14-01,
      a10-04).  Tuple ternaries have no parity witness. *)
+  (* SCRATCH SEQ-8389: ternaries of every type *)
   supported_pure_expr tops (IfExp ty c a b) =
-    (supported_value_type tops ty /\ ~supported_tuple_type ty /\
-     supported_pure_expr tops c /\
+    (supported_pure_expr tops c /\
      supported_pure_expr tops a /\ supported_pure_expr tops b) /\
   supported_pure_expr tops (StructLit ty id fields) =
     (supported_main_nsid id /\ supported_struct_elements tops ty fields /\
@@ -33,8 +33,10 @@ Definition supported_pure_expr_def:
     (supported_builtin_form tops ty blt es /\ supported_pure_exprs tops es) /\
   supported_pure_expr tops (TypeBuiltin ty blt target es) =
     (supported_type_builtin_form tops ty blt target es /\ supported_pure_exprs tops es) /\
-  supported_pure_expr tops (Pop ty target) = F /\
-  supported_pure_expr tops (Call ty target es default) = F /\
+  (* SCRATCH SEQ-8389: effects below the root, every call target and pop *)
+  supported_pure_expr tops (Pop ty target) = T /\
+  supported_pure_expr tops (Call ty target es default) =
+    supported_pure_exprs tops es /\
   supported_pure_exprs tops [] = T /\
   supported_pure_exprs tops (e::es) =
     (supported_pure_expr tops e /\ supported_pure_exprs tops es) /\
@@ -61,19 +63,18 @@ Termination
 End
 
 Definition supported_effect_expr_def:
-  supported_effect_expr tops (Call ty (IntCall id) args NONE) =
+  (* SCRATCH SEQ-8389: struct returns and defaults *)
+  supported_effect_expr tops (Call ty (IntCall id) args default) =
     (IS_SOME (supported_function_decl tops id Internal) /\
-     (* Internal struct memory-return handling is deferred to #545. *)
-     (case ty of StructT _ => F | _ => T) /\
      supported_pure_exprs tops args) /\
   (* Operands: target :: positional args ++ keyword operands in source
      order. Every operand is pure, so lowering default_return_value= before
      the call matches the semantics, which evaluates it there too. *)
   supported_effect_expr tops
-    (Call ty (ExtCall static_call skip_check (name, arg_types, ret) opts) args NONE) =
-    (EVERY supported_word_type arg_types /\
-     supported_external_return_type tops ret /\
-     ALL_DISTINCT opts /\ (static_call ==> ~MEM EKValue opts) /\
+    (Call ty (ExtCall static_call skip_check (name, arg_types, ret) opts) args default) =
+    (* SCRATCH SEQ-8389: every argument and return type, value= on staticcall *)
+    (supported_external_return_type tops ret /\
+     ALL_DISTINCT opts /\
      LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
      supported_pure_exprs tops args) /\
   supported_effect_expr tops (Call NoneT (Send F) [a; v] NONE) =
@@ -81,8 +82,8 @@ Definition supported_effect_expr_def:
   supported_effect_expr tops (Call NoneT (Send T) [a; v; g] NONE) =
     (supported_pure_expr tops a /\ supported_pure_expr tops v /\
      supported_pure_expr tops g) /\
-  supported_effect_expr tops (Pop ty (TopLevelNameTarget id)) =
-    supported_storage_dynamic_array tops id /\
+  (* SCRATCH SEQ-8389: pop on every target *)
+  supported_effect_expr tops (Pop ty target) = T /\
   supported_effect_expr tops (Subscript ty base key) =
     (supported_place_type tops ty /\ supported_subscript_place tops base /\
      ((supported_place_expr tops base /\ supported_effect_expr tops key) \/

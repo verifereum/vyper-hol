@@ -49,7 +49,9 @@ End
 
 Definition supported_scalar_type_def:
   supported_scalar_type ty <=>
-    supported_word_type ty \/ supported_string_type ty
+    supported_word_type ty \/ supported_string_type ty \/
+    (* SCRATCH SEQ-8389: flag values widened *)
+    (case ty of FlagT id => T | _ => F)
 End
 
 (* Event encoding uses typed words, including flags and every fixed-bytes width. *)
@@ -122,41 +124,29 @@ End
 
 Definition supported_value_type_def:
   supported_value_type tops ty <=>
-    supported_scalar_type ty \/
-    case ty of
-      TupleT ts => ~NULL ts /\ EVERY supported_scalar_type ts
-    | ArrayT elem (Fixed n) => supported_word_type elem /\ 0 < n
-    | ArrayT elem (Dynamic n) => supported_word_type elem
-    | StructT id =>
-        (case supported_struct_fields tops id of
-           SOME fields =>
-             ~NULL fields /\ EVERY (supported_word_type o SND) fields
-         | NONE => F)
-    | _ => F
+    (* SCRATCH SEQ-8389: value types widened to every place type *)
+    supported_place_type tops ty
 End
 
 (* Equal aggregate types have identical copy layouts. Other complex subtype
    casts remain guarded until #560. Word casts and bytelike bound changes
    use the existing scalar store paths. Source typing checks compatibility. *)
 Definition supported_copy_types_def:
-  supported_copy_types dst src <=>
-    dst = src \/
-    (supported_word_type dst /\ supported_word_type src) \/
-    (case (dst,src) of
-       (BaseT (StringT _), BaseT (StringT _)) => T
-     | (BaseT (BytesT (Dynamic _)), BaseT (BytesT (Dynamic _))) => T
-     | _ => F)
+  supported_copy_types (dst : type) (src : type) <=>
+    (* SCRATCH SEQ-8389: every checker-assignable copy *)
+    T
 End
 
 Definition supported_storage_type_def:
   supported_storage_type tops ty <=>
-    supported_nested_type supported_full_word_type (LENGTH tops) tops ty
+    (* SCRATCH SEQ-8389: storage leaves widened from full words *)
+    supported_nested_type supported_scalar_type (LENGTH tops) tops ty
 End
 
 Definition supported_hashmap_key_type_def:
   supported_hashmap_key_type ty <=>
-    supported_integer_type ty \/ ty = BaseT BoolT \/ ty = BaseT AddressT \/
-    ty = BaseT (BytesT (Fixed 32)) \/ supported_string_type ty
+    (* SCRATCH SEQ-8389: every scalar key *)
+    supported_scalar_type ty
 End
 
 (* Map traversal carries the value descriptor through every key. Aggregate

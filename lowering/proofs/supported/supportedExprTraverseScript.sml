@@ -94,12 +94,11 @@ End
    from the outcome oracle: a delegate raw_call (eval_raw_call's
    run_raw_call) and the creates (eval_create's run_create_evm). *)
 Definition expr_evm_run_root_def:
-  expr_evm_run_root (Call ty (RawCallTarget flags) es default) =
-    flags.rcf_is_delegate /\
-  expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) =
-    flags.rcf_is_delegate /\
-  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = T /\
-  expr_evm_run_root _ = F
+  (* SCRATCH SEQ-8389: delegate raw_call and creates admitted *)
+  expr_evm_run_root (Call ty (RawCallTarget flags) es default) = F /\
+  expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) = F /\
+  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = F /\
+  expr_evm_run_root (_ : expr) = F
 End
 
 Definition expr_halt_root_def:

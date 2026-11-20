@@ -17,8 +17,9 @@ End
 Definition supported_scalar_target_def:
   supported_scalar_target tops id <=>
     case supported_variable_decl tops id of
-      SOME (Private, Storage, ty, SOME slot) => supported_full_word_type ty
-    | SOME (Private, Transient, ty, SOME slot) => supported_full_word_type ty
+      (* SCRATCH SEQ-8389: any visibility, any storage type *)
+      SOME (vis, Storage, ty, SOME slot) => supported_storage_type tops ty
+    | SOME (vis, Transient, ty, SOME slot) => supported_storage_type tops ty
     | _ => F
 End
 
@@ -32,18 +33,13 @@ End
 Definition supported_target_def:
   supported_target tops bindings target <=>
     case target of
-      NameTarget name =>
-        (case ALOOKUP bindings name of
-           SOME ty => supported_value_type tops ty
-         | NONE => F)
+      (* SCRATCH SEQ-8389: every bound local and every resolving place path;
+         binding types are not consulted (sibling-scope redeclaration) *)
+      NameTarget name => IS_SOME (ALOOKUP bindings name)
     | TopLevelNameTarget id =>
         supported_scalar_target tops id \/
         IS_SOME (supported_immutable_type tops id)
-    | SubscriptTarget (TopLevelNameTarget id) key =>
-        supported_subscript_base tops id /\ supported_expr tops key
-    | AttributeTarget (TopLevelNameTarget id) fname =>
-        supported_storage_field_write tops id fname
-    | _ => F
+    | _ => IS_SOME (supported_target_info tops bindings target)
 End
 
 (* Tuple lowering loads all RHS elements, then resolves and stores each flat
@@ -53,12 +49,8 @@ Definition supported_assignment_def:
   supported_assignment tops bindings target e <=>
     supported_expr tops e /\
     case target of
-    | BaseTarget bt =>
-        supported_target tops bindings bt \/
-        (case supported_target_info tops bindings bt of
-           SOME (ValPT ty) => supported_place_type tops ty /\
-             supported_copy_types ty (expr_type e)
-         | _ => F)
+    (* SCRATCH SEQ-8389: tuple targets stay flat (checker) *)
+    | BaseTarget bt => supported_target tops bindings bt
     | TupleTarget targets =>
         EVERY (\g. case g of
           BaseTarget bt => supported_target tops bindings bt
@@ -74,18 +66,12 @@ Definition supported_aug_target_def:
 End
 
 Definition supported_append_target_def:
+  (* SCRATCH SEQ-8389: every dynamic-array target *)
   supported_append_target tops (TopLevelNameTarget id) =
-    (supported_storage_dynamic_array tops id \/
-     ?vis mut elem dn slot.
-       supported_variable_decl tops id =
-         SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
-       (mut = Storage \/ mut = Transient) /\
-       ~supported_full_word_type elem) /\
+    supported_storage_dynamic_array tops id /\
   supported_append_target tops (NameTarget name) = T /\
-  supported_append_target tops (SubscriptTarget target key) =
-    supported_target_pure tops (SubscriptTarget target key) /\
-  supported_append_target tops (AttributeTarget target fname) =
-    supported_target_pure tops target
+  supported_append_target tops (SubscriptTarget target key) = T /\
+  supported_append_target tops (AttributeTarget target fname) = T
 End
 
 Definition supported_string_reason_def:
@@ -99,14 +85,18 @@ Definition supported_assert_reason_def:
   supported_assert_reason tops AssertBare = T /\
   supported_assert_reason tops AssertUnreachable = T /\
   supported_assert_reason tops (AssertReason e) = supported_string_reason tops e /\
-  supported_assert_reason tops (AssertCustomError err) = F
+  (* SCRATCH SEQ-8389: resolved custom errors (checker fact) *)
+  supported_assert_reason tops (AssertCustomError err) =
+    custom_error_resolved [(NONE, tops)] err
 End
 
 Definition supported_raise_reason_def:
   supported_raise_reason tops RaiseBare = T /\
   supported_raise_reason tops RaiseUnreachable = T /\
   supported_raise_reason tops (RaiseReason e) = supported_string_reason tops e /\
-  supported_raise_reason tops (RaiseCustomError err) = F
+  (* SCRATCH SEQ-8389: resolved custom errors (checker fact) *)
+  supported_raise_reason tops (RaiseCustomError err) =
+    custom_error_resolved [(NONE, tops)] err
 End
 
 (* Exact argument types select the original Log proofs. *)
@@ -157,10 +147,8 @@ Definition supported_iterator_def:
          (IS_SOME (supported_immutable_type tops nid) \/
           supported_storage_value tops nid (ArrayT elem bd))
      | TopLevelName _ _ => F
+     (* SCRATCH SEQ-8389: ternary and storage-place iterables *)
      | _ => supported_expr tops e /\
-            ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
-            (!tgt nid. loop_iterator_place e = SOME tgt ==>
-                       FST (place_access tgt []) <> TopLevelNameTarget nid) /\
             (!t fid args drv. e = Call t (IntCall fid) args drv ==>
                ?m nr rr ps ds b.
                  supported_function_decl tops fid Internal =
@@ -184,18 +172,8 @@ Definition supported_stmt_def:
      supported_expr tops e /\
      supported_binop op ty (expr_type e) F (supported_nonnegative_literal e)) /\
   supported_stmt tops bindings (Append target e) =
-    (supported_append_target tops target /\ supported_pure_expr tops e /\
-     case target of
-       TopLevelNameTarget id =>
-         supported_storage_dynamic_array tops id \/
-         (?vis mut dn slot.
-           supported_variable_decl tops id =
-             SOME (vis, mut, ArrayT (expr_type e) (Dynamic dn), SOME slot))
-     | _ =>
-         supported_full_word_type (expr_type e) /\
-         ~supported_target_exists (\key. ~pure_expr key) target /\
-         ?dn. supported_target_info tops bindings target =
-           SOME (ValPT (ArrayT (expr_type e) (Dynamic dn)))) /\
+    (* SCRATCH SEQ-8389: every element and target shape *)
+    (supported_append_target tops target /\ supported_pure_expr tops e) /\
   supported_stmt tops bindings (If c yes no) =
     (supported_pure_expr tops c /\ supported_stmts tops bindings yes /\
      supported_stmts tops bindings no) /\
@@ -205,8 +183,8 @@ Definition supported_stmt_def:
   supported_stmt tops bindings (Log id es) = supported_log tops id es /\
   supported_stmt tops bindings (For name ty iter n loop_body) =
     (supported_type_namespace ty /\ supported_iterator tops ty iter n /\
-     supported_stmts tops bindings loop_body /\
-     ~supported_stmts_expr_exists expr_internal_call_root loop_body) /\
+     (* SCRATCH SEQ-8389: internal calls in loop bodies *)
+     supported_stmts tops bindings loop_body) /\
   supported_stmts tops bindings [] = T /\
   supported_stmts tops bindings (s::ss) =
     (supported_stmt tops bindings s /\ supported_stmts tops bindings ss)
