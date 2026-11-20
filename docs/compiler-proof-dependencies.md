@@ -30,8 +30,13 @@ and exact bytecode equality are not semantic stage correctness.
 
 ## Exact O1 runtime dependency graph
 
+This is the Milestone 1 graph, for the identity finalizer `K SOME`. Today's
+`vyper_call_correct` has eight public premises (table below); its proof cases
+on calldata dispatch and then on the finalizer (`vyper_call_correct_guarded`,
+`vyper_call_correct_dispatched`).
+
 ```text
-compile_vyper fin succeeds (fin IN accepted_finalizers)
+compile_vyper (K SOME) succeeds
   -> L1 actual rpolicy/raw unit/O1 out/assembly prog/plan cp
        runtime_bc = assemble prog (actual data segment/code-end header)
 
@@ -46,7 +51,7 @@ non-exempt branch:
   S7, using SAME Inv -> frame-aware EVM correspondence/resource alternatives
 
 clean generic e2e_vyper_to_evm (explicit stage premises, zero admission leaves)
-  -> vyper_call_correct (eight public premises; inherits exactly S1-S7)
+  -> vyper_call_correct (seven public premises at Milestone 1; inherits exactly S1-S7)
 exempt branch: actual total run + exact decoder exemption, not invented safety
 ```
 
@@ -64,7 +69,7 @@ preserves its historical schema.
 
 | Hypothesis | Class | Current producer / absence |
 |---|---|---|
-| `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 extracts raw phases and exact assembled runtime bytes. No universal success producer. |
+| `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 (`compile_vyper_runtime_phases`, `K SOME`) or `compile_vyper_runtime_phases_asm_opt` extracts raw phases and the exact assembled runtime bytes (`assemble prog'` of the optimized `prog'` for `asm_opt_finalizer`). No universal success producer. |
 | `supported_program tops` | computational boundary | Plain EVAL on concrete `tops`; exact whitelist on `tops` alone. No universal membership, typing or semantic correctness producer. |
 | `source_typing_ok tops am tx` | boundary + environmental | Checker artifact; partial `load_contract_establishes_checked_contract_runtime_ready`, `load_contract_establishes_machine_well_typed`, `checked_call_external_preserves_machine_well_typed`. No complete arbitrary-environment producer. |
 | `storage_ok H am tx`, `call_within H tops am tx es` | environmental storage horizon | The caller fixes the regions `H`. When calldata dispatch selects a function and the frame is not resource-starved, `call_result_rel H` gives `storage_ok H` again after the call. No producer of `call_within`, and no deployment/transaction producer of `storage_ok`. |
@@ -111,8 +116,8 @@ Pipeline result transport is success-observable preserving, forward and
 terminating; failed-run return bytes/general abort kind/requests may differ.
 Generated plan layout does not prove spill safety. Empty entry memory does not
 prove raw memory validity. Return-address uses and labels are constrained by
-output shape. Source gas observations in the result relation
-remain existential and are not tied to EVM readings.
+output shape. The result relation `call_result_rel` ties source gas
+observations to the EVM's readings through `gas_readings_rel`.
 
 ## Clean producers and composition
 
