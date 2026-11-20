@@ -15,7 +15,7 @@ Ancestors
 
 Theorem abi_decode_caller_header_joint:
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
-  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce st /\ origin.cs_next_var <= st.cs_next_var /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\

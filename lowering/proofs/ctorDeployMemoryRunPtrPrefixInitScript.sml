@@ -8,16 +8,16 @@ Ancestors
 
 
 Theorem deploy_prefix_initial_allocations:
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
   vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops
 Proof
-  simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
+  simp[gas_variant_def, opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def,
        init_venom_state_def] >> strip_tac >>
   pop_assum (mp_tac o Q.AP_TERM `\s. (s.vs_allocas, s.vs_alloca_next)`) >> simp[]
 QED
 
 Theorem deploy_prefix_normalized_allocations:
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
   vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops /\
   allocas_from (imm_len tops)
     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)

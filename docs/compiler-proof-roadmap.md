@@ -676,8 +676,8 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    and exactly one fresh nonstatic Code frame with
    `deploy_bc ++ args_bytes`, empty calldata/memory and live transfer (that the
    runtime has no 0xEF prefix is proved, `compile_vyper_runtime_not_ef`).
-   The frame's call trace has fewer than 2⁶⁴ entries. The assembly-optimizer
-   case requires `~program_reads_self_code tops`.
+   The frame's call trace has fewer than 2⁶⁴ entries. Source reads of `self.code`
+   use the creation frame's code, including in the assembly-optimizer case.
    Successful installation returns and deposits `runtime_bc ++ section`
    satisfying `immutables_section_rel`. The result relation compares accounts
    and transient storage at the run's storage horizon, ordered logs and call

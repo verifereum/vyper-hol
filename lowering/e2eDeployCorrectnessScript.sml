@@ -4,6 +4,8 @@
  * owns its own file. *)
 Theory e2eDeployCorrectness
 Ancestors
+  ownSymSrcUnit codegenLabelDisciplined fnPlanPlaceRevertPostamble
+  codegenSymOwnRel
   e2eDeployAtMarks e2eDeployRawFmp e2eDeployDefs ctorDeployDefs
   ctorDeployInitcode ctorDeployEntry ctorDeployShape ctorDeployDefsReach
   deployUnitExecution ctorDeployBodyJoint ctorDeployDead ctorDeployFrame
@@ -84,20 +86,19 @@ Theorem deploy_focus_frame_inputs[local]:
   deploy_phases policy tops (assemble prog, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_state_rel tops (assemble prog') am tx es /\
-  vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
+  vs_out = opt_deploy_entry_state_own prog prog' cplan tops es /\
   deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
   fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
   unit_shape_ok dout.po_unit /\
   run_call es = SOME (r, es') /\ ~creation_resource_starved es r es' ==>
   o1_run_state_ok vs_out /\
-  vs_out.vs_code = assemble prog ++ vs_out.vs_data_section /\
+  vs_out.vs_code = assemble prog' ++ vs_out.vs_data_section /\
   LENGTH vs_out.vs_data_section < dimword (:256) DIV 2 /\
   vs_out.vs_outcomes = MAP SND (call_trace es) /\
-  codegen_asm_entry_rel cplan prog vs_out
+  codegen_asm_entry_rel_reloc (lo_reloc prog prog') cplan prog vs_out
     (entry_asm_state vs_out (shadow_root es)) /\
   asm_frame_rel_tail [] prog' vs_out.vs_data_section (shadow_root es)
-    (entry_asm_state vs_out (shadow_root es) with
-      as_code := assemble prog' ++ vs_out.vs_data_section) (shadow_root es) /\
+    (entry_asm_state vs_out (shadow_root es)) (shadow_root es) /\
   gas_readings (shadow_root es) = gas_readings es /\
   ?sr sg. run_call (shadow_root es) = SOME (sr,sg) /\
           ~frame_resource_starved (shadow_root es) sr sg
@@ -117,30 +118,34 @@ Proof
     (irule shadow_root_frame_obs >> simp[]) >>
   `vs_out.vs_fmp = vs_out.vs_initial_fmp /\
    o1_initial_state_ok vs_out /\ ~vs_out.vs_call_ctx.cc_static /\
-   vs_out.vs_code = assemble prog ++ vs_out.vs_data_section /\
    vs_out.vs_outcomes = MAP SND (call_trace es)` by
-    simp[opt_deploy_entry_state_def, opt_entry_state_def,
+    simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
          entry_venom_state_def, venomStateTheory.init_venom_state_def,
          o1_initial_state_ok_def] >>
+  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`]
+    mp_tac opt_deploy_asm_rels_own >>
+  impl_tac >- simp[] >> strip_tac >>
+  `tx with code := vs_out.vs_code = tx` by
+    metis_tac[deploy_own_txp_identity] >>
+  `deploy_source_ok tops am tx` by fs[] >>
   `code_layout_valid vs_out` by
     (Q.SUBGOAL_THEN
-      `vs_out with <|vs_gas_readings := vs_out.vs_gas_readings;
-          vs_fmp := vs_out.vs_fmp; vs_initial_fmp := vs_out.vs_fmp|> = vs_out`
-      (fn th => ONCE_REWRITE_TAC [GSYM th])
-     >- simp[venomStateTheory.venom_state_component_equality] >>
-     qpat_x_assum `vs_out = _` SUBST_ALL_TAC >>
-     irule deploy_raw_entry_code_layout >> metis_tac[]) >>
+      `code_layout_valid
+          (vs_out with <|vs_gas_readings := []; vs_fmp := 0w;
+                         vs_initial_fmp := 0w|>)` mp_tac
+     >- (qpat_assum `vs_out = _` (fn th => rewrite_tac[th]) >>
+         irule deploy_raw_entry_code_layout >> metis_tac[]) >>
+     simp[code_layout_valid_def]) >>
+  `vs_out.vs_code = assemble prog' ++ vs_out.vs_data_section` by fs[] >>
   `LENGTH vs_out.vs_data_section < dimword (:256) DIV 2` by
-    (`0 < LENGTH (assemble prog)` by (Cases_on `assemble prog` >> fs[]) >>
+    (`0 < LENGTH (assemble prog')` by (Cases_on `assemble prog'` >> fs[]) >>
      qpat_assum `code_layout_valid vs_out`
        (strip_assume_tac o REWRITE_RULE [code_layout_valid_def]) >>
      qpat_assum `LENGTH vs_out.vs_code <= _` mp_tac >>
-     qpat_assum `vs_out.vs_code = assemble prog ++ _`
+     qpat_assum `vs_out.vs_code = assemble prog' ++ _`
        (fn th => REWRITE_TAC [th, listTheory.LENGTH_APPEND]) >>
-     qpat_assum `0 < LENGTH (assemble prog)` mp_tac >>
-     decide_tac) >>
-  simp[o1_run_state_ok_def, asm_frame_rel_tail_nil, gas_readings_def] >>
-  metis_tac[opt_deploy_codegen_asm_entry_rel, opt_deploy_asm_frame_rel]
+     qpat_assum `0 < LENGTH (assemble prog')` mp_tac >> decide_tac) >>
+  fs[o1_run_state_ok_def, asm_frame_rel_tail_nil, gas_readings_def]
 QED
 
 Theorem deploy_gas_link_from_focus[local]:
@@ -154,7 +159,7 @@ Theorem deploy_gas_link_from_focus[local]:
     codegen_assembly rpolicy out.po_unit = SOME prog /\
     fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
     (fin = asm_opt_finalizer ==>
-       label_flow_ok unit.cu_context /\
+       label_flow_own_ok unit.cu_context /\
        (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
                   ~MEM (Label "code_end") inst.inst_operands) /\
        EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
@@ -164,11 +169,11 @@ Theorem deploy_gas_link_from_focus[local]:
                    MEM (Label "runtime_begin") inst.inst_operands) ==>
         EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) /\
        LENGTH vs0.vs_data_section < dimword (:256) DIV 2) /\
-    vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
-    codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
+    vs0.vs_code = assemble prog' ++ vs0.vs_data_section /\
+    codegen_asm_entry_rel_reloc (lo_reloc prog prog') cpl prog vs0
+      (entry_asm_state vs0 es0) /\
     asm_frame_rel_tail [] prog' vs0.vs_data_section es0
-      (entry_asm_state vs0 es0 with
-        as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
+      (entry_asm_state vs0 es0) es0 /\
     unit.cu_context.ctx_entry = SOME nm /\
     lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
     fn_entry_label entryfn = SOME lbl /\
@@ -220,11 +225,10 @@ Theorem deploy_gas_link_from_focus[local]:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs_out fmp r es'.
     fin IN accepted_finalizers /\
     fin rpolicy prog = SOME prog' /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\
-    vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
+    vs_out = opt_deploy_entry_state_own prog prog' cplan tops es /\
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
@@ -281,7 +285,7 @@ Proof
      disch_then (qx_choosel_then [`df`, `shadow_df`] strip_assume_tac) >>
      `df = func` by fs[] >> fs[]) >>
   `fin = asm_opt_finalizer ==>
-     label_flow_ok dunit.cu_context /\
+     label_flow_own_ok dunit.cu_context /\
      (!fn inst. MEM fn dunit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
                 ~MEM (Label "code_end") inst.inst_operands) /\
      EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
@@ -294,9 +298,8 @@ Proof
     (disch_tac >>
      qspecl_then [`policy`, `tops`, `assemble prog`, `runtime_bc`,
                    `rpolicy`, `dunit`, `dout`, `prog`, `cplan`] mp_tac
-       lower_vyper_deploy_unit_sym_src_ok >>
-     impl_tac >-
-       (fs[deploy_source_ok_def] >> metis_tac[deploy_typing_ok_vtype_keys_distinct]) >>
+       lower_vyper_deploy_unit_sym_src_ok_own >>
+     impl_tac >- fs[deploy_source_ok_def] >>
      strip_tac >> asm_rewrite_tac[]) >>
   `unit_alloca_budget dunit.cu_context +
      32 * ctx_dload_count dunit.cu_context <= w2n fmp` by decide_tac >>
@@ -388,12 +391,11 @@ Theorem deploy_pipeline_gas_link:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs_out fmp r es'.
     fin IN accepted_finalizers /\
     fin rpolicy prog = SOME prog' /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\
     LENGTH (call_trace es) < 2 ** 64 /\
-    vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
+    vs_out = opt_deploy_entry_state_own prog prog' cplan tops es /\
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
@@ -431,7 +433,7 @@ Proof
   mp_tac deploy_gas_link_from_focus >>
   impl_tac
   >- (rpt gen_tac >>
-      disch_then (ACCEPT_TAC o MATCH_MP focus_producer_finalizer)) >>
+      disch_then (ACCEPT_TAC o MATCH_MP focus_producer_finalizer_own)) >>
   disch_then (fn th =>
     rpt gen_tac >> disch_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
     qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
@@ -497,30 +499,28 @@ Proof
         frameOutcomeTheory.frame_resource_starved_def] >> metis_tac[]) >>
   `deploy_bc = assemble prog` by fs[deploy_phases_def] >> gvs[] >>
   `K SOME rpolicy prog = SOME prog` by simp[] >>
-  `tx with code := (opt_deploy_entry_state prog prog cplan tops es).vs_code = tx`
-    by metis_tac[deploy_txp_identity] >>
+  `tx with code := (opt_deploy_entry_state_own prog prog cplan tops es).vs_code = tx`
+    by metis_tac[deploy_own_txp_identity] >>
   drule deploy_raw_fmp_exists >>
   disch_then (qspecl_then [`prog`, `es`] strip_assume_tac) >>
   drule_all deploy_unit_execution_correct_raw_fmp >>
   disch_then (qspec_then `fmp` strip_assume_tac) >>
   qspecl_then [`K SOME`, `policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
                `dout`, `prog`, `prog`, `cplan`, `am`, `tx`, `es`,
-               `opt_deploy_entry_state prog prog cplan tops es`, `fmp`, `r`, `es'`]
+               `opt_deploy_entry_state_own prog prog cplan tops es`, `fmp`, `r`, `es'`]
     mp_tac deploy_pipeline_gas_link >>
   impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
   qspecl_then [`K SOME`, `policy`, `tops`, `assemble prog`, `runtime_bc`,
                `rpolicy`, `dunit`, `dout`, `prog`, `prog`, `cplan`, `am`, `tx`,
-               `tx`, `es`, `opt_deploy_entry_state prog prog cplan tops es`,
+               `tx`, `es`, `opt_deploy_entry_state_own prog prog cplan tops es`,
                `fmp`, `r`, `es'`] mp_tac e2e_deploy_correct_from_gas_link >>
   impl_tac >- gvs[] >> simp[]
 QED
 
-(* The final assembly optimizer's case, under the same hypotheses plus the
-   temporary exclusion of programs that read their own code. *)
+(* The assembly optimizer case uses the installed code and relocated labels. *)
 Theorem e2e_deploy_correctness_asm_opt:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
-    ~program_reads_self_code tops /\
     supported_program tops /\ supported_program_deploy tops /\
     deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
@@ -540,14 +540,15 @@ Proof
   Cases_on `creation_resource_starved es r es'` >> simp[] >>
   `deploy_state_rel tops (assemble prog') am tx es` by fs[] >>
   `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
-  drule_all deploy_source_ok_opt_code >> strip_tac >>
   drule deploy_raw_fmp_exists >>
   disch_then (qspecl_then [`prog'`, `es`] strip_assume_tac) >>
   qspecl_then [`asm_opt_finalizer`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
     `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `fmp`] mp_tac
     deploy_unit_execution_correct_raw_fmp >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  qabbrev_tac `vs_out = opt_deploy_entry_state prog prog' cplan tops es` >>
+  qabbrev_tac `vs_out = opt_deploy_entry_state_own prog prog' cplan tops es` >>
+  `tx with code := vs_out.vs_code = tx` by
+    (simp[Abbr `vs_out`] >> metis_tac[deploy_own_txp_identity]) >>
   qspecl_then [`asm_opt_finalizer`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
     `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `vs_out`, `fmp`,
     `r`, `es'`] mp_tac deploy_pipeline_gas_link >>
@@ -560,16 +561,14 @@ Proof
     e2e_deploy_correct_from_gas_link >>
   impl_tac >- (asm_simp_tac bool_ss [Abbr `vs_out`] >>
                 qpat_assum `~(?t. runtime_bc = _::t)` mp_tac >> simp[]) >>
-  asm_simp_tac bool_ss [deploy_call_result_rel_code_update]
+  asm_simp_tac bool_ss []
 QED
 
 (* TOP-LEVEL: one theorem over the accepted finalizers (Python's -O none and
-   O1 final assembly).  The optimizer's case excludes, for now, programs that
-   read their own code. *)
+   O1 final assembly). *)
 Theorem e2e_deploy_correctness:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ supported_program_deploy tops /\
     deploy_typing_ok tops am tx /\
@@ -585,8 +584,7 @@ Proof
   `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
   pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
   >- (drule_all e2e_deploy_correctness_identity >> simp[])
-  >> `~program_reads_self_code tops` by fs[] >>
-  drule_all e2e_deploy_correctness_asm_opt >> simp[]
+  >> drule_all e2e_deploy_correctness_asm_opt >> simp[]
 QED
 
 (* Typed kernel schema gate. This is an ML check, not a proved alias, and adds
@@ -600,7 +598,6 @@ val _ =
   let
     val expected = ``!fin policy tops deploy_bc runtime_bc am tx es.
       fin IN accepted_finalizers /\
-      (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
       compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc) /\
       supported_program tops /\ supported_program_deploy tops /\
       deploy_typing_ok tops am tx /\

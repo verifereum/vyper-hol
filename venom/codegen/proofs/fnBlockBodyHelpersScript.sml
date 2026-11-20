@@ -183,6 +183,7 @@ Resume body_dfs_calls_alloc_bounded[branch]:
   rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
   qpat_x_assum `generate_succs_plan _ _ _ _ _ _ (_::_) _ _ = _` mp_tac >>
   simp[Once generate_fn_plan_aux_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  imp_res_tac (cj 1 fn_plan_aux_alloc_mono) >>
   imp_res_tac (cj 2 fn_plan_aux_alloc_mono) >> gvs[]
 QED
 

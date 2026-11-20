@@ -36,19 +36,6 @@ Proof
        venomStateTheory.lookup_var_def]
 QED
 
-Theorem materialize_expr_post_returndata[local]:
-  expr_post H ctx func ce cx e es sa sb s0 es' v op
-    (s with vs_returndata := rd) <=>
-  expr_post H ctx func ce cx e es sa sb s0 es' v op s
-Proof
-  Cases_on `op` >>
-  simp[expr_post_def, hash_returndata_state_rel,
-       expr_val_rel_def, expr_val_at_def, expr_val_own_def,
-       locals_kept_def, popped_kept_def, local_region_def,
-       loweringPostsTheory.pure_frame_def,
-       venomStateTheory.lookup_var_def, venomStateTheory.eval_operand_def]
-QED
-
 (* A straight fragment's end state is its instruction run's result, so a
    family of per-horizon fragment facts shares one endpoint. *)
 Theorem materialize_straight_zero_path_horizons[local]:
@@ -156,24 +143,6 @@ Proof
   drule_all materialize_unwrap_owned_straight_path >> simp[]
 QED
 
-Theorem materialize_unwrap_word_region[local]:
-  unwrap_value ce (LocatedValue ty psrc) sm = (op,su) /\
-  is_word_type ty /\ psrc.ptr_location <> LocCode /\
-  (!l. psrc.ptr_operand <> Label l) ==>
-  cs_extends sm su /\ frag_gas_free sm su
-Proof
-  Cases_on `psrc.ptr_location` >>
-  simp[exprLoweringTheory.unwrap_value_def, contextTheory.compile_ptr_load_def,
-       emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
-       comp_bind_def, comp_return_def] >> rpt strip_tac >>
-  gvs[emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
-      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  simp[cs_extends_def, frag_gas_free_def, frag_code_def,
-       fragExecTheory.emitted_blocks_def, exprLoweringPropsTheory.emitted_insts_def,
-       rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0,
-       venomInstTheory.mk_inst_def, rich_listTheory.IS_PREFIX_APPEND]
-QED
-
 Theorem materialize_straight_zero_path[local]:
   frag_exec ctx sm su P Q (\r. F) /\
   dec_straight sm su /\
@@ -196,23 +165,6 @@ Proof
   drule_all hash_run_path >>
   disch_then (qspec_then `ctx` mp_tac) >> simp[] >> strip_tac >>
   qexists_tac `u with vs_inst_idx := LENGTH su.cs_current_insts` >> simp[]
-QED
-
-Theorem materialize_unwrap_word_straight[local]:
-  unwrap_value ce (LocatedValue ty src) sm = (op,su) /\
-  is_word_type ty /\ src.ptr_location <> LocCode ==>
-  dec_straight sm su /\
-  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sm su)
-Proof
-  Cases_on `src.ptr_location` >>
-  simp[exprLoweringTheory.unwrap_value_def, contextTheory.compile_ptr_load_def,
-       emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
-       comp_bind_def, comp_return_def] >> rpt strip_tac >>
-  gvs[emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
-      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  simp[dec_straight_def, inst_extends_def, exprLoweringPropsTheory.emitted_insts_def,
-       rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0,
-       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
 QED
 
 Theorem materialize_captured_post_copy_ok:

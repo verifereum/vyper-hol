@@ -3,7 +3,8 @@ Theory deployEntryLayout
 Ancestors
   e2eEntry e2eProducers asmDataSuffixProps codegen asmIR symbolResolve
   compileVyper vyperCompiler o1PipelineCorrect venomPipelineData
-  finite_map list
+  finite_map list ctorDeployDefs o1PassContract fnPlanPlaceRevertPostamble
+  ctorDeployLoweringDefs
 
 Theorem data_header_fold_present[local]:
   !prog pc labels lbl.
@@ -105,4 +106,32 @@ Proof
   drule lower_vyper_deploy_unit_runtime_section >> strip_tac >>
   drule_all deploy_o1_data_bytes_section >> strip_tac >>
   drule_all generated_entry_data_label >> simp[]
+QED
+
+Theorem deploy_phases_runtime_label:
+  deploy_phases policy tops (deploy_bc,runtime_bc)
+    (rpolicy,unit,out,prog,cplan) ==>
+  IS_SOME (FLOOKUP (lo_reloc prog prog) "runtime_begin")
+Proof
+  simp[deploy_phases_def] >> strip_tac >>
+  drule_all lower_vyper_deploy_unit_entry_runtime_label >>
+  disch_then (qspecl_then [`[]`, `cplan`, `ARB`] mp_tac) >>
+  PURE_REWRITE_TAC [entry_venom_state_frame_fields, data_suffix_label_offsets,
+                    lo_reloc_refl, FLOOKUP_o_f, optionTheory.IS_SOME_MAP] >>
+  qpat_assum `prog = _` SUBST_ALL_TAC >> simp_tac bool_ss []
+QED
+
+Theorem deploy_entry_runtime_label_own:
+  gas_variant vs
+    (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin") ==>
+  IS_SOME (FLOOKUP vs.vs_labels "runtime_begin")
+Proof
+  strip_tac >>
+  qpat_assum `gas_variant _ _` (mp_tac o PURE_REWRITE_RULE [gas_variant_def]) >>
+  disch_then (mp_tac o Q.AP_TERM `\s. s.vs_labels`) >>
+  simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def] >>
+  disch_then (fn th => rewrite_tac [GSYM th]) >>
+  Cases_on `FLOOKUP (lo_reloc prog prog') "runtime_begin"` >>
+  fs[FLOOKUP_o_f]
 QED

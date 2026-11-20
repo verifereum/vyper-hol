@@ -394,7 +394,11 @@ Proof
   gvs[external_call_result_rel_def, call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM,
       AllCaseEqs()] >>
   FIRST [gvs[venom_frame_rel_def] >> NO_TAC,
-         drule venom_frame_rel_abort_failure >> simp[]]
+         drule venom_frame_rel_abort_failure >> simp[] >> NO_TAC,
+         rename1 `venom_frame_rel es r es' (Abort reason _)` >>
+         Cases_on `reason` >> gvs[unspecified_behaviour_exempt_def] >>
+         drule (SRULE [] (Q.INST [`a` |-> `Revert_abort`, `s` |-> `""`]
+                                venom_frame_rel_assertion)) >> simp[]]
 QED
 
 (* Covers all source constructors; escaped control exceptions have no row.

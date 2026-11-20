@@ -123,13 +123,13 @@ Proof
 QED
 
 Theorem deploy_ctor_prefix_fail_run_ptr_safe:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    exts ints fb cf fn lbl.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     (!marks. ~deploy_source_exempt tops
                (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
                   [(NONE, tops)] [])) /\
@@ -153,14 +153,14 @@ Proof
      strip_tac >> drule_all ctor_prefix_entry_value >> simp[Abbr `s0`]) >>
   `s0.vs_allocas = FEMPTY` by
     (fs[gas_variant_def, Abbr `s0`] >>
-     qpat_x_assum `(deploy_entry_state _ _ _ _ with vs_outcomes := _) = _`
+     qpat_x_assum `(opt_deploy_entry_state_own _ _ _ _ _ with vs_outcomes := _) = _`
        (mp_tac o Q.AP_TERM `\x. x.vs_allocas`) >>
-     simp[deploy_entry_state_def, entry_venom_state_def,
+     simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def,
           init_venom_state_def]) >>
   `allocas_below_fmp s0` by
     (qpat_assum `gas_variant vs _` (mp_tac o REWRITE_RULE [gas_variant_def]) >>
      disch_then (mp_tac o Q.AP_TERM `\st. allocas_below_fmp st`) >>
-     simp[Abbr `s0`, allocas_below_fmp_def, deploy_entry_state_def,
+     simp[Abbr `s0`, allocas_below_fmp_def, opt_deploy_entry_state_own_def, opt_entry_state_own_def,
           entry_venom_state_def, init_venom_state_def]) >>
   `?bb rest j0 j1 j2 v0 v1.
      lookup_block "__deploy" fn.fn_blocks = SOME bb /\
