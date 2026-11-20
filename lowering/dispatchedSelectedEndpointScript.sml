@@ -5,7 +5,8 @@ Ancestors
   dispatchedSelectedPreparation entryPtrSeamRegister
   selectedAcceptedDecoder selectedAcceptedSingleton selectedAcceptedFold
   defaultEntryEndpointAssembly externalEntryChecks fragGasPathFrameMem
-  moduleLoweringProps venomState venomInst list words
+  moduleLoweringProps venomState venomInst list words arithmetic
+  entryReachBodyFmp entryValueRevertPtr decoderOriginAllocationFrame
 
 Theorem dispatched_selected_registration_joint:
   !tops rpolicy unit am tx ret vs mut nr args fbody env es0.
@@ -20,6 +21,9 @@ Theorem dispatched_selected_registration_joint:
       cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) =
       SOME (tx.function_name,tys)) /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
       SOME (mut, nr, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -47,7 +51,6 @@ Theorem dispatched_selected_registration_joint:
       fn_entry_label efn = SOME "__entry" /\
       (?bb. lookup_block "__entry" efn.fn_blocks = SOME bb /\
         phi_prefix_length bb.bb_instructions = 0) /\
-      ~ctx_has_dalloca unit.cu_context /\
       gas_path unit.cu_context efn
         (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                     vs_inst_idx := 0 |>) 0 (OK s0) /\
@@ -110,6 +113,24 @@ Proof
      simp[moduleLoweringTheory.var_location_memory_size_def]) >>
   `compile_register_positional_args cenv0 (build_positional_args cenv0 args) 4 st = (cenv,sa)` by
     metis_tac[] >>
+  `vars_pc_only vs s1` by
+    (irule vars_pc_only_trans >>
+     qexists_tac `vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+     simp[] >> simp[vars_pc_only_def]) >>
+  `allocas_below_fmp s1` by (irule initial_entry_allocas_below_fmp >> metis_tac[]) >>
+  `s1.vs_fmp = vs.vs_fmp /\ s1.vs_initial_fmp = vs.vs_initial_fmp /\
+   vs.vs_fmp = vs.vs_initial_fmp` by
+    fs[vars_pc_only_def, venom_state_component_equality,
+       vyperLoweringCorrectTheory.initial_venom_state_rel_def] >>
+  `fmp_room unit.cu_context efn s1` by
+    (irule entry_frontier_fmp_room >>
+     rpt conj_tac >> TRY (qexists_tac `ARB` >> first_assum ACCEPT_TAC) >> fs[]) >>
+  `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp s1 /\
+    s1.vs_alloca_next + pending_alloca_size efn s1 <= w2n s1.vs_initial_fmp` by
+    (strip_tac >>
+     qpat_assum `fmp_room unit.cu_context efn s1`
+       (mp_tac o REWRITE_RULE [exprLoweringPropsTheory.fmp_room_def]) >>
+     simp[] >> decide_tac) >>
   drule_at (Pat `calldata_decode_args _ _ _ = _`)
     (selected_registration_fold |> SPEC_ALL |> Q.INST
       [`PG` |-> `[]`]) >>
@@ -130,6 +151,13 @@ Proof
     (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
       val_in_memory (EL j tvs) (EL j tx.args) p mem)` by
     suspend "owners" >>
+  `s0.vs_initial_fmp = s1.vs_initial_fmp` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s1,G1,tn1) [] (OK s0,G0,tn0)`
+       (qspecl_then [`ARB`, `ARB`] mp_tac) >>
+     strip_tac >> drule_all decoder_origin_path_allocation_frame >> simp[]) >>
+  `fmp_room unit.cu_context efn s0` by
+    (irule entry_frontier_fmp_room >>
+     rpt conj_tac >> TRY (qexists_tac `ARB` >> first_assum ACCEPT_TAC) >> fs[]) >>
   `tn0.t_stor = {} /\ tn0.t_trans = {} /\ tn0.t_imm = {}` by simp[] >>
   `!H:(bool # 256 word # type_value) list # num list.
     stmt_state_rel H unit.cu_context efn cenv
@@ -219,6 +247,9 @@ Theorem dispatched_entry_endpoint_selected:
       SOME (tx.function_name, tx.args) /\
     tx.function_name <> "__default__" /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
