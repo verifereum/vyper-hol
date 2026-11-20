@@ -9,6 +9,12 @@ Ancestors
 val _ = Parse.hide "tops";
 val _ = Parse.hide "body";
 
+Definition top_body_has_def:
+  top_body_has form (FunctionDecl vis mut nr rr name args dflts ret body) =
+    (supported_stmts_expr_exists form body \/ EXISTS (supported_expr_exists form) dflts) /\
+  top_body_has form _ = F
+End
+
 Definition deploy_dalloca_form_occurs_def:
   deploy_dalloca_form_occurs form tops <=>
     IS_SOME (SND (SND (SND (classify_functions tops)))) /\
@@ -19,6 +25,7 @@ Definition deploy_dalloca_form_occurs_def:
        EXISTS (supported_expr_exists form) dflts)
 End
 
+(* GATE_ADMISSION: held, deployment DALLOCA peak memory for raw call calldata *)
 Theorem lower_vyper_deploy_unit_raw_fmp_raw_call_calldata:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan
    am tx es vs vi (fmp:bytes32).
@@ -52,10 +59,10 @@ Theorem lower_vyper_deploy_unit_raw_fmp_raw_call_calldata:
       (inst.inst_opcode = DALLOCA ==>
         w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
 Proof
-  (* GATE_ADMISSION: held, deployment DALLOCA peak memory for raw call calldata *)
   cheat
 QED
 
+(* GATE_ADMISSION: held, deployment DALLOCA peak memory for create copy *)
 Theorem lower_vyper_deploy_unit_raw_fmp_create_copy:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan
    am tx es vs vi (fmp:bytes32).
@@ -87,10 +94,10 @@ Theorem lower_vyper_deploy_unit_raw_fmp_create_copy:
       (inst.inst_opcode = DALLOCA ==>
         w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
 Proof
-  (* GATE_ADMISSION: held, deployment DALLOCA peak memory for create copy *)
   cheat
 QED
 
+(* GATE_ADMISSION: held, deployment DALLOCA peak memory for create blueprint *)
 Theorem lower_vyper_deploy_unit_raw_fmp_create_blueprint:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan
    am tx es vs vi (fmp:bytes32).
@@ -119,7 +126,6 @@ Theorem lower_vyper_deploy_unit_raw_fmp_create_blueprint:
       (inst.inst_opcode = DALLOCA ==>
         w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
 Proof
-  (* GATE_ADMISSION: held, deployment DALLOCA peak memory for create blueprint *)
   cheat
 QED
 
