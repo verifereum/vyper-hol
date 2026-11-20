@@ -201,8 +201,7 @@ Proof
      disch_then (qspecl_then [`tv`,`w`] mp_tac) >> asm_rewrite_tac[]) >>
   mp_tac (Q.INST [`fn` |-> `func`, `rt` |-> `tv`, `t` |-> `u`,
     `G` |-> `Gu`, `tn` |-> `tu`] extcall_direct_saved_unwrap) >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    TRY (metis_tac[]) >> POP_ASSUM_LIST (K ALL_TAC) >> NO_TAC) >>
+  impl_tac >- (asm_rewrite_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
   qexistsl_tac [`z`,`Gz`,`tz`] >>
   asm_rewrite_tac[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
