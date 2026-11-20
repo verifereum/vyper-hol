@@ -749,16 +749,6 @@ Resume intcall_args_defaults_scope_mutual_from_actions[builtin]:
           rpt gen_tac >> disch_tac >> BETA_TAC >>
           irule intcall_args_scope_bind >> reverse conj_tac
           >- metis_tac[] >> simp[return_def]) >>
-      Cases_on `blt = Bop In \/ blt = Bop NotIn` >> simp[]
-      >- (irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
-          rpt gen_tac >> disch_tac >> BETA_TAC >>
-          simp[type_check_def, assert_def, lift_option_type_def, lift_sum_def,
-               bind_def, return_def, raise_def] >>
-          rpt IF_CASES_TAC >> simp[bind_def, raise_def] >>
-          Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
-          simp[bind_def, return_def, raise_def] >>
-          Cases_on `evaluate_membership x (blt = Bop NotIn) (HD v') (EL 1 v')` >>
-          simp[return_def, raise_def]) >>
       Cases_on `blt = Env MsgGas` >> simp[]
       >- (rpt gen_tac >> simp[next_gas_reading_def] >>
           Cases_on `s.gas_obs` >> simp[return_def, raise_def]) >>

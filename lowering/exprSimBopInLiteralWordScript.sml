@@ -298,7 +298,9 @@ Proof
   rename1 `eval_exprs cx elems st = (INL vs, st')` >>
   drule eval_exprs_length >> disch_tac >>
   `compatible_bound n (LENGTH vs)` by metis_tac[] >>
-  simp[bop_result_def, evaluate_membership_array, literal_array_membership]
+  Cases_on `bop = In` >>
+  gvs[bop_result_def, vyperContextTheory.evaluate_builtin_def, LET_THM,
+      evaluate_binop_def, binop_negate_def, literal_array_membership]
 QED
 Theorem literal_body_evaluate_types:
   expr_body_pre cenv cx env

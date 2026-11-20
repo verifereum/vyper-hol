@@ -48,8 +48,7 @@ Ancestors
   vyperState vyperContext vyperTyping compileEnv loweringStateRelDefs freshWrites fragExec varsExt
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
 
-(* Keep the account parameter for account-dependent builtins.  Len and
-   membership have dedicated interpreter paths rather than this boundary. *)
+(* The result of a value builtin, with interpreter errors. *)
 Definition builtin_result_def:
   builtin_result cx acc ty bt ts vs =
     case evaluate_builtin cx acc ty bt ts vs of

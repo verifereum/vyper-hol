@@ -267,7 +267,9 @@ Resume compile_rest_word_membership_full[after_array]:
         x (ArrayV av) ee = INL (BoolV answer)` by
         (Cases_on `bop = In` >>
          gvs[exprBopSimDefsTheory.bop_result_def, Abbr `answer`,
-             vyperValueOperationTheory.evaluate_membership_array]) >>
+             vyperContextTheory.evaluate_builtin_def, LET_THM,
+         vyperValueOperationTheory.evaluate_binop_def,
+         vyperValueOperationTheory.binop_negate_def]) >>
       irule gas_outcome_full_intro >>
       qexistsl [`Gt'`, `mid'`, `[]`, `OK q`, `INL (BoolV answer)`, `Tt`] >>
       conj_tac

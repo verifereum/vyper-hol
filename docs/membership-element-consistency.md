@@ -15,7 +15,7 @@ Vyper: 0.5.0a4, cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c,
 experimental codegen, Prague, optimization NONE, no bytecode metadata.
 HOL: `compile_vyper (K SOME) (o1_policy all_capabilities)` on inputs accepted
 by both old checker modes. The artifact audit reports 24 kernel-derived
-compilation equalities and 48 repaired `evaluate_membership` equalities, with
+compilation equalities and 48 repaired source membership equalities, with
 only DISK_THM tags and no cheat dependencies. Execution: py-evm 0.12.1b1
 PragueVM, eth-abi 6.0.0, eth-utils 6.0.0, gas 1000000, value 0, empty storage.
 Primitive-word and flag controls also have independent pinned-Vyper bytecode
