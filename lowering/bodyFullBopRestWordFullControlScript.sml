@@ -512,6 +512,7 @@ Resume rest_word_membership_loop_full_horizon_joint_all[entry]:
      >- (simp_tac std_ss [] >> irule (SIMP_RULE bool_ss [] (Q.GENL
            [`idx`,`result`,`e`,`t`,`G2`,`tn2`,`u`] rest_word_membership_init_joint)) >>
          pure_asm_rewrite_tac [] >> metis_tac[]) >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
      simp_tac std_ss [] >> drule (Q.GENL
        [`idx`,`result`,`a`,`b`,`e`,`t`,`G2`,`tn2`,`G3`,`tn3`,`u`]
        rest_word_membership_bounded_init_joint) >>
@@ -1098,6 +1099,7 @@ Resume rest_word_membership_loop_const_full_horizon_joint_all[entry]:
      >- (simp_tac std_ss [] >> irule (SIMP_RULE bool_ss [] (Q.GENL
            [`idx`,`result`,`e`,`t`,`G2`,`tn2`,`u`] rest_word_membership_init_joint)) >>
          pure_asm_rewrite_tac [] >> metis_tac[]) >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
      simp_tac std_ss [] >> drule (Q.GENL
        [`idx`,`result`,`a`,`b`,`e`,`t`,`G2`,`tn2`,`G3`,`tn3`,`u`]
        rest_word_membership_bounded_init_joint) >>

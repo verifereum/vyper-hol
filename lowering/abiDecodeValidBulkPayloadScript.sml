@@ -11,7 +11,7 @@ Ancestors calldataDecodePtr[qualified,ignore_grammar] abiDecodePtrMemberFrame[qu
 Theorem bulk_payload_copy_endpoint[local]:
   emit_void MCOPY [Var dst;Var src;lenop] sa = ((),sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\
   lookup_var dst s = SOME (n2w d) /\ lookup_var src s = SOME (n2w b) /\
@@ -114,7 +114,7 @@ Theorem bulk_payload_scalar_cuts[local]:
   run_inst_seq (emitted_insts sa c1) s = OK s1 /\
   run_inst_seq (emitted_insts c1 c2) s1 = OK s2 /\
   fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand cnt s = SOME (n2w n) /\ eval_operand pos s = SOME (n2w p) /\
   op_taint tn cnt = {} /\ op_prov G cnt = NONE /\
@@ -165,6 +165,16 @@ Proof
   `eval_operand (Lit 32w) s1 = SOME 32w /\
    op_taint tn1 (Lit 32w) = {} /\ op_prov G1 (Lit 32w) = NONE` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `s1 with vs_vars := s.vs_vars = s`
+       (mp_tac o AP_TERM ``allocas_below_fmp``) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s1 with vs_inst_idx := LENGTH c1.cs_current_insts)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all (SRULE [] (Q.INST [`H` |-> `ARB`, `opc` |-> `ADD`,
     `s` |-> `s1 with vs_inst_idx := LENGTH c1.cs_current_insts`,
     `t` |-> `s2 with vs_inst_idx := LENGTH c1.cs_current_insts`]
@@ -217,7 +227,7 @@ Theorem bulk_payload_address_cuts[local]:
   run_inst_seq (emitted_insts c2 c3) s2 = OK s3 /\
   run_inst_seq (emitted_insts c3 c4) s3 = OK s4 /\
   fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\
-  allocas_from lo s2 /\ ~ctx_has_dalloca ctx /\ ~s2.vs_halted /\
+  allocas_from lo s2 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s2) /\ ~s2.vs_halted /\
   s2.vs_current_bb = c2.cs_current_bb /\
   lookup_var base_v s2 = SOME (n2w B) /\ ptr_covers G2 tn2 base_v s2 L /\
   lookup_var dst s2 = SOME (n2w d) /\ ptr_covers G2 tn2 dst s2 cap /\
@@ -250,6 +260,10 @@ Proof
     gvs[lookup_var_def] >>
   `w2n ((n2w B):256 word) + (p+32) < dimword (:256)` by
     (`B < dimword (:256)` by decide_tac >> simp[w2n_n2w] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s2 with vs_inst_idx := LENGTH c2.cs_current_insts)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all (Q.INST [`H` |-> `ARB`, `sa` |-> `c2`, `off` |-> `p+32`,
     `n` |-> `k`, `total` |-> `L`, `s` |-> `s2 with vs_inst_idx := LENGTH c2.cs_current_insts`,
     `t` |-> `s3 with vs_inst_idx := LENGTH c2.cs_current_insts`]
@@ -280,6 +294,21 @@ Proof
    op_taint tn3 (Lit 32w) = {} /\ op_prov G3 (Lit 32w) = NONE /\
    w2n ((n2w d):256 word) + 32 < dimword (:256)` by
     gvs[lookup_var_def, eval_operand_def, op_taint_def, op_prov_def] >>
+  `s3 with vs_vars := s2.vs_vars = s2` by
+    (qpat_assum `emit_op ADD [Var base_v;off] _ = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (qpat_assum `s3 with vs_vars := s2.vs_vars = s2`
+       (mp_tac o AP_TERM ``allocas_below_fmp``) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s3 with vs_inst_idx := LENGTH c3.cs_current_insts)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s3` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all (Q.INST [`H` |-> `ARB`, `sa` |-> `c3`, `off` |-> `32`,
     `n` |-> `k`, `total` |-> `cap`, `s` |-> `s3 with vs_inst_idx := LENGTH c3.cs_current_insts`,
     `t` |-> `s4 with vs_inst_idx := LENGTH c3.cs_current_insts`]
@@ -301,11 +330,6 @@ Proof
   `lookup_var x s4 = SOME (n2w (B+p+32)) /\ ptr_covers G4 tn4 x s4 k` by
     (qpat_assum `!z. not_fresh_at c3 z ==> lookup_var z s4 = lookup_var z s3 /\ _`
        (qspec_then `x` strip_assume_tac) >> gvs[bodyPtrDefsTheory.ptr_covers_def]) >>
-  `s3 with vs_vars := s2.vs_vars = s2` by
-    (qpat_assum `emit_op ADD [Var base_v;off] _ = _`
-       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
-       eval_operand_def, lookup_var_def, update_var_def]) >>
   `s4 with vs_vars := s3.vs_vars = s3` by
     (qpat_assum `emit_op ADD [Var dst;Lit 32w] _ = _`
        (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
@@ -337,7 +361,7 @@ QED
 Theorem abi_decode_bulk_payload_success_joint:
   abi_decode_bulk_payload (Var dst) pos cnt mem_sz MLOAD (Var base_v) sa = ((),sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   abi_decode_ptr_window G tn s base_v (n2w B) L /\
   lookup_var dst s = SOME (n2w d) /\ ptr_covers G tn dst s cap /\
@@ -392,6 +416,12 @@ Proof
      gvs[abiDecodePtrMemberFrameTheory.abi_decode_ptr_window_def, bodyPtrDefsTheory.ptr_covers_def]) >>
   `not_fresh_at c2 dst` by simp[] >>
   `p+32+(n*mem_sz) <= L /\ 32+(n*mem_sz) <= cap` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `s2 with vs_vars := s.vs_vars = s`
+       (mp_tac o AP_TERM ``allocas_below_fmp``) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all (Q.INST [`k` |-> `n*mem_sz`] (SPEC_ALL bulk_payload_address_cuts)) >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   rename1 `src = Var src_v` >> rename1 `data = Var data_v` >>
@@ -435,6 +465,16 @@ Proof
   `lookup_var data_v (s4 with vs_inst_idx := LENGTH c4.cs_current_insts) = SOME (n2w (d+32)) /\
    lookup_var src_v (s4 with vs_inst_idx := LENGTH c4.cs_current_insts) = SOME (n2w (B+p+32))` by
     fs[lookup_var_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s4` by
+    (qpat_assum `s4 with vs_vars := s2.vs_vars = s2`
+       (mp_tac o AP_TERM ``allocas_below_fmp``) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s4 with vs_inst_idx := LENGTH c4.cs_current_insts)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s4` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   mp_tac (Q.INST [`dst` |-> `data_v`, `src` |-> `src_v`, `lenop` |-> `sz`,
     `sa` |-> `c4`, `sb` |-> `sb`, `s` |-> `s4 with vs_inst_idx := LENGTH c4.cs_current_insts`,
     `t` |-> `t with vs_inst_idx := LENGTH c4.cs_current_insts`,
