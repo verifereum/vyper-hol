@@ -17,7 +17,7 @@ Ancestors stateFrame[qualified,ignore_grammar] bodyPtrDefs[qualified,ignore_gram
   augAssignFullCurrentSource augAssignFullOperator bodyFullBuiltinWordPowCompose
   bodyInvNoDalloca exprSimSource targetPlaceSim
   bodyFullTarget bodyFullTargetDefs bodyPtrPopTargetFragTransport
-  stmtSimAugAssignPlace stmtSimAugAssignPlaceMemory stmtSimProps loweringPosts
+  stmtSimAugAssignPlace stmtSimAugAssignPlaceMemory stmtSimProps loweringPosts allocLimits
   gasContext targetPlaceSimCases stmtSimDefs vyperExprNoControl
   tuplePlaceHeadGas gasOutcomeFullGuarded
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
@@ -860,6 +860,10 @@ Resume augassign_ordinary_full[ordinary_memory_write]:
       (INL cur,st with gas_obs := rhsReads) /\
    place_type_value cx (MemoryPlace id path) (st with gas_obs := rhsReads) =
       (INL ptv,st with gas_obs := rhsReads)` by simp[] >>
+  `~aug_assign_overlap cenv t e` by fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `target_pre cenv cx env t (es with gas_obs := reads ++ rhsReads)` by
+    (pure_rewrite_tac[targetSubscriptSplitTheory.target_subscript_pre_gas_obs] >>
+     first_assum ACCEPT_TAC) >>
   drule_all (REWRITE_RULE [ETA_AX] augassign_memory_current_source_ready) >>
   strip_tac >>
   `stmt_res_ok lctx wr` by

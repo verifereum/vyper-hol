@@ -440,3 +440,21 @@ Proof
   imp_res_tac read_result_state >> gvs[] >>
   metis_tac[eval_expr_unwritten_local]
 QED
+
+Theorem aug_place_rhs_entry_type:
+  bind (eval_expr cx e) (read_result cx) st = (r,st') /\
+  lookup_scopes id st.scopes = SOME entry ==>
+  ?entry'. lookup_scopes id st'.scopes = SOME entry' /\
+           entry'.type = entry.type
+Proof
+  `!res fin. eval_expr cx e st = (res,fin) /\
+     lookup_scopes id st.scopes = SOME entry ==>
+     ?out. lookup_scopes id fin.scopes = SOME out /\ out.type = entry.type` by
+    (rpt strip_tac >>
+     `?events. scope_pop_trace st.scopes events fin.scopes` by
+       metis_tac[eval_mutual_scope_pop_effect, scope_pop_effect_def] >>
+     drule_all scope_pop_trace_lookup >> strip_tac >>
+     drule entry_pop_trace_metadata >> metis_tac[]) >>
+  simp[bind_def, AllCaseEqs()] >> disch_then strip_assume_tac >>
+  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
+QED
