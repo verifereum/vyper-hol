@@ -591,11 +591,10 @@ Proof
            supportedExprTraverseTheory.expr_evm_run_root_def,
            supportedExprTraverseTheory.call_operands_effect_root_def,
            const_name_root_def, supportedProgramTheory.expr_abi_decode_target_root_def] >>
-      drule (REWRITE_RULE [is_word_type_def]
-        (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `env`, `ty`,
-          `BaseT (BytesT (Dynamic n))`, `BytesL bs`, `es`]
-          literal_bytes_or_string_body_mem)) >>
-      simp[expr_sim_mem_def, expr_vv_sim_mem_def, lower_value_def,
+      mp_tac (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `env`, `ty`,
+        `BaseT (BytesT (Dynamic n))`, `BytesL bs`, `es`]
+        literal_bytes_or_string_body_mem) >>
+      simp[is_word_type_def, expr_sim_mem_def, expr_vv_sim_mem_def, lower_value_def,
            hex_bytes_literal_compile, hex_bytes_literal_eval, lowered_value_type_def,
            expr_post_def, vv_post_def, post_value_type_def, expr_type_def,
            supportedExprTraverseTheory.expr_has_effect_def,
