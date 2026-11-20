@@ -330,12 +330,7 @@ Proof
      >- (drule optimistic_swap_plan_core_inventory >> simp[]) >>
      qexists_tac `core8` >> simp[]) >>
   `final.ps_stack = ps9.ps_stack` by
-    (qpat_x_assum `final = _` SUBST_ALL_TAC >>
-     rpt (pop_assum kall_tac) >> simp[release_dead_spills_def] >>
-     qspec_tac (`FILTER (\(op,off). case op of Lit v => T | Var v => ~MEM v live | Label v => T)
-       (fmap_to_alist ps9.ps_spilled)`, `xs`) >>
-     qid_spec_tac `ps9` >> Induct_on `xs` >> simp[] >>
-     Cases_on `h` >> simp[]) >>
+    metis_tac[fnPlanPrefixTheory.release_dead_spills_stack] >>
   qexists_tac `core9` >>
   gvs[EXTENSION, phi_release_dead_spills_domain, MEM_MAP]
 QED
@@ -546,70 +541,16 @@ Proof
   gvs[]
 QED
 
-Theorem residual_budget_wf_remove_free[local]:
-  !spillbase pending ps op off.
-    residual_budget_wf spillbase pending ps /\
-    FLOOKUP ps.ps_spilled op = SOME off ==>
-    residual_budget_wf spillbase pending
-      (ps with <| ps_spilled := ps.ps_spilled \\ op;
-                  ps_alloc := free_spill_slot off ps.ps_alloc |>)
-Proof
-  rpt gen_tac >> strip_tac >> fs[residual_budget_wf_def] >>
-  rpt conj_tac
-  >- (fs[plan_slots_bounded_def, alloc_slots_bounded_def] >>
-      simp[plan_slots_bounded_def, alloc_slots_bounded_def,
-           free_spill_slot_def, EVERY_SNOC, DOMSUB_FLOOKUP_THM] >>
-      metis_tac[])
-  >- metis_tac[spill_alloc_layout_wf_after_free]
-  >> fs[DOMSUB_FLOOKUP_THM] >> metis_tac[]
-QED
-
-Theorem residual_budget_wf_release_fold[local]:
-  !dead spillbase pending ps.
-    residual_budget_wf spillbase pending ps /\
-    ALL_DISTINCT (MAP FST dead) /\
-    (!op off. MEM (op,off) dead ==>
-       FLOOKUP ps.ps_spilled op = SOME off) ==>
-    residual_budget_wf spillbase pending
-      (FOLDL (\ps' (op,off).
-         ps' with <| ps_spilled := ps'.ps_spilled \\ op;
-                     ps_alloc := free_spill_slot off ps'.ps_alloc |>) ps dead)
-Proof
-  Induct >- simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[] >> strip_tac >>
-  `FLOOKUP ps.ps_spilled h0 = SOME h1` by metis_tac[] >>
-  `residual_budget_wf spillbase pending
-     (ps with <| ps_spilled := ps.ps_spilled \\ h0;
-                 ps_alloc := free_spill_slot h1 ps.ps_alloc |>)` by
-    metis_tac[residual_budget_wf_remove_free] >>
-  `!op off. MEM (op,off) dead ==>
-     FLOOKUP (ps.ps_spilled \\ h0) op = SOME off` by
-    (rpt gen_tac >> strip_tac >>
-     `op <> h0` by
-       (strip_tac >> qpat_x_assum `~MEM h0 (MAP FST dead)` mp_tac >>
-        simp[MEM_MAP] >> qexists_tac `(op,off)` >> simp[]) >>
-     simp[DOMSUB_FLOOKUP_THM] >> metis_tac[]) >>
-  first_x_assum irule >> simp[]
-QED
-
 Theorem residual_budget_wf_release_dead_spills:
   !spillbase pending live ps.
     residual_budget_wf spillbase pending ps ==>
     residual_budget_wf spillbase pending (release_dead_spills live ps)
 Proof
-  rpt gen_tac >> strip_tac >> simp[release_dead_spills_def] >>
-  irule residual_budget_wf_release_fold >>
-  rpt conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      fs[MEM_FILTER, alistTheory.MEM_pair_fmap_to_alist_FLOOKUP])
-  >- (`MAP FST (FILTER (\(op,off). case op of
-          Var v => ~MEM v live | _ => T) (fmap_to_alist ps.ps_spilled)) =
-       FILTER (\op. case op of Var v => ~MEM v live | _ => T)
-         (MAP FST (fmap_to_alist ps.ps_spilled))` by
-        simp[FILTER_MAP, combinTheory.o_DEF, pairTheory.LAMBDA_PROD] >>
-      pop_assum SUBST1_TAC >>
-      irule FILTER_ALL_DISTINCT >>
-      simp[alistTheory.ALL_DISTINCT_fmap_to_alist_keys])
-  >> first_assum ACCEPT_TAC
+  simp[residual_budget_wf_def] >> rpt strip_tac
+  >- metis_tac[release_dead_spills_plan_slots_bounded]
+  >- metis_tac[release_dead_spills_layout_wf]
+  >- gvs[release_dead_spills_def] >>
+  gvs[release_dead_spills_def, FDOM_DRESTRICT] >> metis_tac[]
 QED
 
 Theorem release_fold_stack_update:
@@ -638,7 +579,7 @@ Theorem residual_budget_wf_release_dead_spills_core:
 Proof
   rpt gen_tac >> strip_tac >> drule residual_budget_wf_release_dead_spills >>
   disch_then (qspec_then `live` mp_tac) >>
-  simp[release_dead_spills_def, release_fold_stack_update]
+  simp[release_dead_spills_def, plan_state_component_equality]
 QED
 
 Theorem regular_post_emit_tail_core_resource:
@@ -779,12 +720,7 @@ Proof
      Cases_on `outputs <> [] /\ FILTER (\v. MEM v live) outputs <> []` >>
      qpat_x_assum `ps9 = _` SUBST_ALL_TAC >> simp[] >> ASM_SET_TAC[]) >>
   `final.ps_stack = ps9.ps_stack` by
-    (qpat_x_assum `final = _` SUBST_ALL_TAC >>
-     rpt (pop_assum kall_tac) >> simp[release_dead_spills_def] >>
-     qspec_tac (`FILTER (\(op,off). case op of Lit v => T | Var v => ~MEM v live | Label v => T)
-       (fmap_to_alist ps9.ps_spilled)`, `xs`) >>
-     qid_spec_tac `ps9` >> Induct_on `xs` >> simp[] >>
-     Cases_on `h` >> simp[]) >>
+    metis_tac[fnPlanPrefixTheory.release_dead_spills_stack] >>
   gvs[phi_release_dead_spills_domain, MEM_MAP] >> metis_tac[]
 QED
 
@@ -1608,16 +1544,7 @@ Theorem release_dead_spills_stack_update:
     release_dead_spills live (ps with ps_stack := stack) =
       (release_dead_spills live ps) with ps_stack := stack
 Proof
-  rpt gen_tac >> simp[release_dead_spills_def] >>
-  qmatch_goalsub_abbrev_tac `FOLDL f _ dead` >>
-  `!ps. FOLDL f (ps with ps_stack := stack) dead =
-        (FOLDL f ps dead) with ps_stack := stack` suffices_by simp[] >>
-  qpat_x_assum `Abbrev (dead = _)` kall_tac >>
-  Induct_on `dead` >- simp[] >>
-  Cases_on `h` >> simp[Abbr `f`] >>
-  gen_tac >> first_x_assum (qspec_then
-    `ps' with <|ps_spilled := ps'.ps_spilled \\ q;
-                ps_alloc := free_spill_slot r ps'.ps_alloc|>` mp_tac) >> simp[]
+  simp[release_dead_spills_def, plan_state_component_equality]
 QED
 
 (* Literal non-JMP preparation prefix; planner definitions stay unchanged. *)

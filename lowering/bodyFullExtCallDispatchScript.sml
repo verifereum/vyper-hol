@@ -804,6 +804,11 @@ Theorem extcall_dispatch_selected:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee s /\
+  (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+    ?w aid tv. eval_operand default_op s = SOME w /\
+      evaluate_type (get_tenv cx) default_ty = SOME tv /\
+      FLOOKUP s.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+      aid < sp.cs_next_id) /\
   emit_op (if stat then STATICCALL else CALL)
     (if stat then [gas;addr;off;len;buf;Lit (n2w cap)]
      else [gas;addr;value;off;len;buf;Lit (n2w cap)]) sp = (Var out,sj) /\
@@ -852,6 +857,11 @@ Theorem extcall_dispatch_selected:
       adopt_call_outcome rq oc consumed = (INL (),ee') /\
       extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr buf cap target
         has_default default_op default_ty default_opt oc.co_returnData ee' z /\
+      (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+        ?w aid tv. eval_operand default_op z = SOME w /\
+          evaluate_type (get_tenv cx) default_ty = SOME tv /\
+          FLOOKUP z.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+          aid < sr.cs_next_id) /\
       (!H. valid_horizon cx st0 H ee'.storage_trace ==>
         valid_horizon cx st0 H ee.storage_trace /\
         gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,Gu,tu) /\
@@ -963,6 +973,23 @@ Proof
     (qpat_assum `z.vs_allocas = s.vs_allocas` (fn th => rewrite_tac [allocas_from_def,th]) >>
      qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
   `lo <= z.vs_alloca_next` by ASM_SIMP_TAC bool_ss [] >>
+  `IS_SOME default_opt /\ ~is_word_type default_ty ==>
+    ?w aid tv. eval_operand default_op z = SOME w /\
+      evaluate_type (get_tenv cx) default_ty = SOME tv /\
+      FLOOKUP z.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+      aid < sr.cs_next_id` by
+    (strip_tac >>
+     qpat_assum `IS_SOME default_opt /\ ~is_word_type default_ty ==> _`
+       (drule_all_then strip_assume_tac) >>
+     `safe_operand sp default_op` by
+       (qpat_assum `EVERY (safe_operand sp) [addr;buf;default_op]`
+          (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+        disch_then (qspec_then `default_op` mp_tac) >>
+        simp[NoAsms]) >>
+     `eval_operand default_op z = eval_operand default_op s` by
+       (qpat_assum `!p. safe_operand sp p ==> eval_operand p z = _`
+          (drule_then ACCEPT_TAC)) >>
+     qexistsl_tac [`w`,`aid`,`tv`] >> simp[] >> decide_tac) >>
   qexistsl_tac [`ea`,`z`,`Gu`,`tu`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- (qx_gen_tac `h` >> disch_tac >>

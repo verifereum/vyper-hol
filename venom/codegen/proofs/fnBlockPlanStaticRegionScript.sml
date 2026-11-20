@@ -3593,26 +3593,11 @@ Proof
   simp[generated_plan_state_wf_marked_def]
 QED
 
-Theorem regional_release_fold_stack[local]:
-  !xs ps stk.
-    FOLDL (\qs (op,off). qs with
-      <|ps_spilled := qs.ps_spilled \\ op;
-        ps_alloc := free_spill_slot off qs.ps_alloc|>)
-      (ps with ps_stack := stk) xs =
-    (FOLDL (\qs (op,off). qs with
-      <|ps_spilled := qs.ps_spilled \\ op;
-        ps_alloc := free_spill_slot off qs.ps_alloc|>) ps xs)
-      with ps_stack := stk
-Proof
-  Induct >> simp[] >> gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  simp[]
-QED
-
 Theorem regional_release_stack_update[local]:
   release_dead_spills nl (ps with ps_stack := stk) =
   (release_dead_spills nl ps) with ps_stack := stk
 Proof
-  simp[release_dead_spills_def, regional_release_fold_stack]
+  simp[release_dead_spills_def, plan_state_component_equality]
 QED
 
 Theorem regional_release_marked_wf[local]:

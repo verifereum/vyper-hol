@@ -87,7 +87,7 @@ val good_view = ``\ty ao.
          (dec (vyper_to_abi_type env ty) (DROP ((^source_pos) ty ao) xs)) = SOME v)``;
 
 Theorem malformed_table_prefix_reject_joint:
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\ (^valid_child) /\ (^setup_cut) ==>
+  fn_inst_ids_distinct func /\ (^valid_child) /\ (^setup_cut) ==>
   !i ts ao vo st en s G tn.
     i < LENGTH ts /\ b + ao + (^head_sum) ts <= L /\
     (!j. j <= i ==>
@@ -107,8 +107,8 @@ Theorem malformed_table_prefix_reject_joint:
     (^abort) s G tn
 Proof
   simp_tac bool_ss [LET_THM] >>
-  disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
-    (CONJUNCTS_THEN2 (mk_asm "valid") (mk_asm "setup")))) >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 (mk_asm "valid") (mk_asm "setup"))) >>
   completeInduct_on `i` >>
   qpat_x_assum `!m. m < i ==> _` (mk_asm "ih") >>
   qx_gen_tac `ts` >> namedCases_on `ts` ["", "ty tys"] >- simp[] >>

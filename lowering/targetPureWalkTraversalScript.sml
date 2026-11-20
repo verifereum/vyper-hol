@@ -357,6 +357,24 @@ QED
 
 Finalise walk_outer_mutual
 
+Theorem exprs_source_frame_from_internal:
+  (!ty name actuals fallback.
+    supported_program (cx_tops cx) /\
+    IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
+    ~call_can_mutate cenv (IntCall (NONE,name)) /\
+    state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
+      (eval_exprs cx actuals) ==>
+    state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
+      (eval_expr cx (Call ty (IntCall (NONE,name)) actuals fallback))) /\
+  ~exprs_can_mutate cenv es /\
+  EVERY (\c. FST c = NONE /\ supported_program (cx_tops cx) /\
+    IS_SOME (supported_function_decl (cx_tops cx) c Internal)) (int_calls_exprs es) ==>
+  state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
+    (eval_exprs cx es)
+Proof
+  metis_tac[cj 6 walk_outer_mutual]
+QED
+
 Theorem target_walk_source_frame_from_internal:
   (!ty name actuals fallback.
     supported_program (cx_tops cx) /\

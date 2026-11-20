@@ -730,11 +730,7 @@ Theorem release_dead_spills_spill_base:
     (release_dead_spills next_liveness ps).ps_alloc.sa_spill_base =
     ps.ps_alloc.sa_spill_base
 Proof
-  rpt gen_tac >> simp[release_dead_spills_def] >>
-  match_mp_tac foldl_spill_base_direct >> rpt gen_tac >>
-  Cases_on `item` >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  simp[free_spill_slot_spill_base]
+  simp[release_dead_spills_def, foldl_free_spill_base]
 QED
 
 Theorem release_dead_spills_next_offset:
@@ -742,11 +738,7 @@ Theorem release_dead_spills_next_offset:
     (release_dead_spills next_liveness ps).ps_alloc.sa_next_offset =
     ps.ps_alloc.sa_next_offset
 Proof
-  rpt gen_tac >> simp[release_dead_spills_def] >>
-  match_mp_tac foldl_next_offset_eq_direct >> rpt gen_tac >>
-  Cases_on `item` >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  simp[free_spill_slot_next_offset]
+  simp[release_dead_spills_def, foldl_free_next_offset]
 QED
 
 (* ========== fresh_label ========== *)

@@ -112,7 +112,7 @@ Theorem compile_dispatch_bop_open_flag:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> disch_then (CONJUNCTS_THEN ASSUME_TAC) >>
-  `op <> In /\ op <> NotIn /\ op <> ExpMod` by
+  `~((op = In \/ op = NotIn) /\ is_ArrayT (expr_type b)) /\ op <> ExpMod` by
     (Cases_on `op` >> gvs[supported_binop_def]) >>
   qpat_x_assum `_ \/ _` kall_tac >>
   qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>

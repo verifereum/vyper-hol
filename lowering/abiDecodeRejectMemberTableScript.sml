@@ -14,6 +14,7 @@ Ancestors
   emitHelper emitHelperProps valueEncodingProps abiMalformedBoundedParents
   bodyPtrSubscriptMemoryRebuild abiCallerAbiShape
   finite_map pred_set list rich_list arithmetic words
+  bodyFullHashKeccakFixed
 
 val worlds = ``\s t. t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_immutables = s.vs_immutables``;
@@ -265,7 +266,7 @@ val prefix_members = ``\ts i. !j. j <= i ==>
 
 Theorem malformed_table_head_then_prefix[local]:
   (^head_cut) /\ (^scalar_abort) /\ (^valid_child) /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   (^entry) st en pos output b d outsz s /\ (^pc) st s /\ (^ghosts) pos output outsz s G tn /\
   en.cs_next_var <= ceiling.cs_next_var /\ fn_has_code st en func /\
   compile_abi_decode_to_buf (Var output) pos MLOAD (Var source) hi
@@ -299,6 +300,10 @@ Proof
    eval_operand hi s = SOME (n2w L) /\ b < dimword (:256) /\ L < dimword (:256) /\
    abi_decoder_operand_live st.cs_next_var pos /\ abi_decoder_operand_live st.cs_next_var hi` by
     (fs[abi_malformed_entry_def, abi_malformed_allocated_window_def] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qhdtm_assum `abi_malformed_entry`
+       (ACCEPT_TAC o MATCH_MP (SPEC_ALL bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) o
+        cj 1 o REWRITE_RULE [abi_malformed_entry_def])) >>
   asm "head" (qspecl_then [`pos`,`hi`,`SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) ts))`,
     `st`,`sh`,`b`,`L`,`s`,`G`,`tn`,`ctx`,`func`,`ceiling`,`lo`,`PG`] mp_tac) >>
   (impl_tac >- simp[]) >>
@@ -467,7 +472,7 @@ QED
 (* Apply the checked scan and execution cuts to the same member layout. *)
 Theorem malformed_table_scanned_abort[local]:
   (^head_cut) /\ (^scalar_abort) /\ (^valid_child) /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   (^entry) st en pos output b d outsz s /\ (^pc) st s /\ (^ghosts) pos output outsz s G tn /\
   en.cs_next_var <= ceiling.cs_next_var /\ fn_has_code st en func /\
   compile_abi_decode_to_buf (Var output) pos MLOAD (Var source) hi

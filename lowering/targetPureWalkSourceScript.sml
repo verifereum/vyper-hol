@@ -2,8 +2,32 @@
 Theory targetPureWalkSource
 Ancestors
   targetPureWalkInternalFrame targetPureWalkTraversal vyperCallOutcomeFrame
+  bodySim gasContext abiEncodeArgsScopes
 
 val _ = Parse.hide "body";
+
+Theorem nonmutating_exprs_source_frame:
+  body_inv tops ctx cenv cx /\
+  ~exprs_can_mutate cenv es /\
+  EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+    (int_calls_exprs es) /\
+  eval_exprs cx es s = (res,t) ==>
+  machine_frame (s with logs := t.logs) t /\ t.scopes = s.scopes
+Proof
+  strip_tac >>
+  `cx_tops cx = tops` by metis_tac[body_inv_def, cx_tops_module] >>
+  `state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
+       (eval_exprs cx es)` by
+    (irule exprs_source_frame_from_internal >> conj_tac
+     >- (qexists_tac `cenv` >> simp[] >> rpt strip_tac >>
+         irule target_walk_internal_frame >>
+         fs[body_inv_def, cenv_module_pins_def] >> metis_tac[]) >>
+     fs[body_inv_def, listTheory.EVERY_MEM]) >>
+  conj_tac
+  >- (qpat_assum `state_rel_frame _ _`
+       (mp_tac o Q.SPEC `s` o REWRITE_RULE [state_rel_frame_def]) >> simp[]) >>
+  metis_tac[eval_exprs_no_mutation_scopes]
+QED
 
 Theorem target_walk_source_frame:
   ~expr_can_mutate cenv (target_to_expr bt) /\

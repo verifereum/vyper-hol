@@ -11,6 +11,7 @@ Ancestors
   abiDecoderFrame abiCallerAllocation abiDecoderCounters abiDecoderRecursiveLoopLayout
   gasOriginPtrLabels
   calldataDynInit fragBlockPath valueEncoding exprLowering abiDecoderLoopEmit entryDecoderStateFrame
+  abiDecoderArrayInitReentry decoderWorldFramePtr intCallCallee compileAllocaProvenance
   compileEnv emitHelperProps venomState venomInst venomExecSemantics
   venomMemDefs bodyPtrDefs ptrSafetyTransport codegenRel contextCodegenRel
   loweringStateRelDefs words finite_map pred_set ptrDiscipline
@@ -71,7 +72,9 @@ Theorem none_array_first_header:
   (!ins. MEM ins (emitted_insts hs ls) ==> MEM ins (fn_insts fn)) /\
   lookup_block ls.cs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb (LENGTH ls.cs_current_insts) = SOME (mk_inst jid JMP [Label hdr] []) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   alloca_inv s /\ alloca_frontier_inv ctx fn site s /\ unit_alloca_budget ctx < dimword(:256) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   eval_operand src s = SOME sw /\ lookup_var root s = SOME (n2w d) /\
@@ -155,6 +158,37 @@ Resume none_array_first_header[finish]:
   `allocas_from lo t` by
     (fs[allocas_from_def] >> rpt strip_tac >>
      Cases_on `aid = hs.cs_next_id` >> gvs[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> _` (drule_then strip_assume_tac) >>
+     `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+     drule_all abi_decode_array_loop_init_reentry_code >> strip_tac >>
+     drule_all decoder_run_world_frame >> strip_tac >>
+     drule exprLoweringPropsTheory.run_inst_seq_initial_fmp >> strip_tac >>
+     `EVERY (\i. MEM i (fn_insts fn) /\ i.inst_opcode <> INVOKE)
+        (emitted_insts st ls)` by
+       (rpt (qpat_x_assum `EVERY _ (emitted_insts st ls)` mp_tac) >>
+        simp[EVERY_MEM] >> rpt strip_tac
+        >- (irule fn_has_code_current_member >> simp[] >>
+            qexists_tac `st` >> simp[] >>
+            fs[exprLoweringPropsTheory.emitted_insts_def] >>
+            metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
+        metis_tac[abiDecoderVarSequenceTheory.abi_decoder_reentry_non_invoke]) >>
+     drule_all run_inst_seq_static_charge >> strip_tac >>
+     `t.vs_alloca_next <= w2n s.vs_initial_fmp` by
+       (qpat_assum `t.vs_alloca_next + pending_alloca_size fn t <= _` mp_tac >>
+        qpat_assum `s.vs_alloca_next + pending_alloca_size fn s <= _` mp_tac >>
+        decide_tac) >>
+     simp[allocas_below_fmp_def] >> conj_tac
+     >- qpat_assum `allocas_below_fmp s`
+          (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [allocas_below_fmp_def]) >>
+     rpt gen_tac >> disch_tac >>
+     qpat_assum `alloca_inv t`
+       (strip_assume_tac o REWRITE_RULE [alloca_inv_def, alloca_next_valid_def]) >>
+     qpat_assum `!aid b sz. FLOOKUP t.vs_allocas aid = SOME (b,sz) ==> _`
+       drule >>
+     qpat_assum `t.vs_alloca_next <= w2n s.vs_initial_fmp` mp_tac >>
+     decide_tac) >>
   qexistsl_tac [`jump_to hdr t`,`HG`,`u`,`q`] >>
   conj_tac >- fs[] >>
   conj_tac
@@ -164,6 +198,9 @@ Resume none_array_first_header[finish]:
         (OK (jump_to hdr t),HG,u)` by
         (`jump_to hdr t = jump_to hdr (t with vs_inst_idx := LENGTH ls.cs_current_insts)` by
            simp[jump_to_def] >> pop_assum SUBST1_TAC >>
+         `ctx_has_dalloca ctx ==>
+            allocas_below_fmp (t with vs_inst_idx := LENGTH ls.cs_current_insts)` by
+           (strip_tac >> simp[allocas_below_fmp_def] >> fs[allocas_below_fmp_def]) >>
          irule decoderNavigationPtrTheory.jump_origin_ptr_path >>
          simp[allocas_from_def] >> metis_tac[allocas_from_def]) >>
       metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
@@ -207,7 +244,7 @@ Theorem none_array_final_header[local]:
   mload slot s = n2w cnt /\ DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem /\
   eval_operand src s = SOME sw /\ op_taint tn src = {} /\
   abi_decode_load CALLDATALOAD sw s = n2w cnt /\ cnt < dimword (:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block body_lbl fn.fn_blocks = SOME body_bb /\
   phi_prefix_length body_bb.bb_instructions = 0 /\
   lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
@@ -230,7 +267,6 @@ Theorem none_array_final_header[local]:
        op_taint u (Var x) = op_taint tn (Var x))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `cnt <= cnt` by simp[] >>
   drule_all (Q.INST [`j` |-> `cnt`, `ncount` |-> `cnt`]
     decoder_index_header_ptr_core_uniform_origin) >>
@@ -260,7 +296,7 @@ Theorem none_array_count_reject[local]:
   eval_operand src s = SOME sw /\ abi_decoder_operand_live st.cs_next_var src /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD sw s) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?z H u. z.vs_returndata = [] /\
     !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
@@ -280,7 +316,6 @@ Proof
      simp[rich_listTheory.IS_PREFIX_APPEND] >>
      metis_tac[inst_extends_trans,inst_extends_def]) >>
   `fn_has_code st gs fn` by metis_tac[fragExecTheory.fn_has_code_split] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all calldata_count_guard_rejected_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`z`,`H`,`u`] >> asm_rewrite_tac[]
@@ -384,7 +419,8 @@ Proof
   drule_all calldata_nonbulk_parent_shell_conditional >>
   disch_then (qx_choose_then `ip` (qx_choose_then `cop` strip_assume_tac)) >>
   Cases_on `maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD sw initial)`
-  >- (disj1_tac >> drule_all none_array_count_reject >>
+  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
+      disj1_tac >> drule_all none_array_count_reject >>
       disch_then (qspec_then `PG` ACCEPT_TAC)) >>
   qabbrev_tac `cap = 32+maxn*type_memory_size tv` >>
   `base_addr+owner_cap <= initial.vs_alloca_next` by
@@ -436,6 +472,8 @@ Proof
      qexists_tac `x0` >> asm_rewrite_tac[] >> decide_tac) >>
   `lookup_var root initial = SOME (n2w d)` by
     (qpat_assum `eval_operand (Var root) initial = _` mp_tac >> simp[NoAsms,eval_operand_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+     initial.vs_alloca_next + pending_alloca_size fn initial <= w2n initial.vs_initial_fmp` by simp[] >>
   drule_all none_array_first_header >>
   disch_then (qspec_then `PG` (qx_choose_then `first` (qx_choose_then `A0`
     (qx_choose_then `tn0` (qx_choose_then `q` (map_every assume_tac o CONJUNCTS)))))) >>
@@ -603,6 +641,7 @@ Resume none_nonbulk_fold_paths[exit]:
   (qpat_assum `Q s A ta` mp_tac >> simp[NoAsms, Abbr `Q`]) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME hdr_bb` by asm_rewrite_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (Q.INST [`bb` |-> `hdr_bb`, `id` |-> `loop_st.cs_next_id+1`,
     `G` |-> `A`, `tn` |-> `ta`, `body_lbl` |-> `FST (SND (labels:string#string#string))`,
     `exit_lbl` |-> `SND (SND (labels:string#string#string))`] none_array_final_header) >>

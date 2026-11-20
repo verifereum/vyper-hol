@@ -59,10 +59,9 @@ End
    - the source's encode_source_event cannot fail: the lengths of values,
      types and flags agree, each value has its type, and vyper_to_abi_base
      succeeds on every supported scalar type's value;
-   - a word topic is the argument's operand: typed_val_to_w256 agrees with
-     event_value_to_word on every supported word type (bytes20, the one
-     they disagree on, is not supported); a bytestring topic is SHA3 over
-     the data after its length word, which val_in_memory puts there;
+   - a word topic is the argument's operand: the source's type-directed
+     topic encoding agrees with typed_val_to_w256. A bytestring topic is
+     SHA3 over the data after its length word, which val_in_memory puts there;
    - an argument's value survives the later arguments' code through
      expr_post's frame (allocations before it, locals_kept);
    - compile_log_store_data lays the data out at the SUM of the

@@ -50,6 +50,9 @@ Proof
   >- MATCH_ACCEPT_TAC (GEN_ALL (BETA_RULE abi_valid_allocated_joint_fixed_array))
   >- MATCH_ACCEPT_TAC (GEN_ALL (BETA_RULE abi_valid_allocated_joint_struct))
   >- (rpt gen_tac >> strip_tac >>
-      match_mp_tac abi_valid_allocated_joint_bulk >> simp[]) >>
+      rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      irule abi_valid_allocated_joint_bulk >> simp[] >>
+      qexistsl_tac [`H0`, `abi_sz`, `ei`, `env`, `hi`, `live`,
+                    `mem_sz`, `p`, `pos`, `sf`, `xs`] >> simp[]) >>
   MATCH_ACCEPT_TAC (BETA_RULE abi_valid_allocated_finite_array_joint)
 QED

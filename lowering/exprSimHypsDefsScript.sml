@@ -215,7 +215,6 @@ Definition expr_sim_pre_def:
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e) /\
     ~expr_has_evm_run e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
               occurs_abi_decode_target target (cx_tops cx)) /\
@@ -228,7 +227,6 @@ Definition expr_body_pre_def:
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     EVERY (\c. FST c = NONE /\
                ?tops. supported_program tops /\

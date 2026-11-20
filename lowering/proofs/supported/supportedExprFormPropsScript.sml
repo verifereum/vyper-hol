@@ -22,19 +22,15 @@ Theorem supported_arithmetic_operator_coverage:
               supported_binop op (BaseT DecimalT) (BaseT DecimalT) F F)
     [Add; Sub; Mul; Div; Mod; Lt; LtE; Gt; GtE; Min; Max] /\
   EVERY (\op. supported_binop op (BaseT (UintT 8)) (BaseT (UintT 8)) F F /\
-              supported_binop op (BaseT (IntT 256)) (BaseT (IntT 256)) F F /\
-              ~supported_binop op (BaseT DecimalT) (BaseT DecimalT) F F)
-    [UnsafeAdd; UnsafeSub; UnsafeMul; UnsafeDiv] /\
-  ~supported_binop Add (BaseT BoolT) (BaseT BoolT) F F /\
-  ~supported_binop Add (BaseT (UintT 7)) (BaseT (UintT 7)) F F
+              supported_binop op (BaseT (IntT 256)) (BaseT (IntT 256)) F F)
+    [UnsafeAdd; UnsafeSub; UnsafeMul; UnsafeDiv]
 Proof
   EVAL_TAC
 QED
 
 Theorem supported_bitwise_comparison_operator_coverage:
   EVERY (\op. supported_binop op (BaseT (IntT 8)) (BaseT (IntT 8)) F F /\
-              supported_binop op (BaseT BoolT) (BaseT BoolT) F F /\
-              ~supported_binop op (BaseT DecimalT) (BaseT DecimalT) F F)
+              supported_binop op (BaseT BoolT) (BaseT BoolT) F F)
     [And; Or; XOr] /\
   EVERY (\op. supported_binop op (BaseT AddressT) (BaseT AddressT) F F /\
               supported_binop op (BaseT (BytesT (Fixed 32)))
@@ -42,10 +38,13 @@ Theorem supported_bitwise_comparison_operator_coverage:
               ~supported_binop op (BaseT (StringT 32)) (BaseT (StringT 32)) F F /\
               ~supported_binop op (BaseT (BytesT (Dynamic 32)))
                 (BaseT (BytesT (Dynamic 32))) F F /\
-              ~supported_binop op (BaseT (BytesT (Fixed 20)))
+              supported_binop op (BaseT (BytesT (Fixed 20)))
                 (BaseT (BytesT (Fixed 20))) F F) [Eq; NotEq] /\
-  EVERY (\op. ~supported_binop op (BaseT (UintT 256))
-                (BaseT (UintT 256)) T T) [In; NotIn; ExpMod]
+  EVERY (\op. supported_binop op (FlagT (NONE,"Flags"))
+                (FlagT (NONE,"Flags")) F F /\
+              ~supported_binop op (BaseT (UintT 256))
+                (ArrayT (BaseT (UintT 256)) (Fixed 2)) F F) [In; NotIn] /\
+  ~supported_binop ExpMod (BaseT (UintT 256)) (BaseT (UintT 256)) T T
 Proof
   EVAL_TAC >> simp[]
 QED
@@ -64,10 +63,7 @@ Theorem supported_power_shift_counterexamples:
   supported_binop ShR (BaseT (IntT 8)) (BaseT (UintT 8)) F F /\
   supported_binop ShL (BaseT (IntT 256)) (BaseT (UintT 8)) F F /\
   supported_binop ShL (BaseT (UintT 256)) (BaseT (UintT 256)) F F /\
-  ~supported_binop ShL (BaseT (UintT 8)) (BaseT (UintT 8)) F F /\
-  ~supported_binop ShL (BaseT (IntT 256)) (BaseT (IntT 8)) F F /\
-  ~supported_binop ShR (BaseT (IntT 8)) (BaseT (IntT 8)) F F /\
-  ~supported_binop ShR (BaseT (UintT 8)) (BaseT (UintT 7)) F F /\
+  supported_binop ShL (BaseT (UintT 8)) (BaseT (UintT 8)) F F /\
   ~supported_builtin_form [] (BaseT (UintT 256)) (Bop Add) [expr_test_uint]
 Proof
   EVAL_TAC
@@ -121,14 +117,14 @@ Proof
 QED
 
 Theorem supported_unary_modular_builtin_coverage:
-  supported_builtin_form [] (BaseT BoolT) Not [expr_test_uint] /\
+  supported_builtin_form [] (BaseT BoolT) Not [Name (BaseT BoolT) "b"] /\
   supported_builtin_form [] (BaseT (UintT 256)) Not [expr_test_uint] /\
-  ~supported_builtin_form [] (BaseT (UintT 8)) Not [expr_test_uint] /\
-  supported_builtin_form [] (BaseT (IntT 8)) Neg [expr_test_int] /\
+  supported_builtin_form [] (BaseT (BytesT (Fixed 32))) Not
+    [Name (BaseT (BytesT (Fixed 32))) "word"] /\
+  supported_builtin_form [] (BaseT (IntT 8)) Neg
+    [Name (BaseT (IntT 8)) "small"] /\
   supported_builtin_form [] (BaseT DecimalT) Neg [expr_test_decimal] /\
-  ~supported_builtin_form [] (BaseT (UintT 256)) Neg [expr_test_uint] /\
   supported_builtin_form [] (BaseT (IntT 256)) Abs [expr_test_int] /\
-  ~supported_builtin_form [] (BaseT (IntT 8)) Abs [expr_test_int] /\
   supported_builtin_form [] (BaseT (UintT 256)) (AsWeiValue Ether) [expr_test_uint] /\
   ~supported_builtin_form [] (BaseT (UintT 256)) (AsWeiValue Wei) [expr_test_int] /\
   supported_builtin_form [] (BaseT (UintT 256)) AddMod
@@ -136,11 +132,7 @@ Theorem supported_unary_modular_builtin_coverage:
   supported_builtin_form [] (BaseT (UintT 256)) MulMod
     [expr_test_uint; expr_test_uint; expr_test_uint] /\
   supported_builtin_form [] (BaseT (UintT 256)) PowMod256
-    [expr_test_uint; expr_test_uint] /\
-  ~supported_builtin_form [] (BaseT (UintT 256)) AddMod
-    [expr_test_uint; expr_test_int; expr_test_uint] /\
-  ~supported_builtin_form [] (BaseT (UintT 256)) PowMod256
-    [expr_test_uint; expr_test_int]
+    [expr_test_uint; expr_test_uint]
 Proof
   EVAL_TAC
 QED
@@ -155,6 +147,14 @@ Theorem supported_environment_crypto_builtin_coverage:
   ~supported_builtin_form [] (BaseT (UintT 256)) (Acc Code) [expr_test_uint] /\
   EVERY (\blt. supported_builtin_form [] (BaseT (UintT 256)) blt [expr_test_uint])
     [BlockHash; BlobHash] /\
+  supported_builtin_form [] (BaseT (BytesT (Fixed 32))) Sha256
+    [Name (BaseT (BytesT (Dynamic 32))) "data"] /\
+  supported_builtin_form [] (BaseT (UintT 256)) CalldataLen [] /\
+  supported_builtin_form [] (BaseT (UintT 256)) Len
+    [Name (BaseT (BytesT (Dynamic 32))) "data"] /\
+  supported_builtin_form [] (BaseT (BytesT (Fixed 4))) MethodId
+    [Literal (BaseT (StringT 3)) (StringL "f()")] /\
+  supported_builtin_form [] (BaseT (IntT 256)) Ceil [expr_test_decimal] /\
   supported_builtin_form [] (BaseT AddressT) ECRecover
     [expr_test_uint; expr_test_uint; expr_test_uint; expr_test_uint] /\
   EVERY (\blt. supported_builtin_form [] (ArrayT (BaseT (UintT 256)) (Fixed 2))
@@ -164,10 +164,17 @@ Proof
 QED
 
 Theorem supported_builtin_exclusion_coverage:
-  EVERY (\blt. ~supported_builtin_form [] (BaseT (UintT 256)) blt [expr_test_uint])
-    [Len; Keccak256; Sha256; Concat 32; Slice 32; Ceil; Floor; MethodId;
-     MakeArray NONE (Dynamic 1)] /\
+  (!tops ty n es.
+     ~supported_builtin_form tops ty Keccak256 es /\
+     ~supported_builtin_form tops ty (Concat n) es /\
+     ~supported_builtin_form tops ty (Slice n) es /\
+     ~supported_builtin_form tops ty Floor es) /\
+  ~supported_builtin_form [] (BaseT (UintT 256))
+    (MakeArray NONE (Dynamic 1)) [expr_test_uint] /\
   ~supported_builtin_form [] (TupleT []) (MakeArray NONE (Fixed 0)) [] /\
+  ~supported_builtin_form [] (TupleT [ArrayT (BaseT (UintT 256)) (Fixed 1)])
+    (MakeArray NONE (Fixed 1))
+    [Name (ArrayT (BaseT (UintT 256)) (Fixed 1)) "items"] /\
   supported_builtin_form [] (TupleT [BaseT (UintT 256)])
     (MakeArray NONE (Fixed 1)) [expr_test_uint] /\
   EVERY (\blt. ~supported_builtin_form [] (BaseT (UintT 256)) blt [])
@@ -183,7 +190,7 @@ Theorem supported_builtin_exclusion_coverage:
     [expr_test_uint] /\
   ~supported_builtin_form [] (BaseT (BytesT (Dynamic 4))) (CalldataSlice 4) []
 Proof
-  EVAL_TAC
+  conj_tac >- simp[supported_builtin_form_def] >> EVAL_TAC
 QED
 
 Theorem supported_memory_construction_forms:
@@ -191,6 +198,10 @@ Theorem supported_memory_construction_forms:
     (MakeArray (SOME (BaseT (UintT 256))) (Dynamic 3)) [expr_test_uint] /\
   supported_builtin_form [] (ArrayT (BaseT (UintT 256)) (Fixed 1))
     (MakeArray (SOME (BaseT (UintT 256))) (Fixed 1)) [expr_test_uint] /\
+  supported_builtin_form []
+    (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 2)) (Fixed 1))
+    (MakeArray (SOME (ArrayT (BaseT (UintT 256)) (Dynamic 2))) (Fixed 1))
+    [Name (ArrayT (BaseT (UintT 256)) (Dynamic 1)) "short"] /\
   supported_type_builtin_form [] (BaseT (StringT 10)) Empty (BaseT (StringT 10)) [] /\
   ~supported_type_builtin_form [] (TupleT [TupleT [BaseT (UintT 8)]]) Empty
     (TupleT [TupleT [BaseT (UintT 8)]]) [] /\
@@ -212,8 +223,8 @@ Theorem supported_type_builtin_coverage:
   supported_type_builtin_form [] (BaseT (IntT 8)) Convert (BaseT (IntT 8)) [expr_test_uint] /\
   ~supported_type_builtin_form [] (BaseT (IntT 8)) Convert (BaseT (IntT 8)) [] /\
   ~supported_type_builtin_form [] (BaseT (IntT 8)) Convert (BaseT (UintT 8)) [expr_test_uint] /\
-  ~supported_type_builtin_form [] (BaseT (UintT 256)) Extract32 (BaseT (UintT 256))
-    [expr_test_uint; expr_test_uint] /\
+  supported_type_builtin_form [] (BaseT (UintT 256)) Extract32 (BaseT (UintT 256))
+    [Name (BaseT (BytesT (Dynamic 64))) "data"; expr_test_uint] /\
   EVERY (\blt. ~supported_type_builtin_form [] (BaseT (UintT 8)) blt
     (BaseT (UintT 8)) [expr_test_uint]) [Empty; MaxValue; MinValue; Epsilon]
 Proof
