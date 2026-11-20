@@ -467,7 +467,11 @@ Resume extcall_request_keywords_owned_outcome[tail]:
   `!w. eval_operand op t = SOME w ==> eval_operand op u = SOME w` by
     (Cases_on `op` >> gvs[venomStateTheory.eval_operand_def]) >>
   `op_taint tn2 op = op_taint tn1 op /\ op_prov G2 op = op_prov G1 op` by
-    (Cases_on `op` >> gvs[ghost_kept_at_def, ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
+    (Cases_on `op` >> simp[ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >>
+     rename1 `_ /\ FLOOKUP G2 x = FLOOKUP G1 x` >>
+     qpat_assum `ghost_kept_at lo cenv mid sm G1 tn1 t G2 tn2`
+       (qspec_then `x` mp_tac o CONJUNCT1 o REWRITE_RULE [ghost_kept_at_def]) >>
+     simp[ptrDisciplineTheory.op_taint_def]) >>
   `!x. op = Var x ==> not_fresh_at sb x` by metis_tac[not_fresh_at_mono] >>
   Cases_on `k` >> gvs[ext_call_kwarg_def] >>
   TRY (qpat_x_assum `!w. eval_operand op t = SOME w ==> _` (fn th =>
