@@ -493,7 +493,8 @@ Proof
           gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
           gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
       gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac
+      >- (IF_CASES_TAC >> simp[]) >>
       gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >> simp[]
 QED
 

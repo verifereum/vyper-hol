@@ -543,6 +543,12 @@ Proof
   simp[precompile_call_success_def, initial_state_def]
 QED
 
+Theorem constant_builtin_not_self_codesize[local]:
+  constant_builtin bt ==> ~is_self_codesize bt es
+Proof
+  Cases_on `bt` >> simp[constant_builtin_def, is_self_codesize_def]
+QED
+
 Theorem constant_value_eval_expr_shape[local]:
   (!mods imms e v cx am sc artifact current_src mode checker_layouts checker_addr.
      constant_value mods imms e = SOME v /\
@@ -673,6 +679,7 @@ Proof
     simp[] >> disch_then drule_all >> disch_then (qspec_then `sc` strip_assume_tac) >>
     `get_tenv cx = type_env_all_modules mods` by metis_tac[get_tenv_sources] >>
     gvs[] >>
+    simp[is_self_codesize_def, constant_builtin_def] >>
     (all_tac >>~- ([`constant_length _ = SOME _`],
       drule_all constant_result_length >> strip_tac >>
       gvs[value_runtime_typed_def] >>
@@ -723,7 +730,9 @@ Proof
          lift_sum_def, get_accounts_def, return_def, expr_type_def, eval_result_typed_def,
          read_result_def, value_runtime_typed_def, constant_result_shape_def,
          precompile_call_success_initial_state] >>
-    metis_tac[])
+    IF_CASES_TAC
+    >- metis_tac[constant_builtin_not_self_codesize]
+    >- (simp[return_def, precompile_call_success_initial_state] >> metis_tac[]))
   >~ [`TypeBuiltin`] >- (
     `well_typed_exprs (artifact_env artifact mods current_src) es /\
      well_formed_type (artifact_env artifact mods current_src).type_defs v8 /\
@@ -1060,7 +1069,7 @@ Resume constant_eval_expr_fold_agreement[builtin]:
     `well_typed_exprs (artifact_env artifact mods current_src) es` by
       gvs[Once well_typed_expr_def] >>
     Cases_on `bt = Len`
-    >- (gvs[] >>
+    >- (gvs[return_def, raise_def] >>
       qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
            assert_def, return_def] >> strip_tac >>
@@ -1101,11 +1110,19 @@ Resume constant_eval_expr_fold_agreement[builtin]:
     drule_all constant_eval_exprs_fold_lift >> strip_tac >>
     gvs[return_def, raise_def, constant_result_shape_def, read_result_def,
         precompile_call_success_initial_state] >>
+    Cases_on `is_self_codesize bt es`
+    >- (gvs[] >> metis_tac[constant_builtin_not_self_codesize])
+    >- (gvs[return_def, raise_def] >>
+    Cases_on `evaluate_builtin cx (initial_state am sc).accounts
+                         v8 bt (MAP expr_type es) vs` >>
+    gvs[return_def, raise_def, AllCaseEqs()] >>
     `get_tenv cx = type_env_all_modules mods` by simp[get_tenv_def] >>
     rename1 `evaluate_builtin cx _ v8 bt (MAP expr_type es) vs = INL bv` >>
     `evaluate_builtin (constant_context mods) empty_accounts v8 bt (MAP expr_type es) vs = INL bv` by
       metis_tac[evaluate_builtin_constant_context] >>
-    gvs[constant_value_def]
+    gvs[constant_value_def, precompile_call_success_initial_state] >>
+    qpat_x_assum `return () _ = (INL (),s'')` mp_tac >>
+    simp[return_def] >> strip_tac)
 QED
 
 Resume constant_eval_expr_fold_agreement[type_builtin]:

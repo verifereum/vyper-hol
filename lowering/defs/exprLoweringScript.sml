@@ -3191,8 +3191,9 @@ Definition compile_acc_def:
     (let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
      emit_op BALANCE [addr_op] st1) ∧
   compile_acc cfn cenv addr_e Codesize st =
-    (let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
-     emit_op EXTCODESIZE [addr_op] st1) ∧
+    (if is_self_addr addr_e then emit_op CODESIZE [] st
+     else let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
+          emit_op EXTCODESIZE [addr_op] st1) ∧
   compile_acc cfn cenv addr_e Codehash st =
     (let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
      emit_op EXTCODEHASH [addr_op] st1) ∧
