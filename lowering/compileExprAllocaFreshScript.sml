@@ -1265,11 +1265,34 @@ Proof
             cj 1 alloca_suffix_decode_family, alloca_suffix_return])
 QED
 
+Theorem alloca_suffix_abi_encode_value_rows[local]:
+  !rows off a. k <= a.cs_next_var ==>
+    alloca_suffix k a (SND (compile_abi_encode_value_rows ce dst cursor off rows a))
+Proof
+  Induct >> simp[compile_abi_encode_value_rows_def, alloca_suffix_return] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  simp[compile_abi_encode_value_rows_def, LET_THM, comp_ignore_bind_def] >>
+  Cases_on `is_abi_dynamic ce.ce_struct_fields h1` >> simp[comp_bind_assoc] >>
+  rpt (rpt strip_tac >> simp[] >> irule alloca_suffix_bind_floor >>
+       simp[alloca_suffix_emit_op, alloca_suffix_emit_void, alloca_suffix_unwrap_value,
+            alloca_suffix_store_memory, cj 2 alloca_suffix_encode_family])
+QED
+
+Theorem alloca_suffix_abi_encode_values[local]:
+  k <= a.cs_next_var ==>
+    alloca_suffix k a (SND (compile_abi_encode_values_to_buf ce dst rows a))
+Proof
+  strip_tac >> simp[compile_abi_encode_values_to_buf_def, comp_ignore_bind_def] >>
+  rpt (rpt strip_tac >> simp[] >> irule alloca_suffix_bind_floor >>
+       simp[alloca_suffix_alloc_buffer, alloca_suffix_emit_void, alloca_suffix_emit_op,
+            alloca_suffix_abi_encode_value_rows])
+QED
+
 Theorem alloca_suffix_external_call_kwargs[local]:
   k <= a.cs_next_var ==>
   alloca_suffix k a
-    (SND (compile_external_call_kwargs ce addr vs ts msz asz mid rsz
-            lo rms static cv gas skip hd dv rt dt einfo dinfo a))
+    (SND (compile_external_call_kwargs ce addr vs ts asz mid rsz
+            lo rms static cv gas skip hd dv rt dt dinfo a))
 Proof
   strip_tac >>
   simp[compile_external_call_kwargs_def, comp_ignore_bind_def] >>
@@ -1279,8 +1302,7 @@ Proof
   rpt strip_tac >> irule alloca_suffix_bind_floor >> simp[] >> reverse conj_tac
   >- (rpt strip_tac >> IF_CASES_TAC >> simp[alloca_suffix_return] >>
       rpt (rpt strip_tac >> simp[] >> irule alloca_suffix_bind_floor >>
-           simp[alloca_suffix_alloc_buffer, alloca_suffix_extcall_store_values,
-                alloca_suffix_emit_op, cj 2 alloca_suffix_encode_family])) >>
+           simp[alloca_suffix_abi_encode_values, alloca_suffix_emit_op])) >>
   rpt strip_tac >> irule alloca_suffix_bind_floor >>
   simp[alloca_suffix_emit_op] >>
   rpt strip_tac >> irule alloca_suffix_bind_floor >> simp[] >> reverse conj_tac

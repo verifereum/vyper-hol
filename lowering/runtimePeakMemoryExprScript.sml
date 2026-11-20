@@ -517,13 +517,30 @@ Proof
                dalloca_windows_abi_decode]
 QED
 
+Theorem dalloca_windows_abi_encode_value_rows[local]:
+  !rows off.
+    preserves_dalloca_windows window (compile_abi_encode_value_rows cenv dst cursor off rows)
+Proof
+  Induct >> simp[compile_abi_encode_value_rows_def, dalloca_windows_return] >>
+  Cases >> simp[compile_abi_encode_value_rows_def, LET_THM] >>
+  windows_tac [dalloca_windows_unwrap_value, dalloca_windows_store_memory,
+               dalloca_windows_abi_encode]
+QED
+
+Theorem dalloca_windows_abi_encode_values:
+  preserves_dalloca_windows window (compile_abi_encode_values_to_buf cenv dst rows)
+Proof
+  simp[compile_abi_encode_values_to_buf_def] >>
+  windows_tac [dalloca_windows_abi_encode_value_rows]
+QED
+
 Theorem dalloca_windows_external_call_kwargs[local]:
   preserves_dalloca_windows window
-    (compile_external_call_kwargs cenv addr vs tys mem_sz abi_sz mid ret_sz min_sz
-      ret_mem static val_op gas skip has_default default_op ret_ty default_ty enc_info dec_info)
+    (compile_external_call_kwargs cenv addr vs tys abi_sz mid ret_sz min_sz
+      ret_mem static val_op gas skip has_default default_op ret_ty default_ty dec_info)
 Proof
   simp[compile_external_call_kwargs_def] >>
-  windows_tac [dalloca_windows_extcall_store_values, dalloca_windows_abi_encode,
+  windows_tac [dalloca_windows_abi_encode_values,
                dalloca_windows_extcall_setup, dalloca_windows_abi_decode,
                dalloca_windows_default_return_path]
 QED

@@ -20,6 +20,18 @@ Proof
   simp[abi_tuple_encode_layout_def] >> strip_tac >> drule LIST_REL_LENGTH >> simp[]
 QED
 
+Theorem abi_tuple_encode_layout_head_size:
+  !xs ats. abi_tuple_encode_layout ce xs ats ==>
+    abi_static_size ce.ce_struct_fields (TupleT (MAP SND xs)) =
+    SUM (MAP abi_member_head_size ats)
+Proof
+  Induct >- simp[abi_tuple_encode_layout_def, abi_static_size_def] >>
+  gen_tac >> PairCases_on `h` >> Cases_on `ats` >>
+  simp[abi_tuple_encode_layout_def] >> strip_tac >>
+  qpat_x_assum `!ats. _ ==> _` (drule o REWRITE_RULE [abi_tuple_encode_layout_def]) >>
+  simp[abi_static_size_def, GSYM abi_embedded_static_size_def]
+QED
+
 Theorem abi_tuple_encode_layout_dynamic:
   !xs ats. abi_tuple_encode_layout ce xs ats ==>
   is_abi_dynamic ce.ce_struct_fields (TupleT (MAP SND xs)) = any_dynamic ats

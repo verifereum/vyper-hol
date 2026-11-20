@@ -739,8 +739,8 @@ Proof
 QED
 
 Theorem reason_external_call_operand[local]:
-  compile_external_call_kwargs cenv addr vals tys memsz abisz mid retsz mn outsz
-    static value gas skip hasdef def rt dt einfo dinfo sa = (op,sb) ==>
+  compile_external_call_kwargs cenv addr vals tys abisz mid retsz mn outsz
+    static value gas skip hasdef def rt dt dinfo sa = (op,sb) ==>
   !l. op <> Label l
 Proof
   simp[compile_external_call_kwargs_def, LET_THM, comp_bind_def,

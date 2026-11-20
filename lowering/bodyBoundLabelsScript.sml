@@ -373,18 +373,44 @@ Proof
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED
 
+Theorem bound_labels_abi_encode_value_rows[local]:
+  !rows off s. (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_abi_encode_value_rows ce dst cursor off rows s))))
+Proof
+  Induct >> simp[compile_abi_encode_value_rows_def, comp_return_def] >>
+  qx_gen_tac `h` >> PairCases_on `h` >>
+  simp[compile_abi_encode_value_rows_def] >> rpt strip_tac >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
+    bound_labels_unwrap_value, bound_labels_store_memory, cj 2 bound_labels_abi_encode]),
+    gen_tac, strip_tac, irule bound_labels_bind,
+    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
+QED
+
+Theorem bound_labels_abi_encode_values_to_buf:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_abi_encode_values_to_buf ce dst rows s))))
+Proof
+  strip_tac >> simp[compile_abi_encode_values_to_buf_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_alloc_buffer, bound_labels_emit_void,
+    bound_labels_emit_op, bound_labels_abi_encode_value_rows]),
+    gen_tac, strip_tac, irule bound_labels_bind, irule bound_labels_ignore_bind, conj_tac])
+QED
+
 Theorem bound_labels_external_call_kwargs:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_external_call_kwargs ce addr arg_vals arg_types
-      mem_sz abi_sz mid ret_sz lo ret_mem static val_op gas_op skip has_default
-      def_op ret_ty def_ty enc_info dec_info s))))
+    (SND (compile_external_call_kwargs ce addr arg_vals arg_types abi_sz mid ret_sz lo ret_mem static val_op gas_op skip has_default
+      def_op ret_ty def_ty dec_info s))))
 Proof
   strip_tac >> simp[compile_external_call_kwargs_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
     bound_labels_emit_inst, bound_labels_alloc_buffer, bound_labels_new_block,
-    bound_labels_extcall_store_values, cj 2 bound_labels_abi_encode,
+    bound_labels_abi_encode_values_to_buf,
     cj 1 bound_labels_abi_decode, bound_labels_extcodesize_check,
     bound_labels_default_return_path, bound_labels_return_value_decode,
     comp_return_def]), gen_tac, strip_tac, irule bound_labels_fresh_label_bind,

@@ -706,9 +706,9 @@ Proof
 QED
 
 Theorem first_emission_external_call_kwargs[local]:
-  !ce addr av ats ms az mid rz rmin rm stat cv gas skip hd dv rt dt ei di a x b.
-  compile_external_call_kwargs ce addr av ats ms az mid rz rmin rm stat cv gas
-    skip hd dv rt dt ei di a = (x,b) ==>
+  !ce addr av ats az mid rz rmin rm stat cv gas skip hd dv rt dt di a x b.
+  compile_external_call_kwargs ce addr av ats az mid rz rmin rm stat cv gas
+    skip hd dv rt dt di a = (x,b) ==>
   cs_extends a b /\
   (!fn. fn_has_code a b fn ==> ?bb i.
     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
@@ -729,8 +729,8 @@ Proof
               irule comp_bind_labels >> conj_tac >> rpt gen_tac,
               irule comp_ignore_bind_labels >> conj_tac >> rpt gen_tac] >>
        BETA_TAC >> simp[LET_THM, emit_op_labels, emit_inst_labels, emit_void_labels,
-         compile_alloc_buffer_labels, compile_extcall_store_values_labels,
-         compile_abi_encode_labels, compile_abi_decode_labels,
+         compile_alloc_buffer_labels, compile_abi_encode_values_to_buf_labels,
+         compile_abi_decode_labels,
          compile_return_value_decode_labels, comp_return_labels])
   >~ [`new_block`] >- (irule new_block_action_labels >> simp[])
   >~ [`new_block`] >- (irule new_block_action_labels >> simp[]) >>
@@ -739,8 +739,7 @@ Proof
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
        rpt gen_tac >> BETA_TAC >> simp[LET_THM, compile_alloc_buffer_labels,
-         compile_extcall_store_values_labels, emit_op_labels,
-         compile_abi_encode_labels, comp_return_labels]) >>
+         compile_abi_encode_values_to_buf_labels, emit_op_labels, comp_return_labels]) >>
   IF_CASES_TAC >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>

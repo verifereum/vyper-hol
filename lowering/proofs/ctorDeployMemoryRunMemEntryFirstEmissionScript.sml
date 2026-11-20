@@ -4825,15 +4825,15 @@ Proof
 QED
 
 Theorem ctor_external_call_kwargs_first_emission:
-  !env addr vals tys memsz abisz mid retsz minsz retmem static value gas skip hasdef def rt dt enc dec.
-  !a x b. compile_external_call_kwargs env addr vals tys memsz abisz mid retsz minsz
-    retmem static value gas skip hasdef def rt dt enc dec a = (x,b) ==>
+  !env addr vals tys abisz mid retsz minsz retmem static value gas skip hasdef def rt dt dec.
+  !a x b. compile_external_call_kwargs env addr vals tys abisz mid retsz minsz
+    retmem static value gas skip hasdef def rt dt dec a = (x,b) ==>
     cs_extends a b /\
     (!fn. fn_has_code a b fn ==> ?bb i.
       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
 Proof
-  ntac 20 gen_tac >> simp_tac (srw_ss()) [compile_external_call_kwargs_def, LET_THM] >>
+  ntac 18 gen_tac >> simp_tac (srw_ss()) [compile_external_call_kwargs_def, LET_THM] >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- metis_tac[ctor_alloc_buffer_first_emission] >>
   gen_tac >> simp_tac (srw_ss()) [LET_THM] >>
@@ -4842,12 +4842,9 @@ Proof
   >- simp[ci_mono_emit_void] >>
   rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
   >- (gen_tac >> IF_CASES_TAC >- simp[ci_mono_comp_return] >>
-      ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_compile_alloc_buffer] >>
-      rpt gen_tac >> simp_tac (srw_ss()) [LET_THM] >>
-      ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ctor_extcall_store_values_ci_mono] >>
-      rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
       rpt gen_tac >> ho_match_mp_tac ci_mono_bind >>
-      simp[cj 2 ci_mono_compile_abi_encode, ci_mono_emit_op]) >>
+      simp[ci_mono_compile_abi_encode_values_to_buf, ci_mono_emit_op]) >>
   rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
   rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
   >- (gen_tac >> IF_CASES_TAC >> simp[ctor_extcodesize_check_ci_mono, ci_mono_comp_return]) >>
