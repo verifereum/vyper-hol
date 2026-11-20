@@ -8025,41 +8025,14 @@ Proof
   metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  simp[supported_assignment_def] >> strip_tac
-  >- (Cases_on `t` >> gvs[supported_target_def, supported_expr_exists_def] >>
-      rename1 `supported_target_exists _ b` >> Cases_on `b` >>
-      gvs[supported_expr_exists_def] >> metis_tac[body_inv_const_name_free]) >>
-  Cases_on `supported_target_info tops bindings t` >>
-  gvs[] >> metis_tac[body_inv_target_const_name_free, optionTheory.NOT_SOME_NONE]
-QED
-*)
 Theorem body_assign_empty_target_no_const[local]:
-  body_inv tops ctx cenv cx /\ supported_assignment tops bindings (BaseTarget t) e ==>
+  body_inv tops ctx cenv cx /\ stmt_exprs_ok cenv (Assign (BaseTarget t) e) ==>
   ~supported_target_exists (const_name_root cx) t
 Proof
-  cheat
+  strip_tac >> drule_all body_inv_stmt_const_name_free >>
+  simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >> simp[target_pre_def] >>
-  `supported_assignment tops bindings (BaseTarget t) e` by
-    (qpat_x_assum `supported_stmt _ _ _` mp_tac >> simp[Once supported_stmt_def]) >>
-  drule_all body_assign_empty_target_no_const >> strip_tac >>
-  drule bodyStorageCasesTheory.supported_assignment_storage_syntax >> strip_tac >>
-  `cx_tops cx = tops` by (fs[body_inv_def] >> drule cx_tops_module >> simp[]) >>
-  irule popTargetPreTheory.target_indices_pre_of_body >>
-  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-      supported_assignment_exists_def, alloc_limits_stmt_def, alloc_limits_assignment_def,
-      int_calls_stmt_def, int_calls_atarget_def, body_inv_def] >>
-  rpt conj_tac
-  >- (irule body_assign_empty_target_widths >> qexists_tac `cenv` >> simp[])
-  >- metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left] >>
-  gvs[EVERY_MEM] >> metis_tac[]
-QED
-*)
 Theorem body_assign_empty_target_pre[local]:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -8071,7 +8044,26 @@ Theorem body_assign_empty_target_pre[local]:
   ~immutable_root cx t ==>
   target_pre cenv cx env t es
 Proof
-  cheat
+  strip_tac >> simp[target_pre_def] >>
+  `supported_target tops bindings t` by
+    fs[Once supported_stmt_def, supported_assignment_def] >>
+  `~supported_target_exists expr_evm_run_root t /\
+   EVERY (\c. FST c = NONE /\
+              IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t)` by
+    (mp_tac (Q.SPECL [`tops`, `bindings`, `t`]
+        bodyStorageCasesTheory.supported_target_info_main_calls) >>
+     Cases_on `t` >>
+     gvs[supported_target_def, supported_expr_exists_def, int_calls_expr_def]) >>
+  drule_all body_assign_empty_target_no_const >> strip_tac >>
+  `cx_tops cx = tops` by (fs[body_inv_def] >> drule cx_tops_module >> simp[]) >>
+  irule popTargetPreTheory.target_indices_pre_of_body >>
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, alloc_limits_stmt_def, alloc_limits_assignment_def,
+      int_calls_stmt_def, int_calls_atarget_def, body_inv_def] >>
+  rpt conj_tac
+  >- (irule body_assign_empty_target_widths >> qexists_tac `cenv` >> simp[])
+  >- metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left] >>
+  gvs[EVERY_MEM] >> metis_tac[]
 QED
 
 (* The empty read changes neither state; its certificate prefix has no marks. *)
@@ -13378,40 +13370,6 @@ Proof
   simp[] >> qexists `bindings` >> simp[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >> simp[target_pre_def] >>
-  Cases_on `(?bt fld. t = AttributeTarget bt fld) \/
-            (?bt k. t = SubscriptTarget bt k)`
-  >- (
-    `IS_SOME (supported_target_info tops bindings t)` by
-      metis_tac[body_assign_saved_target_info] >>
-    `IS_SOME (type_place_target env t)` by metis_tac[body_assign_saved_target_type, IS_SOME_EXISTS] >>
-    `body_stmt_safe tops (Assign (BaseTarget t) e)` by
-      metis_tac[supported_stmt_body_safe] >>
-    `supported_program tops /\ get_module_code cx NONE = SOME tops /\
-     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-       is_dynamic (vyper_to_abi_type (type_env tops) target))` by fs[body_inv_def] >>
-    `alloc_limits_target cenv t` by fs[stmt_exprs_ok_def, alloc_limits_stmt_def, alloc_limits_assignment_def] >>
-    `EVERY (\e. ~is_extcode e) (target_indices t)` by
-      metis_tac[alloc_limits_target_indices_not_extcode] >>
-    qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
-      SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
-        supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def,
-        EVERY_APPEND, DE_MORGAN_THM]) >>
-    `~supported_target_exists (const_name_root cx) t` by
-      metis_tac[body_inv_target_const_name_free, optionTheory.NOT_SOME_NONE, IS_SOME_EXISTS] >>
-    `~supported_target_exists call_operands_effect_root t` by
-      metis_tac[bodyStorageCasesTheory.supported_target_info_storage_syntax, IS_SOME_EXISTS] >>
-    irule aug_place_target_indices_pre >>
-    gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, supported_assignment_exists_def,
-        alloc_limits_stmt_def, int_calls_stmt_def, int_calls_atarget_def] >>
-    conj_tac
-    >- (qexists `bindings` >> simp[]) >>
-    metis_tac[call_evaluation_safe_append_left]) >>
-  Cases_on `t` >> gvs[target_indices_pre_def]
-QED
-*)
 Theorem body_assign_saved_target_pre[local]:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -13424,7 +13382,9 @@ Theorem body_assign_saved_target_pre[local]:
   ~immutable_root cx t ==>
   target_pre cenv cx env t mid
 Proof
-  cheat
+  strip_tac >>
+  drule body_assign_saved_target_type >> strip_tac >>
+  metis_tac[body_assign_empty_target_pre]
 QED
 
 Theorem body_assign_saved_target_outcome[local]:
