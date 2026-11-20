@@ -18,3 +18,13 @@ cb12_blueprint_unsafe_offset
 cb13_blueprint_mixed_bytes_offset
 cb14_blueprint_mixed_high_offset
 cb15_blueprint_membership_flag
+cb02_blueprint_args
+cb05_blueprint_rof
+cb06_blueprint_dyn_offset
+cb07_blueprint_args_salt
+rcr01_rawcreate
+rcr02_rawcreate_args_salt
+rcr03_rawcreate_rof
+rcr04_rawcreate_storage
+rcr05_rawcreate_args
+rcr06_rawcreate_salt

@@ -110,36 +110,27 @@ convert the upstream compile-only tests into replayed tests.
 
 ### Static allocation acceptance bounds
 
-`ext_call_alloc_ok` previously accepted every `CreateTarget`. It now checks
-the aggregate physical static buffers emitted by the existing CREATE lowering:
+Pinned Python's `Context.allocate_buffer` rejects allocations of `2 ** 64` bytes
+or more. For CREATE calls with constructor arguments, `ext_call_alloc_ok` checks
+the following capacities against that limit.
 
-- RawCreate with constructor arguments requires the temporary tuple's memory
-  size and `49152 + ABI_size` each to be strictly below `2 ** 64`.
-- Non-raw blueprint creation with constructor arguments requires the tuple's
-  memory size and `ABI_size` each to be strictly below `2 ** 64`.
+- RawCreate checks the bytecode operand's annotated byte limit plus the
+  constructor arguments' ABI size bound.
+- Non-raw blueprint creation checks the constructor arguments' ABI size bound.
 
-The types come from the actual arguments' `expr_type` and the compilation
-environment's struct layout, not external-call result types or keyword-index
-metadata. Salt and blueprint code-offset operands are excluded according to
-their respective evaluation-order layouts. Empty argument tuples, raw blueprint
-arguments, malformed arity, minimal proxies and copy-of retain their previous
-checker result. The latter two use fixed small buffers or dynamic allocation.
-Each argument still undergoes the existing recursive allocation checks.
+The checker derives these bounds from `expr_type` and the compilation
+environment's struct fields. The recursive operand checks also cover the
+RawCreate bytecode snapshot. Empty constructor arguments, raw blueprint
+arguments, malformed arity, minimal proxies and copy-of skip this capacity check.
 
-Pinned Python's `Context.allocate_buffer` rejects every physical allocation
-of `2 ** 64` bytes or more. The blueprint ABI check has zero acceptance delta
-from that limit on coherent valid types: their memory footprint is at most
-their ABI bound, so the legacy tuple staging check adds no restriction.
-For arbitrary compilation environments, struct memory-size metadata can exceed
-its ABI fields; the tuple check also covers that actual HOL buffer.
-
-RawCreate has a separate, pre-existing producer discrepancy: HOL reserves
-49152 bytes for initcode, while the pin uses its actual `Bytes[maxlen]` bound.
-Consequently, this checker also rejects the narrow window
-`maxlen < 49152 /\ 2 ** 64 - 49152 <= ABI_size < 2 ** 64 - maxlen`.
-This is an explicit HOL acceptance narrowing associated with the pending
-RawCreate producer port, not a claim that Python rejects those allocations.
-The producer and its bytecode remain unchanged here.
+Like pinned Python's `lower_raw_create` and `lower_create_from_blueprint` in
+`vyper/codegen_venom/builtins/create.py`, the lowering encodes the constructor
+arguments directly into the destination buffer. It sizes that buffer from the
+arguments' physical types (`lowered_value_type`). For RawCreate, the physical
+bytecode type determines the snapshot size and the bytecode capacity in the
+combined buffer. The encoder starts at the end of the copied initcode. The
+lemmas `create_ctor_args_abi_bound` and `raw_create_bytecode_bound` relate the
+physical capacities to the annotated bounds used by the checker.
 
 The HOL compiler reserves initial headroom `H = 2 ** 254` for the separate
 dynamic-allocation proof by narrowing three existing acceptance comparisons. These are HOL-only

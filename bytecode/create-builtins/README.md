@@ -22,9 +22,9 @@ files are kept from `0.5.0a4+commit.cd74ce4f` and it is out of
 checks that the pinned compiler still rejects it and skips it, and
 `python-o1-bytecode-fixtures --check` reproduces the rest of the corpus.
 Keep that diagnostic and its oracle files when regenerating the accepted
-fixtures. The fixtures whose bytecode changed at
-the pin through vyperlang/vyper#5127 are out of `parity-fixtures.txt` and
-listed in `../pending-5127-port.md`.
+fixtures. The manifest includes every accepted fixture, including the
+blueprint and raw-create cases restored by the direct encoder and bytecode-type
+buffer sizing from vyperlang/vyper#5127.
 
 With the `VYPER_PIN` compiler on `PATH`, compare an accepted fixture's deploy
 and runtime bytecode with its committed `.hex` file, for example:
@@ -50,8 +50,8 @@ holbuild -j4 build evalCompilerCreateBuiltinsTheory
 CI reaches this theory through `loweringChecks`. It proves exact
 deployment/runtime parity for every name in `parity-fixtures.txt` and checks
 that the manifest and proved fixture names agree. Small leaf theories evaluate
-the fixtures independently. The proxy, copy and blueprint execution tests'
-existing compiler certificates are reused for their three oracle comparisons.
+the fixtures independently. The proxy, copy, blueprint and raw-create execution tests'
+existing compiler certificates are reused for those oracle comparisons.
 
 The task identifies separate prerequisites for dynamic scratch allocation
 (#552), salted raw-create checker evaluation (#542), nested raw calls (#554),
@@ -105,6 +105,6 @@ the general recursive ABI or creation-pipeline correctness theorem.
 `tests/create/constructor-alias/sources/ctor_alias.vy` against the source
 semantics. An earlier local array argument is read before a later `xs.pop()`
 shortens it, as pinned Vyper does; source and HOL-compiled execution both
-request 161 initcode bytes. Its bytecode stays out of parity for the other
-items listed in `../pending-5127-port.md`.
+request 161 initcode bytes. `createCtorAliasCompileTestTheory` checks exact
+deployment and runtime bytecode at the pin.
 `vyperCtorStorageAliasTestTheory` checks the corresponding storage-array case.

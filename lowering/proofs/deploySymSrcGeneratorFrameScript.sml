@@ -26,7 +26,7 @@ val _ = augment_srw_ss [rewrites [
   deploy_blocks_frame_call_raw_log, deploy_blocks_frame_call_raw_log_pair,
   deploy_blocks_frame_create_call, deploy_blocks_frame_raw_create,
   deploy_blocks_frame_create_snapshot, deploy_blocks_frame_create_blueprint_args,
-  deploy_blocks_frame_create_ctor_tuple, deploy_blocks_frame_ext_call_args,
+  deploy_blocks_frame_create_ctor_args, deploy_blocks_frame_ext_call_args,
   deploy_blocks_frame_extcall_store_args, deploy_blocks_frame_ext_call_kwargs,
   deploy_blocks_frame_ext_call_kwarg, deploy_blocks_frame_create_salt,
   deploy_blocks_frame_array_subscript, deploy_blocks_frame_stage_intcall_args,
@@ -45,8 +45,8 @@ Proof
   strip_tac >>
   `!copy vv. deploy_blocks_frame (compile_snapshot_vv ce copy vv)` by
     (rpt gen_tac >> irule deploy_blocks_frame_snapshot_vv >> simp[]) >>
-  `!es. deploy_blocks_frame (compile_create_ctor_tuple cf ce es)` by
-    (gen_tac >> irule deploy_blocks_frame_create_ctor_tuple >> simp[]) >>
+  `!es. deploy_blocks_frame (compile_create_ctor_args cf ce es)` by
+    (gen_tac >> irule deploy_blocks_frame_create_ctor_args >> simp[]) >>
   irule deploy_blocks_frame_create_call >> simp[]
 QED
 

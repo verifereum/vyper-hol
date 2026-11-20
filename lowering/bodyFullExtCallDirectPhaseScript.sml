@@ -89,6 +89,40 @@ Proof
   metis_tac[window_phase_vars]
 QED
 
+(* Encoder writes start at the payload. Private scratch is registered
+   separately, so the bytes immediately before the payload stay readable. *)
+Theorem abi_encode_saved_prefix_frame:
+  window_phase ctx func st en ids outs s t /\ alloca_inv s /\
+  FLOOKUP s.vs_allocas shared = SOME (b,cap) /\ shared NOTIN ids /\
+  LENGTH prefix <= dst_offset /\ dst_offset <= cap /\
+  EVERY (\(p,n). b+dst_offset <= p) outs /\
+  read_memory (b+dst_offset-LENGTH prefix) (LENGTH prefix) s = prefix /\
+  (!i. b+dst_offset-LENGTH prefix <= i /\ i < b+dst_offset ==> i NOTIN tn.t_mem) /\
+  (!i. EVERY (\(p,n). i < p \/ p+n <= i) outs /\
+    (!aid p n. aid IN ids /\ FLOOKUP t.vs_allocas aid = SOME (p,n) ==>
+      i < p \/ p+n <= i) /\ i IN tn'.t_mem ==> i IN tn.t_mem) ==>
+  FLOOKUP t.vs_allocas shared = SOME (b,cap) /\
+  read_memory (b+dst_offset-LENGTH prefix) (LENGTH prefix) t = prefix /\
+  (!i. b+dst_offset-LENGTH prefix <= i /\ i < b+dst_offset ==> i NOTIN tn'.t_mem)
+Proof
+  strip_tac >>
+  `b+dst_offset-LENGTH prefix+LENGTH prefix = b+dst_offset` by decide_tac >>
+  `EVERY (\r. venomMemDefs$regions_disjoint (b+dst_offset-LENGTH prefix,LENGTH prefix) r) outs` by
+    (simp_tac (srw_ss()) [EVERY_MEM, FORALL_PROD, venomMemDefsTheory.regions_disjoint_def] >>
+     qx_genl_tac [`p`,`n`] >> disch_tac >>
+     qpat_assum `EVERY (\(p,n). b+dst_offset <= p) outs`
+       (qspec_then `(p,n)` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     asm_simp_tac (srw_ss()) []) >>
+  mp_tac (Q.INST [`owner` |-> `shared`,`q` |-> `b+dst_offset-LENGTH (prefix:word8 list)`,
+    `n` |-> `LENGTH (prefix:word8 list)`,`sz` |-> `cap`]
+    abi_encode_values_registered_window) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+  PURE_REWRITE_TAC [read_memory_eq_mem_bytes_at] >> strip_tac >>
+  qpat_assum `read_memory _ _ s = prefix`
+    (assume_tac o REWRITE_RULE [read_memory_eq_mem_bytes_at]) >>
+  asm_rewrite_tac[] >> metis_tac[]
+QED
+
 (* Writes for the ABI members start at byte 32. Cursor and scratch are
    registered apart from the selector word. *)
 Theorem extcall_direct_selector_frame:
@@ -105,23 +139,13 @@ Theorem extcall_direct_selector_frame:
   (!i. b+28 <= i /\ i < b+32 ==> i NOTIN tn'.t_mem)
 Proof
   strip_tac >>
-  `EVERY (\r. venomMemDefs$regions_disjoint (b+28,4) r) outs` by
-    (simp_tac (srw_ss()) [EVERY_MEM, FORALL_PROD, venomMemDefsTheory.regions_disjoint_def] >>
-     rpt gen_tac >> disch_tac >>
-     qpat_assum `EVERY (\(p,n). b+32 <= p) outs`
-       (mp_tac o Q.SPEC `(p_1,p_2)` o REWRITE_RULE [EVERY_MEM]) >>
+  `LENGTH selector = 4` by
+    (qpat_assum `read_memory (b+28) 4 s = selector` (mp_tac o Q.AP_TERM `LENGTH`) >>
      simp[]) >>
-  mp_tac (Q.INST [`owner` |-> `shared`,`q` |-> `b+28`,`n` |-> `4`,`sz` |-> `cap`]
-    abi_encode_values_registered_window) >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
-  rewrite_tac[read_memory_eq_mem_bytes_at] >> strip_tac >>
-  qpat_assum `read_memory (b+28) 4 s = selector`
-    (assume_tac o REWRITE_RULE [read_memory_eq_mem_bytes_at]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- metis_tac[] >>
-  rpt strip_tac >>
-  `i < b + 28 + 4` by decide_tac >>
-  metis_tac[]
+  `b+32-4 = b+28 /\ 4 <= 32` by decide_tac >>
+  pop_assum strip_assume_tac >>
+  mp_tac (Q.INST [`dst_offset` |-> `32`,`prefix` |-> `selector`] abi_encode_saved_prefix_frame) >>
+  asm_rewrite_tac[]
 QED
 
 (* Both frame relations stay at the Stage 1 boundary when later encoder
