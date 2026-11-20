@@ -7330,38 +7330,6 @@ Proof
   qexistsl [`n`,`a`,`post`] >> simp[]
 QED
 
-Theorem focus_cfg_static_abort_run[local]:
-  cfg_norm_joint_cursors C8 unit.cu_context (schedules,current,saved)
-    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
-    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) /\
-  in_static_abort_prefix fn8 s8 /\ inv_memory_observation inst9.inst_opcode /\
-  unit_shape_ok unit /\ codegen_ready unit.cu_context /\
-  EVERY wf_function unit.cu_context.ctx_functions /\
-  raw_reachable vs0 unit.cu_context fn9 inst9 s9 /\
-  codegen_assembly rp unit = SOME prog /\ codegen_asm_entry_rel cpl prog vs0 a0 /\
-  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-    ~MEM (Label "runtime_begin") inst.inst_operands) ==>
-  ?bound ab post. run_context bound unit.cu_context vs0 = Abort ab post /\
-    post.vs_requests = s8.vs_requests
-Proof
-  disch_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
-  mp_tac focus_cfg_static_abort_run_for >>
-  impl_tac
-  >- (rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-    conj_tac >- (
-    rpt gen_tac >> disch_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
-    `IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)` by
-      (mp_tac (Q.INST [`rp` |-> `rp`, `unit` |-> `unit`, `prog` |-> `prog`]
-         requestCutLabelsTheory.request_cut_compute_labels_bound) >>
-       impl_tac >- (rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-                    strip_tac >> metis_tac[]) >>
-       disch_then (qspecl_then [`fn`,`i`,`l`] mp_tac) >> simp[]) >>
-    Cases_on `FLOOKUP (SND (compute_label_offsets prog)) l` >>
-    fs[codegenEntrySimTheory.codegen_asm_entry_rel_def]) >>
-    first_assum ACCEPT_TAC) >>
-  disch_then ACCEPT_TAC
-QED
-
 Theorem focus_static_operand_labels[local]:
   codegen_assembly rpolicy out.po_unit = SOME prog /\
   unit_shape_ok out.po_unit /\

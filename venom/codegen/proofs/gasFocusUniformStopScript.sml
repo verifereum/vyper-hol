@@ -790,60 +790,6 @@ Proof
   simp[Abbr `spill`,Abbr `opt`,NOT_FORALL_THM] >> metis_tac[]
 QED
 
-Theorem focus_joint_selectable_stop_or_guards[local]:
-  cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
-    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8)
-    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
-  joint_trace vs0 C9 q90 evs9 qs9
-    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
-  C8.ctx_entry = SOME entry /\ o1_ctx_shape C9 /\ code_layout_valid vs0 /\
-  ((?post. step_inst 0 C9 inst9 s9 = OK post) \/
-   (inst9.inst_opcode <> PHI /\ ~is_param_opcode inst9.inst_opcode)) ==>
-  ((~in_revert_forward fn9 s9 /\
-    (inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode ==>
-      source_memory_reads_disjoint cpl inst9 s9 /\
-      context_source_memory_writes_disjoint cpl inst9 s9) /\
-    (fin = asm_opt_finalizer ==>
-      !dst x sz src off.
-        inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
-        code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
-        FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
-        w2n (src - n2w off) < dimword (:256) DIV 2) /\
-    active_inst fn9 inst9 s9 /\
-    (inst9.inst_opcode = INVOKE ==>
-      ?nm ops callee args ent.
-        decode_invoke inst9 = SOME (nm,ops) /\
-        lookup_function nm C9.ctx_functions = SOME callee /\
-        eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent) /\
-    (inst9.inst_opcode <> INVOKE ==>
-      (?u. step_inst 0 C9 inst9 s9 = OK u /\ ~u.vs_halted) \/
-      (stk9 <> [] /\ ?ir u. step_inst 0 C9 inst9 s9 = IntRet ir u))) \/
-   ((inv_memory_observation inst8.inst_opcode \/ is_fallible inst8 \/
-     inst8.inst_opcode = INVOKE \/ is_terminator inst8.inst_opcode) /\
-    ((inst9 = inst8 /\ inst8.inst_opcode <> INVOKE /\
-       ((?u. step_inst fuel C8 inst8 s8 = Halt u) \/
-        (?ex u. step_inst fuel C8 inst8 s8 = Abort ex u))) \/
-     in_revert_forward fn9 s9 \/
-     (inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode /\
-      (~source_memory_reads_disjoint cpl inst9 s9 \/
-       ~context_source_memory_writes_disjoint cpl inst9 s9)) \/
-     (fin = asm_opt_finalizer /\
-      ?dst x sz src off.
-        inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
-        code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
-        FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off /\
-        ~(w2n (src - n2w off) < dimword (:256) DIV 2)) \/
-     (inst9.inst_opcode = INVOKE /\
-      ~(?nm ops callee args ent.
-        decode_invoke inst9 = SOME (nm,ops) /\
-        lookup_function nm C9.ctx_functions = SOME callee /\
-        eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent)) \/
-     (inst9.inst_opcode <> INVOKE /\ ?err. step_inst 0 C9 inst9 s9 = Error err))))
-Proof
-  MATCH_ACCEPT_TAC (Q.INST [`asm_lo` |-> `SND (compute_label_offsets prog)`]
-    focus_joint_selectable_stop_or_guards_at)
-QED
-
 Theorem focus_ledger_pairs_snoc[local]:
   LENGTH qs = m /\ EL m (q0::qs) = q /\
   LIST_REL R costs (ZIP (TAKE m (q0::qs),qs)) /\ R n (q,next) ==>
