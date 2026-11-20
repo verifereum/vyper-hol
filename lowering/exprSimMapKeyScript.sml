@@ -2,7 +2,7 @@
 Theory exprSimMapKey
 Ancestors
   exprSimHashBoundary
-  exprSimHash exprSimLeaves valueEncodingProofs exprLoweringProps
+  exprSimHash valueEncodingProofs exprLoweringProps
   vyperTypeSystem vyperValue vyperTyping vyperStorage valueEncoding valueEncodingDefs
   vyperInterpreter vyperState list rich_list compileEnv loweringStateRelDefs loweringPosts context venomState
   emitHelper emitHelperProps venomExecSemantics venomInst fragExec ASCIInumbers

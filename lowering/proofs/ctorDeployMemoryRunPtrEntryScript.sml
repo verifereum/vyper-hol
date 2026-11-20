@@ -29,7 +29,7 @@ Ancestors
   contextCodegenRel arithmetic finite_map venomMemDefs
   vyperInterpreter vyperState vyperContext ctorDeployInitcode compileVyper
   ctorDeployMemoryRunPtrPrefixEntryPrepare
-  ctorDeployMemoryRunPtrPrefixEntryRegisterList fragGasOriginPtrLoop gasPathPtrExec
+  fragGasOriginPtrLoop gasPathPtrExec
   ctorDeployMemoryRunPtrPrefixEntryPrepared
   abiEncoderRegisteredEffect
   ctorDeployLoweringEntrySourceFrame

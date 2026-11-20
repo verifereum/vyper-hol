@@ -7,7 +7,7 @@ Ancestors
   ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract bodySim e2eDefs callTrace
   ctorDeployDefs immSectionDead e2eDeployDefs e2eEntry
   vyperTypeStoragePreservation list supportedDecls supportedProgram
-  compileEnv loweringStateRelDefs compileVyper moduleLowering entryLocals ctorEntryLocals bodySimEntry
+  compileEnv loweringStateRelDefs compileVyper moduleLowering entryLocals bodySimEntry
   exprLoweringProps context finite_map stmtLoweringMono freshWrites fragExec vyperScopePreservation
   vyperPlaceInvariants vyperInterpreter vyperState vyperMisc
   vyperTypeDeploymentMachine vyperTypeBindArguments vyperTypeInvariants
