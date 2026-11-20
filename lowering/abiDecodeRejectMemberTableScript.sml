@@ -4,6 +4,7 @@ Ancestors
   abiDecodeRejectMemberOffset abiDecodeRejectMemberSetup abiDecodeRejectMemberPrefix
   abiMalformedAggregateFirstBadChild abiDecoderComplexExecute abiMalformedBoundedContract
   abiMalformedRecursiveInterface abiMalformedMemberSetup abiDecoderReentry
+  abiMalformedEntryProps[qualified,ignore_grammar]
   stateRelProj venomMemDefs loweringStateRelDefs bodyPtrBopScalarSeq
   bodyPtrSignedConvertSourceFrame abiDecodePtrMemberFrame decoderGhostFramePtr
   bodyFullPathHistory exprSimAbiDecodeCompositePrefix exprLoweringProps
@@ -302,8 +303,7 @@ Proof
     (fs[abi_malformed_entry_def, abi_malformed_allocated_window_def] >> decide_tac) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
     (qhdtm_assum `abi_malformed_entry`
-       (ACCEPT_TAC o MATCH_MP (SPEC_ALL bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) o
-        cj 1 o REWRITE_RULE [abi_malformed_entry_def])) >>
+       (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
   asm "head" (qspecl_then [`pos`,`hi`,`SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) ts))`,
     `st`,`sh`,`b`,`L`,`s`,`G`,`tn`,`ctx`,`func`,`ceiling`,`lo`,`PG`] mp_tac) >>
   (impl_tac >- simp[]) >>
