@@ -1,37 +1,24 @@
 Theory entryReachBodyFmp
 Ancestors
-  loweringShapeProps loweringShapeSource o1PipelineCorrect ptrDiscipline
-  exprLoweringProps supportedProgram supportedNames moduleLowering list
+  allocaFrontierRoom allocaFrontierBound entryDallocaCoverage
+  ptrDiscipline exprLoweringProps venomInst list words arithmetic
 
-val _ = Parse.hide "tops";
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+(* The frontier invariant bounds the remaining static allocations. *)
+Theorem entry_frontier_fmp_room:
+  alloca_frontier_inv ctx fn site s /\
+  s.vs_fmp = s.vs_initial_fmp /\
+  (ctx_has_dalloca ctx ==> unit_alloca_budget ctx <= w2n s.vs_initial_fmp /\
+    w2n s.vs_initial_fmp < 2 ** 254) ==>
+  fmp_room ctx fn s
 Proof
-  strip_tac >> irule every_no_dalloca >>
-  irule lower_vyper_runtime_unit_no_dalloca >>
-  goal_assum $ drule_at Any >>
-  reverse conj_tac >- metis_tac[supported_program_runtime_bodies_shape_ok] >>
-  irule supported_names_internal_names_distinct >>
-  gvs[supported_program_def, supported_declaration_names_def]
-QED
-*)
-Theorem entry_runtime_no_dalloca:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ runtime_bodies_shape_ok tops ==> ~ctx_has_dalloca unit.cu_context
-Proof
-  cheat
-QED
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >> drule_all entry_runtime_no_dalloca >>
-  simp[ctx_has_dalloca_def, fmp_room_def, EXISTS_MEM] >> metis_tac[]
-QED
-*)
-Theorem entry_runtime_fmp_room:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ MEM func unit.cu_context.ctx_functions ==>
-  fmp_room unit.cu_context func s
-Proof
-  cheat
+  strip_tac >>
+  qpat_assum `alloca_frontier_inv _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [alloca_frontier_inv_def]) >>
+  Cases_on `ctx_has_dalloca ctx`
+  >- (fs[fmp_room_def, deploy_ctor_pending_alloca_eq, unit_alloca_frame_def,
+         deploy_ctor_alloca_size_eq] >>
+      decide_tac) >>
+  irule entryDallocaCoverageTheory.context_without_dalloca_fmp_room >>
+  conj_tac >- (fs[ctx_has_dalloca_def, EXISTS_MEM, EVERY_MEM] >> metis_tac[]) >>
+  metis_tac[lookup_function_MEM]
 QED

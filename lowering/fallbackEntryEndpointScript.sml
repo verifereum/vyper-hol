@@ -25,7 +25,29 @@ Ancestors
   entryReachBodyFmp acceptedContextPhi venomWf venomInst
   runtimeBodyStartDefs runtimeFallbackPackageEnvironment
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem dispatched_entry_endpoint_default:
+  !tops rpolicy unit am tx ret vs mut args fbody env es0.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
+      SOME (tx.function_name, tx.args) /\
+    tx.function_name = "__default__" /\
+    initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) ==>
+    runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret
+      (subst_consts_stmts (module_consts_env tops []) fbody)
 Proof
   rpt gen_tac >> strip_tac >>
   drule vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry >> strip_tac >>
@@ -101,8 +123,6 @@ Proof
          simp[defaultConcreteRegistrationDefsTheory.default_registration_ptr_reservation_def] >>
          metis_tac[]) >> simp[]))) >>
   pop_assum strip_assume_tac >>
-  `~ctx_has_dalloca unit.cu_context` by
-    metis_tac[entryReachBodyFmpTheory.entry_runtime_no_dalloca] >>
   `fn_inst_ids_distinct fn` by
     (`ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
        metis_tac[allocaFrontierBoundTheory.ctx_inst_ids_distinct_fn,
@@ -160,30 +180,6 @@ Proof
   >- (qexistsl [`G`,`tn`] >> gvs[])
   >- (qexistsl [`G`,`tn`] >> gvs[]) >>
   gvs[] >> qexistsl [`G`,`tn`] >> simp[]
-QED
-*)
-Theorem dispatched_entry_endpoint_default:
-  !tops rpolicy unit am tx ret vs mut args fbody env es0.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
-      SOME (tx.function_name, tx.args) /\
-    tx.function_name = "__default__" /\
-    initial_venom_state_rel tops am tx vs /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
-      (INL (), es0) ==>
-    runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret
-      (subst_consts_stmts (module_consts_env tops []) fbody)
-Proof
-  cheat
 QED
 
 Theorem fallback_guarded_placement[local]:
@@ -330,7 +326,60 @@ QED
 
 (* A raw miss or short calldata runs the fallback's payable check. With no
    arguments to register, that endpoint is the start of the guarded body. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem fallback_entry_registration_joint:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
+  calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
+    SOME (tx.function_name,tx.args) /\
+  (LENGTH vs.vs_call_ctx.cc_calldata < 4 \/
+   FIND (\(name,tys). abi_method_id (type_env tops) name tys =
+       cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) = NONE) /\
+  vyperInterpreter$lookup_function NONE tx.function_name External tops =
+    SOME (mut,T,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+      <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) ==>
+  ?cenv sa st' func s0 G0 tn0 rt.
+    rt = (if ret = NoneT then NONE else SOME ret) /\
+    runtime_fallback_body_start tops rpolicy
+      ("fn___default__",cenv,[],4,mut = Payable,T,global_nonreentrant_slot,
+       T,mut = View,fbody,rt) sa /\
+    compile_guarded_body cenv T global_nonreentrant_slot T (mut = View) fbody rt sa =
+      ((),st') /\
+    fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
+    unit.cu_context.ctx_entry = SOME "__entry" /\
+    venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    fn_entry_label func = SOME "__entry" /\
+    (?bb. lookup_block "__entry" func.fn_blocks = SOME bb /\
+      phi_prefix_length bb.bb_instructions = 0) /\
+    gas_path_mem unit.cu_context func
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)
+      0 (OK s0) /\
+    alloca_history func s0 /\ fresh_vars_wrt sa s0 /\
+    cenv.ce_return_pc = NONE /\ return_buf_frame NONE cenv sa s0 /\
+    ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    s0.vs_gas_readings = vs.vs_gas_readings /\
+    s0.vs_code = vs.vs_code /\ s0.vs_labels = vs.vs_labels /\
+    (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context func [] G0 tn0 s0) ==>
+      !fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] FEMPTY entry_taint
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)) /\
+    (!H : (bool # bytes32 # type_value) list # num list.
+      stmt_state_rel H unit.cu_context func cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+      ghost_inv H NONE cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0) /\
+    !D explicit.
+      gas_origin_ptr_path (D,0,explicit,unit.cu_context,func,[])
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+         FEMPTY,entry_taint) [] (OK s0,G0,tn0)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `EXISTS is_default_decl tops /\ tx.function_name = "__default__" /\ tx.args = []` by
@@ -383,7 +432,6 @@ Proof
   disch_then (qspec_then `ARB` (qx_choosel_then [`s0`,`G0`,`tn0`] strip_assume_tac)) >>
   `fn_inst_ids_distinct fn` by
     metis_tac[lowered_runtime_function_inst_ids_distinct, venomInstTheory.lookup_function_MEM] >>
-  `~ctx_has_dalloca unit.cu_context` by metis_tac[entry_runtime_no_dalloca] >>
   `?bb. lookup_block "__entry" fn.fn_blocks = SOME bb /\
        phi_prefix_length bb.bb_instructions = 0` by
     (`?bb. lookup_block "__entry" fn.fn_blocks = SOME bb` by
@@ -402,60 +450,4 @@ Proof
   fs[defaultConcreteRegistrationDefsTheory.default_registration_resources_def,
      defaultConcreteRegistrationDefsTheory.default_registration_entry_frame_def,
      local_ptrs_reserved_def, Abbr `rt`]
-QED
-*)
-Theorem fallback_entry_registration_joint:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
-  source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
-  calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
-    SOME (tx.function_name,tx.args) /\
-  (LENGTH vs.vs_call_ctx.cc_calldata < 4 \/
-   FIND (\(name,tys). abi_method_id (type_env tops) name tys =
-       cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) = NONE) /\
-  vyperInterpreter$lookup_function NONE tx.function_name External tops =
-    SOME (mut,T,args,[],ret,fbody) /\
-  bind_arguments (type_env tops) args tx.args = SOME env /\
-  send_call_value mut
-    (initial_evaluation_context am.sources am.layouts tx NONE)
-    (initial_state am [env] with
-      <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) ==>
-  ?cenv sa st' func s0 G0 tn0 rt.
-    rt = (if ret = NoneT then NONE else SOME ret) /\
-    runtime_fallback_body_start tops rpolicy
-      ("fn___default__",cenv,[],4,mut = Payable,T,global_nonreentrant_slot,
-       T,mut = View,fbody,rt) sa /\
-    compile_guarded_body cenv T global_nonreentrant_slot T (mut = View) fbody rt sa =
-      ((),st') /\
-    fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca unit.cu_context /\
-    local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
-    unit.cu_context.ctx_entry = SOME "__entry" /\
-    venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-    fn_entry_label func = SOME "__entry" /\
-    (?bb. lookup_block "__entry" func.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\
-    gas_path_mem unit.cu_context func
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)
-      0 (OK s0) /\
-    alloca_history func s0 /\ fresh_vars_wrt sa s0 /\
-    cenv.ce_return_pc = NONE /\ return_buf_frame NONE cenv sa s0 /\
-    ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    s0.vs_gas_readings = vs.vs_gas_readings /\
-    s0.vs_code = vs.vs_code /\ s0.vs_labels = vs.vs_labels /\
-    (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context func [] G0 tn0 s0) ==>
-      !fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] FEMPTY entry_taint
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)) /\
-    (!H : (bool # bytes32 # type_value) list # num list.
-      stmt_state_rel H unit.cu_context func cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-      ghost_inv H NONE cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0) /\
-    !D explicit.
-      gas_origin_ptr_path (D,0,explicit,unit.cu_context,func,[])
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
-         FEMPTY,entry_taint) [] (OK s0,G0,tn0)
-Proof
-  cheat
 QED
