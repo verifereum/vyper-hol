@@ -265,7 +265,7 @@ Overload sym_prefix_driver = ``\stepf runf p.
       SymOK next => runf n next
     | r => r)``
 
-Theorem sym_prefix_all_suc[local]:
+Theorem sym_prefix_all_suc:
   sym_prefix_driver stepf runf p ==>
   (sym_prefix_all runf P Q p (SUC n) ss <=>
    ss.sym_base.as_pc < LENGTH p /\ ~Q (EL ss.sym_base.as_pc p) /\
