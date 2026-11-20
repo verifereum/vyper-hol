@@ -74,27 +74,27 @@ Proof
     if w2n p <= w2n q /\ w2n q <= w2n h then OK t else Abort Revert_abort t` >-
     (strip_tac >> Cases_on `w2n p <= w2n q /\ w2n q <= w2n h` >> gvs[]) >>
   simp[Abbr `code`] >>
-  simp[Once run_inst_seq_def,mk_inst_def,Once step_inst_base_def,
+  simp[Once run_inst_seq_def,mk_inst_def,step_inst_base_opcode_eqs,
        exec_pure2_def,eval_operand_def,word_mul_n2w] >>
-  simp[Once run_inst_seq_def,Once step_inst_base_def,exec_pure2_def,
+  simp[Once run_inst_seq_def,step_inst_base_opcode_eqs,exec_pure2_def,
        eval_operand_update_var,payload_old_operand_update] >>
-  simp[Once run_inst_seq_def,Once step_inst_base_def,exec_pure2_def,
+  simp[Once run_inst_seq_def,step_inst_base_opcode_eqs,exec_pure2_def,
        eval_operand_update_var,payload_old_operand_update,bool_to_word_def] >>
-  simp[Once run_inst_seq_def,Once step_inst_base_def,exec_pure1_def,
+  simp[Once run_inst_seq_def,step_inst_base_opcode_eqs,exec_pure1_def,
        eval_operand_update_var] >>
-  simp[Once run_inst_seq_def,Once step_inst_base_def,exec_pure2_def,
+  simp[Once run_inst_seq_def,step_inst_base_opcode_eqs,exec_pure2_def,
        eval_operand_update_var,payload_old_operand_update,toString_inj,
        bool_to_word_def] >>
-  simp[Once run_inst_seq_def,Once step_inst_base_def,exec_pure1_def,
+  simp[Once run_inst_seq_def,step_inst_base_opcode_eqs,exec_pure1_def,
        eval_operand_update_var] >>
-  simp[Once run_inst_seq_def,Once step_inst_base_def,exec_pure2_def,
+  simp[Once run_inst_seq_def,step_inst_base_opcode_eqs,exec_pure2_def,
        eval_operand_update_var,toString_inj] >>
   qmatch_goalsub_abbrev_tac `run_inst_seq [_] v` >>
   `eval_operand (Var (STRING #"%" (toString (sa.cs_next_var+6)))) v =
    SOME (bool_to_word (w2n p <= w2n q /\ w2n q <= w2n h))` by
     simp[Abbr `v`,eval_operand_update_var,GREATER_DEF,NOT_LESS] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def] >>
+  simp[step_inst_base_opcode_eqs] >>
   Cases_on `w2n p <= w2n q /\ w2n q <= w2n h` >>
   simp[bool_to_word_def,run_inst_seq_def]
 QED
@@ -344,9 +344,11 @@ Proof
   `fn_has_code count_st guard_st fn /\ fn_has_code guard_st reload_st fn /\
    fn_has_code reload_st header_st fn` by
     simp[] >>
-  drule_all (BETA_RULE array_payload_guard_owned) >>
-  disch_then (qspecl_then [`explicit`,`PG`] (DISJ_CASES_THEN
-    (qx_choose_then `v` (qx_choose_then `Gv` (qx_choose_then `tnv` strip_assume_tac)))))
+  mp_tac (BETA_RULE (Q.INST [`sa` |-> `count_st`, `sb` |-> `guard_st`,
+    `s` |-> `u`, `G` |-> `Gu`, `tn` |-> `tnu`] array_payload_guard_owned)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (DISJ_CASES_THEN
+    (qx_choose_then `v` (qx_choose_then `Gv` (qx_choose_then `tnv` strip_assume_tac))))
   >- (qexistsl_tac [`Abort Revert_abort v`,`Gv`,`tnv`] >>
       asm_rewrite_tac[] >> conj_tac
       >- (rpt strip_tac >> first_x_assum irule >> simp[]) >>
@@ -370,9 +372,12 @@ Resume abi_decode_array_prepare_suffix_width_joint[reload]:
    w2n a+32 <= v.vs_alloca_next` by
     fs[abiDecodePtrMemberFrameTheory.abi_decode_ptr_window_def] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp v` by simp[] >>
-  drule_all (BETA_RULE bodyFullAbiDecodeLoopHeaderExactTheory.abi_decode_loop_counter_load_exact) >>
-  disch_then (qspecl_then [`explicit`,`PG`] (qx_choose_then `w`
-    (qx_choose_then `Gw` (qx_choose_then `tnw` strip_assume_tac)))) >>
+  mp_tac (BETA_RULE (Q.INST [`sa` |-> `guard_st`, `sb` |-> `reload_st`,
+    `s` |-> `v`, `G` |-> `Gv`, `tn` |-> `tnv`, `counter` |-> `addr`,
+    `out` |-> `cnt`] bodyFullAbiDecodeLoopHeaderExactTheory.abi_decode_loop_counter_load_exact)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `w`
+    (qx_choose_then `Gw` (qx_choose_then `tnw` strip_assume_tac))) >>
   suspend "store"
 QED
 
