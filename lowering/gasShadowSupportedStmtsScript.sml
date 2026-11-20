@@ -5,57 +5,6 @@ Ancestors
   supportedTargets supportedExprs supportedExprForms gasShadowSupportedExpr
   gasShadow vyperExprEffects vyperAST vyperTypeContract list pair combin
 
-Theorem shadow_internal_root[local]:
-  expr_internal_call_root (gas_shadow_expr e) = expr_internal_call_root e
-Proof
-  Cases_on `e` >> simp[gas_shadow_expr_def, expr_internal_call_root_def] >>
-  rename1 `Call ty target args fallback` >> Cases_on `target` >>
-  simp[expr_internal_call_root_def]
-QED
-
-Theorem shadow_internal_iterator[local]:
-  supported_iterator_exists expr_internal_call_root (gas_shadow_iterator iter) =
-  supported_iterator_exists expr_internal_call_root iter
-Proof
-  Cases_on `iter` >> simp[gas_shadow_iterator_def, supported_iterator_exists_def,
-    gas_shadow_expr_exists_invariant, shadow_internal_root]
-QED
-
-Theorem shadow_internal_assert[local]:
-  supported_assert_exists expr_internal_call_root (gas_shadow_assert_reason reason) =
-  supported_assert_exists expr_internal_call_root reason
-Proof
-  Cases_on `reason` >> simp[gas_shadow_assert_reason_def, supported_assert_exists_def,
-    gas_shadow_expr_exists_invariant, shadow_internal_root] >>
-  rename1 `gas_shadow_custom_error err` >> Cases_on `err` >>
-  simp[gas_shadow_custom_error_def, custom_error_exprs_def, EXISTS_APPEND,
-    EXISTS_MAP, o_DEF, SF ETA_ss, gas_shadow_expr_exists_invariant, shadow_internal_root]
-QED
-
-Theorem shadow_internal_raise[local]:
-  supported_raise_exists expr_internal_call_root (gas_shadow_raise_reason reason) =
-  supported_raise_exists expr_internal_call_root reason
-Proof
-  Cases_on `reason` >> simp[gas_shadow_raise_reason_def, supported_raise_exists_def,
-    gas_shadow_expr_exists_invariant, shadow_internal_root] >>
-  rename1 `gas_shadow_custom_error err` >> Cases_on `err` >>
-  simp[gas_shadow_custom_error_def, custom_error_exprs_def, EXISTS_APPEND,
-    EXISTS_MAP, o_DEF, SF ETA_ss, gas_shadow_expr_exists_invariant, shadow_internal_root]
-QED
-
-Theorem shadow_internal_stmts[local]:
-  (!p s. p = expr_internal_call_root ==>
-    supported_stmt_expr_exists p (gas_shadow_stmt s) = supported_stmt_expr_exists p s) /\
-  (!p ss. p = expr_internal_call_root ==>
-    supported_stmts_expr_exists p (MAP gas_shadow_stmt ss) = supported_stmts_expr_exists p ss)
-Proof
-  ho_match_mp_tac supported_stmt_expr_exists_ind >>
-  simp[gas_shadow_stmt_def, supported_stmt_expr_exists_def,
-    gas_shadow_expr_exists_invariant, gas_shadow_shape_assignment_exists,
-    shadow_internal_root, shadow_internal_iterator, shadow_internal_assert,
-    shadow_internal_raise]
-QED
-
 Theorem shadow_target_info[local]:
   (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e)) ==>
   !target tops bindings pt.

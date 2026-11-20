@@ -3,22 +3,6 @@ Theory gasShadowSupportedExpr
 Ancestors
   gasShadow gasShadowCompilePure supportedExprs supportedExprForms vyperAST vyperContext list pair combin
 
-Theorem shadow_literal_tests[local]:
-  supported_integer_literal (gas_shadow_expr e) = supported_integer_literal e /\
-  supported_nonnegative_literal (gas_shadow_expr e) = supported_nonnegative_literal e
-Proof
-  Cases_on `e` >> simp[gas_shadow_expr_def, supported_integer_literal_def,
-    supported_nonnegative_literal_def]
-QED
-
-Theorem shadow_literal_elements[local]:
-  supported_literal_elements tops ty (MAP gas_shadow_expr es) =
-    supported_literal_elements tops ty es
-Proof
-  simp[supported_literal_elements_def, MAP_MAP_o, o_DEF] >>
-  Cases_on `ty` >> simp[MAP_MAP_o, o_DEF, EVERY_MAP, ETA_THM]
-QED
-
 Theorem shadow_builtin_form[local]:
   supported_builtin_form tops ty (gas_shadow_builtin bi) (MAP gas_shadow_expr es) =
     supported_builtin_form tops ty bi es
