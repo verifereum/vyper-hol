@@ -35,7 +35,7 @@ Ancestors
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
   (* O1: lifting per-function pass facts to the stage contract *)
   o1PassLift
-  (* O1: the pipeline's request companion at an abort *)
+  (* O1: DFT's request companion at an abort *)
   dftRequestsGas
   (* O1: joint simulation, abort requests and memory for static frames *)
   o1StaticPipelineCorrect
