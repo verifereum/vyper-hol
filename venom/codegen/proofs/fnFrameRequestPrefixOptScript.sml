@@ -18,6 +18,7 @@ Ancestors
   asmFinalizerPrefixOwn asmRelocDataEnv codegenAsmOpt
   asmOptFinalizerOwn finalizerContractOwn asmSymOwnStep
   fnPlanPlaceRevertPostamble codegenLabelDisciplined asmOptimizer
+  asmSymPcOwn[qualified] asmOptOwnPruneUnreachable[qualified]
 
 (* ===== One asm step against the call oracle ===== *)
 
@@ -202,27 +203,6 @@ Proof
   simp[asm_frame_rel_tail_def, asm_frame_rel_def] >> metis_tac[]
 QED
 
-Theorem sym_step_call_request_cong_own[local]:
-  MEM op ["CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"] /\
-  sym_step_own p env own (AsmOp op) a = SymOK a' /\
-  (b.sym_base with as_pc := 0) = (a.sym_base with as_pc := 0) /\
-  MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
-  FDOM b.sym_mem_labels = FDOM a.sym_mem_labels ==>
-  !q. ?b'. sym_step_own q env own (AsmOp op) b = SymOK b' /\
-    b'.sym_base.as_requests = a'.sym_base.as_requests /\
-    b'.sym_base.as_outcomes = a'.sym_base.as_outcomes
-Proof
-  strip_tac >>
-  `!p ss. sym_step_own p env own (AsmOp op) ss = sym_step p env (AsmOp op) ss` by
-    (rpt gen_tac >> qpat_assum `MEM op _` (mp_tac o SIMP_RULE (srw_ss()) []) >>
-     disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
-     simp[sym_step_own_def, sym_step_op_own_def, sym_step_def]) >>
-  qpat_assum `!p ss. sym_step_own _ _ _ _ _ = _` (fn th =>
-    qpat_x_assum `sym_step_own p env own (AsmOp op) a = _`
-      (assume_tac o PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
-  drule_all sym_step_call_request_cong >> metis_tac[]
-QED
-
 Theorem normal_frame_symbolic_plan_oracle_own[local]:
   normal_frame_symbolic_plan_own allow_own lo env own rpolicy unit cpl prog vs0 es0
     (JointConfig stk PG G tn fn inst s oms om hs h) ast ss ==>
@@ -244,20 +224,6 @@ Theorem asm_sym_rel_oracle_own[local]:
   ss.sym_base.as_pc = cs.as_pc
 Proof
   rw[asm_sym_rel_own_def] >> simp[]
-QED
-
-Theorem sym_steps_own_call_one[local]:
-  ss.sym_base.as_pc < LENGTH p /\
-  EL ss.sym_base.as_pc p = AsmOp op /\
-  sym_step_own p env own (AsmOp op) ss = SymOK out ==>
-  sym_steps_own p env own 1 ss = SymOK out
-Proof
-  strip_tac >>
-  `asm_block_at p ss.sym_base.as_pc [AsmOp op]` by
-    (simp[asm_block_at_def] >> decide_tac) >>
-  drule_then (qspecl_then [`own`, `env`] (fn th => asm_rewrite_tac[th]))
-    (SIMP_RULE bool_ss [sym_steps_mode_def]
-      (Q.INST [`allow_own` |-> `T`] sym_steps_mode_single))
 QED
 
 Theorem asm_sym_call_window_own[local]:
@@ -301,7 +267,8 @@ Proof
      Cases_on `sym_step_own p env own (AsmOp op) sk` >>
      simp_tac (srw_ss()) [sym_result_case_def]) >>
   `sym_steps_own p env own 1 sk = SymOK sk'` by
-    metis_tac[sym_steps_own_call_one] >>
+    asm_simp_tac (srw_ss()) [asmOptOwnPruneUnreachableTheory.sym_steps_own_one,
+                            GREATER_EQ, GSYM NOT_LESS] >>
   `?c1. asm_steps lo (build_offset_to_pc p) p 1 c = AsmOK c1 /\
     asm_sym_rel_own lo p env own c1 sk'` by
     metis_tac[SIMP_RULE bool_ss [sym_steps_mode_def]
@@ -488,7 +455,16 @@ Proof
   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
                 qpat_x_assum `MEM op _` mp_tac >> rw[])) >>
   disch_then (qx_choosel_then [`m`, `b`] strip_assume_tac) >>
-  drule_all_then (qspec_then `prog'` strip_assume_tac) sym_step_call_request_cong_own >>
+  `!q ss. sym_step_own q env E.as_code (AsmOp op) ss =
+          sym_step q env (AsmOp op) ss` by
+    (rpt gen_tac >> irule asmSymPcOwnTheory.sym_step_own_eq >>
+     qpat_assum `MEM op _` (mp_tac o SIMP_RULE (srw_ss()) []) >>
+     disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >> simp[]) >>
+  qpat_assum `!q ss. sym_step_own _ _ _ _ _ = _` (fn th =>
+    qpat_assum `sym_step_own prog env E.as_code (AsmOp op) sk = _`
+      (assume_tac o PURE_REWRITE_RULE [th])) >>
+  drule_all_then (qspecl_then [`prog'`, `env`] strip_assume_tac)
+    sym_step_call_request_cong >>
   qpat_x_assum `MEM op _` kall_tac >>
   `b.sym_base.as_requests = sk.sym_base.as_requests /\
    b.sym_base.as_outcomes = sk.sym_base.as_outcomes` by
@@ -498,7 +474,10 @@ Proof
     (irule (SIMP_RULE bool_ss [sym_steps_mode_def]
        (Q.INST [`allow_own` |-> `T`] sym_steps_mode_compose)) >>
      qexists_tac `b` >> conj_tac >- first_assum ACCEPT_TAC >>
-     drule_all_then ACCEPT_TAC sym_steps_own_call_one) >>
+     qpat_x_assum `env = asm_data_env prog' E.as_code` kall_tac >>
+     qpat_assum `!q ss. sym_step_own _ _ _ _ _ = _` (fn th =>
+       asm_simp_tac (srw_ss()) [asmOptOwnPruneUnreachableTheory.sym_steps_own_one,
+                               th, GREATER_EQ, GSYM NOT_LESS])) >>
   qabbrev_tac `lo' = SND (compute_label_offsets prog')` >>
   `code_labels_agree prog' lo'` by simp[Abbr `lo'`] >>
   `asm_sym_rel_own lo' prog' env E.as_code E (sym_init E)` by

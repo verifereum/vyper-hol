@@ -16,6 +16,7 @@ Ancestors abiDecoderIndexInit[qualified,ignore_grammar]
   abiDecoderArraySetupCode abiDecoderIndexedAddress abiDecoderArrayBound abiDecoderGuard
   abiEncoder compileEnv emitHelper vyperABI contractABI
   abiMalformedRecursiveInterface abiMalformedBulkConstructor bodyFullPathHistory
+  abiMalformedEntryProps[qualified,ignore_grammar]
   calldataDynOwned exprLoweringProps loweringStateRelDefs ptrDiscipline
   venomExecSemantics venomMemDefs venomState words finite_map pred_set list arithmetic
   exprSimConvertFromBytes exprSimAbiDecodeArrayRuntimeSetup freshWrites
@@ -67,8 +68,7 @@ Proof
   `DISJOINT P tn.t_mem` by fs[Abbr `P`, abi_decode_ptr_window_def, DISJOINT_ALT] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
     (qhdtm_assum `abi_malformed_entry`
-       (ACCEPT_TAC o MATCH_MP (SPEC_ALL bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) o
-        cj 1 o REWRITE_RULE [abi_malformed_entry_def])) >>
+       (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
   drule_all decoder_index_backedge_ptr_core_uniform_origin_frame >>
   disch_then (qspec_then `PG` (qx_choosel_then [`Hg`,`zg`,`t`] strip_assume_tac)) >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid u t /\
@@ -143,8 +143,7 @@ Proof
          a NOTIN th.t_mem)` by simp[] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp h` by
     (qhdtm_assum `abi_malformed_entry`
-       (ACCEPT_TAC o MATCH_MP (SPEC_ALL bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) o
-        cj 1 o REWRITE_RULE [abi_malformed_entry_def])) >>
+       (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
   drule_all malformed_finite_header_body_joint >>
   disch_then (qspec_then `PG` (qx_choosel_then [`b`,`Gb`,`tb`] strip_assume_tac)) >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid h b` by
@@ -268,8 +267,7 @@ Proof
    (!a. w2n (n2w slot:bytes32) <= a /\ a < w2n (n2w slot:bytes32)+32 ==> a NOTIN tb.t_mem)` by simp[] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp b` by
     (qhdtm_assum `abi_malformed_entry`
-       (ACCEPT_TAC o MATCH_MP (SPEC_ALL bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) o
-        cj 1 o REWRITE_RULE [abi_malformed_entry_def])) >>
+       (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
   drule_all malformed_indexed_reads_joint_frame >>
   disch_then (qspec_then `PG` (qx_choosel_then [`data`,`head`,`cut`,`t`,`H`,`z`] strip_assume_tac)) >>
   `alloca_history func t` by (irule body_full_path_alloca_history >> metis_tac[]) >>
@@ -354,8 +352,7 @@ Proof
   simp_tac bool_ss [] >> strip_tac >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
     (qhdtm_assum `abi_malformed_entry`
-       (ACCEPT_TAC o MATCH_MP (SPEC_ALL bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) o
-        cj 1 o REWRITE_RULE [abi_malformed_entry_def])) >>
+       (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
   drule_all (SIMP_RULE bool_ss [pairTheory.FST,pairTheory.SND]
     (Q.INST [`ops` |-> `(idx,pos,dstop)`] malformed_indexed_pass_joint)) >>
   disch_then (qspec_then `PG` (qx_choosel_then [`u`,`Gu`,`tu`,`r`] strip_assume_tac)) >>
@@ -427,8 +424,7 @@ Proof
   simp_tac bool_ss [listTheory.EVERY_DEF] >> strip_tac >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
     (qhdtm_assum `abi_malformed_entry`
-       (ACCEPT_TAC o MATCH_MP (SPEC_ALL bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) o
-        cj 1 o REWRITE_RULE [abi_malformed_entry_def])) >>
+       (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
   `L < dimword (:256) /\ hi <> Lit 0w /\ eval_operand hi t = SOME (n2w L) /\
    abi_decoder_operand_live cut.cs_next_var hi` by
     (fs[abi_malformed_entry_def,abi_malformed_allocated_window_def] >> decide_tac) >>

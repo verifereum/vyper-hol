@@ -587,41 +587,6 @@ Proof
   qexistsl_tac [`t`, `H`, `u`] >> simp[]
 QED
 
-Theorem calldata_load_overwrite_trace_uniform:
-  emit_op CALLDATALOAD [src] sa = (v,sb) /\
-  eval_operand src s = SOME sw /\
-  (!x. src = Var x ==> not_fresh_at sa x) /\
-  op_taint tn src = {} /\ fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t H u.
-    run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
-    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    eval_operand v t = SOME (abi_decode_load CALLDATALOAD sw s) /\
-    op_taint u v = {} /\ op_prov H v = NONE /\
-    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    (!a w. (!x. a = Var x ==> not_fresh_at sa x) /\
-      eval_operand a s = SOME w ==> eval_operand a t = SOME w) /\
-    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
-    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
-    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
-      op_taint u (Var x) = op_taint tn (Var x)) /\
-    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
-      (s,G,tn) [] (OK t,H,u)) /\
-    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
-Proof
-  strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
-  drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
-  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
-  qexistsl_tac [`t`, `H`, `u`] >> simp[]
-QED
-
-
 Theorem calldata_load_overwrite_prefix_uniform:
   emit_op CALLDATALOAD [src] sa = (v,sb) /\
   eval_operand src s = SOME sw /\

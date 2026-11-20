@@ -39,7 +39,7 @@ val owned_decoder_state = ``\st s G tn.
 
 val bulk_entry = ``
   abi_decode_bulk_payload (Var dp) src cnt msz MLOAD (Var input) sa = ((),sf) /\
-  fn_has_code sa sf fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sf fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ (?H. V H) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
