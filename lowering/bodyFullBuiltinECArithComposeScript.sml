@@ -39,7 +39,7 @@ Theorem ec_arith_vv_from_tail_full:
     MEM shadow_func shadow_ctx.ctx_functions /\
     fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     gas_admissible (eval_expr cx (Builtin a bt [e1;e2])) expr_vv_res_ok es /\
@@ -408,6 +408,7 @@ Theorem ec_arith_builtin_vv_sim_full:
 Proof
   match_mp_tac ec_arith_vv_from_tail_full >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~ctx_has_dalloca ctx` by (drule body_inv_no_dalloca >> simp[]) >>
   mp_tac (SPEC_ALL ec_arith_staged_cut) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >> Cases_on `u.vs_outcomes = []`
