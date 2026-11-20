@@ -59,12 +59,12 @@ Theorem outcomes_free_compile_log_saved_topics:
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_log_saved_topics ce ops s))))
 Proof
-  strip_tac >> Induct >> rpt gen_tac >> TRY (PairCases_on `h`) >>
-  simp[compile_log_saved_topics_def, every_state_insts_return] >>
-  rpt (ho_match_mp_tac every_state_insts_bind >> conj_tac
-       >- simp[b7 outcomes_free_unwrap_value, b7 outcomes_free_encode_log_topic] >>
-       gen_tac >> BETA_TAC) >>
-  simp[every_state_insts_return]
+  strip_tac >> Induct >> simp[compile_log_saved_topics_def, every_state_insts_return] >>
+  gen_tac >> PairCases_on `h` >> gen_tac >>
+  simp[compile_log_saved_topics_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac, gen_tac,
+    CHANGED_TAC (simp[every_state_insts_return, b7 outcomes_free_unwrap_value,
+      b7 outcomes_free_encode_log_topic])]) >> metis_tac[]
 QED
 
 Theorem outcomes_free_compile_log_topic_ops:

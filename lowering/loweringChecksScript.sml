@@ -41,7 +41,7 @@ Ancestors
   entryPackagedRuntimeCode
   (* compiled creation code and events *)
   vyperCreateMemoryTest vyperEventForwardStruct vyperEventArgumentLifetime
-  checkedLogEmptyExecution checkedLogDataExecution
+  abiEmptyLogPath checkedLogDataExecution
   (* ABI encode/decode edge cases and size boundaries *)
   abiDecodeBoundsTest abiDecodeAliasTest abiDecoderBytesEdges
   createSizeBoundaryTest

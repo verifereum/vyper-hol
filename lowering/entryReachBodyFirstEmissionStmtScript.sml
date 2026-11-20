@@ -35,7 +35,7 @@ Theorem first_emission_log_saved_topics[local]:
 Proof
   Induct >> gen_tac
   >- metis_tac[compile_log_saved_topics_def, first_emission_return] >>
-  PairCases_on `h` >> pure_rewrite_tac[compile_log_saved_topics_def] >>
+  PairCases_on `h` >> gen_tac >> pure_rewrite_tac[compile_log_saved_topics_def] >>
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- metis_tac[first_emission_unwrap_value] >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
@@ -1242,7 +1242,7 @@ Resume first_emission_compile_stmt[log_stmt]:
   Cases_on `ce.ce_event_info (nsid_to_string event_id)` >>
   pure_rewrite_tac[optionTheory.option_case_def] >> BETA_TAC
   >- (rpt strip_tac >> drule_at Any (cj 1 first_emission_emit_helpers) >> simp[] >> metis_tac[]) >>
-  PairCases_on `x` >> pure_rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC >>
+  PairCases_on `x` >> simp_tac bool_ss [pairTheory.pair_case_def] >>
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- (match_mp_tac first_emission_ext_call_args >>
       ACCEPT_TAC (cj 1 first_emission_compile_expr)) >>

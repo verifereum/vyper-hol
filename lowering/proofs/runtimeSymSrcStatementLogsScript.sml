@@ -1,6 +1,6 @@
 Theory runtimeSymSrcStatementLogs
 Ancestors
-  runtimeSymSrcInterfaces runtimeSymSrcEmission runtimeSymSrcContextComplete
+  runtimeSymSrcInterfaces runtimeSymSrcEmission runtimeSymSrcContext runtimeSymSrcContextComplete
   runtimeSymSrcExternalArgStaging runtimeSymSrcExternalPrimitive
   eventLoweringStructure stmtLowering compileEnv context venomInst stackPlanTypes
   list rich_list supportedStmts supportedStmtTraverse supportedExprs
@@ -20,7 +20,7 @@ Proof
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
   drule_all runtime_sym_unwrap_value >> strip_tac >>
   drule_all runtime_sym_encode_log_topic >> strip_tac >>
-  first_x_assum drule_all >> simp[]
+  first_x_assum drule_all >> gvs[]
 QED
 
 Theorem runtime_sym_stmt_log:
@@ -38,28 +38,31 @@ Proof
       simp[Once compile_stmt_def] >> strip_tac >>
       irule runtime_sym_emit_inst >> goal_assum (drule_at Any) >> qexists `0` >>
       simp[runtime_sym_ordinary_inst]) >>
-  rename1 `SOME event` >> PairCases_on `event` >>
+  PairCases_on `x` >>
   drule_all compile_log_stmt_trace >> simp[LET_THM, pairTheory.ELIM_UNCURRY] >>
   disch_then (qx_choose_then `saved` (qx_choose_then `sm`
     (qx_choose_then `topics` (qx_choose_then `st` strip_assume_tac)))) >>
   `EVERY runtime_sym_inst (state_insts sm) /\ EVERY runtime_sym_value saved` by
     (drule_at (Pat `compile_ext_call_args _ _ _ _ _ _ = _`)
        runtime_sym_ext_call_args >> disch_then irule >> simp[] >>
-     fs[supported_stmt_def, supported_log_def, supported_pure_exprs_every,
-        supported_stmt_expr_exists_def, AllCaseEqs()]) >>
-  `!vs tys. EVERY runtime_sym_value vs ==>
+     conj_tac >- fs[supported_stmt_expr_exists_def] >>
+     qexists_tac `tops` >>
+     fs[supported_stmt_def, supported_log_def, supported_pure_exprs_every]) >>
+  `!vs (tys : type list). EVERY runtime_sym_value vs ==>
       EVERY (runtime_sym_value o FST) (ZIP (vs,tys))` by
-    (Induct >> Cases_on `tys` >> simp[ZIP_def]) >>
+    (Induct >> gen_tac >> Cases_on `tys` >> simp[ZIP_def]) >>
   `EVERY (runtime_sym_value o FST)
-      (FST (split_log_ops (ZIP (saved,MAP (lowered_value_type ce) args)) event2)) /\
+      (FST (split_log_ops (ZIP (saved,MAP (lowered_value_type ce) args)) x2)) /\
    EVERY (runtime_sym_value o FST)
-      (SND (split_log_ops (ZIP (saved,MAP (lowered_value_type ce) args)) event2))` by
+      (SND (split_log_ops (ZIP (saved,MAP (lowered_value_type ce) args)) x2))` by
     (irule every_split_log_ops >> simp[]) >>
   drule_all runtime_sym_log_saved_topics >> strip_tac
   >- (irule runtime_sym_emit_inst >> goal_assum (drule_at Any) >> qexists `0` >>
-      simp[runtime_sym_ordinary_inst, EVERY_APPEND, EVERY_REVERSE, is_label_operand_def]) >>
+      goal_assum (drule_at Any) >> irule runtime_sym_ordinary_inst >>
+      simp[EVERY_APPEND, EVERY_REVERSE, is_label_operand_def]) >>
   drule_all runtime_sym_alloc_buffer >> strip_tac >>
   drule runtime_sym_abi_encode_values_to_buf >> disch_then drule_all >> strip_tac >>
   irule runtime_sym_emit_inst >> goal_assum (drule_at Any) >> qexists `0` >>
-  simp[runtime_sym_ordinary_inst, EVERY_APPEND, EVERY_REVERSE, is_label_operand_def]
+  goal_assum (drule_at Any) >> irule runtime_sym_ordinary_inst >>
+  simp[EVERY_APPEND, EVERY_REVERSE, is_label_operand_def]
 QED
