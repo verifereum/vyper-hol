@@ -451,9 +451,26 @@ Definition main_module_def:
   main_module mods = case ALOOKUP mods NONE of SOME tops => tops | NONE => []
 End
 
-(* (exposed externals, internals, main fallback, main constructor, imported
+(* The fallback an export names (`exports: lib.__default__`, or through
+   `lib.__interface__`): the first exported `__default__` whose module
+   declares one. *)
+Definition exported_fallback_def:
+  exported_fallback mods ([] : (string # num) list) = NONE ∧
+  exported_fallback mods ((fname, n) :: exps) =
+    if fname = "__default__" then
+      case ALOOKUP mods (SOME n) of
+        SOME tops =>
+          (case FOLDR classify_function ([], [], NONE, NONE) tops of
+             (exts, ints, SOME f, ctor) => SOME (SOME n, f)
+           | _ => exported_fallback mods exps)
+      | NONE => exported_fallback mods exps
+    else exported_fallback mods exps
+End
+
+(* (exposed externals, internals, fallback, main constructor, imported
    constructors), each function tagged with its module and with every
-   module's constants substituted. *)
+   module's constants substituted.  The fallback is the main module's, else
+   an exported one. *)
 Definition classify_functions_unit_def:
   classify_functions_unit mods exps =
     let env = consts_env_mods mods in
@@ -463,7 +480,9 @@ Definition classify_functions_unit_def:
     (MAP sub (exported_fns mods exps ++
               MAP (λf. (NONE, f)) (exts ++ public_getters main)),
      MAP sub (unit_internal_fns mods),
-     OPTION_MAP (subst_consts_fn_mods env) fb,
+     OPTION_MAP sub (case fb of
+                       SOME f => SOME (NONE, f)
+                     | NONE => exported_fallback mods exps),
      OPTION_MAP (subst_consts_fn_mods env) ctor,
      MAP sub (imported_ctors mods))
 End
@@ -613,8 +632,8 @@ End
 Definition package_fallback_fn_unit_def:
   package_fallback_fn_unit mods use_trans nkey_map NONE = NONE ∧
   package_fallback_fn_unit mods use_trans nkey_map
-    (SOME (mut, nr, rr, fname, fargs, dflts, ret, body)) =
-    let cenv0 = (build_compile_env_unit mods NONE
+    (SOME (src, (mut, nr, rr, fname, fargs, dflts, ret, body))) =
+    let cenv0 = (build_compile_env_unit mods src
                    External mut fname fargs ret body use_trans)
                   with ce_raw_return := rr in
     let cenv = if ret ≠ NoneT then update_cenv_ret_abi cenv0 ret
@@ -747,12 +766,12 @@ Definition lower_vyper_runtime_unit_mods_def:
          fallback_fn ∧
        EVERY (fn_allocs_ok_unit mods)
          (ext_fns ++ int_fns ++
-          (case fb_fn of NONE => [] | SOME f => [(NONE, f)])) ∧
+          (case fb_fn of NONE => [] | SOME sf => [sf])) ∧
        EVERY (no_sha256_expr o SND) (consts_env_mods mods) ∧
        EVERY (no_neg_exp_expr o SND) (consts_env_mods mods) ∧
        EVERY (no_neg_exp_fn o SND)
          (ext_fns ++ int_fns ++
-          (case fb_fn of NONE => [] | SOME f => [(NONE, f)]))
+          (case fb_fn of NONE => [] | SOME sf => [sf]))
     then
       if EXISTS (external_has_defaults o SND) ext_fns then
         run_grouped_lowering
@@ -1008,7 +1027,8 @@ Theorem classify_functions_unit_singleton:
   classify_functions_unit [(NONE, tops)] [] =
   case classify_functions tops of
     (exts, ints, fb, ctor) =>
-      (MAP (λf. (NONE, f)) exts, MAP (λf. (NONE, f)) ints, fb, ctor, [])
+      (MAP (λf. (NONE, f)) exts, MAP (λf. (NONE, f)) ints,
+       OPTION_MAP (λf. (NONE, f)) fb, ctor, [])
 Proof
   Cases_on `FOLDR classify_function ([], [], NONE, NONE) tops` >>
   PairCases_on `r` >>
@@ -1017,7 +1037,7 @@ Proof
   Cases_on `fb` >> Cases_on `ctor` >>
   simp[classify_functions_unit_def, classify_functions_def, main_module_def,
        alistTheory.ALOOKUP_def, unit_internal_fns_def, imported_ctors_def,
-       exported_fns_def, consts_env_mods_singleton,
+       exported_fns_def, exported_fallback_def, consts_env_mods_singleton,
        subst_consts_fn_mods_singleton, MAP_MAP_o, combinTheory.o_DEF]
 QED
 
@@ -1082,12 +1102,12 @@ Proof
 QED
 
 Theorem package_fallback_fn_unit_singleton:
-  package_fallback_fn_unit [(NONE, tops)] ut nkey_map fb =
-  package_fallback_fn tops ut nkey_map fb
+  package_fallback_fn_unit mods ut nkey_map NONE = NONE ∧
+  package_fallback_fn_unit [(NONE, tops)] ut nkey_map (SOME (NONE, f)) =
+  package_fallback_fn tops ut nkey_map (SOME f)
 Proof
-  Cases_on `fb` >>
-  simp[package_fallback_fn_unit_def, package_fallback_fn_def] >>
-  rename1 `SOME f` >> PairCases_on `f` >>
+  conj_tac >- simp[package_fallback_fn_unit_def, package_fallback_fn_def] >>
+  PairCases_on `f` >>
   simp[package_fallback_fn_unit_def, package_fallback_fn_def,
        build_compile_env_unit_singleton]
 QED
@@ -1181,7 +1201,8 @@ Proof
        rich_listTheory.FILTER_MAP, MAP_MAP_o, combinTheory.o_DEF, EVERY_MAP, EXISTS_MAP,
        runtime_internal_order_unit_singleton, order_internals_unit_singleton,
        package_external_fn_unit_singleton, package_internal_fn_unit_singleton,
-       package_fallback_fn_unit_singleton, package_external_group_unit_singleton,
+       package_fallback_fn_unit_singleton, cj 1 package_fallback_fn_def,
+       package_external_group_unit_singleton,
        compute_immutables_len_unit_singleton, make_struct_fields_map_mods_singleton,
        fn_allocs_ok_unit_singleton, consts_env_mods_singleton, EVERY_APPEND] >>
   simp[UNCURRY, SF ETA_ss]
