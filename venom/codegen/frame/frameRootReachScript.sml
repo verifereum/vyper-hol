@@ -23,33 +23,6 @@ Proof
   gvs[FUNPOW_SUC]
 QED
 
-Theorem step_bottom_msgParams[local]:
-  wf_state s /\ step s = (r,t) ==>
-  DROP (LENGTH t.contexts - 1) (MAP (\p. (FST p).msgParams) t.contexts) =
-  DROP (LENGTH s.contexts - 1) (MAP (\p. (FST p).msgParams) s.contexts)
-Proof
-  strip_tac >>
-  Cases_on `1 < LENGTH s.contexts`
-  >- (mp_tac (Q.INST [`k` |-> `1`] step_outer_msgParams) >> simp[] >>
-      disch_then drule_all >> simp[]) >>
-  `s.contexts <> []` by gvs[vfmExecutionPropTheory.wf_state_def] >>
-  `wf_state t` by metis_tac[step_preserves_wf_state, SND] >>
-  `t.contexts <> []` by gvs[vfmExecutionPropTheory.wf_state_def] >>
-  `LENGTH s.contexts = 1`
-    by (Cases_on `s.contexts` >> gvs[] >>
-        rename1 `s.contexts = h::cs` >> Cases_on `cs` >> gvs[]) >>
-  Cases_on `LENGTH t.contexts = LENGTH s.contexts`
-  >- (drule_all step_same_frame_foreign >> strip_tac >>
-      Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[] >>
-      rename1 `LENGTH cs = 0` >> gvs[]) >>
-  `LENGTH s.contexts < LENGTH t.contexts`
-    by (Cases_on `t.contexts` >> gvs[] >>
-        rename1 `t.contexts = h::cs` >> Cases_on `cs` >> gvs[]) >>
-  drule_all step_push_foreign >> strip_tac >>
-  Cases_on `s.contexts` >> Cases_on `t.contexts` >> gvs[] >>
-  rename1 `LENGTH cs = 1` >> Cases_on `cs` >> gvs[]
-QED
-
 Theorem root_reaches_bottom_msgParams[local]:
   wf_state es /\ run_call_reaches es s ==>
   wf_state s /\
@@ -63,7 +36,14 @@ Proof
     run_call_reaches_inv)) >>
   simp[] >> rpt strip_tac
   >- metis_tac[step_preserves_wf_state, SND] >>
-  drule_all step_bottom_msgParams >> simp[]
+  rename1 `step current = (INL (),next)` >>
+  `wf_state next` by metis_tac[step_preserves_wf_state, SND] >>
+  `1 <= LENGTH current.contexts /\ 1 <= LENGTH next.contexts` by
+    (Cases_on `current.contexts` >> Cases_on `next.contexts` >>
+     gvs[vfmExecutionPropTheory.wf_state_def]) >>
+  mp_tac (Q.INST [`n` |-> `1`, `s` |-> `current`, `t` |-> `next`,
+    `r` |-> `INL ()`] step_frame_msg_params) >>
+  simp[]
 QED
 
 Theorem root_run_terminal_source:
