@@ -985,6 +985,9 @@ Proof
   >~ [`StringL str`] >- (simp[compile_literal_vv_def] >>
       irule comp_bind_labels >>
       simp[comp_return_labels, compile_bytelike_literal_labels])
+  >~ [`HexBytesL bs`] >- (simp[compile_literal_vv_def] >>
+      irule comp_bind_labels >>
+      simp[comp_return_labels, compile_bytelike_literal_labels])
   >> Cases_on `ty` >>
   simp[compile_literal_vv_def, comp_return_labels] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
