@@ -60,6 +60,7 @@ Proof
   disch_then (qspec_then `hdr` (strip_assume_tac o BETA_RULE)) >>
   drule_all abi_decode_backedge_sim >> disch_then (qspec_then `ctx` mp_tac) >>
   simp[w2n_n2w] >> disch_tac >> gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `eval_operand (Var iv) s = SOME (n2w j)`
     (mp_then (Pos (el 3)) mp_tac prefix_loop_increment_steps) >>
   disch_then drule_all >>
