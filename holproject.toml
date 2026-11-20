@@ -20,6 +20,7 @@ roots = [
   "lowering/whitelist/whitelistForIterScript.sml",
   "lowering/whitelist/whitelistScopesScript.sml",
   "lowering/whitelist/whitelistLogWidenScript.sml",
+  "lowering/whitelist/gateCheckerAttemptScript.sml",
   # hand-written tests of the semantics, frontend and test runner
   "tests/vyperTestsHolScript.sml",
   # concrete checks of the lowering and compiler

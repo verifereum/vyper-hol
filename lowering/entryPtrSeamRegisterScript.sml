@@ -47,12 +47,32 @@ Proof
   simp[]
 QED
 *)
+(* SCRATCH SEQ-8389 caller split: the deleted bridge
+   supported_program_raw_shape_free_program is false once raw shapes are
+   admitted.  The raw-shape-free branch keeps the old proof, the bridge's
+   `by` line replaced by the case hypothesis; the raw-shape branch is
+   admitted. *)
+Theorem registration_supported_no_dalloca_new_branch[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  ~raw_shape_free_program tops ==>
+  ~ctx_has_dalloca unit.cu_context
+Proof
+  cheat
+QED
+
 Theorem registration_supported_no_dalloca:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx ==>
   ~ctx_has_dalloca unit.cu_context
 Proof
-  cheat
+  strip_tac >>
+  reverse (Cases_on `raw_shape_free_program tops`)
+  >- metis_tac[registration_supported_no_dalloca_new_branch] >>
+  irule o1PipelineCorrectTheory.every_no_dalloca >>
+  fs[e2eDefsTheory.source_typing_ok_def] >>
+  drule_all loweringShapeSourceTheory.lower_vyper_runtime_unit_no_dalloca_checked >>
+  simp[]
 QED
 
 Theorem registration_fmp_room_necessary:

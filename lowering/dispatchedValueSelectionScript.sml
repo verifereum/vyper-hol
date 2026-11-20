@@ -28,6 +28,22 @@ Proof
   asm_rewrite_tac[] >> metis_tac[]
 QED
 *)
+(* SCRATCH SEQ-8389 caller split: the deleted bridge
+   supported_program_no_external_defaults is false once External defaults are
+   admitted.  The no-defaults branch keeps the old proof, the bridge's drule
+   replaced by the case hypothesis; the defaults branch is admitted. *)
+Theorem source_signature_table_new_branch[local]:
+  supported_program tops /\
+  EXISTS external_has_defaults (FST (classify_functions tops)) ==>
+  !name tys.
+    MEM (name,tys) (abi_external_signatures tops) <=>
+    MEM (name,tys)
+      (MAP (\(mut,nr,rr,n,args,ds,ret,body). (n,MAP SND args))
+        (FST (classify_functions tops)))
+Proof
+  cheat
+QED
+
 Theorem source_signature_table[local]:
   supported_program tops ==>
   !name tys.
@@ -36,7 +52,14 @@ Theorem source_signature_table[local]:
       (MAP (\(mut,nr,rr,n,args,ds,ret,body). (n,MAP SND args))
         (FST (classify_functions tops)))
 Proof
-  cheat
+  strip_tac >> rpt gen_tac >>
+  reverse (Cases_on `EXISTS external_has_defaults (FST (classify_functions tops))`)
+  >- (qpat_x_assum `~EXISTS _ _` (mp_tac o MATCH_MP signatures_without_defaults) >>
+      rewrite_tac[classify_external_signatures] >> strip_tac >>
+      mp_tac (MATCH_MP sortingTheory.PERM_MEM_EQ abi_signature_partition) >>
+      disch_then (qspec_then `(name,tys)` mp_tac) >>
+      asm_rewrite_tac[] >> metis_tac[]) >>
+  metis_tac[source_signature_table_new_branch]
 QED
 
 Theorem table_no_hit[local]:
