@@ -11,11 +11,29 @@ Ancestors
   vyperLoweringCorrect sourceUnitExecution vyperCalldata supportedProgram
   vyperInterpreter dispatchedValueSource dispatchedValuePrefix
   dispatchedValueSelection dispatchedValueEntry dispatchedValueFallback
-  entryStateRel entryReachBodyFmp gasShadowUnit gasShadowState
+  entryStateRel gasShadowUnit gasShadowState
   venomInst vyperCompiler list runtimeExternalPackageCode compileEnv emitHelper
-  entryValueRevertPtr e2eDefs venomWf
+  entryValueRevertPtr e2eDefs venomWf moduleLoweringProps
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem external_entry_value_revert_dispatched_nr:
+  !tops rpolicy unit am tx ret vs mut nr args fbody env e st.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
+      SOME (tx.function_name, tx.args) /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, nr, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INR e, st) ==>
+    source_unit_execution_correct tops ret am tx unit vs
 Proof
   rpt strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
@@ -46,9 +64,11 @@ Proof
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops)))) fb` by
     suspend "installed_checks" >>
-  `~ctx_has_dalloca unit.cu_context` by metis_tac[entry_runtime_no_dalloca] >>
   qabbrev_tac `ss = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
                             vs_inst_idx := 0|>` >>
+  `allocas_below_fmp ss` by
+    (irule initial_entry_allocas_below_fmp >>
+     goal_assum (drule_at Any) >> simp[Abbr `ss`, vars_pc_only_def]) >>
   `fresh_vars_wrt ds ss /\ ~ss.vs_halted /\ allocas_from 0 ss /\
    LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256)` by
     (drule_all initial_entry_dispatch_scalars >>
@@ -117,9 +137,10 @@ Resume external_entry_value_revert_dispatched_nr[joint_certificate]:
 QED
 
 Finalise external_entry_value_revert_dispatched_nr
-*)
-Theorem external_entry_value_revert_dispatched_nr:
-  !tops rpolicy unit am tx ret vs mut nr args fbody env e st.
+
+(* The rejecting prefix is independent of which gas shadow was supplied. *)
+Theorem external_entry_value_revert_dispatched_with_nr:
+  !tops rpolicy unit am tx ret vs mut nr args fbody env e st shadow_ctx.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -135,14 +156,9 @@ Theorem external_entry_value_revert_dispatched_nr:
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (initial_state am [env] with
          <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
-      (INR e, st) ==>
-    source_unit_execution_correct tops ret am tx unit vs
-Proof
-  cheat
-QED
-
-(* The rejecting prefix is independent of which gas shadow was supplied. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+      (INR e, st) /\
+    gas_shadow_context unit.cu_context shadow_ctx ==>
+    source_unit_execution_correct_with shadow_ctx [] tops ret am tx unit vs
 Proof
   rpt strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
@@ -176,9 +192,11 @@ Proof
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops)))) fb` by
     suspend "installed_checks" >>
-  `~ctx_has_dalloca unit.cu_context` by metis_tac[entry_runtime_no_dalloca] >>
   qabbrev_tac `ss = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
                             vs_inst_idx := 0|>` >>
+  `allocas_below_fmp ss` by
+    (irule initial_entry_allocas_below_fmp >>
+     goal_assum (drule_at Any) >> simp[Abbr `ss`, vars_pc_only_def]) >>
   `fresh_vars_wrt ds ss /\ ~ss.vs_halted /\ allocas_from 0 ss /\
    LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256)` by
     (drule_all initial_entry_dispatch_scalars >>
@@ -240,30 +258,6 @@ Resume external_entry_value_revert_dispatched_with_nr[joint_certificate]:
 QED
 
 Finalise external_entry_value_revert_dispatched_with_nr
-*)
-Theorem external_entry_value_revert_dispatched_with_nr:
-  !tops rpolicy unit am tx ret vs mut nr args fbody env e st shadow_ctx.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
-      SOME (tx.function_name, tx.args) /\
-    initial_venom_state_rel tops am tx vs /\
-    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, nr, args, [], ret, fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
-      (INR e, st) /\
-    gas_shadow_context unit.cu_context shadow_ctx ==>
-    source_unit_execution_correct_with shadow_ctx [] tops ret am tx unit vs
-Proof
-  cheat
-QED
 
 Theorem external_entry_value_revert_dispatched:
   !tops rpolicy unit am tx ret vs mut args fbody env e st.

@@ -35,7 +35,8 @@ Theorem calldata_word_rejected_joint:
   d+32 < dimword (:256) /\ ptr_covers G tn child initial 32 /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   fresh_vars_wrt limit initial /\ allocas_from lower initial /\
-  lower <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  lower <= initial.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   ~abi_clamp_ok cl (abi_decode_load CALLDATALOAD p initial) ==>
@@ -77,7 +78,6 @@ Proof
     (qpat_assum `abi_decoder_operand_live _ src` mp_tac >>
      Cases_on `src` >> simp_tac (srw_ss()) [abi_decoder_operand_live_def,
       abi_decoder_older_vars_def, loweringStateRelDefsTheory.not_fresh_at_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   rename1 `eval_operand value loaded = SOME _` >>
@@ -96,6 +96,25 @@ Proof
        fn_has_code_code >>
      (impl_tac >- metis_tac[inst_extends_def]) >>
      strip_tac >> qexists_tac `bb` >> asm_rewrite_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp loaded` by
+    (strip_tac >>
+     `allocas_below_fmp initial` by
+       (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp initial`
+         (drule_then ACCEPT_TAC)) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+       ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+       i.inst_opcode <> DALLOCA) (emitted_insts st c1)` by
+       (qpat_assum `emit_op CALLDATALOAD [src] st = (value,c1)`
+          (mp_tac o MATCH_MP emitted_insts_emit_op) >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+     `allocas_below_fmp (loaded with vs_inst_idx := initial.vs_inst_idx)` by
+       (irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+        qexistsl_tac [`emitted_insts st c1`,`initial`] >>
+        rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `allocas_below_fmp (loaded with vs_inst_idx := _)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   `?j HG th.
     (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
       (loaded,H,u) [] (Abort Revert_abort (stopped with vs_inst_idx := j),HG,th)) /\
@@ -104,7 +123,12 @@ Proof
     (!x. x IN ({}:string set) ==> FLOOKUP HG x = FLOOKUP H x /\
       FLOOKUP th.t_var x = FLOOKUP u.t_var x)` by
     (irule exact_scalar_clamp_abort_joint >>
-     asm_rewrite_tac[NOT_IN_EMPTY] >> metis_tac[]) >>
+     asm_rewrite_tac[NOT_IN_EMPTY] >>
+     qexistsl_tac [`bb`,`cl`,`c1`,`c2`,`value`] >>
+     asm_rewrite_tac[] >>
+     qpat_assum `loaded.vs_inst_idx = _` (fn idx =>
+       qpat_assum `isPREFIX (emitted_insts c1 c2) (DROP loaded.vs_inst_idx _)`
+         (ACCEPT_TAC o REWRITE_RULE[idx]))) >>
   `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
     (initial,G,tn) [] (Abort Revert_abort (stopped with vs_inst_idx := j),HG,th)` by
     (rpt gen_tac >>

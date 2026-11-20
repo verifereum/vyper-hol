@@ -9,6 +9,9 @@ Ancestors
 Theorem none_selected_registration_inputs:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ initial_venom_state_rel tops am tx vs /\
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
   compile_entry_checks mincd pay opened = ((),checked) /\
   opened.cs_current_insts = [] /\ fn_has_code opened checked func /\
