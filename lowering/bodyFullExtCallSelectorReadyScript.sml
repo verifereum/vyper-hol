@@ -211,6 +211,8 @@ Theorem selector_packing_run[local]:
     t.vs_code = s.vs_code /\ t.vs_labels = s.vs_labels /\ t.vs_requests = s.vs_requests
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all (Q.SPEC `F` (GEN ``has_args:bool`` extcall_request_buffer_setup) |> SIMP_RULE (srw_ss()) []) >>
   disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] (qx_choose_then `q`
     (qx_choose_then `w` (qx_choose_then `u` (qx_choose_then `Gu`

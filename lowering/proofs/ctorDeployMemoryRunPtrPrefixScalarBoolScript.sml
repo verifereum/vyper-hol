@@ -39,7 +39,7 @@ Theorem prefix_scalar_bool_success:
   x <> dst /\ y <> dst /\ z <> dst /\ x <> y /\ x <> z /\ y <> z /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n p /\ w2n p+32 <= b+sz /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st st') s = OK t ==>
   ?H qt.
     qt.t_mem = tn.t_mem DIFF range_bytes [(w2n p,32)] /\
@@ -90,7 +90,7 @@ Theorem prefix_scalar_bool_ghost:
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d+32 <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?H qt.
     qt.t_mem = tn.t_mem DIFF range_bytes [(d,32)] /\
     qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\

@@ -389,6 +389,7 @@ Proof
   `allocas_from lo tD /\ lo <= tD.vs_alloca_next` by
     (qpat_assum `ghost_inv_at _ _ _ _ _ esD GD tnD tD`
        (mp_tac o REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp tD` by simp[] >>
   drule_all raw_call_header_joint >>
   disch_then (qspecl_then [`PG`,`esD`,`gas_explicit_sites ctx shadow_ctx`] mp_tac) >>
   disch_then (qx_choose_then `header_end` strip_assume_tac) >>

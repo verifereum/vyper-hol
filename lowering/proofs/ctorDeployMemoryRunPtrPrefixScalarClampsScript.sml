@@ -276,7 +276,7 @@ QED
 
 Theorem prefix_scalar_shift_clamp_certificate[local]:
   eval_operand (Var v) s = SOME w /\ op_taint tn (Var v) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   a = (if left then word_lsl w (w2n n) else word_lsr w (w2n n)) /\
   i = mk_inst iid (if left then SHL else SHR) [Lit n;Var v] [y] /\
   j = mk_inst (iid+1) ISZERO [Var y] [z] /\
@@ -304,6 +304,11 @@ Proof
     simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `allocas_from lo t1 /\ allocas_from lo t2` by
     (fs[allocas_from_def, update_var_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t1) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp t2)` by
+    (simp[allocas_below_fmp_def, update_var_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o REWRITE_RULE[allocas_below_fmp_def])) >>
   `op_taint tn1 (Var y) = {} /\ op_taint tn2 (Var z) = {}` by
     (Cases_on `left` >> fs[prefix_scalar_shift_clean, prefix_guard_output_taint]) >>
   `step_inst fuel ctx i s = OK s1` by
@@ -337,7 +342,7 @@ QED
 Theorem prefix_scalar_signed_clamp_certificate[local]:
   eval_operand (Var v) s = SOME w /\ op_taint tn (Var v) = {} /\
   v <> y /\ FLOOKUP G v = NONE /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   i = mk_inst iid SIGNEXTEND [Lit n;Var v] [y] /\
   j = mk_inst (iid+1) EQ [Var v;Var y] [z] /\
   c = mk_inst (iid+2) ASSERT [Var z] [] /\
@@ -366,6 +371,11 @@ Proof
     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `allocas_from lo t1 /\ allocas_from lo t2` by
     (fs[allocas_from_def, update_var_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t1) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp t2)` by
+    (simp[allocas_below_fmp_def, update_var_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o REWRITE_RULE[allocas_below_fmp_def])) >>
   `op_taint tn1 (Var y) = {}` by fs[prefix_scalar_shift_clean] >>
   `op_taint tn1 (Var v) = {}` by
     (fs[op_taint_def] >>
@@ -399,7 +409,7 @@ QED
 
 Theorem prefix_scalar_shift_clamp_continuation:
   eval_operand (Var v) s = SOME w /\ op_taint tn (Var v) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst iid (if left then SHL else SHR) [Lit n;Var v] [y]) /\
   get_instruction bb (SUC s.vs_inst_idx) =
@@ -470,7 +480,7 @@ QED
 Theorem prefix_scalar_signed_clamp_continuation:
   eval_operand (Var v) s = SOME w /\ op_taint tn (Var v) = {} /\
   v <> y /\ FLOOKUP G v = NONE /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst iid SIGNEXTEND [Lit n;Var v] [y]) /\
   get_instruction bb (SUC s.vs_inst_idx) =
@@ -616,7 +626,7 @@ Theorem prefix_scalar_word_ptr:
   x <> dst /\ y <> dst /\ z <> dst /\ x <> y /\ x <> z /\ y <> z /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n p /\ w2n p + 32 <= b+sz /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let k = s.vs_inst_idx;
       w = word_of_bytes T (0w:bytes32)
         (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w));
@@ -679,6 +689,10 @@ Proof
     (simp[Abbr `l1`, Abbr `q0`, prefix_dload_output_taint, FLOOKUP_DRESTRICT] >>
      gvs[Abbr `l`, update_var_def, eval_operand_def, lookup_var_def,
          FLOOKUP_UPDATE, allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp l1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `l1`, Abbr `l`, allocas_below_fmp_def, update_var_def] >>
+     tautLib.TAUT_TAC) >>
   `get_instruction bb l1.vs_inst_idx =
       SOME (mk_inst (iid+1) (if signed then SIGNEXTEND else if left then SHL else SHR)
         [Lit n;Var x] [y]) /\
@@ -739,6 +753,10 @@ Proof
           prefix_guard_taint_other, prefix_scalar_pure_taint_frame,
           update_var_def] >>
      simp[Abbr `q0`, prefix_dload_output_taint, prefix_guard_taint_other]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t4` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `t4`, Abbr `t`, Abbr `r`, Abbr `l`, allocas_below_fmp_def, update_var_def] >>
+     tautLib.TAUT_TAC) >>
   drule_all prefix_boolword_mstore_continuation >>
   simp[LET_THM] >> disch_then irule >>
   simp[Abbr `t4`, instIdxIndepTheory.update_var_idx, instIdxIndepTheory.mstore_idx, Abbr `u`, arithmeticTheory.ADD1]
@@ -816,7 +834,7 @@ Theorem prefix_scalar_word_success:
   x <> dst /\ y <> dst /\ z <> dst /\ x <> y /\ x <> z /\ y <> z /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n p /\ w2n p+32 <= b+sz /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   xs = [mk_inst iid DLOAD [src] [x];
     mk_inst (iid+1) (if signed then SIGNEXTEND else if left then SHL else SHR)
@@ -895,6 +913,11 @@ Proof
           allocas_from lo (t with vs_inst_idx := k)` by
        (qpat_x_assum `allocas_from lo s` mp_tac >>
         simp[allocas_from_def, Abbr `t`, Abbr `r`, Abbr `l`, update_var_def]) >>
+     `!k. (ctx_has_dalloca ctx ==> allocas_below_fmp (l with vs_inst_idx := k)) /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := k))` by
+       (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+        simp[NoAsms, Abbr `t`, Abbr `r`, Abbr `l`, allocas_below_fmp_def, update_var_def] >>
+        tautLib.TAUT_TAC) >>
      `eval_operand (Var x) l = SOME w /\ eval_operand (Var x) r = SOME w /\
       eval_operand (Var y) r = SOME shifted /\
       eval_operand (Var z) t = SOME (bool_to_word valid) /\
@@ -1033,7 +1056,7 @@ Theorem prefix_scalar_checked_ghost:
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d+32 <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?H qt.
     qt.t_mem = tn.t_mem DIFF range_bytes [(d,32)] /\
     qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\

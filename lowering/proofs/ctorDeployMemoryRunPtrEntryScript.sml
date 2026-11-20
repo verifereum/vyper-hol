@@ -271,6 +271,7 @@ Proof
       qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
       simp_tac std_ss [deploy_state_rel_def] >> strip_tac >>
       simp[Abbr `initial`, deploy_entry_state_def, entry_venom_state_def] >> gvs[]) >>
+  `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_entry_prepare_actual_checked >>
   disch_then (qspecl_then [`entry_taint`, `[]`, `FEMPTY`,
     `deploy_dead (HS0:(bool # bytes32 # type_value) list # num list)

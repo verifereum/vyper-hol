@@ -269,6 +269,8 @@ Resume extcall_request_packing_ready[nonempty]:
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
   `LENGTH bs = 4` by simp[Abbr `bs`, selectorCompilerPropsTheory.function_selector_length] >>
   `32 <= n` by simp[Abbr `n`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by simp[] >>
   mp_tac (Q.INST [`sa` |-> `se`, `sc` |-> `sm`, `shared` |-> `ba`,
      `tuple` |-> `aa`, `has_args` |-> `T`, `es` |-> `ee`, `H0` |-> `HH`]
      extcall_request_buffer_setup) >>

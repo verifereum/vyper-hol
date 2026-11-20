@@ -235,6 +235,8 @@ Resume default_word_registration_prelude_footprint[origin]:
      irule prefix_register_address_emit_origin >>
      conj_tac >- simp[] >>
      qexistsl [`ALLOCA`,`[Lit (n2w 32)]`,`buf.buf_operand`,`st`] >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
      `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w 32)]
         [STRING #"%" (toString st.cs_next_var)]) s =
        OK (update_var (STRING #"%" (toString st.cs_next_var)) (n2w s.vs_alloca_next)
@@ -249,7 +251,7 @@ Resume default_word_registration_prelude_footprint[origin]:
          (mk_inst st.cs_next_id ALLOCA [Lit (n2w 32)]
            [STRING #"%" (toString st.cs_next_var)]) s` by
        (drule_all (Q.INST [`n` |-> `32`] prefix_register_alloc_pair) >>
-        disch_then (qspecl_then [`STRING #"%" (toString st.cs_next_var)`, `tn`, `0`, `fn`, `PG`, `G`, `D`] mp_tac) >>
+        disch_then (qspecl_then [`STRING #"%" (toString st.cs_next_var)`, `tn`, `0`, `PG`, `G`, `D`] mp_tac) >>
         simp[] >> strip_tac >> asm_rewrite_tac[]) >>
      simp[run_inst_seq_def, mk_inst_def, is_terminator_def] >>
      simp[unitTransformDefsTheory.inst_mem_below_frontier_def,
@@ -285,6 +287,8 @@ QED
 
 Resume default_word_registration_prelude_footprint[pullback]:
   gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   `(!fuel. ptr_safe_run D lo fuel ctx fn PG H0 q a) ==>
     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s` by
     (drule_all prefix_register_alloc_run_continuation >>

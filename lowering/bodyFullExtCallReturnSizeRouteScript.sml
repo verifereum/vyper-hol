@@ -17,7 +17,7 @@ Ancestors
 
 Theorem size_route_read[local]:
   emit_op RETURNDATASIZE [] a = (rds,b) /\ fn_has_code a b func /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?u H tm.
@@ -137,7 +137,7 @@ QED
 Theorem size_route_tail_entry[local]:
   compile_return_value_decode low cap a = (hi,b) /\ fn_has_code a b func /\
   run_inst_seq (emitted_insts a b) s = res /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   (!x. x IN R ==> not_fresh_at a x) ==>
@@ -151,6 +151,7 @@ Theorem size_route_tail_entry[local]:
     tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\
     tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
     ~u.vs_halted /\ allocas_from lo u /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts m b) (DROP u.vs_inst_idx bb.bb_instructions) /\
     u.vs_inst_idx + LENGTH (emitted_insts m b) = LENGTH b.cs_current_insts /\
@@ -188,6 +189,10 @@ Proof
   `?bb. lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
      isPREFIX (emitted_insts m b) (DROP u.vs_inst_idx bb.bb_instructions)` by
     (drule_all stmtReasonLitFragMemoryTheory.fn_has_code_code >> simp[] >> metis_tac[]) >>
+  `allocas_below_fmp u = allocas_below_fmp s` by
+    (qpat_assum `u = _ with vs_inst_idx := _` SUBST1_TAC >>
+     simp[NoAsms,allocas_below_fmp_def,update_var_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by metis_tac[] >>
   qexistsl_tac [`m`,`u`,`G1`,`tn1`,`rds INSERT {Lit (n2w low); Lit (n2w cap)}`,`B`,`bb`] >>
   simp[] >> rpt conj_tac
   >- (simp[] >> rpt strip_tac >> gvs[] >> simp[op_prov_def, op_taint_def])
@@ -210,7 +215,7 @@ QED
 Theorem size_route_success[local]:
   compile_return_value_decode low cap a = (hi,b) /\ fn_has_code a b func /\
   run_inst_seq (emitted_insts a b) s = OK v /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?Gf tm.
@@ -228,7 +233,6 @@ Proof
   disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] strip_assume_tac) >>
   fs[exec_result_map_def] >>
   drule abiDecodeScalarRunSafetyTheory.abi_decode_scalar_run_safe >> disch_then (qspec_then `u` strip_assume_tac) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`func`,`PG`,`ARB`] strip_assume_tac) >>
   rename1 `inst_seq_ptr ARB 0 ctx func PG G1 tn1 _ u G2 tn2` >>
@@ -248,7 +252,7 @@ QED
 Theorem size_route_abort[local]:
   compile_return_value_decode low cap a = (hi,b) /\ fn_has_code a b func /\
   run_inst_seq (emitted_insts a b) s = Abort err v /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?z Gf tm. !D.
@@ -284,8 +288,7 @@ Proof
     (qx_gen_tac `D` >>
      `opc = ASSERT \/ opc = ASSERT_UNREACHABLE` suffices_by
        (disch_tac >>
-        `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
-        drule_all bop_scalar_seq_assert_abort_checked >>
+              drule_all bop_scalar_seq_assert_abort_checked >>
         disch_then (qspecl_then [`func`,`PG`,`D`] strip_assume_tac) >> metis_tac[]) >>
      simp[]) >>
   pop_assum (fn th =>
@@ -308,7 +311,7 @@ Theorem extcall_return_size_route:
   compile_return_value_decode low cap a = (hi,b) /\ fn_has_code a b func /\
   low < dimword (:256) /\ cap < dimword (:256) /\
   entry.vs_returndata = bs /\ LENGTH bs < dimword (:256) /\
-  ~entry.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo entry /\
+  ~entry.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp entry) /\ allocas_from lo entry /\
   entry.vs_current_bb = a.cs_current_bb /\
   entry.vs_inst_idx = LENGTH a.cs_current_insts /\
   (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)

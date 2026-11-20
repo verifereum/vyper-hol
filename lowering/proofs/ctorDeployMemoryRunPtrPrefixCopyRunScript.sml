@@ -220,7 +220,7 @@ Theorem prefix_copy_success_block:
   eval_operand lenop s = SOME k /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n d /\ w2n d+w2n k <= b+sz /\
   op_taint tn (Var dst) = {} /\ op_taint tn src = {} /\ op_taint tn lenop = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst fuel ctx (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s = OK t ==>
   let qt = step_taint (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s t tn in
     qt.t_mem SUBSET tn.t_mem /\
@@ -338,7 +338,7 @@ Theorem prefix_copy_success_ptr:
   eval_operand lenop s = SOME k /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n d /\ w2n d+w2n k <= b+sz /\
   op_taint tn (Var dst) = {} /\ op_taint tn src = {} /\ op_taint tn lenop = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst 0 ctx (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s = OK t ==>
   inst_seq_ptr D lo ctx fn PG G tn [mk_inst iid DLOADBYTES [Var dst;src;lenop] []] s
     G (step_taint (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s t tn)
@@ -510,6 +510,7 @@ Resume prefix_bytestring_success_ghost[finish]:
     (simp[Abbr `u`, Abbr `i`, ghostPcTransportPtrTheory.eval_operand_inst_idx,
        eval_operand_def, op_taint_def, allocas_from_def] >>
      gvs[eval_operand_def, lookup_var_def, allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   `!fuel. qt.t_mem SUBSET q3.t_mem /\
     DISJOINT (range_bytes [(w2n d,abi_decode_bytes_copy_size n)]) qt.t_mem /\
     qt.t_var = q3.t_var /\ qt.t_stor = q3.t_stor /\
@@ -1023,6 +1024,7 @@ Proof
     (assume_tac o SRULE [step_inst_non_invoke, mk_inst_def]) >>
   qpat_assum `get_instruction bb s5.vs_inst_idx = _`
     (assume_tac o SRULE [mk_inst_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s5` by simp[] >>
   drule_all (SRULE [step_inst_non_invoke, mk_inst_def] prefix_copy_success_block) >>
   disch_then (mp_tac o SRULE [LET_THM, FORALL_AND_THM, GSYM mk_inst_def]) >>
   simp[LESS_MOD] >>

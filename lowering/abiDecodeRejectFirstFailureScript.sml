@@ -559,7 +559,7 @@ Theorem malformed_complex_head_guard_cut:
   op_prov G pos = NONE /\ op_taint tn pos = {} /\
   op_prov G hi = NONE /\ op_taint tn hi = {} /\
   sh.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  fn_has_code st sh func /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code st sh func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   if p+k <= L then
@@ -593,7 +593,6 @@ Proof
       disch_then (qspecl_then [`p`,`ceiling`,`s`] mp_tac) >>
       (impl_tac >- (simp[] >> qexists `L` >> simp[])) >>
       strip_tac >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_all malformed_guard_success_cut >>
       disch_then (qspec_then `PG` strip_assume_tac) >>
       qexistsl_tac [`actual with vs_inst_idx := LENGTH sh.cs_current_insts`, `G'`, `tn'`] >>

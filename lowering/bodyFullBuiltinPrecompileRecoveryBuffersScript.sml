@@ -2,6 +2,7 @@
 Theory bodyFullBuiltinPrecompileRecoveryBuffers
 Ancestors
   bodyFullAllocaFresh bodyFullUnwrapRun bodyFullUnwrapSlotPost
+  bodyFullHashKeccakFixed
   bodyMemBiECRecoverMemory bodyPtrPrecompileBuiltinsRecoveryInput
   bodyPtrPrecompileBuiltinsCompilerStages bodyPtrPrecompileBuiltinsSeq
   exprSimPrecompiles exprSimAlloc exprSimLiteralBuffer exprSimWordArgs
@@ -28,7 +29,9 @@ emit_void MSTORE [ib.buf_operand; h] sa = ((),sb) /\
 compile_alloc_buffer 32 sp = (ob,sm) /\
 emit_void MSTORE [ob.buf_operand; Lit 0w] sm = ((),sz) /\
 fn_has_code sf sz func /\ fn_inst_ids_distinct func /\
-local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
+local_ptrs_reserved cenv sf /\
+(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+  s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
 (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==>
        not_fresh_at sf x) /\
 (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==>
@@ -108,6 +111,7 @@ Proof
     (fn th => qpat_assum
       `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace`
       (strip_assume_tac o MATCH_MP th)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `allocas_from lo s /\ lo <= s.vs_alloca_next` by
     (qpat_assum `ghost_inv_at (DF (storage_trace_horizon _)) _ _ _ _ _ _ _ _`
        (strip_assume_tac o PURE_REWRITE_RULE [ghost_inv_at_def]) >> simp[]) >>
@@ -185,6 +189,11 @@ Proof
           `func` |-> `func`,`sa` |-> `sf`,`s` |-> `s`,`t` |-> `s1`,
           `G` |-> `G`,`tn` |-> `tn`,`G'` |-> `G1`,`tn'` |-> `tn1`,
           `e` |-> `w2n (wi:256 word)+128`] typed) end) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ ghost_inv_at _ _ _ _ _ _ _ _ s1`
+       (fn th => qpat_assum
+          `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace`
+          (ACCEPT_TAC o MATCH_MP (SPEC_ALL stmt_state_rel_allocas_below_fmp) o CONJUNCT1 o MATCH_MP th))) >>
   `!a. MEM a [h;v;r;sig] ==>
     eval_operand a s1 = eval_operand a s /\ op_taint tn1 a = {} /\
     (!l. a <> Label l) /\ (!q. a = Var q ==> not_fresh_at sa q)` by
@@ -421,6 +430,9 @@ Proof
     (fn th => qpat_assum
       `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace`
       (strip_assume_tac o MATCH_MP th)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ s2`
+       (ACCEPT_TAC o MATCH_MP (SPEC_ALL stmt_state_rel_allocas_below_fmp))) >>
   qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ s2`
     (fn ssr => let
        val horizon = hd (snd (strip_comb (concl ssr)));
@@ -462,6 +474,11 @@ Proof
           `G` |-> `G2`,`tn` |-> `tn2`,`G'` |-> `G3`,`tn'` |-> `tn3`,
           `e` |-> `w2n (wo:256 word)+32`] typed) end) >> simp[] >>
      metis_tac[not_fresh_at_mono,LESS_EQ_TRANS]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ ghost_inv_at _ _ _ _ _ _ _ _ s3`
+       (fn th => qpat_assum
+          `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace`
+          (ACCEPT_TAC o MATCH_MP (SPEC_ALL stmt_state_rel_allocas_below_fmp) o CONJUNCT1 o MATCH_MP th))) >>
   mp_tac (Q.INST [`D` |-> `ARB`,`fn` |-> `func`,`bufroot` |-> `qo`,
     `sa` |-> `sm`,`sb` |-> `sz`,`s` |-> `s3`,`G` |-> `G3`,
     `tn` |-> `tn3`,`a` |-> `wo`,`v` |-> `Lit 0w`,`w` |-> `0w`]

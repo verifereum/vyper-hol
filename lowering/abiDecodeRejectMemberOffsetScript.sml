@@ -143,7 +143,7 @@ Theorem malformed_member_scalar_frame[local]:
   bop_scalar_seq {x | not_fresh_at sa x} A (emitted_insts sa sb) C /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
   fn_has_code sa sb func /\ inst_extends sa sb /\ sb.cs_current_bb = sa.cs_current_bb /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?H u. (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -156,7 +156,6 @@ Theorem malformed_member_scalar_frame[local]:
       FLOOKUP H q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q))
 Proof
   strip_tac >> drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (fn th => assume_tac th >>
     qspecl_then [`func`,`PG`,`ARB:dead`] strip_assume_tac th) >>
@@ -216,7 +215,7 @@ Theorem malformed_member_joint_prefix[local]:
   b+ao+32 <= L /\ B+L < dimword (:256) /\ B+L <= s.vs_alloca_next /\
   not_fresh_at sa source /\ abi_decoder_operand_live sa.cs_next_var pos /\
   op_prov G pos = NONE /\ op_taint tn pos = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?H u. (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
      (s,G,tn) [] (OK (r3 with vs_inst_idx := LENGTH c3.cs_current_insts),H,u)) /\
@@ -246,7 +245,11 @@ Proof
   `op_prov G1 head = NONE /\ op_taint tn1 head = {}` by simp[] >>
   `b + ao + 32 <= L /\ w2n (n2w B : bytes32) + (b+ao) < dimword (:256)` by
     (simp[] >> decide_tac) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp r1` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r1` by
+    (qpat_assum `r1 = s with vs_vars := _` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   drule_all (Q.INST [`n` |-> `32`] (SPEC_ALL member_navigation_emit_pointer_pc_uniform_origin)) >>
   disch_then (qspec_then `PG` (qx_choose_then `addr_reg` (qx_choose_then `G2`
     (qx_choose_then `tn2` strip_assume_tac)))) >>
@@ -283,6 +286,12 @@ Proof
      qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE[allocas_from_def])) >>
   `w2n (n2w (B+(b+ao)) : bytes32) + 32 <= at2.vs_alloca_next` by
     (asm_rewrite_tac[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at2` by
+    (simp[NoAsms, Abbr `at2`] >>
+     qpat_assum `r2 = r1 with vs_vars := _` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp r1` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (at2,G2,tn2) []
      (OK (r3 with vs_inst_idx := LENGTH c3.cs_current_insts),G3,tn3)` by
     (rpt gen_tac >> qpat_assum `!D lower explicit ctx' func. _ ==> gas_origin_ptr_path _ _ _ _`
@@ -318,7 +327,7 @@ Theorem malformed_dynamic_member_offset_cut:
   (!R A code C G tn ctx lo s func bb t PG.
     bop_scalar_seq R A code C /\
     (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-    ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     run_inst_seq code s = Abort Revert_abort t ==>
@@ -336,7 +345,7 @@ Theorem malformed_dynamic_member_offset_cut:
   op_prov G pos = NONE /\ op_taint tn pos = {} /\
   sb.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
   fn_has_code sa sb func /\ allocas_from lo s /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   (?u H z. u.vs_accounts = s.vs_accounts /\
       u.vs_transient = s.vs_transient /\ u.vs_call_ctx = s.vs_call_ctx /\
@@ -394,6 +403,11 @@ Proof
     (qpat_assum `at3 = _` SUBST1_TAC >>
      simp[allocas_from_def] >>
      qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE[allocas_from_def])) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at3` by
+    (qpat_assum `at3 = _` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `!op. op IN {pos;off} ==> op_prov H op = NONE /\ op_taint u op = {}` by
     (simp[] >> metis_tac[]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c3 sb)` by

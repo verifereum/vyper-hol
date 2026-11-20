@@ -10,7 +10,7 @@ Ancestors
 
 Theorem return_default_select_joint[local]:
   emit_inst JNZ [test;Label yes;Label no] [] a = ((),b) /\
-  fn_has_code a b func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a b func /\ ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   eval_operand test s = SOME (if empty then 1w else 0w) /\
@@ -40,7 +40,7 @@ QED
 Theorem return_default_test_joint[local]:
   emit_op RETURNDATASIZE [] a = (rds,m) /\
   emit_op ISZERO [rds] m = (test,b) /\ fn_has_code a b func /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   LENGTH s.vs_returndata < dimword (:256) ==>
@@ -110,7 +110,10 @@ Resume return_default_test_joint[path]:
     new_site_bytes_def, step_writes_def, written_taint_def, adopt_reset_def,
     store_taint_def, imm_taint_def, range_bytes_def,
     finite_mapTheory.FLOOKUP_DEF, SF CONJ_ss] >>
-  simp[op_taint_def, finite_mapTheory.FLOOKUP_UPDATE, taint_component_equality]
+  simp[op_taint_def, finite_mapTheory.FLOOKUP_UPDATE, taint_component_equality] >>
+  fs[allocas_below_fmp_def, update_var_def] >>
+  qpat_assum `ctx_has_dalloca ctx ==> _ /\ _` (fn th =>
+    ACCEPT_TAC (DISCH ``ctx_has_dalloca ctx`` (CONJUNCT2 (UNDISCH th))))
 QED
 Finalise return_default_test_joint
 
@@ -122,7 +125,7 @@ Theorem return_default_shell_joint:
   fresh_label "extcall_exit" a4 = (xl,a5) /\
   emit_inst JNZ [test;Label dl;Label cl] [] a5 = ((),a6) /\
   fn_has_code a a2 func /\ fn_has_code a5 a6 func /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   LENGTH s.vs_returndata < dimword (:256) ==>
@@ -149,6 +152,10 @@ Proof
    u.vs_current_bb = s.vs_current_bb /\
    u.vs_inst_idx = LENGTH a2.cs_current_insts` by simp[update_var_def] >>
   `allocas_from lo u` by metis_tac[allocas_from_def] >>
+  `allocas_below_fmp u = allocas_below_fmp s` by
+    (qpat_assum `u = (_ with vs_inst_idx := _)` SUBST1_TAC >>
+     simp[allocas_below_fmp_def, update_var_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   `a5.cs_current_bb = a.cs_current_bb /\
    a5.cs_current_insts = a2.cs_current_insts` by
     gvs[fresh_label_def, comp_bind_def, comp_return_def,
@@ -261,7 +268,7 @@ Theorem return_default_shell_entry:
   fresh_label "extcall_exit" a4 = (xl,a5) /\
   emit_inst JNZ [test;Label dl;Label cl] [] a5 = ((),a6) /\
   fn_has_code a a2 func /\ fn_has_code a5 a6 func /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   LENGTH s.vs_returndata < dimword (:256) ==>

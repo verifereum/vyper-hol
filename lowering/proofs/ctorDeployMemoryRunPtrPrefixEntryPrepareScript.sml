@@ -46,7 +46,7 @@ QED
 Theorem prepare_assert_origin[local]:
   emit_void ASSERT [a] st = ((),last) /\
   eval_operand a initial = SOME w /\ w <> 0w /\ op_taint tn a = {} /\
-  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   fn_has_code st last func /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -83,7 +83,7 @@ val PrepareEmit = ``\checked.
    (opc = ASSIGN /\ ops = [Lit 0w] /\ w = 0w) \/
    (opc = ISZERO /\ ops = [a] /\ eval_operand a initial = SOME 0w /\
     op_taint tn a = {} /\ w = 1w)) /\
-  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   fresh_vars_wrt st initial /\ fn_has_code st last func /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -91,6 +91,7 @@ val PrepareEmit = ``\checked.
     op_prov H out = NONE /\ fresh_vars_wrt last t /\
     t.vs_memory = initial.vs_memory /\ t.vs_allocas = initial.vs_allocas /\
     t.vs_alloca_next = initial.vs_alloca_next /\
+    t.vs_fmp = initial.vs_fmp /\ t.vs_initial_fmp = initial.vs_initial_fmp /\
     t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
     t.vs_data_section = initial.vs_data_section /\
     t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_labels = initial.vs_labels /\
@@ -166,7 +167,6 @@ Proof
   simp[op_taint_def, op_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
     update_var_def] >>
   gvs[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   FIRST [drule_all prefix_prepare_callvalue_run, drule_all prefix_prepare_zero_run,
          drule_all prefix_prepare_iszero_run] >>
   simp[update_var_def]
@@ -177,7 +177,7 @@ val PrepareRegion = ``\checked.
   (if cap > 0 then
      comp_bind (compile_fixed_region_with_id cap) (\r. comp_return (SND r).buf_operand)
    else comp_return (Lit 0w)) st = (imm,last) /\
-  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   fresh_vars_wrt st initial /\ fn_has_code st last func /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -186,6 +186,7 @@ val PrepareRegion = ``\checked.
     fresh_vars_wrt last t /\
     t.vs_memory = initial.vs_memory /\ t.vs_allocas = initial.vs_allocas /\
     t.vs_alloca_next = initial.vs_alloca_next /\
+    t.vs_fmp = initial.vs_fmp /\ t.vs_initial_fmp = initial.vs_initial_fmp /\
     t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
     t.vs_data_section = initial.vs_data_section /\
     t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_labels = initial.vs_labels /\
@@ -229,13 +230,14 @@ Theorem prefix_entry_prepare_paycheck_actual_checked:
   emit_op ISZERO [cv] sa = (nv,sb) /\ emit_void ASSERT [nv] sb = ((),last) /\
   fn_has_code st sa func /\ fn_has_code sa sb func /\ fn_has_code sb last func /\
   initial.vs_call_ctx.cc_callvalue = 0w /\
-  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   fresh_vars_wrt st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t H qt.
     fresh_vars_wrt last t /\
     t.vs_memory = initial.vs_memory /\ t.vs_allocas = initial.vs_allocas /\
     t.vs_alloca_next = initial.vs_alloca_next /\
+    t.vs_fmp = initial.vs_fmp /\ t.vs_initial_fmp = initial.vs_initial_fmp /\
     t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
     t.vs_data_section = initial.vs_data_section /\
     t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_labels = initial.vs_labels /\
@@ -264,13 +266,20 @@ Proof
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`]
     (qx_choose_then `s1` (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac)))) >>
   `allocas_from lo s1` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp initial`
+       (mp_tac o REWRITE_RULE[allocas_below_fmp_def]) >>
+     simp[allocas_below_fmp_def] >> tautLib.TAUT_TAC) >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ISZERO`, `ops` |-> `[cv]`, `a` |-> `cv`, `w` |-> `1w`]
     prefix_entry_prepare_emit_actual_checked)) >>
   disch_then (qspecl_then [`PG`,`G1`,`D`]
     (qx_choose_then `s2` (qx_choose_then `G2` (qx_choose_then `tn2` strip_assume_tac)))) >>
   `allocas_from lo s2` by (fs[allocas_from_def] >> metis_tac[]) >>
   `1w <> (0w:bytes32)` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1`
+       (mp_tac o REWRITE_RULE[allocas_below_fmp_def]) >>
+     simp[allocas_below_fmp_def] >> tautLib.TAUT_TAC) >>
   drule_all prefix_prepare_assert_actual >>
   disch_then (qspecl_then [`PG`,`G2`,`D`] mp_tac) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
@@ -313,13 +322,15 @@ Theorem prefix_entry_prepare_payable_actual_checked:
    else comp_bind (emit_op CALLVALUE [])
      (\cv. comp_bind (emit_op ISZERO [cv]) (\nv. emit_void ASSERT [nv]))) st = ((),last) /\
   (payable \/ initial.vs_call_ctx.cc_callvalue = 0w) /\
-  fn_has_code st last func /\ allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st last func /\ allocas_from lo initial /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   fresh_vars_wrt st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t H qt.
     fresh_vars_wrt last t /\
     t.vs_memory = initial.vs_memory /\ t.vs_allocas = initial.vs_allocas /\
     t.vs_alloca_next = initial.vs_alloca_next /\
+    t.vs_fmp = initial.vs_fmp /\ t.vs_initial_fmp = initial.vs_initial_fmp /\
     t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
     t.vs_data_section = initial.vs_data_section /\
     t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_labels = initial.vs_labels /\
@@ -370,7 +381,8 @@ Theorem prefix_entry_prepare_actual_checked:
      comp_bind (compile_fixed_region_with_id cap) (\r. comp_return (SND r).buf_operand)
    else comp_return (Lit 0w)) pay = (imm,last) /\
   (payable \/ initial.vs_call_ctx.cc_callvalue = 0w) /\
-  fn_has_code st last func /\ allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st last func /\ allocas_from lo initial /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
   fresh_vars_wrt st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t H qt.
@@ -410,6 +422,10 @@ Proof
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`]
     (qx_choose_then `s1` (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac)))) >>
   `allocas_from lo s1` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp initial`
+       (mp_tac o REWRITE_RULE[allocas_below_fmp_def]) >>
+     simp[allocas_below_fmp_def] >> tautLib.TAUT_TAC) >>
   drule_all (SRULE [] prefix_entry_prepare_region_actual_checked) >>
   disch_then (qspecl_then [`tn1`,`PG`,`G1`,`D`]
     (qx_choose_then `s2` (qx_choose_then `G2` (qx_choose_then `tn2` strip_assume_tac)))) >>

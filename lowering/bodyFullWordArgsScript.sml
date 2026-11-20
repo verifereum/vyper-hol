@@ -51,7 +51,8 @@ Theorem lower_word_args_sim_full:
         ghost_inv_at (DF H) lo d cenv cx mid G tn t /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
         EVERY (\x. op_taint tn x = {}) xs)
-      (\H rr mid gt r. wb_args_exit rr r /\ halt_exit H cx mid rr r)
+      (\H rr mid gt r. wb_args_exit rr r /\ halt_exit H cx mid rr r /\
+        (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   Induct
   >- (simp[lower_word_args_nil] >> rpt strip_tac >>
@@ -223,7 +224,8 @@ Proof
         ghost_inv_at (DF H) lo d cenv cx fin G tn u /\
         ghost_kept_at lo cenv mid s1 G1 tn1 t G tn /\
         EVERY (\x. op_taint tn x = {}) ys)
-      (\H rr fin gt r. wb_args_exit rr r /\ halt_exit H cx fin rr r)` by
+      (\H rr fin gt r. wb_args_exit rr r /\ halt_exit H cx fin rr r /\
+        (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))` by
     (first_x_assum irule >> simp[] >>
      rpt conj_tac
      >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
