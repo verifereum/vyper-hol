@@ -349,8 +349,9 @@ Theorem fallback_entry_registration_joint:
     rt = (if ret = NoneT then NONE else SOME ret) /\
     runtime_fallback_body_start tops rpolicy
       ("fn___default__",cenv,[],4,mut = Payable,T,global_nonreentrant_slot,
-       T,mut = View,fbody,rt) sa /\
-    compile_guarded_body cenv T global_nonreentrant_slot T (mut = View) fbody rt sa =
+       T,mut = View,subst_consts_stmts (module_consts_env tops []) fbody,rt) sa /\
+    compile_guarded_body cenv T global_nonreentrant_slot T (mut = View)
+      (subst_consts_stmts (module_consts_env tops []) fbody) rt sa =
       ((),st') /\
     fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
@@ -399,7 +400,7 @@ Proof
   `?ce. set_fallback_package_target rpolicy.rpol_target
       (package_fallback_fn tops T (K global_nonreentrant_slot)
         (FST (SND (SND (classify_functions tops))))) =
-      SOME (ce,mut = Payable,T,global_nonreentrant_slot,T,mut = View,fbody,rt)` by
+      SOME (ce,mut = Payable,T,global_nonreentrant_slot,T,mut = View,subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
     simp[package_fallback_fn_def, set_fallback_package_target_def, Abbr `rt`] >>
   rename1 `set_fallback_package_target _ _ = SOME (ce,_,T,_,T,_,_,_)` >>
   drule lower_vyper_runtime_unit_context_entry >>

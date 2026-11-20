@@ -389,6 +389,7 @@ Theorem external_body_support_bounds_from_allocs[local]:
   (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
   EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
   type_stmts env ret ss = SOME env' /\
+  ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss /\
   (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
    return_buffer_ok cenv) ==>
   locals_alloc_ok cenv env /\ stmts_exprs_ok cenv ss /\
@@ -407,34 +408,6 @@ Proof
       simp[EVERY_MEM] >>
       disch_then (qspec_then `(id,ty)` mp_tac) >> simp[]) >>
   gvs[supported_function_body_def] >> metis_tac[]
-QED
-
-Theorem external_body_support_bounds:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
-  MEM (FunctionDecl External mut nr rr name args defaults ret ss) tops /\
-  cenv.ce_struct_fields = make_struct_fields_map tops /\
-  cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
-  alloc_env_agree (build_compile_env tops Internal mut name args ret ss F)
-    cenv /\
-  env_context_consistent env cx /\
-  (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
-  EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
-  type_stmts env ret ss = SOME env' /\
-  (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
-   return_buffer_ok cenv) ==>
-  locals_alloc_ok cenv env /\ stmts_exprs_ok cenv ss /\
-  ?bindings. supported_stmts tops bindings ss
-Proof
-  strip_tac >>
-  `subst_consts_fn (module_consts_env tops [])
-     (mut,nr,rr,name,args,defaults,ret,ss) = (mut,nr,rr,name,args,defaults,ret,ss)` by
-    (fs[source_typing_ok_def] >>
-     metis_tac[checked_supported_function_subst, vyperASTTheory.function_visibility_distinct]) >>
-  drule_all supported_external_allocs_ok >> strip_tac >> gvs[] >>
-  drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ _ _ _) _`)
-    supported_program_function >> simp[] >> strip_tac >>
-  drule_all external_body_support_bounds_from_allocs >> simp[]
 QED
 
 Theorem external_bind_arguments_popped:
@@ -945,6 +918,13 @@ Proof
      simp[subst_consts_fn_def, subst_consts_expr_def] >> strip_tac >>
      Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
      qexists `rr` >> irule lower_vyper_runtime_unit_allocs_ok >>
+     metis_tac[]) >>
+  `~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules)
+     (subst_consts_stmts (module_consts_env tops []) fbody)` by
+    (`cenv.ce_modules = [(NONE,tops)]` by fs[body_inv_def, cenv_module_pins_def] >>
+     simp[] >>
+     irule (INST_TYPE [alpha |-> ``:160 word``]
+       checked_const_substitution_const_name_free) >>
      metis_tac[]) >>
   drule_all external_body_support_bounds_from_allocs >> strip_tac >>
   qexistsl [`bindings`, `env_t`, `env'`] >> simp[] >>
