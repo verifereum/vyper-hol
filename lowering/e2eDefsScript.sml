@@ -800,7 +800,8 @@ Definition exception_outcome_rel_def:
        ((exc = Reverted /\ frame_raises es Reverted) \/ s = "UNREACHABLE")) /\
   (exception_outcome_rel tops (Error e) es r es' <=>
      unspecified_behaviour_exempt tops e \/
-     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) /\
+     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
+                  (!d. e = RevertData d ==> exc = Reverted /\ frame_raises es Reverted)) /\
   (exception_outcome_rel tops _ es r es' <=> F)
 End
 
@@ -813,7 +814,9 @@ Theorem exception_outcome_rel_cases:
           ((failure = Reverted /\ frame_raises es Reverted) \/ s = "UNREACHABLE")
     | Error e =>
         unspecified_behaviour_exempt tops e \/
-        ?failure out lgs. frame_outcome es r es' (SOME failure) out lgs
+        ?failure out lgs.
+          frame_outcome es r es' (SOME failure) out lgs /\
+          (!d. e = RevertData d ==> failure = Reverted /\ frame_raises es Reverted)
     | _ => F
 Proof
   Cases_on `exc` >> simp[exception_outcome_rel_def]

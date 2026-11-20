@@ -862,7 +862,9 @@ Proof
          rpt (pop_assum kall_tac) >>
          Cases_on `r` >> Cases_on `e` >>
          simp[expr_exit_def, deploy_ctor_finish_def, deploy_venom_result_rel_def] >>
-         rename1 `abort = Revert_abort` >> Cases_on `abort` >> simp[]) >>
+         rename1 `abort = Revert_abort` >> Cases_on `abort` >> simp[] >>
+         rename1 `expr_exit (INR (Error err)) _` >>
+         Cases_on `err` >> simp[expr_exit_def]) >>
      `v = NoneV /\ ?final. r = Halt final` by fs[constructor_return_q_def] >>
      gvs[] >>
      `final.vs_code = vs.vs_code /\ final.vs_labels = vs.vs_labels` by

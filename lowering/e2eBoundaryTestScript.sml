@@ -436,7 +436,8 @@ Theorem error_result_only_exact_exemption_or_failure:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INR (Error e),am',rqs) ==>
   (call_result_rel_at [] tops am tx es r es' <=>
     unspecified_behaviour_exempt tops e \/
-    ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
+    ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
+                  (!d. e = RevertData d ==> exc = Reverted /\ frame_raises es Reverted))
 Proof
   simp[call_result_rel_at_def, exception_outcome_rel_def]
 QED
