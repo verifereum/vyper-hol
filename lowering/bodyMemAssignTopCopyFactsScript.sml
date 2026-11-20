@@ -192,6 +192,7 @@ Proof
   ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >> rpt conj_tac
   >- (simp[expr_type_def] >> metis_tac[topcopy_not_bytestring, is_bytestring_type_def])
   >- (simp[expr_type_def] >> metis_tac[topcopy_not_bytestring, is_bytestring_type_def])
+  >- (simp[expr_type_def] >> metis_tac[topcopy_not_bytestring, is_bytestring_type_def])
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
       simp[expr_body_pre_def, well_typed_expr_def, expr_type_def] >>
