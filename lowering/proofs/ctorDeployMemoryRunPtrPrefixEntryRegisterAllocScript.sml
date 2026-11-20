@@ -21,7 +21,8 @@ Theorem prefix_entry_register_alloc_actual:
  FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\
  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
- allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx ==>
+ allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) ==>
  ?a H q.
  a = (update_var (STRING #"%" (toString st.cs_next_var))
    (n2w initial.vs_alloca_next)
@@ -45,8 +46,6 @@ Theorem prefix_entry_register_alloc_actual:
 Proof
  strip_tac >> drule_all ctorDeployLoweringEntryRegisterRunTheory.deploy_ctor_register_alloc_run >> strip_tac >>
  qexists `a` >> simp[] >>
- `ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
-    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp` by simp[] >>
  reverse conj_tac >-
    (drule_all prefix_register_alloc_run_continuation >> simp[]) >>
  gvs[update_var_def] >>
@@ -64,7 +63,8 @@ Theorem prefix_entry_register_alloc_actual_mode:
  FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\
  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
- allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
  (checked ==> alloca_history func initial) ==>
  ?a H q.
  a = (update_var (STRING #"%" (toString st.cs_next_var))

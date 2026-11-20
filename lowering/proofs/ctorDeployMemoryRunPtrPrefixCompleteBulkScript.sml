@@ -248,6 +248,7 @@ Resume prefix_bulk_complete_mode_contract[package]:
     (simp[w2n_n2w] >>
      qpat_x_assum `type_memory_bytes ce ty = _` SUBST_ALL_TAC >> decide_tac) >>
   `LENGTH vs * type_memory_bytes ce ty < dimword (:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_bulk_success_ghost >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   suspend "finish"

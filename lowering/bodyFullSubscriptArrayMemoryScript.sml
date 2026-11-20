@@ -84,6 +84,7 @@ Proof
     (Cases_on `idx` >> gvs[eval_operand_def, op_taint_def, op_prov_def]) >>
   `!q. base_op = Var q ==> not_fresh_at sc q` by
     metis_tac[ci_mono_def, loweringShapeDefsTheory.not_fresh_at_mono] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all scalar_mul_add_joint_frame >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`G2`,`tn2`,`s2`] strip_assume_tac) >>

@@ -559,6 +559,8 @@ Proof
   disch_then (qx_choosel_then [`p`, `sa'`, `sb`, `vop`] strip_assume_tac) >> gvs[] >>
   `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
   qpat_x_assum `type_memory_bytes cenv (expr_type e) = 32` (assume_tac o SYM) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
+    s0.vs_alloca_next + pending_alloca_size func s0 <= w2n s0.vs_initial_fmp` by simp[] >>
   drule_all annassign_full_alloc_entry >>
   disch_then (qspecl_then [`PG`, `gas_explicit_sites ctx shadow_ctx`]
     (qx_choosel_then [`w`, `t`, `G'`, `tn'`] strip_assume_tac)) >>
