@@ -4,7 +4,7 @@ Ancestors
   list pair stmtLowering context exprLowering venomInst loweringShapeDefs
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeCallbacks ctorCallFreeOps
   ctorCallFreeStmtReturns ctorCallFreeStmtStorage ctorCallFreeStmtLogs
-  ctorCallFreeABIEncode loweringFunctionOpcodes
+  ctorCallFreeABIEncode loweringFunctionOpcodes loweringCallArgsOpcodes
   supportedExprTraverse supportedStmtTraverse e2eDeployDefs loweringShapeProps
 
 (* Discharge precise opcode premises from the complement-of-seven premise;
@@ -40,14 +40,10 @@ Theorem outcomes_free_custom_error_snapshots[local]:
     (state_insts (SND (compile_ext_call_args compile_expr ce [] tys es st)))
   )
 Proof
-  strip_tac >> strip_tac >> Induct >> Cases_on `tys` >>
-  simp[compile_ext_call_args_def, every_state_insts_return] >>
-  rpt gen_tac >> strip_tac >> qid_spec_tac `st` >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[every_state_insts_return,
-      c7 [outcomes_free_unwrap_value, outcomes_free_alloc_buffer,
-          outcomes_free_store_memory] outcomes_free_snapshot])]) >>
-  metis_tac[]
+  rpt strip_tac >> irule opcode_every_ext_call_args_with_snapshot >>
+  simp[c7 [outcomes_free_unwrap_value, outcomes_free_alloc_buffer,
+    outcomes_free_store_memory] outcomes_free_snapshot] >>
+  fs[EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem outcomes_free_revert_with_custom_error[local]:

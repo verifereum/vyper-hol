@@ -43,10 +43,11 @@ Proof
     gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void])])
 QED
 
-Theorem opcode_every_ext_call_args:
-  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
-         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  !es tys cfn ce kws.
+Theorem opcode_every_ext_call_args_with_snapshot:
+  (!copy vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_snapshot_vv ce copy vv st)))) ==>
+  !es tys cfn kws.
   (!e ty st. MEM e es ==> EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (cfn ce ty e st)))) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -58,8 +59,21 @@ Proof
   fs[DISJ_IMP_THM, FORALL_AND_THM] >> Cases_on `tys` >>
   simp[compile_ext_call_args_def] >>
   rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[UNDISCH opcode_every_snapshot_vv,
-      every_state_insts_return])])
+    gen_tac, CHANGED_TAC (simp[every_state_insts_return])])
+QED
+
+Theorem opcode_every_ext_call_args:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
+  !es tys cfn ce kws.
+  (!e ty st. MEM e es ==> EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (cfn ce ty e st)))) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_ext_call_args cfn ce kws tys es st)))
+Proof
+  rpt strip_tac >> irule opcode_every_ext_call_args_with_snapshot >>
+  simp[UNDISCH opcode_every_snapshot_vv]
 QED
 
 Theorem opcode_every_ext_call_kwarg:
