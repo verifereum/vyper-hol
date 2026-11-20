@@ -163,7 +163,8 @@ Proof
   rpt strip_tac >> first_x_assum irule >>
   Cases_on `ALOOKUP (module_consts_env tops []) id` >>
   gvs[] >> drule alistTheory.ALOOKUP_MEM >> strip_tac >>
-  simp[MEM_MAP] >> qexists_tac `(id,x)` >> simp[]
+  rename1 `MEM (id,replacement) _` >>
+  simp[MEM_MAP] >> qexists_tac `(id,replacement)` >> simp[]
 QED
 
 Theorem shadow_body_inv_from_internal_runs[local]:
@@ -430,7 +431,8 @@ Theorem internal_fn_descriptors_map[local]:
       (label,buf,ce.ce_returns_count)) packages
 Proof
   Induct_on `packages` >> simp[internal_fn_descriptors_def] >>
-  rpt strip_tac >> PairCases_on `h` >> simp[internal_fn_descriptors_def]
+  qx_gen_tac `pkg` >> PairCases_on `pkg` >>
+  simp[internal_fn_descriptors_def]
 QED
 
 Theorem extract_context_internal_code_by_labels[local]:
@@ -582,8 +584,10 @@ QED
 Theorem imported_getters_without_defaults[local]:
   public_getter_src src decl = SOME f ==> ~external_has_defaults f
 Proof
-  Cases_on `decl` >> simp[public_getter_src_def] >> rpt gen_tac >>
-  Cases_on `v` >> simp[public_getter_src_def, getter_def] >>
+  ((Cases_on `decl` >> simp[public_getter_src_def] >> rpt gen_tac) >|
+   [rename1 `public_getter_src _ (VariableDecl vis _ _ _ _)`,
+    rename1 `public_getter_src _ (HashMapDecl vis _ _ _ _ _)`]) >>
+  Cases_on `vis` >> simp[public_getter_src_def, getter_def] >>
   rpt CASE_TAC >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
   rpt strip_tac >> gvs[external_has_defaults_def]
 QED
@@ -808,12 +812,13 @@ Proof
   fs[] >>
   Cases_on `cx.in_deploy` >> fs[]
   >- (Cases_on `cf` >> gvs[] >>
+      rename1 `classify_functions_unit _ _ = (_,_,_,SOME constructor,_)` >>
       Cases_on `set_constructor_package_target rp.rpol_target
-         (package_constructor_unit mods T (K global_nonreentrant_slot) x)` >>
+         (package_constructor_unit mods T (K global_nonreentrant_slot) constructor)` >>
       rename1 `set_constructor_package_target _ _ = cpkg` >>
       PairCases_on `cpkg` >>
       qabbrev_tac `srcs = order_internals_unit
-        (deploy_internal_order_unit (SOME x) (ints ++ ctors)) (ints ++ ctors)` >>
+        (deploy_internal_order_unit (SOME constructor) (ints ++ ctors)) (ints ++ ctors)` >>
       qabbrev_tac `ips = MAP (set_internal_package_target rp.rpol_target o
         package_internal_fn_unit mods T (K global_nonreentrant_slot) T
           (imm_len_mods mods)) srcs` >>
