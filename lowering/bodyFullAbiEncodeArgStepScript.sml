@@ -29,11 +29,13 @@ Theorem abi_encode_arg_step_full:
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
   return_buf_frame d ce sa s0 /\ alloca_history func s0 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func ce cx es s0 /\
     storage_well_formed_on cx es (FST H) /\
@@ -77,16 +79,10 @@ Theorem abi_encode_arg_step_full:
           w2n w + type_memory_size tv <= t.vs_alloca_next /\
           (!name b sz. local_region ce es.scopes s0 name b sz ==>
             b+sz <= w2n w \/ w2n w+type_memory_size tv <= b)))
-    (\H rr ee gt r. expr_exit rr r /\ halt_exit H cx ee rr r)
+    (\H rr ee gt r. expr_exit rr r /\ halt_exit H cx ee rr r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   strip_tac >>
-  `!fn inst s. frag_reachable ctx func s0 fn inst s ==>
-    dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
-     disch_then drule >> strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-       unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s0)` by simp[] >>
   Cases_on `~is_word_type (expr_type e) /\ exprs_can_mutate ce rest`
   >- suspend "capture" >>
   `unwrap_value ce vv mid = (op,sb) /\

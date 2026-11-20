@@ -3,7 +3,7 @@ Ancestors
   fnPlanPlaceRevertPostamble
   loweringStateRelDefs
   immSectionDead
- ctorDeployLoweringEntryLocalBounds ctorDeployLoweringEntryCoordinatedDeployment
+ ctorDeployLoweringEntryLocalBounds
  ctorDeployLoweringEntryInputs ctorDeployLoweringEntryPrefix
  ctorDeployLoweringEntryRegisterRun ctorDeployLoweringEntryTransport
  ctorDeployLoweringDefs ctorDeployDefs immSectionDead compileEnv compileVyper

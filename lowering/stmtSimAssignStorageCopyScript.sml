@@ -17,7 +17,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec  exprSimLeaves exprSimOps  stmtSimAssign stmtSimAssignMem
+  fragExec  exprSimOps  stmtSimAssign stmtSimAssignMem
   stmtSimAssignStorage exprSimHash exprOperandVar stmtSimDecl vyperExprNoControl
   stmtSimStoreCopy storageCopyLive accountsRelProps
   fragGasMode fragGasSeq fragGasPath venomExecProofs

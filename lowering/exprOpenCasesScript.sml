@@ -150,27 +150,7 @@ val raw_call_open_tac =
   rpt (pairarg_tac >> simp[]) >> IF_CASES_TAC >>
   strip_tac >> gvs[] >> drule compile_raw_call_finish_open >> simp[];
 
-Theorem compile_raw_call_open:
-  !cfn cenv rty ty flags addr data args default sa vv sb.
-    ~flags.rcf_is_delegate /\
-    compile_call cfn cenv rty ty (RawCallTarget flags) (addr::data::args)
-      default sa = (vv,sb) ==> ~block_is_terminated sb
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >>
-  raw_call_open_tac
-QED
 
-Theorem compile_raw_call_calldata_open:
-  !cfn cenv rty ty flags addr args default sa vv sb.
-    ~flags.rcf_is_delegate /\
-    compile_call cfn cenv rty ty (RawCallCalldataTarget flags) (addr::args)
-      default sa = (vv,sb) ==> ~block_is_terminated sb
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >>
-  raw_call_open_tac
-QED
 
 Theorem compile_raw_log_open:
   !cfn cenv rty ty topics data default sa vv sb.

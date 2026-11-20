@@ -191,7 +191,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem singleton_call_sources[local]:
+Theorem int_calls_expr_main_singleton[local]:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
   EVERY (\c. ?ts. get_module_code cx (FST c) = SOME ts /\
                  supported_program ts /\
@@ -203,21 +203,24 @@ Proof
   rpt strip_tac >> res_tac >> gvs[AllCaseEqs()]
 QED
 
+fun expr_pre_mods_singleton_tac split_def mods_def =
+  strip_tac >>
+  `cx_tops cx = tops` by simp[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
+  simp[split_def] >>
+  qpat_assum `ALOOKUP cx.sources _ = _`
+    (assume_tac o MATCH_MP int_calls_expr_main_singleton) >>
+  simp[mods_def, expr_sim_inv_mods_singleton,
+       type_env_def, type_env_all_modules_def, FUNION_FEMPTY_2,
+       SF CONJ_ss] >>
+  metis_tac[];
+
 Theorem expr_body_pre_mods_singleton[local]:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   cenv.ce_module = NONE /\ immutable_section_layout_mods [(NONE,tops)] cenv ==>
   (expr_body_pre_mods [(NONE,tops)] cenv cx env e es <=>
    expr_body_pre cenv cx env e es)
 Proof
-  strip_tac >>
-  `cx_tops cx = tops` by simp[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
-  simp[expr_body_pre_split_def] >>
-  qpat_assum `ALOOKUP cx.sources _ = _`
-    (assume_tac o MATCH_MP singleton_call_sources) >>
-  simp[expr_body_pre_mods_def, expr_sim_inv_mods_singleton,
-       type_env_def, type_env_all_modules_def, FUNION_FEMPTY_2,
-       SF CONJ_ss] >>
-  metis_tac[]
+  expr_pre_mods_singleton_tac expr_body_pre_split_def expr_body_pre_mods_def
 QED
 
 Theorem expr_map_pre_mods_singleton[local]:
@@ -226,15 +229,7 @@ Theorem expr_map_pre_mods_singleton[local]:
   (expr_map_pre_mods [(NONE,tops)] cenv cx env e es <=>
    expr_map_pre cenv cx env e es)
 Proof
-  strip_tac >>
-  `cx_tops cx = tops` by simp[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
-  simp[expr_map_pre_split_def] >>
-  qpat_assum `ALOOKUP cx.sources _ = _`
-    (assume_tac o MATCH_MP singleton_call_sources) >>
-  simp[expr_map_pre_mods_def, expr_sim_inv_mods_singleton,
-       type_env_def, type_env_all_modules_def, FUNION_FEMPTY_2,
-       SF CONJ_ss] >>
-  metis_tac[]
+  expr_pre_mods_singleton_tac expr_map_pre_split_def expr_map_pre_mods_def
 QED
 
 Theorem body_expr_full_ok_mods_singleton:

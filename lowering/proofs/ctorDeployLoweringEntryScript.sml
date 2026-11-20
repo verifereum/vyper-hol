@@ -7,7 +7,6 @@ Ancestors
   ctorDeployLoweringEntryStatic ctorDeployLoweringEntryStateRel
   exprLoweringProps compileEnv fragGasPath ctorDeployDefs bodyPtrDefs fragGasPathMem
   ctorDeployMemoryRunPtrEntry ctorDeployMemoryRunMemEntryTaskActual
-  ctorDeployMemoryRunMemEntryProvenanceComplete
   ptrSafeRun venomExecSemantics fragExec
   fragGasOriginPtr fragGasOriginPtrLoop vyperStorageFootprint
 

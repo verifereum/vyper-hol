@@ -616,7 +616,16 @@ Theorem abi_encode_args_full_pure_frame:
 Proof
   pure_rewrite_tac [cj 10 expr_has_effect_thm] >>
   match_mp_tac abi_encode_args_full_pure_frame_from_step >>
-  rpt gen_tac >> MATCH_ACCEPT_TAC abi_encode_arg_step_full
+  rpt gen_tac >> strip_tac >>
+  `!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+    dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
+     disch_then drule >> strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
+       unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s0)` by simp[] >>
+  drule_all abi_encode_arg_step_full >> strip_tac >>
+  irule gas_outcome_full_post_mono >> first_assum (irule_at Any) >> simp[]
 QED
 
 (* The tuple region and the row below refer to the selected staging endpoint. *)
