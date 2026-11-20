@@ -4802,21 +4802,6 @@ Proof
   disch_then irule >> metis_tac[]
 QED
 
-Theorem ctor_extcall_store_values_ci_mono[local]:
-  !vals env buf off a.
-    ci_mono a (SND (compile_extcall_store_values env vals buf off a))
-Proof
-  Induct >> rpt gen_tac
-  >- simp[compile_extcall_store_values_def, ci_mono_comp_return] >>
-  PairCases_on `h` >> simp[Once compile_extcall_store_values_def, LET_THM] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
-  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_unwrap_value] >>
-  rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[ci_mono_emit_void, ci_mono_compile_store_bytestring] >>
-      IF_CASES_TAC >> simp[ci_mono_emit_void, ci_mono_compile_store_bytestring]) >>
-  rpt strip_tac >> first_x_assum irule
-QED
-
 Theorem ctor_extcodesize_check_ci_mono[local]:
   !op a. ci_mono a (SND (compile_extcodesize_check op a))
 Proof
