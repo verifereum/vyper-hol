@@ -1122,9 +1122,19 @@ Proof
        simp[cj 5 evaluate_storage_trace_frame,storage_trace_frame_bind,storage_trace_frame_read_result] >>
      drule_all storage_trace_frame_prefix >> simp[] >> strip_tac >>
      gvs[] >> metis_tac[gasOutcomeFullTheory.valid_horizon_append]) >>
-  fs[] >>
+  qpat_assum `!H. valid_horizon cx st0 H esD.storage_trace ==>
+      expr_post H ctx func cenv cx a _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx es s0 /\ _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_x_assum `data = Var x` SUBST_ALL_TAC >>
+  simp[] >>
   conj_tac >-
-    (qpat_assum `expr_store_bound cx (expr_type d) _ _ _` mp_tac >>
+    (qpat_assum `expr_store_bound cx (post_value_type cenv d) (BytesV bs) _ tD` mp_tac >>
+     qpat_assum `post_value_type cenv d = expr_type d` mp_tac >>
      qpat_assum `expr_type d = BaseT (BytesT (Dynamic cap))` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[]) >>
   conj_tac >-

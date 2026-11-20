@@ -1,6 +1,6 @@
 (* Unsigned scaling keeps the original operand when the multiplier is one. *)
 Theory bodyPtrWordBuiltinsScaling
-Ancestors bodyPtrWordBuiltinsScalingSteps bodyPtrWordBuiltinsAbsPost
+Ancestors bodyPtrWordBuiltinsScalingSteps
   bodyPtrWordBuiltinsAbsSequence bodyPtrWordBuiltinsAbsSuffix
   bodyPtrWordBuiltinsScalarSequence bodyPtrWordBuiltinsIntervalGhost
   builtinMisc builtinSimple exprSimWordBuiltins exprLoweringProps compileEnv loweringStateRelDefs

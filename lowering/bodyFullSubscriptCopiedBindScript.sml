@@ -487,7 +487,13 @@ Resume subscript_copied_bind_caller_frames[index_success]:
   `valid_horizon cx st0 (storage_trace_horizon fin.storage_trace) fin.storage_trace` by
     gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `indexQ (storage_trace_horizon fin.storage_trace) ires fin Gi tni it /\
-   ~it.vs_halted /\ fin.gas_obs = []` by metis_tac[] >>
+   ~it.vs_halted /\ fin.gas_obs = []` by
+    (qpat_assum `!H. valid_horizon cx st0 H fin.storage_trace ==>
+        indexQ H ires fin Gi tni it /\ ~it.vs_halted /\ fin.gas_obs = []`
+       (qspec_then `storage_trace_horizon fin.storage_trace`
+         (fn post => qpat_assum
+           `valid_horizon cx st0 (storage_trace_horizon fin.storage_trace) fin.storage_trace`
+           (ACCEPT_TAC o MATCH_MP post)))) >>
   qpat_x_assum `indexQ _ _ _ _ _ _` mp_tac >>
   simp[Abbr `indexQ`, NoAsms] >> strip_tac >> gvs[] >>
   `bind (eval_expr cx idx) (read_result cx)

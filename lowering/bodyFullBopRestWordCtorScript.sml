@@ -695,8 +695,8 @@ Proof
     mload (w2n (addr j)) s0 = EL j ws` by simp[] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
     (qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
-       (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
-     metis_tac[]) >>
+       (fn frame => PURE_REWRITE_TAC [MATCH_MP membership_loop_frame_allocas_below_fmp frame]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s0` ACCEPT_TAC) >>
   drule_all rest_word_membership_ctor_prefix_checked >>
   disch_then (qspecl_then [`PG`, `DF H`] strip_assume_tac) >>
   qexistsl_tac [`g`, `tn`] >> simp[] >>
@@ -805,8 +805,8 @@ Proof
     mload (w2n (addr j)) s0 = EL j ws` by simp[] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
     (qpat_assum `membership_loop_frame _ _ _ s0 _ _ s`
-       (assume_tac o MATCH_MP membership_loop_frame_allocas_below_fmp) >>
-     metis_tac[]) >>
+       (fn frame => PURE_REWRITE_TAC [MATCH_MP membership_loop_frame_allocas_below_fmp frame]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s0` ACCEPT_TAC) >>
   drule_all rest_word_membership_ctor_prefix_checked >>
   disch_then (qspecl_then [`PG`, `DF H`] strip_assume_tac) >>
   simp[] >>

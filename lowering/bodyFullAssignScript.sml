@@ -5837,8 +5837,9 @@ Resume body_assign_immutable_bytes_loop_header_actual[jump]:
     simp[Abbr `t0`, Abbr `u0`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base (mk_inst (ih+1) JNZ [Var test;Label exit;Label loop_body] []) t0 =
      OK (jump_to lbl t0)` by
-    (Cases_on `j=n` >> simp[Abbr `lbl`, step_inst_base_def, mk_inst_def,
-                             eval_operand_def, bool_to_word_def]) >>
+    (Cases_on `j=n` >>
+     simp[Abbr `lbl`, step_inst_base_opcode_eqs, mk_inst_def,
+          eval_operand_def, bool_to_word_def]) >>
   `ptr_inst_ok D 0 0 ctx func G1 tn1
     (mk_inst (ih+1) JNZ [Var test;Label exit;Label loop_body] []) t0` by
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
@@ -5952,12 +5953,17 @@ Theorem body_assign_immutable_bytes_loop_shape[local]:
                       sb.cs_next_var = sm.cs_next_var+9)
 Proof
   Cases_on `imm` >> strip_tac >>
-  qpat_x_assum `compile_word_copy_loop_base _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_word_copy_loop_base_def, word_scale_def,
+  qpat_x_assum `compile_word_copy_loop_base _ _ _ _ _ _ _ _ = _` mp_tac
+  >>> SPLIT_LT 1 (ALLGOALS (simp[compile_word_copy_loop_base_def, word_scale_def,
        compile_ptr_load_def, compile_ptr_store_def, compile_imm_store_word_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_label_def, fresh_var_def, emit_inst_def, emit_op_def,
-       emit_void_def, fresh_id_def, emit_def, new_block_def, Excl "isPREFIX"] >>
+       emit_void_def, fresh_id_def, emit_def, new_block_def, Excl "isPREFIX"]), ALL_LT)
+  >>> SPLIT_LT 1 (ALL_LT, ALLGOALS (simp[compile_word_copy_loop_base_def, word_scale_def,
+       compile_ptr_load_def, compile_ptr_store_def, compile_imm_store_word_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_label_def, fresh_var_def, emit_inst_def, emit_op_def,
+       emit_void_def, fresh_id_def, emit_def, new_block_def, Excl "isPREFIX"])) >>
   strip_tac >> gvs[Excl "isPREFIX"] >>
   qpat_x_assum `fn_has_code _ _ _` mp_tac >>
   simp[fn_has_code_def, emitted_blocks_def, Excl "isPREFIX"] >>

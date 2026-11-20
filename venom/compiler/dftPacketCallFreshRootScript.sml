@@ -1,7 +1,7 @@
 Theory dftPacketCallFreshRoot
 Ancestors
   dftPacketCallFreshEntry dftPacketFreshRootGeometry dftPacketCutExtension
-  dftPacketFreshRootSuccessSplit dftPacketFreshSingletonNative
+  dftPacketFreshSingletonNative
   dftPacketFreshSingletonStop dftPacketFreshSingletonObservation
   dftPacketCalleeAlignment
   dftGasFromListReplayBoundary dftRunRel venomInst venomExecSemantics

@@ -4,23 +4,41 @@ Ancestors
   vyperState vyperInterpreter vyperSmallStep vyperTypeSystem
   vyperTypeContract vyperValueOperation
 Libs
-  vyperCheckContractLib
+  vyperCheckContractLib vyperConstEvalLib
 
 (* The frontend must preserve the operand's result type for bitwise inversion. *)
 Theorem invert_frontend_test:
-  translate_unary ctx JUop_Invert e (JT_Integer 256 F) =
-    Builtin (BaseT (UintT 256)) Not [e] /\
-  translate_unary ctx JUop_Invert e (JT_BytesM 32) =
-    Builtin (BaseT (BytesT (Fixed 32))) Not [e] /\
-  translate_unary ctx JUop_Invert e (JT_Named NONE "bool") =
-    Builtin (BaseT BoolT) Not [e] /\
-  translate_unary ctx JUop_Invert e (JT_Flag NONE "Permissions") =
-    Builtin (FlagT (expr_current_nsid ctx, "Permissions")) Not [e] /\
-  translate_unary ctx JUop_Not e (JT_Named NONE "bool") =
-    Builtin (BaseT BoolT) Not [e]
+  translate_unary ctx JUop_Invert (Name (BaseT (UintT 256)) "x")
+    (JT_Integer 256 F) =
+    Builtin (BaseT (UintT 256)) Not [Name (BaseT (UintT 256)) "x"] /\
+  translate_unary ctx JUop_Invert
+    (Literal (BaseT (BytesT (Fixed 32))) (BytesL bs)) (JT_BytesM 32) =
+    Builtin (BaseT (BytesT (Fixed 32))) Not
+      [Literal (BaseT (BytesT (Fixed 32))) (BytesL bs)] /\
+  translate_unary ctx JUop_Invert (Name (BaseT BoolT) "x") (JT_Named NONE "bool") =
+    Builtin (BaseT BoolT) Not [Name (BaseT BoolT) "x"] /\
+  translate_unary ctx JUop_Invert
+    (Name (FlagT (expr_current_nsid ctx, "Permissions")) "x")
+    (JT_Flag NONE "Permissions") =
+    Builtin (FlagT (expr_current_nsid ctx, "Permissions")) Not
+      [Name (FlagT (expr_current_nsid ctx, "Permissions")) "x"] /\
+  translate_unary ctx JUop_Not (Name (BaseT BoolT) "x") (JT_Named NONE "bool") =
+    Builtin (BaseT BoolT) Not [Name (BaseT BoolT) "x"]
 Proof
   simp[translate_unary_def, translate_type_def, expr_type_ctx_def,
-       tctx_current_nsid_def]
+       tctx_current_nsid_def, fold_pin_constant_def,
+       vyperOriginFoldTheory.origin_fold_value_def,
+       vyperOriginFoldTheory.origin_fold_builtin_def]
+QED
+
+Theorem invert_frontend_literals_test:
+  translate_unary ctx JUop_Invert (Literal (BaseT (UintT 256)) (IntL 0))
+    (JT_Integer 256 F) =
+    Literal (BaseT (UintT 256)) (IntL (&(2 ** 256 - 1))) /\
+  translate_unary ctx JUop_Not (Literal (BaseT BoolT) (BoolL T))
+    (JT_Named NONE "bool") = Literal (BaseT BoolT) (BoolL F)
+Proof
+  EVAL_TAC
 QED
 
 (* Both supported directions and representative narrow-width rejections. *)

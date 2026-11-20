@@ -11,7 +11,7 @@ Ancestors
 Theorem member_scalar_success_observed:
   bop_scalar_seq R A (emitted_insts sa sb) B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ inst_extends sa sb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\ inst_extends sa sb /\
   sb.cs_current_bb = sa.cs_current_bb /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -33,7 +33,6 @@ Proof
         isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
      simp[DROP_APPEND1, DROP_LENGTH_NIL]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_word_scalar_success_joint >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >> conj_tac

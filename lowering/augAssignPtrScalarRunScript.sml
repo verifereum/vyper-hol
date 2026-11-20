@@ -1,6 +1,6 @@
 Theory augAssignPtrScalarRun
 Ancestors augAssignPtrScalarSafety augAssignPtrScalarExec augAssignPtrScalarCertificate augAssignPtrScalarProbe
-  augAssignPtrScalarJoin augAssignPtrInterfaces fragGasSeqPtr
+  decoderGhostFramePtr[qualified] typedCopyArrayPtr[qualified] augAssignPtrInterfaces fragGasSeqPtr
   ptrDiscipline ptrSafeRun venomInst venomState venomExecSemantics
   finite_map pred_set list fragExec exprLoweringProps venomInstProofs instIdxIndep
 

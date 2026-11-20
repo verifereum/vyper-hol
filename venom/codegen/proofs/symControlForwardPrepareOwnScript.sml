@@ -101,7 +101,11 @@ Proof
   `reduce_ops = [] /\ ps2 = ps` by
     (qpat_assum `rf_B` (drule_then irule o cj 6) >>
      fs[IgnAsm `rf_B`, listTheory.MEM_APPEND] >> metis_tac[]) >>
-  gvs[IgnAsm `rf_B`]
+  qpat_x_assum `reduce_ops = []` SUBST_ALL_TAC >>
+  qpat_x_assum `ps2 = ps` SUBST_ALL_TAC >>
+  qpat_assum `option_CASE _ _ _ = (suffix,ps')` mp_tac >>
+  qpat_assum `stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+    (LENGTH pending) ps.ps_stack = SOME dist` (fn th => simp[NoAsms, th])
 QED
 
 Theorem reorder_one_spill_free_kind_replay_conditional:

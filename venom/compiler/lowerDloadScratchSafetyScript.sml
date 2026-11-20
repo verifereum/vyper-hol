@@ -177,7 +177,9 @@ Proof
   Induct_on `h`
   >- (simp[ld_prefix_zero] >> rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> disch_tac >>
-  drule ld_prefix_bound >> simp[] >> strip_tac >>
+  qpat_assum `X = _` (fn code =>
+    qpat_assum `ld_prefix C fn X p (SUC h) t0 t`
+      (assume_tac o SIMP_RULE (srw_ss()) [code,listTheory.LENGTH] o MATCH_MP ld_prefix_bound)) >>
   drule ld_prefix_predecessor >> strip_tac >>
   first_x_assum drule >> strip_tac >>
   Cases_on `h = 0`

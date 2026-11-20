@@ -113,7 +113,7 @@ Theorem bulk_decode_header_ghosts[local]:
   fn_has_code st c1 func /\ fn_has_code c1 c2 func /\
   c1.cs_current_bb = st.cs_current_bb /\ c2.cs_current_bb = st.cs_current_bb /\
   st.cs_next_var <= c1.cs_next_var /\ c1.cs_next_var <= c2.cs_next_var /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\ hi <> Lit 0w /\
   not_fresh_at st source /\ not_fresh_at st output /\
   (!x. pos = Var x ==> not_fresh_at st x) /\ (!x. hi = Var x ==> not_fresh_at st x) /\
@@ -183,6 +183,12 @@ Proof
     (mp_tac (Q.INST [`op` |-> `pos`, `t` |-> `r1`, `HG` |-> `G1`,
                     `u` |-> `tn1`] old_operand_ghost_frame) >>
      simp[Abbr `s1`, eval_op_inst_idx]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (`allocas_below_fmp s1 <=> allocas_below_fmp s` by
+       (qunabbrev_tac `s1` >>
+        qpat_assum `r1 = s with vs_vars := _` SUBST1_TAC >>
+        simp[ptrDisciplineTheory.allocas_below_fmp_def]) >>
+     simp[]) >>
   drule_all abi_decode_array_header_success_joint >>
   disch_then (qspec_then `PG` (qx_choose_then `G2` (qx_choose_then `tn2`
     (map_every assume_tac o CONJUNCTS o SRULE [])))) >>
@@ -283,6 +289,7 @@ Proof
      qpat_assum `d+cap < dimword (:256)` mp_tac >>
      qpat_assum `cap = _ + _` (fn th => pure_rewrite_tac[th]) >>
      simp[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bulk_decode_header_ghosts >>
   disch_then (qspec_then `PG` (qx_choose_then `G2` (qx_choose_then `tn2`
     (map_every assume_tac o CONJUNCTS o BETA_RULE o PURE_REWRITE_RULE [LET_THM])))) >>

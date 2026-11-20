@@ -6630,7 +6630,10 @@ Resume compile_for_range_frag_full[checked]:
            goal_assum (drule_at Any)]) >>
   disch_tac >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (fn inv => qpat_assum `MEM func ctx.ctx_functions`
+         (fn member => ACCEPT_TAC
+           (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi (CONJ inv member))))) >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full cfg tops' cx st0 (bind (eval_expr cx e1) _) (es,s0,G0,tn0) Q0 R0` >>
   `gas_outcome_full cfg tops' cx st0 (bind (eval_expr cx e1) (read_result cx))

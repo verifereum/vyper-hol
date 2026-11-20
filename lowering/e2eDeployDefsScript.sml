@@ -185,23 +185,14 @@ End
    holds of es without a premise; with the balance bound, the callee outcome
    bounds follow as for the call relation. *)
 Theorem deploy_state_rel_call_outcomes_ok:
-  deploy_state_rel tops deploy_bc am tx es /\
-  EVERY (\outcome.
-    contract_storage_well_formed
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state (am with <| accounts := outcome.co_accounts;
-                                tStorage := outcome.co_tStorage |>) []))
-    (MAP SND (call_trace es)) ==>
+  deploy_state_rel tops deploy_bc am tx es ==>
   call_outcomes_ok am tx (MAP SND (call_trace es))
 Proof
   strip_tac >>
-  `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
-    gvs[deploy_state_rel_def, evm_state_ok_def,
-        vfmReturndataBoundTheory.returndata_bounded_def] >>
-  drule_all call_trace_outcomes_bounded >>
-  qpat_x_assum `EVERY _ (MAP SND (call_trace es))` mp_tac >>
-  simp[call_outcomes_ok_def, listTheory.EVERY_MEM] >>
-  rpt strip_tac >> res_tac
+  REWRITE_TAC[call_outcomes_ok_def] >>
+  irule call_trace_outcomes_bounded >>
+  gvs[deploy_state_rel_def, evm_state_ok_def,
+      vfmReturndataBoundTheory.returndata_bounded_def]
 QED
 
 (* ===== Creation result cases (no nested creation frame_outcome) ===== *)

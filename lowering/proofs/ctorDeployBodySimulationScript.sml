@@ -38,17 +38,6 @@ Theorem deploy_ctor_body_frag_full:
       (es0 with outcomes := SOME vs.vs_outcomes)
 Proof
   rpt gen_tac >> strip_tac >>
-  `EVERY (\outcome.
-     contract_storage_well_formed
-       (initial_evaluation_context am.sources am.layouts tx NONE)
-       (initial_state (am with <|accounts := outcome.co_accounts;
-                                tStorage := outcome.co_tStorage|>) []))
-     (MAP SND (call_trace es))` by
-    (`ALOOKUP am.sources tx.target = NONE` by fs[deploy_state_rel_def] >>
-     simp[listTheory.EVERY_MEM, contract_storage_well_formed_def,
-          well_formed_storage_def, storage_var_in_range_def,
-          storage_var_info_def, declared_storage_region_def,
-          get_module_code_def, initial_evaluation_context_def]) >>
   `call_outcomes_ok am tx (MAP SND (call_trace es))` by
     metis_tac[deploy_state_rel_call_outcomes_ok] >>
   drule_all deploy_ctor_body_frame >> strip_tac >>

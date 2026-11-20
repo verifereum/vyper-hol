@@ -1,7 +1,7 @@
 (* Outcome composition for raw-RHS, target, and widened place stores. *)
 Theory placeRelayoutFrag
 Ancestors
-  placeRelayoutOutcome placeRelayoutGasCompose placeRelayoutCode
+  placeRelayoutOutcome placeRelayoutCode
   stmtSimProps exprLoweringProps loweringPosts stmtSimDefs gasOutcome gasSummary
   stmtSimDeclCompose placeRelayoutPhysicalSource exprSimIfExpWidenedCounted
   annassignRelayoutPost exprLowering context

@@ -2,7 +2,7 @@
 Theory externalReturnCopyRecursive
 Ancestors
   typedMemoryCopy
-  externalReturnCopyAdapter externalReturnCopyFields externalReturnCopyLayout
+  externalReturnCopyAdapter externalReturnCopyFields
   externalReturnCopyArrays externalReturnCopyBulk externalReturnCopyFrame
   context compileEnv loweringStateRelDefs emitHelper emitHelperProps fragExec exprLoweringProps
   venomExecSemantics venomState venomInst words arithmetic

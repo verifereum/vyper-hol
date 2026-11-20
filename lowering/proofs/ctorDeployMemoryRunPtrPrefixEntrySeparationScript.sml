@@ -4,7 +4,7 @@ Ancestors
  ctorDeployMemoryRunPtrPrefixEntrySemantic
  compileEnv vyperCall vyperState finite_map list rich_list
  exprLoweringProps ptrDiscipline immutableRelation immutableSectionRel
- ctorDeployLoweringEntrySourceFrame ctorDeployMemoryRunPtrPrefixEntryImmutable
+ ctorDeployLoweringEntrySourceFrame
  ctorDeployDefs e2eEntry e2eDeployDefs vyperInterpreter
   ctorDeployLoweringEntryImmutableMemory ctorDeployLoweringNoCtor
 

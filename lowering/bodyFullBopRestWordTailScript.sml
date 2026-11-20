@@ -4,7 +4,7 @@ Ancestors bodyFullBopRestWordTailFixed bodyFullBopRestWordTailDynamic
 Theorem rest_word_membership_tail_const_full:
  !DF lo d explicit ctx fn PG cenv cx e es sa sm s0 G0 tn0 tv vv ee u Gu Tu needleop needle av ety bd pbd et is_in out ct guard.
  compile_var_array_membership cenv needleop vv (ArrayT ety bd) is_in sm = (out,ct) /\
- fn_has_code sm ct fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+ fn_has_code sm ct fn /\ fn_inst_ids_distinct fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\

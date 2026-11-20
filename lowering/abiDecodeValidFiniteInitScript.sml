@@ -68,7 +68,7 @@ Theorem finite_init_header_cut[local]:
   run_inst_seq (emitted_insts st gs) s = OK g /\
   run_inst_seq (emitted_insts gs hs)
     (g with vs_inst_idx := LENGTH gs.cs_current_insts) = OK u /\
-  fn_has_code st gs func /\ fn_has_code gs hs func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st gs func /\ fn_has_code gs hs func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   not_fresh_at st source /\ not_fresh_at st output /\
@@ -123,6 +123,12 @@ Proof
   `B+p+32 < dimword (:256) /\ B+p+32 <= g0.vs_alloca_next /\
    d+cap < dimword (:256) /\ d+cap <= g0.vs_alloca_next` by
     (simp[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp g0` by
+    (`allocas_below_fmp g0 <=> allocas_below_fmp s` by
+       (qunabbrev_tac `g0` >>
+        qpat_assum `g = s with vs_vars := _` SUBST1_TAC >>
+        simp[ptrDisciplineTheory.allocas_below_fmp_def]) >>
+     simp[]) >>
   drule_all abi_decode_array_header_success_joint >>
   disch_then (qspec_then `PG` (qx_choosel_then [`H`,`th`] strip_assume_tac)) >>
   `!x. not_fresh_at st x ==> lookup_var x u = lookup_var x s /\
@@ -377,6 +383,7 @@ Proof
       imp_res_tac alloca_site_registered_below >> decide_tac) >>
   `p+32 <= L` by decide_tac >>
   qabbrev_tac `u0 = u with vs_inst_idx := LENGTH gs.cs_current_insts` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.INST [`cap` |-> `outsz`, `u` |-> `u0`] finite_init_header_cut) >>
   disch_then (qspec_then `PG` (qx_choosel_then [`Ghead`,`thd`] strip_assume_tac)) >>
   `~u.vs_halted /\ u.vs_current_bb = hs.cs_current_bb /\ allocas_from lo u /\

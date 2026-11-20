@@ -170,6 +170,7 @@ Theorem prefix_entry_register_address_decode_sizes_mode:
  !checked. (^RegisterAddressDecodeSizesMode) checked
 Proof
  gen_tac >> BETA_TAC >> gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
  drule_all (BETA_RULE (SPEC_ALL prefix_entry_register_canonical_address_paired_mode)) >>
  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
  disch_then (qx_choose_then `src` (qx_choose_then `middle`

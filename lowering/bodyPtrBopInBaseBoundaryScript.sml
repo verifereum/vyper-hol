@@ -1,5 +1,5 @@
 Theory bodyPtrBopInBaseBoundary
-Ancestors bodyPtrDefs bodyPtrBopInLoopContract bodyPtrBopInStackMemory
+Ancestors bodyPtrDefs bodyPtrBopInLoopContract
   exprLowering compileEnv context valueEncoding ptrDiscipline venomState finite_map
   valueEncodingProps loweringPosts vyperValue vyperAST
   stmtAppendStorageRunPtr ptrSafeRun venomExecSemantics venomInst codegenRel contextCodegenRel

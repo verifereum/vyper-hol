@@ -1,6 +1,6 @@
 (* Install the rejecting prefix from the classified fallback package. *)
 Theory dispatchedValueFallback
-Ancestors runtimeExternalPackageCode sourceEntryCode
+Ancestors runtimeExternalPackageCode
   actualDecoderPackaging actualRegistrationCode rawEntryCode entryCheckIntervals
   supportedProgramProps loweringShapeSource loweringShapeRules loweringShapeProps
   loweringShapeDefs compileVyper moduleLowering compileEnv fragExec list

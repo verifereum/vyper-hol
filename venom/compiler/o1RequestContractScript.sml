@@ -11,7 +11,7 @@
  *
  * o1_stage_rq_contract_gas is o1_stage_contract_gas with ctx_abort_rq
  * added under the same chosen input oracle, so that DFT's choice serves
- * both; o1PipelineRequests composes these into S4's companion.
+ * both.
  *)
 Theory o1RequestContract
 Ancestors

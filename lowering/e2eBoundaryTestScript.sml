@@ -146,18 +146,10 @@ Theorem outcome_guard_success_only:
   call_outcomes_ok am tx [] /\
   (call_outcomes_ok am tx [co with co_success := F] <=>
     LENGTH co.co_returnData < dimword(:256) /\
-    accounts_runtime_well_typed co.co_accounts /\
-    contract_storage_well_formed
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state (am with <|accounts := co.co_accounts;
-                               tStorage := co.co_tStorage|>) [])) /\
+    accounts_runtime_well_typed co.co_accounts) /\
   (call_outcomes_ok am tx [co with co_success := T] <=>
     LENGTH co.co_returnData < dimword(:256) /\
-    accounts_runtime_well_typed co.co_accounts /\
-    contract_storage_well_formed
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state (am with <|accounts := co.co_accounts;
-                               tStorage := co.co_tStorage|>) [])) /\
+    accounts_runtime_well_typed co.co_accounts) /\
   (call_outcomes_ok am tx (xs ++ ys) <=>
     call_outcomes_ok am tx xs /\ call_outcomes_ok am tx ys)
 Proof

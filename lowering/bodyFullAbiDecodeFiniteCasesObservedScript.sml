@@ -765,7 +765,13 @@ Proof
      disch_then SUBST1_TAC >>
      simp[abi_decoder_operand_live_def,abi_decoder_older_vars_def,not_fresh_at_def]) >>
   `not_fresh_at c3 out /\ not_fresh_at c4 out` by
-    metis_tac[not_fresh_at_mono,arithmeticTheory.LESS_EQ_TRANS] >>
+    (conj_tac
+     >- (irule freshWritesTheory.not_fresh_at_mono >>
+         qexists_tac `sg` >> asm_rewrite_tac[]) >>
+     irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sg` >> asm_rewrite_tac[] >>
+     irule arithmeticTheory.LESS_EQ_TRANS >>
+     qexists_tac `c3.cs_next_var` >> asm_rewrite_tac[]) >>
   `eval_operand cnt z5 = SOME (n2w c) /\ op_prov G5 cnt = NONE /\ op_taint T5 cnt = {}` by
     (map_every (fn pat => qpat_assum pat (qspec_then `out` (drule_then strip_assume_tac)))
        [`!x. not_fresh_at sg x ==> lookup_var x z3 = _ /\ _`,

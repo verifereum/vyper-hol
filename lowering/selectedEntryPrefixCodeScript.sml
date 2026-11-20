@@ -1,8 +1,8 @@
 (* One selected package, with shared check, registration and body endpoints. *)
 Theory selectedEntryPrefixCode
-Ancestors selectedBodyCode runtimeExternalPackageCode entryCheckIntervals
+Ancestors runtimeExternalPackageCode entryCheckIntervals
   actualRegistrationCode loweringShapeProps loweringShapeDefs loweringShapeRules
-  sourceEntryCode supportedProgram supportedProgramProps supportedDecls compileEnv moduleLowering
+  supportedProgram supportedProgramProps supportedDecls compileEnv moduleLowering
   fragExec compileVyper list packagedRegistrationProps argumentRegistrationOpen
   exprOpenPrimitives vyperLoweringCorrect vyperCompiler venomWf venomInst
   exprOpenTerminals allocaFrontierBound externalEntryChecks runtimeBodyStartDefs

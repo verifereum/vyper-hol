@@ -361,9 +361,11 @@ Proof
            disch_then (SUBST_ALL_TAC o SYM) >> fs[]) >>
         `dt = xt /\ tlen = z` by metis_tac[optionTheory.SOME_11] >>
         `?rs. eval_operand src (EL w h).po_state = SOME rs` by
-          (qpat_assum `!op. IS_SOME (eval_operand op _) <=> _`
-             (qspec_then `src` assume_tac) >>
-           Cases_on `eval_operand src (EL w h).po_state` >> fs[]) >>
+          (pure_rewrite_tac[GSYM optionTheory.IS_SOME_EXISTS] >>
+           qpat_assum `!op. IS_SOME (eval_operand op (EL w h).po_state) <=> _`
+             (qspec_then `src` (fn th => ONCE_REWRITE_TAC [th])) >>
+           qpat_assum `eval_operand src (EL r ht).po_state = SOME rt`
+             (fn th => simp[NoAsms, th])) >>
         `eval_operand dst (EL w h).po_state = SOME x` by metis_tac[] >>
         `eval_operand len (EL w h).po_state = SOME z` by metis_tac[] >>
         qexistsl [`x`,`rs`,`z`] >> simp[] >>

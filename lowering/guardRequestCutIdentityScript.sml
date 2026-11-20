@@ -7,7 +7,7 @@
 Theory guardRequestCutIdentity
 Ancestors
   fnFrameRequestPrefix jointRequestCut e2eRequestCutDefs
-  guardRequestAlignment e2eProducers e2eEntry e2eDefs
+  codegenRequestPrefix[qualified] e2eComposition[qualified] immutableCodeLayout[qualified] e2eProducers e2eEntry e2eDefs
   contextCodegenRel codegenEntryRel contextPlanLayoutProps unitMemInv
   staticAbortDefs ctxLookupAgree stepWriteFootprintBase dftGasFromListLookup
   frameRawProjection frameJointTrace frameJointTransition
