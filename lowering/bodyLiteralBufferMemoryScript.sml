@@ -600,7 +600,8 @@ Proof
            supportedExprTraverseTheory.expr_has_effect_def,
            supportedExprTraverseTheory.supported_expr_exists_def,
            supportedExprTraverseTheory.expr_effect_root_def]) >>
-  irule literal_bytes_or_string_body_mem >> qexists_tac `env` >> simp[] >>
+  MATCH_MP_TAC (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `env`, `ty`, `ann`, `l`, `es`]
+    literal_bytes_or_string_body_mem) >> simp[] >>
   gvs[expr_sim_pre_def, well_typed_expr_def] >> Cases_on `l` >> gvs[] >>
   Cases_on `ann` >> gvs[well_typed_literal_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
