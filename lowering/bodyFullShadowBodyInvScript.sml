@@ -93,7 +93,11 @@ Theorem shadow_body_inv_def:
         gas_shadow_state final finalS /\
         fn_has_code entryS finalS sf
 Proof
-  cheat
+  simp[shadow_body_inv_split_def, shadow_body_inv_mods_def,
+       ALOOKUP_def, optionTheory.FORALL_OPTION, nsid_to_string_def,
+       build_func_ids_mods_singleton, lower_vyper_runtime_unit_mods_singleton,
+       lower_vyper_deploy_unit_mods_singleton, package_internal_fn_unit_singleton,
+       imm_len_mods_singleton, immSectionDeadTheory.imm_len_def]
 QED
 
 Theorem shadow_body_inv_callee_code:
@@ -156,7 +160,7 @@ Theorem dead_lo_ok_mods_singleton:
   cenv.ce_modules = [(NONE,cx_tops cx)] ==>
   (dead_lo_ok_mods H D lo cenv cx <=> dead_lo_ok H D lo cenv cx)
 Proof
-  cheat
+  simp[dead_lo_ok_mods_def, dead_lo_ok_def, imm_len_mods_singleton]
 QED
 
 Definition ghost_inv_at_mods_def[nocompute]:
@@ -184,5 +188,9 @@ Theorem ghost_inv_at_mods_singleton:
   cenv.ce_modules = [(NONE,cx_tops cx)] ==>
   (ghost_inv_at_mods D lo d cenv cx es G tn s <=> ghost_inv_at D lo d cenv cx es G tn s)
 Proof
-  cheat
+  strip_tac >>
+  `!sec j. imm_section_dead_mods cenv sec j <=>
+           imm_section_dead (cx_tops cx) sec j` by
+    (rpt gen_tac >> irule imm_section_dead_mods_singleton >> simp[]) >>
+  simp[ghost_inv_at_mods_def, ghost_inv_at_def]
 QED

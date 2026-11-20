@@ -16,7 +16,8 @@ End
 Theorem imm_len_mods_singleton:
   imm_len_mods [(NONE,tops)] = imm_len tops
 Proof
-  cheat
+  simp[imm_len_mods_def, imm_len_def, make_struct_fields_map_mods_singleton,
+       compute_immutables_len_unit_singleton]
 QED
 
 (* A uses-only module has no allocated region for an unannotated
@@ -73,7 +74,7 @@ Theorem imm_section_dead_mods_singleton:
   cenv.ce_modules = [(NONE,tops)] ==>
   (imm_section_dead_mods cenv sec j <=> imm_section_dead tops sec j)
 Proof
-  cheat
+  simp[imm_section_dead_mods_def]
 QED
 
 (* These relations cover the shared immutable section even when a call
@@ -173,33 +174,44 @@ Theorem contract_inv_module_gate:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx ==>
   supported_program tops /\ (cx.in_deploy ==> supported_program_deploy tops)
 Proof
-  cheat
+  rw[contract_inv_def, module_body_inv_def] >>
+  res_tac
 QED
 
 Theorem contract_inv_module_distinct_keys:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx ==>
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops))
 Proof
-  cheat
+  rw[contract_inv_def, module_body_inv_def] >>
+  res_tac
 QED
 
 Theorem contract_inv_module_code:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx ==>
   get_module_code cx src = SOME tops
 Proof
-  cheat
+  rw[contract_inv_def, module_body_inv_def, get_module_code_def]
 QED
 
 Theorem contract_inv_module_type_env:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx ==>
   type_env_for_module src tops SUBMAP get_tenv cx
 Proof
-  cheat
+  rw[contract_inv_def, module_body_inv_def, get_tenv_def,
+     SUBMAP_FLOOKUP_EQN, pairTheory.FORALL_PROD] >>
+  rename1 `FLOOKUP (type_env_for_module src tops) (sid,id) = SOME a` >>
+  `sid = src` by
+    (qpat_x_assum `FLOOKUP (type_env_for_module _ _) _ = _` mp_tac >>
+     qid_spec_tac `tops` >>
+     Induct >> simp[type_env_for_module_def] >>
+     Cases >> simp[type_env_for_module_def, FLOOKUP_UPDATE] >>
+     rw[] >> gvs[AllCaseEqs()]) >>
+  gvs[FLOOKUP_type_env_all_modules]
 QED
 
 Theorem contract_inv_immutable_section_layout:
   contract_inv mods exps ctx cenv cx ==>
   immutable_section_layout_mods mods cenv
 Proof
-  cheat
+  simp[contract_inv_def]
 QED
