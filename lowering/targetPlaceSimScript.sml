@@ -21,8 +21,8 @@
  *   - a mapping (HashMapRef): its slot, at the mapping's key and value
  *     types.
  * Immutables are left out (immutable_root): the lowering keeps them in
- * code (LocCode), which nothing relates to the source's immutables yet
- * (exprSimLeaves' compile_toplevel_immutable_sim).
+ * code (LocCode), and only reads of them are simulated
+ * (exprSimTopLevelImmutable's compile_toplevel_immutable_sim).
  *
  * The offsets (mem_path_offset and its steps) are exprSim's, which the
  * live-locals frame locals_kept uses too.
