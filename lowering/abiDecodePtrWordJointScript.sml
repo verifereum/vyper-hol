@@ -73,7 +73,7 @@ Theorem allocated_word_relative_load[local]:
   abi_decode_ptr_window G tn s src a n /\
   eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
   p+32 <= n /\ w2n a+n <= s.vs_alloca_next /\
-  w2n a+p < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  w2n a+p < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r G2 tn2.
     run_inst_seq (emitted_insts sa c1 ++ emitted_insts c1 c2) s = OK r /\
@@ -91,7 +91,8 @@ Theorem allocated_word_relative_load[local]:
     tn2.t_mem = tn.t_mem /\ tn2.t_stor = tn.t_stor /\
     tn2.t_trans = tn.t_trans /\ tn2.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x s /\
-      FLOOKUP G2 x = FLOOKUP G x /\ op_taint tn2 (Var x) = op_taint tn (Var x))
+      FLOOKUP G2 x = FLOOKUP G x /\ op_taint tn2 (Var x) = op_taint tn (Var x)) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp r)
 Proof
   strip_tac >>
   qhdtm_assum `abi_decode_ptr_window`
@@ -136,6 +137,12 @@ Proof
   `step_inst_base j u = OK r` by
     (simp[Abbr `j`, Abbr `r`, step_inst_base_opcode_eqs, mk_inst_def,
           exec_read1_def, eval_operand_def] >> gvs[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `u`, update_var_def, allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+     simp[Abbr `r`, update_var_def, allocas_below_fmp_def]) >>
   qabbrev_tac `G2 = step_prov PG G1 j r` >>
   qabbrev_tac `tn2 = step_taint j u r tn1` >>
   `op_taint tn2 (Var value) = {} /\ op_prov G2 (Var value) = NONE /\
@@ -186,7 +193,7 @@ Theorem allocated_word_clamp_cut[local]:
   op_prov G2 (Var value) = NONE /\ not_fresh_at c2 value /\
   run_inst_seq (emitted_insts c2 c3) r = OK u /\
   fn_has_code c2 c3 fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ ~r.vs_halted /\ r.vs_current_bb = c2.cs_current_bb ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp r) /\ ~r.vs_halted /\ r.vs_current_bb = c2.cs_current_bb ==>
   ?G3 tn3.
     (!D. inst_seq_ptr D 0 ctx fn PG G2 tn2 (emitted_insts c2 c3)
       (r with vs_inst_idx := LENGTH c2.cs_current_insts) G3 tn3) /\
@@ -201,7 +208,8 @@ Theorem allocated_word_clamp_cut[local]:
     (!x. not_fresh_at c2 x ==>
       FLOOKUP G3 x = FLOOKUP G2 x /\ op_taint tn3 (Var x) = op_taint tn2 (Var x)) /\
     tn3.t_mem = tn2.t_mem /\ tn3.t_stor = tn2.t_stor /\
-    tn3.t_trans = tn2.t_trans /\ tn3.t_imm = tn2.t_imm
+    tn3.t_trans = tn2.t_trans /\ tn3.t_imm = tn2.t_imm /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u)
 Proof
   strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
@@ -220,7 +228,16 @@ Proof
    r'.vs_inst_idx = LENGTH c2.cs_current_insts` by
     gvs[Abbr `r'`, allocas_from_def, eval_operand_def, lookup_var_def] >>
   `!x. Var value = Var x ==> not_fresh_at c2 x` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp r'` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r'` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp r` mp_tac >>
+     simp[Abbr `r'`, allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl [`emitted_insts c2 c3`, `r`] >> simp[] >>
+     drule calldata_clamp_instructions >> rpt strip_tac >>
+     gvs[mk_inst_def, is_alloca_op_def, is_terminator_def] >>
+     Cases_on `signed` >> gvs[mk_inst_def, is_alloca_op_def, is_terminator_def]) >>
   drule_all calldata_clamp_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`G'`,`tn'`] >>
@@ -236,7 +253,7 @@ Theorem allocated_word_store_cut[local]:
   emit_void MSTORE [Var dst;Var value] c3 = ((),sb) /\
   lookup_var dst u = SOME dw /\ lookup_var value u = SOME w /\
   ptr_covers G3 tn3 dst u 32 /\ op_taint tn3 (Var value) = {} /\
-  w2n dw + 32 <= u.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  w2n dw + 32 <= u.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
   run_inst_seq (emitted_insts c3 sb) u = OK v ==>
   v = mstore (w2n dw) w u /\
   run_inst_seq_mem_ok (emitted_insts c3 sb) u /\
@@ -269,6 +286,9 @@ Proof
   `step_taint i u' (mstore (w2n dw) w u') tn3 =
      tn3 with t_mem := tn3.t_mem DIFF {i | w2n dw <= i /\ i < w2n dw + 32}` by
     (simp[Abbr `i`] >> irule clean_mstore_taint_state >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u'` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+     simp[Abbr `u'`, allocas_below_fmp_def]) >>
   gvs[Abbr `i`, inst_seq_ptr_def] >>
   irule ptr_inst_ok_mstore >> simp[]
 QED
@@ -282,7 +302,7 @@ Theorem abi_decode_allocated_word_success_joint:
   p+32 <= n /\ w2n a+n <= s.vs_alloca_next /\ w2n a+p < dimword(:256) /\
   lookup_var dst s = SOME dw /\ ptr_covers G tn dst s 32 /\
   w2n dw+32 <= s.vs_alloca_next /\ not_fresh_at sa dst /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ fn_has_code sa sb fn /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ fn_has_code sa sb fn /\
   fn_inst_ids_distinct fn /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?H tf.
