@@ -16,20 +16,6 @@ Ancestors
 Libs
   monadsyntax
 
-val irule_body_pre = bodyConstNameLib.irule_body_pre;
-
-Theorem body_inv_cx_tops[local]:
-  body_inv tops ctx cenv cx ==>
-  cx_tops cx = tops /\
-  (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-            is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
-Proof
-  strip_tac >>
-  `cx_tops cx = tops` by
-    (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
-  fs[body_inv_def]
-QED
-
 Definition reason_covered_def:
   reason_covered cenv r <=>
     (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
