@@ -1,12 +1,11 @@
 (* What a body keeps under subst_consts_stmts: its abi_decode targets and its
-   internal calls when every inlined constant is free of them, and the whole
-   body when it is supported and every substituted name is a constant. *)
+   internal calls when every inlined constant is free of them. *)
 Theory constSubstStmtsPreserve
 Ancestors
   supportedNameRoot constSubstCorrect constSubst supportedProgram supportedStmts
   supportedTargets supportedStmtTraverse supportedExprTraverse supportedExprs
   supportedExprForms supportedDecls vyperTypeContract vyperTypeCallGraph vyperAST
-  list alist
+  exprSimHypsDefs list alist
 
 (* ===== abi_decode targets ===== *)
 
@@ -408,6 +407,148 @@ Proof
   cheat
 QED
 
+
+Theorem closed_constant_no_const_name[local]:
+  (!e. constant_expr [(NONE,tops)] e /\ const_local_refs e = [] ==>
+    ~supported_expr_exists (const_name_root_mods [(NONE,tops)]) e) /\
+  (!es. EVERY (constant_expr [(NONE,tops)]) es /\ const_local_exprs es = [] ==>
+    ~supported_exprs_exists (const_name_root_mods [(NONE,tops)]) es) /\
+  (!fs. EVERY (constant_expr [(NONE,tops)]) (MAP SND fs) /\ const_local_fields fs = [] ==>
+    ~supported_fields_exists (const_name_root_mods [(NONE,tops)]) fs)
+Proof
+  ho_match_mp_tac const_local_refs_ind >>
+  simp[constant_expr_def, const_local_refs_def, supported_expr_exists_def,
+       const_name_root_mods_def] >>
+  rpt strip_tac >> gvs[]
+  >- (PairCases_on `ns` >> Cases_on `ns0` >>
+      gvs[const_local_refs_def, const_name_root_mods_def, cx_const_name_mods_def]) >>
+  metis_tac[]
+QED
+
+Theorem subst_consts_expr_const_name_free[local]:
+  (!env e.
+    (!id. ALOOKUP env id = NONE ==>
+      ALOOKUP (module_consts_env tops []) id = NONE) /\
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists (const_name_root_mods [(NONE,tops)]) r) ==>
+    ~supported_expr_exists (const_name_root_mods [(NONE,tops)])
+      (subst_consts_expr env e)) /\
+  (!env t.
+    (!id. ALOOKUP env id = NONE ==>
+      ALOOKUP (module_consts_env tops []) id = NONE) /\
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists (const_name_root_mods [(NONE,tops)]) r) ==>
+    ~supported_target_exists (const_name_root_mods [(NONE,tops)])
+      (subst_consts_btarget env t)) /\
+  (!env es.
+    (!id. ALOOKUP env id = NONE ==>
+      ALOOKUP (module_consts_env tops []) id = NONE) /\
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists (const_name_root_mods [(NONE,tops)]) r) ==>
+    ~supported_exprs_exists (const_name_root_mods [(NONE,tops)])
+      (subst_consts_exprs env es)) /\
+  (!env opt.
+    (!id. ALOOKUP env id = NONE ==>
+      ALOOKUP (module_consts_env tops []) id = NONE) /\
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists (const_name_root_mods [(NONE,tops)]) r) ==>
+    ~supported_opt_exists (const_name_root_mods [(NONE,tops)])
+      (subst_consts_opt env opt)) /\
+  (!env fs.
+    (!id. ALOOKUP env id = NONE ==>
+      ALOOKUP (module_consts_env tops []) id = NONE) /\
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists (const_name_root_mods [(NONE,tops)]) r) ==>
+    ~supported_fields_exists (const_name_root_mods [(NONE,tops)])
+      (subst_consts_fields env fs))
+Proof
+  ho_match_mp_tac subst_consts_expr_ind >>
+  simp[subst_consts_expr_def, supported_expr_exists_def,
+       const_name_root_mods_def] >>
+  rpt strip_tac >> gvs[]
+  >- (Cases_on `ns` >>
+      gvs[subst_consts_expr_def, supported_expr_exists_def,
+          const_name_root_mods_def] >>
+      Cases_on `ALOOKUP env id` >>
+      gvs[supported_expr_exists_def, const_name_root_mods_def,
+          cx_const_name_mods_def]
+      >- (qpat_x_assum `!id. ALOOKUP env id = NONE ==> _`
+        (qspec_then `id` mp_tac) >> gvs[ALOOKUP_NONE]) >>
+      metis_tac[])
+  >> metis_tac[]
+QED
+
+Theorem subst_consts_target_const_name_free[local]:
+  (!env t.
+    (!id. ALOOKUP env id = NONE ==>
+      ALOOKUP (module_consts_env tops []) id = NONE) /\
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists (const_name_root_mods [(NONE,tops)]) r) ==>
+    ~supported_assignment_exists (const_name_root_mods [(NONE,tops)])
+      (subst_consts_target env t)) /\
+  (!env ts.
+    (!id. ALOOKUP env id = NONE ==>
+      ALOOKUP (module_consts_env tops []) id = NONE) /\
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists (const_name_root_mods [(NONE,tops)]) r) ==>
+    ~supported_assignments_exists (const_name_root_mods [(NONE,tops)])
+      (subst_consts_targets env ts))
+Proof
+  ho_match_mp_tac subst_consts_target_ind >>
+  simp[subst_consts_target_def, supported_assignment_exists_def] >>
+  metis_tac[subst_consts_expr_const_name_free]
+QED
+
+Theorem subst_consts_stmt_const_name_free[local]:
+  (!env s.
+    (!id. ALOOKUP env id = NONE ==>
+      ALOOKUP (module_consts_env tops []) id = NONE) /\
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists (const_name_root_mods [(NONE,tops)]) r) ==>
+    ~supported_stmt_expr_exists (const_name_root_mods [(NONE,tops)])
+      (subst_consts_stmt env s)) /\
+  (!env ss.
+    (!id. ALOOKUP env id = NONE ==>
+      ALOOKUP (module_consts_env tops []) id = NONE) /\
+    (!id r. ALOOKUP env id = SOME r ==>
+      ~supported_expr_exists (const_name_root_mods [(NONE,tops)]) r) ==>
+    ~supported_stmts_expr_exists (const_name_root_mods [(NONE,tops)])
+      (subst_consts_stmts env ss))
+Proof
+  ho_match_mp_tac subst_consts_stmt_ind >>
+  simp[subst_consts_stmt_def, supported_stmt_expr_exists_def] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+  >~ [`subst_consts_iter`]
+  >- (Cases_on `it` >>
+      gvs[subst_consts_iter_def, supported_iterator_exists_def] >>
+      metis_tac[subst_consts_expr_const_name_free])
+  >~ [`subst_consts_areason`]
+  >- (Cases_on `r` >>
+      gvs[subst_consts_areason_def, supported_assert_exists_def,
+          subst_consts_error_exprs, EXISTS_MAP, EXISTS_MEM, MEM_MAP, PULL_EXISTS] >>
+      metis_tac[subst_consts_expr_const_name_free])
+  >~ [`subst_consts_rreason`]
+  >- (Cases_on `r` >>
+      gvs[subst_consts_rreason_def, supported_raise_exists_def,
+          subst_consts_error_exprs, EXISTS_MAP, EXISTS_MEM, MEM_MAP, PULL_EXISTS] >>
+      metis_tac[subst_consts_expr_const_name_free])
+  >> metis_tac[subst_consts_expr_const_name_free,
+               subst_consts_target_const_name_free]
+QED
+
+Theorem checked_const_substitution_const_name_free:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A ==>
+  ~supported_stmts_expr_exists (const_name_root_mods [(NONE,tops)])
+    (subst_consts_stmts (module_consts_env tops []) ss)
+Proof
+  strip_tac >> irule (cj 2 subst_consts_stmt_const_name_free) >>
+  simp[GSYM ALOOKUP_NONE] >>
+  rpt strip_tac >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
+  drule_all checked_module_consts_env_replacement >> strip_tac >>
+  metis_tac[closed_constant_no_const_name]
+QED
 
 Theorem checked_const_substitution_abi_decode_target:
   check_contract mode layouts addr mods = SOME artifact /\
