@@ -203,8 +203,10 @@ The identity case composes the stage bounds S1b
 `e2e_deploy_gas_sufficient` uses the proved S1b-d `deploy_unit_run_bounded`,
 the same S6b, and the proved S7g-d `deploy_frame_gas_sufficient`. Its OutOfGas
 conclusion allows oversized deposited code or a reached `RETURNDATACOPY`;
-the per-finalizer case theorems give the stronger code-size-only alternative.
-Both assembly-optimizer cases have proofs that inherit upstream admissions.
+its per-finalizer cases (`e2e_deploy_gas_sufficient_identity`,
+`e2e_deploy_gas_sufficient_asm_opt`) allow the same two alternatives.
+No admitted theorem lies under either companion, assembly-optimizer cases
+included.
 
 On success the result relates `tx_return_bytes`, accounts after EVM pending
 deletions and transient storage modulo dead target storage, ordered concrete logs

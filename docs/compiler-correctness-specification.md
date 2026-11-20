@@ -364,8 +364,8 @@ The result relation ties source gas observations to the frame's EVM gas readings
   observations is exempt (`~gas_source_exempt`), the frame runs out of gas only
   if it reaches a `RETURNDATACOPY` instruction (`frame_inst_at`). The identity
   case composes proved lowering, O1 fuel/memory and codegen gas bounds. The
-  assembly-optimizer case remains admitted, so the general companion is not
-  an admission-free result. The deploy companion `e2e_deploy_gas_sufficient`
+  assembly-optimizer case is proved too, so no admitted theorem lies under
+  the general companion. The deploy companion `e2e_deploy_gas_sufficient`
   similarly composes proved stage bounds; under its source-exemption and
   storage premises, OutOfGas implies oversized deposited code or a reached
   `RETURNDATACOPY`. Both deploy finalizer cases include these alternatives.
