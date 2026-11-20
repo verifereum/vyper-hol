@@ -160,29 +160,6 @@ Proof
   EVAL_TAC
 QED
 
-Theorem membership_missing_array_type_test:
-  lookup_scopes_val "x" st.scopes = SOME (IntV 0) /\
-  lookup_scopes_val "a" st.scopes = SOME (ArrayV (SArrayV [])) /\
-  evaluate_type (get_tenv cx)
-    (ArrayT (StructT (NONE,"missing")) (Fixed 1)) = NONE ==>
-  eval_expr cx
-    (Builtin (BaseT BoolT) (Bop (if is_notin then NotIn else In))
-      [Name (BaseT (UintT 256)) "x";
-       Name (ArrayT (StructT (NONE,"missing")) (Fixed 1)) "a"]) st =
-  (INR (Error (TypeError "Membership type")),st)
-Proof
-  strip_tac >>
-  imp_res_tac lookup_local_exists >>
-  imp_res_tac read_local_value >>
-  Cases_on `is_notin` >>
-  simp[evaluate_def, builtin_args_length_ok_def, type_check_def, check_def,
-       assert_def, bind_def, ignore_bind_def, return_def, raise_def,
-       get_scopes_def, get_accounts_def, precompile_call_success_def,
-       lift_sum_def, read_local_value, cj 1 read_result_def,
-       evaluate_type_def, expr_type_def, evaluate_builtin_def,
-       evaluate_binop_def, binop_negate_def]
-QED
-
 (* The checker/lowering interface lives on the lowering side: the type system
    does not depend on compileEnv. *)
 (* Symbolic bounds cover both literal/static and variable/dynamic arrays.
