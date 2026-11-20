@@ -38,6 +38,7 @@ val checker_defs =
    write_mutability_ok_def,
    atarget_mutability_ok_def,
    iterator_mutability_ok_def,
+   reason_calls_ok_def,
    assert_reason_mutability_ok_def,
    raise_reason_mutability_ok_def,
    stmt_mutability_ok_def,
