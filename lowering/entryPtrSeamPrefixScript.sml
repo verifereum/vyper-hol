@@ -1,8 +1,7 @@
 (*
- * Seam of external_entry_reaches_body_ptr (loweringPtrCorrect): the entry's
- * prefix, from __entry's first block to the start of the selected external
- * function's argument registration, on a call whose value the source
- * accepted.
+ * Entry seam: the entry's prefix, from __entry's first block to the start
+ * of the selected external function's argument registration, on a call
+ * whose value the source accepted.
  *
  * The prefix is the selector dispatch (compile_selector_dispatch_linear)
  * and the selected function's entry checks (compile_entry_checks: the call
@@ -47,22 +46,26 @@ QED
 
 (* Entry-to-registration prefix seam.
    Hints (not binding):
-   - Code: source_selected_entry_check_code and source_selected_body_code
-     come from the same packaged external member; compile_external_fn_bodies
-     runs compile_entry_checks and then compile_external_function_body
-     (registration, then compile_guarded_body) in that member's block, so
-     registration starts at `checked`.  fn_inst_ids_distinct follows from
-     lowering_context_ok's ctx_inst_ids_distinct (run_lowering_context_ok);
+   - Code: selectedEntryPrefixCode's source_selected_entry_prefix_structure_nr
+     gives the check, registration and body code of one packaged external
+     member, for either nonreentrant flag; compile_external_fn_bodies runs
+     compile_entry_checks and then compile_external_function_body
+     (registration, then compile_guarded_body) for that member, so
+     registration starts where the checks end.
+     fn_inst_ids_distinct follows from lowering_context_ok's
+     ctx_inst_ids_distinct (run_lowering_context_ok);
      local_ptrs_reserved from entryLocals' compile_register_positional_args_reserved.
    - Run: entryDispatchPtr's compile_selector_dispatch_linear_ptr_continuation
      and compile_selector_checks_ptr_continuation take continuations for
      every ghost; this seam needs the actual ghost, so either state ghost-
-     specific variants of them or thread ghost_run.  external_entry_value_revert_ptr
-     (loweringPtrCorrect) is the rejecting twin of this prefix.
+     specific variants of them or thread ghost_run.
    - The pass path of compile_entry_checks: send_call_value = (INL (), _)
-     gives mut = Payable or a zero call value (the converse of
-     entryValueRevertPtr's initial_entry_rejected_value); valid_vyper_call's
-     calldata_encodes gives the calldata size bound. *)
+     gives mut = Payable or a zero call value
+     (send_call_value_success_condition); the calldata size bound is
+     calldata_encodes_min_calldata_size, from the calldata_encodes premise
+     (valid_vyper_call's, in the nr=F wrapper), the package's decoder
+     environment agreeing with the source typing and bind_arguments's
+     typed arguments. *)
 Theorem external_entry_reaches_registration_ptr_nr:
   !tops rpolicy unit am tx ret vs mut nr args fbody env es0 efn elbl.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
