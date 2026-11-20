@@ -9,6 +9,7 @@ Ancestors
   abiEncodeArgsSim abiTupleProps compileEnv loweringPosts wordArgsPtr
   bodyFullAllocaFresh fragGasPathFrameMem abiDecodeStaticProps exprSimStorageCopy exprSimCopy exprSimAlloc
   finite_map words list arithmetic venomState venomInst
+  bodyFullHashKeccakFixed
 
 Theorem abi_encode_args_tuple_prepared_state_frame:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
@@ -37,7 +38,6 @@ Theorem abi_encode_args_tuple_prepared_state_frame:
   alloca_history func initial /\ allocas_from lo initial /\ lo <= initial.vs_alloca_next /\
   local_ptrs_reserved ce origin /\ local_ptrs_reserved ce st /\
   origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_id <= st.cs_next_id /\
-  ~ctx_has_dalloca ctx /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
   n = abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)) /\
@@ -164,7 +164,9 @@ Resume abi_encode_args_tuple_prepared_state_frame[continuation]:
   qpat_x_assum `compile_store_abi_tuple _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   (Q.SUBGOAL_THEN `n = 0 \/ w2n bw + n <= t.vs_alloca_next` assume_tac >- simp[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel H0 ctx func ce cx ee t`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   drule_all (INST_TYPE [``:'b`` |-> ``:'a``] abi_encode_tuple_staging_zero_safe_with_frame) >>
   disch_then (qspecl_then [`explicit`, `PG`, `d`] mp_tac) >>
   disch_then (qspecl_then [`cx`, `G0`, `tn0`] strip_assume_tac) >>
@@ -421,7 +423,8 @@ Theorem abi_encode_args_tuple_prepared_frame:
       mem_bytes_at z k prepared.vs_memory = mem_bytes_at z k initial.vs_memory) /\
     locals_kept ce ee ee initial prepared
 Proof
-  disch_then (strip_assume_tac o MATCH_MP abi_encode_args_tuple_prepared_state_frame) >>
+  strip_tac >> drule_all abi_encode_args_tuple_prepared_state_frame >>
+  disch_then (qspecl_then [`tn0`, `explicit`, `d`, `PG`, `G0`] strip_assume_tac) >>
   qexistsl_tac [`root`, `bw`, `prepared`, `Gp`, `tnp`] >> asm_rewrite_tac[]
 QED
 

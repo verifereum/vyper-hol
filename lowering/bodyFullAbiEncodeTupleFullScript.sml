@@ -2,7 +2,7 @@
 Theory bodyFullAbiEncodeTupleFull
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullPreds bodySimFull bodyInvNoDalloca
+  bodyFullPreds bodySimFull
   bodyFullAbiEncodePureFrame bodyFullAbiEncodeTuplePrepared bodyFullAbiEncodeTupleTail
   bodyFullAbiEncodeUniformTranslation bodyFullAbiEncodeSuffix
   bodyFullAbiEncodeSetupTail bodyFullAbiEncodeFinish
@@ -72,7 +72,6 @@ Theorem abi_encode_tuple_vv_full_from_packaging:
     ce cx cty (TypeBuiltin ann (AbiEncode ensure mid) ty args) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `1 <= LENGTH args` by
     (Cases_on `args` >> simp[] >>
      `well_typed_expr env (TypeBuiltin ann (AbiEncode ensure mid) ty [])`
