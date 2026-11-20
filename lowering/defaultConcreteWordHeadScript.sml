@@ -76,6 +76,8 @@ Proof
    s.vs_current_bb = st.cs_current_bb /\
    s.vs_inst_idx = LENGTH st.cs_current_insts` by
     fs[default_registration_invariant_def, default_registration_resources_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all default_word_registration_step_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   `p'' = p` by

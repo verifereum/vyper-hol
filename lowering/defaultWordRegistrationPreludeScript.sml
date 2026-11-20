@@ -8,6 +8,7 @@ Ancestors calldataRegistrationExec moduleLowering compileEnv emitHelper
   loweringStateRelDefs bodyPtrDefs venomState ptrDiscipline localPtrsProps
   ctorDeployLoweringEntryAllocation emitHelperProps venomInst venomExecSemantics
   slotCopyExecution exprLoweringProps rich_list
+  allocaSiteResource[qualified,ignore_grammar] entryArgPtrs[qualified,ignore_grammar]
 
 Theorem default_word_registration_split:
   compile_register_positional_args ce
@@ -63,7 +64,9 @@ Theorem default_word_registration_prelude_footprint:
   alloca_inv s /\ alloca_frontier_inv_from k ctx fn site s /\
   fn_inst_ids_distinct fn /\ k + unit_alloca_budget ctx < dimword (:256) /\
   FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   alloca_history fn s /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -130,6 +133,32 @@ Proof
   `raw = update_var (STRING #"%" (toString st.cs_next_var)) (n2w s.vs_alloca_next)
     (s with <|vs_allocas := s.vs_allocas |+ (st.cs_next_id,(s.vs_alloca_next,32));
       vs_alloca_next := s.vs_alloca_next+32|>)` by simp[Abbr `raw`, Abbr `p`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by
+    (strip_tac >>
+     `MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w 32)]
+        [STRING #"%" (toString st.cs_next_var)]) (fn_insts fn)` by
+       (irule entryArgPtrsTheory.entry_alloc_buffer_inst >> simp[]) >>
+     `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w 32)]
+        [STRING #"%" (toString st.cs_next_var)]) s (n2w 32:bytes32) = OK raw` by
+       (qpat_assum `raw = _` (fn th => once_rewrite_tac [th]) >>
+        qpat_assum `FLOOKUP s.vs_allocas st.cs_next_id = NONE` (fn th =>
+          simp[NoAsms, th, exec_alloca_def, mk_inst_def, LET_THM, dimword_def])) >>
+     `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w 32)]
+        [STRING #"%" (toString st.cs_next_var)]) s = OK raw` by
+       (qpat_assum `raw = _` (fn th => once_rewrite_tac [th]) >>
+        irule step_alloca_fresh >> simp[dimword_def]) >>
+     `alloca_inv raw` by
+       (irule step_alloca_fresh_inv >> goal_assum (drule_at Any) >> simp[]) >>
+     `allocas_below_fmp raw` by
+       (irule allocaSiteResourceTheory.alloca_site_below_fmp >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        qexistsl_tac [`fn`, `mk_inst st.cs_next_id ALLOCA [Lit 32w]
+          [STRING #"%" (toString st.cs_next_var)]`, `32w`, `s`] >>
+        qpat_assum `ctx_has_dalloca ctx ==> _ /\ _` (drule_then strip_assume_tac) >>
+        rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[NoAsms, mk_inst_def])) >>
+     qpat_assum `a = raw with vs_inst_idx := _` SUBST1_TAC >>
+     qpat_assum `allocas_below_fmp raw` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all ctor_checked_alloc_buffer_edge >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qpat_x_assum `raw = _` kall_tac >>
@@ -235,8 +264,6 @@ Resume default_word_registration_prelude_footprint[origin]:
      irule prefix_register_address_emit_origin >>
      conj_tac >- simp[] >>
      qexistsl [`ALLOCA`,`[Lit (n2w 32)]`,`buf.buf_operand`,`st`] >>
-     `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
      `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w 32)]
         [STRING #"%" (toString st.cs_next_var)]) s =
        OK (update_var (STRING #"%" (toString st.cs_next_var)) (n2w s.vs_alloca_next)
@@ -278,8 +305,13 @@ Resume default_word_registration_prelude_footprint[origin]:
        simp[lit_add_lit_ghost] >>
      irule ctorDeployMemoryRunPtrPrefixBoolBodyTheory.prefix_bool_body_arith_ptr_step >>
      simp[eval_operand_def,op_taint_def,allocas_from_def,update_var_def,FLOOKUP_UPDATE] >>
-     rpt strip_tac >> gvs[allocas_from_def] >>
-     Cases_on `st.cs_next_id = aid` >> gvs[] >> metis_tac[]) >>
+     reverse conj_tac >- (rpt strip_tac >> gvs[allocas_from_def] >>
+       Cases_on `st.cs_next_id = aid` >> gvs[] >> metis_tac[]) >>
+     qpat_assum `a = _` (fn eq =>
+       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp a`
+         (mp_tac o PURE_REWRITE_RULE [eq])) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) _ _`
     (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
   simp[NoAsms] >> disch_then irule >> simp[]
@@ -287,8 +319,6 @@ QED
 
 Resume default_word_registration_prelude_footprint[pullback]:
   gen_tac >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   `(!fuel. ptr_safe_run D lo fuel ctx fn PG H0 q a) ==>
     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s` by
     (drule_all prefix_register_alloc_run_continuation >>
@@ -367,7 +397,10 @@ Theorem default_word_registration_prelude:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u ready) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all default_word_registration_prelude_footprint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
+  drule_all default_word_registration_prelude_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl [`ready`,`H`,`u`,`p`] >> simp[]
 QED
