@@ -170,6 +170,8 @@ Resume annassign_other_typed_full_execution[prefix]:
   gnvs[Excl "NOT_AND"] >>
   qpat_x_assum `unwrap_value cenv' vv sv = _ /\ _` strip_assume_tac >>
   `type_memory_size dtv = type_memory_bytes cenv typ` by simp[] >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
   qspecl_then
     [`DF`,`lo`,`d`,`PG`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,
      `cenv`,`cenv'`,`cx`,`es`,`id`,`typ`,`e`,`st0`,`sa`,`r`,`a`,`b`,

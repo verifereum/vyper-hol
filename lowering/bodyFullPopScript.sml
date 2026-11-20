@@ -103,7 +103,7 @@ QED
 Theorem pop_full_memory_load[local]:
   ptr_covers G tn p s 32 /\ lookup_var p s = SOME w /\
   mem_word_taint tn.t_mem (w2n w) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G' tn'.
     u = update_var out (mload (w2n w) s) s /\
     step_inst_base (mk_inst id MLOAD [Var p] [out]) s = OK u /\
@@ -138,12 +138,15 @@ QED
 Theorem pop_full_memory_load_uniform[local]:
   ptr_covers G tn p s 32 /\ lookup_var p s = SOME w /\
   mem_word_taint tn.t_mem (w2n w) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   inst_seq_ptr D0 lo ctx fn PG G tn [mk_inst id MLOAD [Var p] [out]] s H tm ==>
   !D k. inst_seq_ptr D lo ctx fn PG G tn
     [mk_inst id MLOAD [Var p] [out]] (s with vs_inst_idx := k) H tm
 Proof
   rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`] (SPEC_ALL pop_full_memory_load)) >>
   (impl_tac >- (gvs[lookup_var_def, allocas_from_def] >> metis_tac[])) >> strip_tac >>
   `step_inst_base (mk_inst id MLOAD [Var p] [out]) s =
@@ -159,7 +162,7 @@ Proof
 QED
 
 Theorem pop_full_bool_pair[local]:
-  op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  op_taint tn x = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   run_inst_seq [mk_inst id ISZERO [x] [a];
     mk_inst (id+1) ISZERO [Var a] [b]] s = OK t ==>
   ?G' tn'.
@@ -177,7 +180,6 @@ Proof
   conj_tac
   >- (gen_tac >> irule inst_seq_ptr_lower_bound_transport >>
       simp[mk_inst_def] >> qexists_tac `0` >> simp[] >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_all iszero_pair_certificate >>
       disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >> gvs[mk_inst_def]) >>
   simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
@@ -227,7 +229,7 @@ QED
 Theorem pop_full_memory_prefix[local]:
   ptr_covers G tn p s 32 /\ lookup_var p s = SOME w /\
   mem_word_taint tn.t_mem (w2n w) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst id MLOAD [Var p] [x0];
     mk_inst (id+1) ISZERO [Var x0] [x1];
     mk_inst (id+2) ISZERO [Var x1] [x2]] s = OK v ==>
@@ -259,6 +261,10 @@ Proof
       (update_var x0 (mload (w2n w) s) s with vs_inst_idx := SUC s.vs_inst_idx) =
       OK (v with vs_inst_idx := SUC s.vs_inst_idx)` by
     simp[run_inst_seq_inst_idx, mk_inst_def, is_terminator_def, exec_result_map_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (update_var x0 (mload (w2n w) s) s
+    with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   drule_all (GEN_ALL (SRULE [GSYM arithmeticTheory.ADD_ASSOC]
     (Q.INST [`id` |-> `id+1`] pop_full_bool_pair))) >>
   disch_then (qspecl_then [`fn`, `PG`, `G'`] strip_assume_tac) >>
@@ -293,7 +299,7 @@ Theorem pop_full_scalar_step[local]:
   MEM opc [SUB; MUL] /\
   EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
   step_inst_base (mk_inst id opc ops [out]) s = OK u /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G' tn'.
     (!D. inst_seq_ptr D lo ctx fn PG G tn [mk_inst id opc ops [out]] s G' tn') /\
     op_prov G' (Var out) = NONE /\ op_taint tn' (Var out) = {} /\
@@ -327,7 +333,7 @@ Theorem pop_full_scalar_sequence[local]:
   bop_scalar_seq R A code B /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> ALLOCA) code /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ run_inst_seq code s = OK t ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ run_inst_seq code s = OK t ==>
   ?G' tn'.
     (!D. inst_seq_ptr D lo ctx fn PG G tn code s G' tn') /\
     (!op. op IN B ==> op_prov G' op = NONE /\ op_taint tn' op = {}) /\
@@ -337,7 +343,6 @@ Theorem pop_full_scalar_sequence[local]:
       op_taint tn' (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `!D. ?H tm. inst_seq_ptr D 0 ctx fn PG G tn code s H tm /\
     (!op. op IN B ==> op_prov H op = NONE /\ op_taint tm op = {}) /\
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
@@ -360,7 +365,7 @@ Theorem pop_full_memory_scalar_chunk[local]:
   EVERY (\x. x <> p) [x1;x2;x3] /\
   lookup_var x0 s = SOME n /\ n <> 0w /\
   op_prov G (Var x0) = NONE /\ op_taint tn (Var x0) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G' tn'.
     run_inst_seq [mk_inst id ISZERO [Var x0] [x1];
       mk_inst (id+1) ISZERO [Var x1] [x2];
@@ -409,7 +414,7 @@ Theorem pop_full_memory_scalar_chunk_uniform[local]:
   EVERY (\x. x <> p) [x1;x2;x3] /\
   lookup_var x0 s = SOME n /\ n <> 0w /\
   op_prov G (Var x0) = NONE /\ op_taint tn (Var x0) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   inst_seq_ptr D0 lo ctx fn PG G tn
     [mk_inst id ISZERO [Var x0] [x1];
      mk_inst (id+1) ISZERO [Var x1] [x2];
@@ -422,6 +427,9 @@ Theorem pop_full_memory_scalar_chunk_uniform[local]:
      mk_inst (id+3) SUB [Var x0; Lit 1w] [x3]] (s with vs_inst_idx := k) H tm
 Proof
   rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`]
     (SPEC_ALL pop_full_memory_scalar_chunk)) >>
   (impl_tac >- (gvs[lookup_var_def, allocas_from_def] >> metis_tac[])) >> strip_tac >>
@@ -439,7 +447,7 @@ QED
 Theorem pop_full_add_step[local]:
   op_taint tn left = {} /\ op_taint tn right = {} /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G' tn'.
     u = update_var out (a+b) s /\
     step_inst_base (mk_inst id ADD [left;right] [out]) s = OK u /\
@@ -475,12 +483,15 @@ QED
 Theorem pop_full_add_step_uniform[local]:
   op_taint tn left = {} /\ op_taint tn right = {} /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   inst_seq_ptr D0 lo ctx fn PG G tn [mk_inst id ADD [left;right] [out]] s H tm ==>
   !D k. inst_seq_ptr D lo ctx fn PG G tn
     [mk_inst id ADD [left;right] [out]] (s with vs_inst_idx := k) H tm
 Proof
   rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`] (SPEC_ALL pop_full_add_step)) >>
   (impl_tac >- (gvs[eval_operand_def, lookup_var_def, allocas_from_def] >> metis_tac[])) >>
   strip_tac >>
@@ -498,7 +509,7 @@ Theorem pop_full_scalar_step_uniform[local]:
   MEM opc [SUB; MUL] /\
   EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
   step_inst_base (mk_inst id opc ops [out]) s = OK u /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   inst_seq_ptr D0 lo ctx fn PG G tn [mk_inst id opc ops [out]] s H tm ==>
   !D k. inst_seq_ptr D lo ctx fn PG G tn
     [mk_inst id opc ops [out]] (s with vs_inst_idx := k) H tm
@@ -508,6 +519,9 @@ Proof
     OK (u with vs_inst_idx := k)` by
     (gvs[] >> simp[step_inst_inst_idx_indep, exec_result_map_def,
       mk_inst_def, is_terminator_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`, `u` |-> `u with vs_inst_idx := k`]
     (SPEC_ALL pop_full_scalar_step)) >>
   (impl_tac >- (gvs[allocas_from_def] >> metis_tac[])) >> strip_tac >>
@@ -572,7 +586,7 @@ Theorem pop_full_memory_store[local]:
   ptr_covers G tn p s 32 /\ lookup_var p s = SOME a /\
   eval_operand value s = SOME w /\ op_taint tn value = {} /\
   mem_word_taint tn.t_mem (w2n a) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   step_inst_base (mk_inst id MSTORE [Var p; value] []) s =
     OK (mstore (w2n a) w s) /\
   (!D. inst_seq_ptr D lo ctx fn PG G tn
@@ -594,11 +608,14 @@ Theorem pop_full_memory_store_uniform[local]:
   ptr_covers G tn p s 32 /\ lookup_var p s = SOME a /\
   eval_operand value s = SOME w /\ op_taint tn value = {} /\
   mem_word_taint tn.t_mem (w2n a) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   !D k. inst_seq_ptr D lo ctx fn PG G tn
     [mk_inst id MSTORE [Var p; value] []] (s with vs_inst_idx := k) G tn
 Proof
   rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`]
     (SPEC_ALL pop_full_memory_store)) >>
   (impl_tac >- (gvs[lookup_var_def, allocas_from_def, eval_operand_def] >> metis_tac[])) >>
@@ -609,7 +626,7 @@ Theorem pop_full_memory_address_tail[local]:
   ALL_DISTINCT [p;x3;x4;x5;x6] /\
   lookup_var p s = SOME w /\ lookup_var x3 s = SOME n /\
   op_taint tn (Var p) = {} /\ op_taint tn (Var x3) = {} /\
-  op_prov G (Var x3) = NONE /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  op_prov G (Var x3) = NONE /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G' tn'.
     run_inst_seq [mk_inst j ADD [Var p;Lit 32w] [x4];
       mk_inst (j+1) MUL [Var x3;Lit (n2w esz)] [x5];
@@ -645,6 +662,9 @@ Proof
     [Var x3;Lit (n2w esz)]` by
     (gvs[op_prov_def, op_taint_def] >> metis_tac[]) >>
   `MEM MUL [SUB; MUL]` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def, Abbr `s1`, update_var_def] >> metis_tac[]) >>
   drule_all pop_full_scalar_step >>
   disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `step_inst_base _ s1 = OK s2` >>
@@ -652,6 +672,9 @@ Proof
     eval_operand (Var x5) s2 = SOME (n*n2w esz)` by
     (gvs[Abbr `s2`, Abbr `s1`, allocas_from_def, eval_operand_def,
       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def, Abbr `s2`, Abbr `s1`, update_var_def] >> metis_tac[]) >>
   `op_taint tn'' (Var x4) = {}` by (fs[] >> metis_tac[]) >>
   mp_tac (Q.INST [`left` |-> `Var x4`, `right` |-> `Var x5`,
     `out` |-> `x6`, `id` |-> `j+2`, `a` |-> `w+32w`, `b` |-> `n*n2w esz`,
@@ -706,7 +729,7 @@ Theorem pop_full_memory_checked_run[local]:
   EVERY (\x. x <> p) [x0;x1;x2;x3;x4;x5;x6] /\
   ptr_covers G tn p s 32 /\ lookup_var p s = SOME w /\
   mem_word_taint tn.t_mem (w2n w) = {} /\ mload (w2n w) s <> 0w /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G' tn'.
     run_inst_seq (memory_pop_insts (Var p) id esz x0 x1 x2 x3 x4 x5 x6) s = OK u /\
     (!D. inst_seq_ptr D lo ctx fn PG G tn
@@ -725,6 +748,9 @@ Proof
   `lookup_var x0 s1 = SOME (mload (w2n w) s) /\ allocas_from lo s1` by
     simp[Abbr `s1`, lookup_var_def, update_var_def, FLOOKUP_UPDATE, allocas_from_def] >>
   `ALL_DISTINCT [x0;x1;x2;x3] /\ EVERY (\x. x <> p) [x1;x2;x3]` by fs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def, Abbr `s1`, update_var_def] >> metis_tac[]) >>
   drule_all pop_full_memory_scalar_chunk >>
   disch_then (qspecl_then [`id+1`, `fn`, `PG`] strip_assume_tac) >>
   `lookup_var p u = SOME w` by
@@ -733,6 +759,11 @@ Proof
   `ptr_covers G'' tn'' p u 32` by
     (irule ptr_covers_frame >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `(u with vs_vars := _) = s1` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[NoAsms, venom_state_component_equality, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   `allocas_from lo u` by
     (qpat_x_assum `(u with vs_vars := _) = s1` mp_tac >>
      simp[venom_state_component_equality] >> strip_tac >> fs[allocas_from_def] >>
@@ -753,6 +784,10 @@ Proof
    lookup_var x3 s2 = SOME (mload (w2n w) s - 1w)` by
     (simp[Abbr `s2`, mstore_def, write_memory_def,
       write_memory_with_expansion_def, lookup_var_def] >> fs[lookup_var_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+     simp[NoAsms, Abbr `s2`, allocas_below_fmp_def, mstore_def, write_memory_def,
+       write_memory_with_expansion_def] >> metis_tac[]) >>
   drule_all pop_full_memory_address_tail >>
   disch_then (qspecl_then [`id+6`, `fn`, `esz`, `PG`] strip_assume_tac) >>
   rename1 `op_prov H (Var x6) = op_prov G'' (Var p)` >>
@@ -810,7 +845,7 @@ Theorem pop_full_memory_empty_path[local]:
   ptr_covers G tn p s 32 /\ lookup_var p s = SOME w /\
   mem_word_taint tn.t_mem (w2n w) = {} /\
   w2n w + 32 <= s.vs_alloca_next /\ mload (w2n w) s = 0w /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id MLOAD [Var p] [x0];
     mk_inst (id+1) ISZERO [Var x0] [x1];
@@ -849,6 +884,11 @@ Proof
   irule gas_origin_ptr_path_trans >> goal_assum (drule_at Any) >>
   `~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\ allocas_from lo t` by
     (gvs[venom_state_component_equality, allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := s.vs_inst_idx + 3)` by
+    (qpat_assum `(t with vs_vars := _) = s` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, venom_state_component_equality, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   irule exit_inst_origin_ptr >> simp[exit_result_def] >>
   `lookup_var x2 t = SOME 0w` by simp[bool_to_word_def] >>
   `lookup_var x2 (t with vs_inst_idx := s.vs_inst_idx + 3) = SOME 0w` by
@@ -873,7 +913,7 @@ QED
 Theorem pop_full_storage_load[local]:
   eval_operand hdr s = SOME slot /\ op_taint tn hdr = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G' tn'.
     u = update_var out (if tr then tload slot s else sload slot s) s /\
     step_inst_base (mk_inst id (if tr then TLOAD else SLOAD) [hdr] [out]) s = OK u /\
@@ -903,6 +943,9 @@ Proof
         exec_result_map_def] >>
       irule ptr_inst_ok_lower_bound_transport >> simp[allocas_from_def] >>
       qexists_tac `0` >> simp[Abbr `i`] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
       irule ptr_inst_ok_storage_load_payload >> simp[] >>
       qexists_tac `u with vs_inst_idx := k` >>
       Cases_on `tr` >>
@@ -916,7 +959,7 @@ QED
 Theorem pop_full_storage_store[local]:
   eval_operand hdr s = SOME slot /\ lookup_var x s = SOME w /\
   op_taint tn hdr = {} /\ op_taint tn (Var x) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_call_ctx.cc_static ==>
   !D k. inst_seq_ptr D lo ctx fn PG G tn
     [mk_inst id (if tr then TSTORE else SSTORE) [hdr;Var x] []]
     (s with vs_inst_idx := k) G
@@ -939,6 +982,9 @@ Proof
   rpt gen_tac >> simp[inst_seq_ptr_def, step_inst_inst_idx_indep,
     exec_result_map_def, Abbr `i`, scalar_void_prov] >>
   irule ptr_inst_ok_lower_bound_transport >> simp[allocas_from_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   qexists_tac `0` >> simp[] >> irule append_scalar_inst_check >>
   Cases_on `tr` >> gvs[Abbr `u`, sstore_def, tstore_def,
     step_inst_inst_idx_indep,mk_inst_def,is_terminator_def,exec_result_map_def] >>
@@ -951,7 +997,7 @@ Theorem pop_full_storage_address_tail[local]:
   eval_operand hdr s = SOME slot /\ lookup_var x3 s = SOME len /\
   op_prov G hdr = NONE /\ op_taint tn hdr = {} /\
   op_prov G (Var x3) = NONE /\ op_taint tn (Var x3) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G' tn'.
     run_inst_seq [mk_inst id ADD [hdr;Lit 1w] [x4];
       mk_inst (id+1) MUL [Var x3;Lit (n2w esz)] [x5];
@@ -994,6 +1040,9 @@ Proof
          mk_inst_def,is_terminator_def] >>
      `allocas_from lo (s with vs_inst_idx := k)` by
        (fs[allocas_from_def] >> first_assum ACCEPT_TAC) >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
      mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`,
        `t` |-> `u with vs_inst_idx := k`,
        `R` |-> `{q | ~MEM q [x4;x5;x6]}`,
@@ -1016,7 +1065,7 @@ Theorem pop_full_storage_checked_run[local]:
   eval_operand hdr s = SOME slot /\ op_prov G hdr = NONE /\ op_taint tn hdr = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
   (if tr then tload slot s else sload slot s) <> 0w /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_call_ctx.cc_static ==>
   ?u G' tn'.
     run_inst_seq (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6) s = OK u /\
     (!D. inst_seq_ptr D lo ctx fn PG G tn
@@ -1038,10 +1087,15 @@ Proof
     (qpat_assum `s1 = update_var x0 _ s` (fn th => PURE_REWRITE_TAC [th]) >>
      simp[lookup_var_def,update_var_def,FLOOKUP_UPDATE,Abbr `lenw`,allocas_from_def] >>
      qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `s1 = update_var x0 _ s` (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   mp_tac (Q.INST [`s` |-> `s1`,`G` |-> `G1`,`tn` |-> `tn1`,
     `n` |-> `lenw`,`id` |-> `id+1`,`p` |-> `x0`]
     (SPEC_ALL pop_full_memory_scalar_chunk)) >>
   (impl_tac >- (simp[Abbr `lenw`] >> fs[])) >>
+
   disch_then (qx_choosel_then [`s2`,`G2`,`tn2`] strip_assume_tac) >>
   `s2.vs_labels = s.vs_labels` by
     (qpat_assum `(s2 with vs_vars := _) = s1`
@@ -1056,6 +1110,11 @@ Proof
   `allocas_from lo s2 /\ ~s2.vs_call_ctx.cc_static` by
     (qpat_assum `(s2 with vs_vars := _) = s1` mp_tac >>
      gvs[venom_state_component_equality,update_var_def,allocas_from_def] >>
+     metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `(s2 with vs_vars := _) = s1` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[NoAsms, venom_state_component_equality, allocas_below_fmp_def] >>
      metis_tac[]) >>
   qabbrev_tac `s3 = if tr then tstore slot (lenw-1w) s2 else sstore slot (lenw-1w) s2` >>
   qabbrev_tac `tm = if tr then tn2 with t_trans := key_update tn2.t_trans slot {}
@@ -1073,6 +1132,11 @@ Proof
     (Cases_on `tr` >> Cases_on `hdr` >> gvs[Abbr `s3`,Abbr `tm`,sstore_def,tstore_def,
        eval_operand_def,lookup_var_def,op_taint_def,allocas_from_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (Cases_on `tr` >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2` mp_tac >>
+     simp[NoAsms, Abbr `s3`, allocas_below_fmp_def, sstore_def, tstore_def] >>
+     metis_tac[]) >>
   mp_tac (Q.INST [`s` |-> `s3`,`G` |-> `G2`,`tn` |-> `tm`,
     `len` |-> `lenw-1w`,`id` |-> `id+6`]
     (SPEC_ALL pop_full_storage_address_tail)) >>
@@ -1130,7 +1194,7 @@ Theorem pop_full_storage_empty_path[local]:
   eval_operand hdr s = SOME slot /\ op_taint tn hdr = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
   (if tr then tload slot s else sload slot s) = 0w /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id (if tr then TLOAD else SLOAD) [hdr] [x0];
     mk_inst (id+1) ISZERO [Var x0] [x1];
@@ -1162,6 +1226,10 @@ Proof
     (qpat_assum `u = update_var x0 0w s` (fn th => PURE_REWRITE_TAC [th]) >>
      simp[allocas_from_def,update_var_def] >>
      qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_assum `u = update_var x0 0w s` (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   mp_tac (SRULE [GSYM arithmeticTheory.ADD_ASSOC]
     (Q.INST [`x` |-> `Var x0`, `a` |-> `x1`, `b` |-> `x2`,
     `id` |-> `id+1`, `s` |-> `u with vs_inst_idx := SUC s.vs_inst_idx`,
@@ -1216,6 +1284,10 @@ Proof
     allocas_from lo v /\ lookup_var x2 v = SOME 0w` by
     (gvs[Abbr `v`,update_var_def,lookup_var_def,FLOOKUP_UPDATE,allocas_from_def] >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (v with vs_inst_idx := s.vs_inst_idx+3)` by
+    (simp[Abbr `v`, allocas_below_fmp_def, update_var_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   irule exit_inst_origin_ptr >> simp[exit_result_def] >>
   `lookup_var x2 (v with vs_inst_idx := s.vs_inst_idx+3) = SOME 0w` by
     fs[lookup_var_def] >>
@@ -1246,7 +1318,6 @@ Theorem pop_vv_full_of_target[local]:
       cenv cx ty (Pop ann bt) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `compile_get_target_ptr compile_expr cenv bt sa` >>
   rename1 `compile_get_target_ptr compile_expr cenv bt sa = (rb,sm)` >>
@@ -1760,6 +1831,11 @@ Resume pop_vv_full_of_target[memory_suffix]:
   conj_tac >- suspend "memory_alloca_history" >>
   conj_tac
   >- (qpat_assum `u = t with <|vs_vars := _; vs_memory := _|>`
+        (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
+      qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+      simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_assum `u = t with <|vs_vars := _; vs_memory := _|>`
         (fn th => PURE_ONCE_REWRITE_TAC [th]) >> simp[]) >>
   conj_tac >- suspend "memory_ghost" >>
   conj_tac >- suspend "memory_pointer" >>
@@ -1971,7 +2047,7 @@ Theorem pop_full_storage_static_path[local]:
   eval_operand hdr s = SOME slot /\ op_prov G hdr = NONE /\ op_taint tn hdr = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
   (if tr then tload slot s else sload slot s) <> 0w /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (TAKE 5 (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6))
     (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -1991,10 +2067,15 @@ Proof
     (qpat_assum `s1 = update_var x0 _ s` (fn th => PURE_REWRITE_TAC [th]) >>
      simp[lookup_var_def,update_var_def,FLOOKUP_UPDATE,Abbr `lenw`,allocas_from_def] >>
      qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `s1 = update_var x0 _ s` (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   mp_tac (Q.INST [`s` |-> `s1`,`G` |-> `G1`,`tn` |-> `tn1`,
     `n` |-> `lenw`,`id` |-> `id+1`,`p` |-> `x0`,`fn` |-> `func`]
     (SPEC_ALL pop_full_memory_scalar_chunk)) >>
   (impl_tac >- (simp[Abbr `lenw`] >> fs[])) >>
+
   disch_then (qx_choosel_then [`s2`,`G2`,`tn2`] strip_assume_tac) >>
   `!D k. inst_seq_ptr D lo ctx func PG G1 tn1
     [mk_inst (id+1) ISZERO [Var x0] [x1];
@@ -2073,10 +2154,15 @@ Resume pop_full_storage_static_path[exit]:
     (`u.vs_call_ctx.cc_static` by simp[Abbr `u`] >>
      Cases_on `tr` >> simp[Abbr `i`] >>
      metis_tac[loweringHaltTheory.step_TSTORE,emitHelperPropsTheory.step_SSTORE]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `(s2 with vs_vars := _) = s1` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[NoAsms, venom_state_component_equality, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   `ptr_inst_ok D lo 0 ctx func G2 tn2 i u` by
     (Cases_on `tr` >>
      simp[ptrSafeRunTheory.ptr_inst_ok_def,access_ok_def,taint_ok_def,Abbr `i`,Abbr `u`,
-       allocas_from_def,mk_inst_def,source_memory_write_ranges_def,
+       allocas_from_def,allocas_below_fmp_def,mk_inst_def,source_memory_write_ranges_def,
        source_memory_read_ranges_def] >>
      fs[] >> simp[GSYM mk_inst_def,step_inst_non_invoke] >>
      rpt strip_tac >> gvs[]) >>
@@ -2443,7 +2529,14 @@ Resume pop_vv_full_of_target[storage_positive]:
   conj_tac >- (Cases_on `tr` >> simp[exprSimMemDefsTheory.vv_store_bound_def,
     contextTheory.mk_ptr_def]) >>
   conj_tac >- simp[] >> conj_tac >- simp[nested_pop_suffix_def] >>
-  conj_tac >- suspend "storage_history" >> conj_tac >- simp[] >>
+  conj_tac >- suspend "storage_history" >>
+  conj_tac
+  >- (qpat_assum `u = _ with vs_vars := u.vs_vars`
+        (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
+      qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+      Cases_on `tr` >> simp[NoAsms, sstore_def, tstore_def, allocas_below_fmp_def] >>
+      metis_tac[]) >>
+  conj_tac >- simp[] >>
   conj_tac >- suspend "storage_ghost" >> conj_tac >- suspend "storage_pointer" >>
   conj_tac >- simp[Abbr `result`, NoAsms] >>
   Cases_on `tr` >> simp[contextTheory.vv_location_def,contextTheory.mk_ptr_def] >>

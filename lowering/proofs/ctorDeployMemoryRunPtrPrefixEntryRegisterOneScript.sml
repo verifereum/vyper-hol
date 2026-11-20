@@ -83,6 +83,8 @@ Theorem prefix_entry_register_one_slot_paired:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp` by simp[] >>
   drule_all prefix_entry_register_alloc_actual >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
   disch_then (qx_choose_then `a` (qx_choose_then `AG` (qx_choose_then `atn`

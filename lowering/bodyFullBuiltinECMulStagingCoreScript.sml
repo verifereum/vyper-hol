@@ -397,6 +397,7 @@ Proof
         `w2n w+64 <= w2n wi \/ w2n wi+64 <= w2n w` assume_tac >-
         (qpat_x_assum `regions_disjoint (w2n wi) 96 (w2n w) 64` mp_tac >>
          pure_rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp ta` by simp[] >>
       drule_all (SRULE [] (Q.INST [`pd` |-> `0`, `nd` |-> `96`]
         (SPEC_ALL ec_point_copy_origin_ptr_path))) >>
       disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]

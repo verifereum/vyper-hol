@@ -275,6 +275,7 @@ Proof
     metis_tac[valueEncodingPropsTheory.mem_word_at_eq_mload, w2n_n2w,
       arithmeticTheory.LESS_MOD] >>
   `allocas_from lo t` by metis_tac[allocas_from_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all abi_decode_loop_source_joint_exact >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (OK u)` by

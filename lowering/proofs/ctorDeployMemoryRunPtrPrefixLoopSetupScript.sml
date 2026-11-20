@@ -413,6 +413,7 @@ Theorem prefix_loop_count_guard_run:
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac prefix_copy_count_success_block >> simp[] >> strip_tac >>
   asm_rewrite_tac[] >> strip_tac >> qx_gen_tac `f` >>
   mp_tac (Q.INST [`fuel` |-> `f`] prefix_copy_count_success_block) >>
@@ -468,6 +469,8 @@ Proof
     (drule ctor_actual_index_insts >> drule abi_decode_index_init_shape >> simp[]) >>
   `run_inst_seq [mk_inst st.cs_next_id ALLOCA [Lit 32w] [iv];
     mk_inst (st.cs_next_id+1) MSTORE [Var iv;Lit 0w] []] s = OK t` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all prefix_loop_index_slot_run >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
   qexistsl_tac [`t`,`p`,`H`,`qt`] >> simp[] >> metis_tac[]
