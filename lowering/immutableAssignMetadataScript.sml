@@ -4,7 +4,7 @@ Ancestors
   immutableDeployAssignFacts bodySim bodyStorageMetadata supportedDecls exprSimHypsDefs
   vyperTypeInvariants vyperTypeEnv vyperTypeSystem finite_map exprSimSource
   vyperInterpreter vyperState bodyInvSplit bodyInvCodeProps
-  bodyInvMetadataProps exprBodyPreProps alist
+  bodyInvMetadataProps immutableRegionTypingProps alist
 
 Theorem immutable_assign_bare_global_mods:
   contract_inv mods exps ctx ce cx /\ cx.in_deploy /\
@@ -21,12 +21,9 @@ Proof
   Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
   simp[] >> strip_tac >> gvs[] >>
   drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
-  `get_module_code cx src = SOME tops` by
-    metis_tac[contract_inv_module_codes] >>
-  drule_then assume_tac expr_sim_inv_mods_env >>
-  drule_then assume_tac contract_inv_constructor >>
-  fs[env_consistent_def, env_context_consistent_def] >>
-  metis_tac[bare_globals_complete_def]
+  conj_tac
+  >- (drule_then assume_tac contract_inv_constructor >> simp[]) >>
+  drule_all immutable_decl_bare_global_mods >> simp[]
 QED
 
 Theorem immutable_assign_bare_global:
