@@ -1,7 +1,7 @@
 (* Checked interface probes for the membership loader's memory checks. *)
 Theory exprSimBopRestWordLoadSafety
 Ancestors
-  exprSimBopRestWordLoads exprSimBopRestWordStorageLoads
+  exprSimBopRestWordLoads
   instMemFrontier fragExecMem memSafeRun emitHelper venomInst
   words arithmetic list rich_list finite_map loweringPosts exprLoweringProps compileEnv
 
