@@ -1,0 +1,57 @@
+Upstream PR: https://github.com/vyperlang/vyper/pull/5337
+Status: merged 2026-11-05 (4f684e7d3efad17e9b1c80405fa6d6605733ff18)
+
+Restore a block's spill allocator before visiting each successor. Use the
+function's peak spill end to place the next function.
+
+diff --git a/vyper/venom/stack_spiller.py b/vyper/venom/stack_spiller.py
+index 90e9eaa20e..3886fe5ab3 100644
+--- a/vyper/venom/stack_spiller.py
++++ b/vyper/venom/stack_spiller.py
+@@ -38,9 +38,12 @@ def set_current_function(self, fn: Optional[IRFunction]) -> None:
+         # callees. In particular, memory-passed arguments are pointers into
+         # the caller's frame. Give every function a disjoint spill region
+         # above every static frame so callee spills cannot clobber either.
+-        if self._current_function is not None and self._next_spill_offset is not None:
++        # `peak_spill_end` rather than `_next_spill_offset`: a branch's
++        # successors each start from the branch's offset, so the offset
++        # after the last one is not the highest slot the function used.
++        if self._current_function is not None:
+             self._next_function_spill_offset = max(
+-                self._next_function_spill_offset, self._next_spill_offset
++                self._next_function_spill_offset, self.peak_spill_end
+             )
+
+         self._current_function = fn
+@@ -66,8 +69,9 @@ def snapshot(self):
+         return (self._spill_free_slots.copy(), self._next_spill_offset)
+
+     def restore(self, snap) -> None:
+-        """Restore from snapshot."""
+-        self._spill_free_slots, self._next_spill_offset = snap
++        """Restore from snapshot. The snapshot stays usable for another restore."""
++        free_slots, self._next_spill_offset = snap
++        self._spill_free_slots = free_slots.copy()
+
+     def spill_operand(
+         self,
+diff --git a/vyper/venom/venom_to_assembly.py b/vyper/venom/venom_to_assembly.py
+index fa919908cb..06502c6435 100644
+--- a/vyper/venom/venom_to_assembly.py
++++ b/vyper/venom/venom_to_assembly.py
+@@ -542,7 +542,15 @@ def _generate_evm_for_basicblock_r(
+
+         ref.extend(asm)
+
++        # each successor starts from this block's spill slots, like `stack`
++        # and `spilled`: a slot freed while generating one successor may
++        # still hold a live spill on entry to the next one. a slot allocated
++        # fresh on one successor's path is free again on the next: none is
++        # live on entry to it, and a join point is entered with every live
++        # value on the stack.
++        spill_state = self.spiller.snapshot()
+         for bb in self.cfg.cfg_out(basicblock):
++            self.spiller.restore(spill_state)
+             self._generate_evm_for_basicblock_r(
+                 ref, bb, stack.copy(), spilled.copy(), stack_height_bound
+             )
