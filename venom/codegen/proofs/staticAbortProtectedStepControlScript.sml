@@ -46,3 +46,38 @@ Proof
       fs[sym_step_own_eq] >> metis_tac[protected_sym_step_control]) >>
   metis_tac[protected_sym_step_control]
 QED
+
+Theorem protected_step_pc_add:
+  inst <> AsmOp "JUMP" /\ inst <> AsmOp "JUMPI" ==>
+  (if allow_own then
+     sym_step_own p env own inst (sym_with_pc (ss.sym_base.as_pc + n) ss)
+   else sym_step p env inst (sym_with_pc (ss.sym_base.as_pc + n) ss)) =
+  sym_result_pc_add n
+    (if allow_own then sym_step_own p env own inst ss else sym_step p env inst ss)
+Proof
+  Cases_on `allow_own` >> PURE_REWRITE_TAC [COND_CLAUSES]
+  >- MATCH_ACCEPT_TAC sym_step_own_pc_add >>
+  MATCH_ACCEPT_TAC sym_step_pc_add
+QED
+
+Theorem protected_step_pc_next:
+  inst <> AsmOp "JUMP" /\ inst <> AsmOp "JUMPI" /\
+  (if allow_own then sym_step_own p env own inst ss else sym_step p env inst ss) =
+    SymOK ss' ==>
+  ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  Cases_on `allow_own` >> PURE_REWRITE_TAC [COND_CLAUSES]
+  >- MATCH_ACCEPT_TAC sym_step_own_pc_next >>
+  MATCH_ACCEPT_TAC sym_step_pc_next
+QED
+
+Theorem protected_step_prog_cong:
+  (!l. MEM (AsmDataHeader l) p <=> MEM (AsmDataHeader l) q) /\
+  inst <> AsmOp "JUMP" /\ inst <> AsmOp "JUMPI" ==>
+  (if allow_own then sym_step_own p env own inst ss else sym_step p env inst ss) =
+  (if allow_own then sym_step_own q env own inst ss else sym_step q env inst ss)
+Proof
+  Cases_on `allow_own` >> PURE_REWRITE_TAC [COND_CLAUSES]
+  >- MATCH_ACCEPT_TAC sym_step_own_prog_cong >>
+  MATCH_ACCEPT_TAC sym_step_prog_cong
+QED
