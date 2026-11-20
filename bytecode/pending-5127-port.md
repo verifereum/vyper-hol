@@ -54,8 +54,6 @@ P2 is ported. These still differ from the oracle with it:
 - `create-builtins/cb05_blueprint_rof`
 - `create-builtins/cb07_blueprint_args_salt`
 - `external-entries/base_dom1`
-- `main/event_log`
-- `main/mixed_event_log`
 - `memory-stores/enc_in_assign`
 - `raw-system/rr03_abi`
 
@@ -76,7 +74,6 @@ P2 is ported. These still differ from the oracle with it:
 - `create-builtins/cb06_blueprint_dyn_offset`
 - `main/abi_dynamic`
 - `main/abi_static`
-- `main/mixed_event_types`
 
 ## P2 (calldata argument guard) + P8 (`raw_create` bytecode type)
 

@@ -51,6 +51,22 @@ Proof
       opcode_every_emit_void, opcode_every_emit_inst]
 QED
 
+Theorem outcomes_free_compile_log_saved_topics:
+  (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
+         opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
+         opc <> RETURNDATACOPY ==> P opc) ==>
+  (!ops ce s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_log_saved_topics ce ops s))))
+Proof
+  strip_tac >> Induct >> rpt gen_tac >> TRY (PairCases_on `h`) >>
+  simp[compile_log_saved_topics_def, every_state_insts_return] >>
+  rpt (ho_match_mp_tac every_state_insts_bind >> conj_tac
+       >- simp[b7 outcomes_free_unwrap_value, b7 outcomes_free_encode_log_topic] >>
+       gen_tac >> BETA_TAC) >>
+  simp[every_state_insts_return]
+QED
+
 Theorem outcomes_free_compile_log_topic_ops:
   (!op bs s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
      EVERY (\i. P i.inst_opcode)

@@ -368,18 +368,17 @@ Definition alloc_limits_raise_def:
   alloc_limits_raise cenv RaiseUnreachable = T
 End
 
-(* A log's two buffers are below Python's allocation limit, as lower_Log
-   allocates them through allocate_buffer: the data of its non-indexed
-   arguments, and their ABI encoding.  An event the compile env doesn't
-   know has none, since compile_stmt emits INVALID for it. *)
+(* Log may materialize individual arguments. Its data buffer is sized
+   for the saved non-indexed layouts. An unknown event allocates neither. *)
 Definition log_alloc_ok_def:
   log_alloc_ok cenv id es ⇔
     case cenv.ce_event_info (nsid_to_string id) of
       NONE => T
-    | SOME (_, arg_types, flags) =>
-        let tys = log_non_indexed_types flags arg_types in
-          SUM (MAP (type_memory_bytes cenv) tys) < 2 ** 64 ∧
-          abi_size_bound cenv.ce_struct_fields (TupleT tys) < 2 ** 64
+    | SOME (_, _, flags) =>
+        let arg_tys = MAP (lowered_value_type cenv) es in
+        let data_tys = log_non_indexed_types flags arg_tys in
+          EVERY (type_alloc_ok cenv) arg_tys ∧
+          abi_size_bound cenv.ce_struct_fields (TupleT data_tys) < 2 ** 64
 End
 
 (* A custom error reserves its ABI payload and the selector word at the

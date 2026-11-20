@@ -15,7 +15,7 @@ val base7_tm = ``!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /
 fun b7 th = SIMP_RULE (srw_ss()) [ASSUME base7_tm, DISJ_IMP_THM, FORALL_AND_THM] th;
 fun c7 ths th = SIMP_RULE (srw_ss()) (map b7 ths) (b7 th);
 
-Theorem outcomes_free_custom_error_snapshots[local]:
+Theorem outcomes_free_positional_snapshots[local]:
   (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
          opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
          opc <> RETURNDATACOPY ==> P opc) ==>
@@ -76,7 +76,7 @@ Theorem outcomes_free_revert_with_custom_error[local]:
   )
 Proof
   strip_tac >>
-  strip_tac >> drule (UNDISCH outcomes_free_custom_error_snapshots) >> strip_tac >>
+  strip_tac >> drule (UNDISCH outcomes_free_positional_snapshots) >> strip_tac >>
   gen_tac >> Cases >> rename1 `CustomError id pos kws` >> rpt gen_tac >>
   strip_tac >> qid_spec_tac `st` >>
   simp[compile_revert_with_custom_error_def] >>
@@ -246,10 +246,10 @@ Theorem outcomes_free_stmt_log:
   )
 Proof
   strip_tac >>
-  strip_tac >> drule (b7 outcomes_free_log_eval_all) >> disch_then assume_tac >>
+  strip_tac >> drule (UNDISCH outcomes_free_positional_snapshots) >> strip_tac >>
   rpt gen_tac >> simp[supported_stmt_expr_exists_def] >> strip_tac >>
-  `EVERY (\e. ~supported_expr_exists R e /\
-     ~supported_expr_exists expr_shape_root e) args` by
+  `EVERY ($~ o supported_expr_exists R) args /\
+   EVERY ($~ o supported_expr_exists expr_shape_root) args` by
     (gvs[EVERY_MEM, supported_exprs_exists_every, EXISTS_MEM] >> metis_tac[]) >>
   simp[Once compile_stmt_def] >>
   Cases_on `ce.ce_event_info (nsid_to_string eid)`
@@ -259,8 +259,8 @@ Proof
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac, IF_CASES_TAC >> qid_spec_tac `st`,
     CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_inst,
-      (c7 [outcomes_free_encode_log_topic] outcomes_free_compile_log_topic_ops), (c7 [outcomes_free_store_memory] outcomes_free_compile_log_store_data), (b7 outcomes_free_alloc_buffer),
-      (b7 outcomes_free_abi_encode)])]) >> metis_tac[]
+      outcomes_free_compile_log_saved_topics, (b7 outcomes_free_alloc_buffer),
+      outcomes_free_abi_encode_values_to_buf])]) >> metis_tac[]
 QED
 
 Theorem opcode_every_stmt_log:

@@ -81,29 +81,4 @@ Proof
   metis_tac[runtime_sym_alloc_buffer]
 QED
 
-Theorem runtime_sym_log_closed:
-  (!e. MEM e args ==> runtime_sym_expr_contract tops compile_expr ce (expr_type e) e) /\
-  (!b v info s op s'. ~is_label_operand b /\ ~is_label_operand v /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_abi_encode_to_buf b v info s = (op,s') ==>
-    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) ==>
-  runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty (Log id args)
-Proof
-  strip_tac >> rewrite_tac[runtime_sym_stmt_contract_def] >> rpt strip_tac >>
-  mp_tac runtime_sym_stmt_log >>
-  (impl_tac >-
-    (rpt conj_tac
-     >- (rpt gen_tac >> strip_tac >>
-         drule_at (Pat `compile_materialize_vv _ _ _ _ = _`)
-           runtime_sym_materialize_vv >>
-         disch_then (qspec_then `tops` mp_tac) >> simp[runtime_sym_value_def])
-     >- (mp_tac runtime_sym_lower_value >>
-         (impl_tac >- metis_tac[runtime_sym_unwrap_value]) >>
-         rewrite_tac[runtime_sym_lower_value_clause_def] >> metis_tac[])
-     >- metis_tac[runtime_sym_encode_log_topic]
-     >- metis_tac[runtime_sym_store_memory]
-     >- metis_tac[runtime_sym_alloc_buffer]
-     >> metis_tac[])) >>
-  rewrite_tac[runtime_sym_stmt_contract_def] >>
-  disch_then drule_all >> simp[]
-QED
+Theorem runtime_sym_log_closed = runtime_sym_stmt_log

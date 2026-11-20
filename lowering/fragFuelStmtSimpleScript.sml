@@ -117,9 +117,9 @@ Proof
   >- (simp_tac (srw_ss()) [] >> irule fuel_ok_emit_inst_any >> simp[]) >>
   rename1 `SOME x` >> PairCases_on `x` >> simp_tac (srw_ss()) [] >>
   fuel_auto [fuel_ok_emit_inst_any, fuel_ok_emit_op,
-             fuel_ok_compile_log_eval_all, fuel_ok_compile_log_topic_ops,
-             fuel_ok_compile_log_store_data, fuel_ok_compile_alloc_buffer,
-             fuel_ok_compile_abi_encode_to_buf] >>
+             fuel_ok_compile_ext_call_args, fuel_ok_compile_expr_cb,
+             fuel_ok_compile_log_saved_topics, fuel_ok_compile_alloc_buffer,
+             fuel_ok_compile_abi_encode_values_to_buf] >>
   simp[is_terminator_def]
 QED
 
