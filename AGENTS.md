@@ -184,6 +184,8 @@ When proving a theorem by induction or by cases with many complex cases:
 - prove directly only simple cases that can be closed with at most 3 tactics,
 - formulate a helper lemma stating the exact subgoal for each complex case that requires more than 3 tactics to close.
 
+Before extracting a case helper, check whether an existing theorem yields the case, drop unused assumptions, and state the general fact with minimal premises.
+
 Re-use existing theorems as much as possible. Before creating a new helper lemma, always check if an existing theorem can be applied directly.
 
 Before handing in proof work, check it for restated theorems with `python3 -I tools/dupscan.py <worktree> <base-ref> <verifereum checkout>`. For each SAME, ALPHA or WITHIN-NEW hit, confirm that the matched theorem is live (not inside a comment) and states the same fact, then remove the copy; read each FUZZY hit by eye.
