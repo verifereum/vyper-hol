@@ -224,8 +224,7 @@ End
 Definition s1_request_prefix_def:
   s1_request_prefix tops <=>
     !rpolicy unit.
-      lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-      supported_program tops ==>
+      lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
       ?shadow_ctx. !am tx ret vs.
         source_typing_ok tops am tx /\
         source_deployment_rel tops am tx /\

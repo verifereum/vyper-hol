@@ -20,13 +20,14 @@ Definition supported_declaration_header_def:
   supported_declaration_header tops top <=>
     case top of
       FunctionDecl vis mut nr rr name args defaults ret body =>
-        (vis <> Internal ==> NULL defaults) /\
+        (* The checker rejects constructor defaults. *)
+        (vis = Deploy ==> NULL defaults) /\
         supported_function_return tops vis ret
     | VariableDecl vis Storage name ty (SOME slot) =>
         supported_storage_type tops ty
     | VariableDecl vis Transient name ty (SOME slot) =>
         supported_storage_type tops ty
-    | VariableDecl Private Immutable name ty NONE =>
+    | VariableDecl vis Immutable name ty offset =>
         supported_value_type tops ty
     | VariableDecl vis (Constant e) name ty slot => T
     | HashMapDecl vis transient name kt vt (SOME slot) =>
@@ -74,12 +75,21 @@ Definition supported_hashmap_decl_def:
     | _ => supported_hashmap_decl rest (module_id, name)
 End
 
-(* Private immutable values have a byte layout, rather than a storage slot. *)
+(* Immutable values have a byte layout, rather than a storage slot. The
+   compiler takes the offset from the layout, so any annotation is accepted. *)
 Definition supported_immutable_type_def:
   supported_immutable_type tops id =
     case supported_variable_decl tops id of
-      SOME (Private, Immutable, ty, NONE) =>
+      SOME (vis, Immutable, ty, offset) =>
         if supported_value_type tops ty then SOME ty else NONE
+    | _ => NONE
+End
+
+(* Declared constants, of any type: the compiler substitutes their values. *)
+Definition supported_constant_type_def:
+  supported_constant_type tops id =
+    case supported_variable_decl tops id of
+      SOME (vis, Constant e, ty, slot) => SOME ty
     | _ => NONE
 End
 

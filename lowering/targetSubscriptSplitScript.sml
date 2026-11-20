@@ -596,7 +596,7 @@ Theorem target_subscript_pure_index_live:
   !st0 H. valid_horizon cx st0 H mid.storage_trace ==>
     nested_pop_result_live H cx ee pv
 Proof
-  simp[target_indices_def, EVERY_APPEND] >> strip_tac >>
+  simp[supportedExprsTheory.target_indices_def, EVERY_APPEND] >> strip_tac >>
   drule_all nested_pop_eval_base_pure_state >> strip_tac >>
   `ee = mid with storage_trace := ee.storage_trace` by
     (qpat_x_assum `bind _ _ _ = _` mp_tac >>

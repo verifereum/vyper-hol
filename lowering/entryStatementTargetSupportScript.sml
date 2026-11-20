@@ -7,7 +7,7 @@ Theorem supported_target_info_index:
     MEM e (target_indices bt) ==> supported_expr tops e
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
-  simp[supported_target_info_def, target_indices_def] >>
+  simp[supported_target_info_def, supportedExprsTheory.target_indices_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   first_x_assum (qspec_then `b` mp_tac) >> simp[] >> metis_tac[]
 QED
@@ -16,9 +16,9 @@ Theorem supported_target_index:
   supported_target tops bindings bt /\ MEM e (target_indices bt) ==>
   supported_expr tops e
 Proof
-  Cases_on `bt` >> simp[supported_target_def, target_indices_def] >>
+  Cases_on `bt` >> simp[supported_target_def, supportedExprsTheory.target_indices_def] >>
   rpt BasicProvers.TOP_CASE_TAC >>
-  simp[target_indices_def] >> metis_tac[]
+  simp[supportedExprsTheory.target_indices_def] >> metis_tac[]
 QED
 
 Theorem supported_assignment_tuple_index:

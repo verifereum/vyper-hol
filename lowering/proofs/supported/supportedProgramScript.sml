@@ -15,9 +15,7 @@ Definition supported_function_body_def:
     in ALL_DISTINCT (MAP FST args) /\
        EVERY (\n. ~MEM n (MAP FST args)) (MAP FST locals ++ MAP FST loops) /\
        supported_stmts tops bindings body /\
-       body_stmts_safe tops body /\
-       (vis = Internal ==>
-         ~supported_stmts_expr_exists expr_internal_call_root body)
+       body_stmts_safe tops body
 End
 
 Definition expr_msg_gas_root_def:
@@ -30,8 +28,7 @@ End
 Definition supported_default_expression_def:
   supported_default_expression tops e <=>
     supported_expr tops e /\
-    ~supported_expr_exists expr_nonmain_type_root e /\
-    ~supported_expr_exists expr_msg_gas_root e
+    ~supported_expr_exists expr_nonmain_type_root e
 End
 
 (* The source-shape restriction on internal names. supported_declaration_names

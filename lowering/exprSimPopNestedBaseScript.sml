@@ -412,7 +412,7 @@ Theorem nested_pop_target_callback_cong:
     compile_get_target_ptr f cenv bt = compile_get_target_ptr g cenv bt
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
-  simp[target_indices_def] >> rpt strip_tac
+  simp[supportedExprsTheory.target_indices_def] >> rpt strip_tac
   >~ [`compile_get_target_ptr _ _ (NameTarget _)`]
   >- simp[compile_get_target_ptr_def]
   >~ [`compile_get_target_ptr _ _ (TopLevelNameTarget _)`]
@@ -434,7 +434,7 @@ Theorem nested_pop_index_size:
   !bt e. MEM e (target_indices bt) ==> expr_size e < base_assignment_target_size bt
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
-  simp[target_indices_def, expr_size_def] >> rpt strip_tac >>
+  simp[supportedExprsTheory.target_indices_def, expr_size_def] >> rpt strip_tac >>
   first_x_assum (qspec_then `b` mp_tac) >> simp[expr_size_def] >>
   strip_tac >> res_tac >> decide_tac
 QED
