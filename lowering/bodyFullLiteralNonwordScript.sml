@@ -161,34 +161,38 @@ Proof
   strip_tac >>
   `expr_sim_pre cenv cx env (Literal ann l) es` by
     gvs[expr_sim_pre_def, expr_body_pre_def, int_calls_expr_def] >>
-  drule_all literal_nonword_classify >> strip_tac >> gvs[]
+  drule_all literal_nonword_classify >>
+  disch_then (DISJ_CASES_THEN2
+    (qx_choosel_then [`bs`, `n`] (CONJUNCTS_THEN2 assume_tac SUBST_ALL_TAC))
+    strip_assume_tac)
   >- suspend "bytes"
-  >> suspend "string"
+  >> gvs[] >> suspend "string"
 QED
 
 Resume literal_nonword_vv_full[bytes]:
-  gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_literal_def,
-      alloc_limits_expr_def, literal_alloc_ok_def, compatible_bound_def,
-      well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
-  irule literal_buffer_full_vv >>
-  simp[is_word_type_def, post_value_type_def, expr_type_def] >>
-  qexistsl_tac [`bs`, `BaseTV (BytesT (Dynamic n))`, `BytesV bs`] >>
-  simp[post_value_type_def, expr_type_def, is_word_type_def,
-       vyperValueTheory.evaluate_type_def, val_wf_def, val_footprint_def,
-       val_store_size_def, literal_bytes_buffer_size,
-       lowered_value_type_def, type_memory_size_def] >>
-  rpt conj_tac
-  >- (rpt gen_tac >>
-      simp[compile_expr_def, compile_literal_vv_def, expr_type_def, is_word_type_def,
-           comp_bind_def, comp_return_def] >>
-      Cases_on `compile_bytelike_literal bs (LENGTH bs) sa` >> simp[])
-  >- simp[Once evaluate_def, return_def, evaluate_literal_def]
-  >- (simp[val_in_memory_def] >> metis_tac[])
-  >> gvs[vfmConstantsTheory.word_size_def] >>
-  simp[wordsTheory.dimword_def] >>
-  mp_tac (Q.SPEC `n` le_word_size_mul) >>
-  mp_tac (Q.SPEC `LENGTH (bs:word8 list)` le_word_size_mul) >>
-  simp[vfmConstantsTheory.word_size_def] >> decide_tac
+  qpat_x_assum `l = BytesL bs \/ l = HexBytesL bs` STRIP_ASSUME_TAC >> (
+    gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_literal_def,
+        alloc_limits_expr_def, literal_alloc_ok_def, compatible_bound_def,
+        well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
+    irule literal_buffer_full_vv >>
+    simp[is_word_type_def, post_value_type_def, expr_type_def] >>
+    qexistsl_tac [`bs`, `BaseTV (BytesT (Dynamic n))`, `BytesV bs`] >>
+    simp[post_value_type_def, expr_type_def, is_word_type_def,
+         vyperValueTheory.evaluate_type_def, val_wf_def, val_footprint_def,
+         val_store_size_def, literal_bytes_buffer_size,
+         lowered_value_type_def, type_memory_size_def, type_memory_bytes_def] >>
+    rpt conj_tac
+    >- (rpt gen_tac >>
+        simp[compile_expr_def, compile_literal_vv_def, expr_type_def, is_word_type_def,
+             comp_bind_def, comp_return_def] >>
+        Cases_on `compile_bytelike_literal bs (LENGTH bs) sa` >> simp[])
+    >- simp[Once evaluate_def, return_def, evaluate_literal_def]
+    >- (simp[val_in_memory_def] >> metis_tac[])
+    >> gvs[vfmConstantsTheory.word_size_def] >>
+    simp[wordsTheory.dimword_def] >>
+    mp_tac (Q.SPEC `n` le_word_size_mul) >>
+    mp_tac (Q.SPEC `LENGTH (bs:word8 list)` le_word_size_mul) >>
+    simp[vfmConstantsTheory.word_size_def] >> decide_tac)
 QED
 
 Resume literal_nonword_vv_full[string]:

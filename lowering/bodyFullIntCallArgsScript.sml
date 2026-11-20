@@ -982,6 +982,7 @@ Proof
   Cases_on `lowered_value_type cenv e = expr_type e` >- gvs[] >>
   `(?n s. e = Literal (BaseT (StringT n)) (StringL s)) \/
    (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) \/
+   (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (HexBytesL bs)) \/
    (?ty n args. e = Builtin ty (Concat n) args) \/
    (?ann ensure method_id tys args.
       e = TypeBuiltin ann (AbiEncode ensure method_id) tys args) \/
@@ -1001,6 +1002,7 @@ Proof
      rename1 `Call ann target args dret` >> Cases_on `target` >>
      simp[lowered_value_type_def]) >>
   pop_assum mp_tac >> strip_tac >> gvs[expr_type_def]
+  >- (drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
   >- (drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
   >- (drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
   >- (gvs[well_typed_expr_def, well_typed_builtin_app_def] >>
