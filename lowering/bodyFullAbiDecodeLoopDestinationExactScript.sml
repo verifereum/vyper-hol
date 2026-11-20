@@ -97,6 +97,7 @@ Theorem abi_decode_loop_destination_joint_exact:
     u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
     u.vs_alloca_next = s.vs_alloca_next /\ u.vs_labels = s.vs_labels /\
     tnu.t_mem = tn.t_mem /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     (!x. not_fresh_at sa x ==>
       lookup_var x u = lookup_var x s /\ FLOOKUP Gu x = FLOOKUP G x /\
       op_taint tnu (Var x) = op_taint tn (Var x))
@@ -358,6 +359,9 @@ Proof
      strip_tac >> asm_rewrite_tac[]) >>
   `!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (OK s3)` by
     suspend "observer" >>
+  `allocas_below_fmp s3 <=> allocas_below_fmp s` by
+    simp[Abbr `s3`, Abbr `u3`, Abbr `s2`, Abbr `u2`, Abbr `s1`, Abbr `u1`,
+      update_var_def, allocas_below_fmp_def] >>
   qexistsl_tac [`s3`, `G3`, `tn3`] >>
   fs[] >> rpt conj_tac >> metis_tac[]
 QED

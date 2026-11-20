@@ -337,6 +337,7 @@ Theorem abi_decode_loop_select_joint_exact:
      u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
      u.vs_alloca_next = s.vs_alloca_next /\ u.vs_labels = s.vs_labels /\
      tnu.t_mem = tn.t_mem /\
+     (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
      (!x. not_fresh_at sa x ==>
        lookup_var x u = lookup_var x s /\ FLOOKUP Gu x = FLOOKUP G x /\
        op_taint tnu (Var x) = op_taint tn (Var x))))
@@ -615,6 +616,11 @@ Resume abi_decode_loop_select_joint_exact[success]:
      first_assum irule >> asm_rewrite_tac[]) >>
   pop_assum (mk_asm "owned") >>
   `u.vs_allocas = s.vs_allocas` by asm_rewrite_tac[] >>
+  `allocas_below_fmp u <=> allocas_below_fmp t` by
+    (simp[Abbr `u`] >>
+     qpat_assum `v = t with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
+     simp[ptrDisciplineTheory.allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   disj2_tac >> qexistsl_tac [`u`,`G'`,`tn'`,`q`] >>
   conj_tac
   >- (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>

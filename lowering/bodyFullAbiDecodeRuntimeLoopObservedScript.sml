@@ -168,6 +168,7 @@ Resume abi_decode_dyn_loop_word_frame_split_entry[header]:
   pop_assum (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
   `s.vs_current_bb = sa.cs_current_bb` by
     (qpat_assum `sa.cs_current_bb = hdr` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (abi_decode_loop_header_observed |> SPEC_ALL |>
     Q.INST [`j` |-> `k`, `idx` |-> `header_idx`, `sf` |-> `header_sf`,
             `exit_lbl` |-> `SND (SND (labels:string # string # string))`,

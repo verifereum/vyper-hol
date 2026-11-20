@@ -112,6 +112,7 @@ Proof
   `lookup_var dst s = SOME (n2w d)` by
     (qpat_assum `eval_operand (Var dst) s = SOME (n2w d)` mp_tac >>
      pure_rewrite_tac[eval_operand_def] >> disch_then irule) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (Q.INST [
     `sa` |-> `loop_body`, `sb` |-> `child`,
     `live` |-> `(aid,counter,cell,32,mem_bytes_at cell 32 s.vs_memory)::live`,
