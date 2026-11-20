@@ -63,11 +63,12 @@ Their exact premises are in the linked owners and
 | S7 | `codegenCorrectness.codegen_correct` ([source](../venom/codegen/codegenCorrectnessScript.sml)) | Generated plan/assembly + shape + context/reachability + initial frame relation -> actual `run_call`, resource alternatives or `venom_frame_rel` | 2.1 / 4 |
 
 The top uses S1 even on exempt source executions. Only its non-exempt branch
-needs S3/S4/S5/S7; it uses the concrete `Inv` `raw_reachable vs0` at the O1
-output's entry state `vs0`, rather than asking the caller for one. Its memory
-and reachability facts come from `e2eProducers.o1_pipeline_memory_obligations_raw`
+needs S3/S4/S7 and memory/reachability facts of S5's form, at the concrete
+`Inv` `raw_reachable vs0` (`vs0` the O1 output's entry state) rather than one
+the caller supplies. They come from `e2eProducers.o1_pipeline_memory_obligations_raw`
 on the ordinary path and from `abort_context_obligations_raw` on the static-abort
-path. S2/S6 produce shape. L5 consumes S5 memory; layout or empty
+path; the S5 export itself is used by the gas-sufficiency proofs. S2/S6 produce
+shape. On the ordinary path L5 consumes that memory fact; layout or empty
 entry memory does not manufacture memory safety.
 
 `venomToAsmProps.gen_fn_simulation` is proved (4.2); S7's `codegen_correct`
