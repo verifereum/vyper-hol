@@ -24,7 +24,7 @@ Theorem fixed_memory_selector_joint_ok[local]:
   array_bounds_check idx (Lit (n2w n)) sgn sa = ((),sc) /\
   emit_op MUL [idx;Lit (n2w elem_size)] sc = (Var offset,sm) /\
   emit_op ADD [base_op;Var offset] sm = (Var out,sb) /\ fn_has_code sa sb func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!q. base_op = Var q ==> not_fresh_at sa q) /\ (!l. base_op <> Label l) /\
   eval_operand base_op s = SOME a /\ op_taint tn base_op = {} /\
@@ -72,7 +72,6 @@ Proof
    (!q. idx = Var q \/ Lit (n2w n) = Var q ==> not_fresh_at sa q) /\
    (!l. idx <> Label l /\ Lit (n2w n) <> Label l)` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all array_bounds_check_read_only_joint_ok_frame >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`G1`,`tn1`,`s1`] strip_assume_tac) >>
@@ -84,7 +83,9 @@ Proof
     (Cases_on `idx` >> gvs[eval_operand_def, op_taint_def, op_prov_def]) >>
   `!q. base_op = Var q ==> not_fresh_at sc q` by
     metis_tac[ci_mono_def, loweringShapeDefsTheory.not_fresh_at_mono] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (`allocas_below_fmp s1 <=> allocas_below_fmp s` by simp[allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all scalar_mul_add_joint_frame >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`G2`,`tn2`,`s2`] strip_assume_tac) >>
@@ -536,6 +537,7 @@ Resume subscript_array_framed_memory_full[selector]:
     fs[ptr_val_ok_def] >>
   `op_taint tni p.ptr_operand = {}` by fs[ptr_vv_ok_def] >>
   `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (fixed_memory_selector_joint_ok |>
     INST_TYPE [alpha |-> ``:256``] |> Q.INST [`i` |-> `w2n (iw:bytes32)`] |>
     SRULE []) >>
