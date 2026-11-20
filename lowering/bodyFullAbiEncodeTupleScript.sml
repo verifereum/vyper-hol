@@ -206,7 +206,8 @@ Theorem abi_encode_tuple_staging_full_with_frame:
   compile_store_abi_tuple ce (Var root) 0 (ZIP (ops,tys)) a = ((),b) /\
   LENGTH ops = LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\
   total = abi_tuple_bytes ce (ZIP (ops,tys)) /\
-  fn_has_code a b func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\ allocas_from lo s /\
   lo <= s.vs_alloca_next /\ lookup_var root s = SOME bw /\
@@ -415,7 +416,13 @@ Resume abi_encode_tuple_staging_full_with_frame[step]:
    (!x. not_fresh_at origin x ==> not_fresh_at st x)` by metis_tac[] >>
   `ptr_covers r1 r2 root r0 capacity` by
     (qpat_x_assum `capacity = _` (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp r0` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r0` by
+    (qpat_assum `copy_static r0 = copy_static s` mp_tac >>
+     simp[NoAsms, copy_static_def, venom_state_component_equality] >>
+     strip_tac >>
+     qsuff_tac `allocas_below_fmp r0 = allocas_below_fmp s`
+     >- (disch_then SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     asm_rewrite_tac [allocas_below_fmp_def]) >>
   drule abi_encode_tuple_slot_origin_with_frame >>
   disch_then (qspecl_then [`EL (LENGTH done) tvs`, `EL (LENGTH done) vs`] mp_tac) >>
   disch_then (drule_at (Pat `abi_tuple_input _ _ _ _ _ _`)) >>
@@ -601,7 +608,11 @@ Theorem abi_encode_tuple_staging_full:
       eval_operand oldop t = eval_operand oldop s /\
       op_taint tnf oldop = op_taint tn oldop /\ op_prov Gf oldop = op_prov G oldop)
 Proof
-  rpt gen_tac >> disch_then (mp_tac o MATCH_MP abi_encode_tuple_staging_full_with_frame) >>
-  disch_then (qspecl_then [`explicit`, `PG`, `d`, `cx`, `G0`, `tn0`] strip_assume_tac) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `tuple_total_bytes = abi_tuple_bytes ce (ZIP (ops,tys))` >>
+  mp_tac (Q.SPECL [`a`,`b`,`ce`,`root`,`ops`,`tys`,`tvs`,`vs`,
+    `tuple_total_bytes`,`s`,`bw`,`G`,`tn`,`lo`,`explicit`,`ctx`,`func`,`PG`,
+    `d`,`cx`,`es`,`origin`,`G0`,`tn0`,`s0`] abi_encode_tuple_staging_full_with_frame) >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
   qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]
 QED
