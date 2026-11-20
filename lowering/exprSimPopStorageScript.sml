@@ -1,7 +1,7 @@
 Theory exprSimPopStorage
 Ancestors
   exprSimDefs exprSimProps loweringPosts
-  exprSimPop exprSimLen exprSimLeaves accountsRelProps
+  exprSimPop exprSimLen accountsRelProps
   vyperInterpreter vyperState vyperValueOperation finite_map
   vyperTypeAssignContext vyperPlaceResultTyping vyperTypeEnv vyperTypeInvariants
   vyperStorageBackend vyperStorage

@@ -9,7 +9,7 @@
 Theory tupleTypedLoad
 Ancestors
   exprSimProps
-  tupleLoadProps tupleMemoryLayout tupleStageProps stmtSimReturn exprSimLeaves
+  tupleLoadProps tupleMemoryLayout tupleStageProps stmtSimReturn
   stmtLowering compileEnv loweringStateRelDefs valueEncoding vyperTyping
   list rich_list words arithmetic valueEncodingProofs vyperTypeDefaults
   exprLoweringProps venomMemDefs finite_map  venomState fragExec
