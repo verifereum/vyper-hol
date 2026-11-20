@@ -14,7 +14,7 @@ Theorem runtime_sym_ext_call_args:
   !es tys cfn ce kw_es s vals s'.
   runtime_sym_env tops ce /\ EVERY (supported_pure_expr tops) es /\
   ~supported_exprs_exists is_self_code es /\
-  (!e t. MEM e es ==> runtime_sym_expr_contract tops cfn ce t e) /\
+  (!e. MEM e es ==> runtime_sym_expr_contract tops cfn ce (expr_type e) e) /\
   EVERY runtime_sym_inst (state_insts s) /\
   compile_ext_call_args cfn ce kw_es tys es s = (vals,s') ==>
   EVERY runtime_sym_inst (state_insts s') /\ EVERY runtime_sym_value vals

@@ -437,6 +437,10 @@ Proof
   drule_all alloc_limits_frame >> strip_tac >>
   `!tgt e. aug_assign_overlap c1 tgt e = aug_assign_overlap c0 tgt e` by
     (rpt gen_tac >> irule aug_assign_overlap_frame >> simp[]) >>
+  `type_alloc_ok c1 = type_alloc_ok c0` by
+    (drule type_memory_bytes_frame >> simp[FUN_EQ_THM, type_alloc_ok_def]) >>
+  `type_memory_bytes c1 = type_memory_bytes c0` by
+    (drule type_memory_bytes_frame >> simp[FUN_EQ_THM]) >>
   gvs[alloc_limits_stmt_def, log_alloc_ok_def] >> metis_tac[]
 QED
 

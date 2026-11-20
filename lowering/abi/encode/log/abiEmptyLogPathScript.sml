@@ -2,16 +2,17 @@
    the evaluated topics and empty data, preserving memory and external state. *)
 Theory abiEmptyLogPath
 Ancestors
-  abiLogStmtCode abiLogEmit abiStateFrame typedCopyStateFrame stmtLowering compileEnv
+  abiLogStmtCode abiLogEmit abiStateFrame typedCopyStateFrame stmtLowering exprLowering compileEnv
   fragExec fragBlockPath venomState list words
 
 Theorem compile_log_empty_data_path:
-  !ctx func cenv lctx ty event_id args cs cs' sig_hash arg_types flags eval_ops eval_cut
+  !ctx func cenv lctx ty event_id args cs cs' sig_hash arg_types flags saved eval_cut
     raw_topics topic_ops topic_cut topics ss.
     cenv.ce_event_info (nsid_to_string event_id) = SOME (sig_hash,arg_types,flags) /\
-    compile_log_eval_all cenv args cs = (eval_ops,eval_cut) /\
-    split_log_ops eval_ops flags = (raw_topics,[]) /\
-    compile_log_topic_ops raw_topics eval_cut = (topic_ops,topic_cut) /\
+    compile_ext_call_args compile_expr cenv [] (MAP (lowered_value_type cenv) args)
+      args cs = (saved,eval_cut) /\
+    split_log_ops (ZIP (saved,MAP (lowered_value_type cenv) args)) flags = (raw_topics,[]) /\
+    compile_log_saved_topics cenv raw_topics eval_cut = (topic_ops,topic_cut) /\
     compile_stmt cenv lctx ty (Log event_id args) cs = ((),cs') /\
     fn_has_code topic_cut cs' func /\ LENGTH (Lit (n2w sig_hash)::topic_ops) < dimword(:256) /\
     eval_operands (Lit (n2w sig_hash)::topic_ops) ss = SOME topics /\

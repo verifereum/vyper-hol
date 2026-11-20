@@ -4139,6 +4139,20 @@ Proof
   stmt_labels_chain stmt_labels_rws
 QED
 
+Theorem compile_log_saved_topics_labels:
+  !topics cenv s.
+    cs_extends s (SND (compile_log_saved_topics cenv topics s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_log_saved_topics cenv topics s)))
+Proof
+  Induct >> rpt gen_tac >> TRY (PairCases_on `h`) >>
+  once_rewrite_tac[compile_log_saved_topics_def] >>
+  stmt_labels_chain stmt_labels_rws
+QED
+
+val stmt_labels_rws =
+  compile_log_saved_topics_labels :: compile_ext_call_args_labels ::
+  compile_abi_encode_values_to_buf_labels :: stmt_labels_rws;
+
 Theorem compile_return_unlock_labels[local]:
   !cenv s. cs_extends s (SND (compile_return_unlock cenv s)) /\
     EVERY (isPREFIX "@") (added_labels s (SND (compile_return_unlock cenv s)))
