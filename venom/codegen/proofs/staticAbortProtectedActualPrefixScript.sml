@@ -222,6 +222,15 @@ Proof
   MATCH_ACCEPT_TAC asm_sym_rel_pc
 QED
 
+Theorem protected_cut_relation_context:
+  (if allow_own then asm_sym_rel_own lo p env own else asm_sym_rel p plain_env) cs ss ==>
+  ss.sym_base.as_call_ctx = cs.as_call_ctx /\ ss.sym_base.as_requests = cs.as_requests
+Proof
+  Cases_on `allow_own` >>
+  simp[asm_sym_rel_def, asm_sym_rel_own_def] >>
+  strip_tac >> first_x_assum (fn th => REWRITE_TAC [th]) >> simp[]
+QED
+
 Theorem protected_cut_relation_slots:
   (if allow_own then asm_sym_rel_own (lo_reloc p installed) p env own else asm_sym_rel p plain_env) cs ss ==>
   !k. k < LENGTH ss.sym_stack ==>
