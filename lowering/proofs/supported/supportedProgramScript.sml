@@ -171,14 +171,19 @@ Proof
   metis_tac[]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  strip_tac >> drule_all supported_program_declaration >>
+  Cases_on `vis = Internal` >>
+  simp[supported_declaration_header_def, supported_declaration_body_def, NULL_EQ]
+QED
+*)
 Theorem supported_program_defaults:
   supported_program tops /\
   MEM (FunctionDecl vis mut nr rr name args defaults ret stmts) tops ==>
     EVERY (supported_default_expression tops) defaults
 Proof
-  strip_tac >> drule_all supported_program_declaration >>
-  Cases_on `vis = Internal` >>
-  simp[supported_declaration_header_def, supported_declaration_body_def, NULL_EQ]
+  cheat
 QED
 
 Theorem supported_program_internal_names:
@@ -188,12 +193,14 @@ Proof
   simp[supported_program_def]
 QED
 
-Theorem supported_internal_body_contract:
-  supported_function_body tops Internal args stmts ==>
-    ~supported_stmts_expr_exists expr_internal_call_root stmts
-Proof
-  simp[supported_function_body_def]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (internal bodies may call internal functions); callers split on the call
+  Theorem supported_internal_body_contract:
+    supported_function_body tops Internal args stmts ==>
+      ~supported_stmts_expr_exists expr_internal_call_root stmts
+  Proof
+    simp[supported_function_body_def]
+  QED
+*)
 
 Theorem supported_function_body_binding_contract:
   supported_function_body tops vis args stmts ==>

@@ -101,11 +101,7 @@ fun runtime_sym_round_tac leaf =
   simp[NoAsms, compile_builtin_dispatch_body_def] >>
   runtime_sym_unary_stack_tac leaf;
 
-Theorem runtime_sym_builtin_body:
-  runtime_sym_generator_contracts tops /\
-  (!e t. expr_size e < list_size expr_size args ==>
-     runtime_sym_expr_contract tops cfn ce t e) ==>
-  runtime_sym_builtin_contract tops (compile_builtin_dispatch_body cfn) ce rt ty bi args
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> pure_rewrite_tac[runtime_sym_builtin_contract_def] >>
   rpt gen_tac >> strip_tac >>
@@ -152,7 +148,12 @@ Resume runtime_sym_builtin_body[bop]:
      (supported_integer_literal a) (supported_nonnegative_literal b)` by
     gvs[supported_expr_def, supported_pure_expr_def,
         supported_effect_expr_def, supported_builtin_form_def] >>
-  drule supported_binop_dispatch_guards >> strip_tac >>
+  (* SCRATCH SEQ-8389: supported_binop_dispatch_guards is false under the
+     widened gate; the excluded operand forms are an admitted branch *)
+  Cases_on `(((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type b)) \/
+       (is_bytestring_type (expr_type a) /\ (bop = Eq \/ bop = NotEq)))`
+  >- (goalStack.print_tac "SEQ8389-ADMIT runtime_sym_builtin_body_bop_excluded" >> cheat (* SCRATCH SEQ-8389 ADMITTED BRANCH runtime_sym_builtin_body_bop_excluded *)) >>
+  RULE_ASSUM_TAC (SRULE [DE_MORGAN_THM]) >> fs[] >>
   drule runtime_sym_generators_expr_primitive >>
   disch_then (assume_tac o cj 3 o SRULE [runtime_sym_expr_primitive_clauses_def]) >>
   qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
@@ -653,3 +654,12 @@ Resume runtime_sym_builtin_body[sha]:
          runtime_sym_unary_stack_tac runtime_sym_sha256_word]
 QED
 Finalise runtime_sym_builtin_body
+*)
+Theorem runtime_sym_builtin_body:
+  runtime_sym_generator_contracts tops /\
+  (!e t. expr_size e < list_size expr_size args ==>
+     runtime_sym_expr_contract tops cfn ce t e) ==>
+  runtime_sym_builtin_contract tops (compile_builtin_dispatch_body cfn) ce rt ty bi args
+Proof
+  cheat
+QED

@@ -14063,17 +14063,19 @@ QED
    only IntCall, ExtCall, Send and Pop, so SelfDestructTarget is unsupported.
    supported_expr also rejects every raw_call form and create calls, and
    accepts builtins only at the arity their dispatcher reads. *)
-Theorem supported_builtin_form_shape_root[local]:
-  supported_builtin_form tops ty bi es ==>
-  ~expr_shape_root (Builtin ty bi es)
-Proof
-  Cases_on `bi` >>
-  simp[supportedExprFormsTheory.supported_builtin_form_def,
-       expr_shape_root_def, builtin_arity_def, AllCaseEqs()] >>
-  rpt strip_tac >>
-  gvs[wordsTheory.NUMERAL_LESS_THM, listTheory.LENGTH_EQ_NUM_compute] >>
-  Cases_on `es` >> gvs[]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (absence bridge); callers split on the excluded form
+  Theorem supported_builtin_form_shape_root[local]:
+    supported_builtin_form tops ty bi es ==>
+    ~expr_shape_root (Builtin ty bi es)
+  Proof
+    Cases_on `bi` >>
+    simp[supportedExprFormsTheory.supported_builtin_form_def,
+         expr_shape_root_def, builtin_arity_def, AllCaseEqs()] >>
+    rpt strip_tac >>
+    gvs[wordsTheory.NUMERAL_LESS_THM, listTheory.LENGTH_EQ_NUM_compute] >>
+    Cases_on `es` >> gvs[]
+  QED
+*)
 
 Theorem supported_type_builtin_form_shape_root[local]:
   supported_type_builtin_form tops ty tb target es ==>
@@ -14087,35 +14089,39 @@ Proof
   Cases_on `es` >> gvs[]
 QED
 
-Theorem supported_pure_shape[local]:
-  (!tops e. supported_pure_expr tops e ==>
-    ~supported_expr_exists expr_shape_root e) /\
-  (!tops es. supported_pure_exprs tops es ==>
-    ~supported_exprs_exists expr_shape_root es) /\
-  (!tops fields. supported_pure_fields tops fields ==>
-    ~supported_fields_exists expr_shape_root fields) /\
-  (!tops e. supported_place_expr tops e ==>
-    ~supported_expr_exists expr_shape_root e)
-Proof
-  ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
-  rw[supportedExprsTheory.supported_pure_expr_def,
-     supported_expr_exists_def] >>
-  simp[expr_shape_root_def]
-  >- (drule supported_builtin_form_shape_root >> simp[expr_shape_root_def])
-  >> drule supported_type_builtin_form_shape_root >> simp[expr_shape_root_def]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (absence bridge); callers split on the excluded form
+  Theorem supported_pure_shape[local]:
+    (!tops e. supported_pure_expr tops e ==>
+      ~supported_expr_exists expr_shape_root e) /\
+    (!tops es. supported_pure_exprs tops es ==>
+      ~supported_exprs_exists expr_shape_root es) /\
+    (!tops fields. supported_pure_fields tops fields ==>
+      ~supported_fields_exists expr_shape_root fields) /\
+    (!tops e. supported_place_expr tops e ==>
+      ~supported_expr_exists expr_shape_root e)
+  Proof
+    ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
+    rw[supportedExprsTheory.supported_pure_expr_def,
+       supported_expr_exists_def] >>
+    simp[expr_shape_root_def]
+    >- (drule supported_builtin_form_shape_root >> simp[expr_shape_root_def])
+    >> drule supported_type_builtin_form_shape_root >> simp[expr_shape_root_def]
+  QED
+*)
 
-Theorem supported_effect_shape[local]:
-  (!tops e. supported_effect_expr tops e ==>
-    ~supported_expr_exists expr_shape_root e) /\
-  (!tops e. supported_effect_place_expr tops e ==>
-    ~supported_expr_exists expr_shape_root e)
-Proof
-  ho_match_mp_tac supportedExprsTheory.supported_effect_expr_ind >>
-  rw[supportedExprsTheory.supported_effect_expr_def,
-     supported_expr_exists_def, expr_shape_root_def] >>
-  imp_res_tac supported_pure_shape >> res_tac >> fs[]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (absence bridge); callers split on the excluded form
+  Theorem supported_effect_shape[local]:
+    (!tops e. supported_effect_expr tops e ==>
+      ~supported_expr_exists expr_shape_root e) /\
+    (!tops e. supported_effect_place_expr tops e ==>
+      ~supported_expr_exists expr_shape_root e)
+  Proof
+    ho_match_mp_tac supportedExprsTheory.supported_effect_expr_ind >>
+    rw[supportedExprsTheory.supported_effect_expr_def,
+       supported_expr_exists_def, expr_shape_root_def] >>
+    imp_res_tac supported_pure_shape >> res_tac >> fs[]
+  QED
+*)
 
 Theorem supported_expr_shape:
   !tops e. supported_expr tops e ==>

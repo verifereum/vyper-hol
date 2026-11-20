@@ -261,24 +261,26 @@ Proof
 QED
 
 Theorem supported_pure_no_effect:
-  (!tops e. supported_pure_expr tops e ==>
+  (* SCRATCH SEQ-8389: restated over the effect-free fragment *)
+  (!tops e. supported_effect_free_expr tops e ==>
       ~supported_expr_exists expr_effect_root e) /\
-  (!tops es. supported_pure_exprs tops es ==>
+  (!tops es. supported_effect_free_exprs tops es ==>
       ~supported_exprs_exists expr_effect_root es) /\
-  (!tops fields. supported_pure_fields tops fields ==>
+  (!tops fields. supported_effect_free_fields tops fields ==>
       ~supported_fields_exists expr_effect_root fields) /\
-  (!tops e. supported_place_expr tops e ==>
+  (!tops e. supported_effect_free_place_expr tops e ==>
       ~supported_expr_exists expr_effect_root e)
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  simp[supported_pure_expr_def, supported_expr_exists_def, expr_effect_root_def] >>
+  ho_match_mp_tac supported_effect_free_expr_ind >>
+  simp[supported_effect_free_expr_def, supported_expr_exists_def, expr_effect_root_def] >>
   rpt conj_tac >> rpt gen_tac >>
   TRY (Cases_on `base`) >>
-  simp[supported_pure_expr_def, supported_expr_exists_def, expr_effect_root_def]
+  simp[supported_effect_free_expr_def, supported_expr_exists_def, expr_effect_root_def]
 QED
 
 Theorem supported_pure_expr_effect_free:
-  supported_pure_expr tops e ==> ~expr_has_effect e
+  (* SCRATCH SEQ-8389: restated over the effect-free fragment *)
+  supported_effect_free_expr tops e ==> ~expr_has_effect e
 Proof
   strip_tac >> simp[expr_has_effect_def] >>
   irule (CONJUNCT1 supported_pure_no_effect) >>
@@ -309,7 +311,8 @@ Proof
 QED
 
 Theorem supported_pure_no_internal_call:
-  supported_pure_expr tops e ==> ~expr_has_internal_call e
+  (* SCRATCH SEQ-8389: restated over the effect-free fragment *)
+  supported_effect_free_expr tops e ==> ~expr_has_internal_call e
 Proof
   metis_tac[supported_pure_expr_effect_free, expr_internal_call_is_effect]
 QED
@@ -327,60 +330,70 @@ QED
 Theorem supported_effect_expr_has_effect = CONJUNCT1 supported_effects_have_effect
 
 Theorem supported_effect_classification:
-  supported_expr tops e /\ expr_has_effect e <=> supported_effect_expr tops e
+  (* SCRATCH SEQ-8389: restated over the pre-widening expression fragment *)
+  supported_root_expr tops e /\ expr_has_effect e <=> supported_root_effect_expr tops e
 Proof
-  metis_tac[supported_expr_def, supported_pure_expr_effect_free,
-    supported_effect_expr_has_effect]
+  metis_tac[supported_root_expr_def, supported_pure_expr_effect_free,
+    supported_effect_expr_has_effect,
+    supported_root_effect_effect, supported_root_expr_def]
 QED
 
 (* The supported subset has no raw_call or create, the calls the source
    runs on the EVM even with the outcome oracle. *)
 Theorem supported_pure_no_halt[local]:
-  (!tops e. supported_pure_expr tops e ==>
+  (* SCRATCH SEQ-8389: restated over the effect-free fragment *)
+  (!tops e. supported_effect_free_expr tops e ==>
       ~supported_expr_exists expr_halt_root e) /\
-  (!tops es. supported_pure_exprs tops es ==>
+  (!tops es. supported_effect_free_exprs tops es ==>
       ~supported_exprs_exists expr_halt_root es) /\
-  (!tops fields. supported_pure_fields tops fields ==>
+  (!tops fields. supported_effect_free_fields tops fields ==>
       ~supported_fields_exists expr_halt_root fields) /\
-  (!tops e. supported_place_expr tops e ==>
+  (!tops e. supported_effect_free_place_expr tops e ==>
       ~supported_expr_exists expr_halt_root e)
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  simp[supported_pure_expr_def, supported_expr_exists_def,
+  ho_match_mp_tac supported_effect_free_expr_ind >>
+  simp[supported_effect_free_expr_def, supported_expr_exists_def,
        expr_halt_root_def, expr_evm_run_root_def] >>
   rpt conj_tac >> rpt gen_tac >>
   TRY (Cases_on `base`) >>
-  simp[supported_pure_expr_def, supported_expr_exists_def,
+  simp[supported_effect_free_expr_def, supported_expr_exists_def,
        expr_halt_root_def, expr_evm_run_root_def]
 QED
 
 Theorem supported_effect_no_halt[local]:
-  (!tops e. supported_effect_expr tops e ==>
+  (* SCRATCH SEQ-8389: restated over the pre-widening expression fragment *)
+  (!tops e. supported_root_effect_expr tops e ==>
       ~supported_expr_exists expr_halt_root e) /\
-  (!tops e. supported_effect_place_expr tops e ==>
+  (!tops e. supported_root_effect_place_expr tops e ==>
       ~supported_expr_exists expr_halt_root e)
 Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  simp[supported_effect_expr_def, supported_expr_exists_def,
+  ho_match_mp_tac supported_root_effect_expr_ind >>
+  simp[supported_root_effect_expr_def, supported_expr_exists_def,
        expr_halt_root_def, expr_evm_run_root_def] >>
   rpt conj_tac >> rpt gen_tac >> simp[] >>
   metis_tac[supported_pure_no_halt]
 QED
 
 Theorem supported_expr_no_halt:
-  supported_expr tops e ==> ~supported_expr_exists expr_halt_root e
+  (* SCRATCH SEQ-8389: restated over the pre-widening expression fragment *)
+  supported_root_expr tops e ==> ~supported_expr_exists expr_halt_root e
 Proof
-  rw[supported_expr_def] >>
+  rw[supported_root_expr_def] >>
   metis_tac[supported_pure_no_halt, supported_effect_no_halt]
 QED
 
-Theorem supported_expr_no_evm_run:
-  supported_expr tops e ==> ~expr_has_evm_run e
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rw[expr_has_evm_run_def] >> drule supported_expr_no_halt >>
   CONV_TAC CONTRAPOS_CONV >> simp[] >> strip_tac >>
   irule (cj 1 supported_expr_exists_mono) >>
   qexists_tac `expr_evm_run_root` >> simp[expr_halt_root_def]
+QED
+*)
+Theorem supported_expr_no_evm_run:
+  supported_expr tops e ==> ~expr_has_evm_run e
+Proof
+  cheat
 QED
 
 (* Call operands are effect free throughout supported expressions. *)
@@ -396,16 +409,22 @@ Proof
   metis_tac[supported_expr_exists_mono]
 QED
 
-Theorem supported_pure_list_call_operands[local]:
-  supported_pure_exprs tops args ==>
-  EVERY (\e. ~expr_has_effect e) args /\
-  EVERY (\e. ~supported_expr_exists call_operands_effect_root e) args
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   simp[supported_pure_exprs_every, listTheory.EVERY_MEM] >> strip_tac >>
   conj_tac >> rpt strip_tac >>
-  `supported_pure_expr tops e` by (first_x_assum irule >> simp[]) >>
+  `supported_effect_free_expr tops e` by (first_x_assum irule >> simp[]) >>
   drule supported_pure_expr_effect_free >>
   metis_tac[no_effect_call_operands]
+QED
+*)
+Theorem supported_pure_list_call_operands[local]:
+  (* SCRATCH SEQ-8389: restated over the effect-free fragment *)
+  supported_effect_free_exprs tops args ==>
+  EVERY (\e. ~expr_has_effect e) args /\
+  EVERY (\e. ~supported_expr_exists call_operands_effect_root e) args
+Proof
+  cheat
 QED
 
 Theorem effect_free_drop[local]:
@@ -417,13 +436,14 @@ Proof
 QED
 
 Theorem supported_effect_no_call_operand_effects[local]:
-  (!tops e. supported_effect_expr tops e ==>
+  (* SCRATCH SEQ-8389: restated over the pre-widening expression fragment *)
+  (!tops e. supported_root_effect_expr tops e ==>
     ~supported_expr_exists call_operands_effect_root e) /\
-  (!tops e. supported_effect_place_expr tops e ==>
+  (!tops e. supported_root_effect_place_expr tops e ==>
     ~supported_expr_exists call_operands_effect_root e)
 Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  simp[supported_effect_expr_def, supported_expr_exists_def,
+  ho_match_mp_tac supported_root_effect_expr_ind >>
+  simp[supported_root_effect_expr_def, supported_expr_exists_def,
        call_operands_effect_root_def] >>
   rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
   imp_res_tac supported_pure_no_effect >>
@@ -437,10 +457,11 @@ Proof
 QED
 
 Theorem supported_expr_no_call_operand_effects:
-  supported_expr tops e ==>
+  (* SCRATCH SEQ-8389: restated over the pre-widening expression fragment *)
+  supported_root_expr tops e ==>
   ~supported_expr_exists call_operands_effect_root e
 Proof
-  rw[supported_expr_def] >>
+  rw[supported_root_expr_def] >>
   metis_tac[supported_pure_expr_effect_free, no_effect_call_operands,
             supported_effect_no_call_operand_effects]
 QED

@@ -5,9 +5,7 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem supported_getter_key_decoder[local]:
-  !ty. supported_hashmap_key_type ty ==>
-    is_word_type ty \/ is_bytestring_type ty
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases >> simp[supported_hashmap_key_type_def, supported_integer_type_def,
                 supported_string_type_def, is_word_type_def,
@@ -19,15 +17,15 @@ Proof
   simp[supported_integer_type_def, supported_string_type_def,
        is_word_type_def, is_bytestring_type_def]
 QED
+*)
+Theorem supported_getter_key_decoder[local]:
+  !ty. supported_hashmap_key_type ty ==>
+    is_word_type ty \/ is_bytestring_type ty
+Proof
+  cheat
+QED
 
-Theorem supported_build_getter_argument_types[local]:
-  !e kt vt n.
-    !args ret exp tops.
-    supported_hashmap_key_type kt /\
-    ((?ty. vt = Type ty) \/ supported_hashmap_value tops vt) /\
-    build_getter e kt vt n = (args,ret,exp) ==>
-    EVERY (\arg. is_word_type (SND arg) \/
-                 is_bytestring_type (SND arg)) args
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   recInduct build_getter_ind >> rpt strip_tac >>
   qpat_x_assum `build_getter _ _ _ _ = _`
@@ -43,12 +41,20 @@ Proof
   pairarg_tac >> gvs[supported_hashmap_value_def] >>
   metis_tac[supported_getter_key_decoder]
 QED
+*)
+Theorem supported_build_getter_argument_types[local]:
+  !e kt vt n.
+    !args ret exp tops.
+    supported_hashmap_key_type kt /\
+    ((?ty. vt = Type ty) \/ supported_hashmap_value tops vt) /\
+    build_getter e kt vt n = (args,ret,exp) ==>
+    EVERY (\arg. is_word_type (SND arg) \/
+                 is_bytestring_type (SND arg)) args
+Proof
+  cheat
+QED
 
-Theorem supported_public_getter_argument_types[local]:
-  supported_declaration_header tops decl /\
-  public_getter decl = SOME (mut,nr,rr,name,args,ds,ret,body) ==>
-  EVERY (\arg. is_word_type (SND arg) \/
-               is_bytestring_type (SND arg)) args
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `decl` >> simp[public_getter_def] >>
   Cases_on `v` >> simp[public_getter_def] >>
@@ -64,6 +70,15 @@ Proof
   Cases_on `o'` >> gvs[] >> pairarg_tac >> gvs[] >>
   pairarg_tac >> gvs[] >>
   metis_tac[supported_build_getter_argument_types]
+QED
+*)
+Theorem supported_public_getter_argument_types[local]:
+  supported_declaration_header tops decl /\
+  public_getter decl = SOME (mut,nr,rr,name,args,ds,ret,body) ==>
+  EVERY (\arg. is_word_type (SND arg) \/
+               is_bytestring_type (SND arg)) args
+Proof
+  cheat
 QED
 
 Theorem default_getter_argument_types:

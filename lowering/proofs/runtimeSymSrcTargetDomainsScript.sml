@@ -3,23 +3,24 @@ Ancestors
   supportedStmts supportedTargets supportedExprTraverse supportedExprs
 
 Theorem runtime_sym_pure_occurrence_domain:
-  (!tops a. supported_pure_expr tops a ==>
+  (* SCRATCH SEQ-8389: restated over the effect-free fragment *)
+  (!tops a. supported_effect_free_expr tops a ==>
     !e. supported_expr_exists (\x. x = e) a ==>
-      supported_expr tops e \/ supported_place_expr tops e \/ supported_effect_place_expr tops e) /\
-  (!tops es. supported_pure_exprs tops es ==>
+      supported_expr tops e \/ supported_effect_free_place_expr tops e \/ supported_effect_place_expr tops e) /\
+  (!tops es. supported_effect_free_exprs tops es ==>
     !e. supported_exprs_exists (\x. x = e) es ==>
-      supported_expr tops e \/ supported_place_expr tops e \/ supported_effect_place_expr tops e) /\
-  (!tops fs. supported_pure_fields tops fs ==>
+      supported_expr tops e \/ supported_effect_free_place_expr tops e \/ supported_effect_place_expr tops e) /\
+  (!tops fs. supported_effect_free_fields tops fs ==>
     !e. supported_fields_exists (\x. x = e) fs ==>
-      supported_expr tops e \/ supported_place_expr tops e \/ supported_effect_place_expr tops e) /\
-  (!tops a. supported_place_expr tops a ==>
+      supported_expr tops e \/ supported_effect_free_place_expr tops e \/ supported_effect_place_expr tops e) /\
+  (!tops a. supported_effect_free_place_expr tops a ==>
     !e. supported_expr_exists (\x. x = e) a ==>
-      supported_expr tops e \/ supported_place_expr tops e \/ supported_effect_place_expr tops e)
+      supported_expr tops e \/ supported_effect_free_place_expr tops e \/ supported_effect_place_expr tops e)
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
+  ho_match_mp_tac supported_effect_free_expr_ind >>
   simp[supported_expr_exists_def] >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> gvs[] >>
-  gvs[supported_pure_expr_def, supported_expr_def] >> metis_tac[]
+  gvs[supported_effect_free_expr_def, supported_expr_def] >> metis_tac[]
 QED
 
 Theorem runtime_sym_effect_occurrence_domain:

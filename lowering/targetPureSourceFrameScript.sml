@@ -158,22 +158,23 @@ QED
 
 
 Theorem target_pure_source_mutual:
-  (!tops e. supported_pure_expr tops e ==>
+  (* SCRATCH SEQ-8389: restated over the effect-free fragment *)
+  (!tops e. supported_effect_free_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==>
       s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
       s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
-  (!tops es. supported_pure_exprs tops es ==>
+  (!tops es. supported_effect_free_exprs tops es ==>
     (!cx s r s'. eval_exprs cx es s = (r,s') ==>
       s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
       s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
     (!e. MEM e es ==> !cx s r s'. eval_expr cx e s = (r,s') ==>
       s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
       s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)) /\
-  (!tops fields. supported_pure_fields tops fields ==>
+  (!tops fields. supported_effect_free_fields tops fields ==>
     !cx s r s'. eval_exprs cx (MAP SND fields) s = (r,s') ==>
       s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
       s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
-  (!tops e. supported_place_expr tops e ==>
+  (!tops e. supported_effect_free_place_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==>
       s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
       s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)
@@ -192,7 +193,8 @@ QED
 
 Theorem target_pure_base_source_projection:
   !bt tops cx s r s'.
-    supported_target_pure tops bt /\
+    (* SCRATCH SEQ-8389: restated; target keys may hold calls and pops now *)
+    supported_target_pure tops bt /\ ~supported_target_exists expr_effect_root bt /\
     eval_base_place cx bt s = (r,s') ==>
       s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
       s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>

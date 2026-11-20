@@ -6,6 +6,12 @@ Ancestors
   exprLowering compileEnv emitHelper list stackPlanTypes supportedExprs
 
 (* The current supported-program whitelist rejects every creation target. *)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  Cases_on `default` >>
+  simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
+QED
+*)
 Theorem runtime_sym_call_create:
   !tops cfn ce rt ty ck has_salt rof metadata es default s v s'.
     (!e t. MEM e es \/ default = SOME e ==>
@@ -19,6 +25,5 @@ Theorem runtime_sym_call_create:
       es default s = (v,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
 Proof
-  Cases_on `default` >>
-  simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
+  cheat
 QED

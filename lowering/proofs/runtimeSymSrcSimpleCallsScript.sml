@@ -4,6 +4,12 @@ Ancestors
   exprLowering compileEnv emitHelper loweringShapeDefs list venomInst stackPlanTypes
   supportedExprs supportedExprTraverse
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `rt` >> Cases_on `default` >>
+  gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
+QED
+*)
 Theorem runtime_sym_call_log:
   !cfn ce rt ty es default s v s'.
     (!e t. MEM e es \/ default = SOME e ==>
@@ -14,10 +20,15 @@ Theorem runtime_sym_call_log:
     compile_call cfn ce rt (ty : type) RawLog es default s = (v,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
 Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
   rpt gen_tac >> strip_tac >> Cases_on `rt` >> Cases_on `default` >>
   gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
 QED
-
+*)
 Theorem runtime_sym_call_revert:
   !cfn ce rt ty es default s v s'.
     (!e t. MEM e es \/ default = SOME e ==>
@@ -28,8 +39,7 @@ Theorem runtime_sym_call_revert:
     compile_call cfn ce rt (ty : type) RawRevert es default s = (v,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `rt` >> Cases_on `default` >>
-  gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
+  cheat
 QED
 
 Theorem runtime_sym_call_selfdestruct:

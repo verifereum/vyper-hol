@@ -77,53 +77,57 @@ Proof
   rw[] >> simp[is_word_type_def, supported_word_type_is_word]
 QED
 
-Theorem copy_types_store_path_flag:
-  !dst src.
-    supported_copy_types dst src \/
-    ((supported_word_type dst \/ ?n. dst = FlagT n) /\
-     (supported_word_type src \/ ?n. src = FlagT n)) ==>
-    is_word_type dst \/ is_bytestring_type dst \/ dst = src
-Proof
-  rpt gen_tac >> strip_tac
-  >- (pop_assum mp_tac >> simp[supported_copy_types_def] >> strip_tac
-      >- simp[]
-      >- metis_tac[supported_word_type_is_word] >>
-      Cases_on `dst` >> Cases_on `src` >>
-      gvs[AllCaseEqs(), is_bytestring_type_def] >>
-      rename1 `is_word_type (BaseT dst_base) \/ _ \/ dst_base = src_base` >>
-      Cases_on `dst_base` >> Cases_on `src_base` >>
-      gvs[AllCaseEqs(), is_bytestring_type_def] >>
-      rename1 `is_word_type (BaseT (BytesT dst_bound)) \/ _ \/
-               dst_bound = src_bound` >>
-      Cases_on `dst_bound` >> Cases_on `src_bound` >>
-      gvs[is_bytestring_type_def]) >>
-  metis_tac[word_or_flag_is_word]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (flag-only widening prep, superseded); no other theory uses it
+  Theorem copy_types_store_path_flag:
+    !dst src.
+      supported_copy_types dst src \/
+      ((supported_word_type dst \/ ?n. dst = FlagT n) /\
+       (supported_word_type src \/ ?n. src = FlagT n)) ==>
+      is_word_type dst \/ is_bytestring_type dst \/ dst = src
+  Proof
+    rpt gen_tac >> strip_tac
+    >- (pop_assum mp_tac >> simp[supported_copy_types_def] >> strip_tac
+        >- simp[]
+        >- metis_tac[supported_word_type_is_word] >>
+        Cases_on `dst` >> Cases_on `src` >>
+        gvs[AllCaseEqs(), is_bytestring_type_def] >>
+        rename1 `is_word_type (BaseT dst_base) \/ _ \/ dst_base = src_base` >>
+        Cases_on `dst_base` >> Cases_on `src_base` >>
+        gvs[AllCaseEqs(), is_bytestring_type_def] >>
+        rename1 `is_word_type (BaseT (BytesT dst_bound)) \/ _ \/
+                 dst_bound = src_bound` >>
+        Cases_on `dst_bound` >> Cases_on `src_bound` >>
+        gvs[is_bytestring_type_def]) >>
+    metis_tac[word_or_flag_is_word]
+  QED
+*)
 
 (* ===== Binary operators on flags keep the block open (rows 32, 37) ===== *)
 
-Theorem compile_dispatch_bop_open_flag:
-  !cfn cenv rty ty op a b sa vv sb.
-    (supported_binop op (expr_type a) (expr_type b)
-       (supported_integer_literal a) (supported_nonnegative_literal b) \/
-     ((op = And \/ op = Or \/ op = XOr \/ op = Eq \/ op = NotEq) /\
-      ?n. expr_type a = FlagT n)) /\
-    compile_builtin_dispatch_body cfn cenv rty ty (Bop op) [a;b] sa = (vv,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >> disch_then (CONJUNCTS_THEN ASSUME_TAC) >>
-  `~((op = In \/ op = NotIn) /\ is_ArrayT (expr_type b)) /\ op <> ExpMod` by
-    (Cases_on `op` >> gvs[supported_binop_def]) >>
-  qpat_x_assum `_ \/ _` kall_tac >>
-  qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_builtin_dispatch_body_def] >> IF_CASES_TAC
-  >- (simp[pairTheory.UNCURRY] >> IF_CASES_TAC >>
-      simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-      drule emit_op_nonterminator_open >> simp[is_terminator_def]) >>
-  rpt (pairarg_tac >> simp[]) >>
-  simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  drule compile_binop_open >> simp[] >> disch_then drule >> simp[]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (flag-only widening prep, superseded); no other theory uses it
+  Theorem compile_dispatch_bop_open_flag:
+    !cfn cenv rty ty op a b sa vv sb.
+      (supported_binop op (expr_type a) (expr_type b)
+         (supported_integer_literal a) (supported_nonnegative_literal b) \/
+       ((op = And \/ op = Or \/ op = XOr \/ op = Eq \/ op = NotEq) /\
+        ?n. expr_type a = FlagT n)) /\
+      compile_builtin_dispatch_body cfn cenv rty ty (Bop op) [a;b] sa = (vv,sb) ==>
+      ~block_is_terminated sb
+  Proof
+    rpt gen_tac >> disch_then (CONJUNCTS_THEN ASSUME_TAC) >>
+    `~((op = In \/ op = NotIn) /\ is_ArrayT (expr_type b)) /\ op <> ExpMod` by
+      (Cases_on `op` >> gvs[supported_binop_def]) >>
+    qpat_x_assum `_ \/ _` kall_tac >>
+    qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
+    simp[compile_builtin_dispatch_body_def] >> IF_CASES_TAC
+    >- (simp[pairTheory.UNCURRY] >> IF_CASES_TAC >>
+        simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+        drule emit_op_nonterminator_open >> simp[is_terminator_def]) >>
+    rpt (pairarg_tac >> simp[]) >>
+    simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+    drule compile_binop_open >> simp[] >> disch_then drule >> simp[]
+  QED
+*)
 
 (* ===== Assignability ===== *)
 
@@ -163,7 +167,9 @@ Proof
   rpt gen_tac >> Cases_on `?n. t = FlagT n`
   >- (gvs[] >> Cases_on `u` >> simp[arg_type_fits_def]) >>
   pop_assum mp_tac >> simp[] >> strip_tac >>
-  Cases_on `t` >>
+  Cases_on `t`
+  (* SCRATCH SEQ-8389: flags are scalars now; the flag case was split off above *)
+  >~ [`supported_scalar_type (FlagT _)`] >- gvs[] >>
   simp[supported_scalar_type_def, supported_word_type_def,
        supported_string_type_def] >>
   rename1 `supported_word_type (BaseT bt)` >> Cases_on `u` >>

@@ -11,7 +11,15 @@ Theorem deploy_supported_scalar_abi_valid:
  vyper_to_abi env ty v = SOME av ==>
  has_type (vyper_to_abi_type env ty) av
 Proof
- Cases_on `ty` >>
+ Cases_on `ty`
+ (* SCRATCH SEQ-8389: flags are scalars now *)
+ >~ [`supported_scalar_type (FlagT _)`]
+ >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >> Cases_on `v` >>
+      gvs[value_has_type_def, vyper_to_abi_def, vyper_to_abi_type_def,
+          has_type_def, valid_int_bound_def] >>
+      qmatch_asmsub_rename_tac `k < 2 ** m` >>
+      irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** m` >>
+      simp[arithmeticTheory.EXP_BASE_LE_MONO]) >>
  simp[supported_scalar_type_def, supported_word_type_def,
       supported_string_type_def] >>
  Cases_on `b` >>
@@ -49,7 +57,11 @@ Theorem deploy_supported_scalar_abi_reverse:
  vyper_to_abi env ty v = SOME av ==>
  abi_to_vyper env ty av = SOME v
 Proof
- Cases_on `ty` >>
+ Cases_on `ty`
+ (* SCRATCH SEQ-8389: flags are scalars now *)
+ >~ [`supported_scalar_type (FlagT _)`]
+ >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >> Cases_on `v` >>
+      gvs[value_has_type_def, vyper_to_abi_def, abi_to_vyper_def]) >>
  simp[supported_scalar_type_def, supported_word_type_def,
       supported_string_type_def] >>
  Cases_on `b` >>

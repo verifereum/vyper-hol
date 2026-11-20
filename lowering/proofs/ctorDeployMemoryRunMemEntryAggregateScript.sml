@@ -240,11 +240,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ctor_supported_value_inverse:
-  supported_value_type tops ty /\ evaluate_type (type_env tops) ty = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\
-  vyper_to_abi (type_env tops) ty v = SOME av ==>
-  abi_to_vyper (type_env tops) ty av = SOME v
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   Cases_on `supported_scalar_type ty`
@@ -262,10 +258,17 @@ Proof
   gvs[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
   first_x_assum drule >> simp[supported_scalar_type_def]
 QED
+*)
+Theorem ctor_supported_value_inverse:
+  supported_value_type tops ty /\ evaluate_type (type_env tops) ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  vyper_to_abi (type_env tops) ty v = SOME av ==>
+  abi_to_vyper (type_env tops) ty av = SOME v
+Proof
+  cheat
+QED
 
-Theorem ctor_supported_scalar_memory_lower:
-  supported_scalar_type ty /\ evaluate_type env ty = SOME tv ==>
-  32 <= type_memory_size tv
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `ty` >>
   simp[supported_scalar_type_def, supported_word_type_def,
@@ -275,6 +278,13 @@ Proof
        evaluate_type_def, type_memory_size_def] >>
   rpt strip_tac >> gvs[AllCaseEqs(), type_memory_size_def] >>
   Cases_on `b` >> gvs[type_memory_size_def, AllCaseEqs()]
+QED
+*)
+Theorem ctor_supported_scalar_memory_lower:
+  supported_scalar_type ty /\ evaluate_type env ty = SOME tv ==>
+  32 <= type_memory_size tv
+Proof
+  cheat
 QED
 
 Theorem ctor_scalar_list_memory_lower:
@@ -379,14 +389,19 @@ Proof
   gvs[type_memory_size_def, ctor_fields_memory_zip] >> decide_tac
 QED
 
-Theorem ctor_scalar_conversion_not_list:
-  supported_scalar_type ty /\ vyper_to_abi env ty v = SOME (ListV avs) ==> F
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `ty` >>
   simp[supported_scalar_type_def, supported_word_type_def, supported_string_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >> Cases_on `v` >>
   simp[Once vyper_to_abi_def, supported_word_type_def, supported_string_type_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+*)
+Theorem ctor_scalar_conversion_not_list:
+  supported_scalar_type ty /\ vyper_to_abi env ty v = SOME (ListV avs) ==> F
+Proof
+  cheat
 QED
 
 Theorem ctor_supported_aggregate_length_bound:

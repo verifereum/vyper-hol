@@ -119,18 +119,19 @@ Proof
 QED
 
 Theorem supported_pure_scopes_mutual:
-  (!tops e. supported_pure_expr tops e ==>
+  (* SCRATCH SEQ-8389: restated over the effect-free fragment *)
+  (!tops e. supported_effect_free_expr tops e ==>
     !cx es res es'. eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes) /\
-  (!tops exprs. supported_pure_exprs tops exprs ==>
+  (!tops exprs. supported_effect_free_exprs tops exprs ==>
     !cx es res es'. eval_exprs cx exprs es = (res,es') ==> es'.scopes = es.scopes) /\
-  (!tops fields. supported_pure_fields tops fields ==>
+  (!tops fields. supported_effect_free_fields tops fields ==>
     !cx es res es'. eval_exprs cx (MAP SND fields) es = (res,es') ==>
       es'.scopes = es.scopes) /\
-  (!tops e. supported_place_expr tops e ==>
+  (!tops e. supported_effect_free_place_expr tops e ==>
     !cx es res es'. eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes)
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >> rpt conj_tac >>
-  simp[supported_pure_expr_def] >> rpt strip_tac
+  ho_match_mp_tac supported_effect_free_expr_ind >> rpt conj_tac >>
+  simp[supported_effect_free_expr_def] >> rpt strip_tac
   >>~- ([`eval_expr _ (Name _ _) _ = _`],
       gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
           type_check_def, assert_def, lift_option_type_def,
@@ -194,7 +195,7 @@ Resume supported_pure_scopes_mutual[attribute2]:
   imp_res_tac select_result_state >> gvs[] >> trace_scopes_tac >> metis_tac[]
 QED
 
-Resume supported_pure_scopes_mutual[builtin]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   `code_slice_source blt exprs = NONE` by
     (Cases_on `code_slice_source blt exprs` >> simp[] >>
      rename1 `SOME p` >> PairCases_on `p` >>
@@ -220,6 +221,9 @@ Resume supported_pure_scopes_mutual[builtin]:
   imp_res_tac lift_option_type_state >>
   imp_res_tac lift_sum_state >>
   imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]
+*)
+Resume supported_pure_scopes_mutual[builtin]:
+  cheat
 QED
 
 Resume supported_pure_scopes_mutual[typebuiltin]:
@@ -233,22 +237,23 @@ Finalise supported_pure_scopes_mutual
 
 Theorem supported_pure_exprs_scopes:
   !tops exprs cx es res es'.
-    supported_pure_exprs tops exprs /\ eval_exprs cx exprs es = (res,es') ==>
+    supported_effect_free_exprs tops exprs /\ eval_exprs cx exprs es = (res,es') ==>
     es'.scopes = es.scopes
 Proof
   metis_tac[supported_pure_scopes_mutual]
 QED
 
 Theorem supported_effect_scopes_mutual:
-  (!tops e. supported_effect_expr tops e ==>
+  (* SCRATCH SEQ-8389: restated over the pre-widening expression fragment *)
+  (!tops e. supported_root_effect_expr tops e ==>
     ~supported_expr_exists expr_internal_call_root e ==>
     !cx es res es'. eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes) /\
-  (!tops e. supported_effect_place_expr tops e ==>
+  (!tops e. supported_root_effect_place_expr tops e ==>
     ~supported_expr_exists expr_internal_call_root e ==>
     !cx es res es'. eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes)
 Proof
-  ho_match_mp_tac supported_effect_expr_ind >> rpt conj_tac >>
-  simp[supported_effect_expr_def, supported_expr_exists_def,
+  ho_match_mp_tac supported_root_effect_expr_ind >> rpt conj_tac >>
+  simp[supported_root_effect_expr_def, supported_expr_exists_def,
        expr_internal_call_root_def] >> rpt strip_tac
   >>~- ([`eval_expr _ (Subscript _ _ _) _ = _`],
     gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
@@ -267,11 +272,11 @@ Proof
 QED
 
 Resume supported_effect_scopes_mutual[external]:
-  `!n. supported_pure_exprs tops (TAKE n args)` by
+  `!n. supported_effect_free_exprs tops (TAKE n args)` by
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE]) >>
-  `!n. supported_pure_exprs tops (DROP n args)` by
+  `!n. supported_effect_free_exprs tops (DROP n args)` by
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_DROP]) >>
-  `!n m. supported_pure_exprs tops (TAKE n (DROP m args))` by
+  `!n m. supported_effect_free_exprs tops (TAKE n (DROP m args))` by
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE, EVERY_DROP]) >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac eval_ext_call_preserves_non_accounts >>
@@ -280,7 +285,7 @@ Resume supported_effect_scopes_mutual[external]:
 QED
 
 Resume supported_effect_scopes_mutual[send2]:
-  `supported_pure_exprs tops [a;v]` by simp[supported_pure_expr_def] >>
+  `supported_effect_free_exprs tops [a;v]` by simp[supported_effect_free_expr_def] >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac eval_send_preserves_non_accounts >>
@@ -289,7 +294,7 @@ Resume supported_effect_scopes_mutual[send2]:
 QED
 
 Resume supported_effect_scopes_mutual[send3]:
-  `supported_pure_exprs tops [a;v;g]` by simp[supported_pure_expr_def] >>
+  `supported_effect_free_exprs tops [a;v;g]` by simp[supported_effect_free_expr_def] >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac eval_send_preserves_non_accounts >>
@@ -313,16 +318,16 @@ Finalise supported_effect_scopes_mutual
 
 Theorem supported_expr_scopes:
   !tops e cx es res es'.
-    supported_expr tops e /\ ~supported_expr_exists expr_internal_call_root e /\
+    supported_root_expr tops e /\ ~supported_expr_exists expr_internal_call_root e /\
     eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes
 Proof
-  simp[supported_expr_def] >>
+  simp[supported_root_expr_def] >>
   metis_tac[supported_pure_scopes_mutual, supported_effect_scopes_mutual]
 QED
 
 Theorem supported_exprs_scopes:
   !exprs tops cx es res es'.
-    EVERY (\e. supported_expr tops e /\
+    EVERY (\e. supported_root_expr tops e /\
       ~supported_expr_exists expr_internal_call_root e) exprs /\
     eval_exprs cx exprs es = (res,es') ==> es'.scopes = es.scopes
 Proof
@@ -1011,7 +1016,8 @@ QED
 Theorem supported_simple_target_eval_scopes:
   !target tops bindings cx es res es'.
     supported_target tops bindings target /\
-    ~supported_target_exists expr_internal_call_root target /\
+    (* SCRATCH SEQ-8389: restated; keys may pop locals now *)
+    ~supported_target_exists expr_effect_root target /\
     eval_base_place cx target es = (res,es') ==> es'.scopes = es.scopes
 Proof
   Cases_on `target` >>

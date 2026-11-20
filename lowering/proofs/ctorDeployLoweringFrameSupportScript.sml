@@ -3,48 +3,56 @@ Ancestors
   supportedStmts supportedExprTraverse supportedExprs supportedExprForms
   supportedTargets supportedStmtTraverse exprLowering allocLimits vyperAST
 
-Theorem deploy_frame_supported_builtin_not_extcode:
-  supported_builtin_form tops ty bi es ==> ~is_extcode (Builtin ty bi es)
-Proof
-  Cases_on `bi` >> simp[is_extcode_def] >>
-  rename1 `Acc a` >> Cases_on `a` >>
-  simp[is_extcode_def, supported_builtin_form_def] >>
-  Cases_on `es` >> simp[] >> Cases_on `t` >> simp[]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (absence bridge); callers split on the excluded form
+  Theorem deploy_frame_supported_builtin_not_extcode:
+    supported_builtin_form tops ty bi es ==> ~is_extcode (Builtin ty bi es)
+  Proof
+    Cases_on `bi` >> simp[is_extcode_def] >>
+    rename1 `Acc a` >> Cases_on `a` >>
+    simp[is_extcode_def, supported_builtin_form_def] >>
+    Cases_on `es` >> simp[] >> Cases_on `t` >> simp[]
+  QED
+*)
 
-Theorem deploy_frame_supported_pure_no_extcode:
-  (!tops e. supported_pure_expr tops e ==>
-    ~supported_expr_exists is_extcode e) /\
-  (!tops es. supported_pure_exprs tops es ==>
-    ~supported_exprs_exists is_extcode es) /\
-  (!tops fields. supported_pure_fields tops fields ==>
-    ~supported_fields_exists is_extcode fields) /\
-  (!tops e. supported_place_expr tops e ==>
-    ~supported_expr_exists is_extcode e)
-Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  simp[supported_pure_expr_def, supported_expr_exists_def, is_extcode_def] >>
-  metis_tac[deploy_frame_supported_builtin_not_extcode]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (absence bridge); callers split on the excluded form
+  Theorem deploy_frame_supported_pure_no_extcode:
+    (!tops e. supported_pure_expr tops e ==>
+      ~supported_expr_exists is_extcode e) /\
+    (!tops es. supported_pure_exprs tops es ==>
+      ~supported_exprs_exists is_extcode es) /\
+    (!tops fields. supported_pure_fields tops fields ==>
+      ~supported_fields_exists is_extcode fields) /\
+    (!tops e. supported_place_expr tops e ==>
+      ~supported_expr_exists is_extcode e)
+  Proof
+    ho_match_mp_tac supported_pure_expr_ind >>
+    simp[supported_pure_expr_def, supported_expr_exists_def, is_extcode_def] >>
+    metis_tac[deploy_frame_supported_builtin_not_extcode]
+  QED
+*)
 
-Theorem deploy_frame_supported_effect_no_extcode:
-  (!tops e. supported_effect_expr tops e ==>
-    ~supported_expr_exists is_extcode e) /\
-  (!tops e. supported_effect_place_expr tops e ==>
-    ~supported_expr_exists is_extcode e)
-Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  simp[supported_effect_expr_def, supported_expr_exists_def, is_extcode_def] >>
-  metis_tac[deploy_frame_supported_pure_no_extcode]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (absence bridge); callers split on the excluded form
+  Theorem deploy_frame_supported_effect_no_extcode:
+    (!tops e. supported_effect_expr tops e ==>
+      ~supported_expr_exists is_extcode e) /\
+    (!tops e. supported_effect_place_expr tops e ==>
+      ~supported_expr_exists is_extcode e)
+  Proof
+    ho_match_mp_tac supported_effect_expr_ind >>
+    simp[supported_effect_expr_def, supported_expr_exists_def, is_extcode_def] >>
+    metis_tac[deploy_frame_supported_pure_no_extcode]
+  QED
+*)
 
-Theorem deploy_frame_supported_expr_no_extcode:
-  supported_expr tops e ==> ~supported_expr_exists is_extcode e
-Proof
-  simp[supported_expr_def] >>
-  metis_tac[deploy_frame_supported_pure_no_extcode,
-            deploy_frame_supported_effect_no_extcode]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (absence bridge); callers split on the excluded form
+  Theorem deploy_frame_supported_expr_no_extcode:
+    supported_expr tops e ==> ~supported_expr_exists is_extcode e
+  Proof
+    simp[supported_expr_def] >>
+    metis_tac[deploy_frame_supported_pure_no_extcode,
+              deploy_frame_supported_effect_no_extcode]
+  QED
+*)
 
 Theorem deploy_frame_supported_target_info_no_extcode:
   !target tops bindings pt.

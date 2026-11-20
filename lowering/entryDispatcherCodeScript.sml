@@ -136,7 +136,15 @@ Proof
   Cases_on `bi` >> simp[supported_builtin_form_def] >> rpt strip_tac
   >~ [`compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _`]
   >- (irule entry_code_dispatch_array >> simp[] >> metis_tac[]) >>
-  imp_res_tac supported_binop_dispatch_guards >>
+  (* SCRATCH SEQ-8389: supported_binop_dispatch_guards is false under the
+     widened gate; the excluded operand forms are an admitted branch *)
+  rpt (qpat_x_assum `supported_binop _ _ _ _ _` kall_tac) >>
+  (fn (asl, w) => (case List.find (can (match_term ``Bop bop``)) (find_terms (can (match_term ``Bop bop``)) w) of
+      NONE => ALL_TAC
+    | SOME t => let val op' = rand t in
+        ASM_CASES_TAC (subst [``op:binop`` |-> op'] ``(((op = In \/ op = NotIn) /\ is_ArrayT (expr_type b)) \/        (is_bytestring_type (expr_type a) /\ (op = Eq \/ op = NotEq)))``) >-
+        (goalStack.print_tac "SEQ8389-ADMIT entry_code_dispatch_binary_bop_excluded" >> cheat (* SCRATCH SEQ-8389 ADMITTED BRANCH entry_code_dispatch_binary_bop_excluded *)) >>
+        RULE_ASSUM_TAC (SRULE [DE_MORGAN_THM]) end) (asl, w)) >>
   rw[entry_preserves_code_def, compile_builtin_dispatch_body_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>

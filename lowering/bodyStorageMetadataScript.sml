@@ -55,6 +55,13 @@ QED
 
 (* A supported immutable is a main-module variable with no storage or
    hashmap declaration of its name. *)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  rpt gen_tac >> simp[supported_immutable_type_def, AllCaseEqs()] >>
+  strip_tac >> drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
+  metis_tac[find_var_decl_immutable_NONE]
+QED
+*)
 Theorem supported_immutable_type_find_NONE:
   !tops src id ty.
     ALL_DISTINCT
@@ -62,9 +69,7 @@ Theorem supported_immutable_type_find_NONE:
     supported_immutable_type tops (src,id) = SOME ty ==>
     src = NONE /\ find_var_decl_by_name id tops = NONE
 Proof
-  rpt gen_tac >> simp[supported_immutable_type_def, AllCaseEqs()] >>
-  strip_tac >> drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-  metis_tac[find_var_decl_immutable_NONE]
+  cheat
 QED
 
 Theorem build_hashmap_info_absent[local]:

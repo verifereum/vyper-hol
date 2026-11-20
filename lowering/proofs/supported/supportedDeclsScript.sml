@@ -115,7 +115,8 @@ End
 Theorem supported_function_header_contract:
   supported_declaration_header tops
     (FunctionDecl vis mut nr rr name args defaults ret body) <=>
-  (vis <> Internal ==> NULL defaults) /\
+  (* SCRATCH SEQ-8389: restated to the widened header (argon ruling c) *)
+  (vis = Deploy ==> NULL defaults) /\
   supported_function_return tops vis ret
 Proof
   simp[supported_declaration_header_def]

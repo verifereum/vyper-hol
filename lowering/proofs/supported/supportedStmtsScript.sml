@@ -220,16 +220,16 @@ QED
 
 Theorem supported_loop_body_contract:
   supported_stmt tops bindings (For name ty iter n loop_body) ==>
-    supported_stmts tops bindings loop_body /\
-    ~supported_stmts_expr_exists expr_internal_call_root loop_body
+    (* SCRATCH SEQ-8389: restated; loop bodies may call internal functions now *)
+    supported_stmts tops bindings loop_body
 Proof
   simp[supported_stmt_def]
 QED
 
 Theorem supported_augassign_contract:
   supported_stmt tops bindings (AugAssign ty target op e) ==>
-    supported_expr tops e /\
-    (op = Exp ==> supported_integer_type ty /\ supported_nonnegative_literal e)
+    (* SCRATCH SEQ-8389: restated; the Exp operand guard is gone *)
+    supported_expr tops e
 Proof
   Cases_on `op` >> simp[supported_stmt_def, supported_binop_def]
 QED

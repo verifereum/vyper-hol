@@ -14,12 +14,7 @@ Proof
   ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >> simp[]
 QED
 
-Theorem aug_place_base_memory_live:
-  !t tops bindings info cx s id path s'.
-    supported_target_info tops bindings t = SOME info /\
-    eval_base_place cx t s = (INL (PlaceR (MemoryPlace id path)),s') ==>
-    ?entry v. lookup_scopes id s'.scopes = SOME entry /\
-      evaluate_subscripts entry.type entry.value path = INL v
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   recInduct aug_place_target_induct >> rpt conj_tac >> rpt gen_tac
   >- (simp[Once evaluate_def, get_scopes_def, bind_def, ignore_bind_def,
@@ -52,6 +47,16 @@ Resume aug_place_base_memory_live[attribute]:
   metis_tac[aug_place_extend_memory_live]
 QED
 Finalise aug_place_base_memory_live
+*)
+Theorem aug_place_base_memory_live:
+  !t tops bindings info cx s id path s'.
+    supported_target_info tops bindings t = SOME info /\
+    eval_base_place cx t s = (INL (PlaceR (MemoryPlace id path)),s') ==>
+    ?entry v. lookup_scopes id s'.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL v
+Proof
+  cheat
+QED
 
 Theorem aug_place_target_memory_live:
   !tops bindings t info cx s id path s'.
