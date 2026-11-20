@@ -954,7 +954,7 @@ QED
 Theorem extcall_store_values_joint_all_dead:
   compile_extcall_store_values ce (ZIP (svs,tys)) (Var root) off ca = ((),cb) /\
   LENGTH svs = LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\
-  fn_has_code ca cb fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code ca cb fn /\ fn_inst_ids_distinct fn /\
   storage_trace_domain cx st0 ee.storage_trace /\ (!H. dead_lo_ok H (DF H) lo ce cx) /\
   (ce.ce_is_ctor ==> body_inv tops ctx ce cx /\ expr_sim_inv ce cx env entry /\
                      ee.immutables = entry.immutables) /\
@@ -1293,6 +1293,9 @@ Theorem extcall_store_values_joint:
     mem_bytes_at (w2n bw) off q.vs_memory = mem_bytes_at (w2n bw) off s.vs_memory /\
     (!i. w2n bw <= i /\ i < w2n bw+off /\ i IN tq.t_mem ==> i IN tn.t_mem)
 Proof
-  disch_then (strip_assume_tac o MATCH_MP extcall_store_values_joint_all_dead) >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  mp_tac (SPEC_ALL extcall_store_values_joint_all_dead) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  strip_tac >>
   qexistsl [`q`,`Gq`,`tq`] >> simp[]
 QED
