@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryBodyResources
 Ancestors
+  fnPlanPlaceRevertPostamble
   loweringStateRelDefs
   immSectionDead
  ctorDeployLoweringEntryLocalBounds ctorDeployLoweringEntryCoordinatedDeployment
@@ -50,12 +51,12 @@ Proof
 QED
 
 Theorem deploy_ctor_entry_registered_map_bounds_normalized_gas_path:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
+ !policy tops runtime_bc rp unit dout prog prog' cplan am tx es vs
  body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0
  exts ints fb rr fargs ce_pack pos_args st_pay st1 ce1 st2 st3 keep_bound.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+ deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
@@ -191,11 +192,11 @@ QED
 Finalise deploy_ctor_entry_registered_map_bounds_normalized_gas_path
 
 Theorem deploy_ctor_entry_registered_map_bounds_gas_path:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
+ !policy tops runtime_bc rp unit dout prog prog' cplan am tx es vs
  body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0 keep_bound.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+ deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
@@ -260,139 +261,6 @@ Proof
  gvs[comp_return_def] >>
  qexistsl [`cenv1`, `st1`, `st2`, `args`, `initial`, `actual`] >>
  asm_rewrite_tac[]
-QED
-
-Theorem deploy_ctor_entry_registered_local_bounds_normalized_gas_path:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
- body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0
- exts ints fb rr fargs ce_pack pos_args st_pay st1 ce1 st2 st3.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
- deploy_ctor_code tops rp runtime_bc unit
-   (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
- deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
- classify_functions tops =
-   (exts,ints,fb,SOME (mut,nr,rr,"__init__",fargs,[],NoneT,body)) /\
- set_constructor_package_target rp.rpol_target
-   (package_constructor tops T (K global_nonreentrant_slot)
-     (mut,nr,rr,"__init__",fargs,([]:expr list),NoneT,body)) =
-   (ce_pack,pos_args,mut = Payable,nr,key,ut,body,NoneT) /\
- (if mut = Payable then comp_return ()
-  else comp_bind (emit_op CALLVALUE [])
-    (\cv. comp_bind (emit_op ISZERO [cv]) (\nv. emit_void ASSERT [nv])))
-     (initial_compile_state "__deploy") = ((),st_pay) /\
- (if imm_len tops > 0 then
-    comp_bind (compile_fixed_region_with_id (imm_len tops))
-      (\r. comp_return (SND r).buf_operand)
-  else comp_return (Lit 0w)) st_pay = (imm,st1) /\
- compile_register_constructor_args
-   (ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE))
-   pos_args 0 0 st1 = (ce1,st2) /\
- (if nr then compile_nonreentrant_lock key ut F else comp_return ()) st2 = ((),st3) /\
- fresh_label "ctor_exit" st3 = (lbl,sa) ==>
- nr = F /\ nr' = nr /\ body' = body /\
- ?scope initial actual.
- gas_path unit.cu_context func
-   (vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy"; vs_inst_idx := 0|>)
-   0 (OK actual) /\
- bind_arguments (type_env tops) fargs tx.args = SOME scope /\
- es0.scopes = [scope] /\
- local_ptrs_rel func ce1 [scope] actual /\
- abi_encoder_registered_effect (frag_ids st1 st2) [] initial actual /\
- vars_pc_only vs initial /\ initial.vs_memory = vs.vs_memory /\
- eval_operand imm initial = SOME 0w /\ eval_operand imm actual = SOME 0w /\
- initial.vs_allocas = FEMPTY /\ initial.vs_alloca_next = imm_len tops /\
- alloca_inv actual /\
- (!site. alloca_frontier_inv_from (imm_len tops) unit.cu_context func site actual) /\
- fresh_vars_wrt st2 actual /\
- (!aid. st2.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
- actual.vs_data_section = vs.vs_data_section /\
- actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_labels = vs.vs_labels /\
- ~actual.vs_halted /\ actual.vs_current_bb = st2.cs_current_bb /\
- actual.vs_inst_idx = LENGTH st2.cs_current_insts /\
- actual.vs_gas_readings = vs.vs_gas_readings /\ actual.vs_code = vs.vs_code /\
- actual.vs_outcomes = vs.vs_outcomes /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
- actual.vs_block_ctx = vs.vs_block_ctx /\
- initial.vs_alloca_next <= actual.vs_alloca_next /\
- (!p. p < initial.vs_alloca_next ==>
-   mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 initial.vs_memory) /\
- (!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   inst.inst_operands = [Lit n] /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
- (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> imm_len tops <= b) /\
- (!id b sz. local_region ce1 [scope] actual id b sz ==> imm_len tops <= b) /\
- (!fuel r. run_from fuel unit.cu_context func actual = r /\ (!err. r <> Error err) ==>
-    ?fuel'. run_context fuel' unit.cu_context vs = r)
-Proof
- rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
-   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
- qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rp`, `unit`, `dout`, `prog`,
-    `cplan`, `am`, `tx`, `es`, `vs`, `body'`, `cenv`, `nr`,
-    `key`, `ut`, `imm`, `lbl`, `sa`, `sb`, `sj`, `se`,
-    `sp`, `sf`, `func`, `mut`, `nr'`, `body''`, `am_c`, `es0`,
-    `exts`, `ints`, `fb`, `rr`, `fargs`, `ce_pack`, `pos_args`, `st_pay`,
-    `st1`, `ce1`, `st2`, `st3`, `F`]
-   mp_tac deploy_ctor_entry_registered_map_bounds_normalized_gas_path >> simp[]
-QED
-
-Theorem deploy_ctor_entry_registered_local_bounds_gas_path:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
- body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
- deploy_ctor_code tops rp runtime_bc unit
-   (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
- deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
- nr = F /\ nr' = nr /\ body' = body /\
- ?ce1 st1 st2 fargs scope initial actual.
- gas_path unit.cu_context func
-   (vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy"; vs_inst_idx := 0|>)
-   0 (OK actual) /\
- cenv = (ce1 with ce_ctor_exit_label := SOME lbl) /\
- fresh_label "ctor_exit" st2 = (lbl,sa) /\
- bind_arguments (type_env tops) fargs tx.args = SOME scope /\
- es0.scopes = [scope] /\
- local_ptrs_rel func ce1 [scope] actual /\
- abi_encoder_registered_effect (frag_ids st1 st2) [] initial actual /\
- vars_pc_only vs initial /\ initial.vs_memory = vs.vs_memory /\
- eval_operand imm initial = SOME 0w /\ eval_operand imm actual = SOME 0w /\
- initial.vs_allocas = FEMPTY /\ initial.vs_alloca_next = imm_len tops /\
- alloca_inv actual /\
- (!site. alloca_frontier_inv_from (imm_len tops) unit.cu_context func site actual) /\
- fresh_vars_wrt st2 actual /\
- (!aid. st2.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
- actual.vs_data_section = vs.vs_data_section /\
- actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_labels = vs.vs_labels /\
- ~actual.vs_halted /\ actual.vs_current_bb = st2.cs_current_bb /\
- actual.vs_inst_idx = LENGTH st2.cs_current_insts /\
- actual.vs_gas_readings = vs.vs_gas_readings /\ actual.vs_code = vs.vs_code /\
- actual.vs_outcomes = vs.vs_outcomes /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
- actual.vs_block_ctx = vs.vs_block_ctx /\
- initial.vs_alloca_next <= actual.vs_alloca_next /\
- (!p. p < initial.vs_alloca_next ==>
-   mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 initial.vs_memory) /\
- (!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   inst.inst_operands = [Lit n] /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
- (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> imm_len tops <= b) /\
- (!id b sz. local_region ce1 [scope] actual id b sz ==> imm_len tops <= b) /\
- (!fuel r. run_from fuel unit.cu_context func actual = r /\ (!err. r <> Error err) ==>
-    ?fuel'. run_context fuel' unit.cu_context vs = r)
-Proof
- rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
-   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
- qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rp`, `unit`, `dout`, `prog`,
-    `cplan`, `am`, `tx`, `es`, `vs`, `body'`, `cenv`, `nr`,
-    `key`, `ut`, `imm`, `lbl`, `sa`, `sb`, `sj`, `se`,
-    `sp`, `sf`, `func`, `mut`, `nr'`, `body''`, `am_c`, `es0`,
-    `F`]
-   mp_tac deploy_ctor_entry_registered_map_bounds_gas_path >> simp[]
 QED
 
 Theorem deploy_ctor_section_alloca_sep:
@@ -534,54 +402,38 @@ Proof
  drule_all deploy_ctor_target_reserved_entry >> strip_tac >> gvs[]
 QED
 
-Theorem deploy_ctor_entry_runtime_label:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
- IS_SOME (FLOOKUP vs.vs_labels "runtime_begin")
-Proof
- rpt gen_tac >> simp[deploy_phases_def] >> strip_tac >>
- drule_all lower_vyper_deploy_unit_entry_runtime_label >>
- disch_then (qspecl_then [`[]`, `cplan`, `es`] mp_tac) >>
- fs[o1PassContractTheory.gas_variant_def, deploy_entry_state_def,
-    entry_venom_state_frame_fields, data_suffix_label_offsets,
-    venom_state_component_equality] >>
- qpat_x_assum `(entry_venom_state _ _ _).vs_labels = _`
-   (fn th => rewrite_tac[GSYM th]) >>
- simp[entry_venom_state_frame_fields]
-QED
-
 Theorem deploy_ctor_entry_base_zero:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
+ !tops rp runtime_bc unit prog prog' cplan es vs
  body cenv nr key ut imm lbl sa sb sj se sp sf func actual.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+ IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin") /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  eval_operand imm actual = SOME 0w /\ actual.vs_labels = vs.vs_labels ==>
  immutable_base_zero cenv actual
 Proof
  rpt gen_tac >> strip_tac >>
- drule_all deploy_ctor_entry_runtime_label >> strip_tac >>
+ drule_all deploy_entry_runtime_label_own >> strip_tac >>
  drule deploy_ctor_entry_immutable_config >> strip_tac >>
  simp[immutable_base_zero_def] >> rpt strip_tac >>
  gvs[AllCaseEqs()]
 QED
 
 Theorem gas_variant_deploy_entry_memory[local]:
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==> vs.vs_memory = []
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==> vs.vs_memory = []
 Proof
   rewrite_tac[o1PassContractTheory.gas_variant_def] >> strip_tac >>
   pop_assum (mp_tac o AP_TERM ``venom_state_vs_memory``) >>
-  simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]
+  simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def, init_venom_state_def]
 QED
 
 Theorem deploy_ctor_entry_body_resources_gas_path:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
+ !policy tops runtime_bc rp unit dout prog prog' cplan am tx es vs
  body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+ deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+ IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin") /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
@@ -642,264 +494,13 @@ Proof
  asm_rewrite_tac[]
 QED
 
-Theorem deploy_ctor_entry_registered_map_bounds_normalized:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
- body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0
- exts ints fb rr fargs ce_pack pos_args st_pay st1 ce1 st2 st3 keep_bound.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
- deploy_ctor_code tops rp runtime_bc unit
-   (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
- deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
- classify_functions tops =
-   (exts,ints,fb,SOME (mut,nr,rr,"__init__",fargs,[],NoneT,body)) /\
- set_constructor_package_target rp.rpol_target
-   (package_constructor tops T (K global_nonreentrant_slot)
-     (mut,nr,rr,"__init__",fargs,([]:expr list),NoneT,body)) =
-   (ce_pack,pos_args,mut = Payable,nr,key,ut,body,NoneT) /\
- (if mut = Payable then comp_return ()
-  else comp_bind (emit_op CALLVALUE [])
-    (\cv. comp_bind (emit_op ISZERO [cv]) (\nv. emit_void ASSERT [nv])))
-     (initial_compile_state "__deploy") = ((),st_pay) /\
- (if imm_len tops > 0 then
-    comp_bind (compile_fixed_region_with_id (imm_len tops))
-      (\r. comp_return (SND r).buf_operand)
-  else comp_return (Lit 0w)) st_pay = (imm,st1) /\
- compile_register_constructor_args
-   (ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE))
-   pos_args 0 0 st1 = (ce1,st2) /\
- (if nr then compile_nonreentrant_lock key ut F else comp_return ()) st2 = ((),st3) /\
- fresh_label "ctor_exit" st3 = (lbl,sa) ==>
- nr = F /\ nr' = nr /\ body' = body /\
- ?scope initial actual.
- (keep_bound ==> !aid b sz. FLOOKUP actual.vs_allocas aid = SOME (b,sz) ==> imm_len tops <= b) /\
- bind_arguments (type_env tops) fargs tx.args = SOME scope /\
- es0.scopes = [scope] /\
- local_ptrs_rel func ce1 [scope] actual /\
- abi_encoder_registered_effect (frag_ids st1 st2) [] initial actual /\
- vars_pc_only vs initial /\ initial.vs_memory = vs.vs_memory /\
- eval_operand imm initial = SOME 0w /\ eval_operand imm actual = SOME 0w /\
- initial.vs_allocas = FEMPTY /\ initial.vs_alloca_next = imm_len tops /\
- alloca_inv actual /\
- (!site. alloca_frontier_inv_from (imm_len tops) unit.cu_context func site actual) /\
- fresh_vars_wrt st2 actual /\
- (!aid. st2.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
- actual.vs_data_section = vs.vs_data_section /\
- actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_labels = vs.vs_labels /\
- ~actual.vs_halted /\ actual.vs_current_bb = st2.cs_current_bb /\
- actual.vs_inst_idx = LENGTH st2.cs_current_insts /\
- actual.vs_gas_readings = vs.vs_gas_readings /\ actual.vs_code = vs.vs_code /\
- actual.vs_outcomes = vs.vs_outcomes /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
- actual.vs_block_ctx = vs.vs_block_ctx /\
- initial.vs_alloca_next <= actual.vs_alloca_next /\
- (!p. p < initial.vs_alloca_next ==>
-   mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 initial.vs_memory) /\
- (!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   inst.inst_operands = [Lit n] /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
- (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> imm_len tops <= b) /\
- (!id b sz. local_region ce1 [scope] actual id b sz ==> imm_len tops <= b) /\
- (!fuel r. run_from fuel unit.cu_context func actual = r /\ (!err. r <> Error err) ==>
-    ?fuel'. run_context fuel' unit.cu_context vs = r)
-Proof
- rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
-   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
- drule_all deploy_ctor_entry_registered_map_bounds_normalized_gas_path >>
- disch_then (qspec_then `keep_bound` strip_assume_tac) >>
- conj_tac >- first_assum ACCEPT_TAC >>
- conj_tac >- first_assum ACCEPT_TAC >>
- conj_tac >- first_assum ACCEPT_TAC >>
- qexistsl [`scope`, `initial`, `actual`] >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Theorem deploy_ctor_entry_registered_map_bounds:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
- body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0 keep_bound.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
- deploy_ctor_code tops rp runtime_bc unit
-   (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
- deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
- nr = F /\ nr' = nr /\ body' = body /\
- ?ce1 st1 st2 fargs scope initial actual.
- (keep_bound ==> !aid b sz. FLOOKUP actual.vs_allocas aid = SOME (b,sz) ==> imm_len tops <= b) /\
- cenv = (ce1 with ce_ctor_exit_label := SOME lbl) /\
- fresh_label "ctor_exit" st2 = (lbl,sa) /\
- bind_arguments (type_env tops) fargs tx.args = SOME scope /\
- es0.scopes = [scope] /\
- local_ptrs_rel func ce1 [scope] actual /\
- abi_encoder_registered_effect (frag_ids st1 st2) [] initial actual /\
- vars_pc_only vs initial /\ initial.vs_memory = vs.vs_memory /\
- eval_operand imm initial = SOME 0w /\ eval_operand imm actual = SOME 0w /\
- initial.vs_allocas = FEMPTY /\ initial.vs_alloca_next = imm_len tops /\
- alloca_inv actual /\
- (!site. alloca_frontier_inv_from (imm_len tops) unit.cu_context func site actual) /\
- fresh_vars_wrt st2 actual /\
- (!aid. st2.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
- actual.vs_data_section = vs.vs_data_section /\
- actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_labels = vs.vs_labels /\
- ~actual.vs_halted /\ actual.vs_current_bb = st2.cs_current_bb /\
- actual.vs_inst_idx = LENGTH st2.cs_current_insts /\
- actual.vs_gas_readings = vs.vs_gas_readings /\ actual.vs_code = vs.vs_code /\
- actual.vs_outcomes = vs.vs_outcomes /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
- actual.vs_block_ctx = vs.vs_block_ctx /\
- initial.vs_alloca_next <= actual.vs_alloca_next /\
- (!p. p < initial.vs_alloca_next ==>
-   mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 initial.vs_memory) /\
- (!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   inst.inst_operands = [Lit n] /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
- (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> imm_len tops <= b) /\
- (!id b sz. local_region ce1 [scope] actual id b sz ==> imm_len tops <= b) /\
- (!fuel r. run_from fuel unit.cu_context func actual = r /\ (!err. r <> Error err) ==>
-    ?fuel'. run_context fuel' unit.cu_context vs = r)
-Proof
- rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
-   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
- drule_all deploy_ctor_entry_registered_map_bounds_gas_path >>
- disch_then (qspec_then `keep_bound` strip_assume_tac) >>
- conj_tac >- first_assum ACCEPT_TAC >>
- conj_tac >- first_assum ACCEPT_TAC >>
- conj_tac >- first_assum ACCEPT_TAC >>
- qexistsl [`ce1`, `st1`, `st2`, `fargs`, `scope`, `initial`, `actual`] >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Theorem deploy_ctor_entry_registered_local_bounds_normalized:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
- body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0
- exts ints fb rr fargs ce_pack pos_args st_pay st1 ce1 st2 st3.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
- deploy_ctor_code tops rp runtime_bc unit
-   (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
- deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
- classify_functions tops =
-   (exts,ints,fb,SOME (mut,nr,rr,"__init__",fargs,[],NoneT,body)) /\
- set_constructor_package_target rp.rpol_target
-   (package_constructor tops T (K global_nonreentrant_slot)
-     (mut,nr,rr,"__init__",fargs,([]:expr list),NoneT,body)) =
-   (ce_pack,pos_args,mut = Payable,nr,key,ut,body,NoneT) /\
- (if mut = Payable then comp_return ()
-  else comp_bind (emit_op CALLVALUE [])
-    (\cv. comp_bind (emit_op ISZERO [cv]) (\nv. emit_void ASSERT [nv])))
-     (initial_compile_state "__deploy") = ((),st_pay) /\
- (if imm_len tops > 0 then
-    comp_bind (compile_fixed_region_with_id (imm_len tops))
-      (\r. comp_return (SND r).buf_operand)
-  else comp_return (Lit 0w)) st_pay = (imm,st1) /\
- compile_register_constructor_args
-   (ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE))
-   pos_args 0 0 st1 = (ce1,st2) /\
- (if nr then compile_nonreentrant_lock key ut F else comp_return ()) st2 = ((),st3) /\
- fresh_label "ctor_exit" st3 = (lbl,sa) ==>
- nr = F /\ nr' = nr /\ body' = body /\
- ?scope initial actual.
- bind_arguments (type_env tops) fargs tx.args = SOME scope /\
- es0.scopes = [scope] /\
- local_ptrs_rel func ce1 [scope] actual /\
- abi_encoder_registered_effect (frag_ids st1 st2) [] initial actual /\
- vars_pc_only vs initial /\ initial.vs_memory = vs.vs_memory /\
- eval_operand imm initial = SOME 0w /\ eval_operand imm actual = SOME 0w /\
- initial.vs_allocas = FEMPTY /\ initial.vs_alloca_next = imm_len tops /\
- alloca_inv actual /\
- (!site. alloca_frontier_inv_from (imm_len tops) unit.cu_context func site actual) /\
- fresh_vars_wrt st2 actual /\
- (!aid. st2.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
- actual.vs_data_section = vs.vs_data_section /\
- actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_labels = vs.vs_labels /\
- ~actual.vs_halted /\ actual.vs_current_bb = st2.cs_current_bb /\
- actual.vs_inst_idx = LENGTH st2.cs_current_insts /\
- actual.vs_gas_readings = vs.vs_gas_readings /\ actual.vs_code = vs.vs_code /\
- actual.vs_outcomes = vs.vs_outcomes /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
- actual.vs_block_ctx = vs.vs_block_ctx /\
- initial.vs_alloca_next <= actual.vs_alloca_next /\
- (!p. p < initial.vs_alloca_next ==>
-   mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 initial.vs_memory) /\
- (!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   inst.inst_operands = [Lit n] /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
- (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> imm_len tops <= b) /\
- (!id b sz. local_region ce1 [scope] actual id b sz ==> imm_len tops <= b) /\
- (!fuel r. run_from fuel unit.cu_context func actual = r /\ (!err. r <> Error err) ==>
-    ?fuel'. run_context fuel' unit.cu_context vs = r)
-Proof
- rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
-   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
- drule_all deploy_ctor_entry_registered_local_bounds_normalized_gas_path >> strip_tac >>
- conj_tac >- first_assum ACCEPT_TAC >>
- conj_tac >- first_assum ACCEPT_TAC >>
- conj_tac >- first_assum ACCEPT_TAC >>
- qexistsl [`scope`, `initial`, `actual`] >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Theorem deploy_ctor_entry_registered_local_bounds:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
- body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
- deploy_ctor_code tops rp runtime_bc unit
-   (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
- deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
- nr = F /\ nr' = nr /\ body' = body /\
- ?ce1 st1 st2 fargs scope initial actual.
- cenv = (ce1 with ce_ctor_exit_label := SOME lbl) /\
- fresh_label "ctor_exit" st2 = (lbl,sa) /\
- bind_arguments (type_env tops) fargs tx.args = SOME scope /\
- es0.scopes = [scope] /\
- local_ptrs_rel func ce1 [scope] actual /\
- abi_encoder_registered_effect (frag_ids st1 st2) [] initial actual /\
- vars_pc_only vs initial /\ initial.vs_memory = vs.vs_memory /\
- eval_operand imm initial = SOME 0w /\ eval_operand imm actual = SOME 0w /\
- initial.vs_allocas = FEMPTY /\ initial.vs_alloca_next = imm_len tops /\
- alloca_inv actual /\
- (!site. alloca_frontier_inv_from (imm_len tops) unit.cu_context func site actual) /\
- fresh_vars_wrt st2 actual /\
- (!aid. st2.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
- actual.vs_data_section = vs.vs_data_section /\
- actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_labels = vs.vs_labels /\
- ~actual.vs_halted /\ actual.vs_current_bb = st2.cs_current_bb /\
- actual.vs_inst_idx = LENGTH st2.cs_current_insts /\
- actual.vs_gas_readings = vs.vs_gas_readings /\ actual.vs_code = vs.vs_code /\
- actual.vs_outcomes = vs.vs_outcomes /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
- actual.vs_block_ctx = vs.vs_block_ctx /\
- initial.vs_alloca_next <= actual.vs_alloca_next /\
- (!p. p < initial.vs_alloca_next ==>
-   mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 initial.vs_memory) /\
- (!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   inst.inst_operands = [Lit n] /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
- (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-   FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> imm_len tops <= b) /\
- (!id b sz. local_region ce1 [scope] actual id b sz ==> imm_len tops <= b) /\
- (!fuel r. run_from fuel unit.cu_context func actual = r /\ (!err. r <> Error err) ==>
-    ?fuel'. run_context fuel' unit.cu_context vs = r)
-Proof
- rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
-   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
- drule_all deploy_ctor_entry_registered_local_bounds_gas_path >> strip_tac >>
- conj_tac >- first_assum ACCEPT_TAC >>
- conj_tac >- first_assum ACCEPT_TAC >>
- conj_tac >- first_assum ACCEPT_TAC >>
- qexistsl [`ce1`, `st1`, `st2`, `fargs`, `scope`, `initial`, `actual`] >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
 Theorem deploy_ctor_entry_body_resources:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
+ !policy tops runtime_bc rp unit dout prog prog' cplan am tx es vs
  body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+ deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+ IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin") /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>

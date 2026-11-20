@@ -2,7 +2,9 @@ Theory o1LabelFlowOwnCompose
 Ancestors
   codegenSymOwnRel o1LabelFlowCompose o1LabelFlowSourceCfgLabels
   o1LabelReadinessSsa o1LabelFlowStaticContracts
-  o1LabelFlowOwnWalk
+  o1LabelFlowOwnWalk o1LabelFlowOwnPreWalk o1LabelFlowOwnFirstSsa
+  o1LabelFlowOwnLowerDload o1LabelFlowOwnConcretize o1LabelFlowOwnFmp
+  o1LabelFlowOwnSecondSsa o1LabelFlowOwnLate
   o1PipelineCorrect
   o1ComposeSupport
   o1PipelineCompose
@@ -155,4 +157,20 @@ Proof
        fs[o1_fn_row_def, EVERY_MEM, label_flow_own_ok_def] >>
        metis_tac[MEM_prune_unit_fcg_unreachable_functions])) >>
   simp[]
+QED
+
+Theorem o1_pipeline_own_label_flow:
+  !rpolicy unit out.
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+    unit_entry_no_params unit /\ unit_defs_reach_uses unit /\
+    unit_fmp_unsealed unit /\ label_flow_own_ok unit.cu_context /\
+    (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+      ~MEM (Label "code_end") inst.inst_operands) ==>
+    label_flow_own_ok out.po_unit.cu_context
+Proof
+  ACCEPT_TAC (MATCH_MP o1_pipeline_label_flow_own_preserved
+    (LIST_CONJ [o1_pre_walk_seed_free_own_flow, compose_first_ssa_own,
+                compose_lower_dload_own, compose_concretize_own,
+                compose_fmp_own, compose_second_ssa_own, compose_late_own]))
 QED

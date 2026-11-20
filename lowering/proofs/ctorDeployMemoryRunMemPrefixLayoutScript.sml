@@ -102,7 +102,7 @@ QED
 Theorem ctor_prefix_rejecting_code:
   deploy_phases policy tops (deploy_bc,runtime_bc)
     (rpolicy,dunit,dout,prog,cplan) /\
-  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
+  deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
   classify_functions tops = (exts,ints,fb,SOME cf) /\
   (!mut nr fbody am_c es0.
     ~deploy_ctor_start tops am tx (mut,nr,fbody,am_c,es0)) /\
@@ -140,7 +140,7 @@ QED
 
 Theorem ctor_prefix_entry_value:
   deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\ tx.value <> 0 ==>
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\ tx.value <> 0 ==>
   (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>).
     vs_call_ctx.cc_callvalue <> 0w
 Proof
@@ -152,7 +152,7 @@ Proof
      disch_then (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx.cc_callvalue`) >>
      qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
      simp[deploy_state_rel_def] >> rpt strip_tac >>
-     gvs[deploy_entry_state_def, entry_venom_state_def]) >>
+     gvs[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def]) >>
   gvs[n2w_11, dimword_def]
 QED
 
@@ -211,13 +211,13 @@ Proof
 QED
 
 Theorem ctor_prefix_entry_not_halted:
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
   ~(vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                vs_inst_idx := 0 |>).vs_halted
 Proof
   simp[gas_variant_def] >>
   disch_then (mp_tac o Q.AP_TERM `\s. s.vs_halted`) >>
-  simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]
+  simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def, init_venom_state_def]
 QED
 
 Theorem ctor_prefix_run_entry_label[local]:

@@ -2,6 +2,19 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringReturn
 Ancestors
+  e2eDeployDefs e2eEntry
+  spillWordBounds
+  venomPipelineDriverProps
+  deploySymSrcData
+  e2eProducers
+  immutableCodeLayout
+  deployEntryLayout
+  codegenAsmStaticWf
+  asmWf
+  asmSymSem
+  asmDataEnv
+  asmFinalizerPrefixStatic
+  fnPlanPlaceRevertPostamble finite_map
   valueEncodingDefs ctorDeployLoweringDefs ctorDeployDefs immSectionDead o1PassContract ctorReturnFrame
   accountsRelProps vfmProg
   vyperInterpreter supportedDecls symbolResolve ctorDeployInitcodeAsm
@@ -833,50 +846,162 @@ Proof
   irule deploy_runtime_suffix_slice >> simp[]
 QED
 
-Theorem deploy_runtime_snapshot_slice[local]:
+(* The runtime data segment moves with the finalized assembly's data suffix. *)
+Triviality deploy_final_label_bound:
+  asm_encoding_wf prog /\
+  FLOOKUP (SND (compute_label_offsets prog)) label = SOME n ==> n < 65536
+Proof
+  Cases_on `compute_label_offsets prog` >>
+  rw[asm_encoding_wf_def, symbol_size_def] >>
+  `LENGTH (encode_num_bytes n) <= 2` by
+    (qpat_assum `!lbl off. FLOOKUP _ lbl = SOME off ==> _`
+       (qspecl_then [`label`, `n`] mp_tac) >> simp[]) >>
+  qspecl_then [`2`, `n`] mp_tac encode_num_bytes_length_bound >>
+  simp[EVAL ``256 ** 2 : num``]
+QED
+
+Triviality deploy_relocated_data_offset:
+  asm_static_wf prog /\ MEM (AsmDataHeader label) prog ==>
+  FLOOKUP (lo_reloc prog prog') label =
+    FLOOKUP (SND (compute_label_offsets prog')) label
+Proof
+  strip_tac >>
+  `~MEM (AsmLabel label) prog` by metis_tac[asm_static_wf_def] >>
+  simp[lo_reloc_def, FLOOKUP_FUNION, FLOOKUP_DRESTRICT]
+QED
+
+Theorem deploy_relocated_data_layout:
   deploy_phases policy tops (deploy_bc,bytes)
     (rpolicy,dunit,dout,prog,cplan) /\ deploy_source_ok tops am tx /\
-  deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' ==>
+  FLOOKUP (lo_reloc prog prog') "code_end" = SOME (LENGTH (assemble prog')) /\
+  LENGTH (assemble prog') < 65536 /\
+  ?off. FLOOKUP (lo_reloc prog prog') "runtime_begin" = SOME off /\
+        DROP off (assemble prog') = bytes /\
+        off <= LENGTH (assemble prog') /\ off < dimword(:256)
+Proof
+  strip_tac >>
+  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_defs_reach_uses >> strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy bytes = SOME dunit /\
+   o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
+   codegen_assembly rpolicy dout.po_unit = SOME prog` by fs[deploy_phases_def] >>
+  `unit_shape_ok dout.po_unit` by
+    metis_tac[run_venom_pipeline_output_shape] >>
+  `codegen_ready dout.po_unit.cu_context` by
+    metis_tac[o1PipelineCorrectTheory.o1_pipeline_def,
+              run_venom_pipeline_success_boundary] >>
+  `sym_unit_static_ok dout.po_unit` by
+    (irule o1_pipeline_sym_unit_static_ok >>
+     qexistsl_tac [`rpolicy`, `dunit`] >>
+     simp[] >> conj_tac
+     >- (strip_tac >> drule lower_vyper_deploy_unit_runtime_section >>
+         strip_tac >> simp[EXISTS_MEM] >>
+         qexists_tac `<|ds_label := "runtime_begin"; ds_items := [DataBytes bytes]|>` >>
+         simp[])
+     >> drule lower_vyper_deploy_unit_data_bytes >> simp[]) >>
+  `asm_static_wf prog` by metis_tac[codegen_asm_static_wf] >>
+  `asm_static_wf prog' /\ FILTER is_data_inst prog' = FILTER is_data_inst prog` by
+    (qspecl_then [`fin`, `rpolicy`, `prog`, `prog'`, `[]`]
+       mp_tac finalizer_prefix_static >> simp[]) >>
+  drule deploy_phase_assembly_suffix >> strip_tac >>
+  `FLOOKUP (lo_reloc prog prog') "runtime_begin" =
+    FLOOKUP (SND (compute_label_offsets prog')) "runtime_begin"` by
+    (irule deploy_relocated_data_offset >> simp[MEM_APPEND]) >>
+  `FLOOKUP (lo_reloc prog prog') "code_end" =
+    FLOOKUP (SND (compute_label_offsets prog')) "code_end"` by
+    (irule deploy_relocated_data_offset >> simp[MEM_APPEND]) >>
+  `?prefix. prog' = prefix ++
+    [AsmDataHeader "runtime_begin"; AsmDataItem bytes; AsmDataHeader "code_end"]` by
+    (qspec_then `prog'` mp_tac asm_data_split >>
+     impl_tac >- fs[asm_static_wf_def] >>
+     disch_then (qx_choose_then `n` strip_assume_tac) >>
+     qexists_tac `TAKE n prog' ++ FILTER is_data_inst pre` >>
+     `FILTER is_data_inst (TAKE n prog') = []` by
+       simp[FILTER_EQ_NIL] >>
+     `FILTER is_data_inst (DROP n prog') = DROP n prog'` by
+       simp[FILTER_EQ_ID] >>
+     `FILTER is_data_inst prog' = DROP n prog'` by
+       (qspecl_then [`n`, `prog'`]
+          (fn split =>
+            qpat_assum `FILTER _ (TAKE _ _) = []` (fn head =>
+              qpat_assum `FILTER _ (DROP _ _) = DROP _ _` (fn tail =>
+                ACCEPT_TAC (SYM (SIMP_RULE (srw_ss ()) [FILTER_APPEND, head, tail]
+                  (Q.AP_TERM `FILTER is_data_inst` split)))))) TAKE_DROP) >>
+     `DROP n prog' = FILTER is_data_inst pre ++
+       [AsmDataHeader "runtime_begin"; AsmDataItem bytes; AsmDataHeader "code_end"]` by
+       (qpat_assum `FILTER is_data_inst prog' = DROP n prog'` (fn split =>
+          qpat_assum `FILTER is_data_inst prog' = FILTER is_data_inst prog` (fn preserved =>
+            qpat_assum `prog = _ ++ _` (fn shape =>
+              ACCEPT_TAC (SIMP_RULE (srw_ss ()) [shape, FILTER_APPEND, is_data_inst_def]
+                (TRANS (SYM split) preserved)))))) >>
+     qpat_assum `DROP n prog' = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[TAKE_DROP, APPEND_ASSOC]) >>
+  qabbrev_tac `off = SUM (MAP asm_inst_size prefix)` >>
+  `FLOOKUP (SND (compute_label_offsets prog')) "runtime_begin" = SOME off` by
+    fs[Abbr `off`, deploy_runtime_suffix_offset] >>
+  `asm_encoding_wf prog'` by fs[asm_static_wf_def] >>
+  `FLOOKUP (SND (compute_label_offsets prog')) "code_end" =
+    SOME (LENGTH (assemble prog'))` by
+    (irule immutable_code_end_length >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `prefix ++ [AsmDataHeader "runtime_begin"; AsmDataItem bytes]` >>
+     simp[GSYM APPEND_ASSOC]) >>
+  `LENGTH (assemble prog') < 65536` by (drule_all deploy_final_label_bound >> simp[]) >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  qexists_tac `off` >>
+  conj_tac >- simp[] >>
+  conj_tac
+  >- (qpat_assum `prog' = prefix ++ _` (fn shape =>
+        qpat_assum `asm_encoding_wf prog'` (fn enc =>
+          mp_tac (REWRITE_RULE [shape] enc) >>
+          simp_tac (srw_ss ()) [shape, Abbr `off`, deploy_runtime_suffix_slice]))) >>
+  `off <= LENGTH (assemble prog')` by
+    (drule deploy_encoding_total_length >> strip_tac >>
+     qspec_then `prog'` strip_assume_tac compute_label_offsets_bound >>
+     metis_tac[]) >>
+  simp[wordsTheory.dimword_def, venomLayoutTheory.dimindex_256] >> decide_tac
+QED
+
+Triviality deploy_runtime_snapshot_slice:
+  deploy_state_rel tops (assemble prog') am tx es /\
+  gas_variant vs
+    (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  FLOOKUP (lo_reloc prog prog') "runtime_begin" = SOME off /\
+  off < dimword(:256) /\ off <= LENGTH (assemble prog') /\
+  DROP off (assemble prog') = bytes /\
   snap.vs_code = vs.vs_code /\ snap.vs_labels = vs.vs_labels /\
   FLOOKUP snap.vs_labels "runtime_begin" = SOME codepos ==>
   TAKE (LENGTH bytes)
     (DROP (w2n codepos) snap.vs_code ++ REPLICATE (LENGTH bytes) 0w) = bytes
 Proof
   strip_tac >>
-  `?off. FLOOKUP (SND (compute_label_offsets prog)) "runtime_begin" =
-      SOME off /\ DROP off (assemble prog) = bytes /\ off < dimword(:256)` by
-    (irule deploy_runtime_assembled_slice >> metis_tac[]) >>
-  `off <= LENGTH (assemble prog)` by
-    (drule_all deploy_assembly_encoding_wf >>
-     disch_then (mp_tac o MATCH_MP deploy_encoding_total_length) >>
-     qspec_then `prog` strip_assume_tac compute_label_offsets_bound >>
-     metis_tac[]) >>
   `snap.vs_code = (FST (HD es.contexts)).msgParams.code /\
    FLOOKUP snap.vs_labels "runtime_begin" = SOME (n2w off)` by
-    (fs[gas_variant_def] >>
-     qspec_then `prog` (qspec_then `cplan`
-       (qspec_then `es` strip_assume_tac))
-       e2eEntryTheory.entry_venom_state_frame_fields >>
-     gvs[deploy_entry_state_def] >>
-     qpat_assum `_ with <|vs_outcomes := _; vs_alloca_next := _|> = _`
-       (mp_tac o Q.AP_TERM `\s. s.vs_code`) >> simp[] >> strip_tac >>
-     qpat_x_assum `_ with <|vs_outcomes := _; vs_alloca_next := _|> = _`
-       (mp_tac o Q.AP_TERM `\s. s.vs_labels`) >> simp[] >>
+    (qpat_assum `gas_variant _ _` (mp_tac o PURE_REWRITE_RULE [gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_code,s.vs_labels)`) >>
+     simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+          entry_venom_state_frame_fields] >>
      strip_tac >>
-     qpat_x_assum `!l. FLOOKUP _ l = _`
-       (qspec_then `"runtime_begin"` mp_tac) >> simp[]) >>
+     qpat_assum `FLOOKUP snap.vs_labels "runtime_begin" = SOME codepos` mp_tac >>
+     qpat_assum `snap.vs_labels = _` (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `n2w o_f _ = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+     qpat_assum `FLOOKUP (lo_reloc _ _) "runtime_begin" = _`
+       (fn th => simp_tac (srw_ss ()) [FLOOKUP_o_f, th])) >>
   `codepos = n2w off` by metis_tac[optionTheory.SOME_11] >>
   `w2n codepos = off` by simp[wordsTheory.w2n_n2w] >>
-  qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
-  simp[e2eDeployDefsTheory.deploy_state_rel_def] >> rpt strip_tac >>
-  `deploy_bc = assemble prog` by gvs[deploy_phases_def] >>
-  gvs[listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0] >>
-  qpat_x_assum `assemble prog ++ args_bytes = vs.vs_code`
-    (fn th => rewrite_tac[GSYM th]) >>
-  simp[DROP_APPEND] >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-  metis_tac[TAKE_LENGTH_APPEND, LENGTH_DROP]
+  `?args_bytes. snap.vs_code = assemble prog' ++ args_bytes` by
+    (fs[deploy_state_rel_def] >> qexists_tac `args_bytes` >>
+     qpat_assum `(FST (HD es.contexts)).msgParams.code = vs.vs_code` mp_tac >>
+     qpat_assum `es.contexts = _` (fn th => simp[th]) >> gvs[]) >>
+  qpat_assum `snap.vs_code = assemble prog' ++ args_bytes`
+    (fn th => PURE_REWRITE_TAC [th]) >>
+  qpat_assum `w2n codepos = off` (fn th => PURE_REWRITE_TAC [th]) >>
+  `DROP off (assemble prog' ++ args_bytes) = bytes ++ args_bytes` by
+    (qspecl_then [`off`, `assemble prog'`] mp_tac DROP_APPEND1 >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (qspec_then `args_bytes` SUBST1_TAC) >> asm_rewrite_tac []) >>
+  qpat_assum `DROP off (assemble prog' ++ args_bytes) = _`
+    (fn th => PURE_REWRITE_TAC [th, GSYM APPEND_ASSOC, TAKE_LENGTH_APPEND]) >> REFL_TAC
 QED
 
 Theorem deploy_ctor_start_static[local]:
@@ -909,13 +1034,16 @@ QED
    halts returning the runtime code and the immutables section, with the
    source's accounts, transient storage and logs. *)
 Theorem deploy_ctor_return:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan off am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut am_c es0 gs res st final H.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    FLOOKUP (lo_reloc prog prog') "runtime_begin" = SOME off /\
+    off < dimword(:256) /\ off <= LENGTH (assemble prog') /\
+    DROP off (assemble prog') = runtime_bc /\
+    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\

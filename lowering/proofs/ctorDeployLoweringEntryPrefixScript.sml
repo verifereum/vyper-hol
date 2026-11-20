@@ -32,12 +32,12 @@ Proof
 QED
 
 Theorem deploy_ctor_entry_initial_fields[local]:
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
  fresh_vars_wrt (initial_compile_state "__deploy") vs /\
  ~vs.vs_halted /\ vs.vs_allocas = FEMPTY /\
  vs.vs_alloca_next = imm_len tops
 Proof
- simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
+ simp[gas_variant_def, opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def,
       init_venom_state_def, venom_state_component_equality] >>
  strip_tac >>
  simp[fresh_vars_wrt_def, initial_compile_state_def, lookup_var_def]
@@ -117,14 +117,14 @@ Proof
 QED
 
 Theorem deploy_ctor_prefix_entry:
- !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+ !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func
   mut nr' body' am_c es0 exts ints fb cf cenv0 pos_args is_payable ret.
- deploy_phases policy tops (deploy_bc,runtime_bc)
+ deploy_phases policy tops (assemble prog,runtime_bc)
    (rpolicy,dunit,dout,prog,cplan) /\
  deploy_source_ok tops am tx /\
- deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+ deploy_state_rel tops (assemble prog') am tx es /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rpolicy runtime_bc dunit
    (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
@@ -156,7 +156,7 @@ Proof
  drule_all deploy_ctor_package_accepts_value >> disch_tac >>
  `is_payable \/ vs.vs_call_ctx.cc_callvalue = 0w` by
    (Cases_on `is_payable` >> simp[] >>
-    gvs[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
+    gvs[gas_variant_def, opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def,
         deploy_state_rel_def, venom_state_component_equality,
         call_context_component_equality]) >>
  drule_all deploy_ctor_enter_context >>
@@ -561,8 +561,12 @@ Theorem deploy_ctor_entry_before_register:
         ?fuel'. run_context fuel' dunit.cu_context vs = r)
 Proof
  rpt gen_tac >> strip_tac >>
- `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
-   fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+ `deploy_bc = assemble prog` by fs[deploy_phases_def] >>
+ qpat_x_assum `deploy_bc = _` SUBST_ALL_TAC >>
+ `gas_variant vs (opt_deploy_entry_state_own prog prog cplan tops es
+     with vs_outcomes := vs.vs_outcomes)` by
+   fs[opt_deploy_entry_state_own_identity, gas_variant_def,
+      venomStateTheory.venom_state_component_equality] >>
  drule_all deploy_ctor_prefix_entry >>
  disch_then (map_every assume_tac o CONJUNCTS) >>
  qpat_x_assum `?e. _` (qx_choose_then `e` (map_every assume_tac o CONJUNCTS)) >>
@@ -587,12 +591,12 @@ Proof
 QED
 
 Theorem deploy_ctor_entry_before_register_gas_path:
- !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+ !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
   body cenv nr nkey ut imm exit_lbl sa sb sj se sp sf func mut nr' body' am_c es0
   exts ints fb cf cenv0 pos_args is_payable ret cap st_pay st1 cenv1 st2 st3.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+ deploy_phases policy tops (assemble prog,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rpolicy runtime_bc dunit
    (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\

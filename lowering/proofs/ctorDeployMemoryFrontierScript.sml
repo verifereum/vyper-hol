@@ -312,10 +312,10 @@ QED
 (* The deployment unit passed lowering_context_ok, its entry is __deploy,
    and its run starts with the alloca frontier at imm_len. *)
 Theorem deploy_unit_run_entry:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan es vs.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan es vs.
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
-    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)
+    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes)
     ==>
     lowering_context_ok dunit.cu_context /\
     dunit.cu_context.ctx_entry = SOME "__deploy" /\
@@ -333,5 +333,26 @@ Proof
   simp[] >>
   qpat_x_assum `gas_variant _ _` mp_tac >> simp[gas_variant_def] >>
   disch_then (mp_tac o AP_TERM ``\s:venom_state. s.vs_alloca_next``) >>
-  simp[deploy_entry_state_def]
+  simp[opt_deploy_entry_state_own_def]
+QED
+
+Theorem deploy_unit_run_entry_canonical:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan es vs.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)
+    ==>
+    lowering_context_ok dunit.cu_context /\
+    dunit.cu_context.ctx_entry = SOME "__deploy" /\
+    vs.vs_alloca_next = imm_len tops /\
+    ?fn lbl. lookup_function "__deploy" dunit.cu_context.ctx_functions =
+               SOME fn /\
+             fn_entry_label fn = SOME lbl
+Proof
+  rpt gen_tac >> strip_tac >>
+  `deploy_bc = assemble prog` by fs[deploy_phases_def] >>
+  qpat_x_assum `deploy_bc = _` SUBST_ALL_TAC >>
+  `gas_variant vs (opt_deploy_entry_state_own prog prog cplan tops es
+      with vs_outcomes := vs.vs_outcomes)` by simp[opt_deploy_entry_state_own_identity] >>
+  drule_all deploy_unit_run_entry >> simp[]
 QED

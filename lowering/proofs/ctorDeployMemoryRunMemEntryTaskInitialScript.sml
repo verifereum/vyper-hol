@@ -163,7 +163,7 @@ Proof
   strip_tac >>
   `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
     fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
-  drule_all deploy_unit_run_entry >> strip_tac >> gvs[] >>
+  drule_all deploy_unit_run_entry_canonical >> strip_tac >> gvs[] >>
   drule_all lowered_unit_entry_facts >> strip_tac >>
   conj_tac
   >- (irule alloca_frontier_inv_from_entry >> simp[] >> metis_tac[]) >>
