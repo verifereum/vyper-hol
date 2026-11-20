@@ -548,10 +548,9 @@ Resume extcall_request_packing_ready[nonempty]:
     (rpt gen_tac >> disch_tac >>
      qpat_assum `!i. i < LENGTH xs ==> _` (qspec_then `i` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >>
-     disch_then (qx_choose_then `e` (qx_choose_then `sv` (qx_choose_then `v`
-       (qx_choose_then `raw` (qx_choose_then `si` (qx_choose_then `arg_sm`
-         (qx_choose_then `ss` (qx_choose_then `vv` (qx_choose_then `phys_tv`
-           (qx_choose_then `param_tv` (REPEAT_TCL CONJUNCTS_THEN assume_tac))))))))))) >>
+     disch_then (qx_choosel_then
+       [`e`,`sv`,`v`,`raw`,`si`,`arg_sm`,`ss`,`vv`,`phys_tv`,`param_tv`,`copy`]
+       (MAP_EVERY assume_tac o CONJUNCTS)) >>
      `EL i tys = lowered_value_type cenv e` by
        (qpat_assum `tys = MAP _ xs` SUBST1_TAC >>
         qpat_assum `i < LENGTH xs` (fn hi =>
@@ -1326,13 +1325,12 @@ Resume extcall_request_packing_ready[nonempty]:
       aid < sp.cs_next_id` by
     (strip_tac >>
      `?dv. dopt = SOME dv` by metis_tac[optionTheory.IS_SOME_EXISTS] >>
-     pop_assum (qx_choose_then `dv` assume_tac) >>
      qpat_assum `!dv. dopt = SOME dv /\ ~is_word_type dt ==> ptr_mem_ok cx dt dv def G tn s /\ _ /\ ?w aid tv. _`
        (drule_all_then (qx_choosel_then [`w`,`aid`,`tv`] strip_assume_tac) o cj 3) >>
      qexistsl_tac [`w`,`aid`,`tv`] >> simp[] >>
      `aid < sp.cs_next_id` by decide_tac >>
      qpat_assum `wb_frame cenv ee ee se s t`
-       (mp_tac o cj 2 o REWRITE_RULE [wb_frame_def]) >> simp[]) >>
+       (mp_tac o cj 2 o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >> simp[]) >>
   qexistsl [`bs ++ bytes`,`t`,`Gf`,`tf`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- (first_assum (ACCEPT_TAC o REWRITE_RULE [optionTheory.OPTION_BIND_EQUALS_OPTION]))

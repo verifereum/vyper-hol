@@ -410,7 +410,7 @@ Proof
                 vyperTypeArgFitsTheory.type_widens_to_refl]) >>
   gvs[] >>
   `expr_body_pre cenv cx env e kw_in` by metis_tac[] >>
-  `type_widens_to (get_tenv cx) (lowered_value_type cenv e) rt` by
+  `type_widens_to (get_tenv cx) (lowered_value_type cenv e) (expr_type e)` by
     (irule immutableDeployPhysicalSourceTheory.immutable_rhs_physical_widens >>
      goal_assum (drule_at Any) >> simp[]) >>
   qpat_assum `env.type_defs = get_tenv cx` (fn th =>
@@ -791,14 +791,15 @@ Proof
    sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
     (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
   `wb_frame cenv es ee sa s0 u /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2` by
-    (irule post_gas_extend_frame >> rpt conj_tac >>
-     TRY (first_assum ACCEPT_TAC) >>
-     qexistsl [`G1`,`H0`,`ctx`,`cx`,`mid`,`func`,`t0`,`s1`,`tn1`] >>
+    (MATCH_MP_TAC (Q.INST [`H` |-> `H0`, `ctx` |-> `ctx`, `cx` |-> `cx`,
+       `func` |-> `func`, `es1` |-> `mid`, `sm` |-> `s1`, `s` |-> `t0`,
+       `G1` |-> `G1`, `tn1` |-> `tn1`] post_gas_extend_frame) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es ke sa s0 zg /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gg tng` by
-    (irule post_gas_extend_frame >> rpt conj_tac >>
-     TRY (first_assum ACCEPT_TAC) >>
-     qexistsl [`G2`,`H0`,`ctx`,`cx`,`ee`,`func`,`u`,`s2`,`tn2`] >>
+    (MATCH_MP_TAC (Q.INST [`H` |-> `H0`, `ctx` |-> `ctx`, `cx` |-> `cx`,
+       `func` |-> `func`, `es1` |-> `ee`, `ee` |-> `ke`, `sm` |-> `s2`, `s` |-> `u`,
+       `G1` |-> `G2`, `tn1` |-> `tn2`, `G2` |-> `Gg`, `tn2` |-> `tng`]
+       post_gas_extend_frame) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `MAP FDOM es.scopes = MAP FDOM ke.scopes` by
     ((qpat_assum `wb_frame cenv es ke sa s0 zg` mp_tac >>
