@@ -76,8 +76,11 @@ Proof
   simp[Abbr `code`] >>
   simp[Once run_inst_seq_def,mk_inst_def,step_inst_base_opcode_eqs,
        exec_pure2_def,eval_operand_def,word_mul_n2w] >>
-  simp[Once run_inst_seq_def,step_inst_base_opcode_eqs,exec_pure2_def,
-       eval_operand_update_var,payload_old_operand_update] >>
+  `eval_operand head
+     (update_var (STRING #"%" (toString sa.cs_next_var)) (n2w (abi_sz * c)) s) =
+     SOME p` by simp[] >>
+  simp[Once run_inst_seq_def] >>
+  simp[step_inst_base_opcode_eqs,exec_pure2_def,eval_operand_update_var] >>
   simp[Once run_inst_seq_def,step_inst_base_opcode_eqs,exec_pure2_def,
        eval_operand_update_var,payload_old_operand_update,bool_to_word_def] >>
   simp[Once run_inst_seq_def,step_inst_base_opcode_eqs,exec_pure1_def,
