@@ -12,6 +12,9 @@ compiler's bytes.
   module that provides one of its functions by re-exporting a third module's,
   and another module's `__interface__`, whose functions it exposes in the
   compiler's order (re-exports, external functions, public getters).
+- `sources/default_export/`, `sources/default_interface/`: the main module
+  exports another module's `__default__`, directly and through its
+  `__interface__`.
 - The other cases are the multi-module programs in
   `tests/fixtures/check_contract/` (`multimodule_storage`,
   `nested_initializes`, `attribute_initializes`, `imported_deploy`,
@@ -20,8 +23,9 @@ compiler's bytes.
   `<case>.hex` (deploy and runtime bytes), from `oracle.py` with the patched
   pinned Vyper (the settings in `../README.md`).
 
-Check them with the native JSON runner (`tools/build_native_json_parity.py`
-builds it):
+CI's `export-parity` job regenerates them with the patched pin, compares them
+with the committed ones, and checks them with the native JSON runner
+(`tools/build_native_json_parity.py` builds it):
 
 ```sh
 bytecode/native/bytecode_parity_json.exe bytecode/linked-units/oracle
@@ -32,6 +36,6 @@ pin's output can depend on the hash seed):
 
 ```sh
 PYTHONHASHSEED=0 python -P -s bytecode/linked-units/oracle.py bytecode/linked-units/oracle \
-  bytecode/linked-units/sources/twin_names bytecode/linked-units/sources/iface_exports \
+  bytecode/linked-units/sources/* \
   tests/fixtures/check_contract/{multimodule_storage,nested_initializes,attribute_initializes,imported_deploy,initializes_alias_shadow}
 ```

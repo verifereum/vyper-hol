@@ -318,9 +318,6 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         run: python3 tools/build_native_json_parity.py
 
-      - name: Check native bytecode parity on the linked-unit fixtures
-        run: bytecode/native/bytecode_parity_json.exe bytecode/linked-units/oracle
-
       - name: Install patched pinned Vyper
         run: |
           python -m pip install uv==0.10.11
@@ -329,6 +326,17 @@ jobs:
           git -C vyper-src checkout --detach "$pin"
           sh bytecode/python-o1-bytecode-fixtures --install "$RUNNER_TEMP/vyper-patched" \
             --vyper-repo vyper-src
+
+      - name: Check native bytecode parity on the linked-unit fixtures
+        # Regenerates the committed oracles with the patched pin first, so a
+        # stale oracle fails the job too.
+        run: |
+          PYTHONHASHSEED=0 "$RUNNER_TEMP/vyper-patched/venv/bin/python" -P -s \
+            bytecode/linked-units/oracle.py "$RUNNER_TEMP/linked-units" \
+            bytecode/linked-units/sources/* \
+            tests/fixtures/check_contract/{multimodule_storage,nested_initializes,attribute_initializes,imported_deploy,initializes_alias_shadow}
+          diff -r bytecode/linked-units/oracle "$RUNNER_TEMP/linked-units"
+          bytecode/native/bytecode_parity_json.exe bytecode/linked-units/oracle
 
       - name: Check native bytecode parity on the exported contracts
         run: |

@@ -1,3 +1,7 @@
+import lib4
+
+exports: lib4.k
+
 y: public(uint256)
 
 
