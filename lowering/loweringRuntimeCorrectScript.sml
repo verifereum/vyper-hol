@@ -287,7 +287,7 @@ Theorem compile_guarded_body_stop_path:
     compile_guarded_body cenv F nkey ut iv stmts NONE st = ((), st') /\
     compile_stmts cenv NoLoop (BaseT BoolT) stmts st = ((), sb) /\
     ~block_is_terminated sb /\ fn_has_code sb st' func /\
-    ~ctx_has_dalloca ctx /\ ~t.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?ss.
@@ -336,17 +336,8 @@ Proof
   >- (rpt strip_tac >> qexistsl_tac [`G`, `tn`] >>
       `!fuel. ptr_safe_step (cx_dead H cx) 0 fuel ctx func [] G tn
                 (mk_inst sb.cs_next_id STOP [] []) t` by
-        (gen_tac >> simp[ptrSafeRunTheory.ptr_safe_step_def,
-                        ptrSafeRunTheory.ptr_inst_ok_def] >>
-         gvs[ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
-             ptrDisciplineTheory.allocas_from_def,
-             contextCodegenRelTheory.source_memory_read_ranges_def,
-             codegenRelTheory.source_memory_write_ranges_def,
-             venomInstTheory.mk_inst_def,
-             ptrDisciplineTheory.step_taint_def, ptrDisciplineTheory.store_taint_def,
-             ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.imm_taint_def,
-             ptrDisciplineTheory.ret_taint_def, venomStateTheory.halt_state_def,
-             stor_taint_ok_def, cx_dead_def]) >>
+        (gen_tac >> simp[ptrSafeRunTheory.ptr_safe_step_def] >>
+         irule fragExecPtrTheory.ptr_inst_ok_stop >> simp[]) >>
       irule (cj 3 gas_origin_ptr_path_rules) >>
       simp[exit_result_def, gas_origin_ptr_edge_def, gas_origin_edge_def,
            fragGasPathPtrTheory.gas_path_ptr_edge_def]) >>

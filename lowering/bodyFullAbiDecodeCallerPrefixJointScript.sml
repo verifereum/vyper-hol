@@ -17,7 +17,7 @@ Ancestors
 
 val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b data_var d.
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
-  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce st /\ origin.cs_next_var <= st.cs_next_var /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -90,7 +90,11 @@ Proof
      first_x_assum irule >> simp[] >> decide_tac) >>
   qpat_x_assum `data = Var data_var` SUBST_ALL_TAC >>
   qpat_x_assum `len = Var lv` SUBST_ALL_TAC >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `stmt_state_rel H ctx fn ce cx es s` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H ctx fn ce cx es s`
+       (mp_then Any ACCEPT_TAC
+         bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all (Q.SPECL [`ARB`, `ctx`, `fn`, `PG`] emit_mload_clean_seq_ptr) >>
   disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts st sa) s = OK raw_load` >>
@@ -133,6 +137,11 @@ Proof
    w2n (n2w b:256 word) + (32+LENGTH input_bytes) < dimword (:256)` by
     (simp[eval_operand_def, op_taint_def] >>
      `b MOD dimword (:256) = b` by simp[LESS_MOD] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp mid` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     qpat_assum `(raw_load with vs_vars := _) = s` (SUBST1_TAC o SYM) >>
+     simp[NoAsms, Abbr `mid`, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     disch_then (fn th => disch_then (ACCEPT_TAC o CONJUNCT2 o MATCH_MP th))) >>
   drule abi_decode_ptr_address >>
   disch_then (qspecl_then
     [`tnl`, `mid`, `32`, `32+LENGTH input_bytes`, `fn`, `ctx`, `n2w b`,

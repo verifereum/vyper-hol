@@ -1,7 +1,7 @@
 (* Actual-site resources at one physical successful child endpoint. *)
 Theory bodyFullAbiDecodeCallerSetupEntry
 Ancestors
-  bodyFullAbiDecodeCallerEntry bodyInvNoDalloca exprSimAbiDecodeResources
+  bodyFullAbiDecodeCallerEntry exprSimAbiDecodeResources
   exprSimAbiDecodeInputBound exprSimAbiDecodeBodyEntry
   bodyPtrEnvBuiltinsHashInput abiArgsLabelBoundary abiBuiltinDecodeSetup
   exprLoweringProps representationCleanPtr exprSimAbiDecodeEntryTyping
@@ -10,7 +10,7 @@ Ancestors
 
 val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b data_var d.
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
-  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce st /\ origin.cs_next_var <= st.cs_next_var /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -71,7 +71,6 @@ Theorem abi_decode_body_setup_entry:
     (^caller_setup_pre) data min_size max_size outsz st ready ops s G tn b data_var d
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `cs_extends origin st /\ origin.cs_next_var <= st.cs_next_var` by
     metis_tac[compile_expr_grows] >>
   `local_ptrs_reserved ce st` by
