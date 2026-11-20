@@ -153,8 +153,8 @@ Proof
   strip_tac >> irule asm_frame_opcode_decode >>
   (conj_tac >- gvs[listTheory.MEM, wf_opname_def]) >>
   qexistsl_tac [`a`, `data`, `prog`] >>
-  gvs[listTheory.MEM, is_data_inst_def, encode_inst_def, evm_opcode_byte_def,
-      evm_opcode_table_def, wf_opname_def, opcode_def]
+  gvs[listTheory.MEM] >>
+  simp[is_data_inst_def, encode_inst_def, opcode_def] >> EVAL_TAC
 QED
 
 Theorem asm_frame_memory_raw_gas:

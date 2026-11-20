@@ -184,7 +184,10 @@ Proof
     (conj_tac >> rpt strip_tac >> irule boundary_pred_operand >>
      goal_assum (drule_at Any) >>
      simp[GSYM ricf_event_copy_def] >> metis_tac[]) >>
-  `fn_reachable fn bb.bb_label` by fs[occurrence_alias_boundary_def] >>
+  `fn_reachable fn bb.bb_label` by
+    (qpat_assum `bb.bb_label = s.vs_current_bb` (pure_rewrite_tac o single) >>
+     qpat_assum `occurrence_alias_boundary fn s a H`
+       (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [occurrence_alias_boundary_def])) >>
   `(!P. boundary_pred fn bb s.vs_inst_idx P ==> P dr) /\
    (!P. boundary_pred fn bb s.vs_inst_idx P ==> P sr)` by
     metis_tac[ircf_alias_boundary_available_root, LESS_IMP_LESS_OR_EQ] >>

@@ -314,7 +314,8 @@ Theorem venom_frame_rel_assertion:
 Proof
   Cases_on `a` >> simp[venom_frame_rel_def] >>
   rpt strip_tac >> goal_assum $ drule_at Any >>
-  gvs[frameGasTheory.frame_raises_inst_raises] >> metis_tac[]
+  metis_tac[SRULE [vfm_abort_def] (Q.INST [`exc` |-> `Reverted`]
+    frameGasTheory.frame_inst_raises_frame_raises)]
 QED
 
 Theorem external_call_result_rel_frame_success:

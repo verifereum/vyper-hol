@@ -16,7 +16,7 @@ Theorem abi_decode_valid_bytes_pruned_certificate:
     MLOAD (Var src) hi B p d s /\
   run_inst_seq (emitted_insts sa en) s = OK raw /\
   hi <> Lit 0w /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\ not_fresh_at sa dst /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ not_fresh_at sa src /\ not_fresh_at sa dst /\
   (!x. MEM (Var x) [pos;hi] ==> not_fresh_at sa x) /\
   abi_decode_ptr_window G tn s src (n2w B) L /\
   ptr_covers G tn dst s cap /\ eval_operand hi s = SOME (n2w L) /\
@@ -66,6 +66,12 @@ Proof
   qpat_x_assum `addr = Var _` SUBST_ALL_TAC >>
   drule abi_decode_bytes_runtime_tail_shape >> strip_tac >>
   `B+L <= m.vs_alloca_next /\ d+cap <= m.vs_alloca_next` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp m` by
+    (`allocas_below_fmp m <=> allocas_below_fmp s` by
+       asm_rewrite_tac[ptrDisciplineTheory.allocas_below_fmp_def] >>
+     qpat_assum `allocas_below_fmp m <=> allocas_below_fmp s`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all abi_decode_valid_bytes_tail_certificate >>
   disch_then (qspecl_then
     [`fn`, `PG`, `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |> `]

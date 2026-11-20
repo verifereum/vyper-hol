@@ -72,7 +72,7 @@ Theorem focus_fmp_cut_create_execute:
   access_ok eom G fn inst s /\ taint_ok fn tn inst s /\ ~in_revert_forward fn s /\
   fmp_stage_rel D C4 sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
   MEM inst.inst_opcode [CREATE;CREATE2] /\ step_inst_base inst s = OK s1 ==>
-  ?vop offop szop value off off' sz salt out rq w r rt.
+  ?vop offop szop value off off' sz salt out rq rq' w r rt.
     eval_operand vop s = SOME value /\ eval_operand vop t = SOME value /\
     eval_operand offop s = SOME off /\ eval_operand offop t = SOME off' /\
     eval_operand szop s = SOME sz /\ eval_operand szop t = SOME sz /\
@@ -82,9 +82,9 @@ Theorem focus_fmp_cut_create_execute:
        eval_operand sop s = SOME sw /\ eval_operand sop t = SOME sw /\ salt = SOME sw)) /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
     rq = venom_create_request s value off sz salt /\
-    rq = venom_create_request t value off' sz salt /\
+    rq' = venom_create_request t value off' sz salt /\
     inst.inst_outputs = [out] /\ consume_create_outcome rq s = (w,r) /\
-    consume_create_outcome rq t = (w,rt) /\ s1 = update_var out w r /\
+    consume_create_outcome rq' t = (w,rt) /\ s1 = update_var out w r /\
     step_inst_base inst t = OK (update_var out w rt) /\
     r = s with <|vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
       vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
@@ -93,8 +93,7 @@ Theorem focus_fmp_cut_create_execute:
     rt = t with <|vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
       vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
       vs_pending_deletions := r.vs_pending_deletions; vs_returndata := r.vs_returndata;
-      vs_requests := record_request rq t.vs_requests|> /\
-    tn.t_stor = {} /\ tn.t_trans = {}
+      vs_requests := record_request rq' t.vs_requests|>
 Proof
   strip_tac >>
   drule_all focus_fmp_cut_create_prestate >> strip_tac >>
@@ -123,14 +122,10 @@ Proof
   qpat_x_assum `exec_create _ _ _ _ _ _ = _`
     (strip_assume_tac o PURE_REWRITE_RULE [dload_exec_create_success_iff]) >>
   rename1 `consume_create_outcome _ s = (w,r)` >>
-  qmatch_asmsub_abbrev_tac `consume_create_outcome rq s` >>
-  `venom_create_request t value off' sz salt = rq` by
-    (simp[Abbr `rq`] >> metis_tac[]) >>
-  drule_all ld_consume_create_outcome_transport >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `consume_create_outcome rq t = (_,rt)` >>
-  `t.vs_outcomes <> []` by
-    (qpat_assum `s.vs_outcomes = t.vs_outcomes` (rewrite_tac o single o SYM) >>
-     first_assum ACCEPT_TAC) >>
+  Cases_on `consume_create_outcome (venom_create_request t value off' sz salt) t` >>
+  rename1 `consume_create_outcome _ t = (w',rt)` >>
+  drule_all dload_consume_create_world >> strip_tac >>
+  `t.vs_outcomes <> []` by metis_tac[] >>
   `exec_create inst t value off' sz salt = OK (update_var out w rt)` by
     (pure_rewrite_tac[dload_exec_create_success_iff] >>
      qexistsl_tac [`out`,`w`,`rt`] >> simp[Excl "consume_create_outcome_eq"]) >>
@@ -142,6 +137,10 @@ Proof
   `step_inst_base inst t = OK (update_var out w rt)` by
     (simp[step_inst_base_opcode_eqs, Excl "consume_create_outcome_eq"] >>
      gvs[AllCaseEqs(), Excl "consume_create_outcome_eq"] >> metis_tac[]) >>
-  qexistsl_tac [`vop`,`offop`,`szop`,`value`,`off`,`off'`,`sz`,`salt`,`out`,`rq`,`w`,`r`,`rt`] >>
-  simp[Excl "consume_create_outcome_eq", Abbr `rt`, Abbr `rq`] >> metis_tac[]
+  qexistsl_tac [`vop`,`offop`,`szop`,`value`,`off`,`off'`,`sz`,`salt`,`out`,
+    `venom_create_request s value off sz salt`,
+    `venom_create_request t value off' sz salt`,`w`,`r`,`rt`] >>
+  imp_res_tac dload_consume_create_state >>
+  gs[venom_state_fupdcanon, Excl "consume_create_outcome_eq"] >>
+  metis_tac[]
 QED

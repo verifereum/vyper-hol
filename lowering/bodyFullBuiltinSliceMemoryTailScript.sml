@@ -15,11 +15,14 @@ Ancestors
   fragExec emitHelperProps bodyPtrBytestringBuiltinsSlice
   bodyPtrBytestringBuiltinsBuffer loweringPosts loweringStateRelDefs
   reasonCodeResourcesPtr bodyPtrAttributeFields stateRelProj
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem slice_memory_tail_full:
   compile_slice_data limit (Var src) start cnt N sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   eval_operand limit s = SOME (n2w (LENGTH bs)) /\
   lookup_var src s = SOME p /\ ptr_covers G tn src s (LENGTH bs) /\
   op_prov G limit = NONE /\ op_taint tn limit = {} /\
@@ -71,7 +74,8 @@ Theorem slice_memory_tail_full:
       ghost_inv_at (DF H) lo d cenv cx ee HG tm t /\
       ptr_vv_ok cx a (Value result) (LocatedValue a (mk_ptr out LocMemory)) ee HG tm t /\
       ptr_buf_ok cenv e out HG t /\ ghost_kept_at lo cenv es sa G tn s HG tm)
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `e = _` SUBST_ALL_TAC >>
@@ -99,6 +103,9 @@ Proof
            (ACCEPT_TAC o MATCH_MP (cj 7 (iffLR bodyPtrDefsTheory.ghost_inv_at_def))))
      >> qpat_assum `ghost_inv_at _ lo d cenv cx es G tn s`
           (ACCEPT_TAC o MATCH_MP (cj 8 (iffLR bodyPtrDefsTheory.ghost_inv_at_def)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `ctx_has_dalloca ctx ==> _ /\ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   drule exprSimSliceDataTheory.slice_data_decompose >> strip_tac >>
   `cs_extends sa sc /\ cs_extends sc sd /\ cs_extends sd se /\
    cs_extends se sf /\ cs_extends sf sb` by
@@ -271,6 +278,13 @@ Resume slice_memory_tail_full[bounds_abort]:
 QED
 
 Resume slice_memory_tail_full[success_output]:
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es v` by
+    (qpat_assum `!H'. stmt_state_rel H' ctx func cenv cx es zb ==> _`
+       (qspec_then `storage_trace_horizon es.storage_trace` match_mp_tac) >>
+     first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    qpat_assum `stmt_state_rel _ ctx func cenv cx es v`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   `!x. not_fresh_at sa x ==>
      lookup_var x v = lookup_var x s /\ FLOOKUP G2 x = FLOOKUP G x /\
      op_taint tn2 (Var x) = op_taint tn (Var x)` by
@@ -389,6 +403,16 @@ Resume slice_memory_tail_full[source_offset]:
   qabbrev_tac `copy_inst = mk_inst se.cs_next_id MCOPY [Var dst;Var copy_var;cnt] []` >>
   qabbrev_tac `zc = mcopy (w2n w+32) (w2n p+i) k za` >>
   qabbrev_tac `tn4 = step_taint copy_inst za zc tn3` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp za` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp v` mp_tac >>
+     simp[NoAsms,Abbr `za`,ptrDisciplineTheory.allocas_below_fmp_def,
+       venomStateTheory.update_var_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp zc` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp za` mp_tac >>
+     simp[NoAsms,Abbr `zc`,ptrDisciplineTheory.allocas_below_fmp_def,
+       venomExecSemanticsTheory.mcopy_def,venomStateTheory.write_memory_with_expansion_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `!D. inst_seq_ptr D 0 ctx func PG G3 tn3 [copy_inst] za G3 tn4 /\
     run_inst_seq [copy_inst] za = OK zc` by
     (gen_tac >>

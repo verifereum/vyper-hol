@@ -251,18 +251,13 @@ Definition call_storage_ok_def:
       storage_trace_backends_well_formed cx regions obs
 End
 
-(* The global storage-and-bounds predicate remains available independently.
-   The compiler boundary uses the finite selected-trace guards above. *)
+(* Outcome bounds and account typing. Storage uses the finite trace guard above. *)
 Definition call_outcomes_ok_def:
-  call_outcomes_ok am tx os <=>
-    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-      EVERY (\outcome.
-               LENGTH outcome.co_returnData < dimword(:256) /\
-               accounts_runtime_well_typed outcome.co_accounts /\
-               contract_storage_well_formed cx
-                 (initial_state (am with <| accounts := outcome.co_accounts;
-                                            tStorage := outcome.co_tStorage |>) []))
-            os
+  call_outcomes_ok (am:abstract_machine) (tx:call_txn) os <=>
+    EVERY (\outcome.
+             LENGTH outcome.co_returnData < dimword(:256) /\
+             accounts_runtime_well_typed outcome.co_accounts)
+          os
 End
 
 (* ===== Transaction environment and entry transfer ===== *)
@@ -456,23 +451,14 @@ Proof
 QED
 
 Theorem call_state_rel_call_outcomes_ok:
-  call_state_rel tops runtime_bc am tx es /\
-  EVERY (\outcome.
-    contract_storage_well_formed
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state (am with <| accounts := outcome.co_accounts;
-                                tStorage := outcome.co_tStorage |>) []))
-    (MAP SND (call_trace es)) ==>
+  call_state_rel tops runtime_bc am tx es ==>
   call_outcomes_ok am tx (MAP SND (call_trace es))
 Proof
   strip_tac >>
-  `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
-    fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
-       evm_state_ok_def] >>
-  drule_all call_trace_outcomes_bounded >>
-  qpat_x_assum `EVERY _ (MAP SND (call_trace es))` mp_tac >>
-  simp[call_outcomes_ok_def, listTheory.EVERY_MEM] >>
-  rpt strip_tac >> res_tac
+  REWRITE_TAC[call_outcomes_ok_def] >>
+  irule call_trace_outcomes_bounded >>
+  fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+     evm_state_ok_def]
 QED
 
 (* The source machine the next transaction starts from, after a transaction

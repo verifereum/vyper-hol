@@ -13,8 +13,7 @@ Theorem dload_create_operand_safety:
     MEM op [value;sz;salt])) /\
   ptr_use_ok P pv i /\ FDOM G SUBSET pv /\ taint_ok f tn i s ==>
   op_prov G op = NONE /\
-  (!arg. MEM arg i.inst_operands ==> op_taint tn arg = {}) /\
-  tn.t_stor = {} /\ tn.t_trans = {}
+  (!arg. MEM arg i.inst_operands ==> op_taint tn arg = {})
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!v. op = Var v ==> v NOTIN pv` by
@@ -61,7 +60,7 @@ Theorem dload_create_evaluated_inputs:
   (!x y z. eval_operand a s = SOME x /\ eval_operand a t = SOME y /\
     eval_operand sz s = SOME z ==>
     read_memory (w2n x) (w2n z) s = read_memory (w2n y) (w2n z) t) /\
-  ~s.vs_call_ctx.cc_static /\ tn.t_stor = {} /\ tn.t_trans = {}
+  ~s.vs_call_ctx.cc_static
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!op. MEM op i.inst_operands ==> eval_operand op t <> NONE` by
@@ -74,8 +73,7 @@ Proof
   `dload_vars_match fl fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
   `!op. MEM op (if i.inst_opcode = CREATE then [value;sz] else [value;sz;salt]) ==>
     op_prov G op = NONE /\
-    (!arg. MEM arg i.inst_operands ==> op_taint tn arg = {}) /\
-    tn.t_stor = {} /\ tn.t_trans = {}` by
+    (!arg. MEM arg i.inst_operands ==> op_taint tn arg = {})` by
     (gen_tac >> disch_tac >> irule dload_create_operand_safety >>
      gvs[] >> metis_tac[]) >>
   `!op. MEM op (if i.inst_opcode = CREATE then [value;sz] else [value;sz;salt]) ==>
@@ -85,7 +83,6 @@ Proof
   `~s.vs_call_ctx.cc_static` by
     (fs[dload_boundary_core_def, dload_equal_environment_def,
         venom_state_component_equality]) >>
-  `tn.t_stor = {} /\ tn.t_trans = {}` by (gvs[] >> metis_tac[]) >>
   simp[] >> suspend "create_read_inputs"
 QED
 
@@ -161,7 +158,6 @@ Theorem dload_create_boundary:
   (i.inst_opcode = CREATE \/ i.inst_opcode = CREATE2) /\
   dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n az) t /\
   exec_create i s value ao az salt = OK s1 /\
   exec_create i t value bo az salt = OK t1 /\

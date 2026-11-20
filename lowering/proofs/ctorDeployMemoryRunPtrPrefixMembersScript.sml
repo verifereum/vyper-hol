@@ -3,7 +3,7 @@ Theory ctorDeployMemoryRunPtrPrefixMembers
 Ancestors
   valueEncodingDefs
   valueEncoding
-  ctorDeployMemoryRunPtrPrefixMemberSetup ctorDeployMemoryRunPtrPrefixRecursiveSupport
+  ctorDeployMemoryRunPtrPrefixMemberSetup ctorDeployMemoryRunPtrPrefixCopySupport[qualified]
   ctorAbiActualMemberRun ctorAbiActualMemberInputs ctorAbiActualMemberBoundary
   ctorAbiActualChildFrame ctorAbiActualMemory ctorAbiActualSites
   ctorAbiActualMembers ctorAbiActualEmpty

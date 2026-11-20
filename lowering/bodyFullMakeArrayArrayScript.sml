@@ -11,6 +11,7 @@ Ancestors
   gasOutcomeFullCompose gasShadowCompileContext exprSimSource
   exprLoweringProps emitHelperProps exprSimHyps exprSimHypsDefs bodySimFull
   vyperTypeSystem bodyFullPreds stateRelProj vyperStorageTrace
+  bodyFullIfExpReach
 
 val _ = Parse.hide "base";
 
@@ -29,7 +30,6 @@ Proof
   pure_once_rewrite_tac [GSYM (PURE_REWRITE_RULE [make_array_completed_def]
     make_array_packaging_ok_def)] >>
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `expr_sim_inv cenv cx env es /\ compatible_bound n (LENGTH args)` by
     gvs[expr_body_pre_def,cj 9 vyperTypeSystemTheory.well_typed_expr_def,
         vyperTypeSystemTheory.well_typed_builtin_app_def] >>
@@ -176,6 +176,25 @@ Resume make_array_vv_sim_full_conditional[elements]:
   `fn_has_code ssh shadow_sb shadow_func` by
     (irule (cj 2 fragExecTheory.fn_has_code_split) >>
      conj_tac >- fs[ci_mono_def] >> qexists_tac `shadow_sa` >> fs[ci_mono_def]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+  `!fn i z. frag_reachable ctx func si fn i z ==> dalloca_no_wrap i z` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK si,Gi,tni)`
+       (qspec_then `DF (storage_trace_horizon es.storage_trace)` assume_tac) >>
+     qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) [] (OK si,Gi,tni)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
+         qpat_assum `!fn i z. frag_reachable ctx func s0 fn i z ==> _`
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+            CONJ path o CONJ no_phi)))) >>
+  `!fn i z. frag_reachable ctx func sj fn i z ==> dalloca_no_wrap i z` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (si,Gi,tni) [] (OK sj,Gj,tnj)`
+       (qspecl_then [`DF (storage_trace_horizon es.storage_trace)`,
+                     `gas_explicit_sites ctx shadow_ctx`] assume_tac) >>
+     qpat_assum `gas_origin_ptr_path _ (si,Gi,tni) [] (OK sj,Gj,tnj)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
+         qpat_assum `!fn i z. frag_reachable ctx func si fn i z ==> _`
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+            CONJ path o CONJ no_phi)))) >>
   mp_tac (Q.INST [`csbase` |-> `sa`, `ebase` |-> `es`, `sbase` |-> `s0`,
     `Gbase` |-> `G0`, `tnbase` |-> `tn0`, `aid` |-> `sa.cs_next_id`,
     `base` |-> `w2n (w:256 word)`, `cap` |-> `type_memory_bytes cenv (ArrayT et n)`]
@@ -187,8 +206,11 @@ Resume make_array_vv_sim_full_conditional[elements]:
 QED
 
 Resume make_array_vv_sim_full_conditional[elements_pre]:
-  fs[ci_mono_def] >> simp[arithmeticTheory.ADD_SYM] >>
-  conj_tac >-
+  fs[ci_mono_def] >> simp[arithmeticTheory.ADD_SYM] >> rpt conj_tac
+  >~ [`!fn inst z. frag_reachable ctx func sj fn inst z ==> dalloca_no_wrap inst z`]
+  >- first_assum ACCEPT_TAC
+  >~ [`regions_disjoint _ _ _ _`]
+  >-
     (rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >> simp[]) >>
   qpat_x_assum `EVERY _ ps` mp_tac >> simp[arithmeticTheory.ADD_SYM]
 QED

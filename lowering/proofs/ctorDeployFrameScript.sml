@@ -298,7 +298,7 @@ Proof
   impl_tac >- simp[] >> strip_tac >>
   `r <> INR (SOME OutOfGas)` by
     (strip_tac >> gvs[frame_inst_raises_def] >>
-     first_x_assum drule >> disch_then drule >> gvs[frame_inst_at_def]) >>
+     first_x_assum drule >> disch_then drule >> gvs[frame_inst_at_step]) >>
   `run sh = SOME (r, es')` by
     (`run_call sh = run sh` by (irule run_call_eq_run_single_context >> simp[]) >>
      gvs[]) >>
@@ -331,7 +331,7 @@ Proof
           `LENGTH s.contexts = 1` by
             (qpat_x_assum `frame_inst_at _ s op` mp_tac >>
              qpat_x_assum `sh.contexts = _` mp_tac >>
-             simp[frame_inst_at_def] >> rpt strip_tac >> gvs[]) >>
+             simp[frame_inst_at_step] >> rpt strip_tac >> gvs[]) >>
           `code_deposit_cost * max_code_size <= frame_gas_left es'` by
             (qpat_x_assum `!s op r s'. frame_inst_at sh _ _ /\ _ ==> _`
                (qspecl_then [`s`, `op`, `INR NONE`, `es'`] mp_tac) >>

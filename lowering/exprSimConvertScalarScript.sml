@@ -34,7 +34,7 @@ Proof
      irule expr_sim_case_apply >> conj_tac >- (qexists `env` >> simp[]) >>
      qexists `nocalls` >> simp[] >>
      metis_tac[int_calls_type_builtin_arg, listTheory.MEM]) >>
-  irule scalar_convert_sim_to_vv >>
+  irule scalar_convert_sim_to_vv >> simp[] >>
   irule compile_convert_frag_sim >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>

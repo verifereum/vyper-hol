@@ -1,5 +1,5 @@
 Theory bodyPtrBopInLiteralTyped
-Ancestors exprSimBopInLiteralWord bodyPtrBopInLiteralSource bodyPtrBopInLiteralSuffix
+Ancestors exprSimBopInLiteralWord bodyPtrBopInLiteralSuffix
   exprSimPtrProps wordArgsPtr exprSimWordArgs typedWordArgsPostPtr
   gasSummaryComposePtr varsExt freshWrites instIdxIndep list
   bodyPtrBopInScalarTransport exprSimBopInLiteralWord

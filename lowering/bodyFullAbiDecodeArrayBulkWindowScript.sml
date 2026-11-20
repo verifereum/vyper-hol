@@ -71,7 +71,7 @@ Theorem abi_decode_bulk_window_add_joint:
   ptr_covers G tn dst s cap /\ lookup_var dst s = SOME b /\
   eval_operand pos s = SOME (n2w q) /\
   op_taint tn (Var dst) = {} /\ op_taint tn pos = {} /\
-  ~ctx_has_dalloca ctx /\ q+k <= cap /\ w2n b+cap < dimword (:256) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ q+k <= cap /\ w2n b+cap < dimword (:256) /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   allocas_from lo s /\ (^owned_decoder_state) sa s G tn /\
@@ -109,7 +109,6 @@ Theorem abi_decode_bulk_window_add_joint:
       tn) (Var x) = op_taint tn (Var x))
 Proof
   BETA_TAC >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (abi_decode_ptr_output_address |> Q.INST [
     `D` |-> `<|d_stor := K (K {}); d_trans := K (K {});
               d_imm := K {}; d_ret := K {}|>`]) >>

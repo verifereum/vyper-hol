@@ -78,7 +78,7 @@ QED
 
 Theorem bytes_word_loader_fixed_frame:
   load_bytestring_as_word (Var src) SHR sa = ((out,bits),sb) /\
-  not_fresh_at sa src /\ ~ctx_has_dalloca ctx /\
+  not_fresh_at sa src /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\
   64 <= capacity /\ w2n a + 64 <= dimword(:256) /\
   mload (w2n a) s = n2w n /\ n <= 32 /\
@@ -124,6 +124,13 @@ Proof
        mk_inst (sa.cs_next_id+3) SUB [Lit 32w;Var len] [sub];
        mk_inst (sa.cs_next_id+4) MUL [Var sub;Lit 8w] [shift];
        mk_inst (sa.cs_next_id+5) SHR [Var shift;Var data] [dst]]` mp_tac) >> fs[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (`allocas_below_fmp u <=> allocas_below_fmp s` by
+       (qpat_assum `u = s with vs_vars := _` SUBST1_TAC >>
+        simp[allocas_below_fmp_def]) >>
+     qpat_assum `allocas_below_fmp u <=> allocas_below_fmp s`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all bytes_word_normalize_fixed_frame >>
   disch_then (qspecl_then [`fn`,`PG`]
     (qx_choose_then `HG` (qx_choose_then `th` strip_assume_tac))) >>
@@ -157,7 +164,7 @@ Theorem bytes_word_convert_origin_path:
   w2n a + 64 <= dimword(:256) /\
   mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
@@ -195,6 +202,13 @@ Proof
   drule_all bytes_word_loader_fixed_frame >>
   disch_then (qspecl_then [`fn`,`PG`]
     (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (`allocas_below_fmp u <=> allocas_below_fmp s` by
+       (qpat_assum `u = s with vs_vars := _` SUBST1_TAC >>
+        simp[allocas_below_fmp_def]) >>
+     qpat_assum `allocas_below_fmp u <=> allocas_below_fmp s`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   `dynamic_straight_fresh (compile_type_convert (Var z) (mk_convert_op src dst))` by
     (irule dynamic_scalar_straight_read_fresh >> simp[]) >>
   `sb.cs_current_bb = sa.cs_current_bb /\

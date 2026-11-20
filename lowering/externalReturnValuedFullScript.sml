@@ -1,7 +1,7 @@
 Theory externalReturnValuedFull
 Ancestors
   externalReturnPrefix externalReturnPackage externalReturnRawJoint
-  externalReturnCopyJoint externalReturnWordJoint loweringHalt allocationPtr
+  externalReturnWordJoint loweringHalt allocationPtr
   externalEntryJoint nonreentrantExit nonreentrantEquiv
   contextCodegenRel venomInst valueEncodingDefs e2eDefs gasSummary exprSimHyps
   bodyFullAllocaFresh bodyFullAllocGeneric typedCopyAgreement representationCleanPtr

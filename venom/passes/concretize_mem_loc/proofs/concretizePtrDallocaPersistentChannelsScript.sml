@@ -186,6 +186,48 @@ Resume ptr_dalloca_call_adoption[evaluate]:
 QED
 Finalise ptr_dalloca_call_adoption
 
+Theorem ptr_dalloca_oracle_adoption:
+  fn_ptr_ok P a.po_fn /\ opaque_use_ok a.po_fn /\
+  MEM a.po_inst (fn_insts a.po_fn) /\ inst_wf a.po_inst /\
+  taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
+  (!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn) /\
+  ptr_mixed_vars (births:(num # num, num # num) fmap)
+    (positions:(allocation, num # num) fmap) (TG:(string, num # num) fmap)
+    a.po_taint a.po_fn at.po_fn
+    a.po_state at.po_state /\
+  ptr_history_content a.po_taint a.po_state at.po_state /\
+  a.po_state.vs_labels = at.po_state.vs_labels /\
+  MEM a.po_inst.inst_opcode [CALL;DELEGATECALL;CREATE;CREATE2] /\
+  step_inst fuel C a.po_inst a.po_state = OK post /\
+  step_inst fuelT C' a.po_inst at.po_state = OK postT ==>
+  ((~a.po_state.vs_call_ctx.cc_static /\
+    post.vs_requests <> a.po_state.vs_requests /\
+    ~computed_precompile (LAST post.vs_requests) /\
+    post.vs_outcomes <> a.po_state.vs_outcomes /\
+    ((HD a.po_state.vs_outcomes).co_success \/
+      MEM a.po_inst.inst_opcode [CREATE;CREATE2])) <=>
+   (~at.po_state.vs_call_ctx.cc_static /\
+    postT.vs_requests <> at.po_state.vs_requests /\
+    ~computed_precompile (LAST postT.vs_requests) /\
+    postT.vs_outcomes <> at.po_state.vs_outcomes /\
+    ((HD at.po_state.vs_outcomes).co_success \/
+      MEM a.po_inst.inst_opcode [CREATE;CREATE2])))
+Proof
+  strip_tac >> Cases_on `a.po_inst.inst_opcode = CALL`
+  >- (drule_all ptr_dalloca_call_adoption >> simp[ptr_call_adopted_def]) >>
+  `MEM a.po_inst.inst_opcode [DELEGATECALL;CREATE;CREATE2]` by fs[MEM] >>
+  `a.po_state.vs_call_ctx = at.po_state.vs_call_ctx /\
+    a.po_state.vs_outcomes = at.po_state.vs_outcomes` by
+    fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def] >>
+  qpat_assum `step_inst fuel C _ a.po_state = OK post`
+    (mp_then (Pat `step_inst _ _ _ _ = _`) mp_tac ptr_dalloca_noncall_reset_step) >>
+  simp[] >> strip_tac >>
+  qpat_assum `step_inst fuelT C' _ at.po_state = OK postT`
+    (mp_then (Pat `step_inst _ _ _ _ = _`) mp_tac ptr_dalloca_noncall_reset_step) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem ptr_dalloca_paired_call_adoption:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -230,11 +272,11 @@ Proof
   >- suspend "alloca" >>
   `at.po_inst = a.po_inst` by
     gvs[concretize_inst_with_positions_def] >>
-  `a.po_inst.inst_opcode = CALL ==>
-    ptr_call_adopted a.po_state post = ptr_call_adopted at.po_state postT` by
-    (strip_tac >> metis_tac[ptr_dalloca_paired_call_adoption]) >>
-  irule ptr_dalloca_persistent_next >> simp[] >>
-  gvs[ptr_call_adopted_def]
+  `step_inst fuelT C' a.po_inst at.po_state = OK postT` by metis_tac[] >>
+  irule ptr_dalloca_persistent_next >> simp[] >> strip_tac >>
+  drule_all ptr_dalloca_persistent_context >> strip_tac >>
+  `MEM a.po_inst.inst_opcode [CALL;DELEGATECALL;CREATE;CREATE2]` by simp[] >>
+  drule_all ptr_dalloca_oracle_adoption >> simp[]
 QED
 Resume ptr_dalloca_actual_persistent_next[alloca]:
   `at.po_inst = a.po_inst \/ at.po_inst.inst_opcode = ASSIGN \/

@@ -50,7 +50,8 @@ Theorem abi_decode_loop_source_joint_exact:
   abi_decoder_operand_live sa.cs_next_var idx /\
   op_prov G src = NONE /\ op_prov G idx = NONE /\
   op_taint tn src = {} /\ op_taint tn idx = {} /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) sa s G tn /\

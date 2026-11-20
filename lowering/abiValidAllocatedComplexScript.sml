@@ -1,7 +1,7 @@
 (* Successful complex head guard over allocation-backed resources. *)
 Theory abiValidAllocatedComplex
 Ancestors
-  abiValidAllocatedMembers abiValidAllocatedContract abiValidAllocatedMemberFold
+  abiValidAllocatedMembers abiValidAllocatedContract abiValidAllocatedMemberJoin[qualified]
   abiDecoderComplexExecute abiDecoderComplexGuard abiDecoderComplexHead
   abiMalformedConstructorContract abiMalformedRecursiveInterface abiMalformedSiteFrame
   abiDecoderSequenceReach abiDecoderReentry abiDecoderReentryPointer

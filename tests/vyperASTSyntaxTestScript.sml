@@ -172,6 +172,8 @@ val flags = vyperASTSyntax.mk_raw_call_flags
   , is_delegate = boolSyntax.F
   , is_static = boolSyntax.T
   , revert_on_failure = boolSyntax.T
+  , kws = listSyntax.mk_list ([vyperASTSyntax.EKValue_tm],
+                              vyperASTSyntax.ext_call_kw_ty)
   };
 val call_target_samples =
   [ vyperASTSyntax.mk_IntCall_tm nsid
@@ -216,7 +218,10 @@ val _ =
       if same_term (#max_outsize decoded) (numSyntax.term_of_int 32) andalso
          same_term (#is_delegate decoded) boolSyntax.F andalso
          same_term (#is_static decoded) boolSyntax.T andalso
-         same_term (#revert_on_failure decoded) boolSyntax.T
+         same_term (#revert_on_failure decoded) boolSyntax.T andalso
+         same_term (#kws decoded)
+           (listSyntax.mk_list ([vyperASTSyntax.EKValue_tm],
+                                vyperASTSyntax.ext_call_kw_ty))
       then () else raise Fail "raw_call_flags fields"
     end
   else raise Fail "raw_call_flags recognizer";

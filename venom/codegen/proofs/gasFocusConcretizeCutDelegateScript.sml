@@ -43,147 +43,6 @@ Proof
   drule_all ld_delegate_dispatch >> metis_tac[]
 QED
 
-Theorem ptr_focus_delegate_scalar[local]:
-  ptr_use_ok P pv inst /\
-  (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
-  inst.inst_opcode = DELEGATECALL /\
-  inst.inst_operands = [gas;addr;off;sz;ret;rsz] /\
-  MEM op [gas;addr;sz;rsz] ==>
-  op_prov TG op = NONE
-Proof
-  strip_tac >> Cases_on `op` >> gvs[op_prov_def] >>
-  rename1 `FLOOKUP TG v = NONE` >>
-  Cases_on `FLOOKUP TG v` >> gvs[] >>
-  `v IN pv /\ MEM (Var v) inst.inst_operands` by fs[MEM] >>
-  fs[ptr_use_ok_def, is_pointer_preserving_op_def, mem_write_ops_def,
-     mem_read_ops_def] >>
-  qpat_x_assum `!u. _ ==> _ /\ _` (qspec_then `v` mp_tac) >>
-  gvs[] >> rpt strip_tac >> gvs[AllCaseEqs()]
-QED
-
-Theorem ptr_focus_delegate_operands[local]:
-  ptr_mixed_vars births positions TG tn f g s t /\
-  s.vs_labels = t.vs_labels /\ EVERY (ptr_nonopaque_operand f) inst.inst_operands /\
-  taint_ok f tn inst s /\ ptr_use_ok P pv inst /\
-  (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
-  inst.inst_opcode = DELEGATECALL /\ inst.inst_operands = [ga;ad;ao;az;ro;rz] /\
-  eval_operand ga t = SOME gas /\ eval_operand ad t = SOME addr /\
-  eval_operand ao t = SOME y /\ eval_operand az t = SOME n /\
-  eval_operand ro t = SOME q /\ eval_operand rz t = SOME rn ==>
-  ?x r. eval_operand ga s = SOME gas /\ eval_operand ad s = SOME addr /\
-    eval_operand ao s = SOME x /\ eval_operand az s = SOME n /\
-    eval_operand ro s = SOME r /\ eval_operand rz s = SOME rn /\
-    ptr_lookup_transport births positions (op_prov TG ao) {} (SOME x) (SOME y) /\
-    ptr_lookup_transport births positions (op_prov TG ro) {} (SOME r) (SOME q)
-Proof
-  strip_tac >>
-  `!op. MEM op inst.inst_operands ==> op_taint tn op = {}` by
-    (fs[taint_ok_def] >> metis_tac[]) >>
-  `!op. MEM op inst.inst_operands ==>
-    ptr_lookup_transport births positions (op_prov TG op) {}
-      (eval_operand op s) (eval_operand op t)` by
-    (rpt strip_tac >>
-     `op_taint tn op = {} /\ ptr_nonopaque_operand f op` by
-       metis_tac[EVERY_MEM] >>
-     drule_all ptr_mixed_vars_eval >> simp[]) >>
-  `!op. MEM op [ga;ad;az;rz] ==> op_prov TG op = NONE` by
-    (rpt strip_tac >> irule ptr_focus_delegate_scalar >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  `!op. MEM op [ga;ad;az;rz] ==> eval_operand op s = eval_operand op t` by
-    (rpt strip_tac >>
-     `op_prov TG op = NONE /\ MEM op inst.inst_operands` by fs[MEM] >>
-     qpat_assum `!op. _ ==> ptr_lookup_transport _ _ _ _ _ _`
-       (qspec_then `op` mp_tac) >>
-     Cases_on `eval_operand op t` >>
-     simp[ptr_lookup_transport_none_right, ptr_lookup_transport_some_right,
-          ptr_value_transport_scalar_empty]) >>
-  `ptr_lookup_transport births positions (op_prov TG ao) {}
-     (eval_operand ao s) (SOME y) /\
-   ptr_lookup_transport births positions (op_prov TG ro) {}
-     (eval_operand ro s) (SOME q)` by metis_tac[MEM] >>
-  fs[ptr_lookup_transport_some_right] >>
-  rpt (goal_assum (drule_at Any)) >> simp[ptr_lookup_transport_some]
-QED
-
-Theorem ptr_focus_delegate_completion[local]:
-  ptr_history_content tn s t /\ ptr_request_shell rq qt /\
-  rq.cr_kind = DelegateMessageCall /\ qt.cr_kind = DelegateMessageCall /\
-  rq.cr_static = qt.cr_static /\
-  consume_call_outcome rq ro n s = (v,u) /\
-  consume_call_outcome qt rt n t = (w,z) ==>
-  v = w /\ u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z
-Proof
-  strip_tac >>
-  `ptr_request_history (record_request rq s.vs_requests)
-     (record_request qt t.vs_requests)` by
-    (irule ptr_request_record >> fs[ptr_history_content_def]) >>
-  fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-     ptr_core_shared_def, ptr_shared_fields_def] >>
-  gvs[consume_call_outcome_eq] >>
-  Cases_on `t.vs_outcomes` >>
-  gvs[take_outcome_create, failed_outcome_def, adopt_outcome_delegate,
-      adopt_outcome_deletions_def, ptr_history_content_def, ptr_taint_content_def,
-      ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def,
-      contract_storage_def, contract_transient_def, storage_agree_except_def,
-      word_agree_except_def] >>
-  rename1 `outcome.co_success` >>
-  Cases_on `qt.cr_static` >> Cases_on `outcome.co_success` >>
-  gvs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-      ptr_core_shared_def, ptr_shared_fields_def, contract_storage_def,
-      contract_transient_def, storage_agree_except_def, word_agree_except_def]
-QED
-
-Theorem ptr_focus_delegate_execution[local]:
-  ptr_mixed_vars births positions TG tn f g s t /\
-  ptr_history_content tn s t /\
-  read_memory (w2n x) (w2n n) s = read_memory (w2n y) (w2n n) t /\
-  inst.inst_opcode = DELEGATECALL /\ inst.inst_outputs = [out] /\ ~retpc_var f out /\
-  exec_delegatecall inst t (gas:bytes32) (addr:bytes32) (y:bytes32)
-    (n:bytes32) (q:bytes32) (rn:bytes32) = OK z ==>
-  ?u. exec_delegatecall inst s gas addr (x:bytes32) n (r:bytes32) rn = OK u /\
-      u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z /\
-      ptr_mixed_vars births positions (step_prov P TG inst u)
-        (step_taint inst s u tn) f g u z
-Proof
-  strip_tac >>
-  `t.vs_outcomes <> []` by
-    (strip_tac >> gvs[exec_delegatecall_def]) >>
-  `s.vs_outcomes = t.vs_outcomes` by
-    (drule ptr_history_content_control >>
-     simp[ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def]) >>
-  dxrule delegate_success_envelope >> strip_tac >>
-  gvs[Excl "consume_call_outcome_eq"] >>
-  qabbrev_tac `qt = venom_call_request t addr 0w y n F with
-    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
-  qabbrev_tac `rq = venom_call_request s addr 0w x n F with
-    <|cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas)|>` >>
-  `ptr_request_shell rq qt /\ rq.cr_kind = DelegateMessageCall /\
-   qt.cr_kind = DelegateMessageCall /\ rq.cr_static = qt.cr_static` by
-    (drule ptr_history_content_call_ctx >> strip_tac >>
-     simp[Abbr `rq`, Abbr `qt`, ptr_request_shell_def, venom_call_request_def]) >>
-  Cases_on `consume_call_outcome rq (w2n r) (w2n rn) s` >>
-  drule_all ptr_focus_delegate_completion >> strip_tac >>
-  gvs[Excl "consume_call_outcome_eq"] >>
-  rename1 `consume_call_outcome rq _ _ s = (w,u)` >>
-  rename1 `consume_call_outcome qt _ _ t = (w,z)` >>
-  qexists `update_var out w u` >>
-  conj_tac >-
-    (qpat_assum `Abbrev (rq = _)` (assume_tac o SYM o REWRITE_RULE[markerTheory.Abbrev_def]) >>
-     simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"]) >>
-  simp[] >>
-  `ptr_mixed_vars births positions TG tn f g u z` by
-    (irule ptr_mixed_vars_fields >>
-     rpt (goal_assum (drule_at Any)) >>
-     qpat_assum `consume_call_outcome _ _ _ s = _` mp_tac >>
-     qpat_assum `consume_call_outcome _ _ _ t = _` mp_tac >>
-     simp[consume_call_outcome_eq] >> rpt strip_tac >> gvs[]) >>
-  drule ptr_mixed_vars_update >> disch_then irule >> simp[] >>
-  simp[step_prov_def, out_prov_def, set_prov_def,
-       step_taint_def, set_var_taint_def, out_taint_def, FLOOKUP_DRESTRICT,
-       FLOOKUP_UPDATE, op_taint_def, ptr_value_transport_def] >>
-  rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def, word_agree_except_def]
-QED
-
 Theorem ptr_focus_delegate_dispatch_ok[local]:
   inst.inst_opcode = DELEGATECALL /\ inst.inst_operands = [ga;ad;ao;az;ro;rz] /\
   eval_operand ga s = SOME gas /\ eval_operand ad s = SOME addr /\
@@ -213,6 +72,8 @@ Theorem ptr_focus_delegate_structural[local]:
   step_inst 0 C a.po_inst a.po_state = OK post /\
   step_inst 0 C' at.po_inst at.po_state = OK target /\
   ptr_history_content a.po_taint post target /\
+  (~a.po_state.vs_call_ctx.cc_static /\ (HD a.po_state.vs_outcomes).co_success ==>
+   post.vs_accounts = target.vs_accounts /\ post.vs_transient = target.vs_transient) /\
   ptr_mixed_vars births positions (step_prov PT TG a.po_inst post)
     (step_taint a.po_inst a.po_state post a.po_taint) a.po_fn at.po_fn post target ==>
   ?z TG'.
@@ -272,8 +133,17 @@ Resume ptr_focus_delegate_structural[sample]:
   simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
   conj_tac
   >- (irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  irule ptr_history_content_masks >> goal_assum (drule_at Any) >>
-  simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def]
+  `post.vs_call_ctx = target.vs_call_ctx` by
+    metis_tac[ptr_history_content_call_ctx] >>
+  Cases_on `~a.po_state.vs_call_ctx.cc_static /\
+     post.vs_requests <> a.po_state.vs_requests /\
+     ~computed_precompile (LAST post.vs_requests) /\
+     post.vs_outcomes <> a.po_state.vs_outcomes /\
+     (HD a.po_state.vs_outcomes).co_success` >>
+  fs[ptr_history_content_def, ptr_taint_content_def, step_taint_def,
+     store_taint_def, adopt_reset_def, imm_taint_def, contract_storage_def,
+     contract_transient_def, storage_agree_except_def, word_agree_except_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume ptr_focus_delegate_structural[cursor]:
@@ -514,11 +384,11 @@ Resume ptr_focus_delegate_step[execute]:
      irule noncopy_output_not_retpc >> conj_tac >- first_assum ACCEPT_TAC >>
      qexists `a.po_inst` >> gvs[MEM]) >>
   `a.po_inst.inst_operands = [g;a';ao;az;ro;rz]` by gvs[] >>
-  drule_all ptr_focus_delegate_operands >> strip_tac >>
+  drule_all concretizePtrCreateFamilyTheory.ptr_create_family_delegate_operand_transport >> strip_tac >>
   `read_memory (w2n x) (w2n n) a.po_state = read_memory (w2n y) (w2n n) at.po_state` by
     suspend "input" >>
   `exec_delegatecall a.po_inst at.po_state gas addr y n q rn = OK post` by metis_tac[] >>
-  drule_all ptr_focus_delegate_execution >>
+  drule_all concretizePtrCreateFamilyTheory.ptr_create_family_delegate_mixed_execution >>
   disch_then (qspecl_then [`r`,`PT`] strip_assume_tac) >>
   `step_inst 0 C a.po_inst a.po_state = OK u` by
     (irule ptr_focus_delegate_dispatch_ok >> rpt (goal_assum (drule_at Any)) >> simp[]) >>

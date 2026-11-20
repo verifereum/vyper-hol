@@ -1,6 +1,6 @@
 Theory runtimeSymSrcStatements
 Ancestors
-  runtimeSymSrcStatementAssignFamily runtimeSymSrcStatementExits
+  runtimeSymSrcStatementAssignFamily
   runtimeSymSrcStatementAssignClosed runtimeSymSrcStatementExitClosed
   runtimeSymSrcStatementReasons runtimeSymSrcGeneratorContracts
   runtimeSymSrcStatementControl runtimeSymSrcStatementRange

@@ -3,7 +3,7 @@ Theory bodyFullBuiltinWordPowCompose
 Ancestors
   bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullShared gasOutcomeFullCompose
-  bodyInvNoDalloca contextRawReachable unitMemInv
+  bodyInvNoDalloca contextRawReachable unitMemInv bodyFullIfExpReach
   exprSimWordBuiltins exprSimSource gasShadowCompileStmtHelpers
   fragGasSeqPtr bodyFullGhostFrame bodyFullBuiltinWordPowPost wordArgsPtr
   gasExemptCert vyperStorageTrace exprSimWordArgs exprLoweringProps
@@ -165,6 +165,22 @@ Proof
          qexistsl_tac [`Qchild`, `Rchild`] >> simp[]) >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ Qchild _` kall_tac >>
       unabbrev_all_tac >>
+      `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+        metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+      qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ (es,s0,G0,tn0) firstQ firstR` >>
+      `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (cx_tops cx) cx st0 (bind (eval_expr cx x0) (read_result cx))
+         (es,s0,G0,tn0)
+         (\H res ee GG tt u. firstQ H res ee GG tt u /\
+            (!fn i v. frag_reachable ctx func u fn i v ==> dalloca_no_wrap i v))
+         firstR` by
+        (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
+         qpat_assum `gas_outcome_full _ _ _ _ _ _ firstQ firstR` (irule_at Any) >>
+         simp[] >> rpt strip_tac >>
+         drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+         disch_then ACCEPT_TAC) >>
+      qpat_x_assum `gas_outcome_full _ _ _ _ _ _ firstQ firstR` kall_tac >>
+      unabbrev_all_tac >>
       `bind (eval_expr cx (Builtin (BaseT (UintT 256)) PowMod256 [x0;x0']))
           (read_result cx) =
        bind (bind (eval_expr cx x0) (read_result cx))
@@ -259,7 +275,7 @@ Proof
                >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
                    qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
                rpt strip_tac >>
-               irule pow_compose_reachable_no_wrap >> metis_tac[]) >>
+               first_x_assum (drule_then ACCEPT_TAC)) >>
            strip_tac >>
            qmatch_asmsub_abbrev_tac `gas_outcome_full cfg cxt cx st0 src (mid,t,G1,tn1) Qsecond Rsecond` >>
            `gas_outcome_full cfg cxt cx st0 src (mid,t,G1,tn1)
@@ -480,14 +496,15 @@ Proof
                simp[gasSummaryTheory.gas_explicit_def] >> rpt strip_tac >>
                `expr_post H ctx func cenv cx x0' mid s1 s2 t mid' v' y t'` by
                  metis_tac[] >>
+               `stmt_state_rel H ctx func cenv cx mid' u` by
+                 FIRST [first_assum ACCEPT_TAC, metis_tac[]] >>
                simp[loweringPostsTheory.post_value_type_word,
                     vyperASTTheory.expr_type_def,
                     compileEnvTheory.is_word_type_def,
                     bodyPtrDefsTheory.ptr_val_ok_def,
                     exprSimMemDefsTheory.expr_store_bound_word]
                >~ [`expr_post _ _ _ _ _ (Builtin _ PowMod256 _) _ _ _ _ _ _ _ _`]
-               >- (`stmt_state_rel H ctx func cenv cx mid' u` by FIRST [first_assum ACCEPT_TAC, metis_tac[]] >>
-                   `storage_well_formed_on cx mid' (FST H)` by
+               >- (`storage_well_formed_on cx mid' (FST H)` by
                      (qpat_assum `expr_post H ctx func cenv cx x0' mid s1 s2 t mid' v' y t'`
                         (strip_assume_tac o PURE_REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
                       first_assum ACCEPT_TAC) >>
@@ -503,7 +520,9 @@ Proof
                    qexistsl_tac [`storage_trace_horizon mid.storage_trace`, `H`,
                      `mid`, `s1`, `s2`, `t`, `t'`, `v`, `v'`, `x`, `y`] >> simp[])
                >~ [`allocas_below_fmp u`]
-               >- metis_tac[bodyInvNoDallocaTheory.body_inv_no_dalloca] >>
+               >- (qpat_assum `stmt_state_rel H ctx func cenv cx mid' u`
+                     (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+                   simp[]) >>
                qpat_x_assum `~is_word_type (expr_type (Builtin _ PowMod256 _))`
                  (mp_tac o SIMP_RULE (srw_ss())
                    [vyperASTTheory.expr_type_def, compileEnvTheory.is_word_type_def]) >>

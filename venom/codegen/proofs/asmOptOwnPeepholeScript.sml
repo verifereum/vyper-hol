@@ -5,16 +5,6 @@ Ancestors
   asmSymOwnCode asmSplice asmSymPc asmSymSem asmOptimizer asmWf
   asmSem symbolResolve list
 
-Theorem sym_steps_own_pos:
-  0 < n ∧ ss.sym_base.as_pc < LENGTH p ⇒
-  sym_steps_own p env own n ss =
-    case sym_step_own p env own (EL ss.sym_base.as_pc p) ss of
-      SymOK ss' => sym_steps_own p env own (n - 1) ss'
-    | r => r
-Proof
-  Cases_on `n` >> rw[sym_steps_own_def]
-QED
-
 Theorem sym_step_unknown_op_own:
   ¬MEM name (MAP FST asm_op_arity_table) ∧ ALOOKUP dup_table name = NONE ∧
   ALOOKUP swap_table name = NONE ⇒

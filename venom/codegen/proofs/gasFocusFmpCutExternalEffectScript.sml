@@ -5,6 +5,7 @@ Ancestors
   concretizeLayoutCutSafe o1LowerDloadPrecompileEffects
   lowerDloadOracleSelection venomCallOracleProps
   lowerDloadExternalEffects lowerDloadExternalMemory lowerDloadPtrResidualInterfaces
+  lowerDloadPtrCreateInterfaces
   concretizeLayoutExternalRequests o1RequestContract arithmetic
   o1LowerDloadExternalOracle o1LowerDloadExternalEffects o1LowerDloadShared
   fmpStageRel ptrDiscipline venomExecSemantics venomCallOracleDefs extCallOracle
@@ -114,7 +115,8 @@ QED
 
 Theorem cut_call_shared_after_update[local]:
   MEM inst.inst_opcode ^call_ops /\
-  (inst.inst_opcode = CALL ==> rq.cr_static = s.vs_call_ctx.cc_static) /\
+  (MEM inst.inst_opcode [CALL;DELEGATECALL] ==>
+    rq.cr_static = s.vs_call_ctx.cc_static) /\
   ld_shared_agree D s.vs_call_ctx.cc_address
     (tn with <|t_stor := if ~rq.cr_static /\ r1.vs_requests <> s.vs_requests /\
                         ~computed_precompile (LAST r1.vs_requests) /\
@@ -133,8 +135,9 @@ Proof
   drule (cj 1 ld_external_taint_projections) >> strip_tac >>
   drule (cj 2 ld_external_taint_projections) >> strip_tac >>
   drule (cj 3 ld_external_taint_projections) >> strip_tac >>
-  Cases_on `inst.inst_opcode = CALL`
-  >- gvs[ld_shared_agree_def, adopt_reset_def, update_var_def] >>
+  Cases_on `MEM inst.inst_opcode [CALL;DELEGATECALL]`
+  >- gvs[MEM, ld_shared_agree_def, adopt_reset_def, update_var_def] >>
+  `inst.inst_opcode = STATICCALL` by fs[MEM] >>
   Cases_on `~rq.cr_static /\ r1.vs_requests <> s.vs_requests /\
     ~computed_precompile (LAST r1.vs_requests) /\
     r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
@@ -220,8 +223,9 @@ Proof
   qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
   drule_all cut_call_shared >> strip_tac >>
   drule_all cut_call_return_memory >> strip_tac >>
-  `(inst.inst_opcode = CALL ==> rq1.cr_static = s.vs_call_ctx.cc_static)` by
-    simp[venom_call_request_def] >>
+  `(MEM inst.inst_opcode [CALL;DELEGATECALL] ==>
+    rq1.cr_static = s.vs_call_ctx.cc_static)` by
+    fs[MEM, venom_call_request_def] >>
   drule_all cut_call_shared_after_update >> strip_tac >>
   every_drule_then assume_tac ld_consume_call_vars >>
   every_drule_then (strip_assume_tac o BETA_RULE) cut_call_fields >>
@@ -245,7 +249,8 @@ val create_update = ``\s r rq. s with
 Theorem cut_create_shared[local]:
   MEM inst.inst_opcode ^create_ops /\
   ld_shared_agree D s.vs_call_ctx.cc_address tn s t /\
-  r = (^create_update) s r rq /\ rt = (^create_update) t r rq ==>
+  request_agree_except D rq rq' /\
+  r = (^create_update) s r rq /\ rt = (^create_update) t r rq' ==>
   ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s (update_var out w r) tn)
     (update_var out w r) (update_var out w rt)
 Proof
@@ -261,7 +266,7 @@ Proof
   qpat_assum `rt = _` (fn th => once_rewrite_tac[th]) >>
   qpat_assum `r = _` (fn th => once_rewrite_tac[th]) >>
   fs[ld_shared_agree_def, word_agree_except_def] >>
-  irule request_agree_record_request >> simp[request_agree_except_refl]
+  irule request_agree_record_request >> simp[]
 QED
 
 Theorem cut_create_memory[local]:
@@ -284,11 +289,21 @@ Theorem cut_create_ok[local]:
 Proof
   strip_tac >> drule_all focus_fmp_cut_create_execute >>
   disch_then (qx_choosel_then
-    [`vop`,`offop`,`szop`,`value`,`off`,`off'`,`sz`,`salt`,`out`,`rq`,`w`,`r`,`rt`]
+    [`vop`,`offop`,`szop`,`value`,`off`,`off'`,`sz`,`salt`,`out`,`rq`,`rq'`,`w`,`r`,`rt`]
     (MAP_EVERY assume_tac o CONJUNCTS)) >>
   `ld_shared_agree D s.vs_call_ctx.cc_address tn s t /\
    ld_memory_agree (fmp_ld_sites sm) eom tn.t_mem s.vs_memory t.vs_memory /\
    ~t.vs_halted` by fs[fmp_stage_rel_def] >>
+  `request_agree_except D rq rq'` by
+    (`inst.inst_opcode <> INVOKE` by fs[MEM] >>
+     `step_inst 0 C inst s = OK s1` by simp[step_inst_non_invoke] >>
+     `LENGTH s.vs_requests < LENGTH s1.vs_requests` by
+       (drule_all ld_create_step_request_growth >> simp[]) >>
+     drule_all taint_within_upto_request >> strip_tac >>
+     qpat_assum `rq = venom_create_request _ _ _ _ _` (fn th => REWRITE_TAC[th]) >>
+     qpat_assum `rq' = venom_create_request _ _ _ _ _` (fn th => REWRITE_TAC[th]) >>
+     irule ld_venom_create_request_masked >> simp[] >>
+     metis_tac[ld_shared_accounts_observe, ld_shared_transient_observe]) >>
   drule_all (BETA_RULE cut_create_shared) >> strip_tac >>
   drule_all (BETA_RULE cut_create_memory) >> strip_tac >>
   qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
@@ -454,13 +469,11 @@ Theorem cut_create_nonstatic_exception[local]:
      (inst.inst_opcode = CREATE2 /\ ?salt. rest = [salt]))
 Proof
   simp[MEM] >> strip_tac >>
+  Cases_on `r` >> fs[passSimulationDefsTheory.terminates_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_opcode_eqs, exec_create_def,
-       Excl "consume_create_outcome_eq", AllCaseEqs()] >>
-  rpt strip_tac >>
-  gvs[passSimulationDefsTheory.terminates_def, eval_operands_def,
-      pairTheory.UNCURRY, Excl "consume_create_outcome_eq", AllCaseEqs()] >>
-  metis_tac[]
+  simp[step_inst_base_opcode_eqs, AllCaseEqs(), exec_create_not_Halt,
+       exec_create_not_IntRet, exec_create_abort_iff] >>
+  rpt strip_tac >> gvs[eval_operands_def] >> metis_tac[]
 QED
 
 Theorem cut_create_nonstatic_abort[local]:

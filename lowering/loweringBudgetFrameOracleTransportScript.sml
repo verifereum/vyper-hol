@@ -185,7 +185,7 @@ Proof
 QED
 
 Theorem step_taint_noncall_outcomes_update:
-  i.inst_opcode <> CALL ==>
+  ~MEM i.inst_opcode [CALL; DELEGATECALL; CREATE; CREATE2] ==>
   step_taint i (s with vs_outcomes := xs) (t with vs_outcomes := ys) tn =
     step_taint i s t tn
 Proof

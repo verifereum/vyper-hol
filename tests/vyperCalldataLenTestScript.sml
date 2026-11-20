@@ -4,7 +4,7 @@ Ancestors
   vyperInterpreter vyperSmallStep vyperTypeSystem vyperTypeBuiltins
   vyperTypeContract
 Libs
-  vyperCheckContractLib
+  vyperCheckContractLib vyperConstEvalLib
 
 (* The special form does not require a bounded bytes annotation for msg.data. *)
 Theorem translate_calldata_len_test:
@@ -41,14 +41,16 @@ Proof
 QED
 
 Theorem ordinary_len_translation_test:
-  make_builtin_call ty "len" args kwargs ret_ty = Builtin ty Len args
+  make_builtin_call (BaseT (UintT 256)) "len"
+    [Name (BaseT (BytesT (Dynamic 4))) "data"] [] (JT_Integer 256 F) =
+    Builtin (BaseT (UintT 256)) Len
+      [Name (BaseT (BytesT (Dynamic 4))) "data"] /\
+  make_builtin_call (BaseT (UintT 256)) "len"
+    [Literal (BaseT (BytesT (Dynamic 4))) (BytesL [1w; 2w])] []
+    (JT_Integer 256 F) =
+    Literal (BaseT (UintT 256)) (IntL 2)
 Proof
-  (* Reduce only the first dispatch condition; leave all AST payloads opaque. *)
-  CONV_TAC (LAND_CONV
-    (REWR_CONV make_builtin_call_def THENC
-     RATOR_CONV (RATOR_CONV (RAND_CONV (REWR_CONV REFL_CLAUSE))) THENC
-     REWR_CONV (CONJUNCT1 (SPEC_ALL COND_CLAUSES)))) >>
-  REFL_TAC
+  EVAL_TAC
 QED
 
 (* Complete raw calldata is observed: selector, ABI bytes, and trailing bytes. *)

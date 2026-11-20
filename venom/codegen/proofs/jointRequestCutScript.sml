@@ -19,6 +19,7 @@ Ancestors
   frameAllocationOwnership frameOriginHistory frameOriginReachable
   fmpStageBlockSimCode ptrSafeRun concretizePtrCoverageStaticMemReachability
   concretizePtrChronologicalHistory concretizeLayoutRequestRelations
+  lowerDloadPtrRuntimeSupport[qualified,ignore_grammar]
 Libs
   stepInstBaseLib
 
@@ -423,12 +424,6 @@ Proof
   gvs[EVERY_MEM, wf_function_def] >> metis_tac[]
 QED
 
-Theorem cut_terminator_not_invoke[local]:
-  is_terminator op ==> op <> INVOKE
-Proof
-  Cases_on `op = INVOKE` >> simp[is_terminator_def]
-QED
-
 (* The supplied step fuel is recorded in the history, but it cannot
    change the execution components of a joint edge. *)
 Theorem cut_joint_transition_unique[local]:
@@ -451,7 +446,7 @@ Proof
   rewrite_tac[Once joint_transition_cases] >>
   rpt strip_tac >> gvs[is_terminator_def] >>
   imp_res_tac step_inst_intret_not_invoke >>
-  imp_res_tac cut_terminator_not_invoke >>
+  imp_res_tac lowerDloadPtrRuntimeSupportTheory.dload_terminator_not_invoke >>
   gvs[step_inst_non_invoke] >>
   gvs[enters_block_def] >>
   metis_tac[cut_joint_active_unique]

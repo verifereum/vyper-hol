@@ -71,9 +71,11 @@ Proof
      pairarg_tac >> gvs[]) >>
   irule prefix_register_address_emit_origin >> simp[] >>
   qexistsl_tac [`ALLOCA`,`[Lit (n2w cap)]`,`buf.buf_operand`,`st`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all prefix_register_alloc_pair >>
   disch_then (qspecl_then [`STRING #"%" (toString st.cs_next_var)`,
-    `tn`,`0`,`fn`,`PG`,`G`,`D`] mp_tac) >>
+    `tn`,`0`,`PG`,`G`,`D`] mp_tac) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   simp[run_inst_seq_def, mk_inst_def, is_terminator_def,
     inst_mem_below_frontier_def, source_memory_read_ranges_def,

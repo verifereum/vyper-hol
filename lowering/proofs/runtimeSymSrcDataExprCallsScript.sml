@@ -1,7 +1,7 @@
 Theory runtimeSymSrcDataExprCalls
 Ancestors
   symbolicSourceCompilerCallFrame
-  runtimeSymSrcDataFrame runtimeSymSrcDataExprCallbacks runtimeSymSrcDataExtCallArgs
+  runtimeSymSrcDataFrame runtimeSymSrcDataExprCallbacks
   exprLowering compileEnv
 
 fun apply_symbolic_frame theorem =

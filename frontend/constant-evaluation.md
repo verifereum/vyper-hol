@@ -88,7 +88,15 @@ cannot recover, including Bytes versus HexBytes and the spelling of Hex values.
    original operand when it does not yield a Literal. Reapplying the raw
    `pin_fold_expr` could erase those refusals. Boolean operators fold their
    literal children before translation to conditional expressions.
-4. A position whose value must be known at compile time but does not
+4. Ordinary expression translation also calls `fold_pin_constant` for
+   binary operations, ordered comparisons, unary minus, logical negation,
+   bitwise inversion, and the builtins `len`, `keccak256`, `floor`, `ceil`,
+   `min`, `max`, `abs`, `uint256_addmod`, `uint256_mulmod`, `pow_mod256`,
+   `max_value`, `min_value`, and `epsilon`. The origin folder allows
+   literal integer shifts and leaves bytes32 shifts at runtime.
+   `fold_pin_constant_type` preserves the result annotation, and
+   `fold_pin_constant_eval_eq` preserves evaluation, including the state.
+5. A position whose value must be known at compile time but does not
    evaluate is rejected, never given a default: a declaration with such an
    annotation bound or `range` bound fails validation (`bound_resolved`,
    `iter_bound_resolved`), and a call with such a keyword or slice length

@@ -1,6 +1,6 @@
 Theory assignPlacePureCode
 Ancestors
-  assignPlacePureFacts stmtSimAssignMem stmtSimProps stmtLowering exprLowering compileEnv
+  stmtSimAssignMem stmtSimProps stmtLowering exprLowering compileEnv
 
 Theorem assign_place_pure_code_parts:
   stmt_env ce lctx ty (Assign (BaseTarget bt) e) sa = (ce',sf) /\

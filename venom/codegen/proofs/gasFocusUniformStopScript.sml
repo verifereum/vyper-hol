@@ -2,7 +2,7 @@ Theory gasFocusUniformStop
 Ancestors gasFocusPlainFrameInitialStatic[qualified] quantHeuristics[qualified,ignore_grammar]
   gasFocusJointProgress gasFocusProductionPacketCursorStatic gasFocusPlainEntry
   codegenEntryFacts[qualified] codegenEntrySim fnEntryParams fnFramePrefixStack
-  fnPlanPlaceDfsBlock stackPlanGen
+  fnPlanPlaceDfsBlock stackPlanGen fnPlanPlaceRevertPostamble
   gasFocusPlainGasPreEdge gasFocusGasPreEdge codegenAsmProgOk
   asmFinalizerPrefix asmFinalizerPrefixFrame
   gasFocusFalseCodegenContext gasFocusOptLabelFlow gasFocusOptStaticAssembly
@@ -495,19 +495,19 @@ Proof
   rw[stackPlanGenTheory.get_params_def] >> gvs[]
 QED
 
-Theorem focus_entry_cursor_phase[local]:
-  entry_frame_plan rp u cpl prog fn entry s ast ra pc_ret rest mem0 /\
+Theorem focus_entry_cursor_phase_reloc:
+  entry_frame_plan_reloc asm_lo rp u cpl prog fn entry s ast ra pc_ret rest mem0 /\
   active_inst fn inst s /\ o1_fn_shape u.cu_context fn ==>
   (?post. step_inst fuel u.cu_context inst s = OK post) \/
   (inst.inst_opcode <> PHI /\ ~is_param_opcode inst.inst_opcode)
 Proof
   strip_tac >>
   Cases_on `s.vs_inst_idx < LENGTH (get_params (HD fn.fn_blocks).bb_instructions)`
-  >- (drule_all entry_frame_active_param >> strip_tac >>
-      drule_all entry_frame_plan_next >> metis_tac[]) >>
+  >- (drule_all entry_frame_active_param_reloc >> strip_tac >>
+      drule_all entry_frame_plan_next_reloc >> metis_tac[]) >>
   disj2_tac >>
-  qpat_x_assum `entry_frame_plan _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [entry_frame_plan_def]) >>
+  qpat_x_assum `entry_frame_plan_reloc _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [entry_frame_plan_reloc_def]) >>
   `s.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions)`
     by fs[] >>
   `wf_function fn /\ fn.fn_blocks <> [] /\ first_block_no_phi fn` by
@@ -521,20 +521,39 @@ Proof
   metis_tac[focus_after_params]
 QED
 
+Theorem focus_entry_cursor_phase[local]:
+  entry_frame_plan rp u cpl prog fn entry s ast ra pc_ret rest mem0 /\
+  active_inst fn inst s /\ o1_fn_shape u.cu_context fn ==>
+  (?post. step_inst fuel u.cu_context inst s = OK post) \/
+  (inst.inst_opcode <> PHI /\ ~is_param_opcode inst.inst_opcode)
+Proof
+  rewrite_tac[GSYM entry_frame_plan_reloc_specialize] >>
+  MATCH_ACCEPT_TAC focus_entry_cursor_phase_reloc
+QED
+
+Theorem focus_body_cursor_phase_reloc:
+  active_frame_plan_reloc asm_lo rp u cpl prog fn s ast ra rest mem0 /\
+  active_inst fn inst s /\ wf_function fn ==>
+  inst.inst_opcode <> PHI /\ ~is_param_opcode inst.inst_opcode
+Proof
+  simp[active_frame_plan_reloc_def] >> strip_tac >>
+  qhdtm_assum `body_plan_inv_reloc`
+    (strip_assume_tac o REWRITE_RULE [body_plan_inv_reloc_def]) >>
+  fs[active_inst_def] >>
+  `bb' = bb` by metis_tac[same_label_same_block,lookup_block_MEM,lookup_block_label] >>
+  fs[] >> reverse conj_tac
+  >- (drule (cj 4 body_plan_inv_static_reloc) >> simp[]) >>
+  `bb_well_formed bb` by metis_tac[wf_function_def,lookup_block_MEM] >>
+  fs[bb_well_formed_def] >> metis_tac[phi_prefix_not_phi]
+QED
+
 Theorem focus_body_cursor_phase[local]:
   active_frame_plan rp u cpl prog fn s ast ra rest mem0 /\
   active_inst fn inst s /\ wf_function fn ==>
   inst.inst_opcode <> PHI /\ ~is_param_opcode inst.inst_opcode
 Proof
-  simp[active_frame_plan_def] >> strip_tac >>
-  qhdtm_assum `body_plan_inv`
-    (strip_assume_tac o REWRITE_RULE [body_plan_inv_def]) >>
-  fs[active_inst_def] >>
-  `bb' = bb` by metis_tac[same_label_same_block,lookup_block_MEM,lookup_block_label] >>
-  fs[] >> reverse conj_tac
-  >- (drule (cj 4 body_plan_inv_static) >> simp[]) >>
-  `bb_well_formed bb` by metis_tac[wf_function_def,lookup_block_MEM] >>
-  fs[bb_well_formed_def] >> metis_tac[phi_prefix_not_phi]
+  rewrite_tac[GSYM active_frame_plan_reloc_specialize] >>
+  MATCH_ACCEPT_TAC focus_body_cursor_phase_reloc
 QED
 
 Theorem focus_frame_cursor_phase[local]:
@@ -681,7 +700,7 @@ QED
 
 (* The stop branch returns the opcode gate for focus_current_row_cut, so
    all reasons select a cut of the existing packet rather than a new one. *)
-Theorem focus_joint_selectable_stop_or_guards[local]:
+Theorem focus_joint_selectable_stop_or_guards_at[local]:
   cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
     (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8)
     (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
@@ -698,7 +717,7 @@ Theorem focus_joint_selectable_stop_or_guards[local]:
       !dst x sz src off.
         inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
         code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
-        FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
+        FLOOKUP asm_lo "code_end" = SOME off ==>
         w2n (src - n2w off) < dimword (:256) DIV 2) /\
     active_inst fn9 inst9 s9 /\
     (inst9.inst_opcode = INVOKE ==>
@@ -722,7 +741,7 @@ Theorem focus_joint_selectable_stop_or_guards[local]:
       ?dst x sz src off.
         inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
         code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
-        FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off /\
+        FLOOKUP asm_lo "code_end" = SOME off /\
         ~(w2n (src - n2w off) < dimword (:256) DIV 2)) \/
      (inst9.inst_opcode = INVOKE /\
       ~(?nm ops callee args ent.
@@ -2714,6 +2733,835 @@ Proof
   drule_all focus_finalizer_prefix_bridge >> metis_tac[]
 QED
 
+val progress_callbacks =
+  let val fields = strip_conj (lhand (concl focus_joint_progress_for))
+  in list_mk_conj (List.take (fields,2)) end;
+
+Theorem focus_uniform_frontier_for:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+    o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+    code_layout_valid vs0 /\
+    unit_shape_ok out.po_unit /\
+    generate_context_plan out.po_unit.cu_context = SOME cpl /\
+    codegen_assembly rpolicy out.po_unit = SOME prog /\
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    ^progress_callbacks /\
+    (!q. joint_initial vs0 out.po_unit.cu_context q ==>
+      (fin = K SOME ==>
+        normal_frame_plan rpolicy out.po_unit cpl prog
+          (vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
+                      vs_return_pc_token := 0w; vs_inst_idx := 0|>)
+          es0 q (entry_asm_state vs0 es0))) /\
+    (!q. joint_initial vs0 out.po_unit.cu_context q ==>
+      (fin = asm_opt_finalizer ==> frame q (entry_asm_state vs0 es0)
+        (sym_init (entry_asm_state vs0 es0)))) /\
+    (!s. symbolic 0 s = SymOK s) /\
+    (!stk PG G tn fn inst s oms om hs hist ast ss fuel.
+  (fin = K SOME ==> normal_frame_plan rpolicy out.po_unit cpl prog (vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
+       vs_return_pc_token := 0w; vs_inst_idx := 0|>) es0
+    (JointConfig stk PG G tn fn inst s oms om hs hist) ast) /\
+  (fin = asm_opt_finalizer ==> frame
+    (JointConfig stk PG G tn fn inst s oms om hs hist) ast ss) /\
+  active_inst fn inst s /\ o1_fn_shape out.po_unit.cu_context fn ==>
+  (?post. step_inst fuel out.po_unit.cu_context inst s = OK post) \/
+  (inst.inst_opcode <> PHI /\ ~is_param_opcode inst.inst_opcode)) /\
+    (?B. !n ast.
+      asm_steps asm_lo (build_offset_to_pc prog)
+        prog n (entry_asm_state vs0 es0) = AsmOK ast /\
+      (fin = asm_opt_finalizer ==>
+        ?ss. symbolic n (sym_init (entry_asm_state vs0 es0)) = SymOK ss) ==>
+      n <= B) /\
+    vs0.vs_gas_readings = gas_readings es0 /\
+    unit.cu_context.ctx_entry = SOME nm /\
+    lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+    fn_entry_label entryfn = SOME lbl /\
+    w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+    unit_alloca_budget unit.cu_context +
+      32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+    run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
+      (init_ir_supply unit) = SOME (pre,t) /\
+    pre.cu_context.ctx_entry = SOME nm /\
+    run_callee_first rpolicy o1_fn_passes
+      (fcg_postorder (fcg_analyze pre.cu_context) nm)
+      (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)) t =
+      SOME (out.po_unit,t') /\
+    stage 0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context /\
+    stage 9 = out.po_unit.cu_context /\
+    (!k. k < 9 ==> ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+      (stage k) (stage (SUC k))) /\
+    (!k. k <= 9 ==> o1_ctx_shape (stage k) /\
+      EVERY (o1_fn_row k) (stage k).ctx_functions) ==>
+    ?raw_slots sites unused N root_sf root_tf root_entry lbl7
+      q80 q90 evs8 qs8 evs9 qs9 schedules current saved asm_fuel ast ss j obs
+      acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+      stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8
+      stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9.
+  0 < N /\
+  root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|> /\
+  (stage 7).ctx_entry = SOME nm /\ (stage 8).ctx_entry = SOME nm /\
+  lookup_function nm (stage 7).ctx_functions = SOME root_sf /\
+  lookup_function nm (stage 8).ctx_functions = SOME root_tf /\
+  fn_entry_label root_sf = SOME lbl7 /\ fn_entry_label root_tf = SOME lbl7 /\
+  joint_initial vs0 (stage 8) q80 /\ joint_initial vs0 (stage 9) q90 /\
+  joint_trace vs0 (stage 8) q80 evs8 qs8 (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8) /\
+  joint_trace vs0 (stage 9) q90 evs9 qs9 (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
+  cfg_norm_joint_cursors (stage 8) (stage 9) (schedules,current,saved) (JointConfig stk8 PG8 G8 tn8 fn8
+    inst8 s8 oms8 om8 hs8 hist8) (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
+  asm_steps asm_lo (build_offset_to_pc prog)
+    prog asm_fuel (entry_asm_state vs0 es0) = AsmOK ast /\
+  (fin = K SOME ==> normal_frame_plan rpolicy out.po_unit cpl prog (vs0 with
+    <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp; vs_return_pc_token := 0w;
+    vs_inst_idx := 0|>) es0 (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ast) /\
+  (fin = asm_opt_finalizer ==>
+    symbolic asm_fuel (sym_init (entry_asm_state vs0 es0)) = SymOK ss /\
+    frame
+      (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ast ss) /\
+  dft_focus_packet_rel N (stage 7) (stage 8) root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8
+      om8 hs8 hist8) raw_slots sites unused /\
+  j = LENGTH evs8 /\ LENGTH evs8 <= LENGTH evs9 /\ LENGTH (TAKE j (dftGasFromListTraceDefs$trace_blocks []
+    0 N (stage 8) root_tf root_entry)) = j /\
+  j < LENGTH (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8) root_tf root_entry) /\ obs =
+    dftGasFromListTraceDefs$trace_gas (TAKE j (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8)
+    root_tf root_entry)) /\
+  EL j (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8) root_tf root_entry) =
+    ((p,d,inst8.inst_id),fn8,inst8,s8) /\
+  LENGTH raw_slots = LENGTH sites /\
+  PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+  (?align old_cursors old_asm old_sym costs.
+    LENGTH costs = LENGTH evs9 /\ LENGTH old_asm = LENGTH evs9 /\
+    (fin = asm_opt_finalizer ==> LENGTH old_sym = LENGTH evs9) /\
+    align 0 = 0 /\ align (LENGTH evs9) = j /\
+    asm_fuel = SUM costs /\ ast = EL (LENGTH evs9) ((entry_asm_state vs0 es0)::old_asm) /\
+    (fin = asm_opt_finalizer ==> ss = EL (LENGTH evs9) (sym_init (entry_asm_state vs0 es0)::old_sym)) /\
+    LIST_REL (\cost edge. 0 < cost \/
+      (\q. case q of JointConfig stk PG G tn fn inst s oms om hs h =>
+         case lookup_block s.vs_current_bb fn.fn_blocks of
+           NONE => 0
+         | SOME bb => LENGTH bb.bb_instructions - s.vs_inst_idx) (SND edge) <
+      (\q. case q of JointConfig stk PG G tn fn inst s oms om hs h =>
+         case lookup_block s.vs_current_bb fn.fn_blocks of
+           NONE => 0
+         | SOME bb => LENGTH bb.bb_instructions - s.vs_inst_idx) (FST edge))
+      costs (ZIP (TAKE (LENGTH evs9) (q90::qs9),qs9)) /\
+    (!k. k < LENGTH evs9 ==>
+      align k <= j /\
+      (align (SUC k) = align k \/ align (SUC k) = SUC (align k)) /\
+      align (SUC k) <= j /\
+      cfg_norm_joint_cursors (stage 8) (stage 9) (old_cursors k) (EL (align k) (q80::qs8)) (EL k
+        (q90::qs9)) /\
+      asm_steps asm_lo (build_offset_to_pc prog)
+        prog (EL k costs) (EL k ((entry_asm_state vs0 es0)::old_asm)) =
+          AsmOK (EL (SUC k) ((entry_asm_state vs0 es0)::old_asm)) /\
+      (fin = asm_opt_finalizer ==>
+        symbolic (EL k costs) (EL k (sym_init (entry_asm_state vs0
+          es0)::old_sym)) =
+          SymOK (EL (SUC k) (sym_init (entry_asm_state vs0 es0)::old_sym))) /\
+      (case ((EL (align k) (q80::qs8)),(EL k (q90::qs9))) of
+        (JointConfig frames8 p8 g8 t8 f8 i8 u8 o8 m8 sh8 oh8,
+         JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) =>
+          (~in_revert_forward fn9 s9 /\
+  (inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode ==>
+    source_memory_reads_disjoint cpl inst9 s9 /\
+    context_source_memory_writes_disjoint cpl inst9 s9) /\
+  (fin = asm_opt_finalizer ==>
+    !dst x sz src off.
+      inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
+      code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
+      FLOOKUP asm_lo "code_end" = SOME off ==>
+      w2n (src - n2w off) < dimword (:256) DIV 2)) /\ (active_inst fn9 inst9 s9 /\
+  (inst9.inst_opcode = INVOKE ==>
+    ?nm' ops callee args ent.
+      decode_invoke inst9 = SOME (nm',ops) /\
+      lookup_function nm' (stage 9).ctx_functions = SOME callee /\
+      eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent) /\
+  (inst9.inst_opcode <> INVOKE ==>
+    (?u. step_inst 0 (stage 9) inst9 s9 = OK u /\ ~u.vs_halted) \/
+    (stk9 <> [] /\ ?ir u. step_inst 0 (stage 9) inst9 s9 = IntRet ir u))) /\
+          (align (SUC k) = SUC (align k) /\ i8.inst_opcode = GAS ==>
+            u8.vs_gas_readings <> [])))) /\
+  (?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
+      body_entry count front closed brest.
+      FLOOKUP acts p = SOME (sf,fn8,inc,entry,order,res,nrest) /\
+      FLOOKUP blocks (p,d) =
+        SOME (bb,bt,ps,xs,ys,rho,in_state,h0,body_entry,count,front,closed,brest) /\
+      get_instruction bt s8.vs_inst_idx = SOME inst8 /\
+      ?q z src_inst cuts levels Mcut Ecut Kcut mr er kr.
+        src_inst = EL (LENGTH z)
+          (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
+        ((IS_SOME body_entry /\ LENGTH ps <= s8.vs_inst_idx /\
+          s8.vs_inst_idx - LENGTH ps < LENGTH rho /\
+          q = EL (s8.vs_inst_idx - LENGTH ps) rho /\ q < LENGTH xs /\
+          (p <> p \/ d <> d \/ s8 <> s8 \/
+            (EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+             (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE count rho)))) /\
+          (inv_memory_observation inst8.inst_opcode \/ is_fallible inst8 \/
+             inst8.inst_opcode = INVOKE ==> EL q xs = inst8) /\
+          z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs) \/
+         (p = p /\ d = d /\ s8 = s8 /\ body_entry = NONE /\
+          s8.vs_inst_idx < LENGTH ps /\ q = 0 /\
+          z = DROP (phi_prefix_length bb.bb_instructions) (TAKE s8.vs_inst_idx ps))) /\
+        MAP (\(ai,ds,ei,qi,zi). ai) cuts =
+          REVERSE (GENLIST (\i. DROP i p) (SUC (LENGTH p))) /\
+        LENGTH cuts = LENGTH levels /\
+        (!i ai ds ei qi zi.
+          i < LENGTH cuts /\ EL i cuts = (ai,ds,ei,qi,zi) ==>
+          ?sfi tfi inci enti orderi resi nresti bbi bti psi xsi ysi rhoi
+            ini hi bei counti fronti closedi resti later.
+            FLOOKUP acts ai = SOME (sfi,tfi,inci,enti,orderi,resi,nresti) /\
+            FLOOKUP blocks (ai,ei) =
+              SOME (bbi,bti,psi,xsi,ysi,rhoi,ini,hi,bei,counti,fronti,closedi,resti) /\
+            orderi = ds ++ ei::later /\
+            (if SUC i = LENGTH cuts then
+              ai = p /\ ei = d /\ qi = q /\ zi = z
+            else
+              ?cid h b0 done_at_call child_entry ret.
+                EL (SUC i) (MAP (\(aj,djs,ej,qj,zj). aj) cuts) = (ei,cid)::ai /\
+                FLOOKUP calls (ai,ei,cid) =
+                  SOME (qi,h,b0,done_at_call,child_entry,ret) /\
+                qi < LENGTH xsi /\ (EL qi xsi).inst_id = cid /\
+                zi = DROP (phi_prefix_length bbi.bb_instructions) psi ++ TAKE qi xsi /\
+                EVERY (\x. ~is_terminator x.inst_opcode) (TAKE qi xsi) /\
+                (!r. r < qi /\ (EL r xsi).inst_opcode = INVOKE ==>
+                  MEM r done_at_call)) /\
+            EL i levels =
+              (sfi,
+               MAP (\f.
+                 (FST (THE (FLOOKUP blocks (ai,f))),f,
+                  DROP (phi_prefix_length
+                    (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)
+                    (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)) ds ++
+                 [(bbi,ei,zi)],
+               if SUC i = LENGTH cuts then NONE else SOME (EL qi xsi))) /\
+        Mcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+          FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab (ai,f)))) ds) ++
+          FLAT (TAKE qi (THE (FLOOKUP ms_tab (ai,ei))))) cuts) /\
+        Ecut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+          FLAT (MAP (\f. FLAT (THE (FLOOKUP es_tab (ai,f)))) ds) ++
+          FLAT (TAKE qi (THE (FLOOKUP es_tab (ai,ei))))) cuts) /\
+        Kcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+          FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab (ai,f)))) ds) ++
+          FLAT (TAKE qi (THE (FLOOKUP ks_tab (ai,ei))))) cuts) /\
+        raw_slots = Mcut ++ mr /\ sites = Ecut ++ er /\ (FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab
+          ([],e)))) (FST (SND (SND (SND (SND (THE (FLOOKUP acts []))))))))) = Kcut ++ kr /\
+        LENGTH Mcut = LENGTH Ecut /\ LENGTH Mcut = LENGTH Kcut /\
+        (!F gs tail.
+          N <= F /\
+          LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs ==>
+          (?extra. Ecut = FST (rooted_eval F (stage 7) levels
+            (root_entry with vs_gas_readings := gs ++ tail)) ++ extra) /\
+          (case SND (rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail)) of
+            OK u =>
+              FST (rooted_eval F (stage 7) levels
+                (root_entry with vs_gas_readings := gs ++ tail)) = Ecut /\
+              u.vs_gas_readings = tail /\
+              (?before after.
+                dftGasFromListTraceDefs$trace_blocks [] 0 F (stage 7) root_sf
+                  (root_entry with vs_gas_readings := gs ++ tail) =
+                  before ++ [((p,d,(EL (LENGTH z)
+                    (DROP (phi_prefix_length bb.bb_instructions)
+                      bb.bb_instructions)).inst_id),sf,
+                    EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
+                      bb.bb_instructions),u)] ++ after /\
+                dftGasFromListTraceDefs$trace_gas before = ZIP (Kcut,gs)) /\
+              (!tail'. rooted_eval F (stage 7) levels
+                (root_entry with vs_gas_readings := gs ++ tail') =
+                  (Ecut,OK (u with vs_gas_readings := tail'))) /\
+              (body_entry = NONE ==>
+                u with vs_gas_readings := s8.vs_gas_readings = s8) /\
+              (p = p /\ d = d /\ IS_SOME body_entry /\
+               inv_memory_observation inst8.inst_opcode /\ EL q xs = inst8 ==>
+                (!op. MEM op inst8.inst_operands ==>
+                  eval_operand op u = eval_operand op s8) /\
+                u.vs_initial_fmp = s8.vs_initial_fmp)
+          | stopped =>
+              run_blocks F (stage 7) root_sf
+                (root_entry with vs_gas_readings := gs ++ tail) = stopped /\
+              gas_events_blocks F (stage 7) root_sf
+                (root_entry with vs_gas_readings := gs ++ tail) =
+                  FST (rooted_eval F (stage 7) levels
+                    (root_entry with vs_gas_readings := gs ++ tail)))) /\
+        (!F gs tail n u.
+          N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
+          LENGTH Mcut < n /\
+          mem_inv (\ctx src_fn src_inst src_state.
+            gas_cut n (root_entry with vs_gas_readings := gs ++ tail) src_state ==>
+              static_mem_ok cpl.cp_max_static_eom ctx src_fn src_inst src_state)
+            (stage 7) (root_entry with vs_gas_readings := gs ++ tail) /\
+          rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail) =
+            (Ecut,OK u) ==>
+          static_mem_ok cpl.cp_max_static_eom (stage 7) sf src_inst u /\
+          (~in_revert_forward fn8 s8 ==> ~in_revert_forward sf u) /\
+          (inv_memory_observation src_inst.inst_opcode ==>
+            (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op s8) /\
+            u.vs_initial_fmp = s8.vs_initial_fmp))) /\
+  (!h. h < j ==>
+    ?a e tf inst visit_state stk PG G tn oms om hs hist.
+      EL h (TAKE j (dftGasFromListTraceDefs$trace_blocks [] 0 N (stage 8) root_tf root_entry)) =
+        ((a,e,inst.inst_id),tf,inst,visit_state) /\
+      EL h (q80::qs8) = JointConfig stk PG G tn tf inst visit_state oms om hs hist /\
+      ?sf inc entry order res nrest bb bt ps xs ys rho in_state h0
+        body_entry count front closed brest.
+        FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
+        FLOOKUP blocks (a,e) =
+          SOME (bb,bt,ps,xs,ys,rho,in_state,h0,body_entry,count,front,closed,brest) /\
+        get_instruction bt visit_state.vs_inst_idx = SOME inst /\
+        ((inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
+          inst.inst_opcode = INVOKE) /\ ~in_revert_forward tf visit_state ==>
+          ?q z src_inst cuts levels Mcut Ecut Kcut mr er kr.
+            src_inst = EL (LENGTH z)
+              (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
+            ((IS_SOME body_entry /\ LENGTH ps <= visit_state.vs_inst_idx /\
+              visit_state.vs_inst_idx - LENGTH ps < LENGTH rho /\
+              q = EL (visit_state.vs_inst_idx - LENGTH ps) rho /\ q < LENGTH xs /\
+              (a <> p \/ e <> d \/ visit_state <> s8 \/
+                (EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+                 (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==> MEM r (TAKE count rho)))) /\
+              (inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
+                 inst.inst_opcode = INVOKE ==> EL q xs = inst) /\
+              z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs) \/
+             (a = p /\ e = d /\ visit_state = s8 /\ body_entry = NONE /\
+              visit_state.vs_inst_idx < LENGTH ps /\ q = 0 /\
+              z = DROP (phi_prefix_length bb.bb_instructions) (TAKE visit_state.vs_inst_idx ps))) /\
+            MAP (\(ai,ds,ei,qi,zi). ai) cuts =
+              REVERSE (GENLIST (\i. DROP i a) (SUC (LENGTH a))) /\
+            LENGTH cuts = LENGTH levels /\
+            (!i ai ds ei qi zi.
+              i < LENGTH cuts /\ EL i cuts = (ai,ds,ei,qi,zi) ==>
+              ?sfi tfi inci enti orderi resi nresti bbi bti psi xsi ysi rhoi
+                ini hi bei counti fronti closedi resti later.
+                FLOOKUP acts ai = SOME (sfi,tfi,inci,enti,orderi,resi,nresti) /\
+                FLOOKUP blocks (ai,ei) =
+                  SOME (bbi,bti,psi,xsi,ysi,rhoi,ini,hi,bei,counti,fronti,closedi,resti) /\
+                orderi = ds ++ ei::later /\
+                (if SUC i = LENGTH cuts then
+                  ai = a /\ ei = e /\ qi = q /\ zi = z
+                else
+                  ?cid h b0 done_at_call child_entry ret.
+                    EL (SUC i) (MAP (\(aj,djs,ej,qj,zj). aj) cuts) = (ei,cid)::ai /\
+                    FLOOKUP calls (ai,ei,cid) =
+                      SOME (qi,h,b0,done_at_call,child_entry,ret) /\
+                    qi < LENGTH xsi /\ (EL qi xsi).inst_id = cid /\
+                    zi = DROP (phi_prefix_length bbi.bb_instructions) psi ++ TAKE qi xsi /\
+                    EVERY (\x. ~is_terminator x.inst_opcode) (TAKE qi xsi) /\
+                    (!r. r < qi /\ (EL r xsi).inst_opcode = INVOKE ==>
+                      MEM r done_at_call)) /\
+                EL i levels =
+                  (sfi,
+                   MAP (\f.
+                     (FST (THE (FLOOKUP blocks (ai,f))),f,
+                      DROP (phi_prefix_length
+                        (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)
+                        (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)) ds ++
+                     [(bbi,ei,zi)],
+                   if SUC i = LENGTH cuts then NONE else SOME (EL qi xsi))) /\
+            Mcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+              FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab (ai,f)))) ds) ++
+              FLAT (TAKE qi (THE (FLOOKUP ms_tab (ai,ei))))) cuts) /\
+            Ecut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+              FLAT (MAP (\f. FLAT (THE (FLOOKUP es_tab (ai,f)))) ds) ++
+              FLAT (TAKE qi (THE (FLOOKUP es_tab (ai,ei))))) cuts) /\
+            Kcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+              FLAT (MAP (\f. FLAT (THE (FLOOKUP ks_tab (ai,f)))) ds) ++
+              FLAT (TAKE qi (THE (FLOOKUP ks_tab (ai,ei))))) cuts) /\
+            raw_slots = Mcut ++ mr /\ sites = Ecut ++ er /\ (FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab
+              ([],e)))) (FST (SND (SND (SND (SND (THE (FLOOKUP acts []))))))))) = Kcut ++ kr /\
+            LENGTH Mcut = LENGTH Ecut /\ LENGTH Mcut = LENGTH Kcut /\
+            (!F gs tail.
+              N <= F /\
+              LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs ==>
+              (?extra. Ecut = FST (rooted_eval F (stage 7) levels
+                (root_entry with vs_gas_readings := gs ++ tail)) ++ extra) /\
+              (case SND (rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail)) of
+                OK u =>
+                  FST (rooted_eval F (stage 7) levels
+                    (root_entry with vs_gas_readings := gs ++ tail)) = Ecut /\
+                  u.vs_gas_readings = tail /\
+                  (?before after.
+                    dftGasFromListTraceDefs$trace_blocks [] 0 F (stage 7) root_sf
+                      (root_entry with vs_gas_readings := gs ++ tail) =
+                      before ++ [((a,e,(EL (LENGTH z)
+                        (DROP (phi_prefix_length bb.bb_instructions)
+                          bb.bb_instructions)).inst_id),sf,
+                        EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
+                          bb.bb_instructions),u)] ++ after /\
+                    dftGasFromListTraceDefs$trace_gas before = ZIP (Kcut,gs)) /\
+                  (!tail'. rooted_eval F (stage 7) levels
+                    (root_entry with vs_gas_readings := gs ++ tail') =
+                      (Ecut,OK (u with vs_gas_readings := tail'))) /\
+                  (body_entry = NONE ==>
+                    u with vs_gas_readings := visit_state.vs_gas_readings = visit_state) /\
+                  (a = p /\ e = d /\ IS_SOME body_entry /\
+                   inv_memory_observation inst.inst_opcode /\ EL q xs = inst ==>
+                    (!op. MEM op inst.inst_operands ==>
+                      eval_operand op u = eval_operand op visit_state) /\
+                    u.vs_initial_fmp = visit_state.vs_initial_fmp)
+              | stopped =>
+                  run_blocks F (stage 7) root_sf
+                    (root_entry with vs_gas_readings := gs ++ tail) = stopped /\
+                  gas_events_blocks F (stage 7) root_sf
+                    (root_entry with vs_gas_readings := gs ++ tail) =
+                      FST (rooted_eval F (stage 7) levels
+                        (root_entry with vs_gas_readings := gs ++ tail)))) /\
+            (!F gs tail n u.
+              N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
+              LENGTH Mcut < n /\
+              mem_inv (\ctx src_fn src_inst src_state.
+                gas_cut n (root_entry with vs_gas_readings := gs ++ tail) src_state ==>
+                  static_mem_ok cpl.cp_max_static_eom ctx src_fn src_inst src_state)
+                (stage 7) (root_entry with vs_gas_readings := gs ++ tail) /\
+              rooted_eval F (stage 7) levels (root_entry with vs_gas_readings := gs ++ tail) =
+                (Ecut,OK u) ==>
+              static_mem_ok cpl.cp_max_static_eom (stage 7) sf src_inst u /\
+              ~in_revert_forward sf u /\
+              (inv_memory_observation src_inst.inst_opcode ==>
+                (!op. MEM op src_inst.inst_operands ==> eval_operand op u = eval_operand op visit_state) /\
+                u.vs_initial_fmp = visit_state.vs_initial_fmp)))) /\
+  ((?r r8. step_inst (N-d) (stage 8) inst8 s8 = r /\
+      r8 = (case r of OK u => Halt u | other => other) /\
+      ((?u. r = OK u /\ u.vs_halted) \/ (?u. r = Halt u) \/
+       (?ex u. r = Abort ex u)) /\
+      inst8.inst_opcode <> INVOKE /\
+      run_blocks N (stage 8) root_tf root_entry = r8 /\
+      (!F gs tail. N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+          raw_slots gs ==>
+        ?extra. sites = gas_events_blocks F (stage 7) root_sf
+          (root_entry with vs_gas_readings := gs ++ tail) ++ extra)) \/
+    in_revert_forward fn9 s9 \/
+    (inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode /\
+     (~source_memory_reads_disjoint cpl inst9 s9 \/
+      ~context_source_memory_writes_disjoint cpl inst9 s9)) \/
+    (fin = asm_opt_finalizer /\
+      ?dst x sz src off. inst9.inst_opcode = CODECOPY /\
+        inst9.inst_operands = [dst; Var x; sz] /\ code_end_var fn9 x /\
+        eval_operand (Var x) s9 = SOME src /\
+        FLOOKUP asm_lo "code_end" = SOME off /\
+        ~(w2n (src - n2w off) < dimword (:256) DIV 2)) \/
+    (inst8.inst_opcode = GAS /\ inst9.inst_opcode = GAS /\ s8.vs_gas_readings = []) \/
+    (inst9.inst_opcode = INVOKE /\
+     ~(?callee_name ops callee args ent.
+        decode_invoke inst9 = SOME (callee_name,ops) /\
+        lookup_function callee_name (stage 9).ctx_functions = SOME callee /\
+        eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent)) \/
+    (inst9.inst_opcode <> INVOKE /\ ?err. step_inst 0 (stage 9) inst9 s9 = Error err))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all_then
+    (qx_choosel_then [`root_sf`,`lbl7`,`schedules`] (map_every assume_tac o CONJUNCTS))
+    focus_production_packet_cursor_static >>
+  qpat_x_assum `!N. 0 < N ==> _` (qspec_then `1` mp_tac) >>
+  simp_tac bool_ss [DECIDE ``0 < (1:num)``,LET_THM] >>
+  disch_then (qx_choosel_then [`bb0`,`bt0`,`ps0`,`xs0`,`ys0`,`rho0`,`f90`,
+      `current0`,`rooted_eval`] (map_every assume_tac o CONJUNCTS)) >>
+  qabbrev_tac `root_tf = dft_fn root_sf` >>
+  qabbrev_tac `root_entry = vs0 with
+    <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|>` >>
+  qabbrev_tac `i80 = HD bt0.bb_instructions` >>
+  qabbrev_tac `i90 = HD (HD f90.fn_blocks).bb_instructions` >>
+  qabbrev_tac `q80 = JointConfig [] [] FEMPTY entry_taint root_tf i80 root_entry [] FEMPTY []
+    [OriginInitial root_entry;
+     OriginObserve (OriginSnapshot root_tf [] FEMPTY FEMPTY i80 root_entry)]` >>
+  qabbrev_tac `q90 = JointConfig [] [] FEMPTY entry_taint f90 i90 root_entry [] FEMPTY []
+    [OriginInitial root_entry;
+     OriginObserve (OriginSnapshot f90 [] FEMPTY FEMPTY i90 root_entry)]` >>
+  `joint_initial vs0 out.po_unit.cu_context q90` by
+    simp[Abbr `q90`,Abbr `i90`,Abbr `root_entry`] >>
+  qpat_assum `!q. joint_initial _ _ q ==> (fin = K SOME ==> _)`
+    (drule_then assume_tac) >>
+  qpat_assum `!q. joint_initial _ _ q ==> (fin = asm_opt_finalizer ==> _)`
+    (drule_then assume_tac) >>
+  qpat_x_assum `?B. !n ast. _ ==> n <= B`
+    (qx_choose_then `B` assume_tac) >>
+  qpat_assum `stage 9 = out.po_unit.cu_context` (fn th =>
+    map_every (fn pat => qpat_assum pat (assume_tac o ONCE_REWRITE_RULE [GSYM th]))
+      [`joint_initial vs0 out.po_unit.cu_context _`,
+       `joint_trace vs0 out.po_unit.cu_context _ _ _ _`,
+       `cfg_norm_joint_cursors (stage 8) out.po_unit.cu_context _ _ _`]) >>
+  (* State the invariant directly from the frozen conclusion, removing only
+     the selected cut and the stop disjunction. The root data stay parameters. *)
+  (fn (asl, goal) =>
+    let
+      val (ws, body) = strip_exists goal
+      val fixed = ["root_sf","root_tf","lbl7","q80","q90","schedules","rooted_eval"]
+      fun name v = fst (dest_var v)
+      fun find n = valOf (List.find (fn v => name v = n orelse name v = n ^ "'") ws)
+      val shared = map (fn n =>
+        let val v = find n in v |-> mk_var (n,type_of v) end) fixed
+      val entry = Parse.parse_in_context (free_vars (list_mk_conj asl))
+        `vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|>`
+      val use_entry = [entry |-> mk_var ("root_entry",type_of entry)]
+      val f = find "asm_fuel"
+      val r = genvar numSyntax.num
+      val rank = Parse.parse_in_context [find "fn9",find "s9"]
+        `case lookup_block s9.vs_current_bb fn9.fn_blocks of
+           NONE => 0 | SOME bb => LENGTH bb.bb_instructions - s9.vs_inst_idx`
+      val fields = strip_conj body
+      val cert = list_mk_conj (List.take (fields, length fields - 3) @
+        [List.nth (fields,length fields - 2), mk_eq (r,rank)])
+      val keep = filter (fn v =>
+        not (aconv v f orelse List.exists (fn {redex,...} => aconv v redex) shared)) ws
+      val pred = mk_abs (f,mk_abs (r,list_mk_exists (keep,subst use_entry (subst shared cert))))
+    in
+      markerLib.ABBREV_TAC (mk_eq (mk_var ("Prefix",type_of pred),pred)) (asl,goal)
+    end) >>
+  suspend "search"
+QED
+
+Resume focus_uniform_frontier_for[search]:
+  `?r. Prefix 0 r` by
+    (qpat_assum `marker$Abbrev (Prefix = _)`
+       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     CONV_TAC (QUANT_CONV (TRY_CONV (RATOR_CONV BETA_CONV THENC BETA_CONV))) >>
+     qabbrev_tac `b0 = if phi_prefix_length bt0.bb_instructions < LENGTH ps0
+                       then NONE else SOME (root_entry,0)` >>
+     qabbrev_tac `ms0 = if IS_SOME b0 then
+                      MAP (\i. if i.inst_opcode = GAS then [NONE:bytes32 option] else []) xs0
+                    else []` >>
+     qabbrev_tac `es00 = if IS_SOME b0 then
+                      MAP (\i. if i.inst_opcode = GAS then [(root_sf.fn_name,i.inst_id)] else []) xs0
+                    else []` >>
+     qabbrev_tac `ks0 = if IS_SOME b0 then
+                      MAP (\i. if i.inst_opcode = GAS then [([]:(num # num) list,1:num,i.inst_id)] else []) xs0
+                    else []` >>
+     qexistsl [`(case lookup_block root_entry.vs_current_bb f90.fn_blocks of
+                   NONE => 0 | SOME bb => LENGTH bb.bb_instructions - root_entry.vs_inst_idx)`,
+       `FLAT ms0`,`FLAT es00`,`root_entry.vs_gas_readings`,`1`,
+       `[]`,`[]`,`[]`,`[]`,`current0`,`[]`,`entry_asm_state vs0 es0`,
+       `sym_init (entry_asm_state vs0 es0)`,
+       `FEMPTY |+ ([],(root_sf,root_tf,0:num,root_entry,[1:num],NONE,NONE))`,
+       `FEMPTY |+ (([],1:num),(bb0,bt0,ps0,xs0,ys0,rho0,root_entry,0:num,b0,0:num,OK root_entry,F,NONE))`,
+       `FEMPTY`,`FEMPTY |+ (([],1),ms0)`,`FEMPTY |+ (([],1),es00)`,
+       `FEMPTY |+ (([],1),ks0)`,`[]`,`1`,
+       `[]`,`[]`,`FEMPTY`,`entry_taint`,`root_tf`,`i80`,`root_entry`,`[]`,`FEMPTY`,`[]`,
+       `[OriginInitial root_entry;
+         OriginObserve (OriginSnapshot root_tf [] FEMPTY FEMPTY i80 root_entry)]`,
+       `[]`,`[]`,`FEMPTY`,`entry_taint`,`f90`,`i90`,`root_entry`,`[]`,`FEMPTY`,`[]`,
+       `[OriginInitial root_entry;
+         OriginObserve (OriginSnapshot f90 [] FEMPTY FEMPTY i90 root_entry)]`] >>
+     simp[Abbr `q80`,Abbr `q90`,Abbr `ks0`] >>
+     conj_tac >-
+       (qpat_assum `?tail. trace_blocks _ _ _ _ _ _ = _::tail`
+          (strip_assume_tac) >> simp[]) >>
+     conj_tac >-
+       (simp[Abbr `ms0`,Abbr `es00`] >> IF_CASES_TAC >> simp[] >>
+        qid_spec_tac `xs0` >> Induct >> simp[] >>
+        gen_tac >> IF_CASES_TAC >> simp[]) >>
+     conj_tac >-
+       (`FILTER IS_SOME (FLAT ms0) = []` by
+          (simp[Abbr `ms0`] >> IF_CASES_TAC >> simp[] >>
+           qid_spec_tac `xs0` >> Induct >> simp[FILTER_APPEND] >>
+           gen_tac >> IF_CASES_TAC >> simp[]) >>
+        simp[Abbr `root_entry`]) >>
+     qexistsl [`K 0`,`[]`] >> simp[combinTheory.K_THM]) >>
+  `!f r. Prefix f r ==> f <= B` by
+    (rpt gen_tac >>
+     qpat_assum `marker$Abbrev (Prefix = _)`
+       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     CONV_TAC (LAND_CONV (RATOR_CONV BETA_CONV THENC BETA_CONV)) >>
+     disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+     first_x_assum irule >>
+     simp[]) >>
+  qabbrev_tac `loss = \i. ?f r. Prefix f r /\ i = B - f` >>
+  qspec_then `loss` mp_tac WhileTheory.LEAST_EXISTS_IMP >>
+  (impl_tac >- (qexists `B` >> simp[Abbr `loss`] >> qexists `0` >> simp[] >>
+                qexists `r` >> first_assum ACCEPT_TAC)) >>
+  disch_then (CONJUNCTS_THEN2 mp_tac (mk_asm "fuel_min")) >>
+  simp_tac bool_ss [Abbr `loss`] >>
+  disch_then (qx_choose_then `f` (qx_choose_then `r_initial` strip_assume_tac)) >>
+  `!f' r'. Prefix f' r' ==> f' <= f` by
+    (rpt strip_tac >> spose_not_then assume_tac >>
+     `f' <= B` by (qpat_assum `!a b. Prefix a b ==> a <= B` irule >>
+                   qexists `r'` >> simp[]) >>
+     `B - f' < B - f` by decide_tac >>
+     asm "fuel_min" (qspec_then `B - f'` mp_tac) >>
+     BETA_TAC >>
+     `B - f' < (LEAST i. ?a b. Prefix a b /\ i = B - a)` by simp[] >>
+     simp[] >> qexistsl [`f'`,`r'`] >> simp[]) >>
+  qspec_then `Prefix f` mp_tac WhileTheory.LEAST_EXISTS_IMP >>
+  (impl_tac >- (qexists `r_initial` >> first_assum ACCEPT_TAC)) >>
+  strip_tac >>
+  qabbrev_tac `best_rank = $LEAST (Prefix f)` >>
+  `!r'. Prefix f r' ==> best_rank <= r'` by
+    (rpt strip_tac >> simp[GSYM arithmeticTheory.NOT_LESS] >>
+     disch_tac >> qpat_assum `!n. n < best_rank ==> _` (qspec_then `r'` mp_tac) >> simp[]) >>
+  qpat_x_assum `Prefix f best_rank` mp_tac >>
+  qpat_assum `marker$Abbrev (Prefix = _)`
+    (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  CONV_TAC (LAND_CONV (RATOR_CONV BETA_CONV THENC BETA_CONV)) >>
+  disch_then (qx_choosel_then
+    [`raw_slots`,`sites`,`unused`,`N`,`evs8`,`qs8`,`evs9`,`qs9`,`current`,`saved`,
+     `ast`,`ss`,`acts`,`blocks`,`calls`,`ms_tab`,`es_tab`,`ks_tab`,`p`,`d`,
+     `stk8`,`PG8`,`G8`,`tn8`,`fn8`,`inst8`,`s8`,`oms8`,`om8`,`hs8`,`hist8`,
+     `stk9`,`PG9`,`G9`,`tn9`,`fn9`,`inst9`,`s9`,`oms9`,`om9`,`hs9`,`hist9`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `?align old_cursors old_asm old_sym costs. _`
+    (qx_choosel_then [`align`,`old_cursors`,`old_asm`,`old_sym`,`costs`]
+       (map_every assume_tac o CONJUNCTS)) >>
+  qabbrev_tac `j = LENGTH evs8` >>
+  qabbrev_tac `obs = trace_gas (TAKE j (trace_blocks [] 0 N (stage 8) root_tf root_entry))` >>
+  drule_then (map_every assume_tac o CONJUNCTS) focus_current_instruction >>
+  drule_then (map_every assume_tac o CONJUNCTS) focus_cursor_ready_context >>
+  `o1_fn_shape out.po_unit.cu_context fn9` by
+    (qpat_x_assum `o1_ctx_shape (stage 9)` (mp_tac o REWRITE_RULE [o1_ctx_shape_def,EVERY_MEM]) >>
+     qpat_assum `stage 9 = out.po_unit.cu_context` (fn eq =>
+       qpat_assum `MEM fn9 (stage 9).ctx_functions` (assume_tac o REWRITE_RULE [eq])) >>
+     asm_rewrite_tac [] >> strip_tac >> first_x_assum irule >> first_assum ACCEPT_TAC) >>
+  `(fin = asm_opt_finalizer ==>
+    frame
+      (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ast ss)` by
+    (disch_tac >> qpat_assum `fin = asm_opt_finalizer ==> symbolic f _ = _ /\ _`
+      (mp_tac o REWRITE_RULE [IMP_CONJ_THM]) >> asm_rewrite_tac [] >> simp[]) >>
+  qpat_assum `!stk PG G tn fn inst s oms om hs hist ast ss fuel. _` drule_all >>
+  disch_then (qspec_then `0` (fn th =>
+    qpat_assum `stage 9 = out.po_unit.cu_context`
+      (fn eq => assume_tac (ONCE_REWRITE_RULE [GSYM eq] th)))) >>
+  drule_all (Q.INST [`cpl` |-> `cpl`, `fin` |-> `fin`, `asm_lo` |-> `asm_lo`,
+    `fuel` |-> `N-d`] focus_joint_selectable_stop_or_guards_at) >>
+  disch_then (qspecl_then [`fin`,`d`,`cpl`,`asm_lo`,`N`]
+    (DISJ_CASES_THEN2 (map_every assume_tac o CONJUNCTS)
+      (CONJUNCTS_THEN2 assume_tac assume_tac)))
+  >- suspend "advance" >>
+  suspend "stop"
+QED
+
+Resume focus_uniform_frontier_for[stop]:
+  qpat_assum `dft_focus_packet_rel N _ _ _ _ _ (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d _ raw_slots sites unused`
+    (mp_then Any mp_tac focus_current_row_cut) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then
+    [`cut_sf`,`cut_inc`,`cut_entry`,`cut_order`,`cut_bb`,`cut_bt`,`cut_ps`,`cut_xs`,`cut_ys`,
+     `cut_rho`,`cut_state`,`cut_h`,`cut_body`,`cut_ix`,`cut_q`,`cut_z`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qpat_assum `FLOOKUP blocks (p,d) = SOME (cut_bb,cut_bt,_,_,_,_,_,_,_,_,OK s8,F,NONE)`
+    (mp_then Any mp_tac focus_selected_endpoint_cut) >>
+  disch_then (fn rule =>
+    qpat_assum `dft_focus_packet_rel N _ _ _ _ _ (j,obs)
+      acts blocks calls ms_tab es_tab ks_tab rooted_eval p d _ raw_slots sites unused`
+      (mp_then Any mp_tac rule)) >>
+  disch_then (fn rule =>
+    qpat_assum `FLOOKUP acts p = SOME (cut_sf,fn8,cut_inc,cut_entry,cut_order,NONE,NONE)`
+      (mp_then Any mp_tac rule)) >>
+  disch_then (qspecl_then [`cut_z`,`cut_q`,`cpl`] mp_tac) >>
+  (impl_tac >- (disj1_tac >> asm_rewrite_tac [])) >>
+  disch_then (CONJUNCTS_THEN2 (K ALL_TAC) assume_tac) >>
+  qexistsl [`raw_slots`,`sites`,`unused`,`N`,`root_sf`,`root_tf`,`lbl7`,`q80`,`q90`,
+    `evs8`,`qs8`,`evs9`,`qs9`,`schedules`,`current`,`saved`,`f`,`ast`,`ss`,
+    `acts`,`blocks`,`calls`,`ms_tab`,`es_tab`,`ks_tab`,`rooted_eval`,`p`,`d`,
+    `stk8`,`PG8`,`G8`,`tn8`,`fn8`,`inst8`,`s8`,`oms8`,`om8`,`hs8`,`hist8`,
+    `stk9`,`PG9`,`G9`,`tn9`,`fn9`,`inst9`,`s9`,`oms9`,`om9`,`hs9`,`hist9`] >>
+  qpat_assum `Abbrev (root_entry = _)`
+    (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qpat_assum `Abbrev (j = _)`
+    (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qpat_assum `Abbrev (obs = _)`
+    (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  (* Keep the indexed conjuncts intact when discharging the flat certificate. *)
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexistsl [`align`,`old_cursors`,`old_asm`,`old_sym`,`costs`] >>
+               asm_rewrite_tac []) >>
+  conj_tac >-
+    (qexistsl [`cut_sf`,`cut_inc`,`cut_entry`,`cut_order`,`NONE`,`NONE`,
+       `cut_bb`,`cut_bt`,`cut_ps`,`cut_xs`,`cut_ys`,`cut_rho`,`cut_state`,`cut_h`,
+       `cut_body`,`cut_ix`,`OK s8`,`F`,`NONE`] >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexistsl [`cut_q`,`cut_z`] >>
+     simp_tac bool_ss [CONJ_ASSOC] >>
+     qpat_assum `?src_inst cuts levels Mcut Ecut Kcut mr er kr. _`
+       (ACCEPT_TAC o SIMP_RULE bool_ss [CONJ_ASSOC])) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `inst9 = inst8 /\ _ \/ _`
+    (DISJ_CASES_THEN2 (map_every assume_tac o CONJUNCTS) mp_tac)
+  >- (disj1_tac >>
+      `~s8.vs_halted` by
+        (PairCases_on `current` >>
+         qpat_assum `cfg_norm_joint_cursors (stage 8) (stage 9) _ _ _`
+           (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [cfg_norm_joint_cursors_def]) >>
+         qmatch_asmsub_rename_tac `cfg_norm_cursors (stage 8) cur_rounds cur_cells` >>
+         qpat_assum `cfg_norm_cursors (stage 8) cur_rounds cur_cells` mp_tac >>
+         qpat_assum `?pending. HD cur_cells = ((inst8,s8),pending)` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+         drule_then strip_assume_tac cfg_norm_cursors_lengths >>
+         Cases_on `cur_rounds` >> Cases_on `cur_cells` >> fs[] >>
+         rename1 `cfg_norm_cursors _ (row::rs) (cell::cs)` >>
+         PairCases_on `row` >> PairCases_on `cell` >> fs[] >>
+         drule cfg_norm_cursors_head >> simp[]) >>
+      qpat_assum `dft_focus_packet_rel N _ _ _ _ _ (j,obs)
+        acts blocks calls ms_tab es_tab ks_tab rooted_eval p d _ raw_slots sites unused`
+        (mp_then Any mp_tac focus_same_inventory_terminal_stop) >>
+      (impl_tac >- (conj_tac >> (simp[]))) >> simp_tac bool_ss []) >>
+  POP_ASSUM_LIST (K ALL_TAC) >> simp_tac bool_ss [] >> metis_tac[]
+QED
+
+Resume focus_uniform_frontier_for[advance]:
+  `root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|>` by
+    simp[Abbr `root_entry`] >>
+  `j = LENGTH evs8` by simp[Abbr `j`] >>
+  `obs = trace_gas (TAKE j (trace_blocks [] 0 N (stage 8) root_tf root_entry))` by
+    simp[Abbr `obs`] >>
+  qpat_assum `dft_focus_packet_rel N _ _ _ _ _ (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d _ raw_slots sites unused`
+    (mp_then Any mp_tac focus_joint_progress_for) >>
+  (* Progress uses the names of the selected certificate, with fuel named f here. *)
+  disch_then (fn th =>
+    let
+      fun specialize th =
+        if is_forall (concl th) then
+          let val (v,_) = dest_forall (concl th) in
+            specialize (if fst (dest_var v) = "asm_fuel" then Q.SPEC `f` th else SPEC v th)
+          end
+        else th
+    in mp_tac (specialize th) end) >>
+  (impl_tac >- (rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     (qpat_assum `j = LENGTH evs8` (rewrite_tac o single o SYM) >> first_assum ACCEPT_TAC)))) >>
+  disch_then (qx_choosel_then
+    [`ev9`,`q9'`,`n`,`ast'`,`ss'`,`N'`,`raw_slots'`,`sites'`,`unused'`,
+     `evs8'`,`qs8'`,`evs9'`,`qs9'`,`current'`,`saved'`,`asm_fuel'`,`j'`,`obs'`,
+     `acts'`,`blocks'`,`calls'`,`ms_tab'`,`es_tab'`,`ks_tab'`,`p'`,`d'`,
+     `stk8'`,`PG8'`,`G8'`,`tn8'`,`fn8'`,`inst8'`,`s8'`,`oms8'`,`om8'`,`hs8'`,`hist8'`,
+     `stk9'`,`PG9'`,`G9'`,`tn9'`,`fn9'`,`inst9'`,`s9'`,`oms9'`,`om9'`,`hs9'`,`hist9'`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qpat_assum `joint_trace vs0 (stage 8) q80 evs8 qs8 _`
+    (mp_then Any assume_tac joint_trace_endpoint) >>
+  qpat_assum `joint_trace vs0 (stage 9) q90 evs9 qs9 _`
+    (mp_then Any assume_tac joint_trace_endpoint) >>
+  `LENGTH qs8 = LENGTH evs8 /\ LENGTH qs9 = LENGTH evs9` by
+    (conj_tac >> first_assum (fn th =>
+       let val chain = CONJUNCT2 (REWRITE_RULE [joint_trace_def] th)
+       in ACCEPT_TAC (SYM (MATCH_MP joint_chain_length chain)) end)) >>
+  qmatch_asmsub_abbrev_tac `EL (LENGTH evs8) (q80::qs8) = q8` >>
+  qmatch_asmsub_abbrev_tac `EL (LENGTH evs9) (q90::qs9) = q9` >>
+  `?add8. qs8' = qs8 ++ add8 /\ j' = j + LENGTH add8 /\ LENGTH add8 <= 1 /\
+     (j' = SUC j /\ inst8.inst_opcode = GAS ==> s8.vs_gas_readings <> [])` by
+    (qpat_assum `_ /\ _ \/ (?ev8. joint_transition (stage 8) _ ev8 _ /\ _)`
+       (DISJ_CASES_THEN2 (map_every assume_tac o CONJUNCTS)
+          (qx_choose_then `ev8` (map_every assume_tac o CONJUNCTS)))
+     >- (qexists `[]` >> qpat_assum `qs8' = qs8` (fn qs_eq =>
+         qpat_assum `j' = j` (fn j_eq => simp[NoAsms,qs_eq,j_eq])))
+     >> qexists `[JointConfig stk8' PG8' G8' tn8' fn8' inst8' s8' oms8' om8' hs8' hist8']` >>
+     map_every (fn p => qpat_assum p mp_tac)
+       [`qs8' = qs8 ++ [_]`,`j' = SUC j`, `inst8.inst_opcode = GAS ==> _ /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[ADD1]) >>
+  rename1 `qs8' = qs8 ++ add8` >>
+  suspend "ledger"
+QED
+
+Resume focus_uniform_frontier_for[ledger]:
+  qabbrev_tac `m = LENGTH evs9` >>
+  qabbrev_tac `rank = \q. case q of JointConfig stk PG G tn fn inst s oms om hs h =>
+     case lookup_block s.vs_current_bb fn.fn_blocks of
+       NONE => 0 | SOME bb => LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  (Q.SUBGOAL_THEN `0 < n \/ rank q9' < rank q9` assume_tac >-
+    (qpat_assum `q9' = JointConfig _ _ _ _ _ _ _ _ _ _ _` SUBST1_TAC >>
+     simp_tac bool_ss [Abbr `q9`, Abbr `rank`] >>
+     irule (BETA_RULE focus_ledger_rank_step) >>
+     qpat_assum `0 < n \/ n = 0 /\ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[])) >>
+  (let
+     val rule = focus_stop_aligned_ledger_snoc
+     val vars = free_vars (concl rule)
+     fun find s = valOf (List.find (fn v => fst (dest_var v) = s) vars)
+     val params = ["j'","q9'","current","a0","s0","opt","cursors","asm_edge","sym_edge",
+                   "cost_ok","edge_ok","fuel"]
+   in
+     qspecl_then
+       [`j'`,`q9'`,`(schedules,current,saved)`,`entry_asm_state vs0 es0`,
+        `sym_init (entry_asm_state vs0 es0)`,`fin = asm_opt_finalizer`,
+        `cfg_norm_joint_cursors (stage 8) (stage 9)`,
+        `\k a b. asm_steps asm_lo (build_offset_to_pc prog)
+                    prog k a = AsmOK b`,
+        `\k a b. symbolic k a = SymOK b`,
+        `\cost edge. 0 < cost \/ rank (SND edge) < rank (FST edge)`,
+        `\moved q8 q9. case (q8,q9) of
+          (JointConfig frames8 p8 g8 t8 f8 i8 u8 o8 m8 sh8 oh8,
+           JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) =>
+           (~in_revert_forward fn9 s9 /\
+            (inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode ==>
+             source_memory_reads_disjoint cpl inst9 s9 /\
+             context_source_memory_writes_disjoint cpl inst9 s9) /\
+            (fin = asm_opt_finalizer ==>
+             !dst x sz src off.
+               inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
+               code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
+               FLOOKUP asm_lo "code_end" = SOME off ==>
+               w2n (src - n2w off) < dimword (:256) DIV 2)) /\
+           (active_inst fn9 inst9 s9 /\
+            (inst9.inst_opcode = INVOKE ==>
+             ?nm' ops callee args ent.
+               decode_invoke inst9 = SOME (nm',ops) /\
+               lookup_function nm' (stage 9).ctx_functions = SOME callee /\
+               eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent) /\
+            (inst9.inst_opcode <> INVOKE ==>
+             (?u. step_inst 0 (stage 9) inst9 s9 = OK u /\ ~u.vs_halted) \/
+             (stk9 <> [] /\ ?ir u. step_inst 0 (stage 9) inst9 s9 = IntRet ir u))) /\
+           (moved /\ i8.inst_opcode = GAS ==> u8.vs_gas_readings <> [])`,
+        `f`] mp_tac (GENL (map find params) rule)
+   end) >>
+  BETA_TAC >>
+  (impl_tac >-
+    (rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+            qpat_assum `j = LENGTH evs8` (rewrite_tac o single) >> first_assum ACCEPT_TAC,
+            simp_tac bool_ss [pairTheory.FST,pairTheory.SND] >> first_assum ACCEPT_TAC,
+            simp_tac bool_ss [Abbr `rank`] >> first_assum ACCEPT_TAC,
+            simp_tac (srw_ss()) [Abbr `q8`, Abbr `q9`] >>
+              rpt conj_tac >> first_assum ACCEPT_TAC])) >>
+  `SUC m = LENGTH evs9'` by
+    (qpat_assum `evs9' = evs9 ++ [_]` (fn th =>
+       simp[NoAsms, th, Abbr `m`, ADD1])) >>
+  disch_then (fn th =>
+    qpat_assum `qs8' = qs8 ++ add8` (fn q8s =>
+    qpat_assum `qs9' = qs9 ++ [q9']` (fn q9s =>
+    qpat_assum `SUC m = LENGTH evs9'` (fn len =>
+    qpat_assum `asm_fuel' = f + n` (fn fuel =>
+    qpat_assum `Abbrev (rank = _)` (fn rk =>
+      mp_tac (BETA_RULE (PURE_REWRITE_RULE [GSYM q8s, GSYM q9s, len, GSYM fuel,
+        REWRITE_RULE [markerTheory.Abbrev_def] rk] th)))))))) >>
+  disch_then (qx_choosel_then [`align'`,`old_cursors'`] assume_tac) >>
+  `j' <= LENGTH evs9'` by
+    (qpat_assum `j' = LENGTH evs8'` (rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
+  `Prefix asm_fuel' (rank q9')` by
+    (qpat_assum `marker$Abbrev (Prefix = _)`
+       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     CONV_TAC (RATOR_CONV BETA_CONV THENC BETA_CONV) >>
+     qexistsl [`raw_slots'`,`sites'`,`unused'`,`N'`,`evs8'`,`qs8'`,`evs9'`,`qs9'`,
+       `current'`,`saved'`,`ast'`,`ss'`,`acts'`,`blocks'`,`calls'`,`ms_tab'`,`es_tab'`,`ks_tab'`,`p'`,`d'`,
+       `stk8'`,`PG8'`,`G8'`,`tn8'`,`fn8'`,`inst8'`,`s8'`,`oms8'`,`om8'`,`hs8'`,`hist8'`,
+       `stk9'`,`PG9'`,`G9'`,`tn9'`,`fn9'`,`inst9'`,`s9'`,`oms9'`,`om9'`,`hs9'`,`hist9'`] >>
+     qpat_assum `j' = LENGTH evs8'` (SUBST1_TAC o SYM) >>
+     qpat_assum `obs' = trace_gas _` (SUBST1_TAC o SYM) >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     conj_tac >-
+       (qexistsl [`align'`,`old_cursors'`,`old_asm ++ [ast']`,`old_sym ++ [ss']`,`costs ++ [n]`] >>
+        first_assum ACCEPT_TAC) >>
+     conj_tac >-
+       (qpat_assum `!h. h < j' ==> _` mp_tac >>
+        simp_tac bool_ss []) >>
+     qpat_assum `q9' = JointConfig _ _ _ _ _ _ _ _ _ _ _` SUBST1_TAC >>
+     simp_tac (srw_ss()) [Abbr `rank`]) >>
+  `asm_fuel' <= f` by
+    (qpat_assum `!a b. Prefix a b ==> a <= f` irule >>
+     qexists `rank q9'` >> first_assum ACCEPT_TAC) >>
+  `asm_fuel' = f` by
+    (qpat_assum `asm_fuel' <= f` mp_tac >> qpat_assum `asm_fuel' = f + n` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  `best_rank <= rank q9'` by
+    (qpat_assum `!r. Prefix f r ==> best_rank <= r` irule >>
+     qpat_assum `asm_fuel' = f` (rewrite_tac o single o SYM) >> first_assum ACCEPT_TAC) >>
+  `best_rank = rank q9` by
+    (simp_tac (srw_ss()) [Abbr `rank`,Abbr `q9`] >> first_assum ACCEPT_TAC) >>
+  (qsuff_tac `F` >- simp_tac bool_ss []) >>
+  map_every (fn p => qpat_assum p mp_tac)
+    [`0 < n \/ rank q9' < rank q9`, `asm_fuel' = f + n`, `asm_fuel' = f`,
+     `best_rank <= rank q9'`, `best_rank = rank q9`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >> decide_tac
+QED
+
+Finalise focus_uniform_frontier_for
+
 Theorem focus_uniform_frontier:
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
@@ -3119,448 +3967,123 @@ Theorem focus_uniform_frontier:
     (inst9.inst_opcode <> INVOKE /\ ?err. step_inst 0 (stage 9) inst9 s9 = Error err))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then
-    (qx_choosel_then [`root_sf`,`lbl7`,`schedules`] (map_every assume_tac o CONJUNCTS))
-    focus_production_packet_cursor_static >>
-  qpat_x_assum `!N. 0 < N ==> _` (qspec_then `1` mp_tac) >>
-  simp_tac bool_ss [DECIDE ``0 < (1:num)``,LET_THM] >>
-  disch_then (qx_choosel_then [`bb0`,`bt0`,`ps0`,`xs0`,`ys0`,`rho0`,`f90`,
-      `current0`,`rooted_eval`] (map_every assume_tac o CONJUNCTS)) >>
-  qabbrev_tac `root_tf = dft_fn root_sf` >>
-  qabbrev_tac `root_entry = vs0 with
-    <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|>` >>
-  qabbrev_tac `i80 = HD bt0.bb_instructions` >>
-  qabbrev_tac `i90 = HD (HD f90.fn_blocks).bb_instructions` >>
-  qabbrev_tac `q80 = JointConfig [] [] FEMPTY entry_taint root_tf i80 root_entry [] FEMPTY []
-    [OriginInitial root_entry;
-     OriginObserve (OriginSnapshot root_tf [] FEMPTY FEMPTY i80 root_entry)]` >>
-  qabbrev_tac `q90 = JointConfig [] [] FEMPTY entry_taint f90 i90 root_entry [] FEMPTY []
-    [OriginInitial root_entry;
-     OriginObserve (OriginSnapshot f90 [] FEMPTY FEMPTY i90 root_entry)]` >>
-  `joint_initial vs0 out.po_unit.cu_context q90` by
-    simp[Abbr `q90`,Abbr `i90`,Abbr `root_entry`] >>
-  drule_all_then assume_tac focus_false_codegen_context >>
-  `(fin = K SOME ==>
-      normal_frame_plan rpolicy out.po_unit cpl prog
-        (vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
-                    vs_return_pc_token := 0w; vs_inst_idx := 0|>)
-        es0 q90 (entry_asm_state vs0 es0))` by
-    (disch_tac >>
-     `prog' = prog` by fs[combinTheory.K_THM] >>
-     `(entry_asm_state vs0 es0 with as_code := assemble prog ++ vs0.vs_data_section) =
-       entry_asm_state vs0 es0` by simp[entry_asm_state_def] >>
-     `asm_frame_rel_tail [] prog vs0.vs_data_section es0 (entry_asm_state vs0 es0) es0` by fs[] >>
-     irule gasFocusPlainFrameInitialStaticTheory.focus_plain_frame_initial_static >> simp[]) >>
-  `(fin = asm_opt_finalizer ==>
-      normal_frame_symbolic_plan (asm_data_env prog vs0.vs_code)
-        rpolicy out.po_unit cpl prog vs0 es0 q90 (entry_asm_state vs0 es0)
-        (sym_init (entry_asm_state vs0 es0)))` by
-    (disch_tac >>
-     qpat_assum `fin = asm_opt_finalizer ==> label_flow_ok _ /\ _` (fn th =>
-       mp_tac th >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac) >>
+  drule_all_then (fn th => assume_tac th >>
+    strip_assume_tac (REWRITE_RULE [codegen_context_obligations_def] th))
+    focus_false_codegen_context >>
+  `fin = asm_opt_finalizer ==> focus_s7_symbolic_context out.po_unit prog` by
+    (disch_tac >> qpat_assum `fin = asm_opt_finalizer ==> label_flow_ok _ /\ _`
+      (fn th => drule_then (map_every assume_tac o CONJUNCTS) th) >>
      drule_all_then assume_tac focus_opt_label_flow >>
      drule_all_then strip_assume_tac focus_opt_static_assembly >>
-     irule normal_frame_symbolic_initial >> simp[focus_s7_symbolic_context_def]) >>
-  `fin = asm_opt_finalizer ==>
-     label_flow_ok unit.cu_context /\
-     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-                ~MEM (Label "code_end") inst.inst_operands) /\
-     EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
-                       ds.ds_items) unit.cu_data_segment /\
-     ((?fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) /\
-                 MEM (Label "runtime_begin") inst.inst_operands) ==>
-      EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment)` by
-    (disch_tac >> qpat_assum `fin = asm_opt_finalizer ==> label_flow_ok _ /\ _`
-       (fn th => mp_tac th >> asm_rewrite_tac [] >> metis_tac[])) >>
-  drule_all_then (qx_choose_then `B` assume_tac) focus_stop_run_budget >>
-  qpat_assum `stage 9 = out.po_unit.cu_context` (fn th =>
-    map_every (fn pat => qpat_assum pat (assume_tac o ONCE_REWRITE_RULE [GSYM th]))
-      [`joint_initial vs0 out.po_unit.cu_context _`,
-       `joint_trace vs0 out.po_unit.cu_context _ _ _ _`,
-       `cfg_norm_joint_cursors (stage 8) out.po_unit.cu_context _ _ _`]) >>
-  (* State the invariant directly from the frozen conclusion, removing only
-     the selected cut and the stop disjunction. The root data stay parameters. *)
-  (fn (asl, goal) =>
-    let
-      val (ws, body) = strip_exists goal
-      val fixed = ["root_sf","root_tf","lbl7","q80","q90","schedules","rooted_eval"]
-      fun name v = fst (dest_var v)
-      fun find n = valOf (List.find (fn v => name v = n orelse name v = n ^ "'") ws)
-      val shared = map (fn n =>
-        let val v = find n in v |-> mk_var (n,type_of v) end) fixed
-      val entry = Parse.parse_in_context (free_vars (list_mk_conj asl))
-        `vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|>`
-      val use_entry = [entry |-> mk_var ("root_entry",type_of entry)]
-      val f = find "asm_fuel"
-      val r = genvar numSyntax.num
-      val rank = Parse.parse_in_context [find "fn9",find "s9"]
-        `case lookup_block s9.vs_current_bb fn9.fn_blocks of
-           NONE => 0 | SOME bb => LENGTH bb.bb_instructions - s9.vs_inst_idx`
-      val fields = strip_conj body
-      val cert = list_mk_conj (List.take (fields, length fields - 3) @
-        [List.nth (fields,length fields - 2), mk_eq (r,rank)])
-      val keep = filter (fn v =>
-        not (aconv v f orelse List.exists (fn {redex,...} => aconv v redex) shared)) ws
-      val pred = mk_abs (f,mk_abs (r,list_mk_exists (keep,subst use_entry (subst shared cert))))
-    in
-      markerLib.ABBREV_TAC (mk_eq (mk_var ("Prefix",type_of pred),pred)) (asl,goal)
-    end) >>
-  suspend "search"
-QED
-
-Resume focus_uniform_frontier[search]:
+     asm_rewrite_tac[focus_s7_symbolic_context_def]) >>
   `vs0.vs_gas_readings = gas_readings es0` by
     (qpat_assum `asm_frame_rel_tail [] prog' _ _ _ _`
        (mp_tac o CONJUNCT2 o REWRITE_RULE [asm_frame_rel_tail_def]) >>
      simp[entry_asm_state_def]) >>
-  `?r. Prefix 0 r` by
-    (qpat_assum `marker$Abbrev (Prefix = _)`
-       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     CONV_TAC (QUANT_CONV (TRY_CONV (RATOR_CONV BETA_CONV THENC BETA_CONV))) >>
-     qabbrev_tac `b0 = if phi_prefix_length bt0.bb_instructions < LENGTH ps0
-                       then NONE else SOME (root_entry,0)` >>
-     qabbrev_tac `ms0 = if IS_SOME b0 then
-                      MAP (\i. if i.inst_opcode = GAS then [NONE:bytes32 option] else []) xs0
-                    else []` >>
-     qabbrev_tac `es00 = if IS_SOME b0 then
-                      MAP (\i. if i.inst_opcode = GAS then [(root_sf.fn_name,i.inst_id)] else []) xs0
-                    else []` >>
-     qabbrev_tac `ks0 = if IS_SOME b0 then
-                      MAP (\i. if i.inst_opcode = GAS then [([]:(num # num) list,1:num,i.inst_id)] else []) xs0
-                    else []` >>
-     qexistsl [`(case lookup_block root_entry.vs_current_bb f90.fn_blocks of
-                   NONE => 0 | SOME bb => LENGTH bb.bb_instructions - root_entry.vs_inst_idx)`,
-       `FLAT ms0`,`FLAT es00`,`root_entry.vs_gas_readings`,`1`,
-       `[]`,`[]`,`[]`,`[]`,`current0`,`[]`,`entry_asm_state vs0 es0`,
-       `sym_init (entry_asm_state vs0 es0)`,
-       `FEMPTY |+ ([],(root_sf,root_tf,0:num,root_entry,[1:num],NONE,NONE))`,
-       `FEMPTY |+ (([],1:num),(bb0,bt0,ps0,xs0,ys0,rho0,root_entry,0:num,b0,0:num,OK root_entry,F,NONE))`,
-       `FEMPTY`,`FEMPTY |+ (([],1),ms0)`,`FEMPTY |+ (([],1),es00)`,
-       `FEMPTY |+ (([],1),ks0)`,`[]`,`1`,
-       `[]`,`[]`,`FEMPTY`,`entry_taint`,`root_tf`,`i80`,`root_entry`,`[]`,`FEMPTY`,`[]`,
-       `[OriginInitial root_entry;
-         OriginObserve (OriginSnapshot root_tf [] FEMPTY FEMPTY i80 root_entry)]`,
-       `[]`,`[]`,`FEMPTY`,`entry_taint`,`f90`,`i90`,`root_entry`,`[]`,`FEMPTY`,`[]`,
-       `[OriginInitial root_entry;
-         OriginObserve (OriginSnapshot f90 [] FEMPTY FEMPTY i90 root_entry)]`] >>
-     simp[asmSpliceTheory.sym_steps_def,Abbr `q80`,Abbr `q90`,Abbr `ks0`] >>
-     conj_tac >-
-       (qpat_assum `?tail. trace_blocks _ _ _ _ _ _ = _::tail`
-          (strip_assume_tac) >> simp[]) >>
-     conj_tac >-
-       (simp[Abbr `ms0`,Abbr `es00`] >> IF_CASES_TAC >> simp[] >>
-        qid_spec_tac `xs0` >> Induct >> simp[] >>
-        gen_tac >> IF_CASES_TAC >> simp[]) >>
-     conj_tac >-
-       (`FILTER IS_SOME (FLAT ms0) = []` by
-          (simp[Abbr `ms0`] >> IF_CASES_TAC >> simp[] >>
-           qid_spec_tac `xs0` >> Induct >> simp[FILTER_APPEND] >>
-           gen_tac >> IF_CASES_TAC >> simp[]) >>
-        simp[Abbr `root_entry`]) >>
-     qexistsl [`K 0`,`[]`] >> simp[combinTheory.K_THM]) >>
-  `!f r. Prefix f r ==> f <= B` by
-    (rpt gen_tac >>
-     qpat_assum `marker$Abbrev (Prefix = _)`
-       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     CONV_TAC (LAND_CONV (RATOR_CONV BETA_CONV THENC BETA_CONV)) >>
-     disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
-     first_x_assum irule >>
-     simp[]) >>
-  qabbrev_tac `loss = \i. ?f r. Prefix f r /\ i = B - f` >>
-  qspec_then `loss` mp_tac WhileTheory.LEAST_EXISTS_IMP >>
-  (impl_tac >- (qexists `B` >> simp[Abbr `loss`] >> qexists `0` >> simp[] >>
-                qexists `r` >> first_assum ACCEPT_TAC)) >>
-  disch_then (CONJUNCTS_THEN2 mp_tac (mk_asm "fuel_min")) >>
-  simp_tac bool_ss [Abbr `loss`] >>
-  disch_then (qx_choose_then `f` (qx_choose_then `r_initial` strip_assume_tac)) >>
-  `!f' r'. Prefix f' r' ==> f' <= f` by
-    (rpt strip_tac >> spose_not_then assume_tac >>
-     `f' <= B` by (qpat_assum `!a b. Prefix a b ==> a <= B` irule >>
-                   qexists `r'` >> simp[]) >>
-     `B - f' < B - f` by decide_tac >>
-     asm "fuel_min" (qspec_then `B - f'` mp_tac) >>
-     BETA_TAC >>
-     `B - f' < (LEAST i. ?a b. Prefix a b /\ i = B - a)` by simp[] >>
-     simp[] >> qexistsl [`f'`,`r'`] >> simp[]) >>
-  qspec_then `Prefix f` mp_tac WhileTheory.LEAST_EXISTS_IMP >>
-  (impl_tac >- (qexists `r_initial` >> first_assum ACCEPT_TAC)) >>
-  strip_tac >>
-  qabbrev_tac `best_rank = $LEAST (Prefix f)` >>
-  `!r'. Prefix f r' ==> best_rank <= r'` by
-    (rpt strip_tac >> simp[GSYM arithmeticTheory.NOT_LESS] >>
-     disch_tac >> qpat_assum `!n. n < best_rank ==> _` (qspec_then `r'` mp_tac) >> simp[]) >>
-  qpat_x_assum `Prefix f best_rank` mp_tac >>
-  qpat_assum `marker$Abbrev (Prefix = _)`
-    (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  CONV_TAC (LAND_CONV (RATOR_CONV BETA_CONV THENC BETA_CONV)) >>
-  disch_then (qx_choosel_then
-    [`raw_slots`,`sites`,`unused`,`N`,`evs8`,`qs8`,`evs9`,`qs9`,`current`,`saved`,
-     `ast`,`ss`,`acts`,`blocks`,`calls`,`ms_tab`,`es_tab`,`ks_tab`,`p`,`d`,
-     `stk8`,`PG8`,`G8`,`tn8`,`fn8`,`inst8`,`s8`,`oms8`,`om8`,`hs8`,`hist8`,
-     `stk9`,`PG9`,`G9`,`tn9`,`fn9`,`inst9`,`s9`,`oms9`,`om9`,`hs9`,`hist9`]
-    (map_every assume_tac o CONJUNCTS)) >>
-  qpat_x_assum `?align old_cursors old_asm old_sym costs. _`
-    (qx_choosel_then [`align`,`old_cursors`,`old_asm`,`old_sym`,`costs`]
-       (map_every assume_tac o CONJUNCTS)) >>
-  qabbrev_tac `j = LENGTH evs8` >>
-  qabbrev_tac `obs = trace_gas (TAKE j (trace_blocks [] 0 N (stage 8) root_tf root_entry))` >>
-  drule_then (map_every assume_tac o CONJUNCTS) focus_current_instruction >>
-  drule_then (map_every assume_tac o CONJUNCTS) focus_cursor_ready_context >>
-  `o1_fn_shape out.po_unit.cu_context fn9` by
-    (qpat_x_assum `o1_ctx_shape (stage 9)` (mp_tac o REWRITE_RULE [o1_ctx_shape_def,EVERY_MEM]) >>
-     qpat_assum `stage 9 = out.po_unit.cu_context` (fn eq =>
-       qpat_assum `MEM fn9 (stage 9).ctx_functions` (assume_tac o REWRITE_RULE [eq])) >>
-     asm_rewrite_tac [] >> strip_tac >> first_x_assum irule >> first_assum ACCEPT_TAC) >>
-  `(fin = asm_opt_finalizer ==>
-    normal_frame_symbolic_plan (asm_data_env prog vs0.vs_code) rpolicy out.po_unit cpl prog vs0 es0
-      (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ast ss)` by
-    (disch_tac >> qpat_assum `fin = asm_opt_finalizer ==> sym_steps _ _ f _ = _ /\ _`
-      (mp_tac o REWRITE_RULE [IMP_CONJ_THM]) >> asm_rewrite_tac [] >> simp[]) >>
-  drule_all focus_frame_cursor_phase >>
-  disch_then (qspec_then `0` (fn th =>
-    qpat_assum `stage 9 = out.po_unit.cu_context`
-      (fn eq => assume_tac (ONCE_REWRITE_RULE [GSYM eq] th)))) >>
-  drule_all (Q.INST [`cpl` |-> `cpl`, `fin` |-> `fin`, `prog` |-> `prog`,
-    `fuel` |-> `N-d`] focus_joint_selectable_stop_or_guards) >>
-  disch_then (qspecl_then [`prog`,`fin`,`d`,`cpl`,`N`]
-    (DISJ_CASES_THEN2 (map_every assume_tac o CONJUNCTS)
-      (CONJUNCTS_THEN2 assume_tac assume_tac)))
-  >- suspend "advance" >>
-  suspend "stop"
+  mp_tac (BETA_RULE (Q.INST
+    [`asm_lo` |-> `SND (compute_label_offsets prog)`,
+     `symbolic` |-> `sym_steps prog (asm_data_env prog vs0.vs_code)`,
+     `frame` |-> `normal_frame_symbolic_plan
+       (asm_data_env prog vs0.vs_code) rpolicy out.po_unit cpl prog vs0 es0`]
+    focus_uniform_frontier_for)) >>
+  `fin = asm_opt_finalizer ==> label_flow_ok unit.cu_context /\
+     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+        ~MEM (Label "code_end") inst.inst_operands) /\
+     EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
+                       ds.ds_items) unit.cu_data_segment /\
+     ((?fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) /\
+                  MEM (Label "runtime_begin") inst.inst_operands) ==>
+       EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment)` by
+    (disch_tac >> qpat_assum `fin = asm_opt_finalizer ==> label_flow_ok _ /\ _`
+       (fn th => mp_tac th >> asm_rewrite_tac [] >> metis_tac[])) >>
+  (impl_tac >- suspend "premises") >>
+  disch_then (fn th => BETA_TAC >> ACCEPT_TAC th)
 QED
 
-Resume focus_uniform_frontier[stop]:
-  qpat_assum `dft_focus_packet_rel N _ _ _ _ _ (j,obs)
-    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d _ raw_slots sites unused`
-    (mp_then Any mp_tac focus_current_row_cut) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  disch_then (qx_choosel_then
-    [`cut_sf`,`cut_inc`,`cut_entry`,`cut_order`,`cut_bb`,`cut_bt`,`cut_ps`,`cut_xs`,`cut_ys`,
-     `cut_rho`,`cut_state`,`cut_h`,`cut_body`,`cut_ix`,`cut_q`,`cut_z`]
-    (map_every assume_tac o CONJUNCTS)) >>
-  qpat_assum `FLOOKUP blocks (p,d) = SOME (cut_bb,cut_bt,_,_,_,_,_,_,_,_,OK s8,F,NONE)`
-    (mp_then Any mp_tac focus_selected_endpoint_cut) >>
-  disch_then (fn rule =>
-    qpat_assum `dft_focus_packet_rel N _ _ _ _ _ (j,obs)
-      acts blocks calls ms_tab es_tab ks_tab rooted_eval p d _ raw_slots sites unused`
-      (mp_then Any mp_tac rule)) >>
-  disch_then (fn rule =>
-    qpat_assum `FLOOKUP acts p = SOME (cut_sf,fn8,cut_inc,cut_entry,cut_order,NONE,NONE)`
-      (mp_then Any mp_tac rule)) >>
-  disch_then (qspecl_then [`cut_z`,`cut_q`,`cpl`] mp_tac) >>
-  (impl_tac >- (disj1_tac >> asm_rewrite_tac [])) >>
-  disch_then (CONJUNCTS_THEN2 (K ALL_TAC) assume_tac) >>
-  qexistsl [`raw_slots`,`sites`,`unused`,`N`,`root_sf`,`root_tf`,`lbl7`,`q80`,`q90`,
-    `evs8`,`qs8`,`evs9`,`qs9`,`schedules`,`current`,`saved`,`f`,`ast`,`ss`,
-    `acts`,`blocks`,`calls`,`ms_tab`,`es_tab`,`ks_tab`,`rooted_eval`,`p`,`d`,
-    `stk8`,`PG8`,`G8`,`tn8`,`fn8`,`inst8`,`s8`,`oms8`,`om8`,`hs8`,`hist8`,
-    `stk9`,`PG9`,`G9`,`tn9`,`fn9`,`inst9`,`s9`,`oms9`,`om9`,`hs9`,`hist9`] >>
-  qpat_assum `Abbrev (root_entry = _)`
-    (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  qpat_assum `Abbrev (j = _)`
-    (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  qpat_assum `Abbrev (obs = _)`
-    (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  (* Keep the indexed conjuncts intact when discharging the flat certificate. *)
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac >- (qexistsl [`align`,`old_cursors`,`old_asm`,`old_sym`,`costs`] >>
-               asm_rewrite_tac []) >>
-  conj_tac >-
-    (qexistsl [`cut_sf`,`cut_inc`,`cut_entry`,`cut_order`,`NONE`,`NONE`,
-       `cut_bb`,`cut_bt`,`cut_ps`,`cut_xs`,`cut_ys`,`cut_rho`,`cut_state`,`cut_h`,
-       `cut_body`,`cut_ix`,`OK s8`,`F`,`NONE`] >>
-     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-     qexistsl [`cut_q`,`cut_z`] >>
-     simp_tac bool_ss [CONJ_ASSOC] >>
-     qpat_assum `?src_inst cuts levels Mcut Ecut Kcut mr er kr. _`
-       (ACCEPT_TAC o SIMP_RULE bool_ss [CONJ_ASSOC])) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `inst9 = inst8 /\ _ \/ _`
-    (DISJ_CASES_THEN2 (map_every assume_tac o CONJUNCTS) mp_tac)
-  >- (disj1_tac >>
-      `~s8.vs_halted` by
-        (PairCases_on `current` >>
-         qpat_assum `cfg_norm_joint_cursors (stage 8) (stage 9) _ _ _`
-           (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [cfg_norm_joint_cursors_def]) >>
-         qmatch_asmsub_rename_tac `cfg_norm_cursors (stage 8) cur_rounds cur_cells` >>
-         qpat_assum `cfg_norm_cursors (stage 8) cur_rounds cur_cells` mp_tac >>
-         qpat_assum `?pending. HD cur_cells = ((inst8,s8),pending)` mp_tac >>
-         POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-         drule_then strip_assume_tac cfg_norm_cursors_lengths >>
-         Cases_on `cur_rounds` >> Cases_on `cur_cells` >> fs[] >>
-         rename1 `cfg_norm_cursors _ (row::rs) (cell::cs)` >>
-         PairCases_on `row` >> PairCases_on `cell` >> fs[] >>
-         drule cfg_norm_cursors_head >> simp[]) >>
-      qpat_assum `dft_focus_packet_rel N _ _ _ _ _ (j,obs)
-        acts blocks calls ms_tab es_tab ks_tab rooted_eval p d _ raw_slots sites unused`
-        (mp_then Any mp_tac focus_same_inventory_terminal_stop) >>
-      (impl_tac >- (conj_tac >> (simp[]))) >> simp_tac bool_ss []) >>
-  POP_ASSUM_LIST (K ALL_TAC) >> simp_tac bool_ss [] >> metis_tac[]
-QED
-
-Resume focus_uniform_frontier[advance]:
-  `root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl7; vs_inst_idx := 0|>` by
-    simp[Abbr `root_entry`] >>
-  `j = LENGTH evs8` by simp[Abbr `j`] >>
-  `obs = trace_gas (TAKE j (trace_blocks [] 0 N (stage 8) root_tf root_entry))` by
-    simp[Abbr `obs`] >>
-  qpat_assum `dft_focus_packet_rel N _ _ _ _ _ (j,obs)
-    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d _ raw_slots sites unused`
-    (mp_then Any mp_tac focus_joint_progress) >>
-  (* Progress uses the names of the selected certificate, with fuel named f here. *)
-  disch_then (fn th =>
-    let
-      fun specialize th =
-        if is_forall (concl th) then
-          let val (v,_) = dest_forall (concl th) in
-            specialize (if fst (dest_var v) = "asm_fuel" then Q.SPEC `f` th else SPEC v th)
-          end
-        else th
-    in mp_tac (specialize th) end) >>
-  (impl_tac >- (rpt conj_tac >>
-    (first_assum ACCEPT_TAC ORELSE
-     (qpat_assum `j = LENGTH evs8` (rewrite_tac o single o SYM) >> first_assum ACCEPT_TAC)))) >>
-  disch_then (qx_choosel_then
-    [`ev9`,`q9'`,`n`,`ast'`,`ss'`,`N'`,`raw_slots'`,`sites'`,`unused'`,
-     `evs8'`,`qs8'`,`evs9'`,`qs9'`,`current'`,`saved'`,`asm_fuel'`,`j'`,`obs'`,
-     `acts'`,`blocks'`,`calls'`,`ms_tab'`,`es_tab'`,`ks_tab'`,`p'`,`d'`,
-     `stk8'`,`PG8'`,`G8'`,`tn8'`,`fn8'`,`inst8'`,`s8'`,`oms8'`,`om8'`,`hs8'`,`hist8'`,
-     `stk9'`,`PG9'`,`G9'`,`tn9'`,`fn9'`,`inst9'`,`s9'`,`oms9'`,`om9'`,`hs9'`,`hist9'`]
-    (map_every assume_tac o CONJUNCTS)) >>
-  qpat_assum `joint_trace vs0 (stage 8) q80 evs8 qs8 _`
-    (mp_then Any assume_tac joint_trace_endpoint) >>
-  qpat_assum `joint_trace vs0 (stage 9) q90 evs9 qs9 _`
-    (mp_then Any assume_tac joint_trace_endpoint) >>
-  `LENGTH qs8 = LENGTH evs8 /\ LENGTH qs9 = LENGTH evs9` by
-    (conj_tac >> first_assum (fn th =>
-       let val chain = CONJUNCT2 (REWRITE_RULE [joint_trace_def] th)
-       in ACCEPT_TAC (SYM (MATCH_MP joint_chain_length chain)) end)) >>
-  qmatch_asmsub_abbrev_tac `EL (LENGTH evs8) (q80::qs8) = q8` >>
-  qmatch_asmsub_abbrev_tac `EL (LENGTH evs9) (q90::qs9) = q9` >>
-  `?add8. qs8' = qs8 ++ add8 /\ j' = j + LENGTH add8 /\ LENGTH add8 <= 1 /\
-     (j' = SUC j /\ inst8.inst_opcode = GAS ==> s8.vs_gas_readings <> [])` by
-    (qpat_assum `_ /\ _ \/ (?ev8. joint_transition (stage 8) _ ev8 _ /\ _)`
-       (DISJ_CASES_THEN2 (map_every assume_tac o CONJUNCTS)
-          (qx_choose_then `ev8` (map_every assume_tac o CONJUNCTS)))
-     >- (qexists `[]` >> qpat_assum `qs8' = qs8` (fn qs_eq =>
-         qpat_assum `j' = j` (fn j_eq => simp[NoAsms,qs_eq,j_eq])))
-     >> qexists `[JointConfig stk8' PG8' G8' tn8' fn8' inst8' s8' oms8' om8' hs8' hist8']` >>
-     map_every (fn p => qpat_assum p mp_tac)
-       [`qs8' = qs8 ++ [_]`,`j' = SUC j`, `inst8.inst_opcode = GAS ==> _ /\ _`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[ADD1]) >>
-  rename1 `qs8' = qs8 ++ add8` >>
-  suspend "ledger"
-QED
-
-Resume focus_uniform_frontier[ledger]:
-  qabbrev_tac `m = LENGTH evs9` >>
-  qabbrev_tac `rank = \q. case q of JointConfig stk PG G tn fn inst s oms om hs h =>
-     case lookup_block s.vs_current_bb fn.fn_blocks of
-       NONE => 0 | SOME bb => LENGTH bb.bb_instructions - s.vs_inst_idx` >>
-  (Q.SUBGOAL_THEN `0 < n \/ rank q9' < rank q9` assume_tac >-
-    (qpat_assum `q9' = JointConfig _ _ _ _ _ _ _ _ _ _ _` SUBST1_TAC >>
-     simp_tac bool_ss [Abbr `q9`, Abbr `rank`] >>
-     irule (BETA_RULE focus_ledger_rank_step) >>
-     qpat_assum `0 < n \/ n = 0 /\ _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[])) >>
-  (let
-     val rule = focus_stop_aligned_ledger_snoc
-     val vars = free_vars (concl rule)
-     fun find s = valOf (List.find (fn v => fst (dest_var v) = s) vars)
-     val params = ["j'","q9'","current","a0","s0","opt","cursors","asm_edge","sym_edge",
-                   "cost_ok","edge_ok","fuel"]
-   in
-     qspecl_then
-       [`j'`,`q9'`,`(schedules,current,saved)`,`entry_asm_state vs0 es0`,
-        `sym_init (entry_asm_state vs0 es0)`,`fin = asm_opt_finalizer`,
-        `cfg_norm_joint_cursors (stage 8) (stage 9)`,
-        `\k a b. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-                    prog k a = AsmOK b`,
-        `\k a b. sym_steps prog (asm_data_env prog vs0.vs_code) k a = SymOK b`,
-        `\cost edge. 0 < cost \/ rank (SND edge) < rank (FST edge)`,
-        `\moved q8 q9. case (q8,q9) of
-          (JointConfig frames8 p8 g8 t8 f8 i8 u8 o8 m8 sh8 oh8,
-           JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) =>
-           (~in_revert_forward fn9 s9 /\
-            (inst9.inst_opcode <> INVOKE /\ ~is_terminator inst9.inst_opcode ==>
-             source_memory_reads_disjoint cpl inst9 s9 /\
-             context_source_memory_writes_disjoint cpl inst9 s9) /\
-            (fin = asm_opt_finalizer ==>
-             !dst x sz src off.
-               inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
-               code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
-               FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off ==>
-               w2n (src - n2w off) < dimword (:256) DIV 2)) /\
-           (active_inst fn9 inst9 s9 /\
-            (inst9.inst_opcode = INVOKE ==>
-             ?nm' ops callee args ent.
-               decode_invoke inst9 = SOME (nm',ops) /\
-               lookup_function nm' (stage 9).ctx_functions = SOME callee /\
-               eval_operands ops s9 = SOME args /\ setup_callee callee args s9 = SOME ent) /\
-            (inst9.inst_opcode <> INVOKE ==>
-             (?u. step_inst 0 (stage 9) inst9 s9 = OK u /\ ~u.vs_halted) \/
-             (stk9 <> [] /\ ?ir u. step_inst 0 (stage 9) inst9 s9 = IntRet ir u))) /\
-           (moved /\ i8.inst_opcode = GAS ==> u8.vs_gas_readings <> [])`,
-        `f`] mp_tac (GENL (map find params) rule)
-   end) >>
-  BETA_TAC >>
-  (impl_tac >-
-    (rpt conj_tac >>
-     FIRST [first_assum ACCEPT_TAC,
-            qpat_assum `j = LENGTH evs8` (rewrite_tac o single) >> first_assum ACCEPT_TAC,
-            simp_tac bool_ss [pairTheory.FST,pairTheory.SND] >> first_assum ACCEPT_TAC,
-            simp_tac bool_ss [Abbr `rank`] >> first_assum ACCEPT_TAC,
-            simp_tac (srw_ss()) [Abbr `q8`, Abbr `q9`] >>
-              rpt conj_tac >> first_assum ACCEPT_TAC])) >>
-  `SUC m = LENGTH evs9'` by
-    (qpat_assum `evs9' = evs9 ++ [_]` (fn th =>
-       simp[NoAsms, th, Abbr `m`, ADD1])) >>
-  disch_then (fn th =>
-    qpat_assum `qs8' = qs8 ++ add8` (fn q8s =>
-    qpat_assum `qs9' = qs9 ++ [q9']` (fn q9s =>
-    qpat_assum `SUC m = LENGTH evs9'` (fn len =>
-    qpat_assum `asm_fuel' = f + n` (fn fuel =>
-    qpat_assum `Abbrev (rank = _)` (fn rk =>
-      mp_tac (BETA_RULE (PURE_REWRITE_RULE [GSYM q8s, GSYM q9s, len, GSYM fuel,
-        REWRITE_RULE [markerTheory.Abbrev_def] rk] th)))))))) >>
-  disch_then (qx_choosel_then [`align'`,`old_cursors'`] assume_tac) >>
-  `j' <= LENGTH evs9'` by
-    (qpat_assum `j' = LENGTH evs8'` (rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
-  `Prefix asm_fuel' (rank q9')` by
-    (qpat_assum `marker$Abbrev (Prefix = _)`
-       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     CONV_TAC (RATOR_CONV BETA_CONV THENC BETA_CONV) >>
-     qexistsl [`raw_slots'`,`sites'`,`unused'`,`N'`,`evs8'`,`qs8'`,`evs9'`,`qs9'`,
-       `current'`,`saved'`,`ast'`,`ss'`,`acts'`,`blocks'`,`calls'`,`ms_tab'`,`es_tab'`,`ks_tab'`,`p'`,`d'`,
-       `stk8'`,`PG8'`,`G8'`,`tn8'`,`fn8'`,`inst8'`,`s8'`,`oms8'`,`om8'`,`hs8'`,`hist8'`,
-       `stk9'`,`PG9'`,`G9'`,`tn9'`,`fn9'`,`inst9'`,`s9'`,`oms9'`,`om9'`,`hs9'`,`hist9'`] >>
-     qpat_assum `j' = LENGTH evs8'` (SUBST1_TAC o SYM) >>
-     qpat_assum `obs' = trace_gas _` (SUBST1_TAC o SYM) >>
-     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-     conj_tac >-
-       (qexistsl [`align'`,`old_cursors'`,`old_asm ++ [ast']`,`old_sym ++ [ss']`,`costs ++ [n]`] >>
-        first_assum ACCEPT_TAC) >>
-     conj_tac >-
-       (qpat_assum `!h. h < j' ==> _` mp_tac >>
-        simp_tac bool_ss []) >>
-     qpat_assum `q9' = JointConfig _ _ _ _ _ _ _ _ _ _ _` SUBST1_TAC >>
-     simp_tac (srw_ss()) [Abbr `rank`]) >>
-  `asm_fuel' <= f` by
-    (qpat_assum `!a b. Prefix a b ==> a <= f` irule >>
-     qexists `rank q9'` >> first_assum ACCEPT_TAC) >>
-  `asm_fuel' = f` by
-    (qpat_assum `asm_fuel' <= f` mp_tac >> qpat_assum `asm_fuel' = f + n` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
-  `best_rank <= rank q9'` by
-    (qpat_assum `!r. Prefix f r ==> best_rank <= r` irule >>
-     qpat_assum `asm_fuel' = f` (rewrite_tac o single o SYM) >> first_assum ACCEPT_TAC) >>
-  `best_rank = rank q9` by
-    (simp_tac (srw_ss()) [Abbr `rank`,Abbr `q9`] >> first_assum ACCEPT_TAC) >>
-  (qsuff_tac `F` >- simp_tac bool_ss []) >>
-  map_every (fn p => qpat_assum p mp_tac)
-    [`0 < n \/ rank q9' < rank q9`, `asm_fuel' = f + n`, `asm_fuel' = f`,
-     `best_rank <= rank q9'`, `best_rank = rank q9`] >>
-  POP_ASSUM_LIST (K ALL_TAC) >> decide_tac
+Resume focus_uniform_frontier[premises]:
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+  >- (MATCH_MP_TAC focus_plain_progress_callback >> rpt conj_tac >> first_assum ACCEPT_TAC)
+  >- (MATCH_MP_TAC focus_plain_gas_callback >> rpt conj_tac >> first_assum ACCEPT_TAC)
+  >- (rpt strip_tac >>
+      `prog' = prog` by fs[combinTheory.K_THM] >>
+      `(entry_asm_state vs0 es0 with as_code := assemble prog ++ vs0.vs_data_section) =
+        entry_asm_state vs0 es0` by simp[entry_asm_state_def] >>
+      `asm_frame_rel_tail [] prog vs0.vs_data_section es0 (entry_asm_state vs0 es0) es0` by fs[] >>
+      irule gasFocusPlainFrameInitialStaticTheory.focus_plain_frame_initial_static >> simp[])
+  >- (rpt strip_tac >> irule normal_frame_symbolic_initial >> simp[focus_s7_symbolic_context_def])
+  >- simp[asmSpliceTheory.sym_steps_def]
+  >- (rpt gen_tac >> strip_tac >> drule_all focus_frame_cursor_phase >>
+      disch_then (qspec_then `fuel` ACCEPT_TAC))
+  >- (drule_all_then ACCEPT_TAC focus_stop_run_budget)
 QED
 
 Finalise focus_uniform_frontier
+
+Theorem focus_plain_frame_projection:
+  fin IN accepted_finalizers /\
+  (fin = K SOME ==> normal_frame_plan rpolicy unit cpl prog entry0 es0
+    (JointConfig stk PG G tn fn inst s oms om hs h) ast) /\
+  (fin = asm_opt_finalizer ==>
+    normal_frame_symbolic_plan env rpolicy unit cpl prog vs0 es0
+      (JointConfig stk PG G tn fn inst s oms om hs h) ast ss) ==>
+  ?ra rest mem0.
+    active_frame_plan_reloc (SND (compute_label_offsets prog))
+      rpolicy unit cpl prog fn s ast ra rest mem0 \/
+    ?entry pc_ret. entry_frame_plan_reloc (SND (compute_label_offsets prog))
+      rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0
+Proof
+  strip_tac >>
+  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  pop_assum strip_assume_tac >>
+  fs[normal_frame_plan_def, normal_frame_symbolic_plan_def,
+     active_frame_symbolic_plan_def, entry_frame_symbolic_plan_def,
+     active_frame_plan_reloc_specialize, entry_frame_plan_reloc_specialize] >>
+  metis_tac[active_frame_plan_def]
+QED
+
+Theorem focus_own_frame_projection:
+  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+  (fin = K SOME ==> normal_frame_plan rpolicy unit cpl prog entry0 es0
+    (JointConfig stk PG G tn fn inst s oms om hs h) ast) /\
+  (fin = asm_opt_finalizer ==>
+    normal_frame_symbolic_plan_own T (lo_reloc prog prog') env own
+      rpolicy unit cpl prog vs0 es0
+      (JointConfig stk PG G tn fn inst s oms om hs h) ast ss) ==>
+  ?ra rest mem0.
+    active_frame_plan_reloc (lo_reloc prog prog')
+      rpolicy unit cpl prog fn s ast ra rest mem0 \/
+    ?entry pc_ret. entry_frame_plan_reloc (lo_reloc prog prog')
+      rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0
+Proof
+  strip_tac >>
+  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  pop_assum strip_assume_tac
+  >- (gvs[combinTheory.K_THM, lo_reloc_refl, normal_frame_plan_def,
+      active_frame_plan_reloc_specialize, entry_frame_plan_reloc_specialize] >>
+      metis_tac[]) >>
+  fs[normal_frame_symbolic_plan_own_def, active_frame_symbolic_plan_own_def,
+     entry_frame_symbolic_plan_own_def] >>
+  qexistsl_tac [`ra`,`rest`,`mem0`]
+  >- (disj1_tac >> simp[active_frame_plan_reloc_def] >> goal_assum (drule_at Any)) >>
+  disj2_tac >> metis_tac[]
+QED
+
+Theorem focus_own_frame_cursor_phase:
+  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+  (fin = K SOME ==> normal_frame_plan rpolicy unit cpl prog entry0 es0
+    (JointConfig stk PG G tn fn inst s oms om hs h) ast) /\
+  (fin = asm_opt_finalizer ==>
+    normal_frame_symbolic_plan_own T (lo_reloc prog prog') env own
+      rpolicy unit cpl prog vs0 es0
+      (JointConfig stk PG G tn fn inst s oms om hs h) ast ss) /\
+  active_inst fn inst s /\ o1_fn_shape unit.cu_context fn ==>
+  (?post. step_inst fuel unit.cu_context inst s = OK post) \/
+  (inst.inst_opcode <> PHI /\ ~is_param_opcode inst.inst_opcode)
+Proof
+  strip_tac >> drule_all focus_own_frame_projection >>
+  disch_then (REPEAT_TCL CHOOSE_THEN (DISJ_CASES_THEN strip_assume_tac)) >>
+  `wf_function fn` by fs[o1_fn_shape_def]
+  >- metis_tac[focus_body_cursor_phase_reloc] >>
+  drule_all focus_entry_cursor_phase_reloc >>
+  disch_then (qspec_then `fuel` ACCEPT_TAC)
+QED

@@ -10,7 +10,7 @@ Ancestors
 
 Theorem runtime_load_joint_path[local]:
   emit_op DLOAD [arg] sa = (Var out,sb) /\ fn_has_code sa sb func /\
-  ~ctx_has_dalloca ctx /\ eval_operand arg s = SOME a /\ op_taint tn arg = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ eval_operand arg s = SOME a /\ op_taint tn arg = {} /\
   w2n a <= LENGTH s.vs_data_section /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   i = mk_inst sa.cs_next_id DLOAD [arg] [out] /\
@@ -50,7 +50,7 @@ QED
 
 Theorem compile_imm_load_word_runtime_joint_frame:
   compile_imm_load_word F imm arg sa = (op,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   eval_operand arg s = SOME a /\ op_taint tn arg = {} /\
   w2n a <= LENGTH s.vs_data_section /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -67,7 +67,7 @@ Theorem compile_imm_load_word_runtime_joint_frame:
     sf.vs_immutables = s.vs_immutables /\
     sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
     sf.vs_alloca_next = s.vs_alloca_next /\
-    sf.vs_fmp = s.vs_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\ sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     sf.vs_requests = s.vs_requests /\ sf.vs_data_section = s.vs_data_section /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
@@ -115,7 +115,7 @@ QED
 Theorem scalar_binop_joint_frame[local]:
   (opc = ADD /\ w = a + b \/ opc = MUL /\ w = a * b) /\
   emit_op opc [left;right] sa = (Var out,sb) /\ fn_has_code sa sb func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
   op_taint tn left = {} /\ op_taint tn right = {} /\ op_prov G right = NONE ==>
@@ -130,7 +130,8 @@ Theorem scalar_binop_joint_frame[local]:
     sf.vs_immutables = s.vs_immutables /\
     sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
     sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
-    sf.vs_fmp = s.vs_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\
+    sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     sf.vs_requests = s.vs_requests /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
@@ -186,7 +187,7 @@ QED
 Theorem scalar_mul_add_joint_frame:
   emit_op MUL [idx;Lit (n2w elem_size)] sa = (Var offset,sm) /\
   emit_op ADD [base_op;Var offset] sm = (Var out,sb) /\ fn_has_code sa sb func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!q. base_op = Var q ==> not_fresh_at sa q) /\ (!l. base_op <> Label l) /\
   eval_operand base_op s = SOME a /\ op_taint tn base_op = {} /\
@@ -229,6 +230,9 @@ Proof
     (Cases_on `base_op` >> gvs[eval_operand_def, op_taint_def, op_prov_def]) >>
   `eval_operand (Var offset) s1 = SOME (n2w (i * elem_size))` by
     simp[eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (`allocas_below_fmp s1 <=> allocas_below_fmp s` by simp[allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all (scalar_binop_joint_frame |>
     Q.INST [`opc` |-> `ADD`, `w` |-> `a + b : bytes32`] |> SRULE []) >>
   disch_then (qspec_then `PG` mp_tac) >>
@@ -250,7 +254,7 @@ Theorem code_dynamic_address_joint_frame:
   emit_op ADD [base_op;Lit 32w] sa = (Var data,sm) /\
   emit_op MUL [idx;Lit (n2w elem_size)] sm = (Var offset,sn) /\
   emit_op ADD [Var data;Var offset] sn = (Var out,sb) /\ fn_has_code sa sb func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!q. idx = Var q ==> not_fresh_at sa q) /\ (!l. idx <> Label l) /\
   eval_operand base_op s = SOME a /\ op_taint tn base_op = {} /\ op_prov G base_op = NONE /\
@@ -297,6 +301,9 @@ Proof
   `(!q. Var data = Var q ==> not_fresh_at sm q) /\
    (!l. Var data <> Label l) /\ eval_operand (Var data) s1 = SOME (a + 32w)` by
     simp[eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (`allocas_below_fmp s1 <=> allocas_below_fmp s` by simp[allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all scalar_mul_add_joint_frame >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`G2`, `tn2`, `s2`] strip_assume_tac) >>

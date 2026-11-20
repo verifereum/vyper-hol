@@ -1,6 +1,6 @@
 Theory bodyPtrBopInLiteralSuffix
 Ancestors exprSimBopInLiteralWord
-  bodyPtrBopInLiteralBoundary bodyPtrAttributeAdd stmtAppendStorageRunPtr
+  bodyPtrAttributeAdd stmtAppendStorageRunPtr
   decoderGhostFramePtr fragGasSeqPtr emitHelperProps ptrSafeRun ptrDiscipline
   venomExecSemantics venomInst venomState compileEnv loweringStateRelDefs codegenRel contextCodegenRel
   list finite_map words ghostPcTransportPtr instIdxIndep instSeqComposePtr

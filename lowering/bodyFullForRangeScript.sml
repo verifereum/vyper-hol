@@ -33,6 +33,7 @@ Ancestors exprSimWordArgs[qualified,ignore_grammar] vyperLookup[qualified,ignore
   bodyFullShared[qualified,ignore_grammar]
   bodyFullPathHistory[qualified,ignore_grammar]
   bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
+  bodyFullIfExpReach[qualified,ignore_grammar]
   bodyInvNoDalloca[qualified,ignore_grammar]
   stmtSimDeclCompose[qualified,ignore_grammar] bodyFullForRounds
 
@@ -425,7 +426,7 @@ QED
 (* ===== Joint finite round control ===== *)
 Theorem range_full_increment_path:
   !ctx s lo func bb i1 cv nv i2 i3 cond_lbl w G tn D explicit PG.
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ allocas_from lo s /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ allocas_from lo s /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst i1 ADD [Var cv;Lit 1w] [nv]) /\
@@ -475,7 +476,9 @@ Proof
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
      (v with vs_inst_idx := s.vs_inst_idx + 2,G2,tn2) []
      (OK (jump_to cond_lbl (v with vs_inst_idx := s.vs_inst_idx + 2)),G2,tn2)` by
-    (irule jmp_origin_ptr_path >>
+    (`allocas_below_fmp (v with vs_inst_idx := s.vs_inst_idx + 2) = allocas_below_fmp s` by
+       simp[Abbr `v`, Abbr `u`, update_var_def, allocas_below_fmp_def] >>
+     irule jmp_origin_ptr_path >>
      gvs[Abbr `v`, Abbr `u`, update_var_def, allocas_from_def,
        arithmeticTheory.ADD1] >>
      metis_tac[]) >>
@@ -505,6 +508,8 @@ Resume range_full_increment_path[checks]:
     (`~is_terminator b.inst_opcode` by
        simp[Abbr `b`, mk_inst_def, is_terminator_def] >>
      simp[step_inst_inst_idx_indep, exec_result_map_def]) >>
+  `allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx) = allocas_below_fmp s` by
+    simp[Abbr `u`, update_var_def, allocas_below_fmp_def] >>
   simp[] >> conj_tac
   >- (simp[Abbr `b`] >> irule membership_increment_check >>
       simp[] >> qexists_tac `w+1w` >> simp[Abbr `v`, update_var_def]) >>
@@ -689,7 +694,7 @@ Theorem range_full_body_lands_path:
   !ctx func sb sj s res exit_lbl incr_lbl lo D explicit PG G tn.
     stmt_lands (InLoop exit_lbl incr_lbl) sb res s /\ ~s.vs_halted /\
     (res = INL () \/ res = INR BreakException \/ res = INR ContinueException) /\
-    ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
     (res = INL () ==> ~block_is_terminated sb) /\
     (~block_is_terminated sb ==>
       sj.cs_blocks = sb.cs_blocks /\ sj.cs_current_bb = sb.cs_current_bb /\
@@ -2514,6 +2519,7 @@ Theorem range_full_body_entry:
         ptr_covers G tn p s sz /\ op_taint tn (Var cv) = {} /\
         op_prov G (Var cv) = NONE /\ op_taint tn (Var ev) = {} /\
         op_prov G (Var ev) = NONE /\ alloca_history func s /\
+        (!fn inst v. frag_reachable ctx func s fn inst v ==> dalloca_no_wrap inst v) /\
         (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
         s0.vs_alloca_next <= s.vs_alloca_next /\
         (!x v.
@@ -3469,12 +3475,19 @@ Resume range_full_body_entry[entry_runtime]:
      simp[]) >>
   `alloca_history func t` by
     (drule_all bodyFullPathHistoryTheory.body_full_path_alloca_history >> simp[]) >>
-  `~ctx_has_dalloca ctx` by
-    (drule bodyInvNoDallocaTheory.body_inv_no_dalloca >> simp[]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi]) >>
   `!fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_no_wrap inst v` by
-    (qpat_assum `body_inv tops ctx cenv cx`
-       (mp_then Any mp_tac bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap) >>
-     disch_then (qspecl_then [`func`,`t`] mp_tac) >> simp[]) >>
+    (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) [] (OK t,Gf,tt) /\ _`
+       (qspec_then `DF H0`
+         (fn th => mp_then (Pos hd) mp_tac
+           bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap (CONJUNCT1 th))) >>
+     asm_rewrite_tac []) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ bc _ ep t /\ _`
+       (qspec_then `H0` (drule_then (fn th =>
+          ACCEPT_TAC (MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp
+            (CONJUNCT1 th)))))) >>
   rpt conj_tac >> simp[] >>
   IF (qmatch_goalsub_rename_tac `valid_horizon cx st0 _ es.storage_trace`)
     (qx_gen_tac `H` >> disch_tac >>
@@ -4570,6 +4583,7 @@ Theorem range_full_round:
          op_taint tn (Var ev) = ({} :num -> bool) /\
          op_prov G (Var ev) = (NONE :(num # num) option) /\
          alloca_history func s /\
+         (!fn inst v. frag_reachable ctx func s fn inst v ==> dalloca_no_wrap inst v) /\
          (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
          s0.vs_alloca_next <= s.vs_alloca_next /\
          (!(x :string) (v :256 word).
@@ -5310,6 +5324,8 @@ Theorem range_full_round:
                op_taint tn (Var ev) = ({} :num -> bool) /\
                op_prov G (Var ev) = (NONE :(num # num) option) /\
                alloca_history func s /\
+               (!(fn :ir_function) (inst :instruction) (v :venom_state).
+                  frag_reachable ctx func s fn inst v ==> dalloca_no_wrap inst v) /\
                (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
                s0.vs_alloca_next <= s.vs_alloca_next /\
                (!(x :string) (v :256 word).
@@ -5580,20 +5596,31 @@ Proof
      PURE_ONCE_REWRITE_RULE [bodySimFullTheory.stmt_frag_full_def]) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_tac >>
-  `~ctx_has_dalloca ctx` by
-    (irule bodyInvNoDallocaTheory.body_inv_no_dalloca >>
-     goal_assum (drule_at Any)) >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ (eval_stmts cx body) (ep,t,Gentry,tt) BQ BR` >>
-  qabbrev_tac `EnrichedQ = \H res ee Gb tb u.
+  qabbrev_tac `SourceQ = \H res ee Gb tb u.
     (?xs. !tail. eval_stmts cx body (ep with gas_obs := xs ++ tail) =
                 (res,ee with gas_obs := tail)) /\
     ee.gas_obs = [] /\ BQ H res ee Gb tb u` >>
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     (cx_tops cx) cx st0 (eval_stmts cx body) (ep,t,Gentry,tt) EnrichedQ BR` by
+     (cx_tops cx) cx st0 (eval_stmts cx body) (ep,t,Gentry,tt) SourceQ BR` by
     (irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
-     simp[Abbr `EnrichedQ`]) >>
+     simp[Abbr `SourceQ`]) >>
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ BQ BR` kall_tac >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+  qabbrev_tac `EnrichedQ = \H res ee Gb tb u.
+    SourceQ H res ee Gb tb u /\
+    (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z)` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (eval_stmts cx body) (ep,t,Gentry,tt) EnrichedQ BR` by
+    (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
+     qpat_x_assum `gas_outcome_full _ _ _ _ _ _ SourceQ BR` (irule_at Any) >>
+     simp[NoAsms, Abbr `EnrichedQ`] >> rpt strip_tac >>
+     qpat_assum `gas_origin_ptr_path _ (t,Gentry,tt) _ (OK _,_,_)`
+       (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) >>
+     asm_rewrite_tac [] >> disch_then (drule_then ACCEPT_TAC)) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ SourceQ BR` kall_tac >>
   qpat_assum `!DF0 lo0 d0 ctx0 func0 PG0 tops0 cx0 st0 body0 es0 s G tn Q R. _`
     (drule_all_then (mk_asm "popped_outcome")) >>
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -5636,6 +5663,7 @@ Resume range_full_round[exception_suffix]:
       qpat_assum `!tail. stmt_exit_ptr _ (prepop with gas_obs := tail) (INR ex) _ r`
         (qspec_then `tail` mp_tac) >>
       simp[NoAsms, Abbr `prepop`, bodyPtrDefsTheory.stmt_exit_ptr_def]) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   `halt_exit H cx (prepop with <|scopes := ee.scopes; gas_obs := ee.gas_obs|>)
        (INR ex : unit + exception) r` suffices_by
     (simp[NoAsms, Abbr `prepop`] >> disch_then (fn th =>
@@ -5645,7 +5673,7 @@ Resume range_full_round[exception_suffix]:
 QED
 
 Resume range_full_round[normal_suffix]:
-  rpt gen_tac >> simp[NoAsms, Abbr `EnrichedQ`, Abbr `BQ`] >>
+  rpt gen_tac >> simp[NoAsms, Abbr `EnrichedQ`, Abbr `SourceQ`, Abbr `BQ`] >>
   disch_then (CONJUNCTS_THEN2 assume_tac (mk_asm "body_post")) >>
   asm "body_post" (qspec_then `storage_trace_horizon ee.storage_trace`
     (drule_then (qx_choosel_then [`raw0`,`sc0`] strip_assume_tac) o
@@ -5828,6 +5856,9 @@ Resume range_full_round[normal_suffix]:
   `allocas_from lo t'` by
     (qpat_assum `ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t'` mp_tac >>
      simp[NoAsms, ghost_inv_at_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx ee t'`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (t',G1,tn1) [] (OK at_incr,G1,tn1) /\
    at_incr.vs_inst_idx = 0 /\
@@ -5907,8 +5938,17 @@ Resume range_full_round[backedge]:
        simp[NoAsms, Abbr `at_incr`, th, jump_to_def, lookup_var_def, allocas_from_def]) >>
      rpt conj_tac >> first_assum (ACCEPT_TAC o
            SRULE [lookup_var_def, allocas_from_def])) >>
-  conj_tac
-  >- (qpat_assum `gas_origin_ptr_path _ (t',G1,tn1) [] (OK at_incr,G1,tn1)`
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at_incr` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t'` mp_tac >>
+     Cases_on `landing_raw = INL ()` >>
+     pop_assum (fn th => simp[NoAsms, th, Abbr `at_incr`, jump_to_def, allocas_below_fmp_def]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  `gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (t',G1,tn1) []
+     (OK (jump_to cond_lbl (update_var cv (countw+1w) (update_var nv (countw+1w) at_incr))),
+      DRESTRICT (DRESTRICT G1 (COMPL {nv})) (COMPL {cv}),
+      tn1 with t_var := tn1.t_var |+ (nv,{}) |+ (cv,{}))` by
+    (qpat_assum `gas_origin_ptr_path _ (t',G1,tn1) [] (OK at_incr,G1,tn1)`
         (mp_then (Pos hd) mp_tac gas_origin_ptr_path_append) >>
       simp[NoAsms] >> disch_then irule >>
       irule (SRULE [NoAsms] range_full_increment_path) >>
@@ -5920,6 +5960,19 @@ Resume range_full_round[backedge]:
       qexistsl_tac [`i3`,`i2`,`i1`] >> asm_rewrite_tac [] >>
       qpat_assum `cv = STRING _ _` (SUBST1_TAC o SYM) >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qpat_assum `gas_origin_ptr_path _ (t',G1,tn1) [] (OK (jump_to _ _),_,_)` mp_tac >>
+     qpat_assum `cond_lbl = fresh_label_output _ _` (fn cond_eq =>
+       qpat_assum `cv = STRING _ _` (fn cv_eq =>
+         qpat_assum `nv = STRING _ _` (fn nv_eq =>
+           qpat_assum `sj.cs_next_var = sb1.cs_next_var` (fn age =>
+             simp[NoAsms, cond_eq, cv_eq, nv_eq, age, DRESTRICT_DRESTRICT]))))) >>
+  `!fn inst v. frag_reachable ctx func
+      (jump_to cond_lbl (update_var cv (countw+1w) (update_var nv (countw+1w) at_incr)))
+      fn inst v ==> dalloca_no_wrap inst v` by
+    (qpat_assum `gas_origin_ptr_path _ (t',G1,tn1) [] (OK (jump_to _ _),_,_)`
+       (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) >>
+     asm_rewrite_tac []) >>
   `ret_pc_ok cenv sa t'` by
     (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`,`s`,`sa`] >>
      asm_rewrite_tac [arithmeticTheory.LE_REFL] >>
@@ -6576,6 +6629,23 @@ Resume compile_for_range_frag_full[checked]:
            irule exprSimSourceTheory.expr_body_pre_gas_admissible >>
            goal_assum (drule_at Any)]) >>
   disch_tac >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (fn inv => qpat_assum `MEM func ctx.ctx_functions`
+         (fn member => ACCEPT_TAC
+           (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi (CONJ inv member))))) >>
+  qmatch_asmsub_abbrev_tac
+    `gas_outcome_full cfg tops' cx st0 (bind (eval_expr cx e1) _) (es,s0,G0,tn0) Q0 R0` >>
+  `gas_outcome_full cfg tops' cx st0 (bind (eval_expr cx e1) (read_result cx))
+     (es,s0,G0,tn0) (\H res ee G tn t. Q0 H res ee G tn t /\
+       (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z)) R0` by
+    (unabbrev_all_tac >> irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
+     qpat_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e1) _) _ _ _`
+       (irule_at Any) >> simp[NoAsms] >> rpt strip_tac >>
+     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+     simp[]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e1) _) _ Q0 R0` kall_tac >>
+  unabbrev_all_tac >>
   suspend "join_endpoints"
 QED
 
@@ -6594,6 +6664,7 @@ Resume compile_for_range_frag_full[join_endpoints]:
       (~is_word_type (post_value_type cenv e1) ==> ptr_buf_ok cenv e1 op1 G t) /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
       ee.gas_obs = [] /\ ~t.vs_halted /\
+      (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z) /\
       (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) t)`,
     `P2` |-> `\(v1:value) mid1 G1 tn1 t1 H v ee G tn t.
       expr_post H ctx func cenv cx e2 mid1 s1 st t1 ee v op2 t /\
@@ -6607,6 +6678,7 @@ Resume compile_for_range_frag_full[join_endpoints]:
       (~is_word_type (post_value_type cenv e2) ==> ptr_buf_ok cenv e2 op2 G t) /\
       ghost_kept_at lo cenv mid1 s1 G1 tn1 t1 G tn /\
       ee.gas_obs = [] /\ ~t.vs_halted /\
+      (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z) /\
       (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) t)`]
       (SPEC_ALL range_full_endpoints))) >>
   map_every qexists_tac [`G0`,`cenv`,`d`,`op1`,`op2`,`s0`,`s1`,`sa`,`st`,`tn0`,`tyv`] >>
@@ -6623,7 +6695,7 @@ Resume compile_for_range_frag_full[first_exit]:
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e1) _) _ _ _`
     (irule_at Any) >>
-  BETA_TAC >> conj_tac >- (rpt strip_tac >> qexists_tac `v` >> simp[]) >>
+  BETA_TAC >> conj_tac >- (rpt strip_tac >> qexists_tac `v` >> simp[] >> first_assum ACCEPT_TAC) >>
   map_every qx_gen_tac [`H`,`res`,`ee`,`gt`,`r`] >> strip_tac >>
   namedCases_on `res` ["v", "ex"]
   >- (qpat_assum `expr_exit (INL _) _` mp_tac >> simp[NoAsms,exprSimDefsTheory.expr_exit_INL]) >>
@@ -6645,6 +6717,12 @@ QED
 
 Resume compile_for_range_frag_full[first_success]:
   map_every qx_gen_tac [`marks1`,`v1`,`mid1`,`G1`,`tn1`,`t1`] >> strip_tac >>
+  `!fn inst z. frag_reachable ctx func t1 fn inst z ==> dalloca_no_wrap inst z` by
+    (qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==> expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `storage_trace_horizon mid1.storage_trace` mp_tac) >>
+     impl_tac >- (qpat_assum `storage_trace_domain cx st0 mid1.storage_trace`
+       (ACCEPT_TAC o PURE_ONCE_REWRITE_RULE [storage_trace_domain_def])) >>
+     disch_then strip_assume_tac >> first_assum ACCEPT_TAC) >>
   qpat_assum `!tail. bind (eval_expr cx e1) (read_result cx) _ = (INL v1,mid1 with gas_obs := tail)`
     (qspec_then `[]` (mk_asm "read1")) >>
   `expr_sim_inv cenv cx env mid1 /\ expr_result_typed env e1 (Value v1)` by
@@ -6683,7 +6761,20 @@ Resume compile_for_range_frag_full[first_success]:
   disch_then (qspecl_then [`st0`,`s1`,`st`,`shadow_s1`,`shadow_st`,
       `op2`,`t1`,`G1`,`tn1`] mp_tac) >>
   impl_tac >- suspend "second_entry" >>
-  disch_tac >> conj_tac >- suspend "second_exit" >>
+  disch_tac >>
+  qmatch_asmsub_abbrev_tac
+    `gas_outcome_full cfg tops' cx st0 (bind (eval_expr cx e2) _) (mid1,t1,G1,tn1) Q0 R0` >>
+  `gas_outcome_full cfg tops' cx st0 (bind (eval_expr cx e2) (read_result cx))
+     (mid1,t1,G1,tn1) (\H res ee G tn t. Q0 H res ee G tn t /\
+       (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z)) R0` by
+    (unabbrev_all_tac >> irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
+     qpat_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e2) _) _ _ _`
+       (irule_at Any) >> simp[NoAsms] >> rpt strip_tac >>
+     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+     simp[]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e2) _) _ Q0 R0` kall_tac >>
+  unabbrev_all_tac >>
+  conj_tac >- suspend "second_exit" >>
   suspend "second_success"
 QED
 
@@ -6694,12 +6785,6 @@ Resume compile_for_range_frag_full[second_entry]:
       (ACCEPT_TAC o PURE_ONCE_REWRITE_RULE [storage_trace_domain_def])) >> strip_tac >>
   qpat_assum `expr_post _ _ _ _ _ e1 es sa s1 s0 mid1 v1 op1 t1`
     (assume_tac o cj 6 o PURE_ONCE_REWRITE_RULE [expr_post_def]) >>
-  `!fn inst u. frag_reachable ctx func t1 fn inst u ==> dalloca_no_wrap inst u` by
-    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
-     qpat_assum `MEM func ctx.ctx_functions` (fn member =>
-       ACCEPT_TAC (Q.SPEC `t1`
-         (MATCH_MP bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap
-           (CONJ inv member)))))) >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
     irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[],
     gen_tac >> gen_tac >> disch_tac >> irule not_fresh_at_mono >>
@@ -6720,7 +6805,7 @@ Resume compile_for_range_frag_full[second_exit]:
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e2) _) _ _ _`
     (irule_at Any) >>
-  BETA_TAC >> conj_tac >- (rpt strip_tac >> qexists_tac `v` >> simp[]) >>
+  BETA_TAC >> conj_tac >- (rpt strip_tac >> qexists_tac `v` >> simp[] >> first_assum ACCEPT_TAC) >>
   map_every qx_gen_tac [`H`,`res`,`ee`,`gt`,`r`] >> strip_tac >>
   namedCases_on `res` ["v", "ex"]
   >- (qpat_assum `expr_exit (INL _) _` mp_tac >> simp[NoAsms,exprSimDefsTheory.expr_exit_INL]) >>
@@ -6895,7 +6980,7 @@ QED
 
 (* Apply the selected initialization witness and recover its full iterator list. *)
 fun range_join_init_tac replay scopes =
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   conj_tac >- simp[cj 4 evaluate_storage_trace_frame] >>
   conj_tac >-
     (rpt strip_tac >> irule gas_exempt_cert_bind_results >>
@@ -6920,7 +7005,8 @@ fun range_join_init_tac replay scopes =
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     (rewrite_tac[GSYM storage_trace_domain_def] >> first_assum ACCEPT_TAC) >>
   `?rs. res = INL rs /\ n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\ Num (n2 - n1) <= n` by
-    (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+    (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+                  (?rs. res = INL rs /\ _) /\ _`
        (drule_then strip_assume_tac) >> qexists `rs` >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `rs = GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))` by
@@ -7056,6 +7142,10 @@ Resume compile_for_range_frag_full[checked_init]:
   suspend "range_rounds"
 QED
 
+(* Instantiate the empty round with the predicate in its own premise. *)
+fun defer_exists_conv tm =
+  ((SWAP_EXISTS_CONV THENC QUANT_CONV defer_exists_conv) ORELSEC ALL_CONV) tm;
+
 (* Both initializer cases continue with the same selected compiler package. *)
 val range_join_rounds_tac =
   `lift_option_type (evaluate_type (get_tenv cx) typ) "For evaluate_type" es = (INL tyv,es)` by
@@ -7081,7 +7171,9 @@ val range_join_rounds_tac =
     lookup_var p s = SOME w /\ FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n w,sz) /\
     ptr_covers G tn p s sz /\ op_taint tn (Var cv) = {} /\ op_prov G (Var cv) = NONE /\
     op_taint tn (Var ev) = {} /\ op_prov G (Var ev) = NONE /\
-    alloca_history func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    alloca_history func s /\
+    (!fn inst v. frag_reachable ctx func s fn inst v ==> dalloca_no_wrap inst v) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     s0.vs_alloca_next <= s.vs_alloca_next /\
     (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==> lookup_var x s = SOME v) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -7121,10 +7213,13 @@ val range_join_rounds_tac =
   conj_tac >-
     (simp[NoAsms, Abbr `R`] >> rpt gen_tac >>
      disch_then (qx_choose_then `ex` (CONJUNCTS_THEN2 SUBST1_TAC assume_tac)) >>
-     pop_assum ACCEPT_TAC) >>
+     pop_assum ACCEPT_TAC);
+
+val range_join_rounds_cons_tac =
   irule eval_for_rounds_full >>
   conj_tac >-
-    (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+    (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+                  (?rs. res = INL rs /\ _) /\ _`
        (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >>
      rpt strip_tac >> first_assum ACCEPT_TAC) >>
@@ -7146,7 +7241,9 @@ val range_join_rounds_tac =
        (simp[NoAsms,Abbr `Inv`,Abbr `Done`,Abbr `R`,FUN_EQ_THM] >>
         POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >>
         metis_tac[haltExitProjTheory.halt_exit_INR_type])) >>
-     disch_then ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC);
+
+val range_join_rounds_nil_tac =
   conj_tac >-
     (rpt strip_tac >> irule gas_exempt_cert_bind_bool >>
      qexistsl [`mid'`,`t'`,`b`] >> BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -7157,12 +7254,24 @@ val range_join_rounds_tac =
     (rpt gen_tac >> strip_tac >> irule range_full_nil >>
      conj_tac >- first_assum ACCEPT_TAC >>
      reverse conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl [`G0`,`Inv`,`Num (n2-n1)`,`ainst`,`body`,`body_lbl`,`n`,`cenv`,`cenv`,
+     qexists `G0` >> CONV_TAC defer_exists_conv >>
+     qexistsl [`Num (n2-n1)`,`ainst`,`body`,`body_lbl`,`n`,`cenv`,`cenv`,
                `cond_lbl`,`cv`,`d`,`dv`,`e1`,`e2`,`j1`,`env`,`es`,`ev`,`exit_lbl`,
                `id`,`j2`,`lctx`,`n1`,`n2`,`stmt_res_ok lctx`,`p`,`ret_ty`,`s0`,
                `sa`,`sb`,`sb0`,`sz`,`tn0`,`typ`,`tyv`,`w`] >>
-     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, REFL_TAC,
-       simp[NoAsms,Abbr `Inv`,Abbr `Done`]]) >>
+     (fn (asl, goal) =>
+        let
+          val (inv, body) = dest_exists goal
+          val eq = find_term (fn tm => is_eq tm andalso aconv (lhs tm) inv) body
+        in EXISTS_TAC (rhs eq) (asl, goal) end) >>
+     rpt conj_tac >> (FIRST [first_assum ACCEPT_TAC, REFL_TAC,
+       simp[NoAsms,Abbr `Done`]]) >>
+     qx_gen_tac `H` >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> Inv H [] _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     simp[NoAsms, Abbr `Inv`] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- (rpt gen_tac >> REFL_TAC) >>
   reverse conj_tac >- first_assum ACCEPT_TAC;
 
@@ -7170,7 +7279,17 @@ val range_join_rounds_entry_tac =
   qx_gen_tac `H` >> disch_tac >>
   qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
                 (?rs. _) /\ (!bw capacity. _ ==> allocas_from _ t)`
-    (drule_then strip_assume_tac);
+    (drule_then strip_assume_tac) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z` by
+    (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+                  gas_origin_ptr_path _ _ _ (OK t,_,_)`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (mp_then (Pos hd) mp_tac
+       bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) >>
+     asm_rewrite_tac []);
 
 val range_join_rounds_sep_tac =
   `return_buf_sep d cenv mid t` by
@@ -7297,6 +7416,8 @@ QED
 
 Resume compile_for_range_frag_full[literal_rounds]:
   range_join_rounds_tac >>
+  range_join_rounds_cons_tac >>
+  range_join_rounds_nil_tac >>
   range_join_rounds_entry_tac >>
   range_join_rounds_sep_tac >>
   range_join_rounds_pack_tac
@@ -7304,6 +7425,8 @@ QED
 
 Resume compile_for_range_frag_full[range_rounds]:
   range_join_rounds_tac >>
+  range_join_rounds_cons_tac >>
+  range_join_rounds_nil_tac >>
   range_join_rounds_entry_tac >>
   range_join_rounds_sep_tac >>
   range_join_rounds_pack_tac

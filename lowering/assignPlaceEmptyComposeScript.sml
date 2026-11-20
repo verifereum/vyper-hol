@@ -3,7 +3,7 @@ Ancestors
   loweringStateRelDefs
   assignPlaceEmpty assignPlacePureCode assignPlaceGasCompose placeStore
   targetPlaceSimCases stmtSimDefs gasContext vyperExprNoControl vyperState
-  assignPlaceEmptySource assignPlaceEmptyStore placeRelayoutOutcome assignPlaceTargetLive exprSimHyps stmtLoweringMono
+  assignPlaceEmptySource assignPlaceEmptyStore placeRelayoutOutcome notMutateExprScopes[qualified] exprSimHyps stmtLoweringMono
   memoryLocalRhsProps vyperTypeArgFits exprSimHypsDefs vyperTypeInvariants
   bodySimAugPlaceLoad vyperStoragePlaceProvenance stmtSimAugAssign storageStoreFrame
   vyperTypeDefaults vyperStorageFrame stmtSimAugAssignPlaceMemory

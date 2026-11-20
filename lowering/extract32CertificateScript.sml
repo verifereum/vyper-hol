@@ -4,12 +4,12 @@ Ancestors
   bodyPtrBytestringBuiltinsBounds[qualified,ignore_grammar]
   typeBuiltinPrereqs
   augAssignPtrScalarRun augAssignPtrScalarClamp augAssignPtrScalarCertificate
-  augAssignPtrScalarSafety
+  augAssignPtrScalarSafety augAssignPtrScalarExec[qualified,ignore_grammar]
   bodyPtrTypeBuiltinsBounds assignBasePtrBytesPrefix
   rawCallBufferPtr bodyPtrBytestringBuiltinsAllocation typedCopyPtr instSeqComposePtr
   immutableRegionLoadPtr decoderGhostFramePtr
   exprSimExtract32Read exprSafeOperandBuiltins exprLoweringProps exprLowering emitHelper emitHelperProps
-  fragGasCopyLoop instSeqPtrLo fragGasSeqPtr ghostPcTransportPtr
+  fragGasCopyLoop fragGasSeqPtrContext[qualified,ignore_grammar] instSeqPtrLo fragGasSeqPtr ghostPcTransportPtr
   builtinBytes compileEnv ptrDiscipline bodyPtrDefs loweringStateRelDefs freshWrites
   venomInst venomState venomExecSemantics instIdxIndep
   words list pred_set finite_map
@@ -18,7 +18,7 @@ Theorem scalar_code_certificate_cursor:
   !code A G tn s H tm.
   scalar_code A code /\
   (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-  ~ctx_has_dalloca ctx /\ inst_seq_ptr D 0 ctx fn PG G tn code s H tm ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ inst_seq_ptr D 0 ctx fn PG G tn code s H tm ==>
   !k. inst_seq_ptr D 0 ctx fn PG G tn code (s with vs_inst_idx := k) H tm
 Proof
   Induct >- simp[inst_seq_ptr_def] >>
@@ -27,7 +27,9 @@ Proof
     (gvs[EVERY_MEM] >> metis_tac[scalar_available_clean]) >>
   `~is_terminator h.inst_opcode` by metis_tac[scalar_shape_control] >>
   `!k. ptr_inst_ok D 0 0 ctx fn G tn h (s with vs_inst_idx := k)` by
-    (rpt strip_tac >> irule scalar_ptr_inst_ok >> simp[]) >>
+    (rpt strip_tac >> irule scalar_ptr_inst_ok >> simp[] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[allocas_below_fmp_def]) >>
   Cases_on `step_inst_base h s` >>
   gvs[Once inst_seq_ptr_def] >>
   simp[Once inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def] >>
@@ -36,15 +38,22 @@ Proof
     op_prov (step_prov PG G h u) (Var v) = NONE /\
     op_taint (step_taint h s u tn) (Var v) = {}` by
     (ho_match_mp_tac scalar_step_clean >> simp[]) >>
-  first_x_assum drule >> disch_then drule >> simp[] >>
-  disch_then drule >> simp[]
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (drule_all (cj 1 augAssignPtrScalarExecTheory.scalar_exec_result) >>
+     strip_tac >> gvs[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+     simp[allocas_below_fmp_def]) >>
+  first_x_assum drule >> disch_then drule >>
+  disch_then (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,`H`,`tm`] mp_tac) >>
+  simp[]
 QED
 
 Theorem slice_bounds_fixed_certificate:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\
   scalar_available A a /\ scalar_available A n /\ scalar_available A limit /\
   (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?H th. (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
       (s with vs_inst_idx := k) H th) /\
     (!z. not_fresh_at sa z ==> FLOOKUP H z = FLOOKUP G z /\
@@ -53,7 +62,6 @@ Theorem slice_bounds_fixed_certificate:
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
   strip_tac >> drule_all slice_bounds_scalar_code >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all scalar_code_inst_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   drule_all scalar_seq_metadata_frame >> strip_tac >>
@@ -71,7 +79,7 @@ QED
 Theorem clamp_basetype_fixed_certificate:
   compile_clamp_basetype (Var x) typ sa = (result,sb) /\
   not_fresh_at sa x /\ op_prov G (Var x) = NONE /\ op_taint tn (Var x) = {} /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?H th.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
       (s with vs_inst_idx := k) H th) /\
@@ -86,7 +94,6 @@ Proof
   `scalar_code {x} (emitted_insts sa sb)` by
     (irule scalar_clamp_basetype_code >> simp[scalar_available_def] >> metis_tac[]) >>
   `!v. v IN {x} ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all scalar_code_inst_seq_ptr >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   drule_all scalar_seq_metadata_frame >> strip_tac >>
@@ -105,7 +112,7 @@ Theorem extract32_payload_read_certificate:
   lookup_var data s = SOME a /\ eval_operand offset s = SOME b /\
   ptr_covers G tn data s span /\ w2n b + 32 <= span /\
   w2n a + w2n b < dimword(:256) /\ op_taint tn offset = {} /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!i. w2n a + w2n b <= i /\ i < w2n a + w2n b + 32 ==> i NOTIN tn.t_mem) ==>
   ?H th t.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn
@@ -139,7 +146,9 @@ Proof
   `lookup_var addr s1 = SOME (a+b)` by simp[Abbr `s1`, lookup_var_update_var] >>
   `!i. w2n (a+b) <= i /\ i < w2n (a+b)+32 ==> i NOTIN tn1.t_mem` by
     simp[Abbr `tn1`, w2n_add_2] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `s1`, allocas_below_fmp_def, update_var_def]) >>
   drule_all assign_base_bytes_mload_seq >>
   disch_then (qspecl_then [`D`,`fn`,`PG`,`id+1`,`out`] strip_assume_tac) >>
   qexistsl_tac [`G'`,`tn'`,`u`] >> simp[] >>
@@ -215,7 +224,7 @@ Theorem extract32_load_normal_certificate:
   lookup_var data s = SOME a /\ eval_operand offset s = SOME b /\
   eval_operand len s = SOME l /\ w2n b + 32 <= w2n l /\
   ptr_covers G tn data s span /\ w2n b + 32 <= span /\
-  w2n a + w2n b < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  w2n a + w2n b < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!i. w2n a + w2n b <= i /\ i < w2n a + w2n b + 32 ==> i NOTIN tn.t_mem) ==>
   ?H th t.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
@@ -249,6 +258,11 @@ Proof
      conj_tac >- (Cases_on `offset` >> gvs[eval_operand_def, scalar_available_def] >> metis_tac[]) >>
      conj_tac >- (gvs[ptr_covers_def] >> metis_tac[]) >>
      Cases_on `offset` >> gvs[op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `u = s with vs_vars := u.vs_vars` (fn th =>
+       once_rewrite_tac[th]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   `!i. w2n a + w2n b <= i /\ i < w2n a + w2n b + 32 ==> i NOTIN un.t_mem` by simp[] >>
   `?H th t.
     (!k. inst_seq_ptr D 0 ctx fn PG J un
@@ -277,7 +291,7 @@ Theorem extract32_load_abort_certificate:
   scalar_available A offset /\ scalar_available A len /\
   (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
   eval_operand offset s = SOME b /\ eval_operand len s = SOME l /\
-  ~(w2n b + 32 <= w2n l) /\ ~ctx_has_dalloca ctx ==>
+  ~(w2n b + 32 <= w2n l) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?H th t.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
       (s with vs_inst_idx := k) H th) /\
@@ -349,7 +363,7 @@ Theorem extract32_tail_bounds_normal_certificate:
   lookup_var data s = SOME a /\ eval_operand offset s = SOME b /\
   eval_operand len s = SOME l /\ w2n b + 32 <= w2n l /\
   ptr_covers G tn data s span /\ w2n b + 32 <= span /\
-  w2n a + w2n b < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  w2n a + w2n b < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!i. w2n a + w2n b <= i /\ i < w2n a + w2n b + 32 ==> i NOTIN tn.t_mem) ==>
   ?H th.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
@@ -364,6 +378,13 @@ Proof
   drule_all extract32_load_normal_certificate >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   drule extract32_load_result_available >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (strip_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl [`emitted_insts sa sm`,`s`] >> simp[] >>
+     drule extract32_load_code_shape >> strip_tac >>
+     drule bodyPtrBytestringBuiltinsBoundsTheory.compile_assert_slice_bounds_layout >>
+     simp[mk_inst_def,is_terminator_def,is_alloca_op_def]) >>
   `?J un.
     (!k. inst_seq_ptr D 0 ctx fn PG H th (emitted_insts sm sb)
       (t with vs_inst_idx := k) J un) /\
@@ -387,7 +408,7 @@ Theorem extract32_tail_bounds_abort_certificate:
   scalar_available A offset /\ scalar_available A len /\
   (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
   eval_operand offset s = SOME b /\ eval_operand len s = SOME l /\
-  ~(w2n b + 32 <= w2n l) /\ ~ctx_has_dalloca ctx ==>
+  ~(w2n b + 32 <= w2n l) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?H th t.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
       (s with vs_inst_idx := k) H th) /\
@@ -419,7 +440,7 @@ Theorem extract32_tail_ready_certificate:
   eval_operand offset s = SOME (n2w n) /\
   n < dimword(:256) /\ p+32+LENGTH bs < dimword(:256) /\
   (!span. 0 < LENGTH bs /\ span <= LENGTH bs ==> ptr_covers G tn data s span) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?HG th.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
       (s with vs_inst_idx := k) HG th) /\

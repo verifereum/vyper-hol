@@ -1,6 +1,6 @@
 Theory dftPacketBlockHistoricalCuts
 Ancestors
-  dftPacketBlockHistorySelectedFrame dftPacketBlockTerminatorCoverage
+  dftPacketBlockTerminatorCoverage
   dftPacketBlockHistoryRootPrefix dftPacketSelectedCutTransport
   dftPacketTableSplice dftPacketBlockHistoryFrame dftPacketBlockTableSplice
   dftGasFromListTraceDefs dftGasInvCrossingProbe dftRunRel

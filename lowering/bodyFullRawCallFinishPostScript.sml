@@ -2,6 +2,7 @@
 Theory bodyFullRawCallFinishPost
 Ancestors emitHelperProps[qualified,ignore_grammar] compileEnv[qualified,ignore_grammar] rich_list[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar] bodyPtrIfExpAllocFrame[qualified,ignore_grammar]
   bodyFullRawCallFinishJoint bodyFullRawCallZero bodyFullRawCallBytes
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   exprSimRawCall exprSimMemDefs stateRelProj
   exprSimProps valueEncoding valueTypingMemoryProps loweringPosts
   vfmConstants context vyperState venomMemDefs exprSimRawCallCalldata
@@ -162,7 +163,7 @@ Theorem raw_call_tuple_length_cut[local]:
   alloc.inst_opcode = ALLOCA /\ alloc.inst_outputs = [q] /\
   not_local_ptr cenv es.scopes q /\ sf.cs_next_id <= alloc.inst_id /\
   FLOOKUP s.vs_allocas alloc.inst_id = SOME (w2n w,32 + ((n+31) DIV 32)*32) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s ==>
   ?u G1 tn1.
     run_inst_seq (emitted_insts sa s4) s = OK u /\
     stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es0 es sf s0 u /\
@@ -199,6 +200,9 @@ Proof
      simp[alloca_room_def] >> decide_tac) >>
   `w2n w + (32 + ((n+31) DIV 32)*32) < dimword (:256)` by decide_tac >>
   `lookup_var x s = SOME (n2w (w2n w))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule_all bodyFullRawCallTupleLengthTheory.raw_call_tuple_length_checked >>
   disch_then (qspecl_then [`func`,`PG`] strip_assume_tac) >>
   rename1 `ptr_covers G1 tn1 x u _` >>
@@ -373,7 +377,9 @@ Theorem raw_call_tuple_alloc_transport[local]:
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w k)] [p]) (fn_insts func) /\
   step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w k)] [p]) s = OK u /\
   p = STRING #"%" (toString sa.cs_next_var) /\ k < dimword (:256) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   FLOOKUP s.vs_allocas aid = SOME (a,len) /\ val_wf tv v /\ val_footprint tv v <= len /\
   safe_operand sa (Var x) /\ ptr_covers G tn x s len /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v a mem) ==>
@@ -410,6 +416,9 @@ Proof
       `!i. a <= i /\ i < a + val_footprint tv v ==> i < s.vs_alloca_next` by decide_tac >>
       (metis_tac[bodyPtrIfExpAllocFrameTheory.alloca_step_robust_below_frontier])) >>
   rpt gen_tac >> simp[fragGasSeqPtrTheory.inst_seq_ptr_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := j)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` mp_tac >>
+     simp[NoAsms, ptrDisciplineTheory.allocas_below_fmp_def] >> tautLib.TAUT_TAC) >>
   conj_tac
   >- (irule ptrSafetyTransportTheory.ptr_inst_ok_lower_bound_transport >>
       conj_tac >- (fs[ptrDisciplineTheory.allocas_from_def] >> (gvs[ptrDisciplineTheory.allocas_from_def])) >>
@@ -521,7 +530,9 @@ Theorem raw_call_positive_tuple_ghosts[local]:
   (!i. w2n w+32 <= i /\ i < w2n w+32+LENGTH (TAKE n s.vs_returndata) ==>
        i NOTIN tn.t_mem) /\
   0 < n /\ n < dimword (:256) /\ 64 + ((n+31) DIV 32)*32 < dimword (:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   (!v sz. cenv.ce_return_buf = SOME (PtrVar (Var v) sz) ==> not_fresh_at sf v) /\
   (!v sz. cenv.ce_return_pc = SOME (PtrVar (Var v) sz) ==> not_fresh_at sf v) /\
   ghost_kept_at lo cenv es0 sf G0 tn0 s0 G tn ==>
@@ -593,6 +604,13 @@ Proof
   `val_wf (BaseTV (BytesT (Dynamic n))) (BytesV bs) /\
    val_footprint (BaseTV (BytesT (Dynamic n))) (BytesV bs) <= 32 + ((n+31) DIV 32)*32` by
     (simp[valueEncodingDefsTheory.val_wf_def, val_footprint_def, type_memory_size_def, word_size_def] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+    (strip_tac >> conj_tac
+     >- (qpat_assum `stmt_state_rel H ctx func cenv cx es u`
+           (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >> simp[]) >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx es u` mp_tac >>
+     simp[NoAsms, stmt_state_rel_def, fmp_room_def] >> strip_tac >> res_tac >> decide_tac) >>
   qpat_assum `step_inst_base (mk_inst s4.cs_next_id ALLOCA _ _) u = _`
     (mp_then (Pat `step_inst_base _ _ = _`) mp_tac raw_call_tuple_alloc_transport) >>
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
@@ -681,6 +699,10 @@ Proof
     (simp[ghostPcTransportPtrTheory.ptr_covers_inst_idx,
           ghostPcTransportPtrTheory.eval_operand_inst_idx, ptrDisciplineTheory.allocas_from_def] >>
      first_assum (ACCEPT_TAC o PURE_REWRITE_RULE[ptrDisciplineTheory.allocas_from_def])) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u2 with vs_inst_idx := k)` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es u2`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[NoAsms, ptrDisciplineTheory.allocas_below_fmp_def] >> tautLib.TAUT_TAC) >>
   qpat_assum `run_inst_seq (emitted_insts s5 sb) (u2 with vs_inst_idx := k) = _`
     (mp_then (Pat `run_inst_seq _ _ = _`) mp_tac
        bodyFullRawCallTupleCopyTheory.raw_call_tuple_copy_checked) >>
@@ -694,7 +716,7 @@ Proof
   disch_then (drule_at (Pat `ptr_covers _ _ x _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   disch_then (drule_at (Pat `allocas_from _ _`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca _ ==> allocas_below_fmp _`)) >>
   disch_then (qspecl_then [`func`,`bs`,`PG`] mp_tac) >>
   (impl_tac >-
     (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
@@ -843,7 +865,9 @@ Theorem raw_call_positive_tuple_finish_joint[local]:
   tn.t_mem = old_tn.t_mem DIFF {j | w2n ro <= j /\ j < w2n ro + LENGTH (TAKE n data)} /\
   w2n ro = w2n w + 32 /\ LENGTH data < dimword (:256) /\
   64 + ((n + 31) DIV 32) * 32 < dimword (:256) /\ n < dimword (:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   (!v sz. cenv.ce_return_buf = SOME (PtrVar (Var v) sz) ==> not_fresh_at sf v) /\
   (!v sz. cenv.ce_return_pc = SOME (PtrVar (Var v) sz) ==> not_fresh_at sf v) /\
   ghost_kept_at lo cenv es0 sf G0 tn0 s0 G tn /\
@@ -1034,7 +1058,7 @@ Theorem raw_call_positive_bytes_good_entry[local]:
     (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w n)]
      else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
   0 < n /\ eval_operand ok s = SOME 1w /\ op_taint tn ok = {} /\
-  fn_has_code sc sb func /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sc sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
   ?sd. (do len <- emit_op RETURNDATASIZE [];
@@ -1087,7 +1111,7 @@ Theorem raw_call_positive_bytes_finish_path[local]:
   0 < n /\ n < dimword (:256) /\ 64 + ((n+31) DIV 32)*32 < dimword (:256) /\
   eval_operand ok s = SOME 1w /\ op_taint tn ok = {} /\
   fn_has_code sc sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ alloca_history func s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ alloca_history func s /\
   ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\
   stmt_state_rel (H0:(bool # 256 word # type_value) list # num list)
@@ -1255,6 +1279,9 @@ Resume raw_call_positive_bytes_finish_path[counted]:
    mem_bytes_at (w2n w+32) (LENGTH (TAKE n j.vs_returndata)) j.vs_memory = TAKE n j.vs_returndata /\
    (!i. w2n w+32 <= i /\ i < w2n w+32+LENGTH (TAKE n j.vs_returndata) ==>
         i NOTIN tn.t_mem)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp j` by
+    qpat_assum `stmt_state_rel H0 ctx func cenv cx es j`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule_at (Pat `run_inst_seq _ _ = _`) raw_call_bytes_success_full_path >>
   disch_then (drule_at (Pat `comp_bind _ _ _ = _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
@@ -1315,7 +1342,7 @@ Theorem raw_call_positive_bytes_finish_post[local]:
   0 < n /\ n < dimword (:256) /\ 64 + ((n+31) DIV 32)*32 < dimword (:256) /\
   eval_operand ok s = SOME 1w /\ op_taint tn ok = {} /\
   fn_has_code sc sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ alloca_history func s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ alloca_history func s /\
   ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\
   stmt_state_rel (H0:(bool # 256 word # type_value) list # num list)
@@ -1456,7 +1483,9 @@ Theorem raw_call_finish_continuation_full:
      else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
   eval_operand ok s = SOME (if success then 1w else 0w) /\
   op_taint tn ok = {} /\ op_prov G ok = NONE /\
-  fn_has_code sc sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sc sb func /\ fn_inst_ids_distinct func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s /\
   ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\ LENGTH (s.vs_returndata) < dimword (:256) /\
@@ -1551,7 +1580,7 @@ Resume raw_call_finish_continuation_full[zero]:
   qpat_x_assum `emit_op _ _ _ = _` (assume_tac o SRULE []) >>
   qpat_x_assum `expr_type e = _` (assume_tac o SRULE []) >>
   `(rev ==> success)` by metis_tac[] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
   drule_all raw_call_zero_finish_post >>
   disch_then (qspecl_then [`dep`,`cx`,`ann`,`PG`] mp_tac) >>
   simp_tac bool_ss [LET_THM] >>
@@ -1576,6 +1605,7 @@ Resume raw_call_finish_continuation_full[bytes]:
   qabbrev_tac `vv = LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr result LocMemory)` >>
   `v = BytesV (TAKE n s.vs_returndata) /\ vv = LocatedValue (expr_type e) (mk_ptr result LocMemory)` by
     simp[Abbr `v`, Abbr `vv`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
   drule_all raw_call_positive_bytes_finish_post >>
   disch_then (qspecl_then [`dep`,`PG`]
     (qx_choose_then `u` (qx_choose_then `Gf`

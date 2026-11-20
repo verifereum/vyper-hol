@@ -37,20 +37,21 @@ val site = ``!pre pat repl post D.
 
 val transitive = ``!p q r. ^transport p q /\ ^transport q r ==> ^transport p r``;
 
-Theorem inefficient_jump_window[local]:
+Theorem inefficient_jump_window_with_bounds:
   !pre x y rest env u.
   asm_static_wf (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x
     :: rest) /\ u.sym_base.as_pc = LENGTH pre /\ u.sym_base.as_stack = [] ==>
   ?d. 0 < d /\ d <= 4 /\
     (!i a. i < d /\ sym_steps (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"]
       ++ AsmLabel x :: rest) env i u = SymOK a ==>
+      a.sym_base.as_pc = LENGTH pre + i /\
       !op. ~(op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"} /\
       a.sym_base.as_pc < LENGTH (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp
         "JUMP"] ++ AsmLabel x :: rest) /\ EL a.sym_base.as_pc (pre ++ [AsmPushLabel x; AsmOp
         "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest) = AsmOp op)) /\
     (!a. sym_steps (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel
       x :: rest) env d u = SymOK a ==>
-      ?e. sym_steps (pre ++ [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"] ++ AsmLabel x :: rest)
+      ?e. e <= 3 /\ sym_steps (pre ++ [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"] ++ AsmLabel x :: rest)
         env e u = SymOK (sym_with_pc
         (splice_pc (LENGTH pre) 4 3 a.sym_base.as_pc) a) /\
         (a.sym_base.as_pc <= LENGTH pre \/ LENGTH pre+4 <= a.sym_base.as_pc) /\
@@ -132,6 +133,35 @@ Proof
   metis_tac[]
 QED
 
+Theorem inefficient_jump_window[local]:
+  !pre x y rest env u.
+  asm_static_wf (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x
+    :: rest) /\ u.sym_base.as_pc = LENGTH pre /\ u.sym_base.as_stack = [] ==>
+  ?d. 0 < d /\ d <= 4 /\
+    (!i a. i < d /\ sym_steps (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"]
+      ++ AsmLabel x :: rest) env i u = SymOK a ==>
+      !op. ~(op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"} /\
+      a.sym_base.as_pc < LENGTH (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp
+        "JUMP"] ++ AsmLabel x :: rest) /\ EL a.sym_base.as_pc (pre ++ [AsmPushLabel x; AsmOp
+        "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest) = AsmOp op)) /\
+    (!a. sym_steps (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel
+      x :: rest) env d u = SymOK a ==>
+      ?e. sym_steps (pre ++ [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"] ++ AsmLabel x :: rest)
+        env e u = SymOK (sym_with_pc
+        (splice_pc (LENGTH pre) 4 3 a.sym_base.as_pc) a) /\
+        (a.sym_base.as_pc <= LENGTH pre \/ LENGTH pre+4 <= a.sym_base.as_pc) /\
+        (e = 0 ==> LENGTH pre+4 <= a.sym_base.as_pc))
+Proof
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`pre`,`x`,`y`,`rest`,`env`,`u`]
+    inefficient_jump_window_with_bounds) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `d` (map_every assume_tac o CONJUNCTS)) >>
+  qexists_tac `d` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule_all >> strip_tac >>
+  metis_tac[]
+QED
+
 Theorem inefficient_jump_site[local]:
   ^site ==>
   !pre x y rest.
@@ -154,24 +184,16 @@ Proof
       simp[]) >> simp[]
 QED
 
-Theorem inefficient_jumps_prefix_transport_conditional:
-  ^site /\ ^transitive ==>
-  !p. asm_static_wf p ==> ^transport p (FST (optimize_inefficient_jumps p))
-Proof
-  qabbrev_tac `tr = ^transport` >> strip_tac >>
-  `!p. tr p p`
-    by (unabbrev_all_tac >> BETA_TAC >> gen_tac >> qexists_tac `1` >>
-     conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
-     conj_tac >- (qexistsl_tac [`n`, `a`] >> simp[]) >>
-     rpt strip_tac >> qexistsl_tac [`n`, `a`] >> simp[]) >>
-  `!pre x y rest.
+Theorem inefficient_jumps_prefix_walk:
+  !tr. (!p. tr p p) /\
+  (!p q r. tr p q /\ tr q r ==> tr p r) /\
+  (!pre x y rest.
     asm_static_wf (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest) ==>
     tr (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest)
-       (pre ++ [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"] ++ AsmLabel x :: rest)`
-    by (unabbrev_all_tac >> MATCH_MP_TAC inefficient_jump_site >>
-        first_assum MATCH_ACCEPT_TAC) >>
-  qpat_x_assum `!pre pat repl post D. _` kall_tac >>
-  qpat_x_assum `Abbrev _` kall_tac >>
+       (pre ++ [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"] ++ AsmLabel x :: rest)) ==>
+  !p. asm_static_wf p ==> tr p (FST (optimize_inefficient_jumps p))
+Proof
+  gen_tac >> strip_tac >>
   `!sfx pre. asm_static_wf (pre ++ sfx) ==>
       tr (pre ++ sfx) (pre ++ FST (optimize_inefficient_jumps sfx))`
     suffices_by (strip_tac >> gen_tac >>
@@ -208,4 +230,26 @@ Proof
   simp[] >>
   qpat_x_assum `!pre x y rest. _` (qspecl_then [`pre`, `lx`, `ly`, `rest`] mp_tac) >>
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,listTheory.APPEND] >> simp[]
+QED
+
+Theorem inefficient_jumps_prefix_transport_conditional:
+  ^site /\ ^transitive ==>
+  !p. asm_static_wf p ==> ^transport p (FST (optimize_inefficient_jumps p))
+Proof
+  qabbrev_tac `tr = ^transport` >> strip_tac >>
+  `!p. tr p p`
+    by (unabbrev_all_tac >> BETA_TAC >> gen_tac >> qexists_tac `1` >>
+     conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
+     conj_tac >- (qexistsl_tac [`n`, `a`] >> simp[]) >>
+     rpt strip_tac >> qexistsl_tac [`n`, `a`] >> simp[]) >>
+  `!pre x y rest.
+    asm_static_wf (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest) ==>
+    tr (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest)
+       (pre ++ [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"] ++ AsmLabel x :: rest)`
+    by (unabbrev_all_tac >> MATCH_MP_TAC inefficient_jump_site >>
+        first_assum MATCH_ACCEPT_TAC) >>
+  qpat_x_assum `!pre pat repl post D. _` kall_tac >>
+  mp_tac (Q.SPEC `tr` inefficient_jumps_prefix_walk) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[]
 QED

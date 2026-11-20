@@ -167,6 +167,7 @@ Theorem prefix_entry_register_address_decode_paired_mode:
  /\ (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)
 Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
  drule_all (Q.SPEC `checked` prefix_entry_register_canonical_address_paired_mode) >>
  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
  disch_then (qx_choose_then `src` (qx_choose_then `middle`

@@ -5837,8 +5837,9 @@ Resume body_assign_immutable_bytes_loop_header_actual[jump]:
     simp[Abbr `t0`, Abbr `u0`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base (mk_inst (ih+1) JNZ [Var test;Label exit;Label loop_body] []) t0 =
      OK (jump_to lbl t0)` by
-    (Cases_on `j=n` >> simp[Abbr `lbl`, step_inst_base_def, mk_inst_def,
-                             eval_operand_def, bool_to_word_def]) >>
+    (Cases_on `j=n` >>
+     simp[Abbr `lbl`, step_inst_base_opcode_eqs, mk_inst_def,
+          eval_operand_def, bool_to_word_def]) >>
   `ptr_inst_ok D 0 0 ctx func G1 tn1
     (mk_inst (ih+1) JNZ [Var test;Label exit;Label loop_body] []) t0` by
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
@@ -5952,12 +5953,17 @@ Theorem body_assign_immutable_bytes_loop_shape[local]:
                       sb.cs_next_var = sm.cs_next_var+9)
 Proof
   Cases_on `imm` >> strip_tac >>
-  qpat_x_assum `compile_word_copy_loop_base _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_word_copy_loop_base_def, word_scale_def,
+  qpat_x_assum `compile_word_copy_loop_base _ _ _ _ _ _ _ _ = _` mp_tac
+  >>> SPLIT_LT 1 (ALLGOALS (simp[compile_word_copy_loop_base_def, word_scale_def,
        compile_ptr_load_def, compile_ptr_store_def, compile_imm_store_word_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_label_def, fresh_var_def, emit_inst_def, emit_op_def,
-       emit_void_def, fresh_id_def, emit_def, new_block_def, Excl "isPREFIX"] >>
+       emit_void_def, fresh_id_def, emit_def, new_block_def, Excl "isPREFIX"]), ALL_LT)
+  >>> SPLIT_LT 1 (ALL_LT, ALLGOALS (simp[compile_word_copy_loop_base_def, word_scale_def,
+       compile_ptr_load_def, compile_ptr_store_def, compile_imm_store_word_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_label_def, fresh_var_def, emit_inst_def, emit_op_def,
+       emit_void_def, fresh_id_def, emit_def, new_block_def, Excl "isPREFIX"])) >>
   strip_tac >> gvs[Excl "isPREFIX"] >>
   qpat_x_assum `fn_has_code _ _ _` mp_tac >>
   simp[fn_has_code_def, emitted_blocks_def, Excl "isPREFIX"] >>
@@ -9144,7 +9150,8 @@ Proof
       >- (rpt gen_tac >> strip_tac >> qexists `v` >> gvs[arithmeticTheory.ADD_COMM]) >>
       rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def] >> strip_tac >>
       conj_tac >- (simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]) >>
-      conj_tac >- metis_tac[halt_exit_INR_type] >>
+      conj_tac >- (qpat_assum `halt_exit _ _ _ (INR _) _`
+        (MATCH_ACCEPT_TAC o MATCH_MP (iffLR halt_exit_INR_type))) >>
       rpt strip_tac
       >- (qpat_assum `ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u`
             (fn frame => qpat_assum `ctx_has_dalloca ctx` (fn active =>
@@ -18600,10 +18607,15 @@ Proof
   reverse conj_tac >- first_assum ACCEPT_TAC >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `is_word_type ity`
-  >- (irule body_assign_other_immutable_word_write_full >>
-      rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
-      qexists `marks` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  irule body_assign_other_immutable_nonword_write_full >>
-  rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
-  qexists `marks` >> rpt conj_tac >> first_assum ACCEPT_TAC
+  >| [irule body_assign_other_immutable_word_write_full,
+      irule body_assign_other_immutable_nonword_write_full] >>
+  qpat_assum `supported_stmt tops bindings (Assign (BaseTarget t) e)` (irule_at Any) >>
+  qpat_assum `type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env'` (irule_at Any) >>
+  qpat_assum `compile_get_target_ptr compile_expr cenv t =
+    comp_return (Lit (n2w off),SOME LocCode,SOME (ValPT ity))` (irule_at Any) >>
+  qpat_assum `compile_expr cenv (expr_type e) e sa = (vv,sm)` (irule_at Any) >>
+  qpat_assum `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+    shadow_sa = (op,shadow_su)` (irule_at Any) >>
+  qexistsl [`su`, `shadow_sb`, `shadow_func`, `marks`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED

@@ -1,7 +1,7 @@
 (* Exact bytes/string decoding with one source, runtime and ghost endpoint. *)
 Theory calldataExactBytesJoint
 Ancestors
-  calldataBytesSourceExact defaultBytesDecodeExec calldataDecodePtr
+  passSharedFrame[qualified] defaultBytesDecodeExec calldataDecodePtr
   calldataFiniteTransport exprPtrCleanBufferPost abiDecoderFrameCompose
   calldataBytesRejectOrigin calldataBytesFiniteFrame fragGasOriginPtrExec
   abiCallerAllocation abiDecoderFrame

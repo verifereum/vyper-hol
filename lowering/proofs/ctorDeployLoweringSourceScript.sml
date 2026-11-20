@@ -556,8 +556,13 @@ Proof
   pop_assum (fn th => once_rewrite_tac[th]) >>
   pop_assum (fn th => rewrite_tac[th]) >>
   rpt (pairarg_tac >> gvs[]) >>
-  BasicProvers.every_case_tac >>
-  gvs[unlock_if_nr_def, return_def, abstract_machine_from_state_def]
+  qmatch_goalsub_rename_tac `option_CASE ctor_constants _ _` >>
+  Cases_on `ctor_constants` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `FST (ctor_run : unit evaluation_result)` >>
+  qpat_x_assum `Abbrev (ctor_run = _)` kall_tac >>
+  Cases_on `FST ctor_run` >>
+  simp[unlock_if_nr_def, return_def, abstract_machine_from_state_def] >>
+  rpt (BasicProvers.PURE_TOP_CASE_TAC >> gvs[])
 QED
 
 (* TOP-LEVEL bridge: a checked, call-free constructor's run, its result and

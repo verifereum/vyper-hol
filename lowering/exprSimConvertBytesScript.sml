@@ -115,9 +115,12 @@ Theorem compile_convert_bytestring_shape:
       if is_bytestring_type (expr_type e1) /\
          type_memory_bytes cenv (lowered_value_type cenv e1) <
          type_memory_bytes cenv t
-      then as_stack_val ann (compile_bytestring_widen_copy
+      then as_ptr_val ann LocMemory (compile_bytestring_widen_copy
              (type_memory_bytes cenv t) x
              (type_memory_bytes cenv (lowered_value_type cenv e1)) s1)
+      else if is_bytestring_type (expr_type e1)
+      then as_ptr_val ann LocMemory
+             (compile_type_convert x (mk_convert_op (expr_type e1) t) s1)
       else as_stack_val ann
              (compile_type_convert x (mk_convert_op (expr_type e1) t) s1)
 Proof
@@ -134,7 +137,7 @@ QED
 Theorem lower_value_convert_bytestring:
   !cenv ty ann t e1 sa op sb.
     lower_value compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa =
-      (op,sb) /\ is_bytestring_type t ==>
+      (op,sb) /\ is_bytestring_type t /\ ~is_word_type ann ==>
     ?x s1.
       lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
       (if is_bytestring_type (expr_type e1) /\
@@ -152,9 +155,10 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   Cases_on `is_bytestring_type (expr_type e1) /\
     type_memory_bytes cenv (lowered_value_type cenv e1) < type_memory_bytes cenv t` >>
-  gvs[] >> rpt (pairarg_tac >> gvs[]) >>
-  gvs[exprBopLoweringTheory.as_stack_val_pair, unwrap_value_def, comp_return_def,
-      pairTheory.PAIR_FST_SND_EQ]
+  gvs[] >> Cases_on `is_bytestring_type (expr_type e1)` >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[exprBopLoweringTheory.as_ptr_val_pair, exprBopLoweringTheory.as_stack_val_pair,
+      unwrap_value_def, contextTheory.mk_ptr_def, comp_return_def, pairTheory.PAIR_FST_SND_EQ]
 QED
 
 Theorem convert_widen_copy_parts:
@@ -1927,6 +1931,7 @@ Proof
   drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
   `!n. t <> FlagT n` by (Cases_on `t` >> gvs[is_bytestring_type_def]) >>
+  `~is_word_type t` by metis_tac[is_bytestring_word_type] >>
   drule_all lower_value_convert_bytestring >> strip_tac >>
   drule (cj 2 exprLoweringPropsTheory.compile_expr_grows) >> strip_tac >>
   `is_bytestring_type (expr_type e1)` by
@@ -2081,6 +2086,21 @@ QED
 
 Finalise compile_convert_bytestring_frag_sim
 
+Theorem expr_vv_sim_convert_bytestring:
+  is_bytestring_type (expr_type e) /\ is_bytestring_type t /\
+  expr_sim ctx func cenv cx ty (TypeBuiltin t Convert t [e]) es ==>
+  expr_vv_sim ctx func cenv cx ty (TypeBuiltin t Convert t [e]) es
+Proof
+  strip_tac >> `~is_word_type t` by metis_tac[is_bytestring_word_type] >>
+  irule expr_vv_sim_memory_value >>
+  simp[post_value_type_def, vyperASTTheory.expr_type_def] >>
+  conj_tac
+  >- (gen_tac >> simp[compile_convert_bytestring_shape] >>
+      pairarg_tac >> gvs[] >>
+      IF_CASES_TAC >> simp[exprBopLoweringTheory.as_ptr_val_pair, contextTheory.mk_ptr_def]) >>
+  metis_tac[eval_expr_type_builtin_value]
+QED
+
 Theorem compile_convert_to_bytestring_case:
   !nocalls ctx func cenv cx ann t e1.
     exprs_case nocalls ctx func cenv cx [e1] /\
@@ -2095,9 +2115,8 @@ Proof
     (irule expr_sim_case_apply >> conj_tac >- (qexists_tac `env` >> simp[]) >>
      qexists_tac `nocalls` >> simp[] >>
      metis_tac[int_calls_type_builtin_arg, listTheory.MEM]) >>
-  irule expr_vv_sim_stack >> rpt conj_tac
-  >- simp[compile_convert_stack]
-  >- metis_tac[eval_expr_type_builtin_value] >>
+  `is_bytestring_type (expr_type e1)` by metis_tac[valid_conversion_to_bytestring] >>
+  irule expr_vv_sim_convert_bytestring >> simp[] >>
   irule compile_convert_bytestring_frag_sim >> simp[] >>
   qexists_tac `env` >> simp[]
 QED

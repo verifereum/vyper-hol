@@ -808,7 +808,7 @@ QED
 Theorem rest_word_membership_runtime_prefix_checked_operand:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   product = "%" ++ toString (sa.cs_next_var+3) /\
   delta = (if 0 < skip then 1 else 0) /\
   offset = "%" ++ toString (sa.cs_next_var+3+delta) /\
@@ -873,7 +873,10 @@ Proof
       scalar_shape_def, scalar_binary_def, scalar_available_def, mk_inst_def]) >>
   `!v. v IN {product} ==> op_prov g1 (Var v) = NONE /\ op_taint t1 (Var v) = {}` by
     gvs[op_prov_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp (u1 with vs_inst_idx := SUC s.vs_inst_idx)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (`allocas_below_fmp (u1 with vs_inst_idx := SUC s.vs_inst_idx) <=>
+       allocas_below_fmp s` by simp[Abbr `u1`, update_var_def, allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all scalar_code_inst_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG g1 t1 mid _ g2 t2` >>
@@ -920,6 +923,11 @@ Proof
   `step_inst_base last u2 = OK u3` by
     gvs[Abbr `last`, Abbr `u3`, step_inst_base_opcode_eqs,
       exec_pure2_def, eval_operands_def, eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u2` by
+    (`allocas_below_fmp u2 <=> allocas_below_fmp s` by
+       (Cases_on `0 < skip` >>
+        simp[Abbr `u2`, Abbr `u1`, update_var_def, allocas_below_fmp_def]) >>
+     asm_rewrite_tac[]) >>
   `ptr_inst_ok D 0 0 ctx fn g2 t2 last u2` by
     (simp[Abbr `last`] >> irule ptr_inst_ok_copy_len_binop >> gvs[]) >>
   `op_taint t3 (Var dst) = {} /\
@@ -1140,7 +1148,7 @@ QED
 Theorem rest_word_membership_runtime_prefix_checked_operand_bounded:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   product = "%" ++ toString (sa.cs_next_var+5) /\
   delta = (if 0 < skip then 1 else 0) /\
   offset = "%" ++ toString (sa.cs_next_var+5+delta) /\
@@ -1205,7 +1213,10 @@ Proof
       scalar_shape_def, scalar_binary_def, scalar_available_def, mk_inst_def]) >>
   `!v. v IN {product} ==> op_prov g1 (Var v) = NONE /\ op_taint t1 (Var v) = {}` by
     gvs[op_prov_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp (u1 with vs_inst_idx := SUC s.vs_inst_idx)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (`allocas_below_fmp (u1 with vs_inst_idx := SUC s.vs_inst_idx) <=>
+       allocas_below_fmp s` by simp[Abbr `u1`, update_var_def, allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all scalar_code_inst_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr D 0 ctx fn PG g1 t1 mid _ g2 t2` >>
@@ -1252,6 +1263,11 @@ Proof
   `step_inst_base last u2 = OK u3` by
     gvs[Abbr `last`, Abbr `u3`, step_inst_base_opcode_eqs,
       exec_pure2_def, eval_operands_def, eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u2` by
+    (`allocas_below_fmp u2 <=> allocas_below_fmp s` by
+       (Cases_on `0 < skip` >>
+        simp[Abbr `u2`, Abbr `u1`, update_var_def, allocas_below_fmp_def]) >>
+     asm_rewrite_tac[]) >>
   `ptr_inst_ok D 0 0 ctx fn g2 t2 last u2` by
     (simp[Abbr `last`] >> irule ptr_inst_ok_copy_len_binop >> gvs[]) >>
   `op_taint t3 (Var dst) = {} /\
@@ -1872,7 +1888,7 @@ Finalise rest_word_membership_header_joint_indexed
 Theorem rest_word_membership_slot_read_joint_const:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm (if tr then LocTransient else LocStorage)) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   delta = (if 0 < skip then 1 else 0) /\
   src = "%" ++ toString (sa.cs_next_var+4+delta) /\
   dst = "%" ++ toString (sa.cs_next_var+5+delta) /\
@@ -1956,7 +1972,7 @@ QED
 Theorem rest_word_membership_code_read_joint_const:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm LocCode) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   delta = (if 0 < skip then 1 else 0) /\
   src = "%" ++ toString (sa.cs_next_var+4+delta) /\
   dst = "%" ++ toString (sa.cs_next_var+5+delta) /\
@@ -2041,7 +2057,7 @@ QED
 Theorem rest_word_membership_memory_read_joint_const:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm LocMemory) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   delta = (if 0 < skip then 1 else 0) /\
   src = "%" ++ toString (sa.cs_next_var+4+delta) /\
   dst = "%" ++ toString (sa.cs_next_var+5+delta) /\
@@ -2122,7 +2138,7 @@ QED
 Theorem rest_word_membership_slot_read_joint_bounded_const:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm (if tr then LocTransient else LocStorage)) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   delta = (if 0 < skip then 1 else 0) /\
   src = "%" ++ toString (sa.cs_next_var+6+delta) /\
   dst = "%" ++ toString (sa.cs_next_var+7+delta) /\
@@ -2205,7 +2221,7 @@ QED
 Theorem rest_word_membership_code_read_joint_bounded_const:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm LocCode) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   delta = (if 0 < skip then 1 else 0) /\
   src = "%" ++ toString (sa.cs_next_var+6+delta) /\
   dst = "%" ++ toString (sa.cs_next_var+7+delta) /\
@@ -2290,7 +2306,7 @@ QED
 Theorem rest_word_membership_memory_read_joint_bounded_const:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm LocMemory) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   delta = (if 0 < skip then 1 else 0) /\
   src = "%" ++ toString (sa.cs_next_var+6+delta) /\
   dst = "%" ++ toString (sa.cs_next_var+7+delta) /\
@@ -2371,7 +2387,7 @@ QED
 Theorem rest_word_membership_runtime_address_operand_joint_const:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm loc) NONE is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   product = "%" ++ toString (sa.cs_next_var+3) /\
   delta = (if 0 < skip then 1 else 0) /\
   offset = "%" ++ toString (sa.cs_next_var+3+delta) /\
@@ -2506,7 +2522,7 @@ Theorem rest_word_membership_header_joint_const:
   vv_location vv = SOME loc /\ (~cenv.ce_is_ctor \/ loc <> LocCode) /\
   (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient \/ loc = LocCode) /\
   compile_var_array_membership cenv needle vv (ArrayT ety (Dynamic cap)) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sa x) /\
   (!H:'h. guard H ==> ~s.vs_halted /\ allocas_from lo s /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -2632,7 +2648,7 @@ Finalise rest_word_membership_header_joint_const
 Theorem rest_word_membership_runtime_address_operand_joint_bounded_const:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   product = "%" ++ toString (sa.cs_next_var+5) /\
   delta = (if 0 < skip then 1 else 0) /\
   offset = "%" ++ toString (sa.cs_next_var+5+delta) /\

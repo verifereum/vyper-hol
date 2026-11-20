@@ -63,11 +63,9 @@ Theorem tuple_place_write_inv:
 Proof
   strip_tac >>
   drule tuple_place_write_outcomes >> strip_tac >>
-  drule oracle_storage_ok_outcomes >> strip_tac >>
   gvs[expr_sim_inv_def] >>
   metis_tac[write_place_preserves_env_consistent,
             write_place_preserves_state_well_typed,
             write_place_preserves_accounts_well_typed,
-            write_place_preserves_contract_storage,
             write_place_popped_keys_indexed]
 QED

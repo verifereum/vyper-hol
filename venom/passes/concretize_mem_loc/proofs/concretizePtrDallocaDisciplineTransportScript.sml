@@ -181,11 +181,9 @@ Proof
       `op_taint tn op <> {}` by metis_tac[SUBSET_EMPTY] >>
       qpat_x_assum `!op. MEM op _ /\ _ ==> _` (drule_all_then strip_assume_tac) >>
       simp[] >> fs[] >> metis_tac[MEM]) >>
-  conj_tac
-  >- (rpt strip_tac >>
+  (rpt strip_tac >>
       `~about_to_revert fn inst s` by metis_tac[] >>
       qpat_x_assum `~about_to_revert ft inst t ==> _`
         (drule_then (drule_all_then strip_assume_tac)) >>
-      metis_tac[]) >>
-  metis_tac[SUBSET_EMPTY]
+      metis_tac[])
 QED

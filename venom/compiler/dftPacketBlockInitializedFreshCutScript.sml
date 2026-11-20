@@ -1,7 +1,7 @@
 Theory dftPacketBlockInitializedFreshCut
 Ancestors
   dftPacketBlockRootedCertificate dftPacketReturnAnchorState
-  dftPacketBlockHistoryRootPrefix dftPacketBlockHistorySelectedFrame
+  dftPacketBlockHistoryRootPrefix dftPacketBlockHistoryFrame[qualified]
   dftPacketFreshBodyObservation dftPacketFillingBoundary
   finite_map list rich_list arithmetic venomInst
 

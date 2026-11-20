@@ -1,6 +1,6 @@
 Theory runtimeSymSrcStatementExitClosed
 Ancestors
-  runtimeSymSrcStatementExits runtimeSymSrcStatementReturns
+  runtimeSymSrcStatementReturns
   runtimeSymSrcStatementLogs runtimeSymSrcStatementReasons
   runtimeSymSrcInterfaces runtimeSymSrcContextTyped runtimeSymSrcContextComplete
   runtimeSymSrcContext runtimeSymSrcGeneratorContracts

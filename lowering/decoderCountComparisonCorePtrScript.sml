@@ -1,6 +1,6 @@
 (* The count-bound comparison threads one deterministic ghost. *)
 Theory decoderCountComparisonCorePtr
-Ancestors ghostPcTransportPtr fragGasSeqPtr unitTransformDefs fragGasOriginPtr instMemFrontier memSafeRun wordLoadStorePtr decoderCountLoadCorePtr decoderSetupStepPtr decoderNavigationPtr
+Ancestors ghostPcTransportPtr fragGasSeqPtr unitTransformDefs fragGasOriginPtr instMemFrontier memSafeRun wordLoadStorePtr decoderSetupStepPtr decoderNavigationPtr
   calldataClampPtr typedCopyPtr bodyPtrDefs compileEnv loweringStateRelDefs emitHelper venomInst
   venomExecSemantics venomState words list rich_list arithmetic finite_map
   ptrDiscipline ptrSafeRun venomInstProofs codegenRel contextCodegenRel

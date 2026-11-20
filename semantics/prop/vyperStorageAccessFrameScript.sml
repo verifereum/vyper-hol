@@ -2249,9 +2249,11 @@ Resume evaluate_finite_frame[intcall]:
        (asm_x "body_frame" kall_tac >> asm_x "args_prefix" kall_tac >>
         asm_x "defaults_prefix" kall_tac >> asm_x "call_prefix" kall_tac >>
         fs[] >>
-        asm "closure" (mp_tac o SRULE [GSYM AND_IMP_INTRO, MEM_APPEND]) >>
-        asm "callee_accesses" mp_tac >>
-        simp[get_module_code_def, function_int_calls_def] >> metis_tac[])) >>
+        asm "closure" mp_tac >>
+        asm "callee_accesses"
+          (mp_tac o CONJUNCT2 o PURE_REWRITE_RULE
+             [function_int_calls_def, BETA_RULE safe_accesses_append]) >>
+        simp[get_module_code_def, CONJ_ASSOC])) >>
      simp[oneline get_storage_def, CONJ_ASSOC]) >>
   `^frame cx A r body_st` by
     (BETA_TAC >> irule (BETA_RULE finite_frame_trans) >>

@@ -347,7 +347,23 @@ Resume abi_decode_bytes_tail_owned_joint[size_success]:
   `local_ptrs_reserved ce c5 /\ not_fresh_at c5 input /\
    (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at c5 x) /\
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at c5 x)` by
-    metis_tac[local_ptrs_reserved_next_var, not_fresh_at_mono] >>
+    (conj_tac
+     >- (irule local_ptrs_reserved_next_var >> qexists_tac `c4` >> asm_rewrite_tac[]) >>
+     conj_tac
+     >- (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `c4` >> asm_rewrite_tac[]) >>
+     conj_tac
+     >- (gen_tac >> gen_tac >> disch_then
+         (fn eq =>
+           irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `c4` >>
+           qpat_assum `!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at c4 x`
+             (fn th => assume_tac (MATCH_MP th eq)) >>
+           asm_rewrite_tac[])) >>
+     gen_tac >> gen_tac >> disch_then
+     (fn eq =>
+       irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `c4` >>
+       qpat_assum `!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at c4 x`
+         (fn th => assume_tac (MATCH_MP th eq)) >>
+       asm_rewrite_tac[])) >>
   `allocas_from lo ts` by
     (qpat_assum `(^owned_decoder_state) c5 ts Gs tns` mp_tac >>
      qpat_assum `?H. V H` mp_tac >>

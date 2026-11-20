@@ -362,6 +362,13 @@ Definition fold_pin_constant_def:
     | _ => e
 End
 
+Theorem fold_pin_constant_type[simp]:
+  expr_type (fold_pin_constant e) = expr_type e
+Proof
+  Cases_on `origin_fold_value e` >> simp[fold_pin_constant_def] >>
+  metis_tac[origin_fold_value_type]
+QED
+
 (* An exponent or a shift amount is a compile-time value where Vyper folds
    it; the checker needs a literal (or unsigned) one. *)
 Definition exponent_operand_def:
@@ -379,7 +386,7 @@ End
 
 Definition make_builtin_call_def:
   make_builtin_call ty name args kwargs ret_ty =
-    if name = "len" then Builtin ty Len args
+    if name = "len" then fold_pin_constant (Builtin ty Len args)
     else if name = "concat" then
       (case ret_ty of JT_String n => Builtin ty (Concat n) args
                     | JT_Bytes n => Builtin ty (Concat n) args
@@ -392,7 +399,7 @@ Definition make_builtin_call_def:
        case ret_ty of JT_String n => Builtin ty (Slice n) slice_args
                     | JT_Bytes n => Builtin ty (Slice n) slice_args
                     | _ => Builtin ty (Slice 0) slice_args)
-    else if name = "keccak256" then Builtin ty Keccak256 args
+    else if name = "keccak256" then fold_pin_constant (Builtin ty Keccak256 args)
     else if name = "sha256" then
       (let original = Builtin ty Sha256 args in
        let args' = MAP origin_fold_value args in
@@ -404,8 +411,8 @@ Definition make_builtin_call_def:
             | Literal lty l => Literal lty l
             | _ => original)
        | NONE => original)
-    else if name = "floor" then Builtin ty Floor args
-    else if name = "ceil" then Builtin ty Ceil args
+    else if name = "floor" then fold_pin_constant (Builtin ty Floor args)
+    else if name = "ceil" then fold_pin_constant (Builtin ty Ceil args)
     else if name = "blockhash" then Builtin ty BlockHash args
     else if name = "blobhash" then Builtin ty BlobHash args
     else if name = "ecrecover" then
@@ -417,9 +424,9 @@ Definition make_builtin_call_def:
     else if name = "ecadd" then Builtin ty ECAdd args
     else if name = "ecmul" then Builtin ty ECMul args
     else if name = "empty" then TypeBuiltin ty Empty ty []
-    else if name = "max_value" then TypeBuiltin ty MaxValue ty []
-    else if name = "min_value" then TypeBuiltin ty MinValue ty []
-    else if name = "epsilon" then TypeBuiltin ty Epsilon ty []
+    else if name = "max_value" then fold_pin_constant (TypeBuiltin ty MaxValue ty [])
+    else if name = "min_value" then fold_pin_constant (TypeBuiltin ty MinValue ty [])
+    else if name = "epsilon" then fold_pin_constant (TypeBuiltin ty Epsilon ty [])
     else if name = "convert" then
       (case args of (arg::_) => TypeBuiltin ty Convert ty [arg]
                   | _ => TypeBuiltin ty Convert ty [])
@@ -427,11 +434,11 @@ Definition make_builtin_call_def:
     else if name = "unsafe_sub" then Builtin ty (Bop UnsafeSub) args
     else if name = "unsafe_mul" then Builtin ty (Bop UnsafeMul) args
     else if name = "unsafe_div" then Builtin ty (Bop UnsafeDiv) args
-    else if name = "uint256_addmod" then Builtin ty AddMod args
-    else if name = "uint256_mulmod" then Builtin ty MulMod args
-    else if name = "pow_mod256" then Builtin ty PowMod256 args
-    else if name = "min" then Builtin ty (Bop Min) args
-    else if name = "max" then Builtin ty (Bop Max) args
+    else if name = "uint256_addmod" then fold_pin_constant (Builtin ty AddMod args)
+    else if name = "uint256_mulmod" then fold_pin_constant (Builtin ty MulMod args)
+    else if name = "pow_mod256" then fold_pin_constant (Builtin ty PowMod256 args)
+    else if name = "min" then fold_pin_constant (Builtin ty (Bop Min) args)
+    else if name = "max" then fold_pin_constant (Builtin ty (Bop Max) args)
     (* send(to, value, gas=0): the gas operand follows the positional ones. *)
     else if name = "send" then
       (case ALOOKUP kwargs "gas" of
@@ -501,7 +508,7 @@ Definition make_builtin_call_def:
                 | _ => rejected_expr)
            else rejected_expr
        | _ => rejected_expr)
-    else if name = "abs" then Builtin ty Abs args
+    else if name = "abs" then fold_pin_constant (Builtin ty Abs args)
     else if name = "as_wei_value" then
       (* Vyper takes exactly two arguments, the second a string; one that
          doesn't reduce to a literal here is rejected, not read as wei. *)
@@ -1005,10 +1012,11 @@ End
 
 Definition translate_unary_def:
   (translate_unary ctx JUop_USub e ret_ty =
-    Builtin (translate_type (expr_type_ctx ctx) ret_ty) Neg [e]) /\
-  (translate_unary ctx JUop_Not e ret_ty = Builtin (BaseT BoolT) Not [e]) /\
+    fold_pin_constant (Builtin (translate_type (expr_type_ctx ctx) ret_ty) Neg [e])) /\
+  (translate_unary ctx JUop_Not e ret_ty =
+    fold_pin_constant (Builtin (BaseT BoolT) Not [e])) /\
   (translate_unary ctx JUop_Invert e ret_ty =
-    Builtin (translate_type (expr_type_ctx ctx) ret_ty) Not [e])
+    fold_pin_constant (Builtin (translate_type (expr_type_ctx ctx) ret_ty) Not [e]))
 End
 
 
@@ -1420,15 +1428,17 @@ Definition translate_expr_with_policy_def:
   (* The checker needs a literal exponent unless the base is one, so a
      compile-time exponent is folded. *)
   (translate_expr_with_policy resolve ctx (JE_BinOp l op r ret_ty) =
-    Builtin (translate_type (expr_type_ctx ctx) ret_ty) (Bop (translate_binop op))
-      [translate_expr_with_policy resolve ctx l;
-       exponent_operand op (translate_expr_with_policy resolve ctx r)]) /\
+    fold_pin_constant
+      (Builtin (translate_type (expr_type_ctx ctx) ret_ty) (Bop (translate_binop op))
+        [translate_expr_with_policy resolve ctx l;
+         exponent_operand op (translate_expr_with_policy resolve ctx r)])) /\
 
   (translate_expr_with_policy resolve ctx (JE_Compare l op r) =
     let l' = translate_expr_with_policy resolve ctx l in
     let r' = translate_expr_with_policy resolve ctx r in
     let original = Builtin (BaseT BoolT) (Bop (translate_binop op)) [l';r'] in
-    if ~MEM op [JBop_In; JBop_NotIn; JBop_Eq; JBop_NotEq] then original else
+    if ~MEM op [JBop_In; JBop_NotIn; JBop_Eq; JBop_NotEq]
+    then fold_pin_constant original else
     let lv = origin_fold_value
       (translate_expr_with_policy T ctx l) in
     let rv = origin_fold_value

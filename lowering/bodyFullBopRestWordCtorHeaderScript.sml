@@ -294,7 +294,7 @@ Finalise rest_word_membership_ctor_header_full_joint
 Theorem rest_word_membership_ctor_header_const_full_joint:
   cenv.ce_is_ctor /\ vv_location vv = SOME LocCode /\
   compile_var_array_membership cenv needle vv (ArrayT ety (Dynamic cap)) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sa x) /\
   (!ib x. cenv.ce_imm_alloca = SOME ib /\ ib = Var x ==> not_fresh_at sa x) /\
   (!H:'h. guard H ==> ~s.vs_halted /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
@@ -405,7 +405,7 @@ Resume rest_word_membership_ctor_header_const_full_joint[none_check]:
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, Abbr `ins`, mk_inst_def,
     source_memory_read_ranges_def, source_memory_write_ranges_def] >>
   simp[mem_read_ops_def, step_inst_non_invoke, step_inst_base_opcode_eqs, exec_read1_def,
-    update_var_def]
+    update_var_def] >> first_assum ACCEPT_TAC
 QED
 
 Resume rest_word_membership_ctor_header_const_full_joint[none_post]:
@@ -490,6 +490,9 @@ Resume rest_word_membership_ctor_header_const_full_joint[some_ghost]:
 QED
 
 Resume rest_word_membership_ctor_header_const_full_joint[some_check]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp si` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `si`, update_var_def, allocas_below_fmp_def]) >>
   conj_tac
   >- (simp[Abbr `ai`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
         mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
@@ -502,7 +505,9 @@ Resume rest_word_membership_ctor_header_const_full_joint[some_check]:
     mem_read_ops_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
     exec_read1_def, update_var_def, Abbr `si`, eval_operand_def,
     lookup_var_def, FLOOKUP_UPDATE] >> simp[allocas_from_def] >>
-  qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE[allocas_from_def])
+  rpt conj_tac >>
+  (FIRST_ASSUM ACCEPT_TAC ORELSE
+   qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE[allocas_from_def]))
 QED
 
 Resume rest_word_membership_ctor_header_const_full_joint[some_post]:

@@ -401,7 +401,7 @@ Proof
   metis_tac[reason_unwrap_operand]
 QED
 
-Theorem reason_convert_operand[local]:
+Theorem reason_convert_operand:
   (!l. v <> Label l) /\ compile_type_convert v conv sa = (op,sb) ==>
   !l. op <> Label l
 Proof
@@ -429,7 +429,7 @@ Proof
   metis_tac[reason_alloc_operand]
 QED
 
-Theorem reason_widen_copy_operand[local]:
+Theorem reason_widen_copy_operand:
   compile_bytestring_widen_copy d v sz sa = (op,sb) ==> !l. op <> Label l
 Proof
   simp[compile_bytestring_widen_copy_def, comp_bind_def, comp_ignore_bind_def,
@@ -449,12 +449,13 @@ Proof
   qpat_x_assum `COND _ _ _ = _` mp_tac >> IF_CASES_TAC
   >- (strip_tac >> gvs[reason_result_shape_def]) >>
   pop_assum kall_tac >> IF_CASES_TAC
-  >- (pop_assum kall_tac >> strip_tac >>
-      qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
-      qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
-      Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
-      strip_tac >> gvs[reason_result_shape_def] >>
+  >- (simp[oneline as_ptr_val_def, AllCaseEqs()] >>
+      strip_tac >> gvs[reason_result_shape_def, mk_ptr_def] >>
       metis_tac[reason_widen_copy_operand]) >>
+  pop_assum kall_tac >> IF_CASES_TAC
+  >- (simp[oneline as_ptr_val_def, AllCaseEqs()] >>
+      strip_tac >> gvs[reason_result_shape_def, mk_ptr_def] >>
+      metis_tac[reason_convert_operand]) >>
   pop_assum kall_tac >> strip_tac >> Cases_on `rt` >> gvs[] >>
   rpt (pairarg_tac >> gvs[]) >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>

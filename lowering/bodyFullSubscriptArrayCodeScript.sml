@@ -5,7 +5,7 @@ Ancestors vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ig
   bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose
   bodyFullAttributeAdd bodyFullGhostFrame bodyFullPathHistory
   bodyFullSubscriptArrayCodeBounds bodyFullSubscriptArrayCodeOps
-  bodyInvNoDalloca stateRelProj exprSimSubscriptArraySuffix
+  bodyInvNoDalloca bodyFullIfExpReach stateRelProj exprSimSubscriptArraySuffix
   gasShadowCompileStmtHelpers bodyPtrPrecompileBuiltinsGhost
   exprSimSubscriptArrayEndpoint exprSimSubscriptArrayOrigin
   exprSimSubscriptArrayCompose exprSimSubscriptArraySource
@@ -15,6 +15,7 @@ Ancestors vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ig
   gasShadowCompile gasShadowState gasShadow gasExemptCert
   vyperStorageTrace vyperStorageFootprint vyperEvalExprPreservesScopesDom
   bodyPtrDefs loweringPosts compileEnv vyperInterpreter vyperState vyperAST
+  bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
 
 Theorem code_array_operand_readonly_tail[local]:
   (!q. op = Var q ==> not_fresh_at st q) /\
@@ -266,7 +267,7 @@ QED
 Resume subscript_array_framed_code_full[bind_base]:
   qpat_assum `~subscript_reads_base _ _ _` (fn th =>
     pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   `!res : eval_result + exception. !r.
      (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r) <=> expr_exit res r` by
     (Cases >> simp[]) >> simp[] >>
@@ -295,6 +296,8 @@ Resume subscript_array_framed_code_full[after_base]:
   strip_tac >> fs[] >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     gvs[storage_trace_domain_def] >>
+  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
   `baseQ (storage_trace_horizon mid.storage_trace) res mid G1 tn1 s` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> baseQ H _ _ _ _ _ /\ _`
        (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
@@ -353,11 +356,13 @@ Resume subscript_array_framed_code_full[after_base]:
     (simp[] >> rpt conj_tac
      >~ [`local_ptrs_reserved _ _`] >- metis_tac[local_ptrs_reserved_next_var]
      >~ [`gas_admissible _ _ _`] >- metis_tac[expr_body_pre_gas_admissible]
-     >- (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
-          qpat_assum `MEM func ctx.ctx_functions` (fn member =>
-            ACCEPT_TAC (Q.SPEC `s` (MATCH_MP
-              bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap
-              (CONJ inv member))))))
+     >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+           metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+         qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G1,tn1)` (fn path =>
+           qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
+           qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
+             (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+              CONJ path o CONJ no_phi))))
      >> rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
        (drule_then strip_assume_tac) >> fs[vv_post_def])) >>
@@ -645,6 +650,7 @@ Resume subscript_array_framed_code_full[fixed_selection]:
    (!l. iop <> Label l /\ Lit (n2w n) <> Label l)` by
     simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_taint_def,
          ptrDisciplineTheory.op_prov_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     array_bounds_check_read_only_joint_ok_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
@@ -678,6 +684,7 @@ Resume subscript_array_framed_code_full[fixed_selection]:
      pure_rewrite_tac[loweringShapeRulesTheory.emit_op_eq, pairTheory.PAIR_EQ] >>
      strip_tac >> gvs[]) >> gvs[] >>
   `eval_operand iop ib = SOME (n2w (w2n iw))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ib` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     bodyFullSubscriptArrayCodeOpsTheory.scalar_mul_add_joint_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
@@ -796,6 +803,7 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
   `w2n w <= LENGTH it.vs_data_section` by
     (drule_all exprSimBopRestWordLoadSafetyTheory.rest_word_immutable_region_bound >>
      simp[] ) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame) >>
   disch_then (qspecl_then [`PG`, `Gi`] mp_tac) >>
@@ -822,6 +830,7 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
   `(!q. iop = Var q \/ len_op = Var q ==> not_fresh_at cs' q) /\
    (!l. iop <> Label l /\ len_op <> Label l)` by metis_tac[] >>
   `fn_has_code cs' cs'' func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp il` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     array_bounds_check_read_only_joint_ok_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
@@ -865,6 +874,7 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
   fs[compileEnvTheory.word_scale_def] >>
   `!q. iop = Var q ==> not_fresh_at cs'' q` by metis_tac[] >>
   `eval_operand iop ib = SOME (n2w (w2n iw))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ib` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     bodyFullSubscriptArrayCodeOpsTheory.code_dynamic_address_joint_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
@@ -1006,6 +1016,7 @@ Resume subscript_array_framed_code_full[fixed_rejection]:
    (!l. iop <> Label l /\ Lit (n2w n) <> Label l)` by
     simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_taint_def,
          ptrDisciplineTheory.op_prov_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``] array_bounds_check_joint_oob_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
@@ -1057,6 +1068,7 @@ Resume subscript_array_framed_code_full[dynamic_rejection]:
     (fs[vv_holds_def] >> gvs[]) >>
   `w2n w <= LENGTH it.vs_data_section` by
     (drule_all exprSimBopRestWordLoadSafetyTheory.rest_word_immutable_region_bound >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame) >>
   disch_then (qspecl_then [`PG`, `Gi`] mp_tac) >>
@@ -1083,6 +1095,7 @@ Resume subscript_array_framed_code_full[dynamic_rejection]:
   `(!q. iop = Var q \/ len_op = Var q ==> not_fresh_at cs' q) /\
    (!l. iop <> Label l /\ len_op <> Label l)` by metis_tac[] >>
   `fn_has_code cs' cs'' func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp il` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``] array_bounds_check_joint_oob_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>

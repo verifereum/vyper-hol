@@ -171,15 +171,15 @@ val () = if optionSyntax.is_none (rhs (concl
   (check_tuple_index ``Name (BaseT (UintT 256)) "index"``)))
   then () else raise Fail "checker accepted dynamic tuple index";
 
-(* Constant tuple indices are evaluated to literals; ordinary array indexing
-   keeps the expression. The compiler's folded_value is never read. *)
+(* Closed arithmetic in both tuple and array indices folds from source.
+   The compiler's folded_value is ignored. *)
 val uint_json =
   "{\"typeclass\":\"integer\",\"bits\":256,\"is_signed\":false}";
 val computed_index_json =
   "{\"ast_type\":\"BinOp\",\"left\":{\"ast_type\":\"Int\",\"value\":0,\"type\":" ^
   uint_json ^ "},\"op\":{\"ast_type\":\"Add\"},\"right\":{\"ast_type\":\"Int\"," ^
   "\"value\":1,\"type\":" ^ uint_json ^ "},\"type\":" ^ uint_json ^
-  ",\"folded_value\":{\"ast_type\":\"Int\",\"value\":1,\"type\":" ^ uint_json ^ "}}";
+  ",\"folded_value\":{\"ast_type\":\"Int\",\"value\":7,\"type\":" ^ uint_json ^ "}}";
 fun decode_subscript base_type index_json = let
   val source = "{\"ast_type\":\"Subscript\",\"value\":{\"ast_type\":\"Name\"," ^
     "\"id\":\"xs\",\"type\":" ^ base_type ^ "},\"slice\":" ^
@@ -211,8 +211,12 @@ val folded_array = decode_subscript
   computed_index_json;
 val translated_array = rhs (concl (EVAL
   ``translate_expr (module_expr_ctx [] (0:int) NONE [] [] [] []) ^folded_array``));
-val () = if can (find_term (aconv ``Bop Add``)) translated_array
-  then () else raise Fail "array index expression was unexpectedly folded";
+val () = if aconv translated_array
+  ``Subscript (BaseT (UintT 256))
+      (Name (ArrayT (BaseT (UintT 256)) (Fixed 2)) "xs")
+      (Literal (BaseT (UintT 256)) (IntL 1))``
+  then () else raise Fail ("constant array index was not translated as a literal: " ^
+    term_to_string translated_array);
 
 (* A tuple index takes its type from its own annotation, whatever folded_value
    says, and an index without a type is rejected. *)

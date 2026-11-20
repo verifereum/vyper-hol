@@ -214,7 +214,7 @@ QED
 Theorem rest_word_membership_bounded_capacity_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_entry" sa.cs_next_label /\
   s.vs_inst_idx = 2 /\
@@ -253,6 +253,10 @@ Proof
     (drule_all run_inst_seq_gas_origin_ptr_path >>
      disch_then (qspec_then `explicit` mp_tac) >>
      simp[Abbr `code`, mk_inst_def, is_terminator_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := 5)` by
+    (qpat_assum `t = update_var _ _ _` SUBST1_TAC >>
+     simp[allocas_below_fmp_def, update_var_def] >>
+     metis_tac[allocas_below_fmp_def]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (t with vs_inst_idx := 5,G1,tn1) [] (OK u,G1,tn1)` by
     (`u = jump_to (fresh_label_output "in_cond" (sa.cs_next_label+1))
@@ -318,7 +322,7 @@ Finalise rest_word_membership_bounded_capacity_joint
 Theorem rest_word_membership_bounded_init_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. len = Var x ==> not_fresh_at sa x) /\
@@ -358,6 +362,11 @@ Proof
    allocas_from lo (t with vs_inst_idx := 2)` by
     (irule (Q.GEN `u` rest_word_membership_segment_init_prefix_joint) >>
      metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := 2)` by
+    (qpat_assum `t = update_var _ _ _` SUBST1_TAC >>
+     qpat_assum `e = jump_to _ _` SUBST1_TAC >>
+     simp[allocas_below_fmp_def, update_var_def, jump_to_def] >>
+     metis_tac[allocas_below_fmp_def]) >>
   `eval_operand len (t with vs_inst_idx := 2) = SOME (n2w n) /\
    op_prov G2 len = NONE /\ op_taint tn2 len = {}` by
     (drule_all membership_loop_frame_operand >> simp[]) >>

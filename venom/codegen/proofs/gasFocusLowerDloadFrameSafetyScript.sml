@@ -1762,9 +1762,6 @@ Resume ld_frame_copied_ptr_rows[taint]:
       simp[taint_ok_def] >> strip_tac >>
       first_x_assum (qspec_then `op` mp_tac) >> simp[] >>
       strip_tac >> gvs[] >> fs[MEM] >> metis_tac[]) >>
-  reverse conj_tac
-  >- (drule dload_boundary_shared_store >>
-      simp[lowerDloadPtrCallTheory.dload_shared_store_def] >> rpt strip_tac >> fs[taint_ok_def] >> metis_tac[]) >>
   suspend "memory"
 QED
 

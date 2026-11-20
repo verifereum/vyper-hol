@@ -3799,9 +3799,12 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
      qexists_tac `mk_inst st.cs_next_id ALLOCA [Lit 32w]
        [STRING #"%" (toString st.cs_next_var)]` >> simp[mk_inst_def]) >>
   `!b sz. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz) ==> sz=32` by
-    (qpat_assum `!id b sz. id IN sites /\ FLOOKUP s.vs_allocas id = _ ==> _`
-       (qspec_then `st.cs_next_id` mp_tac) >> asm_rewrite_tac[] >>
-     rpt strip_tac >> first_x_assum drule >> simp[]) >>
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!id b sz. id IN sites /\ FLOOKUP s.vs_allocas id = _ ==> _`
+       (qspecl_then [`st.cs_next_id`, `b`, `sz`] (fn frame =>
+         qpat_assum `st.cs_next_id IN sites` (fn member =>
+           qpat_assum `FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz)`
+             (ACCEPT_TAC o CONJUNCT1 o MATCH_MP frame o CONJ member))))) >>
   `eval_operand (Lit (n2w (window_member_head_size infos))) s =
       SOME (n2w (window_member_head_size infos)) /\
    op_taint tn (Lit (n2w (window_member_head_size infos))) = {} /\

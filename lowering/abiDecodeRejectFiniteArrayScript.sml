@@ -138,6 +138,7 @@ Proof
    mload (w2n (n2w slot:bytes32)) h = n2w j /\
    (!a. w2n (n2w slot:bytes32) <= a /\ a < w2n (n2w slot:bytes32)+32 ==>
          a NOTIN th.t_mem)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp h` by simp[] >>
   drule_all malformed_finite_header_body_joint >>
   disch_then (qspec_then `PG` (qx_choosel_then [`b`,`Gb`,`tb`] strip_assume_tac)) >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid h b` by
@@ -259,6 +260,7 @@ Proof
     (fs[GSYM calldata_operand_live_not_fresh] >> metis_tac[abi_decoder_operand_live_mono]) >>
   `w2n (n2w slot:bytes32)+32 <= b.vs_alloca_next /\ mload (w2n (n2w slot:bytes32)) b = n2w j /\
    (!a. w2n (n2w slot:bytes32) <= a /\ a < w2n (n2w slot:bytes32)+32 ==> a NOTIN tb.t_mem)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp b` by simp[] >>
   drule_all malformed_indexed_reads_joint_frame >>
   disch_then (qspec_then `PG` (qx_choosel_then [`data`,`head`,`cut`,`t`,`H`,`z`] strip_assume_tac)) >>
   `alloca_history func t` by (irule body_full_path_alloca_history >> metis_tac[]) >>
@@ -341,6 +343,7 @@ Theorem finite_reject_indexed_pass_boundary[local]:
   ?u Gu tu. (^child_cut) q t H z u Gu tu
 Proof
   simp_tac bool_ss [] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all (SIMP_RULE bool_ss [pairTheory.FST,pairTheory.SND]
     (Q.INST [`ops` |-> `(idx,pos,dstop)`] malformed_indexed_pass_joint)) >>
   disch_then (qspec_then `PG` (qx_choosel_then [`u`,`Gu`,`tu`,`r`] strip_assume_tac)) >>
@@ -430,6 +433,7 @@ Proof
              `EVERY (abi_decoder_operand_live cut.cs_next_var) [data;off;hi]` by simp[] >>
              `!op. MEM op [data;off;hi] ==> op_prov H op = NONE /\ op_taint z op = {}` by
                simp[DISJ_IMP_THM] >>
+             `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
              drule_all malformed_indexed_guard_revert_joint >>
              disch_then (qspec_then `PG` (qx_choosel_then [`v`,`Gv`,`tv`] strip_assume_tac)) >>
              qexistsl [`v`,`Gv`,`tv`] >> simp[]) >>
@@ -449,8 +453,9 @@ Proof
      fs[Abbr `q`] >>
      mp_tac (Q.INST [`data_base` |-> `p+32`, `H` |-> `L`, `sz` |-> `stride`]
        abi_array_pointer_check_bounds) >> simp[]) >>
-  drule_all (BETA_RULE finite_reject_indexed_pass_boundary) >>
-  disch_then (qspec_then `PG` (qx_choosel_then [`u`,`Gu`,`tu`] assume_tac)) >>
+  mp_tac (BETA_RULE finite_reject_indexed_pass_boundary) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choosel_then [`u`,`Gu`,`tu`] assume_tac) >>
   qexistsl [`u`,`Gu`,`tu`] >> gvs[Abbr `q`, Abbr `delta`]
 QED
 
@@ -699,7 +704,12 @@ Proof
   simp_tac bool_ss [] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `!m j h Gh th. m = i-j /\ j <= i /\ (^repeat_entry) j h Gh th ==> (^abort) h Gh th`
-    suffices_by (BETA_TAC >> metis_tac[]) >>
+    suffices_by
+      (BETA_TAC >> strip_tac >> qx_genl_tac [`j`,`h`,`Gh`,`th`] >>
+       qpat_x_assum `!m j h Gh th. m = i-j /\ _ ==> _`
+         (qspecl_then [`i-j`,`j`,`h`,`Gh`,`th`] mp_tac) >>
+       qpat_assum `hdr = fresh_label_output "dec_dyn_hdr" ls.cs_next_label`
+         (fn th => simp_tac bool_ss [th])) >>
   BETA_TAC >> completeInduct_on `m` >>
   rpt gen_tac >> strip_tac >> `j < n` by decide_tac >>
   mp_tac (BETA_RULE finite_reject_to_child) >> (impl_tac >- asm_rewrite_tac[]) >>

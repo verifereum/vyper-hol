@@ -6,6 +6,7 @@ Ancestors
 
 Theorem scalar_convert_sim_to_vv:
   !ctx func cenv cx ty ann t e1 es.
+    ~is_bytestring_type t /\
     expr_sim ctx func cenv cx ty (TypeBuiltin ann Convert t [e1]) es ==>
     expr_vv_sim ctx func cenv cx ty (TypeBuiltin ann Convert t [e1]) es
 Proof

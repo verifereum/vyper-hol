@@ -563,7 +563,7 @@ QED
 Theorem live_code_length_joint[local]:
   (if dyn then compile_imm_load_word ctor imm arg
    else comp_return (Lit (n2w cnt))) sa = (len,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (dyn ==> eval_operand arg s = SOME a /\ copy_old_operand sa arg /\
@@ -580,6 +580,7 @@ Theorem live_code_length_joint[local]:
     copy_old_operand sb len /\ (!l. len <> Label l) /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     t.vs_immutables = s.vs_immutables /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_initial_fmp = s.vs_initial_fmp /\
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_requests = s.vs_requests /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
@@ -599,7 +600,6 @@ QED
 
 Resume live_code_length_joint[constructor]:
   gvs[immutable_copy_read_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all live_ctor_header_origin >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   rename1 `copy_runtime_frame sa s sb raw` >>
@@ -622,7 +622,8 @@ Resume live_code_length_joint[constructor]:
 QED
 
 Resume live_code_length_joint[runtime]:
-  gvs[immutable_copy_read_def] >> drule_all compile_imm_load_word_runtime_joint_frame >>
+  gvs[immutable_copy_read_def] >>
+  drule_all compile_imm_load_word_runtime_joint_frame >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qpat_x_assum `!G. ?out Gf tnf sf. _` (qspec_then `G` strip_assume_tac) >>
   qexistsl [`Gf`,`tnf`,`sf`] >>
@@ -638,7 +639,7 @@ Finalise live_code_length_joint
 (* The final code-address calculation is independent of the length loader. *)
 Theorem live_code_element_joint[local]:
   array_elem_ptr base_op idx dyn 32 esz sa = (dst,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   copy_old_operand sa base_op /\ copy_old_operand sa idx /\
   (!l. base_op <> Label l /\ idx <> Label l) /\
@@ -676,7 +677,8 @@ Resume live_code_element_joint[dynamic]:
   pairarg_tac >> gvs[] >>
   qpat_assum `emit_op MUL _ _ = _` (strip_assume_tac o MATCH_MP loweringShapeRulesTheory.emit_op_facts) >> gvs[] >>
   qpat_assum `emit_op ADD [Var _;Var _] _ = _` (strip_assume_tac o MATCH_MP loweringShapeRulesTheory.emit_op_facts) >>
-  gvs[] >> drule_all code_dynamic_address_joint_frame >>
+  gvs[] >>
+  drule_all code_dynamic_address_joint_frame >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`Gf`,`tnf`,`sf`] >> simp[venomStateTheory.eval_operand_def]
 QED
@@ -686,7 +688,8 @@ Resume live_code_element_joint[fixed]:
   qpat_assum `emit_op MUL _ _ = _` (strip_assume_tac o MATCH_MP loweringShapeRulesTheory.emit_op_facts) >>
   gvs[] >>
   drule_then strip_assume_tac (Q.SPEC `ADD` loweringShapeRulesTheory.emit_op_facts) >>
-  gvs[] >> drule_all scalar_mul_add_joint_frame >>
+  gvs[] >>
+  drule_all scalar_mul_add_joint_frame >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`Gf`,`tnf`,`sf`] >> simp[venomStateTheory.eval_operand_def]
 QED
@@ -745,7 +748,7 @@ QED
 Theorem live_code_select_joint[local]:
   compile_array_subscript arg idx dyn (if dyn then 0 else cnt) 32 esz sgn
     (compile_ptr_load ctor imm LocCode) sa = (dst,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   eval_operand arg s = SOME a /\ copy_old_operand sa arg /\
@@ -805,6 +808,12 @@ Proof
     fs[copy_old_operand_def, boolTheory.DISJ_IMP_THM] >>
   `!l. idx <> Label l /\ len <> Label l` by simp[] >>
   `allocas_from lo h` by (simp[ptrDisciplineTheory.allocas_from_def] >> metis_tac[ptrDisciplineTheory.allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp h` by
+    (`allocas_below_fmp h <=> allocas_below_fmp s` by
+       asm_rewrite_tac[ptrDisciplineTheory.allocas_below_fmp_def] >>
+     qpat_assum `allocas_below_fmp h <=> allocas_below_fmp s`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   Cases_on `idx_in_range sgn (n2w i) (n2w cnt)` >> simp[]
   >- suspend "in_range" >> suspend "out_of_range"
 QED
@@ -821,6 +830,12 @@ Resume live_code_select_joint[in_range]:
     (Cases_on `arg` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
       ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
   `allocas_from lo k` by (simp[ptrDisciplineTheory.allocas_from_def] >> metis_tac[ptrDisciplineTheory.allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp k` by
+    (`allocas_below_fmp k <=> allocas_below_fmp h` by
+       asm_rewrite_tac[ptrDisciplineTheory.allocas_below_fmp_def] >>
+     qpat_assum `allocas_below_fmp k <=> allocas_below_fmp h`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all (INST_TYPE [Type.alpha |-> ``:256``] live_code_element_joint) >>
   disch_then (qspec_then `PG` (qx_choosel_then [`Gq`,`tnq`,`q`] strip_assume_tac)) >>
   qexistsl [`Gq`,`tnq`,`q`] >> simp[] >>
@@ -1039,7 +1054,6 @@ Theorem subscript_live_immutable_select_full:
       (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_then assume_tac body_inv_no_dalloca >>
   qabbrev_tac `H0 = storage_trace_horizon fin.storage_trace` >>
   `valid_horizon cx st0 H0 fin.storage_trace` by simp[Abbr `H0`, GSYM storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
@@ -1133,6 +1147,10 @@ Proof
   `!l. p.ptr_operand <> Label l /\ iop <> Label l` by simp[] >>
   `eval_operand iop s = SOME (n2w (w2n iw))` by simp[] >>
   qpat_x_assum `eval_operand iop s = SOME iw` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx fin s`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
   drule_all live_code_select_joint >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choosel_then [`Gf`,`tnf`,`q`] (strip_assume_tac o SIMP_RULE (srw_ss()) []))) >>
@@ -1217,6 +1235,10 @@ Proof
   `ghost_inv_at (DF H) lo d cenv cx fin Gf tnf q` by
     (irule ghost_inv_at_exterior_frame >>
      qexistsl [`Gi`,`fin`,`s`,`sa`,`tni`] >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx fin q`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
   simp[] >> conj_tac
   >- (strip_tac >>
       `dead_lo_ok H (DF H) lo cenv cx` by simp[] >>
