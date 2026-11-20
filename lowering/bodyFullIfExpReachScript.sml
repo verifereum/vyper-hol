@@ -5,7 +5,7 @@ Ancestors
   venomExecSemantics venomInst venomState fragExec
   ctorDeployMemoryRunMemEntryFirstEmission compilerFirstEmission
   exprLoweringProps exprLowering compileEnv
-  fragGasPath gasOutcomeFull bodySim list
+  fragGasPath gasOutcomeFull bodySim bodyInvSplit compileUnit vyperCompiler list
 Libs
   monadsyntax
 
@@ -219,20 +219,40 @@ Proof
   metis_tac[fragGasModeTheory.gas_marked_path_exec]
 QED
 
+Theorem contract_inv_lowering_context[local]:
+  contract_inv mods exps ctx cenv cx ==> lowering_context_ok ctx
+Proof
+  simp[contract_inv_def] >> strip_tac >>
+  Cases_on `cx.in_deploy` >> gvs[]
+  >- (qpat_x_assum `lower_vyper_deploy_unit_mods _ _ _ _ = _` mp_tac >>
+      simp[lower_vyper_deploy_unit_mods_def] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      strip_tac >>
+      qpat_x_assum `run_deploy_lowering _ _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[run_deploy_lowering_def] >>
+      pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  qpat_x_assum `lower_vyper_runtime_unit_mods _ _ _ = _` mp_tac >>
+  simp[lower_vyper_runtime_unit_mods_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> strip_tac >>
+  imp_res_tac run_grouped_lowering_context >>
+  imp_res_tac run_lowering_context_ok >> simp[]
+QED
+
+Theorem body_inv_no_phi_mods:
+  contract_inv mods exps ctx cenv cx /\ MEM fn ctx.ctx_functions ==>
+  !bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >> drule contract_inv_lowering_context >> strip_tac >>
+  rpt strip_tac >> irule venomExecProofsTheory.no_phis_phi_prefix_length_zero >>
+  fs[vyperCompilerTheory.lowering_context_ok_def,vyperCompilerTheory.ptr_ok_check_def,EVERY_MEM] >>
+  metis_tac[venomFnInstsProofsTheory.MEM_fn_insts]
+QED
+
 Theorem body_inv_no_phi:
   body_inv tops ctx cenv cx /\ MEM fn ctx.ctx_functions ==>
   !bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0
 Proof
-  strip_tac >>
-  `lowering_context_ok ctx` by
-    (qpat_assum `body_inv _ _ _ _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     rw[bodySimTheory.body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[] >>
-     metis_tac[vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry,
-               deployUnitProducersTheory.lower_vyper_deploy_unit_context_ok]) >>
-  rpt strip_tac >> irule venomExecProofsTheory.no_phis_phi_prefix_length_zero >>
-  fs[vyperCompilerTheory.lowering_context_ok_def,vyperCompilerTheory.ptr_ok_check_def,EVERY_MEM] >>
-  metis_tac[venomFnInstsProofsTheory.MEM_fn_insts]
+  metis_tac[body_inv_contract, body_inv_no_phi_mods]
 QED
 
 Theorem gas_origin_ptr_path_dalloca_no_wrap:

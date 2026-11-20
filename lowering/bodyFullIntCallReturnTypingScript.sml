@@ -1,6 +1,33 @@
 Theory bodyFullIntCallReturnTyping
 Ancestors
   bodyFullIntCallDefs bodyIntCallSeams exprSimHyps vyperTyping vyperTypeArgFits
+  bodyInvCodeProps exprBodyPreProps
+
+Theorem intcall_declared_return_type_mods:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) ==>
+  cenv.ce_func_return_type (nsid_to_string (src,name)) = ret /\
+  type_widens_to (get_tenv cx) ret ann
+Proof
+ strip_tac >>
+ `get_module_code cx src = SOME tops` by metis_tac[contract_inv_module_codes] >>
+ drule expr_body_pre_mods_inv >> strip_tac >>
+ drule expr_sim_inv_mods_env >> strip_tac >>
+ drule expr_body_pre_mods_well_typed >> strip_tac >>
+ `?sig. FLOOKUP tenv.fn_sigs (src,name) = SOME sig` by
+   fs[vyperTypeSystemTheory.well_typed_expr_def, optionTheory.IS_SOME_EXISTS] >>
+ drule_all expr_sim_inv_mods_return_type >> strip_tac >>
+ `fn_sigs_consistent tenv.fn_sigs cx /\ tenv.type_defs = get_tenv cx` by
+   fs[vyperTypeInvariantsTheory.env_consistent_def,
+      vyperTypeInvariantsTheory.env_context_consistent_def] >>
+ `sig.ret_ty = ret` by
+   (qhdtm_x_assum `fn_sigs_consistent` mp_tac >>
+    pure_rewrite_tac[vyperTypeInvariantsTheory.fn_sigs_consistent_def] >>
+    disch_then drule >> simp[]) >>
+ `type_widens_to (get_tenv cx) ret ann` by
+   fs[vyperTypeSystemTheory.well_typed_expr_def] >> simp[]
+QED
 
 Theorem intcall_declared_return_type:
   body_inv tops ctx cenv cx /\
@@ -9,28 +36,10 @@ Theorem intcall_declared_return_type:
   cenv.ce_func_return_type (nsid_to_string (NONE,name)) = ret /\
   type_widens_to (get_tenv cx) ret ann
 Proof
- strip_tac >>
- `get_module_code cx NONE = SOME tops` by
-   fs[bodySimTheory.body_inv_def] >>
- `expr_sim_inv cenv cx tenv es0 /\
-   well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt)` by
-   fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
- `?sig. FLOOKUP tenv.fn_sigs (NONE,name) = SOME sig` by
-   fs[vyperTypeSystemTheory.well_typed_expr_def, optionTheory.IS_SOME_EXISTS] >>
- `cenv.ce_func_return_type (nsid_to_string (NONE,name)) = sig.ret_ty /\
-   fn_sigs_consistent tenv.fn_sigs cx /\ tenv.type_defs = get_tenv cx` by
-   (qhdtm_assum `expr_sim_inv` mp_tac >>
-    pure_rewrite_tac[exprSimHypsDefsTheory.expr_sim_inv_def,
-                     vyperTypeInvariantsTheory.env_consistent_def,
-                     vyperTypeInvariantsTheory.env_context_consistent_def] >>
-    strip_tac >>
-    metis_tac[]) >>
- `sig.ret_ty = ret` by
-   (qhdtm_x_assum `fn_sigs_consistent` mp_tac >>
-    pure_rewrite_tac[vyperTypeInvariantsTheory.fn_sigs_consistent_def] >>
-    disch_then drule >> simp[]) >>
- `type_widens_to (get_tenv cx) ret ann` by
-   fs[vyperTypeSystemTheory.well_typed_expr_def] >> simp[]
+  metis_tac[bodySimTheory.body_inv_contract, body_inv_expr_body_pre_mods,
+    REWRITE_RULE [alistTheory.ALOOKUP_def]
+      (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`]
+        intcall_declared_return_type_mods)]
 QED
 
 Theorem intcall_rest_read_post_typed:
