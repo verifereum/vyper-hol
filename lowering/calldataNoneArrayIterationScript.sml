@@ -77,7 +77,7 @@ Theorem none_array_element_setup[local]:
     (!x. not_fresh_at st x ==> FLOOKUP HG x = FLOOKUP G x /\
       op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower explicit ctx.
-      allocas_from lower s /\ ~ctx_has_dalloca ctx ==>
+      allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
       gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,HG,u))
 Proof
   strip_tac >>
@@ -125,7 +125,7 @@ Theorem none_array_true_header[local]:
   eval_operand src s = SOME srcaddr /\ op_taint tn src = {} /\
   abi_decode_load CALLDATALOAD srcaddr s = n2w cnt /\
   j < cnt /\ cnt < dimword (:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block body_lbl fn.fn_blocks = SOME body_bb /\
   phi_prefix_length body_bb.bb_instructions = 0 /\
   lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
@@ -149,7 +149,6 @@ Theorem none_array_true_header[local]:
 Proof
   strip_tac >>
   `j <= cnt` by decide_tac >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all decoder_index_header_ptr_core_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `t = jump_to body_lbl (abi_decode_header_state iv cv cmp done j cnt s)` by fs[] >>
@@ -171,7 +170,7 @@ Theorem none_array_backedge[local]:
   eval_operand (Var iv) s = SOME (n2w j) /\
   op_taint tn (Var iv) = {} /\ op_prov G (Var iv) = NONE /\
   j < cnt /\ cnt < dimword (:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block hdr fn.fn_blocks = SOME hdr_bb /\
   phi_prefix_length hdr_bb.bb_instructions = 0 /\
   fresh_vars_wrt limit s /\ nv = STRING #"%" (toString k) /\ k < limit.cs_next_var
@@ -191,7 +190,7 @@ Theorem none_array_backedge[local]:
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,H,u))
 Proof
   strip_tac >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ DISJOINT {} tn.t_mem` by simp[] >>
+  `DISJOINT {} tn.t_mem` by simp[] >>
   drule_all decoder_index_backedge_ptr_core_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   drule_all decoder_index_backedge_replay_frame >> strip_tac >>
@@ -343,6 +342,7 @@ Proof
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME hdr_bb` by simp[] >>
   `!x. src = Var x ==> ~MEM x [iv;cv;cmp;done]` by metis_tac[] >>
   `src <> Var iv` by (strip_tac >> fs[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (Q.INST [`bb` |-> `hdr_bb`, `id` |-> `hid`,
                  `srcaddr` |-> `n2w sb`] none_array_true_header) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
@@ -408,6 +408,7 @@ Proof
     (qpat_x_assum `eval_operand (SND (SND ops)) a = _` mp_tac >>
      qpat_x_assum `abi_decoder_operand_live ready.cs_next_var (SND (SND ops))` mp_tac >>
      asm_rewrite_tac[eval_operand_def] >> simp[NoAsms]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK a,A,ta)` by
     (rpt gen_tac >> irule gas_origin_ptr_path_trans >>
      qexistsl_tac [`H`,`t`,`u`] >> metis_tac[]) >>
@@ -482,6 +483,7 @@ Proof
      simp[NoAsms, op_prov_def] >> asm_rewrite_tac[]) >>
   `lookup_block r.vs_current_bb fn.fn_blocks = SOME back_bb /\
    slot+32 <= r.vs_alloca_next` by (asm_rewrite_tac[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by simp[] >>
   mp_tac (Q.INST [`s` |-> `r`, `G` |-> `R`, `tn` |-> `tr`, `bb` |-> `back_bb`,
                  `id` |-> `last.cs_next_id`, `prefix` |-> `last.cs_current_insts`,
                  `iv` |-> `ix`, `k` |-> `last.cs_next_var`] none_array_backedge) >>
