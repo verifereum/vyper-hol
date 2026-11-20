@@ -16,9 +16,7 @@ Theorem ld_annotated_external_clean:
   ~in_revert_forward fn s ==>
   (!op. MEM op i.inst_operands ==> op_taint tn op = {}) /\
   (!a n. MEM (a,n) (source_memory_read_ranges i s) ==>
-    DISJOINT tn.t_mem {q | a <= q /\ q < a+n}) /\
-  (MEM i.inst_opcode [CREATE; CREATE2] ==>
-    tn.t_stor = {} /\ tn.t_trans = {})
+    DISJOINT tn.t_mem {q | a <= q /\ q < a+n})
 Proof
   strip_tac >> drule_all ld_annotated_taint_ok >> strip_tac >>
   conj_tac
@@ -160,9 +158,7 @@ Theorem ld_normal_external_operands:
         ops.iao_ofst <> op) ==> eval_operand op s = eval_operand op t) /\
   ld_shared_state tn un s t /\
   s.vs_outcomes = t.vs_outcomes /\
-  s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
-  (MEM i.inst_opcode [CREATE; CREATE2] ==>
-    tn.t_stor = {} /\ tn.t_trans = {})
+  s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static
 Proof
   strip_tac >>
   `MEM i (fn_insts fn)` by

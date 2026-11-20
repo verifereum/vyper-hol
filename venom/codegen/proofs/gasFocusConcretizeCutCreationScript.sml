@@ -22,21 +22,18 @@ Theorem focus_create_operand_transport[local]:
    (i.inst_opcode = CREATE2 /\ i.inst_operands = [vop;off;sz;salt] /\ args = [vop;sz;salt])) ==>
   (!op. MEM op args ==> eval_operand op s = eval_operand op t) /\
   ptr_lookup_transport births positions (op_prov TG off) {}
-    (eval_operand off s) (eval_operand off t) /\
-  tn.t_stor = {} /\ tn.t_trans = {}
+    (eval_operand off s) (eval_operand off t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!op. MEM op args ==> op_prov TG op = NONE /\
-     (!arg. MEM arg i.inst_operands ==> op_taint tn arg = {}) /\
-     tn.t_stor = {} /\ tn.t_trans = {}` by
+     (!arg. MEM arg i.inst_operands ==> op_taint tn arg = {})` by
     (gen_tac >> disch_tac >>
      `((i.inst_opcode = CREATE /\ i.inst_operands = [vop;off;sz] /\
         MEM op [vop;sz]) \/
        (i.inst_opcode = CREATE2 /\ i.inst_operands = [vop;off;sz;salt] /\
         MEM op [vop;sz;salt]))` by metis_tac[] >>
      metis_tac[dload_create_operand_safety]) >>
-  `(!arg. MEM arg i.inst_operands ==> op_taint tn arg = {}) /\
-   tn.t_stor = {} /\ tn.t_trans = {}` by
+  `!arg. MEM arg i.inst_operands ==> op_taint tn arg = {}` by
     (qpat_assum `!op. MEM op args ==> _` (qspec_then `vop` mp_tac) >> gvs[]) >>
   `!op. MEM op i.inst_operands ==>
     ptr_lookup_transport births positions (op_prov TG op) {}
@@ -69,6 +66,7 @@ Theorem focus_create_reflect[local]:
     read_byte (w2n x + j) s.vs_memory = read_byte (w2n y + j) t.vs_memory) /\
   step_inst_base i t = OK postt ==>
   ?post. step_inst_base i s = OK post /\ ptr_history_content tn post postt /\
+    post.vs_accounts = postt.vs_accounts /\ post.vs_transient = postt.vs_transient /\
     ptr_mixed_vars births positions (step_prov PT TG i post)
       (step_taint i s post tn) f g post postt
 Proof
@@ -219,8 +217,12 @@ Resume ptr_focus_creation_step[attach]:
   `ptr_paired_sample positions z zt (tokens,registry,births,PT,TG',saved,entries)` by
     (simp[ptr_paired_sample_def, Abbr `TG'`, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
      (reverse conj_tac >-
-       (irule ptr_history_content_masks >> goal_assum (drule_at Any) >>
-        fs[MEM] >> simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def])) >>
+       (`post.vs_call_ctx = postt.vs_call_ctx` by
+          metis_tac[ptr_history_content_call_ctx] >>
+        fs[MEM, ptr_history_content_def, ptr_taint_content_def, step_taint_def,
+           imm_taint_def, contract_storage_def, contract_transient_def,
+           storage_agree_except_def, word_agree_except_def] >>
+        first_assum ACCEPT_TAC)) >>
      gvs[step_prov_def, out_prov_def] >>
      irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >> simp[step_taint_def]) >>
   `ptr_paired_params positions z zt (tokens,registry,births,PT,TG',saved,entries)` by
