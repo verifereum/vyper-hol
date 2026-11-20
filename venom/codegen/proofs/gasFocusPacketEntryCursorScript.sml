@@ -112,7 +112,11 @@ Proof
                   `bb` |-> `sb`, `bt` |-> `tb`, `ps` |-> `prefix`,
                   `xs` |-> `src`, `ys` |-> `dst`, `rho` |-> `schedule`,
                   `root_entry` |-> `E`, `sp` |-> `E`, `st` |-> `E`,
-                  `inst` |-> `HD tb.bb_instructions`]
+                  `inst` |-> `HD tb.bb_instructions`, `PG` |-> `[]`,
+                  `G` |-> `FEMPTY`, `tn` |-> `entry_taint`, `oms` |-> `[]`,
+                  `om` |-> `FEMPTY`, `hs` |-> `[]`,
+                  `h` |-> `[OriginInitial E; OriginObserve (OriginSnapshot
+                    (dft_fn sf) [] FEMPTY FEMPTY (HD tb.bb_instructions) E)]`]
     (CONV_RULE (RAND_CONV (REPEATC Unwind.UNWIND_FORALL_CONV))
        (SPEC_ALL focus_initial_singleton_packet))) >>
   (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
