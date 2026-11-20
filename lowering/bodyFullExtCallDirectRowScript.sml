@@ -53,7 +53,8 @@ Theorem abi_encode_saved_row:
   cursor_inst.inst_outputs = [cursor_var] /\ not_local_ptr ce ee.scopes cursor_var /\
   cursor_inst.inst_opcode = ALLOCA /\ shared < loc /\
   sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
-  abi_enc_plan (get_tenv cx) ty (type_to_abi_enc_info ce.ce_struct_fields ce ty) /\
+  (is_dynamic at ==>
+    abi_enc_plan (get_tenv cx) ty (type_to_abi_enc_info ce.ce_struct_fields ce ty)) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   i < LENGTH ats /\ LENGTH ats = LENGTH avs /\ at = EL i ats /\ av = EL i avs /\
@@ -94,6 +95,7 @@ Proof
 QED
 
 Resume abi_encode_saved_row[dynamic]:
+  qpat_assum `is_dynamic at ==> abi_enc_plan _ _ _` (drule_then assume_tac) >>
   `is_abi_dynamic ce.ce_struct_fields ty /\ abi_member_head_size at = 32` by
     (simp[abi_member_head_size_def] >> metis_tac[]) >>
   drule_all abi_encode_values_dynamic_cuts >>
@@ -280,6 +282,7 @@ Proof
           `shared` |-> `se.cs_next_id`]
           abi_encode_saved_row)))
       extcall_direct_state_selector_length) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    disch_tac >> first_assum ACCEPT_TAC) >>
   disch_then ACCEPT_TAC
 QED
