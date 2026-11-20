@@ -308,6 +308,7 @@ Proof
      qpat_assum `s2.vs_alloca_next = s.vs_alloca_next` (fn th => rewrite_tac[th]) >>
      decide_tac) >>
   `eval_operand cnt s2 = SOME (n2w (LENGTH vs))` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by simp[] >>
   drule_all abi_decode_bulk_payload_success_joint >>
   disch_then (qspec_then `PG` (qx_choose_then `G3` (qx_choose_then `tn3`
     (map_every assume_tac o CONJUNCTS)))) >>

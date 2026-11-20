@@ -9,7 +9,7 @@ Ancestors
 
 Theorem signed_loader_uniform_frame_raw:
   ALL_DISTINCT [src;len;dp;data;empty;nonempty;selected;sub;bits;dst] /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\ 64 <= capacity /\
   w2n a+32 < dimword(:256) /\ mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
@@ -84,6 +84,9 @@ Proof
        ptr_covers G1 tn1 dp s1 z)` by
     (ho_match_mp_tac inst_seq_ptr_uniformize >> gen_tac >>
      irule bytestring_source_fixed_frame >> simp[] >> metis_tac[]) >>
+  `allocas_below_fmp s1 <=> allocas_below_fmp s` by
+    (qpat_assum `s1 = s with vs_vars := _` (fn eq => once_rewrite_tac [eq]) >>
+     simp[allocas_below_fmp_def, NoAsms]) >>
   `ptr_covers G1 tn1 dp s1 32 /\
    ALL_DISTINCT [len;dp;data;empty;nonempty;selected] /\
    lookup_var len s1 = SOME (n2w n)` by
@@ -104,7 +107,15 @@ Proof
       lookup_var p s2 = lookup_var p s1 /\ FLOOKUP G2 p = FLOOKUP G1 p /\
       op_taint tn2 (Var p) = op_taint tn1 (Var p))` by
     (ho_match_mp_tac inst_seq_ptr_uniformize >> gen_tac >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+       (qpat_assum `allocas_below_fmp s1 <=> allocas_below_fmp s`
+          (fn th => PURE_REWRITE_TAC [th]) >> first_assum ACCEPT_TAC) >>
      irule signed_select_fixed_frame >> simp[] >> metis_tac[]) >>
+  `allocas_below_fmp s2 <=> allocas_below_fmp s` by
+    (`allocas_below_fmp s2 <=> allocas_below_fmp s1` by
+       (qpat_assum `s2 = s1 with vs_vars := _` (fn eq => once_rewrite_tac [eq]) >>
+        simp[allocas_below_fmp_def, NoAsms]) >>
+     simp[]) >>
   `w2n (a+32w) = w2n a+32` by
     simp[wordsTheory.w2n_add_2, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
   `!z. z IN mem_word_taint tn1.t_mem (w2n (a+32w)) ==> n <= z /\ z < 32` by
@@ -134,6 +145,9 @@ Proof
     (!p. ~MEM p [sub;bits;dst] ==> lookup_var p t = lookup_var p s2 /\
       FLOOKUP HG p = FLOOKUP G2 p /\ op_taint th (Var p) = op_taint tn2 (Var p))` by
     (ho_match_mp_tac inst_seq_ptr_uniformize >> gen_tac >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+       (qpat_assum `allocas_below_fmp s2 <=> allocas_below_fmp s`
+          (fn th => PURE_REWRITE_TAC [th]) >> first_assum ACCEPT_TAC) >>
      irule signed_normalize_fixed_frame >> simp[] >> metis_tac[]) >>
   `!D q. inst_seq_ptr D 0 ctx fn PG G1 tn1
     [mk_inst k MLOAD [Var dp] [data];
@@ -159,7 +173,7 @@ QED
 
 Theorem convert_signed_loader_uniform:
   load_bytestring_as_word (Var src) SAR sa = ((out,bits),sb) /\
-  not_fresh_at sa src /\ ~ctx_has_dalloca ctx /\
+  not_fresh_at sa src /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\ 64 <= capacity /\

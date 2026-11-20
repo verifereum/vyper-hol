@@ -2,6 +2,7 @@
 Theory bodyFullAbiEncodeSlot
 Ancestors
   bodyFullAbiEncodeOffset bodyFullAbiEncodeStore bodyFullAbiEncodeCopy
+  exprPtrUnwrapFrames[qualified,ignore_grammar]
   fragGasOriginPtrLoop fragExecPtr exprSimStorageCopy exprSimAbiEncodeMemoryLength
   abiTupleProps bodyPtrMakeArrayPrimitiveInstall bodyPtrMakeArrayWordStore
   assignBasePtrCleanStore exprLoweringProps emitHelperProps fragExec
@@ -14,7 +15,7 @@ Theorem abi_encode_tuple_slot_origin_with_frame:
   !a b ce root off op ty tv v s bw G tn total lo explicit ctx func PG
     d cx es origin G0 tn0 s0.
   compile_abi_tuple_slot ce (Var root) off op ty a = ((),b) /\
-  fn_has_code a b func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\ allocas_from lo s /\
   lo <= s.vs_alloca_next /\ lookup_var root s = SOME bw /\
@@ -80,10 +81,13 @@ Proof
   `cs_extends a mid /\ cs_extends mid b` by suspend "extends" >>
   `fn_has_code a mid func /\ fn_has_code mid b func` by
     metis_tac[fn_has_code_split] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_encode_owned_offset_origin >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   rename1 `lookup_var q addressed = SOME (n2w (w2n bw+off))` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp addressed` by
+    (qpat_assum `addressed = _` SUBST1_TAC >>
+     simp[exprPtrUnwrapFramesTheory.copy_allocas_inst_idx,
+          exprPtrUnwrapFramesTheory.copy_allocas_update]) >>
   `copy_static addressed = copy_static s` by
     simp[copy_static_def, update_var_def] >>
   `!x. not_fresh_at a x ==> x <> q` by suspend "fresh" >>
@@ -435,7 +439,13 @@ Theorem abi_encode_tuple_slot_origin:
       eval_operand oldop t = eval_operand oldop s /\
       op_taint tnf oldop = op_taint tn oldop /\ op_prov Gf oldop = op_prov G oldop)
 Proof
-  rpt gen_tac >> disch_then (mp_tac o MATCH_MP abi_encode_tuple_slot_origin_with_frame) >>
-  disch_then (qspecl_then [`explicit`, `PG`, `d`, `cx`, `G0`, `tn0`] strip_assume_tac) >>
+  rpt gen_tac >> disch_then (map_every ASSUME_TAC o CONJUNCTS) >>
+  rename1 `ptr_covers G tn root s cap` >>
+  mp_tac (Q.SPECL [`a`, `b`, `ce`, `root`, `off`, `op`, `ty`, `tv`, `v`,
+    `s`, `bw`, `G`, `tn`, `cap`, `lo`, `explicit`, `ctx`, `func`, `PG`,
+    `d`, `cx`, `es`, `origin`, `G0`, `tn0`, `s0`]
+    abi_encode_tuple_slot_origin_with_frame) >>
+  (impl_tac >- (asm_simp_tac bool_ss [] >> rpt conj_tac >>
+    FIRST_ASSUM ACCEPT_TAC)) >> strip_tac >>
   qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]
 QED

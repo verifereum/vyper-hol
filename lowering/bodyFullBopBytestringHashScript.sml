@@ -1,5 +1,6 @@
 Theory bodyFullBopBytestringHash
 Ancestors
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodySimFull bodyFullGhostFrame bodyPtrBopTypedSource bodyPtrBopHashRun
   bodyPtrBopHashSemantic bodyPtrBopHashCompile bodyPtrBopHashEndpoint bodyPtrBopHashFootprint
   bodyPtrBopHashSuffix bodyPtrBopHashFrame bodyMemBopHeldHash
@@ -18,7 +19,7 @@ Theorem bop_bytestring_hash_post_view:
   lower_value compile_expr cenv (expr_type e) e sa = (m,cb) /\
   compile_bytestring_hash m cb = (h,sz) /\
   fn_has_code sa sz func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   storage_trace_domain cx st0 ee.storage_trace /\
@@ -111,7 +112,7 @@ Theorem bop_bytestring_hash_operational_certificate:
   lower_value compile_expr cenv (expr_type e) e sa = (m,cb) /\
   compile_bytestring_hash m cb = (h,sz) /\
   fn_has_code sa sz func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   storage_trace_domain cx st0 ee.storage_trace /\
@@ -213,7 +214,13 @@ Proof
   drule_all bop_hash_compile_emission >> strip_tac >>
   qpat_assum `emitted_insts _ _ = _` (fn th =>
     rule_assum_tac (PURE_REWRITE_RULE [th]) >> assume_tac th) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> ?v. _`
+       (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     qpat_assum `expr_post _ ctx func cenv cx e es sa cb s ee _ _ t`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        MATCH_MP expr_post_state)) >>
   drule_all (GEN_ALL (REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]
     (Q.INST [`h` |-> `h'`,
              `iA` |-> `mk_inst aId ADD [Var p; Lit 32w] [q]`,
@@ -273,7 +280,7 @@ Theorem bop_bytestring_hash_suffix_frame_from_certificate:
   lower_value compile_expr cenv (expr_type e) e sa = (m,cb) /\
   compile_bytestring_hash m cb = (h,sz) /\
   fn_has_code sa sz func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   storage_trace_domain cx st0 ee.storage_trace /\
@@ -398,7 +405,7 @@ Theorem bop_bytestring_hash_suffix_from_view:
   lower_value compile_expr cenv (expr_type e) e sa = (m,cb) /\
   compile_bytestring_hash m cb = (h,sz) /\
   fn_has_code sa sz func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   storage_trace_domain cx st0 ee.storage_trace /\
@@ -459,7 +466,7 @@ Theorem bop_bytestring_hash_suffix_full:
   lower_value compile_expr cenv (expr_type e) e sa = (m,cb) /\
   compile_bytestring_hash m cb = (h,sz) /\
   fn_has_code sa sz func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   storage_trace_domain cx st0 ee.storage_trace /\
@@ -506,7 +513,7 @@ Theorem bop_bytestring_selected_hash_full_exit:
    | SOME digest => (Lit digest,sa)) = (h,sz) /\
   is_bytestring_type (expr_type e) /\ expr_body_pre cenv cx env e es /\
   body_inv tops ctx cenv cx /\ fn_has_code sa sz func /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   alloca_history func s /\ ~s.vs_halted /\

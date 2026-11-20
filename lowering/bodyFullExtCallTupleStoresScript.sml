@@ -4,6 +4,7 @@ Ancestors abiArgsLabelBoundary[qualified,ignore_grammar] calldataReconstruction[
   loweringPosts bodyPtrDefs valueEncodingProps typedMemoryCopy venomState
   assignPlaceOperandFacts exprSafeOperand targetPurePostTransport
   exprLowering context compileEnv
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 (* The preparation cut may allocate. Only an old, registered and
    local-disjoint window is protected by the preparation frames. *)
@@ -164,7 +165,7 @@ Theorem extcall_tuple_slot_run[local]:
   ptr_covers G tn root s capacity /\ off + type_memory_size tv <= capacity /\
   w2n bw + off < dimword (:256) /\
   FLOOKUP s.vs_allocas aid = SOME (w2n bw,capacity) /\
-  ~ctx_has_dalloca ctx /\ alloca_history fn s /\ ~s.vs_halted /\
+  alloca_history fn s /\ ~s.vs_halted /\
   s.vs_current_bb = ca.cs_current_bb /\ s.vs_inst_idx = LENGTH ca.cs_current_insts /\
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -232,7 +233,9 @@ Proof
   `allocas_from lo s` by
     (qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ s` mp_tac >>
      pure_rewrite_tac[ghost_inv_at_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H0 ctx fn ce cx ee s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `venomMemDefs$alloca_inv s` by metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca] >>
   `w2n bw + capacity <= s.vs_alloca_next` by
     (qpat_assum `venomMemDefs$alloca_inv s`
@@ -263,7 +266,9 @@ Resume extcall_tuple_slot_run[write]:
   drule_all extcall_tuple_slot_write_input >>
   disch_tac >>
   qpat_x_assum `dst = Var p` SUBST_ALL_TAC >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    (qpat_assum `stmt_state_rel H0 ctx fn ce cx ee z`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all extcall_tuple_slot_write >>
   disch_then (qspecl_then [`explicit`,`PG`] (qx_choose_then `q`
     (qx_choose_then `Gf` (qx_choose_then `tf` (REPEAT_TCL CONJUNCTS_THEN assume_tac))))) >>

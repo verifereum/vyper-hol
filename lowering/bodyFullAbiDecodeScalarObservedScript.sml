@@ -54,7 +54,7 @@ QED
 Theorem member_scalar_revert_observed:
   bop_scalar_seq R A (emitted_insts sa sb) B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ inst_extends sa sb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\ inst_extends sa sb /\
   sb.cs_current_bb = sa.cs_current_bb /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -66,7 +66,6 @@ Theorem member_scalar_revert_observed:
     (!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (Abort Revert_abort u))
 Proof
   strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_decode_scalar_guard_abort_joint >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   reverse (drule_all bop_scalar_seq_abort_prefix >> strip_tac)

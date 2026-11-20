@@ -64,7 +64,7 @@ Theorem prefix_loop_element_arith_block:
   (opc = ADD \/ opc = MUL) /\
   eval_operand a s = SOME u /\ eval_operand c s = SOME v /\
   op_taint tn a = {} /\ op_taint tn c = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst iid opc [a;c] [x]) ==>
   let i = mk_inst iid opc [a;c] [x];
       t = update_var x (if opc = ADD then u+v else u*v) s;
@@ -105,7 +105,7 @@ Theorem prefix_loop_element_mload_pair:
   FLOOKUP G ip = SOME (b,sz) /\ b <= w2n p /\ w2n p+32 <= b+sz /\
   op_taint tn (Var ip) = {} /\
   (!k. k < 32 ==> w2n p+k NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let i = mk_inst iid MLOAD [Var ip] [x];
       t = update_var x (mload (w2n p) s) s;
       H = DRESTRICT G (COMPL {x});
@@ -137,7 +137,7 @@ Theorem prefix_loop_element_mload_block:
   FLOOKUP G ip = SOME (b,sz) /\ b <= w2n p /\ w2n p+32 <= b+sz /\
   op_taint tn (Var ip) = {} /\
   (!k. k < 32 ==> w2n p+k NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst iid MLOAD [Var ip] [x]) ==>
   let i = mk_inst iid MLOAD [Var ip] [x];
       t = update_var x (mload (w2n p) s) s;
@@ -313,7 +313,7 @@ Theorem prefix_loop_element_mload_cursor_block:
   FLOOKUP G ip = SOME (b,sz) /\ b <= w2n p /\ w2n p+32 <= b+sz /\
   op_taint tn (Var ip) = {} /\
   (!k. k < 32 ==> w2n p+k NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   get_instruction bb cursor = SOME (mk_inst iid MLOAD [Var ip] [x]) ==>
   let i = mk_inst iid MLOAD [Var ip] [x];
       t = update_var x (mload (w2n p) s) s;
@@ -324,7 +324,10 @@ Theorem prefix_loop_element_mload_cursor_block:
        (t with vs_inst_idx := cursor+1) ==>
      ptr_safe_block D lo fuel ctx fn PG G tn bb (s with vs_inst_idx := cursor))
 Proof
-  strip_tac >> simp[LET_THM] >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := cursor)` by
+    (`allocas_below_fmp (s with vs_inst_idx := cursor) <=> allocas_below_fmp s` by
+       simp[allocas_below_fmp_def] >> simp[]) >> simp[LET_THM] >>
   `eval_operand (Var ip) (s with vs_inst_idx := cursor) = SOME p /\
    allocas_from lo (s with vs_inst_idx := cursor)` by
     (fs[eval_operand_def,lookup_var_def,allocas_from_def] >> metis_tac[]) >>
@@ -343,7 +346,7 @@ Theorem prefix_loop_element_arith_cursor_block:
   (opc = ADD \/ opc = MUL) /\
   eval_operand a s = SOME u /\ eval_operand c s = SOME v /\
   op_taint tn a = {} /\ op_taint tn c = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   get_instruction bb cursor = SOME (mk_inst iid opc [a;c] [x]) ==>
   let i = mk_inst iid opc [a;c] [x];
       t = update_var x (if opc = ADD then u+v else u*v) s;
@@ -354,7 +357,10 @@ Theorem prefix_loop_element_arith_cursor_block:
        (t with vs_inst_idx := cursor+1) ==>
      ptr_safe_block D lo fuel ctx fn PG G tn bb (s with vs_inst_idx := cursor))
 Proof
-  strip_tac >> simp[LET_THM] >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := cursor)` by
+    (`allocas_below_fmp (s with vs_inst_idx := cursor) <=> allocas_below_fmp s` by
+       simp[allocas_below_fmp_def] >> simp[]) >> simp[LET_THM] >>
   `eval_operand a (s with vs_inst_idx := cursor) = SOME u /\
    eval_operand c (s with vs_inst_idx := cursor) = SOME v /\
    allocas_from lo (s with vs_inst_idx := cursor)` by
@@ -372,7 +378,7 @@ QED
 Theorem prefix_loop_element_dload_cursor_block:
   eval_operand off s = SOME a /\ op_taint tn off = {} /\
   abi_decode_load DLOAD a s = w /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   get_instruction bb cursor = SOME (mk_inst iid DLOAD [off] [x]) ==>
   (ptr_safe_block D lo fuel ctx fn PG (DRESTRICT G (COMPL {x}))
      (tn with t_var := tn.t_var |+ (x,{})) bb
@@ -380,6 +386,9 @@ Theorem prefix_loop_element_dload_cursor_block:
    ptr_safe_block D lo fuel ctx fn PG G tn bb (s with vs_inst_idx := cursor))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := cursor)` by
+    (`allocas_below_fmp (s with vs_inst_idx := cursor) <=> allocas_below_fmp s` by
+       simp[allocas_below_fmp_def] >> simp[]) >>
   mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := cursor`]
     prefix_member_dload_block) >>
   fs[instIdxIndepTheory.eval_op_inst_idx,abi_decode_load_def,
@@ -829,6 +838,7 @@ Proof
       comp_bind_def,comp_ignore_bind_def,comp_return_def,emitted_insts_def] >>
      qpat_x_assum `_ = st'` (SUBST1_TAC o SYM) >>
      simp[DROP_LENGTH_APPEND]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all prefix_loop_element_mload_pair >>
   disch_then (qspecl_then [`"%" ++ toString st.cs_next_var`,`st.cs_next_id`,
     `0`,`fn`,`PG`,`D`] mp_tac) >> simp[LET_THM] >> strip_tac >>
@@ -846,6 +856,7 @@ Proof
        simp[mk_inst_def] >>
      `mload (w2n p) (s with vs_inst_idx := k) = mload (w2n p) s` by
        simp[mload_def] >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by simp[] >>
      mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`, `D` |-> `D'`,
        `fuel` |-> `0`, `iid` |-> `st.cs_next_id`,
        `x` |-> `"%" ++ toString st.cs_next_var`] prefix_loop_element_mload_pair) >>

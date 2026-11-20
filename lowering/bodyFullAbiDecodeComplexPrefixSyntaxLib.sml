@@ -43,7 +43,7 @@ val owned_decoder_state = ``\st s G tn.
 
 val owned_decoder_pre = ``\start finish dst src opc base_op hi d write_start size s G tn.
   opc = MLOAD /\ fn_has_code start finish fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce start /\ (?H. V H) /\
+  local_ptrs_reserved ce start /\ (?H. V H) /\
   w2n input_word+LENGTH input_bytes < dimword (:256) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -72,7 +72,7 @@ val owned_decoder_pre = ``\start finish dst src opc base_op hi d write_start siz
 
 val guarded_decoder_pre = ``\start finish dst src opc base_op hi d write_start size s G tn.
   opc = MLOAD /\ fn_has_code start finish fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce start /\ (?H. V H) /\
+  local_ptrs_reserved ce start /\ (?H. V H) /\
   w2n input_word+LENGTH input_bytes < dimword (:256) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\

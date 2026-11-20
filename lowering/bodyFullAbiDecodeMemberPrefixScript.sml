@@ -278,6 +278,7 @@ Proof
      simp_tac (srw_ss()) [DROP_LENGTH_APPEND, mk_inst_def]) >>
   drule_all abi_decode_member_actual_run >> strip_tac
   >- (disj1_tac >> `lo <= s.vs_alloca_next` by fs[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_all member_scalar_revert_observed >>
       disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
       qexistsl_tac [`u`, `Gf`, `tnf`] >> asm_rewrite_tac[]) >>
