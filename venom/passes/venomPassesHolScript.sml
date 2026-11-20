@@ -18,7 +18,6 @@ Ancestors
   fmpStageOpSteps
   fmpStageFmpSteps
   fmpStageBlockSim
-  o1PreDftStaticMem
   (* lower dload/dloadbytes *)
   lowerDload
   lowerDloadCoverageOrdinary
@@ -54,7 +53,7 @@ Ancestors
   (* interprocedural *)
   functionInliner
   (* configured pipeline runner structural guarantees *)
-  venomPipelineRunnerProps venomPipelineData o1PreDftStaticMem
+  venomPipelineRunnerProps venomPipelineData
   (* dead function traversal *)
   dftCorrectnessFinal
   dftGasPrefixProvider

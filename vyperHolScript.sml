@@ -36,7 +36,7 @@ Ancestors
   (* O1: lifting per-function pass facts to the stage contract *)
   o1PassLift
   (* O1: the pipeline's request companion at an abort *)
-  o1PipelineRequests
+  dftRequestsGas
   (* O1: joint simulation, abort requests and memory for static frames *)
   o1StaticPipelineCorrect
   o1PipelineMemoryLoweredAbort
@@ -52,7 +52,6 @@ Ancestors
      place typing *)
   abiEncoderObserverCode
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
-  placeTypingE2EProps
   (* lowering: entry decoding, allocation frames and registration, constructor
      arguments, nonreentrancy, byte-builtin and concat memory, conversion from
      bytes, widened returns *)
@@ -65,8 +64,8 @@ Ancestors
      statement reason theories *)
   bodyMemArrayLayout bodyMemTupleLayout bodyMemBiMethodIdEndpoint
   bodyMemEcArithAssemble bodyMemEcArithSafe bodyMemRawCallFinish
-  bodyMemAssignTopCopySuffix stmtSimAugAssignPlaceStorage
-  stmtSimIfCounted stmtSimRaise stmtSimSeqMem
+  stmtSimAugAssignPlaceStorage
+  stmtSimIfCounted
   (* assignment-to-place pieces the deleted stmtSimAssignPlace imported *)
   immutableAssignMetadata immutableAssignRepresentation immutableAssignStore
   immutableDeployAssignRestore immutableAssignCode immutableAssignEmpty
