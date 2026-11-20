@@ -20,15 +20,7 @@ Ancestors
   whitelistExprOpen whitelistCheckerTypes exprSimTopLevelProps
   vyperTypeGlobalLookupSoundness allocLimits supportedExprTraverse
   vyperInterpreter vyperState
-
-Theorem supported_variable_decl_mem[local]:
-  !tops src id vis mut ty slot.
-    supported_variable_decl tops (src, id) = SOME (vis, mut, ty, slot) ==>
-    src = NONE /\ MEM (VariableDecl vis mut id ty slot) tops
-Proof
-  Induct >> simp[supported_variable_decl_def] >> Cases >>
-  rw[supported_variable_decl_def] >> metis_tac[]
-QED
+  bodyInvCodeProps bodyStorageMetadata exprBodyPreProps
 
 (* Context consistency installs the declaration in bare_globals;
    expr_sim_inv supplies its compiler location. *)
@@ -49,7 +41,7 @@ Proof
   drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
   `get_module_code cx NONE = SOME tops /\
    bare_globals_complete env.bare_globals cx` by
-    fs[body_inv_def, expr_sim_inv_def, env_consistent_def,
+    metis_tac[body_inv_main_code, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
   `?t. FLOOKUP env.bare_globals (NONE, nsid1) = SOME t` by
     metis_tac[bare_globals_complete_def] >>
@@ -69,12 +61,14 @@ Theorem compile_expr_open_general:
     ~block_is_terminated sa ==> ~block_is_terminated sb
 Proof
   measureInduct_on `expr_size e` >> rpt gen_tac >> strip_tac >>
-  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+  `acyclic_struct_metadata cenv.ce_struct_fields` by
+    metis_tac[body_inv_contract, contract_inv_acyclic_struct_metadata] >>
+  drule expr_body_pre_static_facts >> strip_tac >>
   Cases_on `e`
   >~ [`compile_expr _ _ (Name _ _) _ = _`]
     >- (irule compile_expr_name_open >>
         goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
-        gvs[expr_body_pre_def] >> metis_tac[])
+        metis_tac[])
   >~ [`compile_expr _ _ (TopLevelName _ _) _ = _`]
     >- suspend "toplevel"
   >~ [`compile_expr _ _ (Literal _ _) _ = _`]
@@ -94,14 +88,14 @@ Proof
   >~ [`compile_expr_body _ _ _ _ _ (StructLit _ _ _) _ = _`]
     >- (strip_tac >> irule compile_struct_literal_body_open >>
         goal_assum (drule_at (Pat `compile_expr_body _ _ _ _ _ _ _ = _`)) >>
-        gvs[expr_body_pre_def] >> metis_tac[])
+        metis_tac[])
   >~ [`compile_expr_body _ _ _ _ _ (Subscript _ _ _) _ = _`]
     >- (simp[compile_expr_body_def] >> metis_tac[compile_subscript_open])
   >~ [`compile_expr_body _ _ _ _ _ (Attribute _ _ _) _ = _`]
     >- (simp[compile_expr_body_def] >> metis_tac[compile_attribute_open]) >>
   simp[compile_expr_body_def] >> strip_tac >>
   qpat_x_assum `!y. expr_size y < _ ==> _` kall_tac >>
-  fs[expr_body_pre_def, expr_has_evm_run_thm] >>
+  fs[expr_has_evm_run_thm] >>
   metis_tac[compile_call_open]
 QED
 
@@ -109,9 +103,6 @@ Resume compile_expr_open_general[toplevel]:
   rename1 `TopLevelName ann nsid` >>
   qpat_x_assum `!y. _` kall_tac >>
   PairCases_on `nsid` >>
-  `expr_sim_inv cenv cx env es /\
-   well_typed_expr env (TopLevelName ann (nsid0,nsid1))` by
-    fs[expr_body_pre_def] >>
   Cases_on `get_module_code cx nsid0`
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, vyperStateTheory.lookup_global_def,
@@ -123,7 +114,7 @@ Resume compile_expr_open_general[toplevel]:
         (irule toplevel_find_NONE_bare_global >>
          fs[expr_sim_inv_def] >> metis_tac[]) >>
       `?off. FLOOKUP cenv.ce_module_vars (nsid0,nsid1) = SOME (ImmutableLoc off)` by
-        (fs[expr_body_pre_def, expr_sim_inv_def, supportedExprTraverseTheory.supported_expr_exists_def,
+        (fs[expr_sim_inv_def, supportedExprTraverseTheory.supported_expr_exists_def,
          exprSimHypsDefsTheory.const_name_root_def] >>
          metis_tac[]) >>
       gvs[compile_expr_def]) >>
@@ -186,7 +177,7 @@ Resume compile_expr_open_general[type_builtin]:
   >~ [`Extract32`]
     >- metis_tac[compile_extract32_open] >>
   `LENGTH args = 1` by
-    (fs[expr_body_pre_def, well_typed_expr_def] >>
+    (fs[well_typed_expr_def] >>
      drule well_typed_type_builtin_args_arity >> simp[]) >>
   Cases_on `args` >>
   gvs[] >>
@@ -206,7 +197,7 @@ QED
 
 Resume compile_expr_open_general[builtin_dispatch]:
   `well_typed_builtin_app ann bi (MAP expr_type args)` by
-    fs[expr_body_pre_def, well_typed_expr_def] >>
+    fs[well_typed_expr_def] >>
   drule well_typed_builtin_app_arity >> disch_tac >>
   Cases_on `bi` >> gvs[]
   >~ [`Len`] >- metis_tac[compile_len_open]
@@ -252,7 +243,7 @@ Resume compile_expr_open_general[builtin_dispatch]:
           compile_dispatch_as_wei_value_open >> simp[] >>
         disch_then irule >> rpt strip_tac >> gvs[SF ETA_ss] >> metis_tac[]) >>
   rename1 `compile_builtin_dispatch_body _ _ _ _ (Acc item) _ _ = _` >>
-  `item <> Code` by fs[expr_body_pre_def, alloc_limits_expr_def] >>
+  `item <> Code` by fs[alloc_limits_expr_def] >>
   drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
     compile_dispatch_acc_open >> simp[] >> disch_then irule >>
   rpt strip_tac >> gvs[SF ETA_ss] >> metis_tac[]
