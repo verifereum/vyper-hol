@@ -82,7 +82,8 @@ Theorem abi_encode_tuple_staging_zero_safe_with_frame:
   compile_store_abi_tuple ce (Var root) 0 (ZIP (ops,tys)) a = ((),b) /\
   LENGTH ops = LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\
   total = abi_tuple_bytes ce (ZIP (ops,tys)) /\
-  fn_has_code a b func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\ allocas_from lo s /\
   lo <= s.vs_alloca_next /\ lookup_var root s = SOME bw /\
@@ -270,7 +271,11 @@ Theorem abi_encode_tuple_staging_zero_safe:
       eval_operand oldop t = eval_operand oldop s /\
       op_taint tnf oldop = op_taint tn oldop /\ op_prov Gf oldop = op_prov G oldop)
 Proof
-  rpt gen_tac >> disch_then (mp_tac o MATCH_MP abi_encode_tuple_staging_zero_safe_with_frame) >>
-  disch_then (qspecl_then [`explicit`, `PG`, `d`, `cx`, `G0`, `tn0`] strip_assume_tac) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `tuple_total_bytes = abi_tuple_bytes ce (ZIP (ops,tys))` >>
+  mp_tac (Q.SPECL [`a`,`b`,`ce`,`root`,`ops`,`tys`,`tvs`,`vs`,
+    `tuple_total_bytes`,`s`,`bw`,`G`,`tn`,`lo`,`explicit`,`ctx`,`func`,`PG`,
+    `d`,`cx`,`es`,`origin`,`G0`,`tn0`,`s0`] abi_encode_tuple_staging_zero_safe_with_frame) >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
   qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]
 QED
