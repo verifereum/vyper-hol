@@ -19,7 +19,7 @@ Ancestors stateFrame[qualified,ignore_grammar] bodyPtrDefs[qualified,ignore_gram
   bodyFullTarget bodyFullTargetDefs bodyPtrPopTargetFragTransport
   stmtSimAugAssignPlace stmtSimAugAssignPlaceMemory stmtSimProps loweringPosts
   gasContext targetPlaceSimCases stmtSimDefs vyperExprNoControl
-  augAssignStorageFieldSource tuplePlaceHeadGas gasOutcomeFullGuarded
+  tuplePlaceHeadGas gasOutcomeFullGuarded
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
