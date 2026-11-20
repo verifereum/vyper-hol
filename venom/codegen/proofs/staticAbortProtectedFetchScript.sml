@@ -5,9 +5,10 @@ Ancestors
 Theorem protected_mode_fetch_pos:
   0 < n /\ ss.sym_base.as_pc < LENGTH p ==>
   sym_steps_mode allow_own p env own n ss =
-    let inst = EL ss.sym_base.as_pc p in
-    case (if allow_own /\ (inst = AsmOp "CODESIZE" \/ inst = AsmOp "CODECOPY")
-          then sym_step_own p env own inst ss else sym_step p env inst ss) of
+    case (if allow_own /\ (EL ss.sym_base.as_pc p = AsmOp "CODESIZE" \/
+                            EL ss.sym_base.as_pc p = AsmOp "CODECOPY")
+          then sym_step_own p env own (EL ss.sym_base.as_pc p) ss
+          else sym_step p env (EL ss.sym_base.as_pc p) ss) of
       SymOK next => sym_steps_mode allow_own p env own (n-1) next
     | r => r
 Proof
@@ -22,9 +23,10 @@ Theorem protected_mode_fetch_one:
   sym_steps_mode allow_own p env own 1 ss =
   if LENGTH p <= ss.sym_base.as_pc then SymError "pc out of bounds"
   else
-    let inst = EL ss.sym_base.as_pc p in
-    if allow_own /\ (inst = AsmOp "CODESIZE" \/ inst = AsmOp "CODECOPY")
-    then sym_step_own p env own inst ss else sym_step p env inst ss
+    if allow_own /\ (EL ss.sym_base.as_pc p = AsmOp "CODESIZE" \/
+                     EL ss.sym_base.as_pc p = AsmOp "CODECOPY")
+    then sym_step_own p env own (EL ss.sym_base.as_pc p) ss
+    else sym_step p env (EL ss.sym_base.as_pc p) ss
 Proof
   ONCE_REWRITE_TAC [arithmeticTheory.ONE] >>
   PURE_REWRITE_TAC [sym_steps_mode_suc, sym_steps_mode_zero, LET_THM] >>
