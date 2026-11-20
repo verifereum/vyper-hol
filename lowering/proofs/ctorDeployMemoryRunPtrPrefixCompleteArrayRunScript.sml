@@ -117,15 +117,16 @@ Theorem prefix_complete_array_header_pair_mode:
   abi_decode_load DLOAD srcaddr s = n2w (LENGTH vs) /\
   LENGTH vs < dimword(:256) /\ FLOOKUP G slot_var = SOME (slot,32) /\
   slot+32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword(:256) /\
-  allocas_from lo s /\ lo <= slot /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= slot /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   op_taint tn (Var slot_var) = {} /\ op_taint tn src = {} /\
   (!a. a<32 ==> slot+a NOTIN tn.t_mem) /\
   (checked ==> alloca_history func s /\ w2n srcaddr + 32 <= LENGTH s.vs_data_section) ==>
-  let t = jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
-    (abi_decode_header_state (STRING #"%" (toString first))
-      (STRING #"%" (toString (first+1))) (STRING #"%" (toString (first+2)))
-      (STRING #"%" (toString (first+3))) j (LENGTH vs) s)
-  in ?H qt.
+  ?t H qt.
+    t = jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
+      (abi_decode_header_state (STRING #"%" (toString first))
+        (STRING #"%" (toString (first+1))) (STRING #"%" (toString (first+2)))
+        (STRING #"%" (toString (first+3))) j (LENGTH vs) s) /\
     (^Ok) k ctx func site ids D N d outsz next limit_st
       tv vs slot_id slot initial j j t /\
     abi_decode_sim ctx func s t /\
@@ -148,7 +149,7 @@ Theorem prefix_complete_array_header_pair_mode:
     ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
 Proof
-  strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  strip_tac >> BETA_TAC >>
   qabbrev_tac `iv = STRING #"%" (toString first)` >>
   qabbrev_tac `cv = STRING #"%" (toString (first+1))` >>
   qabbrev_tac `cmp = STRING #"%" (toString (first+2))` >>
@@ -194,7 +195,6 @@ Proof
      `slot < dimword(:256)` by decide_tac >>
      `src <> Var iv` by simp[] >>
      metis_tac[ctor_checked_header_prefix_mem_ok]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all prefix_loop_header_operand_path >>
   disch_then (mp_tac o Q.INST [`D` |-> `Ddead`] o SPEC_ALL) >>
   strip_tac >>
@@ -206,7 +206,8 @@ Proof
   drule_all deploy_ctor_array_header_observation >>
   disch_then (qspec_then `if j < LENGTH vs then body_lbl else exit_lbl` assume_tac) >>
   rule_assum_tac BETA_RULE >>
-  qexistsl [`H`,`qt`] >>
+  qexistsl [`jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
+              (abi_decode_header_state iv cv cmp done j (LENGTH vs) s)`,`H`,`qt`] >>
   asm_simp_tac bool_ss [Abbr `iv`,Abbr `cv`,Abbr `cmp`,Abbr `done`] >>
   conj_tac >- (rpt strip_tac >>
     `abi_decoder_operand_live next (Var x)` by
@@ -274,7 +275,8 @@ Theorem prefix_complete_array_header_reach_pair_mode:
   ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\
   FLOOKUP G slot_var = SOME (slot,32) /\
   slot+32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword(:256) /\
-  allocas_from lo s /\ lo <= slot /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= slot /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   op_taint tn (Var slot_var) = {} /\ op_taint tn src = {} /\
   (!a. a < 32 ==> slot+a NOTIN tn.t_mem) /\
   (checked ==> alloca_history func s /\
@@ -335,8 +337,8 @@ Proof
   `header_var+4 <= limit_st.cs_next_var` by
     fs[abi_decode_position_header_delta_def] >>
   drule_all prefix_complete_array_header_pair_mode >>
-  disch_then (mp_tac o SPEC_ALL) >>
-  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qpat_x_assum `t = jump_to _ _` SUBST_ALL_TAC >>
   goal_assum (drule_at Any) >> fs[]
 QED
 
@@ -422,6 +424,7 @@ Proof
   `(checked ==> alloca_history func X0 /\
     sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
       LENGTH initial.vs_data_section)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp X0` by simp[] >>
   drule_all (BETA_RULE prefix_complete_array_header_reach_pair_mode) >>
   disch_then (qspecl_then [`PG`,`Ddead`] mp_tac) >> strip_tac >>
   qexists_tac `(t,H,qt,X3)` >> simp_tac std_ss [] >>
@@ -960,6 +963,7 @@ Proof
   `(checked ==> alloca_history func X0 /\
     sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
       LENGTH initial.vs_data_section)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp X0` by simp[] >>
   drule_all (BETA_RULE prefix_complete_array_header_reach_pair_mode) >>
   disch_then (qspecl_then [`PG`,`Ddead`] mp_tac) >> strip_tac >>
   qexists_tac `(t,H,qt,X3)` >> simp_tac std_ss [] >>
