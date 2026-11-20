@@ -879,28 +879,21 @@ Proof
       qpat_assum `MAP _ (gas_events_blocks _ _ _ _) = _`
         (fn th => asm_rewrite_tac [REWRITE_RULE [venom_state_fupdcanon] th])) >>
   disch_then (qx_choosel_then [`raw_slots`, `sites`, `unused`] strip_assume_tac) >>
-  qabbrev_tac `project = MAP (\key. key IN gas_explicit_sites unit.cu_context shadow_ctx) sites` >>
   rewrite_tac[gas_readings_rel_def] >>
-  irule gas_mask_projection >>
-  qexistsl_tac [`project`, `raw_slots`, `unused`] >>
-  `LENGTH project = LENGTH raw_slots` by simp[Abbr `project`] >>
-  qpat_assum `LENGTH project = LENGTH raw_slots` (fn lengths =>
-    qpat_assum `PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es)`
-      (fn readings => rewrite_tac [lengths, readings])) >>
-  qx_genl_tac [`raw`, `tail`] >> strip_tac >> BETA_TAC >>
+  Q.ISPECL_THEN
+    [`sites`, `\key. key IN gas_explicit_sites unit.cu_context shadow_ctx`,
+     `raw_slots`, `unused`, `gas_readings es`, `markf`]
+    (match_mp_tac o BETA_RULE) gas_mask_projection_padded >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qx_gen_tac `raw` >> strip_tac >>
   qpat_x_assum `!raw. LIST_REL _ raw_slots raw ==> _` (qspec_then `raw` mp_tac) >>
-  impl_tac >- asm_rewrite_tac[] >>
-  disch_then (CONJUNCTS_THEN2 (qx_choose_then `rest` assume_tac)
-    (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qx_gen_tac `suffix` >> BETA_TAC >>
   qabbrev_tac `vs = vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>` >>
   qabbrev_tac `marks = markf (raw ++ [0w])` >>
-  qabbrev_tac `suffix = gas_explicit rest (DROP (LENGTH marks) (raw ++ [0w])) ++ tail` >>
-  `gas_explicit project raw ++ tail = gas_explicit marks vs.vs_gas_readings ++ suffix` by
-    (qpat_assum `project = marks ++ rest` (fn th => once_rewrite_tac [th]) >>
-     simp[Abbr `suffix`, Abbr `vs`] >>
-     irule (SIMP_RULE (srw_ss()) []
-       (Q.INST [`tail` |-> `[]:bytes32 list`] gas_mask_padded_split)) >>
-     `LENGTH raw_slots = LENGTH raw` by metis_tac[LIST_REL_LENGTH] >> fs[]) >>
   `raw_variant fmp vs vs0` by
     (qunabbrev_tac `vs` >>
      simp[NoAsms, o1PassContractTheory.raw_variant_def,
@@ -924,6 +917,7 @@ Proof
          (Q.INST [`src` |-> `(INL NoneV, am, [])`] external_call_dead_wf))) >>
   qexistsl_tac [`rpolicy`, `unit`, `out`, `prog`, `prog'`, `cplan`,
                 `fmp`, `vs`, `marks`, `suffix`] >>
+  conj_tac >- simp[Abbr `vs`] >>
   `tx.target = txp.target` by simp[Abbr `txp`] >>
   qpat_x_assum `vs0 = opt_entry_state _ _ _ _` (fn eq => PURE_REWRITE_TAC [GSYM eq]) >>
   qpat_x_assum `txp = _` (fn eq => PURE_REWRITE_TAC [GSYM eq]) >>
