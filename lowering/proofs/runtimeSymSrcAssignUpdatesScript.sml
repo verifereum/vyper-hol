@@ -1,6 +1,6 @@
 Theory runtimeSymSrcAssignUpdates
 Ancestors
-  runtimeSymSrcInterfaces runtimeSymSrcEmission stmtLowering compileEnv
+  runtimeSymSrcInterfaces runtimeSymSrcEmission runtimeSymSrcContext stmtLowering compileEnv
   context venomInst supportedStmts supportedStmtTraverse supportedExprs
 
 (* Boundary ledger: target-pointer and lower_value belong to C1.1.3's
@@ -36,16 +36,21 @@ Proof
   PairCases_on `tgt_result` >>
   asm "target" (drule_at (Pat `compile_get_target_ptr _ _ _ _ = _`)) >>
   simp[] >> strip_tac >>
+  `!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b` by fs[runtime_sym_env_def] >>
   Cases_on `tgt_result1` >> gvs[]
   >>~- ([`emit_void INVALID [] _ = _`],
     drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[]) >>
   rename1 `SOME loc` >> Cases_on `loc` >>
   gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  drule_at (Pat `emit_op _ _ _ = _`) runtime_sym_emit_op >> simp[] >> strip_tac >>
+  FIRST [
+    (drule_all runtime_sym_ptr_load >> strip_tac),
+    (drule_at (Pat `emit_op _ _ _ = _`) runtime_sym_emit_op >> simp[] >> strip_tac)] >>
   asm "rhs" drule_all >> strip_tac >>
   asm "binop" drule_all >> strip_tac >>
-  drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[]
+  FIRST [
+    (drule_all runtime_sym_ptr_store >> simp[]),
+    (drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[])]
 QED
 
 (* Append ledger: compile_target_base is the assignment-local namespace

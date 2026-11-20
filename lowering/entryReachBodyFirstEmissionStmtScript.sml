@@ -1115,15 +1115,20 @@ Resume first_emission_compile_stmt[augassign]:
   ntac 2 (pure_once_rewrite_tac[comp_bind_def] >>
     pure_rewrite_tac[comp_return_def, LET_THM, pairTheory.pair_case_def, pairTheory.UNCURRY_DEF] >> BETA_TAC >>
     CONV_TAC (DEPTH_CONV ETA_CONV)) >>
-  Cases_on `x` >> pure_rewrite_tac[data_location_case_def] >> BETA_TAC >> (
+  Cases_on `x` >>
+  simp_tac bool_ss [data_location_case_def, TypeBase.distinct_of ``:data_location``] >> BETA_TAC >> (
   ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[] >> metis_tac[]) >>
+  >- (rpt strip_tac >>
+      FIRST [drule_at Any first_emission_ptr_load >> simp[],
+        drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]] >> metis_tac[]) >>
   gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- (match_mp_tac first_emission_lower_value >> metis_tac[first_emission_compile_expr]) >>
   gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- metis_tac[first_emission_binop] >>
-  gen_tac >> BETA_TAC >> rpt strip_tac >>
-  drule_at Any (cj 2 first_emission_emit_helpers) >> simp[] >> metis_tac[])
+  gen_tac >> BETA_TAC >> simp[contextTheory.compile_ptr_store_def] >>
+  TRY (IF_CASES_TAC) >> rpt strip_tac >>
+  FIRST [drule_at Any first_emission_imm_store_word >> simp[],
+    drule_at Any (cj 2 first_emission_emit_helpers) >> simp[]] >> metis_tac[])
 QED
 
 Resume first_emission_compile_stmt[return_value]:
