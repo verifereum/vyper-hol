@@ -66,18 +66,13 @@ Proof
   ho_match_mp_tac supported_pure_expr_ind >>
   simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
   rpt conj_tac >> rpt gen_tac >>
-  TRY (Cases_on `base`) >>
-  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND,
-       int_calls_target_indices, EVERY_FLAT, EVERY_MAP, EVERY_MEM] >>
-  rw[] >>
-  TRY (qpat_assum `MEM _ (int_calls_expr (Call _ target _ _))`
-        (fn _ => Cases_on `target`)) >>
-  TRY (Cases_on `default`) >>
-  gvs[int_calls_expr_def, MEM_FLAT, MEM_MAP, PULL_EXISTS, EVERY_MEM,
-      EVERY_APPEND] >>
+  TRY (Cases_on `base`) >> TRY (Cases_on `target`) >>
+  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
+  simp[int_calls_target_indices, EVERY_FLAT, EVERY_MAP, EVERY_MEM] >>
+  rw[] >> TRY (Cases_on `default`) >>
+  gvs[int_calls_expr_def, target_indices_def, MEM_FLAT, MEM_MAP, PULL_EXISTS, EVERY_MEM] >>
   metis_tac[supported_function_decl_main]
 QED
-
 
 Theorem supported_effect_main_calls:
   (!tops e. supported_effect_expr tops e ==>
