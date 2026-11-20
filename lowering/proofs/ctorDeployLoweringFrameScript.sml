@@ -1329,14 +1329,14 @@ Proof
 QED
 
 Theorem deploy_ctor_body_frame:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut am_c es0.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
+    deploy_state_rel tops (assemble prog') am tx es /\
     call_outcomes_ok am tx vs.vs_outcomes /\
-    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\

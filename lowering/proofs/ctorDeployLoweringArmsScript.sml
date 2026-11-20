@@ -332,15 +332,15 @@ QED
 (* The bad-storage arm: the body's storage failure is the deployment's, and
    the focus from the body start extends back to the unit's entry. *)
 Theorem deploy_ctor_bad_storage_arm:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final
    func mut nr' body' am_c es0 s0 G0 tn0 explicit marks H
    leaf leaf_pg leaf_g leaf_tn finish.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -411,15 +411,15 @@ QED
 (* The exempt arm: the body's exempt error is the deployment's source
    result, with one trace for every continuation of the readings. *)
 Theorem deploy_ctor_exempt_arm:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final
    func mut nr' body' am_c es0 s0 G0 tn0 explicit marks H err ee
    leaf leaf_pg leaf_g leaf_tn finish.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
