@@ -1,5 +1,6 @@
 Theory fnPlanLineageWide
 Ancestors fnPlanLineageInventory fnPlanLineageSetup
+  reorderPreparationFrameProps reorderPreparationInventoryProps planWf
 Libs stackPlanOpsTheory stackModelTheory fnPlanLineageReorderTheory listTheory
      stackPlanGenTheory venomInstTheory asmIRTheory venomEffectsTheory
 
@@ -280,6 +281,16 @@ Proof
   `MAPi (\i op. (i,op)) targets =
    GENLIST (\j. (0+j,EL (0+j) targets)) (LENGTH targets)` by
     simp[LIST_EQ_REWRITE, indexedListsTheory.EL_MAPi, EL_GENLIST] >>
+  Cases_on `reorder_prepare_plan targets ps` >>
+  rename1 `reorder_prepare_plan targets ps = (prep,mid)` >>
+  drule_all reorder_prepare_materialised_counts >> strip_tac >>
+  `!x. MEM x targets ==>
+       LIST_ELEM_COUNT x targets <= LIST_ELEM_COUNT x mid.ps_stack` by
+    (qspecl_then [`targets`, `ps`, `prep`, `mid`] mp_tac
+       reorder_prepare_count_dom >> simp[]) >>
+  `reorder_prepare_plan targets (ps with ps_stack := prefix ++ ps.ps_stack) =
+    (prep,mid with ps_stack := prefix ++ mid.ps_stack)` by
+    (irule reorder_prepare_bottom_frame >> simp[]) >>
   gvs[reorder_plan_def] >>
   qspecl_then [`LENGTH targets`, `0`] mp_tac reorder_wide_fold_bottom_frame >>
   simp[] >> disch_then irule >> simp[]
@@ -341,7 +352,7 @@ Theorem terminal_jmp_regular_bottom_frame:
       (ops,out with ps_stack := prefix ++ out.ps_stack)
 Proof
   rpt gen_tac >> strip_tac >>
-  `!dfg ps. reorder_plan dfg [] ps = ([],ps)` by simp[reorder_plan_def] >>
+  `!dfg ps. reorder_plan dfg [] ps = ([],ps)` by simp[reorder_plan_nil] >>
   qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_regular_inst_plan_def, compute_operands_def,
        get_non_label_operands_def, stackPlanTypesTheory.is_label_operand_def,
@@ -389,7 +400,7 @@ Theorem terminal_jmp_regular_target_height:
       LENGTH targets <= LENGTH out.ps_stack)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
-  `!dfg ps. reorder_plan dfg [] ps = ([],ps)` by simp[reorder_plan_def] >>
+  `!dfg ps. reorder_plan dfg [] ps = ([],ps)` by simp[reorder_plan_nil] >>
   qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_regular_inst_plan_def, compute_operands_def,
        get_non_label_operands_def, stackPlanTypesTheory.is_label_operand_def,

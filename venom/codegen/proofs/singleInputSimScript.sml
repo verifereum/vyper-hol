@@ -1,5 +1,4 @@
-(* One-operand reordering and assignment preparation.
-   TOP-LEVEL: reorder_plan_one_shallow_venom_asm_rel. *)
+(* One-operand reordering and assignment preparation. *)
 Theory singleInputSim
 Ancestors
   emitOperandSim emitInputSim reorderSim mixedPrefixSim strongPrefixSim planAlign planWf
@@ -43,71 +42,13 @@ Proof
   asm_simp_tac (srw_ss()) []
 QED
 
-Theorem reorder_plan_one:
-  !dfg op ps. reorder_plan dfg [op] ps = reorder_one dfg [op] 0 op ps
+Theorem emit_single_input_not_spilled:
+  emit_input_plan opc [op] nl ps = (ops,target) ==>
+  ~is_var_operand op \/ FLOOKUP target.ps_spilled op = NONE
 Proof
-  rpt gen_tac >> simp[reorder_plan_def, MAPi_def, MAPi_ACC_def, LET_THM] >>
-  Cases_on `reorder_one dfg [op] 0 op ps` >> simp[]
-QED
-
-Theorem reorder_plan_one_shallow_ops:
-  !dfg op ps ops ps' dist initial_fmp lo.
-    stack_get_depth op ps.ps_stack = SOME dist /\ dist <= 16 /\
-    reorder_plan dfg [op] ps = (ops,ps') ==>
-    EVERY is_simple_stack_op ops /\ prefix_spill_wf initial_fmp lo ops ps
-Proof
-  rpt gen_tac >> strip_tac >>
-  `dist < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
-  qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-  pure_rewrite_tac[reorder_plan_one] >>
-  Cases_on `dist = 0` >>
-  Cases_on `operand_equiv dfg op (stack_peek 0 ps.ps_stack)` >>
-  asm_simp_tac (srw_ss()) [reorder_one_def, LET_THM,
-    stack_get_unfixed_depth_def, do_swap_def] >> strip_tac >>
-  gvs[is_simple_stack_op_def, prefix_spill_wf_def, spill_op_wf_def]
-QED
-
-Theorem reorder_plan_one_shallow_venom_asm_rel:
-  !dfg op ps ops ps' dist initial_fmp lo o2pc prog vs st.
-    stack_get_depth op ps.ps_stack = SOME dist /\ dist <= 16 /\
-    reorder_plan dfg [op] ps = (ops,ps') /\
-    op <> dead_stack_marker /\
-    (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
-    (!op1 at. operand_equiv dfg op1 at ==>
-      operand_val vs lo op1 = operand_val vs lo at) /\
-    venom_asm_rel lo ps vs st /\
-    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
-    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
-      AsmOK st' /\ venom_asm_rel lo ps' vs st' /\
-      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `dist < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
-  `0 < LENGTH ps.ps_stack /\ 1 <= LENGTH ps.ps_stack` by decide_tac >>
-  `prefix_wf lo (LENGTH ps.ps_stack) ops` by
-    (mp_tac (Q.ISPECL [`dfg:dfg_analysis`,`[op:operand]`,
-       `ps:plan_state`,`lo:(string,num) fmap`] reorder_plan_wf_len) >>
-     asm_simp_tac (srw_ss()) [LET_THM] >> simp[]) >>
-  `prefix_spill_wf initial_fmp lo ops ps` by
-    (mp_tac (Q.SPECL [`dfg`,`op`,`ps`,`ops`,`ps'`,`dist`,`initial_fmp`,`lo`]
-       reorder_plan_one_shallow_ops) >>
-     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp_tac bool_ss []) >>
-  `EVERY is_prefix_op ops` by
-    (drule prefix_wf_every_prefix_op >> simp_tac bool_ss []) >>
-  mp_tac (Q.SPECL [`ops`,`initial_fmp`,`lo`,`o2pc`,`prog`,`ps`,`vs`,`st`]
-    mixed_prefix_venom_asm_rel) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  `~operand_equiv dfg op dead_stack_marker` by
-    (qpat_x_assum `!at. operand_equiv dfg op at ==> _`
-       (qspec_then `dead_stack_marker` mp_tac) >> simp[]) >>
-  mp_tac (Q.SPECL [`dfg`,`[op]`,`0`,`op`,`ps`,`ops`,`ps'`,`lo`,`vs`,`dist`]
-    reorder_one_shallow_sem_align) >>
-  (impl_tac >- asm_simp_tac (srw_ss())
-    [stack_get_unfixed_depth_def, GSYM reorder_plan_one]) >>
-  simp_tac std_ss [LET_THM] >> strip_tac >>
-  qexists_tac `st'` >> asm_rewrite_tac [] >>
-  irule venom_asm_rel_sem_stack_transport >>
-  qexists_tac `apply_prefix_ops initial_fmp lo ops ps` >> asm_simp_tac std_ss []
+  rpt strip_tac >>
+  drule emit_input_plan_vars_not_spilled >> simp[flookup_thm] >>
+  metis_tac[]
 QED
 
 Theorem reorder_plan_one_postpop_wf:
@@ -125,26 +66,17 @@ Proof
   rpt gen_tac >> strip_tac >>
   `dist < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
   `1 <= LENGTH ps.ps_stack` by decide_tac >>
-  `reorder_one dfg [op] 0 op ps = (ops,ps')` by
-    asm_simp_tac std_ss [GSYM reorder_plan_one] >>
-  `residual_budget_wf alloc_base [op] ps' /\ 1 <= LENGTH ps'.ps_stack` by
-    (mp_tac (Q.SPECL [`dfg`,`[op]`,`0`,`op`,`ps`,`ops`,`ps'`,`alloc_base`]
-       reorder_one_residual_budget_wf) >>
-     asm_simp_tac (srw_ss()) []) >>
+  `MEM op ps.ps_stack` by metis_tac[stack_get_depth_props, stack_peek_mem] >>
+  `!x. LIST_ELEM_COUNT x [op] <= LIST_ELEM_COUNT x ps.ps_stack` by
+    (gen_tac >> Cases_on `x = op` >>
+     gvs[LIST_ELEM_COUNT_THM, GSYM LIST_ELEM_COUNT_MEM]) >>
+  `plan_state_residual_wf alloc_base [op] 1 ps' /\
+   ps'.ps_stack = stack_pop 1 ps'.ps_stack ++ [op]` by
+    (qspecl_then [`alloc_base`, `[op]`, `dfg`, `ps`, `ops`, `ps'`]
+       mp_tac reorder_plan_materialised_arranged >> simp[]) >>
   `stack_peek 0 ps'.ps_stack = op` by
-    (mp_tac (Q.SPECL [`dfg`,`[op]`,`0`,`op`,`ps`,`ops`,`ps'`]
-       reorder_one_places) >>
-     asm_simp_tac (srw_ss()) [stack_get_unfixed_depth_def]) >>
-  `plan_state_residual_wf alloc_base [op] 0 ps'` by
-    (mp_tac (Q.SPECL [`alloc_base`,`[op]`,`ps'`] residual_budget_wf_to_residual) >>
-     asm_simp_tac (srw_ss()) []) >>
-  `plan_state_residual_wf alloc_base [op] 1 ps'` by
-    (mp_tac (Q.SPECL [`alloc_base`,`[op]`,`0`,`ps'`] plan_state_residual_wf_fix_next) >>
-     asm_simp_tac (srw_ss()) []) >>
-  `ps'.ps_stack = stack_pop 1 ps'.ps_stack ++ [op]` by
-    (mp_tac (Q.ISPECL [`(ps':plan_state).ps_stack`,`[op:operand]`]
-       fixed_suffix_decompose) >>
-     asm_simp_tac (srw_ss()) []) >>
+    (fs[plan_state_residual_wf_def] >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qpat_x_assum `ps'.ps_stack = _` kall_tac >>

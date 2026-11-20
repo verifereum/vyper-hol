@@ -1,7 +1,8 @@
 Theory symPlannerReorder
 Ancestors
   list stackModel symPlannerBase symPlannerMoves reorderSim deepResidualBudget
-  unitShapeDefs venomWf dfgDefs reorderStages
+  unitShapeDefs venomWf dfgDefs reorderStages reorderPreparationProps
+  allocMono spillPlanSim doSwapSim
 
 Theorem LIST_REL_stack_poke_exchange[local]:
   LIST_REL R (REVERSE stk) top /\ a < LENGTH stk /\ b < LENGTH stk /\
@@ -930,6 +931,96 @@ Proof
   simp[EVERY_MEM, indexedListsTheory.MEM_MAPi, PULL_EXISTS, MEM_EL] >> metis_tac[]
 QED
 
+Theorem sym_reorder_prepare_plan[local]:
+  reorder_prepare_plan pending ps = (ops,out) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  out.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  qspecl_then [`pending`, `ps`, `ops`, `out`,
+    `\st trace post.
+       post.ps_alloc.sa_spill_base = st.ps_alloc.sa_spill_base /\
+       st.ps_alloc.sa_next_offset <= post.ps_alloc.sa_next_offset /\
+       (spill_alloc_layout_wf st.ps_alloc st.ps_spilled ==>
+        spill_alloc_layout_wf post.ps_alloc post.ps_spilled) /\
+       (!start.
+         spill_alloc_layout_wf st.ps_alloc st.ps_spilled /\
+         r.sr_spill_base <= st.ps_alloc.sa_spill_base /\
+         post.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+         EVERY (\s. case s of SOSpill off => off < dimword(:256)
+           | SORestore off => off < dimword(:256) | _ => T) trace /\
+         sym_kinds_ok cplan fn ret srest st start /\
+         asm_block_at p start.sym_base.as_pc (execute_plan initial_fmp trace) ==>
+         ?last. sym_steps p env (LENGTH (execute_plan initial_fmp trace)) start = SymOK last /\
+           sym_kinds_ok cplan fn ret srest post last /\
+           last.sym_base.as_pc = start.sym_base.as_pc + LENGTH (execute_plan initial_fmp trace) /\
+           (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+             FLOOKUP last.sym_mem_labels b = FLOOKUP start.sym_mem_labels b))`]
+    (mp_tac o BETA_RULE) reorder_prepare_trace_relation >>
+  impl_tac
+  >- (rpt conj_tac
+      >- (simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def] >>
+          metis_tac[])
+      >- (rpt gen_tac >> strip_tac >>
+          rpt conj_tac >- metis_tac[]
+          >- metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+          >- metis_tac[] >>
+          rpt gen_tac >> strip_tac >>
+          gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
+              EVERY_APPEND] >>
+          `mid.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
+          qpat_x_assum `!start. _ ==> ?last. sym_steps _ _ _ _ = _ /\
+             sym_kinds_ok _ _ _ _ mid _ /\ _`
+            (qspec_then `start` mp_tac) >>
+          simp[] >> strip_tac >>
+          rename1 `sym_kinds_ok cplan fn ret srest mid ss1` >>
+          qpat_x_assum `!start. _ ==> ?last. sym_steps _ _ _ _ = _ /\
+             sym_kinds_ok _ _ _ _ finish' _ /\ _`
+            (qspec_then `ss1` mp_tac) >>
+          simp[] >> strip_tac >>
+          rename1 `sym_kinds_ok cplan fn ret srest finish' last` >>
+          qexists_tac `last` >>
+          simp[codegenSymRelTheory.sym_steps_add] >>
+          metis_tac[])
+      >- (rpt gen_tac >> strip_tac >>
+          simp[arithmeticTheory.LESS_EQ_REFL] >>
+          rpt conj_tac
+          >- metis_tac[do_restore_spill_base]
+          >- metis_tac[do_restore_next_offset]
+          >- metis_tac[do_restore_layout_wf] >>
+          rpt gen_tac >> strip_tac >>
+          `EVERY (\s. case s of SORestore off => off < dimword(:256)
+             | _ => T) step_ops` by
+            (fs[EVERY_MEM] >> rpt strip_tac >>
+             first_x_assum drule >> Cases_on `s` >> simp[]) >>
+          mp_tac (Q.INST [`ps` |-> `st`, `ss` |-> `start`,
+            `ops` |-> `step_ops`, `out` |-> `finish'`] sym_do_restore) >>
+          simp[])
+      >- (rpt gen_tac >> strip_tac >>
+          rpt conj_tac
+          >- metis_tac[allocMonoTheory.reduce_depth_plan_spill_base]
+          >- metis_tac[allocMonoTheory.reduce_depth_plan_next_offset]
+          >- metis_tac[reduce_depth_plan_layout_wf, pairTheory.SND] >>
+          rpt gen_tac >> strip_tac >>
+          qspecl_then [`LENGTH st.ps_stack - LENGTH pending`, `pending`,
+            `op`, `0`, `0`, `st`, `step_ops`, `finish'`, `start`]
+            mp_tac sym_reduce_depth_plan >>
+          simp[])
+      >- first_assum ACCEPT_TAC) >>
+  metis_tac[]
+QED
+
 Theorem sym_reorder_plan:
   residual_budget_wf_marked spillbase pending ps /\
   pending_inventory_wf pending ps /\ LENGTH pending <= LENGTH ps.ps_stack /\
@@ -947,6 +1038,25 @@ Theorem sym_reorder_plan:
     (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >> irule sym_plan_steps_reorder >>
-  metis_tac[reorderStagesTheory.reorder_plan_eq_plan_steps, reorder_indexed_items_valid]
+  strip_tac >> drule reorder_plan_split >> strip_tac >>
+  rename1 `reorder_prepare_plan pending ps = (prep,mid)` >>
+  `mid.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    (drule plan_steps_reorder_next_offset >> decide_tac) >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    fs[residual_budget_wf_marked_def] >>
+  drule_all reorder_prepare_residual_budget_wf_marked >> strip_tac >>
+  qpat_x_assum `ops = _` SUBST_ALL_TAC >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
+      EVERY_APPEND] >>
+  drule_all sym_reorder_prepare_plan >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  rename1 `sym_kinds_ok cplan fn ret srest mid ss1` >>
+  `asm_block_at p ss1.sym_base.as_pc (execute_plan initial_fmp rest)` by simp[] >>
+  qspecl_then [`MAPi (\i op. (i,op)) pending`, `mid`, `rest`, `out`, `ss1`] mp_tac
+    (Q.INST [`dfg` |-> `dfg_build_function fn`] sym_plan_steps_reorder) >>
+  simp[reorder_indexed_items_valid] >> strip_tac >>
+  rename1 `sym_kinds_ok cplan fn ret srest out last` >>
+  qexists_tac `last` >>
+  simp[LENGTH_APPEND, codegenSymRelTheory.sym_steps_add] >>
+  metis_tac[]
 QED

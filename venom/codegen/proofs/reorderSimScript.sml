@@ -2,19 +2,21 @@
  * Reorder Plan Simulation
  *
  * Key results:
- *   reorder_plan_eq_plan_steps — FOLDL bridge to plan_steps
+ *   reorder_plan_split — preparation and indexed placement
  *   plan_stack_rel_poke/poke_swap — moved to instSimHelpers
  *   reorder_single_op_at_tos — single-operand reorder puts op at TOS
  *)
 
 Theory reorderSim
 Ancestors
+  reorderPreparationTraceProps
+  reorderPreparationProps blockSimHelpers
   foldlSim doSwapSim spillSim instSimHelpers strongPrefixSim planSpillBounds dfgDefs
   stackOpSim mixedPrefixSim planAlign emitInputSim
   stackPlanGen stackPlanOps stackPlanTypes stackModel
   codegenRel asmSem planExec planWf
   indexedLists list rich_list finite_map arithmetic
-  operandInventory inputInventory inputMaterialised reduceDepthSim reorderStages
+  operandInventory inputInventory inputMaterialised reduceDepthSim reorderStages reorderPreparationInventoryProps
   venomInst
 
 
@@ -596,59 +598,11 @@ Proof
   gvs[residual_budget_wf_def]
 QED
 
-Theorem stack_pop_one_elem_count:
-  !x (xs : 'a list).
-    xs <> [] ==>
-    LIST_ELEM_COUNT x (stack_pop 1 xs) +
-    LIST_ELEM_COUNT x [stack_peek 0 xs] = LIST_ELEM_COUNT x xs
-Proof
-  rpt strip_tac >>
-  `?ys y. xs = SNOC y ys` by metis_tac[rich_listTheory.SNOC_CASES] >>
-  gvs[stack_pop_def, stack_peek_def, elem_count_snoc,
-      rich_listTheory.TAKE_SNOC, EL_LENGTH_SNOC]
-QED
+Theorem stack_pop_one_elem_count = reorderPreparationInventoryPropsTheory.stack_pop_one_elem_count
 
-Theorem do_spill_at_stack_count:
-  !d ps ops ps' x.
-    d < LENGTH ps.ps_stack /\ d <= 16 /\
-    do_spill_at d ps = (ops,ps') ==>
-    LIST_ELEM_COUNT x ps'.ps_stack +
-      LIST_ELEM_COUNT x [stack_peek d ps.ps_stack] =
-    LIST_ELEM_COUNT x ps.ps_stack
-Proof
-  rpt gen_tac >> strip_tac >>
-  `ps.ps_stack <> []` by (strip_tac >> gvs[]) >>
-  Cases_on `d = 0`
-  >- (gvs[do_spill_at_def, do_spill_tos_def, LET_THM] >>
-      Cases_on `alloc_spill_slot ps.ps_alloc` >> gvs[] >>
-      qspecl_then [`x`, `ps.ps_stack`] mp_tac
-        stack_pop_one_elem_count >> simp[] >> decide_tac) >>
-  `stack_peek 0 (stack_swap d ps.ps_stack) =
-    stack_peek d ps.ps_stack` by
-    (simp[stack_peek_def, stack_swap_def, LET_THM, EL_LUPDATE] >>
-     IF_CASES_TAC >> gvs[] >> decide_tac) >>
-  `LIST_ELEM_COUNT x (stack_swap d ps.ps_stack) =
-    LIST_ELEM_COUNT x ps.ps_stack` by
-    (qspecl_then [`d`, `ps`, `x`] mp_tac do_swap_multiplicity >>
-     simp[do_swap_def]) >>
-  gvs[do_spill_at_def, do_spill_tos_def, LET_THM] >>
-  Cases_on `alloc_spill_slot ps.ps_alloc` >> gvs[] >>
-  `stack_swap d ps.ps_stack <> []` by
-    (strip_tac >> gvs[stack_swap_def]) >>
-  qspecl_then [`x`, `stack_swap d ps.ps_stack`] mp_tac
-    stack_pop_one_elem_count >> simp[] >> decide_tac
-QED
+Theorem do_spill_at_stack_count = reorderPreparationInventoryPropsTheory.do_spill_at_stack_count
 
-Theorem do_spill_at_other_stack_count:
-  !d ps ops ps' x.
-    d < LENGTH ps.ps_stack /\ d <= 16 /\
-    do_spill_at d ps = (ops,ps') /\
-    x <> stack_peek d ps.ps_stack ==>
-    LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack
-Proof
-  rpt strip_tac >> drule_all do_spill_at_stack_count >>
-  disch_then (qspec_then `x` mp_tac) >> simp[LIST_ELEM_COUNT_THM]
-QED
+Theorem do_spill_at_other_stack_count = reorderPreparationInventoryPropsTheory.do_spill_at_other_stack_count
 
 Theorem do_spill_at_multiplicity_layout[local]:
   !d ps ops ps'.
@@ -788,15 +742,6 @@ Proof
      simp[stack_poke_exchange_multiplicity]
 QED
 
-Theorem select_spill_candidate_not_pending[local]:
-  !stk pending target_dist target_len cand.
-    select_spill_candidate stk pending target_dist target_len = SOME cand ==>
-    ~MEM (stack_peek cand stk) pending
-Proof
-  rpt strip_tac >>
-  fs[select_spill_candidate_def, LET_THM] >>
-  imp_res_tac FIND_SOME_MEM >> gvs[]
-QED
 
 Theorem select_spill_candidate_not_spilled:
   !base pending ps dist target_len d.
@@ -841,21 +786,21 @@ Proof
   >> qspecl_then [`op`, `ps`] mp_tac do_restore_length >> simp[]
 QED
 
-Theorem reduce_depth_plan_residual_budget_wf:
-  !fuel base pending target_op f ps ops ps'.
+Theorem reduce_depth_plan_keeps_budget[local]:
+  !fuel base pending target_op f width ps ops ps'.
     residual_budget_wf base pending ps /\
-    reduce_depth_plan fuel pending target_op f (LENGTH pending) ps =
+    reduce_depth_plan fuel pending target_op f width ps =
       (ops, ps') ==>
     residual_budget_wf base pending ps'
 Proof
   Induct >> simp[reduce_depth_plan_def, LET_THM] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `stack_get_unfixed_depth target_op f (LENGTH pending)
+  Cases_on `stack_get_unfixed_depth target_op f width
               ps.ps_stack` >> gvs[] >>
-  Cases_on `f + 1 < LENGTH pending` >> gvs[] >>
+  Cases_on `f + 1 < width` >> gvs[] >>
   Cases_on `x <= 16` >> gvs[] >>
   Cases_on `select_spill_candidate ps.ps_stack pending x
-              (LENGTH pending)` >> gvs[] >>
+              width` >> gvs[] >>
   pairarg_tac >> gvs[] >>
   rename1 `do_spill_at cand ps = (spill_ops, ps1)` >>
   `1 <= LENGTH ps.ps_stack` by
@@ -866,18 +811,28 @@ Proof
     metis_tac[select_spill_candidate_not_pending] >>
   `residual_budget_wf base' pending ps1` by
     metis_tac[residual_budget_wf_do_spill_at] >>
-  Cases_on `reduce_depth_plan fuel pending target_op f (LENGTH pending) ps1` >>
+  Cases_on `reduce_depth_plan fuel pending target_op f width ps1` >>
   gvs[] >>
   first_x_assum
-    (qspecl_then [`base'`, `pending`, `target_op`, `f`, `ps1`,
+    (qspecl_then [`base'`, `pending`, `target_op`, `f`, `width`, `ps1`,
                   `q`, `ps'`] mp_tac) >>
   simp[]
 QED
 
-Theorem reduce_depth_plan_pending_inventory_mono[local]:
-  !fuel pending target_op f ps ops ps' base x.
-    residual_budget_wf base pending ps /\ MEM x pending /\
+Theorem reduce_depth_plan_residual_budget_wf:
+  !fuel base pending target_op f ps ops ps'.
+    residual_budget_wf base pending ps /\
     reduce_depth_plan fuel pending target_op f (LENGTH pending) ps =
+      (ops, ps') ==>
+    residual_budget_wf base pending ps'
+Proof
+  metis_tac[reduce_depth_plan_keeps_budget]
+QED
+
+Theorem reduce_depth_plan_keeps_inventory[local]:
+  !fuel pending target_op f width ps ops ps' base x.
+    residual_budget_wf base pending ps /\
+    reduce_depth_plan fuel pending target_op f width ps =
       (ops,ps') ==>
     LIST_ELEM_COUNT x ps.ps_stack +
       (if x IN FDOM ps.ps_spilled then 1 else 0) <=
@@ -886,12 +841,12 @@ Theorem reduce_depth_plan_pending_inventory_mono[local]:
 Proof
   Induct >> simp[reduce_depth_plan_def, LET_THM] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `stack_get_unfixed_depth target_op f (LENGTH pending)
+  Cases_on `stack_get_unfixed_depth target_op f width
               ps.ps_stack` >> gvs[] >>
-  Cases_on `f + 1 < LENGTH pending` >> gvs[] >>
+  Cases_on `f + 1 < width` >> gvs[] >>
   Cases_on `x' <= 16` >> gvs[] >>
   Cases_on `select_spill_candidate ps.ps_stack pending x'
-              (LENGTH pending)` >> gvs[] >>
+              width` >> gvs[] >>
   pairarg_tac >> gvs[] >>
   rename1 `do_spill_at cand ps = (spill_ops,ps1)` >>
   `1 <= LENGTH ps.ps_stack` by
@@ -914,14 +869,28 @@ Proof
   `residual_budget_wf base' pending ps1` by
     metis_tac[residual_budget_wf_do_spill_at] >>
   Cases_on `reduce_depth_plan fuel pending target_op f
-              (LENGTH pending) ps1` >> gvs[] >>
+              width ps1` >> gvs[] >>
   first_x_assum
-    (qspecl_then [`pending`, `target_op`, `f`, `ps1`, `q`, `ps'`,
+    (qspecl_then [`pending`, `target_op`, `f`, `width`, `ps1`, `q`, `ps'`,
                   `base'`, `x`] mp_tac) >>
   simp[] >>
   qpat_assum `!y. _` (qspec_then `x` assume_tac) >>
-  decide_tac
+  simp[]
 QED
+
+Theorem reduce_depth_plan_pending_inventory_mono[local]:
+  !fuel pending target_op f ps ops ps' base x.
+    residual_budget_wf base pending ps /\ MEM x pending /\
+    reduce_depth_plan fuel pending target_op f (LENGTH pending) ps =
+      (ops,ps') ==>
+    LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x ps'.ps_stack +
+      (if x IN FDOM ps'.ps_spilled then 1 else 0)
+Proof
+  metis_tac[reduce_depth_plan_keeps_inventory]
+QED
+
 
 Theorem reduce_depth_plan_pending_stack_count_unconditional:
   !fuel pending target_op f ps ops ps' x.
@@ -930,27 +899,7 @@ Theorem reduce_depth_plan_pending_stack_count_unconditional:
       (ops,ps') ==>
     LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack
 Proof
-  Induct >> simp[reduce_depth_plan_def, LET_THM] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `stack_get_unfixed_depth target_op f (LENGTH pending)
-              ps.ps_stack` >> gvs[] >>
-  Cases_on `f + 1 < LENGTH pending` >> gvs[] >>
-  Cases_on `x' <= 16` >> gvs[] >>
-  Cases_on `select_spill_candidate ps.ps_stack pending x'
-              (LENGTH pending)` >> gvs[] >>
-  pairarg_tac >> gvs[] >>
-  rename1 `do_spill_at cand ps = (spill_ops,ps1)` >>
-  `1 <= LENGTH ps.ps_stack` by
-    (drule stack_get_unfixed_depth_bound >> simp[]) >>
-  `cand <= 16 /\ cand < LENGTH ps.ps_stack` by
-    metis_tac[select_spill_candidate_bound] >>
-  `~MEM (stack_peek cand ps.ps_stack) pending` by
-    metis_tac[select_spill_candidate_not_pending] >>
-  `LIST_ELEM_COUNT x ps1.ps_stack = LIST_ELEM_COUNT x ps.ps_stack` by
-    metis_tac[do_spill_at_other_stack_count] >>
-  Cases_on `reduce_depth_plan fuel pending target_op f
-              (LENGTH pending) ps1` >> gvs[] >>
-  metis_tac[]
+  metis_tac[reduce_depth_plan_keeps_pending_count]
 QED
 
 Theorem residual_budget_wf_dup[local]:
@@ -1029,7 +978,6 @@ Proof
      Cases_on `opc = INVOKE` >> gvs[] >>
      irule residual_budget_wf_push >> first_assum ACCEPT_TAC
 QED
-
 
 
 Theorem emit_input_plan_pending_inventory:
@@ -1309,11 +1257,7 @@ Proof
   asm_rewrite_tac[LENGTH_APPEND, asm_steps_add] >> simp[]
 QED
 
-Theorem stack_peek_mem:
-  !d stk. d < LENGTH stk ==> MEM (stack_peek d stk) stk
-Proof
-  rpt strip_tac >> simp[stack_peek_def] >> irule EL_MEM >> decide_tac
-QED
+Theorem stack_peek_mem = reorderPreparationInventoryPropsTheory.stack_peek_mem
 
 Theorem reorder_finish_venom_asm_rel_addresses[local]:
   !dfg op f n ps ops ps' lo o2pc prog vs st.
@@ -1477,7 +1421,6 @@ Proof
     metis_tac[emit_input_plan_two_var_not_spilled] >>
   simp[exact_two_planner_ready_def]
 QED
-
 
 
 Theorem elem_count_from_append[local]:
@@ -1769,19 +1712,16 @@ QED
    spill) ends with op at LAST ps'.ps_stack.
    ========================================================================= *)
 
-Theorem reorder_single_op_at_tos:
+Theorem reorder_one_single_op_at_tos[local]:
   !dfg op ps rops ps'.
     ((?d. stack_get_depth op ps.ps_stack = SOME d) \/
      (stack_get_depth op ps.ps_stack = NONE /\
       IS_SOME (FLOOKUP ps.ps_spilled op))) /\
-    reorder_plan dfg [op] ps = (rops, ps') ==>
+    reorder_one dfg [op] 0 op ps = (rops, ps') ==>
     ps'.ps_stack <> [] /\ LAST ps'.ps_stack = op
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-  simp[reorder_plan_def, MAPi_def, MAPi_ACC_def, LET_THM] >>
-  Cases_on `reorder_one dfg [op] 0 op ps` >>
-  simp[] >> strip_tac >> gvs[]
+  gvs[]
   >- (
     (* Case 1: op on stack at depth d *)
     rename1 `stack_get_depth op ps.ps_stack = SOME d0` >>
@@ -1824,7 +1764,7 @@ Proof
   simp[LAST_SNOC, SNOC_APPEND]
 QED
 
-Resume reorder_single_op_at_tos[deep]:
+Resume reorder_one_single_op_at_tos[deep]:
   simp[] >> pairarg_tac >> simp[] >>
   rename1 `reduce_depth_plan _ _ _ _ _ _ = (reduce_ops, ps2)` >>
   qspecl_then [`LENGTH ps.ps_stack`, `[op]`, `op`, `0`, `1`, `ps`, `d0`]
@@ -1851,7 +1791,56 @@ Resume reorder_single_op_at_tos[deep]:
   simp[stack_peek_def]
 QED
 
-Finalise reorder_single_op_at_tos;
+Finalise reorder_one_single_op_at_tos;
+
+Theorem reduce_depth_plan_single_keeps_target[local]:
+  !fuel op ps ops post depth_before.
+    reduce_depth_plan fuel [op] op 0 0 ps = (ops,post) /\
+    stack_get_depth op ps.ps_stack = SOME depth_before ==>
+    ?d. stack_get_depth op post.ps_stack = SOME d
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`fuel`, `[op]`, `op`, `0`, `0`, `ps`, `ops`, `post`]
+    mp_tac reduce_depth_plan_unfixed_hit >>
+  simp[stack_get_unfixed_depth_empty_window] >>
+  Cases_on `stack_get_depth op post.ps_stack` >> simp[]
+QED
+
+Theorem reorder_single_op_at_tos:
+  !dfg op ps rops ps'.
+    ((?d. stack_get_depth op ps.ps_stack = SOME d) \/
+     (stack_get_depth op ps.ps_stack = NONE /\
+      IS_SOME (FLOOKUP ps.ps_spilled op))) /\
+    reorder_plan dfg [op] ps = (rops, ps') ==>
+    ps'.ps_stack <> [] /\ LAST ps'.ps_stack = op
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule reorder_plan_split >> strip_tac >>
+  gvs[MAPi_def, MAPi_ACC_def, LET_THM, plan_steps_def, pairTheory.UNCURRY_VAR] >>
+  irule reorder_one_single_op_at_tos >>
+  qexistsl_tac [`dfg`, `mid`, `rest`] >> simp[] >>
+  qpat_x_assum `reorder_prepare_plan [op] ps = _` mp_tac >>
+  simp[reorder_prepare_plan_single, LET_THM] >>
+  Cases_on `if is_var_operand op then do_restore op ps else ([],ps)` >>
+  rename1 `(if is_var_operand op then do_restore op ps else ([],ps)) =
+    (restores,restored)` >>
+  `(?d. stack_get_depth op restored.ps_stack = SOME d) \/
+   (stack_get_depth op restored.ps_stack = NONE /\
+    IS_SOME (FLOOKUP restored.ps_spilled op))` by
+    (qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+     Cases_on `is_var_operand op` >> Cases_on `FLOOKUP ps.ps_spilled op` >>
+     simp[do_restore_def, stack_get_depth_push] >> strip_tac >>
+     gvs[stack_get_depth_push] >> metis_tac[]) >>
+  simp[] >> pairarg_tac >> simp[] >>
+  strip_tac >> gvs[] >>
+  Cases_on `stack_get_depth op restored.ps_stack` >>
+  gvs[reduce_depth_plan_missing, stack_get_unfixed_depth_empty_window] >>
+  disj1_tac >>
+  drule_at (Pat `reduce_depth_plan _ _ _ _ _ _ = _`)
+    reduce_depth_plan_single_keeps_target >>
+  simp[] >> metis_tac[]
+QED
+
 
 (* =========================================================================
    After executing the reorder ops for a single operand, the operand's
@@ -1866,6 +1855,7 @@ Finalise reorder_single_op_at_tos;
 Theorem reorder_single_op_val_on_tos:
   !dfg op ps rops ps' lo vs as_stk.
     reorder_plan dfg [op] ps = (rops, ps') /\
+    (~is_var_operand op \/ FLOOKUP ps.ps_spilled op = NONE) /\
     (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 16) /\
     plan_stack_rel lo vs
       (apply_prefix_ops initial_fmp lo rops ps).ps_stack as_stk /\
@@ -1877,12 +1867,11 @@ Theorem reorder_single_op_val_on_tos:
           operand_val vs lo op = operand_val vs lo at) ==>
     operand_val vs lo op = SOME (HD as_stk)
 Proof
-  rpt gen_tac >> strip_tac >>
-  (* Unfold reorder_plan for [op] *)
-  qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-  simp[reorder_plan_def, MAPi_def, MAPi_ACC_def, LET_THM] >>
-  Cases_on `reorder_one dfg [op] 0 op ps` >>
-  simp[] >> strip_tac >> gvs[] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 16`
+    strip_assume_tac >>
+  `reorder_one dfg [op] 0 op ps = (rops,ps')` by
+    metis_tac[reorder_plan_single_shallow] >>
   (* Unfold reorder_one with final_dist = 0 *)
   qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
   simp[reorder_one_def, LET_THM, stack_get_unfixed_depth_empty_window] >>
@@ -3208,76 +3197,13 @@ Proof
 QED
 
 (* Backward inventory boundaries: no planner operand is manufactured. *)
-Theorem do_restore_inventory_subset:
-  !op ps ops ps'.
-    do_restore op ps = (ops,ps') ==>
-    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
-         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
-Proof
-  rpt gen_tac >> simp[do_restore_def] >>
-  Cases_on `FLOOKUP ps.ps_spilled op` >>
-  simp[stack_push_def, FLOOKUP_DEF] >>
-  rpt strip_tac >> gvs[] >> fs[FLOOKUP_DEF]
-QED
+Theorem do_restore_inventory_subset = reorderPreparationInventoryPropsTheory.do_restore_inventory_subset
 
-Theorem stack_swap_mem_subset:
-  !d stk at. MEM at (stack_swap d stk) ==> MEM at stk
-Proof
-  rpt gen_tac >> Cases_on `stk = []` >- simp[stack_swap_def, LUPDATE_def] >>
-  `LENGTH stk - 1 < LENGTH stk /\
-   LENGTH stk - (d + 1) < LENGTH stk` by (Cases_on `stk` >> gvs[]) >>
-  `MEM (EL (LENGTH stk - 1) stk) stk /\
-   MEM (EL (LENGTH stk - (d + 1)) stk) stk` by
-    (conj_tac >> irule EL_MEM >> decide_tac) >>
-  simp[stack_swap_def, LET_THM] >> strip_tac >>
-  fs[MEM_LUPDATE, EL_LUPDATE] >> gvs[] >> metis_tac[EL_MEM]
-QED
+Theorem stack_swap_mem_subset = reorderPreparationInventoryPropsTheory.stack_swap_mem_subset
 
-Theorem do_spill_at_inventory_subset:
-  !d ps ops ps'.
-    d < LENGTH ps.ps_stack /\ do_spill_at d ps = (ops,ps') ==>
-    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
-         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `d = 0` >>
-  gvs[do_spill_at_def, do_spill_tos_def, LET_THM] >>
-  Cases_on `alloc_spill_slot ps.ps_alloc` >>
-  gvs[stack_pop_def, FDOM_FUPDATE] >>
-  rpt strip_tac >> gvs[]
-  >- metis_tac[MEM_TAKE]
-  >- metis_tac[stack_peek_mem]
-  >- metis_tac[MEM_TAKE, stack_swap_mem_subset]
-  >> disj1_tac >> irule stack_swap_mem_subset >>
-     qexists_tac `d` >> irule stack_peek_mem >> simp[] >> decide_tac
-QED
+Theorem do_spill_at_inventory_subset = reorderPreparationInventoryPropsTheory.do_spill_at_inventory_subset
 
-Theorem reduce_depth_plan_inventory_subset:
-  !fuel tops op f n ps ops ps'.
-    reduce_depth_plan fuel tops op f n ps = (ops,ps') ==>
-    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
-         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
-Proof
-  Induct >> simp[reduce_depth_plan_def, LET_THM] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `f + 1 < n` >> gvs[] >>
-  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> gvs[] >>
-  rename1 `stack_get_unfixed_depth op f n ps.ps_stack = SOME dist` >>
-  Cases_on `dist <= 16` >> gvs[] >>
-  Cases_on `select_spill_candidate ps.ps_stack tops dist n` >> gvs[] >>
-  rename1 `select_spill_candidate ps.ps_stack tops dist n = SOME cand` >>
-  Cases_on `do_spill_at cand ps` >> gvs[] >>
-  rename1 `do_spill_at cand ps = (spill_ops, ps1)` >>
-  Cases_on `reduce_depth_plan fuel tops op f n ps1` >> gvs[] >>
-  `1 <= LENGTH ps.ps_stack` by
-    (drule stack_get_unfixed_depth_bound >> simp[]) >>
-  `cand < LENGTH ps.ps_stack` by
-    metis_tac[select_spill_candidate_bound] >>
-  rpt strip_tac >>
-  `MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled` by
-    (first_x_assum irule >> goal_assum (drule_at Any) >> simp[]) >>
-  metis_tac[do_spill_at_inventory_subset]
-QED
+Theorem reduce_depth_plan_inventory_subset = reorderPreparationInventoryPropsTheory.reduce_depth_plan_inventory_subset
 
 Theorem do_swap_inventory_subset:
   !d ps ops ps'.
@@ -4606,245 +4532,6 @@ Proof
 QED
 
 
-
-(* =========================================================================
-   Extended: operand value at TOS for any depth (including d > 16)
-   ========================================================================= *)
-
-Theorem reorder_single_op_val_on_tos_deep:
-  !dfg op ps rops ps' lo vs as_stk.
-    reorder_plan dfg [op] ps = (rops, ps') /\
-    (?d. stack_get_depth op ps.ps_stack = SOME d) /\
-    plan_stack_rel lo vs
-      (apply_prefix_ops initial_fmp lo rops ps).ps_stack as_stk /\
-    as_stk <> [] /\
-    op <> dead_stack_marker /\
-    (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
-    (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
-          operand_equiv dfg op at ==>
-          operand_val vs lo op = operand_val vs lo at) /\
-    (* Spill conditions for deep swap (dist > 16) *)
-    (!d' ps2.
-       d' > 16 /\ d' < LENGTH ps2.ps_stack /\
-       (ps2 = SND (reduce_depth_plan (LENGTH ps.ps_stack)
-                     [op] op 0 1 ps)) ==>
-       ALL_DISTINCT (top_n (d' + 1) ps2.ps_stack) /\
-       DISJOINT (set (top_n (d' + 1) ps2.ps_stack))
-                (FDOM ps2.ps_spilled) /\
-       spill_alloc_wf ps2.ps_alloc ps2.ps_spilled /\
-       ps2.ps_alloc.sa_next_offset + 32 * (d' + 1) < dimword(:256))
-    ==>
-    operand_val vs lo op = SOME (HD as_stk)
-Proof
-  rpt gen_tac >> strip_tac >>
-  rename1 `stack_get_depth op ps.ps_stack = SOME d0` >>
-  Cases_on `d0 <= 16`
-  >- (
-    (* d <= 16: delegate to existing theorem *)
-    qspecl_then [`dfg`, `op`, `ps`, `rops`, `ps'`, `lo`, `vs`, `as_stk`]
-      mp_tac reorder_single_op_val_on_tos >>
-    simp[] >> disch_then irule >> metis_tac[])
-  >> (* d > 16 *)
-  (* Unfold reorder_plan for [op] *)
-  qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-  simp[reorder_plan_def, MAPi_def, MAPi_ACC_def, LET_THM] >>
-  Cases_on `reorder_one dfg [op] 0 op ps` >>
-  simp[] >> strip_tac >> gvs[] >>
-  (* Unfold reorder_one with d > 16 *)
-  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
-  simp[reorder_one_def, LET_THM, stack_get_unfixed_depth_empty_window] >>
-  imp_res_tac stack_get_depth_nonempty >>
-  (* reduce_depth_plan *)
-  pairarg_tac >> simp[] >>
-  rename1 `reduce_depth_plan _ _ _ _ _ _ = (reduce_ops, ps2)` >>
-  (* Stack+spilled alignment: apply_prefix_ops reduce_ops ps = ps2 *)
-  `(apply_prefix_ops initial_fmp lo reduce_ops ps).ps_stack = ps2.ps_stack /\
-   (apply_prefix_ops initial_fmp lo reduce_ops ps).ps_spilled = ps2.ps_spilled` by (
-    qspecl_then [`LENGTH ps.ps_stack`, `[op]`, `op`, `0`, `1`, `ps`, `lo`]
-      mp_tac reduce_depth_plan_align >>
-    simp[LET_THM]) >>
-  (* reduce_ops are only SOSwap/SOSpill *)
-  `EVERY (\op'. (?d. op' = SOSwap d) \/ (?off. op' = SOSpill off))
-     reduce_ops` by (
-    `reduce_ops = FST (reduce_depth_plan (LENGTH ps.ps_stack)
-       [op] op 0 1 ps)` by simp[] >>
-    metis_tac[reduce_depth_plan_only_swap_spill]) >>
-  (* Case: stack_get_depth op ps2.ps_stack *)
-  Cases_on `stack_get_depth op ps2.ps_stack`
-  >- (
-    (* NONE contradicts reduce_depth_plan_dist_ge *)
-    simp[] >> strip_tac >> gvs[] >>
-    qspecl_then [`LENGTH ps.ps_stack`, `[op]`, `op`, `0`, `1`, `ps`, `d0`]
-      mp_tac (CONV_RULE (DEPTH_CONV pairLib.GEN_BETA_CONV)
-                (REWRITE_RULE [LET_THM] reduce_depth_plan_dist_ge)) >>
-    (impl_tac >- simp[stack_get_unfixed_depth_empty_window]) >>
-    simp[stack_get_unfixed_depth_empty_window])
-  >>
-  rename1 `stack_get_depth op ps2.ps_stack = SOME dist'` >>
-  qpat_assum `stack_get_depth _ _ = SOME dist'`
-    (strip_assume_tac o MATCH_MP stack_get_depth_nonempty) >>
-  (* final_dist = 0 for single-op *)
-  simp[] >>
-  (* Case: dist' = 0 *)
-  Cases_on `dist' = 0`
-  >- (
-    simp[] >> strip_tac >> fs[] >>
-    simp[apply_prefix_ops_append, apply_prefix_ops_nil] >>
-    imp_res_tac stack_get_depth_zero_last >>
-    qspecl_then [`lo`,`vs`,`ps2.ps_stack`,`as_stk`]
-      mp_tac plan_stack_rel_hd >>
-    (impl_tac >- fs[]) >>
-    simp[])
-  >>
-  imp_res_tac (DECIDE ``(d:num) < (n:num) /\ d <> 0 ==> 0 < n``) >>
-  simp[] >>
-  (* Case: operand_equiv (poke case) *)
-  Cases_on `operand_equiv dfg op (stack_peek 0 ps2.ps_stack)`
-  >- (simp[] >> strip_tac >> fs[] >>
-    simp[apply_prefix_ops_append, apply_prefix_ops_nil] >>
-    suspend "poke")
-  >>
-  (* Swap case *)
-  pairarg_tac >> simp[] >>
-  simp[do_swap_def] >> strip_tac >> fs[] >>
-  simp[apply_prefix_ops_append, apply_prefix_ops_nil] >>
-  Cases_on `dist' <= 16`
-  >- (simp[apply_prefix_ops_def, apply_prefix_op_def, apply_simple_op_def] >>
-    suspend "swap_le16")
-  >>
-  suspend "deep_swap"
-QED
-
-Resume reorder_single_op_val_on_tos_deep[poke]:
-  `MEM (stack_peek 0 ps2.ps_stack) ps2.ps_stack` by
-    (irule stack_peek_mem >> decide_tac) >>
-  `MEM (stack_peek 0 ps2.ps_stack) ps.ps_stack \/
-   stack_peek 0 ps2.ps_stack IN FDOM ps.ps_spilled` by
-    metis_tac[reduce_depth_plan_inventory_subset] >>
-  (* plan_stack_rel_hd: LAST ps2.ps_stack maps to HD as_stk *)
-  qspecl_then [`lo`,`vs`,`ps2.ps_stack`,`as_stk`]
-    mp_tac plan_stack_rel_hd >>
-  (impl_tac >- simp[]) >>
-  (* operand_equiv: op has same val as stack_peek 0 = LAST *)
-  first_x_assum (qspec_then `stack_peek 0 ps2.ps_stack` mp_tac) >>
-  simp[] >>
-  (* stack_peek 0 stk = LAST stk when stk <> [] *)
-  `stack_peek 0 ps2.ps_stack = LAST ps2.ps_stack` by
-    (Cases_on `ps2.ps_stack` >> fs[stack_peek_def, LAST_EL]) >>
-  `LAST ps2.ps_stack <> dead_stack_marker` by metis_tac[] >>
-  simp[]
-QED
-
-Resume reorder_single_op_val_on_tos_deep[swap_le16]:
-  (* swap1_ops = [SOSwap dist'] since dist' <= 16, dist' <> 0 *)
-  `swap1_ops = [SOSwap dist']` by (
-    qpat_x_assum `do_swap _ _ = _` mp_tac >>
-    simp[do_swap_def]) >>
-  (* Rewrite plan_stack_rel to use stack_swap *)
-  `(apply_prefix_ops initial_fmp lo q ps).ps_stack =
-   stack_swap dist' ps2.ps_stack` by (
-    qpat_x_assum `_ = q` (SUBST_ALL_TAC o SYM) >>
-    simp[apply_prefix_ops_append, apply_prefix_ops_def,
-         apply_prefix_op_def, apply_simple_op_def]) >>
-  (* Rewrite plan_stack_rel assumption *)
-  `plan_stack_rel lo vs (stack_swap dist' ps2.ps_stack) as_stk` by
-    fs[] >>
-  imp_res_tac stack_get_depth_el >>
-  qspecl_then [`lo`,`vs`,
-    `stack_swap dist' ps2.ps_stack`,`as_stk`]
-    mp_tac plan_stack_rel_hd >>
-  (impl_tac >- simp[stack_swap_nonempty]) >>
-  simp[stack_swap_last]
-QED
-
-(* FOLDL spill produces only SOSpill ops *)
-Theorem foldl_spill_only_sospill[local]:
-  !items ops0 offs0 al0 ops1 offs1 al1.
-    EVERY (\op'. ?off. op' = SOSpill off) ops0 /\
-    FOLDL (\(ops,offs,al) item.
-      (\(off,al'). (ops ++ [SOSpill off], SNOC off offs, al'))
-        (alloc_spill_slot al))
-      (ops0, offs0, al0) items = (ops1, offs1, al1) ==>
-    EVERY (\op'. ?off. op' = SOSpill off) ops1
-Proof
-  Induct >> simp[] >>
-  rpt gen_tac >> pairarg_tac >> simp[] >>
-  strip_tac >> first_x_assum match_mp_tac >>
-  Q.EXISTS_TAC `ops0 ++ [SOSpill off]` >>
-  qexistsl [`SNOC off offs0`, `al'`, `offs1`, `al1`] >>
-  simp[EVERY_APPEND]
-QED
-
-(* do_swap ops are always SOSwap/SOSpill/SORestore *)
-Theorem do_swap_ops_ssr[local]:
-  !dist ps.
-    EVERY (\op'. (?d. op' = SOSwap d) \/ (?off. op' = SOSpill off) \/
-                 (?off. op' = SORestore off)) (FST (do_swap dist ps))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[do_swap_def, LET_THM] >>
-  IF_CASES_TAC >- simp[] >>
-  IF_CASES_TAC >- simp[] >>
-  BETA_TAC >> pairarg_tac >> gvs[EVERY_APPEND, EVERY_MAP] >>
-  irule EVERY_MONOTONIC >>
-  Q.EXISTS_TAC `\op'. ?off. op' = SOSpill off` >>
-  conj_tac >- simp[] >>
-  qspecl_then [`top_n (dist + 1) ps.ps_stack`,
-    `[] : stack_op list`, `[] : num list`, `ps.ps_alloc`,
-    `spill_ops`, `offsets`, `alloc'`]
-    mp_tac foldl_spill_only_sospill >> simp[]
-QED
-
-(* do_swap deep: apply_prefix_ops gives same stack as direct computation *)
-
-Resume reorder_single_op_val_on_tos_deep[deep_swap]:
-  (* swap1_ops are SOSwap/SOSpill/SORestore *)
-  `EVERY (\op'. (?d. op' = SOSwap d) \/ (?off. op' = SOSpill off) \/
-                (?off. op' = SORestore off)) swap1_ops` by (
-    `swap1_ops = FST (do_swap dist' ps2)` by gvs[] >>
-    metis_tac[do_swap_ops_ssr]) >>
-  (* apply_ssr_ops_indep bridges reduce_ops gap *)
-  `(apply_prefix_ops initial_fmp lo swap1_ops
-      (apply_prefix_ops initial_fmp lo reduce_ops ps)).ps_stack =
-   (apply_prefix_ops initial_fmp lo swap1_ops ps2).ps_stack` by (
-    qspecl_then [`swap1_ops`, `lo`,
-      `apply_prefix_ops initial_fmp lo reduce_ops ps`, `ps2`]
-      mp_tac apply_ssr_ops_indep >>
-    simp[]) >>
-  (* do_swap_apply_stack_align *)
-  `(apply_prefix_ops initial_fmp lo swap1_ops ps2).ps_stack =
-   (SND (do_swap dist' ps2)).ps_stack` by (
-    `swap1_ops = FST (do_swap dist' ps2)` by simp[] >>
-    pop_assum SUBST_ALL_TAC >>
-    match_mp_tac do_swap_apply_stack_align >> simp[] >>
-    first_x_assum (qspec_then `dist'` mp_tac) >> simp[]) >>
-  imp_res_tac stack_get_depth_el >>
-  (* do_swap_last *)
-  `LAST (SND (do_swap dist' ps2)).ps_stack = op /\
-   (SND (do_swap dist' ps2)).ps_stack <> []` by (
-    irule do_swap_last >> simp[stack_peek_def]) >>
-  (* rewrite plan_stack_rel to use do_swap result stack *)
-  `q = reduce_ops ++ swap1_ops` by gvs[] >>
-  pop_assum (fn eq =>
-    qpat_x_assum `plan_stack_rel _ _ _ _`
-      (mp_tac o REWRITE_RULE [eq, apply_prefix_ops_append])) >>
-  (* Rewrite using the stack equality chain *)
-  qpat_x_assum `(apply_prefix_ops initial_fmp lo swap1_ops
-    (apply_prefix_ops initial_fmp lo reduce_ops ps)).ps_stack = _` (SUBST1_TAC) >>
-  qpat_x_assum `(apply_prefix_ops initial_fmp lo swap1_ops ps2).ps_stack = _`
-    (SUBST1_TAC) >>
-  strip_tac >>
-  (* plan_stack_rel on (SND (do_swap dist' ps2)).ps_stack *)
-  qspecl_then [`lo`, `vs`,
-    `(SND (do_swap dist' ps2)).ps_stack`, `as_stk`]
-    mp_tac plan_stack_rel_hd >>
-  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
-  simp[]
-QED
-
-Finalise reorder_single_op_val_on_tos_deep
-
-
 Theorem prefix_spill_wf_append_reorder:
   !l1 l2 lo ps.
     prefix_spill_wf initial_fmp lo (l1 ++ l2) ps <=>
@@ -4969,9 +4656,6 @@ Proof
     [`target_ops`, `target_op`, `f`, `target_len`, `ps1`, `rest_ops`, `ps'`]
     mp_tac) >> simp[]
 QED
-
-
-
 
 
 Theorem prefix_spill_wf_map_restore_distinct_witnesses[local]:
@@ -5240,11 +4924,6 @@ Proof
     (fn th => PURE_ONCE_REWRITE_TAC[GSYM th]) >>
   first_assum ACCEPT_TAC
 QED
-
-
-
-
-
 
 
 Theorem reorder_one_exact_two_first_noops_source_shape[local]:
@@ -6072,6 +5751,103 @@ Proof
   metis_tac[]
 QED
 
+
+Theorem restore_spilled_plan_keeps_budget[local]:
+  !targets base pending ps ops post.
+    residual_budget_wf base pending ps /\
+    restore_spilled_plan targets ps = (ops,post) ==>
+    residual_budget_wf base pending post /\
+    (!at. MEM at post.ps_stack \/ at IN FDOM post.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled)
+Proof
+  Induct >> simp[restore_spilled_plan_def] >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  strip_tac >> gvs[] >>
+  rename1 `do_restore h ps = (head_ops,mid)` >>
+  `residual_budget_wf base' pending mid` by metis_tac[residual_budget_wf_restore] >>
+  first_x_assum drule_all >> metis_tac[do_restore_inventory_subset]
+QED
+
+Theorem restore_spilled_plan_keeps_inventory[local]:
+  !targets ps ops post.
+    restore_spilled_plan targets ps = (ops,post) ==>
+    !x. LIST_ELEM_COUNT x post.ps_stack +
+      (if x IN FDOM post.ps_spilled then 1 else 0) =
+      LIST_ELEM_COUNT x ps.ps_stack + (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule restore_spilled_plan_counts >> strip_tac >> gen_tac >>
+  rpt (first_x_assum (qspec_then `x` assume_tac)) >>
+  Cases_on `x IN FDOM ps.ps_spilled` >> Cases_on `MEM x targets` >> gvs[]
+QED
+
+Theorem reorder_reduce_keeps_budget[local]:
+  !ordered base targets ps ops post.
+    residual_budget_wf base targets ps /\
+    plan_steps (\op st. reduce_depth_plan
+      (LENGTH st.ps_stack - LENGTH targets) targets op 0 0 st)
+      ordered ps = (ops,post) ==>
+    residual_budget_wf base targets post /\
+    (!x. LIST_ELEM_COUNT x ps.ps_stack +
+       (if x IN FDOM ps.ps_spilled then 1 else 0) <=
+       LIST_ELEM_COUNT x post.ps_stack +
+       (if x IN FDOM post.ps_spilled then 1 else 0))
+Proof
+  Induct >- simp[plan_steps_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule plan_steps_cons_result >> strip_tac >> gvs[] >>
+  rename1 `reduce_depth_plan _ _ _ 0 0 ps = (step_ops,mid)` >>
+  `residual_budget_wf base' targets mid` by metis_tac[reduce_depth_plan_keeps_budget] >>
+  first_x_assum drule_all >> strip_tac >> simp[] >> gen_tac >>
+  irule LESS_EQ_TRANS >>
+  qexists_tac `LIST_ELEM_COUNT x mid.ps_stack +
+    (if x IN FDOM mid.ps_spilled then 1 else 0)` >> simp[] >>
+  qspecl_then [`LENGTH ps.ps_stack - LENGTH targets`, `targets`, `h`,
+      `0`, `0`, `ps`, `step_ops`, `mid`, `base'`, `x`]
+    mp_tac reduce_depth_plan_keeps_inventory >> simp[]
+QED
+
+Theorem reorder_prepare_keeps_budget:
+  !base targets ps ops post.
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    residual_budget_wf base targets ps /\
+    reorder_prepare_plan targets ps = (ops,post) ==>
+    LENGTH targets <= LENGTH post.ps_stack /\
+    residual_budget_wf base targets post /\
+    (pending_inventory_wf targets ps ==> pending_inventory_wf targets post) /\
+    (!at. MEM at post.ps_stack \/ at IN FDOM post.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+    (!x. LIST_ELEM_COUNT x ps.ps_stack +
+       (if x IN FDOM ps.ps_spilled then 1 else 0) <=
+       LIST_ELEM_COUNT x post.ps_stack +
+       (if x IN FDOM post.ps_spilled then 1 else 0))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule reorder_prepare_plan_split >> strip_tac >>
+  drule_all reorder_prepare_materialised_counts >> strip_tac >>
+  drule_all restore_spilled_plan_keeps_budget >> strip_tac >>
+  drule_all reorder_reduce_keeps_budget >> strip_tac >>
+  drule restore_spilled_plan_keeps_inventory >> strip_tac >>
+  drule reorder_prepare_inventory_subset >> strip_tac >>
+  `!x. LIST_ELEM_COUNT x ps.ps_stack +
+       (if x IN FDOM ps.ps_spilled then 1 else 0) <=
+       LIST_ELEM_COUNT x post.ps_stack +
+       (if x IN FDOM post.ps_spilled then 1 else 0)` by
+    (gen_tac >>
+     qpat_assum `!x. LIST_ELEM_COUNT x restored.ps_stack + _ = _`
+       (qspec_then `x` (fn eq => pure_rewrite_tac [GSYM eq])) >>
+     qpat_assum `!x. LIST_ELEM_COUNT x restored.ps_stack + _ <= _`
+       (qspec_then `x` ACCEPT_TAC)) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (simp[pending_inventory_wf_def] >>
+      strip_tac >> gen_tac >> irule LESS_EQ_TRANS >>
+      qexists_tac `LIST_ELEM_COUNT op ps.ps_stack +
+        (if op IN FDOM ps.ps_spilled then 1 else 0)` >> simp[]) >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem reorder_plan_materialised_invariants[local]:
   !dfg pending ps ops ps'.
     LENGTH pending <= 16 /\
@@ -6081,17 +5857,25 @@ Theorem reorder_plan_materialised_invariants[local]:
     reorder_plan dfg pending ps = (ops,ps') ==>
     LENGTH pending <= LENGTH ps'.ps_stack /\
     (!x. MEM x pending ==>
-      LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack) /\
+      LIST_ELEM_COUNT x ps'.ps_stack =
+      LIST_ELEM_COUNT x ps.ps_stack +
+        (if is_var_operand x /\ x IN FDOM ps.ps_spilled then 1 else 0)) /\
     (!i. i < LENGTH pending ==>
       stack_peek (LENGTH pending - 1 - i) ps'.ps_stack = EL i pending)
 Proof
   rpt gen_tac >> strip_tac >>
-  qspecl_then [`MAPi (\i op. (i,op)) pending`, `0`]
-    mp_tac plan_steps_reorder_materialised_order >>
-  disch_then (qspecl_then [`dfg`, `pending`, `ps`, `ops`, `ps'`] mp_tac) >>
-  simp[reorder_plan_eq_plan_steps, indexedListsTheory.LENGTH_MAPi,
-       indexedListsTheory.EL_MAPi] >>
-  metis_tac[reorder_plan_eq_plan_steps]
+  drule reorder_plan_split >> strip_tac >>
+  rename1 `reorder_prepare_plan pending ps = (prep,mid)` >>
+  `LENGTH pending <= 17` by decide_tac >>
+  drule_all reorder_prepare_materialised_counts >> strip_tac >>
+  `!x. MEM x pending ==>
+       LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x mid.ps_stack` by
+    (qspecl_then [`pending`, `ps`, `prep`, `mid`] mp_tac
+       reorder_prepare_count_dom >> simp[]) >>
+  qspecl_then [`MAPi (\i op. (i,op)) pending`, `0`, `dfg`, `pending`,
+                `mid`, `rest`, `ps'`] mp_tac plan_steps_reorder_materialised_order >>
+  simp[indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi] >>
+  metis_tac[]
 QED
 
 Theorem reorder_plan_materialised_order:
@@ -6127,7 +5911,9 @@ Theorem reorder_plan_materialised_counts:
       LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
     reorder_plan dfg pending ps = (ops,ps') ==>
     !x. MEM x pending ==>
-      LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack
+      LIST_ELEM_COUNT x ps'.ps_stack =
+      LIST_ELEM_COUNT x ps.ps_stack +
+        (if is_var_operand x /\ x IN FDOM ps.ps_spilled then 1 else 0)
 Proof
   metis_tac[reorder_plan_materialised_invariants]
 QED
@@ -6231,13 +6017,34 @@ Proof
           indexedListsTheory.MEM_MAPi] >>
      rpt strip_tac >> gvs[] >>
      simp[EL_MEM]) >>
-  `plan_steps (\(idx,op) ps. reorder_one dfg target_ops idx op ps)
-     (MAPi (\i op. (i,op)) target_ops) ps = (ops,ps')` by
-    (qpat_x_assum `reorder_plan dfg target_ops ps = (ops,ps')` mp_tac >>
-     simp[reorder_plan_eq_plan_steps]) >>
-  drule_all plan_steps_reorder_venom_asm_rel_residual_addresses >>
+  drule reorder_plan_split >> strip_tac >> gvs[] >>
+  `LENGTH target_ops <= 17` by decide_tac >>
+  drule_all reorder_prepare_keeps_budget >> strip_tac >>
+  `!op1 at. MEM op1 target_ops /\
+        (MEM at mid.ps_stack \/ at IN FDOM mid.ps_spilled) /\
+        operand_equiv dfg op1 at ==>
+        operand_val vs lo op1 = operand_val vs lo at` by metis_tac[] >>
+  `(!off. MEM (SOSpill off) prep \/ MEM (SORestore off) prep ==>
+          off < dimword(:256)) /\
+   (!off. MEM (SOSpill off) rest \/ MEM (SORestore off) rest ==>
+          off < dimword(:256))` by metis_tac[MEM_APPEND] >>
+  gvs[execute_plan_append, asm_block_at_append] >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    fs[residual_budget_wf_def] >>
+  `EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) prep` by
+    (rewrite_tac[EVERY_MEM] >> Cases >> simp[] >> metis_tac[]) >>
+  drule_all reorder_prepass_venom_asm_rel_numeric >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  goal_assum (drule_at Any) >> simp[]
+  rename1 `venom_asm_rel lo mid vs st1` >>
+  `asm_block_at prog st1.as_pc (execute_plan initial_fmp rest)` by simp[] >>
+  qspecl_then [`MAPi (\i op. (i,op)) target_ops`, `dfg`, `target_ops`, `mid`,
+    `rest`, `ps'`, `base'`, `lo`, `o2pc`, `prog`, `vs`, `st1`] mp_tac
+      plan_steps_reorder_venom_asm_rel_residual_addresses >>
+  simp[] >> impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >> rename1 `venom_asm_rel lo ps' vs final` >>
+  qexists_tac `final` >> simp[] >>
+  irule asm_steps_compose_ok >> qexists_tac `st1` >> simp[]
 QED
 
 Theorem reorder_one_materialised_fix_next:
@@ -6312,11 +6119,21 @@ Theorem reorder_plan_materialised_arranged:
     ps'.ps_stack = stack_pop (LENGTH pending) ps'.ps_stack ++ pending
 Proof
   rpt gen_tac >> strip_tac >>
+  drule reorder_plan_split >> strip_tac >>
+  rename1 `reorder_prepare_plan pending ps = (prep,mid)` >>
+  `LENGTH pending <= 17` by decide_tac >>
+  drule_all reorder_prepare_keeps_budget >> strip_tac >>
+  drule_all reorder_prepare_materialised_counts >> strip_tac >>
+  `!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x mid.ps_stack` by
+    (gen_tac >> Cases_on `MEM x pending`
+     >- (irule LESS_EQ_TRANS >>
+         qexists_tac `LIST_ELEM_COUNT x ps.ps_stack` >> simp[LESS_EQ_ADD]) >>
+     fs[GSYM LIST_ELEM_COUNT_MEM] >>
+     `LIST_ELEM_COUNT x pending = 0` by decide_tac >> simp[]) >>
   `plan_state_residual_wf spillbase pending (LENGTH pending) ps'` by
     (irule plan_steps_reorder_materialised >> simp[] >>
-     qexistsl_tac [`dfg`, `[]`, `ops`, `ps`, `pending`] >>
-     simp[GSYM reorder_plan_eq_plan_steps] >>
-     irule residual_budget_wf_to_residual >> simp[]) >>
+     qexistsl_tac [`dfg`, `[]`, `rest`, `mid`, `pending`] >>
+     simp[] >> irule residual_budget_wf_to_residual >> simp[]) >>
   simp[] >> irule fixed_suffix_decompose >>
   fs[plan_state_residual_wf_def]
 QED
@@ -6331,7 +6148,6 @@ Theorem reorder_plan_materialised_suffix:
 Proof
   rpt strip_tac >> drule_all reorder_plan_materialised_arranged >> simp[]
 QED
-
 
 
 Theorem do_dup_inventory_subset:
@@ -6739,6 +6555,45 @@ Proof
   metis_tac[]
 QED
 
+Theorem reorder_reduce_stack_value_replay[local]:
+  !ordered targets ps ops post qs lo vs.
+    plan_steps (\op st. reduce_depth_plan
+      (LENGTH st.ps_stack - LENGTH targets) targets op 0 0 st)
+      ordered ps = (ops,post) /\
+    plan_stack_sem_eq lo vs qs.ps_stack ps.ps_stack ==>
+    plan_stack_sem_eq lo vs
+      (apply_prefix_ops initial_fmp lo ops qs).ps_stack post.ps_stack /\
+    (!at. MEM at post.ps_stack \/ at IN FDOM post.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled)
+Proof
+  Induct >- simp[plan_steps_def, apply_prefix_ops_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule plan_steps_cons_result >> strip_tac >> gvs[] >>
+  qspecl_then [`LENGTH ps.ps_stack - LENGTH targets`, `targets`, `h`,
+                `0`, `0`, `ps`, `qs`, `lo`, `vs`] mp_tac
+    reduce_depth_plan_stack_value_replay >>
+  simp[] >> strip_tac >>
+  first_x_assum drule_all >> simp[apply_prefix_ops_append] >>
+  metis_tac[reduce_depth_plan_inventory_subset]
+QED
+
+Theorem reorder_prepare_stack_value_replay[local]:
+  !targets ps ops post qs lo vs.
+    reorder_prepare_plan targets ps = (ops,post) /\
+    (!x. MEM x targets /\ is_var_operand x ==> x NOTIN FDOM ps.ps_spilled) /\
+    plan_stack_sem_eq lo vs qs.ps_stack ps.ps_stack ==>
+    plan_stack_sem_eq lo vs
+      (apply_prefix_ops initial_fmp lo ops qs).ps_stack post.ps_stack /\
+    (!at. MEM at post.ps_stack \/ at IN FDOM post.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `restore_spilled_plan (FILTER is_var_operand targets) ps = ([],ps)` by
+    (irule restore_spilled_plan_absent >> simp[MEM_FILTER]) >>
+  drule reorder_prepare_plan_split >> strip_tac >> gvs[] >>
+  metis_tac[reorder_reduce_stack_value_replay]
+QED
+
 (* Marker exclusions are supplied by the frozen genBlockSim consumer:
    zero-code alias exchange must not introduce a symbolic dead marker.
    Only the replay state requires spill separation and prefix safety. *)
@@ -6748,6 +6603,7 @@ Theorem reorder_plan_materialised_stack_value_replay:
     LENGTH pending <= 16 /\ LENGTH pending <= LENGTH ps.ps_stack /\
     (!x. MEM x pending ==>
       LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    (!x. MEM x pending /\ is_var_operand x ==> x NOTIN FDOM ps.ps_spilled) /\
     plan_stack_sem_eq lo vs qs.ps_stack ps.ps_stack /\
     (!x a y b. FLOOKUP qs.ps_spilled x = SOME a /\
                 FLOOKUP qs.ps_spilled y = SOME b /\ x <> y ==>
@@ -6763,16 +6619,32 @@ Theorem reorder_plan_materialised_stack_value_replay:
       (apply_prefix_ops initial_fmp lo ops qs).ps_stack ps'.ps_stack
 Proof
   rpt gen_tac >> strip_tac >>
+  drule reorder_plan_split >> strip_tac >> gvs[] >>
+  `LENGTH pending <= 17` by decide_tac >>
+  drule_all reorder_prepare_materialised_counts >> strip_tac >>
+  `!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x mid.ps_stack` by
+    (gen_tac >> Cases_on `MEM x pending`
+     >- (irule LESS_EQ_TRANS >>
+         qexists_tac `LIST_ELEM_COUNT x ps.ps_stack` >> simp[LESS_EQ_ADD]) >>
+     fs[GSYM LIST_ELEM_COUNT_MEM] >>
+     `LIST_ELEM_COUNT x pending = 0` by decide_tac >> simp[]) >>
+  drule_all reorder_prepare_stack_value_replay >> strip_tac >>
+  gvs[prefix_spill_wf_append_reorder, apply_prefix_ops_append] >>
+  qabbrev_tac `qm = apply_prefix_ops initial_fmp lo prep qs` >>
+  `!x a y b. FLOOKUP qm.ps_spilled x = SOME a /\
+              FLOOKUP qm.ps_spilled y = SOME b /\ x <> y ==>
+              a + 32 <= b \/ b + 32 <= a` by
+    (qspecl_then [`prep`, `qs`, `initial_fmp`, `lo`] mp_tac
+       safe_prefix_spilled_separated >> simp[Abbr `qm`] >> metis_tac[]) >>
+  `!op at. MEM op pending /\
+      (MEM at mid.ps_stack \/ at IN FDOM mid.ps_spilled) /\
+      operand_equiv dfg op at ==>
+      operand_val vs lo op = operand_val vs lo at` by metis_tac[] >>
   qspecl_then [`MAPi (\i op. (i,op)) pending`, `0`]
     mp_tac plan_steps_reorder_materialised_value >>
-  disch_then (qspecl_then [`dfg`, `pending`, `ps`, `ops`, `ps'`, `qs`, `lo`, `vs`] mp_tac) >>
-  simp[indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi] >>
-  disch_then irule >>
-  conj_tac >- metis_tac[reorder_plan_eq_plan_steps] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- (gen_tac >> Cases_on `MEM x pending` >- metis_tac[] >>
-    gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
-  metis_tac[reorder_plan_eq_plan_steps]
+  disch_then (qspecl_then [`dfg`, `pending`, `mid`, `rest`, `ps'`, `qm`, `lo`, `vs`]
+    mp_tac) >>
+  simp[indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi] >> metis_tac[]
 QED
 
 Definition input_spill_provenance_def:

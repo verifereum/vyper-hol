@@ -1,6 +1,6 @@
 Theory fnLineageInvActualReplay
 Ancestors fnPlanLineageInventory fnPlanLineageReplay fnPlanLineageSetup planWf
-  reorderSim fnPlanLineagePhiTemporal
+  reorderSim fnPlanLineagePhiTemporal reorderPreparationFrameProps
   stackPlanGen
   stackPlanOps stackPlanTypes stackModel list rich_list
 
@@ -38,23 +38,8 @@ Proof
   drule_all do_swap_bottom_frame >> simp[]
 QED
 
-Theorem restore_spilled_plan_bottom_frame:
-  !targets ps prefix ops qs.
-    restore_spilled_plan targets ps = (ops,qs) ==>
-    restore_spilled_plan targets
-      (ps with ps_stack := prefix ++ ps.ps_stack) =
-      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
-Proof
-  Induct >- (simp[restore_spilled_plan_def] >> rpt strip_tac >> gvs[]) >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `do_restore h ps` >>
-  rename1 `do_restore h ps = (step_ops,ps_mid)` >>
-  drule do_restore_bottom_frame >>
-  disch_then (qspec_then `prefix` assume_tac) >>
-  Cases_on `restore_spilled_plan targets ps_mid` >>
-  gvs[restore_spilled_plan_def] >>
-  first_x_assum drule >> simp[]
-QED
+Theorem restore_spilled_plan_bottom_frame =
+  reorderPreparationFramePropsTheory.restore_spilled_plan_bottom_frame
 
 Theorem generate_emit_ops_stack_update:
   !inst tc ps stk.
@@ -135,7 +120,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `join_target_ops lv fn lbl inst`
   >- (gvs[generate_regular_inst_plan_def, emit_input_plan_def,
-          reorder_plan_def, generate_emit_ops_def, fresh_label_def,
+          planWfTheory.reorder_plan_nil, generate_emit_ops_def, fresh_label_def,
           asmIRTheory.venom_to_evm_name_def,
           venomEffectsTheory.is_commutative_def, stack_pop_def,
           release_dead_spills_stack_update] >>
@@ -161,7 +146,7 @@ Proof
   rename1 `reorder_plan dfg targets rs = (swap_ops,ts)` >>
   drule_all reorder_plan_bottom_frame >> strip_tac >>
   gvs[generate_regular_inst_plan_def, emit_input_plan_def,
-      reorder_plan_def, generate_emit_ops_def, fresh_label_def,
+      planWfTheory.reorder_plan_nil, generate_emit_ops_def, fresh_label_def,
       asmIRTheory.venom_to_evm_name_def,
       venomEffectsTheory.is_commutative_def, stack_pop_def,
       release_dead_spills_stack_update] >>
@@ -556,6 +541,20 @@ Proof
   Cases_on `reorder_one dfg targets h0 h1 ps` >> gvs[]
 QED
 
+Theorem reorder_prepare_cleanup_frame[local]:
+  !targets ps ch promised.
+    reorder_prepare_plan targets
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+    (FST (reorder_prepare_plan targets ps), SND (reorder_prepare_plan targets ps) with
+      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
+Proof
+  rpt gen_tac >>
+  irule (BETA_RULE (Q.SPECL [`targets`, `ps`, `\s:plan_state. s with
+    <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>`]
+    reorder_prepare_state_update)) >>
+  simp[restore_spilled_plan_cleanup_frame, reduce_depth_plan_cleanup_frame]
+QED
+
 Theorem reorder_plan_cleanup_frame:
   !dfg targets ps ch promised.
     reorder_plan dfg targets
@@ -564,8 +563,10 @@ Theorem reorder_plan_cleanup_frame:
       <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>)
 Proof
   rpt gen_tac >>
-  simp[reorder_plan_def, pairTheory.UNCURRY] >>
-  irule (SRULE [LET_THM] reorder_fold_cleanup_frame)
+  simp[reorder_plan_def, reorder_prepare_cleanup_frame] >>
+  Cases_on `reorder_prepare_plan targets ps` >> simp[pairTheory.UNCURRY] >>
+  qspec_tac (`MAPi (\i op. (i,op)) targets`, `items`) >>
+  rpt gen_tac >> irule (SRULE [LET_THM] reorder_fold_cleanup_frame)
 QED
 
 Theorem popmany_fold_cleanup_frame[local]:

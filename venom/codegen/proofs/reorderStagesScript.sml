@@ -4,7 +4,7 @@
 Theory reorderStages
 Ancestors
   stackPlanOps stackPlanTypes stackPlanGen stackModel planWf dfgDefs
-  foldlSim indexedLists list rich_list arithmetic finite_map
+  reorderPreparationProps foldlSim indexedLists list rich_list arithmetic finite_map
 Libs BasicProvers
 
 Definition reorder_restore_def:
@@ -56,44 +56,8 @@ Proof
   Cases_on `fuel` >> simp[reduce_depth_plan_def]
 QED
 
-Theorem reorder_foldl_body_eq[local]:
-  !dfg target_ops.
-    foldl_body (\(idx,op) ps. reorder_one dfg target_ops idx op ps) =
-    (\(ops, ps) (idx, op).
-      let (step_ops, ps') = reorder_one dfg target_ops idx op ps in
-      (ops ++ step_ops, ps'))
-Proof
-  rpt gen_tac >>
-  simp[FUN_EQ_THM, foldl_body_def, pairTheory.FORALL_PROD]
-QED
-
-Theorem reorder_plan_eq_plan_steps:
-  !dfg target_ops ps.
-    reorder_plan dfg target_ops ps =
-    plan_steps (\(idx,op) ps. reorder_one dfg target_ops idx op ps)
-      (MAPi (\i op. (i, op)) target_ops) ps
-Proof
-  rpt gen_tac >>
-  REWRITE_TAC[reorder_plan_def] >>
-  REWRITE_TAC[GSYM reorder_foldl_body_eq] >>
-  REWRITE_TAC[GSYM plan_steps_eq_foldl]
-QED
-
-
-Theorem plan_steps_cons_result:
-  !step x xs ps ops ps'.
-    plan_steps step (x::xs) ps = (ops,ps') ==>
-    ?step_ops ps1 rest_ops.
-      step x ps = (step_ops,ps1) /\
-      plan_steps step xs ps1 = (rest_ops,ps') /\
-      ops = step_ops ++ rest_ops
-Proof
-  rpt gen_tac >>
-  simp[Once plan_steps_def, LET_THM] >>
-  pairarg_tac >> simp[] >>
-  pairarg_tac >> simp[]
-QED
-
+Theorem reorder_plan_split = reorderPreparationPropsTheory.reorder_plan_split
+Theorem plan_steps_cons_result = reorderPreparationPropsTheory.plan_steps_cons_result
 
 Theorem reorder_one_stages:
   !dfg pending idx op ps.
