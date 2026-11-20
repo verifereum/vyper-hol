@@ -5,7 +5,7 @@ Ancestors
   vyperCompiler venomExecProps venomInst list intCallLookup ctorUnitShape
   gasShadowInternal gasShadowState gasShadowModuleDefs gasShadowUnit
   gasShadowUnitGuards gasShadowUnitExtract gasShadow
-  externalEntryShape loweringShapeRules rich_list
+  bodyInternalFunctionIntervalProps
 
 Theorem compile_internal_fn_bodies_append[local]:
   !xs ys st.
@@ -48,108 +48,6 @@ Proof
        comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   goal_assum (drule_at Any) >> simp[]
-QED
-
-Theorem fn_has_code_block_suffix[local]:
-  final.cs_blocks = fresh ++ entry.cs_blocks /\
-  func.fn_blocks = REVERSE fresh ++
-    [<| bb_label := final.cs_current_bb;
-        bb_instructions := final.cs_current_insts |>] /\
-  ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks) ==>
-  fn_has_code entry final func
-Proof
-  strip_tac >> simp[fn_has_code_def, emitted_blocks_def] >> conj_tac
-  >- (rpt strip_tac >> irule MEM_lookup_block >>
-      simp[] >> gvs[TAKE_APPEND1]) >>
-  qexists_tac `<| bb_label := final.cs_current_bb;
-                 bb_instructions := final.cs_current_insts |>` >>
-  simp[] >> irule MEM_lookup_block >> gvs[]
-QED
-
-Theorem fn_has_code_new_block_segment[local]:
-  new_block label before = (old,entry) /\
-  cs_extends entry final /\
-  all_blocks final = all_blocks before ++ func.fn_blocks /\
-  ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks) ==>
-  fn_has_code entry final func
-Proof
-  strip_tac >> gvs[cs_extends_def] >>
-  irule fn_has_code_block_suffix >> goal_assum (drule_at Any) >>
-  gvs[new_block_def, all_blocks_def, APPEND_ASSOC]
-QED
-
-(* The internal compiler can add only @-labels within a function. This
-   gives the boundaries of the actual packages without an instruction-shape
-   certificate for every function body in the unit. *)
-Theorem compile_internal_fn_bodies_label_segments[local]:
-  !packages start final.
-    compile_internal_fn_bodies packages start = ((),final) ==>
-    ?segments.
-      all_blocks final = all_blocks start ++ FLAT segments /\
-      LIST_REL
-        (\(label,ce,params,has_buf,nr,key,trans,view,ctor,ilen,ss,ret) segment.
-          segment <> [] /\ (HD segment).bb_label = label /\
-          EVERY (\bb. isPREFIX "@" bb.bb_label) (TL segment) /\
-          ?before old entry after.
-            new_block label before = (old,entry) /\
-            compile_internal_function ce params has_buf nr key trans view ctor ilen
-              ss ret entry = ((),after) /\
-            cs_extends entry after /\
-            all_blocks after = all_blocks before ++ segment)
-        packages segments
-Proof
-  Induct >- simp[compile_internal_fn_bodies_def, comp_return_def] >>
-  qx_gen_tac `h` >> PairCases_on `h` >> rpt gen_tac >>
-  Cases_on `new_block h0 start` >> rename1 `new_block h0 start = (old,entry)` >>
-  Cases_on `compile_internal_function h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 entry` >>
-  rename1 `compile_internal_function _ _ _ _ _ _ _ _ _ _ _ entry = (u,after)` >>
-  Cases_on `u` >>
-  simp[Once compile_internal_fn_bodies_def, comp_ignore_bind_def, comp_bind_def] >>
-  strip_tac >> first_x_assum drule >> strip_tac >>
-    qspecl_then [`h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `h7`, `h8`,
-               `h9`, `h10`, `h11`, `entry`] mp_tac compile_internal_function_labels >>
-  simp[] >> strip_tac >>
-  drule cs_extends_block_stream_labels >> strip_tac >>
-  `REVERSE entry.cs_blocks = all_blocks start /\ entry.cs_current_bb = h0` by
-    gvs[new_block_def, all_blocks_def, LET_THM] >>
-  qexists_tac `(bb::tail)::segments` >>
-  gvs[APPEND_ASSOC] >> conj_tac
-  >- (qpat_x_assum `EVERY (isPREFIX "@") _` mp_tac >>
-      qpat_x_assum `MAP _ tail = _` (assume_tac o SYM) >>
-      simp[EVERY_MAP]) >>
-  qexistsl_tac [`start`, `old`, `entry`, `after`] >> simp[]
-QED
-
-Theorem package_internal_blocks_label_segments[local]:
-  !descs segs entry.
-    LIST_REL
-      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
-        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg)) descs segs /\
-    ALL_DISTINCT (MAP FST descs) /\
-    EVERY (\d. internal_label_ok (FST d) /\
-               ~MEM (FST d) (MAP (\bb. bb.bb_label) entry)) descs ==>
-    package_internal_blocks descs (entry ++ FLAT segs) =
-      SOME (entry,
-            MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
-                            (SND (SND d))) descs segs)
-Proof
-  Induct >- rw[package_internal_blocks_def] >>
-  PairCases >> rw[LIST_REL_CONS1] >>
-  rename1 `LIST_REL _ descs segs` >>
-  rename1 `segment <> []` >>
-  Cases_on `segment` >> gvs[] >>
-  rename1 `¬MEM first.bb_label (MAP FST descs)` >>
-  `split_blocks_at first.bb_label (entry ++ first :: (t ++ FLAT segs)) =
-     SOME (entry, first :: (t ++ FLAT segs))` by
-    (irule split_blocks_at_append_delimiter >> simp[]) >>
-  gs[package_internal_blocks_def] >>
-  first_x_assum (qspecl_then [`segs`, `first :: t`] mp_tac) >>
-  impl_tac
-  >- (`!lbl. isPREFIX "@" lbl ==> ~internal_label_ok lbl` by
-        (Cases >> simp[internal_label_ok_def]) >>
-      fs[EVERY_MEM, MEM_MAP, pairTheory.FORALL_PROD, pairTheory.EXISTS_PROD] >>
-      metis_tac[]) >>
-  simp[]
 QED
 
 Theorem internal_fn_descriptors_append[simp,local]:
@@ -362,79 +260,6 @@ Proof
   first_x_assum drule >> Cases_on `EL x (internal_fn_descriptors ips)` >>
   rename1 `EL x (internal_fn_descriptors ips) = desc` >>
   PairCases_on `desc` >> gvs[internal_fn_matches_descriptor_def, EL_MAP]
-QED
-
-Theorem internal_fn_descriptors_map:
-  internal_fn_descriptors packages =
-    MAP (\(label,ce,params,buf,nr,key,trans,view,ctor,ilen,ss,rt).
-      (label,buf,ce.ce_returns_count)) packages
-Proof
-  Induct_on `packages` >> simp[internal_fn_descriptors_def] >>
-  rpt strip_tac >> PairCases_on `h` >> simp[internal_fn_descriptors_def]
-QED
-
-Theorem extract_context_internal_code_by_labels:
-  extract_context_with_internals name packages final = SOME (ctx,data) /\
-  ALL_DISTINCT (MAP (\f. f.fn_name) ctx.ctx_functions) /\
-  EVERY (\f. ALL_DISTINCT (MAP (\bb. bb.bb_label) f.fn_blocks)) ctx.ctx_functions /\
-  compile_internal_fn_bodies packages start = ((),final) /\
-  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors packages) /\
-  EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks start) /\
-  MEM (label,ce,params,has_buf,nr,key,trans,view,ctor,ilen,ss,ret) packages /\
-  lookup_function label ctx.ctx_functions = SOME func ==>
-  ?before old entry after.
-    new_block label before = (old,entry) /\
-    compile_internal_function ce params has_buf nr key trans view ctor ilen
-      ss ret entry = ((),after) /\
-    fn_has_code entry after func /\
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks)
-Proof
-  strip_tac >> drule compile_internal_fn_bodies_label_segments >> strip_tac >>
-  drule extract_context_internal_names >> strip_tac >>
-  `ALL_DISTINCT (MAP FST (internal_fn_descriptors packages))` by fs[] >>
-  `EVERY (\d. internal_label_ok (FST d) /\
-       ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks start)))
-       (internal_fn_descriptors packages)` by
-    (fs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
-  `LIST_REL
-      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
-        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg))
-      (internal_fn_descriptors packages) segments` by
-    (rewrite_tac[internal_fn_descriptors_map, LIST_REL_MAP1] >>
-     irule LIST_REL_mono >> goal_assum (drule_at Any) >>
-     simp[combinTheory.o_DEF, pairTheory.FORALL_PROD]) >>
-  drule_all package_internal_blocks_label_segments >> strip_tac >>
-  qpat_x_assum `extract_context_with_internals _ _ _ = _` mp_tac >>
-  simp[extract_context_with_internals_def, GSYM all_blocks_def] >>
-  strip_tac >>
-  qpat_x_assum `MEM (label,ce,_,_,_,_,_,_,_,_,_,_) packages`
-    (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
-  rename1 `_ = EL i packages` >>
-  qpat_x_assum `LIST_REL _ packages segments` mp_tac >>
-  simp[LIST_REL_EL_EQN] >> strip_tac >>
-  qpat_x_assum `!n. n < LENGTH packages ==> _` (qspec_then `i` mp_tac) >>
-  qpat_x_assum `(label,ce,_,_,_,_,_,_,_,_,_,_) = EL i packages`
-    (assume_tac o SYM) >>
-  simp[] >> strip_tac >>
-  qabbrev_tac `selected = mk_internal_function label (EL i segments)
-    has_buf ce.ce_returns_count` >>
-  `MEM selected ctx.ctx_functions` by
-    (qpat_x_assum `mk_venom_context _ _ = ctx` (SUBST1_TAC o SYM) >>
-     simp[mk_venom_context_def, Abbr `selected`] >>
-     disj2_tac >> simp[MEM_EL, internal_fn_descriptors_map, LENGTH_MAP2] >>
-     qexists_tac `i` >>
-     simp[EL_MAP2, EL_MAP, arithmeticTheory.MIN_DEF]) >>
-  `selected = func` by
-    (drule_all lookup_function_distinct_mem >>
-     simp[Abbr `selected`, mk_internal_function_metadata]) >>
-  `ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks)` by
-    fs[EVERY_MEM] >>
-  qexistsl_tac [`before`, `old`, `entry`, `after`] >> simp[] >>
-  irule fn_has_code_new_block_segment >> simp[] >>
-  qexistsl_tac [`before`, `label`, `old`] >>
-  `func.fn_blocks = EL i segments` by
-    metis_tac[markerTheory.Abbrev_def, mk_internal_function_metadata] >>
-  simp[]
 QED
 
 Theorem selected_internal_shadow_code:
