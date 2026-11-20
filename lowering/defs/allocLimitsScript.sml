@@ -49,10 +49,9 @@ End
 (* The buffers _lower_external_call allocates for an external call: the
    argument tuple in memory (new_temporary_value) and the call buffer, the
    larger of the argument and return ABI size bounds plus the method id word
-   (allocate_buffer).  CREATE's non-raw constructor arguments likewise need
-   a tuple staging buffer and an ABI buffer. RawCreate's current producer
-   reserves 49152 bytes before its ABI suffix. These aggregate sizes are
-   not bounded by any one argument's type_alloc_ok. *)
+   (allocate_buffer). CREATE encodes constructor arguments directly into
+   an ABI buffer, with room for the bytecode prefix in raw_create. The
+   bytecode snapshot itself is covered by the operand's type_alloc_ok. *)
 Definition ext_call_alloc_ok_def:
   ext_call_alloc_ok cenv (ExtCall _ _ (_, arg_tys, ret) _) es =
     (let tys = MAP (lowered_value_type cenv) (TAKE (LENGTH arg_tys) (DROP 1 es));
@@ -62,7 +61,7 @@ Definition ext_call_alloc_ok_def:
            (abi_size_bound cenv.ce_struct_fields wrapped) + 32 < 2 ** 64) /\
   ext_call_alloc_ok cenv (CreateTarget ck has_salt _ _) es =
     (case es of
-       _:: _::rest =>
+       target:: _::rest =>
          if LENGTH rest < (if has_salt then 1 else 0) +
               (case ck of CreateFromBlueprint _ => 1 | _ => 0)
          then T
@@ -72,14 +71,13 @@ Definition ext_call_alloc_ok_def:
                 let args = if has_salt then FRONT rest else rest;
                     ty = TupleT (MAP expr_type args) in
                   args = [] \/
-                  (type_memory_bytes cenv ty < 2 ** 64 /\
-                   49152 + abi_size_bound cenv.ce_struct_fields ty < 2 ** 64)
+                  vyperTypeSystem$bytelike_type_bound (expr_type target) +
+                    abi_size_bound cenv.ce_struct_fields ty < 2 ** 64
             | CreateFromBlueprint raw_args =>
                 let args = DROP (if has_salt then 2 else 1) rest;
                     ty = TupleT (MAP expr_type args) in
                   raw_args \/ args = [] \/
-                  (type_memory_bytes cenv ty < 2 ** 64 /\
-                   abi_size_bound cenv.ce_struct_fields ty < 2 ** 64)
+                  abi_size_bound cenv.ce_struct_fields ty < 2 ** 64
             | _ => T)
      | _ => T) /\
   ext_call_alloc_ok cenv _ _ = T
