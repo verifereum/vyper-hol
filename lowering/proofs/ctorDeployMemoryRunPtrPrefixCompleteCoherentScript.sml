@@ -11,6 +11,13 @@ Ancestors
   exprLowering abiDecoderCoherence
   fragGasOriginPtr
 
+fun scalar_at_static_guard tv th =
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  simp_tac bool_ss [] >> rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`tv` |-> tv] (SPEC_ALL (SIMP_RULE bool_ss [] (BETA_RULE th)))) >>
+  asm_simp_tac bool_ss [] >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC;
+
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
@@ -75,7 +82,7 @@ Proof
    (?n. type_to_abi_dec_info sf ce (BaseT bt) = DecBytestring n)` by
     (Cases_on `bt` >> simp[type_to_abi_dec_info_def] >>
      rename1 `BytesT bound` >> Cases_on `bound` >> simp[type_to_abi_dec_info_def])
-  >- (irule prefix_scalar_complete_code_contract >> goal_assum (drule_at Any)) >>
+  >- (drule_then (scalar_at_static_guard `BaseTV bt`) prefix_scalar_complete_code_contract) >>
   BETA_TAC >> simp_tac bool_ss [] >> rpt gen_tac >> strip_tac >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule (BETA_RULE prefix_bytestring_complete_code_contract) >>
@@ -90,7 +97,10 @@ QED
 Theorem prefix_flag_complete_code[local]:
   (^CshiftCode) (FlagT nsid) (FlagTV n)
 Proof
-  irule prefix_scalar_complete_code_contract >> simp[Once type_to_abi_dec_info_def]
+  `?clamp. type_to_abi_dec_info sf ce (FlagT nsid) = DecPrimWord clamp` by
+    simp[Once type_to_abi_dec_info_def] >>
+  pop_assum strip_assume_tac >>
+  drule_then (scalar_at_static_guard `FlagTV n`) prefix_scalar_complete_code_contract
 QED
 
 Theorem prefix_dynamic_complete_code[local]:
@@ -225,7 +235,7 @@ Proof
    (?n. type_to_abi_dec_info sf ce (BaseT bt) = DecBytestring n)` by
     (Cases_on `bt` >> simp[type_to_abi_dec_info_def] >>
      rename1 `BytesT bound` >> Cases_on `bound` >> simp[type_to_abi_dec_info_def])
-  >- (irule prefix_scalar_complete_checked_contract >> goal_assum (drule_at Any)) >>
+  >- (drule_then (scalar_at_static_guard `BaseTV bt`) prefix_scalar_complete_checked_contract) >>
   BETA_TAC >> simp_tac bool_ss [] >> rpt gen_tac >> strip_tac >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule (SIMP_RULE bool_ss [] (BETA_RULE prefix_bytestring_complete_checked_contract)) >>
@@ -246,7 +256,10 @@ QED
 Theorem prefix_flag_complete_checked[local]:
   (^CshiftChecked) (FlagT nsid) (FlagTV n)
 Proof
-  irule prefix_scalar_complete_checked_contract >> simp[Once type_to_abi_dec_info_def]
+  `?clamp. type_to_abi_dec_info sf ce (FlagT nsid) = DecPrimWord clamp` by
+    simp[Once type_to_abi_dec_info_def] >>
+  pop_assum strip_assume_tac >>
+  drule_then (scalar_at_static_guard `FlagTV n`) prefix_scalar_complete_checked_contract
 QED
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
