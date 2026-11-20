@@ -5,8 +5,8 @@ Ancestors
   valueEncodingDefs
   compileEnv
   valueEncoding
-  ctorDeployMemoryRunPtrPrefixScalarPackage
   ghostPcTransportPtr[qualified]
+  ctorDeployMemoryRunPtrPrefixScalarPackage
   ctorDeployMemoryRunPtrPrefixScalarBool
   ctorAbiActualWordRun
   ctorAbiActualWorld
