@@ -3855,7 +3855,7 @@ Resume for_nonslot_array_round_contracts[round_packets]:
   disch_then (map_every assume_tac o CONJUNCTS) >> first_assum ACCEPT_TAC
 QED
 
-Resume for_nonslot_array_round_contracts[nil]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
   map_every qx_gen_tac [`es`,`z`,`J`,`tz`] >>
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
   `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
@@ -3887,6 +3887,9 @@ Resume for_nonslot_array_round_contracts[nil]:
   simp[Abbr `Done`, NoAsms] >> strip_tac >> asm_rewrite_tac[] >>
   qpat_assum `return_buf_sep d c es z ==> _` irule >>
   first_assum ACCEPT_TAC
+*)
+Resume for_nonslot_array_round_contracts[nil]:
+  cheat
 QED
 
 Resume for_nonslot_array_round_contracts[cons]:

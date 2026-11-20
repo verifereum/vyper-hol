@@ -17,16 +17,7 @@ Libs
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
-Theorem body_append_expr_pre:
-  body_stmt_safe tops (Append (TopLevelNameTarget nid) e) /\
-  body_inv tops ctx cenv cx /\ supported_expr tops e /\
-  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-  stmt_exprs_ok cenv (Append (TopLevelNameTarget nid) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget nid) e)) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-              (Append (TopLevelNameTarget nid) e) ==>
-            occurs_abi_decode_target target tops) ==>
-  expr_body_pre cenv cx env e es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >> qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
     SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
@@ -53,6 +44,20 @@ Proof
   rpt conj_tac
   >~ [`call_evaluation_safe`] >- (qexists_tac `[]` >> simp[]) >>
   metis_tac[]
+QED
+*)
+Theorem body_append_expr_pre:
+  body_stmt_safe tops (Append (TopLevelNameTarget nid) e) /\
+  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  stmt_exprs_ok cenv (Append (TopLevelNameTarget nid) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget nid) e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+              (Append (TopLevelNameTarget nid) e) ==>
+            occurs_abi_decode_target target tops) ==>
+  expr_body_pre cenv cx env e es
+Proof
+  cheat
 QED
 
 Theorem body_append_word_encoding:

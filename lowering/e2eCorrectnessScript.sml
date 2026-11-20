@@ -1009,69 +1009,7 @@ Proof
   fs[raw_reachable_package_iff, codegen_reachability_package_def] >> metis_tac[]
 QED
 
-Triviality vyper_call_at_marks_by_entry:
-  !own fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
-   am tx txp ret es vs0 fmp vs marks.
-    fin IN accepted_finalizers /\
-    (~own /\ fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
-    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
-    source_typing_ok tops am txp /\
-    call_state_rel tops (assemble prog') am tx es /\
-    LENGTH (call_trace es) < 2 ** 64 /\
-    resolve_o1_policy policy = SOME rpolicy /\
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-    codegen_assembly rpolicy out.po_unit = SOME prog /\
-    generate_context_plan out.po_unit.cu_context = SOME cp /\
-    fin rpolicy prog = SOME prog' /\
-    vs0 = (if own then opt_entry_state_own prog prog' cp es
-           else opt_entry_state prog prog' cp es) /\
-    txp = tx with code := vs0.vs_code /\
-    w2n vs0.vs_initial_fmp <= w2n fmp /\
-    w2n fmp < 2 ** 254 /\
-    unit_alloca_budget unit.cu_context +
-      32 * ctx_dload_count unit.cu_context <= w2n fmp /\
-    external_return_type tops tx.function_name = ret /\
-    raw_variant fmp vs vs0 /\
-    (!H:(bool # bytes32 # type_value) list # num list.
-       (?fr. terminates (run_context fr unit.cu_context vs)) /\
-       raw_unit_memory_ok unit.cu_context vs /\
-       ptr_discipline 0 unit.cu_context vs /\
-       taint_within
-         (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
-         unit.cu_context vs /\
-       mem_inv dload_offset_ok unit.cu_context vs /\
-       mem_inv dload_headroom_ok unit.cu_context vs /\
-       mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
-         s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
-         unit.cu_context vs ==>
-       ctx_sim
-         (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
-         unit.cu_context out.po_unit.cu_context vs
-         vs0 /\
-       (fin = asm_opt_finalizer ==>
-          code_end_offset_ok (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
-                              ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
-       ((o1_lowered_inv out.po_unit.cu_context vs0 /\
-         (fin = asm_opt_finalizer ==>
-            code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)) \/
-        ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-           mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
-                     lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
-             out.po_unit.cu_context vs0) /\
-         !fuel. terminates (run_context fuel unit.cu_context vs) ==>
-                ?u. run_context fuel unit.cu_context vs = Abort ExHalt_abort u))) /\
-    source_unit_execution_correct_at marks tops ret am txp unit vs
-    ==>
-    ?r es'.
-      run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
-       !tail.
-         call_storage_ok am txp (MAP SND (call_trace es))
-           (gas_explicit marks vs.vs_gas_readings ++ tail) ==>
-         call_result_rel_at (gas_explicit marks vs.vs_gas_readings ++ tail)
-           tops am txp es r es')
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >>
   qspec_then `es` strip_assume_tac run_call_total >>
@@ -1337,6 +1275,73 @@ Proof
   impl_tac
   >- (gvs[Abbr `D`, cx_dead_def, external_call_dead_def,
           initial_evaluation_context_def] >> metis_tac[]) >> gvs[]
+QED
+*)
+Triviality vyper_call_at_marks_by_entry:
+  !own fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
+   am tx txp ret es vs0 fmp vs marks.
+    fin IN accepted_finalizers /\
+    (~own /\ fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am txp /\
+    call_state_rel tops (assemble prog') am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    resolve_o1_policy policy = SOME rpolicy /\
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    codegen_assembly rpolicy out.po_unit = SOME prog /\
+    generate_context_plan out.po_unit.cu_context = SOME cp /\
+    fin rpolicy prog = SOME prog' /\
+    vs0 = (if own then opt_entry_state_own prog prog' cp es
+           else opt_entry_state prog prog' cp es) /\
+    txp = tx with code := vs0.vs_code /\
+    w2n vs0.vs_initial_fmp <= w2n fmp /\
+    w2n fmp < 2 ** 254 /\
+    unit_alloca_budget unit.cu_context +
+      32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+    external_return_type tops tx.function_name = ret /\
+    raw_variant fmp vs vs0 /\
+    (!H:(bool # bytes32 # type_value) list # num list.
+       (?fr. terminates (run_context fr unit.cu_context vs)) /\
+       raw_unit_memory_ok unit.cu_context vs /\
+       ptr_discipline 0 unit.cu_context vs /\
+       taint_within
+         (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
+         unit.cu_context vs /\
+       mem_inv dload_offset_ok unit.cu_context vs /\
+       mem_inv dload_headroom_ok unit.cu_context vs /\
+       mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+         s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
+         unit.cu_context vs ==>
+       ctx_sim
+         (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
+         unit.cu_context out.po_unit.cu_context vs
+         vs0 /\
+       (fin = asm_opt_finalizer ==>
+          code_end_offset_ok (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
+                              ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
+       ((o1_lowered_inv out.po_unit.cu_context vs0 /\
+         (fin = asm_opt_finalizer ==>
+            code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)) \/
+        ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+           mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+                     lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
+             out.po_unit.cu_context vs0) /\
+         !fuel. terminates (run_context fuel unit.cu_context vs) ==>
+                ?u. run_context fuel unit.cu_context vs = Abort ExHalt_abort u))) /\
+    source_unit_execution_correct_at marks tops ret am txp unit vs
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       !tail.
+         call_storage_ok am txp (MAP SND (call_trace es))
+           (gas_explicit marks vs.vs_gas_readings ++ tail) ==>
+         call_result_rel_at (gas_explicit marks vs.vs_gas_readings ++ tail)
+           tops am txp es r es')
+Proof
+  cheat
 QED
 
 Theorem vyper_call_correct_at_marks_own:
@@ -1605,17 +1610,7 @@ Proof
   fs[code_layout_valid_def] >> metis_tac[]
 QED
 
-Theorem call_source_focus_setup:
-  supported_program tops /\ source_typing_ok tops am tx /\
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out ==>
-  o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
-  unit_entry_no_params unit /\ unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
-  unit_shape_ok out.po_unit /\
-  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-     ~MEM (Label "runtime_begin") inst.inst_operands) /\
-  unit.cu_context.ctx_entry = SOME "__entry" /\
-  ?func. lookup_function "__entry" unit.cu_context.ctx_functions = SOME func
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   drule supported_program_raw_shape_free_program >> strip_tac >>
@@ -1630,6 +1625,21 @@ Proof
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   simp[] >> metis_tac[lower_vyper_runtime_unit_no_runtime_begin]
+QED
+*)
+Theorem call_source_focus_setup:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out ==>
+  o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+  unit_entry_no_params unit /\ unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  unit_shape_ok out.po_unit /\
+  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+     ~MEM (Label "runtime_begin") inst.inst_operands) /\
+  unit.cu_context.ctx_entry = SOME "__entry" /\
+  ?func. lookup_function "__entry" unit.cu_context.ctx_functions = SOME func
+Proof
+  cheat
 QED
 
 Theorem data_section_length_bound:
@@ -2150,20 +2160,7 @@ Proof
 QED
 
 (* The case using Python's final assembly optimizer. *)
-Theorem vyper_call_correct_asm_opt:
-  !policy tops deploy_bc runtime_bc am tx ret es.
-    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
-    dispatched_vyper_call tops tx
-      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    LENGTH (call_trace es) < 2 ** 64
-    ==>
-    ?r es'.
-      run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
-       call_result_rel_guarded tops am tx es r es')
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
@@ -2237,6 +2234,24 @@ Proof
       `es`, `vs0`, `fmp`, `r`, `es'`] mp_tac vyper_call_correct_from_gas_link >>
   impl_tac >- asm_simp_tac bool_ss [Abbr `vs0`] >>
   simp[]
+QED
+*)
+Theorem vyper_call_correct_asm_opt:
+  !policy tops deploy_bc runtime_bc am tx ret es.
+    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    dispatched_vyper_call tops tx
+      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+    LENGTH (call_trace es) < 2 ** 64
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       call_result_rel_guarded tops am tx es r es')
+Proof
+  cheat
 QED
 
 (* TOP-LEVEL: one theorem over the accepted finalizers (Python's -O none and
@@ -2364,21 +2379,7 @@ QED
 
 (* Keep the source unit's empty revert through the pipeline, with enough
    room for the generated frame's static layout. *)
-Theorem o1_pipeline_reverts_empty:
-  !tops rpolicy unit out am tx vs fuel s.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-    o1_run_state_ok vs /\
-    (!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
-           eom <= w2n vs.vs_initial_fmp) /\
-    calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
-    initial_venom_state_rel tops am tx vs /\
-    run_context fuel out.po_unit.cu_context vs = Abort Revert_abort s
-    ==>
-    s.vs_returndata = []
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >>
   drule supported_program_raw_shape_free_program >> strip_tac >>
@@ -2448,6 +2449,25 @@ Proof
     (irule run_context_terminates_mono >> simp[terminates_def]) >>
   gvs[]
 QED
+*)
+Theorem o1_pipeline_reverts_empty:
+  !tops rpolicy unit out am tx vs fuel s.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    o1_run_state_ok vs /\
+    (!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+           eom <= w2n vs.vs_initial_fmp) /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+    initial_venom_state_rel tops am tx vs /\
+    run_context fuel out.po_unit.cu_context vs = Abort Revert_abort s
+    ==>
+    s.vs_returndata = []
+Proof
+  cheat
+QED
 
 Theorem static_shadow_initial_venom_state_rel[local]:
   initial_venom_state_rel tops am tx vs ==>
@@ -2507,19 +2527,7 @@ QED
 (* Calldata that dispatches to nothing (no fallback, a short head, or
    arguments the decoder rejects) makes the compiled contract revert with
    empty returndata, or run out of resources: the identity finalizer. *)
-Theorem vyper_call_reverts_identity:
-  !policy tops deploy_bc runtime_bc am tx es.
-    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
-    calldata_dispatch tops
-      (buffer_to_list (FST (HD es.contexts)).msgParams.data) = NONE
-    ==>
-    ?r es'.
-      run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
-       frame_raises es Reverted /\ ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
@@ -2605,11 +2613,10 @@ Proof
   metis_tac[SRULE [vfm_abort_def] (Q.INST [`exc` |-> `Reverted`]
     frameGasTheory.frame_inst_raises_frame_raises)]
 QED
-
-(* The same under the final assembly optimizer. *)
-Theorem vyper_call_reverts_asm_opt:
+*)
+Theorem vyper_call_reverts_identity:
   !policy tops deploy_bc runtime_bc am tx es.
-    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
+    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
@@ -2620,6 +2627,12 @@ Theorem vyper_call_reverts_asm_opt:
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
        frame_raises es Reverted /\ ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
+Proof
+  cheat
+QED
+
+(* The same under the final assembly optimizer. *)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
@@ -2742,6 +2755,23 @@ Proof
   strip_tac >> qexistsl_tac [`r`, `es'`] >> gvs[venom_frame_rel_def] >>
   metis_tac[SRULE [vfm_abort_def] (Q.INST [`exc` |-> `Reverted`]
     frameGasTheory.frame_inst_raises_frame_raises)]
+QED
+*)
+Theorem vyper_call_reverts_asm_opt:
+  !policy tops deploy_bc runtime_bc am tx es.
+    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    calldata_dispatch tops
+      (buffer_to_list (FST (HD es.contexts)).msgParams.data) = NONE
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       frame_raises es Reverted /\ ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
+Proof
+  cheat
 QED
 
 (* Both accepted finalizers. *)

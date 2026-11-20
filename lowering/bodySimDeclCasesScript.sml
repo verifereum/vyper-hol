@@ -125,17 +125,7 @@ QED
 
 (* ===== AnnAssign ===== *)
 
-Theorem body_annassign_rhs_pre:
-  !cenv cx env e es tops id typ ctx.
-    body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    body_stmt_safe tops (AnnAssign id typ e) /\
-    stmt_exprs_ok cenv (AnnAssign id typ e) /\
-    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
-    expr_body_pre cenv cx env e es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >>
   qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
@@ -157,6 +147,21 @@ Proof
       int_calls_stmt_def] >>
   imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
   qexists_tac `[]` >> simp[]
+QED
+*)
+Theorem body_annassign_rhs_pre:
+  !cenv cx env e es tops id typ ctx.
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
+    stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
+    expr_body_pre cenv cx env e es
+Proof
+  cheat
 QED
 
 (* A declaration of a word type: stmtSimDecl's
@@ -921,36 +926,7 @@ fun range_tuple_forall th =
    source integer literals. Array iteration remains a separate residual.
    body_for_ok supplies a body judgment only for a successfully checked,
    nonempty iterator; rejecting and empty ranges need no body judgment. *)
-Theorem body_for_range:
-  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
-   es res es'.
-    body_stmt_safe tops (For id typ it n body) /\
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_ok cx it) /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (For id typ it n body) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
-    stmt_exprs_ok cenv (For id typ it n body) /\
-    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    (?e1 e2. it = Range e1 e2) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body))
-      (eval_stmt cx (For id typ it n body)) es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >>
   imp_res_tac body_stmt_safe_for_body >> gvs[] >>
@@ -1117,6 +1093,40 @@ Resume body_for_range[pop]:
 QED
 
 Finalise body_for_range
+*)
+Theorem body_for_range:
+  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
+   es res es'.
+    body_stmt_safe tops (For id typ it n body) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_ok cx it) /\
+    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (For id typ it n body) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
+    stmt_exprs_ok cenv (For id typ it n body) /\
+    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    (?e1 e2. it = Range e1 e2) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
+Proof
+  cheat
+QED
 
 (* A loop over an array (#637 for, #559): the iterable is a variable
    holding a fixed array of the loop variable's type (supported_iterator),

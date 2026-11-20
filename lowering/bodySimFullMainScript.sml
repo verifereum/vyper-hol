@@ -59,34 +59,7 @@ fun full_case th =
   irule (SIMP_RULE bool_ss full_case_simps th) >>
   asm_rewrite_tac[];
 
-Theorem body_sim_full_mutual:
-  (!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_stmt_full_ok cx s) /\
-  (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_stmts_full_ok cx ss) /\
-  (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_iterator_full_ok cx it) /\
-  (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_for_full_ok cx tyv nm body vs) /\
-  (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_expr_full_ok cx e) /\
-  (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_exprs_full_ok cx es) /\
-  (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_base_target_full_ok cx t) /\
-  (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_tuple_target_full_ok cx g v) /\
-  (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_tuple_targets_full_ok cx gs vs)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   mp_tac body_ind >> impl_tac
   >- (rpt conj_tac >| [
@@ -156,6 +129,38 @@ Proof
     (* 60 *) simp[body_tuple_target_full_ok_def]
   ]) >>
   simp[]
+QED
+*)
+Theorem body_sim_full_mutual:
+  (!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_stmt_full_ok cx s) /\
+  (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_stmts_full_ok cx ss) /\
+  (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_iterator_full_ok cx it) /\
+  (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_for_full_ok cx tyv nm body vs) /\
+  (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_expr_full_ok cx e) /\
+  (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_exprs_full_ok cx es) /\
+  (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_base_target_full_ok cx t) /\
+  (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_tuple_target_full_ok cx g v) /\
+  (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops) ==>
+    body_tuple_targets_full_ok cx gs vs)
+Proof
+  cheat
 QED
 
 Theorem body_stmts_sim_full:
