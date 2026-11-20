@@ -106,19 +106,6 @@ Proof
   metis_tac[expr_body_pre_split_def, expr_body_pre_intcall_signature_mods]
 QED
 
-Theorem expr_body_pre_intcall_declaration_mods:
-  contract_inv mods exps ctx cenv cx /\
-  expr_body_pre_mods mods cenv cx env (Call ty (IntCall (src,name)) es dflt) st ==>
-  ?callee_tops. ALOOKUP mods src = SOME callee_tops /\
-    supported_program callee_tops /\
-    IS_SOME (supported_function_decl callee_tops (NONE,name) Internal)
-Proof
-  strip_tac >>
-  drule expr_body_pre_mods_int_calls >>
-  drule contract_inv_module_codes >>
-  simp[vyperTypeCallGraphTheory.int_calls_expr_def]
-QED
-
 Theorem body_intcall_source_selection_mods:
   contract_inv mods exps ctx cenv cx /\
   expr_body_pre_mods mods cenv cx env (Call ty (IntCall (src,name)) es dflt) st ==>
@@ -138,7 +125,13 @@ Theorem body_intcall_source_selection_mods:
     supported_function_body callee_tops Internal args ss
 Proof
   strip_tac >>
-  drule_all expr_body_pre_intcall_declaration_mods >> strip_tac >>
+  `?callee_tops. ALOOKUP mods src = SOME callee_tops /\
+     supported_program callee_tops /\
+     IS_SOME (supported_function_decl callee_tops (NONE,name) Internal)` by
+    (drule expr_body_pre_mods_int_calls >>
+     drule contract_inv_module_codes >>
+     simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  pop_assum strip_assume_tac >>
   drule expr_body_pre_intcall_signature_mods >> strip_tac >>
   drule contract_inv_module_codes >> strip_tac >> gvs[] >>
   drule_all supported_internal_callable >> strip_tac >>
