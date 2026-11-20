@@ -63,8 +63,9 @@ Their exact premises are in the linked owners and
 | S7 | `codegenCorrectness.codegen_correct` ([source](../venom/codegen/codegenCorrectnessScript.sml)) | Generated plan/assembly + shape + context/reachability + initial frame relation -> actual `run_call`, resource alternatives or `venom_frame_rel` | 2.1 / 4 |
 
 The top uses S1 even on exempt source executions. Only its non-exempt branch
-needs S3/S4/S5/S7; it chooses **the same `Inv` from S5**, rather than asking the
-caller for one. S2/S6 produce shape. L5 consumes S5 memory; layout or empty
+needs S3/S4/S5/S7; it takes the concrete `Inv` `raw_reachable vs` from
+`e2eProducers.o1_pipeline_memory_obligations_raw` (S5's premises, with that
+witness), rather than asking the caller for one. S2/S6 produce shape. L5 consumes S5 memory; layout or empty
 entry memory does not manufacture memory safety.
 
 `venomToAsmProps.gen_fn_simulation` is proved (4.2); S7's `codegen_correct`
@@ -543,8 +544,8 @@ Remaining work, roughly in dependency order (all future):
    Define this running invariant before block induction. Existing
    `context_venom_asm_rel`/`venom_asm_rel` equal-length/value requirements cannot
    substitute for it. `reachability_closed`/`fn_entry_inv` supply actual
-   instruction sites; S5 must provide their witness. This is a deferred proof
-   design, not an invented currently exported “frame invariant” theorem.
+   instruction sites; S5 must provide their witness. This was the planned proof
+   design; `gen_fn_simulation` is proved now.
 3. **asm→EVM / owner Milestone 4.3:** consume H21-frame/hard/trace/static/pure/
    encoding/lift. Initialize assembly with `gas_readings es` and actual trace
    outcomes; align CALL/STATICCALL requests and complete atomic callee outcomes,
@@ -556,11 +557,11 @@ Remaining work, roughly in dependency order (all future):
 4. **`codegen_correct`**, from the pieces above. Reuse proved
    `initial_state_bridge`, `block_insts_sim` and `terminal_asm_evm_final` only
    within their actual scopes; they do not already supply the new frame/trace
-   or return-address invariant. Compose the required extensions into S7.
+   or return-address invariant. S7 `codegen_correct` is proved now.
 
 ## Milestone 5: Cross-stage invariants
 
-**Owner: Milestone 5 / vyperLoweringCorrect S2/S3 and o1PipelineCorrect S5.**
+**Owner: Milestone 5 / vyperLoweringCorrect S2, loweringMemCorrect S3 and o1PipelineCorrect S5.**
 These producers were ADMITTED statements at Milestone 1; all three are proved now.
 Actual memory API is
 [unitTransformDefs](../venom/compiler/unitTransformDefsScript.sml), not the
@@ -575,10 +576,12 @@ was a `cheat`, and it would not have established S3's raw-unit contract.
 
 `raw_unit_memory_ok ctx vs` means **exists `Inv`** with
 `codegen_reachability_package Inv ctx vs` and, at every invariant instruction
-site, `s.vs_alloca_next < dimword(:256)` and `inst_mem_below_frontier inst s`.
-The latter bounds each source read/write range by the frontier **unless its
-length is zero** (`len = 0 \/ off + len <= s.vs_alloca_next`). A zero-length
-range need not have a small offset. This is an actual-sites safety contract,
+site, `s.vs_alloca_next < dimword(:256)`, `inst_mem_ok_in_fn fn inst s`,
+`dalloca_no_wrap inst s` and `w2n s.vs_initial_fmp <= w2n s.vs_fmp`.
+`inst_mem_ok_in_fn` holds at a revert forwarding, and otherwise requires each
+source read/write range to be **empty**, below the frontier
+(`off + len <= s.vs_alloca_next`) or inside the dynamic region
+`[vs_initial_fmp, vs_fmp)`. A zero-length range need not have a small offset. This is an actual-sites safety contract,
 not byte-array length or “all memory initialized”.
 
 [contextCodegenRel](../venom/codegen/defs/contextCodegenRelScript.sml) defines
