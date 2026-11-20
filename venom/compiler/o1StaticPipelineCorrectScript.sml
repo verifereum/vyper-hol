@@ -667,8 +667,6 @@ Theorem o1_pipeline_code_end_offset_ok_static_abort:
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
     o1_initial_state_ok vs_out /\ vs_out.vs_fmp = vs_out.vs_initial_fmp /\
     code_layout_valid vs_out /\
-    (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-       ~MEM (Label "runtime_begin") inst.inst_operands) /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
     fixed_region_reserved lo unit.cu_context /\ dead_wf D /\

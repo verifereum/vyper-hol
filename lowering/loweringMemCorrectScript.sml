@@ -21,7 +21,7 @@ Ancestors
   allocaFrontierBound ptrDiscipline lowerDloadDefs contextCodegenRel venomWf
   venomInst unitMemInv unitTransformDefs rawReachableFmp ctxLookupAgree
   loweringShapeSource supportedStmtTraverse supportedExprTraverse vyperTypeContract
-  vyperAST unitShapeDefs o1PassContract e2eDefs exprSimHypsDefs list
+  vyperAST vyperCalldata unitShapeDefs o1PassContract e2eDefs exprSimHypsDefs list
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "tops";
@@ -36,16 +36,14 @@ val _ = Parse.hide "tops";
    distinct labels, an acyclic reachable call graph, the allocation budget
    below the word size) are lowering_context_ok, which run_lowering checks.
    The other conjuncts come from run_lowering: no eom, and no reserved
-   global region.  No DALLOCA is a premise: the bridge covers only
-   static allocation. The lowering's pointer check excludes the other raw
-   FMP operations, so the free-memory pointer never moves. The entry floor
-   gives the bridge's two pointer facts. *)
-Theorem lower_vyper_runtime_unit_memory_ok:
+   global region. The static wrapper proves the reachability premise from
+   the absence of raw FMP operations and the entry floor. *)
+Theorem lower_vyper_runtime_unit_memory_ok_from_no_wrap:
   !tops rpolicy unit am tx vs fn lbl D.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     initial_venom_state_rel tops am tx vs /\
-    ~ctx_has_dalloca unit.cu_context /\
-    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
+    (!f inst s. raw_reachable vs unit.cu_context f inst s ==>
+       dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp) /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
     (!fuel. mem_safe_blocks fuel unit.cu_context fn
@@ -84,6 +82,33 @@ Proof
   `!f inst s. alloca_frontier_inv unit.cu_context f inst s ==>
               s.vs_alloca_next < dimword (:256)` by
     (rpt strip_tac >> drule alloca_frontier_inv_bound >> simp[]) >>
+  drule_all mem_safe_raw_unit_memory_ok >> strip_tac >>
+  drule lower_vyper_runtime_unit_raw_defaults >> strip_tac >>
+  drule_all loweringPtrCorrectTheory.lower_vyper_runtime_unit_ptr_taint >> strip_tac >>
+  simp[fixed_region_reserved_def]
+QED
+
+Theorem lower_vyper_runtime_unit_memory_ok:
+  !tops rpolicy unit am tx vs fn lbl D.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    initial_venom_state_rel tops am tx vs /\
+    ~ctx_has_dalloca unit.cu_context /\
+    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    (!fuel. mem_safe_blocks fuel unit.cu_context fn
+       (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                   vs_inst_idx := 0 |>)) /\
+    (!fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint
+       (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                   vs_inst_idx := 0 |>))
+    ==> raw_unit_memory_ok unit.cu_context vs /\
+        EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+        fixed_region_reserved 0 unit.cu_context /\
+        ptr_discipline 0 unit.cu_context vs /\
+        taint_within D unit.cu_context vs
+Proof
+  rpt strip_tac >>
   `EVERY no_raw_fmp_ops unit.cu_context.ctx_functions` by
     (drule_all lower_vyper_runtime_unit_fn_ptr_ok >> strip_tac >>
      simp[listTheory.EVERY_MEM, no_raw_fmp_ops_def] >> rpt strip_tac >>
@@ -110,10 +135,7 @@ Proof
      `inst.inst_opcode <> DALLOCA` by
        (strip_tac >> gvs[is_raw_fmp_opcode_def]) >>
      simp[dalloca_no_wrap_def]) >>
-  drule_all mem_safe_raw_unit_memory_ok >> strip_tac >>
-  drule lower_vyper_runtime_unit_raw_defaults >> strip_tac >>
-  drule_all loweringPtrCorrectTheory.lower_vyper_runtime_unit_ptr_taint >> strip_tac >>
-  simp[fixed_region_reserved_def]
+  metis_tac[lower_vyper_runtime_unit_memory_ok_from_no_wrap]
 QED
 
 Theorem lower_vyper_runtime_unit_source_shape_raw_call_calldata:
@@ -173,73 +195,7 @@ Proof
   cheat
 QED
 
-Theorem lower_vyper_runtime_unit_memory_ok_raw_call_calldata:
-  !tops rpolicy unit layouts addr art.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    check_contract F layouts addr [(NONE, tops)] = SOME art /\
-    (?vis mut nr rr name args dflts ret body.
-       MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
-       vis <> Deploy /\
-       (supported_stmts_expr_exists
-          (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d) body \/
-        EXISTS (supported_expr_exists
-          (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d)) dflts)) ==>
-    (!am tx vs fn lbl D.
-      initial_venom_state_rel tops am tx vs /\
-      w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
-      lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-      fn_entry_label fn = SOME lbl /\
-      (!fuel. mem_safe_blocks fuel unit.cu_context fn
-         (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                     vs_inst_idx := 0 |>)) /\
-      (!fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint
-         (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                     vs_inst_idx := 0 |>))
-      ==> raw_unit_memory_ok unit.cu_context vs /\
-        EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-        fixed_region_reserved 0 unit.cu_context /\
-        ptr_discipline 0 unit.cu_context vs /\
-        taint_within D unit.cu_context vs)
-Proof
-  (* GATE_ADMISSION: held, dynamic allocation; S3 memory_ok for DALLOCA contexts / O1 source shape *)
-  cheat
-QED
-
-Theorem lower_vyper_runtime_unit_memory_ok_create_copy:
-  !tops rpolicy unit layouts addr art.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    check_contract F layouts addr [(NONE, tops)] = SOME art /\
-    (?vis mut nr rr name args dflts ret body.
-       MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
-       vis <> Deploy /\
-       (supported_stmts_expr_exists
-          (\e. ?ty s r ks es d.
-                 e = Call ty (CreateTarget CreateCopyOf s r ks) es d) body \/
-        EXISTS (supported_expr_exists
-          (\e. ?ty s r ks es d.
-                 e = Call ty (CreateTarget CreateCopyOf s r ks) es d)) dflts)) ==>
-    (!am tx vs fn lbl D.
-      initial_venom_state_rel tops am tx vs /\
-      w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
-      lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-      fn_entry_label fn = SOME lbl /\
-      (!fuel. mem_safe_blocks fuel unit.cu_context fn
-         (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                     vs_inst_idx := 0 |>)) /\
-      (!fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint
-         (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                     vs_inst_idx := 0 |>))
-      ==> raw_unit_memory_ok unit.cu_context vs /\
-        EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-        fixed_region_reserved 0 unit.cu_context /\
-        ptr_discipline 0 unit.cu_context vs /\
-        taint_within D unit.cu_context vs)
-Proof
-  (* GATE_ADMISSION: held, dynamic allocation; S3 memory_ok for DALLOCA contexts / O1 source shape *)
-  cheat
-QED
-
-Theorem lower_vyper_runtime_unit_memory_ok_create_blueprint:
+Theorem lower_vyper_runtime_unit_blueprint_raw_fmp:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     check_contract F layouts addr [(NONE, tops)] = SOME art /\
@@ -254,22 +210,6 @@ Theorem lower_vyper_runtime_unit_memory_ok_create_blueprint:
           (\e. ?ty b s r ks es d.
                  e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d))
           dflts)) ==>
-    (!am tx vs fn lbl D.
-      initial_venom_state_rel tops am tx vs /\
-      w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
-      lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-      fn_entry_label fn = SOME lbl /\
-      (!fuel. mem_safe_blocks fuel unit.cu_context fn
-         (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                     vs_inst_idx := 0 |>)) /\
-      (!fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint
-         (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                     vs_inst_idx := 0 |>))
-      ==> raw_unit_memory_ok unit.cu_context vs /\
-        EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-        fixed_region_reserved 0 unit.cu_context /\
-        ptr_discipline 0 unit.cu_context vs /\
-        taint_within D unit.cu_context vs) /\
     (!am tx vi. source_deployment_rel tops am tx /\
       initial_venom_state_rel tops am tx vi /\
       vi.vs_fmp = vi.vs_initial_fmp /\
@@ -280,9 +220,9 @@ Theorem lower_vyper_runtime_unit_memory_ok_create_blueprint:
       outcomes_accounts_typed (SOME vi.vs_outcomes) /\
       LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 ==>
       !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s)
+        dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp)
 Proof
-  (* GATE_ADMISSION: held, dynamic allocation; S3 memory_ok for DALLOCA contexts / O1 source shape *)
+  (* GATE_ADMISSION: held, blueprint DALLOCA no-wrap and FMP floor *)
   cheat
 QED
 
@@ -346,44 +286,6 @@ Proof
     [drule_all lower_vyper_runtime_unit_source_shape_raw_call_calldata,
      drule_all lower_vyper_runtime_unit_source_shape_create_copy,
      drule_all lower_vyper_runtime_unit_source_shape_create_blueprint] >> simp[]
-QED
-
-Theorem lower_vyper_runtime_unit_memory_ok_checked:
-  !tops rpolicy unit layouts addr art am tx vs fn lbl D.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    check_contract F layouts addr [(NONE, tops)] = SOME art /\
-    initial_venom_state_rel tops am tx vs /\
-    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
-    lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-    fn_entry_label fn = SOME lbl /\
-    (!fuel. mem_safe_blocks fuel unit.cu_context fn
-       (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                   vs_inst_idx := 0 |>)) /\
-    (!fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint
-       (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                   vs_inst_idx := 0 |>))
-    ==> raw_unit_memory_ok unit.cu_context vs /\
-        EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-        fixed_region_reserved 0 unit.cu_context /\
-        ptr_discipline 0 unit.cu_context vs /\
-        taint_within D unit.cu_context vs
-Proof
-  rpt gen_tac >> strip_tac >> Cases_on `raw_shape_free_program tops`
-  >- (`~ctx_has_dalloca unit.cu_context` by
-        (drule_all lower_vyper_runtime_unit_no_dalloca_checked >>
-         simp[ctx_has_dalloca_def, listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >>
-         metis_tac[]) >>
-      metis_tac[lower_vyper_runtime_unit_memory_ok]) >>
-  drule runtime_raw_shape_cases >>
-  disch_then (DISJ_CASES_THEN2 ASSUME_TAC (DISJ_CASES_THEN ASSUME_TAC)) >>
-  FIRST
-    [drule_all lower_vyper_runtime_unit_memory_ok_raw_call_calldata >>
-     disch_then irule,
-     drule_all lower_vyper_runtime_unit_memory_ok_create_copy >>
-     disch_then irule,
-     drule_all lower_vyper_runtime_unit_memory_ok_create_blueprint >>
-     disch_then (irule o CONJUNCT1)] >>
-  simp[] >> qexistsl [`am`, `tx`] >> asm_rewrite_tac[]
 QED
 
 Theorem lower_vyper_runtime_unit_dload_in_section:
