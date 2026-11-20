@@ -28,9 +28,10 @@
  *                       program's
  *   byte_widths_expr  — every node's type has a width of whole bytes
  *   expr_body_pre     — expr_sim_pre less int_calls_expr e = []: the
- *                       body simulation's (bodySim); each of its calls
- *                       is to a supported internal function of the main
- *                       module, which then is a supported program
+ *                       body simulation's (bodySim); each internal call
+ *                       in it (int_calls_expr) is to a supported internal
+ *                       function of the main module, which then is a
+ *                       supported program
  *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
  *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre holds
  *   expr_ok           — both: the induction predicate
@@ -297,10 +298,10 @@ Libs
 
 
 (* expr_sim_pre without int_calls_expr e = []: the body simulation's
-   (bodySim), where an operand may call an internal function.  Each of its
-   calls is to a supported internal function of the main module
-   (supported_function_decl, which supported_expr checks too), which then
-   is a supported program. *)
+   (bodySim), where an operand may call an internal function.  Each
+   internal call in it (int_calls_expr) is to a supported internal function
+   of the main module (supported_function_decl, which supported_expr checks
+   too), which then is a supported program. *)
 
 (* A call-free expression is described at its annotation. *)
 Theorem post_value_type_no_calls[simp]:
