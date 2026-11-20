@@ -51,7 +51,7 @@ Theorem deploy_ptr_entry_normalized:
     (rp,unit,dout,prog,cplan) /\
   deploy_source_ok tops am tx /\
   deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) /\
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
@@ -191,7 +191,7 @@ QED
 val SourceEntryMode = ``\checked.
   deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
   deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) /\
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
@@ -265,9 +265,8 @@ Proof
   Q.SUBGOAL_THEN `is_payable \/ initial.vs_call_ctx.cc_callvalue = 0w` assume_tac
   >- (Cases_on `is_payable` >> simp[] >>
       `vs.vs_call_ctx = (deploy_entry_state prog cplan tops es).vs_call_ctx` by
-        (qpat_x_assum `gas_variant _ _` mp_tac >>
-         simp_tac std_ss [gas_variant_def, venom_state_component_equality] >>
-         rpt strip_tac >> simp[]) >>
+        (qpat_x_assum `gas_variant _ _` (mp_tac o REWRITE_RULE [gas_variant_def]) >>
+         disch_then (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx`) >> simp[]) >>
       qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
       simp_tac std_ss [deploy_state_rel_def] >> strip_tac >>
       simp[Abbr `initial`, deploy_entry_state_def, entry_venom_state_def] >> gvs[]) >>
@@ -425,7 +424,7 @@ QED
 Theorem deploy_ptr_entry_prefix_related_checked:
   deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
   deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) /\
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
@@ -582,7 +581,10 @@ Theorem deploy_ptr_entry_prefix_related:
         fuel unit.cu_context func [] FEMPTY entry_taint
         (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
 Proof
-  strip_tac >> drule_all deploy_ptr_entry_prefix_related_checked >> strip_tac >>
+  strip_tac >>
+  `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+  drule_all deploy_ptr_entry_prefix_related_checked >> strip_tac >>
   qexistsl [`actual`,`H`,`qt`] >> simp[]
 QED
 
@@ -621,6 +623,8 @@ Theorem deploy_ctor_entry_run_ptr:
                             vs_inst_idx := 0 |>))
 Proof
   rpt strip_tac >>
+  `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
   drule_all deploy_ptr_entry_prefix_related >>
   disch_then (Q.ISPEC_THEN `HS` strip_assume_tac) >>
   drule_all deploy_ptr_entry_normalized >> simp_tac bool_ss [LET_THM] >> strip_tac >> gvs[] >>

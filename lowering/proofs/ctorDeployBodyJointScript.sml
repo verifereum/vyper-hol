@@ -72,7 +72,7 @@ Theorem deploy_no_ctor_zero_path[local]:
     deploy_phases policy tops (deploy_bc, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     classify_functions tops = (exts, ints, fb, NONE) /\
     lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME func /\
     fn_entry_label func = SOME "__deploy" ==>
@@ -114,7 +114,7 @@ Proof
     metis_tac[run_blocks_run_from_no_phi] >>
   `vs.vs_allocas = FEMPTY` by
     (fs[gas_variant_def] >>
-     qpat_x_assum `deploy_entry_state _ _ _ _ = _`
+     qpat_x_assum `(deploy_entry_state _ _ _ _ with vs_outcomes := _) = _`
        (mp_tac o Q.AP_TERM `\x. x.vs_allocas`) >>
      simp[deploy_entry_state_def, entry_venom_state_def,
           init_venom_state_def]) >>
@@ -231,7 +231,7 @@ Theorem deploy_prefix_zero_path[local]:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     classify_functions tops = (exts, ints, fb, SOME cf) /\
     (!mut nr body am_c es0.
        ~deploy_ctor_start tops am tx (mut, nr, body, am_c, es0)) /\
@@ -441,7 +441,7 @@ Theorem deploy_no_ctor_correct_with:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     classify_functions tops = (exts, ints, fb, NONE) ==>
     deploy_unit_execution_correct_with dunit.cu_context [] tops runtime_bc am tx dunit vs
 Proof
@@ -483,7 +483,10 @@ Theorem deploy_no_ctor_correct_at:
     classify_functions tops = (exts, ints, fb, NONE) ==>
     deploy_unit_execution_correct_at [] tops runtime_bc am tx dunit vs
 Proof
-  rpt strip_tac >> drule_all deploy_no_ctor_correct_with >>
+  rpt strip_tac >>
+  `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+  drule_all deploy_no_ctor_correct_with >>
   simp[deploy_unit_execution_correct_at_with] >> metis_tac[]
 QED
 
@@ -532,7 +535,7 @@ Theorem deploy_ctor_prefix_fail_with:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     classify_functions tops = (exts, ints, fb, SOME cf) /\
     (!mut nr body am_c es0.
        ~deploy_ctor_start tops am tx (mut, nr, body, am_c, es0)) /\
@@ -580,7 +583,10 @@ Theorem deploy_ctor_prefix_fail_at:
        ~deploy_ctor_start tops am tx (mut, nr, body, am_c, es0)) ==>
     deploy_unit_execution_correct_at [] tops runtime_bc am tx dunit vs
 Proof
-  rpt strip_tac >> drule_all deploy_unit_run_entry >> strip_tac >>
+  rpt strip_tac >>
+  `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+  drule_all deploy_unit_run_entry >> strip_tac >>
   drule_all ctor_prefix_task_entry_label >> strip_tac >> gvs[] >>
   `gas_shadow_context dunit.cu_context dunit.cu_context /\
    gas_shadow_function fn fn` by
@@ -600,7 +606,8 @@ Theorem deploy_ctor_body_joint_with:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    call_outcomes_ok am tx vs.vs_outcomes /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -900,7 +907,16 @@ Theorem deploy_ctor_body_joint:
     ?marks.
       deploy_unit_execution_correct_at marks tops runtime_bc am tx dunit vs
 Proof
-  rpt strip_tac >> drule_all deploy_ctor_body_shadow >> strip_tac >>
+  rpt strip_tac >>
+  `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+  `call_outcomes_ok am tx vs.vs_outcomes` by
+    (drule deploy_state_rel_call_outcomes_ok >>
+     qpat_assum `gas_variant _ (deploy_entry_state _ _ _ _)`
+       (mp_tac o SRULE [gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\s. s.vs_outcomes`) >>
+     simp[deploy_entry_state_def, entry_venom_state_def]) >>
+  drule_all deploy_ctor_body_shadow >> strip_tac >>
   drule_all deploy_ctor_body_joint_with >> strip_tac >> qexists_tac `marks` >>
   simp[deploy_unit_execution_correct_at_with] >> metis_tac[]
 QED
@@ -911,8 +927,9 @@ Theorem deploy_unit_execution_correct_fixed_shadow:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es ==>
-    ?shadow_ctx. !vs.
-      gas_variant vs (deploy_entry_state prog cplan tops es) ==>
+    ?shadow_ctx. !outs vs.
+      call_outcomes_ok am tx outs /\
+      gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := outs) ==>
       ?marks. deploy_unit_execution_correct_with shadow_ctx marks
         tops runtime_bc am tx dunit vs
 Proof
@@ -920,7 +937,12 @@ Proof
   `?exts ints fb cfo. classify_functions tops = (exts, ints, fb, cfo)` by
     metis_tac[pairTheory.ABS_PAIR_THM] >>
   Cases_on `cfo`
-  >- (qexists_tac `dunit.cu_context` >> rpt strip_tac >> qexists_tac `[]` >>
+  >- (qexists_tac `dunit.cu_context` >> rpt strip_tac >>
+      `vs.vs_outcomes = outs` by
+        (qpat_assum `gas_variant _ _`
+           (mp_tac o Q.AP_TERM `\s. s.vs_outcomes` o REWRITE_RULE [gas_variant_def]) >>
+         simp[]) >>
+      qpat_x_assum `vs.vs_outcomes = outs` (SUBST_ALL_TAC o SYM) >> qexists_tac `[]` >>
       irule deploy_no_ctor_correct_with >> metis_tac[]) >>
   drule_all deploy_ctor_code_exists >> strip_tac >>
   drule_all deploy_ctor_body_shadow >> strip_tac >>
@@ -928,6 +950,11 @@ Proof
     fs[deploy_source_ok_def] >>
   drule_all deploy_ctor_original_entry_shape >> strip_tac >>
   qexists_tac `shadow_ctx` >> rpt strip_tac >>
+  `vs.vs_outcomes = outs` by
+    (qpat_assum `gas_variant _ _`
+       (mp_tac o Q.AP_TERM `\s. s.vs_outcomes` o REWRITE_RULE [gas_variant_def]) >>
+     simp[]) >>
+  qpat_x_assum `vs.vs_outcomes = outs` (SUBST_ALL_TAC o SYM) >>
   reverse (Cases_on `?mut nr' body' am_c es0.
     deploy_ctor_start tops am tx (mut, nr', body', am_c, es0)`)
   >- (fs[] >> qexists_tac `[]` >> irule deploy_ctor_prefix_fail_with >>
@@ -945,6 +972,11 @@ Theorem deploy_unit_execution_correct_joint:
     deploy_unit_execution_correct tops runtime_bc am tx dunit vs
 Proof
   rpt strip_tac >> drule_all deploy_unit_execution_correct_fixed_shadow >>
+  disch_then (qx_choose_then `shadow_ctx` (qspecl_then
+    [`(deploy_entry_state prog cplan tops es).vs_outcomes`, `vs`] mp_tac)) >>
+  impl_tac
+  >- (simp[] >> drule deploy_state_rel_call_outcomes_ok >>
+      simp[deploy_entry_state_def, entry_venom_state_def]) >>
   simp[deploy_unit_execution_correct_def, deploy_unit_execution_correct_at_with] >>
   metis_tac[]
 QED

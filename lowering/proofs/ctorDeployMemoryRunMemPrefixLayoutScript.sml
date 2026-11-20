@@ -140,7 +140,7 @@ QED
 
 Theorem ctor_prefix_entry_value:
   deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) /\ tx.value <> 0 ==>
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\ tx.value <> 0 ==>
   (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>).
     vs_call_ctx.cc_callvalue <> 0w
 Proof
@@ -211,7 +211,7 @@ Proof
 QED
 
 Theorem ctor_prefix_entry_not_halted:
-  gas_variant vs (deploy_entry_state prog cplan tops es) ==>
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
   ~(vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                vs_inst_idx := 0 |>).vs_halted
 Proof

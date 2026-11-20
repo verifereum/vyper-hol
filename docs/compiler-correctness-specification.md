@@ -65,12 +65,11 @@ or check and is easy to miss:
   `raw_call` at all. The source semantics already models both on the caller's
   side through the call-outcome oracle (`eval_create`, `eval_raw_call`); these
   `supported_program` checks are what keep such bodies outside the theorem.
-  Constructors are narrower still: `e2e_deploy_correctness` also assumes
-  `constructor_call_free tops`, which rejects every call and the precompile
-  builtins in `__init__`. The constructor source runs with the frame's outcome
-  list, `load_contract (SOME (MAP SND (call_trace es))) ...` in
-  `deploy_call_result_rel`, and `constructor_call_free` ensures it takes no
-  outcome from it.
+  `e2e_deploy_correctness` also requires `supported_program tops` and
+  `supported_program_deploy tops`. It covers constructors that make supported
+  external calls, including calls to the computed precompiles.
+  `supported_program_deploy` applies the same body checks to constructors,
+  excluding `create_*` and `raw_call`.
 - **Initcode is the deploy bytecode followed by the canonical constructor
   arguments.** `deploy_state_rel` requires
   `ctxt.msgParams.code = deploy_bc ++ args_bytes` and
@@ -297,10 +296,10 @@ input bytes the lowering passes (`precompile_input`). One path still differs:
 an ecadd/ecmul argument that is not a valid curve point makes the source raise
 before any request, while the compiled STATICCALL records one before its
 ASSERT aborts; `call_result_rel` compares effects only on success or halt, so
-this mismatch is outside what the theorem relates. Constructors, which run
-with the frame's outcome list but take nothing from it, exclude them
-(`constructor_call_free`). Other
-calls, including nonzero-value precompile calls, remain ordinary oracle calls.
+this mismatch is outside what the theorem relates. Constructors take outcomes
+from their creation frame's trace through
+`load_contract (SOME (MAP SND (call_trace es))) ...` in `deploy_call_result_rel`.
+Other calls, including nonzero-value precompile calls, remain ordinary oracle calls.
 Verifereum still executes callees and any reentrant calls; the oracle abstracts
 that whole execution into an outcome. Re-applying a frame theorem to an inner
 call requires its own premises. No current theorem connects all source-executed
@@ -369,8 +368,7 @@ The result relation ties source gas observations to the frame's EVM gas readings
   an admission-free result. The deploy companion `e2e_deploy_gas_sufficient`
   similarly composes proved stage bounds; under its source-exemption and
   storage premises, OutOfGas implies oversized deposited code or a reached
-  `RETURNDATACOPY`. The per-finalizer case theorems give the stronger
-  code-size-only alternative. Its assembly-optimizer case also remains admitted.
+  `RETURNDATACOPY`. Both deploy finalizer cases include these alternatives.
 - msg.gas beyond `gas_readings_rel`, `gas=` beyond its forwarded operand and
   arbitrary unsupported programs are outside this runtime contract. Static entry
   (`ctxt.msgParams.static = tx.is_static`), runtime immutables (`installed_code_rel`
@@ -379,14 +377,16 @@ The result relation ties source gas observations to the frame's EVM gas readings
   transaction entry/storage and callee-outcome producers remain Milestone 7
   obligations; selected boundary regressions do not discharge them.
 
-Deployment is separate: the real `e2e_deploy_correctness` is **ADMITTED**,
-Milestone6 item7, off this call path. It has Call-free constructor/canonical ABI,
-pre-constant deployment typing/storage and fresh single-frame creation with an
-uninstalled source target and an empty target account in `es.originalAccounts`;
-it returns/installs `runtime_bc ++ section` satisfying `immutables_section_rel` and compares other
-accounts, target modulo code and dead storage, transient storage modulo dead
-target storage, and logs. It is not the old
-proved `==> T` placeholder. `gen_fn_simulation` is separately ADMITTED,
+The proved `e2e_deploy_correctness` covers fresh single-frame creation with
+canonical constructor arguments, deployment typing, an uninstalled source
+target and an empty target account in `es.originalAccounts`. It requires fewer
+than 2⁶⁴ entries in the creation frame's call trace. The assembly-optimizer
+case requires `~program_reads_self_code tops`. With the finite storage guard,
+the result relation uses the constructor's call outcomes and
+compares accounts and transient storage at the run's storage horizon,
+along with logs and call requests. Successful installation returns and deposits
+`runtime_bc ++ section` satisfying `immutables_section_rel`.
+`gen_fn_simulation` is separately ADMITTED,
 Milestone4.2, also off path. The
 [completed retirement ledger](../lowering/e2eLegacy.md) retains original proof
 history and maps all obsolete APIs to the clean new boundary; no compatibility
