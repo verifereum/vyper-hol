@@ -48,7 +48,6 @@ P2 is ported. These still differ from the oracle with it:
 
 ## P4 (direct ABI encoder)
 
-- `abi-codegen/enc_multi`
 - `custom-errors/ce_assert_dynamic`
 - `custom-errors/ce_assert_noargs`
 - `custom-errors/ce_assert_static`
@@ -58,8 +57,6 @@ P2 is ported. These still differ from the oracle with it:
 - `external-entries/base_dom1`
 - `main/event_log`
 - `main/mixed_event_log`
-- `memory-stores/enc_in_assign`
-- `raw-system/rr03_abi`
 
 ## Pop receiver copy (vyperlang/vyper#5280), not #5127
 
@@ -70,11 +67,15 @@ P2 is ported. These still differ from the oracle with it:
 
 ## P2 (calldata argument guard) + P4 (direct ABI encoder)
 
-- `abi-codegen/enc_ensT_bytes`
+- `abi-codegen/enc_ensT_bytes`: after the builtin encoder port, the runtime
+  still uses `PUSH2 0x0100` where the oracle uses `PUSH1 0xe0`. The extra byte
+  moves the revert destination from `0x013b` to `0x013c`.
 - `custom-errors/ce_raise_dynamic`
 - `custom-errors/ce_raise_dynarray`
-- `main/abi_dynamic`
-- `main/abi_static`
+- `main/abi_dynamic`: the memory `abi_decode` path still emits
+  relative-position and head bounds checks before the load in both profiles.
+  See [bounded memory ABI decoding](pending-bounded-decode-guards.md).
+- `main/abi_static`: the same memory `abi_decode` checks differ in both profiles.
 - `main/mixed_event_types`
 
 ## Not yet attributed
