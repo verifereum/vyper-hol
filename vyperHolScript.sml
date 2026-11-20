@@ -73,7 +73,6 @@ Ancestors
   assignPlaceEmptyCompose
   assignPlaceGasCompose assignPlaceBytesStore
   (* whitelist: retained raw-call and CREATE compiler shape proofs *)
-  whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
   normalizationAllocPtr
   ptrSafetyTransport staticTypeFitsPtr

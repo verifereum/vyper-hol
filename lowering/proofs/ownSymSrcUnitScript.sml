@@ -43,27 +43,9 @@ Proof
   metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `o1_source_unit_ok unit` by
-    metis_tac[lower_vyper_runtime_unit_source_unit_ok_shape,
-              supported_program_runtime_bodies_shape_ok,
-              supported_program_internal_names, classified_internal_names_distinct] >>
-  `!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-       source_inst_ok ({"code_end"},T) inst` by
-    metis_tac[lower_vyper_runtime_unit_label_checks] >>
-  drule_all source_own_flow >> strip_tac >>
-  rpt conj_tac >|
-  [first_assum ACCEPT_TAC,
-   metis_tac[],
-   metis_tac[lower_vyper_runtime_unit_data_bytes],
-   metis_tac[lower_vyper_runtime_unit_no_runtime_begin]]
-QED
-*)
 Theorem lower_vyper_runtime_unit_sym_src_ok_own:
   !tops rpolicy unit.
-  supported_program tops /\
+  o1_source_unit_ok unit /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
   label_flow_own_ok unit.cu_context /\
   (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
@@ -75,7 +57,16 @@ Theorem lower_vyper_runtime_unit_sym_src_ok_own:
               MEM (Label "runtime_begin") inst.inst_operands) ==>
    EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+       source_inst_ok ({"code_end"},T) inst` by
+    metis_tac[lower_vyper_runtime_unit_label_checks] >>
+  drule_all source_own_flow >> strip_tac >>
+  rpt conj_tac >|
+  [first_assum ACCEPT_TAC,
+   metis_tac[],
+   metis_tac[lower_vyper_runtime_unit_data_bytes],
+   metis_tac[lower_vyper_runtime_unit_no_runtime_begin]]
 QED
 
 Theorem lower_vyper_deploy_unit_sym_src_ok_own:

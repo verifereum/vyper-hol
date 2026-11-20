@@ -1058,16 +1058,20 @@ QED
    function has its FMP convention set (lower_vyper_runtime_unit_raw_defaults).  The
    label and PHI facts S4 also needs follow from unit_wf and
    o1_source_unit_ok (o1_source_unit_label_refs_no_phi). *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem lower_vyper_runtime_unit_o1_shape_extras:
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    raw_shape_free_program tops
+    ==> unit_entry_no_params unit /\ unit_fmp_unsealed unit
 Proof
   rpt gen_tac >> strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   reverse conj_tac >- metis_tac[lower_vyper_runtime_unit_raw_defaults] >>
   drule lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params >>
   impl_tac
-  >- metis_tac[supported_program_runtime_bodies_shape_ok,
-               classified_internal_names_distinct,
-               supported_program_internal_names] >>
+  >- metis_tac[check_contract_runtime_bodies_shape_ok,
+               check_contract_internal_names_distinct] >>
   strip_tac >>
   `entry_fn_first unit.cu_context` by
     fs[o1_source_unit_ok_def, unit_shape_ok_def] >>
@@ -1084,14 +1088,6 @@ Proof
   `MEM g.fn_name (MAP (\f. f.fn_name) rest)` by
     (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
   gs[]
-QED
-*)
-Theorem lower_vyper_runtime_unit_o1_shape_extras:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
-    ==> unit_entry_no_params unit /\ unit_fmp_unsealed unit
-Proof
-  cheat
 QED
 
 (* The dead bytes of a source call's result: those storage_dead gives in
