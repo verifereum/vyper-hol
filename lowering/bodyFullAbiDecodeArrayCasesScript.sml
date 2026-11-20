@@ -683,7 +683,7 @@ Finalise abi_decode_array_guarded_decorated
 Theorem abi_decode_array_guarded_conditional:
   ^array_clause
 Proof
-  simp_tac bool_ss [] >>
-  MATCH_ACCEPT_TAC (SIMP_RULE bool_ss []
-    (Q.INST [`observe_array` |-> `F`] abi_decode_array_guarded_decorated))
+  mp_tac (INST [array_mode |-> F] abi_decode_array_guarded_decorated) >>
+  BETA_TAC >>
+  PURE_REWRITE_TAC [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP]
 QED
