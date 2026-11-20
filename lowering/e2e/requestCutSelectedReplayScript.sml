@@ -192,21 +192,6 @@ val request_cut_setup_own =
      qpat_assum `fin = asm_opt_finalizer ==> label_flow_own_ok _ /\ _`
        (drule_then (ACCEPT_TAC o CONJUNCT2)));
 
-fun request_cut_label_premise own =
-  if own then `fin = asm_opt_finalizer ==> label_flow_own_ok unit.cu_context /\ _`
-  else `fin = asm_opt_finalizer ==> label_flow_ok unit.cu_context /\ _`;
-
-val request_cut_symbolic_plan_legacy =
-  `fin = asm_opt_finalizer ==>
-    sym_steps prog (asm_data_env prog vs0.vs_code) asm_fuel
-      (sym_init (entry_asm_state vs0 es0)) = SymOK ss /\
-    normal_frame_symbolic_plan (asm_data_env prog vs0.vs_code) rpolicy out.po_unit cpl prog vs0 es0
-      (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) ast ss /\
-    focus_s7_symbolic_context out.po_unit prog` by
-    (qpat_assum `fin = asm_opt_finalizer ==> sym_steps _ _ _ _ = _ /\ _` mp_tac >>
-     qpat_assum `fin = asm_opt_finalizer ==> focus_s7_symbolic_context _ _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> metis_tac[]);
-
 val request_cut_symbolic_plan_own =
   `fin = asm_opt_finalizer ==>
     sym_steps_own prog (asm_data_env prog' vs0.vs_code) vs0.vs_code asm_fuel
@@ -221,19 +206,7 @@ val request_cut_symbolic_plan_own =
      qpat_assum `fin = asm_opt_finalizer ==> focus_s7_symbolic_context_own T _ _ /\ asm_data_env_lo_ok _ _ _ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]);
 
-fun request_cut_symbolic_plan own =
-  if own then request_cut_symbolic_plan_own else request_cut_symbolic_plan_legacy;
-
 fun own_steps th = PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES] th;
-
-val request_cut_entry_facts_legacy_tac =
-  `fin = asm_opt_finalizer ==> label_flow_ok out.po_unit.cu_context /\
-    EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F) ds.ds_items)
-      unit.cu_data_segment` by
-    (strip_tac >> qpat_assum `fin = asm_opt_finalizer ==> label_flow_ok unit.cu_context /\ _`
-       (fn th => strip_assume_tac (MP th (ASSUME ``fin = asm_opt_finalizer``))) >>
-     drule_all_then assume_tac focus_opt_label_flow >> simp[]) >>
-  drule_all_then strip_assume_tac request_cut_entry_facts;
 
 val request_cut_entry_facts_own_tac =
   drule_all_then strip_assume_tac request_cut_entry_facts_own;
@@ -300,7 +273,7 @@ fun replay_begin selector entry_facts =
   disch_then (qx_choosel_then [`Ds`, `source_fuel`, `extra`] strip_assume_tac) >>
   suspend "clipped";
 
-fun replay_clipped own =
+val replay_clipped =
   `LENGTH o1_fn_passes = 9` by simp[o1_fn_passes_def] >>
   `stage (LENGTH o1_fn_passes) = out.po_unit.cu_context` by
     (qpat_assum `LENGTH o1_fn_passes = 9` (fn eq => PURE_REWRITE_TAC [eq]) >>
@@ -336,7 +309,7 @@ fun replay_clipped own =
     LENGTH vs0.vs_data_section < dimword (:256) DIV 2 /\
     !fn i. MEM fn unit.cu_context.ctx_functions /\ MEM i (fn_insts fn) ==>
       ~MEM (Label "code_end") i.inst_operands` by
-    (qpat_assum (request_cut_label_premise own) mp_tac >>
+    (qpat_assum `fin = asm_opt_finalizer ==> label_flow_own_ok unit.cu_context /\ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   mp_tac (Q.INST [`rp` |-> `rpolicy`, `supply` |-> `t`, `entry` |-> `nm`,
     `rds` |-> `raw ++ [0w]`, `w7` |-> `v7`, `w` |-> `vs`,
@@ -352,7 +325,7 @@ fun replay_clipped own =
   qabbrev_tac `trace8 = trace_blocks [] 0 N (stage 8) root_tf root_entry` >>
   suspend "stopped";
 
-fun replay_stopped own =
+val replay_stopped =
   `o1_ctx_shape (stage 7) /\ o1_ctx_shape (stage 8)` by
     (qpat_assum `!i. i <= 9 ==> o1_ctx_shape (stage i) /\ _`
       (fn th => simp_tac (srw_ss()) [Q.SPEC `7` th, Q.SPEC `8` th])) >>
@@ -408,15 +381,14 @@ fun replay_stopped own =
       step_inst (N - d) (stage 8) inst8 s8 = Abort a post8`
      >- (qpat_x_assum `?a post8. MEM _ _ /\ _`
           (qx_choosel_then [`ab`, `post8`] strip_assume_tac) >>
-         request_cut_symbolic_plan own >>
+         request_cut_symbolic_plan_own >>
          mp_tac (Q.INST [`rp` |-> `rpolicy`, `unit` |-> `out.po_unit`, `es` |-> `es0`,
            `C` |-> `unit.cu_context`, `C8` |-> `stage 8`, `n` |-> `asm_fuel`,
            `m` |-> `N - d`, `s8'` |-> `post8`, `fuel` |-> `fuel`,
            `q9` |-> `JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9`,
            `planner_base` |-> `vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
                                        vs_return_pc_token := 0w; vs_inst_idx := 0|>`]
-           (if own then own_steps request_cut_stopped_assert_crossed_own
-            else request_cut_stopped_assert_crossed)) >>
+           (own_steps request_cut_stopped_assert_crossed_own)) >>
          (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
             qpat_assum `stage 9 = out.po_unit.cu_context` (SUBST1_TAC o SYM) >>
             first_assum ACCEPT_TAC)) >>
@@ -637,7 +609,7 @@ val replay_earlier_native_stop =
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   finish_recording `record_fn`;
 
-fun replay_other_stop own =
+val replay_other_stop =
   `raw_reachable vs0 (stage 8) fn8 inst8 s8 /\
    raw_reachable vs0 (stage 9) fn9 inst9 s9` by
     (conj_tac
@@ -679,9 +651,8 @@ fun replay_other_stop own =
     (qpat_assum `!i. i <= 9 ==> o1_ctx_shape (stage i) /\ _` (qspec_then `9` mp_tac) >>
      qpat_assum `stage 9 = out.po_unit.cu_context` (fn eq =>
        simp_tac (srw_ss()) [eq])) >>
-  request_cut_symbolic_plan own >>
-  (if own then
-     qpat_assum `fin = asm_opt_finalizer ==> sym_steps_own _ _ _ _ _ = _ /\ _`
+  request_cut_symbolic_plan_own >>
+  (qpat_assum `fin = asm_opt_finalizer ==> sym_steps_own _ _ _ _ _ = _ /\ _`
        (fn plan =>
          qpat_assum `fin = asm_opt_finalizer ==> !j a. _ ==> j <= B /\ _`
            (fn bound =>
@@ -690,16 +661,14 @@ fun replay_other_stop own =
              in
                assume_tac (DISCH (concl enabled)
                  (LIST_CONJ (CONJUNCTS (MP plan enabled) @ [MP bound enabled])))
-             end))
-   else ALL_TAC) >>
+             end))) >>
   PairCases_on `current` >>
   mp_tac (Q.INST [`C8` |-> `stage 8`, `unit` |-> `out.po_unit`, `rp` |-> `rpolicy`,
     `es` |-> `es0`, `n` |-> `asm_fuel`, `m` |-> `N - d`,
     `C` |-> `unit.cu_context`, `rounds` |-> `current0`, `cells` |-> `current1`,
     `q8` |-> `JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8`,
     `q9` |-> `JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9`]
-    (if own then own_steps (Q.INST [`max_cost` |-> `B`] request_cut_frontier_cases_own)
-     else request_cut_frontier_cases)) >>
+    (own_steps (Q.INST [`max_cost` |-> `B`] request_cut_frontier_cases_own))) >>
   (impl_tac >- (rpt conj_tac >>
     TRY (REFL_TAC ORELSE first_assum ACCEPT_TAC) >>
     qpat_assum `stage 9 = out.po_unit.cu_context`
@@ -716,17 +685,14 @@ fun replay_other_stop own =
   `LENGTH s9.vs_requests <= k` by decide_tac >>
   suspend "endpoint_observation";
 
-fun replay_endpoint_observation own =
+val replay_endpoint_observation =
   `!r. MEM r cpl.cp_regions ==> eom <= r.sr_spill_base /\ r.sr_spill_end <= w2n s9.vs_initial_fmp` by
     (drule generate_context_plan_spill_gap >> strip_tac >>
      `s9.vs_initial_fmp = vs0.vs_initial_fmp` by
        (qpat_assum `raw_reachable vs0 (stage 9) fn9 inst9 s9`
          (ACCEPT_TAC o MATCH_MP (SPEC_ALL ctxLookupAgreeTheory.raw_reachable_initial_fmp))) >>
      `vs0.vs_initial_fmp = n2w cpl.cp_initial_fmp` by
-       (if own then first_assum ACCEPT_TAC else
-        (qpat_assum `codegen_asm_entry_rel cpl prog vs0 _`
-         (map_every assume_tac o CONJUNCTS o REWRITE_RULE [codegen_asm_entry_rel_def]) >>
-        qpat_assum `n2w cpl.cp_initial_fmp = vs0.vs_initial_fmp` (ACCEPT_TAC o SYM))) >>
+       first_assum ACCEPT_TAC >>
      `cpl.cp_max_static_eom = eom` by
        (qpat_assum `max_live_eom (stage 7) = SOME eom` (fn cut_eom =>
         qpat_assum `max_live_eom (stage 9) = max_live_eom (stage 7)` (fn stages =>
@@ -757,8 +723,7 @@ fun replay_endpoint_observation own =
     `initial` |-> `vs0`, `p` |-> `p`, `d` |-> `d`,
     `h8` |-> `hist8`, `h9` |-> `hist9`, `current` |-> `(current0,current1)`,
     `guarded` |-> `fin = asm_opt_finalizer`]
-    (if own then Q.INST [`lo` |-> `lo_reloc prog prog'`] request_cut_frontier_guards_reloc
-     else Q.INST [`a0` |-> `entry_asm_state vs0 es0`] request_cut_frontier_guards)) >>
+    (Q.INST [`lo` |-> `lo_reloc prog prog'`] request_cut_frontier_guards_reloc)) >>
   (impl_tac >- (rpt conj_tac >>
     TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
     TRY (rpt strip_tac >>
@@ -775,7 +740,7 @@ fun replay_endpoint_observation own =
   `active_inst fn9 inst9 s9` by
     (qpat_assum `raw_reachable vs0 (stage 9) fn9 inst9 s9`
       (ACCEPT_TAC o MATCH_MP (SPEC_ALL raw_reachable_active))) >>
-  (if own then request_cut_symbolic_plan_own else ALL_TAC) >>
+  request_cut_symbolic_plan_own >>
   mp_tac (Q.INST [`unit` |-> `out.po_unit`, `rp` |-> `rpolicy`, `es` |-> `es0`,
     `q9` |-> `JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9`,
     `stk` |-> `stk9`, `PG` |-> `PG9`, `G` |-> `G9`, `tn` |-> `tn9`,
@@ -783,14 +748,13 @@ fun replay_endpoint_observation own =
     `planner_base` |-> `vs0 with <|vs_call_entry_fmp := n2w cpl.cp_initial_fmp;
        vs_return_pc_token := 0w; vs_inst_idx := 0|>`,
     `C` |-> `unit.cu_context`, `n` |-> `asm_fuel`, `m` |-> `0`, `post9` |-> `terminal`]
-    (if own then own_steps request_cut_stopped_terminal_crossed_own
-     else request_cut_stopped_terminal_crossed)) >>
+    (own_steps request_cut_stopped_terminal_crossed_own)) >>
   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
     qpat_assum `stage 9 = out.po_unit.cu_context`
       (fn eq => first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [eq])))) >>
   qpat_assum `~(k < LENGTH s9.vs_requests)` (fn no_cross => simp_tac bool_ss [no_cross]);
 
-fun replay_static_crossing own =
+val replay_static_crossing =
   `ALL_DISTINCT (fn_labels fn8)` by
     (qpat_assum `EVERY wf_function (stage 8).ctx_functions` mp_tac >>
      qpat_assum `MEM fn8 (stage 8).ctx_functions` mp_tac >>
@@ -814,18 +778,11 @@ fun replay_static_crossing own =
     (qpat_assum `max_live_eom (stage 9) = max_live_eom (stage 7)`
        (fn eq => PURE_REWRITE_TAC [eq]) >>
      first_assum ACCEPT_TAC) >>
-  (if own then
-    `fin = asm_opt_finalizer ==> label_flow_own_ok (stage 9) /\ sym_unit_static_ok out.po_unit` by
+  `fin = asm_opt_finalizer ==> label_flow_own_ok (stage 9) /\ sym_unit_static_ok out.po_unit` by
     (qpat_assum `stage 9 = out.po_unit.cu_context` (fn eq => PURE_REWRITE_TAC [eq]) >>
      qpat_assum `fin = asm_opt_finalizer ==> focus_s7_symbolic_context_own T out.po_unit prog` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
-     simp_tac bool_ss [focus_s7_symbolic_context_own_def] >> metis_tac[])
-   else
-    `fin = asm_opt_finalizer ==> label_flow_ok (stage 9) /\ sym_unit_static_ok out.po_unit` by
-    (qpat_assum `stage 9 = out.po_unit.cu_context` (fn eq => PURE_REWRITE_TAC [eq]) >>
-     qpat_assum `fin = asm_opt_finalizer ==> focus_s7_symbolic_context out.po_unit prog` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp_tac bool_ss [focus_s7_symbolic_context_def] >> metis_tac[])) >>
+     simp_tac bool_ss [focus_s7_symbolic_context_own_def] >> metis_tac[]) >>
   `!i l. MEM i (fn_insts fn9) /\ i.inst_opcode <> PHI /\
     MEM (Label l) (compute_operands i) ==> IS_SOME (FLOOKUP s9.vs_labels l)` by
     (rpt strip_tac >>
@@ -840,7 +797,7 @@ fun replay_static_crossing own =
     `rp` |-> `rpolicy`, `src_unit` |-> `unit`, `unit` |-> `out.po_unit`, `es` |-> `es0`,
     `dft_view` |-> `o1_walk_view rpolicy 7`, `cfg_view` |-> `o1_walk_view rpolicy 8`,
     `source` |-> `v7`, `rounds` |-> `current0`, `cells` |-> `current1`,
-    `h8` |-> `hist8`, `h9` |-> `hist9`] (if own then request_cut_static_crossing_own else request_cut_static_crossing)) >>
+    `h8` |-> `hist8`, `h9` |-> `hist9`] request_cut_static_crossing_own) >>
   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
     qpat_assum `stage 9 = out.po_unit.cu_context` (fn eq => PURE_REWRITE_TAC [eq]) >>
     first_assum ACCEPT_TAC)) >>
@@ -1012,12 +969,12 @@ val replay_endpoint_native_success =
       conj_tac >> first_assum ACCEPT_TAC) >>
   first_assum ACCEPT_TAC;
 
-fun replay_exit own =
+val replay_exit =
   qx_gen_tac `D` >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  (if own then request_cut_frame_projection_own else ALL_TAC) >>
+  request_cut_frame_projection_own >>
   mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV)
     (PURE_REWRITE_RULE [LET_THM]
-      (if own then request_cut_replay_own else focus_stopped_filling_replay))) >>
+      request_cut_replay_own)) >>
   (impl_tac >- (rpt (first_assum ACCEPT_TAC ORELSE conj_tac))) >>
   disch_then (DISJ_CASES_THEN2
     (qx_choose_then `orc` (map_every assume_tac o CONJUNCTS))
@@ -1029,230 +986,13 @@ fun replay_exit own =
         (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
           ~MEM (Label "code_end") inst.inst_operands) /\
         LENGTH vs0.vs_data_section < dimword (:256) DIV 2` by
-        (qpat_assum (request_cut_label_premise own) mp_tac >>
+        (qpat_assum `fin = asm_opt_finalizer ==> label_flow_own_ok unit.cu_context /\ _` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
-      mp_tac (if own then focus_static_replay_exit_for else focus_static_replay_exit) >>
+      mp_tac focus_static_replay_exit_for >>
       (impl_tac >- (rpt (first_assum ACCEPT_TAC ORELSE conj_tac))) >>
       disch_then ACCEPT_TAC) >>
   conj_tac >- (disj2_tac >> rpt (first_assum ACCEPT_TAC ORELSE conj_tac)) >>
   strip_tac >> rpt (first_assum ACCEPT_TAC ORELSE conj_tac ORELSE disj2_tac);
-
-Theorem focus_finalizer_selected_request_replay:
-  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
-  o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
-  code_layout_valid vs0 /\
-  unit_shape_ok out.po_unit /\
-  generate_context_plan out.po_unit.cu_context = SOME cpl /\
-  codegen_assembly rpolicy out.po_unit = SOME prog /\
-  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
-  (fin = asm_opt_finalizer ==>
-     label_flow_ok unit.cu_context /\
-     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-                ~MEM (Label "code_end") inst.inst_operands) /\
-     EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
-                       ds.ds_items) unit.cu_data_segment /\
-     ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
-                 MEM inst (fn_insts fn) /\
-                 MEM (Label "runtime_begin") inst.inst_operands) ==>
-      EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) /\
-     LENGTH vs0.vs_data_section < dimword (:256) DIV 2) /\
-  (vs0.vs_call_ctx.cc_static ==>
-     !fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-               ~MEM (Label "runtime_begin") inst.inst_operands) /\
-  vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
-  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
-  asm_frame_rel_tail [] prog' vs0.vs_data_section es0
-    (entry_asm_state vs0 es0 with
-      as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
-  unit.cu_context.ctx_entry = SOME nm /\
-  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
-  fn_entry_label entryfn = SOME lbl /\
-  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
-  unit_alloca_budget unit.cu_context +
-    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
-  (!gs. ?D f extra.
-    dead_wf D /\
-    (fin = asm_opt_finalizer ==>
-       !fn inst s.
-         raw_reachable (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>)
-           unit.cu_context fn inst s /\
-         gas_cut (MIN (LENGTH (markf gs)) (LENGTH gs))
-           (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) s ==>
-         inst_dload_in_section inst s) /\
-    o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
-      unit.cu_context (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
-    MAP project
-      (gas_events_blocks f unit.cu_context entryfn
-        (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp;
-                    vs_prev_bb := NONE;
-                    vs_current_bb := lbl; vs_inst_idx := 0|>)) =
-      markf gs ++ extra) /\
-  run_call es0 = SOME (result,final) /\
-  ~frame_resource_starved es0 result final /\
-  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
-    (init_ir_supply unit) = SOME (pre,t) /\
-  pre.cu_context.ctx_entry = SOME nm /\
-  run_callee_first rpolicy o1_fn_passes
-    (fcg_postorder (fcg_analyze pre.cu_context) nm)
-    (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)) t =
-    SOME (out.po_unit,t') /\
-  stage 0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context /\
-  stage 9 = out.po_unit.cu_context /\
-  (!k. k < 9 ==> ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
-    (stage k) (stage (SUC k))) /\
-  (!k. k <= 9 ==> o1_ctx_shape (stage k) /\
-    EVERY (o1_fn_row k) (stage k).ctx_functions) ==>
-  ?raw_slots sites unused.
-    LENGTH raw_slots = LENGTH sites /\
-    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
-    !raw.
-      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
-      (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
-      (!D.
-        (?fr. terminates (run_context fr unit.cu_context
-           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
-        dead_wf D /\
-        o1_pre_walk_inv D unit.cu_context
-          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
-        (fin = asm_opt_finalizer ==>
-           mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
-                     s.vs_code = vs0.vs_code /\ s.vs_data_section = vs0.vs_data_section)
-             unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
-        (((?orc.
-          (!fuel. gas_res_rel (run_context fuel (stage 7)
-            (vs0 with vs_gas_readings := raw ++ [0w]))
-            (ev_context orc fuel (stage 7) vs0)) /\
-          (!fuel. gas_res_rel (run_context fuel (stage 8) vs0)
-            (ev_context orc fuel (stage 8) vs0)) /\
-          (!p d fn inst s. ev_reachable orc vs0 (stage 7) p d fn inst s ==>
-            ?ws. raw_reachable (vs0 with vs_gas_readings := raw ++ [0w])
-                 (stage 7) fn inst (s with vs_gas_readings := ws)) /\
-          (!fn inst s. raw_reachable vs0 (stage 8) fn inst s ==>
-            ?p d. ev_reachable orc vs0 (stage 8) p d fn inst
-              (s with vs_gas_readings := vs0.vs_gas_readings))) \/
-         (vs0.vs_call_ctx.cc_static /\
-          ctx_sim D unit.cu_context out.po_unit.cu_context
-            (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
-          ctx_abort_rq D unit.cu_context out.po_unit.cu_context
-            (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
-          (fin = asm_opt_finalizer ==>
-             code_end_offset_ok
-               (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
-                 ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
-          (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-            mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
-                      lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
-              out.po_unit.cu_context vs0) /\
-          (!fuel. terminates (run_context fuel unit.cu_context
-                    (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
-                  ?u. run_context fuel unit.cu_context
-                        (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) =
-                      Abort ExHalt_abort u))) /\
-        ((!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-           ~MEM (Label "runtime_begin") inst.inst_operands) ==>
-        ctx_sim D unit.cu_context out.po_unit.cu_context
-          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
-        ctx_abort_rq D unit.cu_context out.po_unit.cu_context
-          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
-        (fin = asm_opt_finalizer ==>
-           code_end_offset_ok
-             (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
-               ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
-        ((o1_lowered_inv out.po_unit.cu_context vs0 /\
-          (fin = asm_opt_finalizer ==>
-             code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)) \/
-         ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-            mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
-                      lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
-              out.po_unit.cu_context vs0) /\
-          !fuel. terminates (run_context fuel unit.cu_context
-                    (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
-                 ?u. run_context fuel unit.cu_context
-                       (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) =
-                     Abort ExHalt_abort u))))) /\
-      (!D k vs fn inst s fuel s'.
-        (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-           ~MEM (Label "runtime_begin") inst.inst_operands) /\
-        vs = (vs0 with <|vs_gas_readings := raw ++ [0w];
-                         vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
-        dead_wf D /\ raw_safe_rq_upto D 0 k unit.cu_context vs /\
-        raw_reachable vs unit.cu_context fn inst s /\
-        inst.inst_opcode <> INVOKE /\ LENGTH s.vs_requests = k /\
-        step_inst fuel unit.cu_context inst s = OK s' /\
-        k < LENGTH s'.vs_requests ==>
-        (?fn' inst' t fuel' t'.
-          raw_reachable vs0 out.po_unit.cu_context fn' inst' t /\
-          inst'.inst_opcode <> INVOKE /\ LENGTH t.vs_requests = k /\
-          step_inst fuel' out.po_unit.cu_context inst' t = OK t' /\
-          k < LENGTH t'.vs_requests /\
-          request_agree_except D (EL k s'.vs_requests) (EL k t'.vs_requests) /\
-          t.vs_outcomes = s.vs_outcomes) /\
-        ctx_rq_upto D k unit.cu_context out.po_unit.cu_context vs vs0 /\
-        (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-          mem_inv (\ctx fn inst t. (request_cut k t /\ ~in_static_abort_prefix fn t) ==>
-            lowered_mem_ok eom (w2n t.vs_initial_fmp) ctx fn inst t)
-            out.po_unit.cu_context vs0) /\
-        (fin = asm_opt_finalizer ==>
-          code_end_offset_ok (\ctx fn inst t.
-            raw_reachable vs0 ctx fn inst t /\ request_cut k t /\
-            ~in_static_abort_prefix fn t) out.po_unit.cu_context))
-
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  replay_begin focus_walk_stopped_selection request_cut_entry_facts_legacy_tac
-QED
-
-Resume focus_finalizer_selected_request_replay[clipped]:
-  replay_clipped false
-QED
-
-Resume focus_finalizer_selected_request_replay[stopped]:
-  replay_stopped false
-QED
-
-Resume focus_finalizer_selected_request_replay[historical_root]:
-  replay_historical_root
-QED
-
-Resume focus_finalizer_selected_request_replay[join_recording]:
-  replay_join_recording
-QED
-
-Resume focus_finalizer_selected_request_replay[earlier_native_stop]:
-  replay_earlier_native_stop
-QED
-
-Resume focus_finalizer_selected_request_replay[other_stop]:
-  replay_other_stop false
-QED
-
-Resume focus_finalizer_selected_request_replay[endpoint_observation]:
-  replay_endpoint_observation false
-QED
-
-Resume focus_finalizer_selected_request_replay[static_crossing]:
-  replay_static_crossing false
-QED
-
-Resume focus_finalizer_selected_request_replay[endpoint_visit]:
-  replay_endpoint_visit
-QED
-
-Resume focus_finalizer_selected_request_replay[endpoint_native_stop]:
-  replay_endpoint_native_stop
-QED
-
-Resume focus_finalizer_selected_request_replay[endpoint_native_success]:
-  replay_endpoint_native_success
-QED
-
-Resume focus_finalizer_selected_request_replay[exit]:
-  replay_exit false
-QED
-
-Finalise focus_finalizer_selected_request_replay
 
 Theorem focus_finalizer_selected_request_replay_own:
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
@@ -1422,11 +1162,11 @@ Proof
 QED
 
 Resume focus_finalizer_selected_request_replay_own[clipped]:
-  replay_clipped true
+  replay_clipped
 QED
 
 Resume focus_finalizer_selected_request_replay_own[stopped]:
-  replay_stopped true
+  replay_stopped
 QED
 
 Resume focus_finalizer_selected_request_replay_own[historical_root]:
@@ -1442,15 +1182,15 @@ Resume focus_finalizer_selected_request_replay_own[earlier_native_stop]:
 QED
 
 Resume focus_finalizer_selected_request_replay_own[other_stop]:
-  replay_other_stop true
+  replay_other_stop
 QED
 
 Resume focus_finalizer_selected_request_replay_own[endpoint_observation]:
-  replay_endpoint_observation true
+  replay_endpoint_observation
 QED
 
 Resume focus_finalizer_selected_request_replay_own[static_crossing]:
-  replay_static_crossing true
+  replay_static_crossing
 QED
 
 Resume focus_finalizer_selected_request_replay_own[endpoint_visit]:
@@ -1466,7 +1206,7 @@ Resume focus_finalizer_selected_request_replay_own[endpoint_native_success]:
 QED
 
 Resume focus_finalizer_selected_request_replay_own[exit]:
-  replay_exit true
+  replay_exit
 QED
 
 Finalise focus_finalizer_selected_request_replay_own

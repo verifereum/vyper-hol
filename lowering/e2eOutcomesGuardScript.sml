@@ -6,6 +6,8 @@ Ancestors
   callTraceFrameProvenance callTraceFrame callTrace guardReentryCode guardReentryAccounts
   guardPushProjections immutableSectionRel vfmExecution vfmExecutionProp
   e2eCorrectness e2eComposition e2eProducers frameOutcome callGuardGasLinkProof
+  e2eOptEntry immutableCodeLayout ownSymSrcUnit o1PipelineCompose
+  asmFrameRel unitTransformDefs
   guardTerminalBackend guardSourceAlignment asmOptimizer asmOptNonemptyFinalizer
   vfmAccountDeletion e2eEntry
   vyperCallFiniteStorageSupport guardRequestCutAlignment loweringCalldataCorrect
@@ -188,37 +190,6 @@ Proof
     fs[vyper_closed_world_def] >>
   spose_not_then assume_tac >>
   drule_all run_call_to_delete >> simp[] >> metis_tac[]
-QED
-
-Triviality guard_valid_horizon_target:
-  cx'.txn.target = cx.txn.target ==>
-  (valid_horizon cx' st H obs <=> valid_horizon cx st H obs)
-Proof
-  strip_tac >>
-  `!s. storage_well_formed_on cx' s (FST H) <=>
-       storage_well_formed_on cx s (FST H)` by
-    metis_tac[storage_well_formed_on_target] >>
-  simp[valid_horizon_def, storage_observations_ok_def] >>
-  Induct_on `obs` >- simp[storage_trace_backends_well_formed_def] >>
-  Cases >> simp[storage_trace_backends_well_formed_def] >> metis_tac[]
-QED
-
-Triviality guard_opt_entry_code_update:
-  vyper_frame_staging fin policy tops runtime_bc am tx es /\
-  fin rpolicy prog = SOME prog' /\ runtime_bc = assemble prog' ==>
-  tx with code := (opt_entry_state prog prog' cplan es).vs_code = tx \/
-  ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
-  ~program_reads_self_code tops
-Proof
-  strip_tac >>
-  `call_state_rel tops (assemble prog') am tx es /\
-   fin IN accepted_finalizers /\
-   (fin = asm_opt_finalizer ==> ~program_reads_self_code tops)` by
-    fs[vyper_frame_staging_def] >>
-  Cases_on `fin = K SOME`
-  >- (gvs[] >> metis_tac[opt_entry_txp_identity]) >>
-  `fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
-  fs[call_state_rel_def, source_deployment_rel_def]
 QED
 
 Triviality guard_reentry_staging:
@@ -624,7 +595,7 @@ Proof
   disch_then (qx_choosel_then
     [`rpolicy`, `unit`, `out`, `prog`, `prog'`, `cplan`, `fmp`, `vs`, `marks`, `tail`]
     (map_every assume_tac o CONJUNCTS)) >>
-  qabbrev_tac `vs0 = opt_entry_state prog prog' cplan es` >>
+  qabbrev_tac `vs0 = opt_entry_state_own prog prog' cplan es` >>
   qabbrev_tac `txp = tx with code := vs0.vs_code` >>
   `txp.target = tx.target` by simp[Abbr `txp`] >>
   qpat_assum `vyper_call_staging _ _ _ _ _ _ _ _`
@@ -638,41 +609,14 @@ Proof
   qpat_x_assum `?deploy_bc. compile_vyper _ _ _ = _`
     (qx_choose_then `deploy_bc` assume_tac) >>
   `call_state_rel tops (assemble prog') am tx es` by metis_tac[] >>
-  `source_typing_ok tops am txp /\
-   (!gobs. call_external_trace (SOME (MAP SND (call_trace es))) gobs am txp =
-           call_external_trace (SOME (MAP SND (call_trace es))) gobs am tx) /\
-   (call_storage_ok am txp (MAP SND (call_trace es)) gs <=>
-    call_storage_ok am tx (MAP SND (call_trace es)) gs) /\
-   (call_result_rel_at gs tops am txp es r es' <=>
-    call_result_rel_at gs tops am tx es r es')` by
-    (Cases_on `txp = tx` >- asm_simp_tac bool_ss [] >>
-     `tx with code := (opt_entry_state prog prog' cplan es).vs_code <> tx` by
-       fs[Abbr `txp`, Abbr `vs0`] >>
-     `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
-      ~program_reads_self_code tops` by metis_tac[guard_opt_entry_code_update] >>
-     `LENGTH vs0.vs_code < 2 ** 256` by
-       (drule loweringShapeSourceTheory.supported_program_raw_shape_free_program >> strip_tac >>
-        `?art. vyperTypeContract$check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
-          metis_tac[source_typing_ok_def] >>
-        drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
-        drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
-        drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
-        drule_all o1PipelineCorrectTheory.run_venom_pipeline_output_shape >> strip_tac >>
-        `lowerDloadDefs$code_layout_valid vs0` by
-          metis_tac[Abbr `vs0`, opt_entry_code_layout_valid] >>
-        qpat_assum `lowerDloadDefs$code_layout_valid vs0`
-          (mp_tac o REWRITE_RULE [lowerDloadDefsTheory.code_layout_valid_def]) >>
-        simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
-        strip_tac >> irule LESS_EQ_LESS_TRANS >> qexists_tac `2 ** 255` >> fs[]) >>
-     asm_simp_tac list_ss [Abbr `txp`, source_typing_ok_code_update,
-       call_external_trace_no_self_code_update, call_storage_ok_code_update,
-       call_result_rel_at_code_update]) >>
+  `txp = tx` by
+    metis_tac[Abbr `txp`, Abbr `vs0`, opt_entry_own_txp_identity] >>
   conj_tac
   >- (strip_tac >>
       qspecl_then [`fin`, `policy`, `tops`, `deploy_bc`,
         `runtime_bc`, `rpolicy`, `unit`, `out`, `prog`, `prog'`,
         `cplan`, `am`, `tx`, `txp`, `ret`, `es`, `vs0`, `fmp`,
-        `vs`, `marks`] mp_tac vyper_call_correct_at_marks >>
+        `vs`, `marks`] mp_tac vyper_call_correct_at_marks_own >>
       impl_tac
       >- (asm_simp_tac bool_ss [Abbr `vs0`, Abbr `txp`] >>
           metis_tac[]) >>
@@ -681,19 +625,13 @@ Proof
     `co`, `sfx`] >> strip_tac >>
   `vs.vs_outcomes = MAP SND (call_trace es)` by
     (drule raw_variant_outcomes >>
-     simp[Abbr `vs0`, opt_entry_state_def, entry_venom_state_frame_fields]) >>
+     simp[Abbr `vs0`, opt_entry_state_own_def, entry_venom_state_frame_fields]) >>
   `~source_exempt tops (res,am',rqs)` by
     (drule call_external_trace_result >> strip_tac >>
      fs[vyper_closed_world_def] >>
      qpat_assum `call_external _ gs am tx = _` (fn source_result =>
        qpat_assum `!gobs. ~source_exempt _ (call_external _ _ _ _)`
          (qspec_then `gs` (ACCEPT_TAC o REWRITE_RULE [source_result])))) >>
-  `valid_horizon (initial_evaluation_context am.sources am.layouts txp NONE)
-    (initial_state am []) H pre` by
-    (`(initial_evaluation_context am.sources am.layouts txp NONE).txn.target =
-      (initial_evaluation_context am.sources am.layouts tx NONE).txn.target` by
-       simp[initial_evaluation_context_def] >>
-     metis_tac[guard_valid_horizon_target]) >>
   qpat_assum `!tail' res am' rqs obs obs_pre rq outcome sfx H. _`
     (qspecl_then [`tail`, `res`, `am'`, `rqs`, `obs`, `pre`,
       `rq`, `co`, `sfx`, `H`] mp_tac) >>
@@ -788,7 +726,6 @@ Proof
   rewrite_tac[call_guard_gas_link_stmt_def] >>
   rpt gen_tac >> strip_tac >>
   `fin IN accepted_finalizers /\
-   (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
    (?deploy_bc. compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc)) /\
    supported_program tops /\ source_typing_ok tops am tx /\
    call_state_rel tops runtime_bc am tx es` by
@@ -799,25 +736,37 @@ Proof
     [`rpolicy`, `unit`, `out`, `prog`, `prog'`, `cplan`] strip_assume_tac) >>
   drule_all_then strip_assume_tac call_source_focus_setup >>
   rename1 `lookup_function "__entry" unit.cu_context.ctx_functions = SOME func` >>
-  qabbrev_tac `vs0 = opt_entry_state prog prog' cplan es` >>
+  qabbrev_tac `vs0 = opt_entry_state_own prog prog' cplan es` >>
   qabbrev_tac `txp = tx with code := vs0.vs_code` >>
   qabbrev_tac `fmp = (n2w (MAX cplan.cp_initial_fmp
     (unit_alloca_budget unit.cu_context +
      32 * ctx_dload_count unit.cu_context)) : bytes32)` >>
-  `vs0 = opt_entry_state prog prog' cplan es /\ txp = tx with code := vs0.vs_code` by
+  `vs0 = opt_entry_state_own prog prog' cplan es /\ txp = tx with code := vs0.vs_code` by
     simp[Abbr `vs0`, Abbr `txp`] >>
   pop_assum strip_assume_tac >>
   qspecl_then [`tops`, `rpolicy`, `unit`, `out`, `cplan`, `prog`, `prog'`,
-               `es`, `fmp`] mp_tac raw_fmp_choice >>
+               `es`, `fmp`] mp_tac raw_fmp_choice_own >>
   impl_tac >- simp[Abbr `fmp`] >>
-  qpat_assum `vs0 = opt_entry_state prog prog' cplan es`
+  qpat_assum `vs0 = opt_entry_state_own prog prog' cplan es`
     (fn eq => disch_then (strip_assume_tac o REWRITE_RULE [GSYM eq])) >>
   `call_state_rel tops (assemble prog') am tx es /\
    vyper_call_staging fin policy tops (assemble prog') am tx ret es` by fs[] >>
   pop_assum strip_assume_tac >>
-  drule_all_then strip_assume_tac opt_entry_focus_setup >>
+  `assemble prog' <> []` by
+    (qpat_assum `vyper_call_staging _ _ _ (assemble prog') _ _ _ _`
+       (ACCEPT_TAC o MATCH_MP guard_frame_runtime_nonempty o CONJUNCT1 o
+        REWRITE_RULE [vyper_call_staging_def])) >>
+  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`]
+    mp_tac opt_entry_asm_rels_own >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `vs0 = opt_entry_state_own _ _ _ _`
+    (fn eq => disch_then (strip_assume_tac o REWRITE_RULE [GSYM eq])) >>
+  `code_layout_valid vs0` by metis_tac[opt_entry_code_layout_valid_own] >>
+  `o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp` by
+    simp[Abbr `vs0`, opt_entry_state_own_def, entry_venom_state_def,
+         o1_initial_state_ok_def, init_venom_state_def] >>
   `initial_venom_state_rel tops am txp vs0` by
-    metis_tac[opt_entry_initial_venom_state_rel] >>
+    metis_tac[opt_entry_initial_venom_state_rel_own] >>
   drule_all guard_source_marks >>
   disch_then (qx_choose_then `shadow_ctx` assume_tac) >>
   qpat_assum `!vs. raw_variant fmp vs vs0 ==> _` (fn th =>
@@ -839,7 +788,7 @@ Proof
      disch_then (qx_choosel_then [`cf`, `shadow_cf`] strip_assume_tac) >>
      `cf = func` by fs[] >> fs[]) >>
   `fin = asm_opt_finalizer ==>
-    label_flow_ok unit.cu_context /\
+    label_flow_own_ok unit.cu_context /\
     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
                ~MEM (Label "code_end") inst.inst_operands) /\
     EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
@@ -850,10 +799,9 @@ Proof
      EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) /\
     LENGTH vs0.vs_data_section < dimword (:256) DIV 2` by
     (disch_tac >>
-     `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-       metis_tac[entryStateRelTheory.source_typing_ok_vtype_keys_distinct] >>
-     mp_tac (Q.SPECL [`tops`, `rpolicy`, `unit`] lower_vyper_runtime_unit_sym_src_ok) >>
-     impl_tac >- fs[] >> strip_tac >> asm_rewrite_tac[]) >>
+     mp_tac (Q.SPECL [`tops`, `rpolicy`, `unit`] lower_vyper_runtime_unit_sym_src_ok_own) >>
+     impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+     asm_rewrite_tac[] >> metis_tac[data_section_length_bound]) >>
   mp_tac (Q.SPECL [`rpolicy`, `unit`, `out`, `"__entry"`]
     (Q.GENL [`rp`, `unit`, `out`, `nm`] focus_packet_pipeline_stages)) >>
   impl_tac >- asm_rewrite_tac[] >>
@@ -867,14 +815,14 @@ Proof
       [`rpolicy`, `unit`, `out`, `vs0`, `cpl`, `prog`, `fin`, `prog'`, `es0`,
        `nm`, `entryfn`, `lbl`, `fmp`, `markf`, `lo`, `project`, `result`, `final`,
        `pre`, `t`, `t'`, `stage`]
-      focus_finalizer_selected_request_replay) >>
+      focus_finalizer_selected_request_replay_own) >>
   impl_tac
-  >- (BETA_TAC >> asm_rewrite_tac[] >> gen_tac >>
+  >- (BETA_TAC >> asm_rewrite_tac[asm_frame_rel_tail_nil] >> gen_tac >>
       qpat_assum `!gs. source_unit_execution_correct_with _ _ _ _ _ _ _ _ /\ _`
         (qx_choosel_then [`D`, `fuel`, `extra`] strip_assume_tac o
          CONJUNCT2 o CONJUNCT2 o Q.SPEC `gs`) >>
       qexistsl_tac [`D`, `fuel`, `extra`] >>
-      qpat_x_assum `vs0 = opt_entry_state _ _ _ _` SUBST_ALL_TAC >>
+      qpat_x_assum `vs0 = opt_entry_state_own _ _ _ _` SUBST_ALL_TAC >>
       pure_rewrite_tac[venom_state_fupdcanon] >>
       qpat_assum `MAP _ (gas_events_blocks _ _ _ _) = _`
         (fn th => asm_rewrite_tac [REWRITE_RULE [venom_state_fupdcanon] th])) >>
@@ -925,7 +873,7 @@ Proof
   qexistsl_tac [`rpolicy`, `unit`, `out`, `prog`, `prog'`, `cplan`,
                 `fmp`, `vs`, `marks`, `suffix`] >>
   `tx.target = txp.target` by simp[Abbr `txp`] >>
-  qpat_x_assum `vs0 = opt_entry_state _ _ _ _` (fn eq => PURE_REWRITE_TAC [GSYM eq]) >>
+  qpat_x_assum `vs0 = opt_entry_state_own _ _ _ _` (fn eq => PURE_REWRITE_TAC [GSYM eq]) >>
   qpat_x_assum `txp = _` (fn eq => PURE_REWRITE_TAC [GSYM eq]) >>
   asm_rewrite_tac[] >>
   conj_tac
@@ -936,16 +884,17 @@ Proof
       qpat_assum `Abbrev (vs = _)` (fn eq =>
         rewrite_tac [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] eq)]) >>
       impl_tac
-      >- (asm_rewrite_tac[] >> conj_tac
+      >- (conj_tac
           >- (qexists_tac `fr` >> first_assum ACCEPT_TAC) >>
-          strip_tac >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          disch_tac >>
           `vs.vs_code = vs0.vs_code /\ vs.vs_data_section = vs0.vs_data_section` by
             simp[Abbr `vs`] >>
           qpat_assum `vs.vs_code = _` (fn code =>
             qpat_assum `vs.vs_data_section = _` (fn data =>
-              qpat_assum `vs0.vs_code = assemble prog ++ _` (fn layout =>
-                qpat_assum `mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\ _) _ vs`
-                  (ACCEPT_TAC o REWRITE_RULE [code, data, layout]))))) >>
+              qpat_assum `mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\ _) _ vs`
+                (ACCEPT_TAC o REWRITE_RULE [code, data])))) >>
       disch_then (mp_tac o CONJUNCT2) >> asm_rewrite_tac[]) >>
   match_mp_tac guard_selected_request_replay >>
   conj_tac >- first_assum ACCEPT_TAC >>
