@@ -7311,7 +7311,17 @@ Proof
                  externalEntryShapeTheory.store_multi_results_labels) >> simp[]) >>
   `cs_extends st3 sm /\ cs_extends sh_st3 shadow_sm` by
     (conj_tac >> first_x_assum irule >>
-     Cases_on `0 < rc'` >> Cases_on `0 < rbs` >> fs[] >> metis_tac[]) >>
+     qmatch_goalsub_rename_tac `emit_void INVOKE _ invoke_start = (_,invoke_end)` >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`0 < rc' ==> ?rb results mid u. _ /\
+           emit_multi_op INVOKE _ rc' invoke_start = (results,mid) /\
+           store_multi_results _ results 0 mid = (u,invoke_end) /\ _`,
+        `rc' = 0 /\ 0 < rbs ==> ?rb u. _ /\
+           emit_void INVOKE _ invoke_start = (u,invoke_end) /\ _`,
+        `rc' = 0 /\ rbs = 0 ==> ?u. _ /\
+           emit_void INVOKE _ invoke_start = (u,invoke_end) /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `rc'` >> Cases_on `rbs` >> simp[] >> metis_tac[]) >>
   `cs_extends sm sb /\ cs_extends shadow_sm shadow_sb` by
     (conj_tac
      >- metis_tac[compileAppendPropsTheory.cs_appends_result_extends] >>
@@ -7441,7 +7451,8 @@ Proof
        drule vyperStorageFootprintTheory.storage_trace_domain_prefix >> simp[])) >>
   `valid_horizon cx st0 (storage_trace_horizon es0.storage_trace)
       es0.storage_trace` by
-    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    (qpat_assum `storage_trace_domain cx st0 es0.storage_trace`
+       (ACCEPT_TAC o REWRITE_RULE [vyperStorageFootprintTheory.storage_trace_domain_def])) >>
   qpat_assum `!H. valid_horizon cx st0 H es0.storage_trace ==> _`
     (qspec_then `storage_trace_horizon es0.storage_trace` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >>
@@ -9676,5 +9687,6 @@ Proof
       intcall_args_failed_lock_invoke_outcome)) >>
   simp_tac bool_ss [vyperStateTheory.evaluation_state_accfupds] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexists_tac `H` >> first_assum ACCEPT_TAC
+  qexists_tac `H` >>
+  qpat_assum `valid_horizon cx st0 H ed.storage_trace` ACCEPT_TAC
 QED
