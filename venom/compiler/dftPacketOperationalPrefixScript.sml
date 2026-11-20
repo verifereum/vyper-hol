@@ -3,7 +3,7 @@ Ancestors
   dftNativePlanPrefix dftIndexedExec gasEvents
   venomExecSemantics venomInst venomState opcodeClass list rich_list arithmetic
 
-Theorem dft_packet_plain_prefix_index[local]:
+Theorem dft_packet_plain_prefix_index:
   !xs f C s t.
     EVERY (\i. ~is_terminator i.inst_opcode) xs /\
     FOLDR (dft_exec_cons f C) OK xs s = OK t ==>
