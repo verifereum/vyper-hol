@@ -379,7 +379,13 @@ Proof
   irule_at Any extcall_request_keywords_owned_outcome >>
   qpat_assum `compile_ext_call_kwargs _ _ rt opts kw_es s2 = _` (irule_at Any) >>
   qexistsl [`tops`,`shadow_s3`,`shadow_s2`,`shadow_func`,`env`,`d`] >>
-  asm_rewrite_tac[] >> simp[] >>
+  asm_rewrite_tac[] >> simp[NoAsms] >>
+  conj_tac
+  >- (gen_tac >> disch_tac >>
+      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+          stmt_state_rel _ _ _ _ _ ee u /\ _`
+        (drule_then (fn th => ACCEPT_TAC (CONJ (cj 1 th)
+          (CONJ (cj 2 th) (cj 3 th)))))) >>
   conj_tac >- (rpt gen_tac >> Cases_on `res` >>
     simp[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_def, expr_exit_def]) >>
   qx_genl_tac [`kw_marks`,`kw_res`,`ke`,`G3`,`tn3`,`z`] >> strip_tac >>
@@ -524,7 +530,11 @@ Proof
    u.vs_alloca_next <= zg.vs_alloca_next /\ zg.vs_labels = u.vs_labels` by simp[] >>
   `s2.cs_next_var <= s5.cs_next_var /\ s2.cs_next_id <= s5.cs_next_id /\
    sa.cs_next_var <= s5.cs_next_var /\ sa.cs_next_id <= s5.cs_next_id` by
-    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+    (map_every
+       (fn q => qpat_assum q
+         (strip_assume_tac o REWRITE_RULE [exprLoweringPropsTheory.ci_mono_def]))
+       [`ci_mono sa s1`, `ci_mono s1 s2`, `ci_mono s2 s3`, `ci_mono s3 s5`] >>
+     decide_tac) >>
   `!H. valid_horizon cx st0 H ke.storage_trace ==>
        valid_horizon cx st0 H ee.storage_trace /\
        stmt_state_rel H ctx func cenv cx ke zg /\
@@ -656,7 +666,10 @@ Proof
     (drule_all vyperStorageTraceTheory.storage_trace_frame_prefix >> simp[]) >>
   `valid_horizon cx st0 entry_h es.storage_trace` by
     (`storage_trace_domain cx st0 es.storage_trace` by
-       metis_tac[vyperStorageFootprintTheory.storage_trace_domain_prefix] >>
+       (qpat_assum `mid.storage_trace = es.storage_trace ++ obs` (fn eq =>
+          qpat_assum `storage_trace_domain cx st0 mid.storage_trace`
+            (ACCEPT_TAC o MATCH_MP vyperStorageFootprintTheory.storage_trace_domain_prefix o
+             PURE_REWRITE_RULE [eq]))) >>
      qpat_assum `storage_trace_domain cx st0 es.storage_trace`
        (mp_tac o REWRITE_RULE [vyperStorageFootprintTheory.storage_trace_domain_def]) >>
      simp[NoAsms, Abbr `entry_h`]) >>
@@ -728,7 +741,7 @@ Proof
          simp[NoAsms, Abbr `value_op`, Abbr `value_opt`, Abbr `has_def`,
               Abbr `def_op`, Abbr `def_ty`]) >>
      qpat_assum `!sp sr u result. _` mp_tac >>
-     simp[NoAsms, Abbr `cap`, Abbr `rty`, optionTheory.OPTION_BIND_EQUALS_OPTION,
+     simp_tac std_ss [Abbr `cap`, Abbr `rty`, optionTheory.OPTION_BIND_EQUALS_OPTION,
           listTheory.EVERY_DEF, SF ETA_ss])) >>
   simp[NoAsms, SF ETA_ss]
 QED
