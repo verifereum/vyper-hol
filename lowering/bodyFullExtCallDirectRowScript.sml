@@ -1,6 +1,6 @@
 Theory bodyFullExtCallDirectRow
 Ancestors
-  abiEncodeValuesPrefixFrame abiEncodeValuesSource exprSimHyps
+  abiEncodeValuesPrefixFrame bodyFullAbiEncodeNonwordWindow exprSimHyps
   abiEncoderWindow abiEncoderAdmissible
   bodyFullExtCallDirectPhase bodyFullExtCallDirectState bodyFullExtCallDirectWord bodyFullExtCallDirectStore
   bodyFullExtCallDirectMaterialize bodyFullExtCallDirectUnwrap
@@ -12,6 +12,24 @@ Ancestors
   compileEnv exprLowering context bodyPtrDefs loweringPosts loweringStateRelDefs ptrDiscipline
   contractABI vyperABI vyperValue vyperTyping venomState venomInst
   finite_map pred_set list arithmetic pair words
+
+Theorem abi_encode_values_translated_window_input[local]:
+  evaluate_type env ty = SOME tv /\
+  sfields_tenv_consistent ce.ce_struct_fields env /\
+  (!t u. evaluate_type env t = SOME u ==> type_memory_bytes ce t = type_memory_size u) /\
+  value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+  (!mem. mem_agree_outside tainted initial_mem mem ==> val_in_memory tv v sb mem) ==>
+  abi_encoder_admissible (type_to_abi_enc_info ce.ce_struct_fields ce ty) /\
+  ?ct rv. enc ct rv = enc (vyper_to_abi_type env ty) av /\
+    !mem. mem_agree_outside tainted initial_mem mem ==>
+      abi_encoder_window_input (type_to_abi_enc_info ce.ce_struct_fields ce ty)
+        ct rv sb (val_footprint tv v) mem
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  conj_tac >- simp[abi_encoder_translation_admissible] >>
+  irule abi_encode_uniform_translated_footprint_window >>
+  simp[] >> qexists_tac `env` >> simp[]
+QED
 
 Theorem abi_encode_saved_row_open_pure:
   ty = lowered_value_type ce e /\
