@@ -8,6 +8,7 @@ Ancestors
   context exprSimProps robustCopyTransportPtr valueEncodingDefs
   bodyFullAbiEncodeOriginFloor exprOperandVar
   assignTuplePtrLocalCompat[qualified,ignore_grammar]
+  bodyFullHashKeccakFixed
 
 Theorem capture_robust_lowered_source[local]:
   expr_body_pre ce cx env e es /\ ~is_word_type (expr_type e) /\
@@ -145,7 +146,7 @@ Theorem abi_encode_capture_endpoint_origin:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rt /\
@@ -474,7 +475,9 @@ Proof
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
        ghost_inv_at (DF H) lo d ce cx ee G' tn' z` by metis_tac[] >>
   `type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= z.vs_alloca_next` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    (qpat_assum `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func ce cx ee z`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   `?t Gt tt.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
        (z,G',tn') [] (OK t,Gt,tt)) /\
