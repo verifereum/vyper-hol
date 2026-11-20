@@ -20,7 +20,7 @@
 Theory e2eDeployAtMarks
 Ancestors
   codegenLabelDisciplined fnPlanPlaceRevertPostamble finite_map
-  ownSymSrcUnit o1LabelFlowOwnCompose codegenSymOwnRel ctorDeployRawEntryFacts
+  ownSymSrcUnit gasFocusOptLabelFlow[qualified,ignore_grammar] codegenSymOwnRel ctorDeployRawEntryFacts
   e2eDeployDefs e2eDefs ctorDeployDefs deployUnitExecution deployUnitExitSafe
   ctorDeployMemoryFrontier ctorDeployImmBudget ctorDeployInitcode
   deployDynamicMemory loweringShapeSource[qualified]
@@ -477,7 +477,7 @@ Proof
      `supported_program tops /\ supported_program_deploy tops` by fs[deploy_source_ok_def] >>
      drule_all lower_vyper_deploy_unit_sym_src_ok_own >> strip_tac >>
      drule_all deploy_unit_defs_reach_uses >> strip_tac >>
-     drule_all o1_pipeline_own_label_flow >> strip_tac >>
+     drule_all gasFocusOptLabelFlowTheory.focus_opt_label_flow_own >> strip_tac >>
      drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>
      `assemble prog' <> []` by
        (irule codegen_assembly_finalizer_nonempty >> metis_tac[]) >>
