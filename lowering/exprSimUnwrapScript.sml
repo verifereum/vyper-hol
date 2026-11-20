@@ -20,8 +20,6 @@
  *                        unwrap_runtime_code_copy_path,
  *                        unwrap_ctor_code_copy_path
  *   unwrap_value_marked_read — the same, as a marked source execution
- *   expr_sim_of_vv_sim_buffer — the same for an expression lowered to a
- *                        pointer into memory, without the cheated cases
  *   unwrap_value_sim   — unwrap_value's code takes vv_post H to expr_post,
  *                        one lemma per form of value_vv:
  *                        expr_post_of_vv_post_stack,

@@ -391,12 +391,6 @@ Resume target_call_free_evaluate[builtin_len]:
   Cases_on `es` >> gvs[type_check_def, assert_def, raise_def, vyperContextTheory.builtin_args_length_ok_def, SF ETA_ss] >> metis_tac[]
 QED
 Resume target_call_free_evaluate[builtin_other]:
-  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[]
-  >- (irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
-      >- (rpt strip_tac >> simp[ignore_bind_def] >>
-          match_mp_tac machine_frame_bind >> simp[machine_frame_primitives] >>
-          match_mp_tac machine_frame_bind >> simp[machine_frame_primitives]) >>
-      gvs[SF ETA_ss] >> metis_tac[]) >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
   >- rpt (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
           simp[machine_frame_def, machine_frame_reads, machine_frame_primitives,

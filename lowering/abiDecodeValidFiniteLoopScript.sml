@@ -68,7 +68,8 @@ Theorem finite_array_backedge_window:
   ip <> nv /\ ptr_covers G tn ip s 32 /\
   slot+32 <= s.vs_alloca_next /\
   op_prov G (Var iv) = NONE /\ op_taint tn (Var iv) = {} /\
-  alloca_inv s /\ alloca_room ctx func s /\ ~ctx_has_dalloca ctx /\
+  alloca_inv s /\ alloca_room ctx func s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   abi_decode_ptr_window G tn s p b n /\ p <> nv /\
   (w2n b+n <= slot \/ slot+32 <= w2n b) /\
@@ -90,7 +91,6 @@ Theorem finite_array_backedge_window:
       (s,G,tn) [] (OK t,G',tn')
 Proof
   strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (window_array_backedge_joint |> Q.INST [`explicit` |-> `{}`]) >>
   disch_then (qspec_then `PG`
     (qx_choosel_then [`G1`,`tn1`] strip_assume_tac)) >>
@@ -131,7 +131,7 @@ Theorem finite_array_child_backedge:
   ip <> nv /\ source <> nv /\ output <> nv /\
   ptr_covers G tn ip u 32 /\ ptr_covers G tn output u outsz /\
   op_prov G (Var iv) = NONE /\ op_taint tn (Var iv) = {} /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo u /\ lo <= u.vs_alloca_next /\
+  allocas_from lo u /\ lo <= u.vs_alloca_next /\
   alloca_history func u /\ abi_decode_ptr_window G tn u source (n2w B) L /\
   t = jump_to hdr (mstore slot (n2w (SUC k))
     (update_var nv (n2w (SUC k)) u)) ==>
@@ -166,6 +166,8 @@ Proof
         metis_tac[abi_caller_allocation_separate] >> decide_tac) >>
   `eval_operand (Var iv) u = SOME (n2w k) /\
    eval_operand (Var ip) u = SOME (n2w slot)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
   drule_all finite_array_backedge_window >>
   disch_then (qspec_then `PG` (qx_choosel_then [`G1`,`tn1`] strip_assume_tac)) >>
   `alloca_history func t` by
@@ -700,7 +702,7 @@ Theorem finite_array_exit_from_inv[local]:
   abi_decoder_operand_live first (Var output) /\
   abi_decoder_operand_live first (Var ip) /\
   LENGTH vs < dimword (:256) /\ LENGTH vs = abi_head_word (DROP p xs) /\ p+32 <= L /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   alloca_history func s /\ op_taint tn src = {} /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s outsz /\ ptr_covers G tn ip s 32 /\
@@ -756,7 +758,7 @@ Theorem finite_array_setup_prefix_origin[local]:
   run_inst_seq (emitted_insts st c3) s = OK t /\
   fn_has_code st c3 func /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   lookup_var ip s = SOME w /\ ptr_covers G tn ip s 32 /\
   w2n w + 32 <= s.vs_alloca_next /\
   (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) /\
@@ -879,6 +881,11 @@ Resume finite_array_setup_prefix_origin[frames_and_path]:
     (simp[Abbr `s0`] >>
      qpat_assum `r0 = s with vs_vars := _` (PURE_ONCE_REWRITE_TAC o single) >>
      fs[allocas_from_def, same_blocks_def] >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (simp[Abbr `s0`] >>
+     qpat_assum `r0 = s with vs_vars := _` (PURE_ONCE_REWRITE_TAC o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s0,G0,tn0) []
      (OK (t with vs_inst_idx := LENGTH c3.cs_current_insts),G3,tn3)` by
     (qpat_assum `!D lower explicit ctx func. _ ==> gas_origin_ptr_path _ (s0,G0,tn0) [] _`
@@ -894,7 +901,7 @@ Theorem finite_array_setup_head_origin[local]:
   run_inst_seq (emitted_insts st ready) s = OK t /\
   fn_has_code st ready func /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   lookup_var ip s = SOME w /\ ptr_covers G tn ip s 32 /\
   w2n w + 32 <= s.vs_alloca_next /\
   (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) /\
@@ -969,7 +976,7 @@ Theorem finite_array_static_setup_origin[local]:
   run_inst_seq (emitted_insts st ready) s = OK t /\
   fn_has_code st ready func /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   lookup_var ip s = SOME w /\ ptr_covers G tn ip s 32 /\
   w2n w + 32 <= s.vs_alloca_next /\ mload (w2n w) s = n2w j /\
   (!i. w2n w <= i /\ i < w2n w+32 ==> i NOTIN tn.t_mem) /\
@@ -1053,6 +1060,10 @@ Proof
    ~r0.vs_halted /\ r0.vs_current_bb = mid.cs_current_bb` by
     (qpat_assum `r0 = s with vs_vars := _` (PURE_ONCE_REWRITE_TAC o single) >>
      fs[allocas_from_def, same_blocks_def] >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (r0 with vs_inst_idx := LENGTH mid.cs_current_insts)` by
+    (qpat_assum `r0 = s with vs_vars := _` (PURE_ONCE_REWRITE_TAC o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
      (r0 with vs_inst_idx := LENGTH mid.cs_current_insts,G0,tn0) []
      (OK (t with vs_inst_idx := LENGTH ready.cs_current_insts),G1,tn1)` by
@@ -1071,7 +1082,7 @@ Theorem finite_array_offset_address_origin[local]:
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   eval_operand pos s = SOME (n2w p) /\ op_prov G pos = NONE /\ op_taint tn pos = {} /\
   p+32 <= L /\ B+L < dimword (:256) /\ B+L <= s.vs_alloca_next ==>
@@ -1118,7 +1129,7 @@ Theorem finite_array_offset_load_origin[local]:
   run_inst_seq (emitted_insts sa sc) s = OK t /\
   fn_has_code sa sc func /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   eval_operand pos s = SOME (n2w p) /\ op_prov G pos = NONE /\ op_taint tn pos = {} /\
   p+32 <= L /\ B+L < dimword (:256) /\ B+L <= s.vs_alloca_next ==>
@@ -1206,6 +1217,11 @@ Resume finite_array_offset_load_origin[load_endpoint]:
   rpt gen_tac >>
   qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] _`
     (qspecl_then [`D`,`explicit`] (mp_then Any irule gas_origin_ptr_path_trans)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (simp[Abbr `s1`] >>
+     qpat_assum `r = s with vs_vars := _` (PURE_ONCE_REWRITE_TAC o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   qpat_x_assum `!D lower explicit ctx' func. _ ==> gas_origin_ptr_path _ (s1,G1,tn1) [] _`
     (qspecl_then [`D`,`lo`,`explicit`,`ctx`,`func`] mp_tac) >>
   simp[Abbr `s1`]
@@ -1220,7 +1236,7 @@ Theorem finite_array_scalar_add_origin[local]:
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
   op_prov G left = NONE /\ op_prov G right = NONE /\
   op_taint tn left = {} /\ op_taint tn right = {} ==>
@@ -1254,7 +1270,7 @@ Theorem finite_array_pointer_sentinel_origin[local]:
   run_inst_seq (emitted_insts sa sc) s = OK t /\
   fn_has_code sa sc func /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   eval_operand pos s = SOME (n2w p) /\ op_prov G pos = NONE /\ op_taint tn pos = {} /\
   eval_operand data s = SOME a /\ op_prov G data = NONE /\ op_taint tn data = {} /\
@@ -1319,6 +1335,11 @@ Resume finite_array_pointer_sentinel_origin[add_endpoint]:
   `eval_operand data s1 = SOME a /\ eval_operand off s1 = SOME (mload (B+p) s)` by
     simp[Abbr `s1`, eval_operand_def, blockPrefixEquivTheory.lookup_var_set_inst_idx,
          AllCaseEqs()] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (simp[Abbr `s1`] >>
+     qpat_assum `r = s with vs_vars := _` (PURE_ONCE_REWRITE_TAC o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all finite_array_scalar_add_origin >>
   disch_then (qspec_then `PG` (qx_choosel_then [`G2`,`tn2`] strip_assume_tac)) >>
   suspend "compose"
@@ -1392,7 +1413,7 @@ Theorem finite_array_pointer_guard_origin[local]:
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   (!op. MEM op [child_src;data;hi] ==> op_prov G op = NONE /\ op_taint tn op = {}) ==>
   ?G' tn'.
     t = s with vs_vars := t.vs_vars /\
@@ -1415,7 +1436,6 @@ Proof
         op_prov G op = NONE /\ op_taint tn op = {}` by
     (simp[] >> rpt strip_tac >> gvs[op_prov_def,op_taint_def] >> metis_tac[]) >>
   drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_runtime_frame >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bodyFullBopWordSuccessTheory.bop_word_scalar_success_joint >>
   disch_then (qspecl_then [`ARB`,`PG`] (qx_choosel_then [`H`,`u`] strip_assume_tac)) >>
   qexistsl [`H`,`u`] >> simp[] >> conj_tac
@@ -1430,7 +1450,7 @@ Theorem finite_array_pointer_bounded_origin[local]:
   hi <> Lit 0w /\ run_inst_seq (emitted_insts sa sc) s = OK t /\
   fn_has_code sa sc func /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   eval_operand pos s = SOME (n2w p) /\ op_prov G pos = NONE /\ op_taint tn pos = {} /\
   eval_operand data s = SOME a /\ op_prov G data = NONE /\ op_taint tn data = {} /\
@@ -1510,6 +1530,11 @@ Resume finite_array_pointer_bounded_origin[guard_cut]:
     (simp[Abbr `s1`] >>
      qpat_assum `r = s with vs_vars := _` (PURE_ONCE_REWRITE_TAC o single) >>
      fs[allocas_from_def,same_blocks_def] >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (simp[Abbr `s1`] >>
+     qpat_assum `r = s with vs_vars := _` (PURE_ONCE_REWRITE_TAC o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all finite_array_pointer_guard_origin >>
   disch_then (qspec_then `PG` (qx_choosel_then [`G2`,`tn2`] strip_assume_tac)) >>
   suspend "compose"
@@ -1579,7 +1604,7 @@ Theorem finite_array_offset_source_origin[local]:
   run_inst_seq (emitted_insts st ready) s = OK t /\
   fn_has_code st ready func /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   lookup_var ip s = SOME w /\ ptr_covers G tn ip s 32 /\
   w2n w + 32 <= s.vs_alloca_next /\ mload (w2n w) s = n2w j /\
   (!i. w2n w <= i /\ i < w2n w+32 ==> i NOTIN tn.t_mem) /\
@@ -1650,6 +1675,11 @@ Resume finite_array_offset_source_origin[pointer_cut]:
   `!x. data = Var x \/ hi = Var x ==> not_fresh_at mid x` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   `(p+32+j*abi_sz)+32 <= L` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (simp[Abbr `s0`] >>
+     qpat_assum `r = s with vs_vars := _` (PURE_ONCE_REWRITE_TAC o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all finite_array_pointer_bounded_origin >>
   disch_then (qspec_then `PG` (qx_choosel_then [`G1`,`tn1`] strip_assume_tac)) >>
   suspend "join"
@@ -1694,7 +1724,7 @@ Theorem finite_array_offset_setup_origin[local]:
   run_inst_seq (emitted_insts st ready) s = OK t /\
   fn_has_code st ready func /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   lookup_var ip s = SOME w /\ ptr_covers G tn ip s 32 /\
   w2n w + 32 <= s.vs_alloca_next /\ mload (w2n w) s = n2w j /\
   (!i. w2n w <= i /\ i < w2n w+32 ==> i NOTIN tn.t_mem) /\
@@ -1807,6 +1837,12 @@ Resume finite_array_offset_setup_origin[compose]:
      qpat_assum `r0 = s with <|vs_vars := _; vs_inst_idx := _|>`
        (PURE_ONCE_REWRITE_TAC o single) >>
      fs[allocas_from_def,same_blocks_def] >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (simp[Abbr `s0`] >>
+     qpat_assum `r0 = s with <|vs_vars := _; vs_inst_idx := _|>`
+       (PURE_ONCE_REWRITE_TAC o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] _`
      (qspecl_then [`D`,`explicit`] (mp_then Any irule gas_origin_ptr_path_trans)) >>
   qpat_assum `!D lower explicit ctx' func. _ ==> gas_origin_ptr_path _ (s0,G0,tn0) [] _`
@@ -1901,7 +1937,7 @@ Theorem finite_array_setup_child_joint[local]:
   b = a with vs_inst_idx := LENGTH ready.cs_current_insts /\
   fn_has_code st ready func /\ fn_inst_ids_distinct func /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ allocas_from lo s /\
   lo <= s.vs_alloca_next /\ alloca_history func s /\
   lookup_var ip s = SOME (n2w slot) /\ ptr_covers G tn ip s 32 /\
   slot < dimword (:256) /\ FLOOKUP s.vs_allocas counter = SOME (slot,32) /\ mload slot s = n2w j /\
@@ -1939,6 +1975,8 @@ Proof
   qhdtm_assum `abi_malformed_allocated_window`
     (strip_assume_tac o PURE_REWRITE_RULE [abi_malformed_allocated_window_def]) >>
   `alloca_inv s` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
   `B+L <= s.vs_alloca_next /\ slot+32 <= s.vs_alloca_next` by
     (`B+cap <= s.vs_alloca_next /\ slot+32 <= s.vs_alloca_next` by
        metis_tac[alloca_site_registered_below] >> decide_tac) >>

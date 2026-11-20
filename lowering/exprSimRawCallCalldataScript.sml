@@ -469,11 +469,6 @@ Proof
   simp[revert_state_def, set_returndata_def]
 QED
 
-
-(* A common branch-entry boundary for both call outcomes. *)
-
-
-
 Theorem raw_call_size_run[local]:
   !sa op sb s.
     emit_op RETURNDATASIZE [] sa = (op,sb) /\ fresh_vars_wrt sa s ==>
@@ -976,10 +971,6 @@ Theorem raw_call_wb_frame_fmp[local]:
 Proof
   simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def, local_region_def]
 QED
-
-(* The branch boundary is independent of the origin of the input bytes and
-   of the success continuation's chosen value representation. *)
-
 
 (* The non-reverting result is an inline pair, not a pair of pointers.
    Padding in the bytes buffer is irrelevant to this representation. *)

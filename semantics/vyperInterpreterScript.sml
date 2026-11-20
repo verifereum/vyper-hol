@@ -2,9 +2,9 @@ Theory vyperInterpreter
 Ancestors
   vyperCallOutcome[ignore_grammar]
   arithmetic alist combin option list finite_map pair
-  rich_list sorting cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
+  rich_list sorting vfmState vfmContext
   vfmExecution[ignore_grammar] vyperAST vyperGetter vyperABI
-  vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
+  vyperMisc vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
   vyperSubscriptOverlap
 Libs
@@ -1679,12 +1679,6 @@ Definition evaluate_def:
       tv <- eval_expr cx (HD es);
       len <- result_array_length cx tv;
       return $ IntV (&len)
-    od else if bt = Bop In ∨ bt = Bop NotIn then do
-      vs <- eval_exprs cx es;
-      type_check (LENGTH vs = 2) "Membership args";
-      tv <- lift_option_type
-        (evaluate_type (get_tenv cx) (expr_type (EL 1 es))) "Membership type";
-      lift_sum $ evaluate_membership tv (bt = Bop NotIn) (EL 0 vs) (EL 1 vs)
     od else if bt = Env MsgGas then next_gas_reading
     else do
       vs <- (case code_slice_source bt es of
@@ -2475,9 +2469,8 @@ Proof
   simp[call_external_def, source_storage_trace_def]
 QED
 
-(* KEY LEMMA (typing): a safe_cast value of a bytestring type always has raw
-   bytes, so external_returndata's error branch is unreachable for a well-typed
-   @raw_return return value. *)
+(* A successful cast to a bytestring type gives a value whose content
+   bytes can be returned by a well-typed @raw_return function. *)
 Theorem safe_cast_bytestring_raw_return_bytes:
   ∀tv v v'.
     is_bytestring_tv tv ∧ safe_cast tv v = SOME v' ⇒

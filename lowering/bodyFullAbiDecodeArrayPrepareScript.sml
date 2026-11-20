@@ -171,7 +171,7 @@ Theorem abi_decode_array_prepare_width_joint:
   abi_decode_dynarray_position_prefix src MLOAD (Var input) hi maxn stride
     start = (addr,guard_st) /\
   abi_decode_array_header (Var dst) addr MLOAD guard_st = (cnt,header_st) /\
-  fn_has_code start header_st fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code start header_st fn /\ fn_inst_ids_distinct fn /\
   (!c. c <= maxn ==> c * stride < dimword (:256)) /\
   (?H. V H) /\ hi <> Lit 0w /\ off < dimword (:256) /\ h <= LENGTH input_bytes /\
   w2n input_word + LENGTH input_bytes < dimword (:256) /\
@@ -211,6 +211,7 @@ Theorem abi_decode_array_prepare_width_joint:
           i IN tn.t_mem)))
 Proof
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. V H` (qx_choose_then `world` assume_tac) >>
   drule_all array_prepare_trace >>
   disch_then (qx_choose_then `head` (qx_choose_then `head_st`
     (qx_choose_then `addr_st` (qx_choose_then `read_st`
@@ -233,6 +234,11 @@ Proof
          simp[bodyPtrDefsTheory.ghost_inv_at_def] >> (metis_tac[bodyPtrDefsTheory.ghost_inv_at_def]))) >>
      conj_tac >> rpt strip_tac >> irule not_fresh_at_mono >>
      qexists_tac `origin` >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es s /\ _`
+       (qspec_then `world` (fn rel => qpat_assum `V world`
+         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+          CONJUNCT1 o MP rel)))) >>
   mp_tac (abi_decode_bytes_head_joint_observed |> SPEC_ALL |> BETA_RULE |>
           Q.INST [`sa` |-> `start`, `sb` |-> `head_st`]) >>
   (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
@@ -276,6 +282,11 @@ Resume abi_decode_array_prepare_width_joint[load]:
      conj_tac >> rpt strip_tac >> irule not_fresh_at_mono >>
      qexists_tac `origin` >> simp[]) >>
   `off + 32 <= LENGTH input_bytes` by (simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sh` by
+    (qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es sh /\ _`
+       (qspec_then `world` (fn rel => qpat_assum `V world`
+         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+          CONJUNCT1 o MP rel)))) >>
   mp_tac (abi_decode_bytes_owned_load_frame_joint_observed |> SPEC_ALL |> BETA_RULE |>
           Q.INST [`sa` |-> `head_st`, `sb` |-> `addr_st`, `sc` |-> `read_st`,
                   `pos` |-> `src`, `v` |-> `first`, `p` |-> `off`,
@@ -310,6 +321,11 @@ Resume abi_decode_array_prepare_width_joint[count]:
     simp[Abbr `c`, w2n_lt] >>
   `fn_has_code read_st count_st fn /\ maxn MOD dimword (:256) < dimword (:256)` by
     simp[arithmeticTheory.MOD_LESS] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sl` by
+    (qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es sl /\ _`
+       (qspec_then `world` (fn rel => qpat_assum `V world`
+         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+          CONJUNCT1 o MP rel)))) >>
   mp_tac (abi_decode_bytes_count_joint_observed |> SPEC_ALL |> BETA_RULE |>
           Q.INST [`sa` |-> `read_st`, `sb` |-> `count_st`, `cnt` |-> `first`,
                   `s` |-> `sl`, `G` |-> `Gl`, `tn` |-> `tnl`,
