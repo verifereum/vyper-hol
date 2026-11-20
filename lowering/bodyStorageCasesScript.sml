@@ -42,19 +42,13 @@ Proof
   gvs[expr_size_def]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem supported_function_decl_main:
+  IS_SOME (supported_function_decl tops id vis) ==> FST id = NONE
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
-  rpt conj_tac >> rpt gen_tac >>
-  TRY (Cases_on `base`) >>
-  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
-  simp[int_calls_target_indices, EVERY_FLAT, EVERY_MAP, EVERY_MEM] >>
-  rw[] >> TRY (Cases_on `default`) >>
-  gvs[int_calls_expr_def, MEM_FLAT, MEM_MAP, PULL_EXISTS, EVERY_MEM] >>
-  metis_tac[]
+  Cases_on `id` >> CCONTR_TAC >>
+  gvs[supported_lookup_other_module]
 QED
-*)
+
 Theorem supported_pure_main_calls:
   (!tops e. supported_pure_expr tops e ==>
     EVERY (\c. FST c = NONE /\
@@ -69,24 +63,22 @@ Theorem supported_pure_main_calls:
     EVERY (\c. FST c = NONE /\
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
 Proof
-  cheat
+  ho_match_mp_tac supported_pure_expr_ind >>
+  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
+  rpt conj_tac >> rpt gen_tac >>
+  TRY (Cases_on `base`) >>
+  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND,
+       int_calls_target_indices, EVERY_FLAT, EVERY_MAP, EVERY_MEM] >>
+  rw[] >>
+  TRY (qpat_assum `MEM _ (int_calls_expr (Call _ target _ _))`
+        (fn _ => Cases_on `target`)) >>
+  TRY (Cases_on `default`) >>
+  gvs[int_calls_expr_def, MEM_FLAT, MEM_MAP, PULL_EXISTS, EVERY_MEM,
+      EVERY_APPEND] >>
+  metis_tac[supported_function_decl_main]
 QED
 
-Theorem supported_function_decl_main:
-  IS_SOME (supported_function_decl tops id vis) ==> FST id = NONE
-Proof
-  Cases_on `id` >> CCONTR_TAC >>
-  gvs[supported_lookup_other_module]
-QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  simp[supported_effect_expr_def, int_calls_expr_def, EVERY_APPEND] >>
-  rpt conj_tac >> rpt gen_tac >> simp[] >>
-  metis_tac[supported_pure_main_calls, supported_function_decl_main]
-QED
-*)
 Theorem supported_effect_main_calls:
   (!tops e. supported_effect_expr tops e ==>
     EVERY (\c. FST c = NONE /\
@@ -95,7 +87,17 @@ Theorem supported_effect_main_calls:
     EVERY (\c. FST c = NONE /\
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
 Proof
-  cheat
+  ho_match_mp_tac supported_effect_expr_ind >>
+  simp[supported_effect_expr_def, int_calls_expr_def, EVERY_APPEND,
+       int_calls_target_indices, EVERY_FLAT, EVERY_MAP, EVERY_MEM] >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  TRY (Cases_on `default`) >>
+  gvs[int_calls_expr_def, MEM_FLAT, MEM_MAP, PULL_EXISTS, EVERY_MEM,
+      EVERY_APPEND] >>
+  imp_res_tac supported_function_decl_main >>
+  imp_res_tac supported_pure_main_calls >>
+  gvs[EVERY_MEM] >>
+  metis_tac[REWRITE_RULE [EVERY_MEM] supported_pure_main_calls]
 QED
 
 Theorem supported_expr_main_calls:
@@ -104,6 +106,28 @@ Theorem supported_expr_main_calls:
 Proof
   simp[supported_expr_def] >>
   metis_tac[supported_pure_main_calls, supported_effect_main_calls]
+QED
+
+Theorem supported_target_info_main_calls:
+  !tops bindings t.
+    IS_SOME (supported_target_info tops bindings t) ==>
+    ~supported_target_exists expr_evm_run_root t /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t)
+Proof
+  rpt gen_tac >>
+  map_every qid_spec_tac [`bindings`, `tops`, `t`] >>
+  measureInduct_on `base_assignment_target_size t` >>
+  Cases_on `t` >>
+  simp[supported_target_info_def, supported_expr_exists_def,
+       int_calls_expr_def, EVERY_APPEND] >>
+  rpt gen_tac >> simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  gvs[AllCaseEqs(), expr_size_def] >>
+  qmatch_goalsub_rename_tac `int_calls_target tgt` >>
+  first_x_assum (qspec_then `tgt` mp_tac) >> simp[] >>
+  simp[GSYM optionTheory.IS_SOME_EXISTS] >>
+  metis_tac[supported_expr_no_evm_run, expr_has_evm_run_def,
+            supported_expr_main_calls, optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem body_eval_target_place_storage:
