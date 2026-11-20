@@ -1004,6 +1004,9 @@ Proof
   drule two_module_unit_lowers >> strip_tac >>
   qabbrev_tac `ce = build_compile_env_unit mods (SOME 1) Internal Pure "foo"
     [] NoneT [Pass] T` >>
+  `cenv_module_pins_mods mods ce` by
+    simp[NoAsms, Abbr `ce`, build_compile_env_unit_def, cenv_module_pins_mods_def,
+         pairTheory.ELIM_UNCURRY] >>
   qexists_tac `unit.cu_context` >>
   qexists_tac `ce` >>
   qexists_tac `(ARB:evaluation_context) with
@@ -1011,8 +1014,7 @@ Proof
   qexistsl_tac [`main`, `lib`] >>
   simp[contract_inv_def, module_body_inv_def, get_tenv_def] >>
   rpt conj_tac >>
-  simp[Abbr `ce`, build_compile_env_unit_def, cenv_module_pins_mods_def,
-       pairTheory.ELIM_UNCURRY] >>
+  simp[NoAsms, Abbr `ce`, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY] >>
   gvs[] >>
   simp[foo_supported, toplevel_vtype_keys_toplevel_def, make_struct_fields_map_mods_def,
        build_struct_fields_map_mods_def, build_struct_fields_map_src_def] >>
