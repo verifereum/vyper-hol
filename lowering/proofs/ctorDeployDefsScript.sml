@@ -550,7 +550,7 @@ Definition deploy_venom_result_rel_def:
           LIST_REL (request_agree H cx.txn.target) rqs ss.vs_requests
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
-    | (INR (Error e), Abort _ _) => T
+    | (INR (Error e), Abort a _) => (!d. e = RevertData d ==> a = Revert_abort)
     | (INR (Error e), Halt _) => unspecified_behaviour_exempt tops e
     | _ => F
 End

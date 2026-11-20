@@ -961,7 +961,9 @@ Proof
   Cases_on `src0` >> gvs[external_call_result_rel_def] >>
   rename1 `call_external _ _ _ _ = (INR source_exc,_,_)` >>
   Cases_on `source_exc` >> gvs[exception_outcome_rel_def] >>
-  gvs[AllCaseEqs()] >> metis_tac[]
+  gvs[AllCaseEqs()]
+  >- (Cases_on `e` >> gvs[] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 (* The S3 memory facts of the raw unit from the entry's memory- and
