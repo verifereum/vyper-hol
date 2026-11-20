@@ -256,6 +256,19 @@ Proof
   simp[is_label_operand_def]
 QED
 
+fun create_when_step pat tac (goal as (assumptions, _)) =
+  let val pattern = Parse.Term pat
+  in
+    if List.exists (can (ho_match_term [] Term.empty_tmset pattern)) assumptions
+    then tac goal else ALL_TAC goal
+  end;
+
+val create_step_premise_tac =
+  disch_then (fn th =>
+    if boolSyntax.is_imp (concl th) then
+      mp_tac th >> (impl_tac >- metis_tac[]) >> strip_tac
+    else strip_assume_tac th);
+
 Theorem runtime_sym_raw_create[local]:
   (!e t. MEM e args ==> runtime_sym_expr_contract tops cfn ce t e) /\
   runtime_sym_env tops ce /\ EVERY (supported_pure_expr tops) args /\
@@ -305,10 +318,11 @@ Proof
   disch_then (qspec_then `tops` mp_tac) >> simp[] >> strip_tac >>
   create_emit_tac `emit_op MLOAD _ _ = _` runtime_sym_emit_op >>
   create_emit_tac `emit_op ADD [_;Lit 32w] _ = _` runtime_sym_emit_op >>
-  TRY (qpat_assum `compile_create_ctor_tuple _ _ _ _ = _`
-       (mp_then Any mp_tac runtime_sym_create_ctor_tuple) >>
+  create_when_step `compile_create_ctor_tuple _ _ _ _ = _` (
+    qpat_assum `compile_create_ctor_tuple _ _ _ _ = _`
+      (mp_then Any mp_tac runtime_sym_create_ctor_tuple) >>
     disch_then (qspec_then `tops` mp_tac) >> simp[] >>
-    (TRY (impl_tac >- metis_tac[])) >> strip_tac >>
+    create_step_premise_tac >>
     create_emit_tac `compile_alloc_buffer _ _ = _` runtime_sym_alloc_buffer >>
     create_emit_tac `emit_void MCOPY _ _ = _` runtime_sym_emit_void >>
     create_emit_tac `emit_op ADD [buf.buf_operand;len] _ = _` runtime_sym_emit_op >>
@@ -371,7 +385,7 @@ fun create_lower_tac pat =
     in
       qpat_assum `!e t st op st'. _ ==> _`
         (mp_tac o SPECL [expr,ty,state,operand,state']) >>
-      simp[] >> (TRY (impl_tac >- metis_tac[])) >> strip_tac
+      simp[] >> create_step_premise_tac
     end);
 
 Theorem runtime_sym_compile_create_call[local]:
@@ -415,27 +429,29 @@ Proof
                   mp_tac (Q.ISPECL [`second:expr`, `more:expr list`] MEM_LAST)] >>
            simp[] >> tautLib.TAUT_TAC)) >> simp[]) >>
   create_lower_tac `lower_value _ _ _ target s = _` >>
-  TRY (qpat_assum `compile_create_blueprint_args _ _ _ _ _ _ = _`
+  create_when_step `compile_create_blueprint_args _ _ _ _ _ _ = _` (
+    qpat_assum `compile_create_blueprint_args _ _ _ _ _ _ = _`
       (mp_then Any mp_tac runtime_sym_create_blueprint_args_subset) >>
     disch_then (qspecl_then [`tops`, `all_args`] mp_tac) >> simp[] >>
-    (TRY (impl_tac >- metis_tac[])) >> strip_tac) >>
+    create_step_premise_tac) >>
   TRY (qpat_x_assum `_ (lower_value _ _ _ value _) = _` mp_tac >>
        pairarg_tac >> simp[] >> strip_tac) >>
-  TRY (create_lower_tac `lower_value _ _ _ value _ = _`) >>
+  create_when_step `lower_value _ _ _ value _ = _` (create_lower_tac `lower_value _ _ _ value _ = _`) >>
   TRY (create_emit_tac `compile_create_proxy_buf _ _ = _` runtime_sym_create_proxy_buf) >>
   TRY (qpat_x_assum `_ (compile_create_salt _ _ _ _) = _` mp_tac >>
        pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
        pairarg_tac >> simp[] >> strip_tac) >>
-  TRY (qpat_assum `compile_create_salt _ _ _ _ = _`
-    (mp_then Any mp_tac runtime_sym_create_salt) >>
-    simp[] >> (TRY (impl_tac >- metis_tac[])) >> strip_tac) >>
+  create_when_step `compile_create_salt _ _ _ _ = _` (
+    qpat_assum `compile_create_salt _ _ _ _ = _`
+      (mp_then Any mp_tac runtime_sym_create_salt) >>
+    simp[] >> create_step_premise_tac) >>
   TRY (qpat_assum `compile_create_dispatch _ _ _ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_create_dispatch) >> simp[is_label_operand_def]) >>
   TRY (qpat_assum `compile_create_copy _ _ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_create_copy) >> simp[]) >>
   qpat_assum `(case origin_fold_value _ of Literal _ (IntL i) => _ | _ => _) _ = _`
     (mp_then Any mp_tac runtime_sym_create_blueprint_offset) >>
-  simp[] >> (TRY (impl_tac >- metis_tac[])) >> strip_tac >>
+  simp[] >> create_step_premise_tac >>
   create_emit_tac `compile_create_blueprint_check _ _ _ _ = _` runtime_sym_create_blueprint_check >>
   qpat_assum `compile_create_blueprint_append _ _ _ _ _ _ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_create_blueprint_append) >> simp[]
