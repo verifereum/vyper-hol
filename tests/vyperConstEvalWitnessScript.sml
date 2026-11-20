@@ -499,13 +499,25 @@ Theorem mixed_bytes_equality_remains_runtime =
 Theorem hex_bitwise_remains_runtime = check_refused_fold "constant_hexand.json";
 Theorem hex_inversion_remains_runtime = check_refused_fold "constant_hexinvert.json";
 
+val keccak_shift_json = JSONDecode.decodeString jsonASTLib.json_expr
+  "{\"ast_type\":\"Call\",\
+  \ \"func\":{\"ast_type\":\"Name\",\"id\":\"keccak256\",\
+  \         \"type\":{\"typeclass\":\"builtin_function\",\"name\":\"keccak256\"}},\
+  \ \"args\":[{\"ast_type\":\"BinOp\",\"op\":{\"ast_type\":\"LShift\"},\
+  \          \"left\":{\"ast_type\":\"Hex\",\
+  \                  \"value\":\"0x0101010101010101010101010101010101010101010101010101010101010101\",\
+  \                  \"type\":{\"typeclass\":\"bytes_m\",\"m\":32}},\
+  \          \"right\":{\"ast_type\":\"Int\",\"value\":1,\
+  \                   \"type\":{\"typeclass\":\"integer\",\"bits\":8,\"is_signed\":true}},\
+  \          \"type\":{\"typeclass\":\"bytes_m\",\"m\":32}}],\
+  \ \"keywords\":[],\"type\":{\"typeclass\":\"bytes_m\",\"m\":32}}";
+
 val shifted_bytes = ``Builtin (BaseT (BytesT (Fixed 32))) (Bop ShL)
   [Literal (BaseT (BytesT (Fixed 32))) (BytesL (REPLICATE 32 1w));
-   Literal (BaseT (UintT 256)) (IntL 1)]``;
+   Literal (BaseT (IntT 8)) (IntL 1)]``;
 
 Theorem keccak_of_bytes_shift_remains_runtime:
-  make_builtin_call (BaseT (BytesT (Fixed 32))) "keccak256"
-    [^shifted_bytes] [] (JT_BytesM 32) =
+  translate_expr ^residual_ctx ^keccak_shift_json =
   Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [^shifted_bytes]
 Proof
   EVAL_TAC
