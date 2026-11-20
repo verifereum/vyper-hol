@@ -3,15 +3,13 @@
  *
  * type_stmt admits `return e` when expr_type e widens to the return type
  * (type_widens_to: a bytestring or dynamic array of a smaller bound,
- * elementwise).  The lowering passes both types on: an internal memory
- * return stores with compile_store_memory, which converts layouts with
- * compile_store_memory_typed; an external return first normalizes the value
- * into a fresh buffer of the return type with compile_store_memory_typed.
+ * elementwise).  An internal memory return uses compile_store_memory,
+ * which converts layouts with compile_store_memory_typed.  A compatible
+ * bounded external ABI return can encode directly at the source layout.
+ * See externalReturnValuedFull for the proof of that path.
  *
  * TOP-LEVEL:
  *   stack_return_widens_eq — a stack-returned type only widens from itself
- * The external return's normalization, compile_return_normalize_frag, is in
- * exprSimTypedAlloc.
  *)
 
 Theory stmtSimReturnWiden
