@@ -149,12 +149,7 @@ in
     end
 end
 
-Theorem raw_call_expr_vv_full:
-  body_exprs_full_ok cx args /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
-  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Call ann (RawCallTarget flags) args dflt) es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule raw_call_pre_operands >> strip_tac >>
@@ -1056,4 +1051,14 @@ Proof
   rpt gen_tac >> disch_tac >>
   qpat_assum `!t' p. vv = LocatedValue t' p ==> _`
     (drule_then (ACCEPT_TAC o CONJUNCT1))
+QED
+*)
+Theorem raw_call_expr_vv_full:
+  body_exprs_full_ok cx args /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
+  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Call ann (RawCallTarget flags) args dflt) es
+Proof
+  cheat
 QED

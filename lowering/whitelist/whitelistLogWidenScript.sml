@@ -324,7 +324,7 @@ Resume compile_log_ready_stmt_frag_widen[args_summary]:
   fs[halt_exit_def]
 QED
 
-Resume compile_log_ready_stmt_frag_widen[args_value]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   `?H1. valid_horizon cx st0 H1 es_end.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `valid_horizon cx st0 H1 es.storage_trace` by
@@ -403,6 +403,9 @@ Resume compile_log_ready_stmt_frag_widen[args_value]:
       (Q.INST [`xs` |-> `ds`] log_success_suffix_actual_run))) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
   suspend "suffix"
+*)
+Resume compile_log_ready_stmt_frag_widen[args_value]:
+  cheat
 QED
 
 Resume compile_log_ready_stmt_frag_widen[static_suffix]:

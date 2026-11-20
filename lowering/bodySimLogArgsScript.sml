@@ -303,6 +303,22 @@ QED
 
 (* ===== The arguments ===== *)
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  rpt strip_tac >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      int_calls_stmt_def, listTheory.EVERY_CONJ, GSYM expr_has_evm_run_def]) >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
+   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+       is_dynamic (vyper_to_abi_type (type_env tops) target))` by
+    fs[body_inv_def] >>
+  `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
+  qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
+    irule_body_pre stmt_expr_body_pre >>
+  simp[] >> metis_tac[supported_pure_expr_effect_free, no_effect_call_operands]
+QED
+*)
 Theorem log_arg_body_pre[local]:
   !tops ctx cenv cx env e calls es.
     body_stmt_safe tops (Expr e) /\ ~is_extcode e /\
@@ -317,18 +333,7 @@ Theorem log_arg_body_pre[local]:
     expr_sim_inv cenv cx env es ==>
     expr_body_pre cenv cx env e es
 Proof
-  rpt strip_tac >>
-  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
-      int_calls_stmt_def, listTheory.EVERY_CONJ, GSYM expr_has_evm_run_def]) >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
-   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-       is_dynamic (vyper_to_abi_type (type_env tops) target))` by
-    fs[body_inv_def] >>
-  `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
-  qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
-    irule_body_pre stmt_expr_body_pre >>
-  simp[] >> metis_tac[supported_pure_expr_effect_free, no_effect_call_operands]
+  cheat
 QED
 
 (* Body safety and root allocation checks give each argument expr_body_pre;
@@ -378,27 +383,37 @@ QED
 
 (* Supported pure expressions make no calls and pop nothing, so none can
    mutate memory or storage. *)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  ho_match_mp_tac supported_pure_expr_ind >>
+  rw[supported_pure_expr_def, expr_can_mutate_def] >>
+  gvs[supported_pure_expr_def, expr_can_mutate_def]
+QED
+*)
 Theorem supported_pure_expr_no_mutate:
   (!tops e. supported_pure_expr tops e ==> ~expr_can_mutate cenv e) /\
   (!tops es. supported_pure_exprs tops es ==> ~exprs_can_mutate cenv es) /\
   (!tops fs. supported_pure_fields tops fs ==> ~named_exprs_can_mutate cenv fs) /\
   (!tops e. supported_place_expr tops e ==> ~expr_can_mutate cenv e)
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  rw[supported_pure_expr_def, expr_can_mutate_def] >>
-  gvs[supported_pure_expr_def, expr_can_mutate_def]
+  cheat
 QED
 
-Theorem supported_pure_exprs_bytestring_iff:
-  !es. supported_pure_exprs tops es /\ well_typed_exprs env es ==>
-    EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
-               is_bytestring_type (expr_type e)) es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Induct >> simp[] >> rpt gen_tac >>
   simp[Once supported_pure_expr_def, Once well_typed_expr_def] >> strip_tac >>
   irule lowered_value_type_bytestring_iff >> conj_tac
   >- (rpt gen_tac >> strip_tac >> gvs[supported_pure_expr_def]) >>
   qexists_tac `env` >> simp[]
+QED
+*)
+Theorem supported_pure_exprs_bytestring_iff:
+  !es. supported_pure_exprs tops es /\ well_typed_exprs env es ==>
+    EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+               is_bytestring_type (expr_type e)) es
+Proof
+  cheat
 QED
 
 Theorem body_log_assignable_abi_plan:

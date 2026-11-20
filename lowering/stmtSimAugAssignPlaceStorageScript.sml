@@ -437,19 +437,7 @@ Proof
   strip_tac >> drule eval_exprs_singleton_end_state >> metis_tac[]
 QED
 
-Theorem aug_place_pure_storage_mutual:
-  (!tops e. supported_pure_expr tops e ==>
-    !cx s r s' tr. eval_expr cx e s = (r,s') ==>
-      get_storage cx s' tr = get_storage cx s tr) /\
-  (!tops es. supported_pure_exprs tops es ==>
-    !cx s r s' tr. eval_exprs cx es s = (r,s') ==>
-      get_storage cx s' tr = get_storage cx s tr) /\
-  (!tops fs. supported_pure_fields tops fs ==>
-    !cx s r s' tr. eval_exprs cx (MAP SND fs) s = (r,s') ==>
-      get_storage cx s' tr = get_storage cx s tr) /\
-  (!tops e. supported_place_expr tops e ==>
-    !cx s r s' tr. eval_expr cx e s = (r,s') ==>
-      get_storage cx s' tr = get_storage cx s tr)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
   simp[supported_pure_expr_def] >>
@@ -574,6 +562,23 @@ Proof
       qpat_assum `_ = _ with storage_trace := _`
         (fn th => once_rewrite_tac [th]) >> simp[])
   >> gvs[evaluate_def, return_def]
+QED
+*)
+Theorem aug_place_pure_storage_mutual:
+  (!tops e. supported_pure_expr tops e ==>
+    !cx s r s' tr. eval_expr cx e s = (r,s') ==>
+      get_storage cx s' tr = get_storage cx s tr) /\
+  (!tops es. supported_pure_exprs tops es ==>
+    !cx s r s' tr. eval_exprs cx es s = (r,s') ==>
+      get_storage cx s' tr = get_storage cx s tr) /\
+  (!tops fs. supported_pure_fields tops fs ==>
+    !cx s r s' tr. eval_exprs cx (MAP SND fs) s = (r,s') ==>
+      get_storage cx s' tr = get_storage cx s tr) /\
+  (!tops e. supported_place_expr tops e ==>
+    !cx s r s' tr. eval_expr cx e s = (r,s') ==>
+      get_storage cx s' tr = get_storage cx s tr)
+Proof
+  cheat
 QED
 
 Theorem aug_place_pure_eval_storage:

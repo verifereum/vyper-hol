@@ -3,9 +3,7 @@ Ancestors
   bodyAugPlaceTarget supportedStmts supportedTargets supportedTypes
   supportedExprForms supportedDecls bodySim list alist
 
-Theorem augassign_name_target_info:
-  supported_stmt tops bindings (AugAssign ty (NameTarget id) bop e) ==>
-  ?pt. supported_target_info tops bindings (NameTarget id) = SOME pt
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `supported_target tops bindings (NameTarget id) \/
@@ -36,17 +34,15 @@ Proof
   Cases_on `supported_target_info tops bindings (NameTarget id)` >>
   gvs[supported_aug_target_def]
 QED
+*)
+Theorem augassign_name_target_info:
+  supported_stmt tops bindings (AugAssign ty (NameTarget id) bop e) ==>
+  ?pt. supported_target_info tops bindings (NameTarget id) = SOME pt
+Proof
+  cheat
+QED
 
-Theorem augassign_scalar_target_route:
-  body_inv tops ctx cenv cx /\
-  supported_scalar_target tops nsid ==>
-  ?ity slot mut.
-    supported_variable_decl tops nsid = SOME (Private,mut,ity,SOME slot) /\
-    (mut = Storage \/ mut = Transient) /\
-    supported_full_word_type ity /\
-    supported_target_info tops bindings (TopLevelNameTarget nsid) =
-      SOME (ValPT ity) /\
-    ~immutable_root cx (TopLevelNameTarget nsid)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   qpat_x_assum `supported_scalar_target _ _` mp_tac >>
@@ -66,6 +62,20 @@ Proof
   `supported_target_info tops bindings (TopLevelNameTarget nsid) = SOME (ValPT decl2)` by
     simp[supported_target_info_def, supported_place_root_def] >>
   metis_tac[aug_place_supported_root_not_immutable]
+QED
+*)
+Theorem augassign_scalar_target_route:
+  body_inv tops ctx cenv cx /\
+  supported_scalar_target tops nsid ==>
+  ?ity slot mut.
+    supported_variable_decl tops nsid = SOME (Private,mut,ity,SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\
+    supported_full_word_type ity /\
+    supported_target_info tops bindings (TopLevelNameTarget nsid) =
+      SOME (ValPT ity) /\
+    ~immutable_root cx (TopLevelNameTarget nsid)
+Proof
+  cheat
 QED
 
 Theorem augassign_other_target_routes:

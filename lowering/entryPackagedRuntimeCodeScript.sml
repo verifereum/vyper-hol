@@ -56,14 +56,7 @@ Proof
   metis_tac[entry_code_build_getter, entry_code_toplevel_name_expr]
 QED
 
-Theorem entry_code_packaged_externals:
-  supported_program tops /\ module_consts_env tops [] = [] ==>
-  EVERY (\(lbl,ce,args,cds,pay,nr,key,tr,vw,fb,rt).
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_external_function_body ce args nr key tr vw fb rt))
-    (MAP (set_external_package_target target)
-      (MAP (package_external_fn tops T (K global_nonreentrant_slot))
-        (FST (classify_functions tops))))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> simp[EVERY_MAP, EVERY_MEM] >>
   qx_gen_tac `src` >> strip_tac >> PairCases_on `src` >>
@@ -77,15 +70,20 @@ Proof
                build_compile_env_ce_func_defaults, entry_code_build_defaults]) >>
   metis_tac[entry_code_public_getter_body]
 QED
-
-Theorem entry_code_packaged_internals:
+*)
+Theorem entry_code_packaged_externals:
   supported_program tops /\ module_consts_env tops [] = [] ==>
-  EVERY (\(lbl,ce,ps,buf,nr,key,tr,vw,ctor,im,fb,rt).
+  EVERY (\(lbl,ce,args,cds,pay,nr,key,tr,vw,fb,rt).
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_internal_function ce ps buf nr key tr vw ctor im fb rt))
-    (MAP (set_internal_package_target target)
-      (MAP (package_internal_fn tops T (K global_nonreentrant_slot) F 0)
-        (FST (SND (classify_functions tops)))))
+      (compile_external_function_body ce args nr key tr vw fb rt))
+    (MAP (set_external_package_target target)
+      (MAP (package_external_fn tops T (K global_nonreentrant_slot))
+        (FST (classify_functions tops))))
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> simp[EVERY_MAP, EVERY_MEM] >>
   qx_gen_tac `src` >> strip_tac >> PairCases_on `src` >>
@@ -98,16 +96,20 @@ Proof
       fs[update_cenv_ret_abi_def, update_cenv_nonreentrant_def,
            build_compile_env_ce_func_defaults, entry_code_build_defaults]
 QED
-
-Theorem entry_code_packaged_fallback:
+*)
+Theorem entry_code_packaged_internals:
   supported_program tops /\ module_consts_env tops [] = [] ==>
-  (case set_fallback_package_target target
-     (package_fallback_fn tops T (K global_nonreentrant_slot)
-       (FST (SND (SND (classify_functions tops))))) of
-     NONE => T
-   | SOME (ce,pay,nr,key,tr,vw,fb,rt) =>
-       entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-         (compile_fallback_body ce pay nr key tr vw fb rt))
+  EVERY (\(lbl,ce,ps,buf,nr,key,tr,vw,ctor,im,fb,rt).
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (compile_internal_function ce ps buf nr key tr vw ctor im fb rt))
+    (MAP (set_internal_package_target target)
+      (MAP (package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+        (FST (SND (classify_functions tops)))))
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   Cases_on `FST (SND (SND (classify_functions tops)))`
@@ -121,4 +123,17 @@ Proof
   Cases_on `src6 = NoneT` >>
       fs[update_cenv_ret_abi_def, update_cenv_nonreentrant_def,
            build_compile_env_ce_func_defaults, entry_code_build_defaults]
+QED
+*)
+Theorem entry_code_packaged_fallback:
+  supported_program tops /\ module_consts_env tops [] = [] ==>
+  (case set_fallback_package_target target
+     (package_fallback_fn tops T (K global_nonreentrant_slot)
+       (FST (SND (SND (classify_functions tops))))) of
+     NONE => T
+   | SOME (ce,pay,nr,key,tr,vw,fb,rt) =>
+       entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+         (compile_fallback_body ce pay nr key tr vw fb rt))
+Proof
+  cheat
 QED

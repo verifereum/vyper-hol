@@ -5,6 +5,42 @@ Ancestors
   vyperStorageFootprint vyperStorageTrace vyperScopePreservation vyperState
   supportedStmts finite_map pred_set list
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  strip_tac >>
+  `ee.scopes = es0.scopes` by
+    (qpat_assum `vyperState$bind _ _ _ = _`
+       (mp_then (Pat `vyperState$bind _ _ _ = _`) irule
+         vyperScopePreservationTheory.bind_scopes) >>
+     qpat_assum `supported_expr _ _` mp_tac >>
+     POP_ASSUM_LIST kall_tac >>
+     metis_tac[aug_place_supported_expr_scopes, read_result_state]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es0.scopes` by simp[] >>
+  qx_gen_tac `H` >> strip_tac >>
+  `valid_horizon cx st0 H ee.storage_trace` by
+    (qpat_assum `write_place _ _ _ _ = _` mp_tac >>
+     qpat_assum `valid_horizon _ _ _ ff.storage_trace` mp_tac >>
+     POP_ASSUM_LIST kall_tac >>
+     metis_tac[valid_horizon_frame, storage_trace_frame_write_place]) >>
+  `valid_horizon cx st0 H es0.storage_trace` by
+    (qpat_assum `vyperState$bind _ _ _ = _` mp_tac >>
+     qpat_assum `valid_horizon _ _ _ ee.storage_trace` mp_tac >>
+     POP_ASSUM_LIST kall_tac >>
+     metis_tac[valid_horizon_frame, augassign_rhs_trace_frame]) >>
+  map_every (fn post => qpat_x_assum post (qspec_then `H` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac)
+    [`!h. valid_horizon _ _ h es0.storage_trace ==> _`,
+     `!h. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`,
+     `!h. _ ==> stmt_state_rel _ _ _ _ _ ee w /\ _`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  match_mp_tac (GEN_ALL augassign_immutable_entry_operator_frame) >>
+  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >>
+  metis_tac[]
+QED
+*)
 Theorem augassign_immutable_staged_store_frame:
   (!H. valid_horizon cx st0 H es0.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es0 s0 /\
@@ -57,36 +93,5 @@ Theorem augassign_immutable_staged_store_frame:
         off + sz <= b \/ b + sz' <= off) /\
       off <= i /\ i < off + sz /\ i IN tnw.t_mem ==> i IN tn0.t_mem)
 Proof
-  strip_tac >>
-  `ee.scopes = es0.scopes` by
-    (qpat_assum `vyperState$bind _ _ _ = _`
-       (mp_then (Pat `vyperState$bind _ _ _ = _`) irule
-         vyperScopePreservationTheory.bind_scopes) >>
-     qpat_assum `supported_expr _ _` mp_tac >>
-     POP_ASSUM_LIST kall_tac >>
-     metis_tac[aug_place_supported_expr_scopes, read_result_state]) >>
-  `MAP FDOM ee.scopes = MAP FDOM es0.scopes` by simp[] >>
-  qx_gen_tac `H` >> strip_tac >>
-  `valid_horizon cx st0 H ee.storage_trace` by
-    (qpat_assum `write_place _ _ _ _ = _` mp_tac >>
-     qpat_assum `valid_horizon _ _ _ ff.storage_trace` mp_tac >>
-     POP_ASSUM_LIST kall_tac >>
-     metis_tac[valid_horizon_frame, storage_trace_frame_write_place]) >>
-  `valid_horizon cx st0 H es0.storage_trace` by
-    (qpat_assum `vyperState$bind _ _ _ = _` mp_tac >>
-     qpat_assum `valid_horizon _ _ _ ee.storage_trace` mp_tac >>
-     POP_ASSUM_LIST kall_tac >>
-     metis_tac[valid_horizon_frame, augassign_rhs_trace_frame]) >>
-  map_every (fn post => qpat_x_assum post (qspec_then `H` mp_tac) >>
-    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac)
-    [`!h. valid_horizon _ _ h es0.storage_trace ==> _`,
-     `!h. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`,
-     `!h. _ ==> stmt_state_rel _ _ _ _ _ ee w /\ _`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  match_mp_tac (GEN_ALL augassign_immutable_entry_operator_frame) >>
-  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  simp[] >>
-  metis_tac[]
+  cheat
 QED

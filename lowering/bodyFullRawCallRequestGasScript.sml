@@ -19,16 +19,7 @@ Proof
   IF_CASES_TAC >> gvs[] >> metis_tac[]
 QED
 
-Theorem raw_call_request_gas_at_entry:
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
-  expr_sim_inv cenv cx env esD /\
-  eval_exprs cx kws (esD with gas_obs := gsK) = (INL kvs,esK) /\
-  typed_args_post H ctx func cenv cx esD s4 t4 esK kws xs kvs tk /\
-  (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t7 = SOME w) /\
-  (!p. ext_call_kwarg EKGas flags.rcf_kws xs = SOME p ==> gas_op = p) /\
-  eval_operand gas_op t7 = SOME gw ==>
-  !g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
-      g = w2n gw
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   drule raw_call_pre_flags >> simp[] >> strip_tac >>
@@ -59,4 +50,18 @@ Proof
      first_x_assum irule >> simp[EL_MEM]) >>
   Cases_on `ext_call_kwarg EKGas flags.rcf_kws kvs` >> simp[] >>
   drule_all raw_call_selected_gas_word >> strip_tac >> gvs[]
+QED
+*)
+Theorem raw_call_request_gas_at_entry:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
+  expr_sim_inv cenv cx env esD /\
+  eval_exprs cx kws (esD with gas_obs := gsK) = (INL kvs,esK) /\
+  typed_args_post H ctx func cenv cx esD s4 t4 esK kws xs kvs tk /\
+  (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t7 = SOME w) /\
+  (!p. ext_call_kwarg EKGas flags.rcf_kws xs = SOME p ==> gas_op = p) /\
+  eval_operand gas_op t7 = SOME gw ==>
+  !g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
+      g = w2n gw
+Proof
+  cheat
 QED

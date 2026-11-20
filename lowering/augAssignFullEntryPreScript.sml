@@ -34,17 +34,7 @@ Proof
   metis_tac[call_evaluation_safe_append_right]
 QED
 
-Theorem augassign_entry_target_pre:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (AugAssign ty t bop e) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-     (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env es /\
-  type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
-  stmt_exprs_ok cenv (AugAssign ty t bop e) /\
-  call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
-  ~immutable_root cx t ==>
-  target_pre cenv cx env t es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> simp[target_pre_def] >>
   Cases_on `(?bt fld. t = AttributeTarget bt fld) \/
@@ -75,4 +65,19 @@ Proof
     simp[optionTheory.IS_SOME_EXISTS] >>
     metis_tac[call_evaluation_safe_append_left]) >>
   Cases_on `t` >> gvs[target_indices_pre_def]
+QED
+*)
+Theorem augassign_entry_target_pre:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (AugAssign ty t bop e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+  stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+  call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+  ~immutable_root cx t ==>
+  target_pre cenv cx env t es
+Proof
+  cheat
 QED

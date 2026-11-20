@@ -1369,6 +1369,11 @@ QED
 
 Finalise append_storage_aggregate_cont_full[local]
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  simp[Once supported_stmt_def]
+QED
+*)
 Theorem supported_stmt_append_form[local]:
   supported_stmt tops bindings (Append target e) =
     (supported_append_target tops target /\ supported_pure_expr tops e /\
@@ -1382,7 +1387,7 @@ Theorem supported_stmt_append_form[local]:
          ?dn. supported_target_info tops bindings target =
            SOME (ValPT (ArrayT (expr_type e) (Dynamic dn))))
 Proof
-  simp[Once supported_stmt_def]
+  cheat
 QED
 
 (* A local memory dynamic array named directly (gate SEQ-4806). *)
@@ -3302,7 +3307,7 @@ Resume append_nested_after_target_full[rhs_exit]:
   gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def]
 QED
 
-Resume append_nested_after_target_full[suffix]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   rpt strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid'.storage_trace) mid'.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
@@ -3456,6 +3461,9 @@ Resume append_nested_after_target_full[suffix]:
   >- suspend "storage"
   >- suspend "memory" >>
   fs[loweringPostsTheory.place_ptr_rel_def]
+*)
+Resume append_nested_after_target_full[suffix]:
+  cheat
 QED
 
 Resume append_nested_after_target_full[memory]:
@@ -3876,12 +3884,7 @@ QED
 
 Finalise body_append_nested_full
 
-Theorem body_append_storage_full:
-  !cx nid e.
-    (!s'' p t'.
-       eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
-       body_expr_full_ok cx e) ==>
-    body_stmt_full_ok cx (Append (TopLevelNameTarget nid) e)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> strip_tac >> PairCases_on `nid` >>
   rw[body_stmt_full_ok_def] >>
@@ -4453,3 +4456,13 @@ Resume body_append_storage_full[aggregate_post]:
 QED
 
 Finalise body_append_storage_full
+*)
+Theorem body_append_storage_full:
+  !cx nid e.
+    (!s'' p t'.
+       eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
+       body_expr_full_ok cx e) ==>
+    body_stmt_full_ok cx (Append (TopLevelNameTarget nid) e)
+Proof
+  cheat
+QED

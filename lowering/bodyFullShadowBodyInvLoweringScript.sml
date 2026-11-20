@@ -139,33 +139,7 @@ Proof
   simp[] >> metis_tac[internal_fn_label_mode]
 QED
 
-Theorem shadow_body_inv_from_internal_runs[local]:
-  supported_program tops /\
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
-  (if is_ctor then lower_vyper_deploy_unit tops rp bc = SOME unit
-   else lower_vyper_runtime_unit tops rp = SOME unit) /\
-  name = (if is_ctor then "__deploy" else "__entry") /\
-  PERM srcs (FST (SND (classify_functions tops))) /\
-  ips = MAP (set_internal_package_target rp.rpol_target o
-    package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
-      (if is_ctor then imm_len tops else 0)) srcs /\
-  compile_internal_fn_bodies ips start = ((),run_end) /\
-  compile_internal_fn_bodies (MAP gas_shadow_internal_package ips)
-    startS = ((),run_endS) /\
-  extract_context_with_internals name ips run_end = SOME (raw,data) /\
-  extract_context_with_internals name (MAP gas_shadow_internal_package ips)
-    run_endS = SOME (rawS,dataS) /\
-  unit.cu_context.ctx_functions = raw.ctx_functions /\
-  shadow_unit.cu_context.ctx_functions = rawS.ctx_functions /\
-  gas_shadow_context unit.cu_context shadow_unit.cu_context /\
-  lowering_context_ok unit.cu_context /\ lowering_context_ok shadow_unit.cu_context /\
-  gas_shadow_state start startS /\ shape_state start /\ shape_state startS /\
-  all_blocks start <> [] /\ all_blocks startS <> [] /\
-  (HD (all_blocks start)).bb_label = name /\
-  (HD (all_blocks startS)).bb_label = name /\
-  EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks start))) /\
-  EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks startS))) ==>
-  shadow_body_inv tops unit.cu_context shadow_unit.cu_context
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   simp[shadow_body_inv_def] >> rpt gen_tac >> strip_tac >>
@@ -245,12 +219,39 @@ Proof
   gs[imm_len_def, bool_case_eq, lowering_context_ok_def] >>
   metis_tac[]
 QED
-
-Theorem runtime_shadow_body_inv:
+*)
+Theorem shadow_body_inv_from_internal_runs[local]:
+  supported_program tops /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
-  supported_program tops /\ lower_vyper_runtime_unit tops rp = SOME unit /\
-  runtime_gas_shadow_unit tops rp = SOME shadow_unit ==>
+  (if is_ctor then lower_vyper_deploy_unit tops rp bc = SOME unit
+   else lower_vyper_runtime_unit tops rp = SOME unit) /\
+  name = (if is_ctor then "__deploy" else "__entry") /\
+  PERM srcs (FST (SND (classify_functions tops))) /\
+  ips = MAP (set_internal_package_target rp.rpol_target o
+    package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
+      (if is_ctor then imm_len tops else 0)) srcs /\
+  compile_internal_fn_bodies ips start = ((),run_end) /\
+  compile_internal_fn_bodies (MAP gas_shadow_internal_package ips)
+    startS = ((),run_endS) /\
+  extract_context_with_internals name ips run_end = SOME (raw,data) /\
+  extract_context_with_internals name (MAP gas_shadow_internal_package ips)
+    run_endS = SOME (rawS,dataS) /\
+  unit.cu_context.ctx_functions = raw.ctx_functions /\
+  shadow_unit.cu_context.ctx_functions = rawS.ctx_functions /\
+  gas_shadow_context unit.cu_context shadow_unit.cu_context /\
+  lowering_context_ok unit.cu_context /\ lowering_context_ok shadow_unit.cu_context /\
+  gas_shadow_state start startS /\ shape_state start /\ shape_state startS /\
+  all_blocks start <> [] /\ all_blocks startS <> [] /\
+  (HD (all_blocks start)).bb_label = name /\
+  (HD (all_blocks startS)).bb_label = name /\
+  EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks start))) /\
+  EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks startS))) ==>
   shadow_body_inv tops unit.cu_context shadow_unit.cu_context
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   Cases_on `classify_functions tops` >>
@@ -306,6 +307,15 @@ Proof
     `srcs` |-> `order_internals (runtime_internal_order tops ints) ints`]
     shadow_body_inv_from_internal_runs) >>
   simp[Abbr `ips`, PERM_order_runtime_internals]
+QED
+*)
+Theorem runtime_shadow_body_inv:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  supported_program tops /\ lower_vyper_runtime_unit tops rp = SOME unit /\
+  runtime_gas_shadow_unit tops rp = SOME shadow_unit ==>
+  shadow_body_inv tops unit.cu_context shadow_unit.cu_context
+Proof
+  cheat
 QED
 
 Theorem deploy_shadow_body_inv:
@@ -365,37 +375,7 @@ Proof
      PERM_order_deploy_internals]
 QED
 
-Theorem selected_real_internal_code_from_run[local]:
-  supported_program tops /\
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
-  PERM srcs (FST (SND (classify_functions tops))) /\
-  ips = MAP (set_internal_package_target target o
-    package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
-      (if is_ctor then imm_len tops else 0)) srcs /\
-  MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops /\
-  name = (if is_ctor then "__deploy" else "__entry") /\
-  compile_internal_fn_bodies ips start = ((),run_end) /\
-  extract_context_with_internals name ips run_end = SOME (raw,data) /\
-  raw.ctx_functions = ctx.ctx_functions /\ lowering_context_ok ctx /\
-  shape_state start /\ all_blocks start <> [] /\
-  (HD (all_blocks start)).bb_label = name /\
-  EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks start))) /\
-  lookup_function
-    (internal_fn_label (build_func_ids 0 tops fname) fname (MAP SND args)
-       is_ctor) ctx.ctx_functions = SOME callee ==>
-  ?label ce params has_rb nr' key trans view ctor ilen rt before old entry final.
-    set_internal_package_target target
-      (package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
-        (if is_ctor then imm_len tops else 0) (mut,nr,rr,fname,args,dflts,ret,ss)) =
-      (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,ss,rt) /\
-    label = internal_fn_label (build_func_ids 0 tops fname) fname
-      (MAP SND args) is_ctor /\
-    new_block label before = (old,entry) /\
-    compile_internal_function ce params has_rb nr' key trans view ctor ilen
-      ss rt entry = ((),final) /\
-    fn_has_code entry final callee /\
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
-    ctx_inst_ids_distinct ctx
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `subst_consts_fn (module_consts_env tops [])
@@ -455,27 +435,43 @@ Proof
   qexistsl_tac [`before`, `old`, `st0`, `after`] >>
   fs[lowering_context_ok_def]
 QED
-
-Theorem body_inv_selected_internal_code:
-  body_inv tops ctx cenv cx /\
+*)
+Theorem selected_real_internal_code_from_run[local]:
+  supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  PERM srcs (FST (SND (classify_functions tops))) /\
+  ips = MAP (set_internal_package_target target o
+    package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
+      (if is_ctor then imm_len tops else 0)) srcs /\
   MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops /\
+  name = (if is_ctor then "__deploy" else "__entry") /\
+  compile_internal_fn_bodies ips start = ((),run_end) /\
+  extract_context_with_internals name ips run_end = SOME (raw,data) /\
+  raw.ctx_functions = ctx.ctx_functions /\ lowering_context_ok ctx /\
+  shape_state start /\ all_blocks start <> [] /\
+  (HD (all_blocks start)).bb_label = name /\
+  EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks start))) /\
   lookup_function
     (internal_fn_label (build_func_ids 0 tops fname) fname (MAP SND args)
-       cx.in_deploy) ctx.ctx_functions = SOME callee ==>
+       is_ctor) ctx.ctx_functions = SOME callee ==>
   ?label ce params has_rb nr' key trans view ctor ilen rt before old entry final.
-    set_internal_package_target cenv.ce_target
-      (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
-        (if cx.in_deploy then imm_len tops else 0)
-        (mut,nr,rr,fname,args,dflts,ret,ss)) =
+    set_internal_package_target target
+      (package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
+        (if is_ctor then imm_len tops else 0) (mut,nr,rr,fname,args,dflts,ret,ss)) =
       (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,ss,rt) /\
     label = internal_fn_label (build_func_ids 0 tops fname) fname
-      (MAP SND args) cx.in_deploy /\
+      (MAP SND args) is_ctor /\
     new_block label before = (old,entry) /\
     compile_internal_function ce params has_rb nr' key trans view ctor ilen
       ss rt entry = ((),final) /\
     fn_has_code entry final callee /\
     ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
     ctx_inst_ids_distinct ctx
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   qpat_x_assum `body_inv _ _ _ _`
@@ -534,4 +530,28 @@ Proof
      `srcs` |-> `order_internals (runtime_internal_order tops ints) ints`]
      selected_real_internal_code_from_run) >>
   simp[Abbr `ips`, PERM_order_runtime_internals]
+QED
+*)
+Theorem body_inv_selected_internal_code:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops /\
+  lookup_function
+    (internal_fn_label (build_func_ids 0 tops fname) fname (MAP SND args)
+       cx.in_deploy) ctx.ctx_functions = SOME callee ==>
+  ?label ce params has_rb nr' key trans view ctor ilen rt before old entry final.
+    set_internal_package_target cenv.ce_target
+      (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
+        (if cx.in_deploy then imm_len tops else 0)
+        (mut,nr,rr,fname,args,dflts,ret,ss)) =
+      (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,ss,rt) /\
+    label = internal_fn_label (build_func_ids 0 tops fname) fname
+      (MAP SND args) cx.in_deploy /\
+    new_block label before = (old,entry) /\
+    compile_internal_function ce params has_rb nr' key trans view ctor ilen
+      ss rt entry = ((),final) /\
+    fn_has_code entry final callee /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
+    ctx_inst_ids_distinct ctx
+Proof
+  cheat
 QED

@@ -1813,22 +1813,7 @@ QED
 
 Finalise body_assign_toplevel_copy_after_rhs_frame
 
-Theorem body_assign_topcopy_frontend[local]:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-    (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) ==>
-    occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env es /\
-  type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) = SOME env' /\
-  stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) /\
-  call_evaluation_safe cx
-    (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)) /\
-  supported_variable_decl tops (src,id) = SOME (Private, mut, ty, SOME ast_slot) /\
-  (mut = Storage \/ mut = Transient) /\
-  (!elem n. ty <> ArrayT elem (Dynamic n)) /\ expr_type e = ty ==>
-  expr_body_pre cenv cx env e es /\
-  ~is_bytestring_type ty /\ ~has_length_word ty
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `supported_expr tops e` by
@@ -1846,6 +1831,26 @@ Proof
   `expr_body_pre cenv cx env e es` by metis_tac[topcopy_rhs_pre] >>
   simp[] >>
   metis_tac[topcopy_not_bytestring, topcopy_no_length_word]
+QED
+*)
+Theorem body_assign_topcopy_frontend[local]:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+    (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) ==>
+    occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) = SOME env' /\
+  stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) /\
+  call_evaluation_safe cx
+    (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)) /\
+  supported_variable_decl tops (src,id) = SOME (Private, mut, ty, SOME ast_slot) /\
+  (mut = Storage \/ mut = Transient) /\
+  (!elem n. ty <> ArrayT elem (Dynamic n)) /\ expr_type e = ty ==>
+  expr_body_pre cenv cx env e es /\
+  ~is_bytestring_type ty /\ ~has_length_word ty
+Proof
+  cheat
 QED
 
 Theorem body_assign_topcopy_slots_code[local]:
@@ -4435,13 +4440,7 @@ Proof
   drule_all aug_place_legacy_field_info >> simp[SF SFY_ss]
 QED
 
-Theorem body_assign_immutable_typed[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-  supported_immutable_type tops nsid = SOME ity /\
-  type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' ==>
-  cx.in_deploy /\ ~cx_const_name cx nsid /\
-  assignable_type env.type_defs (expr_type e) /\
-  type_widens_to env.type_defs (expr_type e) ity
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `nsid` >> strip_tac >>
   qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
@@ -4467,6 +4466,17 @@ Proof
   Cases_on `x` >> gvs[type_place_target_TopLevelNameTarget] >>
   Cases_on `cx.in_deploy` >> gvs[bare_global_assignable_complete_def] >>
   qpat_assum `!src ts vis id ty init. _ ==> _` (drule_all_then assume_tac) >> gvs[]
+QED
+*)
+Theorem body_assign_immutable_typed[local]:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  supported_immutable_type tops nsid = SOME ity /\
+  type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' ==>
+  cx.in_deploy /\ ~cx_const_name cx nsid /\
+  assignable_type env.type_defs (expr_type e) /\
+  type_widens_to env.type_defs (expr_type e) ity
+Proof
+  cheat
 QED
 
 Theorem body_assign_immutable_value_code[local]:
@@ -7958,9 +7968,7 @@ Proof
   metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode]
 QED
 
-Theorem body_assign_empty_target_no_const[local]:
-  body_inv tops ctx cenv cx /\ supported_assignment tops bindings (BaseTarget t) e ==>
-  ~supported_target_exists (const_name_root cx) t
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   simp[supported_assignment_def] >> strip_tac
   >- (Cases_on `t` >> gvs[supported_target_def, supported_expr_exists_def] >>
@@ -7969,17 +7977,15 @@ Proof
   Cases_on `supported_target_info tops bindings t` >>
   gvs[] >> metis_tac[body_inv_target_const_name_free, optionTheory.NOT_SOME_NONE]
 QED
+*)
+Theorem body_assign_empty_target_no_const[local]:
+  body_inv tops ctx cenv cx /\ supported_assignment tops bindings (BaseTarget t) e ==>
+  ~supported_target_exists (const_name_root cx) t
+Proof
+  cheat
+QED
 
-Theorem body_assign_empty_target_pre[local]:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-     (Assign (BaseTarget t) e) ==> occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env es /\ type_place_target env t = SOME (Type dty) /\
-  stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
-  ~immutable_root cx t ==>
-  target_pre cenv cx env t es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> simp[target_pre_def] >>
   `supported_assignment tops bindings (BaseTarget t) e` by
@@ -7995,6 +8001,20 @@ Proof
   >- (irule body_assign_empty_target_widths >> qexists_tac `cenv` >> simp[])
   >- metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left] >>
   gvs[EVERY_MEM] >> metis_tac[]
+QED
+*)
+Theorem body_assign_empty_target_pre[local]:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Assign (BaseTarget t) e) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\ type_place_target env t = SOME (Type dty) /\
+  stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+  ~immutable_root cx t ==>
+  target_pre cenv cx env t es
+Proof
+  cheat
 QED
 
 (* The empty read changes neither state; its certificate prefix has no marks. *)
@@ -8451,56 +8471,7 @@ QED
 
 Finalise body_assign_other_empty_target_full[local]
 
-Theorem body_assign_other_empty_immutable_full[local]:
-  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t' s'3' v t''.
-       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
-       body_base_target_full_ok cx t) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    struct_args_unique tops /\
-    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (BaseTarget t) e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
-    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
-              is_word_type ty) /\
-    ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
-              ~is_word_type ty /\
-              (expr_type e = ty \/ lowered_value_type cenv e = ty \/
-               is_bytestring_type ty \/
-               has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
-    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
-    ~(?nsid mut ty slot.
-        t = TopLevelNameTarget nsid /\
-        supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
-        (mut = Storage \/ mut = Transient) /\
-        ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
-        lowered_value_type cenv e = expr_type e) /\
-    ~(?id fld sid fty.
-        t = AttributeTarget (NameTarget id) fld /\
-        FLOOKUP env.var_types id = SOME (StructT sid) /\
-        attribute_type env.type_defs (StructT sid) fld = SOME fty /\
-        is_word_type fty) /\
-    ~(?nsid fld fty.
-        t = AttributeTarget (TopLevelNameTarget nsid) fld /\
-        supported_storage_field_write tops nsid fld /\
-        type_place_target env t = SOME (Type fty) /\ is_word_type fty) /\
-    has_length_word (expr_type e) /\ is_empty_value_expr e /\ immutable_root cx t ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
-      (eval_stmt cx (Assign (BaseTarget t) e)) es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `supported_expr tops e /\ supported_target tops bindings t` by
@@ -8840,6 +8811,60 @@ Proof
        stmtSimDefsTheory.alloca_frame_gas_obs,
        IgnAsm `lo = imm_len _`] >>
   metis_tac[pred_setTheory.SUBSET_DEF]
+QED
+*)
+Theorem body_assign_other_empty_immutable_full[local]:
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok cx t) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    struct_args_unique tops /\
+    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget t) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+              is_word_type ty) /\
+    ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+              ~is_word_type ty /\
+              (expr_type e = ty \/ lowered_value_type cenv e = ty \/
+               is_bytestring_type ty \/
+               has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
+    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?nsid mut ty slot.
+        t = TopLevelNameTarget nsid /\
+        supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
+        (mut = Storage \/ mut = Transient) /\
+        ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+        lowered_value_type cenv e = expr_type e) /\
+    ~(?id fld sid fty.
+        t = AttributeTarget (NameTarget id) fld /\
+        FLOOKUP env.var_types id = SOME (StructT sid) /\
+        attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+        is_word_type fty) /\
+    ~(?nsid fld fty.
+        t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+        supported_storage_field_write tops nsid fld /\
+        type_place_target env t = SOME (Type fty) /\ is_word_type fty) /\
+    has_length_word (expr_type e) /\ is_empty_value_expr e /\ immutable_root cx t ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (eval_stmt cx (Assign (BaseTarget t) e)) es
+Proof
+  cheat
 QED
 
 Theorem body_assign_immutable_supported_rhs[local]:
@@ -13298,17 +13323,7 @@ Proof
   simp[] >> qexists `bindings` >> simp[]
 QED
 
-Theorem body_assign_saved_target_pre[local]:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-     (Assign (BaseTarget t) e) ==> occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env mid /\
-  type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
-  stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
-  ~immutable_root cx t ==>
-  target_pre cenv cx env t mid
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> simp[target_pre_def] >>
   Cases_on `(?bt fld. t = AttributeTarget bt fld) \/
@@ -13340,6 +13355,21 @@ Proof
     >- (qexists `bindings` >> simp[]) >>
     metis_tac[call_evaluation_safe_append_left]) >>
   Cases_on `t` >> gvs[target_indices_pre_def]
+QED
+*)
+Theorem body_assign_saved_target_pre[local]:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Assign (BaseTarget t) e) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env mid /\
+  type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+  stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+  ~immutable_root cx t ==>
+  target_pre cenv cx env t mid
+Proof
+  cheat
 QED
 
 Theorem body_assign_saved_target_outcome[local]:

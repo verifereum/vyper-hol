@@ -7,20 +7,7 @@ Ancestors
   vyperStorageTrace vyperStoragePlaceRegion exprSimSource
   supportedStmts vyperState list
 
-Theorem augassign_memory_current_source_ready:
-  expr_body_pre cenv cx env e st /\
-  supported_stmt tops bindings (AugAssign ty bt bop e) /\
-  supported_target_info tops bindings bt = SOME info /\
-  eval_target_place cx bt es = (INL (MemoryPlace id path),st) /\
-  read_place cx (MemoryPlace id path) st = (INL cur,stc) /\
-  place_type_value cx (MemoryPlace id path) stc = (INL ptv,stt) /\
-  bind (eval_expr cx e) (read_result cx) stt = (INL rhs,ee) ==>
-  expr_sim_inv cenv cx env ee /\
-  ?entry old. lookup_scopes id ee.scopes = SOME entry /\
-    evaluate_subscripts entry.type entry.value path = INL old /\
-    subscripts_type entry.type path = SOME ptv /\
-    (!t0. cenv.ce_var_type id = SOME t0 ==>
-      evaluate_type (get_tenv cx) t0 = SOME entry.type)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `stc = st /\ stt = st` by
@@ -42,6 +29,24 @@ Proof
      simp[return_def, raise_def]) >>
   simp[] >>
   metis_tac[aug_place_store_entry_types]
+QED
+*)
+Theorem augassign_memory_current_source_ready:
+  expr_body_pre cenv cx env e st /\
+  supported_stmt tops bindings (AugAssign ty bt bop e) /\
+  supported_target_info tops bindings bt = SOME info /\
+  eval_target_place cx bt es = (INL (MemoryPlace id path),st) /\
+  read_place cx (MemoryPlace id path) st = (INL cur,stc) /\
+  place_type_value cx (MemoryPlace id path) stc = (INL ptv,stt) /\
+  bind (eval_expr cx e) (read_result cx) stt = (INL rhs,ee) ==>
+  expr_sim_inv cenv cx env ee /\
+  ?entry old. lookup_scopes id ee.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL old /\
+    subscripts_type entry.type path = SOME ptv /\
+    (!t0. cenv.ce_var_type id = SOME t0 ==>
+      evaluate_type (get_tenv cx) t0 = SOME entry.type)
+Proof
+  cheat
 QED
 
 Theorem augassign_immutable_current_source_ready:

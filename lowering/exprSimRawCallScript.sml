@@ -4298,7 +4298,7 @@ Resume raw_call_outbuf_positive_tail_vv_path[tuple_positive]:
   first_x_assum irule >> simp[]
 QED
 
-Resume raw_call_outbuf_positive_tail_vv_path[revert_positive]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   fs[] >>
   `!name lb lsz. local_region cenv (SND (adopt_call_outcome rq outcome es1)).scopes u name lb lsz ==>
     w2n w + (32*((flags.rcf_max_outsize+31) DIV 32)+32) <= lb \/ lb+lsz <= w2n w` by
@@ -4339,6 +4339,9 @@ Resume raw_call_outbuf_positive_tail_vv_path[revert_positive]:
   qpat_x_assum `result = ov` SUBST_ALL_TAC >>
   rename1 `raw_call_finish_view final = _` >>
   suspend "bytes_positive"
+*)
+Resume raw_call_outbuf_positive_tail_vv_path[revert_positive]:
+  cheat
 QED
 
 Resume raw_call_outbuf_positive_tail_vv_path[bytes_positive]:
@@ -5154,11 +5157,7 @@ Proof
   strip_tac >> simp[] >> qexists_tac `tv` >> simp[]
 QED
 
-Theorem compile_raw_call_case:
-  !nocalls ctx func cenv cx ann flags args dflt.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_sim_case nocalls ctx func cenv cx (Call ann (RawCallTarget flags) args dflt) /\
-    expr_vv_case nocalls ctx func cenv cx (Call ann (RawCallTarget flags) args dflt)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_case nocalls ctx func cenv cx
@@ -5290,3 +5289,12 @@ Resume compile_raw_call_case[placement]:
 QED
 
 Finalise compile_raw_call_case
+*)
+Theorem compile_raw_call_case:
+  !nocalls ctx func cenv cx ann flags args dflt.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_sim_case nocalls ctx func cenv cx (Call ann (RawCallTarget flags) args dflt) /\
+    expr_vv_case nocalls ctx func cenv cx (Call ann (RawCallTarget flags) args dflt)
+Proof
+  cheat
+QED

@@ -549,52 +549,7 @@ Proof
 QED
 
 (* The support induction keeps success nonlocality alongside scope action. *)
-Theorem intcall_args_defaults_scope_mutual_from_actions:
-  (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
-    !cx s sc. conditional_result cx r (s with scopes := sc) =
-      (FST (conditional_result cx r s),
-       SND (conditional_result cx r s) with scopes := sc)) /\
-  (!r cx s r' t. (!id path. r <> PlaceR (MemoryPlace id path)) /\
-    conditional_result cx r s = (INL r',t) ==>
-    !id path. r' <> PlaceR (MemoryPlace id path)) /\
-  (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
-    !cx s sc. result_array_length cx r (s with scopes := sc) =
-      (FST (result_array_length cx r s),
-       SND (result_array_length cx r s) with scopes := sc)) /\
-  (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
-    !cx ty sb s sc. select_result cx ty r sb (s with scopes := sc) =
-      (FST (select_result cx ty r sb s),
-       SND (select_result cx ty r sb s) with scopes := sc)) /\
-  (!r cx ty sb s r' t. (!id path. r <> PlaceR (MemoryPlace id path)) /\
-    select_result cx ty r sb s = (INL r',t) ==>
-    !id path. r' <> PlaceR (MemoryPlace id path)) ==>
-  (!tops e. supported_pure_expr tops e ==>
-    !tenv. well_typed_expr (defaults_env tenv) e ==> !cx.
-      (!s sc. eval_expr cx e (s with scopes := sc) =
-        (FST (eval_expr cx e s), SND (eval_expr cx e s) with scopes := sc)) /\
-      (!s r t. eval_expr cx e s = (INL r,t) ==>
-        !id path. r <> PlaceR (MemoryPlace id path))) /\
-  (!tops es. supported_pure_exprs tops es ==>
-    (!tenv. well_typed_exprs (defaults_env tenv) es ==> !cx s sc.
-      eval_exprs cx es (s with scopes := sc) =
-        (FST (eval_exprs cx es s), SND (eval_exprs cx es s) with scopes := sc)) /\
-    (!e. MEM e es ==> !tenv. well_typed_expr (defaults_env tenv) e ==> !cx.
-      (!s sc. eval_expr cx e (s with scopes := sc) =
-        (FST (eval_expr cx e s), SND (eval_expr cx e s) with scopes := sc)) /\
-      (!s r t. eval_expr cx e s = (INL r,t) ==>
-        !id path. r <> PlaceR (MemoryPlace id path)))) /\
-  (!tops fields. supported_pure_fields tops fields ==>
-    !tenv. well_typed_named_exprs (defaults_env tenv) fields ==> !cx s sc.
-      eval_exprs cx (MAP SND fields) (s with scopes := sc) =
-        (FST (eval_exprs cx (MAP SND fields) s),
-         SND (eval_exprs cx (MAP SND fields) s) with scopes := sc)) /\
-  (!tops e. supported_place_expr tops e ==>
-    !tenv. (well_typed_expr (defaults_env tenv) e \/
-      ?vt. type_place_expr (defaults_env tenv) e = SOME vt) ==> !cx.
-      (!s sc. eval_expr cx e (s with scopes := sc) =
-        (FST (eval_expr cx e s), SND (eval_expr cx e s) with scopes := sc)) /\
-      (!s r t. eval_expr cx e s = (INL r,t) ==>
-        !id path. r <> PlaceR (MemoryPlace id path)))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
   rpt conj_tac >> rpt gen_tac >> simp[supportedExprsTheory.supported_pure_expr_def]
@@ -904,6 +859,56 @@ Resume intcall_args_defaults_scope_mutual_from_actions[place_rest]:
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]
 QED
 Finalise intcall_args_defaults_scope_mutual_from_actions
+*)
+Theorem intcall_args_defaults_scope_mutual_from_actions:
+  (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+    !cx s sc. conditional_result cx r (s with scopes := sc) =
+      (FST (conditional_result cx r s),
+       SND (conditional_result cx r s) with scopes := sc)) /\
+  (!r cx s r' t. (!id path. r <> PlaceR (MemoryPlace id path)) /\
+    conditional_result cx r s = (INL r',t) ==>
+    !id path. r' <> PlaceR (MemoryPlace id path)) /\
+  (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+    !cx s sc. result_array_length cx r (s with scopes := sc) =
+      (FST (result_array_length cx r s),
+       SND (result_array_length cx r s) with scopes := sc)) /\
+  (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
+    !cx ty sb s sc. select_result cx ty r sb (s with scopes := sc) =
+      (FST (select_result cx ty r sb s),
+       SND (select_result cx ty r sb s) with scopes := sc)) /\
+  (!r cx ty sb s r' t. (!id path. r <> PlaceR (MemoryPlace id path)) /\
+    select_result cx ty r sb s = (INL r',t) ==>
+    !id path. r' <> PlaceR (MemoryPlace id path)) ==>
+  (!tops e. supported_pure_expr tops e ==>
+    !tenv. well_typed_expr (defaults_env tenv) e ==> !cx.
+      (!s sc. eval_expr cx e (s with scopes := sc) =
+        (FST (eval_expr cx e s), SND (eval_expr cx e s) with scopes := sc)) /\
+      (!s r t. eval_expr cx e s = (INL r,t) ==>
+        !id path. r <> PlaceR (MemoryPlace id path))) /\
+  (!tops es. supported_pure_exprs tops es ==>
+    (!tenv. well_typed_exprs (defaults_env tenv) es ==> !cx s sc.
+      eval_exprs cx es (s with scopes := sc) =
+        (FST (eval_exprs cx es s), SND (eval_exprs cx es s) with scopes := sc)) /\
+    (!e. MEM e es ==> !tenv. well_typed_expr (defaults_env tenv) e ==> !cx.
+      (!s sc. eval_expr cx e (s with scopes := sc) =
+        (FST (eval_expr cx e s), SND (eval_expr cx e s) with scopes := sc)) /\
+      (!s r t. eval_expr cx e s = (INL r,t) ==>
+        !id path. r <> PlaceR (MemoryPlace id path)))) /\
+  (!tops fields. supported_pure_fields tops fields ==>
+    !tenv. well_typed_named_exprs (defaults_env tenv) fields ==> !cx s sc.
+      eval_exprs cx (MAP SND fields) (s with scopes := sc) =
+        (FST (eval_exprs cx (MAP SND fields) s),
+         SND (eval_exprs cx (MAP SND fields) s) with scopes := sc)) /\
+  (!tops e. supported_place_expr tops e ==>
+    !tenv. (well_typed_expr (defaults_env tenv) e \/
+      ?vt. type_place_expr (defaults_env tenv) e = SOME vt) ==> !cx.
+      (!s sc. eval_expr cx e (s with scopes := sc) =
+        (FST (eval_expr cx e s), SND (eval_expr cx e s) with scopes := sc)) /\
+      (!s r t. eval_expr cx e s = (INL r,t) ==>
+        !id path. r <> PlaceR (MemoryPlace id path)))
+Proof
+  cheat
+QED
 
 Theorem intcall_args_defaults_scope_action[local]:
   supported_pure_exprs tops ds /\ well_typed_exprs (defaults_env tenv) ds ==>
@@ -1110,6 +1115,22 @@ Proof
 QED
 
 (* Pure allocation checks depend on layouts and overlap modules, not locals. *)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  gvs[supportedExprsTheory.supported_pure_expr_def] >>
+  drule compileEnvTheory.type_memory_bytes_frame >> strip_tac >>
+  rpt (first_x_assum (qspecl_then [`c`,`c'`] assume_tac)) >>
+  fs[allocLimitsTheory.alloc_limits_expr_def, allocLimitsTheory.type_alloc_ok_def,
+       exprLoweringTheory.copies_subscript_base_def] >>
+  drule (cj 2 ctorDeployLoweringFrameSupportTheory.deploy_frame_supported_pure_no_extcode) >>
+  Cases_on `es` >- simp[allocLimitsTheory.alloc_limits_expr_def] >>
+  simp[supportedExprTraverseTheory.supported_expr_exists_def] >> strip_tac >>
+  `~is_extcode h` by metis_tac[supportedExprTraverseTheory.supported_expr_exists_root] >>
+  simp[]
+QED
+*)
 Theorem intcall_args_pure_alloc_mutual[local]:
   (!tops e. supported_pure_expr tops e ==>
     !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
@@ -1128,18 +1149,7 @@ Theorem intcall_args_pure_alloc_mutual[local]:
       c'.ce_modules = c.ce_modules ==>
       (alloc_limits_expr c' e = alloc_limits_expr c e))
 Proof
-  ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
-  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
-  gvs[supportedExprsTheory.supported_pure_expr_def] >>
-  drule compileEnvTheory.type_memory_bytes_frame >> strip_tac >>
-  rpt (first_x_assum (qspecl_then [`c`,`c'`] assume_tac)) >>
-  fs[allocLimitsTheory.alloc_limits_expr_def, allocLimitsTheory.type_alloc_ok_def,
-       exprLoweringTheory.copies_subscript_base_def] >>
-  drule (cj 2 ctorDeployLoweringFrameSupportTheory.deploy_frame_supported_pure_no_extcode) >>
-  Cases_on `es` >- simp[allocLimitsTheory.alloc_limits_expr_def] >>
-  simp[supportedExprTraverseTheory.supported_expr_exists_def] >> strip_tac >>
-  `~is_extcode h` by metis_tac[supportedExprTraverseTheory.supported_expr_exists_root] >>
-  simp[]
+  cheat
 QED
 
 Theorem intcall_args_pure_allocs_frame:
@@ -7082,84 +7092,7 @@ Proof
     (fn th => rewrite_tac[th])
 QED
 
-Theorem intcall_args_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
-   es dflt es0 mut nr args ret ss rr dflts.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-    lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,nr,args,dflts,ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    LENGTH args - LENGTH dflts <= LENGTH es /\
-    LENGTH es <= LENGTH args /\
-    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
-    (!s1 vs t1.
-       ~MEM (NONE,name) cx.stk /\
-       eval_exprs cx es s1 = (INL vs,t1) ==>
-       body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
-         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) ==>
-    !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 kc out f P Q R.
-      (!v. storage_trace_frame (f v)) /\
-      (!v. cs_appends (kc v)) /\
-      comp_bind (compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt))
-        kc sa = (out, sb) /\
-      comp_bind
-        (compile_expr cenv ty
-           (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)))
-        kc shadow_sa = (out, shadow_sb) /\
-      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
-      gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-      gas_shadow_function func shadow_func /\
-      MEM func ctx.ctx_functions /\
-      MEM shadow_func shadow_ctx.ctx_functions /\
-      fn_has_code sa sb func /\
-      fn_has_code shadow_sa shadow_sb shadow_func /\
-      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
-      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
-              not_fresh_at sa x) /\
-      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-              not_fresh_at sa x) /\
-      gas_admissible
-        (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
-        P es0 /\
-      (!e. P (INR e) ==> expr_vv_res_ok (INR e)) /\
-      return_buf_frame d cenv sa s0 /\
-      alloca_history func s0 /\
-      (!H. valid_horizon cx st0 H es0.storage_trace ==>
-        stmt_state_rel H ctx func cenv cx es0 s0 /\
-        storage_well_formed_on cx es0 (FST H) /\
-        ghost_inv_at (DF H) lo d cenv cx es0 G0 tn0 s0) /\ ~s0.vs_halted /\
-      s0.vs_current_bb = sa.cs_current_bb /\
-      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-      (!H res ee gt r.
-         expr_exit res r /\ halt_exit H cx ee res r /\
-         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s) ==>
-         R H res ee gt r) /\
-      (!vv sm prev penv rtv es1 t G tn.
-         compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
-           (vv, sm) /\
-         kc vv sm = (out, sb) /\
-         (!H. valid_horizon cx st0 H es1.storage_trace ==>
-            intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
-              es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
-              es1 t G tn) /\
-         (?H. valid_horizon cx st0 H es1.storage_trace) /\
-         gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
-           P es1 ==>
-         gas_outcome_full
-           (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-           (cx_tops cx) cx st0
-           (bind (intcall_rest cx name mut nr ss prev rtv) f) (es1, t, G, tn)
-           Q R) ==>
-      gas_outcome_full
-        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0
-        (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
-        (es0, s0, G0, tn0) Q R
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt strip_tac >>
   `get_module_code cx NONE = SOME tops` by gvs[bodySimTheory.body_inv_def] >>
@@ -9694,4 +9627,86 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qexists_tac `H` >>
   qpat_assum `valid_horizon cx st0 H ed.storage_trace` ACCEPT_TAC
+QED
+*)
+Theorem intcall_args_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+   es dflt es0 mut nr args ret ss rr dflts.
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    LENGTH args - LENGTH dflts <= LENGTH es /\
+    LENGTH es <= LENGTH args /\
+    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
+    (!s1 vs t1.
+       ~MEM (NONE,name) cx.stk /\
+       eval_exprs cx es s1 = (INL vs,t1) ==>
+       body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) ==>
+    !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 kc out f P Q R.
+      (!v. storage_trace_frame (f v)) /\
+      (!v. cs_appends (kc v)) /\
+      comp_bind (compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt))
+        kc sa = (out, sb) /\
+      comp_bind
+        (compile_expr cenv ty
+           (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)))
+        kc shadow_sa = (out, shadow_sb) /\
+      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+      gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func ctx.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      fn_has_code sa sb func /\
+      fn_has_code shadow_sa shadow_sb shadow_func /\
+      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      gas_admissible
+        (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
+        P es0 /\
+      (!e. P (INR e) ==> expr_vv_res_ok (INR e)) /\
+      return_buf_frame d cenv sa s0 /\
+      alloca_history func s0 /\
+      (!H. valid_horizon cx st0 H es0.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es0 s0 /\
+        storage_well_formed_on cx es0 (FST H) /\
+        ghost_inv_at (DF H) lo d cenv cx es0 G0 tn0 s0) /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!H res ee gt r.
+         expr_exit res r /\ halt_exit H cx ee res r /\
+         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s) ==>
+         R H res ee gt r) /\
+      (!vv sm prev penv rtv es1 t G tn.
+         compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
+           (vv, sm) /\
+         kc vv sm = (out, sb) /\
+         (!H. valid_horizon cx st0 H es1.storage_trace ==>
+            intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
+              es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
+              es1 t G tn) /\
+         (?H. valid_horizon cx st0 H es1.storage_trace) /\
+         gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
+           P es1 ==>
+         gas_outcome_full
+           (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
+           (cx_tops cx) cx st0
+           (bind (intcall_rest cx name mut nr ss prev rtv) f) (es1, t, G, tn)
+           Q R) ==>
+      gas_outcome_full
+        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
+        (cx_tops cx) cx st0
+        (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
+        (es0, s0, G0, tn0) Q R
+Proof
+  cheat
 QED

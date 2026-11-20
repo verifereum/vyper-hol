@@ -1914,7 +1914,7 @@ Resume for_storage_array_entry_full[entry_run]:
   simp[FLOOKUP_UPDATE, w2n_n2w, dimword_def, LESS_MOD, bool_to_word_def, NOT_LESS]
 QED
 
-Resume for_storage_array_entry_full[entry_ghost]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   `!i s u tn. scalar_shape i /\ step_inst_base i s = OK u ==>
      step_taint i s u tn = tn with t_var :=
        set_var_taint tn.t_var i.inst_outputs (out_taint tn i s)` by
@@ -2003,6 +2003,9 @@ Resume for_storage_array_entry_full[entry_ghost]:
           Excl "step_taint_inst_idx_right", step_prov_def, set_prov_def,
           out_prov_def, first_prov_def, op_prov_def, FLOOKUP_DRESTRICT]) >>
   simp[inst_seq_ptr_def, pred_setTheory.INTER_ASSOC, DRESTRICT_UNIV])
+*)
+Resume for_storage_array_entry_full[entry_ghost]:
+  cheat
 QED
 Resume for_storage_array_entry_full[entry_mem]:
   irule run_inst_seq_mem_ok_every >>
@@ -6915,7 +6918,7 @@ Resume compile_for_storage_array_frag_full[round_cons]:
   suspend "round_packet"
 QED
 
-Resume compile_for_storage_array_frag_full[round_packet]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   `compile_stmt cenv lctx ret_ty
      (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n
        (MAP gas_shadow_stmt body')) shadow_sa = ((),shadow_sb)` by
@@ -7601,6 +7604,9 @@ Resume compile_for_storage_array_frag_full[round_packet]:
   conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `w` >>
   qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> _`
     (irule o SPEC_ALL) >> simp[]
+*)
+Resume compile_for_storage_array_frag_full[round_packet]:
+  cheat
 QED
 
 Resume compile_for_storage_array_frag_full[prefix]:

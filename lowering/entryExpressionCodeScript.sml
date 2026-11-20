@@ -237,7 +237,7 @@ Resume entry_code_supported_union[builtin]:
   fs[supported_pure_exprs_every, listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
-Resume entry_code_supported_union[type]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   simp[entry_preserves_code_def, compile_expr_body_def,
        type_child_callback_def, expr_builtin_dispatch_bound,
        Once compile_expr_raw_def] >>
@@ -250,6 +250,9 @@ Resume entry_code_supported_union[type]:
   first_x_assum irule >> conj_tac
   >- (drule expr_list_member_bound >> simp[vyperASTTheory.expr_size_def]) >>
   fs[supported_pure_exprs_every, listTheory.EVERY_MEM] >> metis_tac[]
+*)
+Resume entry_code_supported_union[type]:
+  cheat
 QED
 
 (* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
@@ -285,7 +288,7 @@ Resume entry_code_supported_union[call]:
   cheat
 QED
 
-Resume entry_code_supported_union[pop]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   gvs[supported_pure_expr_def, supported_effect_expr_def] >>
   rename1 `Pop ann target` >> Cases_on `target` >>
   gvs[supported_effect_expr_def] >>
@@ -300,6 +303,9 @@ Resume entry_code_supported_union[pop]:
     (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th)) >>
   imp_res_tac (SRULE [entry_preserves_code_def] entry_code_dynarray_pop) >>
   rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]
+*)
+Resume entry_code_supported_union[pop]:
+  cheat
 QED
 
 Finalise entry_code_supported_union

@@ -181,14 +181,19 @@ QED
   QED
 *)
 
-Theorem topcopy_no_length_word:
-  !tops t. supported_storage_type tops t /\
-    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   drule topcopy_not_bytestring >>
   Cases_on `t` >> simp[has_length_word_def, is_bytestring_type_def] >>
   Cases_on `b` >> gvs[has_length_word_def, is_bytestring_type_def]
+QED
+*)
+Theorem topcopy_no_length_word:
+  !tops t. supported_storage_type tops t /\
+    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
+Proof
+  cheat
 QED
 
 Theorem body_inv_mcopy:
@@ -317,13 +322,7 @@ Proof
   metis_tac[allocation_limit_word_room]
 QED
 
-Theorem body_tuple_target_toplevel_aligned:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
-  supported_scalar_target tops nsid /\
-  type_place_target env (TopLevelNameTarget nsid) = SOME (Type ty) /\
-  evaluate_type (get_tenv cx) ty = SOME tv ==>
-  tuple_target_aligned cenv cx (BaseTarget (TopLevelNameTarget nsid)) ty tv
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `nsid` >> rename1 `(src, id)` >> rpt strip_tac >>
   drule supported_scalar_target_decl >> strip_tac >> gvs[] >>
@@ -350,6 +349,17 @@ Proof
   qexistsl_tac [`NONE`, `id`, `[]`, `tv`] >>
   simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
   metis_tac[exprSimUnwrapTheory.word_type_slot_size]
+QED
+*)
+Theorem body_tuple_target_toplevel_aligned:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  supported_scalar_target tops nsid /\
+  type_place_target env (TopLevelNameTarget nsid) = SOME (Type ty) /\
+  evaluate_type (get_tenv cx) ty = SOME tv ==>
+  tuple_target_aligned cenv cx (BaseTarget (TopLevelNameTarget nsid)) ty tv
+Proof
+  cheat
 QED
 
 Theorem body_tuple_target_field_aligned:

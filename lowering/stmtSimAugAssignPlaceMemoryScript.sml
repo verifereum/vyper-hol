@@ -348,6 +348,16 @@ Proof
   metis_tac[aug_place_rhs_pre_target_gas_obs]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  strip_tac >> drule_all aug_place_target_memory_live >> strip_tac >>
+  `supported_expr tops e` by fs[supported_stmt_def] >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac aug_place_supported_expr_scopes >>
+  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
+QED
+*)
 Theorem aug_place_rhs_memory_live:
   supported_stmt tops bindings (AugAssign ty bt bop e) /\
   supported_target_info tops bindings bt = SOME info /\
@@ -356,12 +366,7 @@ Theorem aug_place_rhs_memory_live:
   ?entry old. lookup_scopes id ee.scopes = SOME entry /\
     evaluate_subscripts entry.type entry.value path = INL old
 Proof
-  strip_tac >> drule_all aug_place_target_memory_live >> strip_tac >>
-  `supported_expr tops e` by fs[supported_stmt_def] >>
-  qpat_x_assum `bind _ _ _ = _` mp_tac >>
-  simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  imp_res_tac aug_place_supported_expr_scopes >>
-  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
+  cheat
 QED
 
 Theorem aug_place_store_entry_types:

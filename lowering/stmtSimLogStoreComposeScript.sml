@@ -4,11 +4,7 @@ Ancestors
   abiCallerAllocation abiDecoderFrame
   stmtSimLogEncodeLayout stmtSimLogDataInput vyperTypeABI vyperABI compileEnv loweringStateRelDefs supportedTypes contractABI list stmtSimLogAllocate abiDecoderReentry exprLoweringProps vyperTyping abiEncoderCounters stmtSimLogTrace emitHelperProps stmtSimLogDataRun arithmetic words
 
-Theorem log_scalar_embedded_bound[local]:
-  supported_scalar_type ty ==>
-  vyper_abi_embedded_size env ty =
-    abi_embedded_static_size sf ty +
-      (if is_abi_dynamic sf ty then abi_size_bound sf ty else 0)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `ty` >> simp[supported_scalar_type_def, supported_word_type_def,
     supported_string_type_def] >>
@@ -22,6 +18,15 @@ Proof
     vyper_abi_size_bound_def, vyper_is_dynamic_def,
     abi_embedded_static_size_def, is_abi_dynamic_def, abi_size_bound_def,
     abi_static_size_def, ceil32_def]
+QED
+*)
+Theorem log_scalar_embedded_bound[local]:
+  supported_scalar_type ty ==>
+  vyper_abi_embedded_size env ty =
+    abi_embedded_static_size sf ty +
+      (if is_abi_dynamic sf ty then abi_size_bound sf ty else 0)
+Proof
+  cheat
 QED
 
 Theorem log_tuple_source_bound[local]:

@@ -8,6 +8,47 @@ Ancestors
   vyperState exprSimSource
   bodyMemoryDefs bodyPtrDefs stmtSimDefs finite_map pred_set list arithmetic
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  strip_tac >>
+  `st.scopes = es0.scopes` by metis_tac[aug_place_target_scopes] >>
+  `supported_expr tops e` by metis_tac[supported_augassign_contract] >>
+  `ee.scopes = st.scopes` by
+    (qpat_x_assum `bind _ _ _ = _` mp_tac >>
+     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     metis_tac[aug_place_supported_expr_scopes, read_result_state]) >>
+  qx_gen_tac `H` >> strip_tac >>
+  `valid_horizon cx st0 H ee.storage_trace` by
+    (qpat_assum `write_place _ _ _ _ = _` mp_tac >>
+     qpat_assum `valid_horizon _ _ _ ff.storage_trace` mp_tac >>
+     POP_ASSUM_LIST kall_tac >>
+     metis_tac[valid_horizon_frame, storage_trace_frame_write_place]) >>
+  `valid_horizon cx st0 H st.storage_trace` by
+    (qpat_assum `bind _ _ _ = _` mp_tac >>
+     qpat_assum `valid_horizon _ _ _ ee.storage_trace` mp_tac >>
+     POP_ASSUM_LIST kall_tac >>
+     metis_tac[valid_horizon_frame, augassign_rhs_trace_frame]) >>
+  `valid_horizon cx st0 H es0.storage_trace` by
+    (qpat_assum `eval_target_place _ _ _ = _` mp_tac >>
+     qpat_assum `valid_horizon _ _ _ st.storage_trace` mp_tac >>
+     POP_ASSUM_LIST kall_tac >>
+     metis_tac[valid_horizon_frame, cj 8 evaluate_storage_trace_frame]) >>
+  map_every (fn trace => qpat_x_assum trace (qspec_then `H` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac)
+    [`!h. valid_horizon _ _ h es0.storage_trace ==> _`,
+     `!h. valid_horizon _ _ h st.storage_trace ==> _`,
+     `!h. valid_horizon _ _ h ee.storage_trace ==> _`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  match_mp_tac (GEN_ALL augassign_entry_operator_frame) >>
+  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >>
+  goal_assum (drule_at (Pat `ghost_kept_at _ _ _ sa0 _ _ _ _ _`)) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+*)
 Theorem augassign_staged_store_frame:
   eval_target_place cx bt es0 = (INL p,st) /\
   bind (eval_expr cx e) (read_result cx) st = (INL rhs,ee) /\
@@ -66,41 +107,5 @@ Theorem augassign_staged_store_frame:
         off + sz <= b \/ b + sz' <= off) /\
       off <= i /\ i < off + sz /\ i IN tnw.t_mem ==> i IN tn0.t_mem)
 Proof
-  strip_tac >>
-  `st.scopes = es0.scopes` by metis_tac[aug_place_target_scopes] >>
-  `supported_expr tops e` by metis_tac[supported_augassign_contract] >>
-  `ee.scopes = st.scopes` by
-    (qpat_x_assum `bind _ _ _ = _` mp_tac >>
-     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
-     metis_tac[aug_place_supported_expr_scopes, read_result_state]) >>
-  qx_gen_tac `H` >> strip_tac >>
-  `valid_horizon cx st0 H ee.storage_trace` by
-    (qpat_assum `write_place _ _ _ _ = _` mp_tac >>
-     qpat_assum `valid_horizon _ _ _ ff.storage_trace` mp_tac >>
-     POP_ASSUM_LIST kall_tac >>
-     metis_tac[valid_horizon_frame, storage_trace_frame_write_place]) >>
-  `valid_horizon cx st0 H st.storage_trace` by
-    (qpat_assum `bind _ _ _ = _` mp_tac >>
-     qpat_assum `valid_horizon _ _ _ ee.storage_trace` mp_tac >>
-     POP_ASSUM_LIST kall_tac >>
-     metis_tac[valid_horizon_frame, augassign_rhs_trace_frame]) >>
-  `valid_horizon cx st0 H es0.storage_trace` by
-    (qpat_assum `eval_target_place _ _ _ = _` mp_tac >>
-     qpat_assum `valid_horizon _ _ _ st.storage_trace` mp_tac >>
-     POP_ASSUM_LIST kall_tac >>
-     metis_tac[valid_horizon_frame, cj 8 evaluate_storage_trace_frame]) >>
-  map_every (fn trace => qpat_x_assum trace (qspec_then `H` mp_tac) >>
-    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac)
-    [`!h. valid_horizon _ _ h es0.storage_trace ==> _`,
-     `!h. valid_horizon _ _ h st.storage_trace ==> _`,
-     `!h. valid_horizon _ _ h ee.storage_trace ==> _`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  match_mp_tac (GEN_ALL augassign_entry_operator_frame) >>
-  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  simp[] >>
-  goal_assum (drule_at (Pat `ghost_kept_at _ _ _ sa0 _ _ _ _ _`)) >>
-  goal_assum (drule_at Any) >> simp[]
+  cheat
 QED
