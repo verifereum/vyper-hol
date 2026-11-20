@@ -75,8 +75,11 @@ The [partial-producer detail](compiler-proof-status-2026-10-09.md#what-partial-p
 is part of this inventory: runtime readiness requires installed exact sources
 and ready immutables; deployment assumes initial typing, both checks/context/
 constants setup; call machine preservation assumes `checked_external_call_inputs_ready`.
-Storage preservation consumes runtime-storage consistency, protected-call,
-call-evaluation and oracle-storage premises. These are not universal producers.
+Storage preservation consumes `contract_storage_well_formed`, protected-call
+(`protected_storage_calls_preserve`) and oracle-storage (`oracle_storage_ok`)
+premises, or, in its finite-horizon form (`call_external_storage_well_formed_on`,
+`load_contract_storage_well_formed_on`), a `valid_horizon` over the actual
+trace. These are not universal producers.
 
 `call_outcomes_ok` requires return-data length `< 2**256` and
 `accounts_runtime_well_typed co_accounts` on every record, including failed and
