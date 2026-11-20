@@ -194,7 +194,7 @@ Proof
   rpt strip_tac >> metis_tac[]
 QED
 
-Theorem sym_steps_own_preserves_splice_invariant[local]:
+Theorem sym_steps_own_preserves_splice_invariant:
   !n u a. u.sym_base.as_stack = [] /\
     sym_state_labels_in (asm_label_refs p) u /\
     sym_steps_own p env own n u = SymOK a ==>

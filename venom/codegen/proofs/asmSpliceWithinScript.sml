@@ -249,6 +249,208 @@ Proof
   simp[sym_terminal_def]
 QED
 
+(* A prefix guard written on run states. This allows both step models to
+   use the splice certificates' existing window checkpoint equations. *)
+Overload sym_prefix_all = ``\(runf:num -> sym_state -> sym_result) P Q p n s.
+  !m t. m < n /\ runf m s = SymOK t ==>
+    t.sym_base.as_pc < LENGTH p /\
+    ~Q (EL t.sym_base.as_pc p) /\
+    P (EL t.sym_base.as_pc p) t.sym_stack``
+
+Overload sym_prefix_driver = ``\stepf runf p.
+  (!ss. runf 0 ss = SymOK ss) /\
+  (!n ss. runf (SUC n) ss =
+    if ss.sym_base.as_pc >= LENGTH p then SymError "pc out of bounds"
+    else case stepf (EL ss.sym_base.as_pc p) ss of
+      SymOK next => runf n next
+    | r => r)``
+
+Theorem sym_prefix_all_suc[local]:
+  sym_prefix_driver stepf runf p ==>
+  (sym_prefix_all runf P Q p (SUC n) ss <=>
+   ss.sym_base.as_pc < LENGTH p /\ ~Q (EL ss.sym_base.as_pc p) /\
+   P (EL ss.sym_base.as_pc p) ss.sym_stack /\
+   case stepf (EL ss.sym_base.as_pc p) ss of
+     SymOK next => sym_prefix_all runf P Q p n next
+   | _ => T)
+Proof
+  BETA_TAC >> strip_tac >> eq_tac
+  >- (strip_tac >> first_assum (qspecl_then [`0`, `ss`] mp_tac) >> simp[] >>
+      strip_tac >> simp[] >> CASE_TAC >> simp[] >>
+      rpt gen_tac >> strip_tac >>
+      first_x_assum (qspecl_then [`SUC m`, `t`] mp_tac) >> simp[]) >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `m` >> gvs[] >>
+  Cases_on `stepf (EL ss.sym_base.as_pc p) ss` >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem sym_steps_ok_as_prefix_all:
+  !n ss.
+    sym_steps_ok P Q p env n ss <=>
+    sym_prefix_all (sym_steps p env) P Q p n ss
+Proof
+  Induct >- simp[sym_steps_ok_def] >> gen_tac >>
+  mp_tac (Q.INST [`stepf` |-> `sym_step p env`, `runf` |-> `sym_steps p env`]
+    (INST_TYPE [alpha |-> ``:asm_inst``] sym_prefix_all_suc)) >>
+  (impl_tac >- simp[sym_steps_def]) >>
+  disch_then (fn th => simp_tac bool_ss [th, sym_steps_ok_def]) >>
+  CASE_TAC >> simp[]
+QED
+
+Theorem sym_prefix_all_append_within:
+  sym_prefix_driver stepf runf p ==>
+  !n ss next k.
+    runf n ss = SymOK next /\ sym_prefix_all runf P Q p n ss /\
+    sym_run_within_for stepf P Q p k next ==>
+    sym_run_within_for stepf P Q p (n + k) ss
+Proof
+  disch_then assume_tac >> Induct >- fs[] >>
+  rpt gen_tac >>
+  mp_tac sym_prefix_all_suc >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (ONCE_REWRITE_TAC o single) >>
+  simp[arithmeticTheory.ADD_CLAUSES, sym_run_within_for_def] >>
+  strip_tac >> Cases_on `stepf (EL ss.sym_base.as_pc p) ss` >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem sym_prefix_all_terminal_within:
+  sym_prefix_driver stepf runf p ==>
+  !n ss.
+    sym_terminal (runf n ss) /\ sym_prefix_all runf P Q p n ss ==>
+    sym_run_within_for stepf P Q p n ss
+Proof
+  disch_then assume_tac >> Induct >- fs[sym_terminal_def] >>
+  gen_tac >> mp_tac sym_prefix_all_suc >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (ONCE_REWRITE_TAC o single) >>
+  simp[sym_run_within_for_def] >>
+  strip_tac >> Cases_on `stepf (EL ss.sym_base.as_pc p) ss` >>
+  gvs[sym_terminal_def] >> metis_tac[]
+QED
+
+Theorem sym_prefix_all_split_within:
+  sym_prefix_driver stepf runf p ==>
+  !n ss next k.
+    sym_run_within_for stepf P Q p k ss /\ runf n ss = SymOK next /\
+    sym_prefix_all runf (\i stk. T) Q p n ss ==>
+    n <= k /\ sym_run_within_for stepf P Q p (k - n) next /\
+    sym_prefix_all runf P Q p n ss
+Proof
+  disch_then assume_tac >> Induct >- fs[] >>
+  rpt gen_tac >>
+  mp_tac (Q.INST [`P` |-> `\(i:'a) (stk:sval list). T`] sym_prefix_all_suc) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (ONCE_REWRITE_TAC o single) >>
+  mp_tac sym_prefix_all_suc >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (ONCE_REWRITE_TAC o single) >>
+  Cases_on `k` >> simp[sym_run_within_for_def] >> strip_tac >>
+  Cases_on `stepf (EL ss.sym_base.as_pc p) ss` >> gvs[] >>
+  first_x_assum (qspecl_then [`s`, `next`, `n'`] mp_tac) >> simp[] >>
+  impl_tac >- first_assum ACCEPT_TAC >> simp[]
+QED
+
+(* The bounded walk only needs a way to replay a window and simulate one
+   instruction outside it. The symbolic step functions can read fixed bytes. *)
+Theorem splice_run_within_for:
+  !shift. shift = (\s. sym_with_pc
+    (splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl) s.sym_base.as_pc) s) ==>
+  pat <> [] /\ sym_prefix_driver target_step target_run (pre ++ repl ++ post) /\
+  (!s k. allowed s /\ s.sym_base.as_pc = LENGTH pre /\
+     sym_run_within_for source_step P Q (pre ++ pat ++ post) k s ==>
+     sym_run_within_for target_step P Q (pre ++ repl ++ post) (2 * k) s \/
+     ?j j' a. 0 < j /\ j <= k /\ j' <= 2 * j /\ allowed a /\
+       (a.sym_base.as_pc <= LENGTH pre \/
+        LENGTH pre + LENGTH pat <= a.sym_base.as_pc) /\
+       sym_run_within_for source_step P Q (pre ++ pat ++ post) (k - j) a /\
+       target_run j' s = SymOK (shift a) /\
+       sym_prefix_all target_run P Q (pre ++ repl ++ post) j' s) /\
+  (!s inst a. allowed s /\
+     (s.sym_base.as_pc < LENGTH pre \/ LENGTH pre + LENGTH pat <= s.sym_base.as_pc) /\
+     s.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
+     inst = EL s.sym_base.as_pc (pre ++ pat ++ post) /\ source_step inst s = SymOK a ==>
+     allowed a /\
+     (a.sym_base.as_pc <= LENGTH pre \/ LENGTH pre + LENGTH pat <= a.sym_base.as_pc) /\
+     target_step inst (shift s) = SymOK (shift a)) /\
+  (!s inst. allowed s /\
+     (s.sym_base.as_pc < LENGTH pre \/ LENGTH pre + LENGTH pat <= s.sym_base.as_pc) /\
+     s.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
+     inst = EL s.sym_base.as_pc (pre ++ pat ++ post) /\ sym_terminal (source_step inst s) ==>
+     sym_terminal (target_step inst (shift s))) ==>
+  !k ss. allowed ss /\
+    (ss.sym_base.as_pc <= LENGTH pre \/ LENGTH pre + LENGTH pat <= ss.sym_base.as_pc) /\
+    sym_run_within_for source_step P Q (pre ++ pat ++ post) k ss ==>
+    sym_run_within_for target_step P Q (pre ++ repl ++ post) (2 * k) (shift ss)
+Proof
+  gen_tac >> disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  strip_tac >> completeInduct_on `k` >> gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `ss.sym_base.as_pc = LENGTH pre`
+  >- suspend "window"
+  >> suspend "outside"
+QED
+
+Resume splice_run_within_for[window]:
+  `shift ss = ss` by
+    (simp[Abbr `shift`, splice_pc_def] >>
+     qpat_assum `ss.sym_base.as_pc = LENGTH pre`
+       (fn th => rewrite_tac[GSYM th]) >> simp[sym_with_pc_def]) >>
+  qpat_x_assum `!s k. allowed s /\ _ ==> _`
+    (qspecl_then [`ss`, `k`] mp_tac) >> simp[] >>
+  disch_then (DISJ_CASES_THEN2 assume_tac
+    (qx_choosel_then [`j`, `j'`, `a`] (map_every assume_tac o CONJUNCTS))) >>
+  simp[] >>
+  `sym_run_within_for target_step P Q (pre ++ repl ++ post) (2 * (k - j)) (shift a)` by
+    (qpat_x_assum `!m. m < k ==> _` (qspec_then `k - j` mp_tac) >>
+     impl_tac >- decide_tac >> disch_then (qspec_then `a` mp_tac) >> simp[]) >>
+  irule sym_run_within_for_mono >>
+  qexists_tac `j' + 2 * (k - j)` >> conj_tac >- decide_tac >>
+  mp_tac (Q.INST [`stepf` |-> `target_step`, `runf` |-> `target_run`,
+    `p` |-> `pre ++ repl ++ post`] sym_prefix_all_append_within) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qspecl_then [`j'`, `ss`, `shift a`, `2 * (k - j)`] mp_tac) >>
+  simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> simp[]
+QED
+
+Resume splice_run_within_for[outside]:
+  (Q.SUBGOAL_THEN `ss.sym_base.as_pc < LENGTH pre \/
+     LENGTH pre + LENGTH pat <= ss.sym_base.as_pc` assume_tac
+    >- decide_tac) >>
+  Cases_on `k` >> fs[sym_run_within_for_def] >>
+  `ss.sym_base.as_pc < LENGTH (pre ++ pat ++ post)` by fs[] >>
+  qabbrev_tac `i = EL ss.sym_base.as_pc (pre ++ pat ++ post)` >>
+  `(shift ss).sym_base.as_pc < LENGTH (pre ++ repl ++ post) /\
+   EL (shift ss).sym_base.as_pc (pre ++ repl ++ post) = i` by
+    (mp_tac (Q.INST [`i` |-> `ss.sym_base.as_pc`, `pfx` |-> `pre`, `sfx` |-> `post`]
+       splice_fetch) >> simp[Abbr `shift`, Abbr `i`, sym_with_pc_def]) >>
+  `(shift ss).sym_stack = ss.sym_stack` by simp[Abbr `shift`, sym_with_pc_def] >>
+  `2 * SUC n = SUC (2 * n + 1)` by decide_tac >>
+  pop_assum SUBST1_TAC >> simp[sym_run_within_for_def] >>
+  Cases_on `Q i` >> fs[] >>
+  Cases_on `?a. source_step i ss = SymOK a` >>
+  FIRST
+  [qpat_x_assum `?a. source_step i ss = SymOK a` (qx_choose_then `a` assume_tac) >>
+   `allowed a /\
+    (a.sym_base.as_pc <= LENGTH pre \/ LENGTH pre + LENGTH pat <= a.sym_base.as_pc) /\
+    target_step i (shift ss) = SymOK (shift a)` by
+     (qpat_x_assum `!s a. _ ==> allowed a /\ _ /\ target_step _ (shift s) = SymOK (shift a)`
+        (qspecl_then [`ss`, `a`] mp_tac) >> fs[Abbr `i`]) >>
+   fs[] >>
+   irule sym_run_within_for_mono >> qexists_tac `2 * n` >> simp[] >>
+   qpat_x_assum `!m. m < SUC n ==> _` (qspec_then `n` mp_tac) >> simp[] >>
+   disch_then (qspec_then `a` mp_tac) >> simp[],
+   `sym_terminal (source_step i ss)` by
+     (Cases_on `source_step i ss` >> gvs[sym_terminal_def]) >>
+   `sym_terminal (target_step i (shift ss))` by
+     (qpat_x_assum `!s. _ ==> sym_terminal (target_step _ (shift s))`
+        (qspec_then `ss` mp_tac) >> fs[Abbr `i`]) >>
+   Cases_on `target_step i (shift ss)` >> gvs[sym_terminal_def]]
+QED
+
+Finalise splice_run_within_for
+
 (* The bounded counterpart: a bounded run of p from outside the window, or
    its start, is matched by one of p' with at most twice the steps. *)
 Theorem splice_run_within[local]:
