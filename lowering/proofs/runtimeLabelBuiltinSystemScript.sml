@@ -248,7 +248,12 @@ Theorem rb_compile_as_wei_value_int:
   rb_operand_ok v ==> rb_step rb_operand_ok (compile_as_wei_value_int v scale signed)
 Proof
   strip_tac >> pure_rewrite_tac[compile_as_wei_value_int_def] >>
-  Cases_on `scale = 1` >> simp[rb_step_return] >>
+  Cases_on `scale = 1` >> simp[]
+  >- (Cases_on `signed` >> simp[rb_step_return] >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >>
+      simp[rb_emit_void, rb_step_return]) >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
