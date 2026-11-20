@@ -5,6 +5,17 @@ Ancestors
   abiValidAllocatedBytesJoint abiDecodeValidMemberTraversal
   abiDecodeValidBulk abiDecodeValidFiniteArray
 
+Triviality valid_entry_allocation_bound:
+  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
+    st en (source_op:operand) hi pos output B L xs p d dstid live ceiling s ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s)
+Proof
+  simp_tac bool_ss [abiValidAllocatedContractTheory.abi_valid_allocated_entry_def,
+                    abiMalformedRecursiveInterfaceTheory.abi_malformed_entry_def] >>
+  strip_tac >>
+  drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp
+QED
+
 Theorem abi_valid_allocated_joint:
 abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
   st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
@@ -37,23 +48,31 @@ allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s
        (a IN tn'.t_mem <=> a IN tn.t_mem)) /\
   alloca_history func u /\ allocas_from lo u /\ lo <= u.vs_alloca_next
 Proof
-  match_mp_tac abi_valid_allocated_joint_from_cases >> BETA_TAC >> rpt conj_tac
-  >- (rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule abi_valid_allocated_joint_from_cases >>
+  BETA_TAC >> rpt conj_tac >> rpt (first_assum ACCEPT_TAC)
+  >- MATCH_ACCEPT_TAC (GEN_ALL (BETA_RULE abi_valid_allocated_joint_tuple))
+  >- MATCH_ACCEPT_TAC (GEN_ALL (BETA_RULE abi_valid_allocated_joint_struct))
+  >- (POP_ASSUM_LIST (K all_tac) >>
+      rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >> rpt gen_tac >>
       disch_then (map_every assume_tac o CONJUNCTS) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by drule_then ACCEPT_TAC valid_entry_allocation_bound >>
       drule_all abi_valid_allocated_primitive_joint_observations >>
       disch_then (qspec_then `PG` ACCEPT_TAC))
-  >- (rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >> rpt gen_tac >>
-      disch_then (map_every assume_tac o CONJUNCTS) >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
-      drule_all abi_valid_allocated_bytes_joint_observations >>
-      disch_then (qspec_then `PG` ACCEPT_TAC))
-  >- MATCH_ACCEPT_TAC (GEN_ALL (BETA_RULE abi_valid_allocated_joint_tuple))
-  >- MATCH_ACCEPT_TAC (GEN_ALL (BETA_RULE abi_valid_allocated_joint_fixed_array))
-  >- MATCH_ACCEPT_TAC (GEN_ALL (BETA_RULE abi_valid_allocated_joint_struct))
-  >- (rpt gen_tac >> strip_tac >>
+  >- (POP_ASSUM_LIST (K all_tac) >>
+      rpt gen_tac >> strip_tac >>
       rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
       irule abi_valid_allocated_joint_bulk >> simp[] >>
       qexistsl_tac [`H0`, `abi_sz`, `ei`, `env`, `hi`, `live`,
-                    `mem_sz`, `p`, `pos`, `sf`, `xs`] >> simp[]) >>
-  MATCH_ACCEPT_TAC (BETA_RULE abi_valid_allocated_finite_array_joint)
+                    `mem_sz`, `p`, `pos`, `sf`, `xs`] >> simp[])
+  >- MATCH_ACCEPT_TAC (BETA_RULE abi_valid_allocated_finite_array_joint)
+  >- MATCH_ACCEPT_TAC (GEN_ALL (BETA_RULE abi_valid_allocated_joint_fixed_array))
+  >- (POP_ASSUM_LIST (K all_tac) >>
+      rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >> rpt gen_tac >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by drule_then ACCEPT_TAC valid_entry_allocation_bound >>
+      drule_all abi_valid_allocated_bytes_joint_observations >>
+      disch_then (qspec_then `PG` ACCEPT_TAC))
+  >- (qexistsl_tac [`H0`,`env`,`hi`,`live`,`p`,`pos`,`sf`,`xs`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC)
 QED

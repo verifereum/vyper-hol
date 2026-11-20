@@ -153,7 +153,6 @@ val decode_child_run = ``\ty tv.
  abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
    st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s ==>
  !G tn PG lo.
- ~ctx_has_dalloca ctx /\
  abi_decode_ptr_window G tn s source (n2w B) L /\
  ptr_covers G tn output s (type_memory_bytes ce ty) /\
  op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -184,7 +183,6 @@ val decode_members_run = ``\tys tvs.
  abi_valid_allocated_members_entry H0 ce env sf tys tvs vs ctx func cenv cx es
    st en (Var source) hi pos (Var output) B L xs p d outsz ao vo dstid live ceiling s ==>
  !G tn PG lo.
- ~ctx_has_dalloca ctx /\
  abi_decode_ptr_window G tn s source (n2w B) L /\
  ptr_covers G tn output s outsz /\
  op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -1199,7 +1197,7 @@ Theorem decoder_joint_complex_members[local]:
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) (DROP p xs) (DROP p xs)) = SOME vs /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s (type_memory_size_list tvs) /\
   op_prov G pos = NONE /\ op_prov G hi = NONE /\
   op_taint tn pos = {} /\ op_taint tn hi = {} /\
