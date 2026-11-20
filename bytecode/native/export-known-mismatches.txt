@@ -172,6 +172,9 @@ e1f88d811068d36c bytes 5127-P4  # functional/codegen/features/test_logging::test
 8f67e4d2f1894daf bytes 5127-P4  # functional/codegen/features/test_logging_bytes_extended::test_bytes_logging_extended_mixed_with_lists
 e4d2a270c3c64e7d bytes 5127-P4  # functional/codegen/features/test_logging_bytes_extended::test_bytes_logging_extended_passthrough
 3988e0b122145e21 bytes 5127-P4  # functional/codegen/features/test_logging_bytes_extended::test_bytes_logging_extended_variables
+87c50574efa56494 bytes 5127-P4  # functional/codegen/types/test_dynamic_array::test_append_pop_complex[DynArray[uint256,3]-...]
+998f90ee731d2a3b bytes 5127-P4  # functional/codegen/types/test_dynamic_array::test_append_pop_complex[uint256[3]-...]
+a7fe7fccc8f6e312 bytes 5127-P4  # functional/codegen/types/test_dynamic_array::test_append_pop_complex[Foo-...]
 71b4023543a4a003 bytes 5127-P4  # functional/codegen/types/test_string::test_logging_extended_string
 9cc5834faf961f27 bytes 5127-P4  # functional/syntax/test_logging::test_logging_with_positional_args
 115630236db2fd66 bytes 5127-P4+decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_default_override2
