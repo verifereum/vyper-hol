@@ -141,7 +141,7 @@ Theorem prefix_canonical_noclamp_continuation:
   eval_operand src s = SOME a /\ eval_operand (Var dst) s = SOME p /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n p /\ w2n p+32 <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let w = word_of_bytes T (0w:bytes32)
         (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w));
       i = mk_inst st.cs_next_id DLOAD [src] [x];
@@ -178,7 +178,6 @@ Proof
            Abbr `t`, Abbr `l`, Abbr `w`, eval_operand_def, lookup_var_def,
            update_var_def, FLOOKUP_UPDATE]) >>
   strip_tac >> gen_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all prefix_decoder_noclamp_ptr >>
   disch_then (qspecl_then [`D`,`fuel`,`fn`,`PG`] mp_tac) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
@@ -270,7 +269,7 @@ Theorem prefix_canonical_noclamp_certificate:
   x <> dst /\ FLOOKUP G dst = SOME (b,sz) /\
   b <= w2n p /\ w2n p+32 <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let w = word_of_bytes T (0w:bytes32)
         (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w));
       i = mk_inst iid DLOAD [src] [x];
@@ -299,7 +298,6 @@ Proof
   qmatch_goalsub_abbrev_tac `update_var x w s` >>
   qabbrev_tac `l = update_var x w s` >>
   qabbrev_tac `t = mstore (w2n p) w l` >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `!fuel. step_inst_base (mk_inst iid DLOAD [src] [x]) s = OK l /\
      step_inst_base (mk_inst (iid+1) MSTORE [Var dst;Var x] []) l = OK t /\
      ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid DLOAD [src] [x]) s` by
@@ -320,7 +318,6 @@ Proof
 QED
 
 Resume prefix_canonical_noclamp_certificate[store]:
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `eval_operand src s = SOME a`
     (mp_then Any (drule_all_then mp_tac) prefix_noclamp_steps) >>
   disch_then (qspec_then `iid` mp_tac) >>
@@ -333,7 +330,7 @@ Resume prefix_canonical_noclamp_certificate[store]:
   conj_tac
   >- (irule prefix_mstore_ptr_step >>
       simp[eval_op_inst_idx, prefix_dload_output_taint] >>
-      gvs[allocas_from_def] >> metis_tac[]) >>
+      gvs[allocas_from_def, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   irule prefix_mstore_ghost_step >>
   simp[step_inst_non_invoke, step_inst_inst_idx_indep,
        exec_result_map_def, mk_inst_def, is_terminator_def]
@@ -375,6 +372,7 @@ Proof
      metis_tac[]) >>
   `b <= w2n (n2w d : bytes32) /\ w2n (n2w d : bytes32)+32 <= b+sz` by
     simp[w2n_n2w] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all prefix_canonical_noclamp_continuation >>
   disch_then (mp_tac o SPEC_ALL) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>

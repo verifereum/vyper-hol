@@ -7,16 +7,17 @@
  * memoryStoreWitnessLib.program: decode the JSON, translate it with the
  * emitted CV translation of translate_annotated_ast, drop empty interface
  * sources, annotate storage slots, and compile the one remaining module with
- * compile_vyper (K SOME) (o1_policy all_capabilities).  The deploy and
+ * compile_vyper (K SOME) (o1_policy all_capabilities), or several modules
+ * with compile_vyper_mods and the program's exports.  The deploy and
  * runtime bytes are compared with <name>.hex.  It does not run check_contract.
  *
  * Usage: bytecode_parity_json.exe DIR [NAME ...]
  * Without names, every <name>.json in DIR with a <name>.hex runs.  Each
  * fixture prints PASS, FAIL (bytes differ, or the compiler failed), or REJECT
- * (the frontend could not decode or rejected the program, or it has several
- * modules).  A
+ * (the frontend could not decode or rejected the program).  A single-module
  * fixture that reached the compiler also prints sp=T or sp=F: whether the
- * program is in supported_program and supported_program_deploy.  Exits
+ * program is in supported_program and supported_program_deploy; a linked unit
+ * prints sp=F modules=N.  Exits
  * non-zero unless every fixture passes.  With NATIVE_PARITY_DUMP=<dir> set, the
  * native bytes of each compiled fixture are written to <dir>/<name>.hex.
  *)
@@ -87,7 +88,9 @@ structure compilerNativeJson = struct
       handle ListPair.UnequalLengths => raise Fail "import/source count mismatch"
   in main :: kept end
 
-  (* The toplevels of the program's one module, as memoryStoreWitnessLib.program. *)
+  (* The program's one module, as memoryStoreWitnessLib.program, or a linked
+     unit's modules, each annotated with its slots, with its exports: what to
+     print about it, and its compilation. *)
   fun program path = let
     val json = jsonDocumentLib.parse_file path
     val (annotated_ast, layout) =
@@ -100,11 +103,26 @@ structure compilerNativeJson = struct
       | _ => raise Reject "frontend rejected the annotated AST"
     val sources = normalize_sources
       (remove_interface_sources annotated_ast (cv_list (cv_fst translated)))
-    val modules = compilerNativeML.annotate_sources_slots
-      (to_compiler (JsonImportCV.encode layout)) (to_compiler (cv_of_list sources))
-  in case modules of
-       [(_, tops)] => tops
-     | _ => raise Reject (Int.toString (length modules) ^ " source modules")
+  in case sources of
+       [_] => (case compilerNativeML.annotate_sources_slots
+                      (to_compiler (JsonImportCV.encode layout))
+                      (to_compiler (cv_of_list sources)) of
+                 [(_, tops)] =>
+                   (fn () => if compilerNativeML.supported tops then " sp=T"
+                             else " sp=F",
+                    fn () => compilerNativeML.compile tops)
+               | _ => raise Fail "annotation changed the module count")
+     | _ => let
+         (* translated = (sources, (exports, layout import map)) *)
+         val exports = cv_fst (cv_snd translated)
+         val lmap = cv_snd (cv_snd translated)
+         val mods = compilerNativeML.annotate_sources_slots_mods
+                      (to_compiler (JsonImportCV.encode layout)) (to_compiler lmap)
+                      (to_compiler (cv_of_list sources))
+       (* supported_program is over one module, so a unit is outside it. *)
+       in (fn () => " sp=F modules=" ^ Int.toString (length mods),
+           fn () => compilerNativeML.compile_mods mods (to_compiler exports))
+       end
   end
 
   (* With NATIVE_PARITY_DUMP=<dir>, write the native bytes there as <name>.hex. *)
@@ -120,9 +138,7 @@ structure compilerNativeJson = struct
     val t0 = Time.now ()
     val supported = ref ""
     val outcome =
-      (case (fn tops => (supported := (if compilerNativeML.supported tops
-                                       then " sp=T" else " sp=F");
-                         compilerNativeML.compile tops))
+      (case (fn (info, comp) => (supported := info (); comp ()))
               (program (OS.Path.concat (dir, name ^ ".json"))) of
          NONE => ("FAIL", "compiler returned NONE")
        | SOME (deploy, runtime) => let

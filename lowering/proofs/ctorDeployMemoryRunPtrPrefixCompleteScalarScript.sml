@@ -89,7 +89,7 @@ Theorem prefix_decoder_noclamp_inst_seq_ptr:
     eval_operand src s = SOME w /\ eval_operand (Var dst) s = SOME a /\
     FLOOKUP G dst = SOME (b,sz) /\ b <= w2n a /\ w2n a + 32 <= b+sz /\
     op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-    allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     inst_seq_ptr D lo ctx fn PG G tn (emitted_insts st st') s
       (DRESTRICT G (COMPL {x}))
       (step_taint (mk_inst (st.cs_next_id+1) MSTORE [Var dst;Var x] [])
@@ -147,7 +147,7 @@ Theorem prefix_scalar_noclamp_ghost:
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d+32 <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?H qt.
     qt.t_mem = tn.t_mem DIFF range_bytes [(d,32)] /\
     qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
@@ -221,7 +221,7 @@ Theorem prefix_scalar_complete_ghost:
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d+32 <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?H qt.
     qt.t_mem = tn.t_mem DIFF range_bytes [(d,32)] /\
     qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
@@ -307,7 +307,7 @@ Theorem prefix_scalar_complete_shift:
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d+32 <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= d /\
+  allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\ lo <= d /\
   lo <= initial.vs_alloca_next /\ alloca_inv initial /\
   alloca_frontier_inv_from k ctx func site initial /\
   ctor_actual_scratch func ids scratch_base N initial /\

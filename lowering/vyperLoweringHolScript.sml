@@ -16,7 +16,7 @@ Ancestors
   e2eLifecycle e2eTransactionWorld
   e2eCodeFrame ownSymSrcUnit
   (* definitions *)
-  moduleLowering
+  moduleLowering compileUnit
   (* property statements and proofs *)
   dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry

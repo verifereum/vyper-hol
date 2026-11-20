@@ -62,7 +62,7 @@ val CshiftCode = ``\ty tv.
  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
  d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
  lo <= initial.vs_alloca_next /\ lo <= d ==>
  ?actual H qt B.
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
@@ -119,7 +119,7 @@ val CshiftMode = ``\checked ty tv.
  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
  d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
  lo <= initial.vs_alloca_next /\ lo <= d /\
  (checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) av) <=
     LENGTH initial.vs_data_section /\ alloca_history func initial) ==>
@@ -248,7 +248,6 @@ Resume prefix_bulk_complete_mode_contract[package]:
     (simp[w2n_n2w] >>
      qpat_x_assum `type_memory_bytes ce ty = _` SUBST_ALL_TAC >> decide_tac) >>
   `LENGTH vs * type_memory_bytes ce ty < dimword (:256)` by decide_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_bulk_success_ghost >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   suspend "finish"

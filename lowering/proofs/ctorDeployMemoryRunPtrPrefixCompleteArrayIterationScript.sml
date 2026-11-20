@@ -131,6 +131,7 @@ Proof
   simp[w2n_n2w] >> disch_tac >>
   qpat_x_assum `ip = Var slot_var` SUBST_ALL_TAC >>
   `slot_var <> fresh` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `eval_operand (Var iv) s = SOME (n2w j)`
     (mp_then (Pos (el 3)) mp_tac prefix_loop_increment_steps) >>
   disch_then drule_all >>

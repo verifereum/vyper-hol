@@ -71,7 +71,7 @@ val CshiftCode = ``\ty tv.
  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
  d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
  lo <= initial.vs_alloca_next /\ lo <= d ==>
  ?actual H qt B.
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
@@ -128,7 +128,7 @@ val CshiftCodeEvidence = ``\checked ty tv.
  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
  d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
  lo <= initial.vs_alloca_next /\ lo <= d /\
  (checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) av) <=
     LENGTH initial.vs_data_section /\ alloca_history func initial) ==>
@@ -233,7 +233,6 @@ Resume prefix_bytestring_complete_mode_contract[package]:
   `b <= w2n (n2w d:bytes32) /\
    w2n (n2w d:bytes32) + abi_decode_bytes_copy_size n <= b+sz` by
     (simp[] >> metis_tac[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_bytestring_success_ghost >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   drule_all ctor_actual_sequence_world >> strip_tac >>

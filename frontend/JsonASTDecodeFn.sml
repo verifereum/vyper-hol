@@ -1530,7 +1530,7 @@ fun mk_json_storage_layout (storage_list, transient_list, code_list) =
     val string_option_ty = mk_option string_ty
     val storage_key_ty = mk_prod(string_option_ty, string_ty)
     val storage_pair_ty = mk_prod(storage_key_ty, storage_slot_info_ty)
-    val code_pair_ty = mk_prod(string_ty, code_slot_info_ty)
+    val code_pair_ty = mk_prod(storage_key_ty, code_slot_info_ty)
     val storage_tm = mk_list(storage_list, storage_pair_ty)
     val transient_tm = mk_list(transient_list, storage_pair_ty)
     val code_tm = mk_list(code_list, code_pair_ty)
@@ -1554,15 +1554,6 @@ val code_slot_info : term decoder =
            field "length" numtm,
            field "type" string))
 
-(* Decode a JSON object as an association list, applying decoder to each value *)
-fun decode_object_alist (decoder : term decoder) : (string * term) list decoder =
-  andThen rawObject (fn pairs =>
-    let
-      fun decode_pair (name, value) = (name, decode decoder value)
-    in
-      succeed (List.map decode_pair pairs)
-    end)
-
 (* Decode storage layout, handling arbitrarily nested module structures.
    Flat: {"counter": {"slot": 0, ...}} -> [(NONE, "counter", info)]
    Nested: {"lib1": {"counter": {"slot": 0, ...}}} -> [(SOME "lib1", "counter", info)]
@@ -1573,15 +1564,18 @@ fun decode_object_alist (decoder : term decoder) : (string * term) list decoder 
    the main module.  An inner alias alone is ambiguous: it is resolved in its
    parent's namespace, not the main module's.  jsonToVyper resolves the path.
 
+   code_layout nests immutables the same way, with an "offset" leaf.
+
    Returns (module_path_opt, var_name, slot_info) triples. *)
 fun decode_storage_layout_nested (slot_decoder : term decoder)
     : (string option * string * term) list decoder =
   andThen rawObject (fn pairs =>
     let
-      (* A slot info has a numeric "slot"; a nested module maps its variables,
-         including one that may be named "slot", to objects. *)
+      (* A slot info has a numeric "slot" (storage) or "offset" (code); a
+         nested module maps its variables, including one that may be named
+         "slot" or "offset", to objects. *)
       fun is_slot_info (JSON.OBJECT fields) =
-            List.exists (fn (k,v) => k = "slot" andalso
+            List.exists (fn (k,v) => (k = "slot" orelse k = "offset") andalso
               (case v of JSON.INT _ => true | _ => false)) fields
         | is_slot_info _ = false
 
@@ -1616,15 +1610,15 @@ fun mk_storage_key (module_opt : string option, var_name : string) : term =
 (* Note: inner storage_layout field is optional - some contracts have empty {} *)
 (* Storage layout keys: (module_alias_opt, var_name) *)
 val storage_layout : term decoder =
-  JSONDecode.map (fn ((storage_triples, transient_triples), code_pairs) =>
+  JSONDecode.map (fn ((storage_triples, transient_triples), code_triples) =>
                     mk_json_storage_layout (
                       List.map (fn (m,n,t) => mk_pair(mk_storage_key(m,n), t)) storage_triples,
                       List.map (fn (m,n,t) => mk_pair(mk_storage_key(m,n), t)) transient_triples,
-                      List.map (fn (n,t) => mk_pair(fromMLstring n, t)) code_pairs))
+                      List.map (fn (m,n,t) => mk_pair(mk_storage_key(m,n), t)) code_triples))
   (tuple2 (
      tuple2 (
        orElse (field "storage_layout" (decode_storage_layout_nested storage_slot_info), succeed []),
        orElse (field "transient_storage_layout" (decode_storage_layout_nested storage_slot_info), succeed [])),
-     orElse (field "code_layout" (decode_object_alist code_slot_info), succeed [])))
+     orElse (field "code_layout" (decode_storage_layout_nested code_slot_info), succeed [])))
 
 end

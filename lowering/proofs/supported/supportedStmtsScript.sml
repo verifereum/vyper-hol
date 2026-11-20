@@ -176,9 +176,7 @@ Definition supported_stmt_def:
   supported_stmt tops bindings (Return NONE) = T /\
   supported_stmt tops bindings (Return (SOME e)) = supported_expr tops e /\
   supported_stmt tops bindings (AnnAssign name ty e) =
-    (supported_place_type tops ty /\
-     (supported_copy_types ty (expr_type e) \/ arg_type_fits (expr_type e) ty) /\
-     supported_expr tops e) /\
+    (supported_place_type tops ty /\ supported_expr tops e) /\
   supported_stmt tops bindings (Assign target e) =
     supported_assignment tops bindings target e /\
   supported_stmt tops bindings (AugAssign ty target op e) =

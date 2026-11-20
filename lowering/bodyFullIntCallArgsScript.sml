@@ -31,6 +31,7 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   unitTransformDefs[qualified,ignore_grammar] memSafeRun[qualified,ignore_grammar]
   fragGasOriginPtrInvoke bodyFullShadowBodyInvLowering[qualified,ignore_grammar]
   intCallMaterializeFull bodyFullAllocGeneric[qualified,ignore_grammar]
+  internalReturnMemoryInputs[qualified,ignore_grammar]
   abiBufferAllocationCode[qualified,ignore_grammar]
   bodyPtrPrecompileBuiltinsAllocationFrame[qualified,ignore_grammar]
 
@@ -1694,7 +1695,6 @@ Theorem intcall_args_stage_full_p2_with_path[local]:
     EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
     body_exprs_full_ok cx es /\
     LENGTH flags = LENGTH es /\ LENGTH dtys = LENGTH es /\
-    EVERY (supported_value_type tops) dtys /\
     EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) dtys /\
     LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es) dtys /\
     (!j. j < LENGTH es /\ EL j flags ==> is_word_type (EL j dtys)) /\
@@ -2324,7 +2324,7 @@ Proof
          POP_ASSUM_LIST (K all_tac) >>
          simp[EVERY_MEM, exprSimHypsDefsTheory.expr_body_pre_def] >>
          metis_tac[]) >>
-      ntac 2 (conj_tac >- fs[]) >>
+      conj_tac >- fs[] >>
       conj_tac >-
         (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
          qexists_tac `si` >> gvs[exprLoweringPropsTheory.ci_mono_def]) >>
@@ -2675,7 +2675,16 @@ Proof
        ptr_buf_ok cenv e op aG at) /\
    (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
        ptr_buf_ok cenv e p.ptr_operand aG at)` by
-    (Cases_on `vv` >> fs[contextTheory.vv_operand_def] >> metis_tac[]) >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`ptr_buf_ok cenv e (vv_operand vv) G1 t ==>
+         ptr_buf_ok cenv e (vv_operand vv) aG at`,
+        `!t' op. vv = StackValue t' op /\
+           ~is_word_type (post_value_type cenv e) ==>
+           ptr_buf_ok cenv e op G1 t`,
+        `!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+           ptr_buf_ok cenv e p.ptr_operand G1 t`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `vv` >> simp[contextTheory.vv_operand_def] >> metis_tac[]) >>
   `at.vs_memory = t.vs_memory /\ at.vs_accounts = t.vs_accounts /\
    at.vs_transient = t.vs_transient /\ at.vs_call_ctx = t.vs_call_ctx` by
     (qpat_assum `at with <| vs_vars := _; vs_allocas := _;
@@ -2888,7 +2897,9 @@ Proof
      simp[loweringStateRelDefsTheory.local_ptrs_reserved_def,
           exprLoweringPropsTheory.ci_mono_def] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `expr_body_pre cenv cx tenv e esi` by fs[] >>
+  `expr_body_pre cenv cx tenv e esi` by
+    (qpat_assum `EVERY (\arg. expr_body_pre cenv cx tenv arg esi) (e::es)` mp_tac >>
+     simp[NoAsms]) >>
   drule exprSimHypsTheory.post_type_evaluates >>
   disch_then (qx_choose_then `rty` assume_tac) >>
   `!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
@@ -2898,7 +2909,8 @@ Proof
     (drule aggregateEvaluatedLayoutTheory.body_post_type_allocation_bound >> simp[]) >>
   `is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)` by
     (`expr_sim_inv cenv cx tenv esi /\ well_typed_expr tenv e` by
-       fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+       (qpat_assum `expr_body_pre cenv cx tenv e esi` mp_tac >>
+        simp[NoAsms,exprSimHypsDefsTheory.expr_body_pre_def]) >>
      drule_all exprSimHypsTheory.post_value_type_widens >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[vyperTypeSystemTheory.type_widens_to_def] >>
@@ -3597,9 +3609,6 @@ Proof
          conj_tac >-
            (qpat_assum `ptr_covers aG atn aq at _` mp_tac >>
             POP_ASSUM_LIST (K all_tac) >> simp[bodyPtrDefsTheory.ptr_covers_def]) >>
-         conj_tac >-
-           (qpat_assum `EVERY (supported_value_type tops) (dty::dtys1)` mp_tac >>
-            POP_ASSUM_LIST (K all_tac) >> simp[]) >>
          conj_tac >-
            (qpat_assum `EVERY (\ty. type_memory_bytes cenv ty < _) (dty::dtys1)` mp_tac >>
             POP_ASSUM_LIST (K all_tac) >> simp[]) >>
@@ -6477,7 +6486,7 @@ Proof
 QED
 
 Theorem args_return_buffer_geometry[local]:
-  supported_return_type tops ret /\
+  (ret <> NoneT ==> 0 < type_memory_size tv) /\
   get_module_code cx NONE = SOME tops /\
   expr_sim_inv ce cx env es /\
   ce.ce_struct_fields = make_struct_fields_map tops /\
@@ -6494,32 +6503,6 @@ Proof
     type_memory_size tv` by
     (drule_all expr_sim_inv_memory_size >>
      simp[GSYM structFieldsPropsTheory.type_mem_bytes_type_memory_bytes]) >>
-  `ret <> NoneT ==> assignable_type (get_tenv cx) ret` by
-    (strip_tac >>
-     `well_formed_type (get_tenv cx) ret` by simp[well_formed_type_def] >>
-     qpat_x_assum `supported_return_type tops ret` mp_tac >>
-     simp[supportedTypesTheory.supported_return_type_def,
-          supportedTypesTheory.supported_value_type_def] >> strip_tac
-     >- metis_tac[retAbiPlanPropsTheory.supported_scalar_type_assignable] >>
-     Cases_on `ret` >> gvs[]
-     >~ [`TupleT types`]
-     >- (simp[assignable_type_def] >>
-         gvs[vyperValueTheory.evaluate_type_def, vyperValueTheory.evaluate_types_OPT_MMAP,
-             AllCaseEqs(),
-             well_formed_type_def, NULL_EQ] >>
-         `EVERY IS_SOME (MAP (evaluate_type (get_tenv cx)) types)` by
-           (simp[GSYM IS_SOME_OPT_MMAP] >>
-            Cases_on `OPT_MMAP (evaluate_type (get_tenv cx)) types` >> gvs[]) >>
-         gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
-         irule retAbiPlanPropsTheory.supported_scalar_type_assignable >> gvs[well_formed_type_def])
-     >~ [`ArrayT elem bd`]
-     >- (Cases_on `bd` >> gvs[assignable_type_def, retAbiPlanPropsTheory.supported_word_type_assignable]) >>
-     rename1 `supported_struct_fields tops id` >>
-     Cases_on `supported_struct_fields tops id` >> gvs[] >>
-     drule_all retAbiPlanPropsTheory.supported_struct_fields_get_tenv >> strip_tac >>
-     gvs[assignable_type_def, EVERY_MEM, retAbiPlanPropsTheory.supported_word_type_assignable, NULL_EQ]) >>
-  `ret <> NoneT ==> 0 < type_memory_size tv` by
-    metis_tac[assignable_type_slot_size_pos, CONJUNCT1 valueEncodingPropsTheory.type_memory_size_pos] >>
   Cases_on `ret = NoneT` >> gvs[compute_func_info_def, returns_stack_count_def] >>
   Cases_on `nrc = 0` >> gvs[] >> Cases_on `ret` >> gvs[]
 QED
@@ -7320,7 +7303,17 @@ Proof
                  externalEntryShapeTheory.store_multi_results_labels) >> simp[]) >>
   `cs_extends st3 sm /\ cs_extends sh_st3 shadow_sm` by
     (conj_tac >> first_x_assum irule >>
-     Cases_on `0 < rc'` >> Cases_on `0 < rbs` >> fs[] >> metis_tac[]) >>
+     qmatch_goalsub_rename_tac `emit_void INVOKE _ invoke_start = (_,invoke_end)` >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`0 < rc' ==> ?rb results mid u. _ /\
+           emit_multi_op INVOKE _ rc' invoke_start = (results,mid) /\
+           store_multi_results _ results 0 mid = (u,invoke_end) /\ _`,
+        `rc' = 0 /\ 0 < rbs ==> ?rb u. _ /\
+           emit_void INVOKE _ invoke_start = (u,invoke_end) /\ _`,
+        `rc' = 0 /\ rbs = 0 ==> ?u. _ /\
+           emit_void INVOKE _ invoke_start = (u,invoke_end) /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `rc'` >> Cases_on `rbs` >> simp[] >> metis_tac[]) >>
   `cs_extends sm sb /\ cs_extends shadow_sm shadow_sb` by
     (conj_tac
      >- metis_tac[compileAppendPropsTheory.cs_appends_result_extends] >>
@@ -7414,16 +7407,11 @@ Proof
      goal_assum (drule_at Any)) >>
   `LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es)
        (TAKE (LENGTH es) (MAP SND args)) /\
-   EVERY (supported_value_type tops o SND) args /\
-   EVERY (supported_default_expression tops) dflts /\
-   supported_return_type tops ret` by
-    ((drule_all bodyIntCallSourceTheory.body_intcall_source_selection >>
-     qpat_assum `lookup_callable_function _ name tops = SOME _`
-       (fn th => SIMP_TAC (srw_ss()) [th]) >>
-     strip_tac >> pure_asm_rewrite_tac[] >> (metis_tac[bodyIntCallSourceTheory.body_intcall_source_selection]))) >>
-  `EVERY (supported_value_type tops) (MAP SND args)` by
-    (simp[EVERY_MAP, combinTheory.o_DEF] >>
-     metis_tac[EVERY_MAP, combinTheory.o_DEF]) >>
+   EVERY (supported_default_expression tops) dflts` by
+    (drule_all bodyIntCallSourceTheory.body_intcall_source_selection >>
+     qpat_assum `lookup_callable_function _ name tops = SOME _` (fn lookup =>
+       qpat_assum `tenv.type_defs = get_tenv cx`
+         (fn defs => simp[NoAsms, lookup, defs]))) >>
   `EVERY (\t. type_memory_bytes cenv t < 2 ** 64) (MAP SND args)` by
     (irule intcall_args_parameter_allocation_bounds_defaults >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
@@ -7455,7 +7443,8 @@ Proof
        drule vyperStorageFootprintTheory.storage_trace_domain_prefix >> simp[])) >>
   `valid_horizon cx st0 (storage_trace_horizon es0.storage_trace)
       es0.storage_trace` by
-    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    (qpat_assum `storage_trace_domain cx st0 es0.storage_trace`
+       (ACCEPT_TAC o REWRITE_RULE [vyperStorageFootprintTheory.storage_trace_domain_def])) >>
   qpat_assum `!H. valid_horizon cx st0 H es0.storage_trace ==> _`
     (qspec_then `storage_trace_horizon es0.storage_trace` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >>
@@ -7493,9 +7482,9 @@ Proof
     (qpat_assum `cenv.ce_func_info _ = compute_func_info _ _ _ _` mp_tac >>
      qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` SUBST1_TAC >>
      qpat_assum `type_memory_bytes cenv ret < 2 ** 64` mp_tac >>
-     qpat_assum `body_inv _ _ _ _`
-       (assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
-     `cenv.ce_struct_fields = make_struct_fields_map tops` by fs[] >>
+     `cenv.ce_struct_fields = make_struct_fields_map tops` by
+       (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
+        simp[NoAsms,bodySimTheory.body_inv_def]) >>
      qpat_assum `cenv.ce_struct_fields = _` (SUBST1_TAC o SYM) >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[structFieldsPropsTheory.type_mem_bytes_type_memory_bytes,
@@ -8193,8 +8182,6 @@ Proof
   >~ [`EVERY (\ty. type_memory_bytes (cenv_without_defaults cenv name) ty < _) (DROP _ _)`]
   >- (qpat_assum `type_memory_bytes (cenv_without_defaults cenv name) = _`
         SUBST1_TAC >> irule rich_listTheory.EVERY_DROP >> first_assum ACCEPT_TAC)
-  >~ [`EVERY (supported_value_type tops) (DROP _ _)`]
-  >- (irule rich_listTheory.EVERY_DROP >> first_assum ACCEPT_TAC)
   >~ [`!H. dead_lo_ok H (DF H) lo (cenv_without_defaults cenv name) cxd`]
   >- (qpat_assum `cx_tops cxd = cx_tops cx` mp_tac >>
       qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx` mp_tac >>
@@ -8233,6 +8220,22 @@ Proof
      simp[NoAsms,exprSimDefsTheory.expr_vv_res_ok_def]) >>
   rename1 `bind_arguments (get_tenv cx) args (xs ++ dvs) = SOME penv` >>
   rename1 `evaluate_type (get_tenv cx) ret = SOME rtv` >>
+  `env_context_consistent tenv cx` by
+    (qpat_assum `env_consistent tenv cx ee`
+       (ACCEPT_TAC o cj 1 o REWRITE_RULE [vyperTypeInvariantsTheory.env_consistent_def])) >>
+  `context_function_live cx (NONE,name)` by
+    (qpat_assum `env_context_consistent tenv cx` mp_tac >>
+     qpat_assum `IS_SOME (FLOOKUP tenv.fn_sigs (NONE,name))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[vyperTypeInvariantsTheory.env_context_consistent_def,
+          vyperTypeInvariantsTheory.fn_sigs_live_def, optionTheory.IS_SOME_EXISTS] >>
+     metis_tac[]) >>
+  `ret <> NoneT ==> 0 < type_memory_size rtv` by
+    (disch_tac >>
+     mp_tac (Q.INST [`env` |-> `tenv`, `src` |-> `NONE`, `tv` |-> `rtv`]
+       internalReturnMemoryInputsTheory.callable_return_memory_size_pos) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[NoAsms]) >>
   `?H. valid_horizon cx st0 H ed.storage_trace` by
     (qpat_assum `storage_trace_domain cxd st0 ed.storage_trace` mp_tac >>
      qpat_assum `!src tr. storage_trace_domain cxd src tr = _`
@@ -9676,5 +9679,6 @@ Proof
       intcall_args_failed_lock_invoke_outcome)) >>
   simp_tac bool_ss [vyperStateTheory.evaluation_state_accfupds] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexists_tac `H` >> first_assum ACCEPT_TAC
+  qexists_tac `H` >>
+  qpat_assum `valid_horizon cx st0 H ed.storage_trace` ACCEPT_TAC
 QED

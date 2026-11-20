@@ -7,7 +7,7 @@
  * trusted, not kernel-checked.  See README.md in this directory.
  *)
 Theory compilerNativeEmit
-Ancestors compileVyper evalCompiler evalCompilerSubsetAbiBuiltins evalCompilerSubsetAbiEvents
+Ancestors compileVyper compileUnit evalCompiler evalCompilerSubsetAbiBuiltins evalCompilerSubsetAbiEvents
   evalCompilerSubsetAbiExternalCalls evalCompilerSubsetAbiExternal evalCompilerSubsetAbiInternalCalls
   evalCompilerSubsetBuiltins evalCompilerSubsetControlDeploy evalCompilerSubsetScalars evalCompilerSubsetState
   integer_word alist jsonToVyperCV vyperTestRunner supportedProgram asmOptimizer
@@ -680,9 +680,32 @@ val annotate_slots_tm = let
 in list_mk_abs ([l, s], list_mk_comb (c,
      [mk_comb (cv_typeLib.to_term_for layout_ty, l),
       mk_comb (cv_typeLib.to_term_for translated_sources_ty, s)])) end;
+(* A linked unit: the layout import map and exports arrive as CV values too. *)
+val annotate_slots_mods_tm = let
+  val c = ``annotate_sources_slots_mods``
+  val (layout_ty, rest_ty) = dom_rng (type_of c)
+  val lmap_ty = fst (dom_rng rest_ty)
+  val sources_ty = fst (dom_rng (snd (dom_rng rest_ty)))
+  val c = Term.inst (match_type sources_ty translated_sources_ty) c
+  val l = mk_var ("layout", cvSyntax.cv)
+  val m = mk_var ("lmap", cvSyntax.cv)
+  val s = mk_var ("sources", cvSyntax.cv)
+in list_mk_abs ([l, m, s], list_mk_comb (c,
+     [mk_comb (cv_typeLib.to_term_for layout_ty, l),
+      mk_comb (cv_typeLib.to_term_for lmap_ty, m),
+      mk_comb (cv_typeLib.to_term_for translated_sources_ty, s)])) end;
+val compile_mods_tm = let
+  val exps_ty = ``:(string # num) list``
+  val e = mk_var ("exps", cvSyntax.cv)
+  val mods = mk_var ("mods", ``:(num option # toplevel list) list``)
+in list_mk_abs ([mods, e],
+     ``compile_vyper_mods (K SOME) (o1_policy all_capabilities) ^mods
+         ^(mk_comb (cv_typeLib.to_term_for exps_ty, e))``) end;
 val entries = [
   ("compile", ``compile_vyper (K SOME) (o1_policy all_capabilities)``),
   ("annotate_sources_slots", annotate_slots_tm),
+  ("compile_mods", compile_mods_tm),
+  ("annotate_sources_slots_mods", annotate_slots_mods_tm),
   ("supported", ``\tops. supported_program tops /\ supported_program_deploy tops``),
   ("cv_num", ``\n. cv$Num n``),
   ("cv_pair", ``\a b. cv$Pair a b``)];
