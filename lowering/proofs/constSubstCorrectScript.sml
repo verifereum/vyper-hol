@@ -926,17 +926,19 @@ QED
 
 (* Constant roots cannot occur in the checked immutable-write namespace. *)
 Theorem checked_constant_not_assignable:
-  contract_namespaces_ok F mods /\ declared_constant mods src id ==>
-  FLOOKUP (build_contract_type_artifact F mods).cta_bare_global_assignable
+  contract_namespaces_ok mode mods /\ declared_constant mods src id ==>
+  FLOOKUP (build_contract_type_artifact mode mods).cta_bare_global_assignable
     (src,id) = NONE
 Proof
   rpt strip_tac >>
-  Cases_on `FLOOKUP (build_contract_type_artifact F mods).cta_bare_global_assignable (src,id)` >> simp[] >>
+  Cases_on `FLOOKUP (build_contract_type_artifact mode mods).cta_bare_global_assignable (src,id)` >> simp[] >>
   drule_all build_contract_type_artifact_bare_global_assignable_sound >>
   strip_tac >> gvs[declared_constant_def] >>
   `ALL_DISTINCT (MAP FST mods)` by gvs[contract_namespaces_ok_def] >>
   `ALOOKUP mods src = SOME tls` by metis_tac[ALOOKUP_ALL_DISTINCT_MEM] >>
   gvs[] >>
+  `contract_namespaces_ok F mods` by
+    (Cases_on `mode` >> gvs[contract_namespaces_ok_deploy_implies_runtime]) >>
   drule_all contract_namespaces_ok_module_toplevel_vtype_keys >>
   metis_tac[vyperTypeConstantCellsTheory.module_immutable_constant_names_distinct]
 QED
@@ -1178,14 +1180,14 @@ Proof
 QED
 
 Theorem function_entry_constant_maps:
-  (function_entry_env art mods src Internal args).bare_globals = art.cta_bare_globals /\
-  (function_entry_env art mods src Internal args).bare_global_assignable =
+  (function_entry_env art mods src vis args).bare_globals = art.cta_bare_globals /\
+  (function_entry_env art mods src vis args).bare_global_assignable =
     art.cta_bare_global_assignable /\
-  (function_entry_env art mods src Internal args).fn_sigs = art.cta_fn_sigs /\
-  (defaults_env (function_entry_env art mods src Internal args)).bare_globals = art.cta_bare_globals /\
-  (defaults_env (function_entry_env art mods src Internal args)).bare_global_assignable =
+  (function_entry_env art mods src vis args).fn_sigs = art.cta_fn_sigs /\
+  (defaults_env (function_entry_env art mods src vis args)).bare_globals = art.cta_bare_globals /\
+  (defaults_env (function_entry_env art mods src vis args)).bare_global_assignable =
     art.cta_bare_global_assignable /\
-  (defaults_env (function_entry_env art mods src Internal args)).fn_sigs = art.cta_fn_sigs
+  (defaults_env (function_entry_env art mods src vis args)).fn_sigs = art.cta_fn_sigs
 Proof
   simp[function_entry_env_def, defaults_env_def, artifact_env_def,
     vyperTypeContractContextTheory.FOLDL_extend_local_args_static]
@@ -2011,7 +2013,7 @@ End
 
 Definition checked_frame_context_def:
   checked_frame_context cx mods art src id env <=>
-    check_contract F cx.layouts cx.txn.target mods = SOME art /\
+    (?mode. check_contract mode cx.layouts cx.txn.target mods = SOME art) /\
     ALOOKUP cx.sources cx.txn.target = SOME mods /\
     declared_constant mods src id /\ frame_maps env art
 End
@@ -2029,7 +2031,7 @@ Proof
 QED
 
 Theorem frame_maps_function_entry[simp]:
-  frame_maps (function_entry_env art mods current_src Internal args) art
+  frame_maps (function_entry_env art mods current_src vis args) art
 Proof
   simp[frame_maps_def, function_entry_constant_maps]
 QED
@@ -2056,7 +2058,7 @@ Theorem checked_frame_context_push_function:
   checked_frame_context cx' mods art src id env
 Proof
   simp[push_function_def, return_def, checked_frame_context_def] >>
-  rpt strip_tac >> gvs[]
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem checked_frame_intcall_static:
@@ -2064,20 +2066,35 @@ Theorem checked_frame_intcall_static:
   well_typed_expr env (Call ty (IntCall (call_src,fn)) es drv) /\
   get_module_code cx call_src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) ==>
-  checked_frame_context cx mods art src id
-    (function_entry_env art mods call_src Internal args) /\
-  IS_SOME (type_stmts (function_entry_env art mods call_src Internal args) ret ss) /\
-  well_typed_exprs (defaults_env (function_entry_env art mods call_src Internal args)) dflts
+  ?vis.
+    checked_frame_context cx mods art src id
+      (function_entry_env art mods call_src vis args) /\
+    IS_SOME (type_stmts (function_entry_env art mods call_src vis args) ret ss) /\
+    well_typed_exprs (defaults_env (function_entry_env art mods call_src vis args)) dflts
 Proof
   strip_tac >>
-  `frame_maps env art` by gvs[checked_frame_context_def] >>
-  `env.fn_sigs = art.cta_fn_sigs` by gvs[frame_maps_def] >>
-  `check_contract F cx.layouts cx.txn.target mods = SOME art /\
-   ALOOKUP cx.sources cx.txn.target = SOME mods` by
-    gvs[checked_frame_context_def] >>
-  drule_all checked_typed_intcall_body >> strip_tac >>
-  simp[] >> irule checked_frame_context_transport >> simp[] >>
-  qexistsl [`cx`, `env`] >> simp[]
+  qpat_x_assum `well_typed_expr _ _` mp_tac >>
+  simp[Once well_typed_expr_def] >> strip_tac >>
+  fs[checked_frame_context_def, frame_maps_def] >>
+  drule check_contract_artifact_fields >> strip_tac >>
+  `FLOOKUP (build_contract_type_artifact mode mods).cta_fn_sigs
+       (call_src,fn) = SOME sig /\
+   function_live cx.layouts cx.txn.target mods
+     (live_functions cx.layouts cx.txn.target mods) (call_src,fn)` by
+    gvs[FLOOKUP_DRESTRICT_SOME] >>
+  drule_all build_contract_type_artifact_fn_sigs_declared_sound >> strip_tac >>
+  gvs[get_module_code_def] >>
+  `lookup_callable_function mode fn ts = SOME (mut,nr,args,dflts,ret,ss)` by
+    (Cases_on `mode` >> Cases_on `cx.in_deploy` >>
+     gvs[lookup_callable_function_def, AllCaseEqs()] >>
+     gvs[include_fn_sig_def]) >>
+  gvs[] >>
+  `check_function_body_in_mode mode vis` by
+    (Cases_on `vis` >> gvs[check_function_body_in_mode_def, include_fn_sig_def]) >>
+  drule_all vyperTypeContractContextTheory.check_contract_function_body_MEM >>
+  strip_tac >>
+  qexists `vis` >> fs[check_function_body_def] >>
+  qexists `mode` >> simp[]
 QED
 
 Theorem type_frame_maps_mutual:
@@ -2220,7 +2237,10 @@ Theorem checked_frame_context_constant_root:
   IS_SOME (FLOOKUP env.bare_globals (src,id))
 Proof
   simp[checked_frame_context_def, frame_maps_def] >> rpt strip_tac >>
-  drule check_contract_artifact_fields >> strip_tac >> gvs[] >>
+  drule check_contract_artifact_fields >>
+  drule check_contract_nonsig_maps >>
+  drule check_contract_runtime_namespaces >>
+  rpt strip_tac >> gvs[] >>
   metis_tac[checked_constant_not_assignable, checked_constant_bare_global]
 QED
 
@@ -2621,14 +2641,14 @@ Proof
           irule protected_cell_frame_bind >>
           simp[protected_cell_frame_primitives] >> rpt strip_tac >>
           simp_tac bool_ss [] >>
-          `well_typed_exprs (defaults_env (function_entry_env art mods call_src Internal tup2))
+          `well_typed_exprs (defaults_env (function_entry_env art mods call_src vis tup2))
              (DROP (LENGTH tup3 - (LENGTH tup2 - LENGTH es)) tup3)` by
             (irule (cj 2 frame_well_typed_exprs_slices) >> simp[]) >>
           simp[state_rel_frame_result] >> rpt strip_tac >>
           first_x_assum irule >>
           conj_tac >- metis_tac[] >>
           conj_tac >- metis_tac[] >>
-          qexistsl [`art`, `defaults_env (function_entry_env art mods call_src Internal tup2)`, `mods`] >>
+          qexistsl [`art`, `defaults_env (function_entry_env art mods call_src vis tup2)`, `mods`] >>
           simp[checked_frame_context_def] >>
           qpat_x_assum `checked_frame_context cx mods art src id env` mp_tac >>
           simp[checked_frame_context_def]) >>
@@ -2686,7 +2706,7 @@ Proof
       >- simp[protected_cell_frame_return] >>
       simp[state_rel_frame_result] >> rpt strip_tac >>
       first_x_assum irule >> conj_tac >- metis_tac[] >>
-      qexistsl [`art`, `function_entry_env art mods call_src Internal tup2`, `mods`, `tup4`] >>
+      qexistsl [`art`, `function_entry_env art mods call_src vis tup2`, `mods`, `tup4`] >>
       simp[] >> irule checked_frame_context_push_function >>
       goal_assum drule >> simp[])
   >~ [`type_stmt env ret (Append bt e)`]
@@ -4587,10 +4607,10 @@ Proof
   irule protected_cell_frame_bind >> simp[protected_cell_frame_primitives] >>
   rpt strip_tac >> simp_tac bool_ss [] >>
   irule checked_eval_exprs_protected_cell_frame >>
-  qexistsl [`art`,`defaults_env (function_entry_env art mods call_src Internal args)`,`mods`] >>
+  qexistsl [`art`,`defaults_env (function_entry_env art mods call_src vis args)`,`mods`] >>
   simp[] >> conj_tac
   >- (irule (cj 2 frame_well_typed_exprs_slices) >> simp[]) >>
-  gvs[checked_frame_context_def]
+  gvs[checked_frame_context_def] >> metis_tac[]
 QED
 
 Theorem checked_intcall_defaults_const_cells_agree:
