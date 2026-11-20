@@ -781,7 +781,6 @@ Proof
   simp[jsonToVyperTopLevelTheory.translate_toplevel_def]
 QED
 
-(* Closed range endpoints fold with or without an explicit bound. *)
 Theorem range_static_folded_endpoints:
   !ctx.
     translate_iter ctx (BaseT (IntT 8))
@@ -790,15 +789,22 @@ Theorem range_static_folded_endpoints:
             (JE_Int 2 (JT_Integer 8 T)) (JT_Integer 8 T);
           JE_Int 127 (JT_Integer 8 T)] NONE) =
     Range (Literal (BaseT (IntT 8)) (IntL (-3)))
-          (Literal (BaseT (IntT 8)) (IntL 127)) /\
-    translate_iter ctx (BaseT (IntT 8))
-      (JIter_Range
-         [JE_BinOp (JE_Int (-5) (JT_Integer 8 T)) JBop_Add
-            (JE_Int 2 (JT_Integer 8 T)) (JT_Integer 8 T);
-          JE_Int 127 (JT_Integer 8 T)]
-         (SOME (JE_Int 1 (JT_Integer 256 F)))) =
-    Range (Literal (BaseT (IntT 8)) (IntL (-3)))
           (Literal (BaseT (IntT 8)) (IntL 127))
 Proof
   gen_tac >> CONV_TAC EVAL
+QED
+
+Theorem range_bounded_folded_endpoint:
+  translate_stmt [] [] ^call_ctx
+    (JS_For "i" (JT_Integer 8 T) (JTA_Integer 8 T)
+       (JIter_Range
+          [JE_Name "n" NONE JMissingSource (JT_Integer 8 T);
+           JE_BinOp (JE_Int 2 (JT_Integer 8 T)) JBop_Add
+             (JE_Int 3 (JT_Integer 8 T)) (JT_Integer 8 T)]
+          (SOME (JE_Int 4 (JT_Integer 256 F)))) [JS_Pass]) =
+    For "i" (BaseT (IntT 8))
+      (Range (Name (BaseT (IntT 8)) "n") (Literal (BaseT (IntT 8)) (IntL 5)))
+      4 [Pass]
+Proof
+  EVAL_TAC
 QED

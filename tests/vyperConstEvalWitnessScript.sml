@@ -132,6 +132,58 @@ val residual_ctx = Term.inst
   (match_type (type_of residual_ctx_raw) (fst (dom_rng (type_of ``translate_expr``))))
   residual_ctx_raw;
 
+val json_uint256 = ``JT_Integer 256 F``;
+val json_int256 = ``JT_Integer 256 T``;
+
+Theorem closed_modular_builtins_translate:
+  translate_expr ^residual_ctx
+    (JE_Call (JE_Name "uint256_addmod" (SOME "builtin_function")
+      JMissingSource JT_None)
+      [JE_Int 10 ^json_uint256; JE_Int 8 ^json_uint256; JE_Int 7 ^json_uint256]
+      [] ^json_uint256 JMissingSource) =
+    Literal ^uint256 (IntL 4) /\
+  translate_expr ^residual_ctx
+    (JE_Call (JE_Name "uint256_mulmod" (SOME "builtin_function")
+      JMissingSource JT_None)
+      [JE_Int 10 ^json_uint256; JE_Int 8 ^json_uint256; JE_Int 7 ^json_uint256]
+      [] ^json_uint256 JMissingSource) =
+    Literal ^uint256 (IntL 3) /\
+  translate_expr ^residual_ctx
+    (JE_Call (JE_Name "pow_mod256" (SOME "builtin_function")
+      JMissingSource JT_None)
+      [JE_Int 3 ^json_uint256; JE_Int 5 ^json_uint256]
+      [] ^json_uint256 JMissingSource) =
+    Literal ^uint256 (IntL 243)
+Proof
+  EVAL_TAC
+QED
+
+Theorem closed_abs_translates:
+  translate_expr ^residual_ctx
+    (JE_Call (JE_Name "abs" (SOME "builtin_function") JMissingSource JT_None)
+      [JE_Int (-7) ^json_int256] [] ^json_int256 JMissingSource) =
+    Literal (BaseT (IntT 256)) (IntL 7)
+Proof
+  EVAL_TAC
+QED
+
+Theorem closed_ordered_comparisons_translate:
+  translate_expr ^residual_ctx
+    (JE_Compare (JE_Int 1 ^json_int256) JBop_Lt (JE_Int 2 ^json_int256)) =
+    Literal (BaseT BoolT) (BoolL T) /\
+  translate_expr ^residual_ctx
+    (JE_Compare (JE_Int 1 ^json_int256) JBop_LtE (JE_Int 1 ^json_int256)) =
+    Literal (BaseT BoolT) (BoolL T) /\
+  translate_expr ^residual_ctx
+    (JE_Compare (JE_Int 3 ^json_int256) JBop_Gt (JE_Int 2 ^json_int256)) =
+    Literal (BaseT BoolT) (BoolL T) /\
+  translate_expr ^residual_ctx
+    (JE_Compare (JE_Int 2 ^json_int256) JBop_GtE (JE_Int 3 ^json_int256)) =
+    Literal (BaseT BoolT) (BoolL F)
+Proof
+  EVAL_TAC
+QED
+
 val projection_residual = EVAL ``
   fold_pin_constant ^residual = ^residual /\
   make_builtin_call (BaseT (BytesT (Dynamic 8))) "slice"
