@@ -78,9 +78,8 @@ Proof
   strip_tac >> drule_all aug_place_target_memory_live >> strip_tac >>
   `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
     (drule_all aug_place_target_entry_typed >> simp[]) >>
-  `st.scopes = es.scopes` by metis_tac[aug_place_target_scopes] >>
   gvs[place_ptr_rel_def] >>
-  `tv0 = entry.type` by metis_tac[aug_place_entry_type_agrees, optionTheory.SOME_11] >>
+  `tv0 = entry.type` by metis_tac[aug_place_target_entry_type_agrees, optionTheory.SOME_11] >>
   gvs[] >>
   `cur = v` by
     gvs[read_place_def, get_scopes_def, bind_def, lift_option_type_def,

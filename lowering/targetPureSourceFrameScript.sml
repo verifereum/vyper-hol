@@ -147,6 +147,17 @@ Proof
 QED
 
 
+Theorem effect_free_sources_projection:
+  !cx es s result s'.
+    ~supported_exprs_exists expr_effect_root es /\
+    eval_exprs cx es s = (result,s') ==>
+    s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+    s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>
+Proof
+  metis_tac[cj 6 effect_free_source_mutual]
+QED
+
+
 Theorem target_pure_source_mutual:
   (!tops e. supported_effect_free_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==>
