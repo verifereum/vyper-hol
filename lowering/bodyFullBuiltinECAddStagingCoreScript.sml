@@ -772,8 +772,16 @@ Resume ecadd_staging_full_from_transfers[after_output_allocation]:
      not_fresh_at s2 z) /\
    (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==>
      not_fresh_at s2 z)` by
-    (rpt strip_tac >> `not_fresh_at sa z` by metis_tac[] >>
-     fs[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+    (`sa.cs_next_var <= s2.cs_next_var` by decide_tac >>
+     rpt strip_tac >>
+     `not_fresh_at sa z` by
+       FIRST
+         [qpat_assum `!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> _`
+            (fn th => drule_then ACCEPT_TAC th),
+          qpat_assum `!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> _`
+            (fn th => drule_then ACCEPT_TAC th)] >>
+     irule stmtFragPtrTheory.not_fresh_at_mono >> qexists_tac `sa` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H es2.storage_trace ==>
      ghost_inv_at (DF H) lo d cenv cx es2 Ga tna ta` by
     (gen_tac >> strip_tac >>
@@ -1338,9 +1346,10 @@ Resume ecadd_staging_full_from_transfers[after_generated_gas]:
      metis_tac[venomStateTheory.operand_11]) >>
   `(lo <> 0 ==> !z. cenv.ce_imm_alloca = SOME (Var z) ==>
      not_fresh_at sm z)` by
-    (qpat_assum `local_ptrs_reserved cenv sm`
-       (mp_tac o PURE_REWRITE_RULE [loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
-     metis_tac[]) >>
+    (rpt strip_tac >>
+     MATCH_MP_TAC (Q.SPECL [`cenv`,`sm`,`z`]
+       exprLoweringPropsTheory.local_ptrs_reserved_imm_base) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `lo <= w2n wo` by
     (qpat_assum `allocas_from lo u`
        (mp_tac o PURE_REWRITE_RULE [ptrDisciplineTheory.allocas_from_def]) >>
