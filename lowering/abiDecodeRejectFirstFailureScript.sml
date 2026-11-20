@@ -7,6 +7,7 @@ Ancestors
   abiDecodePtrPrims[qualified,ignore_grammar]
   abiDecodeScalarRunSafety[qualified,ignore_grammar]
   abiDecodeRejectIndexedPass[qualified,ignore_grammar]
+  abiMalformedEntryProps[qualified,ignore_grammar]
   calldataExactScalarJoint stmtReasonLitFragMemory abiDecoderClampOutcome
   abiDecoderAbortReentry abiDecoderReentry abiDecoderVarSequence
   stateRelProj emitHelperProps exprLoweringProps venomExecSemantics venomState
@@ -224,7 +225,7 @@ Theorem malformed_scalar_prefix_abort[local]:
   eval_operand pos s = SOME (n2w p) /\
   op_prov G pos = NONE /\ op_taint tn pos = {} /\
   p+32 <= L /\ B+L < dimword(:256) /\ B+p+32 <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   abi_decoder_clamp_wf clamp /\
@@ -236,7 +237,6 @@ Theorem malformed_scalar_prefix_abort[local]:
       (s,G,tn) [] (Abort Revert_abort u,G',tn'))
 Proof
   strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all malformed_scalar_load_prefix >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `?stopped. run_inst_seq (emitted_insts sb sc) loaded = Abort Revert_abort stopped` by
@@ -288,7 +288,7 @@ Theorem malformed_scalar_allocated_abort[local]:
     else TAKE (static_length (vyper_to_abi_type env ty)) (DROP p xs)) /\
   ~(vyper_decode_valid_enc (vyper_to_abi_type env ty) bytes /\
     abi_vyper_admissible env ty (dec (vyper_to_abi_type env ty) bytes)) /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
   op_prov G pos = NONE /\ op_taint tn pos = {} /\ allocas_from lo s ==>
   ?u G' tn'.
     u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
@@ -327,6 +327,9 @@ Proof
        metis_tac[compileEnvTheory.cs_extends_trans] >>
      qexistsl_tac [`addr`, `value`, `sb`, `sc`] >>
      simp[] >> metis_tac[fragExecTheory.fn_has_code_split]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (drule abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp >>
+     disch_then ACCEPT_TAC) >>
   fs[abi_malformed_entry_def] >>
   drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
   `B+L < dimword(:256) /\ B+p+32 <= s.vs_alloca_next` by
@@ -772,7 +775,7 @@ Theorem malformed_bytes_payload_abort[local]:
   L < dimword(:256) /\ L < q+c /\
   EVERY (abi_decoder_operand_live sa.cs_next_var) [head;cnt;hi] /\
   (!op. op IN {head;cnt;hi} ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u G' tn'.
     u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
@@ -804,6 +807,15 @@ Proof
   qpat_assum `s.vs_inst_idx = _` (once_rewrite_tac o single o SYM) >> simp[]
 QED
 
+Theorem malformed_bytes_guard_allocas_below_fmp[local]:
+  r = s with <|vs_vars := vars; vs_inst_idx := i|> ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp r)
+Proof
+  disch_then SUBST1_TAC >> rpt strip_tac >> fs[allocas_below_fmp_def] >>
+  asm_rewrite_tac[]
+QED
+
 (* The position and count are already loaded.  A failed count check takes
    precedence over a failed payload check. *)
 Theorem malformed_bytes_compare_abort[local]:
@@ -819,7 +831,7 @@ Theorem malformed_bytes_compare_abort[local]:
   n < dimword(:256) /\ (w2n cv <= n ==> L < q + w2n cv) /\
   EVERY (abi_decoder_operand_live sa.cs_next_var) [head;cnt;hi] /\
   (!op. op IN {head;cnt;hi} ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u G' tn'.
     u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
@@ -829,7 +841,6 @@ Theorem malformed_bytes_compare_abort[local]:
 Proof
   strip_tac >> fs[EVERY_DEF] >>
   `op_prov G cnt = NONE /\ op_taint tn cnt = {}` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all malformed_count_compare_cut >> disch_then (qspec_then `PG` mp_tac) >>
   Cases_on `w2n cv <= n` >> simp[] >> strip_tac >>
   rename1 `r = s with <|vs_vars := r.vs_vars; vs_inst_idx := _|>` >>
@@ -856,6 +867,10 @@ Proof
     (qpat_assum `r.vs_allocas = s.vs_allocas`
        (fn th => PURE_REWRITE_TAC[allocas_from_def,th]) >>
      qpat_assum `allocas_from lo s` (ACCEPT_TAC o PURE_REWRITE_RULE[allocas_from_def])) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
+    (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>`
+       (fn frame => qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+         (ACCEPT_TAC o MATCH_MP (MATCH_MP malformed_bytes_guard_allocas_below_fmp frame)))) >>
   drule_all malformed_bytes_payload_abort >>
   disch_then (qspec_then `PG` (qx_choose_then `u` (qx_choose_then `H` (qx_choose_then `th` strip_assume_tac)))) >>
   qexistsl_tac [`u`,`H`,`th`] >> simp[] >>
@@ -941,7 +956,7 @@ Theorem malformed_bytes_allocated_abort[local]:
     else TAKE (static_length (vyper_to_abi_type env ty)) (DROP p xs)) /\
   ~(vyper_decode_valid_enc (vyper_to_abi_type env ty) bytes /\
     abi_vyper_admissible env ty (dec (vyper_to_abi_type env ty) bytes)) /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
   op_prov G pos = NONE /\ op_taint tn pos = {} /\
   op_prov G hi = NONE /\ op_taint tn hi = {} /\ allocas_from lo s ==>
   ?u G' tn'.
@@ -971,7 +986,9 @@ Proof
    not_fresh_at st source` by
     fs[abi_malformed_entry_def, abi_decoder_operand_live_def,
        abi_decoder_older_vars_def, not_fresh_at_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (drule abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp >>
+     disch_then ACCEPT_TAC) >>
   drule_all malformed_bytes_head_cut >> disch_then (qspec_then `PG` strip_assume_tac)
   >- metis_tac[] >>
   rename1 `r = s with <|vs_vars := r.vs_vars; vs_inst_idx := _|>` >>
@@ -992,7 +1009,10 @@ Proof
      fs[abi_malformed_allocated_window_def] >>
      drule_all allocaSiteResourceTheory.alloca_site_registered_below >> decide_tac) >>
   `eval_operand pos r = SOME (n2w p) /\ op_prov G' pos = NONE /\ op_taint tn' pos = {}` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
+    (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>`
+       (fn frame => qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+         (ACCEPT_TAC o MATCH_MP (MATCH_MP malformed_bytes_guard_allocas_below_fmp frame)))) >>
   drule_all malformed_scalar_load_prefix >> disch_then (qspec_then `PG` strip_assume_tac) >>
   `abi_decoder_operand_live sh.cs_next_var hi` by metis_tac[abi_decoder_operand_live_mono] >>
   `eval_operand hi r = SOME (n2w L) /\ op_prov G' hi = NONE /\ op_taint tn' hi = {}` by metis_tac[] >>
