@@ -12,7 +12,7 @@ Ancestors
   bodyPtrDefs fragGasOriginPtr ghostPcTransportPtr
   bodyFullAbiDecodeFiniteGuardEffect bodyFullAbiDecodeArrayBulkWindow
   bodyFullAbiDecodeOwnedCopyEffect stateRelProj venomMemDefs fragGasOriginPtrLoop
-  fragGasPath valueEncodingProps
+  fragGasPath valueEncodingProps bodyFullAbiDecodeOwnedStateProps
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 val owned_decoder_state = ``\st s G tn.
@@ -256,11 +256,10 @@ Proof
     (simp[] >> rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
   `allocas_from lo s` by metis_tac[ghost_inv_at_def] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
-    (qpat_assum `?H. V H` (qx_choose_then `world` assume_tac) >>
-     qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es s /\ _`
-       (qspec_then `world` (fn rel => qpat_assum `V world`
-         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
-          CONJUNCT1 o MP rel)))) >>
+    (strip_tac >> irule owned_decoder_allocas_below_fmp >>
+     qexistsl [`V`,`ce`,`ctx`,`cx`,`es`,`fn`] >> simp[] >> rpt strip_tac >>
+     qpat_assum `!H. V H ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
   mp_tac (Q.INST [
     `A` |-> `cnt INSERT src INSERT {op | ?w. op = Lit w}`,
     `B` |-> `data INSERT copy_sz INSERT cnt INSERT src INSERT {op | ?w. op = Lit w}`]
