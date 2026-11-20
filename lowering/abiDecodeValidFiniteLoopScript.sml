@@ -24,6 +24,7 @@ Ancestors abiDecoderLoopEmit[qualified,ignore_grammar] pair[qualified,ignore_gra
   abiDecoderOffset abiDecoderDynamic abiDecoderOffsetHead abiDecodeRanges arithmetic
   rich_list[qualified,ignore_grammar]
   bodyMemBopRestWordPath[qualified,ignore_grammar]
+  bodyFullHashKeccakFixed[qualified]
 
 Theorem finite_array_empty_edge_explicit[local]:
   gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) st [] out ==>
@@ -183,7 +184,8 @@ QED
 Theorem finite_loop_read_word[local]:
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id MLOAD [Var q] [x]) /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\
   lookup_var q s = SOME a /\ ptr_covers G tn q s 32 /\
   w2n a + 32 <= s.vs_alloca_next /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
@@ -236,7 +238,8 @@ Theorem finite_loop_test_op[local]:
   (opc <> ADD ==> EVERY (\op. op_prov G op = NONE) ops) /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [x]) /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\
   step_inst_base (mk_inst id opc ops [x]) s = OK (update_var x v s) /\
   t = ((update_var x v s) with vs_inst_idx := SUC s.vs_inst_idx) ==>
   ?G' tn'.
@@ -299,7 +302,7 @@ Theorem finite_array_position_test_joint[local]:
   p+32 <= L /\ B+L < dimword (:256) /\ B+L <= s.vs_alloca_next /\
   ptr_covers G tn ip s 32 /\ w2n iw + 32 <= s.vs_alloca_next /\
   (!a. w2n iw <= a /\ a < w2n iw + 32 ==> a NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   t = jump_to (if j < n then body_lbl else exit_lbl)
     (abi_decode_position_header_state (Var source) first B p j n s) ==>
   ?G' tn'.
@@ -340,7 +343,7 @@ Proof
   drule_at (Pat `s1 = _`) finite_loop_read_word >>
   disch_then (drule_at (Pat `lookup_var _ s = SOME _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ ip s 32`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca ctx ==> allocas_below_fmp s`)) >>
   disch_then (drule_at (Pat `allocas_from _ _`)) >>
   disch_then (drule_at (Pat `get_instruction _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
@@ -374,12 +377,15 @@ Proof
     (qpat_assum `allocas_from lo s` (assume_tac o REWRITE_RULE [allocas_from_def]) >>
      simp[Abbr `s1`, Abbr `s2`, update_var_def, allocas_from_def, arithmeticTheory.ADD1] >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[Abbr `s1`, allocas_below_fmp_def, update_var_def]) >>
   drule_at (Pat `s2 = _`) finite_loop_test_op >>
   disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
   disch_then (drule_at (Pat `get_instruction _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
   disch_then (drule_at (Pat `allocas_from _ _`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca ctx ==> allocas_below_fmp s1`)) >>
   disch_then (qspecl_then [`tn1`,`PG`,`G1`] mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_then (qx_choosel_then [`G2`,`tn2`] strip_assume_tac) >>
@@ -418,10 +424,13 @@ Proof
     (qpat_assum `allocas_from lo s` (assume_tac o REWRITE_RULE [allocas_from_def]) >>
      simp[Abbr `s1`, Abbr `s2`, Abbr `s3`, update_var_def, allocas_from_def, arithmeticTheory.ADD1] >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[Abbr `s2`, allocas_below_fmp_def, update_var_def]) >>
   drule_at (Pat `s3 = _`) finite_loop_read_word >>
   disch_then (drule_at (Pat `lookup_var av s2 = SOME _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ av s2 32`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca ctx ==> allocas_below_fmp s2`)) >>
   disch_then (drule_at (Pat `allocas_from _ _`)) >>
   disch_then (drule_at (Pat `get_instruction _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
@@ -452,12 +461,15 @@ Proof
     (qpat_assum `allocas_from lo s` (assume_tac o REWRITE_RULE [allocas_from_def]) >>
      simp[Abbr `s1`, Abbr `s2`, Abbr `s3`, Abbr `s4`, update_var_def, allocas_from_def, arithmeticTheory.ADD1] >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s2` mp_tac >>
+     simp[Abbr `s3`, allocas_below_fmp_def, update_var_def]) >>
   drule_at (Pat `s4 = _`) finite_loop_test_op >>
   disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
   disch_then (drule_at (Pat `get_instruction _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
   disch_then (drule_at (Pat `allocas_from _ _`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca ctx ==> allocas_below_fmp s3`)) >>
   disch_then (qspecl_then [`tn3`,`PG`,`G3`] mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_then (qx_choosel_then [`G4`,`tn4`] strip_assume_tac) >>
@@ -476,12 +488,15 @@ Proof
     (qpat_assum `allocas_from lo s` (assume_tac o REWRITE_RULE [allocas_from_def]) >>
      simp[Abbr `s1`, Abbr `s2`, Abbr `s3`, Abbr `s4`, Abbr `s5`, update_var_def, allocas_from_def, arithmeticTheory.ADD1] >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s4` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s3` mp_tac >>
+     simp[Abbr `s4`, allocas_below_fmp_def, update_var_def]) >>
   drule_at (Pat `s5 = _`) finite_loop_test_op >>
   disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
   disch_then (drule_at (Pat `get_instruction _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
   disch_then (drule_at (Pat `allocas_from _ _`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca ctx ==> allocas_below_fmp s4`)) >>
   disch_then (qspecl_then [`tn4`,`PG`,`G4`] mp_tac) >>
   (impl_tac >- simp[op_prov_def]) >>
   disch_then (qx_choosel_then [`G5`,`tn5`] strip_assume_tac) >>
@@ -500,6 +515,9 @@ Proof
           abi_decode_position_header_state_def, abi_decode_position_header_delta_def,
           arithmeticPropsTheory.bool_to_word_neq_0w] >>
      Cases_on `j < n` >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s5` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s4` mp_tac >>
+     simp[Abbr `s5`, allocas_below_fmp_def, update_var_def]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
          (s5,G5,tn5) [] (OK t,G5,tn5)` by
     (rpt gen_tac >> qpat_assum `t = jump_to (if done <> 0w then _ else _) s5` (rewrite_tac o single) >>
@@ -557,7 +575,7 @@ Theorem finite_array_header_from_inv[local]:
   abi_decoder_operand_live first (Var output) /\
   abi_decoder_operand_live first (Var ip) /\
   LENGTH vs < dimword (:256) /\ LENGTH vs = abi_head_word (DROP p xs) /\ p+32 <= L /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   alloca_history func s /\ op_taint tn src = {} /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s outsz /\ ptr_covers G tn ip s 32 /\
@@ -613,6 +631,8 @@ Proof
    Var source <> Var (STRING #"%" (toString first))` by
     metis_tac[abi_decoder_live_excludes_output, arithmeticTheory.LESS_EQ_REFL] >>
   `source <> STRING #"%" (toString first)` by gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
   drule_all finite_array_position_test_joint >>
   disch_then (qspec_then `PG` (qx_choosel_then [`G1`,`tn1`] strip_assume_tac)) >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
