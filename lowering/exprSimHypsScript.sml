@@ -223,10 +223,10 @@
  *
  * Not here yet:
  *   - The rest of the compile environment's metadata (dynamic array
- *     capacities) is not related to the source context.  A case that
- *     reads it will need a clause in expr_sim_inv, as pop has the local
- *     types clause, method ids the selector clause and TopLevelName the
- *     bare-global clauses (an immutable is at an ImmutableLoc of
+ *     capacities) is not related to the source context by expr_sim_inv,
+ *     which relates the local types pop reads, the method ids (the
+ *     selector clause) and the immutables TopLevelName reads (the
+ *     bare-global clauses: an immutable is at an ImmutableLoc of
  *     ce_module_vars); storage and transient variables are there by
  *     storage_vars_rel and transient_vars_rel.  Each is to match what
  *     Vyper's compiler guarantees.
