@@ -952,19 +952,17 @@ val fn_plan_defn = Hol_defn "generate_fn_plan_aux" `
            [succ] visited ps_branch of
       NONE => NONE
     | SOME (s_ops, visited_after, ps_after) =>
-      (* The next successor starts from the parent's spill map, so it must
-         also start from the parent's free list: a slot the previous
-         successor freed may still hold one of the parent's spilled
-         variables.  The high-water mark is threaded. *)
-      let ps_g' = ps_g with <|
-        ps_alloc := ps_after.ps_alloc with
-          sa_free_slots := ps_g.ps_alloc.sa_free_slots;
-        ps_label_counter := ps_after.ps_label_counter |> in
+      (* Each successor starts from the parent's spill map and allocator.
+         The caller uses the combined peak to place the next function. *)
+      let ps_g' = ps_g with ps_label_counter := ps_after.ps_label_counter in
       case generate_succs_plan liveness dfg cfg fn
              saved_stack saved_spilled rest visited_after ps_g' of
         NONE => NONE
       | SOME (rest_ops, visited_final, ps_final) =>
-          SOME (s_ops ++ rest_ops, visited_final, ps_final))`;
+          let peak = MAX ps_after.ps_alloc.sa_next_offset
+                         ps_final.ps_alloc.sa_next_offset in
+          SOME (s_ops ++ rest_ops, visited_final,
+            ps_final with ps_alloc := ps_final.ps_alloc with sa_next_offset := peak))`;
 
 (* --- Termination machinery --- *)
 
@@ -1105,9 +1103,7 @@ Proof
     (* Apply IH to INR rest call *)
     first_x_assum (qspec_then
         `INR (y0,y1,y2,y3,y4,y5,t,seen_first,
-              y8 with <| ps_alloc := plan_first.ps_alloc with
-                           sa_free_slots := y8.ps_alloc.sa_free_slots;
-                         ps_label_counter := plan_first.ps_label_counter |>)` mp_tac) >>
+              y8 with ps_label_counter := plan_first.ps_label_counter)` mp_tac) >>
     (impl_tac >- (
       simp[] >> simp[LEX_DEF] >>
       `CARD (set (fn_labels y3) INTER set y7) <=
@@ -1271,9 +1267,7 @@ Proof
      PairCases_on `sr` >>
      Cases_on `generate_succs_plan liveness dfg cfg fn saved_stack
                  saved_spilled succs sr1
-                 (ps with <| ps_alloc := sr2.ps_alloc with
-                               sa_free_slots := ps.ps_alloc.sa_free_slots;
-                             ps_label_counter := sr2.ps_label_counter |>)`
+                 (ps with ps_label_counter := sr2.ps_label_counter)`
      >- gvs[Once (cj 4 generate_fn_plan_aux_def)]
      >> rename1 `generate_succs_plan _ _ _ _ _ _ _ _ _ = SOME rr` >>
      PairCases_on `rr` >>
@@ -1332,15 +1326,15 @@ Definition generate_fn_plan_aux_fuel_def:
             [succ] visited ps_branch of
        NONE => NONE
      | SOME (s_ops, visited_after, ps_after) =>
-         let ps_g' = ps_g with <|
-           ps_alloc := ps_after.ps_alloc with
-             sa_free_slots := ps_g.ps_alloc.sa_free_slots;
-           ps_label_counter := ps_after.ps_label_counter |> in
+         let ps_g' = ps_g with ps_label_counter := ps_after.ps_label_counter in
          case generate_succs_plan_fuel fuel liveness dfg cfg fn
                 saved_stack saved_spilled rest visited_after ps_g' of
            NONE => NONE
          | SOME (rest_ops, visited_final, ps_final) =>
-             SOME (s_ops ++ rest_ops, visited_final, ps_final))
+             let peak = MAX ps_after.ps_alloc.sa_next_offset
+                            ps_final.ps_alloc.sa_next_offset in
+             SOME (s_ops ++ rest_ops, visited_final,
+               ps_final with ps_alloc := ps_final.ps_alloc with sa_next_offset := peak))
 Termination
   WF_REL_TAC `measure (λx. case x of
       INL (fuel, liveness, dfg, cfg, fn, worklist, visited, ps) => fuel
