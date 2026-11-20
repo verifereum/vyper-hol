@@ -2,17 +2,7 @@
  * Typed storage invariants and preservation for primitive operations.
  *
  * The transparent contract-storage invariant covers ordinary declarations and
- * resolved hashmap regions on both persistent and transient backends.  Layout
- * safety supplies nonoverflow and separation for those regions and reserves the
- * nonreentrant transient lock slot.  Result-form preservation is intentional:
- * sequential tuple assignment, append, and pop may retain an earlier successful
- * write when a later operation returns an error.
- *
- * Whole-value writes reuse update_toplevel_name preservation. Resolved storage
- * places use typed region writes, including nested paths,
- * dynamic-array length updates, append, and pop.  The combined
- * runtime_storage_consistent predicate adds storage decodability and layout
- * safety without changing runtime_consistent or state_well_typed.
+ * resolved hashmap regions on both persistent and transient backends.
  *
  * Constructor introduction requires explicit zero-read premises because
  * load_contract does not allocate fresh storage.  External-call preservation is
@@ -27,43 +17,6 @@ Ancestors
   vyperStorageBackend vyperCreate vyperInterpreter
 Libs
   wordsLib markerLib
-
-(* Additive combined invariant: the established runtime invariant is unchanged,
-   and storage decodability/layout safety are carried as explicit conjuncts. *)
-Definition runtime_storage_consistent_def:
-  runtime_storage_consistent env cx st <=>
-    runtime_consistent env cx st /\
-    contract_storage_well_formed cx st /\
-    storage_layout_safe cx
-End
-
-Theorem runtime_storage_consistent_runtime:
-  runtime_storage_consistent env cx st ==> runtime_consistent env cx st
-Proof
-  simp[runtime_storage_consistent_def]
-QED
-
-Theorem runtime_storage_consistent_storage:
-  runtime_storage_consistent env cx st ==>
-  contract_storage_well_formed cx st
-Proof
-  simp[runtime_storage_consistent_def]
-QED
-
-Theorem runtime_storage_consistent_layout:
-  runtime_storage_consistent env cx st ==> storage_layout_safe cx
-Proof
-  simp[runtime_storage_consistent_def]
-QED
-
-Theorem runtime_storage_consistent_intro:
-  runtime_consistent env cx st /\
-  contract_storage_well_formed cx st /\
-  storage_layout_safe cx ==>
-  runtime_storage_consistent env cx st
-Proof
-  simp[runtime_storage_consistent_def]
-QED
 
 (* ===== Oracle storage boundary (PLAN T6.2 / D26) ===== *)
 Definition oracle_storage_ok_def:
@@ -151,52 +104,6 @@ Proof
   simp[vyperStorageBackendTheory.get_storage_after_set_other]
 QED
 
-Theorem set_global_preserves_contract_storage_well_formed:
-  contract_storage_well_formed cx st /\
-  storage_layout_safe cx /\
-  storable_value cx src id v /\
-  var_in_storage cx src id /\
-  set_global cx src id v st = (res,st') ==>
-  contract_storage_well_formed cx st'
-Proof
-  rpt strip_tac >>
-  `st' = update_toplevel_name cx st src id v` by
-    (simp[vyperLookupStorageTheory.update_toplevel_name_def] >>
-     qpat_x_assum `set_global _ _ _ _ _ = _` (fn th => simp[th])) >>
-  gvs[] >>
-  irule vyperStorageWritePreservationTheory.update_toplevel_name_preserves_contract_storage_well_formed >>
-  simp[]
-QED
-
-Theorem runtime_storage_consistent_declared_region_read_typed:
-  runtime_storage_consistent env cx st /\
-  declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
-  ?v. read_storage_slot cx b slot tv st = (INL v,st) /\
-      value_has_type tv v
-Proof
-  simp[runtime_storage_consistent_def] >>
-  metis_tac[current_declared_storage_region_read_typed]
-QED
-
-Theorem runtime_storage_consistent_hashmap_leaf_read_typed:
-  runtime_storage_consistent env cx st /\
-  get_module_code cx mid = SOME code /\
-  find_var_decl_by_name n code =
-    SOME (HashMapVarDecl b kt vt,id) /\
-  lookup_var_slot_from_layout cx b mid id = SOME off /\
-  split_hashmap_subscripts vt rest_subs = SOME (final_type,kts,[]) /\
-  compute_hashmap_slot (n2w off) (kt::kts) (first_sub::rest_subs) =
-    SOME final_slot /\
-  evaluate_type (get_tenv cx) final_type = SOME final_tv ==>
-  ?v. read_storage_slot cx b final_slot final_tv st = (INL v,st) /\
-      value_has_type final_tv v
-Proof
-  simp[runtime_storage_consistent_def] >>
-  metis_tac[current_hashmap_leaf_read_typed]
-QED
-
-
-
 Theorem zero_read_slots_in_range_mutual[local]:
   (!storage off tv.
      (!n. read_slot storage n = 0w) ==>
@@ -242,19 +149,6 @@ Proof
   Cases >>
   gvs[vyperStorageBackendTheory.get_storage_def,
       vyperInterpreterTheory.initial_state_def]
-QED
-
-Theorem constructor_entry_runtime_storage_consistent:
-  (!n. read_slot (am.tStorage cx.txn.target) n = 0w) /\
-  (!n. read_slot ((am.accounts cx.txn.target).storage) n = 0w) /\
-  storage_layout_safe cx /\
-  runtime_consistent env cx
-    (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) ==>
-  runtime_storage_consistent env cx
-    (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)
-Proof
-  simp[runtime_storage_consistent_def] >>
-  metis_tac[constructor_entry_contract_storage_well_formed]
 QED
 
 Definition protected_storage_calls_preserve_def:
