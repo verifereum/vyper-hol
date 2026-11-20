@@ -1,7 +1,7 @@
 (* Executable meaningful-prefix stores for constructor immutables. *)
 Theory immutableDeployAssignExecution
 Ancestors
-  immutableDeployAssignTransfer immutableDeployAssignWord
+  immutableDeployAssignTransfer
   immutableDeployAssignRanges exprSimCopy emitHelperProps
   context compileEnv venomInst exprLoweringProps immutableCopyExecution
   placeTypedCopyPath fragExec venomState stmtLowering valueEncoding

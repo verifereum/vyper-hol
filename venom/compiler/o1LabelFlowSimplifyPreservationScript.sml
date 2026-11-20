@@ -5,7 +5,6 @@ Ancestors
   venomWf codegenSymRel unitShapeDefs symFrameBoundary
   simplifyCfgFixupShape simplifyCfgDefs simplifyCfgInvariant
   o1LabelFlowSimplifyChain o1LabelFlowSimplifyJump
-  o1LabelFlowSimplifySubstitution
 
 Theorem simplify_unreachable_inst_subset:
   wf_function f /\ MEM i (fn_insts (remove_unreachable_blocks f)) ==>

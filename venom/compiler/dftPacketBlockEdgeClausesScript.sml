@@ -1,7 +1,7 @@
 Theory dftPacketBlockEdgeClauses
 Ancestors
   dftPacketBlockNativePrefix dftPacketBlockEntryDischarge dftPacketEntryReplay
-  dftPacketBlockEdgeSplice dftPacketBlockReplayFrame dftPacketBlockHistoricalCuts
+  dftPacketBlockReplayFrame dftPacketBlockHistoricalCuts
   dftPacketBlockRootedCertificate dftPacketBlockTerminatorCoverage
   dftPacketSuccessfulTerminalRow dftPacketBlockInitializedStructure
   dftPacketBlockInitializedReplay dftPacketBlockInitializedHistory

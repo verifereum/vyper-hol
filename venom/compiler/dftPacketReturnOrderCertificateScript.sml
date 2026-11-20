@@ -1,6 +1,6 @@
 Theory dftPacketReturnOrderCertificate
 Ancestors
-  dftPacketReturnOrder dftPacketReturnOrderEnumeration dftPacketReturnRowNormalize
+  dftPacketReturnOrder dftPacketReturnOrderEnumeration
   dftPacketReturnActivation dftGasFromListTraceDefs dftIndexedExec
   venomWf venomExecSemantics venomState venomInst gasEvents
   finite_map list rich_list arithmetic sorting

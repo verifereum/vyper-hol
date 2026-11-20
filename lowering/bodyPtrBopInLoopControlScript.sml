@@ -1,5 +1,5 @@
 Theory bodyPtrBopInLoopControl
-Ancestors bodyPtrBopInLoopExit bodyPtrBopInLoopFrame fragGasSeqPtr fragGasPathPtr
+Ancestors bodyPtrBopInLoopExit exprSimWordBuiltins[qualified] intCallFrame[qualified] fragGasSeqPtr fragGasPathPtr
   emitHelper ptrSafeRun ptrDiscipline venomInstProofs venomInst
   codegenRel contextCodegenRel venomExecSemantics venomState
   instIdxIndep finite_map pred_set gasCount emitHelperProps compileEnv loweringStateRelDefs

@@ -1,7 +1,7 @@
 (* Finite-map transfer for definitely scalar variables. *)
 Theory bodyPtrWordBuiltinsScalar
 Ancestors
-  bodyPtrWordBuiltinsProvenance decoderGhostFramePtr ptrSafeRun
+  decoderGhostFramePtr ptrSafeRun
   ptrDiscipline finite_map pred_set list
 
 Theorem first_prov_none:
