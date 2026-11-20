@@ -86,6 +86,9 @@ Theorem prefix_entry_register_decode_sizes_mode:
  !checked. (^RegisterDecodeSizesMode) checked
 Proof
  gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ `(ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+   initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp)`
+   by simp[] >>
  drule_all (BETA_RULE (SPEC_ALL prefix_entry_register_decode_paired_mode)) >>
  disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
  disch_then (qx_choose_then `actual` (qx_choose_then `H` (qx_choose_then `qt`

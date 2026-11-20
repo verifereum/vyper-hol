@@ -11,7 +11,7 @@ Ancestors
   valueEncoding valueEncodingProps venomMemDefs spillSim
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst
   words arithmetic list finite_map pred_set
-  fragGasOriginPtr
+  fragGasOriginPtr exprLoweringProps[qualified,ignore_grammar]
 
 val Ok = ``\k ctx func site ids D N d outsz next limit_st
     tv vs slot_id slot base prefix cursor s.
@@ -115,6 +115,8 @@ Theorem prefix_complete_backedge_support_mode:
     (!x. abi_decoder_older_vars next x ==>
       FLOOKUP H x = FLOOKUP G x /\ op_taint qt (Var x) = op_taint tn (Var x)) /\
     t.vs_code = s.vs_code /\ t.vs_gas_readings = s.vs_gas_readings /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp /\
     t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
     t.vs_block_ctx = s.vs_block_ctx /\
     (!x. abi_decoder_older_vars next x ==> lookup_var x t = lookup_var x s) /\
@@ -184,6 +186,10 @@ Resume prefix_complete_backedge_support_mode[remaining]:
      simp[update_var_def] >> decide_tac) >>
   `(jump_to hdr raw).vs_code = s.vs_code /\
    (jump_to hdr raw).vs_gas_readings = s.vs_gas_readings /\
+   (jump_to hdr raw).vs_allocas = s.vs_allocas /\
+   (jump_to hdr raw).vs_alloca_next = s.vs_alloca_next /\
+   (jump_to hdr raw).vs_fmp = s.vs_fmp /\
+   (jump_to hdr raw).vs_initial_fmp = s.vs_initial_fmp /\
    (jump_to hdr raw).vs_outcomes = s.vs_outcomes /\
    (jump_to hdr raw).vs_tx_ctx = s.vs_tx_ctx /\
    (jump_to hdr raw).vs_block_ctx = s.vs_block_ctx` by
@@ -232,8 +238,6 @@ Finalise prefix_complete_backedge_support_mode
 
 
 
-
-
 val CshiftMode = ``\checked ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
@@ -261,12 +265,16 @@ val CshiftMode = ``\checked ty tv.
  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
  d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+   initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
  lo <= initial.vs_alloca_next /\ lo <= d /\
  (checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) av) <=
    LENGTH initial.vs_data_section /\ alloca_history func initial) ==>
  ?actual H qt B.
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+   actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
  val_in_memory tv v d actual.vs_memory /\
  abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
    [(d,type_memory_bytes ce ty)] initial actual /\
@@ -412,7 +420,9 @@ Theorem prefix_complete_child_iteration_mode:
  FLOOKUP G child_dst = SOME (b,sz) /\ b <= d+32+j*type_memory_size tv /\
  d+32+SUC j*type_memory_size tv <= b+sz /\
  op_taint tn child_src = {} /\ op_taint tn (Var child_dst) = {} /\
- allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\ ~ctx_has_dalloca ctx /\ lo <= d /\
+ allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\ lo <= d /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+   prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp) /\
  (^Ok) k ctx func site ids D N d outsz next limit_st
    tv vs slot_id slot initial j j prepared /\
  j < LENGTH vs /\ all_have_type tv vs /\ D <= d /\ d+outsz <= D+N /\
@@ -449,6 +459,8 @@ Theorem prefix_complete_child_iteration_mode:
  ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
  abi_decode_sim ctx func prepared t /\
  allocas_from lo t /\ lo <= t.vs_alloca_next /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+   t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp) /\
  FLOOKUP H slot_var = SOME (slot,32) /\ FLOOKUP H dst = SOME (b,sz) /\
  op_taint qt (Var slot_var) = {} /\ op_taint qt (Var dst) = {} /\
  qt.t_mem SUBSET tn.t_mem /\ DISJOINT qt.t_mem {a | slot <= a /\ a < slot+32} /\
@@ -524,6 +536,7 @@ Resume prefix_complete_child_iteration_mode[compose]:
 QED
 
 Resume prefix_complete_child_iteration_mode[backedge]:
+ `ctx_has_dalloca ctx ==> allocas_below_fmp actual` by (strip_tac >> fs[]) >>
  `FLOOKUP H slot_var = SOME (slot,32) /\ FLOOKUP H dst = SOME (b,sz) /\
   op_taint qt (Var slot_var) = {} /\ op_taint qt (Var iv) = {} /\
   op_taint qt (Var dst) = {}` by metis_tac[] >>
@@ -551,6 +564,10 @@ Resume prefix_complete_child_iteration_mode[backedge]:
 QED
 
 Resume prefix_complete_child_iteration_mode[finish]:
+ `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+   t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
+   (strip_tac >> fs[allocas_below_fmp_def,exprLoweringPropsTheory.pending_alloca_size_def] >>
+    first_assum ACCEPT_TAC) >>
  rule_assum_tac BETA_RULE >>
  qexistsl [`t`,`H'`,`qt'`,`B UNION B'`] >>
  conj_tac >- (rpt strip_tac >> metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>

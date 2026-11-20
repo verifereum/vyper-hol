@@ -35,7 +35,8 @@ val PreparedPk = ``
     0 sb d slot slot 32 loop_st.cs_next_var prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     prepared.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
-  fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+    prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp) /\
   lo <= slot /\ lo <= d /\ D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
   venomMemDefs$regions_disjoint (slot,32) (d,type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   header_st.cs_next_id IN ctor_actual_sites func ids /\ frag_ids body_st end_st SUBSET ids /\
@@ -127,7 +128,8 @@ val SetupPrem = ``
   FLOOKUP G dst_var = SOME (b,sz) /\ b <= d /\
   d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst_var) = {} /\
-  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
   abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
     DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -217,6 +219,8 @@ Theorem prefix_complete_array_setup_exit_pair_mode_exact:
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
       lookup_var x actual = lookup_var x initial) /\ 
     (^SetupResult) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+      actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
     (^LoopAt) exit_lbl 0 (LENGTH vs) (actual,Hout,qout,A) /\
     (^Frame) (prepared,H,qt,range_bytes [(d,32)]) (actual,Hout,qout,A) /\
     val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
@@ -236,6 +240,8 @@ Proof
   `?actual Hout qout A.
     (^LoopAtMode) exit_lbl 0 (LENGTH vs) (actual,Hout,qout,A) /\
     (^FrameMode) (prepared,H,qt,range_bytes [(d,32)]) (actual,Hout,qout,A) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+      actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
     (checked ==> !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (prepared,H,qt) [] (OK actual,Hout,qout)) /\
     val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
@@ -281,8 +287,6 @@ Proof
      qexists `hdr_bb'` >> simp[]) >>
   irule abi_decode_sim_trans >> qexists `prepared` >> asm_rewrite_tac[]
 QED
-
-
 
 
 val _ = export_theory();

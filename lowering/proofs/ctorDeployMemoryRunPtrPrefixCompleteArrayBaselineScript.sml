@@ -52,7 +52,8 @@ val InitialPrem = ``
   FLOOKUP G dst_var = SOME (b,sz) /\ b <= d /\
   d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst_var) = {} /\
-  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
   abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
     DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -72,6 +73,8 @@ val InitialResult = ``
       st.cs_next_var limit_st tv vs header_st.cs_next_id slot initial (LENGTH vs) (LENGTH vs) actual /\
     ~actual.vs_halted /\ actual.vs_current_bb = exit_lbl /\ actual.vs_inst_idx = 0 /\
     allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+      actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
     FLOOKUP Hout slot_var = SOME (slot,32) /\ FLOOKUP Hout dst_var = SOME (b,sz) /\
     op_taint qout (Var slot_var) = {} /\ op_taint qout (Var dst_var) = {} /\ op_taint qout src = {} /\
     FINITE A /\ A SUBSET range_bytes [(d,32+LENGTH vs*type_memory_size tv)] /\ DISJOINT A qout.t_mem /\
@@ -143,7 +146,5 @@ Proof
      rewrite_tac[ONE, rich_listTheory.REPLICATE, HD]) >>
   asm_simp_tac std_ss []
 QED
-
-
 
 val _ = export_theory();
