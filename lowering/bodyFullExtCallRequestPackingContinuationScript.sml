@@ -64,6 +64,11 @@ Theorem extcall_request_packing_continuation:
       addr value gas buf off len (abi_size_bound cenv.ce_struct_fields (if needs_external_call_wrap rt then
         TupleT [rt] else rt)) target value_opt calldata
       hasdef def dt (ext_call_kwarg EKDefault opts kws) ke t /\
+    (IS_SOME (ext_call_kwarg EKDefault opts kws) /\ ~is_word_type dt ==>
+      ?w aid tv. eval_operand def t = SOME w /\
+        evaluate_type (get_tenv cx) dt = SOME tv /\
+        FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+        aid < sp.cs_next_id) /\
     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (zg,Gg,tng) [] (OK t,Gf,tf)) /\
     alloca_history func t /\ allocas_from lo t /\
@@ -147,6 +152,11 @@ Theorem extcall_request_packing_continuation:
       addr value gas buf off len (abi_size_bound cenv.ce_struct_fields (if needs_external_call_wrap rt then
         TupleT [rt] else rt)) target value_opt calldata hasdef def dt
       (ext_call_kwarg EKDefault opts kws) ee t /\
+    (IS_SOME (ext_call_kwarg EKDefault opts kws) /\ ~is_word_type dt ==>
+      ?w aid tv. eval_operand def t = SOME w /\
+        evaluate_type (get_tenv cx) dt = SOME tv /\
+        FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+        aid < sp.cs_next_id) /\
     alloca_history func t /\ allocas_from lo t /\ lo <= t.vs_alloca_next /\
     s0.vs_alloca_next <= t.vs_alloca_next /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==> ghost_inv_at (DF H) lo d cenv cx ee G tn t) /\

@@ -327,7 +327,8 @@ Proof
     fs[body_inv_def] >>
   `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
   qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
-    irule_body_pre stmt_expr_body_pre >> simp[] >> metis_tac[]
+    irule_body_pre stmt_expr_body_pre >>
+  simp[] >> metis_tac[supported_pure_expr_effect_free, no_effect_call_operands]
 QED
 
 (* Body safety and root allocation checks give each argument expr_body_pre;

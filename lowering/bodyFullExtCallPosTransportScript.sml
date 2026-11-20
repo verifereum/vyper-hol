@@ -1,4 +1,4 @@
-(* Transport one saved positional operand across a pure argument suffix. *)
+(* Transport one saved positional operand across a later argument suffix. *)
 Theory bodyFullExtCallPosTransport
 Ancestors
   bodyFullLogArgs logValueFramePtr exprSimMemDefs exprSimProps loweringPosts
@@ -9,7 +9,33 @@ Ancestors
   bodySim exprSimHypsDefs typedMemoryCopy vyperContext stateRelProj
   immutableRelation vyperTypeInvariants structFieldsProps
   ctorDeployDeadSectionRel ctorDeployDeadSectionFrame immSectionDead
-  gasContext valueEncodingProps abiCanonicalHeadSize
+  gasContext valueEncodingProps abiCanonicalHeadSize bodyFullOperandSnapshot
+  bodyFullAbiEncodeBorrowed context
+
+Theorem extcall_saved_physical_store_bound:
+  read_result cx raw ee = (INL v,ee) /\
+  (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==> val_wf tv v) /\
+  (~is_word_type ty ==> ~is_word_type ann) /\
+  vv_store_bound cx ann ty ee raw sv s ==>
+  vv_store_bound cx ty ty ee raw sv s
+Proof
+  pure_rewrite_tac [vv_store_bound_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  conj_tac
+  >- (qx_genl_tac [`vt`,`op`,`v'`,`tvt`,`w`] >> strip_tac >>
+      `v' = v` by
+        (qpat_assum `read_result cx raw ee = (INL v,ee)`
+           (fn th => qpat_assum `read_result cx raw ee = (INL v',ee)`
+             (mp_tac o REWRITE_RULE [th])) >> simp[]) >>
+      gvs[] >>
+      `val_store_size tvt v <= type_memory_size tvt` by
+        metis_tac[exprSimPropsTheory.val_store_size_le] >>
+      `type_memory_size tvt = 0 \/
+       w2n w + type_memory_size tvt <= s.vs_alloca_next` by
+        metis_tac[arithmeticTheory.ADD_COMM] >>
+      decide_tac) >>
+  metis_tac[]
+QED
 
 Theorem saved_footprint_pure_frame[local]:
   expr_val_at cenv cx ty sa sm mid v op t /\
@@ -62,11 +88,16 @@ Theorem extcall_request_saved_stack_endpoint:
     vv_holds cenv cx (lowered_value_type cenv e) raw (StackValue tag op) mid t /\
     vv_at cenv cx (lowered_value_type cenv e) sa sm mid raw (StackValue tag op) t /\
     ptr_vv_ok cx (lowered_value_type cenv e) raw (StackValue tag op) mid G1 tn1 t /\
-    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) mid raw (StackValue tag op) t) /\
+    vv_store_bound cx bound_ty (lowered_value_type cenv e) mid raw (StackValue tag op) t) /\
   (~is_word_type (lowered_value_type cenv e) ==> ptr_buf_ok cenv e op G1 t) /\
   ci_mono sm sb /\
   (!x. op = Var x ==> not_fresh_at sm x) /\
-  pure_frame cenv func mid sm t u /\
+  (is_word_type (lowered_value_type cenv e) \/ pure_frame cenv func mid sm t u \/
+   (?env (H0:(bool # bytes32 # type_value) list # num list) (H1:(bool # bytes32 # type_value) list # num list) ctx.
+      expr_sim_inv cenv cx env mid /\
+      stmt_state_rel H0 ctx func cenv cx mid t /\
+      stmt_state_rel H1 ctx func cenv cx ee u /\ ee.scopes = mid.scopes /\
+      local_ptrs_reserved cenv sm /\ wb_frame cenv mid ee sm t u)) /\
   ghost_kept_at lo cenv mid sm G1 tn1 t G2 tn2 /\
   (!x w. not_fresh_at sm x /\ lookup_var x t = SOME w ==> lookup_var x u = SOME w) /\
   (!aid row. FLOOKUP t.vs_allocas aid = SOME row ==> FLOOKUP u.vs_allocas aid = SOME row) /\
@@ -77,10 +108,10 @@ Theorem extcall_request_saved_stack_endpoint:
     vv_holds cenv cx (lowered_value_type cenv e) raw (StackValue tag op) ee u /\
     vv_at cenv cx (lowered_value_type cenv e) sa sb ee raw (StackValue tag op) u /\
     ptr_vv_ok cx (lowered_value_type cenv e) raw (StackValue tag op) ee G2 tn2 u /\
-    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw (StackValue tag op) u) /\
+    vv_store_bound cx bound_ty (lowered_value_type cenv e) ee raw (StackValue tag op) u) /\
   (~is_word_type (lowered_value_type cenv e) ==> ptr_buf_ok cenv e op G2 u)
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_val_rel cx (lowered_value_type cenv e) v op t /\
    expr_val_at cenv cx (lowered_value_type cenv e) sa sm mid v op t /\
    ptr_val_ok cx (lowered_value_type cenv e) v op G1 tn1 t` by
@@ -96,10 +127,15 @@ Proof
        mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory /\
      (!i. w2n w <= i /\ i < w2n w + val_footprint tv v /\ i IN tn2.t_mem ==>
        i IN tn1.t_mem)` by
-    (rpt gen_tac >> strip_tac >> conj_tac
-     >- (gvs[expr_val_at_def] >> metis_tac[]) >>
-     conj_tac >- (drule_all saved_footprint_pure_frame >> simp[]) >>
-     rpt strip_tac >> drule_all pure_argument_taint_kept >> simp[]) >>
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `is_word_type _ \/ _` mp_tac >>
+     simp[] >> disch_then strip_assume_tac
+     >- (conj_tac >- (fs[expr_val_at_def] >> metis_tac[]) >>
+         conj_tac >- (drule_all saved_footprint_pure_frame >> simp[]) >>
+         rpt strip_tac >> drule_all pure_argument_taint_kept >> simp[]) >>
+     drule_all
+       (SIMP_RULE (srw_ss()) [] (Q.INST [`sb` |-> `st`]
+          abi_encode_borrowed_footprint_frame)) >> simp[]) >>
   `(!x. op = Var x ==> FLOOKUP G2 x = FLOOKUP G1 x) /\
    op_taint tn2 op = op_taint tn1 op` by
     (gvs[ghost_kept_at_def] >> Cases_on `op` >>
@@ -134,11 +170,16 @@ Theorem extcall_request_saved_memory_endpoint:
       (LocatedValue (lowered_value_type cenv e) p) t /\
     ptr_vv_ok cx (lowered_value_type cenv e) raw
       (LocatedValue (lowered_value_type cenv e) p) mid G1 tn1 t /\
-    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) mid raw
+    vv_store_bound cx bound_ty (lowered_value_type cenv e) mid raw
       (LocatedValue (lowered_value_type cenv e) p) t) /\
   ptr_buf_ok cenv e p.ptr_operand G1 t /\ ci_mono sm sb /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
-  pure_frame cenv func mid sm t u /\
+  (pure_frame cenv func mid sm t u \/
+   (?env (H0:(bool # bytes32 # type_value) list # num list) (H1:(bool # bytes32 # type_value) list # num list) ctx.
+      expr_sim_inv cenv cx env mid /\
+      stmt_state_rel H0 ctx func cenv cx mid t /\
+      stmt_state_rel H1 ctx func cenv cx ee u /\ ee.scopes = mid.scopes /\
+      local_ptrs_reserved cenv sm /\ wb_frame cenv mid ee sm t u)) /\
   ghost_kept_at lo cenv mid sm G1 tn1 t G2 tn2 /\
   (!x w. not_fresh_at sm x /\ lookup_var x t = SOME w ==> lookup_var x u = SOME w) /\
   (!aid row. FLOOKUP t.vs_allocas aid = SOME row ==> FLOOKUP u.vs_allocas aid = SOME row) /\
@@ -152,11 +193,13 @@ Theorem extcall_request_saved_memory_endpoint:
       (LocatedValue (lowered_value_type cenv e) p) u /\
     ptr_vv_ok cx (lowered_value_type cenv e) raw
       (LocatedValue (lowered_value_type cenv e) p) ee G2 tn2 u /\
-    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw
+    vv_store_bound cx bound_ty (lowered_value_type cenv e) ee raw
       (LocatedValue (lowered_value_type cenv e) p) u) /\
   ptr_buf_ok cenv e p.ptr_operand G2 u
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?raw. read_result cx raw mid = (INL v,mid) /\ _`
+    (qx_choose_then `raw` strip_assume_tac) >>
   `expr_val_at cenv cx (lowered_value_type cenv e) sa sm mid v p.ptr_operand t` by
     (drule_all vv_at_memory_val_at >> simp[]) >>
   `?w. eval_operand p.ptr_operand t = SOME w /\
@@ -175,10 +218,20 @@ Proof
        mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory /\
      (!i. w2n w <= i /\ i < w2n w + val_footprint tv v /\ i IN tn2.t_mem ==>
        i IN tn1.t_mem)` by
-    (rpt gen_tac >> strip_tac >> conj_tac
-     >- (gvs[expr_val_at_def] >> metis_tac[]) >>
-     conj_tac >- (drule_all saved_footprint_pure_frame >> simp[]) >>
-     rpt strip_tac >> drule_all pure_argument_taint_kept >> simp[]) >>
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `_ \/ (?env H0 H1 ctx. _)` strip_assume_tac
+     >- (conj_tac >- (fs[expr_val_at_def] >> metis_tac[]) >>
+         conj_tac >- (drule_all saved_footprint_pure_frame >> simp[]) >>
+         rpt strip_tac >> drule_all pure_argument_taint_kept >> simp[]) >>
+     drule_all
+       (SIMP_RULE (srw_ss()) [] (Q.INST [`sb` |-> `st`]
+          abi_encode_borrowed_footprint_frame)) >> simp[]) >>
+  `ptr_val_ok cx (lowered_value_type cenv e) v p.ptr_operand G1 tn1 t` by
+    (qpat_assum `ptr_vv_ok _ _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [ptr_vv_ok_def]) >>
+     simp[ptr_val_ok_def]) >>
+  `ptr_val_ok cx (lowered_value_type cenv e) v p.ptr_operand G2 tn2 u` by
+    (irule ptr_val_ok_footprint_frame >>
+     qexistsl_tac [`G1`,`t`,`tn1`] >> simp[]) >>
   reverse conj_tac
   >- (irule ptr_buf_ok_frame >> qexistsl_tac [`G1`,`t`] >> simp[]) >>
   `expr_val_at cenv cx (lowered_value_type cenv e) sa sb ee v p.ptr_operand u` by
@@ -193,15 +246,73 @@ Proof
       qpat_assum `expr_val_at _ _ _ _ sb ee _ _ u`
         (mp_tac o REWRITE_RULE [expr_val_at_def]) >>
       disch_then (qspec_then `tvt` mp_tac) >> simp[])
-  >- (gvs[ptr_vv_ok_def, read_result_def, return_def] >>
-      gvs[ptr_mem_ok_def] >> rpt strip_tac
-      >- (irule robust_val_in_memory_footprint_frame >>
-          simp[] >> qexistsl_tac [`t.vs_memory`,`u.vs_memory`,`tn1.t_mem`,`tn2.t_mem`] >>
-          qpat_assum `!tv. _ ==> (val_wf _ _ /\ _)` (qspec_then `tv` mp_tac) >>
-          simp[]) >>
-      metis_tac[]) >>
+  >- (qpat_assum `ptr_val_ok _ _ _ _ G1 tn1 t`
+        (assume_tac o CONJUNCT1 o REWRITE_RULE [ptr_val_ok_def]) >>
+      qpat_assum `ptr_val_ok _ _ _ _ G2 tn2 u`
+        (strip_assume_tac o REWRITE_RULE [ptr_val_ok_def]) >>
+      simp[ptr_vv_ok_def, read_result_def, return_def]) >>
   gvs[vv_store_bound_def, read_result_def, return_def] >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem extcall_request_materialized_endpoint:
+  compile_snapshot_vv cenv T input a = (saved,ss) /\
+  vv_type input = lowered_value_type cenv e /\
+  ~is_word_type (lowered_value_type cenv e) /\ vv_operand saved = Var x /\
+  evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tv /\
+  val_wf tv v /\ val_footprint tv v <= sz /\
+  ptr_val_ok cx (lowered_value_type cenv e) v (Var x) G1 tn1 t /\
+  val_in_memory tv v (w2n w) t.vs_memory /\ ptr_buf_ok cenv e (Var x) G1 t /\
+  lookup_var x t = SOME w /\ not_fresh_at cut x /\
+  FLOOKUP t.vs_allocas aid = SOME (w2n w,sz) /\
+  si.cs_next_id <= aid /\ aid < ss.cs_next_id /\ aid < cut.cs_next_id /\
+  type_memory_size tv <= sz /\
+  w2n w + sz <= t.vs_alloca_next /\ t.vs_alloca_next <= u.vs_alloca_next /\
+  (!n b len. local_region cenv mid.scopes t n b len ==>
+    w2n w + sz <= b \/ b + len <= w2n w) /\
+  (!n b len. local_region cenv ee.scopes u n b len ==>
+    local_region cenv mid.scopes t n b len) /\
+  wb_frame cenv mid ee cut t u /\ ghost_kept_at lo cenv mid cut G1 tn1 t G2 tn2 ==>
+  read_result cx (Value v) ee = (INL v,ee) /\
+  vv_holds cenv cx (lowered_value_type cenv e) (Value v) saved ee u /\
+  vv_at cenv cx (lowered_value_type cenv e) si ss ee (Value v) saved u /\
+  ptr_vv_ok cx (lowered_value_type cenv e) (Value v) saved ee G2 tn2 u /\
+  vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e)
+    ee (Value v) saved u /\
+  ptr_buf_ok cenv e (Var x) G2 u
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`copy` |-> `T`, `vv` |-> `input`, `p` |-> `x`,
+    `sa` |-> `a`, `sm` |-> `ss`, `es` |-> `mid`, `s` |-> `t`,
+    `t` |-> `u`, `G` |-> `G1`, `tn` |-> `tn1`,
+    `G'` |-> `G2`, `tn'` |-> `tn2`] compile_snapshot_vv_materialized_frame) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      qpat_assum `!n b len. local_region cenv mid.scopes t n b len ==> _`
+        (qspecl_then [`n`,`b`,`len`] (drule_then strip_assume_tac)) >>
+      decide_tac) >>
+  simp[] >> strip_tac >>
+  `val_in_memory tv v (w2n w) u.vs_memory` by
+    (irule val_in_memory_footprint_agree >> simp[] >>
+     qexists_tac `t.vs_memory` >> simp[] >>
+     qpat_assum `mem_bytes_at (w2n w) sz u.vs_memory = _`
+       (mp_tac o MATCH_MP (cj 1 mem_bytes_at_agree_window) o SYM) >>
+     disch_then (qspecl_then [`w2n w`,`val_footprint tv v`] mp_tac) >> simp[]) >>
+  `ptr_buf_ok cenv e (Var x) G2 u` by
+    (irule ptr_buf_ok_frame >> qexistsl_tac [`G1`,`t`] >>
+     simp[venomStateTheory.eval_operand_def]) >>
+  qpat_x_assum `saved = _` SUBST_ALL_TAC >>
+  simp[vv_holds_def, vv_at_def, ptr_vv_ok_def, vv_store_bound_def,
+       mk_ptr_def, read_result_def, return_def, venomStateTheory.eval_operand_def] >>
+  rpt conj_tac
+  >- (disj1_tac >> qexistsl_tac [`aid`,`w2n w`,`sz`] >> simp[] >>
+      rpt strip_tac >>
+      qpat_assum `!n b len. local_region cenv ee.scopes u n b len ==> _`
+        (drule_then assume_tac) >>
+      qpat_assum `!n b len. local_region cenv mid.scopes t n b len ==> _`
+        (drule_then strip_assume_tac) >> decide_tac) >>
+  gvs[ptr_val_ok_def] >> rpt strip_tac >>
+  TRY (drule exprSimPropsTheory.val_store_size_le) >> decide_tac
 QED
 
 (* Slot agreement uses the new state's storage relation, not equality of

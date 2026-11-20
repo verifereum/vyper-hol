@@ -3,6 +3,7 @@ Ancestors loweringPosts[qualified,ignore_grammar] exprSimHypsDefs[qualified,igno
   bodyFullExtCallPackingReady bodyFullExtCallKeywordPackingRows
   abiEncodeArgsCase aggregateEvaluatedLayout typedCopyCompatibility
   assignPlaceOperandFacts exprSafeOperand exprLowering context compileEnv
+  immutableDeployPhysicalSource[qualified,ignore_grammar]
 Libs
   pairLib horizonTypeLib
 
@@ -14,7 +15,7 @@ Theorem post_gas_row_type_facts[local]:
   value_runtime_typed env (lowered_value_type cenv e) v /\
   arg_type_fits (expr_type e) formal /\ well_formed_type (get_tenv cx) formal /\
   compile_expr cenv (expr_type e) e si = (vv,sm) /\
-  compile_snapshot_vv cenv F (ext_call_arg_value (lowered_value_type cenv e) vv) sm = (sv,ss) ==>
+  compile_snapshot_vv cenv copy (ext_call_arg_value (lowered_value_type cenv e) vv) sm = (sv,ss) ==>
   ?tv param_tv.
     arg_type_fits (lowered_value_type cenv e) formal /\
     evaluate_type (get_tenv cx) formal = SOME param_tv /\
@@ -61,7 +62,14 @@ Proof
   simp[compile_snapshot_vv_def] >> IF_CASES_TAC
   >- (simp[comp_bind_def] >> pairarg_tac >> simp[comp_return_def] >>
       strip_tac >> gvs[vv_operand_def] >> drule unwrap_value_not_label >> simp[]) >>
-  simp[comp_return_def] >> strip_tac >> gvs[]
+  Cases_on `copy` >> simp[comp_bind_def, comp_return_def]
+  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[vv_operand_def, mk_ptr_def] >>
+      qpat_x_assum `compile_materialize_vv _ _ _ _ = _` mp_tac >>
+      simp[compile_materialize_vv_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> simp[]) >> rpt strip_tac >> gvs[] >>
+      drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >>
+      simp[loweringShapeRulesTheory.emit_op_eq]) >>
+  strip_tac >> gvs[]
 QED
 
 Theorem post_gas_indexed_rows[local]:
@@ -70,10 +78,10 @@ Theorem post_gas_indexed_rows[local]:
   LIST_REL (\e v. value_runtime_typed env (lowered_value_type cenv e) v) xs vs /\
   arg_types_fit (MAP expr_type xs) ats /\ EVERY (well_formed_type (get_tenv cx)) ats /\
   (!i. i < LENGTH xs ==>
-    ?e sv v raw si sm ss vv.
+    ?e sv v raw si sm ss vv copy.
       e = EL i xs /\ sv = EL i av /\ v = EL i vs /\
       compile_expr cenv (expr_type e) e si = (vv,sm) /\
-      compile_snapshot_vv cenv F
+      compile_snapshot_vv cenv copy
         (ext_call_arg_value (lowered_value_type cenv e) vv) sm = (sv,ss) /\
       ((?tag op0. sv = StackValue tag op0) \/
        (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
@@ -90,13 +98,13 @@ Theorem post_gas_indexed_rows[local]:
       vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
       vv_at cenv cx (lowered_value_type cenv e) si ss ee raw sv t /\
       ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G tn t /\
-      vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw sv t /\
+      vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t /\
       (!H. valid_horizon cx st0 H ee.storage_trace ==> vv_storage_live H cx sv ee t) /\
       ((case sv of StackValue tag op0 => ~is_word_type (lowered_value_type cenv e)
         | LocatedValue tag p => p.ptr_location = LocMemory) ==>
         ptr_buf_ok cenv e (vv_operand sv) G t)) ==>
   !i. i < LENGTH xs ==>
-    ?e sv v raw si sm ss vv tv param_tv.
+    ?e sv v raw si sm ss vv tv param_tv copy.
       e = EL i xs /\ sv = EL i av /\ v = EL i vs /\
       arg_type_fits (lowered_value_type cenv e) (EL i ats) /\
       evaluate_type (get_tenv cx) (EL i ats) = SOME param_tv /\
@@ -106,7 +114,7 @@ Theorem post_gas_indexed_rows[local]:
       type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size tv /\
       type_memory_size tv < 2**64 /\ value_has_type tv v /\
       compile_expr cenv (expr_type e) e si = (vv,sm) /\
-      compile_snapshot_vv cenv F
+      compile_snapshot_vv cenv copy
         (ext_call_arg_value (lowered_value_type cenv e) vv) sm = (sv,ss) /\
       ((?tag op0. sv = StackValue tag op0) \/
        (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
@@ -124,7 +132,7 @@ Theorem post_gas_indexed_rows[local]:
       vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
       vv_at cenv cx (lowered_value_type cenv e) si ss ee raw sv t /\
       ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G tn t /\
-      vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw sv t /\
+      vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t /\
       (!H. valid_horizon cx st0 H ee.storage_trace ==> vv_storage_live H cx sv ee t) /\
       ((case sv of StackValue tag op0 => ~is_word_type (lowered_value_type cenv e)
         | LocatedValue tag p => p.ptr_location = LocMemory) ==>
@@ -132,10 +140,10 @@ Theorem post_gas_indexed_rows[local]:
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   qx_gen_tac `i` >> disch_tac >>
-  qpat_assum `!i. i < LENGTH xs ==> ?e sv v raw si sm ss vv. _`
+  qpat_assum `!i. i < LENGTH xs ==> ?e sv v raw si sm ss vv copy. _`
     (qspec_then `i` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
-  disch_then (qx_choosel_then [`e`,`sv`,`v`,`raw`,`si`,`sm`,`ss`,`vv`]
+  disch_then (qx_choosel_then [`e`,`sv`,`v`,`raw`,`si`,`sm`,`ss`,`vv`,`copy`]
     (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
   `expr_body_pre cenv cx env e pos` by
     (qpat_assum `!e st. MEM e xs /\ _ ==> _` irule >>
@@ -153,7 +161,7 @@ Proof
     (qpat_assum `EVERY _ ats` (mp_tac o REWRITE_RULE [listTheory.EVERY_EL]) >> simp[]) >>
   drule_all post_gas_row_type_facts >>
   disch_then (qx_choosel_then [`tv`,`param_tv`] (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
-  qexistsl [`e`,`sv`,`v`,`raw`,`si`,`sm`,`ss`,`vv`,`tv`,`param_tv`] >>
+  qexistsl [`e`,`sv`,`v`,`raw`,`si`,`sm`,`ss`,`vv`,`tv`,`param_tv`,`copy`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -278,7 +286,7 @@ Proof
 QED
 
 Theorem post_gas_memory_default_ready[local]:
-  (dt = rt \/ is_bytestring_type dt /\ is_bytestring_type rt) /\
+  type_widens_to (get_tenv cx) dt rt /\
   rt <> NoneT /\ evaluate_type (get_tenv cx) dt = SOME tv /\
   evaluate_type (get_tenv cx) rt = SOME rtv /\
   value_has_type tv v /\ value_has_type rtv v /\ ~is_word_type dt /\
@@ -341,31 +349,11 @@ Proof
   Cases_on `k = EKDefault` >> gvs[vyperTypeSystemTheory.ext_call_kw_type_def] >> metis_tac[]
 QED
 
-Theorem post_gas_default_type_compat[local]:
-  expr_body_pre cenv cx env e es /\ ~expr_has_effect e ==>
-  lowered_value_type cenv e = expr_type e \/
-  is_bytestring_type (lowered_value_type cenv e) /\ is_bytestring_type (expr_type e)
-Proof
-  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  drule exprSimSourceTheory.expr_body_pre_var_types_well_formed >> strip_tac >>
-  `well_typed_expr env e /\ sfields_tenv_consistent cenv.ce_struct_fields env.type_defs /\
-   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
-      cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
-    gvs[exprSimHypsDefsTheory.expr_body_pre_def, exprSimHypsDefsTheory.expr_sim_inv_def,
-        vyperTypeInvariantsTheory.env_consistent_def,
-        vyperTypeInvariantsTheory.env_context_consistent_def] >>
-  drule_all exprSimIfExpCompatTheory.ifexp_lowered_type_classify >>
-  strip_tac >> gvs[supportedExprTraverseTheory.expr_has_effect_def,
-    cj 12 supportedExprTraverseTheory.supported_expr_exists_def,
-    cj 1 supportedExprTraverseTheory.expr_effect_root_def]
-QED
-
 Theorem post_gas_default_packet[local]:
   env.type_defs = get_tenv cx /\ expr_sim_inv cenv cx env kw_in /\
   (!e st. MEM e kw_es /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
   eval_exprs cx kw_es kw_in = (INL kws,ke) /\
   MAP expr_type kw_es = MAP (ext_call_kw_type rt) opts /\
-  EVERY (\e. ~expr_has_effect e) kw_es /\
   (rt = NoneT ==> ext_call_kwarg EKDefault opts kws = NONE) /\
   (has_def <=> IS_SOME dopt) /\
   (case dopt of NONE => def_op = Lit 0w /\ def_ty = rt
@@ -418,11 +406,13 @@ Proof
   >- (gvs[exprSimExtCallCaseTheory.extcall_default_ready_def,
           vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
       gvs[loweringPostsTheory.expr_val_rel_def] >>
-      metis_tac[cj 1 valueEncodingTypingTheory.value_has_type_val_wf]) >>
+      metis_tac[cj 1 valueEncodingTypingTheory.value_has_type_val_wf,
+                vyperTypeArgFitsTheory.type_widens_to_refl]) >>
   gvs[] >>
   `expr_body_pre cenv cx env e kw_in` by metis_tac[] >>
-  `~expr_has_effect e` by fs[listTheory.EVERY_MEM] >>
-  drule_all post_gas_default_type_compat >> disch_tac >>
+  `type_widens_to (get_tenv cx) (lowered_value_type cenv e) (expr_type e)` by
+    (irule immutableDeployPhysicalSourceTheory.immutable_rhs_physical_widens >>
+     goal_assum (drule_at Any) >> simp[]) >>
   qpat_assum `env.type_defs = get_tenv cx` (fn th =>
     rpt (qpat_x_assum `value_runtime_typed _ _ _`
       (strip_assume_tac o REWRITE_RULE [vyperTypeExprSoundnessTheory.value_runtime_typed_def, th]))) >>
@@ -505,55 +495,21 @@ Proof
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 
-(* At a pure cut an older registered allocation is disjoint from every
-   allocation whose instruction id belongs to the suffix. *)
-Theorem post_gas_pure_wb[local]:
-  pure_frame cenv func es sa s t /\ alloca_inv t /\
-  (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
-         lookup_var x t = SOME w) /\
-  (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
-             FLOOKUP t.vs_allocas aid = SOME row) /\
-  ee.scopes = es.scopes ==>
-  wb_frame cenv es ee sa s t
-Proof
-  rewrite_tac[loweringPostsTheory.pure_frame_def,loweringPostsTheory.wb_frame_def] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (rpt strip_tac >>
-      qpat_assum `!off len. _ ==> mem_bytes_at off len _ = _` irule >>
-      rpt strip_tac >>
-      `aid <> inst.inst_id` by decide_tac >>
-      fs[venomMemDefsTheory.alloca_inv_def,venomMemDefsTheory.allocas_non_overlapping_def,
-         loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
-  irule exprSimPropsTheory.locals_kept_regions_tail >>
-  qexists `s` >> simp[] >> first_assum ACCEPT_TAC
-QED
-
-(* Compose one target evaluation with a pure suffix, keeping the original
-   frame and the original ghost baseline. *)
 Theorem post_gas_extend_frame[local]:
   stmt_state_rel (H : (bool # bytes32 # type_value) list # num list) ctx func cenv cx es s0 /\
   wb_frame cenv es es1 sa s0 s /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  pure_frame cenv func es1 sm s t /\ alloca_inv t /\
-  (!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
-         lookup_var x t = SOME w) /\
-  (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
-             FLOOKUP t.vs_allocas aid = SOME row) /\
-  ee.scopes = es1.scopes /\
+  wb_frame cenv es1 ee sm s t /\
   ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
   ghost_kept_at lo cenv es1 sm G1 tn1 s G2 tn2 ==>
   wb_frame cenv es ee sa s0 t /\
   ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
-    gvs[loweringPostsTheory.wb_frame_def,loweringPostsTheory.locals_kept_def] >>
+    gvs[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def] >>
   conj_tac
-  >- (`wb_frame cenv es1 ee sm s t` by
-        (irule post_gas_pure_wb >> rpt conj_tac >>
-         TRY (first_assum ACCEPT_TAC) >> qexists `func` >> first_assum ACCEPT_TAC) >>
-      irule (horizonTypeLib.at_horizon_named "H" exprSimWordArgsTheory.wb_frame_trans) >>
+  >- (irule (horizonTypeLib.at_horizon_named "H" exprSimWordArgsTheory.wb_frame_trans) >>
       rpt (first_assum (irule_at Any)) >> simp[]) >>
   drule_all (horizonTypeLib.at_horizon_named "H" wordArgsPtrTheory.ghost_kept_at_wb_trans) >> simp[]
 QED
@@ -621,10 +577,10 @@ Theorem extcall_request_post_gas_packing:
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
   eval_exprs cx xs (mid with gas_obs := obs2) = (INL vs,ee) /\
   (!i. i < LENGTH xs ==>
-    ?e sv v raw si sm ss vv.
+    ?e sv v raw si sm ss vv copy.
       e = EL i xs /\ sv = EL i av /\ v = EL i vs /\
       compile_expr cenv (expr_type e) e si = (vv,sm) /\
-      compile_snapshot_vv cenv F
+      compile_snapshot_vv cenv copy
         (ext_call_arg_value (lowered_value_type cenv e) vv) sm = (sv,ss) /\
       ((?tag op0. sv = StackValue tag op0) \/
        (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
@@ -641,7 +597,7 @@ Theorem extcall_request_post_gas_packing:
       vv_holds cenv cx (lowered_value_type cenv e) raw sv ke zg /\
       vv_at cenv cx (lowered_value_type cenv e) si ss ke raw sv zg /\
       ptr_vv_ok cx (lowered_value_type cenv e) raw sv ke Gg tng zg /\
-      vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ke raw sv zg /\
+      vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ke raw sv zg /\
       (!H. valid_horizon cx st0 H ke.storage_trace ==> vv_storage_live H cx sv ke zg) /\
       ((case sv of StackValue tag op0 => ~is_word_type (lowered_value_type cenv e)
         | LocatedValue tag p => p.ptr_location = LocMemory) ==>
@@ -680,12 +636,11 @@ Theorem extcall_request_post_gas_packing:
   ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
   ghost_kept_at lo cenv mid s1 G1 tn1 t0 G2 tn2 /\
   ghost_kept_at lo cenv ee s2 G2 tn2 u Gg tng /\
-  pure_frame cenv func mid s1 t0 u /\ pure_frame cenv func ee s2 u zg /\
+  wb_frame cenv mid ee s1 t0 u /\ wb_frame cenv ee ke s2 u zg /\
   (!x w. not_fresh_at s1 x /\ lookup_var x t0 = SOME w ==> lookup_var x u = SOME w) /\
   (!aid row. FLOOKUP t0.vs_allocas aid = SOME row ==> FLOOKUP u.vs_allocas aid = SOME row) /\
   (!x w. not_fresh_at s2 x /\ lookup_var x u = SOME w ==> lookup_var x zg = SOME w) /\
   (!aid row. FLOOKUP u.vs_allocas aid = SOME row ==> FLOOKUP zg.vs_allocas aid = SOME row) /\
-  ee.scopes = mid.scopes /\ ke.scopes = ee.scopes /\
   local_ptrs_reserved cenv sa /\ ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\ ci_mono s3 s5 /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -702,7 +657,7 @@ Theorem extcall_request_post_gas_packing:
   (!e st. MEM e kw_es /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
   eval_exprs cx kw_es (ee with gas_obs := obs3) = (INL kws,ke) /\
   MAP expr_type kw_es = MAP (ext_call_kw_type rt) opts /\
-  EVERY (\e. ~expr_has_effect e) kw_es /\ ext_call_opts_ok stat opts /\
+  ext_call_opts_ok stat opts /\
   (rt = NoneT ==> ext_call_kwarg EKDefault opts kws = NONE) /\
   (case ext_call_kwarg EKGas opts kws of
      NONE => go = NONE
@@ -742,6 +697,13 @@ Theorem extcall_request_post_gas_packing:
         option_CASE (ext_call_kwarg EKValue opts kws) (SOME 0) dest_NumV) calldata
       (IS_SOME def) (case def of NONE => Lit 0w | SOME (op,dt) => op)
       (case def of NONE => rt | SOME (op,dt) => dt) (ext_call_kwarg EKDefault opts kws) ke t /\
+    (IS_SOME (ext_call_kwarg EKDefault opts kws) /\
+      ~is_word_type (case def of NONE => rt | SOME (op,dt) => dt) ==>
+      ?w aid tv.
+        eval_operand (case def of NONE => Lit 0w | SOME (op,dt) => op) t = SOME w /\
+        evaluate_type (get_tenv cx) (case def of NONE => rt | SOME (op,dt) => dt) = SOME tv /\
+        FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+        aid < sp.cs_next_id) /\
     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (zg,Gg,tng) [] (OK t,Gf,tf)) /\
     alloca_history func t /\ allocas_from lo t /\
@@ -836,14 +798,15 @@ Proof
    sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
     (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
   `wb_frame cenv es ee sa s0 u /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2` by
-    (irule post_gas_extend_frame >> rpt conj_tac >>
-     TRY (first_assum ACCEPT_TAC) >>
-     qexistsl [`G1`,`H0`,`ctx`,`cx`,`mid`,`func`,`t0`,`s1`,`tn1`] >>
+    (MATCH_MP_TAC (Q.INST [`H` |-> `H0`, `ctx` |-> `ctx`, `cx` |-> `cx`,
+       `func` |-> `func`, `es1` |-> `mid`, `sm` |-> `s1`, `s` |-> `t0`,
+       `G1` |-> `G1`, `tn1` |-> `tn1`] post_gas_extend_frame) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es ke sa s0 zg /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gg tng` by
-    (irule post_gas_extend_frame >> rpt conj_tac >>
-     TRY (first_assum ACCEPT_TAC) >>
-     qexistsl [`G2`,`H0`,`ctx`,`cx`,`ee`,`func`,`u`,`s2`,`tn2`] >>
+    (MATCH_MP_TAC (Q.INST [`H` |-> `H0`, `ctx` |-> `ctx`, `cx` |-> `cx`,
+       `func` |-> `func`, `es1` |-> `ee`, `ee` |-> `ke`, `sm` |-> `s2`, `s` |-> `u`,
+       `G1` |-> `G2`, `tn1` |-> `tn2`, `G2` |-> `Gg`, `tn2` |-> `tng`]
+       post_gas_extend_frame) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `MAP FDOM es.scopes = MAP FDOM ke.scopes` by
     ((qpat_assum `wb_frame cenv es ke sa s0 zg` mp_tac >>

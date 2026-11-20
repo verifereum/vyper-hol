@@ -110,7 +110,6 @@ End
 Definition body_stmt_safe_def:
   body_stmt_safe tops s <=>
     ~supported_stmt_expr_exists expr_evm_run_root s /\
-    ~supported_stmt_expr_exists call_operands_effect_root s /\
     EVERY (\c. FST c = NONE /\
                IS_SOME (supported_function_decl tops c Internal))
       (int_calls_stmt s)
@@ -123,7 +122,6 @@ End
 Theorem body_stmts_safe_iff:
   body_stmts_safe tops ss <=>
     ~supported_stmts_expr_exists expr_evm_run_root ss /\
-    ~supported_stmts_expr_exists call_operands_effect_root ss /\
     EVERY (\c. FST c = NONE /\
                IS_SOME (supported_function_decl tops c Internal))
       (int_calls_stmts ss)
@@ -148,8 +146,10 @@ Theorem body_stmt_safe_for_body:
   body_stmt_safe tops (For id typ it n stmts) ==>
   body_stmts_safe tops stmts
 Proof
-  rw[body_stmt_safe_def, body_stmts_safe_iff,
-     supported_stmt_expr_exists_def, int_calls_stmt_def]
+  Induct_on `stmts` >>
+  gvs[body_stmts_safe_def, body_stmt_safe_def,
+      supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+  metis_tac[]
 QED
 
 (* keep duplicates, all branches and nesting, and their declared types;

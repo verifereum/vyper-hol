@@ -67,6 +67,8 @@ Proof
         int_calls_stmt_def, EVERY_APPEND, DE_MORGAN_THM]) >>
     `~supported_target_exists (const_name_root cx) t` by
       metis_tac[body_inv_target_const_name_free, optionTheory.NOT_SOME_NONE] >>
+    `~supported_target_exists call_operands_effect_root t` by
+      metis_tac[supported_target_info_storage_syntax, optionTheory.IS_SOME_EXISTS] >>
     irule aug_place_target_indices_pre >>
     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         alloc_limits_stmt_def, int_calls_stmt_def] >>
