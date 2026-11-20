@@ -294,7 +294,7 @@ Theorem body_inv_nonreentrant_slot_mods:
   MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\ nr ==>
   cx.nonreentrant_slot = SOME global_nonreentrant_slot
 Proof
-  rw[contract_inv_def, module_body_inv_def] >> res_tac >> fs[]
+  metis_tac[module_body_inv_lookup, contract_inv_nonreentrant_slot]
 QED
 
 Theorem body_inv_nonreentrant_slot:
@@ -325,7 +325,9 @@ Theorem body_inv_copies_subscript_base_mods:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx ==>
   copies_subscript_base cenv obj idx = subscript_reads_base cx obj idx
 Proof
-  simp[contract_inv_def, cenv_module_pins_mods_def,
+  strip_tac >> drule contract_inv_source_modules >>
+  drule contract_inv_cenv_module_pins >>
+  simp[cenv_module_pins_mods_def,
        exprLoweringTheory.copies_subscript_base_def,
        vyperInterpreterTheory.subscript_reads_base_def] >>
   rw[]
@@ -437,8 +439,9 @@ QED
 Theorem body_inv_main_module[local]:
   body_inv tops ctx cenv cx ==> main_module [(NONE,tops)] = tops /\ cx_tops cx = tops
 Proof
-  simp[body_inv_split_def, main_module_def, gasContextTheory.cx_tops_module,
-       contract_inv_def, get_module_code_def]
+  `body_inv tops ctx cenv cx ==> get_module_code cx NONE = SOME tops` by
+    metis_tac[body_inv_contract, body_inv_module, contract_inv_module_code] >>
+  simp[main_module_def, gasContextTheory.cx_tops_module]
 QED
 
 Theorem body_inv_const_name_decl_mods:
@@ -450,7 +453,7 @@ Theorem body_inv_const_name_decl_mods:
 Proof
   rw[cx_const_name_mods_def, main_module_def] >>
   irule distinct_module_consts_env_names_constant >>
-  fs[contract_inv_def] >> res_tac
+  simp[] >> metis_tac[contract_inv_module_keys]
 QED
 
 Theorem body_inv_const_name_decl:
@@ -550,8 +553,7 @@ Theorem body_inv_modules_aligned_mods:
      ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
   ALL_DISTINCT (MAP FST cenv.ce_modules)
 Proof
-  rw[contract_inv_def, cenv_module_pins_mods_def, get_module_code_def] >>
-  res_tac
+  metis_tac[contract_inv_module_tables]
 QED
 
 Theorem body_inv_modules_aligned:

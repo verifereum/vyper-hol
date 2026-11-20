@@ -215,3 +215,62 @@ Theorem contract_inv_immutable_section_layout:
 Proof
   simp[contract_inv_def]
 QED
+
+Theorem module_body_inv_lookup:
+  module_body_inv mods src tops cenv cx ==> ALOOKUP mods src = SOME tops
+Proof
+  simp[module_body_inv_def]
+QED
+
+Theorem contract_inv_module_keys:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops ==>
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops))
+Proof
+  rw[contract_inv_def] >> res_tac
+QED
+
+Theorem contract_inv_nonreentrant_slot:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\ nr ==>
+  cx.nonreentrant_slot = SOME global_nonreentrant_slot
+Proof
+  rw[contract_inv_def] >> res_tac >> fs[]
+QED
+
+Theorem contract_inv_cenv_module_pins:
+  contract_inv mods exps ctx cenv cx ==> cenv_module_pins_mods mods cenv
+Proof
+  simp[contract_inv_def]
+QED
+
+Theorem contract_inv_source_modules:
+  contract_inv mods exps ctx cenv cx ==>
+  ALOOKUP cx.sources cx.txn.target = SOME mods
+Proof
+  simp[contract_inv_def]
+QED
+
+Theorem contract_inv_module_tables:
+  contract_inv mods exps ctx cenv cx ==>
+  (!src. ALOOKUP cenv.ce_modules src = get_module_code cx src) /\
+  (!src ts. get_module_code cx src = SOME ts ==>
+     ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
+  ALL_DISTINCT (MAP FST cenv.ce_modules)
+Proof
+  rw[contract_inv_def, cenv_module_pins_mods_def, get_module_code_def] >>
+  res_tac
+QED
+
+Theorem contract_inv_linked_unit:
+  contract_inv mods exps ctx cenv cx ==>
+  ?rp unit.
+    (if cx.in_deploy then
+       ?rbc. lower_vyper_deploy_unit_mods mods exps rp rbc = SOME unit
+     else lower_vyper_runtime_unit_mods mods exps rp = SOME unit) /\
+    ctx = unit.cu_context /\ cenv.ce_target = rp.rpol_target /\
+    (cx.in_deploy ==> IS_SOME (FST (SND (SND (SND (classify_functions_unit mods exps)))))) /\
+    IS_SOME (ALOOKUP mods NONE) /\
+    EVERY (supported_program o SND) mods
+Proof
+  rw[contract_inv_def] >> metis_tac[]
+QED
