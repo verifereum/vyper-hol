@@ -42,7 +42,10 @@ Resume abi_decode_joint_mutual_length_from_array[word]:
   asm_x "array" kall_tac >>
   CONV_TAC normalize >> rpt gen_tac >> disch_tac >>
   mp_tac (BETA_RULE abi_decode_word_case_observed_conditional) >>
-  (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_decode_clamp_joint_observed)) >>
+  (impl_tac >-
+    (rpt gen_tac >> strip_tac >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+     match_mp_tac abi_decode_clamp_joint_observed >> asm_rewrite_tac[])) >>
   disch_then (fn th => first_x_assum (unpack_observed o MATCH_MP (CONV_RULE normalize th))) >>
   qexistsl [`r`, `G'`, `tn'`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
