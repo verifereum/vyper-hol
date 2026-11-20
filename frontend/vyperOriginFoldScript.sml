@@ -4,14 +4,14 @@ Ancestors
 Libs
   cv_transLib
 
-(* Comparisons need the JSON source classes; bytes32 bitwise operations and
-   inversion are runtime-only in the pin. Keep their residuals opaque. *)
+(* Comparisons need the JSON source classes. The pin leaves bytes32
+   bitwise operations, shifts and inversion to runtime. *)
 Definition origin_fold_builtin_def:
   origin_fold_builtin ty b es =
     case b of
     | Bop bop =>
         if MEM bop [Eq; NotEq] then Builtin ty b es
-        else if MEM bop [And; Or; XOr] then
+        else if MEM bop [And; Or; XOr; ShL; ShR] then
           (case es of
            | [Literal _ (IntL _); Literal _ (IntL _)] => pin_fold_builtin ty b es
            | _ => Builtin ty b es)
