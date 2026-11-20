@@ -2,12 +2,12 @@
 Theory vyperLoweringHol
 Ancestors
   (* arbitrary-calldata entry and S1 suppliers *)
-  calldataArrayLiveMemory calldataArrayModularSetup calldataArrayRawCallsite
-  calldataBulkOperationalCertificate calldataBulkSourceOutcome calldataCoherentOwnedEndpoint
+  calldataArrayRawCallsite
+  calldataBulkOperationalCertificate calldataBulkSourceOutcome
   calldataExactBytesJoint calldataExactMemberValues calldataMembersRawCallsite
   calldataExactScalarAccepted calldataExactScalarRejected calldataNoneFallbackJoint
   calldataNoneMetadata calldataRegistrationRawAddress
-  calldataRegistrationTerminalBindings calldataValidHeaderLocalFrontier dispatchedArgsBind
+  calldataRegistrationTerminalBindings dispatchedArgsBind
   dispatchedSelectedFacts dispatchedSelectedPrefix
   dispatchedValueEntry dispatchedValueFallback dispatchedValuePrefix
   dispatchedValueSelection dispatchedValueSource fallbackEntryEndpoint
@@ -46,7 +46,6 @@ Ancestors
   stmtSimAssignAttrStorage stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
-  constructorGuardProps
   nonreentrantEntryEquiv
   transientLockFrameProps
   selectorCompilerProps checkedSelectorTableProps

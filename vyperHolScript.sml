@@ -28,8 +28,8 @@ Ancestors
   constSubstStmts constSubstStmtsPreserve
   (* Venom execution: alloca size caching, jump independence *)
   allocaCacheProps jumpIndep
-  staticShadowRun staticShadowEvent staticShadowReachable staticShadowMemory
-  dftStaticAbort dftStaticEventAbort dftStaticShadowObservation dftStaticMemoryObservation dftStaticMemoryInv dftStaticContextSim dftStaticRequestSim dftStaticGasContract
+  staticShadowRun staticShadowEvent staticShadowReachable
+  dftStaticAbort dftStaticEventAbort dftStaticShadowObservation dftStaticContextSim dftStaticRequestSim
   (* passes: FMP lowering composition, memory merging *)
   fmpLowerSequenceExec mmTransform memzeroFrame
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
@@ -42,13 +42,12 @@ Ancestors
   o1PipelineMemoryLoweredAbort
   (* codegen and compiler units: frame simulation, stack planning, unit checks,
      codegen request prefix *)
-  genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
+  genFrameSim o1SourceUnitCheck unitMemInv
   codegenRequestPrefix callTraceFrame guardPushProjections
   gasFocusParentProofs gasFocusStaticPrefixDriver
   gasFocusConcretizeGhostCutHistory gasFocusConcretizeCutFrameSupport
   fnStaticAbortSim
   contextStaticAbortRel
-  staticAbortMemDefs
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
      place typing *)
   abiEncoderObserverCode

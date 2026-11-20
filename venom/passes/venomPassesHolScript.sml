@@ -22,8 +22,6 @@ Ancestors
   (* lower dload/dloadbytes *)
   lowerDload
   lowerDloadCoverageOrdinary
-  lowerDloadOracleCallCoverage
-  lowerDloadRetpcProducer
   (* branch optimization *)
   branchOpt
   (* single use expansion *)
@@ -41,12 +39,10 @@ Ancestors
   simplifyCfg
   o1SimplifyCfgGasEvents
   cfgNorm
-  o1ContractCfgNormGas
   o1ContractCfgNormCursorBlocks
   o1ContractCfgNormCursorReturns
   o1ContractCfgNormCursorProjection
   o1ContractCfgNormJointCursors
-  o1ContractCfgNormJointTrace
   (* memory passes *)
   loadElim
   deadStoreElim
@@ -67,7 +63,6 @@ Ancestors
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
   (* SSA insertion for variables absent from liveness *)
-  o1LabelFlowPhiPruning
   o1LabelFlowOwnPreWalk
   o1LabelFlowOwnFirstSsa
   o1LabelFlowOwnLowerDload
