@@ -29,15 +29,10 @@ Proof
   gvs[expr_sim_inv_def] >> metis_tac[]
 QED
 
-Theorem custom_error_main_modules_struct_keys:
-  !mods k a. EVERY (\m. FST m = NONE) mods /\
-    FLOOKUP (type_env_all_modules mods) k = SOME (StructArgs a) ==>
-    FST k = NONE
+Theorem contract_inv_distinct_module_sources[local]:
+  contract_inv mods exps ctx ce cx ==> ALL_DISTINCT (MAP FST mods)
 Proof
-  Induct_on `mods` >- simp[type_env_all_modules_def] >>
-  Cases_on `h` >> simp[type_env_all_modules_def, FLOOKUP_FUNION] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  drule type_env_for_module_struct_mem >> strip_tac >> gvs[]
+  simp[bodyInvSplitTheory.contract_inv_def]
 QED
 
 Theorem custom_error_body_inv_struct_keys_mods:
@@ -47,8 +42,7 @@ Theorem custom_error_body_inv_struct_keys_mods:
 Proof
   PairCases_on `k` >> strip_tac >>
   drule_then SUBST_ALL_TAC contract_inv_type_env >>
-  `ALL_DISTINCT (MAP FST mods)` by
-    fs[bodyInvSplitTheory.contract_inv_def] >>
+  drule_then assume_tac contract_inv_distinct_module_sources >>
   qpat_x_assum `FLOOKUP _ _ = SOME _` mp_tac >>
   simp[FLOOKUP_type_env_all_modules, AllCaseEqs(), optionTheory.IS_SOME_EXISTS] >>
   metis_tac[]

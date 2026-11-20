@@ -411,6 +411,13 @@ Proof
   gvs[build_var_type_map_src_other] >> metis_tac[build_var_type_map_src_has_decl]
 QED
 
+Theorem contract_inv_module_var_types[local]:
+  contract_inv mods exps ctx cenv cx ==>
+  cenv.ce_module_var_type = build_var_type_map_mods mods
+Proof
+  simp[contract_inv_def, cenv_module_pins_mods_def]
+QED
+
 Theorem body_inv_bare_global_type_mods:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods active tops cenv cx /\
   env_consistent env cx es /\ FLOOKUP env.bare_globals (src,id) = SOME ty ==>
@@ -427,8 +434,7 @@ Proof
     fs[env_consistent_def, env_context_consistent_def] >>
   `dty = ty` by
     (fs[bare_globals_complete_def] >> metis_tac[SOME_11]) >>
-  `cenv.ce_module_var_type = build_var_type_map_mods mods` by
-    fs[contract_inv_def, cenv_module_pins_mods_def] >>
+  drule_then assume_tac contract_inv_module_var_types >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by metis_tac[] >>
   gvs[] >> irule build_var_type_map_mods_has_decl >> simp[] >> metis_tac[]
 QED
