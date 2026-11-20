@@ -783,7 +783,8 @@ QED
    (tuple_literal_types; a struct's field types, an array's element type),
    each of which its element fits (arg_type_fits).  A flat member is its
    element's own type, or a String or Bytes of another bound, which the
-   store copies as bytes (compile_store_memory_compatible_run); any other
+   store copies as bytes (valueCopyBytesTheory's
+   compile_store_memory_bytestring_src); any other
    member is stored by a typed or layout-equal copy
    (aggregate_store_nested_path), which needs acyclic struct metadata. *)
 Theorem aggregate_make_tuple_member_full_exit_sim[local]:

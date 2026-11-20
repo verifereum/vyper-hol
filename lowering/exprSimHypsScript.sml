@@ -28,8 +28,10 @@
  *                       program's
  *   byte_widths_expr  — every node's type has a width of whole bytes
  *   expr_body_pre     — expr_sim_pre less int_calls_expr e = []: the
- *                       body simulation's (bodySim); its calls are to
- *                       the main module of a supported program
+ *                       body simulation's (bodySim); each internal call
+ *                       in it (int_calls_expr) is to a supported internal
+ *                       function of the main module, which then is a
+ *                       supported program
  *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
  *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre holds
  *   expr_ok           — both: the induction predicate
@@ -49,8 +51,10 @@
  *   expr_sim_pre_res_ok, expr_sim_pre_word_result — the results of an
  *                       expression are those expr_sim speaks of; a
  *                       word_value_type one's values are word_values
- *   expr_sim_pre_builtin_arg — an argument of a builtin meets expr_sim_pre
- *                       wherever expr_sim_inv holds
+ *   expr_sim_pre_builtin_arg — an argument of a builtin that meets
+ *                       expr_sim_pre meets it wherever expr_sim_inv
+ *                       holds, unless it is a code operand
+ *                       (is_extcode) of a Slice
  *   byte_widths_expr_type — the expression's own type has whole bytes
  *   expr_sim_pre_var_types_well_formed — the local types are well formed
  *   well_typed_expr_type_evaluates — a well-typed expression's type
@@ -168,9 +172,10 @@
  *     evaluator only drops outcomes from the front
  *     (eval_outcome_suffix_mutual), so expr_sim_pre_eval carries it on.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
- *     INVOKE, whose simulation is #638's call step; until that is stated
- *     this theorem excludes them, and #638 replaces this conjunct with its
- *     hypothesis on the callees.
+ *     INVOKE, whose simulation is the body simulation's call step
+ *     (bodyFullIntCall's intcall_sim_full); this theorem excludes them,
+ *     and expr_body_pre replaces this conjunct with its hypothesis on the
+ *     callees.
  *   - The oracle clause: the outcomes are SOME (state_rel), so the
  *     source takes external calls from the outcome oracle.  Storage
  *     decoding is not a clause of expr_sim_inv: expr_sim and expr_vv_sim
@@ -219,13 +224,13 @@
  *
  * Not here yet:
  *   - The rest of the compile environment's metadata (dynamic array
- *     capacities, method ids) is not related to the source context.  The
- *     cases that read it (Attribute, ...) will need a clause each in
- *     expr_sim_inv, as pop has the local types clause, and
- *     TopLevelName needs every immutable to be in ce_module_vars (#563);
- *     storage and transient variables are there by storage_vars_rel and
- *     transient_vars_rel.  Each is to match what Vyper's compiler
- *     guarantees.
+ *     capacities) is not related to the source context by expr_sim_inv,
+ *     which relates the local types pop reads, the method ids (the
+ *     selector clause) and the immutables TopLevelName reads (the
+ *     bare-global clauses: an immutable is at an ImmutableLoc of
+ *     ce_module_vars); storage and transient variables are there by
+ *     storage_vars_rel and transient_vars_rel.  Each is to match what
+ *     Vyper's compiler guarantees.
  *   - Keeping an operand's value_vv through the code between compile_expr
  *     and unwrap_value (a later operand's fragment) needs the operand
  *     composition of #636's Infrastructure: vv_post's memory frame for a
@@ -293,9 +298,10 @@ Libs
 
 
 (* expr_sim_pre without int_calls_expr e = []: the body simulation's
-   (bodySim), where an operand may call an internal function.  Its calls
-   are to the main module of a supported program, as supported_expr's
-   are. *)
+   (bodySim), where an operand may call an internal function.  Each
+   internal call in it (int_calls_expr) is to a supported internal function
+   of the main module (supported_function_decl, which supported_expr checks
+   too), which then is a supported program. *)
 
 (* A call-free expression is described at its annotation. *)
 Theorem post_value_type_no_calls[simp]:
