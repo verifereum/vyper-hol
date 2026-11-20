@@ -140,19 +140,22 @@ The exact observation type/relation is a phase-2 deliverable. It should support 
 
 ### Revert data
 
-The current theorems observe that a frame failed, not the bytes it returned on
-failure. For a source `AssertException s`, `exception_outcome_rel`
+The current theorems relate frame failure to source exceptions. For a source
+`AssertException s`, `exception_outcome_rel`
 (`lowering/e2eDefsScript.sml`) requires a failed frame outcome that is `Reverted`
 and raised by the frame itself (`frame_raises es Reverted`), or any failure when
-`s = "UNREACHABLE"`; `deploy_result_rel` (`lowering/e2eDeployDefsScript.sml`)
-requires `Reverted` or, for `"UNREACHABLE"`, any failure. For a source `Error e`
-(for example the bubbled failure of an `extcall`) both relations
-accept any failed frame outcome; when `unspecified_behaviour_exempt tops e` holds
-(see the exemption under
-[Observations, resources and limits](#observations-resources-and-limits)) they
-constrain the frame not at all. Wherever a failure is required, the output
-bytes of `frame_outcome` are existentially quantified, so reason strings, custom
-error payloads and bubbled revert data are not compared. The one exception is
+`s = "UNREACHABLE"`. The deploy relation `deploy_result_rel`
+(`lowering/e2eDeployDefsScript.sml`) requires `Reverted` or, for
+`"UNREACHABLE"`, any failure. A source
+`Error (RevertData d)`, such as a bubbled `extcall` failure, requires a
+`Reverted` frame outcome in both the call and deploy theorems. The call
+relation also requires `frame_raises es Reverted`. For other source errors,
+both relations accept any failed frame outcome. When
+`unspecified_behaviour_exempt tops e` holds (see the exemption under
+[Observations, resources and limits](#observations-resources-and-limits)),
+any frame outcome is allowed. These relations quantify existentially over the
+output bytes of `frame_outcome`. This leaves reason strings, custom error
+payloads and bubbled revert data unspecified. The one exception is
 calldata for which `calldata_dispatch tops tx.calldata = NONE`
 (`semantics/vyperCalldataScript.sml`): a selector miss in a contract without
 `__default__`, fewer than 4 bytes without `__default__`, or a selector hit whose
@@ -164,7 +167,8 @@ failures carry these obligations only where its result relation applies:
 `e2e_deploy_correctness` concludes `creation_resource_starved es r es' \/
 deploy_call_result_rel ...`, and `deploy_call_result_rel` requires
 `deploy_result_rel` only for gas fillings that satisfy `deploy_storage_ok`.
-Whether the theorems should promise revert bytes is an open scope question.
+The guarantee that the output bytes equal `d` for `Error (RevertData d)` is
+deferred.
 
 ## Calls and nested contexts
 
@@ -342,12 +346,14 @@ The result relation ties source gas observations to the frame's EVM gas readings
   only on success or halt; `exception_outcome_rel` compares none of them on
   failure. Terminal leftover outcome lists are not related observations.
 - Assertion/raise requires Reverted, except `"UNREACHABLE"` permits any failure.
-  Non-exempt source Error requires a failed frame. Lowering requires a
+  A source `Error (RevertData d)` requires `Reverted` in both the call and deploy
+  theorems. Other non-exempt source errors require a failed frame of any kind.
+  The failure payload is unspecified in these cases (see
+  [Revert data](#revert-data)). Lowering requires a
   terminating Halt/Abort, never a stuck Error, OK, IntRet or fuel-zero escape;
   escaped Break/Continue/Return control has no corresponding result clause.
-  There is **no revert-data/reason/general abort-kind equality** (see
-  [Revert data](#revert-data)). The pipeline
-  is a forward simulation with deliberately weaker failure observations.
+  The pipeline is a forward simulation with deliberately weaker failure
+  observations.
 - The sole exemption is exact `RuntimeError "abi_decode invalid"` when a function
   body contains a dynamic ABI decode target. It is not arbitrary ReturnReject,
   every decoder error, static-only decoding or `"abi_decode conversion"`.
