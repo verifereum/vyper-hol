@@ -11,7 +11,7 @@ Ancestors
   calldataExactScalarJoint stmtReasonLitFragMemory abiDecoderClampOutcome
   abiDecoderAbortReentry abiDecoderReentry abiDecoderVarSequence
   stateRelProj emitHelperProps exprLoweringProps venomExecSemantics venomState
-  venomInst fragGasOriginPtr ptrDiscipline arithmetic words list
+  venomInst fragGasOriginPtr ptrDiscipline allocasBelowFmpFrame arithmetic words list
   bodyPtrBopScalarCompile bodyPtrBopScalarSeq abiDecoderRange emitHelper
   loweringStateRelDefs bodyFullBopWordSuccess bodyPtrBopScalarDynamic
   abiBoundedBytesExecution decoderGhostFramePtr fragGasCopyLoop fragGasSeqPtr memSafeRun
@@ -140,9 +140,8 @@ Proof
   `w2n (n2w (B+p):bytes32) + 32 <= mid.vs_alloca_next` by
     (simp[] >> decide_tac) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp mid` by
-    (simp[Abbr `mid`, Abbr `raw`, update_var_def, allocas_below_fmp_def] >>
-     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
-       (ACCEPT_TAC o SRULE[allocas_below_fmp_def])) >>
+    (simp[Abbr `mid`, Abbr `raw`, allocas_below_fmp_updates] >>
+     first_assum ACCEPT_TAC) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (mid,G1,tn1) [] (OK (rawload with vs_inst_idx := LENGTH sb.cs_current_insts),HG,th)` by
     (rpt gen_tac >>
@@ -150,9 +149,8 @@ Proof
        (qspecl_then [`D`, `lo`, `explicit`, `ctx`, `func`] mp_tac) >> simp[]) >>
   `ctx_has_dalloca ctx ==>
     allocas_below_fmp (rawload with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-    (simp[update_var_def, allocas_below_fmp_def] >>
-     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp mid`
-       (ACCEPT_TAC o SRULE[allocas_below_fmp_def])) >>
+    (qpat_assum `rawload = update_var _ _ mid` (fn th => rewrite_tac[th]) >>
+     rewrite_tac[allocas_below_fmp_updates] >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`rawload with vs_inst_idx := LENGTH sb.cs_current_insts`, `HG`, `th`] >>
   `mid.vs_memory = s.vs_memory` by simp[Abbr `mid`, Abbr `raw`, update_var_def] >>
   `allocas_from lo (rawload with vs_inst_idx := LENGTH sb.cs_current_insts)` by
@@ -807,15 +805,6 @@ Proof
   qpat_assum `s.vs_inst_idx = _` (once_rewrite_tac o single o SYM) >> simp[]
 QED
 
-Theorem malformed_bytes_guard_allocas_below_fmp[local]:
-  r = s with <|vs_vars := vars; vs_inst_idx := i|> ==>
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-  (ctx_has_dalloca ctx ==> allocas_below_fmp r)
-Proof
-  disch_then SUBST1_TAC >> rpt strip_tac >> fs[allocas_below_fmp_def] >>
-  asm_rewrite_tac[]
-QED
-
 (* The position and count are already loaded.  A failed count check takes
    precedence over a failed payload check. *)
 Theorem malformed_bytes_compare_abort[local]:
@@ -869,8 +858,8 @@ Proof
      qpat_assum `allocas_from lo s` (ACCEPT_TAC o PURE_REWRITE_RULE[allocas_from_def])) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
     (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>`
-       (fn frame => qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
-         (ACCEPT_TAC o MATCH_MP (MATCH_MP malformed_bytes_guard_allocas_below_fmp frame)))) >>
+       (fn th => once_rewrite_tac[th]) >>
+     rewrite_tac[allocas_below_fmp_updates] >> first_assum ACCEPT_TAC) >>
   drule_all malformed_bytes_payload_abort >>
   disch_then (qspec_then `PG` (qx_choose_then `u` (qx_choose_then `H` (qx_choose_then `th` strip_assume_tac)))) >>
   qexistsl_tac [`u`,`H`,`th`] >> simp[] >>
@@ -1011,8 +1000,8 @@ Proof
   `eval_operand pos r = SOME (n2w p) /\ op_prov G' pos = NONE /\ op_taint tn' pos = {}` by metis_tac[] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
     (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>`
-       (fn frame => qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
-         (ACCEPT_TAC o MATCH_MP (MATCH_MP malformed_bytes_guard_allocas_below_fmp frame)))) >>
+       (fn th => once_rewrite_tac[th]) >>
+     rewrite_tac[allocas_below_fmp_updates] >> first_assum ACCEPT_TAC) >>
   drule_all malformed_scalar_load_prefix >> disch_then (qspec_then `PG` strip_assume_tac) >>
   `abi_decoder_operand_live sh.cs_next_var hi` by metis_tac[abi_decoder_operand_live_mono] >>
   `eval_operand hi r = SOME (n2w L) /\ op_prov G' hi = NONE /\ op_taint tn' hi = {}` by metis_tac[] >>

@@ -3,7 +3,7 @@ Theory abiDecodeValidMemberTraversal
 Ancestors
   abiDecoderComplexGuard abiDecoderComplexHead abiEncoder
   bodyPtrBopScalarSeq bodyPtrBopScalarOutcome entryDecoderHistoryFrame
-  fragGasCopyLoop fragGasSeqPtr fragExecMem instMemFrontier memSafeRun ptrDiscipline
+  fragGasCopyLoop fragGasSeqPtr fragExecMem instMemFrontier memSafeRun ptrDiscipline allocasBelowFmpFrame
   emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   abiDecodePtrMemberFrame abiValidAllocatedMembers abiValidAllocatedContract abiValidMembers
   abiDecoderMemberInfos abiDecoderContract abiMalformedRecursiveInterface
@@ -24,12 +24,6 @@ Ancestors
   abiDecoderDynamicLoopSetup freshWrites abiValidAllocatedComplex
   abiDecoderMembers contractABI abiDecoderStruct abiDecoderFixedMemory
   abiValidAggregateHeads vyperABIValid exprSimAggregateEncoding vyperValue
-
-Triviality member_allocas_below_fmp_vars:
-  allocas_below_fmp (s with vs_vars := vars) <=> allocas_below_fmp s
-Proof
-  simp[allocas_below_fmp_def]
-QED
 
 Theorem member_guard_scalar_code[local]:
   abi_decode_complex_head_guard pos hi n sa = ((),sb) ==>
@@ -447,7 +441,7 @@ Proof
      simp[not_fresh_at_def] >> metis_tac[DECIDE ``a+1 <= n ==> a <= n``]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r2` by
     (qpat_assum `r2 = r1 with vs_vars := r2.vs_vars` (fn th => once_rewrite_tac [th]) >>
-     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
+     rewrite_tac[allocas_below_fmp_updates] >> first_assum ACCEPT_TAC) >>
   gvs[] >>
   qpat_assum `ptr_covers G2 tn2 q r2 32`
     (mp_then Any mp_tac allocated_member_read_origin) >>
@@ -584,7 +578,7 @@ Proof
      qpat_assum `!i. B <= i /\ i < B + L ==> _` irule >> decide_tac) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r1` by
     (qpat_assum `r1 = s with vs_vars := r1.vs_vars` (fn th => once_rewrite_tac [th]) >>
-     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
+     rewrite_tac[allocas_below_fmp_updates] >> first_assum ACCEPT_TAC) >>
   drule_all allocated_member_address_read_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `G3` (qx_choose_then `tn3` strip_assume_tac))) >>
   `~r3.vs_halted /\ r3.vs_current_bb = c3.cs_current_bb` by
@@ -594,7 +588,7 @@ Proof
     (Cases_on `pos` >> gvs[op_taint_def,op_prov_def] >> metis_tac[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r3` by
     (qpat_assum `r3 = r1 with vs_vars := r3.vs_vars` (fn th => once_rewrite_tac [th]) >>
-     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
+     rewrite_tac[allocas_below_fmp_updates] >> first_assum ACCEPT_TAC) >>
   drule_all allocated_dynamic_suffix_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac))) >>
   `sa.cs_next_var <= sb.cs_next_var /\ c4.cs_next_var <= sb.cs_next_var` by
@@ -699,7 +693,7 @@ Proof
     (`d < dimword (:256)` by decide_tac >> simp[w2n_n2w, LESS_MOD]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
     (qpat_assum `r = s with vs_vars := r.vs_vars` (fn th => once_rewrite_tac [th]) >>
-     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
+     rewrite_tac[allocas_below_fmp_updates] >> first_assum ACCEPT_TAC) >>
   drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `x`
     (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac)))) >>

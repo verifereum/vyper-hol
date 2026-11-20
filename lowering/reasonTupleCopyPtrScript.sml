@@ -2,7 +2,7 @@
 Theory reasonTupleCopyPtr
 Ancestors
   wordLoadStorePtr reasonPrefixPtr reasonResourcesPtr robustCopyTransportPtr typedCopyPtr
-  valueEncodingProps valueEncodingProofs venomMemProofs ptrDiscipline
+  valueEncodingProps valueEncodingProofs venomMemProofs ptrDiscipline allocasBelowFmpFrame
   venomExecSemantics venomState words list pred_set arithmetic fragExecPtr
   emitHelper bodyPtrDefs venomInst compileEnv fragExec finite_map fragGasPathPtr
   exprSimBufferStore vfmConstants ghostPcTransportPtr exprSimProps
@@ -25,7 +25,7 @@ Theorem reason_scratch_frame_below_fmp:
   (allocas_below_fmp t <=> allocas_below_fmp s)
 Proof
   disch_then (mp_tac o Q.AP_TERM `allocas_below_fmp`) >>
-  simp[allocas_below_fmp_def]
+  simp[allocas_below_fmp_updates]
 QED
 
 val scratch_frame_below_fmp_rule =
