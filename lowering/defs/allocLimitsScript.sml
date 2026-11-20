@@ -368,17 +368,19 @@ Definition alloc_limits_raise_def:
   alloc_limits_raise cenv RaiseUnreachable = T
 End
 
-(* Log may materialize individual arguments. Its data buffer is sized
-   for the saved non-indexed layouts. An unknown event allocates neither. *)
+(* Log allocates at the saved argument layouts. The declared non-indexed
+   bound ensures the source event field types can be evaluated. *)
 Definition log_alloc_ok_def:
   log_alloc_ok cenv id es ⇔
     case cenv.ce_event_info (nsid_to_string id) of
       NONE => T
-    | SOME (_, _, flags) =>
-        let arg_tys = MAP (lowered_value_type cenv) es in
-        let data_tys = log_non_indexed_types flags arg_tys in
-          EVERY (type_alloc_ok cenv) arg_tys ∧
-          abi_size_bound cenv.ce_struct_fields (TupleT data_tys) < 2 ** 64
+    | SOME (_, arg_types, flags) =>
+        let dtys = log_non_indexed_types flags arg_types in
+        let ptys = MAP (lowered_value_type cenv) es in
+        let pdata_tys = log_non_indexed_types flags ptys in
+          SUM (MAP (type_memory_bytes cenv) dtys) < 2 ** 64 ∧
+          EVERY (type_alloc_ok cenv) ptys ∧
+          abi_size_bound cenv.ce_struct_fields (TupleT pdata_tys) < 2 ** 64
 End
 
 (* A custom error reserves its ABI payload and the selector word at the

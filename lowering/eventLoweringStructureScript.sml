@@ -3,7 +3,7 @@
    These certificates do not assume expression execution or payload framing. *)
 Theory eventLoweringStructure
 Ancestors
-  stmtLowering exprLowering exprLoweringProps compileEnv context list rich_list
+  stmtLowering exprLowering exprLoweringProps compileEnv context fragExec list rich_list
 Libs pairLib
 
 Theorem compile_log_save_arg_identity:
@@ -124,6 +124,26 @@ Proof
     compile_encode_log_topic_ci_mono :: log_structure_rules)
 QED
 
+Theorem compile_log_saved_topics_cons:
+  compile_log_saved_topics cenv (row::rows) sa = (ops,sb) <=>
+  ?op sm rest.
+    compile_log_saved_topics cenv [row] sa = ([op],sm) /\
+    compile_log_saved_topics cenv rows sm = (rest,sb) /\ ops = op::rest
+Proof
+  PairCases_on `row` >>
+  simp[compile_log_saved_topics_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
+Theorem compile_log_saved_topic_cut:
+  compile_log_saved_topics cenv [(saved,flag)] sa = ([op],sb) <=>
+  ?src su. unwrap_value cenv saved sa = (src,su) /\
+    compile_encode_log_topic src flag su = (op,sb)
+Proof
+  simp[compile_log_saved_topics_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
 Theorem compile_log_store_data_ci_mono:
   !cenv ops types buf offset cs.
     ci_mono cs (SND (compile_log_store_data cenv ops types buf offset cs))
@@ -168,20 +188,10 @@ Proof
   rename1 `cenv.ce_event_info (nsid_to_string event_id) = SOME info` >>
   PairCases_on `info` >>
   asm_simp_tac (srw_ss()) [Once compile_stmt_def, LET_THM] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- (irule ci_mono_compile_ext_call_args >> simp[cj 1 compile_expr_ci_mono]) >>
-  gen_tac >> BETA_TAC >>
-  `!x f. comp_bind (comp_return x) f = f x` by
-    simp[FUN_EQ_THM, comp_bind_def, comp_return_def] >>
-  asm_simp_tac std_ss [] >> ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- simp[compile_log_saved_topics_ci_mono] >>
-  gen_tac >> asm_simp_tac std_ss [] >> IF_CASES_TAC
-  >- simp[ci_mono_emit_inst] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- simp[ci_mono_compile_alloc_buffer] >>
-  gen_tac >> asm_simp_tac std_ss [] >>
-  ho_match_mp_tac ci_mono_bind >>
-  simp[ci_mono_compile_abi_encode_values_to_buf, ci_mono_emit_inst]
+  log_structure_tac
+    (compile_log_saved_topics_ci_mono ::
+     ci_mono_compile_abi_encode_values_to_buf :: log_structure_rules) >>
+  irule ci_mono_compile_ext_call_args >> simp[cj 1 compile_expr_ci_mono]
 QED
 
 Theorem compile_log_stmt_extends_insts:
@@ -228,6 +238,32 @@ Proof
   rename1 `_ = (topic_rows,data_rows)` >> simp[] >>
   Cases_on `compile_log_saved_topics cenv topic_rows sm` >>
   rename1 `_ = (topics,st)` >> simp[] >>
-  Cases_on `data_rows` >> simp[] >>
-  rpt (pairarg_tac >> simp[])
+  Cases_on `data_rows` >> simp[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[comp_bind_def, comp_return_def]) >> strip_tac >>
+  qexistsl_tac [`saved`,`sm`,`topics`,`st`] >> simp[] >> metis_tac[]
+QED
+
+Theorem compile_log_stmt_snapshot_code:
+  cenv.ce_event_info (nsid_to_string id) = SOME (hash,declared,flags) /\
+  compile_ext_call_args compile_expr cenv [] (MAP (lowered_value_type cenv) args)
+    args sa = (saved,sm) /\
+  compile_stmt cenv lctx ty (Log id args) sa = ((),sf) /\ fn_has_code sa sf fn ==>
+  cs_extends sa sm /\ cs_extends sm sf /\ fn_has_code sa sm fn /\ fn_has_code sm sf fn
+Proof
+  strip_tac >>
+  `ci_mono sa sm` by
+    (qpat_assum `compile_ext_call_args _ _ _ _ _ sa = _`
+       (fn eq => SUBST1_TAC (SYM (SIMP_RULE (srw_ss()) [] (Q.AP_TERM `SND` eq)))) >>
+     irule ci_mono_compile_ext_call_args >> simp[cj 1 compile_expr_ci_mono]) >>
+  `ci_mono sm sf` by
+    (qpat_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+     simp_tac bool_ss [Once compile_stmt_def, LET_THM] >>
+     asm_simp_tac (srw_ss()) [LET_THM] >> rewrite_tac[Once comp_bind_def] >>
+     asm_simp_tac (srw_ss()) [LET_THM, pairTheory.UNCURRY] >>
+     disch_then (fn th => SUBST1_TAC
+       (SYM (SIMP_RULE (srw_ss()) [] (Q.AP_TERM `SND` th)))) >>
+     log_structure_tac
+       (compile_log_saved_topics_ci_mono ::
+        ci_mono_compile_abi_encode_values_to_buf :: log_structure_rules)) >>
+  fs[ci_mono_def] >> metis_tac[fn_has_code_split]
 QED

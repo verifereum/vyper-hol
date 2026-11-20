@@ -9787,13 +9787,16 @@ Proof
   `shape_stable tail` by
     simp[Abbr `tail`, shape_stable_conj, cenv_shape_ok_stable, stmt_stable_saved_values] >>
   stmt_bind `\op st. plain_operand st op /\ tail st` `op`
-    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `tail` >>
-     simp[unwrap_value_shape, Abbr `tail`]) >>
+    (irule shape_step_frame_from >> irule_at Any unwrap_value_shape >>
+     qexists_tac `tail` >> asm_rewrite_tac [] >> simp[Abbr `tail`, CONJ_ASSOC] >>
+     metis_tac[]) >>
   stmt_bind `\topic st. plain_operand st topic /\ tail st` `topic`
-    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `tail` >>
-     simp[compile_encode_log_topic_shape]) >>
+    (irule shape_step_frame_from >> irule_at Any compile_encode_log_topic_shape >>
+     qexists_tac `tail` >> simp[]) >>
   stmt_bind `\xs st. EVERY (plain_operand st) xs /\ plain_operand st topic` `topics`
-    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. plain_operand st topic` >>
+    (irule shape_step_frame_from >>
+     qpat_assum `!internal cenv. shape_step _ _ _ _ _` (irule_at Any) >>
+     qexists_tac `\st. plain_operand st topic` >>
      simp[stmt_shape_stable_plain, Abbr `tail`]) >>
   irule shape_step_return >> simp[]
 QED
@@ -10181,8 +10184,8 @@ Proof
   `shape_stable data_frame` by
     simp[Abbr `data_frame`, shape_stable_conj, cenv_shape_ok_stable, stmt_stable_saved_values] >>
   stmt_bind `\xs st. EVERY (plain_operand st) xs /\ data_frame st` `topic_ops`
-    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `data_frame` >>
-     simp[compile_log_saved_topics_shape, Abbr `data_frame`] >>
+    (irule shape_step_frame_from >> irule_at Any compile_log_saved_topics_shape >>
+     qexists_tac `data_frame` >> simp[Abbr `data_frame`] >>
      simp[Abbr `topics`, Abbr `data_rows`] >> metis_tac[every_split_log_ops]) >>
   IF_CASES_TAC
   >- (irule shape_step_conseq >>

@@ -18,10 +18,10 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   bodySimLogArgs stmtSimLogTrace exprSimHyps whitelistLogWiden
   supportedExprs supportedExprTraverse
   vyperTypeCallStackSoundness vyperTypeExprSoundness vyperTypeInvariants
-  stmtLowering context compileEnv gasShadowState gasShadowCompileStmtHelpers
+  stmtLowering context compileEnv gasShadowState gasShadowCompileStmtHelpers gasShadowCompileStmtCases
   gasOutcomeFullCompose gasStorage vyperStorageTrace vyperStorageFootprint
   logComposeFacts gasExemptCert exprSimDefs stmtSimDefs bodyPtrDefs
-  eventLogSplitProps vyperEventArgCompat vyperTypeArgFits
+  eventLogSplitProps eventEncodingProps vyperEventArgCompat vyperTypeArgFits
   abiLogSourceEncoding typedLogSplitComplete stmtSimLogSource vyperTypeABI vyperEventSoundness
   vyperEventCompatibility vyperEvent vyperABI supportedTypes e2eDefs vyperTypeContract
   stmtSimLogSuffix stmtSimLogSuffixActual eventLoweringStructure
@@ -191,6 +191,93 @@ Proof
   `LENGTH flags = LENGTH vals` by metis_tac[listTheory.LIST_REL_LENGTH] >>
   drule_all non_indexed_event_args_exists >> strip_tac >>
   simp[encode_source_event_def, encode_vyper_event_metadata_def] >> metis_tac[]
+QED
+
+Theorem log_full_snapshot_cuts[local]:
+  cenv.ce_event_info (nsid_to_string id) = SOME (hash,declared,flags) /\
+  compile_stmt cenv lctx ret (Log id args) sa = ((),sb) /\
+  compile_stmt cenv lctx ret (Log id (MAP gas_shadow_expr args)) shadow_sa = ((),shadow_sb) /\
+  gas_shadow_state sa shadow_sa /\ fn_has_code sa sb func /\
+  fn_has_code shadow_sa shadow_sb shadow_func ==>
+  ?saved sm shadow_sm.
+    compile_ext_call_args compile_expr cenv [] (MAP (lowered_value_type cenv) args)
+      args sa = (saved,sm) /\
+    compile_ext_call_args compile_expr cenv []
+      (MAP (lowered_value_type cenv) (MAP gas_shadow_expr args))
+      (MAP gas_shadow_expr args) shadow_sa = (saved,shadow_sm) /\
+    gas_shadow_state sm shadow_sm /\
+    fn_has_code sa sm func /\ fn_has_code sm sb func /\
+    fn_has_code shadow_sa shadow_sm shadow_func
+Proof
+  strip_tac >>
+  Cases_on `compile_ext_call_args compile_expr cenv []
+    (MAP (lowered_value_type cenv) args) args sa` >> rename1 `_ = (saved,sm)` >>
+  Cases_on `compile_ext_call_args compile_expr cenv []
+    (MAP (lowered_value_type cenv) (MAP gas_shadow_expr args))
+    (MAP gas_shadow_expr args) shadow_sa` >> rename1 `_ = (shadow_saved,shadow_sm)` >>
+  qspecl_then [`sa`,`shadow_sa`] mp_tac
+    (REWRITE_RULE [gas_shadow_compiles_def] gas_shadow_log_snapshots) >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule_all_then strip_assume_tac compile_log_stmt_snapshot_code >>
+  mp_tac (Q.INST [`args` |-> `MAP gas_shadow_expr args`, `sa` |-> `shadow_sa`,
+      `sm` |-> `shadow_sm`, `sf` |-> `shadow_sb`, `fn` |-> `shadow_func`]
+    (SPEC_ALL compile_log_stmt_snapshot_code)) >> simp[]
+QED
+
+Theorem log_full_physical_source_encoding[local]:
+  lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id = SOME (h,dtys,flags) /\
+  LENGTH flags = LENGTH dtys /\ LIST_REL event_arg_compatible dtys atys /\
+  EVERY (\(ty,indexed). indexed ==> supported_event_leaf_type ty) (ZIP (dtys,flags)) /\
+  LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v)
+    atys vals /\
+  expr_sim_inv cenv cx env es /\
+  SUM (MAP (type_memory_bytes cenv) (log_non_indexed_types flags dtys)) < 2 ** 64 ==>
+  ?topics avs.
+    encode_indexed_event_topics flags atys vals = SOME topics /\
+    vyper_to_abi_list (get_tenv cx) (log_non_indexed_types flags atys)
+      (log_non_indexed_values flags vals) = SOME avs /\
+    encode_source_event (get_tenv cx) cx.sources cx.txn.target id vals =
+      SOME <|logger := cx.txn.target; topics := n2w h::topics;
+        data := enc (Tuple (vyper_to_abi_types (get_tenv cx) (log_non_indexed_types flags atys)))
+          (ListV avs)|>
+Proof
+  strip_tac >>
+  qabbrev_tac `src = log_non_indexed_types flags atys` >>
+  qabbrev_tac `decl = log_non_indexed_types flags dtys` >>
+  qabbrev_tac `vs = log_non_indexed_values flags vals` >>
+  `LENGTH flags = LENGTH atys` by metis_tac[LIST_REL_LENGTH] >>
+  `LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v)
+    src vs` by
+    (simp_tac bool_ss [Abbr `src`, Abbr `vs`, log_non_indexed_types_select,
+       log_non_indexed_values_select] >> irule select_log_args_rel >> simp[] >>
+     fs[LIST_REL_EL_EQN, EL_ZIP] >> metis_tac[]) >>
+  `LIST_REL event_arg_compatible decl src` by
+    (simp_tac bool_ss [Abbr `decl`, Abbr `src`] >>
+     metis_tac[log_non_indexed_types_preserve, EVERY_TRIVIAL]) >>
+  `arg_types_fit src decl` by
+    fs[event_arg_compatible_list_alias_def, GSYM event_compatible_list_rel] >>
+  `?tvs. OPT_MMAP (evaluate_type (get_tenv cx)) src = SOME tvs` by
+    (qexists_tac `MAP (THE o evaluate_type (get_tenv cx)) src` >>
+     simp[vyperMiscTheory.OPT_MMAP_SOME_IFF, EVERY_EL, EL_MAP] >>
+     fs[LIST_REL_EL_EQN] >> metis_tac[optionTheory.THE_DEF]) >>
+  `?dtvs. OPT_MMAP (evaluate_type (get_tenv cx)) decl = SOME dtvs` by
+    metis_tac[cj 2 log_compatible_bounded_evaluation, optionTheory.IS_SOME_EXISTS] >>
+  `LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v)
+     decl vs` by
+    (imp_res_tac vyperTypeABITheory.OPT_MMAP_LIST_REL >>
+     fs[LIST_REL_EL_EQN] >> metis_tac[log_compatible_declared_value]) >>
+  `EVERY (well_formed_type (get_tenv cx)) src /\
+   EVERY (well_formed_type (get_tenv cx)) decl` by
+    (imp_res_tac vyperTypeABITheory.OPT_MMAP_LIST_REL >>
+     fs[LIST_REL_EL_EQN, EVERY_EL, well_formed_type_def] >>
+     metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+  `event_arg_compatible_list decl src` by simp[event_compatible_list_rel] >>
+  `vyper_to_abi_types (get_tenv cx) decl = vyper_to_abi_types (get_tenv cx) src /\
+   vyper_to_abi_list (get_tenv cx) decl vs = vyper_to_abi_list (get_tenv cx) src vs` by
+    metis_tac[cj 2 event_arg_compatible_abi_type, cj 2 event_arg_compatible_abi_value] >>
+  mp_tac (Q.INST [`tenv` |-> `get_tenv cx`, `sources` |-> `cx.sources`,
+      `target` |-> `cx.txn.target`, `ltys` |-> `atys`] (SPEC_ALL log_full_compatible_source_event_encoded)) >>
+  simp[]
 QED
 
 (* A static LOG still checks the pointer discipline before aborting. *)

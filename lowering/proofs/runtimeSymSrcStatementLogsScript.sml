@@ -15,7 +15,7 @@ Theorem runtime_sym_log_saved_topics[local]:
     EVERY (\op. ~is_label_operand op) topics
 Proof
   Induct >- simp[compile_log_saved_topics_def, comp_return_def] >>
-  gen_tac >> PairCases_on `h` >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
   simp[compile_log_saved_topics_def, comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
   drule_all runtime_sym_unwrap_value >> strip_tac >>

@@ -14,11 +14,12 @@
 Theory bodyFullLogSuffix
 Ancestors
   logTopicsRunPtr rawLogPtrInst stmtSimLogEmit stmtSimLogSuffixCode
-  stmtSimLogTopics stmtLogEmitMemory
+  stmtSimLogTopics stmtLogEmitMemory stmtLogTopicsMemory
   fragGasOriginPtrLoop fragGasOriginPtr instSeqPtrLo fragGasSeqPtr
   bodyFullGhostFrame bodyPtrDefs logInstSeqPtr ptrDiscipline ptrSafeRun
   stmtLowering compileEnv emitHelper emitHelperProps exprLoweringProps
-  loweringStateRelDefs exprSimHashBoundary venomInst venomState list
+  loweringStateRelDefs exprSimHashBoundary valueCopyBytes exprSimMemDefs exprSimProps
+  vyperEvent vyperTyping vfmConstants venomInst venomState list
 
 Theorem ghost_inv_at_logs_idx:
   ghost_inv_at D lo d cenv cx es G tn
@@ -106,6 +107,48 @@ Proof
     `t with vs_inst_idx := LENGTH sb.cs_current_insts`, `sm`]
     ghost_inv_at_exterior_frame) >>
   (impl_tac >- fs[lookup_var_def]) >> disch_then ACCEPT_TAC
+QED
+
+Theorem compile_log_hash_origin_ptr_path:
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  log_arg_rel cenv cx sa sm es s (src,ty) v /\ supported_event_leaf_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
+  encode_event_topic ty v = SOME topic /\
+  (!z. src = Var z ==> not_fresh_at sm z) /\ (!l. src <> Label l) /\
+  compile_encode_log_topic src (is_bytestring_type ty) sm = (op,sb) /\
+  ptr_val_ok cx ty v src G tn s /\ expr_store_bound cx ty v src s /\
+  fn_has_code sm sb func /\ ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\ allocas_from lo s /\
+  lo <= s.vs_alloca_next ==>
+  ?t Gf tnf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
+    (t with <| vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx |>) = s /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted /\
+    eval_operand op t = SOME topic /\ op_taint tnf op = {} /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sm p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    ((!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) ==>
+     !D d. ghost_inv_at D lo d cenv cx es G tn s ==>
+           ghost_inv_at D lo d cenv cx es Gf tnf t)
+Proof
+  strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts sm sb) s` by
+    (drule_all compile_encode_log_topic_event_mem_ok >> disch_then irule >>
+     rpt strip_tac >>
+     `is_bytestring_type ty` by metis_tac[log_event_topic_shape] >>
+     drule_all bytestring_type_value >> strip_tac >>
+     gvs[value_has_type_def, expr_store_bound_def, val_store_size_def, word_size_def] >>
+     decide_tac) >>
+  `compile_log_topic_ops [(src,is_bytestring_type ty)] sm = ([op],sb)` by
+    simp[compile_log_topic_ops_def, comp_bind_def, comp_return_def] >>
+  mp_tac (Q.INST [`xs` |-> `[(src,ty)]`, `ops` |-> `[op]`, `vs` |-> `[v]`,
+                   `topics` |-> `[topic]`] (SPEC_ALL compile_log_topic_ops_origin_ptr_path)) >>
+  simp[encode_indexed_event_topics_def] >> metis_tac[]
 QED
 
 (* ===== LOG ===== *)

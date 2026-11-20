@@ -2,7 +2,7 @@ Theory symbolicSourceCompilerStmtFrame
 Ancestors
   moduleLowering
   symbolicSourceCompilerFrame symbolicSourceCompilerExprFrame
-  symbolicSourceCompilerCallFrame stmtLowering compileEnv
+  symbolicSourceCompilerCallFrame stmtLowering compileEnv context
 Libs symbolicSourceCompilerFrameLib
 
 open symbolicSourceCompilerFrameLib
@@ -15,10 +15,12 @@ Proof
   strip_tac >>
   `!op bs. symbolic_frame R (compile_encode_log_topic op bs)` by
     (rpt gen_tac >> Cases_on `bs` >> simp[compile_encode_log_topic_def] >>
-     rpt (irule symbolic_frame_bind >> simp[])) >>
+     rpt (ho_match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >> gen_tac) >>
+     simp[]) >>
   Induct >> rpt gen_tac >> TRY (PairCases_on `h`) >>
   simp[compile_log_saved_topics_def] >>
-  rpt (irule symbolic_frame_bind >> simp[])
+  rpt (ho_match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >> gen_tac) >>
+  simp[]
 QED
 
 Theorem symbolic_frame_tuple_load_all:
