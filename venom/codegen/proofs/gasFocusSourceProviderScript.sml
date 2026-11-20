@@ -2554,7 +2554,13 @@ Resume focus_layout_history_rows[successor]:
        PHI; NOP; RETURN; REVERT; STOP; SINK; SELFDESTRUCT; INVALID]` by
     (`~MEM a.po_inst.inst_opcode
         [MEMTOP; GETFMP; SETFMP; FMP_PARAM; DRET; RETFMP; NOP]` by
-       (fs[EVERY_MEM, fn_ptr_ok_def, MEM] >> metis_tac[]) >>
+       (qpat_assum `EVERY (fn_ptr_ok P) C.ctx_functions`
+          (mp_tac o Q.SPEC `a.po_fn` o REWRITE_RULE [EVERY_MEM]) >>
+        impl_tac >- first_assum ACCEPT_TAC >>
+        disch_then
+          (mp_tac o Q.SPEC `a.po_inst` o cj 2 o REWRITE_RULE [fn_ptr_ok_def]) >>
+        impl_tac >- first_assum ACCEPT_TAC >>
+        strip_tac >> simp[MEM]) >>
      simp[MEM] >> rpt strip_tac >> gvs[] >>
      `at.po_inst = a.po_inst` by simp[concretize_positions_unchanged] >>
      qpat_x_assum `at.po_inst = concretize_inst_with_positions _ _` kall_tac >>
