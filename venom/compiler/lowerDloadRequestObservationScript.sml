@@ -1,6 +1,7 @@
 Theory lowerDloadRequestObservation
 Ancestors
   lowerDloadOracleSelection lowerDloadExternalInputs lowerDloadExternalBackward
+  lowerDloadExternalData lowerDloadPtrCreateInterfaces
   lowerDloadReachableDiscipline lowerDloadNormalData lowerDloadResidualNonmemory
   venomCallOracleDefs venomExecSemantics venomState venomWf ptrDiscipline list extCallOracle
   oracleExecProps lowerDloadRevertSuffix lowerDloadCoverageInvariant
@@ -27,6 +28,8 @@ Proof
   rw[dead_wf_def] >> metis_tac[pred_setTheory.SUBSET_TRANS]
 QED
 
+(* An OK creation (including failure reported by the oracle) appends its
+   own request. Static execution, oversize initcode and exhaustion abort. *)
 Theorem dead_trans_taint_transport:
   dead_wf D /\ storage_agree_except (D.d_trans a st) st st' /\
   X SUBSET D.d_trans a st /\ Y SUBSET X ==>
@@ -181,28 +184,31 @@ Proof
   strip_tac >> strip_tac >> strip_tac >>
   drule ld_normal_data_frame >> disch_then assume_tac >>
   drule_then assume_tac ld_frame_data_shared >>
-  drule_all ld_annotated_external_clean >> strip_tac >>
-  Cases_on `MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL]`
-  >- (drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  `?s'. step_inst fuel CS i s = OK s' /\
+    LENGTH s.vs_requests < LENGTH s'.vs_requests` by
+    (Cases_on `MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL]`
+     >- (drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
         ld_normal_call_request_backward >>
       disch_then (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
       disch_then (qspecl_then [`stk`,`s0`,`names`,`P`] mp_tac) >>
-      asm_rewrite_tac[] >> strip_tac >>
-      drule_then assume_tac ld_annotated_erasure >>
-      `i.inst_opcode <> INVOKE` by fs[MEM] >>
-      `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
-          (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
-       tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
-          (s.vs_transient s.vs_call_ctx.cc_address)` by
-        (qpat_x_assum `taint_within D CS vs0` mp_tac >>
-         rewrite_tac[taint_within_def] >> strip_tac >>
-         qpat_x_assum `?stk PG G. frame_reachable _ _ _ _ _ _ _ _ _ /\ _`
-           strip_assume_tac >>
-         first_x_assum (drule_all_then assume_tac) >> simp[]) >>
-      suspend "transport") >>
-  `tn.t_stor = {} /\ tn.t_trans = {}` by (fs[MEM] >> metis_tac[]) >>
-  drule ld_shared_state_masks >> simp[]
+      asm_rewrite_tac[]) >>
+     `MEM i.inst_opcode [CREATE;CREATE2]` by fs[MEM] >>
+     drule_all ld_normal_external_backward >> strip_tac >>
+     qexists_tac `s'` >> simp[] >>
+     irule ld_create_step_request_growth >> metis_tac[]) >>
+  drule_then assume_tac ld_annotated_erasure >>
+  `i.inst_opcode <> INVOKE` by fs[MEM] >>
+  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+      (s.vs_transient s.vs_call_ctx.cc_address)` by
+    (qpat_x_assum `taint_within D CS vs0` mp_tac >>
+     rewrite_tac[taint_within_def] >> strip_tac >>
+     qpat_x_assum `?stk PG G. frame_reachable _ _ _ _ _ _ _ _ _ /\ _`
+       strip_assume_tac >>
+     first_x_assum (drule_all_then assume_tac) >> simp[]) >>
+  suspend "transport"
 QED
 
 Resume ld_normal_request_observation[transport]:
