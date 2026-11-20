@@ -156,15 +156,6 @@ Proof
   gvs[n2w_11, dimword_def]
 QED
 
-Theorem ctor_prefix_env_return_pc[local]:
-  !tops vis mut fname args ret fbody use_trans.
-    vis <> Internal ==>
-    (build_compile_env tops vis mut fname args ret fbody use_trans).ce_return_pc = NONE
-Proof
-  rpt strip_tac >> simp[build_compile_env_def] >>
-  rpt (pairarg_tac >> gvs[])
-QED
-
 Theorem ctor_prefix_lowering_run[local]:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
