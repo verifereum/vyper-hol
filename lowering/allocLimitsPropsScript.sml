@@ -289,14 +289,6 @@ Definition alloc_env_agree_def:
     c'.ce_func_mutability = c.ce_func_mutability
 End
 
-Theorem custom_error_alloc_ok_frame:
-  !c c' err. alloc_env_agree c c' ==>
-    custom_error_alloc_ok c' err = custom_error_alloc_ok c err
-Proof
-  rw[alloc_env_agree_def] >> drule type_memory_bytes_frame >> strip_tac >>
-  Cases_on `err` >> simp[custom_error_alloc_ok_def]
-QED
-
 Theorem alloc_env_agree_var_type:
   !c c' f. alloc_env_agree c c' ==>
     alloc_env_agree (c with ce_var_type updated_by f)
@@ -368,6 +360,18 @@ Theorem lowered_value_type_frame:
            lowered_value_type c' e = lowered_value_type c e
 Proof
   metis_tac[lowered_value_type_struct_fields]
+QED
+
+Theorem custom_error_alloc_ok_frame:
+  !c c' err. alloc_env_agree c c' ==>
+    custom_error_alloc_ok c' err = custom_error_alloc_ok c err
+Proof
+  rw[alloc_env_agree_def] >> drule type_memory_bytes_frame >> strip_tac >>
+  `lowered_value_type c' = lowered_value_type c` by
+    (simp[FUN_EQ_THM] >> metis_tac[lowered_value_type_frame]) >>
+  `type_alloc_ok c' = type_alloc_ok c` by simp[FUN_EQ_THM, type_alloc_ok_def] >>
+  Cases_on `err` >> simp[custom_error_alloc_ok_def] >>
+  Cases_on `c.ce_error_info (nsid_to_string p)` >> simp[]
 QED
 
 Theorem assign_alloc_ok_frame:

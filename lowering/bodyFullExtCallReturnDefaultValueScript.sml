@@ -170,6 +170,15 @@ Resume extcall_default_return_alloc_cut[kept]:
 QED
 Finalise extcall_default_return_alloc_cut
 
+fun default_value_fmp_at state =
+  qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace`
+    (qx_choose_then `horizon` (fn horizon =>
+      qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx ee ^state /\ _`
+        (ACCEPT_TAC o
+         MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+         CONJUNCT1 o (fn related => MATCH_MP related horizon))));
+
 Theorem extcall_return_full_default_value:
   !DF lo d explicit ctx PG func cenv cx env es ann is_static skip fname
    arg_types ret_type opts args dflt st0 sa sb s0 G0 tn0 sr result_op vv
@@ -212,7 +221,7 @@ Theorem extcall_return_full_default_value:
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
     fn_has_code sr sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    MEM func ctx.ctx_functions /\ ~ctx_has_dalloca ctx /\
+    MEM func ctx.ctx_functions /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
             not_fresh_at sa x) /\
@@ -347,7 +356,7 @@ Resume extcall_return_full_default_value[entry]:
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   rename1 `lookup_var q a = SOME dw` >>
   `LENGTH a.vs_returndata < dimword (:256)` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by (default_value_fmp_at ``a:venom_state``) >>
   drule_all (INST_TYPE [alpha |-> ``:256``]
     extcallReturnDefaultControlJointTheory.return_default_shell_entry) >>
   disch_then (qspecl_then [`tm`, `explicit`, `PG`, `J`]
@@ -423,6 +432,7 @@ Resume extcall_return_full_default_value[entry]:
      >- (qpat_assum `!op. safe_operand sr op ==> _` (qspec_then `addr_op` mp_tac) >> simp[]) >>
      qpat_assum `!op. safe_operand sr op ==> _` (qspec_then `default_op` mp_tac) >>
      simp[] >> fs[safe_operand_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by (default_value_fmp_at ``u:venom_state``) >>
   `allocas_from lo u /\ lo <= u.vs_alloca_next /\ alloca_history func u` by
     (qpat_x_assum `?H. valid_horizon cx st0 H ee.storage_trace` strip_assume_tac >>
      qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ u /\ _`
@@ -477,7 +487,6 @@ Resume extcall_return_full_default_value[word_store]:
    eval_operand default_op u = SOME (typed_val_to_w256 rtv dv) /\
    w2n dw + 32 < dimword (:256) /\ w2n dw + 32 <= u.vs_alloca_next /\
    ptr_covers Gu tu q u 32` by gvs[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all logStoreDataOriginPtrTheory.compile_store_memory_word_origin_ptr_path >>
   disch_then (qspecl_then [`explicit`, `PG`]
     (qx_choose_then `p` (qx_choose_then `Gp` (qx_choose_then `tp` strip_assume_tac)))) >>
@@ -540,7 +549,6 @@ Resume extcall_return_full_default_value[bytes_store]:
   `!mem. mem_agree_outside tu.t_mem u.vs_memory mem ==>
       val_in_memory tv dv (w2n w) mem` by
     (rpt strip_tac >> drule_all bodyPtrBopHashFootprintTheory.ptr_mem_ok_robust >> simp[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all extcall_default_bytes_store_capacity_joint >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choose_then `p` (qx_choose_then `Gp` (qx_choose_then `tp` strip_assume_tac)))) >>
@@ -638,7 +646,6 @@ Resume extcall_return_full_default_value[flat_store]:
      u.vs_alloca_next < dimword (:256)` by gvs[] >>
   `compile_store_memory cenv default_op (Var q) ret_type ret_type ds = ((),de) /\
    ptr_mem_ok cx ret_type dv default_op Gu tu u` by gvs[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all extcall_default_copy_capacity_joint >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choose_then `p` (qx_choose_then `Gp` (qx_choose_then `tp` strip_assume_tac)))) >>
@@ -719,11 +726,11 @@ Resume extcall_return_full_default_value[after_payload]:
      simp[venomInstTheory.mk_inst_def] >> rpt strip_tac >>
      qpat_assum `!name b len. local_region cenv ee.scopes u name b len ==> _`
        (drule_then strip_assume_tac) >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp p` by (default_value_fmp_at ``p:venom_state``) >>
   Cases_on `skip \/ ext_call_has_code target ee.accounts`
   >- suspend "default_success" >>
   `~skip /\ ~ext_call_has_code target ee.accounts` by metis_tac[] >>
   `compile_extcodesize_check addr_op de = ((),ck)` by fs[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp p` by simp[] >>
   drule_all bodyFullExtCallPrecheckTheory.extcall_codesize_checked_path >>
   disch_then (qspecl_then [`explicit`,`PG`,`Gp`] mp_tac) >>
   `(n2w (LENGTH (lookup_account (w2w aw) p.vs_accounts).code) : bytes32) = 0w` by metis_tac[] >>
@@ -767,7 +774,6 @@ Resume extcall_return_full_default_value[default_success]:
      `LENGTH (lookup_account target t.vs_accounts).code MOD dimword (:256) <> 0` by
        (strip_tac >> qpat_x_assum `cw <> 0w` mp_tac >>
         simp[Abbr `cw`, GSYM w2n_eq_0, w2n_n2w]) >>
-     `ctx_has_dalloca ctx ==> allocas_below_fmp p` by simp[] >>
      drule_all bodyFullExtCallPrecheckTheory.extcall_codesize_checked_path >>
      disch_then (qspecl_then [`explicit`,`PG`,`Gp`] mp_tac) >>
      qpat_assum `Abbrev (cw = _)` (SUBST1_TAC o SYM o REWRITE_RULE[markerTheory.Abbrev_def]) >>
@@ -800,6 +806,12 @@ Resume extcall_return_full_default_value[default_success]:
   `get_instruction bb (LENGTH ck.cs_current_insts) = SOME (mk_inst ck.cs_next_id JMP [Label xl] [])` by
     (qpat_assum `!i. i < _ ==> get_instruction bb _ = _` (qspec_then `0` mp_tac) >>
      simp[NoAsms, listTheory.EL, listTheory.LENGTH]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp checked` by
+    (qpat_assum `Abbrev (checked = _)`
+       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp p` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `skip` >>
+     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (checked,Gc,tc) []
       (OK (jump_to xl checked),Gc,tc)` by
     (gen_tac >> irule decoderNavigationPtrTheory.jump_origin_ptr_path >>
