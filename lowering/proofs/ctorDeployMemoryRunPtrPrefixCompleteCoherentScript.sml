@@ -76,7 +76,15 @@ Proof
     (Cases_on `bt` >> simp[type_to_abi_dec_info_def] >>
      rename1 `BytesT bound` >> Cases_on `bound` >> simp[type_to_abi_dec_info_def])
   >- (irule prefix_scalar_complete_code_contract >> goal_assum (drule_at Any)) >>
-  irule prefix_bytestring_complete_code_contract >> goal_assum (drule_at Any)
+  BETA_TAC >> simp_tac bool_ss [] >> rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
+  drule (BETA_RULE prefix_bytestring_complete_code_contract) >>
+  disch_then match_mp_tac >> asm_rewrite_tac[] >>
+  qexistsl [`env`, `dst`, `src`, `sb`, `av`, `root_di`, `b`, `sz`] >>
+  asm_rewrite_tac[] >>
+  qpat_assum `type_to_abi_dec_info _ _ _ = _` (fn shape =>
+    qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+      (ACCEPT_TAC o REWRITE_RULE [shape]))
 QED
 
 Theorem prefix_flag_complete_code[local]:
@@ -93,7 +101,15 @@ Proof
   Cases_on `is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)`
   >- (match_mp_tac prefix_dynamic_array_loop_complete_code_contract >> asm_rewrite_tac[]) >>
-  match_mp_tac prefix_bulk_complete_code_contract >> asm_rewrite_tac[]
+  BETA_TAC >> simp_tac bool_ss [] >> rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
+  drule (BETA_RULE prefix_bulk_complete_code_contract) >>
+  disch_then match_mp_tac >> asm_rewrite_tac[] >>
+  qexistsl [`env`, `dst`, `src`, `sb`, `av`, `root_di`, `b`, `sz`] >>
+  asm_rewrite_tac[] >>
+  qpat_assum `type_to_abi_dec_info _ _ _ = _` (fn shape =>
+    qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+      (ACCEPT_TAC o REWRITE_RULE [shape]))
 QED
 
 Theorem prefix_array_complete_code[local]:
@@ -210,7 +226,15 @@ Proof
     (Cases_on `bt` >> simp[type_to_abi_dec_info_def] >>
      rename1 `BytesT bound` >> Cases_on `bound` >> simp[type_to_abi_dec_info_def])
   >- (irule prefix_scalar_complete_checked_contract >> goal_assum (drule_at Any)) >>
-  irule prefix_bytestring_complete_checked_contract >> goal_assum (drule_at Any)
+  BETA_TAC >> simp_tac bool_ss [] >> rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
+  drule (SIMP_RULE bool_ss [] (BETA_RULE prefix_bytestring_complete_checked_contract)) >>
+  disch_then match_mp_tac >> asm_rewrite_tac[] >>
+  qexistsl [`env`, `dst`, `src`, `sb`, `av`, `root_di`, `b`, `sz`] >>
+  asm_rewrite_tac[] >>
+  qpat_assum `type_to_abi_dec_info _ _ _ = _` (fn shape =>
+    qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+      (ACCEPT_TAC o REWRITE_RULE [shape]))
 QED
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
@@ -245,7 +269,15 @@ Proof
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)`
   >- (BETA_TAC >> rule_assum_tac BETA_RULE >>
       match_mp_tac (BETA_RULE prefix_dynamic_array_loop_complete_checked_contract) >> asm_rewrite_tac[]) >>
-  match_mp_tac prefix_bulk_complete_checked_contract >> asm_rewrite_tac[]
+  BETA_TAC >> simp_tac bool_ss [] >> rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
+  drule (BETA_RULE prefix_bulk_complete_checked_contract) >>
+  disch_then (match_mp_tac o SIMP_RULE bool_ss []) >> asm_rewrite_tac[] >>
+  qexistsl [`env`, `dst`, `src`, `sb`, `av`, `root_di`, `b`, `sz`] >>
+  asm_rewrite_tac[] >>
+  qpat_assum `type_to_abi_dec_info _ _ _ = _` (fn shape =>
+    qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+      (ACCEPT_TAC o REWRITE_RULE [shape]))
 QED
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward

@@ -208,6 +208,7 @@ Proof
      metis_tac[not_fresh_at_def]) >>
   `fn_has_code st middle func` by
     (mp_tac (Q.SPECL [`st`,`middle`,`final`,`func`] fn_has_code_split) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_canonical_member_setup_complete_shift >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `allocas_from lo prepared` >>

@@ -598,7 +598,7 @@ QED
 Theorem intcall_callee_protected_ordinary_step:
   step_inst fuel ctx inst s = OK u /\
   ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-  inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> SETFMP /\
+  (inst.inst_opcode = DALLOCA ==> ctx_has_dalloca ctx) /\ inst.inst_opcode <> SETFMP /\
   inst.inst_opcode <> DRET /\
   ~in_revert_forward fn s /\ lo <= x /\
   ptr_safe_step D lo fuel ctx fn PG G tn inst s /\
@@ -611,11 +611,45 @@ Theorem intcall_callee_protected_ordinary_step:
 Proof
   strip_tac >>
   `step_inst_base inst s = OK u` by gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  conj_tac >- metis_tac[intcall_callee_base_protected_sites] >>
+  `inst.inst_opcode = DALLOCA ==>
+     x < w2n s.vs_fmp /\ u.vs_initial_fmp = s.vs_initial_fmp /\
+     u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next` by
+    (strip_tac >>
+     `ctx_has_dalloca ctx` by metis_tac[] >>
+     `allocas_below_fmp s` by
+       (drule ptrSafeRunTheory.ptr_safe_step_inst_ok >>
+        simp[ptrSafeRunTheory.ptr_inst_ok_def]) >>
+     conj_tac >-
+       (fs[ptr_byte_frame_inv_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
+        decide_tac) >>
+     conj_tac >-
+       (drule ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp >> simp[]) >>
+     irule venomMemProofsTheory.step_inst_base_preserves_alloca_fields >>
+     qexists_tac `inst` >> simp[]) >>
+  conj_tac >-
+    (reverse (Cases_on `inst.inst_opcode = DALLOCA`)
+     >- metis_tac[intcall_callee_base_protected_sites] >>
+     res_tac >>
+     `!v w. inst.inst_outputs = [v] /\ lookup_var v u = SOME w ==> x < w2n w` by
+       (rpt strip_tac >>
+        gvs[venomExecSemanticsTheory.step_inst_base_opcode_eqs, AllCaseEqs(),
+          update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+     fs[ptr_byte_frame_inv_def] >> conj_tac
+     >- (rpt strip_tac >>
+         fs[ptrDisciplineTheory.step_prov_def] >>
+         drule runtimeProvenanceSourcesTheory.set_prov_source >> strip_tac
+         >- metis_tac[] >>
+         gvs[ptrDisciplineTheory.out_prov_def, AllCaseEqs()] >> metis_tac[]) >>
+     metis_tac[]) >>
   conj_tac >- (drule lowerDloadMaskBoundsTheory.ld_step_taint_bound >> simp[]) >>
   `x < s.vs_alloca_next` by fs[ptr_byte_frame_inv_def] >>
   `x NOTIN new_site_bytes s u` by
-    metis_tac[taintAgreeTheory.step_inst_base_new_site_bytes_frontier] >>
+    (reverse (Cases_on `inst.inst_opcode = DALLOCA`)
+     >- metis_tac[taintAgreeTheory.step_inst_base_new_site_bytes_frontier] >>
+     qpat_assum `inst.inst_opcode = DALLOCA ==> x < _ /\ _`
+       (drule_then strip_assume_tac) >>
+     simp[ptrDisciplineTheory.new_site_bytes_def, finite_mapTheory.FLOOKUP_DEF] >>
+     decide_tac) >>
   `access_ok lo G fn inst s` by
     metis_tac[ptrSafeRunTheory.ptr_safe_step_inst_ok, ptrSafeRunTheory.ptr_inst_ok_def] >>
   `x NOTIN range_bytes (source_memory_write_ranges inst s)` by
@@ -2510,17 +2544,17 @@ Proof
 QED
 
 Theorem intcall_ghost_current_opcode[local]:
-  EVERY pre_fmp_ops ctx.ctx_functions /\ ~ctx_has_dalloca ctx /\
+  EVERY pre_fmp_ops ctx.ctx_functions /\
   MEM func ctx.ctx_functions /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst ==>
-  inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DRET
+  inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DRET
 Proof
   strip_tac >>
   `MEM inst (fn_insts func)` by
     (simp[fn_insts_def] >> irule venomFnInstsProofsTheory.mem_fn_insts_blocks >>
      qexists_tac `bb` >> gvs[get_instruction_def] >> metis_tac[lookup_block_MEM, listTheory.EL_MEM]) >>
-  fs[listTheory.EVERY_MEM, listTheory.EXISTS_MEM, o1PassContractTheory.pre_fmp_ops_def,
-     o1PassContractTheory.pre_fmp_opcode_def, ptrDisciplineTheory.ctx_has_dalloca_def] >>
+  fs[listTheory.EVERY_MEM, o1PassContractTheory.pre_fmp_ops_def,
+     o1PassContractTheory.pre_fmp_opcode_def] >>
   metis_tac[]
 QED
 
@@ -2544,9 +2578,9 @@ QED
 Theorem intcall_callee_protected_ghost_run_rules:
   (!fuel ctx PG G tn inst s D lo func x u.
     step_inst fuel ctx inst s = OK u /\ ~is_terminator inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DALLOCA /\
+    inst.inst_opcode <> INVOKE /\ (inst.inst_opcode = DALLOCA ==> ctx_has_dalloca ctx) /\
     inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DRET /\
-    ~ctx_has_dalloca ctx /\ ~in_revert_forward func s /\ lo <= x /\
+    ~in_revert_forward func s /\ lo <= x /\
     ptr_safe_step D lo fuel ctx func PG G tn inst s /\
     ptr_byte_frame_inv (ctx,x) G s /\
     (!b sz. MEM (SOME (b,sz)) PG ==> x < b \/ b + sz <= x) /\
@@ -2558,8 +2592,8 @@ Theorem intcall_callee_protected_ghost_run_rules:
     ptr_byte_frame_inv (ctx,x) G s /\ lo <= x /\
     (!b sz. MEM (SOME (b,sz)) PG ==> x < b \/ b + sz <= x) /\
     (!v. op_taint tn (Var v) SUBSET count 32) /\ x NOTIN tn.t_mem /\
-    ~ctx_has_dalloca ctx /\ EVERY pre_fmp_ops ctx.ctx_functions /\
-    inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DRET /\
+    EVERY pre_fmp_ops ctx.ctx_functions /\
+    (inst.inst_opcode = DALLOCA ==> ctx_has_dalloca ctx) /\ inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DRET /\
     ptr_safe_step D lo fuel ctx func PG G tn inst s /\
     ~in_revert_forward func s /\ ~is_terminator inst.inst_opcode /\
     step_inst fuel ctx inst s = OK u ==>
@@ -2570,7 +2604,7 @@ Theorem intcall_callee_protected_ghost_run_rules:
     ptr_byte_frame_inv (ctx,x) G s /\ lo <= x /\
     (!b sz. MEM (SOME (b,sz)) PG ==> x < b \/ b + sz <= x) /\
     (!v. op_taint tn (Var v) SUBSET count 32) /\ x NOTIN tn.t_mem /\
-    ~ctx_has_dalloca ctx /\ EVERY pre_fmp_ops ctx.ctx_functions /\
+    EVERY pre_fmp_ops ctx.ctx_functions /\
     MEM func ctx.ctx_functions /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     ptr_safe_block D lo fuel ctx func PG G tn bb s /\
     block_run fuel ctx func bb s = IntRet ir t ==>
@@ -2579,7 +2613,7 @@ Theorem intcall_callee_protected_ghost_run_rules:
     ptr_byte_frame_inv (ctx,x) G s /\ lo <= x /\
     (!b sz. MEM (SOME (b,sz)) PG ==> x < b \/ b + sz <= x) /\
     (!v. op_taint tn (Var v) SUBSET count 32) /\ x NOTIN tn.t_mem /\
-    ~ctx_has_dalloca ctx /\ EVERY pre_fmp_ops ctx.ctx_functions /\
+    EVERY pre_fmp_ops ctx.ctx_functions /\
     MEM func ctx.ctx_functions /\ ptr_safe_blocks D lo fuel ctx func PG G tn s /\
     run_blocks fuel ctx func s = IntRet ir t ==>
     x NOTIN (SND (ghost_blocks fuel ctx func PG G tn s)).t_mem)
@@ -2639,8 +2673,13 @@ Resume intcall_callee_protected_ghost_run_rules[block]:
   rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
   `ptr_safe_step D lo fuel ctx func PG G tn inst s` by
     metis_tac[ptrSafeRunTheory.ptr_safe_block_head] >>
-  `inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DRET` by
+  `inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DRET` by
     metis_tac[intcall_ghost_current_opcode] >>
+  `(inst.inst_opcode = DALLOCA ==> ctx_has_dalloca ctx)` by
+    (strip_tac >> simp[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
+     qexists_tac `func` >> simp[] >> qexists_tac `inst` >> simp[fn_insts_def] >>
+     irule venomFnInstsProofsTheory.mem_fn_insts_blocks >>
+     qexists_tac `bb` >> gvs[get_instruction_def] >> metis_tac[lookup_block_MEM, listTheory.EL_MEM]) >>
   Cases_on `step_inst fuel ctx inst s`
   >~ [`step_inst fuel ctx inst s = OK u`]
   >- (Cases_on `is_terminator inst.inst_opcode`
@@ -2739,7 +2778,6 @@ Proof
   drule_all intcall_callee_entry_horizon >> strip_tac >>
   qpat_x_assum `!H. _ ==> intcall_entry_full _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (drule_then assume_tac) >>
-  drule_then assume_tac body_inv_no_dalloca >>
   drule_then assume_tac intcall_callee_pre_fmp_context >>
   gen_tac >> strip_tac >> CCONTR_TAC >>
   `!b sz. MEM (SOME (b,sz)) (MAP (op_prov G) arg_ops) ==>
@@ -2753,9 +2791,19 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   drule_all intcall_callee_entry_decode >> strip_tac >>
   `MEM callee ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `fmp_room ctx callee setup` by metis_tac[intcall_entry_full_fmp_room] >>
+  `ptr_byte_frame_inv (ctx,i) FEMPTY setup` by
+    (gvs[venomExecSemanticsTheory.setup_callee_def, ptr_byte_frame_inv_def] >>
+     rpt strip_tac >> fs[fmp_room_def] >> decide_tac) >>
   `ptr_byte_frame_inv (ctx,i) FEMPTY entered` by
-    (drule_then strip_assume_tac venomExecProofsTheory.eval_phis_preserves_alloca_fields >>
-     gvs[venomExecSemanticsTheory.setup_callee_def, ptr_byte_frame_inv_def]) >>
+    (qpat_assum `entered = _` SUBST1_TAC >>
+     PURE_REWRITE_TAC [ptr_byte_frame_inv_inst_idx] >>
+     qpat_assum `eval_phis setup _ = OK phi_state`
+       (fn run => once_rewrite_tac [MATCH_MP
+          venomExecProofsTheory.eval_phis_only_updates_vs_vars run]) >>
+     qpat_assum `ptr_byte_frame_inv (ctx,i) FEMPTY setup` mp_tac >>
+     simp[NoAsms,ptr_byte_frame_inv_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `!v. op_taint (tn with t_var := FEMPTY) (Var v) SUBSET count 32` by
     simp[lowerDloadMaskBoundsTheory.ld_var_taint_bound_iff] >>
   qpat_x_assum `entered = _` kall_tac >>
