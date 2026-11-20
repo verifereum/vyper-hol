@@ -6,7 +6,7 @@ Ancestors unitTransformDefs fragGasOriginPtrLoop fragGasPathPtr fragGasPathMem f
   decoderGhostFramePtr calldataDecodePtr entryDispatchPtr emitHelperProps
   exprLoweringProps venomExecSemantics pred_set ptrSafeRun codegenRel
   compileEnv loweringStateRelDefs emitHelper abiDecoderReentry calldataDynOwned instIdxIndep fragExec list
-  abiDecoderMemberSetup decoderMemberValidEndpoint memLocDefs venomInstProofs contextCodegenRel
+  abiDecoderMemberSetup abiDecoderValidMemberCons[qualified] memLocDefs venomInstProofs contextCodegenRel
 
 (* The calldata address step: base Lit 0w adds no instruction. *)
 val calldata_pos_addr = prove(

@@ -1,6 +1,6 @@
 Theory lowerDloadCopyCertificate
 Ancestors
-  lowerDloadVariableTransport lowerDloadAssignProducer lowerDloadPhiProducer
+  lowerDloadVariableTransport lowerDloadAssignProducer
   lowerDloadOwnership ptrDiscipline venomState finite_map pred_set
   lowerDloadByteStoreCertificate lowerDloadCopyProduction lowerDloadEffectTransport
   lowerDloadReachableDiscipline lowerDloadProvenanceSupport

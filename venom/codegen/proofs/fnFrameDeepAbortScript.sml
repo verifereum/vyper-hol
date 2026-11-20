@@ -12,7 +12,7 @@
 Theory fnFrameDeepAbort
 Ancestors
   planEmissionProps arithmetic
-  deepResidualSim fnPlanPrefix fnFrameTerminal fnFrameTerminalAbort deepInstSim asmRunBounded venomRunBounded
+  deepResidualSim fnPlanPrefix fnFrameTerminalAbort deepInstSim asmRunBounded venomRunBounded
   fnFrameTerminalPrep generatedPrefixSim planSpillBounds stackOpSim
   stackModel stackPlanOps asmFrame asmIR emitSim frameViewFacts
   frameViewMemory regularMemorySim venomWf venomEffects allocMono

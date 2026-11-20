@@ -1,6 +1,6 @@
 Theory lowerDloadIndexedStageEntry
 Ancestors
-  lowerDloadStageEntry
+  lowerDloadTopEntryControl[qualified]
   o1PassContract venomInst list
 
 (* Indexed lookup boundary: retains the original relation witness, rather

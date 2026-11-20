@@ -2,14 +2,12 @@ Upstream: https://github.com/vyperlang/vyper/pull/5297
 Status: merged (980f335eb6aaa8910ee7a1142d5319cec937ae77)
 Scope: the base pointer analysis change; the test is not ported.
 
-Adapted to VYPER_PIN 577d2534 after #5274: the import hunk's context lacks `from vyper.utils import OrderedSet` (#5248).
-
 diff --git a/vyper/venom/analysis/base_ptr_analysis.py b/vyper/venom/analysis/base_ptr_analysis.py
 index b3a85397..b0f66343 100644
 --- a/vyper/venom/analysis/base_ptr_analysis.py
 +++ b/vyper/venom/analysis/base_ptr_analysis.py
-@@ -16,7 +16,7 @@ from vyper.evm.address_space import (
- from vyper.exceptions import CompilerPanic
+@@ -17,7 +17,7 @@ from vyper.exceptions import CompilerPanic
+ from vyper.utils import OrderedSet
  from vyper.venom.analysis.analysis import IRAnalysis
  from vyper.venom.analysis.cfg import CFGAnalysis
 -from vyper.venom.basicblock import IRInstruction, IRLiteral, IROperand, IRVariable

@@ -1,7 +1,7 @@
 (* Joint execution of the actual word-array membership control blocks. *)
 Theory bodyFullBopRestWordControl
 Ancestors
-  bodyPtrBopInLoopSearch bodyPtrBopInLoopCode bodyPtrBopInLoopLookups bodyPtrBopInLoopLayout
+  bodyPtrBopInLoopSearch bodyPtrBopInLoopCode bodyPtrBopInLoopLayout
   bodyPtrBopInLoopContract bodyPtrBopInLiteralSuffix bodyPtrBopInScalarTransport
   exprLoweringProps fragExecMem fragGasEmitCtrl fragGasSeqPtr fragGasOriginPtr fragGasOriginPtrLoop stmtAppendStorageRunPtr
   gasEvents gasCount ptrSafeRun memSafeRun instMemFrontier

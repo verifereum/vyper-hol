@@ -86,26 +86,6 @@ Proof
        vyperTypeSystemTheory.well_formed_type_def, optionTheory.IS_SOME_EXISTS]
 QED
 
-Theorem compute_immutables_len_byte_coverage[local]:
-  !tops sft i. i < compute_immutables_len sft tops ==>
-    ?pre vis name ty slot post.
-      tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
-      compute_immutables_len sft pre <= i /\
-      i < compute_immutables_len sft pre + type_mem_bytes sft ty
-Proof
-  Induct >- simp[compute_immutables_len_def] >>
-  rpt gen_tac >> once_rewrite_tac[immutable_len_cons] >> strip_tac >>
-  Cases_on `i < compute_immutables_len sft [h]`
-  >- (qexists_tac `[]` >> Cases_on `h` >>
-      gvs[compute_immutables_len_def] >>
-      rename1 `mut = Immutable` >>
-      Cases_on `mut` >> gvs[compute_immutables_len_def]) >>
-  first_x_assum (qspecl_then [`sft`, `i - compute_immutables_len sft [h]`] mp_tac) >>
-  impl_tac >- decide_tac >> strip_tac >>
-  qexistsl [`h::pre`, `vis`, `name`, `ty`, `slot`, `post`] >>
-  once_rewrite_tac[immutable_len_cons] >> simp[] >> decide_tac
-QED
-
 Theorem intcall_evaluated_immutable_coverage:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx tenv es /\
   i < imm_len (cx_tops cx) ==>

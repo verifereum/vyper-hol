@@ -3,7 +3,7 @@
 Theory bodyFullAbiEncodeTuple
 Ancestors
   bodyFullAbiEncodeSlot bodyFullAbiEncodeTupleStage
-  bodyFullAbiEncodeTupleResources assignTuplePtrCopyLen
+  assignTuplePtrCopyLen
   typedCopyTuplePtr logValueFramePtr typedCopyRobustTransportPtr
   bodyPtrSubscriptMemoryRebuild
   compileEnv context emitHelperProps exprLoweringProps fragGasOriginPtrLoop

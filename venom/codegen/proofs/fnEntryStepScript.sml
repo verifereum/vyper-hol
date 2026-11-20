@@ -10,8 +10,8 @@
 
 Theory fnEntryStep
 Ancestors
-  fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
-  genFrameSim fnPlanPlace fnPlanCover fnAliasInv fnPlanLineage frameRel
+  fnSimSpec fnFrameSteps fnFrameBoundary gasFrameSim
+  genFrameSim fnPlanPlace fnPlanCover fnPlanLineage frameRel
   venomExecSemantics fnBlockBody fnBlockPlanStatic fnEntryPlan fnEntryParams fnRunFields
   unitShapeDefs contextPlanLayoutProps planSpillBounds contextCodegenRel stackPlanGen
   stackPlanTypes stackOpSim blockSimHelpers fnBlockBodySteps asmRunBounded

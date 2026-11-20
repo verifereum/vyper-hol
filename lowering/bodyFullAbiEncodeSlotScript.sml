@@ -5,7 +5,7 @@ Ancestors
   exprPtrUnwrapFrames[qualified,ignore_grammar]
   fragGasOriginPtrLoop fragExecPtr exprSimStorageCopy exprSimAbiEncodeMemoryLength
   abiTupleProps bodyPtrMakeArrayPrimitiveInstall bodyPtrMakeArrayWordStore
-  assignBasePtrCleanStore exprLoweringProps emitHelperProps fragExec
+  exprLoweringProps emitHelperProps fragExec
   assignTuplePtrStoreWord assignTuplePtrCopyEndpoint typedCopyPtr robustCopyTransportPtr contextCodegenRel unitTransformDefs memSafeRun
   ptrDiscipline instMemFrontier codegenRel wordLoadStorePtr
   arithmetic finite_map pred_set words list rich_list compileEnv context emitHelper
