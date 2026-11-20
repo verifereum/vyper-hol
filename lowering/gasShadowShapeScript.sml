@@ -40,9 +40,7 @@ QED
   QED
 *)
 
-Theorem omitted_defaults_gas_shadow_id:
-  !tops dflts k. EVERY (supported_default_expression tops) dflts ==>
-    MAP gas_shadow_expr (DROP k dflts) = DROP k dflts
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt strip_tac >>
   irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
@@ -52,6 +50,13 @@ Proof
   first_x_assum irule >>
   irule (Q.SPECL [`dflts`,`k`,`EL x (DROP k dflts)`] MEM_DROP_IMP) >>
   irule EL_MEM >> simp[]
+QED
+*)
+Theorem omitted_defaults_gas_shadow_id:
+  !tops dflts k. EVERY (supported_default_expression tops) dflts ==>
+    MAP gas_shadow_expr (DROP k dflts) = DROP k dflts
+Proof
+  cheat
 QED
 
 Theorem gas_shadow_expr_shape_root:

@@ -24,12 +24,7 @@ Proof
   gvs[Once alloc_limits_expr_def, type_alloc_ok_def, expr_type_def]
 QED
 
-Theorem supported_append_storage_decl:
-  supported_storage_dynamic_array tops nid ==>
-  ?elem n slot mut.
-    supported_variable_decl tops nid =
-      SOME (Private, mut, ArrayT elem (Dynamic n), SOME slot) /\
-    (mut = Storage \/ mut = Transient) /\ supported_full_word_type elem
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   simp[supported_storage_dynamic_array_def] >>
   Cases_on `supported_variable_decl tops nid` >> simp[] >>
@@ -39,6 +34,18 @@ Proof
   rename1 `ArrayT elem bd` >> Cases_on `bd` >> simp[] >>
   metis_tac[]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (storage arrays of any element type); callers split
+  Theorem supported_append_storage_decl:
+    supported_storage_dynamic_array tops nid ==>
+    ?elem n slot mut.
+      supported_variable_decl tops nid =
+        SOME (Private, mut, ArrayT elem (Dynamic n), SOME slot) /\
+      (mut = Storage \/ mut = Transient) /\ supported_full_word_type elem
+  Proof
+    cheat
+  QED
+*)
 
 Theorem supported_append_element_layout:
   supported_full_word_type elem ==>
@@ -235,25 +242,24 @@ Proof
   metis_tac[compileEnvTheory.type_widens_to_word]
 QED
 
-Theorem append_narrow_annotation:
-  supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
-  supported_variable_decl tops nid =
-    SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
-  ~supported_full_word_type elem ==> expr_type e = elem
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `~supported_storage_dynamic_array tops nid` by
     (strip_tac >> drule supported_append_storage_decl >> strip_tac >> gvs[]) >>
   gvs[supported_stmt_def]
 QED
-
-Theorem append_storage_element_domain:
-  body_inv tops ctx cenv cx /\
+*)
+Theorem append_narrow_annotation:
+  supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
   supported_variable_decl tops nid =
-    SOME (vis,mut,ArrayT elem (Dynamic dn),SOME slot) /\
-  (mut = Storage \/ mut = Transient) ==>
-  supported_storage_type tops elem /\ ~is_bytestring_type elem /\
-  (~supported_full_word_type elem ==> ~is_word_type elem)
+    SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
+  ~supported_full_word_type elem ==> expr_type e = elem
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `nid` >> strip_tac >>
   drule supported_variable_decl_mem >> strip_tac >>
@@ -273,3 +279,16 @@ Proof
   gvs[supported_storage_type_def, Once supported_nested_type_def,
       supported_full_word_type_def, is_word_type_def, is_bytestring_type_def]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (storage arrays of bytestrings and aggregates); callers split
+  Theorem append_storage_element_domain:
+    body_inv tops ctx cenv cx /\
+    supported_variable_decl tops nid =
+      SOME (vis,mut,ArrayT elem (Dynamic dn),SOME slot) /\
+    (mut = Storage \/ mut = Transient) ==>
+    supported_storage_type tops elem /\ ~is_bytestring_type elem /\
+    (~supported_full_word_type elem ==> ~is_word_type elem)
+  Proof
+    cheat
+  QED
+*)

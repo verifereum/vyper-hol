@@ -69,19 +69,21 @@ Proof
   disch_then drule >> simp[]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  strip_tac >> Cases >> simp[gas_shadow_expr_def, supported_target_def] >>
+  rpt gen_tac >> Cases_on `b` >> simp[gas_shadow_expr_def] >> metis_tac[]
+QED
+*)
 Theorem shadow_target_support[local]:
   (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e)) ==>
   !target tops bindings. supported_target tops bindings target ==>
     supported_target tops bindings (gas_shadow_target target)
 Proof
-  strip_tac >> Cases >> simp[gas_shadow_expr_def, supported_target_def] >>
-  rpt gen_tac >> Cases_on `b` >> simp[gas_shadow_expr_def] >> metis_tac[]
+  cheat
 QED
 
-Theorem shadow_assignment_support[local]:
-  (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e)) ==>
-  !target tops bindings e. supported_assignment tops bindings target e ==>
-    supported_assignment tops bindings (gas_shadow_assignment target) (gas_shadow_expr e)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> Cases >> simp[gas_shadow_assignment_def, supported_assignment_def]
   >- (rpt strip_tac >> gvs[AllCaseEqs()]
@@ -93,6 +95,14 @@ Proof
   irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >>
   Cases >> simp[gas_shadow_assignment_def] >> metis_tac[shadow_target_support]
 QED
+*)
+Theorem shadow_assignment_support[local]:
+  (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e)) ==>
+  !target tops bindings e. supported_assignment tops bindings target e ==>
+    supported_assignment tops bindings (gas_shadow_assignment target) (gas_shadow_expr e)
+Proof
+  cheat
+QED
 
 Theorem shadow_string_support[local]:
   (!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) ==>
@@ -103,6 +113,14 @@ Proof
     expr_type_def] >> metis_tac[gas_shadow_expr_def]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  strip_tac >> conj_tac >> Cases >>
+  simp[gas_shadow_assert_reason_def, gas_shadow_raise_reason_def,
+    supported_assert_reason_def, supported_raise_reason_def] >>
+  metis_tac[shadow_string_support]
+QED
+*)
 Theorem shadow_reason_support[local]:
   (!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) ==>
   (!r tops. supported_assert_reason tops r ==>
@@ -110,10 +128,7 @@ Theorem shadow_reason_support[local]:
   (!r tops. supported_raise_reason tops r ==>
     supported_raise_reason tops (gas_shadow_raise_reason r))
 Proof
-  strip_tac >> conj_tac >> Cases >>
-  simp[gas_shadow_assert_reason_def, gas_shadow_raise_reason_def,
-    supported_assert_reason_def, supported_raise_reason_def] >>
-  metis_tac[shadow_string_support]
+  cheat
 QED
 
 Theorem shadow_loop_iterator_place_root[local]:

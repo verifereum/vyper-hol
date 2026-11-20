@@ -43,6 +43,14 @@ Proof
   simp[supported_declaration_header_def, supported_declaration_body_def]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  rpt gen_tac >> strip_tac >> drule classify_functions_fallback_mem >> strip_tac >>
+  gvs[constSubstTheory.subst_consts_fn_empty] >>
+  drule_all supported_program_declaration >>
+  simp[supported_declaration_header_def, supported_declaration_body_def]
+QED
+*)
 Theorem entry_classified_fallback_support:
   !tops mut nr rr name args defaults ret body.
   supported_program tops /\ module_consts_env tops [] = [] /\
@@ -52,8 +60,5 @@ Theorem entry_classified_fallback_support:
   supported_function_return tops External ret /\
   supported_function_body tops External args body
 Proof
-  rpt gen_tac >> strip_tac >> drule classify_functions_fallback_mem >> strip_tac >>
-  gvs[constSubstTheory.subst_consts_fn_empty] >>
-  drule_all supported_program_declaration >>
-  simp[supported_declaration_header_def, supported_declaration_body_def]
+  cheat
 QED

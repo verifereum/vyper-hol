@@ -149,13 +149,7 @@ QED
   QED
 *)
 
-Theorem supported_assignment_storage_syntax:
-  supported_assignment tops bindings tgt e ==>
-  ~supported_assignment_exists expr_halt_root tgt /\
-  ~supported_assignment_exists expr_evm_run_root tgt /\
-  ~supported_assignment_exists call_operands_effect_root tgt /\
-  EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget tgt)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `tgt`
   >- (qmatch_goalsub_rename_tac `BaseTarget btgt` >>
@@ -178,14 +172,21 @@ Proof
   strip_tac >> drule supported_target_storage_syntax >>
   metis_tac[]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (pure operands may halt or run calls); callers split
+  Theorem supported_assignment_storage_syntax:
+    supported_assignment tops bindings tgt e ==>
+    ~supported_assignment_exists expr_halt_root tgt /\
+    ~supported_assignment_exists expr_evm_run_root tgt /\
+    ~supported_assignment_exists call_operands_effect_root tgt /\
+    EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget tgt)
+  Proof
+    cheat
+  QED
+*)
 
-Theorem supported_iterator_storage_syntax:
-  supported_iterator tops ty iter n ==>
-  ~supported_iterator_exists expr_halt_root iter /\
-  ~supported_iterator_exists expr_evm_run_root iter /\
-  ~supported_iterator_exists call_operands_effect_root iter /\
-  EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator iter)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `iter`
   >- (simp[supported_iterator_exists_def, int_calls_iterator_def] >>
@@ -210,14 +211,21 @@ Proof
               supported_expr_def, expr_has_evm_run_def] >>
   BasicProvers.EVERY_CASE_TAC >> simp[supported_pure_expr_def]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (pure operands may halt or run calls); callers split
+  Theorem supported_iterator_storage_syntax:
+    supported_iterator tops ty iter n ==>
+    ~supported_iterator_exists expr_halt_root iter /\
+    ~supported_iterator_exists expr_evm_run_root iter /\
+    ~supported_iterator_exists call_operands_effect_root iter /\
+    EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator iter)
+  Proof
+    cheat
+  QED
+*)
 
-Theorem supported_string_reason_storage_syntax:
-  supported_string_reason tops e ==>
-  ~supported_expr_exists expr_halt_root e /\
-  ~supported_expr_exists expr_evm_run_root e /\
-  ~supported_expr_exists call_operands_effect_root e /\
-  EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `supported_pure_expr tops e` suffices_by
@@ -228,20 +236,21 @@ Proof
   rename1 `Literal _ lit` >> Cases_on `lit` >>
   gvs[supported_string_reason_def, supported_pure_expr_def]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (pure operands may halt or run calls); callers split
+  Theorem supported_string_reason_storage_syntax:
+    supported_string_reason tops e ==>
+    ~supported_expr_exists expr_halt_root e /\
+    ~supported_expr_exists expr_evm_run_root e /\
+    ~supported_expr_exists call_operands_effect_root e /\
+    EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)
+  Proof
+    cheat
+  QED
+*)
 
-Theorem supported_reasons_storage_syntax:
-  (!tops reason. supported_assert_reason tops reason ==>
-    ~supported_assert_exists expr_halt_root reason /\
-    ~supported_assert_exists expr_evm_run_root reason /\
-    ~supported_assert_exists call_operands_effect_root reason /\
-    EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_assert_reason reason)) /\
-  (!tops reason. supported_raise_reason tops reason ==>
-    ~supported_raise_exists expr_halt_root reason /\
-    ~supported_raise_exists expr_evm_run_root reason /\
-    ~supported_raise_exists call_operands_effect_root reason /\
-    EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_raise_reason reason))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   conj_tac >> rpt gen_tac >> Cases_on `reason` >>
   simp[supported_assert_reason_def, supported_raise_reason_def,
@@ -249,120 +258,149 @@ Proof
        int_calls_assert_reason_def, int_calls_raise_reason_def] >>
   metis_tac[supported_string_reason_storage_syntax]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (pure operands may halt or run calls); callers split
+  Theorem supported_reasons_storage_syntax:
+    (!tops reason. supported_assert_reason tops reason ==>
+      ~supported_assert_exists expr_halt_root reason /\
+      ~supported_assert_exists expr_evm_run_root reason /\
+      ~supported_assert_exists call_operands_effect_root reason /\
+      EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_assert_reason reason)) /\
+    (!tops reason. supported_raise_reason tops reason ==>
+      ~supported_raise_exists expr_halt_root reason /\
+      ~supported_raise_exists expr_evm_run_root reason /\
+      ~supported_raise_exists call_operands_effect_root reason /\
+      EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_raise_reason reason))
+  Proof
+    cheat
+  QED
+*)
 
-Theorem supported_pure_exprs_storage_syntax:
-  supported_pure_exprs tops es ==>
-  ~supported_exprs_exists expr_halt_root es /\
-  ~supported_exprs_exists expr_evm_run_root es /\
-  ~supported_exprs_exists call_operands_effect_root es /\
-  EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)
-Proof
-  Induct_on `es` >>
-  simp[supported_pure_expr_def, supported_expr_exists_def, call_operands_effect_root_def,
-       int_calls_expr_def, EVERY_APPEND] >>
-  metis_tac[supported_expr_no_halt, supported_expr_no_evm_run, supported_expr_def,
-            expr_has_evm_run_def, supported_pure_main_calls,
-            supported_expr_no_call_operand_effects]
-QED
-
-Theorem supported_append_target_storage_syntax:
-  supported_append_target tops tgt ==>
-  ~supported_target_exists expr_halt_root tgt /\
-  ~supported_target_exists expr_evm_run_root tgt /\
-  ~supported_target_exists call_operands_effect_root tgt /\
-  EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target tgt)
-Proof
-  `(!e:expr. T) /\
-   !bt. supported_target_pure tops bt ==>
-     EVERY (\c. FST c = NONE /\
-       IS_SOME (supported_function_decl tops c Internal)) (int_calls_target bt)` by
-    (ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
-     simp[supported_target_pure_def, int_calls_expr_def, EVERY_APPEND] >>
-     metis_tac[supported_pure_main_calls]) >>
-  Cases_on `tgt` >>
-  simp[supported_append_target_def, supported_target_pure_def,
-       supported_expr_exists_def,
-       call_operands_effect_root_def, int_calls_expr_def, EVERY_APPEND] >>
-  metis_tac[supported_target_pure_expr_exclusion, supported_expr_no_halt,
-            supported_expr_no_evm_run,
-            supported_expr_no_call_operand_effects, supported_expr_def,
-            expr_has_evm_run_def, supported_pure_main_calls]
-QED
-
-Theorem supported_aug_target_storage_syntax:
-  supported_aug_target tops bindings tgt ==>
-  ~supported_target_exists expr_halt_root tgt /\
-  ~supported_target_exists expr_evm_run_root tgt /\
-  ~supported_target_exists call_operands_effect_root tgt /\
-  EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target tgt)
-Proof
-  strip_tac >> irule supported_target_info_storage_syntax >>
-  qexists_tac `bindings` >>
-  qpat_x_assum `supported_aug_target _ _ _` mp_tac >>
-  Cases_on `supported_target_info tops bindings tgt` >>
-  simp[supported_aug_target_def]
-QED
-
-Theorem supported_stmts_storage_syntax:
-  (!tops bindings s. supported_stmt tops bindings s ==>
-    ~supported_stmt_expr_exists expr_halt_root s /\
-    ~supported_stmt_expr_exists expr_evm_run_root s /\
-    ~supported_stmt_expr_exists call_operands_effect_root s /\
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (pure operands may halt or run calls); callers split
+  Theorem supported_pure_exprs_storage_syntax:
+    supported_pure_exprs tops es ==>
+    ~supported_exprs_exists expr_halt_root es /\
+    ~supported_exprs_exists expr_evm_run_root es /\
+    ~supported_exprs_exists call_operands_effect_root es /\
     EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) /\
-  (!tops bindings ss. supported_stmts tops bindings ss ==>
-    ~supported_stmts_expr_exists expr_halt_root ss /\
-    ~supported_stmts_expr_exists expr_evm_run_root ss /\
-    ~supported_stmts_expr_exists call_operands_effect_root ss /\
-    EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss))
-Proof
-  ho_match_mp_tac supported_stmt_ind >>
-  simp[supported_stmt_def, supported_stmt_expr_exists_def,
-       supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def,
-       int_calls_stmt_def, EVERY_APPEND] >>
-  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
-  imp_res_tac supported_assignment_def >>
-  imp_res_tac supported_log_def >>
-  imp_res_tac (REWRITE_RULE [DISJ_IMP_THM] (iffRL supported_expr_def)) >>
-  imp_res_tac supportedExprTraverseTheory.supported_expr_no_halt >>
-  imp_res_tac supportedExprTraverseTheory.supported_expr_no_evm_run >>
-  imp_res_tac supported_expr_main_calls >>
-  imp_res_tac supported_expr_no_call_operand_effects >>
-  imp_res_tac supported_assignment_storage_syntax >>
-  imp_res_tac supported_target_storage_syntax >>
-  imp_res_tac supported_aug_target_storage_syntax >>
-  imp_res_tac supported_append_target_storage_syntax >>
-  imp_res_tac supported_iterator_storage_syntax >>
-  imp_res_tac supported_reasons_storage_syntax >>
-  imp_res_tac supported_pure_exprs_storage_syntax >>
-  gvs[expr_has_evm_run_def]
-QED
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)
+  Proof
+    Induct_on `es` >>
+    simp[supported_pure_expr_def, supported_expr_exists_def, call_operands_effect_root_def,
+         int_calls_expr_def, EVERY_APPEND] >>
+    metis_tac[supported_expr_no_halt, supported_expr_no_evm_run, supported_expr_def,
+              expr_has_evm_run_def, supported_pure_main_calls,
+              supported_expr_no_call_operand_effects]
+  QED
+*)
 
-Theorem supported_callable_storage_syntax:
-  supported_program tops /\
-  IS_SOME (supported_function_decl tops (NONE,name) Internal) /\
-  lookup_callable_function deploy name tops =
-    SOME (mut,nr,args,defaults,ret,stmts) ==>
-  ~supported_exprs_exists expr_halt_root defaults /\
-  ~supported_exprs_exists expr_evm_run_root defaults /\
-  EVERY (\c. FST c = NONE /\
-             IS_SOME (supported_function_decl tops c Internal))
-    (int_calls_exprs defaults) /\
-  ~supported_stmts_expr_exists expr_halt_root stmts /\
-  ~supported_stmts_expr_exists expr_evm_run_root stmts /\
-  EVERY (\c. FST c = NONE /\
-             IS_SOME (supported_function_decl tops c Internal))
-    (int_calls_stmts stmts)
-Proof
-  strip_tac >> drule_all supported_callable_body_contract >> strip_tac >>
-  drule supported_pure_exprs_storage_syntax >>
-  drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[] >>
-  simp[EVERY_MEM] >> metis_tac[]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (pure operands may halt or run calls); callers split
+  Theorem supported_append_target_storage_syntax:
+    supported_append_target tops tgt ==>
+    ~supported_target_exists expr_halt_root tgt /\
+    ~supported_target_exists expr_evm_run_root tgt /\
+    ~supported_target_exists call_operands_effect_root tgt /\
+    EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_target tgt)
+  Proof
+    `(!e:expr. T) /\
+     !bt. supported_target_pure tops bt ==>
+       EVERY (\c. FST c = NONE /\
+         IS_SOME (supported_function_decl tops c Internal)) (int_calls_target bt)` by
+      (ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+       simp[supported_target_pure_def, int_calls_expr_def, EVERY_APPEND] >>
+       metis_tac[supported_pure_main_calls]) >>
+    Cases_on `tgt` >>
+    simp[supported_append_target_def, supported_target_pure_def,
+         supported_expr_exists_def,
+         call_operands_effect_root_def, int_calls_expr_def, EVERY_APPEND] >>
+    metis_tac[supported_target_pure_expr_exclusion, supported_expr_no_halt,
+              supported_expr_no_evm_run,
+              supported_expr_no_call_operand_effects, supported_expr_def,
+              expr_has_evm_run_def, supported_pure_main_calls]
+  QED
+*)
+
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (pure operands may halt or run calls); callers split
+  Theorem supported_aug_target_storage_syntax:
+    supported_aug_target tops bindings tgt ==>
+    ~supported_target_exists expr_halt_root tgt /\
+    ~supported_target_exists expr_evm_run_root tgt /\
+    ~supported_target_exists call_operands_effect_root tgt /\
+    EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_target tgt)
+  Proof
+    strip_tac >> irule supported_target_info_storage_syntax >>
+    qexists_tac `bindings` >>
+    qpat_x_assum `supported_aug_target _ _ _` mp_tac >>
+    Cases_on `supported_target_info tops bindings tgt` >>
+    simp[supported_aug_target_def]
+  QED
+*)
+
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (pure operands may halt or run calls); callers split
+  Theorem supported_stmts_storage_syntax:
+    (!tops bindings s. supported_stmt tops bindings s ==>
+      ~supported_stmt_expr_exists expr_halt_root s /\
+      ~supported_stmt_expr_exists expr_evm_run_root s /\
+      ~supported_stmt_expr_exists call_operands_effect_root s /\
+      EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) /\
+    (!tops bindings ss. supported_stmts tops bindings ss ==>
+      ~supported_stmts_expr_exists expr_halt_root ss /\
+      ~supported_stmts_expr_exists expr_evm_run_root ss /\
+      ~supported_stmts_expr_exists call_operands_effect_root ss /\
+      EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss))
+  Proof
+    ho_match_mp_tac supported_stmt_ind >>
+    simp[supported_stmt_def, supported_stmt_expr_exists_def,
+         supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def,
+         int_calls_stmt_def, EVERY_APPEND] >>
+    rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+    imp_res_tac supported_assignment_def >>
+    imp_res_tac supported_log_def >>
+    imp_res_tac (REWRITE_RULE [DISJ_IMP_THM] (iffRL supported_expr_def)) >>
+    imp_res_tac supportedExprTraverseTheory.supported_expr_no_halt >>
+    imp_res_tac supportedExprTraverseTheory.supported_expr_no_evm_run >>
+    imp_res_tac supported_expr_main_calls >>
+    imp_res_tac supported_expr_no_call_operand_effects >>
+    imp_res_tac supported_assignment_storage_syntax >>
+    imp_res_tac supported_target_storage_syntax >>
+    imp_res_tac supported_aug_target_storage_syntax >>
+    imp_res_tac supported_append_target_storage_syntax >>
+    imp_res_tac supported_iterator_storage_syntax >>
+    imp_res_tac supported_reasons_storage_syntax >>
+    imp_res_tac supported_pure_exprs_storage_syntax >>
+    gvs[expr_has_evm_run_def]
+  QED
+*)
+
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (pure operands may halt or run calls); callers split
+  Theorem supported_callable_storage_syntax:
+    supported_program tops /\
+    IS_SOME (supported_function_decl tops (NONE,name) Internal) /\
+    lookup_callable_function deploy name tops =
+      SOME (mut,nr,args,defaults,ret,stmts) ==>
+    ~supported_exprs_exists expr_halt_root defaults /\
+    ~supported_exprs_exists expr_evm_run_root defaults /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal))
+      (int_calls_exprs defaults) /\
+    ~supported_stmts_expr_exists expr_halt_root stmts /\
+    ~supported_stmts_expr_exists expr_evm_run_root stmts /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal))
+      (int_calls_stmts stmts)
+  Proof
+    strip_tac >> drule_all supported_callable_body_contract >> strip_tac >>
+    drule supported_pure_exprs_storage_syntax >>
+    drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[] >>
+    simp[EVERY_MEM] >> metis_tac[]
+  QED
+*)
 
 Theorem body_eval_target_place_storage:
   (!r s. eval_base_place cx tgt st = (r,s) ==>

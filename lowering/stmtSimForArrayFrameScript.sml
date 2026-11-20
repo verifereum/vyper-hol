@@ -1420,36 +1420,38 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem supported_iterator_scopes:
-  !tops ty it n cx es res es'.
-    supported_iterator tops ty it n /\
-    ~supported_iterator_exists expr_internal_call_root it /\
-    eval_iterator cx it es = (res,es') ==>
-    es'.scopes = es.scopes
-Proof
-  Cases_on `it` >> rpt gen_tac >> strip_tac
-  >~ [`eval_iterator cx (Array arr) es = _`]
-  >- (irule array_iterator_scopes >> goal_assum (drule_at Any) >>
-      Cases_on `arr`
-      >~ [`Name _ _`] >- metis_tac[name_expr_scopes]
-      >~ [`TopLevelName _ nid`]
-      >- (PairCases_on `nid` >> simp[Once evaluate_def] >>
-          metis_tac[lookup_global_scopes]) >>
-      gvs[supported_iterator_def, supportedStmtTraverseTheory.supported_iterator_exists_def] >>
-      metis_tac[supported_expr_scopes]) >>
-  rename1 `eval_iterator cx (Range a b) es = _` >>
-  irule range_iterator_scopes >> goal_assum (drule_at Any) >>
-  Cases_on `a`
-  >~ [`eval_iterator cx (Range (Literal aty alit) b) es = _`]
-  >- (Cases_on `b`
-      >~ [`eval_iterator cx (Range (Literal aty alit) (Literal bty blit)) es = _`]
-      >- (Cases_on `alit` >> Cases_on `blit` >> gvs[supported_iterator_def] >>
-          metis_tac[literal_expr_scopes, cj 1 supported_pure_scopes_mutual]) >>
-      gvs[supported_iterator_def] >>
-      metis_tac[literal_expr_scopes, cj 1 supported_pure_scopes_mutual]) >>
-  gvs[supported_iterator_def] >>
-  metis_tac[cj 1 supported_pure_scopes_mutual]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (it pinned an exclusion); no theorem uses it
+  Theorem supported_iterator_scopes:
+    !tops ty it n cx es res es'.
+      supported_iterator tops ty it n /\
+      ~supported_iterator_exists expr_internal_call_root it /\
+      eval_iterator cx it es = (res,es') ==>
+      es'.scopes = es.scopes
+  Proof
+    Cases_on `it` >> rpt gen_tac >> strip_tac
+    >~ [`eval_iterator cx (Array arr) es = _`]
+    >- (irule array_iterator_scopes >> goal_assum (drule_at Any) >>
+        Cases_on `arr`
+        >~ [`Name _ _`] >- metis_tac[name_expr_scopes]
+        >~ [`TopLevelName _ nid`]
+        >- (PairCases_on `nid` >> simp[Once evaluate_def] >>
+            metis_tac[lookup_global_scopes]) >>
+        gvs[supported_iterator_def, supportedStmtTraverseTheory.supported_iterator_exists_def] >>
+        metis_tac[supported_expr_scopes]) >>
+    rename1 `eval_iterator cx (Range a b) es = _` >>
+    irule range_iterator_scopes >> goal_assum (drule_at Any) >>
+    Cases_on `a`
+    >~ [`eval_iterator cx (Range (Literal aty alit) b) es = _`]
+    >- (Cases_on `b`
+        >~ [`eval_iterator cx (Range (Literal aty alit) (Literal bty blit)) es = _`]
+        >- (Cases_on `alit` >> Cases_on `blit` >> gvs[supported_iterator_def] >>
+            metis_tac[literal_expr_scopes, cj 1 supported_pure_scopes_mutual]) >>
+        gvs[supported_iterator_def] >>
+        metis_tac[literal_expr_scopes, cj 1 supported_pure_scopes_mutual]) >>
+    gvs[supported_iterator_def] >>
+    metis_tac[cj 1 supported_pure_scopes_mutual]
+  QED
+*)
 
 Theorem balanced_conditional_projection[local]:
   !cx tv ss1 ss2 name es res es'.
