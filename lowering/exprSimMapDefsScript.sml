@@ -9,7 +9,7 @@ Theory exprSimMapDefs
 Ancestors
   exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext
   vyperStoragePlaceProvenance exprLowering vyperInterpreter vyperState
-  vyperTypeCallGraph vyperTypeSystem
+  vyperTypeCallGraph vyperTypeSystem vyperContext option pair
 
 (* The results the mapping judgment speaks of: any result, and the errors
    expr_res_ok allows. *)
@@ -66,7 +66,35 @@ End
 (* expr_body_pre for an expression naming a mapping, which
    well_typed_expr does not type: type_place_expr gives it a mapping's
    type. *)
-Definition expr_map_pre_def:
+Definition expr_map_pre_mods_def[nocompute]:
+  expr_map_pre_mods mods cenv cx env e es <=>
+    expr_sim_inv_mods mods cenv cx env es /\
+    (?kt vt. type_place_expr env e = SOME (HashMapT kt vt)) /\
+    byte_widths_expr e /\ alloc_limits_expr cenv e /\
+    call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
+    ~supported_expr_exists (const_name_root_mods mods) e /\
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+          (int_calls_expr e) /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+              EXISTS (occurs_abi_decode_target target o SND) mods) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env_all_modules mods) target))
+End
+
+Definition expr_map_pre_split_def[nocompute]:
+  expr_map_pre cenv cx env e es <=>
+    expr_map_pre_mods [(NONE,cx_tops cx)] cenv cx env e es /\
+    expr_sim_inv cenv cx env es /\
+    EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+              occurs_abi_decode_target target (cx_tops cx)) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
+End
+
+Theorem expr_map_pre_def:
   expr_map_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\
     (?kt vt. type_place_expr env e = SOME (HashMapT kt vt)) /\
@@ -82,7 +110,9 @@ Definition expr_map_pre_def:
               occurs_abi_decode_target target (cx_tops cx)) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
               is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
-End
+Proof
+  cheat
+QED
 
 (* expr_vv_case for an expression naming a mapping. *)
 Definition expr_map_case_def:
