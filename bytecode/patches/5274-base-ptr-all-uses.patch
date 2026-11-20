@@ -1,6 +1,6 @@
 Upstream: https://github.com/vyperlang/vyper/pull/5274
 Status: merged (bbba50e10e45703a6ce1190e4f0e5dedccf8d2b2)
-Scope: the fixpoint sweep in BasePtrAnalysis, with hunk context adapted to the pin (which lacks the OrderedSet import); the tests are not ported.
+Scope: the fixpoint sweep in BasePtrAnalysis. The tests are not ported.
 
 diff --git a/vyper/venom/analysis/base_ptr_analysis.py b/vyper/venom/analysis/base_ptr_analysis.py
 index e6538b21..b3a85397 100644
@@ -12,8 +12,8 @@ index e6538b21..b3a85397 100644
  from dataclasses import dataclass
  from typing import Optional
  
-@@ -17,7 +16,7 @@ from vyper.evm.address_space import (
- from vyper.exceptions import CompilerPanic
+@@ -18,7 +17,7 @@ from vyper.exceptions import CompilerPanic
+ from vyper.utils import OrderedSet
  from vyper.venom.analysis.analysis import IRAnalysis
  from vyper.venom.analysis.cfg import CFGAnalysis
 -from vyper.venom.basicblock import IRBasicBlock, IRInstruction, IRLiteral, IROperand, IRVariable
@@ -21,7 +21,7 @@ index e6538b21..b3a85397 100644
  from vyper.venom.memory_location import (
      Allocation,
      InstAccessOps,
-@@ -108,18 +107,21 @@ class BasePtrAnalysis(IRAnalysis):
+@@ -109,18 +108,21 @@ class BasePtrAnalysis(IRAnalysis):
          self._untracked_root_active = set()
          self.cfg = self.analyses_cache.request_analysis(CFGAnalysis)
  
