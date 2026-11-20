@@ -9,7 +9,8 @@ Ancestors
   bodySimFull bodyFullPreds exprSimECArith
   gasShadowCompile exprSimHypsDefs exprLowering loweringPosts compileEnv vyperAST list
   vyperStorageTrace vyperStorageFootprint exprSimHyps exprSimOperands exprSimSource
-  stateRelProj allocaSiteResource bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  stateRelProj allocaSiteResource allocasBelowFmpUpdatesProps
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem ecadd_staging_full_from_transfers:
   (!pp bp pd sa sb s pw bw G tn nd lo ctx func bb explicit PG.
@@ -579,10 +580,9 @@ Resume ecadd_staging_full_from_transfers[after_first_copy]:
     (qpat_assum `regions_disjoint (w2n wi) 128 (w2n w2) 64` mp_tac >>
      pure_rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp tm` by
-    (`allocas_below_fmp tm <=> allocas_below_fmp ta` by
-       (qpat_assum `tm with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = ta` mp_tac >>
-        simp[NoAsms, venomStateTheory.venom_state_component_equality] >> strip_tac >>
-        asm_rewrite_tac[ptrDisciplineTheory.allocas_below_fmp_def]) >>
+    (qpat_assum `tm with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = ta`
+       (assume_tac o REWRITE_RULE[allocas_below_fmp_updates] o
+        Q.AP_TERM `allocas_below_fmp`) >>
      asm_rewrite_tac[]) >>
   asm "copy_rule" (fn copy_rule =>
     drule_all (SRULE [GSYM arithmeticTheory.ADD_ASSOC]
