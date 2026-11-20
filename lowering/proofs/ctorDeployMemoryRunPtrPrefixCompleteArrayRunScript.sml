@@ -644,7 +644,7 @@ Proof
   mp_tac prefix_complete_array_body_pair_mode >>
   (impl_tac >- (PairCases_on `X` >> gvs[Excl "enc_def"])) >>
   strip_tac >> PairCases_on `X` >>
-  fs[Excl "enc_def"] >>
+  full_simp_tac std_ss [] >>
   drule abi_decoder_recursive_data_facts >> strip_tac >>
   qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>

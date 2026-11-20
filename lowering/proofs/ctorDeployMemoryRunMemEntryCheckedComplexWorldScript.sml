@@ -225,7 +225,16 @@ Proof
   `type_memory_size_fields (ZIP (MAP FST args,tvs)) = type_memory_size_list tvs` by
     (irule type_memory_size_fields_zip >> simp[]) >>
   `type_memory_bytes ce (StructT nsid) = SUM (MAP (type_memory_bytes ce) (MAP SND args))` by
-    fs[abi_decoder_metadata_def, Once type_memory_size_def, Excl "enc_def"] >>
+    (qpat_assum `abi_decoder_metadata ce env (StructT nsid) _ _ _ _`
+       (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
+     qpat_assum `type_memory_size (StructTV _) = type_memory_bytes ce (StructT nsid)`
+       (fn size =>
+         qpat_assum `type_memory_size_fields (ZIP (MAP FST args,tvs)) = type_memory_size_list tvs`
+           (fn fields =>
+             qpat_assum `type_memory_size_list tvs = SUM _`
+               (fn members =>
+                 ACCEPT_TAC (TRANS (GSYM (PURE_ONCE_REWRITE_RULE [type_memory_size_def] size))
+                   (TRANS fields members)))))) >>
   drule_all abi_decoder_struct_field_types >> strip_tac >>
   drule abi_decoder_struct_infos >> strip_tac >>
   `vyper_to_abi_type env (StructT nsid) =

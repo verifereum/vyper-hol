@@ -528,9 +528,15 @@ Resume blockhash_full_suffix[success]:
  `u8.vs_allocas = s.vs_allocas /\ u8.vs_requests = v6.vs_requests /\
   ~u8.vs_halted` by simp[Abbr `u8`, update_var_def] >>
  `op_taint tn6 arg = {} /\ op_prov G6 arg = NONE` by
-   (Cases_on `arg` >>
-    fs[Abbr `tn6`, Abbr `G6`, Abbr `j6`, mk_inst_def,
-      step_taint_def, step_prov_def, out_prov_def, out_taint_def,
+   (qpat_assum `op_taint tn4 arg = {}` mp_tac >>
+    qpat_assum `op_prov G4 arg = NONE` mp_tac >>
+    qpat_assum `arg <> Var recent` mp_tac >>
+    qpat_assum `Abbrev (tn6 = _)` (mp_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+    qpat_assum `Abbrev (G6 = _)` (mp_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+    qpat_assum `Abbrev (j6 = _)` (mp_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+    POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+    Cases_on `arg` >>
+    fs[mk_inst_def, step_taint_def, step_prov_def, out_prov_def, out_taint_def,
       set_var_taint_def, set_prov_def, op_taint_def, op_prov_def,
       FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]) >>
  `j8.inst_opcode <> INVOKE /\ ~is_terminator j8.inst_opcode` by

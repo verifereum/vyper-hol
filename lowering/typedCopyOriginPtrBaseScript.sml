@@ -434,7 +434,18 @@ Proof
     (gvs[] >> simp[venomInstTheory.is_terminator_def]) >>
   `!out. op = Var out ==> not_fresh_at b out` by
     metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_fresh] >>
-  metis_tac[typed_copy_origin_ptr_emit_op_path]
+  mp_tac (Q.INST [`args` |-> `[left;right]`] typed_copy_origin_ptr_emit_op_path) >>
+  (impl_tac THENL
+    [asm_rewrite_tac[] >> rpt strip_tac >>
+     qpat_assum `!out. ptr_inst_ok D lo 0 ctx func G tn
+       (mk_inst a.cs_next_id opc [left;right] [out]) s /\ _`
+       (qspec_then `out` strip_assume_tac) >>
+     asm_rewrite_tac[],
+     disch_then (qx_choosel_then [`out`, `t`, `G'`, `tn'`] strip_assume_tac) >>
+     qexistsl_tac [`out`, `t`, `G'`, `tn'`] >>
+     asm_rewrite_tac[]]) >>
+  qpat_assum `!out. op = Var out ==> not_fresh_at b out` MATCH_MP_TAC >>
+  asm_rewrite_tac[]
 QED
 
 Theorem typed_copy_origin_ptr_index_addresses_exact:

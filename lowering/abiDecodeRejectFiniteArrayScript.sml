@@ -453,8 +453,9 @@ Proof
      fs[Abbr `q`] >>
      mp_tac (Q.INST [`data_base` |-> `p+32`, `H` |-> `L`, `sz` |-> `stride`]
        abi_array_pointer_check_bounds) >> simp[]) >>
-  drule_all (BETA_RULE finite_reject_indexed_pass_boundary) >>
-  disch_then (qspec_then `PG` (qx_choosel_then [`u`,`Gu`,`tu`] assume_tac)) >>
+  mp_tac (BETA_RULE finite_reject_indexed_pass_boundary) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choosel_then [`u`,`Gu`,`tu`] assume_tac) >>
   qexistsl [`u`,`Gu`,`tu`] >> gvs[Abbr `q`, Abbr `delta`]
 QED
 

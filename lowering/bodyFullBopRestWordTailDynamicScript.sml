@@ -377,8 +377,13 @@ Resume rest_word_membership_tail_dynamic_const_full[runtime_callback]:
      (compile_ptr_load F cenv.ce_imm_alloca loc) (SOME cap) is_in sl = (out,ct)` by
     (`compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc =
        compile_ptr_load F cenv.ce_imm_alloca loc` by
-       (simp[FUN_EQ_THM] >> Cases_on `loc` >> fs[contextTheory.compile_ptr_load_def]) >>
-     metis_tac[]) >>
+       (qpat_assum `~(cenv.ce_is_ctor /\ loc = LocCode)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        Cases_on `loc` >> simp[FUN_EQ_THM, contextTheory.compile_ptr_load_def]) >>
+     pop_assum (fn eq =>
+       qpat_assum `compile_array_membership_loop _ _ _ _ _
+         (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) _ _ sl = (out,ct)`
+         (ACCEPT_TAC o PURE_REWRITE_RULE [eq]))) >>
   `?sp gp tp. !h. guard h ==>
     gas_origin_ptr_path (DF h,lo,explicit,ctx,fn,PG)
       (s,Gs,Ts) [] (OK sp,gp,tp) /\

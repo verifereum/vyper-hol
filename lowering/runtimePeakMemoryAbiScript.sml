@@ -88,8 +88,11 @@ Theorem dalloca_windows_abi_decode:
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >>
   rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
-  simp[Once compile_abi_decode_to_buf_def, compile_abi_decode_static_def] >>
-  windows_tac [dalloca_windows_abi_decode_helpers] >>
+  simp[Once compile_abi_decode_to_buf_def, compile_abi_decode_static_def]
+  >>> SPLIT_LT 2 (ALL_LT, ALLGOALS (windows_tac [dalloca_windows_abi_decode_helpers]))
+  >>> SPLIT_LT 1 (ALL_LT,
+        SPLIT_LT 1 (ALLGOALS (windows_tac [dalloca_windows_abi_decode_helpers]), ALL_LT))
+  >>> SPLIT_LT 1 (ALLGOALS (windows_tac [dalloca_windows_abi_decode_helpers]), ALL_LT) >>
   metis_tac[ADD_COMM]
 QED
 

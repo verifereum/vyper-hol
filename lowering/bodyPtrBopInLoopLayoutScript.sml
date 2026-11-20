@@ -81,8 +81,9 @@ Proof
   CONV_TAC (LAND_CONV (RAND_CONV
     (SIMP_CONV (srw_ss())
       [emit_inst_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, fresh_var_def, fresh_id_def, emit_def, new_block_def]))) >>
-  simp[APPEND_ASSOC, arithmeticTheory.ADD_ASSOC] >>
+       comp_return_def, fresh_var_def, fresh_id_def, emit_def, new_block_def])))
+  >>> SPLIT_LT 16 (ALL_LT, ALLGOALS (simp[APPEND_ASSOC, arithmeticTheory.ADD_ASSOC]))
+  >>> SPLIT_LT 16 (ALLGOALS (simp[APPEND_ASSOC, arithmeticTheory.ADD_ASSOC]), ALL_LT) >>
   CONV_TAC (LAND_CONV (RAND_CONV (SIMP_CONV (srw_ss()) [new_block_def]))) >>
   simp[APPEND_ASSOC, arithmeticTheory.ADD_ASSOC] >>
   CONV_TAC (LAND_CONV (RAND_CONV (SIMP_CONV (srw_ss())

@@ -60,7 +60,16 @@ Proof
      qexistsl_tac [`ids`, `[(d,LENGTH (enc at av))]`, `load`, `{}`, `[]`, `u`] >>
      asm_rewrite_tac[EVERY_DEF, EMPTY_SUBSET]) >>
   qexists_tac `raw` >> asm_rewrite_tac[] >>
-  reverse conj_tac >- (fs[Abbr `t`] >> metis_tac[]) >>
+  reverse conj_tac >-
+    (gen_tac >> disch_tac >>
+     qpat_assum `Abbrev (t = _)`
+       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     irule EQ_TRANS >> qexists_tac `lookup_var x u` >> conj_tac
+     >- (qpat_assum `!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x u`
+           MATCH_MP_TAC >>
+         first_assum ACCEPT_TAC) >>
+     qpat_assum `!x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s`
+       MATCH_MP_TAC >> first_assum ACCEPT_TAC) >>
   `window_strong_result ctx func st en out at av d s t` suffices_by
     simp_tac bool_ss [Abbr `t`] >>
   irule window_complex_phase_result >> asm_rewrite_tac[] >>
