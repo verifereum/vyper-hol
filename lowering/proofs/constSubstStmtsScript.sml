@@ -23,6 +23,19 @@ Proof
   metis_tac[]
 QED
 
+Theorem const_subst_context_checked_artifact:
+  const_subst_context roots cx env E mods art /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  check_contract mode cx.layouts cx.txn.target mods = SOME art' /\
+  frame_maps env' art' /\
+  env'.type_defs = env.type_defs /\
+  env'.bare_globals = env.bare_globals /\
+  env'.toplevel_vtypes = env.toplevel_vtypes ==>
+  const_subst_context roots cx env' E mods art'
+Proof
+  rw[const_subst_context_def, checked_frame_context_def] >> metis_tac[]
+QED
+
 Theorem const_subst_context_type_stmt:
   const_subst_context roots cx env E mods art /\
   type_stmt env ret s = SOME env' ==>
