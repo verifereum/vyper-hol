@@ -1,19 +1,8 @@
-(*
- * The custom-error revert gadget: the Venom code compile_revert_with_custom_error
- * emits after its argument stores (stmtLowering).  It allocates a buffer of the
- * arguments' ABI size bound plus a selector word, MSTOREs the selector, ABI-encodes
- * the argument tuple behind it (when there are arguments) and REVERTs from buf+28.
+(* Expose the compiler sites for argument snapshots, direct ABI encoding and
+ * REVERT, together with the selector frame and exact REVERT result.
  *
- * The argument stores interleave compile_expr, so each tower (S1 stmt_frag, S3
- * stmt_frag_mem, stmt_frag_ptr) simulates them with its own expression judgement;
- * the tail after them is Venom-only and has this one execution lemma, which all
- * three towers' custom-error cases use.
- *
- * TOP-LEVEL:
- *   custom_error_revert_tail_def               the code after the argument stores
- *   compile_revert_with_custom_error_split     the lowering = alloc; stores; tail
- *   custom_error_revert_tail_run (ADMITTED)    the tail reaches REVERT, writing only
- *                                              inside its own fresh allocas
+ * The tuple-window tail is an independent gadget. Its proofs describe a
+ * payload already stored in a tuple buffer and quantify over where it lives.
  *)
 Theory stmtSimCustomErrorRevert
 Ancestors
@@ -27,6 +16,9 @@ Ancestors
   stmtSimCustomErrorPayloadPrepare externalReturnEncoderSites abiEncoderResultLive
   calldataDynOwned allocaSiteResource stmtSimCustomErrorTrapCompile
   stmtSimCustomErrorTrap stmtSimCustomErrorTrapPath runFromGasPathMem
+  abiEncodeValuesPhases fragGasEmitCtrl ptrSafeRun ptrDiscipline instMemFrontier
+  memSafeRun unitTransformDefs gasEvents gasCount venomExecProps
+  valueEncodingDefs valueEncodingProofs codegenRel contextCodegenRel memLocDefs list pair
 
 Definition custom_error_revert_tail_def:
   custom_error_revert_tail cenv id tys args_buf no_args =
@@ -50,30 +42,36 @@ Definition custom_error_revert_tail_def:
 End
 
 Theorem compile_revert_with_custom_error_split:
-  !cenv id positional kwargs params s0 s1.
-    cenv.ce_error_info (nsid_to_string id) = SOME params /\
-    compile_revert_with_custom_error cenv (CustomError id positional kwargs) s0 =
-      ((),s1) ==>
-    ?args_alloc sa sm.
-      compile_alloc_buffer (type_memory_bytes cenv (TupleT (MAP SND params))) s0 =
-        (args_alloc,sa) /\
-      compile_custom_error_store_args cenv
-        (custom_error_exprs (CustomError id positional kwargs))
-        (MAP SND params) args_alloc.buf_operand 0 sa = ((),sm) /\
-      custom_error_revert_tail cenv id (MAP SND params) args_alloc.buf_operand
-        (NULL (custom_error_exprs (CustomError id positional kwargs))) sm =
-        ((),s1)
+  cenv.ce_error_info (nsid_to_string id) = SOME params /\
+  args = custom_error_exprs (CustomError id positional kwargs) /\
+  tys = MAP (lowered_value_type cenv) args /\
+  compile_revert_with_custom_error cenv (CustomError id positional kwargs) s0 =
+    ((),s1) ==>
+  ?saved sa buf sm ss.
+    compile_ext_call_args compile_expr cenv [] tys args s0 = (saved,sa) /\
+    compile_alloc_buffer (abi_size_bound cenv.ce_struct_fields (TupleT tys) + 32)
+      sa = (buf,sm) /\
+    emit_void MSTORE
+      [buf.buf_operand; Lit (n2w (cenv.ce_method_id (SND id) (MAP SND params)))]
+      sm = ((),ss) /\
+    (if NULL args then
+       ?offset sn. emit_op ADD [buf.buf_operand; Lit 28w] ss = (offset,sn) /\
+                   emit_inst REVERT [offset; Lit 4w] [] sn = ((),s1)
+     else
+       ?dst st encoded en offset sr len sn.
+         emit_op ADD [buf.buf_operand; Lit 32w] ss = (dst,st) /\
+         compile_abi_encode_values_to_buf cenv dst (ZIP (saved,tys)) st = (encoded,en) /\
+         emit_op ADD [buf.buf_operand; Lit 28w] en = (offset,sr) /\
+         emit_op ADD [Lit 4w; encoded] sr = (len,sn) /\
+         emit_inst REVERT [offset; len] [] sn = ((),s1))
 Proof
-  rpt strip_tac >>
-  Cases_on `compile_alloc_buffer (type_memory_bytes cenv (TupleT (MAP SND params))) s0` >>
-  rename1 `_ = (args_alloc,sa)` >>
-  Cases_on `compile_custom_error_store_args cenv
-              (custom_error_exprs (CustomError id positional kwargs))
-              (MAP SND params) args_alloc.buf_operand 0 sa` >>
-  rename1 `_ = (u,sm)` >> Cases_on `u` >>
-  qexistsl_tac [`args_alloc`,`sa`,`sm`] >>
-  gvs[compile_revert_with_custom_error_def, custom_error_revert_tail_def,
-      comp_bind_def, comp_ignore_bind_def, comp_return_def]
+  strip_tac >>
+  qpat_x_assum `compile_revert_with_custom_error _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [compile_revert_with_custom_error_def, LET_THM,
+    optionTheory.option_case_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  IF_CASES_TAC >> gvs[comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[comp_bind_def]) >> metis_tac[]
 QED
 
 Theorem ce_trap_custom_error_revert_tail:
@@ -373,7 +371,7 @@ Proof
   strip_tac >> metis_tac[]
 QED
 
-(* ADMITTED: the gadget lemma (run from the state after the argument stores).
+(* The legacy tuple-buffer gadget starts after the argument stores.
    With arguments, the args tuple is a registered alloca outside this fragment,
    holding a valid encoder input whose encoding fits the ABI size bound.  A
    recorded ALLOCA keeps its literal size (the clause stmt_state_rel carries),
@@ -410,3 +408,107 @@ Proof
   drule custom_error_trap_path_reflect >> simp[] >>
   strip_tac >> metis_tac[]
 QED
+
+(* Preserve the complete selector word through cursor and payload writes. *)
+Theorem custom_error_selector_word_frame:
+  window_phase ctx func st en ids outs s t /\ alloca_inv s /\
+  FLOOKUP s.vs_allocas owner = SOME (b,sz) /\ owner NOTIN ids /\
+  32 <= sz /\ EVERY (\(p,n). b+32 <= p) outs /\
+  (!i. EVERY (\(p,n). i < p \/ p+n <= i) outs /\
+    (!id p n. id IN ids /\ FLOOKUP t.vs_allocas id = SOME (p,n) ==>
+      i < p \/ p+n <= i) /\ i IN tn'.t_mem ==> i IN tn.t_mem) ==>
+  FLOOKUP t.vs_allocas owner = SOME (b,sz) /\
+  mem_bytes_at b 32 t.vs_memory = mem_bytes_at b 32 s.vs_memory /\
+  (!i. b <= i /\ i < b+32 /\ i IN tn'.t_mem ==> i IN tn.t_mem)
+Proof
+  strip_tac >> irule abi_encode_values_registered_window >>
+  qpat_assum `window_phase _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `FLOOKUP s.vs_allocas owner = _` (irule_at Any) >>
+  simp[EVERY_MEM, FORALL_PROD, venomMemDefsTheory.regions_disjoint_def] >>
+  fs[EVERY_MEM, FORALL_PROD] >> metis_tac[]
+QED
+
+(* The selector uses the final four bytes of the word MSTORE wrote. *)
+Theorem custom_error_emit_revert_exact:
+  emit_inst REVERT [Var offset;len] [] st = ((),en) /\
+  fn_has_code st en func /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  eval_operand (Var offset) s = SOME (n2w (b+28)) /\
+  eval_operand len s = SOME (n2w (4 + LENGTH bytes)) /\
+  FLOOKUP G offset = SOME (b,cap) /\ b+32+LENGTH bytes <= b+cap /\
+  b+cap <= s.vs_alloca_next /\ b+cap < dimword (:256) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  op_taint tn (Var offset) = {} /\ op_taint tn len = {} /\
+  mem_bytes_at b 32 s.vs_memory = word_to_bytes (selector:bytes32) T /\
+  mem_bytes_at (b+32) (LENGTH bytes) s.vs_memory = bytes /\
+  (!i. b+28 <= i /\ i < b+32 ==> i NOTIN tn.t_mem) /\
+  (!i. b+32 <= i /\ i < b+32+LENGTH bytes ==> i NOTIN tn.t_mem) ==>
+  ?t. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+        (s,G,tn) [] (Abort Revert_abort t,G,tn) /\
+      t.vs_returndata = DROP 28 (word_to_bytes selector T) ++ bytes /\
+      (!i. b+28 <= i /\ i < b+32+LENGTH bytes ==> i NOTIN tn.t_mem)
+Proof
+  strip_tac >>
+  `!i. b+28 <= i /\ i < b+32+LENGTH bytes ==> i NOTIN tn.t_mem` by
+    (rpt strip_tac >> Cases_on `i < b+32` >- metis_tac[] >>
+     `b+32 <= i` by decide_tac >> metis_tac[]) >>
+  drule emit_inst_extends >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  qabbrev_tac `inst = mk_inst st.cs_next_id REVERT [Var offset;len] []` >>
+  `get_instruction bb s.vs_inst_idx = SOME inst` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `inst`]) >>
+  `b+28 < dimword (:256) /\ 4+LENGTH bytes < dimword (:256)` by decide_tac >>
+  qabbrev_tac `ret = mem_bytes_at (b+28) (4+LENGTH bytes) s.vs_memory` >>
+  qabbrev_tac `t = revert_state (set_returndata ret s)` >>
+  `!fuel. step_inst fuel ctx inst s = Abort Revert_abort t` by
+    (gen_tac >>
+     mp_tac (Q.SPECL [`s`, `Var offset`, `len`, `st.cs_next_id`,
+       `n2w (b+28):bytes32`, `n2w (4+LENGTH (bytes:word8 list)):bytes32`] step_revert_behavior) >>
+     simp[Abbr `inst`, Abbr `t`, Abbr `ret`, step_inst_non_invoke, mk_inst_def,
+          mem_bytes_at_def, w2n_n2w]) >>
+  suspend "run"
+QED
+
+Resume custom_error_emit_revert_exact[run]:
+  `source_memory_read_ranges inst s = [(b+28,4+LENGTH bytes)]` by
+    simp[Abbr `inst`, source_memory_read_ranges_def, mk_inst_def,
+         memory_range_of_operands_def, w2n_n2w] >>
+  `inst.inst_opcode = REVERT /\ inst.inst_operands = [Var offset;len] /\
+    source_memory_write_ranges inst s = [] /\
+    mem_read_ops inst = SOME <|iao_ofst := Var offset; iao_size := SOME len;
+      iao_max_size := SOME len |>` by
+    simp[Abbr `inst`, mk_inst_def, source_memory_write_ranges_def, mem_read_ops_def] >>
+  `b+28+(4+LENGTH bytes) <= b+cap /\
+    b+28+(4+LENGTH bytes) <= s.vs_alloca_next` by decide_tac >>
+  `ptr_inst_ok D lo 0 ctx func G tn inst s` by
+    (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def] >> conj_tac
+     >- (qx_gen_tac `operand` >> Cases_on `operand = Var offset` >> simp[] >>
+         Cases_on `operand = len` >> simp[]) >>
+     disch_tac >> qx_gen_tac `i` >>
+     Cases_on `b+28 <= i` >> simp[] >>
+     Cases_on `i < b+(LENGTH bytes+32)` >> simp[] >>
+     `i < b+32+LENGTH bytes` by decide_tac >>
+     qpat_x_assum `!i. b+28 <= i /\ i < b+32+LENGTH bytes ==> _` irule >>
+     simp[]) >>
+  `mem_safe_step 0 ctx inst s` by
+    simp[mem_safe_step_non_invoke, inst_mem_below_frontier_def,
+         inst_dload_in_section_def] >>
+  `gas_events_step 0 ctx func.fn_name inst s = [] /\
+    gas_count_step 0 ctx inst s = 0` by
+    simp[Abbr `inst`, mk_inst_def, gas_events_step_def, gas_count_step_def] >>
+  qexists_tac `t` >>
+  conj_tac
+  >- (irule exit_inst_origin_ptr >> simp[exit_result_def] >>
+      qexists_tac `inst` >>
+      fs[]) >>
+  simp[Abbr `t`, set_returndata_def, revert_state_def, Abbr `ret`] >>
+  `mem_bytes_at (b+28) 4 s.vs_memory = DROP 28 (word_to_bytes selector T)` by
+    (qspecl_then [`b`,`28`,`4`,`s.vs_memory`] mp_tac mem_bytes_at_split_padded >>
+     simp[] >> disch_then (mp_tac o AP_TERM ``DROP 28 : word8 list -> word8 list``) >>
+     simp[DROP_APPEND2, LENGTH_mem_bytes_at_proof]) >>
+  mp_tac (Q.SPECL [`b+28`, `4`, `LENGTH (bytes:word8 list)`, `s.vs_memory`]
+    mem_bytes_at_split_padded) >>
+  simp[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]
+QED
+Finalise custom_error_emit_revert_exact

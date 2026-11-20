@@ -4,7 +4,7 @@ Ancestors
   list pair stmtLowering context exprLowering venomInst loweringShapeDefs
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeCallbacks ctorCallFreeOps
   ctorCallFreeStmtReturns ctorCallFreeStmtStorage ctorCallFreeStmtLogs
-  ctorCallFreeABIEncode loweringFunctionOpcodes
+  ctorCallFreeABIEncode loweringFunctionOpcodes loweringCallArgsOpcodes
   supportedExprTraverse supportedStmtTraverse e2eDeployDefs loweringShapeProps
 
 (* Discharge precise opcode premises from the complement-of-seven premise;
@@ -15,7 +15,7 @@ val base7_tm = ``!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /
 fun b7 th = SIMP_RULE (srw_ss()) [ASSUME base7_tm, DISJ_IMP_THM, FORALL_AND_THM] th;
 fun c7 ths th = SIMP_RULE (srw_ss()) (map b7 ths) (b7 th);
 
-Theorem outcomes_free_custom_error_store_args[local]:
+Theorem outcomes_free_custom_error_snapshots[local]:
   (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
          opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
          opc <> RETURNDATACOPY ==> P opc) ==>
@@ -29,7 +29,7 @@ Theorem outcomes_free_custom_error_store_args[local]:
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
-  !es tys ce dst off st.
+  !es tys ce st.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
                  ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
@@ -37,18 +37,13 @@ Theorem outcomes_free_custom_error_store_args[local]:
   EVERY ($~ o supported_expr_exists expr_shape_root) es ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_custom_error_store_args ce es tys dst off st)))
+    (state_insts (SND (compile_ext_call_args compile_expr ce [] tys es st)))
   )
 Proof
-  strip_tac >>
-  strip_tac >> Induct >> Cases_on `tys` >>
-  simp[compile_custom_error_store_args_def, every_state_insts_return] >>
-  rpt gen_tac >> strip_tac >> qid_spec_tac `st` >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[COND_RATOR, COND_RAND, every_state_insts_return,
-      opcode_every_emit_op, (b7 outcomes_free_unwrap_value), (b7 outcomes_free_store_memory)])]) >>
-  metis_tac[]
+  rpt strip_tac >> irule opcode_every_ext_call_args_with_snapshot >>
+  simp[c7 [outcomes_free_unwrap_value, outcomes_free_alloc_buffer,
+    outcomes_free_store_memory] outcomes_free_snapshot] >>
+  fs[EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem outcomes_free_revert_with_custom_error[local]:
@@ -77,7 +72,7 @@ Theorem outcomes_free_revert_with_custom_error[local]:
   )
 Proof
   strip_tac >>
-  strip_tac >> drule (UNDISCH outcomes_free_custom_error_store_args) >> strip_tac >>
+  strip_tac >> drule (UNDISCH outcomes_free_custom_error_snapshots) >> strip_tac >>
   gen_tac >> Cases >> rename1 `CustomError id pos kws` >> rpt gen_tac >>
   strip_tac >> qid_spec_tac `st` >>
   simp[compile_revert_with_custom_error_def] >>
@@ -86,7 +81,7 @@ Proof
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac, IF_CASES_TAC,
     gen_tac, CHANGED_TAC (simp[every_state_insts_return,
       opcode_every_emit_inst, opcode_every_emit_void, opcode_every_emit_op,
-      (b7 outcomes_free_alloc_buffer), cj 2 (b7 outcomes_free_abi_encode)])]) >>
+      (b7 outcomes_free_alloc_buffer), outcomes_free_abi_encode_values_to_buf])]) >>
   metis_tac[]
 QED
 

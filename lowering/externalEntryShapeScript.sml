@@ -4081,21 +4081,15 @@ Proof
 QED
 
 Theorem compile_custom_error_labels:
-  (!cenv es tys d off s.
-    cs_extends s (SND (compile_custom_error_store_args cenv es tys d off s)) /\
-    EVERY (isPREFIX "@") (added_labels s
-      (SND (compile_custom_error_store_args cenv es tys d off s)))) /\
-  (!cenv err s.
+  !cenv err s.
     cs_extends s (SND (compile_revert_with_custom_error cenv err s)) /\
     EVERY (isPREFIX "@") (added_labels s
-      (SND (compile_revert_with_custom_error cenv err s))))
+      (SND (compile_revert_with_custom_error cenv err s)))
 Proof
-  conj_asm1_tac
-  >- (gen_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >>
-      once_rewrite_tac[compile_custom_error_store_args_def] >>
-      stmt_labels_chain stmt_labels_rws) >>
   gen_tac >> Cases >> once_rewrite_tac[compile_revert_with_custom_error_def] >>
-  stmt_labels_chain stmt_labels_rws
+  stmt_labels_chain
+    (compile_ext_call_args_labels :: compile_abi_encode_values_to_buf_labels ::
+     stmt_labels_rws)
 QED
 
 val stmt_labels_rws = stmt_labels_rws @

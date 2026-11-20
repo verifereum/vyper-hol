@@ -2,7 +2,7 @@
 Theory gasShadowCompileStmtHelpers
 Ancestors
   gasShadowCompileStmtOps gasShadowCompileStmtBase gasShadowCompile
-  gasShadowCompileHelpers gasShadowCompileLiteral gasShadowCompileContext
+  gasShadowCompileHelpers gasShadowCompileExternal gasShadowCompileLiteral gasShadowCompileContext
   gasShadowCompileConvert gasShadowCompileAbi gasShadow gasShadowState
   stmtLowering exprLowering compileEnv vyperAST list
 
@@ -62,36 +62,31 @@ Proof
        combinTheory.o_DEF, pairTheory.PAIR_MAP_THM]
 QED
 
-Theorem gas_shadow_compile_custom_error_store_args:
-  !es tys dst off.
-  gas_shadow_compiles (compile_custom_error_store_args cenv es tys dst off)
-    (compile_custom_error_store_args cenv (MAP gas_shadow_expr es) tys dst off)
-Proof
-  Induct >> Cases_on `tys` >> rpt gen_tac >>
-  simp[compile_custom_error_store_args_def, comp_ignore_bind_def] >>
-  rpt IF_CASES_TAC >>
-  simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
-       gas_shadow_stmt_compile_expr, gas_shadow_compiles_unwrap_value,
-       gas_shadow_compiles_store_memory]
-QED
-
 Theorem gas_shadow_compile_revert_with_custom_error:
   gas_shadow_compiles (compile_revert_with_custom_error cenv err)
     (compile_revert_with_custom_error cenv (gas_shadow_custom_error err))
 Proof
-  namedCases_on `err` ["id positional kwargs"] >>
-  simp[gas_shadow_custom_error_def, compile_revert_with_custom_error_def] >>
+  Cases_on `err` >> rename1 `CustomError id pos kw` >>
+  simp[compile_revert_with_custom_error_def, gas_shadow_custom_error_def] >>
   Cases_on `cenv.ce_error_info (nsid_to_string id)` >>
   simp[gas_shadow_compiles_emit_inst] >>
   simp[GSYM gas_shadow_custom_error_def, gas_shadow_custom_error_exprs,
-       comp_ignore_bind_def] >>
+       comp_ignore_bind_def, MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss] >>
+  match_mp_tac gas_shadow_compiles_bind >> conj_tac
+  >- (mp_tac (Q.INST [`sh` |-> `T`]
+         (MATCH_MP gas_shadow_compiles_ext_call_args (cj 1 gas_shadow_compile_expr))) >>
+      simp[] >>
+      disch_then (qspecl_then [`custom_error_exprs (CustomError id pos kw)`,
+        `[]`, `MAP (lowered_value_type cenv)
+                    (custom_error_exprs (CustomError id pos kw))`] mp_tac) >>
+      simp[]) >>
+  gen_tac >> BETA_TAC >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_return,
-               gas_shadow_compile_custom_error_store_args,
                gas_shadow_compiles_emit_void] >> gen_tac >> BETA_TAC) >>
   IF_CASES_TAC >>
   simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
-       gas_shadow_compiles_emit_inst, gas_shadow_compiles_abi_encode_to_buf]
+       gas_shadow_compiles_emit_inst, gas_shadow_compiles_abi_encode_values_to_buf]
 QED
 
 Theorem gas_shadow_stmt_compile_expr_same[local]:

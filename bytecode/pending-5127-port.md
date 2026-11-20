@@ -12,10 +12,6 @@ The changes, as they appear in the pinned Python compiler:
 
 - P4 direct ABI encoder: values are encoded straight into the destination
   buffer, and an external call sends exactly the encoded length plus 4 bytes.
-  It also covers `_revert_with_custom_error`, which lowers each argument as
-  a value (`snapshot_value_for_delayed_use`), keeps no declared-type
-  argument tuple, and encodes with `abi_encode_values_to_buf`; the
-  `custom-errors/` fixtures return to parity with that port.
 
 P1 (ceil32: `and(add(x, 31), not 31)`), P2 (dynamic external arguments
 assert that their calldata offset isn't below 4, `_get_abi_arg_ptr`), P5 (a
@@ -49,12 +45,6 @@ P2 is ported. These still differ from the oracle with it:
 ## P4 (direct ABI encoder)
 
 - `abi-codegen/enc_multi`
-- `custom-errors/ce_assert_dynamic`
-- `custom-errors/ce_assert_noargs`
-- `custom-errors/ce_assert_static`
-- `custom-errors/ce_raise_kwargs`
-- `custom-errors/ce_raise_noargs`
-- `custom-errors/ce_raise_static`
 - `external-entries/base_dom1`
 - `main/event_log`
 - `main/mixed_event_log`
@@ -71,8 +61,6 @@ P2 is ported. These still differ from the oracle with it:
 ## P2 (calldata argument guard) + P4 (direct ABI encoder)
 
 - `abi-codegen/enc_ensT_bytes`
-- `custom-errors/ce_raise_dynamic`
-- `custom-errors/ce_raise_dynarray`
 - `main/abi_dynamic`
 - `main/abi_static`
 - `main/mixed_event_types`
