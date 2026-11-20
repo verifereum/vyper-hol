@@ -178,6 +178,57 @@ QED
 
 (* The bridges at the deployment entry: the S4 memory facts of vs from its
    memory-safe and pointer-safe runs from "__deploy". *)
+Theorem deploy_selected_memory_from_no_wrap:
+  deploy_phases policy tops (deploy_bc, runtime_bc)
+    (rpolicy, dunit, dout, prog, cplan) /\
+  vs.vs_alloca_next = imm_len tops /\
+  (!f inst s. raw_reachable vs dunit.cu_context f inst s ==>
+     dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp) /\
+  (ctx_has_dalloca dunit.cu_context ==>
+     imm_len tops + unit_alloca_budget dunit.cu_context +
+       32 * ctx_dload_count dunit.cu_context <= w2n vs.vs_initial_fmp) /\
+  code_layout_valid vs /\
+  lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME func /\
+  fn_entry_label func = SOME "__deploy" /\
+  (!fuel. mem_safe_blocks fuel dunit.cu_context func
+     (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                 vs_inst_idx := 0 |>)) /\
+  (!fuel. ptr_safe_blocks D (imm_len tops) fuel dunit.cu_context func [] FEMPTY
+     entry_taint
+     (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                 vs_inst_idx := 0 |>)) ==>
+  raw_unit_memory_ok dunit.cu_context vs /\
+  ptr_discipline (imm_len tops) dunit.cu_context vs /\
+  taint_within D dunit.cu_context vs /\
+  mem_inv dload_offset_ok dunit.cu_context vs /\
+  mem_inv dload_headroom_ok dunit.cu_context vs
+Proof
+  strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
+  drule lower_vyper_deploy_unit_entry >> strip_tac >>
+  drule deploy_imm_alloca_budget_ok >> strip_tac >>
+  `imm_len tops + unit_alloca_budget dunit.cu_context < dimword (:256)` by
+    decide_tac >>
+  rpt conj_tac
+  >- (qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `func`,
+                   `"__deploy"`, `vs`] mp_tac lowered_unit_raw_memory_ok_from_no_wrap >>
+      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[])
+  >- (qspecl_then [`D`, `imm_len tops`, `dunit.cu_context`, `"__deploy"`,
+                   `func`, `"__deploy"`, `vs`] mp_tac lowered_unit_ptr_taint >>
+      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[])
+  >- (qspecl_then [`D`, `imm_len tops`, `dunit.cu_context`, `"__deploy"`,
+                   `func`, `"__deploy"`, `vs`] mp_tac lowered_unit_ptr_taint >>
+      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[])
+  >- (qspecl_then [`dunit.cu_context`, `"__deploy"`, `func`, `"__deploy"`,
+                   `vs`] mp_tac lowered_unit_dload_offset_ok >>
+      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[]) >>
+  qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `func`, `vs`]
+    mp_tac lowered_unit_dload_headroom_ok_from >>
+  impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[]
+QED
+
 Theorem deploy_selected_memory:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
