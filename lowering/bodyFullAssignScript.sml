@@ -4440,14 +4440,20 @@ Proof
   drule_all aug_place_legacy_field_info >> simp[SF SFY_ss]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem body_assign_immutable_typed[local]:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  supported_immutable_type tops nsid = SOME ity /\
+  type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' ==>
+  cx.in_deploy /\ ~cx_const_name cx nsid /\
+  assignable_type env.type_defs (expr_type e) /\
+  type_widens_to env.type_defs (expr_type e) ity
 Proof
   Cases_on `nsid` >> strip_tac >>
   qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
   simp[supported_immutable_type_def] >>
   Cases_on `supported_variable_decl tops (q,r)` >> simp[] >>
   rename1 `_ = SOME decl` >> PairCases_on `decl` >>
-  Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
+  Cases_on `decl1` >>
   simp[] >> strip_tac >> gvs[] >>
   drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
   `get_module_code cx NONE = SOME tops /\
@@ -4457,7 +4463,7 @@ Proof
        env_context_consistent_def] >>
   `~cx_const_name cx (NONE,r)` by
     (strip_tac >> drule_all body_inv_const_name_decl >> simp[]) >>
-  rename1 `MEM (VariableDecl Private Immutable r ity NONE) tops` >>
+  rename1 `MEM (VariableDecl _ Immutable r ity _) tops` >>
   `FLOOKUP env.bare_globals (NONE,r) = SOME ity` by
     metis_tac[bare_globals_complete_def] >>
   qpat_x_assum `type_stmt _ _ _ = SOME _` mp_tac >>
@@ -4466,17 +4472,6 @@ Proof
   Cases_on `x` >> gvs[type_place_target_TopLevelNameTarget] >>
   Cases_on `cx.in_deploy` >> gvs[bare_global_assignable_complete_def] >>
   qpat_assum `!src ts vis id ty init. _ ==> _` (drule_all_then assume_tac) >> gvs[]
-QED
-*)
-Theorem body_assign_immutable_typed[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-  supported_immutable_type tops nsid = SOME ity /\
-  type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' ==>
-  cx.in_deploy /\ ~cx_const_name cx nsid /\
-  assignable_type env.type_defs (expr_type e) /\
-  type_widens_to env.type_defs (expr_type e) ity
-Proof
-  cheat
 QED
 
 Theorem body_assign_immutable_value_code[local]:
@@ -11574,72 +11569,14 @@ Proof
     (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
   simp[]
 QED
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all body_assign_immutable_bytes_loop_shape >>
-  disch_then (qx_choosel_then
-    [`hdr`,`loop_body`,`exit`,`ie`,`ih`,`ib`,`cv`,`test`,`sx`,`sp`,`value`,
-     `dx`,`dp`,`ip`,`nc`,`bbE`,`bbH`,`bbB`] strip_assume_tac) >>
-  qabbrev_tac `Inv = \(j:num) (G:(string,num # num) fmap) (tn:taint) (q:venom_state).
-    j <= n /\
-    (q with <|vs_vars := s0.vs_vars; vs_current_bb := s0.vs_current_bb;
-       vs_prev_bb := s0.vs_prev_bb; vs_inst_idx := s0.vs_inst_idx|>) =
-      immutable_transfers T T a b j 0 s0 /\
-    lookup_var cv q = SOME (n2w j) /\
-    FLOOKUP G cv = NONE /\ op_taint tn (Var cv) = {} /\
-    (!x. not_fresh_at sm x ==>
-      lookup_var x q = lookup_var x s0 /\ FLOOKUP G x = FLOOKUP G0 x /\
-      op_taint tn (Var x) = op_taint tn0 (Var x)) /\
-    eval_operand src q = SOME a /\ op_taint tn src = {} /\
-    (0 < n ==> ?p. src = Var p /\ ptr_covers G tn p q (32*n)) /\
-    eval_operand dst q = SOME b /\ op_taint tn dst = {} /\ op_prov G dst = NONE /\
-    eval_operand cnt q = SOME (n2w n) /\
-    op_taint tn cnt = {} /\ op_prov G cnt = NONE /\
-    (case imm of NONE => T | SOME region =>
-      eval_operand region q = SOME (0w:bytes32) /\
-      op_taint tn region = {} /\ op_prov G region = NONE) /\
-    q.vs_allocas = s0.vs_allocas /\ q.vs_alloca_next = s0.vs_alloca_next /\
-    q.vs_fmp = s0.vs_fmp /\ q.vs_initial_fmp = s0.vs_initial_fmp /\
-    allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q) /\
-    (!k. k < 32*j ==> (w2n b + k IN tn.t_mem <=> w2n a + k IN tn0.t_mem)) /\
-    (!i. ~(w2n b <= i /\ i < w2n b + 32*j) ==> (i IN tn.t_mem <=> i IN tn0.t_mem)) /\
-    tn.t_stor = tn0.t_stor /\ tn.t_trans = tn0.t_trans` >>
-  (let
-     (* All three transitions take this same concrete loop and entry context. *)
-     fun use_transition th =
-       qspecl_then [`sm`,`src`,`dst`,`cnt`,`imm`,`a`,`b`,`n`,`lo`,`ctx`,
-         `cv`,`s0`,`G0`,`tn0`,`D`,`explicit`,`func`,`PG`,`hdr`,`loop_body`,
-         `exit`,`ie`,`ih`,`ib`,`test`,`sx`,`sp`,`value`,`dx`,`dp`,`ip`,`nc`,
-         `bbE`,`bbH`,`bbB`] mp_tac th >>
-       (impl_tac >- asm_rewrite_tac[])
-   in
-     `?r G1 tn1.
-       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s0,G0,tn0) [] (OK r,G1,tn1) /\
-       Inv 0 G1 tn1 r /\ ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0` by
-       (use_transition body_assign_immutable_bytes_loop_init_actual >>
-        simp[Abbr `Inv`, GSYM CONJ_ASSOC]) >>
-     qspecl_then [`Inv`,`(D,lo,explicit,ctx,func,PG)`,`n`,`hdr`,`loop_body`,`exit`,
-       `n`,`0`,`G1`,`tn1`,`r`] mp_tac fragGasCopyLoopTheory.copy_loop_iterate_origin_ptr >>
-     (impl_tac >-
-       (conj_tac >-
-          (use_transition body_assign_immutable_bytes_loop_header_actual >>
-           simp[Abbr `Inv`, GSYM CONJ_ASSOC, SF CONJ_ss]) >>
-        conj_tac >-
-          (use_transition body_assign_immutable_bytes_loop_step_actual >>
-           simp[Abbr `Inv`]) >>
-        simp[]))
-   end) >>
-  disch_then (qx_choosel_then [`t`,`Gf`,`tnf`] strip_assume_tac) >>
-  qpat_x_assum `Inv n Gf tnf t` mp_tac >>
-  simp[Abbr `Inv`] >> strip_tac >>
-  qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[] >>
-  conj_tac >-
-    (irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  first_assum ACCEPT_TAC
-QED
-*)
+(* All three transitions take this same concrete loop and entry context. *)
+fun immutable_bytes_loop_transition th =
+  qspecl_then [`sm`,`src`,`dst`,`cnt`,`imm`,`a`,`b`,`n`,`lo`,`ctx`,
+    `cv`,`s0`,`G0`,`tn0`,`D`,`explicit`,`func`,`PG`,`hdr`,`loop_body`,
+    `exit`,`ie`,`ih`,`ib`,`test`,`sx`,`sp`,`value`,`dx`,`dp`,`ip`,`nc`,
+    `bbE`,`bbH`,`bbB`] mp_tac th >>
+  (impl_tac >- asm_rewrite_tac[]);
+
 Theorem body_assign_immutable_bytes_loop_actual[local]:
   !sm src dst cnt imm a b n lo ctx s0 G0 tn0 D explicit func PG u sb.
   compile_word_copy_loop_base src dst cnt LocMemory LocCode T imm sm = (u,sb) /\
@@ -11686,7 +11623,58 @@ Theorem body_assign_immutable_bytes_loop_actual[local]:
     (!i. ~(w2n b <= i /\ i < w2n b + 32*n) ==> (i IN tnf.t_mem <=> i IN tn0.t_mem)) /\
     tnf.t_stor = tn0.t_stor /\ tnf.t_trans = tn0.t_trans
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all body_assign_immutable_bytes_loop_shape >>
+  disch_then (qx_choosel_then
+    [`hdr`,`loop_body`,`exit`,`ie`,`ih`,`ib`,`cv`,`test`,`sx`,`sp`,`value`,
+     `dx`,`dp`,`ip`,`nc`,`bbE`,`bbH`,`bbB`] strip_assume_tac) >>
+  qabbrev_tac `Inv = \(j:num) (G:(string,num # num) fmap) (tn:taint) (q:venom_state).
+    j <= n /\
+    (q with <|vs_vars := s0.vs_vars; vs_current_bb := s0.vs_current_bb;
+       vs_prev_bb := s0.vs_prev_bb; vs_inst_idx := s0.vs_inst_idx|>) =
+      immutable_transfers T T a b j 0 s0 /\
+    lookup_var cv q = SOME (n2w j) /\
+    FLOOKUP G cv = NONE /\ op_taint tn (Var cv) = {} /\
+    (!x. not_fresh_at sm x ==>
+      lookup_var x q = lookup_var x s0 /\ FLOOKUP G x = FLOOKUP G0 x /\
+      op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+    eval_operand src q = SOME a /\ op_taint tn src = {} /\
+    (0 < n ==> ?p. src = Var p /\ ptr_covers G tn p q (32*n)) /\
+    eval_operand dst q = SOME b /\ op_taint tn dst = {} /\ op_prov G dst = NONE /\
+    eval_operand cnt q = SOME (n2w n) /\
+    op_taint tn cnt = {} /\ op_prov G cnt = NONE /\
+    (case imm of NONE => T | SOME region =>
+      eval_operand region q = SOME (0w:bytes32) /\
+      op_taint tn region = {} /\ op_prov G region = NONE) /\
+    q.vs_allocas = s0.vs_allocas /\ q.vs_alloca_next = s0.vs_alloca_next /\
+    q.vs_fmp = s0.vs_fmp /\ q.vs_initial_fmp = s0.vs_initial_fmp /\
+    allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q) /\
+    (!k. k < 32*j ==> (w2n b + k IN tn.t_mem <=> w2n a + k IN tn0.t_mem)) /\
+    (!i. ~(w2n b <= i /\ i < w2n b + 32*j) ==> (i IN tn.t_mem <=> i IN tn0.t_mem)) /\
+    tn.t_stor = tn0.t_stor /\ tn.t_trans = tn0.t_trans` >>
+  `?r G1 tn1.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s0,G0,tn0) [] (OK r,G1,tn1) /\
+    Inv 0 G1 tn1 r /\ ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0` by
+    (immutable_bytes_loop_transition body_assign_immutable_bytes_loop_init_actual >>
+     simp[Abbr `Inv`, GSYM CONJ_ASSOC]) >>
+  qspecl_then [`Inv`,`(D,lo,explicit,ctx,func,PG)`,`n`,`hdr`,`loop_body`,`exit`,
+    `n`,`0`,`G1`,`tn1`,`r`] mp_tac fragGasCopyLoopTheory.copy_loop_iterate_origin_ptr >>
+  (impl_tac >-
+    (conj_tac >-
+       (immutable_bytes_loop_transition body_assign_immutable_bytes_loop_header_actual >>
+        simp[Abbr `Inv`, GSYM CONJ_ASSOC, SF CONJ_ss]) >>
+     conj_tac >-
+       (immutable_bytes_loop_transition body_assign_immutable_bytes_loop_step_actual >>
+        simp[Abbr `Inv`]) >>
+     simp[])) >>
+  disch_then (qx_choosel_then [`t`,`Gf`,`tnf`] strip_assume_tac) >>
+  qpat_x_assum `Inv n Gf tnf t` mp_tac >>
+  simp[Abbr `Inv`] >> strip_tac >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[] >>
+  conj_tac >-
+    (irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 

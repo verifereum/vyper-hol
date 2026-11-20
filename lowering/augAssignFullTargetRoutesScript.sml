@@ -3,43 +3,13 @@ Ancestors
   bodyAugPlaceTarget supportedStmts supportedTargets supportedTypes
   supportedExprForms supportedDecls bodySim list alist
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >>
-  `supported_target tops bindings (NameTarget id) \/
-   supported_aug_target tops bindings (NameTarget id)` by
-    (qpat_x_assum `supported_stmt _ _ _` mp_tac >>
-     simp[Once supported_stmt_def]) >>
-  pop_assum strip_assume_tac
-  >- (Cases_on `ALOOKUP bindings id` >> gvs[supported_target_def] >>
-      rename1 `supported_value_type tops ity` >>
-      `supported_place_type tops ity` suffices_by
-        simp[supported_target_info_def] >>
-      Cases_on `ity` >>
-      gvs[supported_value_type_def, supported_place_type_def] >>
-      simp[Once supported_nested_type_def] >>
-      gvs[supported_scalar_type_def, supported_word_type_def,
-          supported_string_type_def] >>
-      (rpt conj_tac)
-      >~ [`EVERY _ l`]
-        >- (gvs[EVERY_MEM] >> rpt strip_tac >>
-            simp[Once supported_nested_type_def])
-      >~ [`ALOOKUP bindings id = SOME (ArrayT elem bd)`]
-        >- (Cases_on `bd` >> gvs[] >>
-            simp[Once supported_nested_type_def, supported_scalar_type_def])
-      >> Cases_on `supported_struct_fields tops p` >> gvs[] >>
-         (Cases_on `tops` >> gvs[supported_struct_fields_def]) >>
-         gvs[EVERY_MEM] >> rpt strip_tac >>
-         simp[Once supported_nested_type_def, supported_scalar_type_def]) >>
-  Cases_on `supported_target_info tops bindings (NameTarget id)` >>
-  gvs[supported_aug_target_def]
-QED
-*)
 Theorem augassign_name_target_info:
   supported_stmt tops bindings (AugAssign ty (NameTarget id) bop e) ==>
   ?pt. supported_target_info tops bindings (NameTarget id) = SOME pt
 Proof
-  cheat
+  simp[supported_stmt_def, supported_target_def, supported_aug_target_def,
+       supported_target_info_def] >>
+  Cases_on `ALOOKUP bindings id` >> simp[]
 QED
 
 (* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)

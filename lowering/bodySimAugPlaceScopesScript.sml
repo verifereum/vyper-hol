@@ -1,5 +1,6 @@
 Theory bodySimAugPlaceScopes
 Ancestors
+  targetPureSourceFrame
   supportedExprs vyperInterpreter vyperCallOutcomeFrame vyperScopePreservation
   vyperState vyperContext vyperMisc pair sum
   vyperStatePreservation vyperPlaceFrames vyperCallFrame vyperLocalAccessFrame
@@ -11,123 +12,6 @@ val trace_scopes_tac =
     (fn th => assume_tac (SIMP_RULE (srw_ss()) []
       (AP_TERM ``\s:evaluation_state. s.scopes`` th)))) >> gvs[];
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  rpt conj_tac >> rpt gen_tac >>
-  simp[supported_pure_expr_def]
-  >- (rpt strip_tac >>
-      gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
-          type_check_def, assert_def, return_def, raise_def, AllCaseEqs()])
-  >- simp[Once evaluate_def, return_def]
-  >- (PairCases_on `id` >> rpt strip_tac >>
-      gvs[Once evaluate_def] >> metis_tac[lookup_global_scopes])
-  >- (rpt strip_tac >> gvs[Once evaluate_def] >>
-      drule lookup_flag_mem_scopes >> simp[])
-  >- suspend "ifexp"
-  >- suspend "structlit"
-  >- suspend "subscript"
-  >- suspend "attribute"
-  >- suspend "builtin"
-  >- suspend "typebuiltin"
-  >- suspend "nil"
-  >- suspend "cons"
-  >- suspend "fields_nil"
-  >- suspend "fields_cons"
-  >- suspend "place_name"
-  >- suspend "place_global"
-  >- suspend "place_subscript"
-  >> suspend "place_rest"
-QED
-
-Resume aug_place_pure_scopes_mutual[ifexp]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs(),
-      return_def, raise_def] >>
-  imp_res_tac read_result_state >>
-  imp_res_tac conditional_result_state >> gvs[] >>
-  gvs[COND_RATOR, AllCaseEqs(), raise_def] >> metis_tac[]
-QED
-Resume aug_place_pure_scopes_mutual[structlit]:
-  PairCases_on `id` >> rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >> metis_tac[]
-QED
-Resume aug_place_pure_scopes_mutual[subscript]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
-  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  trace_scopes_tac >> metis_tac[]
-QED
-Resume aug_place_pure_scopes_mutual[attribute]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> trace_scopes_tac >> metis_tac[]
-QED
-Resume aug_place_pure_scopes_mutual[builtin]:
-  rpt strip_tac >>
-  `code_slice_source blt es = NONE` by
-    (Cases_on `code_slice_source blt es` >> simp[] >>
-     rename1 `SOME p` >> PairCases_on `p` >>
-     gvs[code_slice_source_SOME, supportedExprFormsTheory.supported_builtin_form_def]) >>
-  Cases_on `blt = Len` >> Cases_on `blt = Env MsgGas` >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-      assert_def, return_def, raise_def, COND_RATOR, lift_option_type_def,
-      vfmTypesTheory.option_CASE_rator,
-      AllCaseEqs()] >>
-  imp_res_tac result_array_length_state >>
-  imp_res_tac lift_option_type_state >>
-  imp_res_tac next_gas_reading_state >>
-  imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
-  imp_res_tac precompile_call_success_state >> gvs[] >>
-  gvs[builtin_args_length_ok_def] >>
-  Cases_on `es` >> gvs[] >> res_tac >> gvs[]
-QED
-Resume aug_place_pure_scopes_mutual[typebuiltin]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
-      ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
-  imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]
-QED
-Resume aug_place_pure_scopes_mutual[nil]:
-  simp[Once evaluate_def, return_def]
-QED
-Resume aug_place_pure_scopes_mutual[cons]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
-QED
-Resume aug_place_pure_scopes_mutual[fields_nil]:
-  simp[Once evaluate_def, return_def]
-QED
-Resume aug_place_pure_scopes_mutual[fields_cons]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
-QED
-Resume aug_place_pure_scopes_mutual[place_name]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
-      type_check_def, assert_def, return_def, raise_def, AllCaseEqs()]
-QED
-Resume aug_place_pure_scopes_mutual[place_global]:
-  PairCases_on `id` >> rpt strip_tac >>
-  gvs[Once evaluate_def] >> metis_tac[lookup_global_scopes]
-QED
-Resume aug_place_pure_scopes_mutual[place_subscript]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
-  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  trace_scopes_tac >> metis_tac[]
-QED
-Resume aug_place_pure_scopes_mutual[place_rest]:
-  rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> trace_scopes_tac >> metis_tac[]
-QED
-Finalise aug_place_pure_scopes_mutual
-*)
 Theorem aug_place_pure_scopes_mutual:
   (!tops e. supported_effect_free_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes) /\
@@ -140,7 +24,9 @@ Theorem aug_place_pure_scopes_mutual:
   (!tops e. supported_effect_free_place_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes)
 Proof
-  cheat
+  rpt conj_tac >> rpt strip_tac >>
+  imp_res_tac target_pure_source_mutual >>
+  fs[evaluation_state_component_equality]
 QED
 
 Theorem aug_place_pure_expr_scopes:
@@ -230,10 +116,14 @@ Proof
        call_cleanup_scopes))) >> gvs[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem aug_place_effect_scopes_mutual:
+  (!tops e. supported_root_effect_expr tops e ==>
+    !cx s r s'. eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes) /\
+  (!tops e. supported_root_effect_place_expr tops e ==>
+    !cx s r s'. eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes)
 Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  rpt conj_tac >> rpt gen_tac >> simp[supported_effect_expr_def]
+  ho_match_mp_tac supported_root_effect_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> simp[supported_root_effect_expr_def]
   >- suspend "intcall"
   >- suspend "extcall"
   >- suspend "send"
@@ -290,7 +180,7 @@ Resume aug_place_effect_scopes_mutual[extcall]:
   `supported_effect_free_exprs tops (TAKE 1 args) /\
    supported_effect_free_exprs tops (TAKE (LENGTH arg_types) (DROP 1 args)) /\
    supported_effect_free_exprs tops (DROP (1 + LENGTH arg_types) args)` by
-    (gvs[supported_pure_exprs_every] >>
+    (gvs[supported_effect_free_exprs_every] >>
      metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]) >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
   imp_res_tac eval_ext_call_preserves_non_accounts >>
@@ -307,15 +197,6 @@ Resume aug_place_effect_scopes_mutual[intcall]:
   metis_tac[aug_place_pure_exprs_scopes]
 QED
 Finalise aug_place_effect_scopes_mutual
-*)
-Theorem aug_place_effect_scopes_mutual:
-  (!tops e. supported_root_effect_expr tops e ==>
-    !cx s r s'. eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes) /\
-  (!tops e. supported_root_effect_place_expr tops e ==>
-    !cx s r s'. eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes)
-Proof
-  cheat
-QED
 
 Theorem aug_place_supported_expr_scopes:
   supported_root_expr tops e /\ eval_expr cx e s = (r,s') ==>
