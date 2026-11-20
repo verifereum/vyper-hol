@@ -36,14 +36,14 @@ Ancestors
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
   exprSimBuiltins exprSimExtCallCase bodyIntCallSeams bodySimFullMain bodyFullStructLit externalReturnValuedFull ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimExpr
-  stmtSimBreak stmtSimContinue stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
+  stmtSimBreak stmtSimContinue stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
-  stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignTupleMem
+  stmtSimAssign stmtSimAssignMem stmtSimAssignTuple
   storageCopyBodyRaisePtr
   stmtSimAssignStorage stmtSimStoreCopy storageCopyLive stmtSimAssignStorageCopy
   stmtSimAssignAttr
-  stmtSimAssignAttrStorage stmtSimAugAssignAttr
+  stmtSimAssignAttrStorage
   valueEncodingProofs
   localPtrsProps
   nonreentrantEntryEquiv

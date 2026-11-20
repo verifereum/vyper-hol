@@ -1,7 +1,7 @@
 Theory bodyImmutableAugAssignExec
 Ancestors
   bodyImmutableAugAssignFacts bodyImmutableAugAssignStore
-  stmtSimAugAssignStorage stmtSimAugAssign gasContext gasExemptCert gasSummary gasExemptPurePrefix
+  stmtSimAugAssign gasContext gasExemptCert gasSummary gasExemptPurePrefix
   fragGasMode fragGasPath fragGasPathMem fragGasSeq vyperExprNoControl exprSimDefs stmtSimDefs
   vyperInterpreter vyperState exprBopSimProps
 Libs

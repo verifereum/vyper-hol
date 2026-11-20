@@ -16,7 +16,7 @@
 
 Theory targetSubscriptSplit
 Ancestors
-  targetLocalLive targetPlaceLive targetSubscriptMemory targetSubscriptStorage targetSubscriptDecode targetSubscriptContinuation
+  targetLocalLive targetPlaceLive targetSubscriptMemory targetSubscriptStorage targetSubscriptContinuation
   targetPlaceSimCasesBase exprReasonOperand exprSimPopNestedLocalHandoff
   exprSimFieldLayout exprSafeOperandBuiltins exprSafeOperand
   exprSimSource evalNoHalt
