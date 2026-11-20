@@ -32,11 +32,12 @@ Inductive plan_aux_trace:
       (ps with <|ps_stack := stack; ps_spilled := spilled|>)
       (ops1,visited1,ps1) events1 /\
     plan_succs_trace lv dfg cfg fn stack spilled rest visited1
-      (ps with <|ps_alloc := ps1.ps_alloc with sa_free_slots := ps.ps_alloc.sa_free_slots;
-                 ps_label_counter := ps1.ps_label_counter|>)
+      (ps with ps_label_counter := ps1.ps_label_counter)
       (ops2,visited2,ps2) events2 ==>
     plan_succs_trace lv dfg cfg fn stack spilled (succ::rest) visited ps
-      (ops1 ++ ops2,visited2,ps2) (events1 ++ events2))
+      (ops1 ++ ops2,visited2,ps2 with ps_alloc := ps2.ps_alloc with
+        sa_next_offset := MAX ps1.ps_alloc.sa_next_offset
+                              ps2.ps_alloc.sa_next_offset) (events1 ++ events2))
 End
 
 Theorem plan_trace_erasure:
@@ -127,13 +128,15 @@ QED
 Theorem plan_succs_trace_cons:
   plan_succs_trace lv dfg cfg fn stack spilled (succ::rest) visited ps result events ==>
   ?ops1 visited1 ps1 ops2 visited2 ps2 events1 events2.
-    result = (ops1 ++ ops2,visited2,ps2) /\ events = events1 ++ events2 /\
+    result = (ops1 ++ ops2,visited2,ps2 with ps_alloc := ps2.ps_alloc with
+      sa_next_offset := MAX ps1.ps_alloc.sa_next_offset
+                            ps2.ps_alloc.sa_next_offset) /\
+    events = events1 ++ events2 /\
     plan_aux_trace lv dfg cfg fn [succ] visited
       (ps with <|ps_stack := stack; ps_spilled := spilled|>)
       (ops1,visited1,ps1) events1 /\
     plan_succs_trace lv dfg cfg fn stack spilled rest visited1
-      (ps with <|ps_alloc := ps1.ps_alloc with sa_free_slots := ps.ps_alloc.sa_free_slots;
-                 ps_label_counter := ps1.ps_label_counter|>)
+      (ps with ps_label_counter := ps1.ps_label_counter)
       (ops2,visited2,ps2) events2 /\
     set events1 SUBSET set events /\ set events2 SUBSET set events
 Proof

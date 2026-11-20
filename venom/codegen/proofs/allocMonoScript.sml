@@ -1153,7 +1153,7 @@ Proof
     rpt gen_tac >> strip_tac >>
     simp[Once generate_fn_plan_aux_def] >>
     every_case_tac >> gvs[] >>
-    strip_tac >> gvs[] >> decide_tac
+    strip_tac >> gvs[MAX_LE] >> decide_tac
   )
 QED
 
@@ -1188,7 +1188,7 @@ Proof
   ho_match_mp_tac generate_fn_plan_aux_fuel_ind >> rpt conj_tac >>
   rpt gen_tac >> simp[Once generate_fn_plan_aux_fuel_def] >>
   every_case_tac >> gvs[] >> rpt strip_tac >>
-  imp_res_tac generate_block_plan_alloc_mono >> gvs[] >> decide_tac
+  imp_res_tac generate_block_plan_alloc_mono >> gvs[MAX_LE] >> decide_tac
 QED
 
 Theorem generate_fn_plan_fuel_alloc_mono:
