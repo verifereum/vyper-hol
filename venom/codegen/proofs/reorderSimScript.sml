@@ -6285,21 +6285,6 @@ Definition reorder_steps_spill_ready_def:
       reorder_steps_spill_ready initial_fmp dfg pending lo items ps1
 End
 
-Theorem reorder_steps_spill_ready_two[local]:
-  !dfg pending lo idx1 op1 idx2 op2 ps.
-    let (ops1,ps1) = reorder_one dfg pending idx1 op1 ps in
-    let (ops2,ps2) = reorder_one dfg pending idx2 op2 ps1 in
-      reorder_steps_spill_ready initial_fmp dfg pending lo
-        [(idx1,op1); (idx2,op2)] ps =
-      (prefix_spill_wf initial_fmp lo ops1 ps /\
-       prefix_spill_wf initial_fmp lo ops2 ps1)
-Proof
-  rpt gen_tac >>
-  simp[reorder_steps_spill_ready_def, LET_THM] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[]
-QED
-
-
 Theorem reorder_one_inventory_subset:
   !dfg tops idx op ps ops ps'.
     idx < LENGTH tops /\ LENGTH tops <= 16 /\
