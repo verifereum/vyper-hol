@@ -219,12 +219,10 @@ Proof
   first_assum (irule_at (Pat `return_buf_frame _ _ _ _`)) >>
   first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
   first_assum (irule_at (Pat `gas_shadow_function _ _`)) >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  conj_tac
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
   >- (rpt gen_tac >> strip_tac >> conj_tac
       >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
-      metis_tac[haltExitProjTheory.halt_exit_INR_type]) >>
-  conj_tac
+      metis_tac[haltExitProjTheory.halt_exit_INR_type])
   >- (rpt gen_tac >> irule storage_trace_frame_ignore_bind >>
       simp[storage_trace_frame_checks] >>
       irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac >>
@@ -310,7 +308,8 @@ Proof
   qabbrev_tac `ro = if cap = 0 then ob else ob + 32` >>
   `cap <= round` by simp[Abbr `round`,spillSimTheory.n_le_round_up_32] >>
   `ro < dimword (:256)` by
-    (Cases_on `cap = 0` >> fs[Abbr `ro`]) >>
+    (qpat_assum `ob + (if cap = 0 then 0 else round + 32) < _` mp_tac >>
+     Cases_on `cap = 0` >> simp[Abbr `ro`]) >>
   `w2n (n2w ro : bytes32) = ro /\ w2n (n2w cap : bytes32) = cap /\
    w2n (n2w (b + 32) : bytes32) = b + 32 /\
    w2n (n2w (LENGTH bs) : bytes32) = LENGTH bs /\
@@ -435,14 +434,18 @@ Proof
   `expr_sim_inv cenv cx env esA` by
     (irule (cj 1 exprSimHashTheory.expr_body_pre_base_result) >>
      goal_assum (drule_at Any) >> simp[ETA_THM] >>
-     qexists_tac `INL av` >> fs[vyperStateTheory.bind_def]) >>
+     qexists_tac `INL av` >>
+     qpat_assum `bind (eval_expr cx a) (read_result cx) _ = (INL av,esA)` mp_tac >>
+     simp[NoAsms,vyperStateTheory.bind_def]) >>
   `expr_body_pre cenv cx env d (esA with gas_obs := gsD)` by
     (irule expr_body_pre_raw_call_arg >>
      first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
   `expr_sim_inv cenv cx env esD` by
     (irule (cj 1 exprSimHashTheory.expr_body_pre_base_result) >>
      goal_assum (drule_at Any) >> simp[ETA_THM] >>
-     qexists_tac `INL (BytesV bs)` >> fs[vyperStateTheory.bind_def]) >>
+     qexists_tac `INL (BytesV bs)` >>
+     qpat_assum `bind (eval_expr cx d) (read_result cx) _ = (INL (BytesV bs),esD)` mp_tac >>
+     simp[NoAsms,vyperStateTheory.bind_def]) >>
   `!p. ext_call_kwarg EKGas flags.rcf_kws xs = SOME p ==> gas = p` by
     (qpat_assum `go = ext_call_kwarg EKGas flags.rcf_kws xs`
        (fn th => rewrite_tac [GSYM th]) >>
