@@ -4,7 +4,7 @@ Ancestors
   bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullOfVV gasOutcomeFullCompose
   exprSimSliceExtcodeTyped bodyFullUnwrapRun exprSimProps exprSimWordArgs exprSimHash
-  exprSimSliceExtcodeEntry bodyInvNoDalloca
+  exprSimSliceExtcodeEntry
   bodyFullBuiltinBytestringQuery bodyFullBuiltinBytestringBuffer
   bodyFullBuiltinBytestringBounds bodyFullBuiltinBytestringCopy
   bodyFullBuiltinBytestringAbort exprSimSliceSelfCode
@@ -13,8 +13,9 @@ Ancestors
   exprLowering vyperInterpreter vyperAST list
   fragExec emitHelperProps bodyPtrBytestringBuiltinsSlice
   bodyPtrBytestringBuiltinsBuffer loweringPosts loweringStateRelDefs
-  reasonCodeResourcesPtr bodyPtrAttributeFields contextRawReachable unitMemInv vyperState
+  reasonCodeResourcesPtr bodyPtrAttributeFields bodyFullIfExpReach unitMemInv vyperState
   stateRelProj
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem slice_builtin_external_vv_full_from_tail:
   (!query_op query_ops sa limit sc start cnt sd N out data se copy_op copy_ops sf sb
@@ -25,7 +26,9 @@ Theorem slice_builtin_external_vv_full_from_tail:
     emit_void copy_op copy_ops se = ((),sf) /\
     emit_void MSTORE [out;cnt] sf = ((),sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+    local_ptrs_reserved cenv sa /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
     MEM query_op [CODESIZE;EXTCODESIZE] /\ LENGTH query_ops <= 1 /\
     (!arg. MEM arg query_ops ==> op_taint tn arg = {}) /\
     step_inst_base
@@ -82,7 +85,8 @@ Theorem slice_builtin_external_vv_full_from_tail:
           (Value (BytesV (TAKE k (DROP i code))))
           (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) ee HG tm t /\
         ptr_buf_ok cenv e out HG t /\ ghost_kept_at lo cenv es sa G tn s HG tm)
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)) /\
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+         (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))) /\
   (!cenv cx env a n ct addr start len es ee e tops ctx DF lo d shadow_ctx PG func shadow_func ty.
     expr_body_pre cenv cx env
       (Builtin a (Slice n) [Builtin ct (Acc Code) [addr];start;len]) es /\
@@ -109,7 +113,6 @@ Theorem slice_builtin_external_vv_full_from_tail:
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "tail_run") (mk_asm "child_run")) >>
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by (drule body_inv_no_dalloca >> simp[]) >>
   qpat_assum `code_slice_source _ _ = SOME _`
     (strip_assume_tac o REWRITE_RULE [code_slice_source_SOME]) >>
   gvs[] >> fs[vyperContextTheory.builtin_args_length_ok_def] >>
@@ -166,7 +169,7 @@ Proof
   qpat_x_assum `expr_sim_full _ _ _ _ start _` (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then drule >> simp[] >> disch_then drule_all >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ child_post _` >>
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   conj_tac >- (rpt gen_tac >> BETA_TAC >>
     rpt (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
          simp[vyperStorageTraceTheory.storage_trace_frame_state_reads,
@@ -257,17 +260,22 @@ Proof
        (qspec_then `H` (mp_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >> simp[]) >>
   `gas_admissible (bind (eval_expr cx len) (read_result cx)) expr_res_ok mid` by
     (drule exprSimSourceTheory.expr_body_pre_gas_admissible >> simp[]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (MATCH_MP body_inv_no_phi (CONJ inv member))))) >>
+  `!fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_no_wrap inst v` by
+    (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+        gas_origin_ptr_path _ _ marks (OK t,_,_)`
+       (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then mp_tac)) >>
+     qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` mp_tac >>
+     qpat_assum `!fn inst v. frag_reachable ctx func s0 fn inst v ==> _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_origin_ptr_path_dalloca_no_wrap]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ len _` (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`st1`,`st2`,`st1'`,`st2'`,`len_op`,`t`,`G1`,`tn1`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt strip_tac >>
-    drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-    qpat_x_assum `tail_run :- _` kall_tac >>
-    qpat_x_assum `child_run :- _` kall_tac >>
-    fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
-    `inst.inst_opcode <> DALLOCA` by metis_tac[] >>
-    simp[unitTransformDefsTheory.dalloca_no_wrap_def])) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ (mid,t,G1,tn1) len_post _` >>
-  BETA_TAC >> irule gas_outcome_full_bind_all >>
+  BETA_TAC >> irule gas_outcome_full_bind_all_path >>
   conj_tac >- (rpt gen_tac >> BETA_TAC >>
     rpt (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
          simp[vyperStorageTraceTheory.storage_trace_frame_state_reads,
@@ -354,13 +362,16 @@ Proof
        (qspec_then `H` (mp_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >> simp[]) >>
   `gas_admissible (bind (eval_expr cx addr) (read_result cx)) expr_res_ok len_mid` by
     (drule exprSimSourceTheory.expr_body_pre_gas_admissible >> simp[]) >>
+  `!fn inst v. frag_reachable ctx func u fn inst v ==> dalloca_no_wrap inst v` by
+    (qpat_assum `!H. valid_horizon cx st0 H len_mid.storage_trace ==>
+        gas_origin_ptr_path _ _ len_marks (OK u,_,_)`
+       (qspec_then `storage_trace_horizon len_mid.storage_trace` (drule_then mp_tac)) >>
+     qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` mp_tac >>
+     qpat_assum `!fn inst v. frag_reachable ctx func t fn inst v ==> _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_origin_ptr_path_dalloca_no_wrap]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ addr _` (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`st2`,`st3`,`st2'`,`st3'`,`addr_op`,`u`,`G2`,`tn2`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt strip_tac >>
-    drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-    qpat_x_assum `tail_run :- _` kall_tac >> qpat_x_assum `child_run :- _` kall_tac >>
-    fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
-    `inst.inst_opcode <> DALLOCA` by metis_tac[] >> simp[unitTransformDefsTheory.dalloca_no_wrap_def])) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ (len_mid,u,G2,tn2) addr_post _` >>
   BETA_TAC >> irule gas_outcome_full_bind_all >>
   conj_tac >- (rpt gen_tac >> BETA_TAC >>
@@ -607,6 +618,17 @@ Proof
        (mp_then (Pos (el 2)) mp_tac exprSimSliceExtcodeTheory.slice_extcodecopy_step) >>
      disch_then (drule_all_then (qspec_then `se.cs_next_id` mp_tac)) >>
      simp[wordsTheory.w2n_n2w]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z /\
+    z.vs_alloca_next + pending_alloca_size func z <= w2n z.vs_initial_fmp` by
+    (qpat_assum `!H. valid_horizon _ _ H addr_mid.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx addr_mid z /\ _`
+       (qspec_then `storage_trace_horizon addr_mid.storage_trace` mp_tac) >>
+     (impl_tac >- simp[]) >>
+     disch_then (fn th =>
+       mp_tac (MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp
+         (CONJUNCT1 th)) >>
+       mp_tac (MATCH_MP stmt_state_rel_fmp_room (CONJUNCT1 th))) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac) >>
   rpt (qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac) >>
   irule gas_outcome_full_post_source >>
   asm "tail_run" (irule_at Any) >>
@@ -697,6 +719,10 @@ Proof
      qpat_assum `ghost_kept_at lo cenv len_mid st2 G2 tn2 u G' tn'` (irule_at Any) >>
      qpat_assum `ghost_kept_at lo cenv mid st1 G1 tn1 t G2 tn2` (irule_at Any) >>
      simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t''` by
+    (qpat_assum `vv_post H ctx func cenv cx _ _ _ _ _ _ _ _ t''`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o REWRITE_RULE [loweringPostsTheory.vv_post_def])) >>
   fs[vyperASTTheory.expr_type_def,contextTheory.vv_location_def,contextTheory.mk_ptr_def,
      compileEnvTheory.is_bytestring_type_def] >>
   irule (INST_TYPE [``:'b`` |-> ``:256``] wordArgsPtrTheory.ghost_kept_at_wb_trans) >>

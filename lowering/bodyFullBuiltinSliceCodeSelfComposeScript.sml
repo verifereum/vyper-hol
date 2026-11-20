@@ -4,7 +4,7 @@ Ancestors
   bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullOfVV gasOutcomeFullCompose
   exprSimSliceExtcodeTyped bodyFullUnwrapRun exprSimProps exprSimWordArgs exprSimHash
-  exprSimSliceExtcodeEntry bodyInvNoDalloca bodyFullBuiltinWordPowCompose
+  exprSimSliceExtcodeEntry bodyFullBuiltinWordPowCompose
   bodyFullBuiltinBytestringQuery bodyFullBuiltinBytestringBuffer
   bodyFullBuiltinBytestringBounds bodyFullBuiltinBytestringCopy
   bodyFullBuiltinBytestringAbort exprSimSliceSelfCode
@@ -15,6 +15,7 @@ Ancestors
   bodyPtrBytestringBuiltinsBuffer loweringPosts loweringStateRelDefs
   reasonCodeResourcesPtr bodyPtrAttributeFields exprLoweringProps stateRelProj
   bodyFullIfExpReach
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem slice_self_compilation_context[local]:
   lower_value compile_expr cenv ty start sa = (start_op,s1) /\
@@ -56,7 +57,9 @@ Theorem slice_builtin_self_vv_full_from_tail:
     emit_void copy_op copy_ops se = ((),sf) /\
     emit_void MSTORE [out;cnt] sf = ((),sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+    local_ptrs_reserved cenv sa /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
     MEM query_op [CODESIZE;EXTCODESIZE] /\ LENGTH query_ops <= 1 /\
     (!arg. MEM arg query_ops ==> op_taint tn arg = {}) /\
     step_inst_base
@@ -113,7 +116,8 @@ Theorem slice_builtin_self_vv_full_from_tail:
           (Value (BytesV (TAKE k (DROP i code))))
           (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) ee HG tm t /\
         ptr_buf_ok cenv e out HG t /\ ghost_kept_at lo cenv es sa G tn s HG tm)
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)) /\
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+         (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))) /\
   (!cenv cx env a n ct addr start len es ee e tops ctx DF lo d shadow_ctx PG func shadow_func ty.
     expr_body_pre cenv cx env
       (Builtin a (Slice n) [Builtin ct (Acc Code) [addr];start;len]) es /\
@@ -140,7 +144,6 @@ Theorem slice_builtin_self_vv_full_from_tail:
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "tail_run") (mk_asm "child_run")) >>
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by (drule body_inv_no_dalloca >> simp[]) >>
   qpat_assum `code_slice_source _ _ = SOME _`
     (strip_assume_tac o REWRITE_RULE [code_slice_source_SOME]) >>
   gvs[] >> fs[vyperContextTheory.builtin_args_length_ok_def] >>
@@ -528,6 +531,17 @@ Proof
       not_fresh_at st2 x` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sa` >> fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+    (qpat_assum `!H. valid_horizon _ _ H len_mid.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx len_mid u /\ _`
+       (qspec_then `storage_trace_horizon len_mid.storage_trace` mp_tac) >>
+     (impl_tac >- simp[]) >>
+     disch_then (fn th =>
+       mp_tac (MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp
+         (CONJUNCT1 th)) >>
+       mp_tac (MATCH_MP stmt_state_rel_fmp_room (CONJUNCT1 th))) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac) >>
   rpt (qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac) >>
   irule gas_outcome_full_post_source >>
   asm "tail_run" (irule_at Any) >>
@@ -628,6 +642,10 @@ Proof
        (mp_then Any irule wordArgsPtrTheory.ghost_kept_at_wb_trans) >>
      qpat_assum `ghost_kept_at lo cenv len_mid st2 G2 tn2 u G' tn'` (irule_at Any) >>
      qexists_tac `len_mid` >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp target` by
+    (qpat_assum `vv_post H ctx func cenv cx _ _ _ _ _ _ _ _ target`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o REWRITE_RULE [loweringPostsTheory.vv_post_def])) >>
   fs[vyperASTTheory.expr_type_def,exprLoweringTheory.lowered_value_type_def,
      contextTheory.mk_ptr_def,contextTheory.vv_location_def,
      compileEnvTheory.is_bytestring_type_def]

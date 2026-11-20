@@ -12,7 +12,8 @@ Ancestors
 Definition supported_function_return_def:
   supported_function_return tops External ty =
     (ty = NoneT \/ supported_place_type tops ty) /\
-  supported_function_return tops vis ty = supported_return_type tops ty
+  supported_function_return tops Internal ty = T /\
+  supported_function_return tops Deploy ty = supported_return_type tops ty
 End
 
 Definition supported_declaration_header_def:
@@ -20,10 +21,6 @@ Definition supported_declaration_header_def:
     case top of
       FunctionDecl vis mut nr rr name args defaults ret body =>
         (vis <> Internal ==> NULL defaults) /\
-        (* Internal argument copies keep their layout restriction.  External
-           arguments are what the checker's assignable_type admits
-           (entry_abi_support); supported_program_deploy constrains Deploy's. *)
-        (vis = Internal ==> EVERY (supported_value_type tops o SND) args) /\
         supported_function_return tops vis ret
     | VariableDecl vis Storage name ty (SOME slot) =>
         supported_storage_type tops ty
@@ -115,7 +112,6 @@ Theorem supported_function_header_contract:
   supported_declaration_header tops
     (FunctionDecl vis mut nr rr name args defaults ret body) <=>
   (vis <> Internal ==> NULL defaults) /\
-  (vis = Internal ==> EVERY (supported_value_type tops o SND) args) /\
   supported_function_return tops vis ret
 Proof
   simp[supported_declaration_header_def]

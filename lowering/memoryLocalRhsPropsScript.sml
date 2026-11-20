@@ -105,18 +105,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem supported_internal_return_admissible:
-  !tops id mut nr rr args dflts ret body.
-    supported_program tops /\
-    supported_function_decl tops id Internal =
-      SOME (mut,nr,rr,args,dflts,ret,body) ==>
-    supported_return_type tops ret
-Proof
-  rpt strip_tac >> drule supported_internal_function_lookup >> strip_tac >>
-  drule_all supported_program_declaration >>
-  simp[supported_function_header_contract, supported_function_return_def]
-QED
-
 Theorem eval_empty_bytes_read:
   !cx ann es.
     (do r <- eval_expr cx (Literal ann (BytesL []));
