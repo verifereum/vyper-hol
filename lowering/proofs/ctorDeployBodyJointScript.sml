@@ -153,7 +153,7 @@ Proof
   gvs[gas_marked_path_def]
 QED
 
-(* With no constructor start, the unit's first three instructions revert. *)
+(* A contract without a constructor returns its runtime code and zeroed immutables. *)
 Theorem deploy_no_ctor_zero_path[local]:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    off exts ints fb func explicit.
@@ -225,6 +225,7 @@ Proof
   drule gas_path_mem_zero_origin >> simp[]
 QED
 
+(* With no constructor start, the unit's first three instructions revert. *)
 Theorem deploy_prefix_zero_path[local]:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    exts ints fb cf func explicit.

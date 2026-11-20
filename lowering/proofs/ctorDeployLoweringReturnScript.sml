@@ -605,47 +605,6 @@ Proof
        initial_evaluation_context_def]
 QED
 
-Theorem deploy_assembled_size_bound[local]:
-  deploy_phases policy tops (deploy_bc,runtime_bc)
-    (rpolicy,dunit,dout,prog,cplan) /\ deploy_source_ok tops am tx ==>
-  LENGTH (assemble prog) < 65536
-Proof
-  strip_tac >> drule_all deploy_bc_size_bounded >>
-  gvs[deploy_phases_def]
-QED
-
-Theorem deploy_assembly_encoding_wf[local]:
-  deploy_phases policy tops (deploy_bc,runtime_bc)
-    (rpolicy,dunit,dout,prog,cplan) /\ deploy_source_ok tops am tx ==>
-  asm_encoding_wf prog
-Proof
-  strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
-  drule_all deploy_unit_defs_reach_uses >> strip_tac >>
-  `unit_shape_ok dout.po_unit` by
-    (irule run_venom_pipeline_output_shape >>
-     gvs[deploy_phases_def] >> metis_tac[]) >>
-  irule codegen_assembly_asm_encoding_wf >>
-  gvs[deploy_phases_def] >> metis_tac[]
-QED
-
-Theorem deploy_numeric_label_bound[local]:
-  deploy_phases policy tops (deploy_bc,runtime_bc)
-    (rpolicy,dunit,dout,prog,cplan) /\ deploy_source_ok tops am tx /\
-  FLOOKUP (SND (compute_label_offsets prog)) label = SOME off ==>
-  off < dimword(:256)
-Proof
-  strip_tac >>
-  `asm_encoding_wf prog` by
-    (irule deploy_assembly_encoding_wf >> metis_tac[]) >>
-  `LENGTH (assemble prog) < 65536` by
-    (irule deploy_assembled_size_bound >> metis_tac[]) >>
-  drule deploy_encoding_total_length >> strip_tac >>
-  qspec_then `prog` strip_assume_tac compute_label_offsets_bound >>
-  `off <= SUM (MAP asm_inst_size prog)` by metis_tac[] >>
-  simp[wordsTheory.dimword_def] >> decide_tac
-QED
-
 Theorem deploy_label_map_runtime_suffix[local]:
   apply_unit_label_map lm unit = SOME unit' /\
   unit.cu_data_segment = pre ++
@@ -826,24 +785,6 @@ Proof
   `LENGTH prefix = SUM (MAP asm_inst_size pre)` by
     gvs[Abbr `prefix`] >>
   metis_tac[DROP_LENGTH_APPEND]
-QED
-
-Theorem deploy_runtime_assembled_slice[local]:
-  deploy_phases policy tops (deploy_bc,bytes)
-    (rpolicy,dunit,dout,prog,cplan) /\ deploy_source_ok tops am tx ==>
-  ?off. FLOOKUP (SND (compute_label_offsets prog)) "runtime_begin" =
-          SOME off /\
-        DROP off (assemble prog) = bytes /\ off < dimword(:256)
-Proof
-  strip_tac >>
-  `asm_encoding_wf prog` by
-    (irule deploy_assembly_encoding_wf >> metis_tac[]) >>
-  drule deploy_phase_assembly_suffix >> strip_tac >> gvs[] >>
-  `SUM (MAP asm_inst_size pre) < dimword(:256)` by
-    metis_tac[deploy_numeric_label_bound, deploy_runtime_suffix_offset] >>
-  qexists_tac `SUM (MAP asm_inst_size pre)` >>
-  fs[deploy_runtime_suffix_offset] >>
-  irule deploy_runtime_suffix_slice >> simp[]
 QED
 
 (* The runtime data segment moves with the finalized assembly's data suffix. *)
