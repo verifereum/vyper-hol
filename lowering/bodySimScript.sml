@@ -34,7 +34,7 @@
 
 Theory bodySim
 Ancestors
-  loweringPosts
+  loweringPosts bodyInvSplit
   list exprSimDefs exprSimHypsDefs stmtSimDefs compileEnv compileVyper vyperTypeContract
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
@@ -50,7 +50,12 @@ Libs
    and the module list the overlap analysis reads, function mutabilities,
    module-variable types and locations (immutables included), flag
    metadata, custom-error parameters and method ids (build_compile_env_module_pins, bodySimEntry). *)
-Definition cenv_module_pins_def:
+Definition cenv_module_pins_split_def[nocompute]:
+  cenv_module_pins tops cenv <=>
+    cenv.ce_module = NONE /\ cenv_module_pins_mods [(NONE,tops)] cenv
+End
+
+Theorem cenv_module_pins_def:
   cenv_module_pins tops cenv <=>
     cenv.ce_module = NONE /\
     cenv.ce_modules = [(NONE, tops)] /\
@@ -65,7 +70,9 @@ Definition cenv_module_pins_def:
     cenv.ce_method_id =
       (\s tys. w2n (calldata_method_id
                      (function_selector s (vyper_to_abi_types (type_env tops) tys))))
-End
+Proof
+  cheat
+QED
 
 (* A frame of the lowered program: ctx is the context of tops's runtime
    unit or, while cx.in_deploy, its deployment unit. The constructor and
@@ -89,7 +96,14 @@ End
    build_compile_env (cenv_module_pins), so its immutables sit where the
    section layout puts them (body_inv_immutable_section_layout), and the
    program is the main module alone, as source_deployment_rel has it. *)
-Definition body_inv_def:
+Definition body_inv_split_def[nocompute]:
+  body_inv tops ctx cenv cx <=>
+    contract_inv [(NONE,tops)] [] ctx cenv cx /\
+    module_body_inv [(NONE,tops)] NONE tops cenv cx /\
+    cenv_module_pins tops cenv
+End
+
+Theorem body_inv_def:
   body_inv tops ctx cenv cx <=>
     supported_program tops /\
     (?rpolicy unit.
@@ -130,7 +144,21 @@ Definition body_inv_def:
     (!vis mut rr name args dflts ret ss.
        MEM (FunctionDecl vis mut T rr name args dflts ret ss) tops ==>
        cx.nonreentrant_slot = SOME global_nonreentrant_slot)
-End
+Proof
+  cheat
+QED
+
+Theorem body_inv_contract:
+  body_inv tops ctx cenv cx ==> contract_inv [(NONE,tops)] [] ctx cenv cx
+Proof
+  cheat
+QED
+
+Theorem body_inv_module:
+  body_inv tops ctx cenv cx ==> module_body_inv [(NONE,tops)] NONE tops cenv cx
+Proof
+  cheat
+QED
 
 Theorem body_inv_nonreentrant_slot:
   body_inv tops ctx cenv cx /\
