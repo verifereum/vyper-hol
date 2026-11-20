@@ -53,7 +53,4 @@ uv run --with py-evm==0.12.1b1 --with eth-abi==6.0.0 python3 \
 The required results are `"ab"` for `t07_tuple_assign_string_elems` and
 `("x", 3)` for `t08_tuple_assign_ret_type_mismatch` on both runtimes.
 
-These checks cover the listed sources. [Issue #549](https://github.com/verifereum/vyper-hol/issues/549)
-also documents an untested frontend limitation: empty `HexBytes` and `Bytes`
-literals share a representation, although Vyper treats only the latter as an
-empty-value fast path.
+These checks cover the listed sources.
