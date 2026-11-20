@@ -2,6 +2,7 @@ Theory bodyFullExtCallDirectMaterialize
 Ancestors
   abiEncodeValuesPrefixFrame
   bodyFullExtCallDirectState bodyFullExtCallDirectSaved bodyFullExtCallDirectUnwrap
+  localPtrsProps
   abiEncodeValuesRun abiEncodeValuesSource abiEncodeValuesPhases abiEncodeValuesMetadata
   abiEncoderWindowPhase abiEncoderWindowContract exprSimAbiEncodeExecFrame
   gasOriginPtrLabels exprLoweringProps stateRelProj bodyPtrDefs loweringPosts loweringStateRelDefs fragGasOriginPtr fragExec
@@ -50,16 +51,23 @@ Proof
     (drule_then (strip_assume_tac o MATCH_MP stmt_state_rel_local_ptrs_alloca o cj 1)) >>
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ v /\ _`
     (drule_then (assume_tac o cj 2 o MATCH_MP stmt_state_rel_local_ptrs_alloca o cj 1)) >>
-  `!name p k. local_region ce ee.scopes u name p k ==>
-    (pbase+capacity <= p \/ p+k <= pbase) /\ (slot+32 <= p \/ p+k <= slot)` by
-    (rpt gen_tac >> disch_tac >> conj_tac
-     >- (mp_tac (Q.INST [`s` |-> `u`,`b` |-> `pbase`,`n` |-> `capacity`,`x` |-> `root`]
-          extcall_direct_registered_local_separation) >>
-         impl_tac >- (asm_rewrite_tac[] >> metis_tac[]) >> metis_tac[])
-     >> mp_tac (Q.INST [`s` |-> `u`,`b` |-> `slot`,`n` |-> `32`,
-         `x` |-> `cursor_var`,`inst` |-> `cursor_inst`]
-         extcall_direct_registered_local_separation) >>
-     impl_tac >- (asm_rewrite_tac[] >> metis_tac[]) >> metis_tac[]) >>
+  `!name local_base k. local_region ce ee.scopes u name local_base k ==>
+    (pbase+capacity <= local_base \/ local_base+k <= pbase) /\ (slot+32 <= local_base \/ local_base+k <= slot)` by
+    (rpt gen_tac >> disch_tac >>
+     let
+       val separation = REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def]
+         local_ptrs_rel_alloca_disjoint
+     in
+       conj_tac
+       >- (MATCH_MP_TAC (Q.SPECL
+             [`func`,`ce`,`ee.scopes`,`u`,`inst`,`root`,`pbase`,`capacity`,`name`,`local_base`,`k`]
+             separation) >>
+           rpt conj_tac >> asm_rewrite_tac[])
+       >> MATCH_MP_TAC (Q.SPECL
+            [`func`,`ce`,`ee.scopes`,`u`,`cursor_inst`,`cursor_var`,`slot`,`32`,`name`,`local_base`,`k`]
+            separation) >>
+       rpt conj_tac >> asm_rewrite_tac[]
+     end) >>
   conj_tac
   >- (mp_tac extcall_direct_state_unwrap >>
       impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>

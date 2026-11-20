@@ -115,17 +115,3 @@ Proof
   Cases_on `op` >> simp[eval_operand_def, op_taint_def] >>
   metis_tac[op_taint_def]
 QED
-
-(* A nonlocal registered buffer is protected by the ordinary unwrap
-   frame at the unwrap's actual cut. *)
-Theorem extcall_direct_registered_local_separation:
-  alloca_inv s /\ fn_inst_ids_distinct func /\ local_ptrs_rel func ce ee.scopes s /\
-  MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
-  not_local_ptr ce ee.scopes x /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) ==>
-  !name p k. local_region ce ee.scopes s name p k ==> b+n <= p \/ p+k <= b
-Proof
-  strip_tac >> rpt gen_tac >> disch_tac >>
-  `loweringStateRelDefs$regions_disjoint b n p k` by
-    metis_tac[local_ptrs_rel_alloca_disjoint] >>
-  fs[loweringStateRelDefsTheory.regions_disjoint_def]
-QED

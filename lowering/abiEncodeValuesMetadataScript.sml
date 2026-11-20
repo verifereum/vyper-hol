@@ -25,19 +25,6 @@ Proof
   simp[head_lengths_acc]
 QED
 
-Theorem abi_encode_value_rows_take_step:
-  LIST_REL (\row at. abi_embedded_static_size sf (SND row) = abi_member_head_size at)
-    rows ats /\ i < LENGTH rows /\ row = EL i rows ==>
-  SUM (MAP abi_member_head_size (TAKE (SUC i) ats)) =
-    SUM (MAP abi_member_head_size (TAKE i ats)) + abi_embedded_static_size sf (SND row)
-Proof
-  strip_tac >>
-  `LENGTH rows = LENGTH ats` by metis_tac[LIST_REL_LENGTH] >>
-  `TAKE (SUC i) ats = TAKE i ats ++ [EL i ats]` by simp[TAKE_SUC, TAKE1_DROP] >>
-  qpat_assum `LIST_REL _ rows ats` (mp_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
-  strip_tac >> simp[SUM_APPEND] >> metis_tac[]
-QED
-
 Theorem abi_encode_values_static_cuts:
   compile_abi_encode_value_rows ce dst cursor h [(saved,ty)] st = ((),en) /\
   ~is_abi_dynamic ce.ce_struct_fields ty /\ fn_has_code st en func ==>

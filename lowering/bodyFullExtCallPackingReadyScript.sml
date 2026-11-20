@@ -3,7 +3,7 @@ Ancestors
   bodyFullExtCallPacking bodyFullExtCallEncodeTail bodyFullExtCallSelectorReady
   bodyFullExtCallDirectStart bodyFullExtCallDirectLayout
   bodyFullExtCallDirectEncode bodyFullExtCallDirectRow bodyFullExtCallDirectState
-  bodyFullExtCallDirectUnwrap abiEncodeValuesMetadata abiDecodeRanges abiDecoderMembers
+  localPtrsProps abiEncodeValuesMetadata abiDecodeRanges abiDecoderMembers
   bodyFullIntCallReturnFrame bodyPtrBytestringBuiltinsWindowGhost
   exprLoweringProps exprSimWordArgs wordArgsPtr exprSimProps exprSimExtCallCase
   emitHelperProps compileEnv fragGasOriginPtrLoop fragGasOriginPtr list pair words
@@ -617,14 +617,15 @@ Resume extcall_request_packing_ready[nonempty]:
      qexists `se` >> simp[NoAsms] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `!name b k. local_region cenv ee.scopes s name b k ==>
        regions_disjoint (w2n rw) cap b k` by
-    (mp_tac (Q.INST [`ce` |-> `cenv`,`s` |-> `t`,`b` |-> `w2n (rw:bytes32)`,
-       `n` |-> `n`,`x` |-> `r`] extcall_direct_registered_local_separation) >>
-     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
-     disch_then (fn th => rpt gen_tac >> disch_tac >> mp_tac (Q.SPECL [`name`,`b`,`k`] th)) >>
-     impl_tac
-     >- (irule exprSimPropsTheory.local_region_frame_fwd >>
-         qpat_assum `local_region cenv ee.scopes s name b k` (irule_at Any) >>
-         qexists `se` >> simp[NoAsms] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (rpt gen_tac >> disch_tac >>
+     `local_region cenv ee.scopes t name b k` by
+       (irule exprSimPropsTheory.local_region_frame_fwd >>
+        qpat_assum `local_region cenv ee.scopes s name b k` (irule_at Any) >>
+        qexists `se` >> simp[NoAsms] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     mp_tac (Q.SPECL
+       [`func`,`cenv`,`ee.scopes`,`t`,`inst`,`r`,`w2n (rw:bytes32)`,`n`,`name`,`b`,`k`]
+       local_ptrs_rel_alloca_disjoint) >>
+     impl_tac >- asm_rewrite_tac[] >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `!aid b k. aid < se.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (b,k) ==>
        regions_disjoint (w2n rw) cap b k` by
