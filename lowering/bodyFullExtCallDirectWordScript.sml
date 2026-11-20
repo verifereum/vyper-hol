@@ -8,6 +8,7 @@ Ancestors
   compileEnv exprLowering context bodyPtrDefs ptrDiscipline contractABI
   vyperABI vyperValue vyperTyping venomState venomMemDefs
   words finite_map pred_set arithmetic list pair
+Libs pureFrameLib
 
 Theorem extcall_direct_word_source:
   saved = StackValue tag src /\ ty = lowered_value_type ce e /\ is_word_type ty /\
@@ -37,7 +38,7 @@ Proof
   metis_tac[op_taint_def]
 QED
 
-Theorem abi_encode_saved_word_row:
+Theorem abi_encode_saved_word_row_pure:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
     shared pbase capacity root dst dst_offset prefix a u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -62,6 +63,7 @@ Theorem abi_encode_saved_word_row:
   eval_operand src u = SOME (typed_val_to_w256 tv v) /\ op_taint tu src = {} /\
   (!x. src = Var x ==> not_fresh_at a x) /\ fn_has_code a c func ==>
   ?z Gz tz.
+    (pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
     abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
       shared pbase capacity root dst dst_offset prefix c z Gz tz /\
     abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot (SUC i) c z Gz tz /\
@@ -82,7 +84,7 @@ Proof
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[]) >> decide_tac) >>
   disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
   qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[] >>
-  irule abi_encode_saved_state_phase >>
+  irule abi_encode_saved_state_phase_pure >>
   qpat_assum `window_phase ctx func a c _ _ u z` (irule_at Any) >>
   qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qexistsl_tac [`explicit`,`PG`] >>
@@ -97,6 +99,9 @@ Proof
   conj_tac >- (qexistsl_tac [`inst`,`root`] >> asm_rewrite_tac[]) >>
   qpat_assum `h = LENGTH _` (fn th => PURE_REWRITE_TAC [GSYM th]) >> decide_tac
 QED
+
+Theorem abi_encode_saved_word_row =
+  pureFrameLib.drop_frame abi_encode_saved_word_row_pure
 
 Theorem extcall_direct_word_row:
   extcall_direct_state ctx func ce cx st0 ee DF lo d se s G tn

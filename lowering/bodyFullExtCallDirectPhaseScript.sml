@@ -2,6 +2,7 @@ Theory bodyFullExtCallDirectPhase
 Ancestors
   bodyFullExtCallDirectWindows bodyFullExtCallDirectFrame
   abiEncoderWindowPhase abiEncoderWindowContract exprSimAbiEncodeExecFrame exprLoweringProps
+  abiEncoderRegisteredEffect exprSimAbiEncodeFrameTransfer abiDecodeStaticProps
   bodyFullAbiEncodeOriginFloor abiEncodeValuesPhases memoryReadProps
   loweringStateRelDefs loweringPosts
   vyperStorageFootprint bodyPtrDefs fragGasOriginPtr
@@ -10,9 +11,47 @@ Ancestors
   finite_map pred_set list words arithmetic pair
 Libs horizonTypeLib
 
+(* The owner and the registered scratch allocations account for every
+   encoder write, including writes above the initial allocation frontier. *)
+Theorem abi_encode_registered_pure_frame[local]:
+  abi_encoder_registered_effect ids outs u v /\
+  FLOOKUP u.vs_allocas owner = SOME (b,cap) /\
+  EVERY (\(p,n). b <= p /\ p+n <= b+cap) outs /\
+  (!id. id IN owner INSERT ids ==>
+    ?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_id = id /\ cut.cs_next_id <= id) /\
+  (!name p n. local_region ce ee.scopes u name p n ==>
+    mem_bytes_at p n v.vs_memory = mem_bytes_at p n u.vs_memory) ==>
+  pure_frame ce func ee cut u v
+Proof
+  strip_tac >> rewrite_tac[pure_frame_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> disch_tac >>
+  rename1 `mem_bytes_at off len v.vs_memory = _` >>
+  `!id p n. id IN owner INSERT ids /\ FLOOKUP v.vs_allocas id = SOME (p,n) ==>
+    off+len <= p \/ p+n <= off` by
+    (rpt strip_tac >>
+     qpat_assum `!id. id IN owner INSERT ids ==> _` (drule_then strip_assume_tac) >>
+     qpat_assum `!inst p n. _ ==> loweringStateRelDefs$regions_disjoint off len p n`
+       (qspecl_then [`inst`,`p`,`n`] mp_tac) >>
+     asm_simp_tac (srw_ss()) [loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
+  `FLOOKUP v.vs_allocas owner = SOME (b,cap)` by metis_tac[abi_encoder_registered_effect_allocated] >>
+  `off+len <= b \/ b+cap <= off` by metis_tac[IN_INSERT] >>
+  `EVERY (\(p,n). off+len <= p \/ p+n <= off) outs` by
+    (qpat_assum `EVERY _ outs` mp_tac >>
+     simp_tac (srw_ss()) [EVERY_MEM, FORALL_PROD] >> rpt strip_tac >>
+     first_x_assum drule >> decide_tac) >>
+  `!id p n. id IN ids /\ FLOOKUP v.vs_allocas id = SOME (p,n) ==>
+    off+len <= p \/ p+n <= off` by metis_tac[IN_INSERT] >>
+  irule mem_bytes_at_bytewise >> rpt strip_tac >>
+  mp_tac (Q.INST [`s` |-> `u`,`t` |-> `v`,`lo` |-> `off`,`n` |-> `len`,
+    `a` |-> `i`] abi_encode_registered_protected_byte) >>
+  asm_rewrite_tac[]
+QED
+
 (* Pack the pure execution result at its actual cut, with one endpoint
    for every valid storage horizon. Delayed unwrap has the same frame. *)
-Theorem extcall_direct_row_phase:
+Theorem extcall_direct_row_phase_pure:
   window_phase ctx func st en ids outs s t /\
   abi_encode_exec_frame func s t /\
   fn_inst_ids_distinct func /\ alloca_history func s /\
@@ -36,6 +75,7 @@ Theorem extcall_direct_row_phase:
   (!i. EVERY (\(p,n). i < p \/ p+n <= i) outs /\
     (!aid p n. aid IN ids /\ FLOOKUP t.vs_allocas aid = SOME (p,n) ==>
       i < p \/ p+n <= i) /\ i IN tn'.t_mem ==> i IN tn.t_mem) ==>
+  pure_frame ce func ee front s t /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
     stmt_state_rel H ctx func ce cx ee t /\ storage_well_formed_on cx ee (FST H) /\
     ghost_inv_at (DF H) lo d ce cx ee G' tn' t) /\
@@ -50,7 +90,8 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
     stmt_state_rel H ctx func ce cx ee t /\ ghost_inv_at (DF H) lo d ce cx ee G' tn' t /\
-    wb_frame ce ee ee front s t /\ ghost_kept_at lo ce ee front G tn s G' tn' /\ alloca_history func t` by
+    wb_frame ce ee ee front s t /\ ghost_kept_at lo ce ee front G tn s G' tn' /\
+    alloca_history func t /\ pure_frame ce func ee front s t` by
     (qx_gen_tac `hz` >> disch_tac >>
      qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
        (qspec_then `hz` mp_tac) >>
@@ -63,13 +104,25 @@ Proof
            extcall_direct_encode_windows)) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
      strip_tac >>
+     `pure_frame ce func ee front s t` by
+       (`abi_encoder_registered_effect ids outs s t` by metis_tac[window_phase_effect] >>
+        mp_tac (Q.INST [`u` |-> `s`, `v` |-> `t`, `owner` |-> `shared`,
+          `cut` |-> `front`] abi_encode_registered_pure_frame) >>
+        impl_tac >-
+          (asm_rewrite_tac[] >> conj_tac
+           >- (gen_tac >> disch_tac >>
+               qpat_assum `!aid. aid IN shared INSERT ids ==> _`
+                 (drule_then strip_assume_tac) >>
+               qexists_tac `inst` >> fs[IN_INSERT] >> metis_tac[]) >>
+           metis_tac[]) >>
+        disch_then ACCEPT_TAC) >>
      qpat_assum `stmt_state_rel hz ctx func ce cx ee s`
        (mp_then (Pos (el 3)) (mp_tac o SPEC_ALL)
          (Q.INST [`H` |-> `hz`,`cut` |-> `front`,
            `D` |-> `(DF:((bool # bytes32 # type_value) list # num list) -> dead) hz`]
            (SPEC_ALL extcall_direct_encode_phase_frame))) >>
      impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
-     disch_then ACCEPT_TAC) >>
+     strip_tac >> asm_rewrite_tac[]) >>
   qpat_x_assum `?H. valid_horizon cx st0 H ee.storage_trace`
     (qx_choose_then `hz` assume_tac) >>
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ t /\ _`
@@ -88,6 +141,10 @@ Proof
         (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [window_alloca_growth_def])) >>
   metis_tac[window_phase_vars]
 QED
+
+Theorem extcall_direct_row_phase =
+  let val premise = fst (dest_imp (concl extcall_direct_row_phase_pure))
+  in DISCH premise (CONJUNCT2 (UNDISCH extcall_direct_row_phase_pure)) end
 
 (* Encoder writes start at the payload. Private scratch is registered
    separately, so the bytes immediately before the payload stay readable. *)
@@ -145,6 +202,29 @@ Proof
   `b+32-4 = b+28 /\ 4 <= 32` by decide_tac >>
   pop_assum strip_assume_tac >>
   mp_tac (Q.INST [`dst_offset` |-> `32`,`prefix` |-> `selector`] abi_encode_saved_prefix_frame) >>
+  asm_rewrite_tac[]
+QED
+
+(* Use the frame at each phase's actual cut, retaining the earlier
+   allocation cutoff when the phases are composed. *)
+Theorem abi_encode_saved_frames_trans:
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+    ctx func ce cx ee u /\
+  local_ptrs_reserved ce se /\ se.cs_next_var <= a.cs_next_var /\
+  se.cs_next_id <= a.cs_next_id /\
+  (pure_frame ce func ee se u v /\ wb_frame ce ee ee se u v) /\
+  (pure_frame ce func ee a v z /\ wb_frame ce ee ee a v z) ==>
+  pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  conj_tac
+  >- (match_mp_tac (Q.SPECL [`ce`,`func`,`ee`,`ee`,`se`,`a`,
+        `u`,`v`,`z`] exprSimPropsTheory.pure_frame_trans) >>
+      asm_rewrite_tac[] >>
+      fs[wb_frame_def]) >>
+  match_mp_tac (Q.SPECL [`func`,`ce`,`cx`,`ee`,`u`,`se`,`ee`,`ee`,
+    `a`,`v`,`z`,`ctx`]
+    (horizonTypeLib.at_horizon_named "H" exprSimWordArgsTheory.wb_frame_trans)) >>
   asm_rewrite_tac[]
 QED
 

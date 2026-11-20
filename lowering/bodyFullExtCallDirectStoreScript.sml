@@ -9,9 +9,9 @@ Ancestors
   compileEnv exprLowering exprLoweringProps context contractABI
   valueEncodingDefs vyperValue vyperTyping vyperABI
   venomState venomInst venomMemDefs finite_map pred_set list arithmetic pair words
-Libs horizonTypeLib
+Libs horizonTypeLib pureFrameLib
 
-Theorem abi_encode_saved_store_static:
+Theorem abi_encode_saved_store_static_pure:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
     shared pbase capacity root dst dst_offset prefix a u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -39,6 +39,7 @@ Theorem abi_encode_saved_store_static:
      (shared < first.cs_next_id \/ last.cs_next_id <= shared)) /\
   compile_store_memory ce src (Var head) ty ty a = ((),c) /\ fn_has_code a c func /\ ci_mono a c ==>
   ?z Gz tz.
+    (pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
     abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
       shared pbase capacity root dst dst_offset prefix c z Gz tz /\
     abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot (SUC i) c z Gz tz /\
@@ -103,10 +104,11 @@ Proof
     asm_rewrite_tac[]) >>
   qpat_assum `LENGTH (enc at av) = hs` (fn th =>
     disch_then (qx_choosel_then [`z`,`Gz`,`tz`] (strip_assume_tac o PURE_REWRITE_RULE [th]))) >>
-  qexistsl_tac [`z`,`Gz`,`tz`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (mp_tac (Q.INST [`v` |-> `z`,`Gv` |-> `Gz`,`tv` |-> `tz`,
-         `ids` |-> `{}`,`outs` |-> `[(pbase+dst_offset+h,hs)]`] abi_encode_saved_state_phase) >>
+  `(pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
+    abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
+      shared pbase capacity root dst dst_offset prefix c z Gz tz` by
+    (mp_tac (Q.INST [`v` |-> `z`,`Gv` |-> `Gz`,`tv` |-> `tz`,
+         `ids` |-> `{}`,`outs` |-> `[(pbase+dst_offset+h,hs)]`] abi_encode_saved_state_phase_pure) >>
       impl_tac >- (simp_tac (srw_ss()) [IN_INSERT, EVERY_DEF] >>
         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (decide_tac >> NO_TAC) >>
         TRY (qexistsl_tac [`inst`,`root`] >> asm_rewrite_tac[] >> NO_TAC) >>
@@ -116,6 +118,7 @@ Proof
         impl_tac >- first_assum ACCEPT_TAC >>
         disch_then (irule o iffLR) >> first_assum ACCEPT_TAC) >>
       disch_then ACCEPT_TAC) >>
+  qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[] >>
   mp_tac (Q.INST [`st` |-> `a`,`en` |-> `c`,`s` |-> `u`,`t` |-> `z`,
     `G` |-> `Gu`,`tn` |-> `tu`,`G'` |-> `Gz`,`tn'` |-> `tz`,
     `d` |-> `pbase+dst_offset`,`b` |-> `pbase`,`owner` |-> `shared`]
@@ -123,6 +126,9 @@ Proof
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >> metis_tac[]) >>
   disch_then ACCEPT_TAC
 QED
+
+Theorem abi_encode_saved_store_static =
+  pureFrameLib.drop_frame abi_encode_saved_store_static_pure
 
 Theorem extcall_direct_store_static:
   extcall_direct_state ctx func ce cx st0 ee DF lo d se s G tn
@@ -168,7 +174,7 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-Theorem abi_encode_saved_store_dynamic:
+Theorem abi_encode_saved_store_dynamic_pure:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
     shared pbase capacity root dst dst_offset prefix a u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -207,6 +213,7 @@ Theorem abi_encode_saved_store_dynamic:
   abi_encode_child_suffix (Var head) (Var cursor) offset len mid = (len,c) /\
   fn_has_code a mid func /\ fn_has_code mid c func /\ ci_mono a c ==>
   ?z Gz tz.
+    (pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
     abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
       shared pbase capacity root dst dst_offset prefix c z Gz tz /\
     abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) (Var cursor) loc slot (SUC i) c z Gz tz /\
@@ -289,19 +296,25 @@ Proof
   qunabbrev_tac `sites` >>
   `abi_member_head_size at = 32` by
     (qpat_assum `is_dynamic at` (fn th => simp_tac bool_ss [abi_member_head_size_def,th])) >>
-  qexistsl_tac [`z`,`Gz`,`tz`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  mp_tac (Q.INST [`v` |-> `z`,`Gv` |-> `Gz`,`tv` |-> `tz`,
-    `ids` |-> `loc INSERT window_alloca_sites func (frag_ids a mid)`,
-    `outs` |-> `[(pbase+dst_offset+h,32);(pbase+dst_offset+off,LENGTH (enc at av))]`] abi_encode_saved_state_phase) >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    simp_tac (srw_ss()) [EVERY_DEF] >> rpt conj_tac >> TRY (decide_tac >> NO_TAC) >>
-    qx_gen_tac `j` >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-    qpat_assum `!i. _ /\ _ /\ _ ==> (i IN tz.t_mem <=> i IN tu.t_mem)` (qspec_then `j` mp_tac) >>
-    impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      PURE_REWRITE_TAC [IN_INSERT] >> first_assum ACCEPT_TAC) >>
-    disch_then (irule o iffLR) >> first_assum ACCEPT_TAC) >>
-  disch_then ACCEPT_TAC
+  `(pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
+    abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
+      shared pbase capacity root dst dst_offset prefix c z Gz tz` by
+    (mp_tac (Q.INST [`v` |-> `z`,`Gv` |-> `Gz`,`tv` |-> `tz`,
+        `ids` |-> `loc INSERT window_alloca_sites func (frag_ids a mid)`,
+        `outs` |-> `[(pbase+dst_offset+h,32);(pbase+dst_offset+off,LENGTH (enc at av))]`] abi_encode_saved_state_phase_pure) >>
+      impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+        simp_tac (srw_ss()) [EVERY_DEF] >> rpt conj_tac >> TRY (decide_tac >> NO_TAC) >>
+        qx_gen_tac `j` >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+        qpat_assum `!i. _ /\ _ /\ _ ==> (i IN tz.t_mem <=> i IN tu.t_mem)` (qspec_then `j` mp_tac) >>
+        impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+          PURE_REWRITE_TAC [IN_INSERT] >> first_assum ACCEPT_TAC) >>
+        disch_then (irule o iffLR) >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC) >>
+  qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[]
 QED
+
+Theorem abi_encode_saved_store_dynamic =
+  pureFrameLib.drop_frame abi_encode_saved_store_dynamic_pure
 
 Theorem extcall_direct_store_dynamic:
   extcall_direct_state ctx func ce cx st0 ee DF lo d se s G tn

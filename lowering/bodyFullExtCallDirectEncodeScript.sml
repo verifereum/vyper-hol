@@ -1,6 +1,7 @@
 Theory bodyFullExtCallDirectEncode
 Ancestors
-  bodyFullExtCallDirectState bodyFullExtCallDirectWindows
+  bodyFullExtCallDirectState bodyFullExtCallDirectWindows bodyFullExtCallDirectPhase
+  exprSimWordArgs
   abiEncodeValuesRun abiEncodeValuesCode exprLoweringProps exprSimAbiEncodeExecFrame
   stateRelProj bodyPtrDefs loweringPosts loweringStateRelDefs fragGasOriginPtr fragExec
   abiEncoderWindowPhase exprLowering compileEnv context contractABI
@@ -8,7 +9,7 @@ Ancestors
 
 (* The cursor site is distinct from the request allocation and is the
    only allocation touched by the loop's initialization and finish. *)
-Theorem abi_encode_saved_values_execute:
+Theorem abi_encode_saved_values_execute_with_frame[local]:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
     shared pbase capacity root payload_var dst_offset prefix st u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -34,11 +35,13 @@ Theorem abi_encode_saved_values_execute:
       (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields o SND) (TAKE i rows)))
       [EL i rows] a = ((),c) /\ fn_has_code a c func ==>
     ?z Gz tz.
+      (track_frame ==> pure_frame ce func ee se v z /\ wb_frame ce ee ee se v z) /\
       abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
         shared pbase capacity root payload_var dst_offset prefix c z Gz tz /\
       abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor st.cs_next_id slot (SUC i) c z Gz tz /\
       !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (v,Gv,tv) [] (OK z,Gz,tz)) ==>
   ?z Gz tz.
+    (track_frame ==> pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
     abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
       shared pbase capacity root payload_var dst_offset prefix en z Gz tz /\
     eval_operand alen z = SOME (n2w (LENGTH bytes)) /\ op_taint tz alen = {} /\
@@ -73,14 +76,22 @@ Proof
      qpat_assum `!i w b sz. MEM i (fn_insts func) /\ _ ==> _`
        (qspecl_then [`ci`,`32w`,`b`,`sz`] mp_tac) >>
      asm_simp_tac (srw_ss()) [dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]) >>
-  mp_tac (Q.INST
+  qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace`
+    (qx_choose_then `hz` assume_tac) >>
+  `stmt_state_rel hz ctx func ce cx ee u` by
+    (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee u /\ _`
+       (drule_then (ACCEPT_TAC o cj 1))) >>
+  mp_tac (SIMP_RULE bool_ss [GSYM CONJ_ASSOC] (BETA_RULE (Q.INST
     [`dst` |-> `Var payload_var`, `out` |-> `alen`, `s` |-> `u`, `G` |-> `Gu`, `tn` |-> `tu`,
      `owner` |-> `shared`, `b` |-> `pbase`, `cap` |-> `capacity`, `d` |-> `pbase+dst_offset`,
-     `P` |-> `abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
-          shared pbase capacity root payload_var dst_offset prefix`]
-    abi_encode_values_execute) >>
+     `P` |-> `\a v Gv tv.
+          (track_frame ==> pure_frame ce func ee se u v /\ wb_frame ce ee ee se u v) /\
+          abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
+            shared pbase capacity root payload_var dst_offset prefix a v Gv tv`]
+    abi_encode_values_execute))) >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+      >- simp[pure_frame_refl, wb_frame_refl]
       >- (rpt gen_tac >> disch_tac >> metis_tac[abi_encode_saved_state_resources])
       >- (rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
           `!aid. aid IN ids ==> aid = st.cs_next_id` by
@@ -88,28 +99,55 @@ Proof
               (ACCEPT_TAC o SIMP_RULE bool_ss [SUBSET_DEF, IN_SING])) >>
           `shared NOTIN ids /\ (!aid. aid IN ids ==> se.cs_next_id <= aid)` by
             (rpt conj_tac >> rpt strip_tac >> res_tac >> decide_tac) >>
-          qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace`
-            (qx_choose_then `hz` assume_tac) >>
-          irule abi_encode_saved_state_phase >>
-          qpat_assum `window_phase ctx func _ _ ids [] _ _` (irule_at Any) >>
-          qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-            (irule_at Any) >>
-          qexistsl_tac [`explicit`,`PG`] >>
-          asm_simp_tac (srw_ss()) [IN_INSERT] >>
-          qexists_tac `hz` >> asm_rewrite_tac[] >>
-          rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-          >- (gen_tac >> strip_tac >>
-              qpat_assum `tv.t_mem SUBSET tu'.t_mem` (mp_tac o REWRITE_RULE [SUBSET_DEF]) >>
-              disch_then (qspec_then `i` irule) >> first_assum ACCEPT_TAC) >>
-          gen_tac >> disch_then DISJ_CASES_TAC
-          >- (qexistsl_tac [`inst`,`root`] >> asm_rewrite_tac[]) >>
-          qexistsl_tac [`ci`,`r`] >> asm_rewrite_tac[] >> metis_tac[])
+          `(pure_frame ce func ee se u' v /\ wb_frame ce ee ee se u' v) /\
+            abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
+              shared pbase capacity root payload_var dst_offset prefix c v Gv tv` by
+            (irule abi_encode_saved_state_phase_pure >>
+            qpat_assum `window_phase ctx func _ _ ids [] _ _` (irule_at Any) >>
+            qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+              (irule_at Any) >>
+            qexistsl_tac [`explicit`,`PG`] >>
+            asm_simp_tac (srw_ss()) [IN_INSERT] >>
+            qexists_tac `hz` >> asm_rewrite_tac[] >>
+            rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+            >- (gen_tac >> strip_tac >>
+                qpat_assum `tv.t_mem SUBSET tu'.t_mem` (mp_tac o REWRITE_RULE [SUBSET_DEF]) >>
+                disch_then (qspec_then `i` irule) >> first_assum ACCEPT_TAC) >>
+            gen_tac >> disch_then DISJ_CASES_TAC
+            >- (qexistsl_tac [`inst`,`root`] >> asm_rewrite_tac[]) >>
+            qexistsl_tac [`ci`,`r`] >> asm_rewrite_tac[] >> metis_tac[]) >>
+          asm_rewrite_tac[] >>
+          disch_tac >>
+          mp_tac (Q.INST [`H` |-> `hz`,`a` |-> `se`,`v` |-> `u'`,`z` |-> `v`]
+            abi_encode_saved_frames_trans) >>
+          asm_simp_tac bool_ss [arithmeticTheory.LESS_EQ_REFL])
       >> qpat_assum `!ci r. MEM ci (fn_insts func) /\ _ ==> !i a c v Gv tv cursor slot. _`
            (qspecl_then [`ci`,`r`] mp_tac) >>
       impl_tac >- asm_rewrite_tac[] >>
-      simp_tac (srw_ss()) []) >>
+      disch_then (fn rows_step =>
+        MAP_EVERY qx_gen_tac [`i`,`a`,`c`,`u'`,`Gu'`,`tu'`,`cur`,`slot`] >>
+        disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+        qspecl_then [`i`,`a`,`c`,`u'`,`Gu'`,`tu'`,`cur`,`slot`] mp_tac rows_step) >>
+      impl_tac >- asm_rewrite_tac[] >>
+      disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
+      qexistsl_tac [`z`,`Gz`,`tz`] >>
+      asm_rewrite_tac[] >>
+      disch_tac >>
+      mp_tac (Q.INST [`H` |-> `hz`,`a` |-> `se`,`v` |-> `u'`]
+        abi_encode_saved_frames_trans) >>
+      asm_simp_tac bool_ss [arithmeticTheory.LESS_EQ_REFL]) >>
+  qpat_x_assum `bytes = enc (Tuple ats) (ListV avs)` SUBST_ALL_TAC >>
   disch_then ACCEPT_TAC
 QED
+
+Theorem abi_encode_saved_values_execute =
+  PURE_REWRITE_RULE [boolTheory.IMP_CLAUSES, boolTheory.AND_CLAUSES]
+    (Q.INST [`track_frame` |-> `F`] abi_encode_saved_values_execute_with_frame)
+
+Theorem abi_encode_saved_values_execute_pure =
+  PURE_REWRITE_RULE [boolTheory.IMP_CLAUSES, boolTheory.AND_CLAUSES]
+    (Q.INST [`track_frame` |-> `T`] abi_encode_saved_values_execute_with_frame)
+
 
 Theorem extcall_direct_values_execute:
   extcall_direct_state ctx func ce cx st0 ee DF lo disp se s G tn

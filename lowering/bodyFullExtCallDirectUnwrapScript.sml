@@ -5,10 +5,11 @@ Ancestors
   exprLoweringProps loweringPosts loweringStateRelDefs bodyPtrDefs
   compileEnv exprLowering context vyperValue vyperStorageFootprint
   fragExec fragGasOriginPtr ptrDiscipline venomState venomInst words finite_map
+Libs pureFrameLib
 
 (* The row consumes the original saved value. A code-free unwrap retains
    its source allocation interval, while a copy owns its new interval. *)
-Theorem extcall_direct_saved_unwrap:
+Theorem extcall_direct_saved_unwrap_pure:
   ty = lowered_value_type ce e /\
   ((?tag op0. saved = StackValue tag op0) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
@@ -47,6 +48,7 @@ Theorem extcall_direct_saved_unwrap:
   alloca_history fn t /\ ~t.vs_halted /\ t.vs_current_bb = su.cs_current_bb /\
   t.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?z G' tn'.
+    pure_frame ce fn ee su t z /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
       stmt_state_rel H ctx fn ce cx ee z /\ storage_well_formed_on cx ee (FST H) /\
@@ -69,7 +71,7 @@ Theorem extcall_direct_saved_unwrap:
        expr_val_at ce cx ty su sb ee v src z))
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all extcall_slot_unwrap >>
+  drule_all extcall_slot_unwrap_pure >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choosel_then [`z`,`G'`,`tn'`] strip_assume_tac)) >>
   `!x. src = Var x ==> not_fresh_at sb x` by
@@ -89,6 +91,9 @@ Proof
      metis_tac[]) >>
   qexistsl_tac [`z`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED
+
+Theorem extcall_direct_saved_unwrap =
+  pureFrameLib.drop_frame extcall_direct_saved_unwrap_pure
 
 (* The unwrap preserves live pointers issued before its input cut.
    Prefer the provenance frame of that cut for the new head and tail
