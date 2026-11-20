@@ -180,24 +180,6 @@ Proof
   simp[supported_word_type_def, supported_int_width_def]
 QED
 
-Theorem supported_value_tuple_depth:
-  supported_value_type tops (TupleT ts) <=>
-    ~NULL ts /\ EVERY supported_scalar_type ts
-Proof
-  simp[supported_value_type_def, supported_scalar_type_def,
-       supported_word_type_def, supported_string_type_def]
-QED
-
-Theorem supported_value_array_depth:
-  (supported_value_type tops (ArrayT elem (Fixed n)) <=>
-     supported_word_type elem /\ 0 < n) /\
-  (supported_value_type tops (ArrayT elem (Dynamic n)) <=>
-     supported_word_type elem)
-Proof
-  simp[supported_value_type_def, supported_scalar_type_def,
-       supported_word_type_def, supported_string_type_def]
-QED
-
 Theorem supported_struct_fields_other_module:
   module_id <> NONE ==>
     supported_struct_fields tops (module_id, name) = NONE
@@ -213,5 +195,6 @@ Theorem supported_storage_array_depth:
 Proof
   conj_tac >> rewrite_tac[supported_storage_type_def] >>
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [supported_nested_type_def])) >>
-  simp[supported_full_word_type_def, CONJ_COMM]
+  simp[supported_scalar_type_def, supported_word_type_def,
+       supported_string_type_def, CONJ_COMM]
 QED

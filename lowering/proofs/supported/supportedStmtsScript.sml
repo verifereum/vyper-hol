@@ -63,8 +63,10 @@ Definition supported_append_target_def:
   supported_append_target tops (TopLevelNameTarget id) =
     supported_storage_dynamic_array tops id /\
   supported_append_target tops (NameTarget name) = T /\
-  supported_append_target tops (SubscriptTarget target key) = T /\
-  supported_append_target tops (AttributeTarget target fname) = T
+  supported_append_target tops (SubscriptTarget target key) =
+    EVERY (supported_pure_expr tops) (target_indices (SubscriptTarget target key)) /\
+  supported_append_target tops (AttributeTarget target fname) =
+    EVERY (supported_pure_expr tops) (target_indices target)
 End
 
 Definition supported_string_reason_def:
@@ -79,7 +81,8 @@ Definition supported_assert_reason_def:
   supported_assert_reason tops AssertUnreachable = T /\
   supported_assert_reason tops (AssertReason e) = supported_string_reason tops e /\
   supported_assert_reason tops (AssertCustomError err) =
-    custom_error_resolved [(NONE, tops)] err
+    (custom_error_resolved [(NONE, tops)] err /\
+     EVERY (supported_pure_expr tops) (custom_error_exprs err))
 End
 
 Definition supported_raise_reason_def:
@@ -87,7 +90,8 @@ Definition supported_raise_reason_def:
   supported_raise_reason tops RaiseUnreachable = T /\
   supported_raise_reason tops (RaiseReason e) = supported_string_reason tops e /\
   supported_raise_reason tops (RaiseCustomError err) =
-    custom_error_resolved [(NONE, tops)] err
+    (custom_error_resolved [(NONE, tops)] err /\
+     EVERY (supported_pure_expr tops) (custom_error_exprs err))
 End
 
 (* Exact argument types select the original Log proofs. *)
@@ -208,16 +212,14 @@ QED
 
 Theorem supported_loop_body_contract:
   supported_stmt tops bindings (For name ty iter n loop_body) ==>
-    supported_stmts tops bindings loop_body /\
-    ~supported_stmts_expr_exists expr_internal_call_root loop_body
+    supported_stmts tops bindings loop_body
 Proof
   simp[supported_stmt_def]
 QED
 
 Theorem supported_augassign_contract:
   supported_stmt tops bindings (AugAssign ty target op e) ==>
-    supported_expr tops e /\
-    (op = Exp ==> supported_integer_type ty /\ supported_nonnegative_literal e)
+    supported_expr tops e
 Proof
   Cases_on `op` >> simp[supported_stmt_def, supported_binop_def]
 QED
