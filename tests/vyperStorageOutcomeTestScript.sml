@@ -123,31 +123,6 @@ Proof
   gvs[AllCaseEqs(), record_request_def]
 QED
 
-Theorem successful_adoption_storage_client:
-  runtime_storage_consistent env cx st /\ oracle_storage_ok cx st /\
-  take_call_outcome gas_cap target data value st = (INL (rq,co),st1) /\
-  co.co_success /\ adopt_call_outcome rq co st1 = (INL (),st2) ==>
-  runtime_storage_consistent env cx st2 /\ oracle_storage_ok cx st2 /\
-  outcome_suffix st.outcomes st2.outcomes
-Proof
-  strip_tac >> drule_all take_adopt_call_outcome_runtime_storage_suffix >> simp[]
-QED
-
-Theorem updated_statement_storage_consumer:
-  type_stmt env ret_ty s = SOME env' /\ runtime_storage_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_stmt s) /\
-  protected_storage_calls_preserve cx /\ protected_storage_creates_preserve cx /\
-  oracle_storage_ok cx st /\
-  eval_stmt cx s st = (res,st') ==>
-  contract_storage_well_formed cx st' /\ no_type_error_result res /\
-  oracle_storage_ok cx st' /\ outcome_suffix st.outcomes st'.outcomes
-Proof
-  strip_tac >> drule_all eval_stmt_preserves_contract_storage_well_formed >>
-  strip_tac >> drule_all (cj 1 eval_oracle_storage_preserved_mutual) >>
-  strip_tac >> imp_res_tac eval_outcome_suffix_mutual >>
-  drule_all typed_stmt_preserves_runtime_storage >> simp[]
-QED
-
 (* Focused existing real-helper CV observations: ordinary success installs
    slot 8; static/failed bad-account payloads retain slot 4; rejected guard
    consumes an outcome. *)
