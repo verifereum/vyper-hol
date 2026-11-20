@@ -557,11 +557,13 @@ Definition evaluate_builtin_def:
         (case vs of
          | [v1; v2] =>
              (let u = case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0 in
-              let tv = case tys of
-                       | [_; t2] => (case evaluate_type (get_tenv cx) t2 of
-                                     | SOME tv => tv | NONE => NoneTV)
-                       | _ => NoneTV in
-                evaluate_binop u tv bop v1 v2)
+              case tys of
+              | [_; t2] => (case evaluate_type (get_tenv cx) t2 of
+                            | SOME tv => evaluate_binop u tv bop v1 v2
+                            | NONE => if bop = In ∨ bop = NotIn
+                                      then INR (TypeError "Membership type")
+                                      else evaluate_binop u NoneTV bop v1 v2)
+              | _ => evaluate_binop u NoneTV bop v1 v2)
          | _ => INR (TypeError "builtin"))
     | Env item =>
         (case (item, vs) of
