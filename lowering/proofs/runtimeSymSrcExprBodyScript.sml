@@ -148,8 +148,8 @@ Resume runtime_sym_expr_body[struct]:
   simp[runtime_sym_value_def, base_ptr_def]
 QED
 Resume runtime_sym_expr_body[flag]:
-  simp[runtime_sym_expr_contract_def, supported_expr_def,
-       supported_pure_expr_def, supported_effect_expr_def, supported_pure_expr_def]
+  simp[runtime_sym_expr_contract_def, compile_expr_body_def, expr_type_def] >>
+  rpt strip_tac >> gvs[runtime_sym_value_def, is_label_operand_def]
 QED
 Resume runtime_sym_expr_body[topname]:
   simp[NoAsms, runtime_sym_expr_contract_def] >>

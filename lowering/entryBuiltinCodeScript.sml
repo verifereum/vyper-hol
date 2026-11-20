@@ -1,7 +1,7 @@
 Theory entryBuiltinCode
 Ancestors
   entryAggregateCode entryArithmeticCode entryValueCode entryLocationValueCode
-  builtinMath builtinMisc builtinSimple
+  builtinMath builtinMisc builtinSimple builtinHashing
   exprLowering entryCodePredicate entryContextCodePredicate builtinBytes builtinStrings
 
 Theorem entry_code_invert:
@@ -92,6 +92,53 @@ Proof
   simp[entry_code_emit_op]
 QED
 
+Theorem entry_code_ceil:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_ceil v divisor)
+Proof
+  simp[compile_ceil_def] >>
+  rpt (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_emit_op, entry_code_select] >> rpt gen_tac >> BETA_TAC) >>
+  simp[entry_code_emit_op]
+QED
+
+Theorem entry_code_hash_builtins:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_keccak256_bytes v) /\
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_keccak256_bytesm v m) /\
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_keccak256_word v) /\
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_sha256_bytes v) /\
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_sha256_bytesm v m) /\
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_sha256_word v)
+Proof
+  simp[compile_keccak256_bytes_def, compile_keccak256_bytesm_def,
+       compile_keccak256_word_def, compile_sha256_bytes_def,
+       compile_sha256_bytesm_def, compile_sha256_word_def,
+       compileEnvTheory.comp_ignore_bind_def] >>
+  rpt conj_tac >>
+  rpt (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_alloc_buffer, entry_code_return,
+            entry_code_emit_op, entry_code_emit_void] >> rpt gen_tac >> BETA_TAC) >>
+  simp[entry_code_emit_op]
+QED
+
+Theorem entry_code_method_id_runtime:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_method_id_runtime ty v is_bytes4)
+Proof
+  `entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_method_id_hash ty v)` by
+    (Cases_on `ty` >> simp[compile_method_id_hash_def, entry_code_hash_builtins] >>
+     rename1 `compile_method_id_hash (BaseT bt) v` >>
+     Cases_on `bt` >> simp[compile_method_id_hash_def, entry_code_hash_builtins] >>
+     rename1 `compile_method_id_hash (BaseT (BytesT bnd)) v` >>
+     Cases_on `bnd` >> simp[compile_method_id_hash_def, entry_code_hash_builtins]) >>
+  Cases_on `is_bytes4` >>
+  simp[compile_method_id_runtime_def, compileEnvTheory.comp_ignore_bind_def] >>
+  rpt (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_alloc_buffer, entry_code_return,
+            entry_code_emit_op, entry_code_emit_void] >> rpt gen_tac >> BETA_TAC) >>
+  simp[entry_code_return]
+QED
+
 Theorem entry_code_ecrecover:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_ecrecover h v r s)
 Proof
@@ -161,6 +208,16 @@ Proof
   rpt (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_alloc_buffer, entry_code_emit_op, entry_code_return] >>
     rpt gen_tac >> BETA_TAC) >> simp[entry_code_return]
+QED
+
+Theorem entry_code_extract32_load:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_extract32_load len data offset)
+Proof
+  simp[compile_extract32_load_def, compileEnvTheory.comp_ignore_bind_def] >>
+  rpt (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_assert_slice_bounds, entry_code_emit_op] >>
+    rpt gen_tac >> BETA_TAC) >> simp[entry_code_emit_op]
 QED
 
 Theorem entry_code_slice_calldata:

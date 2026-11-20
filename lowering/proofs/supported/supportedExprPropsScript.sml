@@ -80,7 +80,8 @@ Theorem supported_pure_expression_rows:
        (Name (StructT (NONE,"Pair")) "record") "first";
      Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_uint; expr_test_uint];
      TypeBuiltin (BaseT (IntT 8)) Convert (BaseT (IntT 8)) [expr_test_uint];
-     expr_test_decode]
+     expr_test_decode;
+     FlagMember (FlagT (NONE,"Flags")) (NONE,"Flags") "A"]
 Proof
   EVAL_TAC
 QED
@@ -98,9 +99,10 @@ Theorem supported_storage_base_exclusions:
        (TopLevelName (StructT (NONE,"Pair")) (NONE,"record")) "missing";
      Attribute (BaseT (UintT 256))
        (TopLevelName (StructT (NONE,"Pair")) (SOME 0,"record")) "first";
-     IfExp (TupleT [BaseT (UintT 256)]) (Name (BaseT BoolT) "c") expr_test_uint expr_test_uint;
-     StructLit (StructT (NONE,"Pair")) (SOME 0,"Pair") [];
-     FlagMember (FlagT (NONE,"Flags")) (NONE,"Flags") "A"]
+     IfExp (TupleT [BaseT (UintT 256)]) (Name (BaseT BoolT) "c")
+       (Name (TupleT [BaseT (UintT 256)]) "left")
+       (Name (TupleT [BaseT (UintT 256)]) "right");
+     StructLit (StructT (NONE,"Pair")) (SOME 0,"Pair") []]
 Proof
   EVAL_TAC
 QED
@@ -251,7 +253,7 @@ Theorem supported_external_expression_row:
   EVERY (\ret. ~supported_expr expr_test_tops
     (Call ret (ExtCall T F ("remote",[BaseT (UintT 256)],ret) [])
       [expr_test_address; expr_test_uint] NONE))
-    [TupleT []; BaseT (BytesT (Fixed 20)); StructT (NONE,"Missing");
+    [TupleT []; StructT (NONE,"Missing");
      TupleT [TupleT [BaseT (UintT 256)]]]
 Proof
   EVAL_TAC
@@ -262,7 +264,7 @@ Theorem supported_external_nonword_arguments_rejected:
     [InterfaceDecl "I" [("remote",[("arg",arg_ty)],BaseT (UintT 256),View)]]
     (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[arg_ty],BaseT (UintT 256)) [])
       [expr_test_address; Name arg_ty "arg"] NONE))
-    [BaseT (StringT 32); BaseT (BytesT (Dynamic 32)); BaseT (BytesT (Fixed 20));
+    [BaseT (StringT 32); BaseT (BytesT (Dynamic 32));
      BaseT (UintT 7); TupleT [BaseT (UintT 256)];
      ArrayT (BaseT (UintT 256)) (Fixed 2); StructT (NONE,"Pair"); NoneT]
 Proof

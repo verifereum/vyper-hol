@@ -29,7 +29,7 @@ Definition supported_word_type_def:
   supported_word_type (BaseT DecimalT) = T /\
   supported_word_type (BaseT AddressT) = T /\
   supported_word_type (BaseT (BytesT (Fixed n))) =
-    (1 <= n /\ n <= 32 /\ n <> 20) /\
+    (1 <= n /\ n <= 32) /\
   supported_word_type _ = F
 End
 
@@ -182,7 +182,7 @@ QED
 
 Theorem supported_word_bytes_bounds:
   supported_word_type (BaseT (BytesT (Fixed n))) <=>
-    1 <= n /\ n <= 32 /\ n <> 20
+    1 <= n /\ n <= 32
 Proof
   simp[supported_word_type_def]
 QED
