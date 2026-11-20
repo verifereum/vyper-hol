@@ -3,18 +3,7 @@ Theory abiDecodeValidJoint
 Ancestors
   abiDecodeValidCoherentCases abiValidAllocatedPrimitiveJoint
   abiValidAllocatedBytesJoint abiDecodeValidMemberTraversal
-  abiDecodeValidBulk abiDecodeValidFiniteArray
-
-Triviality valid_entry_allocation_bound:
-  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
-    st en (source_op:operand) hi pos output B L xs p d dstid live ceiling s ==>
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s)
-Proof
-  simp_tac bool_ss [abiValidAllocatedContractTheory.abi_valid_allocated_entry_def,
-                    abiMalformedRecursiveInterfaceTheory.abi_malformed_entry_def] >>
-  strip_tac >>
-  drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp
-QED
+  abiDecodeValidBulk abiDecodeValidFiniteArray abiMalformedEntryProps
 
 Theorem abi_valid_allocated_joint:
 abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
@@ -56,7 +45,11 @@ Proof
   >- (POP_ASSUM_LIST (K all_tac) >>
       rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >> rpt gen_tac >>
       disch_then (map_every assume_tac o CONJUNCTS) >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by drule_then ACCEPT_TAC valid_entry_allocation_bound >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+        (qpat_assum `abi_valid_allocated_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (strip_assume_tac o PURE_REWRITE_RULE
+              [abiValidAllocatedContractTheory.abi_valid_allocated_entry_def]) >>
+         drule_then ACCEPT_TAC abi_malformed_entry_allocas_below_fmp) >>
       drule_all abi_valid_allocated_primitive_joint_observations >>
       disch_then (qspec_then `PG` ACCEPT_TAC))
   >- (POP_ASSUM_LIST (K all_tac) >>
@@ -70,7 +63,11 @@ Proof
   >- (POP_ASSUM_LIST (K all_tac) >>
       rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >> rpt gen_tac >>
       disch_then (map_every assume_tac o CONJUNCTS) >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by drule_then ACCEPT_TAC valid_entry_allocation_bound >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+        (qpat_assum `abi_valid_allocated_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (strip_assume_tac o PURE_REWRITE_RULE
+              [abiValidAllocatedContractTheory.abi_valid_allocated_entry_def]) >>
+         drule_then ACCEPT_TAC abi_malformed_entry_allocas_below_fmp) >>
       drule_all abi_valid_allocated_bytes_joint_observations >>
       disch_then (qspec_then `PG` ACCEPT_TAC))
   >- (qexistsl_tac [`H0`,`env`,`hi`,`live`,`p`,`pos`,`sf`,`xs`] >>
