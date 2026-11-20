@@ -327,6 +327,7 @@ Resume abi_decode_loop_setup_joint_exact[select]:
   `h < dimword (:256) /\
    (dec_info_needs_offset ei ==> srcoff+32+j*asz+32 <= LENGTH input_bytes)` by
     (conj_tac >- decide_tac >> strip_tac >> res_tac >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all abi_decode_loop_select_joint_exact >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac)
   >- suspend "reject" >>
@@ -394,6 +395,7 @@ Resume abi_decode_loop_setup_joint_exact[destination]:
      POP_ASSUM_LIST (K all_tac) >>
      simp[eval_operand_def, op_prov_def]) >>
   `allocas_from lo u'` by metis_tac[allocas_from_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u'` by simp[] >>
   drule_all abi_decode_loop_destination_joint_exact >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   suspend "success"

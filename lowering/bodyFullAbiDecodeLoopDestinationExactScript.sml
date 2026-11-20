@@ -75,7 +75,7 @@ Theorem abi_decode_loop_destination_joint_exact:
   FLOOKUP G dst = SOME (output_base,output_cap) /\
   output_base <= d /\ d+32+n*msz <= output_base+output_cap /\ j<n /\
   op_prov G idx = NONE /\ op_taint tn idx = {} /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) sa s G tn /\
@@ -143,7 +143,6 @@ Proof
    op_taint tn (Lit 32w) = {} /\ 32+(j*msz+msz) <= 32+n*msz /\
    w2n (n2w d : 256 word)+(32+n*msz) < dimword(:256)` by
     (simp[eval_operand_def, op_taint_def, w2n_n2w] >> decide_tac) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (abiDecodePtrBytesTailTheory.abi_decode_ptr_output_address |>
     Q.INST [`cap` |-> `32+n*msz`, `q` |-> `32`, `k` |-> `j*msz+msz`,
       `D` |-> `ARB`, `PG` |-> `PG`]) >>
@@ -212,6 +211,9 @@ Proof
    op_taint tn1 (Lit (n2w msz)) = {} /\
    op_prov G1 (Lit (n2w msz)) = NONE` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
+  `allocas_below_fmp s1 <=> allocas_below_fmp s` by
+    simp[Abbr `s1`, Abbr `u1`, update_var_def, allocas_below_fmp_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by simp[] >>
   drule_all (emit_scalar_binop_endpoint_ptr_origin_core |>
     Q.SPEC `MUL` |> SRULE []) >>
   disch_then (qspecl_then [`ARB`, `cx`, `ctx`, `PG`, `ARB`]
@@ -250,6 +252,9 @@ Proof
   `?child. child_dst = Var child` by metis_tac[emit_op_facts] >>
   qpat_x_assum `child_dst = Var child` SUBST_ALL_TAC >>
   `j*msz+msz <= j*msz+msz` by simp[] >>
+  `allocas_below_fmp s2 <=> allocas_below_fmp s` by
+    simp[Abbr `s2`, Abbr `u2`, Abbr `s1`, Abbr `u1`, update_var_def,
+      allocas_below_fmp_def] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by simp[] >>
   drule_all (abiDecodePtrBytesTailTheory.abi_decode_ptr_output_address |>
     Q.INST [`cap` |-> `j*msz+msz`, `q` |-> `j*msz`, `k` |-> `msz`,
