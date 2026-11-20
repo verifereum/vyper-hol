@@ -241,7 +241,12 @@ Resume abi_decode_singleton_vv_full[continuation]:
      disch_then (qx_choose_then `b` $ qx_choose_then `data_var` $
        qx_choose_then `d` $ mk_asm "entry_origin") >>
      qexistsl [`b`,`data_var`,`d`,`ops`,`ready`] >>
-     conj_tac >- asm "entry_origin" ACCEPT_TAC >>
+     conj_asm1_tac >-
+       (qpat_assum `~ctx_has_dalloca ctx`
+          (fn no_dalloca => PURE_REWRITE_TAC [no_dalloca, NOT_CLAUSES, AND_CLAUSES]) >>
+        asm "entry_origin" ACCEPT_TAC) >>
+     pop_assum (fn entry => asm_x "entry_origin" kall_tac >>
+                            mk_asm "entry_origin" entry) >>
      reverse conj_tac >- simp[] >>
      qabbrev_tac `wtv = if unwrap /\ needs_external_call_wrap ty then TupleTV [tyv] else tyv` >>
      `abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields wty wtv /\
