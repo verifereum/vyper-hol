@@ -32,7 +32,7 @@ Proof
   simp[] >> strip_tac >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem inv_phi_prefix_pseudo_bound[local]:
+Theorem inv_phi_prefix_pseudo_bound:
   !pre xs. EVERY (\i. ~is_pseudo i.inst_opcode) xs ==>
     phi_prefix_length (pre ++ xs) <= LENGTH pre
 Proof

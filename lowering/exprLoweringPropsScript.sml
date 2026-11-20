@@ -4803,7 +4803,9 @@ Proof
   >- simp[ci_mono_lower_value_cfn] >>
   rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >- simp[ci_mono_refl] >>
   IF_CASES_TAC
-  >- simp[ci_mono_as_stack_val, ci_mono_compile_bytestring_widen_copy] >>
+  >- simp[ci_mono_as_ptr_val, ci_mono_compile_bytestring_widen_copy] >>
+  IF_CASES_TAC
+  >- simp[ci_mono_as_ptr_val, ci_mono_compile_type_convert] >>
   Cases_on `ret_ty` >>
   simp[ci_mono_as_stack_val, ci_mono_compile_type_convert]
 QED

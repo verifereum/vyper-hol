@@ -100,13 +100,8 @@ Theorem dload_delegate_ghosts[local]:
   i.inst_opcode = DELEGATECALL /\
   source_memory_write_ranges i s = [(w2n ro,w2n rz)] /\
   s1.vs_allocas = s.vs_allocas /\ s1.vs_fmp = s.vs_fmp ==>
-  step_prov PG G i s1 = set_prov G i.inst_outputs NONE /\
-  step_taint i s s1 tn =
-    <|t_mem := tn.t_mem DIFF
-        {a | w2n ro <= a /\
-             a < w2n ro + MIN (w2n rz) (LENGTH s1.vs_returndata)};
-      t_var := set_var_taint tn.t_var i.inst_outputs {};
-      t_stor := tn.t_stor; t_trans := tn.t_trans; t_imm := tn.t_imm|>
+  (step_taint i s s1 tn).t_mem = tn.t_mem DIFF
+    {a | w2n ro <= a /\ a < w2n ro + MIN (w2n rz) (LENGTH s1.vs_returndata)}
 Proof
   strip_tac >>
   `new_site_bytes s s1 = {}` by
@@ -114,9 +109,7 @@ Proof
   `out_taint tn i s = {} /\ written_taint tn i s = {}` by
     (conj_tac >- (irule out_taint_opcode_exclusion >> simp[]) >>
      irule written_taint_opcode_exclusion >> simp[]) >>
-  gvs[step_prov_def, out_prov_def, step_taint_def, mem_taint_def,
-      step_writes_def, range_bytes_def, adopt_reset_def, store_taint_def,
-      imm_taint_def]
+  simp[step_taint_def, mem_taint_def, step_writes_def, range_bytes_def]
 QED
 
 Theorem dload_delegate_frame_fields[local]:
@@ -162,21 +155,14 @@ Proof
     (un with t_mem := un.t_mem DIFF
       {a | w2n rt <= a /\ a < w2n rt + MIN (w2n rz) (LENGTH s1.vs_returndata)}) s1 t1` by
     (irule dload_clean_return_memory_match >> metis_tac[]) >>
-  `step_taint i s s1 tn =
-    <|t_mem := tn.t_mem DIFF
-        {a | w2n ro <= a /\ a < w2n ro + MIN (w2n rz) (LENGTH s1.vs_returndata)};
-      t_var := set_var_taint tn.t_var i.inst_outputs {};
-      t_stor := tn.t_stor; t_trans := tn.t_trans; t_imm := tn.t_imm|>` by
-    (irule (cj 2 dload_delegate_ghosts) >> metis_tac[]) >>
-  `step_taint i t t1 un =
-    <|t_mem := un.t_mem DIFF
-        {a | w2n rt <= a /\ a < w2n rt + MIN (w2n rz) (LENGTH t1.vs_returndata)};
-      t_var := set_var_taint un.t_var i.inst_outputs {};
-      t_stor := un.t_stor; t_trans := un.t_trans; t_imm := un.t_imm|>` by
-    (irule (cj 2 dload_delegate_ghosts) >> metis_tac[]) >>
+  `(step_taint i s s1 tn).t_mem = tn.t_mem DIFF
+    {a | w2n ro <= a /\ a < w2n ro + MIN (w2n rz) (LENGTH s1.vs_returndata)}` by
+    metis_tac[dload_delegate_ghosts] >>
+  `(step_taint i t t1 un).t_mem = un.t_mem DIFF
+    {a | w2n rt <= a /\ a < w2n rt + MIN (w2n rz) (LENGTH t1.vs_returndata)}` by
+    metis_tac[dload_delegate_ghosts] >>
   qpat_x_assum `dload_memory_match _ _ _ _ _ s1 t1` mp_tac >>
-  pure_asm_rewrite_tac[] >>
-  POP_ASSUM_LIST (K all_tac) >> simp[dload_memory_match_def] >> metis_tac[]
+  simp[dload_memory_match_def] >> metis_tac[]
 QED
 
 Theorem dload_delegate_reverse_inputs[local]:
@@ -255,8 +241,8 @@ Proof
   gvs[dload_shared_store_def, step_taint_def, store_taint_def,
       adopt_reset_def, imm_taint_def, update_var_def,
       venom_call_request_def, take_outcome_def,
-      computed_precompile_def, adopt_outcome_def,
-      storage_agree_except_def, word_agree_except_def] >>
+      computed_precompile_def, adopt_outcome_def, record_request_changed,
+      record_request_def, storage_agree_except_def, word_agree_except_def] >>
   rpt (IF_CASES_TAC >> gvs[]) >> metis_tac[]
 QED
 

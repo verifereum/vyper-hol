@@ -71,7 +71,12 @@ Theorem compile_as_wei_value_int_open:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> simp[compile_as_wei_value_int_def] >>
-  IF_CASES_TAC >- (simp[comp_return_def] >> metis_tac[]) >>
+  Cases_on `scale = 1` >> simp[]
+  >- (Cases_on `signed`
+      >- (simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+          ntac 3 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+          drule emit_void_terminated >> simp[is_terminator_def]) >>
+      simp[comp_return_def] >> metis_tac[]) >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   ntac 7 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   drule emit_void_terminated >> simp[is_terminator_def]

@@ -30,7 +30,7 @@ Proof
        arithmeticTheory.ADD_COMM]
 QED
 
-Theorem fmp_cover_block_operand[local]:
+Theorem fmp_cover_block_operand:
   lookup_block lbl fn.fn_blocks = SOME bb /\ MEM q bb.bb_instructions /\
   MEM (Var v) q.inst_operands ==> MEM v (fn_ir_vars fn)
 Proof

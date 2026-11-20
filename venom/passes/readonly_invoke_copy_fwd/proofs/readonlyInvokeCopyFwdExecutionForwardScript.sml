@@ -49,8 +49,7 @@ Proof
   rpt gen_tac >>
   drule_at (Pat `exec_block _ _ _ _ = _`) ld_available_suffix_abort_fuel >>
   disch_then irule >> (conj_tac >- simp[]) >> qexistsl_tac [`UNIV`, `0`, `inst`] >>
-  simp[FLOOKUP_DEF] >> conj_tac
-  >- (rpt strip_tac >> IF_CASES_TAC >> simp[]) >>
+  simp[FLOOKUP_DEF] >>
   sym_tac >> irule ricf_block_edit_unchanged_fetch >>
   simp[] >> qexists_tac `bb` >> simp[]
 QED

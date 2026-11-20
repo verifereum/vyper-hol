@@ -148,7 +148,7 @@ Theorem prefix_register_address_add_run:
   emit_op ADD [a;b] st = (out,middle) /\ fn_has_code st middle fn /\
   eval_operand a s = SOME u /\ eval_operand b s = SOME v /\
   op_taint tn a = {} /\ op_taint tn b = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   let x = STRING #"%" (toString st.cs_next_var);
       H = set_prov G [x] (first_prov G [a;b]);
@@ -167,7 +167,7 @@ QED
 Theorem prefix_register_address_dload_run:
   emit_op DLOAD [off] st = (out,middle) /\ fn_has_code st middle fn /\
   eval_operand off s = SOME a /\ op_taint tn off = {} /\
-  abi_decode_load DLOAD a s = w /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  abi_decode_load DLOAD a s = w /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   let x = STRING #"%" (toString st.cs_next_var);
       H = DRESTRICT G (COMPL {x});
@@ -235,6 +235,7 @@ Proof
        (strip_tac >> gvs[not_fresh_at_def]) >>
      Cases_on `first_prov G [a;b]` >>
      simp[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_register_address_add_run >> simp[]
 QED
 
@@ -291,6 +292,7 @@ Proof
      `x <> STRING #"%" (toString st.cs_next_var)` by
        (strip_tac >> gvs[not_fresh_at_def]) >>
      simp[FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all (SRULE [] (Q.INST
     [`w` |-> `abi_decode_load DLOAD a s`] prefix_register_address_dload_run)) >> simp[]
 QED

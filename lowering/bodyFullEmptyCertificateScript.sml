@@ -39,7 +39,7 @@ Theorem empty_buffer_indexed_frames:
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     sz < dimword (:256) /\
     (if header then 32 <= sz else sz MOD 32 = 0) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     ghost_inv_at D lo d cenv cx es G tn s /\ lo <= s.vs_alloca_next /\
@@ -81,6 +81,14 @@ Proof
   `ptr_covers Ga ta p (u with vs_inst_idx := SUC s.vs_inst_idx) sz` by simp[] >>
   qpat_x_assum `lookup_var p u = SOME w` kall_tac >>
   qpat_x_assum `ptr_covers Ga ta p u sz` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp
+     (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (strip_tac >>
+     `allocas_below_fmp u` by
+       metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
+     `allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx) <=>
+       allocas_below_fmp u` by simp[allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all empty_buffer_tail_effects >>
   disch_then (qspecl_then [`func`, `PG`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts sm sb) _ = OK v` >>
@@ -180,7 +188,7 @@ Theorem empty_buffer_uniform_run:
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     sz < dimword (:256) /\
     (if header then 32 <= sz else sz MOD 32 = 0) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     run_inst_seq (emitted_insts sa sb) s = OK t ==>
@@ -214,6 +222,14 @@ Proof
   qpat_x_assum `lookup_var p u = _` kall_tac >>
   qpat_x_assum `ptr_covers G' tn' _ u sz` kall_tac >>
   `w2n w+sz < dimword (:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp
+     (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (strip_tac >>
+     `allocas_below_fmp u` by
+       metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
+     `allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx) <=>
+       allocas_below_fmp u` by simp[allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all empty_buffer_tail_effects >>
   disch_then (qspecl_then [`func`, `PG`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts sm sb) _ = OK v` >>
@@ -242,6 +258,10 @@ Proof
 QED
 Resume empty_buffer_uniform_run[sequence]:
   rpt gen_tac >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx es s`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
   `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s finalG tk` by
     (qpat_x_assum `inst_seq_ptr ARB 0 _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[inst_seq_ptr_def, ptr_inst_ok_alloca] >> strip_tac >> gvs[] >>
@@ -271,7 +291,7 @@ Theorem empty_buffer_origin_full:
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     sz < dimword (:256) /\
     (if header then 32 <= sz else sz MOD 32 = 0) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     alloca_history func s /\ lo <= s.vs_alloca_next /\

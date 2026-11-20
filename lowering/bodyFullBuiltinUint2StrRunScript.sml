@@ -14,7 +14,6 @@ Theorem u2s_setup_exit_joint:
   inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
   not_local_ptr cenv es.scopes q /\ n+32 <= sz /\ LENGTH (num_to_dec_string X) <= n /\
   X < dimword(:256) /\ b+sz < dimword(:256) /\ lo <= b /\
-  ~ctx_has_dalloca ctx /\
   eval_operand op s = SOME (n2w X) /\ op_prov G op = NONE /\ op_taint tn op = {} /\
   (!k. op <> Var (u2s_var a k)) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -70,7 +69,10 @@ QED
 Resume u2s_setup_exit_joint[zero]:
   gvs[] >>
   `1 <= n` by decide_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp sc` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sc` by
+    (`stmt_state_rel H0 ctx fn cenv cx es sc` by
+       (fs[u2s_safe_def] >> metis_tac[]) >>
+     first_assum (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all (Q.INST [`s` |-> `sc`] (SPEC_ALL u2s_zero_joint_result)) >>
   disch_then (qspecl_then [`ty`, `explicit`, `PG`]
     (qx_choose_then `sf` (qx_choose_then `Gf`

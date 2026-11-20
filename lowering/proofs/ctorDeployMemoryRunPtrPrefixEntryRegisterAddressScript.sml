@@ -91,6 +91,7 @@ Proof
       (strip_tac >> gvs[not_fresh_at_def]) >>
     Cases_on `first_prov G [a;b]` >>
     simp[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def]) >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
  conj_tac >- (drule_all prefix_register_address_add_run >> simp[update_var_def]) >>
  strip_tac >> `alloca_history func initial` by metis_tac[] >>
  drule_all ctor_checked_arg_add_reach >> strip_tac >> gvs[update_var_def]
@@ -175,6 +176,7 @@ Proof
     `x <> STRING #"%" (toString st.cs_next_var)` by
       (strip_tac >> gvs[not_fresh_at_def]) >>
     simp[FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE]) >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
  conj_tac >-
    (drule_all (SRULE [] (Q.INST
      [`w` |-> `abi_decode_load DLOAD a s`] prefix_register_address_dload_run)) >>

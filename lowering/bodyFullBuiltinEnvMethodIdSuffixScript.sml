@@ -3,6 +3,7 @@ Theory bodyFullBuiltinEnvMethodIdSuffix
 Ancestors
   bodyFullBuiltinEnvMethodIdHashDynamic bodyFullBuiltinEnvMethodIdHashFixed
   bodyFullBuiltinEnvMethodIdSelector bodyFullBuiltinEnvMethodIdBuffer
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullBuiltinEnvMethodIdRuntime bodyFullGhostFrame bodyFullUnwrapRun wordArgsPtr
   exprSimHash exprSimSource exprSimWordArgs exprSimMemDefs exprSimUnwrapProps exprSimUnwrap
   exprSimVVFrame exprSimMemoryStack exprSimPtrLiteralBuffer bodySimFull bodyPtrDefs bodyMemoryDefs
@@ -21,7 +22,7 @@ Theorem method_id_runtime_full_suffix:
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     local_ptrs_reserved cenv sa /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -124,6 +125,10 @@ Resume method_id_runtime_full_suffix[cut]:
     (gen_tac >> disch_tac >>
      qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
        (qspec_then `H` mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (`stmt_state_rel (storage_trace_horizon mid.storage_trace)
+       ctx func cenv cx mid s` by fs[expr_post_def] >>
+     first_assum (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `?hashed Gh tnh bs.
     LENGTH bs = 32 /\
     (!ann. builtin_result cx mid.accounts ann MethodId [expr_type e] [v] =
@@ -147,13 +152,11 @@ Resume method_id_runtime_full_suffix[cut]:
       ghost_inv_at (DF H) lo d cenv cx mid Gh tnh hashed /\
       ghost_kept_at lo cenv mid sm G tn s Gh tnh)` by
     (Cases_on `is_bytestring_type (expr_type e)`
-     >- (`ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
-         drule_all method_id_hash_dynamic_full_run >>
+     >- (drule_all method_id_hash_dynamic_full_run >>
          disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
          qexistsl [`u`, `Gh`, `tnh`, `bs`] >> simp[] >>
          conj_tac >- (rpt strip_tac >> Cases_on `entry` >> metis_tac[]) >>
          metis_tac[]) >>
-     `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
      drule_all method_id_hash_fixed_full_run >>
      disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
      qexistsl [`u`, `Gh`, `tnh`, `bs`] >> simp[] >>
@@ -382,6 +385,13 @@ Resume method_id_runtime_full_suffix[dynamic_output]:
   `LENGTH (TAKE 4 bs) = 4` by simp[LENGTH_TAKE] >>
   `eval_operand word selected = SOME
     (typed_val_to_w256 (BaseTV (BytesT (Fixed 4))) (BytesV (TAKE 4 bs)))` by metis_tac[] >>
+  `stmt_state_rel (storage_trace_horizon mid.storage_trace)
+     ctx func cenv cx mid selected` by fs[storage_trace_domain_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp selected /\
+    selected.vs_alloca_next + pending_alloca_size func selected <= w2n selected.vs_initial_fmp` by
+    (qpat_assum `stmt_state_rel (storage_trace_horizon _) ctx func cenv cx mid selected`
+       (assume_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     fs[stmt_state_rel_def, fmp_room_def] >> rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all method_id_output_buffer_full_run >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   rename1 `eval_operand op z = SOME p` >>

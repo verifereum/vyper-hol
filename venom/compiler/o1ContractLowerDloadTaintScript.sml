@@ -75,14 +75,13 @@ Proof
   simp[out_taint_def]
 QED
 
-Theorem step_taint_nonmemory:
-  inst.inst_opcode <> SSTORE /\ inst.inst_opcode <> TSTORE /\
-  inst.inst_opcode <> ISTORE /\ inst.inst_opcode <> CALL /\
-  inst.inst_opcode <> STATICCALL ==>
+Theorem dload_expansion_persistent_frame[local]:
+  MEM inst.inst_opcode [ALLOCA;ADD;CODECOPY;MLOAD] ==>
   (step_taint inst s s' tn).t_stor = tn.t_stor /\
   (step_taint inst s s' tn).t_trans = tn.t_trans /\
   (step_taint inst s s' tn).t_imm = tn.t_imm
 Proof
+  simp[MEM] >> strip_tac >>
   simp[step_taint_def, adopt_reset_def, store_taint_def, imm_taint_def]
 QED
 
@@ -344,7 +343,7 @@ Theorem lower_dload_supply_external_taint:
 Proof
   strip_tac >>
   gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
-  simp[step_taint_nonmemory]
+  simp[dload_expansion_persistent_frame]
 QED
 
 Theorem lower_dload_inst_supply_interval:

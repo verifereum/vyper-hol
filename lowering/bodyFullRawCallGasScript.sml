@@ -2,6 +2,7 @@
 Theory bodyFullRawCallGas
 Ancestors
   generatedGasOrigin bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyMemBiEnvMsgGas fragGasSeqPtr fragGasOriginPtr bodyPtrDefs
   ptrDiscipline ptrSafeRun gasShadowState gasShadowUnit gasExplicitSites
   allocaHistory exprLoweringProps exprSimProps loweringStateRelDefs
@@ -20,7 +21,7 @@ Theorem raw_call_optional_gas_joint:
   gas_shadow_function func shadow_func /\
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   storage_trace_domain cx st0 es.storage_trace /\
@@ -126,6 +127,9 @@ Resume raw_call_optional_gas_joint[gas_path]:
     (mp_tac (Q.INST [`id` |-> `sa.cs_next_id`,
       `out` |-> `FST (fresh_var sa)`] gas_builtin_base_step) >>
      simp[Abbr `inst`, Abbr `u`, update_var_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   `ptr_inst_ok (DF H) lo 0 ctx func G tn inst s` by
     (simp[Abbr `inst`] >> irule ptr_inst_ok_scalar_builtin_at >>
      gvs[ghost_inv_at_def]) >>

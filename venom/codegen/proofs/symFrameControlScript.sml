@@ -27,7 +27,7 @@ Ancestors
   dfgDefs symPlannerSim symShuffleSim asmSymPc codegenEncodingWf
   spillPlanSim reorderStages inputMaterialised reduceDepthSim mixedPrefixSim
   symEmitSim symInstPieces symControlPrefixOwn symFrameControlFacts symControlScratchOwn symControlReorderOwn symControlReplayOwn symControlJumpOwn symControlRetOwn symControlGasOwn symControlTerminalOwn symControlHaltOwn symControlAbortRegularOwn symControlAbortStaticOwn symControlAbortConditionalOwn symControlTerminalPrepareOwn symControlTerminalSafetyOwn symControlForwardPrepareOwn symControlForwardCopyOwn symControlForwardCopyExecutionOwn symControlForwardRunOwn symControlForwardContinuationOwn symControlForwardSourceFacts
-  symControlWordStackOwn symControlTerminalWordStackOwn symFrameControlOwn fnPlanPlaceRevertPostamble
+  symControlWordStackOwn symFrameControlOwn fnPlanPlaceRevertPostamble
   symControlForwardStackOwn
 
 (* Pointwise kind equivalence transports a typed symbolic stack. *)
@@ -2045,17 +2045,6 @@ Proof
       |> Q.INST [`dfg` |-> `dfg_build_function fn`, `ops` |-> `iops ++ rops ++ suffix`,
                  `o2pc` |-> `build_offset_to_pc prog`])) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
-QED
-
-Theorem terminal_operands_not_retpc:
-  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
-  MEM inst.inst_opcode
-    [STOP; RETURN; SELFDESTRUCT; REVERT; ASSERT; ASSERT_UNREACHABLE;
-     INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
-  MEM (Var x) (compute_operands inst) ==> ~retpc_var fn x
-Proof
-  strip_tac >> irule symControlTerminalWordStackOwnTheory.terminal_operands_not_retpc >>
-  metis_tac[listTheory.MEM]
 QED
 
 Theorem terminal_arranged_word_stack:

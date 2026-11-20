@@ -214,6 +214,8 @@ Resume annassign_widened_full_execution[prefix]:
   qpat_x_assum `unwrap_value _ _ _ = _ /\ _`
     (map_every assume_tac o CONJUNCTS) >>
   `type_memory_bytes old typ < dimword (:256)` by simp[dimword_def] >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
   qpat_assum `declare_local old id typ sa = (ce,r)`
     (mp_then Any mp_tac (SRULE [] annassign_full_alloc_rhs_prefix)) >>
   disch_then drule_all >>

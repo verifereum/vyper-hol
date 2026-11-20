@@ -138,7 +138,7 @@ Theorem array_bounds_check_read_only_joint_ok_frame:
     sf.vs_immutables = s.vs_immutables /\
     sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
     sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
-    sf.vs_fmp = s.vs_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\ sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     sf.vs_requests = s.vs_requests /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\

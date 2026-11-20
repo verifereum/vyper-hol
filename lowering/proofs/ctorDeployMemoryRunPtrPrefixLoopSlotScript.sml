@@ -9,7 +9,7 @@ Ancestors
   ctorDeployMemoryRunPtrPrefixSequence
   abiDecoderArrayLoopInit abiDecoderFrame venomMemProps valueEncodingProps instIdxIndep exprLoweringProps
   ptrSafeRun ptrDiscipline venomState venomExecSemantics venomInst
-  finite_map words arithmetic pred_set list memLocDefs codegenRel fragGasSeqPtr
+  finite_map words arithmetic pred_set list memLocDefs codegenRel fragGasSeqPtr fragFuel[qualified]
 
 (* A certified non-INVOKE step, as the facts inst_seq_ptr unfolds to. *)
 Theorem prefix_loop_step_seq_facts:
@@ -62,7 +62,8 @@ QED
 Theorem prefix_loop_slot_zero_pair:
   eval_operand (Var ip) a = SOME (n2w p) /\ p < dimword (:256) /\
   FLOOKUP H ip = SOME (p,32) /\ op_taint q (Var ip) = {} /\
-  allocas_from lo a /\ lo <= a.vs_alloca_next /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo a /\ lo <= a.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp a) ==>
   let j = mk_inst iid MSTORE [Var ip;Lit 0w] [];
       t = mstore p 0w a;
       qt = step_taint j a t q
@@ -103,7 +104,8 @@ Proof
 QED
 
 Theorem prefix_loop_slot_alloc_pair:
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst aid ALLOCA [Lit 32w] [ip]) s = OK a /\
   FLOOKUP a.vs_allocas aid = SOME (p,32) ==>
   let i = mk_inst aid ALLOCA [Lit 32w] [ip];
@@ -150,7 +152,8 @@ QED
 Theorem prefix_loop_slot_zero_block:
   eval_operand (Var ip) a = SOME (n2w p) /\ p < dimword (:256) /\
   FLOOKUP H ip = SOME (p,32) /\ op_taint q (Var ip) = {} /\
-  allocas_from lo a /\ lo <= a.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo a /\ lo <= a.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp a) /\
   get_instruction bb a.vs_inst_idx = SOME (mk_inst iid MSTORE [Var ip;Lit 0w] []) ==>
   (ptr_safe_block D lo fuel ctx fn PG H
      (step_taint (mk_inst iid MSTORE [Var ip;Lit 0w] []) a (mstore p 0w a) q)
@@ -171,7 +174,10 @@ Proof
 QED
 
 Theorem prefix_loop_index_slot_pair:
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
+  MEM (mk_inst aid ALLOCA [Lit 32w] [ip]) (fn_insts fn) /\
   run_inst_seq [mk_inst aid ALLOCA [Lit 32w] [ip];
     mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []] s = OK t /\
   FLOOKUP t.vs_allocas aid = SOME (p,32) /\ p < dimword (:256) ==>
@@ -201,6 +207,9 @@ Proof
   fs[run_inst_seq_def, AllCaseEqs()] >> rename1 `step_inst_base _ s = OK a` >>
   `eval_operand (Var ip) a = SOME (n2w p) /\
    FLOOKUP a.vs_allocas aid = SOME (p,32)` by suspend "allocation_lookup" >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by
+    suspend "allocation_bound" >>
   drule_all prefix_loop_slot_alloc_pair >>
   disch_then (qspecl_then [`tn`,`fuel`,`fn`,`PG`,`G`,`D`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -220,6 +229,28 @@ Proof
   suspend "observations"
 QED
 
+Resume prefix_loop_index_slot_pair[allocation_bound]:
+  strip_tac >>
+  qabbrev_tac `alloc = mk_inst aid ALLOCA [Lit 32w] [ip]` >>
+  `exec_alloca alloc s (32w:bytes32) = OK a` by
+    gvs[Abbr `alloc`, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
+  `a.vs_alloca_next + pending_alloca_size fn a <=
+    s.vs_alloca_next + pending_alloca_size fn s` by
+    (irule exec_alloca_static_charge >>
+     qexistsl_tac [`alloc`,`32w:bytes32`] >> simp[Abbr `alloc`, mk_inst_def]) >>
+  `a.vs_alloca_next <= w2n s.vs_initial_fmp` by
+    (qpat_assum `ctx_has_dalloca ctx ==> _ /\ _`
+       (fn room => qpat_assum `ctx_has_dalloca ctx`
+         (mp_tac o CONJUNCT2 o MATCH_MP room)) >>
+     qpat_assum `a.vs_alloca_next + _ <= _` mp_tac >> decide_tac) >>
+  `allocas_below_fmp s` by simp[] >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  simp[exec_alloca_def, AllCaseEqs(), LET_THM] >>
+  strip_tac >> gvs[update_var_def, allocas_below_fmp_def] >>
+  rpt strip_tac >> fs[FLOOKUP_UPDATE] >>
+  Cases_on `aid' = alloc.inst_id` >> gvs[] >> res_tac
+QED
+
 Resume prefix_loop_index_slot_pair[forward]:
   gen_tac >> unabbrev_all_tac >>
   drule_all prefix_loop_slot_alloc_pair >>
@@ -237,6 +268,10 @@ Resume prefix_loop_index_slot_pair[forward]:
     `H` |-> `G |+ (ip,(p,32))`,
     `q` |-> `step_taint (mk_inst aid ALLOCA [Lit 32w] [ip]) s a tn`,
     `fuel` |-> `0`, `D` |-> `D'`] prefix_loop_slot_zero_pair) >>
+  `ctx_has_dalloca ctx ==>
+    allocas_below_fmp (a with vs_inst_idx := s.vs_inst_idx + 1)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp a` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   (impl_tac >- (fs[eval_op_inst_idx, allocas_from_def, FLOOKUP_UPDATE] >>
      metis_tac[])) >>
   simp_tac std_ss [LET_THM] >> strip_tac >>
@@ -315,6 +350,9 @@ Resume prefix_loop_index_slot_pair[continuation]:
     simp[mk_inst_def,is_terminator_def] >>
   drule_all ptr_safe_block_step >>
   disch_then (fn th => once_rewrite_tac[th]) >> asm_rewrite_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (a with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp a` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
   irule (Q.INST [`p` |-> `p`, `iid` |-> `aid+1`] prefix_loop_slot_zero_block) >>
   simp[eval_op_inst_idx, allocas_from_def] >>
   conj_tac >- fs[allocas_from_def] >>
@@ -332,7 +370,9 @@ Finalise prefix_loop_index_slot_pair
 
 
 Theorem prefix_loop_index_slot_run:
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   run_inst_seq [mk_inst aid ALLOCA [Lit 32w] [ip];
     mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []] s = OK t /\
   FLOOKUP t.vs_allocas aid = SOME (p,32) /\ p < dimword (:256) /\
@@ -359,8 +399,11 @@ Theorem prefix_loop_index_slot_run:
        (t with vs_inst_idx := s.vs_inst_idx+2)) ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all prefix_loop_index_slot_pair >>
-  disch_then (qspecl_then [`tn`,`fn`,`PG`,`G`,`D`] mp_tac) >>
+  strip_tac >>
+  `MEM (mk_inst aid ALLOCA [Lit 32w] [ip]) (fn_insts fn)` by
+    metis_tac[fragFuelTheory.lookup_block_get_instruction_fn_insts] >>
+  drule_all prefix_loop_index_slot_pair >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
   strip_tac >> qexistsl_tac [`H`,`qt`] >>
   asm_rewrite_tac[] >> strip_tac >> gen_tac >>
   `ptr_safe_block D lo fuel ctx fn PG H qt bb

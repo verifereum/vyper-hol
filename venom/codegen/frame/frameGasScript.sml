@@ -1,12 +1,20 @@
-(* Our frame with more gas, for the sufficient-gas theorems.
+(* More gas and instruction observations for the current frame.
  *
  * TOP-LEVEL:
  *   add_frame_gas      - es with g more gas for its top frame
  *   frame_inst_at      - a state of the top frame's run and its instruction
  *   frame_inst_raises  - the top frame's instruction raises an exception
  *   frame_raises       - run_frame ends with the given frame exception
+ *   run_frame_terminal - characterize a terminal step including code deposit
+ *   run_frame_terminal_call - stop at a call frame's terminal step
+ *   run_frame_prefix   - skip a continuing prefix to the same depth
+ *   frame_inst_at_step - characterize a frame instruction by ordinary steps
+ *   step_inner_terminal_inst - identify the instruction at a terminal step
  *   frame_inst_raises_here - the raise at the frame's own state
  *   frame_inst_raises_mid  - a raise from a later state of the frame
+ *   frame_inst_raises_frame_raises - an instruction raise ends the frame
+ *   frame_raises_inst_raises - characterize stack and runtime gas exhaustion
+ *   step_frame_msg_params - a step preserves suspended message parameters
  *   add_frame_gas_wf_state - add_frame_gas keeps wf_state
  *)
 Theory frameGas

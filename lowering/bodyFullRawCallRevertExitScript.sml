@@ -12,7 +12,9 @@ Theorem raw_call_revert_suffix_full_exit:
     (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w n)]
      else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
   eval_operand ok s = SOME 0w /\ op_taint tn ok = {} /\ op_prov G ok = NONE /\
-  fn_has_code sc sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sc sb func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~s.vs_halted /\
   s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\
@@ -36,11 +38,12 @@ Proof
    sj.cs_current_bb = call_end.cs_current_bb /\
    sj.cs_current_insts = call_end.cs_current_insts /\
    s5.cs_current_bb = bad /\ s5.cs_current_insts = []` by suspend "metadata" >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (s,G,tn) [] (OK (jump_to bad s),G,tn)` by
     (map_every (fn q => qpat_assum q mp_tac)
        [`emit_inst JNZ _ _ _ = _`, `fn_has_code sj sn func`,
-        `~ctx_has_dalloca ctx`, `allocas_from lo s`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s`, `allocas_from lo s`,
         `eval_operand ok s = SOME 0w`, `op_taint tn ok = {}`,
         `s.vs_current_bb = call_end.cs_current_bb`,
         `s.vs_inst_idx = LENGTH call_end.cs_current_insts`, `~s.vs_halted`,
@@ -53,18 +56,16 @@ Proof
   `?Gf tnf. !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (jump_to bad s,G,tn) []
     (Abort Revert_abort (t with vs_inst_idx := 3),Gf,tnf)` by
-    (map_every (fn q => qpat_assum q mp_tac)
-       [`emit_op RETURNDATASIZE [] _ = _`, `compile_alloc_buffer 0 _ = _`,
-        `emit_void RETURNDATACOPY _ _ = _`, `emit_inst REVERT _ _ _ = _`,
-        `fn_has_code s5 s9 func`, `~s.vs_halted`, `~ctx_has_dalloca ctx`,
-        `allocas_from lo s`, `lo <= s.vs_alloca_next`,
-        `s5.cs_current_bb = bad`, `s5.cs_current_insts = []`,
-        `LENGTH s.vs_returndata < dimword (:256)`,
-        `run_inst_seq _ _ = Abort Revert_abort t`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     drule_at (Pat `run_inst_seq _ _ = _`) raw_call_failure_block_origin_ptr >>
-     simp[jump_to_def,allocas_from_def] >>
-     gvs[allocas_from_def] >> metis_tac[]) >>
+    (mp_tac (Q.SPECL [`ctx`,`func`,`PG`,`lo`,`explicit`,
+       `s5`,`s6`,`s7`,`s8`,`s9`,`rds`,`rbuf`,`jump_to bad s`,
+       `G`,`tn`,`t`] raw_call_failure_block_origin_ptr) >>
+     impl_tac >-
+       (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+          (mp_tac o REWRITE_RULE[allocas_below_fmp_def,pending_alloca_size_def]) >>
+        qpat_assum `allocas_from lo s` (mp_tac o REWRITE_RULE[allocas_from_def]) >>
+        simp[jump_to_def,allocas_from_def,allocas_below_fmp_def,pending_alloca_size_def] >>
+        rpt strip_tac >> res_tac) >>
+     simp[jump_to_def]) >>
   qexistsl_tac [`t with vs_inst_idx := 3`,`Gf`,`tnf`] >>
   simp[expr_exit_def,halt_exit_def] >> gen_tac >>
   qpat_x_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`

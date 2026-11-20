@@ -102,7 +102,7 @@ val owned_decoder_state = ``\st s G tn.
 Theorem abi_decode_bytes_scalar_frame_joint:
   bop_scalar_seq {x | not_fresh_at sa x} A (emitted_insts sa sb) B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ inst_extends sa sb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\ inst_extends sa sb /\
   sb.cs_current_bb = sa.cs_current_bb /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -127,7 +127,6 @@ Theorem abi_decode_bytes_scalar_frame_joint:
        op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (bodyPtrBopScalarSeqTheory.bop_scalar_seq_run |>
     Q.INST [`D` |-> `<|d_stor := K (K {}); d_trans := K (K {});
       d_imm := K {}; d_ret := K {}|>`]) >>
@@ -252,7 +251,7 @@ QED
 
 Theorem abi_decode_bytes_head_joint_observed:
   abi_decode_bytes_head src hi sa = (head,sb) /\ hi <> Lit 0w /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) sa s G tn /\ allocas_from lo s /\
@@ -315,7 +314,6 @@ Proof
          asm_rewrite_tac[] >> metis_tac[]) >>
       qexistsl_tac [`u`, `Gf`, `tnf`] >>
       simp[eval_operand_def, lookup_var_def] >> metis_tac[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   disj2_tac >> drule_all abi_decode_scalar_guard_abort_joint >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`t with vs_inst_idx := j`, `Gf`, `tnf`] >>
@@ -327,7 +325,7 @@ QED
 
 Theorem abi_decode_bytes_count_joint_observed:
   abi_decode_le_guard cnt (Lit (n2w n)) sa = ((),sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) sa s G tn /\ allocas_from lo s /\
@@ -391,7 +389,6 @@ Proof
          rpt strip_tac >> irule scalar_success_observed >>
          asm_rewrite_tac[] >> metis_tac[]) >>
       qexistsl_tac [`u`, `Gf`, `tnf`] >> simp[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   disj2_tac >> drule_all abi_decode_scalar_guard_abort_joint >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`t with vs_inst_idx := j`, `Gf`, `tnf`] >>
@@ -405,7 +402,7 @@ QED
 Theorem abi_decode_bytes_owned_load_frame_joint_observed:
   compile_abi_dec_addr (Var input) pos sa = (addr,sb) /\
   emit_op MLOAD [addr] sb = (v,sc) /\
-  fn_has_code sa sc fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sc fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) sa s G tn /\
@@ -439,7 +436,6 @@ Proof
    lo <= s.vs_alloca_next /\
    w2n input_word+LENGTH input_bytes <= s.vs_alloca_next /\
    alloca_history fn s` by fs[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (abiDecodePtrReadTheory.abi_decode_ptr_relative_load |>
     Q.INST [`D` |-> `ARB`, `PG` |-> `PG`]) >>
   disch_then (qspec_then `PG` strip_assume_tac) >>

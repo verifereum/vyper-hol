@@ -115,7 +115,7 @@ Theorem reason_normalized_tail_origin_ptr:
   val_wf (BaseTV (StringT cap)) (StringV str) /\
   M = type_memory_bytes cenv (BaseT (StringT cap)) /\
   expr_store_bound cx (BaseT (StringT cap)) (StringV str) op s /\
-  64+M < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  64+M < dimword(:256) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   (!i. MEM i (reason_tail j u v op) ==> MEM i (fn_insts func)) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>
