@@ -113,6 +113,10 @@ signature vyperASTSyntax = sig
   val mk_DecimalL_tm : term -> term
   val dest_DecimalL_tm : term -> term
   val is_DecimalL : term -> bool
+  val HexBytesL_tm : term
+  val mk_HexBytesL_tm : term -> term
+  val dest_HexBytesL_tm : term -> term
+  val is_HexBytesL : term -> bool
 
   val Empty_tm : term
   val is_Empty : term -> bool

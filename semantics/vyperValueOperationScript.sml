@@ -14,7 +14,8 @@ Definition evaluate_literal_def:
   evaluate_literal (StringL s) = StringV s ∧
   evaluate_literal (BytesL bs) = BytesV bs ∧
   evaluate_literal (IntL i) = IntV i ∧
-  evaluate_literal (DecimalL i) = DecimalV i
+  evaluate_literal (DecimalL i) = DecimalV i ∧
+  evaluate_literal (HexBytesL bs) = BytesV bs
 End
 
 val () = cv_auto_trans evaluate_literal_def;

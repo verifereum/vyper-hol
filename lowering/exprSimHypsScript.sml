@@ -1318,9 +1318,16 @@ Proof
           expr_type_def, arg_type_fits_def, compatible_bound_def,
           type_slot_size_def] >>
       imp_res_tac word_size_monotone >> decide_tac)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[well_typed_expr_def, well_typed_literal_def,
+          well_formed_type_def, evaluate_type_def, lowered_value_type_def,
+          expr_type_def, arg_type_fits_def, compatible_bound_def,
+          type_slot_size_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
   >~ [`Builtin _ (Concat _) _`]
   >- (rpt strip_tac >> drule_all expr_sim_inv_type_evaluates >> simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
-      `well_typed_builtin_app ty (Concat v2) (MAP expr_type args)` by
+      rename1 `well_typed_expr env (Builtin ty (Concat n) args)` >>
+      `well_typed_builtin_app ty (Concat n) (MAP expr_type args)` by
         gvs[well_typed_expr_def] >>
       drule physical_concat_fits >> strip_tac >>
       simp[lowered_value_type_def, expr_type_def] >>
@@ -1534,11 +1541,21 @@ Proof
            vyperTypingTheory.value_has_type_def, compatible_bound_def] >>
       gvs[type_slot_size_def, compatible_bound_def] >>
       imp_res_tac word_size_monotone >> decide_tac)
+  >- (rpt gen_tac >> simp[lowered_value_type_def] >> strip_tac >>
+      gvs[Once evaluate_def, bind_def, return_def, read_result_def,
+          vyperValueOperationTheory.evaluate_literal_def] >>
+      gvs[well_typed_expr_def, well_typed_literal_def,
+          well_formed_type_def, evaluate_type_def] >>
+      simp[value_runtime_typed_def, evaluate_type_def,
+           vyperTypingTheory.value_has_type_def, compatible_bound_def] >>
+      gvs[type_slot_size_def, compatible_bound_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
   >~ [`Builtin _ (Concat _) _`]
   >- (rpt strip_tac >> simp[lowered_value_type_def] >>
       drule_all concat_read_buffer_typed_at_inv >> simp[])
   >~ [`TypeBuiltin _ (AbiEncode _ _) _ _`]
   >- (rpt strip_tac >>
+      rename1 `well_typed_expr env (TypeBuiltin _ (AbiEncode ensure method_id) target args)` >>
       `!e. MEM e args ==> well_typed_expr env e /\
          alloc_limits_expr cenv e /\ call_evaluation_safe cx (int_calls_expr e)` by
         (rpt strip_tac >>
@@ -1547,7 +1564,7 @@ Proof
                    call_evaluation_safe_exprs_mem]) >>
       `env.type_defs = get_tenv cx /\
        sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-       well_typed_type_builtin_args (AbiEncode ensure method_id) v4 (MAP expr_type args)` by
+       well_typed_type_builtin_args (AbiEncode ensure method_id) target (MAP expr_type args)` by
         (qpat_assum `expr_sim_inv cenv cx env es`
            (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
          fs[well_typed_expr_def, env_consistent_def, env_context_consistent_def]) >>

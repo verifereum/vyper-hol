@@ -253,7 +253,11 @@ Proof
   Cases_on `lit`
   >- (Cases_on `b` >>
       simp[compile_literal_vv_def, comp_return_def] >>
-      rpt strip_tac >> gvs[reason_result_shape_def]) >>
+      rpt strip_tac >> gvs[reason_result_shape_def])
+  >~ [`HexBytesL bs`] >-
+    (simp[compile_literal_vv_def, comp_bind_def, comp_return_def] >>
+     strip_tac >> pairarg_tac >> gvs[reason_result_shape_def, base_ptr_def] >>
+     drule (GEN_ALL reason_bytelike_operand) >> simp[]) >>
   simp[compile_literal_vv_def, comp_return_def, comp_bind_def] >>
   rpt strip_tac >>
   gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>

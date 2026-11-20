@@ -58,6 +58,8 @@ Proof
      qpat_x_assum `!b slot tv. _` (qspec_then `b` mp_tac) >>
      Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
   gvs[expr_sim_pre_def, well_typed_expr_def] >>
+  Cases_on `?bs. l = HexBytesL bs`
+  >- (gvs[] >> drule well_typed_literal_hex_bytes >> strip_tac >> gvs[is_word_type_def]) >>
   Cases_on `ann` >> gvs[well_typed_literal_def, is_word_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
   Cases_on `l` >> gvs[well_typed_literal_def, is_word_type_def] >>
@@ -92,6 +94,8 @@ Proof
      qpat_x_assum `!b slot tv. _` (qspec_then `b` mp_tac) >>
      Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
   gvs[expr_sim_pre_def, well_typed_expr_def] >>
+  Cases_on `?bs. l = HexBytesL bs`
+  >- (gvs[] >> drule well_typed_literal_hex_bytes >> strip_tac >> gvs[is_word_type_def]) >>
   Cases_on `ann` >> gvs[well_typed_literal_def, is_word_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
   Cases_on `l` >> gvs[well_typed_literal_def, is_word_type_def] >>

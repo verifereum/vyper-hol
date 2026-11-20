@@ -4117,7 +4117,9 @@ Proof
   >~ [`compile_literal_vv ty (IntL n)`]
   >- (simp[compile_literal_vv_def] >> shape_literal_return_tac)
   >~ [`compile_literal_vv ty (DecimalL n)`]
-  >- (simp[compile_literal_vv_def] >> shape_literal_return_tac) >>
+  >- (simp[compile_literal_vv_def] >> shape_literal_return_tac)
+  >~ [`compile_literal_vv ty (HexBytesL bs)`]
+  >- (simp[compile_literal_vv_def] >> shape_literal_buffer_tac) >>
   Cases_on `ty` >> simp[compile_literal_vv_def]
   >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[] >>
       TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[]) >>

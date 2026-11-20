@@ -16,7 +16,6 @@
  *                              frame
  *   alloca_room_callee       — a callee, entered at the caller's frontier,
  *                              has room
- *   compile_literal_vv_correct  — word literal case
  *   compile_name_correct     — allocation-backed word variable lookup
  *   compile_expr_grows, compile_binop_grows — compile_expr, lower_value
  *                              and compile_binop only append (cs_extends)
@@ -1273,37 +1272,6 @@ Proof
 QED
 
 (* ===== Per-Expression Lemmas ===== *)
-
-(* --- Literal --- *)
-(* Covers word-type literals only. Bytestring/string literals allocate buffers. *)
-Theorem compile_literal_vv_correct:
-  !H.
-  ∀ func cenv cx ty l es ss st vv st'.
-    state_rel H func cenv cx es ss ∧
-    compile_literal_vv ty l st = (vv, st') ∧
-    (* Word literals only — dynamic bytes/strings allocate buffers *)
-    (* Word literals only — exclude bytestring/string types that allocate buffers *)
-    (∀ bs. l = BytesL bs ⇒ ∃ m. ty = BaseT (BytesT (Fixed m))) ∧
-    (∀ s. l ≠ StringL s)
-    ⇒
-    emitted_insts st st' = [] ∧
-    same_blocks st st'
-Proof
-  gen_tac >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `l`
-  >- (Cases_on `b` >>
-      gvs[compile_literal_vv_def, comp_return_def,
-          emitted_insts_def, same_blocks_def, listTheory.DROP_LENGTH_NIL])
-  >- gvs[]
-  >- (res_tac >>
-      gvs[compile_literal_vv_def, comp_return_def,
-          emitted_insts_def, same_blocks_def, listTheory.DROP_LENGTH_NIL])
-  >- gvs[compile_literal_vv_def, comp_return_def,
-         emitted_insts_def, same_blocks_def, listTheory.DROP_LENGTH_NIL]
-  >> gvs[compile_literal_vv_def, comp_return_def,
-         emitted_insts_def, same_blocks_def, listTheory.DROP_LENGTH_NIL]
-QED
 
 (* --- Name (local variable load) --- *)
 Theorem lower_value_name_memloc:
@@ -2579,6 +2547,9 @@ Proof
   >~ [`IntL n`] >- simp[exprLoweringTheory.compile_literal_vv_def, ci_mono_comp_return]
   >~ [`DecimalL n`] >- simp[exprLoweringTheory.compile_literal_vv_def, ci_mono_comp_return]
   >~ [`StringL s`] >- (simp[exprLoweringTheory.compile_literal_vv_def] >>
+      irule ci_mono_bind >>
+      simp[ci_mono_comp_return, ci_mono_compile_bytelike_literal])
+  >~ [`HexBytesL bs`] >- (simp[exprLoweringTheory.compile_literal_vv_def] >>
       irule ci_mono_bind >>
       simp[ci_mono_comp_return, ci_mono_compile_bytelike_literal])
   >> Cases_on `ty` >>

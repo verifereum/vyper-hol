@@ -32,7 +32,7 @@ Ancestors
   stmtLoweringProps
   emitHelperProps
   exprLoweringProps
-  moduleLowering compileEnv loweringStateRelDefs context kwargBufferProps
+  moduleLowering compileEnv loweringStateRelDefs context
   venomExecSemantics venomState venomInst venomExecProofs venomMemProps
   stateEquiv
   abiEncoder abiDecoderAppend

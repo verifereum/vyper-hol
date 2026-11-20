@@ -402,61 +402,9 @@ Proof
   simp[]
 QED
 
-(* ========== FOLDL projection for ops-accumulating step functions ==========
-   Many codegen functions are FOLDL of the form:
-     FOLDL (\(ops,ps) item. let (step_ops,ps') = f item ps in (ops++step_ops, ps'))
-   The plan_state (ps) is threaded; the ops just accumulate.
-
-   Key insight: foldl_snd_projection shows SND of this FOLDL equals a simpler
-   single-accumulator FOLDL, eliminating all pair-lambda issues from proofs. *)
-
-Theorem foldl_snd_projection[local]:
-  !f items init_ops init_ps.
-    SND (FOLDL (\(acc,ps) item.
-      let (ops,ps') = f item ps in (acc ++ ops, ps'))
-      (init_ops, init_ps) items)
-    = FOLDL (\ps item. SND (f item ps)) init_ps items
-Proof
-  gen_tac >> Induct >> rpt gen_tac >> simp[FOLDL] >>
-  Cases_on `f h init_ps` >>
-  simp[LET_THM] >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  first_x_assum (qspecl_then [`init_ops ++ q`, `r`] mp_tac) >>
-  simp[LET_THM] >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  simp[]
-QED
-
-Theorem foldl_simple_spill_base[local]:
-  !f items init_ps.
-    (!item ps. (SND (f item ps)).ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base) ==>
-    (FOLDL (\ps item. SND (f item ps)) init_ps items).ps_alloc.sa_spill_base =
-    init_ps.ps_alloc.sa_spill_base
-Proof
-  gen_tac >> Induct >> simp[FOLDL]
-QED
-
-Theorem foldl_simple_next_offset[local]:
-  !f items init_ps.
-    (!item ps. ps.ps_alloc.sa_next_offset <=
-               (SND (f item ps)).ps_alloc.sa_next_offset) ==>
-    init_ps.ps_alloc.sa_next_offset <=
-    (FOLDL (\ps item. SND (f item ps)) init_ps items).ps_alloc.sa_next_offset
-Proof
-  gen_tac >> Induct >> simp[FOLDL] >>
-  rpt strip_tac >>
-  `init_ps.ps_alloc.sa_next_offset <=
-   (SND (f h init_ps)).ps_alloc.sa_next_offset` by simp[] >>
-  `(SND (f h init_ps)).ps_alloc.sa_next_offset <=
-   (FOLDL (\ps item. SND (f item ps)) (SND (f h init_ps)) items)
-    .ps_alloc.sa_next_offset` by metis_tac[] >>
-  decide_tac
-QED
-
 (* ========== reorder_plan (FOLDL of reorder_one) ========== *)
 
-(* Pair-item version of foldl_snd_projection:
-   SND of pair-accum FOLDL with pair-items = simple FOLDL on SND *)
+(* SND of pair-accum FOLDL with pair-items = simple FOLDL on SND *)
 Theorem foldl_pair_item_snd_projection[local]:
   !g items init_ops init_ps.
     SND (FOLDL (\(acc,ps) (a,b).

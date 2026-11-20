@@ -100,6 +100,16 @@ Theorem compile_literal_memory_sim:
     expr_sim ctx func cenv cx ty (Literal ann l) es
 Proof
   rpt strip_tac >> irule exprSimBufferForceTheory.expr_sim_of_vv_sim_buffer >>
+  Cases_on `?bs. l = HexBytesL bs`
+  >- (gvs[] >>
+      `expr_vv_sim ctx func cenv cx ty (Literal ann (HexBytesL bs)) es` by
+        metis_tac[compile_hex_bytes_literal_vv_sim, expr_vv_ok_def] >>
+      simp[Once evaluate_def, return_def] >>
+      gen_tac >>
+      simp[compile_expr_def, compile_literal_vv_def, expr_type_def,
+           comp_bind_def, comp_return_def] >>
+      Cases_on `compile_bytelike_literal bs (LENGTH bs) sa` >>
+      simp[contextTheory.base_ptr_def]) >>
   `(?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)` by
     (gvs[expr_sim_pre_def, well_typed_expr_def] >> Cases_on `l` >> gvs[] >>
      Cases_on `ann` >> gvs[well_typed_literal_def] >>
@@ -135,7 +145,10 @@ Theorem compile_literal_other_sim:
 Proof
   rpt strip_tac >> Cases_on `is_word_type ann`
   >- (Cases_on `l` >> gvs[]
-      >~ [`BytesL bs`] >- (irule compile_literal_bytes_word_sim >> metis_tac[]) >>
+      >~ [`BytesL bs`] >- (irule compile_literal_bytes_word_sim >> metis_tac[])
+      >~ [`HexBytesL bs`]
+      >- (gvs[expr_sim_pre_def, well_typed_expr_def] >>
+          drule well_typed_literal_hex_bytes >> strip_tac >> gvs[is_word_type_def]) >>
       gvs[expr_sim_pre_def, well_typed_expr_def] >>
       Cases_on `ann` >> gvs[well_typed_literal_def] >>
       rename1 `BaseT bt` >> Cases_on `bt` >>
@@ -161,6 +174,8 @@ Theorem compile_literal_case_sim:
   !cenv ann l. expr_ok cenv (Literal ann l)
 Proof
   rpt gen_tac >>
+  Cases_on `?bs. l = HexBytesL bs`
+  >- gvs[expr_ok_def, compile_literal_sim, compile_hex_bytes_literal_vv_sim] >>
   Cases_on `(?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)`
   >- (simp[expr_ok_def, compile_literal_sim] >>
       irule compile_literal_other_vv_sim >> simp[]) >>

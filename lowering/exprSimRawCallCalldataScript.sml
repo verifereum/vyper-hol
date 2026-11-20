@@ -293,10 +293,19 @@ Proof
   >- (qpat_x_assum `t = _` kall_tac >>
       qpat_x_assum `write_memory_with_expansion _ _ _ = _` kall_tac >>
       Cases_on `stat` >> Cases_on `cx.txn.is_static` >> gvs[] >>
-      pure_once_rewrite_tac[step_inst_base_def] >>
-      asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >>
-      asm_simp_tac bool_ss
-        [list_case_def, pair_case_def, optionTheory.option_case_def]) >>
+      qpat_assum `inst.inst_opcode = _` (fn opcode =>
+        let
+          val rule = valOf (get_first (fn clause => total (MATCH_MP clause) opcode)
+            (CONJUNCTS step_inst_base_opcode_eqs))
+        in
+          PURE_ONCE_REWRITE_TAC [rule]
+        end) >>
+      qpat_assum `inst.inst_operands = _`
+        (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
+      simp_tac bool_ss [list_case_def] >>
+      FILTER_ASM_REWRITE_TAC (can (match_term ``eval_operand _ _ = SOME _``)) [] >>
+      simp_tac bool_ss [pair_case_def, optionTheory.option_case_def] >>
+      asm_rewrite_tac[]) >>
   conj_tac >- (first_x_assum irule >> simp[NoAsms] >>
                conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- first_assum ACCEPT_TAC >>
