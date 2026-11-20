@@ -30,7 +30,7 @@
  *   expr_body_pre     — expr_sim_pre less int_calls_expr e = []: the
  *                       body simulation's (bodySim); each of its calls
  *                       is to a supported internal function of the main
- *                       module, a supported program
+ *                       module, which then is a supported program
  *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
  *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre holds
  *   expr_ok           — both: the induction predicate
@@ -52,8 +52,8 @@
  *                       word_value_type one's values are word_values
  *   expr_sim_pre_builtin_arg — an argument of a builtin that meets
  *                       expr_sim_pre meets it wherever expr_sim_inv
- *                       holds, unless the builtin is a Slice of
- *                       external code (is_extcode)
+ *                       holds, unless it is a code operand
+ *                       (is_extcode) of a Slice
  *   byte_widths_expr_type — the expression's own type has whole bytes
  *   expr_sim_pre_var_types_well_formed — the local types are well formed
  *   well_typed_expr_type_evaluates — a well-typed expression's type
@@ -299,8 +299,8 @@ Libs
 (* expr_sim_pre without int_calls_expr e = []: the body simulation's
    (bodySim), where an operand may call an internal function.  Each of its
    calls is to a supported internal function of the main module
-   (supported_function_decl, which supported_expr checks too), and the main
-   module is a supported program. *)
+   (supported_function_decl, which supported_expr checks too), which then
+   is a supported program. *)
 
 (* A call-free expression is described at its annotation. *)
 Theorem post_value_type_no_calls[simp]:
