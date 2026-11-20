@@ -448,8 +448,11 @@ Proof
   `local_ptrs_reserved cenv s3 /\
    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s3 x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at s3 x)` by
-    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
-              freshWritesTheory.not_fresh_at_mono] >>
+    (conj_tac
+     >- (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+         qexists_tac `s2` >> simp[]) >>
+     conj_tac >> rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `s2` >> simp[]) >>
   qabbrev_tac `source_gas = ext_call_kwarg EKGas opts kws` >>
   `(!g. go = SOME g ==> ?w. eval_operand g z = SOME w /\ op_taint tn3 g = {} /\
        (!n. OPTION_BIND source_gas dest_NumV = SOME n ==> n = w2n w)) /\
@@ -482,9 +485,16 @@ Proof
            `sa` |-> `s3`, `sb` |-> `s5`, `shadow_sa` |-> `shadow_s3`, `shadow_sb` |-> `s5'`,
            `shadow_gas` |-> `gas'`, `s` |-> `z`, `G` |-> `G3`, `tn` |-> `tn3`,
            `es` |-> `ke`] raw_call_optional_gas_joint) >>
-         (impl_tac >- (gvs[NoAsms] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-           qpat_assum `!H. valid_horizon _ _ H ke.storage_trace ==> stmt_state_rel _ _ _ _ _ ke z /\ storage_well_formed_on _ _ _ /\ _` mp_tac >>
-           POP_ASSUM_LIST (K all_tac) >> metis_tac[])) >>
+         (impl_tac >-
+           (qpat_assum `(case NONE of NONE => _ | SOME _ => _) = (gas,s5)`
+              (assume_tac o SIMP_RULE std_ss []) >>
+            qpat_assum `shadow_go = NONE` (fn eq =>
+              qpat_assum `(case shadow_go of NONE => _ | SOME _ => _) = (gas',s5')`
+                (assume_tac o SIMP_RULE std_ss [eq])) >>
+            simp_tac std_ss [] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+            qpat_assum `!H. valid_horizon _ _ H ke.storage_trace ==>
+                stmt_state_rel _ _ _ _ _ ke z /\ storage_well_formed_on _ _ _ /\ _` mp_tac >>
+            POP_ASSUM_LIST (K all_tac) >> metis_tac[])) >>
          disch_then (qx_choose_then `zg0` (qx_choose_then `Gg0`
            (qx_choose_then `tng0` (qx_choose_then `gw0`
              (strip_assume_tac o SIMP_RULE (srw_ss()) []))))) >>
