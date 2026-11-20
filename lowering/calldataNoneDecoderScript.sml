@@ -367,6 +367,8 @@ Resume none_coherent_decode_paths[nonbulk]:
        (DISJ_CASES_THEN2 (fn th => fs[th]) ACCEPT_TAC)) >>
   `type_memory_size (ArrayTV tv (Dynamic n)) = 32 + n * type_memory_size tv` by
     (once_rewrite_tac[valueEncodingTheory.type_memory_size_def] >> REFL_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) none_nonbulk_fold_paths >>
   disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ (ArrayT _ _) _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME _`)) >>
@@ -416,6 +418,7 @@ Resume none_coherent_decode_paths[nonbulk_child]:
     (irule decode_path_endpoint_floor >>
      qexistsl [`A`,`H`,`PG`,`ctx`,`fn`,`r`,`ta`,`u`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by simp[] >>
   disj2_tac >> qexistsl [`v`,`sc`,`H`,`u`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
