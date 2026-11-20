@@ -31,6 +31,46 @@ Proof
   simp[static_abort_normal_def, static_abort_trace_def, asm_steps_def]
 QED
 
+(* At the protected cut the row table already relates every concrete successor.
+   The rank and preserved request list suffice to observe an exceptional stop. *)
+Theorem mixed_cut_exception:
+  asm_steps lo otp p j start = AsmOK cut /\
+  req <<= req_bound /\ e IN V /\ shaped e cut /\
+  (!x y. edge x y ==> y IN V /\ (rank:'a -> num) y < rank x) /\
+  (!x t. x IN V /\ shaped x t ==>
+    (?u. (asm_steps lo otp p 1 t = AsmRevert u \/
+          asm_steps lo otp p 1 t = AsmFault u) /\ u.as_requests = req) \/
+    (?y u. edge x y /\ asm_steps lo otp p 1 t = AsmOK u /\ shaped y u)) ==>
+  ?n out. (asm_steps lo otp p n start = AsmRevert out \/
+           asm_steps lo otp p n start = AsmFault out) /\
+          out.as_requests <<= req_bound
+Proof
+  strip_tac >>
+  `!r x t. rank x = r /\ x IN V /\ shaped x t ==>
+    ?n out. (asm_steps lo otp p n t = AsmRevert out \/
+             asm_steps lo otp p n t = AsmFault out) /\ out.as_requests = req` by
+    (completeInduct_on `r` >> rpt gen_tac >> strip_tac >>
+     qpat_assum `!x t. x IN V /\ shaped x t ==> _` (qspecl_then [`x`, `t`] mp_tac) >>
+     impl_tac >- simp[] >>
+     disch_then (DISJ_CASES_THEN2
+       (qx_choose_then `out` (fn th => qexistsl_tac [`1`, `out`] >> ACCEPT_TAC th))
+       (qx_choosel_then [`y`, `u`] strip_assume_tac)) >>
+     `y IN V /\ rank y < rank x` by
+       (qpat_assum `!x y. edge x y ==> _` drule >> simp[]) >>
+     first_x_assum (qspec_then `rank y` mp_tac) >>
+     impl_tac >- simp[] >>
+     disch_then (qspecl_then [`y`, `u`] mp_tac) >>
+     impl_tac >- simp[] >>
+     disch_then (qx_choosel_then [`n`, `out`] strip_assume_tac) >>
+     qexistsl_tac [`1 + n`, `out`] >>
+     ONCE_REWRITE_TAC [stackOpSimTheory.asm_steps_add] >> simp[]) >>
+  pop_assum (qspecl_then [`rank e`, `e`, `cut`] mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`n`, `out`] strip_assume_tac) >>
+  qexistsl_tac [`j + n`, `out`] >>
+  ONCE_REWRITE_TAC [stackOpSimTheory.asm_steps_add] >> simp[]
+QED
+
 Theorem mixed_certificate_exception:
   !orig s data req_bound q Shape.
   Shape = (\p cc req pc height need tag boolean i (t:asm_state).
