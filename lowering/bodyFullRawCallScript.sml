@@ -873,6 +873,8 @@ Proof
      TRY (first_assum ACCEPT_TAC) >>
      qpat_assum `v = u` (fn th => rewrite_tac[GSYM th]) >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q /\
+    q.vs_alloca_next + pending_alloca_size func q <= w2n q.vs_initial_fmp` by simp[] >>
   mp_tac (SIMP_RULE bool_ss [LET_THM]
     (Q.INST [`n` |-> `cap`,`rev` |-> `rev`,`stat` |-> `stat`,
       `success` |-> `outcome.co_success`,`s` |-> `q`,

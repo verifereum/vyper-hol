@@ -1,7 +1,7 @@
 (* Fresh constructor buffer allocation: identical concrete and ghost endpoints. *)
 Theory ctorDeployMemoryRunPtrPrefixRegisterAlloc
 Ancestors
-  loweringHalt allocationPtr
+  loweringHalt allocationPtr exprLoweringProps
   ctorRegisterArgs moduleLowering context compileEnv emitHelper
   ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixAllocationFloor
@@ -12,7 +12,8 @@ Ancestors
 
 Theorem prefix_register_alloc_pair:
   FLOOKUP s.vs_allocas aid = NONE /\ n < dimword (:256) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
   let i = mk_inst aid ALLOCA [Lit (n2w n)] [x];
       a = update_var x (n2w s.vs_alloca_next)
         (s with <|vs_allocas := s.vs_allocas |+
@@ -28,7 +29,9 @@ Theorem prefix_register_alloc_pair:
        eval_operand (Var v) a = eval_operand (Var v) s /\
        op_taint q (Var v) = op_taint tn (Var v))
 Proof
-  strip_tac >> simp[] >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  simp[] >>
   `step_taint (mk_inst aid ALLOCA [Lit (n2w n)] [x]) s
       (update_var x (n2w s.vs_alloca_next)
         (s with <|vs_allocas := s.vs_allocas |+ (aid,(s.vs_alloca_next,n));
@@ -53,7 +56,8 @@ QED
 
 Theorem prefix_register_alloc_block:
   FLOOKUP s.vs_allocas aid = NONE /\ n < dimword (:256) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst aid ALLOCA [Lit (n2w n)] [x]) ==>
   let a = update_var x (n2w s.vs_alloca_next)
         (s with <|vs_allocas := s.vs_allocas |+
@@ -66,7 +70,7 @@ Theorem prefix_register_alloc_block:
 Proof
   strip_tac >>
   drule_all prefix_register_alloc_pair >>
-  disch_then (qspecl_then [`x`,`tn`,`fuel`,`fn`,`PG`,`G`,`D`] mp_tac) >>
+  disch_then (qspecl_then [`x`,`tn`,`fuel`,`PG`,`G`,`D`] mp_tac) >>
   simp[] >> strip_tac >> strip_tac >>
   `step_inst fuel ctx (mk_inst aid ALLOCA [Lit (n2w n)] [x]) s =
      OK (update_var x (n2w s.vs_alloca_next)
@@ -104,7 +108,8 @@ QED
 Theorem prefix_register_alloc_run_continuation:
   compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa fn /\
   FLOOKUP s.vs_allocas st.cs_next_id = NONE /\ n < dimword (:256) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   let x = STRING #"%" (toString st.cs_next_var);
       a = (update_var x (n2w s.vs_alloca_next)
@@ -161,6 +166,8 @@ Theorem prefix_register_alloc_actual:
 Proof
   strip_tac >> drule_all ctor_alloc_buffer_run >> strip_tac >>
   qexists_tac `a` >> simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp` by simp[] >>
   reverse conj_tac >-
     (drule_all prefix_register_alloc_run_continuation >> simp[]) >>
   gvs[update_var_def] >>

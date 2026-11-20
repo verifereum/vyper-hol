@@ -405,6 +405,7 @@ Resume extcall_return_full[has_horizon]:
          drule return_default_path_intervals >> strip_tac >>
          drule_all return_default_intervals_code >> strip_tac >>
          `LENGTH a.vs_returndata < dimword (:256)` by simp[] >>
+         `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
          drule_at (Pat `emit_op RETURNDATASIZE _ ar = _`)
            (INST_TYPE [alpha |-> ``:256``] return_default_shell_entry) >>
          disch_then (drule_all_then (qspecl_then [`tm`,`explicit`,`PG`,`J`]
@@ -466,6 +467,7 @@ Resume extcall_return_full[has_horizon]:
          simp[IgnAsm `result_op = buf.buf_operand`,allocas_from_def] >>
          conj_tac >- (disj2_tac >> qexistsl_tac [`xl`,`cj`,`old3`] >> simp[]) >>
          first_assum (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp p` by simp[] >>
       drule_at (Pat `compile_return_value_decode _ _ _ = _`)
         extcall_return_size_route >>
       disch_then (drule_all_then mp_tac) >>

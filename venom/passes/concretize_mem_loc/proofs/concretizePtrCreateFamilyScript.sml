@@ -127,7 +127,7 @@ Proof
 QED
 
 
-Theorem ptr_create_family_mixed_execution[local]:
+Theorem ptr_create_family_mixed_execution:
   ptr_mixed_vars births positions TG tn f g s t /\
   ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n ot) (w2n sz) t /\
@@ -172,7 +172,7 @@ Proof
   rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def, word_agree_except_def]
 QED
 
-Theorem ptr_create_family_delegate_mixed_execution[local]:
+Theorem ptr_create_family_delegate_mixed_execution:
   ptr_mixed_vars births positions TG tn f g s t /\
   ptr_history_content tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
@@ -384,7 +384,7 @@ Proof
   gvs[op_prov_def] >> metis_tac[optionTheory.option_CASES]
 QED
 
-Theorem ptr_create_family_delegate_operand_transport[local]:
+Theorem ptr_create_family_delegate_operand_transport:
   ptr_mixed_vars births positions TG tn f g s t /\
   s.vs_labels = t.vs_labels /\
   EVERY (ptr_nonopaque_operand f) inst.inst_operands /\

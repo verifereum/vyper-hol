@@ -88,6 +88,7 @@ Proof
     (DecPrimWord (IntClamp bits signed)) st = ((),st')` by metis_tac[] >>
   `d+32 <= b+sz` by metis_tac[] >>
   `!v. src = Var v \/ dst = v ==> not_fresh_at st v` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all (SRULE [] (Q.INST
     [`left` |-> `F`, `n` |-> `(n2w (if signed then bits DIV 8-1 else bits)):bytes32`,
      `clamp` |-> `IntClamp bits signed`, `m` |-> `0`]
@@ -117,6 +118,7 @@ Proof
     (DecPrimWord (BytesMClamp m)) st = ((),st')` by metis_tac[] >>
   `d+32 <= b+sz` by metis_tac[] >>
   `!v. src = Var v \/ dst = v ==> not_fresh_at st v` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all (SRULE [] (Q.INST
     [`left` |-> `T`, `signed` |-> `F`, `n` |-> `(n2w (m*8)):bytes32`,
      `clamp` |-> `BytesMClamp m`, `bits` |-> `0`]
@@ -145,6 +147,7 @@ Proof
   `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord BoolClamp) st = ((),st')` by metis_tac[] >>
   `d+32 <= b+sz` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_scalar_bool_ghost >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   qabbrev_tac `actual = t with vs_inst_idx := LENGTH st'.cs_current_insts` >>

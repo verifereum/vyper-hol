@@ -738,6 +738,7 @@ Proof
      qpat_assum `EVERY (\(b,bytes). b+LENGTH bytes <= d \/ _) protected`
        (mp_tac o SIMP_RULE (srw_ss()) [EVERY_MEM,FORALL_PROD]) >>
      disch_then drule >> simp[Abbr `pad`] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z4` by simp[] >>
   `emit_void MSTORE [Var padvar; Lit 0w] c4 = ((),c5)` by metis_tac[] >>
   qpat_assum `Abbrev (OS = _)` (fn os =>
     qpat_assum `Abbrev (IO = _)` (fn io =>

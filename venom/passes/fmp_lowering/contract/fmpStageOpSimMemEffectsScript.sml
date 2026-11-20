@@ -94,7 +94,7 @@ Proof
   fs[word_agree_except_def] >> metis_tac[]
 QED
 
-Theorem fmp_mem_storage_load_ghost[local]:
+Theorem fmp_mem_storage_load_ghost:
   MEM inst.inst_opcode [SLOAD;TLOAD] /\ inst.inst_outputs = [out] ==>
   step_prov PG G inst (update_var out w s) = DRESTRICT G (COMPL {out}) /\
   step_taint inst s (update_var out w s) tn =

@@ -475,6 +475,7 @@ Proof
            (mp_then Any mp_tac stmtReasonLitFragMemoryTheory.fn_has_code_code) >> simp[]) >>
       qpat_assum `ib.buf_operand = Var src` (fn th =>
         qpat_assum `_ cm = ((),sp)` (assume_tac o REWRITE_RULE [th])) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp tm` by simp[] >>
       drule_all (SRULE [] (Q.INST [`pd` |-> `64`, `nd` |-> `96`]
         (SPEC_ALL ec_scalar_store_origin_ptr_path))) >>
       disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]

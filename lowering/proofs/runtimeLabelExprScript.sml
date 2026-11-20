@@ -55,8 +55,11 @@ Resume rb_compile_type_builtin_dispatch_body[convert]:
   Cases_on `guard` >> simp[]
   >- simp[rb_step_def, rb_value_ok_def, rb_operand_ok_def] >>
   qmatch_goalsub_abbrev_tac `if guard2 then _ else _` >>
-  Cases_on `guard2` >> simp[] >- (irule rb_as_stack_val >>
+  Cases_on `guard2` >> simp[] >- (irule rb_as_ptr_val >>
     simp[rb_compile_bytestring_widen_copy]) >>
+  qmatch_goalsub_abbrev_tac `if memory_result then _ else _` >>
+  Cases_on `memory_result` >> simp[] >- (irule rb_as_ptr_val >>
+    simp[rb_compile_type_convert]) >>
   Cases_on `ret_ty` >> simp[] >> irule rb_as_stack_val >>
   simp[rb_compile_type_convert]
 QED

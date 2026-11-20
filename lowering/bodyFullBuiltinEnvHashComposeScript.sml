@@ -1,6 +1,6 @@
 Theory bodyFullBuiltinEnvHashCompose
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyFullHashKeccakFixed[qualified,ignore_grammar]
  bodyFullPreds bodySimFull gasOutcomeFullCompose bodyFullGhostFrame bodyInvNoDalloca
  gasShadowCompileStmtHelpers gasShadowState exprSimSource exprSimHypsDefs
  exprSimWordBuiltins exprSimUnopComposeProps exprSimUnopProps exprUnopSimDefs exprSimWordArgs exprSimProps exprSimOperands
@@ -20,7 +20,7 @@ Theorem hash_builtin_value_from_suffixes:
  0 <= i /\ i < 2 ** 256 /\
  eval_operand arg s = SOME (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i)) /\
  op_taint tn arg = {} /\ op_prov G arg = NONE /\
- (!p. arg = Var p ==> not_fresh_at sa p) /\ ~ctx_has_dalloca ctx /\
+ (!p. arg = Var p ==> not_fresh_at sa p) /\
  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
  (!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -57,7 +57,7 @@ Theorem hash_builtin_value_from_suffixes:
  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
  eval_operand arg s = SOME (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i)) /\
- op_taint tn arg = {} /\ op_prov G arg = NONE /\ ~ctx_has_dalloca ctx /\
+ op_taint tn arg = {} /\ op_prov G arg = NONE /\
  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
  (!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -91,7 +91,6 @@ Theorem hash_builtin_value_from_suffixes:
    cenv cx ty (Builtin a bt args) es
 Proof
  strip_tac >> rpt gen_tac >> disch_then (CONJUNCTS_THEN assume_tac) >>
- `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
  `?e. args = [e] /\ a = BaseT (BytesT (Fixed 32)) /\
        expr_type e = BaseT (UintT 256)` by
    (gvs[expr_body_pre_def, cj 9 well_typed_expr_def, well_typed_builtin_app_def] >>
@@ -250,6 +249,13 @@ Resume hash_builtin_value_from_suffixes[suffix]:
       (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
       Cases_on `unop_result cx (BaseT (BytesT (Fixed 32))) BlockHash [BaseT (UintT 256)] (IntV i) mid`
       >- suspend "block_success" >>
+      `y <> HaltException` by
+        (qpat_assum `unop_result _ _ BlockHash _ _ _ = INR y` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >>
+         simp[unop_result_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+      `!u. r <> Halt u` by
+        (rpt strip_tac >> gvs[] >>
+         Cases_on `y` >> gvs[exprSimDefsTheory.expr_exit_def]) >>
       `mid with gas_obs := [] = mid` by
         simp[vyperStateTheory.evaluation_state_component_equality] >>
       gvs[Abbr `childR`, exprSimDefsTheory.halt_exit_def,
@@ -277,6 +283,16 @@ Resume hash_builtin_value_from_suffixes[block_success]:
    (qspec_then `H` mp_tac) >>
  (impl_tac >- first_assum ACCEPT_TAC) >>
  disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
+   (FIRST
+      [first_assum (ACCEPT_TAC o MATCH_MP
+         bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp),
+       qpat_assum `!H'. valid_horizon _ _ H' mid.storage_trace ==>
+         gas_origin_ptr_path _ _ _ (OK t',G',tn') /\ _`
+         (qspec_then `H` mp_tac) >>
+       (impl_tac >- first_assum ACCEPT_TAC) >>
+       disch_then (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+         CONJUNCT1 o CONJUNCT2)]) >>
  `mid with gas_obs := [] = mid` by
    simp[vyperStateTheory.evaluation_state_component_equality] >>
  disj1_tac >> simp[] >>
@@ -317,6 +333,16 @@ Resume hash_builtin_value_from_suffixes[blob]:
    (qspec_then `H` mp_tac) >>
  (impl_tac >- first_assum ACCEPT_TAC) >>
  disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
+   (FIRST
+      [first_assum (ACCEPT_TAC o MATCH_MP
+         bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp),
+       qpat_assum `!H'. valid_horizon _ _ H' mid.storage_trace ==>
+         gas_origin_ptr_path _ _ _ (OK t',G',tn') /\ _`
+         (qspec_then `H` mp_tac) >>
+       (impl_tac >- first_assum ACCEPT_TAC) >>
+       disch_then (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+         CONJUNCT1 o CONJUNCT2)]) >>
  `mid with gas_obs := [] = mid` by
    simp[vyperStateTheory.evaluation_state_component_equality] >>
  simp[] >> disj1_tac >>

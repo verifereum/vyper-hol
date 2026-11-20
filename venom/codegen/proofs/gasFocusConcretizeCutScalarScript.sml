@@ -71,34 +71,6 @@ Proof
        ptr_value_transport_def]
 QED
 
-Theorem focus_scalar_shift_execution[local]:
-  ptr_mixed_vars births positions TG tn f g s t /\ s.vs_labels = t.vs_labels /\
-  EVERY (\op. ptr_nonopaque_operand f op /\ op_prov TG op = NONE) i.inst_operands /\
-  MEM i.inst_opcode [SHL; SHR; SAR] /\ i.inst_operands = [n; a] /\ op_taint tn n = {} /\
-  i.inst_outputs = [out] /\ step_inst fuel Ct i t = OK post ==>
-  ?v w. step_inst 0 C i s = OK (update_var out v s) /\ post = update_var out w t /\
-    ptr_value_transport births positions NONE (out_taint tn i s) v w
-Proof
-  strip_tac >>
-  `ptr_nonopaque_operand f n /\ op_prov TG n = NONE /\
-   ptr_nonopaque_operand f a /\ op_prov TG a = NONE` by fs[] >>
-  `ptr_lookup_transport births positions NONE {} (eval_operand n s) (eval_operand n t)` by
-    metis_tac[ptr_mixed_vars_eval] >>
-  `ptr_lookup_transport births positions NONE (op_taint tn a)
-     (eval_operand a s) (eval_operand a t)` by metis_tac[ptr_mixed_vars_eval] >>
-  fs[MEM] >>
-  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
-  simp[step_inst_non_invoke] >> pure_rewrite_tac[step_inst_base_def] >>
-  asm_rewrite_tac[] >> simp[Once opcode_case_def] >>
-  simp[exec_pure2_def, eval_operands_def, AllCaseEqs()] >> strip_tac >>
-  gvs[ptr_lookup_transport_some_right, ptr_value_transport_scalar_empty] >>
-  simp[step_inst_non_invoke] >> pure_rewrite_tac[step_inst_base_def] >>
-  asm_rewrite_tac[] >> simp[Once opcode_case_def] >>
-  simp[exec_pure2_def, eval_operands_def, out_taint_def, ptr_value_transport_def] >>
-  fs[ptr_value_transport_def] >>
-  metis_tac[word_agree_except_shl, word_agree_except_shr, word_agree_except_sar]
-QED
-
 (* All of these outputs lose provenance, but their byte mask need not be empty. *)
 Theorem focus_scalar_update[local]:
   ptr_mixed_vars births positions TG tn f g s t /\ ~retpc_var f out /\
@@ -169,7 +141,7 @@ Proof
       qpat_assum `ptr_static_support _ _ _`
         (assume_tac o REWRITE_RULE [ptr_static_support_def]) >>
       drule_all ptr_shift_operand_discipline >> strip_tac >>
-      drule_all focus_scalar_shift_execution >> simp[]) >>
+      drule_all concretizePtrShiftProducerTheory.ptr_shift_execution >> simp[]) >>
   `MEM i.inst_opcode
      [MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
       ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET]` by fs[MEM] >>
