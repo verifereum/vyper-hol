@@ -1,0 +1,197 @@
+Theory deployDynamicMemory
+Ancestors
+  deployPeakMemoryHeaders ctorDeployDefs e2eDeployDefs e2eDefs asmOptimizer
+  compileVyper supportedStmtTraverse supportedExprTraverse vyperAST
+  contextRawReachable unitTransformDefs unitShapeDefs lowerDloadDefs
+  venomInst venomState venomLayout exprSimHypsDefs fmpLowerSequenceExec
+  loweringShapeSource callRawVariant e2eEntry callTrace words list
+
+val _ = Parse.hide "tops";
+val _ = Parse.hide "body";
+
+Definition deploy_dalloca_form_occurs_def:
+  deploy_dalloca_form_occurs form tops <=>
+    IS_SOME (SND (SND (SND (classify_functions tops)))) /\
+    ?vis mut nr rr name args dflts ret body.
+      MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+      (vis = Deploy \/ vis = Internal) /\
+      (supported_stmts_expr_exists form body \/
+       EXISTS (supported_expr_exists form) dflts)
+End
+
+Theorem lower_vyper_deploy_unit_raw_fmp_raw_call_calldata:
+  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan
+   am tx es vs vi (fmp:bytes32).
+    deploy_phases policy tops (assemble prog, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    deploy_typing_ok tops am tx /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    deploy_dalloca_form_occurs
+      (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d) tops /\
+    ~deploy_dalloca_form_occurs
+      (\e. ?ty s r ks es d.
+            e = Call ty (CreateTarget CreateCopyOf s r ks) es d) tops /\
+    ~deploy_dalloca_form_occurs
+      (\e. ?ty b s r ks es d.
+            e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d) tops /\
+    vs = opt_deploy_entry_state_own prog prog' cplan tops es /\
+    vs.vs_fmp = vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+    imm_len tops + unit_alloca_budget dunit.cu_context +
+      32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
+    raw_variant fmp vi vs /\
+    LENGTH vi.vs_outcomes < 2 ** 64 /\
+    outcomes_accounts_typed (SOME vi.vs_outcomes) /\
+    LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 ==>
+    !fn inst s. raw_reachable vi dunit.cu_context fn inst s ==>
+      s.vs_initial_fmp = fmp /\
+      w2n s.vs_initial_fmp <= w2n s.vs_fmp /\ dalloca_no_wrap inst s /\
+      fmp_frontier_rel (w2n vs.vs_initial_fmp) (w2n fmp)
+        (w2n vs.vs_initial_fmp + (w2n s.vs_fmp - w2n fmp)) s.vs_fmp /\
+      (inst.inst_opcode = DALLOCA ==>
+        w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
+Proof
+  (* GATE_ADMISSION: held, deployment DALLOCA peak memory for raw call calldata *)
+  cheat
+QED
+
+Theorem lower_vyper_deploy_unit_raw_fmp_create_copy:
+  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan
+   am tx es vs vi (fmp:bytes32).
+    deploy_phases policy tops (assemble prog, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    deploy_typing_ok tops am tx /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    deploy_dalloca_form_occurs
+      (\e. ?ty s r ks es d.
+            e = Call ty (CreateTarget CreateCopyOf s r ks) es d) tops /\
+    ~deploy_dalloca_form_occurs
+      (\e. ?ty b s r ks es d.
+            e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d) tops /\
+    vs = opt_deploy_entry_state_own prog prog' cplan tops es /\
+    vs.vs_fmp = vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+    imm_len tops + unit_alloca_budget dunit.cu_context +
+      32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
+    raw_variant fmp vi vs /\
+    LENGTH vi.vs_outcomes < 2 ** 64 /\
+    outcomes_accounts_typed (SOME vi.vs_outcomes) /\
+    LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 ==>
+    !fn inst s. raw_reachable vi dunit.cu_context fn inst s ==>
+      s.vs_initial_fmp = fmp /\
+      w2n s.vs_initial_fmp <= w2n s.vs_fmp /\ dalloca_no_wrap inst s /\
+      fmp_frontier_rel (w2n vs.vs_initial_fmp) (w2n fmp)
+        (w2n vs.vs_initial_fmp + (w2n s.vs_fmp - w2n fmp)) s.vs_fmp /\
+      (inst.inst_opcode = DALLOCA ==>
+        w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
+Proof
+  (* GATE_ADMISSION: held, deployment DALLOCA peak memory for create copy *)
+  cheat
+QED
+
+Theorem lower_vyper_deploy_unit_raw_fmp_create_blueprint:
+  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan
+   am tx es vs vi (fmp:bytes32).
+    deploy_phases policy tops (assemble prog, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    deploy_typing_ok tops am tx /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    deploy_dalloca_form_occurs
+      (\e. ?ty b s r ks es d.
+            e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d) tops /\
+    vs = opt_deploy_entry_state_own prog prog' cplan tops es /\
+    vs.vs_fmp = vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+    imm_len tops + unit_alloca_budget dunit.cu_context +
+      32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
+    raw_variant fmp vi vs /\
+    LENGTH vi.vs_outcomes < 2 ** 64 /\
+    outcomes_accounts_typed (SOME vi.vs_outcomes) /\
+    LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 ==>
+    !fn inst s. raw_reachable vi dunit.cu_context fn inst s ==>
+      s.vs_initial_fmp = fmp /\
+      w2n s.vs_initial_fmp <= w2n s.vs_fmp /\ dalloca_no_wrap inst s /\
+      fmp_frontier_rel (w2n vs.vs_initial_fmp) (w2n fmp)
+        (w2n vs.vs_initial_fmp + (w2n s.vs_fmp - w2n fmp)) s.vs_fmp /\
+      (inst.inst_opcode = DALLOCA ==>
+        w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
+Proof
+  (* GATE_ADMISSION: held, deployment DALLOCA peak memory for create blueprint *)
+  cheat
+QED
+
+(* A constructor or packaged internal uses one of the three dynamic forms. *)
+Theorem deploy_entry_raw_no_wrap:
+  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan
+   am tx es vs vi (fmp:bytes32).
+    deploy_phases policy tops (assemble prog, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    deploy_typing_ok tops am tx /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    deploy_dalloca_form_occurs expr_raw_shape_root tops /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    vs = opt_deploy_entry_state_own prog prog' cplan tops es /\
+    w2n vs.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+    imm_len tops + unit_alloca_budget dunit.cu_context +
+      32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
+    raw_variant fmp vi vs ==>
+    !fn inst s. raw_reachable vi dunit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp
+Proof
+  rpt gen_tac >> strip_tac >>
+  `vs.vs_fmp = vs.vs_initial_fmp /\
+    vs.vs_outcomes = MAP SND (call_trace es)` by
+    simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+         entry_venom_state_def] >>
+  `vi.vs_outcomes = vs.vs_outcomes /\ vi.vs_call_ctx = vs.vs_call_ctx` by
+    metis_tac[raw_variant_outcomes, raw_variant_call_ctx] >>
+  `outcomes_accounts_typed (SOME vi.vs_outcomes)` by
+    (qpat_assum `deploy_state_rel _ _ _ _ _`
+       (mp_tac o MATCH_MP deploy_state_rel_call_outcomes_ok) >>
+     simp[call_outcomes_ok_def, outcomes_accounts_typed_def]) >>
+  `vi.vs_call_ctx.cc_calldata = []` by
+    gvs[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+        entry_venom_state_def, deploy_state_rel_def] >>
+  `expr_raw_shape_root =
+    (\e. (?ty f es d. e = Call ty (RawCallCalldataTarget f) es d) \/
+         ((?ty s r ks es d. e = Call ty (CreateTarget CreateCopyOf s r ks) es d) \/
+          (?ty b s r ks es d.
+             e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)))` by
+    simp[FUN_EQ_THM, expr_raw_shape_root_def, DISJ_ASSOC] >>
+  `!R S. deploy_dalloca_form_occurs (\e. R e \/ S e) tops <=>
+          deploy_dalloca_form_occurs R tops \/ deploy_dalloca_form_occurs S tops` by
+    (simp[deploy_dalloca_form_occurs_def, supported_stmt_expr_exists_disj,
+          supported_expr_exists_disj, EXISTS_MEM] >> metis_tac[]) >>
+  qpat_x_assum `deploy_dalloca_form_occurs expr_raw_shape_root _` mp_tac >>
+  qpat_assum `expr_raw_shape_root = _` (fn th => PURE_REWRITE_TAC [th]) >>
+  simp[] >> disch_then assume_tac >>
+  rpt gen_tac >> strip_tac >>
+  `s.vs_initial_fmp = fmp /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
+      dalloca_no_wrap inst s` suffices_by simp[] >>
+  Cases_on `deploy_dalloca_form_occurs
+      (\e. ?ty b s r ks es d.
+        e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d) tops`
+  >- (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
+         `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `vs`, `vi`, `fmp`]
+       mp_tac lower_vyper_deploy_unit_raw_fmp_create_blueprint >>
+     asm_rewrite_tac[LENGTH_MAP, EVAL ``LENGTH ([]:word8 list) < 2 ** 64``] >>
+     disch_then (qspecl_then [`fn`, `inst`, `s`] mp_tac) >> simp[]) >>
+  Cases_on `deploy_dalloca_form_occurs
+      (\e. ?ty s r ks es d. e = Call ty (CreateTarget CreateCopyOf s r ks) es d) tops`
+  >- (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
+         `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `vs`, `vi`, `fmp`]
+       mp_tac lower_vyper_deploy_unit_raw_fmp_create_copy >>
+     asm_rewrite_tac[LENGTH_MAP, EVAL ``LENGTH ([]:word8 list) < 2 ** 64``] >>
+     disch_then (qspecl_then [`fn`, `inst`, `s`] mp_tac) >> simp[]) >>
+  `deploy_dalloca_form_occurs
+      (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d) tops` by metis_tac[] >>
+  qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
+     `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `vs`, `vi`, `fmp`]
+    mp_tac lower_vyper_deploy_unit_raw_fmp_raw_call_calldata >>
+     asm_rewrite_tac[LENGTH_MAP, EVAL ``LENGTH ([]:word8 list) < 2 ** 64``] >>
+     disch_then (qspecl_then [`fn`, `inst`, `s`] mp_tac) >> simp[]
+QED
