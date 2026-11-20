@@ -282,9 +282,11 @@ Proof
   >- (disj1_tac >> qexistsl_tac [`v`,`Gv`,`tnv`] >> asm_rewrite_tac[]) >>
   disj2_tac >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
-  drule_all (BETA_RULE bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_scalar_frame_joint) >>
-  disch_then (qspecl_then [`explicit`,`PG`] (qx_choose_then `v`
-    (qx_choose_then `Gv` (qx_choose_then `tnv` strip_assume_tac)))) >>
+  mp_tac (BETA_RULE (Q.INST [`t` |-> `raw`]
+    bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_scalar_frame_joint)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `v`
+    (qx_choose_then `Gv` (qx_choose_then `tnv` strip_assume_tac))) >>
   qexistsl_tac [`v`,`Gv`,`tnv`] >> asm_rewrite_tac[] >> simp[]
 QED
 
