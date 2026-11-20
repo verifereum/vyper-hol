@@ -555,12 +555,11 @@ Proof
 QED
 
 Theorem deploy_frame_semantic_setup:
-  !tops am tx mut nr stmts am_c es0 deploy_bc es vs prog cplan.
+  !tops am tx mut nr stmts am_c es0 deploy_bc es vs.
   deploy_source_ok tops am tx /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   deploy_state_rel tops deploy_bc am tx es /\
-  call_outcomes_ok am tx (MAP SND (call_trace es)) /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) ==>
+  call_outcomes_ok am tx vs.vs_outcomes ==>
   ?deploy_art runtime_art args bindings env_t env'.
     check_contract T am.layouts tx.target [(NONE,tops)] = SOME deploy_art /\
     check_contract F am.layouts tx.target [(NONE,tops)] = SOME runtime_art /\
@@ -598,11 +597,6 @@ Proof
   drule deploy_frame_ctor_start_scopes >> strip_tac >>
   `supported_program_deploy tops` by gvs[deploy_source_ok_def] >>
   drule_all deploy_frame_supported_body >> strip_tac >>
-  `vs.vs_outcomes = MAP SND (call_trace es)` by
-    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
-     simp[gas_variant_def] >>
-     disch_then (mp_tac o Q.AP_TERM `\s. s.vs_outcomes`) >>
-     simp[deploy_entry_state_def, entry_venom_state_def]) >>
   `outcomes_accounts_typed (SOME vs.vs_outcomes)` by
     metis_tac[deploy_frame_outcomes_accounts_typed] >>
   qexistsl [`bindings`, `env_body`, `env_after`] >>
@@ -1341,8 +1335,8 @@ Theorem deploy_ctor_body_frame:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    call_outcomes_ok am tx (MAP SND (call_trace es)) /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    call_outcomes_ok am tx vs.vs_outcomes /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\

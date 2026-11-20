@@ -315,7 +315,7 @@ Theorem deploy_unit_run_entry:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan es vs.
     deploy_phases policy tops (deploy_bc, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
-    gas_variant vs (deploy_entry_state prog cplan tops es)
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)
     ==>
     lowering_context_ok dunit.cu_context /\
     dunit.cu_context.ctx_entry = SOME "__deploy" /\

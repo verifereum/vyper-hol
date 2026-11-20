@@ -5,11 +5,12 @@ Ancestors
   asmOptMergeIszero asmSplice asmSymPc finalizerContract asmSymSem
   asmOptimizer asmWf asmSem vfmExecution list
 
-Theorem iszero_pair_window_refines_own:
-  asm_returns_zero_or_one x ⇒
-  asm_window_refines_own pfx [x; AsmOp "ISZERO"; AsmOp "ISZERO"] [x] rest
+Theorem iszero_pair_window_results:
+  asm_returns_zero_or_one x /\
+  ss.sym_base.as_pc = LENGTH pfx /\ ss.sym_base.as_stack = [] ==>
+  own_window_results pfx [x; AsmOp "ISZERO"; AsmOp "ISZERO"] [x] rest env own ss 3 1
 Proof
-  rw[asm_window_refines_own_def] >>
+  strip_tac >> BETA_TAC >>
   `x ≠ AsmOp "JUMP" ∧ x ≠ AsmOp "JUMPI" ∧
    x ≠ AsmOp "CODESIZE" ∧ x ≠ AsmOp "CODECOPY"`
     by gvs[asm_returns_zero_or_one_def] >>
@@ -23,7 +24,6 @@ Proof
    LENGTH pfx + 2 < LENGTH p ∧ EL (LENGTH pfx + 2) p = AsmOp "ISZERO" ∧
    LENGTH pfx < LENGTH q ∧ EL (LENGTH pfx) q = x`
     by simp[Abbr `p`, Abbr `q`, listTheory.EL_APPEND_EQN] >>
-  qexistsl_tac [`3`, `1`] >>
   rewrite_tac[numLib.num_CONV ``3:num``, numLib.num_CONV ``1:num``,
               sym_steps_own_def] >> simp[sym_step_own_eq] >>
   Cases_on `sym_step q env x ss` >>
@@ -50,6 +50,15 @@ Proof
   simp[Abbr `s2`, asmSemTheory.asm_next_def,
        splice_pc_def, sym_with_pc_def, sym_state_component_equality,
        asmSemTheory.asm_state_component_equality]
+QED
+
+Theorem iszero_pair_window_refines_own:
+  asm_returns_zero_or_one x ⇒
+  asm_window_refines_own pfx [x; AsmOp "ISZERO"; AsmOp "ISZERO"] [x] rest
+Proof
+  strip_tac >> irule own_window_results_refines >>
+  qexistsl_tac [`3`, `1`] >> simp[] >>
+  rpt gen_tac >> strip_tac >> mp_tac (BETA_RULE iszero_pair_window_results) >> simp[]
 QED
 
 Theorem merge_iszero_pairs_refines_own_under:
@@ -82,14 +91,15 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-Theorem iszero_jumpi_window_refines_own:
-  asm_window_refines_own pfx [AsmOp "ISZERO"; AsmOp "ISZERO"] []
-    (AsmPushLabel l :: AsmOp "JUMPI" :: rest)
+Theorem iszero_jumpi_window_results:
+  ss.sym_base.as_pc = LENGTH pfx /\ ss.sym_base.as_stack = [] ==>
+  own_window_results pfx [AsmOp "ISZERO"; AsmOp "ISZERO"] []
+    (AsmPushLabel l :: AsmOp "JUMPI" :: rest) env own ss 4 2
 Proof
-  rw[asm_window_refines_own_def] >>
+  strip_tac >> BETA_TAC >>
   qabbrev_tac `p = pfx ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++
                    AsmPushLabel l :: AsmOp "JUMPI" :: rest` >>
-  qabbrev_tac `q = pfx ++ AsmPushLabel l :: AsmOp "JUMPI" :: rest` >>
+  qabbrev_tac `q = pfx ++ [] ++ AsmPushLabel l :: AsmOp "JUMPI" :: rest` >>
   `LENGTH pfx < LENGTH p ∧ EL (LENGTH pfx) p = AsmOp "ISZERO" ∧
    LENGTH pfx + 1 < LENGTH p ∧ EL (LENGTH pfx + 1) p = AsmOp "ISZERO" ∧
    LENGTH pfx + 2 < LENGTH p ∧ EL (LENGTH pfx + 2) p = AsmPushLabel l ∧
@@ -106,7 +116,7 @@ Proof
                         `sfx` |-> `AsmPushLabel l :: AsmOp "JUMPI" :: rest`]
                   splice_index_of_label) >>
         simp[Abbr `p`, Abbr `q`]) >>
-  qexistsl_tac [`4`, `2`] >> simp[] >>
+  simp[] >>
   qspecl_then [`ss`, `p`, `env`] strip_assume_tac
     (GEN_ALL sym_step_iszero_cases)
   >~ [`SymError`]
@@ -155,6 +165,15 @@ Proof
   simp[Abbr `s1`, Abbr `s2`, Abbr `s3`, Abbr `t1`, splice_pc_def,
        asmSemTheory.asm_next_def, sym_with_pc_def, sym_state_component_equality,
        asmSemTheory.asm_state_component_equality]
+QED
+
+Theorem iszero_jumpi_window_refines_own:
+  asm_window_refines_own pfx [AsmOp "ISZERO"; AsmOp "ISZERO"] []
+    (AsmPushLabel l :: AsmOp "JUMPI" :: rest)
+Proof
+  irule own_window_results_refines >>
+  qexistsl_tac [`4`, `2`] >> simp[] >>
+  rpt gen_tac >> strip_tac >> mp_tac (BETA_RULE iszero_jumpi_window_results) >> simp[]
 QED
 
 Theorem merge_iszero_jumpi_refines_own_under:

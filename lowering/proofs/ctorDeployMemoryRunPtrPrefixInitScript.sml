@@ -8,7 +8,7 @@ Ancestors
 
 
 Theorem deploy_prefix_initial_allocations:
-  gas_variant vs (deploy_entry_state prog cplan tops es) ==>
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
   vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops
 Proof
   simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
@@ -17,10 +17,10 @@ Proof
 QED
 
 Theorem deploy_prefix_normalized_allocations:
-  gas_variant vs (deploy_entry_state prog cplan tops es) ==>
-  let s = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>
-  in s.vs_allocas = FEMPTY /\ s.vs_alloca_next = imm_len tops /\
-     allocas_from (imm_len tops) s
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+  vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops /\
+  allocas_from (imm_len tops)
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
 Proof
   strip_tac >> drule deploy_prefix_initial_allocations >>
   simp[allocas_from_def]

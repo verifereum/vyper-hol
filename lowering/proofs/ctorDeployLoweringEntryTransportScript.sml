@@ -51,7 +51,7 @@ Theorem deploy_ctor_entry_data_section:
  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
  deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
  deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) ==>
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
  constructor_args_encode tops tx vs.vs_data_section
 Proof
  rpt strip_tac >>
@@ -105,7 +105,7 @@ Theorem deploy_ctor_entry_data_size:
  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
  deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) ==>
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
  LENGTH vs.vs_data_section < dimword(:256)
 Proof
  rpt strip_tac >> drule_all deploy_ctor_entry_data_section >> strip_tac >>

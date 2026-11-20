@@ -2,45 +2,49 @@ Theory staticAbortStoppedBodyCut
 Ancestors
   fnStaticAbortBoundary fnBlockBody symBlockBody contextStaticAbortRel
   staticAbortExec staticAbortDefs contextCodegenRel asmSem asmSymSem asmSplice
-  codegenSymRel venomExecSemantics venomExecProps venomInst unitShapeDefs
+  asmSpliceOwn asmSymBridge codegenSymRel venomExecSemantics venomExecProps venomInst unitShapeDefs
   o1LowerDloadRequestForward o1LowerDloadForwardInversion stepWriteFootprintForward
   list rich_list
 
 val _ = Parse.hide "cp";
 val _ = Parse.hide "base";
 
-Theorem stopped_body_cut_observation:
-  !rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+Theorem stopped_body_cut_observation_mode:
+  !allow_own own rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
    ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast Inv ra pc_ret
    rest mem0 env ret srest labs0 ss.
-    body_inv_abort rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    (if allow_own then body_inv_abort_reloc else body_inv_abort)
+      rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast Inv
       ra pc_ret rest mem0 /\
-    label_flow_ok ctx /\
+    (if allow_own then label_flow_own_ok ctx else label_flow_ok ctx) /\
     code_end_offset_ok (\ctx fn inst s. Inv ctx fn inst s /\ ~in_static_abort_prefix fn s)
       ctx /\ sym_unit_static_ok unit /\
     asm_static_wf prog /\ (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
-    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps ast ss /\
+    (if allow_own then sym_frame_inv_own lo prog env own
+      else sym_frame_inv prog env) ctx cpl fn ret srest labs0 ps ast ss /\
     (in_static_abort_prefix fn vs \/ in_revert_forward fn vs) ==>
     ((!vs'. block_rest fuel ctx fn bb vs = Halt vs' ==>
        ?n out. asm_steps lo o2pc prog n ast = AsmHalt out /\
-         venom_asm_terminal_rel vs' out /\ sym_terminal (sym_steps prog env n ss)) /\
+         venom_asm_terminal_rel vs' out /\ sym_terminal (sym_steps_mode allow_own prog env own n ss)) /\
      (!a vs'. block_rest fuel ctx fn bb vs = Abort a vs' ==>
        (?n out. (asm_steps lo o2pc prog n ast = AsmRevert out \/
                  asm_steps lo o2pc prog n ast = AsmFault out) /\
-          sym_terminal (sym_steps prog env n ss) /\ out.as_requests <<= vs'.vs_requests) \/
+          sym_terminal (sym_steps_mode allow_own prog env own n ss) /\ out.as_requests <<= vs'.vs_requests) \/
        (?nc cut sc iC fnC rC livC dfgC cfgC chC growthC spillC ctrC fnopsC endC
          bbC pslC hC promisedC dfsC blockC dfsafterC afterC prefixC restopsC kC
          psC pcC cvsC raC pcretC restC memC retC srestC labsC.
           asm_steps lo o2pc prog nc ast = AsmOK cut /\
-          sym_steps prog env nc ss = SymOK sc /\
-          body_inv_abort rpolicy unit cpl prog ctx lo o2pc iC fnC rC livC dfgC cfgC
+          sym_steps_mode allow_own prog env own nc ss = SymOK sc /\
+          (if allow_own then body_inv_abort_reloc else body_inv_abort)
+      rpolicy unit cpl prog ctx lo o2pc iC fnC rC livC dfgC cfgC
             chC growthC spillC ctrC fnopsC endC bbC pslC hC promisedC dfsC blockC
             dfsafterC afterC prefixC restopsC kC psC pcC cvsC cut Inv
             raC pcretC restC memC /\
-          sym_frame_inv prog env ctx cpl fnC retC srestC labsC psC cut sc /\
+          (if allow_own then sym_frame_inv_own lo prog env own
+      else sym_frame_inv prog env) ctx cpl fnC retC srestC labsC psC cut sc /\
           (in_static_abort_prefix fnC cvsC \/ in_revert_forward fnC cvsC) /\
           cut.as_requests = vs'.vs_requests)) /\
      (!rv vs'. block_rest fuel ctx fn bb vs = IntRet rv vs' ==>
@@ -49,8 +53,9 @@ Theorem stopped_body_cut_observation:
          context_memory_rel cpl vs'.vs_memory out.as_memory /\
          (!b. context_spill_byte cpl b /\ ~closure_spill_byte ctx cpl fn.fn_name b ==>
            read_byte b out.as_memory = read_byte b mem0) /\
-         shared_state_rel vs' out /\ sym_steps prog env n ss = SymOK ss' /\
-         asm_sym_rel prog env out ss' /\
+         shared_state_rel vs' out /\ sym_steps_mode allow_own prog env own n ss = SymOK ss' /\
+         (if allow_own then asm_sym_rel_own lo prog env own
+          else asm_sym_rel prog env) out ss' /\
          ss'.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
          (!b. context_spill_byte cpl b /\ ~closure_spill_byte ctx cpl fn.fn_name b ==>
            FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b) /\
@@ -59,7 +64,7 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
    fn_frame_inv ctx cpl lo fn ra rest mem0 ps vs ast` by
-    fs[body_inv_abort_def] >>
+    (Cases_on `allow_own` >> fs[body_inv_abort_def, body_inv_abort_reloc_def]) >>
   `(!v. exec_block fuel ctx bb vs <> OK v) /\
    (!rv v. exec_block fuel ctx bb vs <> IntRet rv v) /\
    (!v. exec_block fuel ctx bb vs <> Halt v)` by
@@ -108,7 +113,57 @@ Proof
   drule static_abort_frame_cut >> strip_tac >>
   disj2_tac >>
   qexistsl_tac [`0`, `ast`, `ss`] >>
-  simp[asm_steps_def, sym_steps_def] >>
-  goal_assum (drule_at (Pat `body_inv_abort`)) >>
-  goal_assum (drule_at (Pat `sym_frame_inv`)) >> simp[]
+  simp[asm_steps_def, sym_steps_mode_def, sym_steps_own_def, sym_steps_def] >>
+  rpt (first_assum (irule_at Any)) >> simp[]
+QED
+
+Theorem stopped_body_cut_observation:
+  !rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+   spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
+   ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast Inv ra pc_ret
+   rest mem0 env ret srest labs0 ss.
+    body_inv_abort rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast Inv
+      ra pc_ret rest mem0 /\
+    label_flow_ok ctx /\
+    code_end_offset_ok (\ctx fn inst s. Inv ctx fn inst s /\ ~in_static_abort_prefix fn s)
+      ctx /\ sym_unit_static_ok unit /\
+    asm_static_wf prog /\ (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps ast ss /\
+    (in_static_abort_prefix fn vs \/ in_revert_forward fn vs) ==>
+    ((!vs'. block_rest fuel ctx fn bb vs = Halt vs' ==>
+       ?n out. asm_steps lo o2pc prog n ast = AsmHalt out /\
+         venom_asm_terminal_rel vs' out /\ sym_terminal (sym_steps prog env n ss)) /\
+     (!a vs'. block_rest fuel ctx fn bb vs = Abort a vs' ==>
+       (?n out. (asm_steps lo o2pc prog n ast = AsmRevert out \/
+                 asm_steps lo o2pc prog n ast = AsmFault out) /\
+          sym_terminal (sym_steps prog env n ss) /\ out.as_requests <<= vs'.vs_requests) \/
+       (?nc cut sc iC fnC rC livC dfgC cfgC chC growthC spillC ctrC fnopsC endC
+         bbC pslC hC promisedC dfsC blockC dfsafterC afterC prefixC restopsC kC
+         psC pcC cvsC raC pcretC restC memC retC srestC labsC.
+          asm_steps lo o2pc prog nc ast = AsmOK cut /\
+          sym_steps prog env nc ss = SymOK sc /\
+          body_inv_abort rpolicy unit cpl prog ctx lo o2pc iC fnC rC livC dfgC cfgC
+            chC growthC spillC ctrC fnopsC endC bbC pslC hC promisedC dfsC blockC
+            dfsafterC afterC prefixC restopsC kC psC pcC cvsC cut Inv
+            raC pcretC restC memC /\
+          sym_frame_inv prog env ctx cpl fnC retC srestC labsC psC cut sc /\
+          (in_static_abort_prefix fnC cvsC \/ in_revert_forward fnC cvsC) /\
+          cut.as_requests = vs'.vs_requests)) /\
+     (!rv vs'. block_rest fuel ctx fn bb vs = IntRet rv vs' ==>
+       ?n out ss'. asm_steps lo o2pc prog n ast = AsmOK out /\
+         out.as_pc = pc_ret /\ out.as_stack = REVERSE rv.iret_values ++ rest /\
+         context_memory_rel cpl vs'.vs_memory out.as_memory /\
+         (!b. context_spill_byte cpl b /\ ~closure_spill_byte ctx cpl fn.fn_name b ==>
+           read_byte b out.as_memory = read_byte b mem0) /\
+         shared_state_rel vs' out /\ sym_steps prog env n ss = SymOK ss' /\
+         asm_sym_rel prog env out ss' /\
+         ss'.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
+         (!b. context_spill_byte cpl b /\ ~closure_spill_byte ctx cpl fn.fn_name b ==>
+           FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b) /\
+         (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cpl b)))
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES]
+    (Q.SPECL [`F`, `[]`] stopped_body_cut_observation_mode))
 QED

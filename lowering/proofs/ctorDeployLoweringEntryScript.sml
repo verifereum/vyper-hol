@@ -42,6 +42,8 @@ Theorem deploy_ctor_entry_reaches_body:
                ?fuel'. run_context fuel' dunit.cu_context vs = r
 Proof
   rpt gen_tac >> strip_tac >>
+  `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
   drule_all deploy_ctor_entry_body_resources >> strip_tac >>
   drule_all deploy_ctor_body_entry_static >> strip_tac >>
   drule_all deploy_ctor_entry_body_state_rel >> strip_tac >>
@@ -84,6 +86,8 @@ Theorem deploy_ctor_entry_gas_path:
                ?fuel'. run_context fuel' dunit.cu_context vs = r
 Proof
   rpt gen_tac >> strip_tac >>
+  `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
   `supported_program tops /\ supported_program_deploy tops` by fs[deploy_source_ok_def] >>
   drule_all deploy_ctor_original_entry_shape >> strip_tac >>
   drule_all deploy_ctor_entry_body_resources_gas_path >> strip_tac >>
@@ -106,7 +110,7 @@ Theorem deploy_ctor_entry_joint:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\

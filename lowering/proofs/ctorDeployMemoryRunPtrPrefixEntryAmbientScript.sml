@@ -23,7 +23,7 @@ Theorem deploy_ptr_entry_actual_state_rel:
   !tops bc am tx es vs prog cp rp runtime unit body ce nr key ut imm exit
     sa sb sj se sp sf func mut am_c es0 args scope actual.
   deploy_source_ok tops am tx /\ deploy_state_rel tops bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cp tops es) /\
+  gas_variant vs (deploy_entry_state prog cp tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   deploy_ctor_start tops am tx (mut,F,body,am_c,es0) /\
