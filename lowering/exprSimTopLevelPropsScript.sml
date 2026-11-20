@@ -46,45 +46,6 @@ Proof
   first_x_assum irule >> simp[var_decl_transient_def]
 QED
 
-Theorem toplevel_storage_slots_in_range:
-  !cx es src id ts tr typ id_str slot tvt.
-    contract_storage_well_formed cx es /\
-    get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
-    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    evaluate_type (get_tenv cx) typ = SOME tvt ==>
-    slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt
-Proof
-  rpt strip_tac >>
-  `declared_storage_region cx src id [] = SOME (tr, n2w slot, tvt)` by
-    simp[declared_storage_region_def] >>
-  irule contract_storage_well_formed_region >>
-  simp[vyperStorageBackendTheory.get_storage_backend_eq] >> metis_tac[]
-QED
-
-Theorem toplevel_storage_read_decodes:
-  !cx es src id ts tr typ id_str slot tvt.
-    contract_storage_well_formed cx es /\
-    get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
-    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    evaluate_type (get_tenv cx) typ = SOME tvt ==>
-    ?v. read_storage_slot cx tr (n2w slot) tvt es = (INL v, es)
-Proof
-  rpt strip_tac >>
-  `declared_storage_region cx src id [] = SOME (tr, n2w slot, tvt)` by
-    simp[declared_storage_region_def] >>
-  `?storage. get_storage_backend cx tr es = (INL storage, es)` by
-    (Cases_on `tr` >>
-     simp[get_storage_backend_def, bind_def, return_def,
-          get_transient_storage_def, get_accounts_def]) >>
-  drule_all contract_storage_well_formed_region >> strip_tac >>
-  drule evaluate_type_well_formed_type_value >> strip_tac >>
-  drule_all decode_value_from_slots_in_range >> strip_tac >>
-  gvs[read_storage_slot_def, bind_def, lift_option_def, return_def,
-      wordsTheory.w2n_n2w]
-QED
-
 Theorem toplevel_find_NONE_bare_global:
   !env cx st src id ty ts.
     well_typed_expr env (TopLevelName ty (src,id)) /\

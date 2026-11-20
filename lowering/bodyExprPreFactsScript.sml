@@ -9,7 +9,7 @@ Ancestors
   vyperTypeEvalSoundness vyperTypeInvariants vyperTypeAssignContext
   vyperTypeValues vyperTypeScopePop vyperTypeEnvExtension
   vyperTypeStoragePreservation vyperStorageLayoutSafety vyperStorageBackend
-  vyperEvalOutcomeSuffix bodyStoragePreservation stmtPoppedKeys placeTypingProps
+  vyperEvalOutcomeSuffix stmtPoppedKeys placeTypingProps
   finite_map list exprLoweringProps compileVyper
   exprSimHypsDefs gasContext vyperABI
   supportedExprTraverse supportedExprs supportedDecls supportedStmts
@@ -533,41 +533,6 @@ Proof
   metis_tac[vyperTypeStoragePreservationTheory.oracle_storage_ok_outcomes]
 QED
 
-(* The storage conjuncts of expr_sim_inv after a supported statement, or a
-   list of them (bodyStoragePreservation). *)
-Theorem eval_stmts_storage_conjs:
-  (!tops bindings cx s env ret_ty env' st res st'.
-     supported_program tops /\ get_module_code cx NONE = SOME tops /\
-     supported_stmt tops bindings s /\ type_stmt env ret_ty s = SOME env' /\
-     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
-     call_evaluation_safe cx (int_calls_stmt s) /\
-     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
-     eval_stmt cx s st = (res, st') ==>
-     contract_storage_well_formed cx st' /\ oracle_storage_ok cx st' /\
-     IS_SOME st'.outcomes) /\
-  (!tops bindings cx ss env ret_ty env' st res st'.
-     supported_program tops /\ get_module_code cx NONE = SOME tops /\
-     supported_stmts tops bindings ss /\ type_stmts env ret_ty ss = SOME env' /\
-     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
-     call_evaluation_safe cx (int_calls_stmts ss) /\
-     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
-     eval_stmts cx ss st = (res, st') ==>
-     contract_storage_well_formed cx st' /\ oracle_storage_ok cx st' /\
-     IS_SOME st'.outcomes)
-Proof
-  conj_tac >> rpt gen_tac >> strip_tac >> rpt conj_tac
-  >- (drule_all (cj 1 eval_stmts_body_oracle_storage) >> simp[])
-  >- (irule oracle_storage_ok_suffix >> qexists_tac `st` >>
-      simp[] >> drule_then irule (cj 1 eval_outcome_suffix_mutual))
-  >- (drule (cj 1 eval_outcome_suffix_mutual) >>
-      rw[outcome_suffix_def] >> gvs[])
-  >- (drule_all (cj 2 eval_stmts_body_oracle_storage) >> simp[])
-  >- (irule oracle_storage_ok_suffix >> qexists_tac `st` >>
-      simp[] >> drule_then irule (cj 2 eval_outcome_suffix_mutual)) >>
-  drule (cj 2 eval_outcome_suffix_mutual) >>
-  rw[outcome_suffix_def] >> gvs[]
-QED
-
 (* The scope of a loop's iteration: the loop variable, declared in the
    compile env and added to the type environment. *)
 Theorem for_pushed_state_well_typed:
@@ -887,4 +852,3 @@ Proof
   drule_all declare_stmt_local_other >> strip_tac >>
   drule_all type_stmt_other >> strip_tac >> gvs[]
 QED
-

@@ -35,27 +35,6 @@ Proof
   simp[encode_hashmap_key_def, byteTheory.word_of_bytes_be_def]
 QED
 
-Theorem target_subscript_storage_base_view:
-  storage_layout_safe cx /\
-  EVERY pure_expr (target_indices bt) /\
-  eval_base_place cx bt es =
-    (INL (PlaceR (StoragePlace tr slot tv)),mid) /\
-  valid_horizon cx st0 H mid.storage_trace /\
-  get_storage_backend cx tr es = (INL raw,es) ==>
-  storage_read_live H tr raw slot tv /\
-  w2n slot + type_slot_size tv <= dimword(:256)
-Proof
-  strip_tac >>
-  drule_all nested_pop_eval_base_live >>
-  simp[nested_pop_result_live_def] >> strip_tac >>
-  drule eval_base_place_region >>
-  simp[storage_result_region_def] >> strip_tac >>
-  simp[] >> Cases_on `type_slot_size tv = 0`
-  >- simp[wordsTheory.w2n_lt, arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
-  `0 < type_slot_size tv` by decide_tac >>
-  drule_all storage_place_region_numeric >> strip_tac >> decide_tac
-QED
-
 (* The compiler continuation after the base_op and index intervals. *)
 Definition target_subscript_suffix_def:
   target_subscript_suffix cenv e rb ix =
