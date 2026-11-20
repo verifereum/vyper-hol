@@ -74,6 +74,7 @@ Resume registration_wrapped_prefix_origin[guard]:
      simp[allocas_from_def] >> fs[allocas_from_def] >> metis_tac[]) >>
   `(4w + abi_decode_load CALLDATALOAD ((4w+n2w (off-4)):bytes32) a) <+ 4w` by
     gvs[abi_decode_load_def, abi_decode_source_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   `?z H1 u1. z.vs_returndata = [] /\
     !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
       (t,H,u) [] (Abort Revert_abort z,H1,u1)` by

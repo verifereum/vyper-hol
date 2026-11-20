@@ -43,6 +43,7 @@ Proof
     gs[inst_extends_def, same_blocks_def] >>
   drule_all calldataWordLiveTheory.calldata_clamp_repeat >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   reverse (Cases_on `abi_clamp_ok clamp w` >> asm_rewrite_tac[] >> strip_tac)
   >- (drule_all bodyFullAbiDecodeScalarObservedTheory.member_scalar_revert_observed >>

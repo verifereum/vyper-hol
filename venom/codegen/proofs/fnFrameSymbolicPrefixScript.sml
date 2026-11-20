@@ -2313,7 +2313,7 @@ Proof
   gvs[sym_steps_mode_def] >> metis_tac[normal_frame_symbolic_plan_from_own]
 QED
 
-Theorem normal_frame_symbolic_joint_progress_own[local]:
+Theorem normal_frame_symbolic_joint_progress_own:
   joint_config_reachable vs0 unit.cu_context
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
   normal_frame_symbolic_plan_own allow_own lo env own rpolicy unit cpl prog vs0 es0

@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeComplexPrefix
 Ancestors
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   exprSimWordBuiltins[qualified,ignore_grammar]
   bodyPtrBopScalarOutcome
   bodyFullAbiDecodeInterface bodyFullAbiDecodeFiniteGuard
@@ -221,7 +222,7 @@ val owned_decoder_state = ``\st s G tn.
 
 val owned_decoder_pre = ``\start finish dst src opc base_op hi d write_start size s G tn.
   opc = MLOAD /\ fn_has_code start finish fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce start /\ (?H. V H) /\
+  local_ptrs_reserved ce start /\ (?H. V H) /\
   w2n input_word+LENGTH input_bytes < dimword (:256) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -250,7 +251,7 @@ val owned_decoder_pre = ``\start finish dst src opc base_op hi d write_start siz
 
 val guarded_decoder_pre = ``\start finish dst src opc base_op hi d write_start size s G tn.
   opc = MLOAD /\ fn_has_code start finish fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce start /\ (?H. V H) /\
+  local_ptrs_reserved ce start /\ (?H. V H) /\
   w2n input_word+LENGTH input_bytes < dimword (:256) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -373,11 +374,16 @@ Proof
     (pure_rewrite_tac [pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY] >>
      rpt strip_tac >> gvs[] >>
      simp[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `?H. V H` strip_assume_tac >>
+     qpat_assum `!H. V H ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+       (qspec_then `H` (mp_tac o CONJUNCT1 o UNDISCH)) >>
+     disch_then (ACCEPT_TAC o MATCH_MP
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `allocas_from lo s` by
     (qpat_x_assum `?H. V H` strip_assume_tac >>
      qpat_x_assum `!H. V H ==> _` drule >>
      simp[bodyPtrDefsTheory.ghost_inv_at_def] >> metis_tac[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_decode_complex_header_run >> strip_tac
   >- (disj1_tac >> drule_all abi_decode_scalar_guard_abort_joint >>
       disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>

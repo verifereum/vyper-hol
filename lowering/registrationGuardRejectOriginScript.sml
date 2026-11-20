@@ -15,7 +15,7 @@ Theorem registration_ptr_guard_reject_origin:
   (!x. src = Var x ==> not_fresh_at sa x) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ fresh_vars_wrt sa s /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts
   ==>
@@ -73,6 +73,14 @@ Proof
      qexists_tac `bb` >> simp[Abbr `s1`, Abbr `s2`, Abbr `t1`, Abbr `t2`, update_var_def] >>
      first_x_assum (fn th => map_every (fn n => mp_tac (Q.SPEC n th))
        [`0`, `1`, `2`]) >> simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, ADD1]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s1`, Abbr `t1`, allocas_below_fmp_def, update_var_def] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[NoAsms, Abbr `s2`, Abbr `t2`, allocas_below_fmp_def, update_var_def] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   suspend "paths"
 QED
 
@@ -101,7 +109,10 @@ Resume registration_ptr_guard_reject_origin[paths]:
      irule scalar_ptr_inst_ok_lo >>
      gvs[mk_inst_def, scalar_shape_def, scalar_binary_def,
        scalar_unary_def, allocas_from_def, op_taint_def, op_prov_def] >>
-     metis_tac[]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     qpat_assum `!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==> lo <= b` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   suspend "exit"
 QED
 
@@ -125,7 +136,7 @@ Resume registration_ptr_guard_reject_origin[exit]:
      irule scalar_ptr_inst_ok_lo >>
      gvs[scalar_shape_def, scalar_binary_def, scalar_unary_def,
        allocas_from_def, Abbr `s2`, Abbr `t2`, Abbr `s1`, Abbr `t1`, update_var_def,
-       op_prov_def, op_taint_def] >> metis_tac[]) >>
+       op_prov_def, op_taint_def, allocas_below_fmp_def] >> metis_tac[]) >>
   qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) _ _` mp_tac >>
   qpat_x_assum `gas_origin_ptr_path _ (s1,G1,tn1) _ _` mp_tac >>
   qpat_x_assum `gas_origin_ptr_path _ (s2,G2,tn2) _ _` mp_tac >>

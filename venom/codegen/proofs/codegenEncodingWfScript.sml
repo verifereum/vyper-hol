@@ -258,6 +258,28 @@ QED
 
 (* ===== Main theorem ===== *)
 
+Theorem codegen_assembly_no_push_ofst:
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit ==>
+  !lbl d. ~MEM (AsmPushOfst lbl d) prog
+Proof
+  strip_tac >>
+  `?cp. generate_context_plan unit.cu_context = SOME cp /\
+        prog = execute_plan cp.cp_initial_fmp (context_plan_ops cp) ++
+               data_segment_asm unit.cu_data_segment ++
+               [AsmDataHeader "code_end"]` by
+    (qpat_x_assum `codegen_assembly _ _ = _` mp_tac >>
+     simp[codegen_assembly_def, AllCaseEqs()] >> rw[] >> simp[]) >>
+  `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> OFFSET) (fn_insts fn))
+     unit.cu_context.ctx_functions` by
+    (fs[unit_shape_ok_def, fn_shape_ok_def, inst_shape_ok_def, EVERY_MEM] >>
+     rpt strip_tac >> res_tac >> fs[]) >>
+  drule_all generate_context_plan_no_push_ofst >> strip_tac >>
+  drule execute_plan_no_push_ofst >>
+  disch_then (qspec_then `cp.cp_initial_fmp` assume_tac) >>
+  qpat_x_assum `prog = _` SUBST1_TAC >>
+  simp[data_segment_no_push_ofst]
+QED
+
 Theorem codegen_assembly_asm_encoding_wf:
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit ==>
   asm_encoding_wf prog
@@ -272,15 +294,7 @@ Proof
     (qpat_x_assum `codegen_assembly _ _ = _` mp_tac >>
      simp[codegen_assembly_def, AllCaseEqs()] >> rw[] >> simp[]) >>
   `!lbl d. ~MEM (AsmPushOfst lbl d) prog` by
-    (`EVERY (\fn. EVERY (\inst. inst.inst_opcode <> OFFSET) (fn_insts fn))
-        unit.cu_context.ctx_functions` by
-       (fs[unit_shape_ok_def, fn_shape_ok_def, inst_shape_ok_def, EVERY_MEM] >>
-        rpt strip_tac >> res_tac >> fs[]) >>
-     drule_all generate_context_plan_no_push_ofst >> strip_tac >>
-     drule execute_plan_no_push_ofst >>
-     disch_then (qspec_then `cp.cp_initial_fmp` assume_tac) >>
-     qpat_x_assum `prog = _` SUBST1_TAC >>
-     simp[data_segment_no_push_ofst]) >>
+    metis_tac[codegen_assembly_no_push_ofst] >>
   qpat_x_assum `prog = _` kall_tac >>
   `EVERY (\inst. !name. inst = AsmOp name ==>
                         IS_SOME (evm_opcode_byte name)) prog /\

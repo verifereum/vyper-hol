@@ -5,7 +5,7 @@ Ancestors
   asmFinalizerPrefixPeepComm
 
 (* The ordered walk is parametric in its contextual semantic relation. *)
-Theorem peephole_walk_relation[local]:
+Theorem peephole_walk_relation:
   !R.
     (!p. R p p) /\
     (!p q r. R p q /\ R q r ==> R p r) /\

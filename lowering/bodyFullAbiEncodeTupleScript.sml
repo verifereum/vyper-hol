@@ -415,6 +415,7 @@ Resume abi_encode_tuple_staging_full_with_frame[step]:
    (!x. not_fresh_at origin x ==> not_fresh_at st x)` by metis_tac[] >>
   `ptr_covers r1 r2 root r0 capacity` by
     (qpat_x_assum `capacity = _` (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r0` by simp[] >>
   drule abi_encode_tuple_slot_origin_with_frame >>
   disch_then (qspecl_then [`EL (LENGTH done) tvs`, `EL (LENGTH done) vs`] mp_tac) >>
   disch_then (drule_at (Pat `abi_tuple_input _ _ _ _ _ _`)) >>

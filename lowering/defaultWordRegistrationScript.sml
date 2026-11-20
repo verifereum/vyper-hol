@@ -5,6 +5,7 @@ Ancestors defaultWordRegistrationPrelude defaultWordDecodeExec defaultWordDecode
   moduleLowering compileEnv words finite_map pred_set abiEncoderWindowLookup
   abiDecoderClampedWord abiDecoderClamp emitHelper emitHelperProps list rich_list
   abiEncoder exprLoweringProps loweringStateRelDefs venomInst
+  decoderOriginAllocationFrame[qualified,ignore_grammar]
 
 Theorem default_word_decode_output_bounds[local]:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -39,7 +40,9 @@ Theorem default_word_registration_step_footprint:
   alloca_inv s /\ alloca_frontier_inv_from k ctx fn site s /\
   fn_inst_ids_distinct fn /\ k + unit_alloca_budget ctx < dimword (:256) /\
   FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   alloca_history fn s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -92,6 +95,15 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
      i.inst_opcode <> GAS) (emitted_insts first decoded)` by
     (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ready` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> _ /\ _` (drule_then strip_assume_tac) >>
+     `ready.vs_fmp = s.vs_fmp` by
+       (qpat_assum `ready = _` (fn th => once_rewrite_tac [th]) >> simp[]) >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK ready,H,u)`
+       (qspecl_then [`D`, `explicit`] assume_tac) >>
+     drule_all decoderOriginAllocationFrameTheory.decoder_origin_path_allocas_below_fmp >>
+     simp[]) >>
   drule_all default_word_decode_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qabbrev_tac `out = t with vs_inst_idx := LENGTH decoded.cs_current_insts` >>
@@ -244,7 +256,10 @@ Theorem default_word_registration_step:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u out) ==>
        !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all default_word_registration_step_footprint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
+  drule_all default_word_registration_step_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl [`out`,`H`,`u`,`p`] >> simp[]
 QED

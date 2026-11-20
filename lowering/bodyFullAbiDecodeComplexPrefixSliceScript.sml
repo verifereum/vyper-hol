@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeComplexPrefixSlice
 Ancestors
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   exprSimWordBuiltins[qualified,ignore_grammar]
   bodyPtrBopScalarOutcome
   bodyFullAbiDecodeInterface bodyFullAbiDecodeFiniteGuard
@@ -81,6 +82,12 @@ Resume abi_decode_complex_prefix_observed_slice[reject]:
     (pure_rewrite_tac [pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY] >>
      rpt strip_tac >> gvs[] >>
      simp[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `?H. V H` strip_assume_tac >>
+     qpat_assum `!H. V H ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+       (qspec_then `H` (mp_tac o CONJUNCT1 o UNDISCH)) >>
+     disch_then (ACCEPT_TAC o MATCH_MP
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `allocas_from lo s` by
     (qpat_x_assum `?H. V H` strip_assume_tac >>
      qpat_assum `!H. V H ==> stmt_state_rel H _ _ _ _ _ _ /\ _`

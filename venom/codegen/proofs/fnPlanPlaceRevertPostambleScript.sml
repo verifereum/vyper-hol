@@ -1,7 +1,7 @@
 Theory fnPlanPlaceRevertPostamble
 Ancestors
   codegen asmSem symbolResolve planExec stackPlanGen list
-  asmToBytecodeProofs codegenEncodingWf words stackOpSim
+  asmToBytecodeProofs codegenEncodingWf finite_map words stackOpSim
 
 (* Code labels retain their offsets; data-header offsets may relocate. *)
 Definition code_labels_agree_def:
@@ -97,4 +97,27 @@ Proof
   qexists `data_segment_asm unit.cu_data_segment ++ [AsmDataHeader "code_end"]` >>
   simp[context_plan_ops_def, execute_plan_append, APPEND_ASSOC] >>
   simp[revert_postamble_def, execute_plan_def, exec_stack_op_def]
+QED
+
+Definition lo_reloc_def:
+  lo_reloc prog prog' =
+    FUNION (DRESTRICT (SND (compute_label_offsets prog))
+                      {l | MEM (AsmLabel l) prog})
+           (DRESTRICT (SND (compute_label_offsets prog'))
+                      {l | ~MEM (AsmLabel l) prog})
+End
+
+Theorem lo_reloc_code_labels_agree:
+  !prog prog'. code_labels_agree prog (lo_reloc prog prog')
+Proof
+  rw[code_labels_agree_def, lo_reloc_def, FLOOKUP_FUNION, FLOOKUP_DRESTRICT] >>
+  Cases_on `FLOOKUP (SND (compute_label_offsets prog)) l` >> simp[]
+QED
+
+Theorem lo_reloc_refl:
+  !prog. lo_reloc prog prog = SND (compute_label_offsets prog)
+Proof
+  rw[fmap_eq_flookup, lo_reloc_def, FLOOKUP_FUNION, FLOOKUP_DRESTRICT] >>
+  Cases_on `MEM (AsmLabel x) prog` >> simp[] >>
+  Cases_on `FLOOKUP (SND (compute_label_offsets prog)) x` >> simp[]
 QED

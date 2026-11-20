@@ -13,7 +13,7 @@ Theorem default_word_decode_ghost_sequence:
   run_inst_seq (emitted_insts sa sb) s = OK actual /\
   ptr_covers G tn p s 32 /\ op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?H u.
@@ -28,7 +28,7 @@ Theorem default_word_decode_ghost_sequence:
        (actual with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_word_overwrite_prefix_uniform_seq >>
+  strip_tac >> drule_all calldata_word_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`G'`, `tn'`] >> gvs[]
 QED
@@ -45,7 +45,7 @@ Theorem default_word_decode_origin:
     i.inst_opcode <> GAS) (emitted_insts sa sb) /\
   ptr_covers G tn p s 32 /\ op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?H u.

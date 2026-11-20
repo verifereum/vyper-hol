@@ -165,7 +165,7 @@ Theorem array_payload_guard_lifts[local]:
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))))
 Proof
   strip_tac
-  >- (disj1_tac >> drule_all member_scalar_revert_observed >>
+  >- (disj1_tac >> `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >> drule_all member_scalar_revert_observed >>
       disch_then (qspecl_then [`explicit`,`PG`] ACCEPT_TAC)) >>
   disj2_tac >> qexists_tac `t` >> asm_rewrite_tac[] >>
   drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_runtime_frame >>

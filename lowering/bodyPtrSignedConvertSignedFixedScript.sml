@@ -51,7 +51,7 @@ Theorem signed_selector_ptr_inst_ok:
   op_prov G x = NONE /\ op_prov G y = NONE /\
   op_taint tn y = {} /\
   (eval_operand y s = SOME 0w \/ eval_operand y s = SOME 1w) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id MUL [x;y] [z]) s = OK u ==>
   ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MUL [x;y] [z]) s
 Proof
@@ -62,7 +62,7 @@ Proof
   drule_all convert_scalar_run_shape >> strip_tac >>
   simp[ptr_inst_ok_def, access_ok_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, allocas_from_def, mk_inst_def] >>
-  simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def] >>
+  simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def, allocas_below_fmp_def] >>
   rpt strip_tac >> gvs[op_prov_def, FLOOKUP_DEF] >> metis_tac[]
 QED
 
@@ -133,7 +133,7 @@ Proof
 QED
 
 Theorem signed_select_uniform_checks:
-  ALL_DISTINCT [len;dp;data;empty;nonempty;selected] /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [len;dp;data;empty;nonempty;selected] /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var len s = SOME nv /\ lookup_var dp s = SOME a /\
   ptr_covers G tn dp s 32 /\ op_taint tn (Var len) = {} /\
   op_prov G (Var len) = NONE /\
@@ -152,6 +152,18 @@ Proof
   strip_tac >> drule_all signed_select_run_endpoint >> strip_tac >>
   drule_all signed_select_ghost_chain >> strip_tac >>
   gvs[] >> fs[op_taint_def] >> gen_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := q)) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp
+     (update_var data (mload (w2n a) s) s with vs_inst_idx := SUC q)) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp
+     (update_var empty (bool_to_word (nv = 0w))
+        (update_var data (mload (w2n a) s) s) with vs_inst_idx := SUC (SUC q))) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp
+     (update_var nonempty (bool_to_word (nv <> 0w))
+        (update_var empty (bool_to_word (nv = 0w))
+           (update_var data (mload (w2n a) s) s)) with vs_inst_idx := SUC (SUC (SUC q))))` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[allocas_below_fmp_def, update_var_def, NoAsms] >> metis_tac[]) >>
   simp[inst_seq_ptr_def, unsigned_step_cursor, is_terminator_def, exec_result_map_def] >>
   conj_tac
   >- (irule ptr_inst_ok_mload >> simp[eval_operand_def]) >>
@@ -181,7 +193,7 @@ Proof
 QED
 
 Theorem signed_select_fixed_frame:
-  ALL_DISTINCT [len;dp;data;empty;nonempty;selected] /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [len;dp;data;empty;nonempty;selected] /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var len s = SOME (n2w n) /\ n <= 32 /\ lookup_var dp s = SOME a /\
   ptr_covers G tn dp s 32 /\ op_prov G (Var len) = NONE /\
   op_taint tn (Var len) = {} /\
@@ -221,7 +233,7 @@ QED
 
 Theorem signed_shift_ptr_inst_ok:
   op_prov G bits = NONE /\ op_prov G data = NONE /\
-  op_taint tn bits = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn bits = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id SAR [bits;data] [out]) s = OK u ==>
   ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id SAR [bits;data] [out]) s
 Proof
@@ -231,7 +243,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
        source_memory_write_ranges_def, source_memory_read_ranges_def,
        allocas_from_def] >>
-  simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def] >>
+  simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def, allocas_below_fmp_def] >>
   rpt strip_tac >> gvs[op_prov_def, FLOOKUP_DEF] >> metis_tac[]
 QED
 
@@ -297,7 +309,7 @@ Proof
 QED
 
 Theorem signed_normalize_uniform_checks:
-  ALL_DISTINCT [len;data;sub;bits;dst] /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [len;data;sub;bits;dst] /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var len s = SOME nv /\ lookup_var data s = SOME dw /\
   op_prov G (Var len) = NONE /\ op_prov G (Var data) = NONE /\
   op_taint tn (Var len) = {} /\
@@ -318,6 +330,14 @@ Proof
   strip_tac >>
   drule_all signed_normalize_ghost_chain >> disch_then (qspec_then `PG` strip_assume_tac) >>
   gvs[] >> gen_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := q)) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp
+     (update_var sub (32w-nv) s with vs_inst_idx := SUC q)) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp
+     (update_var bits ((32w-nv)*8w) (update_var sub (32w-nv) s)
+        with vs_inst_idx := SUC (SUC q)))` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[allocas_below_fmp_def, update_var_def, NoAsms] >> metis_tac[]) >>
   simp[inst_seq_ptr_def, unsigned_step_cursor, is_terminator_def,
        exec_result_map_def] >>
   conj_tac
@@ -381,7 +401,7 @@ Proof
 QED
 
 Theorem signed_normalize_fixed_frame:
-  ALL_DISTINCT [len;data;sub;bits;dst] /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [len;data;sub;bits;dst] /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var len s = SOME (n2w n) /\ n <= 32 /\
   op_prov G (Var len) = NONE /\ op_prov G (Var data) = NONE /\
   op_taint tn (Var len) = {} /\

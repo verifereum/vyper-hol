@@ -20,8 +20,25 @@ val window = ``\pre pat repl post D.
           (a.sym_base.as_pc <= LENGTH pre \/ LENGTH pre + LENGTH pat <= a.sym_base.as_pc) /\
           (e = 0 ==> LENGTH pre + LENGTH pat <= a.sym_base.as_pc))``;
 
-Theorem dup1_swap1_bounded_window:
-  !pre post. ^window pre [AsmOp "DUP1"; AsmOp "SWAP1"] [AsmOp "DUP1"] post 2
+val window_with_target_bound = ``\pre pat repl post D E.
+  !env u. u.sym_base.as_pc = LENGTH pre /\ u.sym_base.as_stack = [] /\
+    sym_state_labels_in (asm_label_refs (pre ++ pat ++ post)) u ==>
+    ?d. 0 < d /\ d <= D /\
+      (!i a. i < d /\ sym_steps (pre ++ pat ++ post) env i u = SymOK a ==>
+        !op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
+                 "CREATE2"} /\
+          a.sym_base.as_pc < LENGTH (pre ++ pat ++ post) /\
+          EL a.sym_base.as_pc (pre ++ pat ++ post) = AsmOp op ==>
+          i = 0 /\ repl <> [] /\ HD repl = HD pat) /\
+      (!a. sym_steps (pre ++ pat ++ post) env d u = SymOK a ==>
+        ?e. e <= E /\ sym_steps (pre ++ repl ++ post) env e u =
+          SymOK (sym_with_pc
+            (splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl) a.sym_base.as_pc) a) /\
+          (a.sym_base.as_pc <= LENGTH pre \/ LENGTH pre + LENGTH pat <= a.sym_base.as_pc) /\
+          (e = 0 ==> LENGTH pre + LENGTH pat <= a.sym_base.as_pc))``;
+
+Theorem dup1_swap1_bounded_window_target_bound:
+  !pre post. ^window_with_target_bound pre [AsmOp "DUP1"; AsmOp "SWAP1"] [AsmOp "DUP1"] post 2 1
 Proof
   BETA_TAC >> rpt gen_tac >> strip_tac >> qexists_tac `2` >> simp[] >>
   conj_tac
@@ -38,8 +55,22 @@ Proof
       asm_state_component_equality]
 QED
 
-Theorem dup1_swap1_pop_bounded_window:
-  !pre post. ^window pre [AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"] [] post 3
+Theorem dup1_swap1_bounded_window:
+  !pre post. ^window pre [AsmOp "DUP1"; AsmOp "SWAP1"] [AsmOp "DUP1"] post 2
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  mp_tac (Q.SPECL [`pre`, `post`] dup1_swap1_bounded_window_target_bound) >>
+  BETA_TAC >> simp[] >>
+  disch_then (qspecl_then [`env`, `u`] mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `d` strip_assume_tac) >>
+  qexists_tac `d` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> disch_then (qx_choose_then `e` strip_assume_tac) >>
+  qexists_tac `e` >> asm_rewrite_tac[]
+QED
+
+Theorem dup1_swap1_pop_bounded_window_target_bound:
+  !pre post. ^window_with_target_bound pre [AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"] [] post 3 0
 Proof
   BETA_TAC >> rpt gen_tac >> strip_tac >> qexists_tac `3` >> simp[] >>
   conj_tac
@@ -48,7 +79,7 @@ Proof
       gvs[sym_steps_pos, sym_steps_def, EL_APPEND_EQN, sym_step_def, sym_step_op_def,
           dup_table_def, swap_table_def, sym_dup_def, sym_swap_def, sym_set_stack_def,
           asm_next_def, LUPDATE_compute, AllCaseEqs()]) >>
-  gen_tac >> strip_tac >> qexists_tac `0` >>
+  gen_tac >> strip_tac >> TRY (qexists_tac `0`) >>
   Cases_on `u.sym_stack` >>
   gvs[sym_steps_pos, sym_steps_def, EL_APPEND_EQN, sym_step_def, sym_step_op_def,
       dup_table_def, swap_table_def, sym_dup_def, sym_swap_def,
@@ -57,9 +88,22 @@ Proof
       asm_state_component_equality]
 QED
 
-Theorem dup1_swap2_swap1_bounded_window:
-  !pre post. ^window pre [AsmOp "DUP1"; AsmOp "SWAP2"; AsmOp "SWAP1"]
-    [AsmOp "SWAP1"; AsmOp "DUP2"] post 3
+Theorem dup1_swap1_pop_bounded_window:
+  !pre post. ^window pre [AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"] [] post 3
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  mp_tac (Q.SPECL [`pre`, `post`] dup1_swap1_pop_bounded_window_target_bound) >>
+  BETA_TAC >> simp[] >>
+  disch_then (qspecl_then [`env`, `u`] mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `d` strip_assume_tac) >>
+  qexists_tac `d` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >> qexists_tac `0` >> asm_rewrite_tac[]
+QED
+
+Theorem dup1_swap2_swap1_bounded_window_target_bound:
+  !pre post. ^window_with_target_bound pre [AsmOp "DUP1"; AsmOp "SWAP2"; AsmOp "SWAP1"]
+    [AsmOp "SWAP1"; AsmOp "DUP2"] post 3 2
 Proof
   BETA_TAC >> rpt gen_tac >> strip_tac >> qexists_tac `3` >> simp[] >>
   conj_tac
@@ -80,9 +124,24 @@ Proof
       asm_state_component_equality]
 QED
 
-Theorem swap1_pop_pop_bounded_window:
-  !pre post. ^window pre [AsmOp "SWAP1"; AsmOp "POP"; AsmOp "POP"]
-    [AsmOp "POP"; AsmOp "POP"] post 3
+Theorem dup1_swap2_swap1_bounded_window:
+  !pre post. ^window pre [AsmOp "DUP1"; AsmOp "SWAP2"; AsmOp "SWAP1"]
+    [AsmOp "SWAP1"; AsmOp "DUP2"] post 3
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  mp_tac (Q.SPECL [`pre`, `post`] dup1_swap2_swap1_bounded_window_target_bound) >>
+  BETA_TAC >> simp[] >>
+  disch_then (qspecl_then [`env`, `u`] mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `d` strip_assume_tac) >>
+  qexists_tac `d` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> disch_then (qx_choose_then `e` strip_assume_tac) >>
+  qexists_tac `e` >> asm_rewrite_tac[]
+QED
+
+Theorem swap1_pop_pop_bounded_window_target_bound:
+  !pre post. ^window_with_target_bound pre [AsmOp "SWAP1"; AsmOp "POP"; AsmOp "POP"]
+    [AsmOp "POP"; AsmOp "POP"] post 3 2
 Proof
   BETA_TAC >> rpt gen_tac >> strip_tac >> qexists_tac `3` >> simp[] >>
   conj_tac
@@ -101,4 +160,19 @@ Proof
       sym_set_stack_def, asm_next_def, LUPDATE_compute,
       splice_pc_def, sym_with_pc_def, sym_state_component_equality,
       asm_state_component_equality]
+QED
+
+Theorem swap1_pop_pop_bounded_window:
+  !pre post. ^window pre [AsmOp "SWAP1"; AsmOp "POP"; AsmOp "POP"]
+    [AsmOp "POP"; AsmOp "POP"] post 3
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  mp_tac (Q.SPECL [`pre`, `post`] swap1_pop_pop_bounded_window_target_bound) >>
+  BETA_TAC >> simp[] >>
+  disch_then (qspecl_then [`env`, `u`] mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `d` strip_assume_tac) >>
+  qexists_tac `d` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> disch_then (qx_choose_then `e` strip_assume_tac) >>
+  qexists_tac `e` >> asm_rewrite_tac[]
 QED
