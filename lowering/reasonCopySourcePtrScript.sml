@@ -2,7 +2,7 @@
    remain arbitrary; only the length/header word is required clean. *)
 Theory reasonCopySourcePtr
 Ancestors
-  reasonRepresentationPtr immutableCopyWordsPtr storageCopyLoopPtr
+  reasonRepresentationPtr immutableCopyWordsPtr
   bodyPtrDefs ptrDiscipline exprSimProps compileEnv valueEncoding
   venomState venomExecSemantics words arithmetic pred_set vyperStorage vyperValue valueEncodingProps
 

@@ -2,7 +2,7 @@ Theory ctorAbiActualBytes
 Ancestors
   ctorAbiActualReentry ctorAbiActualWorld ctorAbiActualNarrow
   abiDecoderBytes abiDecoderBytesTyped abiDecoderBytesFrame abiCanonicalBytes
-  abiDecoderString abiDecoderBytestring abiDecoderBytestringCases vyperABI vyperTyping
+  abiDecoderString abiDecoderBytestringCases vyperABI vyperTyping
   abiDecoderReentryPointer abiDecoderReentry abiDecoderVarExtend
   abiDecoderContract abiDecoderTypedContract abiEncoder compileEnv abiEncoderRegisteredEffect
   valueEncoding valueEncodingDefs valueEncodingProps vyperValue contractABI venomState

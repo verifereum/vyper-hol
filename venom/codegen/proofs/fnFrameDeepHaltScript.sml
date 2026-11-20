@@ -12,7 +12,7 @@
 Theory fnFrameDeepHalt
 Ancestors
   planEmissionProps asmRunBounded arithmetic
-  deepResidualBudget deepResidualSim fnPlanPrefix fnFrameTerminal genFrameSim frameRel contextCodegenRel
+  deepResidualBudget deepResidualSim fnPlanPrefix genFrameSim frameRel contextCodegenRel
   codegenRel blockSimHelpers unitShapeDefs genBlockSim mixedPrefixSim
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs

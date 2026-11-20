@@ -2,7 +2,7 @@
    never by an envelope inferred from instruction ids. *)
 Theory abiMalformedSiteFrame
 Ancestors
-  abiMalformedIndexState abiMalformedResources abiMalformedCopyState
+  abiMalformedCopyState
   abiMalformedPruneState abiDecoderReentry abiDecoderIndexInit
   exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs valueCopy valueEncoding valueEncodingDefs
   venomState venomMemDefs venomMemProps venomExecSemantics finite_map

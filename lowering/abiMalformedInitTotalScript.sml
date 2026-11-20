@@ -5,7 +5,7 @@ Ancestors
   ctorAbiActualAlloc abiDecoderAbortReentry abiDecoderVarExtend rich_list
   abiDecoderBytesBound abiDecoderRange abiEncoder
   abiMalformedMemberSetup fragExec abiDecoderVarSequence
-  abiMalformedBulkArray abiMalformedConstructorContract abiMalformedIndexState
+  abiMalformedBulkArray abiMalformedConstructorContract
   abiDecoderArrayLoopInit abiDecoderArrayInitExec abiDecoderArrayInitReentry
   abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderIndexInit
   abiDecoderArrayHeader abiDecoderGuards abiDecoderContract abiDecoderComposition

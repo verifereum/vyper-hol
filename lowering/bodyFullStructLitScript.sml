@@ -10,7 +10,7 @@ Ancestors
   bodyFullIfExpReach[qualified,ignore_grammar] bodyInvNoDalloca[qualified,ignore_grammar]
   bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose gasContext exprSimDefs
   gasShadowCompile bodyFullStructLitAdd bodyFullStructLitInputs
-  bodyFullStructLitCopy bodyFullStructLitBytes bodyFullStructLitZeroStore
+  bodyFullStructLitBytes bodyFullStructLitZeroStore
   bodyFullStructLitFrames bodyPtrDefs bodyPtrMakeArrayEmission
   bodyFullAllocaFresh bodyFullAllocGeneric bodyMemoryDefs bodyFullPathHistory
   exprSimAggregateLayout exprSimAggregateSource exprSimHyps exprSimHypsDefs

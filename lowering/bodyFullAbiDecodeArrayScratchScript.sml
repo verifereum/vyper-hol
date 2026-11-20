@@ -7,7 +7,7 @@ Ancestors
   calldataDynInit allocationPtr venomMemProps allocaFootprint
   bodyFullAllocaFresh bodyFullUnwrapRun fragExecMem fragGasSeqPtr ghostPcTransportPtr logInstSeqPtr
   exprPtrUnwrapAllocation exprPtrUnwrapCopyEdges
-  assignBasePtrLiteralGhost loweringHalt exprLoweringProps
+  loweringHalt exprLoweringProps
   stateRelProj finite_map words list pair arithmetic
 
 (* Separate the actual allocation site, not the allocation frontier.  The

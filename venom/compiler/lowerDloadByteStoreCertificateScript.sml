@@ -1,6 +1,6 @@
 Theory lowerDloadByteStoreCertificate
 Ancestors
-  lowerDloadByteStoreProduction lowerDloadStoreCertificate lowerDloadEffectTransport
+  lowerDloadByteStoreProduction lowerDloadEffectTransport
   lowerDloadReachableDiscipline lowerDloadProvenanceSupport
   lowerDloadAccessClassification lowerDloadStoreProducer
   lowerDloadCertificateProbe lowerDloadMaskBounds lowerDloadFrameCertificate

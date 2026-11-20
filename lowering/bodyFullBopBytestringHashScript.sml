@@ -2,7 +2,7 @@ Theory bodyFullBopBytestringHash
 Ancestors
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodySimFull bodyFullGhostFrame bodyPtrBopTypedSource bodyPtrBopHashRun
-  bodyPtrBopHashSemantic bodyPtrBopHashCompile bodyPtrBopHashEndpoint bodyPtrBopHashFootprint
+  bodyPtrBopHashSemantic bodyPtrBopHashCompile bodyPtrBopHashFootprint
   bodyPtrBopHashSuffix bodyPtrBopHashFrame bodyMemBopHeldHash
   bodyPtrIfExpBytesFrame abiEncodeOwnership venomInst loweringStateRelDefs
   externalEntryShape fragExec fragGasCopyLoop fragGasSeqPtr gasOutcomeFullCompose

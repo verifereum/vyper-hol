@@ -1,6 +1,6 @@
 (* Robust value boundary for a scalar write to an existing local. *)
 Theory assignBasePtrLocalStore
-Ancestors assignBasePtrWordStore assignBasePtrLiteralGhost stmtSimAssignStore
+Ancestors assignBasePtrWordStore ghostPcTransportPtr[qualified] exprPtrUnwrapFrames[qualified] stmtSimAssignStore
   robustCopyTransportPtr typedCopyPtr bodyPtrDefs valueEncodingProofs
   valueEncodingProps ptrDiscipline venomMemProofs venomState venomInst
   pred_set words list exprSimMemoryTransport exprLoweringProps compileEnv

@@ -1,6 +1,6 @@
 Theory dftGasInvBlockTrace
 Ancestors
-  dftGasInvFixedTrace dftGasInvResidualTrace dftGasInvBoundaryState
+  dftGasInvFixedTrace dftGasInvResidualTrace
   dftGasOracleDefs dftRunRel opcodeClass venomExecSemantics venomInst
   venomState list rich_list sorting
 
