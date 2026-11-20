@@ -11,8 +11,8 @@ keyword operands `value=`, `gas=`, `default_return_value=` and
 including the six restored by direct request encoding. The native runner
 tracks expected bounded ABI decoder differences separately.
 The `m10c_iface_storage_main` witness covers first-occurrence DFT dependency
-ordering (issue #574). Its exact bytecode comparison is pending the bounded
-ABI decoder port (issue #3028).
+ordering (issue #574). The native runner records its
+[bounded ABI decoder difference](../pending-bounded-decode-guards.md).
 The existing 101-fixture corpus is unchanged.
 
 `oracle/` contains independently generated annotated AST/layout JSON and
