@@ -456,11 +456,11 @@ Finalise abi_decode_dyn_loop_word_frame_split_entry
 Theorem abi_decode_dyn_loop_word_frame_from_body:
   ^runtime_loop_word_frame_statement
 Proof
-  let val norm = REDEPTH_CONV BETA_CONV THENC simpLib.SIMP_CONV bool_ss [] in
-    CONV_TAC norm >> qx_gen_tac `keep_word` >> disch_tac >>
-    qspec_then `keep_word` (mp_tac o CONV_RULE norm)
-      abi_decode_dyn_loop_word_frame_split_entry
-  end >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  simp_tac bool_ss [] >> qx_gen_tac `keep_word` >> disch_tac >>
+  qspec_then `keep_word` (mp_tac o CONV_RULE (REDEPTH_CONV BETA_CONV))
+    abi_decode_dyn_loop_word_frame_split_entry >>
+  CONV_TAC (LAND_CONV (simpLib.SIMP_CONV bool_ss [])) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   rpt (ho_match_mp_tac InductiveDefinitionContextTheory.MONO_FORALL >> gen_tac) >>
   (match_mp_tac boolTheory.MONO_IMP >> conj_tac >- (disch_then ACCEPT_TAC)) >>

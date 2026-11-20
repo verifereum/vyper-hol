@@ -101,10 +101,13 @@ Theorem type_builtin_error_exclusion[local]:
   !cx tb typ tys vs. evaluate_type_builtin cx tb typ tys vs <>
     INR ^missing_reading
 Proof
-  rpt gen_tac >> Cases_on `tb` >>
-  simp[type_builtin_eq, conversion_delegate_error_exclusions,
-       oneline evaluate_max_value_def, oneline evaluate_min_value_def,
-       abi_error_exclusions, evaluate_abi_encode_bytes_def, AllCaseEqs()]
+  rpt gen_tac >> Cases_on `tb`
+  >>> SPLIT_LT 6 (ALLGOALS (simp[type_builtin_eq,
+        conversion_delegate_error_exclusions, oneline evaluate_max_value_def,
+        oneline evaluate_min_value_def, AllCaseEqs()]), ALL_LT)
+  >>> SPLIT_LT 1 (ALLGOALS (simp[type_builtin_eq, abi_error_exclusions,
+        AllCaseEqs()]), ALL_LT) >>
+  simp[type_builtin_eq, evaluate_abi_encode_bytes_def, AllCaseEqs()]
 QED
 
 (* Pure reads and mutations of places also feed lift_sum. *)

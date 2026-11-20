@@ -141,12 +141,13 @@ drule_all hash_sha256_source_failure >> strip_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]
 ) g;
 
-fun sha_memory_success_endpoint_tac g = (
-pop_assum strip_assume_tac >>
-  `ghost_inv_at (DF (storage_trace_horizon mid.storage_trace)) lo d cenv cx mid G1 tn1 s` by
-    metis_tac[] >>
+fun sha_memory_success_setup_tac g = (
+  pop_assum strip_assume_tac >>
   drule_all sha_bytes_success_frame_at >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
+  disch_then (qspec_then `PG` strip_assume_tac)
+) g;
+
+fun sha_memory_success_horizons_tac g = (
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
     inst_seq_ptr (DF H) lo ctx func PG G1 tn1 (emitted_insts sm sn) s Gf tf /\
     ghost_inv_at (DF H) lo d cenv cx (SND (take_call_outcome NONE 2w bs NONE mid)) Gf tf t` by
@@ -154,8 +155,8 @@ pop_assum strip_assume_tac >>
      qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
        (fn family => qpat_assum `valid_horizon cx st0 H mid.storage_trace`
          (fn valid => strip_assume_tac (MATCH_MP (Q.SPEC `H` family) valid))) >>
-     `stmt_state_rel H ctx func cenv cx mid s` by
-       metis_tac[exprSimWordArgsTheory.expr_post_state] >>
+     qpat_assum `expr_post H ctx func cenv cx e es sa sm s0 mid _ _ s`
+       (assume_tac o MATCH_MP exprSimWordArgsTheory.expr_post_state) >>
      mp_tac (Q.INST [`D` |-> `DF H`, `H` |-> `H`, `lo` |-> `lo`,
        `ctx` |-> `ctx`, `fn` |-> `func`, `PG` |-> `PG`,
        `G` |-> `G1`, `tn` |-> `tn1`, `s` |-> `s`, `bb` |-> `bb`,
@@ -165,20 +166,27 @@ pop_assum strip_assume_tac >>
        `cenv` |-> `cenv`, `cx` |-> `cx`, `es` |-> `mid`,
        `bs` |-> `bs`, `outcome` |-> `outcome`, `rest` |-> `rest`]
        (SPEC_ALL sha_bytes_success_frame_at)) >>
-     (impl_tac >- simp[]) >>
+     (impl_tac >- asm_rewrite_tac[]) >>
      disch_then (qx_choosel_then [`u`, `G2`, `tn2`] strip_assume_tac) >>
      `u = t` by
        (qpat_assum `run_inst_seq (emitted_insts sm sn) s = OK u` mp_tac >>
         qpat_assum `run_inst_seq (emitted_insts sm sn) s = OK t`
           (fn th => once_rewrite_tac[th]) >> simp[]) >>
      qpat_x_assum `u = t` SUBST_ALL_TAC >>
-     `G2 = Gf /\ tn2 = tf` by
-       (qpat_assum `inst_seq_ptr (DF H) lo ctx func PG G1 tn1 _ s G2 tn2` mp_tac >>
-        qpat_assum `inst_seq_ptr (DF (storage_trace_horizon mid.storage_trace))
-          lo ctx func PG G1 tn1 _ s Gf tf` mp_tac >>
-        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[inst_seq_ptr_ghost_unique]) >>
-     gvs[ghost_inv_at_inst_idx, ghost_inv_at_def] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC)
+     qpat_assum `inst_seq_ptr (DF H) lo ctx func PG G1 tn1 _ s G2 tn2`
+       (fn current => qpat_assum
+         `inst_seq_ptr (DF (storage_trace_horizon mid.storage_trace))
+           lo ctx func PG G1 tn1 _ s Gf tf`
+         (strip_assume_tac o MATCH_MP inst_seq_ptr_ghost_unique o CONJ current)) >>
+     qpat_x_assum `G2 = Gf` SUBST_ALL_TAC >>
+     qpat_x_assum `tn2 = tf` SUBST_ALL_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `ghost_inv_at (DF H) lo d cenv cx (mid with outcomes := SOME rest)
+       Gf tf (t with vs_inst_idx := s.vs_inst_idx + 7)`
+       (mp_tac o REWRITE_RULE [ghost_inv_at_inst_idx]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[ghost_inv_at_def, vyperCallOutcomePropsTheory.take_call_outcome_preserved_fields] >>
+     strip_tac >> first_assum ACCEPT_TAC)
 ) g;
 
 fun sha_memory_success_frame_tac source_value g = (
@@ -705,7 +713,8 @@ Resume sha_vv_sim_full[dynamic_memory_abort]:
 QED
 
 Resume sha_vv_sim_full[string_memory_success]:
-  sha_memory_success_endpoint_tac >>
+  sha_memory_success_setup_tac >>
+  sha_memory_success_horizons_tac >>
   `precompile_input Sha256 [StringV str] = bs` by
     simp[precompile_input_def, Abbr `bs`] >>
   sha_memory_success_frame_tac ``StringV str`` >>
@@ -713,7 +722,8 @@ Resume sha_vv_sim_full[string_memory_success]:
 QED
 
 Resume sha_vv_sim_full[dynamic_memory_success]:
-  sha_memory_success_endpoint_tac >>
+  sha_memory_success_setup_tac >>
+  sha_memory_success_horizons_tac >>
   sha_memory_success_frame_tac ``BytesV bs`` >>
   sha_memory_success_post_tac
 QED

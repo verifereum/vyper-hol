@@ -204,7 +204,8 @@ Resume annassign_other_typed_full_execution[compose]:
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> rpt strip_tac >> Cases_on `res`
-  >- fs[Abbr `childR`, exprSimDefsTheory.expr_exit_def] >>
+  >- (qpat_x_assum `childR _ (INL _) _ _ _` mp_tac >>
+      simp[Abbr `childR`, exprSimDefsTheory.expr_exit_def, NoAsms]) >>
   fs[Abbr `childR`, stmt_exit_ptr_def, exprSimDefsTheory.halt_exit_def] >>
   gvs[stmtSimPropsTheory.expr_exit_INR_type])
 QED

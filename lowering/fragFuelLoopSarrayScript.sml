@@ -201,8 +201,11 @@ Proof
    sa.cs_next_var < si.cs_next_var /\ sa.cs_next_var < se.cs_next_var` by
     (gvs[] >> decide_tac) >>
   `cs_extends sa si` by
-    (simp[cs_extends_def] >>
-     qexists_tac `TAKE 2 si.cs_blocks` >> simp[]) >>
+    (pure_rewrite_tac[cs_extends_def] >>
+     qexists_tac `TAKE 2 si.cs_blocks` >>
+     qpat_assum `si = _` (fn si_eq =>
+       qpat_assum `sb = _` (fn sb_eq =>
+         qpat_assum `sc = _` (fn sc_eq => simp[si_eq, sb_eq, sc_eq, NoAsms])))) >>
   `cs_extends se sz` by
     (simp[cs_extends_def] >> qexists_tac `[HD sz.cs_blocks]` >> simp[]) >>
   conj_tac >- metis_tac[cs_extends_trans] >>

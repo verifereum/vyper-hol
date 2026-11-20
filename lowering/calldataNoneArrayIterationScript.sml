@@ -349,7 +349,13 @@ Proof
   rename1 `t.vs_current_bb = body_lbl` >>
   `!x. x IN protect ==> lookup_var x t = lookup_var x s /\
       FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)` by
-    metis_tac[] >>
+    (qx_gen_tac `x` >> disch_tac >>
+     qpat_assum `!x. ~MEM x [iv;cv;cmp;done] ==> lookup_var x t = _ /\ _`
+       (qspec_then `x` MATCH_MP_TAC) >>
+     qpat_assum `!x. x IN protect ==> not_fresh_at st x /\ _`
+       (qspec_then `x` (fn frame =>
+         qpat_assum `x IN protect`
+           (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o MATCH_MP frame)))) >>
   `t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_assum `entry_decoder_obs s t` mp_tac >> simp[NoAsms, entry_decoder_obs_def]) >>
   `eval_operand src t = SOME (n2w sb) /\ op_taint u src = {} /\ op_prov H src = NONE` by
@@ -390,8 +396,13 @@ Proof
     (qpat_assum `allocas_from lo s` (mp_tac o REWRITE_RULE[allocas_from_def]) >>
      asm_rewrite_tac[allocas_from_def]) >>
   `entry_decoder_obs s a /\ alloca_inv a /\ alloca_frontier_inv ctx fn site a` by
-    metis_tac[entry_decoder_obs_trans, calldata_alloca_inv_fields,
-              calldata_alloca_frontier_inv_fields] >>
+    (conj_tac
+     >- (irule entry_decoder_obs_trans >> qexists_tac `t` >> asm_rewrite_tac[]) >>
+     conj_tac
+     >- (mp_tac (Q.INST [`s` |-> `s`, `t` |-> `a`] calldata_alloca_inv_fields) >>
+         asm_rewrite_tac[]) >>
+     mp_tac (Q.INST [`s` |-> `s`, `t` |-> `a`] calldata_alloca_frontier_inv_fields) >>
+     asm_rewrite_tac[]) >>
   `lookup_var child a = SOME (n2w (d+32+j*type_memory_size tv)) /\
    abi_decoder_operand_live ready.cs_next_var (Var child)` by
     (qpat_x_assum `eval_operand (SND (SND ops)) a = _` mp_tac >>
@@ -438,7 +449,24 @@ Proof
        metis_tac[calldata_operand_live_not_fresh, eval_operand_def] >>
      metis_tac[]) >>
   `ptr_covers R tr q r 32 /\ lookup_var q r = SOME (n2w slot) /\
-   q <> nv /\ ptr_covers R tr root r cap` by metis_tac[ptr_covers_frame] >>
+   q <> nv /\ ptr_covers R tr root r cap` by
+    (qpat_assum `!x. x IN protect ==> lookup_var x r = _ /\ _`
+       (fn frame =>
+         qpat_assum `q IN protect`
+           (strip_assume_tac o MATCH_MP (Q.SPEC `q` frame)) >>
+         qpat_assum `root IN protect`
+           (strip_assume_tac o MATCH_MP (Q.SPEC `root` frame))) >>
+     conj_tac
+     >- (mp_tac (Q.INST [`p` |-> `q`, `n` |-> `32`, `H` |-> `R`, `u` |-> `tr`, `t` |-> `r`]
+            ptr_covers_frame) >> asm_rewrite_tac[]) >>
+     conj_tac >- asm_rewrite_tac[] >>
+     conj_tac
+     >- (qpat_assum `!x. x IN protect ==> not_fresh_at st x /\ _`
+           (qspec_then `q` (fn frame =>
+             qpat_assum `q IN protect` (strip_assume_tac o MATCH_MP frame))) >>
+         qpat_assum `q <> nv` ACCEPT_TAC) >>
+     mp_tac (Q.INST [`p` |-> `root`, `n` |-> `cap`, `H` |-> `R`, `u` |-> `tr`, `t` |-> `r`]
+       ptr_covers_frame) >> asm_rewrite_tac[]) >>
   `eval_operand (Var ix) r = SOME (n2w j) /\
    op_taint tr (Var ix) = {} /\ op_prov R (Var ix) = NONE` by
     (`abi_decoder_operand_live ready.cs_next_var (Var ix) /\

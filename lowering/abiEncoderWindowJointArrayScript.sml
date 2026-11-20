@@ -1737,7 +1737,7 @@ Proof
         conj_tac >-
           (qpat_assum `allocas_from lo hu` mp_tac >>
            POP_ASSUM_LIST (K ALL_TAC) >> simp[allocas_from_def]) >>
-        qexists_tac `0` >> simp[] >>
+        qexists_tac `0` >> simp_tac bool_ss [arithmeticTheory.ZERO_LESS_EQ] >>
         qpat_x_assum `ip = Var _` SUBST_ALL_TAC >>
         simp[Abbr `ai0`, wordLoadStorePtrTheory.ptr_inst_ok_mload]) >>
      `!D j. ptr_inst_ok D lo 0 ctx func ag1 at1 ai1
@@ -4907,8 +4907,7 @@ Proof
         rpt strip_tac >>
         `~(d+32+k*asz <= i /\ i < d+32+k*asz+32) /\
          ~(bd <= i /\ i < bd+32)` by decide_tac >>
-        full_simp_tac (srw_ss())
-          [IN_DIFF, IN_UNION, GSPECIFICATION, Excl "enc_def"]) >>
+        asm_rewrite_tac[GSYM DE_MORGAN_THM]) >>
      `!mem. mem_agree_outside bodytn.t_mem body_s.vs_memory mem ==>
        abi_encoder_window_input (AbiDynArray ei asz msz T)
          (Array NONE ty) (ListV avs) sb cap mem` by
