@@ -210,7 +210,8 @@ Theorem lower_vyper_runtime_unit_blueprint_raw_fmp:
           (\e. ?ty b s r ks es d.
                  e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d))
           dflts)) ==>
-    (!am tx vi. source_deployment_rel tops am tx /\
+    (!am tx vi. source_typing_ok tops am tx /\
+      source_deployment_rel tops am tx /\
       initial_venom_state_rel tops am tx vi /\
       vi.vs_fmp = vi.vs_initial_fmp /\
       w2n vi.vs_initial_fmp < 2 ** 254 /\
