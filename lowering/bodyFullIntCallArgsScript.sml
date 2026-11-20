@@ -2685,7 +2685,16 @@ Proof
        ptr_buf_ok cenv e op aG at) /\
    (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
        ptr_buf_ok cenv e p.ptr_operand aG at)` by
-    (Cases_on `vv` >> fs[contextTheory.vv_operand_def] >> metis_tac[]) >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`ptr_buf_ok cenv e (vv_operand vv) G1 t ==>
+         ptr_buf_ok cenv e (vv_operand vv) aG at`,
+        `!t' op. vv = StackValue t' op /\
+           ~is_word_type (post_value_type cenv e) ==>
+           ptr_buf_ok cenv e op G1 t`,
+        `!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+           ptr_buf_ok cenv e p.ptr_operand G1 t`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `vv` >> simp[contextTheory.vv_operand_def] >> metis_tac[]) >>
   `at.vs_memory = t.vs_memory /\ at.vs_accounts = t.vs_accounts /\
    at.vs_transient = t.vs_transient /\ at.vs_call_ctx = t.vs_call_ctx` by
     (qpat_assum `at with <| vs_vars := _; vs_allocas := _;
@@ -2898,7 +2907,9 @@ Proof
      simp[loweringStateRelDefsTheory.local_ptrs_reserved_def,
           exprLoweringPropsTheory.ci_mono_def] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `expr_body_pre cenv cx tenv e esi` by fs[] >>
+  `expr_body_pre cenv cx tenv e esi` by
+    (qpat_assum `EVERY (\arg. expr_body_pre cenv cx tenv arg esi) (e::es)` mp_tac >>
+     simp[NoAsms]) >>
   drule exprSimHypsTheory.post_type_evaluates >>
   disch_then (qx_choose_then `rty` assume_tac) >>
   `!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
@@ -2908,7 +2919,8 @@ Proof
     (drule aggregateEvaluatedLayoutTheory.body_post_type_allocation_bound >> simp[]) >>
   `is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)` by
     (`expr_sim_inv cenv cx tenv esi /\ well_typed_expr tenv e` by
-       fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+       (qpat_assum `expr_body_pre cenv cx tenv e esi` mp_tac >>
+        simp[NoAsms,exprSimHypsDefsTheory.expr_body_pre_def]) >>
      drule_all exprSimHypsTheory.post_value_type_widens >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[vyperTypeSystemTheory.type_widens_to_def] >>
@@ -7467,9 +7479,9 @@ Proof
     (qpat_assum `cenv.ce_func_info _ = compute_func_info _ _ _ _` mp_tac >>
      qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` SUBST1_TAC >>
      qpat_assum `type_memory_bytes cenv ret < 2 ** 64` mp_tac >>
-     qpat_assum `body_inv _ _ _ _`
-       (assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
-     `cenv.ce_struct_fields = make_struct_fields_map tops` by fs[] >>
+     `cenv.ce_struct_fields = make_struct_fields_map tops` by
+       (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
+        simp[NoAsms,bodySimTheory.body_inv_def]) >>
      qpat_assum `cenv.ce_struct_fields = _` (SUBST1_TAC o SYM) >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[structFieldsPropsTheory.type_mem_bytes_type_memory_bytes,
