@@ -3907,7 +3907,7 @@ val stmt_labels_rws =
    compile_store_bytestring_labels, compile_keccak256_key_labels,
    compile_mapping_subscript_labels, compile_array_subscript_labels,
    compile_bytelike_literal_labels, typed_memory_family_labels,
-   compile_abi_encode_labels, compile_ptr_load_labels,
+   compile_abi_encode_labels, compile_ptr_load_labels, compile_ptr_store_labels,
    compile_imm_store_word_labels, compile_imm_store_words_labels,
    compile_imm_copy_to_memory_labels, compile_expr_labels,
    lower_value_labels, compile_binop_labels];

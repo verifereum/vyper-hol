@@ -321,15 +321,20 @@ Resume compile_stmts_label_checks[augassign]:
   >- (irule rb_compile_get_target_ptr_for >> gvs[rb_expr_contract_for_def]) >>
   gen_tac >> strip_tac >> rpt (irule rb_bind_return_for >> BETA_TAC) >>
   gvs[] >> Cases_on `FST (SND x)` >> simp[rb_emit_void_for] >>
-  rename1 `FST (SND x) = SOME loc` >> Cases_on `loc` >>
-  (rpt (irule rb_bind_return_for >> BETA_TAC) >>
-   irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  rename1 `FST (SND x) = SOME loc` >>
+  rpt (irule rb_bind_return_for >> BETA_TAC) >>
+  `case env.ce_imm_alloca of NONE => T
+     | SOME region => (rb_operand_ok_for source_checks) region` by
+    fs[rb_env_ok_for_def] >>
+  Cases_on `loc` >> gvs[] >>
+  (FIRST [irule rb_bind_ptr_load_for, irule rb_bind_emit_op_for] >>
+   BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
    irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
    reverse conj_tac >- (irule rb_lower_value_for >> gvs[rb_expr_contract_for_def]) >>
    gen_tac >> strip_tac >>
    irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
    reverse conj_tac >- simp[rb_compile_binop_for] >>
-   simp[rb_emit_void_for])
+   simp[rb_emit_void_for, rb_compile_ptr_store_for])
 QED
 
 Resume compile_stmts_label_checks[assert_bare]:

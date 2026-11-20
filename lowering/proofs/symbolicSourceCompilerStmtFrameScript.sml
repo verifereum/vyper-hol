@@ -192,7 +192,11 @@ Resume symbolic_frame_stmt_cond[augassign]:
   simp[Once compile_stmt_def, comp_ignore_bind_def] >>
   rpt (BETA_TAC >> match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[] >>
   BasicProvers.TOP_CASE_TAC >> simp[] >>
-  rpt (BETA_TAC >> match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[]
+  IF_CASES_TAC >> simp[] >>
+  rpt (BETA_TAC >> match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[contextTheory.compile_ptr_store_def] >>
+  Cases_on `cenv.ce_is_ctor` >> Cases_on `cenv.ce_imm_alloca` >>
+  simp[contextTheory.compile_imm_store_word_def, comp_ignore_bind_def] >>
+  match_mp_tac symbolic_frame_bind >> simp[]
 QED
 
 Resume symbolic_frame_stmt_cond[log]:
