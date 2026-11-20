@@ -35,7 +35,9 @@ Theorem bytestring_calldata_full_run_resources:
   (!x. start = Var x ==> not_fresh_at sa x) /\
   a+n < dimword (:256) /\ a+n <= LENGTH cx.txn.calldata /\
   alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==>
+     s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?p w t HG tm.
@@ -139,6 +141,17 @@ Proof
   `!x. not_fresh_at sa x ==> not_fresh_at s2 x` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sa` >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+     u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+    (strip_tac >> conj_tac
+     >- (qpat_assum `stmt_state_rel H0 ctx func cenv cx es u`
+           (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+         simp[]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> _ <= w2n s.vs_initial_fmp` mp_tac >>
+     qpat_assum `u = s with <|vs_vars := _; vs_inst_idx := _|>` SUBST1_TAC >>
+     simp_tac (srw_ss()) [pending_alloca_size_def] >>
+     disch_then (fn th => qpat_assum `ctx_has_dalloca ctx`
+       (ACCEPT_TAC o MATCH_MP th))) >>
   (fn (asl,w) =>
     let val post = fst (dest_forall (find_term (fn tm => is_forall tm andalso
       fst (dest_var (fst (dest_forall tm))) = "H'") w))
@@ -301,7 +314,10 @@ Theorem bytestring_calldata_full_run_frame:
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_immutables = s.vs_immutables
 Proof
-  strip_tac >> drule_all bytestring_calldata_full_run_resources >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==>
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by simp[] >>
+  drule_all bytestring_calldata_full_run_resources >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   qexistsl_tac [`p`,`w`,`t`,`HG`,`tm`] >> asm_rewrite_tac[]
 QED
