@@ -127,6 +127,9 @@ Proof
   recInduct supported_nested_type_ind >> rpt strip_tac >> gvs[] >>
   Cases_on `leaf ty`
   >- (`supported_event_leaf_type ty` by metis_tac[] >>
+      Cases_on `ty = BaseT (BytesT (Fixed 0))`
+      >- gvs[supported_event_leaf_type_def, supported_scalar_type_def,
+             supported_word_type_def, supported_string_type_def] >>
       Cases_on `ty` >>
       gvs[supported_event_leaf_type_def, supported_scalar_type_def,
           supported_word_type_def, supported_string_type_def] >>
