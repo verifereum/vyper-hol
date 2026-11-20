@@ -9,7 +9,7 @@ Ancestors
   abiDecoderDynarrayPrefix abiDecoderContract abiEncoderExitPhi abiDecoderBytesEdges
   calldataRegistration exprSimAbiDecodePhiBoundary compileEnv emitHelper
   vyperCalldata ptrDiscipline abiDecoderCoherence words venomState
-  rich_list list option arithmetic pred_set
+  rich_list list option arithmetic pred_set decoderOriginAllocationFrame
 
 val decode_history = ``\st last fn s.
   !id q k. st.cs_next_id <= id /\ id < last.cs_next_id /\
@@ -34,7 +34,9 @@ val decode_input = ``\di sz st last limit ctx fn site src child s p d oid base c
   base <= d /\ d+sz <= base+cap /\ d+sz < dimword (:256) /\
   ptr_covers G tn child s sz /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   fresh_vars_wrt limit s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts``;
 val decode_outcome = ``\accepted sz st last limit ctx fn site child s d G tn lo PG.
   (?z H u. z.vs_returndata = [] /\
@@ -45,6 +47,8 @@ val decode_outcome = ``\accepted sz st last limit ctx fn site child s d G tn lo 
     v.vs_inst_idx = LENGTH last.cs_current_insts /\
     v.vs_call_ctx = s.vs_call_ctx /\ v.vs_data_section = s.vs_data_section /\
     alloca_inv v /\ alloca_frontier_inv ctx fn site v /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp v /\
+      v.vs_alloca_next + pending_alloca_size fn v <= w2n v.vs_initial_fmp) /\
     (^decode_history) st last fn v /\
     s.vs_alloca_next <= v.vs_alloca_next /\
     (!id q k. FLOOKUP s.vs_allocas id = SOME (q,k) ==> FLOOKUP v.vs_allocas id = SOME (q,k)) /\
@@ -102,8 +106,6 @@ Proof
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o SIMP_RULE std_ss [Once abiEncoderTheory.compile_abi_decode_to_buf_def, LET_THM]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_at (Pat `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _`)
     (BETA_RULE calldataNoneFiniteMembersTheory.none_finite_members_paths) >>
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
@@ -135,8 +137,6 @@ Proof
         (irule decode_path_endpoint_floor >>
          qexistsl [`A`,`H`,`PG`,`ctx`,`fn`,`r`,`ta`,`u`] >>
          rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp v /\
-        v.vs_alloca_next + pending_alloca_size fn v <= w2n v.vs_initial_fmp` by simp[] >>
       disj2_tac >> qexistsl [`v`,`H`,`u`,`sc`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       rpt gen_tac >> disch_then (fn th =>
@@ -212,7 +212,10 @@ Proof
          rename1 `BytesT b` >> Cases_on `b` >>
          simp[is_bytestring_type_def, exprLoweringTheory.type_to_abi_dec_info_def]) >>
      disj2_tac >> disj2_tac >> metis_tac[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) none_decode_leaf_paths >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME _`)) >>
   disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
@@ -223,6 +226,14 @@ Proof
   impl_tac >- (rpt conj_tac >> asm_rewrite_tac[]) >>
   strip_tac
   >- (disj1_tac >> qexistsl [`z`,`H`,`u`] >> asm_rewrite_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v /\
+    v.vs_alloca_next + pending_alloca_size fn v <= w2n v.vs_initial_fmp` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK v,H,u)`
+       (qspecl_then [`ARB`,`ARB`] assume_tac) >>
+     strip_tac >>
+     drule_at (Pat `gas_origin_ptr_path _ _ _ _`) decoder_origin_path_room >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   disj2_tac >> qexistsl [`v`,`sc`,`H`,`u`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
@@ -379,8 +390,6 @@ Resume none_coherent_decode_paths[nonbulk]:
        (DISJ_CASES_THEN2 (fn th => fs[th]) ACCEPT_TAC)) >>
   `type_memory_size (ArrayTV tv (Dynamic n)) = 32 + n * type_memory_size tv` by
     (once_rewrite_tac[valueEncodingTheory.type_memory_size_def] >> REFL_TAC) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) none_nonbulk_fold_paths >>
   disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ (ArrayT _ _) _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME _`)) >>
@@ -399,6 +408,21 @@ Resume none_coherent_decode_paths[nonbulk]:
     (qx_choose_then `v` (qx_choose_then `sc` (qx_choose_then `H`
       (qx_choose_then `u` strip_assume_tac)))))
   >- (disj1_tac >> qexistsl [`z`,`H`,`u`] >> asm_rewrite_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v /\
+    v.vs_alloca_next + pending_alloca_size fn v <= w2n v.vs_initial_fmp` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK v,H,u)`
+       (qspecl_then [`ARB`,`ARB`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >> strip_tac >>
+     strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp v`
+       (drule_then assume_tac) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+       (drule_then strip_assume_tac) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `v.vs_alloca_next + pending_alloca_size fn v = _`
+       (fn credit => qpat_assum `v.vs_initial_fmp = s.vs_initial_fmp`
+         (fn fmp => PURE_REWRITE_TAC [credit,fmp])) >>
+     first_assum ACCEPT_TAC) >>
   disj2_tac >> qexistsl [`v`,`sc`,`H`,`u`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -430,7 +454,10 @@ Resume none_coherent_decode_paths[nonbulk_child]:
     (irule decode_path_endpoint_floor >>
      qexistsl [`A`,`H`,`PG`,`ctx`,`fn`,`r`,`ta`,`u`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
   disj2_tac >> qexistsl [`v`,`sc`,`H`,`u`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
