@@ -4,7 +4,7 @@ Ancestors
   gasShadowCompileStmtHelpers gasShadowCompileStmtOps gasShadowCompileStmtBase
   gasShadowCompilePure gasShadowCompileConvert gasShadowCompileContext gasShadowCompileAbi gasShadowCompileArith gasShadowCompileCallSupport
   gasShadowCompileLiteral gasShadowCompileHelpers
-  gasShadowCompileOps gasShadow gasShadowState stmtLowering compileEnv
+  gasShadow gasShadowState stmtLowering compileEnv
   exprLowering vyperAST list
 
 Theorem gas_shadow_stmt_pass:
