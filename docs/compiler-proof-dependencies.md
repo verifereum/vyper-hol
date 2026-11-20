@@ -80,8 +80,9 @@ call-evaluation and oracle-storage premises. These are not universal producers.
 
 `call_outcomes_ok` requires return-data length `< 2**256` and
 `accounts_runtime_well_typed co_accounts` on every record, including failed and
-static outcomes. `call_storage_ok` supplies the separate finite-trace storage
-obligation over the regions and backends observed for the chosen gas readings.
+static outcomes. `call_storage_ok` for runtime calls and `deploy_storage_ok`
+for constructors supply the separate finite-trace storage obligations over
+the regions and backends observed for the chosen gas readings.
 
 ## S1–S7: current admitted producers
 

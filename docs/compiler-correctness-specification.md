@@ -310,9 +310,9 @@ callees to the EVM outcomes or proves a closed-world/reentrant composition.
 `accounts_runtime_well_typed` for every outcome, including failed and static
 ones. `call_state_rel_call_outcomes_ok` and `deploy_state_rel_call_outcomes_ok`
 derive the guard for `MAP SND (call_trace es)` from the call and deploy state
-relations, respectively. The finite trace guard `call_storage_ok` checks the
-storage regions and backends observed by the source execution for the chosen
-gas readings.
+relations, respectively. The finite trace guards `call_storage_ok` for runtime
+calls and `deploy_storage_ok` for constructors check the storage regions and
+backends observed by the source execution for the chosen gas readings.
 
 The shared entry Venom state has **cc_gas=0**, concrete assembly labels and plan
 FMP fields. Venom GAS consumes the frame-local `gas_readings es`, returning zero
